@@ -17,7 +17,6 @@ import (
 	"github.com/quailyquaily/mister_morph/providers/openai"
 	"github.com/quailyquaily/mister_morph/skills"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 func newRunCmd() *cobra.Command {
@@ -25,7 +24,7 @@ func newRunCmd() *cobra.Command {
 		Use:   "run",
 		Short: "Run an agent task",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			task := strings.TrimSpace(viper.GetString("task"))
+			task := strings.TrimSpace(flagOrViperString(cmd, "task", "task"))
 			if task == "" {
 				data, err := os.ReadFile("/dev/stdin")
 				if err == nil {
@@ -36,14 +35,19 @@ func newRunCmd() *cobra.Command {
 				return fmt.Errorf("missing --task (or stdin)")
 			}
 
-			client, err := llmClientFromConfig()
+			client, err := llmClientFromConfig(llmClientConfig{
+				Provider:       strings.TrimSpace(flagOrViperString(cmd, "provider", "provider")),
+				Endpoint:       strings.TrimSpace(flagOrViperString(cmd, "endpoint", "endpoint")),
+				APIKey:         strings.TrimSpace(flagOrViperString(cmd, "api-key", "api_key")),
+				RequestTimeout: flagOrViperDuration(cmd, "llm-request-timeout", "llm.request_timeout"),
+			})
 			if err != nil {
 				return err
 			}
 
-			model := viper.GetString("model")
+			model := strings.TrimSpace(flagOrViperString(cmd, "model", "model"))
 
-			timeout := viper.GetDuration("timeout")
+			timeout := flagOrViperDuration(cmd, "timeout", "timeout")
 			ctx, cancel := context.WithTimeout(context.Background(), timeout)
 			defer cancel()
 
@@ -55,13 +59,13 @@ func newRunCmd() *cobra.Command {
 
 			logOpts := logOptionsFromViper()
 
-			promptSpec, err := promptSpecWithSkills(ctx, logger, logOpts, task, client, model)
+			promptSpec, err := promptSpecWithSkills(ctx, logger, logOpts, task, client, model, skillsConfigFromRunCmd(cmd, model))
 			if err != nil {
 				return err
 			}
 
 			var hook agent.Hook
-			if viper.GetBool("interactive") {
+			if flagOrViperBool(cmd, "interactive", "interactive") {
 				hook, err = newInteractiveHook()
 				if err != nil {
 					return err
@@ -79,10 +83,10 @@ func newRunCmd() *cobra.Command {
 				client,
 				registryFromViper(),
 				agent.Config{
-					MaxSteps:       viper.GetInt("max_steps"),
-					ParseRetries:   viper.GetInt("parse_retries"),
-					MaxTokenBudget: viper.GetInt("max_token_budget"),
-					PlanMode:       viper.GetString("plan.mode"),
+					MaxSteps:       flagOrViperInt(cmd, "max-steps", "max_steps"),
+					ParseRetries:   flagOrViperInt(cmd, "parse-retries", "parse_retries"),
+					MaxTokenBudget: flagOrViperInt(cmd, "max-token-budget", "max_token_budget"),
+					PlanMode:       strings.TrimSpace(flagOrViperString(cmd, "plan-mode", "plan.mode")),
 				},
 				promptSpec,
 				opts...,
@@ -129,84 +133,48 @@ func newRunCmd() *cobra.Command {
 	cmd.Flags().Int("parse-retries", 2, "Max JSON parse retries.")
 	cmd.Flags().Int("max-token-budget", 0, "Max cumulative token budget (0 disables).")
 	cmd.Flags().String("plan-mode", "auto", "Planning mode: off|auto|always (auto enables planning for complex tasks).")
-	_ = viper.BindPFlag("plan.mode", cmd.Flags().Lookup("plan-mode"))
 
 	cmd.Flags().Duration("timeout", 10*time.Minute, "Overall timeout.")
-
-	mustBind(cmd, "task")
-	mustBind(cmd, "provider")
-	mustBind(cmd, "endpoint")
-	mustBind(cmd, "model")
-	mustBind(cmd, "api-key")
-	_ = viper.BindPFlag("llm.request_timeout", cmd.Flags().Lookup("llm-request-timeout"))
-	mustBind(cmd, "interactive")
-	_ = viper.BindPFlag("skills.dirs", cmd.Flags().Lookup("skills-dir"))
-	_ = viper.BindPFlag("skills.load", cmd.Flags().Lookup("skill"))
-	_ = viper.BindPFlag("skills.auto", cmd.Flags().Lookup("skills-auto"))
-	_ = viper.BindPFlag("skills.mode", cmd.Flags().Lookup("skills-mode"))
-	_ = viper.BindPFlag("skills.max_load", cmd.Flags().Lookup("skills-max-load"))
-	_ = viper.BindPFlag("skills.preview_bytes", cmd.Flags().Lookup("skills-preview-bytes"))
-	_ = viper.BindPFlag("skills.catalog_limit", cmd.Flags().Lookup("skills-catalog-limit"))
-	_ = viper.BindPFlag("skills.select_timeout", cmd.Flags().Lookup("skills-select-timeout"))
-	mustBind(cmd, "max-steps")
-	mustBind(cmd, "parse-retries")
-	mustBind(cmd, "max-token-budget")
-	mustBind(cmd, "timeout")
-
-	viper.SetDefault("timeout", 10*time.Minute)
-	viper.SetDefault("llm.request_timeout", 90*time.Second)
-	viper.SetDefault("plan.mode", "auto")
-	viper.SetDefault("skills.select_timeout", 10*time.Second)
 
 	return cmd
 }
 
-func llmClientFromConfig() (llm.Client, error) {
-	switch strings.ToLower(strings.TrimSpace(viper.GetString("provider"))) {
+type llmClientConfig struct {
+	Provider       string
+	Endpoint       string
+	APIKey         string
+	RequestTimeout time.Duration
+}
+
+func llmClientFromConfig(cfg llmClientConfig) (llm.Client, error) {
+	switch strings.ToLower(strings.TrimSpace(cfg.Provider)) {
 	case "openai":
-		c := openai.New(viper.GetString("endpoint"), viper.GetString("api_key"))
-		if d := viper.GetDuration("llm.request_timeout"); d > 0 && c.HTTP != nil {
-			c.HTTP.Timeout = d
+		c := openai.New(strings.TrimSpace(cfg.Endpoint), strings.TrimSpace(cfg.APIKey))
+		if cfg.RequestTimeout > 0 && c.HTTP != nil {
+			c.HTTP.Timeout = cfg.RequestTimeout
 		}
 		return c, nil
 	default:
-		return nil, fmt.Errorf("unknown provider: %s", viper.GetString("provider"))
-	}
-}
-
-func mustBind(cmd *cobra.Command, name string) {
-	flag := cmd.Flags().Lookup(name)
-	if flag == nil {
-		panic("missing flag: " + name)
-	}
-
-	key := strings.ReplaceAll(name, "-", "_")
-	if err := viper.BindPFlag(key, flag); err != nil {
-		panic(err)
+		return nil, fmt.Errorf("unknown provider: %s", cfg.Provider)
 	}
 }
 
 var errAbortedByUser = errors.New("aborted by user")
 
-func promptSpecWithSkills(ctx context.Context, log *slog.Logger, logOpts agent.LogOptions, task string, client llm.Client, model string) (agent.PromptSpec, error) {
+func promptSpecWithSkills(ctx context.Context, log *slog.Logger, logOpts agent.LogOptions, task string, client llm.Client, model string, cfg skillsConfig) (agent.PromptSpec, error) {
 	if log == nil {
 		log = slog.Default()
 	}
 	spec := agent.DefaultPromptSpec()
 
-	roots := getStringSlice(
-		"skills.dirs",
-		"skills_dirs",
-		"skills_dir",
-	)
-	discovered, err := skills.Discover(skills.DiscoverOptions{Roots: roots})
+	discovered, err := skills.Discover(skills.DiscoverOptions{Roots: cfg.Roots})
 	if err != nil {
-		if viper.GetBool("trace") {
+		if cfg.Trace {
 			log.Warn("skills_discover_warning", "error", err.Error())
 		}
 	}
 
-	mode := strings.ToLower(strings.TrimSpace(viper.GetString("skills.mode")))
+	mode := strings.ToLower(strings.TrimSpace(cfg.Mode))
 	if mode == "" {
 		mode = "smart"
 	}
@@ -217,12 +185,9 @@ func promptSpecWithSkills(ctx context.Context, log *slog.Logger, logOpts agent.L
 
 	loadedSkillIDs := make(map[string]bool)
 
-	var requested []string
-	requested = append(requested, viper.GetStringSlice("skill")...)  // legacy
-	requested = append(requested, viper.GetStringSlice("skills")...) // legacy
-	requested = append(requested, getStringSlice("skills.load")...)
+	requested := append([]string{}, cfg.Requested...)
 
-	if getBool("skills.auto", "skills_auto") {
+	if cfg.Auto {
 		requested = append(requested, skills.ReferencedSkillNames(task)...)
 	}
 
@@ -276,14 +241,11 @@ func promptSpecWithSkills(ctx context.Context, log *slog.Logger, logOpts agent.L
 	}
 
 	// Smart selection: non-strict (model may suggest none or unknown ids)
-	maxLoad := viper.GetInt("skills.max_load")
-	previewBytes := viper.GetInt64("skills.preview_bytes")
-	catalogLimit := viper.GetInt("skills.catalog_limit")
-	selectTimeout := viper.GetDuration("skills.select_timeout")
-	selectorModel := strings.TrimSpace(viper.GetString("skills.selector_model"))
-	if selectorModel == "" {
-		selectorModel = model
-	}
+	maxLoad := cfg.MaxLoad
+	previewBytes := cfg.PreviewBytes
+	catalogLimit := cfg.CatalogLimit
+	selectTimeout := cfg.SelectTimeout
+	selectorModel := strings.TrimSpace(cfg.SelectorModel)
 
 	log.Info("skills_select_start",
 		"mode", mode,

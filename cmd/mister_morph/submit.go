@@ -19,7 +19,11 @@ func newSubmitCmd() *cobra.Command {
 		Use:   "submit",
 		Short: "Submit a task to a running mister_morph daemon",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			task := strings.TrimSpace(viper.GetString("task"))
+			task, _ := cmd.Flags().GetString("task")
+			task = strings.TrimSpace(task)
+			if task == "" {
+				task = strings.TrimSpace(viper.GetString("task"))
+			}
 			if task == "" {
 				data, err := os.ReadFile("/dev/stdin")
 				if err == nil {
@@ -30,19 +34,28 @@ func newSubmitCmd() *cobra.Command {
 				return fmt.Errorf("missing --task (or stdin)")
 			}
 
-			serverURL := strings.TrimRight(strings.TrimSpace(viper.GetString("server.url")), "/")
+			serverURL := strings.TrimRight(strings.TrimSpace(flagOrViperString(cmd, "server-url", "server.url")), "/")
 			if serverURL == "" {
 				serverURL = "http://127.0.0.1:8787"
 			}
-			auth := strings.TrimSpace(viper.GetString("server.auth_token"))
+			auth, _ := cmd.Flags().GetString("auth-token")
+			auth = strings.TrimSpace(auth)
+			if auth == "" {
+				auth = strings.TrimSpace(viper.GetString("server.auth_token"))
+			}
 			if auth == "" {
 				return fmt.Errorf("missing server.auth_token (set via --auth-token or MISTER_MORPH_SERVER_AUTH_TOKEN)")
 			}
 
+			model, _ := cmd.Flags().GetString("model")
+			model = strings.TrimSpace(model)
+			if model == "" {
+				model = strings.TrimSpace(viper.GetString("model"))
+			}
 			reqBody := SubmitTaskRequest{
 				Task:    task,
-				Model:   strings.TrimSpace(viper.GetString("model")),
-				Timeout: strings.TrimSpace(viper.GetString("submit.timeout")),
+				Model:   model,
+				Timeout: strings.TrimSpace(flagOrViperString(cmd, "submit-timeout", "submit.timeout")),
 			}
 			b, _ := json.Marshal(reqBody)
 
@@ -69,14 +82,14 @@ func newSubmitCmd() *cobra.Command {
 				return fmt.Errorf("failed to parse server response: %w", err)
 			}
 
-			wait := viper.GetBool("submit.wait")
+			wait := flagOrViperBool(cmd, "wait", "submit.wait")
 			if !wait {
 				enc := json.NewEncoder(os.Stdout)
 				enc.SetIndent("", "  ")
 				return enc.Encode(submitResp)
 			}
 
-			interval := viper.GetDuration("submit.poll_interval")
+			interval := flagOrViperDuration(cmd, "poll-interval", "submit.poll_interval")
 			if interval <= 0 {
 				interval = 1 * time.Second
 			}
@@ -118,18 +131,6 @@ func newSubmitCmd() *cobra.Command {
 	cmd.Flags().String("submit-timeout", "", "Per-task timeout override (e.g. 2m, 30s).")
 	cmd.Flags().Bool("wait", false, "Wait for completion and print the final JSON.")
 	cmd.Flags().Duration("poll-interval", 1*time.Second, "Polling interval when --wait is set.")
-
-	mustBind(cmd, "task")
-	_ = viper.BindPFlag("server.url", cmd.Flags().Lookup("server-url"))
-	_ = viper.BindPFlag("server.auth_token", cmd.Flags().Lookup("auth-token"))
-	mustBind(cmd, "model")
-	_ = viper.BindPFlag("submit.timeout", cmd.Flags().Lookup("submit-timeout"))
-	_ = viper.BindPFlag("submit.wait", cmd.Flags().Lookup("wait"))
-	_ = viper.BindPFlag("submit.poll_interval", cmd.Flags().Lookup("poll-interval"))
-
-	viper.SetDefault("server.url", "http://127.0.0.1:8787")
-	viper.SetDefault("submit.wait", false)
-	viper.SetDefault("submit.poll_interval", 1*time.Second)
 
 	return cmd
 }

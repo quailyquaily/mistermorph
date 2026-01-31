@@ -81,6 +81,8 @@ func newRootCmd() *cobra.Command {
 }
 
 func initConfig() {
+	initViperDefaults()
+
 	viper.SetEnvPrefix(envPrefix)
 	viper.SetEnvKeyReplacer(strings.NewReplacer("-", "_", ".", "_"))
 	viper.AutomaticEnv()

@@ -7,7 +7,6 @@ import (
 
 	"github.com/quailyquaily/mister_morph/skills"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 func newSkillsCmd() *cobra.Command {
@@ -26,11 +25,14 @@ func newSkillsListCmd() *cobra.Command {
 		Use:   "list",
 		Short: "List discovered skills",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			roots := getStringSlice(
-				"skills.dirs",
-				"skills_dirs",
-				"skills_dir",
-			)
+			roots, _ := cmd.Flags().GetStringArray("skills-dir")
+			if len(roots) == 0 {
+				roots = getStringSlice(
+					"skills.dirs",
+					"skills_dirs",
+					"skills_dir",
+				)
+			}
 			list, err := skills.Discover(skills.DiscoverOptions{Roots: roots})
 			if err != nil {
 				return err
@@ -43,7 +45,6 @@ func newSkillsListCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringArray("skills-dir", nil, "Skills root directory (repeatable). Defaults: ~/.codex/skills, ~/.claude/skills")
-	_ = viper.BindPFlag("skills.dirs", cmd.Flags().Lookup("skills-dir"))
 
 	return cmd
 }
@@ -54,11 +55,14 @@ func newSkillsShowCmd() *cobra.Command {
 		Short: "Print a skill's SKILL.md",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			roots := getStringSlice(
-				"skills.dirs",
-				"skills_dirs",
-				"skills_dir",
-			)
+			roots, _ := cmd.Flags().GetStringArray("skills-dir")
+			if len(roots) == 0 {
+				roots = getStringSlice(
+					"skills.dirs",
+					"skills_dirs",
+					"skills_dir",
+				)
+			}
 			list, err := skills.Discover(skills.DiscoverOptions{Roots: roots})
 			if err != nil {
 				return err
@@ -80,7 +84,6 @@ func newSkillsShowCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringArray("skills-dir", nil, "Skills root directory (repeatable). Defaults: ~/.codex/skills, ~/.claude/skills")
-	_ = viper.BindPFlag("skills.dirs", cmd.Flags().Lookup("skills-dir"))
 
 	return cmd
 }

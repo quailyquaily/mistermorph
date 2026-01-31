@@ -23,20 +23,20 @@ func newServeCmd() *cobra.Command {
 		Use:   "serve",
 		Short: "Run as a local daemon that accepts tasks over HTTP",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			bind := strings.TrimSpace(viper.GetString("server.bind"))
+			bind := strings.TrimSpace(flagOrViperString(cmd, "server-bind", "server.bind"))
 			if bind == "" {
 				bind = "127.0.0.1"
 			}
-			port := viper.GetInt("server.port")
+			port := flagOrViperInt(cmd, "server-port", "server.port")
 			if port <= 0 {
 				port = 8787
 			}
-			auth := viper.GetString("server.auth_token")
+			auth := flagOrViperString(cmd, "server-auth-token", "server.auth_token")
 			if strings.TrimSpace(auth) == "" {
 				return fmt.Errorf("missing server.auth_token (set via --server-auth-token or MISTER_MORPH_SERVER_AUTH_TOKEN)")
 			}
 
-			maxQueue := viper.GetInt("server.max_queue")
+			maxQueue := flagOrViperInt(cmd, "server-max-queue", "server.max_queue")
 			store := NewTaskStore(maxQueue)
 
 			logger, err := loggerFromViper()
@@ -45,7 +45,12 @@ func newServeCmd() *cobra.Command {
 			}
 			slog.SetDefault(logger)
 
-			client, err := llmClientFromConfig()
+			client, err := llmClientFromConfig(llmClientConfig{
+				Provider:       viper.GetString("provider"),
+				Endpoint:       viper.GetString("endpoint"),
+				APIKey:         viper.GetString("api_key"),
+				RequestTimeout: viper.GetDuration("llm.request_timeout"),
+			})
 			if err != nil {
 				return err
 			}
@@ -187,15 +192,6 @@ func newServeCmd() *cobra.Command {
 	cmd.Flags().String("server-auth-token", "", "Bearer token required for all non-/health endpoints.")
 	cmd.Flags().Int("server-max-queue", 100, "Max queued tasks in memory.")
 
-	_ = viper.BindPFlag("server.bind", cmd.Flags().Lookup("server-bind"))
-	_ = viper.BindPFlag("server.port", cmd.Flags().Lookup("server-port"))
-	_ = viper.BindPFlag("server.auth_token", cmd.Flags().Lookup("server-auth-token"))
-	_ = viper.BindPFlag("server.max_queue", cmd.Flags().Lookup("server-max-queue"))
-
-	viper.SetDefault("server.bind", "127.0.0.1")
-	viper.SetDefault("server.port", 8787)
-	viper.SetDefault("server.max_queue", 100)
-
 	return cmd
 }
 
@@ -216,7 +212,7 @@ func errorsIsContextDeadline(ctx context.Context, err error) bool {
 }
 
 func runOneTask(ctx context.Context, logger *slog.Logger, logOpts agent.LogOptions, client llm.Client, registry *tools.Registry, baseCfg agent.Config, task string, model string) (*agent.Final, *agent.Context, error) {
-	promptSpec, err := promptSpecWithSkills(ctx, logger, logOpts, task, client, model)
+	promptSpec, err := promptSpecWithSkills(ctx, logger, logOpts, task, client, model, skillsConfigFromViper(model))
 	if err != nil {
 		return nil, nil, err
 	}

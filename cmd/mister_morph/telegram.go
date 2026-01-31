@@ -38,18 +38,18 @@ func newTelegramCmd() *cobra.Command {
 		Use:   "telegram",
 		Short: "Run a Telegram bot that chats with the agent",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			token := strings.TrimSpace(viper.GetString("telegram.bot_token"))
+			token := strings.TrimSpace(flagOrViperString(cmd, "telegram-bot-token", "telegram.bot_token"))
 			if token == "" {
 				return fmt.Errorf("missing telegram.bot_token (set via --telegram-bot-token or MISTER_MORPH_TELEGRAM_BOT_TOKEN)")
 			}
 
-			baseURL := strings.TrimRight(strings.TrimSpace(viper.GetString("telegram.base_url")), "/")
+			baseURL := strings.TrimRight(strings.TrimSpace(flagOrViperString(cmd, "telegram-base-url", "telegram.base_url")), "/")
 			if baseURL == "" {
 				baseURL = "https://api.telegram.org"
 			}
 
 			allowed := make(map[int64]bool)
-			for _, s := range viper.GetStringSlice("telegram.allowed_chat_ids") {
+			for _, s := range flagOrViperStringArray(cmd, "telegram-allowed-chat-id", "telegram.allowed_chat_ids") {
 				s = strings.TrimSpace(s)
 				if s == "" {
 					continue
@@ -67,11 +67,16 @@ func newTelegramCmd() *cobra.Command {
 			}
 			slog.SetDefault(logger)
 
-			client, err := llmClientFromConfig()
+			client, err := llmClientFromConfig(llmClientConfig{
+				Provider:       viper.GetString("provider"),
+				Endpoint:       viper.GetString("endpoint"),
+				APIKey:         viper.GetString("api_key"),
+				RequestTimeout: viper.GetDuration("llm.request_timeout"),
+			})
 			if err != nil {
 				return err
 			}
-			model := viper.GetString("model")
+			model := strings.TrimSpace(viper.GetString("model"))
 			reg := registryFromViper()
 			logOpts := logOptionsFromViper()
 
@@ -82,24 +87,24 @@ func newTelegramCmd() *cobra.Command {
 				PlanMode:       viper.GetString("plan.mode"),
 			}
 
-			pollTimeout := viper.GetDuration("telegram.poll_timeout")
+			pollTimeout := flagOrViperDuration(cmd, "telegram-poll-timeout", "telegram.poll_timeout")
 			if pollTimeout <= 0 {
 				pollTimeout = 30 * time.Second
 			}
-			taskTimeout := viper.GetDuration("telegram.task_timeout")
+			taskTimeout := flagOrViperDuration(cmd, "telegram-task-timeout", "telegram.task_timeout")
 			if taskTimeout <= 0 {
 				taskTimeout = viper.GetDuration("timeout")
 			}
 			if taskTimeout <= 0 {
 				taskTimeout = 10 * time.Minute
 			}
-			maxConc := viper.GetInt("telegram.max_concurrency")
+			maxConc := flagOrViperInt(cmd, "telegram-max-concurrency", "telegram.max_concurrency")
 			if maxConc <= 0 {
 				maxConc = 3
 			}
 			sem := make(chan struct{}, maxConc)
 
-			historyMax := viper.GetInt("telegram.history_max_messages")
+			historyMax := flagOrViperInt(cmd, "telegram-history-max-messages", "telegram.history_max_messages")
 			if historyMax <= 0 {
 				historyMax = 20
 			}
@@ -114,32 +119,32 @@ func newTelegramCmd() *cobra.Command {
 
 			botUser := me.Username
 			botID := me.ID
-			aliases := viper.GetStringSlice("telegram.aliases")
+			aliases := flagOrViperStringArray(cmd, "telegram-alias", "telegram.aliases")
 			for i := range aliases {
 				aliases[i] = strings.TrimSpace(aliases[i])
 			}
-			groupTriggerMode := strings.ToLower(strings.TrimSpace(viper.GetString("telegram.group_trigger_mode")))
+			groupTriggerMode := strings.ToLower(strings.TrimSpace(flagOrViperString(cmd, "telegram-group-trigger-mode", "telegram.group_trigger_mode")))
 			if groupTriggerMode == "" {
 				groupTriggerMode = "smart"
 			}
-			aliasPrefixMaxChars := viper.GetInt("telegram.alias_prefix_max_chars")
+			aliasPrefixMaxChars := flagOrViperInt(cmd, "telegram-alias-prefix-max-chars", "telegram.alias_prefix_max_chars")
 			if aliasPrefixMaxChars <= 0 {
 				aliasPrefixMaxChars = 24
 			}
-			addressingLLMEnabled := viper.GetBool("telegram.addressing_llm.enabled")
-			addressingLLMMode := strings.ToLower(strings.TrimSpace(viper.GetString("telegram.addressing_llm.mode")))
+			addressingLLMEnabled := flagOrViperBool(cmd, "telegram-addressing-llm-enabled", "telegram.addressing_llm.enabled")
+			addressingLLMMode := strings.ToLower(strings.TrimSpace(flagOrViperString(cmd, "telegram-addressing-llm-mode", "telegram.addressing_llm.mode")))
 			if addressingLLMMode == "" {
 				addressingLLMMode = "borderline"
 			}
-			addressingLLMModel := strings.TrimSpace(viper.GetString("telegram.addressing_llm.model"))
+			addressingLLMModel := strings.TrimSpace(flagOrViperString(cmd, "telegram-addressing-llm-model", "telegram.addressing_llm.model"))
 			if addressingLLMModel == "" {
 				addressingLLMModel = model
 			}
-			addressingLLMTimeout := viper.GetDuration("telegram.addressing_llm.timeout")
+			addressingLLMTimeout := flagOrViperDuration(cmd, "telegram-addressing-llm-timeout", "telegram.addressing_llm.timeout")
 			if addressingLLMTimeout <= 0 {
 				addressingLLMTimeout = 3 * time.Second
 			}
-			addressingLLMMinConfidence := viper.GetFloat64("telegram.addressing_llm.min_confidence")
+			addressingLLMMinConfidence := flagOrViperFloat64(cmd, "telegram-addressing-llm-min-confidence", "telegram.addressing_llm.min_confidence")
 			if addressingLLMMinConfidence <= 0 {
 				addressingLLMMinConfidence = 0.55
 			}
@@ -429,35 +434,6 @@ func newTelegramCmd() *cobra.Command {
 	cmd.Flags().Int("telegram-max-concurrency", 3, "Max number of chats processed concurrently.")
 	cmd.Flags().Int("telegram-history-max-messages", 20, "Max chat history messages to keep per chat.")
 
-	_ = viper.BindPFlag("telegram.bot_token", cmd.Flags().Lookup("telegram-bot-token"))
-	_ = viper.BindPFlag("telegram.base_url", cmd.Flags().Lookup("telegram-base-url"))
-	_ = viper.BindPFlag("telegram.allowed_chat_ids", cmd.Flags().Lookup("telegram-allowed-chat-id"))
-	_ = viper.BindPFlag("telegram.aliases", cmd.Flags().Lookup("telegram-alias"))
-	_ = viper.BindPFlag("telegram.group_trigger_mode", cmd.Flags().Lookup("telegram-group-trigger-mode"))
-	_ = viper.BindPFlag("telegram.alias_prefix_max_chars", cmd.Flags().Lookup("telegram-alias-prefix-max-chars"))
-	_ = viper.BindPFlag("telegram.addressing_llm.enabled", cmd.Flags().Lookup("telegram-addressing-llm-enabled"))
-	_ = viper.BindPFlag("telegram.addressing_llm.mode", cmd.Flags().Lookup("telegram-addressing-llm-mode"))
-	_ = viper.BindPFlag("telegram.addressing_llm.model", cmd.Flags().Lookup("telegram-addressing-llm-model"))
-	_ = viper.BindPFlag("telegram.addressing_llm.timeout", cmd.Flags().Lookup("telegram-addressing-llm-timeout"))
-	_ = viper.BindPFlag("telegram.addressing_llm.min_confidence", cmd.Flags().Lookup("telegram-addressing-llm-min-confidence"))
-	_ = viper.BindPFlag("telegram.poll_timeout", cmd.Flags().Lookup("telegram-poll-timeout"))
-	_ = viper.BindPFlag("telegram.task_timeout", cmd.Flags().Lookup("telegram-task-timeout"))
-	_ = viper.BindPFlag("telegram.max_concurrency", cmd.Flags().Lookup("telegram-max-concurrency"))
-	_ = viper.BindPFlag("telegram.history_max_messages", cmd.Flags().Lookup("telegram-history-max-messages"))
-
-	viper.SetDefault("telegram.base_url", "https://api.telegram.org")
-	viper.SetDefault("telegram.poll_timeout", 30*time.Second)
-	viper.SetDefault("telegram.history_max_messages", 20)
-	viper.SetDefault("telegram.aliases", []string{})
-	viper.SetDefault("telegram.group_trigger_mode", "smart")
-	viper.SetDefault("telegram.alias_prefix_max_chars", 24)
-	viper.SetDefault("telegram.addressing_llm.enabled", false)
-	viper.SetDefault("telegram.addressing_llm.mode", "borderline")
-	viper.SetDefault("telegram.addressing_llm.model", "")
-	viper.SetDefault("telegram.addressing_llm.timeout", 3*time.Second)
-	viper.SetDefault("telegram.addressing_llm.min_confidence", 0.55)
-	viper.SetDefault("telegram.max_concurrency", 3)
-
 	return cmd
 }
 
@@ -465,7 +441,7 @@ func runTelegramTask(ctx context.Context, logger *slog.Logger, logOpts agent.Log
 	if reg == nil {
 		reg = registryFromViper()
 	}
-	promptSpec, err := promptSpecWithSkills(ctx, logger, logOpts, task, client, model)
+	promptSpec, err := promptSpecWithSkills(ctx, logger, logOpts, task, client, model, skillsConfigFromViper(model))
 	if err != nil {
 		return nil, nil, err
 	}
