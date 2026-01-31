@@ -98,6 +98,50 @@ All 5 acceptance criteria pass: `go build ./...` succeeds, defaults are zero/nil
 
 ### No deviations from spec.
 
-## Review
+## Review 8e764cd
 
-(empty)
+Reviewing commit `8e764cd` (Mission 001: Add Usage.Cost, AgentResponse.RawFinalAnswer, and Context.RawFinalAnswer).
+
+### Verification
+
+- **`go build ./...`**: Passes, zero errors.
+- **`go test ./... -v`**: All 10 tests pass (8 in `agent`, 2 in `llm`). No failures.
+
+### Critical Issues
+
+None.
+
+### Major Issues
+
+None.
+
+### Minor Issues
+
+1. **`agent/context.go:46-48` — `TotalTokens` fallback logic is pre-existing but worth noting**: The existing `AddUsage` uses `if c.Metrics.TotalTokens == 0` to fall back to `InputTokens + OutputTokens`, but this means the fallback only fires on the first call. This is pre-existing and outside mission scope — noted for awareness only.
+
+### Improvement Suggestions
+
+1. **`agent/types.go:102` — Unused `RawJSON` type alias**: `type RawJSON json.RawMessage` on line 102 is defined but appears unused anywhere in the codebase. Pre-existing, not introduced by this mission.
+
+### Test Gaps / Residual Risks
+
+1. **No test for `RawFinalAnswer` propagation from `AgentResponse` to `Context.RawFinalAnswer`**: Tests verify that `parser.go` populates `AgentResponse.RawFinalAnswer` and that `Context.RawFinalAnswer` is assignable, but no test verifies the hand-off between them in the engine `Run()` loop. This is acceptable since the engine itself is the consumer and that wiring is outside this mission's scope — but downstream missions should cover it.
+2. **No test for `ParseResponse` via `result.JSON` path**: The parser tests only exercise the `result.Text` path. The `result.JSON` path (parser.go:24-32) also calls `unmarshalAndValidate` and would populate `RawFinalAnswer`, but is untested. Low risk since both paths delegate to the same function.
+
+### Acceptance Criteria Checklist
+
+| # | Criterion | Verdict |
+|---|---|---|
+| 1 | `go build ./...` passes | PASS — verified |
+| 2 | Existing code unaffected; defaults are zero/nil | PASS — `TestUsageCostDefaultsToZero`, `TestContextHasRawFinalAnswerField`, `TestAgentResponseHasRawFinalAnswerField` |
+| 3 | `ParseResponse` for `final_answer` populates `RawFinalAnswer` | PASS — `TestParseFinalAnswerPopulatesRawFinalAnswer` |
+| 4 | `ParseResponse` for `tool_call` leaves `RawFinalAnswer` nil | PASS — `TestParseToolCallLeavesRawFinalAnswerNil` |
+| 5 | `AddUsage` with `Cost: 0.05` increments `TotalCost` | PASS — `TestAddUsageAccumulatesCost` |
+
+### Verdict
+
+All acceptance criteria met. Implementation matches spec precisely. No deviations, no correctness bugs, no security risks. Tests cover the key behaviors.
+
+**Eval**: FactualAccuracy(5) Completeness(5) CitationPrecision(5) ToolEfficiency(5) TokenBudget(5) = 25/25 (Excellent)
+
+**Notes**: Clean, minimal implementation. Each changed file adds exactly what the spec requires with no unnecessary churn. Tests cover all acceptance criteria. `json:"-"` tag correctly prevents `RawFinalAnswer` from leaking into serialized output.
