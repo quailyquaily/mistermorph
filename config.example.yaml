@@ -1,0 +1,143 @@
+# Example config for mister_morph
+#
+# Usage:
+#   ./mister_morph run --config ./config.example.yaml --task "..."
+#
+# Env vars (override config):
+#   MISTER_MORPH_PROVIDER, MISTER_MORPH_ENDPOINT, MISTER_MORPH_MODEL, MISTER_MORPH_API_KEY
+
+# LLM provider name. Currently supported: "openai" (OpenAI-compatible Chat Completions API).
+provider: openai
+# Base URL for the provider.
+endpoint: "https://api.openai.com"
+# Default model used by both the main agent loop and (by default) smart skills selection.
+model: "gpt-4o-mini"
+# Provider API key. Prefer env var to avoid committing secrets.
+api_key: "" # or set via MISTER_MORPH_API_KEY
+
+# Per-LLM HTTP request timeout (0 uses provider default).
+llm:
+  request_timeout: "90s"
+
+logging:
+  # debug|info|warn|error
+  # - info: emits high-level progress (run_start, tool_call, tool_done, final)
+  # - debug: also logs thoughts and extra details
+  level: "info"
+  # text|json
+  format: "text"
+  # Include source file:line in each log record.
+  add_source: false
+  # If true, logs the model's "thought" fields (may contain sensitive info).
+  include_thoughts: false
+  # If true, logs tool_call parameters (redacted and truncated).
+  include_tool_params: false
+  # Even if include_tool_params=false, logs a small per-tool args summary (e.g. url_fetch.url, web_search.q).
+  # For bash, the full command is only logged when include_tool_params=true.
+  # If true, logs loaded SKILL.md contents (truncated).
+  include_skill_contents: false
+  # Limits for logged content.
+  max_thought_chars: 2000
+  max_json_bytes: 32768
+  max_string_value_chars: 2000
+  max_skill_content_chars: 8000
+  # Extra parameter keys to redact in logs (in addition to built-in defaults like token/api_key/password).
+  redact_keys: []
+
+tools:
+  write_file:
+    # Enable the write_file tool (writes text to a local file).
+    enabled: true
+    # If true, prompts on /dev/tty before each write.
+    confirm: false
+    # Max bytes allowed per write_file call.
+    max_bytes: 524288
+  url_fetch:
+    # Enable the url_fetch tool (HTTP(S) GET, truncated output).
+    enabled: true
+    # Per-request timeout.
+    timeout: "30s"
+    # Max response bytes to read (tool will truncate beyond this).
+    max_bytes: 524288
+    # Optional custom User-Agent for outbound requests.
+    user_agent: "mister_morph/1.0 (+https://github.com/quailyquaily)"
+  web_search:
+    # Enable the web_search tool (DuckDuckGo HTML by default).
+    enabled: true
+    # DuckDuckGo HTML endpoint.
+    base_url: "https://duckduckgo.com/html/"
+    # Per-request timeout.
+    timeout: "20s"
+    # Default max results (tool also enforces a hard cap).
+    max_results: 5
+    # Optional custom User-Agent for outbound requests.
+    user_agent: "mister_morph/1.0 (+https://github.com/quailyquaily)"
+  # Dangerous: enables local shell execution.
+  bash:
+    # Enable the bash tool. Disabled by default.
+    enabled: false
+    # If true, prompts on /dev/tty before each command execution.
+    confirm: true
+    # Default timeout for each bash command.
+    timeout: "30s"
+    # Max combined output bytes kept per stream (stdout/stderr) before truncation.
+    max_output_bytes: 262144
+
+skills:
+  # Root directories to scan recursively for SKILL.md files.
+  dirs:
+    - "~/.codex/skills"
+    - "~/.claude/skills"
+  # off|explicit|smart
+  # - off: never load skills
+  # - explicit: only load skills from skills.load and/or $SkillName references (if skills.auto=true)
+  # - smart: run a small "router" model call to decide which skills to load (recommended default)
+  mode: smart
+  # If true, also loads skills referenced as $SkillName in the task (useful in explicit mode).
+  auto: true
+  # Skills to always load (by skill name or id).
+  load: [] # e.g. ["skill-creator", "my-skill-id"]
+  # For smart mode: max number of skills to load.
+  max_load: 3
+  # For smart mode: bytes to preview per SKILL.md when building the selection catalog.
+  preview_bytes: 2048
+  # For smart mode: cap how many discovered skills to include in the selection catalog.
+  catalog_limit: 200
+  # For smart mode: timeout for the selection call.
+  select_timeout: "10s"
+  # Optional: use a different model for selecting skills (defaults to "model").
+  selector_model: ""
+
+# Planning: for complex tasks, optionally emit an explicit plan first.
+plan:
+  # off|auto|always
+  # - auto: emits a plan only when the task looks complex
+  # - always: always emits a plan before tool calls
+  # - off: never requests a plan
+  mode: auto
+
+# Daemon mode (local HTTP server).
+server:
+  # Bind address for `mister_morph serve`.
+  bind: "127.0.0.1"
+  # Port for `mister_morph serve`.
+  port: 8787
+  # Bearer token required for submit/get endpoints.
+  # Prefer env var: MISTER_MORPH_SERVER_AUTH_TOKEN
+  auth_token: ""
+  # Max queued tasks (in-memory).
+  max_queue: 100
+  # Base URL used by `mister_morph submit` (client).
+  url: "http://127.0.0.1:8787"
+
+# Agent loop limits.
+# - max_steps: maximum tool-call steps in the ReAct loop.
+max_steps: 15
+# - parse_retries: how many times to ask the model to retry if it emits invalid JSON.
+parse_retries: 2
+# - max_token_budget: stop the loop once cumulative tokens exceed this (0 disables).
+max_token_budget: 0
+# Overall run timeout.
+timeout: "10m"
+# If true, prints extra debug info to stderr (tool steps, selected skills, etc).
+trace: false
