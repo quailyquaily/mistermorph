@@ -14,6 +14,7 @@ type Usage struct {
 	InputTokens  int
 	OutputTokens int
 	TotalTokens  int
+	Cost         float64
 }
 
 type Result struct {
