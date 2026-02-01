@@ -4,10 +4,24 @@ title: Security
 
 # Security
 
-This document focuses on **process isolation** and **filesystem sandboxing** when running `mister_morph` as a long-lived daemon (for example, via `mister_morph serve`).
-It also covers **secret handling** for authenticated outbound HTTP calls (profile-based credential injection).
+This document focuses on:
 
-## Why a systemd sandbox
+- **process isolation** and **filesystem sandboxing** when running `mister_morph` as a long-lived daemon (for example, via `mister_morph serve`)
+- **secret handling** for authenticated outbound HTTP calls (profile-based credential injection)
+
+## Table of contents
+
+- [Threat model](#threat-model)
+- [Secret handling (profile-based auth)](#secret-handling-profile-based-auth)
+  - [Configure profiles](#configure-profiles)
+  - [Tool behavior and safeguards](#tool-behavior-and-safeguards)
+- [Systemd sandbox](#systemd-sandbox)
+  - [Recommended deployment layout](#recommended-deployment-layout)
+  - [Filesystem sandboxing](#filesystem-sandboxing)
+  - [Other hardening knobs](#other-hardening-knobs)
+- [Notes and limitations](#notes-and-limitations)
+
+## Threat model
 
 `mister_morph` is an agent that can:
 
@@ -15,7 +29,15 @@ It also covers **secret handling** for authenticated outbound HTTP calls (profil
 - read local files (read_file tool, skill discovery)
 - optionally execute shell commands (bash tool, if enabled)
 
-That makes it a good candidate for a **deny-by-default** runtime profile:
+The main security risks are:
+
+- **data exfiltration** (sending local data to external services)
+- **secret leakage** (prompts, tool params, logs, traces)
+- **over-broad capabilities** (shell access, unrestricted networking, unrestricted filesystem reads/writes)
+
+## Systemd sandbox
+
+Because of those capabilities, daemon mode is a good candidate for a **deny-by-default** runtime profile:
 
 - keep the root filesystem read-only
 - allow writes only to explicitly declared directories
@@ -24,7 +46,7 @@ That makes it a good candidate for a **deny-by-default** runtime profile:
 
 systemd provides a first-class “service hardening” feature set for this. Unlike `chroot`, it does not require building a separate root filesystem; it applies restrictions directly to the unit.
 
-## Recommended deployment layout
+### Recommended deployment layout
 
 The recommended unit assumes:
 
@@ -38,7 +60,7 @@ The recommended unit assumes:
 
 See the example unit file: `deploy/systemd/mister-morph.service`.
 
-## Secrets and credential injection (profile-based auth)
+## Secret handling (profile-based auth)
 
 Agents are extremely good at “accidentally” leaking secrets if you ever put them into:
 
@@ -52,7 +74,7 @@ To avoid this, `mister_morph` supports **profile-based credential injection**:
 - The host resolves the real secret value from the environment (via `secret_ref`).
 - The tool injects the credential into the actual HTTP request (e.g. `Authorization: Bearer …`) without logging it.
 
-### Configure profiles (example)
+### Configure profiles
 
 In `/opt/morph/config.yaml`:
 
@@ -102,21 +124,21 @@ MISTER_MORPH_SERVER_AUTH_TOKEN="..."
 - `url_fetch` supports saving binary responses to `file_cache_dir` (instead of inlining bytes in the LLM context), which is recommended for PDFs.
 - When `secrets.enabled=true`, `bash` can still be enabled for local automation, but `curl` is rejected by default to avoid “bash + curl” carrying authenticated HTTP requests.
 
-## How the filesystem sandbox works (in the unit)
+### Filesystem sandboxing
 
-### Read-only system files
+#### Read-only system files
 
 - `ProtectSystem=strict` makes the system directories effectively read-only for the service (with a small set of unavoidable exceptions handled by systemd).
 - This prevents accidental or malicious writes to places like `/etc`, `/usr`, `/bin`, etc.
 
-### No access to home directories
+#### No access to home directories
 
 - `ProtectHome=true` hides `/home`, `/root`, and `/run/user` from the service.
 - This is a strong default: it prevents the agent from reading shell history, SSH keys, dotfiles, and other sensitive user data.
 
 If you need access to specific content, prefer moving it under `/opt/morph/...` or using explicit bind mounts (see below) rather than opening up all of `/home`.
 
-### Explicit writable directories only
+#### Explicit writable directories only
 
 systemd can create and manage service-owned directories under `/var/lib`, `/var/cache`, and `/var/log`:
 
@@ -130,7 +152,7 @@ The example unit additionally pins the agent’s paths via env vars:
 - `MISTER_MORPH_DB_DSN=/var/lib/morph/mister_morph.sqlite`
 - `MISTER_MORPH_FILE_CACHE_DIR=/var/cache/morph`
 
-### Optional bind mounts (fine-grained allowlist)
+#### Optional bind mounts (fine-grained allowlist)
 
 If you want the agent to read a specific project directory, allowlist it explicitly:
 
@@ -139,7 +161,7 @@ If you want the agent to read a specific project directory, allowlist it explici
 
 Prefer bind mounts over weakening `ProtectSystem`/`ProtectHome`.
 
-## Other hardening knobs used
+### Other hardening knobs
 
 The example unit also enables common isolation options:
 
