@@ -125,6 +125,8 @@ func (e *Engine) Run(ctx context.Context, task string, opts RunOptions) (*Final,
 		model = "gpt-4o-mini"
 	}
 
+	loadedSkills := e.loadedSkillNames()
+
 	runID := fmt.Sprintf("%x", rand.Uint64())
 	log := e.log.With(
 		"run_id", runID,
@@ -343,7 +345,11 @@ func (e *Engine) Run(ctx context.Context, task string, opts RunOptions) (*Final,
 			var toolErr error
 			tool, found := e.registry.Get(tc.Name)
 			if !found {
-				observation = fmt.Sprintf("Error: tool '%s' not found. Available tools: %s", tc.Name, e.registry.ToolNames())
+				if loadedSkills[strings.ToLower(strings.TrimSpace(tc.Name))] {
+					observation = fmt.Sprintf("Error: '%s' is not an available tool. It looks like a loaded skill, not a tool. Skills are prompt context; to execute a skill's script, use an available tool such as 'bash' (if enabled). Available tools: %s", tc.Name, e.registry.ToolNames())
+				} else {
+					observation = fmt.Sprintf("Error: tool '%s' not found. Available tools: %s", tc.Name, e.registry.ToolNames())
+				}
 			} else {
 				observation, toolErr = tool.Execute(ctx, tc.Params)
 				if toolErr != nil {
@@ -416,6 +422,34 @@ func (e *Engine) Run(ctx context.Context, task string, opts RunOptions) (*Final,
 	}
 
 	return e.forceConclusion(ctx, messages, model, agentCtx, extraParams, log)
+}
+
+func (e *Engine) loadedSkillNames() map[string]bool {
+	out := make(map[string]bool)
+	spec := e.spec
+	if len(spec.Blocks) == 0 {
+		return out
+	}
+	for _, blk := range spec.Blocks {
+		title := strings.TrimSpace(blk.Title)
+		if title == "" {
+			continue
+		}
+		// Most call sites use: "<name> (<id>)"
+		name := title
+		id := ""
+		if i := strings.LastIndexByte(title, '('); i >= 0 && strings.HasSuffix(title, ")") {
+			name = strings.TrimSpace(title[:i])
+			id = strings.TrimSpace(strings.TrimSuffix(title[i+1:], ")"))
+		}
+		if strings.TrimSpace(name) != "" {
+			out[strings.ToLower(name)] = true
+		}
+		if strings.TrimSpace(id) != "" {
+			out[strings.ToLower(id)] = true
+		}
+	}
+	return out
 }
 
 func missingFiles(paths []string) []string {

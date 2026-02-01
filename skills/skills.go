@@ -15,6 +15,7 @@ type Skill struct {
 	ID       string
 	Name     string
 	RootDir  string
+	RootRank int
 	Dir      string
 	SkillMD  string
 	Contents string
@@ -30,22 +31,21 @@ func DefaultRoots() []string {
 		return nil
 	}
 	return []string{
-		filepath.Join(home, ".codex", "skills"),
+		filepath.Join(home, ".morph", "skills"),
 		filepath.Join(home, ".claude", "skills"),
+		filepath.Join(home, ".codex", "skills"),
 	}
 }
 
 func Discover(opts DiscoverOptions) ([]Skill, error) {
-	roots := opts.Roots
-	if len(roots) == 0 {
-		roots = DefaultRoots()
-	}
+	roots := normalizeRoots(opts.Roots)
 
 	var out []Skill
 	var firstErr error
+	seenByID := make(map[string]bool)
 
-	for _, root := range roots {
-		root = strings.TrimSpace(root)
+	for rootRank, root := range roots {
+		root = strings.TrimSpace(expandHome(root))
 		if root == "" {
 			continue
 		}
@@ -80,12 +80,18 @@ func Discover(opts DiscoverOptions) ([]Skill, error) {
 			}
 
 			name := filepath.Base(dir)
+			idKey := strings.ToLower(id)
+			if seenByID[idKey] {
+				return nil
+			}
+			seenByID[idKey] = true
 			out = append(out, Skill{
-				ID:      id,
-				Name:    name,
-				RootDir: root,
-				Dir:     dir,
-				SkillMD: path,
+				ID:       id,
+				Name:     name,
+				RootDir:  root,
+				RootRank: rootRank,
+				Dir:      dir,
+				SkillMD:  path,
 			})
 			return nil
 		})
@@ -96,7 +102,10 @@ func Discover(opts DiscoverOptions) ([]Skill, error) {
 
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].Name == out[j].Name {
-			return out[i].ID < out[j].ID
+			if out[i].RootRank == out[j].RootRank {
+				return out[i].ID < out[j].ID
+			}
+			return out[i].RootRank < out[j].RootRank
 		}
 		return out[i].Name < out[j].Name
 	})
@@ -146,10 +155,25 @@ func Resolve(skills []Skill, query string) (Skill, error) {
 			return s, nil
 		}
 	}
+
+	var (
+		best    Skill
+		bestSet bool
+	)
 	for _, s := range skills {
-		if strings.ToLower(s.Name) == lower {
-			return s, nil
+		if strings.ToLower(s.Name) != lower {
+			continue
 		}
+		if !bestSet || s.RootRank < best.RootRank {
+			best = s
+			bestSet = true
+		} else if s.RootRank == best.RootRank && s.ID < best.ID {
+			best = s
+			bestSet = true
+		}
+	}
+	if bestSet {
+		return best, nil
 	}
 	return Skill{}, fmt.Errorf("skill not found: %s", query)
 }
@@ -180,4 +204,78 @@ func ReferencedSkillNames(task string) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+func normalizeRoots(roots []string) []string {
+	roots = append([]string{}, roots...)
+	if len(roots) == 0 {
+		roots = DefaultRoots()
+	}
+
+	expanded := make([]string, 0, len(roots))
+	seen := make(map[string]bool, len(roots))
+	for _, r := range roots {
+		r = strings.TrimSpace(expandHome(r))
+		if r == "" {
+			continue
+		}
+		key := strings.ToLower(filepath.Clean(r))
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		expanded = append(expanded, r)
+	}
+
+	// Enforce priority order for the well-known roots (even if provided out of order).
+	home, _ := os.UserHomeDir()
+	if strings.TrimSpace(home) == "" {
+		return expanded
+	}
+	want := []string{
+		filepath.Join(home, ".morph", "skills"),
+		filepath.Join(home, ".claude", "skills"),
+		filepath.Join(home, ".codex", "skills"),
+	}
+	wantKeys := map[string]int{}
+	for i, w := range want {
+		wantKeys[strings.ToLower(filepath.Clean(w))] = i
+	}
+
+	var prioritized []string
+	rest := make([]string, 0, len(expanded))
+	tmp := make([]string, len(want))
+	for _, r := range expanded {
+		k := strings.ToLower(filepath.Clean(r))
+		if idx, ok := wantKeys[k]; ok {
+			tmp[idx] = r
+			continue
+		}
+		rest = append(rest, r)
+	}
+	for _, r := range tmp {
+		if strings.TrimSpace(r) != "" {
+			prioritized = append(prioritized, r)
+		}
+	}
+	prioritized = append(prioritized, rest...)
+	return prioritized
+}
+
+func expandHome(p string) string {
+	p = strings.TrimSpace(p)
+	if p == "" {
+		return ""
+	}
+	if p == "~" || strings.HasPrefix(p, "~/") {
+		home, err := os.UserHomeDir()
+		if err != nil || strings.TrimSpace(home) == "" {
+			return filepath.Clean(p)
+		}
+		if p == "~" {
+			return home
+		}
+		return filepath.Join(home, strings.TrimPrefix(p, "~/"))
+	}
+	return filepath.Clean(p)
 }

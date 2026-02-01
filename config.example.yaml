@@ -103,9 +103,9 @@ db:
   driver: "sqlite"
   # Driver-specific DSN. For sqlite, prefer a plain file path.
   # If empty, Phase 1 auto-selects:
-  #   1) $HOME/.mister_morph/mister_morph.sqlite (if exists)
+  #   1) $HOME/.morph/mister_morph.sqlite (if exists)
   #   2) ./mister_morph.sqlite (if exists)
-  #   3) creates and uses $HOME/.mister_morph/mister_morph.sqlite
+  #   3) creates and uses $HOME/.morph/mister_morph.sqlite
   dsn: ""
   pool:
     # SQLite is single-writer; keep these conservative.
@@ -131,9 +131,11 @@ memory:
 
 skills:
   # Root directories to scan recursively for SKILL.md files.
+  # Priority order (first wins on duplicates): ~/.morph/skills, ~/.claude/skills, ~/.codex/skills
   dirs:
-    - "~/.codex/skills"
+    - "~/.morph/skills"
     - "~/.claude/skills"
+    - "~/.codex/skills"
   # off|explicit|smart
   # - off: never load skills
   # - explicit: only load skills from skills.load and/or $SkillName references (if skills.auto=true)

@@ -27,6 +27,7 @@ func DefaultPromptSpec() PromptSpec {
 			"If the user requests writing/saving a local file, you MUST use write_file (preferred) or bash to actually write it; do not claim you wrote a file unless you called a tool to do so.",
 			"Use tool_call when you need external information or actions; otherwise respond with final.",
 			"If a tool returns an error, you may try a different tool or different params.",
+			"In tool_call.tool_name, you MUST use a tool listed under 'Available Tools' (do NOT invent tool names). Skills are prompt context, not tools.",
 		},
 	}
 }
@@ -36,6 +37,7 @@ func BuildSystemPrompt(registry *tools.Registry, spec PromptSpec) string {
 	b.WriteString(spec.Identity)
 	if len(spec.Blocks) > 0 {
 		b.WriteString("\n\n## Skills & Context\n")
+		b.WriteString("Skills are not tools. They provide extra context and may include scripts to run via tools like bash.\n\n")
 		for _, blk := range spec.Blocks {
 			title := strings.TrimSpace(blk.Title)
 			if title == "" {

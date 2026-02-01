@@ -17,6 +17,7 @@ func newSkillsCmd() *cobra.Command {
 
 	cmd.AddCommand(newSkillsListCmd())
 	cmd.AddCommand(newSkillsShowCmd())
+	cmd.AddCommand(newSkillsInstallBuiltinCmd())
 	return cmd
 }
 
@@ -44,7 +45,7 @@ func newSkillsListCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringArray("skills-dir", nil, "Skills root directory (repeatable). Defaults: ~/.codex/skills, ~/.claude/skills")
+	cmd.Flags().StringArray("skills-dir", nil, "Skills root directory (repeatable). Defaults: ~/.morph/skills, ~/.claude/skills, ~/.codex/skills")
 
 	return cmd
 }
@@ -83,7 +84,7 @@ func newSkillsShowCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringArray("skills-dir", nil, "Skills root directory (repeatable). Defaults: ~/.codex/skills, ~/.claude/skills")
+	cmd.Flags().StringArray("skills-dir", nil, "Skills root directory (repeatable). Defaults: ~/.morph/skills, ~/.claude/skills, ~/.codex/skills")
 
 	return cmd
 }
