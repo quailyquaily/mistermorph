@@ -16,10 +16,16 @@ Type=simple
 ExecStart=/opt/morph/mister_morph --config /opt/morph/config.yaml --log-level info serve --server-bind 127.0.0.1 --server-port 8787
 
 # Secrets/config via environment (recommended).
-# Expected:
-# - MISTER_MORPH_API_KEY
+# Suggested split:
+# - /opt/morph/morph.env: non-secret config (permissions: 0640)
+# - /opt/morph/morph.secrets.env: secret values / secret_ref env vars (permissions: 0600)
+#
+# Common env vars:
+# - MISTER_MORPH_LLM_API_KEY
 # - MISTER_MORPH_SERVER_AUTH_TOKEN
+# - Any auth_profile secret_ref env vars (e.g. JSONBILL_API_KEY)
 EnvironmentFile=-/opt/morph/morph.env
+EnvironmentFile=-/opt/morph/morph.secrets.env
 
 Restart=on-failure
 RestartSec=2s
