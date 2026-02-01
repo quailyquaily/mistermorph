@@ -3,14 +3,23 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
+	"mime/multipart"
 	"net/http"
+	"net/url"
+	"os"
+	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -130,6 +139,35 @@ func newTelegramCmd() *cobra.Command {
 			httpClient := &http.Client{Timeout: 60 * time.Second}
 			api := newTelegramAPI(httpClient, baseURL, token)
 
+			fileCacheDir := strings.TrimSpace(flagOrViperString(cmd, "file-cache-dir", "file_cache_dir"))
+			if fileCacheDir == "" {
+				// Backward-compatible fallback.
+				fileCacheDir = strings.TrimSpace(flagOrViperString(cmd, "telegram-file-cache-dir", "telegram.file_cache_dir"))
+			}
+			if fileCacheDir == "" {
+				fileCacheDir = "/tmp/.morph-cache"
+			}
+			filesEnabled := flagOrViperBool(cmd, "telegram-files-enabled", "telegram.files.enabled")
+			filesMaxBytes := flagOrViperInt64(cmd, "telegram-files-max-bytes", "telegram.files.max_bytes")
+			if filesMaxBytes <= 0 {
+				filesMaxBytes = 20 * 1024 * 1024
+			}
+			if filesEnabled {
+				if err := ensureSecureCacheDir(fileCacheDir); err != nil {
+					return fmt.Errorf("telegram file cache dir: %w", err)
+				}
+				telegramCacheDir := filepath.Join(fileCacheDir, "telegram")
+				if err := ensureSecureChildDir(fileCacheDir, telegramCacheDir); err != nil {
+					return fmt.Errorf("telegram cache subdir: %w", err)
+				}
+				maxAge := viper.GetDuration("file_cache.max_age")
+				maxFiles := viper.GetInt("file_cache.max_files")
+				maxTotalBytes := viper.GetInt64("file_cache.max_total_bytes")
+				if err := cleanupFileCacheDir(telegramCacheDir, maxAge, maxFiles, maxTotalBytes); err != nil {
+					logger.Warn("file_cache_cleanup_error", "error", err.Error())
+				}
+			}
+
 			me, err := api.getMe(context.Background())
 			if err != nil {
 				return err
@@ -221,7 +259,7 @@ func newTelegramCmd() *cobra.Command {
 							_ = api.sendChatAction(context.Background(), chatID, "typing")
 
 							ctx, cancel := context.WithTimeout(context.Background(), taskTimeout)
-							final, _, runErr := runTelegramTask(ctx, logger, logOpts, client, reg, cfg, job, model, h)
+							final, _, runErr := runTelegramTask(ctx, logger, logOpts, client, reg, api, filesEnabled, fileCacheDir, filesMaxBytes, cfg, job, model, h)
 							cancel()
 
 							if runErr != nil {
@@ -280,11 +318,8 @@ func newTelegramCmd() *cobra.Command {
 						continue
 					}
 					chatID := msg.Chat.ID
-					text := strings.TrimSpace(msg.Text)
+					text := strings.TrimSpace(messageTextOrCaption(msg))
 					rawText := text
-					if text == "" {
-						continue
-					}
 
 					fromUserID := int64(0)
 					if msg.From != nil && !msg.From.IsBot {
@@ -300,6 +335,7 @@ func newTelegramCmd() *cobra.Command {
 						help := "Send a message and I will run it as an agent task.\n" +
 							"Commands: /ask <task>, /mem, /mem del <id>, /mem vis <id> <public|private>, /reset, /id\n\n" +
 							"Group chats: use /ask <task>, reply to me, or mention @" + botUser + ".\n" +
+							"You can also send a file (document/photo). It will be downloaded under file_cache_dir/telegram/ and the agent can process it.\n" +
 							"Note: if Bot Privacy Mode is enabled, I may not receive normal group messages (so aliases won't trigger unless I receive the message)."
 						_ = api.sendMessage(context.Background(), chatID, help, true)
 						continue
@@ -586,11 +622,33 @@ func newTelegramCmd() *cobra.Command {
 								)
 							}
 							text = strings.TrimSpace(dec.TaskText)
-							if strings.TrimSpace(text) == "" {
+							if strings.TrimSpace(text) == "" && !messageHasDownloadableFile(msg) {
 								_ = api.sendMessage(context.Background(), chatID, "usage: /ask <task> (or send text with a mention/reply)", true)
 								continue
 							}
+						} else {
+							if strings.TrimSpace(text) == "" && !messageHasDownloadableFile(msg) {
+								continue
+							}
 						}
+					}
+
+					var downloaded []telegramDownloadedFile
+					if filesEnabled && messageHasDownloadableFile(msg) {
+						telegramCacheDir := filepath.Join(fileCacheDir, "telegram")
+						ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+						downloaded, err = downloadTelegramMessageFiles(ctx, api, telegramCacheDir, filesMaxBytes, msg, chatID)
+						cancel()
+						if err != nil {
+							_ = api.sendMessage(context.Background(), chatID, "file download error: "+err.Error(), true)
+							continue
+						}
+					}
+					if strings.TrimSpace(text) == "" && len(downloaded) > 0 {
+						text = "Please process the uploaded file(s)."
+					}
+					if len(downloaded) > 0 {
+						text = appendDownloadedFilesToTask(text, downloaded)
 					}
 
 					// Enqueue to per-chat worker (per chat serial; across chats parallel).
@@ -627,6 +685,11 @@ func newTelegramCmd() *cobra.Command {
 	cmd.Flags().Duration("telegram-task-timeout", 0, "Per-message agent timeout (0 uses --timeout).")
 	cmd.Flags().Int("telegram-max-concurrency", 3, "Max number of chats processed concurrently.")
 	cmd.Flags().Int("telegram-history-max-messages", 20, "Max chat history messages to keep per chat.")
+	cmd.Flags().String("file-cache-dir", "/tmp/.morph-cache", "Global temporary file cache directory (used for Telegram file handling).")
+	// Deprecated: use --file-cache-dir or config file_cache_dir.
+	cmd.Flags().String("telegram-file-cache-dir", "", "Deprecated. Use --file-cache-dir.")
+	cmd.Flags().Bool("telegram-files-enabled", true, "If true, download inbound attachments and enable telegram_send_file tool.")
+	cmd.Flags().Int64("telegram-files-max-bytes", 20*1024*1024, "Max bytes for a single downloaded Telegram file.")
 
 	return cmd
 }
@@ -660,7 +723,7 @@ func initMemory(ctx context.Context) (memory.Store, memory.IdentityResolver, err
 	return memoryStore, memoryResolver, memoryInitErr
 }
 
-func runTelegramTask(ctx context.Context, logger *slog.Logger, logOpts agent.LogOptions, client llm.Client, baseReg *tools.Registry, cfg agent.Config, job telegramJob, model string, history []llm.Message) (*agent.Final, *agent.Context, error) {
+func runTelegramTask(ctx context.Context, logger *slog.Logger, logOpts agent.LogOptions, client llm.Client, baseReg *tools.Registry, api *telegramAPI, filesEnabled bool, fileCacheDir string, filesMaxBytes int64, cfg agent.Config, job telegramJob, model string, history []llm.Message) (*agent.Final, *agent.Context, error) {
 	task := job.Text
 	if baseReg == nil {
 		baseReg = registryFromViper()
@@ -670,6 +733,9 @@ func runTelegramTask(ctx context.Context, logger *slog.Logger, logOpts agent.Log
 	reg := tools.NewRegistry()
 	for _, t := range baseReg.All() {
 		reg.Register(t)
+	}
+	if filesEnabled && api != nil {
+		reg.Register(newTelegramSendFileTool(api, job.ChatID, filepath.Join(fileCacheDir, "telegram"), filesMaxBytes))
 	}
 
 	promptSpec, err := promptSpecWithSkills(ctx, logger, logOpts, task, client, model, skillsConfigFromViper(model))
@@ -780,6 +846,11 @@ type telegramMessage struct {
 	ReplyTo   *telegramMessage `json:"reply_to_message,omitempty"`
 	Entities  []telegramEntity `json:"entities,omitempty"`
 	Text      string           `json:"text,omitempty"`
+	Caption   string           `json:"caption,omitempty"`
+
+	// Attachments (subset).
+	Document *telegramDocument   `json:"document,omitempty"`
+	Photo    []telegramPhotoSize `json:"photo,omitempty"`
 }
 
 type telegramChat struct {
@@ -798,6 +869,20 @@ type telegramEntity struct {
 	Offset int           `json:"offset"`
 	Length int           `json:"length"`
 	User   *telegramUser `json:"user,omitempty"` // for text_mention
+}
+
+type telegramDocument struct {
+	FileID   string `json:"file_id"`
+	FileName string `json:"file_name,omitempty"`
+	MimeType string `json:"mime_type,omitempty"`
+	FileSize int64  `json:"file_size,omitempty"`
+}
+
+type telegramPhotoSize struct {
+	FileID   string `json:"file_id"`
+	Width    int    `json:"width,omitempty"`
+	Height   int    `json:"height,omitempty"`
+	FileSize int64  `json:"file_size,omitempty"`
 }
 
 type telegramGetUpdatesResponse struct {
@@ -896,6 +981,101 @@ type telegramOKResponse struct {
 	OK bool `json:"ok"`
 }
 
+type telegramFile struct {
+	FileID       string `json:"file_id"`
+	FileUniqueID string `json:"file_unique_id,omitempty"`
+	FileSize     int64  `json:"file_size,omitempty"`
+	FilePath     string `json:"file_path,omitempty"`
+}
+
+type telegramGetFileResponse struct {
+	OK     bool         `json:"ok"`
+	Result telegramFile `json:"result"`
+}
+
+func (api *telegramAPI) getFile(ctx context.Context, fileID string) (*telegramFile, error) {
+	fileID = strings.TrimSpace(fileID)
+	if fileID == "" {
+		return nil, fmt.Errorf("missing file_id")
+	}
+	url := fmt.Sprintf("%s/bot%s/getFile?file_id=%s", api.baseURL, api.token, url.QueryEscape(fileID))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := api.http.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	raw, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("telegram http %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))
+	}
+	var out telegramGetFileResponse
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil, err
+	}
+	if !out.OK {
+		return nil, fmt.Errorf("telegram getFile: ok=false")
+	}
+	if strings.TrimSpace(out.Result.FilePath) == "" {
+		return nil, fmt.Errorf("telegram getFile: missing file_path")
+	}
+	return &out.Result, nil
+}
+
+func (api *telegramAPI) downloadFileTo(ctx context.Context, filePath, dstPath string, maxBytes int64) (int64, bool, error) {
+	filePath = strings.TrimSpace(filePath)
+	dstPath = strings.TrimSpace(dstPath)
+	if filePath == "" {
+		return 0, false, fmt.Errorf("missing file_path")
+	}
+	if dstPath == "" {
+		return 0, false, fmt.Errorf("missing dst_path")
+	}
+	if maxBytes <= 0 {
+		maxBytes = 20 * 1024 * 1024
+	}
+
+	url := fmt.Sprintf("%s/file/bot%s/%s", api.baseURL, api.token, strings.TrimLeft(filePath, "/"))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return 0, false, err
+	}
+	resp, err := api.http.Do(req)
+	if err != nil {
+		return 0, false, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return 0, false, fmt.Errorf("telegram download http %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))
+	}
+
+	f, err := os.OpenFile(dstPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	if err != nil {
+		return 0, false, err
+	}
+	defer f.Close()
+
+	limited := io.LimitReader(resp.Body, maxBytes+1)
+	n, err := io.Copy(f, limited)
+	if err != nil {
+		return n, false, err
+	}
+	if n > maxBytes {
+		return n, true, fmt.Errorf("telegram file too large (>%d bytes)", maxBytes)
+	}
+	if err := f.Close(); err != nil {
+		return n, false, err
+	}
+	if err := os.Chmod(dstPath, 0o600); err != nil {
+		return n, false, err
+	}
+	return n, false, nil
+}
+
 func (api *telegramAPI) sendMessage(ctx context.Context, chatID int64, text string, disablePreview bool) error {
 	text = strings.TrimSpace(text)
 	if text == "" {
@@ -949,6 +1129,81 @@ func (api *telegramAPI) sendMessageChunked(ctx context.Context, chatID int64, te
 	return nil
 }
 
+func (api *telegramAPI) sendDocument(ctx context.Context, chatID int64, filePath string, filename string, caption string) error {
+	filePath = strings.TrimSpace(filePath)
+	if filePath == "" {
+		return fmt.Errorf("missing file path")
+	}
+
+	f, err := os.Open(filePath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	st, err := f.Stat()
+	if err != nil {
+		return err
+	}
+	if st.IsDir() {
+		return fmt.Errorf("path is a directory: %s", filePath)
+	}
+
+	filename = strings.TrimSpace(filename)
+	if filename == "" {
+		filename = filepath.Base(filePath)
+	}
+	if filename == "" {
+		filename = "file"
+	}
+	caption = strings.TrimSpace(caption)
+
+	pr, pw := io.Pipe()
+	mw := multipart.NewWriter(pw)
+	go func() {
+		defer pw.Close()
+		defer mw.Close()
+
+		_ = mw.WriteField("chat_id", strconv.FormatInt(chatID, 10))
+		if caption != "" {
+			_ = mw.WriteField("caption", caption)
+		}
+
+		part, err := mw.CreateFormFile("document", filename)
+		if err != nil {
+			_ = pw.CloseWithError(err)
+			return
+		}
+		if _, err := io.Copy(part, f); err != nil {
+			_ = pw.CloseWithError(err)
+			return
+		}
+	}()
+
+	url := fmt.Sprintf("%s/bot%s/sendDocument", api.baseURL, api.token)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, pr)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+
+	resp, err := api.http.Do(req)
+	if err != nil {
+		return err
+	}
+	raw, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("telegram http %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))
+	}
+	var ok telegramOKResponse
+	_ = json.Unmarshal(raw, &ok)
+	if !ok.OK {
+		return fmt.Errorf("telegram sendDocument: ok=false")
+	}
+	return nil
+}
+
 func splitCommand(text string) (cmd string, rest string) {
 	text = strings.TrimSpace(text)
 	if text == "" {
@@ -985,14 +1240,18 @@ func groupTriggerDecision(msg *telegramMessage, botUser string, botID int64, ali
 	if msg == nil {
 		return telegramGroupTriggerDecision{}, false
 	}
-	text := strings.TrimSpace(msg.Text)
-	if text == "" {
-		return telegramGroupTriggerDecision{}, false
-	}
+	text := strings.TrimSpace(messageTextOrCaption(msg))
 
 	// Reply-to-bot.
 	if msg.ReplyTo != nil && msg.ReplyTo.From != nil && msg.ReplyTo.From.ID == botID {
+		if text == "" && !messageHasDownloadableFile(msg) {
+			return telegramGroupTriggerDecision{}, false
+		}
 		return telegramGroupTriggerDecision{Reason: "reply", TaskText: stripBotMentions(text, botUser)}, true
+	}
+
+	if text == "" {
+		return telegramGroupTriggerDecision{}, false
 	}
 
 	// Entity-based mention of the bot (text_mention includes user id; mention includes "@username").
@@ -1524,4 +1783,530 @@ func (api *telegramAPI) sendChatAction(ctx context.Context, chatID int64, action
 		return fmt.Errorf("telegram http %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))
 	}
 	return nil
+}
+
+type telegramDownloadedFile struct {
+	Kind         string
+	OriginalName string
+	MimeType     string
+	SizeBytes    int64
+	Path         string
+}
+
+func messageTextOrCaption(msg *telegramMessage) string {
+	if msg == nil {
+		return ""
+	}
+	if strings.TrimSpace(msg.Text) != "" {
+		return msg.Text
+	}
+	return msg.Caption
+}
+
+func messageHasDownloadableFile(msg *telegramMessage) bool {
+	if msg == nil {
+		return false
+	}
+	if msg.Document != nil && strings.TrimSpace(msg.Document.FileID) != "" {
+		return true
+	}
+	if len(msg.Photo) > 0 {
+		for _, p := range msg.Photo {
+			if strings.TrimSpace(p.FileID) != "" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func ensureSecureCacheDir(dir string) error {
+	dir = strings.TrimSpace(dir)
+	if dir == "" {
+		return fmt.Errorf("empty dir")
+	}
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return err
+	}
+	dir = abs
+
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+
+	fi, err := os.Lstat(dir)
+	if err != nil {
+		return err
+	}
+	if fi.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("refusing symlink path: %s", dir)
+	}
+	if !fi.IsDir() {
+		return fmt.Errorf("not a directory: %s", dir)
+	}
+
+	perm := fi.Mode().Perm()
+	st, ok := fi.Sys().(*syscall.Stat_t)
+	if !ok || st == nil {
+		return fmt.Errorf("unsupported stat for: %s", dir)
+	}
+	curUID := uint32(os.Getuid())
+	if st.Uid != curUID {
+		return fmt.Errorf("cache dir not owned by current user (uid=%d, owner=%d): %s", curUID, st.Uid, dir)
+	}
+	if perm != 0o700 {
+		// Try to fix perms if we own it.
+		if err := os.Chmod(dir, 0o700); err != nil {
+			return fmt.Errorf("cache dir has insecure perms (%#o) and chmod failed: %w", perm, err)
+		}
+		fi2, err := os.Stat(dir)
+		if err != nil {
+			return err
+		}
+		if fi2.Mode().Perm() != 0o700 {
+			return fmt.Errorf("cache dir has insecure perms (%#o): %s", fi2.Mode().Perm(), dir)
+		}
+	}
+	return nil
+}
+
+func ensureSecureChildDir(parentDir, childDir string) error {
+	parentDir = strings.TrimSpace(parentDir)
+	childDir = strings.TrimSpace(childDir)
+	if parentDir == "" || childDir == "" {
+		return fmt.Errorf("missing parent/child dir")
+	}
+	parentAbs, err := filepath.Abs(parentDir)
+	if err != nil {
+		return err
+	}
+	childAbs, err := filepath.Abs(childDir)
+	if err != nil {
+		return err
+	}
+	rel, err := filepath.Rel(parentAbs, childAbs)
+	if err != nil {
+		return err
+	}
+	if rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+		return fmt.Errorf("child dir is not under parent dir: %s", childAbs)
+	}
+	return ensureSecureCacheDir(childAbs)
+}
+
+type fileCacheEntry struct {
+	Path    string
+	ModTime time.Time
+	Size    int64
+}
+
+func cleanupFileCacheDir(dir string, maxAge time.Duration, maxFiles int, maxTotalBytes int64) error {
+	dir = strings.TrimSpace(dir)
+	if dir == "" {
+		return fmt.Errorf("missing dir")
+	}
+	if maxAge <= 0 && maxFiles <= 0 && maxTotalBytes <= 0 {
+		return nil
+	}
+	now := time.Now()
+
+	var kept []fileCacheEntry
+	total := int64(0)
+
+	walkErr := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		// Never follow symlinks.
+		if d.Type()&os.ModeSymlink != 0 {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if d.IsDir() {
+			return nil
+		}
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		if !info.Mode().IsRegular() {
+			return nil
+		}
+		if maxAge > 0 && now.Sub(info.ModTime()) > maxAge {
+			_ = os.Remove(path)
+			return nil
+		}
+		kept = append(kept, fileCacheEntry{
+			Path:    path,
+			ModTime: info.ModTime(),
+			Size:    info.Size(),
+		})
+		total += info.Size()
+		return nil
+	})
+	if walkErr != nil && !os.IsNotExist(walkErr) {
+		return walkErr
+	}
+
+	// Enforce max_files and max_total_bytes by removing oldest files first.
+	sort.Slice(kept, func(i, j int) bool { return kept[i].ModTime.Before(kept[j].ModTime) })
+	needPrune := func() bool {
+		if maxFiles > 0 && len(kept) > maxFiles {
+			return true
+		}
+		if maxTotalBytes > 0 && total > maxTotalBytes {
+			return true
+		}
+		return false
+	}
+	for needPrune() && len(kept) > 0 {
+		old := kept[0]
+		kept = kept[1:]
+		total -= old.Size
+		_ = os.Remove(old.Path)
+	}
+
+	// Best-effort remove empty dirs (bottom-up).
+	var dirs []string
+	_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.Type()&os.ModeSymlink != 0 {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if d.IsDir() {
+			dirs = append(dirs, path)
+		}
+		return nil
+	})
+	sort.Slice(dirs, func(i, j int) bool { return len(dirs[i]) > len(dirs[j]) })
+	for _, d := range dirs {
+		if filepath.Clean(d) == filepath.Clean(dir) {
+			continue
+		}
+		_ = os.Remove(d)
+	}
+	return nil
+}
+
+func sanitizeFilename(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "file"
+	}
+	name = filepath.Base(name)
+	var b strings.Builder
+	b.Grow(len(name))
+	for _, r := range name {
+		switch {
+		case r >= 'a' && r <= 'z':
+			b.WriteRune(r)
+		case r >= 'A' && r <= 'Z':
+			b.WriteRune(r)
+		case r >= '0' && r <= '9':
+			b.WriteRune(r)
+		case r == '.' || r == '_' || r == '-' || r == '+':
+			b.WriteRune(r)
+		default:
+			b.WriteByte('_')
+		}
+	}
+	out := strings.Trim(b.String(), "._- ")
+	if out == "" {
+		return "file"
+	}
+	const max = 120
+	if len(out) > max {
+		out = out[:max]
+	}
+	return out
+}
+
+func shortHash(s string) string {
+	sum := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(sum[:6])
+}
+
+func appendDownloadedFilesToTask(task string, files []telegramDownloadedFile) string {
+	task = strings.TrimSpace(task)
+	var b strings.Builder
+	b.WriteString(task)
+	if b.Len() > 0 {
+		b.WriteString("\n\n")
+	}
+	b.WriteString("Downloaded Telegram file(s) (use bash tool to process these paths):\n")
+	for _, f := range files {
+		name := strings.TrimSpace(f.OriginalName)
+		if name == "" {
+			name = "file"
+		}
+		b.WriteString("- ")
+		if strings.TrimSpace(f.Kind) != "" {
+			b.WriteString(strings.TrimSpace(f.Kind))
+			b.WriteString(": ")
+		}
+		b.WriteString(name)
+		if strings.TrimSpace(f.Path) != "" {
+			b.WriteString(" -> ")
+			b.WriteString(strings.TrimSpace(f.Path))
+		}
+		b.WriteString("\n")
+	}
+	return strings.TrimSpace(b.String())
+}
+
+func downloadTelegramMessageFiles(ctx context.Context, api *telegramAPI, cacheDir string, maxBytes int64, msg *telegramMessage, chatID int64) ([]telegramDownloadedFile, error) {
+	if api == nil {
+		return nil, fmt.Errorf("telegram api not available")
+	}
+	if msg == nil {
+		return nil, nil
+	}
+	cacheDir = strings.TrimSpace(cacheDir)
+	if cacheDir == "" {
+		return nil, fmt.Errorf("missing cache dir")
+	}
+	if maxBytes <= 0 {
+		maxBytes = 20 * 1024 * 1024
+	}
+	if err := ensureSecureCacheDir(cacheDir); err != nil {
+		return nil, err
+	}
+	chatDir := filepath.Join(cacheDir, fmt.Sprintf("chat_%d", chatID))
+	if err := ensureSecureChildDir(cacheDir, chatDir); err != nil {
+		return nil, err
+	}
+
+	var out []telegramDownloadedFile
+
+	// document
+	if msg.Document != nil && strings.TrimSpace(msg.Document.FileID) != "" {
+		f, err := api.getFile(ctx, msg.Document.FileID)
+		if err != nil {
+			return nil, err
+		}
+		orig := strings.TrimSpace(msg.Document.FileName)
+		if orig == "" {
+			orig = "document" + filepath.Ext(f.FilePath)
+		}
+		name := sanitizeFilename(orig)
+		base := fmt.Sprintf("tg_%d_%s_%s", msg.MessageID, shortHash(msg.Document.FileID), name)
+		dst := filepath.Join(chatDir, base)
+		if _, err := os.Stat(dst); err == nil {
+			out = append(out, telegramDownloadedFile{
+				Kind:         "document",
+				OriginalName: orig,
+				MimeType:     msg.Document.MimeType,
+				SizeBytes:    msg.Document.FileSize,
+				Path:         dst,
+			})
+		} else {
+			tmp, err := os.CreateTemp(chatDir, base+".tmp-*")
+			if err != nil {
+				return nil, err
+			}
+			tmpPath := tmp.Name()
+			_ = tmp.Close()
+			_, _, dlErr := api.downloadFileTo(ctx, f.FilePath, tmpPath, maxBytes)
+			if dlErr != nil {
+				_ = os.Remove(tmpPath)
+				return nil, dlErr
+			}
+			if err := os.Chmod(tmpPath, 0o600); err != nil {
+				_ = os.Remove(tmpPath)
+				return nil, err
+			}
+			if err := os.Rename(tmpPath, dst); err != nil {
+				_ = os.Remove(tmpPath)
+				return nil, err
+			}
+			_ = os.Chmod(dst, 0o600)
+			out = append(out, telegramDownloadedFile{
+				Kind:         "document",
+				OriginalName: orig,
+				MimeType:     msg.Document.MimeType,
+				SizeBytes:    msg.Document.FileSize,
+				Path:         dst,
+			})
+		}
+	}
+
+	// photo (download the largest size).
+	if len(msg.Photo) > 0 {
+		var best telegramPhotoSize
+		for i := range msg.Photo {
+			if strings.TrimSpace(msg.Photo[i].FileID) == "" {
+				continue
+			}
+			best = msg.Photo[i]
+		}
+		if strings.TrimSpace(best.FileID) != "" {
+			f, err := api.getFile(ctx, best.FileID)
+			if err != nil {
+				return nil, err
+			}
+			ext := filepath.Ext(f.FilePath)
+			orig := "photo" + ext
+			name := sanitizeFilename(orig)
+			base := fmt.Sprintf("tg_%d_%s_%s", msg.MessageID, shortHash(best.FileID), name)
+			dst := filepath.Join(chatDir, base)
+			if _, err := os.Stat(dst); err == nil {
+				out = append(out, telegramDownloadedFile{
+					Kind:         "photo",
+					OriginalName: orig,
+					SizeBytes:    best.FileSize,
+					Path:         dst,
+				})
+			} else {
+				tmp, err := os.CreateTemp(chatDir, base+".tmp-*")
+				if err != nil {
+					return nil, err
+				}
+				tmpPath := tmp.Name()
+				_ = tmp.Close()
+				_, _, dlErr := api.downloadFileTo(ctx, f.FilePath, tmpPath, maxBytes)
+				if dlErr != nil {
+					_ = os.Remove(tmpPath)
+					return nil, dlErr
+				}
+				if err := os.Chmod(tmpPath, 0o600); err != nil {
+					_ = os.Remove(tmpPath)
+					return nil, err
+				}
+				if err := os.Rename(tmpPath, dst); err != nil {
+					_ = os.Remove(tmpPath)
+					return nil, err
+				}
+				_ = os.Chmod(dst, 0o600)
+				out = append(out, telegramDownloadedFile{
+					Kind:         "photo",
+					OriginalName: orig,
+					SizeBytes:    best.FileSize,
+					Path:         dst,
+				})
+			}
+		}
+	}
+
+	return out, nil
+}
+
+type telegramSendFileTool struct {
+	api      *telegramAPI
+	chatID   int64
+	cacheDir string
+	maxBytes int64
+	enabled  bool
+}
+
+func newTelegramSendFileTool(api *telegramAPI, chatID int64, cacheDir string, maxBytes int64) *telegramSendFileTool {
+	if maxBytes <= 0 {
+		maxBytes = 20 * 1024 * 1024
+	}
+	return &telegramSendFileTool{
+		api:      api,
+		chatID:   chatID,
+		cacheDir: strings.TrimSpace(cacheDir),
+		maxBytes: maxBytes,
+		enabled:  true,
+	}
+}
+
+func (t *telegramSendFileTool) Name() string { return "telegram_send_file" }
+
+func (t *telegramSendFileTool) Description() string {
+	return "Sends a local file (from file_cache_dir/telegram) back to the current chat as a document. If you need more advanced behavior, describe it in text instead."
+}
+
+func (t *telegramSendFileTool) ParameterSchema() string {
+	s := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"path": map[string]any{
+				"type":        "string",
+				"description": "Path to a local file under file_cache_dir/telegram (absolute or relative to that directory).",
+			},
+			"filename": map[string]any{
+				"type":        "string",
+				"description": "Optional filename shown to the user (default: basename of path).",
+			},
+			"caption": map[string]any{
+				"type":        "string",
+				"description": "Optional caption text.",
+			},
+		},
+		"required": []string{"path"},
+	}
+	b, _ := json.MarshalIndent(s, "", "  ")
+	return string(b)
+}
+
+func (t *telegramSendFileTool) Execute(ctx context.Context, params map[string]any) (string, error) {
+	if !t.enabled || t.api == nil {
+		return "", fmt.Errorf("telegram_send_file is disabled")
+	}
+	rawPath, _ := params["path"].(string)
+	rawPath = strings.TrimSpace(rawPath)
+	if rawPath == "" {
+		return "", fmt.Errorf("missing required param: path")
+	}
+	cacheDir := strings.TrimSpace(t.cacheDir)
+	if cacheDir == "" {
+		return "", fmt.Errorf("file cache dir is not configured")
+	}
+
+	p := rawPath
+	if !filepath.IsAbs(p) {
+		p = filepath.Join(cacheDir, p)
+	}
+	p = filepath.Clean(p)
+
+	cacheAbs, err := filepath.Abs(cacheDir)
+	if err != nil {
+		return "", err
+	}
+	pathAbs, err := filepath.Abs(p)
+	if err != nil {
+		return "", err
+	}
+	rel, err := filepath.Rel(cacheAbs, pathAbs)
+	if err != nil {
+		return "", err
+	}
+	if rel == "." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) || rel == ".." {
+		return "", fmt.Errorf("refusing to send file outside file_cache_dir: %s", pathAbs)
+	}
+
+	st, err := os.Stat(pathAbs)
+	if err != nil {
+		return "", err
+	}
+	if st.IsDir() {
+		return "", fmt.Errorf("path is a directory: %s", pathAbs)
+	}
+	if t.maxBytes > 0 && st.Size() > t.maxBytes {
+		return "", fmt.Errorf("file too large to send (>%d bytes): %s", t.maxBytes, pathAbs)
+	}
+
+	filename, _ := params["filename"].(string)
+	filename = strings.TrimSpace(filename)
+	if filename == "" {
+		filename = filepath.Base(pathAbs)
+	}
+	filename = sanitizeFilename(filename)
+
+	caption, _ := params["caption"].(string)
+	caption = strings.TrimSpace(caption)
+
+	if err := t.api.sendDocument(ctx, t.chatID, pathAbs, filename, caption); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("sent file: %s", filename), nil
 }

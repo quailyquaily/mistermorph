@@ -73,6 +73,7 @@ export MISTER_MORPH_TELEGRAM_BOT_TOKEN="123456:ABC..."
 Notes:
 - Use `/ask <task>` in groups.
 - In groups, the bot also responds when you reply to it, or mention `@BotUsername` (if it receives the message).
+- You can send a file (document/photo); it will be downloaded under `file_cache_dir/telegram/` and the agent can process it (e.g. via the `bash` tool). The agent can also send cached files back via `telegram_send_file`.
 - If you configure `telegram.aliases`, the default `telegram.group_trigger_mode=smart` only triggers on aliases when the message looks like direct addressing (alias near the start + request-like text). Use `contains` for the old substring behavior.
 - If you want smarter disambiguation for alias mentions, enable `telegram.addressing_llm.enabled` (and optionally set `telegram.addressing_llm.mode=always`) to let an LLM classify alias hits.
 - Use `/id` to print the current chat id (useful for allowlisting group ids).

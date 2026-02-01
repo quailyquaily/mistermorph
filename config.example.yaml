@@ -219,6 +219,11 @@ telegram:
   max_concurrency: 3
   # Max chat history messages kept per chat.
   history_max_messages: 20
+  files:
+    # If true, download inbound attachments (document/photo) to file_cache_dir (under ./telegram/) and enable telegram_send_file tool.
+    enabled: true
+    # Max bytes for a single downloaded Telegram file.
+    max_bytes: 20971520
 
 # Agent loop limits.
 # - max_steps: maximum tool-call steps in the ReAct loop.
@@ -229,5 +234,15 @@ parse_retries: 2
 max_token_budget: 0
 # Overall run timeout.
 timeout: "10m"
+# Global temporary file cache directory used for inbound/outbound file handling (e.g. Telegram).
+file_cache_dir: "/tmp/.morph-cache"
+file_cache:
+  # Note: cleanup runs on startup (best-effort).
+  # Max age for cached files (0 disables age-based cleanup).
+  max_age: "168h"
+  # Max number of cached files (0 disables count-based cleanup).
+  max_files: 1000
+  # Max total bytes of cached files (0 disables size-based cleanup).
+  max_total_bytes: 536870912
 # If true, prints extra debug info to stderr (tool steps, selected skills, etc).
 trace: false

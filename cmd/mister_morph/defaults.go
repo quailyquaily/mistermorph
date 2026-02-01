@@ -20,6 +20,12 @@ func initViperDefaults() {
 	viper.SetDefault("timeout", 10*time.Minute)
 	viper.SetDefault("plan.mode", "auto")
 
+	// Global
+	viper.SetDefault("file_cache_dir", "/tmp/.morph-cache")
+	viper.SetDefault("file_cache.max_age", 7*24*time.Hour)
+	viper.SetDefault("file_cache.max_files", 1000)
+	viper.SetDefault("file_cache.max_total_bytes", int64(512*1024*1024))
+
 	// Skills
 	viper.SetDefault("skills.mode", "smart")
 	viper.SetDefault("skills.max_load", 3)
@@ -50,6 +56,8 @@ func initViperDefaults() {
 	viper.SetDefault("telegram.addressing_llm.timeout", 3*time.Second)
 	viper.SetDefault("telegram.addressing_llm.min_confidence", 0.55)
 	viper.SetDefault("telegram.max_concurrency", 3)
+	viper.SetDefault("telegram.files.enabled", true)
+	viper.SetDefault("telegram.files.max_bytes", int64(20*1024*1024))
 
 	// DB (Phase 1: sqlite only)
 	viper.SetDefault("db.driver", "sqlite")
