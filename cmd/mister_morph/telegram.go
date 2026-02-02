@@ -742,6 +742,13 @@ func runTelegramTask(ctx context.Context, logger *slog.Logger, logOpts agent.Log
 		return nil, nil, nil, err
 	}
 
+	// Telegram replies are rendered using Telegram Markdown (MarkdownV2 first; fallback to Markdown/plain).
+	// Underscores in identifiers like "new_york" will render as italics unless the model wraps them in
+	// backticks. Give the model a channel-specific reminder.
+	promptSpec.Rules = append(promptSpec.Rules,
+		"In your final.output string, write for Telegram Markdown (prefer MarkdownV2). Wrap identifiers/params/paths (especially anything containing '_' like `new_york`) in backticks so they render correctly. Avoid using underscores for italics; use *...* if you need emphasis.",
+	)
+
 	if viper.GetBool("memory.enabled") && job.FromUserID > 0 {
 		reqCtx := memory.ContextPublic
 		if strings.ToLower(strings.TrimSpace(job.ChatType)) == "private" {
@@ -1084,6 +1091,10 @@ func (api *telegramAPI) sendMessage(ctx context.Context, chatID int64, text stri
 		text = "(empty)"
 	}
 
+	// Telegram renders responses using MarkdownV2/Markdown. Many agent outputs contain identifiers like
+	// "new_york" which would otherwise render as italics. Escape underscores outside code spans/blocks.
+	text = escapeTelegramMarkdownUnderscores(text)
+
 	// Telegram Markdown can be picky; try richer formatting first, then fall back to plain text.
 	if err := api.sendMessageWithParseMode(ctx, chatID, text, disablePreview, "MarkdownV2"); err == nil {
 		return nil
@@ -1092,6 +1103,53 @@ func (api *telegramAPI) sendMessage(ctx context.Context, chatID int64, text stri
 		return nil
 	}
 	return api.sendMessageWithParseMode(ctx, chatID, text, disablePreview, "")
+}
+
+func escapeTelegramMarkdownUnderscores(text string) string {
+	if !strings.Contains(text, "_") {
+		return text
+	}
+
+	var b strings.Builder
+	b.Grow(len(text) + 8)
+
+	inCodeBlock := false
+	inInlineCode := false
+
+	for i := 0; i < len(text); i++ {
+		// Toggle fenced code blocks with ```
+		if !inInlineCode && strings.HasPrefix(text[i:], "```") {
+			inCodeBlock = !inCodeBlock
+			b.WriteString("```")
+			i += 2
+			continue
+		}
+
+		ch := text[i]
+
+		// Toggle inline code with `
+		if !inCodeBlock && ch == '`' {
+			inInlineCode = !inInlineCode
+			b.WriteByte(ch)
+			continue
+		}
+
+		// Escape underscores outside code.
+		if !inCodeBlock && !inInlineCode && ch == '_' {
+			// Avoid double-escaping if the user/model already emitted \_
+			if i > 0 && text[i-1] == '\\' {
+				b.WriteByte('_')
+				continue
+			}
+			b.WriteByte('\\')
+			b.WriteByte('_')
+			continue
+		}
+
+		b.WriteByte(ch)
+	}
+
+	return b.String()
 }
 
 func (api *telegramAPI) sendMessageChunked(ctx context.Context, chatID int64, text string) error {

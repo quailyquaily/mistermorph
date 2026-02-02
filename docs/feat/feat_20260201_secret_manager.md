@@ -6,34 +6,38 @@ status: done
 
 Date: 2026-02-01
 
-## 1. 需求 Review（技术合理性）
+## 1. Requirements Review (Technical Soundness)
 
-你提出的方向整体是正确的：把 secret（API Key / Token）与 skill 定义、日志、以及 LLM 上下文彻底隔离，并按“最小暴露面（least exposure）”在运行时注入到真实请求中。
+The overall direction is correct: fully separate secrets (API keys / tokens) from skill definitions, logs, and the LLM context, then inject them into real requests at runtime with the smallest possible exposure surface (“least exposure”).
 
-这套设计能显著降低以下风险面：
+This design significantly reduces the following risks:
 
-- **Prompt injection/套话泄漏**：模型永远“看不见”明文 key，即使被诱导也吐不出来。
-- **工具调用记录泄漏**：tool params / traces / debug logs 不应携带 key（只出现 `secret_ref` 这种引用）。
-- **不受信任 skill 的扩散风险**：skill 只声明自己“需要什么 ref”，不掌握 secret 本体。
-- **意外复制/提交**：避免 key 出现在 `SKILL.md`、配置模板、或者运行日志中。
+- **Prompt injection / social-engineering leakage**: the model never sees the raw key, so it cannot leak it even if coerced.
+- **Tool call trace leakage**: tool params / traces / debug logs must not carry secrets (only references like `secret_ref`).
+- **Untrusted skill blast radius**: a skill can declare “what it needs” but never holds the secret value.
+- **Accidental copy/commit**: avoids secrets ending up in `SKILL.md`, example configs, or run logs.
 
-同时，这里也有几个需要补强/澄清的点（建议纳入 TODO）：
+There are also a few points that need to be strengthened/clarified (recommended TODOs):
 
-- **`secret_ref` 本身也需要权限边界**：如果任意用户输入都能让模型指定 `secret_ref=ANYTHING`，仍可能导致“越权取其他 secret”。因此需要“允许列表/绑定关系”（skill ↔ secret_ref ↔ tool）。
-- **不要让 LLM 拼完整 HTTP 请求**：你已指出这一点。落地时需要把“headers/body 的拼装权”收回到宿主层（tool 实现或 middleware）。
-- **日志红action要覆盖常见 header 命名**：当前日志红action偏向 `api_key`/`authorization` 等；像 `X-API-Key`（含连字符）这类容易漏掉，需要补齐。
+- **`secret_ref` must have authorization boundaries**: if arbitrary user text can make the model choose `secret_ref=ANYTHING`, it can still access unrelated secrets. You need an allowlist / binding relationship (skill ↔ profile/secret_ref ↔ tool).
+- **Do not let the LLM assemble full HTTP requests**: headers/body assembly must be controlled by the host (tool implementation or middleware).
+- **Log redaction must cover common header names**: redaction based on `api_key` / `authorization` alone is easy to miss; names like `X-API-Key` must be covered.
 
-## 2. 建议的架构拆分（适配 mister_morph）
+## 2. Proposed Architecture (mister_morph)
 
-### 2.1 概念与数据模型（最小必要）
+### 2.1 Concepts and Minimal Data Model
 
-本方案选择 **profile-based auth** 作为唯一推荐路径：skill/LLM **只引用 profile id**，不直接声明 `secret_ref`、不声明 header 名、不声明注入位置。
+This design recommends **profile-based auth** as the only supported path:
 
-这样才能从机制上实现“最小暴露面 + 最小可变输入面”，避免 prompt injection 把注入细节/目标域名改成攻击者控制的值。
+- Skills/LLM reference **only** a profile id.
+- Skills/LLM do **not** specify `secret_ref`.
+- Skills/LLM do **not** specify injection location/header names.
 
-#### Skill 侧（只声明需要的 profile）
+This is necessary to achieve “least exposure” and a small, host-controlled input surface, preventing prompt injection from rewriting injection details or target domains.
 
-Skill frontmatter（示例）：
+#### Skill side (declare required profiles only)
+
+Skill frontmatter example:
 
 ```yaml
 ---
@@ -43,36 +47,36 @@ auth_profiles: ["jsonbill"]
 ---
 ```
 
-在 LLM/tool 调用层，只允许传：
+At the LLM/tool call layer, only this is allowed:
 
-- `auth_profile`: `"jsonbill"`（字符串 id）
+- `auth_profile`: `"jsonbill"` (profile id string)
 
-### 2.2 Secret Resolver / Credential Provider（宿主侧）
+### 2.2 Secret Resolver / Credential Provider (Host side)
 
-新增一个 Secret Resolver（或 Credential Provider）接口：
+Introduce a Secret Resolver (Credential Provider) interface:
 
-- 输入：`secret_ref`（例如 `JSONBILL_API_KEY`）
-- 输出：**仅在内存中短生命周期存在**的明文 secret（string/bytes）
+- Input: `secret_ref` (e.g. `JSONBILL_API_KEY`)
+- Output: the plaintext secret, **in-memory only**, for a short lifetime (string/bytes)
 
-MVP 落地：`EnvSecretResolver`
+MVP implementation: `EnvResolver`
 
-- 默认策略：`secret_ref` 直接映射到环境变量名（例如 `JSONBILL_API_KEY`）
-- 可选策略：支持配置别名（`secret_ref -> ENV_NAME`），便于迁移/复用
-- 失败策略：默认 fail-closed（找不到就报错，不降级为“让 LLM 继续猜”）
+- Default mapping: `secret_ref` maps directly to an environment variable name (e.g. `JSONBILL_API_KEY`)
+- Optional: alias mapping `secret_ref -> ENV_NAME` to ease migration/reuse
+- Failure policy: fail-closed (missing => error; do not “let the model guess”)
 
-### 2.3 Tool 注入点（只在 HTTP 层用）
+### 2.3 Injection Point (HTTP layer only)
 
-对需要鉴权的工具，建议采用下面两条硬规则：
+For tools that need auth, enforce two hard rules:
 
-1) **LLM 只能传 `auth_profile`，不能传 `secret_ref`，也不能传任何鉴权值（header/query/body/subprotocol 等）**
-2) **最终鉴权注入在 tool 内部或 tool middleware 内完成，且不出现在 observation/logs**
+1) **The LLM can only pass `auth_profile`, never `secret_ref`, and never any auth value (header/query/body/subprotocol/etc).**
+2) **Final auth injection happens inside the tool (or middleware) and must not appear in observations/logs.**
 
-在本仓库里，优先改造/扩展 `url_fetch`（`tools/builtin/url_fetch.go`）来承载“安全 HTTP”能力，因为：
+In this repo, `url_fetch` (`tools/builtin/url_fetch.go`) is the right place to implement “safe HTTP” because:
 
-- 现在 `url_fetch` 允许 LLM 直接传 `headers`，这会鼓励把 key 放进 tool params（高风险）。
-- `agent/logging.go` 虽然会按 key 名 redaction，但对 `X-API-Key` 这类命名存在漏网风险。
+- `url_fetch` currently accepts user-provided `headers`, which encourages putting secrets into tool params (high risk).
+- `agent/logging.go` redaction helps, but header-name variants like `X-API-Key` are easy to miss without strict policy.
 
-建议的 tool call（示例，仅传 profile）：
+Recommended tool call shape (profile only):
 
 ```json
 {
@@ -82,218 +86,217 @@ MVP 落地：`EnvSecretResolver`
 }
 ```
 
-并增加约束：
+Additional constraints:
 
-- `headers` 允许，但必须经过 **安全 header 名 allowlist（P0）**；同时对敏感/代理类 header 名做 denylist（P0）
-- 输出中不回显 request headers（目前 `url_fetch` 没回显 headers，保持即可）
+- Allow `headers`, but enforce a safe allowlist (P0) and deny sensitive/proxy headers (P0).
+- Do not echo request headers in the observation (current `url_fetch` behavior already does this).
 
-### 2.4 Profile 结构的可扩展性（面向未来工具）
+### 2.4 Extensibility of Profiles (Future tools)
 
-注意：`auth_profile` 的核心价值是 **把“凭据是什么”和“如何使用它”从 LLM 的可控输入里拿走**，而不是把“url_fetch 的 header 注入方式”固化成整个系统的唯一形态。
+The value of `auth_profile` is taking “what the credential is” and “how it is applied” out of LLM-controlled inputs; it is not about hard-coding “HTTP header injection” as the only mechanism.
 
-未来可能出现的工具（例：`websocket_fetch`）未必通过 HTTP header 传 key：可能需要 query param、WebSocket subprotocol、握手 header、或者某种签名流程。因此建议把 profile 的配置拆成两层：
+Future tools (e.g. `websocket_fetch`) may need query params, WebSocket subprotocols, handshake headers, or request signing. Therefore the profile config should be split into:
 
-- **Credential（凭据本体引用）**：`secret_ref` + 类型（api_key/bearer/…），只负责“从哪里取明文”，不包含注入细节
-- **Bindings（工具绑定/注入策略）**：按 tool 维度声明“这个 tool 如何使用该 credential”（例如 header/query/subprotocol），由宿主配置固定
+- **Credential**: `secret_ref` + kind (api_key/bearer/…), only “where to resolve plaintext”
+- **Bindings**: tool-specific injection strategy declared per tool (host-controlled)
 
-这样：
+This way:
 
-- skill/LLM 仍然只传 `auth_profile="jsonbill"`
-- 具体用 header 还是 query、header 名是什么、是否允许 redirect/哪些 host/path 允许访问，全部由宿主配置决定
+- Skills/LLM still pass only `auth_profile="jsonbill"`.
+- Whether it uses header vs query, header name, redirect policy, allowed hosts/paths, etc. are all host-controlled.
 
-为了同时满足“可扩展”和“可校验”，建议 `bindings.<tool>` 的注入规则保持 **结构化且可枚举**：
+To keep this both extensible and auditable, `bindings.<tool>` should remain structured and enumerable:
 
-- 采用统一的注入原语（MVP）：`inject.location` + `inject.name` + `inject.format`
-- 为未来预留扩展枚举（例如 `subprotocol`、`cookie`、`signed` 等），但**每个工具只能接受它明确支持的子集**；不支持则报错（fail-closed）
-- `inject.format` 必须是枚举（例如 `raw` / `bearer` / `basic`），禁止自由模板字符串（例如 `format: "X-API-Key: {{secret}}"`）这类不可控拼接方式
+- Use structured injection primitives (MVP): `inject.location` + `inject.name` + `inject.format`
+- Reserve enum space for future injection locations (e.g. `subprotocol`, `cookie`, `signed`), but **each tool must only accept the subset it explicitly supports**; otherwise error (fail-closed).
+- `inject.format` must be an enum (e.g. `raw` / `bearer` / `basic`); do not allow free-form templates such as `format: "X-API-Key: {{secret}}"`.
 
-### 2.5 权限边界（防“模型随便取 ref”）
+### 2.5 Authorization Boundaries (Prevent “model can grab anything”)
 
-需要把 “谁能用哪些 profile” 固化为可审计的 policy，而不是完全交给 LLM：
+“Which profiles can be used” must be a host policy, not an LLM decision:
 
-- **Skill 级声明**：skill 的 frontmatter 声明 `auth_profiles: ["jsonbill"]`
-- **运行时 allowlist**：配置/启动参数指定本次 run 允许的 `auth_profile` 集合
-- **Tool 级约束**：仅允许某些 tool 使用 `auth_profile`（如 `url_fetch`）；`bash` 不允许承载带鉴权 HTTP（见 TODO）
+- **Skill declaration**: skill frontmatter declares `auth_profiles: ["jsonbill"]`.
+- **Runtime allowlist**: config/flags declare which `auth_profile` ids are allowed for the run.
+- **Tool-level constraints**: only selected tools may accept `auth_profile` (e.g. `url_fetch`); `bash` must not be used to carry authenticated HTTP (see TODO).
 
-如果允许“用户任务文本”影响 `auth_profile`，务必做校验：
+If user task text can influence `auth_profile`, validate strictly:
 
-- `auth_profile` 必须匹配严格正则（如 `^[a-z][a-z0-9_.-]{1,63}$`）
-- 必须在 allowlist 中
-- 必须是 skill 声明过的 profile（当此次 tool call 归因于某个 skill 时）
+- `auth_profile` must match a strict regex (e.g. `^[a-z][a-z0-9_.-]{1,63}$`)
+- Must be in the runtime allowlist
+- Must be declared by at least one loaded skill (when enforcing skill declarations)
 
-## 3. 实现 TODO（按优先级）
+## 3. Implementation TODO (Prioritized)
 
-### P0（必须）
+### P0 (Must)
 
-- 新增 `secrets`（或 `credentials`）包：定义 `Resolver` 接口 + `EnvResolver` 实现（仅从 env 取值，不落盘）。
-- 在 Engine/工具构造阶段注入 resolver（避免让 tool 自己 `os.Getenv` 到处读）。
-- 引入 **profile-based auth（唯一支持路径）**：
-  - `url_fetch` 新增 `auth_profile` 参数：LLM/skill 只能传 `profile_id`，不能描述注入细节与 `secret_ref`。
-  - 运行时从配置加载 `auth_profiles`（宿主定义）：
-    - `credential`: 绑定的 `secret_ref` + `kind`（api_key/bearer/…）
-    - `allow`: `url_prefixes` + `methods`（以及 `follow_redirects` 等开关）
-    - `bindings`: 按 tool 的注入规则（例如 `bindings.url_fetch.inject.location=header` + `inject.name=Authorization` + `inject.format=bearer`）
-  - `url_fetch` 执行时：先校验 URL 是否符合 `allow` 约束，再按 `bindings.url_fetch` 的规则通过 resolver 取 secret 并注入；禁止把注入信息传播到 redirect（推荐默认：禁用 redirect）。
-  - 明确不支持 `auth.secret_ref`（避免绕开 profile 约束的“后门 API”）。
-- `bindings` 的校验与失败策略：
-  - 未配置 `bindings.<tool>`：该 tool 使用该 `auth_profile` 时直接报错（避免“悄悄不带 auth”）
-  - `inject.location`/字段名不被该 tool 支持：直接报错（fail-closed）
-- `url_fetch.headers` 的强约束（P0：header 名约束；P1：header 值模式检测/脱敏）：
-  - 允许（allowlist，建议默认）：`Accept`、`Content-Type`、`User-Agent`、`If-None-Match`、`If-Modified-Since`、（可选）`Range`
-  - 禁止（denylist，至少）：`Authorization`、`Cookie`、`Host`、`Proxy-*`、`X-Forwarded-*`
-  - 额外规则：header 名匹配 `(?i).*api[-_]?key.*`、`(?i).*token.*` 一律拒绝（可配置，避免误伤时允许更细的例外规则）
-  - 规范化：判断前先把 header 名规范化（trim + lower + 去掉 `-`/`_`），避免大小写/分隔符绕过
-- Redirect 策略（P0，硬规则）：
-  - 默认 `follow_redirects=false`
-  - 若开启 redirect：
-    - 只允许同源（同 scheme + host + port）
-    - 严格限制次数（例如 ≤3）
-    - 对 301/302/303/307/308 一致做 allow 校验；特别注意 307/308 会保留 method/body
-    - 每一跳都重新校验 allow，并“每跳重新注入 auth（仅同源）”，不要依赖 net/http 自动复用 header
-- 日志与 trace 防泄漏：
-  - 扩展 redaction 规则覆盖 `api-key`（连字符）/`x-api-key` 等常见命名。
-  - 确保任何 error/observation 不拼出包含 secret 的字符串（包括“调试回显请求”这类习惯用法）。
+- Add `secrets` (or `credentials`) package: define `Resolver` interface + `EnvResolver` implementation (env only, never persisted).
+- Inject the resolver during engine/tool construction (avoid tools calling `os.Getenv` directly).
+- Introduce **profile-based auth (only supported path)**:
+  - Add `auth_profile` param to `url_fetch`: the LLM/skill can pass only `profile_id`, not injection details or `secret_ref`.
+  - Load `auth_profiles` from config (host-defined):
+    - `credential`: bound `secret_ref` + `kind` (api_key/bearer/…)
+    - `allow`: `url_prefixes` + `methods` (plus flags like `follow_redirects`)
+    - `bindings`: tool injection rules (e.g. `bindings.url_fetch.inject.location=header` + `inject.name=Authorization` + `inject.format=bearer`)
+  - `url_fetch` execution: validate the URL against `allow` first, then resolve/inject the secret according to `bindings.url_fetch`; do not leak injection through redirects (recommended default: redirects disabled).
+  - Explicitly do not support `auth.secret_ref` (avoid a “bypass API” that skips profile boundaries).
+- Binding validation + failure policy:
+  - If `bindings.<tool>` is missing: using that `auth_profile` with that tool must error (avoid silently dropping auth).
+  - If `inject.location` / fields are unsupported by the tool: error (fail-closed).
+- `url_fetch.headers` strict policy (P0: header name constraints; P1: header value detection/redaction):
+  - Allowlist (recommended default): `Accept`, `Content-Type`, `User-Agent`, `If-None-Match`, `If-Modified-Since`, (optional) `Range`
+  - Denylist (at least): `Authorization`, `Cookie`, `Host`, `Proxy-*`, `X-Forwarded-*`
+  - Extra rule: any header name matching `(?i).*api[-_]?key.*` or `(?i).*token.*` is rejected (configurable to avoid false positives later).
+  - Normalize header names before matching (trim + lower + remove `-`/`_`) to avoid case/separator bypasses.
+- Redirect policy (P0, hard rules):
+  - Default `follow_redirects=false`
+  - If enabled:
+    - only allow same-origin (same scheme + host + port)
+    - strict redirect count limit (e.g. ≤3)
+    - validate allow policy on every hop for 301/302/303/307/308 (note 307/308 preserve method/body)
+    - re-inject auth on every hop; do not rely on net/http defaults
+- Logging/trace leakage prevention:
+  - Extend redaction to cover `api-key` / `x-api-key` / `set-cookie` and similar forms.
+  - Ensure errors/observations never contain secret values (avoid “debug print request” patterns).
 
-### P1（强烈建议）
+### P1 (Strongly recommended)
 
-- 增强 skill frontmatter schema：支持声明 `auth_profiles: ["..."]`（仅 profile id，不含注入细节）。
-- 增加 policy 配置（建议加在 `config.example.yaml`）：
+- Extend skill frontmatter schema: allow `auth_profiles: ["..."]` (profile id only; no injection details).
+- Add policy config (recommend in `config.example.yaml`):
   - `secrets.enabled: true|false`
-  - `secrets.allow_refs: [...]`（可选：若希望进一步限制可用的 secret_ref 集合）
-  - `secrets.aliases: {JSONBILL_API_KEY: "SOME_ENV_NAME"}`（可选）
-  - `secrets.allow_profiles: ["jsonbill", "..."]`（推荐：以 profile 为主的 allowlist）
-- 对 `bash` 的默认策略（建议写死为安全默认）：
-  - 当 `secrets.enabled=true` 时，默认允许 `bash`（本地自动化仍有价值），但默认拒绝 `curl`（以及其它可外发 HTTP 的子命令），避免“bash + curl”承载带鉴权的 HTTP；需要 HTTP 时用 `url_fetch + auth_profile`。
-  - 如果确实需要 curl 特性，优先新增一个“结构化的 subprocess 工具”（例如 `exec`/`curl_fetch`），支持 `profile_id + argv + stdin`，由宿主注入 secret 并提供最小环境。
-- 增加 `auth_profiles` 配置（建议加在 `config.example.yaml`）：
-  - `auth_profiles.<id>.credential.secret_ref`：profile 绑定的 secret
-  - `auth_profiles.<id>.credential.kind`：api_key/bearer/...
-  - `auth_profiles.<id>.allow.url_prefixes`/`methods`
-  - `auth_profiles.<id>.allow.follow_redirects`：默认 false
-  - `auth_profiles.<id>.bindings.<tool>`：每个工具的注入规则（url_fetch/websocket_fetch/...）
-  - `auth_profiles.<id>.bindings.<tool>.allow_user_headers`：默认 false（避免 LLM 自行带敏感 header）
-- 在 tool 执行前做统一校验：
-  - `auth_profile` 是否允许（`secrets.allow_profiles` + skill 声明）
-  - URL 是否满足 profile 限制（host/scheme/path + redirect 策略）
-- 增加输出 redaction（不仅按 key 名，还按值模式）：
-  - JWT、常见 token 前缀、`-----BEGIN ... PRIVATE KEY-----` 等
-  - 对 HTTP 响应体进行最小化 redaction（避免接口回传 token 时直接进入上下文）
-  - （可选）对 `url_fetch.headers` 的 value 做模式检测：如果疑似 token/JWT/私钥块，直接拒绝或强制脱敏（按你的风险偏好）
+  - `secrets.allow_refs: [...]` (optional: further restrict secret_ref values)
+  - `secrets.aliases: {JSONBILL_API_KEY: "SOME_ENV_NAME"}` (optional)
+  - `secrets.allow_profiles: ["jsonbill", "..."]` (recommended main allowlist)
+- Default policy for `bash` (recommend hard-coded safe default):
+  - When `secrets.enabled=true`, allow `bash` for local automation, but deny `curl` by default to avoid “bash + curl” carrying authenticated HTTP; use `url_fetch + auth_profile` for HTTP.
+  - If curl features are needed, prefer a structured subprocess tool (e.g. `exec`/`curl_fetch`) that takes `profile_id + argv + stdin` and injects secrets host-side with a minimal environment.
+- `auth_profiles` config (recommend in `config.example.yaml`):
+  - `auth_profiles.<id>.credential.secret_ref`
+  - `auth_profiles.<id>.credential.kind` (api_key/bearer/...)
+  - `auth_profiles.<id>.allow.url_prefixes` / `methods`
+  - `auth_profiles.<id>.allow.follow_redirects` (default false)
+  - `auth_profiles.<id>.bindings.<tool>` (url_fetch/websocket_fetch/...)
+  - `auth_profiles.<id>.bindings.<tool>.allow_user_headers` (default false)
+- Add uniform validation before tool execution:
+  - validate `auth_profile` is allowed (`secrets.allow_profiles` + skill declarations)
+  - validate URL matches profile restrictions (origin/path + redirect policy)
+- Add output redaction beyond “key name” matching:
+  - JWTs, common token prefixes, `-----BEGIN ... PRIVATE KEY-----`, etc.
+  - Apply minimal redaction to HTTP response bodies before they enter context (avoid an API returning a token that then gets stored).
+  - Optionally detect suspicious header values (token/JWT/private key blocks) and reject or redact (risk-dependent).
 
-### P2（后续演进）
+### P2 (Future)
 
-- Secret “短生命周期”强化：
-  - 可选：resolver 返回结构体（`Value + ExpiresAt + RedactHint`），支持缓存与过期
-  - 禁止写入 memory/历史上下文（工程侧保证，不依赖“提示词约束”）
-- 为更多工具提供 `auth_profile` 支持（而不是鼓励 `bash + curl`）：
-  - 新增专用工具（例如 `api_request`）并内置常见鉴权模板
-- 与 Guard 模块对接：
-  - pre-tool：阻断敏感 header 直传、阻断未知 `auth_profile`、阻断高风险外发域名
-  - post-tool：对响应做 redaction，再进入上下文
+- Strengthen “short lifetime” handling:
+  - Resolver may return `{Value, ExpiresAt, RedactHint}` for caching/expiry
+  - Ensure secrets never enter memory/history/context (enforced in code, not via prompt rules)
+- Extend `auth_profile` support to more tools (instead of encouraging `bash + curl`).
+- Integrate with Guard module:
+  - pre-tool: block sensitive headers, unknown auth_profile, high-risk outbound domains
+  - post-tool: redact responses before they enter context
 
-### Implementation TODO（详细清单）
+### Implementation Checklist (Detailed)
 
-> 目标：落地 profile-based auth，并确保 secret **不会**出现在：`SKILL.md` / tool params / tool logs / tool observation / LLM 上下文 / 进程长期内存。
+> Goal: implement profile-based auth so that plaintext secrets never appear in: `SKILL.md` / tool params / tool logs / tool observations / LLM context / long-lived process memory.
 
-**Config & Wiring（cmd/）**
+**Config & Wiring (cmd/)**
 
-- [x] 在 `cmd/mister_morph/defaults.go` 的默认项中补齐以下默认值（fail-closed）：
+- [x] Add default fail-closed values in `cmd/mister_morph/defaults.go`:
   - [x] `secrets.enabled=false`
-  - [x] `secrets.allow_profiles=[]`（默认空：意味着“全部禁用 profile”）
+  - [x] `secrets.allow_profiles=[]` (empty means “all profiles disabled”)
   - [x] `secrets.aliases={}`
   - [x] `auth_profiles={}`
-- [x] 在 `config.example.yaml` 增加 `secrets:` 与 `auth_profiles:` 的完整示例与注释（并明确 bash 默认关闭、secrets 下 curl 默认拒绝）。
-- [x] 在 `cmd/mister_morph/registry.go`：
-  - [x] 从 viper 读取并构建 `EnvSecretResolver`（支持 `secrets.aliases`）
-  - [x] 从 viper 读取并校验 `auth_profiles`（见下方 schema），构建一个只读的 `ProfileStore`（不合法的 profile 直接丢弃）
-  - [x] 当 `secrets.enabled=true` 时：允许继续注册 `bash`，但默认拒绝 `curl`（以及其它可外发 HTTP 的子命令）来避免“bash + curl”承载带鉴权的 HTTP
-  - [x] 把 `ProfileStore + Resolver` 注入到 `url_fetch` tool 的构造函数
+- [x] Add full examples and comments for `secrets:` and `auth_profiles:` in `config.example.yaml` (and clarify: bash disabled by default; when secrets enabled, curl denied by default).
+- [x] In `cmd/mister_morph/registry.go`:
+  - [x] Build `EnvResolver` from viper (`secrets.aliases` supported)
+  - [x] Load/validate `auth_profiles` and build a read-only `ProfileStore` (discard invalid profiles)
+  - [x] When `secrets.enabled=true`, keep `bash` optional but deny `curl` by default
+  - [x] Inject `ProfileStore + Resolver` into the `url_fetch` tool constructor
 
-**Profile Schema（建议 Go struct + viper unmarshal）**
+**Profile Schema (Go struct + viper unmarshal)**
 
-- [x] 定义 `AuthProfile` 结构（新包：`secrets/`）：
-  - [x] `ID`（map key）
-  - [x] `Credential`：`kind` + `secret_ref`
-  - [x] `Allow`（fail-closed 缺省）：
-    - [x] `url_prefixes`（每条为完整 URL 前缀，scheme/host/port/path 绑定在同一条规则里）
-    - [x] `methods`（统一 upper）
+- [x] Define `AuthProfile` (`secrets/`):
+  - [x] `ID` (map key)
+  - [x] `Credential`: `kind` + `secret_ref`
+  - [x] `Allow` (fail-closed):
+    - [x] `url_prefixes` (each entry is a full URL prefix; scheme/host/port/path are bound in one rule)
+    - [x] `methods` (normalize to upper)
     - [x] `follow_redirects`
-    - [x] `allow_proxy`（默认 false）
-    - [x] `deny_private_ips`（默认 true；MVP 仅拒绝 literal IP/localhost，不做 DNS 解析）
-  - [x] `Bindings`：`map[string]ToolBinding`
-- [x] 定义 `ToolBinding`：
-  - [x] `inject.location` 枚举（MVP：`header`）
-  - [x] `inject.name`（header 名）
-  - [x] `inject.format` 枚举（`raw|bearer|basic`）
-  - [x] `allow_user_headers`（默认 false）
-  - [x] `user_header_allowlist`（当 `allow_user_headers=true` 时生效）
-- [x] 在加载配置时做 fail-closed 校验：
-  - [x] `url_prefixes`/`methods` 不能为空
-  - [x] `bindings.url_fetch` 必须存在
-  - [x] `inject.name` 严格校验（header token 语法）
+    - [x] `allow_proxy` (default false)
+    - [x] `deny_private_ips` (default true; MVP rejects literal IP/localhost only, no DNS resolution)
+  - [x] `Bindings`: `map[string]ToolBinding`
+- [x] Define `ToolBinding`:
+  - [x] `inject.location` enum (MVP: `header`)
+  - [x] `inject.name` (header name)
+  - [x] `inject.format` enum (`raw|bearer|basic`)
+  - [x] `allow_user_headers` (default false)
+  - [x] `user_header_allowlist` (active when `allow_user_headers=true`)
+- [x] Fail-closed validation at load time:
+  - [x] `url_prefixes` / `methods` must be non-empty
+  - [x] `bindings.url_fetch` must exist
+  - [x] `inject.name` must match header token syntax
 
-**Tool: url_fetch（tools/builtin/url_fetch.go）**
+**Tool: url_fetch (`tools/builtin/url_fetch.go`)**
 
-- [x] 更新 `ParameterSchema()`：
-  - [x] 增加 `auth_profile`（string，可选）
-  - [x] `headers` 允许但必须走 allowlist：`Accept`/`Content-Type`/`User-Agent`/`If-None-Match`/`If-Modified-Since`/`Range`
-  - [x] 明确拒绝敏感 header：`Authorization`/`Cookie`/`Host`/`Proxy-*`/`X-Forwarded-*` 以及 `*api[-_]?key*`、`*token*`
-- [x] 更新 `Execute()`：
-  - [x] 若 params 包含 `auth_profile`：
-    - [x] 校验 `secrets.enabled=true`
-    - [x] 校验 `auth_profile` 在 `secrets.allow_profiles` 且存在于 `auth_profiles`
-    - [x] 校验 URL 满足 profile allow 约束（scheme/host/port/path 前缀）
-    - [x] 按 `bindings.url_fetch.inject` 注入 secret（MVP：仅支持 header 注入）
-  - [x] Redirect 策略：
-    - [x] 默认不 follow redirect（`follow_redirects=false`）
-    - [x] 若允许 redirect：限制次数（≤3），且仅允许同源（scheme+host+port 一致）
-    - [x] 每跳都重新校验 allow；每跳都重新注入 auth
-  - [x] 严格拒绝敏感 headers（无论是否启用 profile）
-- [x] 调整输出（observation）避免泄漏：
-  - [x] 输出中的 `url:` 会清洗常见敏感 query key（防止未来 query 注入时泄漏）
-  - [x] 响应体 `body:` 进入上下文前做 redaction（JWT / Bearer / PrivateKey block / 常见 key=value）
+- [x] Update `ParameterSchema()`:
+  - [x] Add `auth_profile` (optional string)
+  - [x] Allow `headers` but enforce allowlist: `Accept`/`Content-Type`/`User-Agent`/`If-None-Match`/`If-Modified-Since`/`Range`
+  - [x] Explicitly reject sensitive headers: `Authorization`/`Cookie`/`Host`/`Proxy-*`/`X-Forwarded-*` and any `*api[-_]?key*` / `*token*`
+- [x] Update `Execute()`:
+  - [x] If params include `auth_profile`:
+    - [x] require `secrets.enabled=true`
+    - [x] require `auth_profile` is in `secrets.allow_profiles` and exists in `auth_profiles`
+    - [x] validate URL matches profile allow policy (scheme/host/port/path prefix)
+    - [x] resolve and inject secret per `bindings.url_fetch.inject` (MVP: header injection only)
+  - [x] Redirect policy:
+    - [x] default: do not follow redirects (`follow_redirects=false`)
+    - [x] if allowed: limit to ≤3 and same-origin only (scheme+host+port)
+    - [x] validate allow policy on every hop; re-inject auth on every hop
+  - [x] Strictly reject sensitive headers (regardless of whether auth_profile is used)
+- [x] Adjust observation output to avoid leaks:
+  - [x] sanitize `url:` by redacting sensitive query keys (future-proof)
+  - [x] redact response bodies before they enter context (JWT / Bearer / private key blocks / common key=value patterns)
 
-**Logging Redaction（agent/logging.go）**
+**Logging Redaction (`agent/logging.go`)**
 
-- [x] 改进 `shouldRedactKey`：
-  - [x] key 规范化（lower + 去掉 `-`/`_`）再判断
-  - [x] 覆盖 `x-api-key` / `api-key` / `set-cookie` 等常见形式
-- [ ] 确保任何日志路径都不会打印“最终请求 headers”（包括 debug 模式）
+- [x] Improve `shouldRedactKey`:
+  - [x] normalize keys (lower + remove `-`/`_`) before matching
+  - [x] cover `x-api-key` / `api-key` / `set-cookie` etc.
+- [ ] Ensure no code path prints “final request headers” (even in debug mode)
 
-**Skills（skills/）**
+**Skills (`skills/`)**
 
-- [x] 在 `skills/skills.go` 增加对 SKILL frontmatter 的轻量解析（只提取 `auth_profiles: []`）
-- [x] 在 skill 被加载时，记录“本次 run 载入了哪些 skill 声明的 profiles”（用于审计与可选的二次校验）
-- [x] 增加可选强制校验：`secrets.require_skill_profiles=true` 时，`url_fetch(auth_profile=...)` 必须属于本次已加载 skills 声明的 profiles（仍会再叠加 `secrets.allow_profiles`）
-- [ ] 明确规则：skill 声明的 profile 只能“提出需求”，最终可用范围仍由 `secrets.allow_profiles` 决定（防止 prompt injection 诱导自动加载 skill 来扩大权限）
+- [x] Add lightweight parsing of SKILL frontmatter in `skills/skills.go` (extract `auth_profiles: []` only)
+- [x] When skills are loaded, record which profiles were declared for the run (auditing + optional enforcement)
+- [x] Optional enforcement: when `secrets.require_skill_profiles=true`, `url_fetch(auth_profile=...)` must be in the set declared by loaded skills (still intersected with `secrets.allow_profiles`)
+- [ ] Clarify rule: a skill declaration is a “request”, but the actual permission boundary remains `secrets.allow_profiles` (avoid prompt injection expanding privileges via skill loading)
 
-**Tests（建议新增 *_test.go）**
+**Tests**
 
-- [x] `tools/builtin/url_fetch*_test.go`：
-  - [x] `auth_profile` 注入 header 生效
-  - [x] 不在 allowlist 的 profile 被拒绝
-  - [x] redirect 情况下只允许同源且每跳重新注入（覆盖 307）
-  - [x] `headers` 里显式传 `X-API-Key` 被拒绝
-  - [x] 响应体 redaction 生效（JWT 不进入输出）
-- [x] `agent/logging*_test.go`：
-  - [x] `X-API-Key` / `api-key` / `set-cookie` 等 key 名会被 redaction
+- [x] `tools/builtin/url_fetch*_test.go`:
+  - [x] auth_profile header injection works
+  - [x] non-allowlisted profiles are rejected
+  - [x] redirects: same-origin only and re-inject on each hop (cover 307)
+  - [x] explicit `X-API-Key` in `headers` is rejected
+  - [x] response redaction works (JWT does not appear in output)
+- [x] `agent/logging*_test.go`:
+  - [x] header names like `X-API-Key` / `api-key` / `set-cookie` are redacted
 
-## 4. 验收标准（MVP）
+## 4. Acceptance Criteria (MVP)
 
-- 任意情况下：SKILL、日志、tool params、LLM 上下文中都不出现明文 secret。
-- `url_fetch` 可在不暴露明文 key 的情况下访问需要鉴权的 HTTP API（通过 `auth_profile` 注入）。
-- 未在 allowlist 的 `auth_profile` 必须失败（fail-closed），且错误信息不包含 secret 值。
-- 打开 `logging.include_tool_params=true` 也不会泄漏：敏感 header 名/值被拒绝或被 redaction。
-- 当 `secrets.enabled=true`：禁止用 `bash + curl` 承载带鉴权 HTTP（默认允许 bash 但拒绝 curl；或至少需要显式审批策略）。
+- Plaintext secrets never appear in SKILL, logs, tool params, or LLM context.
+- `url_fetch` can access authenticated HTTP APIs without exposing the key (inject via `auth_profile`).
+- Any `auth_profile` not in the allowlist must fail (fail-closed), and errors must not contain the secret value.
+- Enabling `logging.include_tool_params=true` does not leak secrets: sensitive headers are rejected or redacted.
+- When `secrets.enabled=true`, authenticated HTTP must not be carried via `bash + curl` (default allow bash but deny curl, or require explicit approval policy).
 
-## 5. Samples（配置与调用示例）
+## 5. Samples (Configuration and Usage)
 
-### 5.1 config.yaml（示例片段）
+### 5.1 config.yaml snippet
 
-说明：这里的 `config.yaml` 指的是 **mister_morph 的主配置文件**（通过 `--config` 指定，或你本地约定的路径），不建议放在某个 skill 目录里。
+Note: `config.yaml` here refers to the main `mister_morph` config (passed via `--config`, or your local convention). It should not live inside a skill directory.
 
-- Skill 目录应该只包含 `SKILL.md` / `scripts/` / `references/` 等“可分享的内容”，不要放任何环境相关配置，更不要放 secret 明文。
-- 如果想让 skill 自带“如何配主配置”的示例，建议把示例作为文本放在 `SKILL.md` 或 `references/`（例如 `references/config_snippet.yaml`），由用户手动合并到自己的主配置里。
+- Skill directories should contain only shareable content like `SKILL.md` / `scripts/` / `references/` and must not contain environment-specific config or plaintext secrets.
+- If you want a skill to carry “how to configure the main config” examples, include them as text in `SKILL.md` or `references/` (e.g. `references/config_snippet.yaml`) for manual merging.
 
 ```yaml
 secrets:
@@ -327,7 +330,7 @@ tools:
     enabled: true
 ```
 
-### 5.2 tool_call（示例）
+### 5.2 tool_call example
 
 ```json
 {
@@ -337,7 +340,7 @@ tools:
 }
 ```
 
-### 5.3 SKILL.md frontmatter（示例）
+### 5.3 SKILL.md frontmatter example
 
 ```yaml
 ---
@@ -347,12 +350,12 @@ auth_profiles: ["jsonbill"]
 ---
 ```
 
-## 6. 可能遗漏的点（建议补充）
+## 6. Potential Gaps (Recommended additions)
 
-- **Redirect 安全**：Go 的 HTTP redirect 可能会把自定义 header（如 `X-API-Key`）带到跳转后的地址；建议在 `url_fetch` 里禁用 redirect 或在 `CheckRedirect` 中对任何 redirect 都移除所有 auth 注入的 header（或只允许同源）。  
-- **`bash` 工具的环境变量继承**：即使 LLM 不拿 key，只要 `bash` 继承了进程环境，就可能通过 `env`/`printenv`/`/proc/self/environ` 读到并外发；建议默认“最小环境”执行（env allowlist），并在 Guard 中对相关命令/路径强拦截。  
-- **LLM Provider 的 key（`llm.api_key`）也纳入同一策略**：它同样属于 secret（虽不会进 prompt），但会进日志/trace 的风险面；建议明确：永不在日志打印 provider 的鉴权 header/参数，并考虑是否也用 `secret_ref` 统一管理。  
-- **Secret 的“可用范围”模型**：除 allowlist 外，建议定义 `secret_ref` 的 scope（per-run / per-skill / per-tool / per-domain），避免“同一次任务里拿到 ref 就到处用”。  
-- **Profile 的“可用范围”模型**：除 allowlist 外，建议定义 `auth_profile` 的 scope（per-run / per-skill / per-tool / per-domain），避免“同一次任务里拿到 profile 就到处用”。  
-- **Redirect/代理/TLS 等网络边界**：是否允许代理（`HTTP_PROXY`）、是否允许自定义 `Host`、以及证书校验策略都可能影响“最小暴露面”；建议明确默认值与禁用项。  
-- **测试用例**：至少加单测覆盖：拒绝敏感 header 直传、`auth_profile` 注入生效但不会出现在 observation/log、redirect 不带 auth、以及响应体 redaction 的基本规则。
+- **Redirect safety**: Go redirects may carry custom headers to the redirected target; keep redirects disabled by default or use `CheckRedirect` to allow only same-origin and to re-inject auth safely.
+- **`bash` environment inheritance**: even if the LLM never sees the key, a `bash` tool that inherits env can read it via `env`/`printenv`/`/proc/self/environ` and exfiltrate; recommend a minimal env allowlist and Guard hard blocks for risky patterns.
+- **LLM provider key (`llm.api_key`)**: this is also a secret (even if not placed into prompts) and can leak through logs/traces; ensure provider auth is never logged, and consider unifying it under `secret_ref`.
+- **Secret/profile scope model**: beyond allowlists, define scope boundaries (per-run / per-skill / per-tool / per-domain) to prevent reuse across unrelated actions.
+- **Network boundaries**: proxy usage (`HTTP_PROXY`), custom `Host`, and TLS verification policies all affect “least exposure”; document defaults and disallowed options.
+- **Test coverage**: ensure tests cover sensitive header rejection, auth_profile injection without observation/log leakage, redirect behavior, and response redaction rules.
+
