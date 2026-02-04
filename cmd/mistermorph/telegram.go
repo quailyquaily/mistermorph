@@ -2886,6 +2886,10 @@ func (t *telegramSendVoiceTool) ParameterSchema() string {
 				"type":        "string",
 				"description": "Text to synthesize into a voice message when `path` is omitted. If omitted, falls back to `caption`.",
 			},
+			"lang": map[string]any{
+				"type":        "string",
+				"description": "Optional language tag for TTS (BCP-47, e.g., en-US, zh-CN). If omitted, auto-detect.",
+			},
 			"filename": map[string]any{
 				"type":        "string",
 				"description": "Optional filename shown to the user (default: basename of path).",
@@ -2906,7 +2910,97 @@ func commandExists(name string) bool {
 	return err == nil
 }
 
+type ttsLang struct {
+	Pico   string
+	Espeak string
+}
+
+func resolveTTSLang(lang string, text string) ttsLang {
+	lang = strings.TrimSpace(lang)
+	if lang == "" {
+		lang = detectLangFromText(text)
+	}
+	base := strings.ToLower(strings.Split(strings.ReplaceAll(lang, "_", "-"), "-")[0])
+	pico := normalizePicoLang(base)
+	espeak := normalizeEspeakLang(base)
+	if pico == "" && base == "en" {
+		pico = "en-US"
+	}
+	return ttsLang{Pico: pico, Espeak: espeak}
+}
+
+func detectLangFromText(text string) string {
+	for _, r := range text {
+		switch {
+		case unicode.In(r, unicode.Han):
+			return "zh-CN"
+		case unicode.In(r, unicode.Hiragana, unicode.Katakana):
+			return "ja-JP"
+		case unicode.In(r, unicode.Hangul):
+			return "ko-KR"
+		case unicode.In(r, unicode.Cyrillic):
+			return "ru-RU"
+		case unicode.In(r, unicode.Arabic):
+			return "ar-SA"
+		case unicode.In(r, unicode.Devanagari):
+			return "hi-IN"
+		}
+	}
+	return "en-US"
+}
+
+func normalizePicoLang(base string) string {
+	switch base {
+	case "en":
+		return "en-US"
+	case "de":
+		return "de-DE"
+	case "es":
+		return "es-ES"
+	case "fr":
+		return "fr-FR"
+	case "it":
+		return "it-IT"
+	default:
+		return ""
+	}
+}
+
+func normalizeEspeakLang(base string) string {
+	if base == "" {
+		return ""
+	}
+	return base
+}
+
+func selectTTSCmd(ctx context.Context, wavPath string, text string, lang ttsLang) *exec.Cmd {
+	if commandExists("pico2wave") && lang.Pico != "" {
+		// pico2wave writes the WAV file directly.
+		return exec.CommandContext(ctx, "pico2wave", "-l", lang.Pico, "-w", wavPath, text)
+	}
+	if commandExists("espeak-ng") {
+		if lang.Espeak != "" {
+			return exec.CommandContext(ctx, "espeak-ng", "-v", lang.Espeak, "-w", wavPath, text)
+		}
+		return exec.CommandContext(ctx, "espeak-ng", "-w", wavPath, text)
+	}
+	if commandExists("espeak") {
+		if lang.Espeak != "" {
+			return exec.CommandContext(ctx, "espeak", "-v", lang.Espeak, "-w", wavPath, text)
+		}
+		return exec.CommandContext(ctx, "espeak", "-w", wavPath, text)
+	}
+	if commandExists("flite") {
+		return exec.CommandContext(ctx, "flite", "-t", text, "-o", wavPath)
+	}
+	return nil
+}
+
 func synthesizeVoiceToOggOpus(ctx context.Context, cacheDir string, text string) (string, error) {
+	return synthesizeVoiceToOggOpusWithLang(ctx, cacheDir, text, "")
+}
+
+func synthesizeVoiceToOggOpusWithLang(ctx context.Context, cacheDir string, text string, lang string) (string, error) {
 	text = strings.TrimSpace(text)
 	if text == "" {
 		return "", fmt.Errorf("missing voice synthesis text")
@@ -2935,18 +3029,9 @@ func synthesizeVoiceToOggOpus(ctx context.Context, cacheDir string, text string)
 	wavPath := filepath.Join(ttsDir, base+".wav")
 	oggPath := filepath.Join(ttsDir, base+".ogg")
 
-	var synthCmd *exec.Cmd
-	switch {
-	case commandExists("pico2wave"):
-		// pico2wave writes the WAV file directly.
-		synthCmd = exec.CommandContext(ctx, "pico2wave", "-l", "en-US", "-w", wavPath, text)
-	case commandExists("espeak-ng"):
-		synthCmd = exec.CommandContext(ctx, "espeak-ng", "-w", wavPath, text)
-	case commandExists("espeak"):
-		synthCmd = exec.CommandContext(ctx, "espeak", "-w", wavPath, text)
-	case commandExists("flite"):
-		synthCmd = exec.CommandContext(ctx, "flite", "-t", text, "-o", wavPath)
-	default:
+	ttsLang := resolveTTSLang(lang, text)
+	synthCmd := selectTTSCmd(ctx, wavPath, text, ttsLang)
+	if synthCmd == nil {
 		return "", fmt.Errorf("no local TTS engine found (install one of: pico2wave, espeak-ng, espeak, flite)")
 	}
 	out, err := synthCmd.CombinedOutput()
@@ -3051,9 +3136,11 @@ func (t *telegramSendVoiceTool) Execute(ctx context.Context, params map[string]a
 		if text == "" {
 			text = caption
 		}
+		lang, _ := params["lang"].(string)
+		lang = strings.TrimSpace(lang)
 		synthCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
-		pathAbs, err = synthesizeVoiceToOggOpus(synthCtx, cacheAbs, text)
+		pathAbs, err = synthesizeVoiceToOggOpusWithLang(synthCtx, cacheAbs, text, lang)
 		if err != nil {
 			return "", err
 		}
