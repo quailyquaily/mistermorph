@@ -126,7 +126,7 @@ func newRunCmd() *cobra.Command {
 			}
 
 			reg := registryFromViper()
-			reg.Register(newPlanCreateTool(client, model))
+			registerPlanTool(reg, client, model)
 
 			engine := agent.New(
 				client,

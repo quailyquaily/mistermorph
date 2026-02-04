@@ -59,7 +59,7 @@ func newServeCmd() *cobra.Command {
 				return err
 			}
 			reg := registryFromViper()
-			reg.Register(newPlanCreateTool(client, llmModelFromViper()))
+			registerPlanTool(reg, client, llmModelFromViper())
 
 			logOpts := logOptionsFromViper()
 

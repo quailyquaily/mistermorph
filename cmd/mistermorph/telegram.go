@@ -671,7 +671,7 @@ func runTelegramTask(ctx context.Context, logger *slog.Logger, logOpts agent.Log
 	for _, t := range baseReg.All() {
 		reg.Register(t)
 	}
-	reg.Register(newPlanCreateTool(client, model))
+	registerPlanTool(reg, client, model)
 	reg.Register(newTelegramSendVoiceTool(api, job.ChatID, fileCacheDir, filesMaxBytes, nil))
 	if filesEnabled && api != nil {
 		reg.Register(newTelegramSendFileTool(api, job.ChatID, fileCacheDir, filesMaxBytes))

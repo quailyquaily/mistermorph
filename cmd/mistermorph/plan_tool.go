@@ -6,23 +6,48 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/quailyquaily/mistermorph/agent"
 	"github.com/quailyquaily/mistermorph/internal/jsonutil"
 	"github.com/quailyquaily/mistermorph/llm"
+	"github.com/quailyquaily/mistermorph/tools"
 )
 
 type planCreateTool struct {
 	client       llm.Client
 	defaultModel string
+	toolNames    []string
 }
 
-func newPlanCreateTool(client llm.Client, defaultModel string) *planCreateTool {
-	return &planCreateTool{client: client, defaultModel: strings.TrimSpace(defaultModel)}
+func registerPlanTool(reg *tools.Registry, client llm.Client, defaultModel string) {
+	if reg == nil {
+		return
+	}
+	names := toolNames(reg)
+	names = append(names, "plan_create")
+	reg.Register(newPlanCreateTool(client, defaultModel, names))
+}
+
+func toolNames(reg *tools.Registry) []string {
+	all := reg.All()
+	out := make([]string, 0, len(all))
+	for _, t := range all {
+		out = append(out, t.Name())
+	}
+	return out
+}
+
+func newPlanCreateTool(client llm.Client, defaultModel string, toolNames []string) *planCreateTool {
+	return &planCreateTool{
+		client:       client,
+		defaultModel: strings.TrimSpace(defaultModel),
+		toolNames:    toolNames,
+	}
 }
 
 func (t *planCreateTool) Name() string { return "plan_create" }
 
 func (t *planCreateTool) Description() string {
-	return "Generate a concise execution plan for a task as JSON. Use when you want a plan before execution."
+	return "Generate a concise execution plan for a task as JSON (plan object with summary/steps/risks/questions). Use when you want a plan before execution."
 }
 
 func (t *planCreateTool) ParameterSchema() string {
@@ -53,11 +78,23 @@ func (t *planCreateTool) ParameterSchema() string {
 	return string(b)
 }
 
+type planCreatePlan struct {
+	Summary    string          `json:"summary"`
+	Steps      agent.PlanSteps `json:"steps"`
+	Risks      []string        `json:"risks"`
+	Questions  []string        `json:"questions"`
+	Completion string          `json:"completion"`
+}
+
 type planCreateOutput struct {
-	Summary   string   `json:"summary"`
-	Steps     []string `json:"steps"`
-	Risks     []string `json:"risks"`
-	Questions []string `json:"questions"`
+	Plan planCreatePlan `json:"plan"`
+}
+
+type planCreateLegacy struct {
+	Summary   string          `json:"summary"`
+	Steps     agent.PlanSteps `json:"steps"`
+	Risks     []string        `json:"risks"`
+	Questions []string        `json:"questions"`
 }
 
 func (t *planCreateTool) Execute(ctx context.Context, params map[string]any) (string, error) {
@@ -101,9 +138,15 @@ func (t *planCreateTool) Execute(ctx context.Context, params map[string]any) (st
 	}
 
 	payload := map[string]any{
-		"task":      task,
-		"max_steps": maxSteps,
-		"style":     style,
+		"task":            task,
+		"max_steps":       maxSteps,
+		"style":           style,
+		"available_tools": t.toolNames,
+		"constraints": []string{
+			"Use only available_tools when describing steps that involve tools.",
+			"Keep steps executable and concise.",
+			"Assume required credentials are already configured when a skill references an auth_profile.",
+		},
 	}
 	payloadJSON, _ := json.Marshal(payload)
 
@@ -111,10 +154,13 @@ func (t *planCreateTool) Execute(ctx context.Context, params map[string]any) (st
 You generate a concise execution plan.
 Return ONLY JSON:
 {
-  "summary": "1-2 sentence overview",
-  "steps": ["step 1", "step 2"],
-  "risks": ["optional"],
-  "questions": ["optional clarifying questions"]
+  "plan": {
+    "summary": "1-2 sentence overview",
+    "steps": [{"step":"step 1","status":"in_progress"},{"step":"step 2","status":"pending"}],
+    "risks": ["optional"],
+    "questions": ["optional clarifying questions"],
+    "completion": "optional definition of done"
+  }
 }
 Rules:
 - Steps should be actionable and ordered.
@@ -142,11 +188,50 @@ Rules:
 		return "", fmt.Errorf("invalid plan_create response")
 	}
 
-	out.Summary = strings.TrimSpace(out.Summary)
-	if len(out.Steps) > maxSteps {
-		out.Steps = out.Steps[:maxSteps]
+	if strings.TrimSpace(out.Plan.Summary) == "" && len(out.Plan.Steps) == 0 {
+		var legacy planCreateLegacy
+		if err := jsonutil.DecodeWithFallback(res.Text, &legacy); err == nil {
+			out.Plan.Summary = legacy.Summary
+			out.Plan.Steps = legacy.Steps
+			out.Plan.Risks = legacy.Risks
+			out.Plan.Questions = legacy.Questions
+		}
 	}
+
+	out.Plan.Summary = strings.TrimSpace(out.Plan.Summary)
+	if len(out.Plan.Steps) > maxSteps {
+		out.Plan.Steps = out.Plan.Steps[:maxSteps]
+	}
+	out.Plan.Steps = normalizePlanSteps(out.Plan.Steps)
 
 	b, _ := json.MarshalIndent(out, "", "  ")
 	return string(b), nil
+}
+
+func normalizePlanSteps(steps agent.PlanSteps) agent.PlanSteps {
+	if len(steps) == 0 {
+		return steps
+	}
+	for i := range steps {
+		steps[i].Step = strings.TrimSpace(steps[i].Step)
+		if steps[i].Step == "" {
+			steps[i].Step = fmt.Sprintf("step %d", i+1)
+		}
+		status := strings.ToLower(strings.TrimSpace(steps[i].Status))
+		if status == "" {
+			if i == 0 {
+				steps[i].Status = "in_progress"
+			} else {
+				steps[i].Status = "pending"
+			}
+			continue
+		}
+		switch status {
+		case "pending", "in_progress", "completed":
+			steps[i].Status = status
+		default:
+			steps[i].Status = "pending"
+		}
+	}
+	return steps
 }
