@@ -77,7 +77,7 @@ func toolCallResponse(toolName string) llm.Result {
 }
 
 func baseCfg() Config {
-	return Config{MaxSteps: 5, PlanMode: "off"}
+	return Config{MaxSteps: 5}
 }
 
 func baseRegistry() *tools.Registry {
@@ -395,7 +395,7 @@ func TestFallbackFinal_UsedOnForceConclusionLLMError(t *testing.T) {
 		llm.Result{Text: "not json"}, // main loop: parse failure
 		// forceConclusion: no response → error
 	)
-	e2 := New(client2, baseRegistry(), Config{MaxSteps: 5, ParseRetries: 0, PlanMode: "off"}, DefaultPromptSpec(),
+	e2 := New(client2, baseRegistry(), Config{MaxSteps: 5, ParseRetries: 0}, DefaultPromptSpec(),
 		WithFallbackFinal(func() *Final {
 			return &Final{Output: "my_fallback"}
 		}),
@@ -419,7 +419,7 @@ func TestFallbackFinal_DefaultWhenNotSet(t *testing.T) {
 		llm.Result{Text: "not json"},
 		// forceConclusion: no response → error → default fallback
 	)
-	e := New(client, baseRegistry(), Config{MaxSteps: 5, ParseRetries: 0, PlanMode: "off"}, DefaultPromptSpec())
+	e := New(client, baseRegistry(), Config{MaxSteps: 5, ParseRetries: 0}, DefaultPromptSpec())
 
 	f, _, err := e.Run(context.Background(), "test", RunOptions{})
 	if err != nil {
@@ -439,7 +439,7 @@ func TestFallbackFinal_UsedOnParseError(t *testing.T) {
 		llm.Result{Text: "not json"},             // main loop parse fail
 		llm.Result{Text: "still not valid json"}, // forceConclusion parse fail
 	)
-	e := New(client, baseRegistry(), Config{MaxSteps: 5, ParseRetries: 0, PlanMode: "off"}, DefaultPromptSpec(),
+	e := New(client, baseRegistry(), Config{MaxSteps: 5, ParseRetries: 0}, DefaultPromptSpec(),
 		WithFallbackFinal(func() *Final {
 			return &Final{Output: "parse_fallback"}
 		}),
@@ -463,7 +463,7 @@ func TestFallbackFinal_UsedOnInvalidType(t *testing.T) {
 		llm.Result{Text: "not json"},                                          // main loop parse fail
 		llm.Result{Text: `{"type":"plan","plan":{"summary":"x","steps":[]}}`}, // forceConclusion: valid but wrong type
 	)
-	e := New(client, baseRegistry(), Config{MaxSteps: 5, ParseRetries: 0, PlanMode: "off"}, DefaultPromptSpec(),
+	e := New(client, baseRegistry(), Config{MaxSteps: 5, ParseRetries: 0}, DefaultPromptSpec(),
 		WithFallbackFinal(func() *Final {
 			return &Final{Output: "type_fallback"}
 		}),
@@ -488,7 +488,7 @@ func TestForceConclusion_RawFinalAnswer_Set(t *testing.T) {
 		llm.Result{Text: "not json"}, // main loop parse fail
 		llm.Result{Text: resp},       // forceConclusion succeeds
 	)
-	e := New(client, baseRegistry(), Config{MaxSteps: 5, ParseRetries: 0, PlanMode: "off"}, DefaultPromptSpec())
+	e := New(client, baseRegistry(), Config{MaxSteps: 5, ParseRetries: 0}, DefaultPromptSpec())
 
 	_, agentCtx, err := e.Run(context.Background(), "test", RunOptions{})
 	if err != nil {

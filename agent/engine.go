@@ -84,7 +84,6 @@ type Config struct {
 	MaxSteps       int
 	MaxTokenBudget int
 	ParseRetries   int
-	PlanMode       string // off|auto|always
 }
 
 type Engine struct {
@@ -114,9 +113,6 @@ func New(client llm.Client, registry *tools.Registry, cfg Config, spec PromptSpe
 	}
 	if cfg.ParseRetries < 0 {
 		cfg.ParseRetries = 0
-	}
-	if strings.TrimSpace(cfg.PlanMode) == "" {
-		cfg.PlanMode = "auto"
 	}
 	if spec.Identity == "" {
 		spec = DefaultPromptSpec()
@@ -178,27 +174,7 @@ func (e *Engine) Run(ctx context.Context, task string, opts RunOptions) (*Final,
 
 	requestedWrites := ExtractFileWritePaths(task)
 
-	planMode := strings.ToLower(strings.TrimSpace(e.config.PlanMode))
 	planRequired := false
-	switch planMode {
-	case "off", "none", "disabled", "false", "0":
-		planRequired = false
-	case "always", "on", "true", "1":
-		planRequired = true
-	case "auto", "":
-		planRequired = TaskNeedsPlan(task)
-	default:
-		log.Warn("unknown_plan_mode", "mode", planMode)
-		planRequired = TaskNeedsPlan(task)
-	}
-	if planRequired {
-		log.Info("plan_required", "mode", planMode)
-		messages = append(messages, llm.Message{
-			Role: "user",
-			Content: "Before calling any tools, return a concise plan as JSON with type=\"plan\". " +
-				"Do NOT call tools in the plan response; you will execute the plan afterwards.",
-		})
-	}
 
 	var extraParams map[string]any
 	if e.paramsBuilder != nil {

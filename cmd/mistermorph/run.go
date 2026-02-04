@@ -125,14 +125,16 @@ func newRunCmd() *cobra.Command {
 				opts = append(opts, agent.WithGuard(g))
 			}
 
+			reg := registryFromViper()
+			reg.Register(newPlanCreateTool(client, model))
+
 			engine := agent.New(
 				client,
-				registryFromViper(),
+				reg,
 				agent.Config{
 					MaxSteps:       flagOrViperInt(cmd, "max-steps", "max_steps"),
 					ParseRetries:   flagOrViperInt(cmd, "parse-retries", "parse_retries"),
 					MaxTokenBudget: flagOrViperInt(cmd, "max-token-budget", "max_token_budget"),
-					PlanMode:       strings.TrimSpace(flagOrViperString(cmd, "plan-mode", "plan.mode")),
 				},
 				promptSpec,
 				opts...,
@@ -180,7 +182,6 @@ func newRunCmd() *cobra.Command {
 	cmd.Flags().Int("max-steps", 15, "Max tool-call steps.")
 	cmd.Flags().Int("parse-retries", 2, "Max JSON parse retries.")
 	cmd.Flags().Int("max-token-budget", 0, "Max cumulative token budget (0 disables).")
-	cmd.Flags().String("plan-mode", "auto", "Planning mode: off|auto|always (auto enables planning for complex tasks).")
 
 	cmd.Flags().Duration("timeout", 10*time.Minute, "Overall timeout.")
 

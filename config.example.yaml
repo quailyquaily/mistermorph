@@ -263,14 +263,6 @@ skills:
   # Optional: use a different model for selecting skills (defaults to "model").
   selector_model: ""
 
-# Planning: for complex tasks, optionally emit an explicit plan first.
-plan:
-  # off|auto|always
-  # - auto: emits a plan only when the task looks complex
-  # - always: always emits a plan before tool calls
-  # - off: never requests a plan
-  mode: auto
-
 # Daemon mode (local HTTP server).
 server:
   # Bind address for `mistermorph serve`.

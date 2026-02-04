@@ -19,7 +19,6 @@ func initViperDefaults() {
 	viper.SetDefault("parse_retries", 2)
 	viper.SetDefault("max_token_budget", 0)
 	viper.SetDefault("timeout", 10*time.Minute)
-	viper.SetDefault("plan.mode", "auto")
 
 	// Global
 	viper.SetDefault("file_cache_dir", "/var/cache/morph")

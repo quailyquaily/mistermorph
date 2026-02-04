@@ -59,6 +59,7 @@ func newServeCmd() *cobra.Command {
 				return err
 			}
 			reg := registryFromViper()
+			reg.Register(newPlanCreateTool(client, llmModelFromViper()))
 
 			logOpts := logOptionsFromViper()
 
@@ -66,7 +67,6 @@ func newServeCmd() *cobra.Command {
 				MaxSteps:       viper.GetInt("max_steps"),
 				ParseRetries:   viper.GetInt("parse_retries"),
 				MaxTokenBudget: viper.GetInt("max_token_budget"),
-				PlanMode:       viper.GetString("plan.mode"),
 			}
 
 			sharedGuard := guardFromViper(logger)
