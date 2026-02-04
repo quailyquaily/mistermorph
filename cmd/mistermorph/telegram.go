@@ -885,6 +885,23 @@ func runTelegramTask(ctx context.Context, logger *slog.Logger, logOpts agent.Log
 		}
 	}
 
+	planUpdateHook := func(runCtx *agent.Context, update agent.PlanStepUpdate) {
+		if api == nil || runCtx == nil || runCtx.Plan == nil {
+			return
+		}
+		msg, err := generateTelegramPlanProgressMessage(ctx, client, model, task, runCtx.Plan, update)
+		if err != nil {
+			logger.Warn("telegram_plan_progress_error", "error", err.Error())
+			return
+		}
+		if strings.TrimSpace(msg) == "" {
+			return
+		}
+		if err := api.sendMessage(context.Background(), job.ChatID, msg, true); err != nil {
+			logger.Warn("telegram_send_error", "error", err.Error())
+		}
+	}
+
 	engine := agent.New(
 		client,
 		reg,
@@ -893,6 +910,7 @@ func runTelegramTask(ctx context.Context, logger *slog.Logger, logOpts agent.Log
 		agent.WithLogger(logger),
 		agent.WithLogOptions(logOpts),
 		agent.WithSkillAuthProfiles(skillAuthProfiles, viper.GetBool("secrets.require_skill_profiles")),
+		agent.WithPlanStepUpdate(planUpdateHook),
 		agent.WithGuard(guardFromViper(logger)),
 	)
 	meta := map[string]any{
@@ -904,6 +922,68 @@ func runTelegramTask(ctx context.Context, logger *slog.Logger, logOpts agent.Log
 	}
 	final, agentCtx, err := engine.Run(ctx, task, agent.RunOptions{Model: model, History: history, Meta: meta})
 	return final, agentCtx, loadedSkills, err
+}
+
+func generateTelegramPlanProgressMessage(ctx context.Context, client llm.Client, model string, task string, plan *agent.Plan, update agent.PlanStepUpdate) (string, error) {
+	if client == nil || plan == nil || update.CompletedIndex < 0 {
+		return "", nil
+	}
+	total := len(plan.Steps)
+	if total == 0 {
+		return "", nil
+	}
+
+	completed := 0
+	for i := range plan.Steps {
+		if plan.Steps[i].Status == agent.PlanStatusCompleted {
+			completed++
+		}
+	}
+
+	payload := map[string]any{
+		"task":             strings.TrimSpace(task),
+		"plan_summary":     strings.TrimSpace(plan.Summary),
+		"completed_index":  update.CompletedIndex,
+		"completed_step":   strings.TrimSpace(update.CompletedStep),
+		"next_index":       update.StartedIndex,
+		"next_step":        strings.TrimSpace(update.StartedStep),
+		"steps_completed":  completed,
+		"steps_total":      total,
+		"progress_percent": int(float64(completed) / float64(total) * 100),
+	}
+	b, _ := json.Marshal(payload)
+
+	system := "You write very short, casual progress updates for a Telegram chat. " +
+		"Keep it conversational and concise (1 short sentence, max 2). " +
+		"Use the same language as the task. " +
+		"Use Telegram Markdown and wrap identifiers/paths in backticks. " +
+		"Do not mention tools, internal steps, or that you are an AI. " +
+		"Include the completed step and, if present, the next step."
+
+	req := llm.Request{
+		Model:     model,
+		ForceJSON: false,
+		Messages: []llm.Message{
+			{Role: "system", Content: system},
+			{Role: "user", Content: "Generate a progress update for this plan step:\n" + string(b)},
+		},
+		Parameters: map[string]any{
+			"max_tokens": 200,
+		},
+	}
+
+	timeout := 6 * time.Second
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	result, err := client.Chat(ctx, req)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(result.Text), nil
 }
 
 func formatFinalOutput(final *agent.Final) string {

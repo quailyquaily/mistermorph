@@ -57,6 +57,14 @@ func WithOnToolSuccess(fn func(*Context, string)) Option {
 	}
 }
 
+func WithPlanStepUpdate(fn func(*Context, PlanStepUpdate)) Option {
+	return func(e *Engine) {
+		if fn != nil {
+			e.onPlanStepUpdate = fn
+		}
+	}
+}
+
 func WithFallbackFinal(fn func() *Final) Option {
 	return func(e *Engine) {
 		if fn != nil {
@@ -88,10 +96,11 @@ type Engine struct {
 	log      *slog.Logger
 	logOpts  LogOptions
 
-	promptBuilder func(registry *tools.Registry, task string) string
-	paramsBuilder func(opts RunOptions) map[string]any
-	onToolSuccess func(ctx *Context, toolName string)
-	fallbackFinal func() *Final
+	promptBuilder    func(registry *tools.Registry, task string) string
+	paramsBuilder    func(opts RunOptions) map[string]any
+	onToolSuccess    func(ctx *Context, toolName string)
+	onPlanStepUpdate func(ctx *Context, update PlanStepUpdate)
+	fallbackFinal    func() *Final
 
 	skillAuthProfiles []string
 	enforceSkillAuth  bool

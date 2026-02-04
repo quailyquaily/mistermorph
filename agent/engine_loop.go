@@ -325,6 +325,15 @@ func (e *Engine) runLoop(ctx context.Context, st *engineLoopState) (*Final, *Con
 							)
 						}
 						log.Info("plan_step_completed", planFields...)
+						if e.onPlanStepUpdate != nil {
+							e.onPlanStepUpdate(st.agentCtx, PlanStepUpdate{
+								CompletedIndex: completedIdx,
+								CompletedStep:  completedStep,
+								StartedIndex:   startedIdx,
+								StartedStep:    startedStep,
+								Reason:         "tool_success",
+							})
+						}
 					}
 				}
 

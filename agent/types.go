@@ -59,6 +59,14 @@ type Plan struct {
 	Completion string    `json:"completion,omitempty"`
 }
 
+type PlanStepUpdate struct {
+	CompletedIndex int
+	CompletedStep  string
+	StartedIndex   int
+	StartedStep    string
+	Reason         string
+}
+
 type Final struct {
 	Thought string `json:"thought,omitempty"`
 	Output  any    `json:"output,omitempty"`
