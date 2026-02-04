@@ -77,11 +77,6 @@ func newRunCmd() *cobra.Command {
 
 			logOpts := logOptionsFromViper()
 
-			promptSpec, _, skillAuthProfiles, err := promptSpecWithSkills(ctx, logger, logOpts, task, client, model, skillsConfigFromRunCmd(cmd, model))
-			if err != nil {
-				return err
-			}
-
 			if flagOrViperBool(cmd, "inspect-request", "") {
 				inspector, err := newRequestInspector(task)
 				if err != nil {
@@ -104,6 +99,11 @@ func newRunCmd() *cobra.Command {
 				}
 				defer func() { _ = inspector.Close() }()
 				client = &inspectClient{base: client, inspector: inspector}
+			}
+
+			promptSpec, _, skillAuthProfiles, err := promptSpecWithSkills(ctx, logger, logOpts, task, client, model, skillsConfigFromRunCmd(cmd, model))
+			if err != nil {
+				return err
 			}
 
 			var hook agent.Hook
