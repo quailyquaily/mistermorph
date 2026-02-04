@@ -1051,6 +1051,8 @@ func semanticMergeShortTerm(ctx context.Context, client llm.Client, model string
 		FollowUps:      out.FollowUps,
 		RelatedLinks:   existing.RelatedLinks,
 	}
+	merged.Tasks = applyTaskUpdates(merged.Tasks, draft.Tasks)
+	merged.FollowUps = applyTaskUpdates(merged.FollowUps, draft.FollowUps)
 	summary := strings.TrimSpace(out.Summary)
 	if summary == "" {
 		summary = strings.TrimSpace(draft.Summary)
@@ -1060,6 +1062,37 @@ func semanticMergeShortTerm(ctx context.Context, client llm.Client, model string
 
 func hasDraftContent(draft memory.SessionDraft) bool {
 	return len(draft.SessionSummary) > 0 || len(draft.TemporaryFacts) > 0 || len(draft.Tasks) > 0 || len(draft.FollowUps) > 0
+}
+
+func applyTaskUpdates(base []memory.TaskItem, updates []memory.TaskItem) []memory.TaskItem {
+	if len(updates) == 0 {
+		return base
+	}
+	index := make(map[string]int, len(base))
+	for i, it := range base {
+		key := normalizeTaskText(it.Text)
+		if key == "" {
+			continue
+		}
+		index[key] = i
+	}
+	for _, u := range updates {
+		key := normalizeTaskText(u.Text)
+		if key == "" {
+			continue
+		}
+		if i, ok := index[key]; ok {
+			base[i].Done = u.Done
+			continue
+		}
+		index[key] = len(base)
+		base = append(base, u)
+	}
+	return base
+}
+
+func normalizeTaskText(text string) string {
+	return strings.ToLower(strings.TrimSpace(text))
 }
 
 func buildMemoryContextMessages(history []llm.Message, task string, output string) []map[string]string {
