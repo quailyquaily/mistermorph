@@ -1,0 +1,341 @@
+package memory
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+)
+
+const (
+	defaultShortSummary = "Session updated."
+	defaultLongSummary  = "Long-term memory."
+	longTermMaxItems    = 100
+	longTermMaxChars    = 3000
+)
+
+type WriteMeta struct {
+	SessionID string
+	Source    string
+	Channel   string
+	SubjectID string
+}
+
+func (m *Manager) UpdateShortTerm(date time.Time, draft SessionDraft, meta WriteMeta) (string, error) {
+	if m == nil {
+		return "", fmt.Errorf("nil memory manager")
+	}
+	abs, rel := m.ShortTermPath(date)
+	if abs == "" {
+		return "", fmt.Errorf("memory dir not set")
+	}
+
+	fm, body, ok, err := readMemoryFile(abs)
+	if err != nil {
+		return "", err
+	}
+	content := ShortTermContent{}
+	if ok {
+		content = ParseShortTermContent(body)
+	}
+
+	merged := MergeShortTerm(content, draft)
+	merged = ensureShortTermDefaults(merged, draft)
+	merged = m.attachRelatedLink(merged, date)
+
+	bodyOut := BuildShortTermBody(date.UTC().Format("2006-01-02"), merged)
+	summary := strings.TrimSpace(draft.Summary)
+	if summary == "" {
+		summary = fallbackShortSummary(draft)
+	}
+	fm = applyShortTermFrontmatter(fm, summary, meta, m.nowUTC())
+
+	if err := writeMemoryFile(abs, RenderFrontmatter(fm)+"\n"+bodyOut); err != nil {
+		return "", err
+	}
+	return rel, nil
+}
+
+func (m *Manager) WriteShortTerm(date time.Time, content ShortTermContent, summary string, meta WriteMeta) (string, error) {
+	if m == nil {
+		return "", fmt.Errorf("nil memory manager")
+	}
+	abs, rel := m.ShortTermPath(date)
+	if abs == "" {
+		return "", fmt.Errorf("memory dir not set")
+	}
+
+	fm, _, ok, err := readMemoryFile(abs)
+	if err != nil {
+		return "", err
+	}
+	if !ok {
+		fm = Frontmatter{}
+	}
+
+	content = m.attachRelatedLink(content, date)
+	bodyOut := BuildShortTermBody(date.UTC().Format("2006-01-02"), content)
+	summary = strings.TrimSpace(summary)
+	if summary == "" {
+		summary = fallbackShortSummaryFromContent(content)
+	}
+	fm = applyShortTermFrontmatter(fm, summary, meta, m.nowUTC())
+	if err := writeMemoryFile(abs, RenderFrontmatter(fm)+"\n"+bodyOut); err != nil {
+		return "", err
+	}
+	return rel, nil
+}
+
+func (m *Manager) LoadShortTerm(date time.Time) (Frontmatter, ShortTermContent, bool, error) {
+	if m == nil {
+		return Frontmatter{}, ShortTermContent{}, false, fmt.Errorf("nil memory manager")
+	}
+	abs, _ := m.ShortTermPath(date)
+	if abs == "" {
+		return Frontmatter{}, ShortTermContent{}, false, fmt.Errorf("memory dir not set")
+	}
+	fm, body, ok, err := readMemoryFile(abs)
+	if err != nil {
+		return Frontmatter{}, ShortTermContent{}, false, err
+	}
+	if !ok {
+		return Frontmatter{}, ShortTermContent{}, false, nil
+	}
+	return fm, ParseShortTermContent(body), true, nil
+}
+
+func (m *Manager) UpdateLongTerm(subjectID string, promote PromoteDraft) (bool, error) {
+	if m == nil {
+		return false, fmt.Errorf("nil memory manager")
+	}
+	if len(promote.GoalsProjects) == 0 && len(promote.KeyFacts) == 0 {
+		return false, nil
+	}
+	abs, _ := m.LongTermPath(subjectID)
+	if abs == "" {
+		return false, fmt.Errorf("memory dir not set")
+	}
+
+	fm, body, ok, err := readMemoryFile(abs)
+	if err != nil {
+		return false, err
+	}
+	content := LongTermContent{}
+	if ok {
+		content = ParseLongTermContent(body)
+	}
+
+	merged := MergeLongTerm(content, promote)
+	merged = enforceLongTermLimits(merged)
+	bodyOut := BuildLongTermBody(merged)
+	fm = applyLongTermFrontmatter(fm, subjectID, merged, m.nowUTC())
+
+	if err := writeMemoryFile(abs, RenderFrontmatter(fm)+"\n"+bodyOut); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func (m *Manager) attachRelatedLink(content ShortTermContent, date time.Time) ShortTermContent {
+	prev := date.AddDate(0, 0, -1)
+	prevAbs, prevRel := m.ShortTermPath(prev)
+	if prevAbs == "" || prevRel == "" {
+		return content
+	}
+	if _, err := os.Stat(prevAbs); err != nil {
+		return content
+	}
+	label := prev.UTC().Format("2006-01-02")
+	link := LinkItem{Text: label, Target: filepath.ToSlash(prevRel)}
+	content.RelatedLinks = mergeLinks(content.RelatedLinks, []LinkItem{link})
+	return content
+}
+
+func applyShortTermFrontmatter(existing Frontmatter, summary string, meta WriteMeta, now time.Time) Frontmatter {
+	existing.CreatedAt = chooseTimestamp(existing.CreatedAt, now)
+	existing.UpdatedAt = now.UTC().Format(time.RFC3339)
+	existing.Summary = summary
+	if strings.TrimSpace(meta.SessionID) != "" {
+		existing.SessionID = strings.TrimSpace(meta.SessionID)
+	}
+	if strings.TrimSpace(meta.Source) != "" {
+		existing.Source = strings.TrimSpace(meta.Source)
+	}
+	if strings.TrimSpace(meta.Channel) != "" {
+		existing.Channel = strings.TrimSpace(meta.Channel)
+	}
+	return existing
+}
+
+func applyLongTermFrontmatter(existing Frontmatter, subjectID string, content LongTermContent, now time.Time) Frontmatter {
+	existing.CreatedAt = chooseTimestamp(existing.CreatedAt, now)
+	existing.UpdatedAt = now.UTC().Format(time.RFC3339)
+	if strings.TrimSpace(existing.Summary) == "" {
+		existing.Summary = summarizeLongTerm(content)
+	} else {
+		existing.Summary = summarizeLongTerm(content)
+	}
+	existing.SubjectID = strings.TrimSpace(subjectID)
+	return existing
+}
+
+func fallbackShortSummary(draft SessionDraft) string {
+	for _, item := range draft.SessionSummary {
+		val := strings.TrimSpace(item.Value)
+		if val != "" {
+			return truncateSummary(val)
+		}
+	}
+	for _, item := range draft.TemporaryFacts {
+		val := strings.TrimSpace(item.Value)
+		if val != "" {
+			return truncateSummary(val)
+		}
+	}
+	for _, item := range draft.Tasks {
+		val := strings.TrimSpace(item.Text)
+		if val != "" {
+			return truncateSummary("Task: " + val)
+		}
+	}
+	return defaultShortSummary
+}
+
+func fallbackShortSummaryFromContent(content ShortTermContent) string {
+	if len(content.SessionSummary) > 0 {
+		val := strings.TrimSpace(content.SessionSummary[0].Value)
+		if val != "" {
+			return truncateSummary(val)
+		}
+	}
+	if len(content.TemporaryFacts) > 0 {
+		val := strings.TrimSpace(content.TemporaryFacts[0].Value)
+		if val != "" {
+			return truncateSummary(val)
+		}
+	}
+	for _, task := range content.Tasks {
+		val := strings.TrimSpace(task.Text)
+		if val != "" {
+			return truncateSummary("Task: " + val)
+		}
+	}
+	return defaultShortSummary
+}
+
+func summarizeLongTerm(content LongTermContent) string {
+	parts := make([]string, 0, 2)
+	if len(content.Goals) > 0 {
+		parts = append(parts, "Goals: "+kvSummary(content.Goals[0]))
+	}
+	if len(content.Facts) > 0 {
+		parts = append(parts, "Facts: "+kvSummary(content.Facts[0]))
+	}
+	if len(parts) == 0 {
+		return defaultLongSummary
+	}
+	return truncateSummary(strings.Join(parts, "; "))
+}
+
+func enforceLongTermLimits(content LongTermContent) LongTermContent {
+	for len(content.Goals)+len(content.Facts) > longTermMaxItems {
+		content = dropOldestLongTerm(content)
+	}
+	for len(BuildLongTermBody(content)) > longTermMaxChars {
+		content = dropOldestLongTerm(content)
+		if len(content.Goals) == 0 && len(content.Facts) == 0 {
+			break
+		}
+	}
+	return content
+}
+
+func dropOldestLongTerm(content LongTermContent) LongTermContent {
+	if len(content.Goals) == 0 && len(content.Facts) == 0 {
+		return content
+	}
+	if len(content.Goals) >= len(content.Facts) {
+		if len(content.Goals) > 0 {
+			content.Goals = content.Goals[1:]
+		}
+		return content
+	}
+	if len(content.Facts) > 0 {
+		content.Facts = content.Facts[1:]
+	}
+	return content
+}
+
+func kvSummary(item KVItem) string {
+	title := strings.TrimSpace(item.Title)
+	val := strings.TrimSpace(item.Value)
+	if title == "" {
+		return truncateSummary(val)
+	}
+	if val == "" {
+		return truncateSummary(title)
+	}
+	return truncateSummary(title + ": " + val)
+}
+
+func truncateSummary(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
+	if len(s) <= 200 {
+		return s
+	}
+	return strings.TrimSpace(s[:200])
+}
+
+func chooseTimestamp(existing string, now time.Time) string {
+	existing = strings.TrimSpace(existing)
+	if existing != "" {
+		return existing
+	}
+	return now.UTC().Format(time.RFC3339)
+}
+
+func ensureShortTermDefaults(content ShortTermContent, draft SessionDraft) ShortTermContent {
+	if len(content.SessionSummary) == 0 {
+		summary := strings.TrimSpace(draft.Summary)
+		if summary != "" {
+			content.SessionSummary = []KVItem{{Title: "Summary", Value: summary}}
+		}
+	}
+	return content
+}
+
+func readMemoryFile(path string) (Frontmatter, string, bool, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return Frontmatter{}, "", false, nil
+		}
+		return Frontmatter{}, "", false, err
+	}
+	fm, body, ok := ParseFrontmatter(string(data))
+	if !ok {
+		return Frontmatter{}, string(data), true, nil
+	}
+	return fm, body, true, nil
+}
+
+func writeMemoryFile(path string, content string) error {
+	dir := filepath.Dir(path)
+	if dir != "" {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			return err
+		}
+	}
+	return os.WriteFile(path, []byte(content), 0o600)
+}
+
+func (m *Manager) nowUTC() time.Time {
+	if m != nil && m.Now != nil {
+		return m.Now().UTC()
+	}
+	return time.Now().UTC()
+}

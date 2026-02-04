@@ -36,7 +36,6 @@ import (
 	"github.com/quailyquaily/mistermorph/tools"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"gorm.io/gorm"
 )
 
 type telegramJob struct {
@@ -51,18 +50,6 @@ type telegramJob struct {
 type telegramChatWorker struct {
 	Jobs    chan telegramJob
 	Version uint64
-}
-
-type telegramMemoryRow struct {
-	ID         int64    `gorm:"column:id"`
-	Namespace  string   `gorm:"column:namespace"`
-	Key        string   `gorm:"column:key"`
-	Value      string   `gorm:"column:value"`
-	Visibility int      `gorm:"column:visibility"`
-	Confidence *float64 `gorm:"column:confidence"`
-	Source     *string  `gorm:"column:source"`
-	CreatedAt  int64    `gorm:"column:created_at"`
-	UpdatedAt  int64    `gorm:"column:updated_at"`
 }
 
 func newTelegramCmd() *cobra.Command {
@@ -408,7 +395,7 @@ func newTelegramCmd() *cobra.Command {
 					switch normalizeSlashCommand(cmdWord) {
 					case "/start", "/help":
 						help := "Send a message and I will run it as an agent task.\n" +
-							"Commands: /ask <task>, /mem, /mem del <id>, /mem vis <id> <public|private>, /reset, /id\n\n" +
+							"Commands: /ask <task>, /mem, /reset, /id\n\n" +
 							"Group chats: use /ask <task>, reply to me, or mention @" + botUser + ".\n" +
 							"You can also send a file (document/photo). It will be downloaded under file_cache_dir/telegram/ and the agent can process it.\n" +
 							"Note: if Bot Privacy Mode is enabled, I may not receive normal group messages (so aliases won't trigger unless I receive the message)."
@@ -436,24 +423,15 @@ func newTelegramCmd() *cobra.Command {
 							continue
 						}
 
-						sub, rest := splitCommand(cmdArgs)
+						sub, _ := splitCommand(cmdArgs)
 						sub = strings.ToLower(strings.TrimSpace(sub))
-						rest = strings.TrimSpace(rest)
-
-						ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-						store, resolver, err := initMemory(ctx)
-						cancel()
-						if err != nil {
-							_ = api.sendMessage(context.Background(), chatID, "memory init error: "+err.Error(), true)
-							continue
-						}
-						if store == nil || resolver == nil || memoryDB == nil {
-							_ = api.sendMessage(context.Background(), chatID, "memory not available", true)
+						if sub != "" && sub != "ls" && sub != "list" {
+							_ = api.sendMessage(context.Background(), chatID, "memory 已切换为文件存储；/mem 仅显示摘要。", true)
 							continue
 						}
 
-						ctx, cancel = context.WithTimeout(context.Background(), 8*time.Second)
-						id, err := resolver.ResolveTelegram(ctx, fromUserID)
+						ctx, cancel := context.WithTimeout(context.Background(), 6*time.Second)
+						id, err := (&memory.Resolver{}).ResolveTelegram(ctx, fromUserID)
 						cancel()
 						if err != nil {
 							_ = api.sendMessage(context.Background(), chatID, "memory identity error: "+err.Error(), true)
@@ -464,113 +442,21 @@ func newTelegramCmd() *cobra.Command {
 							continue
 						}
 
-						switch sub {
-						case "", "ls", "list":
-							const limit = 200
-							var rows []telegramMemoryRow
-							ctx, cancel = context.WithTimeout(context.Background(), 8*time.Second)
-							err = memoryDB.WithContext(ctx).
-								Table("memory_items").
-								Select("rowid AS id, namespace, `key`, value, visibility, confidence, source, created_at, updated_at").
-								Where("subject_id = ?", id.SubjectID).
-								Where("namespace IN ?", memory.NamespacesAllowlist).
-								Order("updated_at DESC").
-								Limit(limit).
-								Scan(&rows).Error
-							cancel()
-							if err != nil {
-								_ = api.sendMessage(context.Background(), chatID, "memory query error: "+err.Error(), true)
-								continue
-							}
-
-							if len(rows) == 0 {
-								_ = api.sendMessage(context.Background(), chatID, "（空）\n用法：/mem del <id>", true)
-								continue
-							}
-
-							var b strings.Builder
-							b.WriteString("当前 Memory（最多 200 条；id=sqlite rowid）：\n")
-							for _, r := range rows {
-								b.WriteString(fmt.Sprintf("%d  %s.%s = %s  [%s]\n",
-									r.ID,
-									strings.TrimSpace(r.Namespace),
-									strings.TrimSpace(r.Key),
-									truncateOneLine(r.Value, 180),
-									visibilityLabel(r.Visibility),
-								))
-							}
-							b.WriteString("\n用法：/mem del <id>")
-							if err := api.sendMessageChunked(context.Background(), chatID, b.String()); err != nil {
-								logger.Warn("telegram_send_error", "error", err.Error())
-							}
-							continue
-						case "del", "delete", "rm", "remove":
-							if rest == "" {
-								_ = api.sendMessage(context.Background(), chatID, "用法：/mem del <id>", true)
-								continue
-							}
-							itemID, err := strconv.ParseInt(rest, 10, 64)
-							if err != nil || itemID <= 0 {
-								_ = api.sendMessage(context.Background(), chatID, "无效 id（需要正整数）："+rest, true)
-								continue
-							}
-							ctx, cancel = context.WithTimeout(context.Background(), 8*time.Second)
-							tx := memoryDB.WithContext(ctx).Exec(
-								"DELETE FROM memory_items WHERE rowid = ? AND subject_id = ?",
-								itemID, id.SubjectID,
-							)
-							cancel()
-							if tx.Error != nil {
-								_ = api.sendMessage(context.Background(), chatID, "delete error: "+tx.Error.Error(), true)
-								continue
-							}
-							if tx.RowsAffected == 0 {
-								_ = api.sendMessage(context.Background(), chatID, "未找到该 id（或不属于当前用户）", true)
-								continue
-							}
-							_ = api.sendMessage(context.Background(), chatID, "ok (deleted)", true)
-							continue
-						case "vis", "visibility", "setvis":
-							idStr, visStr := splitCommand(rest)
-							idStr = strings.TrimSpace(idStr)
-							visStr = strings.TrimSpace(visStr)
-							if idStr == "" || visStr == "" {
-								_ = api.sendMessage(context.Background(), chatID, "用法：/mem vis <id> <public|private>", true)
-								continue
-							}
-							itemID, err := strconv.ParseInt(idStr, 10, 64)
-							if err != nil || itemID <= 0 {
-								_ = api.sendMessage(context.Background(), chatID, "无效 id（需要正整数）："+idStr, true)
-								continue
-							}
-							newVis, ok := parseVisibility(visStr)
-							if !ok {
-								_ = api.sendMessage(context.Background(), chatID, "无效 visibility（public|private）: "+visStr, true)
-								continue
-							}
-							ctx, cancel = context.WithTimeout(context.Background(), 8*time.Second)
-							tx := memoryDB.WithContext(ctx).Exec(
-								"UPDATE memory_items SET visibility = ?, updated_at = ? WHERE rowid = ? AND subject_id = ?",
-								newVis,
-								time.Now().Unix(),
-								itemID,
-								id.SubjectID,
-							)
-							cancel()
-							if tx.Error != nil {
-								_ = api.sendMessage(context.Background(), chatID, "update error: "+tx.Error.Error(), true)
-								continue
-							}
-							if tx.RowsAffected == 0 {
-								_ = api.sendMessage(context.Background(), chatID, "未找到该 id（或不属于当前用户）", true)
-								continue
-							}
-							_ = api.sendMessage(context.Background(), chatID, "ok (updated visibility)", true)
-							continue
-						default:
-							_ = api.sendMessage(context.Background(), chatID, "用法：/mem | /mem del <id> | /mem vis <id> <public|private>", true)
+						mgr := memory.NewManager(viper.GetString("memory.dir"), viper.GetInt("memory.short_term_days"))
+						maxItems := viper.GetInt("memory.injection.max_items")
+						snap, err := mgr.BuildInjection(id.SubjectID, memory.ContextPrivate, maxItems)
+						if err != nil {
+							_ = api.sendMessage(context.Background(), chatID, "memory load error: "+err.Error(), true)
 							continue
 						}
+						if strings.TrimSpace(snap) == "" {
+							_ = api.sendMessage(context.Background(), chatID, "（空）", true)
+							continue
+						}
+						if err := api.sendMessageChunked(context.Background(), chatID, snap); err != nil {
+							logger.Warn("telegram_send_error", "error", err.Error())
+						}
+						continue
 					case "/reset":
 						if len(allowed) > 0 && !allowed[chatID] {
 							logger.Warn("telegram_unauthorized_chat", "chat_id", chatID)
@@ -775,42 +661,13 @@ func newTelegramCmd() *cobra.Command {
 	return cmd
 }
 
-var (
-	memoryOnce     sync.Once
-	memoryInitErr  error
-	memoryDB       *gorm.DB
-	memoryStore    memory.Store
-	memoryResolver memory.IdentityResolver
-)
-
-func initMemory(ctx context.Context) (memory.Store, memory.IdentityResolver, error) {
-	memoryOnce.Do(func() {
-		cfg := dbConfigFromViper()
-		gdb, err := db.Open(ctx, cfg)
-		if err != nil {
-			memoryInitErr = err
-			return
-		}
-		if cfg.AutoMigrate {
-			if err := db.AutoMigrate(gdb); err != nil {
-				memoryInitErr = err
-				return
-			}
-		}
-		memoryDB = gdb
-		memoryStore = memory.NewGormStore(gdb)
-		memoryResolver = &memory.Resolver{DB: gdb}
-	})
-	return memoryStore, memoryResolver, memoryInitErr
-}
-
 func runTelegramTask(ctx context.Context, logger *slog.Logger, logOpts agent.LogOptions, client llm.Client, baseReg *tools.Registry, api *telegramAPI, filesEnabled bool, fileCacheDir string, filesMaxBytes int64, cfg agent.Config, job telegramJob, model string, history []llm.Message, stickySkills []string) (*agent.Final, *agent.Context, []string, error) {
 	task := job.Text
 	if baseReg == nil {
 		baseReg = registryFromViper()
 	}
 
-	// Per-run registry (memory tools are bound to this request).
+	// Per-run registry.
 	reg := tools.NewRegistry()
 	for _, t := range baseReg.All() {
 		reg.Register(t)
@@ -845,43 +702,29 @@ func runTelegramTask(ctx context.Context, logger *slog.Logger, logOpts agent.Log
 		"If you need to send a Telegram voice message: call telegram_send_voice. If you do not already have a voice file path, do NOT ask the user for one; instead call telegram_send_voice without path and provide a short `text` to synthesize from the current context.",
 	)
 
+	var memManager *memory.Manager
+	var memIdentity memory.Identity
+	memReqCtx := memory.ContextPublic
 	if viper.GetBool("memory.enabled") && job.FromUserID > 0 {
-		reqCtx := memory.ContextPublic
 		if strings.ToLower(strings.TrimSpace(job.ChatType)) == "private" {
-			reqCtx = memory.ContextPrivate
+			memReqCtx = memory.ContextPrivate
 		}
-
-		store, resolver, err := initMemory(ctx)
-		if err != nil {
-			return nil, nil, loadedSkills, fmt.Errorf("memory init: %w", err)
-		}
-
-		id, err := resolver.ResolveTelegram(ctx, job.FromUserID)
+		id, err := (&memory.Resolver{}).ResolveTelegram(ctx, job.FromUserID)
 		if err != nil {
 			return nil, nil, loadedSkills, fmt.Errorf("memory identity: %w", err)
 		}
 		if id.Enabled && strings.TrimSpace(id.SubjectID) != "" {
-			source := fmt.Sprintf("telegram:chat=%d msg=%d", job.ChatID, job.MessageID)
-			for _, mt := range (memory.ToolSet{
-				Store:     store,
-				SubjectID: id.SubjectID,
-				Context:   reqCtx,
-				Source:    source,
-			}).All() {
-				reg.Register(mt)
-			}
-
+			memIdentity = id
+			memManager = memory.NewManager(viper.GetString("memory.dir"), viper.GetInt("memory.short_term_days"))
 			if viper.GetBool("memory.injection.enabled") {
 				maxItems := viper.GetInt("memory.injection.max_items")
-				maxChars := viper.GetInt("memory.injection.max_chars")
-				items, err := memory.LoadSnapshot(ctx, store, id.SubjectID, reqCtx, maxItems)
+				snap, err := memManager.BuildInjection(id.SubjectID, memReqCtx, maxItems)
 				if err != nil {
-					return nil, nil, loadedSkills, fmt.Errorf("memory snapshot: %w", err)
+					return nil, nil, loadedSkills, fmt.Errorf("memory injection: %w", err)
 				}
-				snap := memory.FormatSnapshotForPrompt(items, memory.SnapshotOptions{MaxItems: maxItems, MaxChars: maxChars})
 				if strings.TrimSpace(snap) != "" {
 					promptSpec.Blocks = append(promptSpec.Blocks, agent.PromptBlock{
-						Title:   "Long-term Memory (filtered)",
+						Title:   "Memory Summaries",
 						Content: snap,
 					})
 				}
@@ -925,7 +768,16 @@ func runTelegramTask(ctx context.Context, logger *slog.Logger, logOpts agent.Log
 		"telegram_from_user_id": job.FromUserID,
 	}
 	final, agentCtx, err := engine.Run(ctx, task, agent.RunOptions{Model: model, History: history, Meta: meta})
-	return final, agentCtx, loadedSkills, err
+	if err != nil {
+		return final, agentCtx, loadedSkills, err
+	}
+
+	if memManager != nil && memIdentity.Enabled && strings.TrimSpace(memIdentity.SubjectID) != "" {
+		if err := updateTelegramMemory(ctx, logger, client, model, memManager, memIdentity, job, history, final); err != nil {
+			logger.Warn("memory_update_error", "error", err.Error())
+		}
+	}
+	return final, agentCtx, loadedSkills, nil
 }
 
 func generateTelegramPlanProgressMessage(ctx context.Context, client llm.Client, model string, task string, plan *agent.Plan, update agent.PlanStepUpdate) (string, error) {
@@ -1001,6 +853,246 @@ func formatFinalOutput(final *agent.Final) string {
 		b, _ := json.MarshalIndent(v, "", "  ")
 		return strings.TrimSpace(string(b))
 	}
+}
+
+func updateTelegramMemory(ctx context.Context, logger *slog.Logger, client llm.Client, model string, mgr *memory.Manager, id memory.Identity, job telegramJob, history []llm.Message, final *agent.Final) error {
+	if mgr == nil || client == nil {
+		return nil
+	}
+	output := formatFinalOutput(final)
+	memCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
+	defer cancel()
+
+	draft, err := buildMemoryDraft(memCtx, client, model, history, job.Text, output)
+	if err != nil {
+		return err
+	}
+
+	meta := memory.WriteMeta{
+		SessionID: fmt.Sprintf("telegram:%d:%d", job.ChatID, job.MessageID),
+		Source:    "telegram",
+		Channel:   job.ChatType,
+		SubjectID: id.SubjectID,
+	}
+	date := time.Now().UTC()
+	_, existingContent, hasExisting, err := mgr.LoadShortTerm(date)
+	if err != nil {
+		return err
+	}
+
+	mergedContent := memory.MergeShortTerm(existingContent, draft)
+	summary := strings.TrimSpace(draft.Summary)
+	if hasExisting && hasDraftContent(draft) {
+		semantic, semanticSummary, mergeErr := semanticMergeShortTerm(memCtx, client, model, existingContent, draft)
+		if mergeErr == nil {
+			mergedContent = semantic
+			summary = semanticSummary
+		}
+	}
+
+	_, err = mgr.WriteShortTerm(date, mergedContent, summary, meta)
+	if err != nil {
+		return err
+	}
+	if _, err := mgr.UpdateLongTerm(id.SubjectID, draft.Promote); err != nil {
+		return err
+	}
+	if logger != nil {
+		logger.Debug("memory_update_ok", "subject_id", id.SubjectID)
+	}
+	return nil
+}
+
+func buildMemoryDraft(ctx context.Context, client llm.Client, model string, history []llm.Message, task string, output string) (memory.SessionDraft, error) {
+	if client == nil {
+		return memory.SessionDraft{}, fmt.Errorf("nil llm client")
+	}
+	if strings.TrimSpace(model) == "" {
+		model = "gpt-4o-mini"
+	}
+
+	payload := map[string]any{
+		"conversation": buildMemoryContextMessages(history, task, output),
+		"rules": []string{
+			"Short-term memory is public. Do NOT include private or sensitive info in summary/session_summary/temporary_facts/tasks/follow_ups.",
+			"Use the same language as the user.",
+			"Keep items concise.",
+			"If unsure, leave the field empty.",
+		},
+	}
+	b, _ := json.Marshal(payload)
+
+	sys := "You summarize a single agent session into a markdown-based memory draft. " +
+		"Return ONLY a JSON object with keys: " +
+		"summary (string), " +
+		"session_summary (array of {title, value}), " +
+		"temporary_facts (array of {title, value}), " +
+		"tasks (array of {text, done}), " +
+		"follow_ups (array of {text, done}), " +
+		"promote (object with goals_projects and key_facts arrays of {title, value}). " +
+		"If nothing applies, use empty arrays and empty strings. " +
+		"Promote only stable, high-signal items."
+
+	res, err := client.Chat(ctx, llm.Request{
+		Model:     model,
+		ForceJSON: true,
+		Messages: []llm.Message{
+			{Role: "system", Content: sys},
+			{Role: "user", Content: string(b)},
+		},
+		Parameters: map[string]any{
+			"max_tokens": 600,
+		},
+	})
+	if err != nil {
+		return memory.SessionDraft{}, err
+	}
+
+	raw := strings.TrimSpace(res.Text)
+	if raw == "" {
+		return memory.SessionDraft{}, fmt.Errorf("empty memory draft response")
+	}
+
+	var out memory.SessionDraft
+	if err := jsonutil.DecodeWithFallback(raw, &out); err != nil {
+		return memory.SessionDraft{}, fmt.Errorf("invalid memory draft json")
+	}
+	out.Summary = strings.TrimSpace(out.Summary)
+	return out, nil
+}
+
+type semanticMergeInput struct {
+	Existing semanticMergeContent `json:"existing"`
+	Incoming semanticMergeContent `json:"incoming"`
+	Rules    []string             `json:"rules"`
+}
+
+type semanticMergeContent struct {
+	SessionSummary []memory.KVItem   `json:"session_summary"`
+	TemporaryFacts []memory.KVItem   `json:"temporary_facts"`
+	Tasks          []memory.TaskItem `json:"tasks"`
+	FollowUps      []memory.TaskItem `json:"follow_ups"`
+}
+
+type semanticMergeResult struct {
+	Summary        string            `json:"summary"`
+	SessionSummary []memory.KVItem   `json:"session_summary"`
+	TemporaryFacts []memory.KVItem   `json:"temporary_facts"`
+	Tasks          []memory.TaskItem `json:"tasks"`
+	FollowUps      []memory.TaskItem `json:"follow_ups"`
+}
+
+func semanticMergeShortTerm(ctx context.Context, client llm.Client, model string, existing memory.ShortTermContent, draft memory.SessionDraft) (memory.ShortTermContent, string, error) {
+	if client == nil {
+		return memory.ShortTermContent{}, "", fmt.Errorf("nil llm client")
+	}
+	if strings.TrimSpace(model) == "" {
+		model = "gpt-4o-mini"
+	}
+
+	input := semanticMergeInput{
+		Existing: semanticMergeContent{
+			SessionSummary: existing.SessionSummary,
+			TemporaryFacts: existing.TemporaryFacts,
+			Tasks:          existing.Tasks,
+			FollowUps:      existing.FollowUps,
+		},
+		Incoming: semanticMergeContent{
+			SessionSummary: draft.SessionSummary,
+			TemporaryFacts: draft.TemporaryFacts,
+			Tasks:          draft.Tasks,
+			FollowUps:      draft.FollowUps,
+		},
+		Rules: []string{
+			"These are same-day short-term items. Merge semantically and deduplicate.",
+			"Short-term memory is public. Do NOT include private or sensitive info.",
+			"Prefer the most recent information when conflicts occur.",
+			"Keep items concise.",
+			"Tasks: if a task appears in both, keep the latest done status.",
+			"If unsure, keep the existing item and add the new one only if distinct.",
+		},
+	}
+	payload, _ := json.Marshal(input)
+
+	sys := "You merge short-term memory entries for the same day. " +
+		"Return ONLY a JSON object with keys: summary, session_summary, temporary_facts, tasks, follow_ups. " +
+		"Each list item must keep the same shape as input. " +
+		"Summary must reflect the merged content and be one short sentence."
+
+	res, err := client.Chat(ctx, llm.Request{
+		Model:     model,
+		ForceJSON: true,
+		Messages: []llm.Message{
+			{Role: "system", Content: sys},
+			{Role: "user", Content: string(payload)},
+		},
+		Parameters: map[string]any{
+			"max_tokens": 500,
+		},
+	})
+	if err != nil {
+		return memory.ShortTermContent{}, "", err
+	}
+
+	raw := strings.TrimSpace(res.Text)
+	if raw == "" {
+		return memory.ShortTermContent{}, "", fmt.Errorf("empty semantic merge response")
+	}
+
+	var out semanticMergeResult
+	if err := jsonutil.DecodeWithFallback(raw, &out); err != nil {
+		return memory.ShortTermContent{}, "", fmt.Errorf("invalid semantic merge json")
+	}
+
+	merged := memory.ShortTermContent{
+		SessionSummary: out.SessionSummary,
+		TemporaryFacts: out.TemporaryFacts,
+		Tasks:          out.Tasks,
+		FollowUps:      out.FollowUps,
+		RelatedLinks:   existing.RelatedLinks,
+	}
+	summary := strings.TrimSpace(out.Summary)
+	if summary == "" {
+		summary = strings.TrimSpace(draft.Summary)
+	}
+	return merged, summary, nil
+}
+
+func hasDraftContent(draft memory.SessionDraft) bool {
+	return len(draft.SessionSummary) > 0 || len(draft.TemporaryFacts) > 0 || len(draft.Tasks) > 0 || len(draft.FollowUps) > 0
+}
+
+func buildMemoryContextMessages(history []llm.Message, task string, output string) []map[string]string {
+	msgs := make([]llm.Message, 0, len(history)+2)
+	for _, m := range history {
+		if strings.TrimSpace(m.Role) == "system" {
+			continue
+		}
+		msgs = append(msgs, m)
+	}
+	if strings.TrimSpace(task) != "" {
+		msgs = append(msgs, llm.Message{Role: "user", Content: task})
+	}
+	if strings.TrimSpace(output) != "" {
+		msgs = append(msgs, llm.Message{Role: "assistant", Content: output})
+	}
+	if len(msgs) > 6 {
+		msgs = msgs[len(msgs)-6:]
+	}
+
+	out := make([]map[string]string, 0, len(msgs))
+	for _, m := range msgs {
+		role := strings.ToLower(strings.TrimSpace(m.Role))
+		content := strings.TrimSpace(m.Content)
+		if role == "" || content == "" {
+			continue
+		}
+		out = append(out, map[string]string{
+			"role":    role,
+			"content": truncateRunes(content, 1200),
+		})
+	}
+	return out
 }
 
 // Telegram API
@@ -1724,24 +1816,6 @@ func truncateRunes(s string, max int) string {
 		return string(runes[:max])
 	}
 	return string(runes[:max-3]) + "..."
-}
-
-func visibilityLabel(v int) string {
-	if v == int(memory.PublicOK) {
-		return "public_ok"
-	}
-	return "private_only"
-}
-
-func parseVisibility(s string) (int, bool) {
-	switch strings.ToLower(strings.TrimSpace(s)) {
-	case "public", "pub", "public_ok":
-		return int(memory.PublicOK), true
-	case "private", "priv", "private_only":
-		return int(memory.PrivateOnly), true
-	default:
-		return int(memory.PrivateOnly), false
-	}
 }
 
 type telegramAliasSmartMatch struct {

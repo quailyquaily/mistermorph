@@ -1,5 +1,7 @@
 package memory
 
+import "time"
+
 type RequestContext string
 
 const (
@@ -8,50 +10,68 @@ const (
 	ContextPrivate RequestContext = "private"
 )
 
-type Visibility int
-
-const (
-	PublicOK    Visibility = 0
-	PrivateOnly Visibility = 1
-)
-
-var NamespacesAllowlist = []string{
-	"profile",
-	"preference",
-	"fact",
-	"project",
-	"task_state",
+type Frontmatter struct {
+	CreatedAt string   `yaml:"created_at"`
+	UpdatedAt string   `yaml:"updated_at"`
+	Summary   string   `yaml:"summary"`
+	SessionID string   `yaml:"session_id,omitempty"`
+	Source    string   `yaml:"source,omitempty"`
+	Channel   string   `yaml:"channel,omitempty"`
+	Tags      []string `yaml:"tags,omitempty"`
+	SubjectID string   `yaml:"subject_id,omitempty"`
 }
 
-func IsAllowedNamespace(ns string) bool {
-	for _, a := range NamespacesAllowlist {
-		if ns == a {
-			return true
-		}
-	}
-	return false
+type Manager struct {
+	Dir           string
+	ShortTermDays int
+	Now           func() time.Time
 }
 
-type Item struct {
-	SubjectID  string
-	Namespace  string
-	Key        string
-	Value      string
-	Visibility Visibility
-	Confidence *float64
-	Source     *string
-	CreatedAt  int64
-	UpdatedAt  int64
+type KVItem struct {
+	Title string `json:"title"`
+	Value string `json:"value"`
 }
 
-type ReadOptions struct {
-	Context RequestContext
-	Limit   int
-	Prefix  string
+type TaskItem struct {
+	Text string `json:"text"`
+	Done bool   `json:"done"`
 }
 
-type PutOptions struct {
-	Visibility *Visibility
-	Confidence *float64
-	Source     *string
+type PromoteDraft struct {
+	GoalsProjects []KVItem `json:"goals_projects"`
+	KeyFacts      []KVItem `json:"key_facts"`
+}
+
+type SessionDraft struct {
+	Summary        string       `json:"summary"`
+	SessionSummary []KVItem     `json:"session_summary"`
+	TemporaryFacts []KVItem     `json:"temporary_facts"`
+	Tasks          []TaskItem   `json:"tasks"`
+	FollowUps      []TaskItem   `json:"follow_ups"`
+	Promote        PromoteDraft `json:"promote"`
+}
+
+type ShortTermSummary struct {
+	Date    string
+	Summary string
+	RelPath string
+}
+
+// ShortTermContent is the parsed representation of a daily short-term file.
+type ShortTermContent struct {
+	SessionSummary []KVItem
+	TemporaryFacts []KVItem
+	Tasks          []TaskItem
+	FollowUps      []TaskItem
+	RelatedLinks   []LinkItem
+}
+
+type LongTermContent struct {
+	Goals []KVItem
+	Facts []KVItem
+}
+
+type LinkItem struct {
+	Text   string
+	Target string
 }

@@ -12,8 +12,6 @@ func AutoMigrate(gdb *gorm.DB) error {
 		return fmt.Errorf("nil gorm db")
 	}
 	return gdb.AutoMigrate(
-		&models.MemoryItem{},
-		&models.IdentityLink{},
 		&models.CronJob{},
 		&models.CronRun{},
 	)

@@ -71,9 +71,10 @@ func initViperDefaults() {
 
 	// Long-term memory (Phase 1)
 	viper.SetDefault("memory.enabled", false)
+	viper.SetDefault("memory.dir", "~/.morph/memory")
+	viper.SetDefault("memory.short_term_days", 7)
 	viper.SetDefault("memory.injection.enabled", true)
 	viper.SetDefault("memory.injection.max_items", 50)
-	viper.SetDefault("memory.injection.max_chars", 6000)
 
 	// Secrets / auth profiles (Phase 0: disabled by default, fail-closed).
 	viper.SetDefault("secrets.enabled", false)
