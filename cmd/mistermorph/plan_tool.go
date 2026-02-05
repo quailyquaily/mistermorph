@@ -145,7 +145,7 @@ func (t *planCreateTool) Execute(ctx context.Context, params map[string]any) (st
 		"constraints": []string{
 			"Use only available_tools when describing steps that involve tools.",
 			"Keep steps executable and concise.",
-			"Assume required credentials are already configured when a skill references an auth_profile.",
+			"Assume required credentials are already configured when a skill references an auth_profile; do not add steps asking the user to confirm keys unless a tool error explicitly indicates missing configuration.",
 		},
 	}
 	payloadJSON, _ := json.Marshal(payload)

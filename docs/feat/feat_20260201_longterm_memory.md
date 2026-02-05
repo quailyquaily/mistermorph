@@ -14,7 +14,7 @@ All memory files live under a configured `memory/` directory.
 1. **Readable and editable**: markdown is easy to audit and maintain.
 2. **Stable layout**: predictable file structure for indexing and loading.
 3. **Linkable**: standard markdown links between memory files.
-4. **Session-driven updates**: every session writes short-term memory and merges same-day content when needed.
+4. **Session-driven updates**: every session writes short-term memory to its own file and merges within that session when needed.
 5. **Long-term compactness**: long-term memory retains only the most important items.
 
 ## 3. User Model and Scope
@@ -37,7 +37,7 @@ Optionally store the original `subject_id` in frontmatter to preserve the canoni
 All files are under the configured `memory/` directory:
 
 - **Long-term memory**: `memory/_longterms/<subject-id>/_index.md`
-- **Short-term memory**: `memory/YYYY-MM-DD/_index.md`
+- **Short-term memory**: `memory/YYYY-MM-DD/<session-id>.md`
 
 Example:
 
@@ -47,9 +47,10 @@ memory/
     acct_42/
       _index.md
   2026-02-04/
-    _index.md
+    telegram_12345.md
+    cli_session_001.md
   2026-02-05/
-    _index.md
+    telegram_12345.md
 ```
 
 ## 5. File Format (Frontmatter)
@@ -90,17 +91,20 @@ subject_id: acct:42
 
 - Store only **important, stable, high-signal** items.
 - Keep it compact and easy to scan.
+- Each entry should include an **added date** suffix (e.g., `(added 2026-02-05)`).
 - Links can reference short-term files for details.
 - **Private-only**: must not be used in public contexts (e.g., group chats).
 
-### 6.2 Short-Term Memory (`memory/YYYY-MM-DD/_index.md`)
+### 6.2 Short-Term Memory (`memory/YYYY-MM-DD/<session-id>.md`)
 
-- Each session appends content to today’s file.
-- If similar content already exists for the same day, **rewrite and merge** instead of duplicating.
+- Each session writes to its **own** file for that day.
+- If similar content already exists for the same session file, **rewrite and merge** instead of duplicating.
 - Update `updated_at` and `summary` after every write.
+- Session summary entries should include **who**, **when**, **what happened**, and the **result** (if any).
+- When tasks are completed in a later session, scan recent short-term files and update matching TODO status.
 - **Public-by-default**: do not write private information here.
 
-## 7. Merge Rules (Same-Day Short-Term)
+## 7. Merge Rules (Same-Session Short-Term)
 
 Primary strategy: **semantic merge** (LLM-assisted), with a rule-based fallback.
 
@@ -139,25 +143,29 @@ On session start (agent wake):
 
 1. Load current user long-term memory from `memory/_longterms/<subject-id>/_index.md`.
 2. Load recent short-term memory (default 7 days; configurable).
-3. Always load **today’s short-term file** if present.
+3. Always load **today’s short-term file for the current session** if present.
 
 On session end (or after a batch):
 
-1. Summarize the session into today’s short-term file.
-2. Merge with existing same-day content using the rules above.
+1. Summarize the session into today’s short-term file (per session id).
+2. Merge with existing same-session content using the rules above.
 3. Update `updated_at` and `summary`.
-4. Promote key items into long-term memory (current user scope).
+4. Scan recent short-term files and update matching task statuses.
+5. Promote key items into long-term memory (current user scope).
 
 ## 10. Long-Term Selection Rules
 
-Minimal rule-based selection:
+Strict selection (very conservative):
 
-Include if any of the following are true:
+Include **only** if all are true:
 
-1. The user explicitly asks to remember it.
-2. Long-lived goal or multi-week project state.
-3. Key fact that remains valid over time.
-4. High-frequency fact repeated across sessions or days.
+1. The user explicitly asks to remember it (or to add to long-term memory).
+2. It is **precious and long-lived** (weeks/months), not a transient detail.
+3. It is **not** a short-term task, one-off detail, or time-bound item.
+
+Hard limits:
+- **At most 1 item per session** can be promoted.
+- If uncertain, **skip promotion**.
 
 Exclude (stored elsewhere, not in long-term memory):
 
@@ -190,8 +198,8 @@ Recommended injection block:
 - <summary line 2>
 
 [Memory:ShortTerm:Recent]
-- 2026-02-04: <summary> (2026-02-04/_index.md)
-- 2026-02-03: <summary> (2026-02-03/_index.md)
+- 2026-02-04: <summary> (2026-02-04/telegram_12345.md)
+- 2026-02-03: <summary> (2026-02-03/telegram_12345.md)
 ```
 
 ## 12. Templates
@@ -209,13 +217,13 @@ subject_id: acct:42
 # Long-Term Memory
 
 ## Long-Term Goals / Projects
-- **Project A**: ...
+- **Project A**: ... (added 2026-02-05)
 
 ## Key Facts
-- **Key fact**: ...
+- **Key fact**: ... (added 2026-02-05)
 ```
 
-### 12.2 Short-Term Template (`memory/YYYY-MM-DD/_index.md`)
+### 12.2 Short-Term Template (`memory/YYYY-MM-DD/<session-id>.md`)
 
 ```
 ---
@@ -242,7 +250,7 @@ channel: local
 - [ ] ...
 
 ## Related Links
-- [Previous day](../2026-02-03/_index.md)
+- [Previous day](../2026-02-03/telegram_12345.md)
 ```
 
 ## 13. Configuration (Proposed)
@@ -260,7 +268,9 @@ channel: local
 - [x] Add subject-id directory mapping (sanitize `SubjectID` to path-safe).
 - [x] Implement frontmatter parsing/writing with required fields and summary updates.
 - [x] Implement short-term merge rules (section/title/TODO/link matching).
+- [x] Write short-term memory per session file and sync completed TODOs across recent sessions.
 - [x] Implement long-term selection/promotion rules and capacity limits.
+- [x] Append added-date suffix to new long-term entries.
 - [x] Implement session startup load (long-term + recent short-term).
 - [x] Implement injection rendering (summaries + short-term path refs only).
 - [x] Update configuration schema and defaults (remove `memory.injection.max_chars`).

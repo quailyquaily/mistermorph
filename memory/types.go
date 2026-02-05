@@ -57,7 +57,7 @@ type ShortTermSummary struct {
 	RelPath string
 }
 
-// ShortTermContent is the parsed representation of a daily short-term file.
+// ShortTermContent is the parsed representation of a short-term session file.
 type ShortTermContent struct {
 	SessionSummary []KVItem
 	TemporaryFacts []KVItem

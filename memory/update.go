@@ -26,7 +26,7 @@ func (m *Manager) UpdateShortTerm(date time.Time, draft SessionDraft, meta Write
 	if m == nil {
 		return "", fmt.Errorf("nil memory manager")
 	}
-	abs, rel := m.ShortTermPath(date)
+	abs, rel := m.ShortTermSessionPath(date, meta.SessionID)
 	if abs == "" {
 		return "", fmt.Errorf("memory dir not set")
 	}
@@ -61,7 +61,7 @@ func (m *Manager) WriteShortTerm(date time.Time, content ShortTermContent, summa
 	if m == nil {
 		return "", fmt.Errorf("nil memory manager")
 	}
-	abs, rel := m.ShortTermPath(date)
+	abs, rel := m.ShortTermSessionPath(date, meta.SessionID)
 	if abs == "" {
 		return "", fmt.Errorf("memory dir not set")
 	}
@@ -87,11 +87,11 @@ func (m *Manager) WriteShortTerm(date time.Time, content ShortTermContent, summa
 	return rel, nil
 }
 
-func (m *Manager) LoadShortTerm(date time.Time) (Frontmatter, ShortTermContent, bool, error) {
+func (m *Manager) LoadShortTerm(date time.Time, sessionID string) (Frontmatter, ShortTermContent, bool, error) {
 	if m == nil {
 		return Frontmatter{}, ShortTermContent{}, false, fmt.Errorf("nil memory manager")
 	}
-	abs, _ := m.ShortTermPath(date)
+	abs, _ := m.ShortTermSessionPath(date, sessionID)
 	if abs == "" {
 		return Frontmatter{}, ShortTermContent{}, false, fmt.Errorf("memory dir not set")
 	}
@@ -103,6 +103,114 @@ func (m *Manager) LoadShortTerm(date time.Time) (Frontmatter, ShortTermContent, 
 		return Frontmatter{}, ShortTermContent{}, false, nil
 	}
 	return fm, ParseShortTermContent(body), true, nil
+}
+
+func (m *Manager) UpdateRecentTaskStatuses(updates []TaskItem, excludeSessionID string) (int, error) {
+	if m == nil {
+		return 0, fmt.Errorf("nil memory manager")
+	}
+	if len(updates) == 0 {
+		return 0, nil
+	}
+	updateMap := make(map[string]bool)
+	for _, it := range updates {
+		if !it.Done {
+			continue
+		}
+		text := strings.TrimSpace(it.Text)
+		if text == "" {
+			continue
+		}
+		key := strings.ToLower(text)
+		updateMap[key] = true
+	}
+	if len(updateMap) == 0 {
+		return 0, nil
+	}
+
+	excludeName := ""
+	if strings.TrimSpace(excludeSessionID) != "" {
+		excludeName = SanitizeSubjectID(excludeSessionID) + ".md"
+	}
+
+	now := m.nowUTC()
+	updated := 0
+	for i := 0; i < m.ShortTermDays; i++ {
+		date := now.AddDate(0, 0, -i)
+		dayAbs, _ := m.ShortTermDayDir(date)
+		if strings.TrimSpace(dayAbs) == "" {
+			continue
+		}
+		entries, err := os.ReadDir(dayAbs)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return updated, err
+		}
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
+			}
+			name := entry.Name()
+			if !strings.HasSuffix(strings.ToLower(name), ".md") {
+				continue
+			}
+			if excludeName != "" && name == excludeName {
+				continue
+			}
+			abs := filepath.Join(dayAbs, name)
+			fm, body, ok, err := readMemoryFile(abs)
+			if err != nil {
+				return updated, err
+			}
+			content := ShortTermContent{}
+			if ok {
+				content = ParseShortTermContent(body)
+			} else {
+				content = ParseShortTermContent(body)
+			}
+			changed := updateTaskList(&content.Tasks, updateMap)
+			if updateTaskList(&content.FollowUps, updateMap) {
+				changed = true
+			}
+			if !changed {
+				continue
+			}
+			fm.UpdatedAt = now.UTC().Format(time.RFC3339)
+			if strings.TrimSpace(fm.CreatedAt) == "" {
+				fm.CreatedAt = now.UTC().Format(time.RFC3339)
+			}
+			if strings.TrimSpace(fm.Summary) == "" {
+				fm.Summary = fallbackShortSummaryFromContent(content)
+			}
+			bodyOut := BuildShortTermBody(date.UTC().Format("2006-01-02"), content)
+			if err := writeMemoryFile(abs, RenderFrontmatter(fm)+"\n"+bodyOut); err != nil {
+				return updated, err
+			}
+			updated++
+		}
+	}
+	return updated, nil
+}
+
+func updateTaskList(tasks *[]TaskItem, updates map[string]bool) bool {
+	if len(updates) == 0 || tasks == nil {
+		return false
+	}
+	changed := false
+	for i := range *tasks {
+		text := strings.TrimSpace((*tasks)[i].Text)
+		if text == "" {
+			continue
+		}
+		key := strings.ToLower(text)
+		if done, ok := updates[key]; ok && done && !(*tasks)[i].Done {
+			(*tasks)[i].Done = true
+			changed = true
+		}
+	}
+	return changed
 }
 
 func (m *Manager) UpdateLongTerm(subjectID string, promote PromoteDraft) (bool, error) {
@@ -126,7 +234,7 @@ func (m *Manager) UpdateLongTerm(subjectID string, promote PromoteDraft) (bool, 
 		content = ParseLongTermContent(body)
 	}
 
-	merged := MergeLongTerm(content, promote)
+	merged := MergeLongTerm(content, promote, m.nowUTC())
 	merged = enforceLongTermLimits(merged)
 	bodyOut := BuildLongTermBody(merged)
 	fm = applyLongTermFrontmatter(fm, subjectID, merged, m.nowUTC())
@@ -138,17 +246,7 @@ func (m *Manager) UpdateLongTerm(subjectID string, promote PromoteDraft) (bool, 
 }
 
 func (m *Manager) attachRelatedLink(content ShortTermContent, date time.Time) ShortTermContent {
-	prev := date.AddDate(0, 0, -1)
-	prevAbs, prevRel := m.ShortTermPath(prev)
-	if prevAbs == "" || prevRel == "" {
-		return content
-	}
-	if _, err := os.Stat(prevAbs); err != nil {
-		return content
-	}
-	label := prev.UTC().Format("2006-01-02")
-	link := LinkItem{Text: label, Target: filepath.ToSlash(prevRel)}
-	content.RelatedLinks = mergeLinks(content.RelatedLinks, []LinkItem{link})
+	_ = date
 	return content
 }
 

@@ -45,12 +45,36 @@ func (m *Manager) LongTermPath(subjectID string) (string, string) {
 }
 
 func (m *Manager) ShortTermPath(date time.Time) (string, string) {
+	return m.ShortTermSessionPath(date, "session")
+}
+
+func (m *Manager) ShortTermDayDir(date time.Time) (string, string) {
 	root := m.memoryRoot()
 	if root == "" {
 		return "", ""
 	}
 	day := date.UTC().Format("2006-01-02")
-	rel := filepath.ToSlash(filepath.Join(day, shortTermIndexName))
+	rel := filepath.ToSlash(day)
+	abs := filepath.Join(root, rel)
+	return abs, rel
+}
+
+func (m *Manager) ShortTermSessionPath(date time.Time, sessionID string) (string, string) {
+	root := m.memoryRoot()
+	if root == "" {
+		return "", ""
+	}
+	day := date.UTC().Format("2006-01-02")
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
+		sessionID = "session"
+	}
+	cleanID := SanitizeSubjectID(sessionID)
+	if cleanID == "" {
+		cleanID = "session"
+	}
+	filename := cleanID + ".md"
+	rel := filepath.ToSlash(filepath.Join(day, filename))
 	abs := filepath.Join(root, rel)
 	return abs, rel
 }

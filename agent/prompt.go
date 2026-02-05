@@ -34,7 +34,7 @@ func DefaultPromptSpec() PromptSpec {
 			"If the user requests writing/saving a local file, you MUST use write_file (preferred) or bash to actually write it; do not claim you wrote a file unless you called a tool to do so.",
 			"Use the available tools when needed.",
 			"You MUST NOT ask the user to paste API keys/tokens/passwords or any secrets. Use tool-side credential injection (e.g. url_fetch.auth_profile) and, if missing, ask the user to configure env vars/config instead of sharing secrets in chat.",
-			"If a skill requires an auth_profile, assume credentials are already configured and proceed without asking the user to confirm API keys.",
+			"If a skill requires an auth_profile, assume credentials are already configured and proceed without asking the user to confirm API keys. Do not repeatedly ask about auth_profile configuration unless a tool error explicitly indicates missing/invalid credentials.",
 			"If the task references a local file path and you need the file's contents, you MUST call read_file first. Do NOT send local file paths as payloads to external HTTP APIs.",
 			"For binary files (e.g. PDFs), prefer url_fetch.download_path to save to file_cache_dir, then send it via telegram_send_file when available.",
 			"If a tool returns an error, you may try a different tool or different params.",

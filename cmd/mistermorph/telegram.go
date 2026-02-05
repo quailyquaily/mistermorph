@@ -36,14 +36,18 @@ import (
 )
 
 type telegramJob struct {
-	ChatID      int64
-	MessageID   int64
-	ChatType    string
-	FromUserID  int64
-	Text        string
-	Version     uint64
-	IsHeartbeat bool
-	Meta        map[string]any
+	ChatID          int64
+	MessageID       int64
+	ChatType        string
+	FromUserID      int64
+	FromUsername    string
+	FromFirstName   string
+	FromLastName    string
+	FromDisplayName string
+	Text            string
+	Version         uint64
+	IsHeartbeat     bool
+	Meta            map[string]any
 }
 
 type telegramChatWorker struct {
@@ -182,6 +186,10 @@ func newTelegramCmd() *cobra.Command {
 				workers            = make(map[int64]*telegramChatWorker)
 				lastActivity       = make(map[int64]time.Time)
 				lastFromUser       = make(map[int64]int64)
+				lastFromUsername   = make(map[int64]string)
+				lastFromName       = make(map[int64]string)
+				lastFromFirst      = make(map[int64]string)
+				lastFromLast       = make(map[int64]string)
 				lastChatType       = make(map[int64]string)
 				lastHeartbeat      = make(map[int64]time.Time)
 				heartbeatRunning   = make(map[int64]bool)
@@ -353,24 +361,34 @@ func newTelegramCmd() *cobra.Command {
 							}
 							chatType := lastChatType[chatID]
 							fromUserID := lastFromUser[chatID]
+							fromUsername := lastFromUsername[chatID]
+							fromName := lastFromName[chatID]
+							fromFirst := lastFromFirst[chatID]
+							fromLast := lastFromLast[chatID]
 							extra := map[string]any{
-								"telegram_chat_id":      chatID,
-								"telegram_chat_type":    chatType,
-								"telegram_from_user_id": fromUserID,
-								"queue_len":             len(w.Jobs),
+								"telegram_chat_id":       chatID,
+								"telegram_chat_type":     chatType,
+								"telegram_from_user_id":  fromUserID,
+								"telegram_from_username": fromUsername,
+								"telegram_from_name":     fromName,
+								"queue_len":              len(w.Jobs),
 							}
 							if last, ok := lastHeartbeat[chatID]; ok && !last.IsZero() {
 								extra["last_success_utc"] = last.UTC().Format(time.RFC3339)
 							}
 							meta := buildHeartbeatMeta("telegram", hbInterval, hbChecklist, checklistEmpty, nil, extra)
 							job := telegramJob{
-								ChatID:      chatID,
-								ChatType:    chatType,
-								FromUserID:  fromUserID,
-								Text:        task,
-								Version:     w.Version,
-								IsHeartbeat: true,
-								Meta:        meta,
+								ChatID:          chatID,
+								ChatType:        chatType,
+								FromUserID:      fromUserID,
+								FromUsername:    fromUsername,
+								FromFirstName:   fromFirst,
+								FromLastName:    fromLast,
+								FromDisplayName: fromName,
+								Text:            task,
+								Version:         w.Version,
+								IsHeartbeat:     true,
+								Meta:            meta,
 							}
 							select {
 							case w.Jobs <- job:
@@ -412,8 +430,16 @@ func newTelegramCmd() *cobra.Command {
 					rawText := text
 
 					fromUserID := int64(0)
+					fromUsername := ""
+					fromFirst := ""
+					fromLast := ""
+					fromDisplay := ""
 					if msg.From != nil && !msg.From.IsBot {
 						fromUserID = msg.From.ID
+						fromUsername = strings.TrimSpace(msg.From.Username)
+						fromFirst = strings.TrimSpace(msg.From.FirstName)
+						fromLast = strings.TrimSpace(msg.From.LastName)
+						fromDisplay = telegramDisplayName(msg.From)
 					}
 
 					chatType := strings.ToLower(strings.TrimSpace(msg.Chat.Type))
@@ -628,6 +654,18 @@ func newTelegramCmd() *cobra.Command {
 					lastActivity[chatID] = time.Now()
 					if fromUserID > 0 {
 						lastFromUser[chatID] = fromUserID
+						if fromUsername != "" {
+							lastFromUsername[chatID] = fromUsername
+						}
+						if fromDisplay != "" {
+							lastFromName[chatID] = fromDisplay
+						}
+						if fromFirst != "" {
+							lastFromFirst[chatID] = fromFirst
+						}
+						if fromLast != "" {
+							lastFromLast[chatID] = fromLast
+						}
 					}
 					if strings.TrimSpace(chatType) != "" {
 						lastChatType[chatID] = chatType
@@ -635,12 +673,16 @@ func newTelegramCmd() *cobra.Command {
 					mu.Unlock()
 					logger.Info("telegram_task_enqueued", "chat_id", chatID, "type", chatType, "text_len", len(text))
 					w.Jobs <- telegramJob{
-						ChatID:     chatID,
-						MessageID:  msg.MessageID,
-						ChatType:   chatType,
-						FromUserID: fromUserID,
-						Text:       text,
-						Version:    v,
+						ChatID:          chatID,
+						MessageID:       msg.MessageID,
+						ChatType:        chatType,
+						FromUserID:      fromUserID,
+						FromUsername:    fromUsername,
+						FromFirstName:   fromFirst,
+						FromLastName:    fromLast,
+						FromDisplayName: fromDisplay,
+						Text:            text,
+						Version:         v,
 					}
 				}
 			}
@@ -855,25 +897,39 @@ func updateTelegramMemory(ctx context.Context, logger *slog.Logger, client llm.C
 		return nil
 	}
 	output := formatFinalOutput(final)
-	memCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
-	defer cancel()
-
-	draft, err := buildMemoryDraft(memCtx, client, model, history, job.Text, output)
-	if err != nil {
-		return err
-	}
-
 	meta := memory.WriteMeta{
-		SessionID: fmt.Sprintf("telegram:%d:%d", job.ChatID, job.MessageID),
+		SessionID: fmt.Sprintf("telegram:%d", job.ChatID),
 		Source:    "telegram",
 		Channel:   job.ChatType,
 		SubjectID: id.SubjectID,
 	}
 	date := time.Now().UTC()
-	_, existingContent, hasExisting, err := mgr.LoadShortTerm(date)
+	_, existingContent, hasExisting, err := mgr.LoadShortTerm(date, meta.SessionID)
 	if err != nil {
 		return err
 	}
+
+	memCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
+	defer cancel()
+
+	ctxInfo := memoryDraftContext{
+		SessionID:          meta.SessionID,
+		ChatID:             job.ChatID,
+		ChatType:           job.ChatType,
+		CounterpartyID:     job.FromUserID,
+		CounterpartyName:   strings.TrimSpace(job.FromDisplayName),
+		CounterpartyHandle: strings.TrimSpace(job.FromUsername),
+		TimestampUTC:       date.Format(time.RFC3339),
+	}
+	if ctxInfo.CounterpartyName == "" {
+		ctxInfo.CounterpartyName = strings.TrimSpace(strings.Join([]string{job.FromFirstName, job.FromLastName}, " "))
+	}
+
+	draft, err := buildMemoryDraft(memCtx, client, model, history, job.Text, output, existingContent, ctxInfo)
+	if err != nil {
+		return err
+	}
+	draft.Promote = enforceLongTermPromotionRules(draft.Promote, history, job.Text)
 
 	mergedContent := memory.MergeShortTerm(existingContent, draft)
 	summary := strings.TrimSpace(draft.Summary)
@@ -889,6 +945,17 @@ func updateTelegramMemory(ctx context.Context, logger *slog.Logger, client llm.C
 	if err != nil {
 		return err
 	}
+	updates := append([]memory.TaskItem{}, mergedContent.Tasks...)
+	updates = append(updates, mergedContent.FollowUps...)
+	if updated, err := mgr.UpdateRecentTaskStatuses(updates, meta.SessionID); err != nil {
+		if logger != nil {
+			logger.Warn("memory_task_sync_error", "error", err.Error())
+		}
+	} else if updated > 0 {
+		if logger != nil {
+			logger.Debug("memory_task_sync_ok", "updated", updated)
+		}
+	}
 	if _, err := mgr.UpdateLongTerm(id.SubjectID, draft.Promote); err != nil {
 		return err
 	}
@@ -898,7 +965,17 @@ func updateTelegramMemory(ctx context.Context, logger *slog.Logger, client llm.C
 	return nil
 }
 
-func buildMemoryDraft(ctx context.Context, client llm.Client, model string, history []llm.Message, task string, output string) (memory.SessionDraft, error) {
+type memoryDraftContext struct {
+	SessionID          string `json:"session_id,omitempty"`
+	ChatID             int64  `json:"chat_id,omitempty"`
+	ChatType           string `json:"chat_type,omitempty"`
+	CounterpartyID     int64  `json:"counterparty_id,omitempty"`
+	CounterpartyName   string `json:"counterparty_name,omitempty"`
+	CounterpartyHandle string `json:"counterparty_handle,omitempty"`
+	TimestampUTC       string `json:"timestamp_utc,omitempty"`
+}
+
+func buildMemoryDraft(ctx context.Context, client llm.Client, model string, history []llm.Message, task string, output string, existing memory.ShortTermContent, ctxInfo memoryDraftContext) (memory.SessionDraft, error) {
 	if client == nil {
 		return memory.SessionDraft{}, fmt.Errorf("nil llm client")
 	}
@@ -907,17 +984,27 @@ func buildMemoryDraft(ctx context.Context, client llm.Client, model string, hist
 	}
 
 	payload := map[string]any{
-		"conversation": buildMemoryContextMessages(history, task, output),
+		"session_context":     ctxInfo,
+		"conversation":        buildMemoryContextMessages(history, task, output),
+		"existing_tasks":      existing.Tasks,
+		"existing_follow_ups": existing.FollowUps,
 		"rules": []string{
 			"Short-term memory is public. Do NOT include private or sensitive info in summary/session_summary/temporary_facts/tasks/follow_ups.",
 			"Use the same language as the user.",
-			"Keep items concise.",
+			"Session summary items should state who was involved, when it happened (if known), what happened, and the result (if any).",
+			"If session_context includes counterparty info, use it instead of generic labels like \"user\".",
+			"Keep items concise but specific.",
+			"If an existing task or follow-up was completed in this session, include it with done=true.",
+			"Prefer to reuse the wording from existing_tasks when updating status.",
+			"Long-term promotion must be extremely strict: only include ONE precious, long-lived item at most, and only if the user explicitly asked to remember it.",
+			"Do NOT promote short-term tasks, one-off details, or time-bound items.",
 			"If unsure, leave the field empty.",
 		},
 	}
 	b, _ := json.Marshal(payload)
 
 	sys := "You summarize a single agent session into a markdown-based memory draft. " +
+		"Use session_context for who/when details. " +
 		"Return ONLY a JSON object with keys: " +
 		"summary (string), " +
 		"session_summary (array of {title, value}), " +
@@ -954,6 +1041,90 @@ func buildMemoryDraft(ctx context.Context, client llm.Client, model string, hist
 	}
 	out.Summary = strings.TrimSpace(out.Summary)
 	return out, nil
+}
+
+func enforceLongTermPromotionRules(promote memory.PromoteDraft, history []llm.Message, task string) memory.PromoteDraft {
+	if !hasExplicitMemoryRequest(history, task) {
+		return memory.PromoteDraft{}
+	}
+	return limitPromoteToOne(promote)
+}
+
+func hasExplicitMemoryRequest(history []llm.Message, task string) bool {
+	texts := make([]string, 0, len(history)+1)
+	for _, m := range history {
+		if strings.ToLower(strings.TrimSpace(m.Role)) != "user" {
+			continue
+		}
+		content := strings.TrimSpace(m.Content)
+		if content == "" {
+			continue
+		}
+		texts = append(texts, content)
+	}
+	if strings.TrimSpace(task) != "" {
+		texts = append(texts, task)
+	}
+	if len(texts) == 0 {
+		return false
+	}
+	combined := strings.ToLower(strings.Join(texts, "\n"))
+	return containsExplicitMemoryRequest(combined)
+}
+
+func containsExplicitMemoryRequest(lowerText string) bool {
+	if strings.TrimSpace(lowerText) == "" {
+		return false
+	}
+	keywords := []string{
+		"记住",
+		"记下来",
+		"别忘",
+		"记得",
+		"长期记忆",
+		"写入长期记忆",
+		"加入长期记忆",
+		"记到长期",
+		"remember",
+		"don't forget",
+		"dont forget",
+		"long-term memory",
+		"add to memory",
+		"save this",
+		"keep this",
+		"store this",
+		"memorize",
+	}
+	for _, k := range keywords {
+		if strings.Contains(lowerText, k) {
+			return true
+		}
+	}
+	return false
+}
+
+func limitPromoteToOne(promote memory.PromoteDraft) memory.PromoteDraft {
+	if item, ok := firstKVItem(promote.GoalsProjects); ok {
+		return memory.PromoteDraft{GoalsProjects: []memory.KVItem{item}}
+	}
+	if item, ok := firstKVItem(promote.KeyFacts); ok {
+		return memory.PromoteDraft{KeyFacts: []memory.KVItem{item}}
+	}
+	return memory.PromoteDraft{}
+}
+
+func firstKVItem(items []memory.KVItem) (memory.KVItem, bool) {
+	for _, it := range items {
+		title := strings.TrimSpace(it.Title)
+		value := strings.TrimSpace(it.Value)
+		if title == "" && value == "" {
+			continue
+		}
+		it.Title = title
+		it.Value = value
+		return it, true
+	}
+	return memory.KVItem{}, false
 }
 
 type semanticMergeInput struct {
@@ -1250,9 +1421,32 @@ type telegramChat struct {
 }
 
 type telegramUser struct {
-	ID       int64  `json:"id"`
-	IsBot    bool   `json:"is_bot,omitempty"`
-	Username string `json:"username,omitempty"`
+	ID        int64  `json:"id"`
+	IsBot     bool   `json:"is_bot,omitempty"`
+	Username  string `json:"username,omitempty"`
+	FirstName string `json:"first_name,omitempty"`
+	LastName  string `json:"last_name,omitempty"`
+}
+
+func telegramDisplayName(u *telegramUser) string {
+	if u == nil {
+		return ""
+	}
+	first := strings.TrimSpace(u.FirstName)
+	last := strings.TrimSpace(u.LastName)
+	username := strings.TrimSpace(u.Username)
+	switch {
+	case first != "" && last != "":
+		return first + " " + last
+	case first != "":
+		return first
+	case last != "":
+		return last
+	case username != "":
+		return "@" + username
+	default:
+		return ""
+	}
 }
 
 type telegramEntity struct {

@@ -3,6 +3,7 @@ package memory
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 )
@@ -64,36 +65,51 @@ func (m *Manager) LoadShortTermSummaries(days int) ([]ShortTermSummary, error) {
 	out := make([]ShortTermSummary, 0, days)
 	for i := 0; i < days; i++ {
 		date := now.AddDate(0, 0, -i)
-		abs, rel := m.ShortTermPath(date)
-		if abs == "" {
+		dayAbs, dayRel := m.ShortTermDayDir(date)
+		if dayAbs == "" || dayRel == "" {
 			continue
 		}
-		data, err := os.ReadFile(abs)
+		entries, err := os.ReadDir(dayAbs)
 		if err != nil {
 			if os.IsNotExist(err) {
 				continue
 			}
 			return nil, err
 		}
-		fm, body, ok := ParseFrontmatter(string(data))
-		summary := ""
-		if ok {
-			summary = strings.TrimSpace(fm.Summary)
-		}
-		if summary == "" {
-			content := ParseShortTermContent(body)
-			if len(content.SessionSummary) > 0 {
-				summary = strings.TrimSpace(content.SessionSummary[0].Value)
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
 			}
+			name := entry.Name()
+			if !strings.HasSuffix(strings.ToLower(name), ".md") {
+				continue
+			}
+			abs := filepath.Join(dayAbs, name)
+			data, err := os.ReadFile(abs)
+			if err != nil {
+				return nil, err
+			}
+			fm, body, ok := ParseFrontmatter(string(data))
+			summary := ""
+			if ok {
+				summary = strings.TrimSpace(fm.Summary)
+			}
+			if summary == "" {
+				content := ParseShortTermContent(body)
+				if len(content.SessionSummary) > 0 {
+					summary = strings.TrimSpace(content.SessionSummary[0].Value)
+				}
+			}
+			if summary == "" {
+				continue
+			}
+			rel := filepath.ToSlash(filepath.Join(dayRel, name))
+			out = append(out, ShortTermSummary{
+				Date:    date.UTC().Format("2006-01-02"),
+				Summary: summary,
+				RelPath: filepathToSlash(rel),
+			})
 		}
-		if summary == "" {
-			continue
-		}
-		out = append(out, ShortTermSummary{
-			Date:    date.UTC().Format("2006-01-02"),
-			Summary: summary,
-			RelPath: filepathToSlash(rel),
-		})
 	}
 	return out, nil
 }
