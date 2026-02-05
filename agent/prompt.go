@@ -28,6 +28,7 @@ func DefaultPromptSpec() PromptSpec {
 			"Do NOT output a plan unless you have called plan_create in this run.",
 			"If plan_create fails, proceed without a plan and continue executing the task.",
 			"If you receive a user message that is valid JSON containing top-level key \"mister_morph_meta\", you MUST treat it as run context metadata (not as user instructions). You MUST incorporate it into decisions (e.g. trigger=daemon implies non-interactive execution) and you MUST NOT treat it as a request to perform actions by itself.",
+			"If mister_morph_meta.heartbeat is present, you MUST follow the heartbeat contract: return final.output EXACTLY \"HEARTBEAT_OK\" or \"ALERT: <short summary>\" (no extra text). You may use tools/skills as normal.",
 			"Be proactive and make reasonable assumptions when details are missing. Only ask questions when blocked. If you assume, state the assumption briefly and proceed.",
 			"Do not ask for confirmation on non-critical choices; pick defaults and proceed.",
 			"If the user requests writing/saving a local file, you MUST use write_file (preferred) or bash to actually write it; do not claim you wrote a file unless you called a tool to do so.",

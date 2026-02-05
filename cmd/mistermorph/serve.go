@@ -68,6 +68,7 @@ func newServeCmd() *cobra.Command {
 			}
 
 			sharedGuard := guardFromViper(logger)
+			hbState := &heartbeatState{}
 
 			// Worker: process tasks sequentially.
 			go func() {
@@ -99,10 +100,16 @@ func newServeCmd() *cobra.Command {
 						qt.resumeApprovalID = ""
 						final, runCtx, runErr = resumeOneTask(qt.ctx, logger, logOpts, client, reg, baseCfg, sharedGuard, resumeApprovalID)
 					} else {
-						final, runCtx, runErr = runOneTask(qt.ctx, logger, logOpts, client, reg, baseCfg, sharedGuard, qt.info.Task, qt.info.Model, nil)
+						final, runCtx, runErr = runOneTask(qt.ctx, logger, logOpts, client, reg, baseCfg, sharedGuard, qt.info.Task, qt.info.Model, qt.meta)
 					}
 
 					if pendingID, ok := pendingApprovalID(final); ok && runErr == nil {
+						if qt.isHeartbeat && qt.heartbeatState != nil {
+							alert, msg := qt.heartbeatState.EndFailure(fmt.Errorf("heartbeat pending approval"))
+							if alert {
+								logger.Warn("heartbeat_alert", "message", msg)
+							}
+						}
 						pendingAt := time.Now()
 						store.Update(id, func(info *TaskInfo) {
 							info.Status = TaskPending
@@ -137,9 +144,61 @@ func newServeCmd() *cobra.Command {
 							"steps":   summarizeSteps(runCtx),
 						}
 					})
+					if qt.isHeartbeat && qt.heartbeatState != nil {
+						if runErr != nil {
+							alert, msg := qt.heartbeatState.EndFailure(runErr)
+							if alert {
+								logger.Warn("heartbeat_alert", "message", msg)
+							} else {
+								logger.Warn("heartbeat_error", "error", runErr.Error())
+							}
+						} else {
+							qt.heartbeatState.EndSuccess(finished)
+							out := formatFinalOutput(final)
+							if isHeartbeatOK(out) {
+								logger.Info("heartbeat_ok")
+							} else {
+								logger.Warn("heartbeat_alert", "message", out)
+							}
+						}
+					}
 					qt.cancel()
 				}
 			}()
+
+			hbEnabled := viper.GetBool("heartbeat.enabled")
+			hbInterval := viper.GetDuration("heartbeat.interval")
+			hbChecklist := strings.TrimSpace(viper.GetString("heartbeat.checklist_path"))
+			if hbEnabled && hbInterval > 0 {
+				go func() {
+					ticker := time.NewTicker(hbInterval)
+					defer ticker.Stop()
+					for range ticker.C {
+						if !hbState.Start() {
+							logger.Debug("heartbeat_skip", "reason", "already_running")
+							continue
+						}
+						task, checklistEmpty, err := buildHeartbeatTask(hbChecklist)
+						if err != nil {
+							alert, msg := hbState.EndFailure(err)
+							if alert {
+								logger.Warn("heartbeat_alert", "message", msg)
+							} else {
+								logger.Warn("heartbeat_task_error", "error", err.Error())
+							}
+							continue
+						}
+						meta := buildHeartbeatMeta("daemon", hbInterval, hbChecklist, checklistEmpty, hbState, map[string]any{
+							"queue_len": store.QueueLen(),
+						})
+						timeout := viper.GetDuration("timeout")
+						if _, err := store.EnqueueHeartbeat(context.Background(), task, llmModelFromViper(), timeout, meta, hbState); err != nil {
+							hbState.EndSkipped()
+							logger.Debug("heartbeat_skip", "reason", err.Error())
+						}
+					}
+				}()
+			}
 
 			mux := http.NewServeMux()
 			mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {

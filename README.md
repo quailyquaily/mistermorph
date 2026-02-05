@@ -101,8 +101,8 @@ Notes:
 - Bot replies are sent with Telegram Markdown (MarkdownV2; with fallback to plain text if Telegram rejects formatting).
 - You can send a file (document/photo); it will be downloaded under `file_cache_dir/telegram/` and the agent can process it (e.g. via the `bash` tool). The agent can also send cached files back via `telegram_send_file`, and send a voice message via `telegram_send_voice` (either send an existing `.ogg`/Opus file from `file_cache_dir`, or omit `path` and provide `text` to synthesize locally; requires a local TTS engine + `ffmpeg`/`opusenc`).
 - In Telegram mode, the last loaded skill(s) stay “sticky” per chat (so follow-up messages won’t forget SKILL.md); `/reset` clears this.
-- If you configure `telegram.aliases`, the default `telegram.group_trigger_mode=smart` only triggers on aliases when the message looks like direct addressing (alias near the start + request-like text). Use `contains` for the old substring behavior.
-- If you want smarter disambiguation for alias mentions, enable `telegram.addressing_llm.enabled` (and optionally set `telegram.addressing_llm.mode=always`) to let an LLM classify alias hits.
+- If you configure `telegram.aliases`, the default `telegram.group_trigger_mode=smart` only triggers on aliases when the message looks like direct addressing (alias near the start + request-like text). Alias hits are LLM-validated in smart mode.
+- You can tune smart addressing with `telegram.smart_addressing_max_chars` and `telegram.smart_addressing_confidence`.
 - Use `/id` to print the current chat id (useful for allowlisting group ids).
 - Use `/reset` in chat to clear conversation history.
 - If you omit `--telegram-allowed-chat-id`, all chats can talk to the bot (not recommended).
@@ -197,13 +197,9 @@ These arguments will dump the final system/user/tool prompts and the full LLM re
 - `--telegram-bot-token`
 - `--telegram-allowed-chat-id` (repeatable)
 - `--telegram-alias` (repeatable)
-- `--telegram-group-trigger-mode` (`strict|smart|contains`)
-- `--telegram-alias-prefix-max-chars`
-- `--telegram-addressing-llm-enabled`
-- `--telegram-addressing-llm-mode` (`borderline|always`)
-- `--telegram-addressing-llm-model`
-- `--telegram-addressing-llm-timeout`
-- `--telegram-addressing-llm-min-confidence`
+- `--telegram-group-trigger-mode` (`strict|smart`)
+- `--telegram-smart-addressing-max-chars`
+- `--telegram-smart-addressing-confidence`
 - `--telegram-poll-timeout`
 - `--telegram-task-timeout`
 - `--telegram-max-concurrency`

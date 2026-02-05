@@ -36,12 +36,14 @@ import (
 )
 
 type telegramJob struct {
-	ChatID     int64
-	MessageID  int64
-	ChatType   string
-	FromUserID int64
-	Text       string
-	Version    uint64
+	ChatID      int64
+	MessageID   int64
+	ChatType    string
+	FromUserID  int64
+	Text        string
+	Version     uint64
+	IsHeartbeat bool
+	Meta        map[string]any
 }
 
 type telegramChatWorker struct {
@@ -93,7 +95,6 @@ func newTelegramCmd() *cobra.Command {
 			model := llmModelFromViper()
 			reg := registryFromViper()
 			logOpts := logOptionsFromViper()
-			sharedGuard := guardFromViper(logger)
 
 			cfg := agent.Config{
 				MaxSteps:       viper.GetInt("max_steps"),
@@ -161,29 +162,17 @@ func newTelegramCmd() *cobra.Command {
 			if groupTriggerMode == "" {
 				groupTriggerMode = "smart"
 			}
-			aliasPrefixMaxChars := flagOrViperInt(cmd, "telegram-alias-prefix-max-chars", "telegram.alias_prefix_max_chars")
-			if aliasPrefixMaxChars <= 0 {
-				aliasPrefixMaxChars = 24
+			smartAddressingMaxChars := flagOrViperInt(cmd, "telegram-smart-addressing-max-chars", "telegram.smart_addressing_max_chars")
+			if smartAddressingMaxChars <= 0 {
+				smartAddressingMaxChars = 24
 			}
-			addressingLLMEnabled := flagOrViperBool(cmd, "telegram-addressing-llm-enabled", "telegram.addressing_llm.enabled")
-			addressingLLMMode := strings.ToLower(strings.TrimSpace(flagOrViperString(cmd, "telegram-addressing-llm-mode", "telegram.addressing_llm.mode")))
-			if addressingLLMMode == "" {
-				addressingLLMMode = "borderline"
+			addressingLLMTimeout := 10 * time.Second
+			smartAddressingConfidence := flagOrViperFloat64(cmd, "telegram-smart-addressing-confidence", "telegram.smart_addressing_confidence")
+			if smartAddressingConfidence <= 0 {
+				smartAddressingConfidence = 0.55
 			}
-			addressingLLMModel := strings.TrimSpace(flagOrViperString(cmd, "telegram-addressing-llm-model", "telegram.addressing_llm.model"))
-			if addressingLLMModel == "" {
-				addressingLLMModel = model
-			}
-			addressingLLMTimeout := flagOrViperDuration(cmd, "telegram-addressing-llm-timeout", "telegram.addressing_llm.timeout")
-			if addressingLLMTimeout <= 0 {
-				addressingLLMTimeout = 3 * time.Second
-			}
-			addressingLLMMinConfidence := flagOrViperFloat64(cmd, "telegram-addressing-llm-min-confidence", "telegram.addressing_llm.min_confidence")
-			if addressingLLMMinConfidence <= 0 {
-				addressingLLMMinConfidence = 0.55
-			}
-			if addressingLLMMinConfidence > 1 {
-				addressingLLMMinConfidence = 1
+			if smartAddressingConfidence > 1 {
+				smartAddressingConfidence = 1
 			}
 
 			var (
@@ -191,6 +180,12 @@ func newTelegramCmd() *cobra.Command {
 				history            = make(map[int64][]llm.Message)
 				stickySkillsByChat = make(map[int64][]string)
 				workers            = make(map[int64]*telegramChatWorker)
+				lastActivity       = make(map[int64]time.Time)
+				lastFromUser       = make(map[int64]int64)
+				lastChatType       = make(map[int64]string)
+				lastHeartbeat      = make(map[int64]time.Time)
+				heartbeatRunning   = make(map[int64]bool)
+				heartbeatFailures  = make(map[int64]int)
 				offset             int64
 			)
 
@@ -203,12 +198,8 @@ func newTelegramCmd() *cobra.Command {
 				"max_concurrency", maxConc,
 				"history_max_messages", historyMax,
 				"group_trigger_mode", groupTriggerMode,
-				"alias_prefix_max_chars", aliasPrefixMaxChars,
-				"addressing_llm_enabled", addressingLLMEnabled,
-				"addressing_llm_mode", addressingLLMMode,
-				"addressing_llm_model", addressingLLMModel,
-				"addressing_llm_timeout", addressingLLMTimeout.String(),
-				"addressing_llm_min_confidence", addressingLLMMinConfidence,
+				"smart_addressing_max_chars", smartAddressingMaxChars,
+				"smart_addressing_confidence", smartAddressingConfidence,
 			)
 
 			getOrStartWorkerLocked := func(chatID int64) *telegramChatWorker {
@@ -236,21 +227,62 @@ func newTelegramCmd() *cobra.Command {
 								h = nil
 							}
 
-							typingStop := startTypingTicker(context.Background(), api, chatID, "typing", 4*time.Second)
-							defer typingStop()
+							var typingStop func()
+							if !job.IsHeartbeat {
+								typingStop = startTypingTicker(context.Background(), api, chatID, "typing", 4*time.Second)
+								defer typingStop()
+							}
 
 							ctx, cancel := context.WithTimeout(context.Background(), taskTimeout)
 							final, _, loadedSkills, runErr := runTelegramTask(ctx, logger, logOpts, client, reg, api, filesEnabled, fileCacheDir, filesMaxBytes, cfg, job, model, h, sticky)
 							cancel()
 
 							if runErr != nil {
+								if job.IsHeartbeat {
+									var alertMsg string
+									mu.Lock()
+									failures := heartbeatFailures[chatID] + 1
+									heartbeatFailures[chatID] = failures
+									heartbeatRunning[chatID] = false
+									if failures >= heartbeatFailureThreshold {
+										heartbeatFailures[chatID] = 0
+										alertMsg = "ALERT: heartbeat_failed (" + strings.TrimSpace(runErr.Error()) + ")"
+									}
+									mu.Unlock()
+									if strings.TrimSpace(alertMsg) != "" {
+										_ = api.sendMessage(context.Background(), chatID, alertMsg, true)
+										mu.Lock()
+										cur := history[chatID]
+										cur = append(cur, llm.Message{Role: "assistant", Content: alertMsg})
+										if len(cur) > historyMax {
+											cur = cur[len(cur)-historyMax:]
+										}
+										history[chatID] = cur
+										mu.Unlock()
+									}
+									return
+								}
 								_ = api.sendMessage(context.Background(), chatID, "error: "+runErr.Error(), true)
 								return
 							}
 
 							outText := formatFinalOutput(final)
-							if err := api.sendMessageChunked(context.Background(), chatID, outText); err != nil {
-								logger.Warn("telegram_send_error", "error", err.Error())
+							if job.IsHeartbeat {
+								mu.Lock()
+								heartbeatRunning[chatID] = false
+								heartbeatFailures[chatID] = 0
+								lastHeartbeat[chatID] = time.Now()
+								mu.Unlock()
+								if isHeartbeatOK(outText) {
+									return
+								}
+								if err := api.sendMessageChunked(context.Background(), chatID, outText); err != nil {
+									logger.Warn("telegram_send_error", "error", err.Error())
+								}
+							} else {
+								if err := api.sendMessageChunked(context.Background(), chatID, outText); err != nil {
+									logger.Warn("telegram_send_error", "error", err.Error())
+								}
 							}
 
 							mu.Lock()
@@ -267,10 +299,16 @@ func newTelegramCmd() *cobra.Command {
 								stickySkillsByChat[chatID] = capUniqueStrings(loadedSkills, capN)
 							}
 							cur := history[chatID]
-							cur = append(cur,
-								llm.Message{Role: "user", Content: job.Text},
-								llm.Message{Role: "assistant", Content: outText},
-							)
+							if job.IsHeartbeat {
+								if !isHeartbeatOK(outText) {
+									cur = append(cur, llm.Message{Role: "assistant", Content: outText})
+								}
+							} else {
+								cur = append(cur,
+									llm.Message{Role: "user", Content: job.Text},
+									llm.Message{Role: "assistant", Content: outText},
+								)
+							}
 							if len(cur) > historyMax {
 								cur = cur[len(cur)-historyMax:]
 							}
@@ -281,6 +319,69 @@ func newTelegramCmd() *cobra.Command {
 				}(chatID, w)
 
 				return w
+			}
+
+			hbEnabled := viper.GetBool("heartbeat.enabled")
+			hbInterval := viper.GetDuration("heartbeat.interval")
+			hbChecklist := strings.TrimSpace(viper.GetString("heartbeat.checklist_path"))
+			if hbEnabled && hbInterval > 0 {
+				go func() {
+					ticker := time.NewTicker(hbInterval)
+					defer ticker.Stop()
+					for range ticker.C {
+						task, checklistEmpty, err := buildHeartbeatTask(hbChecklist)
+						if err != nil {
+							logger.Warn("telegram_heartbeat_task_error", "error", err.Error())
+							continue
+						}
+						mu.Lock()
+						for chatID, w := range workers {
+							if w == nil {
+								continue
+							}
+							if len(allowed) > 0 && !allowed[chatID] {
+								continue
+							}
+							if _, ok := lastActivity[chatID]; !ok {
+								continue
+							}
+							if heartbeatRunning[chatID] {
+								continue
+							}
+							if len(w.Jobs) > 0 {
+								continue
+							}
+							chatType := lastChatType[chatID]
+							fromUserID := lastFromUser[chatID]
+							extra := map[string]any{
+								"telegram_chat_id":      chatID,
+								"telegram_chat_type":    chatType,
+								"telegram_from_user_id": fromUserID,
+								"queue_len":             len(w.Jobs),
+							}
+							if last, ok := lastHeartbeat[chatID]; ok && !last.IsZero() {
+								extra["last_success_utc"] = last.UTC().Format(time.RFC3339)
+							}
+							meta := buildHeartbeatMeta("telegram", hbInterval, hbChecklist, checklistEmpty, nil, extra)
+							job := telegramJob{
+								ChatID:      chatID,
+								ChatType:    chatType,
+								FromUserID:  fromUserID,
+								Text:        task,
+								Version:     w.Version,
+								IsHeartbeat: true,
+								Meta:        meta,
+							}
+							select {
+							case w.Jobs <- job:
+								heartbeatRunning[chatID] = true
+							default:
+								// busy; skip this tick
+							}
+						}
+						mu.Unlock()
+					}
+				}()
 			}
 
 			for {
@@ -417,12 +518,13 @@ func newTelegramCmd() *cobra.Command {
 							continue
 						}
 						if isGroup {
-							dec, ok := groupTriggerDecision(msg, botUser, botID, aliases, groupTriggerMode, aliasPrefixMaxChars)
+							dec, ok := groupTriggerDecision(msg, botUser, botID, aliases, groupTriggerMode, smartAddressingMaxChars)
 							usedAddressingLLM := false
 							addressingLLMConfidence := 0.0
-							if !ok && dec.NeedsAddressingLLM && addressingLLMEnabled && addressingLLMMode == "borderline" {
+							smartAddressing := strings.TrimSpace(strings.ToLower(groupTriggerMode)) != "strict"
+							if smartAddressing && (dec.NeedsAddressingLLM || isAliasReason(dec.Reason)) {
 								ctx, cancel := context.WithTimeout(context.Background(), addressingLLMTimeout)
-								llmDec, llmOK, llmErr := addressingDecisionViaLLM(ctx, client, addressingLLMModel, botUser, aliases, rawText)
+								llmDec, llmOK, llmErr := addressingDecisionViaLLM(ctx, client, model, botUser, aliases, rawText)
 								cancel()
 								if llmErr != nil {
 									logger.Warn("telegram_addressing_llm_error",
@@ -431,10 +533,13 @@ func newTelegramCmd() *cobra.Command {
 										"error", llmErr.Error(),
 									)
 								}
-								if llmOK && llmDec.Addressed && llmDec.Confidence >= addressingLLMMinConfidence {
-									dec.Reason = "addressing_llm"
+								if llmOK && llmDec.Addressed && llmDec.Confidence >= smartAddressingConfidence {
+									if dec.NeedsAddressingLLM {
+										dec.Reason = "addressing_llm"
+									} else {
+										dec.Reason = "addressing_llm:" + dec.Reason
+									}
 									dec.TaskText = strings.TrimSpace(stripBotMentions(llmDec.TaskText, botUser))
-									dec.NeedsAddressingLLM = false
 									usedAddressingLLM = true
 									addressingLLMConfidence = llmDec.Confidence
 									if dec.TaskText == "" {
@@ -442,39 +547,6 @@ func newTelegramCmd() *cobra.Command {
 										continue
 									}
 									ok = true
-								} else {
-									logger.Debug("telegram_group_ignored",
-										"chat_id", chatID,
-										"type", chatType,
-										"text_len", len(text),
-										"addressing_llm", true,
-										"llm_ok", llmOK,
-										"llm_addressed", llmDec.Addressed,
-										"llm_confidence", llmDec.Confidence,
-									)
-									continue
-								}
-							}
-							if ok && addressingLLMEnabled && addressingLLMMode == "always" && isAliasReason(dec.Reason) {
-								ctx, cancel := context.WithTimeout(context.Background(), addressingLLMTimeout)
-								llmDec, llmOK, llmErr := addressingDecisionViaLLM(ctx, client, addressingLLMModel, botUser, aliases, rawText)
-								cancel()
-								if llmErr != nil {
-									logger.Warn("telegram_addressing_llm_error",
-										"chat_id", chatID,
-										"type", chatType,
-										"error", llmErr.Error(),
-									)
-								}
-								if llmOK && llmDec.Addressed && llmDec.Confidence >= addressingLLMMinConfidence {
-									dec.Reason = "addressing_llm:" + dec.Reason
-									dec.TaskText = strings.TrimSpace(stripBotMentions(llmDec.TaskText, botUser))
-									usedAddressingLLM = true
-									addressingLLMConfidence = llmDec.Confidence
-									if dec.TaskText == "" {
-										_ = api.sendMessage(context.Background(), chatID, "usage: /ask <task> (or send text with a mention/reply)", true)
-										continue
-									}
 								} else {
 									logger.Debug("telegram_group_ignored",
 										"chat_id", chatID,
@@ -553,6 +625,13 @@ func newTelegramCmd() *cobra.Command {
 					mu.Lock()
 					w := getOrStartWorkerLocked(chatID)
 					v := w.Version
+					lastActivity[chatID] = time.Now()
+					if fromUserID > 0 {
+						lastFromUser[chatID] = fromUserID
+					}
+					if strings.TrimSpace(chatType) != "" {
+						lastChatType[chatID] = chatType
+					}
 					mu.Unlock()
 					logger.Info("telegram_task_enqueued", "chat_id", chatID, "type", chatType, "text_len", len(text))
 					w.Jobs <- telegramJob{
@@ -572,13 +651,9 @@ func newTelegramCmd() *cobra.Command {
 	// Note: base_url is intentionally not configurable.
 	cmd.Flags().StringArray("telegram-allowed-chat-id", nil, "Allowed chat id(s). If empty, allows all.")
 	cmd.Flags().StringArray("telegram-alias", nil, "Bot alias keywords (group messages containing these may trigger a response).")
-	cmd.Flags().String("telegram-group-trigger-mode", "smart", "Group trigger mode: strict|smart|contains.")
-	cmd.Flags().Int("telegram-alias-prefix-max-chars", 24, "In smart mode, max chars from message start for alias addressing (0 uses default).")
-	cmd.Flags().Bool("telegram-addressing-llm-enabled", false, "If true, in smart mode, use the LLM to decide borderline alias-triggered group messages.")
-	cmd.Flags().String("telegram-addressing-llm-mode", "borderline", "When to call Telegram addressing LLM: borderline|always (always=any alias hit).")
-	cmd.Flags().String("telegram-addressing-llm-model", "", "Model for Telegram addressing LLM (default: --model / llm.model).")
-	cmd.Flags().Duration("telegram-addressing-llm-timeout", 3*time.Second, "Timeout for Telegram addressing LLM calls.")
-	cmd.Flags().Float64("telegram-addressing-llm-min-confidence", 0.55, "Minimum confidence (0-1) required to accept an addressing LLM decision.")
+	cmd.Flags().String("telegram-group-trigger-mode", "smart", "Group trigger mode: strict|smart.")
+	cmd.Flags().Int("telegram-smart-addressing-max-chars", 24, "In smart mode, max chars from message start for alias addressing (0 uses default).")
+	cmd.Flags().Float64("telegram-smart-addressing-confidence", 0.55, "Minimum confidence (0-1) required to accept an addressing LLM decision.")
 	cmd.Flags().Duration("telegram-poll-timeout", 30*time.Second, "Long polling timeout for getUpdates.")
 	cmd.Flags().Duration("telegram-task-timeout", 0, "Per-message agent timeout (0 uses --timeout).")
 	cmd.Flags().Int("telegram-max-concurrency", 3, "Max number of chats processed concurrently.")
@@ -654,47 +729,58 @@ func runTelegramTask(ctx context.Context, logger *slog.Logger, logOpts agent.Log
 		}
 	}
 
-	planUpdateHook := func(runCtx *agent.Context, update agent.PlanStepUpdate) {
-		if api == nil || runCtx == nil || runCtx.Plan == nil {
-			return
-		}
-		msg, err := generateTelegramPlanProgressMessage(ctx, client, model, task, runCtx.Plan, update)
-		if err != nil {
-			logger.Warn("telegram_plan_progress_error", "error", err.Error())
-			return
-		}
-		if strings.TrimSpace(msg) == "" {
-			return
-		}
-		if err := api.sendMessage(context.Background(), job.ChatID, msg, true); err != nil {
-			logger.Warn("telegram_send_error", "error", err.Error())
+	var planUpdateHook func(runCtx *agent.Context, update agent.PlanStepUpdate)
+	if !job.IsHeartbeat {
+		planUpdateHook = func(runCtx *agent.Context, update agent.PlanStepUpdate) {
+			if api == nil || runCtx == nil || runCtx.Plan == nil {
+				return
+			}
+			msg, err := generateTelegramPlanProgressMessage(ctx, client, model, task, runCtx.Plan, update)
+			if err != nil {
+				logger.Warn("telegram_plan_progress_error", "error", err.Error())
+				return
+			}
+			if strings.TrimSpace(msg) == "" {
+				return
+			}
+			if err := api.sendMessage(context.Background(), job.ChatID, msg, true); err != nil {
+				logger.Warn("telegram_send_error", "error", err.Error())
+			}
 		}
 	}
 
+	engineOpts := []agent.Option{
+		agent.WithLogger(logger),
+		agent.WithLogOptions(logOpts),
+		agent.WithSkillAuthProfiles(skillAuthProfiles, viper.GetBool("secrets.require_skill_profiles")),
+		agent.WithGuard(guardFromViper(logger)),
+	}
+	if planUpdateHook != nil {
+		engineOpts = append(engineOpts, agent.WithPlanStepUpdate(planUpdateHook))
+	}
 	engine := agent.New(
 		client,
 		reg,
 		cfg,
 		promptSpec,
-		agent.WithLogger(logger),
-		agent.WithLogOptions(logOpts),
-		agent.WithSkillAuthProfiles(skillAuthProfiles, viper.GetBool("secrets.require_skill_profiles")),
-		agent.WithPlanStepUpdate(planUpdateHook),
-		agent.WithGuard(guardFromViper(logger)),
+		engineOpts...,
 	)
-	meta := map[string]any{
-		"trigger":               "telegram",
-		"telegram_chat_id":      job.ChatID,
-		"telegram_message_id":   job.MessageID,
-		"telegram_chat_type":    job.ChatType,
-		"telegram_from_user_id": job.FromUserID,
+	meta := job.Meta
+	if meta == nil {
+		meta = map[string]any{
+			"trigger":               "telegram",
+			"telegram_chat_id":      job.ChatID,
+			"telegram_message_id":   job.MessageID,
+			"telegram_chat_type":    job.ChatType,
+			"telegram_from_user_id": job.FromUserID,
+		}
 	}
 	final, agentCtx, err := engine.Run(ctx, task, agent.RunOptions{Model: model, History: history, Meta: meta})
 	if err != nil {
 		return final, agentCtx, loadedSkills, err
 	}
 
-	if memManager != nil && memIdentity.Enabled && strings.TrimSpace(memIdentity.SubjectID) != "" {
+	if !job.IsHeartbeat && memManager != nil && memIdentity.Enabled && strings.TrimSpace(memIdentity.SubjectID) != "" {
 		if err := updateTelegramMemory(ctx, logger, client, model, memManager, memIdentity, job, history, final); err != nil {
 			logger.Warn("memory_update_error", "error", err.Error())
 		}
@@ -762,19 +848,6 @@ func generateTelegramPlanProgressMessage(ctx context.Context, client llm.Client,
 		return "", err
 	}
 	return strings.TrimSpace(result.Text), nil
-}
-
-func formatFinalOutput(final *agent.Final) string {
-	if final == nil {
-		return ""
-	}
-	switch v := final.Output.(type) {
-	case string:
-		return strings.TrimSpace(v)
-	default:
-		b, _ := json.MarshalIndent(v, "", "  ")
-		return strings.TrimSpace(string(b))
-	}
 }
 
 func updateTelegramMemory(ctx context.Context, logger *slog.Logger, client llm.Client, model string, mgr *memory.Manager, id memory.Identity, job telegramJob, history []llm.Message, final *agent.Final) error {
@@ -1754,19 +1827,6 @@ func groupTriggerDecision(msg *telegramMessage, botUser string, botID int64, ali
 		}
 		task := stripBotMentions(m.TaskText, botUser)
 		return telegramGroupTriggerDecision{Reason: "alias_smart:" + m.Alias, TaskText: task}, true
-	case "contains":
-		lower := strings.ToLower(text)
-		for _, a := range aliases {
-			a = strings.TrimSpace(a)
-			if a == "" {
-				continue
-			}
-			if strings.Contains(lower, strings.ToLower(a)) {
-				task := stripBotMentions(text, botUser)
-				return telegramGroupTriggerDecision{Reason: "alias_contains:" + a, TaskText: task}, true
-			}
-		}
-		return telegramGroupTriggerDecision{}, false
 	default:
 		m, ok := matchAddressedAliasSmart(text, aliases, aliasPrefixMaxChars)
 		if !ok {
@@ -1936,7 +1996,7 @@ func anyAliasContains(text string, aliases []string) (string, bool) {
 
 func isAliasReason(reason string) bool {
 	reason = strings.TrimSpace(reason)
-	return strings.HasPrefix(reason, "alias_smart:") || strings.HasPrefix(reason, "alias_contains:")
+	return strings.HasPrefix(reason, "alias_smart:")
 }
 
 func isAliasAddressingCandidate(text string, prefixStart int, aliasIdx int, aliasPrefixMaxChars int) bool {

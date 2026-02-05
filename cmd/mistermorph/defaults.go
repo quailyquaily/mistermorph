@@ -49,16 +49,17 @@ func initViperDefaults() {
 	viper.SetDefault("telegram.history_max_messages", 20)
 	viper.SetDefault("telegram.aliases", []string{})
 	viper.SetDefault("telegram.group_trigger_mode", "smart")
-	viper.SetDefault("telegram.alias_prefix_max_chars", 24)
-	viper.SetDefault("telegram.addressing_llm.enabled", false)
-	viper.SetDefault("telegram.addressing_llm.mode", "borderline")
-	viper.SetDefault("telegram.addressing_llm.model", "")
-	viper.SetDefault("telegram.addressing_llm.timeout", 3*time.Second)
-	viper.SetDefault("telegram.addressing_llm.min_confidence", 0.55)
+	viper.SetDefault("telegram.smart_addressing_max_chars", 24)
+	viper.SetDefault("telegram.smart_addressing_confidence", 0.55)
 	viper.SetDefault("telegram.max_concurrency", 3)
 
+	// Heartbeat
+	viper.SetDefault("heartbeat.enabled", true)
+	viper.SetDefault("heartbeat.interval", 30*time.Minute)
+	viper.SetDefault("heartbeat.checklist_path", "~/.morph/HEARTBEAT.md")
+
 	// Long-term memory (Phase 1)
-	viper.SetDefault("memory.enabled", false)
+	viper.SetDefault("memory.enabled", true)
 	viper.SetDefault("memory.dir", "~/.morph/memory")
 	viper.SetDefault("memory.short_term_days", 7)
 	viper.SetDefault("memory.injection.enabled", true)
@@ -71,8 +72,8 @@ func initViperDefaults() {
 	viper.SetDefault("secrets.require_skill_profiles", false)
 	viper.SetDefault("auth_profiles", map[string]any{})
 
-	// Guard (M1: disabled by default).
-	viper.SetDefault("guard.enabled", false)
+	// Guard (M1).
+	viper.SetDefault("guard.enabled", true)
 	viper.SetDefault("guard.network.url_fetch.allowed_url_prefixes", []string{})
 	viper.SetDefault("guard.network.url_fetch.deny_private_ips", true)
 	viper.SetDefault("guard.network.url_fetch.follow_redirects", false)

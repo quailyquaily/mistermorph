@@ -110,7 +110,7 @@ auth_profiles:
 # - redaction for tool outputs + final outputs
 # - async approvals + audit trail (JSONL), with approvals state in SQLite
 guard:
-  enabled: false
+  enabled: true
   network:
     url_fetch:
       # Allow outbound HTTP only to these URL prefixes (fail-closed when empty).
@@ -172,9 +172,9 @@ tools:
     max_results: 5
   # Dangerous: enables local shell execution.
   bash:
-    # Enable the bash tool. Disabled by default.
+    # Enable the bash tool.
     # Note: when `secrets.enabled: true`, bash is allowed but `curl` is denied by default.
-    enabled: false
+    enabled: true
     # If true, prompts on /dev/tty before each command execution.
     confirm: true
     # Default timeout for each bash command.
@@ -189,7 +189,7 @@ tools:
 # Markdown-based memory
 memory:
   # Enable memory (Telegram only in Phase 1).
-  enabled: false
+  enabled: true
   # Root directory for memory files.
   # Default: ~/.morph/memory
   # Systemd deployments (recommended): /var/lib/morph/memory
@@ -253,26 +253,12 @@ telegram:
   aliases: []
   # Group trigger mode:
   # - strict: only /ask, replies, and @mentions trigger in groups.
-  # - smart: replies/@mentions trigger; aliases only trigger when they look like direct addressing (alias near start + request-like text).
-  # - contains: legacy behavior; any substring match of an alias triggers.
+  # - smart: replies/@mentions trigger; aliases are LLM-validated for direct addressing.
   group_trigger_mode: "smart"
   # In smart mode, how far from the start (in runes) an alias can appear to count as "addressing".
-  alias_prefix_max_chars: 24
-  # Optional LLM-based addressing classifier for borderline alias hits in groups.
-  # Only used when:
-  # - group_trigger_mode is smart, AND
-  # - an alias keyword appears somewhere, but doesn't look like direct addressing by heuristics.
-  addressing_llm:
-    enabled: false
-    # When to call the addressing classifier:
-    # - borderline: only when an alias is present but heuristics aren't confident (default).
-    # - always: for any alias hit (useful with group_trigger_mode=contains to avoid naive substring triggers).
-    mode: "borderline"
-    # Model to use for addressing classification (empty uses `llm.model`).
-    model: ""
-    timeout: "3s"
-    # Minimum confidence required to accept the classification.
-    min_confidence: 0.55
+  smart_addressing_max_chars: 24
+  # Minimum confidence required to accept the LLM addressing classification.
+  smart_addressing_confidence: 0.55
   # Long polling timeout.
   poll_timeout: "30s"
   # Per-message agent timeout (0 uses top-level timeout).
@@ -282,6 +268,15 @@ telegram:
   # Max chat history messages kept per chat.
   history_max_messages: 20
   # Note: file handling is always enabled; files are downloaded under file_cache_dir/telegram/ (max size is hardcoded).
+
+# Heartbeat (periodic awareness/checkpoint).
+heartbeat:
+  # Enable heartbeats by default.
+  enabled: true
+  # Interval between heartbeats (use "0m" to disable without changing enabled).
+  interval: "30m"
+  # Checklist file path (default under ~/.morph).
+  checklist_path: "~/.morph/HEARTBEAT.md"
 
 # Agent loop limits.
 # - max_steps: maximum tool-call steps in the ReAct loop.

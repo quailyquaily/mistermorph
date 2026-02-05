@@ -16,6 +16,11 @@ type queuedTask struct {
 
 	// resumeApprovalID is set when re-queued to resume a paused run from an approval request.
 	resumeApprovalID string
+
+	// Internal-only heartbeat fields.
+	meta           map[string]any
+	isHeartbeat    bool
+	heartbeatState *heartbeatState
 }
 
 type TaskStore struct {
@@ -35,6 +40,14 @@ func NewTaskStore(maxQueue int) *TaskStore {
 }
 
 func (s *TaskStore) Enqueue(parent context.Context, task string, model string, timeout time.Duration) (*TaskInfo, error) {
+	return s.enqueue(parent, task, model, timeout, nil, false, nil)
+}
+
+func (s *TaskStore) EnqueueHeartbeat(parent context.Context, task string, model string, timeout time.Duration, meta map[string]any, hbState *heartbeatState) (*TaskInfo, error) {
+	return s.enqueue(parent, task, model, timeout, meta, true, hbState)
+}
+
+func (s *TaskStore) enqueue(parent context.Context, task string, model string, timeout time.Duration, meta map[string]any, isHeartbeat bool, hbState *heartbeatState) (*TaskInfo, error) {
 	if timeout <= 0 {
 		timeout = 10 * time.Minute
 	}
@@ -55,6 +68,9 @@ func (s *TaskStore) Enqueue(parent context.Context, task string, model string, t
 		CreatedAt: now,
 	}
 	qt := &queuedTask{info: info, ctx: ctx, cancel: cancel}
+	qt.meta = meta
+	qt.isHeartbeat = isHeartbeat
+	qt.heartbeatState = hbState
 
 	s.mu.Lock()
 	s.tasks[id] = qt
@@ -86,6 +102,10 @@ func (s *TaskStore) Get(id string) (*TaskInfo, bool) {
 
 func (s *TaskStore) Next() *queuedTask {
 	return <-s.queue
+}
+
+func (s *TaskStore) QueueLen() int {
+	return len(s.queue)
 }
 
 func (s *TaskStore) Update(id string, fn func(info *TaskInfo)) {
