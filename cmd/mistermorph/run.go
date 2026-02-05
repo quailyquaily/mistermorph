@@ -17,6 +17,7 @@ import (
 	telegramcmd "github.com/quailyquaily/mistermorph/cmd/telegram"
 	"github.com/quailyquaily/mistermorph/internal/configutil"
 	"github.com/quailyquaily/mistermorph/internal/llmconfig"
+	"github.com/quailyquaily/mistermorph/internal/retryutil"
 	"github.com/quailyquaily/mistermorph/internal/statepaths"
 	"github.com/quailyquaily/mistermorph/llm"
 	"github.com/quailyquaily/mistermorph/memory"
@@ -220,6 +221,11 @@ func newRunCmd() *cobra.Command {
 
 			if !isHeartbeat && memManager != nil && memIdentity.Enabled && strings.TrimSpace(memIdentity.SubjectID) != "" {
 				if err := updateRunMemory(ctx, logger, client, model, memManager, memIdentity, task, final); err != nil {
+					if errors.Is(err, context.DeadlineExceeded) {
+						retryutil.AsyncRetry(logger, "memory_update", 2*time.Second, 12*time.Second, func(retryCtx context.Context) error {
+							return updateRunMemory(retryCtx, logger, client, model, memManager, memIdentity, task, final)
+						})
+					}
 					logger.Warn("memory_update_error", "error", err.Error())
 				}
 			}

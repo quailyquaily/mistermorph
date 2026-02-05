@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -28,6 +29,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/jsonutil"
 	"github.com/quailyquaily/mistermorph/internal/llmconfig"
 	"github.com/quailyquaily/mistermorph/internal/pathutil"
+	"github.com/quailyquaily/mistermorph/internal/retryutil"
 	"github.com/quailyquaily/mistermorph/internal/statepaths"
 	"github.com/quailyquaily/mistermorph/internal/telegramutil"
 	"github.com/quailyquaily/mistermorph/llm"
@@ -1050,6 +1052,11 @@ func runTelegramTask(ctx context.Context, logger *slog.Logger, logOpts agent.Log
 
 	if reaction == nil && !job.IsHeartbeat && memManager != nil && memIdentity.Enabled && strings.TrimSpace(memIdentity.SubjectID) != "" {
 		if err := updateTelegramMemory(ctx, logger, client, model, memManager, memIdentity, job, history, final); err != nil {
+			if errors.Is(err, context.DeadlineExceeded) {
+				retryutil.AsyncRetry(logger, "memory_update", 2*time.Second, 12*time.Second, func(retryCtx context.Context) error {
+					return updateTelegramMemory(retryCtx, logger, client, model, memManager, memIdentity, job, history, final)
+				})
+			}
 			logger.Warn("memory_update_error", "error", err.Error())
 		}
 	}
