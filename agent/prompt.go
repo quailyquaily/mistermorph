@@ -39,6 +39,7 @@ func DefaultPromptSpec() PromptSpec {
 			"If the task references a local file path and you need the file's contents, you MUST call read_file first. Do NOT send local file paths as payloads to external HTTP APIs.",
 			"For binary files (e.g. PDFs), prefer url_fetch.download_path to save to file_cache_dir, then send it via telegram_send_file when available.",
 			"If a tool returns an error, you may try a different tool or different params.",
+			"Do NOT repeatedly call the same tool with identical parameters unless the observation meaningfully changes or the previous call failed.",
 			"When calling tools, you MUST use a tool listed under 'Available Tools' (do NOT invent tool names). Skills are prompt context, not tools.",
 			"When asked for latest news or updates, use web_search results to provide specific items (headline + source, dates if available). Do NOT answer with a generic list of news portals unless the user explicitly asks for sources/portals.",
 			"If an Intent (inferred) block is present, treat its deliverable and constraints as hard requirements. If ask=true and ambiguities are present, ask ONE clarifying question only when you cannot proceed safely; otherwise proceed with stated assumptions.",

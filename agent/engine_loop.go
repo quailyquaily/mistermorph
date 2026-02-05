@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"math/rand/v2"
@@ -29,7 +30,12 @@ type engineLoopState struct {
 	approvedPendingTool bool
 
 	nextStep int
+
+	lastToolSig    string
+	lastToolRepeat int
 }
+
+const toolRepeatLimit = 3
 
 func newRunID() string { return fmt.Sprintf("%x", rand.Uint64()) }
 
@@ -354,6 +360,14 @@ func (e *Engine) runLoop(ctx context.Context, st *engineLoopState) (*Final, *Con
 					)
 				}
 
+				if toolErr == nil {
+					if t, ok := e.registry.Get(tc.Name); ok {
+						if stopper, ok := t.(interface{ StopAfterSuccess() bool }); ok && stopper.StopAfterSuccess() {
+							return &Final{Output: "", Plan: st.agentCtx.Plan}, st.agentCtx, nil
+						}
+					}
+				}
+
 				if strings.TrimSpace(tc.ID) != "" {
 					st.messages = append(st.messages, llm.Message{
 						Role:       "tool",
@@ -364,6 +378,27 @@ func (e *Engine) runLoop(ctx context.Context, st *engineLoopState) (*Final, *Con
 					st.messages = append(st.messages,
 						llm.Message{Role: "user", Content: fmt.Sprintf("Tool Result (%s):\n%s", tc.Name, observation)},
 					)
+				}
+
+				if toolErr == nil {
+					sig := toolCallSignature(tc)
+					if sig == st.lastToolSig {
+						st.lastToolRepeat++
+					} else {
+						st.lastToolSig = sig
+						st.lastToolRepeat = 1
+					}
+					if st.lastToolRepeat >= toolRepeatLimit {
+						log.Warn("tool_repeat_limit_reached", "step", step, "tool", tc.Name, "repeat", st.lastToolRepeat)
+						st.messages = append(st.messages, llm.Message{
+							Role:    "user",
+							Content: "The tool was already called with the same parameters. Do NOT call it again. Return a final response now.",
+						})
+						return e.forceConclusion(ctx, st.messages, st.model, st.agentCtx, st.extraParams, log)
+					}
+				} else {
+					st.lastToolSig = ""
+					st.lastToolRepeat = 0
 				}
 			}
 
@@ -492,4 +527,12 @@ func (e *Engine) executeToolWithGuard(ctx context.Context, st *engineLoopState, 
 
 	_ = stepStart
 	return observation, toolErr, nil, false
+}
+
+func toolCallSignature(tc ToolCall) string {
+	if strings.TrimSpace(tc.Name) == "" {
+		return ""
+	}
+	b, _ := json.Marshal(tc.Params)
+	return tc.Name + ":" + string(b)
 }
