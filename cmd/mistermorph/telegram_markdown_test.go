@@ -6,7 +6,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/telegramutil"
 )
 
-func TestEscapeTelegramMarkdownUnderscores(t *testing.T) {
+func TestEscapeMarkdownV2(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -20,24 +20,14 @@ func TestEscapeTelegramMarkdownUnderscores(t *testing.T) {
 			want: "new\\_york",
 		},
 		{
-			name: "already_escaped",
-			in:   "auth\\_profile",
-			want: "auth\\_profile",
+			name: "special_chars",
+			in:   "_*[]()~`>#+-=|{}.!\\",
+			want: "\\_\\*\\[\\]\\(\\)\\~\\`\\>\\#\\+\\-\\=\\|\\{\\}\\.\\!\\\\",
 		},
 		{
-			name: "inline_code_unmodified",
-			in:   "`new_york`",
-			want: "`new_york`",
-		},
-		{
-			name: "fenced_code_unmodified",
-			in:   "```json\nnew_york\n```",
-			want: "```json\nnew_york\n```",
-		},
-		{
-			name: "mixed",
-			in:   "use new_york and `new_york`",
-			want: "use new\\_york and `new_york`",
+			name: "non_specials",
+			in:   "hello world",
+			want: "hello world",
 		},
 	}
 
@@ -45,7 +35,7 @@ func TestEscapeTelegramMarkdownUnderscores(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			if got := telegramutil.EscapeTelegramMarkdownUnderscores(tt.in); got != tt.want {
+			if got := telegramutil.EscapeMarkdownV2(tt.in); got != tt.want {
 				t.Fatalf("got %q, want %q", got, tt.want)
 			}
 		})

@@ -278,7 +278,7 @@ func newTelegramCmd() *cobra.Command {
 				if sentVersion >= version {
 					return
 				}
-				_ = api.sendMessage(context.Background(), chatID, msg, true)
+				_ = api.sendMessageMarkdownV2(context.Background(), chatID, msg, true)
 				markSystemWarningsSent(chatID, version)
 			}
 
@@ -303,7 +303,7 @@ func newTelegramCmd() *cobra.Command {
 					if sentVersion >= version {
 						continue
 					}
-					_ = api.sendMessage(context.Background(), chatID, msg, true)
+					_ = api.sendMessageMarkdownV2(context.Background(), chatID, msg, true)
 					markSystemWarningsSent(chatID, version)
 				}
 			}
@@ -364,7 +364,7 @@ func newTelegramCmd() *cobra.Command {
 									}
 									mu.Unlock()
 									if strings.TrimSpace(alertMsg) != "" {
-										_ = api.sendMessage(context.Background(), chatID, alertMsg, true)
+										_ = api.sendMessageMarkdownV2(context.Background(), chatID, alertMsg, true)
 										mu.Lock()
 										cur := history[chatID]
 										cur = append(cur, llm.Message{Role: "assistant", Content: alertMsg})
@@ -376,7 +376,7 @@ func newTelegramCmd() *cobra.Command {
 									}
 									return
 								}
-								_ = api.sendMessage(context.Background(), chatID, "error: "+runErr.Error(), true)
+								_ = api.sendMessageMarkdownV2(context.Background(), chatID, "error: "+runErr.Error(), true)
 								return
 							}
 
@@ -610,34 +610,34 @@ func newTelegramCmd() *cobra.Command {
 							"Group chats: use /ask <task>, reply to me, or mention @" + botUser + ".\n" +
 							"You can also send a file (document/photo). It will be downloaded under file_cache_dir/telegram/ and the agent can process it.\n" +
 							"Note: if Bot Privacy Mode is enabled, I may not receive normal group messages (so aliases won't trigger unless I receive the message)."
-						_ = api.sendMessage(context.Background(), chatID, help, true)
+						_ = api.sendMessageMarkdownV2(context.Background(), chatID, help, true)
 						continue
 					case "/id":
-						_ = api.sendMessage(context.Background(), chatID, fmt.Sprintf("chat_id=%d type=%s", chatID, chatType), true)
+						_ = api.sendMessageMarkdownV2(context.Background(), chatID, fmt.Sprintf("chat_id=%d type=%s", chatID, chatType), true)
 						continue
 					case "/mem":
 						if len(allowed) > 0 && !allowed[chatID] {
 							logger.Warn("telegram_unauthorized_chat", "chat_id", chatID)
-							_ = api.sendMessage(context.Background(), chatID, "unauthorized", true)
+							_ = api.sendMessageMarkdownV2(context.Background(), chatID, "unauthorized", true)
 							continue
 						}
 						if strings.ToLower(strings.TrimSpace(chatType)) != "private" {
-							_ = api.sendMessage(context.Background(), chatID, "请在私聊中使用 /mem（避免在群里泄露隐私）", true)
+							_ = api.sendMessageMarkdownV2(context.Background(), chatID, "请在私聊中使用 /mem（避免在群里泄露隐私）", true)
 							continue
 						}
 						if fromUserID <= 0 {
-							_ = api.sendMessage(context.Background(), chatID, "无法识别当前用户（msg.from 为空）", true)
+							_ = api.sendMessageMarkdownV2(context.Background(), chatID, "无法识别当前用户（msg.from 为空）", true)
 							continue
 						}
 						if !viper.GetBool("memory.enabled") {
-							_ = api.sendMessage(context.Background(), chatID, "memory 未启用（设置 memory.enabled=true）", true)
+							_ = api.sendMessageMarkdownV2(context.Background(), chatID, "memory 未启用（设置 memory.enabled=true）", true)
 							continue
 						}
 
 						sub, _ := splitCommand(cmdArgs)
 						sub = strings.ToLower(strings.TrimSpace(sub))
 						if sub != "" && sub != "ls" && sub != "list" {
-							_ = api.sendMessage(context.Background(), chatID, "memory 已切换为文件存储；/mem 仅显示摘要。", true)
+							_ = api.sendMessageMarkdownV2(context.Background(), chatID, "memory 已切换为文件存储；/mem 仅显示摘要。", true)
 							continue
 						}
 
@@ -645,11 +645,11 @@ func newTelegramCmd() *cobra.Command {
 						id, err := (&memory.Resolver{}).ResolveTelegram(ctx, fromUserID)
 						cancel()
 						if err != nil {
-							_ = api.sendMessage(context.Background(), chatID, "memory identity error: "+err.Error(), true)
+							_ = api.sendMessageMarkdownV2(context.Background(), chatID, "memory identity error: "+err.Error(), true)
 							continue
 						}
 						if !id.Enabled || strings.TrimSpace(id.SubjectID) == "" {
-							_ = api.sendMessage(context.Background(), chatID, "memory 未启用（identity disabled）", true)
+							_ = api.sendMessageMarkdownV2(context.Background(), chatID, "memory 未启用（identity disabled）", true)
 							continue
 						}
 
@@ -657,11 +657,11 @@ func newTelegramCmd() *cobra.Command {
 						maxItems := viper.GetInt("memory.injection.max_items")
 						snap, err := mgr.BuildInjection(id.SubjectID, memory.ContextPrivate, maxItems)
 						if err != nil {
-							_ = api.sendMessage(context.Background(), chatID, "memory load error: "+err.Error(), true)
+							_ = api.sendMessageMarkdownV2(context.Background(), chatID, "memory load error: "+err.Error(), true)
 							continue
 						}
 						if strings.TrimSpace(snap) == "" {
-							_ = api.sendMessage(context.Background(), chatID, "（空）", true)
+							_ = api.sendMessageMarkdownV2(context.Background(), chatID, "（空）", true)
 							continue
 						}
 						if err := api.sendMessageChunked(context.Background(), chatID, snap); err != nil {
@@ -671,7 +671,7 @@ func newTelegramCmd() *cobra.Command {
 					case "/reset":
 						if len(allowed) > 0 && !allowed[chatID] {
 							logger.Warn("telegram_unauthorized_chat", "chat_id", chatID)
-							_ = api.sendMessage(context.Background(), chatID, "unauthorized", true)
+							_ = api.sendMessageMarkdownV2(context.Background(), chatID, "unauthorized", true)
 							continue
 						}
 						mu.Lock()
@@ -681,23 +681,23 @@ func newTelegramCmd() *cobra.Command {
 							w.Version++
 						}
 						mu.Unlock()
-						_ = api.sendMessage(context.Background(), chatID, "ok (reset)", true)
+						_ = api.sendMessageMarkdownV2(context.Background(), chatID, "ok (reset)", true)
 						continue
 					case "/ask":
 						if len(allowed) > 0 && !allowed[chatID] {
 							logger.Warn("telegram_unauthorized_chat", "chat_id", chatID)
-							_ = api.sendMessage(context.Background(), chatID, "unauthorized", true)
+							_ = api.sendMessageMarkdownV2(context.Background(), chatID, "unauthorized", true)
 							continue
 						}
 						if strings.TrimSpace(cmdArgs) == "" {
-							_ = api.sendMessage(context.Background(), chatID, "usage: /ask <task>", true)
+							_ = api.sendMessageMarkdownV2(context.Background(), chatID, "usage: /ask <task>", true)
 							continue
 						}
 						text = strings.TrimSpace(cmdArgs)
 					default:
 						if len(allowed) > 0 && !allowed[chatID] {
 							logger.Warn("telegram_unauthorized_chat", "chat_id", chatID)
-							_ = api.sendMessage(context.Background(), chatID, "unauthorized", true)
+							_ = api.sendMessageMarkdownV2(context.Background(), chatID, "unauthorized", true)
 							continue
 						}
 						if isGroup {
@@ -726,7 +726,7 @@ func newTelegramCmd() *cobra.Command {
 									usedAddressingLLM = true
 									addressingLLMConfidence = llmDec.Confidence
 									if dec.TaskText == "" {
-										_ = api.sendMessage(context.Background(), chatID, "usage: /ask <task> (or send text with a mention/reply)", true)
+										_ = api.sendMessageMarkdownV2(context.Background(), chatID, "usage: /ask <task> (or send text with a mention/reply)", true)
 										continue
 									}
 									ok = true
@@ -767,7 +767,7 @@ func newTelegramCmd() *cobra.Command {
 							}
 							text = strings.TrimSpace(dec.TaskText)
 							if strings.TrimSpace(text) == "" && !messageHasDownloadableFile(msg) && msg.ReplyTo == nil {
-								_ = api.sendMessage(context.Background(), chatID, "usage: /ask <task> (or send text with a mention/reply)", true)
+								_ = api.sendMessageMarkdownV2(context.Background(), chatID, "usage: /ask <task> (or send text with a mention/reply)", true)
 								continue
 							}
 						} else {
@@ -784,7 +784,7 @@ func newTelegramCmd() *cobra.Command {
 						downloaded, err = downloadTelegramMessageFiles(ctx, api, telegramCacheDir, filesMaxBytes, msg, chatID)
 						cancel()
 						if err != nil {
-							_ = api.sendMessage(context.Background(), chatID, "file download error: "+err.Error(), true)
+							_ = api.sendMessageMarkdownV2(context.Background(), chatID, "file download error: "+err.Error(), true)
 							continue
 						}
 					}
@@ -1958,15 +1958,20 @@ func (api *telegramAPI) sendMessage(ctx context.Context, chatID int64, text stri
 		text = "(empty)"
 	}
 
-	// Telegram renders responses using MarkdownV2/Markdown. Many agent outputs contain identifiers like
-	// "new_york" which would otherwise render as italics. Escape underscores outside code spans/blocks.
-	text = telegramutil.EscapeTelegramMarkdownUnderscores(text)
-
 	// Telegram MarkdownV2 can be picky; fall back to plain text on failure.
 	if err := api.sendMessageWithParseMode(ctx, chatID, text, disablePreview, "MarkdownV2"); err == nil {
 		return nil
 	}
 	return api.sendMessageWithParseMode(ctx, chatID, text, disablePreview, "")
+}
+
+func (api *telegramAPI) sendMessageMarkdownV2(ctx context.Context, chatID int64, text string, disablePreview bool) error {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		text = "(empty)"
+	}
+	text = telegramutil.EscapeMarkdownV2(text)
+	return api.sendMessageWithParseMode(ctx, chatID, text, disablePreview, "MarkdownV2")
 }
 
 func (api *telegramAPI) sendMessageChunked(ctx context.Context, chatID int64, text string) error {

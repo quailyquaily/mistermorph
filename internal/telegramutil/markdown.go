@@ -2,49 +2,40 @@ package telegramutil
 
 import "strings"
 
-func EscapeTelegramMarkdownUnderscores(text string) string {
-	if !strings.Contains(text, "_") {
+var markdownV2Escapes = map[byte]bool{
+	'\\': true,
+	'_':  true,
+	'*':  true,
+	'[':  true,
+	']':  true,
+	'(':  true,
+	')':  true,
+	'~':  true,
+	'`':  true,
+	'>':  true,
+	'#':  true,
+	'+':  true,
+	'-':  true,
+	'=':  true,
+	'|':  true,
+	'{':  true,
+	'}':  true,
+	'.':  true,
+	'!':  true,
+}
+
+func EscapeMarkdownV2(text string) string {
+	if strings.TrimSpace(text) == "" {
 		return text
 	}
-
 	var b strings.Builder
 	b.Grow(len(text) + 8)
-
-	inCodeBlock := false
-	inInlineCode := false
-
 	for i := 0; i < len(text); i++ {
-		// Toggle fenced code blocks with ```
-		if !inInlineCode && strings.HasPrefix(text[i:], "```") {
-			inCodeBlock = !inCodeBlock
-			b.WriteString("```")
-			i += 2
-			continue
-		}
-
 		ch := text[i]
-
-		// Toggle inline code with `
-		if !inCodeBlock && ch == '`' {
-			inInlineCode = !inInlineCode
-			b.WriteByte(ch)
-			continue
-		}
-
-		// Escape underscores outside code.
-		if !inCodeBlock && !inInlineCode && ch == '_' {
-			// Avoid double-escaping if the user/model already emitted \_
-			if i > 0 && text[i-1] == '\\' {
-				b.WriteByte('_')
-				continue
-			}
+		if markdownV2Escapes[ch] {
 			b.WriteByte('\\')
-			b.WriteByte('_')
-			continue
 		}
-
 		b.WriteByte(ch)
 	}
-
 	return b.String()
 }
