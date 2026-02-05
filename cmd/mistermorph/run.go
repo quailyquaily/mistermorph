@@ -308,14 +308,18 @@ func updateRunMemory(ctx context.Context, logger *slog.Logger, client llm.Client
 	}
 	draft.Promote = telegramcmd.EnforceLongTermPromotionRules(draft.Promote, nil, task)
 
-	mergedContent := memory.MergeShortTerm(existingContent, draft)
 	summary := strings.TrimSpace(draft.Summary)
+	var mergedContent memory.ShortTermContent
 	if hasExisting && telegramcmd.HasDraftContent(draft) {
 		semantic, semanticSummary, mergeErr := telegramcmd.SemanticMergeShortTerm(memCtx, client, model, existingContent, draft)
 		if mergeErr == nil {
 			mergedContent = semantic
 			summary = semanticSummary
+		} else {
+			mergedContent = memory.MergeShortTerm(existingContent, draft)
 		}
+	} else {
+		mergedContent = memory.MergeShortTerm(existingContent, draft)
 	}
 
 	if _, err := mgr.WriteShortTerm(date, mergedContent, summary, meta); err != nil {
