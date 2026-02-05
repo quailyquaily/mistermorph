@@ -99,7 +99,7 @@ func (c *Client) Chat(ctx context.Context, req llm.Request) (llm.Result, error) 
 		defer cancel()
 	}
 
-	opts := buildChatOptions(req, c.provider, true, c.toolsEmulationMode, c.debugFn)
+	opts := buildChatOptions(req, c.provider, req.ForceJSON, c.toolsEmulationMode, c.debugFn)
 	resp, err := c.client.Chat(ctx, opts...)
 	if err != nil && req.ForceJSON && shouldRetryWithoutResponseFormat(err) {
 		opts = buildChatOptions(req, c.provider, false, c.toolsEmulationMode, c.debugFn)
