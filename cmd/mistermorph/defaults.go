@@ -74,7 +74,7 @@ func initViperDefaults() {
 
 	// Guard (M1).
 	viper.SetDefault("guard.enabled", true)
-	viper.SetDefault("guard.network.url_fetch.allowed_url_prefixes", []string{})
+	viper.SetDefault("guard.network.url_fetch.allowed_url_prefixes", []string{"https://"})
 	viper.SetDefault("guard.network.url_fetch.deny_private_ips", true)
 	viper.SetDefault("guard.network.url_fetch.follow_redirects", false)
 	viper.SetDefault("guard.network.url_fetch.allow_proxy", false)

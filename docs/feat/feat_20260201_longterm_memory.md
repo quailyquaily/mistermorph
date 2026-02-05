@@ -62,6 +62,8 @@ Each memory file must include YAML frontmatter metadata.
 - `created_at`: UTC timestamp (ISO 8601)
 - `updated_at`: UTC timestamp (ISO 8601)
 - `summary`: short summary (short-term memory must update this every write)
+- `tasks`: done/total counts for Tasks section (e.g., `2/5`)
+- `follow_ups`: done/total counts for Follow Ups section (e.g., `1/3`)
 
 **Optional fields**
 
@@ -92,6 +94,7 @@ subject_id: acct:42
 - Store only **important, stable, high-signal** items.
 - Keep it compact and easy to scan.
 - Each entry should include an **added date** suffix (e.g., `(added 2026-02-05)`).
+- If the file includes optional **Tasks** / **Follow Ups** sections, frontmatter `tasks` / `follow_ups` are updated from those TODOs.
 - Links can reference short-term files for details.
 - **Private-only**: must not be used in public contexts (e.g., group chats).
 
@@ -198,8 +201,8 @@ Recommended injection block:
 - <summary line 2>
 
 [Memory:ShortTerm:Recent]
-- 2026-02-04: <summary> (2026-02-04/telegram_12345.md)
-- 2026-02-03: <summary> (2026-02-03/telegram_12345.md)
+- 2026-02-04: <summary> (2026-02-04/telegram_12345.md) [progress: tasks 1/3, follow_ups 0/1]
+- 2026-02-03: <summary> (2026-02-03/telegram_12345.md) [progress: tasks 0/0, follow_ups 0/0]
 ```
 
 ## 12. Templates
@@ -211,6 +214,8 @@ Recommended injection block:
 created_at: 2026-02-04T12:34:56Z
 updated_at: 2026-02-04T12:34:56Z
 summary: "Most important and stable long-term facts and project state."
+tasks: "0/0"
+follow_ups: "0/0"
 subject_id: acct:42
 ---
 
@@ -230,6 +235,8 @@ subject_id: acct:42
 created_at: 2026-02-04T12:34:56Z
 updated_at: 2026-02-04T12:34:56Z
 summary: "Discussed memory layout and merge rules."
+tasks: "1/3"
+follow_ups: "0/1"
 session_id: s_20260204_001
 source: cli
 channel: local
@@ -241,7 +248,7 @@ channel: local
 - **Summary**: ...
 
 ## Temporary Facts
-- **Fact**: ...
+- **Fact**: Include key metadata like URLs, terms, IDs, or ticket numbers when relevant.
 
 ## Tasks
 - [ ] ...

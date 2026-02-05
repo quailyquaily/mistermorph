@@ -15,6 +15,7 @@ import (
 
 	"github.com/quailyquaily/mistermorph/agent"
 	"github.com/quailyquaily/mistermorph/llm"
+	"github.com/quailyquaily/mistermorph/memory"
 	uniaiProvider "github.com/quailyquaily/mistermorph/providers/uniai"
 	"github.com/quailyquaily/mistermorph/skills"
 	"github.com/spf13/cobra"
@@ -26,15 +27,47 @@ func newRunCmd() *cobra.Command {
 		Use:   "run",
 		Short: "Run an agent task",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			task := strings.TrimSpace(flagOrViperString(cmd, "task", "task"))
-			if task == "" {
-				data, err := os.ReadFile("/dev/stdin")
-				if err == nil {
-					task = strings.TrimSpace(string(data))
+			isHeartbeat := flagOrViperBool(cmd, "heartbeat", "")
+			task := ""
+			var runMeta map[string]any
+			if isHeartbeat {
+				hbChecklist := strings.TrimSpace(viper.GetString("heartbeat.checklist_path"))
+				var hbSnapshot string
+				if viper.GetBool("memory.enabled") {
+					hbMgr := memory.NewManager(viper.GetString("memory.dir"), viper.GetInt("memory.short_term_days"))
+					snap, err := buildHeartbeatProgressSnapshot(hbMgr, viper.GetInt("memory.injection.max_items"))
+					if err != nil {
+						return err
+					}
+					hbSnapshot = snap
 				}
-			}
-			if task == "" {
-				return fmt.Errorf("missing --task (or stdin)")
+				hbTask, checklistEmpty, err := buildHeartbeatTask(hbChecklist, hbSnapshot)
+				if err != nil {
+					return err
+				}
+				task = hbTask
+				runMeta = map[string]any{
+					"trigger": "heartbeat",
+					"heartbeat": buildHeartbeatMeta(
+						"cli",
+						viper.GetDuration("heartbeat.interval"),
+						hbChecklist,
+						checklistEmpty,
+						nil,
+						nil,
+					),
+				}
+			} else {
+				task = strings.TrimSpace(flagOrViperString(cmd, "task", "task"))
+				if task == "" {
+					data, err := os.ReadFile("/dev/stdin")
+					if err == nil {
+						task = strings.TrimSpace(string(data))
+					}
+				}
+				if task == "" {
+					return fmt.Errorf("missing --task (or stdin)")
+				}
 			}
 
 			provider := llmProviderFromViper()
@@ -106,6 +139,29 @@ func newRunCmd() *cobra.Command {
 				return err
 			}
 
+			var memManager *memory.Manager
+			var memIdentity memory.Identity
+			if viper.GetBool("memory.enabled") {
+				id := resolveRunMemoryIdentity()
+				if id.Enabled && strings.TrimSpace(id.SubjectID) != "" {
+					memIdentity = id
+					memManager = memory.NewManager(viper.GetString("memory.dir"), viper.GetInt("memory.short_term_days"))
+					if viper.GetBool("memory.injection.enabled") {
+						maxItems := viper.GetInt("memory.injection.max_items")
+						snap, err := memManager.BuildInjection(id.SubjectID, memory.ContextPrivate, maxItems)
+						if err != nil {
+							return fmt.Errorf("memory injection: %w", err)
+						}
+						if strings.TrimSpace(snap) != "" {
+							promptSpec.Blocks = append(promptSpec.Blocks, agent.PromptBlock{
+								Title:   "Memory Summaries",
+								Content: snap,
+							})
+						}
+					}
+				}
+			}
+
 			var hook agent.Hook
 			if flagOrViperBool(cmd, "interactive", "interactive") {
 				hook, err = newInteractiveHook()
@@ -140,12 +196,18 @@ func newRunCmd() *cobra.Command {
 				opts...,
 			)
 
-			final, runCtx, err := engine.Run(ctx, task, agent.RunOptions{Model: model})
+			final, runCtx, err := engine.Run(ctx, task, agent.RunOptions{Model: model, Meta: runMeta})
 			if err != nil {
 				if errors.Is(err, errAbortedByUser) {
 					return nil
 				}
 				return err
+			}
+
+			if !isHeartbeat && memManager != nil && memIdentity.Enabled && strings.TrimSpace(memIdentity.SubjectID) != "" {
+				if err := updateRunMemory(ctx, logger, client, model, memManager, memIdentity, task, final); err != nil {
+					logger.Warn("memory_update_error", "error", err.Error())
+				}
 			}
 
 			logger.Info("run_done",
@@ -162,6 +224,7 @@ func newRunCmd() *cobra.Command {
 	}
 
 	cmd.Flags().String("task", "", "Task to run (if empty, reads from stdin).")
+	cmd.Flags().Bool("heartbeat", false, "Run a single heartbeat check (ignores --task and stdin).")
 	cmd.Flags().String("provider", "openai", "Provider: openai|openai_custom|deepseek|xai|gemini|azure|anthropic|bedrock|susanoo.")
 	cmd.Flags().String("endpoint", "https://api.openai.com", "Base URL for provider.")
 	cmd.Flags().String("model", "gpt-4o-mini", "Model name.")
@@ -198,6 +261,85 @@ func mapKeysSorted(m map[string]bool) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+func resolveRunMemoryIdentity() memory.Identity {
+	return memory.Identity{
+		Enabled:     true,
+		ExternalKey: "CLI_USER",
+		SubjectID:   "CLI_USER",
+	}
+}
+
+func updateRunMemory(ctx context.Context, logger *slog.Logger, client llm.Client, model string, mgr *memory.Manager, id memory.Identity, task string, final *agent.Final) error {
+	if mgr == nil || client == nil {
+		return nil
+	}
+	output := formatFinalOutput(final)
+	meta := memory.WriteMeta{
+		SessionID: "cli",
+		Source:    "cli",
+		Channel:   "local",
+		SubjectID: id.SubjectID,
+	}
+	date := time.Now().UTC()
+	_, existingContent, hasExisting, err := mgr.LoadShortTerm(date, meta.SessionID)
+	if err != nil {
+		return err
+	}
+
+	memCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
+	defer cancel()
+
+	ctxInfo := memoryDraftContext{
+		SessionID:        meta.SessionID,
+		ChatType:         "cli",
+		CounterpartyName: strings.TrimSpace(os.Getenv("USER")),
+		TimestampUTC:     date.Format(time.RFC3339),
+	}
+	if ctxInfo.CounterpartyName == "" {
+		ctxInfo.CounterpartyName = strings.TrimSpace(os.Getenv("USERNAME"))
+	}
+
+	draft, err := buildMemoryDraft(memCtx, client, model, nil, task, output, existingContent, ctxInfo)
+	if err != nil {
+		return err
+	}
+	draft.Promote = enforceLongTermPromotionRules(draft.Promote, nil, task)
+
+	mergedContent := memory.MergeShortTerm(existingContent, draft)
+	summary := strings.TrimSpace(draft.Summary)
+	if hasExisting && hasDraftContent(draft) {
+		semantic, semanticSummary, mergeErr := semanticMergeShortTerm(memCtx, client, model, existingContent, draft)
+		if mergeErr == nil {
+			mergedContent = semantic
+			summary = semanticSummary
+		}
+	}
+
+	if _, err := mgr.WriteShortTerm(date, mergedContent, summary, meta); err != nil {
+		return err
+	}
+
+	updates := append([]memory.TaskItem{}, mergedContent.Tasks...)
+	updates = append(updates, mergedContent.FollowUps...)
+	if updated, err := mgr.UpdateRecentTaskStatuses(updates, meta.SessionID); err != nil {
+		if logger != nil {
+			logger.Warn("memory_task_sync_error", "error", err.Error())
+		}
+	} else if updated > 0 {
+		if logger != nil {
+			logger.Debug("memory_task_sync_ok", "updated", updated)
+		}
+	}
+
+	if _, err := mgr.UpdateLongTerm(id.SubjectID, draft.Promote); err != nil {
+		return err
+	}
+	if logger != nil {
+		logger.Debug("memory_update_ok", "subject_id", id.SubjectID)
+	}
+	return nil
 }
 
 type llmClientConfig struct {

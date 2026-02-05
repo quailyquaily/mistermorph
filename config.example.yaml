@@ -114,7 +114,7 @@ guard:
   network:
     url_fetch:
       # Allow outbound HTTP only to these URL prefixes (fail-closed when empty).
-      allowed_url_prefixes: []
+      allowed_url_prefixes: ["https://"]
       # Deny localhost and literal private IP destinations.
       deny_private_ips: true
       # Redirects are a common allowlist bypass; keep disabled by default.
@@ -188,7 +188,7 @@ tools:
 
 # Markdown-based memory
 memory:
-  # Enable memory (Telegram only in Phase 1).
+  # Enable memory (Telegram + run).
   enabled: true
   # Root directory for memory files.
   # Default: ~/.morph/memory

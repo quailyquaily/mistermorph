@@ -49,7 +49,7 @@ func (m *Manager) UpdateShortTerm(date time.Time, draft SessionDraft, meta Write
 	if summary == "" {
 		summary = fallbackShortSummary(draft)
 	}
-	fm = applyShortTermFrontmatter(fm, summary, meta, m.nowUTC())
+	fm = applyShortTermFrontmatter(fm, summary, meta, m.nowUTC(), merged)
 
 	if err := writeMemoryFile(abs, RenderFrontmatter(fm)+"\n"+bodyOut); err != nil {
 		return "", err
@@ -80,7 +80,7 @@ func (m *Manager) WriteShortTerm(date time.Time, content ShortTermContent, summa
 	if summary == "" {
 		summary = fallbackShortSummaryFromContent(content)
 	}
-	fm = applyShortTermFrontmatter(fm, summary, meta, m.nowUTC())
+	fm = applyShortTermFrontmatter(fm, summary, meta, m.nowUTC(), content)
 	if err := writeMemoryFile(abs, RenderFrontmatter(fm)+"\n"+bodyOut); err != nil {
 		return "", err
 	}
@@ -184,6 +184,10 @@ func (m *Manager) UpdateRecentTaskStatuses(updates []TaskItem, excludeSessionID 
 			if strings.TrimSpace(fm.Summary) == "" {
 				fm.Summary = fallbackShortSummaryFromContent(content)
 			}
+			tDone, tTotal := taskCounts(content.Tasks)
+			fDone, fTotal := taskCounts(content.FollowUps)
+			fm.Tasks = formatTaskRatio(tDone, tTotal)
+			fm.FollowUps = formatTaskRatio(fDone, fTotal)
 			bodyOut := BuildShortTermBody(date.UTC().Format("2006-01-02"), content)
 			if err := writeMemoryFile(abs, RenderFrontmatter(fm)+"\n"+bodyOut); err != nil {
 				return updated, err
@@ -236,8 +240,12 @@ func (m *Manager) UpdateLongTerm(subjectID string, promote PromoteDraft) (bool, 
 
 	merged := MergeLongTerm(content, promote, m.nowUTC())
 	merged = enforceLongTermLimits(merged)
+	tasksLines, followLines := extractTodoSections(body)
+	tDone, tTotal := taskCounts(parseTodoSection(tasksLines))
+	fDone, fTotal := taskCounts(parseTodoSection(followLines))
 	bodyOut := BuildLongTermBody(merged)
-	fm = applyLongTermFrontmatter(fm, subjectID, merged, m.nowUTC())
+	bodyOut = appendTodoSections(bodyOut, tasksLines, followLines)
+	fm = applyLongTermFrontmatter(fm, subjectID, merged, m.nowUTC(), tDone, tTotal, fDone, fTotal)
 
 	if err := writeMemoryFile(abs, RenderFrontmatter(fm)+"\n"+bodyOut); err != nil {
 		return false, err
@@ -250,10 +258,14 @@ func (m *Manager) attachRelatedLink(content ShortTermContent, date time.Time) Sh
 	return content
 }
 
-func applyShortTermFrontmatter(existing Frontmatter, summary string, meta WriteMeta, now time.Time) Frontmatter {
+func applyShortTermFrontmatter(existing Frontmatter, summary string, meta WriteMeta, now time.Time, content ShortTermContent) Frontmatter {
 	existing.CreatedAt = chooseTimestamp(existing.CreatedAt, now)
 	existing.UpdatedAt = now.UTC().Format(time.RFC3339)
 	existing.Summary = summary
+	tDone, tTotal := taskCounts(content.Tasks)
+	fDone, fTotal := taskCounts(content.FollowUps)
+	existing.Tasks = formatTaskRatio(tDone, tTotal)
+	existing.FollowUps = formatTaskRatio(fDone, fTotal)
 	if strings.TrimSpace(meta.SessionID) != "" {
 		existing.SessionID = strings.TrimSpace(meta.SessionID)
 	}
@@ -266,7 +278,7 @@ func applyShortTermFrontmatter(existing Frontmatter, summary string, meta WriteM
 	return existing
 }
 
-func applyLongTermFrontmatter(existing Frontmatter, subjectID string, content LongTermContent, now time.Time) Frontmatter {
+func applyLongTermFrontmatter(existing Frontmatter, subjectID string, content LongTermContent, now time.Time, tasksDone int, tasksTotal int, followDone int, followTotal int) Frontmatter {
 	existing.CreatedAt = chooseTimestamp(existing.CreatedAt, now)
 	existing.UpdatedAt = now.UTC().Format(time.RFC3339)
 	if strings.TrimSpace(existing.Summary) == "" {
@@ -274,6 +286,8 @@ func applyLongTermFrontmatter(existing Frontmatter, subjectID string, content Lo
 	} else {
 		existing.Summary = summarizeLongTerm(content)
 	}
+	existing.Tasks = formatTaskRatio(tasksDone, tasksTotal)
+	existing.FollowUps = formatTaskRatio(followDone, followTotal)
 	existing.SubjectID = strings.TrimSpace(subjectID)
 	return existing
 }
@@ -404,6 +418,64 @@ func ensureShortTermDefaults(content ShortTermContent, draft SessionDraft) Short
 		}
 	}
 	return content
+}
+
+func extractTodoSections(body string) (tasks []string, followUps []string) {
+	var current string
+	lines := strings.Split(body, "\n")
+	for _, line := range lines {
+		trim := strings.TrimSpace(line)
+		if strings.HasPrefix(trim, "## ") {
+			current = strings.TrimSpace(strings.TrimPrefix(trim, "## "))
+			continue
+		}
+		if current == "" || trim == "" {
+			continue
+		}
+		switch current {
+		case sectionTasks:
+			tasks = append(tasks, trim)
+		case sectionFollowUps:
+			followUps = append(followUps, trim)
+		}
+	}
+	return tasks, followUps
+}
+
+func appendTodoSections(body string, tasks []string, followUps []string) string {
+	b := strings.TrimSpace(body)
+	if len(tasks) == 0 && len(followUps) == 0 {
+		if b == "" {
+			return ""
+		}
+		return b + "\n"
+	}
+	var out strings.Builder
+	if b != "" {
+		out.WriteString(b)
+		out.WriteString("\n\n")
+	}
+	if len(tasks) > 0 {
+		out.WriteString("## ")
+		out.WriteString(sectionTasks)
+		out.WriteString("\n")
+		for _, line := range tasks {
+			out.WriteString(line)
+			out.WriteString("\n")
+		}
+		out.WriteString("\n")
+	}
+	if len(followUps) > 0 {
+		out.WriteString("## ")
+		out.WriteString(sectionFollowUps)
+		out.WriteString("\n")
+		for _, line := range followUps {
+			out.WriteString(line)
+			out.WriteString("\n")
+		}
+		out.WriteString("\n")
+	}
+	return strings.TrimSpace(out.String()) + "\n"
 }
 
 func readMemoryFile(path string) (Frontmatter, string, bool, error) {

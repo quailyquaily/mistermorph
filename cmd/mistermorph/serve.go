@@ -14,6 +14,7 @@ import (
 	"github.com/quailyquaily/mistermorph/agent"
 	"github.com/quailyquaily/mistermorph/guard"
 	"github.com/quailyquaily/mistermorph/llm"
+	"github.com/quailyquaily/mistermorph/memory"
 	"github.com/quailyquaily/mistermorph/tools"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -171,6 +172,11 @@ func newServeCmd() *cobra.Command {
 			hbChecklist := strings.TrimSpace(viper.GetString("heartbeat.checklist_path"))
 			if hbEnabled && hbInterval > 0 {
 				go func() {
+					var hbMemMgr *memory.Manager
+					hbMaxItems := viper.GetInt("memory.injection.max_items")
+					if viper.GetBool("memory.enabled") {
+						hbMemMgr = memory.NewManager(viper.GetString("memory.dir"), viper.GetInt("memory.short_term_days"))
+					}
 					ticker := time.NewTicker(hbInterval)
 					defer ticker.Stop()
 					for range ticker.C {
@@ -178,7 +184,16 @@ func newServeCmd() *cobra.Command {
 							logger.Debug("heartbeat_skip", "reason", "already_running")
 							continue
 						}
-						task, checklistEmpty, err := buildHeartbeatTask(hbChecklist)
+						hbSnapshot := ""
+						if hbMemMgr != nil {
+							snap, err := buildHeartbeatProgressSnapshot(hbMemMgr, hbMaxItems)
+							if err != nil {
+								logger.Warn("heartbeat_memory_error", "error", err.Error())
+							} else {
+								hbSnapshot = snap
+							}
+						}
+						task, checklistEmpty, err := buildHeartbeatTask(hbChecklist, hbSnapshot)
 						if err != nil {
 							alert, msg := hbState.EndFailure(err)
 							if alert {

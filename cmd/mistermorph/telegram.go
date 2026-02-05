@@ -334,10 +334,24 @@ func newTelegramCmd() *cobra.Command {
 			hbChecklist := strings.TrimSpace(viper.GetString("heartbeat.checklist_path"))
 			if hbEnabled && hbInterval > 0 {
 				go func() {
+					var hbMemMgr *memory.Manager
+					hbMaxItems := viper.GetInt("memory.injection.max_items")
+					if viper.GetBool("memory.enabled") {
+						hbMemMgr = memory.NewManager(viper.GetString("memory.dir"), viper.GetInt("memory.short_term_days"))
+					}
 					ticker := time.NewTicker(hbInterval)
 					defer ticker.Stop()
 					for range ticker.C {
-						task, checklistEmpty, err := buildHeartbeatTask(hbChecklist)
+						hbSnapshot := ""
+						if hbMemMgr != nil {
+							snap, err := buildHeartbeatProgressSnapshot(hbMemMgr, hbMaxItems)
+							if err != nil {
+								logger.Warn("telegram_heartbeat_memory_error", "error", err.Error())
+							} else {
+								hbSnapshot = snap
+							}
+						}
+						task, checklistEmpty, err := buildHeartbeatTask(hbChecklist, hbSnapshot)
 						if err != nil {
 							logger.Warn("telegram_heartbeat_task_error", "error", err.Error())
 							continue
@@ -993,6 +1007,7 @@ func buildMemoryDraft(ctx context.Context, client llm.Client, model string, hist
 			"Use the same language as the user.",
 			"Session summary items should state who was involved, when it happened (if known), what happened, and the result (if any).",
 			"If session_context includes counterparty info, use it instead of generic labels like \"user\".",
+			"Temporary facts should preserve key metadata such as URLs, terms, identifiers, IDs, or ticket numbers when they matter to future work.",
 			"Keep items concise but specific.",
 			"If an existing task or follow-up was completed in this session, include it with done=true.",
 			"Prefer to reuse the wording from existing_tasks when updating status.",
@@ -1173,6 +1188,7 @@ func semanticMergeShortTerm(ctx context.Context, client llm.Client, model string
 			"These are same-day short-term items. Merge semantically and deduplicate.",
 			"Short-term memory is public. Do NOT include private or sensitive info.",
 			"Prefer the most recent information when conflicts occur.",
+			"Preserve important metadata in temporary_facts such as URLs, terms, identifiers, IDs, or ticket numbers.",
 			"Keep items concise.",
 			"Tasks: if a task appears in both, keep the latest done status.",
 			"If unsure, keep the existing item and add the new one only if distinct.",

@@ -4,13 +4,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/quailyquaily/mistermorph/agent"
 	"github.com/quailyquaily/mistermorph/internal/pathutil"
+	"github.com/quailyquaily/mistermorph/memory"
 )
 
 const (
@@ -78,7 +81,7 @@ func isChecklistEmptyContent(content string) bool {
 	return true
 }
 
-func buildHeartbeatTask(checklistPath string) (string, bool, error) {
+func buildHeartbeatTask(checklistPath string, memorySnapshot string) (string, bool, error) {
 	checklist, empty, err := readHeartbeatChecklist(checklistPath)
 	if err != nil {
 		return "", true, err
@@ -90,9 +93,17 @@ func buildHeartbeatTask(checklistPath string) (string, bool, error) {
 	b.WriteString("If anything requires user attention or action, respond with: ALERT: <short summary>\n")
 	b.WriteString("If the checklist is missing or empty, review recent short-term memory (if enabled) and current context to find things to do before returning HEARTBEAT_OK.\n")
 	b.WriteString("Prefer to resolve things yourself; avoid asking the user unless genuinely blocked.\n")
+	b.WriteString("If the progress snapshot shows pending tasks or follow_ups (done < total), treat that as needing attention: pick ONE pending item and take the smallest next step now (tools optional, but use them if needed).\n")
+	b.WriteString("You MUST take at least one concrete action step before returning a final response when pending items exist. Do not only acknowledge pending items.\n")
+	b.WriteString("Only return ALERT after you attempted a concrete step and something remains or you are blocked. If you fully resolve everything, return HEARTBEAT_OK.\n")
 	if !empty {
 		b.WriteString("\nChecklist:\n")
 		b.WriteString(checklist)
+		b.WriteString("\n")
+	}
+	if strings.TrimSpace(memorySnapshot) != "" {
+		b.WriteString("\nRecent memory progress:\n")
+		b.WriteString(strings.TrimSpace(memorySnapshot))
 		b.WriteString("\n")
 	}
 
@@ -133,6 +144,98 @@ func buildHeartbeatMeta(source string, interval time.Duration, checklistPath str
 		"trigger":   "heartbeat",
 		"heartbeat": hb,
 	}
+}
+
+func buildHeartbeatProgressSnapshot(mgr *memory.Manager, maxItems int) (string, error) {
+	if mgr == nil {
+		return "", nil
+	}
+	summaries, err := mgr.LoadShortTermSummaries(mgr.ShortTermDays)
+	if err != nil {
+		return "", err
+	}
+	filtered := make([]memory.ShortTermSummary, 0, len(summaries))
+	for _, s := range summaries {
+		if s.TasksTotal == 0 && s.FollowUpsTotal == 0 {
+			continue
+		}
+		filtered = append(filtered, s)
+	}
+	if len(filtered) == 0 {
+		return "", nil
+	}
+	if maxItems <= 0 {
+		maxItems = 50
+	}
+	sort.SliceStable(filtered, func(i, j int) bool {
+		return filtered[i].Date > filtered[j].Date
+	})
+	if len(filtered) > maxItems {
+		filtered = filtered[:maxItems]
+	}
+	lines := make([]string, 0, len(filtered)+1)
+	lines = append(lines, "[Memory:ShortTerm:Progress]")
+	for _, s := range filtered {
+		progress := fmt.Sprintf("[progress: tasks %d/%d, follow_ups %d/%d]", s.TasksDone, s.TasksTotal, s.FollowUpsDone, s.FollowUpsTotal)
+		details := buildPendingDetails(mgr, s.RelPath)
+		line := fmt.Sprintf("- %s: %s (%s) %s%s", s.Date, strings.TrimSpace(s.Summary), strings.TrimSpace(s.RelPath), progress, details)
+		lines = append(lines, line)
+	}
+	return strings.TrimSpace(strings.Join(lines, "\n")), nil
+}
+
+func buildPendingDetails(mgr *memory.Manager, relPath string) string {
+	if mgr == nil {
+		return ""
+	}
+	relPath = strings.TrimSpace(relPath)
+	if relPath == "" {
+		return ""
+	}
+	abs := filepath.Join(mgr.Dir, filepath.FromSlash(relPath))
+	data, err := os.ReadFile(abs)
+	if err != nil {
+		return ""
+	}
+	_, body, ok := memory.ParseFrontmatter(string(data))
+	if !ok {
+		body = string(data)
+	}
+	content := memory.ParseShortTermContent(body)
+	pendingTasks := pendingItems(content.Tasks, 2)
+	pendingFollow := pendingItems(content.FollowUps, 2)
+	if len(pendingTasks) == 0 && len(pendingFollow) == 0 {
+		return ""
+	}
+	var parts []string
+	if len(pendingTasks) > 0 {
+		parts = append(parts, "pending tasks: "+strings.Join(pendingTasks, "; "))
+	}
+	if len(pendingFollow) > 0 {
+		parts = append(parts, "pending follow_ups: "+strings.Join(pendingFollow, "; "))
+	}
+	return " [" + strings.Join(parts, " | ") + "]"
+}
+
+func pendingItems(items []memory.TaskItem, limit int) []string {
+	if limit <= 0 {
+		limit = 2
+	}
+	out := make([]string, 0, limit)
+	for _, it := range items {
+		if it.Done {
+			continue
+		}
+		text := strings.TrimSpace(it.Text)
+		if text == "" {
+			continue
+		}
+		out = append(out, text)
+		if len(out) >= limit {
+			break
+		}
+	}
+	return out
 }
 
 type heartbeatState struct {

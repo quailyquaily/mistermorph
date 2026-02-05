@@ -95,6 +95,7 @@ If anything requires user attention or action, respond with: ALERT: <short summa
 ### 4) Inputs & Signals (Minimal)
 Heartbeats should rely on **lightweight, local inputs** supplied by the controller:
 - Optional **checklist file** (`HEARTBEAT.md`).
+- Recent short-term progress (only if TODOs exist; included as a progress snapshot).
 - Last successful heartbeat time.
 - Consecutive failure count.
 - Queue length (daemon) or per-chat backlog (telegram).
@@ -146,6 +147,8 @@ If the file is missing, still check recent **short-term memory** (if enabled) an
 
 Behavior details:
 - If the checklist is missing or effectively empty, review **recent short-term memory** (if enabled) and scan for reasonable next actions before returning `HEARTBEAT_OK`.
+- If recent short-term memory contains TODOs, include a **progress snapshot** (tasks/follow_ups done/total) in the heartbeat prompt.
+- If the progress snapshot shows pending TODOs, **pick one and take the smallest next step** (tools optional). You must take at least one concrete action before alerting. Only alert if something remains or you are blocked.
 - Keep the checklist short; recommended max length: **100 lines**.
 - Prefer **self-resolving** actions. Avoid asking the user unless it is genuinely blocked.
 

@@ -94,10 +94,29 @@ func (m *Manager) LoadShortTermSummaries(days int) ([]ShortTermSummary, error) {
 			if ok {
 				summary = strings.TrimSpace(fm.Summary)
 			}
-			if summary == "" {
+			var tasksDone, tasksTotal, followDone, followTotal int
+			hasTaskCounts := false
+			hasFollowCounts := false
+			if summary == "" || strings.TrimSpace(fm.Tasks) == "" || strings.TrimSpace(fm.FollowUps) == "" {
 				content := ParseShortTermContent(body)
-				if len(content.SessionSummary) > 0 {
+				if summary == "" && len(content.SessionSummary) > 0 {
 					summary = strings.TrimSpace(content.SessionSummary[0].Value)
+				}
+				tasksDone, tasksTotal = taskCounts(content.Tasks)
+				followDone, followTotal = taskCounts(content.FollowUps)
+				hasTaskCounts = true
+				hasFollowCounts = true
+			}
+			if !hasTaskCounts {
+				if d, t, ok := parseTaskRatio(fm.Tasks); ok {
+					tasksDone, tasksTotal = d, t
+					hasTaskCounts = true
+				}
+			}
+			if !hasFollowCounts {
+				if d, t, ok := parseTaskRatio(fm.FollowUps); ok {
+					followDone, followTotal = d, t
+					hasFollowCounts = true
 				}
 			}
 			if summary == "" {
@@ -105,9 +124,13 @@ func (m *Manager) LoadShortTermSummaries(days int) ([]ShortTermSummary, error) {
 			}
 			rel := filepath.ToSlash(filepath.Join(dayRel, name))
 			out = append(out, ShortTermSummary{
-				Date:    date.UTC().Format("2006-01-02"),
-				Summary: summary,
-				RelPath: filepathToSlash(rel),
+				Date:           date.UTC().Format("2006-01-02"),
+				Summary:        summary,
+				RelPath:        filepathToSlash(rel),
+				TasksDone:      tasksDone,
+				TasksTotal:     tasksTotal,
+				FollowUpsDone:  followDone,
+				FollowUpsTotal: followTotal,
 			})
 		}
 	}
@@ -136,7 +159,8 @@ func formatInjection(longSummary string, shortSummaries []ShortTermSummary, maxI
 			if count >= maxItems {
 				break
 			}
-			line := fmt.Sprintf("- %s: %s (%s)", s.Date, strings.TrimSpace(s.Summary), strings.TrimSpace(s.RelPath))
+			progress := fmt.Sprintf(" [progress: tasks %d/%d, follow_ups %d/%d]", s.TasksDone, s.TasksTotal, s.FollowUpsDone, s.FollowUpsTotal)
+			line := fmt.Sprintf("- %s: %s (%s)%s", s.Date, strings.TrimSpace(s.Summary), strings.TrimSpace(s.RelPath), progress)
 			lines = append(lines, line)
 			count++
 		}
