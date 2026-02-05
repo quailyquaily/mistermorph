@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/quailyquaily/mistermorph/internal/telegramutil"
 )
 
 func TestEnsureSecureCacheDir_FixesPerms(t *testing.T) {
@@ -15,7 +17,7 @@ func TestEnsureSecureCacheDir_FixesPerms(t *testing.T) {
 	if err := os.Chmod(dir, 0o777); err != nil {
 		t.Fatal(err)
 	}
-	if err := ensureSecureCacheDir(dir); err != nil {
+	if err := telegramutil.EnsureSecureCacheDir(dir); err != nil {
 		t.Fatalf("expected nil error, got %v", err)
 	}
 	fi, err := os.Stat(dir)
@@ -37,14 +39,14 @@ func TestEnsureSecureCacheDir_RejectsSymlink(t *testing.T) {
 	if err := os.Symlink(target, link); err != nil {
 		t.Skipf("symlink not supported: %v", err)
 	}
-	if err := ensureSecureCacheDir(link); err == nil {
+	if err := telegramutil.EnsureSecureCacheDir(link); err == nil {
 		t.Fatalf("expected error for symlink path, got nil")
 	}
 }
 
 func TestCleanupFileCacheDir_MaxAgeAndMaxFiles(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "telegram")
-	if err := ensureSecureCacheDir(dir); err != nil {
+	if err := telegramutil.EnsureSecureCacheDir(dir); err != nil {
 		t.Fatal(err)
 	}
 
@@ -62,7 +64,7 @@ func TestCleanupFileCacheDir_MaxAgeAndMaxFiles(t *testing.T) {
 	_ = os.Chtimes(newest, now.Add(-1*time.Minute), now.Add(-1*time.Minute))
 
 	// Remove files older than 3h (old should go), then keep only 1 newest file.
-	if err := cleanupFileCacheDir(dir, 3*time.Hour, 1, 0); err != nil {
+	if err := telegramutil.CleanupFileCacheDir(dir, 3*time.Hour, 1, 0); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(old); err == nil {

@@ -1,4 +1,4 @@
-package main
+package telegramutil
 
 import (
 	"fmt"
@@ -11,8 +11,13 @@ import (
 	"time"
 )
 
-// Keep in sync with cmd/telegram/command.go.
-func ensureSecureCacheDir(dir string) error {
+type fileCacheEntry struct {
+	Path    string
+	ModTime time.Time
+	Size    int64
+}
+
+func EnsureSecureCacheDir(dir string) error {
 	dir = strings.TrimSpace(dir)
 	if dir == "" {
 		return fmt.Errorf("empty dir")
@@ -48,6 +53,7 @@ func ensureSecureCacheDir(dir string) error {
 		return fmt.Errorf("cache dir not owned by current user (uid=%d, owner=%d): %s", curUID, st.Uid, dir)
 	}
 	if perm != 0o700 {
+		// Try to fix perms if we own it.
 		if err := os.Chmod(dir, 0o700); err != nil {
 			return fmt.Errorf("cache dir has insecure perms (%#o) and chmod failed: %w", perm, err)
 		}
@@ -62,14 +68,7 @@ func ensureSecureCacheDir(dir string) error {
 	return nil
 }
 
-type fileCacheEntry struct {
-	Path    string
-	ModTime time.Time
-	Size    int64
-}
-
-// Keep in sync with cmd/telegram/command.go.
-func cleanupFileCacheDir(dir string, maxAge time.Duration, maxFiles int, maxTotalBytes int64) error {
+func CleanupFileCacheDir(dir string, maxAge time.Duration, maxFiles int, maxTotalBytes int64) error {
 	dir = strings.TrimSpace(dir)
 	if dir == "" {
 		return fmt.Errorf("missing dir")
@@ -86,6 +85,7 @@ func cleanupFileCacheDir(dir string, maxAge time.Duration, maxFiles int, maxTota
 		if err != nil {
 			return err
 		}
+		// Never follow symlinks.
 		if d.Type()&os.ModeSymlink != 0 {
 			if d.IsDir() {
 				return filepath.SkipDir
@@ -118,6 +118,7 @@ func cleanupFileCacheDir(dir string, maxAge time.Duration, maxFiles int, maxTota
 		return walkErr
 	}
 
+	// Enforce max_files and max_total_bytes by removing oldest files first.
 	sort.Slice(kept, func(i, j int) bool { return kept[i].ModTime.Before(kept[j].ModTime) })
 	needPrune := func() bool {
 		if maxFiles > 0 && len(kept) > maxFiles {
@@ -135,6 +136,7 @@ func cleanupFileCacheDir(dir string, maxAge time.Duration, maxFiles int, maxTota
 		_ = os.Remove(old.Path)
 	}
 
+	// Best-effort remove empty dirs (bottom-up).
 	var dirs []string
 	_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -159,48 +161,4 @@ func cleanupFileCacheDir(dir string, maxAge time.Duration, maxFiles int, maxTota
 		_ = os.Remove(d)
 	}
 	return nil
-}
-
-// Keep in sync with cmd/telegram/command.go.
-func escapeTelegramMarkdownUnderscores(text string) string {
-	if !strings.Contains(text, "_") {
-		return text
-	}
-
-	var b strings.Builder
-	b.Grow(len(text) + 8)
-
-	inCodeBlock := false
-	inInlineCode := false
-
-	for i := 0; i < len(text); i++ {
-		if !inInlineCode && strings.HasPrefix(text[i:], "```") {
-			inCodeBlock = !inCodeBlock
-			b.WriteString("```")
-			i += 2
-			continue
-		}
-
-		ch := text[i]
-
-		if !inCodeBlock && ch == '`' {
-			inInlineCode = !inInlineCode
-			b.WriteByte(ch)
-			continue
-		}
-
-		if !inCodeBlock && !inInlineCode && ch == '_' {
-			if i > 0 && text[i-1] == '\\' {
-				b.WriteByte('_')
-				continue
-			}
-			b.WriteByte('\\')
-			b.WriteByte('_')
-			continue
-		}
-
-		b.WriteByte(ch)
-	}
-
-	return b.String()
 }

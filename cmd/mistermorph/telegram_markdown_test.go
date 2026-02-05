@@ -1,6 +1,10 @@
 package main
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/quailyquaily/mistermorph/internal/telegramutil"
+)
 
 func TestEscapeTelegramMarkdownUnderscores(t *testing.T) {
 	t.Parallel()
@@ -41,7 +45,7 @@ func TestEscapeTelegramMarkdownUnderscores(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			if got := escapeTelegramMarkdownUnderscores(tt.in); got != tt.want {
+			if got := telegramutil.EscapeTelegramMarkdownUnderscores(tt.in); got != tt.want {
 				t.Fatalf("got %q, want %q", got, tt.want)
 			}
 		})
