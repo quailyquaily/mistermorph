@@ -5,6 +5,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/quailyquaily/mistermorph/cmd/mistermorph/runcmd"
+	"github.com/quailyquaily/mistermorph/cmd/mistermorph/skillscmd"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -69,12 +71,16 @@ func newRootCmd() *cobra.Command {
 	viper.SetDefault("logging.max_skill_content_chars", 8000)
 	viper.SetDefault("trace", false)
 
-	cmd.AddCommand(newRunCmd())
+	cmd.AddCommand(runcmd.New(runcmd.Dependencies{
+		RegistryFromViper: registryFromViper,
+		GuardFromViper:    guardFromViper,
+		RegisterPlanTool:  registerPlanTool,
+	}))
 	cmd.AddCommand(newServeCmd())
 	cmd.AddCommand(newSubmitCmd())
 	cmd.AddCommand(newTelegramCommand())
 	cmd.AddCommand(newToolsCmd())
-	cmd.AddCommand(newSkillsCmd())
+	cmd.AddCommand(skillscmd.New())
 	cmd.AddCommand(newInstallCmd())
 	cmd.AddCommand(newVersionCmd())
 

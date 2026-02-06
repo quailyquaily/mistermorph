@@ -1,4 +1,4 @@
-package main
+package skillscmd
 
 import (
 	"bytes"
@@ -22,6 +22,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/clifmt"
 	"github.com/quailyquaily/mistermorph/internal/jsonutil"
 	"github.com/quailyquaily/mistermorph/internal/llmconfig"
+	"github.com/quailyquaily/mistermorph/internal/llmutil"
 	"github.com/quailyquaily/mistermorph/internal/statepaths"
 	"github.com/quailyquaily/mistermorph/llm"
 	"github.com/quailyquaily/mistermorph/skills"
@@ -32,7 +33,7 @@ import (
 
 var errSelectionCancelled = errors.New("selection cancelled")
 
-func newSkillsInstallBuiltinCmd() *cobra.Command {
+func NewSkillsInstallBuiltinCmd() *cobra.Command {
 	var (
 		dest         string
 		dryRun       bool
@@ -77,18 +78,18 @@ func newSkillsInstallBuiltinCmd() *cobra.Command {
 			}
 
 			// Discover built-in skill directories (assets/skills/<skill>/SKILL.md).
-			skillDirs, err := discoverBuiltInSkills()
+			skillDirs, err := DiscoverBuiltInSkills()
 			if err != nil {
 				return err
 			}
-			selected, err := selectBuiltInSkills(skillDirs, yes)
+			selected, err := SelectBuiltInSkills(skillDirs, yes)
 			if err != nil {
 				if errors.Is(err, errSelectionCancelled) {
 					return nil
 				}
 				return err
 			}
-			return installBuiltInSkills(dest, dryRun, clean, skipExisting, selected)
+			return InstallBuiltInSkills(dest, dryRun, clean, skipExisting, selected)
 		},
 	}
 
@@ -108,7 +109,7 @@ type builtInSkillInfo struct {
 	Description string
 }
 
-func discoverBuiltInSkills() ([]builtInSkillInfo, error) {
+func DiscoverBuiltInSkills() ([]builtInSkillInfo, error) {
 	entries, err := fs.ReadDir(assets.SkillsFS, "skills")
 	if err != nil {
 		return nil, err
@@ -153,7 +154,7 @@ func skillInfoNames(infos []builtInSkillInfo) []string {
 	return out
 }
 
-func selectBuiltInSkills(skillInfos []builtInSkillInfo, autoAll bool) ([]string, error) {
+func SelectBuiltInSkills(skillInfos []builtInSkillInfo, autoAll bool) ([]string, error) {
 	if len(skillInfos) == 0 {
 		return nil, nil
 	}
@@ -358,13 +359,13 @@ type builtInSkillPlan struct {
 	Files []string
 }
 
-type installedFileInfo struct {
+type InstalledFileInfo struct {
 	Path    string
 	Skipped bool
 	DryRun  bool
 }
 
-func installBuiltInSkills(dest string, dryRun bool, clean bool, skipExisting bool, skillDirs []string) error {
+func InstallBuiltInSkills(dest string, dryRun bool, clean bool, skipExisting bool, skillDirs []string) error {
 	if len(skillDirs) == 0 {
 		return nil
 	}
@@ -391,7 +392,7 @@ func installBuiltInSkills(dest string, dryRun bool, clean bool, skipExisting boo
 		srcRoot := filepath.ToSlash(filepath.Join("skills", plan.Name))
 		dstRoot := filepath.Join(dest, plan.Name)
 		skipped := 0
-		fileInfos := make([]installedFileInfo, 0, len(plan.Files))
+		fileInfos := make([]InstalledFileInfo, 0, len(plan.Files))
 
 		if dryRun {
 			fmt.Printf("[%d/%d] %s (%d files)\n", idx+1, len(plans), plan.Name, len(plan.Files))
@@ -426,7 +427,7 @@ func installBuiltInSkills(dest string, dryRun bool, clean bool, skipExisting boo
 					if dryRun {
 						fmt.Printf("  skip %s\n", outPath)
 					}
-					fileInfos = append(fileInfos, installedFileInfo{Path: outPath, Skipped: true, DryRun: dryRun})
+					fileInfos = append(fileInfos, InstalledFileInfo{Path: outPath, Skipped: true, DryRun: dryRun})
 					continue
 				}
 			}
@@ -440,7 +441,7 @@ func installBuiltInSkills(dest string, dryRun bool, clean bool, skipExisting boo
 
 			if dryRun {
 				fmt.Printf("  write %s\n", outPath)
-				fileInfos = append(fileInfos, installedFileInfo{Path: outPath, DryRun: true})
+				fileInfos = append(fileInfos, InstalledFileInfo{Path: outPath, DryRun: true})
 				continue
 			}
 
@@ -459,12 +460,12 @@ func installBuiltInSkills(dest string, dryRun bool, clean bool, skipExisting boo
 			if err := os.Chmod(outPath, builtinSkillFileMode(path)); err != nil {
 				return err
 			}
-			fileInfos = append(fileInfos, installedFileInfo{Path: outPath})
+			fileInfos = append(fileInfos, InstalledFileInfo{Path: outPath})
 		}
 
 		totalSkipped += skipped
 		if dryRun {
-			printInstalledFileInfos(fileInfos)
+			PrintInstalledFileInfos(fileInfos)
 			continue
 		}
 		fmt.Printf("%s", clifmt.Success("done"))
@@ -472,7 +473,7 @@ func installBuiltInSkills(dest string, dryRun bool, clean bool, skipExisting boo
 			fmt.Printf(" %s", clifmt.Warn(fmt.Sprintf("(%d skipped)", skipped)))
 		}
 		fmt.Println()
-		printInstalledFileInfos(fileInfos)
+		PrintInstalledFileInfos(fileInfos)
 	}
 
 	if dryRun {
@@ -487,7 +488,7 @@ func installBuiltInSkills(dest string, dryRun bool, clean bool, skipExisting boo
 	return nil
 }
 
-func printInstalledFileInfos(files []installedFileInfo) {
+func PrintInstalledFileInfos(files []InstalledFileInfo) {
 	if len(files) == 0 {
 		return
 	}
@@ -721,12 +722,12 @@ func installSkillFromURL(ctx context.Context, log *slog.Logger, client llm.Clien
 	fmt.Println(clifmt.Headerf("==> Installing remote skill %s (%d files)", skillName, len(files)))
 	if dryRun {
 		fmt.Printf("mkdir -p %s\n", dstDir)
-		fileInfos := make([]installedFileInfo, 0, len(files))
+		fileInfos := make([]InstalledFileInfo, 0, len(files))
 		for _, f := range files {
 			fmt.Printf("  write %s\n", f.DestPath)
-			fileInfos = append(fileInfos, installedFileInfo{Path: f.DestPath, DryRun: true})
+			fileInfos = append(fileInfos, InstalledFileInfo{Path: f.DestPath, DryRun: true})
 		}
-		printInstalledFileInfos(fileInfos)
+		PrintInstalledFileInfos(fileInfos)
 		fmt.Printf("%s: 1 skill, %d files\n", clifmt.Success("done"), len(files))
 		return nil
 	}
@@ -736,12 +737,12 @@ func installSkillFromURL(ctx context.Context, log *slog.Logger, client llm.Clien
 	}
 
 	skipped := 0
-	fileInfos := make([]installedFileInfo, 0, len(files))
+	fileInfos := make([]InstalledFileInfo, 0, len(files))
 	for _, f := range files {
 		if skipExisting {
 			if _, err := os.Stat(f.DestPath); err == nil {
 				skipped++
-				fileInfos = append(fileInfos, installedFileInfo{Path: f.DestPath, Skipped: true})
+				fileInfos = append(fileInfos, InstalledFileInfo{Path: f.DestPath, Skipped: true})
 				continue
 			}
 		}
@@ -766,10 +767,10 @@ func installSkillFromURL(ctx context.Context, log *slog.Logger, client llm.Clien
 		if log != nil {
 			log.Info("skill_file_installed", "path", f.DestPath, "bytes", len(data))
 		}
-		fileInfos = append(fileInfos, installedFileInfo{Path: f.DestPath})
+		fileInfos = append(fileInfos, InstalledFileInfo{Path: f.DestPath})
 	}
 
-	printInstalledFileInfos(fileInfos)
+	PrintInstalledFileInfos(fileInfos)
 	if skipped > 0 {
 		fmt.Printf("%s: 1 skill, %d files %s\n", clifmt.Success("done"), len(files), clifmt.Warn(fmt.Sprintf("(%d skipped)", skipped)))
 		return nil
@@ -781,22 +782,22 @@ func installSkillFromURL(ctx context.Context, log *slog.Logger, client llm.Clien
 func llmClientForRemoteSkillReview() (llm.Client, string, error) {
 	model := strings.TrimSpace(viper.GetString("skills.selector_model"))
 	if model == "" {
-		model = llmModelFromViper()
+		model = llmutil.ModelFromViper()
 	}
 	if model == "" {
 		model = "gpt-4o-mini"
 	}
 	cfg := llmconfig.ClientConfig{
-		Provider:       llmProviderFromViper(),
-		Endpoint:       llmEndpointFromViper(),
-		APIKey:         llmAPIKeyFromViper(),
+		Provider:       llmutil.ProviderFromViper(),
+		Endpoint:       llmutil.EndpointFromViper(),
+		APIKey:         llmutil.APIKeyFromViper(),
 		Model:          model,
 		RequestTimeout: viper.GetDuration("llm.request_timeout"),
 	}
 	if strings.TrimSpace(cfg.APIKey) == "" {
 		return nil, "", fmt.Errorf("missing llm.api_key (required to review remote skills safely)")
 	}
-	c, err := llmClientFromConfig(cfg)
+	c, err := llmutil.ClientFromConfig(cfg)
 	if err != nil {
 		return nil, "", err
 	}

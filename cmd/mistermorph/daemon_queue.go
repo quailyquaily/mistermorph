@@ -7,6 +7,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/quailyquaily/mistermorph/internal/heartbeatutil"
 )
 
 type queuedTask struct {
@@ -20,7 +22,7 @@ type queuedTask struct {
 	// Internal-only heartbeat fields.
 	meta           map[string]any
 	isHeartbeat    bool
-	heartbeatState *heartbeatState
+	heartbeatState *heartbeatutil.State
 }
 
 type TaskStore struct {
@@ -43,11 +45,11 @@ func (s *TaskStore) Enqueue(parent context.Context, task string, model string, t
 	return s.enqueue(parent, task, model, timeout, nil, false, nil)
 }
 
-func (s *TaskStore) EnqueueHeartbeat(parent context.Context, task string, model string, timeout time.Duration, meta map[string]any, hbState *heartbeatState) (*TaskInfo, error) {
+func (s *TaskStore) EnqueueHeartbeat(parent context.Context, task string, model string, timeout time.Duration, meta map[string]any, hbState *heartbeatutil.State) (*TaskInfo, error) {
 	return s.enqueue(parent, task, model, timeout, meta, true, hbState)
 }
 
-func (s *TaskStore) enqueue(parent context.Context, task string, model string, timeout time.Duration, meta map[string]any, isHeartbeat bool, hbState *heartbeatState) (*TaskInfo, error) {
+func (s *TaskStore) enqueue(parent context.Context, task string, model string, timeout time.Duration, meta map[string]any, isHeartbeat bool, hbState *heartbeatutil.State) (*TaskInfo, error) {
 	if timeout <= 0 {
 		timeout = 10 * time.Minute
 	}

@@ -14,7 +14,11 @@ import (
 	"github.com/quailyquaily/mistermorph/agent"
 	"github.com/quailyquaily/mistermorph/guard"
 	"github.com/quailyquaily/mistermorph/internal/configutil"
+	"github.com/quailyquaily/mistermorph/internal/heartbeatutil"
 	"github.com/quailyquaily/mistermorph/internal/llmconfig"
+	"github.com/quailyquaily/mistermorph/internal/llmutil"
+	"github.com/quailyquaily/mistermorph/internal/logutil"
+	"github.com/quailyquaily/mistermorph/internal/skillsutil"
 	"github.com/quailyquaily/mistermorph/internal/statepaths"
 	"github.com/quailyquaily/mistermorph/llm"
 	"github.com/quailyquaily/mistermorph/memory"
@@ -44,27 +48,27 @@ func newServeCmd() *cobra.Command {
 			maxQueue := configutil.FlagOrViperInt(cmd, "server-max-queue", "server.max_queue")
 			store := NewTaskStore(maxQueue)
 
-			logger, err := loggerFromViper()
+			logger, err := logutil.LoggerFromViper()
 			if err != nil {
 				return err
 			}
 			slog.SetDefault(logger)
 
 			requestTimeout := viper.GetDuration("llm.request_timeout")
-			client, err := llmClientFromConfig(llmconfig.ClientConfig{
-				Provider:       llmProviderFromViper(),
-				Endpoint:       llmEndpointFromViper(),
-				APIKey:         llmAPIKeyFromViper(),
-				Model:          llmModelFromViper(),
+			client, err := llmutil.ClientFromConfig(llmconfig.ClientConfig{
+				Provider:       llmutil.ProviderFromViper(),
+				Endpoint:       llmutil.EndpointFromViper(),
+				APIKey:         llmutil.APIKeyFromViper(),
+				Model:          llmutil.ModelFromViper(),
 				RequestTimeout: requestTimeout,
 			})
 			if err != nil {
 				return err
 			}
 			reg := registryFromViper()
-			registerPlanTool(reg, client, llmModelFromViper())
+			registerPlanTool(reg, client, llmutil.ModelFromViper())
 
-			logOpts := logOptionsFromViper()
+			logOpts := logutil.LogOptionsFromViper()
 
 			baseCfg := agent.Config{
 				MaxSteps:         viper.GetInt("max_steps"),
@@ -76,7 +80,7 @@ func newServeCmd() *cobra.Command {
 			}
 
 			sharedGuard := guardFromViper(logger)
-			hbState := &heartbeatState{}
+			hbState := &heartbeatutil.State{}
 
 			// Worker: process tasks sequentially.
 			go func() {
@@ -162,7 +166,7 @@ func newServeCmd() *cobra.Command {
 							}
 						} else {
 							qt.heartbeatState.EndSuccess(finished)
-							out := formatFinalOutput(final)
+							out := heartbeatutil.FormatFinalOutput(final)
 							if strings.TrimSpace(out) != "" {
 								logger.Info("heartbeat_summary", "message", out)
 							} else {
@@ -193,14 +197,14 @@ func newServeCmd() *cobra.Command {
 						}
 						hbSnapshot := ""
 						if hbMemMgr != nil {
-							snap, err := buildHeartbeatProgressSnapshot(hbMemMgr, hbMaxItems)
+							snap, err := heartbeatutil.BuildHeartbeatProgressSnapshot(hbMemMgr, hbMaxItems)
 							if err != nil {
 								logger.Warn("heartbeat_memory_error", "error", err.Error())
 							} else {
 								hbSnapshot = snap
 							}
 						}
-						task, checklistEmpty, err := buildHeartbeatTask(hbChecklist, hbSnapshot)
+						task, checklistEmpty, err := heartbeatutil.BuildHeartbeatTask(hbChecklist, hbSnapshot)
 						if err != nil {
 							alert, msg := hbState.EndFailure(err)
 							if alert {
@@ -210,11 +214,11 @@ func newServeCmd() *cobra.Command {
 							}
 							continue
 						}
-						meta := buildHeartbeatMeta("daemon", hbInterval, hbChecklist, checklistEmpty, hbState, map[string]any{
+						meta := heartbeatutil.BuildHeartbeatMeta("daemon", hbInterval, hbChecklist, checklistEmpty, hbState, map[string]any{
 							"queue_len": store.QueueLen(),
 						})
 						timeout := viper.GetDuration("timeout")
-						if _, err := store.EnqueueHeartbeat(context.Background(), task, llmModelFromViper(), timeout, meta, hbState); err != nil {
+						if _, err := store.EnqueueHeartbeat(context.Background(), task, llmutil.ModelFromViper(), timeout, meta, hbState); err != nil {
 							hbState.EndSkipped()
 							logger.Debug("heartbeat_skip", "reason", err.Error())
 						}
@@ -260,7 +264,7 @@ func newServeCmd() *cobra.Command {
 				}
 				model := strings.TrimSpace(req.Model)
 				if model == "" {
-					model = llmModelFromViper()
+					model = llmutil.ModelFromViper()
 				}
 
 				info, err := store.Enqueue(context.Background(), req.Task, model, timeout)
@@ -442,7 +446,7 @@ func errorsIsContextDeadline(ctx context.Context, err error) bool {
 }
 
 func runOneTask(ctx context.Context, logger *slog.Logger, logOpts agent.LogOptions, client llm.Client, registry *tools.Registry, baseCfg agent.Config, sharedGuard *guard.Guard, task string, model string, meta map[string]any) (*agent.Final, *agent.Context, error) {
-	promptSpec, _, skillAuthProfiles, err := promptSpecWithSkills(ctx, logger, logOpts, task, client, model, skillsConfigFromViper(model))
+	promptSpec, _, skillAuthProfiles, err := skillsutil.PromptSpecWithSkills(ctx, logger, logOpts, task, client, model, skillsutil.SkillsConfigFromViper(model))
 	if err != nil {
 		return nil, nil, err
 	}

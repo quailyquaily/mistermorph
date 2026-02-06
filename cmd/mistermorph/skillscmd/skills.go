@@ -1,4 +1,4 @@
-package main
+package skillscmd
 
 import (
 	"fmt"
@@ -10,7 +10,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newSkillsCmd() *cobra.Command {
+func New() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "skills",
 		Short: "Discover and inspect SKILL.md skills",
@@ -18,7 +18,7 @@ func newSkillsCmd() *cobra.Command {
 
 	cmd.AddCommand(newSkillsListCmd())
 	cmd.AddCommand(newSkillsShowCmd())
-	cmd.AddCommand(newSkillsInstallBuiltinCmd())
+	cmd.AddCommand(NewSkillsInstallBuiltinCmd())
 	return cmd
 }
 

@@ -1,4 +1,4 @@
-package main
+package builtin
 
 import (
 	"context"
@@ -9,8 +9,6 @@ import (
 	"github.com/quailyquaily/mistermorph/agent"
 	"github.com/quailyquaily/mistermorph/internal/jsonutil"
 	"github.com/quailyquaily/mistermorph/llm"
-	"github.com/quailyquaily/mistermorph/tools"
-	"github.com/spf13/viper"
 )
 
 type planCreateTool struct {
@@ -20,29 +18,7 @@ type planCreateTool struct {
 	toolNames       []string
 }
 
-func registerPlanTool(reg *tools.Registry, client llm.Client, defaultModel string) {
-	if reg == nil {
-		return
-	}
-	names := toolNames(reg)
-	names = append(names, "plan_create")
-	defaultMaxSteps := viper.GetInt("plan.max_steps")
-	if defaultMaxSteps <= 0 {
-		defaultMaxSteps = 6
-	}
-	reg.Register(newPlanCreateTool(client, defaultModel, names, defaultMaxSteps))
-}
-
-func toolNames(reg *tools.Registry) []string {
-	all := reg.All()
-	out := make([]string, 0, len(all))
-	for _, t := range all {
-		out = append(out, t.Name())
-	}
-	return out
-}
-
-func newPlanCreateTool(client llm.Client, defaultModel string, toolNames []string, defaultMaxSteps int) *planCreateTool {
+func NewPlanCreateTool(client llm.Client, defaultModel string, toolNames []string, defaultMaxSteps int) *planCreateTool {
 	return &planCreateTool{
 		client:          client,
 		defaultModel:    strings.TrimSpace(defaultModel),

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/quailyquaily/mistermorph/assets"
+	"github.com/quailyquaily/mistermorph/cmd/mistermorph/skillscmd"
 	"github.com/quailyquaily/mistermorph/internal/clifmt"
 	"github.com/quailyquaily/mistermorph/internal/pathutil"
 	"github.com/spf13/cobra"
@@ -78,7 +79,7 @@ func newInstallCmd() *cobra.Command {
 				if !plan.Write {
 					totalSkipped++
 					fmt.Printf("%s %s\n", clifmt.Success("done"), clifmt.Warn("(skipped)"))
-					printInstalledFileInfos([]installedFileInfo{{Path: plan.Path, Skipped: true}})
+					skillscmd.PrintInstalledFileInfos([]skillscmd.InstalledFileInfo{{Path: plan.Path, Skipped: true}})
 					continue
 				}
 				body, err := plan.Loader()
@@ -89,7 +90,7 @@ func newInstallCmd() *cobra.Command {
 					return err
 				}
 				fmt.Println(clifmt.Success("done"))
-				printInstalledFileInfos([]installedFileInfo{{Path: plan.Path}})
+				skillscmd.PrintInstalledFileInfos([]skillscmd.InstalledFileInfo{{Path: plan.Path}})
 			}
 			if totalSkipped > 0 {
 				fmt.Printf("%s: %d files %s\n", clifmt.Success("done"), len(filePlans), clifmt.Warn(fmt.Sprintf("(%d skipped)", totalSkipped)))
@@ -98,15 +99,15 @@ func newInstallCmd() *cobra.Command {
 			}
 
 			skillsDir := filepath.Join(dir, "skills")
-			skillDirs, err := discoverBuiltInSkills()
+			skillDirs, err := skillscmd.DiscoverBuiltInSkills()
 			if err != nil {
 				return err
 			}
-			selected, err := selectBuiltInSkills(skillDirs, false)
+			selected, err := skillscmd.SelectBuiltInSkills(skillDirs, false)
 			if err != nil {
 				return err
 			}
-			if err := installBuiltInSkills(skillsDir, false, false, false, selected); err != nil {
+			if err := skillscmd.InstallBuiltInSkills(skillsDir, false, false, false, selected); err != nil {
 				return err
 			}
 

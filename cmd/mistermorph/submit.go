@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/quailyquaily/mistermorph/internal/configutil"
+	"github.com/quailyquaily/mistermorph/internal/llmutil"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -51,7 +52,7 @@ func newSubmitCmd() *cobra.Command {
 			model, _ := cmd.Flags().GetString("model")
 			model = strings.TrimSpace(model)
 			if model == "" {
-				model = llmModelFromViper()
+				model = llmutil.ModelFromViper()
 			}
 			reqBody := SubmitTaskRequest{
 				Task:    task,

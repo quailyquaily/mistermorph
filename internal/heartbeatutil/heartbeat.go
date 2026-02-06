@@ -1,4 +1,4 @@
-package main
+package heartbeatutil
 
 import (
 	"encoding/json"
@@ -22,7 +22,7 @@ const (
 
 var heartbeatHTMLComment = regexp.MustCompile(`(?s)<!--.*?-->`)
 
-func formatFinalOutput(final *agent.Final) string {
+func FormatFinalOutput(final *agent.Final) string {
 	if final == nil {
 		return ""
 	}
@@ -35,42 +35,7 @@ func formatFinalOutput(final *agent.Final) string {
 	}
 }
 
-func readHeartbeatChecklist(path string) (string, bool, error) {
-	path = pathutil.ExpandHomePath(path)
-	if strings.TrimSpace(path) == "" {
-		return "", true, nil
-	}
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return "", true, nil
-		}
-		return "", true, err
-	}
-	content := string(raw)
-	if isChecklistEmptyContent(content) {
-		return "", true, nil
-	}
-	return strings.TrimSpace(content), false, nil
-}
-
-func isChecklistEmptyContent(content string) bool {
-	stripped := heartbeatHTMLComment.ReplaceAllString(content, "")
-	lines := strings.Split(stripped, "\n")
-	for _, line := range lines {
-		l := strings.TrimSpace(line)
-		if l == "" {
-			continue
-		}
-		if strings.HasPrefix(l, "#") {
-			continue
-		}
-		return false
-	}
-	return true
-}
-
-func buildHeartbeatTask(checklistPath string, memorySnapshot string) (string, bool, error) {
+func BuildHeartbeatTask(checklistPath string, memorySnapshot string) (string, bool, error) {
 	checklist, empty, err := readHeartbeatChecklist(checklistPath)
 	if err != nil {
 		return "", true, err
@@ -100,7 +65,7 @@ func buildHeartbeatTask(checklistPath string, memorySnapshot string) (string, bo
 	return b.String(), empty, nil
 }
 
-func buildHeartbeatMeta(source string, interval time.Duration, checklistPath string, checklistEmpty bool, state *heartbeatState, extra map[string]any) map[string]any {
+func BuildHeartbeatMeta(source string, interval time.Duration, checklistPath string, checklistEmpty bool, state *State, extra map[string]any) map[string]any {
 	hb := map[string]any{
 		"source":           source,
 		"scheduled_at_utc": time.Now().UTC().Format(time.RFC3339),
@@ -136,7 +101,7 @@ func buildHeartbeatMeta(source string, interval time.Duration, checklistPath str
 	}
 }
 
-func buildHeartbeatProgressSnapshot(mgr *memory.Manager, maxItems int) (string, error) {
+func BuildHeartbeatProgressSnapshot(mgr *memory.Manager, maxItems int) (string, error) {
 	if mgr == nil {
 		return "", nil
 	}
@@ -172,6 +137,99 @@ func buildHeartbeatProgressSnapshot(mgr *memory.Manager, maxItems int) (string, 
 		lines = append(lines, line)
 	}
 	return strings.TrimSpace(strings.Join(lines, "\n")), nil
+}
+
+type State struct {
+	mu          sync.Mutex
+	running     bool
+	failures    int
+	lastSuccess time.Time
+	lastError   string
+}
+
+func (s *State) Start() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.running {
+		return false
+	}
+	s.running = true
+	return true
+}
+
+func (s *State) EndSkipped() {
+	s.mu.Lock()
+	s.running = false
+	s.mu.Unlock()
+}
+
+func (s *State) EndSuccess(now time.Time) {
+	s.mu.Lock()
+	s.running = false
+	s.failures = 0
+	s.lastError = ""
+	s.lastSuccess = now
+	s.mu.Unlock()
+}
+
+func (s *State) EndFailure(err error) (bool, string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.running = false
+	s.failures++
+	if err != nil {
+		s.lastError = strings.TrimSpace(err.Error())
+	}
+	if s.failures >= heartbeatFailureThreshold {
+		msg := "heartbeat_failed"
+		if s.lastError != "" {
+			msg = fmt.Sprintf("heartbeat_failed (%s)", s.lastError)
+		}
+		s.failures = 0
+		return true, "ALERT: " + msg
+	}
+	return false, ""
+}
+
+func (s *State) Snapshot() (failures int, lastSuccess time.Time, lastError string, running bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.failures, s.lastSuccess, s.lastError, s.running
+}
+
+func readHeartbeatChecklist(path string) (string, bool, error) {
+	path = pathutil.ExpandHomePath(path)
+	if strings.TrimSpace(path) == "" {
+		return "", true, nil
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", true, nil
+		}
+		return "", true, err
+	}
+	content := string(raw)
+	if isChecklistEmptyContent(content) {
+		return "", true, nil
+	}
+	return strings.TrimSpace(content), false, nil
+}
+
+func isChecklistEmptyContent(content string) bool {
+	stripped := heartbeatHTMLComment.ReplaceAllString(content, "")
+	lines := strings.Split(stripped, "\n")
+	for _, line := range lines {
+		l := strings.TrimSpace(line)
+		if l == "" {
+			continue
+		}
+		if strings.HasPrefix(l, "#") {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func buildPendingDetails(mgr *memory.Manager, relPath string) string {
@@ -226,62 +284,4 @@ func pendingItems(items []memory.TaskItem, limit int) []string {
 		}
 	}
 	return out
-}
-
-type heartbeatState struct {
-	mu          sync.Mutex
-	running     bool
-	failures    int
-	lastSuccess time.Time
-	lastError   string
-}
-
-func (s *heartbeatState) Start() bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.running {
-		return false
-	}
-	s.running = true
-	return true
-}
-
-func (s *heartbeatState) EndSkipped() {
-	s.mu.Lock()
-	s.running = false
-	s.mu.Unlock()
-}
-
-func (s *heartbeatState) EndSuccess(now time.Time) {
-	s.mu.Lock()
-	s.running = false
-	s.failures = 0
-	s.lastError = ""
-	s.lastSuccess = now
-	s.mu.Unlock()
-}
-
-func (s *heartbeatState) EndFailure(err error) (bool, string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.running = false
-	s.failures++
-	if err != nil {
-		s.lastError = strings.TrimSpace(err.Error())
-	}
-	if s.failures >= heartbeatFailureThreshold {
-		msg := "heartbeat_failed"
-		if s.lastError != "" {
-			msg = fmt.Sprintf("heartbeat_failed (%s)", s.lastError)
-		}
-		s.failures = 0
-		return true, "ALERT: " + msg
-	}
-	return false, ""
-}
-
-func (s *heartbeatState) Snapshot() (failures int, lastSuccess time.Time, lastError string, running bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.failures, s.lastSuccess, s.lastError, s.running
 }
