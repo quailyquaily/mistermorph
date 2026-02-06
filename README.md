@@ -120,7 +120,7 @@ Core tools available to the agent:
 
 - `echo`: echo a value (debugging/formatting).
 - `read_file`: read local text files.
-- `write_file`: write local text files under `file_cache_dir`.
+- `write_file`: write local text files under `file_cache_dir` or `file_state_dir`.
 - `bash`: run a shell command (disabled by default).
 - `url_fetch`: HTTP fetch with optional auth profiles.
 - `web_search`: web search (DuckDuckGo HTML).

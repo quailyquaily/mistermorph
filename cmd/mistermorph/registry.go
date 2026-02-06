@@ -94,6 +94,7 @@ func registryFromViper() *tools.Registry {
 		viper.GetBool("tools.write_file.enabled"),
 		viper.GetInt("tools.write_file.max_bytes"),
 		strings.TrimSpace(viper.GetString("file_cache_dir")),
+		strings.TrimSpace(viper.GetString("file_state_dir")),
 	))
 
 	if viper.GetBool("tools.bash.enabled") {

@@ -127,7 +127,8 @@ The recommended unit assumes:
 - Config: `/opt/morph/config.yaml`
 - Skills: `/opt/morph/skills` (set `file_state_dir: /opt/morph` and `skills.dir_name: skills`)
 - Persistent state (sqlite DB): `/var/lib/morph/`
-- Ephemeral cache (file_cache_dir, Telegram downloads, write_file tool output): `/var/cache/morph/`
+- Ephemeral cache (file_cache_dir, Telegram downloads): `/var/cache/morph/`
+- write_file tool output: `/var/cache/morph/` or `/var/lib/morph/` (file_cache_dir or file_state_dir)
 - Non-secret env/config: `/opt/morph/morph.env` (mode `0640`, owned by root or `morph`)
 - Secrets env: `/opt/morph/morph.secrets.env` (mode `0600`, owned by root or `morph`)
 
