@@ -108,9 +108,11 @@ auth_profiles:
 # Guard is a lightweight, content/workflow safety layer:
 # - outbound destination allowlists (primarily url_fetch)
 # - redaction for tool outputs + final outputs
-# - async approvals + audit trail (JSONL), with approvals state in SQLite
+# - async approvals + audit trail (JSONL), with approvals state in file storage
 guard:
   enabled: true
+  # Directory name under file_state_dir for guard state.
+  dir_name: "guard"
   network:
     url_fetch:
       # Allow outbound HTTP only to these URL prefixes (fail-closed when empty).
@@ -129,14 +131,11 @@ guard:
     # bash can bypass url_fetch policies; require approval by default when guard is enabled.
     require_approval: true
   audit:
-    # JSONL audit log path (append-only). When empty, defaults to $HOME/.morph/guard_audit.jsonl.
+    # JSONL audit log path (append-only). When empty, defaults to <file_state_dir>/<guard.dir_name>/audit/guard_audit.jsonl.
     jsonl_path: ""
     rotate_max_bytes: 104857600
   approvals:
     enabled: true
-    # SQLite DSN or file path for approvals state.
-    # Default: $HOME/.morph/guard_approvals.sqlite
-    sqlite_dsn: ""
 
 tools:
   read_file:

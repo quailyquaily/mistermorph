@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -48,19 +49,27 @@ func guardFromViper(log *slog.Logger) *guard.Guard {
 		},
 	}
 
+	guardDir, err := resolveGuardDir()
+	if err != nil {
+		log.Warn("guard_dir_resolve_error", "error", err.Error())
+		return nil
+	}
+	if err := os.MkdirAll(guardDir, 0o700); err != nil {
+		log.Warn("guard_dir_create_error", "error", err.Error(), "guard_dir", guardDir)
+		return nil
+	}
+	lockRoot := filepath.Join(guardDir, ".fslocks")
+
 	jsonlPath := strings.TrimSpace(cfg.Audit.JSONLPath)
 	if jsonlPath == "" {
-		home, err := os.UserHomeDir()
-		if err == nil && strings.TrimSpace(home) != "" {
-			jsonlPath = filepath.Join(home, ".morph", "guard_audit.jsonl")
-		}
+		jsonlPath = filepath.Join(guardDir, "audit", "guard_audit.jsonl")
 	}
 	jsonlPath = pathutil.ExpandHomePath(jsonlPath)
 
 	var sink guard.AuditSink
 	var warnings []string
 	if strings.TrimSpace(jsonlPath) != "" {
-		s, err := guard.NewJSONLAuditSink(jsonlPath, cfg.Audit.RotateMaxBytes)
+		s, err := guard.NewJSONLAuditSink(jsonlPath, cfg.Audit.RotateMaxBytes, lockRoot)
 		if err != nil {
 			log.Warn("guard_audit_sink_error", "error", err.Error())
 			warnings = append(warnings, "guard_audit_sink_error: "+err.Error())
@@ -71,23 +80,18 @@ func guardFromViper(log *slog.Logger) *guard.Guard {
 
 	var approvals guard.ApprovalStore
 	if cfg.Approvals.Enabled {
-		dsn, err := resolveGuardApprovalsDSN()
+		approvalsPath := filepath.Join(guardDir, "approvals", "guard_approvals.json")
+		st, err := guard.NewFileApprovalStore(approvalsPath, lockRoot)
 		if err != nil {
-			log.Warn("guard_approvals_dsn_error", "error", err.Error())
-			warnings = append(warnings, "guard_approvals_dsn_error: "+err.Error())
-		}
-		if strings.TrimSpace(dsn) != "" && err == nil {
-			st, err := guard.NewSQLiteApprovalStore(dsn)
-			if err != nil {
-				log.Warn("guard_approvals_store_error", "error", err.Error())
-				warnings = append(warnings, "guard_approvals_store_error: "+err.Error())
-			} else {
-				approvals = st
-			}
+			log.Warn("guard_approvals_store_error", "error", err.Error())
+			warnings = append(warnings, "guard_approvals_store_error: "+err.Error())
+		} else {
+			approvals = st
 		}
 	}
 
 	log.Info("guard_enabled",
+		"guard_dir", guardDir,
 		"url_fetch_prefixes", len(cfg.Network.URLFetch.AllowedURLPrefixes),
 		"bash_require_approval", cfg.Bash.RequireApproval,
 		"audit_jsonl", jsonlPath,
@@ -100,18 +104,18 @@ func guardFromViper(log *slog.Logger) *guard.Guard {
 	return guard.New(cfg, sink, approvals)
 }
 
-func resolveGuardApprovalsDSN() (string, error) {
-	dsn := strings.TrimSpace(viper.GetString("guard.approvals.sqlite_dsn"))
-	if dsn != "" {
-		return pathutil.ExpandHomePath(dsn), nil
-	}
+func resolveGuardDir() (string, error) {
+	base := pathutil.ResolveStateDir(viper.GetString("file_state_dir"))
 	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
+	if strings.TrimSpace(base) == "" && err == nil && strings.TrimSpace(home) != "" {
+		base = filepath.Join(home, ".morph")
 	}
-	baseDir := filepath.Join(home, ".morph")
-	if err := os.MkdirAll(baseDir, 0o755); err != nil {
-		return "", err
+	if strings.TrimSpace(base) == "" {
+		return "", fmt.Errorf("unable to resolve file_state_dir")
 	}
-	return filepath.Join(baseDir, "guard_approvals.sqlite"), nil
+	name := strings.TrimSpace(viper.GetString("guard.dir_name"))
+	if name == "" {
+		name = "guard"
+	}
+	return filepath.Join(base, name), nil
 }

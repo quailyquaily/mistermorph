@@ -93,7 +93,7 @@ Guard approvals are asynchronous by design:
 
 - When an action requires approval (M1 default: `bash` tool when enabled), the run pauses and returns a `final.output` object like:
   - `{ "status": "pending", "approval_request_id": "apr_...", "message": "..." }`
-- Approval state is stored in SQLite (configure via `guard.approvals.sqlite_dsn`, default: `$HOME/.morph/guard_approvals.sqlite`).
+- Approval state is stored in file state (`<file_state_dir>/<guard.dir_name>/approvals/guard_approvals.json` by default).
 - Approval expiry is **hard-coded to 5 minutes** in M1.
 
 Daemon (`mistermorph serve`) exposes minimal admin endpoints (authenticated with `server.auth_token`):
@@ -106,7 +106,7 @@ Daemon (`mistermorph serve`) exposes minimal admin endpoints (authenticated with
 Audit:
 
 - Guard emits structured audit events to an append-only JSONL log.
-- Configure via `guard.audit.jsonl_path` (default: `$HOME/.morph/guard_audit.jsonl`) and `guard.audit.rotate_max_bytes`.
+- Configure via `guard.audit.jsonl_path` (default: `<file_state_dir>/<guard.dir_name>/audit/guard_audit.jsonl`) and `guard.audit.rotate_max_bytes`.
 
 ## Systemd sandbox
 
