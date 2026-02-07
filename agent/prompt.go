@@ -39,6 +39,7 @@ func DefaultPromptSpec() PromptSpec {
 			"If a skill requires an auth_profile, assume credentials are already configured and proceed without asking the user to confirm API keys. Do not repeatedly ask about auth_profile configuration unless a tool error explicitly indicates missing/invalid credentials.",
 			"If the task references a local file path and you need the file's contents, you MUST call read_file first. Do NOT send local file paths as payloads to external HTTP APIs.",
 			"`file_cache_dir` and `file_state_dir` are path aliases, not literal filenames. Always use them with a relative suffix such as `file_state_dir/notes/todo.md`.",
+			"If the user asks to update your long-term persona/tone, update workspace-root IDENTITY.md and/or SOUL.md using write_file.",
 			"For binary files (e.g. PDFs), prefer url_fetch.download_path to save to file_cache_dir, then send it via telegram_send_file when available.",
 			"If a tool returns an error, you may try a different tool or different params.",
 			"Do NOT repeatedly call the same tool with identical parameters unless the observation meaningfully changes or the previous call failed.",

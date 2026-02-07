@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/spf13/viper"
@@ -73,5 +74,31 @@ func TestEnsureInstallMAEPIdentity_RespectsMaepDirName(t *testing.T) {
 	identityPath := filepath.Join(root, "custom-maep", "identity.json")
 	if _, err := os.Stat(identityPath); err != nil {
 		t.Fatalf("identity file missing at %s: %v", identityPath, err)
+	}
+}
+
+func TestLoadIdentityTemplate(t *testing.T) {
+	body, err := loadIdentityTemplate()
+	if err != nil {
+		t.Fatalf("loadIdentityTemplate() error = %v", err)
+	}
+	if body == "" {
+		t.Fatalf("expected non-empty IDENTITY template")
+	}
+	if !strings.Contains(body, "# IDENTITY.md - Who Am I?") {
+		t.Fatalf("IDENTITY template seems invalid")
+	}
+}
+
+func TestLoadSoulTemplate(t *testing.T) {
+	body, err := loadSoulTemplate()
+	if err != nil {
+		t.Fatalf("loadSoulTemplate() error = %v", err)
+	}
+	if body == "" {
+		t.Fatalf("expected non-empty SOUL template")
+	}
+	if !strings.Contains(body, "# SOUL.md - Who You Are") {
+		t.Fatalf("SOUL template seems invalid")
 	}
 }

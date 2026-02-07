@@ -20,7 +20,7 @@ import (
 func newInstallCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "install [dir]",
-		Short: "Install config.yaml, HEARTBEAT.md, and built-in skills",
+		Short: "Install config.yaml, HEARTBEAT.md, IDENTITY.md, SOUL.md, and built-in skills",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dir := "~/.morph/"
@@ -36,6 +36,11 @@ func newInstallCmd() *cobra.Command {
 			if err := os.MkdirAll(dir, 0o755); err != nil {
 				return err
 			}
+			workspaceRoot, err := os.Getwd()
+			if err != nil {
+				return err
+			}
+			workspaceRoot = filepath.Clean(workspaceRoot)
 
 			cfgPath := filepath.Join(dir, "config.yaml")
 			writeConfig := true
@@ -48,6 +53,17 @@ func newInstallCmd() *cobra.Command {
 			writeHeartbeat := true
 			if _, err := os.Stat(hbPath); err == nil {
 				writeHeartbeat = false
+			}
+
+			identityPath := filepath.Join(workspaceRoot, "IDENTITY.md")
+			writeIdentity := true
+			if _, err := os.Stat(identityPath); err == nil {
+				writeIdentity = false
+			}
+			soulPath := filepath.Join(workspaceRoot, "SOUL.md")
+			writeSoul := true
+			if _, err := os.Stat(soulPath); err == nil {
+				writeSoul = false
 			}
 
 			type initFilePlan struct {
@@ -74,6 +90,18 @@ func newInstallCmd() *cobra.Command {
 					Path:   hbPath,
 					Write:  writeHeartbeat,
 					Loader: loadHeartbeatTemplate,
+				},
+				{
+					Name:   "IDENTITY.md",
+					Path:   identityPath,
+					Write:  writeIdentity,
+					Loader: loadIdentityTemplate,
+				},
+				{
+					Name:   "SOUL.md",
+					Path:   soulPath,
+					Write:  writeSoul,
+					Loader: loadSoulTemplate,
 				},
 			}
 			totalSkipped := 0
@@ -145,6 +173,22 @@ func loadHeartbeatTemplate() (string, error) {
 	data, err := assets.ConfigFS.ReadFile("config/HEARTBEAT.md")
 	if err != nil {
 		return "", fmt.Errorf("read embedded HEARTBEAT.md: %w", err)
+	}
+	return string(data), nil
+}
+
+func loadIdentityTemplate() (string, error) {
+	data, err := assets.ConfigFS.ReadFile("config/IDENTITY.md")
+	if err != nil {
+		return "", fmt.Errorf("read embedded IDENTITY.md: %w", err)
+	}
+	return string(data), nil
+}
+
+func loadSoulTemplate() (string, error) {
+	data, err := assets.ConfigFS.ReadFile("config/SOUL.md")
+	if err != nil {
+		return "", fmt.Errorf("read embedded SOUL.md: %w", err)
 	}
 	return string(data), nil
 }

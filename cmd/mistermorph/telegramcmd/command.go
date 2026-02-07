@@ -34,6 +34,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/llmconfig"
 	"github.com/quailyquaily/mistermorph/internal/maepruntime"
 	"github.com/quailyquaily/mistermorph/internal/pathutil"
+	"github.com/quailyquaily/mistermorph/internal/promptprofile"
 	"github.com/quailyquaily/mistermorph/internal/retryutil"
 	"github.com/quailyquaily/mistermorph/internal/statepaths"
 	"github.com/quailyquaily/mistermorph/internal/telegramutil"
@@ -1173,6 +1174,8 @@ func runTelegramTask(ctx context.Context, logger *slog.Logger, logOpts agent.Log
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
+	promptprofile.AppendIdentityPromptBlock(&promptSpec, logger)
+	promptprofile.AppendSoulPromptBlock(&promptSpec, logger)
 
 	// Telegram replies are rendered using Telegram Markdown (MarkdownV2 first; fallback to Markdown/plain).
 	// Underscores in identifiers like "new_york" will render as italics unless the model wraps them in
@@ -1333,6 +1336,8 @@ func runMAEPTask(ctx context.Context, logger *slog.Logger, logOpts agent.LogOpti
 	if err != nil {
 		return nil, nil, nil, err
 	}
+	promptprofile.AppendIdentityPromptBlock(&promptSpec, logger)
+	promptprofile.AppendSoulPromptBlock(&promptSpec, logger)
 
 	engine := agent.New(
 		client,

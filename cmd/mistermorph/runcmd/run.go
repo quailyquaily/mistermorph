@@ -20,6 +20,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/llmconfig"
 	"github.com/quailyquaily/mistermorph/internal/llmutil"
 	"github.com/quailyquaily/mistermorph/internal/logutil"
+	"github.com/quailyquaily/mistermorph/internal/promptprofile"
 	"github.com/quailyquaily/mistermorph/internal/retryutil"
 	"github.com/quailyquaily/mistermorph/internal/skillsutil"
 	"github.com/quailyquaily/mistermorph/internal/statepaths"
@@ -153,6 +154,8 @@ func New(deps Dependencies) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			promptprofile.AppendIdentityPromptBlock(&promptSpec, logger)
+			promptprofile.AppendSoulPromptBlock(&promptSpec, logger)
 
 			var memManager *memory.Manager
 			var memIdentity memory.Identity

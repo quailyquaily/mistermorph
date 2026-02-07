@@ -7,7 +7,9 @@ import (
 	"github.com/spf13/viper"
 )
 
-const HeartbeatChecklistFilename = "HEARTBEAT.md"
+const (
+	HeartbeatChecklistFilename = "HEARTBEAT.md"
+)
 
 func FileStateDir() string {
 	return pathutil.ResolveStateDir(viper.GetString("file_state_dir"))
