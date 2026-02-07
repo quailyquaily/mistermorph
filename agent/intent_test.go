@@ -33,3 +33,12 @@ func TestIntentBlockContainsInternalOnlyNotice(t *testing.T) {
 		t.Fatalf("missing internal-only notice in content: %q", blk.Content)
 	}
 }
+
+func TestIntentEmptyWithQuestionOrRequest(t *testing.T) {
+	if (Intent{Question: true}).Empty() {
+		t.Fatalf("question=true should make intent non-empty")
+	}
+	if (Intent{Request: true}).Empty() {
+		t.Fatalf("request=true should make intent non-empty")
+	}
+}

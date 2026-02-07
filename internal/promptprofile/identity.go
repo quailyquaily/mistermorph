@@ -18,12 +18,20 @@ func ApplyPersonaIdentity(spec *agent.PromptSpec, log *slog.Logger) {
 		log = slog.Default()
 	}
 
-	identityDoc := loadPersonaDoc(identityPath(), "identity", log)
-	soulDoc := loadPersonaDoc(soulPath(), "soul", log)
+	identityDoc, identityStatus := loadPersonaDoc(identityPath(), "identity", log)
+	soulDoc, soulStatus := loadPersonaDoc(soulPath(), "soul", log)
 	if identityDoc == "" && soulDoc == "" {
+		log.Debug("persona_identity_skipped", "identity_status", identityStatus, "soul_status", soulStatus)
 		return
 	}
 	spec.Identity = buildPersonaIdentity(identityDoc, soulDoc)
+	log.Info(
+		"persona_identity_applied",
+		"identity_loaded", identityDoc != "",
+		"soul_loaded", soulDoc != "",
+		"identity_status", identityStatus,
+		"soul_status", soulStatus,
+	)
 }
 
 // Backward-compatible wrappers for existing call sites.
@@ -44,22 +52,25 @@ func soulPath() string {
 	return filepath.Join(statepaths.FileStateDir(), "SOUL.md")
 }
 
-func loadPersonaDoc(path string, kind string, log *slog.Logger) string {
+func loadPersonaDoc(path string, kind string, log *slog.Logger) (string, string) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		if !os.IsNotExist(err) {
 			log.Warn("persona_load_failed", "kind", kind, "path", path, "error", err.Error())
 		}
-		return ""
+		if os.IsNotExist(err) {
+			return "", "missing"
+		}
+		return "", "error"
 	}
 	content := strings.TrimSpace(string(raw))
 	if content == "" {
-		return ""
+		return "", "empty"
 	}
 	if strings.EqualFold(strings.TrimSpace(frontMatterStatus(raw)), "draft") {
-		return ""
+		return "", "draft"
 	}
-	return content
+	return content, "loaded"
 }
 
 func buildPersonaIdentity(identityDoc string, soulDoc string) string {

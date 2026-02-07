@@ -15,6 +15,8 @@ type Intent struct {
 	Deliverable string   `json:"deliverable"`
 	Constraints []string `json:"constraints"`
 	Ambiguities []string `json:"ambiguities"`
+	Question    bool     `json:"question"`
+	Request     bool     `json:"request"`
 	Ask         bool     `json:"ask"`
 }
 
@@ -23,6 +25,8 @@ func (i Intent) Empty() bool {
 		strings.TrimSpace(i.Deliverable) == "" &&
 		len(i.Constraints) == 0 &&
 		len(i.Ambiguities) == 0 &&
+		!i.Question &&
+		!i.Request &&
 		!i.Ask
 }
 
@@ -44,6 +48,9 @@ func InferIntent(ctx context.Context, client llm.Client, model string, task stri
 			"deliverable: the minimum acceptable output form (e.g., list of concrete items, decision, plan, code diff).",
 			"constraints: explicit constraints like time range, quantity, sources, format, language.",
 			"ambiguities: only material uncertainties that block a good answer.",
+			"question: true if the user message asks a question (explicit or implicit).",
+			"request: true if the user message asks the assistant to perform an action or produce an output.",
+			"question and request are independent; both may be true.",
 			"ask: default false; set true only if you cannot proceed safely or would risk irreversible harm without clarification.",
 			"Prefer proceeding with stated assumptions over asking questions.",
 			"Do not invent constraints or facts.",
@@ -53,7 +60,7 @@ func InferIntent(ctx context.Context, client llm.Client, model string, task stri
 	}
 	b, _ := json.Marshal(payload)
 	sys := "You infer user intent. Return ONLY JSON with keys: " +
-		"goal (string), deliverable (string), constraints (array of strings), ambiguities (array of strings), ask (boolean)."
+		"goal (string), deliverable (string), constraints (array of strings), ambiguities (array of strings), question (boolean), request (boolean), ask (boolean)."
 
 	res, err := client.Chat(ctx, llm.Request{
 		Model:     model,

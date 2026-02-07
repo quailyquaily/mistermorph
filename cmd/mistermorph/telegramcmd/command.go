@@ -772,7 +772,7 @@ func newTelegramCmd() *cobra.Command {
 
 							logger.Info("telegram_maep_task_enqueued", "from_peer_id", peerID, "topic", event.Topic, "task_len", len(task))
 							runCtx, cancel := context.WithTimeout(context.Background(), taskTimeout)
-							final, _, loadedSkills, runErr := runMAEPTask(runCtx, logger, logOpts, client, reg, sharedGuard, cfg, model, h, sticky, task)
+							final, _, loadedSkills, runErr := runMAEPTask(runCtx, logger, logOpts, client, reg, sharedGuard, cfg, model, peerID, maepMemMgr, h, sticky, task)
 							cancel()
 							if runErr != nil {
 								logger.Warn("telegram_maep_task_error", "from_peer_id", peerID, "topic", event.Topic, "error", runErr.Error())
@@ -1325,11 +1325,19 @@ func runTelegramTask(ctx context.Context, logger *slog.Logger, logOpts agent.Log
 							"emoji", emoji,
 							"source", reaction.Source,
 							"reason", decision.Reason,
+							"category", decision.Category,
 						)
 					}
 					return nil, nil, nil, reaction, nil
 				} else if logger != nil {
-					logger.Warn("telegram_reaction_error", "error", err.Error())
+					logger.Warn("telegram_reaction_error",
+						"chat_id", job.ChatID,
+						"message_id", job.MessageID,
+						"emoji", emoji,
+						"category", decision.Category,
+						"decision_reason", decision.Reason,
+						"error", err.Error(),
+					)
 				}
 			}
 		}
@@ -1418,8 +1426,17 @@ func runTelegramTask(ctx context.Context, logger *slog.Logger, logOpts agent.Log
 						Title:   "Memory Summaries",
 						Content: snap,
 					})
+					if logger != nil {
+						logger.Info("memory_injection_applied", "source", "telegram", "subject_id", id.SubjectID, "chat_id", job.ChatID, "snapshot_len", len(snap))
+					}
+				} else if logger != nil {
+					logger.Debug("memory_injection_skipped", "source", "telegram", "reason", "empty_snapshot", "subject_id", id.SubjectID, "chat_id", job.ChatID)
 				}
+			} else if logger != nil {
+				logger.Debug("memory_injection_skipped", "source", "telegram", "reason", "disabled")
 			}
+		} else if logger != nil {
+			logger.Debug("memory_identity_unavailable", "source", "telegram", "enabled", id.Enabled, "subject_id", strings.TrimSpace(id.SubjectID))
 		}
 	}
 
@@ -1500,7 +1517,7 @@ func runTelegramTask(ctx context.Context, logger *slog.Logger, logOpts agent.Log
 	return final, agentCtx, loadedSkills, reaction, nil
 }
 
-func runMAEPTask(ctx context.Context, logger *slog.Logger, logOpts agent.LogOptions, client llm.Client, baseReg *tools.Registry, sharedGuard *guard.Guard, cfg agent.Config, model string, history []llm.Message, stickySkills []string, task string) (*agent.Final, *agent.Context, []string, error) {
+func runMAEPTask(ctx context.Context, logger *slog.Logger, logOpts agent.LogOptions, client llm.Client, baseReg *tools.Registry, sharedGuard *guard.Guard, cfg agent.Config, model string, peerID string, memManager *memory.Manager, history []llm.Message, stickySkills []string, task string) (*agent.Final, *agent.Context, []string, error) {
 	if strings.TrimSpace(task) == "" {
 		return nil, nil, nil, fmt.Errorf("empty maep task")
 	}
@@ -1517,6 +1534,32 @@ func runMAEPTask(ctx context.Context, logger *slog.Logger, logOpts agent.LogOpti
 	promptprofile.ApplyPersonaIdentity(&promptSpec, logger)
 	applyChatPersonaRules(&promptSpec)
 	// applyMAEPReplyPromptRules(&promptSpec)
+	if memManager != nil && viper.GetBool("memory.injection.enabled") {
+		peerID = strings.TrimSpace(peerID)
+		if peerID != "" {
+			subjectID := "ext:maep:" + peerID
+			maxItems := viper.GetInt("memory.injection.max_items")
+			snap, err := memManager.BuildInjection(subjectID, memory.ContextPrivate, maxItems)
+			if err != nil {
+				return nil, nil, nil, fmt.Errorf("memory injection: %w", err)
+			}
+			if strings.TrimSpace(snap) != "" {
+				promptSpec.Blocks = append(promptSpec.Blocks, agent.PromptBlock{
+					Title:   "Memory Summaries",
+					Content: snap,
+				})
+				if logger != nil {
+					logger.Info("memory_injection_applied", "source", "maep", "subject_id", subjectID, "peer_id", peerID, "snapshot_len", len(snap))
+				}
+			} else if logger != nil {
+				logger.Debug("memory_injection_skipped", "source", "maep", "reason", "empty_snapshot", "subject_id", subjectID, "peer_id", peerID)
+			}
+		} else if logger != nil {
+			logger.Debug("memory_injection_skipped", "source", "maep", "reason", "empty_peer_id")
+		}
+	} else if logger != nil {
+		logger.Debug("memory_injection_skipped", "source", "maep", "reason", "disabled_or_no_manager")
+	}
 
 	engine := agent.New(
 		client,
