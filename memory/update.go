@@ -17,11 +17,17 @@ const (
 )
 
 type WriteMeta struct {
-	SessionID string
-	Source    string
-	Channel   string
-	Usernames []string
-	SubjectID string
+	SessionID        string
+	Source           string
+	Channel          string
+	Usernames        []string
+	SubjectID        string
+	ContactIDs       []string
+	ContactNicknames []string
+	// Deprecated: use ContactIDs.
+	ContactID string
+	// Deprecated: use ContactNicknames.
+	ContactNickname string
 }
 
 func (m *Manager) UpdateShortTerm(date time.Time, draft SessionDraft, meta WriteMeta) (string, error) {
@@ -280,7 +286,51 @@ func applyShortTermFrontmatter(existing Frontmatter, summary string, meta WriteM
 	if len(meta.Usernames) > 0 {
 		existing.Usernames = mergeUsernames(existing.Usernames, meta.Usernames)
 	}
+	if strings.TrimSpace(meta.SubjectID) != "" {
+		existing.SubjectID = strings.TrimSpace(meta.SubjectID)
+	}
+	contactIDs := append([]string{}, meta.ContactIDs...)
+	if strings.TrimSpace(meta.ContactID) != "" {
+		contactIDs = append(contactIDs, strings.TrimSpace(meta.ContactID))
+	}
+	if len(contactIDs) > 0 {
+		existing.ContactIDs = StringList(mergePlainStrings([]string(existing.ContactIDs), contactIDs))
+	}
+	contactNicknames := append([]string{}, meta.ContactNicknames...)
+	if strings.TrimSpace(meta.ContactNickname) != "" {
+		contactNicknames = append(contactNicknames, strings.TrimSpace(meta.ContactNickname))
+	}
+	if len(contactNicknames) > 0 {
+		existing.ContactNicknames = StringList(mergePlainStrings([]string(existing.ContactNicknames), contactNicknames))
+	}
 	return existing
+}
+
+func mergePlainStrings(existing []string, incoming []string) []string {
+	if len(incoming) == 0 {
+		return existing
+	}
+	seen := make(map[string]bool, len(existing)+len(incoming))
+	out := make([]string, 0, len(existing)+len(incoming))
+	add := func(raw string) {
+		value := strings.TrimSpace(raw)
+		if value == "" {
+			return
+		}
+		key := strings.ToLower(value)
+		if seen[key] {
+			return
+		}
+		seen[key] = true
+		out = append(out, value)
+	}
+	for _, value := range existing {
+		add(value)
+	}
+	for _, value := range incoming {
+		add(value)
+	}
+	return out
 }
 
 func mergeUsernames(existing []string, incoming []string) []string {

@@ -37,11 +37,23 @@ func initViperDefaults() {
 	viper.SetDefault("skills.select_timeout", 10*time.Second)
 	viper.SetDefault("skills.dir_name", "skills")
 
+	// MAEP
+	viper.SetDefault("maep.dir_name", "maep")
+	viper.SetDefault("maep.listen_addrs", []string{})
+	viper.SetDefault("contacts.dir_name", "contacts")
+	viper.SetDefault("contacts.human.enabled", true)
+	viper.SetDefault("contacts.human.send.enabled", true)
+	viper.SetDefault("contacts.human.send.public_enabled", false)
+	viper.SetDefault("contacts.proactive.max_turns_per_session", 6)
+	viper.SetDefault("contacts.proactive.session_cooldown", 72*time.Hour)
+	viper.SetDefault("contacts.proactive.failure_cooldown", 72*time.Hour)
+
 	// Daemon server
 	viper.SetDefault("server.bind", "127.0.0.1")
 	viper.SetDefault("server.port", 8787)
 	viper.SetDefault("server.max_queue", 100)
 	viper.SetDefault("server.url", "http://127.0.0.1:8787")
+	viper.SetDefault("server.with_maep", false)
 
 	// Submit client
 	viper.SetDefault("submit.wait", false)
@@ -56,6 +68,7 @@ func initViperDefaults() {
 	viper.SetDefault("telegram.smart_addressing_confidence", 0.55)
 	viper.SetDefault("telegram.max_concurrency", 3)
 	viper.SetDefault("telegram.reactions.enabled", true)
+	viper.SetDefault("telegram.with_maep", false)
 
 	// Heartbeat
 	viper.SetDefault("heartbeat.enabled", true)
@@ -89,8 +102,8 @@ func initViperDefaults() {
 	viper.SetDefault("guard.redaction.enabled", true)
 	viper.SetDefault("guard.redaction.patterns", []map[string]any{})
 	viper.SetDefault("guard.bash.require_approval", true)
+	viper.SetDefault("guard.dir_name", "guard")
 	viper.SetDefault("guard.audit.jsonl_path", "")
 	viper.SetDefault("guard.audit.rotate_max_bytes", int64(100*1024*1024))
 	viper.SetDefault("guard.approvals.enabled", true)
-	viper.SetDefault("guard.approvals.sqlite_dsn", "")
 }

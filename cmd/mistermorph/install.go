@@ -1,22 +1,26 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/quailyquaily/mistermorph/assets"
 	"github.com/quailyquaily/mistermorph/cmd/mistermorph/skillscmd"
 	"github.com/quailyquaily/mistermorph/internal/clifmt"
 	"github.com/quailyquaily/mistermorph/internal/pathutil"
+	"github.com/quailyquaily/mistermorph/maep"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 func newInstallCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "install [dir]",
-		Short: "Install config.yaml, HEARTBEAT.md, and built-in skills",
+		Short: "Install config.yaml, HEARTBEAT.md, IDENTITY.md, SOUL.md, and built-in skills",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dir := "~/.morph/"
@@ -32,6 +36,11 @@ func newInstallCmd() *cobra.Command {
 			if err := os.MkdirAll(dir, 0o755); err != nil {
 				return err
 			}
+			workspaceRoot, err := os.Getwd()
+			if err != nil {
+				return err
+			}
+			workspaceRoot = filepath.Clean(workspaceRoot)
 
 			cfgPath := filepath.Join(dir, "config.yaml")
 			writeConfig := true
@@ -44,6 +53,17 @@ func newInstallCmd() *cobra.Command {
 			writeHeartbeat := true
 			if _, err := os.Stat(hbPath); err == nil {
 				writeHeartbeat = false
+			}
+
+			identityPath := filepath.Join(workspaceRoot, "IDENTITY.md")
+			writeIdentity := true
+			if _, err := os.Stat(identityPath); err == nil {
+				writeIdentity = false
+			}
+			soulPath := filepath.Join(workspaceRoot, "SOUL.md")
+			writeSoul := true
+			if _, err := os.Stat(soulPath); err == nil {
+				writeSoul = false
 			}
 
 			type initFilePlan struct {
@@ -71,6 +91,18 @@ func newInstallCmd() *cobra.Command {
 					Write:  writeHeartbeat,
 					Loader: loadHeartbeatTemplate,
 				},
+				{
+					Name:   "IDENTITY.md",
+					Path:   identityPath,
+					Write:  writeIdentity,
+					Loader: loadIdentityTemplate,
+				},
+				{
+					Name:   "SOUL.md",
+					Path:   soulPath,
+					Write:  writeSoul,
+					Loader: loadSoulTemplate,
+				},
 			}
 			totalSkipped := 0
 			fmt.Println(clifmt.Headerf("==> Installing required files (%d)", len(filePlans)))
@@ -96,6 +128,16 @@ func newInstallCmd() *cobra.Command {
 				fmt.Printf("%s: %d files %s\n", clifmt.Success("done"), len(filePlans), clifmt.Warn(fmt.Sprintf("(%d skipped)", totalSkipped)))
 			} else {
 				fmt.Printf("%s: %d files\n", clifmt.Success("done"), len(filePlans))
+			}
+
+			identity, created, err := ensureInstallMAEPIdentity(dir)
+			if err != nil {
+				return fmt.Errorf("initialize maep identity: %w", err)
+			}
+			if created {
+				fmt.Printf("[i] maep identity created: %s\n", identity.PeerID)
+			} else {
+				fmt.Printf("[i] maep identity exists: %s\n", identity.PeerID)
 			}
 
 			skillsDir := filepath.Join(dir, "skills")
@@ -135,6 +177,22 @@ func loadHeartbeatTemplate() (string, error) {
 	return string(data), nil
 }
 
+func loadIdentityTemplate() (string, error) {
+	data, err := assets.ConfigFS.ReadFile("config/IDENTITY.md")
+	if err != nil {
+		return "", fmt.Errorf("read embedded IDENTITY.md: %w", err)
+	}
+	return string(data), nil
+}
+
+func loadSoulTemplate() (string, error) {
+	data, err := assets.ConfigFS.ReadFile("config/SOUL.md")
+	if err != nil {
+		return "", fmt.Errorf("read embedded SOUL.md: %w", err)
+	}
+	return string(data), nil
+}
+
 func patchInitConfig(cfg string, dir string) string {
 	if strings.TrimSpace(cfg) == "" {
 		return cfg
@@ -143,4 +201,14 @@ func patchInitConfig(cfg string, dir string) string {
 	dir = filepath.ToSlash(dir)
 	cfg = strings.ReplaceAll(cfg, `file_state_dir: "~/.morph"`, fmt.Sprintf(`file_state_dir: "%s"`, dir))
 	return cfg
+}
+
+func ensureInstallMAEPIdentity(dir string) (maep.Identity, bool, error) {
+	maepDirName := strings.TrimSpace(viper.GetString("maep.dir_name"))
+	if maepDirName == "" {
+		maepDirName = "maep"
+	}
+	maepDir := filepath.Join(dir, maepDirName)
+	svc := maep.NewService(maep.NewFileStore(maepDir))
+	return svc.EnsureIdentity(context.Background(), time.Now().UTC())
 }

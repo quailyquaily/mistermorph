@@ -176,6 +176,8 @@ func (e *Engine) Run(ctx context.Context, task string, opts RunOptions) (*Final,
 			log.Debug("intent_inferred",
 				"goal", truncateString(intent.Goal, 120),
 				"deliverable", truncateString(intent.Deliverable, 120),
+				"question", intent.Question,
+				"request", intent.Request,
 				"ask", intent.Ask,
 			)
 		}

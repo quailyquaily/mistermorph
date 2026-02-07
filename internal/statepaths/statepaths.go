@@ -7,7 +7,9 @@ import (
 	"github.com/spf13/viper"
 )
 
-const HeartbeatChecklistFilename = "HEARTBEAT.md"
+const (
+	HeartbeatChecklistFilename = "HEARTBEAT.md"
+)
 
 func FileStateDir() string {
 	return pathutil.ResolveStateDir(viper.GetString("file_state_dir"))
@@ -26,6 +28,22 @@ func SkillsDir() string {
 		viper.GetString("file_state_dir"),
 		viper.GetString("skills.dir_name"),
 		"skills",
+	)
+}
+
+func MAEPDir() string {
+	return pathutil.ResolveStateChildDir(
+		viper.GetString("file_state_dir"),
+		viper.GetString("maep.dir_name"),
+		"maep",
+	)
+}
+
+func ContactsDir() string {
+	return pathutil.ResolveStateChildDir(
+		viper.GetString("file_state_dir"),
+		viper.GetString("contacts.dir_name"),
+		"contacts",
 	)
 }
 

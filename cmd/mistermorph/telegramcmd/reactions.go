@@ -13,14 +13,14 @@ import (
 )
 
 const (
-	reactionEmojiConfirm   = "\u2705"     // check mark
+	reactionEmojiConfirm   = "\U0001F440" // eyes
 	reactionEmojiAgree     = "\U0001F44D" // thumbs up
 	reactionEmojiSeen      = "\U0001F440" // eyes
 	reactionEmojiCelebrate = "\U0001F389" // party popper
 	reactionEmojiThanks    = "\U0001F64F" // folded hands
 	reactionEmojiCancel    = "\U0001F44E" // thumbs down
 	reactionEmojiOK        = "\U0001F44C" // OK hand
-	reactionEmojiWarn      = "\u2757"     // exclamation
+	reactionEmojiWarn      = "\U0001F440" // eyes
 	reactionEmojiSmile     = "\U0001F60A" // smiling face
 )
 
@@ -130,6 +130,10 @@ func decideTelegramReaction(ctx context.Context, client llm.Client, model string
 	decision.Intent = intent
 	decision.HasIntent = true
 
+	if intent.Question || intent.Request {
+		decision.Reason = "question_or_request"
+		return decision, nil
+	}
 	if intent.Ask || len(intent.Ambiguities) > 0 {
 		decision.Reason = "intent_ask_or_ambiguous"
 		return decision, nil
@@ -278,6 +282,10 @@ func classifyReactionCategoryViaIntent(ctx context.Context, client llm.Client, m
 	if model == "" {
 		return reactionMatch{}, nil
 	}
+	if intent.Ask || intent.Question || intent.Request {
+		return reactionMatch{}, nil
+	}
+
 	payload := map[string]any{
 		"intent": map[string]any{
 			"goal":        intent.Goal,

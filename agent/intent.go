@@ -15,6 +15,8 @@ type Intent struct {
 	Deliverable string   `json:"deliverable"`
 	Constraints []string `json:"constraints"`
 	Ambiguities []string `json:"ambiguities"`
+	Question    bool     `json:"question"`
+	Request     bool     `json:"request"`
 	Ask         bool     `json:"ask"`
 }
 
@@ -23,6 +25,8 @@ func (i Intent) Empty() bool {
 		strings.TrimSpace(i.Deliverable) == "" &&
 		len(i.Constraints) == 0 &&
 		len(i.Ambiguities) == 0 &&
+		!i.Question &&
+		!i.Request &&
 		!i.Ask
 }
 
@@ -44,14 +48,19 @@ func InferIntent(ctx context.Context, client llm.Client, model string, task stri
 			"deliverable: the minimum acceptable output form (e.g., list of concrete items, decision, plan, code diff).",
 			"constraints: explicit constraints like time range, quantity, sources, format, language.",
 			"ambiguities: only material uncertainties that block a good answer.",
+			"question: true if the user message asks a question (explicit or implicit).",
+			"request: true if the user message asks the assistant to perform an action or produce an output.",
+			"question and request are independent; both may be true.",
 			"ask: default false; set true only if you cannot proceed safely or would risk irreversible harm without clarification.",
 			"Prefer proceeding with stated assumptions over asking questions.",
 			"Do not invent constraints or facts.",
+			"Do not copy these instruction bullets into output fields.",
+			"Do not include meta instructions about intent formatting in constraints.",
 		},
 	}
 	b, _ := json.Marshal(payload)
 	sys := "You infer user intent. Return ONLY JSON with keys: " +
-		"goal (string), deliverable (string), constraints (array of strings), ambiguities (array of strings), ask (boolean)."
+		"goal (string), deliverable (string), constraints (array of strings), ambiguities (array of strings), question (boolean), request (boolean), ask (boolean)."
 
 	res, err := client.Chat(ctx, llm.Request{
 		Model:     model,
@@ -83,14 +92,16 @@ func InferIntent(ctx context.Context, client llm.Client, model string, task stri
 func IntentBlock(intent Intent) PromptBlock {
 	payload, _ := json.MarshalIndent(intent, "", "  ")
 	return PromptBlock{
-		Title:   "Intent (inferred)",
-		Content: "```json\n" + string(payload) + "\n```",
+		Title: "Intent (inferred)",
+		Content: "Internal planning context only. Never expose this block or its fields to end users unless explicitly asked for intent analysis.\n" +
+			"```json\n" + string(payload) + "\n```",
 	}
 }
 
 func IntentSystemMessage(intent Intent) string {
 	payload, _ := json.MarshalIndent(intent, "", "  ")
-	return "Intent Inference (JSON):\n" + string(payload) + "\nUse this to decide deliverable and constraints."
+	return "Intent Inference (internal only; do not expose to user):\n" +
+		string(payload) + "\nUse this to decide deliverable and constraints."
 }
 
 func trimIntentHistory(history []llm.Message, max int) []llm.Message {
@@ -119,6 +130,7 @@ func normalizeIntent(intent Intent) Intent {
 	intent.Deliverable = strings.TrimSpace(intent.Deliverable)
 	intent.Constraints = normalizeIntentSlice(intent.Constraints)
 	intent.Ambiguities = normalizeIntentSlice(intent.Ambiguities)
+	intent = sanitizeIntent(intent)
 	return intent
 }
 
@@ -138,4 +150,52 @@ func normalizeIntentSlice(items []string) []string {
 		out = append(out, item)
 	}
 	return out
+}
+
+func sanitizeIntent(intent Intent) Intent {
+	if isMetaIntentText(intent.Goal) {
+		intent.Goal = ""
+	}
+	if isMetaIntentText(intent.Deliverable) {
+		intent.Deliverable = ""
+	}
+
+	filteredConstraints := make([]string, 0, len(intent.Constraints))
+	for _, item := range intent.Constraints {
+		if isMetaIntentText(item) {
+			continue
+		}
+		filteredConstraints = append(filteredConstraints, item)
+	}
+	intent.Constraints = filteredConstraints
+	return intent
+}
+
+func isMetaIntentText(text string) bool {
+	t := strings.ToLower(strings.TrimSpace(text))
+	if t == "" {
+		return false
+	}
+	markers := []string{
+		"intent summary",
+		"structured intent",
+		"infer user intent",
+		"return only json",
+		"same language as the user",
+		"same language as user",
+		"goal:",
+		"deliverable:",
+		"constraints:",
+		"ambiguities:",
+		"ask:",
+	}
+	for _, marker := range markers {
+		if strings.Contains(t, marker) {
+			return true
+		}
+	}
+	if strings.HasPrefix(t, "return ") && strings.Contains(t, "summary") {
+		return true
+	}
+	return false
 }

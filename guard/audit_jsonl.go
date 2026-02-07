@@ -1,69 +1,59 @@
 package guard
 
 import (
-	"bufio"
 	"context"
-	"encoding/json"
 	"fmt"
-	"os"
 	"path/filepath"
+	"strings"
 	"sync"
-	"time"
+
+	"github.com/quailyquaily/mistermorph/internal/fsstore"
 )
 
 type JSONLAuditSink struct {
-	Path           string
-	RotateMaxBytes int64
+	path     string
+	lockPath string
+	writer   *fsstore.JSONLWriter
 
-	mu   sync.Mutex
-	f    *os.File
-	w    *bufio.Writer
-	size int64
+	mu sync.Mutex
 }
 
-func NewJSONLAuditSink(path string, rotateMaxBytes int64) (*JSONLAuditSink, error) {
-	path = stringsTrimSpace(path)
+func NewJSONLAuditSink(path string, rotateMaxBytes int64, lockRoot string) (*JSONLAuditSink, error) {
+	path = strings.TrimSpace(path)
 	if path == "" {
 		return nil, fmt.Errorf("missing jsonl path")
 	}
-	if rotateMaxBytes <= 0 {
-		rotateMaxBytes = 100 * 1024 * 1024
+	if strings.TrimSpace(lockRoot) == "" {
+		lockRoot = filepath.Join(filepath.Dir(path), ".fslocks")
 	}
-	s := &JSONLAuditSink{
-		Path:           path,
-		RotateMaxBytes: rotateMaxBytes,
-	}
-	if err := s.openLocked(); err != nil {
+	lockPath, err := fsstore.BuildLockPath(lockRoot, "audit.guard_audit_jsonl")
+	if err != nil {
 		return nil, err
 	}
-	return s, nil
+	writer, err := fsstore.NewJSONLWriter(path, fsstore.JSONLOptions{
+		RotateMaxBytes: rotateMaxBytes,
+		FlushEachWrite: true,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &JSONLAuditSink{
+		path:     path,
+		lockPath: lockPath,
+		writer:   writer,
+	}, nil
 }
 
 func (s *JSONLAuditSink) Emit(ctx context.Context, e AuditEvent) error {
-	_ = ctx
-	if s == nil {
+	if s == nil || s.writer == nil {
 		return nil
 	}
-	b, err := json.Marshal(e)
-	if err != nil {
-		return err
-	}
-
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if err := s.rotateIfNeededLocked(int64(len(b)) + 1); err != nil {
-		return err
-	}
-	if s.w == nil {
-		return fmt.Errorf("audit sink is not initialized")
-	}
-	n, err := s.w.Write(append(b, '\n'))
-	if err != nil {
-		return err
-	}
-	s.size += int64(n)
-	return s.w.Flush()
+	return fsstore.WithLock(ctx, s.lockPath, func() error {
+		return s.writer.AppendJSON(e)
+	})
 }
 
 func (s *JSONLAuditSink) Close() error {
@@ -72,77 +62,10 @@ func (s *JSONLAuditSink) Close() error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.w != nil {
-		_ = s.w.Flush()
-	}
-	if s.f != nil {
-		err := s.f.Close()
-		s.f = nil
-		s.w = nil
-		s.size = 0
-		return err
-	}
-	return nil
-}
-
-func (s *JSONLAuditSink) openLocked() error {
-	dir := filepath.Dir(s.Path)
-	if dir != "" && dir != "." {
-		if err := os.MkdirAll(dir, 0o700); err != nil {
-			return err
-		}
-	}
-
-	f, err := os.OpenFile(s.Path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
-	if err != nil {
-		return err
-	}
-	var st os.FileInfo
-	st, err = f.Stat()
-	if err == nil {
-		s.size = st.Size()
-	}
-	s.f = f
-	s.w = bufio.NewWriterSize(f, 64*1024)
-	return nil
-}
-
-func (s *JSONLAuditSink) rotateIfNeededLocked(addBytes int64) error {
-	if s.RotateMaxBytes <= 0 {
+	if s.writer == nil {
 		return nil
 	}
-	if s.size+addBytes <= s.RotateMaxBytes {
-		return nil
-	}
-
-	if s.w != nil {
-		_ = s.w.Flush()
-	}
-	if s.f != nil {
-		_ = s.f.Close()
-	}
-
-	ts := time.Now().UTC().Format("20060102T150405Z")
-	rotated := fmt.Sprintf("%s.%s", s.Path, ts)
-	if err := os.Rename(s.Path, rotated); err != nil {
-		// If rename fails, try reopening without rotation.
-		return s.openLocked()
-	}
-	s.f = nil
-	s.w = nil
-	s.size = 0
-	return s.openLocked()
-}
-
-func stringsTrimSpace(s string) string {
-	// Avoid importing strings in multiple guard files just for TrimSpace.
-	i := 0
-	j := len(s)
-	for i < j && (s[i] == ' ' || s[i] == '\n' || s[i] == '\t' || s[i] == '\r') {
-		i++
-	}
-	for j > i && (s[j-1] == ' ' || s[j-1] == '\n' || s[j-1] == '\t' || s[j-1] == '\r') {
-		j--
-	}
-	return s[i:j]
+	err := s.writer.Close()
+	s.writer = nil
+	return err
 }
