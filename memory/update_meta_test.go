@@ -14,12 +14,12 @@ func TestWriteShortTermStoresContactMeta(t *testing.T) {
 	_, err := mgr.WriteShortTerm(date, ShortTermContent{
 		SessionSummary: []KVItem{{Title: "Who", Value: "Alice"}},
 	}, "hello", WriteMeta{
-		SessionID:       "telegram:1",
-		Source:          "telegram",
-		Channel:         "private",
-		SubjectID:       "ext:telegram:1001",
-		ContactID:       "tg:@alice",
-		ContactNickname: "Alice",
+		SessionID:        "telegram:1",
+		Source:           "telegram",
+		Channel:          "private",
+		SubjectID:        "ext:telegram:1001",
+		ContactIDs:       []string{"tg:@alice"},
+		ContactNicknames: []string{"Alice"},
 	})
 	if err != nil {
 		t.Fatalf("WriteShortTerm() error = %v", err)
@@ -34,10 +34,34 @@ func TestWriteShortTermStoresContactMeta(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected frontmatter in %s", path)
 	}
-	if fm.ContactID != "tg:@alice" {
-		t.Fatalf("frontmatter contact_id mismatch: got %q want %q", fm.ContactID, "tg:@alice")
+	if len(fm.ContactIDs) != 1 || fm.ContactIDs[0] != "tg:@alice" {
+		t.Fatalf("frontmatter contact_id mismatch: got %#v want [%q]", []string(fm.ContactIDs), "tg:@alice")
 	}
-	if fm.ContactNickname != "Alice" {
-		t.Fatalf("frontmatter contact_nickname mismatch: got %q want %q", fm.ContactNickname, "Alice")
+	if len(fm.ContactNicknames) != 1 || fm.ContactNicknames[0] != "Alice" {
+		t.Fatalf("frontmatter contact_nickname mismatch: got %#v want [%q]", []string(fm.ContactNicknames), "Alice")
+	}
+}
+
+func TestParseFrontmatterLegacyContactScalarIsAccepted(t *testing.T) {
+	raw := `---
+created_at: "2026-02-07T00:00:00Z"
+updated_at: "2026-02-07T00:00:00Z"
+summary: "x"
+tasks: "0/0"
+follow_ups: "0/0"
+contact_id: "tg:@alice"
+contact_nickname: "Alice"
+---
+# body
+`
+	fm, _, ok := ParseFrontmatter(raw)
+	if !ok {
+		t.Fatalf("ParseFrontmatter() expected ok=true")
+	}
+	if len(fm.ContactIDs) != 1 || fm.ContactIDs[0] != "tg:@alice" {
+		t.Fatalf("legacy contact_id parse mismatch: got %#v", []string(fm.ContactIDs))
+	}
+	if len(fm.ContactNicknames) != 1 || fm.ContactNicknames[0] != "Alice" {
+		t.Fatalf("legacy contact_nickname parse mismatch: got %#v", []string(fm.ContactNicknames))
 	}
 }

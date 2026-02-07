@@ -52,7 +52,7 @@ func NewContactsCandidateRankTool(opts ContactsCandidateRankToolOptions) *Contac
 func (t *ContactsCandidateRankTool) Name() string { return "contacts_candidate_rank" }
 
 func (t *ContactsCandidateRankTool) Description() string {
-	return "Ranks contacts against current candidate pool and returns top decisions (no sending, no state mutation)."
+	return "Ranks contacts against current candidate pool and returns top decisions (no sending). Also refreshes contact preference profile signals."
 }
 
 func (t *ContactsCandidateRankTool) ParameterSchema() string {
@@ -125,7 +125,7 @@ func (t *ContactsCandidateRankTool) Execute(ctx context.Context, params map[stri
 	}
 	extractor := contacts.NewLLMFeatureExtractor(client, model)
 
-	decisions, err := svc.RankCandidates(ctx, time.Now().UTC(), contacts.TickOptions{
+	result, err := svc.RunTick(ctx, time.Now().UTC(), contacts.TickOptions{
 		MaxTargets:            limit,
 		FreshnessWindow:       freshnessWindow,
 		PushTopic:             strings.TrimSpace(pushTopic),
@@ -135,10 +135,12 @@ func (t *ContactsCandidateRankTool) Execute(ctx context.Context, params map[stri
 		EnableHumanPublicSend: humanPublicEnabled,
 		MaxLinkedHistoryItems: maxLinkedHistoryItems,
 		FeatureExtractor:      extractor,
-	})
+		PreferenceExtractor:   extractor,
+	}, nil)
 	if err != nil {
 		return "", err
 	}
+	decisions := result.Decisions
 	out, _ := json.MarshalIndent(map[string]any{
 		"count":     len(decisions),
 		"decisions": decisions,

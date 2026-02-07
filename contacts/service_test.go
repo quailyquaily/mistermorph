@@ -873,3 +873,108 @@ func TestServiceRunTickSendFailureUsesConfiguredCooldown(t *testing.T) {
 		t.Fatalf("cooldown mismatch: got %s want %s", updated.CooldownUntil.Format(time.RFC3339), want.Format(time.RFC3339))
 	}
 }
+
+func TestServiceUpdateFeedbackTopicWeightsPrunedToTop16(t *testing.T) {
+	ctx := context.Background()
+	root := filepath.Join(t.TempDir(), "contacts")
+	store := NewFileStore(root)
+	svc := NewService(store)
+	now := time.Date(2026, 2, 7, 20, 0, 0, 0, time.UTC)
+
+	_, err := svc.UpsertContact(ctx, Contact{
+		ContactID:          "tg:@alice",
+		Kind:               KindHuman,
+		Status:             StatusActive,
+		SubjectID:          "tg:@alice",
+		UnderstandingDepth: 20,
+		ReciprocityNorm:    0.4,
+	}, now)
+	if err != nil {
+		t.Fatalf("UpsertContact() error = %v", err)
+	}
+
+	for i := 0; i < 20; i++ {
+		_, _, err := svc.UpdateFeedback(ctx, now.Add(time.Duration(i)*time.Minute), FeedbackUpdateInput{
+			ContactID: "tg:@alice",
+			Signal:    FeedbackPositive,
+			Topic:     fmt.Sprintf("topic_%02d", i),
+		})
+		if err != nil {
+			t.Fatalf("UpdateFeedback() error at %d = %v", i, err)
+		}
+	}
+
+	contact, ok, err := svc.GetContact(ctx, "tg:@alice")
+	if err != nil {
+		t.Fatalf("GetContact() error = %v", err)
+	}
+	if !ok {
+		t.Fatalf("GetContact expected ok=true")
+	}
+	if got := len(contact.TopicWeights); got > 16 {
+		t.Fatalf("topic_weights size mismatch: got %d want <=16", got)
+	}
+}
+
+func TestServiceRunTickPreferenceExtractionDoesNotFabricatePersonaBrief(t *testing.T) {
+	ctx := context.Background()
+	root := filepath.Join(t.TempDir(), "contacts")
+	store := NewFileStore(root)
+	svc := NewService(store)
+	now := time.Date(2026, 2, 7, 21, 0, 0, 0, time.UTC)
+
+	_, err := svc.UpsertContact(ctx, Contact{
+		ContactID:          "maep:a",
+		Kind:               KindAgent,
+		Status:             StatusActive,
+		PeerID:             "12D3KooWA",
+		TrustState:         "verified",
+		UnderstandingDepth: 30,
+		ReciprocityNorm:    0.5,
+	}, now)
+	if err != nil {
+		t.Fatalf("UpsertContact() error = %v", err)
+	}
+	payload := base64.RawURLEncoding.EncodeToString([]byte("hello"))
+	if _, err := svc.AddCandidate(ctx, ShareCandidate{
+		ItemID:        "cand-1",
+		Topic:         "maep",
+		ContentType:   "text/plain",
+		PayloadBase64: payload,
+	}, now); err != nil {
+		t.Fatalf("AddCandidate() error = %v", err)
+	}
+
+	_, err = svc.RunTick(ctx, now, TickOptions{
+		MaxTargets:      1,
+		FreshnessWindow: 72 * time.Hour,
+		Send:            false,
+		PreferenceExtractor: &stubPreferenceExtractor{byContact: map[string]PreferenceFeatures{
+			"maep:a": {
+				TopicAffinity: map[string]float64{
+					"golang": 0.95,
+					"agent":  0.90,
+				},
+				PersonaBrief: "",
+				Confidence:   1.0,
+			},
+		}},
+	}, nil)
+	if err != nil {
+		t.Fatalf("RunTick() error = %v", err)
+	}
+
+	contact, ok, err := svc.GetContact(ctx, "maep:a")
+	if err != nil {
+		t.Fatalf("GetContact() error = %v", err)
+	}
+	if !ok {
+		t.Fatalf("GetContact expected ok=true")
+	}
+	if strings.TrimSpace(contact.PersonaBrief) != "" {
+		t.Fatalf("persona_brief should stay empty when extractor omits it, got %q", contact.PersonaBrief)
+	}
+	if len(contact.TopicWeights) == 0 {
+		t.Fatalf("topic_weights should still be updated")
+	}
+}

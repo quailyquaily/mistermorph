@@ -38,9 +38,9 @@ func TestMemoryRecentlyTool_ReadsRecentItems(t *testing.T) {
 	var parsed struct {
 		Count int `json:"count"`
 		Items []struct {
-			ContactID        string `json:"contact_id"`
-			TelegramChatID   int64  `json:"telegram_chat_id"`
-			TelegramChatType string `json:"telegram_chat_type"`
+			ContactID        []string `json:"contact_id"`
+			TelegramChatID   int64    `json:"telegram_chat_id"`
+			TelegramChatType string   `json:"telegram_chat_type"`
 		} `json:"items"`
 	}
 	if err := json.Unmarshal([]byte(out), &parsed); err != nil {
@@ -49,8 +49,8 @@ func TestMemoryRecentlyTool_ReadsRecentItems(t *testing.T) {
 	if parsed.Count <= 0 || len(parsed.Items) == 0 {
 		t.Fatalf("expected at least one item, got count=%d", parsed.Count)
 	}
-	if parsed.Items[0].ContactID != "tg:@alice" {
-		t.Fatalf("contact_id mismatch: got %q", parsed.Items[0].ContactID)
+	if len(parsed.Items[0].ContactID) != 1 || parsed.Items[0].ContactID[0] != "tg:@alice" {
+		t.Fatalf("contact_id mismatch: got %#v", parsed.Items[0].ContactID)
 	}
 	if parsed.Items[0].TelegramChatID != -100123456 {
 		t.Fatalf("telegram_chat_id mismatch: got %d", parsed.Items[0].TelegramChatID)

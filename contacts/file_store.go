@@ -618,7 +618,7 @@ func normalizeContact(c Contact, now time.Time) Contact {
 	c.Status = normalizeStatus(c.Status)
 	c.Addresses = normalizeStringSlice(c.Addresses)
 	c.TelegramChats = normalizeTelegramChats(c.TelegramChats)
-	c.TopicWeights = cloneFloatMap(c.TopicWeights)
+	c.TopicWeights = normalizeTopicWeightsMap(cloneFloatMap(c.TopicWeights))
 	c.PersonaTraits = normalizeTraitMap(c.PersonaTraits)
 	c.UnderstandingDepth = clamp(c.UnderstandingDepth, 0, 100)
 	c.ReciprocityNorm = clamp(c.ReciprocityNorm, 0, 1)

@@ -448,6 +448,7 @@ func (s *Service) UpdateFeedback(ctx context.Context, now time.Time, input Feedb
 			contact.TopicWeights = map[string]float64{}
 		}
 		contact.TopicWeights[input.Topic] = clamp(contact.TopicWeights[input.Topic]+topicDelta, 0, 1)
+		contact.TopicWeights = normalizeTopicWeightsMap(contact.TopicWeights)
 	}
 	cooldownHours := 0
 	if signal == FeedbackNegative {
@@ -1123,6 +1124,7 @@ func (s *Service) applyContactPreferences(
 				contact.TopicWeights[normalizedTopic] = newValue
 				topicUpdates++
 			}
+			contact.TopicWeights = normalizeTopicWeightsMap(contact.TopicWeights)
 		}
 
 		if brief := strings.TrimSpace(features.PersonaBrief); brief != "" && brief != contact.PersonaBrief {

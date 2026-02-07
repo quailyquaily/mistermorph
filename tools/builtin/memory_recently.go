@@ -75,8 +75,8 @@ type recentMemoryItem struct {
 	Source           string                   `json:"source,omitempty"`
 	Channel          string                   `json:"channel,omitempty"`
 	SubjectID        string                   `json:"subject_id,omitempty"`
-	ContactID        string                   `json:"contact_id,omitempty"`
-	ContactNickname  string                   `json:"contact_nickname,omitempty"`
+	ContactIDs       []string                 `json:"contact_id,omitempty"`
+	ContactNicknames []string                 `json:"contact_nickname,omitempty"`
 	Usernames        []string                 `json:"usernames,omitempty"`
 	TelegramChatID   int64                    `json:"telegram_chat_id,omitempty"`
 	TelegramChatType string                   `json:"telegram_chat_type,omitempty"`
@@ -144,8 +144,8 @@ func (t *MemoryRecentlyTool) Execute(_ context.Context, params map[string]any) (
 			item.Source = strings.TrimSpace(fm.Source)
 			item.Channel = strings.TrimSpace(fm.Channel)
 			item.SubjectID = strings.TrimSpace(fm.SubjectID)
-			item.ContactID = strings.TrimSpace(fm.ContactID)
-			item.ContactNickname = strings.TrimSpace(fm.ContactNickname)
+			item.ContactIDs = dedupeStrings([]string(fm.ContactIDs))
+			item.ContactNicknames = dedupeStrings([]string(fm.ContactNicknames))
 			item.Usernames = dedupeStrings(fm.Usernames)
 		}
 		if chatID, ok := parseTelegramSessionID(item.SessionID); ok {

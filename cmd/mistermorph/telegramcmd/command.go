@@ -198,6 +198,10 @@ func newTelegramCmd() *cobra.Command {
 				IntentMaxHistory: viper.GetInt("intent.max_history"),
 			}
 			contactsSvc := contacts.NewService(contacts.NewFileStore(statepaths.ContactsDir()))
+			var maepMemMgr *memory.Manager
+			if viper.GetBool("memory.enabled") {
+				maepMemMgr = memory.NewManager(statepaths.MemoryDir(), viper.GetInt("memory.short_term_days"))
+			}
 
 			pollTimeout := configutil.FlagOrViperDuration(cmd, "telegram-poll-timeout", "telegram.poll_timeout")
 			if pollTimeout <= 0 {
@@ -756,6 +760,21 @@ func newTelegramCmd() *cobra.Command {
 							output := strings.TrimSpace(formatFinalOutput(final))
 							if output == "" {
 								continue
+							}
+							if maepMemMgr != nil {
+								contactID := chooseBusinessContactID("", peerID)
+								contactNickname := ""
+								if contactsSvc != nil {
+									item, found, getErr := contactsSvc.GetContact(context.Background(), contactID)
+									if getErr != nil {
+										logger.Warn("memory_maep_contact_lookup_error", "peer_id", peerID, "error", getErr.Error())
+									} else if found {
+										contactNickname = strings.TrimSpace(item.ContactNickname)
+									}
+								}
+								if memErr := updateMAEPMemory(context.Background(), logger, client, model, maepMemMgr, peerID, event.Topic, sessionID, task, output, h, contactID, contactNickname, requestTimeout); memErr != nil {
+									logger.Warn("memory_update_error", "source", "maep", "peer_id", peerID, "error", memErr.Error())
+								}
 							}
 
 							payload := map[string]any{
@@ -1598,13 +1617,90 @@ func updateTelegramMemory(ctx context.Context, logger *slog.Logger, client llm.C
 		contactNickname = strings.TrimSpace(strings.Join([]string{job.FromFirstName, job.FromLastName}, " "))
 	}
 	meta := memory.WriteMeta{
-		SessionID:       fmt.Sprintf("telegram:%d", job.ChatID),
-		Source:          "telegram",
-		Channel:         job.ChatType,
-		Usernames:       mergeMemoryUsernames(job.FromUsername, job.MentionUsers),
-		SubjectID:       id.SubjectID,
-		ContactID:       telegramMemoryContactID(job.FromUsername, job.FromUserID),
-		ContactNickname: contactNickname,
+		SessionID:        fmt.Sprintf("telegram:%d", job.ChatID),
+		Source:           "telegram",
+		Channel:          job.ChatType,
+		Usernames:        mergeMemoryUsernames(job.FromUsername, job.MentionUsers),
+		SubjectID:        id.SubjectID,
+		ContactIDs:       []string{telegramMemoryContactID(job.FromUsername, job.FromUserID)},
+		ContactNicknames: []string{contactNickname},
+	}
+
+	ctxInfo := MemoryDraftContext{
+		SessionID:          meta.SessionID,
+		ChatID:             job.ChatID,
+		ChatType:           job.ChatType,
+		CounterpartyID:     job.FromUserID,
+		CounterpartyName:   strings.TrimSpace(job.FromDisplayName),
+		CounterpartyHandle: strings.TrimSpace(job.FromUsername),
+		TimestampUTC:       time.Now().UTC().Format(time.RFC3339),
+	}
+	if ctxInfo.CounterpartyName == "" {
+		ctxInfo.CounterpartyName = strings.TrimSpace(strings.Join([]string{job.FromFirstName, job.FromLastName}, " "))
+	}
+	return updateSessionMemory(ctx, logger, client, model, mgr, id.SubjectID, meta, history, job.Text, output, ctxInfo, requestTimeout)
+}
+
+func updateMAEPMemory(ctx context.Context, logger *slog.Logger, client llm.Client, model string, mgr *memory.Manager, peerID string, inboundTopic string, inboundSessionID string, inboundText string, outboundText string, history []llm.Message, contactID string, contactNickname string, requestTimeout time.Duration) error {
+	if mgr == nil || client == nil {
+		return nil
+	}
+	peerID = strings.TrimSpace(peerID)
+	if peerID == "" {
+		return nil
+	}
+	sessionID := strings.TrimSpace(inboundSessionID)
+	if sessionID == "" {
+		sessionID = peerID
+	}
+	memSessionID := "maep:" + sessionID
+	subjectID := "ext:maep:" + peerID
+	contactID = strings.TrimSpace(contactID)
+	if contactID == "" {
+		contactID = "maep:" + peerID
+	}
+	contactNickname = strings.TrimSpace(contactNickname)
+	if contactNickname == "" {
+		contactNickname = contactID
+	}
+	channel := strings.TrimSpace(inboundTopic)
+	if channel == "" {
+		channel = "maep"
+	}
+	meta := memory.WriteMeta{
+		SessionID:        memSessionID,
+		Source:           "maep",
+		Channel:          channel,
+		SubjectID:        subjectID,
+		ContactIDs:       []string{contactID},
+		ContactNicknames: []string{contactNickname},
+	}
+	ctxInfo := MemoryDraftContext{
+		SessionID:          memSessionID,
+		ChatType:           channel,
+		CounterpartyName:   contactNickname,
+		CounterpartyHandle: peerID,
+		TimestampUTC:       time.Now().UTC().Format(time.RFC3339),
+	}
+	return updateSessionMemory(ctx, logger, client, model, mgr, subjectID, meta, history, inboundText, outboundText, ctxInfo, requestTimeout)
+}
+
+func updateSessionMemory(
+	ctx context.Context,
+	logger *slog.Logger,
+	client llm.Client,
+	model string,
+	mgr *memory.Manager,
+	subjectID string,
+	meta memory.WriteMeta,
+	history []llm.Message,
+	task string,
+	output string,
+	ctxInfo MemoryDraftContext,
+	requestTimeout time.Duration,
+) error {
+	if mgr == nil || client == nil {
+		return nil
 	}
 	date := time.Now().UTC()
 	_, existingContent, hasExisting, err := mgr.LoadShortTerm(date, meta.SessionID)
@@ -1619,24 +1715,11 @@ func updateTelegramMemory(ctx context.Context, logger *slog.Logger, client llm.C
 	}
 	defer cancel()
 
-	ctxInfo := MemoryDraftContext{
-		SessionID:          meta.SessionID,
-		ChatID:             job.ChatID,
-		ChatType:           job.ChatType,
-		CounterpartyID:     job.FromUserID,
-		CounterpartyName:   strings.TrimSpace(job.FromDisplayName),
-		CounterpartyHandle: strings.TrimSpace(job.FromUsername),
-		TimestampUTC:       date.Format(time.RFC3339),
-	}
-	if ctxInfo.CounterpartyName == "" {
-		ctxInfo.CounterpartyName = strings.TrimSpace(strings.Join([]string{job.FromFirstName, job.FromLastName}, " "))
-	}
-
-	draft, err := BuildMemoryDraft(memCtx, client, model, history, job.Text, output, existingContent, ctxInfo)
+	draft, err := BuildMemoryDraft(memCtx, client, model, history, task, output, existingContent, ctxInfo)
 	if err != nil {
 		return err
 	}
-	draft.Promote = EnforceLongTermPromotionRules(draft.Promote, history, job.Text)
+	draft.Promote = EnforceLongTermPromotionRules(draft.Promote, history, task)
 
 	summary := strings.TrimSpace(draft.Summary)
 	var mergedContent memory.ShortTermContent
@@ -1666,11 +1749,11 @@ func updateTelegramMemory(ctx context.Context, logger *slog.Logger, client llm.C
 			logger.Debug("memory_task_sync_ok", "updated", updated)
 		}
 	}
-	if _, err := mgr.UpdateLongTerm(id.SubjectID, draft.Promote); err != nil {
+	if _, err := mgr.UpdateLongTerm(subjectID, draft.Promote); err != nil {
 		return err
 	}
 	if logger != nil {
-		logger.Debug("memory_update_ok", "subject_id", id.SubjectID)
+		logger.Debug("memory_update_ok", "subject_id", subjectID)
 	}
 	return nil
 }

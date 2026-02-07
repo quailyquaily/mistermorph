@@ -311,12 +311,12 @@ func updateRunMemory(ctx context.Context, logger *slog.Logger, client llm.Client
 		contactNickname = strings.TrimSpace(os.Getenv("USERNAME"))
 	}
 	meta := memory.WriteMeta{
-		SessionID:       "cli",
-		Source:          "cli",
-		Channel:         "local",
-		SubjectID:       id.SubjectID,
-		ContactID:       strings.TrimSpace(id.SubjectID),
-		ContactNickname: contactNickname,
+		SessionID:        "cli",
+		Source:           "cli",
+		Channel:          "local",
+		SubjectID:        id.SubjectID,
+		ContactIDs:       []string{strings.TrimSpace(id.SubjectID)},
+		ContactNicknames: []string{contactNickname},
 	}
 	date := time.Now().UTC()
 	_, existingContent, hasExisting, err := mgr.LoadShortTerm(date, meta.SessionID)
