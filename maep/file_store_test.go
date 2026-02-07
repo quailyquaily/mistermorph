@@ -157,4 +157,28 @@ func TestFileStoreDedupeAndProtocolHistory(t *testing.T) {
 	if inbox[0].MessageID != messageA.MessageID {
 		t.Fatalf("inbox message_id mismatch: got %s want %s", inbox[0].MessageID, messageA.MessageID)
 	}
+
+	audit := AuditEvent{
+		EventID:            "evt-001",
+		Action:             AuditActionTrustStateChanged,
+		PeerID:             "12D3KooWpeerA",
+		NodeUUID:           "0194f5c0-8f6e-7d9d-a4d7-6d8d4f35f789",
+		PreviousTrustState: TrustStateTOFU,
+		NewTrustState:      TrustStateVerified,
+		Reason:             "manual_verify",
+		CreatedAt:          now.Add(10 * time.Second),
+	}
+	if err := store.AppendAuditEvent(ctx, audit); err != nil {
+		t.Fatalf("AppendAuditEvent() error = %v", err)
+	}
+	audits, err := store.ListAuditEvents(ctx, "12D3KooWpeerA", AuditActionTrustStateChanged, 10)
+	if err != nil {
+		t.Fatalf("ListAuditEvents() error = %v", err)
+	}
+	if len(audits) != 1 {
+		t.Fatalf("ListAuditEvents() length mismatch: got %d want 1", len(audits))
+	}
+	if audits[0].EventID != audit.EventID {
+		t.Fatalf("audit event_id mismatch: got %s want %s", audits[0].EventID, audit.EventID)
+	}
 }

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type Service struct {
@@ -91,9 +93,16 @@ func (s *Service) ImportContactCard(ctx context.Context, rawCard []byte, display
 	}
 	if foundByUUID && strings.TrimSpace(existingByUUID.PeerID) != peerID {
 		now = normalizedNow(now)
+		previousTrust := existingByUUID.TrustState
 		existingByUUID.TrustState = TrustStateConflicted
 		existingByUUID.UpdatedAt = now
 		if err := s.store.PutContact(ctx, existingByUUID); err != nil {
+			return ImportContactResult{}, err
+		}
+		if err := s.appendAuditEvent(ctx, now, AuditActionContactImportConflict, existingByUUID, previousTrust, existingByUUID.TrustState, "node_uuid_conflict", map[string]string{
+			"existing_peer_id": existingByUUID.PeerID,
+			"incoming_peer_id": peerID,
+		}); err != nil {
 			return ImportContactResult{}, err
 		}
 		return ImportContactResult{Contact: existingByUUID, Conflicted: true}, WrapProtocolError(ErrContactConflicted, "node_uuid already maps to another peer_id")
@@ -105,9 +114,16 @@ func (s *Service) ImportContactCard(ctx context.Context, rawCard []byte, display
 	}
 	if foundByPeer && strings.TrimSpace(existingByPeer.NodeUUID) != "" && strings.TrimSpace(existingByPeer.NodeUUID) != strings.TrimSpace(payload.NodeUUID) {
 		now = normalizedNow(now)
+		previousTrust := existingByPeer.TrustState
 		existingByPeer.TrustState = TrustStateConflicted
 		existingByPeer.UpdatedAt = now
 		if err := s.store.PutContact(ctx, existingByPeer); err != nil {
+			return ImportContactResult{}, err
+		}
+		if err := s.appendAuditEvent(ctx, now, AuditActionContactImportConflict, existingByPeer, previousTrust, existingByPeer.TrustState, "peer_id_conflict", map[string]string{
+			"existing_node_uuid": existingByPeer.NodeUUID,
+			"incoming_node_uuid": payload.NodeUUID,
+		}); err != nil {
 			return ImportContactResult{}, err
 		}
 		return ImportContactResult{Contact: existingByPeer, Conflicted: true}, WrapProtocolError(ErrContactConflicted, "peer_id already maps to another node_uuid")
@@ -139,10 +155,12 @@ func (s *Service) ImportContactCard(ctx context.Context, rawCard []byte, display
 
 	created := true
 	updated := false
+	previousTrust := TrustState("")
 	if foundByPeer {
 		created = false
 		updated = true
 		contact.CreatedAt = existingByPeer.CreatedAt
+		previousTrust = existingByPeer.TrustState
 		contact.TrustState = preserveTrustState(existingByPeer.TrustState)
 		if contact.DisplayName == "" {
 			contact.DisplayName = existingByPeer.DisplayName
@@ -151,6 +169,13 @@ func (s *Service) ImportContactCard(ctx context.Context, rawCard []byte, display
 	}
 
 	if err := s.store.PutContact(ctx, contact); err != nil {
+		return ImportContactResult{}, err
+	}
+	action := AuditActionContactImportCreated
+	if updated {
+		action = AuditActionContactImportUpdated
+	}
+	if err := s.appendAuditEvent(ctx, now, action, contact, previousTrust, contact.TrustState, "", nil); err != nil {
 		return ImportContactResult{}, err
 	}
 
@@ -171,6 +196,13 @@ func (s *Service) ListInboxMessages(ctx context.Context, fromPeerID string, topi
 	return s.store.ListInboxMessages(ctx, fromPeerID, topic, limit)
 }
 
+func (s *Service) ListAuditEvents(ctx context.Context, peerID string, action string, limit int) ([]AuditEvent, error) {
+	if s == nil || s.store == nil {
+		return nil, fmt.Errorf("nil maep service")
+	}
+	return s.store.ListAuditEvents(ctx, peerID, action, limit)
+}
+
 func (s *Service) GetContactByPeerID(ctx context.Context, peerID string) (Contact, bool, error) {
 	if s == nil || s.store == nil {
 		return Contact{}, false, fmt.Errorf("nil maep service")
@@ -189,12 +221,31 @@ func (s *Service) MarkContactVerified(ctx context.Context, peerID string, now ti
 	if contact.TrustState == TrustStateRevoked || contact.TrustState == TrustStateConflicted {
 		return Contact{}, WrapProtocolError(ErrContactConflicted, "contact cannot be promoted from state=%s", contact.TrustState)
 	}
+	previousTrust := contact.TrustState
 	contact.TrustState = TrustStateVerified
 	contact.UpdatedAt = normalizedNow(now)
 	if err := s.store.PutContact(ctx, contact); err != nil {
 		return Contact{}, err
 	}
+	if err := s.appendAuditEvent(ctx, contact.UpdatedAt, AuditActionTrustStateChanged, contact, previousTrust, contact.TrustState, "manual_verify", nil); err != nil {
+		return Contact{}, err
+	}
 	return contact, nil
+}
+
+func (s *Service) appendAuditEvent(ctx context.Context, now time.Time, action string, contact Contact, previousTrustState TrustState, newTrustState TrustState, reason string, metadata map[string]string) error {
+	event := AuditEvent{
+		EventID:            "evt_" + uuid.NewString(),
+		Action:             strings.TrimSpace(action),
+		PeerID:             strings.TrimSpace(contact.PeerID),
+		NodeUUID:           strings.TrimSpace(contact.NodeUUID),
+		PreviousTrustState: previousTrustState,
+		NewTrustState:      newTrustState,
+		Reason:             strings.TrimSpace(reason),
+		Metadata:           metadata,
+		CreatedAt:          normalizedNow(now),
+	}
+	return s.store.AppendAuditEvent(ctx, event)
 }
 
 func preserveTrustState(existing TrustState) TrustState {

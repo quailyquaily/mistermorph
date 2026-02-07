@@ -31,6 +31,7 @@ func New() *cobra.Command {
 	cmd.AddCommand(newIDCmd())
 	cmd.AddCommand(newCardCmd())
 	cmd.AddCommand(newContactsCmd())
+	cmd.AddCommand(newAuditCmd())
 	cmd.AddCommand(newInboxCmd())
 	cmd.AddCommand(newServeCmd())
 	cmd.AddCommand(newHelloCmd())
@@ -309,6 +310,59 @@ func newContactsVerifyCmd() *cobra.Command {
 			return nil
 		},
 	}
+	return cmd
+}
+
+func newAuditCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "audit",
+		Short: "Query MAEP trust-state and operation audit events",
+	}
+	cmd.AddCommand(newAuditListCmd())
+	return cmd
+}
+
+func newAuditListCmd() *cobra.Command {
+	var peerID string
+	var action string
+	var limit int
+	var outputJSON bool
+
+	cmd := &cobra.Command{
+		Use:   "list",
+		Short: "List audit events",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			svc := serviceFromCmd(cmd)
+			events, err := svc.ListAuditEvents(cmd.Context(), peerID, action, limit)
+			if err != nil {
+				return err
+			}
+			if outputJSON {
+				return writeJSON(cmd.OutOrStdout(), events)
+			}
+			if len(events) == 0 {
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "no audit events")
+				return nil
+			}
+			for _, event := range events {
+				_, _ = fmt.Fprintf(
+					cmd.OutOrStdout(),
+					"%s\t%s\t%s\t%s\t%s\t%s\n",
+					event.CreatedAt.UTC().Format(time.RFC3339),
+					event.Action,
+					event.PeerID,
+					event.PreviousTrustState,
+					event.NewTrustState,
+					event.Reason,
+				)
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&peerID, "peer-id", "", "Filter by peer_id")
+	cmd.Flags().StringVar(&action, "action", "", "Filter by action symbol")
+	cmd.Flags().IntVar(&limit, "limit", 100, "Max number of records (<=0 means all)")
+	cmd.Flags().BoolVar(&outputJSON, "json", false, "Print as JSON")
 	return cmd
 }
 

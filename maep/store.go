@@ -13,6 +13,8 @@ type Store interface {
 	GetContactByNodeUUID(ctx context.Context, nodeUUID string) (Contact, bool, error)
 	PutContact(ctx context.Context, contact Contact) error
 	ListContacts(ctx context.Context) ([]Contact, error)
+	AppendAuditEvent(ctx context.Context, event AuditEvent) error
+	ListAuditEvents(ctx context.Context, peerID string, action string, limit int) ([]AuditEvent, error)
 	AppendInboxMessage(ctx context.Context, message InboxMessage) error
 	ListInboxMessages(ctx context.Context, fromPeerID string, topic string, limit int) ([]InboxMessage, error)
 	GetDedupeRecord(ctx context.Context, fromPeerID string, topic string, idempotencyKey string) (DedupeRecord, bool, error)

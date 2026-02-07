@@ -1,9 +1,10 @@
 package maep
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/quailyquaily/mistermorph/internal/fsstore"
 )
 
 const (
@@ -34,6 +37,11 @@ type contactsFile struct {
 type dedupeFile struct {
 	Version int            `json:"version"`
 	Records []DedupeRecord `json:"records"`
+}
+
+type auditFile struct {
+	Version int          `json:"version"`
+	Records []AuditEvent `json:"records"`
 }
 
 type inboxFile struct {
@@ -60,7 +68,7 @@ func (s *FileStore) Ensure(ctx context.Context) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return os.MkdirAll(s.rootPath(), 0o700)
+	return fsstore.EnsureDir(s.rootPath(), 0o700)
 }
 
 func (s *FileStore) GetIdentity(ctx context.Context) (Identity, bool, error) {
@@ -87,11 +95,9 @@ func (s *FileStore) PutIdentity(ctx context.Context, identity Identity) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	if err := os.MkdirAll(s.rootPath(), 0o700); err != nil {
-		return fmt.Errorf("create maep state dir: %w", err)
-	}
-	return s.writeJSONFileAtomic(s.identityPath(), identity, 0o600)
+	return s.withStateLock(ctx, func() error {
+		return s.writeJSONFileAtomic(s.identityPath(), identity, 0o600)
+	})
 }
 
 func (s *FileStore) GetContactByPeerID(ctx context.Context, peerID string) (Contact, bool, error) {
@@ -140,29 +146,30 @@ func (s *FileStore) PutContact(ctx context.Context, contact Contact) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	contacts, err := s.loadContactsLocked()
-	if err != nil {
-		return err
-	}
-
-	replaced := false
-	for i := range contacts {
-		if strings.TrimSpace(contacts[i].PeerID) == strings.TrimSpace(contact.PeerID) {
-			if contacts[i].CreatedAt.IsZero() {
-				contacts[i].CreatedAt = contact.CreatedAt
-			}
-			contact.CreatedAt = contacts[i].CreatedAt
-			contacts[i] = contact
-			replaced = true
-			break
+	return s.withStateLock(ctx, func() error {
+		contacts, err := s.loadContactsLocked()
+		if err != nil {
+			return err
 		}
-	}
-	if !replaced {
-		contacts = append(contacts, contact)
-	}
 
-	return s.saveContactsLocked(contacts)
+		replaced := false
+		for i := range contacts {
+			if strings.TrimSpace(contacts[i].PeerID) == strings.TrimSpace(contact.PeerID) {
+				if contacts[i].CreatedAt.IsZero() {
+					contacts[i].CreatedAt = contact.CreatedAt
+				}
+				contact.CreatedAt = contacts[i].CreatedAt
+				contacts[i] = contact
+				replaced = true
+				break
+			}
+		}
+		if !replaced {
+			contacts = append(contacts, contact)
+		}
+
+		return s.saveContactsLocked(contacts)
+	})
 }
 
 func (s *FileStore) ListContacts(ctx context.Context) ([]Contact, error) {
@@ -181,28 +188,94 @@ func (s *FileStore) ListContacts(ctx context.Context) ([]Contact, error) {
 	return out, nil
 }
 
-func (s *FileStore) AppendInboxMessage(ctx context.Context, message InboxMessage) error {
+func (s *FileStore) AppendAuditEvent(ctx context.Context, event AuditEvent) error {
 	if err := s.ensureNotCanceled(ctx); err != nil {
 		return err
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	records, err := s.loadInboxMessagesLocked()
-	if err != nil {
+	event.EventID = strings.TrimSpace(event.EventID)
+	event.Action = strings.TrimSpace(event.Action)
+	event.PeerID = strings.TrimSpace(event.PeerID)
+	event.NodeUUID = strings.TrimSpace(event.NodeUUID)
+	event.Reason = strings.TrimSpace(event.Reason)
+	if event.CreatedAt.IsZero() {
+		event.CreatedAt = time.Now().UTC()
+	}
+	if event.Metadata != nil && len(event.Metadata) == 0 {
+		event.Metadata = nil
+	}
+	return s.withAuditLock(ctx, func() error {
+		return s.appendAuditEventLocked(event)
+	})
+}
+
+func (s *FileStore) ListAuditEvents(ctx context.Context, peerID string, action string, limit int) ([]AuditEvent, error) {
+	if err := s.ensureNotCanceled(ctx); err != nil {
+		return nil, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	peerID = strings.TrimSpace(peerID)
+	action = strings.TrimSpace(action)
+
+	var out []AuditEvent
+	err := s.withAuditLock(ctx, func() error {
+		records, err := s.loadAuditEventsLocked()
+		if err != nil {
+			return err
+		}
+
+		filtered := make([]AuditEvent, 0, len(records))
+		for _, record := range records {
+			if peerID != "" && strings.TrimSpace(record.PeerID) != peerID {
+				continue
+			}
+			if action != "" && strings.TrimSpace(record.Action) != action {
+				continue
+			}
+			filtered = append(filtered, record)
+		}
+		sort.Slice(filtered, func(i, j int) bool {
+			if filtered[i].CreatedAt.Equal(filtered[j].CreatedAt) {
+				return strings.TrimSpace(filtered[i].EventID) > strings.TrimSpace(filtered[j].EventID)
+			}
+			return filtered[i].CreatedAt.After(filtered[j].CreatedAt)
+		})
+		if limit > 0 && len(filtered) > limit {
+			filtered = filtered[:limit]
+		}
+		out = make([]AuditEvent, len(filtered))
+		copy(out, filtered)
+		return nil
+	})
+	return out, err
+}
+
+func (s *FileStore) AppendInboxMessage(ctx context.Context, message InboxMessage) error {
+	if err := s.ensureNotCanceled(ctx); err != nil {
 		return err
 	}
-	message.MessageID = strings.TrimSpace(message.MessageID)
-	message.FromPeerID = strings.TrimSpace(message.FromPeerID)
-	message.Topic = strings.TrimSpace(message.Topic)
-	message.ContentType = strings.TrimSpace(message.ContentType)
-	message.PayloadBase64 = strings.TrimSpace(message.PayloadBase64)
-	message.IdempotencyKey = strings.TrimSpace(message.IdempotencyKey)
-	if message.ReceivedAt.IsZero() {
-		message.ReceivedAt = time.Now().UTC()
-	}
-	records = append(records, message)
-	return s.saveInboxMessagesLocked(records)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.withStateLock(ctx, func() error {
+		records, err := s.loadInboxMessagesLocked()
+		if err != nil {
+			return err
+		}
+		message.MessageID = strings.TrimSpace(message.MessageID)
+		message.FromPeerID = strings.TrimSpace(message.FromPeerID)
+		message.Topic = strings.TrimSpace(message.Topic)
+		message.ContentType = strings.TrimSpace(message.ContentType)
+		message.PayloadBase64 = strings.TrimSpace(message.PayloadBase64)
+		message.IdempotencyKey = strings.TrimSpace(message.IdempotencyKey)
+		if message.ReceivedAt.IsZero() {
+			message.ReceivedAt = time.Now().UTC()
+		}
+		records = append(records, message)
+		return s.saveInboxMessagesLocked(records)
+	})
 }
 
 func (s *FileStore) ListInboxMessages(ctx context.Context, fromPeerID string, topic string, limit int) ([]InboxMessage, error) {
@@ -283,43 +356,44 @@ func (s *FileStore) PutDedupeRecord(ctx context.Context, record DedupeRecord) er
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	records, err := s.loadDedupeRecordsLocked()
-	if err != nil {
-		return err
-	}
-
-	now := time.Now().UTC()
-	record.FromPeerID = strings.TrimSpace(record.FromPeerID)
-	record.Topic = strings.TrimSpace(record.Topic)
-	record.IdempotencyKey = strings.TrimSpace(record.IdempotencyKey)
-	if record.CreatedAt.IsZero() {
-		record.CreatedAt = now
-	}
-	if record.ExpiresAt.IsZero() {
-		record.ExpiresAt = record.CreatedAt.Add(DefaultDedupeTTL)
-	}
-
-	replaced := false
-	for i := range records {
-		if strings.TrimSpace(records[i].FromPeerID) != record.FromPeerID {
-			continue
+	return s.withStateLock(ctx, func() error {
+		records, err := s.loadDedupeRecordsLocked()
+		if err != nil {
+			return err
 		}
-		if strings.TrimSpace(records[i].Topic) != record.Topic {
-			continue
-		}
-		if strings.TrimSpace(records[i].IdempotencyKey) != record.IdempotencyKey {
-			continue
-		}
-		records[i] = record
-		replaced = true
-		break
-	}
-	if !replaced {
-		records = append(records, record)
-	}
 
-	return s.saveDedupeRecordsLocked(records)
+		now := time.Now().UTC()
+		record.FromPeerID = strings.TrimSpace(record.FromPeerID)
+		record.Topic = strings.TrimSpace(record.Topic)
+		record.IdempotencyKey = strings.TrimSpace(record.IdempotencyKey)
+		if record.CreatedAt.IsZero() {
+			record.CreatedAt = now
+		}
+		if record.ExpiresAt.IsZero() {
+			record.ExpiresAt = record.CreatedAt.Add(DefaultDedupeTTL)
+		}
+
+		replaced := false
+		for i := range records {
+			if strings.TrimSpace(records[i].FromPeerID) != record.FromPeerID {
+				continue
+			}
+			if strings.TrimSpace(records[i].Topic) != record.Topic {
+				continue
+			}
+			if strings.TrimSpace(records[i].IdempotencyKey) != record.IdempotencyKey {
+				continue
+			}
+			records[i] = record
+			replaced = true
+			break
+		}
+		if !replaced {
+			records = append(records, record)
+		}
+
+		return s.saveDedupeRecordsLocked(records)
+	})
 }
 
 func (s *FileStore) PruneDedupeRecords(ctx context.Context, now time.Time, maxPerPeer int) (int, error) {
@@ -335,56 +409,60 @@ func (s *FileStore) PruneDedupeRecords(ctx context.Context, now time.Time, maxPe
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	records, err := s.loadDedupeRecordsLocked()
-	if err != nil {
-		return 0, err
-	}
-	if len(records) == 0 {
-		return 0, nil
-	}
-
-	active := make([]DedupeRecord, 0, len(records))
-	for _, record := range records {
-		if !record.ExpiresAt.IsZero() && !record.ExpiresAt.After(now) {
-			continue
+	removed := 0
+	err := s.withStateLock(ctx, func() error {
+		records, err := s.loadDedupeRecordsLocked()
+		if err != nil {
+			return err
 		}
-		active = append(active, record)
-	}
-
-	sort.Slice(active, func(i, j int) bool {
-		leftPeer := strings.TrimSpace(active[i].FromPeerID)
-		rightPeer := strings.TrimSpace(active[j].FromPeerID)
-		if leftPeer != rightPeer {
-			return leftPeer < rightPeer
+		if len(records) == 0 {
+			removed = 0
+			return nil
 		}
-		if active[i].CreatedAt.Equal(active[j].CreatedAt) {
-			leftTopic := strings.TrimSpace(active[i].Topic)
-			rightTopic := strings.TrimSpace(active[j].Topic)
-			if leftTopic != rightTopic {
-				return leftTopic < rightTopic
+
+		active := make([]DedupeRecord, 0, len(records))
+		for _, record := range records {
+			if !record.ExpiresAt.IsZero() && !record.ExpiresAt.After(now) {
+				continue
 			}
-			return strings.TrimSpace(active[i].IdempotencyKey) < strings.TrimSpace(active[j].IdempotencyKey)
+			active = append(active, record)
 		}
-		return active[i].CreatedAt.After(active[j].CreatedAt)
+
+		sort.Slice(active, func(i, j int) bool {
+			leftPeer := strings.TrimSpace(active[i].FromPeerID)
+			rightPeer := strings.TrimSpace(active[j].FromPeerID)
+			if leftPeer != rightPeer {
+				return leftPeer < rightPeer
+			}
+			if active[i].CreatedAt.Equal(active[j].CreatedAt) {
+				leftTopic := strings.TrimSpace(active[i].Topic)
+				rightTopic := strings.TrimSpace(active[j].Topic)
+				if leftTopic != rightTopic {
+					return leftTopic < rightTopic
+				}
+				return strings.TrimSpace(active[i].IdempotencyKey) < strings.TrimSpace(active[j].IdempotencyKey)
+			}
+			return active[i].CreatedAt.After(active[j].CreatedAt)
+		})
+
+		kept := make([]DedupeRecord, 0, len(active))
+		peerCounts := map[string]int{}
+		for _, record := range active {
+			peerID := strings.TrimSpace(record.FromPeerID)
+			if peerCounts[peerID] >= maxPerPeer {
+				continue
+			}
+			peerCounts[peerID]++
+			kept = append(kept, record)
+		}
+
+		removed = len(records) - len(kept)
+		if removed <= 0 {
+			return nil
+		}
+		return s.saveDedupeRecordsLocked(kept)
 	})
-
-	kept := make([]DedupeRecord, 0, len(active))
-	peerCounts := map[string]int{}
-	for _, record := range active {
-		peerID := strings.TrimSpace(record.FromPeerID)
-		if peerCounts[peerID] >= maxPerPeer {
-			continue
-		}
-		peerCounts[peerID]++
-		kept = append(kept, record)
-	}
-
-	removed := len(records) - len(kept)
-	if removed <= 0 {
-		return 0, nil
-	}
-	if err := s.saveDedupeRecordsLocked(kept); err != nil {
+	if err != nil {
 		return 0, err
 	}
 	return removed, nil
@@ -416,28 +494,29 @@ func (s *FileStore) PutProtocolHistory(ctx context.Context, history ProtocolHist
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	records, err := s.loadProtocolHistoryLocked()
-	if err != nil {
-		return err
-	}
-
-	history.PeerID = strings.TrimSpace(history.PeerID)
-	if history.UpdatedAt.IsZero() {
-		history.UpdatedAt = time.Now().UTC()
-	}
-	replaced := false
-	for i := range records {
-		if strings.TrimSpace(records[i].PeerID) == history.PeerID {
-			records[i] = history
-			replaced = true
-			break
+	return s.withStateLock(ctx, func() error {
+		records, err := s.loadProtocolHistoryLocked()
+		if err != nil {
+			return err
 		}
-	}
-	if !replaced {
-		records = append(records, history)
-	}
-	return s.saveProtocolHistoryLocked(records)
+
+		history.PeerID = strings.TrimSpace(history.PeerID)
+		if history.UpdatedAt.IsZero() {
+			history.UpdatedAt = time.Now().UTC()
+		}
+		replaced := false
+		for i := range records {
+			if strings.TrimSpace(records[i].PeerID) == history.PeerID {
+				records[i] = history
+				replaced = true
+				break
+			}
+		}
+		if !replaced {
+			records = append(records, history)
+		}
+		return s.saveProtocolHistoryLocked(records)
+	})
 }
 
 func (s *FileStore) loadContactsLocked() ([]Contact, error) {
@@ -457,10 +536,6 @@ func (s *FileStore) loadContactsLocked() ([]Contact, error) {
 }
 
 func (s *FileStore) saveContactsLocked(contacts []Contact) error {
-	if err := os.MkdirAll(s.rootPath(), 0o700); err != nil {
-		return fmt.Errorf("create maep state dir: %w", err)
-	}
-
 	sort.Slice(contacts, func(i, j int) bool {
 		left := strings.TrimSpace(contacts[i].PeerID)
 		right := strings.TrimSpace(contacts[j].PeerID)
@@ -475,6 +550,34 @@ func (s *FileStore) saveContactsLocked(contacts []Contact) error {
 		Contacts: contacts,
 	}
 	return s.writeJSONFileAtomic(s.contactsPath(), file, 0o600)
+}
+
+func (s *FileStore) loadAuditEventsLocked() ([]AuditEvent, error) {
+	records, ok, err := s.readAuditEventsJSONL(s.auditPathJSONL())
+	if err != nil {
+		return nil, err
+	}
+	if ok {
+		return records, nil
+	}
+
+	var legacy auditFile
+	ok, err = s.readJSONFile(s.auditPathLegacy(), &legacy)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return []AuditEvent{}, nil
+	}
+
+	out := make([]AuditEvent, 0, len(legacy.Records))
+	for _, record := range legacy.Records {
+		out = append(out, record)
+	}
+	if err := s.migrateLegacyAuditEventsLocked(out); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (s *FileStore) loadDedupeRecordsLocked() ([]DedupeRecord, error) {
@@ -494,9 +597,6 @@ func (s *FileStore) loadDedupeRecordsLocked() ([]DedupeRecord, error) {
 }
 
 func (s *FileStore) saveDedupeRecordsLocked(records []DedupeRecord) error {
-	if err := os.MkdirAll(s.rootPath(), 0o700); err != nil {
-		return fmt.Errorf("create maep state dir: %w", err)
-	}
 	file := dedupeFile{Version: dedupeFileVersion, Records: records}
 	return s.writeJSONFileAtomic(s.dedupePath(), file, 0o600)
 }
@@ -518,9 +618,6 @@ func (s *FileStore) loadInboxMessagesLocked() ([]InboxMessage, error) {
 }
 
 func (s *FileStore) saveInboxMessagesLocked(records []InboxMessage) error {
-	if err := os.MkdirAll(s.rootPath(), 0o700); err != nil {
-		return fmt.Errorf("create maep state dir: %w", err)
-	}
 	file := inboxFile{Version: inboxFileVersion, Records: records}
 	return s.writeJSONFileAtomic(s.inboxPath(), file, 0o600)
 }
@@ -542,9 +639,6 @@ func (s *FileStore) loadProtocolHistoryLocked() ([]ProtocolHistory, error) {
 }
 
 func (s *FileStore) saveProtocolHistoryLocked(records []ProtocolHistory) error {
-	if err := os.MkdirAll(s.rootPath(), 0o700); err != nil {
-		return fmt.Errorf("create maep state dir: %w", err)
-	}
 	sort.Slice(records, func(i, j int) bool {
 		return strings.TrimSpace(records[i].PeerID) < strings.TrimSpace(records[j].PeerID)
 	})
@@ -553,57 +647,103 @@ func (s *FileStore) saveProtocolHistoryLocked(records []ProtocolHistory) error {
 }
 
 func (s *FileStore) readJSONFile(path string, out any) (bool, error) {
-	data, err := os.ReadFile(path)
+	ok, err := fsstore.ReadJSON(path, out)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return false, nil
-		}
 		return false, fmt.Errorf("read %s: %w", path, err)
 	}
-	if len(strings.TrimSpace(string(data))) == 0 {
-		return false, nil
-	}
-	if err := json.Unmarshal(data, out); err != nil {
-		return false, fmt.Errorf("decode %s: %w", path, err)
-	}
-	return true, nil
+	return ok, nil
 }
 
 func (s *FileStore) writeJSONFileAtomic(path string, v any, perm os.FileMode) error {
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return fmt.Errorf("create parent dir %s: %w", dir, err)
-	}
+	return fsstore.WriteJSONAtomic(path, v, fsstore.FileOptions{
+		DirPerm:  0o700,
+		FilePerm: perm,
+	})
+}
 
-	data, err := json.MarshalIndent(v, "", "  ")
+func (s *FileStore) appendAuditEventLocked(event AuditEvent) error {
+	writer, err := fsstore.NewJSONLWriter(s.auditPathJSONL(), fsstore.JSONLOptions{
+		DirPerm:        0o700,
+		FilePerm:       0o600,
+		FlushEachWrite: true,
+	})
 	if err != nil {
-		return fmt.Errorf("marshal json for %s: %w", path, err)
+		return fmt.Errorf("open audit writer: %w", err)
 	}
-	data = append(data, '\n')
-
-	tmp, err := os.CreateTemp(dir, filepath.Base(path)+".tmp.*")
-	if err != nil {
-		return fmt.Errorf("create temp file for %s: %w", path, err)
-	}
-	tmpPath := tmp.Name()
-	defer func() {
-		_ = os.Remove(tmpPath)
-	}()
-
-	if _, err := tmp.Write(data); err != nil {
-		_ = tmp.Close()
-		return fmt.Errorf("write temp file %s: %w", tmpPath, err)
-	}
-	if err := tmp.Close(); err != nil {
-		return fmt.Errorf("close temp file %s: %w", tmpPath, err)
-	}
-	if err := os.Chmod(tmpPath, perm); err != nil {
-		return fmt.Errorf("chmod temp file %s: %w", tmpPath, err)
-	}
-	if err := os.Rename(tmpPath, path); err != nil {
-		return fmt.Errorf("rename temp file to %s: %w", path, err)
+	defer writer.Close()
+	if err := writer.AppendJSON(event); err != nil {
+		return fmt.Errorf("append audit event: %w", err)
 	}
 	return nil
+}
+
+func (s *FileStore) readAuditEventsJSONL(path string) ([]AuditEvent, bool, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, false, nil
+		}
+		return nil, false, fmt.Errorf("open audit jsonl %s: %w", path, err)
+	}
+	defer file.Close()
+
+	records := make([]AuditEvent, 0, 64)
+	scanner := bufio.NewScanner(file)
+	scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+	for scanner.Scan() {
+		line := bytes.TrimSpace(scanner.Bytes())
+		if len(line) == 0 {
+			continue
+		}
+		var event AuditEvent
+		if err := json.Unmarshal(line, &event); err != nil {
+			return nil, false, fmt.Errorf("decode audit jsonl %s: %w", path, err)
+		}
+		records = append(records, event)
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, false, fmt.Errorf("scan audit jsonl %s: %w", path, err)
+	}
+	return records, true, nil
+}
+
+func (s *FileStore) migrateLegacyAuditEventsLocked(records []AuditEvent) error {
+	if len(records) > 0 {
+		writer, err := fsstore.NewJSONLWriter(s.auditPathJSONL(), fsstore.JSONLOptions{
+			DirPerm:        0o700,
+			FilePerm:       0o600,
+			FlushEachWrite: true,
+		})
+		if err != nil {
+			return fmt.Errorf("open audit migration writer: %w", err)
+		}
+		for _, record := range records {
+			if err := writer.AppendJSON(record); err != nil {
+				_ = writer.Close()
+				return fmt.Errorf("append migrated audit event: %w", err)
+			}
+		}
+		if err := writer.Close(); err != nil {
+			return fmt.Errorf("close audit migration writer: %w", err)
+		}
+	}
+
+	legacyPath := s.auditPathLegacy()
+	base := legacyPath + ".migrated." + time.Now().UTC().Format("20060102T150405Z")
+	target := base
+	for i := 1; ; i++ {
+		if err := os.Rename(legacyPath, target); err == nil {
+			return nil
+		} else if os.IsNotExist(err) {
+			return nil
+		} else {
+			if _, statErr := os.Stat(target); statErr == nil {
+				target = fmt.Sprintf("%s.%d", base, i)
+				continue
+			}
+			return fmt.Errorf("rename legacy audit file: %w", err)
+		}
+	}
 }
 
 func (s *FileStore) ensureNotCanceled(ctx context.Context) error {
@@ -626,12 +766,40 @@ func (s *FileStore) rootPath() string {
 	return filepath.Clean(root)
 }
 
+func (s *FileStore) lockRootPath() string {
+	return filepath.Join(s.rootPath(), ".fslocks")
+}
+
+func (s *FileStore) withStateLock(ctx context.Context, fn func() error) error {
+	return s.withLock(ctx, "state.main", fn)
+}
+
+func (s *FileStore) withAuditLock(ctx context.Context, fn func() error) error {
+	return s.withLock(ctx, "audit.audit_events_jsonl", fn)
+}
+
+func (s *FileStore) withLock(ctx context.Context, key string, fn func() error) error {
+	lockPath, err := fsstore.BuildLockPath(s.lockRootPath(), key)
+	if err != nil {
+		return err
+	}
+	return fsstore.WithLock(ctx, lockPath, fn)
+}
+
 func (s *FileStore) identityPath() string {
 	return filepath.Join(s.rootPath(), "identity.json")
 }
 
 func (s *FileStore) contactsPath() string {
 	return filepath.Join(s.rootPath(), "contacts.json")
+}
+
+func (s *FileStore) auditPathJSONL() string {
+	return filepath.Join(s.rootPath(), "audit_events.jsonl")
+}
+
+func (s *FileStore) auditPathLegacy() string {
+	return filepath.Join(s.rootPath(), "audit_events.json")
 }
 
 func (s *FileStore) dedupePath() string {
