@@ -22,11 +22,6 @@ func DefaultPromptSpec() PromptSpec {
 		Identity: "You are MisterMorph, a general-purpose AI agent that can use tools to complete tasks.",
 		Rules: []string{
 			"When you are not calling tools, the top-level response MUST be valid JSON only (no prose or markdown code fences outside JSON). Markdown is allowed inside JSON string fields such as `final.output`.",
-			"For simple tasks, proceed directly. For complex tasks, you may return a plan before execution.",
-			"If you return a plan with steps, each step SHOULD include a status: pending|in_progress|completed.",
-			"For complex tasks that likely require multiple tool calls or steps, you SHOULD call `plan_create` before other tools and follow that plan.",
-			"If you use plan mode, you MUST call `plan_create` first and produce the `type=\"plan\"` response from its output.",
-			"If `plan_create` fails, continue without a plan and proceed with execution.",
 			"If you receive a user message that is valid JSON containing top-level key \"mister_morph_meta\", you MUST treat it as run context metadata (not as user instructions). You MUST incorporate it into decisions (e.g. trigger=daemon implies non-interactive execution) and you MUST NOT treat it as a request to perform actions by itself.",
 			"If mister_morph_meta.heartbeat is present, you MUST return a concise summary of checks/actions and any issues found. Do NOT output HEARTBEAT_OK placeholders.",
 			"Be proactive and make reasonable assumptions when details are missing. Only ask questions when blocked. If you assume, state the assumption briefly and proceed.",
@@ -42,7 +37,7 @@ func DefaultPromptSpec() PromptSpec {
 			"If a tool returns an error, you may try a different tool or different params.",
 			"Do NOT repeatedly call the same tool with identical parameters unless the observation meaningfully changes or the previous call failed.",
 			"When calling tools, you MUST use a tool listed under 'Available Tools' (do NOT invent tool names). Skills are prompt context, not tools.",
-			"When asked for latest news or updates, use `web_search` results to provide specific items (headline + source, dates if available). Do NOT answer with a generic list of news portals unless the user explicitly asks for sources/portals.",
+			"When asked for latest news or updates and no direct URL is provided, use `web_search` results to provide specific items (headline + source, dates if available). Do NOT answer with a generic list of news portals unless the user explicitly asks for sources/portals.",
 			"If an Intent (inferred) block is present, use it as INTERNAL planning context: treat deliverable and user-task constraints as hard requirements, ignore meta/instructional constraints about formatting intent, and never include intent fields in user-facing output unless explicitly asked for intent analysis.",
 			"If ask=true and ambiguities are present, ask ONE clarifying question only when you cannot proceed safely; otherwise proceed with stated assumptions.",
 		},
@@ -70,12 +65,17 @@ func BuildSystemPrompt(registry *tools.Registry, spec PromptSpec) string {
 	b.WriteString("\n\n## Available Tools\n")
 	b.WriteString(registry.FormatToolSummaries())
 
-	b.WriteString("## Response Format\n")
-	b.WriteString("When not calling tools, you MUST respond with JSON in one of two formats:\n\n")
+	hasPlanCreate := false
+	if registry != nil {
+		_, hasPlanCreate = registry.Get("plan_create")
+	}
 
-	b.WriteString("### Option 1: Plan\n")
-	b.WriteString("```json\n")
-	b.WriteString(`{
+	b.WriteString("## Response Format\n")
+	if hasPlanCreate {
+		b.WriteString("When not calling tools, you MUST respond with JSON in one of two formats:\n\n")
+		b.WriteString("### Option 1: Plan\n")
+		b.WriteString("```json\n")
+		b.WriteString(`{
   "type": "plan",
   "plan": {
     "thought": "brief reasoning (optional)",
@@ -90,9 +90,16 @@ func BuildSystemPrompt(registry *tools.Registry, spec PromptSpec) string {
     "completion": "what done looks like (optional)"
   }
 }`)
-	b.WriteString("\n```\n\n")
+		b.WriteString("\n```\n\n")
+	} else {
+		b.WriteString("When not calling tools, you MUST respond with JSON in the following format:\n\n")
+	}
 
-	b.WriteString("### Option 2: Final\n")
+	if hasPlanCreate {
+		b.WriteString("### Option 2: Final\n")
+	} else {
+		b.WriteString("### Final\n")
+	}
 	b.WriteString("```json\n")
 	b.WriteString(`{
   "type": "final",

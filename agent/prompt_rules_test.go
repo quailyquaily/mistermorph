@@ -19,6 +19,15 @@ func (t schemaMarkerTool) Execute(_ context.Context, _ map[string]any) (string, 
 	return "ok", nil
 }
 
+type planCreateMarkerTool struct{}
+
+func (t planCreateMarkerTool) Name() string            { return "plan_create" }
+func (t planCreateMarkerTool) Description() string     { return "plan tool marker" }
+func (t planCreateMarkerTool) ParameterSchema() string { return "{}" }
+func (t planCreateMarkerTool) Execute(_ context.Context, _ map[string]any) (string, error) {
+	return "ok", nil
+}
+
 func TestBuildSystemPrompt_UsesToolSummaries(t *testing.T) {
 	reg := tools.NewRegistry()
 	reg.Register(schemaMarkerTool{})
@@ -29,6 +38,33 @@ func TestBuildSystemPrompt_UsesToolSummaries(t *testing.T) {
 	}
 	if strings.Contains(prompt, "SCHEMA_MARKER") {
 		t.Fatalf("expected tool schema to be omitted from prompt")
+	}
+}
+
+func TestBuildSystemPrompt_HidesPlanOptionWithoutPlanCreate(t *testing.T) {
+	reg := tools.NewRegistry()
+	reg.Register(schemaMarkerTool{})
+
+	prompt := BuildSystemPrompt(reg, DefaultPromptSpec())
+	if strings.Contains(prompt, "### Option 1: Plan") {
+		t.Fatalf("did not expect plan response format without plan_create tool")
+	}
+	if !strings.Contains(prompt, "### Final") {
+		t.Fatalf("expected final response format section")
+	}
+}
+
+func TestBuildSystemPrompt_ShowsPlanOptionWithPlanCreate(t *testing.T) {
+	reg := tools.NewRegistry()
+	reg.Register(schemaMarkerTool{})
+	reg.Register(planCreateMarkerTool{})
+
+	prompt := BuildSystemPrompt(reg, DefaultPromptSpec())
+	if !strings.Contains(prompt, "### Option 1: Plan") {
+		t.Fatalf("expected plan response format with plan_create tool")
+	}
+	if !strings.Contains(prompt, "### Option 2: Final") {
+		t.Fatalf("expected final response format option label with plan_create tool")
 	}
 }
 
@@ -113,5 +149,61 @@ func TestPromptRules_NonBinaryURL_RangeRule(t *testing.T) {
 	prompt := client.allCalls()[0].Messages[0].Content
 	if !strings.Contains(prompt, ruleRangeProbe) {
 		t.Fatalf("expected range probe rule for non-binary URL")
+	}
+}
+
+func TestPromptRules_PlanCreateRules_WhenToolRegistered(t *testing.T) {
+	client := newMockClient(finalResponse("ok"))
+	reg := baseRegistry()
+	reg.Register(planCreateMarkerTool{})
+	e := New(client, reg, baseCfg(), DefaultPromptSpec())
+
+	_, _, err := e.Run(context.Background(), "do a complex migration task", RunOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	prompt := client.allCalls()[0].Messages[0].Content
+	if !strings.Contains(prompt, rulePlanGeneral) {
+		t.Fatalf("expected plan general rule in prompt")
+	}
+	if !strings.Contains(prompt, rulePlanStepStatus) {
+		t.Fatalf("expected plan step status rule in prompt")
+	}
+	if !strings.Contains(prompt, rulePlanCreateComplex) {
+		t.Fatalf("expected plan_create complex-task rule in prompt")
+	}
+	if !strings.Contains(prompt, rulePlanCreateMode) {
+		t.Fatalf("expected plan_create mode rule in prompt")
+	}
+	if !strings.Contains(prompt, rulePlanCreateFail) {
+		t.Fatalf("expected plan_create fallback rule in prompt")
+	}
+}
+
+func TestPromptRules_PlanCreateRules_NotInjected_WhenToolMissing(t *testing.T) {
+	client := newMockClient(finalResponse("ok"))
+	e := New(client, baseRegistry(), baseCfg(), DefaultPromptSpec())
+
+	_, _, err := e.Run(context.Background(), "do a complex migration task", RunOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	prompt := client.allCalls()[0].Messages[0].Content
+	if strings.Contains(prompt, rulePlanGeneral) {
+		t.Fatalf("did not expect plan general rule without tool")
+	}
+	if strings.Contains(prompt, rulePlanStepStatus) {
+		t.Fatalf("did not expect plan step status rule without tool")
+	}
+	if strings.Contains(prompt, rulePlanCreateComplex) {
+		t.Fatalf("did not expect plan_create complex-task rule without tool")
+	}
+	if strings.Contains(prompt, rulePlanCreateMode) {
+		t.Fatalf("did not expect plan_create mode rule without tool")
+	}
+	if strings.Contains(prompt, rulePlanCreateFail) {
+		t.Fatalf("did not expect plan_create fallback rule without tool")
 	}
 }

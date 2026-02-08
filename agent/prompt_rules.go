@@ -5,6 +5,8 @@ import (
 	"path"
 	"regexp"
 	"strings"
+
+	"github.com/quailyquaily/mistermorph/tools"
 )
 
 const (
@@ -13,7 +15,32 @@ const (
 	rulePreferDownload = "When a URL likely points to a file (e.g. .pdf, .zip, .png, .jpg, .mp4), prefer download_path instead of inline body."
 	ruleRangeProbe     = "If file type is unclear, you may first issue a small-range GET using a Range header with a low max_bytes to confirm content type before downloading."
 	ruleURLFetchFail   = "If url_fetch fails (blocked, timeout, non-2xx), do not fabricate; report the error and ask for updated allowlist or parameters."
+
+	rulePlanGeneral       = "For simple tasks, proceed directly. For complex tasks, you may return a plan before execution."
+	rulePlanStepStatus    = "If you return a plan with steps, each step SHOULD include a status: pending|in_progress|completed."
+	rulePlanCreateComplex = "For complex tasks that likely require multiple tool calls or steps, you SHOULD call `plan_create` before other tools and follow that plan."
+	rulePlanCreateMode    = "If you use plan mode, you MUST call `plan_create` first and produce the `type=\"plan\"` response from its output."
+	rulePlanCreateFail    = "If `plan_create` fails, continue without a plan and proceed with execution."
 )
+
+func augmentPromptSpecForRegistry(spec PromptSpec, registry *tools.Registry) PromptSpec {
+	if registry == nil {
+		return spec
+	}
+	if _, ok := registry.Get("plan_create"); !ok {
+		return spec
+	}
+
+	out := spec
+	out.Rules = append([]string{}, spec.Rules...)
+	out.Blocks = append([]PromptBlock{}, spec.Blocks...)
+	out.Rules = appendRule(out.Rules, rulePlanGeneral)
+	out.Rules = appendRule(out.Rules, rulePlanStepStatus)
+	out.Rules = appendRule(out.Rules, rulePlanCreateComplex)
+	out.Rules = appendRule(out.Rules, rulePlanCreateMode)
+	out.Rules = appendRule(out.Rules, rulePlanCreateFail)
+	return out
+}
 
 func augmentPromptSpecForTask(spec PromptSpec, task string) PromptSpec {
 	urls := ExtractDirectURLs(task)

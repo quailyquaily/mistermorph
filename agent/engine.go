@@ -34,6 +34,8 @@ func WithLogger(l *slog.Logger) Option {
 	}
 }
 
+// WithPromptBuilder replaces the default system prompt builder.
+// This hook is intended for tests in this repository.
 func WithPromptBuilder(fn func(*tools.Registry, string) string) Option {
 	return func(e *Engine) {
 		if fn != nil {
@@ -188,6 +190,7 @@ func (e *Engine) Run(ctx context.Context, task string, opts RunOptions) (*Final,
 		systemPrompt = e.promptBuilder(e.registry, task)
 	} else {
 		spec := augmentPromptSpecForTask(e.spec, task)
+		spec = augmentPromptSpecForRegistry(spec, e.registry)
 		if hasIntent {
 			spec.Blocks = append(spec.Blocks, IntentBlock(intent))
 		}
