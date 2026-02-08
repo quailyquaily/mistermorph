@@ -29,8 +29,23 @@ What makes this project worth looking at:
 
 ### Step 1: Install
 
+Option A: download a prebuilt binary from GitHub Releases (recommended for production use):
+
 ```bash
-go install github.com/lyricat/mistermorph@latest
+curl -fsSL -o /tmp/install-mistermorph.sh \
+  https://raw.githubusercontent.com/quailyquaily/mistermorph/main/scripts/install-release.sh
+bash /tmp/install-mistermorph.sh v0.1.0
+```
+
+The installer supports:
+
+- `bash install-release.sh <version-tag>`
+- `INSTALL_DIR=$HOME/.local/bin bash install-release.sh <version-tag>`
+
+Option B: install from source with Go:
+
+```bash
+go install github.com/quailyquaily/mistermorph@latest
 ```
 
 ### Step 2: Install the Agent requirements and built-in skills
