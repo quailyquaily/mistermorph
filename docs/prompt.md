@@ -21,9 +21,13 @@ This document tracks where prompts are defined, how they are composed at runtime
 ### 1) Base PromptSpec
 
 - File: `agent/prompt.go`
+- Template/Renderer:
+  - `agent/prompts/system.tmpl`
+  - `agent/prompt_template.go`
+  - `internal/prompttmpl/prompttmpl.go`
 - Definitions:
   - `DefaultPromptSpec()`: base `Identity` and `Rules`
-  - `BuildSystemPrompt(...)`: renders identity, blocks, available tools, response schema, and rules
+  - `BuildSystemPrompt(...)`: renders identity, blocks, available tools, response schema, and rules (template-driven, with legacy fallback)
 
 ### 2) Persona identity injection
 

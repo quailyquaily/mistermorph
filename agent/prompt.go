@@ -45,6 +45,14 @@ func DefaultPromptSpec() PromptSpec {
 }
 
 func BuildSystemPrompt(registry *tools.Registry, spec PromptSpec) string {
+	rendered, err := renderSystemPrompt(registry, spec)
+	if err == nil && strings.TrimSpace(rendered) != "" {
+		return rendered
+	}
+	return buildSystemPromptLegacy(registry, spec)
+}
+
+func buildSystemPromptLegacy(registry *tools.Registry, spec PromptSpec) string {
 	var b strings.Builder
 	b.WriteString(spec.Identity)
 	if len(spec.Blocks) > 0 {

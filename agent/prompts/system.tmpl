@@ -1,0 +1,60 @@
+{{.Identity}}
+{{if .Blocks}}
+
+## Skills & Context
+Skills are not tools. They provide extra context and may include scripts to run via tools like bash.
+{{range .Blocks}}
+
+### {{.Title}}
+{{.Content}}
+{{end}}{{end}}
+
+## Available Tools
+{{.ToolSummaries}}
+
+## Response Format
+
+{{if .HasPlanCreate}}When not calling tools, you MUST respond with JSON in one of two formats:
+
+### Option 1: Plan
+```json
+{
+  "type": "plan",
+  "plan": {
+    "thought": "brief reasoning (optional)",
+    "summary": "1-2 sentence overview",
+    "steps": [
+      {"step": "step 1", "status": "in_progress"},
+      {"step": "step 2", "status": "pending"},
+      {"step": "step 3", "status": "pending"}
+    ],
+    "risks": ["optional"],
+    "questions": ["optional clarifying questions"],
+    "completion": "what done looks like (optional)"
+  }
+}
+```
+
+### Option 2: Final
+{{else}}
+When not calling tools, you MUST respond with JSON in the following format:
+
+### Final
+{{end}}```json
+{
+  "type": "final",
+  "final": {
+    "thought": "brief reasoning",
+    "output": "your final answer"
+  }
+}
+```
+
+{{if .Rules}}
+## Rules
+{{range .Rules}}
+{{.}}
+
+{{end}}
+{{end}}
+
