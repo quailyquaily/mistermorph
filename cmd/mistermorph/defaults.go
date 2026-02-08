@@ -40,6 +40,14 @@ func initViperDefaults() {
 	// MAEP
 	viper.SetDefault("maep.dir_name", "maep")
 	viper.SetDefault("maep.listen_addrs", []string{})
+
+	// Bus
+	viper.SetDefault("bus.backend", "inproc")
+	viper.SetDefault("bus.max_inflight", 1024)
+	viper.SetDefault("bus.retry.max_attempts", 5)
+	viper.SetDefault("bus.retry.initial_backoff", 500*time.Millisecond)
+	viper.SetDefault("bus.retry.max_backoff", 30*time.Second)
+
 	viper.SetDefault("contacts.dir_name", "contacts")
 	viper.SetDefault("contacts.human.enabled", true)
 	viper.SetDefault("contacts.human.send.enabled", true)

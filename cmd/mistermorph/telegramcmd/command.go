@@ -230,6 +230,14 @@ func newTelegramCmd() *cobra.Command {
 			}
 			maepMaxTurnsPerSession := configuredMAEPMaxTurnsPerSession()
 			maepSessionCooldown := configuredMAEPSessionCooldown()
+			runtimeStore, err := maepruntime.NewStateStore(statepaths.MAEPDir())
+			if err != nil {
+				return fmt.Errorf("init telegram runtime state store: %w", err)
+			}
+			runtimeSnapshot, runtimeStateFound, err := runtimeStore.Load()
+			if err != nil {
+				return fmt.Errorf("load telegram runtime state: %w", err)
+			}
 
 			reactionCfg := readTelegramReactionConfig()
 
@@ -292,6 +300,7 @@ func newTelegramCmd() *cobra.Command {
 				maepHistory        = make(map[string][]llm.Message)
 				maepStickySkills   = make(map[string][]string)
 				maepSessions       = make(map[string]maepSessionState)
+				maepSessionDirty   bool
 				maepVersion        uint64
 				stickySkillsByChat = make(map[int64][]string)
 				workers            = make(map[int64]*telegramChatWorker)
@@ -308,6 +317,15 @@ func newTelegramCmd() *cobra.Command {
 				knownMentions      = make(map[int64]map[string]string)
 				offset             int64
 			)
+			if runtimeStateFound {
+				restoredOffset, ok := runtimeSnapshot.ChannelOffsets[maepruntime.ChannelTelegram]
+				if !ok {
+					return fmt.Errorf("runtime state missing channel offset %q", maepruntime.ChannelTelegram)
+				}
+				offset = restoredOffset
+				maepSessions = restoreMAEPSessionStates(runtimeSnapshot.SessionStates)
+				logger.Info("telegram_runtime_state_loaded", "offset", offset, "session_states", len(maepSessions))
+			}
 			initRequired := false
 			if _, err := loadInitProfileDraft(); err == nil {
 				initRequired = true
@@ -743,6 +761,7 @@ func newTelegramCmd() *cobra.Command {
 								shouldRefreshPreferences = true
 							}
 							maepSessions[sessionKey] = nextSessionState
+							maepSessionDirty = true
 							if blockedByFeedback {
 								maepMu.Unlock()
 								preferenceChanged := false
@@ -838,6 +857,7 @@ func newTelegramCmd() *cobra.Command {
 								sessionState.TurnCount++
 								sessionState.UpdatedAt = time.Now().UTC()
 								maepSessions[sessionKey] = sessionState
+								maepSessionDirty = true
 								if len(loadedSkills) > 0 {
 									capN := viper.GetInt("skills.max_load")
 									if capN <= 0 {
@@ -868,6 +888,7 @@ func newTelegramCmd() *cobra.Command {
 					time.Sleep(1 * time.Second)
 					continue
 				}
+				offsetChanged := nextOffset != offset
 				offset = nextOffset
 
 				for _, u := range updates {
@@ -1260,6 +1281,30 @@ func newTelegramCmd() *cobra.Command {
 						Text:            text,
 						Version:         v,
 						MentionUsers:    mentionUsers,
+					}
+				}
+
+				persistNeeded := offsetChanged
+				var maepSessionsSnapshot map[string]maepSessionState
+				maepMu.Lock()
+				if maepSessionDirty {
+					persistNeeded = true
+					maepSessionDirty = false
+				}
+				if persistNeeded {
+					maepSessionsSnapshot = cloneMAEPSessionStates(maepSessions)
+				}
+				maepMu.Unlock()
+
+				if persistNeeded {
+					snapshot := maepruntime.StateSnapshot{
+						ChannelOffsets: map[string]int64{
+							maepruntime.ChannelTelegram: offset,
+						},
+						SessionStates: exportMAEPSessionStates(maepSessionsSnapshot),
+					}
+					if err := runtimeStore.Save(snapshot); err != nil {
+						return fmt.Errorf("persist telegram runtime state: %w", err)
 					}
 				}
 			}
@@ -3420,6 +3465,53 @@ func maepSessionKey(peerID string, topic string, sessionID string) string {
 
 func maepSessionScopeByTopic(topic string) string {
 	return maep.SessionScopeByTopic(topic)
+}
+
+func cloneMAEPSessionStates(in map[string]maepSessionState) map[string]maepSessionState {
+	if len(in) == 0 {
+		return map[string]maepSessionState{}
+	}
+	out := make(map[string]maepSessionState, len(in))
+	for key, value := range in {
+		out[key] = value
+	}
+	return out
+}
+
+func exportMAEPSessionStates(in map[string]maepSessionState) map[string]maepruntime.SessionState {
+	if len(in) == 0 {
+		return map[string]maepruntime.SessionState{}
+	}
+	out := make(map[string]maepruntime.SessionState, len(in))
+	for key, value := range in {
+		out[key] = maepruntime.SessionState{
+			TurnCount:         value.TurnCount,
+			CooldownUntil:     value.CooldownUntil,
+			UpdatedAt:         value.UpdatedAt,
+			InterestLevel:     value.InterestLevel,
+			LowInterestRounds: value.LowInterestRounds,
+			PreferenceSynced:  value.PreferenceSynced,
+		}
+	}
+	return out
+}
+
+func restoreMAEPSessionStates(in map[string]maepruntime.SessionState) map[string]maepSessionState {
+	if len(in) == 0 {
+		return map[string]maepSessionState{}
+	}
+	out := make(map[string]maepSessionState, len(in))
+	for key, value := range in {
+		out[key] = maepSessionState{
+			TurnCount:         value.TurnCount,
+			CooldownUntil:     value.CooldownUntil,
+			UpdatedAt:         value.UpdatedAt,
+			InterestLevel:     value.InterestLevel,
+			LowInterestRounds: value.LowInterestRounds,
+			PreferenceSynced:  value.PreferenceSynced,
+		}
+	}
+	return out
 }
 
 func applyMAEPFeedback(state maepSessionState, feedback maepFeedbackClassification) maepSessionState {
