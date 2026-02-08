@@ -87,6 +87,22 @@ This document tracks where prompts are defined, how they are composed at runtime
 
 These are prompts sent through separate `llm.Request` calls outside the main tool-using turn loop.
 
+## Template Index (Per File)
+
+| Template | Role | Purpose |
+|---|---|---|
+| `agent/prompts/system.tmpl` | system | Renders the main system prompt (Identity, Blocks, Tools, response format, Rules). |
+| `agent/prompts/intent_system.tmpl` | system | Constrains intent inference output schema (JSON contract). |
+| `agent/prompts/intent_user.tmpl` | user | Carries `task/history` plus built-in intent inference rules. |
+| `telegramcmd/prompts/memory_draft_system.tmpl` | system | Defines the output contract for single-session memory draft generation. |
+| `telegramcmd/prompts/memory_draft_user.tmpl` | user | Carries session context, dialogue snippets, existing tasks/follow-ups, and summarization rules. |
+| `telegramcmd/prompts/memory_merge_system.tmpl` | system | Defines the output contract for same-day short-term memory merge. |
+| `telegramcmd/prompts/memory_merge_user.tmpl` | user | Carries existing/incoming memory content and merge rules. |
+| `telegramcmd/prompts/memory_task_match_system.tmpl` | system | Defines the output contract for task mapping (`update_index/match_index`). |
+| `telegramcmd/prompts/memory_task_match_user.tmpl` | user | Carries existing tasks, updates, and matching rules. |
+| `telegramcmd/prompts/memory_task_dedup_system.tmpl` | system | Defines the output contract for semantic task deduplication. |
+| `telegramcmd/prompts/memory_task_dedup_user.tmpl` | user | Carries tasks and deduplication rules. |
+
 ### 1) Intent inference
 
 - File/Function: `agent/intent.go` / `InferIntent(...)`
@@ -95,7 +111,7 @@ These are prompts sent through separate `llm.Request` calls outside the main too
   - `agent/prompts/intent_user.tmpl`
   - Renderer: `agent/intent_template.go` (via `internal/prompttmpl`)
 - Purpose: infer structured user intent and ambiguity level
-- Primary input: current `task`, trimmed recent `history`（规则由模板内置）
+- Primary input: current `task`, trimmed recent `history` (rules are embedded in the template)
 - Output: `Intent{goal, deliverable, constraints, ambiguities, ask}`
 - JSON required: **Yes** (`ForceJSON=true`)
 
@@ -182,32 +198,48 @@ These are prompts sent through separate `llm.Request` calls outside the main too
 ### 12) Telegram memory draft generation
 
 - File/Function: `cmd/mistermorph/telegramcmd/command.go` / `BuildMemoryDraft(...)`
+- Templates:
+  - `cmd/mistermorph/telegramcmd/prompts/memory_draft_system.tmpl`
+  - `cmd/mistermorph/telegramcmd/prompts/memory_draft_user.tmpl`
+  - Renderer: `cmd/mistermorph/telegramcmd/memory_prompts.go`
 - Purpose: convert one session into structured short-term memory draft
-- Primary input: session context, conversation, existing tasks/follow-ups, memory rules
+- Primary input: session context, conversation, existing tasks/follow-ups
 - Output: `memory.SessionDraft`
 - JSON required: **Yes** (`ForceJSON=true`)
 
 ### 13) Telegram semantic merge for short-term memory
 
 - File/Function: `cmd/mistermorph/telegramcmd/command.go` / `SemanticMergeShortTerm(...)`
+- Templates:
+  - `cmd/mistermorph/telegramcmd/prompts/memory_merge_system.tmpl`
+  - `cmd/mistermorph/telegramcmd/prompts/memory_merge_user.tmpl`
+  - Renderer: `cmd/mistermorph/telegramcmd/memory_prompts.go`
 - Purpose: semantically merge same-day short-term memory
-- Primary input: existing content + incoming draft + merge rules
+- Primary input: existing content + incoming draft
 - Output: merged `memory.ShortTermContent` + summary string
 - JSON required: **Yes** (`ForceJSON=true`)
 
 ### 14) Telegram semantic task matching
 
 - File/Function: `cmd/mistermorph/telegramcmd/command.go` / `semanticMatchTasks(...)`
+- Templates:
+  - `cmd/mistermorph/telegramcmd/prompts/memory_task_match_system.tmpl`
+  - `cmd/mistermorph/telegramcmd/prompts/memory_task_match_user.tmpl`
+  - Renderer: `cmd/mistermorph/telegramcmd/memory_prompts.go`
 - Purpose: map incoming task updates onto existing tasks
-- Primary input: existing task list + update task list + matching rules
+- Primary input: existing task list + update task list
 - Output: `[]taskMatch{update_index, match_index}`
 - JSON required: **Yes** (`ForceJSON=true`)
 
 ### 15) Telegram semantic task deduplication
 
 - File/Function: `cmd/mistermorph/telegramcmd/command.go` / `semanticDedupTaskItems(...)`
+- Templates:
+  - `cmd/mistermorph/telegramcmd/prompts/memory_task_dedup_system.tmpl`
+  - `cmd/mistermorph/telegramcmd/prompts/memory_task_dedup_user.tmpl`
+  - Renderer: `cmd/mistermorph/telegramcmd/memory_prompts.go`
 - Purpose: deduplicate semantically equivalent task items
-- Primary input: task list + dedup rules
+- Primary input: task list
 - Output: deduplicated `[]memory.TaskItem`
 - JSON required: **Yes** (`ForceJSON=true`)
 

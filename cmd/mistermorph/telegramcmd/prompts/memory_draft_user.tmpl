@@ -1,0 +1,22 @@
+{
+  "session_context": {{toJSON .SessionContext}},
+  "conversation": {{toJSON .Conversation}},
+  "existing_tasks": {{toJSON .ExistingTasks}},
+  "existing_follow_ups": {{toJSON .ExistingFollowUps}},
+  "rules": [
+    "Short-term memory is public. Do NOT include private or sensitive info in summary/session_summary/temporary_facts/tasks/follow_ups.",
+    "Use the same language as the user for titles and values; keep Session Summary keys labeled as Users/Datetime/Event/Result.",
+    "Session summary items must be single-topic. Set title to the topic name.",
+    "Session summary value must be newline-separated key-value lines: Users: ..., Datetime: ..., Event: ..., Result: ... (omit unknowns).",
+    "If session_context includes counterparty info, use it instead of generic labels like \"user\".",
+    "Temporary facts title is the fact group name; value is newline-separated key-value lines (e.g., 网站 URL: ..., API 示例: ...).",
+    "Temporary facts should preserve key metadata such as URLs, terms, identifiers, IDs, or ticket numbers when they matter to future work.",
+    "Keep items concise but specific.",
+    "If an existing task or follow-up was completed in this session, include it with done=true.",
+    "Prefer to reuse the wording from existing_tasks when updating status.",
+    "If session_context.counterparty_label is present, use that exact label in tasks/follow_ups instead of generic words like user/用户/对方.",
+    "Long-term promotion must be extremely strict: only include ONE precious, long-lived item at most, and only if the user explicitly asked to remember it.",
+    "Do NOT promote short-term tasks, one-off details, or time-bound items.",
+    "If unsure, leave the field empty."
+  ]
+}

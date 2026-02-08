@@ -1,0 +1,9 @@
+{
+  "existing": {{toJSON .Existing}},
+  "updates": {{toJSON .Updates}},
+  "rules": [
+    "Match updates to existing tasks if they refer to the same task even with different wording.",
+    "Return match_index = -1 if no existing task matches.",
+    "Each update should map to at most one existing task."
+  ]
+}

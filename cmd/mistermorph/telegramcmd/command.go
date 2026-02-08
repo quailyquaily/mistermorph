@@ -1941,48 +1941,18 @@ func BuildMemoryDraft(ctx context.Context, client llm.Client, model string, hist
 		return memory.SessionDraft{}, fmt.Errorf("nil llm client")
 	}
 
-	payload := map[string]any{
-		"session_context":     ctxInfo,
-		"conversation":        buildMemoryContextMessages(history, task, output),
-		"existing_tasks":      existing.Tasks,
-		"existing_follow_ups": existing.FollowUps,
-		"rules": []string{
-			"Short-term memory is public. Do NOT include private or sensitive info in summary/session_summary/temporary_facts/tasks/follow_ups.",
-			"Use the same language as the user for titles and values; keep Session Summary keys labeled as Users/Datetime/Event/Result.",
-			"Session summary items must be single-topic. Set title to the topic name.",
-			"Session summary value must be newline-separated key-value lines: Users: ..., Datetime: ..., Event: ..., Result: ... (omit unknowns).",
-			"If session_context includes counterparty info, use it instead of generic labels like \"user\".",
-			"Temporary facts title is the fact group name; value is newline-separated key-value lines (e.g., 网站 URL: ..., API 示例: ...).",
-			"Temporary facts should preserve key metadata such as URLs, terms, identifiers, IDs, or ticket numbers when they matter to future work.",
-			"Keep items concise but specific.",
-			"If an existing task or follow-up was completed in this session, include it with done=true.",
-			"Prefer to reuse the wording from existing_tasks when updating status.",
-			"If session_context.counterparty_label is present, use that exact label in tasks/follow_ups instead of generic words like user/用户/对方.",
-			"Long-term promotion must be extremely strict: only include ONE precious, long-lived item at most, and only if the user explicitly asked to remember it.",
-			"Do NOT promote short-term tasks, one-off details, or time-bound items.",
-			"If unsure, leave the field empty.",
-		},
+	conversation := buildMemoryContextMessages(history, task, output)
+	sys, user, err := renderMemoryDraftPrompts(ctxInfo, conversation, existing.Tasks, existing.FollowUps)
+	if err != nil {
+		return memory.SessionDraft{}, fmt.Errorf("render memory draft prompts: %w", err)
 	}
-	b, _ := json.Marshal(payload)
-
-	sys := "You summarize a single agent session into a markdown-based memory draft. " +
-		"Use session_context for who/when details. " +
-		"Return ONLY a JSON object with keys: " +
-		"summary (string), " +
-		"session_summary (array of {title, value}), " +
-		"temporary_facts (array of {title, value}), " +
-		"tasks (array of {text, done}), " +
-		"follow_ups (array of {text, done}), " +
-		"promote (object with goals_projects and key_facts arrays of {title, value}). " +
-		"If nothing applies, use empty arrays and empty strings. " +
-		"Promote only stable, high-signal items."
 
 	res, err := client.Chat(ctx, llm.Request{
 		Model:     model,
 		ForceJSON: true,
 		Messages: []llm.Message{
 			{Role: "system", Content: sys},
-			{Role: "user", Content: string(b)},
+			{Role: "user", Content: user},
 		},
 		Parameters: map[string]any{
 			"max_tokens": 10240,
@@ -2089,12 +2059,6 @@ func firstKVItem(items []memory.KVItem) (memory.KVItem, bool) {
 	return memory.KVItem{}, false
 }
 
-type semanticMergeInput struct {
-	Existing semanticMergeContent `json:"existing"`
-	Incoming semanticMergeContent `json:"incoming"`
-	Rules    []string             `json:"rules"`
-}
-
 type semanticMergeContent struct {
 	SessionSummary []memory.KVItem   `json:"session_summary"`
 	TemporaryFacts []memory.KVItem   `json:"temporary_facts"`
@@ -2115,51 +2079,29 @@ func SemanticMergeShortTerm(ctx context.Context, client llm.Client, model string
 		return memory.ShortTermContent{}, "", fmt.Errorf("nil llm client")
 	}
 
-	input := semanticMergeInput{
-		Existing: semanticMergeContent{
-			SessionSummary: existing.SessionSummary,
-			TemporaryFacts: existing.TemporaryFacts,
-			Tasks:          existing.Tasks,
-			FollowUps:      existing.FollowUps,
-		},
-		Incoming: semanticMergeContent{
-			SessionSummary: draft.SessionSummary,
-			TemporaryFacts: draft.TemporaryFacts,
-			Tasks:          draft.Tasks,
-			FollowUps:      draft.FollowUps,
-		},
-		Rules: []string{
-			"These are same-day short-term items. Merge semantically and deduplicate.",
-			"Short-term memory is public. Do NOT include private or sensitive info.",
-			"Session summary title is the topic name; value is newline-separated key-value lines (Users/Datetime/Event/Result).",
-			"Temporary facts title is the fact group name; value is newline-separated key-value lines.",
-			"Merge items with overlapping meaning even if titles differ. You may rename titles to unify duplicates.",
-			"Prefer a single canonical title when multiple entries describe the same topic.",
-			"Preserve all concrete details when merging; do not lose facts from incoming or existing items.",
-			"Merge overlapping link lists into one list (dedupe URLs).",
-			"Within a Session Summary value, each key (Users/Datetime/Event/Result) must appear at most once.",
-			"Within a Temporary Facts value, do not repeat the same key or URL.",
-			"Prefer the most recent information when conflicts occur.",
-			"Preserve important metadata in temporary_facts such as URLs, terms, identifiers, IDs, or ticket numbers.",
-			"Keep items concise.",
-			"Tasks/Follow-ups: merge duplicates even if wording differs; keep one canonical item.",
-			"If any duplicate is done=true, the merged item must be done=true.",
-			"If unsure, keep the existing item and add the new one only if distinct.",
-		},
+	existingContent := semanticMergeContent{
+		SessionSummary: existing.SessionSummary,
+		TemporaryFacts: existing.TemporaryFacts,
+		Tasks:          existing.Tasks,
+		FollowUps:      existing.FollowUps,
 	}
-	payload, _ := json.Marshal(input)
-
-	sys := "You merge short-term memory entries for the same day. " +
-		"Return ONLY a JSON object with keys: summary, session_summary, temporary_facts, tasks, follow_ups. " +
-		"Each list item must keep the same shape as input. " +
-		"Summary must reflect the merged content and be one short sentence."
+	incomingContent := semanticMergeContent{
+		SessionSummary: draft.SessionSummary,
+		TemporaryFacts: draft.TemporaryFacts,
+		Tasks:          draft.Tasks,
+		FollowUps:      draft.FollowUps,
+	}
+	sys, user, err := renderMemoryMergePrompts(existingContent, incomingContent)
+	if err != nil {
+		return memory.ShortTermContent{}, "", fmt.Errorf("render semantic merge prompts: %w", err)
+	}
 
 	res, err := client.Chat(ctx, llm.Request{
 		Model:     model,
 		ForceJSON: true,
 		Messages: []llm.Message{
 			{Role: "system", Content: sys},
-			{Role: "user", Content: string(payload)},
+			{Role: "user", Content: user},
 		},
 		Parameters: map[string]any{
 			"max_tokens": 40960,
@@ -2317,23 +2259,16 @@ func semanticMatchTasks(ctx context.Context, client llm.Client, model string, ba
 	if client == nil || len(base) == 0 || len(updates) == 0 {
 		return nil
 	}
-	payload := map[string]any{
-		"existing": base,
-		"updates":  updates,
-		"rules": []string{
-			"Match updates to existing tasks if they refer to the same task even with different wording.",
-			"Return match_index = -1 if no existing task matches.",
-			"Each update should map to at most one existing task.",
-		},
+	sys, user, err := renderMemoryTaskMatchPrompts(base, updates)
+	if err != nil {
+		return nil
 	}
-	b, _ := json.Marshal(payload)
-	sys := "You match task updates to existing tasks. Return ONLY JSON: {\"matches\":[{\"update_index\":int,\"match_index\":int}]}."
 	res, err := client.Chat(ctx, llm.Request{
 		Model:     model,
 		ForceJSON: true,
 		Messages: []llm.Message{
 			{Role: "system", Content: sys},
-			{Role: "user", Content: string(b)},
+			{Role: "user", Content: user},
 		},
 		Parameters: map[string]any{
 			"max_tokens": 40960,
@@ -2357,23 +2292,16 @@ func semanticDedupTaskItems(ctx context.Context, client llm.Client, model string
 	if client == nil || len(items) == 0 {
 		return items
 	}
-	payload := map[string]any{
-		"tasks": items,
-		"rules": []string{
-			"Merge duplicate tasks even if wording differs.",
-			"Keep one canonical task per meaning.",
-			"If any duplicate is done=true, the merged task must be done=true.",
-			"Do not invent new tasks.",
-		},
+	sys, user, err := renderMemoryTaskDedupPrompts(items)
+	if err != nil {
+		return items
 	}
-	b, _ := json.Marshal(payload)
-	sys := "You deduplicate tasks semantically. Return ONLY JSON: {\"tasks\":[{\"text\":string,\"done\":bool}]}."
 	res, err := client.Chat(ctx, llm.Request{
 		Model:     model,
 		ForceJSON: true,
 		Messages: []llm.Message{
 			{Role: "system", Content: sys},
-			{Role: "user", Content: string(b)},
+			{Role: "user", Content: user},
 		},
 		Parameters: map[string]any{
 			"max_tokens": 1200,
