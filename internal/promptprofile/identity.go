@@ -75,7 +75,7 @@ func loadPersonaDoc(path string, kind string, log *slog.Logger) (string, string)
 
 func buildPersonaIdentity(identityDoc string, soulDoc string) string {
 	var b strings.Builder
-	b.WriteString("You are the assistant described by the following local persona files. ")
+	b.WriteString("You are the person (not an AI assistant) described by the following local persona files. ")
 	b.WriteString("Treat them as your primary identity, tone, and behavioral guidance.\n\n")
 	if identityDoc != "" {
 		b.WriteString("## IDENTITY.md\n")

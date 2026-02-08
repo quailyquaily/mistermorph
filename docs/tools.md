@@ -12,6 +12,7 @@
   - `url_fetch`
   - `web_search`
   - `memory_recently`
+  - `contacts_upsert`
   - `contacts_list`
   - `contacts_candidate_rank`
   - `contacts_send`
@@ -125,6 +126,31 @@
 | `days` | `integer` | 否 | `3` | 时间窗口（天）。 |
 | `limit` | `integer` | 否 | `tools.memory.recently.max_items` | 返回条数上限。 |
 | `include_body` | `boolean` | 否 | `false` | 是否附带解析后的 body。 |
+
+## `contacts_upsert`
+
+用途：创建或更新单个联系人画像（支持部分字段更新，未提供字段默认保留原值）。
+
+参数：
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+|---|---|---|---|---|
+| `contact_id` | `string` | 条件必填 | 无 | 联系人稳定 ID。更新时建议提供。 |
+| `status` | `string` | 否 | `active` | `active` / `inactive`。 |
+| `contact_nickname` | `string` | 否 | 空 | 联系人昵称。 |
+| `persona_brief` | `string` | 否 | 空 | 联系人互动风格摘要。 |
+| `persona_traits` | `object<string,number>` | 否 | 空 | 人格特征权重映射。 |
+| `subject_id` | `string` | 条件必填 | 空 | 人类联系人的主体 ID。 |
+| `understanding_depth` | `number` | 否 | 继承旧值或 `30` | 认知深度，范围 `[0,100]`。 |
+| `topic_weights` | `object<string,number>` | 否 | 空 | topic 偏好权重映射。 |
+| `reciprocity_norm` | `number` | 否 | 继承旧值或 `0.5` | 互惠分，范围 `[0,1]`。 |
+
+约束：
+
+- `contact_id` / `subject_id` 至少提供一个。
+- 当 `contact_id` 缺失时，服务会尝试由 `subject_id` 推导联系人 ID。
+- `status` 仅支持 `active|inactive`。
+- 数值参数会在存储层被归一化（例如深度裁剪到 `[0,100]`、分值裁剪到 `[0,1]`）。
 
 ## `contacts_list`
 
