@@ -10,7 +10,7 @@ require (
 	github.com/libp2p/go-libp2p v0.44.0
 	github.com/lyricat/goutils v1.2.3
 	github.com/multiformats/go-multiaddr v0.16.0
-	github.com/quailyquaily/uniai v0.0.5
+	github.com/quailyquaily/uniai v0.0.8
 	github.com/spf13/cobra v1.8.1
 	github.com/spf13/viper v1.19.0
 	golang.org/x/net v0.49.0
