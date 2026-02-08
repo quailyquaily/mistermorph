@@ -86,7 +86,8 @@ func TestFileStoreDedupeAndProtocolHistory(t *testing.T) {
 		Topic:          "chat.message",
 		IdempotencyKey: "m-001",
 		CreatedAt:      now,
-		ExpiresAt:      now.Add(24 * time.Hour),
+		// Keep expiration relative to wall clock because GetDedupeRecord uses time.Now().
+		ExpiresAt: time.Now().UTC().Add(24 * time.Hour),
 	}
 	if err := store.PutDedupeRecord(ctx, record); err != nil {
 		t.Fatalf("PutDedupeRecord() error = %v", err)
