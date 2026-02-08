@@ -262,7 +262,7 @@ func (s *Service) RankCandidates(ctx context.Context, now time.Time, opts TickOp
 		}
 	}
 
-	decisions := buildDecisions("rank_only", eligible, freshCandidates, featuresByContact, opts.PushTopic, opts.MaxLinkedHistoryItems, opts)
+	decisions := buildDecisions(eligible, freshCandidates, featuresByContact, opts.PushTopic, opts.MaxLinkedHistoryItems, opts)
 	if len(decisions) > opts.MaxTargets {
 		decisions = decisions[:opts.MaxTargets]
 	}
@@ -330,34 +330,32 @@ func (s *Service) SendDecision(ctx context.Context, now time.Time, decision Shar
 		decision.IdempotencyKey = fmt.Sprintf("manual:%s:%s", sanitizeToken(contact.ContactID), uuid.NewString())
 	}
 
-	outcome := ShareOutcome{
-		ContactID:      decision.ContactID,
-		PeerID:         decision.PeerID,
-		ItemID:         decision.ItemID,
-		IdempotencyKey: decision.IdempotencyKey,
-		SentAt:         now,
-	}
-	accepted, deduped, sendErr := sender.Send(ctx, contact, decision)
-	if sendErr != nil {
-		outcome.Error = sendErr.Error()
-		cooldown := now.Add(s.failureCooldown)
-		contact.CooldownUntil = &cooldown
-	} else {
-		outcome.Accepted = accepted
-		outcome.Deduped = deduped
-		ts := now
-		contact.LastSharedAt = &ts
-		contact.LastInteractionAt = &ts
-		contact.LastSharedItemID = decision.ItemID
-		contact.ShareCount++
-	}
-	contact = recomputeRetainScore(contact, now)
-	if err := s.store.PutContact(ctx, contact); err != nil {
+	outcome, attempted, err := s.sendWithBusOutbox(ctx, now, contact, decision, sender)
+	if err != nil {
 		return ShareOutcome{}, err
+	}
+	if attempted {
+		if outcome.Error != "" {
+			cooldown := now.Add(s.failureCooldown)
+			contact.CooldownUntil = &cooldown
+		} else {
+			ts := now
+			contact.LastSharedAt = &ts
+			contact.LastInteractionAt = &ts
+			contact.LastSharedItemID = decision.ItemID
+			contact.ShareCount++
+		}
+		contact = recomputeRetainScore(contact, now)
+		if err := s.store.PutContact(ctx, contact); err != nil {
+			return ShareOutcome{}, err
+		}
 	}
 	action := "proactive_share_send_ok"
 	reason := "accepted"
-	if outcome.Error != "" {
+	if !attempted && outcome.Deduped {
+		action = "proactive_share_send_deduped"
+		reason = "outbox_deduped"
+	} else if outcome.Error != "" {
 		action = "proactive_share_send_failed"
 		reason = outcome.Error
 	}
@@ -371,6 +369,148 @@ func (s *Service) SendDecision(ctx context.Context, now time.Time, decision Shar
 		CreatedAt: now,
 	})
 	return outcome, nil
+}
+
+func resolveDecisionChannel(contact Contact, decision ShareDecision) (string, error) {
+	for _, endpoint := range contact.ChannelEndpoints {
+		channel, err := normalizeBusChannel(endpoint.Channel)
+		if err != nil {
+			return "", err
+		}
+		if channel == ChannelTelegram {
+			return channel, nil
+		}
+	}
+	if hasTelegramTarget(contact) {
+		return ChannelTelegram, nil
+	}
+	if strings.TrimSpace(decision.PeerID) != "" || strings.TrimSpace(contact.PeerID) != "" {
+		return ChannelMAEP, nil
+	}
+	return "", fmt.Errorf("unable to resolve delivery channel for contact_id=%s", contact.ContactID)
+}
+
+func (s *Service) sendWithBusOutbox(ctx context.Context, now time.Time, contact Contact, decision ShareDecision, sender Sender) (ShareOutcome, bool, error) {
+	channel, err := resolveDecisionChannel(contact, decision)
+	if err != nil {
+		return ShareOutcome{}, false, err
+	}
+	if _, keyErr := busOutboxRecordKey(channel, decision.IdempotencyKey); keyErr != nil {
+		return ShareOutcome{}, false, keyErr
+	}
+
+	outcome := ShareOutcome{
+		ContactID:      decision.ContactID,
+		PeerID:         decision.PeerID,
+		ItemID:         decision.ItemID,
+		IdempotencyKey: decision.IdempotencyKey,
+		SentAt:         now,
+	}
+
+	existing, exists, err := s.store.GetBusOutboxRecord(ctx, channel, decision.IdempotencyKey)
+	if err != nil {
+		return ShareOutcome{}, false, err
+	}
+	if exists {
+		if existing.Status == BusDeliveryStatusSent {
+			outcome.Accepted = existing.Accepted
+			outcome.Deduped = true
+			if existing.SentAt != nil {
+				outcome.SentAt = existing.SentAt.UTC()
+			}
+			return outcome, false, nil
+		}
+		if existing.Status == BusDeliveryStatusDead {
+			return ShareOutcome{}, false, fmt.Errorf("outbox record is dead: channel=%s idempotency_key=%s", channel, decision.IdempotencyKey)
+		}
+	}
+
+	attempts := 1
+	createdAt := now
+	if exists {
+		attempts = existing.Attempts + 1
+		createdAt = existing.CreatedAt.UTC()
+	}
+	lastAttemptAt := now
+	pendingRecord := BusOutboxRecord{
+		Channel:        channel,
+		IdempotencyKey: decision.IdempotencyKey,
+		ContactID:      decision.ContactID,
+		PeerID:         decision.PeerID,
+		ItemID:         decision.ItemID,
+		Topic:          decision.Topic,
+		ContentType:    decision.ContentType,
+		PayloadBase64:  decision.PayloadBase64,
+		Status:         BusDeliveryStatusPending,
+		Attempts:       attempts,
+		CreatedAt:      createdAt,
+		UpdatedAt:      now,
+		LastAttemptAt:  &lastAttemptAt,
+	}
+	if err := s.store.PutBusOutboxRecord(ctx, pendingRecord); err != nil {
+		return ShareOutcome{}, false, err
+	}
+	pendingDelivery := BusDeliveryRecord{
+		Channel:        channel,
+		IdempotencyKey: decision.IdempotencyKey,
+		Status:         BusDeliveryStatusPending,
+		Attempts:       attempts,
+		CreatedAt:      createdAt,
+		UpdatedAt:      now,
+		LastAttemptAt:  &lastAttemptAt,
+	}
+	if err := s.store.PutBusDeliveryRecord(ctx, pendingDelivery); err != nil {
+		return ShareOutcome{}, false, err
+	}
+
+	accepted, deduped, sendErr := sender.Send(ctx, contact, decision)
+	if sendErr != nil {
+		outcome.Error = sendErr.Error()
+		failedRecord := pendingRecord
+		failedRecord.Status = BusDeliveryStatusFailed
+		failedRecord.LastError = outcome.Error
+		failedRecord.Accepted = false
+		failedRecord.Deduped = false
+		failedRecord.UpdatedAt = now
+		failedRecord.SentAt = nil
+		if err := s.store.PutBusOutboxRecord(ctx, failedRecord); err != nil {
+			return ShareOutcome{}, false, err
+		}
+		failedDelivery := pendingDelivery
+		failedDelivery.Status = BusDeliveryStatusFailed
+		failedDelivery.LastError = outcome.Error
+		failedDelivery.UpdatedAt = now
+		failedDelivery.SentAt = nil
+		if err := s.store.PutBusDeliveryRecord(ctx, failedDelivery); err != nil {
+			return ShareOutcome{}, false, err
+		}
+		return outcome, true, nil
+	}
+
+	outcome.Accepted = accepted
+	outcome.Deduped = deduped
+	sentAt := now
+	sentRecord := pendingRecord
+	sentRecord.Status = BusDeliveryStatusSent
+	sentRecord.Accepted = accepted
+	sentRecord.Deduped = deduped
+	sentRecord.LastError = ""
+	sentRecord.SentAt = &sentAt
+	sentRecord.UpdatedAt = now
+	if err := s.store.PutBusOutboxRecord(ctx, sentRecord); err != nil {
+		return ShareOutcome{}, false, err
+	}
+	sentDelivery := pendingDelivery
+	sentDelivery.Status = BusDeliveryStatusSent
+	sentDelivery.Accepted = accepted
+	sentDelivery.Deduped = deduped
+	sentDelivery.LastError = ""
+	sentDelivery.SentAt = &sentAt
+	sentDelivery.UpdatedAt = now
+	if err := s.store.PutBusDeliveryRecord(ctx, sentDelivery); err != nil {
+		return ShareOutcome{}, false, err
+	}
+	return outcome, true, nil
 }
 
 func (s *Service) UpdateFeedback(ctx context.Context, now time.Time, input FeedbackUpdateInput) (Contact, SessionState, error) {
@@ -679,7 +819,7 @@ func (s *Service) RunTick(ctx context.Context, now time.Time, opts TickOptions, 
 		}
 	}
 
-	decisions := buildDecisions(tickID, eligible, freshCandidates, featuresByContact, opts.PushTopic, opts.MaxLinkedHistoryItems, opts)
+	decisions := buildDecisions(eligible, freshCandidates, featuresByContact, opts.PushTopic, opts.MaxLinkedHistoryItems, opts)
 	if len(decisions) > opts.MaxTargets {
 		decisions = decisions[:opts.MaxTargets]
 	}
@@ -704,36 +844,34 @@ func (s *Service) RunTick(ctx context.Context, now time.Time, opts TickOptions, 
 	if opts.Send {
 		for _, decision := range decisions {
 			contact := contactByID[decision.ContactID]
-			outcome := ShareOutcome{
-				ContactID:      decision.ContactID,
-				PeerID:         decision.PeerID,
-				ItemID:         decision.ItemID,
-				IdempotencyKey: decision.IdempotencyKey,
-				SentAt:         now,
-			}
-			accepted, deduped, sendErr := sender.Send(ctx, contact, decision)
-			if sendErr != nil {
-				outcome.Error = sendErr.Error()
-				cooldown := now.Add(s.failureCooldown)
-				contact.CooldownUntil = &cooldown
-			} else {
-				outcome.Accepted = accepted
-				outcome.Deduped = deduped
-				ts := now
-				contact.LastSharedAt = &ts
-				contact.LastInteractionAt = &ts
-				contact.LastSharedItemID = decision.ItemID
-				contact.ShareCount++
-				result.Sent++
-			}
-			contact = recomputeRetainScore(contact, now)
-			if err := s.store.PutContact(ctx, contact); err != nil {
+			outcome, attempted, err := s.sendWithBusOutbox(ctx, now, contact, decision, sender)
+			if err != nil {
 				return TickResult{}, err
+			}
+			if attempted {
+				if outcome.Error != "" {
+					cooldown := now.Add(s.failureCooldown)
+					contact.CooldownUntil = &cooldown
+				} else {
+					ts := now
+					contact.LastSharedAt = &ts
+					contact.LastInteractionAt = &ts
+					contact.LastSharedItemID = decision.ItemID
+					contact.ShareCount++
+					result.Sent++
+				}
+				contact = recomputeRetainScore(contact, now)
+				if err := s.store.PutContact(ctx, contact); err != nil {
+					return TickResult{}, err
+				}
 			}
 			result.Outcomes = append(result.Outcomes, outcome)
 			action := "proactive_share_send_ok"
 			reason := "accepted"
-			if outcome.Error != "" {
+			if !attempted && outcome.Deduped {
+				action = "proactive_share_send_deduped"
+				reason = "outbox_deduped"
+			} else if outcome.Error != "" {
 				action = "proactive_share_send_failed"
 				reason = outcome.Error
 			}
@@ -805,7 +943,6 @@ func (s *Service) rebalanceActiveContacts(ctx context.Context, now time.Time) er
 }
 
 func buildDecisions(
-	tickID string,
 	contacts []Contact,
 	candidates []ShareCandidate,
 	featuresByContact map[string]map[string]CandidateFeature,
@@ -839,7 +976,7 @@ func buildDecisions(
 		if bestScore <= 0 {
 			continue
 		}
-		idempotencyKey := fmt.Sprintf("proactive:%s:%s:%s", tickID, sanitizeToken(contact.ContactID), sanitizeToken(bestCandidate.ItemID))
+		idempotencyKey := proactiveIdempotencyKey(contact, bestCandidate)
 		topic := strings.TrimSpace(pushTopic)
 		if topic == "" {
 			topic = "share.proactive.v1"
@@ -867,6 +1004,17 @@ func buildDecisions(
 		return decisions[i].Score > decisions[j].Score
 	})
 	return decisions
+}
+
+func proactiveIdempotencyKey(contact Contact, candidate ShareCandidate) string {
+	sourceChatType := strings.ToLower(strings.TrimSpace(candidate.SourceChatType))
+	return fmt.Sprintf(
+		"proactive:%s:%s:%d:%s",
+		sanitizeToken(contact.ContactID),
+		sanitizeToken(candidate.ItemID),
+		candidate.SourceChatID,
+		sanitizeToken(sourceChatType),
+	)
 }
 
 func scoreCandidate(contact Contact, candidate ShareCandidate, feature CandidateFeature) (float64, ScoreBreakdown) {

@@ -815,6 +815,66 @@ func TestServiceSendDecisionFailureUsesConfiguredCooldown(t *testing.T) {
 	}
 }
 
+func TestServiceSendDecisionOutboxDedupesByIdempotencyKey(t *testing.T) {
+	ctx := context.Background()
+	root := filepath.Join(t.TempDir(), "contacts")
+	store := NewFileStore(root)
+	svc := NewService(store)
+	now := time.Date(2026, 2, 7, 19, 10, 0, 0, time.UTC)
+
+	_, err := svc.UpsertContact(ctx, Contact{
+		ContactID:          "maep:a",
+		Kind:               KindAgent,
+		Status:             StatusActive,
+		PeerID:             "12D3KooWA",
+		TrustState:         "verified",
+		UnderstandingDepth: 30,
+		ReciprocityNorm:    0.5,
+	}, now)
+	if err != nil {
+		t.Fatalf("UpsertContact() error = %v", err)
+	}
+
+	sender := &mockSender{accepted: true}
+	payload := base64.RawURLEncoding.EncodeToString([]byte("hello"))
+	decision := ShareDecision{
+		ContactID:      "maep:a",
+		Topic:          "share.proactive.v1",
+		ContentType:    "text/plain",
+		PayloadBase64:  payload,
+		ItemID:         "manual_1",
+		IdempotencyKey: "manual:key1",
+	}
+
+	first, err := svc.SendDecision(ctx, now, decision, sender)
+	if err != nil {
+		t.Fatalf("SendDecision(first) error = %v", err)
+	}
+	second, err := svc.SendDecision(ctx, now.Add(30*time.Second), decision, sender)
+	if err != nil {
+		t.Fatalf("SendDecision(second) error = %v", err)
+	}
+	if sender.calls != 1 {
+		t.Fatalf("sender calls mismatch: got %d want 1", sender.calls)
+	}
+	if first.Deduped {
+		t.Fatalf("first outcome should not be deduped")
+	}
+	if !second.Deduped {
+		t.Fatalf("second outcome expected deduped=true")
+	}
+	outbox, ok, err := store.GetBusOutboxRecord(ctx, ChannelMAEP, "manual:key1")
+	if err != nil {
+		t.Fatalf("GetBusOutboxRecord() error = %v", err)
+	}
+	if !ok {
+		t.Fatalf("GetBusOutboxRecord() expected ok=true")
+	}
+	if outbox.Status != BusDeliveryStatusSent || outbox.Attempts != 1 {
+		t.Fatalf("outbox mismatch: status=%q attempts=%d", outbox.Status, outbox.Attempts)
+	}
+}
+
 func TestServiceRunTickSendFailureUsesConfiguredCooldown(t *testing.T) {
 	ctx := context.Background()
 	root := filepath.Join(t.TempDir(), "contacts")
@@ -871,6 +931,69 @@ func TestServiceRunTickSendFailureUsesConfiguredCooldown(t *testing.T) {
 	want := now.Add(3 * time.Minute)
 	if !updated.CooldownUntil.Equal(want) {
 		t.Fatalf("cooldown mismatch: got %s want %s", updated.CooldownUntil.Format(time.RFC3339), want.Format(time.RFC3339))
+	}
+}
+
+func TestServiceRunTickOutboxDedupesStableIdempotencyKey(t *testing.T) {
+	ctx := context.Background()
+	root := filepath.Join(t.TempDir(), "contacts")
+	store := NewFileStore(root)
+	svc := NewService(store)
+	now := time.Date(2026, 2, 7, 19, 40, 0, 0, time.UTC)
+
+	_, err := svc.UpsertContact(ctx, Contact{
+		ContactID:          "maep:a",
+		Kind:               KindAgent,
+		Status:             StatusActive,
+		PeerID:             "12D3KooWA",
+		TrustState:         "verified",
+		UnderstandingDepth: 50,
+		ReciprocityNorm:    0.7,
+		TopicWeights: map[string]float64{
+			"maep": 0.9,
+		},
+	}, now)
+	if err != nil {
+		t.Fatalf("UpsertContact() error = %v", err)
+	}
+	payload := base64.RawURLEncoding.EncodeToString([]byte("hello"))
+	if _, err := svc.AddCandidate(ctx, ShareCandidate{
+		ItemID:        "cand-1",
+		Topic:         "maep",
+		ContentType:   "text/plain",
+		PayloadBase64: payload,
+	}, now); err != nil {
+		t.Fatalf("AddCandidate() error = %v", err)
+	}
+
+	sender := &mockSender{accepted: true}
+	first, err := svc.RunTick(ctx, now, TickOptions{
+		MaxTargets:      1,
+		FreshnessWindow: 72 * time.Hour,
+		Send:            true,
+	}, sender)
+	if err != nil {
+		t.Fatalf("RunTick(first) error = %v", err)
+	}
+	second, err := svc.RunTick(ctx, now.Add(1*time.Minute), TickOptions{
+		MaxTargets:      1,
+		FreshnessWindow: 72 * time.Hour,
+		Send:            true,
+	}, sender)
+	if err != nil {
+		t.Fatalf("RunTick(second) error = %v", err)
+	}
+	if sender.calls != 1 {
+		t.Fatalf("sender calls mismatch: got %d want 1", sender.calls)
+	}
+	if first.Sent != 1 {
+		t.Fatalf("first sent mismatch: got %d want 1", first.Sent)
+	}
+	if second.Sent != 0 {
+		t.Fatalf("second sent mismatch: got %d want 0", second.Sent)
+	}
+	if len(second.Outcomes) == 0 || !second.Outcomes[0].Deduped {
+		t.Fatalf("second run expected deduped outcome, got=%v", second.Outcomes)
 	}
 }
 

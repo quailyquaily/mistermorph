@@ -2,6 +2,7 @@ package contacts
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -223,5 +224,107 @@ func TestFileStoreNormalizesChannelEndpoints(t *testing.T) {
 	}
 	if maepEndpoint.ChatType != "" {
 		t.Fatalf("maep endpoint chat_type should be empty, got %q", maepEndpoint.ChatType)
+	}
+}
+
+func TestFileStoreBusRecordsRoundTrip(t *testing.T) {
+	ctx := context.Background()
+	root := filepath.Join(t.TempDir(), "contacts")
+	store := NewFileStore(root)
+	if err := store.Ensure(ctx); err != nil {
+		t.Fatalf("Ensure() error = %v", err)
+	}
+
+	now := time.Date(2026, 2, 8, 11, 0, 0, 0, time.UTC)
+	if err := store.PutBusInboxRecord(ctx, BusInboxRecord{
+		Channel:           ChannelTelegram,
+		PlatformMessageID: "12345",
+		ConversationKey:   "telegram:-1001",
+		SeenAt:            now,
+	}); err != nil {
+		t.Fatalf("PutBusInboxRecord() error = %v", err)
+	}
+	inbox, ok, err := store.GetBusInboxRecord(ctx, ChannelTelegram, "12345")
+	if err != nil {
+		t.Fatalf("GetBusInboxRecord() error = %v", err)
+	}
+	if !ok {
+		t.Fatalf("GetBusInboxRecord() expected ok=true")
+	}
+	if inbox.ConversationKey != "telegram:-1001" {
+		t.Fatalf("conversation_key mismatch: got %q", inbox.ConversationKey)
+	}
+
+	lastAttemptAt := now.Add(1 * time.Minute)
+	if err := store.PutBusOutboxRecord(ctx, BusOutboxRecord{
+		Channel:        ChannelMAEP,
+		IdempotencyKey: "manual:k1",
+		ContactID:      "maep:a",
+		PeerID:         "12D3KooWA",
+		ItemID:         "item-1",
+		Topic:          "share.proactive.v1",
+		ContentType:    "text/plain",
+		PayloadBase64:  "aGVsbG8",
+		Status:         BusDeliveryStatusPending,
+		Attempts:       1,
+		CreatedAt:      now,
+		UpdatedAt:      now,
+		LastAttemptAt:  &lastAttemptAt,
+	}); err != nil {
+		t.Fatalf("PutBusOutboxRecord() error = %v", err)
+	}
+	outbox, ok, err := store.GetBusOutboxRecord(ctx, ChannelMAEP, "manual:k1")
+	if err != nil {
+		t.Fatalf("GetBusOutboxRecord() error = %v", err)
+	}
+	if !ok {
+		t.Fatalf("GetBusOutboxRecord() expected ok=true")
+	}
+	if outbox.Status != BusDeliveryStatusPending {
+		t.Fatalf("outbox status mismatch: got %q", outbox.Status)
+	}
+
+	sentAt := now.Add(2 * time.Minute)
+	if err := store.PutBusDeliveryRecord(ctx, BusDeliveryRecord{
+		Channel:        ChannelMAEP,
+		IdempotencyKey: "manual:k1",
+		Status:         BusDeliveryStatusSent,
+		Attempts:       1,
+		Accepted:       true,
+		CreatedAt:      now,
+		UpdatedAt:      sentAt,
+		LastAttemptAt:  &lastAttemptAt,
+		SentAt:         &sentAt,
+	}); err != nil {
+		t.Fatalf("PutBusDeliveryRecord() error = %v", err)
+	}
+	delivery, ok, err := store.GetBusDeliveryRecord(ctx, ChannelMAEP, "manual:k1")
+	if err != nil {
+		t.Fatalf("GetBusDeliveryRecord() error = %v", err)
+	}
+	if !ok {
+		t.Fatalf("GetBusDeliveryRecord() expected ok=true")
+	}
+	if delivery.Status != BusDeliveryStatusSent || !delivery.Accepted {
+		t.Fatalf("delivery mismatch: got status=%q accepted=%v", delivery.Status, delivery.Accepted)
+	}
+}
+
+func TestFileStoreBusOutboxRejectsUnknownField(t *testing.T) {
+	ctx := context.Background()
+	root := filepath.Join(t.TempDir(), "contacts")
+	store := NewFileStore(root)
+	if err := store.Ensure(ctx); err != nil {
+		t.Fatalf("Ensure() error = %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(root, "bus_outbox.json"),
+		[]byte("{\"version\":1,\"records\":[{\"channel\":\"maep\",\"idempotency_key\":\"k\",\"status\":\"sent\",\"attempts\":1,\"created_at\":\"2026-02-08T12:00:00Z\",\"updated_at\":\"2026-02-08T12:00:00Z\",\"sent_at\":\"2026-02-08T12:00:00Z\",\"unknown\":\"x\"}]}\n"),
+		0o600,
+	); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+	if _, _, err := store.GetBusOutboxRecord(ctx, ChannelMAEP, "k"); err == nil {
+		t.Fatalf("GetBusOutboxRecord() expected decode error for unknown field")
 	}
 }
