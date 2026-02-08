@@ -2603,7 +2603,9 @@ type telegramSetMessageReactionRequest struct {
 }
 
 type telegramOKResponse struct {
-	OK bool `json:"ok"`
+	OK          bool   `json:"ok"`
+	ErrorCode   int    `json:"error_code,omitempty"`
+	Description string `json:"description,omitempty"`
 }
 
 type telegramFile struct {
@@ -2707,9 +2709,11 @@ func (api *telegramAPI) sendMessage(ctx context.Context, chatID int64, text stri
 		text = "(empty)"
 	}
 
-	// Telegram MarkdownV2 can be picky; fall back to plain text on failure.
+	// Telegram MarkdownV2 can be picky; fall back to plain text only for parse errors.
 	if err := api.sendMessageWithParseMode(ctx, chatID, text, disablePreview, "MarkdownV2"); err == nil {
 		return nil
+	} else if !isTelegramMarkdownParseError(err) {
+		return err
 	}
 	return api.sendMessageWithParseMode(ctx, chatID, text, disablePreview, "")
 }
@@ -2719,8 +2723,59 @@ func (api *telegramAPI) sendMessageMarkdownV2(ctx context.Context, chatID int64,
 	if text == "" {
 		text = "(empty)"
 	}
-	text = telegramutil.EscapeMarkdownV2(text)
-	return api.sendMessageWithParseMode(ctx, chatID, text, disablePreview, "MarkdownV2")
+	// Keep model-produced MarkdownV2 as-is; avoid second-pass escaping.
+	if err := api.sendMessageWithParseMode(ctx, chatID, text, disablePreview, "MarkdownV2"); err == nil {
+		return nil
+	} else if !isTelegramMarkdownParseError(err) {
+		return err
+	}
+	return api.sendMessageWithParseMode(ctx, chatID, text, disablePreview, "")
+}
+
+type telegramRequestError struct {
+	StatusCode  int
+	ErrorCode   int
+	Description string
+	Body        string
+}
+
+func (e *telegramRequestError) Error() string {
+	if e == nil {
+		return "telegram request failed"
+	}
+	desc := strings.TrimSpace(e.Description)
+	if desc != "" {
+		if e.StatusCode > 0 {
+			return fmt.Sprintf("telegram http %d: %s", e.StatusCode, desc)
+		}
+		return "telegram: " + desc
+	}
+	body := strings.TrimSpace(e.Body)
+	if e.StatusCode > 0 {
+		if body != "" {
+			return fmt.Sprintf("telegram http %d: %s", e.StatusCode, body)
+		}
+		return fmt.Sprintf("telegram http %d", e.StatusCode)
+	}
+	if body != "" {
+		return "telegram: " + body
+	}
+	return "telegram request failed"
+}
+
+func isTelegramMarkdownParseError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var reqErr *telegramRequestError
+	if errors.As(err, &reqErr) {
+		desc := strings.ToLower(strings.TrimSpace(reqErr.Description))
+		if strings.Contains(desc, "can't parse entities") || strings.Contains(desc, "can't parse entity") {
+			return true
+		}
+	}
+	msg := strings.ToLower(strings.TrimSpace(err.Error()))
+	return strings.Contains(msg, "can't parse entities") || strings.Contains(msg, "can't parse entity")
 }
 
 func (api *telegramAPI) sendMessageChunked(ctx context.Context, chatID int64, text string) error {
@@ -2762,13 +2817,23 @@ func (api *telegramAPI) sendMessageWithParseMode(ctx context.Context, chatID int
 	}
 	raw, _ := io.ReadAll(resp.Body)
 	_ = resp.Body.Close()
+	var out telegramOKResponse
+	_ = json.Unmarshal(raw, &out)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("telegram http %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))
+		return &telegramRequestError{
+			StatusCode:  resp.StatusCode,
+			ErrorCode:   out.ErrorCode,
+			Description: out.Description,
+			Body:        strings.TrimSpace(string(raw)),
+		}
 	}
-	var ok telegramOKResponse
-	_ = json.Unmarshal(raw, &ok)
-	if !ok.OK {
-		return fmt.Errorf("telegram sendMessage: ok=false")
+	if !out.OK {
+		return &telegramRequestError{
+			StatusCode:  resp.StatusCode,
+			ErrorCode:   out.ErrorCode,
+			Description: out.Description,
+			Body:        strings.TrimSpace(string(raw)),
+		}
 	}
 	return nil
 }
