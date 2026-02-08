@@ -37,8 +37,8 @@ func TestObserveTelegramContact_UpsertByUsername(t *testing.T) {
 	if item.LastInteractionAt == nil {
 		t.Fatalf("last_interaction_at expected non-nil")
 	}
-	if len(item.TelegramChats) != 1 || item.TelegramChats[0].ChatID != 90001 || item.TelegramChats[0].ChatType != "private" {
-		t.Fatalf("telegram_chats mismatch: got=%v", item.TelegramChats)
+	if len(item.ChannelEndpoints) != 1 || item.ChannelEndpoints[0].Channel != contacts.ChannelTelegram || item.ChannelEndpoints[0].ChatID != 90001 || item.ChannelEndpoints[0].ChatType != "private" {
+		t.Fatalf("channel_endpoints mismatch: got=%v", item.ChannelEndpoints)
 	}
 }
 
@@ -61,7 +61,7 @@ func TestObserveTelegramContact_FallbackToUserID(t *testing.T) {
 	if item.ContactNickname != "Bob" {
 		t.Fatalf("contact_nickname mismatch: got %q", item.ContactNickname)
 	}
-	if len(item.TelegramChats) != 1 || item.TelegramChats[0].ChatID != -100778899 || item.TelegramChats[0].ChatType != "group" {
-		t.Fatalf("telegram_chats mismatch: got=%v", item.TelegramChats)
+	if len(item.ChannelEndpoints) != 1 || item.ChannelEndpoints[0].Channel != contacts.ChannelTelegram || item.ChannelEndpoints[0].ChatID != -100778899 || item.ChannelEndpoints[0].ChatType != "group" {
+		t.Fatalf("channel_endpoints mismatch: got=%v", item.ChannelEndpoints)
 	}
 }

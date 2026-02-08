@@ -1026,11 +1026,14 @@ func candidateTargetsPublicChat(contact Contact, candidate ShareCandidate) bool 
 	if candidate.SourceChatID == 0 {
 		return false
 	}
-	for _, chat := range contact.TelegramChats {
-		if chat.ChatID != candidate.SourceChatID {
+	for _, endpoint := range contact.ChannelEndpoints {
+		if strings.ToLower(strings.TrimSpace(endpoint.Channel)) != ChannelTelegram {
 			continue
 		}
-		t := strings.ToLower(strings.TrimSpace(chat.ChatType))
+		if endpoint.ChatID != candidate.SourceChatID {
+			continue
+		}
+		t := strings.ToLower(strings.TrimSpace(endpoint.ChatType))
 		return t == "group" || t == "supergroup"
 	}
 	return candidate.SourceChatID < 0

@@ -465,9 +465,9 @@ func TestServiceRunTickDecisionCarriesSourceChatHints(t *testing.T) {
 		SubjectID:          "tg:id:1001",
 		UnderstandingDepth: 30,
 		ReciprocityNorm:    0.4,
-		TelegramChats: []TelegramChatRef{
-			{ChatID: 1001, ChatType: "private"},
-			{ChatID: -10055, ChatType: "group"},
+		ChannelEndpoints: []ChannelEndpoint{
+			{Channel: ChannelTelegram, Address: "1001", ChatID: 1001, ChatType: "private"},
+			{Channel: ChannelTelegram, Address: "-10055", ChatID: -10055, ChatType: "group"},
 		},
 	}, now)
 	if err != nil {
@@ -592,8 +592,8 @@ func TestServiceRunTickHumanPublicDisabledSkipsPublicCandidate(t *testing.T) {
 		SubjectID:          "tg:id:1001",
 		UnderstandingDepth: 20,
 		ReciprocityNorm:    0.4,
-		TelegramChats: []TelegramChatRef{
-			{ChatID: -100999, ChatType: "group"},
+		ChannelEndpoints: []ChannelEndpoint{
+			{Channel: ChannelTelegram, Address: "-100999", ChatID: -100999, ChatType: "group"},
 		},
 	}, now)
 	if err != nil {

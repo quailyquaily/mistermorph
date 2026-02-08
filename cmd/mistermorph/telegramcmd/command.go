@@ -4029,7 +4029,9 @@ func observeTelegramContact(ctx context.Context, svc *contacts.Service, chatID i
 		return err
 	}
 	lastInteraction := now
-	chatRef := contacts.TelegramChatRef{
+	endpoint := contacts.ChannelEndpoint{
+		Channel:    contacts.ChannelTelegram,
+		Address:    strconv.FormatInt(chatID, 10),
 		ChatID:     chatID,
 		ChatType:   strings.ToLower(strings.TrimSpace(chatType)),
 		LastSeenAt: &lastInteraction,
@@ -4045,7 +4047,7 @@ func observeTelegramContact(ctx context.Context, svc *contacts.Service, chatID i
 		if contactNickname != "" {
 			existing.ContactNickname = contactNickname
 		}
-		existing.TelegramChats = upsertTelegramChatRef(existing.TelegramChats, chatRef)
+		existing.ChannelEndpoints = upsertChannelEndpoint(existing.ChannelEndpoints, endpoint)
 		existing.LastInteractionAt = &lastInteraction
 		_, err = svc.UpsertContact(ctx, existing, now)
 		return err
@@ -4056,7 +4058,7 @@ func observeTelegramContact(ctx context.Context, svc *contacts.Service, chatID i
 		Status:             contacts.StatusActive,
 		ContactNickname:    contactNickname,
 		SubjectID:          contactID,
-		TelegramChats:      upsertTelegramChatRef(nil, chatRef),
+		ChannelEndpoints:   upsertChannelEndpoint(nil, endpoint),
 		UnderstandingDepth: 20,
 		ReciprocityNorm:    0.5,
 		LastInteractionAt:  &lastInteraction,
@@ -4064,8 +4066,20 @@ func observeTelegramContact(ctx context.Context, svc *contacts.Service, chatID i
 	return err
 }
 
-func upsertTelegramChatRef(items []contacts.TelegramChatRef, ref contacts.TelegramChatRef) []contacts.TelegramChatRef {
-	if ref.ChatID == 0 {
+func upsertChannelEndpoint(items []contacts.ChannelEndpoint, ref contacts.ChannelEndpoint) []contacts.ChannelEndpoint {
+	ref.Channel = strings.ToLower(strings.TrimSpace(ref.Channel))
+	ref.Address = strings.TrimSpace(ref.Address)
+	if ref.Channel == "" {
+		return items
+	}
+	if ref.Channel == contacts.ChannelTelegram {
+		if ref.ChatID == 0 {
+			return items
+		}
+		if ref.Address == "" {
+			ref.Address = strconv.FormatInt(ref.ChatID, 10)
+		}
+	} else if ref.Address == "" {
 		return items
 	}
 	if ref.LastSeenAt != nil && !ref.LastSeenAt.IsZero() {
@@ -4073,21 +4087,43 @@ func upsertTelegramChatRef(items []contacts.TelegramChatRef, ref contacts.Telegr
 		ref.LastSeenAt = &ts
 	}
 	ref.ChatType = strings.ToLower(strings.TrimSpace(ref.ChatType))
-	switch ref.ChatType {
-	case "private", "group", "supergroup":
-	default:
+	if ref.Channel == contacts.ChannelTelegram {
+		switch ref.ChatType {
+		case "private", "group", "supergroup":
+		default:
+			ref.ChatType = ""
+		}
+	} else {
 		ref.ChatType = ""
+		ref.ChatID = 0
 	}
-	out := make([]contacts.TelegramChatRef, 0, len(items)+1)
+	key := ref.Channel + ":" + ref.Address
+	if ref.Channel == contacts.ChannelTelegram {
+		key = ref.Channel + ":" + strconv.FormatInt(ref.ChatID, 10)
+	}
+	out := make([]contacts.ChannelEndpoint, 0, len(items)+1)
 	found := false
 	for _, item := range items {
-		if item.ChatID != ref.ChatID {
+		itemKey := strings.ToLower(strings.TrimSpace(item.Channel)) + ":" + strings.TrimSpace(item.Address)
+		if strings.ToLower(strings.TrimSpace(item.Channel)) == contacts.ChannelTelegram {
+			itemKey = contacts.ChannelTelegram + ":" + strconv.FormatInt(item.ChatID, 10)
+		}
+		if itemKey != key {
 			out = append(out, item)
 			continue
 		}
 		merged := item
+		if merged.Channel == "" {
+			merged.Channel = ref.Channel
+		}
+		if merged.Address == "" && ref.Address != "" {
+			merged.Address = ref.Address
+		}
 		if merged.ChatType == "" && ref.ChatType != "" {
 			merged.ChatType = ref.ChatType
+		}
+		if merged.ChatID == 0 && ref.ChatID != 0 {
+			merged.ChatID = ref.ChatID
 		}
 		if merged.LastSeenAt == nil || (ref.LastSeenAt != nil && ref.LastSeenAt.After(*merged.LastSeenAt)) {
 			merged.LastSeenAt = ref.LastSeenAt
@@ -4108,7 +4144,13 @@ func upsertTelegramChatRef(items []contacts.TelegramChatRef, ref contacts.Telegr
 			tj = *out[j].LastSeenAt
 		}
 		if ti.Equal(tj) {
-			return out[i].ChatID < out[j].ChatID
+			if out[i].Channel != out[j].Channel {
+				return out[i].Channel < out[j].Channel
+			}
+			if out[i].ChatID != out[j].ChatID {
+				return out[i].ChatID < out[j].ChatID
+			}
+			return out[i].Address < out[j].Address
 		}
 		return ti.After(tj)
 	})

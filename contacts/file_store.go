@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -623,7 +624,7 @@ func normalizeContact(c Contact, now time.Time) Contact {
 	c.Kind = normalizeKind(c.Kind)
 	c.Status = normalizeStatus(c.Status)
 	c.Addresses = normalizeStringSlice(c.Addresses)
-	c.TelegramChats = normalizeTelegramChats(c.TelegramChats)
+	c.ChannelEndpoints = normalizeChannelEndpoints(c.ChannelEndpoints)
 	c.TopicWeights = normalizeTopicWeightsMap(cloneFloatMap(c.TopicWeights))
 	c.PersonaTraits = normalizeTraitMap(c.PersonaTraits)
 	c.UnderstandingDepth = clamp(c.UnderstandingDepth, 0, 100)
@@ -641,6 +642,9 @@ func normalizeContact(c Contact, now time.Time) Contact {
 	}
 	if len(c.PersonaTraits) == 0 {
 		c.PersonaTraits = nil
+	}
+	if len(c.ChannelEndpoints) == 0 {
+		c.ChannelEndpoints = nil
 	}
 	return c
 }
@@ -766,50 +770,73 @@ func normalizeStringSlice(input []string) []string {
 	return out
 }
 
-func normalizeTelegramChats(input []TelegramChatRef) []TelegramChatRef {
+func normalizeChannelEndpoints(input []ChannelEndpoint) []ChannelEndpoint {
 	if len(input) == 0 {
 		return nil
 	}
-	type keyed struct {
-		item TelegramChatRef
-	}
-	byID := map[int64]TelegramChatRef{}
+	byKey := map[string]ChannelEndpoint{}
 	for _, raw := range input {
-		if raw.ChatID == 0 {
-			continue
-		}
-		item := TelegramChatRef{
+		item := ChannelEndpoint{
+			Channel:  strings.ToLower(strings.TrimSpace(raw.Channel)),
+			Address:  strings.TrimSpace(raw.Address),
 			ChatID:   raw.ChatID,
 			ChatType: strings.ToLower(strings.TrimSpace(raw.ChatType)),
 		}
-		switch item.ChatType {
-		case "private", "group", "supergroup":
-		default:
-			item.ChatType = ""
+		if item.Channel == "" {
+			continue
 		}
 		if raw.LastSeenAt != nil && !raw.LastSeenAt.IsZero() {
 			ts := raw.LastSeenAt.UTC()
 			item.LastSeenAt = &ts
 		}
-		prev, exists := byID[item.ChatID]
+		switch item.Channel {
+		case ChannelTelegram:
+			switch item.ChatType {
+			case "private", "group", "supergroup":
+			default:
+				item.ChatType = ""
+			}
+			if item.Address == "" && item.ChatID != 0 {
+				item.Address = strconv.FormatInt(item.ChatID, 10)
+			}
+		default:
+			item.ChatID = 0
+			item.ChatType = ""
+		}
+		key := ""
+		if item.Channel == ChannelTelegram && item.ChatID != 0 {
+			key = item.Channel + "#chat:" + strconv.FormatInt(item.ChatID, 10)
+		} else if item.Address != "" {
+			key = item.Channel + "#addr:" + item.Address
+		}
+		if key == "" {
+			continue
+		}
+		prev, exists := byKey[key]
 		if !exists {
-			byID[item.ChatID] = item
+			byKey[key] = item
 			continue
 		}
 		merged := prev
+		if merged.Address == "" && item.Address != "" {
+			merged.Address = item.Address
+		}
+		if merged.ChatID == 0 && item.ChatID != 0 {
+			merged.ChatID = item.ChatID
+		}
 		if merged.ChatType == "" && item.ChatType != "" {
 			merged.ChatType = item.ChatType
 		}
 		if merged.LastSeenAt == nil || (item.LastSeenAt != nil && item.LastSeenAt.After(*merged.LastSeenAt)) {
 			merged.LastSeenAt = item.LastSeenAt
 		}
-		byID[item.ChatID] = merged
+		byKey[key] = merged
 	}
-	if len(byID) == 0 {
+	if len(byKey) == 0 {
 		return nil
 	}
-	out := make([]TelegramChatRef, 0, len(byID))
-	for _, item := range byID {
+	out := make([]ChannelEndpoint, 0, len(byKey))
+	for _, item := range byKey {
 		out = append(out, item)
 	}
 	sort.Slice(out, func(i, j int) bool {
@@ -822,7 +849,13 @@ func normalizeTelegramChats(input []TelegramChatRef) []TelegramChatRef {
 			tj = *out[j].LastSeenAt
 		}
 		if ti.Equal(tj) {
-			return out[i].ChatID < out[j].ChatID
+			if out[i].Channel != out[j].Channel {
+				return out[i].Channel < out[j].Channel
+			}
+			if out[i].ChatID != out[j].ChatID {
+				return out[i].ChatID < out[j].ChatID
+			}
+			return out[i].Address < out[j].Address
 		}
 		return ti.After(tj)
 	})

@@ -293,7 +293,7 @@ func IsPublicTelegramTarget(contact contacts.Contact, decision contacts.ShareDec
 		return true
 	}
 	if decision.SourceChatID != 0 {
-		for _, item := range contact.TelegramChats {
+		for _, item := range telegramChannelEndpoints(contact) {
 			if item.ChatID != decision.SourceChatID {
 				continue
 			}
@@ -306,7 +306,7 @@ func IsPublicTelegramTarget(contact contacts.Contact, decision contacts.ShareDec
 }
 
 func preferredChatByDecision(contact contacts.Contact, decision contacts.ShareDecision) (int64, string, bool) {
-	chats := contact.TelegramChats
+	chats := telegramChannelEndpoints(contact)
 	if len(chats) == 0 {
 		return 0, "", false
 	}
@@ -336,6 +336,23 @@ func preferredChatByDecision(contact contacts.Contact, decision contacts.ShareDe
 		}
 	}
 	return 0, "", false
+}
+
+func telegramChannelEndpoints(contact contacts.Contact) []contacts.ChannelEndpoint {
+	if len(contact.ChannelEndpoints) == 0 {
+		return nil
+	}
+	out := make([]contacts.ChannelEndpoint, 0, len(contact.ChannelEndpoints))
+	for _, item := range contact.ChannelEndpoints {
+		if strings.ToLower(strings.TrimSpace(item.Channel)) != contacts.ChannelTelegram {
+			continue
+		}
+		if item.ChatID == 0 {
+			continue
+		}
+		out = append(out, item)
+	}
+	return out
 }
 
 func normalizeStrings(items []string) []string {

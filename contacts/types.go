@@ -22,6 +22,11 @@ const (
 	StatusInactive Status = "inactive"
 )
 
+const (
+	ChannelTelegram = "telegram"
+	ChannelMAEP     = "maep"
+)
+
 type Contact struct {
 	ContactID          string             `json:"contact_id"`
 	Kind               Kind               `json:"kind"`
@@ -37,7 +42,7 @@ type Contact struct {
 	NodeID             string             `json:"node_id,omitempty"`
 	PeerID             string             `json:"peer_id,omitempty"`
 	Addresses          []string           `json:"addresses,omitempty"`
-	TelegramChats      []TelegramChatRef  `json:"telegram_chats,omitempty"`
+	ChannelEndpoints   []ChannelEndpoint  `json:"channel_endpoints,omitempty"`
 	TrustState         string             `json:"trust_state,omitempty"`
 	UnderstandingDepth float64            `json:"understanding_depth"`
 	TopicWeights       map[string]float64 `json:"topic_weights,omitempty"`
@@ -116,8 +121,10 @@ type ShareDecision struct {
 	LinkedHistoryIDs []string       `json:"linked_history_ids,omitempty"`
 }
 
-type TelegramChatRef struct {
-	ChatID     int64      `json:"chat_id"`
+type ChannelEndpoint struct {
+	Channel    string     `json:"channel"`
+	Address    string     `json:"address,omitempty"`
+	ChatID     int64      `json:"chat_id,omitempty"`
 	ChatType   string     `json:"chat_type,omitempty"`
 	LastSeenAt *time.Time `json:"last_seen_at,omitempty"`
 }

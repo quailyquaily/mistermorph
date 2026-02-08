@@ -153,3 +153,75 @@ func TestFileStoreLegacyDisplayNameMigratesToContactNickname(t *testing.T) {
 		t.Fatalf("display_name should be normalized away, got %q", got.DisplayName)
 	}
 }
+
+func TestFileStoreNormalizesChannelEndpoints(t *testing.T) {
+	ctx := context.Background()
+	root := filepath.Join(t.TempDir(), "contacts")
+	store := NewFileStore(root)
+	if err := store.Ensure(ctx); err != nil {
+		t.Fatalf("Ensure() error = %v", err)
+	}
+
+	now := time.Date(2026, 2, 8, 9, 0, 0, 0, time.UTC)
+	oldSeen := now.Add(-1 * time.Hour)
+	newSeen := now.Add(-10 * time.Minute)
+	input := Contact{
+		ContactID:          "tg:id:1001",
+		Kind:               KindHuman,
+		Status:             StatusActive,
+		SubjectID:          "tg:id:1001",
+		UnderstandingDepth: 20,
+		ReciprocityNorm:    0.4,
+		ChannelEndpoints: []ChannelEndpoint{
+			{Channel: " TELEGRAM ", ChatID: 1001, ChatType: "PRIVATE", LastSeenAt: &oldSeen},
+			{Channel: "telegram", Address: "1001", ChatID: 1001, ChatType: "private", LastSeenAt: &newSeen},
+			{Channel: "maep", Address: "12D3KooWpeer", ChatID: 101, ChatType: "group"},
+			{Channel: "", Address: "ignored"},
+		},
+	}
+	if err := store.PutContact(ctx, input); err != nil {
+		t.Fatalf("PutContact() error = %v", err)
+	}
+
+	got, ok, err := store.GetContact(ctx, "tg:id:1001")
+	if err != nil {
+		t.Fatalf("GetContact() error = %v", err)
+	}
+	if !ok {
+		t.Fatalf("GetContact() expected ok=true")
+	}
+	if len(got.ChannelEndpoints) != 2 {
+		t.Fatalf("channel_endpoints length mismatch: got %d want 2", len(got.ChannelEndpoints))
+	}
+
+	telegram := got.ChannelEndpoints[0]
+	if telegram.Channel != ChannelTelegram {
+		t.Fatalf("telegram endpoint channel mismatch: got %q", telegram.Channel)
+	}
+	if telegram.ChatID != 1001 {
+		t.Fatalf("telegram endpoint chat_id mismatch: got %d want 1001", telegram.ChatID)
+	}
+	if telegram.ChatType != "private" {
+		t.Fatalf("telegram endpoint chat_type mismatch: got %q want %q", telegram.ChatType, "private")
+	}
+	if telegram.Address != "1001" {
+		t.Fatalf("telegram endpoint address mismatch: got %q want %q", telegram.Address, "1001")
+	}
+	if telegram.LastSeenAt == nil || !telegram.LastSeenAt.Equal(newSeen) {
+		t.Fatalf("telegram endpoint last_seen_at mismatch: got %v want %v", telegram.LastSeenAt, newSeen)
+	}
+
+	maepEndpoint := got.ChannelEndpoints[1]
+	if maepEndpoint.Channel != ChannelMAEP {
+		t.Fatalf("maep endpoint channel mismatch: got %q want %q", maepEndpoint.Channel, ChannelMAEP)
+	}
+	if maepEndpoint.Address != "12D3KooWpeer" {
+		t.Fatalf("maep endpoint address mismatch: got %q", maepEndpoint.Address)
+	}
+	if maepEndpoint.ChatID != 0 {
+		t.Fatalf("maep endpoint chat_id should be 0, got %d", maepEndpoint.ChatID)
+	}
+	if maepEndpoint.ChatType != "" {
+		t.Fatalf("maep endpoint chat_type should be empty, got %q", maepEndpoint.ChatType)
+	}
+}

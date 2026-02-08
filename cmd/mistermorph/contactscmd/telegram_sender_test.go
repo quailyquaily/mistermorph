@@ -13,9 +13,9 @@ func TestResolveTelegramTargetByDecisionChatID(t *testing.T) {
 	contact := contacts.Contact{
 		ContactID: "tg:id:1001",
 		Kind:      contacts.KindHuman,
-		TelegramChats: []contacts.TelegramChatRef{
-			{ChatID: 1001, ChatType: "private", LastSeenAt: &now},
-			{ChatID: -1002233, ChatType: "group", LastSeenAt: &now},
+		ChannelEndpoints: []contacts.ChannelEndpoint{
+			{Channel: contacts.ChannelTelegram, Address: "1001", ChatID: 1001, ChatType: "private", LastSeenAt: &now},
+			{Channel: contacts.ChannelTelegram, Address: "-1002233", ChatID: -1002233, ChatType: "group", LastSeenAt: &now},
 		},
 	}
 	target, chatType, err := contactsruntime.ResolveTelegramTarget(contact, contacts.ShareDecision{SourceChatID: -1002233})
@@ -36,9 +36,9 @@ func TestResolveTelegramTargetByDecisionChatType(t *testing.T) {
 	contact := contacts.Contact{
 		ContactID: "tg:id:1001",
 		Kind:      contacts.KindHuman,
-		TelegramChats: []contacts.TelegramChatRef{
-			{ChatID: 1001, ChatType: "private", LastSeenAt: &now},
-			{ChatID: -1008899, ChatType: "group", LastSeenAt: &now},
+		ChannelEndpoints: []contacts.ChannelEndpoint{
+			{Channel: contacts.ChannelTelegram, Address: "1001", ChatID: 1001, ChatType: "private", LastSeenAt: &now},
+			{Channel: contacts.ChannelTelegram, Address: "-1008899", ChatID: -1008899, ChatType: "group", LastSeenAt: &now},
 		},
 	}
 	target, chatType, err := contactsruntime.ResolveTelegramTarget(contact, contacts.ShareDecision{SourceChatType: "group"})
@@ -59,9 +59,9 @@ func TestResolveTelegramTargetFallsBackToPrivate(t *testing.T) {
 	contact := contacts.Contact{
 		ContactID: "tg:id:1001",
 		Kind:      contacts.KindHuman,
-		TelegramChats: []contacts.TelegramChatRef{
-			{ChatID: -100111, ChatType: "group", LastSeenAt: &now},
-			{ChatID: 1001, ChatType: "private", LastSeenAt: &now},
+		ChannelEndpoints: []contacts.ChannelEndpoint{
+			{Channel: contacts.ChannelTelegram, Address: "-100111", ChatID: -100111, ChatType: "group", LastSeenAt: &now},
+			{Channel: contacts.ChannelTelegram, Address: "1001", ChatID: 1001, ChatType: "private", LastSeenAt: &now},
 		},
 	}
 	target, chatType, err := contactsruntime.ResolveTelegramTarget(contact, contacts.ShareDecision{})
@@ -100,9 +100,9 @@ func TestIsPublicTelegramTarget(t *testing.T) {
 	contact := contacts.Contact{
 		ContactID: "tg:id:1001",
 		Kind:      contacts.KindHuman,
-		TelegramChats: []contacts.TelegramChatRef{
-			{ChatID: 1001, ChatType: "private", LastSeenAt: &now},
-			{ChatID: -100789, ChatType: "group", LastSeenAt: &now},
+		ChannelEndpoints: []contacts.ChannelEndpoint{
+			{Channel: contacts.ChannelTelegram, Address: "1001", ChatID: 1001, ChatType: "private", LastSeenAt: &now},
+			{Channel: contacts.ChannelTelegram, Address: "-100789", ChatID: -100789, ChatType: "group", LastSeenAt: &now},
 		},
 	}
 	if !contactsruntime.IsPublicTelegramTarget(contact, contacts.ShareDecision{SourceChatID: -100789}, int64(-100789), "group") {
