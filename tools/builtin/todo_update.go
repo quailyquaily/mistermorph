@@ -15,19 +15,21 @@ type TodoUpdateTool struct {
 	Enabled  bool
 	WIPPath  string
 	DONEPath string
+	Contacts string
 	Client   llm.Client
 	Model    string
 }
 
-func NewTodoUpdateTool(enabled bool, wipPath string, donePath string) *TodoUpdateTool {
-	return NewTodoUpdateToolWithLLM(enabled, wipPath, donePath, nil, "")
+func NewTodoUpdateTool(enabled bool, wipPath string, donePath string, contactsDir string) *TodoUpdateTool {
+	return NewTodoUpdateToolWithLLM(enabled, wipPath, donePath, contactsDir, nil, "")
 }
 
-func NewTodoUpdateToolWithLLM(enabled bool, wipPath string, donePath string, client llm.Client, model string) *TodoUpdateTool {
+func NewTodoUpdateToolWithLLM(enabled bool, wipPath string, donePath string, contactsDir string, client llm.Client, model string) *TodoUpdateTool {
 	return &TodoUpdateTool{
 		Enabled:  enabled,
 		WIPPath:  strings.TrimSpace(wipPath),
 		DONEPath: strings.TrimSpace(donePath),
+		Contacts: strings.TrimSpace(contactsDir),
 		Client:   client,
 		Model:    strings.TrimSpace(model),
 	}
@@ -83,8 +85,12 @@ func (t *TodoUpdateTool) Execute(ctx context.Context, params map[string]any) (st
 
 	wipPath := pathutil.ExpandHomePath(strings.TrimSpace(t.WIPPath))
 	donePath := pathutil.ExpandHomePath(strings.TrimSpace(t.DONEPath))
+	contactsDir := pathutil.ExpandHomePath(strings.TrimSpace(t.Contacts))
 	if wipPath == "" || donePath == "" {
 		return "", fmt.Errorf("todo paths are not configured")
+	}
+	if contactsDir == "" {
+		return "", fmt.Errorf("contacts dir is not configured")
 	}
 	if t.Client == nil {
 		return "", fmt.Errorf("todo_update unavailable (missing llm client)")
@@ -101,7 +107,25 @@ func (t *TodoUpdateTool) Execute(ctx context.Context, params map[string]any) (st
 	)
 	switch action {
 	case "add":
-		result, err = store.Add(ctx, content)
+		if _, preErr := todo.ExtractReferenceIDs(content); preErr != nil {
+			return "", preErr
+		}
+		snapshot, snapErr := todo.LoadContactSnapshot(ctx, contactsDir)
+		if snapErr != nil {
+			return "", snapErr
+		}
+		resolver := todo.NewLLMReferenceResolver(t.Client, t.Model)
+		rewritten, warnings, resolveErr := resolver.ResolveAddContent(ctx, content, snapshot)
+		if resolveErr != nil {
+			return "", resolveErr
+		}
+		if validErr := todo.ValidateReachableReferences(rewritten, snapshot); validErr != nil {
+			return "", validErr
+		}
+		result, err = store.Add(ctx, rewritten)
+		if err == nil && len(warnings) > 0 {
+			result.Warnings = append(result.Warnings, warnings...)
+		}
 	case "complete":
 		result, err = store.Complete(ctx, content)
 	default:

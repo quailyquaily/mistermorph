@@ -11,7 +11,6 @@ import (
 var (
 	refIDPatternA = regexp.MustCompile(`^tg:id:-?\d+$`)
 	refIDPatternB = regexp.MustCompile(`^maep:[A-Za-z0-9._-]+$`)
-	refIDPatternC = regexp.MustCompile(`^[A-Za-z0-9._-]+:[A-Za-z0-9._:@-]+$`)
 	parenPattern  = regexp.MustCompile(`\(([^()]+)\)`)
 )
 
@@ -238,24 +237,8 @@ func validateWIPEntry(item Entry) error {
 }
 
 func validateEntryReferences(content string) error {
-	content = strings.TrimSpace(content)
-	if content == "" {
-		return fmt.Errorf("content is required")
-	}
-	matches := parenPattern.FindAllStringSubmatch(content, -1)
-	for _, m := range matches {
-		if len(m) < 2 {
-			continue
-		}
-		ref := strings.TrimSpace(m[1])
-		if ref == "" {
-			return fmt.Errorf("missing reference id")
-		}
-		if !isValidReferenceID(ref) {
-			return fmt.Errorf("invalid reference id: %s", ref)
-		}
-	}
-	return nil
+	_, err := ExtractReferenceIDs(content)
+	return err
 }
 
 func isValidReferenceID(ref string) bool {
@@ -263,7 +246,7 @@ func isValidReferenceID(ref string) bool {
 	if ref == "" {
 		return false
 	}
-	if refIDPatternA.MatchString(ref) || refIDPatternB.MatchString(ref) || refIDPatternC.MatchString(ref) {
+	if refIDPatternA.MatchString(ref) || refIDPatternB.MatchString(ref) {
 		return true
 	}
 	return false

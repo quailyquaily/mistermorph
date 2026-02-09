@@ -7,7 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/quailyquaily/mistermorph/contacts"
 	"github.com/quailyquaily/mistermorph/llm"
 )
 
@@ -34,11 +36,16 @@ func TestTodoUpdateAndListTools(t *testing.T) {
 	root := t.TempDir()
 	wip := filepath.Join(root, "TODO.WIP.md")
 	done := filepath.Join(root, "TODO.DONE.md")
+	contactsDir := filepath.Join(root, "contacts")
+	seedTodoContacts(t, contactsDir)
 
 	client := &stubTodoToolLLMClient{
-		replies: []string{`{"status":"matched","index":0}`},
+		replies: []string{
+			`{"status":"ok","rewritten_content":"提醒 John (tg:id:1001) 和 Momo (maep:12D3KooWPeer) 对齐消息内容"}`,
+			`{"status":"matched","index":0}`,
+		},
 	}
-	update := NewTodoUpdateToolWithLLM(true, wip, done, client, "gpt-5.2")
+	update := NewTodoUpdateToolWithLLM(true, wip, done, contactsDir, client, "gpt-5.2")
 	out, err := update.Execute(context.Background(), map[string]any{
 		"action":  "add",
 		"content": "提醒 John (tg:id:1001) 和 Momo (maep:12D3KooWPeer) 对齐消息内容",
@@ -67,8 +74,8 @@ func TestTodoUpdateAndListTools(t *testing.T) {
 	if err != nil {
 		t.Fatalf("todo_update complete error = %v", err)
 	}
-	if len(client.calls) != 1 || !client.calls[0].ForceJSON {
-		t.Fatalf("expected one ForceJSON llm call on complete")
+	if len(client.calls) != 2 || !client.calls[0].ForceJSON || !client.calls[1].ForceJSON {
+		t.Fatalf("expected two ForceJSON llm calls (add resolve + complete match)")
 	}
 
 	list := NewTodoListTool(true, wip, done)
@@ -95,7 +102,7 @@ func TestTodoUpdateAndListTools(t *testing.T) {
 
 func TestTodoUpdateRequiresLLMBinding(t *testing.T) {
 	root := t.TempDir()
-	update := NewTodoUpdateTool(true, filepath.Join(root, "TODO.WIP.md"), filepath.Join(root, "TODO.DONE.md"))
+	update := NewTodoUpdateTool(true, filepath.Join(root, "TODO.WIP.md"), filepath.Join(root, "TODO.DONE.md"), filepath.Join(root, "contacts"))
 	_, err := update.Execute(context.Background(), map[string]any{
 		"action":  "add",
 		"content": "提醒 John (tg:id:1001) 对齐信息",
@@ -109,13 +116,17 @@ func TestTodoUpdateCompleteAmbiguousFromLLM(t *testing.T) {
 	root := t.TempDir()
 	wip := filepath.Join(root, "TODO.WIP.md")
 	done := filepath.Join(root, "TODO.DONE.md")
+	contactsDir := filepath.Join(root, "contacts")
+	seedTodoContacts(t, contactsDir)
 	client := &stubTodoToolLLMClient{
 		replies: []string{
+			`{"status":"ok","rewritten_content":"提醒 John (tg:id:1001) 准备一版草稿"}`,
+			`{"status":"ok","rewritten_content":"提醒 John (tg:id:1001) 和 Momo (maep:12D3KooWPeer) 确认草稿"}`,
 			`{"keep_indices":[0,1]}`,
 			`{"status":"ambiguous","candidate_indices":[0,1]}`,
 		},
 	}
-	update := NewTodoUpdateToolWithLLM(true, wip, done, client, "gpt-5.2")
+	update := NewTodoUpdateToolWithLLM(true, wip, done, contactsDir, client, "gpt-5.2")
 
 	_, err := update.Execute(context.Background(), map[string]any{
 		"action":  "add",
@@ -144,7 +155,7 @@ func TestTodoUpdateCompleteAmbiguousFromLLM(t *testing.T) {
 func TestTodoUpdateAddRejectsInvalidReferenceBeforeLLM(t *testing.T) {
 	root := t.TempDir()
 	client := &stubTodoToolLLMClient{}
-	update := NewTodoUpdateToolWithLLM(true, filepath.Join(root, "TODO.WIP.md"), filepath.Join(root, "TODO.DONE.md"), client, "gpt-5.2")
+	update := NewTodoUpdateToolWithLLM(true, filepath.Join(root, "TODO.WIP.md"), filepath.Join(root, "TODO.DONE.md"), filepath.Join(root, "contacts"), client, "gpt-5.2")
 	_, err := update.Execute(context.Background(), map[string]any{
 		"action":  "add",
 		"content": "提醒 John (not-a-reference) 明天确认内容",
@@ -154,5 +165,54 @@ func TestTodoUpdateAddRejectsInvalidReferenceBeforeLLM(t *testing.T) {
 	}
 	if len(client.calls) != 0 {
 		t.Fatalf("expected no llm calls for invalid reference input")
+	}
+}
+
+func TestTodoUpdateAddMissingReferenceIDErrorFromLLM(t *testing.T) {
+	root := t.TempDir()
+	client := &stubTodoToolLLMClient{
+		replies: []string{
+			`{"status":"missing_reference_id","missing":[{"mention":"John","suggestion":"John (tg:id:1001)"}]}`,
+		},
+	}
+	update := NewTodoUpdateToolWithLLM(true, filepath.Join(root, "TODO.WIP.md"), filepath.Join(root, "TODO.DONE.md"), filepath.Join(root, "contacts"), client, "gpt-5.2")
+	_, err := update.Execute(context.Background(), map[string]any{
+		"action":  "add",
+		"content": "提醒 John 明天确认内容",
+	})
+	if err == nil {
+		t.Fatalf("expected missing_reference_id error")
+	}
+	msg := strings.ToLower(err.Error())
+	if !strings.Contains(msg, "missing_reference_id") || !strings.Contains(msg, "john") || !strings.Contains(msg, "tg:id:1001") {
+		t.Fatalf("unexpected missing_reference_id error: %v", err)
+	}
+}
+
+func seedTodoContacts(t *testing.T, contactsDir string) {
+	t.Helper()
+	svc := contacts.NewService(contacts.NewFileStore(contactsDir))
+	now := time.Date(2026, 2, 9, 12, 0, 0, 0, time.UTC)
+	_, err := svc.UpsertContact(context.Background(), contacts.Contact{
+		ContactID:       "tg:id:1001",
+		ContactNickname: "John",
+		Kind:            contacts.KindHuman,
+		Status:          contacts.StatusActive,
+		ChannelEndpoints: []contacts.ChannelEndpoint{
+			{Channel: contacts.ChannelTelegram, ChatID: 1001},
+		},
+	}, now)
+	if err != nil {
+		t.Fatalf("seed john contact error = %v", err)
+	}
+	_, err = svc.UpsertContact(context.Background(), contacts.Contact{
+		ContactID:       "maep:12D3KooWPeer",
+		ContactNickname: "Momo",
+		Kind:            contacts.KindAgent,
+		Status:          contacts.StatusActive,
+		PeerID:          "12D3KooWPeer",
+	}, now)
+	if err != nil {
+		t.Fatalf("seed momo contact error = %v", err)
 	}
 }

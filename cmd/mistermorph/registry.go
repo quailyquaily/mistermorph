@@ -152,6 +152,7 @@ func registryFromViper() *tools.Registry {
 			true,
 			statepaths.TODOWIPPath(),
 			statepaths.TODODONEPath(),
+			statepaths.ContactsDir(),
 		))
 		r.Register(builtin.NewTodoListTool(
 			true,
