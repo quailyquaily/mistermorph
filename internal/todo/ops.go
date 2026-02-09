@@ -122,14 +122,12 @@ func (s *Store) List(scope string) (ListResult, error) {
 		return ListResult{}, err
 	}
 	out := ListResult{
-		Scope:         scope,
-		UpdatedAt:     s.nowUTC().Format(time.RFC3339),
-		OpenCount:     len(wip.Entries),
-		DoneCount:     len(done.Entries),
-		WIPPath:       s.WIPPath,
-		DONEPath:      s.DONEPath,
-		GeneratedAt:   s.nowUTC().Format(time.RFC3339),
-		GeneratedUnix: s.nowUTC().Unix(),
+		Scope:       scope,
+		OpenCount:   len(wip.Entries),
+		DoneCount:   len(done.Entries),
+		WIPPath:     s.WIPPath,
+		DONEPath:    s.DONEPath,
+		GeneratedAt: s.nowUTC().Format(time.RFC3339),
 	}
 	if scope == "wip" || scope == "both" {
 		out.WIPItems = append([]Entry{}, wip.Entries...)

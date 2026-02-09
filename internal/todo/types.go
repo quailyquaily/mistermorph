@@ -55,16 +55,14 @@ type Counts struct {
 }
 
 type ListResult struct {
-	Scope         string  `json:"scope"`
-	UpdatedAt     string  `json:"updated_at"`
-	OpenCount     int     `json:"open_count"`
-	DoneCount     int     `json:"done_count"`
-	WIPItems      []Entry `json:"wip_items,omitempty"`
-	DONEItems     []Entry `json:"done_items,omitempty"`
-	WIPPath       string  `json:"wip_path,omitempty"`
-	DONEPath      string  `json:"done_path,omitempty"`
-	GeneratedAt   string  `json:"generated_at"`
-	GeneratedUnix int64   `json:"generated_unix"`
+	Scope       string  `json:"scope"`
+	OpenCount   int     `json:"open_count"`
+	DoneCount   int     `json:"done_count"`
+	WIPItems    []Entry `json:"wip_items,omitempty"`
+	DONEItems   []Entry `json:"done_items,omitempty"`
+	WIPPath     string  `json:"wip_path,omitempty"`
+	DONEPath    string  `json:"done_path,omitempty"`
+	GeneratedAt string  `json:"generated_at"`
 }
 
 type SemanticResolver interface {

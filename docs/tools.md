@@ -191,7 +191,7 @@
   - `scope`、`open_count`、`done_count`。
   - `wip_items` / `done_items`（按文件顺序返回，首条优先）。
   - `wip_path` / `done_path`。
-  - `generated_at` / `generated_unix`。
+  - `generated_at`。
 
 错误（字符串匹配）：
 
