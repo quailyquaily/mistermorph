@@ -9,6 +9,43 @@ import (
 	"github.com/spf13/viper"
 )
 
+func TestInstallWritesIdentityAndSoulUnderStateDir(t *testing.T) {
+	initViperDefaults()
+
+	stateDir := t.TempDir()
+	workspaceDir := t.TempDir()
+
+	prevWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	if err := os.Chdir(workspaceDir); err != nil {
+		t.Fatalf("chdir workspace: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chdir(prevWD)
+	})
+
+	cmd := newInstallCmd()
+	cmd.SetArgs([]string{stateDir})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("install command failed: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(stateDir, "IDENTITY.md")); err != nil {
+		t.Fatalf("IDENTITY.md should exist under state dir: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(stateDir, "SOUL.md")); err != nil {
+		t.Fatalf("SOUL.md should exist under state dir: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(workspaceDir, "IDENTITY.md")); !os.IsNotExist(err) {
+		t.Fatalf("IDENTITY.md should not be created in workspace root, err=%v", err)
+	}
+	if _, err := os.Stat(filepath.Join(workspaceDir, "SOUL.md")); !os.IsNotExist(err) {
+		t.Fatalf("SOUL.md should not be created in workspace root, err=%v", err)
+	}
+}
+
 func TestEnsureInstallMAEPIdentity_ReusesExistingIdentity(t *testing.T) {
 	initViperDefaults()
 	originalDirName := viper.GetString("maep.dir_name")

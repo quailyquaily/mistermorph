@@ -36,11 +36,6 @@ func newInstallCmd() *cobra.Command {
 			if err := os.MkdirAll(dir, 0o755); err != nil {
 				return err
 			}
-			workspaceRoot, err := os.Getwd()
-			if err != nil {
-				return err
-			}
-			workspaceRoot = filepath.Clean(workspaceRoot)
 
 			cfgPath := filepath.Join(dir, "config.yaml")
 			writeConfig := true
@@ -84,12 +79,12 @@ func newInstallCmd() *cobra.Command {
 				writeContactsInactive = false
 			}
 
-			identityPath := filepath.Join(workspaceRoot, "IDENTITY.md")
+			identityPath := filepath.Join(dir, "IDENTITY.md")
 			writeIdentity := true
 			if _, err := os.Stat(identityPath); err == nil {
 				writeIdentity = false
 			}
-			soulPath := filepath.Join(workspaceRoot, "SOUL.md")
+			soulPath := filepath.Join(dir, "SOUL.md")
 			writeSoul := true
 			if _, err := os.Stat(soulPath); err == nil {
 				writeSoul = false
