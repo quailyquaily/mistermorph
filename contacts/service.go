@@ -4,7 +4,8 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"math"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -96,6 +97,8 @@ func (s *Service) UpsertContact(ctx context.Context, contact Contact, now time.T
 	if err := s.ensureStore.Ensure(ctx); err != nil {
 		return Contact{}, err
 	}
+
+	input := contact
 	contact = normalizeContact(contact, now)
 	if strings.TrimSpace(contact.ContactID) == "" {
 		contact.ContactID = deriveContactID(contact)
@@ -108,29 +111,56 @@ func (s *Service) UpsertContact(ctx context.Context, contact Contact, now time.T
 	if err != nil {
 		return Contact{}, err
 	}
-	if ok && !existing.CreatedAt.IsZero() {
-		contact.CreatedAt = existing.CreatedAt
-	}
-	if ok && strings.TrimSpace(contact.ContactNickname) == "" && strings.TrimSpace(existing.ContactNickname) != "" {
-		contact.ContactNickname = strings.TrimSpace(existing.ContactNickname)
-	}
-	if ok && strings.TrimSpace(contact.PersonaBrief) == "" && strings.TrimSpace(existing.PersonaBrief) != "" {
-		contact.PersonaBrief = strings.TrimSpace(existing.PersonaBrief)
-	}
-	if ok && strings.TrimSpace(contact.Pronouns) == "" && strings.TrimSpace(existing.Pronouns) != "" {
-		contact.Pronouns = strings.TrimSpace(existing.Pronouns)
-	}
-	if ok && strings.TrimSpace(contact.Timezone) == "" && strings.TrimSpace(existing.Timezone) != "" {
-		contact.Timezone = strings.TrimSpace(existing.Timezone)
-	}
-	if ok && strings.TrimSpace(contact.PreferenceContext) == "" && strings.TrimSpace(existing.PreferenceContext) != "" {
-		contact.PreferenceContext = strings.TrimSpace(existing.PreferenceContext)
-	}
-	if ok && len(contact.PersonaTraits) == 0 && len(existing.PersonaTraits) > 0 {
-		contact.PersonaTraits = map[string]float64{}
-		for k, v := range existing.PersonaTraits {
-			contact.PersonaTraits[k] = v
+	if ok {
+		if input.Kind == "" {
+			contact.Kind = existing.Kind
 		}
+		if input.Status == "" {
+			contact.Status = existing.Status
+		}
+		if strings.TrimSpace(input.Channel) == "" {
+			contact.Channel = strings.TrimSpace(existing.Channel)
+		}
+		if strings.TrimSpace(contact.ContactNickname) == "" && strings.TrimSpace(existing.ContactNickname) != "" {
+			contact.ContactNickname = strings.TrimSpace(existing.ContactNickname)
+		}
+		if strings.TrimSpace(contact.PersonaBrief) == "" && strings.TrimSpace(existing.PersonaBrief) != "" {
+			contact.PersonaBrief = strings.TrimSpace(existing.PersonaBrief)
+		}
+		if strings.TrimSpace(contact.TGUsername) == "" && strings.TrimSpace(existing.TGUsername) != "" {
+			contact.TGUsername = strings.TrimSpace(existing.TGUsername)
+		}
+		if contact.PrivateChatID == 0 && existing.PrivateChatID != 0 {
+			contact.PrivateChatID = existing.PrivateChatID
+		}
+		if len(contact.GroupChatIDs) == 0 && len(existing.GroupChatIDs) > 0 {
+			contact.GroupChatIDs = append([]int64(nil), existing.GroupChatIDs...)
+		}
+		if strings.TrimSpace(contact.MAEPNodeID) == "" && strings.TrimSpace(existing.MAEPNodeID) != "" {
+			contact.MAEPNodeID = strings.TrimSpace(existing.MAEPNodeID)
+		}
+		if strings.TrimSpace(contact.MAEPDialAddress) == "" && strings.TrimSpace(existing.MAEPDialAddress) != "" {
+			contact.MAEPDialAddress = strings.TrimSpace(existing.MAEPDialAddress)
+		}
+		if len(contact.TopicPreferences) == 0 && len(existing.TopicPreferences) > 0 {
+			contact.TopicPreferences = append([]string(nil), existing.TopicPreferences...)
+		}
+		if contact.CooldownUntil == nil && existing.CooldownUntil != nil {
+			ts := existing.CooldownUntil.UTC()
+			contact.CooldownUntil = &ts
+		}
+		if contact.LastInteractionAt == nil && existing.LastInteractionAt != nil {
+			ts := existing.LastInteractionAt.UTC()
+			contact.LastInteractionAt = &ts
+		}
+	}
+
+	contact = normalizeContact(contact, now)
+	if strings.TrimSpace(contact.ContactID) == "" {
+		contact.ContactID = deriveContactID(contact)
+	}
+	if strings.TrimSpace(contact.ContactID) == "" {
+		return Contact{}, fmt.Errorf("contact_id is required")
 	}
 	if err := s.contactStore.PutContact(ctx, contact); err != nil {
 		return Contact{}, err
@@ -183,8 +213,6 @@ func (s *Service) SetContactStatus(ctx context.Context, contactID string, status
 	return contact, nil
 }
 
-// SendDecision sends one prepared decision through sender and persists outcome effects
-// (cooldown/last_shared/share_count/retain_score).
 func (s *Service) SendDecision(ctx context.Context, now time.Time, decision ShareDecision, sender Sender) (ShareOutcome, error) {
 	if s == nil || !s.ready() {
 		return ShareOutcome{}, fmt.Errorf("nil contacts service")
@@ -210,7 +238,7 @@ func (s *Service) SendDecision(ctx context.Context, now time.Time, decision Shar
 	}
 
 	if strings.TrimSpace(decision.PeerID) == "" {
-		decision.PeerID = strings.TrimSpace(contact.PeerID)
+		decision.PeerID = resolveMAEPPeerID(contact)
 	}
 	decision.Topic = strings.TrimSpace(decision.Topic)
 	if decision.Topic == "" {
@@ -246,12 +274,9 @@ func (s *Service) SendDecision(ctx context.Context, now time.Time, decision Shar
 			contact.CooldownUntil = &cooldown
 		} else {
 			ts := now
-			contact.LastSharedAt = &ts
 			contact.LastInteractionAt = &ts
-			contact.LastSharedItemID = decision.ItemID
-			contact.ShareCount++
+			contact.CooldownUntil = nil
 		}
-		contact = recomputeRetainScore(contact, now)
 		if err := s.contactStore.PutContact(ctx, contact); err != nil {
 			return ShareOutcome{}, err
 		}
@@ -260,19 +285,10 @@ func (s *Service) SendDecision(ctx context.Context, now time.Time, decision Shar
 }
 
 func resolveDecisionChannel(contact Contact, decision ShareDecision) (string, error) {
-	for _, endpoint := range contact.ChannelEndpoints {
-		channel, err := normalizeBusChannel(endpoint.Channel)
-		if err != nil {
-			return "", err
-		}
-		if channel == ChannelTelegram {
-			return channel, nil
-		}
-	}
 	if hasTelegramTarget(contact) {
 		return ChannelTelegram, nil
 	}
-	if strings.TrimSpace(decision.PeerID) != "" || strings.TrimSpace(contact.PeerID) != "" {
+	if strings.TrimSpace(decision.PeerID) != "" || resolveMAEPPeerID(contact) != "" {
 		return ChannelMAEP, nil
 	}
 	return "", fmt.Errorf("unable to resolve delivery channel for contact_id=%s", contact.ContactID)
@@ -370,57 +386,52 @@ func (s *Service) sendWithBusOutbox(ctx context.Context, now time.Time, contact 
 }
 
 func hasTelegramTarget(contact Contact) bool {
-	for _, endpoint := range contact.ChannelEndpoints {
-		if strings.ToLower(strings.TrimSpace(endpoint.Channel)) != ChannelTelegram {
-			continue
-		}
-		if endpoint.ChatID != 0 || strings.TrimSpace(endpoint.Address) != "" {
-			return true
-		}
+	if contact.PrivateChatID != 0 {
+		return true
 	}
-	for _, raw := range []string{contact.SubjectID, contact.ContactID} {
-		v := strings.TrimSpace(strings.ToLower(raw))
-		if strings.HasPrefix(v, "tg:@") {
-			return true
-		}
-		if strings.HasPrefix(v, "tg:") && strings.TrimSpace(v[len("tg:"):]) != "" {
-			return true
-		}
+	if len(contact.GroupChatIDs) > 0 {
+		return true
+	}
+	v := strings.TrimSpace(strings.ToLower(contact.ContactID))
+	if strings.HasPrefix(v, "tg:") && !strings.HasPrefix(v, "tg:@") {
+		_, err := strconv.ParseInt(strings.TrimSpace(contact.ContactID[len("tg:"):]), 10, 64)
+		return err == nil
 	}
 	return false
 }
 
-func recomputeRetainScore(contact Contact, now time.Time) Contact {
-	depthNorm := clamp(contact.UnderstandingDepth/100.0, 0, 1)
-	reciprocityNorm := clamp(contact.ReciprocityNorm, 0, 1)
-	recentAt := contact.UpdatedAt
-	if contact.LastInteractionAt != nil && contact.LastInteractionAt.After(recentAt) {
-		recentAt = *contact.LastInteractionAt
+func deriveContactID(contact Contact) string {
+	if v := strings.TrimSpace(contact.ContactID); v != "" {
+		return v
 	}
-	if contact.LastSharedAt != nil && contact.LastSharedAt.After(recentAt) {
-		recentAt = *contact.LastSharedAt
+	if contact.PrivateChatID > 0 {
+		return "tg:" + strconv.FormatInt(contact.PrivateChatID, 10)
 	}
-	if recentAt.IsZero() {
-		recentAt = now
+	if v := normalizeTelegramUsername(contact.TGUsername); v != "" {
+		return "tg:@" + v
 	}
-	ageHours := now.Sub(recentAt).Hours()
-	if ageHours < 0 {
-		ageHours = 0
+	if v := strings.TrimSpace(contact.MAEPNodeID); v != "" {
+		nodeID, _ := splitMAEPNodeID(v)
+		return nodeID
 	}
-	recencyNorm := clamp(math.Exp(-ageHours/(24.0*14.0)), 0, 1)
-	contact.RetainScore = clamp(0.45*depthNorm+0.35*recencyNorm+0.20*reciprocityNorm, 0, 1)
-	return contact
+	if contact.Channel == ChannelTelegram {
+		ids := append([]int64(nil), contact.GroupChatIDs...)
+		sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+		for _, id := range ids {
+			if id != 0 {
+				return "tg:" + strconv.FormatInt(id, 10)
+			}
+		}
+	}
+	return ""
 }
 
-func deriveContactID(contact Contact) string {
-	if v := strings.TrimSpace(contact.SubjectID); v != "" {
-		return v
+func resolveMAEPPeerID(contact Contact) string {
+	if _, peerID := splitMAEPNodeID(contact.MAEPNodeID); peerID != "" {
+		return peerID
 	}
-	if v := strings.TrimSpace(contact.NodeID); v != "" {
-		return v
-	}
-	if v := strings.TrimSpace(contact.PeerID); v != "" {
-		return "maep:" + v
+	if _, peerID := splitMAEPNodeID(contact.ContactID); peerID != "" {
+		return peerID
 	}
 	return ""
 }

@@ -38,18 +38,13 @@ func TestRoutingSenderSendTelegramViaBus(t *testing.T) {
 	sender := newRoutingSenderForBusTest(t, sendText, &mockDataPusher{})
 	contentType, payloadBase64 := testEnvelopePayload(t, "hello telegram")
 	accepted, deduped, err := sender.Send(ctx, contacts.Contact{
-		ContactID: "tg:1",
-		Kind:      contacts.KindHuman,
-		Status:    contacts.StatusActive,
-		ChannelEndpoints: []contacts.ChannelEndpoint{
-			{
-				Channel:  contacts.ChannelTelegram,
-				ChatID:   12345,
-				ChatType: "private",
-			},
-		},
+		ContactID:     "tg:12345",
+		Kind:          contacts.KindHuman,
+		Status:        contacts.StatusActive,
+		Channel:       contacts.ChannelTelegram,
+		PrivateChatID: 12345,
 	}, contacts.ShareDecision{
-		ContactID:      "tg:1",
+		ContactID:      "tg:12345",
 		ItemID:         "cand_1",
 		Topic:          busruntime.TopicShareProactiveV1,
 		ContentType:    contentType,
@@ -91,12 +86,13 @@ func TestRoutingSenderSendMAEPViaBus(t *testing.T) {
 
 	contentType, payloadBase64 := testEnvelopePayload(t, "hello maep")
 	accepted, deduped, err := sender.Send(ctx, contacts.Contact{
-		ContactID: "maep:peer",
-		Kind:      contacts.KindAgent,
-		Status:    contacts.StatusActive,
-		PeerID:    "12D3KooWTestPeer",
+		ContactID:  "maep:12D3KooWTestPeer",
+		Kind:       contacts.KindAgent,
+		Status:     contacts.StatusActive,
+		Channel:    contacts.ChannelMAEP,
+		MAEPNodeID: "maep:12D3KooWTestPeer",
 	}, contacts.ShareDecision{
-		ContactID:      "maep:peer",
+		ContactID:      "maep:12D3KooWTestPeer",
 		ItemID:         "cand_2",
 		Topic:          busruntime.TopicShareProactiveV1,
 		ContentType:    contentType,
@@ -136,18 +132,13 @@ func TestRoutingSenderSendFailsWithoutIdempotencyKey(t *testing.T) {
 	}, &mockDataPusher{})
 	contentType, payloadBase64 := testEnvelopePayload(t, "hello")
 	_, _, err := sender.Send(ctx, contacts.Contact{
-		ContactID: "tg:1",
-		Kind:      contacts.KindHuman,
-		Status:    contacts.StatusActive,
-		ChannelEndpoints: []contacts.ChannelEndpoint{
-			{
-				Channel:  contacts.ChannelTelegram,
-				ChatID:   12345,
-				ChatType: "private",
-			},
-		},
+		ContactID:     "tg:12345",
+		Kind:          contacts.KindHuman,
+		Status:        contacts.StatusActive,
+		Channel:       contacts.ChannelTelegram,
+		PrivateChatID: 12345,
 	}, contacts.ShareDecision{
-		ContactID:     "tg:1",
+		ContactID:     "tg:12345",
 		ItemID:        "cand_3",
 		Topic:         busruntime.TopicShareProactiveV1,
 		ContentType:   contentType,
@@ -171,10 +162,11 @@ func TestRoutingSenderSendHumanWithUsernameTargetFails(t *testing.T) {
 	}, &mockDataPusher{})
 	contentType, payloadBase64 := testEnvelopePayload(t, "hello")
 	_, _, err := sender.Send(ctx, contacts.Contact{
-		ContactID: "tg:@alice",
-		SubjectID: "tg:@alice",
-		Kind:      contacts.KindHuman,
-		Status:    contacts.StatusActive,
+		ContactID:  "tg:@alice",
+		Kind:       contacts.KindHuman,
+		Status:     contacts.StatusActive,
+		Channel:    contacts.ChannelTelegram,
+		TGUsername: "alice",
 	}, contacts.ShareDecision{
 		ContactID:      "tg:@alice",
 		ItemID:         "cand_4",
@@ -186,7 +178,7 @@ func TestRoutingSenderSendHumanWithUsernameTargetFails(t *testing.T) {
 	if err == nil {
 		t.Fatalf("Send() expected error for tg:@ fallback")
 	}
-	if !strings.Contains(err.Error(), "telegram target not found in subject_id/contact_id") {
+	if !strings.Contains(err.Error(), "telegram username target is not sendable") {
 		t.Fatalf("Send() error mismatch: got %q", err.Error())
 	}
 	if calls != 0 {

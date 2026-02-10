@@ -59,12 +59,11 @@ func newListCmd() *cobra.Command {
 			for _, item := range records {
 				_, _ = fmt.Fprintf(
 					cmd.OutOrStdout(),
-					"%s\t%s\t%s\t%s\t%s\t%s\n",
+					"%s\t%s\t%s\t%s\t%s\n",
 					item.ContactID,
 					item.Status,
 					item.Kind,
-					item.PeerID,
-					item.TrustState,
+					item.Channel,
 					item.ContactNickname,
 				)
 			}
@@ -79,23 +78,15 @@ func newListCmd() *cobra.Command {
 func newUpsertCmd() *cobra.Command {
 	var kind string
 	var status string
-	var peerID string
-	var nodeID string
-	var subjectID string
+	var channel string
 	var contactNickname string
 	var personaBrief string
-	var pronouns string
-	var timezone string
-	var preferenceContext string
-	var displayName string
 	var telegramUsername string
-	var telegramNickname string
-	var trustState string
-	var depth float64
-	var reciprocity float64
-	var addresses []string
-	var topicWeights []string
-	var personaTraits []string
+	var privateChatID string
+	var groupChatIDs []string
+	var maepNodeID string
+	var maepDialAddress string
+	var topicPreferences []string
 	var outputJSON bool
 
 	cmd := &cobra.Command{
@@ -103,52 +94,34 @@ func newUpsertCmd() *cobra.Command {
 		Short: "Create or update one contact",
 		Args:  cobra.RangeArgs(0, 1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			topicMap, err := parseFloatAssignments(topicWeights)
-			if err != nil {
-				return err
-			}
-			traitMap, err := parseFloatAssignments(personaTraits)
-			if err != nil {
-				return err
-			}
 			contactID := ""
 			if len(args) > 0 {
 				contactID = strings.TrimSpace(args[0])
 			}
-			telegramID := telegramContactID(telegramUsername)
-			kindValue := contacts.Kind(strings.TrimSpace(strings.ToLower(kind)))
-			nickname := strings.TrimSpace(contactNickname)
-			if nickname == "" {
-				nickname = strings.TrimSpace(displayName)
+
+			privateID, err := parseOptionalInt64(privateChatID)
+			if err != nil {
+				return err
 			}
-			if nickname == "" {
-				nickname = strings.TrimSpace(telegramNickname)
+			groupIDs, err := parseInt64List(groupChatIDs)
+			if err != nil {
+				return err
 			}
-			if kindValue == contacts.KindHuman && strings.TrimSpace(subjectID) == "" && telegramID != "" {
-				subjectID = telegramID
-			}
-			if kindValue == contacts.KindHuman && contactID == "" && telegramID != "" {
-				contactID = telegramID
-			}
+
 			svc := serviceFromCmd(cmd)
 			updated, err := svc.UpsertContact(cmd.Context(), contacts.Contact{
-				ContactID:          contactID,
-				Kind:               kindValue,
-				Status:             parseStatus(status),
-				ContactNickname:    nickname,
-				PersonaBrief:       strings.TrimSpace(personaBrief),
-				Pronouns:           strings.TrimSpace(pronouns),
-				Timezone:           strings.TrimSpace(timezone),
-				PreferenceContext:  strings.TrimSpace(preferenceContext),
-				PersonaTraits:      traitMap,
-				SubjectID:          strings.TrimSpace(subjectID),
-				NodeID:             strings.TrimSpace(nodeID),
-				PeerID:             strings.TrimSpace(peerID),
-				Addresses:          normalizeList(addresses),
-				TrustState:         strings.TrimSpace(strings.ToLower(trustState)),
-				UnderstandingDepth: depth,
-				TopicWeights:       topicMap,
-				ReciprocityNorm:    reciprocity,
+				ContactID:        contactID,
+				Kind:             contacts.Kind(strings.TrimSpace(strings.ToLower(kind))),
+				Status:           parseStatus(status),
+				Channel:          strings.TrimSpace(strings.ToLower(channel)),
+				ContactNickname:  strings.TrimSpace(contactNickname),
+				PersonaBrief:     strings.TrimSpace(personaBrief),
+				TGUsername:       strings.TrimSpace(telegramUsername),
+				PrivateChatID:    privateID,
+				GroupChatIDs:     groupIDs,
+				MAEPNodeID:       strings.TrimSpace(maepNodeID),
+				MAEPDialAddress:  strings.TrimSpace(maepDialAddress),
+				TopicPreferences: normalizeList(topicPreferences),
 			}, time.Now().UTC())
 			if err != nil {
 				return err
@@ -156,29 +129,29 @@ func newUpsertCmd() *cobra.Command {
 			if outputJSON {
 				return writeJSON(cmd.OutOrStdout(), updated)
 			}
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "contact_id: %s\nstatus: %s\nkind: %s\npeer_id: %s\ncontact_nickname: %s\n", updated.ContactID, updated.Status, updated.Kind, updated.PeerID, updated.ContactNickname)
+			_, _ = fmt.Fprintf(
+				cmd.OutOrStdout(),
+				"contact_id: %s\nstatus: %s\nkind: %s\nchannel: %s\nnickname: %s\n",
+				updated.ContactID,
+				updated.Status,
+				updated.Kind,
+				updated.Channel,
+				updated.ContactNickname,
+			)
 			return nil
 		},
 	}
 	cmd.Flags().StringVar(&kind, "kind", "agent", "Contact kind: agent|human")
 	cmd.Flags().StringVar(&status, "status", "active", "Contact status: active|inactive")
-	cmd.Flags().StringVar(&peerID, "peer-id", "", "MAEP peer_id for agent contact")
-	cmd.Flags().StringVar(&nodeID, "node-id", "", "MAEP node_id for agent contact")
-	cmd.Flags().StringVar(&subjectID, "subject-id", "", "Subject id for human contact")
-	cmd.Flags().StringVar(&contactNickname, "contact-nickname", "", "Contact nickname")
+	cmd.Flags().StringVar(&channel, "channel", "", "Contact channel: telegram|maep|slack|discord")
+	cmd.Flags().StringVar(&contactNickname, "nickname", "", "Contact nickname")
 	cmd.Flags().StringVar(&personaBrief, "persona-brief", "", "Personality summary for this contact")
-	cmd.Flags().StringVar(&pronouns, "pronouns", "", "Pronouns for this contact (for example: she/her, they/them)")
-	cmd.Flags().StringVar(&timezone, "timezone", "", "IANA timezone (for example: Asia/Shanghai, America/New_York)")
-	cmd.Flags().StringVar(&preferenceContext, "preference-context", "", "Long-form preference/context notes for this contact")
-	cmd.Flags().StringVar(&displayName, "display-name", "", "Legacy alias of --contact-nickname")
-	cmd.Flags().StringVar(&telegramUsername, "telegram-username", "", "Telegram username for human contact (maps to tg:@<username>)")
-	cmd.Flags().StringVar(&telegramNickname, "telegram-nickname", "", "Telegram nickname (fallback for contact_nickname)")
-	cmd.Flags().StringVar(&trustState, "trust-state", "verified", "Trust state (verified recommended)")
-	cmd.Flags().Float64Var(&depth, "understanding-depth", 30, "Understanding depth [0,100]")
-	cmd.Flags().Float64Var(&reciprocity, "reciprocity", 0.5, "Reciprocity score [0,1]")
-	cmd.Flags().StringArrayVar(&addresses, "address", nil, "Dial address for MAEP peer (repeatable)")
-	cmd.Flags().StringArrayVar(&topicWeights, "topic-weight", nil, "Topic affinity (repeatable): topic=score")
-	cmd.Flags().StringArrayVar(&personaTraits, "persona-trait", nil, "Persona trait weight (repeatable): trait=score")
+	cmd.Flags().StringVar(&telegramUsername, "telegram-username", "", "Telegram username for contact (without @)")
+	cmd.Flags().StringVar(&privateChatID, "private-chat-id", "", "Telegram private chat id")
+	cmd.Flags().StringArrayVar(&groupChatIDs, "group-chat-id", nil, "Telegram group/supergroup chat id (repeatable)")
+	cmd.Flags().StringVar(&maepNodeID, "maep-node-id", "", "MAEP node_id (maep:<peer_id>)")
+	cmd.Flags().StringVar(&maepDialAddress, "maep-dial-address", "", "MAEP dial multiaddr")
+	cmd.Flags().StringArrayVar(&topicPreferences, "topic", nil, "Topic preference (repeatable)")
 	cmd.Flags().BoolVar(&outputJSON, "json", false, "Print as JSON")
 	return cmd
 }
@@ -216,7 +189,6 @@ func newSetStatusCmd() *cobra.Command {
 
 func newSyncMAEPCmd() *cobra.Command {
 	var maepDir string
-	var includeTOFU bool
 	cmd := &cobra.Command{
 		Use:   "sync-maep",
 		Short: "Import MAEP contacts into contacts business store",
@@ -233,7 +205,7 @@ func newSyncMAEPCmd() *cobra.Command {
 			}
 			existingByNodeID := map[string]string{}
 			for _, item := range existingContacts {
-				nodeID := strings.TrimSpace(item.NodeID)
+				nodeID := strings.TrimSpace(item.MAEPNodeID)
 				contactID := strings.TrimSpace(item.ContactID)
 				if nodeID == "" || contactID == "" {
 					continue
@@ -247,23 +219,20 @@ func newSyncMAEPCmd() *cobra.Command {
 			now := time.Now().UTC()
 			imported := 0
 			for _, item := range maepContacts {
-				trust := strings.TrimSpace(strings.ToLower(string(item.TrustState)))
-				if trust != "verified" && !(includeTOFU && trust == "tofu") {
-					continue
-				}
 				nodeID := strings.TrimSpace(item.NodeID)
 				targetContactID := resolveSyncMAEPTargetContactID(existingByNodeID, nodeID, item.PeerID)
+				dialAddress := ""
+				if len(item.Addresses) > 0 {
+					dialAddress = strings.TrimSpace(item.Addresses[0])
+				}
 				record := contacts.Contact{
-					ContactID:          targetContactID,
-					Kind:               contacts.KindAgent,
-					Status:             contacts.StatusActive,
-					ContactNickname:    strings.TrimSpace(item.DisplayName),
-					NodeID:             nodeID,
-					PeerID:             strings.TrimSpace(item.PeerID),
-					Addresses:          normalizeList(item.Addresses),
-					TrustState:         trust,
-					UnderstandingDepth: 30,
-					ReciprocityNorm:    0.5,
+					ContactID:       targetContactID,
+					Kind:            contacts.KindAgent,
+					Status:          contacts.StatusActive,
+					Channel:         contacts.ChannelMAEP,
+					ContactNickname: strings.TrimSpace(item.DisplayName),
+					MAEPNodeID:      nodeID,
+					MAEPDialAddress: dialAddress,
 				}
 				updated, err := svc.UpsertContact(cmd.Context(), record, now)
 				if err != nil {
@@ -279,7 +248,6 @@ func newSyncMAEPCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&maepDir, "maep-dir", "", "MAEP state directory (defaults to file_state_dir/maep)")
-	cmd.Flags().BoolVar(&includeTOFU, "include-tofu", false, "Include TOFU contacts (default only verified)")
 	return cmd
 }
 
@@ -353,19 +321,6 @@ func resolveSyncMAEPTargetContactID(existingByNodeID map[string]string, nodeID s
 	return chooseContactID(nodeID, peerID)
 }
 
-func telegramContactID(username string) string {
-	username = strings.TrimSpace(username)
-	if username == "" {
-		return ""
-	}
-	username = strings.TrimPrefix(username, "@")
-	username = strings.TrimSpace(username)
-	if username == "" {
-		return ""
-	}
-	return "tg:@" + username
-}
-
 func normalizeList(items []string) []string {
 	seen := map[string]bool{}
 	out := make([]string, 0, len(items))
@@ -380,28 +335,36 @@ func normalizeList(items []string) []string {
 	return out
 }
 
-func parseFloatAssignments(values []string) (map[string]float64, error) {
+func parseOptionalInt64(raw string) (int64, error) {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return 0, nil
+	}
+	v, err := strconv.ParseInt(value, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("invalid int64 %q: %w", raw, err)
+	}
+	return v, nil
+}
+
+func parseInt64List(values []string) ([]int64, error) {
 	if len(values) == 0 {
 		return nil, nil
 	}
-	out := map[string]float64{}
+	seen := map[int64]bool{}
+	out := make([]int64, 0, len(values))
 	for _, raw := range values {
-		value := strings.TrimSpace(raw)
-		if value == "" {
+		v, err := parseOptionalInt64(raw)
+		if err != nil {
+			return nil, err
+		}
+		if v == 0 || seen[v] {
 			continue
 		}
-		idx := strings.Index(value, "=")
-		if idx <= 0 || idx == len(value)-1 {
-			return nil, fmt.Errorf("invalid assignment %q (want key=value)", raw)
-		}
-		key := strings.TrimSpace(value[:idx])
-		number := strings.TrimSpace(value[idx+1:])
-		f, err := strconv.ParseFloat(number, 64)
-		if err != nil {
-			return nil, fmt.Errorf("invalid number in %q: %w", raw, err)
-		}
-		out[key] = f
+		seen[v] = true
+		out = append(out, v)
 	}
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
 	if len(out) == 0 {
 		return nil, nil
 	}

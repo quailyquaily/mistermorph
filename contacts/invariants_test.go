@@ -31,16 +31,12 @@ func TestInvariantOutboxIdempotency(t *testing.T) {
 	now := time.Date(2026, 2, 8, 21, 0, 0, 0, time.UTC)
 
 	if _, err := svc.UpsertContact(ctx, Contact{
-		ContactID:          "maep:inv",
-		Kind:               KindAgent,
-		Status:             StatusActive,
-		PeerID:             "12D3KooWInv",
-		TrustState:         "verified",
-		UnderstandingDepth: 50,
-		ReciprocityNorm:    0.7,
-		TopicWeights: map[string]float64{
-			"maep": 0.9,
-		},
+		ContactID:       "maep:12D3KooWInv",
+		Kind:            KindAgent,
+		Status:          StatusActive,
+		Channel:         ChannelMAEP,
+		MAEPNodeID:      "maep:12D3KooWInv",
+		MAEPDialAddress: "/ip4/127.0.0.1/tcp/4021/p2p/12D3KooWInv",
 	}, now); err != nil {
 		t.Fatalf("UpsertContact() error = %v", err)
 	}
@@ -48,7 +44,7 @@ func TestInvariantOutboxIdempotency(t *testing.T) {
 	sender := &mockSender{accepted: true}
 	payload := base64.RawURLEncoding.EncodeToString([]byte("hello"))
 	decision := ShareDecision{
-		ContactID:      "maep:inv",
+		ContactID:      "maep:12D3KooWInv",
 		PeerID:         "12D3KooWInv",
 		ItemID:         "manual_item_1",
 		Topic:          "share.proactive.v1",

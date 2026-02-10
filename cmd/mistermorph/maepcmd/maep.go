@@ -823,14 +823,14 @@ func observeMAEPContact(ctx context.Context, maepSvc *maep.Service, contactsSvc 
 		return err
 	}
 	nodeID := ""
-	addresses := []string(nil)
+	dialAddress := ""
 	nickname := ""
-	trustState := ""
 	if foundMAEP {
 		nodeID = strings.TrimSpace(maepContact.NodeID)
-		addresses = append([]string(nil), maepContact.Addresses...)
+		if len(maepContact.Addresses) > 0 {
+			dialAddress = strings.TrimSpace(maepContact.Addresses[0])
+		}
 		nickname = strings.TrimSpace(maepContact.DisplayName)
-		trustState = strings.TrimSpace(strings.ToLower(string(maepContact.TrustState)))
 	}
 
 	canonicalContactID := chooseBusinessContactID(nodeID, peerID)
@@ -861,18 +861,15 @@ func observeMAEPContact(ctx context.Context, maepSvc *maep.Service, contactsSvc 
 		if existing.Status == "" {
 			existing.Status = contacts.StatusActive
 		}
-		if existing.NodeID == "" && nodeID != "" {
-			existing.NodeID = nodeID
+		existing.Channel = contacts.ChannelMAEP
+		if existing.MAEPNodeID == "" && nodeID != "" {
+			existing.MAEPNodeID = nodeID
 		}
-		if existing.PeerID == "" {
-			existing.PeerID = peerID
+		if existing.MAEPDialAddress == "" && dialAddress != "" {
+			existing.MAEPDialAddress = dialAddress
 		}
-		existing.Addresses = mergeAddresses(existing.Addresses, addresses)
 		if nickname != "" {
 			existing.ContactNickname = nickname
-		}
-		if trustState != "" {
-			existing.TrustState = trustState
 		}
 		existing.LastInteractionAt = &lastInteraction
 		_, err = contactsSvc.UpsertContact(ctx, existing, now)
@@ -880,41 +877,16 @@ func observeMAEPContact(ctx context.Context, maepSvc *maep.Service, contactsSvc 
 	}
 
 	_, err = contactsSvc.UpsertContact(ctx, contacts.Contact{
-		ContactID:          canonicalContactID,
-		Kind:               contacts.KindAgent,
-		Status:             contacts.StatusActive,
-		ContactNickname:    nickname,
-		NodeID:             nodeID,
-		PeerID:             peerID,
-		Addresses:          addresses,
-		TrustState:         trustState,
-		UnderstandingDepth: 30,
-		ReciprocityNorm:    0.5,
-		LastInteractionAt:  &lastInteraction,
+		ContactID:         canonicalContactID,
+		Kind:              contacts.KindAgent,
+		Status:            contacts.StatusActive,
+		Channel:           contacts.ChannelMAEP,
+		ContactNickname:   nickname,
+		MAEPNodeID:        nodeID,
+		MAEPDialAddress:   dialAddress,
+		LastInteractionAt: &lastInteraction,
 	}, now)
 	return err
-}
-
-func mergeAddresses(base []string, extra []string) []string {
-	seen := map[string]bool{}
-	out := make([]string, 0, len(base)+len(extra))
-	for _, raw := range base {
-		v := strings.TrimSpace(raw)
-		if v == "" || seen[v] {
-			continue
-		}
-		seen[v] = true
-		out = append(out, v)
-	}
-	for _, raw := range extra {
-		v := strings.TrimSpace(raw)
-		if v == "" || seen[v] {
-			continue
-		}
-		seen[v] = true
-		out = append(out, v)
-	}
-	return out
 }
 
 func chooseBusinessContactID(nodeID string, peerID string) string {

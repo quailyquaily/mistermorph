@@ -19,24 +19,9 @@ import (
 )
 
 const (
-	candidatesFileVersion = 1
-	sessionsFileVersion   = 1
-	busInboxFileVersion   = 1
-	busOutboxFileVersion  = 1
-	contactPronounsMaxLen = 64
-	contactTZMaxLen       = 64
-	contactPrefMaxLen     = 2000
+	busInboxFileVersion  = 1
+	busOutboxFileVersion = 1
 )
-
-type candidatesFile struct {
-	Version int              `json:"version"`
-	Records []ShareCandidate `json:"records"`
-}
-
-type sessionsFile struct {
-	Version int            `json:"version"`
-	Records []SessionState `json:"records"`
-}
 
 type busInboxFile struct {
 	Version int              `json:"version"`
@@ -116,10 +101,8 @@ func (s *FileStore) PutContact(ctx context.Context, contact Contact) error {
 			return err
 		}
 
-		createdAt := contact.CreatedAt
-		active = removeContactByID(active, contact.ContactID, &createdAt)
-		inactive = removeContactByID(inactive, contact.ContactID, &createdAt)
-		contact.CreatedAt = createdAt
+		active = removeContactByID(active, contact.ContactID)
+		inactive = removeContactByID(inactive, contact.ContactID)
 
 		switch contact.Status {
 		case StatusInactive:
@@ -172,128 +155,6 @@ func (s *FileStore) ListContacts(ctx context.Context, status Status) ([]Contact,
 		})
 		return out, nil
 	}
-}
-
-func (s *FileStore) GetCandidate(ctx context.Context, itemID string) (ShareCandidate, bool, error) {
-	if err := ensureNotCanceled(ctx); err != nil {
-		return ShareCandidate{}, false, err
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	records, err := s.loadCandidatesLocked()
-	if err != nil {
-		return ShareCandidate{}, false, err
-	}
-	itemID = strings.TrimSpace(itemID)
-	for _, item := range records {
-		if strings.TrimSpace(item.ItemID) == itemID {
-			return item, true, nil
-		}
-	}
-	return ShareCandidate{}, false, nil
-}
-
-func (s *FileStore) PutCandidate(ctx context.Context, candidate ShareCandidate) error {
-	if err := ensureNotCanceled(ctx); err != nil {
-		return err
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.withStateLock(ctx, func() error {
-		records, err := s.loadCandidatesLocked()
-		if err != nil {
-			return err
-		}
-		now := time.Now().UTC()
-		candidate = normalizeCandidate(candidate, now)
-		replaced := false
-		for i := range records {
-			if strings.TrimSpace(records[i].ItemID) != candidate.ItemID {
-				continue
-			}
-			if records[i].CreatedAt.IsZero() {
-				records[i].CreatedAt = candidate.CreatedAt
-			}
-			candidate.CreatedAt = records[i].CreatedAt
-			records[i] = candidate
-			replaced = true
-			break
-		}
-		if !replaced {
-			records = append(records, candidate)
-		}
-		return s.saveCandidatesLocked(records)
-	})
-}
-
-func (s *FileStore) ListCandidates(ctx context.Context) ([]ShareCandidate, error) {
-	if err := ensureNotCanceled(ctx); err != nil {
-		return nil, err
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.loadCandidatesLocked()
-}
-
-func (s *FileStore) GetSessionState(ctx context.Context, sessionID string) (SessionState, bool, error) {
-	if err := ensureNotCanceled(ctx); err != nil {
-		return SessionState{}, false, err
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	records, err := s.loadSessionsLocked()
-	if err != nil {
-		return SessionState{}, false, err
-	}
-	sessionID = strings.TrimSpace(sessionID)
-	for _, item := range records {
-		if strings.TrimSpace(item.SessionID) == sessionID {
-			return item, true, nil
-		}
-	}
-	return SessionState{}, false, nil
-}
-
-func (s *FileStore) PutSessionState(ctx context.Context, state SessionState) error {
-	if err := ensureNotCanceled(ctx); err != nil {
-		return err
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.withStateLock(ctx, func() error {
-		records, err := s.loadSessionsLocked()
-		if err != nil {
-			return err
-		}
-		now := time.Now().UTC()
-		state = normalizeSessionState(state, now)
-		replaced := false
-		for i := range records {
-			if strings.TrimSpace(records[i].SessionID) != state.SessionID {
-				continue
-			}
-			if records[i].StartedAt.IsZero() {
-				records[i].StartedAt = state.StartedAt
-			}
-			state.StartedAt = records[i].StartedAt
-			records[i] = state
-			replaced = true
-			break
-		}
-		if !replaced {
-			records = append(records, state)
-		}
-		return s.saveSessionsLocked(records)
-	})
-}
-
-func (s *FileStore) ListSessionStates(ctx context.Context) ([]SessionState, error) {
-	if err := ensureNotCanceled(ctx); err != nil {
-		return nil, err
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.loadSessionsLocked()
 }
 
 func (s *FileStore) GetBusInboxRecord(ctx context.Context, channel string, platformMessageID string) (BusInboxRecord, bool, error) {
@@ -430,64 +291,6 @@ func (s *FileStore) PutBusOutboxRecord(ctx context.Context, record BusOutboxReco
 	})
 }
 
-func (s *FileStore) AppendAuditEvent(ctx context.Context, event AuditEvent) error {
-	if err := ensureNotCanceled(ctx); err != nil {
-		return err
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	event = normalizeAuditEvent(event, time.Now().UTC())
-	return s.withAuditLock(ctx, func() error {
-		return appendJSONLine(s.auditPathJSONL(), event, 0o700, 0o600)
-	})
-}
-
-func (s *FileStore) ListAuditEvents(ctx context.Context, tickID string, contactID string, action string, limit int) ([]AuditEvent, error) {
-	if err := ensureNotCanceled(ctx); err != nil {
-		return nil, err
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	tickID = strings.TrimSpace(tickID)
-	contactID = strings.TrimSpace(contactID)
-	action = strings.TrimSpace(action)
-	var out []AuditEvent
-	err := s.withAuditLock(ctx, func() error {
-		records, err := s.readAuditEventsJSONL(s.auditPathJSONL())
-		if err != nil {
-			return err
-		}
-		filtered := make([]AuditEvent, 0, len(records))
-		for _, item := range records {
-			if tickID != "" && strings.TrimSpace(item.TickID) != tickID {
-				continue
-			}
-			if contactID != "" && strings.TrimSpace(item.ContactID) != contactID {
-				continue
-			}
-			if action != "" && strings.TrimSpace(item.Action) != action {
-				continue
-			}
-			filtered = append(filtered, item)
-		}
-		sort.Slice(filtered, func(i, j int) bool {
-			if filtered[i].CreatedAt.Equal(filtered[j].CreatedAt) {
-				return strings.TrimSpace(filtered[i].EventID) > strings.TrimSpace(filtered[j].EventID)
-			}
-			return filtered[i].CreatedAt.After(filtered[j].CreatedAt)
-		})
-		if limit > 0 && len(filtered) > limit {
-			filtered = filtered[:limit]
-		}
-		out = make([]AuditEvent, len(filtered))
-		copy(out, filtered)
-		return nil
-	})
-	return out, err
-}
-
 func (s *FileStore) loadContactsMarkdownLocked(path string, status Status) ([]Contact, error) {
 	content, exists, err := readText(path)
 	if err != nil {
@@ -522,37 +325,19 @@ func parseContactsMarkdown(content string, status Status) ([]Contact, error) {
 }
 
 type contactProfileSection struct {
-	ContactID          string             `yaml:"contact_id"`
-	Nickname           string             `yaml:"nickname"`
-	Kind               string             `yaml:"kind"`
-	Channel            string             `yaml:"channel"`
-	SubjectID          string             `yaml:"subject_id"`
-	TGUsername         string             `yaml:"tg_username"`
-	PrivateChatID      string             `yaml:"private_chat_id"`
-	GroupChatIDs       []string           `yaml:"group_chat_ids"`
-	MAEPNodeID         string             `yaml:"maep_node_id"`
-	MAEPPeerID         string             `yaml:"maep_peer_id"`
-	MAEPAddresses      []string           `yaml:"maep_addresses"`
-	Addresses          []string           `yaml:"addresses"`
-	ChannelEndpoints   []ChannelEndpoint  `yaml:"channel_endpoints"`
-	PersonaBrief       string             `yaml:"persona_brief"`
-	TopicPreferences   []string           `yaml:"topic_preferences"`
-	TopicWeights       map[string]float64 `yaml:"topic_weights"`
-	PersonaTraits      map[string]float64 `yaml:"persona_traits"`
-	UnderstandingDepth float64            `yaml:"understanding_depth"`
-	ReciprocityNorm    float64            `yaml:"reciprocity_norm"`
-	RetainScore        float64            `yaml:"retain_score"`
-	ShareCount         int                `yaml:"share_count"`
-	CooldownUntil      string             `yaml:"cooldown_until"`
-	LastInteractionAt  string             `yaml:"last_interaction_at"`
-	LastSharedAt       string             `yaml:"last_shared_at"`
-	LastSharedItemID   string             `yaml:"last_shared_item_id"`
-	PreferenceContext  string             `yaml:"preference_context"`
-	TrustState         string             `yaml:"trust_state"`
-	Pronouns           string             `yaml:"pronouns"`
-	Timezone           string             `yaml:"timezone"`
-	CreatedAt          string             `yaml:"created_at"`
-	UpdatedAt          string             `yaml:"updated_at"`
+	ContactID         string   `yaml:"contact_id"`
+	Nickname          string   `yaml:"nickname"`
+	Kind              string   `yaml:"kind"`
+	Channel           string   `yaml:"channel"`
+	TGUsername        string   `yaml:"tg_username"`
+	PrivateChatID     string   `yaml:"private_chat_id"`
+	GroupChatIDs      []string `yaml:"group_chat_ids"`
+	MAEPNodeID        string   `yaml:"maep_node_id"`
+	MAEPDialAddress   string   `yaml:"maep_dial_address"`
+	PersonaBrief      string   `yaml:"persona_brief"`
+	TopicPreferences  []string `yaml:"topic_preferences"`
+	CooldownUntil     string   `yaml:"cooldown_until"`
+	LastInteractionAt string   `yaml:"last_interaction_at"`
 }
 
 func parseContactsProfileMarkdown(content string, status Status) ([]Contact, error) {
@@ -566,7 +351,7 @@ func parseContactsProfileMarkdown(content string, status Status) ([]Contact, err
 	yamlLines := make([]string, 0, 32)
 
 	flushProfile := func() error {
-		if strings.TrimSpace(sectionTitle) == "" || len(yamlLines) == 0 {
+		if len(yamlLines) == 0 {
 			yamlLines = yamlLines[:0]
 			return nil
 		}
@@ -635,9 +420,10 @@ func renderContactsMarkdown(title string, status Status, records []Contact) (str
 			title = "Active Contacts"
 		}
 	}
+
 	items := make([]Contact, 0, len(records))
 	for _, item := range records {
-		items = append(items, item)
+		items = append(items, normalizeContact(item, time.Now().UTC()))
 	}
 	sort.Slice(items, func(i, j int) bool {
 		return strings.TrimSpace(items[i].ContactID) < strings.TrimSpace(items[j].ContactID)
@@ -701,21 +487,13 @@ func stripMarkdownHTMLComments(content string) string {
 func contactFromProfileSection(title string, profile contactProfileSection, status Status) (Contact, error) {
 	now := time.Now().UTC()
 	contact := Contact{
-		ContactID:          strings.TrimSpace(profile.ContactID),
-		ContactNickname:    strings.TrimSpace(profile.Nickname),
-		PersonaBrief:       strings.TrimSpace(profile.PersonaBrief),
-		TrustState:         strings.TrimSpace(profile.TrustState),
-		Pronouns:           strings.TrimSpace(profile.Pronouns),
-		Timezone:           strings.TrimSpace(profile.Timezone),
-		SubjectID:          strings.TrimSpace(profile.SubjectID),
-		PreferenceContext:  strings.TrimSpace(profile.PreferenceContext),
-		UnderstandingDepth: profile.UnderstandingDepth,
-		ReciprocityNorm:    profile.ReciprocityNorm,
-		RetainScore:        profile.RetainScore,
-		ShareCount:         profile.ShareCount,
-		LastSharedItemID:   strings.TrimSpace(profile.LastSharedItemID),
-		TopicWeights:       cloneFloatMap(profile.TopicWeights),
-		PersonaTraits:      cloneFloatMap(profile.PersonaTraits),
+		ContactID:        strings.TrimSpace(profile.ContactID),
+		ContactNickname:  strings.TrimSpace(profile.Nickname),
+		Channel:          strings.ToLower(strings.TrimSpace(profile.Channel)),
+		TGUsername:       normalizeTelegramUsername(profile.TGUsername),
+		MAEPDialAddress:  strings.TrimSpace(profile.MAEPDialAddress),
+		PersonaBrief:     strings.TrimSpace(profile.PersonaBrief),
+		TopicPreferences: normalizeStringSlice(profile.TopicPreferences),
 	}
 	if contact.ContactNickname == "" && strings.TrimSpace(profile.ContactID) == "" {
 		contact.ContactNickname = strings.TrimSpace(title)
@@ -723,6 +501,29 @@ func contactFromProfileSection(title string, profile contactProfileSection, stat
 	if status != "" {
 		contact.Status = status
 	}
+
+	privateChatID, err := parseTelegramChatID(profile.PrivateChatID)
+	if err != nil {
+		return Contact{}, err
+	}
+	if privateChatID > 0 {
+		contact.PrivateChatID = privateChatID
+	}
+	groupChatIDs := make([]int64, 0, len(profile.GroupChatIDs))
+	for _, raw := range profile.GroupChatIDs {
+		id, parseErr := parseTelegramChatID(raw)
+		if parseErr != nil {
+			return Contact{}, parseErr
+		}
+		if id != 0 {
+			groupChatIDs = append(groupChatIDs, id)
+		}
+	}
+	contact.GroupChatIDs = groupChatIDs
+
+	nodeID, _ := splitMAEPNodeID(profile.MAEPNodeID)
+	contact.MAEPNodeID = nodeID
+
 	kindRaw := strings.ToLower(strings.TrimSpace(profile.Kind))
 	switch kindRaw {
 	case string(KindAgent):
@@ -740,141 +541,6 @@ func contactFromProfileSection(title string, profile contactProfileSection, stat
 		return Contact{}, fmt.Errorf("invalid contact kind: %s", profile.Kind)
 	}
 
-	tgUsername := normalizeTelegramUsername(profile.TGUsername)
-	privateChatID, err := parseTelegramChatID(profile.PrivateChatID)
-	if err != nil {
-		return Contact{}, err
-	}
-	groupChatIDs := make([]int64, 0, len(profile.GroupChatIDs))
-	for _, raw := range profile.GroupChatIDs {
-		id, parseErr := parseTelegramChatID(raw)
-		if parseErr != nil {
-			return Contact{}, parseErr
-		}
-		if id != 0 {
-			groupChatIDs = append(groupChatIDs, id)
-		}
-	}
-
-	nodeID, peerID := splitMAEPNodeID(profile.MAEPNodeID)
-	if peerID == "" {
-		_, peerID = splitMAEPNodeID(profile.MAEPPeerID)
-	}
-	if peerID == "" {
-		if _, p := splitMAEPNodeID(contact.ContactID); p != "" {
-			peerID = p
-		}
-	}
-	if nodeID == "" && peerID != "" {
-		nodeID = "maep:" + peerID
-	}
-	contact.NodeID = nodeID
-	contact.PeerID = peerID
-	contact.Addresses = normalizeStringSlice(profile.MAEPAddresses)
-	if len(contact.Addresses) == 0 {
-		contact.Addresses = normalizeStringSlice(profile.Addresses)
-	}
-
-	endpoints := make([]ChannelEndpoint, 0, len(profile.ChannelEndpoints)+1+len(groupChatIDs))
-	endpoints = append(endpoints, profile.ChannelEndpoints...)
-	hasTelegramChatEndpoint := false
-	for _, endpoint := range normalizeChannelEndpoints(profile.ChannelEndpoints) {
-		if strings.ToLower(strings.TrimSpace(endpoint.Channel)) != ChannelTelegram {
-			continue
-		}
-		if endpoint.ChatID != 0 {
-			hasTelegramChatEndpoint = true
-			break
-		}
-	}
-	if tgUsername != "" && privateChatID == 0 && len(groupChatIDs) == 0 && !hasTelegramChatEndpoint {
-		endpoints = append(endpoints, ChannelEndpoint{
-			Channel: ChannelTelegram,
-			Address: "@" + tgUsername,
-		})
-	}
-	if privateChatID != 0 {
-		endpoints = append(endpoints, ChannelEndpoint{
-			Channel:  ChannelTelegram,
-			Address:  strconv.FormatInt(privateChatID, 10),
-			ChatID:   privateChatID,
-			ChatType: "private",
-		})
-	}
-	for _, groupID := range groupChatIDs {
-		chatType := "group"
-		if groupID < 0 {
-			chatType = "supergroup"
-		}
-		endpoints = append(endpoints, ChannelEndpoint{
-			Channel:  ChannelTelegram,
-			Address:  strconv.FormatInt(groupID, 10),
-			ChatID:   groupID,
-			ChatType: chatType,
-		})
-	}
-	if peerID != "" {
-		endpoints = append(endpoints, ChannelEndpoint{
-			Channel: ChannelMAEP,
-			Address: peerID,
-		})
-	}
-	contact.ChannelEndpoints = endpoints
-	if contact.PeerID == "" {
-		for _, endpoint := range normalizeChannelEndpoints(contact.ChannelEndpoints) {
-			if strings.ToLower(strings.TrimSpace(endpoint.Channel)) != ChannelMAEP {
-				continue
-			}
-			if _, p := splitMAEPNodeID(endpoint.Address); p != "" {
-				contact.PeerID = p
-				if contact.NodeID == "" {
-					contact.NodeID = "maep:" + p
-				}
-				break
-			}
-		}
-	}
-
-	if contact.ContactID == "" {
-		channel := strings.ToLower(strings.TrimSpace(profile.Channel))
-		switch channel {
-		case ChannelTelegram:
-			if privateChatID != 0 {
-				contact.ContactID = "tg:" + strconv.FormatInt(privateChatID, 10)
-			} else if tgUsername != "" {
-				contact.ContactID = "tg:@" + tgUsername
-			}
-		case ChannelMAEP:
-			if peerID != "" {
-				contact.ContactID = "maep:" + peerID
-			}
-		}
-	}
-	if contact.ContactID == "" {
-		if peerID != "" {
-			contact.ContactID = "maep:" + peerID
-		} else if privateChatID != 0 {
-			contact.ContactID = "tg:" + strconv.FormatInt(privateChatID, 10)
-		} else if tgUsername != "" {
-			contact.ContactID = "tg:@" + tgUsername
-		}
-	}
-	if contact.ContactID == "" {
-		contact.ContactID = "contact:" + slugToken(contact.ContactNickname)
-	}
-	if contact.SubjectID == "" && contact.Kind == KindHuman {
-		contact.SubjectID = contact.ContactID
-	}
-
-	if len(contact.TopicWeights) == 0 {
-		if values := normalizeStringSlice(profile.TopicPreferences); len(values) > 0 {
-			weights := make(map[string]float64, len(values))
-			for _, topic := range values {
-				weights[topic] = 1
-			}
-			contact.TopicWeights = weights
-		}
-	}
 	if profile.CooldownUntil != "" {
 		ts, parseErr := parseRFC3339Timestamp(profile.CooldownUntil)
 		if parseErr != nil {
@@ -889,171 +555,76 @@ func contactFromProfileSection(title string, profile contactProfileSection, stat
 		}
 		contact.LastInteractionAt = &ts
 	}
-	if profile.LastSharedAt != "" {
-		ts, parseErr := parseRFC3339Timestamp(profile.LastSharedAt)
-		if parseErr != nil {
-			return Contact{}, parseErr
-		}
-		contact.LastSharedAt = &ts
+
+	contact = normalizeContact(contact, now)
+	if contact.ContactID == "" {
+		contact.ContactID = deriveContactID(contact)
 	}
-	if profile.CreatedAt != "" {
-		ts, parseErr := parseRFC3339Timestamp(profile.CreatedAt)
-		if parseErr != nil {
-			return Contact{}, parseErr
-		}
-		contact.CreatedAt = ts
+	if contact.ContactID == "" {
+		contact.ContactID = "contact:" + slugToken(contact.ContactNickname)
 	}
-	if profile.UpdatedAt != "" {
-		ts, parseErr := parseRFC3339Timestamp(profile.UpdatedAt)
-		if parseErr != nil {
-			return Contact{}, parseErr
-		}
-		contact.UpdatedAt = ts
-	}
-	if contact.CreatedAt.IsZero() {
-		contact.CreatedAt = now
-	}
-	if contact.UpdatedAt.IsZero() {
-		contact.UpdatedAt = now
-	}
+	contact = normalizeContact(contact, now)
 	return contact, nil
 }
 
 func profileSectionFromContact(contact Contact) (contactProfileSection, string) {
+	contact = normalizeContact(contact, time.Now().UTC())
 	profile := contactProfileSection{
-		ContactID:          strings.TrimSpace(contact.ContactID),
-		Nickname:           strings.TrimSpace(contact.ContactNickname),
-		Kind:               string(normalizeKind(contact.Kind)),
-		SubjectID:          strings.TrimSpace(contact.SubjectID),
-		PersonaBrief:       strings.TrimSpace(contact.PersonaBrief),
-		TrustState:         strings.TrimSpace(contact.TrustState),
-		Pronouns:           strings.TrimSpace(contact.Pronouns),
-		Timezone:           strings.TrimSpace(contact.Timezone),
-		PreferenceContext:  strings.TrimSpace(contact.PreferenceContext),
-		UnderstandingDepth: contact.UnderstandingDepth,
-		ReciprocityNorm:    contact.ReciprocityNorm,
-		RetainScore:        contact.RetainScore,
-		ShareCount:         contact.ShareCount,
-		LastSharedItemID:   strings.TrimSpace(contact.LastSharedItemID),
-		TopicWeights:       cloneFloatMap(contact.TopicWeights),
-		PersonaTraits:      cloneFloatMap(contact.PersonaTraits),
-		ChannelEndpoints:   append([]ChannelEndpoint(nil), contact.ChannelEndpoints...),
+		ContactID:        strings.TrimSpace(contact.ContactID),
+		Nickname:         strings.TrimSpace(contact.ContactNickname),
+		Kind:             string(normalizeKind(contact.Kind)),
+		Channel:          strings.TrimSpace(contact.Channel),
+		TGUsername:       normalizeTelegramUsername(contact.TGUsername),
+		MAEPNodeID:       strings.TrimSpace(contact.MAEPNodeID),
+		MAEPDialAddress:  strings.TrimSpace(contact.MAEPDialAddress),
+		PersonaBrief:     strings.TrimSpace(contact.PersonaBrief),
+		TopicPreferences: normalizeStringSlice(contact.TopicPreferences),
 	}
 
-	tgUsername := ""
-	privateChatID := int64(0)
-	groupChatIDs := make([]int64, 0)
-	hasTelegramEndpoint := false
-	for _, endpoint := range normalizeChannelEndpoints(contact.ChannelEndpoints) {
-		if strings.ToLower(strings.TrimSpace(endpoint.Channel)) != ChannelTelegram {
-			continue
-		}
-		hasTelegramEndpoint = true
-		if endpoint.ChatID > 0 {
-			if strings.ToLower(strings.TrimSpace(endpoint.ChatType)) == "private" || privateChatID == 0 {
-				privateChatID = endpoint.ChatID
-			}
-			continue
-		}
-		if endpoint.ChatID < 0 {
-			groupChatIDs = append(groupChatIDs, endpoint.ChatID)
-			continue
-		}
-		addr := strings.TrimSpace(endpoint.Address)
-		if strings.HasPrefix(addr, "@") {
-			tgUsername = strings.TrimPrefix(addr, "@")
-		}
-	}
-	if !hasTelegramEndpoint {
-		for _, raw := range []string{contact.SubjectID, contact.ContactID} {
-			value := strings.TrimSpace(raw)
-			lower := strings.ToLower(value)
-			if strings.HasPrefix(lower, "tg:@") && tgUsername == "" {
-				tgUsername = strings.TrimSpace(value[len("tg:@"):])
-			}
-			if strings.HasPrefix(lower, "tg:") && privateChatID == 0 {
-				id, err := parseTelegramChatID(value[len("tg:"):])
-				if err == nil && id != 0 {
-					privateChatID = id
-				}
-			}
+	if profile.Channel == "" {
+		switch {
+		case contact.PrivateChatID != 0 || len(contact.GroupChatIDs) > 0 || profile.TGUsername != "":
+			profile.Channel = ChannelTelegram
+		case profile.MAEPNodeID != "":
+			profile.Channel = ChannelMAEP
+		default:
+			profile.Channel = strings.TrimSpace(string(normalizeKind(contact.Kind)))
 		}
 	}
 
-	nodeID, peerID := splitMAEPNodeID(contact.NodeID)
-	if peerID == "" {
-		_, peerID = splitMAEPNodeID(contact.PeerID)
+	if profile.TGUsername == "" {
+		if alias := extractTelegramAlias(profile.ContactID); alias != "" {
+			profile.TGUsername = alias
+		}
 	}
-	if peerID == "" {
-		_, peerID = splitMAEPNodeID(contact.ContactID)
+	if contact.PrivateChatID != 0 {
+		profile.PrivateChatID = strconv.FormatInt(contact.PrivateChatID, 10)
 	}
-	if nodeID == "" && peerID != "" {
-		nodeID = "maep:" + peerID
-	}
-
-	switch {
-	case privateChatID != 0 || tgUsername != "":
-		profile.Channel = ChannelTelegram
-	case peerID != "":
-		profile.Channel = ChannelMAEP
-	default:
-		profile.Channel = strings.ToLower(strings.TrimSpace(string(contact.Kind)))
-	}
-	if tgUsername != "" {
-		profile.TGUsername = tgUsername
-	}
-	if privateChatID != 0 {
-		profile.PrivateChatID = strconv.FormatInt(privateChatID, 10)
-	}
-	if len(groupChatIDs) > 0 {
-		sort.Slice(groupChatIDs, func(i, j int) bool { return groupChatIDs[i] < groupChatIDs[j] })
-		ids := make([]string, 0, len(groupChatIDs))
+	if len(contact.GroupChatIDs) > 0 {
+		ids := make([]int64, 0, len(contact.GroupChatIDs))
+		ids = append(ids, contact.GroupChatIDs...)
+		sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+		out := make([]string, 0, len(ids))
 		seen := map[string]bool{}
-		for _, id := range groupChatIDs {
+		for _, id := range ids {
 			value := strconv.FormatInt(id, 10)
 			if seen[value] {
 				continue
 			}
 			seen[value] = true
-			ids = append(ids, value)
+			out = append(out, value)
 		}
-		profile.GroupChatIDs = ids
+		profile.GroupChatIDs = out
 	}
-	if nodeID != "" {
+	if profile.MAEPNodeID == "" {
+		nodeID, _ := splitMAEPNodeID(contact.ContactID)
 		profile.MAEPNodeID = nodeID
-	}
-	if peerID != "" {
-		profile.MAEPPeerID = peerID
-	}
-	if len(contact.Addresses) > 0 {
-		profile.MAEPAddresses = append([]string(nil), normalizeStringSlice(contact.Addresses)...)
-		profile.Addresses = append([]string(nil), normalizeStringSlice(contact.Addresses)...)
-	}
-	if len(contact.TopicWeights) > 0 {
-		topics := make([]string, 0, len(contact.TopicWeights))
-		for topic := range contact.TopicWeights {
-			if strings.TrimSpace(topic) == "" {
-				continue
-			}
-			topics = append(topics, strings.TrimSpace(topic))
-		}
-		sort.Strings(topics)
-		profile.TopicPreferences = topics
 	}
 	if contact.CooldownUntil != nil && !contact.CooldownUntil.IsZero() {
 		profile.CooldownUntil = contact.CooldownUntil.UTC().Format(time.RFC3339)
 	}
 	if contact.LastInteractionAt != nil && !contact.LastInteractionAt.IsZero() {
 		profile.LastInteractionAt = contact.LastInteractionAt.UTC().Format(time.RFC3339)
-	}
-	if contact.LastSharedAt != nil && !contact.LastSharedAt.IsZero() {
-		profile.LastSharedAt = contact.LastSharedAt.UTC().Format(time.RFC3339)
-	}
-	if !contact.CreatedAt.IsZero() {
-		profile.CreatedAt = contact.CreatedAt.UTC().Format(time.RFC3339)
-	}
-	if !contact.UpdatedAt.IsZero() {
-		profile.UpdatedAt = contact.UpdatedAt.UTC().Format(time.RFC3339)
 	}
 
 	heading := strings.TrimSpace(contact.ContactNickname)
@@ -1091,6 +662,17 @@ func normalizeTelegramUsername(raw string) string {
 	value := strings.TrimSpace(raw)
 	value = strings.TrimPrefix(value, "@")
 	return strings.TrimSpace(value)
+}
+
+func extractTelegramAlias(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if strings.HasPrefix(raw, "tg:@") {
+		return strings.TrimPrefix(raw, "tg:@")
+	}
+	if strings.HasPrefix(raw, "@") {
+		return strings.TrimPrefix(raw, "@")
+	}
+	return ""
 }
 
 func splitMAEPNodeID(raw string) (string, string) {
@@ -1139,87 +721,16 @@ func slugToken(raw string) string {
 	return token
 }
 
-func removeContactByID(items []Contact, contactID string, createdAt *time.Time) []Contact {
+func removeContactByID(items []Contact, contactID string) []Contact {
 	out := items[:0]
 	contactID = strings.TrimSpace(contactID)
 	for _, item := range items {
 		if strings.TrimSpace(item.ContactID) == contactID {
-			if createdAt != nil && !item.CreatedAt.IsZero() {
-				*createdAt = item.CreatedAt
-			}
 			continue
 		}
 		out = append(out, item)
 	}
 	return out
-}
-
-func (s *FileStore) loadCandidatesLocked() ([]ShareCandidate, error) {
-	var file candidatesFile
-	ok, err := readJSONFile(s.candidatesPath(), &file)
-	if err != nil {
-		return nil, err
-	}
-	if !ok {
-		return []ShareCandidate{}, nil
-	}
-	out := make([]ShareCandidate, 0, len(file.Records))
-	for _, item := range file.Records {
-		item = normalizeCandidate(item, time.Now().UTC())
-		out = append(out, item)
-	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].CreatedAt.Equal(out[j].CreatedAt) {
-			return strings.TrimSpace(out[i].ItemID) < strings.TrimSpace(out[j].ItemID)
-		}
-		return out[i].CreatedAt.After(out[j].CreatedAt)
-	})
-	return out, nil
-}
-
-func (s *FileStore) saveCandidatesLocked(records []ShareCandidate) error {
-	sort.Slice(records, func(i, j int) bool {
-		if records[i].CreatedAt.Equal(records[j].CreatedAt) {
-			return strings.TrimSpace(records[i].ItemID) < strings.TrimSpace(records[j].ItemID)
-		}
-		return records[i].CreatedAt.After(records[j].CreatedAt)
-	})
-	file := candidatesFile{Version: candidatesFileVersion, Records: records}
-	return writeJSONFileAtomic(s.candidatesPath(), file)
-}
-
-func (s *FileStore) loadSessionsLocked() ([]SessionState, error) {
-	var file sessionsFile
-	ok, err := readJSONFile(s.sessionsPath(), &file)
-	if err != nil {
-		return nil, err
-	}
-	if !ok {
-		return []SessionState{}, nil
-	}
-	out := make([]SessionState, 0, len(file.Records))
-	for _, item := range file.Records {
-		item = normalizeSessionState(item, time.Now().UTC())
-		out = append(out, item)
-	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].UpdatedAt.Equal(out[j].UpdatedAt) {
-			return strings.TrimSpace(out[i].SessionID) < strings.TrimSpace(out[j].SessionID)
-		}
-		return out[i].UpdatedAt.After(out[j].UpdatedAt)
-	})
-	return out, nil
-}
-
-func (s *FileStore) saveSessionsLocked(records []SessionState) error {
-	sort.Slice(records, func(i, j int) bool {
-		if records[i].UpdatedAt.Equal(records[j].UpdatedAt) {
-			return strings.TrimSpace(records[i].SessionID) < strings.TrimSpace(records[j].SessionID)
-		}
-		return records[i].UpdatedAt.After(records[j].UpdatedAt)
-	})
-	file := sessionsFile{Version: sessionsFileVersion, Records: records}
-	return writeJSONFileAtomic(s.sessionsPath(), file)
 }
 
 func (s *FileStore) loadBusInboxLocked() ([]BusInboxRecord, error) {
@@ -1310,42 +821,8 @@ func (s *FileStore) saveBusOutboxLocked(records []BusOutboxRecord) error {
 	return writeJSONFileAtomic(s.busOutboxPath(), file)
 }
 
-func (s *FileStore) readAuditEventsJSONL(path string) ([]AuditEvent, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return []AuditEvent{}, nil
-		}
-		return nil, fmt.Errorf("open audit jsonl %s: %w", path, err)
-	}
-	defer file.Close()
-
-	records := make([]AuditEvent, 0, 64)
-	scanner := bufio.NewScanner(file)
-	scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
-	for scanner.Scan() {
-		line := bytes.TrimSpace(scanner.Bytes())
-		if len(line) == 0 {
-			continue
-		}
-		var event AuditEvent
-		if err := json.Unmarshal(line, &event); err != nil {
-			return nil, fmt.Errorf("decode audit jsonl %s: %w", path, err)
-		}
-		records = append(records, event)
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("scan audit jsonl %s: %w", path, err)
-	}
-	return records, nil
-}
-
 func (s *FileStore) withStateLock(ctx context.Context, fn func() error) error {
 	return s.withLock(ctx, "state.main", fn)
-}
-
-func (s *FileStore) withAuditLock(ctx context.Context, fn func() error) error {
-	return s.withLock(ctx, "audit.share_decisions_jsonl", fn)
 }
 
 func (s *FileStore) withLock(ctx context.Context, key string, fn func() error) error {
@@ -1366,24 +843,12 @@ func (s *FileStore) rootPath() string {
 	return filepath.Clean(root)
 }
 
-func (s *FileStore) lockRootPath() string {
-	return filepath.Join(s.rootPath(), ".fslocks")
-}
-
 func (s *FileStore) activeContactsPath() string {
 	return filepath.Join(s.rootPath(), "ACTIVE.md")
 }
 
 func (s *FileStore) inactiveContactsPath() string {
 	return filepath.Join(s.rootPath(), "INACTIVE.md")
-}
-
-func (s *FileStore) candidatesPath() string {
-	return filepath.Join(s.rootPath(), "share_candidates.json")
-}
-
-func (s *FileStore) sessionsPath() string {
-	return filepath.Join(s.rootPath(), "share_sessions.json")
 }
 
 func (s *FileStore) busInboxPath() string {
@@ -1394,10 +859,6 @@ func (s *FileStore) busOutboxPath() string {
 	return filepath.Join(s.rootPath(), "bus_outbox.json")
 }
 
-func (s *FileStore) auditPathJSONL() string {
-	return filepath.Join(s.rootPath(), "share_decisions_audit.jsonl")
-}
-
 func normalizeContact(c Contact, now time.Time) Contact {
 	if now.IsZero() {
 		now = time.Now().UTC()
@@ -1405,132 +866,96 @@ func normalizeContact(c Contact, now time.Time) Contact {
 	c.ContactID = strings.TrimSpace(c.ContactID)
 	c.ContactNickname = strings.TrimSpace(c.ContactNickname)
 	c.PersonaBrief = strings.TrimSpace(c.PersonaBrief)
-	c.Pronouns = clipString(strings.TrimSpace(c.Pronouns), contactPronounsMaxLen)
-	c.Timezone = normalizeTimezone(strings.TrimSpace(c.Timezone))
-	c.PreferenceContext = clipString(strings.TrimSpace(c.PreferenceContext), contactPrefMaxLen)
-	c.DisplayName = strings.TrimSpace(c.DisplayName)
-	if c.ContactNickname == "" && c.DisplayName != "" {
-		c.ContactNickname = c.DisplayName
-	}
-	c.DisplayName = ""
-	c.SubjectID = strings.TrimSpace(c.SubjectID)
-	c.NodeID = strings.TrimSpace(c.NodeID)
-	c.PeerID = strings.TrimSpace(c.PeerID)
-	c.TrustState = strings.TrimSpace(strings.ToLower(c.TrustState))
-	c.LastSharedItemID = strings.TrimSpace(c.LastSharedItemID)
+	c.TGUsername = normalizeTelegramUsername(c.TGUsername)
 	c.Kind = normalizeKind(c.Kind)
 	c.Status = normalizeStatus(c.Status)
-	c.Addresses = normalizeStringSlice(c.Addresses)
-	c.ChannelEndpoints = normalizeChannelEndpoints(c.ChannelEndpoints)
-	c.TopicWeights = normalizeTopicWeightsMap(cloneFloatMap(c.TopicWeights))
-	c.PersonaTraits = normalizeTraitMap(c.PersonaTraits)
-	c.UnderstandingDepth = clamp(c.UnderstandingDepth, 0, 100)
-	c.ReciprocityNorm = clamp(c.ReciprocityNorm, 0, 1)
-	c.RetainScore = clamp(c.RetainScore, 0, 1)
-	if c.CreatedAt.IsZero() {
-		c.CreatedAt = now
+	c.Channel = normalizeContactChannel(c.Channel)
+	c.GroupChatIDs = normalizeInt64Slice(c.GroupChatIDs)
+	if c.PrivateChatID <= 0 {
+		c.PrivateChatID = 0
 	}
-	c.UpdatedAt = now
-	if len(c.Addresses) == 0 {
-		c.Addresses = nil
+	nodeID, _ := splitMAEPNodeID(c.MAEPNodeID)
+	c.MAEPNodeID = nodeID
+	c.MAEPDialAddress = strings.TrimSpace(c.MAEPDialAddress)
+	c.TopicPreferences = normalizeStringSlice(c.TopicPreferences)
+	if len(c.TopicPreferences) == 0 {
+		c.TopicPreferences = nil
 	}
-	if len(c.TopicWeights) == 0 {
-		c.TopicWeights = nil
+
+	if c.CooldownUntil != nil {
+		ts := c.CooldownUntil.UTC()
+		if ts.IsZero() {
+			c.CooldownUntil = nil
+		} else {
+			c.CooldownUntil = &ts
+		}
 	}
-	if len(c.PersonaTraits) == 0 {
-		c.PersonaTraits = nil
+	if c.LastInteractionAt != nil {
+		ts := c.LastInteractionAt.UTC()
+		if ts.IsZero() {
+			c.LastInteractionAt = nil
+		} else {
+			c.LastInteractionAt = &ts
+		}
 	}
-	if len(c.ChannelEndpoints) == 0 {
-		c.ChannelEndpoints = nil
+
+	if c.ContactID == "" {
+		c.ContactID = deriveContactID(c)
+	}
+	if c.ContactID == "" {
+		c.ContactID = "contact:" + slugToken(c.ContactNickname)
+	}
+
+	if c.Channel == "" {
+		switch {
+		case strings.HasPrefix(strings.ToLower(c.ContactID), "tg:"), c.PrivateChatID != 0, len(c.GroupChatIDs) > 0, c.TGUsername != "":
+			c.Channel = ChannelTelegram
+		case strings.HasPrefix(strings.ToLower(c.ContactID), "maep:"), c.MAEPNodeID != "", c.MAEPDialAddress != "":
+			c.Channel = ChannelMAEP
+		}
+	}
+	if c.Channel == "" {
+		if c.Kind == KindHuman {
+			c.Channel = ChannelTelegram
+		} else {
+			c.Channel = ChannelMAEP
+		}
+	}
+
+	if strings.HasPrefix(strings.ToLower(c.ContactID), "tg:@") && c.TGUsername == "" {
+		c.TGUsername = normalizeTelegramUsername(c.ContactID[len("tg:@"):])
+	}
+	if strings.HasPrefix(strings.ToLower(c.ContactID), "tg:") && c.PrivateChatID == 0 {
+		id, err := parseTelegramChatID(c.ContactID[len("tg:"):])
+		if err == nil && id > 0 {
+			c.PrivateChatID = id
+		}
+	}
+	if strings.HasPrefix(strings.ToLower(c.ContactID), "maep:") && c.MAEPNodeID == "" {
+		node, _ := splitMAEPNodeID(c.ContactID)
+		c.MAEPNodeID = node
+	}
+
+	if c.TGUsername == "" && c.PrivateChatID == 0 && len(c.GroupChatIDs) == 0 && c.Channel == ChannelTelegram {
+		if alias := extractTelegramAlias(c.ContactID); alias != "" {
+			c.TGUsername = alias
+		}
+	}
+
+	if c.ContactID == "" {
+		c.ContactID = deriveContactID(c)
 	}
 	return c
 }
 
-func clipString(input string, max int) string {
-	if max <= 0 {
-		return ""
-	}
-	if len(input) <= max {
-		return input
-	}
-	return input[:max]
-}
-
-func normalizeTimezone(raw string) string {
-	raw = clipString(strings.TrimSpace(raw), contactTZMaxLen)
-	if raw == "" {
-		return ""
-	}
-	if _, err := time.LoadLocation(raw); err != nil {
-		return ""
-	}
-	return raw
-}
-
-func normalizeCandidate(c ShareCandidate, now time.Time) ShareCandidate {
-	if now.IsZero() {
-		now = time.Now().UTC()
-	}
-	c.ItemID = strings.TrimSpace(c.ItemID)
-	c.Topic = strings.TrimSpace(c.Topic)
-	c.ContentType = strings.TrimSpace(c.ContentType)
-	c.PayloadBase64 = strings.TrimSpace(c.PayloadBase64)
-	c.SensitivityLevel = strings.TrimSpace(strings.ToLower(c.SensitivityLevel))
-	c.SourceRef = strings.TrimSpace(c.SourceRef)
-	c.Topics = normalizeStringSlice(c.Topics)
-	c.LinkedHistoryIDs = normalizeStringSlice(c.LinkedHistoryIDs)
-	c.DepthHint = clamp(c.DepthHint, 0, 1)
-	c.SourceChatType = strings.ToLower(strings.TrimSpace(c.SourceChatType))
-	switch c.SourceChatType {
-	case "private", "group", "supergroup":
+func normalizeContactChannel(raw string) string {
+	value := strings.ToLower(strings.TrimSpace(raw))
+	switch value {
+	case ChannelTelegram, ChannelMAEP, "slack", "discord":
+		return value
 	default:
-		c.SourceChatType = ""
+		return ""
 	}
-	if c.CreatedAt.IsZero() {
-		c.CreatedAt = now
-	}
-	c.UpdatedAt = now
-	if len(c.Topics) == 0 {
-		c.Topics = nil
-	}
-	if len(c.LinkedHistoryIDs) == 0 {
-		c.LinkedHistoryIDs = nil
-	}
-	return c
-}
-
-func normalizeSessionState(s SessionState, now time.Time) SessionState {
-	if now.IsZero() {
-		now = time.Now().UTC()
-	}
-	s.SessionID = strings.TrimSpace(s.SessionID)
-	s.ContactID = strings.TrimSpace(s.ContactID)
-	s.SessionInterestLevel = clamp(s.SessionInterestLevel, 0, 1)
-	if s.StartedAt.IsZero() {
-		s.StartedAt = now
-	}
-	s.UpdatedAt = now
-	return s
-}
-
-func normalizeAuditEvent(e AuditEvent, now time.Time) AuditEvent {
-	if now.IsZero() {
-		now = time.Now().UTC()
-	}
-	e.EventID = strings.TrimSpace(e.EventID)
-	e.TickID = strings.TrimSpace(e.TickID)
-	e.Action = strings.TrimSpace(e.Action)
-	e.ContactID = strings.TrimSpace(e.ContactID)
-	e.PeerID = strings.TrimSpace(e.PeerID)
-	e.ItemID = strings.TrimSpace(e.ItemID)
-	e.Reason = strings.TrimSpace(e.Reason)
-	if e.Metadata != nil && len(e.Metadata) == 0 {
-		e.Metadata = nil
-	}
-	if e.CreatedAt.IsZero() {
-		e.CreatedAt = now
-	}
-	return e
 }
 
 func normalizeKind(kind Kind) Kind {
@@ -1567,128 +992,17 @@ func normalizeStringSlice(input []string) []string {
 	return out
 }
 
-func normalizeChannelEndpoints(input []ChannelEndpoint) []ChannelEndpoint {
-	if len(input) == 0 {
-		return nil
-	}
-	byKey := map[string]ChannelEndpoint{}
+func normalizeInt64Slice(input []int64) []int64 {
+	seen := map[int64]bool{}
+	out := make([]int64, 0, len(input))
 	for _, raw := range input {
-		item := ChannelEndpoint{
-			Channel:  strings.ToLower(strings.TrimSpace(raw.Channel)),
-			Address:  strings.TrimSpace(raw.Address),
-			ChatID:   raw.ChatID,
-			ChatType: strings.ToLower(strings.TrimSpace(raw.ChatType)),
-		}
-		if item.Channel == "" {
+		if raw == 0 || seen[raw] {
 			continue
 		}
-		if raw.LastSeenAt != nil && !raw.LastSeenAt.IsZero() {
-			ts := raw.LastSeenAt.UTC()
-			item.LastSeenAt = &ts
-		}
-		switch item.Channel {
-		case ChannelTelegram:
-			switch item.ChatType {
-			case "private", "group", "supergroup":
-			default:
-				item.ChatType = ""
-			}
-			if item.Address == "" && item.ChatID != 0 {
-				item.Address = strconv.FormatInt(item.ChatID, 10)
-			}
-		default:
-			item.ChatID = 0
-			item.ChatType = ""
-		}
-		key := ""
-		if item.Channel == ChannelTelegram && item.ChatID != 0 {
-			key = item.Channel + "#chat:" + strconv.FormatInt(item.ChatID, 10)
-		} else if item.Address != "" {
-			key = item.Channel + "#addr:" + item.Address
-		}
-		if key == "" {
-			continue
-		}
-		prev, exists := byKey[key]
-		if !exists {
-			byKey[key] = item
-			continue
-		}
-		merged := prev
-		if merged.Address == "" && item.Address != "" {
-			merged.Address = item.Address
-		}
-		if merged.ChatID == 0 && item.ChatID != 0 {
-			merged.ChatID = item.ChatID
-		}
-		if merged.ChatType == "" && item.ChatType != "" {
-			merged.ChatType = item.ChatType
-		}
-		if merged.LastSeenAt == nil || (item.LastSeenAt != nil && item.LastSeenAt.After(*merged.LastSeenAt)) {
-			merged.LastSeenAt = item.LastSeenAt
-		}
-		byKey[key] = merged
+		seen[raw] = true
+		out = append(out, raw)
 	}
-	if len(byKey) == 0 {
-		return nil
-	}
-	out := make([]ChannelEndpoint, 0, len(byKey))
-	for _, item := range byKey {
-		out = append(out, item)
-	}
-	sort.Slice(out, func(i, j int) bool {
-		ti := time.Time{}
-		tj := time.Time{}
-		if out[i].LastSeenAt != nil {
-			ti = *out[i].LastSeenAt
-		}
-		if out[j].LastSeenAt != nil {
-			tj = *out[j].LastSeenAt
-		}
-		if ti.Equal(tj) {
-			if out[i].Channel != out[j].Channel {
-				return out[i].Channel < out[j].Channel
-			}
-			if out[i].ChatID != out[j].ChatID {
-				return out[i].ChatID < out[j].ChatID
-			}
-			return out[i].Address < out[j].Address
-		}
-		return ti.After(tj)
-	})
-	return out
-}
-
-func cloneFloatMap(input map[string]float64) map[string]float64 {
-	if len(input) == 0 {
-		return nil
-	}
-	out := make(map[string]float64, len(input))
-	for k, v := range input {
-		key := strings.TrimSpace(k)
-		if key == "" {
-			continue
-		}
-		out[key] = v
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
-}
-
-func normalizeTraitMap(input map[string]float64) map[string]float64 {
-	if len(input) == 0 {
-		return nil
-	}
-	out := make(map[string]float64, len(input))
-	for rawKey, rawValue := range input {
-		key := strings.ToLower(strings.TrimSpace(rawKey))
-		if key == "" {
-			continue
-		}
-		out[key] = clamp(rawValue, 0, 1)
-	}
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
 	if len(out) == 0 {
 		return nil
 	}
@@ -1823,14 +1137,6 @@ func normalizeBusOutboxRecord(record BusOutboxRecord) (BusOutboxRecord, error) {
 	return normalized, nil
 }
 
-func readJSONFile(path string, out any) (bool, error) {
-	ok, err := readJSON(path, out)
-	if err != nil {
-		return false, fmt.Errorf("read %s: %w", path, err)
-	}
-	return ok, nil
-}
-
 func readJSONFileStrict(path string, out any) (bool, error) {
 	normalizedPath := filepath.Clean(strings.TrimSpace(path))
 	if normalizedPath == "." || normalizedPath == "" {
@@ -1926,36 +1232,6 @@ func writeJSONAtomic(path string, v any, dirPerm os.FileMode, filePerm os.FileMo
 	}
 	data = append(data, '\n')
 	return writeBytesAtomic(path, data, dirPerm, filePerm)
-}
-
-func appendJSONLine(path string, v any, dirPerm os.FileMode, filePerm os.FileMode) error {
-	normalizedPath := filepath.Clean(strings.TrimSpace(path))
-	if normalizedPath == "" {
-		return fmt.Errorf("path is required")
-	}
-	if dirPerm == 0 {
-		dirPerm = 0o700
-	}
-	if filePerm == 0 {
-		filePerm = 0o600
-	}
-	if err := ensureDir(filepath.Dir(normalizedPath), dirPerm); err != nil {
-		return err
-	}
-	data, err := json.Marshal(v)
-	if err != nil {
-		return fmt.Errorf("encode jsonl %s: %w", normalizedPath, err)
-	}
-	data = append(data, '\n')
-	file, err := os.OpenFile(normalizedPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, filePerm)
-	if err != nil {
-		return fmt.Errorf("open jsonl %s: %w", normalizedPath, err)
-	}
-	defer file.Close()
-	if _, err := file.Write(data); err != nil {
-		return fmt.Errorf("append jsonl %s: %w", normalizedPath, err)
-	}
-	return nil
 }
 
 func writeBytesAtomic(path string, data []byte, dirPerm os.FileMode, filePerm os.FileMode) error {

@@ -38,6 +38,7 @@ nickname: "Miss Morph"
 kind: "agent"
 channel: "maep"
 maep_node_id: "maep:12D3KooWabc123xyz001"
+maep_dial_address: "/ip4/..."
 persona_brief: "A mysterious agent with a knack for gathering intelligence and solving complex problems"
 topic_preferences:
   - "espionage"

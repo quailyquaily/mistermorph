@@ -19,21 +19,21 @@ func TestLoadContactSnapshot(t *testing.T) {
 		ContactNickname: "John",
 		Kind:            contacts.KindHuman,
 		Status:          contacts.StatusActive,
-		SubjectID:       "tg:@john",
-		ChannelEndpoints: []contacts.ChannelEndpoint{
-			{Channel: contacts.ChannelTelegram, ChatID: 1001, Address: "@john"},
-		},
+		Channel:         contacts.ChannelTelegram,
+		TGUsername:      "john",
+		PrivateChatID:   1001,
 	}, now)
 	if err != nil {
 		t.Fatalf("UpsertContact(john) error = %v", err)
 	}
 
 	_, err = svc.UpsertContact(context.Background(), contacts.Contact{
-		ContactID:       "maep:alice",
+		ContactID:       "maep:12D3KooWAlicePeer",
 		ContactNickname: "Alice",
 		Kind:            contacts.KindAgent,
 		Status:          contacts.StatusActive,
-		PeerID:          "12D3KooWAlicePeer",
+		Channel:         contacts.ChannelMAEP,
+		MAEPNodeID:      "maep:12D3KooWAlicePeer",
 	}, now)
 	if err != nil {
 		t.Fatalf("UpsertContact(alice) error = %v", err)

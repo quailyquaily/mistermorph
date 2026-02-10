@@ -341,9 +341,8 @@ func seedTodoContacts(t *testing.T, contactsDir string) {
 		ContactNickname: "John",
 		Kind:            contacts.KindHuman,
 		Status:          contacts.StatusActive,
-		ChannelEndpoints: []contacts.ChannelEndpoint{
-			{Channel: contacts.ChannelTelegram, ChatID: 1001},
-		},
+		Channel:         contacts.ChannelTelegram,
+		PrivateChatID:   1001,
 	}, now)
 	if err != nil {
 		t.Fatalf("seed john contact error = %v", err)
@@ -353,7 +352,8 @@ func seedTodoContacts(t *testing.T, contactsDir string) {
 		ContactNickname: "Momo",
 		Kind:            contacts.KindAgent,
 		Status:          contacts.StatusActive,
-		PeerID:          "12D3KooWPeer",
+		Channel:         contacts.ChannelMAEP,
+		MAEPNodeID:      "maep:12D3KooWPeer",
 	}, now)
 	if err != nil {
 		t.Fatalf("seed momo contact error = %v", err)

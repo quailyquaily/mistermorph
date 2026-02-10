@@ -3752,14 +3752,14 @@ func observeMAEPContact(ctx context.Context, maepSvc *maep.Service, contactsSvc 
 		return err
 	}
 	nodeID := ""
-	addresses := []string(nil)
+	dialAddress := ""
 	nickname := ""
-	trustState := ""
 	if foundMAEP {
 		nodeID = strings.TrimSpace(maepContact.NodeID)
-		addresses = append([]string(nil), maepContact.Addresses...)
+		if len(maepContact.Addresses) > 0 {
+			dialAddress = strings.TrimSpace(maepContact.Addresses[0])
+		}
 		nickname = strings.TrimSpace(maepContact.DisplayName)
-		trustState = strings.TrimSpace(strings.ToLower(string(maepContact.TrustState)))
 	}
 
 	canonicalContactID := chooseBusinessContactID(nodeID, peerID)
@@ -3791,18 +3791,15 @@ func observeMAEPContact(ctx context.Context, maepSvc *maep.Service, contactsSvc 
 		if existing.Status == "" {
 			existing.Status = contacts.StatusActive
 		}
-		if existing.NodeID == "" && nodeID != "" {
-			existing.NodeID = nodeID
+		existing.Channel = contacts.ChannelMAEP
+		if existing.MAEPNodeID == "" && nodeID != "" {
+			existing.MAEPNodeID = nodeID
 		}
-		if existing.PeerID == "" {
-			existing.PeerID = peerID
+		if existing.MAEPDialAddress == "" && dialAddress != "" {
+			existing.MAEPDialAddress = dialAddress
 		}
-		existing.Addresses = mergeAddresses(existing.Addresses, addresses)
 		if nickname != "" {
 			existing.ContactNickname = nickname
-		}
-		if trustState != "" {
-			existing.TrustState = trustState
 		}
 		existing.LastInteractionAt = &lastInteraction
 		_, err = contactsSvc.UpsertContact(ctx, existing, now)
@@ -3810,41 +3807,16 @@ func observeMAEPContact(ctx context.Context, maepSvc *maep.Service, contactsSvc 
 	}
 
 	_, err = contactsSvc.UpsertContact(ctx, contacts.Contact{
-		ContactID:          canonicalContactID,
-		Kind:               contacts.KindAgent,
-		Status:             contacts.StatusActive,
-		ContactNickname:    nickname,
-		NodeID:             nodeID,
-		PeerID:             peerID,
-		Addresses:          addresses,
-		TrustState:         trustState,
-		UnderstandingDepth: 30,
-		ReciprocityNorm:    0.5,
-		LastInteractionAt:  &lastInteraction,
+		ContactID:         canonicalContactID,
+		Kind:              contacts.KindAgent,
+		Status:            contacts.StatusActive,
+		Channel:           contacts.ChannelMAEP,
+		ContactNickname:   nickname,
+		MAEPNodeID:        nodeID,
+		MAEPDialAddress:   dialAddress,
+		LastInteractionAt: &lastInteraction,
 	}, now)
 	return err
-}
-
-func mergeAddresses(base []string, extra []string) []string {
-	seen := map[string]bool{}
-	out := make([]string, 0, len(base)+len(extra))
-	for _, raw := range base {
-		v := strings.TrimSpace(raw)
-		if v == "" || seen[v] {
-			continue
-		}
-		seen[v] = true
-		out = append(out, v)
-	}
-	for _, raw := range extra {
-		v := strings.TrimSpace(raw)
-		if v == "" || seen[v] {
-			continue
-		}
-		seen[v] = true
-		out = append(out, v)
-	}
-	return out
 }
 
 func chooseBusinessContactID(nodeID string, peerID string) string {
@@ -3992,131 +3964,66 @@ func observeTelegramContact(ctx context.Context, svc *contacts.Service, chatID i
 		return err
 	}
 	lastInteraction := now
-	endpoint := contacts.ChannelEndpoint{
-		Channel:    contacts.ChannelTelegram,
-		Address:    strconv.FormatInt(chatID, 10),
-		ChatID:     chatID,
-		ChatType:   strings.ToLower(strings.TrimSpace(chatType)),
-		LastSeenAt: &lastInteraction,
-	}
+	chatType = strings.ToLower(strings.TrimSpace(chatType))
+	username = strings.TrimSpace(strings.TrimPrefix(username, "@"))
 	if ok {
 		existing.Kind = contacts.KindHuman
 		if existing.Status == "" {
 			existing.Status = contacts.StatusActive
 		}
-		if existing.SubjectID == "" {
-			existing.SubjectID = contactID
+		existing.Channel = contacts.ChannelTelegram
+		if username != "" {
+			existing.TGUsername = username
+		}
+		if chatType == "private" && chatID > 0 {
+			existing.PrivateChatID = chatID
+		}
+		if chatType == "group" || chatType == "supergroup" {
+			existing.GroupChatIDs = mergeGroupChatIDs(existing.GroupChatIDs, chatID)
 		}
 		if contactNickname != "" {
 			existing.ContactNickname = contactNickname
 		}
-		existing.ChannelEndpoints = upsertChannelEndpoint(existing.ChannelEndpoints, endpoint)
 		existing.LastInteractionAt = &lastInteraction
 		_, err = svc.UpsertContact(ctx, existing, now)
 		return err
 	}
-	_, err = svc.UpsertContact(ctx, contacts.Contact{
-		ContactID:          contactID,
-		Kind:               contacts.KindHuman,
-		Status:             contacts.StatusActive,
-		ContactNickname:    contactNickname,
-		SubjectID:          contactID,
-		ChannelEndpoints:   upsertChannelEndpoint(nil, endpoint),
-		UnderstandingDepth: 20,
-		ReciprocityNorm:    0.5,
-		LastInteractionAt:  &lastInteraction,
-	}, now)
+	record := contacts.Contact{
+		ContactID:         contactID,
+		Kind:              contacts.KindHuman,
+		Status:            contacts.StatusActive,
+		Channel:           contacts.ChannelTelegram,
+		ContactNickname:   contactNickname,
+		TGUsername:        username,
+		LastInteractionAt: &lastInteraction,
+	}
+	if chatType == "private" && chatID > 0 {
+		record.PrivateChatID = chatID
+	}
+	if chatType == "group" || chatType == "supergroup" {
+		record.GroupChatIDs = []int64{chatID}
+	}
+	_, err = svc.UpsertContact(ctx, record, now)
 	return err
 }
 
-func upsertChannelEndpoint(items []contacts.ChannelEndpoint, ref contacts.ChannelEndpoint) []contacts.ChannelEndpoint {
-	ref.Channel = strings.ToLower(strings.TrimSpace(ref.Channel))
-	ref.Address = strings.TrimSpace(ref.Address)
-	if ref.Channel == "" {
-		return items
+func mergeGroupChatIDs(base []int64, extra int64) []int64 {
+	if extra == 0 {
+		return base
 	}
-	if ref.Channel == contacts.ChannelTelegram {
-		if ref.ChatID == 0 {
-			return items
-		}
-		if ref.Address == "" {
-			ref.Address = strconv.FormatInt(ref.ChatID, 10)
-		}
-	} else if ref.Address == "" {
-		return items
-	}
-	if ref.LastSeenAt != nil && !ref.LastSeenAt.IsZero() {
-		ts := ref.LastSeenAt.UTC()
-		ref.LastSeenAt = &ts
-	}
-	ref.ChatType = strings.ToLower(strings.TrimSpace(ref.ChatType))
-	if ref.Channel == contacts.ChannelTelegram {
-		switch ref.ChatType {
-		case "private", "group", "supergroup":
-		default:
-			ref.ChatType = ""
-		}
-	} else {
-		ref.ChatType = ""
-		ref.ChatID = 0
-	}
-	key := ref.Channel + ":" + ref.Address
-	if ref.Channel == contacts.ChannelTelegram {
-		key = ref.Channel + ":" + strconv.FormatInt(ref.ChatID, 10)
-	}
-	out := make([]contacts.ChannelEndpoint, 0, len(items)+1)
-	found := false
-	for _, item := range items {
-		itemKey := strings.ToLower(strings.TrimSpace(item.Channel)) + ":" + strings.TrimSpace(item.Address)
-		if strings.ToLower(strings.TrimSpace(item.Channel)) == contacts.ChannelTelegram {
-			itemKey = contacts.ChannelTelegram + ":" + strconv.FormatInt(item.ChatID, 10)
-		}
-		if itemKey != key {
-			out = append(out, item)
+	seen := map[int64]bool{}
+	out := make([]int64, 0, len(base)+1)
+	for _, raw := range base {
+		if raw == 0 || seen[raw] {
 			continue
 		}
-		merged := item
-		if merged.Channel == "" {
-			merged.Channel = ref.Channel
-		}
-		if merged.Address == "" && ref.Address != "" {
-			merged.Address = ref.Address
-		}
-		if merged.ChatType == "" && ref.ChatType != "" {
-			merged.ChatType = ref.ChatType
-		}
-		if merged.ChatID == 0 && ref.ChatID != 0 {
-			merged.ChatID = ref.ChatID
-		}
-		if merged.LastSeenAt == nil || (ref.LastSeenAt != nil && ref.LastSeenAt.After(*merged.LastSeenAt)) {
-			merged.LastSeenAt = ref.LastSeenAt
-		}
-		out = append(out, merged)
-		found = true
+		seen[raw] = true
+		out = append(out, raw)
 	}
-	if !found {
-		out = append(out, ref)
+	if !seen[extra] {
+		out = append(out, extra)
 	}
-	sort.Slice(out, func(i, j int) bool {
-		ti := time.Time{}
-		tj := time.Time{}
-		if out[i].LastSeenAt != nil {
-			ti = *out[i].LastSeenAt
-		}
-		if out[j].LastSeenAt != nil {
-			tj = *out[j].LastSeenAt
-		}
-		if ti.Equal(tj) {
-			if out[i].Channel != out[j].Channel {
-				return out[i].Channel < out[j].Channel
-			}
-			if out[i].ChatID != out[j].ChatID {
-				return out[i].ChatID < out[j].ChatID
-			}
-			return out[i].Address < out[j].Address
-		}
-		return ti.After(tj)
-	})
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
 	return out
 }
 

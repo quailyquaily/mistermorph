@@ -36,8 +36,11 @@ func TestObserveMAEPContact_WithoutMAEPContactFallback(t *testing.T) {
 	if item.Kind != contacts.KindAgent {
 		t.Fatalf("kind mismatch: got %s want %s", item.Kind, contacts.KindAgent)
 	}
-	if item.PeerID != "12D3KooWExamplePeer" {
-		t.Fatalf("peer_id mismatch: got %s", item.PeerID)
+	if item.MAEPNodeID != "maep:12D3KooWExamplePeer" {
+		t.Fatalf("maep_node_id mismatch: got %s", item.MAEPNodeID)
+	}
+	if item.Channel != contacts.ChannelMAEP {
+		t.Fatalf("channel mismatch: got %s want %s", item.Channel, contacts.ChannelMAEP)
 	}
 	if item.LastInteractionAt == nil {
 		t.Fatalf("last_interaction_at expected non-nil")

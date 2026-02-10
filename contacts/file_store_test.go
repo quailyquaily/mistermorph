@@ -16,27 +16,26 @@ func TestFileStoreContactsReadWrite(t *testing.T) {
 		t.Fatalf("Ensure() error = %v", err)
 	}
 
-	now := time.Date(2026, 2, 7, 10, 0, 0, 0, time.UTC)
 	active := Contact{
-		ContactID:          "maep:peer-active",
-		Kind:               KindAgent,
-		Status:             StatusActive,
-		PeerID:             "12D3KooWactive",
-		TrustState:         "verified",
-		UnderstandingDepth: 40,
-		ReciprocityNorm:    0.6,
-		CreatedAt:          now,
-		UpdatedAt:          now,
+		ContactID:        "maep:12D3KooWactive",
+		Kind:             KindAgent,
+		Status:           StatusActive,
+		Channel:          ChannelMAEP,
+		ContactNickname:  "Active Agent",
+		MAEPNodeID:       "maep:12D3KooWactive",
+		MAEPDialAddress:  "/ip4/127.0.0.1/tcp/4021/p2p/12D3KooWactive",
+		TopicPreferences: []string{"ops", "alerts"},
 	}
 	inactive := Contact{
-		ContactID:          "ext:telegram:1001",
-		Kind:               KindHuman,
-		Status:             StatusInactive,
-		SubjectID:          "ext:telegram:1001",
-		UnderstandingDepth: 20,
-		ReciprocityNorm:    0.3,
-		CreatedAt:          now,
-		UpdatedAt:          now,
+		ContactID:        "tg:1001",
+		Kind:             KindHuman,
+		Status:           StatusInactive,
+		Channel:          ChannelTelegram,
+		ContactNickname:  "Inactive Human",
+		TGUsername:       "john",
+		PrivateChatID:    1001,
+		GroupChatIDs:     []int64{-10001},
+		TopicPreferences: []string{"planning"},
 	}
 	if err := store.PutContact(ctx, active); err != nil {
 		t.Fatalf("PutContact(active) error = %v", err)
@@ -52,6 +51,9 @@ func TestFileStoreContactsReadWrite(t *testing.T) {
 	if len(activeList) != 1 || activeList[0].ContactID != active.ContactID {
 		t.Fatalf("active contacts mismatch: got=%v", activeList)
 	}
+	if activeList[0].MAEPDialAddress == "" {
+		t.Fatalf("active contact maep_dial_address should be set")
+	}
 
 	inactiveList, err := store.ListContacts(ctx, StatusInactive)
 	if err != nil {
@@ -60,115 +62,8 @@ func TestFileStoreContactsReadWrite(t *testing.T) {
 	if len(inactiveList) != 1 || inactiveList[0].ContactID != inactive.ContactID {
 		t.Fatalf("inactive contacts mismatch: got=%v", inactiveList)
 	}
-
-}
-
-func TestFileStoreLegacyDisplayNameMigratesToContactNickname(t *testing.T) {
-	ctx := context.Background()
-	root := filepath.Join(t.TempDir(), "contacts")
-	store := NewFileStore(root)
-	if err := store.Ensure(ctx); err != nil {
-		t.Fatalf("Ensure() error = %v", err)
-	}
-
-	now := time.Date(2026, 2, 7, 11, 0, 0, 0, time.UTC)
-	legacy := Contact{
-		ContactID:   "tg:@alice",
-		Kind:        KindHuman,
-		Status:      StatusActive,
-		SubjectID:   "tg:@alice",
-		DisplayName: "Alice Legacy",
-		CreatedAt:   now,
-		UpdatedAt:   now,
-	}
-	if err := store.PutContact(ctx, legacy); err != nil {
-		t.Fatalf("PutContact(legacy) error = %v", err)
-	}
-
-	got, ok, err := store.GetContact(ctx, "tg:@alice")
-	if err != nil {
-		t.Fatalf("GetContact() error = %v", err)
-	}
-	if !ok {
-		t.Fatalf("GetContact() expected ok=true")
-	}
-	if got.ContactNickname != "Alice Legacy" {
-		t.Fatalf("contact nickname mismatch: got %q want %q", got.ContactNickname, "Alice Legacy")
-	}
-	if got.DisplayName != "" {
-		t.Fatalf("display_name should be normalized away, got %q", got.DisplayName)
-	}
-}
-
-func TestFileStoreNormalizesChannelEndpoints(t *testing.T) {
-	ctx := context.Background()
-	root := filepath.Join(t.TempDir(), "contacts")
-	store := NewFileStore(root)
-	if err := store.Ensure(ctx); err != nil {
-		t.Fatalf("Ensure() error = %v", err)
-	}
-
-	now := time.Date(2026, 2, 8, 9, 0, 0, 0, time.UTC)
-	oldSeen := now.Add(-1 * time.Hour)
-	newSeen := now.Add(-10 * time.Minute)
-	input := Contact{
-		ContactID:          "tg:1001",
-		Kind:               KindHuman,
-		Status:             StatusActive,
-		SubjectID:          "tg:1001",
-		UnderstandingDepth: 20,
-		ReciprocityNorm:    0.4,
-		ChannelEndpoints: []ChannelEndpoint{
-			{Channel: " TELEGRAM ", ChatID: 1001, ChatType: "PRIVATE", LastSeenAt: &oldSeen},
-			{Channel: "telegram", Address: "1001", ChatID: 1001, ChatType: "private", LastSeenAt: &newSeen},
-			{Channel: "maep", Address: "12D3KooWpeer", ChatID: 101, ChatType: "group"},
-			{Channel: "", Address: "ignored"},
-		},
-	}
-	if err := store.PutContact(ctx, input); err != nil {
-		t.Fatalf("PutContact() error = %v", err)
-	}
-
-	got, ok, err := store.GetContact(ctx, "tg:1001")
-	if err != nil {
-		t.Fatalf("GetContact() error = %v", err)
-	}
-	if !ok {
-		t.Fatalf("GetContact() expected ok=true")
-	}
-	if len(got.ChannelEndpoints) != 2 {
-		t.Fatalf("channel_endpoints length mismatch: got %d want 2", len(got.ChannelEndpoints))
-	}
-
-	telegram := got.ChannelEndpoints[0]
-	if telegram.Channel != ChannelTelegram {
-		t.Fatalf("telegram endpoint channel mismatch: got %q", telegram.Channel)
-	}
-	if telegram.ChatID != 1001 {
-		t.Fatalf("telegram endpoint chat_id mismatch: got %d want 1001", telegram.ChatID)
-	}
-	if telegram.ChatType != "private" {
-		t.Fatalf("telegram endpoint chat_type mismatch: got %q want %q", telegram.ChatType, "private")
-	}
-	if telegram.Address != "1001" {
-		t.Fatalf("telegram endpoint address mismatch: got %q want %q", telegram.Address, "1001")
-	}
-	if telegram.LastSeenAt == nil || !telegram.LastSeenAt.Equal(newSeen) {
-		t.Fatalf("telegram endpoint last_seen_at mismatch: got %v want %v", telegram.LastSeenAt, newSeen)
-	}
-
-	maepEndpoint := got.ChannelEndpoints[1]
-	if maepEndpoint.Channel != ChannelMAEP {
-		t.Fatalf("maep endpoint channel mismatch: got %q want %q", maepEndpoint.Channel, ChannelMAEP)
-	}
-	if maepEndpoint.Address != "12D3KooWpeer" {
-		t.Fatalf("maep endpoint address mismatch: got %q", maepEndpoint.Address)
-	}
-	if maepEndpoint.ChatID != 0 {
-		t.Fatalf("maep endpoint chat_id should be 0, got %d", maepEndpoint.ChatID)
-	}
-	if maepEndpoint.ChatType != "" {
-		t.Fatalf("maep endpoint chat_type should be empty, got %q", maepEndpoint.ChatType)
+	if inactiveList[0].PrivateChatID != 1001 {
+		t.Fatalf("inactive private_chat_id mismatch: got %d want 1001", inactiveList[0].PrivateChatID)
 	}
 }
 
@@ -271,6 +166,8 @@ kind: "human"
 channel: "telegram"
 tg_username: "alice"
 private_chat_id: "90001"
+group_chat_ids:
+  - "-100222"
 topic_preferences:
   - "golang"
 ` + "```\n"
@@ -287,6 +184,7 @@ updated_at: "1970-01-01T00:00:00Z"
 kind: "agent"
 channel: "maep"
 maep_node_id: "maep:12D3KooWPeerX"
+maep_dial_address: "/ip4/127.0.0.1/tcp/4021/p2p/12D3KooWPeerX"
 ` + "```\n"
 	if err := os.WriteFile(filepath.Join(root, "ACTIVE.md"), []byte(activeBody), 0o600); err != nil {
 		t.Fatalf("WriteFile(ACTIVE.md) error = %v", err)
@@ -305,8 +203,8 @@ maep_node_id: "maep:12D3KooWPeerX"
 	if active[0].ContactID != "tg:90001" || active[0].Kind != KindHuman {
 		t.Fatalf("active contact mismatch: %#v", active[0])
 	}
-	if len(active[0].ChannelEndpoints) == 0 || active[0].ChannelEndpoints[0].Channel != ChannelTelegram {
-		t.Fatalf("active contact channel endpoint mismatch: %#v", active[0].ChannelEndpoints)
+	if active[0].PrivateChatID != 90001 {
+		t.Fatalf("active private chat id mismatch: %#v", active[0])
 	}
 
 	inactive, err := store.ListContacts(ctx, StatusInactive)
@@ -316,7 +214,10 @@ maep_node_id: "maep:12D3KooWPeerX"
 	if len(inactive) != 1 {
 		t.Fatalf("inactive contacts mismatch: got=%d want=1", len(inactive))
 	}
-	if inactive[0].PeerID != "12D3KooWPeerX" || inactive[0].Kind != KindAgent {
+	if inactive[0].MAEPNodeID != "maep:12D3KooWPeerX" || inactive[0].Kind != KindAgent {
 		t.Fatalf("inactive contact mismatch: %#v", inactive[0])
+	}
+	if inactive[0].MAEPDialAddress == "" {
+		t.Fatalf("inactive contact maep_dial_address should be set")
 	}
 }

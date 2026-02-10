@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/quailyquaily/mistermorph/contacts"
@@ -47,23 +48,15 @@ func LoadContactSnapshot(ctx context.Context, contactsDir string) (ContactSnapsh
 			name = strings.TrimSpace(item.ContactID)
 		}
 		if name == "" {
-			name = strings.TrimSpace(item.SubjectID)
-		}
-		if name == "" {
-			name = strings.TrimSpace(item.PeerID)
-		}
-		if name == "" {
 			continue
 		}
 		aliases := dedupeSortedStrings([]string{
 			strings.TrimSpace(item.ContactNickname),
-			strings.TrimSpace(item.DisplayName),
 			extractTelegramAlias(item.ContactID),
-			extractTelegramAlias(item.SubjectID),
 		})
 		usernames := dedupeSortedStrings([]string{
+			strings.TrimSpace(item.TGUsername),
 			extractTelegramAlias(item.ContactID),
-			extractTelegramAlias(item.SubjectID),
 		})
 		preferred := choosePreferredID(item, reachable)
 		out.Contacts = append(out.Contacts, ContactSnapshotItem{
@@ -115,11 +108,8 @@ func (s *ContactSnapshot) ensureReachableSet() {
 func chooseContactName(item contacts.Contact) string {
 	for _, raw := range []string{
 		item.ContactNickname,
-		item.DisplayName,
 		extractTelegramAlias(item.ContactID),
-		extractTelegramAlias(item.SubjectID),
 		item.ContactID,
-		item.SubjectID,
 	} {
 		val := strings.TrimSpace(raw)
 		if val != "" {
@@ -130,12 +120,12 @@ func chooseContactName(item contacts.Contact) string {
 }
 
 func choosePreferredID(item contacts.Contact, reachable []string) string {
-	candidates := []string{
-		strings.TrimSpace(item.ContactID),
-		strings.TrimSpace(item.SubjectID),
+	candidates := []string{strings.TrimSpace(item.ContactID)}
+	if item.PrivateChatID > 0 {
+		candidates = append(candidates, "tg:"+strconv.FormatInt(item.PrivateChatID, 10))
 	}
-	if p := strings.TrimSpace(item.PeerID); p != "" {
-		candidates = append(candidates, "maep:"+p)
+	if nodeID := strings.TrimSpace(item.MAEPNodeID); nodeID != "" {
+		candidates = append(candidates, nodeID)
 	}
 	for _, candidate := range candidates {
 		if candidate == "" {
@@ -157,7 +147,7 @@ func choosePreferredID(item contacts.Contact, reachable []string) string {
 }
 
 func contactReachableIDs(item contacts.Contact) []string {
-	ids := make([]string, 0, 6)
+	ids := make([]string, 0, 8)
 	appendID := func(v string) {
 		v = strings.TrimSpace(v)
 		if v == "" {
@@ -170,24 +160,15 @@ func contactReachableIDs(item contacts.Contact) []string {
 	}
 
 	appendID(item.ContactID)
-	appendID(item.SubjectID)
-	if peer := strings.TrimSpace(item.PeerID); peer != "" {
-		appendID("maep:" + peer)
+	if item.PrivateChatID > 0 {
+		appendID(fmt.Sprintf("tg:%d", item.PrivateChatID))
 	}
-	for _, ep := range item.ChannelEndpoints {
-		channel := strings.ToLower(strings.TrimSpace(ep.Channel))
-		switch channel {
-		case contacts.ChannelTelegram:
-			if ep.ChatID != 0 {
-				appendID(fmt.Sprintf("tg:%d", ep.ChatID))
-			}
-		case contacts.ChannelMAEP:
-			addr := strings.TrimSpace(ep.Address)
-			if addr != "" {
-				appendID("maep:" + addr)
-			}
+	for _, groupID := range item.GroupChatIDs {
+		if groupID != 0 {
+			appendID(fmt.Sprintf("tg:%d", groupID))
 		}
 	}
+	appendID(item.MAEPNodeID)
 	return dedupeSortedStrings(ids)
 }
 

@@ -9,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -218,7 +219,7 @@ func (s *RoutingSender) publishMAEP(ctx context.Context, contact contacts.Contac
 	}
 	peerID := strings.TrimSpace(decision.PeerID)
 	if peerID == "" {
-		peerID = strings.TrimSpace(contact.PeerID)
+		peerID = resolveContactMAEPPeerID(contact)
 	}
 	if peerID == "" {
 		return false, false, fmt.Errorf("maep peer_id is required")
@@ -589,22 +590,20 @@ func ResolveTelegramTarget(contact contacts.Contact, decision contacts.ShareDeci
 	if chatID, chatType, ok := preferredChatByDecision(contact, decision); ok {
 		return chatID, chatType, nil
 	}
-	for _, raw := range []string{contact.SubjectID, contact.ContactID} {
-		value := strings.TrimSpace(raw)
-		lower := strings.ToLower(value)
-		if strings.HasPrefix(lower, "tg:@") {
-			continue
-		}
-		if strings.HasPrefix(lower, "tg:") {
-			idText := strings.TrimSpace(value[len("tg:"):])
-			chatID, err := strconv.ParseInt(idText, 10, 64)
-			if err != nil {
-				return nil, "", fmt.Errorf("invalid telegram id in %q", raw)
-			}
-			return chatID, "private", nil
-		}
+	value := strings.TrimSpace(contact.ContactID)
+	lower := strings.ToLower(value)
+	if strings.HasPrefix(lower, "tg:@") {
+		return nil, "", fmt.Errorf("telegram username target is not sendable: %s", value)
 	}
-	return nil, "", fmt.Errorf("telegram target not found in subject_id/contact_id")
+	if strings.HasPrefix(lower, "tg:") {
+		idText := strings.TrimSpace(value[len("tg:"):])
+		chatID, err := strconv.ParseInt(idText, 10, 64)
+		if err != nil {
+			return nil, "", fmt.Errorf("invalid telegram id in %q", value)
+		}
+		return chatID, chatTypeFromChatID(chatID), nil
+	}
+	return nil, "", fmt.Errorf("telegram target not found in private_chat_id/group_chat_ids/contact_id")
 }
 
 func IsPublicTelegramTarget(contact contacts.Contact, decision contacts.ShareDecision, target any, resolvedChatType string) bool {
@@ -619,78 +618,100 @@ func IsPublicTelegramTarget(contact contacts.Contact, decision contacts.ShareDec
 		return true
 	}
 	if decision.SourceChatID != 0 {
-		for _, item := range telegramChannelEndpoints(contact) {
-			if item.ChatID != decision.SourceChatID {
-				continue
+		for _, groupID := range contact.GroupChatIDs {
+			if groupID == decision.SourceChatID {
+				return true
 			}
-			t := strings.ToLower(strings.TrimSpace(item.ChatType))
-			return t == "group" || t == "supergroup"
 		}
+		return decision.SourceChatID < 0
 	}
 	t := strings.ToLower(strings.TrimSpace(decision.SourceChatType))
 	return t == "group" || t == "supergroup"
 }
 
 func preferredChatByDecision(contact contacts.Contact, decision contacts.ShareDecision) (int64, string, bool) {
-	chats := telegramChannelEndpoints(contact)
-	if len(chats) == 0 {
-		return 0, "", false
-	}
+	privateChatID := contact.PrivateChatID
+	groupIDs := append([]int64(nil), contact.GroupChatIDs...)
+	sort.Slice(groupIDs, func(i, j int) bool { return groupIDs[i] < groupIDs[j] })
 	if decision.SourceChatID != 0 {
-		for _, item := range chats {
-			if item.ChatID == decision.SourceChatID {
-				return item.ChatID, strings.ToLower(strings.TrimSpace(item.ChatType)), true
+		if privateChatID != 0 && decision.SourceChatID == privateChatID {
+			return privateChatID, "private", true
+		}
+		for _, groupID := range groupIDs {
+			if groupID == decision.SourceChatID {
+				return groupID, chatTypeFromChatID(groupID), true
+			}
+		}
+		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(contact.ContactID)), "tg:") {
+			idText := strings.TrimSpace(strings.TrimSpace(contact.ContactID)[len("tg:"):])
+			if chatID, err := strconv.ParseInt(idText, 10, 64); err == nil && chatID == decision.SourceChatID {
+				return chatID, chatTypeFromChatID(chatID), true
 			}
 		}
 	}
 	t := strings.ToLower(strings.TrimSpace(decision.SourceChatType))
 	if t != "" {
-		for _, item := range chats {
-			if strings.ToLower(strings.TrimSpace(item.ChatType)) == t {
-				return item.ChatID, t, true
+		if t == "private" && privateChatID != 0 {
+			return privateChatID, "private", true
+		}
+		if t == "group" || t == "supergroup" {
+			for _, groupID := range groupIDs {
+				groupType := chatTypeFromChatID(groupID)
+				if t == groupType || (t == "group" && groupType == "supergroup") {
+					return groupID, groupType, true
+				}
 			}
 		}
 	}
-	for _, item := range chats {
-		if strings.ToLower(strings.TrimSpace(item.ChatType)) == "private" {
-			return item.ChatID, "private", true
+	if privateChatID != 0 {
+		return privateChatID, "private", true
+	}
+	for _, groupID := range groupIDs {
+		if groupID != 0 {
+			return groupID, chatTypeFromChatID(groupID), true
 		}
 	}
-	for _, item := range chats {
-		if item.ChatID != 0 {
-			return item.ChatID, strings.ToLower(strings.TrimSpace(item.ChatType)), true
+	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(contact.ContactID)), "tg:") && !strings.HasPrefix(strings.ToLower(strings.TrimSpace(contact.ContactID)), "tg:@") {
+		idText := strings.TrimSpace(strings.TrimSpace(contact.ContactID)[len("tg:"):])
+		if chatID, err := strconv.ParseInt(idText, 10, 64); err == nil && chatID != 0 {
+			return chatID, chatTypeFromChatID(chatID), true
 		}
 	}
 	return 0, "", false
 }
 
-func telegramChannelEndpoints(contact contacts.Contact) []contacts.ChannelEndpoint {
-	if len(contact.ChannelEndpoints) == 0 {
-		return nil
+func chatTypeFromChatID(chatID int64) string {
+	if chatID < 0 {
+		return "supergroup"
 	}
-	out := make([]contacts.ChannelEndpoint, 0, len(contact.ChannelEndpoints))
-	for _, item := range contact.ChannelEndpoints {
-		if strings.ToLower(strings.TrimSpace(item.Channel)) != contacts.ChannelTelegram {
-			continue
-		}
-		if item.ChatID == 0 {
-			continue
-		}
-		out = append(out, item)
-	}
-	return out
+	return "private"
 }
 
-func normalizeStrings(items []string) []string {
-	seen := map[string]bool{}
-	out := make([]string, 0, len(items))
-	for _, raw := range items {
-		item := strings.TrimSpace(raw)
-		if item == "" || seen[item] {
-			continue
-		}
-		seen[item] = true
-		out = append(out, item)
+func resolveContactMAEPPeerID(contact contacts.Contact) string {
+	if _, peerID := splitMAEPNodeID(contact.MAEPNodeID); peerID != "" {
+		return peerID
 	}
-	return out
+	if _, peerID := splitMAEPNodeID(contact.ContactID); peerID != "" {
+		return peerID
+	}
+	return ""
+}
+
+func splitMAEPNodeID(raw string) (string, string) {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return "", ""
+	}
+	lower := strings.ToLower(value)
+	if strings.Contains(value, ":") && !strings.HasPrefix(lower, "maep:") {
+		return "", ""
+	}
+	if strings.HasPrefix(lower, "maep:") {
+		peerID := strings.TrimSpace(value[len("maep:"):])
+		if peerID == "" {
+			return "", ""
+		}
+		return "maep:" + peerID, peerID
+	}
+	return "maep:" + value, value
 }
