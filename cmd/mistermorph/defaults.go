@@ -45,9 +45,6 @@ func initViperDefaults() {
 	viper.SetDefault("bus.max_inflight", 1024)
 
 	viper.SetDefault("contacts.dir_name", "contacts")
-	viper.SetDefault("contacts.human.enabled", true)
-	viper.SetDefault("contacts.human.send.enabled", true)
-	viper.SetDefault("contacts.human.send.public_enabled", false)
 	viper.SetDefault("contacts.proactive.max_turns_per_session", 6)
 	viper.SetDefault("contacts.proactive.session_cooldown", 72*time.Hour)
 	viper.SetDefault("contacts.proactive.failure_cooldown", 72*time.Hour)

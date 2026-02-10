@@ -230,15 +230,6 @@ contacts:
     session_cooldown: "10m"
     # Cooldown applied when proactive/direct send fails (e.g. peer unavailable).
     failure_cooldown: "1h"
-  # Human-contact behavior switches (channel-agnostic extension point).
-  human:
-    # If false, proactive pipeline ignores human contacts.
-    enabled: true
-    send:
-      # If false, proactive --send never sends to human contacts.
-      enabled: true
-      # If false, proactive --send avoids public contexts (e.g. Telegram group/supergroup).
-      public_enabled: true
 
 # Intent inference (preflight)
 intent:

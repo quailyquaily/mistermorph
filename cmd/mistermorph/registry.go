@@ -166,14 +166,12 @@ func registryFromViper() *tools.Registry {
 
 	if viper.GetBool("tools.contacts.enabled") {
 		r.Register(builtin.NewContactsSendTool(builtin.ContactsSendToolOptions{
-			Enabled:              true,
-			ContactsDir:          statepaths.ContactsDir(),
-			MAEPDir:              statepaths.MAEPDir(),
-			TelegramBotToken:     strings.TrimSpace(viper.GetString("telegram.bot_token")),
-			TelegramBaseURL:      "https://api.telegram.org",
-			AllowHumanSend:       viper.GetBool("contacts.human.send.enabled"),
-			AllowHumanPublicSend: viper.GetBool("contacts.human.send.public_enabled"),
-			FailureCooldown:      contactsFailureCooldown(),
+			Enabled:          true,
+			ContactsDir:      statepaths.ContactsDir(),
+			MAEPDir:          statepaths.MAEPDir(),
+			TelegramBotToken: strings.TrimSpace(viper.GetString("telegram.bot_token")),
+			TelegramBaseURL:  "https://api.telegram.org",
+			FailureCooldown:  contactsFailureCooldown(),
 		}))
 	}
 

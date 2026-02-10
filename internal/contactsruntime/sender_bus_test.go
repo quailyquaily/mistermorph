@@ -350,12 +350,10 @@ func newRoutingSenderForBusTest(t *testing.T, sendText telegrambus.SendTextFunc,
 	}
 
 	sender := &RoutingSender{
-		bus:                  bus,
-		telegramDelivery:     telegramDelivery,
-		maepDelivery:         maepDelivery,
-		allowHumanSend:       true,
-		allowHumanPublicSend: true,
-		pending:              make(map[string]chan deliveryResult),
+		bus:              bus,
+		telegramDelivery: telegramDelivery,
+		maepDelivery:     maepDelivery,
+		pending:          make(map[string]chan deliveryResult),
 	}
 
 	busHandler := func(deliverCtx context.Context, msg busruntime.BusMessage) error {

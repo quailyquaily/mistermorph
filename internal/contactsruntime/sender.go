@@ -28,28 +28,24 @@ import (
 const defaultTelegramBaseURL = "https://api.telegram.org"
 
 type SenderOptions struct {
-	MAEPDir              string
-	TelegramBotToken     string
-	TelegramBaseURL      string
-	AllowHumanSend       bool
-	AllowHumanPublicSend bool
-	BusMaxInFlight       int
-	Logger               *slog.Logger
+	MAEPDir          string
+	TelegramBotToken string
+	TelegramBaseURL  string
+	BusMaxInFlight   int
+	Logger           *slog.Logger
 }
 
 type RoutingSender struct {
-	maepNode             *maep.Node
-	bus                  *busruntime.Inproc
-	telegramDelivery     *telegrambus.DeliveryAdapter
-	maepDelivery         *maepbus.DeliveryAdapter
-	telegramClient       *http.Client
-	telegramBaseURL      string
-	telegramBotToken     string
-	allowHumanSend       bool
-	allowHumanPublicSend bool
-	pendingMu            sync.Mutex
-	pending              map[string]chan deliveryResult
-	closeOnce            sync.Once
+	maepNode         *maep.Node
+	bus              *busruntime.Inproc
+	telegramDelivery *telegrambus.DeliveryAdapter
+	maepDelivery     *maepbus.DeliveryAdapter
+	telegramClient   *http.Client
+	telegramBaseURL  string
+	telegramBotToken string
+	pendingMu        sync.Mutex
+	pending          map[string]chan deliveryResult
+	closeOnce        sync.Once
 }
 
 type deliveryResult struct {
@@ -100,14 +96,12 @@ func NewRoutingSender(ctx context.Context, opts SenderOptions) (*RoutingSender, 
 	}
 
 	sender := &RoutingSender{
-		maepNode:             node,
-		bus:                  inprocBus,
-		telegramClient:       &http.Client{Timeout: 30 * time.Second},
-		telegramBaseURL:      baseURL,
-		telegramBotToken:     strings.TrimSpace(opts.TelegramBotToken),
-		allowHumanSend:       opts.AllowHumanSend,
-		allowHumanPublicSend: opts.AllowHumanPublicSend,
-		pending:              make(map[string]chan deliveryResult),
+		maepNode:         node,
+		bus:              inprocBus,
+		telegramClient:   &http.Client{Timeout: 30 * time.Second},
+		telegramBaseURL:  baseURL,
+		telegramBotToken: strings.TrimSpace(opts.TelegramBotToken),
+		pending:          make(map[string]chan deliveryResult),
 	}
 	sender.telegramDelivery, err = telegrambus.NewDeliveryAdapter(telegrambus.DeliveryAdapterOptions{
 		SendText: sender.sendTelegramTarget,
@@ -197,14 +191,8 @@ func (s *RoutingSender) Send(ctx context.Context, contact contacts.Contact, deci
 	if ctx == nil {
 		return false, false, fmt.Errorf("context is required")
 	}
-	target, resolvedChatType, telegramErr := ResolveTelegramTargetWithChatID(contact, decision.ChatID)
+	target, _, telegramErr := ResolveTelegramTargetWithChatID(contact, decision.ChatID)
 	if telegramErr == nil && target != nil {
-		if !s.allowHumanSend {
-			return false, false, fmt.Errorf("human proactive send is disabled by config")
-		}
-		if !s.allowHumanPublicSend && IsPublicTelegramTarget(target, resolvedChatType) {
-			return false, false, fmt.Errorf("public human proactive send is disabled by config")
-		}
 		return s.publishTelegram(ctx, target, decision)
 	}
 	if contact.Kind == contacts.KindHuman && telegramErr != nil {

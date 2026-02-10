@@ -212,7 +212,7 @@
 - `message_text` 与 `message_base64` 至少提供一个。
 - `content_type` 默认 `application/json`，且必须是 `application/json`（可带参数，如 `application/json; charset=utf-8`）。
 - 若提供 `message_base64`，其解码结果必须是 envelope JSON，并包含 `message_id` / `text` / `sent_at(RFC3339)` / `session_id(UUIDv7)`。
-- 人类联系人发送受 `contacts.human.send.*` 策略约束。
+- 人类联系人发送默认允许；是否可送达仍取决于联系人资料中的可发送目标（私聊/群聊 chat_id）。
 
 ## `plan_create`
 

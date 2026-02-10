@@ -19,14 +19,12 @@ const (
 )
 
 type ContactsSendToolOptions struct {
-	Enabled              bool
-	ContactsDir          string
-	MAEPDir              string
-	TelegramBotToken     string
-	TelegramBaseURL      string
-	AllowHumanSend       bool
-	AllowHumanPublicSend bool
-	FailureCooldown      time.Duration
+	Enabled          bool
+	ContactsDir      string
+	MAEPDir          string
+	TelegramBotToken string
+	TelegramBaseURL  string
+	FailureCooldown  time.Duration
 }
 
 type ContactsSendTool struct {
@@ -49,15 +47,15 @@ func (t *ContactsSendTool) ParameterSchema() string {
 		"properties": map[string]any{
 			"contact_id": map[string]any{
 				"type":        "string",
-				"description": "Target contact_id.",
+				"description": "Target contact_id. e.g.: tg:@<username>, tg:<chat_id>, maeph:<peer_id>.",
 			},
 			"chat_id": map[string]any{
 				"type":        "string",
-				"description": "Optional chat hint (for example tg:-1001234567890).",
+				"description": "Optional chat id hint. e.g. tg:<chat_id>).",
 			},
 			"content_type": map[string]any{
 				"type":        "string",
-				"description": "Payload type (default application/json). Must be application/json envelope.",
+				"description": "Payload type (default application/json).",
 			},
 			"message_text": map[string]any{
 				"type":        "string",
@@ -106,11 +104,9 @@ func (t *ContactsSendTool) Execute(ctx context.Context, params map[string]any) (
 	}
 
 	sender, err := contactsruntime.NewRoutingSender(ctx, contactsruntime.SenderOptions{
-		MAEPDir:              strings.TrimSpace(t.opts.MAEPDir),
-		TelegramBotToken:     strings.TrimSpace(t.opts.TelegramBotToken),
-		TelegramBaseURL:      strings.TrimSpace(t.opts.TelegramBaseURL),
-		AllowHumanSend:       t.opts.AllowHumanSend,
-		AllowHumanPublicSend: t.opts.AllowHumanPublicSend,
+		MAEPDir:          strings.TrimSpace(t.opts.MAEPDir),
+		TelegramBotToken: strings.TrimSpace(t.opts.TelegramBotToken),
+		TelegramBaseURL:  strings.TrimSpace(t.opts.TelegramBaseURL),
 	})
 	if err != nil {
 		return "", err
