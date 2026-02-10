@@ -141,26 +141,21 @@ status: draft
 
 | 字段 | 主要填充入口 | 允许自动提取 | 覆盖策略 |
 |---|---|---|---|
-| `pronouns` | `contacts upsert`（CLI）/ 后续 `contacts_upsert` tool 明确写入 | 否（默认不猜测） | 仅在明确声明时覆盖 |
-| `timezone` | `contacts upsert`（CLI）/ 后续 `contacts_upsert` tool 明确写入 | 否（默认不猜测） | 仅合法 IANA 时区可写入 |
-| `preference_context` | `contacts upsert`（CLI 或 tool）+ 会话后画像提取流程 | 是（从会话与记忆提取） | 低频更新，保留人工覆盖优先级 |
+| `pronouns` | `contacts_upsert` tool 明确写入 | 否（默认不猜测） | 仅在明确声明时覆盖 |
+| `timezone` | `contacts_upsert` tool 明确写入 | 否（默认不猜测） | 仅合法 IANA 时区可写入 |
+| `preference_context` | `contacts_upsert` tool + 会话后画像提取流程 | 是（从会话与记忆提取） | 低频更新，保留人工覆盖优先级 |
 
 说明：
 
 - 自动观察入口（Telegram/MAEP contact observe）默认不写 `pronouns/timezone`，避免猜测性写入。
 - `preference_context` 允许来自 LLM 摘要，但需要长度限制与隐私边界。
 
-### C.4 CLI 与运维任务
+### C.4 Tool 与运维任务
 
-- [ ] `contacts upsert` 增加参数
-  - 文件：`cmd/mistermorph/contactscmd/contacts.go`
-  - 新参数建议：
-    - `--pronouns`
-    - `--timezone`
-    - `--preference-context`
-    - 可选：`--preference-context-file`
-- [ ] `contacts list` 输出优化
-  - 默认简版保持不变，`--json` 返回完整字段即可。
+- [x] `contacts_upsert` 覆盖新增字段写入（`pronouns/timezone/preference_context`）
+  - 文件：`tools/builtin/contacts_upsert.go`
+- [x] `contacts_list` 返回字段覆盖新增字段
+  - 文件：`tools/builtin/contacts_list.go`
 
 ### C.5 新增 `contacts_upsert` tool（agent 可调用）
 
@@ -199,7 +194,7 @@ status: draft
 
 ### C.8 验收标准
 
-- 新字段可通过 CLI 与 `contacts_upsert` tool 写入、通过 `contacts_list` 读取。
+- 新字段可通过 `contacts_upsert` tool 写入、通过 `contacts_list` 读取。
 - `active.md` / `inactive.md` 旧数据可直接读取，无崩溃/丢字段。
 - LLM 特征提取可消费新字段，且不影响旧流程。
 - agent 可在会话中调用 `contacts_upsert` 完成联系人画像补录。
@@ -207,7 +202,7 @@ status: draft
 ### C.9 测试清单
 
 - [ ] `contacts` 存储 roundtrip 测试（含新字段）。
-- [ ] `contacts upsert` 参数解析与写入测试。
+- [ ] `contacts_upsert` 参数解析与写入测试。
 - [ ] `tools/builtin/contacts_upsert.go` 单测（创建、更新、partial patch、非法参数）。
 - [ ] `contacts_list` 输出 JSON 字段回归测试。
 - [ ] `llm_features` payload 组装测试。
@@ -218,7 +213,7 @@ status: draft
 
 1. PR-1: `TOOLS.md` 模板 + 安装 + prompt block 注入  
 2. PR-2: 群聊规则注入 + 配置开关 + 回归测试  
-3. PR-3: contacts 字段扩展 + CLI + extractor 联动
+3. PR-3: contacts 字段扩展 + tool + extractor 联动
 4. PR-4: `contacts_upsert` tool + registry + docs + tests
 
 ## 7) 风险与回滚
@@ -292,11 +287,10 @@ status: draft
   - [x] 在 `normalizeContact(...)` 中新增字段 trim。
   - [x] 对 `preference_context` 增加长度上限。
   - [x] 对 `timezone` 增加合法性校验策略（按开放问题结论实施）。
-- [x] 更新 CLI `cmd/mistermorph/contactscmd/contacts.go`：
-  - [x] `contacts upsert` 增加 `--pronouns`。
-  - [x] `contacts upsert` 增加 `--timezone`。
-  - [x] `contacts upsert` 增加 `--preference-context`。
-  - [ ] 可选：增加 `--preference-context-file`。
+- [x] 更新 tool `tools/builtin/contacts_upsert.go`：
+  - [x] 支持 `pronouns`。
+  - [x] 支持 `timezone`。
+  - [x] 支持 `preference_context`。
 - [x] 更新 `contacts/llm_features.go`：
   - [x] 在提取输入 payload 中加入 `preference_context`。
   - [x] 保持输出契约不破坏兼容。
@@ -304,10 +298,10 @@ status: draft
   - [x] `docs/tools.md` 更新 `contacts_list` 返回字段说明。
 - [ ] 测试：
   - [ ] `contacts` 存储 roundtrip（新字段读写）。
-  - [ ] CLI 参数解析与写入测试。
+  - [ ] `contacts_upsert` 参数解析与写入测试。
   - [ ] `llm_features` payload 组装测试。
 - [x] 验证：
-  - [x] `go test ./contacts/... ./cmd/mistermorph/contactscmd/...`
+  - [x] `go test ./contacts/... ./tools/builtin/...`
 
 ### PR-4: 新增 `contacts_upsert` 内置 Tool
 
