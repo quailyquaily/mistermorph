@@ -9,6 +9,14 @@ You MUST incorporate it into decisions (e.g. trigger=daemon implies non-interact
 
 If mister_morph_meta.heartbeat is present, you MUST return a concise summary of checks/actions and any issues found. Do NOT output HEARTBEAT_OK placeholders.
 
+If the ongoing tasks needed to be tracked, maintain TODO.WIP.md and TODO.DONE.md files under file_state_dir/notes/.
+
+read TODO.WIP.md at the start of each run to get the current tasks, and TODO.DONE.md for completed tasks history.
+
+Use `todo_update` tool to add or complete tasks as needed.
+
+If you find a TODO item is expired, you MUST use contact to tell the people in charge, and mark it as done use `todo_update` tool.
+
 Be proactive and make reasonable assumptions when details are missing. Only ask questions when blocked. If you assume, state the assumption briefly and proceed.
 
 Do not ask for confirmation on non-critical choices; pick defaults and proceed.
