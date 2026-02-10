@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/quailyquaily/mistermorph/internal/runtimeclock"
 	"github.com/quailyquaily/mistermorph/tools"
 )
 
@@ -131,7 +132,7 @@ func TestRun_InsertsRuntimeClockMeta_WhenNoUserMeta(t *testing.T) {
 
 func TestWithRuntimeClockMeta_UsesProvidedTimeAndTimezone(t *testing.T) {
 	now := time.Date(2026, 2, 10, 7, 46, 12, 0, time.FixedZone("JST", 9*3600))
-	got := withRuntimeClockMeta(map[string]any{"trigger": "daemon"}, now)
+	got := runtimeclock.WithRuntimeClockMeta(map[string]any{"trigger": "daemon"}, now)
 	if got["trigger"] != "daemon" {
 		t.Fatalf("expected trigger preserved, got %#v", got["trigger"])
 	}

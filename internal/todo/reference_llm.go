@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
+	"github.com/quailyquaily/mistermorph/internal/runtimeclock"
 	"github.com/quailyquaily/mistermorph/llm"
 )
 
@@ -87,20 +89,22 @@ func (r *LLMReferenceResolver) ResolveAddContent(ctx context.Context, content st
 		"reachable_id_count", len(snapshot.ReachableIDs),
 	)
 
+	runtimeMeta := runtimeclock.WithRuntimeClockMeta(map[string]any{
+		"channel":           runtime.Channel,
+		"chat_type":         runtime.ChatType,
+		"chat_id":           runtime.ChatID,
+		"speaker_user_id":   runtime.SpeakerUserID,
+		"speaker_username":  runtime.SpeakerUsername,
+		"mention_usernames": runtime.MentionUsernames,
+	}, time.Now())
+
 	payload := map[string]any{
 		"input": map[string]any{
 			"content": content,
 			"people":  people,
 		},
-		"input_raw": runtime.UserInputRaw,
-		"runtime": map[string]any{
-			"channel":           runtime.Channel,
-			"chat_type":         runtime.ChatType,
-			"chat_id":           runtime.ChatID,
-			"speaker_user_id":   runtime.SpeakerUserID,
-			"speaker_username":  runtime.SpeakerUsername,
-			"mention_usernames": runtime.MentionUsernames,
-		},
+		"input_raw":    runtime.UserInputRaw,
+		"runtime":      runtimeMeta,
 		"contacts":     snapshot.Contacts,
 		"allowed_ids":  snapshot.ReachableIDs,
 		"output_rules": []string{"strict_json_only"},
@@ -114,6 +118,7 @@ func (r *LLMReferenceResolver) ResolveAddContent(ctx context.Context, content st
 		"Use `content` as the target text to rewrite.",
 		"Use `contacts` as the primary list of people to resolve.",
 		"Use `input_raw` and `runtime` context for disambiguation.",
+		"If `input_raw` mentions a time (explicit or relative), resolve it with current time context in `runtime` (now_local/timezone/utc_offset) and rewrite it as exact `YYYY-MM-DD hh:mm`.",
 		"Must consider first-person references with speaker context: ",
 		"- if the speaker mention themselves (like 'I', 'me', '$SPEAKER'), resolve to their own contact if available; similarly, resolve mentions of the speaker's direct interlocutors to those contacts if available;",
 		"Attach IDs as `Name (id)` where id is from allowed_ids, example input:",

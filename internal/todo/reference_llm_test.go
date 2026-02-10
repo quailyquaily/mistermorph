@@ -42,6 +42,9 @@ func TestLLMReferenceResolverResolveAddContentOK(t *testing.T) {
 	if !client.calls[0].ForceJSON {
 		t.Fatalf("expected ForceJSON=true")
 	}
+	if !strings.Contains(client.calls[0].Messages[0].Content, "YYYY-MM-DD hh:mm") {
+		t.Fatalf("system prompt missing time rewrite rule: %q", client.calls[0].Messages[0].Content)
+	}
 	var payload map[string]any
 	if err := json.Unmarshal([]byte(client.calls[0].Messages[1].Content), &payload); err != nil {
 		t.Fatalf("payload json parse error: %v", err)
@@ -56,6 +59,16 @@ func TestLLMReferenceResolverResolveAddContentOK(t *testing.T) {
 	}
 	if strings.TrimSpace(payload["input_raw"].(string)) == "" {
 		t.Fatalf("expected non-empty input_raw")
+	}
+	runtime, _ := payload["runtime"].(map[string]any)
+	if runtime == nil {
+		t.Fatalf("missing runtime payload")
+	}
+	for _, key := range []string{"now_utc", "now_local", "timezone", "utc_offset"} {
+		v, _ := runtime[key].(string)
+		if strings.TrimSpace(v) == "" {
+			t.Fatalf("missing runtime clock field %q in runtime payload: %#v", key, runtime)
+		}
 	}
 }
 

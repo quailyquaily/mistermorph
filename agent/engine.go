@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/quailyquaily/mistermorph/guard"
+	"github.com/quailyquaily/mistermorph/internal/runtimeclock"
 	"github.com/quailyquaily/mistermorph/llm"
 	"github.com/quailyquaily/mistermorph/secrets"
 	"github.com/quailyquaily/mistermorph/tools"
@@ -211,7 +212,7 @@ func (e *Engine) Run(ctx context.Context, task string, opts RunOptions) (*Final,
 		messages = append(messages, m)
 	}
 
-	injectedMeta := withRuntimeClockMeta(opts.Meta, time.Now())
+	injectedMeta := runtimeclock.WithRuntimeClockMeta(opts.Meta, time.Now())
 	if metaMsg, ok := buildInjectedMetaMessage(injectedMeta); ok {
 		trigger := ""
 		if v, ok := injectedMeta["trigger"].(string); ok {
