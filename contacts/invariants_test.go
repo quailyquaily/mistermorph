@@ -13,12 +13,14 @@ type mockSender struct {
 	deduped  bool
 	err      error
 	calls    int
+	contact  Contact
+	decision ShareDecision
 }
 
 func (m *mockSender) Send(ctx context.Context, contact Contact, decision ShareDecision) (bool, bool, error) {
 	_ = ctx
-	_ = contact
-	_ = decision
+	m.contact = contact
+	m.decision = decision
 	m.calls++
 	return m.accepted, m.deduped, m.err
 }
@@ -63,5 +65,85 @@ func TestInvariantOutboxIdempotency(t *testing.T) {
 	}
 	if !second.Deduped {
 		t.Fatalf("second send expected deduped outcome, got=%+v", second)
+	}
+}
+
+func TestSendDecisionResolvesTelegramUsernameToPrivateChatContact(t *testing.T) {
+	ctx := context.Background()
+	root := filepath.Join(t.TempDir(), "contacts")
+	store := NewFileStore(root)
+	svc := NewService(store)
+	now := time.Date(2026, 2, 10, 11, 30, 0, 0, time.UTC)
+
+	if _, err := svc.UpsertContact(ctx, Contact{
+		ContactID:       "tg:777",
+		Kind:            KindHuman,
+		Channel:         ChannelTelegram,
+		TGUsername:      "trinity",
+		TGPrivateChatID: 777,
+	}, now); err != nil {
+		t.Fatalf("UpsertContact() error = %v", err)
+	}
+
+	sender := &mockSender{accepted: true}
+	payload := base64.RawURLEncoding.EncodeToString([]byte("hello"))
+	outcome, err := svc.SendDecision(ctx, now, ShareDecision{
+		ContactID:      "tg:@trinity",
+		ItemID:         "manual_item_2",
+		ContentType:    "application/json",
+		PayloadBase64:  payload,
+		IdempotencyKey: "manual:key2",
+	}, sender)
+	if err != nil {
+		t.Fatalf("SendDecision() error = %v", err)
+	}
+	if sender.calls != 1 {
+		t.Fatalf("sender calls mismatch: got %d want 1", sender.calls)
+	}
+	if sender.contact.ContactID != "tg:777" {
+		t.Fatalf("sender contact mismatch: got %q want %q", sender.contact.ContactID, "tg:777")
+	}
+	if sender.decision.ContactID != "tg:777" {
+		t.Fatalf("sender decision contact_id mismatch: got %q want %q", sender.decision.ContactID, "tg:777")
+	}
+	if outcome.ContactID != "tg:777" {
+		t.Fatalf("outcome contact_id mismatch: got %q want %q", outcome.ContactID, "tg:777")
+	}
+}
+
+func TestSendDecisionTelegramUsernameWithoutPrivateChatIDNotFound(t *testing.T) {
+	ctx := context.Background()
+	root := filepath.Join(t.TempDir(), "contacts")
+	store := NewFileStore(root)
+	svc := NewService(store)
+	now := time.Date(2026, 2, 10, 11, 45, 0, 0, time.UTC)
+
+	if _, err := svc.UpsertContact(ctx, Contact{
+		ContactID:      "contact:trinity",
+		Kind:           KindHuman,
+		Channel:        ChannelTelegram,
+		TGUsername:     "trinity",
+		TGGroupChatIDs: []int64{-1007788},
+	}, now); err != nil {
+		t.Fatalf("UpsertContact() error = %v", err)
+	}
+
+	sender := &mockSender{accepted: true}
+	payload := base64.RawURLEncoding.EncodeToString([]byte("hello"))
+	_, err := svc.SendDecision(ctx, now, ShareDecision{
+		ContactID:      "tg:@trinity",
+		ItemID:         "manual_item_3",
+		ContentType:    "application/json",
+		PayloadBase64:  payload,
+		IdempotencyKey: "manual:key3",
+	}, sender)
+	if err == nil {
+		t.Fatalf("SendDecision() expected contact not found error")
+	}
+	if got := err.Error(); got != "contact not found: tg:@trinity" {
+		t.Fatalf("SendDecision() error mismatch: got %q want %q", got, "contact not found: tg:@trinity")
+	}
+	if sender.calls != 0 {
+		t.Fatalf("sender should not be called, got %d", sender.calls)
 	}
 }

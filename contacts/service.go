@@ -214,13 +214,14 @@ func (s *Service) SendDecision(ctx context.Context, now time.Time, decision Shar
 	if decision.ContactID == "" {
 		return ShareOutcome{}, fmt.Errorf("contact_id is required")
 	}
-	contact, ok, err := s.contactStore.GetContact(ctx, decision.ContactID)
+	contact, ok, err := s.resolveSendContact(ctx, decision.ContactID)
 	if err != nil {
 		return ShareOutcome{}, err
 	}
 	if !ok {
 		return ShareOutcome{}, fmt.Errorf("contact not found: %s", decision.ContactID)
 	}
+	decision.ContactID = contact.ContactID
 
 	if strings.TrimSpace(decision.PeerID) == "" {
 		decision.PeerID = resolveMAEPPeerID(contact)
@@ -263,6 +264,70 @@ func (s *Service) SendDecision(ctx context.Context, now time.Time, decision Shar
 		}
 	}
 	return outcome, nil
+}
+
+func (s *Service) resolveSendContact(ctx context.Context, contactID string) (Contact, bool, error) {
+	if s == nil || s.contactStore == nil {
+		return Contact{}, false, fmt.Errorf("contact store is required")
+	}
+	contactID = strings.TrimSpace(contactID)
+	if contactID == "" {
+		return Contact{}, false, fmt.Errorf("contact_id is required")
+	}
+	item, ok, err := s.contactStore.GetContact(ctx, contactID)
+	if err != nil || ok {
+		return item, ok, err
+	}
+	username := extractTelegramUsernameRef(contactID)
+	if username == "" {
+		return Contact{}, false, nil
+	}
+	records, err := s.contactStore.ListContacts(ctx, "")
+	if err != nil {
+		return Contact{}, false, err
+	}
+	matches := make([]Contact, 0, 1)
+	for _, candidate := range records {
+		if candidate.TGPrivateChatID == 0 {
+			continue
+		}
+		if !strings.EqualFold(telegramUsernameOfContact(candidate), username) {
+			continue
+		}
+		matches = append(matches, candidate)
+	}
+	switch len(matches) {
+	case 0:
+		return Contact{}, false, nil
+	case 1:
+		return matches[0], true, nil
+	default:
+		ids := make([]string, 0, len(matches))
+		for _, candidate := range matches {
+			ids = append(ids, strings.TrimSpace(candidate.ContactID))
+		}
+		sort.Strings(ids)
+		return Contact{}, false, fmt.Errorf("telegram username %q matches multiple contacts with private chat id: %s", username, strings.Join(ids, ", "))
+	}
+}
+
+func extractTelegramUsernameRef(contactID string) string {
+	contactID = strings.TrimSpace(contactID)
+	if !strings.HasPrefix(strings.ToLower(contactID), "tg:@") {
+		return ""
+	}
+	return normalizeTelegramUsername(contactID[len("tg:@"):])
+}
+
+func telegramUsernameOfContact(contact Contact) string {
+	if username := normalizeTelegramUsername(contact.TGUsername); username != "" {
+		return username
+	}
+	contactID := strings.TrimSpace(contact.ContactID)
+	if strings.HasPrefix(strings.ToLower(contactID), "tg:@") {
+		return normalizeTelegramUsername(contactID[len("tg:@"):])
+	}
+	return ""
 }
 
 func resolveDecisionChannel(contact Contact, decision ShareDecision) (string, error) {
