@@ -2,9 +2,9 @@ package skillscmd
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
+	"github.com/quailyquaily/mistermorph/internal/clifmt"
 	"github.com/quailyquaily/mistermorph/internal/statepaths"
 	"github.com/quailyquaily/mistermorph/skills"
 	"github.com/spf13/cobra"
@@ -26,25 +26,41 @@ func newSkillsListCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List discovered skills",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			roots, _ := cmd.Flags().GetStringArray("skills-dir")
-			if len(roots) == 0 {
-				roots = statepaths.DefaultSkillsRoots()
-			}
-			list, err := skills.Discover(skills.DiscoverOptions{Roots: roots})
-			if err != nil {
-				return err
-			}
-			for _, s := range list {
-				fmt.Printf("%s\t%s\t%s\n", s.Name, s.ID, s.SkillMD)
-			}
-			return nil
-		},
+		RunE:  runSkillsListCmd,
 	}
 
 	cmd.Flags().StringArray("skills-dir", nil, "Skills root directory (repeatable). Defaults: file_state_dir/skills + ~/.claude/skills + ~/.codex/skills")
 
 	return cmd
+}
+
+func runSkillsListCmd(cmd *cobra.Command, _ []string) error {
+	roots, _ := cmd.Flags().GetStringArray("skills-dir")
+	if len(roots) == 0 {
+		roots = statepaths.DefaultSkillsRoots()
+	}
+	list, err := skills.Discover(skills.DiscoverOptions{Roots: roots})
+	if err != nil {
+		return err
+	}
+
+	rows := make([]clifmt.NameDetailRow, 0, len(list))
+	for _, skill := range list {
+		rows = append(rows, clifmt.NameDetailRow{
+			Name:   skill.Name,
+			Detail: fmt.Sprintf("id=%s  path=%s", skill.ID, skill.SkillMD),
+		})
+	}
+
+	clifmt.PrintNameDetailTable(cmd.OutOrStdout(), clifmt.NameDetailTableOptions{
+		Title:          "Available skills",
+		Rows:           rows,
+		EmptyText:      "No skills were discovered.",
+		NameHeader:     "NAME",
+		DetailHeader:   "DETAILS",
+		MinDetailWidth: 48,
+	})
+	return nil
 }
 
 func newSkillsShowCmd() *cobra.Command {
@@ -72,7 +88,7 @@ func newSkillsShowCmd() *cobra.Command {
 				return err
 			}
 
-			_, err = fmt.Fprintln(os.Stdout, strings.TrimRight(loaded.Contents, "\n"))
+			_, err = fmt.Fprintln(cmd.OutOrStdout(), strings.TrimRight(loaded.Contents, "\n"))
 			return err
 		},
 	}
