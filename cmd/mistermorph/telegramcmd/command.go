@@ -612,6 +612,11 @@ func newTelegramCmd() *cobra.Command {
 									}
 									mu.Unlock()
 									if strings.TrimSpace(alertMsg) != "" {
+										logger.Warn("heartbeat_alert", "source", "telegram", "chat_id", chatID, "message", alertMsg)
+									} else {
+										logger.Warn("heartbeat_error", "source", "telegram", "chat_id", chatID, "error", runErr.Error())
+									}
+									if strings.TrimSpace(alertMsg) != "" {
 										if _, err := publishTelegramBusOutbound(context.Background(), inprocBus, chatID, alertMsg, fmt.Sprintf("telegram:heartbeat_error:%d", chatID)); err != nil {
 											logger.Warn("telegram_bus_publish_error", "channel", busruntime.ChannelTelegram, "chat_id", chatID, "bus_error_code", busErrorCodeString(err), "error", err.Error())
 										}
@@ -657,6 +662,13 @@ func newTelegramCmd() *cobra.Command {
 									lastHeartbeat[chatID] = time.Now()
 									mu.Unlock()
 								}
+							}
+							if job.IsHeartbeat {
+								summary := strings.TrimSpace(outText)
+								if summary == "" {
+									summary = "empty"
+								}
+								logger.Info("heartbeat_summary", "source", "telegram", "chat_id", chatID, "message", summary)
 							}
 
 							mu.Lock()
