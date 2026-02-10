@@ -36,20 +36,10 @@ func BuildHeartbeatTask(checklistPath string) (string, bool, error) {
 	if err != nil {
 		return "", true, err
 	}
-
-	var b strings.Builder
-	b.WriteString("You are running a regular checkpoint for yourself, just like a wake up from sleep.\n")
-	b.WriteString("Review the provided checklist and context. Always do not respond of what you checked/did.\n")
-	b.WriteString("Do NOT output placeholders like HEARTBEAT_OK.\n")
-	b.WriteString("Do NOT output mention it is a heartbeat.\n")
-	b.WriteString("Try to resolve things yourself; avoid asking the user unless genuinely blocked.\n")
-	if !empty {
-		b.WriteString("\nChecklist:\n")
-		b.WriteString(checklist)
-		b.WriteString("\n")
+	if empty {
+		return "", true, nil
 	}
-
-	return b.String(), empty, nil
+	return checklist, false, nil
 }
 
 func BuildHeartbeatMeta(source string, interval time.Duration, checklistPath string, checklistEmpty bool, state *State, extra map[string]any) map[string]any {

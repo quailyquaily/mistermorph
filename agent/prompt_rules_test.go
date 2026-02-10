@@ -68,6 +68,17 @@ func TestBuildSystemPrompt_ShowsPlanOptionWithPlanCreate(t *testing.T) {
 	}
 }
 
+func TestDefaultPromptSpec_IncludesTodoRulesTemplate(t *testing.T) {
+	spec := DefaultPromptSpec()
+	joined := strings.Join(spec.Rules, "\n")
+	if !strings.Contains(joined, "TODO.md entry format examples") {
+		t.Fatalf("expected todo_rules.tmpl content in DefaultPromptSpec rules")
+	}
+	if !strings.Contains(joined, "contacts_send") {
+		t.Fatalf("expected TODO workflow send rule in DefaultPromptSpec rules")
+	}
+}
+
 func TestPromptRules_NoURL_NoInjection(t *testing.T) {
 	client := newMockClient(finalResponse("ok"))
 	e := New(client, baseRegistry(), baseCfg(), DefaultPromptSpec())

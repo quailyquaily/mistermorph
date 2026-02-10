@@ -54,17 +54,14 @@ func New(deps Dependencies) *cobra.Command {
 					return err
 				}
 				task = hbTask
-				runMeta = map[string]any{
-					"trigger": "heartbeat",
-					"heartbeat": heartbeatutil.BuildHeartbeatMeta(
-						"cli",
-						viper.GetDuration("heartbeat.interval"),
-						hbChecklist,
-						checklistEmpty,
-						nil,
-						nil,
-					),
-				}
+				runMeta = heartbeatutil.BuildHeartbeatMeta(
+					"cli",
+					viper.GetDuration("heartbeat.interval"),
+					hbChecklist,
+					checklistEmpty,
+					nil,
+					nil,
+				)
 			} else {
 				task = strings.TrimSpace(configutil.FlagOrViperString(cmd, "task", "task"))
 				if task == "" {

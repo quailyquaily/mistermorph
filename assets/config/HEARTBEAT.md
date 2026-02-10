@@ -25,11 +25,4 @@ Above are just examples, do not consider them as actual tasks to be done.
 
 ## Check TODO.md
 
-- Check the `TODO.md` file for any pending tasks using `read_file` tool.
-- If there are tasks and if there are contacts that match the task context, consider reaching out to them using `contacts_send` tool.
-- Parse optional task context prefix: `ChatID: tg:<chat-id>`.
-- For each mentioned person in a TODO item:
-  - Resolve the person to a contact profile first.
-  - Call `contacts_send` with `contact_id`.
-  - If the TODO item has `ChatID:`, also pass it as `contacts_send.chat_id`.
-  - If contact resolution or send fails, skip this person and include the reason in the heartbeat summary.
+Check and process `TODO.md` items by the shared TODO workflow rules.

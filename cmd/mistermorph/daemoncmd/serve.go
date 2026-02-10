@@ -219,28 +219,37 @@ func NewServeCmd(deps ServeDependencies) *cobra.Command {
 				go func() {
 					ticker := time.NewTicker(hbInterval)
 					defer ticker.Stop()
-					for range ticker.C {
-						if !hbState.Start() {
-							logger.Debug("heartbeat_skip", "reason", "already_running")
-							continue
+					for {
+						select {
+						case <-cmd.Context().Done():
+							return
+						case <-ticker.C:
 						}
-						task, checklistEmpty, err := heartbeatutil.BuildHeartbeatTask(hbChecklist)
-						if err != nil {
-							alert, msg := hbState.EndFailure(err)
-							if alert {
-								logger.Warn("heartbeat_alert", "message", msg)
+						result := heartbeatutil.Tick(
+							hbState,
+							func() (string, bool, error) {
+								return heartbeatutil.BuildHeartbeatTask(hbChecklist)
+							},
+							func(task string, checklistEmpty bool) string {
+								meta := heartbeatutil.BuildHeartbeatMeta("daemon", hbInterval, hbChecklist, checklistEmpty, hbState, map[string]any{
+									"queue_len": store.QueueLen(),
+								})
+								timeout := viper.GetDuration("timeout")
+								if _, err := store.EnqueueHeartbeat(context.Background(), task, llmutil.ModelFromViper(), timeout, meta, hbState); err != nil {
+									return err.Error()
+								}
+								return ""
+							},
+						)
+						switch result.Outcome {
+						case heartbeatutil.TickBuildError:
+							if strings.TrimSpace(result.AlertMessage) != "" {
+								logger.Warn("heartbeat_alert", "message", result.AlertMessage)
 							} else {
-								logger.Warn("heartbeat_task_error", "error", err.Error())
+								logger.Warn("heartbeat_task_error", "error", result.BuildError.Error())
 							}
-							continue
-						}
-						meta := heartbeatutil.BuildHeartbeatMeta("daemon", hbInterval, hbChecklist, checklistEmpty, hbState, map[string]any{
-							"queue_len": store.QueueLen(),
-						})
-						timeout := viper.GetDuration("timeout")
-						if _, err := store.EnqueueHeartbeat(context.Background(), task, llmutil.ModelFromViper(), timeout, meta, hbState); err != nil {
-							hbState.EndSkipped()
-							logger.Debug("heartbeat_skip", "reason", err.Error())
+						case heartbeatutil.TickSkipped:
+							logger.Debug("heartbeat_skip", "reason", result.SkipReason)
 						}
 					}
 				}()

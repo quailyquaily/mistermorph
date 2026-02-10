@@ -34,6 +34,7 @@ import (
 	maepbus "github.com/quailyquaily/mistermorph/internal/bus/adapters/maep"
 	telegrambus "github.com/quailyquaily/mistermorph/internal/bus/adapters/telegram"
 	"github.com/quailyquaily/mistermorph/internal/configutil"
+	"github.com/quailyquaily/mistermorph/internal/heartbeatutil"
 	"github.com/quailyquaily/mistermorph/internal/idempotency"
 	"github.com/quailyquaily/mistermorph/internal/jsonutil"
 	"github.com/quailyquaily/mistermorph/internal/llmconfig"
@@ -430,10 +431,8 @@ func newTelegramCmd() *cobra.Command {
 				lastFromFirst      = make(map[int64]string)
 				lastFromLast       = make(map[int64]string)
 				lastChatType       = make(map[int64]string)
-				lastHeartbeat      = make(map[int64]time.Time)
-				heartbeatRunning   = make(map[int64]bool)
-				heartbeatFailures  = make(map[int64]int)
 				knownMentions      = make(map[int64]map[string]string)
+				heartbeatState     = &heartbeatutil.State{}
 				offset             int64
 			)
 			if runtimeStateFound {
@@ -601,30 +600,19 @@ func newTelegramCmd() *cobra.Command {
 
 							if runErr != nil {
 								if job.IsHeartbeat {
-									var alertMsg string
-									mu.Lock()
-									failures := heartbeatFailures[chatID] + 1
-									heartbeatFailures[chatID] = failures
-									heartbeatRunning[chatID] = false
-									if failures >= heartbeatFailureThreshold {
-										heartbeatFailures[chatID] = 0
-										alertMsg = strings.TrimSpace(runErr.Error())
-									}
-									mu.Unlock()
-									if strings.TrimSpace(alertMsg) != "" {
-										logger.Warn("heartbeat_alert", "source", "telegram", "chat_id", chatID, "message", alertMsg)
-									} else {
-										logger.Warn("heartbeat_error", "source", "telegram", "chat_id", chatID, "error", runErr.Error())
-									}
-									if strings.TrimSpace(alertMsg) != "" {
+									alert, msg := heartbeatState.EndFailure(runErr)
+									if alert {
+										logger.Warn("heartbeat_alert", "source", "telegram", "chat_id", chatID, "message", msg)
 										mu.Lock()
 										cur := history[chatID]
-										cur = append(cur, llm.Message{Role: "assistant", Content: alertMsg})
+										cur = append(cur, llm.Message{Role: "assistant", Content: msg})
 										if len(cur) > historyMax {
 											cur = cur[len(cur)-historyMax:]
 										}
 										history[chatID] = cur
 										mu.Unlock()
+									} else {
+										logger.Warn("heartbeat_error", "source", "telegram", "chat_id", chatID, "error", runErr.Error())
 									}
 									return
 								}
@@ -637,25 +625,14 @@ func newTelegramCmd() *cobra.Command {
 							var outText string
 							if reaction == nil {
 								outText = formatFinalOutput(final)
-								if job.IsHeartbeat {
-									mu.Lock()
-									heartbeatRunning[chatID] = false
-									heartbeatFailures[chatID] = 0
-									lastHeartbeat[chatID] = time.Now()
-									mu.Unlock()
-								} else {
+								if !job.IsHeartbeat {
 									if _, err := publishTelegramBusOutbound(context.Background(), inprocBus, chatID, outText, fmt.Sprintf("telegram:message:%d:%d", chatID, job.MessageID)); err != nil {
 										logger.Warn("telegram_bus_publish_error", "channel", busruntime.ChannelTelegram, "chat_id", chatID, "bus_error_code", busErrorCodeString(err), "error", err.Error())
 									}
 								}
-							} else {
-								if job.IsHeartbeat {
-									mu.Lock()
-									heartbeatRunning[chatID] = false
-									heartbeatFailures[chatID] = 0
-									lastHeartbeat[chatID] = time.Now()
-									mu.Unlock()
-								}
+							}
+							if job.IsHeartbeat {
+								heartbeatState.EndSuccess(time.Now())
 							}
 							if job.IsHeartbeat {
 								summary := strings.TrimSpace(outText)
@@ -774,126 +751,93 @@ func newTelegramCmd() *cobra.Command {
 			hbInterval := viper.GetDuration("heartbeat.interval")
 			hbChecklist := statepaths.HeartbeatChecklistPath()
 			if hbEnabled && hbInterval > 0 {
+				const heartbeatChatID int64 = 0
 				go func() {
-					var hbMemMgr *memory.Manager
-					var hbTODOStore *todo.Store
-					if viper.GetBool("memory.enabled") {
-						hbMemMgr = memory.NewManager(statepaths.MemoryDir(), viper.GetInt("memory.short_term_days"))
-					}
-					if viper.GetBool("tools.todo.enabled") {
-						hbTODOStore = todo.NewStore(statepaths.TODOWIPPath(), statepaths.TODODONEPath())
-					}
 					ticker := time.NewTicker(hbInterval)
 					defer ticker.Stop()
-					for range ticker.C {
-						hasPendingTODO := false
-						if hbTODOStore != nil {
-							list, err := hbTODOStore.List("wip")
-							if err != nil {
-								logger.Warn("telegram_heartbeat_todo_error", "error", err.Error())
-								enqueueSystemWarning(err.Error())
-								broadcastSystemWarnings()
-							} else if len(list.WIPItems) > 0 {
-								hasPendingTODO = true
-							}
+					for {
+						select {
+						case <-cmd.Context().Done():
+							return
+						case <-ticker.C:
 						}
-						if !hasPendingTODO {
-							continue
-						}
+						result := heartbeatutil.Tick(
+							heartbeatState,
+							func() (string, bool, error) {
+								return buildHeartbeatTask(hbChecklist)
+							},
+							func(task string, checklistEmpty bool) string {
+								mu.Lock()
+								defer mu.Unlock()
 
-						targets := make(map[int64]struct{})
-						if hbMemMgr != nil {
-							recent, err := hbMemMgr.LoadRecentTelegramChatIDs(viper.GetInt("memory.short_term_days"))
-							if err != nil {
-								logger.Warn("telegram_heartbeat_memory_error", "error", err.Error())
-								enqueueSystemWarning(err.Error())
-								broadcastSystemWarnings()
-							} else {
-								for _, chatID := range recent {
-									targets[chatID] = struct{}{}
+								chatID := heartbeatChatID
+								w := getOrStartWorkerLocked(chatID)
+								if w == nil {
+									return "worker_unavailable"
 								}
+								if len(w.Jobs) > 0 {
+									return "worker_busy"
+								}
+								chatType := lastChatType[chatID]
+								if strings.TrimSpace(chatType) == "" {
+									chatType = "unknown"
+								}
+								fromUserID := lastFromUser[chatID]
+								fromUsername := lastFromUsername[chatID]
+								fromName := lastFromName[chatID]
+								fromFirst := lastFromFirst[chatID]
+								fromLast := lastFromLast[chatID]
+								var mentionUsers []string
+								if isGroupChat(chatType) {
+									mentionUsers = mentionUsersSnapshot(knownMentions[chatID], mentionUserSnapshotLimit)
+								}
+								extra := map[string]any{
+									"telegram_chat_id":       chatID,
+									"telegram_chat_type":     chatType,
+									"telegram_from_user_id":  fromUserID,
+									"telegram_from_username": fromUsername,
+									"telegram_from_name":     fromName,
+									"queue_len":              len(w.Jobs),
+								}
+								_, lastSuccess, _, _ := heartbeatState.Snapshot()
+								if !lastSuccess.IsZero() {
+									extra["last_success_utc"] = lastSuccess.UTC().Format(time.RFC3339)
+								}
+								meta := buildHeartbeatMeta("telegram", hbInterval, hbChecklist, checklistEmpty, extra)
+								job := telegramJob{
+									ChatID:          chatID,
+									ChatType:        chatType,
+									FromUserID:      fromUserID,
+									FromUsername:    fromUsername,
+									FromFirstName:   fromFirst,
+									FromLastName:    fromLast,
+									FromDisplayName: fromName,
+									Text:            task,
+									Version:         w.Version,
+									IsHeartbeat:     true,
+									Meta:            meta,
+									MentionUsers:    mentionUsers,
+								}
+								select {
+								case w.Jobs <- job:
+									return ""
+								default:
+									return "worker_queue_full"
+								}
+							},
+						)
+						switch result.Outcome {
+						case heartbeatutil.TickBuildError:
+							if strings.TrimSpace(result.AlertMessage) != "" {
+								logger.Warn("heartbeat_alert", "source", "telegram", "message", result.AlertMessage)
+							} else {
+								logger.Warn("telegram_heartbeat_task_error", "error", result.BuildError.Error())
 							}
-						}
-						if len(targets) == 0 {
-							mu.Lock()
-							for chatID := range lastActivity {
-								targets[chatID] = struct{}{}
-							}
-							mu.Unlock()
-						}
-						if len(targets) == 0 {
-							continue
-						}
-
-						task, checklistEmpty, err := buildHeartbeatTask(hbChecklist)
-						if err != nil {
-							logger.Warn("telegram_heartbeat_task_error", "error", err.Error())
-							enqueueSystemWarning(err.Error())
+							enqueueSystemWarning(result.BuildError.Error())
 							broadcastSystemWarnings()
-							continue
+						case heartbeatutil.TickSkipped:
+							logger.Debug("heartbeat_skip", "source", "telegram", "reason", result.SkipReason)
 						}
-						mu.Lock()
-						for chatID := range targets {
-							if len(allowed) > 0 && !allowed[chatID] {
-								continue
-							}
-							w := getOrStartWorkerLocked(chatID)
-							if w == nil {
-								continue
-							}
-							if heartbeatRunning[chatID] {
-								continue
-							}
-							if len(w.Jobs) > 0 {
-								continue
-							}
-							chatType := lastChatType[chatID]
-							if strings.TrimSpace(chatType) == "" {
-								chatType = "unknown"
-							}
-							fromUserID := lastFromUser[chatID]
-							fromUsername := lastFromUsername[chatID]
-							fromName := lastFromName[chatID]
-							fromFirst := lastFromFirst[chatID]
-							fromLast := lastFromLast[chatID]
-							var mentionUsers []string
-							if isGroupChat(chatType) {
-								mentionUsers = mentionUsersSnapshot(knownMentions[chatID], mentionUserSnapshotLimit)
-							}
-							extra := map[string]any{
-								"telegram_chat_id":       chatID,
-								"telegram_chat_type":     chatType,
-								"telegram_from_user_id":  fromUserID,
-								"telegram_from_username": fromUsername,
-								"telegram_from_name":     fromName,
-								"queue_len":              len(w.Jobs),
-							}
-							if last, ok := lastHeartbeat[chatID]; ok && !last.IsZero() {
-								extra["last_success_utc"] = last.UTC().Format(time.RFC3339)
-							}
-							meta := buildHeartbeatMeta("telegram", hbInterval, hbChecklist, checklistEmpty, extra)
-							job := telegramJob{
-								ChatID:          chatID,
-								ChatType:        chatType,
-								FromUserID:      fromUserID,
-								FromUsername:    fromUsername,
-								FromFirstName:   fromFirst,
-								FromLastName:    fromLast,
-								FromDisplayName: fromName,
-								Text:            task,
-								Version:         w.Version,
-								IsHeartbeat:     true,
-								Meta:            meta,
-								MentionUsers:    mentionUsers,
-							}
-							select {
-							case w.Jobs <- job:
-								heartbeatRunning[chatID] = true
-							default:
-								// busy; skip this tick
-							}
-						}
-						mu.Unlock()
 					}
 				}()
 			}
