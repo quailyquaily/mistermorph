@@ -303,3 +303,75 @@ func TestFileStoreBusOutboxRejectsUnknownField(t *testing.T) {
 		t.Fatalf("GetBusOutboxRecord() expected decode error for unknown field")
 	}
 }
+
+func TestFileStoreParsesProfileMarkdownTemplate(t *testing.T) {
+	ctx := context.Background()
+	root := filepath.Join(t.TempDir(), "contacts")
+	store := NewFileStore(root)
+	if err := store.Ensure(ctx); err != nil {
+		t.Fatalf("Ensure() error = %v", err)
+	}
+	activeBody := `---
+created_at: "1970-01-01T00:00:00Z"
+updated_at: "1970-01-01T00:00:00Z"
+---
+
+# Active Contacts
+
+## Alice
+
+` + "```yaml\n" + `contact_id: "tg:90001"
+nickname: "Alice"
+kind: "human"
+channel: "telegram"
+tg_username: "alice"
+private_chat_id: "90001"
+topic_preferences:
+  - "golang"
+` + "```\n"
+	inactiveBody := `---
+created_at: "1970-01-01T00:00:00Z"
+updated_at: "1970-01-01T00:00:00Z"
+---
+
+# Inactive Contacts
+
+## Morph Node
+
+` + "```yaml\n" + `contact_id: "maep:12D3KooWPeerX"
+kind: "agent"
+channel: "maep"
+maep_node_id: "maep:12D3KooWPeerX"
+` + "```\n"
+	if err := os.WriteFile(filepath.Join(root, "ACTIVE.md"), []byte(activeBody), 0o600); err != nil {
+		t.Fatalf("WriteFile(ACTIVE.md) error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "INACTIVE.md"), []byte(inactiveBody), 0o600); err != nil {
+		t.Fatalf("WriteFile(INACTIVE.md) error = %v", err)
+	}
+
+	active, err := store.ListContacts(ctx, StatusActive)
+	if err != nil {
+		t.Fatalf("ListContacts(active) error = %v", err)
+	}
+	if len(active) != 1 {
+		t.Fatalf("active contacts mismatch: got=%d want=1", len(active))
+	}
+	if active[0].ContactID != "tg:90001" || active[0].Kind != KindHuman {
+		t.Fatalf("active contact mismatch: %#v", active[0])
+	}
+	if len(active[0].ChannelEndpoints) == 0 || active[0].ChannelEndpoints[0].Channel != ChannelTelegram {
+		t.Fatalf("active contact channel endpoint mismatch: %#v", active[0].ChannelEndpoints)
+	}
+
+	inactive, err := store.ListContacts(ctx, StatusInactive)
+	if err != nil {
+		t.Fatalf("ListContacts(inactive) error = %v", err)
+	}
+	if len(inactive) != 1 {
+		t.Fatalf("inactive contacts mismatch: got=%d want=1", len(inactive))
+	}
+	if inactive[0].PeerID != "12D3KooWPeerX" || inactive[0].Kind != KindAgent {
+		t.Fatalf("inactive contact mismatch: %#v", inactive[0])
+	}
+}

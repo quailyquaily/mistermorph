@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/quailyquaily/mistermorph/internal/fsstore"
+	"gopkg.in/yaml.v3"
 )
 
 const (
@@ -73,7 +74,7 @@ func (s *FileStore) GetContact(ctx context.Context, contactID string) (Contact, 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	active, err := s.loadContactsMarkdownLocked(s.activeContactsPath())
+	active, err := s.loadContactsMarkdownLocked(s.activeContactsPath(), StatusActive)
 	if err != nil {
 		return Contact{}, false, err
 	}
@@ -84,7 +85,7 @@ func (s *FileStore) GetContact(ctx context.Context, contactID string) (Contact, 
 		}
 	}
 
-	inactive, err := s.loadContactsMarkdownLocked(s.inactiveContactsPath())
+	inactive, err := s.loadContactsMarkdownLocked(s.inactiveContactsPath(), StatusInactive)
 	if err != nil {
 		return Contact{}, false, err
 	}
@@ -107,11 +108,11 @@ func (s *FileStore) PutContact(ctx context.Context, contact Contact) error {
 		now := time.Now().UTC()
 		contact = normalizeContact(contact, now)
 
-		active, err := s.loadContactsMarkdownLocked(s.activeContactsPath())
+		active, err := s.loadContactsMarkdownLocked(s.activeContactsPath(), StatusActive)
 		if err != nil {
 			return err
 		}
-		inactive, err := s.loadContactsMarkdownLocked(s.inactiveContactsPath())
+		inactive, err := s.loadContactsMarkdownLocked(s.inactiveContactsPath(), StatusInactive)
 		if err != nil {
 			return err
 		}
@@ -129,10 +130,10 @@ func (s *FileStore) PutContact(ctx context.Context, contact Contact) error {
 			active = append(active, contact)
 		}
 
-		if err := s.saveContactsMarkdownLocked(s.activeContactsPath(), "Active Contacts", active); err != nil {
+		if err := s.saveContactsMarkdownLocked(s.activeContactsPath(), "Active Contacts", StatusActive, active); err != nil {
 			return err
 		}
-		if err := s.saveContactsMarkdownLocked(s.inactiveContactsPath(), "Inactive Contacts", inactive); err != nil {
+		if err := s.saveContactsMarkdownLocked(s.inactiveContactsPath(), "Inactive Contacts", StatusInactive, inactive); err != nil {
 			return err
 		}
 		return nil
@@ -149,15 +150,15 @@ func (s *FileStore) ListContacts(ctx context.Context, status Status) ([]Contact,
 	status = normalizeStatus(status)
 	switch status {
 	case StatusActive:
-		return s.loadContactsMarkdownLocked(s.activeContactsPath())
+		return s.loadContactsMarkdownLocked(s.activeContactsPath(), StatusActive)
 	case StatusInactive:
-		return s.loadContactsMarkdownLocked(s.inactiveContactsPath())
+		return s.loadContactsMarkdownLocked(s.inactiveContactsPath(), StatusInactive)
 	default:
-		active, err := s.loadContactsMarkdownLocked(s.activeContactsPath())
+		active, err := s.loadContactsMarkdownLocked(s.activeContactsPath(), StatusActive)
 		if err != nil {
 			return nil, err
 		}
-		inactive, err := s.loadContactsMarkdownLocked(s.inactiveContactsPath())
+		inactive, err := s.loadContactsMarkdownLocked(s.inactiveContactsPath(), StatusInactive)
 		if err != nil {
 			return nil, err
 		}
@@ -500,7 +501,7 @@ func (s *FileStore) ListAuditEvents(ctx context.Context, tickID string, contactI
 	return out, err
 }
 
-func (s *FileStore) loadContactsMarkdownLocked(path string) ([]Contact, error) {
+func (s *FileStore) loadContactsMarkdownLocked(path string, status Status) ([]Contact, error) {
 	content, exists, err := fsstore.ReadText(path)
 	if err != nil {
 		return nil, fmt.Errorf("read contacts markdown %s: %w", path, err)
@@ -508,7 +509,7 @@ func (s *FileStore) loadContactsMarkdownLocked(path string) ([]Contact, error) {
 	if !exists {
 		return []Contact{}, nil
 	}
-	records, err := parseContactsMarkdown(content)
+	records, err := parseContactsMarkdown(content, status)
 	if err != nil {
 		return nil, fmt.Errorf("parse contacts markdown %s: %w", path, err)
 	}
@@ -521,8 +522,8 @@ func (s *FileStore) loadContactsMarkdownLocked(path string) ([]Contact, error) {
 	return records, nil
 }
 
-func (s *FileStore) saveContactsMarkdownLocked(path string, title string, records []Contact) error {
-	rendered, err := renderContactsMarkdown(title, records)
+func (s *FileStore) saveContactsMarkdownLocked(path string, title string, status Status, records []Contact) error {
+	rendered, err := renderContactsMarkdown(title, status, records)
 	if err != nil {
 		return err
 	}
@@ -532,36 +533,123 @@ func (s *FileStore) saveContactsMarkdownLocked(path string, title string, record
 	})
 }
 
-func parseContactsMarkdown(content string) ([]Contact, error) {
-	out := make([]Contact, 0, 64)
-	scanner := bufio.NewScanner(strings.NewReader(content))
+func parseContactsMarkdown(content string, status Status) ([]Contact, error) {
+	return parseContactsProfileMarkdown(content, status)
+}
+
+type contactProfileSection struct {
+	ContactID          string             `yaml:"contact_id"`
+	Nickname           string             `yaml:"nickname"`
+	Kind               string             `yaml:"kind"`
+	Channel            string             `yaml:"channel"`
+	SubjectID          string             `yaml:"subject_id"`
+	TGUsername         string             `yaml:"tg_username"`
+	PrivateChatID      string             `yaml:"private_chat_id"`
+	GroupChatIDs       []string           `yaml:"group_chat_ids"`
+	MAEPNodeID         string             `yaml:"maep_node_id"`
+	MAEPPeerID         string             `yaml:"maep_peer_id"`
+	MAEPAddresses      []string           `yaml:"maep_addresses"`
+	Addresses          []string           `yaml:"addresses"`
+	ChannelEndpoints   []ChannelEndpoint  `yaml:"channel_endpoints"`
+	PersonaBrief       string             `yaml:"persona_brief"`
+	TopicPreferences   []string           `yaml:"topic_preferences"`
+	TopicWeights       map[string]float64 `yaml:"topic_weights"`
+	PersonaTraits      map[string]float64 `yaml:"persona_traits"`
+	UnderstandingDepth float64            `yaml:"understanding_depth"`
+	ReciprocityNorm    float64            `yaml:"reciprocity_norm"`
+	RetainScore        float64            `yaml:"retain_score"`
+	ShareCount         int                `yaml:"share_count"`
+	CooldownUntil      string             `yaml:"cooldown_until"`
+	LastInteractionAt  string             `yaml:"last_interaction_at"`
+	LastSharedAt       string             `yaml:"last_shared_at"`
+	LastSharedItemID   string             `yaml:"last_shared_item_id"`
+	PreferenceContext  string             `yaml:"preference_context"`
+	TrustState         string             `yaml:"trust_state"`
+	Pronouns           string             `yaml:"pronouns"`
+	Timezone           string             `yaml:"timezone"`
+	CreatedAt          string             `yaml:"created_at"`
+	UpdatedAt          string             `yaml:"updated_at"`
+}
+
+func parseContactsProfileMarkdown(content string, status Status) ([]Contact, error) {
+	clean := stripMarkdownHTMLComments(content)
+	scanner := bufio.NewScanner(strings.NewReader(clean))
 	scanner.Buffer(make([]byte, 0, 64*1024), 2*1024*1024)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if !strings.HasPrefix(line, "- ") {
-			continue
+
+	out := make([]Contact, 0, 64)
+	sectionTitle := ""
+	inYAML := false
+	yamlLines := make([]string, 0, 32)
+
+	flushProfile := func() error {
+		if strings.TrimSpace(sectionTitle) == "" || len(yamlLines) == 0 {
+			yamlLines = yamlLines[:0]
+			return nil
 		}
-		raw := strings.TrimSpace(strings.TrimPrefix(line, "- "))
-		raw = strings.Trim(raw, "`")
-		if raw == "" {
-			continue
+		var profile contactProfileSection
+		if err := yaml.Unmarshal([]byte(strings.Join(yamlLines, "\n")), &profile); err != nil {
+			return err
 		}
-		var item Contact
-		if err := json.Unmarshal([]byte(raw), &item); err != nil {
-			return nil, err
+		item, err := contactFromProfileSection(sectionTitle, profile, status)
+		if err != nil {
+			return err
 		}
 		out = append(out, item)
+		yamlLines = yamlLines[:0]
+		return nil
+	}
+
+	for scanner.Scan() {
+		rawLine := scanner.Text()
+		line := strings.TrimSpace(rawLine)
+
+		if !inYAML && strings.HasPrefix(line, "## ") {
+			sectionTitle = strings.TrimSpace(strings.TrimPrefix(line, "## "))
+			continue
+		}
+
+		if !inYAML && strings.HasPrefix(line, "```") {
+			lowerFence := strings.ToLower(line)
+			if strings.HasPrefix(lowerFence, "```yaml") || strings.HasPrefix(lowerFence, "```yml") {
+				inYAML = true
+				yamlLines = yamlLines[:0]
+			}
+			continue
+		}
+
+		if inYAML && strings.HasPrefix(line, "```") {
+			if err := flushProfile(); err != nil {
+				return nil, err
+			}
+			inYAML = false
+			continue
+		}
+
+		if inYAML {
+			yamlLines = append(yamlLines, rawLine)
+		}
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, err
 	}
+	if inYAML {
+		if err := flushProfile(); err != nil {
+			return nil, err
+		}
+	}
 	return out, nil
 }
 
-func renderContactsMarkdown(title string, records []Contact) (string, error) {
+func renderContactsMarkdown(title string, status Status, records []Contact) (string, error) {
+	status = normalizeStatus(status)
 	title = strings.TrimSpace(title)
 	if title == "" {
-		title = "Contacts"
+		switch status {
+		case StatusInactive:
+			title = "Inactive Contacts"
+		default:
+			title = "Active Contacts"
+		}
 	}
 	items := make([]Contact, 0, len(records))
 	for _, item := range records {
@@ -570,21 +658,501 @@ func renderContactsMarkdown(title string, records []Contact) (string, error) {
 	sort.Slice(items, func(i, j int) bool {
 		return strings.TrimSpace(items[i].ContactID) < strings.TrimSpace(items[j].ContactID)
 	})
+
+	nowRFC3339 := time.Now().UTC().Format(time.RFC3339)
+	fm := map[string]string{
+		"created_at": nowRFC3339,
+		"updated_at": nowRFC3339,
+	}
+	fmRaw, err := yaml.Marshal(fm)
+	if err != nil {
+		return "", err
+	}
+
 	var b strings.Builder
+	b.WriteString("---\n")
+	b.WriteString(string(fmRaw))
+	b.WriteString("---\n\n")
 	b.WriteString("# ")
 	b.WriteString(title)
 	b.WriteString("\n\n")
-	b.WriteString("<!-- One JSON object per list item. -->\n")
+	b.WriteString("<!-- One contact profile per section, as YAML code block. -->\n\n")
+
 	for _, item := range items {
-		raw, err := json.Marshal(item)
+		profile, heading := profileSectionFromContact(item)
+		raw, err := yaml.Marshal(profile)
 		if err != nil {
 			return "", err
 		}
-		b.WriteString("- ")
+		if heading == "" {
+			heading = strings.TrimSpace(item.ContactID)
+		}
+		if heading == "" {
+			heading = "Unnamed Contact"
+		}
+		b.WriteString("## ")
+		b.WriteString(heading)
+		b.WriteString("\n\n```yaml\n")
 		b.Write(raw)
-		b.WriteString("\n")
+		b.WriteString("```\n\n")
 	}
 	return b.String(), nil
+}
+
+func stripMarkdownHTMLComments(content string) string {
+	out := content
+	for {
+		start := strings.Index(out, "<!--")
+		if start < 0 {
+			return out
+		}
+		end := strings.Index(out[start+4:], "-->")
+		if end < 0 {
+			return out[:start]
+		}
+		out = out[:start] + out[start+4+end+3:]
+	}
+}
+
+func contactFromProfileSection(title string, profile contactProfileSection, status Status) (Contact, error) {
+	now := time.Now().UTC()
+	contact := Contact{
+		ContactID:          strings.TrimSpace(profile.ContactID),
+		ContactNickname:    strings.TrimSpace(profile.Nickname),
+		PersonaBrief:       strings.TrimSpace(profile.PersonaBrief),
+		TrustState:         strings.TrimSpace(profile.TrustState),
+		Pronouns:           strings.TrimSpace(profile.Pronouns),
+		Timezone:           strings.TrimSpace(profile.Timezone),
+		SubjectID:          strings.TrimSpace(profile.SubjectID),
+		PreferenceContext:  strings.TrimSpace(profile.PreferenceContext),
+		UnderstandingDepth: profile.UnderstandingDepth,
+		ReciprocityNorm:    profile.ReciprocityNorm,
+		RetainScore:        profile.RetainScore,
+		ShareCount:         profile.ShareCount,
+		LastSharedItemID:   strings.TrimSpace(profile.LastSharedItemID),
+		TopicWeights:       cloneFloatMap(profile.TopicWeights),
+		PersonaTraits:      cloneFloatMap(profile.PersonaTraits),
+	}
+	if contact.ContactNickname == "" && strings.TrimSpace(profile.ContactID) == "" {
+		contact.ContactNickname = strings.TrimSpace(title)
+	}
+	if status != "" {
+		contact.Status = status
+	}
+	kindRaw := strings.ToLower(strings.TrimSpace(profile.Kind))
+	switch kindRaw {
+	case string(KindAgent):
+		contact.Kind = KindAgent
+	case string(KindHuman):
+		contact.Kind = KindHuman
+	case "":
+		channel := strings.ToLower(strings.TrimSpace(profile.Channel))
+		if channel == ChannelMAEP {
+			contact.Kind = KindAgent
+		} else {
+			contact.Kind = KindHuman
+		}
+	default:
+		return Contact{}, fmt.Errorf("invalid contact kind: %s", profile.Kind)
+	}
+
+	tgUsername := normalizeTelegramUsername(profile.TGUsername)
+	privateChatID, err := parseTelegramChatID(profile.PrivateChatID)
+	if err != nil {
+		return Contact{}, err
+	}
+	groupChatIDs := make([]int64, 0, len(profile.GroupChatIDs))
+	for _, raw := range profile.GroupChatIDs {
+		id, parseErr := parseTelegramChatID(raw)
+		if parseErr != nil {
+			return Contact{}, parseErr
+		}
+		if id != 0 {
+			groupChatIDs = append(groupChatIDs, id)
+		}
+	}
+
+	nodeID, peerID := splitMAEPNodeID(profile.MAEPNodeID)
+	if peerID == "" {
+		_, peerID = splitMAEPNodeID(profile.MAEPPeerID)
+	}
+	if peerID == "" {
+		if _, p := splitMAEPNodeID(contact.ContactID); p != "" {
+			peerID = p
+		}
+	}
+	if nodeID == "" && peerID != "" {
+		nodeID = "maep:" + peerID
+	}
+	contact.NodeID = nodeID
+	contact.PeerID = peerID
+	contact.Addresses = normalizeStringSlice(profile.MAEPAddresses)
+	if len(contact.Addresses) == 0 {
+		contact.Addresses = normalizeStringSlice(profile.Addresses)
+	}
+
+	endpoints := make([]ChannelEndpoint, 0, len(profile.ChannelEndpoints)+1+len(groupChatIDs))
+	endpoints = append(endpoints, profile.ChannelEndpoints...)
+	hasTelegramChatEndpoint := false
+	for _, endpoint := range normalizeChannelEndpoints(profile.ChannelEndpoints) {
+		if strings.ToLower(strings.TrimSpace(endpoint.Channel)) != ChannelTelegram {
+			continue
+		}
+		if endpoint.ChatID != 0 {
+			hasTelegramChatEndpoint = true
+			break
+		}
+	}
+	if tgUsername != "" && privateChatID == 0 && len(groupChatIDs) == 0 && !hasTelegramChatEndpoint {
+		endpoints = append(endpoints, ChannelEndpoint{
+			Channel: ChannelTelegram,
+			Address: "@" + tgUsername,
+		})
+	}
+	if privateChatID != 0 {
+		endpoints = append(endpoints, ChannelEndpoint{
+			Channel:  ChannelTelegram,
+			Address:  strconv.FormatInt(privateChatID, 10),
+			ChatID:   privateChatID,
+			ChatType: "private",
+		})
+	}
+	for _, groupID := range groupChatIDs {
+		chatType := "group"
+		if groupID < 0 {
+			chatType = "supergroup"
+		}
+		endpoints = append(endpoints, ChannelEndpoint{
+			Channel:  ChannelTelegram,
+			Address:  strconv.FormatInt(groupID, 10),
+			ChatID:   groupID,
+			ChatType: chatType,
+		})
+	}
+	if peerID != "" {
+		endpoints = append(endpoints, ChannelEndpoint{
+			Channel: ChannelMAEP,
+			Address: peerID,
+		})
+	}
+	contact.ChannelEndpoints = endpoints
+	if contact.PeerID == "" {
+		for _, endpoint := range normalizeChannelEndpoints(contact.ChannelEndpoints) {
+			if strings.ToLower(strings.TrimSpace(endpoint.Channel)) != ChannelMAEP {
+				continue
+			}
+			if _, p := splitMAEPNodeID(endpoint.Address); p != "" {
+				contact.PeerID = p
+				if contact.NodeID == "" {
+					contact.NodeID = "maep:" + p
+				}
+				break
+			}
+		}
+	}
+
+	if contact.ContactID == "" {
+		channel := strings.ToLower(strings.TrimSpace(profile.Channel))
+		switch channel {
+		case ChannelTelegram:
+			if privateChatID != 0 {
+				contact.ContactID = "tg:" + strconv.FormatInt(privateChatID, 10)
+			} else if tgUsername != "" {
+				contact.ContactID = "tg:@" + tgUsername
+			}
+		case ChannelMAEP:
+			if peerID != "" {
+				contact.ContactID = "maep:" + peerID
+			}
+		}
+	}
+	if contact.ContactID == "" {
+		if peerID != "" {
+			contact.ContactID = "maep:" + peerID
+		} else if privateChatID != 0 {
+			contact.ContactID = "tg:" + strconv.FormatInt(privateChatID, 10)
+		} else if tgUsername != "" {
+			contact.ContactID = "tg:@" + tgUsername
+		}
+	}
+	if contact.ContactID == "" {
+		contact.ContactID = "contact:" + slugToken(contact.ContactNickname)
+	}
+	if contact.SubjectID == "" && contact.Kind == KindHuman {
+		contact.SubjectID = contact.ContactID
+	}
+
+	if len(contact.TopicWeights) == 0 {
+		if values := normalizeStringSlice(profile.TopicPreferences); len(values) > 0 {
+			weights := make(map[string]float64, len(values))
+			for _, topic := range values {
+				weights[topic] = 1
+			}
+			contact.TopicWeights = weights
+		}
+	}
+	if profile.CooldownUntil != "" {
+		ts, parseErr := parseRFC3339Timestamp(profile.CooldownUntil)
+		if parseErr != nil {
+			return Contact{}, parseErr
+		}
+		contact.CooldownUntil = &ts
+	}
+	if profile.LastInteractionAt != "" {
+		ts, parseErr := parseRFC3339Timestamp(profile.LastInteractionAt)
+		if parseErr != nil {
+			return Contact{}, parseErr
+		}
+		contact.LastInteractionAt = &ts
+	}
+	if profile.LastSharedAt != "" {
+		ts, parseErr := parseRFC3339Timestamp(profile.LastSharedAt)
+		if parseErr != nil {
+			return Contact{}, parseErr
+		}
+		contact.LastSharedAt = &ts
+	}
+	if profile.CreatedAt != "" {
+		ts, parseErr := parseRFC3339Timestamp(profile.CreatedAt)
+		if parseErr != nil {
+			return Contact{}, parseErr
+		}
+		contact.CreatedAt = ts
+	}
+	if profile.UpdatedAt != "" {
+		ts, parseErr := parseRFC3339Timestamp(profile.UpdatedAt)
+		if parseErr != nil {
+			return Contact{}, parseErr
+		}
+		contact.UpdatedAt = ts
+	}
+	if contact.CreatedAt.IsZero() {
+		contact.CreatedAt = now
+	}
+	if contact.UpdatedAt.IsZero() {
+		contact.UpdatedAt = now
+	}
+	return contact, nil
+}
+
+func profileSectionFromContact(contact Contact) (contactProfileSection, string) {
+	profile := contactProfileSection{
+		ContactID:          strings.TrimSpace(contact.ContactID),
+		Nickname:           strings.TrimSpace(contact.ContactNickname),
+		Kind:               string(normalizeKind(contact.Kind)),
+		SubjectID:          strings.TrimSpace(contact.SubjectID),
+		PersonaBrief:       strings.TrimSpace(contact.PersonaBrief),
+		TrustState:         strings.TrimSpace(contact.TrustState),
+		Pronouns:           strings.TrimSpace(contact.Pronouns),
+		Timezone:           strings.TrimSpace(contact.Timezone),
+		PreferenceContext:  strings.TrimSpace(contact.PreferenceContext),
+		UnderstandingDepth: contact.UnderstandingDepth,
+		ReciprocityNorm:    contact.ReciprocityNorm,
+		RetainScore:        contact.RetainScore,
+		ShareCount:         contact.ShareCount,
+		LastSharedItemID:   strings.TrimSpace(contact.LastSharedItemID),
+		TopicWeights:       cloneFloatMap(contact.TopicWeights),
+		PersonaTraits:      cloneFloatMap(contact.PersonaTraits),
+		ChannelEndpoints:   append([]ChannelEndpoint(nil), contact.ChannelEndpoints...),
+	}
+
+	tgUsername := ""
+	privateChatID := int64(0)
+	groupChatIDs := make([]int64, 0)
+	hasTelegramEndpoint := false
+	for _, endpoint := range normalizeChannelEndpoints(contact.ChannelEndpoints) {
+		if strings.ToLower(strings.TrimSpace(endpoint.Channel)) != ChannelTelegram {
+			continue
+		}
+		hasTelegramEndpoint = true
+		if endpoint.ChatID > 0 {
+			if strings.ToLower(strings.TrimSpace(endpoint.ChatType)) == "private" || privateChatID == 0 {
+				privateChatID = endpoint.ChatID
+			}
+			continue
+		}
+		if endpoint.ChatID < 0 {
+			groupChatIDs = append(groupChatIDs, endpoint.ChatID)
+			continue
+		}
+		addr := strings.TrimSpace(endpoint.Address)
+		if strings.HasPrefix(addr, "@") {
+			tgUsername = strings.TrimPrefix(addr, "@")
+		}
+	}
+	if !hasTelegramEndpoint {
+		for _, raw := range []string{contact.SubjectID, contact.ContactID} {
+			value := strings.TrimSpace(raw)
+			lower := strings.ToLower(value)
+			if strings.HasPrefix(lower, "tg:@") && tgUsername == "" {
+				tgUsername = strings.TrimSpace(value[len("tg:@"):])
+			}
+			if strings.HasPrefix(lower, "tg:") && privateChatID == 0 {
+				id, err := parseTelegramChatID(value[len("tg:"):])
+				if err == nil && id != 0 {
+					privateChatID = id
+				}
+			}
+		}
+	}
+
+	nodeID, peerID := splitMAEPNodeID(contact.NodeID)
+	if peerID == "" {
+		_, peerID = splitMAEPNodeID(contact.PeerID)
+	}
+	if peerID == "" {
+		_, peerID = splitMAEPNodeID(contact.ContactID)
+	}
+	if nodeID == "" && peerID != "" {
+		nodeID = "maep:" + peerID
+	}
+
+	switch {
+	case privateChatID != 0 || tgUsername != "":
+		profile.Channel = ChannelTelegram
+	case peerID != "":
+		profile.Channel = ChannelMAEP
+	default:
+		profile.Channel = strings.ToLower(strings.TrimSpace(string(contact.Kind)))
+	}
+	if tgUsername != "" {
+		profile.TGUsername = tgUsername
+	}
+	if privateChatID != 0 {
+		profile.PrivateChatID = strconv.FormatInt(privateChatID, 10)
+	}
+	if len(groupChatIDs) > 0 {
+		sort.Slice(groupChatIDs, func(i, j int) bool { return groupChatIDs[i] < groupChatIDs[j] })
+		ids := make([]string, 0, len(groupChatIDs))
+		seen := map[string]bool{}
+		for _, id := range groupChatIDs {
+			value := strconv.FormatInt(id, 10)
+			if seen[value] {
+				continue
+			}
+			seen[value] = true
+			ids = append(ids, value)
+		}
+		profile.GroupChatIDs = ids
+	}
+	if nodeID != "" {
+		profile.MAEPNodeID = nodeID
+	}
+	if peerID != "" {
+		profile.MAEPPeerID = peerID
+	}
+	if len(contact.Addresses) > 0 {
+		profile.MAEPAddresses = append([]string(nil), normalizeStringSlice(contact.Addresses)...)
+		profile.Addresses = append([]string(nil), normalizeStringSlice(contact.Addresses)...)
+	}
+	if len(contact.TopicWeights) > 0 {
+		topics := make([]string, 0, len(contact.TopicWeights))
+		for topic := range contact.TopicWeights {
+			if strings.TrimSpace(topic) == "" {
+				continue
+			}
+			topics = append(topics, strings.TrimSpace(topic))
+		}
+		sort.Strings(topics)
+		profile.TopicPreferences = topics
+	}
+	if contact.CooldownUntil != nil && !contact.CooldownUntil.IsZero() {
+		profile.CooldownUntil = contact.CooldownUntil.UTC().Format(time.RFC3339)
+	}
+	if contact.LastInteractionAt != nil && !contact.LastInteractionAt.IsZero() {
+		profile.LastInteractionAt = contact.LastInteractionAt.UTC().Format(time.RFC3339)
+	}
+	if contact.LastSharedAt != nil && !contact.LastSharedAt.IsZero() {
+		profile.LastSharedAt = contact.LastSharedAt.UTC().Format(time.RFC3339)
+	}
+	if !contact.CreatedAt.IsZero() {
+		profile.CreatedAt = contact.CreatedAt.UTC().Format(time.RFC3339)
+	}
+	if !contact.UpdatedAt.IsZero() {
+		profile.UpdatedAt = contact.UpdatedAt.UTC().Format(time.RFC3339)
+	}
+
+	heading := strings.TrimSpace(contact.ContactNickname)
+	if heading == "" {
+		heading = strings.TrimSpace(contact.ContactID)
+	}
+	return profile, heading
+}
+
+func parseRFC3339Timestamp(raw string) (time.Time, error) {
+	value := strings.TrimSpace(raw)
+	ts, err := time.Parse(time.RFC3339, value)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("invalid RFC3339 timestamp %q", raw)
+	}
+	return ts.UTC(), nil
+}
+
+func parseTelegramChatID(raw string) (int64, error) {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return 0, nil
+	}
+	if strings.HasPrefix(strings.ToLower(value), "tg:") {
+		value = strings.TrimSpace(value[len("tg:"):])
+	}
+	id, err := strconv.ParseInt(value, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("invalid telegram chat id %q", raw)
+	}
+	return id, nil
+}
+
+func normalizeTelegramUsername(raw string) string {
+	value := strings.TrimSpace(raw)
+	value = strings.TrimPrefix(value, "@")
+	return strings.TrimSpace(value)
+}
+
+func splitMAEPNodeID(raw string) (string, string) {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return "", ""
+	}
+	lower := strings.ToLower(value)
+	if strings.Contains(value, ":") && !strings.HasPrefix(lower, "maep:") {
+		return "", ""
+	}
+	if strings.HasPrefix(lower, "maep:") {
+		peerID := strings.TrimSpace(value[len("maep:"):])
+		if peerID == "" {
+			return "", ""
+		}
+		return "maep:" + peerID, peerID
+	}
+	return "maep:" + value, value
+}
+
+func slugToken(raw string) string {
+	value := strings.ToLower(strings.TrimSpace(raw))
+	if value == "" {
+		return "unnamed"
+	}
+	var b strings.Builder
+	lastDash := false
+	for _, r := range value {
+		isLetter := r >= 'a' && r <= 'z'
+		isDigit := r >= '0' && r <= '9'
+		if isLetter || isDigit {
+			b.WriteRune(r)
+			lastDash = false
+			continue
+		}
+		if !lastDash {
+			b.WriteByte('-')
+			lastDash = true
+		}
+	}
+	token := strings.Trim(b.String(), "-")
+	if token == "" {
+		return "unnamed"
+	}
+	return token
 }
 
 func removeContactByID(items []Contact, contactID string, createdAt *time.Time) []Contact {
@@ -817,11 +1385,11 @@ func (s *FileStore) lockRootPath() string {
 }
 
 func (s *FileStore) activeContactsPath() string {
-	return filepath.Join(s.rootPath(), "active.md")
+	return filepath.Join(s.rootPath(), "ACTIVE.md")
 }
 
 func (s *FileStore) inactiveContactsPath() string {
-	return filepath.Join(s.rootPath(), "inactive.md")
+	return filepath.Join(s.rootPath(), "INACTIVE.md")
 }
 
 func (s *FileStore) candidatesPath() string {
