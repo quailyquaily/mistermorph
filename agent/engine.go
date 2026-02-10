@@ -211,9 +211,20 @@ func (e *Engine) Run(ctx context.Context, task string, opts RunOptions) (*Final,
 		messages = append(messages, m)
 	}
 
-	if metaMsg, ok := buildInjectedMetaMessage(opts.Meta); ok {
+	injectedMeta := withRuntimeClockMeta(opts.Meta, time.Now())
+	if metaMsg, ok := buildInjectedMetaMessage(injectedMeta); ok {
+		trigger := ""
+		if v, ok := injectedMeta["trigger"].(string); ok {
+			trigger = strings.TrimSpace(v)
+		}
 		messages = append(messages, llm.Message{Role: "user", Content: metaMsg})
-		log.Debug("run_meta_injected", "meta_bytes", len(metaMsg))
+		log.Debug(
+			"run_meta_injected",
+			"meta_bytes", len(metaMsg),
+			"meta_keys", sortedMapKeys(injectedMeta),
+			"meta_trigger", trigger,
+			"meta_payload", metaMsg,
+		)
 	}
 
 	messages = append(messages, llm.Message{Role: "user", Content: task})
