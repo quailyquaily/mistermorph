@@ -80,7 +80,7 @@ func (s *Store) Complete(ctx context.Context, raw string) (UpdateResult, error) 
 		return UpdateResult{}, err
 	}
 	if len(wip.Entries) == 0 {
-		return UpdateResult{}, fmt.Errorf("no matching todo item in TODO.WIP.md")
+		return UpdateResult{}, fmt.Errorf("no matching todo item in TODO.md")
 	}
 	semantic, err := s.semanticResolver()
 	if err != nil {
@@ -91,7 +91,7 @@ func (s *Store) Complete(ctx context.Context, raw string) (UpdateResult, error) 
 		return UpdateResult{}, err
 	}
 	if idx < 0 || idx >= len(wip.Entries) {
-		return UpdateResult{}, fmt.Errorf("no matching todo item in TODO.WIP.md")
+		return UpdateResult{}, fmt.Errorf("no matching todo item in TODO.md")
 	}
 	target := wip.Entries[idx]
 	wip.Entries = append(append([]Entry{}, wip.Entries[:idx]...), wip.Entries[idx+1:]...)

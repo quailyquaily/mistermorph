@@ -70,7 +70,7 @@ func (t *TodoUpdateTool) SetAddContext(ctx todo.AddResolveContext) {
 func (t *TodoUpdateTool) Name() string { return "todo_update" }
 
 func (t *TodoUpdateTool) Description() string {
-	return "Updates TODO files under file_state_dir. Supports add and complete actions, keeps counts in TODO.WIP.md/TODO.DONE.md consistent."
+	return "Updates TODO files under file_state_dir. Supports add and complete actions, keeps counts in TODO.md/TODO.DONE.md consistent."
 }
 
 func (t *TodoUpdateTool) ParameterSchema() string {

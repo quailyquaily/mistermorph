@@ -77,7 +77,7 @@ func TestRenderWIPEntryWithChatID(t *testing.T) {
 
 func TestStoreAddWithChatIDAndCompleteKeepsChatID(t *testing.T) {
 	root := t.TempDir()
-	store := NewStore(filepath.Join(root, "TODO.WIP.md"), filepath.Join(root, "TODO.DONE.md"))
+	store := NewStore(filepath.Join(root, "TODO.md"), filepath.Join(root, "TODO.DONE.md"))
 	store.Semantics = stubSemantics{
 		matchFn: func(query string, entries []Entry) (int, error) {
 			for i, item := range entries {
@@ -117,7 +117,7 @@ func TestStoreAddWithChatIDAndCompleteKeepsChatID(t *testing.T) {
 
 func TestStoreAddWithInvalidChatID(t *testing.T) {
 	root := t.TempDir()
-	store := NewStore(filepath.Join(root, "TODO.WIP.md"), filepath.Join(root, "TODO.DONE.md"))
+	store := NewStore(filepath.Join(root, "TODO.md"), filepath.Join(root, "TODO.DONE.md"))
 	store.Semantics = stubSemantics{}
 	store.Now = func() time.Time {
 		return time.Date(2026, 2, 11, 9, 30, 0, 0, time.UTC)

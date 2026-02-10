@@ -126,7 +126,7 @@
 
 ## `todo_update`
 
-用途：维护 `file_state_dir` 下的 `TODO.WIP.md` / `TODO.DONE.md`，支持新增与完成事项。
+用途：维护 `file_state_dir` 下的 `TODO.md` / `TODO.DONE.md`，支持新增与完成事项。
 
 参数：
 
@@ -171,7 +171,7 @@
 | `invalid reference id:` | 文本里存在非法 `(...)` 引用。 |
 | `missing_reference_id` | 人物提及无法唯一解析为可引用 ID。 |
 | `reference id is not reachable:` | 引用 ID 不在联系人可达集合。 |
-| `no matching todo item in TODO.WIP.md` | `complete` 未命中可完成条目。 |
+| `no matching todo item in TODO.md` | `complete` 未命中可完成条目。 |
 | `ambiguous todo item match` | `complete` 命中多个候选。 |
 | `people is required for add action` | `add` 未提供 `people` 参数。 |
 | `people must be an array of strings` | `people` 不是字符串数组。 |

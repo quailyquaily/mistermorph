@@ -23,9 +23,9 @@ Above are just examples, do not consider them as actual tasks to be done.
 -->
 
 
-## Check TODO.WIP.md
+## Check TODO.md
 
-- Check the `TODO.WIP.md` file for any pending tasks using `read_file` tool.
+- Check the `TODO.md` file for any pending tasks using `read_file` tool.
 - If there are tasks and if there are contacts that match the task context, consider reaching out to them using `contacts_send` tool.
 - Parse optional task context prefix: `ChatID: tg:<chat-id>`.
 - For each mentioned person in a TODO item:

@@ -54,7 +54,7 @@ func newInstallCmd() *cobra.Command {
 			if _, err := os.Stat(toolsPath); err == nil {
 				writeTools = false
 			}
-			todoWIPPath := filepath.Join(dir, "TODO.WIP.md")
+			todoWIPPath := filepath.Join(dir, "TODO.md")
 			writeTodoWIP := true
 			if _, err := os.Stat(todoWIPPath); err == nil {
 				writeTodoWIP = false
@@ -122,7 +122,7 @@ func newInstallCmd() *cobra.Command {
 					Loader: loadToolsTemplate,
 				},
 				{
-					Name:   "TODO.WIP.md",
+					Name:   "TODO.md",
 					Path:   todoWIPPath,
 					Write:  writeTodoWIP,
 					Loader: loadTodoWIPTemplate,
@@ -251,9 +251,9 @@ func loadToolsTemplate() (string, error) {
 }
 
 func loadTodoWIPTemplate() (string, error) {
-	data, err := assets.ConfigFS.ReadFile("config/TODO.WIP.md")
+	data, err := assets.ConfigFS.ReadFile("config/TODO.md")
 	if err != nil {
-		return "", fmt.Errorf("read embedded TODO.WIP.md: %w", err)
+		return "", fmt.Errorf("read embedded TODO.md: %w", err)
 	}
 	return string(data), nil
 }

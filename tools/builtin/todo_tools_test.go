@@ -35,7 +35,7 @@ func (s *stubTodoToolLLMClient) Chat(_ context.Context, req llm.Request) (llm.Re
 
 func TestTodoUpdateTool(t *testing.T) {
 	root := t.TempDir()
-	wip := filepath.Join(root, "TODO.WIP.md")
+	wip := filepath.Join(root, "TODO.md")
 	done := filepath.Join(root, "TODO.DONE.md")
 	contactsDir := filepath.Join(root, "contacts")
 	seedTodoContacts(t, contactsDir)
@@ -95,7 +95,7 @@ func TestTodoUpdateTool(t *testing.T) {
 
 func TestTodoUpdateToolAddWithChatIDParam(t *testing.T) {
 	root := t.TempDir()
-	wip := filepath.Join(root, "TODO.WIP.md")
+	wip := filepath.Join(root, "TODO.md")
 	done := filepath.Join(root, "TODO.DONE.md")
 	contactsDir := filepath.Join(root, "contacts")
 	seedTodoContacts(t, contactsDir)
@@ -147,7 +147,7 @@ func TestTodoUpdateToolAddWithChatIDParam(t *testing.T) {
 
 func TestTodoUpdateToolAddRejectsInvalidChatID(t *testing.T) {
 	root := t.TempDir()
-	wip := filepath.Join(root, "TODO.WIP.md")
+	wip := filepath.Join(root, "TODO.md")
 	done := filepath.Join(root, "TODO.DONE.md")
 	contactsDir := filepath.Join(root, "contacts")
 	seedTodoContacts(t, contactsDir)
@@ -174,7 +174,7 @@ func TestTodoUpdateToolAddRejectsInvalidChatID(t *testing.T) {
 
 func TestTodoUpdateRequiresLLMBinding(t *testing.T) {
 	root := t.TempDir()
-	update := NewTodoUpdateTool(true, filepath.Join(root, "TODO.WIP.md"), filepath.Join(root, "TODO.DONE.md"), filepath.Join(root, "contacts"))
+	update := NewTodoUpdateTool(true, filepath.Join(root, "TODO.md"), filepath.Join(root, "TODO.DONE.md"), filepath.Join(root, "contacts"))
 	_, err := update.Execute(context.Background(), map[string]any{
 		"action":  "add",
 		"content": "提醒 John (tg:1001) 对齐信息",
@@ -187,7 +187,7 @@ func TestTodoUpdateRequiresLLMBinding(t *testing.T) {
 
 func TestTodoUpdatePeopleRequired(t *testing.T) {
 	root := t.TempDir()
-	update := NewTodoUpdateToolWithLLM(true, filepath.Join(root, "TODO.WIP.md"), filepath.Join(root, "TODO.DONE.md"), filepath.Join(root, "contacts"), &stubTodoToolLLMClient{}, "gpt-5.2")
+	update := NewTodoUpdateToolWithLLM(true, filepath.Join(root, "TODO.md"), filepath.Join(root, "TODO.DONE.md"), filepath.Join(root, "contacts"), &stubTodoToolLLMClient{}, "gpt-5.2")
 	_, err := update.Execute(context.Background(), map[string]any{
 		"action":  "add",
 		"content": "提醒 John 明天确认",
@@ -199,7 +199,7 @@ func TestTodoUpdatePeopleRequired(t *testing.T) {
 
 func TestTodoUpdateCompleteDoesNotRequirePeople(t *testing.T) {
 	root := t.TempDir()
-	wip := filepath.Join(root, "TODO.WIP.md")
+	wip := filepath.Join(root, "TODO.md")
 	done := filepath.Join(root, "TODO.DONE.md")
 	contactsDir := filepath.Join(root, "contacts")
 	seedTodoContacts(t, contactsDir)
@@ -229,7 +229,7 @@ func TestTodoUpdateCompleteDoesNotRequirePeople(t *testing.T) {
 
 func TestTodoUpdateCompleteAmbiguousFromLLM(t *testing.T) {
 	root := t.TempDir()
-	wip := filepath.Join(root, "TODO.WIP.md")
+	wip := filepath.Join(root, "TODO.md")
 	done := filepath.Join(root, "TODO.DONE.md")
 	contactsDir := filepath.Join(root, "contacts")
 	seedTodoContacts(t, contactsDir)
@@ -272,7 +272,7 @@ func TestTodoUpdateCompleteAmbiguousFromLLM(t *testing.T) {
 func TestTodoUpdateAddRejectsInvalidReferenceBeforeLLM(t *testing.T) {
 	root := t.TempDir()
 	client := &stubTodoToolLLMClient{}
-	update := NewTodoUpdateToolWithLLM(true, filepath.Join(root, "TODO.WIP.md"), filepath.Join(root, "TODO.DONE.md"), filepath.Join(root, "contacts"), client, "gpt-5.2")
+	update := NewTodoUpdateToolWithLLM(true, filepath.Join(root, "TODO.md"), filepath.Join(root, "TODO.DONE.md"), filepath.Join(root, "contacts"), client, "gpt-5.2")
 	_, err := update.Execute(context.Background(), map[string]any{
 		"action":  "add",
 		"content": "提醒 John (not-a-reference) 明天确认内容",
@@ -293,7 +293,7 @@ func TestTodoUpdateAddMissingReferenceIDFallbackWritesRaw(t *testing.T) {
 			`{"status":"missing_reference_id","missing":[{"mention":"John","suggestion":"John (tg:1001)"}]}`,
 		},
 	}
-	update := NewTodoUpdateToolWithLLM(true, filepath.Join(root, "TODO.WIP.md"), filepath.Join(root, "TODO.DONE.md"), filepath.Join(root, "contacts"), client, "gpt-5.2")
+	update := NewTodoUpdateToolWithLLM(true, filepath.Join(root, "TODO.md"), filepath.Join(root, "TODO.DONE.md"), filepath.Join(root, "contacts"), client, "gpt-5.2")
 	out, err := update.Execute(context.Background(), map[string]any{
 		"action":  "add",
 		"content": "提醒 John 明天确认内容",
@@ -322,7 +322,7 @@ func TestTodoUpdateAddMissingReferenceIDFallbackWritesRaw(t *testing.T) {
 
 func TestTodoUpdateAddMissingSelfReferenceIDFallbackWritesRaw(t *testing.T) {
 	root := t.TempDir()
-	wip := filepath.Join(root, "TODO.WIP.md")
+	wip := filepath.Join(root, "TODO.md")
 	done := filepath.Join(root, "TODO.DONE.md")
 	contactsDir := filepath.Join(root, "contacts")
 	seedTodoContacts(t, contactsDir)
@@ -364,7 +364,7 @@ func TestTodoUpdateAddMissingSelfReferenceIDFallbackWritesRaw(t *testing.T) {
 
 func TestTodoUpdateAddSelfReferenceResolvedFromTelegramContext(t *testing.T) {
 	root := t.TempDir()
-	wip := filepath.Join(root, "TODO.WIP.md")
+	wip := filepath.Join(root, "TODO.md")
 	done := filepath.Join(root, "TODO.DONE.md")
 	contactsDir := filepath.Join(root, "contacts")
 	seedTodoContacts(t, contactsDir)

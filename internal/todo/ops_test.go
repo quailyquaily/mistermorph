@@ -27,14 +27,14 @@ func (s stubSemantics) SelectDedupKeepIndices(_ context.Context, entries []Entry
 
 func (s stubSemantics) MatchCompleteIndex(_ context.Context, query string, entries []Entry) (int, error) {
 	if s.matchFn == nil {
-		return -1, fmt.Errorf("no matching todo item in TODO.WIP.md")
+		return -1, fmt.Errorf("no matching todo item in TODO.md")
 	}
 	return s.matchFn(query, entries)
 }
 
 func TestStoreAddAndComplete(t *testing.T) {
 	root := t.TempDir()
-	store := NewStore(filepath.Join(root, "TODO.WIP.md"), filepath.Join(root, "TODO.DONE.md"))
+	store := NewStore(filepath.Join(root, "TODO.md"), filepath.Join(root, "TODO.DONE.md"))
 	store.Semantics = stubSemantics{
 		matchFn: func(query string, entries []Entry) (int, error) {
 			for i, item := range entries {
@@ -42,7 +42,7 @@ func TestStoreAddAndComplete(t *testing.T) {
 					return i, nil
 				}
 			}
-			return -1, fmt.Errorf("no matching todo item in TODO.WIP.md")
+			return -1, fmt.Errorf("no matching todo item in TODO.md")
 		},
 	}
 	now := time.Date(2026, 2, 9, 10, 0, 0, 0, time.UTC)
@@ -82,7 +82,7 @@ func TestStoreAddAndComplete(t *testing.T) {
 
 func TestStoreAddRejectsInvalidReferenceID(t *testing.T) {
 	root := t.TempDir()
-	store := NewStore(filepath.Join(root, "TODO.WIP.md"), filepath.Join(root, "TODO.DONE.md"))
+	store := NewStore(filepath.Join(root, "TODO.md"), filepath.Join(root, "TODO.DONE.md"))
 	store.Semantics = stubSemantics{}
 	store.Now = func() time.Time {
 		return time.Date(2026, 2, 9, 10, 0, 0, 0, time.UTC)

@@ -69,11 +69,11 @@ func (m *Manager) LoadRecentTelegramChatIDs(days int) ([]int64, error) {
 }
 
 // LoadTelegramChatsWithPendingTasks is kept for compatibility.
-// Pending todo tracking has moved out of memory files to TODO.WIP.md.
+// Pending todo tracking has moved out of memory files to TODO.md.
 func (m *Manager) LoadTelegramChatsWithPendingTasks(days int) ([]int64, error) {
 	_ = m
 	_ = days
-	// Pending task tracking has moved out of memory files to TODO.WIP.md.
+	// Pending task tracking has moved out of memory files to TODO.md.
 	return nil, nil
 }
 

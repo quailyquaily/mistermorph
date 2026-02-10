@@ -9,7 +9,7 @@ import (
 
 const (
 	HeartbeatChecklistFilename = "HEARTBEAT.md"
-	TODOWIPFilename            = "TODO.WIP.md"
+	TODOWIPFilename            = "TODO.md"
 	TODODONEFilename           = "TODO.DONE.md"
 )
 

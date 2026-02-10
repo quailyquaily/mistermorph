@@ -9,7 +9,7 @@ const (
 	TimestampLayout     = "2006-01-02 15:04"
 	HeaderWIP           = "# TODO Work In Progress (WIP)"
 	HeaderDONE          = "# TODO Done"
-	DefaultWIPFilename  = "TODO.WIP.md"
+	DefaultWIPFilename  = "TODO.md"
 	DefaultDONEFilename = "TODO.DONE.md"
 )
 

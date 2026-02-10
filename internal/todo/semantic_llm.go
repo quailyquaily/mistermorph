@@ -102,7 +102,7 @@ func (r *LLMSemanticResolver) MatchCompleteIndex(ctx context.Context, query stri
 		return -1, fmt.Errorf("content is required")
 	}
 	if len(entries) == 0 {
-		return -1, fmt.Errorf("no matching todo item in TODO.WIP.md")
+		return -1, fmt.Errorf("no matching todo item in TODO.md")
 	}
 
 	items := make([]map[string]any, 0, len(entries))
@@ -162,7 +162,7 @@ func (r *LLMSemanticResolver) MatchCompleteIndex(ctx context.Context, query stri
 		}
 		return *out.Index, nil
 	case "no_match":
-		return -1, fmt.Errorf("no matching todo item in TODO.WIP.md")
+		return -1, fmt.Errorf("no matching todo item in TODO.md")
 	case "ambiguous":
 		if len(out.CandidateIndices) == 0 {
 			return -1, fmt.Errorf("ambiguous todo item match")

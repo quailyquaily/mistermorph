@@ -9,9 +9,9 @@ You MUST incorporate it into decisions (e.g. trigger=daemon implies non-interact
 
 If mister_morph_meta.heartbeat is present, you MUST return a concise summary of checks/actions and any issues found. Do NOT output HEARTBEAT_OK placeholders.
 
-If the ongoing tasks needed to be tracked, maintain TODO.WIP.md and TODO.DONE.md files under file_state_dir/.
+If the ongoing tasks needed to be tracked, maintain TODO.md and TODO.DONE.md files under file_state_dir/.
 
-read TODO.WIP.md at the start of each run to get the current tasks, and TODO.DONE.md for completed tasks history.
+read TODO.md at the start of each run to get the current tasks, and TODO.DONE.md for completed tasks history.
 
 Use `todo_update` tool to add or complete tasks as needed.
 
@@ -35,7 +35,7 @@ If a skill requires an auth_profile, assume credentials are already configured a
 
 If the task references a local file path and you need the file's contents, you MUST call `read_file` first. Do NOT send local file paths as payloads to external HTTP APIs.
 
-`file_cache_dir` and `file_state_dir` are path aliases, not literal filenames. Always use them with a relative suffix such as `file_state_dir/TODO.WIP.md`.
+`file_cache_dir` and `file_state_dir` are path aliases, not literal filenames. Always use them with a relative suffix such as `file_state_dir/TODO.md`.
 
 For binary files (e.g. PDFs), prefer `url_fetch.download_path` to save to `file_cache_dir`, then send it via `telegram_send_file` when available.
 
