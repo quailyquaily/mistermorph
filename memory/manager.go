@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	shortTermIndexName = "_index.md"
+	longTermFilename = "index.md"
 )
 
 func NewManager(dir string, shortTermDays int) *Manager {
@@ -32,13 +32,12 @@ func (m *Manager) memoryRoot() string {
 	return m.Dir
 }
 
-func (m *Manager) LongTermPath(subjectID string) (string, string) {
+func (m *Manager) LongTermPath(_ string) (string, string) {
 	root := m.memoryRoot()
 	if root == "" {
 		return "", ""
 	}
-	cleanID := SanitizeSubjectID(subjectID)
-	rel := filepath.ToSlash(filepath.Join(cleanID, shortTermIndexName))
+	rel := filepath.ToSlash(longTermFilename)
 	abs := filepath.Join(root, rel)
 	return abs, rel
 }

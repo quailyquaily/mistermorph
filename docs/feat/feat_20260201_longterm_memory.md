@@ -209,17 +209,20 @@ Recommended injection block:
 created_at: 2026-02-04T12:34:56Z
 updated_at: 2026-02-04T12:34:56Z
 summary: "Most important and stable long-term facts and project state."
-tasks: "0/0"
-follow_ups: "0/0"
+tasks: "1/2"
 ---
 
 # Long-Term Memory
 
 ## Long-Term Goals / Projects
-- **Project A**: ... (added 2026-02-05)
+
+- [ ] [Created](2026-02-11 09:30) | Project Alpha: Launch the new product line by Q3 2026.
+- [x] [Created](2026-02-11 09:30), [Done](2026-02-15 10:00) | Finalize the budget proposal for Project Beta. 
 
 ## Key Facts
-- **Key fact**: ... (added 2026-02-05)
+
+- **Key fact ..**: ... 
+- **Key fact ..**: ... 
 ```
 
 ### 12.2 Short-Term Template (`memory/YYYY-MM-DD/<session-id>.md`)
@@ -229,35 +232,18 @@ follow_ups: "0/0"
 created_at: 2026-02-04T12:34:56Z
 updated_at: 2026-02-04T12:34:56Z
 summary: "Discussed memory layout and merge rules."
-tasks: "1/3"
-follow_ups: "0/1"
 session_id: tg:-1001234567890
-contact_id: tg:@alice
-contact_nickname: Alice
+contact_id: 
+  - tg:@alice
+contact_nickname: 
+  - Alice
 ---
 
-# 2026-02-04 Short-Term Memory
+# Summary
 
-## Session Summary
-1. **Topic**: ...
-   - Users: ...
-   - Datetime: ...
-   - Event: ...
-   - Result: ...
+- [Created](YYYY-MM-DD hh:mm) | $Agent disucss with [John](tg:@johnwick) about the training of assassins.
+- [Created](YYYY-MM-DD hh:mm) | $Agent received feedback from [Sarah](tg:@sarah_connor) on the project proposal.
 
-## Temporary Facts
-1. Example:
-   - 网站 URL: ...
-   - API 示例: ...
-
-## Tasks
-- [ ] ...
-
-## Follow Ups
-- [ ] ...
-
-## Related Links
-- [Previous day](../2026-02-03/telegram_12345.md)
 ```
 
 ## 13. Configuration (Proposed)

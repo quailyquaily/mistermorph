@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/quailyquaily/mistermorph/internal/entryutil"
 )
 
 var (
@@ -154,12 +156,7 @@ func (s *Store) List(scope string) (ListResult, error) {
 }
 
 func validTimestamp(v string) bool {
-	v = strings.TrimSpace(v)
-	if v == "" {
-		return false
-	}
-	_, err := time.Parse(TimestampLayout, v)
-	return err == nil
+	return entryutil.IsValidTimestamp(v)
 }
 
 func normalizeCompleteQuery(raw string) (string, error) {
@@ -197,22 +194,20 @@ func (s *Store) dedupeWIPEntries(ctx context.Context, entries []Entry) ([]Entry,
 	if err != nil {
 		return nil, err
 	}
-	keepIndices, err := semantic.SelectDedupKeepIndices(ctx, entries)
+	items := make([]entryutil.SemanticItem, 0, len(entries))
+	for _, item := range entries {
+		items = append(items, entryutil.SemanticItem{
+			CreatedAt: strings.TrimSpace(item.CreatedAt),
+			Content:   strings.TrimSpace(item.Content),
+		})
+	}
+	keepIndices, err := entryutil.ResolveKeepIndices(ctx, items, semantic)
 	if err != nil {
 		return nil, err
 	}
-	if len(keepIndices) == 0 {
-		return nil, fmt.Errorf("semantic dedupe returned empty keep_indices")
-	}
 	keep := make(map[int]bool, len(keepIndices))
 	for _, idx := range keepIndices {
-		if idx < 0 || idx >= len(entries) {
-			return nil, fmt.Errorf("semantic dedupe index out of range: %d", idx)
-		}
 		keep[idx] = true
-	}
-	if !keep[0] {
-		return nil, fmt.Errorf("semantic dedupe must keep the newest todo item")
 	}
 	out := make([]Entry, 0, len(keep))
 	for i, item := range entries {
@@ -298,19 +293,4 @@ func isValidTODOChatID(chatID string) bool {
 		return false
 	}
 	return id != 0
-}
-
-// normalizeEntryChannel is kept for backward compatibility in older call sites.
-func normalizeEntryChannel(raw string) string {
-	return normalizeEntryChatID(raw)
-}
-
-// validateEntryChannel is kept for backward compatibility in older call sites.
-func validateEntryChannel(raw string) error {
-	return validateEntryChatID(raw)
-}
-
-// isValidTODOChannel is kept for backward compatibility in older call sites.
-func isValidTODOChannel(channel string) bool {
-	return isValidTODOChatID(channel)
 }

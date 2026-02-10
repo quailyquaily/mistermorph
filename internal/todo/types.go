@@ -3,10 +3,12 @@ package todo
 import (
 	"context"
 	"time"
+
+	"github.com/quailyquaily/mistermorph/internal/entryutil"
 )
 
 const (
-	TimestampLayout     = "2006-01-02 15:04"
+	TimestampLayout     = entryutil.TimestampLayout
 	HeaderWIP           = "# TODO Work In Progress (WIP)"
 	HeaderDONE          = "# TODO Done"
 	DefaultWIPFilename  = "TODO.md"
@@ -67,7 +69,7 @@ type ListResult struct {
 }
 
 type SemanticResolver interface {
-	SelectDedupKeepIndices(ctx context.Context, entries []Entry) ([]int, error)
+	SelectDedupKeepIndices(ctx context.Context, items []entryutil.SemanticItem) ([]int, error)
 	MatchCompleteIndex(ctx context.Context, query string, entries []Entry) (int, error)
 }
 

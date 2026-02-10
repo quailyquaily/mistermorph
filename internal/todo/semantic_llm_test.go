@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/quailyquaily/mistermorph/internal/entryutil"
 	"github.com/quailyquaily/mistermorph/llm"
 )
 
@@ -33,7 +34,7 @@ func TestLLMSemanticResolverSelectDedupKeepIndices(t *testing.T) {
 		replies: []string{`{"keep_indices":[0,2,2]}`},
 	}
 	resolver := NewLLMSemanticResolver(client, "gpt-5.2")
-	indices, err := resolver.SelectDedupKeepIndices(context.Background(), []Entry{
+	indices, err := resolver.SelectDedupKeepIndices(context.Background(), []entryutil.SemanticItem{
 		{CreatedAt: "2026-02-09 10:00", Content: "A"},
 		{CreatedAt: "2026-02-09 10:01", Content: "B"},
 		{CreatedAt: "2026-02-09 10:02", Content: "C"},
@@ -68,7 +69,7 @@ func TestLLMSemanticResolverRejectsNonStrictJSON(t *testing.T) {
 		replies: []string{"```json\n{\"keep_indices\":[0]}\n```"},
 	}
 	resolver := NewLLMSemanticResolver(client, "gpt-5.2")
-	_, err := resolver.SelectDedupKeepIndices(context.Background(), []Entry{
+	_, err := resolver.SelectDedupKeepIndices(context.Background(), []entryutil.SemanticItem{
 		{CreatedAt: "2026-02-09 10:00", Content: "A"},
 		{CreatedAt: "2026-02-09 10:01", Content: "B"},
 	})

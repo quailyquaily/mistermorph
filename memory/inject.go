@@ -96,8 +96,8 @@ func (m *Manager) LoadShortTermSummaries(days int) ([]ShortTermSummary, error) {
 			}
 			if summary == "" {
 				content := ParseShortTermContent(body)
-				if summary == "" && len(content.SessionSummary) > 0 {
-					summary = strings.TrimSpace(content.SessionSummary[0].Value)
+				if summary == "" && len(content.SummaryItems) > 0 {
+					summary = strings.TrimSpace(content.SummaryItems[0].Content)
 				}
 			}
 			if summary == "" {

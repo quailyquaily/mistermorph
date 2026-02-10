@@ -7,22 +7,24 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/quailyquaily/mistermorph/internal/entryutil"
 )
 
 type stubSemantics struct {
-	keepFn  func(entries []Entry) ([]int, error)
+	keepFn  func(items []entryutil.SemanticItem) ([]int, error)
 	matchFn func(query string, entries []Entry) (int, error)
 }
 
-func (s stubSemantics) SelectDedupKeepIndices(_ context.Context, entries []Entry) ([]int, error) {
+func (s stubSemantics) SelectDedupKeepIndices(_ context.Context, items []entryutil.SemanticItem) ([]int, error) {
 	if s.keepFn == nil {
-		out := make([]int, 0, len(entries))
-		for i := range entries {
+		out := make([]int, 0, len(items))
+		for i := range items {
 			out = append(out, i)
 		}
 		return out, nil
 	}
-	return s.keepFn(entries)
+	return s.keepFn(items)
 }
 
 func (s stubSemantics) MatchCompleteIndex(_ context.Context, query string, entries []Entry) (int, error) {

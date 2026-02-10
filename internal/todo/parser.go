@@ -3,14 +3,12 @@ package todo
 import (
 	"bufio"
 	"fmt"
-	"regexp"
 	"strconv"
 	"strings"
 
+	"github.com/quailyquaily/mistermorph/internal/entryutil"
 	"gopkg.in/yaml.v3"
 )
-
-var metadataTuplePattern = regexp.MustCompile(`^\[(Created|Done|ChatID)\]\(([^()]+)\)$`)
 
 type fileFrontmatter struct {
 	CreatedAt string `yaml:"created_at"`
@@ -207,7 +205,7 @@ func parseWIPEntryLine(line string) (Entry, bool) {
 		return Entry{}, false
 	}
 	rest := strings.TrimSpace(strings.TrimPrefix(line, "- [ ] "))
-	metaRaw, content, ok := splitEntryMetadataAndContent(rest)
+	metaRaw, content, ok := entryutil.SplitMetadataAndContent(rest)
 	if !ok {
 		return Entry{}, false
 	}
@@ -243,7 +241,7 @@ func parseDONEEntryLine(line string) (Entry, bool) {
 		return Entry{}, false
 	}
 	rest := strings.TrimSpace(strings.TrimPrefix(line, "- [x] "))
-	metaRaw, content, ok := splitEntryMetadataAndContent(rest)
+	metaRaw, content, ok := entryutil.SplitMetadataAndContent(rest)
 	if !ok {
 		return Entry{}, false
 	}
@@ -281,13 +279,13 @@ func renderWIPEntryLine(item Entry) string {
 	if content == "" || !validTimestamp(createdAt) {
 		return ""
 	}
-	meta := []string{formatMetadataTuple("Created", createdAt)}
+	meta := []string{entryutil.FormatMetadataTuple("Created", createdAt)}
 	chatID := normalizeEntryChatID(item.ChatID)
 	if chatID != "" {
 		if !isValidTODOChatID(chatID) {
 			return ""
 		}
-		meta = append(meta, formatMetadataTuple("ChatID", chatID))
+		meta = append(meta, entryutil.FormatMetadataTuple("ChatID", chatID))
 	}
 	return "- [ ] " + strings.Join(meta, ", ") + " | " + content
 }
@@ -300,65 +298,31 @@ func renderDONEEntryLine(item Entry) string {
 		return ""
 	}
 	meta := []string{
-		formatMetadataTuple("Created", createdAt),
-		formatMetadataTuple("Done", doneAt),
+		entryutil.FormatMetadataTuple("Created", createdAt),
+		entryutil.FormatMetadataTuple("Done", doneAt),
 	}
 	chatID := normalizeEntryChatID(item.ChatID)
 	if chatID != "" {
 		if !isValidTODOChatID(chatID) {
 			return ""
 		}
-		meta = append(meta, formatMetadataTuple("ChatID", chatID))
+		meta = append(meta, entryutil.FormatMetadataTuple("ChatID", chatID))
 	}
 	return "- [x] " + strings.Join(meta, ", ") + " | " + content
 }
 
-func splitEntryMetadataAndContent(raw string) (string, string, bool) {
-	raw = strings.TrimSpace(raw)
-	parts := strings.SplitN(raw, " | ", 2)
-	if len(parts) != 2 {
-		return "", "", false
-	}
-	meta := strings.TrimSpace(parts[0])
-	content := strings.TrimSpace(parts[1])
-	if meta == "" || content == "" {
-		return "", "", false
-	}
-	return meta, content, true
-}
-
 func parseEntryMetadata(raw string) (map[string]string, bool) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
+	out, ok := entryutil.ParseMetadataTuples(raw)
+	if !ok {
 		return nil, false
 	}
-	parts := strings.Split(raw, ",")
-	out := make(map[string]string, len(parts))
-	for _, part := range parts {
-		item := strings.TrimSpace(part)
-		if item == "" {
+	for key := range out {
+		switch key {
+		case "Created", "Done", "ChatID":
+			continue
+		default:
 			return nil, false
 		}
-		matches := metadataTuplePattern.FindStringSubmatch(item)
-		if len(matches) != 3 {
-			return nil, false
-		}
-		key := strings.TrimSpace(matches[1])
-		val := strings.TrimSpace(matches[2])
-		if key == "" || val == "" {
-			return nil, false
-		}
-		if _, exists := out[key]; exists {
-			return nil, false
-		}
-		out[key] = val
-	}
-	if len(out) == 0 {
-		return nil, false
 	}
 	return out, true
-}
-
-func formatMetadataTuple(key string, value string) string {
-	return "[" + strings.TrimSpace(key) + "](" + strings.TrimSpace(value) + ")"
 }

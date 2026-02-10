@@ -16,6 +16,7 @@ import (
 	telegramcmd "github.com/quailyquaily/mistermorph/cmd/mistermorph/telegramcmd"
 	"github.com/quailyquaily/mistermorph/guard"
 	"github.com/quailyquaily/mistermorph/internal/configutil"
+	"github.com/quailyquaily/mistermorph/internal/entryutil"
 	"github.com/quailyquaily/mistermorph/internal/heartbeatutil"
 	"github.com/quailyquaily/mistermorph/internal/llmconfig"
 	"github.com/quailyquaily/mistermorph/internal/llminspect"
@@ -335,20 +336,18 @@ func updateRunMemory(ctx context.Context, logger *slog.Logger, client llm.Client
 	}
 	draft.Promote = telegramcmd.EnforceLongTermPromotionRules(draft.Promote, nil, task)
 
-	summary := strings.TrimSpace(draft.Summary)
 	var mergedContent memory.ShortTermContent
 	if hasExisting && telegramcmd.HasDraftContent(draft) {
-		semantic, semanticSummary, mergeErr := telegramcmd.SemanticMergeShortTerm(memCtx, client, model, existingContent, draft)
+		semantic, mergeErr := telegramcmd.SemanticMergeShortTerm(memCtx, client, model, existingContent, draft)
 		if mergeErr != nil {
 			return mergeErr
 		}
 		mergedContent = semantic
-		summary = semanticSummary
 	} else {
-		mergedContent = memory.MergeShortTerm(existingContent, draft)
+		mergedContent = memory.MergeShortTerm(existingContent, draft, date.UTC().Format(entryutil.TimestampLayout))
 	}
 
-	if _, err := mgr.WriteShortTerm(date, mergedContent, summary, meta); err != nil {
+	if _, err := mgr.WriteShortTerm(date, mergedContent, meta); err != nil {
 		return err
 	}
 

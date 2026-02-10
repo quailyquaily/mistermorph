@@ -12,8 +12,8 @@ func TestWriteShortTermStoresContactMeta(t *testing.T) {
 	date := time.Date(2026, 2, 7, 12, 0, 0, 0, time.UTC)
 
 	_, err := mgr.WriteShortTerm(date, ShortTermContent{
-		SessionSummary: []KVItem{{Title: "Who", Value: "Alice"}},
-	}, "hello", WriteMeta{
+		SummaryItems: []SummaryItem{{Created: "2026-02-07 12:00", Content: "Alice discussed the plan."}},
+	}, WriteMeta{
 		SessionID:        "tg:1",
 		ContactIDs:       []string{"tg:@alice"},
 		ContactNicknames: []string{"Alice"},

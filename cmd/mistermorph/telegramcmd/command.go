@@ -34,6 +34,7 @@ import (
 	maepbus "github.com/quailyquaily/mistermorph/internal/bus/adapters/maep"
 	telegrambus "github.com/quailyquaily/mistermorph/internal/bus/adapters/telegram"
 	"github.com/quailyquaily/mistermorph/internal/configutil"
+	"github.com/quailyquaily/mistermorph/internal/entryutil"
 	"github.com/quailyquaily/mistermorph/internal/heartbeatutil"
 	"github.com/quailyquaily/mistermorph/internal/idempotency"
 	"github.com/quailyquaily/mistermorph/internal/jsonutil"
@@ -2017,20 +2018,19 @@ func updateSessionMemory(
 	}
 	draft.Promote = EnforceLongTermPromotionRules(draft.Promote, history, task)
 
-	summary := strings.TrimSpace(draft.Summary)
 	var mergedContent memory.ShortTermContent
 	if hasExisting && HasDraftContent(draft) {
-		semantic, semanticSummary, mergeErr := SemanticMergeShortTerm(memCtx, client, model, existingContent, draft)
+		semantic, mergeErr := SemanticMergeShortTerm(memCtx, client, model, existingContent, draft)
 		if mergeErr != nil {
 			return mergeErr
 		}
 		mergedContent = semantic
-		summary = semanticSummary
 	} else {
-		mergedContent = memory.MergeShortTerm(existingContent, draft)
+		createdAt := date.UTC().Format(entryutil.TimestampLayout)
+		mergedContent = memory.MergeShortTerm(existingContent, draft, createdAt)
 	}
 
-	_, err = mgr.WriteShortTerm(date, mergedContent, summary, meta)
+	_, err = mgr.WriteShortTerm(date, mergedContent, meta)
 	if err != nil {
 		return err
 	}
@@ -2120,7 +2120,7 @@ func BuildMemoryDraft(ctx context.Context, client llm.Client, model string, hist
 	if err := jsonutil.DecodeWithFallback(raw, &out); err != nil {
 		return memory.SessionDraft{}, fmt.Errorf("invalid memory draft json")
 	}
-	out.Summary = strings.TrimSpace(out.Summary)
+	out.SummaryItems = normalizeMemorySummaryItems(out.SummaryItems)
 	return out, nil
 }
 
@@ -2185,13 +2185,24 @@ func containsExplicitMemoryRequest(lowerText string) bool {
 }
 
 func limitPromoteToOne(promote memory.PromoteDraft) memory.PromoteDraft {
-	if item, ok := firstKVItem(promote.GoalsProjects); ok {
-		return memory.PromoteDraft{GoalsProjects: []memory.KVItem{item}}
+	if item, ok := firstNonEmptyText(promote.GoalsProjects); ok {
+		return memory.PromoteDraft{GoalsProjects: []string{item}}
 	}
 	if item, ok := firstKVItem(promote.KeyFacts); ok {
 		return memory.PromoteDraft{KeyFacts: []memory.KVItem{item}}
 	}
 	return memory.PromoteDraft{}
+}
+
+func firstNonEmptyText(items []string) (string, bool) {
+	for _, raw := range items {
+		v := strings.TrimSpace(raw)
+		if v == "" {
+			continue
+		}
+		return v, true
+	}
+	return "", false
 }
 
 func firstKVItem(items []memory.KVItem) (memory.KVItem, bool) {
@@ -2208,75 +2219,54 @@ func firstKVItem(items []memory.KVItem) (memory.KVItem, bool) {
 	return memory.KVItem{}, false
 }
 
-type semanticMergeContent struct {
-	SessionSummary []memory.KVItem `json:"session_summary"`
-	TemporaryFacts []memory.KVItem `json:"temporary_facts"`
-}
-
-type semanticMergeResult struct {
-	Summary        string          `json:"summary"`
-	SessionSummary []memory.KVItem `json:"session_summary"`
-	TemporaryFacts []memory.KVItem `json:"temporary_facts"`
-}
-
-func SemanticMergeShortTerm(ctx context.Context, client llm.Client, model string, existing memory.ShortTermContent, draft memory.SessionDraft) (memory.ShortTermContent, string, error) {
+func SemanticMergeShortTerm(ctx context.Context, client llm.Client, model string, existing memory.ShortTermContent, draft memory.SessionDraft) (memory.ShortTermContent, error) {
 	if client == nil {
-		return memory.ShortTermContent{}, "", fmt.Errorf("nil llm client")
+		return memory.ShortTermContent{}, fmt.Errorf("nil llm client")
 	}
+	incoming := memory.MergeShortTerm(memory.ShortTermContent{}, draft, time.Now().UTC().Format(entryutil.TimestampLayout))
+	if len(incoming.SummaryItems) == 0 {
+		return memory.NormalizeShortTermContent(existing), nil
+	}
+	combined := make([]memory.SummaryItem, 0, len(incoming.SummaryItems)+len(existing.SummaryItems))
+	combined = append(combined, incoming.SummaryItems...)
+	combined = append(combined, existing.SummaryItems...)
 
-	existingContent := semanticMergeContent{
-		SessionSummary: existing.SessionSummary,
-		TemporaryFacts: existing.TemporaryFacts,
-	}
-	incomingContent := semanticMergeContent{
-		SessionSummary: draft.SessionSummary,
-		TemporaryFacts: draft.TemporaryFacts,
-	}
-	sys, user, err := renderMemoryMergePrompts(existingContent, incomingContent)
+	resolver := entryutil.NewLLMSemanticResolver(client, model)
+	deduped, err := memory.SemanticDedupeSummaryItems(ctx, combined, resolver)
 	if err != nil {
-		return memory.ShortTermContent{}, "", fmt.Errorf("render semantic merge prompts: %w", err)
+		return memory.ShortTermContent{}, err
 	}
 
-	res, err := client.Chat(ctx, llm.Request{
-		Model:     model,
-		ForceJSON: true,
-		Messages: []llm.Message{
-			{Role: "system", Content: sys},
-			{Role: "user", Content: user},
-		},
-		Parameters: map[string]any{
-			"max_tokens": 40960,
-		},
-	})
-	if err != nil {
-		return memory.ShortTermContent{}, "", err
-	}
-
-	raw := strings.TrimSpace(res.Text)
-	if raw == "" {
-		return memory.ShortTermContent{}, "", fmt.Errorf("empty semantic merge response")
-	}
-
-	var out semanticMergeResult
-	if err := jsonutil.DecodeWithFallback(raw, &out); err != nil {
-		return memory.ShortTermContent{}, "", fmt.Errorf("invalid semantic merge json")
-	}
-
-	merged := memory.ShortTermContent{
-		SessionSummary: out.SessionSummary,
-		TemporaryFacts: out.TemporaryFacts,
-		RelatedLinks:   existing.RelatedLinks,
-	}
-	merged = memory.NormalizeShortTermContent(merged)
-	summary := strings.TrimSpace(out.Summary)
-	if summary == "" {
-		summary = strings.TrimSpace(draft.Summary)
-	}
-	return merged, summary, nil
+	merged := memory.NormalizeShortTermContent(memory.ShortTermContent{SummaryItems: deduped})
+	return merged, nil
 }
 
 func HasDraftContent(draft memory.SessionDraft) bool {
-	return len(draft.SessionSummary) > 0 || len(draft.TemporaryFacts) > 0
+	return len(normalizeMemorySummaryItems(draft.SummaryItems)) > 0
+}
+
+func normalizeMemorySummaryItems(input []string) []string {
+	if len(input) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(input))
+	seen := make(map[string]bool, len(input))
+	for _, raw := range input {
+		v := strings.TrimSpace(raw)
+		if v == "" {
+			continue
+		}
+		key := strings.ToLower(v)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, v)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func buildMemoryContextMessages(history []llm.Message, task string, output string) []map[string]string {

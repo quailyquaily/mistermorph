@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/quailyquaily/mistermorph/internal/entryutil"
 )
 
 const (
@@ -19,10 +21,6 @@ type WriteMeta struct {
 	SessionID        string
 	ContactIDs       []string
 	ContactNicknames []string
-	// Deprecated: use ContactIDs.
-	ContactID string
-	// Deprecated: use ContactNicknames.
-	ContactNickname string
 }
 
 func (m *Manager) UpdateShortTerm(date time.Time, draft SessionDraft, meta WriteMeta) (string, error) {
@@ -44,14 +42,12 @@ func (m *Manager) UpdateShortTerm(date time.Time, draft SessionDraft, meta Write
 		content = ParseShortTermContent(body)
 	}
 
-	merged := MergeShortTerm(content, draft)
-	merged = ensureShortTermDefaults(merged, draft)
+	createdAt := date.UTC().Format(entryutil.TimestampLayout)
+	merged := MergeShortTerm(content, draft, createdAt)
+	merged = NormalizeShortTermContent(merged)
 
-	bodyOut := BuildShortTermBody(date.UTC().Format("2006-01-02"), merged)
-	summary := strings.TrimSpace(draft.Summary)
-	if summary == "" {
-		summary = fallbackShortSummary(draft)
-	}
+	bodyOut := BuildShortTermBody(merged)
+	summary := fallbackShortSummaryFromContent(merged)
 	fm = applyShortTermFrontmatter(fm, summary, meta, m.nowUTC())
 
 	if err := writeMemoryFile(abs, RenderFrontmatter(fm)+"\n"+bodyOut); err != nil {
@@ -60,7 +56,7 @@ func (m *Manager) UpdateShortTerm(date time.Time, draft SessionDraft, meta Write
 	return rel, nil
 }
 
-func (m *Manager) WriteShortTerm(date time.Time, content ShortTermContent, summary string, meta WriteMeta) (string, error) {
+func (m *Manager) WriteShortTerm(date time.Time, content ShortTermContent, meta WriteMeta) (string, error) {
 	if m == nil {
 		return "", fmt.Errorf("nil memory manager")
 	}
@@ -78,11 +74,9 @@ func (m *Manager) WriteShortTerm(date time.Time, content ShortTermContent, summa
 		fm = Frontmatter{}
 	}
 
-	bodyOut := BuildShortTermBody(date.UTC().Format("2006-01-02"), content)
-	summary = strings.TrimSpace(summary)
-	if summary == "" {
-		summary = fallbackShortSummaryFromContent(content)
-	}
+	content = NormalizeShortTermContent(content)
+	bodyOut := BuildShortTermBody(content)
+	summary := fallbackShortSummaryFromContent(content)
 	fm = applyShortTermFrontmatter(fm, summary, meta, m.nowUTC())
 	if err := writeMemoryFile(abs, RenderFrontmatter(fm)+"\n"+bodyOut); err != nil {
 		return "", err
@@ -148,16 +142,10 @@ func applyShortTermFrontmatter(existing Frontmatter, summary string, meta WriteM
 		existing.SessionID = strings.TrimSpace(meta.SessionID)
 	}
 	contactIDs := append([]string{}, meta.ContactIDs...)
-	if strings.TrimSpace(meta.ContactID) != "" {
-		contactIDs = append(contactIDs, strings.TrimSpace(meta.ContactID))
-	}
 	if len(contactIDs) > 0 {
 		existing.ContactIDs = StringList(mergePlainStrings([]string(existing.ContactIDs), contactIDs))
 	}
 	contactNicknames := append([]string{}, meta.ContactNicknames...)
-	if strings.TrimSpace(meta.ContactNickname) != "" {
-		contactNicknames = append(contactNicknames, strings.TrimSpace(meta.ContactNickname))
-	}
 	if len(contactNicknames) > 0 {
 		existing.ContactNicknames = StringList(mergePlainStrings([]string(existing.ContactNicknames), contactNicknames))
 	}
@@ -195,34 +183,13 @@ func applyLongTermFrontmatter(existing Frontmatter, content LongTermContent, now
 	existing.CreatedAt = chooseTimestamp(existing.CreatedAt, now)
 	existing.UpdatedAt = now.UTC().Format(time.RFC3339)
 	existing.Summary = summarizeLongTerm(content)
+	existing.Tasks = longTermTaskProgress(content.Goals)
 	return existing
 }
 
-func fallbackShortSummary(draft SessionDraft) string {
-	for _, item := range draft.SessionSummary {
-		val := strings.TrimSpace(item.Value)
-		if val != "" {
-			return truncateSummary(val)
-		}
-	}
-	for _, item := range draft.TemporaryFacts {
-		val := strings.TrimSpace(item.Value)
-		if val != "" {
-			return truncateSummary(val)
-		}
-	}
-	return defaultShortSummary
-}
-
 func fallbackShortSummaryFromContent(content ShortTermContent) string {
-	if len(content.SessionSummary) > 0 {
-		val := strings.TrimSpace(content.SessionSummary[0].Value)
-		if val != "" {
-			return truncateSummary(val)
-		}
-	}
-	if len(content.TemporaryFacts) > 0 {
-		val := strings.TrimSpace(content.TemporaryFacts[0].Value)
+	if len(content.SummaryItems) > 0 {
+		val := strings.TrimSpace(content.SummaryItems[0].Content)
 		if val != "" {
 			return truncateSummary(val)
 		}
@@ -233,7 +200,7 @@ func fallbackShortSummaryFromContent(content ShortTermContent) string {
 func summarizeLongTerm(content LongTermContent) string {
 	parts := make([]string, 0, 2)
 	if len(content.Goals) > 0 {
-		parts = append(parts, "Goals: "+kvSummary(content.Goals[0]))
+		parts = append(parts, "Goals: "+goalSummary(content.Goals[0]))
 	}
 	if len(content.Facts) > 0 {
 		parts = append(parts, "Facts: "+kvSummary(content.Facts[0]))
@@ -285,6 +252,28 @@ func kvSummary(item KVItem) string {
 	return truncateSummary(title + ": " + val)
 }
 
+func goalSummary(goal LongTermGoal) string {
+	content := strings.TrimSpace(goal.Content)
+	if content == "" {
+		return ""
+	}
+	if goal.Done {
+		return truncateSummary("Done: " + content)
+	}
+	return truncateSummary(content)
+}
+
+func longTermTaskProgress(goals []LongTermGoal) string {
+	total := len(goals)
+	done := 0
+	for _, goal := range goals {
+		if goal.Done {
+			done++
+		}
+	}
+	return fmt.Sprintf("%d/%d", done, total)
+}
+
 func truncateSummary(s string) string {
 	s = strings.TrimSpace(s)
 	if s == "" {
@@ -302,16 +291,6 @@ func chooseTimestamp(existing string, now time.Time) string {
 		return existing
 	}
 	return now.UTC().Format(time.RFC3339)
-}
-
-func ensureShortTermDefaults(content ShortTermContent, draft SessionDraft) ShortTermContent {
-	if len(content.SessionSummary) == 0 {
-		summary := strings.TrimSpace(draft.Summary)
-		if summary != "" {
-			content.SessionSummary = []KVItem{{Title: "Summary", Value: summary}}
-		}
-	}
-	return content
 }
 
 func readMemoryFile(path string) (Frontmatter, string, bool, error) {

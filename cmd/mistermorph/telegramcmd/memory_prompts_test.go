@@ -13,8 +13,7 @@ func TestRenderMemoryDraftPrompts(t *testing.T) {
 		MemoryDraftContext{SessionID: "tg:1", ChatType: "private"},
 		[]map[string]string{{"role": "user", "content": "hi"}},
 		memory.ShortTermContent{
-			SessionSummary: []memory.KVItem{{Title: "Topic", Value: "Users: A"}},
-			TemporaryFacts: []memory.KVItem{{Title: "Fact", Value: "URL: https://example.com"}},
+			SummaryItems: []memory.SummaryItem{{Created: "2026-02-11 09:30", Content: "The agent discussed progress with [Alice](tg:@alice)."}},
 		},
 	)
 	if err != nil {
@@ -33,27 +32,7 @@ func TestRenderMemoryDraftPrompts(t *testing.T) {
 	if payload["rules"] == nil {
 		t.Fatalf("missing rules")
 	}
-	if payload["existing_session_summary"] == nil || payload["existing_temporary_facts"] == nil {
+	if payload["existing_summary_items"] == nil {
 		t.Fatalf("missing existing memory payload")
-	}
-}
-
-func TestRenderMemoryMergePrompts(t *testing.T) {
-	sys, user, err := renderMemoryMergePrompts(
-		semanticMergeContent{SessionSummary: []memory.KVItem{{Title: "A", Value: "v"}}},
-		semanticMergeContent{TemporaryFacts: []memory.KVItem{{Title: "B", Value: "v"}}},
-	)
-	if err != nil {
-		t.Fatalf("renderMemoryMergePrompts() error = %v", err)
-	}
-	if !strings.Contains(sys, "merge short-term memory entries") {
-		t.Fatalf("unexpected system prompt: %q", sys)
-	}
-	var payload map[string]any
-	if err := json.Unmarshal([]byte(user), &payload); err != nil {
-		t.Fatalf("user prompt is not valid json: %v", err)
-	}
-	if payload["existing"] == nil || payload["incoming"] == nil {
-		t.Fatalf("missing existing/incoming payload")
 	}
 }
