@@ -8,6 +8,21 @@ import (
 	"time"
 )
 
+type mockSender struct {
+	accepted bool
+	deduped  bool
+	err      error
+	calls    int
+}
+
+func (m *mockSender) Send(ctx context.Context, contact Contact, decision ShareDecision) (bool, bool, error) {
+	_ = ctx
+	_ = contact
+	_ = decision
+	m.calls++
+	return m.accepted, m.deduped, m.err
+}
+
 func TestInvariantOutboxIdempotency(t *testing.T) {
 	ctx := context.Background()
 	root := filepath.Join(t.TempDir(), "contacts")
@@ -29,36 +44,30 @@ func TestInvariantOutboxIdempotency(t *testing.T) {
 	}, now); err != nil {
 		t.Fatalf("UpsertContact() error = %v", err)
 	}
-	payload := base64.RawURLEncoding.EncodeToString([]byte("hello"))
-	if _, err := svc.AddCandidate(ctx, ShareCandidate{
-		ItemID:        "cand-inv-1",
-		Topic:         "maep",
-		ContentType:   "text/plain",
-		PayloadBase64: payload,
-	}, now); err != nil {
-		t.Fatalf("AddCandidate() error = %v", err)
-	}
 
 	sender := &mockSender{accepted: true}
-	if _, err := svc.RunTick(ctx, now, TickOptions{
-		MaxTargets:      1,
-		FreshnessWindow: 72 * time.Hour,
-		Send:            true,
-	}, sender); err != nil {
-		t.Fatalf("RunTick(first) error = %v", err)
+	payload := base64.RawURLEncoding.EncodeToString([]byte("hello"))
+	decision := ShareDecision{
+		ContactID:      "maep:inv",
+		PeerID:         "12D3KooWInv",
+		ItemID:         "manual_item_1",
+		Topic:          "share.proactive.v1",
+		ContentType:    "text/plain",
+		PayloadBase64:  payload,
+		IdempotencyKey: "manual:key1",
 	}
-	second, err := svc.RunTick(ctx, now.Add(1*time.Minute), TickOptions{
-		MaxTargets:      1,
-		FreshnessWindow: 72 * time.Hour,
-		Send:            true,
-	}, sender)
+
+	if _, err := svc.SendDecision(ctx, now, decision, sender); err != nil {
+		t.Fatalf("SendDecision(first) error = %v", err)
+	}
+	second, err := svc.SendDecision(ctx, now.Add(1*time.Minute), decision, sender)
 	if err != nil {
-		t.Fatalf("RunTick(second) error = %v", err)
+		t.Fatalf("SendDecision(second) error = %v", err)
 	}
 	if sender.calls != 1 {
 		t.Fatalf("sender calls mismatch: got %d want 1", sender.calls)
 	}
-	if len(second.Outcomes) == 0 || !second.Outcomes[0].Deduped {
-		t.Fatalf("second run expected deduped outcome, got=%v", second.Outcomes)
+	if !second.Deduped {
+		t.Fatalf("second send expected deduped outcome, got=%+v", second)
 	}
 }

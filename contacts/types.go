@@ -1,6 +1,7 @@
 package contacts
 
 import (
+	"context"
 	"time"
 
 	"github.com/quailyquaily/mistermorph/internal/channels"
@@ -142,6 +143,32 @@ type ShareOutcome struct {
 	Deduped        bool      `json:"deduped"`
 	Error          string    `json:"error,omitempty"`
 	SentAt         time.Time `json:"sent_at"`
+}
+
+type CandidateFeature struct {
+	HasOverlapSemantic   bool
+	OverlapSemantic      float64
+	ExplicitHistoryLinks []string
+	Confidence           float64
+}
+
+type FeatureExtractor interface {
+	EvaluateCandidateFeatures(ctx context.Context, contact Contact, candidates []ShareCandidate) (map[string]CandidateFeature, error)
+}
+
+type PreferenceFeatures struct {
+	TopicAffinity map[string]float64
+	PersonaBrief  string
+	PersonaTraits map[string]float64
+	Confidence    float64
+}
+
+type PreferenceExtractor interface {
+	EvaluateContactPreferences(ctx context.Context, contact Contact, candidates []ShareCandidate) (PreferenceFeatures, error)
+}
+
+type NicknameGenerator interface {
+	SuggestNickname(ctx context.Context, contact Contact) (nickname string, confidence float64, err error)
 }
 
 type TickOptions struct {

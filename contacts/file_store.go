@@ -15,7 +15,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/quailyquaily/mistermorph/internal/fsstore"
 	"gopkg.in/yaml.v3"
 )
 
@@ -64,7 +63,7 @@ func (s *FileStore) Ensure(ctx context.Context) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return fsstore.EnsureDir(s.rootPath(), 0o700)
+	return ensureDir(s.rootPath(), 0o700)
 }
 
 func (s *FileStore) GetContact(ctx context.Context, contactID string) (Contact, bool, error) {
@@ -440,19 +439,7 @@ func (s *FileStore) AppendAuditEvent(ctx context.Context, event AuditEvent) erro
 
 	event = normalizeAuditEvent(event, time.Now().UTC())
 	return s.withAuditLock(ctx, func() error {
-		writer, err := fsstore.NewJSONLWriter(s.auditPathJSONL(), fsstore.JSONLOptions{
-			DirPerm:        0o700,
-			FilePerm:       0o600,
-			FlushEachWrite: true,
-		})
-		if err != nil {
-			return fmt.Errorf("open audit writer: %w", err)
-		}
-		defer writer.Close()
-		if err := writer.AppendJSON(event); err != nil {
-			return fmt.Errorf("append audit event: %w", err)
-		}
-		return nil
+		return appendJSONLine(s.auditPathJSONL(), event, 0o700, 0o600)
 	})
 }
 
@@ -502,7 +489,7 @@ func (s *FileStore) ListAuditEvents(ctx context.Context, tickID string, contactI
 }
 
 func (s *FileStore) loadContactsMarkdownLocked(path string, status Status) ([]Contact, error) {
-	content, exists, err := fsstore.ReadText(path)
+	content, exists, err := readText(path)
 	if err != nil {
 		return nil, fmt.Errorf("read contacts markdown %s: %w", path, err)
 	}
@@ -527,10 +514,7 @@ func (s *FileStore) saveContactsMarkdownLocked(path string, title string, status
 	if err != nil {
 		return err
 	}
-	return fsstore.WriteTextAtomic(path, rendered, fsstore.FileOptions{
-		DirPerm:  0o700,
-		FilePerm: 0o600,
-	})
+	return writeTextAtomic(path, rendered, 0o700, 0o600)
 }
 
 func parseContactsMarkdown(content string, status Status) ([]Contact, error) {
@@ -1365,11 +1349,13 @@ func (s *FileStore) withAuditLock(ctx context.Context, fn func() error) error {
 }
 
 func (s *FileStore) withLock(ctx context.Context, key string, fn func() error) error {
-	lockPath, err := fsstore.BuildLockPath(s.lockRootPath(), key)
-	if err != nil {
+	if err := ensureNotCanceled(ctx); err != nil {
 		return err
 	}
-	return fsstore.WithLock(ctx, lockPath, fn)
+	if strings.TrimSpace(key) == "" || fn == nil {
+		return nil
+	}
+	return fn()
 }
 
 func (s *FileStore) rootPath() string {
@@ -1838,7 +1824,7 @@ func normalizeBusOutboxRecord(record BusOutboxRecord) (BusOutboxRecord, error) {
 }
 
 func readJSONFile(path string, out any) (bool, error) {
-	ok, err := fsstore.ReadJSON(path, out)
+	ok, err := readJSON(path, out)
 	if err != nil {
 		return false, fmt.Errorf("read %s: %w", path, err)
 	}
@@ -1876,10 +1862,141 @@ func readJSONFileStrict(path string, out any) (bool, error) {
 }
 
 func writeJSONFileAtomic(path string, v any) error {
-	return fsstore.WriteJSONAtomic(path, v, fsstore.FileOptions{
-		DirPerm:  0o700,
-		FilePerm: 0o600,
-	})
+	return writeJSONAtomic(path, v, 0o700, 0o600)
+}
+
+func ensureDir(path string, perm os.FileMode) error {
+	normalizedPath := filepath.Clean(strings.TrimSpace(path))
+	if normalizedPath == "" {
+		return fmt.Errorf("path is required")
+	}
+	if perm == 0 {
+		perm = 0o700
+	}
+	if err := os.MkdirAll(normalizedPath, perm); err != nil {
+		return fmt.Errorf("ensure dir %s: %w", normalizedPath, err)
+	}
+	return nil
+}
+
+func readText(path string) (string, bool, error) {
+	normalizedPath := filepath.Clean(strings.TrimSpace(path))
+	if normalizedPath == "" {
+		return "", false, fmt.Errorf("path is required")
+	}
+	data, err := os.ReadFile(normalizedPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", false, nil
+		}
+		return "", false, fmt.Errorf("read text %s: %w", normalizedPath, err)
+	}
+	return string(data), true, nil
+}
+
+func writeTextAtomic(path string, content string, dirPerm os.FileMode, filePerm os.FileMode) error {
+	return writeBytesAtomic(path, []byte(content), dirPerm, filePerm)
+}
+
+func readJSON(path string, out any) (bool, error) {
+	normalizedPath := filepath.Clean(strings.TrimSpace(path))
+	if normalizedPath == "" {
+		return false, fmt.Errorf("path is required")
+	}
+	data, err := os.ReadFile(normalizedPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("read json %s: %w", normalizedPath, err)
+	}
+	if len(bytes.TrimSpace(data)) == 0 {
+		return false, nil
+	}
+	if err := json.Unmarshal(data, out); err != nil {
+		return false, fmt.Errorf("decode json %s: %w", normalizedPath, err)
+	}
+	return true, nil
+}
+
+func writeJSONAtomic(path string, v any, dirPerm os.FileMode, filePerm os.FileMode) error {
+	data, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode json %s: %w", strings.TrimSpace(path), err)
+	}
+	data = append(data, '\n')
+	return writeBytesAtomic(path, data, dirPerm, filePerm)
+}
+
+func appendJSONLine(path string, v any, dirPerm os.FileMode, filePerm os.FileMode) error {
+	normalizedPath := filepath.Clean(strings.TrimSpace(path))
+	if normalizedPath == "" {
+		return fmt.Errorf("path is required")
+	}
+	if dirPerm == 0 {
+		dirPerm = 0o700
+	}
+	if filePerm == 0 {
+		filePerm = 0o600
+	}
+	if err := ensureDir(filepath.Dir(normalizedPath), dirPerm); err != nil {
+		return err
+	}
+	data, err := json.Marshal(v)
+	if err != nil {
+		return fmt.Errorf("encode jsonl %s: %w", normalizedPath, err)
+	}
+	data = append(data, '\n')
+	file, err := os.OpenFile(normalizedPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, filePerm)
+	if err != nil {
+		return fmt.Errorf("open jsonl %s: %w", normalizedPath, err)
+	}
+	defer file.Close()
+	if _, err := file.Write(data); err != nil {
+		return fmt.Errorf("append jsonl %s: %w", normalizedPath, err)
+	}
+	return nil
+}
+
+func writeBytesAtomic(path string, data []byte, dirPerm os.FileMode, filePerm os.FileMode) error {
+	normalizedPath := filepath.Clean(strings.TrimSpace(path))
+	if normalizedPath == "" {
+		return fmt.Errorf("path is required")
+	}
+	if dirPerm == 0 {
+		dirPerm = 0o700
+	}
+	if filePerm == 0 {
+		filePerm = 0o600
+	}
+	parentDir := filepath.Dir(normalizedPath)
+	if err := ensureDir(parentDir, dirPerm); err != nil {
+		return err
+	}
+
+	tmp, err := os.CreateTemp(parentDir, filepath.Base(normalizedPath)+".tmp.*")
+	if err != nil {
+		return fmt.Errorf("create temp for %s: %w", normalizedPath, err)
+	}
+	tmpPath := tmp.Name()
+	defer func() {
+		_ = tmp.Close()
+		_ = os.Remove(tmpPath)
+	}()
+
+	if _, err := tmp.Write(data); err != nil {
+		return fmt.Errorf("write temp for %s: %w", normalizedPath, err)
+	}
+	if err := tmp.Chmod(filePerm); err != nil {
+		return fmt.Errorf("chmod temp for %s: %w", normalizedPath, err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("close temp for %s: %w", normalizedPath, err)
+	}
+	if err := os.Rename(tmpPath, normalizedPath); err != nil {
+		return fmt.Errorf("rename temp for %s: %w", normalizedPath, err)
+	}
+	return nil
 }
 
 func ensureNotCanceled(ctx context.Context) error {

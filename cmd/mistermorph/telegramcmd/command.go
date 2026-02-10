@@ -3683,52 +3683,15 @@ func applyMAEPInboundFeedback(
 	feedback maepFeedbackClassification,
 	now time.Time,
 ) error {
-	if contactsSvc == nil {
-		return nil
-	}
-	contact, found, err := lookupMAEPBusinessContact(ctx, maepSvc, contactsSvc, peerID)
-	if err != nil {
-		return err
-	}
-	if !found {
-		return nil
-	}
-	signal, endSession, reason := maepFeedbackToContactSignal(feedback)
-	sessionID = strings.TrimSpace(sessionID)
-	if sessionID == "" {
-		sessionID = strings.TrimSpace(peerID)
-	}
-	if sessionID == "" {
-		sessionID = strings.TrimSpace(contact.ContactID)
-	}
-	if now.IsZero() {
-		now = time.Now().UTC()
-	} else {
-		now = now.UTC()
-	}
-	_, _, err = contactsSvc.UpdateFeedback(ctx, now, contacts.FeedbackUpdateInput{
-		ContactID:  contact.ContactID,
-		SessionID:  sessionID,
-		Signal:     signal,
-		Topic:      normalizeInboundFeedbackTopic(inboundTopic, "maep.inbound"),
-		Reason:     reason,
-		EndSession: endSession,
-	})
-	return err
-}
-
-func maepFeedbackToContactSignal(feedback maepFeedbackClassification) (contacts.FeedbackSignal, bool, string) {
-	feedback = normalizeMAEPFeedback(feedback)
-	if feedback.NextAction == "wrap_up" && feedback.Confidence >= maepWrapUpConfidenceThreshold {
-		return contacts.FeedbackNegative, true, "maep_feedback_wrap_up"
-	}
-	if feedback.SignalNegative >= maepFeedbackNegativeThreshold || feedback.SignalBored >= maepFeedbackNegativeThreshold {
-		return contacts.FeedbackNegative, false, "maep_feedback_negative"
-	}
-	if feedback.SignalPositive >= maepFeedbackPositiveThreshold && feedback.SignalPositive > feedback.SignalNegative {
-		return contacts.FeedbackPositive, false, "maep_feedback_positive"
-	}
-	return contacts.FeedbackNeutral, false, "maep_feedback_neutral"
+	_ = ctx
+	_ = contactsSvc
+	_ = maepSvc
+	_ = peerID
+	_ = inboundTopic
+	_ = sessionID
+	_ = feedback
+	_ = now
+	return nil
 }
 
 func applyTelegramInboundFeedback(
@@ -3740,41 +3703,14 @@ func applyTelegramInboundFeedback(
 	username string,
 	now time.Time,
 ) error {
-	if svc == nil || userID <= 0 || chatID == 0 {
-		return nil
-	}
-	contactID := telegramMemoryContactID(username, userID)
-	if strings.TrimSpace(contactID) == "" {
-		return nil
-	}
-	if now.IsZero() {
-		now = time.Now().UTC()
-	} else {
-		now = now.UTC()
-	}
-	_, _, err := svc.UpdateFeedback(ctx, now, contacts.FeedbackUpdateInput{
-		ContactID: contactID,
-		SessionID: fmt.Sprintf("telegram:%d", chatID),
-		Signal:    contacts.FeedbackPositive,
-		Topic:     normalizeInboundFeedbackTopic("telegram."+strings.ToLower(strings.TrimSpace(chatType))+".inbound", "telegram.inbound"),
-		Reason:    "telegram_inbound_message",
-	})
-	return err
-}
-
-func normalizeInboundFeedbackTopic(raw string, fallback string) string {
-	value := strings.ToLower(strings.TrimSpace(raw))
-	if value == "" {
-		return strings.ToLower(strings.TrimSpace(fallback))
-	}
-	for strings.Contains(value, "..") {
-		value = strings.ReplaceAll(value, "..", ".")
-	}
-	value = strings.Trim(value, ".")
-	if value == "" {
-		return strings.ToLower(strings.TrimSpace(fallback))
-	}
-	return value
+	_ = ctx
+	_ = svc
+	_ = chatID
+	_ = chatType
+	_ = userID
+	_ = username
+	_ = now
+	return nil
 }
 
 func clampUnit(v float64) float64 {
@@ -3937,34 +3873,19 @@ func refreshMAEPPreferencesOnSessionEnd(
 	now time.Time,
 	reason string,
 ) (bool, error) {
-	if contactsSvc == nil || client == nil {
-		return false, nil
-	}
-	model = strings.TrimSpace(model)
-	if model == "" {
-		return false, nil
-	}
-	peerID = strings.TrimSpace(peerID)
-	if peerID == "" {
-		return false, nil
-	}
-	contact, found, err := lookupMAEPBusinessContact(ctx, maepSvc, contactsSvc, peerID)
-	if err != nil {
-		return false, err
-	}
-	if !found {
-		return false, nil
-	}
-	candidates := buildMAEPSessionPreferenceCandidates(peerID, inboundTopic, sessionID, latestTask, history, now)
-	if len(candidates) == 0 {
-		return false, nil
-	}
-	extractor := contacts.NewLLMFeatureExtractor(client, model)
-	_, changed, err := contactsSvc.RefreshContactPreferences(ctx, now, contact.ContactID, candidates, extractor, reason)
-	if err != nil {
-		return false, err
-	}
-	return changed, nil
+	_ = ctx
+	_ = contactsSvc
+	_ = maepSvc
+	_ = client
+	_ = model
+	_ = peerID
+	_ = inboundTopic
+	_ = sessionID
+	_ = latestTask
+	_ = history
+	_ = now
+	_ = reason
+	return false, nil
 }
 
 func lookupMAEPBusinessContact(ctx context.Context, maepSvc *maep.Service, contactsSvc *contacts.Service, peerID string) (contacts.Contact, bool, error) {
@@ -4002,46 +3923,6 @@ func lookupMAEPBusinessContact(ctx context.Context, maepSvc *maep.Service, conta
 		}
 	}
 	return contacts.Contact{}, false, nil
-}
-
-func buildMAEPSessionPreferenceCandidates(peerID string, inboundTopic string, sessionID string, latestTask string, history []llm.Message, now time.Time) []contacts.ShareCandidate {
-	now = now.UTC()
-	if now.IsZero() {
-		now = time.Now().UTC()
-	}
-	texts := collectMAEPUserUtterances(history, latestTask)
-	if len(texts) == 0 {
-		return nil
-	}
-	topic := "dialogue.session"
-	topics := dedupeNonEmptyStrings([]string{"dialogue", "maep", strings.ToLower(strings.TrimSpace(inboundTopic))})
-	out := make([]contacts.ShareCandidate, 0, len(texts))
-	for i, text := range texts {
-		if strings.TrimSpace(text) == "" {
-			continue
-		}
-		sentAt := now.Add(-time.Duration(len(texts)-i) * time.Second)
-		envelope := map[string]any{
-			"message_id": "msg_" + uuid.NewString(),
-			"text":       strings.TrimSpace(text),
-			"sent_at":    sentAt.Format(time.RFC3339),
-		}
-		if strings.TrimSpace(sessionID) != "" {
-			envelope["session_id"] = strings.TrimSpace(sessionID)
-		}
-		raw, _ := json.Marshal(envelope)
-		out = append(out, contacts.ShareCandidate{
-			ItemID:        "maep_pref_" + uuid.NewString(),
-			Topic:         topic,
-			Topics:        topics,
-			ContentType:   "application/json",
-			PayloadBase64: base64.RawURLEncoding.EncodeToString(raw),
-			SourceRef:     strings.TrimSpace(text),
-			CreatedAt:     sentAt,
-			UpdatedAt:     now,
-		})
-	}
-	return out
 }
 
 func collectMAEPUserUtterances(history []llm.Message, latestTask string) []string {
