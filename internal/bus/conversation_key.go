@@ -5,21 +5,9 @@ import (
 	"strings"
 )
 
-type ConversationScope string
-
-const (
-	ConversationScopeChat    ConversationScope = "chat"
-	ConversationScopeChannel ConversationScope = "channel"
-	ConversationScopePeer    ConversationScope = "peer"
-	ConversationScopeUser    ConversationScope = "user"
-)
-
-func BuildConversationKey(channel Channel, scope ConversationScope, id string) (string, error) {
+func BuildConversationKey(channel Channel, id string) (string, error) {
 	if !isValidChannel(channel) {
 		return "", fmt.Errorf("channel is invalid")
-	}
-	if !isValidConversationScope(scope) {
-		return "", fmt.Errorf("conversation scope is invalid")
 	}
 	id = strings.TrimSpace(id)
 	if id == "" {
@@ -28,23 +16,23 @@ func BuildConversationKey(channel Channel, scope ConversationScope, id string) (
 	if strings.Contains(id, " ") {
 		return "", fmt.Errorf("conversation id must not contain spaces")
 	}
-	return fmt.Sprintf("%s:%s:%s", channel, scope, id), nil
+	return fmt.Sprintf("%s:%s", conversationKeyPrefix(channel), id), nil
 }
 
 func BuildTelegramChatConversationKey(chatID string) (string, error) {
-	return BuildConversationKey(ChannelTelegram, ConversationScopeChat, chatID)
+	return BuildConversationKey(ChannelTelegram, chatID)
 }
 
 func BuildSlackChannelConversationKey(channelID string) (string, error) {
-	return BuildConversationKey(ChannelSlack, ConversationScopeChannel, channelID)
+	return BuildConversationKey(ChannelSlack, channelID)
 }
 
 func BuildDiscordChannelConversationKey(channelID string) (string, error) {
-	return BuildConversationKey(ChannelDiscord, ConversationScopeChannel, channelID)
+	return BuildConversationKey(ChannelDiscord, channelID)
 }
 
 func BuildMAEPPeerConversationKey(peerID string) (string, error) {
-	return BuildConversationKey(ChannelMAEP, ConversationScopePeer, peerID)
+	return BuildConversationKey(ChannelMAEP, peerID)
 }
 
 func isValidChannel(channel Channel) bool {
@@ -56,11 +44,17 @@ func isValidChannel(channel Channel) bool {
 	}
 }
 
-func isValidConversationScope(scope ConversationScope) bool {
-	switch scope {
-	case ConversationScopeChat, ConversationScopeChannel, ConversationScopePeer, ConversationScopeUser:
-		return true
+func conversationKeyPrefix(channel Channel) string {
+	switch channel {
+	case ChannelTelegram:
+		return "tg"
+	case ChannelMAEP:
+		return "maep"
+	case ChannelSlack:
+		return "slack"
+	case ChannelDiscord:
+		return "discord"
 	default:
-		return false
+		return ""
 	}
 }

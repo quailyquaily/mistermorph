@@ -1193,7 +1193,10 @@ func contactAllowedForProactiveReason(contact Contact, now time.Time, opts TickO
 func hasTelegramTarget(contact Contact) bool {
 	for _, raw := range []string{contact.SubjectID, contact.ContactID} {
 		v := strings.TrimSpace(strings.ToLower(raw))
-		if strings.HasPrefix(v, "tg:@") || strings.HasPrefix(v, "tg:id:") {
+		if strings.HasPrefix(v, "tg:@") {
+			return true
+		}
+		if strings.HasPrefix(v, "tg:") && strings.TrimSpace(v[len("tg:"):]) != "" {
 			return true
 		}
 	}
@@ -1346,7 +1349,7 @@ func deriveContactID(contact Contact) string {
 		return v
 	}
 	if v := strings.TrimSpace(contact.PeerID); v != "" {
-		return v
+		return "maep:" + v
 	}
 	return ""
 }

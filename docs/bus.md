@@ -74,13 +74,13 @@ Registered topic allowlist:
 
 ### 2.5 Conversation Key Rules
 Implemented constructors:
-- Telegram chat: `telegram:chat:<chat_id>`
-- MAEP peer: `maep:peer:<peer_id>`
-- Slack channel: `slack:channel:<channel_id>`
-- Discord channel: `discord:channel:<channel_id>`
+- Telegram chat: `tg:<chat_id>`
+- MAEP peer: `maep:<peer_id>`
+- Slack channel: `slack:<channel_id>`
+- Discord channel: `discord:<channel_id>`
 
 Notes:
-- `telegram:user:<username>` is no longer supported in Telegram delivery.
+- `tg:@<username>` is not a Telegram delivery conversation key (delivery requires numeric `tg:<chat_id>`).
 - Slack/Discord constructors exist, while runtime adapters are not yet implemented.
 
 ### 2.6 Adapter Layer (`internal/bus/adapters/*`)

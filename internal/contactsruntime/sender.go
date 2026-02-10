@@ -592,8 +592,11 @@ func ResolveTelegramTarget(contact contacts.Contact, decision contacts.ShareDeci
 	for _, raw := range []string{contact.SubjectID, contact.ContactID} {
 		value := strings.TrimSpace(raw)
 		lower := strings.ToLower(value)
-		if strings.HasPrefix(lower, "tg:id:") {
-			idText := strings.TrimSpace(value[len("tg:id:"):])
+		if strings.HasPrefix(lower, "tg:@") {
+			continue
+		}
+		if strings.HasPrefix(lower, "tg:") {
+			idText := strings.TrimSpace(value[len("tg:"):])
 			chatID, err := strconv.ParseInt(idText, 10, 64)
 			if err != nil {
 				return nil, "", fmt.Errorf("invalid telegram id in %q", raw)

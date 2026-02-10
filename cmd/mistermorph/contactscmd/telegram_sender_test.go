@@ -12,7 +12,7 @@ import (
 func TestResolveTelegramTargetByDecisionChatID(t *testing.T) {
 	now := time.Date(2026, 2, 7, 18, 0, 0, 0, time.UTC)
 	contact := contacts.Contact{
-		ContactID: "tg:id:1001",
+		ContactID: "tg:1001",
 		Kind:      contacts.KindHuman,
 		ChannelEndpoints: []contacts.ChannelEndpoint{
 			{Channel: contacts.ChannelTelegram, Address: "1001", ChatID: 1001, ChatType: "private", LastSeenAt: &now},
@@ -35,7 +35,7 @@ func TestResolveTelegramTargetByDecisionChatID(t *testing.T) {
 func TestResolveTelegramTargetByDecisionChatType(t *testing.T) {
 	now := time.Date(2026, 2, 7, 18, 30, 0, 0, time.UTC)
 	contact := contacts.Contact{
-		ContactID: "tg:id:1001",
+		ContactID: "tg:1001",
 		Kind:      contacts.KindHuman,
 		ChannelEndpoints: []contacts.ChannelEndpoint{
 			{Channel: contacts.ChannelTelegram, Address: "1001", ChatID: 1001, ChatType: "private", LastSeenAt: &now},
@@ -58,7 +58,7 @@ func TestResolveTelegramTargetByDecisionChatType(t *testing.T) {
 func TestResolveTelegramTargetFallsBackToPrivate(t *testing.T) {
 	now := time.Date(2026, 2, 7, 19, 0, 0, 0, time.UTC)
 	contact := contacts.Contact{
-		ContactID: "tg:id:1001",
+		ContactID: "tg:1001",
 		Kind:      contacts.KindHuman,
 		ChannelEndpoints: []contacts.ChannelEndpoint{
 			{Channel: contacts.ChannelTelegram, Address: "-100111", ChatID: -100111, ChatType: "group", LastSeenAt: &now},
@@ -101,7 +101,7 @@ func TestResolveTelegramTargetLegacyUsernameUnsupported(t *testing.T) {
 func TestIsPublicTelegramTarget(t *testing.T) {
 	now := time.Date(2026, 2, 7, 19, 30, 0, 0, time.UTC)
 	contact := contacts.Contact{
-		ContactID: "tg:id:1001",
+		ContactID: "tg:1001",
 		Kind:      contacts.KindHuman,
 		ChannelEndpoints: []contacts.ChannelEndpoint{
 			{Channel: contacts.ChannelTelegram, Address: "1001", ChatID: 1001, ChatType: "private", LastSeenAt: &now},

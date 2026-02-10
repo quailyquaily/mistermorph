@@ -9,8 +9,11 @@ import (
 )
 
 var (
-	refIDPatternA = regexp.MustCompile(`^tg:id:-?\d+$`)
-	refIDPatternB = regexp.MustCompile(`^maep:[A-Za-z0-9._-]+$`)
+	refIDPatternA = regexp.MustCompile(`^tg:-?\d+$`)
+	refIDPatternB = regexp.MustCompile(`^tg:@[A-Za-z0-9_]+$`)
+	refIDPatternC = regexp.MustCompile(`^maep:[A-Za-z0-9._-]+$`)
+	refIDPatternD = regexp.MustCompile(`^slack:[A-Za-z0-9._:-]+$`)
+	refIDPatternE = regexp.MustCompile(`^discord:[A-Za-z0-9._:-]+$`)
 	parenPattern  = regexp.MustCompile(`\(([^()]+)\)`)
 )
 
@@ -244,7 +247,11 @@ func isValidReferenceID(ref string) bool {
 	if ref == "" {
 		return false
 	}
-	if refIDPatternA.MatchString(ref) || refIDPatternB.MatchString(ref) {
+	if refIDPatternA.MatchString(ref) ||
+		refIDPatternB.MatchString(ref) ||
+		refIDPatternC.MatchString(ref) ||
+		refIDPatternD.MatchString(ref) ||
+		refIDPatternE.MatchString(ref) {
 		return true
 	}
 	return false

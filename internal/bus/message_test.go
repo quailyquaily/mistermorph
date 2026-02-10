@@ -183,7 +183,7 @@ func validMessage(t *testing.T) BusMessage {
 		Direction:       DirectionInbound,
 		Channel:         ChannelTelegram,
 		Topic:           TopicChatMessage,
-		ConversationKey: "telegram:chat:123",
+		ConversationKey: "tg:123",
 		ParticipantKey:  "tg:user:42",
 		IdempotencyKey:  "idem_01",
 		CorrelationID:   "corr_01",

@@ -51,7 +51,7 @@ func TestObserveTelegramContact_FallbackToUserID(t *testing.T) {
 		t.Fatalf("observeTelegramContact() error = %v", err)
 	}
 
-	item, ok, err := svc.GetContact(ctx, "tg:id:2002")
+	item, ok, err := svc.GetContact(ctx, "tg:2002")
 	if err != nil {
 		t.Fatalf("GetContact() error = %v", err)
 	}

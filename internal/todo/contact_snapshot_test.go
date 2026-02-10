@@ -46,7 +46,19 @@ func TestLoadContactSnapshot(t *testing.T) {
 	if len(snap.Contacts) != 2 {
 		t.Fatalf("contacts count mismatch: got %d want 2", len(snap.Contacts))
 	}
-	for _, id := range []string{"tg:id:1001", "maep:12D3KooWAlicePeer"} {
+	foundJohn := false
+	for _, item := range snap.Contacts {
+		if strings.EqualFold(item.Name, "John") {
+			foundJohn = true
+			if len(item.Usernames) == 0 || !strings.EqualFold(item.Usernames[0], "john") {
+				t.Fatalf("john usernames mismatch: %#v", item.Usernames)
+			}
+		}
+	}
+	if !foundJohn {
+		t.Fatalf("expected John snapshot item")
+	}
+	for _, id := range []string{"tg:1001", "maep:12D3KooWAlicePeer"} {
 		if !snap.HasReachableID(id) {
 			t.Fatalf("expected reachable id %q", id)
 		}
@@ -55,10 +67,10 @@ func TestLoadContactSnapshot(t *testing.T) {
 
 func TestValidateReachableReferences(t *testing.T) {
 	snap := ContactSnapshot{
-		ReachableIDs: []string{"maep:12D3KooWJohn", "tg:id:1001"},
+		ReachableIDs: []string{"maep:12D3KooWJohn", "tg:1001"},
 	}
 
-	if err := ValidateReachableReferences("提醒 John (tg:id:1001) 明天确认", snap); err != nil {
+	if err := ValidateReachableReferences("提醒 John (tg:1001) 明天确认", snap); err != nil {
 		t.Fatalf("ValidateReachableReferences(snapshot tg id) error = %v", err)
 	}
 	if err := ValidateReachableReferences("提醒 John (maep:12D3KooWJohn) 明天确认", snap); err != nil {

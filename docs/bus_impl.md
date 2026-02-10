@@ -62,13 +62,13 @@ Implemented error codes:
   - `extensions` (typed extension fields)
 
 ### 2.4 Conversation Key Rules
-- Generic constructor: `BuildConversationKey(channel, scope, id)`.
+- Generic constructor: `BuildConversationKey(channel, id)`.
 - Implemented specialized constructors:
   - `BuildTelegramChatConversationKey`
   - `BuildMAEPPeerConversationKey`
   - `BuildSlackChannelConversationKey`
   - `BuildDiscordChannelConversationKey`
-- `telegram:user:<username>` is no longer supported in Telegram delivery.
+- `tg:@<username>` is not a Telegram delivery conversation key (delivery requires numeric `tg:<chat_id>`).
 
 ## 3) Adapter Layer (`internal/bus/adapters`)
 

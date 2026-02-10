@@ -43,7 +43,7 @@ func TestDeliveryAdapterDeliver(t *testing.T) {
 		Direction:       busruntime.DirectionOutbound,
 		Channel:         busruntime.ChannelMAEP,
 		Topic:           busruntime.TopicDMReplyV1,
-		ConversationKey: "maep:peer:12D3KooWpeerC",
+		ConversationKey: "maep:12D3KooWpeerC",
 		ParticipantKey:  "12D3KooWpeerC",
 		IdempotencyKey:  "msg:msg_3001",
 		CorrelationID:   "corr_2",

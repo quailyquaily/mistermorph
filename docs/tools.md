@@ -138,6 +138,7 @@
 |---|---|---|---|---|
 | `action` | `string` | 是 | 无 | `add` 或 `complete`。 |
 | `content` | `string` | 是 | 无 | `add` 时为条目文本；`complete` 时为匹配查询。 |
+| `people` | `array<string>` | 否（`add` 时必填） | 无 | 提及人物列表（通常包含说话者、被称呼者、以及其他提及对象）。 |
 
 返回：
 
@@ -153,8 +154,10 @@
 
 - 受 `tools.todo.enabled` 开关控制。
 - 依赖 LLM 客户端与模型；未绑定会报错。
-- `add` 仅接受可引用 ID：`tg:id:<int64>` 或 `maep:<peer_id>`。
+- `add` 采用“参数抽取 + LLM 插入”流程：工具参数直接提供 `people`，然后由 LLM 结合 `content`、原始用户输入与运行时上下文插入 `名称 (ref_id)`。
+- `add` 仅接受可引用 ID：`tg:<int64>`、`tg:@<username>`、`maep:<peer_id>`、`slack:<channel_id>`、`discord:<channel_id>`。
 - `add` 中的引用 ID 必须存在于联系人快照的 `reachable_ids`。
+- 若 `add` 中部分人物无法映射可引用 ID，工具不会中断，而是回退为“原样写入 content”，并在 `warnings` 中附加 `reference_unresolved_write_raw`。
 - `complete` 仅走 LLM 语义匹配（无程序兜底）；歧义会直接报错。
 
 错误（字符串匹配）：
@@ -168,12 +171,17 @@
 | `todo_update unavailable (missing llm client)` | 未注入 LLM client。 |
 | `todo_update unavailable (missing llm model)` | 未配置模型。 |
 | `invalid reference id:` | 文本里存在非法 `(...)` 引用。 |
-| `missing_reference_id` | LLM 判断有对象提及但缺可引用 ID。 |
+| `missing_reference_id` | 人物提及无法唯一解析为可引用 ID。 |
 | `reference id is not reachable:` | 引用 ID 不在联系人可达集合。 |
 | `no matching todo item in TODO.WIP.md` | `complete` 未命中可完成条目。 |
 | `ambiguous todo item match` | `complete` 命中多个候选。 |
+| `people is required for add action` | `add` 未提供 `people` 参数。 |
+| `people must be an array of strings` | `people` 不是字符串数组。 |
+| `invalid reference_resolve response` | 引用插入 LLM 返回非法 JSON。 |
 | `invalid semantic_match response` | 语义匹配 LLM 返回非法 JSON/结构。 |
 | `invalid semantic_dedup response` | 语义去重 LLM 返回非法 JSON/结构。 |
+
+注：`missing_reference_id` 在当前实现中通常由内部 LLM 解析阶段触发并被工具降级处理为原样写入；若上游直接消费该错误仍可按该字符串识别。
 
 ## `todo_list`
 

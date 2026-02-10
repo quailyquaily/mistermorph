@@ -75,7 +75,7 @@ func TestDeliveryAdapterDeliver(t *testing.T) {
 	}
 }
 
-func TestDeliveryAdapterRejectsTelegramUserConversationKey(t *testing.T) {
+func TestDeliveryAdapterRejectsTelegramUsernameConversationKey(t *testing.T) {
 	t.Parallel()
 
 	calls := 0
@@ -102,7 +102,7 @@ func TestDeliveryAdapterRejectsTelegramUserConversationKey(t *testing.T) {
 		Direction:       busruntime.DirectionOutbound,
 		Channel:         busruntime.ChannelTelegram,
 		Topic:           busruntime.TopicChatMessage,
-		ConversationKey: "telegram:user:alice",
+		ConversationKey: "tg:@alice",
 		ParticipantKey:  "@alice",
 		IdempotencyKey:  "msg:msg_4002",
 		CorrelationID:   "corr_4",
@@ -111,7 +111,7 @@ func TestDeliveryAdapterRejectsTelegramUserConversationKey(t *testing.T) {
 	}
 	accepted, deduped, err := adapter.Deliver(context.Background(), msg)
 	if err == nil {
-		t.Fatalf("Deliver() expected error for telegram:user conversation key")
+		t.Fatalf("Deliver() expected error for tg:@ conversation key")
 	}
 	if !strings.Contains(err.Error(), "telegram conversation key is invalid") {
 		t.Fatalf("Deliver() error mismatch: got %q", err.Error())

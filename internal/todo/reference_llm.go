@@ -4,10 +4,21 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/quailyquaily/mistermorph/llm"
 )
+
+type AddResolveContext struct {
+	Channel          string   `json:"channel,omitempty"`
+	ChatType         string   `json:"chat_type,omitempty"`
+	ChatID           int64    `json:"chat_id,omitempty"`
+	SpeakerUserID    int64    `json:"speaker_user_id,omitempty"`
+	SpeakerUsername  string   `json:"speaker_username,omitempty"`
+	MentionUsernames []string `json:"mention_usernames,omitempty"`
+	UserInputRaw     string   `json:"user_input_raw,omitempty"`
+}
 
 type MissingReference struct {
 	Mention    string `json:"mention"`
@@ -48,7 +59,7 @@ func NewLLMReferenceResolver(client llm.Client, model string) *LLMReferenceResol
 	}
 }
 
-func (r *LLMReferenceResolver) ResolveAddContent(ctx context.Context, content string, snapshot ContactSnapshot) (string, []string, error) {
+func (r *LLMReferenceResolver) ResolveAddContent(ctx context.Context, content string, people []string, snapshot ContactSnapshot, runtime AddResolveContext) (string, []string, error) {
 	if err := r.validateReady(); err != nil {
 		return "", nil, err
 	}
@@ -56,22 +67,62 @@ func (r *LLMReferenceResolver) ResolveAddContent(ctx context.Context, content st
 	if content == "" {
 		return "", nil, fmt.Errorf("content is required")
 	}
+	runtime = normalizeAddResolveContext(runtime)
+	people = normalizePeople(people)
+	if runtime.UserInputRaw == "" {
+		runtime.UserInputRaw = content
+	}
+
+	slog.Default().Debug("todo_reference_resolve_start",
+		"content_len", len(content),
+		"people_count", len(people),
+		"channel", runtime.Channel,
+		"chat_type", runtime.ChatType,
+		"chat_id", runtime.ChatID,
+		"speaker_user_id", runtime.SpeakerUserID,
+		"speaker_username", runtime.SpeakerUsername,
+		"mention_usernames_count", len(runtime.MentionUsernames),
+		"user_input_raw_len", len(runtime.UserInputRaw),
+		"contact_count", len(snapshot.Contacts),
+		"reachable_id_count", len(snapshot.ReachableIDs),
+	)
+
 	payload := map[string]any{
-		"content":      content,
+		"input": map[string]any{
+			"content": content,
+			"people":  people,
+		},
+		"input_raw": runtime.UserInputRaw,
+		"runtime": map[string]any{
+			"channel":           runtime.Channel,
+			"chat_type":         runtime.ChatType,
+			"chat_id":           runtime.ChatID,
+			"speaker_user_id":   runtime.SpeakerUserID,
+			"speaker_username":  runtime.SpeakerUsername,
+			"mention_usernames": runtime.MentionUsernames,
+		},
 		"contacts":     snapshot.Contacts,
 		"allowed_ids":  snapshot.ReachableIDs,
 		"output_rules": []string{"strict_json_only"},
 	}
 	input, _ := json.Marshal(payload)
+
 	systemPrompt := strings.Join([]string{
-		"You rewrite TODO add content by attaching explicit reference IDs to object mentions.",
+		"You rewrite `input.content` by attaching explicit reference IDs to `input.people` mentions.",
 		"Return strict JSON only.",
-		`Output schema: {"status":"ok","rewritten_content":"...","warnings":["..."]} OR {"status":"missing_reference_id","missing":[{"mention":"...","suggestion":"Name (id)","reason":"..."}]}.`,
-		"Preserve the original language and intent.",
-		"If a mentioned object can be resolved to one allowed_id, rewrite as Name (id).",
-		"If any mentioned object lacks a resolvable allowed_id, return status=missing_reference_id.",
+		`Output schema: { "status":"ok","rewritten_content":"..." }`,
+		"Use `content` as the target text to rewrite.",
+		"Use `contacts` as the primary list of people to resolve.",
+		"Use `input_raw` and `runtime` context for disambiguation.",
+		"Must consider first-person references with speaker context: ",
+		"- if the speaker mention themselves (like 'I', 'me', '$SPEAKER'), resolve to their own contact if available; similarly, resolve mentions of the speaker's direct interlocutors to those contacts if available;",
+		"Attach IDs as `Name (id)` where id is from allowed_ids, example input:",
+		"Notice $SPEAKER to tell Alice invites Bob to the meeting of Lucy.",
+		"and rewritten content (assume the $SPEAKER is 'Lyric'): ",
+		"Notice Lyric (tg:98765) to tell Alice (tg:12345) invites Bob (maep:a1b2c3d4e5) to the meeting of Lucy (tg:@lucy).",
+		"If any person in `people` cannot be uniquely resolved to one allowed id, keep it in the rewritten content in the same form",
 		"Never invent IDs that are not listed in allowed_ids.",
-		"When content already has valid references, keep it stable.",
+		"Preserve original language and intent. Keep the sentence natural.",
 	}, " ")
 
 	res, err := r.Client.Chat(ctx, llm.Request{
@@ -87,6 +138,7 @@ func (r *LLMReferenceResolver) ResolveAddContent(ctx context.Context, content st
 		},
 	})
 	if err != nil {
+		slog.Default().Debug("todo_reference_resolve_failed", "error", err.Error())
 		return "", nil, err
 	}
 
@@ -97,6 +149,7 @@ func (r *LLMReferenceResolver) ResolveAddContent(ctx context.Context, content st
 		Missing   []MissingReference `json:"missing,omitempty"`
 	}
 	if err := decodeStrictJSON(res.Text, &out); err != nil {
+		slog.Default().Debug("todo_reference_resolve_failed", "error", err.Error())
 		return "", nil, fmt.Errorf("invalid reference_resolve response: %w", err)
 	}
 
@@ -104,17 +157,27 @@ func (r *LLMReferenceResolver) ResolveAddContent(ctx context.Context, content st
 	case "ok":
 		rewritten := strings.TrimSpace(out.Rewritten)
 		if rewritten == "" {
-			return "", nil, fmt.Errorf("reference_resolve returned empty rewritten_content")
+			err := fmt.Errorf("reference_resolve returned empty rewritten_content")
+			slog.Default().Debug("todo_reference_resolve_failed", "error", err.Error())
+			return "", nil, err
 		}
-		return rewritten, normalizeWarnings(out.Warnings), nil
+		warnings := normalizeWarnings(out.Warnings)
+		slog.Default().Debug("todo_reference_resolve_ok",
+			"rewritten", rewritten,
+			"warnings_count", len(warnings),
+		)
+		return rewritten, warnings, nil
 	case "missing_reference_id":
 		items := normalizeMissingReferences(out.Missing)
+		slog.Default().Debug("todo_reference_missing_ids", "count", len(items))
 		if len(items) == 0 {
 			return "", nil, &MissingReferenceIDError{}
 		}
 		return "", nil, &MissingReferenceIDError{Items: items}
 	default:
-		return "", nil, fmt.Errorf("invalid reference_resolve status: %s", strings.TrimSpace(out.Status))
+		err := fmt.Errorf("invalid reference_resolve status: %s", strings.TrimSpace(out.Status))
+		slog.Default().Debug("todo_reference_resolve_failed", "error", err.Error())
+		return "", nil, err
 	}
 }
 
@@ -126,6 +189,48 @@ func (r *LLMReferenceResolver) validateReady() error {
 		return fmt.Errorf("todo reference resolver missing llm model")
 	}
 	return nil
+}
+
+func normalizeAddResolveContext(in AddResolveContext) AddResolveContext {
+	out := AddResolveContext{
+		Channel:       strings.ToLower(strings.TrimSpace(in.Channel)),
+		ChatType:      strings.ToLower(strings.TrimSpace(in.ChatType)),
+		ChatID:        in.ChatID,
+		SpeakerUserID: in.SpeakerUserID,
+		UserInputRaw:  strings.TrimSpace(in.UserInputRaw),
+		SpeakerUsername: func() string {
+			v := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(in.SpeakerUsername), "@"))
+			if v == "" {
+				return ""
+			}
+			return strings.ToLower(v)
+		}(),
+	}
+	if len(in.MentionUsernames) > 0 {
+		out.MentionUsernames = normalizePeople(in.MentionUsernames)
+	}
+	return out
+}
+
+func normalizePeople(input []string) []string {
+	if len(input) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(input))
+	seen := make(map[string]bool, len(input))
+	for _, raw := range input {
+		v := strings.TrimSpace(raw)
+		if v == "" {
+			continue
+		}
+		key := strings.ToLower(v)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, v)
+	}
+	return out
 }
 
 func normalizeMissingReferences(items []MissingReference) []MissingReference {

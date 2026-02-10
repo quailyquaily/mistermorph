@@ -48,7 +48,7 @@ func TestStoreAddAndComplete(t *testing.T) {
 	now := time.Date(2026, 2, 9, 10, 0, 0, 0, time.UTC)
 	store.Now = func() time.Time { return now }
 
-	addRes, err := store.Add(context.Background(), "帮 John (tg:id:1001) 发消息给 Momo (maep:12D3KooWPeer)")
+	addRes, err := store.Add(context.Background(), "帮 John (tg:1001) 发消息给 Momo (maep:12D3KooWPeer)")
 	if err != nil {
 		t.Fatalf("Add() error = %v", err)
 	}

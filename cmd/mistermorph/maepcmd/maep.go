@@ -836,7 +836,7 @@ func observeMAEPContact(ctx context.Context, maepSvc *maep.Service, contactsSvc 
 	canonicalContactID := chooseBusinessContactID(nodeID, peerID)
 	candidateIDs := []string{canonicalContactID}
 	if peerID != "" {
-		candidateIDs = append(candidateIDs, "maep:"+peerID, peerID)
+		candidateIDs = append(candidateIDs, "maep:"+peerID)
 	}
 	var existing contacts.Contact
 	found := false

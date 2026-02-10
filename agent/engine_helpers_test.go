@@ -5,7 +5,7 @@ import "testing"
 func TestToolArgsSummary_ContactsSendSafeSummary(t *testing.T) {
 	opts := DefaultLogOptions()
 	params := map[string]any{
-		"contact_id":     "tg:id:1001",
+		"contact_id":     "tg:1001",
 		"topic":          "share.proactive.v1",
 		"message_text":   "private content should not be logged",
 		"source_chat_id": float64(12345),
@@ -15,7 +15,7 @@ func TestToolArgsSummary_ContactsSendSafeSummary(t *testing.T) {
 	if got == nil {
 		t.Fatalf("summary should not be nil")
 	}
-	if got["contact_id"] != "tg:id:1001" {
+	if got["contact_id"] != "tg:1001" {
 		t.Fatalf("unexpected contact_id summary: %#v", got["contact_id"])
 	}
 	if got["topic"] != "share.proactive.v1" {
@@ -50,7 +50,7 @@ func TestToolArgsSummary_ContactsList(t *testing.T) {
 func TestToolArgsSummary_ContactsUpsertSafeSummary(t *testing.T) {
 	opts := DefaultLogOptions()
 	got := toolArgsSummary("contacts_upsert", map[string]any{
-		"contact_id":         "tg:id:1001",
+		"contact_id":         "tg:1001",
 		"kind":               "human",
 		"status":             "active",
 		"timezone":           "America/New_York",
@@ -60,7 +60,7 @@ func TestToolArgsSummary_ContactsUpsertSafeSummary(t *testing.T) {
 	if got == nil {
 		t.Fatalf("upsert summary should not be nil")
 	}
-	if got["contact_id"] != "tg:id:1001" {
+	if got["contact_id"] != "tg:1001" {
 		t.Fatalf("unexpected contact_id summary: %#v", got["contact_id"])
 	}
 	if got["kind"] != "human" {

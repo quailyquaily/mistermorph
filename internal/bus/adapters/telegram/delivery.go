@@ -55,7 +55,7 @@ func (a *DeliveryAdapter) Deliver(ctx context.Context, msg busruntime.BusMessage
 }
 
 func chatIDFromConversationKey(conversationKey string) (int64, error) {
-	const prefix = "telegram:chat:"
+	const prefix = "tg:"
 	if !strings.HasPrefix(conversationKey, prefix) {
 		return 0, fmt.Errorf("telegram conversation key is invalid")
 	}

@@ -459,10 +459,10 @@ func TestServiceRunTickDecisionCarriesSourceChatHints(t *testing.T) {
 	now := time.Date(2026, 2, 7, 15, 0, 0, 0, time.UTC)
 
 	_, err := svc.UpsertContact(ctx, Contact{
-		ContactID:          "tg:id:1001",
+		ContactID:          "tg:1001",
 		Kind:               KindHuman,
 		Status:             StatusActive,
-		SubjectID:          "tg:id:1001",
+		SubjectID:          "tg:1001",
 		UnderstandingDepth: 30,
 		ReciprocityNorm:    0.4,
 		ChannelEndpoints: []ChannelEndpoint{
@@ -586,10 +586,10 @@ func TestServiceRunTickHumanPublicDisabledSkipsPublicCandidate(t *testing.T) {
 	now := time.Date(2026, 2, 7, 16, 30, 0, 0, time.UTC)
 
 	_, err := svc.UpsertContact(ctx, Contact{
-		ContactID:          "tg:id:1001",
+		ContactID:          "tg:1001",
 		Kind:               KindHuman,
 		Status:             StatusActive,
-		SubjectID:          "tg:id:1001",
+		SubjectID:          "tg:1001",
 		UnderstandingDepth: 20,
 		ReciprocityNorm:    0.4,
 		ChannelEndpoints: []ChannelEndpoint{

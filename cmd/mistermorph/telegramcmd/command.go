@@ -1591,6 +1591,15 @@ func runTelegramTask(ctx context.Context, logger *slog.Logger, logOpts agent.Log
 	}
 	registerPlanTool(reg, client, model)
 	toolsutil.BindTodoUpdateToolLLM(reg, client, model)
+	toolsutil.SetTodoUpdateToolAddContext(reg, todo.AddResolveContext{
+		Channel:          "telegram",
+		ChatType:         job.ChatType,
+		ChatID:           job.ChatID,
+		SpeakerUserID:    job.FromUserID,
+		SpeakerUsername:  job.FromUsername,
+		MentionUsernames: append([]string(nil), job.MentionUsers...),
+		UserInputRaw:     job.Text,
+	})
 	reg.Register(newTelegramSendVoiceTool(api, job.ChatID, fileCacheDir, filesMaxBytes, nil))
 	if filesEnabled && api != nil {
 		reg.Register(newTelegramSendFileTool(api, job.ChatID, fileCacheDir, filesMaxBytes))
@@ -3786,7 +3795,7 @@ func telegramMemoryContactID(username string, userID int64) string {
 		return "tg:@" + username
 	}
 	if userID > 0 {
-		return fmt.Sprintf("tg:id:%d", userID)
+		return fmt.Sprintf("tg:%d", userID)
 	}
 	return ""
 }
@@ -3820,7 +3829,7 @@ func observeMAEPContact(ctx context.Context, maepSvc *maep.Service, contactsSvc 
 	canonicalContactID := chooseBusinessContactID(nodeID, peerID)
 	candidateIDs := []string{canonicalContactID}
 	if peerID != "" {
-		candidateIDs = append(candidateIDs, "maep:"+peerID, peerID)
+		candidateIDs = append(candidateIDs, "maep:"+peerID)
 	}
 
 	var existing contacts.Contact
@@ -3976,7 +3985,7 @@ func lookupMAEPBusinessContact(ctx context.Context, maepSvc *maep.Service, conta
 			nodeID = strings.TrimSpace(item.NodeID)
 		}
 	}
-	ids := []string{chooseBusinessContactID(nodeID, peerID), "maep:" + peerID, peerID}
+	ids := []string{chooseBusinessContactID(nodeID, peerID), "maep:" + peerID}
 	seen := map[string]bool{}
 	for _, raw := range ids {
 		contactID := strings.TrimSpace(raw)

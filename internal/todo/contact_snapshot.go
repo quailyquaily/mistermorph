@@ -20,6 +20,7 @@ type ContactSnapshotItem struct {
 	ContactID    string   `json:"contact_id,omitempty"`
 	Name         string   `json:"name"`
 	Aliases      []string `json:"aliases,omitempty"`
+	Usernames    []string `json:"usernames,omitempty"`
 	ReachableIDs []string `json:"reachable_ids"`
 	PreferredID  string   `json:"preferred_id,omitempty"`
 }
@@ -60,11 +61,16 @@ func LoadContactSnapshot(ctx context.Context, contactsDir string) (ContactSnapsh
 			extractTelegramAlias(item.ContactID),
 			extractTelegramAlias(item.SubjectID),
 		})
+		usernames := dedupeSortedStrings([]string{
+			extractTelegramAlias(item.ContactID),
+			extractTelegramAlias(item.SubjectID),
+		})
 		preferred := choosePreferredID(item, reachable)
 		out.Contacts = append(out.Contacts, ContactSnapshotItem{
 			ContactID:    strings.TrimSpace(item.ContactID),
 			Name:         name,
 			Aliases:      aliases,
+			Usernames:    usernames,
 			ReachableIDs: reachable,
 			PreferredID:  preferred,
 		})
@@ -173,7 +179,7 @@ func contactReachableIDs(item contacts.Contact) []string {
 		switch channel {
 		case contacts.ChannelTelegram:
 			if ep.ChatID != 0 {
-				appendID(fmt.Sprintf("tg:id:%d", ep.ChatID))
+				appendID(fmt.Sprintf("tg:%d", ep.ChatID))
 			}
 		case contacts.ChannelMAEP:
 			addr := strings.TrimSpace(ep.Address)

@@ -167,10 +167,10 @@ func TestFileStoreNormalizesChannelEndpoints(t *testing.T) {
 	oldSeen := now.Add(-1 * time.Hour)
 	newSeen := now.Add(-10 * time.Minute)
 	input := Contact{
-		ContactID:          "tg:id:1001",
+		ContactID:          "tg:1001",
 		Kind:               KindHuman,
 		Status:             StatusActive,
-		SubjectID:          "tg:id:1001",
+		SubjectID:          "tg:1001",
 		UnderstandingDepth: 20,
 		ReciprocityNorm:    0.4,
 		ChannelEndpoints: []ChannelEndpoint{
@@ -184,7 +184,7 @@ func TestFileStoreNormalizesChannelEndpoints(t *testing.T) {
 		t.Fatalf("PutContact() error = %v", err)
 	}
 
-	got, ok, err := store.GetContact(ctx, "tg:id:1001")
+	got, ok, err := store.GetContact(ctx, "tg:1001")
 	if err != nil {
 		t.Fatalf("GetContact() error = %v", err)
 	}

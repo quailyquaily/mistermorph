@@ -137,7 +137,7 @@ func resolvePeerID(msg busruntime.BusMessage) (string, error) {
 	if peerID != "" {
 		return peerID, nil
 	}
-	const prefix = "maep:peer:"
+	const prefix = "maep:"
 	if !strings.HasPrefix(msg.ConversationKey, prefix) {
 		return "", fmt.Errorf("participant_key is required for maep message")
 	}

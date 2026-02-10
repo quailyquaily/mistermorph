@@ -101,7 +101,7 @@ func TestEventFromBusMessage(t *testing.T) {
 		Direction:       busruntime.DirectionInbound,
 		Channel:         busruntime.ChannelMAEP,
 		Topic:           busruntime.TopicDMReplyV1,
-		ConversationKey: "maep:peer:12D3KooWpeerB",
+		ConversationKey: "maep:12D3KooWpeerB",
 		ParticipantKey:  "12D3KooWpeerB",
 		IdempotencyKey:  "msg:msg_2001",
 		CorrelationID:   "corr_1",
