@@ -10,7 +10,6 @@
 
 ## Contacts Proactive Check
 
-- Use `memory_recently` first (`days=3`, `limit=20`) to load recent context and routing clues.
 - Use `read_file` to read `file_state_dir/contacts/ACTIVE.md`, then select contacts for the current round.
 - Send selected items using `contacts_send` (one send call per selected contact).
 - Session feedback states are updated by runtime program flow (no LLM tool call needed).

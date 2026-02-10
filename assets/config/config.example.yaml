@@ -151,12 +151,6 @@ tools:
     enabled: true
     # Max bytes allowed per write_file call.
     max_bytes: 524288
-  memory:
-    # Enable memory tools.
-    enabled: true
-    recently:
-      # Max items returned by memory_recently.
-      max_items: 50
   contacts:
     # Enable contacts tool (contacts_send).
     enabled: true

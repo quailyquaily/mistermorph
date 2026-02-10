@@ -38,8 +38,6 @@ func registryFromViper() *tools.Registry {
 	viper.SetDefault("tools.web_search.base_url", "https://duckduckgo.com/html/")
 	viper.SetDefault("tools.contacts.enabled", true)
 	viper.SetDefault("tools.todo.enabled", true)
-	viper.SetDefault("tools.memory.enabled", true)
-	viper.SetDefault("tools.memory.recently.max_items", 50)
 
 	userAgent := strings.TrimSpace(viper.GetString("user_agent"))
 
@@ -151,15 +149,6 @@ func registryFromViper() *tools.Registry {
 			statepaths.TODOWIPPath(),
 			statepaths.TODODONEPath(),
 			statepaths.ContactsDir(),
-		))
-	}
-
-	if viper.GetBool("tools.memory.enabled") {
-		r.Register(builtin.NewMemoryRecentlyTool(
-			true,
-			statepaths.MemoryDir(),
-			viper.GetInt("memory.short_term_days"),
-			viper.GetInt("tools.memory.recently.max_items"),
 		))
 	}
 

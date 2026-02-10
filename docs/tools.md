@@ -10,7 +10,6 @@
   - `bash`
   - `url_fetch`
   - `web_search`
-  - `memory_recently`
   - `todo_update`
   - `contacts_send`
 - 条件注册
@@ -100,18 +99,6 @@
 |---|---|---|---|---|
 | `q` | `string` | 是 | 无 | 搜索关键词。 |
 | `max_results` | `integer` | 否 | `tools.web_search.max_results` | 返回结果上限（代码侧最大 20）。 |
-
-## `memory_recently`
-
-用途：读取最近短期记忆，返回摘要与元信息。
-
-参数：
-
-| 参数 | 类型 | 必填 | 默认值 | 说明 |
-|---|---|---|---|---|
-| `days` | `integer` | 否 | `3` | 时间窗口（天）。 |
-| `limit` | `integer` | 否 | `tools.memory.recently.max_items` | 返回条数上限。 |
-| `include_body` | `boolean` | 否 | `false` | 是否附带解析后的 body。 |
 
 ## `todo_update`
 

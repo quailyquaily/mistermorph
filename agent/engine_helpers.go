@@ -2,9 +2,7 @@ package agent
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
-	"strconv"
 	"strings"
 
 	"github.com/quailyquaily/mistermorph/llm"
@@ -74,16 +72,6 @@ func toolArgsSummary(toolName string, params map[string]any, opts LogOptions) ma
 		if v, ok := params["q"].(string); ok && strings.TrimSpace(v) != "" {
 			out["q"] = truncateString(strings.TrimSpace(v), opts.MaxStringValueChars)
 		}
-	case "memory_recently":
-		if v, ok := summaryInt(params, "days"); ok {
-			out["days"] = v
-		}
-		if v, ok := summaryInt(params, "limit"); ok {
-			out["limit"] = v
-		}
-		if v, ok := params["include_body"].(bool); ok {
-			out["include_body"] = v
-		}
 	case "read_file":
 		if v, ok := params["path"].(string); ok && strings.TrimSpace(v) != "" {
 			out["path"] = truncateString(strings.TrimSpace(v), opts.MaxStringValueChars)
@@ -113,77 +101,4 @@ func toolArgsSummary(toolName string, params map[string]any, opts LogOptions) ma
 		return nil
 	}
 	return out
-}
-
-func summaryInt(params map[string]any, key string) (int64, bool) {
-	raw, ok := params[key]
-	if !ok || raw == nil {
-		return 0, false
-	}
-	switch x := raw.(type) {
-	case int:
-		return int64(x), true
-	case int8:
-		return int64(x), true
-	case int16:
-		return int64(x), true
-	case int32:
-		return int64(x), true
-	case int64:
-		return x, true
-	case uint:
-		return int64(x), true
-	case uint8:
-		return int64(x), true
-	case uint16:
-		return int64(x), true
-	case uint32:
-		return int64(x), true
-	case uint64:
-		return int64(x), true
-	case float32:
-		return int64(x), true
-	case float64:
-		return int64(x), true
-	case string:
-		text := strings.TrimSpace(x)
-		if text == "" {
-			return 0, false
-		}
-		n, err := strconv.ParseInt(text, 10, 64)
-		return n, err == nil
-	default:
-		text := strings.TrimSpace(fmt.Sprintf("%v", x))
-		if text == "" {
-			return 0, false
-		}
-		n, err := strconv.ParseInt(text, 10, 64)
-		return n, err == nil
-	}
-}
-
-func summaryFloat(params map[string]any, key string) (float64, bool) {
-	raw, ok := params[key]
-	if !ok || raw == nil {
-		return 0, false
-	}
-	switch x := raw.(type) {
-	case float32:
-		return float64(x), true
-	case float64:
-		return x, true
-	case int:
-		return float64(x), true
-	case int64:
-		return float64(x), true
-	case string:
-		text := strings.TrimSpace(x)
-		if text == "" {
-			return 0, false
-		}
-		n, err := strconv.ParseFloat(text, 64)
-		return n, err == nil
-	default:
-		return 0, false
-	}
 }
