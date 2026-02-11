@@ -1,7 +1,5 @@
 # Documentation Index
 
-Mister Morph 文档主入口。
-
 ## Core Docs
 
 - [Prompt System](./prompt.md)
