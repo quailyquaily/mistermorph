@@ -12,7 +12,7 @@ import (
 
 const (
 	defaultShortSummary = "Session updated."
-	defaultLongSummary  = "Long-term memory."
+	defaultLongSummary  = "Most important and stable long-term facts and project state."
 	longTermMaxItems    = 100
 	longTermMaxChars    = 3000
 )
@@ -105,6 +105,9 @@ func (m *Manager) LoadShortTerm(date time.Time, sessionID string) (Frontmatter, 
 func (m *Manager) UpdateLongTerm(subjectID string, promote PromoteDraft) (bool, error) {
 	if m == nil {
 		return false, fmt.Errorf("nil memory manager")
+	}
+	if _, err := m.ensureLongTermIndex(subjectID); err != nil {
+		return false, err
 	}
 	if len(promote.GoalsProjects) == 0 && len(promote.KeyFacts) == 0 {
 		return false, nil

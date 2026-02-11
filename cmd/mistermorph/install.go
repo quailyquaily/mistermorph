@@ -20,7 +20,7 @@ import (
 func newInstallCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "install [dir]",
-		Short: "Install config.yaml, HEARTBEAT.md, TOOLS.md, IDENTITY.md, SOUL.md, TODO templates, contacts templates, and built-in skills",
+		Short: "Install config.yaml, HEARTBEAT.md, TOOLS.md, IDENTITY.md, SOUL.md, TODO templates, contacts templates, memory template, and built-in skills",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dir, err := resolveInstallDir(args)
@@ -72,6 +72,15 @@ func newInstallCmd() *cobra.Command {
 			writeContactsInactive := true
 			if _, err := os.Stat(contactsInactivePath); err == nil {
 				writeContactsInactive = false
+			}
+			memoryDirName := strings.TrimSpace(viper.GetString("memory.dir_name"))
+			if memoryDirName == "" {
+				memoryDirName = "memory"
+			}
+			memoryIndexPath := filepath.Join(dir, memoryDirName, "index.md")
+			writeMemoryIndex := true
+			if _, err := os.Stat(memoryIndexPath); err == nil {
+				writeMemoryIndex = false
 			}
 
 			identityPath := filepath.Join(dir, "IDENTITY.md")
@@ -139,6 +148,12 @@ func newInstallCmd() *cobra.Command {
 					Path:   contactsInactivePath,
 					Write:  writeContactsInactive,
 					Loader: loadContactsInactiveTemplate,
+				},
+				{
+					Name:   "memory/index.md",
+					Path:   memoryIndexPath,
+					Write:  writeMemoryIndex,
+					Loader: loadMemoryIndexTemplate,
 				},
 				{
 					Name:   "IDENTITY.md",
@@ -290,6 +305,14 @@ func loadContactsInactiveTemplate() (string, error) {
 	data, err := assets.ConfigFS.ReadFile("config/contacts/INACTIVE.md")
 	if err != nil {
 		return "", fmt.Errorf("read embedded contacts/INACTIVE.md: %w", err)
+	}
+	return string(data), nil
+}
+
+func loadMemoryIndexTemplate() (string, error) {
+	data, err := assets.ConfigFS.ReadFile("config/memory/index.md")
+	if err != nil {
+		return "", fmt.Errorf("read embedded memory/index.md: %w", err)
 	}
 	return string(data), nil
 }

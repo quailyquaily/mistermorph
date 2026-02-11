@@ -38,6 +38,9 @@ func TestInstallWritesIdentityAndSoulUnderStateDir(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(stateDir, "SOUL.md")); err != nil {
 		t.Fatalf("SOUL.md should exist under state dir: %v", err)
 	}
+	if _, err := os.Stat(filepath.Join(stateDir, "memory", "index.md")); err != nil {
+		t.Fatalf("memory/index.md should exist under state dir: %v", err)
+	}
 	if _, err := os.Stat(filepath.Join(workspaceDir, "IDENTITY.md")); !os.IsNotExist(err) {
 		t.Fatalf("IDENTITY.md should not be created in workspace root, err=%v", err)
 	}
@@ -84,6 +87,9 @@ func TestInstallUsesConfiguredStateDirWhenArgMissing(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(stateDir, "SOUL.md")); err != nil {
 		t.Fatalf("SOUL.md should exist under configured file_state_dir: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(stateDir, "memory", "index.md")); err != nil {
+		t.Fatalf("memory/index.md should exist under configured file_state_dir: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(workspaceDir, "IDENTITY.md")); !os.IsNotExist(err) {
 		t.Fatalf("IDENTITY.md should not be created in workspace root, err=%v", err)
@@ -249,5 +255,18 @@ func TestLoadContactsInactiveTemplate(t *testing.T) {
 	}
 	if !strings.Contains(body, "# Inactive Contacts") {
 		t.Fatalf("contacts INACTIVE template seems invalid")
+	}
+}
+
+func TestLoadMemoryIndexTemplate(t *testing.T) {
+	body, err := loadMemoryIndexTemplate()
+	if err != nil {
+		t.Fatalf("loadMemoryIndexTemplate() error = %v", err)
+	}
+	if body == "" {
+		t.Fatalf("expected non-empty memory index template")
+	}
+	if !strings.Contains(body, "# Long-Term Memory") {
+		t.Fatalf("memory index template seems invalid")
 	}
 }

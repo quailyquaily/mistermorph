@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 )
 
 func (m *Manager) BuildInjection(subjectID string, reqCtx RequestContext, maxItems int) (string, error) {
@@ -34,24 +35,54 @@ func (m *Manager) BuildInjection(subjectID string, reqCtx RequestContext, maxIte
 }
 
 func (m *Manager) LoadLongTermSummary(subjectID string) (string, error) {
-	abs, _ := m.LongTermPath(subjectID)
+	abs, err := m.ensureLongTermIndex(subjectID)
+	if err != nil {
+		return "", err
+	}
 	if abs == "" {
 		return "", nil
 	}
 	data, err := os.ReadFile(abs)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return "", nil
-		}
 		return "", err
 	}
 	fm, body, ok := ParseFrontmatter(string(data))
+	content := ParseLongTermContent(body)
+	if len(content.Goals) == 0 && len(content.Facts) == 0 {
+		return "", nil
+	}
 	if ok && strings.TrimSpace(fm.Summary) != "" {
 		return strings.TrimSpace(fm.Summary), nil
 	}
-	content := ParseLongTermContent(body)
 	summary := summarizeLongTerm(content)
 	return strings.TrimSpace(summary), nil
+}
+
+func (m *Manager) ensureLongTermIndex(subjectID string) (string, error) {
+	abs, _ := m.LongTermPath(subjectID)
+	if abs == "" {
+		return "", nil
+	}
+	_, err := os.Stat(abs)
+	if err == nil {
+		return abs, nil
+	}
+	if !os.IsNotExist(err) {
+		return "", err
+	}
+
+	now := m.nowUTC()
+	fm := Frontmatter{
+		CreatedAt: now.Format(time.RFC3339),
+		UpdatedAt: now.Format(time.RFC3339),
+		Summary:   defaultLongSummary,
+		Tasks:     "0/0",
+	}
+	body := BuildLongTermBody(LongTermContent{})
+	if err := writeMemoryFile(abs, RenderFrontmatter(fm)+"\n"+body); err != nil {
+		return "", err
+	}
+	return abs, nil
 }
 
 func (m *Manager) LoadShortTermSummaries(days int) ([]ShortTermSummary, error) {
