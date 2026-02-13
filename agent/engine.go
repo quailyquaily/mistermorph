@@ -85,12 +85,9 @@ func WithSkillAuthProfiles(authProfiles []string, enforce bool) Option {
 }
 
 type Config struct {
-	MaxSteps         int
-	MaxTokenBudget   int
-	ParseRetries     int
-	IntentEnabled    bool
-	IntentTimeout    time.Duration
-	IntentMaxHistory int
+	MaxSteps       int
+	MaxTokenBudget int
+	ParseRetries   int
 }
 
 type Engine struct {
@@ -120,12 +117,6 @@ func New(client llm.Client, registry *tools.Registry, cfg Config, spec PromptSpe
 	}
 	if cfg.ParseRetries < 0 {
 		cfg.ParseRetries = 0
-	}
-	if cfg.IntentTimeout <= 0 {
-		cfg.IntentTimeout = 8 * time.Second
-	}
-	if cfg.IntentMaxHistory <= 0 {
-		cfg.IntentMaxHistory = 8
 	}
 	if spec.Identity == "" {
 		spec = DefaultPromptSpec()
@@ -159,49 +150,16 @@ func (e *Engine) Run(ctx context.Context, task string, opts RunOptions) (*Final,
 	log := e.log.With("run_id", runID, "model", model)
 	log.Info("run_start", "task_len", len(task))
 
-	var intent Intent
-	hasIntent := false
-	if e.config.IntentEnabled && !isHeartbeatMeta(opts.Meta) {
-		intentCtx := ctx
-		var cancel context.CancelFunc
-		if e.config.IntentTimeout > 0 {
-			intentCtx, cancel = context.WithTimeout(ctx, e.config.IntentTimeout)
-		}
-		if cancel != nil {
-			defer cancel()
-		}
-		inferred, err := InferIntent(intentCtx, e.client, model, task, opts.History, e.config.IntentMaxHistory)
-		if err != nil {
-			log.Warn("intent_infer_error", "error", err.Error())
-		} else if !inferred.Empty() {
-			intent = inferred
-			hasIntent = true
-			log.Debug("intent_inferred",
-				"goal", truncateString(intent.Goal, 120),
-				"deliverable", truncateString(intent.Deliverable, 120),
-				"question", intent.Question,
-				"request", intent.Request,
-				"ask", intent.Ask,
-			)
-		}
-	}
-
 	var systemPrompt string
 	if e.promptBuilder != nil {
 		systemPrompt = e.promptBuilder(e.registry, task)
 	} else {
 		spec := augmentPromptSpecForTask(e.spec, task)
 		spec = augmentPromptSpecForRegistry(spec, e.registry)
-		if hasIntent {
-			spec.Blocks = append(spec.Blocks, IntentBlock(intent))
-		}
 		systemPrompt = BuildSystemPrompt(e.registry, spec)
 	}
 
 	messages := []llm.Message{{Role: "system", Content: systemPrompt}}
-	if hasIntent && e.promptBuilder != nil {
-		messages = append(messages, llm.Message{Role: "system", Content: IntentSystemMessage(intent)})
-	}
 	for _, m := range opts.History {
 		if strings.TrimSpace(strings.ToLower(m.Role)) == "system" {
 			continue

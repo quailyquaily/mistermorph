@@ -65,17 +65,11 @@ func initViperDefaults() {
 	viper.SetDefault("telegram.smart_addressing_confidence", 0.55)
 	viper.SetDefault("telegram.talkative_addressing_confidence", 0.55)
 	viper.SetDefault("telegram.max_concurrency", 3)
-	viper.SetDefault("telegram.reactions.enabled", true)
 	viper.SetDefault("telegram.with_maep", false)
 
 	// Heartbeat
 	viper.SetDefault("heartbeat.enabled", true)
 	viper.SetDefault("heartbeat.interval", 30*time.Minute)
-
-	// Intent inference
-	viper.SetDefault("intent.enabled", true)
-	viper.SetDefault("intent.timeout", 8*time.Second)
-	viper.SetDefault("intent.max_history", 8)
 
 	// Long-term memory (Phase 1)
 	viper.SetDefault("memory.enabled", true)

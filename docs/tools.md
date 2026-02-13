@@ -257,14 +257,13 @@
 |---|---|---|---|---|
 | `chat_id` | `integer` | 否 | 当前上下文 chat | 目标 Telegram chat_id。 |
 | `message_id` | `integer` | 否 | 触发消息 ID | 要添加 reaction 的消息 ID。 |
-| `emoji` | `string` | 是 | 无 | reaction emoji（必须在 allow list 内）。 |
+| `emoji` | `string` | 是 | 无 | reaction emoji。 |
 | `is_big` | `boolean` | 否 | 空 | 是否使用 Telegram 大号 reaction。 |
 
 约束：
 
 - 仅在 Telegram 模式可用。
-- 该工具仅在 `telegram.reactions.enabled=true` 且当前上下文存在 `message_id` 时注入。
-- `emoji` 必须命中 allow list（当前默认集合：`👀`、`👍`、`🎉`、`🙏`、`👎`、`👌`、`😊`）。
+- 该工具在 Telegram 模式可用，且需存在 `message_id` 上下文（或显式传入）。
 
 ## 备注
 

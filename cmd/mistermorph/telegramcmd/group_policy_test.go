@@ -2,15 +2,10 @@ package telegramcmd
 
 import (
 	"context"
-	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/quailyquaily/mistermorph/agent"
-	"github.com/quailyquaily/mistermorph/llm"
-	"github.com/quailyquaily/mistermorph/tools"
 )
 
 func TestGroupTriggerDecision_ReplyPath(t *testing.T) {
@@ -169,76 +164,6 @@ func TestApplyTelegramGroupRuntimePromptRules_GroupOnly(t *testing.T) {
 	if len(privateSpec.Blocks) != 0 || len(privateSpec.Rules) != 0 {
 		t.Fatalf("non-group chat must not inject group policy rules")
 	}
-}
-
-func TestRunTelegramTask_PreflightReactionNoTextReply(t *testing.T) {
-	var reactionCalls int
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost || !strings.HasSuffix(r.URL.Path, "/setMessageReaction") {
-			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
-		}
-		reactionCalls++
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"ok":true}`))
-	}))
-	defer srv.Close()
-
-	api := newTelegramAPI(srv.Client(), srv.URL, "TOKEN")
-	cfg := agent.Config{
-		IntentEnabled:    true,
-		IntentTimeout:    5 * time.Second,
-		IntentMaxHistory: 3,
-	}
-	final, _, _, reaction, err := runTelegramTask(
-		context.Background(),
-		nil,
-		agent.LogOptions{},
-		&staticIntentClient{},
-		tools.NewRegistry(),
-		api,
-		false,
-		t.TempDir(),
-		0,
-		nil,
-		cfg,
-		telegramReactionConfig{Enabled: true, Allow: defaultReactionAllowList()},
-		nil,
-		telegramJob{
-			ChatID:    1001,
-			MessageID: 2002,
-			ChatType:  "group",
-			Text:      "ok",
-		},
-		"test-model",
-		nil,
-		8,
-		nil,
-		5*time.Second,
-		func(ctx context.Context, chatID int64, text string, correlationID string) error { return nil },
-	)
-	if err != nil {
-		t.Fatalf("runTelegramTask() error = %v", err)
-	}
-	if final != nil {
-		t.Fatalf("expected no text final when preflight reaction succeeds")
-	}
-	if reaction == nil {
-		t.Fatalf("expected reaction result")
-	}
-	if reaction.Source != "preflight" {
-		t.Fatalf("unexpected reaction source: %q", reaction.Source)
-	}
-	if reactionCalls != 1 {
-		t.Fatalf("expected exactly one reaction API call, got %d", reactionCalls)
-	}
-}
-
-type staticIntentClient struct{}
-
-func (c *staticIntentClient) Chat(ctx context.Context, req llm.Request) (llm.Result, error) {
-	return llm.Result{
-		Text: `{"goal":"acknowledge","deliverable":"确认","constraints":[],"ambiguities":[],"question":false,"request":false,"ask":false}`,
-	}, nil
 }
 
 func hasPromptBlockTitle(blocks []agent.PromptBlock, want string) bool {

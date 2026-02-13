@@ -7,23 +7,28 @@ import (
 	"strings"
 )
 
+type telegramReaction struct {
+	ChatID    int64
+	MessageID int64
+	Emoji     string
+	Source    string
+}
+
 type telegramReactTool struct {
 	api              *telegramAPI
 	defaultChatID    int64
 	defaultMessageID int64
 	allowedIDs       map[int64]bool
-	allowEmoji       map[string]bool
 	enabled          bool
 	lastReaction     *telegramReaction
 }
 
-func newTelegramReactTool(api *telegramAPI, defaultChatID int64, defaultMessageID int64, allowedIDs map[int64]bool, allowList []string) *telegramReactTool {
+func newTelegramReactTool(api *telegramAPI, defaultChatID int64, defaultMessageID int64, allowedIDs map[int64]bool) *telegramReactTool {
 	return &telegramReactTool{
 		api:              api,
 		defaultChatID:    defaultChatID,
 		defaultMessageID: defaultMessageID,
 		allowedIDs:       allowedIDs,
-		allowEmoji:       buildReactionAllowSet(allowList),
 		enabled:          true,
 	}
 }
@@ -49,7 +54,7 @@ func (t *telegramReactTool) ParameterSchema() string {
 			},
 			"emoji": map[string]any{
 				"type":        "string",
-				"description": "Emoji to react with (must be in allow list).",
+				"description": "Emoji to react with.",
 			},
 			"is_big": map[string]any{
 				"type":        "boolean",
@@ -104,9 +109,6 @@ func (t *telegramReactTool) Execute(ctx context.Context, params map[string]any) 
 	emoji = strings.TrimSpace(emoji)
 	if emoji == "" {
 		return "", fmt.Errorf("missing required param: emoji")
-	}
-	if len(t.allowEmoji) > 0 && !t.allowEmoji[emoji] {
-		return "", fmt.Errorf("emoji not allowed")
 	}
 
 	var isBigPtr *bool
