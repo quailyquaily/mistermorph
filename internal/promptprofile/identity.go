@@ -70,6 +70,10 @@ func loadPersonaDoc(path string, kind string, log *slog.Logger) (string, string)
 	if strings.EqualFold(strings.TrimSpace(frontMatterStatus(raw)), "draft") {
 		return "", "draft"
 	}
+	content = strings.TrimSpace(stripFrontMatter(raw))
+	if content == "" {
+		return "", "empty"
+	}
 	return content, "loaded"
 }
 
@@ -105,4 +109,18 @@ func frontMatterStatus(raw []byte) string {
 		}
 	}
 	return ""
+}
+
+func stripFrontMatter(raw []byte) string {
+	content := strings.ReplaceAll(string(raw), "\r\n", "\n")
+	lines := strings.Split(content, "\n")
+	if len(lines) == 0 || strings.TrimSpace(lines[0]) != "---" {
+		return content
+	}
+	for i := 1; i < len(lines); i++ {
+		if strings.TrimSpace(lines[i]) == "---" {
+			return strings.Join(lines[i+1:], "\n")
+		}
+	}
+	return content
 }

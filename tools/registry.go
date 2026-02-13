@@ -49,7 +49,7 @@ func (r *Registry) FormatToolSummaries() string {
 		if desc == "" {
 			desc = "No description provided."
 		}
-		fmt.Fprintf(&b, "- %s: %s\n", t.Name(), desc)
+		fmt.Fprintf(&b, "- `%s`: %s\n", t.Name(), desc)
 	}
 	return b.String()
 }

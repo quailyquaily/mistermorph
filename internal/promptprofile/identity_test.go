@@ -84,6 +84,40 @@ func TestApplyPersonaIdentity_DraftFilesSkipped(t *testing.T) {
 	}
 }
 
+func TestApplyPersonaIdentity_StripsFrontmatter(t *testing.T) {
+	stateDir := t.TempDir()
+	prevStateDir := viper.GetString("file_state_dir")
+	viper.Set("file_state_dir", stateDir)
+	t.Cleanup(func() {
+		viper.Set("file_state_dir", prevStateDir)
+	})
+
+	identity := "---\nstatus: active\nprofile: local\n---\n\n# IDENTITY\nName: Nova\n"
+	soul := "---\nstatus: active\n---\n\n# SOUL\nStay sharp.\n"
+	if err := os.WriteFile(filepath.Join(stateDir, "IDENTITY.md"), []byte(identity), 0o644); err != nil {
+		t.Fatalf("write identity file: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(stateDir, "SOUL.md"), []byte(soul), 0o644); err != nil {
+		t.Fatalf("write soul file: %v", err)
+	}
+
+	spec := agent.DefaultPromptSpec()
+	ApplyPersonaIdentity(&spec, nil)
+
+	if strings.Contains(spec.Identity, "status: active") {
+		t.Fatalf("frontmatter status should be stripped: %s", spec.Identity)
+	}
+	if strings.Contains(spec.Identity, "profile: local") {
+		t.Fatalf("frontmatter fields should be stripped: %s", spec.Identity)
+	}
+	if !strings.Contains(spec.Identity, "# IDENTITY\nName: Nova") {
+		t.Fatalf("identity body should remain after stripping frontmatter: %s", spec.Identity)
+	}
+	if !strings.Contains(spec.Identity, "# SOUL\nStay sharp.") {
+		t.Fatalf("soul body should remain after stripping frontmatter: %s", spec.Identity)
+	}
+}
+
 func TestLegacyWrappers(t *testing.T) {
 	stateDir := t.TempDir()
 	prevStateDir := viper.GetString("file_state_dir")
