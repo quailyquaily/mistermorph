@@ -23,7 +23,7 @@
 - 🧩 **再利用しやすい Go コア**: Agent を CLI として実行するだけでなく、ライブラリやサブプロセスとして他アプリへ組み込めます。
 - 🤝 **Mesh Agent Exchange Protocol（MAEP）**: 複数の Agent を運用し、相互にメッセージをやり取りしたい場合に MAEP を使えます。信頼状態と監査トレイルを備えた P2P プロトコルです（[../maep.md](../maep.md) を参照、WIP）。
 - 🔒 **実運用を意識した安全なデフォルト**: プロファイルベースの資格情報注入、Guard によるマスキング、アウトバウンドポリシー制御、監査トレイル付きの非同期承認を提供します（[../security.md](../security.md) を参照）。
-- 🧰 **実用的な Skills システム**: `~/.morph`、`~/.claude`、`~/.codex` から `SKILL.md` を検出して注入でき、スマートなルーティングと明示的な制御の両方に対応します（[../skills.md](../skills.md) を参照）。
+- 🧰 **実用的な Skills システム**: `file_state_dir/skills` から `SKILL.md` を検出して注入でき、シンプルな on/off 制御に対応します（[../skills.md](../skills.md) を参照）。
 - 📚 **学習しやすい構成**: 学習重視の Agent プロジェクトとして設計されており、`docs/` に詳細な設計ドキュメントがあり、`--inspect-prompt` や `--inspect-request` など実用的なデバッグ機能も用意されています。
 
 <a id="quickstart"></a>
@@ -157,7 +157,7 @@ Telegram モードでのみ利用できるツール:
 <a id="skills"></a>
 ## Skills（スキル）
 
-`mistermorph` は `~/.morph/skills`、`~/.claude/skills`、`~/.codex/skills` を再帰的に探索し、選択した `SKILL.md` の内容を system prompt に注入できます。
+`mistermorph` は `file_state_dir/skills` を再帰的に探索し、選択した `SKILL.md` の内容を system prompt に注入できます。
 
 デフォルトでは `run` は `skills.mode=on` を使い、`skills.load` と任意の `$SkillName` 参照（`skills.auto=true`）を読み込みます。
 
