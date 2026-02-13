@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/quailyquaily/mistermorph/agent"
+	markdownutil "github.com/quailyquaily/mistermorph/internal/markdown"
 	"github.com/quailyquaily/mistermorph/internal/statepaths"
 )
 
@@ -67,10 +68,10 @@ func loadPersonaDoc(path string, kind string, log *slog.Logger) (string, string)
 	if content == "" {
 		return "", "empty"
 	}
-	if strings.EqualFold(strings.TrimSpace(frontMatterStatus(raw)), "draft") {
+	if strings.EqualFold(markdownutil.FrontmatterStatus(string(raw)), "draft") {
 		return "", "draft"
 	}
-	content = strings.TrimSpace(stripFrontMatter(raw))
+	content = strings.TrimSpace(markdownutil.StripFrontmatter(string(raw)))
 	if content == "" {
 		return "", "empty"
 	}
@@ -92,35 +93,4 @@ func buildPersonaIdentity(identityDoc string, soulDoc string) string {
 		b.WriteString("\n")
 	}
 	return strings.TrimSpace(b.String())
-}
-
-func frontMatterStatus(raw []byte) string {
-	lines := strings.Split(strings.ReplaceAll(string(raw), "\r\n", "\n"), "\n")
-	if len(lines) == 0 || strings.TrimSpace(lines[0]) != "---" {
-		return ""
-	}
-	for i := 1; i < len(lines); i++ {
-		line := strings.TrimSpace(lines[i])
-		if line == "---" {
-			break
-		}
-		if strings.HasPrefix(strings.ToLower(line), "status:") {
-			return strings.TrimSpace(line[len("status:"):])
-		}
-	}
-	return ""
-}
-
-func stripFrontMatter(raw []byte) string {
-	content := strings.ReplaceAll(string(raw), "\r\n", "\n")
-	lines := strings.Split(content, "\n")
-	if len(lines) == 0 || strings.TrimSpace(lines[0]) != "---" {
-		return content
-	}
-	for i := 1; i < len(lines); i++ {
-		if strings.TrimSpace(lines[i]) == "---" {
-			return strings.Join(lines[i+1:], "\n")
-		}
-	}
-	return content
 }
