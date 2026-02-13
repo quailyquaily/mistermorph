@@ -8,13 +8,9 @@ import (
 //go:embed prompts/system_rules.tmpl
 var systemRulesTemplateSource string
 
-//go:embed prompts/todo_rules.tmpl
-var todoRulesTemplateSource string
-
 func defaultSystemRules() []string {
 	sources := []string{
 		systemRulesTemplateSource,
-		todoRulesTemplateSource,
 	}
 	out := make([]string, 0, 64)
 	seen := make(map[string]struct{}, 64)

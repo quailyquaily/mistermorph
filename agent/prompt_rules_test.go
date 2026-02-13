@@ -68,14 +68,26 @@ func TestBuildSystemPrompt_ShowsPlanOptionWithPlanCreate(t *testing.T) {
 	}
 }
 
-func TestDefaultPromptSpec_IncludesTodoRulesTemplate(t *testing.T) {
+func TestDefaultPromptSpec_IncludesStaticTodoWorkflowInAdditionalContext(t *testing.T) {
 	spec := DefaultPromptSpec()
-	joined := strings.Join(spec.Rules, "\n")
-	if !strings.Contains(joined, "TODO.md entry format examples") {
-		t.Fatalf("expected todo_rules.tmpl content in DefaultPromptSpec rules")
+	joinedRules := strings.Join(spec.Rules, "\n")
+	if strings.Contains(joinedRules, "TODO.md entry format examples") {
+		t.Fatalf("did not expect TODO workflow content in DefaultPromptSpec rules")
 	}
-	if !strings.Contains(joined, "contacts_send") {
-		t.Fatalf("expected TODO workflow send rule in DefaultPromptSpec rules")
+	if len(spec.Blocks) != 0 {
+		t.Fatalf("did not expect default blocks in DefaultPromptSpec")
+	}
+
+	reg := tools.NewRegistry()
+	prompt := BuildSystemPrompt(reg, spec)
+	if !strings.Contains(prompt, "## Additional Context") {
+		t.Fatalf("expected Additional Context section in rendered prompt")
+	}
+	if !strings.Contains(prompt, "TODO.md entry format examples") {
+		t.Fatalf("expected static TODO workflow examples in rendered prompt")
+	}
+	if !strings.Contains(prompt, "contacts_send") {
+		t.Fatalf("expected TODO workflow contacts_send rule in rendered prompt")
 	}
 }
 

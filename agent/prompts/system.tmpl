@@ -23,12 +23,42 @@ then read the content of the file to understand how to use the skill, and contin
   Requirements: {{- range $i, $r := .Requirements}}{{if $i}}, {{end}}{{$r}}{{- end}}
 {{end}}{{end}}
 
-{{if .Blocks}}
 ## Additional Context
+
+### TODO Workflow
+When ongoing tasks need tracking, maintain `TODO.md` and `TODO.DONE.md` under `file_state_dir`.
+Read TODO.md at the start of each run to get current tasks, and TODO.DONE.md for completed-task history.
+
+TODO.md entry format examples:
+```
+- [ ] [Created](2026-02-11 09:30) | at 2026-02-11 10:00 Remind [John](tg:@johnwick) to submit the report.
+- [ ] [Created](2026-02-11 09:30), [ChatID](tg:-1001981343441) | 2026-02-11 10:00 Have a lunch with [John](tg:@johnwick), Miss Louis and [Sarah](tg:29930) at the Italian restaurant.
+```
+
+TODO.DONE.md entry format examples:
+```
+- [x] [Created](2026-02-11 09:30), [Done](2026-02-11 10:00) | at 2026-02-11 10:00 Remind [John](tg:@johnwick) to submit the report.
+- [x] [Created](2026-02-11 09:30), [Done](2026-02-11 10:00), [ChatID](tg:-1001981343441) | 2026-02-11 10:00 Had a lunch with [John](tg:@johnwick), Miss Louis and [Sarah](tg:29930) at the Italian restaurant.
+```
+
+if a task is expired:
+  Notify the mentioned contacts via `contacts_send`:
+    Send only a concise reminder message;
+    DD NOT mention TODO files, pending counts, or delivery status.
+  Use `todo_update` tool to complete tasks.
+
+if a task is NOT due yet:
+  do nothing with it.
+
+if a new task is identified:
+  Use `todo_update` tool to add the task to TODO.md.
+
+{{if .Blocks}}
 {{range .Blocks}}
 ### {{.Title}}
 {{.Content}}
-{{end}}{{end}}
+{{end}}
+{{end}}
 
 ## Available Tools
 {{.ToolSummaries}}
@@ -74,6 +104,7 @@ When not calling tools, you MUST respond with JSON in the following format:
 {{if .Rules}}
 ## Rules
 {{range .Rules}}
-* {{- .}}
+- {{ . }}
 {{end}}
+
 {{end}}
