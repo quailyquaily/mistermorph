@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/quailyquaily/mistermorph/internal/chathistory"
 	"github.com/spf13/viper"
 )
 
@@ -22,7 +23,13 @@ func TestRenderTelegramAddressingPrompts(t *testing.T) {
 		t.Fatalf("write SOUL.md: %v", err)
 	}
 
-	sys, user, err := renderTelegramAddressingPrompts("my_bot", []string{"mybot", "morph"}, "hey mybot do this", "alias heuristic uncertain")
+	historyPayload := chathistory.BuildContextPayload(chathistory.ChannelTelegram, []chathistory.ChatHistoryItem{
+		{
+			Kind: chathistory.KindInboundUser,
+			Text: "hello from [Alice](tg:@alice)",
+		},
+	})
+	sys, user, err := renderTelegramAddressingPrompts("my_bot", []string{"mybot", "morph"}, "hey mybot do this", historyPayload)
 	if err != nil {
 		t.Fatalf("renderTelegramAddressingPrompts() error = %v", err)
 	}
@@ -34,10 +41,12 @@ func TestRenderTelegramAddressingPrompts(t *testing.T) {
 	}
 
 	var payload struct {
-		BotUsername string   `json:"bot_username"`
-		Aliases     []string `json:"aliases"`
-		Message     string   `json:"message"`
-		Note        string   `json:"note"`
+		BotUsername        string `json:"bot_username"`
+		CurrentMessage     string `json:"current_message"`
+		ChatHistoryContext struct {
+			Type string `json:"type"`
+		} `json:"chat_history_context"`
+		Aliases []string `json:"aliases"`
 	}
 	if err := json.Unmarshal([]byte(user), &payload); err != nil {
 		t.Fatalf("user prompt is not valid json: %v", err)
@@ -48,10 +57,10 @@ func TestRenderTelegramAddressingPrompts(t *testing.T) {
 	if len(payload.Aliases) != 2 {
 		t.Fatalf("aliases len = %d, want 2", len(payload.Aliases))
 	}
-	if strings.TrimSpace(payload.Message) == "" {
-		t.Fatalf("message should not be empty")
+	if strings.TrimSpace(payload.CurrentMessage) == "" {
+		t.Fatalf("current_message should not be empty")
 	}
-	if payload.Note != "alias heuristic uncertain" {
-		t.Fatalf("note = %q, want custom note", payload.Note)
+	if payload.ChatHistoryContext.Type != chathistory.ContextType {
+		t.Fatalf("chat_history_context.type = %q, want %q", payload.ChatHistoryContext.Type, chathistory.ContextType)
 	}
 }

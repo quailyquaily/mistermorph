@@ -42,12 +42,13 @@ type telegramAddressingSystemPromptData struct {
 }
 
 type telegramAddressingUserPromptData struct {
-	BotUsername string
-	Aliases     []string
-	Message     string
+	BotUsername        string
+	Aliases            []string
+	CurrentMessage     string
+	ChatHistoryContext any
 }
 
-func renderTelegramAddressingPrompts(botUser string, aliases []string, text string) (string, string, error) {
+func renderTelegramAddressingPrompts(botUser string, aliases []string, text string, historyContext any) (string, string, error) {
 	personaIdentity := loadAddressingPersonaIdentity()
 	if personaIdentity == "" {
 		personaIdentity = addressingPromptPersonaFallback
@@ -60,9 +61,10 @@ func renderTelegramAddressingPrompts(botUser string, aliases []string, text stri
 		return "", "", err
 	}
 	userPrompt, err := prompttmpl.Render(telegramAddressingUserPromptTemplate, telegramAddressingUserPromptData{
-		BotUsername: botUser,
-		Aliases:     aliases,
-		Message:     text,
+		BotUsername:        botUser,
+		Aliases:            aliases,
+		CurrentMessage:     text,
+		ChatHistoryContext: historyContext,
 	})
 	if err != nil {
 		return "", "", err

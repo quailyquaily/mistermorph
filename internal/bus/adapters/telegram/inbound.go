@@ -23,6 +23,7 @@ type InboundMessage struct {
 	ChatID           int64
 	MessageID        int64
 	ReplyToMessageID int64
+	SentAt           time.Time
 	ChatType         string
 	FromUserID       int64
 	FromUsername     string
@@ -83,6 +84,10 @@ func (a *InboundAdapter) HandleInboundMessage(ctx context.Context, msg InboundMe
 	}
 
 	now := a.nowFn().UTC()
+	sentAt := msg.SentAt.UTC()
+	if sentAt.IsZero() {
+		sentAt = now
+	}
 	sessionUUID, err := uuid.NewV7()
 	if err != nil {
 		return false, err
@@ -96,7 +101,7 @@ func (a *InboundAdapter) HandleInboundMessage(ctx context.Context, msg InboundMe
 	payloadBase64, err := busruntime.EncodeMessageEnvelope(busruntime.TopicChatMessage, busruntime.MessageEnvelope{
 		MessageID: envelopeMessageID,
 		Text:      text,
-		SentAt:    now.Format(time.RFC3339),
+		SentAt:    sentAt.Format(time.RFC3339),
 		SessionID: sessionID,
 		ReplyTo:   replyTo,
 	})
@@ -131,7 +136,7 @@ func (a *InboundAdapter) HandleInboundMessage(ctx context.Context, msg InboundMe
 		IdempotencyKey:  idempotency.MessageEnvelopeKey(envelopeMessageID),
 		CorrelationID:   fmt.Sprintf("telegram:%d:%d", chatID, messageID),
 		PayloadBase64:   payloadBase64,
-		CreatedAt:       now,
+		CreatedAt:       sentAt,
 		Extensions: busruntime.MessageExtensions{
 			PlatformMessageID: fmt.Sprintf("%d:%d", chatID, messageID),
 			ReplyTo:           replyTo,
@@ -176,6 +181,10 @@ func InboundMessageFromBusMessage(msg busruntime.BusMessage) (InboundMessage, er
 	if err != nil {
 		return InboundMessage{}, err
 	}
+	sentAt, err := time.Parse(time.RFC3339, strings.TrimSpace(envelope.SentAt))
+	if err != nil {
+		return InboundMessage{}, fmt.Errorf("sent_at is invalid")
+	}
 	if strings.TrimSpace(msg.Extensions.ChatType) == "" {
 		return InboundMessage{}, fmt.Errorf("chat_type is required")
 	}
@@ -188,6 +197,7 @@ func InboundMessageFromBusMessage(msg busruntime.BusMessage) (InboundMessage, er
 		ChatID:           chatID,
 		MessageID:        messageID,
 		ReplyToMessageID: replyToMessageID,
+		SentAt:           sentAt.UTC(),
 		ChatType:         strings.TrimSpace(msg.Extensions.ChatType),
 		FromUserID:       msg.Extensions.FromUserID,
 		FromUsername:     strings.TrimSpace(msg.Extensions.FromUsername),

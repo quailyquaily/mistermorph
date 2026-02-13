@@ -305,7 +305,7 @@ telegram:
   task_timeout: "0s"
   # Max number of chats processed concurrently (each chat remains serial).
   max_concurrency: 3
-  # Max chat history messages kept per chat.
+  # Deprecated for Telegram chat history (Telegram now uses mode caps: talkative=16, others=8).
   history_max_messages: 20
   # Emoji reactions (lightweight replies).
   reactions:

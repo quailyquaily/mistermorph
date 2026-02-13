@@ -19,8 +19,8 @@ func defaultSystemRules() []string {
 	out := make([]string, 0, 64)
 	seen := make(map[string]struct{}, 64)
 	for _, src := range sources {
-		lines := strings.Split(src, "\n")
-		for _, raw := range lines {
+		lines := strings.SplitSeq(src, "\n")
+		for raw := range lines {
 			rule := strings.TrimSpace(raw)
 			if rule == "" || strings.HasPrefix(rule, "#") {
 				continue

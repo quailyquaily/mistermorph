@@ -20,7 +20,7 @@ func TestGroupTriggerDecision_ReplyPath(t *testing.T) {
 			From: &telegramUser{ID: 42},
 		},
 	}
-	dec, ok, err := groupTriggerDecision(context.Background(), nil, "", msg, "morphbot", 42, nil, "strict", 24, 0, 0.55, 0.55)
+	dec, ok, err := groupTriggerDecision(context.Background(), nil, "", msg, "morphbot", 42, nil, "strict", 24, 0, 0.55, 0.55, nil)
 	if err != nil {
 		t.Fatalf("groupTriggerDecision() error = %v", err)
 	}
@@ -56,7 +56,7 @@ func TestGroupTriggerDecision_StrictIgnoresAlias(t *testing.T) {
 	msg := &telegramMessage{
 		Text: "morph can you check this",
 	}
-	dec, ok, err := groupTriggerDecision(context.Background(), nil, "", msg, "morphbot", 42, []string{"morph"}, "strict", 24, 0, 0.55, 0.55)
+	dec, ok, err := groupTriggerDecision(context.Background(), nil, "", msg, "morphbot", 42, []string{"morph"}, "strict", 24, 0, 0.55, 0.55, nil)
 	if err != nil {
 		t.Fatalf("groupTriggerDecision() error = %v", err)
 	}
@@ -70,7 +70,7 @@ func TestGroupTriggerDecision_TalkativeAlwaysRequestsAddressingLLM(t *testing.T)
 	msg := &telegramMessage{
 		Text: "just discussing among people",
 	}
-	dec, ok, err := groupTriggerDecision(context.Background(), nil, "", msg, "morphbot", 42, nil, "talkative", 24, 0, 0.55, 0.55)
+	dec, ok, err := groupTriggerDecision(context.Background(), nil, "", msg, "morphbot", 42, nil, "talkative", 24, 0, 0.55, 0.55, nil)
 	if err != nil {
 		t.Fatalf("groupTriggerDecision() error = %v", err)
 	}
@@ -92,7 +92,7 @@ func TestGroupTriggerDecision_MentionEntityTriggers(t *testing.T) {
 			{Type: "mention", Offset: 0, Length: 9},
 		},
 	}
-	dec, ok, err := groupTriggerDecision(context.Background(), nil, "", msg, "morphbot", 42, nil, "strict", 24, 0, 0.55, 0.55)
+	dec, ok, err := groupTriggerDecision(context.Background(), nil, "", msg, "morphbot", 42, nil, "strict", 24, 0, 0.55, 0.55, nil)
 	if err != nil {
 		t.Fatalf("groupTriggerDecision() error = %v", err)
 	}
@@ -114,7 +114,7 @@ func TestGroupTriggerDecision_ExplicitMentionBypassesLLMEvenInTalkative(t *testi
 			{Type: "mention", Offset: 0, Length: 9},
 		},
 	}
-	dec, ok, err := groupTriggerDecision(context.Background(), nil, "", msg, "morphbot", 42, []string{"morph"}, "talkative", 24, 0, 0.55, 0.55)
+	dec, ok, err := groupTriggerDecision(context.Background(), nil, "", msg, "morphbot", 42, []string{"morph"}, "talkative", 24, 0, 0.55, 0.55, nil)
 	if err != nil {
 		t.Fatalf("groupTriggerDecision() error = %v", err)
 	}
@@ -136,7 +136,7 @@ func TestGroupTriggerDecision_SmartMentionRoutesThroughAddressingLLM(t *testing.
 	msg := &telegramMessage{
 		Text: "let us use morphism to describe this",
 	}
-	dec, ok, err := groupTriggerDecision(context.Background(), nil, "", msg, "morphbot", 42, []string{"morph"}, "smart", 24, 0, 0.55, 0.55)
+	dec, ok, err := groupTriggerDecision(context.Background(), nil, "", msg, "morphbot", 42, []string{"morph"}, "smart", 24, 0, 0.55, 0.55, nil)
 	if err != nil {
 		t.Fatalf("groupTriggerDecision() error = %v", err)
 	}
@@ -153,7 +153,7 @@ func TestGroupTriggerDecision_SmartMentionRoutesThroughAddressingLLM(t *testing.
 
 func TestApplyTelegramGroupRuntimePromptRules_GroupOnly(t *testing.T) {
 	groupSpec := agent.PromptSpec{}
-	applyTelegramGroupRuntimePromptRules(&groupSpec, "group", []string{"@alice"}, true)
+	applyTelegramGroupRuntimePromptRules(&groupSpec, "group", []string{"@alice"})
 	if !hasPromptBlockTitle(groupSpec.Blocks, "Group Reply Policy") {
 		t.Fatalf("group chat should include Group Reply Policy block")
 	}
@@ -165,7 +165,7 @@ func TestApplyTelegramGroupRuntimePromptRules_GroupOnly(t *testing.T) {
 	}
 
 	privateSpec := agent.PromptSpec{}
-	applyTelegramGroupRuntimePromptRules(&privateSpec, "private", []string{"@alice"}, true)
+	applyTelegramGroupRuntimePromptRules(&privateSpec, "private", []string{"@alice"})
 	if len(privateSpec.Blocks) != 0 || len(privateSpec.Rules) != 0 {
 		t.Fatalf("non-group chat must not inject group policy rules")
 	}
