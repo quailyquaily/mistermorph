@@ -10,8 +10,9 @@ import (
 	"testing"
 )
 
-func TestSendMessageMarkdownV2_FallbackOnlyOnParseError(t *testing.T) {
+func TestSendMessageMarkdownV2_EscapesBeforeSendingMarkdownV2(t *testing.T) {
 	var parseModes []string
+	var texts []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost || !strings.HasSuffix(r.URL.Path, "/sendMessage") {
 			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
@@ -22,6 +23,43 @@ func TestSendMessageMarkdownV2_FallbackOnlyOnParseError(t *testing.T) {
 			t.Fatalf("decode request: %v", err)
 		}
 		parseModes = append(parseModes, req.ParseMode)
+		texts = append(texts, req.Text)
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer srv.Close()
+
+	api := newTelegramAPI(srv.Client(), srv.URL, "TOKEN")
+	if err := api.sendMessageMarkdownV2(context.Background(), 1001, "hello-world", true); err != nil {
+		t.Fatalf("sendMessageMarkdownV2() error = %v", err)
+	}
+
+	if len(parseModes) != 1 {
+		t.Fatalf("expected 1 send attempt, got %d", len(parseModes))
+	}
+	if parseModes[0] != "MarkdownV2" {
+		t.Fatalf("first attempt parse_mode mismatch: got %q", parseModes[0])
+	}
+	if texts[0] != "hello\\-world" {
+		t.Fatalf("MarkdownV2 text should be escaped on first attempt: got %q", texts[0])
+	}
+}
+
+func TestSendMessageMarkdownV2_FallbackToPlainOnParseError(t *testing.T) {
+	var parseModes []string
+	var texts []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || !strings.HasSuffix(r.URL.Path, "/sendMessage") {
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+		raw, _ := io.ReadAll(r.Body)
+		var req telegramSendMessageRequest
+		if err := json.Unmarshal(raw, &req); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		parseModes = append(parseModes, req.ParseMode)
+		texts = append(texts, req.Text)
 
 		w.Header().Set("Content-Type", "application/json")
 		if len(parseModes) == 1 {
@@ -41,11 +79,14 @@ func TestSendMessageMarkdownV2_FallbackOnlyOnParseError(t *testing.T) {
 	if len(parseModes) != 2 {
 		t.Fatalf("expected 2 send attempts, got %d", len(parseModes))
 	}
-	if parseModes[0] != "MarkdownV2" {
-		t.Fatalf("first attempt parse_mode mismatch: got %q", parseModes[0])
+	if parseModes[0] != "MarkdownV2" || parseModes[1] != "" {
+		t.Fatalf("unexpected parse_mode attempts: %#v", parseModes)
 	}
-	if parseModes[1] != "" {
-		t.Fatalf("fallback attempt should be plain text, got parse_mode=%q", parseModes[1])
+	if texts[0] != "hello\\-world" {
+		t.Fatalf("first attempt text should be escaped MarkdownV2: got %q", texts[0])
+	}
+	if texts[1] != "hello-world" {
+		t.Fatalf("plain-text fallback should use original text: got %q", texts[1])
 	}
 }
 

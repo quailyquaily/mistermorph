@@ -2704,13 +2704,41 @@ func (api *telegramAPI) sendMessageMarkdownV2Reply(ctx context.Context, chatID i
 	if text == "" {
 		text = "(empty)"
 	}
-	// Keep model-produced MarkdownV2 as-is; avoid second-pass escaping.
-	if err := api.sendMessageWithParseModeReply(ctx, chatID, text, disablePreview, "MarkdownV2", replyToMessageID); err == nil {
+
+	err := api.sendMessageWithParseModeReply(ctx, chatID, text, disablePreview, "MarkdownV2", replyToMessageID)
+	if err == nil {
 		return nil
-	} else if !isTelegramMarkdownParseError(err) {
-		return err
 	}
+	if !isTelegramMarkdownParseError(err) {
+		slog.Warn("failed to send with MarkdownV2", "error", err)
+		escaped := escapeTelegramMarkdownV2(text)
+		err = api.sendMessageWithParseModeReply(ctx, chatID, escaped, disablePreview, "MarkdownV2", replyToMessageID)
+		if err == nil {
+			return nil
+		}
+		if !isTelegramMarkdownParseError(err) {
+			slog.Warn("again, failed to send escaped with MarkdownV2", "error", err)
+		}
+	}
+
+	slog.Warn("failed to send with MarkdownV2; fallback to plain text", "error", err)
 	return api.sendMessageWithParseModeReply(ctx, chatID, text, disablePreview, "", replyToMessageID)
+}
+
+func escapeTelegramMarkdownV2(text string) string {
+	if strings.TrimSpace(text) == "" {
+		return text
+	}
+	var b strings.Builder
+	b.Grow(len(text) * 2)
+	for _, r := range text {
+		switch r {
+		case '\\', '_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!':
+			b.WriteByte('\\')
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
 }
 
 type telegramRequestError struct {
@@ -2786,10 +2814,6 @@ func (api *telegramAPI) sendMessageChunkedReply(ctx context.Context, chatID int6
 		isFirstChunk = false
 	}
 	return nil
-}
-
-func (api *telegramAPI) sendMessageWithParseMode(ctx context.Context, chatID int64, text string, disablePreview bool, parseMode string) error {
-	return api.sendMessageWithParseModeReply(ctx, chatID, text, disablePreview, parseMode, 0)
 }
 
 func (api *telegramAPI) sendMessageWithParseModeReply(ctx context.Context, chatID int64, text string, disablePreview bool, parseMode string, replyToMessageID int64) error {

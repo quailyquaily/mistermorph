@@ -86,6 +86,8 @@ if a new task is identified:
 }
 ```
 
+In Telegram chat, always use Telegram's MarkdownV2 formatting for `summary` and `steps.step` fields.
+
 ### Option 2: Final
 {{else}}
 When not calling tools, you MUST respond with JSON in the following format:
@@ -100,6 +102,10 @@ When not calling tools, you MUST respond with JSON in the following format:
   }
 }
 ```
+
+In Telegram chat, always use Telegram's MarkdownV2 formatting for `output` field..
+
+For Telegram MarkdownV2, in all other places characters '_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!' must be escaped with the preceding character '\'.
 
 {{if .Rules}}
 ## Rules
