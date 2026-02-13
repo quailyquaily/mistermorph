@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/quailyquaily/mistermorph/agent"
@@ -75,6 +76,43 @@ func (t *ListDirTool) Execute(_ context.Context, params map[string]any) (string,
 	return string(b), nil
 }
 
+type GetWeatherTool struct {
+}
+
+func (t *GetWeatherTool) Name() string { return "get_weather" }
+
+func (t *GetWeatherTool) Description() string {
+	return "Gets current weather for a city from a configured weather API endpoint."
+}
+
+func (t *GetWeatherTool) ParameterSchema() string {
+	return `{
+  "type": "object",
+  "properties": {
+    "city": {"type": "string", "description": "City name, e.g. San Francisco."}
+  },
+  "required": ["city"]
+}`
+}
+
+func (t *GetWeatherTool) Execute(ctx context.Context, params map[string]any) (string, error) {
+	_ = ctx
+	city, _ := params["city"].(string)
+	city = strings.TrimSpace(city)
+	if city == "" {
+		return "", fmt.Errorf("city is required")
+	}
+	out, _ := json.MarshalIndent(map[string]any{
+		"source":         "mock_weather_tool",
+		"city":           city,
+		"condition":      "raining",
+		"temperature_c":  18,
+		"humidity_pct":   82,
+		"updated_at_utc": "2026-02-13T09:00:00Z",
+	}, "", "  ")
+	return string(out), nil
+}
+
 func main() {
 	var (
 		task     = flag.String("task", "List files and summarize the project.", "Task to run.")
@@ -96,9 +134,17 @@ func main() {
 
 	reg := tools.NewRegistry()
 	reg.Register(&ListDirTool{Root: "."})
+	reg.Register(&GetWeatherTool{})
 
 	spec := agent.DefaultPromptSpec()
 	spec.Identity = "You are an agent embedded inside another Go app. Use tools to inspect the local project when helpful."
+	spec.Blocks = append(spec.Blocks, agent.PromptBlock{
+		Title: "Embedding App Rules",
+		Content: strings.Join([]string{
+			"- Prefer `get_weather` when user asks weather questions.",
+			"- Always respond with plain text.",
+		}, "\n"),
+	})
 
 	engine := agent.New(
 		client,
