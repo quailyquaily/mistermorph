@@ -24,7 +24,7 @@ What makes this project worth looking at:
 - 🧩 **Reusable Go core**: Run the agent as a CLI, or embed it as a library/subprocess in other apps.
 - 🤝 **Mesh Agent Exchange Protocol (MAEP)**: You and your amigos run multiple agents and want them to message each other: use the MAEP, a p2p protocol with trust-state and audit trails. (see [docs/maep.md](docs/maep.md), WIP).
 - 🔒 **Serious secure defaults**: Profile-based credential injection, Guard redaction, outbound policy controls, and async approvals with audit trails (see [docs/security.md](docs/security.md)).
-- 🧰 **Practical Skills system**: Discover + inject `SKILL.md` from `~/.morph`, `~/.claude`, and `~/.codex`, with smart routing plus explicit control (see [docs/skills.md](docs/skills.md)).
+- 🧰 **Practical Skills system**: Discover + inject `SKILL.md` from `~/.morph`, `~/.claude`, and `~/.codex`, with simple on/off control (see [docs/skills.md](docs/skills.md)).
 - 📚 **Beginner-friendly**: Built as a learning-first agent project, with detailed design docs in `docs/` and practical debugging tools like `--inspect-prompt` and `--inspect-request`.
 
 ## Quickstart
@@ -155,7 +155,7 @@ Please see [`docs/tools.md`](docs/tools.md) for detailed tool documentation.
 
 `mistermorph` can discover skills under `~/.morph/skills`, `~/.claude/skills`, and `~/.codex/skills` (recursively), and inject selected `SKILL.md` content into the system prompt.
 
-By default, `run` uses `skills.mode=smart` so the agent can decide which skills to load (no need to mention `$SkillName`).
+By default, `run` uses `skills.mode=on`, which loads skills from `skills.load` and optional `$SkillName` references (`skills.auto=true`).
 
 Docs: [`docs/skills.md`](docs/skills.md).
 
@@ -163,7 +163,7 @@ Docs: [`docs/skills.md`](docs/skills.md).
 # list available skills
 mistermorph skills list
 # Use a specific skill in the run command
-mistermorph run --task "..." --skills-mode explicit --skill skill-name
+mistermorph run --task "..." --skills-mode on --skill skill-name
 # install remote skills 
 mistermorph skills install <remote-skill-url> 
 ```
@@ -233,11 +233,8 @@ These arguments will dump the final system/user/tool prompts and the full LLM re
 - `--skills-dir` (repeatable)
 - `--skill` (repeatable)
 - `--skills-auto`
-- `--skills-mode` (`off|explicit|smart`)
+- `--skills-mode` (`off|on`)
 - `--skills-max-load`
-- `--skills-preview-bytes`
-- `--skills-catalog-limit`
-- `--skills-select-timeout`
 - `--max-steps`
 - `--parse-retries`
 - `--max-token-budget`
@@ -315,5 +312,5 @@ Key meanings (see `assets/config/config.example.yaml` for the canonical list):
 - Core: `llm.provider` selects the backend. Most providers use `llm.endpoint`/`llm.api_key`/`llm.model`. Azure and Bedrock have dedicated config blocks (`llm.azure.*`, `llm.bedrock.*`). `llm.tools_emulation_mode` controls tool-call emulation for models without native tool calling (`off|fallback|force`).
 - Logging: `logging.level` (`info` shows progress; `debug` adds thoughts), `logging.format` (`text|json`), plus opt-in fields `logging.include_thoughts` and `logging.include_tool_params` (redacted).
 - Loop: `max_steps` limits tool-call rounds; `parse_retries` retries invalid JSON; `max_token_budget` is a cumulative token cap (0 disables); `timeout` is the overall run timeout.
-- Skills: `skills.mode` controls whether skills are used (`smart` lets the agent decide); `file_state_dir` + `skills.dir_name` define the default skills root (also scans `~/.claude/skills` and `~/.codex/skills`); `skills.load` always loads specific skills; `skills.auto` additionally loads `$SkillName` references; smart mode tuning via `skills.max_load/preview_bytes/catalog_limit/select_timeout/selector_model`.
+- Skills: `skills.mode` controls whether skills are used (`off|on`; legacy `explicit/smart` map to `on`); `file_state_dir` + `skills.dir_name` define the default skills root (also scans `~/.claude/skills` and `~/.codex/skills`); `skills.load` always loads specific skills; `skills.auto` additionally loads `$SkillName` references.
 - Tools: all tool toggles live under `tools.*` (e.g. `tools.bash.enabled`, `tools.url_fetch.enabled`) with per-tool limits and timeouts.

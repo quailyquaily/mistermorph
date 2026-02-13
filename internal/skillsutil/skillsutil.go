@@ -3,6 +3,7 @@ package skillsutil
 import (
 	"context"
 	"log/slog"
+	"path"
 	"sort"
 	"strings"
 
@@ -169,7 +170,7 @@ func PromptSpecWithSkills(ctx context.Context, log *slog.Logger, logOpts agent.L
 		}
 		spec.Skills = append(spec.Skills, agent.PromptSkill{
 			Name:         name,
-			FilePath:     skillLoaded.SkillMD,
+			FilePath:     skillPromptFilePath(skillLoaded.ID),
 			Description:  desc,
 			Requirements: reqs,
 		})
@@ -242,4 +243,16 @@ func mapKeysSorted(m map[string]bool) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+func skillPromptFilePath(skillID string) string {
+	dirName := strings.TrimSpace(viper.GetString("skills.dir_name"))
+	if dirName == "" {
+		dirName = "skills"
+	}
+	id := strings.Trim(strings.TrimSpace(skillID), "/\\")
+	if id == "" {
+		return path.Join("file_state_dir", dirName, "SKILL.md")
+	}
+	return path.Join("file_state_dir", dirName, id, "SKILL.md")
 }

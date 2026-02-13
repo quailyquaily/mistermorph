@@ -12,7 +12,7 @@ user_agent: "mistermorph/1.0 (+https://github.com/quailyquaily)"
 llm:
   # LLM provider name. Supported: openai|openai_custom|deepseek|xai|gemini|azure|anthropic|bedrock|susanoo.
   provider: openai
-  # Default model used by both the main agent loop and (by default) smart skills selection.
+  # Default model used by the main agent loop.
   model: "gpt-5.2"
   # Base URL for providers that use OpenAI-compatible endpoints.
   endpoint: "https://api.openai.com"
@@ -238,25 +238,17 @@ skills:
   # Directory name under file_state_dir for skills.
   dir_name: "skills"
   # Note: the default scan also includes ~/.claude/skills and ~/.codex/skills.
-  # off|explicit|smart
+  # off|on
   # - off: never load skills
-  # - explicit: only load skills from skills.load and/or $SkillName references (if skills.auto=true)
-  # - smart: run a small "router" model call to decide which skills to load (recommended default)
-  mode: smart
-  # If true, also loads skills referenced as $SkillName in the task (useful in explicit mode).
+  # - on: only load skills from skills.load and/or $SkillName references (if skills.auto=true)
+  # Legacy compatibility: explicit/smart are accepted and treated as on.
+  mode: on
+  # If true, also loads skills referenced as $SkillName in the task (useful in on mode).
   auto: true
   # Skills to always load (by skill name or id).
-  load: [] # e.g. ["skill-creator", "my-skill-id"]
-  # For smart mode: max number of skills to load.
+  load: ["*"] # e.g. ["skill-creator", "my-skill-id"]
+  # Legacy smart-mode option (currently ignored).
   max_load: 3
-  # For smart mode: bytes to preview per SKILL.md when building the selection catalog.
-  preview_bytes: 2048
-  # For smart mode: cap how many discovered skills to include in the selection catalog.
-  catalog_limit: 200
-  # For smart mode: timeout for the selection call.
-  select_timeout: "10s"
-  # Optional: use a different model for selecting skills (defaults to "model").
-  selector_model: ""
 
 # Daemon mode (local HTTP server).
 server:

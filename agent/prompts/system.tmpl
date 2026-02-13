@@ -2,16 +2,28 @@
 {{if .Skills}}
 
 ## Available Skills
-Skills are not tools. They provide extra context and may include scripts to run via tools like bash.
+Skills are not tools. If you want to use a skill to help you complete the user's request,
+use `read_file` tool to read the SKILL.md file of the skill, and then use the information from the skill.
+example:
+
+```
+- Name: `dummy_skill`
+  FilePath: `path/to/SKILL.md`
+  Description: Description of what the skill does.
+  Requirements: requirement1, requirement2, ...
+```
+
+If you need to use the dummy_skill, first call the `read_file` tool to read the SKILL.md file at `path/to/SKILL.md`,
+then read the content of the file to understand how to use the skill, and continue to process the user's request.
+
 {{range .Skills}}
 - Name: `{{.Name}}`
-  File: `{{.FilePath}}`
+  FilePath: `{{.FilePath}}`
   Description: {{.Description}}
   Requirements: {{- range $i, $r := .Requirements}}{{if $i}}, {{end}}{{$r}}{{- end}}
 {{end}}{{end}}
 
 {{if .Blocks}}
-
 ## Additional Context
 {{range .Blocks}}
 ### {{.Title}}

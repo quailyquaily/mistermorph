@@ -159,7 +159,7 @@ Telegram モードでのみ利用できるツール:
 
 `mistermorph` は `~/.morph/skills`、`~/.claude/skills`、`~/.codex/skills` を再帰的に探索し、選択した `SKILL.md` の内容を system prompt に注入できます。
 
-デフォルトでは `run` は `skills.mode=smart` を使うため、どのスキルを読み込むかは Agent が自動で判断します（`$SkillName` を明示しなくても動作）。
+デフォルトでは `run` は `skills.mode=on` を使い、`skills.load` と任意の `$SkillName` 参照（`skills.auto=true`）を読み込みます。
 
 ドキュメント: [../skills.md](../skills.md)
 
@@ -167,7 +167,7 @@ Telegram モードでのみ利用できるツール:
 # 利用可能なスキル一覧
 mistermorph skills list
 # run コマンドで特定スキルを使用
-mistermorph run --task "..." --skills-mode explicit --skill skill-name
+mistermorph run --task "..." --skills-mode on --skill skill-name
 # リモートスキルをインストール
 mistermorph skills install <remote-skill-url>
 ```
@@ -239,11 +239,8 @@ mistermorph run --inspect-prompt --inspect-request --task "..."
 - `--skills-dir`（繰り返し指定可）
 - `--skill`（繰り返し指定可）
 - `--skills-auto`
-- `--skills-mode`（`off|explicit|smart`）
+- `--skills-mode`（`off|on`）
 - `--skills-max-load`
-- `--skills-preview-bytes`
-- `--skills-catalog-limit`
-- `--skills-select-timeout`
 - `--max-steps`
 - `--parse-retries`
 - `--max-token-budget`
