@@ -137,12 +137,25 @@ func New(deps Dependencies) *cobra.Command {
 				client = &llminspect.PromptClient{Base: client, Inspector: inspector}
 			}
 
+			reg := (*tools.Registry)(nil)
+			if deps.RegistryFromViper != nil {
+				reg = deps.RegistryFromViper()
+			}
+			if reg == nil {
+				reg = tools.NewRegistry()
+			}
+			if deps.RegisterPlanTool != nil {
+				deps.RegisterPlanTool(reg, client, model)
+			}
+			toolsutil.BindTodoUpdateToolLLM(reg, client, model)
+
 			promptSpec, _, skillAuthProfiles, err := skillsutil.PromptSpecWithSkills(ctx, logger, logOpts, task, client, model, skillsutil.SkillsConfigFromRunCmd(cmd))
 			if err != nil {
 				return err
 			}
 			promptprofile.ApplyPersonaIdentity(&promptSpec, logger)
 			promptprofile.AppendLocalToolNotesBlock(&promptSpec, logger)
+			promptprofile.AppendPlanCreateGuidanceBlock(&promptSpec, reg)
 
 			var hook agent.Hook
 			if configutil.FlagOrViperBool(cmd, "interactive", "interactive") {
@@ -171,17 +184,6 @@ func New(deps Dependencies) *cobra.Command {
 					opts = append(opts, agent.WithGuard(g))
 				}
 			}
-			reg := (*tools.Registry)(nil)
-			if deps.RegistryFromViper != nil {
-				reg = deps.RegistryFromViper()
-			}
-			if reg == nil {
-				reg = tools.NewRegistry()
-			}
-			if deps.RegisterPlanTool != nil {
-				deps.RegisterPlanTool(reg, client, model)
-			}
-			toolsutil.BindTodoUpdateToolLLM(reg, client, model)
 
 			engine := agent.New(
 				client,

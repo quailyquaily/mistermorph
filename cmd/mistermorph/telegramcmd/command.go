@@ -1545,7 +1545,8 @@ func runTelegramTask(ctx context.Context, logger *slog.Logger, logOpts agent.Log
 	}
 	promptprofile.ApplyPersonaIdentity(&promptSpec, logger)
 	promptprofile.AppendLocalToolNotesBlock(&promptSpec, logger)
-	applyTelegramRuntimePromptBlocks(&promptSpec, job.ChatType, job.MentionUsers)
+	promptprofile.AppendPlanCreateGuidanceBlock(&promptSpec, reg)
+	promptprofile.AppendTelegramRuntimeBlocks(&promptSpec, isGroupChat(job.ChatType), job.MentionUsers)
 
 	var memManager *memory.Manager
 	var memIdentity memory.Identity
@@ -1568,10 +1569,7 @@ func runTelegramTask(ctx context.Context, logger *slog.Logger, logOpts agent.Log
 					return nil, nil, loadedSkills, nil, fmt.Errorf("memory injection: %w", err)
 				}
 				if strings.TrimSpace(snap) != "" {
-					promptSpec.Blocks = append(promptSpec.Blocks, agent.PromptBlock{
-						Title:   "Memory Summaries",
-						Content: snap,
-					})
+					promptprofile.AppendMemorySummariesBlock(&promptSpec, snap)
 					if logger != nil {
 						logger.Info("memory_injection_applied", "source", "telegram", "subject_id", id.SubjectID, "chat_id", job.ChatID, "snapshot_len", len(snap))
 					}
@@ -1682,7 +1680,8 @@ func runMAEPTask(ctx context.Context, logger *slog.Logger, logOpts agent.LogOpti
 	}
 	promptprofile.ApplyPersonaIdentity(&promptSpec, logger)
 	promptprofile.AppendLocalToolNotesBlock(&promptSpec, logger)
-	applyMAEPReplyPromptRules(&promptSpec)
+	promptprofile.AppendPlanCreateGuidanceBlock(&promptSpec, reg)
+	promptprofile.AppendMAEPReplyPolicyBlock(&promptSpec)
 
 	engine := agent.New(
 		client,

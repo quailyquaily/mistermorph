@@ -480,6 +480,7 @@ func runOneTask(ctx context.Context, logger *slog.Logger, logOpts agent.LogOptio
 	}
 	promptprofile.ApplyPersonaIdentity(&promptSpec, logger)
 	promptprofile.AppendLocalToolNotesBlock(&promptSpec, logger)
+	promptprofile.AppendPlanCreateGuidanceBlock(&promptSpec, registry)
 	engine := agent.New(
 		client,
 		registry,
@@ -497,6 +498,7 @@ func resumeOneTask(ctx context.Context, logger *slog.Logger, logOpts agent.LogOp
 	promptSpec := agent.DefaultPromptSpec()
 	promptprofile.ApplyPersonaIdentity(&promptSpec, logger)
 	promptprofile.AppendLocalToolNotesBlock(&promptSpec, logger)
+	promptprofile.AppendPlanCreateGuidanceBlock(&promptSpec, registry)
 	engine := agent.New(
 		client,
 		registry,
