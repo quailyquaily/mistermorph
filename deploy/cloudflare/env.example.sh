@@ -31,6 +31,14 @@ export MISTER_MORPH_LOG_LEVEL=""
 export MISTER_MORPH_TOOLS_BASH_ENABLED=""
 # Optional run mode: "serve" (default) or "telegram".
 export MISTER_MORPH_RUN_MODE=""
+# Optional runtime paths. Leave empty to use defaults:
+# - MISTER_MORPH_FILE_STATE_DIR=/tmp/mistermorph/state
+# - MISTER_MORPH_FILE_CACHE_DIR=/tmp/mistermorph/cache
+export MISTER_MORPH_FILE_STATE_DIR=""
+export MISTER_MORPH_FILE_CACHE_DIR=""
+# Optional: set to 0 to enable bootstrap install in container entrypoint.
+# Default in Cloudflare deployment is 1 (skip).
+export MISTER_MORPH_SKIP_BOOTSTRAP_INSTALL=""
 
 # Optional: set to 1 to skip npm install.
 export SKIP_NPM_INSTALL=0

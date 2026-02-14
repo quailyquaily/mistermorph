@@ -38,8 +38,9 @@ RUN mkdir -p /data/state /data/cache /app \
 USER morph
 WORKDIR /app
 
-ENV MISTER_MORPH_FILE_STATE_DIR=/data/state \
-  MISTER_MORPH_FILE_CACHE_DIR=/data/cache \
+ENV MISTER_MORPH_FILE_STATE_DIR=/tmp/mistermorph/state \
+  MISTER_MORPH_FILE_CACHE_DIR=/tmp/mistermorph/cache \
+  MISTER_MORPH_SKIP_BOOTSTRAP_INSTALL=1 \
   MISTER_MORPH_LOG_FORMAT=json \
   MISTER_MORPH_TOOLS_BASH_ENABLED=false
 

@@ -100,12 +100,20 @@ if [[ -n "${MISTER_MORPH_TELEGRAM_BOT_TOKEN:-}" ]]; then
 fi
 
 DEPLOY_VAR_FLAGS=()
-add_optional_var "MISTER_MORPH_LLM_PROVIDER"
-add_optional_var "MISTER_MORPH_LLM_ENDPOINT"
-add_optional_var "MISTER_MORPH_LLM_MODEL"
-add_optional_var "MISTER_MORPH_LOG_LEVEL"
-add_optional_var "MISTER_MORPH_TOOLS_BASH_ENABLED"
-add_optional_var "MISTER_MORPH_RUN_MODE"
+OPTIONAL_VAR_KEYS=(
+  MISTER_MORPH_LLM_PROVIDER
+  MISTER_MORPH_LLM_ENDPOINT
+  MISTER_MORPH_LLM_MODEL
+  MISTER_MORPH_LOG_LEVEL
+  MISTER_MORPH_TOOLS_BASH_ENABLED
+  MISTER_MORPH_RUN_MODE
+  MISTER_MORPH_FILE_STATE_DIR
+  MISTER_MORPH_FILE_CACHE_DIR
+  MISTER_MORPH_SKIP_BOOTSTRAP_INSTALL
+)
+for key in "${OPTIONAL_VAR_KEYS[@]}"; do
+  add_optional_var "${key}"
+done
 
 echo "Deploying Cloudflare Worker + Container..."
 if [[ -n "${WRANGLER_ENV}" ]]; then
@@ -116,15 +124,16 @@ fi
 
 echo
 if [[ "${GENERATED_SERVER_TOKEN}" == "1" ]]; then
-  echo "Generated MISTER_MORPH_SERVER_AUTH_TOKEN:"
-  echo "${MISTER_MORPH_SERVER_AUTH_TOKEN}"
+  echo "Generated MISTER_MORPH_SERVER_AUTH_TOKEN and stored it as a Cloudflare secret (value hidden)."
+  echo "If you need to call protected endpoints manually, deploy with an explicit token:"
+  echo 'MISTER_MORPH_SERVER_AUTH_TOKEN="<your-token>" ./deploy.sh'
   echo
 fi
 
 if [[ "${MISTER_MORPH_RUN_MODE:-serve}" == "telegram" ]]; then
   echo "Telegram mode deployed. Example status check (replace worker domain):"
-  echo "curl -H \"Authorization: Bearer ${MISTER_MORPH_SERVER_AUTH_TOKEN}\" https://<worker-domain>/_mistermorph/state"
+  echo 'curl -H "Authorization: Bearer $MISTER_MORPH_SERVER_AUTH_TOKEN" https://<worker-domain>/_mistermorph/state'
 else
   echo "Serve mode deployed. Example health check (replace worker domain):"
-  echo "curl -H \"Authorization: Bearer ${MISTER_MORPH_SERVER_AUTH_TOKEN}\" https://<worker-domain>/health"
+  echo 'curl -H "Authorization: Bearer $MISTER_MORPH_SERVER_AUTH_TOKEN" https://<worker-domain>/health'
 fi

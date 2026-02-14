@@ -44,6 +44,8 @@ Optional env vars:
 - `MISTER_MORPH_LLM_PROVIDER` / `MISTER_MORPH_LLM_ENDPOINT` / `MISTER_MORPH_LLM_MODEL`
 - `MISTER_MORPH_LOG_LEVEL` / `MISTER_MORPH_TOOLS_BASH_ENABLED`
 - `MISTER_MORPH_RUN_MODE` (`serve` or `telegram`)
+- `MISTER_MORPH_FILE_STATE_DIR` / `MISTER_MORPH_FILE_CACHE_DIR` (defaults: `/tmp/mistermorph/state`, `/tmp/mistermorph/cache`)
+- `MISTER_MORPH_SKIP_BOOTSTRAP_INSTALL` (`1` to skip `mistermorph install --yes` in entrypoint; Cloudflare default is `1`)
 
 `config.yaml` stores non-sensitive defaults. Secrets still come from Cloudflare secrets env vars:
 
@@ -90,7 +92,11 @@ Container control/state endpoints (protected by `MISTER_MORPH_SERVER_AUTH_TOKEN`
 
 ```bash
 curl -X POST -H "Authorization: Bearer <token>" "https://<worker-domain>/_mistermorph/start?instance=default"
+curl -X POST -H "Authorization: Bearer <token>" "https://<worker-domain>/_mistermorph/stop?instance=default"
+# hard stop + destroy container process:
+curl -X POST -H "Authorization: Bearer <token>" "https://<worker-domain>/_mistermorph/stop?instance=default&hard=1"
 curl -H "Authorization: Bearer <token>" "https://<worker-domain>/_mistermorph/state?instance=default"
+curl -H "Authorization: Bearer <token>" "https://<worker-domain>/_mistermorph/lifecycle?instance=default"
 ```
 
 In telegram mode, normal HTTP proxy endpoints are not used; requests return a mode/status JSON response.
