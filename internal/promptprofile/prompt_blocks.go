@@ -18,6 +18,9 @@ import (
 const (
 	localToolNotesDefaultMaxBytes   = 8 * 1024
 	planCreatePromptBlockTitle      = "Plan Create Guidance"
+	localToolNotesPromptBlockTitle  = "Local Tool Notes"
+	memorySummariesPromptBlockTitle = "Memory Summaries"
+	groupUsernamesPromptBlockTitle  = "Group Usernames"
 	TelegramRuntimePromptBlockTitle = "Telegram Policies"
 	MAEPReplyPromptBlockTitle       = "MAEP Policies"
 )
@@ -88,7 +91,7 @@ func AppendLocalToolNotesBlock(spec *agent.PromptSpec, log *slog.Logger) {
 	}
 
 	spec.Blocks = append(spec.Blocks, agent.PromptBlock{
-		Title:   "Local Tool Notes",
+		Title:   localToolNotesPromptBlockTitle,
 		Content: content,
 	})
 	log.Info("prompt_local_tool_notes_applied", "path", path, "size", len(content), "max_bytes", localToolNotesDefaultMaxBytes, "truncated", truncated)
@@ -103,7 +106,7 @@ func AppendMemorySummariesBlock(spec *agent.PromptSpec, content string) {
 		return
 	}
 	spec.Blocks = append(spec.Blocks, agent.PromptBlock{
-		Title:   "Memory Summaries",
+		Title:   memorySummariesPromptBlockTitle,
 		Content: content,
 	})
 }
@@ -130,7 +133,7 @@ func AppendTelegramRuntimeBlocks(spec *agent.PromptSpec, isGroup bool, mentionUs
 	}
 	if len(mentionUsers) > 0 {
 		spec.Blocks = append(spec.Blocks, agent.PromptBlock{
-			Title:   "Group Usernames",
+			Title:   groupUsernamesPromptBlockTitle,
 			Content: strings.Join(mentionUsers, "\n"),
 		})
 	}
