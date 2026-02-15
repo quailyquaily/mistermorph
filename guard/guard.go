@@ -189,7 +189,7 @@ func (g *Guard) evalToolCallPre(_ context.Context, a Action) Result {
 	name := strings.TrimSpace(strings.ToLower(a.ToolName))
 	switch name {
 	case "bash":
-		if g.cfg.Bash.RequireApproval {
+		if g.cfg.Approvals.Enabled {
 			return Result{
 				RiskLevel: RiskHigh,
 				Decision:  DecisionRequireApproval,

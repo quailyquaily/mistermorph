@@ -5,7 +5,6 @@ type Config struct {
 
 	Network   NetworkConfig
 	Redaction RedactionConfig
-	Bash      BashConfig
 
 	Audit     AuditConfig
 	Approvals ApprovalsConfig
@@ -30,10 +29,6 @@ type RedactionConfig struct {
 type RegexPattern struct {
 	Name string
 	Re   string
-}
-
-type BashConfig struct {
-	RequireApproval bool
 }
 
 type AuditConfig struct {

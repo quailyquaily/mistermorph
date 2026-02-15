@@ -37,9 +37,6 @@ func (rt *Runtime) buildGuardFromViper(log *slog.Logger) *guard.Guard {
 			Enabled:  viper.GetBool("guard.redaction.enabled"),
 			Patterns: patterns,
 		},
-		Bash: guard.BashConfig{
-			RequireApproval: viper.GetBool("guard.bash.require_approval"),
-		},
 		Audit: guard.AuditConfig{
 			JSONLPath:      strings.TrimSpace(viper.GetString("guard.audit.jsonl_path")),
 			RotateMaxBytes: viper.GetInt64("guard.audit.rotate_max_bytes"),
@@ -93,7 +90,6 @@ func (rt *Runtime) buildGuardFromViper(log *slog.Logger) *guard.Guard {
 	log.Info("guard_enabled",
 		"guard_dir", guardDir,
 		"url_fetch_prefixes", len(cfg.Network.URLFetch.AllowedURLPrefixes),
-		"bash_require_approval", cfg.Bash.RequireApproval,
 		"audit_jsonl", jsonlPath,
 		"approvals_enabled", approvals != nil,
 	)

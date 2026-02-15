@@ -96,9 +96,8 @@ func initViperDefaults() {
 	viper.SetDefault("guard.network.url_fetch.allow_proxy", false)
 	viper.SetDefault("guard.redaction.enabled", true)
 	viper.SetDefault("guard.redaction.patterns", []map[string]any{})
-	viper.SetDefault("guard.bash.require_approval", true)
 	viper.SetDefault("guard.dir_name", "guard")
 	viper.SetDefault("guard.audit.jsonl_path", "")
 	viper.SetDefault("guard.audit.rotate_max_bytes", int64(100*1024*1024))
-	viper.SetDefault("guard.approvals.enabled", true)
+	viper.SetDefault("guard.approvals.enabled", false)
 }

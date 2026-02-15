@@ -322,7 +322,6 @@ Provider-specific settings use the same mapping, for example:
 Tool toggles and limits also map to env vars, for example:
 
 - `MISTER_MORPH_TOOLS_BASH_ENABLED`
-- `MISTER_MORPH_TOOLS_BASH_CONFIRM`
 - `MISTER_MORPH_TOOLS_URL_FETCH_ENABLED`
 - `MISTER_MORPH_TOOLS_URL_FETCH_MAX_BYTES`
 

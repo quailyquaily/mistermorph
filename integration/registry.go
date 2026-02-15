@@ -40,7 +40,6 @@ func (rt *Runtime) buildRegistryFromViper() *tools.Registry {
 	viper.SetDefault("tools.write_file.max_bytes", 512*1024)
 
 	viper.SetDefault("tools.bash.enabled", true)
-	viper.SetDefault("tools.bash.confirm", false)
 	viper.SetDefault("tools.bash.timeout", 30*time.Second)
 	viper.SetDefault("tools.bash.max_output_bytes", 256*1024)
 	viper.SetDefault("tools.bash.deny_paths", []string{"config.yaml"})
@@ -125,7 +124,6 @@ func (rt *Runtime) buildRegistryFromViper() *tools.Registry {
 	if isToolSelected("bash") && viper.GetBool("tools.bash.enabled") {
 		bt := builtin.NewBashTool(
 			true,
-			viper.GetBool("tools.bash.confirm"),
 			viper.GetDuration("tools.bash.timeout"),
 			viper.GetInt("tools.bash.max_output_bytes"),
 		)

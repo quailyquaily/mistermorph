@@ -13,14 +13,13 @@ import (
 
 type BashTool struct {
 	Enabled        bool
-	ConfirmEachRun bool
 	DefaultTimeout time.Duration
 	MaxOutputBytes int
 	DenyPaths      []string
 	DenyTokens     []string
 }
 
-func NewBashTool(enabled bool, confirmEachRun bool, defaultTimeout time.Duration, maxOutputBytes int) *BashTool {
+func NewBashTool(enabled bool, defaultTimeout time.Duration, maxOutputBytes int) *BashTool {
 	if defaultTimeout <= 0 {
 		defaultTimeout = 30 * time.Second
 	}
@@ -29,7 +28,6 @@ func NewBashTool(enabled bool, confirmEachRun bool, defaultTimeout time.Duration
 	}
 	return &BashTool{
 		Enabled:        enabled,
-		ConfirmEachRun: confirmEachRun,
 		DefaultTimeout: defaultTimeout,
 		MaxOutputBytes: maxOutputBytes,
 	}
@@ -89,16 +87,6 @@ func (t *BashTool) Execute(ctx context.Context, params map[string]any) (string, 
 	if v, ok := params["timeout_seconds"]; ok {
 		if secs, ok := asFloat64(v); ok && secs > 0 {
 			timeout = time.Duration(secs * float64(time.Second))
-		}
-	}
-
-	if t.ConfirmEachRun {
-		ok, err := confirmOnTTY(fmt.Sprintf("Run bash command?\n%s\n[y/N]: ", cmdStr))
-		if err != nil {
-			return "", err
-		}
-		if !ok {
-			return "aborted", nil
 		}
 	}
 
