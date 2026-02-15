@@ -85,10 +85,10 @@ func AppendLocalToolNotesBlock(spec *agent.PromptSpec, log *slog.Logger) {
 		"* You can use python or bash to create new script to satisfy specific needs.\n" +
 		"* Always put your scripts at `file_state_dir/`, and update the SCRIPTS.md in following format:" +
 		"```" + "\n" +
-		`- name: "get_ip"` + "\n" +
-		"  script: `file_state_dir/scripts/get_ip.sh`" + "\n" +
-		`  description: "Get the current machine's IP address."` + "\n" +
-		`  usage: "file_state_dir/scripts/get_ip.sh <options or flags>"` + "\n" +
+		`- name: "get_weather"` + "\n" +
+		"  script: `file_state_dir/scripts/get_weather.sh`" + "\n" +
+		`  description: "Get the weather for a specified location."` + "\n" +
+		`  usage: "file_state_dir/scripts/get_weather.sh <location>"` + "\n" +
 		"```\n" +
 		">>> BEGIN OF SCRIPTS.md <<<\n" +
 		"\n" + content + "\n" +

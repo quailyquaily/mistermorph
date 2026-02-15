@@ -418,14 +418,6 @@ func newTelegramCmd() *cobra.Command {
 
 			botUser := me.Username
 			botID := me.ID
-			availableReactionEmojis, err := api.getAvailableReactionEmojis(pollCtx)
-			if err != nil {
-				if errors.Is(err, context.Canceled) || pollCtx.Err() != nil {
-					logger.Info("telegram_stop", "reason", "context_canceled")
-					return nil
-				}
-				logger.Warn("telegram_get_available_reactions_error", "error", err.Error())
-			}
 			aliases := configutil.FlagOrViperStringArray(cmd, "telegram-alias", "telegram.aliases")
 			for i := range aliases {
 				aliases[i] = strings.TrimSpace(aliases[i])
@@ -515,7 +507,6 @@ func newTelegramCmd() *cobra.Command {
 				"telegram_history_mode_cap_talkative", 16,
 				"telegram_history_mode_cap_others", 8,
 				"reactions_enabled", true,
-				"available_reactions_count", len(availableReactionEmojis),
 				"group_trigger_mode", groupTriggerMode,
 				"group_reply_policy", "humanlike",
 				"smart_addressing_max_chars", smartAddressingMaxChars,
@@ -642,7 +633,7 @@ func newTelegramCmd() *cobra.Command {
 							}
 
 							ctx, cancel := context.WithTimeout(context.Background(), taskTimeout)
-							final, _, loadedSkills, reaction, runErr := runTelegramTask(ctx, logger, logOpts, client, reg, api, filesEnabled, fileCacheDir, filesMaxBytes, sharedGuard, cfg, allowed, availableReactionEmojis, job, botUser, model, h, telegramHistoryCap, sticky, requestTimeout, publishTelegramText)
+							final, _, loadedSkills, reaction, runErr := runTelegramTask(ctx, logger, logOpts, client, reg, api, filesEnabled, fileCacheDir, filesMaxBytes, sharedGuard, cfg, allowed, job, botUser, model, h, telegramHistoryCap, sticky, requestTimeout, publishTelegramText)
 							cancel()
 
 							if runErr != nil {
@@ -1550,7 +1541,7 @@ func newTelegramCmd() *cobra.Command {
 	return cmd
 }
 
-func runTelegramTask(ctx context.Context, logger *slog.Logger, logOpts agent.LogOptions, client llm.Client, baseReg *tools.Registry, api *telegramAPI, filesEnabled bool, fileCacheDir string, filesMaxBytes int64, sharedGuard *guard.Guard, cfg agent.Config, allowedIDs map[int64]bool, availableReactionEmojis map[string]bool, job telegramJob, botUsername string, model string, history []chathistory.ChatHistoryItem, historyCap int, stickySkills []string, requestTimeout time.Duration, sendTelegramText func(context.Context, int64, string, string) error) (*agent.Final, *agent.Context, []string, *telegramtools.Reaction, error) {
+func runTelegramTask(ctx context.Context, logger *slog.Logger, logOpts agent.LogOptions, client llm.Client, baseReg *tools.Registry, api *telegramAPI, filesEnabled bool, fileCacheDir string, filesMaxBytes int64, sharedGuard *guard.Guard, cfg agent.Config, allowedIDs map[int64]bool, job telegramJob, botUsername string, model string, history []chathistory.ChatHistoryItem, historyCap int, stickySkills []string, requestTimeout time.Duration, sendTelegramText func(context.Context, int64, string, string) error) (*agent.Final, *agent.Context, []string, *telegramtools.Reaction, error) {
 	if sendTelegramText == nil {
 		return nil, nil, nil, nil, fmt.Errorf("send telegram text callback is required")
 	}
@@ -1596,7 +1587,7 @@ func runTelegramTask(ctx context.Context, logger *slog.Logger, logOpts agent.Log
 	}
 	var reactTool *telegramtools.ReactTool
 	if api != nil && job.MessageID != 0 {
-		reactTool = telegramtools.NewReactTool(toolAPI, job.ChatID, job.MessageID, allowedIDs, availableReactionEmojis)
+		reactTool = telegramtools.NewReactTool(toolAPI, job.ChatID, job.MessageID, allowedIDs)
 		reg.Register(reactTool)
 	}
 

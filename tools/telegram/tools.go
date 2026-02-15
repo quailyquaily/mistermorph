@@ -54,6 +54,10 @@ type ReactTool struct {
 	lastReaction     *Reaction
 }
 
+var telegramStandardReactionEmojis = []string{
+	"👍", "👎", "❤", "🔥", "🥰", "👏", "😁", "🤔", "🤯", "😱", "🤬", "😢", "🎉", "🤩", "🤮", "💩", "🙏", "👌", "🕊", "🤡", "🥱", "🥴", "😍", "🐳", "❤️‍🔥", "🌚", "🌭", "💯", "🤣", "⚡", "🍌", "🏆", "💔", "🤨", "😐", "🍓", "🍾", "💋", "🖕", "😈", "😴", "😭", "🤓", "👻", "👨‍💻", "👀", "🎃", "🙈", "😇", "😨", "🤝", "✍", "🤗", "🫡", "🎅", "🎄", "☃", "💅", "🤪", "🗿", "🆒", "💘", "🙉", "🦄", "😘", "💊", "🙊", "😎", "👾", "🤷‍♂️", "🤷", "🤷‍♀️", "😡",
+}
+
 func NewSendFileTool(api API, chatID int64, cacheDir string, maxBytes int64) *SendFileTool {
 	if maxBytes <= 0 {
 		maxBytes = 20 * 1024 * 1024
@@ -312,9 +316,9 @@ func (t *SendVoiceTool) Execute(ctx context.Context, params map[string]any) (str
 	return fmt.Sprintf("sent voice: %s", filename), nil
 }
 
-func NewReactTool(api API, defaultChatID int64, defaultMessageID int64, allowedIDs map[int64]bool, allowedEmojis map[string]bool) *ReactTool {
-	emojiSet := make(map[string]bool, len(allowedEmojis))
-	for emoji := range allowedEmojis {
+func NewReactTool(api API, defaultChatID int64, defaultMessageID int64, allowedIDs map[int64]bool) *ReactTool {
+	emojiSet := make(map[string]bool, len(telegramStandardReactionEmojis))
+	for _, emoji := range telegramStandardReactionEmojis {
 		emoji = strings.TrimSpace(emoji)
 		if emoji == "" {
 			continue
@@ -337,6 +341,7 @@ func (t *ReactTool) Description() string {
 }
 
 func (t *ReactTool) ParameterSchema() string {
+	emojiDescription := "Emoji to react with. Allowed values: " + strings.Join(telegramStandardReactionEmojis, ",") + "."
 	s := map[string]any{
 		"type":                 "object",
 		"additionalProperties": false,
@@ -351,7 +356,7 @@ func (t *ReactTool) ParameterSchema() string {
 			},
 			"emoji": map[string]any{
 				"type":        "string",
-				"description": "Emoji to react with.",
+				"description": emojiDescription,
 			},
 			"is_big": map[string]any{
 				"type":        "boolean",
@@ -406,9 +411,6 @@ func (t *ReactTool) Execute(ctx context.Context, params map[string]any) (string,
 	emoji = strings.TrimSpace(emoji)
 	if emoji == "" {
 		return "", fmt.Errorf("missing required param: emoji")
-	}
-	if t.allowedEmojis == nil {
-		return "", fmt.Errorf("available reactions cache is not initialized")
 	}
 	if !t.allowedEmojis[emoji] {
 		return "", fmt.Errorf("emoji is not available in current Telegram reactions list: %s", emoji)

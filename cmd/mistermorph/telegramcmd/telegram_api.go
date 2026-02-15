@@ -129,13 +129,6 @@ type telegramGetMeResponse struct {
 	Result telegramUser `json:"result"`
 }
 
-type telegramGetAvailableReactionsResponse struct {
-	OK          bool            `json:"ok"`
-	Result      json.RawMessage `json:"result"`
-	ErrorCode   int             `json:"error_code,omitempty"`
-	Description string          `json:"description,omitempty"`
-}
-
 func (api *telegramAPI) getMe(ctx context.Context) (*telegramUser, error) {
 	url := fmt.Sprintf("%s/bot%s/getMe", api.baseURL, api.token)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -159,76 +152,6 @@ func (api *telegramAPI) getMe(ctx context.Context) (*telegramUser, error) {
 		return nil, fmt.Errorf("telegram getMe: ok=false")
 	}
 	return &out.Result, nil
-}
-
-func (api *telegramAPI) getAvailableReactionEmojis(ctx context.Context) (map[string]bool, error) {
-	url := fmt.Sprintf("%s/bot%s/getAvailableReactions", api.baseURL, api.token)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := api.http.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	raw, _ := io.ReadAll(resp.Body)
-	_ = resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("telegram http %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))
-	}
-
-	var out telegramGetAvailableReactionsResponse
-	if err := json.Unmarshal(raw, &out); err != nil {
-		return nil, err
-	}
-	if !out.OK {
-		desc := strings.TrimSpace(out.Description)
-		if desc == "" {
-			desc = "ok=false"
-		}
-		return nil, fmt.Errorf("telegram getAvailableReactions: %s", desc)
-	}
-
-	reactions, err := parseAvailableReactionEmojis(out.Result)
-	if err != nil {
-		return nil, err
-	}
-	return reactions, nil
-}
-
-func parseAvailableReactionEmojis(raw json.RawMessage) (map[string]bool, error) {
-	if len(raw) == 0 {
-		return map[string]bool{}, nil
-	}
-
-	var list []telegramReactionType
-	if err := json.Unmarshal(raw, &list); err == nil {
-		return reactionEmojiSet(list), nil
-	}
-
-	var wrapped struct {
-		Type      string                 `json:"type"`
-		Reactions []telegramReactionType `json:"reactions"`
-	}
-	if err := json.Unmarshal(raw, &wrapped); err != nil {
-		return nil, err
-	}
-	return reactionEmojiSet(wrapped.Reactions), nil
-}
-
-func reactionEmojiSet(reactions []telegramReactionType) map[string]bool {
-	out := make(map[string]bool, len(reactions))
-	for _, reaction := range reactions {
-		if !strings.EqualFold(strings.TrimSpace(reaction.Type), "emoji") {
-			continue
-		}
-		emoji := strings.TrimSpace(reaction.Emoji)
-		if emoji == "" {
-			continue
-		}
-		out[emoji] = true
-	}
-	return out
 }
 
 func (api *telegramAPI) getUpdates(ctx context.Context, offset int64, timeout time.Duration) ([]telegramUpdate, int64, error) {
