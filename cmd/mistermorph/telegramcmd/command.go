@@ -1539,9 +1539,9 @@ func runTelegramTask(ctx context.Context, logger *slog.Logger, logOpts agent.Log
 		return nil, nil, nil, nil, fmt.Errorf("send telegram text callback is required")
 	}
 	task := job.Text
-	historyRaw, err := json.Marshal(map[string]any{
+	historyRaw, err := json.MarshalIndent(map[string]any{
 		"chat_history_messages": chathistory.BuildMessages(chathistory.ChannelTelegram, history),
-	})
+	}, "", "  ")
 	if err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("render telegram history context: %w", err)
 	}
