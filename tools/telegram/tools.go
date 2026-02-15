@@ -50,6 +50,7 @@ type ReactTool struct {
 	defaultChatID    int64
 	defaultMessageID int64
 	allowedIDs       map[int64]bool
+	allowedEmojis    map[string]bool
 	lastReaction     *Reaction
 }
 
@@ -311,12 +312,21 @@ func (t *SendVoiceTool) Execute(ctx context.Context, params map[string]any) (str
 	return fmt.Sprintf("sent voice: %s", filename), nil
 }
 
-func NewReactTool(api API, defaultChatID int64, defaultMessageID int64, allowedIDs map[int64]bool) *ReactTool {
+func NewReactTool(api API, defaultChatID int64, defaultMessageID int64, allowedIDs map[int64]bool, allowedEmojis map[string]bool) *ReactTool {
+	emojiSet := make(map[string]bool, len(allowedEmojis))
+	for emoji := range allowedEmojis {
+		emoji = strings.TrimSpace(emoji)
+		if emoji == "" {
+			continue
+		}
+		emojiSet[emoji] = true
+	}
 	return &ReactTool{
 		api:              api,
 		defaultChatID:    defaultChatID,
 		defaultMessageID: defaultMessageID,
 		allowedIDs:       allowedIDs,
+		allowedEmojis:    emojiSet,
 	}
 }
 
@@ -396,6 +406,12 @@ func (t *ReactTool) Execute(ctx context.Context, params map[string]any) (string,
 	emoji = strings.TrimSpace(emoji)
 	if emoji == "" {
 		return "", fmt.Errorf("missing required param: emoji")
+	}
+	if t.allowedEmojis == nil {
+		return "", fmt.Errorf("available reactions cache is not initialized")
+	}
+	if !t.allowedEmojis[emoji] {
+		return "", fmt.Errorf("emoji is not available in current Telegram reactions list: %s", emoji)
 	}
 
 	var isBigPtr *bool
