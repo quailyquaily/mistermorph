@@ -126,6 +126,8 @@ func (rt *Runtime) buildRegistryFromViper() *tools.Registry {
 			true,
 			viper.GetDuration("tools.bash.timeout"),
 			viper.GetInt("tools.bash.max_output_bytes"),
+			strings.TrimSpace(viper.GetString("file_cache_dir")),
+			strings.TrimSpace(viper.GetString("file_state_dir")),
 		)
 		bt.DenyPaths = viper.GetStringSlice("tools.bash.deny_paths")
 		if secretsEnabled {

@@ -16,8 +16,12 @@ model_scene: `{{.Scene}}`
 
 BEGIN
 * role: {{.Role}}
-{{- if .HasToolCallID}}*tool_call_id: {{.ToolCallID}}{{- end}}
-{{- if .HasToolCalls}}*tool_calls: {{.ToolCalls}}{{- end}}
+{{- if .HasToolCallID}}
+* tool_call_id: {{.ToolCallID}}
+{{- end}}
+{{- if .HasToolCalls}}
+* tool_calls: {{.ToolCalls}}
+{{- end}}
 * content: > |
 {{.Content}}
 END

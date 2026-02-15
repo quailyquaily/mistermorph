@@ -6,20 +6,24 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/quailyquaily/mistermorph/internal/pathutil"
 )
 
 type BashTool struct {
 	Enabled        bool
 	DefaultTimeout time.Duration
 	MaxOutputBytes int
+	BaseDirs       []string
 	DenyPaths      []string
 	DenyTokens     []string
 }
 
-func NewBashTool(enabled bool, defaultTimeout time.Duration, maxOutputBytes int) *BashTool {
+func NewBashTool(enabled bool, defaultTimeout time.Duration, maxOutputBytes int, baseDirs ...string) *BashTool {
 	if defaultTimeout <= 0 {
 		defaultTimeout = 30 * time.Second
 	}
@@ -30,6 +34,7 @@ func NewBashTool(enabled bool, defaultTimeout time.Duration, maxOutputBytes int)
 		Enabled:        enabled,
 		DefaultTimeout: defaultTimeout,
 		MaxOutputBytes: maxOutputBytes,
+		BaseDirs:       normalizeBaseDirs(baseDirs),
 	}
 }
 
@@ -45,11 +50,11 @@ func (t *BashTool) ParameterSchema() string {
 		"properties": map[string]any{
 			"cmd": map[string]any{
 				"type":        "string",
-				"description": "Bash command to execute.",
+				"description": "Bash command to execute. Supports path aliases file_cache_dir and file_state_dir.",
 			},
 			"cwd": map[string]any{
 				"type":        "string",
-				"description": "Optional working directory.",
+				"description": "Optional working directory. Supports path aliases file_cache_dir and file_state_dir.",
 			},
 			"timeout_seconds": map[string]any{
 				"type":        "number",
@@ -72,6 +77,11 @@ func (t *BashTool) Execute(ctx context.Context, params map[string]any) (string, 
 	if cmdStr == "" {
 		return "", fmt.Errorf("missing required param: cmd")
 	}
+	var err error
+	cmdStr, err = t.expandPathAliasesInCommand(cmdStr)
+	if err != nil {
+		return "", err
+	}
 
 	if offending, ok := bashCommandDenied(cmdStr, t.DenyPaths); ok {
 		return "", fmt.Errorf("bash command references denied path %q (configure via tools.bash.deny_paths)", offending)
@@ -82,6 +92,10 @@ func (t *BashTool) Execute(ctx context.Context, params map[string]any) (string, 
 
 	cwd, _ := params["cwd"].(string)
 	cwd = strings.TrimSpace(cwd)
+	cwd, err = t.resolveCWD(cwd)
+	if err != nil {
+		return "", err
+	}
 
 	timeout := t.DefaultTimeout
 	if v, ok := params["timeout_seconds"]; ok {
@@ -105,7 +119,7 @@ func (t *BashTool) Execute(ctx context.Context, params map[string]any) (string, 
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
-	err := cmd.Run()
+	err = cmd.Run()
 
 	exitCode := 0
 	if err != nil {
@@ -130,6 +144,78 @@ func (t *BashTool) Execute(ctx context.Context, params map[string]any) (string, 
 	if exitCode != 0 {
 		return b.String(), fmt.Errorf("bash exited with code %d", exitCode)
 	}
+	return b.String(), nil
+}
+
+func (t *BashTool) resolveCWD(raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", nil
+	}
+	alias, rest := detectWritePathAlias(raw)
+	if alias == "" {
+		return pathutil.ExpandHomePath(raw), nil
+	}
+	base := selectBaseForAlias(t.BaseDirs, alias)
+	if strings.TrimSpace(base) == "" {
+		return "", fmt.Errorf("base dir %s is not configured", alias)
+	}
+	rest = strings.TrimLeft(strings.TrimSpace(rest), "/\\")
+	if rest == "" {
+		return filepath.Clean(base), nil
+	}
+	return filepath.Clean(filepath.Join(base, rest)), nil
+}
+
+func (t *BashTool) expandPathAliasesInCommand(cmd string) (string, error) {
+	var err error
+	cmd, err = replaceAliasTokenInCommand(cmd, "file_cache_dir", selectBaseForAlias(t.BaseDirs, "file_cache_dir"))
+	if err != nil {
+		return "", err
+	}
+	cmd, err = replaceAliasTokenInCommand(cmd, "file_state_dir", selectBaseForAlias(t.BaseDirs, "file_state_dir"))
+	if err != nil {
+		return "", err
+	}
+	return cmd, nil
+}
+
+func replaceAliasTokenInCommand(cmd, alias, baseDir string) (string, error) {
+	cmd = strings.TrimSpace(cmd)
+	alias = strings.TrimSpace(alias)
+	if cmd == "" || alias == "" {
+		return cmd, nil
+	}
+	lower := strings.ToLower(cmd)
+	needle := strings.ToLower(alias)
+
+	last := 0
+	start := 0
+	var b strings.Builder
+	matched := false
+	for {
+		i := strings.Index(lower[start:], needle)
+		if i < 0 {
+			break
+		}
+		i += start
+		if !tokenBoundaryAt(lower, i, len(needle)) {
+			start = i + 1
+			continue
+		}
+		if strings.TrimSpace(baseDir) == "" {
+			return "", fmt.Errorf("base dir %s is not configured", alias)
+		}
+		matched = true
+		b.WriteString(cmd[last:i])
+		b.WriteString(baseDir)
+		last = i + len(needle)
+		start = last
+	}
+	if !matched {
+		return cmd, nil
+	}
+	b.WriteString(cmd[last:])
 	return b.String(), nil
 }
 

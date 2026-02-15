@@ -59,8 +59,8 @@
 
 | 参数 | 类型 | 必填 | 默认值 | 说明 |
 |---|---|---|---|---|
-| `cmd` | `string` | 是 | 无 | 要执行的 bash 命令。 |
-| `cwd` | `string` | 否 | 当前目录 | 命令执行目录。 |
+| `cmd` | `string` | 是 | 无 | 要执行的 bash 命令。支持 `file_cache_dir/...` 与 `file_state_dir/...` 别名。 |
+| `cwd` | `string` | 否 | 当前目录 | 命令执行目录。支持 `file_cache_dir/...` 与 `file_state_dir/...` 别名。 |
 | `timeout_seconds` | `number` | 否 | `tools.bash.timeout` | 超时秒数覆盖值。 |
 
 约束：
