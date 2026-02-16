@@ -120,7 +120,7 @@ mistermorph telegram --log-level info
 - `/id` で現在の chat id を取得し、`allowed_chat_ids` に追加して許可リスト化します。
 - グループでは `/ask <task>` を使えます。
 - グループでは、ボットへの返信または `@BotUsername` メンションでも応答します。
-- ファイルを送信すると `file_cache_dir/telegram/` に保存され、Agent が処理できます。`telegram_send_file` でキャッシュ済みファイルの送信、`telegram_send_voice` で音声送信も可能です（ローカル TTS エンジン例: `espeak-ng` と `ffmpeg`/`opusenc` が必要）。
+- ファイルを送信すると `file_cache_dir/telegram/` に保存され、Agent が処理できます。`telegram_send_file` でキャッシュ済みファイルを送信でき、`telegram_send_voice` で `file_cache_dir` 配下のローカル音声ファイルも送信できます。
 - 最後に読み込んだスキルはチャット単位で保持されるため、後続メッセージでも `SKILL.md` の文脈が維持されます。`/reset` でクリアできます。
 - `telegram.aliases` を設定している場合、デフォルトの `telegram.group_trigger_mode=smart` では、直接呼びかけに見えるメッセージに対してのみ alias がトリガーされます。smart モードでは alias ヒット時に LLM による検証も行います。
 - チャットで `/reset` を実行すると会話履歴をクリアできます。

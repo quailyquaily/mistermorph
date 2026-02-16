@@ -249,7 +249,8 @@ func (e *Engine) runLoop(ctx context.Context, st *engineLoopState) (*Final, *Con
 			for i := range toolCalls {
 				tc := toolCalls[i]
 				stepStart := time.Now()
-				fields := []any{"step", step, "tool", tc.Name, "args", toolArgsSummary(tc.Name, tc.Params, e.logOpts)}
+				debugMode := log.Enabled(ctx, slog.LevelDebug)
+				fields := []any{"step", step, "tool", tc.Name, "args", toolArgsSummary(tc.Name, tc.Params, e.logOpts, debugMode)}
 				if len(toolCalls) > 1 {
 					fields = append(fields, "tool_index", i, "tool_count", len(toolCalls))
 				}

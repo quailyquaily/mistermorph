@@ -57,7 +57,7 @@ func (e *Engine) forceConclusion(ctx context.Context, messages []llm.Message, mo
 	return fp, agentCtx, nil
 }
 
-func toolArgsSummary(toolName string, params map[string]any, opts LogOptions) map[string]any {
+func toolArgsSummary(toolName string, params map[string]any, opts LogOptions, debugMode bool) map[string]any {
 	if len(params) == 0 {
 		return nil
 	}
@@ -67,6 +67,28 @@ func toolArgsSummary(toolName string, params map[string]any, opts LogOptions) ma
 	case "url_fetch":
 		if v, ok := params["url"].(string); ok && strings.TrimSpace(v) != "" {
 			out["url"] = sanitizeURLForLog(v, opts)
+		}
+		if debugMode {
+			method := "GET"
+			if v, ok := params["method"].(string); ok && strings.TrimSpace(v) != "" {
+				method = strings.ToUpper(strings.TrimSpace(v))
+			}
+			out["method"] = method
+
+			if headers, ok := params["headers"]; ok && headers != nil {
+				if mapped, ok := headers.(map[string]string); ok {
+					converted := make(map[string]any, len(mapped))
+					for k, v := range mapped {
+						converted[k] = v
+					}
+					headers = converted
+				}
+				out["headers"] = sanitizeValue(headers, opts.MaxStringValueChars, opts.RedactKeys, "")
+			}
+
+			if body, ok := params["body"]; ok {
+				out["body"] = sanitizeValue(body, opts.MaxStringValueChars, opts.RedactKeys, "")
+			}
 		}
 	case "web_search":
 		if v, ok := params["q"].(string); ok && strings.TrimSpace(v) != "" {

@@ -1,10 +1,10 @@
 # Tools Reference
 
-本文档描述当前代码中的内置与运行时注入 tools 参数（基于 `tools/builtin/*.go`、`cmd/mistermorph/telegramcmd/*.go` 与注册逻辑）。
+This document describes the built-in and runtime-injected tool parameters currently implemented in the codebase (based on `tools/builtin/*.go`, `cmd/mistermorph/telegramcmd/*.go`, and registration logic).
 
-## 注册与可用性
+## Registration and Availability
 
-- 默认注册（由 `cmd/mistermorph/registry.go` 控制）
+- Default registration (controlled by `cmd/mistermorph/registry.go`)
   - `read_file`
   - `write_file`
   - `bash`
@@ -12,260 +12,258 @@
   - `web_search`
   - `todo_update`
   - `contacts_send`
-- 条件注册
-  - `plan_create`（在 `run` / `telegram` / `daemon serve` 模式通过 `internal/toolsutil.RegisterPlanTool` 注入，可由 `tools.plan_create.enabled` 关闭）
-  - `telegram_send_voice`（仅 `mistermorph telegram` 运行时注入）
-  - `telegram_send_file`（仅 `mistermorph telegram` 运行时注入）
-  - `telegram_react`（仅 `mistermorph telegram` 运行时注入）
+- Conditional registration
+  - `plan_create` (injected in `run` / `telegram` / `daemon serve` via `internal/toolsutil.RegisterPlanTool`; can be disabled with `tools.plan_create.enabled`)
+  - `telegram_send_voice` (injected only at `mistermorph telegram` runtime)
+  - `telegram_send_file` (injected only at `mistermorph telegram` runtime)
+  - `telegram_react` (injected only at `mistermorph telegram` runtime)
 
 ## `read_file`
 
-用途：读取本地文本文件内容（超长会截断）。
+Purpose: read local text file content (very long output may be truncated).
 
-参数：
+Parameters:
 
-| 参数 | 类型 | 必填 | 默认值 | 说明 |
+| Parameter | Type | Required | Default | Description |
 |---|---|---|---|---|
-| `path` | `string` | 是 | 无 | 文件路径。支持 `file_cache_dir/<path>` 与 `file_state_dir/<path>` 别名。 |
+| `path` | `string` | Yes | None | File path. Supports `file_cache_dir/<path>` and `file_state_dir/<path>` aliases. |
 
-约束：
+Constraints:
 
-- 会受 `tools.read_file.deny_paths` 拦截。
-- 别名必须带相对文件路径，不能只传 `file_cache_dir` 或 `file_state_dir`。
+- Access can be blocked by `tools.read_file.deny_paths`.
+- Alias paths must include a relative file path; passing only `file_cache_dir` or `file_state_dir` is invalid.
 
 ## `write_file`
 
-用途：写入本地文件（覆盖或追加）。
+Purpose: write local files (overwrite or append).
 
-参数：
+Parameters:
 
-| 参数 | 类型 | 必填 | 默认值 | 说明 |
+| Parameter | Type | Required | Default | Description |
 |---|---|---|---|---|
-| `path` | `string` | 是 | 无 | 目标路径。相对路径默认写到 `file_cache_dir`。支持 `file_state_dir/<path>`。 |
-| `content` | `string` | 是 | 无 | 要写入的文本内容。 |
-| `mode` | `string` | 否 | `overwrite` | `overwrite` 或 `append`。 |
+| `path` | `string` | Yes | None | Target path. Relative paths are written under `file_cache_dir` by default. Supports `file_state_dir/<path>`. |
+| `content` | `string` | Yes | None | Text content to write. |
+| `mode` | `string` | No | `overwrite` | `overwrite` or `append`. |
 
-约束：
+Constraints:
 
-- 会默认创建目标父目录。
-- 仅允许写入 `file_cache_dir` / `file_state_dir` 范围。
-- 内容大小受 `tools.write_file.max_bytes` 限制。
+- Parent directories are created automatically when needed.
+- Writes are allowed only under `file_cache_dir` / `file_state_dir`.
+- Content size is limited by `tools.write_file.max_bytes`.
 
 ## `bash`
 
-用途：执行本地 `bash` 命令。
+Purpose: execute local `bash` commands.
 
-参数：
+Parameters:
 
-| 参数 | 类型 | 必填 | 默认值 | 说明 |
+| Parameter | Type | Required | Default | Description |
 |---|---|---|---|---|
-| `cmd` | `string` | 是 | 无 | 要执行的 bash 命令。支持 `file_cache_dir/...` 与 `file_state_dir/...` 别名。 |
-| `cwd` | `string` | 否 | 当前目录 | 命令执行目录。支持 `file_cache_dir/...` 与 `file_state_dir/...` 别名。 |
-| `timeout_seconds` | `number` | 否 | `tools.bash.timeout` | 超时秒数覆盖值。 |
+| `cmd` | `string` | Yes | None | Bash command to execute. Supports `file_cache_dir/...` and `file_state_dir/...` aliases. |
+| `cwd` | `string` | No | Current directory | Working directory for command execution. Supports `file_cache_dir/...` and `file_state_dir/...` aliases. |
+| `timeout_seconds` | `number` | No | `tools.bash.timeout` | Timeout override in seconds. |
 
-约束：
+Constraints:
 
-- 可被 `tools.bash.enabled` 关闭。
-- 受 `tools.bash.deny_paths` 与内部 deny token 规则约束。
+- Can be disabled via `tools.bash.enabled`.
+- Restricted by `tools.bash.deny_paths` and internal deny-token rules.
 
 ## `url_fetch`
 
-用途：发起 HTTP(S) 请求并返回响应（可下载到文件）。
+Purpose: make HTTP(S) requests and return responses (or download to file).
 
-参数：
+Parameters:
 
-| 参数 | 类型 | 必填 | 默认值 | 说明 |
+| Parameter | Type | Required | Default | Description |
 |---|---|---|---|---|
-| `url` | `string` | 是 | 无 | 请求地址，仅支持 `http/https`。 |
-| `method` | `string` | 否 | `GET` | `GET` / `POST` / `PUT` / `PATCH` / `DELETE`。 |
-| `auth_profile` | `string` | 否 | 无 | 认证配置 ID（启用 secrets 后可用）。 |
-| `headers` | `object<string,string>` | 否 | 无 | 自定义请求头（有 allowlist/denylist）。 |
-| `body` | `string|object|array|number|boolean|null` | 否 | 无 | 请求体（仅 `POST/PUT/PATCH`）。 |
-| `download_path` | `string` | 否 | 无 | 将响应体保存到缓存目录路径。 |
-| `timeout_seconds` | `number` | 否 | `tools.url_fetch.timeout` | 超时秒数覆盖值。 |
-| `max_bytes` | `integer` | 否 | `tools.url_fetch.max_bytes` 或下载上限 | 最大读取字节数。 |
+| `url` | `string` | Yes | None | Request URL. Only `http/https` are supported. |
+| `method` | `string` | No | `GET` | `GET` / `POST` / `PUT` / `PATCH` / `DELETE`. |
+| `auth_profile` | `string` | No | None | Auth profile ID (available when secrets are enabled). |
+| `headers` | `object<string,string>` | No | None | Custom headers (allowlist/denylist applies). |
+| `body` | `string|object|array|number|boolean|null` | No | None | Request body (for `POST/PUT/PATCH` only). |
+| `download_path` | `string` | No | None | Save response body to a cache-directory path. |
+| `timeout_seconds` | `number` | No | `tools.url_fetch.timeout` | Timeout override in seconds. |
+| `max_bytes` | `integer` | No | `tools.url_fetch.max_bytes` or download cap | Maximum bytes to read. |
 
-约束：
+Constraints:
 
-- `download_path` 启用时会默认创建目标父目录。
-- `download_path` 启用时返回下载元数据，不内联大响应。
-- `headers` 存在安全限制（如 `Authorization`、`Cookie` 等禁止直接传入）。
-- 会受 guard 网络策略限制。
+- Parent directories for `download_path` are created automatically.
+- With `download_path`, the tool returns download metadata instead of embedding large response bodies.
+- `headers` has security restrictions (for example, direct `Authorization` and `Cookie` are blocked).
+- Requests are subject to guard network policy.
 
 ## `web_search`
 
-用途：网页搜索并返回结构化结果（当前实现基于 DuckDuckGo HTML）。
+Purpose: run web search and return structured results (current implementation uses DuckDuckGo HTML).
 
-参数：
+Parameters:
 
-| 参数 | 类型 | 必填 | 默认值 | 说明 |
+| Parameter | Type | Required | Default | Description |
 |---|---|---|---|---|
-| `q` | `string` | 是 | 无 | 搜索关键词。 |
-| `max_results` | `integer` | 否 | `tools.web_search.max_results` | 返回结果上限（代码侧最大 20）。 |
+| `q` | `string` | Yes | None | Search keywords. |
+| `max_results` | `integer` | No | `tools.web_search.max_results` | Maximum returned results (hard-capped at 20 in code). |
 
 ## `todo_update`
 
-用途：维护 `file_state_dir` 下的 `TODO.md` / `TODO.DONE.md`，支持新增与完成事项。
+Purpose: maintain `TODO.md` / `TODO.DONE.md` under `file_state_dir`, including add and complete operations.
 
-参数：
+Parameters:
 
-| 参数 | 类型 | 必填 | 默认值 | 说明 |
+| Parameter | Type | Required | Default | Description |
 |---|---|---|---|---|
-| `action` | `string` | 是 | 无 | `add` 或 `complete`。 |
-| `content` | `string` | 是 | 无 | `add` 时为条目文本；`complete` 时为匹配查询。 |
-| `people` | `array<string>` | 否（`add` 时必填） | 无 | 提及人物列表（通常包含说话者、被称呼者、以及其他提及对象）。 |
-| `chat_id` | `string` | 否 | 空 | 任务上下文聊天 ID（例如 `tg:-1001234567890`）。写入 WIP 条目的 `ChatID:` 元字段。 |
+| `action` | `string` | Yes | None | `add` or `complete`. |
+| `content` | `string` | Yes | None | For `add`: item text. For `complete`: matching query. |
+| `people` | `array<string>` | No (`add` requires it) | None | Mentioned people (usually speaker, addressee, and other mentioned users). |
+| `chat_id` | `string` | No | Empty | Task-context chat ID (for example `tg:-1001234567890`). Written to WIP entry metadata as `ChatID:`. |
 
-返回：
+Returns:
 
-- 成功时返回 `UpdateResult` JSON，关键字段：
-  - `ok`：是否成功（布尔）。
-  - `action`：实际执行动作（`add` / `complete`）。
-  - `updated_counts`：`{open_count, done_count}`。
-  - `changed`：`{wip_added, wip_removed, done_added}`。
-  - `entry`：本次主变更条目（`created_at` / `done_at` / `content`）。
-  - `warnings`：可选警告数组（例如 LLM 改写提示）。
+- On success, returns `UpdateResult` JSON with key fields:
+  - `ok`: whether operation succeeded (boolean).
+  - `action`: actual executed action (`add` / `complete`).
+  - `updated_counts`: `{open_count, done_count}`.
+  - `changed`: `{wip_added, wip_removed, done_added}`.
+  - `entry`: primary changed entry (`created_at` / `done_at` / `content`).
+  - `warnings`: optional warning array (for example, LLM rewrite hints).
 
-约束：
+Constraints:
 
-- 受 `tools.todo_update.enabled` 开关控制。
-- 依赖 LLM 客户端与模型；未绑定会报错。
-- `add` 采用“参数抽取 + LLM 插入”流程：工具参数直接提供 `people`，然后由 LLM 结合 `content`、原始用户输入与运行时上下文插入 `名称 (ref_id)`。
-- `chat_id` 当前仅接受 `tg:<chat-id>`（正负 int64，且不能为 0）。
-- `add` 仅接受可引用 ID：`tg:<int64>`、`tg:@<username>`、`maep:<peer_id>`、`slack:<channel_id>`、`discord:<channel_id>`。
-- `add` 中的引用 ID 必须存在于联系人快照的 `reachable_ids`。
-- 若 `add` 中部分人物无法映射可引用 ID，工具不会中断，而是回退为“原样写入 content”，并在 `warnings` 中附加 `reference_unresolved_write_raw`。
-- `complete` 仅走 LLM 语义匹配（无程序兜底）；歧义会直接报错。
+- Controlled by `tools.todo_update.enabled`.
+- Requires an LLM client and model; returns an error if not bound.
+- `add` uses a "param extraction + LLM insertion" flow: `people` comes from tool params, then the LLM inserts `name (ref_id)` based on `content`, raw user input, and runtime context.
+- `chat_id` currently accepts only `tg:<chat-id>` (signed int64, non-zero).
+- `add` only accepts reference IDs in this set: `tg:<int64>`, `tg:@<username>`, `maep:<peer_id>`, `slack:<channel_id>`, `discord:<channel_id>`.
+- Reference IDs in `add` must exist in contact snapshot `reachable_ids`.
+- If some people in `add` cannot be mapped to reference IDs, the tool does not fail; it falls back to writing raw `content` and appends `reference_unresolved_write_raw` in `warnings`.
+- `complete` relies only on LLM semantic matching (no programmatic fallback); ambiguous matches return an error directly.
 
-错误（字符串匹配）：
+Errors (string matching):
 
-| 错误字符串（包含） | 触发场景 |
+| Error substring | Trigger |
 |---|---|
-| `todo_update tool is disabled` | 工具被禁用。 |
-| `action is required` | 缺少 `action`。 |
-| `content is required` | 缺少 `content` 或为空。 |
-| `invalid action:` | `action` 不是 `add/complete`。 |
-| `todo_update unavailable (missing llm client)` | 未注入 LLM client。 |
-| `todo_update unavailable (missing llm model)` | 未配置模型。 |
-| `invalid reference id:` | 文本里存在非法 `(...)` 引用。 |
-| `missing_reference_id` | 人物提及无法唯一解析为可引用 ID。 |
-| `reference id is not reachable:` | 引用 ID 不在联系人可达集合。 |
-| `no matching todo item in TODO.md` | `complete` 未命中可完成条目。 |
-| `ambiguous todo item match` | `complete` 命中多个候选。 |
-| `people is required for add action` | `add` 未提供 `people` 参数。 |
-| `people must be an array of strings` | `people` 不是字符串数组。 |
-| `invalid reference_resolve response` | 引用插入 LLM 返回非法 JSON。 |
-| `invalid semantic_match response` | 语义匹配 LLM 返回非法 JSON/结构。 |
-| `invalid semantic_dedup response` | 语义去重 LLM 返回非法 JSON/结构。 |
+| `todo_update tool is disabled` | Tool is disabled. |
+| `action is required` | Missing `action`. |
+| `content is required` | Missing or empty `content`. |
+| `invalid action:` | `action` is not `add/complete`. |
+| `todo_update unavailable (missing llm client)` | LLM client not injected. |
+| `todo_update unavailable (missing llm model)` | LLM model not configured. |
+| `invalid reference id:` | Invalid `(...)` reference exists in text. |
+| `missing_reference_id` | Mentioned person cannot be uniquely resolved to a reference ID. |
+| `reference id is not reachable:` | Reference ID is not in reachable contacts. |
+| `no matching todo item in TODO.md` | `complete` found no completable entry. |
+| `ambiguous todo item match` | `complete` matched multiple candidates. |
+| `people is required for add action` | `add` called without `people`. |
+| `people must be an array of strings` | `people` is not a string array. |
+| `invalid reference_resolve response` | Reference insertion LLM returned invalid JSON. |
+| `invalid semantic_match response` | Semantic match LLM returned invalid JSON/schema. |
+| `invalid semantic_dedup response` | Semantic dedup LLM returned invalid JSON/schema. |
 
-注：`missing_reference_id` 在当前实现中通常由内部 LLM 解析阶段触发并被工具降级处理为原样写入；若上游直接消费该错误仍可按该字符串识别。
+Note: in current implementation, `missing_reference_id` is usually raised during internal LLM parsing and then downgraded to raw-content write; if an upstream layer directly consumes this error, it can still match on that string.
 
 ## `contacts_send`
 
-用途：向单个联系人发送一条消息（自动路由 MAEP/Telegram）。
+Purpose: send a single message to one contact (auto-routed via MAEP/Telegram).
 
-联系人资料维护说明：
+Contact profile maintenance:
 
-- 读取联系人请用 `read_file` 读取 `file_state_dir/contacts/ACTIVE.md` 与 `file_state_dir/contacts/INACTIVE.md`。
-- 更新联系人请用 `write_file` 直接编辑上述文件（遵循模板中的 YAML profile 结构）。
+- To read contacts, use `read_file` on `file_state_dir/contacts/ACTIVE.md` and `file_state_dir/contacts/INACTIVE.md`.
+- To update contacts, use `write_file` to edit those files directly (following the YAML profile template structure).
 
-参数：
+Parameters:
 
-| 参数 | 类型 | 必填 | 默认值 | 说明 |
+| Parameter | Type | Required | Default | Description |
 |---|---|---|---|---|
-| `contact_id` | `string` | 是 | 无 | 目标联系人 ID。 |
-| `chat_id` | `string` | 否 | 空 | 可选 Telegram chat 提示（例如 `tg:-1001234567890`）。 |
-| `content_type` | `string` | 否 | `application/json` | 负载类型，必须是 envelope JSON 类型。 |
-| `message_text` | `string` | 条件必填 | 无 | 文本内容；工具会自动封装为 envelope。 |
-| `message_base64` | `string` | 条件必填 | 无 | base64url 编码的 envelope JSON。 |
-| `session_id` | `string` | 否 | 空 | 会话 ID（UUIDv7）。`contacts_send` 固定发送 `chat.message`。 |
-| `reply_to` | `string` | 否 | 空 | 可选，引用上一条消息 `message_id`。 |
+| `contact_id` | `string` | Yes | None | Target contact ID. |
+| `chat_id` | `string` | No | Empty | Optional Telegram chat hint (for example `tg:-1001234567890`). |
+| `content_type` | `string` | No | `application/json` | Payload type; must be envelope JSON type. |
+| `message_text` | `string` | Conditionally required | None | Message text; the tool wraps it into an envelope. |
+| `message_base64` | `string` | Conditionally required | None | base64url-encoded envelope JSON. |
+| `session_id` | `string` | No | Empty | Session ID (UUIDv7). `contacts_send` always sends `chat.message`. |
+| `reply_to` | `string` | No | Empty | Optional reply target `message_id`. |
 
-约束：
+Constraints:
 
-- `contacts_send` 的发送 topic 固定为 `chat.message`（调用方不再传 `topic`）。
-- 若传入 `chat_id`：
-  - 仅当该值命中联系人的 `tg_private_chat_id` 或 `tg_group_chat_ids` 时使用该目标发送；
-  - 否则回退到该联系人的 `tg_private_chat_id`；
-  - 若仍不可用，则返回错误。
-- `message_text` 与 `message_base64` 至少提供一个。
-- `content_type` 默认 `application/json`，且必须是 `application/json`（可带参数，如 `application/json; charset=utf-8`）。
-- 若提供 `message_base64`，其解码结果必须是 envelope JSON，并包含 `message_id` / `text` / `sent_at(RFC3339)` / `session_id(UUIDv7)`。
-- 人类联系人发送默认允许；是否可送达仍取决于联系人资料中的可发送目标（私聊/群聊 chat_id）。
+- `contacts_send` always uses topic `chat.message` (caller does not pass `topic`).
+- In Telegram runtime mode: `group/supergroup` sessions do not expose `contacts_send` by default; `private` sessions keep it available.
+- If cross-session forwarding is needed in group chat (for example, explicit "DM someone"), trigger it via explicit task/command, not by routing ordinary group replies to `contacts_send`.
+- If `chat_id` is provided:
+  - It is used only when it matches the contact's `tg_private_chat_id` or `tg_group_chat_ids`.
+  - Otherwise it falls back to the contact's `tg_private_chat_id`.
+  - If still unavailable, the tool returns an error.
+- At least one of `message_text` or `message_base64` is required.
+- `content_type` defaults to `application/json`, and must be `application/json` (parameters allowed, for example `application/json; charset=utf-8`).
+- If `message_base64` is provided, decoded payload must be envelope JSON containing `message_id` / `text` / `sent_at (RFC3339)` / `session_id (UUIDv7)`.
+- Sending to human contacts is allowed by default; actual deliverability still depends on sendable targets in contact profiles (private/group chat IDs).
 
 ## `plan_create`
 
-用途：生成执行计划 JSON。通常由系统在复杂任务时调用。
+Purpose: generate execution-plan JSON. Usually called by the system for complex tasks.
 
-参数：
+Parameters:
 
-| 参数 | 类型 | 必填 | 默认值 | 说明 |
+| Parameter | Type | Required | Default | Description |
 |---|---|---|---|---|
-| `task` | `string` | 是 | 无 | 待规划任务描述。 |
-| `max_steps` | `integer` | 否 | 配置默认（通常 6） | 最大步骤数。 |
-| `style` | `string` | 否 | 空 | 计划风格提示，如 `terse`。 |
-| `model` | `string` | 否 | 当前默认模型 | 计划生成模型覆盖。 |
+| `task` | `string` | Yes | None | Task description to plan. |
+| `max_steps` | `integer` | No | Config default (usually 6) | Maximum number of steps. |
+| `style` | `string` | No | Empty | Plan style hint, for example `terse`. |
+| `model` | `string` | No | Current default model | Override model for plan generation. |
 
 ## `telegram_send_file`
 
-用途：向当前 Telegram chat 发送本地缓存文件（document）。
+Purpose: send a local cached file (document) to the current Telegram chat.
 
-参数：
+Parameters:
 
-| 参数 | 类型 | 必填 | 默认值 | 说明 |
+| Parameter | Type | Required | Default | Description |
 |---|---|---|---|---|
-| `path` | `string` | 是 | 无 | 本地文件路径。支持绝对路径，或 `file_cache_dir` 下相对路径。 |
-| `filename` | `string` | 否 | `path` 的 basename | 发送给 Telegram 时展示的文件名。 |
-| `caption` | `string` | 否 | 空 | 可选文件说明。 |
+| `path` | `string` | Yes | None | Local file path. Supports absolute path or relative path under `file_cache_dir`. |
+| `filename` | `string` | No | `basename(path)` | File name displayed in Telegram. |
+| `caption` | `string` | No | Empty | Optional file caption. |
 
-约束：
+Constraints:
 
-- 仅在 Telegram 模式可用。
-- `path` 支持 `file_cache_dir/<path>` 别名写法。
-- 仅允许发送 `file_cache_dir` 范围内文件；目录会报错。
-- 文件大小受工具上限限制（当前默认 20 MiB）。
+- Available only in Telegram mode.
+- `path` supports `file_cache_dir/<path>` alias form.
+- Only files under `file_cache_dir` can be sent; directories return errors.
+- File size is limited by tool cap (currently 20 MiB by default).
 
 ## `telegram_send_voice`
 
-用途：发送 Telegram 语音消息（本地语音文件或本地 TTS 合成）。
+Purpose: send a Telegram voice message from a local voice file.
 
-参数：
+Parameters:
 
-| 参数 | 类型 | 必填 | 默认值 | 说明 |
+| Parameter | Type | Required | Default | Description |
 |---|---|---|---|---|
-| `chat_id` | `integer` | 否 | 当前上下文 chat | 目标 Telegram chat_id。无活动 chat 上下文时必填。 |
-| `path` | `string` | 否 | 空 | 本地语音文件路径（建议 `.ogg`/Opus）。支持绝对路径，或 `file_cache_dir` 下相对路径。 |
-| `text` | `string` | 否 | 空 | 当 `path` 为空时，用于本地 TTS 合成语音。 |
-| `lang` | `string` | 否 | 自动检测 | TTS 语言标签（BCP-47，如 `en-US`、`zh-CN`）。 |
-| `filename` | `string` | 否 | `path` 的 basename | 发送给 Telegram 时展示的文件名。 |
-| `caption` | `string` | 否 | 空 | 可选说明；当 `path` 与 `text` 都为空时会作为 TTS 文本兜底。 |
+| `chat_id` | `integer` | No | Current context chat | Target Telegram `chat_id`. Required if there is no active chat context. |
+| `path` | `string` | Yes | None | Local voice file path (recommended `.ogg`/Opus). Supports absolute path or relative path under `file_cache_dir`. |
+| `filename` | `string` | No | `basename(path)` | File name displayed in Telegram. |
 
-约束：
+Constraints:
 
-- 仅在 Telegram 模式可用。
-- 优先使用 `path`：有 `path` 时直接发送文件；无 `path` 时使用 `text`（为空则回退到 `caption`）做本地 TTS 合成。
-- 本地文件仅允许在 `file_cache_dir` 范围内，且受大小上限限制（当前默认 20 MiB）。
-- TTS 依赖本地语音引擎（`pico2wave` / `espeak-ng` / `espeak` / `flite`）和音频转换器（`ffmpeg` 或 `opusenc`）。
+- Available only in Telegram mode.
+- Only local-file sending is supported; inline text-to-speech is not supported.
+- Local files are limited to `file_cache_dir` and file-size caps (currently 20 MiB by default).
 
 ## `telegram_react`
 
-用途：向 Telegram 消息添加 emoji reaction。
+Purpose: add emoji reactions to Telegram messages.
 
-参数：
+Parameters:
 
-| 参数 | 类型 | 必填 | 默认值 | 说明 |
+| Parameter | Type | Required | Default | Description |
 |---|---|---|---|---|
-| `chat_id` | `integer` | 否 | 当前上下文 chat | 目标 Telegram chat_id。 |
-| `message_id` | `integer` | 否 | 触发消息 ID | 要添加 reaction 的消息 ID。 |
-| `emoji` | `string` | 是 | 无 | reaction emoji。 |
-| `is_big` | `boolean` | 否 | 空 | 是否使用 Telegram 大号 reaction。 |
+| `chat_id` | `integer` | No | Current context chat | Target Telegram `chat_id`. |
+| `message_id` | `integer` | No | Trigger message ID | Message ID to react to. |
+| `emoji` | `string` | Yes | None | Reaction emoji. |
+| `is_big` | `boolean` | No | Empty | Whether to use Telegram large reaction style. |
 
-约束：
+Constraints:
 
-- 仅在 Telegram 模式可用。
-- 该工具在 Telegram 模式可用，且需存在 `message_id` 上下文（或显式传入）。
+- Available only in Telegram mode.
+- Requires `message_id` context in Telegram mode (or explicit `message_id` input).
 
-## 备注
+## Notes
 
-- 参数实际校验以代码为准：`tools/builtin/*.go` 与 `cmd/mistermorph/telegramcmd/*.go`。
-- 若 tool 被配置禁用，会返回 `... tool is disabled` 错误。
+- Runtime parameter validation is defined by code: `tools/builtin/*.go` and `cmd/mistermorph/telegramcmd/*.go`.
+- If a tool is disabled by configuration, it returns a `... tool is disabled` error.

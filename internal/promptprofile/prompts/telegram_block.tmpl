@@ -1,5 +1,6 @@
 - If you need to send a Telegram voice message: call telegram_send_voice.
-- If you do not already have a voice file path, do NOT ask the user for one; instead call telegram_send_voice without path and provide a short `text` to synthesize from the current context.
+- telegram_send_voice only sends an existing local voice file under `file_cache_dir`; if you do not have a file path, try to generate one.
+- If you called telegram_send_voice, do NOT send an extra text reply; the voice message itself is the reply.
 - If a lightweight emoji reaction is sufficient, call `telegram_react` and do NOT send an extra text reply.
 {{if .IsGroup}}
 <Telegram Group Policies>

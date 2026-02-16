@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -65,10 +66,11 @@ func TestURLFetchTool_DefaultGET(t *testing.T) {
 
 func TestURLFetchTool_POSTHeadersBody(t *testing.T) {
 	type got struct {
-		Method    string
-		UserAgent string
-		Accept    string
-		Body      string
+		Method      string
+		UserAgent   string
+		Accept      string
+		ContentType string
+		Body        string
 	}
 	ch := make(chan got, 1)
 	rt := roundTripFunc(func(r *http.Request) (*http.Response, error) {
@@ -80,10 +82,11 @@ func TestURLFetchTool_POSTHeadersBody(t *testing.T) {
 			b, _ = io.ReadAll(r.Body)
 		}
 		ch <- got{
-			Method:    r.Method,
-			UserAgent: r.Header.Get("User-Agent"),
-			Accept:    r.Header.Get("Accept"),
-			Body:      string(b),
+			Method:      r.Method,
+			UserAgent:   r.Header.Get("User-Agent"),
+			Accept:      r.Header.Get("Accept"),
+			ContentType: r.Header.Get("Content-Type"),
+			Body:        string(b),
 		}
 		return &http.Response{
 			StatusCode: 200,
@@ -118,8 +121,120 @@ func TestURLFetchTool_POSTHeadersBody(t *testing.T) {
 	if req.Accept != "application/json" {
 		t.Fatalf("expected accept %q, got %q", "application/json", req.Accept)
 	}
+	if req.ContentType != "" {
+		t.Fatalf("expected empty content-type when headers are provided without content-type, got %q", req.ContentType)
+	}
 	if req.Body != "hello" {
 		t.Fatalf("expected body %q, got %q", "hello", req.Body)
+	}
+}
+
+func TestURLFetchTool_PostObjectBodyInfersJSONContentTypeWithoutHeaders(t *testing.T) {
+	type got struct {
+		ContentType string
+		Body        string
+	}
+	ch := make(chan got, 1)
+	rt := roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		if r.Body != nil {
+			defer r.Body.Close()
+		}
+		raw, _ := io.ReadAll(r.Body)
+		ch <- got{
+			ContentType: r.Header.Get("Content-Type"),
+			Body:        string(raw),
+		}
+		return &http.Response{
+			StatusCode: 200,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader("ok")),
+			Request:    r,
+		}, nil
+	})
+
+	tool := NewURLFetchTool(true, 2*time.Second, 1024, "test-agent", t.TempDir())
+	tool.HTTPClient = &http.Client{Transport: rt}
+	out, err := tool.Execute(context.Background(), map[string]any{
+		"url":    "https://example.test/",
+		"method": "POST",
+		"body": map[string]any{
+			"model": "gpt-4o-mini-tts",
+		},
+	})
+	if err != nil {
+		t.Fatalf("expected nil error, got %v (out=%q)", err, out)
+	}
+
+	req := <-ch
+	if req.ContentType != "application/json" {
+		t.Fatalf("expected content-type %q, got %q", "application/json", req.ContentType)
+	}
+	if !strings.Contains(req.Body, "\"model\":\"gpt-4o-mini-tts\"") {
+		t.Fatalf("expected json body, got %q", req.Body)
+	}
+}
+
+func TestURLFetchTool_PostJSONStringBodyInfersJSONContentTypeWithoutHeaders(t *testing.T) {
+	type got struct {
+		ContentType string
+	}
+	ch := make(chan got, 1)
+	rt := roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		ch <- got{ContentType: r.Header.Get("Content-Type")}
+		return &http.Response{
+			StatusCode: 200,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader("ok")),
+			Request:    r,
+		}, nil
+	})
+
+	tool := NewURLFetchTool(true, 2*time.Second, 1024, "test-agent", t.TempDir())
+	tool.HTTPClient = &http.Client{Transport: rt}
+	out, err := tool.Execute(context.Background(), map[string]any{
+		"url":    "https://example.test/",
+		"method": "POST",
+		"body":   "{\"model\":\"gpt-4o-mini-tts\"}",
+	})
+	if err != nil {
+		t.Fatalf("expected nil error, got %v (out=%q)", err, out)
+	}
+
+	req := <-ch
+	if req.ContentType != "application/json" {
+		t.Fatalf("expected content-type %q, got %q", "application/json", req.ContentType)
+	}
+}
+
+func TestURLFetchTool_PostPlainStringBodyInfersTextPlainWithoutHeaders(t *testing.T) {
+	type got struct {
+		ContentType string
+	}
+	ch := make(chan got, 1)
+	rt := roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		ch <- got{ContentType: r.Header.Get("Content-Type")}
+		return &http.Response{
+			StatusCode: 200,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader("ok")),
+			Request:    r,
+		}, nil
+	})
+
+	tool := NewURLFetchTool(true, 2*time.Second, 1024, "test-agent", t.TempDir())
+	tool.HTTPClient = &http.Client{Transport: rt}
+	out, err := tool.Execute(context.Background(), map[string]any{
+		"url":    "https://example.test/",
+		"method": "POST",
+		"body":   "hello world",
+	})
+	if err != nil {
+		t.Fatalf("expected nil error, got %v (out=%q)", err, out)
+	}
+
+	req := <-ch
+	if req.ContentType != "text/plain" {
+		t.Fatalf("expected content-type %q, got %q", "text/plain", req.ContentType)
 	}
 }
 
@@ -212,6 +327,96 @@ func TestURLFetchTool_DownloadPathTruncationFails(t *testing.T) {
 	}
 	if _, statErr := os.Stat(filepath.Join(cacheDir, "out.pdf")); statErr == nil {
 		t.Fatalf("expected file not to be written on truncation")
+	}
+}
+
+func TestURLFetchTool_DebugLogsOutboundRequest(t *testing.T) {
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	defer slog.SetDefault(prev)
+
+	rt := roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: 200,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader("ok")),
+			Request:    r,
+		}, nil
+	})
+
+	tool := NewURLFetchTool(true, 2*time.Second, 1024, "test-agent", t.TempDir())
+	tool.HTTPClient = &http.Client{Transport: rt}
+	out, err := tool.Execute(context.Background(), map[string]any{
+		"url":    "https://example.test/search?access_token=secret-token&q=test",
+		"method": "POST",
+		"headers": map[string]any{
+			"Accept": "application/json",
+		},
+		"body": map[string]any{
+			"api_key": "secret-api-key",
+			"message": "hello",
+		},
+	})
+	if err != nil {
+		t.Fatalf("expected nil error, got %v (out=%q)", err, out)
+	}
+
+	logs := buf.String()
+	if !strings.Contains(logs, "url_fetch_request_url") {
+		t.Fatalf("expected debug url log, got %q", logs)
+	}
+	if !strings.Contains(logs, "url_fetch_request_method") || !strings.Contains(logs, "POST") {
+		t.Fatalf("expected debug method log, got %q", logs)
+	}
+	if !strings.Contains(logs, "url_fetch_request_headers") {
+		t.Fatalf("expected debug headers log, got %q", logs)
+	}
+	if !strings.Contains(logs, "url_fetch_request_body") {
+		t.Fatalf("expected debug body log, got %q", logs)
+	}
+	if !strings.Contains(logs, "url_fetch_response_raw_text") || !strings.Contains(logs, "ok") {
+		t.Fatalf("expected debug raw response log, got %q", logs)
+	}
+	if strings.Contains(logs, "secret-token") {
+		t.Fatalf("expected url token to be redacted in logs, got %q", logs)
+	}
+	if strings.Contains(logs, "secret-api-key") {
+		t.Fatalf("expected body api_key to be redacted in logs, got %q", logs)
+	}
+}
+
+func TestURLFetchTool_InfoLevelSkipsOutboundDebugLogs(t *testing.T) {
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo})))
+	defer slog.SetDefault(prev)
+
+	rt := roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: 200,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader("ok")),
+			Request:    r,
+		}, nil
+	})
+
+	tool := NewURLFetchTool(true, 2*time.Second, 1024, "test-agent", t.TempDir())
+	tool.HTTPClient = &http.Client{Transport: rt}
+	out, err := tool.Execute(context.Background(), map[string]any{
+		"url": "https://example.test/",
+	})
+	if err != nil {
+		t.Fatalf("expected nil error, got %v (out=%q)", err, out)
+	}
+
+	logs := buf.String()
+	if strings.Contains(logs, "url_fetch_request_url") ||
+		strings.Contains(logs, "url_fetch_request_method") ||
+		strings.Contains(logs, "url_fetch_request_headers") ||
+		strings.Contains(logs, "url_fetch_request_body") ||
+		strings.Contains(logs, "url_fetch_response_raw_text") {
+		t.Fatalf("expected no debug outbound logs at info level, got %q", logs)
 	}
 }
 

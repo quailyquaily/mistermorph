@@ -117,7 +117,7 @@ Notes:
 - Use `/id` to get the current chat id and add it to `allowed_chat_ids` for allowlisting.
 - Use `/ask <task>` in groups.
 - In groups, the bot also responds when you reply to it, or mention `@BotUsername`.
-- You can send a file; it will be downloaded under `file_cache_dir/telegram/` and the agent can process it. The agent can also send cached files back via `telegram_send_file`, and send a voice message via `telegram_send_voice` (requires a local TTS engine (e.g. `espeak-ng`) + `ffmpeg`/`opusenc`).
+- You can send a file; it will be downloaded under `file_cache_dir/telegram/` and the agent can process it. The agent can also send cached files back via `telegram_send_file`, and send voice messages via `telegram_send_voice` from local voice files in `file_cache_dir`.
 - The last loaded skill(s) stay “sticky” per chat (so follow-up messages won’t forget SKILL.md); `/reset` clears this.
 - If you configure `telegram.aliases`, the default `telegram.group_trigger_mode=smart` only triggers on aliases when the message looks like direct addressing. Alias hits are LLM-validated in smart mode.
 - `telegram.group_trigger_mode=talkative` runs addressing LLM on every group message; acceptance uses `telegram.addressing_confidence_threshold` and rejects when `irrelevance` exceeds `telegram.addressing_irrelevance_threshold`.

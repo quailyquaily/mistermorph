@@ -215,20 +215,21 @@ func (t *URLFetchTool) Execute(ctx context.Context, params map[string]any) (stri
 
 	var bodyReader io.Reader
 	var bodyProvided bool
-	var bodyIsNonStringJSON bool
+	var inferredContentType string
 	if v, ok := params["body"]; ok {
 		bodyProvided = true
 		if v != nil {
 			switch x := v.(type) {
 			case string:
 				bodyReader = strings.NewReader(x)
+				inferredContentType = inferContentTypeFromStringBody(x)
 			default:
 				if authProfileID != "" {
 					if offending := findExistingAbsPath(x); offending != "" {
 						return "", fmt.Errorf("request body contains local file path %q; use read_file and send the file contents instead", offending)
 					}
 				}
-				bodyIsNonStringJSON = true
+				inferredContentType = "application/json"
 				bodyBytes, err := json.Marshal(x)
 				if err != nil {
 					return "", fmt.Errorf("invalid param: body must be a string or JSON-serializable value (for more complex requests, use the bash tool with curl): %w", err)
@@ -306,7 +307,9 @@ func (t *URLFetchTool) Execute(ctx context.Context, params map[string]any) (stri
 
 	var hasUserAgent bool
 	var hasContentType bool
+	headersProvided := false
 	if hdrs, ok := params["headers"]; ok && hdrs != nil {
+		headersProvided = true
 		m, ok := hdrs.(map[string]any)
 		if !ok {
 			return "", fmt.Errorf("invalid param: headers must be an object of string values (for more complex requests, use the bash tool with curl)")
@@ -350,9 +353,9 @@ func (t *URLFetchTool) Execute(ctx context.Context, params map[string]any) (stri
 	if !hasUserAgent && strings.TrimSpace(t.UserAgent) != "" {
 		req.Header.Set("User-Agent", t.UserAgent)
 	}
-	// If the caller passed a JSON-ish body (non-string), default Content-Type to application/json.
-	if bodyIsNonStringJSON && !hasContentType {
-		req.Header.Set("Content-Type", "application/json")
+	// If caller did not provide headers at all, infer Content-Type from body type.
+	if !headersProvided && !hasContentType && inferredContentType != "" {
+		req.Header.Set("Content-Type", inferredContentType)
 	}
 
 	if authProfileID != "" {
@@ -586,6 +589,23 @@ func cloneDefaultTransport() *http.Transport {
 		return dt.Clone()
 	}
 	return &http.Transport{}
+}
+
+const (
+	urlFetchDebugHeaderMaxChars = 1024
+	urlFetchDebugBodyMaxBytes   = 8 * 1024
+	urlFetchDebugRespMaxBytes   = 32 * 1024
+)
+
+func inferContentTypeFromStringBody(body string) string {
+	trimmed := strings.TrimSpace(body)
+	if trimmed == "" {
+		return "text/plain"
+	}
+	if json.Valid([]byte(trimmed)) {
+		return "application/json"
+	}
+	return "text/plain"
 }
 
 var allowedUserHeaderNames = map[string]bool{

@@ -1563,10 +1563,7 @@ func runTelegramTask(ctx context.Context, logger *slog.Logger, logOpts agent.Log
 	}
 
 	// Per-run registry.
-	reg := tools.NewRegistry()
-	for _, t := range baseReg.All() {
-		reg.Register(t)
-	}
+	reg := buildTelegramRegistry(baseReg, job.ChatType)
 	registerPlanTool(reg, client, model)
 	toolsutil.BindTodoUpdateToolLLM(reg, client, model)
 	toolsutil.SetTodoUpdateToolAddContext(reg, todo.AddResolveContext{
@@ -1775,6 +1772,22 @@ func buildMAEPRegistry(baseReg *tools.Registry) *tools.Registry {
 	for _, t := range baseReg.All() {
 		name := strings.TrimSpace(t.Name())
 		if name == "contacts_send" {
+			continue
+		}
+		reg.Register(t)
+	}
+	return reg
+}
+
+func buildTelegramRegistry(baseReg *tools.Registry, chatType string) *tools.Registry {
+	reg := tools.NewRegistry()
+	if baseReg == nil {
+		return reg
+	}
+	groupChat := isGroupChat(chatType)
+	for _, t := range baseReg.All() {
+		name := strings.TrimSpace(t.Name())
+		if groupChat && strings.EqualFold(name, "contacts_send") {
 			continue
 		}
 		reg.Register(t)
