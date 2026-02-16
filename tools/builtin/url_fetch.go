@@ -457,11 +457,6 @@ func (t *URLFetchTool) Execute(ctx context.Context, params map[string]any) (stri
 		truncated = true
 	}
 
-	if debugEnabled {
-		rawText, logTruncated := debugRawTextForLog(body, urlFetchDebugRespMaxBytes)
-		slog.DebugContext(reqCtx, "url_fetch_response_raw_text", "text", rawText, "response_truncated", truncated, "log_truncated", logTruncated)
-	}
-
 	ct := resp.Header.Get("Content-Type")
 	sniffedCT := ""
 	isHTML := isHTMLContentType(ct)
@@ -606,8 +601,6 @@ func cloneDefaultTransport() *http.Transport {
 
 const (
 	urlFetchDebugHeaderMaxChars = 1024
-	urlFetchDebugBodyMaxBytes   = 8 * 1024
-	urlFetchDebugRespMaxBytes   = 32 * 1024
 )
 
 func sanitizeHeadersForDebugLog(headers http.Header) string {
@@ -630,20 +623,6 @@ func sanitizeHeadersForDebugLog(headers http.Header) string {
 	return truncateForDebugLog(string(b), urlFetchDebugHeaderMaxChars)
 }
 
-func debugRawTextForLog(raw []byte, limit int) (string, bool) {
-	if len(raw) == 0 {
-		return "", false
-	}
-	var text string
-	if jsonText, ok := redactStructuredJSONForLog(raw); ok {
-		text = jsonText
-	} else {
-		text = string(bytes.ToValidUTF8(raw, []byte("\n[non-utf8 body]\n")))
-	}
-	text = redactResponseBody(text)
-	return truncateWithDebugFlag(text, limit)
-}
-
 func truncateForDebugLog(s string, max int) string {
 	if max <= 0 || len(s) <= max {
 		return s
@@ -651,57 +630,11 @@ func truncateForDebugLog(s string, max int) string {
 	return s[:max] + "...(truncated)"
 }
 
-func truncateWithDebugFlag(s string, max int) (string, bool) {
-	if max <= 0 || len(s) <= max {
-		return s, false
-	}
-	return s[:max] + "...(truncated)", true
-}
-
 func shouldRedactDebugHeader(name string) bool {
 	if isDeniedUserHeader(name) {
 		return true
 	}
 	return isSensitiveKeyLike(name)
-}
-
-func redactStructuredJSONForLog(raw []byte) (string, bool) {
-	trimmed := bytes.TrimSpace(raw)
-	if len(trimmed) == 0 || !json.Valid(trimmed) {
-		return "", false
-	}
-	var decoded any
-	if err := json.Unmarshal(trimmed, &decoded); err != nil {
-		return "", false
-	}
-	safe := redactStructuredValueForLog(decoded, "")
-	b, err := json.Marshal(safe)
-	if err != nil {
-		return "", false
-	}
-	return string(b), true
-}
-
-func redactStructuredValueForLog(v any, keyHint string) any {
-	if keyHint != "" && isSensitiveKeyLike(keyHint) {
-		return "[redacted]"
-	}
-	switch x := v.(type) {
-	case map[string]any:
-		out := make(map[string]any, len(x))
-		for k, vv := range x {
-			out[k] = redactStructuredValueForLog(vv, k)
-		}
-		return out
-	case []any:
-		out := make([]any, 0, len(x))
-		for _, vv := range x {
-			out = append(out, redactStructuredValueForLog(vv, ""))
-		}
-		return out
-	default:
-		return v
-	}
 }
 
 func inferContentTypeFromStringBody(body string) string {

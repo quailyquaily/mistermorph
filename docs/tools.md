@@ -91,7 +91,7 @@ Constraints:
 - With `download_path`, the tool returns download metadata instead of embedding large response bodies.
 - `headers` has security restrictions (for example, direct `Authorization` and `Cookie` are blocked).
 - If `headers` is not provided and `body` is provided, `Content-Type` is inferred from body type (`application/json` for JSON/object bodies, `text/plain` for plain strings).
-- At debug log level, the tool logs sanitized outbound request fields (`url`, `method`, `headers`) and sanitized raw response text.
+- At debug log level, the tool logs sanitized outbound request fields (`url`, `method`, `headers`).
 - Requests are subject to guard network policy.
 
 ## `web_search`

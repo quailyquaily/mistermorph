@@ -375,8 +375,8 @@ func TestURLFetchTool_DebugLogsOutboundRequest(t *testing.T) {
 	if strings.Contains(logs, "url_fetch_request_body") {
 		t.Fatalf("expected request body log to be omitted in debug mode, got %q", logs)
 	}
-	if !strings.Contains(logs, "url_fetch_response_raw_text") || !strings.Contains(logs, "ok") {
-		t.Fatalf("expected debug raw response log, got %q", logs)
+	if strings.Contains(logs, "url_fetch_response_raw_text") {
+		t.Fatalf("expected response raw text log to be omitted in debug mode, got %q", logs)
 	}
 	if strings.Contains(logs, "secret-token") {
 		t.Fatalf("expected url token to be redacted in logs, got %q", logs)
