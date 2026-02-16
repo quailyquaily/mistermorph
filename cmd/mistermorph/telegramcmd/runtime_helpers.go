@@ -108,7 +108,7 @@ func groupTriggerDecision(ctx context.Context, client llm.Client, model string, 
 		}, true, nil
 	}
 
-	runAddressingLLM := func(confidenceThreshold float64, interjectThreshold float64, fallbackReason string) (telegramGroupTriggerDecision, bool, error) {
+	runAddressingLLM := func(confidenceThreshold float64, interjectThreshold float64, requireAddressed bool, fallbackReason string) (telegramGroupTriggerDecision, bool, error) {
 		dec := telegramGroupTriggerDecision{
 			AddressingLLMAttempted: true,
 			Reason:                 strings.TrimSpace(fallbackReason),
@@ -134,7 +134,11 @@ func groupTriggerDecision(ctx context.Context, client llm.Client, model string, 
 		if strings.TrimSpace(llmDec.Reason) != "" {
 			dec.Reason = llmDec.Reason
 		}
-		if llmOK && llmDec.Addressed && llmDec.Confidence >= confidenceThreshold && llmDec.Interject > interjectThreshold {
+		addressedOK := true
+		if requireAddressed {
+			addressedOK = llmDec.Addressed
+		}
+		if llmOK && addressedOK && llmDec.Confidence >= confidenceThreshold && llmDec.Interject > interjectThreshold {
 			dec.UsedAddressingLLM = true
 			return dec, true, nil
 		}
@@ -142,8 +146,10 @@ func groupTriggerDecision(ctx context.Context, client llm.Client, model string, 
 	}
 
 	switch mode {
-	case "talkative", "smart":
-		return runAddressingLLM(addressingConfidenceThreshold, addressingInterjectThreshold, mode)
+	case "talkative":
+		return runAddressingLLM(addressingConfidenceThreshold, addressingInterjectThreshold, false, mode)
+	case "smart":
+		return runAddressingLLM(addressingConfidenceThreshold, addressingInterjectThreshold, true, mode)
 	default: // strict (and unknown values fallback to strict behavior)
 		return telegramGroupTriggerDecision{}, false, nil
 	}

@@ -267,8 +267,8 @@ telegram:
   allowed_chat_ids: []
   # Group trigger mode:
   # - strict: only /ask, replies, and @mentions trigger in groups.
-  # - smart: every group message goes through addressing LLM classification.
-  # - talkative: same trigger behavior as smart (kept for compatibility).
+  # - smart: every group message goes through addressing LLM classification; `addressed=true` is required.
+  # - talkative: every group message goes through addressing LLM classification; does not require `addressed=true`.
   group_trigger_mode: "talkative"
   # Group reply policy is fixed to humanlike (not configurable).
   # Minimum confidence required to accept the LLM addressing classification.
