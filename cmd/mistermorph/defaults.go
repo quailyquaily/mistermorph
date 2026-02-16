@@ -16,7 +16,6 @@ func initViperDefaults() {
 	viper.SetDefault("llm.tools_emulation_mode", "off")
 	viper.SetDefault("llm.cloudflare.account_id", "")
 	viper.SetDefault("llm.cloudflare.api_token", "")
-	viper.SetDefault("llm.cloudflare.api_base", "")
 	viper.SetDefault("health.listen", "0.0.0.0:8787")
 
 	viper.SetDefault("max_steps", 15)

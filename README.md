@@ -8,12 +8,14 @@ Other languages: [简体中文](docs/zh-CN/README.md) | [日本語](docs/ja-JP/R
 
 - [Why Mister Morph](#why-mistermorph)
 - [Quickstart](#quickstart)
+- [Supported Models](#supported-models)
 - [Daemon mode](#daemon-mode)
 - [Telegram bot mode](#telegram-bot-mode)
 - [Embedding](#embedding-to-other-projects)
 - [Built-in Tools](#built-in-tools)
 - [Skills](#skills)
 - [Security](#security)
+- [Troubleshoots](#troubleshoots)
 - [Debug](#debug)
 - [Configuration](#configuration)
 
@@ -78,6 +80,22 @@ Mister Morph also supports Azure OpenAI, Anthropic Claude, AWS Bedrock, and othe
 ```bash
 mistermorph run --task "Hello!"
 ```
+
+## Supported Models
+
+> Model support may vary by specific model ID, provider endpoint capability, and tool-calling behavior.
+
+| Model family | Tool calling status |
+|---|---|
+| GPT-5 series | ✅ Full |
+| GPT-OSS (`gpt-oss-120b`) | ✅ Full |
+| Claude 3.5+ series | ✅ Full |
+| DeepSeek 3 series | ✅ Full |
+| Gemini 2.5+ series | ✅ Full |
+| Kimi 2.5+ series | ✅ Full |
+| MiniMax / MiniMax-M2.5+ series | ✅ Full |
+| GLM 4.6+ series | ✅ Full |
+| Cloudflare Workers AI models | ⚠️ Limited (no tool calling) |
 
 ## Telegram bot mode
 
@@ -199,6 +217,10 @@ mistermorph skills install <remote-skill-url>
 
 Recommended systemd hardening and secret handling: [`docs/security.md`](docs/security.md).
 
+## Troubleshoots
+
+Known issues and workarounds: [`docs/troubleshoots.md`](docs/troubleshoots.md).
+
 ## Debug
 
 ### Logging
@@ -316,7 +338,7 @@ Common env vars (these map to config keys):
 - `MISTER_MORPH_FILE_CACHE_DIR`
 
 Provider-specific settings use the same mapping, for example:
-- `llm.azure.api_key` → `MISTER_MORPH_LLM_AZURE_API_KEY`
+- `llm.azure.deployment` → `MISTER_MORPH_LLM_AZURE_DEPLOYMENT`
 - `llm.bedrock.model_arn` → `MISTER_MORPH_LLM_BEDROCK_MODEL_ARN`
 
 Tool toggles and limits also map to env vars, for example:
@@ -328,7 +350,7 @@ Tool toggles and limits also map to env vars, for example:
 Secret values referenced by `auth_profiles.*.credential.secret_ref` are regular env vars too (example: `JSONBILL_API_KEY`).
 
 Key meanings (see `assets/config/config.example.yaml` for the canonical list):
-- Core: `llm.provider` selects the backend. Most providers use `llm.endpoint`/`llm.api_key`/`llm.model`. Azure and Bedrock have dedicated config blocks (`llm.azure.*`, `llm.bedrock.*`). `llm.tools_emulation_mode` controls tool-call emulation for models without native tool calling (`off|fallback|force`).
+- Core: `llm.provider` selects the backend. Most providers use `llm.endpoint`/`llm.api_key`/`llm.model`. Azure uses `llm.azure.deployment` for deployment name, while endpoint/key are still read from `llm.endpoint` and `llm.api_key`. Bedrock uses `llm.bedrock.*`. `llm.tools_emulation_mode` controls tool-call emulation for models without native tool calling (`off|fallback|force`).
 - Logging: `logging.level` (`info` shows progress; `debug` adds thoughts), `logging.format` (`text|json`), plus opt-in fields `logging.include_thoughts` and `logging.include_tool_params` (redacted).
 - Loop: `max_steps` limits tool-call rounds; `parse_retries` retries invalid JSON; `max_token_budget` is a cumulative token cap (0 disables); `timeout` is the overall run timeout.
 - Skills: `skills.mode` controls whether skills are used (`off|on`; legacy `explicit/smart` map to `on`); `file_state_dir` + `skills.dir_name` define the default skills root; `skills.load` always loads specific skills; `skills.auto` additionally loads `$SkillName` references.

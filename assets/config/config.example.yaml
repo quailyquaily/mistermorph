@@ -5,7 +5,7 @@
 #
 # Env vars (override config):
 #   - Preferred: MISTER_MORPH_LLM_PROVIDER, MISTER_MORPH_LLM_ENDPOINT, MISTER_MORPH_LLM_MODEL, MISTER_MORPH_LLM_API_KEY
-#   - Cloudflare: MISTER_MORPH_LLM_CLOUDFLARE_ACCOUNT_ID, MISTER_MORPH_LLM_CLOUDFLARE_API_TOKEN, MISTER_MORPH_LLM_CLOUDFLARE_API_BASE
+#   - Cloudflare: MISTER_MORPH_LLM_CLOUDFLARE_ACCOUNT_ID, MISTER_MORPH_LLM_CLOUDFLARE_API_TOKEN
 
 # Global User-Agent for outbound HTTP requests (tools like url_fetch, web_search, etc).
 user_agent: "mistermorph/1.0 (+https://github.com/quailyquaily)"
@@ -26,8 +26,6 @@ llm:
   tools_emulation_mode: "off"
   # Provider-specific settings for Azure OpenAI.
   azure:
-    api_key: ""
-    endpoint: ""
     deployment: "" # Azure OpenAI deployment name
   # Provider-specific settings for AWS Bedrock.
   bedrock:
@@ -39,9 +37,6 @@ llm:
   cloudflare:
     account_id: ""
     api_token: ""
-    # Optional. Leave empty to use the default:
-    # https://api.cloudflare.com/client/v4
-    api_base: ""
 
 logging:
   # debug|info|warn|error

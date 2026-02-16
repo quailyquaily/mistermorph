@@ -29,13 +29,7 @@ func ModelFromViper() string {
 func EndpointForProvider(provider string) string {
 	provider = normalizeProvider(provider)
 	switch provider {
-	case "azure":
-		return firstNonEmpty(viper.GetString("llm.azure.endpoint"), viper.GetString("llm.endpoint"))
 	case "cloudflare":
-		cfBase := strings.TrimSpace(viper.GetString("llm.cloudflare.api_base"))
-		if cfBase != "" {
-			return cfBase
-		}
 		generic := strings.TrimSpace(viper.GetString("llm.endpoint"))
 		if generic != "" && generic != "https://api.openai.com" && generic != "https://api.openai.com/v1" {
 			return generic
@@ -49,8 +43,6 @@ func EndpointForProvider(provider string) string {
 func APIKeyForProvider(provider string) string {
 	provider = normalizeProvider(provider)
 	switch provider {
-	case "azure":
-		return firstNonEmpty(viper.GetString("llm.azure.api_key"), viper.GetString("llm.api_key"))
 	case "cloudflare":
 		return firstNonEmpty(viper.GetString("llm.cloudflare.api_token"), viper.GetString("llm.api_key"))
 	default:
@@ -85,9 +77,9 @@ func ClientFromConfig(cfg llmconfig.ClientConfig) (llm.Client, error) {
 			Model:              strings.TrimSpace(cfg.Model),
 			RequestTimeout:     cfg.RequestTimeout,
 			ToolsEmulationMode: toolsEmulationMode,
-			AzureAPIKey:        firstNonEmpty(viper.GetString("llm.azure.api_key"), viper.GetString("llm.api_key")),
-			AzureEndpoint:      firstNonEmpty(viper.GetString("llm.azure.endpoint"), viper.GetString("llm.endpoint")),
-			AzureDeployment:    firstNonEmpty(viper.GetString("llm.azure.deployment"), viper.GetString("llm.model")),
+			AzureAPIKey:        strings.TrimSpace(cfg.APIKey),
+			AzureEndpoint:      strings.TrimSpace(cfg.Endpoint),
+			AzureDeployment:    strings.TrimSpace(cfg.Model),
 			AwsKey:             firstNonEmpty(viper.GetString("llm.bedrock.aws_key"), viper.GetString("llm.aws.key")),
 			AwsSecret:          firstNonEmpty(viper.GetString("llm.bedrock.aws_secret"), viper.GetString("llm.aws.secret")),
 			AwsRegion:          firstNonEmpty(viper.GetString("llm.bedrock.region"), viper.GetString("llm.aws.region")),
@@ -99,10 +91,7 @@ func ClientFromConfig(cfg llmconfig.ClientConfig) (llm.Client, error) {
 				viper.GetString("llm.cloudflare.api_token"),
 				viper.GetString("llm.api_key"),
 			),
-			CloudflareAPIBase: firstNonEmpty(
-				viper.GetString("llm.cloudflare.api_base"),
-				EndpointForProvider(cfg.Provider),
-			),
+			CloudflareAPIBase: strings.TrimSpace(cfg.Endpoint),
 		})
 		return c, nil
 	default:

@@ -10,6 +10,7 @@
 - [MAEP Implementation](./maep_impl.md)
 - [Bus](./bus.md)
 - [Bus Implementation](./bus_impl.md)
+- [Troubleshoots](./troubleshoots.md)
 
 ## Localized README
 
