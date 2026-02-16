@@ -122,7 +122,8 @@ mistermorph telegram --log-level info
 - グループでは、ボットへの返信または `@BotUsername` メンションでも応答します。
 - ファイルを送信すると `file_cache_dir/telegram/` に保存され、Agent が処理できます。`telegram_send_file` でキャッシュ済みファイルを送信でき、`telegram_send_voice` で `file_cache_dir` 配下のローカル音声ファイルも送信できます。
 - 最後に読み込んだスキルはチャット単位で保持されるため、後続メッセージでも `SKILL.md` の文脈が維持されます。`/reset` でクリアできます。
-- `telegram.aliases` を設定している場合、デフォルトの `telegram.group_trigger_mode=smart` では、直接呼びかけに見えるメッセージに対してのみ alias がトリガーされます。smart モードでは alias ヒット時に LLM による検証も行います。
+- `telegram.group_trigger_mode=smart` は、グループ内の各メッセージを addressing LLM で判定します。受理には `telegram.addressing_confidence_threshold` を満たし、`interject` が `telegram.addressing_interject_threshold` を上回る必要があります。
+- `telegram.group_trigger_mode=talkative` は `smart` と同じトリガー挙動です（互換モード）。
 - チャットで `/reset` を実行すると会話履歴をクリアできます。
 - 既定では複数チャットを並列処理しつつ、各チャット内は直列で処理します（設定: `telegram.max_concurrency`）。
 

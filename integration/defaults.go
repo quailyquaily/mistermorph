@@ -62,9 +62,7 @@ func applyViperDefaults() {
 
 	// Telegram.
 	viper.SetDefault("telegram.poll_timeout", 30*time.Second)
-	viper.SetDefault("telegram.aliases", []string{})
 	viper.SetDefault("telegram.group_trigger_mode", "smart")
-	viper.SetDefault("telegram.smart_addressing_max_chars", 24)
 	viper.SetDefault("telegram.addressing_confidence_threshold", 0.6)
 	viper.SetDefault("telegram.addressing_interject_threshold", 0.3)
 	viper.SetDefault("telegram.max_concurrency", 3)

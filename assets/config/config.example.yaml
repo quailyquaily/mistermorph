@@ -265,17 +265,12 @@ telegram:
   bot_token: ""
   # Optional allowlist of chat ids (strings). If empty, allows all.
   allowed_chat_ids: []
-  # Optional aliases (keywords). In groups, these may trigger a response depending on `group_trigger_mode`.
-  # Note: if Bot Privacy Mode is enabled, the bot may not receive non-command messages.
-  aliases: []
   # Group trigger mode:
   # - strict: only /ask, replies, and @mentions trigger in groups.
-  # - smart: replies/@mentions trigger; aliases are LLM-validated for direct addressing.
-  # - talkative: every group message goes through addressing LLM classification.
+  # - smart: every group message goes through addressing LLM classification.
+  # - talkative: same trigger behavior as smart (kept for compatibility).
   group_trigger_mode: "talkative"
   # Group reply policy is fixed to humanlike (not configurable).
-  # In smart mode, how far from the start (in runes) an alias can appear to count as "addressing".
-  smart_addressing_max_chars: 24
   # Minimum confidence required to accept the LLM addressing classification.
   addressing_confidence_threshold: 0.7
   # Maximum interject allowed to accept the LLM addressing classification.

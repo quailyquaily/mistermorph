@@ -78,7 +78,7 @@ func quoteReplyMessageIDForGroupTrigger(msg *telegramMessage, dec telegramGroupT
 // groupTriggerDecision belongs to the trigger layer.
 // It decides whether this group message should enter an agent run.
 // It must not decide output modality (text reply vs reaction), which is handled in the generation layer.
-func groupTriggerDecision(ctx context.Context, client llm.Client, model string, msg *telegramMessage, botUser string, botID int64, aliases []string, mode string, aliasPrefixMaxChars int, addressingLLMTimeout time.Duration, addressingConfidenceThreshold float64, addressingInterjectThreshold float64, history []chathistory.ChatHistoryItem) (telegramGroupTriggerDecision, bool, error) {
+func groupTriggerDecision(ctx context.Context, client llm.Client, model string, msg *telegramMessage, botUser string, botID int64, mode string, addressingLLMTimeout time.Duration, addressingConfidenceThreshold float64, addressingInterjectThreshold float64, history []chathistory.ChatHistoryItem) (telegramGroupTriggerDecision, bool, error) {
 	if msg == nil {
 		return telegramGroupTriggerDecision{}, false, nil
 	}
@@ -142,14 +142,8 @@ func groupTriggerDecision(ctx context.Context, client llm.Client, model string, 
 	}
 
 	switch mode {
-	case "talkative":
-		return runAddressingLLM(addressingConfidenceThreshold, addressingInterjectThreshold, "talkative")
-	case "smart":
-		mentionReason, _ := groupAliasMentionReason(text, aliases, aliasPrefixMaxChars)
-		if strings.TrimSpace(mentionReason) == "" {
-			return telegramGroupTriggerDecision{}, false, nil
-		}
-		return runAddressingLLM(addressingConfidenceThreshold, addressingInterjectThreshold, mentionReason)
+	case "talkative", "smart":
+		return runAddressingLLM(addressingConfidenceThreshold, addressingInterjectThreshold, mode)
 	default: // strict (and unknown values fallback to strict behavior)
 		return telegramGroupTriggerDecision{}, false, nil
 	}

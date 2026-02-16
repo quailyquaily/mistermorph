@@ -418,19 +418,11 @@ func newTelegramCmd() *cobra.Command {
 
 			botUser := me.Username
 			botID := me.ID
-			aliases := configutil.FlagOrViperStringArray(cmd, "telegram-alias", "telegram.aliases")
-			for i := range aliases {
-				aliases[i] = strings.TrimSpace(aliases[i])
-			}
 			groupTriggerMode := strings.ToLower(strings.TrimSpace(configutil.FlagOrViperString(cmd, "telegram-group-trigger-mode", "telegram.group_trigger_mode")))
 			if groupTriggerMode == "" {
 				groupTriggerMode = "smart"
 			}
 			telegramHistoryCap := telegramHistoryCapForMode(groupTriggerMode)
-			smartAddressingMaxChars := configutil.FlagOrViperInt(cmd, "telegram-smart-addressing-max-chars", "telegram.smart_addressing_max_chars")
-			if smartAddressingMaxChars <= 0 {
-				smartAddressingMaxChars = 24
-			}
 			addressingLLMTimeout := requestTimeout
 			addressingConfidenceThreshold := configutil.FlagOrViperFloat64(cmd, "telegram-addressing-confidence-threshold", "telegram.addressing_confidence_threshold")
 			if addressingConfidenceThreshold <= 0 {
@@ -509,7 +501,6 @@ func newTelegramCmd() *cobra.Command {
 				"reactions_enabled", true,
 				"group_trigger_mode", groupTriggerMode,
 				"group_reply_policy", "humanlike",
-				"smart_addressing_max_chars", smartAddressingMaxChars,
 				"addressing_confidence_threshold", addressingConfidenceThreshold,
 				"addressing_interject_threshold", addressingInterjectThreshold,
 				"telegram_history_cap", telegramHistoryCap,
@@ -1220,7 +1211,7 @@ func newTelegramCmd() *cobra.Command {
 							"Commands: /ask <task>, /echo <msg>, /mem, /humanize, /reset, /id\n\n" +
 							"Group chats: use /ask <task>, reply to me, or mention @" + botUser + ".\n" +
 							"You can also send a file (document/photo). It will be downloaded under file_cache_dir/telegram/ and the agent can process it.\n" +
-							"Note: if Bot Privacy Mode is enabled, I may not receive normal group messages (so aliases won't trigger unless I receive the message)."
+							"Note: if Bot Privacy Mode is enabled, I may not receive normal group messages."
 						_ = api.sendMessageMarkdownV2(context.Background(), chatID, help, true)
 						continue
 					case "/id":
@@ -1357,7 +1348,7 @@ func newTelegramCmd() *cobra.Command {
 							mu.Lock()
 							historySnapshot := append([]chathistory.ChatHistoryItem(nil), history[chatID]...)
 							mu.Unlock()
-							dec, ok, decErr := groupTriggerDecision(context.Background(), client, model, msg, botUser, botID, aliases, groupTriggerMode, smartAddressingMaxChars, addressingLLMTimeout, addressingConfidenceThreshold, addressingInterjectThreshold, historySnapshot)
+							dec, ok, decErr := groupTriggerDecision(context.Background(), client, model, msg, botUser, botID, groupTriggerMode, addressingLLMTimeout, addressingConfidenceThreshold, addressingInterjectThreshold, historySnapshot)
 							if decErr != nil {
 								logger.Warn("telegram_addressing_llm_error",
 									"chat_id", chatID,
@@ -1392,33 +1383,18 @@ func newTelegramCmd() *cobra.Command {
 								}
 								continue
 							}
-							if dec.UsedAddressingLLM && dec.AddressingLLMAddressed {
-								replyToMessageID = quoteReplyMessageIDForGroupTrigger(msg, dec)
-								quoteReply := replyToMessageID > 0
-								logger.Info("telegram_group_trigger",
-									"chat_id", chatID,
-									"type", chatType,
-									"reason", dec.Reason,
-									"llm_addressed", dec.AddressingLLMAddressed,
-									"confidence", dec.AddressingLLMConfidence,
-									"interject", dec.AddressingLLMInterject,
-									"impulse", dec.AddressingImpulse,
-									"quote_reply", quoteReply,
-								)
-							} else {
-								replyToMessageID = quoteReplyMessageIDForGroupTrigger(msg, dec)
-								quoteReply := replyToMessageID > 0
-								logger.Info("telegram_group_trigger",
-									"chat_id", chatID,
-									"type", chatType,
-									"reason", dec.Reason,
-									"llm_addressed", dec.AddressingLLMAddressed,
-									"confidence", dec.AddressingLLMConfidence,
-									"interject", dec.AddressingLLMInterject,
-									"impulse", dec.AddressingImpulse,
-									"quote_reply", quoteReply,
-								)
-							}
+							replyToMessageID = quoteReplyMessageIDForGroupTrigger(msg, dec)
+							quoteReply := replyToMessageID > 0
+							logger.Info("telegram_group_trigger",
+								"chat_id", chatID,
+								"type", chatType,
+								"reason", dec.Reason,
+								"llm_addressed", dec.AddressingLLMAddressed,
+								"confidence", dec.AddressingLLMConfidence,
+								"interject", dec.AddressingLLMInterject,
+								"impulse", dec.AddressingImpulse,
+								"quote_reply", quoteReply,
+							)
 							text = strings.TrimSpace(rawText)
 							if strings.TrimSpace(text) == "" && !messageHasDownloadableFile(msg) && msg.ReplyTo == nil {
 								_ = api.sendMessageMarkdownV2(context.Background(), chatID, "usage: /ask <task> (or send text with a mention/reply)", true)
@@ -1524,9 +1500,7 @@ func newTelegramCmd() *cobra.Command {
 	cmd.Flags().String("telegram-bot-token", "", "Telegram bot token.")
 	// Note: base_url is intentionally not configurable.
 	cmd.Flags().StringArray("telegram-allowed-chat-id", nil, "Allowed chat id(s). If empty, allows all.")
-	cmd.Flags().StringArray("telegram-alias", nil, "Bot alias keywords (group messages containing these may trigger a response).")
 	cmd.Flags().String("telegram-group-trigger-mode", "smart", "Group trigger mode: strict|smart|talkative.")
-	cmd.Flags().Int("telegram-smart-addressing-max-chars", 24, "In smart mode, max chars from message start for alias addressing (0 uses default).")
 	cmd.Flags().Float64("telegram-addressing-confidence-threshold", 0.6, "Minimum confidence (0-1) required to accept an addressing LLM decision.")
 	cmd.Flags().Float64("telegram-addressing-interject-threshold", 0.6, "Minimum interject (0-1) allowed to accept an addressing LLM decision.")
 	cmd.Flags().Bool("with-maep", false, "Start MAEP listener together with telegram mode.")
