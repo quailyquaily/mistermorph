@@ -6,12 +6,14 @@
 
 - [为什么选择 Mister Morph](#why-mistermorph)
 - [快速开始](#quickstart)
+- [支持模型](#supported-models)
 - [守护进程模式](#daemon-mode)
 - [Telegram 机器人模式](#telegram-bot-mode)
 - [嵌入到其他项目](#embedding-to-other-projects)
 - [内置工具](#built-in-tools)
 - [Skills（技能）](#skills)
 - [安全性](#security)
+- [故障排查](#troubleshoots)
 - [调试](#debug)
 - [配置](#configuration)
 
@@ -79,6 +81,23 @@ Mister Morph 也支持 Azure OpenAI、Anthropic Claude、AWS Bedrock 等（更�
 ```bash
 mistermorph run --task "Hello!"
 ```
+
+<a id="supported-models"></a>
+## 支持模型
+
+> 模型支持情况可能因具体模型 ID、provider endpoint 能力和 tool-calling 行为而变化。
+
+| Model family | Model range | Status |
+|---|---|---|
+| GPT | `gpt-5*` | ✅ Full |
+| GPT-OSS | `gpt-oss-120b` | ✅ Full |
+| Claude | `claude-3.5+` | ✅ Full |
+| DeepSeek | `deepseek-3*` | ✅ Full |
+| Gemini | `gemini-2.5+` | ✅ Full |
+| Kimi | `kimi-2.5+` | ✅ Full |
+| MiniMax | `minimax* / minimax-m2.5+` | ✅ Full |
+| GLM | `glm-4.6+` | ✅ Full |
+| Cloudflare Workers AI | `Workers AI model IDs` | ⚠️ Limited (no tool calling) |
 
 <a id="telegram-bot-mode"></a>
 ## Telegram 机器人模式
@@ -182,6 +201,11 @@ mistermorph skills install <remote-skill-url>
 ## 安全性
 
 推荐的 systemd 加固与密钥管理方式： [../security.md](../security.md)。
+
+<a id="troubleshoots"></a>
+## 故障排查
+
+已知问题与规避建议： [../troubleshoots.md](../troubleshoots.md)。
 
 <a id="debug"></a>
 ## 调试

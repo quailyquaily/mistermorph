@@ -36,7 +36,7 @@ func registryFromViper() *tools.Registry {
 	viper.SetDefault("tools.web_search.max_results", 5)
 	viper.SetDefault("tools.web_search.base_url", "https://duckduckgo.com/html/")
 	viper.SetDefault("tools.contacts.enabled", true)
-	viper.SetDefault("tools.todo.enabled", true)
+	viper.SetDefault("tools.todo_update.enabled", true)
 
 	userAgent := strings.TrimSpace(viper.GetString("user_agent"))
 
@@ -93,12 +93,14 @@ func registryFromViper() *tools.Registry {
 		strings.TrimSpace(viper.GetString("file_state_dir")),
 	))
 
-	r.Register(builtin.NewWriteFileTool(
-		viper.GetBool("tools.write_file.enabled"),
-		viper.GetInt("tools.write_file.max_bytes"),
-		strings.TrimSpace(viper.GetString("file_cache_dir")),
-		strings.TrimSpace(viper.GetString("file_state_dir")),
-	))
+	if viper.GetBool("tools.write_file.enabled") {
+		r.Register(builtin.NewWriteFileTool(
+			true,
+			viper.GetInt("tools.write_file.max_bytes"),
+			strings.TrimSpace(viper.GetString("file_cache_dir")),
+			strings.TrimSpace(viper.GetString("file_state_dir")),
+		))
+	}
 
 	if viper.GetBool("tools.bash.enabled") {
 		bt := builtin.NewBashTool(
@@ -143,7 +145,7 @@ func registryFromViper() *tools.Registry {
 		))
 	}
 
-	if viper.GetBool("tools.todo.enabled") {
+	if viper.GetBool("tools.todo_update.enabled") {
 		r.Register(builtin.NewTodoUpdateTool(
 			true,
 			statepaths.TODOWIPPath(),

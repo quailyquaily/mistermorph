@@ -11,6 +11,13 @@ func RegisterPlanTool(reg *tools.Registry, client llm.Client, defaultModel strin
 	if reg == nil {
 		return
 	}
+	enabled := true
+	if viper.IsSet("tools.plan_create.enabled") {
+		enabled = viper.GetBool("tools.plan_create.enabled")
+	}
+	if !enabled {
+		return
+	}
 	names := toolNames(reg)
 	names = append(names, "plan_create")
 	defaultMaxSteps := viper.GetInt("plan.max_steps")

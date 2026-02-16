@@ -13,7 +13,7 @@
   - `todo_update`
   - `contacts_send`
 - 条件注册
-  - `plan_create`（在 `run` / `telegram` / `daemon serve` 模式通过 `internal/toolsutil.RegisterPlanTool` 注入）
+  - `plan_create`（在 `run` / `telegram` / `daemon serve` 模式通过 `internal/toolsutil.RegisterPlanTool` 注入，可由 `tools.plan_create.enabled` 关闭）
   - `telegram_send_voice`（仅 `mistermorph telegram` 运行时注入）
   - `telegram_send_file`（仅 `mistermorph telegram` 运行时注入）
   - `telegram_react`（仅 `mistermorph telegram` 运行时注入）
@@ -128,7 +128,7 @@
 
 约束：
 
-- 受 `tools.todo.enabled` 开关控制。
+- 受 `tools.todo_update.enabled` 开关控制。
 - 依赖 LLM 客户端与模型；未绑定会报错。
 - `add` 采用“参数抽取 + LLM 插入”流程：工具参数直接提供 `people`，然后由 LLM 结合 `content`、原始用户输入与运行时上下文插入 `名称 (ref_id)`。
 - `chat_id` 当前仅接受 `tg:<chat-id>`（正负 int64，且不能为 0）。

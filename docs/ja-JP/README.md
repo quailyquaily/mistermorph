@@ -6,12 +6,14 @@
 
 - [Mister Morph を選ぶ理由](#why-mistermorph)
 - [クイックスタート](#quickstart)
+- [対応モデル](#supported-models)
 - [デーモンモード](#daemon-mode)
 - [Telegram ボットモード](#telegram-bot-mode)
 - [他プロジェクトへの組み込み](#embedding-to-other-projects)
 - [組み込みツール](#built-in-tools)
 - [Skills（スキル）](#skills)
 - [セキュリティ](#security)
+- [トラブルシュート](#troubleshoots)
 - [デバッグ](#debug)
 - [設定](#configuration)
 
@@ -79,6 +81,23 @@ Mister Morph は Azure OpenAI、Anthropic Claude、AWS Bedrock などにも対�
 ```bash
 mistermorph run --task "Hello!"
 ```
+
+<a id="supported-models"></a>
+## 対応モデル
+
+> モデル対応状況は、モデル ID・provider endpoint の機能・tool-calling の挙動によって変わる場合があります。
+
+| Model family | Model range | Status |
+|---|---|---|
+| GPT | `gpt-5*` | ✅ Full |
+| GPT-OSS | `gpt-oss-120b` | ✅ Full |
+| Claude | `claude-3.5+` | ✅ Full |
+| DeepSeek | `deepseek-3*` | ✅ Full |
+| Gemini | `gemini-2.5+` | ✅ Full |
+| Kimi | `kimi-2.5+` | ✅ Full |
+| MiniMax | `minimax* / minimax-m2.5+` | ✅ Full |
+| GLM | `glm-4.6+` | ✅ Full |
+| Cloudflare Workers AI | `Workers AI model IDs` | ⚠️ Limited (no tool calling) |
 
 <a id="telegram-bot-mode"></a>
 ## Telegram ボットモード
@@ -181,6 +200,11 @@ mistermorph skills install <remote-skill-url>
 ## セキュリティ
 
 systemd ハードニングとシークレット管理の推奨事項は [../security.md](../security.md) を参照してください。
+
+<a id="troubleshoots"></a>
+## トラブルシュート
+
+既知の問題と回避策: [../troubleshoots.md](../troubleshoots.md)
 
 <a id="debug"></a>
 ## デバッグ

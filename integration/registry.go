@@ -53,7 +53,7 @@ func (rt *Runtime) buildRegistryFromViper() *tools.Registry {
 	viper.SetDefault("tools.web_search.max_results", 5)
 	viper.SetDefault("tools.web_search.base_url", "https://duckduckgo.com/html/")
 	viper.SetDefault("tools.contacts.enabled", true)
-	viper.SetDefault("tools.todo.enabled", true)
+	viper.SetDefault("tools.todo_update.enabled", true)
 
 	userAgent := strings.TrimSpace(viper.GetString("user_agent"))
 
@@ -112,9 +112,9 @@ func (rt *Runtime) buildRegistryFromViper() *tools.Registry {
 		))
 	}
 
-	if isToolSelected("write_file") {
+	if isToolSelected("write_file") && viper.GetBool("tools.write_file.enabled") {
 		r.Register(builtin.NewWriteFileTool(
-			viper.GetBool("tools.write_file.enabled"),
+			true,
 			viper.GetInt("tools.write_file.max_bytes"),
 			strings.TrimSpace(viper.GetString("file_cache_dir")),
 			strings.TrimSpace(viper.GetString("file_state_dir")),
@@ -163,7 +163,7 @@ func (rt *Runtime) buildRegistryFromViper() *tools.Registry {
 		))
 	}
 
-	if isToolSelected("todo_update") && viper.GetBool("tools.todo.enabled") {
+	if isToolSelected("todo_update") && viper.GetBool("tools.todo_update.enabled") {
 		r.Register(builtin.NewTodoUpdateTool(
 			true,
 			statepaths.TODOWIPPath(),

@@ -107,15 +107,23 @@ func (c *Client) Chat(ctx context.Context, req llm.Request) (llm.Result, error) 
 
 	opts := buildChatOptions(req, c.provider, req.ForceJSON, c.toolsEmulationMode, c.debugFn)
 	resp, err := c.client.Chat(ctx, opts...)
+	if err != nil {
+		c.emitChatError(err, req.ForceJSON, 1)
+	}
 	if err != nil && req.ForceJSON && shouldRetryWithoutResponseFormat(err) {
 		opts = buildChatOptions(req, c.provider, false, c.toolsEmulationMode, c.debugFn)
 		resp, err = c.client.Chat(ctx, opts...)
+		if err != nil {
+			c.emitChatError(err, false, 2)
+		}
 	}
 	if err != nil {
 		return llm.Result{}, err
 	}
 	if resp == nil {
-		return llm.Result{}, fmt.Errorf("uniai: empty response")
+		err = fmt.Errorf("uniai: empty response")
+		c.emitChatError(err, req.ForceJSON, 0)
+		return llm.Result{}, err
 	}
 
 	toolCalls := toLLMToolCalls(resp.ToolCalls)
@@ -230,6 +238,36 @@ func normalizeToolsEmulationMode(mode string) uniaiapi.ToolsEmulationMode {
 
 func (c *Client) SetDebugFn(fn func(label, payload string)) {
 	c.debugFn = fn
+}
+
+func (c *Client) emitChatError(err error, forceJSON bool, attempt int) {
+	if err == nil || c == nil || c.debugFn == nil {
+		return
+	}
+
+	provider := strings.TrimSpace(c.provider)
+	if provider == "" {
+		provider = "openai"
+	}
+	label := provider + ".chat.error"
+
+	payload := map[string]any{
+		"provider": provider,
+		"error":    err.Error(),
+	}
+	if attempt > 0 {
+		payload["attempt"] = attempt
+	}
+	if forceJSON {
+		payload["force_json"] = true
+	}
+
+	data, marshalErr := json.Marshal(payload)
+	if marshalErr != nil {
+		c.debugFn(label, err.Error())
+		return
+	}
+	c.debugFn(label, string(data))
 }
 
 func toLLMToolCalls(calls []uniaiapi.ToolCall) []llm.ToolCall {

@@ -154,8 +154,11 @@ tools:
   contacts:
     # Enable contacts tool (contacts_send).
     enabled: true
-  todo:
+  todo_update:
     # Enable TODO tool (todo_update).
+    enabled: true
+  plan_create:
+    # Enable planning tool (plan_create) in run/serve/telegram runtimes.
     enabled: true
   url_fetch:
     # Enable the url_fetch tool (HTTP(S) GET/POST/PUT/DELETE, truncated output).

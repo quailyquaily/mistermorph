@@ -85,17 +85,17 @@ mistermorph run --task "Hello!"
 
 > Model support may vary by specific model ID, provider endpoint capability, and tool-calling behavior.
 
-| Model family | Tool calling status |
-|---|---|
-| GPT-5 series | ✅ Full |
-| GPT-OSS (`gpt-oss-120b`) | ✅ Full |
-| Claude 3.5+ series | ✅ Full |
-| DeepSeek 3 series | ✅ Full |
-| Gemini 2.5+ series | ✅ Full |
-| Kimi 2.5+ series | ✅ Full |
-| MiniMax / MiniMax-M2.5+ series | ✅ Full |
-| GLM 4.6+ series | ✅ Full |
-| Cloudflare Workers AI models | ⚠️ Limited (no tool calling) |
+| Model family | Model range | Status |
+|---|---|---|
+| GPT | `gpt-5*` | ✅ Full |
+| GPT-OSS | `gpt-oss-120b` | ✅ Full |
+| Claude | `claude-3.5+` | ✅ Full |
+| DeepSeek | `deepseek-3*` | ✅ Full |
+| Gemini | `gemini-2.5+` | ✅ Full |
+| Kimi | `kimi-2.5+` | ✅ Full |
+| MiniMax | `minimax* / minimax-m2.5+` | ✅ Full |
+| GLM | `glm-4.6+` | ✅ Full |
+| Cloudflare Workers AI | `Workers AI model IDs` | ⚠️ Limited (no tool calling) |
 
 ## Telegram bot mode
 
