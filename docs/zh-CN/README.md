@@ -123,7 +123,7 @@ mistermorph telegram --log-level info
 - 你可以发送文件；文件会下载到 `file_cache_dir/telegram/`，Agent 可以处理它。Agent 也能通过 `telegram_send_file` 回传缓存文件，还可以通过 `telegram_send_voice` 发送位于 `file_cache_dir` 的本地语音文件。
 - 每个 chat 会保留最近一次加载的 skill（sticky），后续消息不会“忘记” `SKILL.md`；可用 `/reset` 清除。
 - 如果配置了 `telegram.aliases`，默认的 `telegram.group_trigger_mode=smart` 只会在消息看起来是直接称呼时触发 alias；smart 模式下 alias 命中还会经过 LLM 校验。
-- `telegram.group_trigger_mode=talkative` 会让每条群消息都进入 addressing LLM 判定；通过 `telegram.addressing_confidence_threshold` 控制最低置信度，并在 `irrelevance` 高于 `telegram.addressing_irrelevance_threshold` 时拒绝触发。
+- `telegram.group_trigger_mode=talkative` 会让每条群消息都进入 addressing LLM 判定；通过 `telegram.addressing_confidence_threshold` 控制最低置信度，并在 `interject` 低于 `telegram.addressing_interject_threshold` 时拒绝触发。
 - 可在 chat 中使用 `/reset` 清空对话历史。
 - 默认支持多 chat 并发处理，但单个 chat 内按串行处理（配置项：`telegram.max_concurrency`）。
 

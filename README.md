@@ -120,7 +120,7 @@ Notes:
 - You can send a file; it will be downloaded under `file_cache_dir/telegram/` and the agent can process it. The agent can also send cached files back via `telegram_send_file`, and send voice messages via `telegram_send_voice` from local voice files in `file_cache_dir`.
 - The last loaded skill(s) stay “sticky” per chat (so follow-up messages won’t forget SKILL.md); `/reset` clears this.
 - If you configure `telegram.aliases`, the default `telegram.group_trigger_mode=smart` only triggers on aliases when the message looks like direct addressing. Alias hits are LLM-validated in smart mode.
-- `telegram.group_trigger_mode=talkative` runs addressing LLM on every group message; acceptance uses `telegram.addressing_confidence_threshold` and rejects when `irrelevance` exceeds `telegram.addressing_irrelevance_threshold`.
+- `telegram.group_trigger_mode=talkative` runs addressing LLM on every group message; acceptance uses `telegram.addressing_confidence_threshold` and rejects when `interject` less than `telegram.addressing_interject_threshold`.
 - Use `/reset` in chat to clear conversation history.
 - By default it runs multiple chats concurrently, but processes each chat serially (config: `telegram.max_concurrency`).
 
@@ -307,7 +307,7 @@ These arguments will dump the final system/user/tool prompts and the full LLM re
 - `--telegram-group-trigger-mode` (`strict|smart|talkative`)
 - `--telegram-smart-addressing-max-chars`
 - `--telegram-addressing-confidence-threshold`
-- `--telegram-addressing-irrelevance-threshold`
+- `--telegram-addressing-interject-threshold`
 - `--telegram-poll-timeout`
 - `--telegram-task-timeout`
 - `--telegram-max-concurrency`

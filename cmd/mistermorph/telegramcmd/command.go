@@ -439,12 +439,12 @@ func newTelegramCmd() *cobra.Command {
 			if addressingConfidenceThreshold > 1 {
 				addressingConfidenceThreshold = 1
 			}
-			addressingIrrelevanceThreshold := configutil.FlagOrViperFloat64(cmd, "telegram-addressing-irrelevance-threshold", "telegram.addressing_irrelevance_threshold")
-			if addressingIrrelevanceThreshold <= 0 {
-				addressingIrrelevanceThreshold = 0.3
+			addressingInterjectThreshold := configutil.FlagOrViperFloat64(cmd, "telegram-addressing-interject-threshold", "telegram.addressing_interject_threshold")
+			if addressingInterjectThreshold <= 0 {
+				addressingInterjectThreshold = 0.6
 			}
-			if addressingIrrelevanceThreshold > 1 {
-				addressingIrrelevanceThreshold = 1
+			if addressingInterjectThreshold > 1 {
+				addressingInterjectThreshold = 1
 			}
 
 			var (
@@ -511,7 +511,7 @@ func newTelegramCmd() *cobra.Command {
 				"group_reply_policy", "humanlike",
 				"smart_addressing_max_chars", smartAddressingMaxChars,
 				"addressing_confidence_threshold", addressingConfidenceThreshold,
-				"addressing_irrelevance_threshold", addressingIrrelevanceThreshold,
+				"addressing_interject_threshold", addressingInterjectThreshold,
 				"telegram_history_cap", telegramHistoryCap,
 			)
 
@@ -1357,7 +1357,7 @@ func newTelegramCmd() *cobra.Command {
 							mu.Lock()
 							historySnapshot := append([]chathistory.ChatHistoryItem(nil), history[chatID]...)
 							mu.Unlock()
-							dec, ok, decErr := groupTriggerDecision(context.Background(), client, model, msg, botUser, botID, aliases, groupTriggerMode, smartAddressingMaxChars, addressingLLMTimeout, addressingConfidenceThreshold, addressingIrrelevanceThreshold, historySnapshot)
+							dec, ok, decErr := groupTriggerDecision(context.Background(), client, model, msg, botUser, botID, aliases, groupTriggerMode, smartAddressingMaxChars, addressingLLMTimeout, addressingConfidenceThreshold, addressingInterjectThreshold, historySnapshot)
 							if decErr != nil {
 								logger.Warn("telegram_addressing_llm_error",
 									"chat_id", chatID,
@@ -1376,7 +1376,7 @@ func newTelegramCmd() *cobra.Command {
 										"llm_ok", dec.AddressingLLMOK,
 										"llm_addressed", dec.AddressingLLMAddressed,
 										"confidence", dec.AddressingLLMConfidence,
-										"irrelevance", dec.AddressingLLMIrrelevance,
+										"interject", dec.AddressingLLMInterject,
 										"impulse", dec.AddressingImpulse,
 										"reason", dec.Reason,
 									)
@@ -1401,7 +1401,7 @@ func newTelegramCmd() *cobra.Command {
 									"reason", dec.Reason,
 									"llm_addressed", dec.AddressingLLMAddressed,
 									"confidence", dec.AddressingLLMConfidence,
-									"irrelevance", dec.AddressingLLMIrrelevance,
+									"interject", dec.AddressingLLMInterject,
 									"impulse", dec.AddressingImpulse,
 									"quote_reply", quoteReply,
 								)
@@ -1414,7 +1414,7 @@ func newTelegramCmd() *cobra.Command {
 									"reason", dec.Reason,
 									"llm_addressed", dec.AddressingLLMAddressed,
 									"confidence", dec.AddressingLLMConfidence,
-									"irrelevance", dec.AddressingLLMIrrelevance,
+									"interject", dec.AddressingLLMInterject,
 									"impulse", dec.AddressingImpulse,
 									"quote_reply", quoteReply,
 								)
@@ -1528,7 +1528,7 @@ func newTelegramCmd() *cobra.Command {
 	cmd.Flags().String("telegram-group-trigger-mode", "smart", "Group trigger mode: strict|smart|talkative.")
 	cmd.Flags().Int("telegram-smart-addressing-max-chars", 24, "In smart mode, max chars from message start for alias addressing (0 uses default).")
 	cmd.Flags().Float64("telegram-addressing-confidence-threshold", 0.6, "Minimum confidence (0-1) required to accept an addressing LLM decision.")
-	cmd.Flags().Float64("telegram-addressing-irrelevance-threshold", 0.3, "Maximum irrelevance (0-1) allowed to accept an addressing LLM decision.")
+	cmd.Flags().Float64("telegram-addressing-interject-threshold", 0.6, "Minimum interject (0-1) allowed to accept an addressing LLM decision.")
 	cmd.Flags().Bool("with-maep", false, "Start MAEP listener together with telegram mode.")
 	cmd.Flags().StringArray("maep-listen", nil, "MAEP listen multiaddr for --with-maep (repeatable). Defaults to maep.listen_addrs or MAEP defaults.")
 	cmd.Flags().Duration("telegram-poll-timeout", 30*time.Second, "Long polling timeout for getUpdates.")

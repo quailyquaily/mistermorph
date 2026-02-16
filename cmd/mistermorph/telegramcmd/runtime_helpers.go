@@ -57,12 +57,12 @@ type telegramGroupTriggerDecision struct {
 	Reason            string
 	UsedAddressingLLM bool
 
-	AddressingLLMAttempted   bool
-	AddressingLLMOK          bool
-	AddressingLLMAddressed   bool
-	AddressingLLMConfidence  float64
-	AddressingLLMIrrelevance float64
-	AddressingImpulse        float64
+	AddressingLLMAttempted  bool
+	AddressingLLMOK         bool
+	AddressingLLMAddressed  bool
+	AddressingLLMConfidence float64
+	AddressingLLMInterject  float64
+	AddressingImpulse       float64
 }
 
 func quoteReplyMessageIDForGroupTrigger(msg *telegramMessage, dec telegramGroupTriggerDecision) int64 {
@@ -78,7 +78,7 @@ func quoteReplyMessageIDForGroupTrigger(msg *telegramMessage, dec telegramGroupT
 // groupTriggerDecision belongs to the trigger layer.
 // It decides whether this group message should enter an agent run.
 // It must not decide output modality (text reply vs reaction), which is handled in the generation layer.
-func groupTriggerDecision(ctx context.Context, client llm.Client, model string, msg *telegramMessage, botUser string, botID int64, aliases []string, mode string, aliasPrefixMaxChars int, addressingLLMTimeout time.Duration, addressingConfidenceThreshold float64, addressingIrrelevanceThreshold float64, history []chathistory.ChatHistoryItem) (telegramGroupTriggerDecision, bool, error) {
+func groupTriggerDecision(ctx context.Context, client llm.Client, model string, msg *telegramMessage, botUser string, botID int64, aliases []string, mode string, aliasPrefixMaxChars int, addressingLLMTimeout time.Duration, addressingConfidenceThreshold float64, addressingInterjectThreshold float64, history []chathistory.ChatHistoryItem) (telegramGroupTriggerDecision, bool, error) {
 	if msg == nil {
 		return telegramGroupTriggerDecision{}, false, nil
 	}
@@ -92,11 +92,11 @@ func groupTriggerDecision(ctx context.Context, client llm.Client, model string, 
 	if addressingConfidenceThreshold > 1 {
 		addressingConfidenceThreshold = 1
 	}
-	if addressingIrrelevanceThreshold <= 0 {
-		addressingIrrelevanceThreshold = 0.3
+	if addressingInterjectThreshold <= 0 {
+		addressingInterjectThreshold = 0.3
 	}
-	if addressingIrrelevanceThreshold > 1 {
-		addressingIrrelevanceThreshold = 1
+	if addressingInterjectThreshold > 1 {
+		addressingInterjectThreshold = 1
 	}
 
 	text := strings.TrimSpace(messageTextOrCaption(msg))
@@ -108,7 +108,7 @@ func groupTriggerDecision(ctx context.Context, client llm.Client, model string, 
 		}, true, nil
 	}
 
-	runAddressingLLM := func(confidenceThreshold float64, irrelevanceThreshold float64, fallbackReason string) (telegramGroupTriggerDecision, bool, error) {
+	runAddressingLLM := func(confidenceThreshold float64, interjectThreshold float64, fallbackReason string) (telegramGroupTriggerDecision, bool, error) {
 		dec := telegramGroupTriggerDecision{
 			AddressingLLMAttempted: true,
 			Reason:                 strings.TrimSpace(fallbackReason),
@@ -129,16 +129,12 @@ func groupTriggerDecision(ctx context.Context, client llm.Client, model string, 
 		dec.AddressingLLMOK = llmOK
 		dec.AddressingLLMAddressed = llmDec.Addressed
 		dec.AddressingLLMConfidence = llmDec.Confidence
-		dec.AddressingLLMIrrelevance = llmDec.Irrelevance
+		dec.AddressingLLMInterject = llmDec.Interject
 		dec.AddressingImpulse = llmDec.Impulse
 		if strings.TrimSpace(llmDec.Reason) != "" {
 			dec.Reason = llmDec.Reason
 		}
-		if llmOK && llmDec.Addressed && llmDec.Confidence >= confidenceThreshold {
-			if llmDec.Irrelevance > irrelevanceThreshold {
-				dec.UsedAddressingLLM = false
-				return dec, false, nil
-			}
+		if llmOK && llmDec.Addressed && llmDec.Confidence >= confidenceThreshold && llmDec.Interject > interjectThreshold {
 			dec.UsedAddressingLLM = true
 			return dec, true, nil
 		}
@@ -147,13 +143,13 @@ func groupTriggerDecision(ctx context.Context, client llm.Client, model string, 
 
 	switch mode {
 	case "talkative":
-		return runAddressingLLM(addressingConfidenceThreshold, addressingIrrelevanceThreshold, "talkative")
+		return runAddressingLLM(addressingConfidenceThreshold, addressingInterjectThreshold, "talkative")
 	case "smart":
 		mentionReason, _ := groupAliasMentionReason(text, aliases, aliasPrefixMaxChars)
 		if strings.TrimSpace(mentionReason) == "" {
 			return telegramGroupTriggerDecision{}, false, nil
 		}
-		return runAddressingLLM(addressingConfidenceThreshold, addressingIrrelevanceThreshold, mentionReason)
+		return runAddressingLLM(addressingConfidenceThreshold, addressingInterjectThreshold, mentionReason)
 	default: // strict (and unknown values fallback to strict behavior)
 		return telegramGroupTriggerDecision{}, false, nil
 	}
@@ -1601,11 +1597,11 @@ func lowerASCII(b byte) byte {
 }
 
 type telegramAddressingLLMDecision struct {
-	Addressed   bool    `json:"addressed"`
-	Confidence  float64 `json:"confidence"`
-	Irrelevance float64 `json:"irrelevance"`
-	Impulse     float64 `json:"impulse"`
-	Reason      string  `json:"reason"`
+	Addressed  bool    `json:"addressed"`
+	Confidence float64 `json:"confidence"`
+	Interject  float64 `json:"interject"`
+	Impulse    float64 `json:"impulse"`
+	Reason     string  `json:"reason"`
 }
 
 func addressingDecisionViaLLM(ctx context.Context, client llm.Client, model string, msg *telegramMessage, text string, history []chathistory.ChatHistoryItem) (telegramAddressingLLMDecision, bool, error) {
@@ -1673,11 +1669,11 @@ func addressingDecisionViaLLM(ctx context.Context, client llm.Client, model stri
 	if out.Impulse > 1 {
 		out.Impulse = 1
 	}
-	if out.Irrelevance < 0 {
-		out.Irrelevance = 0
+	if out.Interject < 0 {
+		out.Interject = 0
 	}
-	if out.Irrelevance > 1 {
-		out.Irrelevance = 1
+	if out.Interject > 1 {
+		out.Interject = 1
 	}
 	out.Reason = strings.TrimSpace(out.Reason)
 	return out, true, nil

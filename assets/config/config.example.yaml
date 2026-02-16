@@ -278,8 +278,8 @@ telegram:
   smart_addressing_max_chars: 24
   # Minimum confidence required to accept the LLM addressing classification.
   addressing_confidence_threshold: 0.7
-  # Maximum irrelevance allowed to accept the LLM addressing classification.
-  addressing_irrelevance_threshold: 0.3
+  # Maximum interject allowed to accept the LLM addressing classification.
+  addressing_interject_threshold: 0.6
   # Long polling timeout.
   poll_timeout: "30s"
   # Per-message agent timeout (0 uses top-level timeout).
