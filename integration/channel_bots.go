@@ -103,38 +103,29 @@ type telegramBotRunner struct {
 }
 
 func (r *telegramBotRunner) Run(ctx context.Context) error {
-	if r == nil || r.rt == nil {
+	if r == nil {
 		return fmt.Errorf("telegram runner is nil")
 	}
-	runCtx, cancel, err := r.state.begin(ctx, "telegram")
-	if err != nil {
-		return err
-	}
-	defer r.state.end(cancel)
-
-	snap, err := r.rt.snapshot()
-	if err != nil {
-		return err
-	}
-
-	runOpts, err := channelopts.BuildTelegramRunOptions(snap.Telegram, channelopts.TelegramInput{
-		BotToken:                      strings.TrimSpace(r.opts.BotToken),
-		AllowedChatIDs:                append([]int64(nil), r.opts.AllowedChatIDs...),
-		GroupTriggerMode:              strings.TrimSpace(r.opts.GroupTriggerMode),
-		AddressingConfidenceThreshold: r.opts.AddressingConfidenceThreshold,
-		AddressingInterjectThreshold:  r.opts.AddressingInterjectThreshold,
-		WithMAEP:                      false,
-		PollTimeout:                   r.opts.PollTimeout,
-		TaskTimeout:                   r.opts.TaskTimeout,
-		MaxConcurrency:                r.opts.MaxConcurrency,
-		Hooks:                         r.runtimeHooks(),
-		InspectPrompt:                 r.rt.cfg.Inspect.Prompt,
-		InspectRequest:                r.rt.cfg.Inspect.Request,
+	return runChannelLoop(ctx, &r.state, "telegram", r.rt, func(runCtx context.Context, snap runtimeSnapshot) error {
+		runOpts, err := channelopts.BuildTelegramRunOptions(snap.Telegram, channelopts.TelegramInput{
+			BotToken:                      strings.TrimSpace(r.opts.BotToken),
+			AllowedChatIDs:                append([]int64(nil), r.opts.AllowedChatIDs...),
+			GroupTriggerMode:              strings.TrimSpace(r.opts.GroupTriggerMode),
+			AddressingConfidenceThreshold: r.opts.AddressingConfidenceThreshold,
+			AddressingInterjectThreshold:  r.opts.AddressingInterjectThreshold,
+			WithMAEP:                      false,
+			PollTimeout:                   r.opts.PollTimeout,
+			TaskTimeout:                   r.opts.TaskTimeout,
+			MaxConcurrency:                r.opts.MaxConcurrency,
+			Hooks:                         r.runtimeHooks(),
+			InspectPrompt:                 r.rt.inspect.Prompt,
+			InspectRequest:                r.rt.inspect.Request,
+		})
+		if err != nil {
+			return err
+		}
+		return telegramruntime.Run(runCtx, r.rt.telegramDependencies(snap), runOpts)
 	})
-	if err != nil {
-		return err
-	}
-	return telegramruntime.Run(runCtx, r.rt.telegramDependencies(snap), runOpts)
 }
 
 func (r *telegramBotRunner) Close() error {
@@ -151,35 +142,39 @@ type slackBotRunner struct {
 }
 
 func (r *slackBotRunner) Run(ctx context.Context) error {
-	if r == nil || r.rt == nil {
+	if r == nil {
 		return fmt.Errorf("slack runner is nil")
 	}
-	runCtx, cancel, err := r.state.begin(ctx, "slack")
-	if err != nil {
-		return err
-	}
-	defer r.state.end(cancel)
-
-	snap, err := r.rt.snapshot()
-	if err != nil {
-		return err
-	}
-
-	runOpts := channelopts.BuildSlackRunOptions(snap.Slack, channelopts.SlackInput{
-		BotToken:                      strings.TrimSpace(r.opts.BotToken),
-		AppToken:                      strings.TrimSpace(r.opts.AppToken),
-		AllowedTeamIDs:                append([]string(nil), r.opts.AllowedTeamIDs...),
-		AllowedChannelIDs:             append([]string(nil), r.opts.AllowedChannelIDs...),
-		GroupTriggerMode:              strings.TrimSpace(r.opts.GroupTriggerMode),
-		AddressingConfidenceThreshold: r.opts.AddressingConfidenceThreshold,
-		AddressingInterjectThreshold:  r.opts.AddressingInterjectThreshold,
-		TaskTimeout:                   r.opts.TaskTimeout,
-		MaxConcurrency:                r.opts.MaxConcurrency,
-		Hooks:                         r.runtimeHooks(),
-		InspectPrompt:                 r.rt.cfg.Inspect.Prompt,
-		InspectRequest:                r.rt.cfg.Inspect.Request,
+	return runChannelLoop(ctx, &r.state, "slack", r.rt, func(runCtx context.Context, snap runtimeSnapshot) error {
+		runOpts := channelopts.BuildSlackRunOptions(snap.Slack, channelopts.SlackInput{
+			BotToken:                      strings.TrimSpace(r.opts.BotToken),
+			AppToken:                      strings.TrimSpace(r.opts.AppToken),
+			AllowedTeamIDs:                append([]string(nil), r.opts.AllowedTeamIDs...),
+			AllowedChannelIDs:             append([]string(nil), r.opts.AllowedChannelIDs...),
+			GroupTriggerMode:              strings.TrimSpace(r.opts.GroupTriggerMode),
+			AddressingConfidenceThreshold: r.opts.AddressingConfidenceThreshold,
+			AddressingInterjectThreshold:  r.opts.AddressingInterjectThreshold,
+			TaskTimeout:                   r.opts.TaskTimeout,
+			MaxConcurrency:                r.opts.MaxConcurrency,
+			Hooks:                         r.runtimeHooks(),
+			InspectPrompt:                 r.rt.inspect.Prompt,
+			InspectRequest:                r.rt.inspect.Request,
+		})
+		return slackruntime.Run(runCtx, r.rt.slackDependencies(snap), runOpts)
 	})
-	return slackruntime.Run(runCtx, r.rt.slackDependencies(snap), runOpts)
+}
+
+func runChannelLoop(ctx context.Context, state *runState, name string, rt *Runtime, run func(context.Context, runtimeSnapshot) error) error {
+	name = strings.TrimSpace(name)
+	if rt == nil {
+		return fmt.Errorf("%s runner is nil", name)
+	}
+	runCtx, cancel, err := state.begin(ctx, name)
+	if err != nil {
+		return err
+	}
+	defer state.end(cancel)
+	return run(runCtx, rt.snapshot())
 }
 
 func (r *slackBotRunner) Close() error {
@@ -229,71 +224,56 @@ func (s *runState) close() error {
 	return nil
 }
 
+func mapRuntimeHook[T any](fn func(T)) func(context.Context, T) {
+	if fn == nil {
+		return nil
+	}
+	return func(_ context.Context, event T) {
+		fn(event)
+	}
+}
+
 func (r *telegramBotRunner) runtimeHooks() telegramruntime.Hooks {
 	h := r.opts.Hooks
-	if h.OnInbound == nil && h.OnOutbound == nil && h.OnError == nil {
-		return telegramruntime.Hooks{}
-	}
 	return telegramruntime.Hooks{
-		OnInbound: func(_ context.Context, event telegramruntime.InboundEvent) {
-			if h.OnInbound == nil {
-				return
-			}
-			h.OnInbound(event)
-		},
-		OnOutbound: func(_ context.Context, event telegramruntime.OutboundEvent) {
-			if h.OnOutbound == nil {
-				return
-			}
-			h.OnOutbound(event)
-		},
-		OnError: func(_ context.Context, event telegramruntime.ErrorEvent) {
-			if h.OnError == nil {
-				return
-			}
-			h.OnError(event)
-		},
+		OnInbound:  mapRuntimeHook(h.OnInbound),
+		OnOutbound: mapRuntimeHook(h.OnOutbound),
+		OnError:    mapRuntimeHook(h.OnError),
 	}
 }
 
 func (r *slackBotRunner) runtimeHooks() slackruntime.Hooks {
 	h := r.opts.Hooks
-	if h.OnInbound == nil && h.OnOutbound == nil && h.OnError == nil {
-		return slackruntime.Hooks{}
-	}
 	return slackruntime.Hooks{
-		OnInbound: func(_ context.Context, event slackruntime.InboundEvent) {
-			if h.OnInbound == nil {
-				return
-			}
-			h.OnInbound(event)
-		},
-		OnOutbound: func(_ context.Context, event slackruntime.OutboundEvent) {
-			if h.OnOutbound == nil {
-				return
-			}
-			h.OnOutbound(event)
-		},
-		OnError: func(_ context.Context, event slackruntime.ErrorEvent) {
-			if h.OnError == nil {
-				return
-			}
-			h.OnError(event)
-		},
+		OnInbound:  mapRuntimeHook(h.OnInbound),
+		OnOutbound: mapRuntimeHook(h.OnOutbound),
+		OnError:    mapRuntimeHook(h.OnError),
 	}
 }
 
-func (rt *Runtime) telegramDependencies(snap runtimeSnapshot) telegramruntime.Dependencies {
-	return telegramruntime.Dependencies{
+type runtimeSharedDependencies struct {
+	Logger                 func() (*slog.Logger, error)
+	LogOptions             func() agent.LogOptions
+	CreateLLMClient        func(provider, endpoint, apiKey, model string, timeout time.Duration) (llm.Client, error)
+	LLMProvider            func() string
+	LLMEndpointForProvider func(provider string) string
+	LLMAPIKeyForProvider   func(provider string) string
+	LLMModelForProvider    func(provider string) string
+	Registry               func() *tools.Registry
+	RegisterPlanTool       func(reg *tools.Registry, client llm.Client, model string)
+	Guard                  func(logger *slog.Logger) *guard.Guard
+	PromptSpec             func(ctx context.Context, logger *slog.Logger, logOpts agent.LogOptions, task string, client llm.Client, model string, stickySkills []string) (agent.PromptSpec, []string, []string, error)
+}
+
+func (rt *Runtime) sharedDependencies(snap runtimeSnapshot) runtimeSharedDependencies {
+	return runtimeSharedDependencies{
 		Logger: func() (*slog.Logger, error) {
 			if snap.Logger != nil {
 				return snap.Logger, nil
 			}
 			return slog.Default(), nil
 		},
-		LogOptions: func() agent.LogOptions {
-			return cloneLogOptions(snap.LogOptions)
-		},
+		LogOptions: func() agent.LogOptions { return cloneLogOptions(snap.LogOptions) },
 		CreateLLMClient: func(provider, endpoint, apiKey, model string, timeout time.Duration) (llm.Client, error) {
 			return llmutil.ClientFromConfigWithValues(llmconfig.ClientConfig{
 				Provider:       provider,
@@ -309,13 +289,28 @@ func (rt *Runtime) telegramDependencies(snap runtimeSnapshot) telegramruntime.De
 		LLMModelForProvider:    func(_ string) string { return snap.LLMModel },
 		Registry:               func() *tools.Registry { return rt.buildRegistry(snap.Registry, snap.Logger) },
 		RegisterPlanTool:       rt.maybeRegisterPlanTool,
-		Guard: func(logger *slog.Logger) *guard.Guard {
-			return rt.buildGuard(snap.Guard, logger)
-		},
+		Guard:                  func(logger *slog.Logger) *guard.Guard { return rt.buildGuard(snap.Guard, logger) },
 		PromptSpec: func(ctx context.Context, logger *slog.Logger, logOpts agent.LogOptions, task string, client llm.Client, model string, stickySkills []string) (agent.PromptSpec, []string, []string, error) {
 			return rt.promptSpecWithSkillsFromConfig(ctx, logger, logOpts, task, client, model, snap.SkillsConfig, stickySkills)
 		},
-		BuildHeartbeatTask: heartbeatutil.BuildHeartbeatTask,
+	}
+}
+
+func (rt *Runtime) telegramDependencies(snap runtimeSnapshot) telegramruntime.Dependencies {
+	base := rt.sharedDependencies(snap)
+	return telegramruntime.Dependencies{
+		Logger:                 base.Logger,
+		LogOptions:             base.LogOptions,
+		CreateLLMClient:        base.CreateLLMClient,
+		LLMProvider:            base.LLMProvider,
+		LLMEndpointForProvider: base.LLMEndpointForProvider,
+		LLMAPIKeyForProvider:   base.LLMAPIKeyForProvider,
+		LLMModelForProvider:    base.LLMModelForProvider,
+		Registry:               base.Registry,
+		RegisterPlanTool:       base.RegisterPlanTool,
+		Guard:                  base.Guard,
+		PromptSpec:             base.PromptSpec,
+		BuildHeartbeatTask:     heartbeatutil.BuildHeartbeatTask,
 		BuildHeartbeatMeta: func(source string, interval time.Duration, checklistPath string, checklistEmpty bool, extra map[string]any) map[string]any {
 			return heartbeatutil.BuildHeartbeatMeta(source, interval, checklistPath, checklistEmpty, nil, extra)
 		},
@@ -323,42 +318,24 @@ func (rt *Runtime) telegramDependencies(snap runtimeSnapshot) telegramruntime.De
 }
 
 func (rt *Runtime) slackDependencies(snap runtimeSnapshot) slackruntime.Dependencies {
+	base := rt.sharedDependencies(snap)
 	return slackruntime.Dependencies{
-		Logger: func() (*slog.Logger, error) {
-			if snap.Logger != nil {
-				return snap.Logger, nil
-			}
-			return slog.Default(), nil
-		},
-		LogOptions: func() agent.LogOptions {
-			return cloneLogOptions(snap.LogOptions)
-		},
-		CreateLLMClient: func(provider, endpoint, apiKey, model string, timeout time.Duration) (llm.Client, error) {
-			return llmutil.ClientFromConfigWithValues(llmconfig.ClientConfig{
-				Provider:       provider,
-				Endpoint:       endpoint,
-				APIKey:         apiKey,
-				Model:          model,
-				RequestTimeout: timeout,
-			}, snap.LLMValues)
-		},
-		LLMProvider:            func() string { return snap.LLMProvider },
-		LLMEndpointForProvider: func(_ string) string { return snap.LLMEndpoint },
-		LLMAPIKeyForProvider:   func(_ string) string { return snap.LLMAPIKey },
-		LLMModelForProvider:    func(_ string) string { return snap.LLMModel },
-		Registry:               func() *tools.Registry { return rt.buildRegistry(snap.Registry, snap.Logger) },
-		RegisterPlanTool:       rt.maybeRegisterPlanTool,
-		Guard: func(logger *slog.Logger) *guard.Guard {
-			return rt.buildGuard(snap.Guard, logger)
-		},
-		PromptSpec: func(ctx context.Context, logger *slog.Logger, logOpts agent.LogOptions, task string, client llm.Client, model string, stickySkills []string) (agent.PromptSpec, []string, []string, error) {
-			return rt.promptSpecWithSkillsFromConfig(ctx, logger, logOpts, task, client, model, snap.SkillsConfig, stickySkills)
-		},
+		Logger:                 base.Logger,
+		LogOptions:             base.LogOptions,
+		CreateLLMClient:        base.CreateLLMClient,
+		LLMProvider:            base.LLMProvider,
+		LLMEndpointForProvider: base.LLMEndpointForProvider,
+		LLMAPIKeyForProvider:   base.LLMAPIKeyForProvider,
+		LLMModelForProvider:    base.LLMModelForProvider,
+		Registry:               base.Registry,
+		RegisterPlanTool:       base.RegisterPlanTool,
+		Guard:                  base.Guard,
+		PromptSpec:             base.PromptSpec,
 	}
 }
 
 func (rt *Runtime) maybeRegisterPlanTool(reg *tools.Registry, client llm.Client, model string) {
-	if rt == nil || !rt.cfg.Features.PlanTool {
+	if rt == nil || !rt.features.PlanTool {
 		return
 	}
 	toolsutil.RegisterPlanTool(reg, client, model)
@@ -368,7 +345,7 @@ func (rt *Runtime) promptSpecWithSkillsFromConfig(ctx context.Context, logger *s
 	if rt == nil {
 		return agent.PromptSpec{}, nil, nil, fmt.Errorf("runtime is nil")
 	}
-	if !rt.cfg.Features.Skills {
+	if !rt.features.Skills {
 		return agent.DefaultPromptSpec(), nil, nil, nil
 	}
 	cfg := cloneSkillsConfig(base)

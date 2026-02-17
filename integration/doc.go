@@ -13,5 +13,5 @@
 // The embedding host owns env/config-file loading and passes resolved values in.
 //
 // Note: this package snapshots config from explicit Config overrides plus
-// integration defaults once at runtime initialization.
+// integration defaults once during Runtime construction.
 package integration

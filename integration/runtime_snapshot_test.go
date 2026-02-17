@@ -14,10 +14,7 @@ func TestRuntimeSnapshotFreezesRequestTimeout(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Set("llm.request_timeout", 5*time.Second)
 
-	rt, err := New(cfg)
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
+	rt := New(cfg)
 
 	if got := rt.RequestTimeout(); got != 5*time.Second {
 		t.Fatalf("RequestTimeout() = %v, want %v", got, 5*time.Second)
@@ -36,10 +33,7 @@ func TestRuntimeSnapshotFreezesRegistryToolConfig(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Set("tools.write_file.enabled", false)
 
-	rt, err := New(cfg)
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
+	rt := New(cfg)
 
 	reg := rt.NewRegistry()
 	if _, ok := reg.Get("write_file"); ok {
@@ -59,10 +53,7 @@ func TestRuntimeSnapshotIgnoresGlobalViper(t *testing.T) {
 
 	viper.Set("llm.request_timeout", 77*time.Second)
 
-	rt, err := New(DefaultConfig())
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
+	rt := New(DefaultConfig())
 	if got := rt.RequestTimeout(); got != 90*time.Second {
 		t.Fatalf("RequestTimeout() = %v, want %v", got, 90*time.Second)
 	}

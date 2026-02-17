@@ -10,10 +10,7 @@ import (
 )
 
 func TestNewTelegramBotRequiresToken(t *testing.T) {
-	rt, err := New(DefaultConfig())
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
+	rt := New(DefaultConfig())
 
 	if _, err := rt.NewTelegramBot(TelegramOptions{}); err == nil {
 		t.Fatalf("expected error when telegram bot token is missing")
@@ -21,10 +18,7 @@ func TestNewTelegramBotRequiresToken(t *testing.T) {
 }
 
 func TestNewSlackBotRequiresTokens(t *testing.T) {
-	rt, err := New(DefaultConfig())
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
+	rt := New(DefaultConfig())
 
 	if _, err := rt.NewSlackBot(SlackOptions{}); err == nil {
 		t.Fatalf("expected error when slack tokens are missing")
@@ -35,10 +29,7 @@ func TestNewSlackBotRequiresTokens(t *testing.T) {
 }
 
 func TestRunnerCloseAndReentrantGuard(t *testing.T) {
-	rt, err := New(DefaultConfig())
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
+	rt := New(DefaultConfig())
 	r, err := rt.NewSlackBot(SlackOptions{
 		BotToken: "xoxb-1",
 		AppToken: "xapp-1",

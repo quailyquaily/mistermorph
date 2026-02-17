@@ -159,8 +159,7 @@ cfg.Inspect.Prompt = true   // optional
 cfg.Inspect.Request = true  // optional
 cfg.Set("llm.api_key", os.Getenv("OPENAI_API_KEY"))
 
-rt, err := integration.New(cfg)
-if err != nil { /* ... */ }
+rt := integration.New(cfg)
 
 reg := rt.NewRegistry() // built-in tools wiring
 prepared, err := rt.NewRunEngineWithRegistry(ctx, task, reg)

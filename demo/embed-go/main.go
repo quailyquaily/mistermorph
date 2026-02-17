@@ -158,10 +158,7 @@ func main() {
 	cfg.Set("tools.url_fetch.timeout", 20*time.Second)
 	cfg.Set("tools.todo.enabled", true)
 
-	rt, err := integration.New(cfg)
-	if err != nil {
-		exitErr(err)
-	}
+	rt := integration.New(cfg)
 
 	switch strings.ToLower(strings.TrimSpace(*mode)) {
 	case "task":

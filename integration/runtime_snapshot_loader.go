@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"log/slog"
 	"strings"
 	"time"
 
@@ -15,7 +16,7 @@ import (
 	"github.com/spf13/viper"
 )
 
-func loadRuntimeSnapshotInput(cfg Config) runtimeSnapshotInput {
+func loadRuntimeSnapshot(cfg Config) runtimeSnapshot {
 	v := viper.New()
 	applyViperDefaults(v)
 	for k, value := range cfg.Overrides {
@@ -25,10 +26,10 @@ func loadRuntimeSnapshotInput(cfg Config) runtimeSnapshotInput {
 		}
 		v.Set(key, value)
 	}
-	return loadRuntimeSnapshotInputFromReader(v)
+	return loadRuntimeSnapshotFromReader(v)
 }
 
-func loadRuntimeSnapshotInputFromReader(v *viper.Viper) runtimeSnapshotInput {
+func loadRuntimeSnapshotFromReader(v *viper.Viper) runtimeSnapshot {
 	if v == nil {
 		v = viper.New()
 		applyViperDefaults(v)
@@ -49,10 +50,23 @@ func loadRuntimeSnapshotInputFromReader(v *viper.Viper) runtimeSnapshotInput {
 	var guardPatterns []guard.RegexPattern
 	_ = v.UnmarshalKey("guard.redaction.patterns", &guardPatterns)
 
-	return runtimeSnapshotInput{
-		LoggerConfig:                logutil.LoggerConfigFromReader(v),
-		LogOptionsConfig:            logutil.LogOptionsConfigFromReader(v),
-		LLMValues:                   llmutil.RuntimeValuesFromReader(v),
+	logger, loggerErr := logutil.LoggerFromConfig(logutil.LoggerConfigFromReader(v))
+	if loggerErr != nil {
+		logger = slog.Default()
+	}
+	logOpts := cloneLogOptions(logutil.LogOptionsFromConfig(logutil.LogOptionsConfigFromReader(v)))
+	llmValues := llmutil.RuntimeValuesFromReader(v)
+	provider := strings.TrimSpace(llmValues.Provider)
+
+	return runtimeSnapshot{
+		Logger:                      logger,
+		LoggerInitErr:               loggerErr,
+		LogOptions:                  logOpts,
+		LLMValues:                   llmValues,
+		LLMProvider:                 provider,
+		LLMEndpoint:                 llmutil.EndpointForProviderWithValues(provider, llmValues),
+		LLMAPIKey:                   llmutil.APIKeyForProviderWithValues(provider, llmValues),
+		LLMModel:                    llmutil.ModelForProviderWithValues(provider, llmValues),
 		LLMRequestTimeout:           v.GetDuration("llm.request_timeout"),
 		AgentMaxSteps:               v.GetInt("max_steps"),
 		AgentParseRetries:           v.GetInt("parse_retries"),

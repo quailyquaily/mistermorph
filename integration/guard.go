@@ -11,7 +11,7 @@ import (
 )
 
 func (rt *Runtime) buildGuard(cfg guardSnapshot, log *slog.Logger) *guard.Guard {
-	if rt == nil || !rt.cfg.Features.Guard || !cfg.Enabled {
+	if rt == nil || !rt.features.Guard || !cfg.Enabled {
 		return nil
 	}
 	if log == nil {

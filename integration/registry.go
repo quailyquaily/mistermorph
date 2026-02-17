@@ -19,8 +19,8 @@ func (rt *Runtime) buildRegistry(cfg registrySnapshot, logger *slog.Logger) *too
 		logger = slog.Default()
 	}
 
-	selectedBuiltinTools := make(map[string]struct{}, len(rt.cfg.BuiltinToolNames))
-	for _, name := range rt.cfg.BuiltinToolNames {
+	selectedBuiltinTools := make(map[string]struct{}, len(rt.builtinToolNames))
+	for _, name := range rt.builtinToolNames {
 		selectedBuiltinTools[name] = struct{}{}
 		if _, ok := knownBuiltinToolNames[name]; !ok {
 			logger.Warn("unknown_builtin_tool_name", "name", name)

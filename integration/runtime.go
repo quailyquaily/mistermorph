@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"slices"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/quailyquaily/mistermorph/agent"
@@ -21,9 +20,10 @@ import (
 
 // Runtime is the reusable wiring entrypoint for third-party embedding.
 type Runtime struct {
-	cfg      Config
-	initOnce sync.Once
-	snap     runtimeSnapshot
+	features         Features
+	inspect          InspectOptions
+	builtinToolNames []string
+	snap             runtimeSnapshot
 }
 
 type PreparedRun struct {
@@ -32,38 +32,35 @@ type PreparedRun struct {
 	Cleanup func() error
 }
 
-func New(cfg Config) (*Runtime, error) {
+func New(cfg Config) *Runtime {
 	cfg = normalizeConfig(cfg)
-	return &Runtime{cfg: cfg}, nil
+	return &Runtime{
+		features:         cfg.Features,
+		inspect:          cfg.Inspect,
+		builtinToolNames: append([]string(nil), cfg.BuiltinToolNames...),
+		snap:             loadRuntimeSnapshot(cfg),
+	}
 }
 
 func normalizeConfig(cfg Config) Config {
-	if isZeroConfig(cfg) {
-		return DefaultConfig()
-	}
-	if cfg.Overrides == nil {
-		cfg.Overrides = map[string]any{}
-	}
-	if len(cfg.BuiltinToolNames) > 0 {
-		cfg.BuiltinToolNames = normalizeToolNames(cfg.BuiltinToolNames)
-	}
-	return cfg
-}
-
-func isZeroConfig(cfg Config) bool {
-	if len(cfg.Overrides) > 0 {
-		return false
-	}
-	if len(cfg.BuiltinToolNames) > 0 {
-		return false
-	}
+	out := DefaultConfig()
 	if cfg.Features != (Features{}) {
-		return false
+		out.Features = cfg.Features
 	}
 	if cfg.Inspect != (InspectOptions{}) {
-		return false
+		out.Inspect = cfg.Inspect
 	}
-	return true
+	if len(cfg.BuiltinToolNames) > 0 {
+		out.BuiltinToolNames = normalizeToolNames(cfg.BuiltinToolNames)
+	}
+	for k, v := range cfg.Overrides {
+		key := strings.TrimSpace(k)
+		if key == "" {
+			continue
+		}
+		out.Overrides[key] = v
+	}
+	return out
 }
 
 func normalizeToolNames(names []string) []string {
@@ -94,11 +91,7 @@ func (rt *Runtime) NewRegistry() *tools.Registry {
 	if rt == nil {
 		return tools.NewRegistry()
 	}
-	snap, err := rt.snapshot()
-	if err != nil {
-		slog.Default().Warn("integration_config_init_failed", "error", err.Error())
-		return tools.NewRegistry()
-	}
+	snap := rt.snapshot()
 	return rt.buildRegistry(snap.Registry, snap.Logger)
 }
 
@@ -110,10 +103,7 @@ func (rt *Runtime) NewRunEngineWithRegistry(ctx context.Context, task string, ba
 	if rt == nil {
 		return nil, fmt.Errorf("runtime is nil")
 	}
-	snap, err := rt.snapshot()
-	if err != nil {
-		return nil, err
-	}
+	snap := rt.snapshot()
 	if snap.LoggerInitErr != nil {
 		return nil, snap.LoggerInitErr
 	}
@@ -140,7 +130,7 @@ func (rt *Runtime) NewRunEngineWithRegistry(ctx context.Context, task string, ba
 		return nil, err
 	}
 
-	client, inspectCleanup, err := rt.wrapClientWithInspect(client, task, rt.cfg.Inspect)
+	client, inspectCleanup, err := rt.wrapClientWithInspect(client, task, rt.inspect)
 	if err != nil {
 		return nil, err
 	}
@@ -150,14 +140,14 @@ func (rt *Runtime) NewRunEngineWithRegistry(ctx context.Context, task string, ba
 		reg = rt.buildRegistry(snap.Registry, logger)
 	}
 
-	if rt.cfg.Features.PlanTool {
+	if rt.features.PlanTool {
 		toolsutil.RegisterPlanTool(reg, client, snap.LLMModel)
 	}
 	toolsutil.BindTodoUpdateToolLLM(reg, client, snap.LLMModel)
 
 	skillAuthProfiles := []string{}
 	promptSpec := agent.DefaultPromptSpec()
-	if rt.cfg.Features.Skills {
+	if rt.features.Skills {
 		spec, _, authProfiles, err := rt.promptSpecWithSkillsFromConfig(ctx, logger, logOpts, task, client, snap.LLMModel, snap.SkillsConfig, nil)
 		if err != nil {
 			_ = inspectCleanup()
@@ -168,7 +158,7 @@ func (rt *Runtime) NewRunEngineWithRegistry(ctx context.Context, task string, ba
 	}
 	promptprofile.ApplyPersonaIdentity(&promptSpec, logger)
 	promptprofile.AppendLocalToolNotesBlock(&promptSpec, logger)
-	if rt.cfg.Features.PlanTool {
+	if rt.features.PlanTool {
 		promptprofile.AppendPlanCreateGuidanceBlock(&promptSpec, reg)
 	}
 
@@ -283,29 +273,12 @@ func (rt *Runtime) RequestTimeout() time.Duration {
 	if rt == nil {
 		return 0
 	}
-	snap, err := rt.snapshot()
-	if err != nil {
-		return 0
-	}
-	return snap.LLMRequestTimeout
+	return rt.snapshot().LLMRequestTimeout
 }
 
-func (rt *Runtime) snapshot() (runtimeSnapshot, error) {
+func (rt *Runtime) snapshot() runtimeSnapshot {
 	if rt == nil {
-		return runtimeSnapshot{}, fmt.Errorf("runtime is nil")
+		return runtimeSnapshot{}
 	}
-	if err := rt.ensureRuntimeSnapshot(); err != nil {
-		return runtimeSnapshot{}, err
-	}
-	return rt.snap, nil
-}
-
-func (rt *Runtime) ensureRuntimeSnapshot() error {
-	if rt == nil {
-		return fmt.Errorf("runtime is nil")
-	}
-	rt.initOnce.Do(func() {
-		rt.snap = newRuntimeSnapshot(loadRuntimeSnapshotInput(rt.cfg))
-	})
-	return nil
+	return rt.snap
 }
