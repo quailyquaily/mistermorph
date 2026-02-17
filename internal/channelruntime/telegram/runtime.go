@@ -18,6 +18,7 @@ import (
 	busruntime "github.com/quailyquaily/mistermorph/internal/bus"
 	maepbus "github.com/quailyquaily/mistermorph/internal/bus/adapters/maep"
 	telegrambus "github.com/quailyquaily/mistermorph/internal/bus/adapters/telegram"
+	runtimeworker "github.com/quailyquaily/mistermorph/internal/channelruntime/worker"
 	"github.com/quailyquaily/mistermorph/internal/chathistory"
 	"github.com/quailyquaily/mistermorph/internal/healthcheck"
 	"github.com/quailyquaily/mistermorph/internal/heartbeatutil"
@@ -315,6 +316,8 @@ func runTelegramLoop(ctx context.Context, d Dependencies, opts runtimeLoopOption
 	taskTimeout := opts.TaskTimeout
 	maxConc := opts.MaxConcurrency
 	sem := make(chan struct{}, maxConc)
+	workersCtx, stopWorkers := context.WithCancel(pollCtx)
+	defer stopWorkers()
 	healthListen := healthcheck.NormalizeListen(opts.HealthListen)
 	if healthListen != "" {
 		healthServer, err := healthcheck.StartServer(pollCtx, logger, healthListen, "telegram")
@@ -583,135 +586,141 @@ func runTelegramLoop(ctx context.Context, d Dependencies, opts runtimeLoopOption
 		w := &telegramChatWorker{Jobs: make(chan telegramJob, 16)}
 		workers[chatID] = w
 
-		go func(chatID int64, w *telegramChatWorker) {
-			for job := range w.Jobs {
-				// Global concurrency limit.
-				sem <- struct{}{}
-				func() {
-					defer func() { <-sem }()
+		runtimeworker.Start(runtimeworker.StartOptions[telegramJob]{
+			Ctx:  workersCtx,
+			Sem:  sem,
+			Jobs: w.Jobs,
+			Handle: func(workerCtx context.Context, job telegramJob) {
+				mu.Lock()
+				h := append([]chathistory.ChatHistoryItem(nil), history[chatID]...)
+				curVersion := w.Version
+				sticky := append([]string(nil), stickySkillsByChat[chatID]...)
+				mu.Unlock()
 
-					mu.Lock()
-					h := append([]chathistory.ChatHistoryItem(nil), history[chatID]...)
-					curVersion := w.Version
-					sticky := append([]string(nil), stickySkillsByChat[chatID]...)
-					mu.Unlock()
+				// If there was a /reset after this job was queued, drop history for this run.
+				if job.Version != curVersion {
+					h = nil
+				}
 
-					// If there was a /reset after this job was queued, drop history for this run.
-					if job.Version != curVersion {
-						h = nil
+				var typingStop func()
+				if !job.IsHeartbeat {
+					typingStop = startTypingTicker(workerCtx, api, chatID, "typing", 4*time.Second)
+					defer typingStop()
+				}
+
+				runCtx, cancel := context.WithTimeout(workerCtx, taskTimeout)
+				final, _, loadedSkills, reaction, runErr := runTelegramTask(runCtx, d, logger, logOpts, client, reg, api, filesEnabled, fileCacheDir, filesMaxBytes, sharedGuard, cfg, allowed, job, botUser, model, h, telegramHistoryCap, sticky, requestTimeout, taskRuntimeOpts, publishTelegramText)
+				cancel()
+
+				if runErr != nil {
+					if workerCtx.Err() != nil {
+						return
 					}
-
-					var typingStop func()
-					if !job.IsHeartbeat {
-						typingStop = startTypingTicker(context.Background(), api, chatID, "typing", 4*time.Second)
-						defer typingStop()
+					callErrorHook(workerCtx, logger, hooks, ErrorEvent{
+						Stage:     ErrorStageRunTask,
+						ChatID:    chatID,
+						MessageID: job.MessageID,
+						Err:       runErr,
+					})
+					if job.IsHeartbeat {
+						alert, msg := heartbeatState.EndFailure(runErr)
+						if alert {
+							logger.Warn("heartbeat_alert", "source", "telegram", "chat_id", chatID, "message", msg)
+							mu.Lock()
+							cur := history[chatID]
+							cur = append(cur, newTelegramSystemHistoryItem(chatID, job.ChatType, msg, time.Now().UTC(), botUser))
+							history[chatID] = trimChatHistoryItems(cur, telegramHistoryCap)
+							mu.Unlock()
+						} else {
+							logger.Warn("heartbeat_error", "source", "telegram", "chat_id", chatID, "error", runErr.Error())
+						}
+						return
 					}
-
-					ctx, cancel := context.WithTimeout(context.Background(), taskTimeout)
-					final, _, loadedSkills, reaction, runErr := runTelegramTask(ctx, d, logger, logOpts, client, reg, api, filesEnabled, fileCacheDir, filesMaxBytes, sharedGuard, cfg, allowed, job, botUser, model, h, telegramHistoryCap, sticky, requestTimeout, taskRuntimeOpts, publishTelegramText)
-					cancel()
-
-					if runErr != nil {
-						callErrorHook(context.Background(), logger, hooks, ErrorEvent{
-							Stage:     ErrorStageRunTask,
+					errorCorrelationID := fmt.Sprintf("telegram:error:%d:%d", chatID, job.MessageID)
+					if _, err := publishTelegramBusOutbound(workerCtx, inprocBus, chatID, "error: "+runErr.Error(), "", errorCorrelationID); err != nil {
+						logger.Warn("telegram_bus_publish_error", "channel", busruntime.ChannelTelegram, "chat_id", chatID, "bus_error_code", busErrorCodeString(err), "error", err.Error())
+						callErrorHook(workerCtx, logger, hooks, ErrorEvent{
+							Stage:     ErrorStagePublishErrorReply,
 							ChatID:    chatID,
 							MessageID: job.MessageID,
-							Err:       runErr,
+							Err:       err,
 						})
-						if job.IsHeartbeat {
-							alert, msg := heartbeatState.EndFailure(runErr)
-							if alert {
-								logger.Warn("heartbeat_alert", "source", "telegram", "chat_id", chatID, "message", msg)
-								mu.Lock()
-								cur := history[chatID]
-								cur = append(cur, newTelegramSystemHistoryItem(chatID, job.ChatType, msg, time.Now().UTC(), botUser))
-								history[chatID] = trimChatHistoryItems(cur, telegramHistoryCap)
-								mu.Unlock()
-							} else {
-								logger.Warn("heartbeat_error", "source", "telegram", "chat_id", chatID, "error", runErr.Error())
-							}
+					}
+					return
+				}
+
+				var outText string
+				if reaction == nil {
+					outText = formatFinalOutput(final)
+					if !job.IsHeartbeat {
+						if workerCtx.Err() != nil {
 							return
 						}
-						errorCorrelationID := fmt.Sprintf("telegram:error:%d:%d", chatID, job.MessageID)
-						if _, err := publishTelegramBusOutbound(context.Background(), inprocBus, chatID, "error: "+runErr.Error(), "", errorCorrelationID); err != nil {
+						replyTo := ""
+						if job.ReplyToMessageID > 0 {
+							replyTo = strconv.FormatInt(job.ReplyToMessageID, 10)
+						}
+						outCorrelationID := fmt.Sprintf("telegram:message:%d:%d", chatID, job.MessageID)
+						if _, err := publishTelegramBusOutbound(workerCtx, inprocBus, chatID, outText, replyTo, outCorrelationID); err != nil {
 							logger.Warn("telegram_bus_publish_error", "channel", busruntime.ChannelTelegram, "chat_id", chatID, "bus_error_code", busErrorCodeString(err), "error", err.Error())
-							callErrorHook(context.Background(), logger, hooks, ErrorEvent{
-								Stage:     ErrorStagePublishErrorReply,
+							callErrorHook(workerCtx, logger, hooks, ErrorEvent{
+								Stage:     ErrorStagePublishOutbound,
 								ChatID:    chatID,
 								MessageID: job.MessageID,
 								Err:       err,
 							})
 						}
-						return
 					}
+				}
+				if job.IsHeartbeat {
+					heartbeatState.EndSuccess(time.Now())
+				}
+				if job.IsHeartbeat {
+					summary := strings.TrimSpace(outText)
+					if summary == "" {
+						summary = "empty"
+					}
+					logger.Info("heartbeat_summary", "source", "telegram", "chat_id", chatID, "message", summary)
+				}
 
-					var outText string
+				mu.Lock()
+				// Respect resets that happened while the task was running.
+				if w.Version != curVersion {
+					history[chatID] = nil
+					stickySkillsByChat[chatID] = nil
+				}
+				if w.Version == curVersion && len(loadedSkills) > 0 {
+					stickySkillsByChat[chatID] = capUniqueStrings(loadedSkills, telegramStickySkillsCap)
+				}
+				cur := history[chatID]
+				if job.IsHeartbeat {
 					if reaction == nil {
-						outText = formatFinalOutput(final)
-						if !job.IsHeartbeat {
-							replyTo := ""
-							if job.ReplyToMessageID > 0 {
-								replyTo = strconv.FormatInt(job.ReplyToMessageID, 10)
-							}
-							outCorrelationID := fmt.Sprintf("telegram:message:%d:%d", chatID, job.MessageID)
-							if _, err := publishTelegramBusOutbound(context.Background(), inprocBus, chatID, outText, replyTo, outCorrelationID); err != nil {
-								logger.Warn("telegram_bus_publish_error", "channel", busruntime.ChannelTelegram, "chat_id", chatID, "bus_error_code", busErrorCodeString(err), "error", err.Error())
-								callErrorHook(context.Background(), logger, hooks, ErrorEvent{
-									Stage:     ErrorStagePublishOutbound,
-									ChatID:    chatID,
-									MessageID: job.MessageID,
-									Err:       err,
-								})
-							}
+						cur = append(cur, newTelegramOutboundAgentHistoryItem(chatID, job.ChatType, outText, time.Now().UTC(), botUser))
+					}
+				} else {
+					cur = append(cur, newTelegramInboundHistoryItem(job))
+					if reaction != nil {
+						note := "[reacted]"
+						if emoji := strings.TrimSpace(reaction.Emoji); emoji != "" {
+							note = "[reacted: " + emoji + "]"
 						}
-					}
-					if job.IsHeartbeat {
-						heartbeatState.EndSuccess(time.Now())
-					}
-					if job.IsHeartbeat {
-						summary := strings.TrimSpace(outText)
-						if summary == "" {
-							summary = "empty"
-						}
-						logger.Info("heartbeat_summary", "source", "telegram", "chat_id", chatID, "message", summary)
-					}
-
-					mu.Lock()
-					// Respect resets that happened while the task was running.
-					if w.Version != curVersion {
-						history[chatID] = nil
-						stickySkillsByChat[chatID] = nil
-					}
-					if w.Version == curVersion && len(loadedSkills) > 0 {
-						stickySkillsByChat[chatID] = capUniqueStrings(loadedSkills, telegramStickySkillsCap)
-					}
-					cur := history[chatID]
-					if job.IsHeartbeat {
-						if reaction == nil {
-							cur = append(cur, newTelegramOutboundAgentHistoryItem(chatID, job.ChatType, outText, time.Now().UTC(), botUser))
-						}
+						cur = append(cur, newTelegramOutboundReactionHistoryItem(chatID, job.ChatType, note, reaction.Emoji, time.Now().UTC(), botUser))
 					} else {
-						cur = append(cur, newTelegramInboundHistoryItem(job))
-						if reaction != nil {
-							note := "[reacted]"
-							if emoji := strings.TrimSpace(reaction.Emoji); emoji != "" {
-								note = "[reacted: " + emoji + "]"
-							}
-							cur = append(cur, newTelegramOutboundReactionHistoryItem(chatID, job.ChatType, note, reaction.Emoji, time.Now().UTC(), botUser))
-						} else {
-							cur = append(cur, newTelegramOutboundAgentHistoryItem(chatID, job.ChatType, outText, time.Now().UTC(), botUser))
-						}
+						cur = append(cur, newTelegramOutboundAgentHistoryItem(chatID, job.ChatType, outText, time.Now().UTC(), botUser))
 					}
-					history[chatID] = trimChatHistoryItems(cur, telegramHistoryCap)
-					mu.Unlock()
-				}()
-			}
-		}(chatID, w)
+				}
+				history[chatID] = trimChatHistoryItems(cur, telegramHistoryCap)
+				mu.Unlock()
+			},
+		})
 
 		return w
 	}
 
 	enqueueTelegramInbound = func(ctx context.Context, msg busruntime.BusMessage) error {
+		if ctx == nil {
+			ctx = workersCtx
+		}
 		inbound, err := telegrambus.InboundMessageFromBusMessage(msg)
 		if err != nil {
 			return err
@@ -768,20 +777,18 @@ func runTelegramLoop(ctx context.Context, d Dependencies, opts runtimeLoopOption
 			Version:          v,
 			MentionUsers:     append([]string(nil), inbound.MentionUsers...),
 		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case w.Jobs <- job:
-			callInboundHook(ctx, logger, hooks, InboundEvent{
-				ChatID:       inbound.ChatID,
-				MessageID:    inbound.MessageID,
-				ChatType:     inbound.ChatType,
-				FromUserID:   inbound.FromUserID,
-				Text:         text,
-				MentionUsers: append([]string(nil), inbound.MentionUsers...),
-			})
-			return nil
+		if err := runtimeworker.Enqueue(ctx, workersCtx, w.Jobs, job); err != nil {
+			return err
 		}
+		callInboundHook(ctx, logger, hooks, InboundEvent{
+			ChatID:       inbound.ChatID,
+			MessageID:    inbound.MessageID,
+			ChatType:     inbound.ChatType,
+			FromUserID:   inbound.FromUserID,
+			Text:         text,
+			MentionUsers: append([]string(nil), inbound.MentionUsers...),
+		})
+		return nil
 	}
 
 	hbEnabled := opts.HeartbeatEnabled
