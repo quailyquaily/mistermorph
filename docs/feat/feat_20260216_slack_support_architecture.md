@@ -686,9 +686,18 @@ slack:
   - `cmd/mistermorph/telegramcmd/trigger.go`
   - `cmd/mistermorph/telegramcmd/trigger_addressing.go`
 
+7. Phase B 首批能力已完成：
+- `contacts_send` 路由已支持 Slack（`chat_id=slack:<team_id>:<channel_id>`，以及 contact reachability 自动选路）
+- `contacts` 领域模型已扩展 Slack reachability 字段：
+  - `slack_team_id`
+  - `slack_user_id`
+  - `slack_dm_channel_id`
+  - `slack_channel_ids`
+- `contacts.ObserveInboundBusMessage` 已增加 Slack 观察分支，并接入 `slackcmd` 入站处理
+- `internal/contactsruntime/sender.go` 已接入 Slack delivery adapter（`chat.postMessage`）
+
 ### 14.2 暂未纳入（按原计划属于后续阶段）
 
-- `contacts_send` Slack 路由与 Slack 联系人观察（Phase B）
 - Slack memory 落盘实现（Phase C）
 - TODO 的 Slack ref 扩展字段重构（当前仅保持兼容）
 - Slack runtime prompt block（Phase C）

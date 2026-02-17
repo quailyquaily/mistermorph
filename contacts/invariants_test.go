@@ -223,3 +223,98 @@ func TestSendDecisionInvalidChatIDHintFailsBeforeSend(t *testing.T) {
 		t.Fatalf("sender should not be called, got %d", sender.calls)
 	}
 }
+
+func TestSendDecisionChatIDHintAllowsSlackChannelResolution(t *testing.T) {
+	ctx := context.Background()
+	root := filepath.Join(t.TempDir(), "contacts")
+	store := NewFileStore(root)
+	svc := NewService(store)
+	now := time.Date(2026, 2, 10, 12, 20, 0, 0, time.UTC)
+
+	if _, err := svc.UpsertContact(ctx, Contact{
+		ContactID: "contact:neo",
+		Kind:      KindHuman,
+		Channel:   ChannelTelegram,
+	}, now); err != nil {
+		t.Fatalf("UpsertContact() error = %v", err)
+	}
+
+	sender := &mockSender{accepted: true}
+	payload := base64.RawURLEncoding.EncodeToString([]byte("hello"))
+	outcome, err := svc.SendDecision(ctx, now, ShareDecision{
+		ContactID:      "contact:neo",
+		ChatID:         "slack:T111:C222",
+		ItemID:         "manual_item_6",
+		ContentType:    "application/json",
+		PayloadBase64:  payload,
+		IdempotencyKey: "manual:key6",
+	}, sender)
+	if err != nil {
+		t.Fatalf("SendDecision() error = %v", err)
+	}
+	if !outcome.Accepted {
+		t.Fatalf("outcome accepted mismatch: got %+v", outcome)
+	}
+	if sender.calls != 1 {
+		t.Fatalf("sender calls mismatch: got %d want 1", sender.calls)
+	}
+	outbox, ok, err := store.GetBusOutboxRecord(ctx, ChannelSlack, "manual:key6")
+	if err != nil {
+		t.Fatalf("GetBusOutboxRecord(slack) error = %v", err)
+	}
+	if !ok {
+		t.Fatalf("expected slack outbox record")
+	}
+	if outbox.Channel != ChannelSlack {
+		t.Fatalf("outbox channel mismatch: got %q want %q", outbox.Channel, ChannelSlack)
+	}
+}
+
+func TestSendDecisionPrefersSlackTargetWhenNoChatIDHint(t *testing.T) {
+	ctx := context.Background()
+	root := filepath.Join(t.TempDir(), "contacts")
+	store := NewFileStore(root)
+	svc := NewService(store)
+	now := time.Date(2026, 2, 10, 12, 30, 0, 0, time.UTC)
+
+	if _, err := svc.UpsertContact(ctx, Contact{
+		ContactID:        "slack:T111:U222",
+		Kind:             KindHuman,
+		Channel:          ChannelSlack,
+		TGPrivateChatID:  90001,
+		SlackTeamID:      "T111",
+		SlackUserID:      "U222",
+		SlackDMChannelID: "D333",
+	}, now); err != nil {
+		t.Fatalf("UpsertContact() error = %v", err)
+	}
+
+	sender := &mockSender{accepted: true}
+	payload := base64.RawURLEncoding.EncodeToString([]byte("hello"))
+	outcome, err := svc.SendDecision(ctx, now, ShareDecision{
+		ContactID:      "slack:T111:U222",
+		ItemID:         "manual_item_7",
+		ContentType:    "application/json",
+		PayloadBase64:  payload,
+		IdempotencyKey: "manual:key7",
+	}, sender)
+	if err != nil {
+		t.Fatalf("SendDecision() error = %v", err)
+	}
+	if !outcome.Accepted {
+		t.Fatalf("outcome accepted mismatch: got %+v", outcome)
+	}
+	if sender.calls != 1 {
+		t.Fatalf("sender calls mismatch: got %d want 1", sender.calls)
+	}
+	if _, ok, err := store.GetBusOutboxRecord(ctx, ChannelSlack, "manual:key7"); err != nil {
+		t.Fatalf("GetBusOutboxRecord(slack) error = %v", err)
+	} else if !ok {
+		t.Fatalf("expected slack outbox record")
+	}
+	if _, ok, err := store.GetBusOutboxRecord(ctx, ChannelTelegram, "manual:key7"); err != nil {
+		t.Fatalf("GetBusOutboxRecord(telegram) error = %v", err)
+	} else if ok {
+		t.Fatalf("did not expect telegram outbox record when slack target exists")
+	}
+}

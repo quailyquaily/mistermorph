@@ -266,3 +266,45 @@ func TestFileStorePutContact_ActiveOverflowMovesToInactive(t *testing.T) {
 		t.Fatalf("expected oldest contact moved to inactive: got=%s want=tg:1", inactive[0].ContactID)
 	}
 }
+
+func TestFileStoreSlackContactRoundTrip(t *testing.T) {
+	ctx := context.Background()
+	root := filepath.Join(t.TempDir(), "contacts")
+	store := NewFileStore(root)
+	if err := store.Ensure(ctx); err != nil {
+		t.Fatalf("Ensure() error = %v", err)
+	}
+
+	record := Contact{
+		ContactID:        "slack:T111:U222",
+		Kind:             KindHuman,
+		Channel:          ChannelSlack,
+		ContactNickname:  "Alice Slack",
+		SlackTeamID:      "T111",
+		SlackUserID:      "U222",
+		SlackDMChannelID: "D333",
+		SlackChannelIDs:  []string{"C444", "G555"},
+	}
+	if err := store.PutContact(ctx, record); err != nil {
+		t.Fatalf("PutContact() error = %v", err)
+	}
+	got, ok, err := store.GetContact(ctx, "slack:T111:U222")
+	if err != nil {
+		t.Fatalf("GetContact() error = %v", err)
+	}
+	if !ok {
+		t.Fatalf("GetContact() expected ok=true")
+	}
+	if got.Channel != ChannelSlack {
+		t.Fatalf("channel mismatch: got %q want %q", got.Channel, ChannelSlack)
+	}
+	if got.SlackTeamID != "T111" || got.SlackUserID != "U222" {
+		t.Fatalf("slack identity mismatch: team=%q user=%q", got.SlackTeamID, got.SlackUserID)
+	}
+	if got.SlackDMChannelID != "D333" {
+		t.Fatalf("slack dm channel mismatch: got %q want %q", got.SlackDMChannelID, "D333")
+	}
+	if len(got.SlackChannelIDs) != 2 {
+		t.Fatalf("slack channel ids count mismatch: got=%v", got.SlackChannelIDs)
+	}
+}

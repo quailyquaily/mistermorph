@@ -161,6 +161,8 @@ func registryFromViper() *tools.Registry {
 			MAEPDir:          statepaths.MAEPDir(),
 			TelegramBotToken: strings.TrimSpace(viper.GetString("telegram.bot_token")),
 			TelegramBaseURL:  "https://api.telegram.org",
+			SlackBotToken:    strings.TrimSpace(viper.GetString("slack.bot_token")),
+			SlackBaseURL:     strings.TrimSpace(viper.GetString("slack.base_url")),
 			FailureCooldown:  contactsFailureCooldown(),
 		}))
 	}

@@ -124,6 +124,110 @@ func TestObserveInboundBusMessage_TelegramPrivateChatSetOnce(t *testing.T) {
 	}
 }
 
+func TestObserveInboundBusMessage_SlackSenderAndMention(t *testing.T) {
+	ctx := context.Background()
+	store := NewFileStore(t.TempDir())
+	svc := NewService(store)
+	now := time.Date(2026, 2, 10, 9, 45, 0, 0, time.UTC)
+
+	msg := busruntime.BusMessage{
+		Direction:       busruntime.DirectionInbound,
+		Channel:         busruntime.ChannelSlack,
+		ConversationKey: "slack:T111:C222",
+		Extensions: busruntime.MessageExtensions{
+			ChatType:        "channel",
+			FromUserRef:     "U100",
+			FromDisplayName: "Alice New",
+			MentionUsers:    []string{"U100", "U200"},
+		},
+	}
+	if err := svc.ObserveInboundBusMessage(ctx, msg, nil, now); err != nil {
+		t.Fatalf("ObserveInboundBusMessage() error = %v", err)
+	}
+
+	alice, ok, err := svc.GetContact(ctx, "slack:T111:U100")
+	if err != nil {
+		t.Fatalf("GetContact(alice) error = %v", err)
+	}
+	if !ok {
+		t.Fatalf("GetContact(alice) expected ok=true")
+	}
+	if alice.Channel != ChannelSlack {
+		t.Fatalf("channel mismatch: got %q want %q", alice.Channel, ChannelSlack)
+	}
+	if alice.ContactNickname != "Alice New" {
+		t.Fatalf("nickname mismatch: got %q want %q", alice.ContactNickname, "Alice New")
+	}
+	if alice.SlackTeamID != "T111" || alice.SlackUserID != "U100" {
+		t.Fatalf("slack identity mismatch: team=%q user=%q", alice.SlackTeamID, alice.SlackUserID)
+	}
+	if len(alice.SlackChannelIDs) != 1 || alice.SlackChannelIDs[0] != "C222" {
+		t.Fatalf("slack_channel_ids mismatch: got=%v", alice.SlackChannelIDs)
+	}
+	if alice.SlackDMChannelID != "" {
+		t.Fatalf("slack_dm_channel_id should be empty for group message: got %q", alice.SlackDMChannelID)
+	}
+	if alice.LastInteractionAt == nil || !alice.LastInteractionAt.Equal(now) {
+		t.Fatalf("last_interaction_at mismatch: got=%v want=%v", alice.LastInteractionAt, now)
+	}
+
+	bob, ok, err := svc.GetContact(ctx, "slack:T111:U200")
+	if err != nil {
+		t.Fatalf("GetContact(bob) error = %v", err)
+	}
+	if !ok {
+		t.Fatalf("GetContact(bob) expected ok=true")
+	}
+	if len(bob.SlackChannelIDs) != 1 || bob.SlackChannelIDs[0] != "C222" {
+		t.Fatalf("slack_channel_ids mismatch: got=%v", bob.SlackChannelIDs)
+	}
+}
+
+func TestObserveInboundBusMessage_SlackDMSetOnce(t *testing.T) {
+	ctx := context.Background()
+	store := NewFileStore(t.TempDir())
+	svc := NewService(store)
+	now := time.Date(2026, 2, 10, 9, 50, 0, 0, time.UTC)
+
+	msg := busruntime.BusMessage{
+		Direction:       busruntime.DirectionInbound,
+		Channel:         busruntime.ChannelSlack,
+		ConversationKey: "slack:T111:D90001",
+		Extensions: busruntime.MessageExtensions{
+			ChatType:    "im",
+			FromUserRef: "U300",
+		},
+	}
+	if err := svc.ObserveInboundBusMessage(ctx, msg, nil, now); err != nil {
+		t.Fatalf("ObserveInboundBusMessage(first) error = %v", err)
+	}
+	item, ok, err := svc.GetContact(ctx, "slack:T111:U300")
+	if err != nil {
+		t.Fatalf("GetContact(first) error = %v", err)
+	}
+	if !ok {
+		t.Fatalf("GetContact(first) expected ok=true")
+	}
+	if item.SlackDMChannelID != "D90001" {
+		t.Fatalf("slack_dm_channel_id mismatch: got %q want %q", item.SlackDMChannelID, "D90001")
+	}
+
+	msg.ConversationKey = "slack:T111:D90002"
+	if err := svc.ObserveInboundBusMessage(ctx, msg, nil, now.Add(1*time.Minute)); err != nil {
+		t.Fatalf("ObserveInboundBusMessage(second) error = %v", err)
+	}
+	item, ok, err = svc.GetContact(ctx, "slack:T111:U300")
+	if err != nil {
+		t.Fatalf("GetContact(second) error = %v", err)
+	}
+	if !ok {
+		t.Fatalf("GetContact(second) expected ok=true")
+	}
+	if item.SlackDMChannelID != "D90001" {
+		t.Fatalf("slack_dm_channel_id should not be overwritten: got %q want %q", item.SlackDMChannelID, "D90001")
+	}
+}
+
 func TestObserveInboundBusMessage_MAEPSenderAndMention(t *testing.T) {
 	ctx := context.Background()
 	store := NewFileStore(t.TempDir())

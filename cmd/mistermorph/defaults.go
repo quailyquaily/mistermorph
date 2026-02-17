@@ -69,6 +69,7 @@ func initViperDefaults() {
 	viper.SetDefault("telegram.with_maep", false)
 
 	// Slack
+	viper.SetDefault("slack.base_url", "https://slack.com/api")
 	viper.SetDefault("slack.bot_token", "")
 	viper.SetDefault("slack.app_token", "")
 	viper.SetDefault("slack.allowed_team_ids", []string{})

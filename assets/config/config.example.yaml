@@ -285,6 +285,8 @@ telegram:
 
 # Slack bot mode (`mistermorph slack`, Socket Mode only).
 slack:
+  # Slack Web API base URL (override for mock/testing only).
+  base_url: "https://slack.com/api"
   # Bot token with chat:write + history scopes. Prefer env var: MISTER_MORPH_SLACK_BOT_TOKEN
   bot_token: ""
   # App-level token for Socket Mode. Prefer env var: MISTER_MORPH_SLACK_APP_TOKEN

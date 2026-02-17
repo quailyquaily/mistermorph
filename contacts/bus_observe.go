@@ -29,6 +29,10 @@ type observedContactCandidate struct {
 	TelegramChatID      int64
 	TelegramChatType    string
 	TelegramIsSender    bool
+	SlackTeamID         string
+	SlackUserID         string
+	SlackDMChannelID    string
+	SlackChannelIDs     []string
 	MAEPNodeID          string
 	MAEPDialAddress     string
 }
@@ -50,6 +54,8 @@ func (s *Service) ObserveInboundBusMessage(ctx context.Context, msg busruntime.B
 	switch msg.Channel {
 	case busruntime.ChannelTelegram:
 		return s.observeTelegramInboundBusMessage(ctx, msg, now)
+	case busruntime.ChannelSlack:
+		return s.observeSlackInboundBusMessage(ctx, msg, now)
 	case busruntime.ChannelMAEP:
 		return s.observeMAEPInboundBusMessage(ctx, msg, maepLookup, now)
 	default:
@@ -137,6 +143,64 @@ func (s *Service) observeMAEPInboundBusMessage(ctx context.Context, msg busrunti
 			}
 			candidates = append(candidates, mentionedCandidate)
 		}
+	}
+
+	return s.applyObservedCandidates(ctx, candidates, now)
+}
+
+func (s *Service) observeSlackInboundBusMessage(ctx context.Context, msg busruntime.BusMessage, now time.Time) error {
+	teamID, channelID, err := slackConversationPartsFromKey(msg.ConversationKey)
+	if err != nil {
+		return err
+	}
+	chatType := normalizeSlackChatType(msg.Extensions.ChatType, channelID)
+	fromUserID := normalizeSlackID(msg.Extensions.FromUserRef)
+	if fromUserID == "" {
+		participantTeamID, participantUserID, parseErr := parseSlackParticipantKey(msg.ParticipantKey)
+		if parseErr == nil && strings.EqualFold(participantTeamID, teamID) {
+			fromUserID = participantUserID
+		}
+	}
+	nickname := strings.TrimSpace(msg.Extensions.FromDisplayName)
+	if nickname == "" {
+		nickname = strings.TrimSpace(msg.Extensions.FromUsername)
+	}
+
+	candidates := make([]observedContactCandidate, 0, len(msg.Extensions.MentionUsers)+1)
+	if senderContactID := slackContactIDFromUser(teamID, fromUserID); senderContactID != "" {
+		candidate := observedContactCandidate{
+			PrimaryContactID: senderContactID,
+			Kind:             KindHuman,
+			Channel:          ChannelSlack,
+			Nickname:         nickname,
+			SlackTeamID:      teamID,
+			SlackUserID:      fromUserID,
+		}
+		switch chatType {
+		case "im":
+			candidate.SlackDMChannelID = channelID
+		case "channel", "private_channel", "mpim":
+			candidate.SlackChannelIDs = append(candidate.SlackChannelIDs, channelID)
+		}
+		candidates = append(candidates, candidate)
+	}
+
+	for _, rawMention := range msg.Extensions.MentionUsers {
+		userID := normalizeSlackID(rawMention)
+		if userID == "" {
+			continue
+		}
+		candidate := observedContactCandidate{
+			PrimaryContactID: slackContactIDFromUser(teamID, userID),
+			Kind:             KindHuman,
+			Channel:          ChannelSlack,
+			SlackTeamID:      teamID,
+			SlackUserID:      userID,
+		}
+		if chatType == "channel" || chatType == "private_channel" || chatType == "mpim" {
+			candidate.SlackChannelIDs = append(candidate.SlackChannelIDs, channelID)
+		}
+		candidates = append(candidates, candidate)
 	}
 
 	return s.applyObservedCandidates(ctx, candidates, now)
@@ -237,6 +301,15 @@ func extractMAEPMentionPeerIDs(text string) []string {
 	return out
 }
 
+func slackContactIDFromUser(teamID, userID string) string {
+	teamID = normalizeSlackID(teamID)
+	userID = normalizeSlackID(userID)
+	if teamID == "" || userID == "" {
+		return ""
+	}
+	return "slack:" + teamID + ":" + userID
+}
+
 func telegramContactIDFromUser(username string, userID int64) string {
 	username = normalizeTelegramUsername(username)
 	if username != "" {
@@ -319,6 +392,7 @@ func (s *Service) upsertObservedCandidate(ctx context.Context, candidate observe
 			existing.TGUsername = username
 		}
 		applyObservedTelegramMerge(&existing, candidate)
+		applyObservedSlackMerge(&existing, candidate)
 		if strings.TrimSpace(existing.MAEPNodeID) == "" {
 			existing.MAEPNodeID = strings.TrimSpace(candidate.MAEPNodeID)
 		}
@@ -336,11 +410,16 @@ func (s *Service) upsertObservedCandidate(ctx context.Context, candidate observe
 		Channel:           strings.TrimSpace(candidate.Channel),
 		ContactNickname:   strings.TrimSpace(candidate.Nickname),
 		TGUsername:        normalizeTelegramUsername(candidate.TGUsername),
+		SlackTeamID:       normalizeSlackID(candidate.SlackTeamID),
+		SlackUserID:       normalizeSlackID(candidate.SlackUserID),
+		SlackDMChannelID:  normalizeSlackID(candidate.SlackDMChannelID),
+		SlackChannelIDs:   normalizeStringSlice(candidate.SlackChannelIDs),
 		MAEPNodeID:        strings.TrimSpace(candidate.MAEPNodeID),
 		MAEPDialAddress:   strings.TrimSpace(candidate.MAEPDialAddress),
 		LastInteractionAt: &lastInteraction,
 	}
 	applyObservedTelegramMerge(&contact, candidate)
+	applyObservedSlackMerge(&contact, candidate)
 	_, err = s.UpsertContact(ctx, contact, now)
 	return err
 }
@@ -389,6 +468,27 @@ func applyObservedTelegramMerge(contact *Contact, candidate observedContactCandi
 	}
 }
 
+func applyObservedSlackMerge(contact *Contact, candidate observedContactCandidate) {
+	if contact == nil {
+		return
+	}
+	teamID := normalizeSlackID(candidate.SlackTeamID)
+	if teamID != "" && strings.TrimSpace(contact.SlackTeamID) == "" {
+		contact.SlackTeamID = teamID
+	}
+	userID := normalizeSlackID(candidate.SlackUserID)
+	if userID != "" && strings.TrimSpace(contact.SlackUserID) == "" {
+		contact.SlackUserID = userID
+	}
+	dmChannelID := normalizeSlackID(candidate.SlackDMChannelID)
+	if dmChannelID != "" && strings.TrimSpace(contact.SlackDMChannelID) == "" {
+		contact.SlackDMChannelID = dmChannelID
+	}
+	if len(candidate.SlackChannelIDs) > 0 {
+		contact.SlackChannelIDs = mergeSlackChannelIDs(contact.SlackChannelIDs, candidate.SlackChannelIDs...)
+	}
+}
+
 func mergeObservedTGGroupChatIDs(base []int64, chatID int64) []int64 {
 	if chatID == 0 {
 		return normalizeInt64Slice(base)
@@ -396,4 +496,64 @@ func mergeObservedTGGroupChatIDs(base []int64, chatID int64) []int64 {
 	out := append([]int64(nil), base...)
 	out = append(out, chatID)
 	return normalizeInt64Slice(out)
+}
+
+func mergeSlackChannelIDs(base []string, channelIDs ...string) []string {
+	out := append([]string(nil), base...)
+	out = append(out, channelIDs...)
+	for i := range out {
+		out[i] = normalizeSlackID(out[i])
+	}
+	return normalizeStringSlice(out)
+}
+
+func slackConversationPartsFromKey(conversationKey string) (string, string, error) {
+	const prefix = "slack:"
+	key := strings.TrimSpace(conversationKey)
+	if !strings.HasPrefix(strings.ToLower(key), prefix) {
+		return "", "", fmt.Errorf("slack conversation key is invalid")
+	}
+	raw := strings.TrimSpace(key[len(prefix):])
+	parts := strings.Split(raw, ":")
+	if len(parts) != 2 {
+		return "", "", fmt.Errorf("slack conversation key is invalid")
+	}
+	teamID := normalizeSlackID(parts[0])
+	channelID := normalizeSlackID(parts[1])
+	if teamID == "" || channelID == "" {
+		return "", "", fmt.Errorf("slack conversation key is invalid")
+	}
+	return teamID, channelID, nil
+}
+
+func parseSlackParticipantKey(raw string) (string, string, error) {
+	raw = strings.TrimSpace(raw)
+	parts := strings.Split(raw, ":")
+	if len(parts) != 2 {
+		return "", "", fmt.Errorf("slack participant key is invalid")
+	}
+	teamID := normalizeSlackID(parts[0])
+	userID := normalizeSlackID(parts[1])
+	if teamID == "" || userID == "" {
+		return "", "", fmt.Errorf("slack participant key is invalid")
+	}
+	return teamID, userID, nil
+}
+
+func normalizeSlackChatType(chatType string, channelID string) string {
+	chatType = strings.ToLower(strings.TrimSpace(chatType))
+	switch chatType {
+	case "im", "channel", "private_channel", "mpim":
+		return chatType
+	}
+	switch {
+	case strings.HasPrefix(strings.ToUpper(strings.TrimSpace(channelID)), "D"):
+		return "im"
+	case strings.HasPrefix(strings.ToUpper(strings.TrimSpace(channelID)), "C"):
+		return "channel"
+	case strings.HasPrefix(strings.ToUpper(strings.TrimSpace(channelID)), "G"):
+		return "private_channel"
+	default:
+		return "channel"
+	}
 }

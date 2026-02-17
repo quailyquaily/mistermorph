@@ -420,6 +420,10 @@ type contactProfileSection struct {
 	TGUsername        string   `yaml:"tg_username"`
 	TGPrivateChatID   string   `yaml:"tg_private_chat_id"`
 	TGGroupChatIDs    []string `yaml:"tg_group_chat_ids"`
+	SlackTeamID       string   `yaml:"slack_team_id"`
+	SlackUserID       string   `yaml:"slack_user_id"`
+	SlackDMChannelID  string   `yaml:"slack_dm_channel_id"`
+	SlackChannelIDs   []string `yaml:"slack_channel_ids"`
 	MAEPNodeID        string   `yaml:"maep_node_id"`
 	MAEPDialAddress   string   `yaml:"maep_dial_address"`
 	PersonaBrief      string   `yaml:"persona_brief"`
@@ -580,6 +584,10 @@ func contactFromProfileSection(title string, profile contactProfileSection, stat
 		ContactNickname:  strings.TrimSpace(profile.Nickname),
 		Channel:          strings.ToLower(strings.TrimSpace(profile.Channel)),
 		TGUsername:       normalizeTelegramUsername(profile.TGUsername),
+		SlackTeamID:      normalizeSlackID(profile.SlackTeamID),
+		SlackUserID:      normalizeSlackID(profile.SlackUserID),
+		SlackDMChannelID: normalizeSlackID(profile.SlackDMChannelID),
+		SlackChannelIDs:  normalizeStringSlice(profile.SlackChannelIDs),
 		MAEPDialAddress:  strings.TrimSpace(profile.MAEPDialAddress),
 		PersonaBrief:     strings.TrimSpace(profile.PersonaBrief),
 		TopicPreferences: normalizeStringSlice(profile.TopicPreferences),
@@ -661,6 +669,10 @@ func profileSectionFromContact(contact Contact) (contactProfileSection, string) 
 		Kind:             string(normalizeKind(contact.Kind)),
 		Channel:          strings.TrimSpace(contact.Channel),
 		TGUsername:       normalizeTelegramUsername(contact.TGUsername),
+		SlackTeamID:      normalizeSlackID(contact.SlackTeamID),
+		SlackUserID:      normalizeSlackID(contact.SlackUserID),
+		SlackDMChannelID: normalizeSlackID(contact.SlackDMChannelID),
+		SlackChannelIDs:  normalizeStringSlice(contact.SlackChannelIDs),
 		MAEPNodeID:       strings.TrimSpace(contact.MAEPNodeID),
 		MAEPDialAddress:  strings.TrimSpace(contact.MAEPDialAddress),
 		PersonaBrief:     strings.TrimSpace(contact.PersonaBrief),
@@ -671,6 +683,8 @@ func profileSectionFromContact(contact Contact) (contactProfileSection, string) 
 		switch {
 		case contact.TGPrivateChatID != 0 || len(contact.TGGroupChatIDs) > 0 || profile.TGUsername != "":
 			profile.Channel = ChannelTelegram
+		case profile.SlackTeamID != "" || profile.SlackUserID != "" || profile.SlackDMChannelID != "" || len(profile.SlackChannelIDs) > 0 || strings.HasPrefix(strings.ToLower(profile.ContactID), "slack:"):
+			profile.Channel = ChannelSlack
 		case profile.MAEPNodeID != "":
 			profile.Channel = ChannelMAEP
 		default:
@@ -701,6 +715,29 @@ func profileSectionFromContact(contact Contact) (contactProfileSection, string) 
 			out = append(out, value)
 		}
 		profile.TGGroupChatIDs = out
+	}
+	if profile.SlackTeamID == "" || profile.SlackUserID == "" {
+		teamID, userOrChannelID, ok := parseSlackContactID(profile.ContactID)
+		if ok {
+			if profile.SlackTeamID == "" {
+				profile.SlackTeamID = teamID
+			}
+			if profile.SlackUserID == "" && strings.HasPrefix(strings.ToUpper(userOrChannelID), "U") {
+				profile.SlackUserID = userOrChannelID
+			}
+		}
+	}
+	if profile.SlackDMChannelID == "" || len(profile.SlackChannelIDs) == 0 {
+		_, userOrChannelID, ok := parseSlackContactID(profile.ContactID)
+		if ok {
+			id := normalizeSlackID(userOrChannelID)
+			switch {
+			case profile.SlackDMChannelID == "" && strings.HasPrefix(strings.ToUpper(id), "D"):
+				profile.SlackDMChannelID = id
+			case len(profile.SlackChannelIDs) == 0 && (strings.HasPrefix(strings.ToUpper(id), "C") || strings.HasPrefix(strings.ToUpper(id), "G")):
+				profile.SlackChannelIDs = []string{id}
+			}
+		}
 	}
 	if profile.MAEPNodeID == "" {
 		nodeID, _ := splitMAEPNodeID(contact.ContactID)
@@ -759,6 +796,27 @@ func extractTelegramAlias(raw string) string {
 		return strings.TrimPrefix(raw, "@")
 	}
 	return ""
+}
+
+func normalizeSlackID(raw string) string {
+	return strings.TrimSpace(raw)
+}
+
+func parseSlackContactID(raw string) (string, string, bool) {
+	raw = strings.TrimSpace(raw)
+	if !strings.HasPrefix(strings.ToLower(raw), "slack:") {
+		return "", "", false
+	}
+	parts := strings.Split(raw[len("slack:"):], ":")
+	if len(parts) != 2 {
+		return "", "", false
+	}
+	teamID := normalizeSlackID(parts[0])
+	userOrChannelID := normalizeSlackID(parts[1])
+	if teamID == "" || userOrChannelID == "" {
+		return "", "", false
+	}
+	return teamID, userOrChannelID, true
 }
 
 func splitMAEPNodeID(raw string) (string, string) {
@@ -972,9 +1030,20 @@ func normalizeContact(c Contact, now time.Time) Contact {
 	c.ContactNickname = strings.TrimSpace(c.ContactNickname)
 	c.PersonaBrief = strings.TrimSpace(c.PersonaBrief)
 	c.TGUsername = normalizeTelegramUsername(c.TGUsername)
+	c.SlackTeamID = normalizeSlackID(c.SlackTeamID)
+	c.SlackUserID = normalizeSlackID(c.SlackUserID)
+	c.SlackDMChannelID = normalizeSlackID(c.SlackDMChannelID)
+	c.SlackChannelIDs = normalizeStringSlice(c.SlackChannelIDs)
+	for i := range c.SlackChannelIDs {
+		c.SlackChannelIDs[i] = normalizeSlackID(c.SlackChannelIDs[i])
+	}
+	c.SlackChannelIDs = normalizeStringSlice(c.SlackChannelIDs)
 	c.Kind = normalizeKind(c.Kind)
 	c.Channel = normalizeContactChannel(c.Channel)
 	c.TGGroupChatIDs = normalizeInt64Slice(c.TGGroupChatIDs)
+	if len(c.SlackChannelIDs) == 0 {
+		c.SlackChannelIDs = nil
+	}
 	if c.TGPrivateChatID <= 0 {
 		c.TGPrivateChatID = 0
 	}
@@ -1014,6 +1083,8 @@ func normalizeContact(c Contact, now time.Time) Contact {
 		switch {
 		case strings.HasPrefix(strings.ToLower(c.ContactID), "tg:"), c.TGPrivateChatID != 0, len(c.TGGroupChatIDs) > 0, c.TGUsername != "":
 			c.Channel = ChannelTelegram
+		case strings.HasPrefix(strings.ToLower(c.ContactID), "slack:"), c.SlackTeamID != "", c.SlackUserID != "", c.SlackDMChannelID != "", len(c.SlackChannelIDs) > 0:
+			c.Channel = ChannelSlack
 		case strings.HasPrefix(strings.ToLower(c.ContactID), "maep:"), c.MAEPNodeID != "", c.MAEPDialAddress != "":
 			c.Channel = ChannelMAEP
 		}
@@ -1039,6 +1110,23 @@ func normalizeContact(c Contact, now time.Time) Contact {
 		node, _ := splitMAEPNodeID(c.ContactID)
 		c.MAEPNodeID = node
 	}
+	if strings.HasPrefix(strings.ToLower(c.ContactID), "slack:") {
+		teamID, userOrChannelID, ok := parseSlackContactID(c.ContactID)
+		if ok {
+			if c.SlackTeamID == "" {
+				c.SlackTeamID = teamID
+			}
+			userOrChannelIDUpper := strings.ToUpper(userOrChannelID)
+			switch {
+			case c.SlackUserID == "" && strings.HasPrefix(userOrChannelIDUpper, "U"):
+				c.SlackUserID = userOrChannelID
+			case c.SlackDMChannelID == "" && strings.HasPrefix(userOrChannelIDUpper, "D"):
+				c.SlackDMChannelID = userOrChannelID
+			case strings.HasPrefix(userOrChannelIDUpper, "C") || strings.HasPrefix(userOrChannelIDUpper, "G"):
+				c.SlackChannelIDs = normalizeStringSlice(append(c.SlackChannelIDs, userOrChannelID))
+			}
+		}
+	}
 
 	if c.TGUsername == "" && c.TGPrivateChatID == 0 && len(c.TGGroupChatIDs) == 0 && c.Channel == ChannelTelegram {
 		if alias := extractTelegramAlias(c.ContactID); alias != "" {
@@ -1055,7 +1143,7 @@ func normalizeContact(c Contact, now time.Time) Contact {
 func normalizeContactChannel(raw string) string {
 	value := strings.ToLower(strings.TrimSpace(raw))
 	switch value {
-	case ChannelTelegram, ChannelMAEP, "slack", "discord":
+	case ChannelTelegram, ChannelSlack, ChannelMAEP, "discord":
 		return value
 	default:
 		return ""

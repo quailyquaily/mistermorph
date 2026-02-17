@@ -22,6 +22,7 @@ const (
 
 const (
 	ChannelTelegram = channels.Telegram
+	ChannelSlack    = channels.Slack
 	ChannelMAEP     = channels.MAEP
 	ShareTopic      = "chat.message"
 )
@@ -34,6 +35,10 @@ type Contact struct {
 	TGUsername        string     `json:"tg_username,omitempty"`
 	TGPrivateChatID   int64      `json:"tg_private_chat_id,omitempty"`
 	TGGroupChatIDs    []int64    `json:"tg_group_chat_ids,omitempty"`
+	SlackTeamID       string     `json:"slack_team_id,omitempty"`
+	SlackUserID       string     `json:"slack_user_id,omitempty"`
+	SlackDMChannelID  string     `json:"slack_dm_channel_id,omitempty"`
+	SlackChannelIDs   []string   `json:"slack_channel_ids,omitempty"`
 	MAEPNodeID        string     `json:"maep_node_id,omitempty"`
 	MAEPDialAddress   string     `json:"maep_dial_address,omitempty"`
 	PersonaBrief      string     `json:"persona_brief,omitempty"`

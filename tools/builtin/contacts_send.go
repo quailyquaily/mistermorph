@@ -24,6 +24,8 @@ type ContactsSendToolOptions struct {
 	MAEPDir          string
 	TelegramBotToken string
 	TelegramBaseURL  string
+	SlackBotToken    string
+	SlackBaseURL     string
 	FailureCooldown  time.Duration
 }
 
@@ -38,7 +40,7 @@ func NewContactsSendTool(opts ContactsSendToolOptions) *ContactsSendTool {
 func (t *ContactsSendTool) Name() string { return "contacts_send" }
 
 func (t *ContactsSendTool) Description() string {
-	return "Sends one message to a contact. Routing is automatic: MAEP for agents, Telegram for human contacts."
+	return "Sends one message to a contact. Routing is automatic across Slack, Telegram, and MAEP based on chat_id/contact reachability."
 }
 
 func (t *ContactsSendTool) ParameterSchema() string {
@@ -47,11 +49,11 @@ func (t *ContactsSendTool) ParameterSchema() string {
 		"properties": map[string]any{
 			"contact_id": map[string]any{
 				"type":        "string",
-				"description": "Target contact_id. e.g.: tg:@<username>, tg:<chat_id>, maeph:<peer_id>.",
+				"description": "Target contact_id. e.g.: slack:<team_id>:<user_id>, tg:@<username>, tg:<chat_id>, maep:<peer_id>.",
 			},
 			"chat_id": map[string]any{
 				"type":        "string",
-				"description": "Optional chat id hint. e.g. tg:<chat_id>).",
+				"description": "Optional chat id hint. e.g. slack:<team_id>:<channel_id> or tg:<chat_id>.",
 			},
 			"content_type": map[string]any{
 				"type":        "string",
@@ -107,6 +109,8 @@ func (t *ContactsSendTool) Execute(ctx context.Context, params map[string]any) (
 		MAEPDir:          strings.TrimSpace(t.opts.MAEPDir),
 		TelegramBotToken: strings.TrimSpace(t.opts.TelegramBotToken),
 		TelegramBaseURL:  strings.TrimSpace(t.opts.TelegramBaseURL),
+		SlackBotToken:    strings.TrimSpace(t.opts.SlackBotToken),
+		SlackBaseURL:     strings.TrimSpace(t.opts.SlackBaseURL),
 	})
 	if err != nil {
 		return "", err

@@ -57,10 +57,12 @@ func newSlackCmd() *cobra.Command {
 			if botToken == "" {
 				return fmt.Errorf("missing slack.bot_token (set via --slack-bot-token or MISTER_MORPH_SLACK_BOT_TOKEN)")
 			}
+			viper.Set("slack.bot_token", botToken)
 			appToken := strings.TrimSpace(configutil.FlagOrViperString(cmd, "slack-app-token", "slack.app_token"))
 			if appToken == "" {
 				return fmt.Errorf("missing slack.app_token (set via --slack-app-token or MISTER_MORPH_SLACK_APP_TOKEN)")
 			}
+			viper.Set("slack.app_token", appToken)
 
 			allowedTeams := toAllowlist(configutil.FlagOrViperStringArray(cmd, "slack-allowed-team-id", "slack.allowed_team_ids"))
 			allowedChannels := toAllowlist(configutil.FlagOrViperStringArray(cmd, "slack-allowed-channel-id", "slack.allowed_channel_ids"))
@@ -85,6 +87,7 @@ func newSlackCmd() *cobra.Command {
 			if err := contactsStore.Ensure(context.Background()); err != nil {
 				return err
 			}
+			contactsSvc := contacts.NewService(contactsStore)
 			slackInboundAdapter, err := slackbus.NewInboundAdapter(slackbus.InboundAdapterOptions{
 				Bus:   inprocBus,
 				Store: contactsStore,
@@ -354,6 +357,9 @@ func newSlackCmd() *cobra.Command {
 				case busruntime.DirectionInbound:
 					if msg.Channel != busruntime.ChannelSlack {
 						return fmt.Errorf("unsupported inbound channel: %s", msg.Channel)
+					}
+					if err := contactsSvc.ObserveInboundBusMessage(context.Background(), msg, nil, time.Now().UTC()); err != nil {
+						logger.Warn("contacts_observe_bus_error", "channel", msg.Channel, "idempotency_key", msg.IdempotencyKey, "error", err.Error())
 					}
 					if enqueueSlackInbound == nil {
 						return fmt.Errorf("slack inbound handler is not initialized")

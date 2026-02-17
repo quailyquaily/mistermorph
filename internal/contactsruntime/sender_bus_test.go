@@ -15,6 +15,7 @@ import (
 	"github.com/quailyquaily/mistermorph/contacts"
 	busruntime "github.com/quailyquaily/mistermorph/internal/bus"
 	maepbus "github.com/quailyquaily/mistermorph/internal/bus/adapters/maep"
+	slackbus "github.com/quailyquaily/mistermorph/internal/bus/adapters/slack"
 	telegrambus "github.com/quailyquaily/mistermorph/internal/bus/adapters/telegram"
 	"github.com/quailyquaily/mistermorph/maep"
 )
@@ -183,6 +184,118 @@ func TestRoutingSenderSendTelegramViaBus_ChatIDHintNoPrivateFallback(t *testing.
 	}
 }
 
+func TestRoutingSenderSendSlackViaBus_WithDMTarget(t *testing.T) {
+	ctx := context.Background()
+
+	var (
+		mu     sync.Mutex
+		got    slackbus.DeliveryTarget
+		gotRaw any
+		gotTxt string
+	)
+	sendSlack := func(ctx context.Context, target any, text string, opts slackbus.SendTextOptions) error {
+		mu.Lock()
+		defer mu.Unlock()
+		gotRaw = target
+		gotTxt = text
+		deliveryTarget, ok := target.(slackbus.DeliveryTarget)
+		if !ok {
+			return fmt.Errorf("target type mismatch: %T", target)
+		}
+		got = deliveryTarget
+		return nil
+	}
+	sendTelegram := func(ctx context.Context, target any, text string, opts telegrambus.SendTextOptions) error {
+		return fmt.Errorf("unexpected telegram send: target=%v text=%q", target, text)
+	}
+
+	sender := newRoutingSenderForBusTest(t, sendTelegram, &mockDataPusher{}, sendSlack)
+	contentType, payloadBase64 := testEnvelopePayload(t, "hello slack")
+	accepted, deduped, err := sender.Send(ctx, contacts.Contact{
+		ContactID:        "slack:T111:U222",
+		Kind:             contacts.KindHuman,
+		Channel:          contacts.ChannelSlack,
+		SlackTeamID:      "T111",
+		SlackUserID:      "U222",
+		SlackDMChannelID: "D333",
+	}, contacts.ShareDecision{
+		ContactID:      "slack:T111:U222",
+		ItemID:         "cand_slack_1",
+		ContentType:    contentType,
+		PayloadBase64:  payloadBase64,
+		IdempotencyKey: "manual:slack:1",
+	})
+	if err != nil {
+		t.Fatalf("Send() error = %v", err)
+	}
+	if !accepted {
+		t.Fatalf("accepted mismatch: got %v want true", accepted)
+	}
+	if deduped {
+		t.Fatalf("deduped mismatch: got %v want false", deduped)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if gotRaw == nil {
+		t.Fatalf("expected slack send target")
+	}
+	if got.TeamID != "T111" || got.ChannelID != "D333" {
+		t.Fatalf("slack target mismatch: got=%+v want team=T111 channel=D333", got)
+	}
+	if gotTxt != "hello slack" {
+		t.Fatalf("text mismatch: got %q want %q", gotTxt, "hello slack")
+	}
+}
+
+func TestRoutingSenderSendSlackViaBus_WithChatIDHint(t *testing.T) {
+	ctx := context.Background()
+
+	var (
+		mu  sync.Mutex
+		got slackbus.DeliveryTarget
+	)
+	sendSlack := func(ctx context.Context, target any, text string, opts slackbus.SendTextOptions) error {
+		mu.Lock()
+		defer mu.Unlock()
+		deliveryTarget, ok := target.(slackbus.DeliveryTarget)
+		if !ok {
+			return fmt.Errorf("target type mismatch: %T", target)
+		}
+		got = deliveryTarget
+		return nil
+	}
+
+	sender := newRoutingSenderForBusTest(
+		t,
+		func(ctx context.Context, target any, text string, opts telegrambus.SendTextOptions) error {
+			return fmt.Errorf("unexpected telegram send: target=%v text=%q", target, text)
+		},
+		&mockDataPusher{},
+		sendSlack,
+	)
+	contentType, payloadBase64 := testEnvelopePayload(t, "hello slack by hint")
+	_, _, err := sender.Send(ctx, contacts.Contact{
+		ContactID: "contact:any",
+		Kind:      contacts.KindHuman,
+		Channel:   contacts.ChannelTelegram,
+	}, contacts.ShareDecision{
+		ContactID:      "contact:any",
+		ChatID:         "slack:T999:C888",
+		ItemID:         "cand_slack_2",
+		ContentType:    contentType,
+		PayloadBase64:  payloadBase64,
+		IdempotencyKey: "manual:slack:2",
+	})
+	if err != nil {
+		t.Fatalf("Send() error = %v", err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if got.TeamID != "T999" || got.ChannelID != "C888" {
+		t.Fatalf("slack target mismatch: got=%+v want team=T999 channel=C888", got)
+	}
+}
+
 func TestRoutingSenderSendMAEPViaBus(t *testing.T) {
 	ctx := context.Background()
 
@@ -317,7 +430,7 @@ func (m *mockDataPusher) PushData(ctx context.Context, peerID string, addresses 
 	return m.result, m.err
 }
 
-func newRoutingSenderForBusTest(t *testing.T, sendText telegrambus.SendTextFunc, pusher maepbus.DataPusher) *RoutingSender {
+func newRoutingSenderForBusTest(t *testing.T, sendText telegrambus.SendTextFunc, pusher maepbus.DataPusher, slackSendText ...slackbus.SendTextFunc) *RoutingSender {
 	t.Helper()
 
 	if sendText == nil {
@@ -325,6 +438,12 @@ func newRoutingSenderForBusTest(t *testing.T, sendText telegrambus.SendTextFunc,
 	}
 	if pusher == nil {
 		t.Fatalf("pusher is required")
+	}
+	sendSlack := func(ctx context.Context, target any, text string, opts slackbus.SendTextOptions) error {
+		return fmt.Errorf("unexpected slack send: target=%v text=%q", target, text)
+	}
+	if len(slackSendText) > 0 && slackSendText[0] != nil {
+		sendSlack = slackSendText[0]
 	}
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelDebug}))
@@ -348,10 +467,17 @@ func newRoutingSenderForBusTest(t *testing.T, sendText telegrambus.SendTextFunc,
 	if err != nil {
 		t.Fatalf("NewDeliveryAdapter(maep) error = %v", err)
 	}
+	slackDelivery, err := slackbus.NewDeliveryAdapter(slackbus.DeliveryAdapterOptions{
+		SendText: sendSlack,
+	})
+	if err != nil {
+		t.Fatalf("NewDeliveryAdapter(slack) error = %v", err)
+	}
 
 	sender := &RoutingSender{
 		bus:              bus,
 		telegramDelivery: telegramDelivery,
+		slackDelivery:    slackDelivery,
 		maepDelivery:     maepDelivery,
 		pending:          make(map[string]chan deliveryResult),
 	}
@@ -372,6 +498,8 @@ func newRoutingSenderForBusTest(t *testing.T, sendText telegrambus.SendTextFunc,
 		switch msg.Channel {
 		case busruntime.ChannelTelegram:
 			accepted, deduped, deliverErr = sender.telegramDelivery.Deliver(deliverCtx, msg)
+		case busruntime.ChannelSlack:
+			accepted, deduped, deliverErr = sender.slackDelivery.Deliver(deliverCtx, msg)
 		case busruntime.ChannelMAEP:
 			accepted, deduped, deliverErr = sender.maepDelivery.Deliver(deliverCtx, msg)
 		default:

@@ -330,12 +330,21 @@ func telegramUsernameOfContact(contact Contact) string {
 	return ""
 }
 
-func resolveDecisionChannel(contact Contact, decision ShareDecision) (string, error) {
+func ResolveDecisionChannel(contact Contact, decision ShareDecision) (string, error) {
 	if strings.TrimSpace(decision.ChatID) != "" {
+		if _, _, ok, err := parseSlackChatIDHint(decision.ChatID); ok || err != nil {
+			if err != nil {
+				return "", err
+			}
+			return ChannelSlack, nil
+		}
 		if _, err := parseTelegramChatIDHint(decision.ChatID); err != nil {
 			return "", err
 		}
 		return ChannelTelegram, nil
+	}
+	if hasSlackTarget(contact) {
+		return ChannelSlack, nil
 	}
 	if hasTelegramTarget(contact) {
 		return ChannelTelegram, nil
@@ -350,7 +359,7 @@ func (s *Service) sendWithBusOutbox(ctx context.Context, now time.Time, contact 
 	if s == nil || s.outboxStore == nil {
 		return ShareOutcome{}, false, fmt.Errorf("outbox store is required")
 	}
-	channel, err := resolveDecisionChannel(contact, decision)
+	channel, err := ResolveDecisionChannel(contact, decision)
 	if err != nil {
 		return ShareOutcome{}, false, err
 	}
@@ -444,9 +453,28 @@ func hasTelegramTarget(contact Contact) bool {
 		return true
 	}
 	v := strings.TrimSpace(strings.ToLower(contact.ContactID))
+	if strings.HasPrefix(v, "tg:@") {
+		return true
+	}
 	if strings.HasPrefix(v, "tg:") && !strings.HasPrefix(v, "tg:@") {
 		_, err := strconv.ParseInt(strings.TrimSpace(contact.ContactID[len("tg:"):]), 10, 64)
 		return err == nil
+	}
+	return false
+}
+
+func hasSlackTarget(contact Contact) bool {
+	if strings.TrimSpace(contact.SlackDMChannelID) != "" {
+		return true
+	}
+	for _, raw := range contact.SlackChannelIDs {
+		if strings.TrimSpace(raw) != "" {
+			return true
+		}
+	}
+	if _, userOrChannelID, ok := parseSlackContactID(contact.ContactID); ok {
+		idUpper := strings.ToUpper(userOrChannelID)
+		return strings.HasPrefix(idUpper, "C") || strings.HasPrefix(idUpper, "G") || strings.HasPrefix(idUpper, "D")
 	}
 	return false
 }
@@ -467,6 +495,26 @@ func parseTelegramChatIDHint(raw string) (int64, error) {
 	return chatID, nil
 }
 
+func parseSlackChatIDHint(raw string) (string, string, bool, error) {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return "", "", false, nil
+	}
+	if !strings.HasPrefix(strings.ToLower(value), "slack:") {
+		return "", "", false, nil
+	}
+	parts := strings.Split(strings.TrimSpace(value[len("slack:"):]), ":")
+	if len(parts) != 2 {
+		return "", "", false, fmt.Errorf("invalid chat_id: %s", strings.TrimSpace(raw))
+	}
+	teamID := strings.TrimSpace(parts[0])
+	channelID := strings.TrimSpace(parts[1])
+	if teamID == "" || channelID == "" {
+		return "", "", false, fmt.Errorf("invalid chat_id: %s", strings.TrimSpace(raw))
+	}
+	return teamID, channelID, true, nil
+}
+
 func deriveContactID(contact Contact) string {
 	if v := strings.TrimSpace(contact.ContactID); v != "" {
 		return v
@@ -476,6 +524,23 @@ func deriveContactID(contact Contact) string {
 	}
 	if v := normalizeTelegramUsername(contact.TGUsername); v != "" {
 		return "tg:@" + v
+	}
+	if teamID, userID := strings.TrimSpace(contact.SlackTeamID), strings.TrimSpace(contact.SlackUserID); teamID != "" && userID != "" {
+		return "slack:" + teamID + ":" + userID
+	}
+	if teamID, dmChannelID := strings.TrimSpace(contact.SlackTeamID), strings.TrimSpace(contact.SlackDMChannelID); teamID != "" && dmChannelID != "" {
+		return "slack:" + teamID + ":" + dmChannelID
+	}
+	if strings.EqualFold(strings.TrimSpace(contact.Channel), ChannelSlack) {
+		teamID := strings.TrimSpace(contact.SlackTeamID)
+		if teamID != "" {
+			for _, raw := range contact.SlackChannelIDs {
+				channelID := strings.TrimSpace(raw)
+				if channelID != "" {
+					return "slack:" + teamID + ":" + channelID
+				}
+			}
+		}
 	}
 	if v := strings.TrimSpace(contact.MAEPNodeID); v != "" {
 		nodeID, _ := splitMAEPNodeID(v)

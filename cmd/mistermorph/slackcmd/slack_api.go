@@ -7,11 +7,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/quailyquaily/mistermorph/internal/slackclient"
 )
 
 type slackAPI struct {
@@ -140,93 +140,9 @@ func (api *slackAPI) connectSocket(ctx context.Context) (*websocket.Conn, error)
 	return conn, nil
 }
 
-type slackPostMessageRequest struct {
-	Channel  string `json:"channel"`
-	Text     string `json:"text"`
-	ThreadTS string `json:"thread_ts,omitempty"`
-}
-
-type slackPostMessageResponse struct {
-	OK    bool   `json:"ok"`
-	Error string `json:"error,omitempty"`
-	TS    string `json:"ts,omitempty"`
-}
-
 func (api *slackAPI) postMessage(ctx context.Context, channelID, text, threadTS string) error {
-	channelID = strings.TrimSpace(channelID)
-	text = strings.TrimSpace(text)
-	threadTS = strings.TrimSpace(threadTS)
-	if channelID == "" {
-		return fmt.Errorf("channel_id is required")
-	}
-	if text == "" {
-		return fmt.Errorf("text is required")
-	}
-	const maxAttempts = 3
-	var lastErr error
-	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		body, status, headers, err := api.postAuthJSON(ctx, api.botToken, "/chat.postMessage", slackPostMessageRequest{
-			Channel:  channelID,
-			Text:     text,
-			ThreadTS: threadTS,
-		})
-		if err != nil {
-			lastErr = err
-		} else {
-			var out slackPostMessageResponse
-			if parseErr := json.Unmarshal(body, &out); parseErr != nil {
-				lastErr = parseErr
-			} else if status < 200 || status >= 300 {
-				lastErr = fmt.Errorf("slack chat.postMessage http %d", status)
-			} else if out.OK {
-				return nil
-			} else {
-				code := strings.TrimSpace(out.Error)
-				if code == "" {
-					code = "unknown_error"
-				}
-				lastErr = fmt.Errorf("slack chat.postMessage failed: %s", code)
-			}
-		}
-
-		if attempt >= maxAttempts {
-			break
-		}
-		wait, retryable := slackRetryDelay(status, headers, attempt)
-		if !retryable {
-			break
-		}
-		if err := sleepWithContext(ctx, wait); err != nil {
-			return err
-		}
-	}
-	return lastErr
-}
-
-func slackRetryDelay(status int, headers http.Header, attempt int) (time.Duration, bool) {
-	switch {
-	case status == http.StatusTooManyRequests:
-		retryAfter := strings.TrimSpace(headers.Get("Retry-After"))
-		if retryAfter == "" {
-			return 1 * time.Second, true
-		}
-		secs, err := strconv.Atoi(retryAfter)
-		if err != nil || secs <= 0 {
-			return 1 * time.Second, true
-		}
-		return time.Duration(secs) * time.Second, true
-	case status >= 500 && status <= 599:
-		switch attempt {
-		case 1:
-			return 300 * time.Millisecond, true
-		case 2:
-			return 1 * time.Second, true
-		default:
-			return 2 * time.Second, true
-		}
-	default:
-		return 0, false
-	}
+	client := slackclient.New(api.http, api.baseURL, api.botToken)
+	return client.PostMessage(ctx, channelID, text, threadTS)
 }
 
 func sleepWithContext(ctx context.Context, d time.Duration) error {
