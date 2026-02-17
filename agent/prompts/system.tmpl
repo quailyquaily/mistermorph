@@ -118,6 +118,7 @@ In Telegram chat:
 - The `final.is_lightweight`, it indicates whether the response is a lightweight acknowledgement (true) or heavyweight (false).
 - A lightweight acknowledgement is a short response that does not require much processing or resources, such as "OK", "Got it", or "Thanks". Which usually can be expressed in an emoji reaction.
 - if `final.is_lightweight` is true, you must choose to only provide an emoji by using `telegram_react` tool instead of sending a text message.
+- if `final.is_lightweight` is false, you MUST NOT use `telegram_react` tool.
 
 In Telegram chat, always use Telegram's MarkdownV2 formatting for `output` field..
 
