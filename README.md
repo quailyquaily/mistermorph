@@ -11,6 +11,7 @@ Other languages: [简体中文](docs/zh-CN/README.md) | [日本語](docs/ja-JP/R
 - [Supported Models](#supported-models)
 - [Daemon mode](#daemon-mode)
 - [Telegram bot mode](#telegram-bot-mode)
+- [Slack bot mode](#slack-bot-mode)
 - [Embedding](#embedding-to-other-projects)
 - [Built-in Tools](#built-in-tools)
 - [Skills](#skills)
@@ -63,17 +64,16 @@ The `install` command installs required files and built-in skills under `~/.morp
 
 ### Step 3: Setup an API key
 
-Open the config file `~/.morph/config.yaml` and set your LLM provider API key, e.g. for OpenAI:
+You can run without a `config.yaml` by using environment variables:
 
-```yaml
-llm:
-  provider: "openai"
-  endpoint: "https://api.openai.com/v1"
-  model: "gpt-5.2"
-  api_key: "YOUR_OPENAI_API_KEY_HERE"
+```bash
+export MISTER_MORPH_LLM_API_KEY="YOUR_OPENAI_API_KEY_HERE"
+# Optional explicit defaults:
+export MISTER_MORPH_LLM_PROVIDER="openai"
+export MISTER_MORPH_LLM_MODEL="gpt-5.2"
 ```
 
-Mister Morph also supports Azure OpenAI, Anthropic Claude, AWS Bedrock, and others (see `assets/config/config.example.yaml` for more options).
+Mister Morph also supports Azure OpenAI, Anthropic Claude, AWS Bedrock, and others (see `assets/config/config.example.yaml` for more options). If you prefer file-based config, use `~/.morph/config.yaml`.
 
 ### Step 4: One-time Run 
 
@@ -89,6 +89,7 @@ mistermorph run --task "Hello!"
 |---|---|---|
 | GPT | `gpt-5*` | ✅ Full |
 | GPT-OSS | `gpt-oss-120b` | ✅ Full |
+| Grok | `grok-4+` | ✅ Full |
 | Claude | `claude-3.5+` | ✅ Full |
 | DeepSeek | `deepseek-3*` | ✅ Full |
 | Gemini | `gemini-2.5+` | ✅ Full |
@@ -123,6 +124,31 @@ Notes:
 - `telegram.group_trigger_mode=talkative` also runs addressing LLM on every group message, but does not require `addressed=true` (it still uses the same confidence/interject thresholds).
 - Use `/reset` in chat to clear conversation history.
 - By default it runs multiple chats concurrently, but processes each chat serially (config: `telegram.max_concurrency`).
+
+## Slack bot mode
+
+Run a Slack bot with Socket Mode so you can chat with the agent in Slack:
+
+Edit the config file `~/.morph/config.yaml` and set your Slack tokens:
+
+```yaml
+slack:
+  bot_token: "YOUR_SLACK_BOT_TOKEN_HERE" # xoxb-...
+  app_token: "YOUR_SLACK_APP_TOKEN_HERE" # xapp-...
+  allowed_team_ids: [] # optional allowlist
+  allowed_channel_ids: [] # optional allowlist
+```
+
+```bash
+mistermorph slack --log-level info
+```
+
+Notes:
+- Requires both `xoxb` bot token and `xapp` app token.
+- Group trigger and addressing controls mirror Telegram style (`strict|smart|talkative` + confidence/interject thresholds).
+- By default it runs multiple conversations concurrently, but processes each `team_id:channel_id` conversation serially (`slack.max_concurrency` controls global concurrency).
+- See [`docs/slack.md`](docs/slack.md) for setup and thread behavior details.
+- See [`docs/bus.md`](docs/bus.md) for bus routing and ordering semantics.
 
 
 ## Daemon mode
@@ -310,6 +336,17 @@ These arguments will dump the final system/user/tool prompts and the full LLM re
 - `--telegram-max-concurrency`
 - `--file-cache-dir`
 
+**slack**
+- `--slack-bot-token`
+- `--slack-app-token`
+- `--slack-allowed-team-id` (repeatable)
+- `--slack-allowed-channel-id` (repeatable)
+- `--slack-group-trigger-mode` (`strict|smart|talkative`)
+- `--slack-addressing-confidence-threshold`
+- `--slack-addressing-interject-threshold`
+- `--slack-task-timeout`
+- `--slack-max-concurrency`
+
 **skills**
 - `skills list --skills-dir` (repeatable)
 - `skills install --dest --dry-run --clean --skip-existing --timeout --max-bytes --yes`
@@ -331,6 +368,8 @@ Common env vars (these map to config keys):
 - `MISTER_MORPH_LOGGING_FORMAT`
 - `MISTER_MORPH_SERVER_AUTH_TOKEN`
 - `MISTER_MORPH_TELEGRAM_BOT_TOKEN`
+- `MISTER_MORPH_SLACK_BOT_TOKEN`
+- `MISTER_MORPH_SLACK_APP_TOKEN`
 - `MISTER_MORPH_GUARD_APPROVALS_SQLITE_DSN`
 - `MISTER_MORPH_FILE_CACHE_DIR`
 

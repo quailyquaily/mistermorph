@@ -79,8 +79,8 @@ func TestNormalizeRuntimeLoopOptionsDefaults(t *testing.T) {
 	if got.AgentParseRetries != 2 {
 		t.Fatalf("agent parse retries = %d, want 2", got.AgentParseRetries)
 	}
-	if got.FileCacheDir != "/var/cache/morph" {
-		t.Fatalf("file cache dir = %q, want /var/cache/morph", got.FileCacheDir)
+	if got.FileCacheDir != "~/.cache/morph" {
+		t.Fatalf("file cache dir = %q, want ~/.cache/morph", got.FileCacheDir)
 	}
 	if got.FileCacheMaxAge != 7*24*time.Hour {
 		t.Fatalf("file cache max age = %v, want 168h", got.FileCacheMaxAge)

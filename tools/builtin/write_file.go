@@ -30,7 +30,7 @@ func NewWriteFileTool(enabled bool, maxBytes int, baseDirs ...string) *WriteFile
 		cleaned = append(cleaned, dir)
 	}
 	if len(cleaned) == 0 {
-		cleaned = []string{"/var/cache/morph"}
+		cleaned = []string{"~/.cache/morph"}
 	}
 	return &WriteFileTool{
 		Enabled:  enabled,

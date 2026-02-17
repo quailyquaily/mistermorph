@@ -66,7 +66,7 @@ func newTelegramCmd(d Dependencies) *cobra.Command {
 	cmd.Flags().Duration("telegram-poll-timeout", 30*time.Second, "Long polling timeout for getUpdates.")
 	cmd.Flags().Duration("telegram-task-timeout", 0, "Per-message agent timeout (0 uses --timeout).")
 	cmd.Flags().Int("telegram-max-concurrency", 3, "Max number of chats processed concurrently.")
-	cmd.Flags().String("file-cache-dir", "/var/cache/morph", "Global temporary file cache directory (used for Telegram file handling).")
+	cmd.Flags().String("file-cache-dir", "~/.cache/morph", "Global temporary file cache directory (used for Telegram file handling).")
 	cmd.Flags().Bool("inspect-prompt", false, "Dump prompts (messages) to ./dump/prompt_telegram_YYYYMMDD_HHmmss.md.")
 	cmd.Flags().Bool("inspect-request", false, "Dump LLM request/response payloads to ./dump/request_telegram_YYYYMMDD_HHmmss.md.")
 

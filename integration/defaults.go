@@ -30,7 +30,7 @@ func applyViperDefaults(v *viper.Viper) {
 
 	// Global.
 	v.SetDefault("file_state_dir", "~/.morph")
-	v.SetDefault("file_cache_dir", "/var/cache/morph")
+	v.SetDefault("file_cache_dir", "~/.cache/morph")
 	v.SetDefault("file_cache.max_age", 7*24*time.Hour)
 	v.SetDefault("file_cache.max_files", 1000)
 	v.SetDefault("file_cache.max_total_bytes", int64(512*1024*1024))

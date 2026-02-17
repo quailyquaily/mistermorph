@@ -69,7 +69,7 @@ func NewURLFetchToolWithAuthLimits(enabled bool, timeout time.Duration, maxBytes
 	}
 	fileCacheDir = strings.TrimSpace(fileCacheDir)
 	if fileCacheDir == "" {
-		fileCacheDir = "/var/cache/morph"
+		fileCacheDir = "~/.cache/morph"
 	}
 	return &URLFetchTool{
 		Enabled:          enabled,

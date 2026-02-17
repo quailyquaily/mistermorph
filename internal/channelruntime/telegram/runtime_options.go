@@ -126,7 +126,7 @@ func normalizeRuntimeLoopOptions(opts runtimeLoopOptions) runtimeLoopOptions {
 		opts.MemoryInjectionMaxItems = 50
 	}
 	if opts.FileCacheDir == "" {
-		opts.FileCacheDir = "/var/cache/morph"
+		opts.FileCacheDir = "~/.cache/morph"
 	}
 	if opts.GroupTriggerMode == "" {
 		opts.GroupTriggerMode = "smart"
