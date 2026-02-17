@@ -1,38 +1,38 @@
 # Slack Setup (Socket Mode)
 
-本文说明如何为 `mistermorph slack` 准备凭据，尤其是“只有 `client_id/client_secret`”时如何获取可用 token。
+This document explains how to prepare credentials for `mistermorph slack`, especially when you only have `client_id/client_secret`.
 
-## 1. 三类凭据的区别
+## 1. Credential Types
 
 - `client_id` / `client_secret`
-  - 用于 OAuth 换票（`code -> token`）。
-  - 不能直接拿来调用 `mistermorph slack`。
-- Bot Token（`xoxb-...`）
-  - 用于调用 Web API（如 `chat.postMessage`）。
-  - `mistermorph slack` 必填：`slack.bot_token`。
-- App Token（`xapp-...`）
-  - 用于 Socket Mode 建立 WebSocket 连接（`apps.connections.open`）。
-  - `mistermorph slack` 必填：`slack.app_token`。
+  - Used for OAuth token exchange (`code -> token`).
+  - Cannot be used directly to run `mistermorph slack`.
+- Bot Token (`xoxb-...`)
+  - Used for Web API calls (for example, `chat.postMessage`).
+  - Required by `mistermorph slack`: `slack.bot_token`.
+- App Token (`xapp-...`)
+  - Used by Socket Mode to open the WebSocket connection (`apps.connections.open`).
+  - Required by `mistermorph slack`: `slack.app_token`.
 
-## 2. 先开 Socket Mode
+## 2. Enable Socket Mode First
 
-在 Slack App 管理后台：
+In the Slack App dashboard:
 
-1. 进入 `Socket Mode`。
-2. 打开 `Enable Socket Mode`。
+1. Go to `Socket Mode`.
+2. Turn on `Enable Socket Mode`.
 
-## 3. 获取 Bot Token (`xoxb-...`)
+## 3. Get the Bot Token (`xoxb-...`)
 
-### 方式 A：后台直接安装（推荐）
+### Option A: Install from Dashboard (Recommended)
 
-1. 进入 `OAuth & Permissions`。
-2. 在 `Bot Token Scopes` 添加最小必要 scopes（见下节）。
-3. 点击 `Install to Workspace`（如果已安装且 scope 有变更，点 `Reinstall`）。
-4. 复制 `Bot User OAuth Token`（`xoxb-...`）。
+1. Go to `OAuth & Permissions`.
+2. Add the minimum required bot scopes (see next section).
+3. Click `Install to Workspace` (or `Reinstall` if scopes changed).
+4. Copy `Bot User OAuth Token` (`xoxb-...`).
 
-### 方式 B：只有 `client_id/client_secret` 时（OAuth 换票）
+### Option B: If You Only Have `client_id/client_secret` (OAuth Exchange)
 
-先完成 OAuth 授权拿到 `code`，然后调用：
+Complete OAuth authorization to get a `code`, then call:
 
 ```bash
 curl -X POST https://slack.com/api/oauth.v2.access \
@@ -42,21 +42,21 @@ curl -X POST https://slack.com/api/oauth.v2.access \
   -d redirect_uri=YOUR_REDIRECT_URI
 ```
 
-返回 JSON 中的 `access_token`（通常是 `xoxb-...`）就是 bot token。
+The `access_token` in the JSON response (usually `xoxb-...`) is your bot token.
 
-## 4. 获取 App Token (`xapp-...`)
+## 4. Get the App Token (`xapp-...`)
 
-`xapp` 不能通过 `client_id/client_secret` 的 OAuth 换票获得，需要在后台手动生成：
+`xapp` cannot be obtained via OAuth exchange with `client_id/client_secret`. You must generate it in the dashboard:
 
-1. 进入 `Basic Information`。
-2. 找到 `App-Level Tokens`。
-3. 点击 `Generate Token and Scopes`。
-4. 添加 scope：`connections:write`。
-5. 生成后复制 `xapp-...`。
+1. Go to `Basic Information`.
+2. Find `App-Level Tokens`.
+3. Click `Generate Token and Scopes`.
+4. Add scope: `connections:write`.
+5. Generate and copy the `xapp-...` token.
 
-## 5. 建议 scopes（Phase A）
+## 5. Recommended Scopes (Phase A)
 
-本仓库当前 Slack Phase A（Socket Mode + 文本收发）建议配置：
+For the current Slack Phase A in this repo (Socket Mode + text send/receive), use:
 
 - `app_mentions:read`
 - `channels:history`
@@ -65,16 +65,16 @@ curl -X POST https://slack.com/api/oauth.v2.access \
 - `mpim:history`
 - `chat:write`
 
-## 6. 写入配置
+## 6. Configure Credentials
 
-可用环境变量（推荐）：
+Environment variables (recommended):
 
 ```bash
 export MISTER_MORPH_SLACK_BOT_TOKEN='xoxb-...'
 export MISTER_MORPH_SLACK_APP_TOKEN='xapp-...'
 ```
 
-或写到配置文件：
+Or in config file:
 
 ```yaml
 slack:
@@ -89,7 +89,7 @@ slack:
   max_concurrency: 3
 ```
 
-## 7. 启动示例
+## 7. Run Example
 
 ```bash
 go run ./cmd/mistermorph slack \
@@ -97,19 +97,34 @@ go run ./cmd/mistermorph slack \
   --slack-app-token "$MISTER_MORPH_SLACK_APP_TOKEN"
 ```
 
-## 8. 常见报错
+## 8. Common Errors
 
 - `missing slack.bot_token` / `missing slack.app_token`
-  - 没有传 token，或环境变量名不对。
+  - Token was not provided, or env var names are incorrect.
 - `slack auth.test failed: invalid_auth`
-  - `xoxb` 无效、过期、复制错误，或装错 workspace。
+  - `xoxb` is invalid/expired/mis-copied, or installed in the wrong workspace.
 - `slack apps.connections.open failed: not_allowed_token_type`
-  - 传了非 `xapp` token，或 `xapp` 没有 `connections:write`。
-- 收不到群消息
-  - 检查 bot 是否在目标频道、scope 是否齐全、频道/team allowlist 是否拦截。
+  - A non-`xapp` token was used, or `xapp` is missing `connections:write`.
+- Not receiving channel messages
+  - Check whether the bot is in the target channel, scopes are complete, and team/channel allowlists are not blocking.
 
-## 9. 安全建议
+## 9. Security Notes
 
-- 不要把 `xoxb`/`xapp` 提交到仓库。
-- 线上优先用环境变量或 secret manager 注入。
-- 日志中避免打印完整 token。
+- Do not commit `xoxb`/`xapp` to the repository.
+- In production, prefer environment variables or a secret manager.
+- Avoid logging full tokens.
+
+## 10. Thread Behavior (Bus Semantics)
+
+In the current implementation, Slack thread data is passed through fields in bus messages, not used as an independent routing key.
+
+- On inbound, Slack `thread_ts` is written into:
+  - `MessageEnvelope.reply_to`
+  - `extensions.reply_to`
+  - `extensions.thread_ts`
+- On outbound delivery to Slack, thread selection priority is:
+  1. `extensions.thread_ts`
+  2. `extensions.reply_to`
+  3. `MessageEnvelope.reply_to`
+- Bus ordering/sharding key is `conversation_key = slack:<team_id>:<channel_id>`.
+  Thread is not part of sharding, so different threads in the same channel share the same serialized worker.
