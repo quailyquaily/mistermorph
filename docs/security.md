@@ -126,7 +126,7 @@ The recommended unit assumes:
 - Binary: `/opt/morph/mistermorph`
 - Config: `/opt/morph/config.yaml`
 - Skills: `/opt/morph/skills` (set `file_state_dir: /opt/morph` and `skills.dir_name: skills`)
-- Persistent state (sqlite DB): `/var/lib/morph/`
+- Persistent state (guard approvals, memory, contacts, etc.): `/var/lib/morph/`
 - Ephemeral cache (file_cache_dir, Telegram downloads): `/var/cache/morph/`
 - write_file tool output: `/var/cache/morph/` or `/var/lib/morph/` (file_cache_dir or file_state_dir)
 - Non-secret env/config: `/opt/morph/morph.env` (mode `0640`, owned by root or `morph`)
@@ -216,11 +216,10 @@ systemd can create and manage service-owned directories under `/var/lib`, `/var/
 - `StateDirectory=morph` → writable `/var/lib/morph` (persistent state)
 - `CacheDirectory=morph` → writable `/var/cache/morph` (ephemeral cache)
 
-For `mistermorph`, this split is recommended because approval state uses a sqlite file that should not be treated as disposable.
+For `mistermorph`, this split is recommended because guard approvals and other state are persistent and should not be treated as disposable.
 
 The example unit additionally pins the agent’s paths via env vars:
 
-- `MISTER_MORPH_GUARD_APPROVALS_SQLITE_DSN=/var/lib/morph/guard_approvals.sqlite`
 - `MISTER_MORPH_FILE_CACHE_DIR=/var/cache/morph`
 
 #### Optional bind mounts (fine-grained allowlist)

@@ -369,7 +369,6 @@ Common env vars (these map to config keys):
 - `MISTER_MORPH_TELEGRAM_BOT_TOKEN`
 - `MISTER_MORPH_SLACK_BOT_TOKEN`
 - `MISTER_MORPH_SLACK_APP_TOKEN`
-- `MISTER_MORPH_GUARD_APPROVALS_SQLITE_DSN`
 - `MISTER_MORPH_FILE_CACHE_DIR`
 
 Provider-specific settings use the same mapping, for example:

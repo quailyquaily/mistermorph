@@ -117,7 +117,8 @@ The goal is to reduce blast radius if the process or a tool is abused.
 Related data-isolation settings:
 
 - `StateDirectory=morph` and `CacheDirectory=morph` create dedicated writable directories owned for this service.
-- `WorkingDirectory=/var/lib/morph` plus explicit env paths (`MISTER_MORPH_GUARD_APPROVALS_SQLITE_DSN`, `MISTER_MORPH_FILE_CACHE_DIR`) keep writes in predictable locations.
+- `WorkingDirectory=/var/lib/morph` plus `MISTER_MORPH_FILE_CACHE_DIR` keep writes in predictable locations.
+- Guard approvals are stored as a JSON state file under `<file_state_dir>/<guard.dir_name>/approvals/guard_approvals.json` (default under `/var/lib/morph` with this unit layout).
 
 ### When to relax sandboxing
 
