@@ -1370,28 +1370,20 @@ func runTelegramLoop(ctx context.Context, d Dependencies, opts runtimeLoopOption
 						continue
 					}
 					if !ok {
-						if dec.AddressingLLMAttempted {
-							logger.Info("telegram_group_ignored",
-								"chat_id", chatID,
-								"type", chatType,
-								"text_len", len(text),
-								"addressing_llm", true,
-								"llm_ok", dec.AddressingLLMOK,
-								"llm_addressed", dec.Addressing.Addressed,
-								"confidence", dec.Addressing.Confidence,
-								"wanna_interject", dec.Addressing.WannaInterject,
-								"interject", dec.Addressing.Interject,
-								"impulse", dec.Addressing.Impulse,
-								"is_lightweight", dec.Addressing.IsLightweight,
-								"reason", dec.Reason,
-							)
-						} else {
-							logger.Debug("telegram_group_ignored",
-								"chat_id", chatID,
-								"type", chatType,
-								"text_len", len(text),
-							)
-						}
+						logger.Info("telegram_group_ignored",
+							"chat_id", chatID,
+							"type", chatType,
+							"text_len", len(text),
+							"llm_attempted", dec.AddressingLLMAttempted,
+							"llm_ok", dec.AddressingLLMOK,
+							"llm_addressed", dec.Addressing.Addressed,
+							"confidence", dec.Addressing.Confidence,
+							"wanna_interject", dec.Addressing.WannaInterject,
+							"interject", dec.Addressing.Interject,
+							"impulse", dec.Addressing.Impulse,
+							"is_lightweight", dec.Addressing.IsLightweight,
+							"reason", dec.Reason,
+						)
 						if strings.EqualFold(groupTriggerMode, "talkative") {
 							appendIgnoredInboundHistory(rawText)
 						}
