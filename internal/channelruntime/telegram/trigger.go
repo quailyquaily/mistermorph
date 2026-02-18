@@ -120,16 +120,3 @@ func shouldSkipGroupReplyWithoutBodyMention(msg *telegramMessage, text string, b
 	_, bodyMentioned := groupBodyMentionReason(msg, text, botUser, botID)
 	return !bodyMentioned
 }
-
-func groupAliasMentionReason(text string, aliases []string, aliasPrefixMaxChars int) (string, bool) {
-	if strings.TrimSpace(text) == "" {
-		return "", false
-	}
-	if m, ok := matchAddressedAliasSmart(text, aliases, aliasPrefixMaxChars); ok {
-		return "alias_smart:" + m.Alias, true
-	}
-	if hit, ok := anyAliasContains(text, aliases); ok {
-		return "alias_mention:" + hit, true
-	}
-	return "", false
-}

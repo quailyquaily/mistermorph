@@ -42,32 +42,65 @@ If explicit match succeeds, trigger is accepted directly.
 Trigger layer only decides whether to run the agent.
 It does not decide text vs reaction modality.
 
-## 3) Reaction Decision
+### 2.4 Trigger output fields
+
+`grouptrigger.Decide(...)` returns `Decision`, and `Decision.Addressing` includes:
+
+- `addressed`
+- `confidence`
+- `wanna_interject`
+- `interject`
+- `impulse`
+- `is_lightweight`
+- `reason`
+
+So yes, trigger output also carries `is_lightweight` (from addressing LLM output).
+But in current runtime design, this field is not the final publish switch; final text/no-text is still decided by `final.is_lightweight` from generation output.
+
+## 3) Reaction Decision (Generation Layer)
 
 Entry point:
 - `internal/channelruntime/telegram/runtime_task.go`
 - `tools/telegram/react_tool.go`
 - `internal/channelruntime/telegram/runtime.go`
 
-### 3.1 When reaction is possible
+### 3.1 Registration gate (tool availability)
 
-`telegram_react` is registered only when:
-- Telegram API is available
+`telegram_react` is registered only when all conditions hold:
+
+- Telegram API is available (`api != nil`)
 - inbound `message_id` is non-zero
 
-### 3.2 What actually decides "react"
+If not registered, reaction cannot be applied in this run.
 
-Reaction is considered applied only if `telegram_react` was successfully executed:
+### 3.2 Execution gate (tool call must succeed)
 
-- Runtime check: `reactTool.LastReaction() != nil`
-- If true: reaction history item is appended.
+Even when the tool is available, a reaction is considered successful only when `telegram_react` executes without error.
+`react_tool` validates:
 
-### 3.3 When text response will be generated
+- target `chat_id` / `message_id` (explicit or defaulted from current inbound message)
+- allowlist authorization (`allowedIDs`) when configured
+- emoji is in Telegram standard reaction list
+- Telegram API call (`SetEmojiReaction`) succeeds
 
-Text response is decided by `final.is_lightweight`:
+Only then does the tool persist `lastReaction`.
 
-- `final.is_lightweight = false`: runtime sends normal text reply.
-- `final.is_lightweight = true`: runtime does not send text reply.
+### 3.3 Runtime confirmation and recording
+
+After `agent.Engine.Run`, runtime checks `reactTool.LastReaction()`:
+
+- `nil`: no reaction applied
+- non-`nil`: runtime logs `telegram_reaction_applied` and appends an outbound reaction history item
+
+So runtime state is based on actual tool success, not on intent text.
+
+### 3.4 Boundary with text publishing
+
+Reaction and text are related but not the same switch:
+
+- text publishing is controlled by `final.is_lightweight` (`shouldPublishTelegramText(final) == !final.IsLightweight`)
+- reaction applied is controlled by `reactTool.LastReaction() != nil`
+- `dec.Addressing.is_lightweight` from `grouptrigger.Decide` is trigger metadata only; it does not directly publish/suppress text
 
 ## 4) Text Decision
 
@@ -97,6 +130,7 @@ Useful logs:
 Telegram group inbound
   -> explicit mention/reply check
   -> grouptrigger.Decide(mode=strict|smart|talkative)
+     -> output dec.Addressing.is_lightweight (trigger metadata)
      -> not triggered: ignore
      -> triggered: runTelegramTask
           -> agent.Engine.Run

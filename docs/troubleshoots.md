@@ -33,3 +33,19 @@ llm:
   model: "gemini-2.5-pro"
   api_key: "${GEMINI_API_KEY}"
 ```
+
+## 3. Telegram supergroup topics: messages may be skipped without `@bot`
+
+Symptoms:
+
+- In supergroup topic/thread chats, incoming messages include `reply_to_message` even when the user did not explicitly reply.
+- Group messages without `@bot` can be skipped before `groupTriggerDecision` runs.
+
+Status:
+
+- Known behavior gap. Current reply prefilter treats `reply_to_message` as explicit reply context.
+
+Workarounds:
+
+- Mention the bot in message body (for example `@your_bot`).
+- Do not use Telegram topics/threads for now 
