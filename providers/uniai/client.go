@@ -61,9 +61,6 @@ func New(cfg Config) *Client {
 	geminiKey := strings.TrimSpace(cfg.APIKey)
 	geminiBase := strings.TrimSpace(cfg.Endpoint)
 
-	susanooKey := strings.TrimSpace(cfg.APIKey)
-	susanooBase := strings.TrimSpace(cfg.Endpoint)
-
 	uCfg := uniaiapi.Config{
 		Provider:            provider,
 		OpenAIAPIKey:        openAIKey,
