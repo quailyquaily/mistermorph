@@ -20,6 +20,15 @@
 - Example run:
   - `./bin/mistermorph run --task "Summarize this repo" --provider openai --model gpt-5.2 --api-key "$OPENAI_API_KEY"`
 
+### Admin Frontend (`web/admin`)
+
+- Package manager: use `pnpm` (do not use `npm`).
+- Allowed commands:
+  - `pnpm install`
+  - `pnpm add <pkg>`
+  - `pnpm dev`
+  - `pnpm build`
+
 ## Demos (Embedding)
 
 - Go library demo: `cd demo/embed-go && OPENAI_API_KEY="..." go run . --task "List files and summarize."`

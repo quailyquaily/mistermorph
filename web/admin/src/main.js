@@ -1,6 +1,7 @@
 import { createApp, computed, onMounted, reactive, ref } from "vue";
 import { createRouter, createWebHistory, useRoute, useRouter } from "vue-router";
 import { QuailUI } from "quail-ui";
+import "quail-ui/dist/style.css";
 import "./styles.css";
 
 const AUTH_STORAGE_KEY = "mistermorph_admin_auth_v1";

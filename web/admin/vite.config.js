@@ -2,12 +2,27 @@ import { defineConfig } from "vite";
 
 export default defineConfig({
   base: "./",
+  resolve: {
+    alias: {
+      vue: "vue/dist/vue.esm-bundler.js",
+    },
+  },
+  server: {
+    host: "127.0.0.1",
+    port: 5173,
+    strictPort: true,
+    proxy: {
+      "/admin/api": {
+        target: "http://127.0.0.1:9080",
+        changeOrigin: false,
+      },
+    },
+  },
   build: {
     outDir: "dist",
     emptyOutDir: true,
     cssCodeSplit: false,
     rollupOptions: {
-      external: ["vue", "vue-router", "quail-ui"],
       output: {
         entryFileNames: "main.js",
         assetFileNames: (assetInfo) => {
