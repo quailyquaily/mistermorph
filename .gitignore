@@ -7,3 +7,7 @@ config.yaml
 go.work
 go.work.sum
 dump
+
+# Admin SPA dependencies
+web/admin/node_modules/
+web/admin/dist/

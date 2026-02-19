@@ -1,6 +1,7 @@
-import { createApp, computed, onMounted, reactive, ref, watch } from "vue";
+import { createApp, computed, onMounted, reactive, ref } from "vue";
 import { createRouter, createWebHistory, useRoute, useRouter } from "vue-router";
 import { QuailUI } from "quail-ui";
+import "./styles.css";
 
 const AUTH_STORAGE_KEY = "mistermorph_admin_auth_v1";
 
@@ -517,34 +518,18 @@ const router = createRouter({
   routes,
 });
 
-const navTabs = [
-  { id: "/dashboard", title: "Dashboard", icon: "QIconGrid" },
-  { id: "/tasks", title: "当前任务", icon: "QIconCpuChip" },
-  { id: "/contacts-files", title: "联系人文件", icon: "QIconUsers" },
-  { id: "/settings", title: "配置与诊断", icon: "QIconSettings" },
+const navItems = [
+  { id: "/dashboard", title: "Dashboard" },
+  { id: "/tasks", title: "当前任务" },
+  { id: "/contacts-files", title: "联系人文件" },
+  { id: "/settings", title: "配置与诊断" },
 ];
-
-function tabForPath(p) {
-  if (p.startsWith("/tasks/")) {
-    return navTabs[1];
-  }
-  return navTabs.find((t) => t.id === p) || navTabs[0];
-}
 
 const App = {
   setup() {
     const router = useRouter();
     const route = useRoute();
-    const selectedTab = ref(tabForPath(route.path));
     const inLogin = computed(() => route.path === "/login");
-
-    watch(
-      () => route.path,
-      (p) => {
-        selectedTab.value = tabForPath(p);
-      },
-      { immediate: true }
-    );
 
     async function logout() {
       try {
@@ -556,14 +541,26 @@ const App = {
       router.replace("/login");
     }
 
-    function onTabChange(item) {
-      const tab = item && item.tab ? item.tab : item;
-      if (tab && typeof tab.id === "string" && tab.id) {
-        router.push(tab.id);
+    function goTo(item) {
+      if (!item || typeof item.id !== "string" || !item.id) {
+        return;
+      }
+      if (route.path !== item.id) {
+        router.push(item.id);
       }
     }
 
-    return { inLogin, selectedTab, navTabs, onTabChange, logout, authState };
+    function isActive(item) {
+      if (!item || typeof item.id !== "string") {
+        return false;
+      }
+      if (item.id === "/tasks") {
+        return route.path === "/tasks" || route.path.startsWith("/tasks/");
+      }
+      return route.path === item.id;
+    }
+
+    return { inLogin, navItems, goTo, isActive, logout, authState };
   },
   template: `
     <div>
@@ -574,12 +571,27 @@ const App = {
         <header class="topbar">
           <div class="brand">
             MisterMorph Admin
-            <small>Base: <code>${BASE_PATH}</code> | account: {{ authState.account }}</small>
+            <small>Base: <code>${BASE_PATH}</code></small>
           </div>
-          <QButton class="outlined" @click="logout">退出</QButton>
+          <div class="topbar-actions">
+            <span class="muted topbar-account">account: <code>{{ authState.account }}</code></span>
+            <QButton class="outlined" @click="logout">退出</QButton>
+          </div>
         </header>
-        <div class="content-stack">
-          <QTabs :tabs="navTabs" :modelValue="selectedTab" variant="plain" @change="onTabChange" />
+        <div class="workspace">
+          <aside class="sidebar">
+            <p class="sidebar-title">导航</p>
+            <div class="sidebar-nav">
+              <QButton
+                v-for="item in navItems"
+                :key="item.id"
+                :class="isActive(item) ? 'primary' : 'plain'"
+                @click="goTo(item)"
+              >
+                {{ item.title }}
+              </QButton>
+            </div>
+          </aside>
           <main class="content">
             <RouterView />
           </main>
