@@ -1,6 +1,7 @@
 package consolecmd
 
 import (
+	"bytes"
 	"context"
 	"crypto/subtle"
 	"encoding/json"
@@ -14,6 +15,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -47,6 +49,7 @@ type server struct {
 	sessions       *sessionStore
 	limiter        *loginLimiter
 	tasks          *daemonTaskClient
+	guardAuditPath string
 	contactsDir    string
 	contactsActive string
 	contactsOld    string
@@ -54,6 +57,32 @@ type server struct {
 	soulPath       string
 	todoWIPPath    string
 	todoDonePath   string
+}
+
+const (
+	auditDefaultWindowBytes int64 = 128 * 1024
+	auditMinWindowBytes     int64 = 4 * 1024
+	auditMaxWindowBytes     int64 = 2 * 1024 * 1024
+)
+
+type auditFileItem struct {
+	Name      string `json:"name"`
+	Path      string `json:"path"`
+	SizeBytes int64  `json:"size_bytes"`
+	ModTime   string `json:"mod_time"`
+	Current   bool   `json:"current"`
+}
+
+type auditLogChunk struct {
+	File      string   `json:"file"`
+	Path      string   `json:"path"`
+	Exists    bool     `json:"exists"`
+	SizeBytes int64    `json:"size_bytes"`
+	Before    int64    `json:"before"`
+	From      int64    `json:"from"`
+	To        int64    `json:"to"`
+	HasOlder  bool     `json:"has_older"`
+	Lines     []string `json:"lines"`
 }
 
 func newServeCmd() *cobra.Command {
@@ -157,6 +186,7 @@ func newServer(cfg serveConfig) (*server, error) {
 		sessions:       newSessionStore(),
 		limiter:        newLoginLimiter(),
 		tasks:          newDaemonTaskClient(cfg.daemonURL, cfg.daemonToken),
+		guardAuditPath: resolveGuardAuditPath(cfg.stateDir),
 		contactsDir:    contactsDir,
 		contactsActive: filepath.Join(contactsDir, "ACTIVE.md"),
 		contactsOld:    filepath.Join(contactsDir, "INACTIVE.md"),
@@ -185,6 +215,8 @@ func (s *server) run() error {
 	mux.HandleFunc(apiPrefix+"/contacts/files/", s.withAuth(s.handleContactsFileDetail))
 	mux.HandleFunc(apiPrefix+"/persona/files", s.withAuth(s.handlePersonaFiles))
 	mux.HandleFunc(apiPrefix+"/persona/files/", s.withAuth(s.handlePersonaFileDetail))
+	mux.HandleFunc(apiPrefix+"/audit/files", s.withAuth(s.handleAuditFiles))
+	mux.HandleFunc(apiPrefix+"/audit/logs", s.withAuth(s.handleAuditLogs))
 	mux.HandleFunc(apiPrefix+"/system/config", s.withAuth(s.handleSystemConfig))
 	mux.HandleFunc(apiPrefix+"/system/diagnostics", s.withAuth(s.handleSystemDiagnostics))
 
@@ -385,6 +417,52 @@ func (s *server) handleSystemDiagnostics(w http.ResponseWriter, r *http.Request)
 		"version":    buildVersion(),
 		"checks":     checks,
 	})
+}
+
+func (s *server) handleAuditFiles(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	items, err := s.listAuditFiles()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"default_file": filepath.Base(strings.TrimSpace(s.guardAuditPath)),
+		"items":        items,
+	})
+}
+
+func (s *server) handleAuditLogs(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	fileName := strings.TrimSpace(r.URL.Query().Get("file"))
+	filePath, err := s.resolveAuditFilePath(fileName)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	maxBytes, err := parseInt64QueryParamInRange(r.URL.Query().Get("max_bytes"), auditDefaultWindowBytes, auditMinWindowBytes, auditMaxWindowBytes)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid max_bytes")
+		return
+	}
+	before, err := parseInt64QueryParamOptional(r.URL.Query().Get("before"), -1)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid before")
+		return
+	}
+	chunk, err := readAuditLogChunk(filePath, before, maxBytes)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	chunk.File = filepath.Base(filePath)
+	writeJSON(w, http.StatusOK, chunk)
 }
 
 func (s *server) handleTasks(w http.ResponseWriter, r *http.Request) {
@@ -671,6 +749,92 @@ func (s *server) resolvePersonaFile(name string) (string, bool) {
 	}
 }
 
+func (s *server) listAuditFiles() ([]auditFileItem, error) {
+	basePath := strings.TrimSpace(s.guardAuditPath)
+	if basePath == "" {
+		return []auditFileItem{}, nil
+	}
+
+	dirPath := filepath.Dir(basePath)
+	baseName := filepath.Base(basePath)
+
+	entries, err := os.ReadDir(dirPath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return []auditFileItem{}, nil
+		}
+		return nil, err
+	}
+
+	type sortableAuditFileItem struct {
+		item  auditFileItem
+		unixN int64
+	}
+	items := make([]sortableAuditFileItem, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := strings.TrimSpace(entry.Name())
+		if name == "" {
+			continue
+		}
+		if name != baseName && !strings.HasPrefix(name, baseName+".") {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		modTime := info.ModTime().UTC()
+		items = append(items, sortableAuditFileItem{
+			item: auditFileItem{
+				Name:      name,
+				Path:      filepath.Join(dirPath, name),
+				SizeBytes: info.Size(),
+				ModTime:   modTime.Format(time.RFC3339),
+				Current:   name == baseName,
+			},
+			unixN: modTime.UnixNano(),
+		})
+	}
+
+	sort.SliceStable(items, func(i, j int) bool {
+		if items[i].item.Current != items[j].item.Current {
+			return items[i].item.Current
+		}
+		if items[i].unixN != items[j].unixN {
+			return items[i].unixN > items[j].unixN
+		}
+		return items[i].item.Name > items[j].item.Name
+	})
+
+	out := make([]auditFileItem, 0, len(items))
+	for _, it := range items {
+		out = append(out, it.item)
+	}
+	return out, nil
+}
+
+func (s *server) resolveAuditFilePath(name string) (string, error) {
+	basePath := strings.TrimSpace(s.guardAuditPath)
+	if basePath == "" {
+		return "", fmt.Errorf("guard audit path is not configured")
+	}
+	baseName := filepath.Base(basePath)
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return basePath, nil
+	}
+	if strings.Contains(name, "/") || strings.Contains(name, "\\") {
+		return "", fmt.Errorf("invalid file name")
+	}
+	if name != baseName && !strings.HasPrefix(name, baseName+".") {
+		return "", fmt.Errorf("invalid file name")
+	}
+	return filepath.Clean(filepath.Join(filepath.Dir(basePath), name)), nil
+}
+
 func (s *server) handleSPA(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -731,6 +895,125 @@ func detectConfiguredChannelAPI() (current string, telegramConfigured bool, slac
 	default:
 		return "none", telegramConfigured, slackConfigured
 	}
+}
+
+func resolveGuardAuditPath(stateDir string) string {
+	configured := pathutil.ExpandHomePath(viper.GetString("guard.audit.jsonl_path"))
+	if strings.TrimSpace(configured) != "" {
+		return configured
+	}
+	guardDir := pathutil.ResolveStateChildDir(stateDir, strings.TrimSpace(viper.GetString("guard.dir_name")), "guard")
+	return filepath.Join(guardDir, "audit", "guard_audit.jsonl")
+}
+
+func parseInt64QueryParamOptional(raw string, fallback int64) (int64, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return fallback, nil
+	}
+	v, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil {
+		return 0, err
+	}
+	return v, nil
+}
+
+func parseInt64QueryParamInRange(raw string, fallback, minValue, maxValue int64) (int64, error) {
+	v, err := parseInt64QueryParamOptional(raw, fallback)
+	if err != nil {
+		return 0, err
+	}
+	if v < minValue {
+		v = minValue
+	}
+	if v > maxValue {
+		v = maxValue
+	}
+	return v, nil
+}
+
+func readAuditLogChunk(filePath string, before int64, maxBytes int64) (auditLogChunk, error) {
+	chunk := auditLogChunk{
+		Path:  strings.TrimSpace(filePath),
+		Lines: []string{},
+	}
+	fi, err := os.Stat(filePath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return chunk, nil
+		}
+		return chunk, err
+	}
+	if fi.IsDir() {
+		return chunk, fmt.Errorf("audit log path is a directory")
+	}
+
+	chunk.Exists = true
+	chunk.SizeBytes = fi.Size()
+	if chunk.SizeBytes <= 0 {
+		return chunk, nil
+	}
+	if before <= 0 || before > chunk.SizeBytes {
+		before = chunk.SizeBytes
+	}
+	start := before - maxBytes
+	if start < 0 {
+		start = 0
+	}
+	windowBytes := before - start
+	if windowBytes <= 0 {
+		chunk.Before = before
+		chunk.From = before
+		chunk.To = before
+		chunk.HasOlder = before > 0
+		return chunk, nil
+	}
+
+	fd, err := os.Open(filePath)
+	if err != nil {
+		return chunk, err
+	}
+	defer fd.Close()
+
+	buf := make([]byte, windowBytes)
+	n, err := fd.ReadAt(buf, start)
+	if err != nil && !errors.Is(err, io.EOF) {
+		return chunk, err
+	}
+	buf = buf[:n]
+
+	if start > 0 {
+		idx := bytes.IndexByte(buf, '\n')
+		if idx >= 0 {
+			start += int64(idx + 1)
+			buf = buf[idx+1:]
+		} else {
+			start = before
+			buf = buf[:0]
+		}
+	}
+
+	chunk.Before = before
+	chunk.From = start
+	chunk.To = before
+	chunk.HasOlder = start > 0
+	chunk.Lines = splitAuditLines(buf)
+	return chunk, nil
+}
+
+func splitAuditLines(buf []byte) []string {
+	if len(buf) == 0 {
+		return []string{}
+	}
+	parts := bytes.Split(buf, []byte{'\n'})
+	lines := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if len(part) == 0 {
+			continue
+		}
+		lines = append(lines, strings.TrimSuffix(string(part), "\r"))
+	}
+	return lines
 }
 
 func (s *server) detectRunningChannelAPI(ctx context.Context) (current string, telegramRunning bool, slackRunning bool) {

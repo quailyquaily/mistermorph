@@ -358,9 +358,88 @@ a {
   font-size: 12px;
 }
 
+.settings-toolbar {
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.settings-toolbar-left,
+.settings-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.audit-meta {
+  display: grid;
+  gap: 4px;
+  margin: 10px 0;
+}
+
+.audit-meta code {
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.audit-list {
+  display: grid;
+  gap: 6px;
+}
+
+.audit-row {
+  display: grid;
+  gap: 6px;
+  padding: 8px 10px 12px;
+}
+
+.audit-item-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.audit-item-id,
+.audit-item-time {
+  font-size: 11px;
+  color: var(--text-2);
+}
+
+.audit-item-meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 4px 8px;
+}
+
+.audit-item-meta code {
+  font-size: 12px;
+  color: var(--text-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.audit-summary {
+  display: block;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 12px;
+  color: var(--text-1);
+}
+
+.audit-line {
+  display: block;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-1);
+}
+
 .stat-item,
 .task-row,
 .check-item,
+.audit-row,
 .login-box {
   position: relative;
   overflow: hidden;
@@ -377,6 +456,7 @@ a {
 .stat-item::after,
 .task-row::after,
 .check-item::after,
+.audit-row::after,
 .login-box::after {
   content: "";
   position: absolute;
@@ -393,6 +473,7 @@ a {
 .stat-item > *,
 .task-row > *,
 .check-item > *,
+.audit-row > *,
 .login-box > * {
   position: relative;
   z-index: 1;
@@ -416,6 +497,10 @@ pre {
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+.login-language {
+  margin: 0 0 10px;
 }
 
 @media (max-width: 980px) {
@@ -453,6 +538,11 @@ pre {
     grid-template-columns: 1fr;
     gap: 4px;
   }
+
+  .settings-toolbar-right {
+    width: 100%;
+    justify-content: flex-end;
+  }
 }
 
 @media (max-width: 620px) {
@@ -474,5 +564,9 @@ pre {
 
   .session-inline {
     display: none;
+  }
+
+  .settings-toolbar-right {
+    justify-content: space-between;
   }
 }
