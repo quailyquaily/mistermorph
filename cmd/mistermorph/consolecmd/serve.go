@@ -1,6 +1,7 @@
 package consolecmd
 
 import (
+	"context"
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
@@ -11,6 +12,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"runtime"
 	"runtime/debug"
 	"strconv"
 	"strings"
@@ -295,11 +297,36 @@ func (s *server) handleDashboardOverview(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
+	var mem runtime.MemStats
+	runtime.ReadMemStats(&mem)
+	channelConfigured, telegramConfigured, slackConfigured := detectConfiguredChannelAPI()
+	channelRunning, telegramRunning, slackRunning := s.detectRunningChannelAPI(r.Context())
+
 	writeJSON(w, http.StatusOK, map[string]any{
 		"version":    buildVersion(),
 		"started_at": s.startedAt.Format(time.RFC3339),
 		"uptime_sec": int(time.Since(s.startedAt).Seconds()),
 		"health":     "ok",
+		"llm": map[string]any{
+			"provider": strings.TrimSpace(viper.GetString("llm.provider")),
+			"model":    strings.TrimSpace(viper.GetString("llm.model")),
+		},
+		"channel": map[string]any{
+			"configured":          channelConfigured,
+			"telegram_configured": telegramConfigured,
+			"slack_configured":    slackConfigured,
+			"running":             channelRunning,
+			"telegram_running":    telegramRunning,
+			"slack_running":       slackRunning,
+		},
+		"runtime": map[string]any{
+			"go_version":       runtime.Version(),
+			"goroutines":       runtime.NumGoroutine(),
+			"heap_alloc_bytes": mem.HeapAlloc,
+			"heap_sys_bytes":   mem.HeapSys,
+			"heap_objects":     mem.HeapObjects,
+			"gc_cycles":        mem.NumGC,
+		},
 	})
 }
 
@@ -687,6 +714,43 @@ func buildVersion() string {
 		return "dev"
 	}
 	return strings.TrimSpace(info.Main.Version)
+}
+
+func detectConfiguredChannelAPI() (current string, telegramConfigured bool, slackConfigured bool) {
+	telegramConfigured = strings.TrimSpace(viper.GetString("telegram.bot_token")) != ""
+	slackConfigured = strings.TrimSpace(viper.GetString("slack.bot_token")) != "" &&
+		strings.TrimSpace(viper.GetString("slack.app_token")) != ""
+
+	switch {
+	case telegramConfigured && slackConfigured:
+		return "both", telegramConfigured, slackConfigured
+	case telegramConfigured:
+		return "telegram", telegramConfigured, slackConfigured
+	case slackConfigured:
+		return "slack", telegramConfigured, slackConfigured
+	default:
+		return "none", telegramConfigured, slackConfigured
+	}
+}
+
+func (s *server) detectRunningChannelAPI(ctx context.Context) (current string, telegramRunning bool, slackRunning bool) {
+	if s == nil || s.tasks == nil {
+		return "unknown", false, false
+	}
+	mode, err := s.tasks.HealthMode(ctx)
+	if err != nil {
+		return "unknown", false, false
+	}
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "telegram":
+		return "telegram", true, false
+	case "slack":
+		return "slack", false, true
+	case "serve":
+		return "none", false, false
+	default:
+		return "unknown", false, false
+	}
 }
 
 func bearerToken(r *http.Request) (string, bool) {

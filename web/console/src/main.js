@@ -132,6 +132,52 @@ function formatRemainingUntil(ts) {
   return `${days}d ${hourPart}h left`;
 }
 
+function toInt(value, fallback = 0) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) {
+    return fallback;
+  }
+  return Math.trunc(n);
+}
+
+function toBool(value, fallback = false) {
+  if (typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "number") {
+    return value !== 0;
+  }
+  if (typeof value === "string") {
+    const v = value.trim().toLowerCase();
+    if (v === "true" || v === "1" || v === "yes" || v === "on") {
+      return true;
+    }
+    if (v === "false" || v === "0" || v === "no" || v === "off") {
+      return false;
+    }
+  }
+  return fallback;
+}
+
+function formatBytes(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0) {
+    return "-";
+  }
+  if (n < 1024) {
+    return `${Math.trunc(n)} B`;
+  }
+  const units = ["KiB", "MiB", "GiB", "TiB"];
+  let v = n;
+  let idx = -1;
+  while (v >= 1024 && idx < units.length - 1) {
+    v /= 1024;
+    idx += 1;
+  }
+  const digits = v >= 100 ? 0 : v >= 10 ? 1 : 2;
+  return `${v.toFixed(digits)} ${units[idx]}`;
+}
+
 const LoginView = {
   setup() {
     const router = useRouter();
@@ -189,11 +235,24 @@ const DashboardView = {
   setup() {
     const err = ref("");
     const loading = ref(false);
+    let refreshTimer = null;
     const overview = reactive({
       version: "-",
       started_at: "-",
       uptime_sec: 0,
       health: "-",
+      llm_provider: "-",
+      llm_model: "-",
+      channel_telegram_configured: false,
+      channel_slack_configured: false,
+      channel_running_telegram: false,
+      channel_running_slack: false,
+      runtime_go_version: "-",
+      runtime_goroutines: 0,
+      runtime_heap_alloc_bytes: 0,
+      runtime_heap_sys_bytes: 0,
+      runtime_heap_objects: 0,
+      runtime_gc_cycles: 0,
     });
 
     async function load() {
@@ -203,8 +262,23 @@ const DashboardView = {
         const data = await apiFetch("/dashboard/overview");
         overview.version = data.version || "-";
         overview.started_at = data.started_at || "-";
-        overview.uptime_sec = data.uptime_sec || 0;
+        overview.uptime_sec = toInt(data.uptime_sec, 0);
         overview.health = data.health || "-";
+        const llm = data && typeof data.llm === "object" ? data.llm : {};
+        overview.llm_provider = llm.provider || "-";
+        overview.llm_model = llm.model || "-";
+        const channel = data && typeof data.channel === "object" ? data.channel : {};
+        overview.channel_telegram_configured = toBool(channel.telegram_configured, false);
+        overview.channel_slack_configured = toBool(channel.slack_configured, false);
+        overview.channel_running_telegram = toBool(channel.telegram_running, false);
+        overview.channel_running_slack = toBool(channel.slack_running, false);
+        const rt = data && typeof data.runtime === "object" ? data.runtime : {};
+        overview.runtime_go_version = rt.go_version || "-";
+        overview.runtime_goroutines = toInt(rt.goroutines, 0);
+        overview.runtime_heap_alloc_bytes = toInt(rt.heap_alloc_bytes, 0);
+        overview.runtime_heap_sys_bytes = toInt(rt.heap_sys_bytes, 0);
+        overview.runtime_heap_objects = toInt(rt.heap_objects, 0);
+        overview.runtime_gc_cycles = toInt(rt.gc_cycles, 0);
       } catch (e) {
         err.value = e.message || "加载失败";
       } finally {
@@ -212,34 +286,121 @@ const DashboardView = {
       }
     }
 
-    onMounted(load);
-    return { err, loading, overview, load, formatTime };
+    onMounted(() => {
+      void load();
+      refreshTimer = window.setInterval(() => {
+        void load();
+      }, 60000);
+    });
+    onUnmounted(() => {
+      if (refreshTimer !== null) {
+        window.clearInterval(refreshTimer);
+        refreshTimer = null;
+      }
+    });
+    return { err, loading, overview, formatTime, formatBytes };
   },
   template: `
     <section>
       <h2 class="title">概览</h2>
       <QProgress v-if="loading" :infinite="true" />
       <QFence v-if="err" type="danger" icon="QIconCloseCircle" :text="err" />
-      <div class="stat-list">
-        <div class="stat-item">
-          <span class="stat-key">Version</span>
-          <code class="stat-value">{{ overview.version }}</code>
-        </div>
-        <div class="stat-item">
-          <span class="stat-key">Started</span>
-          <code class="stat-value">{{ formatTime(overview.started_at) }}</code>
-        </div>
-        <div class="stat-item">
-          <span class="stat-key">Uptime</span>
-          <code class="stat-value">{{ overview.uptime_sec }}s</code>
-        </div>
-        <div class="stat-item">
-          <span class="stat-key">Health</span>
-          <code class="stat-value">{{ overview.health }}</code>
-        </div>
-      </div>
-      <div class="toolbar">
-        <QButton class="outlined" @click="load" :loading="loading">刷新</QButton>
+      <div class="stat-groups">
+        <section class="stat-group">
+          <h3 class="stat-group-title">基础状态</h3>
+          <div class="stat-list">
+            <div class="stat-item">
+              <span class="stat-key">Version</span>
+              <code class="stat-value">{{ overview.version }}</code>
+            </div>
+            <div class="stat-item">
+              <span class="stat-key">Started</span>
+              <code class="stat-value">{{ formatTime(overview.started_at) }}</code>
+            </div>
+            <div class="stat-item">
+              <span class="stat-key">Uptime</span>
+              <code class="stat-value">{{ overview.uptime_sec }}s</code>
+            </div>
+            <div class="stat-item">
+              <span class="stat-key">Health</span>
+              <code class="stat-value">{{ overview.health }}</code>
+            </div>
+          </div>
+        </section>
+        <section class="stat-group">
+          <h3 class="stat-group-title">模型配置</h3>
+          <div class="stat-list">
+            <div class="stat-item">
+              <span class="stat-key">LLM Provider</span>
+              <code class="stat-value">{{ overview.llm_provider }}</code>
+            </div>
+            <div class="stat-item">
+              <span class="stat-key">LLM Model</span>
+              <code class="stat-value">{{ overview.llm_model }}</code>
+            </div>
+          </div>
+        </section>
+        <section class="stat-group">
+          <h3 class="stat-group-title">接入渠道</h3>
+          <div class="stat-list">
+            <div class="stat-item">
+              <span class="stat-key">Channels</span>
+              <div class="channel-runtime-list">
+                <div :class="overview.channel_telegram_configured ? 'channel-runtime-item' : 'channel-runtime-item is-disabled'">
+                  <span class="channel-runtime-dot">
+                    <QBadge
+                      :type="overview.channel_running_telegram ? 'success' : 'default'"
+                      size="md"
+                      variant="filled"
+                      :dot="true"
+                    />
+                  </span>
+                  <span class="channel-runtime-label">Telegram</span>
+                </div>
+                <div :class="overview.channel_slack_configured ? 'channel-runtime-item' : 'channel-runtime-item is-disabled'">
+                  <span class="channel-runtime-dot">
+                    <QBadge
+                      :type="overview.channel_running_slack ? 'success' : 'default'"
+                      size="md"
+                      variant="filled"
+                      :dot="true"
+                    />
+                  </span>
+                  <span class="channel-runtime-label">Slack</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+        <section class="stat-group">
+          <h3 class="stat-group-title">运行时指标</h3>
+          <div class="stat-list">
+            <div class="stat-item">
+              <span class="stat-key">Go Version</span>
+              <code class="stat-value">{{ overview.runtime_go_version }}</code>
+            </div>
+            <div class="stat-item">
+              <span class="stat-key">Goroutines</span>
+              <code class="stat-value">{{ overview.runtime_goroutines }}</code>
+            </div>
+            <div class="stat-item">
+              <span class="stat-key">Heap Alloc</span>
+              <code class="stat-value">{{ formatBytes(overview.runtime_heap_alloc_bytes) }}</code>
+            </div>
+            <div class="stat-item">
+              <span class="stat-key">Heap Sys</span>
+              <code class="stat-value">{{ formatBytes(overview.runtime_heap_sys_bytes) }}</code>
+            </div>
+            <div class="stat-item">
+              <span class="stat-key">Heap Objects</span>
+              <code class="stat-value">{{ overview.runtime_heap_objects }}</code>
+            </div>
+            <div class="stat-item">
+              <span class="stat-key">GC Cycles</span>
+              <code class="stat-value">{{ overview.runtime_gc_cycles }}</code>
+            </div>
+          </div>
+        </section>
       </div>
     </section>
   `,

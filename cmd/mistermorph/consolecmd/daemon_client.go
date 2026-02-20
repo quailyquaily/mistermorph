@@ -32,14 +32,49 @@ func newDaemonTaskClient(baseURL, authToken string) *daemonTaskClient {
 	}
 }
 
-func (c *daemonTaskClient) ready() error {
+func (c *daemonTaskClient) readyBaseURL() error {
 	if c == nil || strings.TrimSpace(c.baseURL) == "" {
 		return fmt.Errorf("daemon server url is not configured")
+	}
+	return nil
+}
+
+func (c *daemonTaskClient) ready() error {
+	if err := c.readyBaseURL(); err != nil {
+		return err
 	}
 	if strings.TrimSpace(c.authToken) == "" {
 		return fmt.Errorf("daemon server auth token is not configured")
 	}
 	return nil
+}
+
+func (c *daemonTaskClient) HealthMode(ctx context.Context) (string, error) {
+	if err := c.readyBaseURL(); err != nil {
+		return "", err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/health", nil)
+	if err != nil {
+		return "", err
+	}
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("daemon health http %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))
+	}
+
+	var out struct {
+		Mode string `json:"mode"`
+	}
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return "", fmt.Errorf("invalid daemon health response: %w", err)
+	}
+	return strings.ToLower(strings.TrimSpace(out.Mode)), nil
 }
 
 func (c *daemonTaskClient) List(ctx context.Context, status daemoncmd.TaskStatus, limit int) ([]daemoncmd.TaskInfo, error) {

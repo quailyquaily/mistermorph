@@ -241,9 +241,35 @@ a {
 
 .stat-list {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fill, 210px);
+  justify-content: flex-start;
   gap: 8px;
   margin: 12px 0;
+}
+
+.stat-groups {
+  display: grid;
+  gap: 12px;
+  margin: 12px 0;
+}
+
+.stat-group {
+  display: grid;
+  gap: 0;
+}
+
+.stat-group-title {
+  margin: 0;
+  font-family: var(--font-mono);
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.stat-group .stat-list {
+  margin: 8px 0 0;
 }
 
 .stat-item {
@@ -265,6 +291,34 @@ a {
 .stat-value {
   color: var(--text-1);
   font-size: 13px;
+}
+
+.channel-runtime-list {
+  display: grid;
+  gap: 6px;
+}
+
+.channel-runtime-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 20px;
+}
+
+.channel-runtime-item.is-disabled {
+  opacity: 0.68;
+}
+
+.channel-runtime-dot {
+  width: 14px;
+  display: inline-flex;
+  justify-content: center;
+}
+
+.channel-runtime-label {
+  font-family: var(--font-mono);
+  color: var(--text-1);
+  font-size: 12px;
 }
 
 .check-list {
@@ -412,6 +466,10 @@ pre {
 
   .content {
     padding: 10px;
+  }
+
+  .stat-list {
+    grid-template-columns: 1fr;
   }
 
   .session-inline {
