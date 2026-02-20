@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/quailyquaily/mistermorph/agent"
@@ -121,6 +122,21 @@ func promptSpecForTelegram(d Dependencies, ctx context.Context, logger *slog.Log
 
 func formatFinalOutput(final *agent.Final) string {
 	return outputfmt.FormatFinalOutput(final)
+}
+
+func formatRuntimeError(err error) string {
+	s := strings.TrimSpace(outputfmt.FormatErrorForDisplay(err))
+	if s != "" {
+		return s
+	}
+	if err == nil {
+		return "unknown error"
+	}
+	raw := strings.TrimSpace(err.Error())
+	if raw == "" {
+		return "unknown error"
+	}
+	return raw
 }
 
 func shouldPublishTelegramText(final *agent.Final) bool {

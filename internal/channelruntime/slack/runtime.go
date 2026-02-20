@@ -295,6 +295,7 @@ func runSlackLoop(ctx context.Context, d Dependencies, opts runtimeLoopOptions) 
 					if workerCtx.Err() != nil {
 						return
 					}
+					displayErr := formatRuntimeError(runErr)
 					if daemonStore != nil && strings.TrimSpace(job.TaskID) != "" {
 						finishedAt := time.Now().UTC()
 						failedStatus := daemonruntime.TaskFailed
@@ -303,7 +304,7 @@ func runSlackLoop(ctx context.Context, d Dependencies, opts runtimeLoopOptions) 
 						}
 						daemonStore.Update(job.TaskID, func(info *daemonruntime.TaskInfo) {
 							info.Status = failedStatus
-							info.Error = strings.TrimSpace(runErr.Error())
+							info.Error = displayErr
 							info.FinishedAt = &finishedAt
 						})
 					}
@@ -315,7 +316,7 @@ func runSlackLoop(ctx context.Context, d Dependencies, opts runtimeLoopOptions) 
 						MessageTS:       job.MessageTS,
 						Err:             runErr,
 					})
-					errorText := "error: " + runErr.Error()
+					errorText := "error: " + displayErr
 					errorCorrelationID := fmt.Sprintf("slack:error:%s:%s", job.ChannelID, job.MessageTS)
 					_, err := publishSlackBusOutbound(
 						workerCtx,

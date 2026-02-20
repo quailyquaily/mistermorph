@@ -937,11 +937,17 @@ func readAuditLogChunk(filePath string, before int64, maxBytes int64) (auditLogC
 		Path:  strings.TrimSpace(filePath),
 		Lines: []string{},
 	}
-	fi, err := os.Stat(filePath)
+	fd, err := os.Open(filePath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return chunk, nil
 		}
+		return chunk, err
+	}
+	defer fd.Close()
+
+	fi, err := fd.Stat()
+	if err != nil {
 		return chunk, err
 	}
 	if fi.IsDir() {
@@ -968,12 +974,6 @@ func readAuditLogChunk(filePath string, before int64, maxBytes int64) (auditLogC
 		chunk.HasOlder = before > 0
 		return chunk, nil
 	}
-
-	fd, err := os.Open(filePath)
-	if err != nil {
-		return chunk, err
-	}
-	defer fd.Close()
 
 	buf := make([]byte, windowBytes)
 	n, err := fd.ReadAt(buf, start)
@@ -1120,9 +1120,20 @@ func diagnoseFileReadable(id, p string) map[string]any {
 }
 
 func writeJSON(w http.ResponseWriter, status int, body any) {
-	w.Header().Set("Content-Type", "application/json")
+	setNoCacheHeaders(w.Header())
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(body)
+}
+
+func setNoCacheHeaders(h http.Header) {
+	if h == nil {
+		return
+	}
+	h.Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+	h.Set("Pragma", "no-cache")
+	h.Set("Expires", "0")
+	h.Set("Vary", "Authorization")
 }
 
 func writeError(w http.ResponseWriter, status int, msg string) {

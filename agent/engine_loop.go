@@ -503,9 +503,10 @@ func (e *Engine) executeToolWithGuard(ctx context.Context, st *engineLoopState, 
 	// Guard post-tool redaction (runs even when toolErr != nil).
 	if e.guard != nil && e.guard.Enabled() {
 		gr, _ := e.guard.Evaluate(ctx, guard.Meta{RunID: st.runID, Step: step, Time: time.Now().UTC()}, guard.Action{
-			Type:     guard.ActionToolCallPost,
-			ToolName: tc.Name,
-			Content:  observation,
+			Type:       guard.ActionToolCallPost,
+			ToolName:   tc.Name,
+			ToolParams: tc.Params,
+			Content:    observation,
 		})
 		switch gr.Decision {
 		case guard.DecisionAllowWithRedact:

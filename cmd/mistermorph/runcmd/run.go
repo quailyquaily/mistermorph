@@ -20,6 +20,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/llminspect"
 	"github.com/quailyquaily/mistermorph/internal/llmutil"
 	"github.com/quailyquaily/mistermorph/internal/logutil"
+	"github.com/quailyquaily/mistermorph/internal/outputfmt"
 	"github.com/quailyquaily/mistermorph/internal/promptprofile"
 	"github.com/quailyquaily/mistermorph/internal/skillsutil"
 	"github.com/quailyquaily/mistermorph/internal/statepaths"
@@ -203,7 +204,11 @@ func New(deps Dependencies) *cobra.Command {
 				if errors.Is(err, errAbortedByUser) {
 					return nil
 				}
-				return err
+				displayErr := strings.TrimSpace(outputfmt.FormatErrorForDisplay(err))
+				if displayErr == "" {
+					displayErr = strings.TrimSpace(err.Error())
+				}
+				return fmt.Errorf("%s", displayErr)
 			}
 
 			logger.Info("run_done",

@@ -286,7 +286,7 @@ func (g *Guard) emitAudit(ctx context.Context, meta Meta, a Action, res Result, 
 		meta.Time = time.Now().UTC()
 	}
 
-	sum := summarizeActionRedacted(a)
+	sum := g.summarizeActionRedacted(a)
 	hash, _ := ActionHash(a)
 	ev := AuditEvent{
 		EventID:               newEventID(meta),
@@ -331,23 +331,53 @@ func (g *Guard) emitApprovalResolutionAudit(ctx context.Context, rec ApprovalRec
 	_ = g.audit.Emit(ctx, ev)
 }
 
-func summarizeActionRedacted(a Action) string {
+func (g *Guard) summarizeActionRedacted(a Action) string {
 	switch a.Type {
 	case ActionToolCallPre, ActionToolCallPost:
 		if strings.TrimSpace(a.ToolName) == "" {
 			return string(a.Type)
 		}
-		if strings.EqualFold(a.ToolName, "url_fetch") {
-			raw := ""
-			if a.ToolParams != nil {
-				if v, ok := a.ToolParams["url"].(string); ok {
-					raw = strings.TrimSpace(v)
-				}
+		toolName := strings.TrimSpace(strings.ToLower(a.ToolName))
+		switch toolName {
+		case "read_file":
+			rawPath := toolParamString(a.ToolParams, "path")
+			if rawPath == "" {
+				return string(a.Type) + " tool=read_file"
 			}
-			if raw == "" {
-				raw = strings.TrimSpace(a.URL)
+			return fmt.Sprintf("%s tool=read_file path=%q", string(a.Type), g.redactAuditValue(rawPath, 280))
+		case "web_search":
+			rawQuery := toolParamString(a.ToolParams, "q", "query")
+			if rawQuery == "" {
+				return string(a.Type) + " tool=web_search"
 			}
-			return string(a.Type) + " tool=url_fetch url=" + redactURLQuery(raw)
+			return fmt.Sprintf("%s tool=web_search q=%q", string(a.Type), g.redactAuditValue(rawQuery, 280))
+		case "url_fetch":
+			rawURL := toolParamString(a.ToolParams, "url")
+			if rawURL == "" {
+				rawURL = strings.TrimSpace(a.URL)
+			}
+			method := strings.ToUpper(toolParamString(a.ToolParams, "method"))
+			if method == "" {
+				method = strings.ToUpper(strings.TrimSpace(a.Method))
+			}
+			var b strings.Builder
+			b.WriteString(string(a.Type))
+			b.WriteString(" tool=url_fetch")
+			if method != "" {
+				b.WriteString(" method=")
+				b.WriteString(method)
+			}
+			if rawURL != "" {
+				b.WriteString(" url=")
+				b.WriteString(clipAuditValue(redactURLQuery(rawURL), 420))
+			}
+			return b.String()
+		case "bash":
+			rawCmd := toolParamString(a.ToolParams, "cmd")
+			if rawCmd == "" {
+				return string(a.Type) + " tool=bash"
+			}
+			return fmt.Sprintf("%s tool=bash cmd=%q", string(a.Type), g.redactAuditValue(rawCmd, 320))
 		}
 		return string(a.Type) + " tool=" + strings.TrimSpace(a.ToolName)
 	case ActionOutputPublish:
@@ -355,6 +385,62 @@ func summarizeActionRedacted(a Action) string {
 	default:
 		return string(a.Type)
 	}
+}
+
+func (g *Guard) redactAuditValue(raw string, maxLen int) string {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return ""
+	}
+	value = strings.Join(strings.Fields(value), " ")
+	if g != nil && g.redactor != nil {
+		if red, changed := g.redactor.RedactString(value); changed {
+			value = red
+		}
+	}
+	return clipAuditValue(value, maxLen)
+}
+
+func clipAuditValue(value string, maxLen int) string {
+	value = strings.TrimSpace(value)
+	if maxLen <= 0 || len(value) <= maxLen {
+		return value
+	}
+	return strings.TrimSpace(value[:maxLen]) + "..."
+}
+
+func toolParamString(params map[string]any, keys ...string) string {
+	if len(params) == 0 {
+		return ""
+	}
+	for _, key := range keys {
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		v, ok := params[key]
+		if !ok || v == nil {
+			continue
+		}
+		switch x := v.(type) {
+		case string:
+			s := strings.TrimSpace(x)
+			if s != "" {
+				return s
+			}
+		case fmt.Stringer:
+			s := strings.TrimSpace(x.String())
+			if s != "" {
+				return s
+			}
+		default:
+			s := strings.TrimSpace(fmt.Sprintf("%v", x))
+			if s != "" && s != "<nil>" {
+				return s
+			}
+		}
+	}
+	return ""
 }
 
 func redactURLQuery(raw string) string {

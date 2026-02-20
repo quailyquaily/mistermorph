@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/subtle"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -176,6 +177,10 @@ func NewServeCmd(deps ServeDependencies) *cobra.Command {
 					}
 
 					finished := time.Now()
+					displayErr := strings.TrimSpace(outputfmt.FormatErrorForDisplay(runErr))
+					if displayErr == "" && runErr != nil {
+						displayErr = strings.TrimSpace(runErr.Error())
+					}
 					store.Update(id, func(info *TaskInfo) {
 						info.FinishedAt = &finished
 						if runErr != nil {
@@ -184,7 +189,7 @@ func NewServeCmd(deps ServeDependencies) *cobra.Command {
 							} else {
 								info.Status = TaskFailed
 							}
-							info.Error = runErr.Error()
+							info.Error = displayErr
 							return
 						}
 						info.Status = TaskDone
@@ -196,11 +201,11 @@ func NewServeCmd(deps ServeDependencies) *cobra.Command {
 					})
 					if qt.isHeartbeat && qt.heartbeatState != nil {
 						if runErr != nil {
-							alert, msg := qt.heartbeatState.EndFailure(runErr)
+							alert, msg := qt.heartbeatState.EndFailure(errors.New(displayErr))
 							if alert {
 								logger.Warn("heartbeat_alert", "message", msg)
 							} else {
-								logger.Warn("heartbeat_error", "error", runErr.Error())
+								logger.Warn("heartbeat_error", "error", displayErr)
 							}
 						} else {
 							qt.heartbeatState.EndSuccess(finished)

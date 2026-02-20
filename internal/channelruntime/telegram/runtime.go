@@ -633,6 +633,7 @@ func runTelegramLoop(ctx context.Context, d Dependencies, opts runtimeLoopOption
 					if workerCtx.Err() != nil {
 						return
 					}
+					displayErr := formatRuntimeError(runErr)
 					if !job.IsHeartbeat && daemonStore != nil && strings.TrimSpace(job.TaskID) != "" {
 						finishedAt := time.Now().UTC()
 						failedStatus := daemonruntime.TaskFailed
@@ -641,7 +642,7 @@ func runTelegramLoop(ctx context.Context, d Dependencies, opts runtimeLoopOption
 						}
 						daemonStore.Update(job.TaskID, func(rec *daemonruntime.TaskInfo) {
 							rec.Status = failedStatus
-							rec.Error = strings.TrimSpace(runErr.Error())
+							rec.Error = displayErr
 							rec.FinishedAt = &finishedAt
 						})
 					}
@@ -652,7 +653,7 @@ func runTelegramLoop(ctx context.Context, d Dependencies, opts runtimeLoopOption
 						Err:       runErr,
 					})
 					if job.IsHeartbeat {
-						alert, msg := heartbeatState.EndFailure(runErr)
+						alert, msg := heartbeatState.EndFailure(errors.New(displayErr))
 						if alert {
 							logger.Warn("heartbeat_alert", "source", "telegram", "chat_id", chatID, "message", msg)
 							mu.Lock()
@@ -661,12 +662,12 @@ func runTelegramLoop(ctx context.Context, d Dependencies, opts runtimeLoopOption
 							history[chatID] = trimChatHistoryItems(cur, telegramHistoryCap)
 							mu.Unlock()
 						} else {
-							logger.Warn("heartbeat_error", "source", "telegram", "chat_id", chatID, "error", runErr.Error())
+							logger.Warn("heartbeat_error", "source", "telegram", "chat_id", chatID, "error", displayErr)
 						}
 						return
 					}
 					errorCorrelationID := fmt.Sprintf("telegram:error:%d:%d", chatID, job.MessageID)
-					if _, err := publishTelegramBusOutbound(workerCtx, inprocBus, chatID, "error: "+runErr.Error(), "", errorCorrelationID); err != nil {
+					if _, err := publishTelegramBusOutbound(workerCtx, inprocBus, chatID, "error: "+displayErr, "", errorCorrelationID); err != nil {
 						logger.Warn("telegram_bus_publish_error", "channel", busruntime.ChannelTelegram, "chat_id", chatID, "bus_error_code", busErrorCodeString(err), "error", err.Error())
 						callErrorHook(workerCtx, logger, hooks, ErrorEvent{
 							Stage:     ErrorStagePublishErrorReply,

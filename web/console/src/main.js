@@ -471,6 +471,7 @@ async function apiFetch(pathname, options = {}) {
     method,
     headers,
     body,
+    cache: "no-store",
   });
   const raw = await resp.text();
   const parsed = raw ? safeJSON(raw, { error: raw }) : {};
@@ -967,7 +968,9 @@ const AuditView = {
     });
     const canGoNewer = computed(() => newerStack.value.length > 0);
     const auditItems = computed(() => {
-      return lines.value.map((line, idx) => parseAuditLine(line, idx));
+      return lines.value
+        .map((line, idx) => parseAuditLine(line, idx))
+        .reverse();
     });
 
     function normalizeAuditText(value, fallback = "-") {
