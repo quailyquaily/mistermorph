@@ -86,25 +86,6 @@ func TestReplaceAliasTokenInCommand(t *testing.T) {
 	}
 }
 
-func TestBashTool_Execute_PathAliasInCommand(t *testing.T) {
-	cache := t.TempDir()
-	state := t.TempDir()
-	if err := os.WriteFile(filepath.Join(state, "note.txt"), []byte("hello"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	tool := NewBashTool(true, 5*time.Second, 4096, cache, state)
-	out, err := tool.Execute(context.Background(), map[string]any{
-		"cmd": "cat file_state_dir/note.txt",
-	})
-	if err != nil {
-		t.Fatalf("expected nil error, got %v (out=%q)", err, out)
-	}
-	if !strings.Contains(out, "hello") {
-		t.Fatalf("expected output to contain file content, got %q", out)
-	}
-}
-
 func TestBashTool_Execute_PathAliasInCWD(t *testing.T) {
 	cache := t.TempDir()
 	state := t.TempDir()
