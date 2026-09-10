@@ -80,9 +80,9 @@ const OverviewView = {
       <QFence v-if="err" type="danger" icon="PhXCircle" :text="err" />
 
       <section class="overview-page">
-        <QCard v-if="endpointRows.length" variant="default" class="endpoint-overview-panel">
-          <ul class="endpoint-overview-list">
-            <li v-for="item in endpointRows" :key="item.endpoint_ref">
+        <ul v-if="endpointRows.length" class="endpoint-overview-list">
+          <li v-for="item in endpointRows" :key="item.endpoint_ref">
+            <QCard variant="default" class="endpoint-overview-panel">
               <component
                 :is="item.connected ? 'RouterLink' : 'div'"
                 :to="item.route"
@@ -108,9 +108,9 @@ const OverviewView = {
                   :title="item.statusLabel"
                 ></span>
               </component>
-            </li>
-          </ul>
-        </QCard>
+            </QCard>
+          </li>
+        </ul>
         <p v-else-if="!loading && !err" class="muted overview-empty">{{ t('no_endpoints') }}</p>
       </section>
     </AppPage>
