@@ -31,19 +31,13 @@ const (
 var ErrRequestTooLarge = errors.New("mixin request is too large")
 
 const (
-	MessageCategoryPlainText      = "PLAIN_TEXT"
-	MessageCategoryPlainPost      = "PLAIN_POST"
-	MessageCategoryPlainImage     = "PLAIN_IMAGE"
-	MessageCategoryPlainAudio     = "PLAIN_AUDIO"
-	MessageCategoryPlainData      = "PLAIN_DATA"
-	MessageCategoryPlainVideo     = "PLAIN_VIDEO"
-	MessageCategoryPlainSticker   = "PLAIN_STICKER"
 	MessageCategoryEncryptedText  = "ENCRYPTED_TEXT"
 	MessageCategoryEncryptedPost  = "ENCRYPTED_POST"
 	MessageCategoryEncryptedImage = "ENCRYPTED_IMAGE"
 	MessageCategoryEncryptedAudio = "ENCRYPTED_AUDIO"
 	MessageCategoryEncryptedData  = "ENCRYPTED_DATA"
 	MessageCategoryEncryptedVideo = "ENCRYPTED_VIDEO"
+	MessageCategoryAppCard        = "APP_CARD"
 	MessageCategoryAppButton      = "APP_BUTTON_GROUP"
 	MessageCategorySystem         = "SYSTEM_CONVERSATION"
 )
@@ -54,6 +48,24 @@ type User struct {
 	FullName       string `json:"full_name"`
 	AvatarURL      string `json:"avatar_url"`
 	AppID          string `json:"app_id"`
+}
+
+func (u *User) UnmarshalJSON(data []byte) error {
+	type user User
+	var payload struct {
+		user
+		App *struct {
+			AppID string `json:"app_id"`
+		} `json:"app"`
+	}
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return err
+	}
+	*u = User(payload.user)
+	if payload.App != nil && strings.TrimSpace(payload.App.AppID) != "" {
+		u.AppID = payload.App.AppID
+	}
+	return nil
 }
 
 type ConversationParticipant struct {
@@ -216,14 +228,28 @@ func (c *Client) SendMessages(ctx context.Context, messages []MessageRequest) er
 	if len(messages) > 100 {
 		return fmt.Errorf("mixin message batch exceeds 100 messages")
 	}
-	raw, err := json.Marshal(messages)
+	pending := append([]MessageRequest(nil), messages...)
+	appCards := strings.EqualFold(strings.TrimSpace(pending[0].Category), MessageCategoryAppCard)
+	for index := range pending {
+		pending[index].Category = strings.ToUpper(strings.TrimSpace(pending[index].Category))
+		category := pending[index].Category
+		if category != MessageCategoryAppCard && !isEncryptedMessageCategory(category) {
+			return fmt.Errorf("unsupported mixin message category: %q", category)
+		}
+		if (category == MessageCategoryAppCard) != appCards {
+			return fmt.Errorf("mixin APP_CARD and encrypted messages must use separate batches")
+		}
+	}
+	raw, err := json.Marshal(pending)
 	if err != nil {
 		return fmt.Errorf("marshal mixin message batch: %w", err)
 	}
 	if len(raw) > maxMessageRequestBytes {
 		return fmt.Errorf("%w: %d bytes exceeds %d", ErrRequestTooLarge, len(raw), maxMessageRequestBytes)
 	}
-	pending := append([]MessageRequest(nil), messages...)
+	if appCards {
+		return c.sendMessageRequest(ctx, "/messages", pending, nil)
+	}
 	for sessionAttempt := 0; sessionAttempt < 2; sessionAttempt++ {
 		requests, err := c.buildEncryptedMessageRequests(ctx, pending)
 		if err != nil {

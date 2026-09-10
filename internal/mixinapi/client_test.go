@@ -168,6 +168,37 @@ func TestClientSendMessagesRetriesWithStableBody(t *testing.T) {
 	}
 }
 
+func TestClientRejectsUnsupportedMessagesBeforeRequest(t *testing.T) {
+	var calls atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		http.Error(w, "unexpected request", http.StatusBadRequest)
+	}))
+	defer server.Close()
+	client, err := NewClient(testCredentials(), ClientOptions{BaseURL: server.URL, HTTPClient: server.Client()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, category := range []string{"PLAIN_TEXT", "PLAIN_POST", "PLAIN_IMAGE", "PLAIN_AUDIO", "PLAIN_DATA", "PLAIN_VIDEO", "PLAIN_STICKER", "", MessageCategorySystem} {
+		t.Run(category, func(t *testing.T) {
+			message := MessageRequest{
+				ConversationID: "8f7059b9-b1b2-4ed8-a99f-4ac2f07a9a34",
+				RecipientID:    "11111111-1111-4111-8111-111111111111",
+				MessageID:      "a4ec1e53-f147-439a-82cd-2e5e4a95a152",
+				Category:       MessageCategoryEncryptedText, DataBase64: "SGVsbG8",
+			}
+			invalid := message
+			invalid.Category = category
+			if err := client.SendMessages(context.Background(), []MessageRequest{message, invalid}); err == nil {
+				t.Fatal("SendMessages() accepted unsupported category")
+			}
+			if calls.Load() != 0 {
+				t.Fatalf("HTTP calls = %d, want 0", calls.Load())
+			}
+		})
+	}
+}
+
 func TestClientRejectsOversizedMessageBatchBeforeRequest(t *testing.T) {
 	var called atomic.Bool
 	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {

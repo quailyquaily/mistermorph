@@ -1013,7 +1013,7 @@ func (s *RoutingSender) sendMixinTarget(ctx context.Context, target mixinbus.Del
 		ConversationID: target.ConversationID,
 		RecipientID:    strings.TrimSpace(target.RecipientID),
 		MessageID:      messageID.String(),
-		Category:       mixinapi.MessageCategoryPlainText,
+		Category:       mixinapi.MessageCategoryEncryptedText,
 		DataBase64:     base64.RawURLEncoding.EncodeToString([]byte(strings.TrimSpace(text))),
 		QuoteMessageID: quoteMessageID,
 	}

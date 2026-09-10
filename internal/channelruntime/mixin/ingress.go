@@ -92,7 +92,7 @@ func (i *mixinIngress) Normalize(ctx context.Context, message mixinapi.MessageVi
 		}
 		return mixinbus.InboundMessage{}, false, nil
 	}
-	message.Category = mixinapi.PlainMessageCategory(message.Category)
+	message.Category = strings.ToUpper(strings.TrimSpace(message.Category))
 	text, supported, err := decodeMixinText(message.Category, message.DataBase64)
 	if err != nil {
 		return mixinbus.InboundMessage{}, false, err
@@ -101,6 +101,10 @@ func (i *mixinIngress) Normalize(ctx context.Context, message mixinapi.MessageVi
 	if !supported {
 		payload, attachmentSupported, attachmentErr := decodeMixinAttachment(message.Category, message.DataBase64)
 		if attachmentErr != nil || !attachmentSupported {
+			if attachmentErr == nil && i.logger != nil {
+				i.logger.Warn("mixin_message_ignored", "conversation_id", conversationID, "message_id", message.MessageID,
+					"category", message.Category, "reason", "unsupported_category")
+			}
 			return mixinbus.InboundMessage{}, false, attachmentErr
 		}
 		attachmentPayload = &payload
@@ -146,13 +150,13 @@ func (i *mixinIngress) Normalize(ctx context.Context, message mixinapi.MessageVi
 			return mixinbus.InboundMessage{}, false, downloadErr
 		}
 		switch strings.ToUpper(strings.TrimSpace(message.Category)) {
-		case mixinapi.MessageCategoryPlainImage:
+		case mixinapi.MessageCategoryEncryptedImage:
 			inbound.Text = "User sent an image."
 			inbound.ImageAttachments = []busruntime.ImageAttachment{{
 				Path: path, SourceMessageID: strings.TrimSpace(message.MessageID),
 				SourceAttachmentID: attachmentPayload.AttachmentID, MIMEType: mimeType,
 			}}
-		case mixinapi.MessageCategoryPlainAudio:
+		case mixinapi.MessageCategoryEncryptedAudio:
 			inbound.Text = fmt.Sprintf("User sent an audio file: %s\nLocal path: %s", attachmentDisplayName(*attachmentPayload, "audio"), alias)
 		default:
 			inbound.Text = fmt.Sprintf("User sent a file: %s\nLocal path: %s", attachmentDisplayName(*attachmentPayload, "file"), alias)
@@ -170,7 +174,7 @@ func (i *mixinIngress) downloadAttachment(ctx context.Context, message mixinapi.
 		return "", "", "", fmt.Errorf("mixin attachment_id is invalid")
 	}
 	maxBytes := mixinFileMaxBytes
-	if strings.EqualFold(strings.TrimSpace(message.Category), mixinapi.MessageCategoryPlainImage) {
+	if strings.EqualFold(strings.TrimSpace(message.Category), mixinapi.MessageCategoryEncryptedImage) {
 		maxBytes = mixinImageMaxBytes
 	}
 	if payload.Size < 0 || payload.Size > maxBytes {
@@ -183,7 +187,7 @@ func (i *mixinIngress) downloadAttachment(ctx context.Context, message mixinapi.
 	if err != nil {
 		return "", "", "", fmt.Errorf("%w: %v", errMixinAttachmentDownload, err)
 	}
-	name := attachmentDisplayName(payload, strings.ToLower(strings.TrimPrefix(message.Category, "PLAIN_")))
+	name := attachmentDisplayName(payload, strings.ToLower(strings.TrimPrefix(message.Category, "ENCRYPTED_")))
 	filename := "mixin_" + attachmentID.String() + "_" + filecache.SanitizeFilename(name)
 	path := filepath.Join(cacheDir, filename)
 	alias := filepath.ToSlash(filepath.Join("file_cache_dir", string(busruntime.ChannelMixin), filename))

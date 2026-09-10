@@ -115,6 +115,11 @@ func TestBlazeRunAcknowledgesUndecryptableMessageAndContinues(t *testing.T) {
 		goodMessageID  = "b4ec1e53-f147-439a-82cd-2e5e4a95a153"
 	)
 	var handled atomic.Int64
+	plain := base64.RawURLEncoding.EncodeToString([]byte("next"))
+	encrypted, err := encryptMessageData(plain, []Session{encryptedTestSession(t, testCredentials())}, encryptedTestCredentials(0x67).privateKey)
+	if err != nil {
+		t.Fatal(err)
+	}
 	decryptError := make(chan error, 1)
 	done := make(chan struct{})
 	upgrader := websocket.Upgrader{Subprotocols: []string{blazeSubprotocol}}
@@ -157,8 +162,8 @@ func TestBlazeRunAcknowledgesUndecryptableMessageAndContinues(t *testing.T) {
 				ConversationID: conversationID,
 				UserID:         "11111111-1111-4111-8111-111111111111",
 				MessageID:      goodMessageID,
-				Category:       MessageCategoryPlainText,
-				DataBase64:     base64.RawURLEncoding.EncodeToString([]byte("next")),
+				Category:       MessageCategoryEncryptedText,
+				DataBase64:     encrypted,
 			}),
 		}); err != nil {
 			t.Error(err)
@@ -197,6 +202,9 @@ func TestBlazeRunAcknowledgesUndecryptableMessageAndContinues(t *testing.T) {
 			handled.Add(1)
 			if message.MessageID != goodMessageID {
 				t.Errorf("handled message = %#v", message)
+			}
+			if message.Category != MessageCategoryEncryptedText || message.DataBase64 != plain {
+				t.Errorf("decrypted message = %#v", message)
 			}
 			return nil
 		})
@@ -247,7 +255,7 @@ func TestBlazeRunDoesNotAcknowledgeFailedHandler(t *testing.T) {
 		_ = readBlazeEnvelope(conn, &request)
 		_ = writeBlazeEnvelope(conn, BlazeEnvelope{
 			ID: "event", Action: blazeActionCreateMessage,
-			Data: mustJSONRaw(t, MessageView{MessageID: "a4ec1e53-f147-439a-82cd-2e5e4a95a152", Category: MessageCategoryPlainText}),
+			Data: mustJSONRaw(t, MessageView{MessageID: "a4ec1e53-f147-439a-82cd-2e5e4a95a152", Category: MessageCategorySystem}),
 		})
 		_ = conn.SetReadDeadline(time.Now().Add(30 * time.Millisecond))
 		if readBlazeEnvelope(conn, &request) == nil && request.Action == blazeActionAcknowledge {
@@ -296,8 +304,8 @@ func TestBlazeRunHandlesDifferentConversationsWhileOneIsBlocked(t *testing.T) {
 			return
 		}
 		for _, message := range []MessageView{
-			{ConversationID: slowConversation, MessageID: slowMessage, Category: MessageCategoryPlainText},
-			{ConversationID: fastConversation, MessageID: fastMessage, Category: MessageCategoryPlainText},
+			{ConversationID: slowConversation, MessageID: slowMessage, Category: MessageCategorySystem},
+			{ConversationID: fastConversation, MessageID: fastMessage, Category: MessageCategorySystem},
 		} {
 			if err := writeBlazeEnvelope(conn, BlazeEnvelope{ID: message.MessageID, Action: blazeActionCreateMessage, Data: mustJSONRaw(t, message)}); err != nil {
 				return
@@ -385,7 +393,7 @@ func TestBlazeRunReconnectsAfterDisconnect(t *testing.T) {
 		}
 		_ = writeBlazeEnvelope(conn, BlazeEnvelope{
 			ID: "event", Action: blazeActionCreateMessage,
-			Data: mustJSONRaw(t, MessageView{MessageID: "a4ec1e53-f147-439a-82cd-2e5e4a95a152", Category: MessageCategoryPlainText}),
+			Data: mustJSONRaw(t, MessageView{MessageID: "a4ec1e53-f147-439a-82cd-2e5e4a95a152", Category: MessageCategorySystem}),
 		})
 		_ = readBlazeEnvelope(conn, &request)
 	}))
@@ -435,7 +443,7 @@ func TestBlazeRunReconnectsAfterListPendingError(t *testing.T) {
 		}
 		_ = writeBlazeEnvelope(conn, BlazeEnvelope{
 			ID: "event", Action: blazeActionCreateMessage,
-			Data: mustJSONRaw(t, MessageView{MessageID: "a4ec1e53-f147-439a-82cd-2e5e4a95a152", Category: MessageCategoryPlainText}),
+			Data: mustJSONRaw(t, MessageView{MessageID: "a4ec1e53-f147-439a-82cd-2e5e4a95a152", Category: MessageCategorySystem}),
 		})
 		_ = readBlazeEnvelope(conn, &request)
 	}))

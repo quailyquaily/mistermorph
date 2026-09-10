@@ -66,17 +66,26 @@ Bot 使用 `POST /encrypted_messages` 发消息。发送前通过 `POST /session
 
 | Mixin category | 用途 |
 | --- | --- |
-| `ENCRYPTED_TEXT` / `PLAIN_TEXT` | 普通文本；出站使用 encrypted，入站兼容两者 |
-| `ENCRYPTED_POST` / `PLAIN_POST` | Markdown 长文；入站兼容两者 |
-| `ENCRYPTED_IMAGE` / `PLAIN_IMAGE` | 图片；出站使用 encrypted，入站兼容两者 |
-| `ENCRYPTED_AUDIO` / `PLAIN_AUDIO` | 音频；出站使用 encrypted，入站兼容两者 |
-| `ENCRYPTED_DATA` / `PLAIN_DATA` | 文件；出站使用 encrypted，入站兼容两者 |
+| `ENCRYPTED_TEXT` | 普通文本 |
+| `ENCRYPTED_POST` | Markdown 长文 |
+| `ENCRYPTED_IMAGE` | 图片 |
+| `ENCRYPTED_AUDIO` | 音频 |
+| `ENCRYPTED_DATA` | 文件 |
+| `APP_CARD` | 收到普通用户的明文消息时，返回当前 Bot 的资料卡片 |
 | `APP_BUTTON_GROUP` | 按钮组；是否可由 Bot 发送需要真实账号验证 |
 | `SYSTEM_CONVERSATION` | 群成员和会话状态变化 |
 
 图片、音频和文件都先调用 `POST /attachments` 获取 `upload_url` 和 `attachment_id`，上传后再发送消息。接收附件时通过 `GET /attachments/:id` 获取 `view_url`，再下载文件。
 
-公开 Message Category 文档仍写着 Bot 只支持 `PLAIN_`，但官方 Go SDK 和 Mixin Safe 已在 2026-08-25 至 2026-08-27 接入 encrypted message。Morph 以最新官方实现为准，同时保留 `PLAIN_*` 入站兼容。按钮能力仍需真实 Bot smoke test；审批先提供完整的纯文本命令。
+Morph 的文本和附件收发只使用 `ENCRYPTED_*`。入站先解密 payload，保留原 category，不映射为 `PLAIN_*`，也不处理明文正文。
+
+收到 `PLAIN_*` 时，先读取发送者资料：
+
+- 普通用户：在原会话中定向回复一张当前 Bot 的 `APP_CARD`，链接为 `mixin://apps/<app_id>`；不广播给群内其他成员，不进入 Agent。
+- Bot：忽略并 ACK。Bot 身份从用户资料中的 `app.app_id` 判断，也兼容顶层 `app_id`。
+- 资料查询或卡片发送失败：返回错误，不确认该消息；重投时复用卡片 message ID。
+
+`APP_CARD` 通过 `POST /messages` 发送，是明确允许的非加密类型；文本和附件仍走 `POST /encrypted_messages`，不做明文降级。两类消息分别成批发送。`SYSTEM_CONVERSATION` 和协议回执继续处理。按钮能力仍需真实 Bot smoke test；审批先提供完整的纯文本命令。
 
 ### 2.5 提及和引用
 
@@ -322,23 +331,23 @@ Mixin 没有 Telegram 的 `/command@bot_username` 语法。为了避免一个群
 
 ### 8.1 文本
 
-- `ENCRYPTED_TEXT` / `PLAIN_TEXT`：encrypted payload 先解密；trim 后为空则忽略并 ACK，否则作为普通文本。
-- `ENCRYPTED_POST` / `PLAIN_POST`：把解密和解码后的 UTF-8 payload 作为用户文本，不在 Morph 内渲染或转换格式。
+- `ENCRYPTED_TEXT`：payload 先解密；trim 后为空则忽略并 ACK，否则作为普通文本。
+- `ENCRYPTED_POST`：把解密和解码后的 UTF-8 payload 作为用户文本，不在 Morph 内渲染或转换格式。
 - 普通 Agent 回复使用 `ENCRYPTED_TEXT`。不在 encrypted 发送失败时降级为 plain。
 - 单条回复最多使用 64 KiB UTF-8 文本，超过时按段落和 rune 安全分片。只有第一片引用 inbound message。
 - 每个分片使用由 bus idempotency key 和分片序号稳定生成的 UUID，超时重试时复用同一个 message ID。
 
-不把普通回复自动转换为 `PLAIN_POST`。POST 是独立的长文卡片，不是普通聊天气泡的格式化版本。
+不把普通回复自动转换为 `ENCRYPTED_POST`。POST 是独立的长文卡片，不是普通聊天气泡的格式化版本。
 
 ### 8.2 入站附件
 
 | category | 第一版处理 |
 | --- | --- |
-| `ENCRYPTED_IMAGE` / `PLAIN_IMAGE` | 下载原图，校验大小和 MIME，进入现有 multimodal image input |
-| `ENCRYPTED_DATA` / `PLAIN_DATA` | 下载到安全缓存，向 Agent 提供文件名、MIME 和本地路径说明 |
-| `ENCRYPTED_AUDIO` / `PLAIN_AUDIO` | 下载到安全缓存，作为音频文件提供；不新增语音转写服务 |
-| `ENCRYPTED_VIDEO` / `PLAIN_VIDEO` | 只记录类型和基本 metadata，不下载，不触发仅视频消息 |
-| `ENCRYPTED_STICKER` / `PLAIN_STICKER` | 不触发，也不保存 sticker 内容 |
+| `ENCRYPTED_IMAGE` | 下载原图，校验大小和 MIME，进入现有 multimodal image input |
+| `ENCRYPTED_DATA` | 下载到安全缓存，向 Agent 提供文件名、MIME 和本地路径说明 |
+| `ENCRYPTED_AUDIO` | 下载到安全缓存，作为音频文件提供；不新增语音转写服务 |
+| `ENCRYPTED_VIDEO` | 只记录类型和基本 metadata，不下载，不触发仅视频消息 |
+| `ENCRYPTED_STICKER` | 不触发，也不保存 sticker 内容 |
 | contact/location/live/card | 不触发 main run，只做受限日志并 ACK |
 | transfer/snapshot/wallet system | 永不进入 Agent prompt，ACK 后丢弃 |
 
@@ -607,6 +616,7 @@ health check 只读内存状态，不请求 Mixin API。
 - [x] Phase 2：Channel 注册、Bus adapters、私聊、群聊 trigger、commands 和 task runtime。
 - [x] Phase 3：附件、审批、Contacts、主动发送和 Agent 配对。
 - [x] Phase 4：CLI、managed runtime、Console Settings、Integration API 和用户文档。
-- [x] encrypted message 出站、入站解密和 `PLAIN_*` 入站兼容。
+- [x] 文本和附件仅使用 `ENCRYPTED_*`：出站加密、入站解密，无类别映射。
+- [x] 普通用户发送 `PLAIN_*` 时回复当前 Bot 的 `APP_CARD`；Bot 发送的明文继续忽略。
 - [x] 完成定向测试、`go test ./...` 和 `go vet ./...`。
 - [ ] 完成真实 Mixin Bot 的私聊、群聊、附件、审批和断线重连 smoke test。

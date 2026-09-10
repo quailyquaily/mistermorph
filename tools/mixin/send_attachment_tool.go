@@ -139,14 +139,14 @@ func (t *SendAttachmentTool) Execute(ctx context.Context, params map[string]any)
 		"mime_type":     mimeType,
 		"size":          info.Size(),
 	}
-	category := mixinapi.MessageCategoryPlainData
+	category := mixinapi.MessageCategoryEncryptedData
 	switch t.kind {
 	case AttachmentPhoto:
-		category = mixinapi.MessageCategoryPlainImage
+		category = mixinapi.MessageCategoryEncryptedImage
 		payload["width"] = imageWidth
 		payload["height"] = imageHeight
 	case AttachmentAudio:
-		category = mixinapi.MessageCategoryPlainAudio
+		category = mixinapi.MessageCategoryEncryptedAudio
 		payload["waveform"] = ""
 		payload["duration"] = 0
 		payload["created_at"] = time.Now().UTC().Format(time.RFC3339Nano)
@@ -166,7 +166,7 @@ func (t *SendAttachmentTool) Execute(ctx context.Context, params map[string]any)
 	if caption = strings.TrimSpace(caption); caption != "" {
 		captionID := uuid.NewSHA1(messageID, []byte("caption"))
 		messages = append(messages, mixinapi.MessageRequest{
-			ConversationID: conversationID.String(), RecipientID: t.recipientID, MessageID: captionID.String(), Category: mixinapi.MessageCategoryPlainText,
+			ConversationID: conversationID.String(), RecipientID: t.recipientID, MessageID: captionID.String(), Category: mixinapi.MessageCategoryEncryptedText,
 			DataBase64: base64.RawURLEncoding.EncodeToString([]byte(caption)), QuoteMessageID: messageID.String(),
 		})
 	}

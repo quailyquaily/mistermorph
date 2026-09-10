@@ -63,22 +63,6 @@ func (e *EncryptedMessageError) Error() string {
 	return fmt.Sprintf("encrypted mixin messages failed after refreshing sessions: %s", strings.Join(ids, ", "))
 }
 
-func PlainMessageCategory(category string) string {
-	category = strings.ToUpper(strings.TrimSpace(category))
-	if strings.HasPrefix(category, "ENCRYPTED_") {
-		return "PLAIN_" + strings.TrimPrefix(category, "ENCRYPTED_")
-	}
-	return category
-}
-
-func encryptedMessageCategory(category string) string {
-	category = strings.ToUpper(strings.TrimSpace(category))
-	if strings.HasPrefix(category, "PLAIN_") {
-		return "ENCRYPTED_" + strings.TrimPrefix(category, "PLAIN_")
-	}
-	return category
-}
-
 func isEncryptedMessageCategory(category string) bool {
 	return strings.HasPrefix(strings.ToUpper(strings.TrimSpace(category)), "ENCRYPTED_")
 }
@@ -333,7 +317,6 @@ func (c *Client) buildEncryptedMessageRequests(ctx context.Context, messages []M
 		if err != nil {
 			return nil, err
 		}
-		message.Category = encryptedMessageCategory(message.Category)
 		request := encryptedMessageRequest{MessageRequest: message, Checksum: sessionChecksum(sessions)}
 		for _, session := range sessions {
 			request.RecipientSessions = append(request.RecipientSessions, recipientSession{SessionID: session.SessionID})

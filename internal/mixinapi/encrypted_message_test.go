@@ -100,7 +100,7 @@ func TestClientSendMessagesEncryptsAndCachesRecipientSessions(t *testing.T) {
 			ConversationID: "8f7059b9-b1b2-4ed8-a99f-4ac2f07a9a34",
 			RecipientID:    recipient.ClientID,
 			MessageID:      messageID,
-			Category:       MessageCategoryPlainText,
+			Category:       MessageCategoryEncryptedText,
 			DataBase64:     base64.RawURLEncoding.EncodeToString([]byte("hello")),
 		}})
 		if err != nil {
@@ -159,7 +159,7 @@ func TestClientSendMessagesRefreshesRejectedSessions(t *testing.T) {
 		ConversationID: "8f7059b9-b1b2-4ed8-a99f-4ac2f07a9a34",
 		RecipientID:    oldRecipient.ClientID,
 		MessageID:      "10000000-0000-4000-8000-000000000003",
-		Category:       MessageCategoryPlainText,
+		Category:       MessageCategoryEncryptedText,
 		DataBase64:     base64.RawURLEncoding.EncodeToString([]byte("refresh sessions")),
 	}})
 	if err != nil {
@@ -182,12 +182,16 @@ func TestBlazeClientDecryptsEncryptedMessage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	message := MessageView{Category: MessageCategoryEncryptedText, DataBase64: encrypted}
-	if err := client.decryptMessage(&message); err != nil {
-		t.Fatalf("decryptMessage() error = %v", err)
-	}
-	if message.DataBase64 != plain || message.Category != MessageCategoryEncryptedText {
-		t.Fatalf("message = %#v", message)
+	for _, category := range []string{MessageCategoryEncryptedText, MessageCategoryEncryptedPost, MessageCategoryEncryptedImage, MessageCategoryEncryptedAudio, MessageCategoryEncryptedData, MessageCategoryEncryptedVideo} {
+		t.Run(category, func(t *testing.T) {
+			message := MessageView{Category: category, DataBase64: encrypted}
+			if err := client.decryptMessage(&message); err != nil {
+				t.Fatalf("decryptMessage() error = %v", err)
+			}
+			if message.DataBase64 != plain || message.Category != category {
+				t.Fatalf("message = %#v", message)
+			}
+		})
 	}
 }
 

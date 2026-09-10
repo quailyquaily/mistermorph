@@ -29,6 +29,7 @@ type fakeMixinAPI struct {
 	readConversationCalls int
 	readAttachmentCalls   int
 	sent                  []mixinapi.MessageRequest
+	sendError             error
 	attachments           map[string]mixinapi.Attachment
 	attachmentBody        []byte
 	attachmentContentType string
@@ -53,7 +54,7 @@ func (f *fakeMixinAPI) ReadConversation(_ context.Context, id string) (mixinapi.
 }
 func (f *fakeMixinAPI) SendMessages(_ context.Context, messages []mixinapi.MessageRequest) error {
 	f.sent = append(f.sent, messages...)
-	return nil
+	return f.sendError
 }
 func (f *fakeMixinAPI) ReadAttachment(_ context.Context, id string) (mixinapi.Attachment, error) {
 	f.readAttachmentCalls++
@@ -76,7 +77,7 @@ func TestMixinIngressAuthorizesBeforeDownloadingAttachment(t *testing.T) {
 
 	_, publish, err := ingress.Normalize(context.Background(), mixinapi.MessageView{
 		ConversationID: testConversationID, UserID: testUserID,
-		MessageID: "55555555-5555-5555-5555-555555555555", Category: mixinapi.MessageCategoryPlainData,
+		MessageID: "55555555-5555-5555-5555-555555555555", Category: mixinapi.MessageCategoryEncryptedData,
 		DataBase64: base64.RawURLEncoding.EncodeToString(payload),
 	})
 	if err != nil || publish {
@@ -99,7 +100,7 @@ func TestMixinIngressRetriesUserProfileAfterTransientFailure(t *testing.T) {
 	ingress := newMixinIngress(api, api.users[testBotID], "", nil)
 	message := mixinapi.MessageView{
 		ConversationID: testConversationID, UserID: testUserID,
-		MessageID: "55555555-5555-5555-5555-555555555555", Category: mixinapi.MessageCategoryPlainText,
+		MessageID: "55555555-5555-5555-5555-555555555555", Category: mixinapi.MessageCategoryEncryptedText,
 		DataBase64: base64.RawURLEncoding.EncodeToString([]byte("hello")),
 	}
 	first, publish, err := ingress.Normalize(context.Background(), message)
@@ -124,7 +125,7 @@ func TestMixinIngressRetriesTransientAttachmentFailureButNotMissingAttachment(t 
 	payload, _ := json.Marshal(mixinAttachmentPayload{AttachmentID: "44444444-4444-4444-4444-444444444444", Name: "report.txt"})
 	message := mixinapi.MessageView{
 		ConversationID: testConversationID, UserID: testUserID, MessageID: "55555555-5555-5555-5555-555555555555",
-		Category: mixinapi.MessageCategoryPlainData, DataBase64: base64.RawURLEncoding.EncodeToString(payload),
+		Category: mixinapi.MessageCategoryEncryptedData, DataBase64: base64.RawURLEncoding.EncodeToString(payload),
 	}
 	base.attachmentError = errors.New("temporary network error")
 	_, _, err := newMixinIngress(base, base.users[testBotID], t.TempDir(), nil).Normalize(context.Background(), message)
@@ -169,6 +170,39 @@ func TestSendMixinTextSplitsWithStableIDs(t *testing.T) {
 	if api.sent[0].RecipientID != testUserID {
 		t.Fatalf("recipient_id = %q", api.sent[0].RecipientID)
 	}
+	if api.sent[0].Category != mixinapi.MessageCategoryEncryptedText {
+		t.Fatalf("category = %q", api.sent[0].Category)
+	}
+}
+
+func TestSendMixinDirectTextUsesEncryptedCategory(t *testing.T) {
+	api := &fakeMixinAPI{}
+	if err := sendMixinDirectText(context.Background(), api, testConversationID, testUserID, "hello", ""); err != nil {
+		t.Fatal(err)
+	}
+	if len(api.sent) != 1 || api.sent[0].Category != mixinapi.MessageCategoryEncryptedText {
+		t.Fatalf("sent = %#v", api.sent)
+	}
+}
+
+func TestMixinIngressIgnoresPlainMessages(t *testing.T) {
+	for _, category := range []string{"PLAIN_TEXT", "PLAIN_POST", "PLAIN_IMAGE", "PLAIN_AUDIO", "PLAIN_DATA", "PLAIN_VIDEO", "PLAIN_STICKER"} {
+		t.Run(category, func(t *testing.T) {
+			api := &fakeMixinAPI{}
+			ingress := newMixinIngress(api, mixinapi.User{UserID: testBotID}, "", nil)
+			_, publish, err := ingress.Normalize(context.Background(), mixinapi.MessageView{
+				ConversationID: testConversationID, UserID: testUserID,
+				MessageID: "55555555-5555-5555-5555-555555555555", Category: category,
+				DataBase64: base64.RawURLEncoding.EncodeToString([]byte("hello")),
+			})
+			if err != nil || publish {
+				t.Fatalf("Normalize() publish=%v err=%v", publish, err)
+			}
+			if api.readUserCalls != 0 || api.readConversationCalls != 0 || api.readAttachmentCalls != 0 {
+				t.Fatalf("ignored message made API calls: %#v", api)
+			}
+		})
+	}
 }
 
 func TestMixinIngressNormalizesAndCachesProfiles(t *testing.T) {
@@ -184,7 +218,7 @@ func TestMixinIngressNormalizesAndCachesProfiles(t *testing.T) {
 		},
 	}
 	ingress := newMixinIngress(api, api.users[testBotID], "", nil)
-	categories := []string{mixinapi.MessageCategoryEncryptedText, mixinapi.MessageCategoryPlainText}
+	categories := []string{mixinapi.MessageCategoryEncryptedText, mixinapi.MessageCategoryEncryptedPost}
 	for index, messageID := range []string{"44444444-4444-4444-4444-444444444444", "55555555-5555-5555-5555-555555555555"} {
 		inbound, publish, err := ingress.Normalize(context.Background(), mixinapi.MessageView{
 			ConversationID: testConversationID,
@@ -230,7 +264,7 @@ func TestMixinIngressRefreshesExpiredUserProfile(t *testing.T) {
 			ConversationID: testConversationID,
 			UserID:         testUserID,
 			MessageID:      messageID,
-			Category:       mixinapi.MessageCategoryPlainText,
+			Category:       mixinapi.MessageCategoryEncryptedText,
 			DataBase64:     base64.RawURLEncoding.EncodeToString([]byte("@7000 hello")),
 		})
 		if err != nil || !publish {
@@ -276,7 +310,7 @@ func TestMixinIngressDownloadsImageBeforePublishing(t *testing.T) {
 		ConversationID: testConversationID,
 		UserID:         testUserID,
 		MessageID:      "55555555-5555-5555-5555-555555555555",
-		Category:       mixinapi.MessageCategoryPlainImage,
+		Category:       mixinapi.MessageCategoryEncryptedImage,
 		DataBase64:     base64.RawURLEncoding.EncodeToString(payload),
 	})
 	if err != nil || !publish {
@@ -306,7 +340,7 @@ func TestMixinIngressAddsDownloadedFilePathToText(t *testing.T) {
 	ingress := newMixinIngress(api, api.users[testBotID], t.TempDir(), nil)
 	inbound, publish, err := ingress.Normalize(context.Background(), mixinapi.MessageView{
 		ConversationID: testConversationID, UserID: testUserID,
-		MessageID: "55555555-5555-5555-5555-555555555555", Category: mixinapi.MessageCategoryPlainData,
+		MessageID: "55555555-5555-5555-5555-555555555555", Category: mixinapi.MessageCategoryEncryptedData,
 		DataBase64: base64.RawURLEncoding.EncodeToString(payload),
 	})
 	if err != nil || !publish || !strings.Contains(inbound.Text, "report.txt") || !strings.Contains(inbound.Text, "file_cache_dir/") {
@@ -320,8 +354,8 @@ func TestMixinIngressIgnoresOwnAndUnsupportedMessages(t *testing.T) {
 	api := &fakeMixinAPI{users: map[string]mixinapi.User{testBotID: {UserID: testBotID}}, conversations: map[string]mixinapi.Conversation{}}
 	ingress := newMixinIngress(api, api.users[testBotID], "", nil)
 	for _, message := range []mixinapi.MessageView{
-		{ConversationID: testConversationID, UserID: testBotID, MessageID: "44444444-4444-4444-4444-444444444444", Category: mixinapi.MessageCategoryPlainText},
-		{ConversationID: testConversationID, UserID: testUserID, MessageID: "55555555-5555-5555-5555-555555555555", Category: mixinapi.MessageCategoryPlainSticker},
+		{ConversationID: testConversationID, UserID: testBotID, MessageID: "44444444-4444-4444-4444-444444444444", Category: mixinapi.MessageCategoryEncryptedText},
+		{ConversationID: testConversationID, UserID: testUserID, MessageID: "55555555-5555-5555-5555-555555555555", Category: "ENCRYPTED_STICKER"},
 	} {
 		if _, publish, err := ingress.Normalize(context.Background(), message); err != nil || publish {
 			t.Fatalf("Normalize(%s) publish=%v err=%v", message.MessageID, publish, err)
@@ -345,12 +379,12 @@ func TestMixinSystemMessageInvalidatesConversationCache(t *testing.T) {
 		invalidatedConversationID = conversationID
 	}
 	text := base64.RawURLEncoding.EncodeToString([]byte("hello"))
-	_, _, _ = ingress.Normalize(context.Background(), mixinapi.MessageView{ConversationID: testConversationID, UserID: testUserID, MessageID: "44444444-4444-4444-4444-444444444444", Category: mixinapi.MessageCategoryPlainText, DataBase64: text})
+	_, _, _ = ingress.Normalize(context.Background(), mixinapi.MessageView{ConversationID: testConversationID, UserID: testUserID, MessageID: "44444444-4444-4444-4444-444444444444", Category: mixinapi.MessageCategoryEncryptedText, DataBase64: text})
 	_, publish, err := ingress.Normalize(context.Background(), mixinapi.MessageView{ConversationID: testConversationID, UserID: testUserID, MessageID: "55555555-5555-5555-5555-555555555555", Category: mixinapi.MessageCategorySystem})
 	if err != nil || publish {
 		t.Fatalf("system message publish=%v err=%v", publish, err)
 	}
-	_, _, _ = ingress.Normalize(context.Background(), mixinapi.MessageView{ConversationID: testConversationID, UserID: testUserID, MessageID: "66666666-6666-6666-6666-666666666666", Category: mixinapi.MessageCategoryPlainText, DataBase64: text})
+	_, _, _ = ingress.Normalize(context.Background(), mixinapi.MessageView{ConversationID: testConversationID, UserID: testUserID, MessageID: "66666666-6666-6666-6666-666666666666", Category: mixinapi.MessageCategoryEncryptedText, DataBase64: text})
 	if api.readConversationCalls != 2 {
 		t.Fatalf("conversation calls = %d, want 2", api.readConversationCalls)
 	}

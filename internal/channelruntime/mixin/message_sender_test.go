@@ -25,7 +25,7 @@ func TestMixinMessageSenderExpandsAndCachesGroupRecipients(t *testing.T) {
 	request := mixinapi.MessageRequest{
 		ConversationID: testConversationID,
 		MessageID:      "55555555-5555-5555-5555-555555555555",
-		Category:       mixinapi.MessageCategoryPlainText,
+		Category:       mixinapi.MessageCategoryEncryptedText,
 		DataBase64:     base64.RawURLEncoding.EncodeToString([]byte("hello")),
 	}
 

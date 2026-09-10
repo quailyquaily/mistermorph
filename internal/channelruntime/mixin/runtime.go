@@ -527,6 +527,9 @@ func runMixinLoop(ctx context.Context, d Dependencies, opts RunOptions) error {
 
 	logger.Info("mixin_runtime_start", "allowed_conversation_ids", len(opts.AllowedConversationIDs), "task_timeout", opts.TaskTimeout.String(), "max_concurrency", opts.MaxConcurrency)
 	err = blaze.Run(ctx, func(messageCtx context.Context, view mixinapi.MessageView) error {
+		if handled, err := ingress.HandlePlainMessage(messageCtx, view); handled {
+			return err
+		}
 		inbound, publish, normalizeErr := ingress.Normalize(messageCtx, view)
 		if normalizeErr != nil {
 			logger.Warn("mixin_message_unsupported", "conversation_id", view.ConversationID, "message_id", view.MessageID, "category", view.Category, "error", normalizeErr.Error())
@@ -614,7 +617,7 @@ func sendMixinDirectText(ctx context.Context, api mixinAPI, conversationID, reci
 		return fmt.Errorf("mixin conversation and text are required")
 	}
 	return api.SendMessages(ctx, []mixinapi.MessageRequest{{
-		ConversationID: conversationID, RecipientID: strings.TrimSpace(recipientID), MessageID: uuid.NewString(), Category: mixinapi.MessageCategoryPlainText,
+		ConversationID: conversationID, RecipientID: strings.TrimSpace(recipientID), MessageID: uuid.NewString(), Category: mixinapi.MessageCategoryEncryptedText,
 		DataBase64: base64.RawURLEncoding.EncodeToString([]byte(text)), QuoteMessageID: strings.TrimSpace(quoteMessageID),
 	}})
 }
@@ -688,7 +691,7 @@ func sendMixinText(ctx context.Context, api mixinAPI, conversationID, recipientI
 			quote = strings.TrimSpace(opts.QuoteMessageID)
 		}
 		request := mixinapi.MessageRequest{
-			ConversationID: conversationID, RecipientID: strings.TrimSpace(recipientID), MessageID: messageID.String(), Category: mixinapi.MessageCategoryPlainText,
+			ConversationID: conversationID, RecipientID: strings.TrimSpace(recipientID), MessageID: messageID.String(), Category: mixinapi.MessageCategoryEncryptedText,
 			DataBase64: base64.RawURLEncoding.EncodeToString([]byte(part)), QuoteMessageID: quote,
 		}
 		if err := api.SendMessages(ctx, []mixinapi.MessageRequest{request}); err != nil {

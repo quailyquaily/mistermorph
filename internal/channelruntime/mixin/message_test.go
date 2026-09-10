@@ -12,7 +12,7 @@ import (
 func TestDecodeMixinText(t *testing.T) {
 	t.Parallel()
 
-	for _, category := range []string{mixinapi.MessageCategoryPlainText, mixinapi.MessageCategoryPlainPost} {
+	for _, category := range []string{mixinapi.MessageCategoryEncryptedText, mixinapi.MessageCategoryEncryptedPost} {
 		text, supported, err := decodeMixinText(category, base64.RawURLEncoding.EncodeToString([]byte(" hello ")))
 		if err != nil || !supported || text != "hello" {
 			t.Fatalf("decodeMixinText(%s) = %q, %v, %v", category, text, supported, err)
@@ -31,11 +31,11 @@ func TestDecodeMixinAttachmentPayload(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, supported, err := decodeMixinAttachment(mixinapi.MessageCategoryPlainImage, base64.RawURLEncoding.EncodeToString(raw))
+	got, supported, err := decodeMixinAttachment(mixinapi.MessageCategoryEncryptedImage, base64.RawURLEncoding.EncodeToString(raw))
 	if err != nil || !supported || got != payload {
 		t.Fatalf("decodeMixinAttachment() = %#v, %v, %v", got, supported, err)
 	}
-	if _, supported, err := decodeMixinAttachment(mixinapi.MessageCategoryPlainSticker, "ignored"); err != nil || supported {
+	if _, supported, err := decodeMixinAttachment("ENCRYPTED_STICKER", "ignored"); err != nil || supported {
 		t.Fatalf("unsupported attachment = %v, %v", supported, err)
 	}
 }
@@ -58,10 +58,10 @@ func TestSplitMixinTextPreservesUTF8AndContent(t *testing.T) {
 func TestDecodeMixinTextRejectsInvalidAndIgnoresUnsupported(t *testing.T) {
 	t.Parallel()
 
-	if _, supported, err := decodeMixinText(mixinapi.MessageCategoryPlainText, "not-base64!"); err == nil || !supported {
+	if _, supported, err := decodeMixinText(mixinapi.MessageCategoryEncryptedText, "not-base64!"); err == nil || !supported {
 		t.Fatalf("invalid text = supported %v, error %v", supported, err)
 	}
-	if text, supported, err := decodeMixinText(mixinapi.MessageCategoryPlainSticker, "ignored"); err != nil || supported || text != "" {
+	if text, supported, err := decodeMixinText("ENCRYPTED_STICKER", "ignored"); err != nil || supported || text != "" {
 		t.Fatalf("sticker = %q, %v, %v", text, supported, err)
 	}
 }

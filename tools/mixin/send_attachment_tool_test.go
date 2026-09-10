@@ -53,9 +53,9 @@ func TestSendAttachmentToolUploadsAndSendsCategoryPayload(t *testing.T) {
 		wantCategory string
 		wantMIME     string
 	}{
-		{kind: AttachmentFile, filename: "report.txt", content: []byte("report"), wantName: "mixin_send_file", wantCategory: mixinapi.MessageCategoryPlainData, wantMIME: "text/plain"},
-		{kind: AttachmentPhoto, filename: "photo.png", content: imageData.Bytes(), wantName: "mixin_send_photo", wantCategory: mixinapi.MessageCategoryPlainImage, wantMIME: "image/png"},
-		{kind: AttachmentAudio, filename: "voice.ogg", content: []byte("OggS-audio"), wantName: "mixin_send_audio", wantCategory: mixinapi.MessageCategoryPlainAudio, wantMIME: "audio/ogg"},
+		{kind: AttachmentFile, filename: "report.txt", content: []byte("report"), wantName: "mixin_send_file", wantCategory: mixinapi.MessageCategoryEncryptedData, wantMIME: "text/plain"},
+		{kind: AttachmentPhoto, filename: "photo.png", content: imageData.Bytes(), wantName: "mixin_send_photo", wantCategory: mixinapi.MessageCategoryEncryptedImage, wantMIME: "image/png"},
+		{kind: AttachmentAudio, filename: "voice.ogg", content: []byte("OggS-audio"), wantName: "mixin_send_audio", wantCategory: mixinapi.MessageCategoryEncryptedAudio, wantMIME: "audio/ogg"},
 	}
 	for _, tt := range tests {
 		t.Run(string(tt.kind), func(t *testing.T) {
@@ -74,7 +74,7 @@ func TestSendAttachmentToolUploadsAndSendsCategoryPayload(t *testing.T) {
 			if !bytes.Equal(api.uploaded, tt.content) || api.mimeType != tt.wantMIME {
 				t.Fatalf("upload = %q, %q", api.uploaded, api.mimeType)
 			}
-			if len(api.messages) != 2 || api.messages[0].Category != tt.wantCategory || api.messages[1].Category != mixinapi.MessageCategoryPlainText {
+			if len(api.messages) != 2 || api.messages[0].Category != tt.wantCategory || api.messages[1].Category != mixinapi.MessageCategoryEncryptedText {
 				t.Fatalf("messages = %#v", api.messages)
 			}
 			if api.messages[0].RecipientID != "33333333-3333-3333-3333-333333333333" || api.messages[1].RecipientID != "33333333-3333-3333-3333-333333333333" {
