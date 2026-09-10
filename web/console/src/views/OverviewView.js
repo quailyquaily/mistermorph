@@ -82,7 +82,7 @@ const OverviewView = {
       <section class="overview-page">
         <ul v-if="endpointRows.length" class="endpoint-overview-list">
           <li v-for="item in endpointRows" :key="item.endpoint_ref">
-            <QCard variant="default" class="endpoint-overview-panel">
+            <QCard variant="default" class="endpoint-overview-panel" :hoverable="item.connected">
               <component
                 :is="item.connected ? 'RouterLink' : 'div'"
                 :to="item.route"

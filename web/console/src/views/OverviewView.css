@@ -62,13 +62,7 @@ a.endpoint-overview-item:focus-visible {
 }
 
 a.endpoint-overview-item:active {
-  background: var(--surface-muted);
-}
-
-@media (hover: hover) {
-  a.endpoint-overview-item:hover {
-    background: var(--surface-muted);
-  }
+  background: var(--q-button-plain-hover-bg);
 }
 
 .endpoint-overview-avatar-mark {
