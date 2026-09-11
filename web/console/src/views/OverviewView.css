@@ -1,156 +1,330 @@
+.overview-view {
+  --overview-accent: var(--q-button-primary-bg);
+  position: relative;
+}
+
+.overview-view > .page-body {
+  min-height: min-content;
+  padding-block: max(64px, calc(env(safe-area-inset-top) + 56px));
+}
+
+.overview-title {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 .overview-page {
-  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  flex: 1 0 auto;
   width: 100%;
   min-width: 0;
 }
 
-.endpoint-overview-panel.q-card-default {
-  height: 100%;
-  min-height: 0;
-  padding: 0;
+.q-button.overview-address-toggle {
+  --q-c-blue: var(--overview-accent);
+  --q-button-plain-hover-bg: color-mix(in srgb, var(--overview-accent) 10%, transparent);
+  position: absolute;
+  top: max(12px, env(safe-area-inset-top));
+  right: max(var(--content-gutter-x), env(safe-area-inset-right));
+  z-index: 1;
+  min-width: 44px;
+  min-height: 44px;
 }
 
-.endpoint-overview-panel .q-card-body,
-.endpoint-overview-panel .q-card-content {
-  padding: 0;
-  min-width: 0;
+.overview-address-toggle svg {
+  color: var(--overview-accent);
 }
 
-.endpoint-overview-list {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--content-gutter-y);
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-.endpoint-overview-list > li {
-  min-width: 0;
-}
-
-@container (min-width: 640px) {
-  .endpoint-overview-list {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@container (min-width: 1040px) {
-  .endpoint-overview-list {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-
-.endpoint-overview-item {
-  display: grid;
-  grid-template-columns: 40px minmax(0, 1fr) 10px;
-  align-items: center;
-  gap: 14px;
-  min-height: 80px;
-  padding: 18px 20px;
-  color: var(--text-0);
-  text-decoration: none;
-}
-
-a.endpoint-overview-item {
-  cursor: pointer;
-}
-
-a.endpoint-overview-item:focus-visible {
-  outline: 2px solid var(--q-button-primary-border);
-  outline-offset: -3px;
-}
-
-a.endpoint-overview-item:active {
-  background: var(--q-button-plain-hover-bg);
-}
-
-.endpoint-overview-avatar-mark {
+.overview-connection-map {
   position: relative;
-  display: grid;
-  place-items: center;
-  width: 40px;
-  height: 40px;
-  overflow: hidden;
-  border-radius: 50%;
-  background: var(--surface-muted);
+  width: 100%;
+  max-width: 1152px;
 }
 
-.endpoint-overview-avatar {
+.overview-connections {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  overflow: visible;
+  pointer-events: none;
 }
 
-.endpoint-overview-logo {
+.overview-connection {
+  fill: none;
+  stroke: color-mix(in srgb, var(--overview-accent) 30%, var(--bg-0));
+  stroke-width: 1.5px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.overview-connection.is-offline {
+  stroke: var(--text-2);
+  stroke-width: 1px;
+  stroke-dasharray: 3 6;
+}
+
+.overview-connection.is-pending {
+  stroke: color-mix(in srgb, var(--q-c-orange) 65%, var(--bg-0));
+  stroke-dasharray: 2 5;
+}
+
+.overview-connection.is-active {
+  stroke: var(--overview-accent);
+}
+
+.overview-connection-traffic {
+  --connection-period: 3s;
+  fill: var(--overview-accent);
+}
+
+.overview-connection-pulse {
+  animation: overview-connection-pulse var(--connection-period) linear infinite;
+  animation-delay: var(--connection-delay);
+}
+
+.overview-connection-glow {
+  fill: none;
+  stroke: var(--connection-color, var(--overview-accent));
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  /* Center each tapered layer on the same position along the actual curve. */
+  stroke-dasharray: var(--pulse-length) var(--connection-length);
+  animation: overview-connection-flow var(--connection-period) linear infinite;
+  animation-delay: var(--connection-delay);
+}
+
+.overview-connection-arrival {
+  fill: none;
+  stroke: var(--overview-accent);
+  stroke-width: 1px;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: overview-connection-arrival var(--connection-period) cubic-bezier(0.25, 1, 0.5, 1) infinite;
+  animation-delay: var(--connection-delay);
+}
+
+@keyframes overview-connection-pulse {
+  0%, 100% { opacity: 0; }
+  5%, 95% { opacity: 1; }
+}
+
+@keyframes overview-connection-flow {
+  from { stroke-dashoffset: calc(var(--pulse-length) / 2); }
+  to { stroke-dashoffset: calc(var(--pulse-length) / 2 - var(--connection-length)); }
+}
+
+@keyframes overview-connection-arrival {
+  0% { transform: scale(0.96); opacity: 0.5; }
+  28%, 100% { transform: scale(1.16); opacity: 0; }
+}
+
+.endpoint-overview-list {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: stretch;
+  gap: clamp(48px, 7vw, 80px) 24px;
+  width: 100%;
+  list-style: none;
+  padding: 0 24px;
+  margin: 0 auto;
+}
+
+.endpoint-overview-list > li {
+  width: min(10rem, calc((100% - 24px) / 2));
+  min-width: 0;
+}
+
+.endpoint-overview-list > .is-controller {
+  width: 100%;
+}
+
+.endpoint-overview-list > .is-controller .endpoint-overview-item {
+  flex-direction: column-reverse;
+  width: min(12rem, 100%);
+  margin-inline: auto;
+}
+
+.endpoint-overview-list > .is-controller .endpoint-overview-portrait {
+  width: 80px;
+  height: 80px;
+  outline-width: 1px;
+  outline-color: color-mix(in srgb, var(--overview-accent) 30%, var(--bg-0));
+}
+
+.endpoint-overview-list > .is-controller .endpoint-overview-portrait::before {
+  content: "";
+  position: absolute;
+  inset: -9px;
+  border: 1px solid var(--overview-accent);
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.endpoint-overview-list > .is-controller .endpoint-overview-detail {
+  color: var(--overview-accent);
+}
+
+.endpoint-overview-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  height: 100%;
+  padding: 16px 8px;
+  border-radius: 8px;
+  color: var(--text-0);
+  text-align: center;
+  text-decoration: none;
+}
+
+a.endpoint-overview-item:focus-visible {
+  outline: 2px solid var(--overview-accent);
+  outline-offset: 2px;
+}
+
+.endpoint-overview-portrait {
+  position: relative;
+  flex: 0 0 auto;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  outline: 2px solid transparent;
+  outline-offset: 5px;
+}
+
+.endpoint-overview-avatar {
   display: block;
-  width: 26px;
-  height: 26px;
-  color: var(--text-1);
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+  background: var(--bg-2);
 }
 
 .endpoint-overview-identity {
   display: grid;
-  gap: 4px;
+  gap: 6px;
+  width: 100%;
   min-width: 0;
-}
-
-.endpoint-overview-name,
-.endpoint-overview-detail {
-  display: block;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
 }
 
 .endpoint-overview-name {
   font-family: var(--font-ui);
   font-size: var(--font-size-body);
   font-weight: 600;
-  line-height: 1.4;
+  line-height: 1.35;
 }
 
 .endpoint-overview-detail {
-  color: var(--text-2);
+  color: var(--text-1);
   font-size: var(--font-size-meta);
-  line-height: 1.4;
+  line-height: 1.5;
+}
+
+.endpoint-overview-identity .is-private {
+  filter: blur(0);
+  transition: filter 240ms cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.endpoint-overview-identity .is-masked {
+  filter: blur(6px);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .endpoint-overview-identity .is-private {
+    transition: none;
+  }
+
+  .overview-connection-traffic {
+    display: none;
+  }
+
+  .overview-connection-pulse,
+  .overview-connection-glow,
+  .overview-connection-arrival {
+    animation: none;
+  }
 }
 
 .endpoint-overview-status {
-  width: 8px;
-  height: 8px;
+  position: absolute;
+  right: 0;
+  bottom: 2px;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--bg-0);
+}
+
+.endpoint-overview-status::after {
+  content: "";
+  width: 10px;
+  height: 10px;
   border: 1px solid var(--text-2);
   border-radius: 50%;
 }
 
-.endpoint-overview-status.is-online {
-  background: var(--accent-1);
-  border-color: var(--accent-1);
+.endpoint-overview-status.is-online::after {
+  background: var(--overview-accent);
+  border-color: var(--overview-accent);
 }
 
-.endpoint-overview-status.is-pending {
+.endpoint-overview-status.is-pending::after {
   border-color: var(--q-c-orange);
   border-style: dashed;
 }
 
 .endpoint-overview-item.is-offline .endpoint-overview-name {
-  color: var(--text-2);
+  color: var(--text-1);
 }
 
-.endpoint-overview-item.is-offline .endpoint-overview-avatar-mark {
+.endpoint-overview-item.is-offline .endpoint-overview-avatar {
   filter: grayscale(1);
+  opacity: 0.65;
+}
+
+a.endpoint-overview-item:is(:focus-visible, :active) {
+  color: var(--overview-accent);
+}
+
+a.endpoint-overview-item:is(:focus-visible, :active) .endpoint-overview-portrait {
+  outline-color: var(--overview-accent);
+}
+
+a.endpoint-overview-item:active .endpoint-overview-portrait {
+  outline-width: 3px;
+}
+
+@media (hover: hover) {
+  a.endpoint-overview-item:hover {
+    color: var(--overview-accent);
+  }
+
+  a.endpoint-overview-item:hover .endpoint-overview-portrait {
+    outline-color: var(--overview-accent);
+  }
 }
 
 .overview-empty {
-  margin: 0;
-  font-size: var(--font-size-meta);
-}
-
-@media (max-width: 620px) {
-  .endpoint-overview-item {
-    gap: 12px;
-    padding: 16px;
-  }
+  margin: 0 auto;
+  color: var(--text-1);
+  font-size: var(--font-size-body);
+  text-align: center;
 }
