@@ -13,7 +13,7 @@ var (
 	ErrParseFailure    = errors.New("failed to parse agent response from LLM output")
 	ErrInvalidToolCall = errors.New("tool_call JSON responses are not supported")
 	ErrInvalidPlan     = errors.New("plan response missing payload")
-	ErrInvalidFinal    = errors.New("final response missing payload")
+	ErrInvalidFinal    = errors.New("final response missing non-empty output")
 )
 
 func ParseResponse(result llm.Result) (*AgentResponse, error) {
@@ -74,6 +74,7 @@ func unmarshalAndValidate(data []byte) (*AgentResponse, error) {
 		if err := json.Unmarshal(data, &final); err != nil {
 			return nil, err
 		}
+		resp.Final, resp.FinalAnswer = nil, nil
 		if resp.Type == TypeFinalAnswer {
 			resp.FinalAnswer = &final
 		} else {
@@ -105,11 +106,42 @@ func validate(resp *AgentResponse) (*AgentResponse, error) {
 			return nil, ErrInvalidPlan
 		}
 	case TypeFinal, TypeFinalAnswer:
-		if resp.FinalPayload() == nil {
+		final := resp.FinalPayload()
+		if final == nil {
 			return nil, ErrInvalidFinal
+		}
+		if !final.IsLightweight {
+			if final.Output == nil {
+				return nil, ErrInvalidFinal
+			}
+			if output, ok := final.Output.(string); ok {
+				output = strings.TrimSpace(output)
+				var decoded string
+				if json.Unmarshal([]byte(output), &decoded) == nil {
+					output = strings.TrimSpace(decoded)
+				}
+				if output == "" || output == "null" {
+					return nil, ErrInvalidFinal
+				}
+			}
 		}
 	default:
 		return nil, ErrParseFailure
 	}
 	return resp, nil
+}
+
+func validateMainResult(result llm.Result) error {
+	if len(result.ToolCalls) > 0 {
+		return nil
+	}
+	if text := strings.TrimSpace(result.Text); result.JSON == nil && (text == "" || text == "null") {
+		return ErrInvalidFinal
+	}
+	_, err := ParseResponse(result)
+	if errors.Is(err, ErrInvalidFinal) {
+		return err
+	}
+	// Other format errors retain the engine's corrective-prompt retry flow.
+	return nil
 }

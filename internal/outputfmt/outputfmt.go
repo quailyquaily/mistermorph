@@ -18,6 +18,9 @@ func FormatFinalOutput(final *agent.Final) string {
 		return normalizeFinalStringOutput(v)
 	default:
 		b, _ := json.MarshalIndent(v, "", "  ")
+		if string(b) == "null" {
+			return ""
+		}
 		return strings.TrimSpace(string(b))
 	}
 }

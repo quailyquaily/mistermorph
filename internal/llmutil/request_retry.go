@@ -3,6 +3,7 @@ package llmutil
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math/rand/v2"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 const llmRequestRetries = 5
 
 var errStreamConsumer = errors.New("llm stream consumer failed")
+var errInvalidResponse = errors.New("invalid LLM response")
 
 func (c *fallbackClient) chatWithRetry(ctx context.Context, client llm.Client, req llm.Request, profile string) (llm.Result, error) {
 	for attempt := 0; ; attempt++ {
@@ -35,6 +37,11 @@ func (c *fallbackClient) chatWithRetry(ctx context.Context, client llm.Client, r
 		result, err := client.Chat(ctx, attemptReq)
 		if streamErr != nil {
 			return llm.Result{}, errors.Join(errStreamConsumer, streamErr)
+		}
+		if err == nil && req.ValidateResult != nil {
+			if validationErr := req.ValidateResult(result); validationErr != nil {
+				err = fmt.Errorf("%w: %w", errInvalidResponse, validationErr)
+			}
 		}
 		if err == nil {
 			return result, nil

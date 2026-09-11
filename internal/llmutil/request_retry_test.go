@@ -269,3 +269,62 @@ func TestFallbackClientDoesNotRetryStreamConsumerFailure(t *testing.T) {
 		})
 	}
 }
+
+func TestFallbackClientResultValidationSeparatesStreams(t *testing.T) {
+	for _, alreadyDone := range []bool{false, true} {
+		t.Run(fmt.Sprint(alreadyDone), func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				calls := 0
+				var buffer strings.Builder
+				var streams []string
+				client := NewFallbackClient(FallbackClientOptions{Primary: &testLLMClient{chatFn: func(_ context.Context, req llm.Request) (llm.Result, error) {
+					calls++
+					text := "null"
+					if calls == 2 {
+						text = "answer"
+					}
+					if err := req.OnStream(llm.StreamEvent{Delta: text}); err != nil {
+						return llm.Result{}, err
+					}
+					if alreadyDone || calls == 2 {
+						if err := req.OnStream(llm.StreamEvent{Done: true}); err != nil {
+							return llm.Result{}, err
+						}
+					}
+					return llm.Result{Text: text}, nil
+				}}})
+				result, err := client.Chat(context.Background(), llm.Request{
+					ValidateResult: func(result llm.Result) error {
+						if result.Text == "null" {
+							return errors.New("empty answer")
+						}
+						return nil
+					},
+					OnStream: func(event llm.StreamEvent) error {
+						buffer.WriteString(event.Delta)
+						if event.Done {
+							streams = append(streams, buffer.String())
+							buffer.Reset()
+						}
+						return nil
+					},
+				})
+				if err != nil || result.Text != "answer" || calls != 2 || !reflect.DeepEqual(streams, []string{"null", "answer"}) {
+					t.Fatalf("result=%+v err=%v calls=%d streams=%v", result, err, calls, streams)
+				}
+			})
+		})
+	}
+}
+
+func TestFallbackClientDoesNotValidateUnrelatedJSON(t *testing.T) {
+	calls := 0
+	client := NewFallbackClient(FallbackClientOptions{Primary: &testLLMClient{chatFn: func(context.Context, llm.Request) (llm.Result, error) {
+		calls++
+		return llm.Result{Text: `{"title":"topic"}`}, nil
+	}}})
+	result, err := client.Chat(context.Background(), llm.Request{ForceJSON: true, Scene: "console.topic_title"})
+	if err != nil || result.Text != `{"title":"topic"}` || calls != 1 {
+		t.Fatalf("result=%+v err=%v calls=%d", result, err, calls)
+	}
+}

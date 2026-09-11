@@ -135,6 +135,9 @@ func fallbackEligibleReason(err error) (string, bool) {
 	if err == nil || errors.Is(err, context.Canceled) || errors.Is(err, errStreamConsumer) {
 		return "", false
 	}
+	if errors.Is(err, errInvalidResponse) {
+		return "invalid_response", true
+	}
 	if errors.Is(err, context.DeadlineExceeded) {
 		return "timeout", true
 	}

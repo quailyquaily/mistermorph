@@ -2,10 +2,87 @@ package agent
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/quailyquaily/mistermorph/llm"
 )
+
+func TestParseFinalRejectsEmptyOutput(t *testing.T) {
+	for _, responseType := range []string{"final", "final_answer"} {
+		for _, fields := range []string{
+			``, `,"output":null`, `,"output":""`, `,"output":" \n\t"`,
+			`,"output":"null"`, `,"output":" null "`,
+			`,"output":"\"\""`, `,"output":"\"null\""`,
+			`,"final":{"output":"nested answer"}`, `,"reaction":"👍"`,
+		} {
+			t.Run(responseType+fields, func(t *testing.T) {
+				_, err := ParseResponse(llm.Result{Text: fmt.Sprintf(`{"type":%q%s}`, responseType, fields)})
+				if !errors.Is(err, ErrInvalidFinal) {
+					t.Fatalf("ParseResponse() error = %v, want ErrInvalidFinal", err)
+				}
+			})
+		}
+	}
+	_, err := ParseResponse(llm.Result{JSON: map[string]any{"type": "final", "output": nil}})
+	if !errors.Is(err, ErrInvalidFinal) {
+		t.Fatalf("structured result error = %v, want ErrInvalidFinal", err)
+	}
+}
+
+func TestParseFinalPreservesUsableAndLightweightOutput(t *testing.T) {
+	for _, fields := range []string{
+		`"output":"answer"`, `"output":"null means no value"`,
+		`"output":false`, `"output":0`, `"output":[]`, `"output":{}`,
+		`"output":{"value":null}`, `"is_lightweight":true`,
+		`"is_lightweight":true,"output":null,"reaction":"👍"`,
+		`"is_lightweight":true,"output":""`,
+	} {
+		t.Run(fields, func(t *testing.T) {
+			_, err := ParseResponse(llm.Result{Text: `{"type":"final",` + fields + `}`})
+			if err != nil {
+				t.Fatalf("ParseResponse() error = %v", err)
+			}
+		})
+	}
+}
+
+func TestMainRequestResultValidation(t *testing.T) {
+	request := (&Engine{}).mainRequest(&engineLoopState{}, nil)
+	if request.ValidateResult == nil {
+		t.Fatal("main request has no response validator")
+	}
+	for _, tc := range []struct {
+		name    string
+		result  llm.Result
+		invalid bool
+	}{
+		{"empty", llm.Result{}, true},
+		{"raw null", llm.Result{Text: " null "}, true},
+		{"null final", llm.Result{Text: `{"type":"final","output":null}`}, true},
+		{"blank final", llm.Result{Text: `{"type":"final","output":" "}`}, true},
+		{"tools", llm.Result{ToolCalls: []llm.ToolCall{{Name: "read_file"}}}, false},
+		{"tools with empty final text", llm.Result{Text: `{"type":"final"}`, ToolCalls: []llm.ToolCall{{Name: "read_file"}}}, false},
+		{"plan", llm.Result{Text: `{"type":"plan","steps":[{"step":"read"}]}`}, false},
+		{"lightweight", llm.Result{Text: `{"type":"final","is_lightweight":true}`}, false},
+		{"structured output", llm.Result{JSON: map[string]any{"type": "final", "output": false}}, false},
+		{"format retry", llm.Result{Text: "not JSON"}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := request.ValidateResult(tc.result); (err != nil) != tc.invalid {
+				t.Fatalf("validation error=%v, want invalid=%v", err, tc.invalid)
+			}
+		})
+	}
+}
+
+func TestParseFinalAnswerUsesTopLevelOutput(t *testing.T) {
+	resp, err := ParseResponse(llm.Result{Text: `{"type":"final_answer","output":"answer","final":{"output":"wrong"}}`})
+	if err != nil || resp.FinalPayload().Output != "answer" {
+		t.Fatalf("response=%+v err=%v, want top-level answer", resp, err)
+	}
+}
 
 func TestAgentResponseHasRawFinalAnswerField(t *testing.T) {
 	var resp AgentResponse

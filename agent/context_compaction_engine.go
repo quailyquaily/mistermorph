@@ -124,6 +124,7 @@ func (e *Engine) mainRequest(st *engineLoopState, reqTools []llm.Tool) llm.Reque
 		Parameters:       st.extraParams,
 		ReasoningDetails: st.reasoningDetails,
 		OnStream:         st.onStream,
+		ValidateResult:   validateMainResult,
 	}
 }
 

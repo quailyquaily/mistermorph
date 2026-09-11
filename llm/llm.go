@@ -124,6 +124,9 @@ type Request struct {
 	DebugFn           func(label, payload string)
 	ReasoningDetails  bool
 	OnStream          StreamHandler
+	// ValidateResult lets the retrying client reject unusable successful responses.
+	// It is optional; callers without an agent response schema leave it unset.
+	ValidateResult func(Result) error
 }
 
 type Client interface {
