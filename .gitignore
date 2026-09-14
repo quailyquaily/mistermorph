@@ -3,6 +3,7 @@ mistermorph
 
 config.yaml
 /config.mock.yaml
+/benchmark/
 
 .ai
 .cursor/
