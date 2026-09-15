@@ -108,12 +108,3 @@ func TestValidateIdentityYAML(t *testing.T) {
 		t.Fatalf("ValidateIdentityYAML() error = nil, want malformed")
 	}
 }
-
-func TestValidateSoulMarkdown(t *testing.T) {
-	if err := ValidateSoulMarkdown("# soul.md\n\n## Core Truths\n- A\n\n## Boundaries\n- B\n\n## Vibe\n\nC\n"); err != nil {
-		t.Fatalf("ValidateSoulMarkdown() error = %v", err)
-	}
-	if err := ValidateSoulMarkdown("# soul.md\n\n## Vibe\n\nC\n"); err == nil {
-		t.Fatalf("ValidateSoulMarkdown() error = nil, want malformed")
-	}
-}

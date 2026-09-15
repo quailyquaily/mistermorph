@@ -78,16 +78,8 @@ func loadPersonaDoc(candidate personaDocCandidate, log *slog.Logger) (string, st
 	if candidate.Kind != "identity_yaml" && strings.EqualFold(markdownutil.FrontmatterStatus(string(raw)), "draft") {
 		return "", "draft"
 	}
-	switch candidate.Kind {
-	case "identity_yaml":
+	if candidate.Kind == "identity_yaml" {
 		if err := onboardingcheck.ValidateIdentityYAML(string(raw)); err != nil {
-			if log != nil {
-				log.Warn("persona_load_failed", "kind", candidate.Kind, "path", path, "error", err.Error())
-			}
-			return "", "malformed"
-		}
-	case "soul_markdown":
-		if err := onboardingcheck.ValidateSoulMarkdown(string(raw)); err != nil {
 			if log != nil {
 				log.Warn("persona_load_failed", "kind", candidate.Kind, "path", path, "error", err.Error())
 			}

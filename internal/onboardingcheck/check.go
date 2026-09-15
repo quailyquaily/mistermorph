@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/quailyquaily/mistermorph/internal/configutil"
-	markdownutil "github.com/quailyquaily/mistermorph/internal/markdown"
 	"github.com/quailyquaily/mistermorph/internal/secref"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
@@ -38,7 +37,6 @@ const (
 	CodeOSSecretNotFound         = "os_secret_not_found"
 	CodeOSSecretStoreUnavailable = "os_secret_store_unavailable"
 	CodeIdentityInvalid          = "identity_invalid"
-	CodeSoulInvalid              = "soul_invalid"
 )
 
 type Item struct {
@@ -123,15 +121,9 @@ func InspectSoulPath(path string) Item {
 	if item.Name == "." || item.Name == "" {
 		item.Name = "soul.md"
 	}
-	raw, err := os.ReadFile(item.Path)
+	_, err := os.ReadFile(item.Path)
 	if err != nil {
 		return itemForReadError(item, err)
-	}
-	if err := ValidateSoulMarkdown(string(raw)); err != nil {
-		item.Status = StatusMalformed
-		item.Code = CodeSoulInvalid
-		item.Error = err.Error()
-		return item
 	}
 	item.Status = StatusOK
 	return item
@@ -155,23 +147,6 @@ func ValidateIdentityYAML(raw string) error {
 	}
 	if root.Kind != yaml.MappingNode {
 		return fmt.Errorf("identity.yaml must be a mapping")
-	}
-	return nil
-}
-
-func ValidateSoulMarkdown(raw string) error {
-	content := strings.ToLower(strings.TrimSpace(markdownutil.StripFrontmatter(strings.ReplaceAll(raw, "\r\n", "\n"))))
-	if content == "" {
-		return fmt.Errorf("soul.md is empty")
-	}
-	if !strings.Contains(content, "## core truths") {
-		return fmt.Errorf("soul.md is missing the Core Truths section")
-	}
-	if !strings.Contains(content, "## boundaries") {
-		return fmt.Errorf("soul.md is missing the Boundaries section")
-	}
-	if !strings.Contains(content, "## vibe") {
-		return fmt.Errorf("soul.md is missing the Vibe section")
 	}
 	return nil
 }

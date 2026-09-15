@@ -203,10 +203,6 @@ function normalizePayload(data) {
   };
 }
 
-function hasSoulDocument(raw) {
-  return normalizeSoulDocument(raw).trim() !== "";
-}
-
 function normalizeStage(value) {
   if (value === "persona" || value === "soul" || value === "done") {
     return value;
@@ -260,7 +256,7 @@ const SetupView = {
     const llmEnvManaged = ref({});
     const llmSecretFields = ref({});
     const loadedIdentityRaw = ref("");
-    const loadedSoulRaw = ref("");
+    const loadedSoulRaw = ref(null);
     const personaAvatarURL = ref("");
     const personaAvatarBusy = ref(false);
     const personaAvatarSourceTypes = Array.from(PERSONA_AVATAR_SOURCE_TYPES);
@@ -610,9 +606,7 @@ const SetupView = {
       () =>
         loading.value ||
         saving.value ||
-        (soulEditMode.value
-          ? normalizeSoulDocument(soulEditorDraft.value).trim() === ""
-          : String(soulPresetId.value || "").trim() === "")
+        (!soulEditMode.value && String(soulPresetId.value || "").trim() === "")
     );
     const progressSteps = computed(() =>
       Array.from({ length: TOTAL_STEPS }, (_, index) => ({
@@ -631,7 +625,7 @@ const SetupView = {
     );
     const hasSoulSelection = computed(() => soulSelectionKind.value === "preset" || soulSelectionKind.value === "custom");
     const isCustomSoulSelected = computed(() => soulSelectionKind.value === "custom");
-    const soulDocumentExists = computed(() => hasSoulDocument(loadedSoulRaw.value));
+    const soulDocumentExists = computed(() => loadedSoulRaw.value !== null);
     const customSoulCardIcon = computed(() => (soulDocumentExists.value ? "PhCpu" : "PhPlus"));
     const selectedSoulCard = computed(() => {
       if (soulSelectionKind.value === "preset") {
@@ -717,11 +711,11 @@ const SetupView = {
 
     function applySoulContent(raw) {
       const next = normalizeSoulDocument(raw);
-      loadedSoulRaw.value = next;
+      loadedSoulRaw.value = raw === null ? null : next;
       soulSelectionContent.value = next;
-      soulEditorDraft.value = next || buildCustomSoulDocument();
+      soulEditorDraft.value = raw === null ? buildCustomSoulDocument() : next;
       soulPresetId.value = "";
-      soulSelectionKind.value = hasSoulDocument(next) ? "custom" : "";
+      soulSelectionKind.value = raw === null ? "" : "custom";
       soulEditMode.value = false;
     }
 
@@ -739,7 +733,7 @@ const SetupView = {
         return String(payload?.content || "");
       } catch (e) {
         if (e?.status === 404) {
-          return "";
+          return null;
         }
         throw e;
       }
@@ -1048,7 +1042,7 @@ const SetupView = {
         applySoulContent(content);
       } catch (e) {
         if (e?.status === 404) {
-          applySoulContent("");
+          applySoulContent(null);
           return;
         }
         err.value = e.message || t("msg_load_failed");
@@ -1423,7 +1417,7 @@ const SetupView = {
         soulSelectionContent.value = content;
         soulEditorDraft.value = content;
         soulPresetId.value = "";
-        soulSelectionKind.value = hasSoulDocument(content) ? "custom" : "";
+        soulSelectionKind.value = "custom";
         soulEditMode.value = false;
         await runtimeApiFetchForEndpoint(setupEndpointRef.value, PERSONA_SOUL_ENDPOINT, {
           method: "PUT",
@@ -1606,17 +1600,17 @@ const SetupView = {
       const customSource =
         soulUsesCustomContent.value
           ? loadedSoulRaw.value
-          : isCustomSoulSelected.value && normalizeSoulDocument(soulSelectionContent.value).trim() !== ""
+          : isCustomSoulSelected.value
             ? soulSelectionContent.value
             : buildCustomSoulDocument();
       soulSelectionKind.value = "custom";
       soulPresetId.value = "";
-      soulSelectionContent.value = normalizeSoulDocument(customSource) || buildCustomSoulDocument();
+      soulSelectionContent.value = normalizeSoulDocument(customSource);
     }
 
     function openSoulEditor() {
       const source =
-        normalizeSoulDocument(soulSelectionContent.value).trim() !== ""
+        hasSoulSelection.value
           ? soulSelectionContent.value
           : buildCustomSoulDocument();
       soulSelectionContent.value = source;

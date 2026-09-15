@@ -69,11 +69,7 @@ emoji: ""
 
 ### `persona/soul.md`
 
-保持 Markdown，继续使用现有段落约束：
-
-1. `Core Truths`
-2. `Boundaries`
-3. `Vibe`
+保持自由 Markdown，不校验内容。允许空文件，不要求固定章节、标题或语言。
 
 ### `persona/avatar.webp`
 
@@ -163,7 +159,7 @@ Soul：
 3. 服务端不接受任意 persona 子路径写入，避免把接口变成通用文件管理器。
 4. `identity.yaml` 写入前要做 YAML parse 校验。
 5. `identity.yaml` 保存时必须保留未知字段。
-6. `soul.md` 写入前继续做现有章节校验。
+6. `soul.md` 允许任意内容，包括空内容；保存和加载时不做内容校验。
 
 ## Settings UI
 
