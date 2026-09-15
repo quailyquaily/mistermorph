@@ -95,7 +95,7 @@ func TestResolveOpenAICompatibleModelLookup_ExplicitEndpointOverridesCurrentInfe
 	}
 }
 
-func TestResolveOpenAICompatibleModelLookup_ExplicitRouteDoesNotUseCurrentConnectionFields(t *testing.T) {
+func TestResolveOpenAICompatibleModelLookup_ExplicitRouteDoesNotUseUnrelatedConnectionFields(t *testing.T) {
 	current := LLMSettingsPayload{LLMConfigFieldsPayload: LLMConfigFieldsPayload{
 		InferenceProvider: llmutil.InferenceProviderOpenAI,
 		Provider:          "openai_resp",
@@ -117,7 +117,7 @@ func TestResolveOpenAICompatibleModelLookup_ExplicitRouteDoesNotUseCurrentConnec
 	t.Run("api key", func(t *testing.T) {
 		_, err := ResolveOpenAICompatibleModelLookup(
 			current,
-			ModelLookupRequest{InferenceProvider: llmutil.InferenceProviderOpenAI},
+			ModelLookupRequest{InferenceProvider: llmutil.InferenceProviderGroq},
 			nil,
 		)
 		if err == nil || err.Error() != "api key is required" {

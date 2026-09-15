@@ -3196,7 +3196,7 @@ const SettingsView = {
 
     function buildProfileTestPayload(profile) {
       return {
-        profiles: [buildProfilePayload(profile)],
+        profiles: [{ ...buildProfilePayload(profile), name: trimText(profile._savedName) || trimText(profile.name) }],
       };
     }
 
@@ -4191,6 +4191,7 @@ const SettingsView = {
         const payload = await endpointApiFetch(targetEndpointRef, "/settings/agent/models", {
           method: "POST",
           body: {
+            target_profile: targetProfile ? trimText(targetProfile._savedName) || trimText(targetProfile.name) : "",
             inference_provider: providerChoice,
             endpoint: setupProviderSupportsCustomAPIBase(providerChoice) ? endpoint : "",
             api_key:
@@ -4268,7 +4269,7 @@ const SettingsView = {
           llm: nextPayload,
         };
         if (targetProfileName !== "") {
-          body.target_profile = targetProfileName;
+          body.target_profile = trimText(targetProfile._savedName) || targetProfileName;
         }
         const payload = await endpointApiFetch(targetEndpointRef, "/settings/agent/test", {
           method: "POST",

@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -247,6 +249,116 @@ func TestHandlerConnectionTestUsesSharedProfileResolution(t *testing.T) {
 	if got := recorder.Body.String(); !strings.Contains(got, `"model":"gpt-candidate"`) {
 		t.Fatalf("response = %s, want resolved model", got)
 	}
+}
+
+func TestHandlerModelsUsesStoredAPIKey(t *testing.T) {
+	owner := handlerOwnerWithStoredAPIKeys(t)
+	for _, tc := range []struct {
+		name    string
+		body    string
+		wantKey string
+	}{
+		{"default", `{"inference_provider":"openai_chat_compatible","endpoint":"https://models.example.test/v1","api_key":""}`, "default-secret"},
+		{"profile", `{"target_profile":"saved","inference_provider":"openai_chat_compatible","endpoint":"https://models.example.test/v1","api_key":""}`, "profile-secret"},
+		{"profile request key", `{"target_profile":"saved","inference_provider":"openai_chat_compatible","endpoint":"https://models.example.test/v1","api_key":"replacement"}`, "replacement"},
+		{"changed endpoint", `{"target_profile":"saved","inference_provider":"openai_chat_compatible","endpoint":"https://other.example.test/v1","api_key":""}`, ""},
+		{"changed provider", `{"target_profile":"saved","inference_provider":"openai_response_compatible","endpoint":"https://models.example.test/v1","api_key":""}`, ""},
+		{"new profile", `{"target_profile":"new","inference_provider":"openai_chat_compatible","endpoint":"https://models.example.test/v1","api_key":"replacement"}`, "replacement"},
+		{"missing profile key", `{"target_profile":"new","inference_provider":"openai_chat_compatible","endpoint":"https://models.example.test/v1","api_key":""}`, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			called := false
+			handler := NewHandler(HandlerOptions{
+				Owner: owner,
+				FetchModels: func(_ context.Context, endpoint, apiKey string) ([]string, error) {
+					called = true
+					if tc.wantKey == "" || apiKey != tc.wantKey {
+						t.Fatalf("API key = %q, want %q", apiKey, tc.wantKey)
+					}
+					return []string{"test-model"}, nil
+				},
+			})
+			recorder := httptest.NewRecorder()
+			handler.Models(recorder, httptest.NewRequest(http.MethodPost, "/settings/agent/models", strings.NewReader(tc.body)))
+			wantStatus := http.StatusOK
+			if tc.wantKey == "" {
+				wantStatus = http.StatusBadRequest
+			}
+			if recorder.Code != wantStatus || called != (tc.wantKey != "") {
+				t.Fatalf("status = %d, called = %v, body = %s", recorder.Code, called, recorder.Body.String())
+			}
+			if strings.Contains(recorder.Body.String(), "secret") {
+				t.Fatalf("response exposed stored API key: %s", recorder.Body.String())
+			}
+		})
+	}
+}
+
+func TestHandlerConnectionTestUsesStoredAPIKey(t *testing.T) {
+	owner := handlerOwnerWithStoredAPIKeys(t)
+	for _, tc := range []struct {
+		name    string
+		body    string
+		wantKey string
+	}{
+		{"default", `{"llm":{"inference_provider":"openai_chat_compatible","endpoint":"https://models.example.test/v1","model":"candidate"}}`, "default-secret"},
+		{"profile", `{"target_profile":"saved","llm":{"profiles":[{"name":"saved","inference_provider":"openai_chat_compatible","endpoint":"https://models.example.test/v1","model":"candidate"}]}}`, "profile-secret"},
+		{"profile request key", `{"target_profile":"saved","llm":{"profiles":[{"name":"saved","inference_provider":"openai_chat_compatible","endpoint":"https://models.example.test/v1","model":"candidate","api_key":"replacement"}]}}`, "replacement"},
+		{"changed endpoint", `{"target_profile":"saved","llm":{"profiles":[{"name":"saved","inference_provider":"openai_chat_compatible","endpoint":"https://other.example.test/v1","model":"candidate"}]}}`, ""},
+		{"changed provider", `{"target_profile":"saved","llm":{"profiles":[{"name":"saved","inference_provider":"openai_response_compatible","endpoint":"https://models.example.test/v1","model":"candidate"}]}}`, ""},
+		{"new profile", `{"target_profile":"new","llm":{"profiles":[{"name":"new","inference_provider":"openai_chat_compatible","endpoint":"https://models.example.test/v1","model":"candidate"}]}}`, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			called := false
+			handler := NewHandler(HandlerOptions{
+				Owner: owner,
+				ConnectionTest: func(_ context.Context, settings LLMSettingsPayload, _ Reader, _ ConnectionTestOptions) (ConnectionTestResult, error) {
+					called = true
+					if settings.APIKey != tc.wantKey || settings.Model != "candidate" {
+						t.Fatalf("settings = %+v, want key %q and candidate model", settings, tc.wantKey)
+					}
+					return ConnectionTestResult{Provider: settings.Provider, Model: settings.Model}, nil
+				},
+			})
+			recorder := httptest.NewRecorder()
+			handler.Test(recorder, httptest.NewRequest(http.MethodPost, "/settings/agent/test", strings.NewReader(tc.body)))
+			if recorder.Code != http.StatusOK || !called {
+				t.Fatalf("status = %d, called = %v, body = %s", recorder.Code, called, recorder.Body.String())
+			}
+			if strings.Contains(recorder.Body.String(), "secret") {
+				t.Fatalf("response exposed stored API key: %s", recorder.Body.String())
+			}
+		})
+	}
+}
+
+func handlerOwnerWithStoredAPIKeys(t *testing.T) *FileOwner {
+	t.Helper()
+	const defaultID = "b_LsX7HLzAR3OShG7YjRcw"
+	const profileID = "c_LsX7HLzAR3OShG7YjRcw"
+	backend := &fakeFileOwnerSecretBackend{values: map[string]string{
+		defaultID: "default-secret", profileID: "profile-secret",
+	}}
+	configPath := filepath.Join(t.TempDir(), "config.yaml")
+	config := "llm:\n  inference_provider: openai_chat_compatible\n  endpoint: https://models.example.test/v1\n  model: default-model\n  api_key: " + secref.OSSecretRef(defaultID) + "\n  profiles:\n    saved:\n      inference_provider: openai_chat_compatible\n      endpoint: https://models.example.test/v1\n      model: saved-model\n      api_key: " + secref.OSSecretRef(profileID) + "\n"
+	if err := os.WriteFile(configPath, []byte(config), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	owner := NewFileOwner(FileOwnerOptions{
+		ConfigPath: configPath, Reader: readFileOwnerTestConfigWithSource(t, configPath, backend),
+		SecretSource: backend, OSStore: backend,
+	})
+	view, err := owner.View(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if view.LLM.APIKey != "" || len(view.LLM.Profiles) != 1 || view.LLM.Profiles[0].APIKey != "" {
+		t.Fatal("settings view must hide stored API keys")
+	}
+	if !view.SecretFields.LLM["api_key"].Configured || !view.SecretFields.LLMProfiles["saved"]["api_key"].Configured {
+		t.Fatal("settings view must report configured API keys")
+	}
+	return owner
 }
 
 func TestReadOnlyOwnerBuildsViewFromRuntimeReader(t *testing.T) {

@@ -276,6 +276,7 @@ func settingsErrorStatus(err error) int {
 }
 
 type ModelsRequest struct {
+	TargetProfile     string `json:"target_profile,omitempty"`
 	InferenceProvider string `json:"inference_provider"`
 	Provider          string `json:"provider"`
 	Endpoint          string `json:"endpoint"`
@@ -310,6 +311,7 @@ func (h *Handler) Models(w http.ResponseWriter, r *http.Request) {
 	lookup, err := ResolveOpenAICompatibleModelLookup(
 		current,
 		ModelLookupRequest{
+			TargetProfile:     req.TargetProfile,
 			InferenceProvider: req.InferenceProvider,
 			Provider:          req.Provider,
 			Endpoint:          req.Endpoint,

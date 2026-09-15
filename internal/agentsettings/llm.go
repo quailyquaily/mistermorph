@@ -48,6 +48,7 @@ type LLMSettingsPayload struct {
 }
 
 type ModelLookupRequest struct {
+	TargetProfile     string
 	InferenceProvider string
 	Provider          string
 	Endpoint          string
@@ -310,6 +311,10 @@ func ResolveOpenAICompatibleModelLookup(
 	req ModelLookupRequest,
 	resolveField func(string) (string, error),
 ) (ModelLookupConfig, error) {
+	if name := strings.TrimSpace(req.TargetProfile); name != "" && !strings.EqualFold(name, llmutil.RouteProfileDefault) {
+		profile, _ := findProfile(current.Profiles, name)
+		current = LLMSettingsPayload{LLMConfigFieldsPayload: profile.LLMConfigFieldsPayload}
+	}
 	requestSetsRoute := strings.TrimSpace(req.InferenceProvider) != "" ||
 		strings.TrimSpace(req.Provider) != "" ||
 		strings.TrimSpace(req.Endpoint) != ""
@@ -350,6 +355,15 @@ func ResolveOpenAICompatibleModelLookup(
 	if err != nil {
 		return ModelLookupConfig{}, err
 	}
+	if strings.TrimSpace(resolved.APIKey) == "" {
+		resolved.APIKey = savedAPIKeyForConnection(resolved, current.LLMConfigFieldsPayload)
+		if resolveField != nil {
+			resolved.APIKey, err = resolveField(resolved.APIKey)
+			if err != nil {
+				return ModelLookupConfig{}, err
+			}
+		}
+	}
 	provider := strings.TrimSpace(resolved.Provider)
 	endpoint := strings.TrimSpace(llmutil.EndpointForProviderWithValues(provider, resolved))
 	if endpoint == "" {
@@ -365,6 +379,28 @@ func ResolveOpenAICompatibleModelLookup(
 		Endpoint: endpoint,
 		APIKey:   apiKey,
 	}, nil
+}
+
+// Reuse a hidden API key only for the saved provider and endpoint.
+func savedAPIKeyForConnection(values llmutil.RuntimeValues, saved LLMConfigFieldsPayload) string {
+	current, err := llmutil.ResolveRuntimeValuesInferenceProvider(values)
+	if err != nil {
+		return ""
+	}
+	stored, err := llmutil.ResolveRuntimeValuesInferenceProvider(llmutil.RuntimeValues{
+		InferenceProvider: saved.InferenceProvider,
+		Provider:          saved.Provider,
+		Endpoint:          saved.Endpoint,
+	})
+	if err != nil || current.Provider != stored.Provider {
+		return ""
+	}
+	currentEndpoint := llmutil.EndpointForProviderWithValues(current.Provider, current)
+	storedEndpoint := llmutil.EndpointForProviderWithValues(stored.Provider, stored)
+	if strings.TrimRight(currentEndpoint, "/") != strings.TrimRight(storedEndpoint, "/") {
+		return ""
+	}
+	return strings.TrimSpace(saved.APIKey)
 }
 
 func FirstNonEmpty(values ...string) string {

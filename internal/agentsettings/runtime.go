@@ -104,6 +104,13 @@ func ResolveConnectionTestValues(
 	if err != nil {
 		return llmutil.RuntimeValues{}, err
 	}
+	if saved, ok := base.Profiles[targetProfile]; ok && strings.TrimSpace(profileValues.APIKey) == "" {
+		profileValues.APIKey = savedAPIKeyForConnection(profileValues, ProfileSettingsPayloadFromConfig(targetProfile, saved).LLMConfigFieldsPayload)
+		profileValues.APIKey, err = ResolveConnectionTestFieldValue(profileValues.APIKey, source)
+		if err != nil {
+			return llmutil.RuntimeValues{}, err
+		}
+	}
 	base.Profiles = map[string]llmutil.ProfileConfig{
 		targetProfile: profileConfigFromValues(profileValues),
 	}
