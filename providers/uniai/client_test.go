@@ -702,7 +702,7 @@ func TestRecalculateUsageCostIncludesCacheCreation(t *testing.T) {
 	}
 }
 
-func TestBuildChatOptionsDisablesOnStreamForGeminiProvider(t *testing.T) {
+func TestBuildChatOptionsEnablesOnStreamForGeminiProvider(t *testing.T) {
 	req := llm.Request{
 		Messages: []llm.Message{{Role: "user", Content: "hello"}},
 		OnStream: func(llm.StreamEvent) error { return nil },
@@ -713,12 +713,12 @@ func TestBuildChatOptionsDisablesOnStreamForGeminiProvider(t *testing.T) {
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
-	if built.Options.OnStream != nil {
-		t.Fatalf("expected on_stream callback to be disabled for gemini provider")
+	if built.Options.OnStream == nil {
+		t.Fatalf("expected on_stream callback to be enabled for gemini provider")
 	}
 }
 
-func TestBuildChatOptionsDisablesOnStreamForAnthropicProvider(t *testing.T) {
+func TestBuildChatOptionsEnablesOnStreamForAnthropicProvider(t *testing.T) {
 	req := llm.Request{
 		Messages: []llm.Message{{Role: "user", Content: "hello"}},
 		OnStream: func(llm.StreamEvent) error { return nil },
@@ -729,8 +729,8 @@ func TestBuildChatOptionsDisablesOnStreamForAnthropicProvider(t *testing.T) {
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
-	if built.Options.OnStream != nil {
-		t.Fatalf("expected on_stream callback to be disabled for anthropic provider")
+	if built.Options.OnStream == nil {
+		t.Fatalf("expected on_stream callback to be enabled for anthropic provider")
 	}
 }
 

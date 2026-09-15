@@ -142,7 +142,7 @@ func (c *Client) buildChatOptions(req llm.Request, forceJSON bool) []uniaiapi.Ch
 	if req.DebugFn != nil {
 		opts = append(opts, uniaiapi.WithDebugFn(req.DebugFn))
 	}
-	if req.ReasoningDetails && supportsReasoningDetails(provider, model, defaultReasoningEffort, defaultReasoningBudget) {
+	if req.ReasoningDetails && supportsReasoningDetails(provider, model) {
 		opts = append(opts, uniaiapi.WithReasoningDetails())
 	}
 	if req.OnStream != nil && supportsStreaming(provider) {
@@ -182,41 +182,19 @@ func (c *Client) buildChatOptions(req llm.Request, forceJSON bool) []uniaiapi.Ch
 	return opts
 }
 
-func supportsReasoningDetails(provider, model, reasoningEffort string, reasoningBudget *int) bool {
+func supportsReasoningDetails(provider, model string) bool {
 	provider = strings.ToLower(strings.TrimSpace(provider))
 	switch provider {
-	case "openai":
-		return openAIModelMatchesFamily(model, "deepseek") || openAIModelMatchesFamily(model, "kimi")
-	case "deepseek":
-		return true
-	case "openai_resp", "openai_codex":
+	case "openai_resp", "openai_codex", "xai_oauth", "sakana":
+		// Responses also adds reasoning.summary to the request; keep its model check
+		// until uniai separates response capture from requesting summaries.
 		return openAIModelMatchesFamily(model, "gpt-5") ||
 			openAIModelMatchesFamily(model, "o1") ||
 			openAIModelMatchesFamily(model, "o3") ||
 			openAIModelMatchesFamily(model, "o4")
-	case "gemini":
-		return openAIModelMatchesFamily(model, "gemini-2-5") || openAIModelMatchesFamily(model, "gemini-3")
-	case "anthropic", "bedrock":
-		if reasoningBudget != nil || strings.TrimSpace(reasoningEffort) != "" {
-			return true
-		}
-		model = strings.ToLower(strings.ReplaceAll(llm.ShortModelName(model), ".", "-"))
-		for _, family := range []string{
-			"fable-5",
-			"mythos-5",
-			"opus-5",
-			"sonnet-5",
-			"opus-4-8",
-			"opus-4-7",
-			"opus-4-6",
-			"sonnet-4-6",
-		} {
-			if strings.Contains(model, family) {
-				return true
-			}
-		}
+	default:
+		return true
 	}
-	return false
 }
 
 func mergeProviderOptions(raw any, dst structs.JSONMap) {

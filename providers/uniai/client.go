@@ -196,12 +196,7 @@ func (c *Client) Chat(ctx context.Context, req llm.Request) (llm.Result, error) 
 }
 
 func supportsStreaming(provider string) bool {
-	switch strings.ToLower(strings.TrimSpace(provider)) {
-	case "anthropic", "gemini", "cloudflare":
-		return false
-	default:
-		return true
-	}
+	return strings.ToLower(strings.TrimSpace(provider)) != "cloudflare"
 }
 
 func cloneFloat64(v *float64) *float64 {
