@@ -452,9 +452,6 @@ func (m *chatModel) View() tea.View {
 		}
 	}
 	lines = append(lines, m.renderTextarea())
-	if m.height >= shortTerminalHeight {
-		lines = append(lines, "")
-	}
 	if picker := m.renderPicker(); len(picker) > 0 {
 		lines = append(lines, picker...)
 	}
@@ -577,10 +574,20 @@ func (m *chatModel) startTranscriptPrint() tea.Cmd {
 		return nil
 	}
 	text := wrapChatTranscript(m.transcriptQueue[0], m.width)
-	return tea.Sequence(
-		tea.Println(text),
-		func() tea.Msg { return transcriptPrintedMsg{} },
-	)
+	// Bubble Tea inserts transcript output by moving within the visible screen.
+	// A block taller than the terminal clamps that cursor movement and displaces
+	// the live view. Insert one physical line at a time, keeping the block queued
+	// until every line has been printed.
+	lines := strings.Split(text, "\n")
+	cmds := make([]tea.Cmd, 0, len(lines)+1)
+	for _, line := range lines {
+		if line == "" {
+			line = " " // Bubble Tea skips empty strings rather than inserting a row.
+		}
+		cmds = append(cmds, tea.Println(line))
+	}
+	cmds = append(cmds, func() tea.Msg { return transcriptPrintedMsg{} })
+	return tea.Sequence(cmds...)
 }
 
 func (m *chatModel) clearThinking() {
@@ -901,7 +908,7 @@ func (m *chatModel) renderPicker() []string {
 		textareaRows := strings.Count(m.renderTextarea(), "\n") + 1
 		reservedRows := 1 + textareaRows // footer
 		if m.height >= shortTerminalHeight {
-			reservedRows += 2 // space above and below the composer
+			reservedRows++ // space above the composer
 		}
 		if m.thinking {
 			reservedRows++

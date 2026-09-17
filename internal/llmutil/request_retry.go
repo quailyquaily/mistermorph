@@ -79,6 +79,13 @@ func (c *fallbackClient) chatWithRetry(ctx context.Context, client llm.Client, r
 				"retry", attempt+1, "max_retries", llmRequestRetries, "reason", reason,
 				"delay", delay, "error", err.Error())
 		}
+		if notify, ok := ctx.Value(retryNotificationKey{}).(func(context.Context, RetryEvent)); ok && notify != nil {
+			notify(ctx, RetryEvent{
+				Model: req.Model, Profile: profile, Scene: req.Scene,
+				Attempt: attempt + 1, MaxRetries: llmRequestRetries,
+				Delay: delay, Reason: retryReasonDescription(err),
+			})
+		}
 		timer := time.NewTimer(delay)
 		select {
 		case <-ctx.Done():

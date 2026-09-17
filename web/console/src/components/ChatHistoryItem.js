@@ -4,6 +4,7 @@ import { approvalParameterEntries } from "../core/chat-approvals";
 import { recordComponentUpdate } from "../core/performance";
 import ChatRichContent from "./ChatRichContent";
 import ChatStatusCard from "./ChatStatusCard";
+import ChatSystemMessage from "./ChatSystemMessage";
 
 function roleOf(item) {
   return String(item?.role || "").trim().toLowerCase();
@@ -34,6 +35,7 @@ const ChatHistoryItem = {
   components: {
     ChatRichContent,
     ChatStatusCard,
+    ChatSystemMessage,
   },
   emits: ["approval-approve", "approval-deny", "copy", "preview-file", "rendered", "time-click", "toggle-status"],
   props: {
@@ -109,6 +111,24 @@ const ChatHistoryItem = {
     });
     const surfaceClass = computed(() => (role.value === "agent" ? "chat-history-copy" : "chat-history-bubble"));
     const reasoningVisible = computed(() => String(props.item?.reasoning || "").trim() !== "");
+    const activityEntries = computed(() => {
+      const activity = props.item?.activity;
+      const entries = Array.isArray(activity?.history) ? activity.history.filter(Boolean) : [];
+      if (activity?.current && !entries.some((entry) => entry.id === activity.current.id)) {
+        return [...entries, activity.current];
+      }
+      return entries;
+    });
+    const retryNotices = computed(() =>
+      role.value === "agent" ? activityEntries.value.filter((entry) => entry.kind === "retry") : []
+    );
+    const taskActivity = computed(() => {
+      const history = activityEntries.value.filter((entry) => entry.kind !== "retry");
+      const current = props.item?.activity?.current;
+      return history.length > 0
+        ? { history, current: current && current.kind !== "retry" ? current : history[history.length - 1] }
+        : null;
+    });
     const userFiles = computed(() =>
       role.value === "user" && Array.isArray(props.item?.files) ? props.item.files : []
     );
@@ -258,14 +278,24 @@ const ChatHistoryItem = {
       itemClass,
       role,
       reasoningVisible,
+      retryNotices,
       statusInteractive,
       statusText,
       streaming,
       surfaceClass,
+      taskActivity,
       userFiles,
     };
   },
   template: `
+    <div v-if="retryNotices.length" class="chat-system-messages" role="log" aria-label="Retry updates" aria-live="polite" aria-relevant="additions">
+      <ChatSystemMessage
+        v-for="notice in retryNotices"
+        :key="notice.id"
+        :text="notice.summary"
+        :at="notice.at"
+      />
+    </div>
     <article
       :class="itemClass"
       v-memo="[item, copied, expandedPanel, autoPreview, streamProfiler, submitEndpointRef, selectedTopicId, approvalApproveLabel, approvalDenyLabel, approvalTitle]"
@@ -289,10 +319,10 @@ const ChatHistoryItem = {
       <template v-else-if="role === 'agent'">
         <div class="chat-history-stack">
           <ChatStatusCard
-            v-if="item.plan || item.activity || reasoningVisible"
+            v-if="item.plan || taskActivity || reasoningVisible"
             :item-id="item.id"
             :plan="item.plan"
-            :activity="item.activity"
+            :activity="taskActivity"
             :has-reasoning="reasoningVisible"
             :status="item.status"
             :expanded-panel="expandedPanel"

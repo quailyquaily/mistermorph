@@ -71,8 +71,25 @@ func (e *Engine) forceConclusion(ctx context.Context, st *engineLoopState, reaso
 		reason = forceConclusionTaskDeadline
 		st.deadlineConclusion = true
 		// Providers enforce the selected profile's request_timeout per attempt.
-		// Detach the expired task deadline without adding a separate summary limit.
+		// Detach only the execution deadline; user/session cancellation must still
+		// reach the summary even after the execution context has expired.
+		parent, _ := ctx.Value(taskTimeoutParentKey{}).(context.Context)
 		ctx = context.WithoutCancel(ctx)
+		if parent != nil {
+			summaryCtx, cancel := context.WithCancelCause(ctx)
+			stop := context.AfterFunc(parent, func() { cancel(context.Cause(parent)) })
+			defer func() {
+				stop()
+				cancel(nil)
+			}()
+			if parent.Err() != nil {
+				cancel(context.Cause(parent))
+			}
+			ctx = summaryCtx
+			if ctx.Err() != nil {
+				return nil, agentCtx, ctx.Err()
+			}
+		}
 	}
 	if log == nil {
 		log = e.log.With("model", st.model)
@@ -122,10 +139,13 @@ func (e *Engine) forceConclusion(ctx context.Context, st *engineLoopState, reaso
 	result, err := e.callMainWithContextCompaction(ctx, st, agentCtx.MaxSteps, nil)
 	if err != nil {
 		log.Error("force_conclusion_llm_error", "error", err.Error())
-		if !deadlineReached && ctx.Err() != nil {
+		if ctx.Err() != nil {
 			return nil, agentCtx, ctx.Err()
 		}
 		return finishFallback(summarizeForceConclusionModelError(err))
+	}
+	if ctx.Err() != nil {
+		return nil, agentCtx, ctx.Err()
 	}
 	agentCtx.AddUsage(result.Usage, result.Duration)
 

@@ -8,9 +8,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/quailyquaily/mistermorph/agent"
 	"github.com/quailyquaily/mistermorph/guard"
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/taskruntime"
+	"github.com/quailyquaily/mistermorph/internal/llmutil"
 	"github.com/quailyquaily/mistermorph/internal/textutil"
 )
 
@@ -80,6 +82,15 @@ func (s *consoleEventPreviewSink) Close() {
 		return
 	}
 	s.observeCancel()
+}
+
+func (s *consoleEventPreviewSink) HandleRetry(ctx context.Context, event llmutil.RetryEvent) {
+	s.HandleEvent(ctx, agent.Event{
+		Kind: agent.EventKindLLMRetry, ActivityID: "retry:" + uuid.NewString(),
+		Status: "done", Summary: event.StatusText(), Profile: event.Profile,
+		// A retry notice is a point-in-time record, not an open tool lifecycle.
+		Text: event.Model,
+	})
 }
 
 func (s *consoleEventPreviewSink) HandleEvent(_ context.Context, event agent.Event) {

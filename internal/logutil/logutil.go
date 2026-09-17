@@ -38,6 +38,8 @@ type LoggerConfig struct {
 	FileDir      string
 	FileMaxAge   string
 	FileStateDir string
+	// ConsoleWriter defaults to os.Stderr. File logging is independent of it.
+	ConsoleWriter io.Writer
 }
 
 type LogOptionsConfig struct {
@@ -124,13 +126,17 @@ func LoggerFromConfig(cfg LoggerConfig) (*slog.Logger, error) {
 		Level:     level,
 		AddSource: cfg.AddSource,
 	}
+	consoleWriter := cfg.ConsoleWriter
+	if consoleWriter == nil {
+		consoleWriter = os.Stderr
+	}
 
 	var h slog.Handler
 	switch strings.ToLower(strings.TrimSpace(cfg.Format)) {
 	case "", "text":
-		h = slog.NewTextHandler(os.Stderr, opts)
+		h = slog.NewTextHandler(consoleWriter, opts)
 	case "json":
-		h = slog.NewJSONHandler(os.Stderr, opts)
+		h = slog.NewJSONHandler(consoleWriter, opts)
 	default:
 		return nil, fmt.Errorf("unknown logging.format: %s", cfg.Format)
 	}

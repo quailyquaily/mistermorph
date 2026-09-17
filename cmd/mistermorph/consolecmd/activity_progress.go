@@ -193,6 +193,9 @@ func buildConsoleActivityEntry(event agent.Event) *consoleActivityEntry {
 	}
 
 	switch strings.TrimSpace(event.Kind) {
+	case agent.EventKindLLMRetry:
+		entry.Kind = "retry"
+		entry.Name = strings.TrimSpace(event.Text)
 	case agent.EventKindToolStart, agent.EventKindToolDone:
 		entry.Kind = "tool"
 		entry.Name = strings.TrimSpace(event.ToolName)

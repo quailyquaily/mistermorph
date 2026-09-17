@@ -9,8 +9,43 @@ import (
 
 	"github.com/quailyquaily/mistermorph/agent"
 	"github.com/quailyquaily/mistermorph/guard"
+	"github.com/quailyquaily/mistermorph/internal/llmutil"
 	"github.com/quailyquaily/mistermorph/llm"
 )
+
+func TestConsoleRetryNotificationsPublishAndRetainEachAttempt(t *testing.T) {
+	hub := newConsoleStreamHub()
+	frames, unsubscribe := hub.Subscribe("task-retry")
+	defer unsubscribe()
+	sink := newConsoleEventPreviewSink(hub, "task-retry", nil, nil)
+	defer sink.Close()
+	var latest *consoleActivityProgress
+	sink.activityUpdated = func(progress *consoleActivityProgress) { latest = progress }
+	for attempt := 1; attempt <= 2; attempt++ {
+		event := llmutil.RetryEvent{Model: "test-model", Profile: "main", Attempt: attempt, MaxRetries: 5, Delay: time.Second, Reason: "HTTP 504 Gateway Timeout"}
+		sink.HandleRetry(context.Background(), event)
+		frame := <-frames
+		if frame.Done || frame.Activity == nil || len(frame.Activity.History) != attempt {
+			t.Fatalf("retry %d frame=%+v", attempt, frame)
+		}
+		current := frame.Activity.Current
+		if current.Kind != "retry" || current.Name != "test-model" || current.Summary != event.StatusText() {
+			t.Fatalf("retry activity=%+v", current)
+		}
+	}
+	if latest == nil || len(latest.History) != 2 || latest.History[0].ID == latest.History[1].ID {
+		t.Fatalf("retry attempts overwritten: %+v", latest)
+	}
+	replayed, stop := hub.Subscribe("task-retry")
+	defer stop()
+	if frame := <-replayed; frame.Activity == nil || len(frame.Activity.History) != 2 {
+		t.Fatalf("reconnect lost retries: %+v", frame)
+	}
+	sink.HandleEvent(context.Background(), agent.Event{Kind: agent.EventKindToolStart, ActivityID: "tool:next", ToolName: "read_file", Status: "running"})
+	if frame := <-frames; frame.Activity.Current.Kind != "tool" || len(frame.Activity.History) != 3 {
+		t.Fatalf("new activity lost retry history: %+v", frame)
+	}
+}
 
 type stubConsoleSemanticObserver struct {
 	summary string

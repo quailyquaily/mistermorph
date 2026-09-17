@@ -3,6 +3,7 @@ package chatcmd
 import (
 	"context"
 	"errors"
+	"io"
 	"strings"
 	"sync"
 	"time"
@@ -27,14 +28,27 @@ import (
 // block to Bubble Tea. Keeping the block intact prevents a multi-line tool
 // record from being interleaved with other transcript output.
 type programWriter struct {
-	p      *tea.Program
-	mu     sync.Mutex
-	buffer strings.Builder
+	p        *tea.Program
+	fallback io.Writer
+	mu       sync.Mutex
+	buffer   strings.Builder
+}
+
+func (w *programWriter) setProgram(p *tea.Program) {
+	w.mu.Lock()
+	w.p = p
+	w.mu.Unlock()
 }
 
 func (w *programWriter) Write(p []byte) (int, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	if w.p == nil {
+		if w.fallback != nil {
+			return w.fallback.Write(p)
+		}
+		return len(p), nil
+	}
 
 	w.buffer.Write(p)
 	data := w.buffer.String()
@@ -197,6 +211,10 @@ func runREPL(sess *chatSession) error {
 
 	sess.sendMsg = func(msg any) { safeSend(p, msg) }
 	sess.setWriter(&programWriter{p: p})
+	if sess.logWriter != nil {
+		sess.logWriter.setProgram(p)
+		defer sess.logWriter.setProgram(nil)
+	}
 
 	history := make([]llm.Message, 0, 32)
 	historyBoundaries := make([]string, 0, 32)
@@ -205,6 +223,9 @@ func runREPL(sess *chatSession) error {
 	model.commandRegistry = reg
 
 	ctx, cancel := context.WithCancel(rootCtx)
+	ctx = llmutil.WithRetryNotification(ctx, func(_ context.Context, event llmutil.RetryEvent) {
+		safeSend(p, tuiOutputMsg{output: chatSecondaryStyle.Render("↻ " + event.StatusText())})
+	})
 	processorDone := make(chan struct{})
 
 	// Agent turn processing goroutine
@@ -286,7 +307,8 @@ func runREPL(sess *chatSession) error {
 							sess.logger.Warn("chat_context_checkpoint_load_failed", "error", loadErr.Error())
 						}
 					}
-					if errors.Is(result.cause, runtimecontrol.ErrStoppedByUser) {
+					if errors.Is(result.cause, runtimecontrol.ErrStoppedByUser) ||
+						(result.turn != nil && result.turn.stopAcknowledged && errors.Is(result.err, context.Canceled)) {
 						if shouldSendChatStopFeedback(result) {
 							safeSend(p, agentResultMsg{output: runtimecontrol.StopFeedback(true)})
 						}
@@ -369,18 +391,15 @@ func runREPL(sess *chatSession) error {
 				if input == "" {
 					continue
 				}
+				command, _ := chatcommands.ParseCommand(input)
+				switch chatcommands.NormalizeCommand(command) {
+				case "/exit", "/quit":
+					// Quit the UI first. Its return cancels the session, and the
+					// ctx.Done branch joins the active turn and clears approvals.
+					safeSend(p, quitMsg{})
+					continue
+				}
 				if pending != nil {
-					command, _ := chatcommands.ParseCommand(input)
-					switch chatcommands.NormalizeCommand(command) {
-					case "/exit", "/quit":
-						if err := expirePendingChatApproval(ctx, sess, pending, "chat:session", "chat session closed"); err != nil && !errors.Is(err, guard.ErrApprovalNotPending) && sess.logger != nil {
-							sess.logger.Warn("chat_approval_expire_failed", "approval_id", pending.id, "error", err.Error())
-						}
-						pending = nil
-						safeSend(p, quitMsg{})
-						return
-					}
-
 					var approvalGuard *guard.Guard
 					if sess.taskRuntime != nil {
 						approvalGuard = sess.taskRuntime.SharedGuard

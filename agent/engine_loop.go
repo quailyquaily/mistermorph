@@ -8,6 +8,7 @@ import (
 	"hash/fnv"
 	"log/slog"
 	"math/rand/v2"
+	"net"
 	"strings"
 	"time"
 
@@ -186,7 +187,29 @@ func (e *Engine) runLoop(ctx context.Context, st *engineLoopState) (final *Final
 			}
 			result, err = e.callMainWithContextCompaction(ctx, st, step, reqTools)
 			if err != nil {
-				log.Error("llm_call_error", "step", step, "error", err.Error())
+				failedAt := time.Now()
+				ctxErr := ctx.Err()
+				timeoutScope := "none"
+				var timeoutErr net.Error
+				if errors.Is(ctxErr, context.DeadlineExceeded) {
+					timeoutScope = "task"
+				} else if ctxErr == nil && (errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &timeoutErr) && timeoutErr.Timeout())) {
+					timeoutScope = "request"
+				}
+				attrs := []any{
+					"step", step, "error", err.Error(), "timeout_scope", timeoutScope,
+					"task_context_done", ctxErr != nil,
+					// Includes retries, fallback calls, and any context compaction.
+					"call_duration_ms", failedAt.Sub(start).Milliseconds(),
+				}
+				if ctxErr != nil {
+					attrs = append(attrs, "task_context_error", ctxErr.Error())
+				}
+				if deadline, ok := ctx.Deadline(); ok {
+					attrs = append(attrs, "task_deadline", deadline,
+						"task_remaining_ms", max(int64(0), deadline.Sub(failedAt).Milliseconds()))
+				}
+				log.Error("llm_call_error", attrs...)
 				return nil, st.agentCtx, fmt.Errorf("llm call failed at step %d: %w", step, err)
 			}
 			st.agentCtx.AddUsage(result.Usage, time.Since(start))

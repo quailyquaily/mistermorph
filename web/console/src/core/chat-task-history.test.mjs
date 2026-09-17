@@ -4,9 +4,20 @@ import test from "node:test";
 import {
   isTerminalStatus,
   normalizeTaskStatus,
+  normalizeActivity,
   taskAgentText,
   taskListHistoryItems,
 } from "./chat-task-history.js";
+
+test("normalizeActivity retains separate retry notices with their reasons", () => {
+  const activity = normalizeActivity({ history: [
+    { id: "retry:1", kind: "retry", name: "model", status: "done", summary: "HTTP 504 · retry 1/5" },
+    { id: "retry:2", kind: "retry", name: "model", status: "done", summary: "HTTP 504 · retry 2/5" },
+  ] });
+  assert.equal(activity?.history.length, 2);
+  assert.equal(activity.current.id, "retry:2");
+  assert.equal(activity.current.summary, "HTTP 504 · retry 2/5");
+});
 
 function t(key, vars = {}) {
   const messages = {

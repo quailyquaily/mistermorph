@@ -1,0 +1,43 @@
+.chat-system-messages {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+}
+
+.chat-system-message {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  width: min(100%, 82ch);
+  padding-block: 4px;
+  color: var(--text-2);
+  font-size: var(--font-size-meta);
+  line-height: 1.5;
+}
+
+.chat-system-message-marker {
+  font-size: 16px;
+  line-height: 1.25;
+}
+
+.chat-system-message-meta {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+
+.chat-system-message-label {
+  font-weight: 600;
+}
+
+.chat-system-message-meta time {
+  font-variant-numeric: tabular-nums;
+}
+
+.chat-system-message-text {
+  margin: 2px 0 0;
+  overflow-wrap: anywhere;
+}

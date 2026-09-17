@@ -205,7 +205,7 @@ function taskPlan(task) {
 
 function normalizeActivityKind(raw) {
   const value = String(raw || "").trim().toLowerCase();
-  return value === "tool" || value === "subtask" ? value : "";
+  return value === "tool" || value === "subtask" || value === "retry" ? value : "";
 }
 
 function normalizeActivityEntry(raw) {

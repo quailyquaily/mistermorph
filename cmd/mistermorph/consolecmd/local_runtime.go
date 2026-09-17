@@ -2169,6 +2169,7 @@ func (r *consoleLocalRuntime) handleTaskJob(workerCtx context.Context, conversat
 		runCtx = workerCtx
 	}
 	runCtx = agent.WithEventSinkContext(runCtx, eventSink)
+	runCtx = llmutil.WithRetryNotification(runCtx, eventSink.HandleRetry)
 
 	final, agentCtx, runErr := r.runTask(runCtx, conversationKey, job, onStream, steerSource, planStepUpdate)
 	contextCanceled := taskdomain.EndedByCancellation(runCtx, runErr)

@@ -18,6 +18,7 @@ const (
 	EventKindToolStart               = "tool_start"
 	EventKindToolDone                = "tool_done"
 	EventKindToolOutput              = "tool_output"
+	EventKindLLMRetry                = "llm_retry"
 	EventKindSubtaskStart            = "subtask_start"
 	EventKindSubtaskDone             = "subtask_done"
 	EventKindContextCompactionStart  = "context_compaction_start"

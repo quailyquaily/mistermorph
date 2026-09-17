@@ -148,6 +148,7 @@ func runShellCommand(ctx context.Context, common shellToolCommon, spec shellRunn
 
 	args := append(append([]string(nil), spec.ArgsPrefix...), inv.Command)
 	cmd := exec.CommandContext(runCtx, spec.Program, args...)
+	configureShellProcess(cmd)
 	if inv.CWD != "" {
 		cmd.Dir = inv.CWD
 	}

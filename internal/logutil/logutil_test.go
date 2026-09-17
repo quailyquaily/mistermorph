@@ -1,6 +1,7 @@
 package logutil
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,6 +10,33 @@ import (
 
 	"github.com/quailyquaily/mistermorph/internal/pathutil"
 )
+
+func TestLoggerFromConfigUsesConsoleWriterAndKeepsFileLog(t *testing.T) {
+	for _, format := range []string{"text", "json"} {
+		t.Run(format, func(t *testing.T) {
+			var console bytes.Buffer
+			dir := t.TempDir()
+			logger, err := LoggerFromConfig(LoggerConfig{
+				Level: "info", Format: format, FileDir: dir, ConsoleWriter: &console,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			logger.Error("test_llm_error", "step", 1)
+			if !strings.Contains(console.String(), "test_llm_error") {
+				t.Fatalf("console writer did not receive log: %q", console.String())
+			}
+			files, err := filepath.Glob(filepath.Join(dir, "*.jsonl"))
+			if err != nil || len(files) != 1 {
+				t.Fatalf("log files=%v err=%v", files, err)
+			}
+			data, err := os.ReadFile(files[0])
+			if err != nil || !strings.Contains(string(data), `"msg":"test_llm_error"`) {
+				t.Fatalf("file log=%q err=%v", data, err)
+			}
+		})
+	}
+}
 
 func TestResolveFileLogDir_DefaultsUnderStateDir(t *testing.T) {
 	got := ResolveFileLogDir(filepath.Join(t.TempDir(), "state"), "")

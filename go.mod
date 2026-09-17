@@ -1,5 +1,7 @@
 module github.com/quailyquaily/mistermorph
 
+replace github.com/charmbracelet/ultraviolet => ./third_party/ultraviolet
+
 go 1.25.0
 
 require (

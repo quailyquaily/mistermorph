@@ -31,6 +31,55 @@ type consoleProgressPersistenceLLMStep struct {
 	err    error
 }
 
+func TestConsoleLocalRuntimeStreamsAndPersistsRetries(t *testing.T) {
+	rt, job, journal := newConsoleProgressPersistenceRuntime(t, []consoleProgressPersistenceLLMStep{
+		{err: errors.New(`POST "/v1/chat/completions": 504 Gateway Timeout`)},
+		{err: errors.New(`POST "/v1/chat/completions": 504 Gateway Timeout`)},
+		{result: llm.Result{Text: `{"type":"final","output":"done"}`}},
+	}, "work", false)
+	job.Generation.bundle.taskRuntime.ClientDecorator = func(client llm.Client, route llmutil.ResolvedRoute) llm.Client {
+		return llmutil.NewFallbackClient(llmutil.FallbackClientOptions{Primary: client, PrimaryProfile: "main"})
+	}
+	frames, unsubscribe := rt.streamHub.Subscribe(job.TaskID)
+	defer unsubscribe()
+	rt.handleTaskJob(context.Background(), job.ConversationKey, job)
+	updates := consoleProgressTaskUpdates(t, journal, job.TaskID)
+	if len(updates) != 2 || updates[1].Status != daemonruntime.TaskDone {
+		t.Fatalf("task updates=%+v", updates)
+	}
+	payload, err := json.Marshal(updates[1].Result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var result struct {
+		Activity *consoleActivityProgress `json:"activity"`
+	}
+	if err := json.Unmarshal(payload, &result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Activity == nil || len(result.Activity.History) != 2 {
+		t.Fatalf("persisted retries=%s", payload)
+	}
+	seen := map[string]bool{}
+	for {
+		select {
+		case frame := <-frames:
+			if frame.Activity != nil {
+				for _, entry := range frame.Activity.History {
+					if entry.Kind == "retry" && strings.Contains(entry.Summary, "504 Gateway Timeout") {
+						seen[entry.ID] = true
+					}
+				}
+			}
+		default:
+			if len(seen) != 2 {
+				t.Fatalf("streamed retries=%d, want 2", len(seen))
+			}
+			return
+		}
+	}
+}
+
 type consoleProgressPersistenceClient struct {
 	mu    sync.Mutex
 	steps []consoleProgressPersistenceLLMStep

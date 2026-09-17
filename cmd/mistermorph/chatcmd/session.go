@@ -43,6 +43,7 @@ type chatSession struct {
 	cmd                    *cobra.Command
 	rootContext            context.Context
 	logger                 *slog.Logger
+	logWriter              *programWriter
 	taskRuntime            *taskruntime.Runtime
 	imageScopeKey          string
 	mainCfg                llmconfig.ClientConfig
@@ -154,7 +155,7 @@ func chatTimeoutContext(parent context.Context, timeout time.Duration) (context.
 	if timeout <= 0 {
 		return context.WithCancel(parent)
 	}
-	return context.WithTimeout(parent, timeout)
+	return agent.WithTaskTimeout(parent, timeout)
 }
 
 func (s *chatSession) rebuildRuntimeState(ctx context.Context) error {
@@ -332,6 +333,8 @@ func buildChatSession(cmd *cobra.Command, deps Dependencies) (*chatSession, erro
 
 	verbose, _ := cmd.Flags().GetBool("verbose")
 	loggerCfg := logutil.LoggerConfigFromViper()
+	logWriter := &programWriter{fallback: cmd.ErrOrStderr()}
+	loggerCfg.ConsoleWriter = logWriter
 	if !verbose {
 		loggerCfg.Level = "error"
 	}
@@ -392,6 +395,7 @@ func buildChatSession(cmd *cobra.Command, deps Dependencies) (*chatSession, erro
 		cmd:                    cmd,
 		rootContext:            rootContext,
 		logger:                 logger,
+		logWriter:              logWriter,
 		imageScopeKey:          "chat:" + strings.ReplaceAll(uuid.NewString(), "-", ""),
 		runtimeToolsCfg:        runtimeToolsCfg,
 		projectID:              cliProjectID(projectDir),
