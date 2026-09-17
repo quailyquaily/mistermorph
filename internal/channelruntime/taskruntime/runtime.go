@@ -829,6 +829,8 @@ func (rt *Runtime) runSubtask(ctx context.Context, req agent.SubtaskRequest, rou
 	agent.EmitEvent(ctx, nil, agent.Event{
 		Kind:    agent.EventKindSubtaskStart,
 		TaskID:  taskID,
+		Text:    task,
+		Model:   strings.TrimSpace(req.Model),
 		Mode:    mode,
 		Profile: string(agent.NormalizeObserveProfile(string(req.ObserveProfile))),
 		Status:  "running",
@@ -865,7 +867,7 @@ func (rt *Runtime) runSubtask(ctx context.Context, req agent.SubtaskRequest, rou
 		}
 	}
 	logger.Info("subtask_done", "task_id", taskID, "status", result.Status, "output_kind", result.OutputKind)
-	agent.EmitEvent(ctx, nil, agent.Event{
+	agent.EmitEventDetached(ctx, nil, agent.Event{
 		Kind:       agent.EventKindSubtaskDone,
 		TaskID:     taskID,
 		Status:     strings.TrimSpace(result.Status),

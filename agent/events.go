@@ -19,6 +19,8 @@ const (
 	EventKindToolDone                = "tool_done"
 	EventKindToolOutput              = "tool_output"
 	EventKindLLMRetry                = "llm_retry"
+	EventKindLLMStart                = "llm_start"
+	EventKindLLMDone                 = "llm_done"
 	EventKindSubtaskStart            = "subtask_start"
 	EventKindSubtaskDone             = "subtask_done"
 	EventKindContextCompactionStart  = "context_compaction_start"
@@ -29,6 +31,7 @@ const (
 type Event struct {
 	Kind            string         `json:"kind"`
 	RunID           string         `json:"run_id,omitempty"`
+	Model           string         `json:"model,omitempty"`
 	Step            int            `json:"step,omitempty"`
 	ActivityID      string         `json:"activity_id,omitempty"`
 	ConversationKey string         `json:"conversation_key,omitempty"`

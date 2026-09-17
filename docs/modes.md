@@ -9,6 +9,12 @@ The README focuses on:
 
 For the other runtime modes, use the docs below.
 
+## Terminal chat
+
+- Command: `morph chat` (also the default for `morph`)
+- Purpose: interactive local agent execution with a subagent thread inspector
+- Docs: [chat.md](./chat.md)
+
 ## Console
 
 - Command: `morph console` (`morph console serve` remains supported)

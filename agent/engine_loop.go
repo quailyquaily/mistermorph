@@ -91,6 +91,7 @@ func (e *Engine) runLoop(ctx context.Context, st *engineLoopState) (final *Final
 
 	EmitEvent(ctx, nil, Event{
 		Kind:       EventKindTurnStart,
+		Model:      st.model,
 		ActivityID: "turn",
 		Status:     "running",
 	})
@@ -104,6 +105,13 @@ func (e *Engine) runLoop(ctx context.Context, st *engineLoopState) (final *Final
 			Kind:       EventKindTurnDone,
 			ActivityID: "turn",
 			Status:     "done",
+		}
+		if final != nil && final.Output != nil {
+			if output, ok := final.Output.(string); ok {
+				event.Text = output
+			} else if output, marshalErr := json.MarshalIndent(final.Output, "", "  "); marshalErr == nil {
+				event.Text = string(output)
+			}
 		}
 		if st.deadlineConclusion {
 			event.Reason = "task_deadline_exceeded"
@@ -179,6 +187,7 @@ func (e *Engine) runLoop(ctx context.Context, st *engineLoopState) (final *Final
 			}
 		} else {
 			start := time.Now()
+			EmitEvent(ctx, nil, Event{Kind: EventKindLLMStart, Step: step, Model: st.model, Status: "running"})
 			log.Debug("llm_call_start", "step", step, "messages", len(st.messages))
 			reqTools := st.tools
 			if st.disableToolsForFormatRetry {
@@ -186,6 +195,7 @@ func (e *Engine) runLoop(ctx context.Context, st *engineLoopState) (final *Final
 				st.disableToolsForFormatRetry = false
 			}
 			result, err = e.callMainWithContextCompaction(ctx, st, step, reqTools)
+			EmitEvent(ctx, nil, Event{Kind: EventKindLLMDone, Step: step, Model: st.model, Status: toolEventStatus(err), Error: eventErrorString(err)})
 			if err != nil {
 				failedAt := time.Now()
 				ctxErr := ctx.Err()
@@ -621,6 +631,7 @@ func (e *Engine) runLoop(ctx context.Context, st *engineLoopState) (final *Final
 					ActivityID: toolActivityID(step, &tc),
 					ToolName:   strings.TrimSpace(tc.Name),
 					Status:     toolEventStatus(item.err),
+					Text:       item.observation,
 					Error:      eventErrorString(item.err),
 					Args:       toolDisplayArgsSummary(strings.TrimSpace(tc.Name), tc.Params, e.logOpts),
 				})
@@ -648,11 +659,14 @@ func (e *Engine) runLoop(ctx context.Context, st *engineLoopState) (final *Final
 				execCtx, execCancel = context.WithCancel(ctx)
 			}
 			defer execCancel()
-			// Late worker events must not overwrite the canceled batch's recorded state.
+			// Ignore late progress for canceled batches, but deliver child lifecycle
+			// completions so observers can retire subagents after cancellation.
 			workerCtx := execCtx
 			if sink, ok := EventSinkFromContext(ctx); ok {
 				workerCtx = WithEventSinkContext(execCtx, EventSinkFunc(func(eventCtx context.Context, event Event) {
-					if execCtx.Err() == nil {
+					childTerminal := event.Kind == EventKindSubtaskDone ||
+						(event.RunID != st.runID && (event.Kind == EventKindTurnDone || event.Kind == EventKindTurnCanceled))
+					if execCtx.Err() == nil || childTerminal {
 						sink.HandleEvent(eventCtx, event)
 					}
 				}))
@@ -1006,6 +1020,7 @@ func (e *Engine) executeTool(ctx context.Context, st *engineLoopState, step int,
 	toolCtx := ctx
 	EmitEvent(ctx, nil, Event{
 		Kind:       EventKindToolStart,
+		Step:       step,
 		ActivityID: toolActivityID(step, tc),
 		ToolName:   strings.TrimSpace(tc.Name),
 		Status:     "running",

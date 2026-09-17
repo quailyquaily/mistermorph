@@ -92,8 +92,14 @@ type chatModel struct {
 	pickerIndex     int
 	pickerClosed    bool
 
-	transcriptQueue     []string
-	quitAfterTranscript bool
+	transcriptQueue            []string
+	transcriptPrinting         bool
+	transcriptResuming         bool
+	transcriptResumeGeneration uint64
+	quitAfterTranscript        bool
+	agents                     chatAgentStore
+	agentBrowser               *chatAgentBrowser
+	pendingAgentInspect        *agentInspectMsg
 
 	// pastedTexts stores the original text behind each paste placeholder,
 	// keyed by the exact placeholder string.
@@ -197,7 +203,7 @@ func (m *chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.PasteMsg:
-		if m.approval != nil {
+		if m.approval != nil || m.agentBrowser != nil {
 			return m, nil
 		}
 		if lines := countPasteLines(msg.Content); lines >= pastePlaceholderLineThreshold {
@@ -209,6 +215,12 @@ func (m *chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyPressMsg:
 		keyName := msg.String()
+		if m.agentBrowser != nil {
+			return m, m.updateAgentBrowser(keyName)
+		}
+		if keyName == "ctrl+g" {
+			return m, m.openAgentBrowser("")
+		}
 		if m.approval != nil {
 			decision := ""
 			switch keyName {
@@ -395,13 +407,34 @@ func (m *chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.enqueueTranscript(msg.output)
 
 	case transcriptPrintedMsg:
+		m.transcriptPrinting = false
 		if len(m.transcriptQueue) > 0 {
 			m.transcriptQueue = m.transcriptQueue[1:]
 		}
 		if len(m.transcriptQueue) == 0 && m.quitAfterTranscript {
 			return m, tea.Quit
 		}
+		if pending := m.pendingAgentInspect; pending != nil {
+			m.pendingAgentInspect = nil
+			return m, m.openAgentBrowser(pending.prefix)
+		}
 		return m, m.startTranscriptPrint()
+
+	case agentInspectMsg:
+		return m, m.openAgentBrowser(msg.prefix)
+
+	case agentInspectTickMsg:
+		if m.agentBrowser != nil {
+			return m, agentInspectTick()
+		}
+		return m, nil
+
+	case agentInspectClosedMsg:
+		if msg.generation == m.transcriptResumeGeneration {
+			m.transcriptResuming = false
+			return m, m.startTranscriptPrint()
+		}
+		return m, nil
 
 	case agentResultMsg:
 		if msg.err != nil && m.approval != nil {
@@ -419,8 +452,10 @@ func (m *chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.enqueueTranscript(msg.output)
 
 	case quitMsg:
+		m.pendingAgentInspect = nil
 		m.quitAfterTranscript = true
-		return m, m.enqueueTranscript("Bye! 👋")
+		m.transcriptQueue = append(m.transcriptQueue, "Bye! 👋")
+		return m, m.closeAgentBrowser()
 	}
 
 	before := m.textarea.Value()
@@ -437,6 +472,9 @@ func (m *chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // View renders only the fixed bottom surface. At normal heights, the leading
 // blank row separates it from transcript content printed into scrollback.
 func (m *chatModel) View() tea.View {
+	if m.agentBrowser != nil {
+		return m.viewAgentBrowser()
+	}
 	if m.approval != nil {
 		lines := []string{""}
 		return tea.NewView(strings.Join(append(lines, m.renderApproval()...), "\n"))
@@ -561,18 +599,15 @@ func wrapChatTranscript(text string, terminalWidth int) string {
 }
 
 func (m *chatModel) enqueueTranscript(text string) tea.Cmd {
-	idle := len(m.transcriptQueue) == 0
 	m.transcriptQueue = append(m.transcriptQueue, text)
-	if !idle {
-		return nil
-	}
 	return m.startTranscriptPrint()
 }
 
 func (m *chatModel) startTranscriptPrint() tea.Cmd {
-	if len(m.transcriptQueue) == 0 {
+	if len(m.transcriptQueue) == 0 || m.transcriptPrinting || m.transcriptResuming || m.agentBrowser != nil {
 		return nil
 	}
+	m.transcriptPrinting = true
 	text := wrapChatTranscript(m.transcriptQueue[0], m.width)
 	// Bubble Tea inserts transcript output by moving within the visible screen.
 	// A block taller than the terminal clamps that cursor movement and displaces

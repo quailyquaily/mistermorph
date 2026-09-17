@@ -36,6 +36,14 @@ func newChatRuntimeCommandRegistry(sess *chatSession) *chatcommands.Registry {
 // Each handler receives the mutable session so it can update client/engine state
 // when necessary (e.g. /models).
 func registerChatCommands(reg *chatcommands.Registry, sess *chatSession, history *[]llm.Message, historyBoundaries *[]string) {
+	for _, name := range []string{"/agents", "/agent", "/subagents"} {
+		reg.Register(name, "inspect subagent threads [id]", func(_ context.Context, args string) (*chatcommands.Result, error) {
+			if sess.sendMsg != nil {
+				sess.sendMsg(agentInspectMsg{prefix: strings.TrimSpace(args)})
+			}
+			return &chatcommands.Result{}, nil
+		})
+	}
 	writer := sess.writer
 	runAgentsCommand := func(ctx context.Context, input, activity, projectDir string) (*chatcommands.Result, error) {
 		commandCtx, finish := sess.beginForegroundCommand(ctx)

@@ -223,7 +223,17 @@ func runREPL(sess *chatSession) error {
 	model.commandRegistry = reg
 
 	ctx, cancel := context.WithCancel(rootCtx)
-	ctx = llmutil.WithRetryNotification(ctx, func(_ context.Context, event llmutil.RetryEvent) {
+	baseSink, _ := agent.EventSinkFromContext(ctx)
+	ctx = agent.WithEventSinkContext(ctx, agent.EventSinkFunc(func(eventCtx context.Context, event agent.Event) {
+		model.agents.HandleEvent(eventCtx, event)
+		if baseSink != nil {
+			baseSink.HandleEvent(eventCtx, event)
+		}
+	}))
+	ctx = llmutil.WithRetryNotification(ctx, func(retryCtx context.Context, event llmutil.RetryEvent) {
+		if model.agents.HandleRetry(retryCtx, event) {
+			return
+		}
 		safeSend(p, tuiOutputMsg{output: chatSecondaryStyle.Render("↻ " + event.StatusText())})
 	})
 	processorDone := make(chan struct{})
@@ -392,6 +402,12 @@ func runREPL(sess *chatSession) error {
 					continue
 				}
 				command, _ := chatcommands.ParseCommand(input)
+				// Inspection remains available during execution and approvals; it
+				// must never become a steer message or an approval response.
+				if isChatAgentCommand(command) {
+					_, _, _ = reg.Dispatch(ctx, input)
+					continue
+				}
 				switch chatcommands.NormalizeCommand(command) {
 				case "/exit", "/quit":
 					// Quit the UI first. Its return cancels the session, and the
