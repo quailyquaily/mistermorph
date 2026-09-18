@@ -69,7 +69,7 @@ func TestRunREPLReturnsWhenRootContextIsCanceled(t *testing.T) {
 	}
 	done := make(chan error, 1)
 	go func() {
-		done <- runREPL(sess)
+		done <- runREPL(sess, newChatModel(sess))
 	}()
 
 	cancel()

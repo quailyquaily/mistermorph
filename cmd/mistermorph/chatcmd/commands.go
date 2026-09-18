@@ -44,6 +44,19 @@ func registerChatCommands(reg *chatcommands.Registry, sess *chatSession, history
 			return &chatcommands.Result{}, nil
 		})
 	}
+	reg.Register("/topics", "list shared topics", func(_ context.Context, args string) (*chatcommands.Result, error) {
+		return sess.topicsCommand(strings.TrimSpace(args))
+	})
+	reg.Register("/topic", "new, switch, history, title, or delete a topic", func(ctx context.Context, args string) (*chatcommands.Result, error) {
+		result, err := sess.topicCommand(ctx, args)
+		if err == nil {
+			*history = nil
+			if historyBoundaries != nil {
+				*historyBoundaries = nil
+			}
+		}
+		return result, err
+	})
 	writer := sess.writer
 	runAgentsCommand := func(ctx context.Context, input, activity, projectDir string) (*chatcommands.Result, error) {
 		commandCtx, finish := sess.beginForegroundCommand(ctx)
@@ -91,7 +104,13 @@ func registerChatCommands(reg *chatcommands.Registry, sess *chatSession, history
 	})
 
 	reg.Register("/reset", "reset the conversation", func(ctx context.Context, args string) (*chatcommands.Result, error) {
-		if err := contextcheckpoint.Reset(ctx, sess.contextCheckpointRoot(), sess.conversationKey()); err != nil {
+		var err error
+		if sess.sharedTopics != nil {
+			err = sess.resetLocalTopic(ctx)
+		} else {
+			err = contextcheckpoint.Reset(ctx, sess.contextCheckpointRoot(), sess.conversationKey())
+		}
+		if err != nil {
 			return nil, fmt.Errorf("reset context checkpoint: %w", err)
 		}
 		*history = nil
@@ -300,42 +319,42 @@ func chatWorkspaceCommand(sess *chatSession) chatcommands.WorkspaceCommandFunc {
 		if err != nil {
 			return err.Error(), nil
 		}
+		dir := sess.defaultWorkspaceDir
 		switch cmd.Action {
 		case workspace.CommandStatus:
 			return workspace.StatusText(sess.workspaceDir), nil
 		case workspace.CommandAttach:
-			dir, err := workspace.ValidateDir(cmd.Dir, nil)
+			dir, err = workspace.ValidateDir(cmd.Dir, nil)
 			if err != nil {
 				return "error: " + err.Error(), nil
 			}
-			oldDir := sess.workspaceDir
-			sess.workspaceDir = dir
-			sess.refreshProjectScope()
-			ctx, cancel := chatTimeoutContext(sess.rootContext, sess.timeout)
-			err = sess.rebuildRuntimeState(ctx)
-			cancel()
-			if err != nil {
-				sess.workspaceDir = oldDir
-				sess.refreshProjectScope()
-				return "", err
-			}
-			return workspace.AttachText(oldDir, dir, oldDir != ""), nil
 		case workspace.CommandDetach:
-			oldDir := sess.workspaceDir
-			sess.workspaceDir = sess.defaultWorkspaceDir
-			sess.refreshProjectScope()
-			ctx, cancel := chatTimeoutContext(sess.rootContext, sess.timeout)
-			err := sess.rebuildRuntimeState(ctx)
-			cancel()
-			if err != nil {
-				sess.workspaceDir = oldDir
-				sess.refreshProjectScope()
-				return "", err
-			}
-			return workspace.DetachText(oldDir, oldDir != ""), nil
 		default:
 			return "error: unsupported workspace command", nil
 		}
+
+		oldDir := sess.workspaceDir
+		sess.workspaceDir = dir
+		sess.refreshProjectScope()
+		ctx, cancel := chatTimeoutContext(sess.rootContext, sess.timeout)
+		err = sess.rebuildRuntimeState(ctx)
+		cancel()
+		if err == nil && sess.sharedTopics != nil && sess.topicID != "" {
+			if cmd.Action == workspace.CommandAttach {
+				_, _, err = sess.sharedWorkspaces.Set(sess.conversationKey(), workspace.Attachment{WorkspaceDir: dir})
+			} else {
+				_, _, err = sess.sharedWorkspaces.Delete(sess.conversationKey())
+			}
+		}
+		if err != nil {
+			sess.workspaceDir = oldDir
+			sess.refreshProjectScope()
+			return "", err
+		}
+		if cmd.Action == workspace.CommandAttach {
+			return workspace.AttachText(oldDir, dir, oldDir != ""), nil
+		}
+		return workspace.DetachText(oldDir, oldDir != ""), nil
 	}
 }
 
@@ -345,6 +364,8 @@ func chatBuiltinCommandsBlock() string {
 		"- `/exit` or `/quit` — exit the chat session\n" +
 		"- `/stop` — stop the current running turn\n" +
 		"- `/reset` — reset the current conversation\n" +
+		"- `/topics` — select a shared topic in the current workspace\n" +
+		"- `/topic new|switch <id>|history [more]|title regenerate|delete` — manage shared topics\n" +
 		"- `/think <task>` — run one task through the think route with xhigh reasoning effort\n" +
 		"- `/skills` — show loaded and not loaded skills\n" +
 		"- `/models` — inspect or change the current model selection for this session\n" +
@@ -376,6 +397,7 @@ func formatChatStatus(sess *chatSession) (string, error) {
 	lines := []string{
 		"Chat status",
 		"Model: " + strings.TrimSpace(sess.mainCfg.Model),
+		"Topic: " + strings.TrimSpace(sess.topicID),
 		"Workspace: " + strings.TrimSpace(sess.workspaceDir),
 		"File state: " + strings.TrimSpace(sess.fileStateDir),
 		"File cache: " + strings.TrimSpace(sess.fileCacheDir),

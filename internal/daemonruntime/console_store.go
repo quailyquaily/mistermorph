@@ -16,6 +16,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/domainjournal"
 	"github.com/quailyquaily/mistermorph/internal/pagination"
 	"github.com/quailyquaily/mistermorph/internal/taskdomain"
+	"github.com/quailyquaily/mistermorph/internal/topicproj"
 )
 
 const (
@@ -36,17 +37,26 @@ type ConsoleFileStoreOptions struct {
 	Journal        *domainjournal.Journal
 	JournalDir     string
 	RotateMaxBytes int64
+	// Local chat reads shared history without recovering another runtime's jobs.
+	SkipRecovery bool
+	// TopicsProjectionPath optionally receives a lightweight topics
+	// projection after every topic mutation so local clients can read it
+	// without a runtime API connection. Write failures are ignored; the
+	// journal remains the source of truth.
+	TopicsProjectionPath string
 }
 
 type ConsoleFileStore struct {
 	mu sync.RWMutex
 
-	rootDir          string
-	journalDir       string
-	persist          bool
-	journal          *domainjournal.Journal
-	projectionCursor domainjournal.Cursor
-	projectionErr    error
+	rootDir              string
+	topicsProjectionPath string
+	journalDir           string
+	persist              bool
+	skipRecovery         bool
+	journal              *domainjournal.Journal
+	projectionCursor     domainjournal.Cursor
+	projectionErr        error
 
 	items             map[string]TaskInfo
 	topics            map[string]TopicInfo
@@ -76,13 +86,15 @@ func NewConsoleFileStore(opts ConsoleFileStoreOptions) (*ConsoleFileStore, error
 		return nil, fmt.Errorf("console task store root dir is required")
 	}
 	s := &ConsoleFileStore{
-		rootDir:           filepath.Clean(rootDir),
-		persist:           opts.Persist,
-		journal:           opts.Journal,
-		items:             map[string]TaskInfo{},
-		topics:            map[string]TopicInfo{},
-		triggers:          map[string]TaskTrigger{},
-		orderedIDsByTopic: map[string][]string{},
+		rootDir:              filepath.Clean(rootDir),
+		topicsProjectionPath: cleanOptionalPath(opts.TopicsProjectionPath),
+		persist:              opts.Persist,
+		skipRecovery:         opts.SkipRecovery,
+		journal:              opts.Journal,
+		items:                map[string]TaskInfo{},
+		topics:               map[string]TopicInfo{},
+		triggers:             map[string]TaskTrigger{},
+		orderedIDsByTopic:    map[string][]string{},
 	}
 	journalDir := cleanOptionalPath(opts.JournalDir)
 	if s.journal == nil && journalDir != "" {
@@ -126,8 +138,11 @@ func (s *ConsoleFileStore) ApplyConfig(opts ConsoleFileStoreOptions) error {
 		return fmt.Errorf("journal dir is required")
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	unlock, err := s.lockShared()
+	if err != nil {
+		return err
+	}
+	defer unlock()
 
 	sameJournal := sameConsoleJournalStorage(s.journal, s.journalDir, nextJournal, nextJournalDir)
 
@@ -174,8 +189,11 @@ func (s *ConsoleFileStore) CreateTopic(title string) (TopicInfo, error) {
 		UpdatedAt: now,
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	unlock, err := s.lockShared()
+	if err != nil {
+		return TopicInfo{}, err
+	}
+	defer unlock()
 	cursor, err := s.appendTopicEventLocked(taskdomain.JournalTypeTopicUpsert, topic, now, TaskTrigger{})
 	if err != nil {
 		return TopicInfo{}, err
@@ -183,6 +201,7 @@ func (s *ConsoleFileStore) CreateTopic(title string) (TopicInfo, error) {
 	s.topics[topic.ID] = topic
 	s.orderedTopicIDs = upsertOrderedTopicID(s.orderedTopicIDs, s.topics, topic.ID)
 	s.projectionCursor = cursor
+	s.persistTopicsProjectionLocked(now)
 	return topic, nil
 }
 
@@ -204,10 +223,26 @@ func (s *ConsoleFileStore) UpsertWithTrigger(info TaskInfo, trigger TaskTrigger,
 	}
 	now := time.Now().UTC()
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	unlock, err := s.lockShared()
+	if err != nil {
+		return err
+	}
+	defer unlock()
 
 	info.TopicID = s.normalizeTopicIDLocked(info.TopicID)
+	if topic, ok := s.topics[info.TopicID]; ok && topicDeleted(topic) {
+		if _, exists := s.items[info.ID]; !exists {
+			return fmt.Errorf("topic %q was deleted", info.TopicID)
+		}
+	}
+	if _, exists := s.items[info.ID]; !exists && activeConsoleTask(info) && info.SteerTargetTaskID == "" {
+		for _, other := range s.items {
+			if other.TopicID == info.TopicID && activeConsoleTask(other) && other.SteerTargetTaskID == "" &&
+				(trigger.Source == "chat" || s.triggers[other.ID].Source == "chat") {
+				return ErrTopicBusy
+			}
+		}
+	}
 	currentTopic, topicExists := s.topics[info.TopicID]
 	topic := nextConsoleTopic(currentTopic, topicExists, info.TopicID, topicTitle, now, true)
 	cursor, err := s.appendTaskEventLocked(info, &topic, now, s.triggerForTaskLocked(info.ID, trigger), taskdomain.JournalTypeTaskUpsert)
@@ -226,6 +261,7 @@ func (s *ConsoleFileStore) UpsertWithTrigger(info TaskInfo, trigger TaskTrigger,
 		s.triggers[info.ID] = taskdomain.NormalizeTaskTrigger(trigger)
 	}
 	s.projectionCursor = cursor
+	s.persistTopicsProjectionLocked(now)
 	return nil
 }
 
@@ -247,8 +283,11 @@ func (s *ConsoleFileStore) UpdateWithTrigger(id string, trigger TaskTrigger, fn 
 	}
 	now := time.Now().UTC()
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	unlock, err := s.lockShared()
+	if err != nil {
+		return err
+	}
+	defer unlock()
 
 	item, ok := s.items[id]
 	if !ok {
@@ -292,9 +331,12 @@ func (s *ConsoleFileStore) Get(id string) (*TaskInfo, bool) {
 	if id == "" {
 		return nil, false
 	}
-	s.mu.RLock()
+	unlock, err := s.lockShared()
+	if err != nil {
+		return nil, false
+	}
+	defer unlock()
 	item, ok := s.items[id]
-	s.mu.RUnlock()
 	if !ok {
 		return nil, false
 	}
@@ -310,9 +352,12 @@ func (s *ConsoleFileStore) GetTopic(id string) (*TopicInfo, bool) {
 	if id == "" {
 		return nil, false
 	}
-	s.mu.RLock()
+	unlock, err := s.lockShared()
+	if err != nil {
+		return nil, false
+	}
+	defer unlock()
 	topic, ok := s.topics[id]
-	s.mu.RUnlock()
 	if !ok {
 		return nil, false
 	}
@@ -328,9 +373,12 @@ func (s *ConsoleFileStore) GetTrigger(taskID string) (TaskTrigger, bool) {
 	if taskID == "" {
 		return TaskTrigger{}, false
 	}
-	s.mu.RLock()
+	unlock, err := s.lockShared()
+	if err != nil {
+		return TaskTrigger{}, false
+	}
+	defer unlock()
 	trigger, ok := s.triggers[taskID]
-	s.mu.RUnlock()
 	if !ok {
 		return TaskTrigger{}, false
 	}
@@ -353,7 +401,11 @@ func (s *ConsoleFileStore) List(opts TaskListOptions) []TaskInfo {
 
 	cursor, cursorOK := pagination.ParseKeysetCursor(opts.Cursor)
 	useCursor := cursorOK && strings.TrimSpace(opts.Cursor) != ""
-	s.mu.RLock()
+	unlock, err := s.lockShared()
+	if err != nil {
+		return nil
+	}
+	defer unlock()
 	orderedIDs := s.orderedIDs
 	if topicID != "" {
 		orderedIDs = s.orderedIDsByTopic[topicID]
@@ -388,7 +440,6 @@ func (s *ConsoleFileStore) List(opts TaskListOptions) []TaskInfo {
 			break
 		}
 	}
-	s.mu.RUnlock()
 	return out
 }
 
@@ -429,7 +480,11 @@ func (s *ConsoleFileStore) ListTopicsPage(opts TopicListOptions) []TopicInfo {
 	}
 	cursor, cursorOK := pagination.ParseKeysetCursor(opts.Cursor)
 	useCursor := cursorOK && strings.TrimSpace(opts.Cursor) != ""
-	s.mu.RLock()
+	unlock, err := s.lockShared()
+	if err != nil {
+		return nil
+	}
+	defer unlock()
 	start := 0
 	if useCursor {
 		start = sort.Search(len(s.orderedTopicIDs), func(i int) bool {
@@ -448,7 +503,6 @@ func (s *ConsoleFileStore) ListTopicsPage(opts TopicListOptions) []TopicInfo {
 			break
 		}
 	}
-	s.mu.RUnlock()
 	return out
 }
 
@@ -462,8 +516,11 @@ func (s *ConsoleFileStore) DeleteTopic(id string) (bool, error) {
 	}
 	now := time.Now().UTC()
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	unlock, err := s.lockShared()
+	if err != nil {
+		return false, err
+	}
+	defer unlock()
 
 	topic, ok := s.topics[id]
 	if !ok {
@@ -471,6 +528,11 @@ func (s *ConsoleFileStore) DeleteTopic(id string) (bool, error) {
 	}
 	if topic.DeletedAt != nil {
 		return true, nil
+	}
+	for _, task := range s.items {
+		if task.TopicID == id && activeConsoleTask(task) && (s.skipRecovery || s.triggers[task.ID].Source == "chat") {
+			return false, ErrTopicBusy
+		}
 	}
 	topic.DeletedAt = &now
 	topic.UpdatedAt = now
@@ -481,6 +543,7 @@ func (s *ConsoleFileStore) DeleteTopic(id string) (bool, error) {
 	s.topics[id] = topic
 	s.orderedTopicIDs = removeOrderedTopicID(s.orderedTopicIDs, id)
 	s.projectionCursor = cursor
+	s.persistTopicsProjectionLocked(now)
 	return true, nil
 }
 
@@ -506,8 +569,11 @@ func (s *ConsoleFileStore) setTopicTitle(id, title, icon, expectedTitle string, 
 	}
 	now := time.Now().UTC()
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	unlock, err := s.lockShared()
+	if err != nil {
+		return err
+	}
+	defer unlock()
 
 	topic, ok := s.topics[id]
 	if !ok || topicDeleted(topic) {
@@ -531,8 +597,11 @@ func (s *ConsoleFileStore) setTopicTitle(id, title, icon, expectedTitle string, 
 // BeginTopicTitleRegeneration invalidates pending naming results without changing
 // the displayed title, icon or topic ordering. Its revision survives a restart.
 func (s *ConsoleFileStore) BeginTopicTitleRegeneration(id string) (TopicInfo, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	unlock, err := s.lockShared()
+	if err != nil {
+		return TopicInfo{}, err
+	}
+	defer unlock()
 	topic, ok := s.topics[id]
 	if !ok || topicDeleted(topic) {
 		return TopicInfo{}, ErrTopicTitleChanged
@@ -545,8 +614,11 @@ func (s *ConsoleFileStore) BeginTopicTitleRegeneration(id string) (TopicInfo, er
 }
 
 func (s *ConsoleFileStore) CompleteTopicTitleRegeneration(id string, revision uint64, title, icon string) (TopicInfo, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	unlock, err := s.lockShared()
+	if err != nil {
+		return TopicInfo{}, err
+	}
+	defer unlock()
 	topic, ok := s.topics[id]
 	if !ok || topicDeleted(topic) || revision == 0 || topic.TitleRevision != revision {
 		return TopicInfo{}, ErrTopicTitleChanged
@@ -580,14 +652,18 @@ func (s *ConsoleFileStore) saveTopicTitleLocked(topic TopicInfo, now time.Time) 
 		s.orderedTopicIDs = upsertOrderedTopicID(s.orderedTopicIDs, s.topics, topic.ID)
 	}
 	s.projectionCursor = cursor
+	s.persistTopicsProjectionLocked(now)
 	return nil
 }
 
 // TopicTitleTasks returns the first user task and a bounded recent history in
 // chronological order. Slash commands are not conversation subjects.
 func (s *ConsoleFileStore) TopicTitleTasks(id string, recentLimit int) []TaskInfo {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	unlock, err := s.lockShared()
+	if err != nil {
+		return nil
+	}
+	defer unlock()
 	if topic, ok := s.topics[id]; !ok || topicDeleted(topic) || recentLimit <= 0 {
 		return nil
 	}
@@ -614,8 +690,11 @@ func (s *ConsoleFileStore) TopicTitleTasks(id string, recentLimit int) []TaskInf
 }
 
 func (s *ConsoleFileStore) load() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	unlock, err := s.lockState()
+	if err != nil {
+		return err
+	}
+	defer unlock()
 
 	if !s.persist {
 		return nil
@@ -635,14 +714,35 @@ func (s *ConsoleFileStore) load() error {
 	}
 	s.pruneUnusedDefaultTopicLocked()
 	now := time.Now().UTC()
-	if err := s.recoverNonTerminalTasksLocked(now); err != nil {
-		return err
+	if !s.skipRecovery {
+		if err := s.recoverNonTerminalTasksLocked(now, false); err != nil {
+			return err
+		}
 	}
 	s.orderedIDs = rebuildOrderedTaskIDs(s.items)
 	s.orderedIDsByTopic = groupOrderedTaskIDsByTopic(s.orderedIDs, s.items)
 	s.orderedTopicIDs = rebuildOrderedTopicIDs(s.topics)
 	s.projectionErr = s.persistSnapshotLocked(now)
+	s.persistTopicsProjectionLocked(now)
 	return nil
+}
+
+// persistTopicsProjectionLocked mirrors the current topic list into the
+// optional projection file. Best effort: the file is a read cache for local
+// clients and the journal stays authoritative.
+func (s *ConsoleFileStore) persistTopicsProjectionLocked(now time.Time) {
+	if s.topicsProjectionPath == "" {
+		return
+	}
+	items := make([]TopicInfo, 0, len(s.orderedTopicIDs))
+	for _, id := range s.orderedTopicIDs {
+		topic, ok := s.topics[id]
+		if !ok || topicDeleted(topic) {
+			continue
+		}
+		items = append(items, normalizeTopicInfo(topic))
+	}
+	_ = topicproj.Save(s.topicsProjectionPath, items)
 }
 
 func (s *ConsoleFileStore) loadSnapshotLocked() (domainjournal.Cursor, error) {
@@ -832,12 +932,24 @@ func (s *ConsoleFileStore) replayJournalLocked(cursor domainjournal.Cursor) erro
 	})
 }
 
-func (s *ConsoleFileStore) recoverNonTerminalTasksLocked(now time.Time) error {
+func (s *ConsoleFileStore) recoverNonTerminalTasksLocked(now time.Time, chatOnly bool) error {
 	for id, item := range s.items {
 		switch item.Status {
 		case TaskQueued, TaskRunning, TaskPending:
 		default:
 			continue
+		}
+		if chatOnly && s.triggers[id].Source != "chat" {
+			continue
+		}
+		if trigger := s.triggers[id]; trigger.Source == "chat" && trigger.Ref != "" {
+			live, err := s.chatSessionAlive(trigger.Ref)
+			if err != nil {
+				return err
+			}
+			if live {
+				continue
+			}
 		}
 		item.Status = TaskCanceled
 		item.Error = "runtime restarted"

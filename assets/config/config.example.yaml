@@ -489,6 +489,8 @@ server:
   # Bearer token required for submit/get endpoints.
   # Also used by channel runtime APIs (telegram/slack/line/lark/mixin/console runtime API server).
   # Prefer env var: MISTER_MORPH_SERVER_AUTH_TOKEN.
+  # Default `morph chat` uses automatic local credentials and does not require this.
+  # For `chat --runtime-url`, supply this token via MISTERMORPH_RUNTIME_TOKEN.
   auth_token: ""
   # Max queued tasks (in-memory).
   max_queue: 100
@@ -496,6 +498,7 @@ server:
 # Console mode (`morph console serve`).
 console:
   # Bind address for console API + SPA.
+  # Used by explicitly started Console; terminal chat does not open a Web listener.
   listen: "127.0.0.1:9080"
   # Base path for console routes and static files.
   base_path: "/"

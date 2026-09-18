@@ -12,7 +12,7 @@ For the other runtime modes, use the docs below.
 ## Terminal chat
 
 - Command: `morph chat` (also the default for `morph`)
-- Purpose: interactive local agent execution with a subagent thread inspector
+- Purpose: run the agent locally and share topics and history with Web Console through the same state directory; Console is started separately. Includes a subagent thread inspector
 - Docs: [chat.md](./chat.md)
 
 ## Console

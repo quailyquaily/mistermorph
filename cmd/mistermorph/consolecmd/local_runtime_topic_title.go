@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/quailyquaily/mistermorph/internal/chathistory"
 	"github.com/quailyquaily/mistermorph/internal/daemonruntime"
 	"github.com/quailyquaily/mistermorph/internal/textutil"
 )
@@ -64,7 +65,7 @@ func consoleTopicTitleInput(tasks []daemonruntime.TaskInfo) string {
 		if task.Status != daemonruntime.TaskDone || task.SteerTargetTaskID != "" {
 			continue
 		}
-		if reply := consoleTaskResultOutput(task.Result); reply != "" {
+		if reply := chathistory.TaskResultOutput(task.Result); reply != "" {
 			input.WriteString("Assistant: ")
 			input.WriteString(textutil.TruncateRunes(reply, 400))
 			input.WriteByte('\n')

@@ -2,6 +2,7 @@ package chatcmd
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -20,6 +21,8 @@ import (
 	"github.com/quailyquaily/mistermorph/guard"
 	"github.com/quailyquaily/mistermorph/internal/caprefs"
 	"github.com/quailyquaily/mistermorph/internal/chatcommands"
+	"github.com/quailyquaily/mistermorph/internal/skillsutil"
+	"github.com/quailyquaily/mistermorph/internal/taskdomain"
 )
 
 // Messages sent from the agent goroutine back into the TUI.
@@ -46,6 +49,7 @@ type (
 
 type chatSessionStatus struct {
 	model        string
+	topic        string
 	workspace    string
 	contextRatio float64
 	contextKnown bool
@@ -66,9 +70,16 @@ type chatPicker struct {
 // chatModel owns only the fixed bottom surface. Conversation history is
 // printed with tea.Println so it remains in the terminal's native scrollback.
 type chatModel struct {
-	textarea textarea.Model
-	sess     *chatSession
+	topicView
+	*sharedChat
+	textarea      textarea.Model
+	sess          *chatSession
+	skillItems    []skillsutil.SkillStatusItem
+	skillsLoading bool
+	skillsError   string
+	notice        string
 
+	historyPath  string
 	inputHistory []string
 	historyIdx   int
 	submitted    chan string
@@ -85,6 +96,7 @@ type chatModel struct {
 
 	quitConfirmation  bool
 	approval          *guard.ApprovalRecord
+	approvalParams    map[string]any
 	approvalResolving bool
 	approvalScroll    int
 
@@ -142,7 +154,7 @@ var (
 	chatSpinnerFrames = [...]string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 )
 
-func newChatModel(sess *chatSession) *chatModel {
+func newChatTextarea() textarea.Model {
 	ta := textarea.New()
 	ta.ShowLineNumbers = false
 	ta.Placeholder = "Ask a question or describe a task"
@@ -171,9 +183,13 @@ func newChatModel(sess *chatSession) *chatModel {
 
 	// Enter submits. Modified Enter and Ctrl+J remain composer newlines.
 	ta.KeyMap.InsertNewline = key.NewBinding(key.WithKeys("shift+enter", "alt+enter", "ctrl+j"))
+	return ta
+}
 
-	return &chatModel{
-		textarea:    ta,
+func newChatModel(sess *chatSession) *chatModel {
+	m := &chatModel{
+		topicView:   topicView{tasks: map[string]taskdomain.TaskInfo{}, printed: map[string]string{}},
+		textarea:    newChatTextarea(),
 		sess:        sess,
 		submitted:   make(chan string, 1),
 		status:      chatSessionStatusFromSession(sess),
@@ -181,13 +197,39 @@ func newChatModel(sess *chatSession) *chatModel {
 		height:      24,
 		pastedTexts: make(map[string]string),
 	}
+	if sess != nil {
+		m.skillItems = sess.skillItems
+	}
+	return m
 }
 
 func (m *chatModel) Init() tea.Cmd {
+	if m.sharedChat != nil {
+		return m.initShared()
+	}
+	if m.topic.ID != "" {
+		return tea.Batch(textarea.Blink, m.printHistory(true))
+	}
 	return textarea.Blink
 }
 
-func (m *chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *chatModel) Update(msg tea.Msg) (model tea.Model, command tea.Cmd) {
+	if m.sharedChat != nil {
+		defer func() {
+			m.save()
+			if tick := m.syncSharedActivity(); tick != nil {
+				command = tea.Batch(command, tick)
+			}
+		}()
+		if cmd, handled := m.updateShared(msg); handled {
+			return m, cmd
+		}
+	}
+	if m.sharedChat == nil {
+		if cmd, handled := m.updateLocalTopics(msg); handled {
+			return m, cmd
+		}
+	}
 	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
@@ -197,6 +239,9 @@ func (m *chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.textarea.MaxHeight = maxInputHeight
 		if m.height > 0 && m.height < shortTerminalHeight {
 			m.textarea.MaxHeight = shortInputHeight
+		}
+		if m.height > 0 {
+			m.textarea.MaxHeight = min(m.textarea.MaxHeight, max(1, m.height-3))
 		}
 		m.textarea.SetWidth(m.contentWidth())
 		m.clampApprovalScroll()
@@ -239,6 +284,9 @@ func (m *chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 			if decision != "" && !m.approvalResolving {
+				if m.sharedChat != nil {
+					return m, m.decideSharedApproval(decision == "y")
+				}
 				m.approvalResolving = true
 				select {
 				case m.submitted <- decision:
@@ -301,6 +349,9 @@ func (m *chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			if m.thinking {
+				if m.sharedChat != nil {
+					return m, m.command("/stop")
+				}
 				go func() { m.submitted <- "/stop" }()
 				return m, nil
 			}
@@ -464,6 +515,9 @@ func (m *chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if m.textarea.Value() != before {
 		m.pickerClosed = false
 		m.pickerIndex = 0
+		if m.sharedChat != nil && m.skillsError != "" && !m.skillsLoading && strings.Contains(m.textarea.Value(), "$") {
+			cmds = append(cmds, m.loadSharedSettings())
+		}
 	}
 	cmds = append(cmds, cmd)
 	return m, tea.Batch(cmds...)
@@ -472,6 +526,9 @@ func (m *chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // View renders only the fixed bottom surface. At normal heights, the leading
 // blank row separates it from transcript content printed into scrollback.
 func (m *chatModel) View() tea.View {
+	if m.listing {
+		return m.viewTopics()
+	}
 	if m.agentBrowser != nil {
 		return m.viewAgentBrowser()
 	}
@@ -479,24 +536,64 @@ func (m *chatModel) View() tea.View {
 		lines := []string{""}
 		return tea.NewView(strings.Join(append(lines, m.renderApproval()...), "\n"))
 	}
-	lines := make([]string, 0, 8)
-	if m.height >= shortTerminalHeight {
-		lines = append(lines, "")
+	composer := strings.Split(renderChatTextarea(m.textarea), "\n")
+	if m.height > 0 && (m.height < 4 || (m.thinking && len(composer)+2 > m.height)) {
+		composer = strings.Split(m.textarea.View(), "\n")
 	}
+	if m.height > 0 && len(composer) >= m.height {
+		return m.fitView(composer)
+	}
+	picker := m.renderPicker()
+	budget := m.height - len(composer) - len(picker) - 1
+	lines := make([]string, 0, 8)
+	if m.height >= shortTerminalHeight && budget > 0 {
+		lines = append(lines, "")
+		budget--
+	}
+	var activity []string
 	if m.thinking {
-		lines = append(lines, m.renderActivity())
-		if m.height >= shortTerminalHeight {
+		activity = append(activity, m.renderActivity())
+	}
+	if m.notice != "" {
+		activity = append(activity, chatSecondaryStyle.Render(remoteLine(m.notice)))
+	}
+	if m.sharedChat != nil {
+		if progress := strings.TrimSuffix(m.streamView(), "\n"); progress != "" {
+			activity = append(activity, strings.Split(progress, "\n")...)
+		}
+	}
+	if len(activity) > 0 && budget > 0 {
+		gap := m.height >= shortTerminalHeight && budget > 1
+		if gap {
+			budget--
+		}
+		if len(activity) > budget {
+			activity = activity[:budget]
+			if !m.thinking || budget > 1 {
+				activity[len(activity)-1] = "… progress clipped to terminal height"
+			}
+		}
+		lines = append(lines, activity...)
+		if gap {
 			lines = append(lines, "")
 		}
 	}
-	lines = append(lines, m.renderTextarea())
-	if picker := m.renderPicker(); len(picker) > 0 {
-		lines = append(lines, picker...)
-	}
+	lines = append(lines, composer...)
+	lines = append(lines, picker...)
 	lines = append(lines, m.renderFooter())
-	return tea.NewView(strings.Join(lines, "\n"))
+	return m.fitView(lines)
 }
 
+// fitView clips by terminal cells, not bytes, without breaking ANSI sequences.
+func (m *chatModel) fitView(lines []string) tea.View {
+	if len(lines) > m.height {
+		lines = lines[:m.height]
+	}
+	for i, line := range lines {
+		lines[i] = ansi.Truncate(line, m.width, "…")
+	}
+	return tea.NewView(strings.Join(lines, "\n"))
+}
 func (m *chatModel) contentWidth() int {
 	if m.width <= 1 {
 		return 10
@@ -504,9 +601,9 @@ func (m *chatModel) contentWidth() int {
 	return max(10, m.width-1)
 }
 
-func (m *chatModel) renderTextarea() string {
-	view := m.textarea.View()
-	ranges := chatInputHighlightRanges(view, m.textarea.Value())
+func renderChatTextarea(input textarea.Model) string {
+	view := input.View()
+	ranges := chatInputHighlightRanges(view, input.Value())
 	if len(ranges) > 0 {
 		cursorStart, cursorEnd, cursorVisible := chatInputCursorRange(view)
 		visible := make([]lipgloss.Range, 0, len(ranges)+1)
@@ -662,6 +759,14 @@ func (m *chatModel) renderActivity() string {
 
 func (m *chatModel) renderFooter() string {
 	width := m.contentWidth()
+	if strings.Contains(m.textarea.Value(), "$") {
+		if m.skillsLoading {
+			return fitChatLine(chatMutedStyle.Render("  Loading skills…"), width)
+		}
+		if m.skillsError != "" {
+			return fitChatLine(chatWarningStyle.Render("  Skills unavailable; edit the reference to retry"), width)
+		}
+	}
 	if picker := m.picker(); len(picker.items) > 0 {
 		enterAction := "run"
 		if !picker.submitOnEnter {
@@ -672,14 +777,6 @@ func (m *chatModel) renderFooter() string {
 	if m.quitConfirmation {
 		return fitChatLine(chatMutedStyle.Render("  Ctrl+C again to exit"), width)
 	}
-	if m.thinking {
-		text := "  Enter steer · Ctrl+J newline · Esc/Ctrl+C stop"
-		if width < 60 {
-			text = "  Esc/Ctrl+C stop"
-		}
-		return fitChatLine(chatMutedStyle.Render(text), width)
-	}
-
 	left := make([]string, 0, 3)
 	if m.status.model != "" {
 		left = append(left, m.status.model)
@@ -690,8 +787,18 @@ func (m *chatModel) renderFooter() string {
 	if m.status.contextKnown {
 		left = append(left, fmt.Sprintf("ctx %.0f%%", m.status.contextRatio*100))
 	}
+	if m.status.topic != "" {
+		left = append(left, remoteLine(m.status.topic))
+	}
 	leftText := strings.Join(left, " · ")
-	return chatMutedStyle.Render(joinChatFooter(leftText, "Ctrl+J newline · / commands", width))
+	hint := "Ctrl+J newline · / commands"
+	if m.thinking {
+		hint = "Enter steer · Ctrl+J newline · Esc/Ctrl+C stop"
+		if ansi.StringWidth(leftText)+ansi.StringWidth(hint)+5 > width {
+			hint = "Enter steer · Ctrl+C stop"
+		}
+	}
+	return chatMutedStyle.Render(joinChatFooter(leftText, hint, width))
 }
 
 func (m *chatModel) atTextareaTop() bool {
@@ -737,15 +844,8 @@ func joinChatFooter(left, right string, width int) string {
 	if gap >= 3 {
 		return left + strings.Repeat(" ", gap) + right
 	}
-	if width < 40 {
-		return fitChatLine("  "+right, width)
-	}
-	availableLeft := width - ansi.StringWidth(right) - 3
-	if availableLeft <= inputMarkerWidth {
-		return fitChatLine("  "+right, width)
-	}
-	left = ansi.Truncate(left, availableLeft, "…")
-	return left + "   " + right
+	// Keep session status visible when there is no room for keyboard hints.
+	return fitChatLine(left, width)
 }
 
 func fitChatLine(line string, width int) string {
@@ -774,6 +874,11 @@ func chatSessionStatusFromSession(sess *chatSession) chatSessionStatus {
 	status := chatSessionStatus{
 		model:     strings.TrimSpace(sess.mainCfg.Model),
 		workspace: strings.TrimSpace(sess.workspaceDir),
+	}
+	if sess.sharedTopics != nil && sess.topicID != "" {
+		if topic, ok := sess.sharedTopics.GetTopic(sess.topicID); ok {
+			status.topic = topic.Title
+		}
 	}
 	if sess.topicContextStore == nil {
 		return status
@@ -805,6 +910,39 @@ func (m *chatModel) submitInput(value string) tea.Cmd {
 		return nil
 	}
 	expanded := m.expandPastePlaceholders(raw)
+	if m.sharedChat != nil {
+		m.pickerClosed = false
+		m.pickerIndex = 0
+		var cmd tea.Cmd
+		localCommand := false
+		if strings.HasPrefix(raw, "/") {
+			name, _ := chatcommands.ParseCommand(expanded)
+			// Task commands keep their draft until the server acknowledges it,
+			// just as ordinary messages do.
+			if !isSharedTaskCommand(chatcommands.NormalizeCommand(name)) {
+				localCommand = true
+				m.textarea.Reset()
+				m.save()
+			}
+			cmd = m.command(expanded)
+		} else {
+			cmd = m.submit(expanded)
+		}
+		if cmd != nil || localCommand {
+			// Paste placeholders belong to a draft; input history crosses topics.
+			m.saveHistoryLine(expanded)
+			m.inputHistory = append(m.inputHistory, expanded)
+			m.historyIdx = len(m.inputHistory)
+		}
+		return cmd
+	}
+	if strings.TrimSpace(expanded) == "/topic history more" {
+		if m.cursor == "" {
+			m.textarea.Reset()
+			return nil
+		}
+		expanded += " " + m.cursor
+	}
 	go func() { m.submitted <- expanded }()
 	m.saveHistoryLine(raw)
 	m.inputHistory = append(m.inputHistory, raw)
@@ -835,7 +973,7 @@ func (m *chatModel) picker() chatPicker {
 		}
 		picker.replaceEnd = len([]rune(input))
 		picker.submitOnEnter = true
-	} else if m.sess != nil && len(m.sess.skillItems) > 0 {
+	} else if len(m.skillItems) > 0 {
 		runes := []rune(input)
 		cursor := min(len(runes), textareaCursorOffset(m.textarea))
 		start := cursor
@@ -845,7 +983,7 @@ func (m *chatModel) picker() chatPicker {
 		token := runes[start:cursor]
 		if len(token) > 0 && token[0] == '$' {
 			query := strings.ToLower(string(token[1:]))
-			for _, skill := range m.sess.skillItems {
+			for _, skill := range m.skillItems {
 				id := strings.TrimSpace(skill.ID)
 				if id == "" {
 					id = strings.TrimSpace(skill.Name)
@@ -940,7 +1078,7 @@ func (m *chatModel) renderPicker() []string {
 		limit = shortPickerItems
 	}
 	if m.height > 0 {
-		textareaRows := strings.Count(m.renderTextarea(), "\n") + 1
+		textareaRows := strings.Count(renderChatTextarea(m.textarea), "\n") + 1
 		reservedRows := 1 + textareaRows // footer
 		if m.height >= shortTerminalHeight {
 			reservedRows++ // space above the composer
@@ -998,7 +1136,7 @@ func (m *chatModel) renderPicker() []string {
 }
 
 func (m *chatModel) renderApproval() []string {
-	data := chatApprovalData(*m.approval)
+	data := chatApprovalData(*m.approval, m.approvalParams)
 	tool := data.tool
 	if tool == "" {
 		tool = "action"
@@ -1062,7 +1200,7 @@ func (m *chatModel) clampApprovalScroll() {
 		return
 	}
 	bodyHeight := max(0, max(1, m.height-1)-2)
-	body := renderApprovalBody(chatApprovalData(*m.approval), m.contentWidth())
+	body := renderApprovalBody(chatApprovalData(*m.approval, m.approvalParams), m.contentWidth())
 	m.approvalScroll = min(max(0, m.approvalScroll), max(0, len(body)-bodyHeight))
 }
 
@@ -1100,7 +1238,13 @@ func (m *chatModel) expandPastePlaceholders(s string) string {
 }
 
 func (m *chatModel) loadHistory() error {
-	path := filepath.Join(os.Getenv("HOME"), ".mistermorph_chat_history")
+	path := m.historyPath
+	if path == "" {
+		if m.sharedChat != nil {
+			return nil
+		}
+		path = filepath.Join(os.Getenv("HOME"), ".mistermorph_chat_history")
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -1112,6 +1256,12 @@ func (m *chatModel) loadHistory() error {
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		if line != "" {
+			var entry struct {
+				Text string `json:"text"`
+			}
+			if json.Unmarshal([]byte(line), &entry) == nil && entry.Text != "" {
+				line = entry.Text
+			}
 			m.inputHistory = append(m.inputHistory, line)
 		}
 	}
@@ -1120,11 +1270,19 @@ func (m *chatModel) loadHistory() error {
 }
 
 func (m *chatModel) saveHistoryLine(input string) {
-	path := filepath.Join(os.Getenv("HOME"), ".mistermorph_chat_history")
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	path := m.historyPath
+	if path == "" {
+		if m.sharedChat != nil {
+			return
+		}
+		path = filepath.Join(os.Getenv("HOME"), ".mistermorph_chat_history")
+	}
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return
 	}
 	defer f.Close()
-	_, _ = fmt.Fprintln(f, input)
+	_ = json.NewEncoder(f).Encode(struct {
+		Text string `json:"text"`
+	}{input})
 }

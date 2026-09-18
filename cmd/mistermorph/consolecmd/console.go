@@ -1,6 +1,11 @@
 package consolecmd
 
-import "github.com/spf13/cobra"
+import (
+	"github.com/quailyquaily/mistermorph/internal/localconsole"
+	"github.com/quailyquaily/mistermorph/internal/runtimepaths"
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+)
 
 func New(version ...string) *cobra.Command {
 	buildVersion := ""
@@ -14,6 +19,14 @@ func New(version ...string) *cobra.Command {
 	}
 	serve := newServeCmd(buildVersion)
 	cmd.AddCommand(serve)
+	cmd.AddCommand(&cobra.Command{
+		Use:   "stop",
+		Short: "Stop the local Console runtime",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return localconsole.Stop(cmd.Context(), runtimepaths.FromReader(viper.GetViper()).StateDir)
+		},
+	})
 	cmd.RunE = serve.RunE
 	cmd.Flags().AddFlagSet(serve.Flags())
 	return cmd

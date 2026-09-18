@@ -54,7 +54,7 @@ morph run "Hello!"
 
 If `config.yaml` is missing, `morph install` starts the setup wizard and writes the first workspace files.
 
-Run `morph` to start an interactive terminal chat, equivalent to `morph chat`. Chat flags also work without the subcommand, for example `morph --model MODEL`. Use `morph --help` to list commands and options.
+Run `morph` to start a terminal chat, equivalent to `morph chat`. The agent runs locally and shares topics and history with Web Console through the same state directory. Chat does not start Console or require a runtime token. It opens a new conversation directly; the first message creates the shared topic. Use `/topics` to open existing topics and `morph console` when you want the Web UI. Local flags such as `morph --model MODEL` work directly. See [terminal chat](docs/chat.md) for details, or `morph --help` for commands and flags.
 
 Use `morph console` to start the Web Console. The older `morph console serve` and `morph run --task "Hello!"` forms remain supported. For `run`, use either positional task text or `--task`, not both. Quote task text to preserve whitespace; use `--` before task text that starts with a dash.
 

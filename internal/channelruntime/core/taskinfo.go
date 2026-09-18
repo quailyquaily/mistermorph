@@ -77,7 +77,13 @@ func ClearTaskPendingApprovalFields(info *daemonruntime.TaskInfo) {
 	}
 	info.PendingAt = nil
 	info.ApprovalRequestID = ""
+	result, _ := info.Result.(map[string]any)
 	info.Result = nil
+	// Clear the pending response without discarding the execution record that
+	// a resumed task continues, or a denied task retains for history.
+	if trace := result["trace"]; trace != nil {
+		info.Result = map[string]any{"trace": trace}
+	}
 }
 
 func MarkTaskDone(store daemonruntime.TaskUpdater, taskID string, output string) error {

@@ -12,6 +12,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/quailyquaily/mistermorph/guard"
+	"github.com/quailyquaily/mistermorph/internal/chattrace"
 	"github.com/quailyquaily/mistermorph/llm"
 )
 
@@ -22,6 +23,7 @@ type runtimeEndpointStreamClient interface {
 }
 
 type consoleStreamFrame struct {
+	Trace     *chattrace.Snapshot      `json:"trace,omitempty"`
 	TaskID    string                   `json:"task_id"`
 	Seq       uint64                   `json:"seq"`
 	Status    string                   `json:"status,omitempty"`
@@ -182,6 +184,9 @@ func (h *consoleStreamHub) publish(frame consoleStreamFrame) {
 	h.nextSeq++
 	frame.Seq = h.nextSeq
 	previous := h.latest[frame.TaskID]
+	if frame.Trace == nil {
+		frame.Trace = previous.Trace
+	}
 	if frame.Plan == nil {
 		frame.Plan = previous.Plan
 	}

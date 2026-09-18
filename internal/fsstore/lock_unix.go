@@ -11,12 +11,11 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-func withLockFile(ctx context.Context, lockPath string, fn func() error) error {
+func acquireLockFile(ctx context.Context, lockPath string) (func(), error) {
 	file, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, defaultFilePerm)
 	if err != nil {
-		return fmt.Errorf("%w: open %s: %v", ErrLockUnavailable, lockPath, err)
+		return nil, fmt.Errorf("%w: open %s: %v", ErrLockUnavailable, lockPath, err)
 	}
-	defer file.Close()
 
 	fd := int(file.Fd())
 	for {
@@ -29,16 +28,17 @@ func withLockFile(ctx context.Context, lockPath string, fn func() error) error {
 		}
 		if errors.Is(err, unix.EWOULDBLOCK) || errors.Is(err, unix.EAGAIN) {
 			if waitErr := waitForLockRetry(ctx, lockPath); waitErr != nil {
-				return waitErr
+				_ = file.Close()
+				return nil, waitErr
 			}
 			continue
 		}
-		return fmt.Errorf("%w: flock %s: %v", ErrLockUnavailable, lockPath, err)
+		_ = file.Close()
+		return nil, fmt.Errorf("%w: flock %s: %v", ErrLockUnavailable, lockPath, err)
 	}
-	defer func() {
-		_ = unix.Flock(fd, unix.LOCK_UN)
-	}()
-
 	writeLockDebugMetadata(file, lockPath)
-	return fn()
+	return func() {
+		_ = unix.Flock(fd, unix.LOCK_UN)
+		_ = file.Close()
+	}, nil
 }

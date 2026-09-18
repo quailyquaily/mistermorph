@@ -25,6 +25,7 @@ type Paths struct {
 	LLMUsageJournalDir       string
 	LLMUsageProjectionPath   string
 	TopicContextPath         string
+	TopicsProjectionPath       string
 }
 
 type Reader interface {
@@ -70,6 +71,7 @@ func FromReader(reader Reader) Paths {
 		LLMUsageJournalDir:       filepath.Join(statsDir, "llm_usage"),
 		LLMUsageProjectionPath:   filepath.Join(statsDir, "llm_usage_projection.json"),
 		TopicContextPath:         filepath.Join(stateDir, "topic_context.json"),
+		TopicsProjectionPath:     filepath.Join(statsDir, "topics_projection.json"),
 	}
 }
 

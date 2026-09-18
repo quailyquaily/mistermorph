@@ -40,6 +40,7 @@ func TestFromReaderResolvesRuntimeStatePathsOnce(t *testing.T) {
 		LLMUsageJournalDir:       filepath.Join(stateDir, "stats", "llm_usage"),
 		LLMUsageProjectionPath:   filepath.Join(stateDir, "stats", "llm_usage_projection.json"),
 		TopicContextPath:         filepath.Join(stateDir, "topic_context.json"),
+		TopicsProjectionPath:     filepath.Join(stateDir, "stats", "topics_projection.json"),
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("FromReader() = %#v, want %#v", got, want)

@@ -29,7 +29,9 @@ import (
 
 	"github.com/quailyquaily/mistermorph/internal/codexauth"
 	"github.com/quailyquaily/mistermorph/internal/configutil"
+	"github.com/quailyquaily/mistermorph/internal/fsstore"
 	serverpolicy "github.com/quailyquaily/mistermorph/internal/httpserver"
+	"github.com/quailyquaily/mistermorph/internal/localconsole"
 	"github.com/quailyquaily/mistermorph/internal/pathutil"
 	"github.com/quailyquaily/mistermorph/internal/secref"
 	"github.com/quailyquaily/mistermorph/internal/xaiauth"
@@ -160,11 +162,7 @@ func newServeCmd(version ...string) *cobra.Command {
 			if cfg.authDisabled() {
 				_, _ = fmt.Fprintln(os.Stderr, "warn: console password is not configured; authentication is disabled by --allow-empty-password")
 			}
-			srv, err := newServer(cfg)
-			if err != nil {
-				return err
-			}
-			return srv.run(cmd.Context())
+			return runConsole(cmd.Context(), cfg)
 		},
 	}
 
@@ -407,18 +405,34 @@ func newServer(cfg serveConfig) (*server, error) {
 	return srv, nil
 }
 
-func (s *server) run(ctx context.Context) error {
-	if s != nil && s.localRuntime != nil {
-		defer s.localRuntime.Close()
-	}
-	if s != nil && s.managed != nil {
-		defer s.managed.Close()
-	}
-	ln, err := net.Listen("tcp", s.cfg.listen)
-	if err != nil {
+func runConsole(ctx context.Context, cfg serveConfig) error {
+	if err := ctx.Err(); err != nil {
 		return err
 	}
-	return s.serve(ctx, ln)
+	lockCtx, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+	err := fsstore.WithLock(lockCtx, filepath.Join(cfg.stateDir, "console", "owner.lck"), func() error {
+		// Bind before recovering the store; an older server may own the port
+		// without participating in the per-state-directory lock.
+		ln, err := net.Listen("tcp", cfg.listen)
+		if err != nil {
+			return err
+		}
+		defer ln.Close()
+		srv, err := newServer(cfg)
+		if err != nil {
+			return err
+		}
+		defer srv.localRuntime.Close()
+		defer srv.managed.Close()
+		return srv.serve(ctx, ln)
+	})
+	if errors.Is(err, fsstore.ErrLockTimeout) {
+		if c, found, _ := localconsole.Load(cfg.stateDir); found && c.Probe(ctx) == nil {
+			return fmt.Errorf("Console is already running at %s; use morph console stop to stop it", c.WebURL)
+		}
+	}
+	return err
 }
 
 func (s *server) serve(ctx context.Context, ln net.Listener) error {
@@ -454,6 +468,18 @@ func (s *server) serve(ctx context.Context, ln net.Listener) error {
 	}
 	s.startEndpointBackground(runCtx)
 	s.startRuntimeConfigPoller(runCtx)
+	if s.localRuntime != nil && s.cfg.stateDir != "" {
+		webURL := "http://" + ln.Addr().String() + displayBasePath(s.cfg.basePath)
+		cleanup, err := s.startLocalChatEndpoint(runCtx, cancelRun, webURL)
+		if err != nil {
+			cancelRun()
+			s.runtimeConfigPollerWG.Wait()
+			s.endpointWorkersWG.Wait()
+			_ = ln.Close()
+			return err
+		}
+		defer cleanup()
+	}
 	fmt.Fprintf(os.Stdout, "console serve listening on http://%s%s\n", ln.Addr().String(), displayBasePath(s.cfg.basePath))
 	if !s.cfg.staticAssetsEnabled() {
 		fmt.Fprintf(os.Stdout, "console serve static assets disabled; API available under http://%s%s\n", ln.Addr().String(), apiPrefix)

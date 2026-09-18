@@ -16,6 +16,8 @@ import (
 	"github.com/quailyquaily/mistermorph/guard"
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/depsutil"
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/taskruntime"
+	"github.com/quailyquaily/mistermorph/internal/chathistory"
+	"github.com/quailyquaily/mistermorph/internal/chattrace"
 	"github.com/quailyquaily/mistermorph/internal/daemonruntime"
 	"github.com/quailyquaily/mistermorph/internal/domainjournal"
 	"github.com/quailyquaily/mistermorph/internal/llmconfig"
@@ -138,6 +140,16 @@ func TestConsoleLocalRuntimeStreamsProgressWithoutDurablePartialUpdates(t *testi
 			},
 		},
 		{
+			name:       "canceled",
+			terminal:   daemonruntime.TaskCanceled,
+			secondTool: "work",
+			llmSteps: []consoleProgressPersistenceLLMStep{
+				{result: consoleProgressToolCall("plan_create")},
+				{result: consoleProgressToolCall("work")},
+				{err: context.Canceled},
+			},
+		},
+		{
 			name:       "pending",
 			terminal:   daemonruntime.TaskPending,
 			withGuard:  true,
@@ -168,24 +180,52 @@ func TestConsoleLocalRuntimeStreamsProgressWithoutDurablePartialUpdates(t *testi
 			if terminal.Status != tt.terminal {
 				t.Fatalf("terminal durable status = %q, want %q", terminal.Status, tt.terminal)
 			}
+			if tt.terminal == daemonruntime.TaskPending {
+				if terminal.ApprovalRequestID == "" || terminal.PendingAt == nil || terminal.FinishedAt != nil {
+					t.Fatalf("pending task lost its approval state: %+v", terminal)
+				}
+			} else if terminal.FinishedAt == nil || terminal.PendingAt != nil {
+				t.Fatalf("terminal task has incorrect timestamps: %+v", terminal)
+			}
+			if tt.terminal == daemonruntime.TaskDone && chathistory.TaskReplyText(terminal) != "done" {
+				t.Fatalf("completed task lost its final reply: %+v", terminal)
+			}
+			if (tt.terminal == daemonruntime.TaskFailed || tt.terminal == daemonruntime.TaskCanceled) && terminal.Error == "" {
+				t.Fatalf("unsuccessful task lost its error: %+v", terminal)
+			}
 			terminalResult, ok := terminal.Result.(map[string]any)
 			if !ok || terminalResult["plan"] == nil || terminalResult["activity"] == nil {
 				t.Fatalf("terminal durable result = %#v, want one final plan/activity summary", terminal.Result)
 			}
 
-			var sawPlan, sawActivity bool
+			var trace chattrace.Snapshot
+			raw, _ := json.Marshal(terminalResult["trace"])
+			if err := json.Unmarshal(raw, &trace); err != nil || len(trace.Entries) == 0 {
+				t.Fatalf("missing persisted execution trace: %s (%v)", raw, err)
+			}
+			var tracePlan, traceTool bool
+			for _, entry := range trace.Entries {
+				tracePlan = tracePlan || entry.Plan != nil
+				traceTool = traceTool || entry.Event.Kind == agent.EventKindToolDone
+			}
+			if !tracePlan || !traceTool {
+				t.Fatalf("persisted trace missing plan=%v or tools=%v: %s", tracePlan, traceTool, raw)
+			}
+
+			var sawPlan, sawActivity, sawTrace bool
 		drainFrames:
 			for {
 				select {
 				case frame := <-frames:
 					sawPlan = sawPlan || frame.Plan != nil
 					sawActivity = sawActivity || frame.Activity != nil
+					sawTrace = sawTrace || frame.Trace != nil && len(frame.Trace.Entries) > 0
 				default:
 					break drainFrames
 				}
 			}
-			if !sawPlan || !sawActivity {
-				t.Fatalf("stream frames saw plan=%v activity=%v, want both progress types", sawPlan, sawActivity)
+			if !sawPlan || !sawActivity || !sawTrace {
+				t.Fatalf("stream frames saw plan=%v activity=%v trace=%v, want all progress types", sawPlan, sawActivity, sawTrace)
 			}
 		})
 	}

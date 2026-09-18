@@ -82,9 +82,12 @@ func resolveChatApprovalInput(
 	return decision, state, err
 }
 
-func chatApprovalData(record guard.ApprovalRecord) chatApprovalViewData {
+func chatApprovalData(record guard.ApprovalRecord, supplied ...map[string]any) chatApprovalViewData {
 	data := chatApprovalViewData{tool: escapeTerminalControls(strings.TrimSpace(record.ToolName))}
 	params := runtimecore.ApprovalToolParams(record)
+	if len(supplied) > 0 && supplied[0] != nil {
+		params = supplied[0]
+	}
 	keys := make([]string, 0, len(params))
 	for key := range params {
 		keys = append(keys, key)

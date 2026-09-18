@@ -46,9 +46,12 @@ type chatAgentStore struct {
 }
 
 func (s *chatAgentStore) HandleEvent(ctx context.Context, event agent.Event) {
+	s.handleEventAt(ctx, event, time.Now())
+}
+
+func (s *chatAgentStore) handleEventAt(ctx context.Context, event agent.Event, now time.Time) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	now := time.Now()
 	id := event.RunID
 	if event.Kind == agent.EventKindSubtaskStart || event.Kind == agent.EventKindSubtaskDone {
 		id = event.TaskID
@@ -90,6 +93,9 @@ func (s *chatAgentStore) HandleEvent(ctx context.Context, event agent.Event) {
 	switch event.Kind {
 	case agent.EventKindTurnStart:
 		record.Activity = "Starting model"
+	case agent.EventKindLLMRetry:
+		record.Activity = strings.TrimSpace(event.Text + " " + event.Summary)
+		record.appendEntry(now, "Retry", record.Activity)
 	case agent.EventKindLLMStart:
 		record.Activity = "Waiting for model"
 		record.appendEntry(now, fmt.Sprintf("Model request · step %d", event.Step), "")

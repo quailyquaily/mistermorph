@@ -47,3 +47,25 @@ func TestMarkTaskDoneReturnsPersistenceError(t *testing.T) {
 		t.Fatalf("MarkTaskDone() error = %v, want %v", err, want)
 	}
 }
+
+func TestClearTaskPendingApprovalFieldsKeepsExecutionTrace(t *testing.T) {
+	now := time.Now()
+	for _, hasTrace := range []bool{false, true} {
+		info := daemonruntime.TaskInfo{PendingAt: &now, ApprovalRequestID: "approval", Result: map[string]any{"final": "pending response"}}
+		if hasTrace {
+			info.Result.(map[string]any)["trace"] = "retained execution records"
+		}
+		ClearTaskPendingApprovalFields(&info)
+		if info.PendingAt != nil || info.ApprovalRequestID != "" {
+			t.Fatal("pending fields remain")
+		}
+		if hasTrace {
+			result, ok := info.Result.(map[string]any)
+			if !ok || len(result) != 1 || result["trace"] != "retained execution records" {
+				t.Fatalf("lost trace or retained pending response: %#v", info.Result)
+			}
+		} else if info.Result != nil {
+			t.Fatalf("pending response remains: %#v", info.Result)
+		}
+	}
+}

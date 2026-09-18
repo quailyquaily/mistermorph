@@ -34,6 +34,32 @@ func TestRootReusesChat(t *testing.T) {
 	}
 }
 
+func TestChatPreparesLocalToolsUnlessRemoteIsExplicit(t *testing.T) {
+	for _, explicit := range []bool{false, true} {
+		resetRootConfigForTest(t)
+		root := rootCommandForTest(t)
+		cmd := root
+		if explicit {
+			cmd, _, _ = root.Find([]string{"chat"})
+		}
+		if !shouldPrepareRootRegistry(cmd) {
+			t.Fatal("default chat did not prepare local tools")
+		}
+		if err := cmd.ParseFlags([]string{"--standalone"}); err != nil {
+			t.Fatal(err)
+		}
+		if !shouldPrepareRootRegistry(cmd) {
+			t.Fatal("standalone chat did not prepare local tools")
+		}
+		if err := cmd.ParseFlags([]string{"--runtime-url", "http://localhost/runtime"}); err != nil {
+			t.Fatal(err)
+		}
+		if shouldPrepareRootRegistry(cmd) {
+			t.Fatal("conflicting modes prepared local tools before validation")
+		}
+	}
+}
+
 func TestRootDefaultChatDispatch(t *testing.T) {
 	for _, tt := range []struct {
 		name       string

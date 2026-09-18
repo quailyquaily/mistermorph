@@ -25,8 +25,9 @@ popup-close handler and the full Quail UI stylesheet.
 - Runtime views (`Chat`, `Runtime`, `Tasks`, `Stats`, `Audit`, `Files`, `Contacts`) read from the endpoint selected in the top bar.
 - `console` always exposes one built-in local runtime endpoint (`Console Local`).
   - It runs tasks in its own runtime loop via shared runtime core.
-  - Its runtime API uses the shared `daemonruntime` handler. With an explicit `server.auth_token`, the same handler is available at `<console.base_path>/runtime`; no extra TCP listener is started.
+  - Its runtime API uses the shared `daemonruntime` handler. With an explicit `server.auth_token`, the same handler is available at `<console.base_path>/runtime` on the Web listener.
   - If `server.auth_token` is unset, the local runtime generates an internal in-process token and does not expose `<console.base_path>/runtime`.
+  - An explicitly started Console publishes a private loopback control endpoint with generated credentials for local service control. Ordinary terminal chat executes in its own process.
   - Task/topic changes are written to stable segments under `<file_state_dir>/journal/`. When `tasks.persistence_targets` contains `console`, its task projection is also saved and restored across process restarts.
   - The local runtime currently provides topic-aware APIs (`GET /topics`, `DELETE /topics/{topic_id}`) and runs awareness through the shared direct awareness runtime. Periodic heartbeat is optional; `/poke` remains available when heartbeat is disabled.
 - Additional remote runtime endpoints can be configured under `console.endpoints` in `config.yaml`. Each `url` is the complete runtime API base URL; new built-in runtime servers use `/runtime`.
@@ -313,3 +314,128 @@ Notes:
 - If you omit `--console-static-dir`, `console` falls back to its embedded SPA assets.
 - `./scripts/stage-console-assets.sh` is required before `go run ./cmd/mistermorph ...`, because the CLI validates embedded Console assets at startup.
 - Optional external endpoints should point to an existing channel runtime such as `morph telegram`, `morph slack`, `morph line`, or `morph lark`.
+
+
+## Shared topics in the terminal
+
+`mistermorph chat` (or `morph`) executes locally. It does not start Console,
+bind `console.listen`, or require a runtime token. Start `morph console`
+separately to use the Web UI.
+
+Chat and Web share topic IDs, tasks, replies, workspace attachments, and context
+checkpoints when they use the same `file_state_dir` and `tasks.dir_name`, with
+`console` enabled in `tasks.persistence_targets`. Disabling persistence also
+disables cross-process history sharing. Chat does not change this setting.
+
+The first message creates a topic. `/topics` opens the same topic picker used
+for explicit remote connections, filtered by the current workspace. Use
+`/topic switch <id>` or `chat --topic <id>` to open an existing topic, including
+one outside the picker scope. Selecting a topic restores its history with the
+normal chat presentation. `/topic history` reads the latest saved history;
+`/topic history more` loads older entries. Each new local turn reads shared
+history again, including messages added by Web.
+
+The task store refreshes its projection from the journal under a process-shared
+file lock before reads and writes. Chat does not run Console's restart recovery.
+A live chat session holds a separate ownership lock so starting Console cannot
+cancel its tasks. When that session exits unexpectedly, subsequent store access
+marks its unfinished tasks canceled. Different topics can execute independently.
+While a topic is active in chat, another executor cannot start a turn or delete
+that topic. Stop and approve local tasks in their owning terminal.
+
+Ordinary chat accepts local execution flags such as `--model` and `--workspace`.
+`--standalone` is a hidden compatibility alias, with the same topics and UI.
+Local `/exit` and `/quit` cancel the current task and save the outcome. They do
+not stop a separately running Console. Local topic switching and context-changing
+commands wait until the current task or approval finishes.
+
+`<file_state_dir>/stats/topics_projection.json` remains a derived list cache.
+Local chat reads the shared task store, so this cache is not its history source.
+
+The remaining connection details apply when `--runtime-url` is explicitly set.
+
+To connect to an explicit address with `--runtime-url`, enable that Console's
+public runtime API with `server.auth_token`, then set
+`MISTERMORPH_RUNTIME_TOKEN` to that Console's `server.auth_token` using your
+shell/secret manager. Explicit URLs never inherit automatic local credentials or
+the local configuration token. Do not put the token in a URL or CLI flag.
+
+```bash
+mistermorph chat
+mistermorph chat --topic <topic-id>
+mistermorph chat --runtime-url http://127.0.0.1:9080/runtime
+mistermorph chat --runtime-url https://morph.example.com/morph/runtime --topic <topic-id>
+```
+
+Use the full runtime API base URL, including any reverse-proxy prefix. Non-loopback
+connections require HTTPS. This connects directly to `/runtime`, not the browser
+session/proxy API. Connection failure never starts a local agent. Explicit local
+provider/model/skills/execution overrides and `--workspace`/`--no-workspace` cannot
+be combined with `--runtime-url`. In remote chat, use `/workspace` to set the
+server workspace.
+
+In connected mode, `/topics` opens the picker and queries the runtime API.
+The picker shows topics in the **server-resolved current workspace**, never the
+client's working directory. Arrow keys move selection;
+Enter opens the selected topic or activates the New topic / Load more row; Esc returns to the previous conversation and its draft. Type to
+filter loaded titles/IDs, Ctrl+L loads more, Ctrl+R refreshes the fixed workspace,
+Ctrl+S prints the full endpoint/workspace/status, and Ctrl+N starts a local draft in that workspace. The first message creates the
+server topic. There is no empty-topic creation API. Topics outside the picker scope
+remain accessible via `/topic switch <id>`.
+
+| Command | Explicit remote connection behavior |
+| --- | --- |
+| `/topic new` | Resume the single new-topic draft, or start one without creating server state |
+| `/topic switch <id>` | Validate and load an existing topic; failure preserves the current view |
+| `/topic history [more]` | Redisplay loaded history / load the next older page |
+| `/workspace` | Read server workspace (draft: show pending path/default intent) |
+| `/workspace attach <path>` | Bind an existing topic on the server, or stage a path for the draft's first send |
+| `/workspace detach` | Remove attachment; resolve server default, **not** disable workspace |
+| `/status` | Full endpoint/topic/workspace and server context metadata |
+| `/stop` | Explicitly stop tasks for the selected topic only |
+| `/models`, `/skills`, `/think`, `/ctx` | Execute the Console runtime command in the current topic; `/ctx` requires an existing topic |
+| `/reset` | Clear model context and its checkpoint, retaining shared chat history |
+| `/init`, `/update` | Create/read or regenerate AGENTS.md in the server workspace |
+| `/approve`, `/deny` | Resolve the pending approval through Console; y/n also works in the panel |
+| `/agents`, `/agent`, `/subagents` | Inspect retained child execution records; Ctrl+G opens the same view |
+| `/topic title regenerate` | Server-generated title, not manual rename |
+| `/topic delete` | Confirm with y; server deletion also stops tasks and cleans up context |
+| `/exit`, `/quit` | Disconnect without stopping server tasks |
+
+Paths are interpreted on the **server**. Drafts are kept per topic only until the
+client exits. Switching away or losing the connection does not stop tasks.
+Esc or Ctrl+C while running stops tasks in the current topic, as does `/stop`.
+Unknown submission outcomes are never automatically retried: inspect `/topics` and
+history before sending again, especially after first-topic creation. A draft with
+an unresolved creation remains blocked to prevent duplicate topics. Pending tasks
+show the common approval panel; decisions in either terminal or Web apply to the
+same server task. Approving resumes it, and denying rejects the pending action.
+
+HTTP polling (normally every 3 seconds, backing off to 30 seconds on errors)
+remains authoritative. WebSocket snapshots add multiline text/reasoning previews,
+plan steps, recent activity and current activity for up to four active tasks in the
+selected topic; other tasks remain
+HTTP-tracked. Stream failures retry with backoff without interrupting polling.
+Switching views or exiting closes subscriptions without stopping server tasks.
+HTTP terminal results replace previews, so final answers are not printed twice.
+Progress is bounded and clipped to terminal dimensions, keeping the composer
+visible. Text/reasoning remain snapshot previews. Execution records are appended
+to the transcript and retained with completed or pending tasks: tool parameters
+and output, plan steps, file diffs, retries, and child-agent events. Reconnecting
+uses record sequence numbers to avoid printing the same events twice. Retention
+is bounded; see [terminal chat](chat.md#inspect-subagents) for limits. Older tasks
+without execution traces restore their saved plans and tool activities alongside
+their replies. Details that were never stored cannot be recovered.
+Polling discovers other clients' new tasks,
+title/workspace changes and deletion, including after the last task finishes.
+Loaded history uses the normal chat presentation: `❯` for user messages and
+Markdown for replies. Task IDs and successful completion statuses stay out of
+message text; errors and approval requests appear separately. `/topic history`
+gives the canonical loaded projection, including steering instructions. The `/` command
+menu and `$` skill menu use the common chat UI; skills are read from Console.
+Input recall history is saved locally, including multiline input. `/status` uses
+the normal labelled display, and the startup header shows the provider and model.
+The Console process must also be updated for the restored commands and records.
+Remote chat does not read local topic files or import terminal input history.
+Server persistence settings still apply. See the [design](feat/feat_20260917_tui_shared_topics.md)
+for storage and execution boundaries.

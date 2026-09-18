@@ -18,6 +18,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/depsutil"
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/taskruntime"
 	"github.com/quailyquaily/mistermorph/internal/configutil"
+	"github.com/quailyquaily/mistermorph/internal/daemonruntime"
 	"github.com/quailyquaily/mistermorph/internal/llmconfig"
 	"github.com/quailyquaily/mistermorph/internal/llmselect"
 	"github.com/quailyquaily/mistermorph/internal/llmstats"
@@ -52,6 +53,11 @@ type chatSession struct {
 	launchDir              string
 	fileCacheDir           string
 	fileStateDir           string
+	sharedTopics           *daemonruntime.ConsoleFileStore
+	topicID                string
+	chatOwner              string
+	releaseChatOwner       func()
+	sharedWorkspaces       *workspace.Store
 	topicContextStore      *topiccontext.Store
 	workspaceDir           string
 	defaultWorkspaceDir    string
@@ -105,6 +111,12 @@ func (s *chatSession) refreshProjectScope() {
 func (s *chatSession) conversationKey() string {
 	if s == nil {
 		return ""
+	}
+	if s.sharedTopics != nil {
+		if s.topicID == "" {
+			return ""
+		}
+		return "console:" + s.topicID
 	}
 	projectID := strings.TrimSpace(s.projectID)
 	if projectID == "" {
@@ -531,6 +543,7 @@ func buildChatSession(cmd *cobra.Command, deps Dependencies) (*chatSession, erro
 }
 
 func (s *chatSession) cleanup() {
+	defer s.closeLocalTopics()
 	if s == nil {
 		return
 	}

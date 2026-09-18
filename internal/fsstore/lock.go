@@ -28,20 +28,31 @@ func BuildLockPath(lockRoot string, lockKey string) (string, error) {
 }
 
 func WithLock(ctx context.Context, lockPath string, fn func() error) error {
-	normalizedPath, err := normalizePath(lockPath)
+	if fn == nil {
+		return nil
+	}
+	release, err := AcquireLock(ctx, lockPath)
 	if err != nil {
 		return err
 	}
-	if fn == nil {
-		return nil
+	defer release()
+	return fn()
+}
+
+// AcquireLock holds the lock until the returned release function is called.
+// The caller must release it exactly once, including on cancellation.
+func AcquireLock(ctx context.Context, lockPath string) (func(), error) {
+	normalizedPath, err := normalizePath(lockPath)
+	if err != nil {
+		return nil, err
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	if err := EnsureDir(filepath.Dir(normalizedPath), defaultDirPerm); err != nil {
-		return err
+		return nil, err
 	}
-	return withLockFile(ctx, normalizedPath, fn)
+	return acquireLockFile(ctx, normalizedPath)
 }
 
 func validateLockKey(lockKey string) (string, error) {

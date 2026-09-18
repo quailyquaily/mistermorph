@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/quailyquaily/mistermorph/agent"
+	"github.com/quailyquaily/mistermorph/internal/chatcommands"
 	"github.com/quailyquaily/mistermorph/internal/pathroots"
 	"github.com/quailyquaily/mistermorph/llm"
 )
@@ -47,20 +48,7 @@ func handleAgentsGenerate(
 	}
 	initCtx, initCancel := chatTimeoutContext(parent, timeout)
 	initCtx = pathroots.WithWorkspaceDir(initCtx, projectDir)
-	initPrompt := fmt.Sprintf(`Please analyze the project in directory %q and generate an AGENTS.md file.
-
-AGENTS.md is a project-level guide for AI coding assistants. It should contain:
-
-1. **Project Overview** — what this project does, its purpose, tech stack
-2. **Directory Structure** — key directories and their purposes
-3. **Build & Development** — how to build, test, run
-4. **Coding Conventions** — naming, formatting, architecture patterns
-5. **Key Dependencies** — major libraries/frameworks
-6. **Special Notes** — anything AI assistants should know (env vars, config files, gotchas)
-
-Use bash and read_file tools to explore the project structure, README, go.mod, package.json, Makefile, etc. to gather accurate information.
-
-IMPORTANT: Do NOT use the write_file tool. Instead, write the final AGENTS.md content directly as your response text. Use markdown format. Be concise but thorough.`, projectDir)
+	initPrompt := chatcommands.ProjectGuidePrompt(projectDir)
 	final, _, err := engine.Run(initCtx, initPrompt, agent.RunOptions{
 		Model:   strings.TrimSpace(model),
 		Scene:   "chat.init",
@@ -80,7 +68,7 @@ IMPORTANT: Do NOT use the write_file tool. Instead, write the final AGENTS.md co
 		_, _ = fmt.Fprintln(writer, "AI returned empty content. AGENTS.md not created.")
 		return history, false
 	}
-	content = stripMarkdownFences(content)
+	content = chatcommands.StripMarkdownFences(content)
 	if err := os.WriteFile(agentsPath, []byte(content), 0o644); err != nil {
 		_, _ = fmt.Fprintf(writer, "Error writing AGENTS.md: %v\n", err)
 		return history, false

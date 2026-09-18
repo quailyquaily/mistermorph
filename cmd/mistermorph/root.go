@@ -555,7 +555,9 @@ func shouldPrepareRootRegistry(cmd *cobra.Command) bool {
 		return false
 	}
 	switch cmd.CommandPath() {
-	case "morph", "morph run", "morph chat", "morph telegram", "morph slack", "morph line", "morph lark", "morph mixin", "morph tools":
+	case "morph", "morph chat":
+		return !cmd.Flags().Changed("runtime-url")
+	case "morph run", "morph telegram", "morph slack", "morph line", "morph lark", "morph mixin", "morph tools":
 		return true
 	default:
 		return false

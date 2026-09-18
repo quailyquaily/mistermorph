@@ -3,6 +3,7 @@ package chatcmd
 import (
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/quailyquaily/mistermorph/guard"
 	"github.com/quailyquaily/mistermorph/internal/configdefaults"
@@ -20,17 +21,33 @@ type Dependencies struct {
 func New(deps Dependencies) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "chat",
-		Short: "Start an interactive chat session",
+		Short: "Chat locally with topics and history shared with Web Console",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			client, err := chatRuntimeClient(cmd)
+			if err != nil {
+				return err
+			}
+			if client != nil {
+				topic, _ := cmd.Flags().GetString("topic")
+				return runRemoteChat(cmd, client, strings.TrimSpace(topic), deps.Version)
+			}
 			sess, err := buildChatSession(cmd, deps)
 			if err != nil {
 				return fmt.Errorf("build chat session: %w", err)
 			}
 			defer sess.cleanup()
-			return runREPL(sess)
+			topic, _ := cmd.Flags().GetString("topic")
+			if err := sess.openLocalTopics(strings.TrimSpace(topic)); err != nil {
+				return fmt.Errorf("open shared topics: %w", err)
+			}
+			return runREPL(sess, newChatModel(sess))
 		},
 	}
 
+	cmd.Flags().Bool("standalone", false, "Use local execution (the default).")
+	_ = cmd.Flags().MarkHidden("standalone")
+	cmd.Flags().String("runtime-url", "", "Execute through a remote runtime API URL ("+runtimeTokenEnv+" supplies auth). Default: execute locally.")
+	cmd.Flags().String("topic", "", "Continue an existing shared topic.")
 	cmd.Flags().String("provider", "", "Override LLM provider.")
 	cmd.Flags().String("endpoint", "", "Override LLM endpoint.")
 	cmd.Flags().String("model", "", "Override LLM model.")

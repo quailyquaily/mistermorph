@@ -3,6 +3,7 @@ package chatcmd
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"sync"
@@ -14,7 +15,9 @@ import (
 	runtimecore "github.com/quailyquaily/mistermorph/internal/channelruntime/core"
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/taskruntime"
 	"github.com/quailyquaily/mistermorph/internal/chatcommands"
+	"github.com/quailyquaily/mistermorph/internal/chattrace"
 	"github.com/quailyquaily/mistermorph/internal/contextcheckpoint"
+	"github.com/quailyquaily/mistermorph/internal/daemonruntime"
 	"github.com/quailyquaily/mistermorph/internal/llmstats"
 	"github.com/quailyquaily/mistermorph/internal/llmutil"
 	"github.com/quailyquaily/mistermorph/internal/outputfmt"
@@ -71,6 +74,8 @@ func safeSend(p *tea.Program, msg tea.Msg) {
 }
 
 type activeChatTurn struct {
+	sharedTask            *daemonruntime.TaskInfo
+	trace                 *chattrace.Collector
 	cancel                context.CancelCauseFunc
 	timeoutCancel         context.CancelFunc
 	steerQueue            *runtimecontrol.SteerQueue
@@ -117,16 +122,16 @@ func (t *activeChatTurn) requestStop() {
 	}
 }
 
-func cancelAndWaitActiveChatTurn(active *activeChatTurn, resultCh <-chan chatTurnResult) {
+func cancelAndWaitActiveChatTurn(active *activeChatTurn, resultCh <-chan chatTurnResult) chatTurnResult {
 	if active == nil {
-		return
+		return chatTurnResult{}
 	}
 	if active.cancel != nil {
 		active.cancel(context.Canceled)
 	}
 	result := <-resultCh
 	if result.turn == nil {
-		return
+		return result
 	}
 	if result.turn.timeoutCancel != nil {
 		result.turn.timeoutCancel()
@@ -134,6 +139,7 @@ func cancelAndWaitActiveChatTurn(active *activeChatTurn, resultCh <-chan chatTur
 	if result.turn.cancel != nil {
 		result.turn.cancel(nil)
 	}
+	return result
 }
 
 func cleanupPreparedChatTurn(sess *chatSession, turn *activeChatTurn) {
@@ -180,6 +186,15 @@ func startChatTurn(
 	resultCh chan<- chatTurnResult,
 	run func(context.Context) (*agent.Final, *agent.Context, error),
 ) {
+	if turn.trace != nil {
+		baseSink, _ := agent.EventSinkFromContext(turnCtx)
+		turnCtx = agent.WithEventSinkContext(turnCtx, agent.EventSinkFunc(func(ctx context.Context, event agent.Event) {
+			turn.trace.HandleEvent(ctx, event)
+			if baseSink != nil {
+				baseSink.HandleEvent(ctx, event)
+			}
+		}))
+	}
 	go func() {
 		final, runCtx, err := run(turnCtx)
 		if _, waiting := runtimecore.PendingApprovalID(final); err != nil || !waiting {
@@ -195,8 +210,14 @@ func startChatTurn(
 	}()
 }
 
-func runREPL(sess *chatSession) error {
-	model := newChatModel(sess)
+func runREPL(sess *chatSession, model *chatModel, options ...tea.ProgramOption) error {
+	if sess.sharedTopics != nil && sess.topicID != "" {
+		view, err := sess.localHistory("")
+		if err != nil {
+			return err
+		}
+		model.applyLocalHistory(view)
+	}
 	if err := model.loadHistory(); err != nil {
 		sess.logger.Warn("chat_history_load_failed", "error", err.Error())
 	}
@@ -205,7 +226,8 @@ func runREPL(sess *chatSession) error {
 	if rootCtx == nil {
 		rootCtx = context.Background()
 	}
-	p := tea.NewProgram(model, tea.WithInput(sess.cmd.InOrStdin()), tea.WithOutput(sess.cmd.OutOrStdout()), tea.WithContext(rootCtx))
+	options = append([]tea.ProgramOption{tea.WithInput(sess.cmd.InOrStdin()), tea.WithOutput(sess.cmd.OutOrStdout()), tea.WithContext(rootCtx)}, options...)
+	p := tea.NewProgram(model, options...)
 
 	printChatSessionHeader(sess.cmd.OutOrStdout(), strings.TrimSpace(sess.mainCfg.Provider), strings.TrimSpace(sess.mainCfg.Model), sess.workspaceDir, sess.version)
 
@@ -250,6 +272,9 @@ func runREPL(sess *chatSession) error {
 				return
 			}
 			cleanupPreparedChatTurn(sess, approval.turn)
+			if err := sess.recordLocalResult(chatTurnResult{turn: approval.turn, final: &agent.Final{Output: output}, err: context.Canceled}); err != nil {
+				safeSend(p, agentResultMsg{err: err})
+			}
 			safeSend(p, approvalClearedMsg{})
 			safeSend(p, agentResultMsg{output: output})
 			if approval.turn != nil && !approval.turn.contextCompactionOnly {
@@ -280,15 +305,24 @@ func runREPL(sess *chatSession) error {
 		for {
 			select {
 			case <-ctx.Done():
-				cancelAndWaitActiveChatTurn(active, resultCh)
+				result := cancelAndWaitActiveChatTurn(active, resultCh)
+				if err := sess.recordLocalResult(result); err != nil {
+					sess.logger.Error("chat_history_write_failed", "error", err)
+				}
 				cleanupPreparedChatTurn(sess, active)
 				if pending != nil {
 					if err := expirePendingChatApproval(context.Background(), sess, pending, "chat:session", "chat session closed"); err != nil && !errors.Is(err, guard.ErrApprovalNotPending) && sess.logger != nil {
 						sess.logger.Warn("chat_approval_expire_failed", "approval_id", pending.id, "error", err.Error())
 					}
+					if err := sess.recordLocalResult(chatTurnResult{turn: pending.turn, err: context.Canceled}); err != nil {
+						sess.logger.Error("chat_history_write_failed", "error", err)
+					}
 				}
 				return
 			case result := <-resultCh:
+				if err := sess.recordLocalResult(result); err != nil {
+					safeSend(p, agentResultMsg{err: fmt.Errorf("save shared history: %w", err)})
+				}
 				if active == result.turn {
 					active = nil
 				}
@@ -340,6 +374,7 @@ func runREPL(sess *chatSession) error {
 					record, approvalErr := getChatApproval(ctx, sess, approvalID)
 					if approvalErr != nil {
 						cleanupPreparedChatTurn(sess, result.turn)
+						approvalErr = errors.Join(approvalErr, sess.recordLocalResult(chatTurnResult{turn: result.turn, err: approvalErr, runCtx: result.runCtx}))
 						safeSend(p, agentResultMsg{err: approvalErr})
 						continue
 					}
@@ -401,7 +436,8 @@ func runREPL(sess *chatSession) error {
 				if input == "" {
 					continue
 				}
-				command, _ := chatcommands.ParseCommand(input)
+				command, args := chatcommands.ParseCommand(input)
+				command = chatcommands.NormalizeCommand(command)
 				// Inspection remains available during execution and approvals; it
 				// must never become a steer message or an approval response.
 				if isChatAgentCommand(command) {
@@ -414,6 +450,23 @@ func runREPL(sess *chatSession) error {
 					// ctx.Done branch joins the active turn and clears approvals.
 					safeSend(p, quitMsg{})
 					continue
+				}
+				if active != nil || pending != nil {
+					readOnly := command == "/topics" || command == "/status" || command == "/skills" || (command == "/ctx" || command == "/workspace") && strings.TrimSpace(args) == ""
+					if readOnly {
+						result, _, err := reg.Dispatch(ctx, input)
+						if err != nil {
+							safeSend(p, agentResultMsg{err: err, keepThinking: active != nil})
+						} else if result != nil && result.Reply != "" {
+							safeSend(p, agentResultMsg{output: formatChatCommandOutput(input, result.Reply, reg), keepThinking: active != nil})
+						}
+						continue
+					}
+					switch command {
+					case "/topic", "/workspace", "/reset", "/models", "/init", "/update", "/ctx":
+						safeSend(p, agentResultMsg{err: fmt.Errorf("wait for the current turn or approval to finish before using %s", command), keepThinking: active != nil})
+						continue
+					}
 				}
 				if pending != nil {
 					var approvalGuard *guard.Guard
@@ -435,6 +488,7 @@ func runREPL(sess *chatSession) error {
 					if approvalErr != nil {
 						if commitState != runtimecore.ApprovalCommitPending {
 							cleanupPreparedChatTurn(sess, pending.turn)
+							approvalErr = errors.Join(approvalErr, sess.recordLocalResult(chatTurnResult{turn: pending.turn, err: approvalErr}))
 							pending = nil
 							safeSend(p, approvalClearedMsg{})
 						}
@@ -459,8 +513,22 @@ func runREPL(sess *chatSession) error {
 					if currentTurn == nil || currentTurn.prepared == nil || currentTurn.prepared.Engine == nil {
 						cleanupPreparedChatTurn(sess, currentTurn)
 						safeSend(p, approvalClearedMsg{})
-						safeSend(p, agentResultMsg{err: errors.New("approval resume state is unavailable")})
+						err := errors.New("approval resume state is unavailable")
+						safeSend(p, agentResultMsg{err: errors.Join(err, sess.recordLocalResult(chatTurnResult{turn: currentTurn, err: err}))})
 						continue
+					}
+					if currentTurn.sharedTask != nil {
+						err := sess.sharedTopics.Update(currentTurn.sharedTask.ID, func(task *daemonruntime.TaskInfo) {
+							now := time.Now().UTC()
+							task.Status, task.ResumedAt = daemonruntime.TaskRunning, &now
+							task.PendingAt, task.ApprovalRequestID = nil, ""
+						})
+						if err != nil {
+							cleanupPreparedChatTurn(sess, currentTurn)
+							safeSend(p, approvalClearedMsg{})
+							safeSend(p, agentResultMsg{err: errors.Join(err, sess.recordLocalResult(chatTurnResult{turn: currentTurn, err: err}))})
+							continue
+						}
 					}
 					stopCtx, stopCancel := context.WithCancelCause(ctx)
 					resumeCtx, timeoutCancel := chatTimeoutContext(stopCtx, sess.timeout)
@@ -469,7 +537,7 @@ func runREPL(sess *chatSession) error {
 					resumeCtx = topiccontext.WithScope(resumeCtx, topiccontext.Scope{
 						Runtime:         "chat",
 						ConversationKey: sess.conversationKey(),
-						TopicID:         sess.projectID,
+						TopicID:         sess.topicID,
 					})
 					resumeCtx = taskruntime.WithContextCompactionNotification(resumeCtx, sess.logger, func(_ context.Context, _ agent.Event, text string) error {
 						safeSend(p, agentResultMsg{output: text, keepThinking: true})
@@ -514,7 +582,7 @@ func runREPL(sess *chatSession) error {
 						safeSend(p, agentResultMsg{output: runtimecontrol.SteerFeedback(true, false), keepThinking: true})
 						continue
 					}
-					if _, err := active.steerQueue.Push(input); err != nil {
+					if err := sess.queueLocalSteer(active, input); err != nil {
 						safeSend(p, agentResultMsg{err: err, keepThinking: true})
 						continue
 					}
@@ -557,14 +625,39 @@ func runREPL(sess *chatSession) error {
 					}
 				}
 				runID := llmstats.NewSyntheticRunID("chat")
+				currentTurn := &activeChatTurn{runInput: runInput, runID: runID, contextCompactionOnly: contextCompactionOnly}
+				failTurn := func(err error) {
+					err = errors.Join(err, sess.recordLocalResult(chatTurnResult{turn: currentTurn, err: err}))
+					safeSend(p, agentResultMsg{err: err})
+				}
+				userBoundary := "chat:v1:" + runID + ":user"
+				if sess.sharedTopics != nil {
+					task, err := sess.startLocalTask(runID, input)
+					if err != nil {
+						safeSend(p, agentResultMsg{err: err})
+						continue
+					}
+					currentTurn.sharedTask = &task
+					safeSend(p, sessionStatusMsg{status: chatSessionStatusFromSession(sess)})
+					history, historyBoundaries, userBoundary, err = sess.localTopicHistory(task)
+					if err != nil {
+						failTurn(err)
+						continue
+					}
+					var g *guard.Guard
+					if sess.taskRuntime != nil {
+						g = sess.taskRuntime.SharedGuard
+					}
+					currentTurn.trace = chattrace.NewCollector(runID, pathroots.New(sess.workspaceDir, sess.fileStateDir, sess.fileCacheDir), g, nil)
+				}
 				checkpointStore, checkpointErr := contextcheckpoint.NewFileStore(sess.contextCheckpointRoot(), sess.conversationKey())
 				if checkpointErr != nil {
-					safeSend(p, agentResultMsg{err: checkpointErr})
+					failTurn(checkpointErr)
 					continue
 				}
 				checkpoint, found, checkpointErr := checkpointStore.Load(ctx)
 				if checkpointErr != nil {
-					safeSend(p, agentResultMsg{err: checkpointErr})
+					failTurn(checkpointErr)
 					continue
 				}
 				if found {
@@ -573,12 +666,11 @@ func runREPL(sess *chatSession) error {
 				stopCtx, stopCancel := context.WithCancelCause(ctx)
 				turnCtx, timeoutCancel := chatTimeoutContext(stopCtx, sess.timeout)
 				turnCtx = pathroots.WithWorkspaceDir(turnCtx, sess.workspaceDir)
-				userBoundary := "chat:v1:" + runID + ":user"
 				turnCtx = llmstats.WithRunID(turnCtx, runID)
 				turnCtx = topiccontext.WithScope(turnCtx, topiccontext.Scope{
 					Runtime:         "chat",
 					ConversationKey: sess.conversationKey(),
-					TopicID:         sess.projectID,
+					TopicID:         sess.topicID,
 				})
 				turnCtx = taskruntime.WithContextCompactionNotification(turnCtx, sess.logger, func(_ context.Context, _ agent.Event, text string) error {
 					safeSend(p, agentResultMsg{output: text, keepThinking: true})
@@ -588,24 +680,16 @@ func runREPL(sess *chatSession) error {
 				if err != nil {
 					timeoutCancel()
 					stopCancel(nil)
-					safeSend(p, agentResultMsg{err: err})
+					failTurn(err)
 					continue
 				}
 				safeSend(p, thinkingMsg{on: true})
 
 				steerQueue := runtimecontrol.NewSteerQueue(0)
-				active = &activeChatTurn{
-					cancel:                stopCancel,
-					timeoutCancel:         timeoutCancel,
-					steerQueue:            steerQueue,
-					prepared:              prepared,
-					runInput:              runInput,
-					runID:                 runID,
-					checkpointStore:       checkpointStore,
-					userBoundary:          userBoundary,
-					contextCompactionOnly: contextCompactionOnly,
-				}
-				currentTurn := active
+				currentTurn.cancel, currentTurn.timeoutCancel = stopCancel, timeoutCancel
+				currentTurn.steerQueue, currentTurn.prepared = steerQueue, prepared
+				currentTurn.checkpointStore, currentTurn.userBoundary = checkpointStore, userBoundary
+				active = currentTurn
 				historySnapshot := append([]llm.Message(nil), history...)
 				historyBoundarySnapshot := append([]string(nil), historyBoundaries...)
 				startChatTurn(sess, currentTurn, turnCtx, resultCh, func(turnCtx context.Context) (*agent.Final, *agent.Context, error) {

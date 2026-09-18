@@ -10,6 +10,8 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -28,6 +30,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/taskruntime"
 	"github.com/quailyquaily/mistermorph/internal/chatcommands"
 	"github.com/quailyquaily/mistermorph/internal/chatinfo"
+	"github.com/quailyquaily/mistermorph/internal/chattrace"
 	"github.com/quailyquaily/mistermorph/internal/codexauth"
 	"github.com/quailyquaily/mistermorph/internal/configdefaults"
 	"github.com/quailyquaily/mistermorph/internal/contextcheckpoint"
@@ -185,10 +188,11 @@ func newConsoleLocalRuntime(cfg serveConfig, reader *viper.Viper) (*consoleLocal
 	slog.SetDefault(gen.logger)
 	persistTasks := consoleTaskPersistenceEnabledFromReader(gen.reader)
 	store, err := daemonruntime.NewConsoleFileStore(daemonruntime.ConsoleFileStoreOptions{
-		RootDir:        gen.paths.TaskTargetDir("console"),
-		Persist:        persistTasks,
-		JournalDir:     gen.paths.JournalDir,
-		RotateMaxBytes: gen.reader.GetInt64("tasks.rotate_max_bytes"),
+		RootDir:              gen.paths.TaskTargetDir("console"),
+		Persist:              persistTasks,
+		JournalDir:           gen.paths.JournalDir,
+		RotateMaxBytes:       gen.reader.GetInt64("tasks.rotate_max_bytes"),
+		TopicsProjectionPath: gen.paths.TopicsProjectionPath,
 	})
 	if err != nil {
 		_ = inspectors.Close()
@@ -1287,6 +1291,11 @@ func (r *consoleLocalRuntime) submitTaskWithGeneration(ctx context.Context, gene
 			generation.release()
 		}
 	}()
+	if topicID := strings.TrimSpace(req.TopicID); topicID != "" && topicID != daemonruntime.ConsoleDefaultTopicID {
+		if topic, ok := r.store.GetTopic(topicID); !ok || topic == nil || topic.DeletedAt != nil {
+			return daemonruntime.SubmitTaskResponse{}, daemonruntime.BadRequest("topic not found")
+		}
+	}
 	timeout := consoleDefaultTimeoutFromReader(generation.reader)
 	if strings.TrimSpace(req.Timeout) != "" {
 		d, err := time.ParseDuration(strings.TrimSpace(req.Timeout))
@@ -1301,13 +1310,15 @@ func (r *consoleLocalRuntime) submitTaskWithGeneration(ctx context.Context, gene
 		Ref:    "web/console",
 	})
 	task := strings.TrimSpace(req.Task)
+	command, _ := chatcommands.ParseCommand(task)
+	command = chatcommands.NormalizeCommand(command)
 	contextCompactionOnly := chatcommands.IsContextCompactCommand(task)
 	if len(req.FileReferences) == 0 {
 		if resp, handled, err := r.handleConsoleRuntimeCommand(generation, req, timeout, trigger); handled {
 			return resp, err
 		}
 	}
-	if !contextCompactionOnly && len(req.FileReferences) == 0 {
+	if !contextCompactionOnly && command != "/reset" && command != "/init" && command != "/update" && len(req.FileReferences) == 0 {
 		if result := r.trySteerConsoleRun(task, strings.TrimSpace(req.TopicID)); result.Found {
 			output := runtimecontrol.SteerFeedback(result.Found, result.Queued)
 			steerTargetTaskID := ""
@@ -1499,6 +1510,15 @@ func (r *consoleLocalRuntime) approveApproval(ctx context.Context, req daemonrun
 		return daemonruntime.ApprovalDecisionResponse{}, runtimecore.ErrPendingApprovalClaimInFlight
 	case runtimecore.PendingApprovalClaimMissing:
 		taskID := r.taskIDForApproval(approvalID)
+		if r.store != nil {
+			local, err := r.store.ChatOwnsTask(taskID)
+			if err != nil {
+				return daemonruntime.ApprovalDecisionResponse{}, err
+			}
+			if local {
+				return daemonruntime.ApprovalDecisionResponse{}, daemonruntime.BadRequest("resolve this approval in the chat terminal running the task")
+			}
+		}
 		return r.approvalResumeFailedResponse(approvalID, taskID, "pending approval handle is unavailable")
 	}
 	defer r.completePendingApprovalClaim(claim)
@@ -2094,14 +2114,28 @@ func (r *consoleLocalRuntime) handleTaskJob(workerCtx context.Context, conversat
 	var progressMu sync.Mutex
 	var latestPlan *consolePlanProgress
 	var latestActivity *consoleActivityProgress
-	eventSink := newConsoleEventPreviewSink(r.streamHub, job.TaskID, logger, outputGuard)
-	eventSink.activityUpdated = func(progress *consoleActivityProgress) {
+	previewSink := newConsoleEventPreviewSink(r.streamHub, job.TaskID, logger, outputGuard)
+	trace := newConsoleChatTrace(job.TaskID, pathroots.New(job.WorkspaceDir, consoleFileCacheDir(job.Generation.reader), job.Generation.paths.StateDir), outputGuard, r.streamHub)
+	if task, ok := r.store.Get(job.TaskID); ok && task.Result != nil {
+		raw, _ := json.Marshal(task.Result)
+		var previous struct {
+			Trace chattrace.Snapshot `json:"trace"`
+		}
+		if json.Unmarshal(raw, &previous) == nil {
+			trace.Restore(previous.Trace)
+		}
+	}
+	eventSink := agent.EventSinkFunc(func(ctx context.Context, event agent.Event) {
+		trace.HandleEvent(ctx, event)
+		previewSink.HandleEvent(ctx, event)
+	})
+	previewSink.activityUpdated = func(progress *consoleActivityProgress) {
 		progressMu.Lock()
 		latestActivity = cloneConsoleActivityProgress(progress)
 		progressMu.Unlock()
 	}
 	if bundle := job.Generation.bundle; bundle != nil {
-		eventSink.observer = newConsoleLLMObserver(bundle.taskRuntime, job.Model, logger)
+		previewSink.observer = newConsoleLLMObserver(bundle.taskRuntime, job.Model, logger)
 	}
 	streamer := streaming.NewFinalOutputStreamer(streaming.FinalOutputStreamerOptions{
 		Sink: replySink,
@@ -2115,6 +2149,7 @@ func (r *consoleLocalRuntime) handleTaskJob(workerCtx context.Context, conversat
 	}
 
 	planStepUpdate := func(runCtx *agent.Context, _ agent.PlanStepUpdate) {
+		trace.RecordPlan(consoleTaskPlan(nil, runCtx))
 		progress := buildConsolePlanProgress(consoleTaskPlan(nil, runCtx))
 		if progress == nil {
 			return
@@ -2149,7 +2184,7 @@ func (r *consoleLocalRuntime) handleTaskJob(workerCtx context.Context, conversat
 			EventSink:       eventSink,
 		})
 		if err != nil {
-			eventSink.Close()
+			previewSink.Close()
 			displayErr := strings.TrimSpace(err.Error())
 			if stateErr := runtimecore.MarkTaskFailed(r.store, job.TaskID, displayErr, false); stateErr != nil {
 				logger.Error("console_task_state_write_error", "status", daemonruntime.TaskFailed, "error", stateErr.Error())
@@ -2169,7 +2204,10 @@ func (r *consoleLocalRuntime) handleTaskJob(workerCtx context.Context, conversat
 		runCtx = workerCtx
 	}
 	runCtx = agent.WithEventSinkContext(runCtx, eventSink)
-	runCtx = llmutil.WithRetryNotification(runCtx, eventSink.HandleRetry)
+	runCtx = llmutil.WithRetryNotification(runCtx, func(ctx context.Context, event llmutil.RetryEvent) {
+		trace.HandleEvent(ctx, agent.Event{Kind: agent.EventKindLLMRetry, RunID: llmstats.RunIDFromContext(ctx), Text: event.StatusText()})
+		previewSink.HandleRetry(ctx, event)
+	})
 
 	final, agentCtx, runErr := r.runTask(runCtx, conversationKey, job, onStream, steerSource, planStepUpdate)
 	contextCanceled := taskdomain.EndedByCancellation(runCtx, runErr)
@@ -2178,9 +2216,14 @@ func (r *consoleLocalRuntime) handleTaskJob(workerCtx context.Context, conversat
 		userStopped = lease.UserStopped()
 		lease.Finish()
 	}
+	previewSink.Close()
+	progressMu.Lock()
+	activity := cloneConsoleActivityProgress(latestActivity)
+	progressMu.Unlock()
+	result := buildConsoleTaskResult(final, agentCtx, activity, reasoningSink.Snapshot())
+	result["trace"] = trace.Snapshot()
 
 	if runErr != nil {
-		eventSink.Close()
 		displayErr := strings.TrimSpace(outputfmt.FormatErrorForDisplay(runErr))
 		if displayErr == "" {
 			displayErr = strings.TrimSpace(runErr.Error())
@@ -2197,10 +2240,7 @@ func (r *consoleLocalRuntime) handleTaskJob(workerCtx context.Context, conversat
 			info.Status = status
 			info.Error = displayErr
 			info.FinishedAt = &finishedAt
-			progressMu.Lock()
-			activity := cloneConsoleActivityProgress(latestActivity)
-			progressMu.Unlock()
-			info.Result = buildConsoleTaskResult(final, agentCtx, activity, reasoningSink.Snapshot())
+			info.Result = result
 		}); stateErr != nil {
 			logger.Error("console_task_state_write_error", "status", status, "error", stateErr.Error())
 		}
@@ -2213,16 +2253,12 @@ func (r *consoleLocalRuntime) handleTaskJob(workerCtx context.Context, conversat
 	}
 
 	if pendingID, ok := runtimecore.PendingApprovalID(final); ok {
-		eventSink.Close()
 		pendingAt := time.Now().UTC()
 		if err := r.store.Update(job.TaskID, func(info *daemonruntime.TaskInfo) {
 			info.Status = daemonruntime.TaskPending
 			info.PendingAt = &pendingAt
 			info.ApprovalRequestID = pendingID
-			progressMu.Lock()
-			activity := cloneConsoleActivityProgress(latestActivity)
-			progressMu.Unlock()
-			info.Result = buildConsoleTaskResult(final, agentCtx, activity, reasoningSink.Snapshot())
+			info.Result = result
 		}); err != nil {
 			logger.Error("console_task_state_write_error", "status", daemonruntime.TaskPending, "error", err.Error())
 			_ = replySink.Abort(context.Background(), err)
@@ -2251,15 +2287,11 @@ func (r *consoleLocalRuntime) handleTaskJob(workerCtx context.Context, conversat
 
 	finishedAt := time.Now().UTC()
 	output := strings.TrimSpace(outputfmt.FormatFinalOutput(final))
-	eventSink.Close()
 	if err := r.store.Update(job.TaskID, func(info *daemonruntime.TaskInfo) {
 		info.Status = daemonruntime.TaskDone
 		info.Error = ""
 		info.FinishedAt = &finishedAt
-		progressMu.Lock()
-		activity := cloneConsoleActivityProgress(latestActivity)
-		progressMu.Unlock()
-		info.Result = buildConsoleTaskResult(final, agentCtx, activity, reasoningSink.Snapshot())
+		info.Result = result
 	}); err != nil {
 		logger.Error("console_task_state_write_error", "status", daemonruntime.TaskDone, "error", err.Error())
 		_ = replySink.Abort(context.Background(), err)
@@ -2353,6 +2385,37 @@ func (r *consoleLocalRuntime) runTask(ctx context.Context, conversationKey strin
 	}
 	job.FileReferences = validatedFileReferences
 	task := strings.TrimSpace(job.Task)
+	command, _ := chatcommands.ParseCommand(task)
+	command = chatcommands.NormalizeCommand(command)
+	if command == "/reset" {
+		for _, pending := range r.store.List(daemonruntime.TaskListOptions{TopicID: job.TopicID, Status: daemonruntime.TaskPending, Limit: 200}) {
+			if pending.ApprovalRequestID != "" {
+				return nil, nil, fmt.Errorf("resolve the pending approval before resetting this conversation")
+			}
+		}
+		if err := contextcheckpoint.Reset(ctx, generation.paths.CheckpointRoot, conversationKey); err != nil {
+			return nil, nil, err
+		}
+		return &agent.Final{Output: "Session reset."}, nil, nil
+	}
+	projectGuide := command == "/init" || command == "/update"
+	guidePath := ""
+	if projectGuide {
+		if strings.TrimSpace(job.WorkspaceDir) == "" {
+			return nil, nil, fmt.Errorf("attach a workspace before using %s", task)
+		}
+		guidePath = filepath.Join(job.WorkspaceDir, "AGENTS.md")
+		if command == "/init" {
+			content, err := os.ReadFile(guidePath)
+			if err == nil {
+				return &agent.Final{Output: "--- AGENTS.md ---\n" + string(content)}, nil, nil
+			}
+			if !os.IsNotExist(err) {
+				return nil, nil, err
+			}
+		}
+		task = chatcommands.ProjectGuidePrompt(job.WorkspaceDir)
+	}
 	routePurpose := ""
 	reasoningEffort := ""
 	if thinkTask, ok := chatcommands.ExtractThinkTask(task); ok {
@@ -2397,7 +2460,11 @@ func (r *consoleLocalRuntime) runTask(ctx context.Context, conversationKey strin
 	if err != nil {
 		return nil, nil, err
 	}
-	historyMsgs, currentMsg, err := renderConsolePromptMessages(checkpointHistory.History, job, model, selectedRoute.Values.SupportsImageParts, imagePaths, generation.logger)
+	promptJob := job
+	if projectGuide {
+		promptJob.Task = task
+	}
+	historyMsgs, currentMsg, err := renderConsolePromptMessages(checkpointHistory.History, promptJob, model, selectedRoute.Values.SupportsImageParts, imagePaths, generation.logger)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -2490,6 +2557,18 @@ func (r *consoleLocalRuntime) runTask(ctx context.Context, conversationKey strin
 	}
 	if runErr != nil {
 		return result.Final, result.Context, runErr
+	}
+	if projectGuide {
+		if _, pending := runtimecore.PendingApprovalID(result.Final); !pending {
+			content := chatcommands.StripMarkdownFences(outputfmt.FormatFinalOutput(result.Final))
+			if strings.TrimSpace(content) == "" {
+				return result.Final, result.Context, fmt.Errorf("AGENTS.md content is empty")
+			}
+			if err := os.WriteFile(guidePath, []byte(content+"\n"), 0644); err != nil {
+				return result.Final, result.Context, err
+			}
+			result.Final = &agent.Final{Output: "✓ AGENTS.md saved\n\n" + content}
+		}
 	}
 	result.Final = applyConsoleMessageReactionFinal(result.Final, reactTool.LastEmoji())
 	return result.Final, result.Context, nil

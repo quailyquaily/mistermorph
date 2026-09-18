@@ -50,31 +50,3 @@ func formatChatOutput(final *agent.Final) string {
 		return strings.TrimSpace(string(payload))
 	}
 }
-
-func stripMarkdownFences(content string) string {
-	content = strings.TrimSpace(content)
-	if strings.HasPrefix(content, "```markdown") {
-		content = strings.TrimPrefix(content, "```markdown")
-		content = strings.TrimSpace(content)
-		if strings.HasSuffix(content, "```") {
-			content = strings.TrimSuffix(content, "```")
-			content = strings.TrimSpace(content)
-		}
-		return content
-	}
-	if strings.HasPrefix(content, "```") {
-		idx := strings.Index(content, "\n")
-		if idx > 0 {
-			content = content[idx+1:]
-		} else {
-			content = strings.TrimPrefix(content, "```")
-		}
-		content = strings.TrimSpace(content)
-		if strings.HasSuffix(content, "```") {
-			content = strings.TrimSuffix(content, "```")
-			content = strings.TrimSpace(content)
-		}
-		return content
-	}
-	return content
-}
