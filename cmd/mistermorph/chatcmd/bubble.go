@@ -104,6 +104,7 @@ type chatModel struct {
 	pickerIndex     int
 	pickerClosed    bool
 
+	initialHistoryPending      bool
 	transcriptQueue            []string
 	transcriptPrinting         bool
 	transcriptResuming         bool
@@ -138,7 +139,7 @@ var (
 			Foreground(lipglosscompat.AdaptiveColor{Light: lipgloss.Color("25"), Dark: lipgloss.Color("75")}).
 			Bold(true)
 	chatUserLineStyle = lipgloss.NewStyle().
-				Background(lipglosscompat.AdaptiveColor{Light: lipgloss.Color("237"), Dark: lipgloss.Color("236")})
+				Background(lipglosscompat.AdaptiveColor{Light: lipgloss.Color("254"), Dark: lipgloss.Color("#40444B")})
 	chatSecondaryStyle = lipgloss.NewStyle().
 				Foreground(lipglosscompat.AdaptiveColor{Light: lipgloss.Color("239"), Dark: lipgloss.Color("250")})
 	chatMutedStyle = lipgloss.NewStyle().
@@ -210,7 +211,8 @@ func (m *chatModel) Init() tea.Cmd {
 		return m.initShared()
 	}
 	if m.topic.ID != "" {
-		return tea.Batch(textarea.Blink, m.printHistory(true))
+		m.initialHistoryPending = true
+		return textarea.Blink
 	}
 	return textarea.Blink
 }
@@ -247,6 +249,10 @@ func (m *chatModel) Update(msg tea.Msg) (model tea.Model, command tea.Cmd) {
 		}
 		m.textarea.SetWidth(m.contentWidth())
 		m.clampApprovalScroll()
+		if m.initialHistoryPending {
+			m.initialHistoryPending = false
+			return m, m.printHistory(true)
+		}
 		return m, nil
 
 	case tea.PasteMsg:
@@ -909,10 +915,12 @@ func chatSessionStatusFromSession(sess *chatSession) chatSessionStatus {
 // formatSubmittedInput renders a submitted user message for the transcript:
 // the first line carries the marker, continuation lines are indented, every
 // physical line is hard-wrapped and padded to width, and the band style
-// paints the full-width background so user input is recognizable without
-// relying on the marker alone.
+// paints the full-width background, including one blank row above and below.
 func formatSubmittedInput(input string, width int) string {
-	out := make([]string, 0, strings.Count(input, "\n")+1)
+	out := make([]string, 0, strings.Count(input, "\n")+3)
+	blank := chatUserLineStyle.Render(strings.Repeat(" ", max(1, width)))
+	out = append(out, blank)
+	markerStyle := chatAccentStyle.Background(chatUserLineStyle.GetBackground())
 	contentWidth := width - inputMarkerWidth
 	for i, line := range strings.Split(input, "\n") {
 		prefix := "  "
@@ -930,9 +938,16 @@ func formatSubmittedInput(input string, width int) string {
 			if contentWidth > 1 && ansi.StringWidth(w) < contentWidth {
 				w += strings.Repeat(" ", contentWidth-ansi.StringWidth(w))
 			}
-			out = append(out, chatUserLineStyle.Render(prefix+w))
+			// Render adjacent styled spans, not nested styles: a marker reset
+			// must not clear the background of the rest of the row.
+			if i == 0 && j == 0 {
+				out = append(out, markerStyle.Render(prefix)+chatUserLineStyle.Render(w))
+			} else {
+				out = append(out, chatUserLineStyle.Render(prefix+w))
+			}
 		}
 	}
+	out = append(out, blank)
 	return strings.Join(out, "\n") + "\n"
 }
 
@@ -984,7 +999,7 @@ func (m *chatModel) submitInput(value string) tea.Cmd {
 	m.pastedTexts = make(map[string]string)
 	m.pickerClosed = false
 	m.pickerIndex = 0
-	return m.enqueueTranscript(formatSubmittedInput(expanded, m.width-1))
+	return m.enqueueTranscript(formatSubmittedInput(expanded, m.contentWidth()))
 }
 
 func (m *chatModel) picker() chatPicker {

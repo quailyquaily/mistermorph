@@ -518,30 +518,42 @@ func TestFormatSubmittedInput(t *testing.T) {
 	t.Run("single line fills the band", func(t *testing.T) {
 		got := formatSubmittedInput("hello", 40)
 		lines := strings.Split(strings.TrimRight(got, "\n"), "\n")
-		if len(lines) != 1 {
-			t.Fatalf("want 1 physical line, got %d", len(lines))
+		if len(lines) != 3 {
+			t.Fatalf("want 3 physical lines, got %d", len(lines))
 		}
-		if w := ansi.StringWidth(lines[0]); w != 40 {
+		if w := ansi.StringWidth(lines[1]); w != 40 {
 			t.Errorf("band width = %d, want 40", w)
 		}
-		if stripped := ansi.Strip(lines[0]); stripped != "❯ hello"+strings.Repeat(" ", 33) {
+		if stripped := ansi.Strip(lines[1]); stripped != "❯ hello"+strings.Repeat(" ", 33) {
 			t.Errorf("stripped = %q", stripped)
 		}
-		if !strings.Contains(lines[0], "48;") {
+		if !strings.Contains(lines[1], "48;") {
 			t.Error("band should carry a background SGR")
+		}
+		blank := chatUserLineStyle.Render(strings.Repeat(" ", 40))
+		if lines[0] != blank || lines[2] != blank {
+			t.Errorf("top and bottom padding must have the same full-width background: %q", got)
+		}
+		marker := chatAccentStyle.Background(chatUserLineStyle.GetBackground()).Render("❯ ")
+		if !strings.Contains(marker, "38;") || !strings.Contains(marker, "48;") {
+			t.Fatalf("marker must carry both blue foreground and band background: %q", marker)
+		}
+		want := marker + chatUserLineStyle.Render("hello"+strings.Repeat(" ", 33))
+		if lines[1] != want {
+			t.Errorf("marker and body must independently preserve the background: %q", lines[1])
 		}
 	})
 
 	t.Run("multi line indents continuation", func(t *testing.T) {
 		got := formatSubmittedInput("first\nsecond", 20)
 		lines := strings.Split(strings.TrimRight(got, "\n"), "\n")
-		if len(lines) != 2 {
-			t.Fatalf("want 2 physical lines, got %d", len(lines))
+		if len(lines) != 4 {
+			t.Fatalf("want 4 physical lines, got %d", len(lines))
 		}
-		if stripped := ansi.Strip(lines[0]); !strings.HasPrefix(stripped, "❯ first") {
+		if stripped := ansi.Strip(lines[1]); !strings.HasPrefix(stripped, "❯ first") {
 			t.Errorf("line 1 stripped = %q", stripped)
 		}
-		if stripped := ansi.Strip(lines[1]); !strings.HasPrefix(stripped, "  second") {
+		if stripped := ansi.Strip(lines[2]); !strings.HasPrefix(stripped, "  second") {
 			t.Errorf("line 2 stripped = %q", stripped)
 		}
 	})
@@ -550,18 +562,18 @@ func TestFormatSubmittedInput(t *testing.T) {
 		// 90 content cells at 18 cells per line is exactly 5 physical lines.
 		got := formatSubmittedInput(strings.Repeat("ab ", 30), 20)
 		lines := strings.Split(strings.TrimRight(got, "\n"), "\n")
-		if len(lines) != 5 {
-			t.Fatalf("want 5 physical lines, got %d: %v", len(lines), lines)
+		if len(lines) != 7 {
+			t.Fatalf("want 7 physical lines, got %d: %v", len(lines), lines)
 		}
 		for i, line := range lines {
 			if w := ansi.StringWidth(line); w != 20 {
 				t.Errorf("line %d width = %d, want 20", i, w)
 			}
 		}
-		if stripped := ansi.Strip(lines[0]); !strings.HasPrefix(stripped, "❯ ab ") {
+		if stripped := ansi.Strip(lines[1]); !strings.HasPrefix(stripped, "❯ ab ") {
 			t.Errorf("line 1 stripped = %q", stripped)
 		}
-		if stripped := ansi.Strip(lines[1]); !strings.HasPrefix(stripped, "  ab ") {
+		if stripped := ansi.Strip(lines[2]); !strings.HasPrefix(stripped, "  ab ") {
 			t.Errorf("line 2 stripped = %q", stripped)
 		}
 	})
@@ -570,10 +582,10 @@ func TestFormatSubmittedInput(t *testing.T) {
 		// "你好" is 4 cells; the content area is 8, so 4 trailing spaces.
 		got := formatSubmittedInput("你好", 10)
 		lines := strings.Split(strings.TrimRight(got, "\n"), "\n")
-		if w := ansi.StringWidth(lines[0]); w != 10 {
+		if w := ansi.StringWidth(lines[1]); w != 10 {
 			t.Errorf("band width = %d, want 10", w)
 		}
-		if stripped := ansi.Strip(lines[0]); stripped != "❯ 你好"+strings.Repeat(" ", 4) {
+		if stripped := ansi.Strip(lines[1]); stripped != "❯ 你好"+strings.Repeat(" ", 4) {
 			t.Errorf("stripped = %q", stripped)
 		}
 	})
@@ -581,10 +593,10 @@ func TestFormatSubmittedInput(t *testing.T) {
 	t.Run("narrow width falls back", func(t *testing.T) {
 		got := formatSubmittedInput("hello", -1)
 		lines := strings.Split(strings.TrimRight(got, "\n"), "\n")
-		if len(lines) != 1 {
-			t.Fatalf("want 1 physical line, got %d", len(lines))
+		if len(lines) != 3 {
+			t.Fatalf("want 3 physical lines, got %d", len(lines))
 		}
-		if stripped := ansi.Strip(lines[0]); stripped != "❯ hello" {
+		if stripped := ansi.Strip(lines[1]); stripped != "❯ hello" {
 			t.Errorf("stripped = %q", stripped)
 		}
 	})
@@ -598,6 +610,38 @@ func TestFormatSubmittedInputSurvivesTranscriptWrap(t *testing.T) {
 		wrapped := wrapChatTranscript(got, 40)
 		if strings.Count(got, "\n") != strings.Count(wrapped, "\n") {
 			t.Errorf("input %q: transcript wrap changed the line count: %q", input, wrapped)
+		}
+	}
+}
+
+func TestInitialHistoryWaitsForTerminalWidth(t *testing.T) {
+	m := newChatModel(nil)
+	m.topic.ID = "topic"
+	m.Init()
+	if !m.initialHistoryPending || len(m.transcriptQueue) != 0 {
+		t.Fatal("initial history must wait for terminal dimensions")
+	}
+	_, cmd := m.Update(tea.WindowSizeMsg{Width: 200, Height: 40})
+	if cmd == nil || m.initialHistoryPending || m.width != 200 {
+		t.Fatal("initial history must print after receiving terminal dimensions")
+	}
+	queued := len(m.transcriptQueue)
+	m.Update(tea.WindowSizeMsg{Width: 240, Height: 40})
+	if len(m.transcriptQueue) != queued {
+		t.Fatal("resize must not print history again")
+	}
+}
+
+func TestSubmittedInputMatchesComposerWidth(t *testing.T) {
+	m := newChatModel(nil)
+	for _, width := range []int{40, 80, 160, 240} {
+		m.Update(tea.WindowSizeMsg{Width: width, Height: 40})
+		frame := strings.Split(ansi.Strip(renderChatTextarea(m.textarea)), "\n")[0]
+		band := wrapChatTranscript(formatSubmittedInput("hello", m.contentWidth()), width)
+		for _, line := range strings.Split(strings.TrimRight(band, "\n"), "\n") {
+			if got, want := ansi.StringWidth(line), ansi.StringWidth(frame); got != want || got != width-1 {
+				t.Fatalf("terminal %d: band width %d, frame width %d", width, got, want)
+			}
 		}
 	}
 }

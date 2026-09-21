@@ -182,7 +182,9 @@ func (m *chatModel) initShared() tea.Cmd {
 		settings = m.loadSharedSettings()
 	}
 	if m.hasChat {
-		return tea.Batch(textarea.Blink, settings, m.loadSharedMetadata(), m.printHistory(true), m.tick(), m.syncStreams(), m.syncSharedActivity(), m.loadSharedApproval())
+		// History needs the actual terminal width, delivered by WindowSizeMsg.
+		m.initialHistoryPending = true
+		return tea.Batch(textarea.Blink, settings, m.loadSharedMetadata(), m.tick(), m.syncStreams(), m.syncSharedActivity(), m.loadSharedApproval())
 	}
 	return tea.Batch(m.newDraft(), textarea.Blink, settings)
 }
