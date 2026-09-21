@@ -380,7 +380,7 @@ func (m *chatModel) Update(msg tea.Msg) (model tea.Model, command tea.Cmd) {
 			return m, m.submitInput(m.textarea.Value())
 
 		case "up":
-			if m.atTextareaTop() && m.historyUnmodified() {
+			if m.atTextareaTop() && m.historyBrowsable() {
 				if m.historyIdx > 0 {
 					m.historyIdx--
 					m.textarea.SetValue(m.inputHistory[m.historyIdx])
@@ -390,7 +390,7 @@ func (m *chatModel) Update(msg tea.Msg) (model tea.Model, command tea.Cmd) {
 			}
 
 		case "down":
-			if m.atTextareaBottom() && m.historyUnmodified() {
+			if m.atTextareaBottom() && m.historyBrowsable() {
 				if m.historyIdx < len(m.inputHistory)-1 {
 					m.historyIdx++
 					m.textarea.SetValue(m.inputHistory[m.historyIdx])
@@ -801,14 +801,17 @@ func (m *chatModel) renderFooter() string {
 	return chatMutedStyle.Render(joinChatFooter(leftText, hint, width))
 }
 
-// historyUnmodified reports whether the textarea still shows the entry at
-// historyIdx (an empty buffer at the end position). Up and down only browse
-// history from that state, so an unsent draft is never clobbered.
-func (m *chatModel) historyUnmodified() bool {
+// historyBrowsable reports whether up/down may browse input history: the
+// buffer is empty, or it still shows the entry at historyIdx. Any other
+// content is an unsent draft and must never be clobbered.
+func (m *chatModel) historyBrowsable() bool {
+	if m.textarea.Value() == "" {
+		return true
+	}
 	if m.historyIdx < len(m.inputHistory) {
 		return m.textarea.Value() == m.inputHistory[m.historyIdx]
 	}
-	return m.textarea.Value() == ""
+	return false
 }
 
 func (m *chatModel) atTextareaTop() bool {

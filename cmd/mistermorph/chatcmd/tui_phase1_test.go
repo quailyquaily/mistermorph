@@ -167,6 +167,38 @@ func TestChatModelHistoryBrowsingStopsAfterEdit(t *testing.T) {
 	}
 }
 
+func TestChatModelHistoryBrowsingContinuesAfterClearingRecalledEntry(t *testing.T) {
+	m := newChatModel(newPhase1TestSession(t))
+	m.inputHistory = []string{"first", "second"}
+	m.historyIdx = len(m.inputHistory)
+	m.textarea.Reset()
+
+	m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyUp}))
+	if got := m.textarea.Value(); got != "second" {
+		t.Fatalf("Up value = %q, want second", got)
+	}
+
+	// The user deletes the recalled entry entirely; browsing must continue.
+	m.textarea.Reset()
+	m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyUp}))
+	if got := m.textarea.Value(); got != "first" {
+		t.Fatalf("Up after clearing value = %q, want first", got)
+	}
+
+	// Down walks back to the empty end of history.
+	m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyDown}))
+	if got := m.textarea.Value(); got != "second" {
+		t.Fatalf("Down value = %q, want second", got)
+	}
+	m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyDown}))
+	if got := m.textarea.Value(); got != "" {
+		t.Fatalf("Down at end value = %q, want empty buffer", got)
+	}
+	if got := m.historyIdx; got != len(m.inputHistory) {
+		t.Fatalf("historyIdx = %d, want end %d", got, len(m.inputHistory))
+	}
+}
+
 func TestChatModelCtrlJInsertsNewline(t *testing.T) {
 	m := newChatModel(newPhase1TestSession(t))
 	m.textarea.SetValue("first")
