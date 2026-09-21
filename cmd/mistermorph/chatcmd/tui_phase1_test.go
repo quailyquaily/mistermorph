@@ -111,8 +111,59 @@ func TestChatModelMultilineArrowsMoveCursorBeforeHistory(t *testing.T) {
 	}
 
 	m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyUp}))
+	if got := m.textarea.Value(); got != "first\nsecond" {
+		t.Fatalf("Up at top boundary clobbered draft value = %q", got)
+	}
+	if got := m.textarea.Line(); got != 0 {
+		t.Fatalf("textarea line after Up at top = %d, want 0", got)
+	}
+}
+
+func TestChatModelUpArrowPreservesSingleLineDraft(t *testing.T) {
+	m := newChatModel(newPhase1TestSession(t))
+	m.inputHistory = []string{"older"}
+	m.historyIdx = len(m.inputHistory)
+	m.textarea.SetValue("draft")
+
+	m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyUp}))
+	if got := m.textarea.Value(); got != "draft" {
+		t.Fatalf("Up with single-line draft value = %q, want draft preserved", got)
+	}
+	if got := m.historyIdx; got != len(m.inputHistory) {
+		t.Fatalf("historyIdx = %d, want end %d", got, len(m.inputHistory))
+	}
+
+	m.textarea.Reset()
+	m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyUp}))
 	if got := m.textarea.Value(); got != "older" {
-		t.Fatalf("Up at top boundary value = %q, want older history", got)
+		t.Fatalf("Up with empty buffer value = %q, want older history", got)
+	}
+}
+
+func TestChatModelHistoryBrowsingStopsAfterEdit(t *testing.T) {
+	m := newChatModel(newPhase1TestSession(t))
+	m.inputHistory = []string{"first", "second"}
+	m.historyIdx = len(m.inputHistory)
+	m.textarea.Reset()
+
+	m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyUp}))
+	if got := m.textarea.Value(); got != "second" {
+		t.Fatalf("Up value = %q, want second", got)
+	}
+	m.textarea.SetValue("second edited")
+
+	m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyUp}))
+	if got := m.textarea.Value(); got != "second edited" {
+		t.Fatalf("Up after edit value = %q, want edited buffer preserved", got)
+	}
+	if got := m.historyIdx; got != len(m.inputHistory)-1 {
+		t.Fatalf("historyIdx = %d, want %d", got, len(m.inputHistory)-1)
+	}
+
+	m.textarea.SetValue("second")
+	m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyUp}))
+	if got := m.textarea.Value(); got != "first" {
+		t.Fatalf("Up after restoring entry value = %q, want first", got)
 	}
 }
 
