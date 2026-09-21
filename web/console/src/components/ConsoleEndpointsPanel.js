@@ -62,10 +62,9 @@ export default {
         <header class="settings-panel-head">
           <div class="settings-panel-copy">
             <h3 class="settings-panel-title workspace-document-title">Remote Morphs</h3>
-            <p class="settings-panel-meta">Other Morph instances this Console can control. Each access token must match the remote Morph's incoming access token.</p>
+            <p class="settings-panel-meta">Other Morph instances this Console can control. Each access token must match the remote Morph's incoming access token. Changes apply immediately after saving.</p>
           </div>
           <div class="settings-panel-actions">
-            <span class="config-settings-restart">Restart required</span>
             <QButton class="primary" :loading="saving" :disabled="loading || saving || !valid" @click="save">Save</QButton>
           </div>
         </header>

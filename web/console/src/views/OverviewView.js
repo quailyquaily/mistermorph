@@ -1,6 +1,6 @@
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
-import { PhEye, PhEyeSlash } from "@phosphor-icons/vue";
+import { PhEye, PhEyeSlash, PhPlus } from "@phosphor-icons/vue";
 import "./OverviewView.css";
 import logoURL from "../assets/images/app_logo_current.svg";
 
@@ -18,6 +18,7 @@ const OverviewView = {
     RouterLink,
     PhEye,
     PhEyeSlash,
+    PhPlus,
   },
   setup() {
     const t = translate;
@@ -68,8 +69,12 @@ const OverviewView = {
         left.title.localeCompare(right.title, undefined, { numeric: true, sensitivity: "base" })
       );
     });
+    const controllerSettingsRoute = computed(() => {
+      const controller = endpointRows.value.find((item) => item.local);
+      return controller ? endpointRoutePath(controller.endpoint_ref, "/settings/console") : "";
+    });
     const activeConnection = computed(() => connections.value.find((connection) =>
-      connection.connected && connection.endpoint_ref === (hoveredEndpoint.value || focusedEndpoint.value)
+      (connection.connected || connection.add) && connection.endpoint_ref === (hoveredEndpoint.value || focusedEndpoint.value)
     ));
 
     function readAvatarColor(image, item) {
@@ -91,7 +96,7 @@ const OverviewView = {
       const controller = nodes[controllerIndex].querySelector(".endpoint-overview-portrait").getBoundingClientRect();
       const sourceX = controller.x + controller.width / 2 - bounds.x;
       const sourceY = controller.bottom - bounds.y + 10;
-      const targets = endpointRows.value.flatMap((item, index) => {
+      const targets = [...endpointRows.value, { endpoint_ref: "add-console", add: true }].flatMap((item, index) => {
         if (item.local) return [];
         const portrait = nodes[index].querySelector(".endpoint-overview-portrait").getBoundingClientRect();
         return [{
@@ -99,6 +104,7 @@ const OverviewView = {
           avatar_url: item.avatar_url,
           connected: item.connected,
           pending: item.pending,
+          add: item.add,
           x: portrait.x + portrait.width / 2 - bounds.x,
           y: portrait.top - bounds.y - 8,
           portraitY: portrait.y + portrait.height / 2 - bounds.y,
@@ -183,6 +189,7 @@ const OverviewView = {
       t, err, loading, endpointRows, logoURL, showAddresses, toggleAddresses,
       connectionMap, connections, activeConnection, hoveredEndpoint, focusedEndpoint,
       avatarColors, readAvatarColor,
+      controllerSettingsRoute,
     };
   },
   template: `
@@ -210,9 +217,9 @@ const OverviewView = {
               v-for="connection in connections"
               :key="connection.endpoint_ref"
               :d="connection.path"
-              :class="['overview-connection', { 'is-offline': !connection.connected && !connection.pending, 'is-pending': connection.pending }]"
+              :class="['overview-connection', { 'is-offline': !connection.add && !connection.connected && !connection.pending, 'is-pending': connection.pending, 'is-add': connection.add }]"
             />
-            <path v-if="activeConnection" :d="activeConnection.path" class="overview-connection is-active" />
+            <path v-if="activeConnection" :d="activeConnection.path" class="overview-connection is-active" :class="{ 'is-add': activeConnection.add }" />
             <template v-for="(connection, index) in connections" :key="connection.endpoint_ref">
               <g
                 v-if="connection.connected"
@@ -277,6 +284,22 @@ const OverviewView = {
                   >{{ item.detail }}</span>
                 </span>
               </component>
+            </li>
+            <li v-if="controllerSettingsRoute" class="endpoint-overview-add">
+              <RouterLink
+                :to="controllerSettingsRoute"
+                class="endpoint-overview-item"
+                @pointerenter="$event.pointerType === 'mouse' && (hoveredEndpoint = 'add-console')"
+                @pointerleave="hoveredEndpoint = ''"
+                @focus="focusedEndpoint = $event.target.matches(':focus-visible') ? 'add-console' : ''"
+                @blur="focusedEndpoint = ''"
+              >
+                <span class="endpoint-overview-portrait"><PhPlus :size="28" aria-hidden="true" /></span>
+                <span class="endpoint-overview-identity">
+                  <span class="endpoint-overview-name">{{ t('overview_add_console') }}</span>
+                  <span class="endpoint-overview-detail">{{ t('overview_add_console_hint') }}</span>
+                </span>
+              </RouterLink>
             </li>
           </ul>
         </div>

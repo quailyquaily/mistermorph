@@ -78,6 +78,10 @@
   stroke-dasharray: 2 5;
 }
 
+.overview-connection.is-add {
+  stroke-dasharray: 4 6;
+}
+
 .overview-connection.is-active {
   stroke: var(--overview-accent);
 }
@@ -211,6 +215,14 @@ a.endpoint-overview-item:focus-visible {
   border-radius: inherit;
   object-fit: cover;
   background: var(--bg-2);
+}
+
+.endpoint-overview-add .endpoint-overview-portrait {
+  display: grid;
+  place-items: center;
+  border: 1.5px dashed var(--overview-accent);
+  background: var(--bg-0);
+  color: var(--overview-accent);
 }
 
 .endpoint-overview-identity {

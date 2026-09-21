@@ -447,6 +447,14 @@ func (s *server) handleConsoleSettingsPut(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusBadRequest, "no settings changes")
 		return
 	}
+	var endpoints []runtimeEndpointConfig
+	if req.Endpoints != nil {
+		endpoints, err = resolveConsoleEndpointSettings(r.Context(), serialized, s.secretStore)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
 	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -456,6 +464,9 @@ func (s *server) handleConsoleSettingsPut(w http.ResponseWriter, r *http.Request
 		return
 	}
 	committed = true
+	if req.Endpoints != nil {
+		s.replaceRuntimeEndpoints(endpoints)
+	}
 
 	doc, docErr := configbootstrap.LoadDocumentBytes(serialized)
 	if docErr != nil {
@@ -488,9 +499,6 @@ func (s *server) handleConsoleSettingsPut(w http.ResponseWriter, r *http.Request
 	}
 	if req.AuthProfiles != nil {
 		additionalModes = append(additionalModes, configsettings.ApplyNextGeneration)
-	}
-	if req.Endpoints != nil {
-		additionalModes = append(additionalModes, configsettings.ApplyProcessRestart)
 	}
 	applyResult := configsettings.ResultForUpdate(
 		configUpdate,

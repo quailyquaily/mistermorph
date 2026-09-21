@@ -125,6 +125,8 @@ type server struct {
 	endpointByRef               map[string]runtimeEndpoint
 	endpointStateMu             sync.RWMutex
 	endpointStates              []endpointCachedState
+	endpointGeneration          uint64
+	endpointRefresh             chan struct{}
 	endpointWorkersWG           sync.WaitGroup
 	localRuntime                *consoleLocalRuntime
 	managed                     *managedRuntimeSupervisor
@@ -909,8 +911,8 @@ func (s *server) handleEndpoints(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.ensureEndpointStates()
-	snapshots := make([]endpointSnapshot, len(s.endpoints))
 	s.endpointStateMu.RLock()
+	snapshots := make([]endpointSnapshot, len(s.endpoints))
 	for i, ep := range s.endpoints {
 		state := s.endpointStates[i]
 		snapshots[i] = endpointSnapshot{
@@ -982,14 +984,22 @@ func (s *server) setEndpointAvatar(ref string, avatarURL string) {
 }
 
 func (s *server) startEndpointBackground(ctx context.Context) {
-	if s == nil || len(s.endpoints) == 0 {
+	if s == nil {
 		return
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	s.ensureEndpointStates()
+	s.endpointStateMu.Lock()
+	if s.endpointRefresh != nil {
+		s.endpointStateMu.Unlock()
+		return
+	}
+	refresh := make(chan struct{}, 1)
+	s.endpointRefresh = refresh
 	s.endpointWorkersWG.Add(1)
+	s.endpointStateMu.Unlock()
 	go func() {
 		defer s.endpointWorkersWG.Done()
 		ticker := time.NewTicker(endpointHealthRefreshInterval)
@@ -1001,9 +1011,10 @@ func (s *server) startEndpointBackground(ctx context.Context) {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				s.refreshEndpointHealth(ctx)
-				s.refreshEndpointAvatars(ctx)
+			case <-refresh:
 			}
+			s.refreshEndpointHealth(ctx)
+			s.refreshEndpointAvatars(ctx)
 		}
 	}()
 }
@@ -1016,11 +1027,14 @@ func (s *server) refreshEndpointAvatars(ctx context.Context) {
 		ctx = context.Background()
 	}
 	s.ensureEndpointStates()
+	s.endpointStateMu.RLock()
+	endpoints := append([]runtimeEndpoint(nil), s.endpoints...)
+	states := append([]endpointCachedState(nil), s.endpointStates...)
+	generation := s.endpointGeneration
+	s.endpointStateMu.RUnlock()
 	var wg sync.WaitGroup
-	for i, endpoint := range s.endpoints {
-		s.endpointStateMu.RLock()
-		state := s.endpointStates[i]
-		s.endpointStateMu.RUnlock()
+	for i, endpoint := range endpoints {
+		state := states[i]
 		if !state.Connected || state.AvatarReady {
 			continue
 		}
@@ -1034,15 +1048,17 @@ func (s *server) refreshEndpointAvatars(ctx context.Context) {
 				return
 			}
 			s.endpointStateMu.Lock()
+			defer s.endpointStateMu.Unlock()
+			if s.endpointGeneration != generation {
+				return
+			}
 			state := s.endpointStates[i]
 			if state.AvatarReady {
-				s.endpointStateMu.Unlock()
 				return
 			}
 			state.AvatarURL = avatarURL
 			state.AvatarReady = true
 			s.endpointStates[i] = state
-			s.endpointStateMu.Unlock()
 		}(i, endpoint)
 	}
 	wg.Wait()
@@ -1053,8 +1069,12 @@ func (s *server) refreshEndpointHealth(ctx context.Context) {
 		return
 	}
 	s.ensureEndpointStates()
+	s.endpointStateMu.RLock()
+	endpoints := append([]runtimeEndpoint(nil), s.endpoints...)
+	generation := s.endpointGeneration
+	s.endpointStateMu.RUnlock()
 	var wg sync.WaitGroup
-	for i, endpoint := range s.endpoints {
+	for i, endpoint := range endpoints {
 		wg.Add(1)
 		go func(i int, endpoint runtimeEndpoint) {
 			defer wg.Done()
@@ -1065,6 +1085,10 @@ func (s *server) refreshEndpointHealth(ctx context.Context) {
 				return
 			}
 			s.endpointStateMu.Lock()
+			defer s.endpointStateMu.Unlock()
+			if s.endpointGeneration != generation {
+				return
+			}
 			state := s.endpointStates[i]
 			state.Health = health
 			state.Connected = err == nil
@@ -1074,7 +1098,6 @@ func (s *server) refreshEndpointHealth(ctx context.Context) {
 				state.AvatarReady = true
 			}
 			s.endpointStates[i] = state
-			s.endpointStateMu.Unlock()
 		}(i, endpoint)
 	}
 	wg.Wait()
@@ -1506,11 +1529,21 @@ func (s *server) resolveRuntimeEndpoint(r *http.Request) (runtimeEndpoint, error
 	if ref == "" {
 		return runtimeEndpoint{}, fmt.Errorf("missing endpoint")
 	}
-	endpoint, ok := s.endpointByRef[ref]
+	endpoint, ok := s.lookupRuntimeEndpoint(ref)
 	if !ok {
 		return runtimeEndpoint{}, fmt.Errorf("invalid endpoint")
 	}
 	return endpoint, nil
+}
+
+func (s *server) lookupRuntimeEndpoint(ref string) (runtimeEndpoint, bool) {
+	if s == nil {
+		return runtimeEndpoint{}, false
+	}
+	s.endpointStateMu.RLock()
+	defer s.endpointStateMu.RUnlock()
+	endpoint, ok := s.endpointByRef[ref]
+	return endpoint, ok
 }
 
 func bearerToken(r *http.Request) (string, bool) {

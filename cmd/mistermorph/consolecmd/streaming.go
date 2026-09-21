@@ -544,7 +544,7 @@ func (s *server) handleStreamWebSocket(w http.ResponseWriter, r *http.Request) {
 		}
 		frames, closeFrames = s.localRuntime.streamHub.Subscribe(taskID)
 	} else {
-		endpoint, ok := s.endpointByRef[endpointRef]
+		endpoint, ok := s.lookupRuntimeEndpoint(endpointRef)
 		if !ok {
 			writeError(w, http.StatusBadRequest, "invalid endpoint")
 			return

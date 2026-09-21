@@ -191,8 +191,15 @@ func TestHandleConsoleSettingsReadsAndUpdatesEndpointsWithoutExposingSecrets(t *
 	if err := json.Unmarshal(putRec.Body.Bytes(), &putPayload); err != nil {
 		t.Fatal(err)
 	}
-	if putPayload.ApplyMode != configsettings.ApplyProcessRestart || putPayload.ApplyStatus != "pending" {
+	if putPayload.ApplyMode != configsettings.ApplyImmediate || putPayload.ApplyStatus != "applied" {
 		t.Fatalf("apply result = %#v", putPayload)
+	}
+	endpoint, err := srv.resolveRuntimeEndpoint(httptest.NewRequest(http.MethodGet, "/api/proxy?endpoint="+buildRuntimeEndpointRef("Remote 2", "https://new.example.test"), nil))
+	if err != nil {
+		t.Fatalf("saved endpoint is not active: %v", err)
+	}
+	if client, ok := endpoint.Client.(*daemonTaskClient); !ok || client.authToken != "old-token" {
+		t.Fatal("active endpoint did not resolve the preserved OS secret")
 	}
 	raw, err := os.ReadFile(configPath)
 	if err != nil {

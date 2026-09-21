@@ -1,13 +1,16 @@
 package consolecmd
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net/url"
 	"strings"
 
 	"github.com/quailyquaily/mistermorph/internal/configbootstrap"
+	"github.com/quailyquaily/mistermorph/internal/configutil"
 	"github.com/quailyquaily/mistermorph/internal/secref"
+	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 )
 
@@ -17,6 +20,92 @@ type consoleEndpointSettingsPayload struct {
 	URL                 string `json:"url"`
 	AuthToken           string `json:"auth_token"`
 	AuthTokenConfigured bool   `json:"auth_token_configured,omitempty"`
+}
+
+func resolveConsoleEndpointSettings(ctx context.Context, raw []byte, store secref.OSStore) ([]runtimeEndpointConfig, error) {
+	reader := viper.New()
+	reader.SetConfigType("yaml")
+	if err := reader.ReadConfig(bytes.NewReader(raw)); err != nil {
+		return nil, err
+	}
+	var items []runtimeEndpointConfigRaw
+	if err := reader.UnmarshalKey("console.endpoints", &items); err != nil {
+		return nil, err
+	}
+	awsConfig := configutil.AWSSecretsManagerConfigFromReader(reader)
+	awsConfig.Region, _ = configutil.ExpandStrictEnv(awsConfig.Region)
+	awsConfig.Profile, _ = configutil.ExpandStrictEnv(awsConfig.Profile)
+	resolver := secref.NewResolver(secref.NewDefaultSourceWithOSStore(awsConfig, store))
+	for i := range items {
+		for field, value := range map[string]*string{"name": &items[i].Name, "url": &items[i].URL, "auth_token": &items[i].AuthToken} {
+			result, err := resolver.ResolveString(ctx, *value, secref.Options{EnvMissing: secref.EnvMissingError})
+			if err != nil || len(result.Warnings) > 0 {
+				return nil, fmt.Errorf("console.endpoints[%d].%s could not be resolved", i, field)
+			}
+			*value = result.Value
+		}
+		parsed, err := url.Parse(strings.TrimSpace(items[i].URL))
+		if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+			return nil, fmt.Errorf("console.endpoints[%d] has an invalid URL", i)
+		}
+	}
+	endpoints, warnings := resolveRuntimeEndpointsForServe(items)
+	if len(warnings) > 0 {
+		return nil, fmt.Errorf("console endpoints must have unique names and non-empty names, URLs, and resolved tokens")
+	}
+	return endpoints, nil
+}
+
+func (s *server) replaceRuntimeEndpoints(configs []runtimeEndpointConfig) {
+	s.ensureEndpointStates()
+	s.endpointStateMu.Lock()
+	previous := make(map[string]int, len(s.endpoints))
+	for i, endpoint := range s.endpoints {
+		previous[endpoint.Ref] = i
+	}
+	endpoints := make([]runtimeEndpoint, 0, len(configs)+1)
+	states := make([]endpointCachedState, 0, len(configs)+1)
+	if i, ok := previous[consoleLocalEndpointRef]; ok {
+		endpoints = append(endpoints, s.endpoints[i])
+		states = append(states, s.endpointStates[i])
+	}
+	for _, config := range configs {
+		if i, ok := previous[config.Ref]; ok {
+			if client, ok := s.endpoints[i].Client.(*daemonTaskClient); ok && client.baseURL == config.URL && client.authToken == config.AuthToken {
+				endpoints = append(endpoints, s.endpoints[i])
+				states = append(states, s.endpointStates[i])
+				delete(previous, config.Ref)
+				continue
+			}
+		}
+		endpoints = append(endpoints, runtimeEndpoint{Ref: config.Ref, Name: config.Name, URL: config.URL, Client: newDaemonTaskClient(config.URL, config.AuthToken)})
+		states = append(states, endpointCachedState{})
+	}
+	var retired []*daemonTaskClient
+	for _, i := range previous {
+		if client, ok := s.endpoints[i].Client.(*daemonTaskClient); ok {
+			retired = append(retired, client)
+		}
+	}
+	s.endpoints = endpoints
+	s.endpointStates = states
+	s.endpointByRef = make(map[string]runtimeEndpoint, len(endpoints))
+	for _, endpoint := range endpoints {
+		s.endpointByRef[endpoint.Ref] = endpoint
+	}
+	s.endpointGeneration++
+	if s.endpointRefresh != nil {
+		select {
+		case s.endpointRefresh <- struct{}{}:
+		default:
+		}
+	}
+	s.endpointStateMu.Unlock()
+	for _, client := range retired {
+		if client.downloadClient != nil {
+			client.downloadClient.CloseIdleConnections()
+		}
+	}
 }
 
 func consoleEndpointSettingsFromDocument(doc *yaml.Node) []consoleEndpointSettingsPayload {

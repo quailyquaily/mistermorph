@@ -193,10 +193,7 @@ func (s *server) buildArtifactPreviewTicket(req artifactPreviewRequest) (artifac
 	if endpointRef == "" {
 		return artifactPreviewTicket{}, fmt.Errorf("endpoint_ref is required")
 	}
-	if s == nil || s.endpointByRef == nil {
-		return artifactPreviewTicket{}, fmt.Errorf("invalid endpoint")
-	}
-	if _, ok := s.endpointByRef[endpointRef]; !ok {
+	if _, ok := s.lookupRuntimeEndpoint(endpointRef); !ok {
 		return artifactPreviewTicket{}, fmt.Errorf("invalid endpoint")
 	}
 
@@ -257,7 +254,7 @@ func (s *server) handleArtifactPreview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	endpoint, ok := s.endpointByRef[item.EndpointRef]
+	endpoint, ok := s.lookupRuntimeEndpoint(item.EndpointRef)
 	if !ok {
 		writeError(w, http.StatusBadRequest, "invalid endpoint")
 		return
