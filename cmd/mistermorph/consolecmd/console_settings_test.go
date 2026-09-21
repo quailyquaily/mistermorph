@@ -139,6 +139,8 @@ func TestHandleConsoleSettingsKeepsSharedOSSecret(t *testing.T) {
 }
 
 func TestHandleConsoleSettingsReadsAndUpdatesEndpointsWithoutExposingSecrets(t *testing.T) {
+	remote := newConsoleEndpointTestRemote(t, "old-token")
+	remoteURL := remote.URL + "/runtime"
 	const oldID = "b_LsX7HLzAR3OShG7YjRcw"
 	configPath := filepath.Join(t.TempDir(), "config.yaml")
 	config := `console:
@@ -178,7 +180,7 @@ func TestHandleConsoleSettingsReadsAndUpdatesEndpointsWithoutExposingSecrets(t *
 		t.Fatalf("unsafe endpoint response: %#v", got.Endpoints)
 	}
 
-	body := `{"endpoints":[{"original_name":"Remote","name":"Remote 2","url":"https://new.example.test","auth_token":""}]}`
+	body := `{"endpoints":[{"original_name":"Remote","name":"Remote 2","url":"` + remoteURL + `","auth_token":""}]}`
 	putRec := httptest.NewRecorder()
 	srv.handleConsoleSettings(putRec, httptest.NewRequest(http.MethodPut, "/api/settings/console", strings.NewReader(body)))
 	if putRec.Code != http.StatusOK {
@@ -194,7 +196,7 @@ func TestHandleConsoleSettingsReadsAndUpdatesEndpointsWithoutExposingSecrets(t *
 	if putPayload.ApplyMode != configsettings.ApplyImmediate || putPayload.ApplyStatus != "applied" {
 		t.Fatalf("apply result = %#v", putPayload)
 	}
-	endpoint, err := srv.resolveRuntimeEndpoint(httptest.NewRequest(http.MethodGet, "/api/proxy?endpoint="+buildRuntimeEndpointRef("Remote 2", "https://new.example.test"), nil))
+	endpoint, err := srv.resolveRuntimeEndpoint(httptest.NewRequest(http.MethodGet, "/api/proxy?endpoint="+buildRuntimeEndpointRef("Remote 2", remoteURL), nil))
 	if err != nil {
 		t.Fatalf("saved endpoint is not active: %v", err)
 	}
@@ -206,7 +208,7 @@ func TestHandleConsoleSettingsReadsAndUpdatesEndpointsWithoutExposingSecrets(t *
 		t.Fatal(err)
 	}
 	text := string(raw)
-	for _, want := range []string{"name: Remote 2", "url: https://new.example.test", secref.OSSecretRef(oldID), "future_field: keep-me"} {
+	for _, want := range []string{"name: Remote 2", "url: " + remoteURL, secref.OSSecretRef(oldID), "future_field: keep-me"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("updated config missing %q:\n%s", want, text)
 		}
@@ -217,6 +219,7 @@ func TestHandleConsoleSettingsReadsAndUpdatesEndpointsWithoutExposingSecrets(t *
 }
 
 func TestHandleConsoleSettingsProtectsNewEndpointToken(t *testing.T) {
+	remote := newConsoleEndpointTestRemote(t, "new-token")
 	configPath := filepath.Join(t.TempDir(), "config.yaml")
 	if err := os.WriteFile(configPath, []byte("console: {}\n"), 0o600); err != nil {
 		t.Fatal(err)
@@ -231,7 +234,7 @@ func TestHandleConsoleSettingsProtectsNewEndpointToken(t *testing.T) {
 		}
 	})
 	store := &consoleSettingsTestOSStore{}
-	body := `{"endpoints":[{"name":"Remote","url":"https://remote.example.test","auth_token":"new-token"}]}`
+	body := `{"endpoints":[{"name":"Remote","url":"` + remote.URL + `/runtime","auth_token":"new-token"}]}`
 	rec := httptest.NewRecorder()
 	(&server{secretStore: store}).handleConsoleSettings(rec, httptest.NewRequest(http.MethodPut, "/api/settings/console", strings.NewReader(body)))
 	if rec.Code != http.StatusOK {

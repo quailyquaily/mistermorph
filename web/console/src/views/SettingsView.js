@@ -772,6 +772,16 @@ const SettingsView = {
     const consoleConfigValues = ref({});
     const consoleFieldStates = ref({});
     const consoleEndpoints = ref([]);
+    const addConsoleEndpointRequested = computed(() => route.query.add === "agent");
+    const consoleEndpointErrorOpen = ref(false);
+    const consoleEndpointError = ref("");
+    const consoleEndpointErrorTitle = ref("");
+    const consoleEndpointErrorActions = computed(() => [{
+      name: "close",
+      label: t("action_close"),
+      class: "primary",
+      action: () => { consoleEndpointErrorOpen.value = false; },
+    }]);
     const authProfiles = ref([]);
     const loadedConsoleManagedSnapshot = ref("");
     const loadedConsoleTelegramSnapshot = ref("");
@@ -4024,7 +4034,13 @@ const SettingsView = {
       }
     }
 
-    async function saveConsoleCollection(target, values) {
+    function consumeConsoleEndpointAddRequest() {
+      const { add, ...query } = route.query;
+      void router.replace({ path: route.path, query, hash: route.hash });
+    }
+
+    async function saveConsoleCollection(target, values, onComplete) {
+      if (consoleSaving.value) return;
       const targetEndpointRef = settingsEndpointRef.value;
       consoleSaving.value = true;
       consoleSavingTarget.value = target;
@@ -4035,10 +4051,22 @@ const SettingsView = {
         });
         if (targetEndpointRef !== settingsEndpointRef.value) return;
         applyConsolePayload(payload);
-        if (target === "endpoints") await loadEndpoints();
+        onComplete?.();
+        if (target === "endpoints") await loadEndpoints().catch(() => {});
         toast.success(settingsSavedMessage(payload));
       } catch (e) {
-        if (e?.status === 409 && targetEndpointRef === settingsEndpointRef.value) {
+        if (targetEndpointRef !== settingsEndpointRef.value) return;
+        if (target === "endpoints") {
+          if (onComplete) {
+            onComplete(e?.message || t("msg_save_failed"));
+            return;
+          }
+          consoleEndpointErrorTitle.value = t(e?.status === 502 ? "settings_endpoint_test_failed" : "msg_save_failed");
+          consoleEndpointError.value = `${t("settings_endpoints_not_saved")}\n\n${e?.message || t("msg_save_failed")}`;
+          await openReentrantDialog(consoleEndpointErrorOpen);
+          return;
+        }
+        if (e?.status === 409) {
           await loadConsoleSettings();
         }
         toast.error(e?.message || t("msg_save_failed"));
@@ -4445,6 +4473,7 @@ const SettingsView = {
       personaOk.value = "";
 
       resetConsoleSettingsState();
+      consoleEndpointErrorOpen.value = false;
       resetSystemSettingsState();
 
       apiBasePickerOpen.value = false;
@@ -4650,6 +4679,13 @@ const SettingsView = {
       consoleConfigValues,
       consoleFieldStates,
       consoleEndpoints,
+      consoleSettingsLoaded,
+      addConsoleEndpointRequested,
+      consumeConsoleEndpointAddRequest,
+      consoleEndpointErrorOpen,
+      consoleEndpointError,
+      consoleEndpointErrorTitle,
+      consoleEndpointErrorActions,
       authProfiles,
       consolePasswordConfigured,
       systemConfigValues,
@@ -5854,9 +5890,11 @@ const SettingsView = {
             />
             <ConsoleEndpointsPanel
               :endpoints="consoleEndpoints"
-              :loading="consoleLoading"
+              :loading="consoleLoading || !consoleSettingsLoaded"
               :saving="consoleSaving && consoleSavingTarget === 'endpoints'"
-              @save="saveConsoleCollection('endpoints', $event)"
+              :addRequested="addConsoleEndpointRequested"
+              @add-opened="consumeConsoleEndpointAddRequest"
+              @save="(values, onComplete) => saveConsoleCollection('endpoints', values, onComplete)"
             />
             <ConfigSettingsPanel
               :groups="CONSOLE_DEPLOYMENT_CONFIG_GROUPS"
@@ -6350,6 +6388,14 @@ const SettingsView = {
         :userCode="proLoginUserCode"
         :loginExpiresLabel="proLoginExpiresLabel"
         @logout="logoutProAuth"
+      />
+      <QMessageDialog
+        v-model="consoleEndpointErrorOpen"
+        icon="PhXCircle"
+        iconColor="red"
+        :title="consoleEndpointErrorTitle"
+        :text="consoleEndpointError"
+        :actions="consoleEndpointErrorActions"
       />
       <QMessageDialog
         v-model="deleteProfileDialogOpen"

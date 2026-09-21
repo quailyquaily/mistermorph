@@ -3,9 +3,12 @@ package consolecmd
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/quailyquaily/mistermorph/internal/configbootstrap"
 	"github.com/quailyquaily/mistermorph/internal/configutil"
@@ -54,6 +57,48 @@ func resolveConsoleEndpointSettings(ctx context.Context, raw []byte, store secre
 		return nil, fmt.Errorf("console endpoints must have unique names and non-empty names, URLs, and resolved tokens")
 	}
 	return endpoints, nil
+}
+
+func (s *server) validateConsoleEndpointConnections(ctx context.Context, configs []runtimeEndpointConfig) error {
+	s.endpointStateMu.RLock()
+	current := make(map[string]*daemonTaskClient, len(s.endpoints))
+	for _, endpoint := range s.endpoints {
+		if client, ok := endpoint.Client.(*daemonTaskClient); ok {
+			current[endpoint.Ref] = client
+		}
+	}
+	s.endpointStateMu.RUnlock()
+	for _, config := range configs {
+		if client := current[config.Ref]; client != nil && client.baseURL == config.URL && client.authToken == config.AuthToken {
+			continue
+		}
+		client := newDaemonTaskClient(config.URL, config.AuthToken)
+		probeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		health, err := client.Health(probeCtx)
+		if err != nil || health.Mode == "" {
+			cancel()
+			return fmt.Errorf("agent %q connection test failed: health check failed; check the Runtime API URL and availability", config.Name)
+		}
+		// Health is public; a read-only task request also verifies the access token.
+		status, raw, err := client.Proxy(probeCtx, http.MethodGet, "/tasks?limit=1", nil, "")
+		cancel()
+		if err != nil {
+			return fmt.Errorf("agent %q connection test failed: Runtime API could not be reached", config.Name)
+		}
+		if status == http.StatusUnauthorized || status == http.StatusForbidden {
+			return fmt.Errorf("agent %q connection test failed: access token was rejected (HTTP %d)", config.Name, status)
+		}
+		if status != http.StatusOK {
+			return fmt.Errorf("agent %q connection test failed: Runtime API returned HTTP %d", config.Name, status)
+		}
+		var tasks struct {
+			Items json.RawMessage `json:"items"`
+		}
+		if json.Unmarshal(raw, &tasks) != nil || len(tasks.Items) == 0 || (tasks.Items[0] != '[' && string(tasks.Items) != "null") {
+			return fmt.Errorf("agent %q connection test failed: invalid Runtime API response", config.Name)
+		}
+	}
+	return nil
 }
 
 func (s *server) replaceRuntimeEndpoints(configs []runtimeEndpointConfig) {

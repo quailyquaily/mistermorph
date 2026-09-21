@@ -205,6 +205,12 @@
   gap: 16px;
 }
 
+.settings-field-note.console-endpoint-add-error {
+  grid-column: 1 / -1;
+  color: var(--danger);
+  overflow-wrap: anywhere;
+}
+
 .settings-collection-item {
   display: grid;
   gap: 10px;

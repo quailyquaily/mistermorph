@@ -359,14 +359,6 @@ func (s *server) handleConsoleSettingsPut(w http.ResponseWriter, r *http.Request
 			secref.DeleteOSSecrets(r.Context(), s.secretStore, newSecretIDs)
 		}
 	}()
-	if req.Endpoints != nil {
-		endpointSecretIDs, endpointSecretErr := prepareConsoleEndpointSecrets(r.Context(), *req.Endpoints, s.secretStore)
-		if endpointSecretErr != nil {
-			s.logger().Warn("os_secret_store_write_failed", "scope", "console_endpoints", "error", endpointSecretErr)
-		} else {
-			newSecretIDs = append(newSecretIDs, endpointSecretIDs...)
-		}
-	}
 	if req.AuthProfiles != nil {
 		authSecretIDs, authSecretErr := prepareConsoleAuthProfileSecrets(r.Context(), *req.AuthProfiles, s.secretStore)
 		if authSecretErr != nil {
@@ -453,6 +445,34 @@ func (s *server) handleConsoleSettingsPut(w http.ResponseWriter, r *http.Request
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
+		}
+		if err := s.validateConsoleEndpointConnections(r.Context(), endpoints); err != nil {
+			writeError(w, http.StatusBadGateway, err.Error())
+			return
+		}
+		latest, err := configrevision.Read(configPath)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if latest.Revision != snapshot.Revision {
+			writeError(w, http.StatusConflict, "config changed while testing the connection; reload settings and try again")
+			return
+		}
+		endpointSecretIDs, endpointSecretErr := prepareConsoleEndpointSecrets(r.Context(), *req.Endpoints, s.secretStore)
+		if endpointSecretErr != nil {
+			s.logger().Warn("os_secret_store_write_failed", "scope", "console_endpoints", "error", endpointSecretErr)
+		} else if len(endpointSecretIDs) > 0 {
+			newSecretIDs = append(newSecretIDs, endpointSecretIDs...)
+			// The draft already contains any renames; retain those nodes and their extra fields.
+			for i := range *req.Endpoints {
+				(*req.Endpoints)[i].OriginalName = (*req.Endpoints)[i].Name
+			}
+			serialized, err = applyConsoleEndpointSettings(serialized, *req.Endpoints)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
 		}
 	}
 	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {

@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -67,11 +68,13 @@ func requireEndpointReloadSaved(t *testing.T, rec *httptest.ResponseRecorder) {
 }
 
 func TestConsoleEndpointReloadAddUpdateRemove(t *testing.T) {
+	remote := newConsoleEndpointTestRemote(t, "")
+	newRemote := newConsoleEndpointTestRemote(t, "rotated-token")
 	srv, _ := newEndpointReloadTestServer(t)
 	localClient := srv.endpoints[0].Client
 	items := []consoleEndpointSettingsPayload{
-		{Name: "Remote", URL: "https://remote.example.test/runtime", AuthToken: "first-token"},
-		{Name: "Keep", URL: "https://keep.example.test/runtime", AuthToken: "keep-token"},
+		{Name: "Remote", URL: remote.URL + "/runtime", AuthToken: "first-token"},
+		{Name: "Keep", URL: remote.URL + "/runtime", AuthToken: "keep-token"},
 	}
 	requireEndpointReloadSaved(t, putEndpointReloadSettings(t, srv, items))
 	remoteRef := buildRuntimeEndpointRef(items[0].Name, items[0].URL)
@@ -107,13 +110,13 @@ func TestConsoleEndpointReloadAddUpdateRemove(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("proxy status = %d: %s", rec.Code, rec.Body.String())
 	}
-	items[0] = consoleEndpointSettingsPayload{OriginalName: "Remote", Name: "Renamed", URL: "https://new.example.test/runtime"}
+	items[0] = consoleEndpointSettingsPayload{OriginalName: "Remote", Name: "Renamed", URL: newRemote.URL + "/runtime"}
 	requireEndpointReloadSaved(t, putEndpointReloadSettings(t, srv, items))
 	if _, err := srv.resolveRuntimeEndpoint(httptest.NewRequest(http.MethodGet, "/api/proxy?endpoint="+remoteRef, nil)); err == nil {
 		t.Fatal("old endpoint remains routable after rename")
 	}
 	renamed := lookup(buildRuntimeEndpointRef(items[0].Name, items[0].URL)).Client.(*daemonTaskClient)
-	if renamed.authToken != "rotated-token" || renamed.baseURL != items[0].URL {
+	if renamed.authToken != "rotated-token" || renamed.baseURL != strings.TrimRight(items[0].URL, "/") {
 		t.Fatal("rename did not retain the token and apply the new URL")
 	}
 	requireEndpointReloadSaved(t, putEndpointReloadSettings(t, srv, items[1:]))
@@ -140,9 +143,10 @@ func TestConsoleEndpointReloadAddUpdateRemove(t *testing.T) {
 }
 
 func TestConsoleEndpointReloadResolvesSecretsBeforeSaving(t *testing.T) {
+	remote := newConsoleEndpointTestRemote(t, "")
 	srv, configPath := newEndpointReloadTestServer(t)
 	t.Setenv("MORPH_TEST_ENDPOINT_TOKEN", "env-token")
-	items := []consoleEndpointSettingsPayload{{Name: "Remote", URL: "https://remote.example.test", AuthToken: "${MORPH_TEST_ENDPOINT_TOKEN}"}}
+	items := []consoleEndpointSettingsPayload{{Name: "Remote", URL: remote.URL + "/runtime", AuthToken: "${MORPH_TEST_ENDPOINT_TOKEN}"}}
 	requireEndpointReloadSaved(t, putEndpointReloadSettings(t, srv, items))
 	if srv.endpoints[1].Client.(*daemonTaskClient).authToken != "env-token" {
 		t.Fatal("environment token was not resolved")
@@ -186,11 +190,12 @@ func (c *blockedEndpointReloadClient) Download(ctx context.Context, path string)
 }
 
 func TestConsoleEndpointReloadDiscardsOldProbes(t *testing.T) {
+	remote := newConsoleEndpointTestRemote(t, "")
 	for _, stage := range []string{"health", "avatar"} {
 		for _, remove := range []bool{false, true} {
 			t.Run(stage+map[bool]string{false: "/replace", true: "/remove"}[remove], func(t *testing.T) {
 				srv, _ := newEndpointReloadTestServer(t)
-				items := []consoleEndpointSettingsPayload{{Name: "Remote", URL: "https://remote.example.test", AuthToken: "first-token"}}
+				items := []consoleEndpointSettingsPayload{{Name: "Remote", URL: remote.URL + "/runtime", AuthToken: "first-token"}}
 				requireEndpointReloadSaved(t, putEndpointReloadSettings(t, srv, items))
 				blocked := &blockedEndpointReloadClient{
 					stubRuntimeEndpointClient: &stubRuntimeEndpointClient{
@@ -228,11 +233,19 @@ func TestConsoleEndpointReloadDiscardsOldProbes(t *testing.T) {
 
 func TestConsoleEndpointReloadWakesHealthWorker(t *testing.T) {
 	healthSeen := make(chan struct{}, 1)
+	var healthCalls atomic.Int32
 	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/tasks" {
+			_, _ = io.WriteString(w, `{"items":[]}`)
+			return
+		}
 		if r.URL.Path == "/health" {
-			select {
-			case healthSeen <- struct{}{}:
-			default:
+			// The first call validates the save; the next must come from the worker.
+			if healthCalls.Add(1) > 1 {
+				select {
+				case healthSeen <- struct{}{}:
+				default:
+				}
 			}
 			_, _ = io.WriteString(w, `{"mode":"console","can_submit":true}`)
 			return
@@ -253,6 +266,7 @@ func TestConsoleEndpointReloadWakesHealthWorker(t *testing.T) {
 }
 
 func TestConsoleEndpointReloadConcurrentReaders(t *testing.T) {
+	remote := newConsoleEndpointTestRemote(t, "")
 	srv, _ := newEndpointReloadTestServer(t)
 	done := make(chan struct{})
 	var readers sync.WaitGroup
@@ -276,7 +290,7 @@ func TestConsoleEndpointReloadConcurrentReaders(t *testing.T) {
 	for i := 0; i < 20; i++ {
 		items := []consoleEndpointSettingsPayload{}
 		if i%2 == 0 {
-			items = append(items, consoleEndpointSettingsPayload{Name: "Remote", URL: "https://remote.example.test", AuthToken: "token"})
+			items = append(items, consoleEndpointSettingsPayload{Name: "Remote", URL: remote.URL + "/runtime", AuthToken: "token"})
 		}
 		requireEndpointReloadSaved(t, putEndpointReloadSettings(t, srv, items))
 	}

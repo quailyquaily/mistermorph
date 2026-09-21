@@ -71,7 +71,10 @@ const OverviewView = {
     });
     const controllerSettingsRoute = computed(() => {
       const controller = endpointRows.value.find((item) => item.local);
-      return controller ? endpointRoutePath(controller.endpoint_ref, "/settings/console") : "";
+      return controller ? {
+        path: endpointRoutePath(controller.endpoint_ref, "/settings/console"),
+        query: { add: "agent" },
+      } : "";
     });
     const activeConnection = computed(() => connections.value.find((connection) =>
       (connection.connected || connection.add) && connection.endpoint_ref === (hoveredEndpoint.value || focusedEndpoint.value)
