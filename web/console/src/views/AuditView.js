@@ -18,7 +18,6 @@ import {
   safeJSON,
   taskEndpointRefsForSelection,
   toBool,
-  toInt,
   translate,
 } from "../core/context";
 
@@ -53,17 +52,6 @@ function normalizeAuditList(value) {
       return String(it).trim();
     })
     .filter((it) => it !== "");
-}
-
-function formatAuditStepMarker(value) {
-  const text = normalizeAuditText(value, "");
-  if (!text) {
-    return "";
-  }
-  if (/^\d+$/.test(text)) {
-    return text.padStart(2, "0");
-  }
-  return text;
 }
 
 function humanizeAuditToken(raw) {
@@ -224,11 +212,18 @@ function auditFamilyOrder(name) {
 
 function toAuditFileItem(t, item) {
   const name = String(item?.name || "").trim();
+  const suffix = name.match(/\.jsonl\.(.+)$/)?.[1] || "";
+  const timestamp = suffix.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/);
+  const archivedAt = timestamp
+    ? formatTime(`${timestamp[1]}-${timestamp[2]}-${timestamp[3]}T${timestamp[4]}:${timestamp[5]}:${timestamp[6]}Z`)
+    : suffix;
   return {
     key: name,
     value: name,
     name,
-    title: auditFamilyTitle(t, name),
+    title: auditFamilyOrder(name) === 4 ? name : auditFamilyTitle(t, name),
+    archived: Boolean(suffix),
+    subtitle: archivedAt ? t("audit_archived_at", { value: archivedAt }) : "",
   };
 }
 
@@ -273,9 +268,16 @@ const AuditView = {
     const selectedStream = ref(AUDIT_STREAM_VALUE);
     const pageValue = ref(1);
     const auditPageCursors = ref([""]);
-    const fileItems = ref([]);
+    const auditFiles = ref([]);
+    const fileItems = computed(() => auditFiles.value
+      .map((item) => toAuditFileItem(t, item))
+      .filter((item) => item.value !== "")
+      .sort((left, right) => Number(left.archived) - Number(right.archived) ||
+        auditFamilyOrder(left.name) - auditFamilyOrder(right.name) || right.name.localeCompare(left.name)));
     const selectedFile = ref("");
     const lines = ref([]);
+    const filterText = ref("");
+    const updatedAt = ref("");
     const rawDialogOpen = ref(false);
     const rawDialogJSON = ref("");
     let initEndpointRef = "";
@@ -284,10 +286,7 @@ const AuditView = {
     let refreshTimer = null;
     let chunkSequence = 0;
     const meta = reactive({
-      path: "",
-      exists: false,
-      size_bytes: 0,
-      limit: AUDIT_ITEMS_PER_PAGE,
+      exists: null,
       has_next: false,
       next_cursor: "",
     });
@@ -340,7 +339,6 @@ const AuditView = {
 
     function isSelectedFileItem(item) {
       return (
-        !isMobile.value &&
         selectedStream.value === AUDIT_STREAM_VALUE &&
         String(item?.value || "") === selectedFile.value
       );
@@ -356,18 +354,18 @@ const AuditView = {
 
     function taskStreamClass() {
       const classes = ["audit-index-item", "workspace-sidebar-item"];
-      if (!isMobile.value && isTasksStreamSelected.value) {
+      if (isTasksStreamSelected.value) {
         classes.push("is-active");
       }
       return classes.join(" ");
     }
 
-    function parseAuditLine(line, idx) {
+    function parseAuditLine(line) {
       const raw = typeof line === "string" ? line : String(line ?? "");
       const parsed = safeJSON(raw, null);
       if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
         return {
-          key: `${idx}-raw`,
+          key: raw,
           parsed: false,
           raw,
           rawPretty: raw,
@@ -376,9 +374,13 @@ const AuditView = {
 
       const eventID = normalizeAuditText(parsed.event_id);
       const tsRaw = normalizeAuditText(parsed.ts);
-      const stepText = normalizeAuditText(parsed.step);
+      const stepText = Number(parsed.step) < 0 ? "-" : normalizeAuditText(parsed.step);
       const actionTypeRaw = normalizeAuditText(parsed.action_type);
-      const actionType = humanizeAuditToken(actionTypeRaw);
+      const actionLabels = {
+        ToolCallPre: "audit_action_tool_pre", ToolCallPost: "audit_action_tool_post",
+        OutputPublish: "audit_action_output", SkillInstall: "audit_action_skill",
+      };
+      const actionType = actionLabels[actionTypeRaw] ? t(actionLabels[actionTypeRaw]) : humanizeAuditToken(actionTypeRaw);
       const toolName = normalizeAuditText(parsed.tool_name);
       const runID = normalizeAuditText(parsed.run_id);
       const actor = normalizeAuditText(parsed.actor);
@@ -388,63 +390,65 @@ const AuditView = {
       const decisionRaw = normalizeAuditText(parsed.decision, "");
       const riskRaw = normalizeAuditText(parsed.risk_level, "");
       const bodyOmittedFromAudit = isBodyOmittedFromAudit(parsed, actionTypeRaw, summaryRaw);
-      const summary = summaryRaw;
+      const summary = isOutputPublishSummaryPlaceholder(actionTypeRaw, summaryRaw)
+        ? t("audit_output_publish_summary") : summaryRaw;
       let reasonsText = reasons.length > 0 ? reasons.map((reason) => auditReasonLabel(t, reason)).join(" | ") : "-";
       if (bodyOmittedFromAudit && reasonsText === "-") {
         reasonsText = t("audit_output_publish_reason");
       }
       const hasTool = toolName !== "-";
       const primaryTitle = hasTool ? toolName : actionType;
-      const subtitleParts = [];
-      if (hasTool && actionType !== "-") {
-        subtitleParts.push(actionType);
-      }
-      if (actor !== "-") {
-        subtitleParts.push(`${t("audit_actor")} ${actor}`);
-      }
-      const subtitle = subtitleParts.join(" · ");
-      const formattedStep = formatAuditStepMarker(stepText);
-      const stepMarker = formattedStep ? `${primaryTitle} / ${formattedStep}` : "";
-      const metaTrail = [];
-      if (approvalStatus !== "-") {
-        metaTrail.push(`${t("audit_approval")} ${humanizeAuditToken(approvalStatus)}`);
-      }
+      const approval = approvalStatus.toLowerCase();
+      const knownApproval = ["pending", "approved", "denied", "expired"].includes(approval);
 
-    return {
-        key: `${idx}-${eventID}`,
+      return {
+        key: raw,
         parsed: true,
         raw,
         rawPretty: JSON.stringify(parsed, null, 2),
         eventID,
+        tsRaw,
         tsText: tsRaw === "-" ? "-" : formatTime(tsRaw),
         actionType,
         toolName,
         runID,
         stepText,
         actor,
-        approvalStatus: humanizeAuditToken(approvalStatus),
+        approvalLabel: knownApproval ? t(`audit_approval_${approval}`) : humanizeAuditToken(approvalStatus),
+        approvalType: approval === "approved" ? "success" : approval === "denied" ? "danger" : approval === "pending" ? "warning" : "default",
+        approvalRequestID: normalizeAuditText(parsed.approval_request_id),
         summary,
         reasonsText,
+        hasReasons: reasons.length > 0,
         primaryTitle,
-        subtitle,
-        stepMarker,
-        metaTrail,
         decisionLabel: decisionLabel(t, decisionRaw),
         decisionType: decisionBadgeType(decisionRaw),
         riskLabel: riskLabel(t, riskRaw),
         riskType: riskBadgeType(riskRaw),
-    };
+      };
     }
 
-    const auditItems = computed(() =>
-      lines.value
-        .map((line, idx) => parseAuditLine(line, idx))
-        .reverse()
-    );
+    const auditItems = computed(() => {
+      const occurrences = new Map();
+      return lines.value.map((line) => {
+        const item = parseAuditLine(line);
+        const count = occurrences.get(item.key) || 0;
+        occurrences.set(item.key, count + 1);
+        item.key = `${item.key}:${count}`;
+        return item;
+      }).reverse();
+    });
+    const filteredAuditItems = computed(() => {
+      const query = filterText.value.trim().toLowerCase();
+      if (!query) return auditItems.value;
+      return auditItems.value.filter((item) => [
+        item.raw, item.summary, item.reasonsText, item.decisionLabel, item.riskLabel, item.approvalLabel,
+      ].join(" ").toLowerCase().includes(query));
+    });
     const auditGroups = computed(() => {
       const groups = [];
       const byRunID = new Map();
-      for (const item of auditItems.value) {
+      for (const item of filteredAuditItems.value) {
         const runID = item.parsed ? item.runID : "-";
         const groupKey = `run:${runID}`;
         let group = byRunID.get(groupKey);
@@ -454,15 +458,11 @@ const AuditView = {
             runID,
             title: runID === "-" ? t("audit_run_unknown") : runID,
             items: [],
-            latestTs: "-",
           };
           byRunID.set(groupKey, group);
           groups.push(group);
         }
         group.items.push(item);
-        if (group.latestTs === "-" && item.parsed && item.tsText !== "-") {
-          group.latestTs = item.tsText;
-        }
       }
       return groups;
     });
@@ -506,6 +506,12 @@ const AuditView = {
       },
       { flush: "sync" }
     );
+
+    watch(currentTaskCursor, () => {
+      taskItems.value = [];
+      taskNextCursor.value = "";
+      taskErr.value = "";
+    }, { flush: "sync" });
 
     const taskListResource = useResource({
       key: computed(() => resourceKey("tasks", "list", taskFeedEndpointRef.value, currentTaskCursor.value)),
@@ -559,9 +565,7 @@ const AuditView = {
     watch(
       () => taskListResource.error.value,
       (error) => {
-        if (error) {
-          taskErr.value = error.message || t("msg_load_failed");
-        }
+        taskErr.value = error ? error.message || t("msg_load_failed") : "";
       }
     );
 
@@ -578,7 +582,7 @@ const AuditView = {
     }
 
     function prevTaskPage() {
-      if (taskPageIndex.value <= 0) {
+      if (taskLoading.value || taskPageIndex.value <= 0) {
         return;
       }
       taskPageIndex.value -= 1;
@@ -586,7 +590,7 @@ const AuditView = {
 
     function nextTaskPage() {
       const cursor = String(taskNextCursor.value || "").trim();
-      if (!cursor) {
+      if (taskLoading.value || !cursor) {
         return;
       }
       const nextPageIndex = taskPageIndex.value + 1;
@@ -630,26 +634,6 @@ const AuditView = {
         return endpointChannelLabel(mode, t);
       }
       return t("tasks_runtime_fallback");
-    }
-
-    function taskSourceType(task) {
-      switch (String(task?.source_mode || "").trim().toLowerCase()) {
-        case "console":
-          return "primary";
-        case "telegram":
-          return "info";
-        case "slack":
-          return "danger";
-        case "line":
-          return "success";
-        case "lark":
-          return "warning";
-		case "mixin":
-		  return "info";
-        case "serve":
-        default:
-          return "default";
-      }
     }
 
     function taskRuntimeMeta(task) {
@@ -714,11 +698,7 @@ const AuditView = {
       if (!acceptsAuditLoad(token)) {
         return false;
       }
-      const items = Array.isArray(data.items) ? data.items : [];
-      fileItems.value = items
-        .map((it) => toAuditFileItem(t, it))
-        .filter((it) => it.value !== "")
-        .sort((left, right) => auditFamilyOrder(left.name) - auditFamilyOrder(right.name));
+      auditFiles.value = Array.isArray(data.items) ? data.items : [];
 
       const preferred = typeof data.default_file === "string" ? data.default_file.trim() : "";
       if (fileItems.value.length === 0) {
@@ -736,7 +716,7 @@ const AuditView = {
       return true;
     }
 
-    async function loadChunk(cursor = "", endpointRef = currentEndpointRef(), token = null) {
+    async function loadChunk(cursor = "", endpointRef = currentEndpointRef(), token = initToken) {
       const sequence = ++chunkSequence;
       const file = selectedFile.value;
       const isCurrent = () => sequence === chunkSequence && acceptsAuditLoad(token) &&
@@ -760,14 +740,12 @@ const AuditView = {
         if (!isCurrent()) {
           return;
         }
-        meta.path = data.path || "";
         meta.exists = toBool(data.exists, false);
-        meta.size_bytes = toInt(data.size_bytes, 0);
-        meta.limit = toInt(data.limit, AUDIT_ITEMS_PER_PAGE);
         meta.has_next = toBool(data.has_next, false);
         meta.next_cursor = String(data.next_cursor || "").trim();
         const fetchedLines = Array.isArray(data.items) ? data.items : [];
         lines.value = fetchedLines.slice(-AUDIT_ITEMS_PER_PAGE);
+        updatedAt.value = formatTime(new Date().toISOString());
         return true;
       } catch (e) {
         if (isCurrent()) {
@@ -781,11 +759,16 @@ const AuditView = {
       }
     }
 
-    async function refreshLatest(endpointRef = currentEndpointRef(), token = null) {
-      if (await loadChunk("", endpointRef, token)) {
-        auditPageCursors.value = [""];
-        pageValue.value = 1;
-      }
+    function resetAuditPage() {
+      chunkSequence += 1;
+      lines.value = [];
+      updatedAt.value = "";
+      filterText.value = "";
+      meta.exists = null;
+      meta.has_next = false;
+      meta.next_cursor = "";
+      auditPageCursors.value = [""];
+      pageValue.value = 1;
     }
 
     async function goPrev() {
@@ -823,13 +806,15 @@ const AuditView = {
         return;
       }
       selectedFile.value = item.value;
+      initToken = {};
+      resetAuditPage();
       if (isMobile.value) {
         mobileLedgerVisible.value = true;
       }
-      await refreshLatest();
+      await loadChunk();
     }
 
-    async function init() {
+    async function refreshAudit({ latest = false } = {}) {
       const endpointRef = currentEndpointRef();
       if (initPromise && initEndpointRef === endpointRef) {
         return initPromise;
@@ -837,18 +822,28 @@ const AuditView = {
       initEndpointRef = endpointRef;
       const token = {};
       initToken = token;
+      loading.value = true;
+      err.value = "";
       const promise = (async () => {
         try {
+          const previousFile = selectedFile.value;
           const loaded = await loadFiles(endpointRef, token);
           if (!loaded) {
             return;
+          }
+          if (previousFile !== selectedFile.value) resetAuditPage();
+          const cursor = latest ? "" : auditPageCursors.value[pageValue.value - 1] || "";
+          if (await loadChunk(cursor, endpointRef, token) && latest) {
+            auditPageCursors.value = [""];
+            pageValue.value = 1;
           }
         } catch (e) {
           if (acceptsAuditLoad(token)) {
             err.value = e.message || t("msg_load_failed");
           }
+        } finally {
+          if (acceptsAuditLoad(token)) loading.value = false;
         }
-        await refreshLatest(endpointRef, token);
       })();
       initPromise = promise;
       try {
@@ -863,13 +858,14 @@ const AuditView = {
     onMounted(() => {
       window.addEventListener("resize", refreshMobileMode);
       refreshMobileMode();
-      void init();
+      void refreshAudit();
       refreshTimer = window.setInterval(() => {
         if (document.hidden || initPromise || loading.value || taskLoading.value) return;
+        if (document.querySelector(".audit-event[open], .audit-task[open]")) return;
         if (isTasksStreamSelected.value) {
           if (taskPageIndex.value === 0) void loadTaskStream();
         } else if (pageValue.value === 1) {
-          if (!fileItems.value.length) void init();
+          if (!fileItems.value.length) void refreshAudit();
           else void loadChunk("", currentEndpointRef(), initToken);
         }
       }, 15000);
@@ -882,323 +878,263 @@ const AuditView = {
     watch(
       () => endpointState.selectedRef,
       () => {
-        void init();
+        selectedFile.value = "";
+        auditFiles.value = [];
+        resetAuditPage();
+        void refreshAudit();
       }
     );
 
-      return {
-        t,
-        formatTime,
-        loading,
-        err,
-        isMobile,
-        mobileShowBack,
-        pageClass,
-        fileItems,
-        selectedFileItem,
-        isTasksStreamSelected,
-        auditGroups,
-        selectedFileTitle,
-        meta,
-        pageValue,
-        pageText,
-        showIndexPane,
-        showLedgerPane,
-        isSelectedFileItem,
-        auditFileClass,
-        taskStreamClass,
-        selectTaskStream,
-        showIndexView,
-        goPrev,
-        goNext,
-        onFileChange,
-        taskItems,
-        taskErr,
-        taskLoading,
-        prevTaskPage,
-        nextTaskPage,
-        openTask,
-        goChat,
-        taskStatusLabel,
-        taskStatusType,
-        taskSourceLabel,
-        taskSourceType,
-        taskRuntimeMeta,
-        taskModelMeta,
-        taskTitle,
-        shortenTaskID,
-        tasksPageText,
-        hasPrevTaskPage: computed(() => taskPageIndex.value > 0),
-        hasNextTaskPage: computed(() => String(taskNextCursor.value || "").trim() !== ""),
-        rawDialogOpen,
-        rawDialogJSON,
-        openRawDialog,
-        closeRawDialog,
-      };
+    return {
+      t,
+      formatTime,
+      loading,
+      err,
+      isMobile,
+      mobileShowBack,
+      pageClass,
+      fileItems,
+      currentFiles: computed(() => fileItems.value.filter((item) => !item.archived)),
+      archivedFiles: computed(() => fileItems.value.filter((item) => item.archived)),
+      filterText,
+      updatedAt,
+      auditItemCount: computed(() => auditItems.value.length),
+      filteredItemCount: computed(() => filteredAuditItems.value.length),
+      refreshAudit,
+      loadTaskStream,
+      selectedFileItem,
+      isTasksStreamSelected,
+      auditGroups,
+      selectedFileTitle,
+      meta,
+      pageValue,
+      pageText,
+      showIndexPane,
+      showLedgerPane,
+      isSelectedFileItem,
+      auditFileClass,
+      taskStreamClass,
+      selectTaskStream,
+      showIndexView,
+      goPrev,
+      goNext,
+      onFileChange,
+      taskItems,
+      taskErr,
+      taskLoading,
+      prevTaskPage,
+      nextTaskPage,
+      openTask,
+      goChat,
+      taskStatusLabel,
+      taskStatusType,
+      taskSourceLabel,
+      taskRuntimeMeta,
+      taskModelMeta,
+      taskTitle,
+      tasksPageText,
+      hasPrevTaskPage: computed(() => taskPageIndex.value > 0),
+      hasNextTaskPage: computed(() => String(taskNextCursor.value || "").trim() !== ""),
+      rawDialogOpen,
+      rawDialogJSON,
+      openRawDialog,
+      closeRawDialog,
+    };
   },
   template: `
-    <AppPage
-      :title="t('audit_title')"
-      :class="pageClass"
-      :hideDesktopBar="true"
-      :hideMobileBar="true"
-    >
+    <AppPage :title="t('audit_title')" :class="pageClass" :hideDesktopBar="true" :hideMobileBar="true">
       <div class="audit-workbench">
         <aside v-if="showIndexPane" class="audit-index workspace-sidebar-section" :aria-label="t('audit_title')">
           <div class="audit-index-head workspace-sidebar-head">
-            <h3 class="audit-index-title workspace-section-title">{{ t("audit_title") }}</h3>
+            <h3 class="workspace-section-title">{{ t('audit_title') }}</h3>
+            <QButton v-if="isMobile" class="plain sm icon" :disabled="loading" :aria-label="t('action_refresh')" @click="refreshAudit()">
+              <PhArrowClockwise class="icon" />
+            </QButton>
           </div>
           <div class="audit-index-scroll">
-            <section class="audit-index-group">
-              <div class="audit-index-items workspace-sidebar-list">
-                <button
-                  v-for="item in fileItems"
-                  :key="item.key"
-                  type="button"
-                  :class="auditFileClass(item)"
-                  @click="onFileChange(item)"
-                >
+            <QProgress v-if="loading && fileItems.length === 0" :infinite="true" />
+            <QFence v-if="err && isMobile && !showLedgerPane" class="audit-index-error" type="danger" :text="err" />
+            <div class="workspace-sidebar-list">
+              <button v-for="item in currentFiles" :key="item.key" type="button" :class="auditFileClass(item)"
+                :aria-pressed="isSelectedFileItem(item)" @click="onFileChange(item)">
+                <span class="workspace-sidebar-item-copy">
+                  <span class="workspace-sidebar-item-title">{{ item.title }}</span>
+                </span>
+                <span class="workspace-sidebar-item-marker" aria-hidden="true">
+                  <QBadge v-if="isSelectedFileItem(item)" dot type="primary" size="sm" />
+                </span>
+              </button>
+              <p v-if="!loading && !err && fileItems.length === 0" class="audit-index-note">{{ t('audit_no_file') }}</p>
+            </div>
+            <details v-if="archivedFiles.length" class="audit-archives">
+              <summary class="audit-archives-heading">
+                <PhCaretRight class="icon" />
+                <span>{{ t('audit_archives') }}</span>
+                <span class="audit-archives-count">{{ archivedFiles.length }}</span>
+              </summary>
+              <div class="workspace-sidebar-list">
+                <button v-for="item in archivedFiles" :key="item.key" type="button" :class="auditFileClass(item)"
+                  :aria-pressed="isSelectedFileItem(item)" :title="item.name" @click="onFileChange(item)">
                   <span class="workspace-sidebar-item-copy">
-                    <span class="audit-index-item-name workspace-sidebar-item-title">{{ item.title }}</span>
+                    <span class="workspace-sidebar-item-title">{{ item.title }}</span>
+                    <span class="workspace-sidebar-item-meta">{{ item.subtitle }}</span>
                   </span>
                   <span class="workspace-sidebar-item-marker" aria-hidden="true">
                     <QBadge v-if="isSelectedFileItem(item)" dot type="primary" size="sm" />
                   </span>
                 </button>
               </div>
-            </section>
-            <section class="audit-index-group">
-              <div class="audit-index-items workspace-sidebar-list">
-                <button
-                  type="button"
-                  :class="taskStreamClass()"
-                  @click="selectTaskStream"
-                >
-                  <span class="workspace-sidebar-item-copy">
-                    <span class="audit-index-item-name workspace-sidebar-item-title">{{ t("tasks_title") }}</span>
-                  </span>
-                  <span class="workspace-sidebar-item-marker" aria-hidden="true">
-                    <QBadge v-if="!isMobile && isTasksStreamSelected" dot type="primary" size="sm" />
-                  </span>
-                </button>
-              </div>
-            </section>
+            </details>
+            <div class="audit-task-nav workspace-sidebar-list">
+              <button type="button" :class="taskStreamClass()" :aria-pressed="isTasksStreamSelected" @click="selectTaskStream">
+                <span class="workspace-sidebar-item-copy"><span class="workspace-sidebar-item-title">{{ t('tasks_title') }}</span></span>
+                <span class="workspace-sidebar-item-marker" aria-hidden="true">
+                  <QBadge v-if="isTasksStreamSelected" dot type="primary" size="sm" />
+                </span>
+              </button>
+            </div>
           </div>
         </aside>
 
-        <section v-if="showLedgerPane && !isTasksStreamSelected" class="audit-ledger">
+        <QCard v-if="showLedgerPane" class="audit-ledger" variant="default">
           <header class="audit-ledger-head">
-            <QButton
-              v-if="mobileShowBack"
-              class="plain xs icon audit-ledger-back"
-              :title="t('audit_title')"
-              :aria-label="t('audit_title')"
-              @click="showIndexView"
-            >
+            <QButton v-if="mobileShowBack" class="plain sm icon audit-ledger-back" :aria-label="t('audit_title')" @click="showIndexView">
               <PhArrowLeft class="icon" />
             </QButton>
             <div class="audit-ledger-copy">
-              <h3 class="audit-ledger-title workspace-document-title">{{ selectedFileTitle }}</h3>
+              <h3 class="workspace-document-title">{{ isTasksStreamSelected ? t('tasks_title') : selectedFileTitle }}</h3>
+              <p v-if="!isTasksStreamSelected && selectedFileItem?.subtitle" class="audit-ledger-subtitle">{{ selectedFileItem.subtitle }}</p>
             </div>
             <div class="audit-ledger-actions">
-              <div v-if="meta.exists && (auditGroups.length > 0 || pageValue > 1)" class="audit-pagination">
-                <QButton
-                  class="plain sm icon"
-                  :disabled="pageValue <= 1"
-                  :title="t('audit_newer')"
-                  :aria-label="t('audit_newer')"
-                  @click="goPrev"
-                >
-                  <PhArrowLeft class="icon" />
-                </QButton>
-                <code class="audit-page-indicator">{{ pageText }}</code>
-                <QButton
-                  class="plain sm icon"
-                  :disabled="!meta.has_next || !meta.next_cursor"
-                  :title="t('audit_older')"
-                  :aria-label="t('audit_older')"
-                  @click="goNext"
-                >
-                  <PhArrowRight class="icon" />
-                </QButton>
-              </div>
+              <QButton v-if="!isTasksStreamSelected && pageValue > 1" class="plain sm" :disabled="loading" @click="refreshAudit({ latest: true })">{{ t('audit_latest') }}</QButton>
+              <QButton class="plain sm icon" :disabled="isTasksStreamSelected ? taskLoading : loading"
+                :title="t('action_refresh')" :aria-label="t('action_refresh')" @click="isTasksStreamSelected ? loadTaskStream() : refreshAudit()">
+                <PhArrowClockwise class="icon" />
+              </QButton>
             </div>
           </header>
-
-        <QProgress v-if="loading && auditGroups.length === 0" :infinite="true" />
-        <QFence v-if="err" type="danger" icon="PhXCircle" :text="err" />
-
-        <div v-if="meta.exists" class="audit-feed">
-          <section v-for="group in auditGroups" :key="group.key" class="audit-group">
-            <QDivider class="audit-group-divider" :label="group.latestTs !== '-' ? group.latestTs : ''" />
-            <div class="audit-group-meta">
-              <code class="audit-group-run-id">{{ group.title }}</code>
-              <span class="audit-group-count">{{ group.items.length }} {{ t("audit_group_count") }}</span>
+          <div class="audit-toolbar">
+            <div v-if="!isTasksStreamSelected" class="audit-filter">
+              <QInput v-model="filterText" class="xs audit-filter-input" :placeholder="t('audit_filter_placeholder')" :aria-label="t('audit_filter_placeholder')" />
+              <span class="audit-filter-scope">{{ t('audit_filter_scope') }}</span>
             </div>
-
-            <QCard
-              v-for="item in group.items"
-              :key="item.key"
-              class="audit-row audit-item-card clickable"
-              :variant="item.parsed ? 'annotated' : 'default'"
-              :marker="item.parsed ? item.stepMarker : ''"
-              marker-style="plate"
-              :hoverable="true"
-              tabindex="0"
-              role="button"
-              :aria-label="t('chat_action_show_raw')"
-              @click="openRawDialog(item)"
-              @keydown.enter.prevent="openRawDialog(item)"
-              @keydown.space.prevent="openRawDialog(item)"
-            >
-              <template #header>
-                <div class="audit-item-head" v-if="item.parsed">
-                  <code v-if="item.eventID !== '-'" class="audit-item-event-id">{{ item.eventID }}</code>
-                  <p v-if="item.actionType !== '-'" class="audit-item-action-type">{{ item.actionType }}</p>
-                  <span v-if="item.tsText !== '-'" class="audit-item-time">{{ item.tsText }}</span>
-                </div>
-
-                <div class="audit-item-head" v-else>
-                  <p class="audit-item-action-type">{{ t("audit_raw") }}</p>
-                </div>
-              </template>
-
-              <template v-if="item.parsed">
-                <p v-if="item.summary !== '-'" class="audit-item-summary">{{ item.summary }}</p>
-
-                <div class="audit-item-footer">
-                  <p class="audit-item-reasons" :class="{ 'is-empty': item.reasonsText === '-' }">
-                    {{ item.reasonsText === '-' ? '\u00A0' : item.reasonsText }}
-                  </p>
-                  <div class="audit-item-badges">
-                    <QBadge :type="item.decisionType">{{ item.decisionLabel }}</QBadge>
-                    <QBadge :type="item.riskType">{{ item.riskLabel }}</QBadge>
-                  </div>
-                </div>
-              </template>
-
-              <template v-else>
-                <pre class="audit-line">{{ item.raw }}</pre>
-              </template>
-            </QCard>
-          </section>
-
-          <div v-if="!loading && auditGroups.length === 0" class="audit-empty">
-            <h3 class="audit-empty-title">{{ t("audit_empty_title") }}</h3>
-            <p class="audit-empty-copy">{{ t("audit_empty") }}</p>
+            <span v-else class="audit-page-count">{{ t('audit_page_count', { count: taskItems.length }) }}</span>
+            <nav class="audit-pagination" :aria-label="t('audit_pagination')">
+              <QButton class="plain sm icon" :disabled="isTasksStreamSelected ? taskLoading || !hasPrevTaskPage : loading || pageValue <= 1"
+                :title="t('audit_newer')" :aria-label="t('audit_newer')" @click="isTasksStreamSelected ? prevTaskPage() : goPrev()">
+                <PhArrowLeft class="icon" />
+              </QButton>
+              <span class="audit-page-indicator">{{ t('audit_page_number', { page: isTasksStreamSelected ? tasksPageText : pageText }) }}</span>
+              <QButton class="plain sm icon" :disabled="isTasksStreamSelected ? taskLoading || !hasNextTaskPage : loading || !meta.has_next || !meta.next_cursor"
+                :title="t('audit_older')" :aria-label="t('audit_older')" @click="isTasksStreamSelected ? nextTaskPage() : goNext()">
+                <PhArrowRight class="icon" />
+              </QButton>
+            </nav>
           </div>
-        </div>
-
-        <div v-else-if="!loading" class="audit-empty">
-          <h3 class="audit-empty-title">{{ t("audit_missing_title") }}</h3>
-          <p class="audit-empty-copy">{{ t("audit_no_file") }}</p>
-        </div>
-        </section>
-
-        <section v-if="showLedgerPane && isTasksStreamSelected" class="audit-ledger">
-          <header class="audit-ledger-head">
-            <QButton
-              v-if="mobileShowBack"
-              class="plain xs icon audit-ledger-back"
-              :title="t('audit_title')"
-              :aria-label="t('audit_title')"
-              @click="showIndexView"
-            >
-              <PhArrowLeft class="icon" />
-            </QButton>
-            <div class="audit-ledger-copy">
-              <h3 class="audit-ledger-title workspace-document-title">{{ t("tasks_title") }}</h3>
-            </div>
-            <div class="audit-ledger-actions">
-              <div class="audit-pagination">
-                <QButton
-                  class="plain sm icon"
-                  :disabled="!hasPrevTaskPage"
-                  :title="t('audit_newer')"
-                  :aria-label="t('audit_newer')"
-                  @click="prevTaskPage"
-                >
-                  <PhArrowLeft class="icon" />
-                </QButton>
-                <code class="audit-page-indicator">{{ tasksPageText }}</code>
-                <QButton
-                  class="plain sm icon"
-                  :disabled="!hasNextTaskPage"
-                  :title="t('audit_older')"
-                  :aria-label="t('audit_older')"
-                  @click="nextTaskPage"
-                >
-                  <PhArrowRight class="icon" />
-                </QButton>
-              </div>
-            </div>
-          </header>
-
-          <QProgress v-if="taskLoading && taskItems.length === 0" :infinite="true" />
-          <QFence v-if="taskErr" type="danger" icon="PhXCircle" :text="taskErr" />
-
-          <div class="stack audit-task-stream">
-            <QCard
-              v-for="item in taskItems"
-              :key="item.id"
-              class="task-row clickable"
-              variant="default"
-              :hoverable="true"
-              tabindex="0"
-              role="button"
-              :aria-label="t('chat_action_show_raw')"
-              @click="openTask(item)"
-              @keydown.enter.prevent="openTask(item)"
-              @keydown.space.prevent="openTask(item)"
-            >
-              <div class="task-row-head">
-                <div class="task-copy">
-                  <h3 class="task-title">{{ taskTitle(item) }}</h3>
-                  <div class="task-badges">
-                    <QBadge :type="taskStatusType(item)" size="sm">{{ taskStatusLabel(item) }}</QBadge>
-                    <QBadge :type="taskSourceType(item)" size="sm">{{ taskSourceLabel(item) }}</QBadge>
-                  </div>
-                </div>
-                <div class="task-row-side">
-                  <time class="task-time">{{ formatTime(item.created_at) }}</time>
-                  <span class="task-row-arrow" aria-hidden="true">
-                    <PhArrowRight class="icon" />
-                  </span>
-                </div>
-              </div>
-              <div class="task-meta-grid">
-                <div class="task-meta-item">
-                  <span class="task-meta-label">{{ t("stats_model") }}</span>
-                  <span class="task-meta-value">{{ taskModelMeta(item) }}</span>
-                </div>
-                <div class="task-meta-item">
-                  <span class="task-meta-label">{{ t("tasks_runtime_label") }}</span>
-                  <span class="task-meta-value">{{ taskRuntimeMeta(item) }}</span>
-                </div>
-                <div class="task-meta-item task-meta-item-code">
-                  <span class="task-meta-label">{{ t("tasks_task_id_label") }}</span>
-                  <code class="task-meta-value task-meta-code" :title="item.id">{{ shortenTaskID(item.id) }}</code>
-                </div>
-              </div>
-            </QCard>
-            <QCard v-if="taskItems.length === 0 && !taskLoading" class="task-empty" variant="default">
-              <div class="task-empty-copy">
-                <code class="task-empty-kicker">{{ t("tasks_title") }}</code>
-                <h3 class="task-empty-title">{{ t("tasks_empty_title") }}</h3>
-                <p class="task-empty-hint">{{ t("tasks_empty_hint") }}</p>
-              </div>
-              <template #footer>
-                <QButton class="plain sm" @click="goChat">{{ t("tasks_empty_action") }}</QButton>
-              </template>
-            </QCard>
+          <div class="audit-load-progress" :aria-label="t('runtime_loading')" v-if="isTasksStreamSelected ? taskLoading : loading">
+            <QProgress :infinite="true" />
           </div>
-        </section>
-
-        <RawJsonDialog
-          :open="rawDialogOpen"
-          :json="rawDialogJSON"
-          @close="closeRawDialog"
-        />
+          <div class="audit-ledger-content" :aria-busy="isTasksStreamSelected ? taskLoading : loading">
+            <template v-if="!isTasksStreamSelected">
+              <QFence v-if="err" type="danger" icon="PhXCircle" :text="err" />
+              <div v-if="updatedAt" class="audit-feed-meta">
+                <span>{{ filterText ? t('audit_filtered_count', { count: filteredItemCount, total: auditItemCount }) : t('audit_page_count', { count: auditItemCount }) }}</span>
+                <span>{{ t('audit_updated', { value: updatedAt }) }}</span>
+              </div>
+              <div v-if="meta.exists" class="audit-feed">
+                <section v-for="group in auditGroups" :key="group.key" class="audit-group">
+                  <header class="audit-group-head">
+                    <span class="audit-group-identity"><span class="audit-group-label">{{ t('audit_run') }}</span><code :title="group.title">{{ group.title }}</code></span>
+                    <span class="audit-group-count">{{ t('audit_page_count', { count: group.items.length }) }}</span>
+                  </header>
+                  <details v-for="item in group.items" :key="item.key" class="audit-event">
+                    <summary class="audit-event-summary">
+                      <span class="audit-event-copy">
+                        <span class="audit-event-heading">
+                          <strong>{{ item.parsed ? item.primaryTitle : t('audit_raw') }}</strong>
+                          <template v-if="item.parsed">
+                            <QBadge v-if="item.approvalLabel !== '-'" :type="item.approvalType" size="sm">{{ item.approvalLabel }}</QBadge>
+                            <QBadge v-else-if="item.decisionLabel !== '-'" :type="item.decisionType" size="sm">{{ item.decisionLabel }}</QBadge>
+                            <span v-if="item.riskLabel !== '-'" class="audit-event-risk" :class="'is-' + item.riskType">{{ t('audit_risk') }} · {{ item.riskLabel }}</span>
+                          </template>
+                        </span>
+                        <span v-if="!item.parsed || item.summary !== '-'" class="audit-event-preview">{{ item.parsed ? item.summary : item.raw }}</span>
+                        <span v-if="item.hasReasons" class="audit-event-reason">{{ item.reasonsText }}</span>
+                        <span v-if="item.parsed" class="audit-event-meta">
+                          <time v-if="item.tsText !== '-'" :datetime="item.tsRaw">{{ item.tsText }}</time>
+                          <span v-if="item.toolName !== '-' && item.actionType !== '-'">{{ item.actionType }}</span>
+                          <span v-if="item.stepText !== '-'">{{ t('audit_step') }} {{ item.stepText }}</span>
+                        </span>
+                      </span>
+                      <PhCaretRight class="icon audit-event-chevron" />
+                    </summary>
+                    <div class="audit-event-detail">
+                      <template v-if="item.parsed">
+                        <dl class="audit-detail-grid">
+                          <div v-if="item.eventID !== '-'"><dt>{{ t('audit_event_id') }}</dt><dd><code>{{ item.eventID }}</code></dd></div>
+                          <div v-if="item.runID !== '-'"><dt>{{ t('audit_run') }}</dt><dd><code>{{ item.runID }}</code></dd></div>
+                          <div><dt>{{ t('audit_decision') }}</dt><dd>{{ item.decisionLabel }}</dd></div>
+                          <div><dt>{{ t('audit_risk') }}</dt><dd>{{ item.riskLabel }}</dd></div>
+                          <div v-if="item.approvalLabel !== '-'"><dt>{{ t('audit_approval') }}</dt><dd>{{ item.approvalLabel }}</dd></div>
+                          <div v-if="item.actor !== '-'"><dt>{{ t('audit_actor') }}</dt><dd>{{ item.actor }}</dd></div>
+                          <div v-if="item.approvalRequestID !== '-'" class="audit-detail-wide"><dt>{{ t('audit_approval_request') }}</dt><dd><code>{{ item.approvalRequestID }}</code></dd></div>
+                        </dl>
+                        <div v-if="item.summary !== '-'" class="audit-detail-section">
+                          <h4>{{ t('audit_summary') }}</h4><p>{{ item.summary }}</p>
+                        </div>
+                        <div v-if="item.reasonsText !== '-'" class="audit-detail-section">
+                          <h4>{{ t('audit_reasons') }}</h4><p>{{ item.reasonsText }}</p>
+                        </div>
+                      </template>
+                      <pre v-else class="audit-raw-line">{{ item.raw }}</pre>
+                      <QButton class="outlined sm audit-raw-action" @click="openRawDialog(item)"><PhCode class="icon" />{{ t('chat_action_show_raw') }}</QButton>
+                    </div>
+                  </details>
+                </section>
+                <div v-if="!loading && !err && auditGroups.length === 0" class="audit-empty">
+                  <h3>{{ filterText ? t('audit_filter_empty') : t('audit_empty_title') }}</h3>
+                  <p>{{ filterText ? t('audit_filter_empty_hint') : t('audit_empty') }}</p>
+                  <QButton v-if="filterText" class="plain sm" @click="filterText = ''">{{ t('audit_clear_filter') }}</QButton>
+                </div>
+              </div>
+              <div v-else-if="!loading && !err" class="audit-empty">
+                <h3>{{ t('audit_missing_title') }}</h3><p>{{ t('audit_no_file') }}</p>
+              </div>
+            </template>
+            <template v-else>
+              <QFence v-if="taskErr" type="danger" icon="PhXCircle" :text="taskErr" />
+              <div class="audit-task-stream">
+                <details v-for="item in taskItems" :key="item.id" class="audit-task">
+                  <summary class="audit-event-summary">
+                    <span class="audit-event-copy">
+                      <span class="audit-event-heading"><strong class="audit-task-title">{{ taskTitle(item) }}</strong></span>
+                      <span class="audit-event-meta">
+                        <QBadge :type="taskStatusType(item)" size="sm">{{ taskStatusLabel(item) }}</QBadge>
+                        <span>{{ taskSourceLabel(item) }}</span>
+                        <time :datetime="item.created_at">{{ formatTime(item.created_at) }}</time>
+                      </span>
+                    </span>
+                    <PhCaretRight class="icon audit-event-chevron" />
+                  </summary>
+                  <div class="audit-event-detail">
+                    <p class="audit-task-text">{{ item.task }}</p>
+                    <dl class="audit-detail-grid">
+                      <div class="audit-detail-wide"><dt>{{ t('tasks_task_id_label') }}</dt><dd><code>{{ item.id }}</code></dd></div>
+                      <div><dt>{{ t('stats_model') }}</dt><dd>{{ taskModelMeta(item) }}</dd></div>
+                      <div><dt>{{ t('tasks_runtime_label') }}</dt><dd>{{ taskRuntimeMeta(item) }}</dd></div>
+                    </dl>
+                    <QButton class="outlined sm audit-raw-action" @click="openTask(item)"><PhCode class="icon" />{{ t('chat_action_show_raw') }}</QButton>
+                  </div>
+                </details>
+                <div v-if="taskItems.length === 0 && !taskLoading && !taskErr" class="audit-empty">
+                  <h3>{{ t('tasks_empty_title') }}</h3><p>{{ t('tasks_empty_hint') }}</p>
+                  <QButton class="plain sm" @click="goChat">{{ t('tasks_empty_action') }}</QButton>
+                </div>
+              </div>
+            </template>
+          </div>
+        </QCard>
+        <RawJsonDialog :open="rawDialogOpen" :json="rawDialogJSON" @close="closeRawDialog" />
       </div>
     </AppPage>
   `,
