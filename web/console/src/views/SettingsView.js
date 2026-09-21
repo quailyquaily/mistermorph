@@ -1152,6 +1152,7 @@ const SettingsView = {
       { title: t("settings_console_group_trigger_talkative"), value: "talkative" },
     ]);
     const settingsEndpointRef = computed(() => trimText(endpointState.selectedRef) || LOCAL_CONSOLE_ENDPOINT_REF);
+    const consoleRuntimeEndpoints = computed(() => settingsEndpointRef.value === LOCAL_CONSOLE_ENDPOINT_REF ? endpointState.items : []);
     const selectedEndpointIsConsole = computed(
       () =>
         settingsEndpointRef.value === LOCAL_CONSOLE_ENDPOINT_REF ||
@@ -4679,6 +4680,8 @@ const SettingsView = {
       consoleConfigValues,
       consoleFieldStates,
       consoleEndpoints,
+      settingsEndpointRef,
+      consoleRuntimeEndpoints,
       consoleSettingsLoaded,
       addConsoleEndpointRequested,
       consumeConsoleEndpointAddRequest,
@@ -5880,24 +5883,18 @@ const SettingsView = {
           </div>
 
           <div v-else-if="selectedSection.id === 'console'" class="settings-panel-body settings-panel-body-plain">
-            <ConfigSettingsPanel
-              :groups="REMOTE_CONTROL_CONFIG_GROUPS"
-              :values="consoleConfigValues"
-              :fieldStates="consoleFieldStates"
-              :loading="consoleLoading"
-              :saving="consoleSaving && consoleSavingTarget === 'config'"
-              @save="saveConfigSettings('console', $event)"
-            />
             <ConsoleEndpointsPanel
+              :key="settingsEndpointRef"
               :endpoints="consoleEndpoints"
+              :runtimeEndpoints="consoleRuntimeEndpoints"
               :loading="consoleLoading || !consoleSettingsLoaded"
-              :saving="consoleSaving && consoleSavingTarget === 'endpoints'"
+              :saving="consoleSaving"
               :addRequested="addConsoleEndpointRequested"
               @add-opened="consumeConsoleEndpointAddRequest"
               @save="(values, onComplete) => saveConsoleCollection('endpoints', values, onComplete)"
             />
             <ConfigSettingsPanel
-              :groups="CONSOLE_DEPLOYMENT_CONFIG_GROUPS"
+              :groups="REMOTE_CONTROL_CONFIG_GROUPS"
               :values="consoleConfigValues"
               :fieldStates="consoleFieldStates"
               :loading="consoleLoading"
@@ -5909,6 +5906,20 @@ const SettingsView = {
               :saving="consoleSaving && consoleSavingTarget === 'config'"
               @save="saveConfigSettings('console', $event)"
             />
+            <details class="settings-remote-advanced">
+              <summary>
+                <PhCaretRight class="icon" />
+                <span><strong>{{ t('remote_advanced_title') }}</strong><span>{{ t('remote_advanced_note') }}</span></span>
+              </summary>
+              <ConfigSettingsPanel
+                :groups="CONSOLE_DEPLOYMENT_CONFIG_GROUPS"
+                :values="consoleConfigValues"
+                :fieldStates="consoleFieldStates"
+                :loading="consoleLoading"
+                :saving="consoleSaving && consoleSavingTarget === 'config'"
+                @save="saveConfigSettings('console', $event)"
+              />
+            </details>
           </div>
 
           <div v-else-if="selectedSection.id === 'persona'" class="settings-panel-body settings-panel-body-plain">

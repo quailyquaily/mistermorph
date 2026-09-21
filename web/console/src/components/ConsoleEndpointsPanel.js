@@ -1,27 +1,14 @@
 import { computed, reactive, ref, watch } from "vue";
 import SettingDialog from "./SettingDialog";
 import { translate } from "../core/context";
-
-let endpointKey = 0;
-
-function endpointDraft(item = {}) {
-  const name = String(item?.name || "");
-  endpointKey += 1;
-  return {
-    _key: `console-endpoint-${endpointKey}`,
-    _originalName: String(item?.original_name || name),
-    _configured: item?.auth_token_configured === true,
-    name,
-    url: String(item?.url || ""),
-    auth_token: "",
-  };
-}
+import "./ConsoleEndpointsPanel.css";
 
 export default {
   name: "ConsoleEndpointsPanel",
   components: { SettingDialog },
   props: {
     endpoints: { type: Array, default: () => [] },
+    runtimeEndpoints: { type: Array, default: () => [] },
     loading: Boolean,
     saving: Boolean,
     addRequested: Boolean,
@@ -29,126 +16,136 @@ export default {
   emits: ["save", "add-opened"],
   setup(props, { emit }) {
     const t = translate;
-    const draft = reactive([]);
-    const addOpen = ref(false);
-    const addError = ref("");
-    const newEndpoint = reactive(endpointDraft());
+    const editorOpen = ref(false);
+    const editorError = ref("");
+    const editingName = ref(null);
+    const draft = reactive({ name: "", url: "", auth_token: "", configured: false });
+    const removeTarget = ref(null);
+    const removeError = ref("");
+    const valid = computed(() => Boolean(draft.name.trim() && draft.url.trim() && (draft.configured || draft.auth_token.trim())));
+    const rows = computed(() => props.endpoints.map((endpoint) => {
+      const live = props.runtimeEndpoints.find((item) => item.name === endpoint.name && item.url === endpoint.url);
+      const status = live?.health_pending ? "checking" : live?.connected === true ? "online" : live?.connected === false ? "offline" : "unknown";
+      return { ...endpoint, status };
+    }));
 
-    function replaceDraft() {
-      draft.splice(0, draft.length, ...props.endpoints.map(endpointDraft));
+    function edit(endpoint = null) {
+      if (props.loading || props.saving) return;
+      editingName.value = endpoint?.name ?? null;
+      Object.assign(draft, { name: endpoint?.name || "", url: endpoint?.url || "", auth_token: "", configured: endpoint?.auth_token_configured === true });
+      editorError.value = "";
+      editorOpen.value = true;
     }
 
-    watch(() => props.endpoints, replaceDraft, { deep: true, immediate: true });
-    watch(addOpen, (open) => {
+    function save() {
+      if (props.loading || props.saving || !valid.value) return;
+      editorError.value = "";
+      const item = { original_name: editingName.value || "", name: draft.name.trim(), url: draft.url.trim(), auth_token: draft.auth_token.trim() };
+      const values = props.endpoints.map((endpoint) => ({ original_name: endpoint.name, name: endpoint.name, url: endpoint.url, auth_token: "" }));
+      if (editingName.value === null) values.push(item);
+      else {
+        const index = values.findIndex((endpoint) => endpoint.name === editingName.value);
+        if (index < 0) {
+          editorError.value = t("remote_agent_missing");
+          return;
+        }
+        values.splice(index, 1, item);
+      }
+      emit("save", values, (error) => {
+        if (error) editorError.value = error;
+        else editorOpen.value = false;
+      });
+    }
+
+    function confirmRemove(endpoint) {
+      removeError.value = "";
+      removeTarget.value = endpoint;
+    }
+
+    function remove() {
+      if (props.loading || props.saving || !removeTarget.value) return;
+      removeError.value = "";
+      const values = props.endpoints.filter((item) => item.name !== removeTarget.value.name)
+        .map((item) => ({ original_name: item.name, name: item.name, url: item.url, auth_token: "" }));
+      emit("save", values, (error) => {
+        if (error) removeError.value = error;
+        else removeTarget.value = null;
+      });
+    }
+
+    watch(editorOpen, (open) => {
       if (!open) {
-        Object.assign(newEndpoint, endpointDraft());
-        addError.value = "";
+        draft.auth_token = "";
+        editorError.value = "";
       }
     });
-    watch([() => props.addRequested, () => props.loading], ([requested, loading]) => {
-      if (!requested || loading) return;
-      add();
+    watch([() => props.addRequested, () => props.loading, () => props.saving], ([requested, loading, saving]) => {
+      if (!requested || loading || saving) return;
+      edit();
       emit("add-opened");
     }, { immediate: true });
 
-    const valid = computed(() => draft.every((item) => {
-      if (!item.name.trim() || !item.url.trim()) return false;
-      return item._configured || item.auth_token.trim() !== "";
-    }));
-    const newEndpointValid = computed(() =>
-      newEndpoint.name.trim() !== "" && newEndpoint.url.trim() !== "" && newEndpoint.auth_token.trim() !== ""
-    );
-
-    function add() {
-      if (props.loading || props.saving) return;
-      addOpen.value = true;
-    }
-
-    function remove(index) {
-      draft.splice(index, 1);
-    }
-
-    function save(adding = false) {
-      if (props.loading || props.saving || !valid.value) return;
-      if (adding && !newEndpointValid.value) return;
-      if (adding) addError.value = "";
-      const items = adding ? [...draft, newEndpoint] : draft;
-      emit("save", items.map((item) => ({
-        original_name: item._originalName,
-        name: item.name.trim(),
-        url: item.url.trim(),
-        auth_token: item.auth_token.trim(),
-      })), adding ? (error) => {
-        if (error) addError.value = error;
-        else addOpen.value = false;
-      } : undefined);
-    }
-
-    return { t, draft, valid, addOpen, addError, newEndpoint, newEndpointValid, add, remove, save };
+    return { t, rows, editorOpen, editorError, editingName, draft, valid, removeTarget, removeError, edit, save, confirmRemove, remove };
   },
   template: `
-    <QCard variant="default" class="config-settings-group">
-      <div class="settings-panel-shell">
-        <header class="settings-panel-head">
-          <div class="settings-panel-copy">
-            <h3 class="settings-panel-title workspace-document-title">Remote Morphs</h3>
-            <p class="settings-panel-meta">Other Morph instances this Console can control. Each access token must match the remote Morph's incoming access token. New and changed connections are tested before saving, then applied immediately.</p>
-          </div>
-          <div class="settings-panel-actions">
-            <QButton class="primary" :loading="saving" :disabled="loading || saving || !valid" @click="save()">{{ t(saving ? 'settings_endpoints_saving' : 'action_save') }}</QButton>
-          </div>
-        </header>
-        <div class="settings-panel-body settings-collection-list">
-          <div v-for="(endpoint, index) in draft" :key="endpoint._key" :data-endpoint-key="endpoint._key" class="settings-collection-item">
-            <div class="settings-form-grid">
-              <div class="settings-field">
-                <span class="settings-field-label">Name</span>
-                <QInput v-model="endpoint.name" :disabled="loading || saving" />
+    <div class="console-endpoints-section">
+      <QCard variant="default" class="config-settings-group console-endpoints-panel">
+        <div class="settings-panel-shell">
+          <header class="settings-panel-head">
+            <div class="settings-panel-copy">
+              <h3 class="settings-panel-title workspace-document-title">{{ t('remote_agents_title') }} <span class="console-endpoint-count">{{ endpoints.length }}</span></h3>
+              <p class="settings-panel-meta">{{ t('remote_agents_note') }}</p>
+            </div>
+            <div class="settings-panel-actions">
+              <QButton class="primary" :disabled="loading || saving" @click="edit()"><PhPlus class="icon" />{{ t('overview_add_console') }}</QButton>
+            </div>
+          </header>
+          <div class="console-endpoint-list" :aria-busy="loading || saving">
+            <QProgress v-if="loading" :infinite="true" />
+            <p v-else-if="!rows.length" class="console-endpoint-empty">{{ t('remote_agents_empty') }}</p>
+            <div v-for="endpoint in rows" :key="endpoint.name" class="console-endpoint-row">
+              <div class="console-endpoint-copy">
+                <div class="console-endpoint-heading"><strong>{{ endpoint.name }}</strong>
+                  <span class="console-endpoint-status"><QBadge dot :type="endpoint.status === 'online' ? 'success' : endpoint.status === 'offline' ? 'danger' : 'default'" size="sm" />{{ t('remote_status_' + endpoint.status) }}</span>
+                </div>
+                <code class="console-endpoint-url">{{ endpoint.url }}</code>
               </div>
-              <div class="settings-field">
-                <span class="settings-field-label">Runtime API URL</span>
-                <QInput v-model="endpoint.url" placeholder="https://agent.example.com/runtime" :disabled="loading || saving" />
-              </div>
-              <div class="settings-field is-wide">
-                <span class="settings-field-label">Access token</span>
-                <QInput
-                  v-model="endpoint.auth_token"
-                  inputType="password"
-                  :placeholder="endpoint._configured ? 'Configured — enter a new value to replace' : 'Required'"
-                  :disabled="loading || saving"
-                />
+              <div class="console-endpoint-actions">
+                <QButton class="outlined sm" :disabled="loading || saving" :aria-label="t('remote_edit_named', { name: endpoint.name })" @click="edit(endpoint)"><PhPencilSimple class="icon" />{{ t('action_edit') }}</QButton>
+                <QButton class="plain sm icon" :disabled="loading || saving" :title="t('remote_remove_named', { name: endpoint.name })" :aria-label="t('remote_remove_named', { name: endpoint.name })" @click="confirmRemove(endpoint)"><PhTrash class="icon" /></QButton>
               </div>
             </div>
-            <QButton class="plain xs danger" :disabled="loading || saving" @click="remove(index)">Remove</QButton>
           </div>
-          <QButton class="placeholder" :disabled="loading || saving" @click="add">{{ t('overview_add_console') }}</QButton>
         </div>
-      </div>
-    </QCard>
+      </QCard>
 
-    <SettingDialog
-      v-model="addOpen"
-      :title="t('overview_add_console')"
-      width="520px"
-      :saving="saving"
-      :saveDisabled="loading || !valid || !newEndpointValid"
-      @save="save(true)"
-    >
-      <div class="settings-form-grid console-endpoint-add-form" @keyup.enter="save(true)">
-        <label class="settings-field is-wide">
-          <span class="settings-field-label">Name</span>
-          <QInput v-model="newEndpoint.name" :disabled="saving" />
-        </label>
-        <label class="settings-field is-wide">
-          <span class="settings-field-label">Runtime API URL</span>
-          <QInput v-model="newEndpoint.url" placeholder="https://agent.example.com/runtime" :disabled="saving" />
-        </label>
-        <label class="settings-field is-wide">
-          <span class="settings-field-label">Access token</span>
-          <QInput v-model="newEndpoint.auth_token" inputType="password" placeholder="Required" :disabled="saving" />
-        </label>
-        <p v-if="addError" class="settings-field-note console-endpoint-add-error" role="alert">{{ addError }}</p>
-      </div>
-    </SettingDialog>
+      <SettingDialog v-model="editorOpen" :title="t(editingName === null ? 'overview_add_console' : 'remote_edit_agent')"
+        width="520px" :saving="saving" :saveDisabled="loading || !valid" @save="save">
+        <div class="settings-form-grid console-endpoint-form" @keyup.enter="save">
+          <label class="settings-field is-wide"><span class="settings-field-label">{{ t('remote_agent_name') }}</span><QInput v-model="draft.name" :disabled="saving" /></label>
+          <label class="settings-field is-wide"><span class="settings-field-label">Runtime API URL</span><QInput v-model="draft.url" placeholder="https://agent.example.com/runtime" :disabled="saving" /></label>
+          <label class="settings-field is-wide">
+            <span class="settings-field-label">{{ t('remote_access_token') }}</span>
+            <QInput v-model="draft.auth_token" inputType="password" :placeholder="t(draft.configured ? 'remote_token_keep' : 'remote_token_required')" :disabled="saving" />
+            <span class="settings-field-note">{{ t('remote_token_note') }}</span>
+          </label>
+          <p v-if="editorError" class="settings-field-note console-endpoint-error" role="alert">{{ editorError }}</p>
+        </div>
+      </SettingDialog>
+
+      <QDialog :modelValue="!!removeTarget" :persistent="saving" width="460px" @update:modelValue="!$event && !saving && (removeTarget = null)">
+        <template #header><header class="setting-dialog-header"><h3 class="setting-dialog-title">{{ t('remote_remove_agent') }}</h3></header></template>
+        <section class="setting-dialog">
+          <div class="setting-dialog-scroll console-endpoint-remove-copy">
+            <p>{{ t('remote_remove_confirm', { name: removeTarget?.name || '' }) }}</p>
+            <p v-if="removeError" class="console-endpoint-error" role="alert">{{ removeError }}</p>
+          </div>
+          <footer class="setting-dialog-actions">
+            <QButton class="outlined" :disabled="saving" @click="removeTarget = null">{{ t('action_cancel') }}</QButton>
+            <QButton class="danger" :loading="saving" :disabled="saving" @click="remove">{{ t('remote_remove_agent') }}</QButton>
+          </footer>
+        </section>
+      </QDialog>
+    </div>
   `,
 };
