@@ -120,7 +120,7 @@ func (m *chatModel) printHistory(full bool) tea.Cmd {
 			text := remoteDisplay(r.text)
 			switch r.role {
 			case "user":
-				text = formatSubmittedInput(text)
+				text = formatSubmittedInput(text, m.width-1)
 			case "assistant":
 				if !r.structured {
 					name, _ := chatcommands.ParseCommand(m.tasks[r.task].Task)

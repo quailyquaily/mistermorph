@@ -513,3 +513,91 @@ func TestExpandPastePlaceholdersExactMatch(t *testing.T) {
 }
 
 var errTest = tea.ErrProgramKilled
+
+func TestFormatSubmittedInput(t *testing.T) {
+	t.Run("single line fills the band", func(t *testing.T) {
+		got := formatSubmittedInput("hello", 40)
+		lines := strings.Split(strings.TrimRight(got, "\n"), "\n")
+		if len(lines) != 1 {
+			t.Fatalf("want 1 physical line, got %d", len(lines))
+		}
+		if w := ansi.StringWidth(lines[0]); w != 40 {
+			t.Errorf("band width = %d, want 40", w)
+		}
+		if stripped := ansi.Strip(lines[0]); stripped != "❯ hello"+strings.Repeat(" ", 33) {
+			t.Errorf("stripped = %q", stripped)
+		}
+		if !strings.Contains(lines[0], "48;") {
+			t.Error("band should carry a background SGR")
+		}
+	})
+
+	t.Run("multi line indents continuation", func(t *testing.T) {
+		got := formatSubmittedInput("first\nsecond", 20)
+		lines := strings.Split(strings.TrimRight(got, "\n"), "\n")
+		if len(lines) != 2 {
+			t.Fatalf("want 2 physical lines, got %d", len(lines))
+		}
+		if stripped := ansi.Strip(lines[0]); !strings.HasPrefix(stripped, "❯ first") {
+			t.Errorf("line 1 stripped = %q", stripped)
+		}
+		if stripped := ansi.Strip(lines[1]); !strings.HasPrefix(stripped, "  second") {
+			t.Errorf("line 2 stripped = %q", stripped)
+		}
+	})
+
+	t.Run("long line wraps and stays banded", func(t *testing.T) {
+		// 90 content cells at 18 cells per line is exactly 5 physical lines.
+		got := formatSubmittedInput(strings.Repeat("ab ", 30), 20)
+		lines := strings.Split(strings.TrimRight(got, "\n"), "\n")
+		if len(lines) != 5 {
+			t.Fatalf("want 5 physical lines, got %d: %v", len(lines), lines)
+		}
+		for i, line := range lines {
+			if w := ansi.StringWidth(line); w != 20 {
+				t.Errorf("line %d width = %d, want 20", i, w)
+			}
+		}
+		if stripped := ansi.Strip(lines[0]); !strings.HasPrefix(stripped, "❯ ab ") {
+			t.Errorf("line 1 stripped = %q", stripped)
+		}
+		if stripped := ansi.Strip(lines[1]); !strings.HasPrefix(stripped, "  ab ") {
+			t.Errorf("line 2 stripped = %q", stripped)
+		}
+	})
+
+	t.Run("wide content counts cells not bytes", func(t *testing.T) {
+		// "你好" is 4 cells; the content area is 8, so 4 trailing spaces.
+		got := formatSubmittedInput("你好", 10)
+		lines := strings.Split(strings.TrimRight(got, "\n"), "\n")
+		if w := ansi.StringWidth(lines[0]); w != 10 {
+			t.Errorf("band width = %d, want 10", w)
+		}
+		if stripped := ansi.Strip(lines[0]); stripped != "❯ 你好"+strings.Repeat(" ", 4) {
+			t.Errorf("stripped = %q", stripped)
+		}
+	})
+
+	t.Run("narrow width falls back", func(t *testing.T) {
+		got := formatSubmittedInput("hello", -1)
+		lines := strings.Split(strings.TrimRight(got, "\n"), "\n")
+		if len(lines) != 1 {
+			t.Fatalf("want 1 physical line, got %d", len(lines))
+		}
+		if stripped := ansi.Strip(lines[0]); stripped != "❯ hello" {
+			t.Errorf("stripped = %q", stripped)
+		}
+	})
+}
+
+func TestFormatSubmittedInputSurvivesTranscriptWrap(t *testing.T) {
+	// Padded band lines are exactly terminalWidth-1 wide, so the transcript
+	// hardwrap must not re-wrap or truncate them.
+	for _, input := range []string{"hello", "first\nsecond", strings.Repeat("word ", 20)} {
+		got := formatSubmittedInput(input, 39)
+		wrapped := wrapChatTranscript(got, 40)
+		if strings.Count(got, "\n") != strings.Count(wrapped, "\n") {
+			t.Errorf("input %q: transcript wrap changed the line count: %q", input, wrapped)
+		}
+	}
+}

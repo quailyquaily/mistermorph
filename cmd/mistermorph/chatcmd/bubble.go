@@ -137,6 +137,8 @@ var (
 	chatAccentStyle = lipgloss.NewStyle().
 			Foreground(lipglosscompat.AdaptiveColor{Light: lipgloss.Color("25"), Dark: lipgloss.Color("75")}).
 			Bold(true)
+	chatUserLineStyle = lipgloss.NewStyle().
+				Background(lipglosscompat.AdaptiveColor{Light: lipgloss.Color("237"), Dark: lipgloss.Color("236")})
 	chatSecondaryStyle = lipgloss.NewStyle().
 				Foreground(lipglosscompat.AdaptiveColor{Light: lipgloss.Color("239"), Dark: lipgloss.Color("250")})
 	chatMutedStyle = lipgloss.NewStyle().
@@ -904,16 +906,34 @@ func chatSessionStatusFromSession(sess *chatSession) chatSessionStatus {
 	return status
 }
 
-func formatSubmittedInput(input string) string {
-	lines := strings.Split(input, "\n")
-	for i := range lines {
+// formatSubmittedInput renders a submitted user message for the transcript:
+// the first line carries the marker, continuation lines are indented, every
+// physical line is hard-wrapped and padded to width, and the band style
+// paints the full-width background so user input is recognizable without
+// relying on the marker alone.
+func formatSubmittedInput(input string, width int) string {
+	out := make([]string, 0, strings.Count(input, "\n")+1)
+	contentWidth := width - inputMarkerWidth
+	for i, line := range strings.Split(input, "\n") {
+		prefix := "  "
 		if i == 0 {
-			lines[i] = chatAccentStyle.Render("❯ ") + lines[i]
-		} else {
-			lines[i] = "  " + lines[i]
+			prefix = "❯ "
+		}
+		wrapped := []string{line}
+		if contentWidth > 1 {
+			wrapped = strings.Split(ansi.Hardwrap(line, contentWidth, false), "\n")
+		}
+		for j, w := range wrapped {
+			if i == 0 && j > 0 {
+				prefix = "  "
+			}
+			if contentWidth > 1 && ansi.StringWidth(w) < contentWidth {
+				w += strings.Repeat(" ", contentWidth-ansi.StringWidth(w))
+			}
+			out = append(out, chatUserLineStyle.Render(prefix+w))
 		}
 	}
-	return strings.Join(lines, "\n") + "\n"
+	return strings.Join(out, "\n") + "\n"
 }
 
 func (m *chatModel) submitInput(value string) tea.Cmd {
@@ -964,7 +984,7 @@ func (m *chatModel) submitInput(value string) tea.Cmd {
 	m.pastedTexts = make(map[string]string)
 	m.pickerClosed = false
 	m.pickerIndex = 0
-	return m.enqueueTranscript(formatSubmittedInput(expanded))
+	return m.enqueueTranscript(formatSubmittedInput(expanded, m.width-1))
 }
 
 func (m *chatModel) picker() chatPicker {
