@@ -1245,7 +1245,7 @@ html[data-macos26="true"] .chat-workspace-sidebar-shell-mobile {
 }
 
 .chat-history-copy {
-  padding: 18px 20px 20px;
+  padding: 13px 15px 14px;
   border: 1px solid color-mix(in srgb, var(--line-soft) 80%, transparent);
   border-radius: 16px 16px 16px 0;
   background: #fff;
@@ -1665,8 +1665,9 @@ body.artifact-preview-scroll-lock {
 }
 
 .chat-history-copy .mmr-document {
+  font-family: var(--font-ui);
   font-size: var(--font-size-body);
-  line-height: 1.8;
+  line-height: 1.78;
   min-width: 0;
   word-break: break-word;
   overflow-wrap: anywhere;
@@ -1691,6 +1692,13 @@ body.artifact-preview-scroll-lock {
   border-radius: 14px;
   background: var(--chat-code-bg);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.chat-history-copy .mmr-document table {
+  display: block;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
 }
 
 .chat-history-copy .mmr-document pre {
@@ -1842,9 +1850,10 @@ body.artifact-preview-scroll-lock {
   width: calc(100% + var(--chat-history-agent-padding-right));
 }
 
-.chat-history-agent .chat-history-stack > .chat-history-copy {
+.chat-history-agent .chat-history-stack > .chat-history-copy:not(.chat-history-approval-surface) {
   justify-self: start;
-  width: min(100%, 82ch);
+  width: fit-content;
+  max-width: min(100%, 82ch);
 }
 
 .chat-history-agent .chat-history-copy {
@@ -2134,15 +2143,19 @@ body.artifact-preview-scroll-lock {
     padding-bottom: 12px;
   }
 
-  .chat-history-user,
-  .chat-history-agent,
   .chat-history-system {
     padding-left: 0;
     padding-right: 0;
   }
 
+  .chat-history-user {
+    padding-left: clamp(32px, 10vw, 48px);
+    padding-right: 0;
+  }
+
   .chat-history-agent {
-    --chat-history-agent-padding-right: 0px;
+    --chat-history-agent-padding-right: clamp(32px, 10vw, 48px);
+    padding-left: 0;
   }
 
   .chat-history-copy,
