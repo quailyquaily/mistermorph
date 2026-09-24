@@ -111,6 +111,50 @@ func TestFetcherRefreshSlackConversationInfo(t *testing.T) {
 	}
 }
 
+func TestFetcherRefreshSlackDMName(t *testing.T) {
+	for _, tt := range []struct {
+		name, userResponse, want string
+	}{
+		{"display name", `{"ok":true,"user":{"name":"alice","real_name":"Alice Smith","profile":{"display_name":"Alice"}}}`, "Alice"},
+		{"real name", `{"ok":true,"user":{"name":"alice","real_name":"Alice Smith"}}`, "Alice Smith"},
+		{"username", `{"ok":true,"user":{"name":"alice"}}`, "alice"},
+		{"missing permission", `{"ok":false,"error":"missing_scope"}`, "slack:T111:D222"},
+		{"empty profile", `{"ok":true,"user":{}}`, "slack:T111:D222"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Header.Get("Authorization") != "Bearer xoxb-test" {
+					t.Errorf("unexpected authorization header")
+				}
+				switch r.URL.Path {
+				case "/conversations.info":
+					if r.URL.Query().Get("channel") != "D222" {
+						t.Errorf("unexpected channel: %s", r.URL.RawQuery)
+					}
+					_, _ = w.Write([]byte(`{"ok":true,"channel":{"id":"D222","is_im":true,"user":"U333"}}`))
+				case "/users.info":
+					if r.URL.Query().Get("user") != "U333" {
+						t.Errorf("unexpected user: %s", r.URL.RawQuery)
+					}
+					_, _ = w.Write([]byte(tt.userResponse))
+				default:
+					t.Errorf("unexpected request: %s", r.URL.Path)
+					http.NotFound(w, r)
+				}
+			}))
+			defer server.Close()
+			fetcher := NewFetcher(FetcherOptions{SlackBotToken: "xoxb-test", SlackBaseURL: server.URL})
+			info, err := fetcher.RefreshChatInfo(context.Background(), "slack:T111:D222")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if info.Name != tt.want || info.Type != "im" || info.Platform != "slack" {
+				t.Fatalf("DM info = %#v, want name %q and type im", info, tt.want)
+			}
+		})
+	}
+}
+
 func TestFetcherRefreshLineGroupSummary(t *testing.T) {
 	var gotAuth, gotPath string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

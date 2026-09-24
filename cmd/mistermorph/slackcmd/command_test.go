@@ -40,7 +40,7 @@ func TestBuildAwarenessRuntimePropagatesInspectFlags(t *testing.T) {
 		true,
 		true,
 		runtimepaths.Paths{},
-		chatinfo.NewFetcher(chatinfo.FetcherOptions{SlackBotToken: "snapshot-token"}),
+		chatinfo.FetcherOptions{SlackBotToken: "snapshot-token"},
 	)
 	if !hbOpts.InspectPrompt {
 		t.Fatal("InspectPrompt = false, want true")
@@ -52,6 +52,38 @@ func TestBuildAwarenessRuntimePropagatesInspectFlags(t *testing.T) {
 		t.Fatal("ChatInfoRefresher = nil, want explicit snapshot dependency")
 	}
 	assertDependencyCapabilities(t, awarenessDeps)
+}
+
+func TestBuildAwarenessRuntimeUsesEffectiveSlackCredentials(t *testing.T) {
+	server := testhttp.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/active/conversations.info":
+			if r.Header.Get("Authorization") != "Bearer effective-token" {
+				t.Errorf("chat profile fetch did not use the runtime bot token")
+			}
+			_, _ = w.Write([]byte(`{"ok":true,"channel":{"id":"C222","name":"Project Room"}}`))
+		case "/bottelegram-snapshot/getChat":
+			_, _ = w.Write([]byte(`{"ok":true,"result":{"id":123,"type":"private","first_name":"Alice"}}`))
+		default:
+			t.Errorf("unexpected request path: %s", r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	_, opts := buildAwarenessRuntime(
+		Dependencies{Dependencies: dependencyCapabilitiesForTest()},
+		channelopts.SlackConfig{}, channelopts.HeartbeatConfig{}, channelopts.CronConfig{Enabled: true},
+		"effective-token", nil, time.Minute, server.URL+"/active", toolsutil.RuntimeToolsRegisterConfig{},
+		false, false, runtimepaths.Paths{},
+		chatinfo.FetcherOptions{
+			HTTPClient: server.Client, SlackBotToken: "stale-token", SlackBaseURL: server.URL + "/stale",
+			TelegramBotToken: "telegram-snapshot", TelegramBaseURL: server.URL,
+		},
+	)
+	for _, id := range []string{"slack:T111:C222", "tg:123"} {
+		if _, err := opts.ChatInfoRefresher.RefreshChatInfo(context.Background(), id); err != nil {
+			t.Errorf("RefreshChatInfo(%q): %v", id, err)
+		}
+	}
 }
 
 func TestBuildSlackRuntimeDepsPreservesCommonCapabilities(t *testing.T) {

@@ -1356,7 +1356,7 @@ func handleTodoTasks(w http.ResponseWriter, r *http.Request, cronPath string, co
 
 func todoChatOptions(ctx context.Context, contactsDir string, mode string) []todoChatOption {
 	store := chatinfo.NewStore(contactsDir)
-	items, exists, err := store.Read(ctx)
+	items, _, err := store.Read(ctx)
 	if err != nil {
 		items = nil
 	}
@@ -1373,21 +1373,42 @@ func todoChatOptions(ctx context.Context, contactsDir string, mode string) []tod
 			Name:     "Console User",
 		})
 	}
-	if !exists {
-		return out
-	}
+	seen := make(map[string]bool, len(items))
 	for _, item := range items {
-		name := strings.TrimSpace(item.Name)
-		if strings.TrimSpace(item.ChatID) == "" || name == "" {
+		chatID := strings.TrimSpace(item.ChatID)
+		key := strings.ToLower(chatID)
+		if chatID == "" || seen[key] {
 			continue
 		}
+		name := strings.TrimSpace(item.Name)
+		if name == "" {
+			name = chatID
+		}
+		seen[key] = true
 		out = append(out, todoChatOption{
-			ChatID:    strings.TrimSpace(item.ChatID),
+			ChatID:    chatID,
 			Platform:  strings.TrimSpace(item.Platform),
 			Type:      strings.TrimSpace(item.Type),
 			Name:      name,
 			ExpiresAt: item.ExpiresAt,
 		})
+	}
+	// Newly observed conversations are selectable before their remote profiles
+	// have been fetched. Reading local contacts keeps this endpoint network-free.
+	candidates, err := chatinfo.ActiveContactCandidateIDs(ctx, contactsDir)
+	if err == nil {
+		for _, chatID := range candidates {
+			key := strings.ToLower(chatID)
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			out = append(out, todoChatOption{
+				ChatID:   chatID,
+				Platform: chatinfo.PlatformFromChatID(chatID),
+				Name:     chatID,
+			})
+		}
 	}
 	return out
 }

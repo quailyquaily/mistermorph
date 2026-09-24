@@ -156,6 +156,10 @@ slack:
 
 Inbound Slack images are downloaded under `file_cache_dir/slack/` and passed to image-capable models as image parts. The current runtime accepts PNG, JPEG, and WebP images, keeps at most 3 images per message, and rejects images larger than 5 MiB each.
 
+The Todo chat selector includes conversations recorded in active contacts as well as cached chat profiles. After Morph accepts a message from a new conversation, reload Todo to see that target without restarting the runtime. The selector reads local data and does not call Slack. Targets without a cached name display their full chat ID.
+
+When fetching a Slack DM profile, Morph uses the other participant's display name, real name, or username. If no name is available, it uses the chat ID. Reading DM profiles requires `im:read`; resolving participant names requires `users:read`. For standalone `morph slack`, profile requests use the same effective bot token and API base URL as the Slack runtime, including a token supplied through `--slack-bot-token`.
+
 ## 7. Run Example
 
 ```bash

@@ -137,12 +137,12 @@ func TestTodoTasksRouteRoundTrip(t *testing.T) {
 	if payload.LLMDefaultRoute.Name != "default" || payload.LLMDefaultRoute.InferenceProvider != "openai" || payload.LLMDefaultRoute.Model != "batch-model" {
 		t.Fatalf("unexpected default llm route: %#v", payload.LLMDefaultRoute)
 	}
-	if len(payload.ChatOptions) != 1 || payload.ChatOptions[0].ChatID != "tg:-100" || payload.ChatOptions[0].Name != "Project Room" {
+	if len(payload.ChatOptions) != 2 || payload.ChatOptions[0].ChatID != "tg:-100" || payload.ChatOptions[0].Name != "Project Room" || payload.ChatOptions[1].Name != "tg:-200" {
 		t.Fatalf("unexpected chat options: %#v", payload.ChatOptions)
 	}
 }
 
-func TestTodoTasksRouteDoesNotFetchChatOptionsFromActiveContacts(t *testing.T) {
+func TestTodoTasksRouteIncludesContactChatsWithoutExternalFetch(t *testing.T) {
 	stateDir := t.TempDir()
 
 	var fetchCount atomic.Int32
@@ -212,8 +212,48 @@ func TestTodoTasksRouteDoesNotFetchChatOptionsFromActiveContacts(t *testing.T) {
 	if got := fetchCount.Load(); got != 0 {
 		t.Fatalf("external chat profile fetch count = %d, want 0", got)
 	}
-	if len(payload.ChatOptions) != 0 {
-		t.Fatalf("chat_options len = %d, want 0: %#v", len(payload.ChatOptions), payload.ChatOptions)
+	if len(payload.ChatOptions) != 1 || payload.ChatOptions[0].ChatID != "slack:T111:C999" || payload.ChatOptions[0].Name != "slack:T111:C999" || payload.ChatOptions[0].Platform != "slack" {
+		t.Fatalf("unexpected contact chat options: %#v", payload.ChatOptions)
+	}
+}
+
+func TestTodoChatOptionsIncludeNewSlackChatsAndNamelessCachedDM(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	store := chatinfo.NewStore(dir)
+	if err := store.Write(ctx, []chatinfo.Info{
+		{ChatID: "slack:T111:C222", Platform: "slack", Type: "channel", Name: "Project Room"},
+		{ChatID: "slack:T111:D333", Platform: "slack", Type: "im"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	before := todoChatOptions(ctx, dir, "console")
+	if len(before) != 3 {
+		t.Fatalf("options before new contact = %#v, want console, channel and nameless DM", before)
+	}
+	if err := contacts.NewFileStore(dir).PutContact(ctx, contacts.Contact{
+		ContactID: "slack:T111:U444", Channel: contacts.ChannelSlack, Kind: contacts.KindHuman,
+		SlackTeamID: "T111", SlackUserID: "U444", SlackDMChannelID: "D555", SlackChannelIDs: []string{"C222", "C666"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	options := todoChatOptions(ctx, dir, "console")
+	if len(options) != 5 {
+		t.Fatalf("options after new contact = %#v, want five deduplicated options", options)
+	}
+	names := map[string]string{}
+	for _, option := range options {
+		names[option.ChatID] = option.Name
+	}
+	for id, name := range map[string]string{
+		"slack:T111:C222": "Project Room",
+		"slack:T111:D333": "slack:T111:D333",
+		"slack:T111:D555": "slack:T111:D555",
+		"slack:T111:C666": "slack:T111:C666",
+	} {
+		if names[id] != name {
+			t.Errorf("name for %s = %q, want %q", id, names[id], name)
+		}
 	}
 }
 

@@ -169,6 +169,7 @@ func (f *Fetcher) fetchSlack(ctx context.Context, chatID string) (Info, error) {
 		Channel struct {
 			ID        string `json:"id"`
 			Name      string `json:"name"`
+			User      string `json:"user"`
 			IsChannel bool   `json:"is_channel"`
 			IsGroup   bool   `json:"is_group"`
 			IsIM      bool   `json:"is_im"`
@@ -181,11 +182,43 @@ func (f *Fetcher) fetchSlack(ctx context.Context, chatID string) (Info, error) {
 	if !resp.OK {
 		return Info{}, fmt.Errorf("slack conversations.info failed: %s", strings.TrimSpace(resp.Error))
 	}
+	name := strings.TrimSpace(resp.Channel.Name)
+	if resp.Channel.IsIM && strings.TrimSpace(resp.Channel.User) != "" {
+		userURL, err := url.Parse(joinURL(f.slackBaseURL, "/users.info"))
+		if err != nil {
+			return Info{}, err
+		}
+		query := userURL.Query()
+		query.Set("user", strings.TrimSpace(resp.Channel.User))
+		userURL.RawQuery = query.Encode()
+		var userResp struct {
+			OK   bool `json:"ok"`
+			User struct {
+				Name     string `json:"name"`
+				RealName string `json:"real_name"`
+				Profile  struct {
+					DisplayName string `json:"display_name"`
+					RealName    string `json:"real_name"`
+				} `json:"profile"`
+			} `json:"user"`
+		}
+		if err := f.doJSON(ctx, http.MethodGet, userURL.String(), "Bearer "+f.slackBotToken, nil, &userResp); err == nil && userResp.OK {
+			for _, candidate := range []string{userResp.User.Profile.DisplayName, userResp.User.Profile.RealName, userResp.User.RealName, userResp.User.Name} {
+				if candidate = strings.TrimSpace(candidate); candidate != "" {
+					name = candidate
+					break
+				}
+			}
+		}
+	}
+	if name == "" {
+		name = chatID
+	}
 	return Info{
 		ChatID:   chatID,
 		Platform: "slack",
 		Type:     slackChatType(resp.Channel.IsIM, resp.Channel.IsMPIM, resp.Channel.IsGroup),
-		Name:     strings.TrimSpace(resp.Channel.Name),
+		Name:     name,
 	}, nil
 }
 

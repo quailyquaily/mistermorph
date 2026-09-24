@@ -57,7 +57,7 @@ func NewCommand(d Dependencies) *cobra.Command {
 				InspectRequest:                configutil.FlagOrViperBool(cmd, "inspect-request", ""),
 			})
 			deps := buildSlackRuntimeDeps(d, runtimeToolsConfig, viper.GetViper())
-			awarenessDeps, awarenessOpts := buildAwarenessRuntime(d, cfg, hbCfg, cronCfg, botToken, runOpts.AllowedChannelIDs, runOpts.TaskTimeout, runOpts.BaseURL, runtimeToolsConfig, runOpts.InspectPrompt, runOpts.InspectRequest, deps.RuntimePaths, chatinfo.NewFetcher(chatinfo.FetcherOptionsFromReader(viper.GetViper())))
+			awarenessDeps, awarenessOpts := buildAwarenessRuntime(d, cfg, hbCfg, cronCfg, botToken, runOpts.AllowedChannelIDs, runOpts.TaskTimeout, runOpts.BaseURL, runtimeToolsConfig, runOpts.InspectPrompt, runOpts.InspectRequest, deps.RuntimePaths, chatinfo.FetcherOptionsFromReader(viper.GetViper()))
 			awarenessDeps.DefaultWorkspaceDir = deps.DefaultWorkspaceDir
 			return runSlackWithOptionalAwareness(cmd.Context(), deps, runOpts, awarenessDeps, awarenessOpts, (hbCfg.Enabled && hbCfg.Interval > 0) || cronCfg.Enabled)
 		},
@@ -91,11 +91,13 @@ func buildAwarenessRuntime(
 	inspectPrompt bool,
 	inspectRequest bool,
 	paths runtimepaths.Paths,
-	chatInfoRefresher chatinfo.Refresher,
+	chatInfoOptions chatinfo.FetcherOptions,
 ) (awarenessruntime.Dependencies, awarenessruntime.RunOptions) {
 	awarenessDeps := d.Dependencies
 	awarenessDeps.RuntimeToolsConfig = runtimeToolsConfig
 	awarenessDeps.RuntimePaths = paths
+	chatInfoOptions.SlackBotToken = botToken
+	chatInfoOptions.SlackBaseURL = baseURL
 	awarenessOpts := awarenessruntime.RunOptions{
 		Interval:          hbCfg.Interval,
 		TaskTimeout:       taskTimeout,
@@ -110,7 +112,7 @@ func buildAwarenessRuntime(
 		Notifier:          newSlackAwarenessNotifier(botToken, baseURL, allowedChannelIDs),
 		CronEnabled:       cronCfg.Enabled,
 		CronPath:          paths.CronPath,
-		ChatInfoRefresher: chatInfoRefresher,
+		ChatInfoRefresher: chatinfo.NewFetcher(chatInfoOptions),
 	}
 	return awarenessDeps, awarenessOpts
 }
