@@ -12,6 +12,7 @@ export function parseLogLine(raw) {
     line,
     level: level === "warning" ? "warn" : level,
     time: typeof parsed.time === "string" ? parsed.time : "",
+    event: typeof parsed.msg === "string" ? parsed.msg : "",
     msg: typeof parsed.msg === "string" && parsed.msg ? parsed.msg : line,
     fields: Object.entries(parsed)
       .filter(([key]) => !["level", "time", "msg"].includes(key))
@@ -19,9 +20,13 @@ export function parseLogLine(raw) {
   };
 }
 
-export function filterLogEntries(entries, query, level) {
+export function filterLogEntries(entries, query, level, { event = "", since = null } = {}) {
   const needle = query.trim().toLowerCase();
-  return entries.filter((entry) => (!level || entry.level === level) && (!needle || entry.line.toLowerCase().includes(needle)));
+  return entries.filter((entry) =>
+    (!level || (level === "issues" ? ["warn", "error"].includes(entry.level) : entry.level === level)) &&
+    (!event || entry.event === event) &&
+    (since === null || Date.parse(entry.time) >= since) &&
+    (!needle || entry.line.toLowerCase().includes(needle)));
 }
 
 export function logSnapshotKey(payload) {

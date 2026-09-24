@@ -38,3 +38,29 @@ test("refresh detects appended, rotated, and rewritten logs, not timestamp-only 
   assert.notEqual(key, logSnapshotKey({ ...base, items: ["same", "edit"] }));
   assert.equal(logSnapshotKey({ items: null }), logSnapshotKey({ items: [] }));
 });
+
+test("event, severity, time, and text filters intersect without losing duplicate entries", () => {
+  const entries = [
+    { time: "2026-09-24T21:00:00+09:00", level: "WARN", msg: "request_failed", task_id: "task_a" },
+    { time: "2026-09-24T12:01:00Z", level: "ERROR", msg: "request_failed", task_id: "task_a" },
+    { time: "2026-09-24T12:02:00Z", level: "INFO", msg: "request_failed", task_id: "task_a" },
+    { time: "2026-09-24T12:03:00Z", level: "ERROR", msg: "request_started", task_id: "task_a" },
+    { time: "invalid", level: "ERROR", msg: "request_failed", task_id: "task_a" },
+  ].map((entry) => parseLogLine(JSON.stringify(entry)));
+  const since = Date.parse("2026-09-24T12:00:00Z");
+  assert.deepEqual(filterLogEntries(entries, " TASK_A ", "issues", { event: "request_failed", since }), entries.slice(0, 2));
+  assert.deepEqual(filterLogEntries(entries, "", "", { since: since + 1 }), entries.slice(1, 4));
+  assert.deepEqual(filterLogEntries(entries, "", "", { event: "request" }), []);
+  assert.deepEqual(filterLogEntries([entries[0], entries[0]], "", "issues"), [entries[0], entries[0]]);
+  assert.deepEqual(filterLogEntries(entries, "", "error", { event: "request_failed" }), [entries[1], entries[4]]);
+});
+
+test("only structured message names are selectable events; undated lines survive unrestricted filtering", () => {
+  const raw = parseLogLine("request_failed");
+  const structured = parseLogLine('{"msg":"request_failed"}');
+  assert.equal(raw.event, "");
+  assert.equal(structured.event, "request_failed");
+  assert.deepEqual(filterLogEntries([raw, structured], "", ""), [raw, structured]);
+  assert.deepEqual(filterLogEntries([raw, structured], "", "", { event: "request_failed" }), [structured]);
+  assert.deepEqual(filterLogEntries([raw, structured], "", "", { since: 0 }), []);
+});
