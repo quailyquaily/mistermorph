@@ -12,6 +12,7 @@ import (
 const (
 	RoutePurposeMainLoop   = "main_loop"
 	RoutePurposeAddressing = "addressing"
+	RoutePurposeDecision   = "decision"
 	RoutePurposeAwareness  = "awareness"
 	RoutePurposeHeartbeat  = "heartbeat"
 	RoutePurposeThink      = "think"
@@ -80,6 +81,7 @@ type RoutePolicyConfig struct {
 type PurposeRoutes struct {
 	MainLoop   RoutePolicyConfig `mapstructure:"main_loop"`
 	Addressing RoutePolicyConfig `mapstructure:"addressing"`
+	Decision   RoutePolicyConfig `mapstructure:"decision"`
 	Awareness  RoutePolicyConfig `mapstructure:"awareness"`
 	Heartbeat  RoutePolicyConfig `mapstructure:"heartbeat"`
 	Think      RoutePolicyConfig `mapstructure:"think"`
@@ -381,6 +383,7 @@ func normalizeRoutesConfig(cfg RoutesConfig) RoutesConfig {
 func normalizePurposeRoutes(cfg PurposeRoutes) PurposeRoutes {
 	cfg.MainLoop = normalizeRoutePolicy(cfg.MainLoop)
 	cfg.Addressing = normalizeRoutePolicy(cfg.Addressing)
+	cfg.Decision = normalizeRoutePolicy(cfg.Decision)
 	cfg.Awareness = normalizeRoutePolicy(cfg.Awareness)
 	cfg.Heartbeat = normalizeRoutePolicy(cfg.Heartbeat)
 	cfg.Think = normalizeRoutePolicy(cfg.Think)
@@ -408,7 +411,10 @@ func routeTargetForPurpose(routes PurposeRoutes, purpose string) RoutePolicyConf
 	switch purpose {
 	case RoutePurposeMainLoop:
 		return routes.MainLoop
-	case RoutePurposeAddressing:
+	case RoutePurposeDecision, RoutePurposeAddressing:
+		if !routePolicyEmpty(routes.Decision) {
+			return routes.Decision
+		}
 		return routes.Addressing
 	case RoutePurposeAwareness:
 		if !routePolicyEmpty(routes.Awareness) {
@@ -432,7 +438,7 @@ func normalizeRoutePurpose(purpose string) string {
 
 func isSupportedRoutePurpose(purpose string) bool {
 	switch purpose {
-	case RoutePurposeMainLoop, RoutePurposeAddressing, RoutePurposeAwareness, RoutePurposeHeartbeat, RoutePurposeThink, RoutePurposePlanCreate:
+	case RoutePurposeMainLoop, RoutePurposeDecision, RoutePurposeAddressing, RoutePurposeAwareness, RoutePurposeHeartbeat, RoutePurposeThink, RoutePurposePlanCreate:
 		return true
 	default:
 		return false
@@ -705,6 +711,10 @@ func routePolicyIdentity(policy RoutePolicyConfig) string {
 }
 
 func parseRoutesConfig(raw map[string]any) (RoutesConfig, error) {
+	decision, err := parseRoutePolicyValue(raw[RoutePurposeDecision], "llm.routes."+RoutePurposeDecision)
+	if err != nil {
+		return RoutesConfig{}, err
+	}
 	mainLoop, err := parseRoutePolicyValue(raw[RoutePurposeMainLoop], "llm.routes."+RoutePurposeMainLoop)
 	if err != nil {
 		return RoutesConfig{}, err
@@ -733,6 +743,7 @@ func parseRoutesConfig(raw map[string]any) (RoutesConfig, error) {
 		PurposeRoutes: PurposeRoutes{
 			MainLoop:   mainLoop,
 			Addressing: addressing,
+			Decision:   decision,
 			Awareness:  awareness,
 			Heartbeat:  heartbeat,
 			Think:      think,

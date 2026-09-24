@@ -52,6 +52,7 @@ func decideSlackGroupTrigger(
 		ExplicitMatched:          explicitMentioned,
 		AddressingFallbackReason: mode,
 		AddressingTimeout:        addressingLLMTimeout,
+		ReactionTool:             addressingReactionTool,
 		Addressing: func(addrCtx context.Context) (grouptrigger.Addressing, bool, error) {
 			return slackAddressingDecisionViaLLM(addrCtx, client, model, event, history, emojiList, addressingReactionTool, personaDir...)
 		},
@@ -92,14 +93,17 @@ func slackAddressingDecisionViaLLM(ctx context.Context, client llm.Client, model
 	if err != nil {
 		return grouptrigger.Addressing{}, false, fmt.Errorf("render addressing prompts: %w", err)
 	}
+	var reactionEmojis []string
+	if addressingTool != nil {
+		reactionEmojis = strings.Split(emojiList, ",")
+	}
 	return grouptrigger.DecideViaLLM(ctx, grouptrigger.LLMDecisionOptions{
 		Client:         client,
 		Model:          model,
 		Scene:          "slack.addressing_decision",
 		SystemPrompt:   systemPrompt,
 		UserPrompt:     userPrompt,
-		AddressingTool: addressingTool,
-		MaxToolRounds:  3,
+		ReactionEmojis: reactionEmojis,
 	})
 }
 

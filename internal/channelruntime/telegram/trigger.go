@@ -31,7 +31,7 @@ func quoteReplyMessageIDForGroupTrigger(msg *telegramMessage, dec telegramGroupT
 
 // groupTriggerDecision belongs to the trigger layer.
 // It decides whether this group message should enter an agent run.
-// It must not decide output modality (text reply vs reaction), which is handled in the generation layer.
+// An accepted lightweight decision sends a reaction without starting an agent run.
 func groupTriggerDecision(
 	ctx context.Context,
 	client llm.Client,
@@ -60,6 +60,7 @@ func groupTriggerDecision(
 		ExplicitMatched:          explicitMentioned,
 		AddressingFallbackReason: mode,
 		AddressingTimeout:        addressingLLMTimeout,
+		ReactionTool:             addressingReactionTool,
 		Addressing: func(addrCtx context.Context) (grouptrigger.Addressing, bool, error) {
 			return addressingDecisionViaLLM(addrCtx, client, model, msg, text, history, addressingReactionTool, personaDir...)
 		},
@@ -172,14 +173,17 @@ func addressingDecisionViaLLM(
 	if err != nil {
 		return grouptrigger.Addressing{}, false, fmt.Errorf("render addressing prompts: %w", err)
 	}
+	var reactionEmojis []string
+	if addressingTool != nil {
+		reactionEmojis = telegramtools.StandardReactionEmojis()
+	}
 	return grouptrigger.DecideViaLLM(ctx, grouptrigger.LLMDecisionOptions{
 		Client:         client,
 		Model:          model,
 		Scene:          "telegram.addressing_decision",
 		SystemPrompt:   sys,
 		UserPrompt:     user,
-		AddressingTool: addressingTool,
-		MaxToolRounds:  3,
+		ReactionEmojis: reactionEmojis,
 	})
 }
 

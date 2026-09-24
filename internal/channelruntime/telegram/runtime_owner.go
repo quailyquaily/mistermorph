@@ -34,6 +34,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/textutil"
 	"github.com/quailyquaily/mistermorph/internal/topiccontext"
 	"github.com/quailyquaily/mistermorph/internal/workspace"
+	"github.com/quailyquaily/mistermorph/tools"
 	telegramtools "github.com/quailyquaily/mistermorph/tools/telegram"
 )
 
@@ -1081,8 +1082,10 @@ func (s *telegramRuntimeState) handleUpdate(update telegramUpdate) {
 			historySnapshot := append([]chathistory.ChatHistoryItem(nil), s.history[conversationKey]...)
 			s.stateMu.Unlock()
 			var addressingReactionTool *telegramtools.ReactTool
+			var reactionTool tools.Tool
 			if s.api != nil && message.MessageID > 0 {
 				addressingReactionTool = telegramtools.NewReactTool(newTelegramToolAPI(s.api), chatID, message.MessageID, s.allowedChatIDs)
+				reactionTool = addressingReactionTool
 			}
 			decisionCtx := context.Background()
 			if message.MessageID > 0 {
@@ -1109,7 +1112,7 @@ func (s *telegramRuntimeState) handleUpdate(update telegramUpdate) {
 				s.options.AddressingConfidenceThreshold,
 				s.options.AddressingInterjectThreshold,
 				historySnapshot,
-				addressingReactionTool,
+				reactionTool,
 				s.dependencies.RuntimePaths.PersonaDir,
 			)
 			if generationLease != nil {
@@ -1143,6 +1146,10 @@ func (s *telegramRuntimeState) handleUpdate(update telegramUpdate) {
 					appendIgnoredInboundHistory(rawText)
 				}
 				recordUntriggered()
+				return
+			}
+			if decision.ReactionHandled {
+				appendIgnoredInboundHistory(rawText)
 				return
 			}
 			replyToMessageID = quoteReplyMessageIDForGroupTrigger(message, decision)

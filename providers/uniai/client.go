@@ -91,6 +91,8 @@ func New(cfg Config) (*Client, error) {
 	geminiBase := strings.TrimSpace(cfg.Endpoint)
 
 	uCfg := uniaiapi.Config{
+		TypeSafeAPIKey:      strings.TrimSpace(cfg.APIKey),
+		TypeSafeAPIBase:     strings.TrimSpace(cfg.Endpoint),
 		Provider:            provider,
 		OpenAIAPIKey:        openAIKey,
 		OpenAIAPIBase:       openAIBase,
@@ -135,6 +137,9 @@ func New(cfg Config) (*Client, error) {
 }
 
 func (c *Client) Chat(ctx context.Context, req llm.Request) (llm.Result, error) {
+	if c.provider == "typesafe" {
+		return llm.Result{}, fmt.Errorf("typesafe supports Evaluate, not Chat")
+	}
 	start := time.Now()
 	if c.requestTimeout > 0 {
 		var cancel context.CancelFunc

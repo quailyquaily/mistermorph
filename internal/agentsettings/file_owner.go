@@ -1131,6 +1131,9 @@ func validateAgentConfigDocument(data []byte, effectiveLLM LLMSettingsPayload) (
 	if err := validateAgentLLMRoute(values, llmutil.RoutePurposeMainLoop); err != nil {
 		return nil, err
 	}
+	if err := validateAgentLLMRoute(values, llmutil.RoutePurposeDecision); err != nil {
+		return nil, err
+	}
 	for name := range values.Profiles {
 		name = strings.TrimSpace(name)
 		if name == "" {
@@ -1138,7 +1141,16 @@ func validateAgentConfigDocument(data []byte, effectiveLLM LLMSettingsPayload) (
 		}
 		profileValues := values
 		profileValues.Routes.MainLoop = llmutil.RoutePolicyConfig{Profile: name}
-		if err := validateAgentLLMRoute(profileValues, llmutil.RoutePurposeMainLoop); err != nil {
+		purpose := llmutil.RoutePurposeMainLoop
+		profile, err := llmutil.ResolveProfile(values, name)
+		if err != nil {
+			return nil, err
+		}
+		if profile.ClientConfig.Provider == "typesafe" {
+			purpose = llmutil.RoutePurposeDecision
+			profileValues.Routes.Decision = llmutil.RoutePolicyConfig{Profile: name}
+		}
+		if err := validateAgentLLMRoute(profileValues, purpose); err != nil {
 			return nil, err
 		}
 	}

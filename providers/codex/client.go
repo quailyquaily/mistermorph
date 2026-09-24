@@ -54,18 +54,6 @@ func (c *Client) Chat(ctx context.Context, req llm.Request) (llm.Result, error) 
 	if c == nil {
 		return llm.Result{}, fmt.Errorf("codex provider is nil")
 	}
-	headers := sanitizeHeaders(c.cfg.Headers)
-	apiKey := c.cfg.APIKey
-	if !codexauth.UsesAPIKey(c.cfg.Endpoint, apiKey) {
-		token, err := codexauth.ResolveToken(ctx, c.cfg.StateDir, c.cfg.OAuth)
-		if err != nil {
-			return llm.Result{}, err
-		}
-		apiKey = token.AccessToken
-		if accountID := strings.TrimSpace(token.AccountID); accountID != "" {
-			headers["ChatGPT-Account-ID"] = accountID
-		}
-	}
 	req, err := prepareCodexRequest(req)
 	if err != nil {
 		return llm.Result{}, err
@@ -77,7 +65,39 @@ func (c *Client) Chat(ctx context.Context, req llm.Request) (llm.Result, error) 
 		req.OnStream = func(llm.StreamEvent) error { return nil }
 	}
 
-	base, err := uniaiProvider.New(uniaiProvider.Config{
+	base, err := c.baseClient(ctx)
+	if err != nil {
+		return llm.Result{}, err
+	}
+	return base.Chat(ctx, req)
+}
+
+func (c *Client) Evaluate(ctx context.Context, req llm.EvaluateRequest) (*llm.EvaluateResult, error) {
+	if c == nil {
+		return nil, llm.ErrEvaluateUnsupported
+	}
+	base, err := c.baseClient(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return base.Evaluate(ctx, req)
+}
+
+// baseClient resolves the same credentials for Chat and Evaluate.
+func (c *Client) baseClient(ctx context.Context) (*uniaiProvider.Client, error) {
+	headers := sanitizeHeaders(c.cfg.Headers)
+	apiKey := c.cfg.APIKey
+	if !codexauth.UsesAPIKey(c.cfg.Endpoint, apiKey) {
+		token, err := codexauth.ResolveToken(ctx, c.cfg.StateDir, c.cfg.OAuth)
+		if err != nil {
+			return nil, err
+		}
+		apiKey = token.AccessToken
+		if accountID := strings.TrimSpace(token.AccountID); accountID != "" {
+			headers["ChatGPT-Account-ID"] = accountID
+		}
+	}
+	return uniaiProvider.New(uniaiProvider.Config{
 		Provider:           "openai_codex",
 		Endpoint:           c.cfg.Endpoint,
 		APIKey:             apiKey,
@@ -88,10 +108,6 @@ func (c *Client) Chat(ctx context.Context, req llm.Request) (llm.Result, error) 
 		ToolsEmulationMode: c.cfg.ToolsEmulationMode,
 		ReasoningEffort:    c.cfg.ReasoningEffort,
 	})
-	if err != nil {
-		return llm.Result{}, err
-	}
-	return base.Chat(ctx, req)
 }
 
 func prepareCodexRequest(req llm.Request) (llm.Request, error) {

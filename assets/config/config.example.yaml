@@ -124,12 +124,24 @@ llm:
   #     model: "grok-4.1-fast-reasoning"
   #     api_key: "${XAI_API_KEY}"
   #     reasoning_effort: "high"
+  #   judge:
+  #     inference_provider: typesafe # Evaluate only; not available for Chat routes
+  #     model: "jev-1.13.0"
+  #     api_key: "${TYPESAFE_API_KEY}"
+  #     request_timeout: "15s"
   #   grok_subscription:
   #     inference_provider: xai_oauth
   #     model: "grok-4.5"
   #     reasoning_effort: "high"
   # Optional route map. Supported purposes:
-  #   main_loop | addressing | awareness | heartbeat | think | plan_create
+  #   main_loop | decision | awareness | heartbeat | think | plan_create
+  # `decision` selects the group-response evaluator. Unset uses `default`.
+  # `addressing` is a legacy alias, used only when `decision` is unset.
+  # Evaluate uses uniai's native-or-Chat emulation fallback on the selected model;
+  # cross-profile fallback still requires explicit fallback_profiles below.
+  # Evaluate uses request_timeout and supported reasoning_effort. It does not
+  # forward temperature, reasoning_budget_tokens, tools_emulation_mode, or Chat
+  # cache hints. Score thresholds use 10 levels (0..9), normalized by dividing by 9.
   # `heartbeat` is kept as a legacy alias for `awareness`.
   # `/think <task>` uses routes.think when set, otherwise the default profile,
   # then temporarily applies reasoning_effort: "xhigh" for that task.
@@ -141,7 +153,7 @@ llm:
   #       - profile: cheap
   #         weight: 1
   #     fallback_profiles: ["reasoning"]
-  #   addressing:
+  #   decision:
   #     profile: cheap
   #     fallback_profiles: ["default"]
   #   awareness: cheap

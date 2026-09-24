@@ -6,6 +6,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/quailyquaily/mistermorph/llm"
 )
 
 const (
@@ -14,6 +16,7 @@ const (
 	unknownScene    = "unknown"
 
 	operationChat          = "chat"
+	operationEvaluate      = "evaluate"
 	operationImageGenerate = "image_generate"
 	operationImageEdit     = "image_edit"
 )
@@ -25,29 +28,37 @@ type Offset struct {
 }
 
 type RequestRecord struct {
-	TS                       string           `json:"ts"`
-	RunID                    string           `json:"run_id,omitempty"`
-	OriginEventID            string           `json:"origin_event_id,omitempty"`
-	Provider                 string           `json:"provider"`
-	APIBase                  string           `json:"api_base,omitempty"`
-	APIHost                  string           `json:"api_host"`
-	Model                    string           `json:"model"`
-	Operation                string           `json:"operation,omitempty"`
-	Scene                    string           `json:"scene,omitempty"`
-	InputTokens              int64            `json:"input_tokens"`
-	OutputTokens             int64            `json:"output_tokens"`
-	TotalTokens              int64            `json:"total_tokens"`
-	CachedInputTokens        int64            `json:"cached_input_tokens,omitempty"`
-	CacheCreationInputTokens int64            `json:"cache_creation_input_tokens,omitempty"`
-	CacheDetails             map[string]int64 `json:"cache_details,omitempty"`
-	CostCurrency             string           `json:"cost_currency,omitempty"`
-	CostEstimated            bool             `json:"cost_estimated,omitempty"`
-	InputCost                float64          `json:"input_cost,omitempty"`
-	CachedInputCost          float64          `json:"cached_input_cost,omitempty"`
-	CacheCreationInputCost   float64          `json:"cache_creation_input_cost,omitempty"`
-	OutputCost               float64          `json:"output_cost,omitempty"`
-	TotalCost                float64          `json:"total_cost,omitempty"`
-	DurationMs               int64            `json:"duration_ms,omitempty"`
+	Evaluation               *EvaluationRecord `json:"evaluation,omitempty"`
+	TS                       string            `json:"ts"`
+	RunID                    string            `json:"run_id,omitempty"`
+	OriginEventID            string            `json:"origin_event_id,omitempty"`
+	Provider                 string            `json:"provider"`
+	APIBase                  string            `json:"api_base,omitempty"`
+	APIHost                  string            `json:"api_host"`
+	Model                    string            `json:"model"`
+	Operation                string            `json:"operation,omitempty"`
+	Scene                    string            `json:"scene,omitempty"`
+	InputTokens              int64             `json:"input_tokens"`
+	OutputTokens             int64             `json:"output_tokens"`
+	TotalTokens              int64             `json:"total_tokens"`
+	CachedInputTokens        int64             `json:"cached_input_tokens,omitempty"`
+	CacheCreationInputTokens int64             `json:"cache_creation_input_tokens,omitempty"`
+	CacheDetails             map[string]int64  `json:"cache_details,omitempty"`
+	CostCurrency             string            `json:"cost_currency,omitempty"`
+	CostEstimated            bool              `json:"cost_estimated,omitempty"`
+	InputCost                float64           `json:"input_cost,omitempty"`
+	CachedInputCost          float64           `json:"cached_input_cost,omitempty"`
+	CacheCreationInputCost   float64           `json:"cache_creation_input_cost,omitempty"`
+	OutputCost               float64           `json:"output_cost,omitempty"`
+	TotalCost                float64           `json:"total_cost,omitempty"`
+	DurationMs               int64             `json:"duration_ms,omitempty"`
+}
+
+// EvaluationRecord preserves missing counts separately from aggregate zeros.
+type EvaluationRecord struct {
+	Emulated bool               `json:"emulated"`
+	Failed   bool               `json:"failed"`
+	Usage    *llm.EvaluateUsage `json:"usage,omitempty"`
 }
 
 type Totals struct {

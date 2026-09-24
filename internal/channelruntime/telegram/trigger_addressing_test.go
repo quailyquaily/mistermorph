@@ -2,29 +2,40 @@ package telegram
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"testing"
-
 	"github.com/quailyquaily/mistermorph/llm"
+	"github.com/quailyquaily/mistermorph/tools"
+	"testing"
 )
 
 type stubAddressingLLMClient struct {
-	results []llm.Result
-	err     error
-	calls   []llm.Request
+	addressed bool
+	response  string
+	calls     []llm.EvaluateRequest
 }
 
-func (s *stubAddressingLLMClient) Chat(_ context.Context, req llm.Request) (llm.Result, error) {
+func (s *stubAddressingLLMClient) Chat(context.Context, llm.Request) (llm.Result, error) {
+	panic("unexpected Chat")
+}
+func (s *stubAddressingLLMClient) Evaluate(_ context.Context, req llm.EvaluateRequest) (*llm.EvaluateResult, error) {
 	s.calls = append(s.calls, req)
-	if s.err != nil {
-		return llm.Result{}, s.err
+	yes := true
+	score := 9.0
+	selected := s.response
+	if selected == "" {
+		for key, value := range req.Questions["response"].Options {
+			if value == "🤨" {
+				selected = key
+			}
+		}
 	}
-	if len(s.results) == 0 {
-		return llm.Result{}, fmt.Errorf("no stub result")
-	}
-	res := s.results[0]
-	s.results = s.results[1:]
-	return res, nil
+	return &llm.EvaluateResult{Emulated: true, Answers: map[string]llm.Answer{
+		"addressed":       {Kind: llm.Boolean, BooleanValue: &s.addressed},
+		"wanna_interject": {Kind: llm.Boolean, BooleanValue: &yes},
+		"confidence":      {Kind: llm.Score, ScoreValue: &score}, "interject": {Kind: llm.Score, ScoreValue: &score}, "impulse": {Kind: llm.Score, ScoreValue: &score},
+		"response": {Kind: llm.Choice, Selected: selected},
+	}}, nil
 }
 
 type stubAddressingTool struct {
@@ -34,47 +45,83 @@ type stubAddressingTool struct {
 	failOnEmoji string
 }
 
-func (s *stubAddressingTool) Name() string { return s.name }
-
-func (s *stubAddressingTool) Description() string { return "stub tool" }
-
-func (s *stubAddressingTool) ParameterSchema() string {
-	return `{"type":"object","properties":{"emoji":{"type":"string"}},"required":["emoji"]}`
-}
-
-func (s *stubAddressingTool) Execute(_ context.Context, params map[string]any) (string, error) {
+func (s *stubAddressingTool) Name() string            { return s.name }
+func (s *stubAddressingTool) Description() string     { return "stub" }
+func (s *stubAddressingTool) ParameterSchema() string { return "{}" }
+func (s *stubAddressingTool) Execute(_ context.Context, p map[string]any) (string, error) {
 	s.execCount++
-	emoji, _ := params["emoji"].(string)
-	s.lastEmoji = emoji
-	if emoji == s.failOnEmoji {
-		return "", fmt.Errorf("emoji not allowed: %s", emoji)
+	s.lastEmoji, _ = p["emoji"].(string)
+	if s.lastEmoji == s.failOnEmoji {
+		return "", fmt.Errorf("send failed")
 	}
 	return "ok", nil
 }
 
-func TestAddressingDecisionViaLLM_EnforceLightweightReaction(t *testing.T) {
-	client := &stubAddressingLLMClient{
-		results: []llm.Result{
-			{Text: `{"addressed":false,"confidence":0.2,"wanna_interject":true,"interject":0.1,"impulse":0.3,"is_lightweight":true,"reaction":"🤨","reason":"x"}`},
-		},
-	}
+func TestAddressingEvaluationDoesNotSendReaction(t *testing.T) {
+	c := &stubAddressingLLMClient{addressed: true}
 	tool := &stubAddressingTool{name: "message_react"}
+	got, ok, err := addressingDecisionViaLLM(context.Background(), c, "judge", nil, "Hi", nil, tool)
+	if err != nil || !ok || !got.IsLightweight || got.Reaction != "🤨" || tool.execCount != 0 || len(c.calls) != 1 {
+		t.Fatalf("got=%+v ok=%v err=%v sends=%d", got, ok, err, tool.execCount)
+	}
+}
 
-	got, ok, err := addressingDecisionViaLLM(context.Background(), client, "gpt-5.2", nil, "啧", nil, tool)
-	if err != nil {
-		t.Fatalf("addressingDecisionViaLLM() error = %v", err)
+func TestAddressingEvaluationReactionAvailability(t *testing.T) {
+	for _, enabled := range []bool{false, true} {
+		t.Run(fmt.Sprintf("enabled=%v", enabled), func(t *testing.T) {
+			client := &stubAddressingLLMClient{addressed: true, response: "text"}
+			var tool tools.Tool
+			if enabled {
+				tool = &stubAddressingTool{name: "message_react"}
+			}
+			got, ok, err := addressingDecisionViaLLM(context.Background(), client, "judge", nil, "Hi", nil, tool)
+			if err != nil || !ok || got.IsLightweight || len(client.calls) != 1 {
+				t.Fatalf("got=%+v ok=%v err=%v calls=%d", got, ok, err, len(client.calls))
+			}
+			options := client.calls[0].Questions["response"].Options
+			if !enabled && len(options) != 1 {
+				t.Fatalf("reaction offered without a tool: %v", options)
+			}
+			if enabled && options["reaction_0"] != "👍" {
+				t.Fatalf("missing first allowed reaction: %v", options)
+			}
+		})
 	}
-	if !ok {
-		t.Fatalf("addressingDecisionViaLLM() ok = false, want true")
-	}
-	if !got.IsLightweight {
-		t.Fatalf("IsLightweight = false, want true")
-	}
-	if tool.execCount != 1 {
-		t.Fatalf("tool exec count = %d, want 1", tool.execCount)
-	}
-	if tool.lastEmoji != "🤨" {
-		t.Fatalf("last emoji = %q, want %q", tool.lastEmoji, "🤨")
+}
+
+func TestGroupDecisionReactionGate(t *testing.T) {
+	for _, tt := range []struct {
+		name      string
+		addressed bool
+		response  string
+		fail      bool
+		sends     int
+		handled   bool
+		wantErr   bool
+	}{
+		{"reaction", true, "", false, 1, true, false},
+		{"ignored", false, "", false, 0, false, false},
+		{"text", true, "text", false, 0, false, false},
+		{"invalid", true, "bad-option", false, 0, false, true},
+		{"failed send", true, "", true, 1, false, true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &stubAddressingLLMClient{addressed: tt.addressed, response: tt.response}
+			tool := &stubAddressingTool{name: "message_react"}
+			if tt.fail {
+				tool.failOnEmoji = "🤨"
+			}
+			got, accepted, err := groupTriggerDecision(context.Background(), c, "judge", &telegramMessage{MessageID: 10, Text: "Hi"}, "bot", 99, "smart", 0, .6, .6, nil, tool)
+			if (err != nil) != tt.wantErr || got.ReactionHandled != tt.handled || tool.execCount != tt.sends {
+				t.Fatalf("decision=%+v err=%v sends=%d", got, err, tool.execCount)
+			}
+			if tt.wantErr && accepted {
+				t.Fatal("failed decision accepted")
+			}
+			if tt.response == "bad-option" && !errors.Is(err, llm.ErrEvaluateInvalidResponse) {
+				t.Fatal(err)
+			}
+		})
 	}
 }
 
@@ -228,100 +275,5 @@ func TestShouldIgnoreTelegramFirstMention(t *testing.T) {
 				t.Fatalf("shouldIgnoreTelegramFirstMention() = %v, want %v", got, tt.want)
 			}
 		})
-	}
-}
-
-func TestAddressingDecisionViaLLM_EnforceLightweightReactionReturnsErrorOnToolFailure(t *testing.T) {
-	client := &stubAddressingLLMClient{
-		results: []llm.Result{
-			{Text: `{"addressed":false,"confidence":0.2,"wanna_interject":true,"interject":0.1,"impulse":0.3,"is_lightweight":true,"reaction":"🚫","reason":"x"}`},
-		},
-	}
-	tool := &stubAddressingTool{name: "message_react", failOnEmoji: "🚫"}
-
-	_, _, err := addressingDecisionViaLLM(context.Background(), client, "gpt-5.2", nil, "啧", nil, tool)
-	if err == nil {
-		t.Fatalf("addressingDecisionViaLLM() error = nil, want non-nil")
-	}
-	if tool.execCount != 1 {
-		t.Fatalf("tool exec count = %d, want 1", tool.execCount)
-	}
-}
-
-func TestAddressingDecisionViaLLM_EmptyReactionKeepsLightweight(t *testing.T) {
-	client := &stubAddressingLLMClient{
-		results: []llm.Result{
-			{Text: `{"addressed":false,"confidence":0.2,"wanna_interject":true,"interject":0.1,"impulse":0.3,"is_lightweight":true,"reaction":"","reason":"x"}`},
-		},
-	}
-	tool := &stubAddressingTool{name: "message_react"}
-
-	got, ok, err := addressingDecisionViaLLM(context.Background(), client, "gpt-5.2", nil, "啧", nil, tool)
-	if err != nil {
-		t.Fatalf("addressingDecisionViaLLM() error = %v", err)
-	}
-	if !ok {
-		t.Fatalf("addressingDecisionViaLLM() ok = false, want true")
-	}
-	if !got.IsLightweight {
-		t.Fatalf("IsLightweight = false, want true")
-	}
-	if tool.execCount != 0 {
-		t.Fatalf("tool exec count = %d, want 0", tool.execCount)
-	}
-}
-
-func TestAddressingDecisionViaLLM_NoReactionWhenNotLightweight(t *testing.T) {
-	client := &stubAddressingLLMClient{
-		results: []llm.Result{
-			{Text: `{"addressed":false,"confidence":0.2,"wanna_interject":false,"interject":0.05,"impulse":0.1,"is_lightweight":false,"reason":"x"}`},
-		},
-	}
-	tool := &stubAddressingTool{name: "message_react"}
-
-	got, ok, err := addressingDecisionViaLLM(context.Background(), client, "gpt-5.2", nil, "啧", nil, tool)
-	if err != nil {
-		t.Fatalf("addressingDecisionViaLLM() error = %v", err)
-	}
-	if !ok {
-		t.Fatalf("addressingDecisionViaLLM() ok = false, want true")
-	}
-	if got.IsLightweight {
-		t.Fatalf("IsLightweight = true, want false")
-	}
-	if tool.execCount != 0 {
-		t.Fatalf("tool exec count = %d, want 0", tool.execCount)
-	}
-}
-
-func TestAddressingDecisionViaLLM_NoDuplicateReactionWhenModelAlreadyCalledTool(t *testing.T) {
-	client := &stubAddressingLLMClient{
-		results: []llm.Result{
-			{
-				ToolCalls: []llm.ToolCall{
-					{
-						ID:        "tc_1",
-						Name:      "message_react",
-						Arguments: map[string]any{"emoji": "🤨"},
-					},
-				},
-			},
-			{Text: `{"addressed":false,"confidence":0.2,"wanna_interject":true,"interject":0.1,"impulse":0.3,"is_lightweight":true,"reaction":"🤨","reason":"x"}`},
-		},
-	}
-	tool := &stubAddressingTool{name: "message_react"}
-
-	got, ok, err := addressingDecisionViaLLM(context.Background(), client, "gpt-5.2", nil, "啧", nil, tool)
-	if err != nil {
-		t.Fatalf("addressingDecisionViaLLM() error = %v", err)
-	}
-	if !ok {
-		t.Fatalf("addressingDecisionViaLLM() ok = false, want true")
-	}
-	if !got.IsLightweight {
-		t.Fatalf("IsLightweight = false, want true")
-	}
-	if tool.execCount != 1 {
-		t.Fatalf("tool exec count = %d, want 1", tool.execCount)
 	}
 }

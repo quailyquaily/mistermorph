@@ -2,6 +2,7 @@ package line
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"testing"
 
@@ -14,16 +15,44 @@ type stubLineAddressingLLMClient struct {
 	err     error
 }
 
-func (s *stubLineAddressingLLMClient) Chat(_ context.Context, _ llm.Request) (llm.Result, error) {
+func (s *stubLineAddressingLLMClient) Chat(context.Context, llm.Request) (llm.Result, error) {
+	panic("unexpected Chat")
+}
+func (s *stubLineAddressingLLMClient) Evaluate(_ context.Context, req llm.EvaluateRequest) (*llm.EvaluateResult, error) {
 	if s.err != nil {
-		return llm.Result{}, s.err
+		return nil, s.err
 	}
 	if len(s.results) == 0 {
-		return llm.Result{}, fmt.Errorf("no stub result")
+		return nil, fmt.Errorf("no stub result")
 	}
-	res := s.results[0]
+	// Existing behavioral fixtures are translated to native Evaluate answers.
+	var value struct {
+		Addressed      bool
+		Confidence     float64
+		WannaInterject bool `json:"wanna_interject"`
+		Interject      float64
+		Impulse        float64
+	}
+	if err := json.Unmarshal([]byte(s.results[0].Text), &value); err != nil {
+		return nil, err
+	}
 	s.results = s.results[1:]
-	return res, nil
+	addressed, wanna := 0.0, 0.0
+	if value.Addressed {
+		addressed = 1
+	}
+	if value.WannaInterject {
+		wanna = 1
+	}
+	confidence, interject, impulse := value.Confidence*9, value.Interject*9, value.Impulse*9
+	if len(req.Questions["response"].Options) != 1 {
+		return nil, fmt.Errorf("LINE must not offer reactions")
+	}
+	return &llm.EvaluateResult{Answers: map[string]llm.Answer{
+		"addressed": {Kind: llm.Boolean, ProbabilityTrue: &addressed}, "wanna_interject": {Kind: llm.Boolean, ProbabilityTrue: &wanna},
+		"confidence": {Kind: llm.Score, ScoreValue: &confidence}, "interject": {Kind: llm.Score, ScoreValue: &interject}, "impulse": {Kind: llm.Score, ScoreValue: &impulse},
+		"response": {Kind: llm.Choice, Selected: "text"},
+	}}, nil
 }
 
 func TestLineExplicitTriggerReason(t *testing.T) {
@@ -142,7 +171,7 @@ func TestDecideLineGroupTriggerTalkative(t *testing.T) {
 	}
 }
 
-func TestLineAddressingDecisionViaLLM_AllowsLightweightWithoutReactionTool(t *testing.T) {
+func TestLineAddressingDecisionViaLLM_UsesTextWithoutReactionTool(t *testing.T) {
 	t.Parallel()
 
 	client := &stubLineAddressingLLMClient{
@@ -165,7 +194,7 @@ func TestLineAddressingDecisionViaLLM_AllowsLightweightWithoutReactionTool(t *te
 	if !ok {
 		t.Fatalf("lineAddressingDecisionViaLLM() ok=false, want true")
 	}
-	if !got.IsLightweight {
-		t.Fatalf("IsLightweight = false, want true")
+	if got.IsLightweight {
+		t.Fatalf("IsLightweight = true, want false")
 	}
 }

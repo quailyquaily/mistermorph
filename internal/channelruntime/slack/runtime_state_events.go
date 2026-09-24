@@ -22,6 +22,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/taskdomain"
 	"github.com/quailyquaily/mistermorph/internal/textutil"
 	"github.com/quailyquaily/mistermorph/internal/workspace"
+	"github.com/quailyquaily/mistermorph/tools"
 	slacktools "github.com/quailyquaily/mistermorph/tools/slack"
 )
 
@@ -588,8 +589,10 @@ func (s *slackRuntimeState) handleSocketEnvelope(ctx context.Context, envelope s
 		s.mu.Unlock()
 		decisionCtx := llmstats.WithRunID(ctx, slackTaskID(event.TeamID, event.ChannelID, event.MessageTS))
 		var addressingReactionTool *slacktools.ReactTool
+		var reactionTool tools.Tool
 		if s.api != nil && strings.TrimSpace(event.ChannelID) != "" && strings.TrimSpace(event.MessageTS) != "" {
 			addressingReactionTool = slacktools.NewReactTool(newSlackToolAPI(s.api), event.ChannelID, event.MessageTS, s.allowedChannels, s.availableEmojiNames)
+			reactionTool = addressingReactionTool
 		}
 		generationLease, runtimeBundle, captureErr := s.captureRuntimeGeneration()
 		if captureErr != nil {
@@ -612,7 +615,7 @@ func (s *slackRuntimeState) handleSocketEnvelope(ctx context.Context, envelope s
 			s.addressingConfidenceThreshold,
 			s.addressingInterjectThreshold,
 			historySnapshot,
-			addressingReactionTool,
+			reactionTool,
 			s.dependencies.RuntimePaths.PersonaDir,
 		)
 		if generationLease != nil {
@@ -674,6 +677,10 @@ func (s *slackRuntimeState) handleSocketEnvelope(ctx context.Context, envelope s
 					s.logger.Error("slack_untriggered_journal_append_error", "channel_id", event.ChannelID, "message_ts", event.MessageTS, "error", recordErr.Error())
 				}
 			}
+			return nil
+		}
+		if decision.ReactionHandled {
+			s.appendIgnoredInboundHistory(event)
 			return nil
 		}
 		event.ThreadTS = quoteReplyThreadTSForGroupTrigger(event, decision)

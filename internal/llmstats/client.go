@@ -152,6 +152,26 @@ func (c *UsageClient) Chat(ctx context.Context, req llm.Request) (llm.Result, er
 	return res, nil
 }
 
+func (c *UsageClient) Evaluate(ctx context.Context, req llm.EvaluateRequest) (*llm.EvaluateResult, error) {
+	if c == nil || c.Base == nil {
+		return nil, llm.ErrEvaluateUnsupported
+	}
+	started := c.now()
+	res, err := llm.Evaluate(ctx, c.Base, req)
+	if res != nil && res.Usage != nil && c.Journal != nil {
+		finished := c.now()
+		rec := requestRecordFromUsage(ctx, requestRecordInput{
+			TS: finished, Provider: firstNonEmpty(res.Provider, c.Provider), APIBase: c.APIBase,
+			Model: firstNonEmpty(res.Model, req.Model, c.DefaultModel), Operation: operationEvaluate, Scene: req.Scene,
+			Usage: res.Usage.Details, DurationMs: durationMillis(res.Duration, finished.Sub(started)),
+		})
+		rec.Evaluation = &EvaluationRecord{Emulated: res.Emulated, Failed: err != nil, Usage: res.Usage}
+		appendUsageRecord(c.Journal, c.Logger, rec)
+	}
+	// Judgment usage must not replace the main conversation's context estimate.
+	return res, err
+}
+
 func (c *ImageUsageClient) GenerateImage(ctx context.Context, req llm.ImageRequest) (llm.ImageResult, error) {
 	if c == nil || c.Base == nil {
 		return llm.ImageResult{}, fmt.Errorf("image usage client is not initialized")

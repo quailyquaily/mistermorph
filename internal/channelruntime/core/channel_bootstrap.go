@@ -93,7 +93,7 @@ func BootstrapChannelRuntime(ctx context.Context, d depsutil.CommonDependencies,
 		return ChannelRuntimeBundle{}, err
 	}
 	mainRoute := execRuntime.BootstrapMainRoute
-	addressingRoute, err := d.ResolveLLMRoute(llmutil.RoutePurposeAddressing)
+	addressingRoute, err := d.ResolveLLMRoute(llmutil.RoutePurposeDecision)
 	if err != nil {
 		_ = execRuntime.Close()
 		cleanupInspectors()

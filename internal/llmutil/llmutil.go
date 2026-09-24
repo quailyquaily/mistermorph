@@ -366,7 +366,7 @@ func ClientFromConfigWithValues(cfg llmconfig.ClientConfig, values RuntimeValues
 			}), nil
 		}
 		fallthrough
-	case xaiauth.ProviderName, "openai", "openai_resp", "deepseek", "xai", "meta", "sakana", "gemini", "azure", "anthropic", "bedrock", "susanoo", "cloudflare":
+	case xaiauth.ProviderName, "typesafe", "openai", "openai_resp", "deepseek", "xai", "meta", "sakana", "gemini", "azure", "anthropic", "bedrock", "susanoo", "cloudflare":
 		c, err := uniaiProvider.New(uniaiProvider.Config{
 			Provider:           uniaiProviderName,
 			InferenceProvider:  strings.TrimSpace(values.InferenceProvider),
@@ -422,6 +422,23 @@ type ClientWrapFunc func(client llm.Client, cfg llmconfig.ClientConfig, profile 
 func BuildRouteClient(route ResolvedRoute, primaryOverride *llmconfig.ClientConfig, build BaseClientBuilder, wrap ClientWrapFunc, logger *slog.Logger) (llm.Client, error) {
 	if build == nil {
 		return nil, fmt.Errorf("base client builder is nil")
+	}
+	if route.Purpose != RoutePurposeDecision && route.Purpose != RoutePurposeAddressing {
+		configs := []llmconfig.ClientConfig{route.ClientConfig}
+		if primaryOverride != nil {
+			configs = append(configs, *primaryOverride)
+		}
+		for _, candidate := range route.Candidates {
+			configs = append(configs, candidate.ClientConfig)
+		}
+		for _, fallback := range route.Fallbacks {
+			configs = append(configs, fallback.ClientConfig)
+		}
+		for _, cfg := range configs {
+			if cfg.Provider == "typesafe" {
+				return nil, fmt.Errorf("typesafe supports only the decision route, not %q", route.Purpose)
+			}
+		}
 	}
 	if len(route.Candidates) > 0 {
 		return buildWeightedRouteClient(route, primaryOverride, build, wrap, logger)

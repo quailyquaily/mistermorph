@@ -64,6 +64,13 @@ func (c *ownedRuntimeClient) Close() error {
 	return c.closeErr
 }
 
+func (c *ownedRuntimeClient) Evaluate(ctx context.Context, req llm.EvaluateRequest) (*llm.EvaluateResult, error) {
+	if c == nil {
+		return nil, io.ErrClosedPipe
+	}
+	return llm.Evaluate(ctx, c.base, req)
+}
+
 func (owners *runtimeClientOwners) own(client llm.Client) llm.Client {
 	if owners == nil || client == nil {
 		return client

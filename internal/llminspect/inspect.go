@@ -407,6 +407,36 @@ func (c *client) Close() error {
 	return closer.Close()
 }
 
+func (c *client) Evaluate(ctx context.Context, req llm.EvaluateRequest) (*llm.EvaluateResult, error) {
+	if c == nil {
+		return nil, llm.ErrEvaluateUnsupported
+	}
+	model := strings.TrimSpace(req.Model)
+	if model == "" {
+		model = c.model
+	}
+	meta := InspectMetadata{APIBase: c.apiBase, Model: model, Scene: req.Scene}
+	if c.promptInspector != nil {
+		questions, err := json.Marshal(req.Questions)
+		if err != nil {
+			return nil, err
+		}
+		state, err := json.Marshal(req.State)
+		if err != nil {
+			return nil, err
+		}
+		if err := c.promptInspector.DumpWithMetadata(meta, []llm.Message{{Role: "system", Content: string(questions)}, {Role: "user", Content: string(state)}}); err != nil {
+			return nil, err
+		}
+	}
+	if c.requestInspector != nil {
+		if event := c.requestInspector.NewEvent(meta); event != nil {
+			req.DebugFn = chainDebugFns(req.DebugFn, event.Dump)
+		}
+	}
+	return llm.Evaluate(ctx, c.base, req)
+}
+
 func normalizeInspectMetadata(meta InspectMetadata) InspectMetadata {
 	meta.APIBase = strings.TrimSpace(meta.APIBase)
 	if meta.APIBase == "" {

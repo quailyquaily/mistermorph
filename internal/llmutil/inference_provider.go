@@ -54,6 +54,7 @@ type InferenceProviderInfo struct {
 }
 
 var inferenceProviderRegistry = []InferenceProviderInfo{
+	{Label: "TypeSafe (Evaluate only)", Value: "typesafe", Provider: "typesafe", SupportsCustomAPIBase: true},
 	{Label: "OpenAI", Value: InferenceProviderOpenAI, Provider: "openai_resp", Endpoint: DefaultOpenAIEndpoint},
 	{Label: "OpenAI Codex", Value: InferenceProviderOpenAICodex, Provider: "openai_codex", SupportsCustomAPIBase: true},
 	{Label: "Google Gemini", Value: InferenceProviderGemini, Provider: "gemini", Endpoint: DefaultGeminiEndpoint},
@@ -113,6 +114,8 @@ func InferInferenceProvider(provider string, endpoint string) string {
 	provider = normalizeProvider(provider)
 	endpoint = normalizeEndpoint(endpoint)
 	switch provider {
+	case "typesafe":
+		return "typesafe"
 	case "openai_codex":
 		return InferenceProviderOpenAICodex
 	case "gemini":

@@ -102,7 +102,7 @@ func TestBootstrapChannelRuntimeClosesTaskRuntimeOnAddressingRouteFailure(t *tes
 	deps := channelBootstrapDeps("main", "addressing", &created)
 	resolve := deps.ResolveLLMRoute
 	deps.ResolveLLMRoute = func(purpose string) (llmutil.ResolvedRoute, error) {
-		if purpose == llmutil.RoutePurposeAddressing {
+		if purpose == llmutil.RoutePurposeDecision {
 			return llmutil.ResolvedRoute{}, errors.New("resolve addressing")
 		}
 		return resolve(purpose)
@@ -171,7 +171,7 @@ func channelBootstrapDeps(mainProfile, addressingProfile string, created *[]*cha
 		ResolveLLMRoute: func(purpose string) (llmutil.ResolvedRoute, error) {
 			profile := mainProfile
 			model := "main-model"
-			if purpose == llmutil.RoutePurposeAddressing {
+			if purpose == llmutil.RoutePurposeDecision {
 				profile = addressingProfile
 				model = "addressing-model"
 			}

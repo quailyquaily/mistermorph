@@ -56,7 +56,8 @@ export const LLM_SYSTEM_CONFIG_GROUPS = [
     note: "Route main loop, addressing, awareness, think, and plan creation to named profiles.",
     fields: [
       { path: "llm.routes.main_loop", label: "Main loop", type: "json", wide: true, placeholder: "{}" },
-      { path: "llm.routes.addressing", label: "Addressing", type: "json", wide: true, placeholder: "{}" },
+      { path: "llm.routes.decision", label: "Decision", type: "json", wide: true, placeholder: "{}" },
+      { path: "llm.routes.addressing", label: "Addressing (legacy)", type: "json", wide: true, placeholder: "{}" },
       { path: "llm.routes.awareness", label: "Awareness", type: "json", wide: true, placeholder: "{}" },
       { path: "llm.routes.think", label: "Think", type: "json", wide: true, placeholder: "{}" },
       { path: "llm.routes.plan_create", label: "Plan creation", type: "json", wide: true, placeholder: "{}" },

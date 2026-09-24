@@ -98,6 +98,13 @@ func (c *weightedRouteClient) Chat(ctx context.Context, req llm.Request) (llm.Re
 		return llm.Result{}, io.ErrClosedPipe
 	}
 	primaryIdx := c.pickPrimaryIndex(ctx, req)
+	req.Model = c.candidates[primaryIdx].Model
+	return c.fallbackForPrimary(primaryIdx).Chat(ctx, req)
+}
+
+// fallbackForPrimary preserves candidate order, then appends explicit fallbacks.
+// Chat and Evaluate use the same routing policy but retain their own retries.
+func (c *weightedRouteClient) fallbackForPrimary(primaryIdx int) llm.Client {
 	primary := c.candidates[primaryIdx]
 	fallbacks := make([]FallbackCandidate, 0, len(c.candidates)-1+len(c.fallbacks))
 	for idx, candidate := range c.candidates {
@@ -111,16 +118,13 @@ func (c *weightedRouteClient) Chat(ctx context.Context, req llm.Request) (llm.Re
 		})
 	}
 	fallbacks = append(fallbacks, c.fallbacks...)
-	client := NewFallbackClient(FallbackClientOptions{
+	return NewFallbackClient(FallbackClientOptions{
 		Primary:        primary.Client,
 		PrimaryProfile: primary.Profile,
 		PrimaryModel:   primary.Model,
 		Fallbacks:      fallbacks,
 		Logger:         c.logger,
 	})
-	fallbackReq := req
-	fallbackReq.Model = primary.Model
-	return client.Chat(ctx, fallbackReq)
 }
 
 func (c *weightedRouteClient) Close() error {
