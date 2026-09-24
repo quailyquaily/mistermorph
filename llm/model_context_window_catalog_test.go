@@ -36,6 +36,10 @@ func TestResolveModelContextWindowUnknown(t *testing.T) {
 func TestResolveModelContextWindowCatalogExamples(t *testing.T) {
 	tests := map[string]int64{
 		"gpt-6-astra":                            1050000,
+		"gpt-6-sol":                              1050000,
+		"openai/gpt-6-sol":                       1050000,
+		"gpt-6-luna":                             1050000,
+		"openai/gpt-6-luna":                      1050000,
 		"gpt-5.6":                                1050000,
 		"gpt-5.6-sol":                            1050000,
 		"gpt-5.6-terra":                          1050000,
@@ -48,6 +52,10 @@ func TestResolveModelContextWindowCatalogExamples(t *testing.T) {
 		"claude-fable-5-1":                       1000000,
 		"claude-mythos-5-1":                      1000000,
 		"claude-opus-5":                          1000000,
+		"claude-opus-5-5":                        1000000,
+		"anthropic/claude-opus-5-5":              1000000,
+		"claude-opus-5.5":                        1000000,
+		"anthropic/claude-opus-5.5":              1000000,
 		"claude-sonnet-5":                        1000000,
 		"claude-sonnet-4-6":                      1000000,
 		"claude-haiku-4-5":                       200000,

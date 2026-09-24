@@ -2,6 +2,22 @@ version: 1
 models:
   # OpenAI
   - provider: openai
+    model: gpt-6-sol
+    aliases:
+      - openai/gpt-6-sol
+    context_window_tokens: 1050000
+    sources:
+      - url: https://developers.openai.com/api/docs/models/gpt-6-sol
+        checked_at: "2026-09-23"
+  - provider: openai
+    model: gpt-6-luna
+    aliases:
+      - openai/gpt-6-luna
+    context_window_tokens: 1050000
+    sources:
+      - url: https://developers.openai.com/api/docs/models/gpt-6-luna
+        checked_at: "2026-09-23"
+  - provider: openai
     model: gpt-6-astra
     aliases:
       - openai/gpt-6-astra
@@ -178,6 +194,16 @@ models:
     sources:
       - url: https://platform.claude.com/docs/en/about-claude/models/overview
         checked_at: "2026-06-10"
+  - provider: anthropic
+    model: claude-opus-5-5
+    aliases:
+      - anthropic/claude-opus-5-5
+      - claude-opus-5.5
+      - anthropic/claude-opus-5.5
+    context_window_tokens: 1000000
+    sources:
+      - url: https://platform.claude.com/docs/en/models/opus-5-5/overview
+        checked_at: "2026-09-23"
   - provider: anthropic
     model: claude-opus-5
     aliases:
