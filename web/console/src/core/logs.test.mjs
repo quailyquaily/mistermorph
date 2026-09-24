@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { filterLogEntries, logSnapshotKey, parseLogLine } from "./logs.js";
+import { filterLogEntries, logClock, logDayKey, logDayLabel, logFieldPreview, logSnapshotKey, parseLogLine } from "./logs.js";
 
 test("structured logs retain detail fields and normalize warning levels", () => {
   const line = JSON.stringify({ time: "2026-09-21T04:00:00Z", level: "WARNING", msg: "request failed", retry: 0, context: { host: "api.example.com" } });
@@ -63,4 +63,22 @@ test("only structured message names are selectable events; undated lines survive
   assert.deepEqual(filterLogEntries([raw, structured], "", ""), [raw, structured]);
   assert.deepEqual(filterLogEntries([raw, structured], "", "", { event: "request_failed" }), [structured]);
   assert.deepEqual(filterLogEntries([raw, structured], "", "", { since: 0 }), []);
+});
+
+test("field previews flatten multi-line values and cap long ones", () => {
+  const entry = parseLogLine(JSON.stringify({ level: "INFO", msg: "x", context: { host: "a" }, body: "y".repeat(200) }));
+  const preview = logFieldPreview(entry.fields);
+  assert.deepEqual(preview[0], ["context", '{"host":"a"}']);
+  assert.equal(preview[1][1].length, 120);
+  assert.ok(preview[1][1].endsWith("…"));
+  assert.equal(logFieldPreview(entry.fields, 1).length, 1);
+});
+
+test("clock and day helpers tolerate missing or invalid times", () => {
+  assert.equal(logClock("", "en"), "");
+  assert.equal(logDayKey("nope"), "");
+  assert.equal(logDayLabel(undefined, "en"), "");
+  assert.match(logClock("2026-09-21T04:05:06.789Z", "en"), /^\d{2}:05:06\.789$/);
+  assert.equal(logDayKey("2026-09-21T12:00:00"), "2026-9-21");
+  assert.equal(logDayLabel("2026-09-21T12:00:00", "en"), "2026-09-21 Mon");
 });
