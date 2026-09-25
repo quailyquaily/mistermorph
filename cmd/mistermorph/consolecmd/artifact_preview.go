@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/quailyquaily/mistermorph/internal/daemonruntime"
 )
 
 const artifactPreviewTicketTTL = 5 * time.Minute
@@ -283,7 +285,7 @@ func (s *server) handleArtifactPreview(w http.ResponseWriter, r *http.Request) {
 	setNoCacheHeaders(w.Header())
 	copyDownloadHeader(w.Header(), download.Header, "Content-Type")
 	copyDownloadHeader(w.Header(), download.Header, "Content-Length")
-	w.Header().Set("Content-Security-Policy", artifactPreviewCSP())
+	w.Header().Set("Content-Security-Policy", daemonruntime.PreviewContentSecurityPolicy())
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(status)
 	if download.Body != nil {
@@ -379,18 +381,4 @@ func artifactPreviewPathWithinEntryDir(entryDir string, assetPath string) bool {
 		return true
 	}
 	return assetPath == entryDir || strings.HasPrefix(assetPath, entryDir+"/")
-}
-
-func artifactPreviewCSP() string {
-	return strings.Join([]string{
-		"default-src 'none'",
-		"script-src 'self' 'unsafe-inline' blob: data:",
-		"style-src 'self' 'unsafe-inline'",
-		"img-src 'self' data: blob:",
-		"font-src 'self' data:",
-		"connect-src 'none'",
-		"frame-src 'none'",
-		"form-action 'none'",
-		"base-uri 'none'",
-	}, "; ")
 }

@@ -858,7 +858,7 @@ func TestFilesPreviewRouteGetWorkspaceHTML(t *testing.T) {
 	if got := rec.Header().Get("Content-Disposition"); got != "" {
 		t.Fatalf("Content-Disposition = %q, want empty", got)
 	}
-	if got := rec.Header().Get("Content-Security-Policy"); !strings.Contains(got, "connect-src 'none'") {
+	if got := rec.Header().Get("Content-Security-Policy"); got != PreviewContentSecurityPolicy() {
 		t.Fatalf("Content-Security-Policy = %q", got)
 	}
 	if rec.Body.String() != "<h1>Hello</h1>" {
@@ -957,4 +957,44 @@ func TestWorkspaceRouteBadRequestErrors(t *testing.T) {
 	if got := strings.TrimSpace(rec.Body.String()); got != "workspace dir does not exist" {
 		t.Fatalf("body = %q, want %q", got, "workspace dir does not exist")
 	}
+}
+
+func TestPreviewContentSecurityPolicy(t *testing.T) {
+	policy := PreviewContentSecurityPolicy()
+	directives := map[string]string{}
+	for _, part := range strings.Split(policy, ";") {
+		fields := strings.Fields(part)
+		if len(fields) > 0 {
+			directives[fields[0]] = strings.Join(fields[1:], " ")
+		}
+	}
+	tests := []struct {
+		directive string
+		want      string
+	}{
+		{"default-src", "'none'"},
+		{"script-src", "'self' 'unsafe-inline' blob: data: https:"},
+		{"style-src", "'self' 'unsafe-inline' https:"},
+		{"font-src", "'self' data: https:"},
+		{"connect-src", "https: wss:"},
+		{"frame-src", "'none'"},
+		{"form-action", "'none'"},
+		{"base-uri", "'none'"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.directive, func(t *testing.T) {
+			if got := directives[tt.directive]; got != tt.want {
+				t.Fatalf("%s = %q, want %q", tt.directive, got, tt.want)
+			}
+		})
+	}
+	t.Run("no plain http", func(t *testing.T) {
+		for directive, sources := range directives {
+			for _, source := range strings.Fields(sources) {
+				if source == "http:" || source == "ws:" || source == "*" {
+					t.Fatalf("%s allows %q; previews must stay off plain http (localhost and LAN)", directive, source)
+				}
+			}
+		}
+	})
 }

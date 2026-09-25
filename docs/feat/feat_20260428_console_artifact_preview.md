@@ -51,7 +51,7 @@ app.js
 - 不运行后端服务
 - 不运行 npm dev server
 - 不支持任意端口反向代理
-- 不支持浏览器外部网络访问
+- 不支持访问 localhost 和内网的 http 服务（外部 https 网络见第 9 节）
 - 不做完整 IDE
 - 不做多文件编辑器
 - 不把任意 Markdown 链接都自动变成预览
@@ -328,21 +328,31 @@ HTML 预览必须使用 iframe sandbox。
 
 这样生成页面可以运行脚本，但不能和 Console 主页面共享 origin。
 
-Preview 响应建议加 CSP：
+Preview 响应使用 `daemonruntime.PreviewContentSecurityPolicy()`，runtime 的 `/files/preview` 和 Console 的 `/api/artifacts/preview/` 共用同一份：
 
 ```text
 default-src 'none';
-script-src 'self' 'unsafe-inline' blob: data:;
-style-src 'self' 'unsafe-inline';
-img-src 'self' data: blob:;
-font-src 'self' data:;
-connect-src 'none';
+script-src 'self' 'unsafe-inline' blob: data: https:;
+style-src 'self' 'unsafe-inline' https:;
+img-src 'self' data: blob: https:;
+font-src 'self' data: https:;
+media-src 'self' data: blob: https:;
+connect-src https: wss:;
 frame-src 'none';
 form-action 'none';
 base-uri 'none';
 ```
 
-这允许常见的单页 HTML demo 运行，同时阻止它主动访问外部网络。
+生成的页面可以通过 https 使用外部资源：CDN 脚本、Web 字体、图片，以及 `fetch` 调用外部 API。
+
+联网的边界：
+
+- 只允许 `https:` / `wss:`，不允许 `http:` / `ws:`。本机和内网服务（runtime、路由器、NAS 等）基本只有 http，因此生成页面访问不到它们。
+- iframe 没有 `allow-same-origin`，页面 origin 是 `null`。跨域请求只有在对方返回 `Access-Control-Allow-Origin: *` 时才能读到结果；需要 cookie 或登录的接口不可用。这是浏览器限制，不由 CSP 决定。
+- 不提供服务端代理来绕过 CORS：代理会让生成页面借服务端访问内网（SSRF）。
+- 与 Console 的隔离依赖 iframe sandbox，而不是 CSP：页面拿不到 Console 的 token 和 cookie，不能导航顶层页面、弹窗、嵌套 iframe 或提交表单。
+
+2026-09-25 起放开外部 https 访问；此前为 `connect-src 'none'` 且不允许外部样式、字体和脚本。
 
 ## 10) 和 Markdown renderer 的关系
 

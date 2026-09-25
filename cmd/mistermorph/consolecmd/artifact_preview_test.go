@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/quailyquaily/mistermorph/internal/daemonruntime"
 )
 
 func TestHandleArtifactPreviewTicket(t *testing.T) {
@@ -264,7 +266,7 @@ func TestHandleArtifactPreviewProxiesPreviewFile(t *testing.T) {
 	if rec.Body.String() != "console.log('ok')" {
 		t.Fatalf("body = %q", rec.Body.String())
 	}
-	if got := rec.Header().Get("Content-Security-Policy"); !strings.Contains(got, "connect-src 'none'") {
+	if got := rec.Header().Get("Content-Security-Policy"); got != daemonruntime.PreviewContentSecurityPolicy() {
 		t.Fatalf("Content-Security-Policy = %q", got)
 	}
 	u, err := url.Parse(client.lastDownloadPath)

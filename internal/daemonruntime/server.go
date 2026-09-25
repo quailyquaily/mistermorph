@@ -244,7 +244,7 @@ func serveFilePreview(w http.ResponseWriter, r *http.Request, filePath string) {
 		ctype = "application/octet-stream"
 	}
 	w.Header().Set("Content-Type", ctype)
-	w.Header().Set("Content-Security-Policy", previewContentSecurityPolicy())
+	w.Header().Set("Content-Security-Policy", PreviewContentSecurityPolicy())
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	http.ServeContent(w, r, info.Name(), info.ModTime(), file)
 }
@@ -270,14 +270,20 @@ func previewContentType(filePath string) string {
 	return strings.TrimSpace(mime.TypeByExtension(filepath.Ext(filePath)))
 }
 
-func previewContentSecurityPolicy() string {
+// PreviewContentSecurityPolicy is the CSP for sandboxed artifact previews, shared by the runtime
+// and the console proxy. Generated pages may load resources from and call out to the public web
+// over https (CDNs, web fonts, CORS-enabled APIs), but not over plain http, which keeps them off
+// localhost and most LAN services. Isolation from the console itself comes from the iframe
+// sandbox (no allow-same-origin), not from this policy.
+func PreviewContentSecurityPolicy() string {
 	return strings.Join([]string{
 		"default-src 'none'",
-		"script-src 'self' 'unsafe-inline' blob: data:",
-		"style-src 'self' 'unsafe-inline'",
-		"img-src 'self' data: blob:",
-		"font-src 'self' data:",
-		"connect-src 'none'",
+		"script-src 'self' 'unsafe-inline' blob: data: https:",
+		"style-src 'self' 'unsafe-inline' https:",
+		"img-src 'self' data: blob: https:",
+		"font-src 'self' data: https:",
+		"media-src 'self' data: blob: https:",
+		"connect-src https: wss:",
 		"frame-src 'none'",
 		"form-action 'none'",
 		"base-uri 'none'",
