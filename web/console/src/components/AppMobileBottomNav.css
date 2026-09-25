@@ -201,17 +201,19 @@
 
 .mobile-agent-switcher-status {
   justify-self: center;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
+  width: var(--status-mark-size);
+  height: var(--status-mark-size);
+  border: 1px solid var(--status-off);
+  border-radius: 1px;
 }
 
 .mobile-agent-switcher-status.is-online {
-  background: var(--q-c-green);
+  border-color: var(--status-on);
+  background: var(--status-on);
 }
 
 .mobile-agent-switcher-status.is-offline {
-  background: var(--q-c-dark-3);
+  background: transparent;
 }
 
 .mobile-agent-switcher-route {

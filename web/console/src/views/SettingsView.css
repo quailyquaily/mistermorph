@@ -485,10 +485,10 @@
 }
 
 .settings-profile-status-dot {
-  width: 7px;
-  height: 7px;
-  border: 1px solid color-mix(in srgb, var(--text-2) 56%, var(--line));
-  border-radius: 50%;
+  width: var(--status-mark-size);
+  height: var(--status-mark-size);
+  border: 1px solid var(--status-off);
+  border-radius: 1px;
   background: transparent;
 }
 
@@ -497,8 +497,8 @@
 }
 
 .settings-profile-status.is-in-use .settings-profile-status-dot {
-  border-color: var(--q-button-primary-border);
-  background: var(--q-button-primary-border);
+  border-color: var(--status-on);
+  background: var(--status-on);
 }
 
 .settings-profile-actions {

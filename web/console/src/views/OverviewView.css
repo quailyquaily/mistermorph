@@ -287,19 +287,19 @@ a.endpoint-overview-item:focus-visible {
 
 .endpoint-overview-status::after {
   content: "";
-  width: 10px;
-  height: 10px;
-  border: 1px solid var(--text-2);
-  border-radius: 50%;
+  width: 9px;
+  height: 9px;
+  border: 1px solid var(--status-off);
+  border-radius: 1px;
 }
 
 .endpoint-overview-status.is-online::after {
-  background: var(--overview-accent);
-  border-color: var(--overview-accent);
+  background: var(--status-on);
+  border-color: var(--status-on);
 }
 
 .endpoint-overview-status.is-pending::after {
-  border-color: var(--q-c-orange);
+  border-color: var(--status-pending);
   border-style: dashed;
 }
 

@@ -59,23 +59,27 @@
 }
 
 .runtime-status-dot {
-  width: 7px;
-  height: 7px;
-  flex: 0 0 7px;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--text-2) 55%, transparent);
+  width: var(--status-mark-size);
+  height: var(--status-mark-size);
+  flex: 0 0 var(--status-mark-size);
+  border: 1px solid var(--status-off);
+  border-radius: 1px;
+  background: transparent;
 }
 
 .runtime-status.is-healthy .runtime-status-dot {
-  background: var(--accent-1);
+  border-color: var(--status-on);
+  background: var(--status-on);
 }
 
 .runtime-status.is-stale .runtime-status-dot {
-  background: var(--q-c-orange);
+  border-color: var(--status-pending);
+  background: var(--status-pending);
 }
 
 .runtime-status.is-error .runtime-status-dot {
-  background: var(--danger);
+  border-color: var(--status-error);
+  background: var(--status-error);
 }
 
 .runtime-update,

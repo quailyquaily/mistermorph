@@ -43,6 +43,13 @@ body {
   --accent-1: var(--q-c-blue);
   --ok: var(--q-c-green);
   --danger: var(--q-c-red);
+
+  /* Status marks: square, filled when on, hollow when off. Blue is reserved for selection. */
+  --status-mark-size: 7px;
+  --status-on: var(--q-c-green);
+  --status-off: color-mix(in srgb, var(--q-c-dark-3) 70%, transparent);
+  --status-pending: var(--q-c-orange);
+  --status-error: var(--q-c-red);
 }
 
 *,
@@ -84,6 +91,13 @@ body {
 
 body[data-theme] .q-button.touchable.plain:not(:hover):not(:focus-visible):not(:active):not(.shortcut-active):not(.toggle-on):not([aria-pressed="true"]):not([aria-expanded="true"]) {
   background: transparent !important;
+}
+
+/* Quail's default dot is a filled grey square; in this console "default" means off/unknown,
+   which is drawn hollow like every other off status mark. */
+body[data-theme] .q-badge.q-badge-dot.q-badge-default {
+  background: transparent !important;
+  box-shadow: inset 0 0 0 1px var(--status-off);
 }
 
 .q-input:not(.xs) {

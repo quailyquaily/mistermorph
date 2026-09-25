@@ -1,7 +1,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import "./LogsView.css";
 import AppPage from "../components/AppPage";
-import { currentLocale, endpointState, formatBytes, formatTime, runtimeApiFetchForEndpoint, translate } from "../core/context";
+import { currentLocale, endpointState, formatBytes, formatShortTime, runtimeApiFetchForEndpoint, translate } from "../core/context";
 import { filterLogEntries, logClock, logDayKey, logDayLabel, logFieldPreview, logSnapshotKey, parseLogLine } from "../core/logs";
 
 const LIMIT_OPTIONS = [100, 300, 1000];
@@ -74,7 +74,7 @@ export default {
     })));
     const timeOptions = computed(() => TIME_OPTIONS.map((value) => ({ id: value, title: t(`logs_time_${value}`), value })));
     const metaText = computed(() => [
-      modTime.value ? t("logs_updated", { value: formatTime(modTime.value) }) : "",
+      modTime.value ? t("logs_updated", { value: formatShortTime(modTime.value) }) : "",
       sizeBytes.value > 0 ? formatBytes(sizeBytes.value) : "",
     ].filter(Boolean).join(" · "));
     const emptyText = computed(() => unsupported.value ? t("logs_unsupported")
@@ -224,7 +224,7 @@ export default {
     return {
       t, err, unsupported, loading, loadingOlder, limit, query, level, event, timeRange, following, hasNewer,
       entries, filteredEntries, dayGroups, filterActive, activeFilterCount, filtersOpen, nextCursor, logPane, rawEntries,
-      metaText, emptyText, limits: LIMIT_OPTIONS, eventOptions, levelOptions, timeOptions, formatTime,
+      metaText, emptyText, limits: LIMIT_OPTIONS, eventOptions, levelOptions, timeOptions,
       loadOlder, onScroll, resumeFollowing, toggleRaw, clearFilters, levelLabel,
     };
   },

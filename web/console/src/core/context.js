@@ -1,4 +1,5 @@
 import { currentLocale, localeState, translate } from "../i18n";
+import { formatShortTimestamp } from "./time-format.js";
 import { authState, authValid, endpointState } from "../stores";
 import { CONSOLE_LOCAL_ENDPOINT_REF } from "./endpoints";
 import { recordApiRequest } from "./performance";
@@ -443,6 +444,10 @@ function formatTime(ts) {
   return d.toLocaleString(currentLocale());
 }
 
+function formatShortTime(ts) {
+  return formatShortTimestamp(ts, currentLocale());
+}
+
 function formatRemainingUntil(ts) {
   if (!ts) {
     return translate("ttl_unknown");
@@ -543,6 +548,7 @@ export {
   taskEndpointRefsForSelection,
   safeJSON,
   formatTime,
+  formatShortTime,
   formatRemainingUntil,
   toInt,
   toBool,

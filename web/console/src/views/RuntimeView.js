@@ -16,6 +16,7 @@ import { endpointDisplayItem, endpointChannelLabel } from "../core/endpoints";
 import {
   endpointState,
   formatBytes,
+  formatShortTime,
   formatTime,
   loadEndpoints,
   runtimeApiFetchForEndpoint,
@@ -155,9 +156,9 @@ const RuntimePanel = {
     });
     const statusRows = computed(() => [
       { key: "uptime", label: t("stat_uptime"), value: formatUptime(overview.uptime_sec) },
-      { key: "started", label: t("stat_started"), value: formatTime(overview.started_at) },
+      { key: "started", label: t("stat_started"), value: formatShortTime(overview.started_at) },
       { key: "poke", label: t("runtime_field_last_poke"),
-        value: overview.last_poke_at ? formatTime(overview.last_poke_at) : t("runtime_status_never") },
+        value: overview.last_poke_at ? formatShortTime(overview.last_poke_at) : t("runtime_status_never") },
     ]);
     const technicalRows = computed(() => [
       { key: "endpoint", label: t("runtime_field_endpoint"), value: endpointMeta.value?.title || "-" },
@@ -394,6 +395,7 @@ const RuntimePanel = {
       technicalRows,
       hasData,
       lastUpdated,
+      formatShortTime,
       formatTime,
       statusTone,
       statusLabel,
@@ -434,7 +436,7 @@ const RuntimePanel = {
         </header>
         <p v-if="canPoke && awarenessRunning" id="runtime-poke-busy" class="runtime-note">{{ t("runtime_poke_busy") }}</p>
         <p class="runtime-update" role="status">
-          {{ loading ? t("runtime_loading") : hasData ? t("runtime_updated", { time: formatTime(lastUpdated) }) : t("runtime_no_data") }}
+          {{ loading ? t("runtime_loading") : hasData ? t("runtime_updated", { time: formatShortTime(lastUpdated) }) : t("runtime_no_data") }}
         </p>
         <div v-if="err" class="runtime-error" role="alert">
           <span>{{ err }}</span>

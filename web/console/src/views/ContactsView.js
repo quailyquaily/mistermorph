@@ -10,7 +10,7 @@ import channelSlackLogoURL from "../assets/images/channels/slack.svg";
 import channelTelegramLogoURL from "../assets/images/channels/telegram.svg";
 import AppPage from "../components/AppPage";
 import ContactAvatar from "../components/ContactAvatar";
-import { currentLocale, endpointState, formatTime, runtimeApiFetch, translate } from "../core/context";
+import { currentLocale, endpointState, formatShortTime, formatTime, runtimeApiFetch, translate } from "../core/context";
 import { useContactsStore } from "../stores/contactsStore";
 
 const CHANNEL_LOGOS = {
@@ -583,6 +583,7 @@ const ContactsView = {
       statusText,
       kindText,
       channelLabel,
+      formatShortTime,
       formatTime,
       relativeTime,
       primaryContactMeta,
@@ -865,7 +866,7 @@ const ContactsView = {
                       </strong>
                       <strong v-else>{{ t("contacts_activity_none") }}</strong>
                       <time v-if="selectedContact.last_interaction_at" :datetime="selectedContact.last_interaction_at">
-                        {{ formatTime(selectedContact.last_interaction_at) }}
+                        {{ formatShortTime(selectedContact.last_interaction_at) }}
                       </time>
                     </div>
                   </div>
@@ -874,7 +875,7 @@ const ContactsView = {
                     <div class="contacts-activity-copy">
                       <span>{{ t("contacts_field_cooldown") }}</span>
                       <strong>{{ relativeTime(selectedContact.cooldown_until) }}</strong>
-                      <time :datetime="selectedContact.cooldown_until">{{ formatTime(selectedContact.cooldown_until) }}</time>
+                      <time :datetime="selectedContact.cooldown_until">{{ formatShortTime(selectedContact.cooldown_until) }}</time>
                     </div>
                   </div>
                 </div>

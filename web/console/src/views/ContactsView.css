@@ -235,15 +235,16 @@
 }
 
 .contacts-status-dot {
-  width: 7px;
-  min-width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--text-2);
+  width: var(--status-mark-size);
+  min-width: var(--status-mark-size);
+  height: var(--status-mark-size);
+  border: 1px solid var(--status-off);
+  border-radius: 1px;
 }
 
 .contacts-status.is-active .contacts-status-dot {
-  background: var(--ok);
+  border-color: var(--status-on);
+  background: var(--status-on);
 }
 
 .contacts-detail-persona {

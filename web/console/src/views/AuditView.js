@@ -11,6 +11,7 @@ import { loadResource, resourceKey, useResource } from "../core/resources";
 import {
   TASK_STATUS_META,
   endpointState,
+  formatShortTime,
   formatTime,
   runtimeApiFetchFirstForEndpoints,
   runtimeApiFetchForEndpoint,
@@ -62,18 +63,39 @@ function humanizeAuditToken(raw) {
   return text.replaceAll("_", " ").replace(/([a-z0-9])([A-Z])/g, "$1 $2");
 }
 
-function decisionBadgeType(raw) {
+// Badge weight follows attention, not colour alone: routine states are quiet outlined grey,
+// notable ones are outlined in their colour, and only states that need action are filled.
+function auditBadge(level, type = "default") {
+  if (level === "alert") {
+    return { type, variant: "filled" };
+  }
+  if (level === "notable") {
+    return { type, variant: "outlined" };
+  }
+  return { type: "default", variant: "outlined" };
+}
+
+function decisionBadge(raw) {
   switch (String(raw || "").trim().toLowerCase()) {
-    case "allow":
-      return "success";
     case "allow_with_redaction":
-      return "warning";
+      return auditBadge("notable", "warning");
     case "require_approval":
-      return "warning";
+      return auditBadge("alert", "warning");
     case "deny":
-      return "danger";
+      return auditBadge("alert", "danger");
     default:
-      return "default";
+      return auditBadge("quiet");
+  }
+}
+
+function approvalBadge(status) {
+  switch (status) {
+    case "pending":
+      return auditBadge("alert", "warning");
+    case "denied":
+      return auditBadge("alert", "danger");
+    default:
+      return auditBadge("quiet");
   }
 }
 
@@ -215,7 +237,7 @@ function toAuditFileItem(t, item) {
   const suffix = name.match(/\.jsonl\.(.+)$/)?.[1] || "";
   const timestamp = suffix.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/);
   const archivedAt = timestamp
-    ? formatTime(`${timestamp[1]}-${timestamp[2]}-${timestamp[3]}T${timestamp[4]}:${timestamp[5]}:${timestamp[6]}Z`)
+    ? formatShortTime(`${timestamp[1]}-${timestamp[2]}-${timestamp[3]}T${timestamp[4]}:${timestamp[5]}:${timestamp[6]}Z`)
     : suffix;
   return {
     key: name,
@@ -408,21 +430,22 @@ const AuditView = {
         rawPretty: JSON.stringify(parsed, null, 2),
         eventID,
         tsRaw,
-        tsText: tsRaw === "-" ? "-" : formatTime(tsRaw),
+        tsText: tsRaw === "-" ? "-" : formatShortTime(tsRaw),
+        tsFull: tsRaw === "-" ? "" : formatTime(tsRaw),
         actionType,
         toolName,
         runID,
         stepText,
         actor,
         approvalLabel: knownApproval ? t(`audit_approval_${approval}`) : humanizeAuditToken(approvalStatus),
-        approvalType: approval === "approved" ? "success" : approval === "denied" ? "danger" : approval === "pending" ? "warning" : "default",
+        approvalBadge: approvalBadge(approval),
         approvalRequestID: normalizeAuditText(parsed.approval_request_id),
         summary,
         reasonsText,
         hasReasons: reasons.length > 0,
         primaryTitle,
         decisionLabel: decisionLabel(t, decisionRaw),
-        decisionType: decisionBadgeType(decisionRaw),
+        decisionBadge: decisionBadge(decisionRaw),
         riskLabel: riskLabel(t, riskRaw),
         riskType: riskBadgeType(riskRaw),
       };
@@ -605,22 +628,16 @@ const AuditView = {
       return taskStatusTitleMap.value.get(value) || String(task?.status || "").trim() || "-";
     }
 
-    function taskStatusType(task) {
+    function taskStatusBadge(task) {
       switch (normalizeTaskStatus(task?.status)) {
-        case "done":
-          return "success";
         case "failed":
-          return "danger";
-        case "running":
-          return "primary";
+          return auditBadge("alert", "danger");
         case "pending":
-          return "warning";
-        case "queued":
-          return "default";
-        case "canceled":
-          return "default";
+          return auditBadge("alert", "warning");
+        case "running":
+          return auditBadge("notable", "success");
         default:
-          return "default";
+          return auditBadge("quiet");
       }
     }
 
@@ -745,7 +762,7 @@ const AuditView = {
         meta.next_cursor = String(data.next_cursor || "").trim();
         const fetchedLines = Array.isArray(data.items) ? data.items : [];
         lines.value = fetchedLines.slice(-AUDIT_ITEMS_PER_PAGE);
-        updatedAt.value = formatTime(new Date().toISOString());
+        updatedAt.value = formatShortTime(new Date().toISOString());
         return true;
       } catch (e) {
         if (isCurrent()) {
@@ -887,6 +904,7 @@ const AuditView = {
 
     return {
       t,
+      formatShortTime,
       formatTime,
       loading,
       err,
@@ -927,7 +945,7 @@ const AuditView = {
       openTask,
       goChat,
       taskStatusLabel,
-      taskStatusType,
+      taskStatusBadge,
       taskSourceLabel,
       taskRuntimeMeta,
       taskModelMeta,
@@ -1053,15 +1071,15 @@ const AuditView = {
                         <span class="audit-event-heading">
                           <strong>{{ item.parsed ? item.primaryTitle : t('audit_raw') }}</strong>
                           <template v-if="item.parsed">
-                            <QBadge v-if="item.approvalLabel !== '-'" :type="item.approvalType" size="sm">{{ item.approvalLabel }}</QBadge>
-                            <QBadge v-else-if="item.decisionLabel !== '-'" :type="item.decisionType" size="sm">{{ item.decisionLabel }}</QBadge>
+                            <QBadge v-if="item.approvalLabel !== '-'" v-bind="item.approvalBadge" size="sm">{{ item.approvalLabel }}</QBadge>
+                            <QBadge v-else-if="item.decisionLabel !== '-'" v-bind="item.decisionBadge" size="sm">{{ item.decisionLabel }}</QBadge>
                             <span v-if="item.riskLabel !== '-'" class="audit-event-risk" :class="'is-' + item.riskType">{{ t('audit_risk') }} · {{ item.riskLabel }}</span>
                           </template>
                         </span>
                         <span v-if="!item.parsed || item.summary !== '-'" class="audit-event-preview">{{ item.parsed ? item.summary : item.raw }}</span>
                         <span v-if="item.hasReasons" class="audit-event-reason">{{ item.reasonsText }}</span>
                         <span v-if="item.parsed" class="audit-event-meta">
-                          <time v-if="item.tsText !== '-'" :datetime="item.tsRaw">{{ item.tsText }}</time>
+                          <time v-if="item.tsText !== '-'" class="audit-time" :datetime="item.tsRaw" :title="item.tsFull">{{ item.tsText }}</time>
                           <span v-if="item.toolName !== '-' && item.actionType !== '-'">{{ item.actionType }}</span>
                           <span v-if="item.stepText !== '-'">{{ t('audit_step') }} {{ item.stepText }}</span>
                         </span>
@@ -1109,9 +1127,9 @@ const AuditView = {
                     <span class="audit-event-copy">
                       <span class="audit-event-heading"><strong class="audit-task-title">{{ taskTitle(item) }}</strong></span>
                       <span class="audit-event-meta">
-                        <QBadge :type="taskStatusType(item)" size="sm">{{ taskStatusLabel(item) }}</QBadge>
+                        <QBadge v-bind="taskStatusBadge(item)" size="sm">{{ taskStatusLabel(item) }}</QBadge>
                         <span>{{ taskSourceLabel(item) }}</span>
-                        <time :datetime="item.created_at">{{ formatTime(item.created_at) }}</time>
+                        <time class="audit-time" :datetime="item.created_at" :title="formatTime(item.created_at)">{{ formatShortTime(item.created_at) }}</time>
                       </span>
                     </span>
                     <PhCaretRight class="icon audit-event-chevron" />

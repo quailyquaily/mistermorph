@@ -2482,7 +2482,7 @@ const TodoView = {
                     </span>
                   </span>
                   <span class="todo-index-item-marker workspace-sidebar-item-marker" aria-hidden="true">
-                    <QBadge dot :type="heartbeatDisabled ? 'default' : 'primary'" size="sm" />
+                    <QBadge dot :type="heartbeatDisabled ? 'default' : 'success'" size="sm" />
                   </span>
                 </button>
               </div>
@@ -2512,7 +2512,7 @@ const TodoView = {
                     </span>
                   </span>
                   <span class="todo-index-item-marker workspace-sidebar-item-marker" aria-hidden="true">
-                    <QBadge dot :type="taskListDisplayTask(task).enabled === false ? 'default' : 'primary'" size="sm" />
+                    <QBadge dot :type="taskListDisplayTask(task).enabled === false ? 'default' : 'success'" size="sm" />
                   </span>
                 </div>
               </div>

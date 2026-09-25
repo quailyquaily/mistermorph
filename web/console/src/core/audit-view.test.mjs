@@ -34,6 +34,7 @@ function mount(t, fetch) {
     useResource: () => taskResource,
     translate: (key, args = {}) => `${key}${Object.values(args).join(" ")}`,
     formatTime: (value) => value,
+    formatShortTime: (value) => value,
     safeJSON: (raw, fallback) => { try { return JSON.parse(raw); } catch { return fallback; } },
     toBool: (value, fallback) => typeof value === "boolean" ? value : fallback,
     toInt: (value, fallback) => Number.isFinite(Number(value)) ? Number(value) : fallback,
@@ -119,7 +120,9 @@ test("events retain approval outcomes and actors without changing the original d
   await flush();
   const item = view.auditGroups.value[0].items[0];
   assert.equal(item.approvalLabel, "audit_approval_approved");
-  assert.equal(item.approvalType, "success");
+  // Approved is a routine outcome: quiet badge. The original decision still reads as needing attention.
+  assert.deepEqual({ ...item.approvalBadge }, { type: "default", variant: "outlined" });
+  assert.deepEqual({ ...item.decisionBadge }, { type: "warning", variant: "filled" });
   assert.equal(item.actor, "reviewer");
   assert.equal(item.approvalRequestID, "apr_one");
   assert.equal(item.decisionLabel, "audit_decision_require_approval");

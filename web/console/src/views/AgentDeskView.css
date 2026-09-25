@@ -138,15 +138,16 @@ html[data-macos26="true"] .agent-desk-view-tabs {
   position: absolute;
   right: 7px;
   bottom: 7px;
-  width: 6px;
-  height: 6px;
-  border: 1px solid var(--q-c-dark);
-  border-radius: 50%;
-  background: var(--q-c-green);
+  width: var(--status-mark-size);
+  height: var(--status-mark-size);
+  border: 1px solid var(--status-on);
+  border-radius: 1px;
+  background: var(--status-on);
 }
 
 .agent-desk-view-tab.is-offline .agent-desk-view-tab-status {
-  background: var(--q-c-dark-3);
+  border-color: var(--status-off);
+  background: transparent;
 }
 
 .agent-desk-view-tab.is-empty .agent-desk-view-tab-status {
@@ -164,7 +165,7 @@ html[data-macos26="true"] .agent-desk-view-tabs {
   top: 6px;
   width: 5px;
   height: 5px;
-  border-radius: 50%;
+  border-radius: 1px;
   background: var(--q-c-blue-light);
 }
 

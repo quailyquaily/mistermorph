@@ -367,6 +367,12 @@
   color: var(--text-1);
 }
 
+.audit-time {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
 .audit-event-meta time {
   font-variant-numeric: tabular-nums;
 }

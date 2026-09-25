@@ -3,7 +3,7 @@ import "./StatsView.css";
 
 import AppPage from "../components/AppPage";
 import AppTabs from "../components/AppTabs";
-import { endpointState, formatTime, runtimeApiFetch, translate } from "../core/context";
+import { endpointState, formatShortTime, runtimeApiFetch, translate } from "../core/context";
 import { modelVendorMeta } from "../core/model-vendor";
 
 function hasMetricValue(totals, key) {
@@ -333,7 +333,7 @@ const StatsView = {
     const summaryMetaItems = computed(() => {
       const items = [];
       if (payload.value.updated_at) {
-        const value = formatTime(payload.value.updated_at);
+        const value = formatShortTime(payload.value.updated_at);
         items.push({
           key: "updated",
           icon: "PhClockCounterClockwise",
