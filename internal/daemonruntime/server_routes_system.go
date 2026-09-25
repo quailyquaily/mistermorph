@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -309,6 +310,60 @@ func (routes *routeRegistration) registerSystemRoutes() {
 			"summary":           proj.Summary,
 			"api_hosts":         proj.APIHosts,
 			"models":            proj.Models,
+		})
+	})
+
+	// Daily totals for the last `days` days, split on calendar days in the caller's `tz`
+	// (an IANA name such as Asia/Shanghai; UTC when absent).
+	mux.HandleFunc("/stats/llm/daily", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if !checkAuth(r, authToken) {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		query := r.URL.Query()
+		days := llmstats.DefaultDailyDays
+		if raw := strings.TrimSpace(query.Get("days")); raw != "" {
+			n, err := strconv.Atoi(raw)
+			if err != nil || n <= 0 {
+				http.Error(w, "invalid days", http.StatusBadRequest)
+				return
+			}
+			days = n
+		}
+		loc := time.UTC
+		if name := strings.TrimSpace(query.Get("tz")); name != "" {
+			parsed, err := time.LoadLocation(name)
+			if err != nil {
+				http.Error(w, "invalid tz", http.StatusBadRequest)
+				return
+			}
+			loc = parsed
+		}
+		store := llmstats.NewProjectionStoreWithOptions(
+			capturedPaths.LLMUsageJournalDir,
+			capturedPaths.LLMUsageProjectionPath,
+			llmstats.ProjectionOptions{
+				PricingFile: settingsReader.GetString("llm.pricing_file"),
+				ConfigPath:  pricingConfigPath,
+			},
+		)
+		daily, err := store.Daily(days, loc)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"generated_at": time.Now().UTC().Format(time.RFC3339),
+			"time_zone":    daily.TimeZone,
+			"from":         daily.From,
+			"to":           daily.To,
+			"summary":      daily.Summary,
+			"days":         daily.Days,
 		})
 	})
 

@@ -25,7 +25,7 @@
 
 .stats-hero.block-default {
   padding: clamp(18px, 2vw, 24px);
-  background: #fff;
+  background: var(--q-card-bg, var(--q-bg-white));
   border: 1px solid var(--stats-line);
 }
 

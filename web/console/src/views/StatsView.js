@@ -4,6 +4,7 @@ import { formatCompactCost, formatExactCost } from "../core/cost-format.js";
 
 import AppPage from "../components/AppPage";
 import AppTabs from "../components/AppTabs";
+import StatsDailyPanel from "../components/StatsDailyPanel";
 import { endpointState, formatShortTime, runtimeApiFetch, translate } from "../core/context";
 import { modelVendorMeta } from "../core/model-vendor";
 
@@ -268,6 +269,7 @@ const StatsView = {
   components: {
     AppPage,
     AppTabs,
+    StatsDailyPanel,
   },
   setup() {
     const t = translate;
@@ -481,6 +483,8 @@ const StatsView = {
             </div>
           </div>
         </header>
+
+        <StatsDailyPanel />
 
         <section class="stats-section">
           <AppTabs

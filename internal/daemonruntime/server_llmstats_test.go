@@ -150,3 +150,78 @@ func TestLLMUsageStatsRouteUsesCapturedPricingConfig(t *testing.T) {
 		t.Fatalf("total cost = %v, want captured pricing cost 1", payload.Summary.TotalCost)
 	}
 }
+
+func TestLLMDailyStatsRoute(t *testing.T) {
+	stateDir := t.TempDir()
+	paths := testRuntimePaths(stateDir)
+
+	journal := llmstats.NewJournal(paths.LLMUsageJournalDir, llmstats.JournalOptions{})
+	if _, err := journal.Append(llmstats.RequestRecord{
+		TS:           time.Now().UTC().Format(time.RFC3339),
+		Provider:     "openai",
+		APIBase:      "https://api.openai.com",
+		Model:        "gpt-5.2",
+		InputTokens:  8,
+		OutputTokens: 4,
+		CostCurrency: "USD",
+		TotalCost:    0.5,
+	}); err != nil {
+		t.Fatalf("Append() error = %v", err)
+	}
+	if err := journal.Close(); err != nil {
+		t.Fatalf("Journal.Close() error = %v", err)
+	}
+
+	mux := http.NewServeMux()
+	RegisterRoutes(mux, RoutesOptions{Mode: "serve", AuthToken: "token", RuntimePaths: paths})
+	get := func(target string) *httptest.ResponseRecorder {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, target, nil)
+		req.Header.Set("Authorization", "Bearer token")
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		return rec
+	}
+
+	t.Run("buckets", func(t *testing.T) {
+		rec := get("/stats/llm/daily?days=7&tz=UTC")
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200 (%s)", rec.Code, rec.Body.String())
+		}
+		var payload struct {
+			TimeZone string `json:"time_zone"`
+			To       string `json:"to"`
+			Summary  struct {
+				Requests  int64   `json:"requests"`
+				TotalCost float64 `json:"total_cost"`
+			} `json:"summary"`
+			Days []struct {
+				Date        string `json:"date"`
+				Requests    int64  `json:"requests"`
+				TotalTokens int64  `json:"total_tokens"`
+			} `json:"days"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+			t.Fatalf("Unmarshal() error = %v", err)
+		}
+		if payload.TimeZone != "UTC" || len(payload.Days) != 7 || payload.Summary.Requests != 1 || payload.Summary.TotalCost != 0.5 {
+			t.Fatalf("payload = %+v", payload)
+		}
+		last := payload.Days[len(payload.Days)-1]
+		if last.Date != payload.To || last.Requests != 1 || last.TotalTokens != 12 {
+			t.Fatalf("today = %+v, want 1 request / 12 tokens on %s", last, payload.To)
+		}
+	})
+
+	for _, tc := range []struct{ name, target string }{
+		{"bad days", "/stats/llm/daily?days=abc"},
+		{"zero days", "/stats/llm/daily?days=0"},
+		{"bad tz", "/stats/llm/daily?tz=Mars/Base"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if rec := get(tc.target); rec.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want 400", rec.Code)
+			}
+		})
+	}
+}

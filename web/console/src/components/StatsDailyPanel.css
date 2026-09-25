@@ -1,0 +1,371 @@
+/* Daily usage chart on the Stats page. Inherits the --stats-* tokens from .stats-page. */
+.stats-daily {
+  --daily-bar: color-mix(in srgb, var(--stats-accent) 58%, transparent);
+  --daily-select: var(--q-c-blue);
+  --daily-rule: var(--stats-line);
+  --daily-plot-height: 184px;
+  position: relative;
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding: clamp(16px, 2vw, 22px);
+  border: 1px solid var(--daily-rule);
+  background: var(--q-card-bg, var(--q-bg-white));
+}
+
+/* Registration marks, matching the summary sheet above. */
+.stats-daily::before,
+.stats-daily::after {
+  content: "";
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border: 0 solid color-mix(in srgb, var(--stats-accent) 72%, transparent);
+  pointer-events: none;
+}
+
+.stats-daily::before {
+  top: -1px;
+  left: -1px;
+  border-top-width: 2px;
+  border-left-width: 2px;
+}
+
+.stats-daily::after {
+  right: -1px;
+  bottom: -1px;
+  border-right-width: 2px;
+  border-bottom-width: 2px;
+}
+
+.stats-daily-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+}
+
+.stats-daily-heading {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 12px;
+  min-width: 0;
+}
+
+.stats-daily-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--stats-ink);
+  font: 600 var(--font-size-meta) / 1.4 var(--font-mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.stats-daily-title::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  background: var(--stats-accent);
+}
+
+.stats-daily-zone {
+  overflow: hidden;
+  color: var(--stats-muted);
+  font: 400 10px/1.4 var(--font-mono);
+  letter-spacing: 0.06em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stats-daily-controls {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.stats-daily-key {
+  color: var(--stats-muted);
+  font: 400 9.5px/1.4 var(--font-mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.stats-daily-value {
+  margin: 0;
+  color: var(--stats-ink);
+  font: 400 11px/1.4 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.stats-daily-note {
+  margin-left: 6px;
+  color: var(--stats-muted);
+  font-size: 10px;
+}
+
+.stats-daily-error {
+  margin: 0;
+  color: var(--q-c-red);
+  font-size: var(--font-size-meta);
+}
+
+/* Readout for the hovered, pinned or (by default) latest day. */
+.stats-daily-readout {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 18px;
+  min-height: 22px;
+  padding: 6px 10px;
+  border-left: 2px solid var(--daily-select);
+  background: color-mix(in srgb, var(--daily-select) 5%, transparent);
+}
+
+.stats-daily-readout-date {
+  color: var(--stats-ink);
+  font: 400 11px/1.4 var(--font-mono);
+  letter-spacing: 0.04em;
+}
+
+.stats-daily-readout-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.stats-daily-chart {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: var(--daily-plot-height) auto;
+  column-gap: 10px;
+  row-gap: 6px;
+  min-width: 0;
+}
+
+.stats-daily-axis {
+  position: relative;
+  min-width: 44px;
+}
+
+.stats-daily-tick {
+  position: absolute;
+  right: 0;
+  color: var(--stats-muted);
+  font: 400 10px/1 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  transform: translateY(50%);
+}
+
+.stats-daily-plot {
+  position: relative;
+  min-width: 0;
+}
+
+.stats-daily-grid {
+  position: absolute;
+  right: 0;
+  left: 0;
+  border-top: 1px dashed var(--stats-line-soft);
+  pointer-events: none;
+}
+
+.stats-daily-grid.is-base {
+  border-top: 1px solid var(--daily-rule);
+}
+
+.stats-daily-average {
+  position: absolute;
+  right: 0;
+  left: 0;
+  z-index: 2;
+  border-top: 1px dashed color-mix(in srgb, var(--stats-ink) 45%, transparent);
+  pointer-events: none;
+}
+
+/* Legend for the average line, shown before the Avg / day figure. */
+.stats-daily-average-swatch {
+  display: inline-block;
+  width: 14px;
+  margin-right: 6px;
+  vertical-align: middle;
+  border-top: 1px dashed color-mix(in srgb, var(--stats-ink) 55%, transparent);
+}
+
+.stats-daily-bars {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  align-items: stretch;
+}
+
+.stats-daily-bar {
+  display: flex;
+  flex: 1 1 0;
+  align-items: flex-end;
+  justify-content: center;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.stats-daily-bar-fill {
+  display: block;
+  width: 62%;
+  max-width: 28px;
+  min-width: 1px;
+  background: var(--daily-bar);
+  transition: height 220ms ease, background-color 120ms ease;
+}
+
+/* Today is still filling up: hatched instead of solid. */
+.stats-daily-bar.is-today .stats-daily-bar-fill {
+  box-shadow: inset 0 0 0 1px var(--daily-bar);
+  background: repeating-linear-gradient(135deg, var(--daily-bar) 0 2px, transparent 2px 5px);
+}
+
+.stats-daily-bar:hover,
+.stats-daily-bar.is-focused {
+  background: color-mix(in srgb, var(--daily-select) 5%, transparent);
+}
+
+.stats-daily-bar.is-focused .stats-daily-bar-fill,
+.stats-daily-bar.is-pinned .stats-daily-bar-fill {
+  --daily-bar: var(--daily-select);
+}
+
+.stats-daily-bar:focus-visible {
+  outline: 1px solid var(--daily-select);
+  outline-offset: -1px;
+}
+
+.stats-daily-empty {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  color: var(--stats-muted);
+  font: 400 10.5px/1.4 var(--font-mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
+.stats-daily-xaxis {
+  grid-column: 2;
+  display: flex;
+  min-width: 0;
+}
+
+/* Labels are wider than a bar slot: flex centring lets them overflow evenly, and the end
+   labels overflow inwards so they stay inside the plot. */
+.stats-daily-xlabel {
+  display: flex;
+  flex: 1 1 0;
+  justify-content: center;
+  min-width: 0;
+  color: var(--stats-muted);
+  font: 400 10px/1.2 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.stats-daily-xlabel:first-child {
+  justify-content: flex-start;
+}
+
+.stats-daily-xlabel:last-child {
+  justify-content: flex-end;
+}
+
+.stats-daily-xlabel.is-hidden {
+  visibility: hidden;
+}
+
+.stats-daily-xlabel.is-focused {
+  color: var(--daily-select);
+  visibility: visible;
+}
+
+/* Range figures as one datasheet row. */
+.stats-daily-figures {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  margin: 0;
+  border-top: 1px solid var(--daily-rule);
+}
+
+.stats-daily-figure {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 10px 12px 0;
+}
+
+.stats-daily-figure + .stats-daily-figure {
+  border-left: 1px dashed var(--stats-line-soft);
+}
+
+.stats-daily-figure:first-child {
+  padding-left: 0;
+}
+
+@media (max-width: 860px) {
+  .stats-daily-figures {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .stats-daily-figure:nth-child(3n + 1) {
+    padding-left: 0;
+    border-left: 0;
+  }
+
+  .stats-daily-figure:nth-child(n + 4) {
+    margin-top: 10px;
+    border-top: 1px dashed var(--stats-line-soft);
+  }
+}
+
+@media (max-width: 560px) {
+  .stats-daily {
+    --daily-plot-height: 150px;
+  }
+
+  .stats-daily-chart.is-dense .stats-daily-bar-fill {
+    width: 80%;
+  }
+
+  .stats-daily-readout {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 4px 12px;
+  }
+
+  .stats-daily-readout-date,
+  .stats-daily-readout-item.is-wide {
+    grid-column: 1 / -1;
+  }
+
+  .stats-daily-readout-item {
+    justify-content: space-between;
+    min-width: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stats-daily-bar-fill {
+    transition: none;
+  }
+}

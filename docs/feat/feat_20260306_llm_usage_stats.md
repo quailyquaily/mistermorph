@@ -488,6 +488,13 @@ Acceptance criteria:
   - [x] API domain
   - [x] API domain -> models
 - [x] return stable JSON payload
+- [x] add daily route (2026-09-25):
+  - [x] `GET /stats/llm/daily?days=30&tz=Asia/Shanghai`
+  - [x] `days` defaults to 30 and is capped at 366; a non-positive or non-numeric value is a 400
+  - [x] `tz` is an IANA zone name (UTC when absent, 400 when unknown); days split at midnight in that zone
+  - [x] response: `time_zone`, `from`, `to`, `summary` (range totals) and `days` (one entry per calendar day, oldest first, zero totals for idle days), each with the same fields as `summary`
+  - [x] reads the journal directly instead of the projection, so any zone can be served without storing per-zone buckets; segments that end before the range are skipped, and costs are backfilled from pricing the same way as the projection
+  - [x] the console Stats page draws it as the Daily chart
 
 Acceptance criteria:
 

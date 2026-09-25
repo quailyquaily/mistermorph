@@ -61,9 +61,11 @@
   height: 1rem;
 }
 
+/* The label clips for the ellipsis, so its line box must be tall enough for descenders. */
 .app-tabs-option-label {
   min-width: 0;
   overflow: hidden;
+  line-height: 1.4;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
