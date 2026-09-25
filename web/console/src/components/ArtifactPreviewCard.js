@@ -99,6 +99,7 @@ const ArtifactPreviewCard = {
     });
 
     const displayPath = computed(() => `${preview.value.dirName}/${preview.value.path}`);
+    const artifactName = computed(() => (preview.value.path ? artifactFilename(preview.value.path) : ""));
     const isImagePreview = computed(() => IMAGE_PREVIEW_EXTENSIONS.has(artifactPathExtension(preview.value.path)));
     const artifactLabel = computed(() =>
       isImagePreview.value ? t("artifact_preview_type_image") : t("artifact_preview_type_web")
@@ -317,6 +318,7 @@ const ArtifactPreviewCard = {
       previewCardClass,
       fullscreenActionLabel,
       displayPath,
+      artifactName,
       artifactLabel,
       isImagePreview,
       canPreview,
@@ -331,6 +333,7 @@ const ArtifactPreviewCard = {
         <header v-if="!previewFullscreen" class="artifact-preview-head">
           <div class="artifact-preview-copy">
             <p class="artifact-preview-kicker">{{ artifactLabel }}</p>
+            <p v-if="artifactName" class="artifact-preview-name" :title="displayPath">{{ artifactName }}</p>
           </div>
           <div class="artifact-preview-actions">
             <QButton

@@ -397,6 +397,38 @@ function compareTopicsNewestFirst(left, right) {
   return leftID < rightID ? 1 : -1;
 }
 
+function topicDate(topic) {
+  const date = new Date(String(topic?.updated_at || topic?.created_at || "").trim());
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function topicDayKey(topic) {
+  const date = topicDate(topic);
+  return date ? `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}` : "";
+}
+
+function topicDayLabel(topic, translate) {
+  const date = topicDate(topic);
+  if (!date) {
+    return "";
+  }
+  const today = new Date();
+  const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
+  const sameDay = (left, right) =>
+    left.getFullYear() === right.getFullYear() && left.getMonth() === right.getMonth() && left.getDate() === right.getDate();
+  if (sameDay(date, today)) {
+    return translate("chat_topics_today");
+  }
+  if (sameDay(date, yesterday)) {
+    return translate("chat_topics_yesterday");
+  }
+  return date.toLocaleDateString(currentLocale(), {
+    year: date.getFullYear() === today.getFullYear() ? undefined : "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
+
 function topicTimeLabel(topic) {
   const raw = String(topic?.updated_at || topic?.created_at || "").trim();
   if (!raw) {
@@ -947,6 +979,21 @@ const ChatView = {
     const mobileWorkspaceSidebarVisible = computed(
       () => workspaceSidebarAvailable.value && mobileMode.value && showChatPane.value && workspaceSidebarOpen.value
     );
+    // Consecutive topics from the same local day share one date header instead of repeating the date per row.
+    const topicDayGroups = computed(() => {
+      const groups = [];
+      for (const topic of visibleTopics.value) {
+        const dayKey = topicDayKey(topic);
+        const last = groups[groups.length - 1];
+        if (last && last.dayKey === dayKey) {
+          last.topics.push(topic);
+        } else {
+          groups.push({ key: `${dayKey}:${normalizeTopicID(topic?.id)}`, dayKey, label: topicDayLabel(topic, t), topics: [topic] });
+        }
+      }
+      return groups;
+    });
+
     const shellClass = computed(() => {
       const classes = ["chat-shell"];
       if (consoleTopicsEnabled.value && hasVisibleTopics.value && !mobileTopicSplitEnabled.value) {
@@ -3744,8 +3791,20 @@ const ChatView = {
 
     useTopicMetadata(topics, submitEndpointRef);
 
+    // The history reserves a stable scrollbar gutter; the composer mirrors its measured width so both right edges line up.
+    function syncHistoryScrollbarWidth() {
+      const el = historyViewport.value;
+      if (!el?.parentElement) {
+        return;
+      }
+      el.parentElement.style.setProperty("--chat-history-scrollbar-w", `${Math.max(0, el.offsetWidth - el.clientWidth)}px`);
+    }
+
+    watch(historyViewport, () => nextTick(syncHistoryScrollbarWidth));
+
     onMounted(() => {
       window.addEventListener("resize", refreshMobileMode);
+      window.addEventListener("resize", syncHistoryScrollbarWidth);
       refreshMobileMode();
       dialogShellPreloadCancel = scheduleIdleCallback(() => {
         dialogShellPreloadCancel = null;
@@ -3766,6 +3825,7 @@ const ChatView = {
       historyLoadVersion += 1;
       persistComposerDraft();
       window.removeEventListener("resize", refreshMobileMode);
+      window.removeEventListener("resize", syncHistoryScrollbarWidth);
       window.removeEventListener("keydown", onMobileWorkspaceSidebarKeydown);
       unlockMobileWorkspaceSidebarScroll();
       if (dialogShellPreloadCancel) {
@@ -4054,6 +4114,7 @@ const ChatView = {
       topicTitle,
       topicIcon,
       topicTime,
+      topicDayGroups,
       topicItemClass,
       topicIsActive,
       clickTopicSidebarTitle,
@@ -4140,31 +4201,27 @@ const ChatView = {
               </QButton>
             </header>
             <div :class="topicsLoading ? 'chat-topic-list workspace-sidebar-list is-busy' : 'chat-topic-list workspace-sidebar-list'">
-              <button
-                v-for="topic in visibleTopics"
-                :key="topic.id"
-                type="button"
-                :class="topicItemClass(topic)"
-                :aria-current="topicIsActive(topic) ? 'page' : undefined"
-                @click="selectTopic(topic.id)"
-              >
-                <span
-                  class="topic-icon chat-topic-item-icon"
-                  :style="{ '--topic-icon': 'url(' + JSON.stringify(topicIcon(topic)) + ')' }"
-                  aria-hidden="true"
-                ></span>
-                <span class="chat-topic-item-copy workspace-sidebar-item-copy">
-                  <span class="chat-topic-item-main">
+              <section v-for="group in topicDayGroups" :key="group.key" class="chat-topic-day">
+                <h4 v-if="group.label" class="chat-topic-day-label">{{ group.label }}</h4>
+                <button
+                  v-for="topic in group.topics"
+                  :key="topic.id"
+                  type="button"
+                  :class="topicItemClass(topic)"
+                  :title="topicTime(topic) || undefined"
+                  :aria-current="topicIsActive(topic) ? 'page' : undefined"
+                  @click="selectTopic(topic.id)"
+                >
+                  <span
+                    class="topic-icon chat-topic-item-icon"
+                    :style="{ '--topic-icon': 'url(' + JSON.stringify(topicIcon(topic)) + ')' }"
+                    aria-hidden="true"
+                  ></span>
+                  <span class="chat-topic-item-copy workspace-sidebar-item-copy">
                     <span class="chat-topic-item-title workspace-sidebar-item-title">{{ topicTitle(topic) }}</span>
-                    <span v-if="topicTime(topic)" class="chat-topic-item-meta workspace-sidebar-item-meta">
-                      <time class="chat-topic-item-time">{{ topicTime(topic) }}</time>
-                    </span>
                   </span>
-                </span>
-                <span class="chat-topic-item-marker workspace-sidebar-item-marker" aria-hidden="true">
-                  <QBadge v-if="topicIsActive(topic)" dot type="primary" size="sm" />
-                </span>
-              </button>
+                </button>
+              </section>
               <QButton
                 v-if="topicsNextCursor"
                 class="plain sm chat-topic-load-older"
@@ -4259,7 +4316,6 @@ const ChatView = {
                   :loading="historyLoading"
                   :loading-text="t('chat_history_loading')"
                   :empty-text="t('chat_empty')"
-                  :footer-text="chatDisclaimer"
                   :submit-endpoint-ref="submitEndpointRef"
                   :selected-topic-id="selectedTopicID"
                   :copied-item-id="copiedHistoryItemID"
@@ -4318,6 +4374,7 @@ const ChatView = {
               @request-commands="ensureComposerCommandsLoaded"
               @request-skills="ensureComposerSkillsLoaded"
               @height-change="updateComposerHeight"
+              :footer-text="chatDisclaimer"
             />
           </section>
           <aside

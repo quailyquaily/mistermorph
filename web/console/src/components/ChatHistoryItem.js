@@ -132,6 +132,10 @@ const ChatHistoryItem = {
     const userFiles = computed(() =>
       role.value === "user" && Array.isArray(props.item?.files) ? props.item.files : []
     );
+    function fileKind(file) {
+      const match = /\.([a-z0-9]{1,6})$/i.exec(String(file?.name || ""));
+      return match ? match[1].toUpperCase() : "";
+    }
     const copyButtonClass = computed(() =>
       props.copied ? "chat-history-copy-action is-copied" : "chat-history-copy-action"
     );
@@ -266,6 +270,7 @@ const ChatHistoryItem = {
       approvalVisible,
       copyAvailable,
       copyButtonClass,
+      fileKind,
       contextCompactNotice,
       contextCompactNoticeClass,
       emitApprovalApprove,
@@ -448,22 +453,25 @@ const ChatHistoryItem = {
         </div>
       </template>
       <template v-else>
-        <div v-if="userFiles.length" class="chat-history-files">
-          <button
-            v-for="file in userFiles"
-            :key="file.id"
-            type="button"
-            class="chat-history-file"
-            :title="filePreviewLabel + ': ' + file.name"
-            :aria-label="filePreviewLabel + ': ' + file.name"
-            @click="emitPreviewFile(file)"
-          >
-            <PhPaperclip class="chat-history-file-icon" />
-            <span class="chat-history-file-name">{{ file.name }}</span>
-          </button>
-        </div>
-        <div :class="surfaceClass">
-          <div class="chat-history-body">{{ item.text }}</div>
+        <div :class="userFiles.length ? 'chat-history-message has-files' : 'chat-history-message'">
+          <div :class="surfaceClass">
+            <div class="chat-history-body">{{ item.text }}</div>
+          </div>
+          <div v-if="userFiles.length" class="chat-history-files">
+            <button
+              v-for="file in userFiles"
+              :key="file.id"
+              type="button"
+              class="chat-history-file"
+              :title="filePreviewLabel + ': ' + file.name"
+              :aria-label="filePreviewLabel + ': ' + file.name"
+              @click="emitPreviewFile(file)"
+            >
+              <PhPaperclip class="chat-history-file-icon" />
+              <span class="chat-history-file-name">{{ file.name }}</span>
+              <span v-if="fileKind(file)" class="chat-history-file-kind" aria-hidden="true">{{ fileKind(file) }}</span>
+            </button>
+          </div>
         </div>
         <button
           v-if="copyAvailable"

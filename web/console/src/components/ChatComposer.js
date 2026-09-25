@@ -259,6 +259,10 @@ export default {
       type: Object,
       default: () => DEFAULT_SUGGESTION_LABELS,
     },
+    footerText: {
+      type: String,
+      default: "",
+    },
     maxRows: {
       type: Number,
       default: DEFAULT_MAX_ROWS,
@@ -1204,6 +1208,7 @@ export default {
           </div>
         </div>
       </div>
+      <p v-if="footerText" class="chat-composer-footer">{{ footerText }}</p>
       <ChatComposerDialogMenu
         v-if="showAddActions && addUsesDialog"
         v-model="addDialogOpen"

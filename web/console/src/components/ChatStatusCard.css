@@ -9,8 +9,10 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 12px;
-  font-size: var(--font-size-meta);
+  gap: 14px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
   line-height: var(--chat-status-summary-line);
 }
 
@@ -22,7 +24,7 @@
   flex-wrap: nowrap;
   gap: 4px;
   min-height: var(--chat-status-summary-line);
-  color: var(--text-2);
+  color: var(--q-c-dark-3);
   font-size: inherit;
   line-height: inherit;
   cursor: default;

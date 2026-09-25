@@ -16,7 +16,21 @@
   overflow: hidden;
 }
 
+/* base.css defines these tokens on :root, where they resolve against Quail's default warm palette.
+   Re-declaring them here re-resolves them under the body theme (morph) for everything in the chat. */
 .chat-shell {
+  --bg-0: var(--q-bg-light);
+  --bg-1: var(--q-bg-light-2);
+  --bg-2: var(--q-bg-white);
+  --text-0: var(--q-c-dark);
+  --text-1: var(--q-c-dark-2);
+  --text-2: var(--q-c-dark-3);
+  --line: color-mix(in srgb, var(--q-c-dark-4) 72%, transparent);
+  --line-soft: color-mix(in srgb, var(--q-c-dark-4) 52%, transparent);
+  --accent-0: var(--q-c-secondary);
+  --accent-1: var(--q-c-blue);
+  --ok: var(--q-c-green);
+  --danger: var(--q-c-red);
   flex: 1 1 auto;
   min-height: 0;
   display: grid;
@@ -154,33 +168,42 @@
   flex: 0 0 auto;
 }
 
+/* Topics are grouped under one date header per day, so rows carry only the title. */
+.chat-topic-day + .chat-topic-day {
+  margin-top: 6px;
+}
+
+.chat-topic-day-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding: 10px 14px 4px;
+  color: var(--q-c-dark-3);
+  font: 500 11px/1.4 var(--font-mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.chat-topic-day-label::after {
+  content: "";
+  flex: 1 1 auto;
+  height: 1px;
+  background: var(--line-soft);
+}
+
 .chat-topic-item {
-  grid-template-columns: 20px minmax(0, 1fr) 16px;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 10px;
+  padding-block: 7px;
   box-shadow: none !important;
 }
 
 .chat-topic-item-icon {
-  align-self: start;
-  color: var(--text-1);
-}
-
-.chat-topic-item-main {
-  min-width: 0;
-  display: grid;
-  grid-template-rows: minmax(0, auto) minmax(0, auto);
-  gap: 4px;
-  min-height: 38px;
-  align-content: start;
-  overflow: hidden;
-}
-
-.chat-topic-item-title,
-.chat-topic-item-meta {
-  min-width: 0;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  align-self: center;
+  width: 16px;
+  height: 16px;
+  color: var(--q-c-dark-2);
 }
 
 .chat-topic-item-title.workspace-sidebar-item-title {
@@ -196,28 +219,6 @@
   line-clamp: unset;
 }
 
-.chat-topic-item-meta {
-  display: flex;
-  align-items: center;
-  flex-wrap: nowrap;
-  gap: 8px;
-  min-width: 0;
-}
-
-.chat-topic-item-time {
-  display: inline-flex;
-  align-items: center;
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.chat-topic-item.is-active .chat-topic-item-meta {
-  color: var(--text-1);
-}
-
 .chat-topic-item.is-active .chat-topic-item-title {
   color: var(--q-c-dark);
 }
@@ -231,10 +232,24 @@
   grid-template-rows: auto minmax(0, 1fr) auto;
   align-items: stretch;
   overflow: hidden;
+  isolation: isolate;
+}
+
+/* Tracing paper over the drafting grid: the body grid shows through faintly so the sheet keeps its
+   texture, but no longer cuts through message text. The topic sidebar keeps the full grid. */
+.chat-main::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: color-mix(in srgb, var(--q-bg-paper) 65%, transparent);
+  pointer-events: none;
 }
 
 .chat-main:not(.is-readonly):not(.is-placeholder-mode) > .chat-composer {
-  padding-bottom: max(24px, env(safe-area-inset-bottom, 0px));
+  margin-left: var(--chat-history-gutter-x);
+  margin-right: calc(var(--chat-history-gutter-x) + var(--chat-history-scrollbar-w, 0px));
+  padding-bottom: max(10px, env(safe-area-inset-bottom, 0px));
 }
 
 .chat-main.is-readonly {
@@ -1192,6 +1207,7 @@ html[data-macos26="true"] .chat-workspace-sidebar-shell-mobile {
 }
 
 .chat-history {
+  --chat-measure: 46rem;
   display: grid;
   gap: 20px;
   align-content: start;
@@ -1244,36 +1260,46 @@ html[data-macos26="true"] .chat-workspace-sidebar-shell-mobile {
   gap: 8px;
 }
 
+/* Assistant replies read as a document on the sheet, not as a card. */
 .chat-history-copy {
-  padding: 13px 15px 14px;
-  border: 1px solid color-mix(in srgb, var(--line-soft) 80%, transparent);
-  border-radius: 16px 16px 16px 0;
-  background: #fff;
-  box-shadow:
-    0 12px 26px rgba(19, 24, 32, 0.035),
-    0 1px 0 rgba(255, 255, 255, 0.76) inset;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
   overflow: visible;
 }
 
+/* Reasoning is a side note: muted, smaller, and cut off from the answer by a dashed line. */
 .chat-history-reasoning {
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.2);
+  padding-bottom: 14px;
+  border-bottom: 1px dashed var(--q-card-border-color);
+  color: var(--q-c-dark-3);
+}
+
+/* Also carries .chat-history-copy, whose document font-size is declared later with equal specificity. */
+.chat-history-copy.chat-history-reasoning .mmr-document {
+  --mmr-text: var(--q-c-dark-3);
+  color: var(--q-c-dark-3);
+  font-size: 13px;
+  line-height: 1.65;
 }
 
 .chat-history-bubble {
   position: relative;
-  padding: 13px 15px 14px;
-  border: 1px solid color-mix(in srgb, var(--line-soft) 88%, transparent);
-  border-radius: 16px;
-  background: #fff;
-  box-shadow:
-    0 8px 18px rgba(19, 24, 32, 0.028),
-    0 1px 0 rgba(255, 255, 255, 0.68) inset;
+  padding: 10px 14px 11px;
+  border: 1px solid var(--q-card-border-color);
+  border-radius: 2px;
+  background: var(--q-bg-white);
+  box-shadow: none;
   overflow: visible;
 }
 
 .chat-history-approval-surface {
   padding: 16px 18px 14px;
+  border: 1px solid var(--q-card-border-color);
+  border-radius: 2px;
+  background: var(--q-bg-white);
 }
 
 .chat-approval-panel {
@@ -1393,7 +1419,7 @@ html[data-macos26="true"] .chat-workspace-sidebar-shell-mobile {
   padding: 10px 12px;
   overflow-x: auto;
   border: 1px solid color-mix(in srgb, var(--line-soft) 86%, transparent);
-  border-radius: 8px;
+  border-radius: 2px;
   background: color-mix(in srgb, var(--q-c-blue) 3%, var(--bg-1));
   color: var(--text-0);
   font-family: var(--font-mono);
@@ -1446,9 +1472,9 @@ html[data-macos26="true"] .chat-workspace-sidebar-shell-mobile {
   margin-top: -2px;
   padding: 0;
   border: 0;
-  border-radius: 7px;
+  border-radius: 2px;
   background: transparent;
-  color: color-mix(in srgb, var(--text-2) 78%, transparent);
+  color: var(--q-c-dark-3);
   cursor: default;
   opacity: 0.72;
   transition:
@@ -1478,6 +1504,18 @@ html[data-macos26="true"] .chat-workspace-sidebar-shell-mobile {
   color: var(--q-c-accent);
 }
 
+@media (hover: hover) {
+  .chat-history-copy-action {
+    opacity: 0;
+  }
+
+  .chat-history-item:hover .chat-history-copy-action,
+  .chat-history-copy-action:focus-visible,
+  .chat-history-copy-action.is-copied {
+    opacity: 0.72;
+  }
+}
+
 .chat-history-status {
   position: static;
   z-index: 0;
@@ -1487,9 +1525,9 @@ html[data-macos26="true"] .chat-workspace-sidebar-shell-mobile {
   padding: 0;
   font-family: var(--font-mono);
   line-height: 1.4;
-  font-size: var(--font-size-meta);
-  letter-spacing: 0.08em;
-  color: var(--text-2);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--q-c-dark-3);
   user-select: none;
   opacity: 1;
   pointer-events: auto;
@@ -1512,7 +1550,7 @@ html[data-macos26="true"] .chat-workspace-sidebar-shell-mobile {
   font-family: inherit;
   font-size: inherit;
   line-height: inherit;
-  letter-spacing: 0;
+  letter-spacing: inherit;
 }
 
 .chat-history-body {
@@ -1539,13 +1577,42 @@ html[data-macos26="true"] .chat-workspace-sidebar-shell-mobile {
   min-width: 0;
 }
 
+/* A web artifact is an exhibit sheet inside the reply: hairline frame, registration marks on
+   opposite corners, a title strip naming the file. Uses Quail variables directly because the
+   fullscreen card is teleported to <body>, outside the chat's token scope. */
 .artifact-preview-card {
+  position: relative;
   display: grid;
   gap: 0;
-  margin-block: 12px;
-  border: 1px solid color-mix(in srgb, var(--line-soft) 86%, transparent);
-  border-radius: 8px;
-  background: color-mix(in srgb, #fff 92%, var(--q-c-accent) 8%);
+  margin-block: 14px;
+  border: 1px solid var(--q-card-border-color);
+  border-radius: 2px;
+  background: var(--q-bg-white);
+}
+
+.artifact-preview-card:not(.is-fullscreen)::before,
+.artifact-preview-card:not(.is-fullscreen)::after {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  width: 10px;
+  height: 10px;
+  border: 0 solid var(--q-c-dark);
+  pointer-events: none;
+}
+
+.artifact-preview-card:not(.is-fullscreen)::before {
+  top: -1px;
+  left: -1px;
+  border-top-width: 1.5px;
+  border-left-width: 1.5px;
+}
+
+.artifact-preview-card:not(.is-fullscreen)::after {
+  right: -1px;
+  bottom: -1px;
+  border-right-width: 1.5px;
+  border-bottom-width: 1.5px;
 }
 
 body.artifact-preview-scroll-lock {
@@ -1568,26 +1635,44 @@ body.artifact-preview-scroll-lock {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
   align-items: center;
-  padding: 12px;
+  min-height: 40px;
+  padding: 4px 6px 4px 14px;
 }
 
 .artifact-preview-copy {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
   min-width: 0;
 }
 
 .artifact-preview-kicker {
+  flex: 0 0 auto;
   margin: 0;
-  font-size: var(--font-size-meta);
-  font-weight: 700;
-  line-height: 1.2;
+  color: var(--q-c-dark-3);
+  font: 500 11px/1.4 var(--font-mono);
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--text-2);
+}
+
+.artifact-preview-name {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--q-c-dark-2);
+  font: 12px/1.4 var(--font-mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .artifact-preview-actions {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 2px;
+}
+
+.artifact-preview-actions .q-button {
+  border-radius: 2px !important;
 }
 
 .artifact-preview-corner {
@@ -1605,11 +1690,7 @@ body.artifact-preview-scroll-lock {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--line-soft) 92%, transparent);
-  border-top: 0;
-  border-radius: 8px;
-  border-top-left-radius: 0;
-  border-top-right-radius: 0;
+  border-top: 1px solid var(--q-card-border-color);
   background: #fff;
 }
 
@@ -1623,7 +1704,7 @@ body.artifact-preview-scroll-lock {
   place-items: center;
   padding: 16px;
   overflow: auto;
-  background: #f6f7f9;
+  background: var(--q-bg-paper);
 }
 
 .artifact-preview-card.is-fullscreen .artifact-preview-frame-shell.is-image {
@@ -1667,10 +1748,30 @@ body.artifact-preview-scroll-lock {
 .chat-history-copy .mmr-document {
   font-family: var(--font-ui);
   font-size: var(--font-size-body);
-  line-height: 1.78;
+  line-height: 1.7;
   min-width: 0;
   word-break: break-word;
   overflow-wrap: anywhere;
+}
+
+/* The renderer lays blocks out in a grid, where margins add instead of collapsing. */
+.chat-history-copy .mmr-document :is(p, ul, ol, blockquote) {
+  margin-block: 0.32em;
+}
+
+.chat-history-copy .mmr-document > :first-child {
+  margin-top: 0;
+}
+
+.chat-history-copy .mmr-document > :last-child {
+  margin-bottom: 0;
+}
+
+.chat-history-copy .mmr-document :not(pre) > code {
+  padding: 0.04em 0.3em;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--q-c-blue) 8%, transparent);
+  font-size: 0.88em;
 }
 
 .chat-history-copy .mmr-document pre,
@@ -1689,13 +1790,14 @@ body.artifact-preview-scroll-lock {
   overflow-x: auto;
   overflow-y: hidden;
   border: 1px solid var(--chat-code-border);
-  border-radius: 14px;
+  border-radius: 2px;
   background: var(--chat-code-bg);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
 .chat-history-copy .mmr-document table {
   display: block;
+  width: fit-content;
   max-width: 100%;
   min-width: 0;
   overflow-x: auto;
@@ -1705,7 +1807,7 @@ body.artifact-preview-scroll-lock {
   max-width: 100%;
   padding: 1.08em 1.12em;
   border: 0;
-  border-radius: 14px;
+  border-radius: 2px;
   background: transparent;
   font-size: var(--font-size-ui);
   line-height: 1.62;
@@ -1727,6 +1829,7 @@ body.artifact-preview-scroll-lock {
 
 .chat-history-copy .mmr-code-copy {
   border-color: var(--chat-code-border);
+  border-radius: 2px;
   background: var(--chat-code-surface);
   color: var(--chat-code-muted);
   box-shadow: none;
@@ -1759,7 +1862,7 @@ body.artifact-preview-scroll-lock {
 
 .chat-history-copy .mmr-diagram-surface {
   padding: 20px 22px;
-  border-radius: 12px;
+  border-radius: 2px;
 }
 
 .chat-history-user {
@@ -1767,75 +1870,136 @@ body.artifact-preview-scroll-lock {
   padding-left: clamp(48px, 10vw, 144px);
 }
 
+.chat-history-user {
+  --chat-user-bg: color-mix(in srgb, var(--q-c-blue) 7%, var(--q-bg-white));
+  --chat-user-edge: color-mix(in srgb, var(--q-c-dark-4) 62%, var(--q-bg-white));
+  --chat-user-tail: 8px;
+}
+
 .chat-history-user .chat-history-bubble {
   width: fit-content;
   max-width: min(100%, 58ch);
-  border-radius: 16px 16px 0 16px;
-  background: #fff;
+  margin-right: var(--chat-user-tail);
+  border-color: var(--chat-user-edge);
+  background: var(--chat-user-bg);
+}
+
+/* Tail: an outer triangle in the edge colour with an inner one in the fill, so the outline stays 1px. */
+.chat-history-user .chat-history-bubble::before,
+.chat-history-user .chat-history-bubble::after {
+  content: "";
+  position: absolute;
+  clip-path: polygon(0 0, 100% 0, 0 100%);
+  pointer-events: none;
+}
+
+.chat-history-user .chat-history-bubble::before {
+  top: -1px;
+  right: calc(-1 * var(--chat-user-tail) - 1px);
+  width: calc(var(--chat-user-tail) + 1px);
+  height: 12px;
+  background: var(--chat-user-edge);
+}
+
+.chat-history-user .chat-history-bubble::after {
+  top: 0;
+  right: calc(-1 * var(--chat-user-tail) + 0.6px);
+  width: calc(var(--chat-user-tail) + 0.4px);
+  height: 10.4px;
+  background: var(--chat-user-bg);
+}
+
+/* A user message is its text plus, when files were sent, a stub hung beneath it: same width,
+   joined by a perforated line, lighter paper, one row per file. */
+.chat-history-message {
+  justify-self: end;
+  display: grid;
+  width: fit-content;
+  max-width: min(100%, 58ch);
+  margin-right: var(--chat-user-tail, 0px);
+}
+
+.chat-history-message.has-files {
+  min-width: min(100%, 16rem);
+}
+
+.chat-history-message > .chat-history-bubble {
+  width: auto;
+  max-width: none;
+  margin-right: 0;
+}
+
+.chat-history-message.has-files > .chat-history-bubble {
+  border-bottom-style: dashed;
 }
 
 .chat-history-files {
-  justify-self: end;
-  width: fit-content;
-  max-width: min(100%, 58ch);
   display: grid;
-  gap: 2px;
-  padding: 6px;
-  border: 1px solid color-mix(in srgb, var(--line-soft) 88%, transparent);
-  border-radius: 16px 16px 8px 16px;
-  background: #fff;
-  box-shadow:
-    0 8px 18px rgba(19, 24, 32, 0.028),
-    0 1px 0 rgba(255, 255, 255, 0.68) inset;
+  padding: 3px 0;
+  border: 1px solid var(--chat-user-edge);
+  border-top: 0;
+  background: var(--q-bg-white);
 }
 
 .chat-history-file {
   min-width: 0;
-  max-width: 100%;
-  height: 34px;
-  display: flex;
+  display: grid;
+  grid-template-columns: 13px minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
-  padding: 0 9px;
+  padding: 5px 12px 5px 13px;
   border: 0;
-  border-radius: 10px;
   background: transparent;
-  color: var(--text-0);
+  color: var(--text-1);
   cursor: pointer;
   text-align: left;
 }
 
 .chat-history-file:hover {
-  background: color-mix(in srgb, var(--q-c-blue-light) 12%, transparent);
+  background: color-mix(in srgb, var(--q-c-blue) 6%, transparent);
+  color: var(--q-c-blue);
 }
 
 .chat-history-file:focus-visible {
-  outline: 1px solid color-mix(in srgb, var(--q-c-accent) 55%, transparent);
-  outline-offset: 2px;
+  outline: 1px solid var(--q-c-blue);
+  outline-offset: -1px;
 }
 
 .chat-history-file-icon {
-  width: 16px;
-  height: 16px;
-  flex: 0 0 auto;
+  width: 13px;
+  height: 13px;
   color: var(--text-2);
+}
+
+.chat-history-file:hover .chat-history-file-icon,
+.chat-history-file:hover .chat-history-file-kind {
+  color: currentColor;
 }
 
 .chat-history-file-name {
   min-width: 0;
   overflow: hidden;
-  font-size: var(--font-size-ui);
-  line-height: 1.35;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-meta);
+  line-height: 1.4;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.chat-history-file-kind {
+  color: var(--text-2);
+  font: 500 10px/1 var(--font-mono);
+  letter-spacing: 0.1em;
+}
+
 .chat-history-user .chat-history-copy-action {
   justify-self: end;
+  margin-right: var(--chat-user-tail);
 }
 
 .chat-history-user .chat-history-status {
   justify-self: end;
+  margin-right: var(--chat-user-tail);
   color: var(--text-2);
 }
 
@@ -1845,19 +2009,10 @@ body.artifact-preview-scroll-lock {
   padding-right: var(--chat-history-agent-padding-right);
 }
 
-.chat-history-agent .chat-history-stack > .chat-status-card {
-  justify-self: start;
-  width: calc(100% + var(--chat-history-agent-padding-right));
-}
-
-.chat-history-agent .chat-history-stack > .chat-history-copy:not(.chat-history-approval-surface) {
-  justify-self: start;
-  width: fit-content;
-  max-width: min(100%, 82ch);
-}
-
+.chat-history-agent .chat-history-stack > .chat-status-card,
 .chat-history-agent .chat-history-copy {
-  width: min(100%, 82ch);
+  justify-self: start;
+  width: min(100%, var(--chat-measure));
 }
 
 .chat-history-agent .chat-history-copy-action {
@@ -1916,11 +2071,11 @@ body.artifact-preview-scroll-lock {
 .chat-history-system .chat-history-bubble {
   width: min(100%, 68ch);
   padding: 10px 14px 11px;
-  border-radius: 14px;
+  border-radius: 2px;
   border-style: dashed;
-  border-color: color-mix(in srgb, var(--q-c-dark-3) 18%, transparent);
-  background: #fff;
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.72) inset;
+  border-color: var(--q-card-border-color);
+  background: transparent;
+  box-shadow: none;
 }
 
 .chat-history-system .chat-history-status {

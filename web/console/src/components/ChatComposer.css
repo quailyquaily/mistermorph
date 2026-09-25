@@ -583,3 +583,14 @@
     animation: none;
   }
 }
+
+.chat-composer-footer {
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  padding-inline: 12px;
+  color: var(--q-c-dark-3);
+  font: 400 11px/1.4 var(--font-mono);
+  letter-spacing: 0.02em;
+  text-align: center;
+}
