@@ -199,7 +199,7 @@ export const AUTOMATION_CONFIG_GROUPS = [
     note: "Heartbeat runs through the cron service. Both switches must be enabled for scheduled heartbeats.",
     fields: [
       { path: "heartbeat.enabled", label: "Heartbeat", type: "bool" },
-      { path: "heartbeat.interval", label: "Heartbeat interval", type: "string", placeholder: "30m" },
+      { path: "heartbeat.interval", label: "Heartbeat interval", type: "string", placeholder: "30m", dependsOn: "heartbeat.enabled" },
       { path: "cron.enabled", label: "TODO scheduler", type: "bool" },
     ],
   },

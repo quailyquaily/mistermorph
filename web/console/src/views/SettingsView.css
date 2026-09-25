@@ -171,8 +171,39 @@
 
 .config-settings-restart {
   color: var(--text-2);
-  font-size: var(--font-size-meta);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
   white-space: nowrap;
+}
+
+/* Switch fields use the Settings toggle row: text left, switch right, full width. */
+.config-settings-fields > .settings-field.is-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-block: 4px;
+}
+
+.config-settings-fields > .settings-field.is-toggle .config-settings-restart {
+  justify-self: start;
+}
+
+.config-settings-fields > .settings-field.is-inactive,
+.config-settings-group.is-inactive .config-settings-fields {
+  opacity: 0.55;
+}
+
+.config-settings-dependency-note,
+.config-settings-inactive-note {
+  color: var(--text-2);
+  font-style: italic;
+}
+
+.config-settings-inactive-note {
+  margin: 0 0 12px;
+  font-size: var(--font-size-meta);
 }
 
 .config-settings-field-meta {
@@ -1260,5 +1291,69 @@ body:has(.settings-page) .q-dialog .q-menu-item.danger .q-menu-title {
 @media (max-width: 620px) {
   .settings-page-bar {
     gap: 6px;
+  }
+}
+
+/* Section save bar: pinned to the bottom of the settings pane while the section has unsaved changes. */
+.settings-save-bar {
+  position: sticky;
+  bottom: 12px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  /* Same gutters as .settings-panel-body-plain so the bar lines up with the section cards. */
+  margin: 0 var(--content-gutter-x) 12px 0;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: var(--q-bg-white);
+}
+
+.settings-save-bar-mark {
+  flex: 0 0 auto;
+  width: var(--status-mark-size);
+  height: var(--status-mark-size);
+  border-radius: 1px;
+  background: var(--status-pending);
+}
+
+.settings-save-bar-mark.is-error {
+  background: var(--status-error);
+}
+
+.settings-save-bar-text {
+  flex: 1 1 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 12px;
+  min-width: 0;
+  margin: 0;
+  color: var(--text-1);
+  font-size: var(--font-size-ui);
+}
+
+.settings-save-bar-text strong {
+  font-weight: 600;
+}
+
+.settings-save-bar-items {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-save-bar-button {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 920px) {
+  .settings-save-bar {
+    margin-left: var(--content-gutter-x);
   }
 }

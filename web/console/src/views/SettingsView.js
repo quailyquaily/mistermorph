@@ -1,6 +1,7 @@
-import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import { computed, nextTick, onMounted, onUnmounted, provide, reactive, ref, watch } from "vue";
+import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from "vue-router";
 import { useToast } from "quail-ui";
+import { captureUnsavedScopes, mergeConfigUpdates, restoreUnsavedScopes } from "../core/settings-save.js";
 import "./SettingsView.css";
 
 import AppPage from "../components/AppPage";
@@ -915,6 +916,21 @@ const SettingsView = {
       guard: buildEmptyGuardConsoleState(),
     });
 
+    // apply_mode of each successful save since the last reset, so a combined save can report the
+    // strongest outcome (a restart beats a plain save) in one message.
+    let savedApplyModes = [];
+
+    function noteSavedApplyMode(payload) {
+      savedApplyModes.push(trimText(payload?.apply_mode));
+    }
+
+    function takeSavedApplyMode() {
+      const order = ["process_restart", "runtime_restart", "next_generation"];
+      const strongest = order.find((mode) => savedApplyModes.includes(mode)) || "";
+      savedApplyModes = [];
+      return strongest;
+    }
+
     function settingsSavedMessage(payload) {
       switch (trimText(payload?.apply_mode)) {
         case "process_restart":
@@ -1322,6 +1338,183 @@ const SettingsView = {
         consoleFieldStates.value?.["console.password"]?.configured === true,
     );
     const activeSaveKind = computed(() => String(selectedSection.value?.saveKind || ""));
+
+    // Section save bar. Every section saves from one place: its own draft scopes (below) plus any
+    // ConfigSettingsPanel that registered through this provider while the section is mounted.
+    const saveRegistryEntries = reactive(new Map());
+    provide("settingsSaveRegistry", {
+      register(entry) {
+        saveRegistryEntries.set(entry.key, entry);
+      },
+      unregister(key) {
+        saveRegistryEntries.delete(key);
+      },
+    });
+
+    const CONSOLE_SECTION_TARGETS = {
+      channels: [
+        ["telegram", consoleTelegramDirty, "settings_console_telegram_title"],
+        ["slack", consoleSlackDirty, "settings_console_slack_title"],
+        ["line", consoleLineDirty, "settings_console_line_title"],
+        ["lark", consoleLarkDirty, "settings_console_lark_title"],
+        ["mixin", consoleMixinDirty, "settings_console_mixin_title"],
+      ],
+      security: [["guard", consoleGuardDirty, "settings_console_guard_title"]],
+      runtimes: [["runtimes", consoleManagedDirty, ""]],
+    };
+
+    const sectionSaveUnits = computed(() => {
+      const id = selectedSection.value?.id || "";
+      const title = selectedSection.value?.title || "";
+      const units = [];
+      if (id === "persona" && personaDirty.value) {
+        units.push({ key: "persona", label: t("settings_persona_title"), save: () => savePersona({ notify: false }) });
+      }
+      if (id === "agent") {
+        if (llmDirty.value) {
+          units.push({ key: "llm", label: title, save: () => saveAgentSettings("llm", { notify: false }) });
+        }
+        for (const profile of state.llm.profiles) {
+          if (profileDirty(profile)) {
+            units.push({
+              key: `profile:${profile._key}`,
+              label: trimText(profile.name) || title,
+              save: () => saveLLMProfile(profile._key, null, { notify: false }),
+            });
+          }
+        }
+      }
+      if (id === "tools" && toolsDirty.value) {
+        units.push({ key: "tools", label: title, save: () => saveAgentSettings("tools", { notify: false }) });
+      }
+      if (id === "skills" && skillsDirty.value) {
+        units.push({ key: "skills", label: title, save: () => saveAgentSettings("skills", { notify: false }) });
+      }
+      const dirtyTargets = (CONSOLE_SECTION_TARGETS[id] || []).filter(([, dirty]) => dirty.value);
+      if (dirtyTargets.length) {
+        units.push({
+          key: `console:${dirtyTargets.map(([target]) => target).join(",")}`,
+          label: dirtyTargets.map(([, , labelKey]) => (labelKey ? t(labelKey) : title)).join(", "),
+          // One request for all of the section's console targets.
+          save: () => saveConsoleSettings(dirtyTargets.map(([target]) => target), { notify: false }),
+        });
+      }
+      for (const scope of ["console", "agent", "system"]) {
+        const panels = [...saveRegistryEntries.values()].filter((entry) => entry.scope === scope && entry.dirty());
+        if (panels.length) {
+          units.push({ key: `config:${scope}`, label: panels.map((entry) => entry.label()).join(", "), scope, panels });
+        }
+      }
+      return units;
+    });
+
+    const sectionSaving = ref(false);
+    const sectionSaveFailed = ref("");
+    const sectionSaveBusy = computed(
+      () =>
+        sectionSaving.value ||
+        agentLoading.value ||
+        agentSaving.value ||
+        consoleLoading.value ||
+        consoleSaving.value ||
+        personaLoading.value ||
+        personaSaving.value ||
+        systemLoading.value ||
+        systemSaving.value,
+    );
+
+    watch(() => selectedSection.value?.id, () => {
+      sectionSaveFailed.value = "";
+    });
+
+    // Leaving a section discards its drafts (see discardSettingsDrafts), so ask first when the
+    // section has unsaved changes.
+    const leaveDialogOpen = ref(false);
+    let pendingLeavePath = "";
+    let leaveConfirmed = false;
+
+    function guardUnsavedSection(to) {
+      if (leaveConfirmed) {
+        leaveConfirmed = false;
+        return true;
+      }
+      if (sectionSaveUnits.value.length === 0 || sectionSaving.value || to.path === route.path) {
+        return true;
+      }
+      pendingLeavePath = to.fullPath;
+      leaveDialogOpen.value = true;
+      return false;
+    }
+
+    onBeforeRouteUpdate(guardUnsavedSection);
+    onBeforeRouteLeave(guardUnsavedSection);
+
+    const leaveDialogText = computed(() =>
+      t("settings_unsaved_text", { items: sectionSaveUnits.value.map((unit) => unit.label).join(", ") })
+    );
+    const leaveDialogActions = computed(() => [
+      {
+        name: "stay",
+        label: t("settings_unsaved_stay"),
+        class: "outlined",
+        action: () => {
+          leaveDialogOpen.value = false;
+          pendingLeavePath = "";
+        },
+      },
+      {
+        name: "discard",
+        label: t("settings_unsaved_discard"),
+        class: "danger",
+        action: () => {
+          const target = pendingLeavePath;
+          leaveDialogOpen.value = false;
+          pendingLeavePath = "";
+          if (target) {
+            leaveConfirmed = true;
+            void router.push(target);
+          }
+        },
+      },
+    ]);
+
+    async function saveSection() {
+      const units = sectionSaveUnits.value;
+      if (sectionSaveBusy.value || units.length === 0) {
+        return;
+      }
+      sectionSaving.value = true;
+      sectionSaveFailed.value = "";
+      takeSavedApplyMode();
+      try {
+        // Collect every panel's changes before anything is sent: a save response replaces the shared
+        // config values, which would otherwise reset the drafts of panels not yet saved.
+        const configSaves = [];
+        for (const unit of units.filter((item) => item.panels)) {
+          try {
+            configSaves.push({ unit, update: mergeConfigUpdates(unit.panels.map((panel) => panel.collectUpdate())) });
+          } catch {
+            sectionSaveFailed.value = unit.label;
+            return;
+          }
+        }
+        for (const unit of units.filter((item) => !item.panels)) {
+          if (!(await unit.save())) {
+            sectionSaveFailed.value = unit.label;
+            return;
+          }
+        }
+        for (const { unit, update } of configSaves) {
+          if (!(await saveConfigSettings(unit.scope, update, { notify: false }))) {
+            sectionSaveFailed.value = unit.label;
+            return;
+          }
+        }
+        toast.success(settingsSavedMessage({ apply_mode: takeSavedApplyMode() }));
+      } finally {
+        sectionSaving.value = false;
+      }
+    }
     const showIndexPane = computed(() => !isMobile.value || !mobilePanelVisible.value);
     const showPanelPane = computed(() => !isMobile.value || mobilePanelVisible.value);
     const mobileShowBack = computed(() => isMobile.value && mobilePanelVisible.value);
@@ -2707,7 +2900,24 @@ const SettingsView = {
       }
     }
 
-    function applyConsolePayload(data) {
+    // Console scopes that keep their own draft in `state`. A save response rewrites all of them, so
+    // edits in scopes that were not part of the save are captured first and put back afterwards.
+    const CONSOLE_DRAFT_SCOPES = [
+      { id: "runtimes", dirty: () => consoleManagedDirty.value, slice: () => state.managedRuntimes, sync: updateConsoleManagedDirty },
+      { id: "telegram", dirty: () => consoleTelegramDirty.value, slice: () => state.telegram, sync: updateConsoleTelegramDirty },
+      { id: "slack", dirty: () => consoleSlackDirty.value, slice: () => state.slack, sync: updateConsoleSlackDirty },
+      { id: "line", dirty: () => consoleLineDirty.value, slice: () => state.line, sync: updateConsoleLineDirty },
+      { id: "lark", dirty: () => consoleLarkDirty.value, slice: () => state.lark, sync: updateConsoleLarkDirty },
+      { id: "mixin", dirty: () => consoleMixinDirty.value, slice: () => state.mixin, sync: updateConsoleMixinDirty },
+      { id: "guard", dirty: () => consoleGuardDirty.value, slice: () => state.guard, sync: updateConsoleGuardDirty },
+    ];
+
+    // savedScopes: omit for a fresh load (everything is replaced); pass the scopes a save covered to
+    // keep unsaved edits in every other scope.
+    function applyConsolePayload(data, { savedScopes = null } = {}) {
+      const unsaved = Array.isArray(savedScopes)
+        ? captureUnsavedScopes(CONSOLE_DRAFT_SCOPES, savedScopes, consoleSecretDirty)
+        : [];
       const values = Array.isArray(data?.managed_runtimes) ? data.managed_runtimes : [];
       const telegram = data?.telegram && typeof data.telegram === "object" ? data.telegram : {};
       const slack = data?.slack && typeof data.slack === "object" ? data.slack : {};
@@ -2763,6 +2973,7 @@ const SettingsView = {
         typeof guardApprovals.enabled === "boolean" ? guardApprovals.enabled : false;
       consoleSettingsLoaded.value = true;
       setLoadedConsoleSnapshots();
+      restoreUnsavedScopes(unsaved, consoleSecretDirty);
     }
 
     function resetConsoleSettingsState() {
@@ -2983,9 +3194,9 @@ const SettingsView = {
       }
     }
 
-    async function savePersona() {
+    async function savePersona({ notify = true } = {}) {
       if (personaSaveDisabled.value) {
-        return;
+        return false;
       }
       personaSaving.value = true;
       personaSavingTarget.value = "persona";
@@ -3001,7 +3212,7 @@ const SettingsView = {
             body: { content },
           });
           if (targetEndpointRef !== settingsEndpointRef.value) {
-            return;
+            return false;
           }
           loadedIdentityRaw.value = content;
           loadedIdentitySnapshot.value = buildPersonaIdentitySnapshot(state.persona);
@@ -3015,7 +3226,7 @@ const SettingsView = {
             body: { content },
           });
           if (targetEndpointRef !== settingsEndpointRef.value) {
-            return;
+            return false;
           }
           soulContent.value = content;
           loadedSoulSnapshot.value = content;
@@ -3025,10 +3236,13 @@ const SettingsView = {
           invalidateConsoleSetupReadiness();
         }
         personaOk.value = t("msg_save_success");
-        toast.success(personaOk.value);
+        noteSavedApplyMode(null);
+        if (notify) toast.success(personaOk.value);
+        return true;
       } catch (e) {
         personaErr.value = e.message || t("msg_save_failed");
         toast.error(personaErr.value);
+        return false;
       } finally {
         personaSaving.value = false;
         personaSavingTarget.value = "";
@@ -3730,7 +3944,7 @@ const SettingsView = {
       updateConsoleGuardDirty();
     }
 
-    async function saveLLMProfile(profileKey, draft = null) {
+    async function saveLLMProfile(profileKey, draft = null, { notify = true } = {}) {
       const storedProfile = state.llm.profiles.find((item) => item._key === profileKey) || null;
       const profile = draft || storedProfile;
       if (!storedProfile || !profile || agentLoading.value || agentSaving.value || agentSettingsReadOnly.value) {
@@ -3796,7 +4010,8 @@ const SettingsView = {
           invalidateConsoleSetupReadiness();
         }
         await loadEndpoints();
-        toast.success(settingsSavedMessage(payload));
+        noteSavedApplyMode(payload);
+        if (notify) toast.success(settingsSavedMessage(payload));
         return true;
       } catch (e) {
         toast.error(agentSettingsErrorMessage(e, targetEndpointRef, "msg_save_failed"));
@@ -3807,35 +4022,35 @@ const SettingsView = {
       }
     }
 
-    async function saveAgentSettings(target = "all") {
+    async function saveAgentSettings(target = "all", { notify = true } = {}) {
       const normalizedTarget = ["all", "llm", "skills", "tools", "mcp"].includes(String(target))
         ? String(target)
         : "all";
       if (agentSettingsReadOnly.value) {
-        return;
+        return false;
       }
       if (normalizedTarget === "llm" && llmSaveDisabled.value) {
-        return;
+        return false;
       }
       if (normalizedTarget === "skills" && skillsSaveDisabled.value) {
-        return;
+        return false;
       }
       if (normalizedTarget === "tools" && toolsSaveDisabled.value) {
-        return;
+        return false;
       }
       if (normalizedTarget === "mcp" && mcpSaveDisabled.value) {
-        return;
+        return false;
       }
       if (normalizedTarget === "all" && agentLoading.value) {
-        return;
+        return false;
       }
       if ((normalizedTarget === "llm" || normalizedTarget === "all") && agentValidationError.value !== "") {
         agentValidationVisible.value = true;
-        return;
+        return false;
       }
       if ((normalizedTarget === "skills" || normalizedTarget === "all") && skillsValidationError.value !== "") {
         skillsValidationVisible.value = true;
-        return;
+        return false;
       }
       agentSaving.value = true;
       agentSavingTarget.value = normalizedTarget;
@@ -3848,7 +4063,7 @@ const SettingsView = {
           body: { config_revision: settingsConfigRevision.value, ...buildSavePayload(normalizedTarget) },
         });
         if (targetEndpointRef !== settingsEndpointRef.value) {
-          return;
+          return false;
         }
         llmConfigPath.value = typeof payload.config_path === "string" ? payload.config_path : llmConfigPath.value;
         settingsConfigRevision.value = trimText(payload?.config_revision) || settingsConfigRevision.value;
@@ -3886,67 +4101,68 @@ const SettingsView = {
           loadedMCPSnapshot.value = buildMCPSnapshot(state);
           mcpDirty.value = false;
         }
-        const saveMessage = t("msg_save_success");
-        toast.success(saveMessage);
+        noteSavedApplyMode(payload);
+        if (notify) toast.success(t("msg_save_success"));
+        return true;
       } catch (e) {
         toast.error(agentSettingsErrorMessage(e, targetEndpointRef, "msg_save_failed"));
+        return false;
       } finally {
         agentSaving.value = false;
         agentSavingTarget.value = "";
       }
     }
 
-    async function saveConsoleSettings(target = "all") {
-      const normalizedTarget = ["all", "runtimes", "telegram", "slack", "line", "lark", "mixin", "guard"].includes(String(target))
-        ? String(target)
-        : "all";
-      if (!selectedEndpointIsConsole.value) {
-        return;
+    async function saveConsoleSettings(target = "all", { notify = true } = {}) {
+      const known = ["runtimes", "telegram", "slack", "line", "lark", "mixin", "guard"];
+      const requested = Array.isArray(target) ? target.map(String) : [String(target)];
+      const targets = requested.includes("all") ? ["all"] : requested.filter((item) => known.includes(item));
+      if (!selectedEndpointIsConsole.value || targets.length === 0) {
+        return false;
       }
-      if (normalizedTarget === "runtimes" && consoleSaveDisabled.value) {
-        return;
+      const targetDisabled = {
+        runtimes: consoleSaveDisabled,
+        telegram: telegramSaveDisabled,
+        slack: slackSaveDisabled,
+        line: lineSaveDisabled,
+        lark: larkSaveDisabled,
+        mixin: mixinSaveDisabled,
+        guard: guardSaveDisabled,
+      };
+      if (targets[0] === "all" && (consoleLoading.value || consoleSaving.value || !consoleDirty.value)) {
+        return false;
       }
-      if (normalizedTarget === "telegram" && telegramSaveDisabled.value) {
-        return;
-      }
-      if (normalizedTarget === "slack" && slackSaveDisabled.value) {
-        return;
-      }
-      if (normalizedTarget === "line" && lineSaveDisabled.value) {
-        return;
-      }
-      if (normalizedTarget === "lark" && larkSaveDisabled.value) {
-        return;
-      }
-      if (normalizedTarget === "mixin" && mixinSaveDisabled.value) {
-        return;
-      }
-      if (normalizedTarget === "guard" && guardSaveDisabled.value) {
-        return;
-      }
-      if (normalizedTarget === "all" && (consoleLoading.value || consoleSaving.value || !consoleDirty.value)) {
-        return;
+      if (targets[0] !== "all" && targets.some((item) => targetDisabled[item].value)) {
+        return false;
       }
       consoleSaving.value = true;
-      consoleSavingTarget.value = normalizedTarget;
+      consoleSavingTarget.value = targets.length === 1 ? targets[0] : "multiple";
       const requestSeq = ++consoleSettingsRequestSeq;
       const targetEndpointRef = settingsEndpointRef.value;
       try {
+        // The endpoint takes one key per target, so several targets go out in a single request.
+        const body = { config_revision: settingsConfigRevision.value };
+        for (const item of targets) {
+          Object.assign(body, buildConsoleSavePayload(item));
+        }
         const payload = await endpointApiFetch(targetEndpointRef, "/settings/console", {
           method: "PUT",
-          body: { config_revision: settingsConfigRevision.value, ...buildConsoleSavePayload(normalizedTarget) },
+          body,
         });
         if (!isCurrentConsoleSettingsRequest(requestSeq, targetEndpointRef)) {
-          return;
+          return false;
         }
         consoleConfigPath.value =
           typeof payload.config_path === "string" ? payload.config_path : consoleConfigPath.value;
-        applyConsolePayload(payload);
-        toast.success(settingsSavedMessage(payload));
+        applyConsolePayload(payload, { savedScopes: targets[0] === "all" ? known : targets });
+        noteSavedApplyMode(payload);
+        if (notify) toast.success(settingsSavedMessage(payload));
+        return true;
       } catch (e) {
         if (isCurrentConsoleSettingsRequest(requestSeq, targetEndpointRef)) {
           toast.error(e.message || t("msg_save_failed"));
         }
+        return false;
       } finally {
         if (isCurrentConsoleSettingsRequest(requestSeq, targetEndpointRef)) {
           consoleSaving.value = false;
@@ -3973,7 +4189,7 @@ const SettingsView = {
       );
     }
 
-    async function saveConfigSettings(scope, update) {
+    async function saveConfigSettings(scope, update, { notify = true } = {}) {
       const endpoint = scope === "agent" ? "/settings/agent" : scope === "console" ? "/settings/console" : "/settings/system";
       const targetEndpointRef = settingsEndpointRef.value;
       if (scope === "agent") {
@@ -4008,7 +4224,8 @@ const SettingsView = {
           systemConfigValues.value = values;
           systemFieldStates.value = fieldStates;
         }
-        toast.success(settingsSavedMessage(payload));
+        noteSavedApplyMode(payload);
+        if (notify) toast.success(settingsSavedMessage(payload));
         return true;
       } catch (e) {
         if (e?.status === 409 && targetEndpointRef === settingsEndpointRef.value) {
@@ -4051,7 +4268,7 @@ const SettingsView = {
           body: { config_revision: settingsConfigRevision.value, [target]: values },
         });
         if (targetEndpointRef !== settingsEndpointRef.value) return;
-        applyConsolePayload(payload);
+        applyConsolePayload(payload, { savedScopes: [] });
         onComplete?.();
         if (target === "endpoints") await loadEndpoints().catch(() => {});
         toast.success(settingsSavedMessage(payload));
@@ -4402,14 +4619,21 @@ const SettingsView = {
 
     function selectSection(id) {
       const sectionID = normalizeSettingsSectionID(id);
-      selectedSectionID.value = sectionID;
-      if (isMobile.value) {
-        mobilePanelVisible.value = true;
-      }
       const nextPath = settingsSectionPath(endpointState.selectedRef, sectionID);
-      if (route.path !== nextPath) {
-        router.push(nextPath);
+      if (route.path === nextPath) {
+        selectedSectionID.value = sectionID;
+        if (isMobile.value) {
+          mobilePanelVisible.value = true;
+        }
+        return;
       }
+      // The route watcher selects the section once navigation succeeds; the unsaved-changes guard
+      // may cancel it, in which case the current section stays on screen.
+      void router.push(nextPath).then((failure) => {
+        if (!failure && isMobile.value) {
+          mobilePanelVisible.value = true;
+        }
+      });
     }
 
     function isSelectedSection(item) {
@@ -4722,6 +4946,14 @@ const SettingsView = {
       groupTriggerItems,
       settingsSections,
       selectedSection,
+      sectionSaveUnits,
+      sectionSaving,
+      sectionSaveFailed,
+      sectionSaveBusy,
+      saveSection,
+      leaveDialogOpen,
+      leaveDialogText,
+      leaveDialogActions,
       selectedEndpointIsConsole,
       activeSaveKind,
       isMobile,
@@ -4949,14 +5181,6 @@ const SettingsView = {
                     <p class="settings-panel-meta">{{ selectedSection.meta }}</p>
                   </div>
                   <div class="settings-profile-actions settings-default-llm-actions">
-                    <QButton
-                      class="primary settings-profile-save"
-                      :loading="agentSaving && agentSavingTarget === 'llm'"
-                      :disabled="llmSaveDisabled"
-                      @click="saveAgentSettings('llm')"
-                    >
-                      {{ t("action_save") }}
-                    </QButton>
                     <QDropdownMenu
                       class="settings-llm-actions-menu"
                       :items="llmActionMenuItems()"
@@ -5042,15 +5266,6 @@ const SettingsView = {
                               }}
                             </span>
                             <div class="settings-profile-actions">
-                              <QButton
-                                type="button"
-                                class="primary settings-profile-save"
-                                :loading="agentSaving && agentSavingTarget === 'profile:' + profile._key"
-                                :disabled="profileSaveDisabled(profile)"
-                                @click="saveLLMProfile(profile._key)"
-                              >
-                                {{ t("action_save") }}
-                              </QButton>
                               <QDropdownMenu
                                 class="settings-llm-actions-menu"
                                 :items="llmActionMenuItems(profile)"
@@ -5198,6 +5413,7 @@ const SettingsView = {
               :fieldStates="agentFieldStates"
               :loading="agentLoading"
               :saving="agentSaving && agentSavingTarget === 'config'"
+              saveScope="agent"
               @save="saveConfigSettings('agent', $event)"
             />
           </div>
@@ -5211,14 +5427,6 @@ const SettingsView = {
                     <p class="settings-panel-meta">{{ t("settings_console_telegram_token_note") }}</p>
                   </div>
                   <div class="settings-profile-actions settings-default-llm-actions">
-                    <QButton
-                      class="primary settings-profile-save"
-                      :loading="consoleSaving && consoleSavingTarget === 'telegram'"
-                      :disabled="telegramSaveDisabled"
-                      @click="saveConsoleSettings('telegram')"
-                    >
-                      {{ t("action_save") }}
-                    </QButton>
                     <QDropdownMenu
                       class="settings-llm-actions-menu"
                       :items="channelActionMenuItems('telegram')"
@@ -5285,14 +5493,6 @@ const SettingsView = {
                     <p class="settings-panel-meta">{{ t("settings_console_slack_token_note") }}</p>
                   </div>
                   <div class="settings-profile-actions settings-default-llm-actions">
-                    <QButton
-                      class="primary settings-profile-save"
-                      :loading="consoleSaving && consoleSavingTarget === 'slack'"
-                      :disabled="slackSaveDisabled"
-                      @click="saveConsoleSettings('slack')"
-                    >
-                      {{ t("action_save") }}
-                    </QButton>
                     <QDropdownMenu
                       class="settings-llm-actions-menu"
                       :items="channelActionMenuItems('slack')"
@@ -5387,14 +5587,6 @@ const SettingsView = {
                     <p class="settings-panel-meta">{{ t("settings_console_line_token_note") }}</p>
                   </div>
                   <div class="settings-profile-actions settings-default-llm-actions">
-                    <QButton
-                      class="primary settings-profile-save"
-                      :loading="consoleSaving && consoleSavingTarget === 'line'"
-                      :disabled="lineSaveDisabled"
-                      @click="saveConsoleSettings('line')"
-                    >
-                      {{ t("action_save") }}
-                    </QButton>
                     <QDropdownMenu
                       class="settings-llm-actions-menu"
                       :items="channelActionMenuItems('line')"
@@ -5477,14 +5669,6 @@ const SettingsView = {
                     <p class="settings-panel-meta">{{ t("settings_console_lark_token_note") }}</p>
                   </div>
                   <div class="settings-profile-actions settings-default-llm-actions">
-                    <QButton
-                      class="primary settings-profile-save"
-                      :loading="consoleSaving && consoleSavingTarget === 'lark'"
-                      :disabled="larkSaveDisabled"
-                      @click="saveConsoleSettings('lark')"
-                    >
-                      {{ t("action_save") }}
-                    </QButton>
                     <QDropdownMenu
                       class="settings-llm-actions-menu"
                       :items="channelActionMenuItems('lark')"
@@ -5566,14 +5750,6 @@ const SettingsView = {
                     <p class="settings-panel-meta">{{ t("settings_console_mixin_note") }}</p>
                   </div>
                   <div class="settings-profile-actions settings-default-llm-actions">
-                    <QButton
-                      class="primary settings-profile-save"
-                      :loading="consoleSaving && consoleSavingTarget === 'mixin'"
-                      :disabled="mixinSaveDisabled"
-                      @click="saveConsoleSettings('mixin')"
-                    >
-                      {{ t("action_save") }}
-                    </QButton>
                     <QDropdownMenu
                       class="settings-llm-actions-menu"
                       :items="channelActionMenuItems('mixin')"
@@ -5631,16 +5807,6 @@ const SettingsView = {
                   <div class="settings-panel-copy">
                     <h3 class="settings-panel-title workspace-document-title">{{ t("settings_console_guard_title") }}</h3>
                     <p class="settings-panel-meta">{{ selectedSection.meta }}</p>
-                  </div>
-                  <div class="settings-panel-actions">
-                    <QButton
-                      class="primary"
-                      :loading="consoleSaving && consoleSavingTarget === 'guard'"
-                      :disabled="guardSaveDisabled"
-                      @click="saveConsoleSettings('guard')"
-                    >
-                      {{ t("action_save") }}
-                    </QButton>
                   </div>
                 </header>
 
@@ -5740,8 +5906,10 @@ const SettingsView = {
               :groups="SECURITY_CONFIG_GROUPS"
               :values="consoleConfigValues"
               :fieldStates="consoleFieldStates"
+              :inactiveGroups="state.guard.enabled ? {} : { 'guard-storage': t('settings_guard_details_inactive') }"
               :loading="consoleLoading"
               :saving="consoleSaving && consoleSavingTarget === 'config'"
+              saveScope="console"
               @save="saveConfigSettings('console', $event)"
             />
             <AuthProfilesPanel
@@ -5770,16 +5938,6 @@ const SettingsView = {
                   <div class="settings-panel-copy">
                     <h3 class="settings-panel-title workspace-document-title">{{ t("settings_skills_title") }}</h3>
                     <p class="settings-panel-meta">{{ selectedSection.meta }}</p>
-                  </div>
-                  <div class="settings-panel-actions">
-                    <QButton
-                      class="primary"
-                      :loading="agentSaving && agentSavingTarget === 'skills'"
-                      :disabled="skillsSaveDisabled"
-                      @click="saveAgentSettings('skills')"
-                    >
-                      {{ t("action_save") }}
-                    </QButton>
                   </div>
                 </header>
 
@@ -5878,6 +6036,7 @@ const SettingsView = {
               :fieldStates="consoleFieldStates"
               :loading="consoleLoading"
               :saving="consoleSaving && consoleSavingTarget === 'config'"
+              saveScope="console"
               @save="saveConfigSettings('console', $event)"
             />
           </div>
@@ -5899,11 +6058,13 @@ const SettingsView = {
               :fieldStates="consoleFieldStates"
               :loading="consoleLoading"
               :saving="consoleSaving && consoleSavingTarget === 'config'"
+              saveScope="console"
               @save="saveConfigSettings('console', $event)"
             />
             <ConsolePasswordPanel
               :configured="consolePasswordConfigured"
               :saving="consoleSaving && consoleSavingTarget === 'config'"
+              saveScope="console"
               @save="saveConfigSettings('console', $event)"
             />
             <details class="settings-remote-advanced">
@@ -5917,6 +6078,7 @@ const SettingsView = {
                 :fieldStates="consoleFieldStates"
                 :loading="consoleLoading"
                 :saving="consoleSaving && consoleSavingTarget === 'config'"
+                saveScope="console"
                 @save="saveConfigSettings('console', $event)"
               />
             </details>
@@ -5931,16 +6093,6 @@ const SettingsView = {
                   <div class="settings-panel-copy">
                     <h3 class="settings-panel-title workspace-document-title">{{ t("settings_persona_title") }}</h3>
                     <p class="settings-panel-meta">{{ selectedSection.meta }}</p>
-                  </div>
-                  <div class="settings-panel-actions">
-                    <QButton
-                      class="primary"
-                      :loading="personaSaving && personaSavingTarget === 'persona'"
-                      :disabled="personaSaveDisabled"
-                      @click="savePersona"
-                    >
-                      {{ t("action_save") }}
-                    </QButton>
                   </div>
                 </header>
 
@@ -6081,6 +6233,7 @@ const SettingsView = {
                   :loading="systemLoading"
                   :saving="systemSaving"
                   :embedded="true"
+                  saveScope="system"
                   @save="saveConfigSettings('system', $event)"
                 >
                   <template #heading>
@@ -6171,6 +6324,7 @@ const SettingsView = {
               :fieldStates="systemFieldStates"
               :loading="systemLoading"
               :saving="systemSaving"
+              saveScope="system"
               @save="saveConfigSettings('system', $event)"
             />
 
@@ -6188,6 +6342,7 @@ const SettingsView = {
                   :fieldStates="systemFieldStates"
                   :loading="systemLoading"
                   :saving="systemSaving"
+                  saveScope="system"
                   @save="saveConfigSettings('system', $event)"
                 />
               </div>
@@ -6201,26 +6356,6 @@ const SettingsView = {
                 <div class="settings-panel-copy">
                   <h3 class="settings-panel-title workspace-document-title">{{ selectedSection.title }}</h3>
                   <p class="settings-panel-meta">{{ selectedSection.meta }}</p>
-                </div>
-                <div class="settings-panel-actions">
-                  <QButton
-                    v-if="activeSaveKind === 'agent' && selectedSection.id === 'tools'"
-                    class="primary"
-                    :loading="agentSaving && agentSavingTarget === 'tools'"
-                    :disabled="toolsSaveDisabled"
-                    @click="saveAgentSettings('tools')"
-                  >
-                    {{ t("action_save") }}
-                  </QButton>
-                  <QButton
-                    v-else-if="activeSaveKind === 'console' && selectedSection.id === 'runtimes'"
-                    class="primary"
-                    :loading="consoleSaving"
-                    :disabled="consoleSaveDisabled"
-                    @click="saveConsoleSettings('runtimes')"
-                  >
-                    {{ t("action_save") }}
-                  </QButton>
                 </div>
               </header>
 
@@ -6281,6 +6416,19 @@ const SettingsView = {
               </div>
               </div>
             </QCard>
+          </div>
+          <div v-if="sectionSaveUnits.length || sectionSaveFailed" class="settings-save-bar" role="region" :aria-label="t('settings_save_bar_label')">
+            <span class="settings-save-bar-mark" :class="{ 'is-error': sectionSaveFailed }" aria-hidden="true"></span>
+            <p class="settings-save-bar-text" role="status">
+              <template v-if="sectionSaveFailed">{{ t('settings_save_bar_failed', { items: sectionSaveFailed }) }}</template>
+              <template v-else>
+                <strong>{{ t('settings_save_bar_count', { count: sectionSaveUnits.length }) }}</strong>
+                <span class="settings-save-bar-items">{{ sectionSaveUnits.map((unit) => unit.label).join(' · ') }}</span>
+              </template>
+            </p>
+            <QButton class="primary settings-save-bar-button" :loading="sectionSaving" :disabled="sectionSaveBusy || !sectionSaveUnits.length" @click="saveSection">
+              {{ t('action_save') }}
+            </QButton>
           </div>
         </div>
       </div>
@@ -6407,6 +6555,13 @@ const SettingsView = {
         :title="consoleEndpointErrorTitle"
         :text="consoleEndpointError"
         :actions="consoleEndpointErrorActions"
+      />
+      <QMessageDialog
+        v-model="leaveDialogOpen"
+        icon="PhInfo"
+        :title="t('settings_unsaved_title')"
+        :text="leaveDialogText"
+        :actions="leaveDialogActions"
       />
       <QMessageDialog
         v-model="deleteProfileDialogOpen"

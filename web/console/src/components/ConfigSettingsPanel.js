@@ -1,4 +1,4 @@
-import { computed, reactive, ref, watch } from "vue";
+import { computed, getCurrentInstance, inject, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 
 import { buildConfigUpdate, createConfigDraft } from "../core/config-fields";
 import SettingSelect from "./SettingSelect";
@@ -16,9 +16,16 @@ export default {
     embedded: { type: Boolean, default: false },
     hideSingleGroupHeading: { type: Boolean, default: false },
     savePlacement: { type: String, default: "header" },
+    // Group id -> note. A listed group is shown dimmed and read-only, with the note explaining why.
+    inactiveGroups: { type: Object, default: () => ({}) },
+    // When set ("agent", "console" or "system") and a settings save registry is provided, the panel
+    // hands its changes to the section save bar instead of showing its own Save button.
+    saveScope: { type: String, default: "" },
   },
   emits: ["save", "update:dirty"],
   setup(props, { emit }) {
+    const saveRegistry = inject("settingsSaveRegistry", null);
+    const registered = computed(() => Boolean(saveRegistry && props.saveScope));
     const draft = reactive({});
     const original = ref({});
     const reset = reactive({});
@@ -54,8 +61,36 @@ export default {
       return props.fieldStates?.[field.path] || {};
     }
 
-    function fieldDisabled(field) {
-      return props.loading || props.saving || stateFor(field).editable === false;
+    const fieldsByPath = computed(() => new Map(fields.value.map((field) => [field.path, field])));
+
+    // A field with dependsOn is inactive while that switch is off in the current draft, so the
+    // state follows the switch immediately, before anything is saved.
+    function fieldInactive(field) {
+      return Boolean(field.dependsOn) && !draft[field.dependsOn];
+    }
+
+    function dependencyNote(field) {
+      const parent = fieldsByPath.value.get(field.dependsOn);
+      return `Turn on ${parent?.label || field.dependsOn} to change this.`;
+    }
+
+    function groupInactiveNote(group) {
+      return props.inactiveGroups?.[group.id] || "";
+    }
+
+    function fieldDisabled(field, group = null) {
+      return (
+        props.loading ||
+        props.saving ||
+        stateFor(field).editable === false ||
+        fieldInactive(field) ||
+        Boolean(group && groupInactiveNote(group))
+      );
+    }
+
+    function restartRequired(field) {
+      const mode = stateFor(field).apply_mode;
+      return mode === "runtime_restart" || mode === "process_restart";
     }
 
     function updateField(field, value) {
@@ -97,6 +132,45 @@ export default {
       return "text";
     }
 
+    // Validated changes for the section save bar: null when there is nothing to save. Throws (and
+    // shows the error in the panel) when a value is invalid.
+    function collectUpdate() {
+      if (!dirty.value) {
+        return null;
+      }
+      try {
+        const update = buildConfigUpdate(
+          draft,
+          original.value,
+          Object.keys(reset).filter((path) => reset[path]),
+          fields.value,
+        );
+        validationError.value = "";
+        return update;
+      } catch (error) {
+        validationError.value = error?.message || "Invalid setting";
+        throw error;
+      }
+    }
+
+    const registryKey = `config-panel-${getCurrentInstance()?.uid ?? Math.random()}`;
+    onMounted(() => {
+      if (registered.value) {
+        saveRegistry.register({
+          key: registryKey,
+          scope: props.saveScope,
+          label: () => props.groups[0]?.title || "Settings",
+          dirty: () => dirty.value,
+          collectUpdate,
+        });
+      }
+    });
+    onBeforeUnmount(() => {
+      if (registered.value) {
+        saveRegistry.unregister(registryKey);
+      }
+    });
+
     function save() {
       try {
         const update = buildConfigUpdate(
@@ -118,6 +192,10 @@ export default {
       dirty,
       stateFor,
       fieldDisabled,
+      fieldInactive,
+      dependencyNote,
+      groupInactiveNote,
+      restartRequired,
       updateField,
       resetField,
       environmentManaged,
@@ -125,6 +203,8 @@ export default {
       showClear,
       sourceLabel,
       inputType,
+      registered,
+      collectUpdate,
       save,
     };
   },
@@ -138,11 +218,11 @@ export default {
         v-for="group in groups"
         :key="group.id"
         :variant="embedded ? undefined : 'default'"
-        :class="['config-settings-group', { 'is-embedded': embedded }]"
+        :class="['config-settings-group', { 'is-embedded': embedded, 'is-inactive': groupInactiveNote(group) }]"
       >
         <div class="settings-panel-shell">
           <header
-            v-if="!hideSingleGroupHeading || groups.length > 1 || (savePlacement === 'header' && group === groups[0])"
+            v-if="!hideSingleGroupHeading || groups.length > 1 || (!registered && savePlacement === 'header' && group === groups[0])"
             class="settings-panel-head"
           >
             <div v-if="!hideSingleGroupHeading || groups.length > 1" class="settings-panel-copy">
@@ -152,7 +232,7 @@ export default {
               </slot>
             </div>
             <QButton
-              v-if="savePlacement === 'header' && group === groups[0]"
+              v-if="!registered && savePlacement === 'header' && group === groups[0]"
               class="primary"
               :loading="saving"
               :disabled="loading || saving || !dirty"
@@ -162,30 +242,40 @@ export default {
             </QButton>
           </header>
 
+          <p v-if="groupInactiveNote(group)" class="config-settings-inactive-note">{{ groupInactiveNote(group) }}</p>
           <div class="settings-panel-body config-settings-fields">
             <div
               v-for="field in group.fields"
               :key="field.path"
-              :class="['settings-field', { 'is-wide': field.wide || field.type === 'json' || field.type === 'string_list' }]"
+              :class="['settings-field', {
+                'is-wide': field.wide || field.type === 'json' || field.type === 'string_list' || field.type === 'bool',
+                'is-toggle': field.type === 'bool' && !environmentManaged(field),
+                'is-inactive': fieldInactive(field),
+              }]"
             >
+              <!-- Switches use the same row as the rest of Settings: text on the left, switch on the right. -->
+              <template v-if="field.type === 'bool' && !environmentManaged(field)">
+                <div class="settings-toggle-copy">
+                  <strong class="settings-toggle-title">{{ field.label }}</strong>
+                  <span v-if="field.note" class="settings-toggle-note">{{ field.note }}</span>
+                  <span v-if="restartRequired(field)" class="config-settings-restart">Restart required</span>
+                </div>
+                <QSwitch
+                  :modelValue="draft[field.path]"
+                  :disabled="fieldDisabled(field, group)"
+                  @update:modelValue="updateField(field, $event)"
+                />
+              </template>
+              <template v-else>
               <div class="config-settings-label-row">
                 <span class="settings-field-label">{{ field.label }}</span>
-                <span
-                  v-if="stateFor(field).apply_mode === 'runtime_restart' || stateFor(field).apply_mode === 'process_restart'"
-                  class="config-settings-restart"
-                >Restart required</span>
+                <span v-if="restartRequired(field)" class="config-settings-restart">Restart required</span>
               </div>
 
               <div v-if="environmentManaged(field)" class="settings-env-managed">
                 <code class="settings-env-managed-env">{{ environmentManagedName(field) }}</code>
                 <p class="settings-env-managed-body">Managed by the environment variable.</p>
               </div>
-              <QSwitch
-                v-else-if="field.type === 'bool'"
-                :modelValue="draft[field.path]"
-                :disabled="fieldDisabled(field)"
-                @update:modelValue="updateField(field, $event)"
-              />
               <SettingSelect
                 v-else-if="field.type === 'select'"
                 :modelValue="draft[field.path]"
@@ -193,7 +283,7 @@ export default {
                 :allowCustom="field.allowCustom"
                 :label="field.label"
                 :placeholder="field.placeholder || 'Default'"
-                :disabled="fieldDisabled(field)"
+                :disabled="fieldDisabled(field, group)"
                 @update:modelValue="updateField(field, $event)"
               />
               <SettingChoices
@@ -201,7 +291,7 @@ export default {
                 :modelValue="draft[field.path].split(/\\r?\\n/).map(item => item.trim()).filter(Boolean)"
                 :options="field.options"
                 :label="field.label"
-                :disabled="fieldDisabled(field)"
+                :disabled="fieldDisabled(field, group)"
                 @update:modelValue="updateField(field, $event.join('\\n'))"
               />
               <QTextarea
@@ -210,7 +300,7 @@ export default {
                 :rows="field.type === 'json' ? 7 : 4"
                 :class="{ 'config-settings-json': field.type === 'json' }"
                 :placeholder="field.placeholder || ''"
-                :disabled="fieldDisabled(field)"
+                :disabled="fieldDisabled(field, group)"
                 @update:modelValue="updateField(field, $event)"
               />
               <QInput
@@ -218,11 +308,12 @@ export default {
                 :modelValue="draft[field.path]"
                 :inputType="inputType(field)"
                 :placeholder="field.secret && stateFor(field).configured ? 'Configured — enter a new value to replace' : field.placeholder || ''"
-                :disabled="fieldDisabled(field)"
+                :disabled="fieldDisabled(field, group)"
                 @update:modelValue="updateField(field, $event)"
               />
 
-              <p v-if="field.note" class="settings-field-note">{{ field.note }}</p>
+              <p v-if="fieldInactive(field)" class="settings-field-note config-settings-dependency-note">{{ dependencyNote(field) }}</p>
+              <p v-else-if="field.note" class="settings-field-note">{{ field.note }}</p>
               <div v-if="sourceLabel(field) || showClear(field)" class="config-settings-field-meta">
                 <span v-if="sourceLabel(field)">{{ sourceLabel(field) }}</span>
                 <span v-else></span>
@@ -233,12 +324,13 @@ export default {
                   @click="resetField(field)"
                 >Clear</QButton>
               </div>
+              </template>
             </div>
           </div>
         </div>
       </component>
 
-      <div v-if="savePlacement === 'footer'" class="config-settings-actions">
+      <div v-if="!registered && savePlacement === 'footer'" class="config-settings-actions">
         <QButton class="primary" :loading="saving" :disabled="loading || saving || !dirty" @click="save">
           Save
         </QButton>

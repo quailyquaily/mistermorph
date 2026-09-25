@@ -383,7 +383,15 @@
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
+  gap: 10px;
   height: 44px;
+}
+
+.todo-enabled-label {
+  color: var(--text-2);
+  font: 500 11px/1 var(--font-mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
 
 .todo-editor-actions .q-button {

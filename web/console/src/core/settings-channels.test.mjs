@@ -23,11 +23,12 @@ test("console channel settings expose line, lark, and mixin alongside telegram a
   assert.match(source, /if \(target === "line"\)/);
   assert.match(source, /if \(target === "lark"\)/);
   assert.match(source, /if \(target === "mixin"\)/);
-  assert.match(source, /saveConsoleSettings\('line'\)/);
-  assert.match(source, /saveConsoleSettings\('lark'\)/);
-  assert.match(source, /saveConsoleSettings\('mixin'\)/);
-	assert.match(source, /\["all", "runtimes", "telegram", "slack", "line", "lark", "mixin", "guard"\]/);
-	assert.match(source, /normalizedTarget === "mixin" && mixinSaveDisabled\.value/);
+  // Channels save from the section save bar, which batches every dirty channel into one request.
+  assert.match(source, /\["line", consoleLineDirty, "settings_console_line_title"\]/);
+  assert.match(source, /\["lark", consoleLarkDirty, "settings_console_lark_title"\]/);
+  assert.match(source, /\["mixin", consoleMixinDirty, "settings_console_mixin_title"\]/);
+  assert.match(source, /const known = \["runtimes", "telegram", "slack", "line", "lark", "mixin", "guard"\];/);
+  assert.match(source, /mixin: mixinSaveDisabled,/);
   assert.match(source, /consoleFieldEnvManaged\('line', 'channel_access_token'\)/);
   assert.match(source, /consoleFieldEnvManaged\('lark', 'app_secret'\)/);
   assert.match(source, /consoleFieldEnvManaged\('mixin', 'keystore_file'\)/);

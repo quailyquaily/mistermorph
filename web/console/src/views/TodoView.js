@@ -2568,6 +2568,7 @@ const TodoView = {
             <header class="todo-editor-head todo-task-editor-head">
               <div class="todo-editor-toolbar">
                 <div class="todo-enabled-control">
+                  <span class="todo-enabled-label" aria-hidden="true">{{ t('todo_field_enabled') }}</span>
                   <QSwitch
                     :modelValue="selectedTask.enabled !== false"
                     :disabled="saving || loading"

@@ -965,9 +965,6 @@ const AuditView = {
         <aside v-if="showIndexPane" class="audit-index workspace-sidebar-section" :aria-label="t('audit_title')">
           <div class="audit-index-head workspace-sidebar-head">
             <h3 class="workspace-section-title">{{ t('audit_title') }}</h3>
-            <QButton v-if="isMobile" class="plain sm icon" :disabled="loading" :aria-label="t('action_refresh')" @click="refreshAudit()">
-              <PhArrowClockwise class="icon" />
-            </QButton>
           </div>
           <div class="audit-index-scroll">
             <QProgress v-if="loading && fileItems.length === 0" :infinite="true" />
@@ -1025,10 +1022,6 @@ const AuditView = {
             </div>
             <div class="audit-ledger-actions">
               <QButton v-if="!isTasksStreamSelected && pageValue > 1" class="plain sm" :disabled="loading" @click="refreshAudit({ latest: true })">{{ t('audit_latest') }}</QButton>
-              <QButton class="plain sm icon" :disabled="isTasksStreamSelected ? taskLoading : loading"
-                :title="t('action_refresh')" :aria-label="t('action_refresh')" @click="isTasksStreamSelected ? loadTaskStream() : refreshAudit()">
-                <PhArrowClockwise class="icon" />
-              </QButton>
             </div>
           </header>
           <div class="audit-toolbar">
