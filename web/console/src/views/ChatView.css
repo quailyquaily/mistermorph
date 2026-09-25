@@ -16,21 +16,7 @@
   overflow: hidden;
 }
 
-/* base.css defines these tokens on :root, where they resolve against Quail's default warm palette.
-   Re-declaring them here re-resolves them under the body theme (morph) for everything in the chat. */
 .chat-shell {
-  --bg-0: var(--q-bg-light);
-  --bg-1: var(--q-bg-light-2);
-  --bg-2: var(--q-bg-white);
-  --text-0: var(--q-c-dark);
-  --text-1: var(--q-c-dark-2);
-  --text-2: var(--q-c-dark-3);
-  --line: color-mix(in srgb, var(--q-c-dark-4) 72%, transparent);
-  --line-soft: color-mix(in srgb, var(--q-c-dark-4) 52%, transparent);
-  --accent-0: var(--q-c-secondary);
-  --accent-1: var(--q-c-blue);
-  --ok: var(--q-c-green);
-  --danger: var(--q-c-red);
   flex: 1 1 auto;
   min-height: 0;
   display: grid;

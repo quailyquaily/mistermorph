@@ -63,7 +63,7 @@
   height: 7px;
   flex: 0 0 7px;
   border-radius: 50%;
-  background: var(--text-1);
+  background: color-mix(in srgb, var(--text-2) 55%, transparent);
 }
 
 .runtime-status.is-healthy .runtime-status-dot {

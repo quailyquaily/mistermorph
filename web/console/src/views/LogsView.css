@@ -6,8 +6,7 @@
 }
 
 .logs-shell {
-  /* Built from Quail variables so they resolve under the body theme (morph); the shared
-     base.css tokens resolve on :root and pick up Quail's default warm palette instead. */
+  /* Page tokens: the sheet uses the lighter card hairline (--q-card-border-color) rather than --line. */
   --logs-ink: var(--q-c-dark);
   --logs-text: var(--q-c-dark-2);
   --logs-muted: var(--q-c-dark-3);
