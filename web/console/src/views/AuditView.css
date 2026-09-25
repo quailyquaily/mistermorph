@@ -538,3 +538,39 @@
     gap: 12px;
   }
 }
+
+/* Task rows are one line on desktop: title on the left, status, source and time on the right. */
+@media (min-width: 921px) {
+  .audit-task > .audit-event-summary {
+    align-items: center;
+    padding-block: 9px;
+  }
+
+  .audit-task .audit-event-copy {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .audit-task .audit-task-title {
+    display: block;
+    overflow: hidden;
+    font-weight: 500;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    -webkit-line-clamp: unset;
+  }
+
+  .audit-task .audit-event-meta {
+    flex-wrap: nowrap;
+    white-space: nowrap;
+  }
+}
+
+/* On phones sidebar lists have no side padding; match it so "Tasks" lines up with the files. */
+@media (max-width: 920px) {
+  .audit-task-nav,
+  .audit-archives {
+    margin-inline: 0;
+  }
+}

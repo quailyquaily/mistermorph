@@ -6215,7 +6215,7 @@ const SettingsView = {
                         <h4 class="settings-card-title">{{ t("settings_session_title") }}</h4>
                         <p class="settings-card-note">{{ t("settings_session_hint") }}</p>
                       </div>
-                      <QButton class="danger settings-console-control" :loading="loggingOut" @click="logout">
+                      <QButton class="outlined danger settings-console-control" :loading="loggingOut" @click="logout">
                         {{ t("action_logout") }}
                       </QButton>
                     </div>

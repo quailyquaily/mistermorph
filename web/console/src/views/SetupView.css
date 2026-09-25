@@ -616,7 +616,8 @@
 
 @media (max-width: 620px) {
   .setup-screen {
-    padding: 0;
+    /* Keep the sheet and its registration marks inside the screen. */
+    padding: 16px;
   }
 
   .setup-shell {

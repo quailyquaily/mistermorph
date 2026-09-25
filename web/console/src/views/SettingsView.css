@@ -1357,3 +1357,8 @@ body:has(.settings-page) .q-dialog .q-menu-item.danger .q-menu-title {
     margin-left: var(--content-gutter-x);
   }
 }
+
+/* Example values in empty lists read as examples, not as saved data. */
+.settings-panel-body textarea::placeholder {
+  color: color-mix(in srgb, var(--q-field-placeholder-color, var(--text-2)) 65%, transparent);
+}

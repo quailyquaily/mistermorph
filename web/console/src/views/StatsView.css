@@ -475,6 +475,27 @@
   border-bottom: 1px solid var(--stats-line-soft);
 }
 
+/* Scroll shadow: the "local" cover moves with the content and hides the fixed shadow once the
+   table is scrolled to its end, so the shadow only shows while more columns are off-screen. */
+.stats-model-ledger-scroll {
+  background:
+    linear-gradient(to left, var(--q-bg-paper) 45%, transparent) right center / 36px 100% no-repeat local,
+    linear-gradient(to left, color-mix(in srgb, var(--q-c-dark) 16%, transparent), transparent) right center / 16px 100% no-repeat scroll;
+}
+
+.stats-model-ledger-scroll + .stats-model-ledger-scroll {
+  margin-top: 16px;
+}
+
+/* When a table is wider than the page (narrow screens), the model column stays in view. */
+.stats-model-ledger-table .stats-model-ledger-column-row > .stats-model-ledger-stub:first-child,
+.stats-model-ledger-table tbody .stats-model-ledger-model {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  box-shadow: 1px 0 0 var(--stats-line-soft);
+}
+
 .stats-model-ledger-table {
   width: max-content;
   min-width: 100%;

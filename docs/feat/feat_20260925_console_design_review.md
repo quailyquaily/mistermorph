@@ -51,8 +51,8 @@ These have the widest effect and should come first.
 | G5 | Medium | **Done.** Settings had a Save button per section, per LLM profile, per Channels card and per config panel; the disabled Save looked almost enabled. | One save bar per section, pinned to the bottom while the section has unsaved changes: count, what is pending, one Save, one combined result. Leaving a section with unsaved changes asks first. See §7. |
 | G6 | Medium | **Done.** Toggle placement varied (right-aligned in most sections, under the label in Automation and System); the TODO editor switch had no label. | Config panel switches use the Settings toggle row (text left, switch right, "Restart required" as a mono note). The TODO switch has a visible "Enabled" label. |
 | G7 | Medium | **Done.** Guard details stayed editable with Enable Guard off; Heartbeat interval stayed editable with Heartbeat off. | Dependent fields and groups are dimmed and disabled with a note while their parent switch is off in the current draft. |
-| G8 | Low | Names don't line up: the nav says "Stats" and the page title is "LLM Usage"; Audit has an "All Logs" view that is easy to confuse with the Logs page; TODO has no page title, only the List/Calendar tabs. | Use one name per page in nav and title. Rename Audit's "All Logs" (for example "All events"). Give TODO a title row like the other pages. |
-| G9 | Low | The phone bottom nav is a floating rounded pill with a drop shadow, the one strongly off-style element left on phones. | Square, hairline-framed bar docked to the bottom edge, with the selected item marked the way the sidebar marks it. |
+| G8 | Low | **Done.** The nav said "Stats" and the page title "LLM Usage"; Audit's "All Logs" was easy to confuse with the Logs page; TODO had no page title. | Nav and title are "Usage" (用量 / 使用量); Audit's view is "All events" (全部事件 / すべてのイベント); TODO shows its title before the List/Calendar tabs in both views. |
+| G9 | Low | **Kept by decision (2026-09-25).** The phone bottom nav is a floating rounded pill with a drop shadow. | Reviewed against a docked, square alternative; the floating pill stays. |
 
 ## 4. Per-page findings
 
@@ -114,7 +114,7 @@ These have the widest effect and should come first.
 1. G1: the `base.css` token fix. Done, see §7.
 2. G2–G4: done, see §7.
 3. G5–G7: done, see §7.
-4. Stats table, then the remaining per-page items.
+4. Stats table and per-page items: done except those listed as deferred in §7.
 
 Each step should be checked at 1440 and 390 widths, with screenshots of every page it touches.
 
@@ -203,3 +203,40 @@ Each step should be checked at 1440 and 390 widths, with screenshots of every pa
 - **Known limits:**
   - Quail text areas update their value when they lose focus, so the bar can lag one field behind while typing. The change is still included when Save is pressed, since pressing it moves focus.
   - The dialog's "Discard changes" uses Quail's saturated `danger` button, the same issue as "Logout" (see §4, Settings: System).
+
+### Stage 4: Stats and per-page items (2026-09-25)
+
+Done:
+
+- **Stats table:**
+  - The per-model table is split into a Costs table (model, requests, cost columns) and a Tokens table (model, token columns). Each fits at 1440 without scrolling.
+  - At narrower widths the model column is sticky, and a CSS-only scroll shadow on the right edge shows while more columns are hidden.
+- **Stats costs:** `core/cost-format.js` (with tests) formats compact costs: two decimals from 1, four from 0.01, two significant digits below that. The exact value is in a tooltip on the table cells and the header figures.
+- **Stats cache column:** renamed from "Cache Delta" to "Cache savings", with the sign flipped. Money saved is a positive amount in the OK colour; extra cost from cache writes is negative and red.
+- **Danger buttons:** Quail declares `--q-button-danger-*` on `:root` too, so danger buttons had the default theme's saturated red. The variables are re-declared in `base.css`'s `body` block and now use morph's muted red. "Logout" is an outlined danger button.
+- **Channels:** list placeholders start with "e.g." (例如 / 例:) and render lighter, so they can't be mistaken for saved values.
+- **Runtime:** key/value values are mono with tabular figures.
+- **Contacts:** a contact without a name is titled by its channel identifier; "Unnamed User" moves to the meta line.
+- **TODO calendar:**
+  - Month cells show the 24-hour run time, then the title (the title truncates, the time doesn't). The schedule description is in the tooltip; the agenda list keeps title first.
+  - Date badges, including today, are square.
+- **TODO editor:** the content editor is `clamp(168px, 26vh, 320px)` tall, with a lower minimum for this editor only (it was a fixed 360px).
+- **Audit:**
+  - Task rows are one line on desktop: title left, status, source and time right.
+  - On phones the Tasks item lines up with the file list.
+- **Setup:**
+  - The finished screen labels the persona row "identity.yaml" instead of "Create identity.yaml".
+  - On phones the sheet has a 16px gutter, so its registration marks aren't clipped.
+
+Deferred:
+
+- MCP server status and tool count: the settings API does not return them yet.
+- Overview composition (small tree, no title) and the phone connector route: needs a decision on what the page is for.
+- Contacts detail layout and the TODO day panel: these are layout redesigns rather than fixes.
+- System's Language row: kept. It is one of a list of action rows (Language, Logs, Session) that all put the control on the right.
+- G9 (phone bottom nav): kept as is by decision; G8 is done (see below).
+
+### G8: page names (2026-09-25)
+
+- `web/console/src/i18n/index.js`: `nav_stats` and `stats_title` are "Usage" (用量 / 使用量); `audit_stream_all` is "All events" (全部事件 / すべてのイベント).
+- `TodoView.js`, `TodoCalendar.js`: the list sidebar header and the calendar toolbar start with the page title ("TODO" / 待办事项). The List/Calendar tabs keep their natural width (`.todo-view-tabs` options no longer stretch) so the title, the tabs and "+" fit in one row.

@@ -70,13 +70,23 @@
   height: 13px;
 }
 
-.todo-view-tabs {
+/* The page title leads the header (as in the other sections); the view tabs keep their natural width. */
+.todo-section-title {
   flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.todo-view-tabs {
+  flex: 0 0 auto;
   min-width: 0;
 }
 
 .todo-view-tabs .app-tabs-option {
-  flex: 1 1 0;
+  flex: 0 0 auto;
 }
 
 .todo-view-tabs .app-tabs-option-label {
@@ -152,7 +162,7 @@
   min-height: 25px;
   padding: 0;
   border: 0;
-  border-radius: 999px;
+  border-radius: 2px;
   background: transparent;
   color: var(--text-1);
   font: inherit;
@@ -251,6 +261,22 @@
 .todo-calendar-entry-meta {
   color: var(--text-2);
   font-family: var(--font-mono);
+}
+
+/* Month cells are narrow: status, then the run time (never truncated), then the title. */
+.todo-calendar-day .todo-calendar-entry {
+  grid-template-columns: 7px auto minmax(0, 1fr);
+}
+
+.todo-calendar-day .todo-calendar-entry-meta {
+  grid-column: 2;
+  grid-row: 1;
+  overflow: visible;
+}
+
+.todo-calendar-day .todo-calendar-entry-title {
+  grid-column: 3;
+  grid-row: 1;
 }
 
 .todo-calendar-entry-title {

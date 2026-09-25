@@ -682,7 +682,7 @@ const SetupView = {
       {
         stage: "persona",
         icon: "PhUsers",
-        key: t("setup_identity_title"),
+        key: t("setup_done_identity_label"),
         value: t("setup_done_status_ready"),
         action: t("setup_action_edit_persona"),
       },

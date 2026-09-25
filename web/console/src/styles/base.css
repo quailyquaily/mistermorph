@@ -50,6 +50,11 @@ body {
   --status-off: color-mix(in srgb, var(--q-c-dark-3) 70%, transparent);
   --status-pending: var(--q-c-orange);
   --status-error: var(--q-c-red);
+
+  /* Quail declares these on :root too, so they had the default theme's saturated red. */
+  --q-button-danger-bg: var(--q-c-red);
+  --q-button-danger-border: var(--q-c-red);
+  --q-button-danger-hover-bg: var(--q-c-red-light);
 }
 
 *,

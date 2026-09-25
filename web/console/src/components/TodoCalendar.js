@@ -159,6 +159,20 @@ const TodoCalendar = {
       return taskIsRecurring(entry?.task) ? props.scheduleLabel(entry.task) : entryTime(entry);
     }
 
+    // Calendar cells are narrow: show a 24-hour run time; the schedule description goes in the tooltip.
+    function entryCellMeta(entry) {
+      const date = new Date(entry?.first_at);
+      if (Number.isNaN(date.getTime())) {
+        return entryMeta(entry);
+      }
+      return new Intl.DateTimeFormat(currentLocale(), {
+        hour: "2-digit",
+        minute: "2-digit",
+        hourCycle: "h23",
+        timeZone: timezone,
+      }).format(date);
+    }
+
     function entryClass(entry) {
       return ["todo-calendar-entry", { "is-disabled": entry?.task?.enabled === false }];
     }
@@ -253,6 +267,7 @@ const TodoCalendar = {
       taskIsRecurring,
       entryTime,
       entryMeta,
+      entryCellMeta,
       entryClass,
       entryAccessibleName,
       selectDate,
@@ -267,6 +282,7 @@ const TodoCalendar = {
     <section class="todo-calendar" :aria-label="t('todo_view_calendar')">
       <header class="todo-calendar-toolbar">
         <div class="todo-calendar-toolbar-primary">
+          <h3 class="workspace-section-title todo-section-title">{{ t('todo_title') }}</h3>
           <AppTabs
             class="todo-view-tabs todo-calendar-view-tabs"
             :tabs="viewTabs"
@@ -325,11 +341,12 @@ const TodoCalendar = {
               type="button"
               :class="entryClass(entry)"
               :aria-label="entryAccessibleName(entry)"
+              :title="entryMeta(entry)"
               @click.stop="selectEntry(entry)"
             >
               <span class="todo-calendar-status" aria-hidden="true"></span>
               <span class="todo-calendar-entry-title">{{ taskTitle(entry.task) }}</span>
-              <span class="todo-calendar-entry-meta">{{ entryMeta(entry) }}</span>
+              <span class="todo-calendar-entry-meta">{{ entryCellMeta(entry) }}</span>
             </button>
 
             <button
@@ -364,7 +381,7 @@ const TodoCalendar = {
             >
               <span class="todo-calendar-status" aria-hidden="true"></span>
               <span class="todo-calendar-entry-title">{{ taskTitle(entry.task) }}</span>
-              <span class="todo-calendar-entry-meta">{{ entryMeta(entry) }}</span>
+              <span class="todo-calendar-entry-meta">{{ entryCellMeta(entry) }}</span>
             </button>
           </div>
         </article>

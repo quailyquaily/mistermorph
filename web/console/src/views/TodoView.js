@@ -2445,6 +2445,7 @@ const TodoView = {
 
         <aside v-if="!calendarView && showIndexPane" class="todo-index workspace-sidebar-section" :aria-label="t('todo_nav_title')">
           <div class="todo-index-head workspace-sidebar-head">
+            <h3 class="workspace-section-title todo-section-title">{{ t('todo_title') }}</h3>
             <AppTabs
               class="todo-view-tabs todo-index-view-tabs"
               :tabs="todoViewTabs"
@@ -2611,7 +2612,7 @@ const TodoView = {
                 <AppMarkdownEditor
                   class="todo-content-markdown-editor"
                   :modelValue="selectedTask.content"
-                  height="360px"
+                  height="clamp(168px, 26vh, 320px)"
                   :placeholder="t('todo_content_placeholder')"
                   :aria-label="t('todo_field_content')"
                   :disabled="saving || loading"

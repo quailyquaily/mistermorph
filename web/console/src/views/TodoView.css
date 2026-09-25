@@ -556,6 +556,11 @@ body:has(.todo-page) .q-dialog .q-menu-item.danger .q-menu-title {
   width: 100%;
 }
 
+/* TODO prompts are usually short; the shared editor minimum (320px) left a large empty box. */
+.todo-content-markdown-editor .markdown-editor-surface {
+  min-height: 168px;
+}
+
 .todo-dropdown {
   width: 100%;
 }

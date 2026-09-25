@@ -147,6 +147,8 @@
   color: var(--text-0);
   overflow-wrap: anywhere;
   font-variant-numeric: tabular-nums;
+  font-family: var(--font-mono);
+  font-size: 13px;
 }
 
 .runtime-context-grid {

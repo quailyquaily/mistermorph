@@ -203,16 +203,23 @@ const ContactsView = {
     const deleteTarget = ref(null);
     const deleting = ref(false);
 
-    function displayName(item) {
+    function namedTitle(item) {
       const nickname = String(item?.nickname || "").trim();
       if (nickname) {
         return nickname;
       }
       const telegramUsername = String(item?.tg_username || "").trim().replace(/^@+/, "");
-      if (telegramUsername) {
-        return `@${telegramUsername}`;
-      }
-      return t("contacts_unnamed");
+      return telegramUsername ? `@${telegramUsername}` : "";
+    }
+
+    // Without a name, the channel identifier tells contacts apart; "Unnamed" moves to the meta line.
+    function displayName(item) {
+      return (
+        namedTitle(item) ||
+        channelHandles(t, item)[0]?.short ||
+        shortenIdentifier(item?.contact_id) ||
+        t("contacts_unnamed")
+      );
     }
 
     function isAgent(item) {
@@ -236,6 +243,9 @@ const ContactsView = {
     }
 
     function primaryContactMeta(item) {
+      if (!namedTitle(item)) {
+        return `${channelLabel(t, item?.channel)} · ${t("contacts_unnamed")}`;
+      }
       const handle = channelHandles(t, item)[0];
       if (handle) {
         return `${handle.channel} · ${handle.short}`;
