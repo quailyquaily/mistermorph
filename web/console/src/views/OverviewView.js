@@ -8,9 +8,17 @@ import AppPage from "../components/AppPage";
 import { avatarAccentColor } from "../core/avatar-color";
 import { endpointDisplayItem, isConsoleLocalEndpoint, visibleEndpoints } from "../core/endpoints";
 import { endpointRoutePath } from "../core/endpoint-routes";
-import { endpointState, ensureEndpointsLoaded, loadEndpoints, toBool, translate } from "../core/context";
+import { currentLocale, endpointState, ensureEndpointsLoaded, loadEndpoints, runtimeApiFetchForEndpoint, toBool, translate } from "../core/context";
+import { summarizeAgentReadout } from "../core/agent-readout.js";
+import { formatCompactCost, formatExactCost } from "../core/cost-format.js";
+import telegramLogo from "../assets/images/channels/telegram.svg";
+import slackLogo from "../assets/images/channels/slack.svg";
+import lineLogo from "../assets/images/channels/line.svg";
+import larkLogo from "../assets/images/channels/lark.svg";
+import mixinLogo from "../assets/images/channels/mixin.svg";
 
 const SHOW_ADDRESSES_STORAGE_KEY = "mistermorph_console_overview_show_addresses";
+const CHANNEL_LOGOS = { telegram: telegramLogo, slack: slackLogo, line: lineLogo, lark: larkLogo, mixin: mixinLogo };
 
 const OverviewView = {
   components: {
@@ -38,6 +46,7 @@ const OverviewView = {
       // Keep addresses masked when browser storage is unavailable.
     }
     let refreshTimer = null;
+    const readouts = ref(new Map());
 
     const endpointRows = computed(() => {
       const items = visibleEndpoints(endpointState.items);
@@ -150,6 +159,47 @@ const OverviewView = {
       queueConnections();
     }, { flush: "post" });
 
+    // Live readings for each online agent: health and uptime, model and running channels, usage.
+    async function loadReadouts() {
+      const targets = endpointRows.value.filter((item) => item.connected && !item.local);
+      const results = await Promise.all(targets.map(async (item) => {
+        const [overview, usage] = await Promise.allSettled([
+          runtimeApiFetchForEndpoint(item.endpoint_ref, "/overview"),
+          runtimeApiFetchForEndpoint(item.endpoint_ref, "/stats/llm/usage"),
+        ]);
+        return [
+          item.endpoint_ref,
+          summarizeAgentReadout(
+            overview.status === "fulfilled" ? overview.value : null,
+            usage.status === "fulfilled" ? usage.value : null,
+          ),
+        ];
+      }));
+      readouts.value = new Map(results);
+    }
+
+    const METER_SEGMENTS = 16;
+
+    function readoutFor(item) {
+      const readout = item.connected && !item.local ? readouts.value.get(item.endpoint_ref) : null;
+      if (!readout) return null;
+      const rate = readout.cacheRate;
+      return {
+        model: readout.model,
+        cost: readout.cost === null ? "—" : formatCompactCost(readout.cost, readout.currency),
+        costExact: readout.cost === null ? "" : formatExactCost(readout.cost, readout.currency),
+        requests: readout.requests === null ? "—" : readout.requests.toLocaleString(),
+        tokens: readout.tokens === null ? "—" : new Intl.NumberFormat(currentLocale(), { notation: "compact", maximumFractionDigits: 2 }).format(readout.tokens),
+        tokensExact: readout.tokens === null ? "" : readout.tokens.toLocaleString(),
+        uptime: readout.uptime || "—",
+        cache: rate === null ? null : {
+          percent: `${Math.round(rate * 100)}%`,
+          lit: Math.round(rate * METER_SEGMENTS),
+        },
+        channels: readout.channels.map((key) => ({ key, logo: CHANNEL_LOGOS[key], title: t(`endpoint_channel_${key}`) })),
+      };
+    }
+
     function toggleAddresses() {
       showAddresses.value = !showAddresses.value;
       try {
@@ -174,6 +224,7 @@ const OverviewView = {
       } finally {
         loading.value = false;
       }
+      void loadReadouts().catch(() => {});
     }
 
     onMounted(() => {
@@ -193,6 +244,7 @@ const OverviewView = {
       connectionMap, connections, activeConnection, hoveredEndpoint, focusedEndpoint,
       avatarColors, readAvatarColor,
       controllerSettingsRoute,
+      readoutFor, meterSegments: METER_SEGMENTS,
     };
   },
   template: `
@@ -216,10 +268,27 @@ const OverviewView = {
       <section class="overview-page">
         <div v-if="endpointRows.length" ref="connectionMap" class="overview-connection-map">
           <svg v-if="connections.length" class="overview-connections" aria-hidden="true" focusable="false">
+            <defs>
+              <!-- Draws each line in like a pen plotter; a mask keeps dashed lines' own dash pattern. -->
+              <mask
+                v-for="(connection, index) in connections"
+                :id="'overview-plot-' + connection.endpoint_ref"
+                :key="'mask:' + connection.endpoint_ref"
+                maskUnits="userSpaceOnUse"
+                x="-2000" y="-2000" width="6000" height="6000"
+              >
+                <path
+                  class="overview-plot-mask"
+                  :d="connection.path"
+                  :style="{ '--connection-length': connection.length + 'px', '--plot-index': index }"
+                />
+              </mask>
+            </defs>
             <path
               v-for="connection in connections"
               :key="connection.endpoint_ref"
               :d="connection.path"
+              :mask="'url(#overview-plot-' + connection.endpoint_ref + ')'"
               :class="['overview-connection', { 'is-offline': !connection.add && !connection.connected && !connection.pending, 'is-pending': connection.pending, 'is-add': connection.add }]"
             />
             <path v-if="activeConnection" :d="activeConnection.path" class="overview-connection is-active" :class="{ 'is-add': activeConnection.add }" />
@@ -248,7 +317,7 @@ const OverviewView = {
             </template>
           </svg>
           <ul id="overview-endpoints" class="endpoint-overview-list">
-            <li v-for="item in endpointRows" :key="item.endpoint_ref" :class="{ 'is-controller': item.local }">
+            <li v-for="(item, index) in endpointRows" :key="item.endpoint_ref" :class="{ 'is-controller': item.local }" :style="{ '--node-index': index }">
               <component
                 :is="item.connected ? 'RouterLink' : 'div'"
                 :to="item.route"
@@ -287,8 +356,59 @@ const OverviewView = {
                   >{{ item.detail }}</span>
                 </span>
               </component>
+              <!-- Outside the link: the readout is information only, clicking it does not navigate. -->
+              <template v-for="readout in [readoutFor(item)]" :key="'readout'">
+                <span v-if="readout" class="endpoint-overview-readout">
+                  <span class="readout-leader-line" aria-hidden="true"></span>
+                  <span class="readout-head">
+                    <span v-if="readout.model" class="readout-model" :title="readout.model"><span>{{ readout.model }}</span></span>
+                    <span class="readout-channels">
+                      <img v-for="channel in readout.channels" :key="channel.key" :src="channel.logo" :alt="channel.title" :title="channel.title" />
+                    </span>
+                  </span>
+                  <span class="readout-spec">
+                    <span class="readout-row">
+                      <span class="readout-key">{{ t('overview_readout_cost') }}</span>
+                      <span class="readout-dots" aria-hidden="true"></span>
+                      <span class="readout-value" :title="readout.costExact">{{ readout.cost }}</span>
+                    </span>
+                    <span class="readout-row">
+                      <span class="readout-key">{{ t('overview_readout_requests') }}</span>
+                      <span class="readout-dots" aria-hidden="true"></span>
+                      <span class="readout-value">{{ readout.requests }}</span>
+                    </span>
+                    <span class="readout-row">
+                      <span class="readout-key">{{ t('overview_readout_tokens') }}</span>
+                      <span class="readout-dots" aria-hidden="true"></span>
+                      <span class="readout-value" :title="readout.tokensExact">{{ readout.tokens }}</span>
+                    </span>
+                    <span class="readout-row">
+                      <span class="readout-key">{{ t('overview_readout_uptime_label') }}</span>
+                      <span class="readout-dots" aria-hidden="true"></span>
+                      <span class="readout-value">{{ readout.uptime }}</span>
+                    </span>
+                  </span>
+                  <span
+                    v-if="readout.cache"
+                    class="readout-meter"
+                    role="meter"
+                    aria-valuemin="0"
+                    aria-valuemax="100"
+                    :aria-valuenow="parseInt(readout.cache.percent)"
+                    :aria-label="t('overview_readout_cache')"
+                    :title="t('overview_readout_cache_hint')"
+                    :style="{ '--readout-color': avatarColors.get(item.avatar_url) || undefined }"
+                  >
+                    <span class="readout-key">{{ t('overview_readout_cache') }}</span>
+                    <span class="readout-segments" aria-hidden="true">
+                      <i v-for="segment in meterSegments" :key="segment" :class="{ 'is-lit': segment <= readout.cache.lit }"></i>
+                    </span>
+                    <span class="readout-value">{{ readout.cache.percent }}</span>
+                  </span>
+                </span>
+              </template>
             </li>
-            <li v-if="controllerSettingsRoute" class="endpoint-overview-add">
+            <li v-if="controllerSettingsRoute" class="endpoint-overview-add" :style="{ '--node-index': endpointRows.length }">
               <RouterLink
                 :to="controllerSettingsRoute"
                 class="endpoint-overview-item"

@@ -231,7 +231,7 @@ Done:
 Deferred:
 
 - MCP server status and tool count: the settings API does not return them yet.
-- Overview composition (small tree, no title) and the phone connector route: needs a decision on what the page is for.
+- Overview composition: done afterwards as a drawing sheet with live readouts (see below). The phone connector route to "Add Agent" is unchanged.
 - Contacts detail layout and the TODO day panel: these are layout redesigns rather than fixes.
 - System's Language row: kept. It is one of a list of action rows (Language, Logs, Session) that all put the control on the right.
 - G9 (phone bottom nav): kept as is by decision; G8 is done (see below).
@@ -240,3 +240,20 @@ Deferred:
 
 - `web/console/src/i18n/index.js`: `nav_stats` and `stats_title` are "Usage" (用量 / 使用量); `audit_stream_all` is "All events" (全部事件 / すべてのイベント).
 - `TodoView.js`, `TodoCalendar.js`: the list sidebar header and the calendar toolbar start with the page title ("TODO" / 待办事项). The List/Calendar tabs keep their natural width (`.todo-view-tabs` options no longer stretch) so the title, the tabs and "+" fit in one row.
+
+### Overview: draw-in and agent readouts (2026-09-25)
+
+A first version also framed the page as a drawing sheet (grid references, registration marks, a title block). It was removed as too much decoration; the parts below stayed.
+
+- **Draw-in:**
+  - Nodes fade in in order; opacity only, because the connection paths are measured from node positions.
+  - Each line then draws itself along its path through an SVG mask, so dashed offline/pending/"add" lines keep their dash pattern.
+  - The travelling dots start once the lines are drawn.
+  - It plays when the paths first mount; resizes and the 60-second refresh don't replay it. Off with reduced motion.
+- **Agent readouts:** each online agent has a small instrument datasheet hung from a dashed leader:
+  - Registration marks on opposite corners.
+  - A header strip with the model as a bracket tag and running channels as logos.
+  - Spec rows with dotted leaders for cost, requests, tokens (compact, e.g. 1.27M, exact count in the tooltip) and uptime.
+  - A segmented meter for the cache hit rate (cached input tokens as a share of input tokens), lit in the agent's own avatar accent colour.
+  - An earlier version drew a share-of-spend bar; it was dropped because it repeated the cost figure.
+- **Data:** `core/agent-readout.js` (with tests) summarises `/overview` and `/stats/llm/usage`, accepting both nested and flattened field names. The page fetches them for online agents with its existing refresh. Figures are all-time totals, since the usage API has no daily range.

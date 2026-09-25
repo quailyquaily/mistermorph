@@ -146,8 +146,16 @@
 }
 
 .endpoint-overview-list > li {
-  width: min(10rem, calc((100% - 24px) / 2));
+  width: min(13rem, calc((100% - 24px) / 2));
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* The link fills the item; an agent's readout card sits below it, outside the link. */
+.endpoint-overview-list > li > .endpoint-overview-item {
+  flex: 1 1 auto;
+  height: auto;
 }
 
 .endpoint-overview-list > .is-controller {
@@ -339,4 +347,229 @@ a.endpoint-overview-item:active .endpoint-overview-portrait {
   color: var(--text-1);
   font-size: var(--font-size-body);
   text-align: center;
+}
+
+/* ---- Agent readouts: a small instrument datasheet under each agent. ---- */
+
+.endpoint-overview-readout {
+  --readout-rule: color-mix(in srgb, var(--q-c-dark-4) 55%, transparent);
+  position: relative;
+  display: grid;
+  width: 100%;
+  margin-top: 0;
+  border: 1px solid var(--readout-rule);
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--q-bg-white) 88%, transparent);
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  text-align: left;
+}
+
+/* Registration marks on opposite corners, as on the other drawing-style panels. */
+.endpoint-overview-readout::before,
+.endpoint-overview-readout::after {
+  content: "";
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  border: 0 solid var(--q-c-dark);
+  pointer-events: none;
+}
+
+.endpoint-overview-readout::before {
+  top: -1px;
+  left: -1px;
+  border-top-width: 1.5px;
+  border-left-width: 1.5px;
+}
+
+.endpoint-overview-readout::after {
+  right: -1px;
+  bottom: -1px;
+  border-right-width: 1.5px;
+  border-bottom-width: 1.5px;
+}
+
+.readout-leader-line {
+  position: absolute;
+  top: -15px;
+  left: 50%;
+  height: 14px;
+  border-left: 1px dashed var(--line);
+}
+
+.readout-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--readout-rule);
+  background: color-mix(in srgb, var(--q-c-blue) 5%, transparent);
+}
+
+.readout-model {
+  display: inline-flex;
+  gap: 0.35em;
+  min-width: 0;
+  color: var(--text-0);
+  font-size: 10.5px;
+  font-weight: 400;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.readout-model > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.readout-model::before,
+.readout-model::after {
+  color: color-mix(in srgb, var(--text-2) 60%, transparent);
+}
+
+.readout-model::before {
+  content: "[";
+}
+
+.readout-model::after {
+  content: "]";
+}
+
+.readout-channels {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 4px;
+}
+
+.readout-channels img {
+  display: block;
+  width: 12px;
+  height: 12px;
+}
+
+/* Spec rows: label, dotted leader, value, like a component datasheet. */
+.readout-spec {
+  display: grid;
+  gap: 3px;
+  padding: 8px 8px 7px;
+}
+
+.readout-row,
+.readout-meter {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.readout-key {
+  flex: 0 0 auto;
+  color: var(--text-2);
+  font-size: 9.5px;
+  font-weight: 400;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.readout-dots {
+  flex: 1 1 auto;
+  min-width: 8px;
+  border-bottom: 1px dotted color-mix(in srgb, var(--text-2) 55%, transparent);
+  transform: translateY(-3px);
+}
+
+/* Every number on the card, cache percent included, shares one face, size and colour. */
+.readout-value {
+  flex: 0 0 auto;
+  color: var(--text-0);
+  font: 400 11px/1.4 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Cache hit rate as a segmented meter. */
+.readout-meter {
+  align-items: center;
+  padding: 7px 8px 8px;
+  border-top: 1px dashed var(--readout-rule);
+}
+
+.readout-segments {
+  flex: 1 1 auto;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 2px;
+  min-width: 0;
+  height: 7px;
+}
+
+.readout-segments > i {
+  background: color-mix(in srgb, var(--q-c-dark-4) 35%, transparent);
+}
+
+.readout-segments > i.is-lit {
+  background: var(--readout-color, var(--overview-accent));
+}
+
+/* ---- Plotter draw-in: nodes appear in order, then each line is drawn along its path. ---- */
+
+.overview-connection-map {
+  --overview-node-step: 110ms;
+  --overview-plot-start: 380ms;
+  --overview-plot-step: 150ms;
+}
+
+.endpoint-overview-list > li {
+  animation: overview-node-in 420ms cubic-bezier(0.25, 1, 0.5, 1) both;
+  animation-delay: calc(var(--node-index, 0) * var(--overview-node-step));
+}
+
+.overview-plot-mask {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 8px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: var(--connection-length);
+  stroke-dashoffset: var(--connection-length);
+  animation: overview-plot 900ms cubic-bezier(0.55, 0, 0.25, 1) forwards;
+  animation-delay: calc(var(--overview-plot-start) + var(--plot-index, 0) * var(--overview-plot-step));
+}
+
+/* Traffic starts once the lines are drawn. */
+.overview-connection-traffic {
+  animation: overview-fade-in 400ms ease-out both;
+  animation-delay: 1.6s;
+}
+
+@keyframes overview-plot {
+  to { stroke-dashoffset: 0; }
+}
+
+/* Opacity only: the connection paths are measured from node positions, so nodes must not move. */
+@keyframes overview-node-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes overview-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .endpoint-overview-list > li,
+  .overview-connection-traffic {
+    animation: none;
+  }
+
+  .overview-plot-mask {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
 }
