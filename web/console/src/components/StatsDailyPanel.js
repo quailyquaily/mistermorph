@@ -6,7 +6,26 @@ import AppTabs from "./AppTabs";
 import { endpointState, runtimeApiFetch, translate } from "../core/context";
 import { currentLocale } from "../i18n";
 import { formatCompactCost, formatExactCost } from "../core/cost-format.js";
-import { DAILY_METRICS, DAILY_RANGES, barFraction, summarizeDailyUsage } from "../core/daily-usage.js";
+import {
+  DAILY_METRICS,
+  DAILY_RANGES,
+  OTHER_KEY,
+  assignModelSlots,
+  barFraction,
+  summarizeDailyUsage,
+} from "../core/daily-usage.js";
+
+const METRIC_TITLE_KEYS = {
+  cost: "stats_daily_metric_cost",
+  tokens: "stats_daily_metric_tokens",
+  cache: "stats_daily_metric_cache",
+};
+
+const CACHE_PART_KEYS = {
+  hits: "stats_daily_cache_hits",
+  writes: "stats_daily_cache_writes",
+  uncached: "stats_daily_cache_uncached",
+};
 
 function browserTimeZone() {
   try {
@@ -16,7 +35,8 @@ function browserTimeZone() {
   }
 }
 
-// Daily cost or tokens as a bar chart, one bar per calendar day in the viewer's time zone.
+// Daily usage as stacked bars, one per calendar day in the viewer's time zone: cost or tokens
+// split by model, or input tokens split by how the prompt cache served them.
 const StatsDailyPanel = {
   components: {
     AppTabs,
@@ -31,16 +51,19 @@ const StatsDailyPanel = {
     const unsupported = ref(false);
     const hovered = ref(null);
     const pinned = ref(null);
+    const isolate = ref(null);
+    const slots = ref(new Map());
     const timeZone = browserTimeZone();
     let requestSeq = 0;
 
     const rangeTabs = computed(() => DAILY_RANGES.map((n) => ({ id: n, title: t("stats_daily_range_days", { count: n }) })));
     const rangeTab = computed(() => rangeTabs.value.find((tab) => tab.id === range.value) || null);
-    const metricTabs = computed(() =>
-      DAILY_METRICS.map((m) => ({ id: m, title: t(m === "tokens" ? "stats_daily_metric_tokens" : "stats_daily_metric_cost") })),
-    );
+    const metricTabs = computed(() => DAILY_METRICS.map((m) => ({ id: m, title: t(METRIC_TITLE_KEYS[m]) })));
     const metricTab = computed(() => metricTabs.value.find((tab) => tab.id === metric.value) || null);
-    const series = computed(() => summarizeDailyUsage(payload.value, metric.value));
+    const series = computed(() =>
+      summarizeDailyUsage(payload.value, metric.value, { slots: slots.value, isolate: isolate.value }),
+    );
+    const isCache = computed(() => series.value.metric === "cache");
     const hasRequests = computed(() => Number(payload.value?.summary?.requests || 0) > 0);
     const emptyMessage = computed(() => {
       if (unsupported.value) {
@@ -48,6 +71,7 @@ const StatsDailyPanel = {
       }
       return !loading.value && !err.value && !hasRequests.value ? t("stats_daily_empty") : "";
     });
+    const selecting = computed(() => hovered.value !== null || pinned.value !== null);
     const focusedIndex = computed(() => {
       const count = series.value.days.length;
       for (const index of [hovered.value, pinned.value]) {
@@ -83,15 +107,15 @@ const StatsDailyPanel = {
     }
 
     function metricValue(value) {
-      return series.value.metric === "tokens" ? compactNumber(value) : cost(value);
+      return series.value.metric === "cost" ? cost(value) : compactNumber(value);
     }
 
     function metricExact(value) {
-      return series.value.metric === "tokens" ? exactNumber(value) : exactCost(value);
+      return series.value.metric === "cost" ? exactCost(value) : exactNumber(value);
     }
 
     function axisValue(value) {
-      if (series.value.metric === "tokens") {
+      if (series.value.metric !== "cost") {
         return compactNumber(value);
       }
       if (value === 0) {
@@ -104,6 +128,25 @@ const StatsDailyPanel = {
       }).format(value);
     }
 
+    // Cache savings are what caching took off the input bill; negative when writes cost more.
+    function savings(delta) {
+      return delta === null || delta === undefined ? "-" : cost(-delta);
+    }
+
+    function segmentName(key) {
+      if (key === OTHER_KEY) {
+        return t("stats_daily_other");
+      }
+      return CACHE_PART_KEYS[key] ? t(CACHE_PART_KEYS[key]) : key;
+    }
+
+    function segmentClass(segment) {
+      if (Number.isInteger(segment?.slot)) {
+        return `is-slot-${segment.slot + 1}`;
+      }
+      return segment?.key === OTHER_KEY || !segment?.key ? "is-other" : `is-${segment.key}`;
+    }
+
     const ticks = computed(() =>
       series.value.ticks.map((value) => ({
         value,
@@ -114,14 +157,25 @@ const StatsDailyPanel = {
 
     const averageLine = computed(() => {
       const { average, scaleMax } = series.value;
-      if (!hasRequests.value || average <= 0 || scaleMax <= 0) {
+      if (isCache.value || !hasRequests.value || average <= 0 || scaleMax <= 0) {
         return null;
       }
-      return { bottom: (average / scaleMax) * 100, label: metricValue(average) };
+      return { bottom: (average / scaleMax) * 100 };
     });
 
     const figures = computed(() => {
       const s = series.value;
+      const active = { key: "active", label: t("stats_daily_active"), value: `${s.activeDays}/${s.days.length}` };
+      if (isCache.value) {
+        return [
+          { key: "rate", label: t("stats_cache_rate"), value: percent(s.cache.rate) },
+          { key: "hits", label: t("stats_daily_cache_hits"), value: compactNumber(s.cache.hits), title: exactNumber(s.cache.hits) },
+          { key: "writes", label: t("stats_daily_cache_writes"), value: compactNumber(s.cache.writes), title: exactNumber(s.cache.writes) },
+          { key: "uncached", label: t("stats_daily_cache_uncached"), value: compactNumber(s.cache.uncached), title: exactNumber(s.cache.uncached) },
+          { key: "savings", label: t("stats_cache_delta"), value: savings(s.cache.delta), title: s.cache.delta === null ? "" : exactCost(-s.cache.delta) },
+          active,
+        ];
+      }
       return [
         { key: "avg", label: t("stats_daily_avg"), value: metricValue(s.average), title: metricExact(s.average) },
         {
@@ -133,22 +187,93 @@ const StatsDailyPanel = {
         },
         { key: "today", label: t("stats_daily_today"), value: metricValue(s.today), title: metricExact(s.today) },
         { key: "total", label: t("stats_daily_total"), value: metricValue(s.total), title: metricExact(s.total) },
-        { key: "active", label: t("stats_daily_active"), value: `${s.activeDays}/${s.days.length}` },
+        active,
         { key: "cache", label: t("stats_cache_rate"), value: percent(s.cacheRate) },
       ];
+    });
+
+    // Tooltip rows for the focused day: its models, or its cache split.
+    const tooltip = computed(() => {
+      const day = focusedDay.value;
+      if (!selecting.value || !day || day.requests <= 0) {
+        return null;
+      }
+      const count = series.value.days.length;
+      const center = ((focusedIndex.value + 0.5) / count) * 100;
+      let rows;
+      if (isCache.value) {
+        rows = day.segments.map((segment) => ({
+          key: segment.key,
+          name: segmentName(segment.key),
+          swatch: segmentClass(segment),
+          value: compactNumber(segment.value),
+          title: exactNumber(segment.value),
+        }));
+        rows.push({ key: "rate", name: t("stats_daily_cache_rate"), value: percent(day.cache.rate) });
+        rows.push({ key: "savings", name: t("stats_cache_delta"), value: savings(day.cache.delta) });
+      } else {
+        rows = day.models
+          .filter((item) => !isolate.value || item.model === isolate.value || (isolate.value === OTHER_KEY && item.slot === null))
+          .map((item) => {
+            const value = series.value.metric === "tokens" ? item.tokens : item.cost;
+            return {
+              key: item.model,
+              name: item.model,
+              swatch: segmentClass({ key: item.model, slot: item.slot }),
+              value: metricValue(value),
+              title: metricExact(value),
+              note: `${exactNumber(item.requests)} ${t("stats_daily_req")}`,
+            };
+          });
+      }
+      if (rows.length === 0) {
+        return null;
+      }
+      return {
+        date: day.date,
+        total: isCache.value ? null : metricValue(day.value),
+        rows,
+        style: center > 55 ? { right: `${100 - center}%` } : { left: `${center}%` },
+        side: center > 55 ? "is-left" : "is-right",
+      };
     });
 
     function barHeight(day) {
       return `${barFraction(day.value, series.value.scaleMax) * 100}%`;
     }
 
+    function segmentHeight(day, segment) {
+      return day.value > 0 ? `${(segment.value / day.value) * 100}%` : "0";
+    }
+
     function barLabel(day) {
-      return `${day.date}: ${cost(day.cost)}, ${exactNumber(day.requests)} ${t("stats_requests")}, ${compactNumber(day.tokens)} ${t("stats_tokens")}`;
+      return `${day.date}: ${cost(day.cost)}, ${exactNumber(day.requests)} ${t("stats_requests")}, ${compactNumber(day.tokens)} ${t("stats_tokens")}, ${t("stats_cache_rate")} ${percent(day.cacheRate)}`;
     }
 
     function onBarClick(index) {
       pinned.value = pinned.value === index ? null : index;
     }
+
+    function toggleIsolate(key) {
+      if (!isCache.value) {
+        isolate.value = isolate.value === key ? null : key;
+      }
+    }
+
+    function legendTitle(item) {
+      if (isCache.value) {
+        return exactNumber(item.value);
+      }
+      const name = segmentName(item.key);
+      return isolate.value === item.key ? t("stats_daily_show_all") : t("stats_daily_show_only", { name });
+    }
+
+    watch(payload, (data) => {
+      slots.value = assignModelSlots(slots.value, data?.models);
+      if (isolate.value && !series.value.legend.some((item) => item.key === isolate.value)) {
+        isolate.value = null;
+      }
+    });
 
     async function load() {
       const seq = ++requestSeq;
@@ -192,6 +317,8 @@ const StatsDailyPanel = {
       () => endpointState.selectedRef,
       () => {
         pinned.value = null;
+        isolate.value = null;
+        slots.value = new Map();
         void load();
       },
     );
@@ -207,25 +334,36 @@ const StatsDailyPanel = {
       loading,
       err,
       series,
+      isCache,
       hasRequests,
       emptyMessage,
       hovered,
       pinned,
+      isolate,
+      selecting,
       focusedIndex,
       focusedDay,
       ticks,
       averageLine,
       figures,
+      tooltip,
       timeZone,
       setRange,
       onBarClick,
+      toggleIsolate,
+      legendTitle,
       barHeight,
+      segmentHeight,
+      segmentName,
+      segmentClass,
       barLabel,
+      metricValue,
       cost,
       exactCost,
       compactNumber,
       exactNumber,
       percent,
+      savings,
     };
   },
   template: `
@@ -284,7 +422,7 @@ const StatsDailyPanel = {
               class="stats-daily-bar"
               :class="{
                 'is-today': day.isToday,
-                'is-focused': index === focusedIndex && (hovered !== null || pinned !== null),
+                'is-focused': index === focusedIndex && selecting,
                 'is-pinned': index === pinned,
               }"
               :aria-label="barLabel(day)"
@@ -294,8 +432,29 @@ const StatsDailyPanel = {
               @blur="hovered = null"
               @click="onBarClick(index)"
             >
-              <span class="stats-daily-bar-fill" :style="{ height: barHeight(day) }"></span>
+              <span class="stats-daily-bar-stack" :style="{ height: barHeight(day) }">
+                <span
+                  v-for="segment in day.segments"
+                  :key="segment.key"
+                  class="stats-daily-segment"
+                  :class="segmentClass(segment)"
+                  :style="{ height: segmentHeight(day, segment) }"
+                ></span>
+              </span>
             </button>
+          </div>
+          <div v-if="tooltip" class="stats-daily-tooltip" :class="tooltip.side" :style="tooltip.style" aria-hidden="true">
+            <div class="stats-daily-tooltip-head">
+              <span>{{ tooltip.date }}</span>
+              <span v-if="tooltip.total" class="stats-daily-value">{{ tooltip.total }}</span>
+            </div>
+            <div v-for="row in tooltip.rows" :key="row.key" class="stats-daily-tooltip-row">
+              <span v-if="row.swatch" class="stats-daily-swatch" :class="row.swatch"></span>
+              <span v-else class="stats-daily-swatch is-blank"></span>
+              <span class="stats-daily-tooltip-name">{{ row.name }}</span>
+              <span v-if="row.note" class="stats-daily-note">{{ row.note }}</span>
+              <span class="stats-daily-value" :title="row.title || undefined">{{ row.value }}</span>
+            </div>
           </div>
           <p v-if="emptyMessage" class="stats-daily-empty">{{ emptyMessage }}</p>
         </div>
@@ -304,10 +463,28 @@ const StatsDailyPanel = {
             v-for="(day, index) in series.days"
             :key="'x:' + day.date"
             class="stats-daily-xlabel"
-            :class="{ 'is-hidden': !day.showLabel, 'is-focused': index === focusedIndex }"
+            :class="{ 'is-hidden': !day.showLabel, 'is-focused': index === focusedIndex && selecting }"
           >{{ day.label }}</span>
         </div>
       </div>
+
+      <ul v-if="series.legend.length > 0" class="stats-daily-legend" :class="{ 'is-static': isCache }">
+        <li v-for="item in series.legend" :key="item.key">
+          <component
+            :is="isCache ? 'span' : 'button'"
+            :type="isCache ? undefined : 'button'"
+            class="stats-daily-legend-item"
+            :class="{ 'is-muted': isolate && isolate !== item.key, 'is-active': isolate === item.key }"
+            :aria-pressed="isCache ? undefined : (isolate === item.key ? 'true' : 'false')"
+            :title="legendTitle(item)"
+            @click="toggleIsolate(item.key)"
+          >
+            <span class="stats-daily-swatch" :class="segmentClass(item)"></span>
+            <span class="stats-daily-legend-name">{{ segmentName(item.key) }}</span>
+            <span class="stats-daily-value">{{ metricValue(item.value) }}</span>
+          </component>
+        </li>
+      </ul>
 
       <dl class="stats-daily-figures">
         <div v-for="item in figures" :key="item.key" class="stats-daily-figure">

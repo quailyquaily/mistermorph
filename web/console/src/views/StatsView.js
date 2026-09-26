@@ -1,6 +1,7 @@
 import { computed, onMounted, ref, watch } from "vue";
 import "./StatsView.css";
 import { formatCompactCost, formatExactCost } from "../core/cost-format.js";
+import { cacheCostDelta as modelCacheCostDelta, cacheRate as modelCacheRate } from "../core/cache-cost.js";
 
 import AppPage from "../components/AppPage";
 import AppTabs from "../components/AppTabs";
@@ -39,55 +40,6 @@ function formatPercent(value) {
     minimumFractionDigits: 1,
     maximumFractionDigits: 1,
   }).format(clamped);
-}
-
-function modelCacheBaseInputTokens(row) {
-  const inputTokens = toFiniteNumber(row?.input_tokens);
-  const cachedInputTokens = toFiniteNumber(row?.cached_input_tokens);
-  const cacheCreationInputTokens = toFiniteNumber(row?.cache_creation_input_tokens);
-  return Math.max(0, inputTokens - cachedInputTokens - cacheCreationInputTokens);
-}
-
-function modelCacheRate(row) {
-  const inputTokens = toFiniteNumber(row?.input_tokens);
-  if (inputTokens <= 0) {
-    return null;
-  }
-  const cachedInputTokens = Math.min(toFiniteNumber(row?.cached_input_tokens), inputTokens);
-  return Math.max(0, cachedInputTokens / inputTokens);
-}
-
-function modelCacheCostDelta(row) {
-  const inputTokens = toFiniteNumber(row?.input_tokens);
-  if (inputTokens <= 0) {
-    return null;
-  }
-
-  const cachedInputTokens = toFiniteNumber(row?.cached_input_tokens);
-  const cacheCreationInputTokens = toFiniteNumber(row?.cache_creation_input_tokens);
-  if (cachedInputTokens <= 0 && cacheCreationInputTokens <= 0) {
-    return 0;
-  }
-
-  const baseInputTokens = modelCacheBaseInputTokens(row);
-  if (baseInputTokens <= 0 || !hasMetricValue(row, "input_cost")) {
-    return null;
-  }
-
-  const inputCost = Number(row?.input_cost);
-  if (!Number.isFinite(inputCost)) {
-    return null;
-  }
-
-  const baseInputCostPerToken = inputCost / baseInputTokens;
-  if (!Number.isFinite(baseInputCostPerToken)) {
-    return null;
-  }
-
-  const actualInputCost =
-    inputCost + toFiniteNumber(row?.cached_input_cost) + toFiniteNumber(row?.cache_creation_input_cost);
-  const baselineInputCostWithoutCache = baseInputCostPerToken * inputTokens;
-  return actualInputCost - baselineInputCostWithoutCache;
 }
 
 function summaryHeroMetric(t, totals, key) {

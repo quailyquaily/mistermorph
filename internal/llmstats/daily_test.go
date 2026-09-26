@@ -17,11 +17,15 @@ func TestDailyBucketsByCalendarDayInZone(t *testing.T) {
 
 	appendAt := func(ts time.Time, input, output int64, cost float64) {
 		t.Helper()
+		model := "gpt-5.2"
+		if cost < 1 {
+			model = "gpt-5-mini"
+		}
 		_, err := journal.Append(RequestRecord{
 			TS:                ts.UTC().Format(time.RFC3339),
 			Provider:          "openai",
 			APIBase:           "https://api.openai.com",
-			Model:             "gpt-5.2",
+			Model:             model,
 			InputTokens:       input,
 			OutputTokens:      output,
 			CachedInputTokens: input / 2,
@@ -75,6 +79,21 @@ func TestDailyBucketsByCalendarDayInZone(t *testing.T) {
 			}
 			if got.Summary.TotalCost != 3.5 || got.Summary.TotalTokens != 374 {
 				t.Fatalf("summary cost/tokens = %v/%d, want 3.5/374", got.Summary.TotalCost, got.Summary.TotalTokens)
+			}
+			if len(got.Models) != 2 || got.Models[0].Model != "gpt-5.2" || got.Models[0].Requests != 2 || got.Models[1].Model != "gpt-5-mini" || got.Models[1].TotalCost != 0.5 {
+				t.Fatalf("range models = %+v", got.Models)
+			}
+			for _, day := range got.Days {
+				var requests int64
+				for _, model := range day.Models {
+					requests += model.Requests
+				}
+				if requests != day.Requests {
+					t.Fatalf("%s model requests = %d, day requests = %d", day.Date, requests, day.Requests)
+				}
+				if day.Requests == 0 && day.Models != nil {
+					t.Fatalf("%s idle day has models %+v", day.Date, day.Models)
+				}
 			}
 		})
 	}

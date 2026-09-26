@@ -363,6 +363,7 @@ func (routes *routeRegistration) registerSystemRoutes() {
 			"from":         daily.From,
 			"to":           daily.To,
 			"summary":      daily.Summary,
+			"models":       daily.Models,
 			"days":         daily.Days,
 		})
 	})

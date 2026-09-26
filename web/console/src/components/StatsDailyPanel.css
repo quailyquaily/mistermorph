@@ -1,6 +1,21 @@
 /* Daily usage chart on the Stats page. Inherits the --stats-* tokens from .stats-page. */
+/* Model colours: cool, muted hues kept clear of the selection blue and the status green, in a
+   fixed order, validated for colour-vision deficiency on the light card (OKLCH L .44-.77,
+   C >= .10). The two light hues sit under 3:1 contrast, so values always appear as text in
+   the legend, tooltip and readout. Validated dark-surface steps for a future dark theme:
+   #5469b4 #2aa9a9 #97549b #8d8f3d. */
 .stats-daily {
   --daily-bar: color-mix(in srgb, var(--stats-accent) 58%, transparent);
+  --daily-series-1: #3c4e8c;
+  --daily-series-2: #40b9b9;
+  --daily-series-3: #925d9e;
+  --daily-series-4: #b8ba69;
+  --daily-series-other: color-mix(in srgb, var(--q-c-dark-4) 80%, transparent);
+  /* Cache split: one hue, darkest for what the cache served. */
+  --daily-cache-hits: var(--stats-accent);
+  --daily-cache-writes: color-mix(in srgb, var(--stats-accent) 52%, transparent);
+  --daily-cache-uncached: color-mix(in srgb, var(--stats-accent) 20%, transparent);
+  --daily-gap: var(--q-bg-white);
   --daily-select: var(--q-c-blue);
   --daily-rule: var(--stats-line);
   --daily-plot-height: 184px;
@@ -219,29 +234,53 @@
   cursor: pointer;
 }
 
-.stats-daily-bar-fill {
-  display: block;
+/* Segments are listed bottom first; a surface-coloured line separates stacked segments. */
+.stats-daily-bar-stack {
+  display: flex;
+  flex-direction: column-reverse;
   width: 62%;
   max-width: 28px;
   min-width: 1px;
-  background: var(--daily-bar);
-  transition: height 220ms ease, background-color 120ms ease;
+  transition: height 220ms ease;
 }
+
+.stats-daily-segment {
+  --seg: var(--daily-bar);
+  display: block;
+  flex: 0 0 auto;
+  min-height: 0;
+  box-sizing: border-box;
+  background: var(--seg);
+}
+
+.stats-daily-segment:not(:first-child) {
+  border-bottom: 1px solid var(--daily-gap);
+}
+
+.stats-daily .is-slot-1 { --seg: var(--daily-series-1); }
+.stats-daily .is-slot-2 { --seg: var(--daily-series-2); }
+.stats-daily .is-slot-3 { --seg: var(--daily-series-3); }
+.stats-daily .is-slot-4 { --seg: var(--daily-series-4); }
+.stats-daily .is-other { --seg: var(--daily-series-other); }
+.stats-daily .is-hits { --seg: var(--daily-cache-hits); }
+.stats-daily .is-writes { --seg: var(--daily-cache-writes); }
+.stats-daily .is-uncached { --seg: var(--daily-cache-uncached); }
 
 /* Today is still filling up: hatched instead of solid. */
-.stats-daily-bar.is-today .stats-daily-bar-fill {
-  box-shadow: inset 0 0 0 1px var(--daily-bar);
-  background: repeating-linear-gradient(135deg, var(--daily-bar) 0 2px, transparent 2px 5px);
+.stats-daily-bar.is-today .stats-daily-segment {
+  box-shadow: inset 0 0 0 1px var(--seg);
+  background: repeating-linear-gradient(135deg, var(--seg) 0 2px, transparent 2px 5px);
 }
 
+/* Selection marks the column, not the marks, so the model colours stay readable. */
 .stats-daily-bar:hover,
 .stats-daily-bar.is-focused {
-  background: color-mix(in srgb, var(--daily-select) 5%, transparent);
+  background: color-mix(in srgb, var(--daily-select) 6%, transparent);
 }
 
-.stats-daily-bar.is-focused .stats-daily-bar-fill,
-.stats-daily-bar.is-pinned .stats-daily-bar-fill {
-  --daily-bar: var(--daily-select);
+.stats-daily-bar.is-pinned {
+  background: color-mix(in srgb, var(--daily-select) 10%, transparent);
+  box-shadow: inset 0 -2px 0 var(--daily-select);
 }
 
 .stats-daily-bar:focus-visible {
@@ -261,6 +300,126 @@
   letter-spacing: 0.12em;
   text-transform: uppercase;
   pointer-events: none;
+}
+
+/* Per-day breakdown, floated over the plot beside the focused bar. */
+.stats-daily-tooltip {
+  position: absolute;
+  top: 4px;
+  z-index: 4;
+  display: grid;
+  gap: 3px;
+  min-width: 190px;
+  max-width: 280px;
+  padding: 8px 10px;
+  border: 1px solid var(--daily-rule);
+  background: var(--q-bg-white);
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--stats-ink) 10%, transparent);
+  pointer-events: none;
+}
+
+.stats-daily-tooltip.is-right {
+  margin-left: 12px;
+}
+
+.stats-daily-tooltip.is-left {
+  margin-right: 12px;
+}
+
+.stats-daily-tooltip-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 3px;
+  padding-bottom: 5px;
+  border-bottom: 1px dashed var(--stats-line-soft);
+  color: var(--stats-ink);
+  font: 400 11px/1.4 var(--font-mono);
+}
+
+.stats-daily-tooltip-row {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.stats-daily-tooltip-name,
+.stats-daily-legend-name {
+  overflow: hidden;
+  color: var(--stats-copy);
+  font: 400 10.5px/1.4 var(--font-mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stats-daily-tooltip-row .stats-daily-note {
+  margin-left: 0;
+}
+
+.stats-daily-tooltip-row .stats-daily-value {
+  text-align: right;
+}
+
+.stats-daily-swatch {
+  --seg: var(--daily-bar);
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  background: var(--seg);
+}
+
+.stats-daily-swatch.is-blank {
+  background: transparent;
+}
+
+/* Legend: model totals for the range; a model button shows only that model. */
+.stats-daily-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 6px;
+  margin: -4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.stats-daily-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 100%;
+  min-height: 26px;
+  margin: 0;
+  padding: 2px 8px;
+  border: 1px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+button.stats-daily-legend-item {
+  cursor: pointer;
+}
+
+button.stats-daily-legend-item:hover {
+  background: color-mix(in srgb, var(--daily-select) 6%, transparent);
+}
+
+.stats-daily-legend-item.is-active {
+  border-color: var(--daily-select);
+  background: color-mix(in srgb, var(--daily-select) 8%, transparent);
+}
+
+.stats-daily-legend-item.is-muted {
+  opacity: 0.45;
+}
+
+.stats-daily-legend-item:focus-visible {
+  outline: 1px solid var(--daily-select);
+  outline-offset: -1px;
 }
 
 .stats-daily-xaxis {
@@ -294,9 +453,10 @@
   visibility: hidden;
 }
 
+/* Only recoloured: forcing a hidden label visible would collide with its neighbours, and the
+   readout above already names the day. */
 .stats-daily-xlabel.is-focused {
   color: var(--daily-select);
-  visibility: visible;
 }
 
 /* Range figures as one datasheet row. */
@@ -343,8 +503,13 @@
     --daily-plot-height: 150px;
   }
 
-  .stats-daily-chart.is-dense .stats-daily-bar-fill {
+  .stats-daily-chart.is-dense .stats-daily-bar-stack {
     width: 80%;
+  }
+
+  .stats-daily-tooltip {
+    min-width: 160px;
+    max-width: 220px;
   }
 
   .stats-daily-readout {
@@ -365,7 +530,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .stats-daily-bar-fill {
+  .stats-daily-bar-stack {
     transition: none;
   }
 }

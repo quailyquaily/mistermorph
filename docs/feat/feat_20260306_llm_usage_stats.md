@@ -494,7 +494,8 @@ Acceptance criteria:
   - [x] `tz` is an IANA zone name (UTC when absent, 400 when unknown); days split at midnight in that zone
   - [x] response: `time_zone`, `from`, `to`, `summary` (range totals) and `days` (one entry per calendar day, oldest first, zero totals for idle days), each with the same fields as `summary`
   - [x] reads the journal directly instead of the projection, so any zone can be served without storing per-zone buckets; segments that end before the range are skipped, and costs are backfilled from pricing the same way as the projection
-  - [x] the console Stats page draws it as the Daily chart
+  - [x] each day and the range also carry `models`: per-model totals (same fields), sorted by tokens; idle days omit it
+  - [x] the console Stats page draws it as the Daily chart: Cost and Tokens stack the four leading models plus Other (colours stay with a model when the range changes; the legend isolates one model), and Cache splits input tokens into cache hits, cache writes and uncached, with cache rate and savings
 
 Acceptance criteria:
 
