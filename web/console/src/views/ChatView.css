@@ -2270,8 +2270,9 @@ body.artifact-preview-scroll-lock {
     gap: 6px;
   }
 
+  /* The usual 16px phone gutter; the composer and empty state share it, so they stay aligned. */
   .chat-main {
-    --chat-history-gutter-x: 8px;
+    --chat-history-gutter-x: 16px;
   }
 
   .chat-readonly {
@@ -2295,7 +2296,8 @@ body.artifact-preview-scroll-lock {
   }
 
   .chat-history-agent {
-    --chat-history-agent-padding-right: clamp(32px, 10vw, 48px);
+    /* Replies use the full width on a phone; only user messages are inset. */
+    --chat-history-agent-padding-right: 0px;
     padding-left: 0;
   }
 
