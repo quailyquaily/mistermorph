@@ -556,6 +556,8 @@ func (s *server) handler() http.Handler {
 		register("/settings/agent", s.handleAgentSettings)
 		register("/settings/agent/models", s.handleAgentSettingsModels)
 		register("/settings/agent/test", s.handleAgentSettingsTest)
+		register("/settings/agent/skills", s.handleAgentSkills)
+		register("/settings/agent/skills/detail", s.handleAgentSkillDetail)
 		register("/settings/console", s.handleConsoleSettings)
 		register("/settings/system", s.handleSystemSettings)
 		register("/settings/auto-update", s.handleAutoUpdateSettings)

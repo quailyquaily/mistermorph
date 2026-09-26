@@ -47,6 +47,7 @@ const ROUTE_VIEW_LOADERS = {
   settings: () => import("../views/SettingsView"),
   stats: () => import("../views/StatsView"),
   todo: () => import("../views/TodoView"),
+  skills: () => import("../views/SkillsView"),
 };
 const routePreloadPromises = new Map();
 
@@ -64,6 +65,7 @@ const SetupView = ROUTE_VIEW_LOADERS.setup;
 const SettingsView = ROUTE_VIEW_LOADERS.settings;
 const StatsView = ROUTE_VIEW_LOADERS.stats;
 const TodoView = ROUTE_VIEW_LOADERS.todo;
+const SkillsView = ROUTE_VIEW_LOADERS.skills;
 
 const RootRedirectView = {
   template: `<div aria-hidden="true"></div>`,
@@ -106,6 +108,8 @@ function preloadKeyForPath(path) {
       return "stats";
     case "/todo":
       return "todo";
+    case "/skills":
+      return "skills";
     default:
       return "";
   }
@@ -214,6 +218,7 @@ const routes = [
   { path: `${ENDPOINT_SCOPE_PATH}/audit`, component: AuditView, meta: { endpointScoped: true } },
   { path: `${ENDPOINT_SCOPE_PATH}/logs`, component: LogsView, meta: { endpointScoped: true } },
   { path: `${ENDPOINT_SCOPE_PATH}/todo`, component: TodoView, meta: { endpointScoped: true } },
+  { path: `${ENDPOINT_SCOPE_PATH}/skills`, component: SkillsView, meta: { endpointScoped: true } },
   {
     path: `${ENDPOINT_SCOPE_PATH}/contacts`,
     component: ContactsView,
@@ -243,6 +248,7 @@ const routes = [
   { path: "/audit", redirect: legacyEndpointRedirect("/audit") },
   { path: "/logs", redirect: legacyEndpointRedirect("/logs") },
   { path: "/todo", redirect: legacyEndpointRedirect("/todo") },
+  { path: "/skills", redirect: legacyEndpointRedirect("/skills") },
   { path: "/files", redirect: legacyEndpointRedirect("/todo") },
   { path: "/contacts", redirect: legacyEndpointRedirect("/contacts") },
   { path: "/settings/:section", redirect: legacyEndpointRedirect("/settings/:section") },
@@ -261,6 +267,7 @@ const NAV_ITEMS_META = [
   { id: "/chat", titleKey: "nav_chat", icon: "PhChats" },
   { id: "/contacts", titleKey: "nav_contacts", icon: "PhUsers" },
   { id: "/todo", titleKey: "nav_todo", icon: "PhListChecks" },
+  { id: "/skills", titleKey: "nav_skills", icon: "PhMagicWand" },
   { id: "__sep_primary", separator: true },
   { id: "/stats", titleKey: "nav_stats", icon: "PhChartBar" },
   { id: "/audit", titleKey: "nav_audit", icon: "PhFingerprint" },

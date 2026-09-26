@@ -130,7 +130,6 @@ const SETTINGS_SECTION_IDS = new Set([
   "agent",
   "tools",
   "mcp",
-  "skills",
   "persona",
   "channels",
   "automation",
@@ -414,44 +413,8 @@ function formatConfigList(values) {
   return normalizeNamedList(Array.isArray(values) ? values : []).join("\n");
 }
 
-function parseSkillLoadText(value) {
-  return String(value || "")
-    .split(/\r?\n/)
-    .map((item) => trimText(item))
-    .filter((item) => item !== "");
-}
-
-function formatSkillLoadList(values) {
-  return normalizeNamedList(Array.isArray(values) ? values : []).join("\n");
-}
-
 function toolEnabledValue(entry) {
   return !!(entry && typeof entry === "object" && entry.enabled === true);
-}
-
-function normalizeSkillItems(values) {
-  if (!Array.isArray(values)) {
-    return [];
-  }
-  return values
-    .map((item) => ({
-      id: trimText(item?.id),
-      name: trimText(item?.name),
-      description: trimText(item?.description),
-    }))
-    .filter((item) => item.id !== "" || item.name !== "");
-}
-
-function skillLoadEntry(skill) {
-  return trimText(skill?.id) || trimText(skill?.name);
-}
-
-function skillLoadEntryMatches(skill, entry) {
-  const key = trimText(entry).toLowerCase();
-  if (!key) {
-    return false;
-  }
-  return trimText(skill?.id).toLowerCase() === key || trimText(skill?.name).toLowerCase() === key;
 }
 
 function serializeLLMProfile(profile) {
@@ -597,21 +560,6 @@ function buildMCPSnapshot(state) {
   });
 }
 
-function buildSkillsSnapshot(state) {
-  recordSnapshotBuild("settings.skills");
-  return JSON.stringify({
-    skills: {
-      enabled: !!state.skills.enabled,
-      load: parseSkillLoadText(state.skills.load_text),
-    },
-  });
-}
-
-function formatSkillCount(count) {
-  const value = Math.max(0, Number(count) || 0);
-  return value === 1 ? "1 Skill" : `${value} Skills`;
-}
-
 function buildConsoleManagedRuntimeSnapshot(state) {
   recordSnapshotBuild("settings.console.managed_runtimes");
   return JSON.stringify({
@@ -740,7 +688,6 @@ const SettingsView = {
       agentSettingsReadOnly.value ? agentSettingsReadOnlyMessage.value : agentBusyReason.value
     );
     const agentValidationVisible = ref(false);
-    const skillsValidationVisible = ref(false);
     const deleteProfileDialogOpen = ref(false);
     const deleteProfileTargetKey = ref("");
     const advancedSettingsOpen = ref(false);
@@ -755,11 +702,9 @@ const SettingsView = {
     const agentConfigValues = ref({});
     const agentFieldStates = ref({});
     const loadedLLMSnapshot = ref("");
-    const loadedSkillsSnapshot = ref("");
     const loadedToolsSnapshot = ref("");
     const loadedMCPSnapshot = ref("");
     const llmDirty = ref(false);
-    const skillsDirty = ref(false);
     const toolsDirty = ref(false);
     const mcpDirty = ref(false);
     const agentSettingsLoaded = ref(false);
@@ -879,12 +824,6 @@ const SettingsView = {
         profiles: [],
         fallback_profiles: [],
       },
-      skills: {
-        enabled: true,
-        load_text: "",
-        loaded: [],
-        available: [],
-      },
       tools: {
         write_file: true,
         spawn: true,
@@ -946,11 +885,9 @@ const SettingsView = {
 
     function clearLoadedAgentSnapshots() {
       loadedLLMSnapshot.value = "";
-      loadedSkillsSnapshot.value = "";
       loadedToolsSnapshot.value = "";
       loadedMCPSnapshot.value = "";
       llmDirty.value = false;
-      skillsDirty.value = false;
       toolsDirty.value = false;
       mcpDirty.value = false;
       agentSettingsLoaded.value = false;
@@ -964,8 +901,6 @@ const SettingsView = {
           return "tools";
         case "mcp":
           return "mcp";
-        case "skills":
-          return "skills";
         default:
           return "";
       }
@@ -976,10 +911,6 @@ const SettingsView = {
       if (normalizedScope === "all" || normalizedScope === "agent" || normalizedScope === "llm") {
         loadedLLMSnapshot.value = buildLLMSnapshot(state);
         llmDirty.value = false;
-      }
-      if (normalizedScope === "all" || normalizedScope === "skills") {
-        loadedSkillsSnapshot.value = buildSkillsSnapshot(state);
-        skillsDirty.value = false;
       }
       if (normalizedScope === "all" || normalizedScope === "tools") {
         loadedToolsSnapshot.value = buildToolsSnapshot(state);
@@ -1002,8 +933,6 @@ const SettingsView = {
         }
       } else if (scope === "tools" && !loadedToolsSnapshot.value) {
         setLoadedAgentSnapshots("tools");
-      } else if (scope === "skills" && !loadedSkillsSnapshot.value) {
-        setLoadedAgentSnapshots("skills");
       } else if (scope === "mcp" && !loadedMCPSnapshot.value) {
         setLoadedAgentSnapshots("mcp");
       }
@@ -1031,10 +960,6 @@ const SettingsView = {
       } catch {
         // A missing snapshot only affects the disabled state of the page-level save button.
       }
-    }
-
-    function updateSkillsDirty() {
-      skillsDirty.value = buildSkillsSnapshot(state) !== loadedSkillsSnapshot.value;
     }
 
     function updateToolsDirty() {
@@ -1263,13 +1188,6 @@ const SettingsView = {
           meta: t("settings_section_mcp_meta"),
           saveKind: "agent",
         },
-        {
-          id: "skills",
-          icon: "PhMagicWand",
-          title: t("settings_skills_title"),
-          meta: t("settings_section_skills_meta"),
-          saveKind: "agent",
-        },
       ];
       if (selectedEndpointIsConsole.value) {
         items.push({
@@ -1386,9 +1304,6 @@ const SettingsView = {
       }
       if (id === "tools" && toolsDirty.value) {
         units.push({ key: "tools", label: title, save: () => saveAgentSettings("tools", { notify: false }) });
-      }
-      if (id === "skills" && skillsDirty.value) {
-        units.push({ key: "skills", label: title, save: () => saveAgentSettings("skills", { notify: false }) });
       }
       const dirtyTargets = (CONSOLE_SECTION_TARGETS[id] || []).filter(([, dirty]) => dirty.value);
       if (dirtyTargets.length) {
@@ -1759,38 +1674,6 @@ const SettingsView = {
         (selectedEndpointIsConsole.value && provider === SETUP_PROVIDER_MISTERMORPH_PRO && !proAuthStatus.logged_in)
       );
     }
-    const skillsSaveDisabled = computed(
-      () => agentLoading.value || agentSaving.value || agentSettingsReadOnly.value || !skillsDirty.value
-    );
-    const allSkillItems = computed(() => {
-      const items = [];
-      const seen = new Set();
-      for (const item of [...state.skills.loaded, ...state.skills.available]) {
-        const entry = skillLoadEntry(item);
-        if (!entry) {
-          continue;
-        }
-        const key = entry.toLowerCase();
-        if (seen.has(key)) {
-          continue;
-        }
-        seen.add(key);
-        items.push(item);
-      }
-      return items;
-    });
-    const currentSkillLoadEntries = computed(() => parseSkillLoadText(state.skills.load_text));
-    const displayedLoadedSkills = computed(() => {
-      const entries = currentSkillLoadEntries.value;
-      if (!entries.length || (entries.length === 1 && entries[0] === "*")) {
-        return allSkillItems.value;
-      }
-      return allSkillItems.value.filter((skill) => entries.some((entry) => skillLoadEntryMatches(skill, entry)));
-    });
-    const displayedAvailableSkills = computed(() => {
-      const loaded = new Set(displayedLoadedSkills.value.map((skill) => skillLoadEntry(skill).toLowerCase()));
-      return allSkillItems.value.filter((skill) => !loaded.has(skillLoadEntry(skill).toLowerCase()));
-    });
     const toolsSaveDisabled = computed(
       () => agentLoading.value || agentSaving.value || agentSettingsReadOnly.value || !toolsDirty.value
     );
@@ -1902,50 +1785,6 @@ const SettingsView = {
       const comparison = compareAppVersions(current, latest);
       return comparison !== -1;
     });
-    const skillsValidationError = computed(() => {
-      const entries = parseSkillLoadText(state.skills.load_text);
-      const seenRaw = new Set();
-      const queryToID = new Map();
-      for (const item of [...state.skills.loaded, ...state.skills.available]) {
-        const id = trimText(item?.id);
-        const name = trimText(item?.name);
-        const canonical = id || name;
-        if (!canonical) {
-          continue;
-        }
-        if (id) {
-          queryToID.set(id.toLowerCase(), canonical.toLowerCase());
-        }
-        if (name) {
-          queryToID.set(name.toLowerCase(), canonical.toLowerCase());
-        }
-      }
-      const hasWildcard = entries.includes("*");
-      if (hasWildcard && entries.length > 1) {
-        return t("settings_skills_load_error_wildcard");
-      }
-      const seenResolved = new Map();
-      for (const entry of entries) {
-        const key = entry.toLowerCase();
-        if (seenRaw.has(key)) {
-          return t("settings_skills_load_error_duplicate", { name: entry });
-        }
-        seenRaw.add(key);
-        if (entry === "*") {
-          continue;
-        }
-        const resolvedID = queryToID.get(key);
-        if (!resolvedID) {
-          return t("settings_skills_load_error_unknown", { name: entry });
-        }
-        if (seenResolved.has(resolvedID)) {
-          return t("settings_skills_load_error_duplicate", { name: entry });
-        }
-        seenResolved.set(resolvedID, entry);
-      }
-      return "";
-    });
-
     let agentSettingsRequestSeq = 0;
     let personaSettingsRequestSeq = 0;
     let consoleSettingsRequestSeq = 0;
@@ -1956,10 +1795,6 @@ const SettingsView = {
       state.llm.current_profile = "";
       state.llm.profiles = [];
       state.llm.fallback_profiles = [];
-      state.skills.enabled = true;
-      state.skills.load_text = "";
-      state.skills.loaded = [];
-      state.skills.available = [];
       state.tools.write_file = true;
       state.tools.spawn = true;
       state.tools.coder = false;
@@ -1983,7 +1818,6 @@ const SettingsView = {
       agentConfigValues.value = {};
       agentFieldStates.value = {};
       agentValidationVisible.value = false;
-      skillsValidationVisible.value = false;
       clearLoadedAgentSnapshots();
     }
 
@@ -2027,7 +1861,6 @@ const SettingsView = {
         secretFieldsPayload?.llm_profiles && typeof secretFieldsPayload.llm_profiles === "object"
           ? secretFieldsPayload.llm_profiles
           : {};
-      const skills = data?.skills && typeof data.skills === "object" ? data.skills : {};
       const tools = data?.tools && typeof data.tools === "object" ? data.tools : {};
       const mcp = data?.mcp && typeof data.mcp === "object" ? data.mcp : {};
       const profiles = Array.isArray(llm.profiles) ? llm.profiles : [];
@@ -2113,7 +1946,6 @@ const SettingsView = {
         }),
       );
       state.llm.fallback_profiles = normalizeNamedList(llm.fallback_profiles);
-      applySkillsPayload(skills);
       state.tools.write_file = toolEnabledValue(tools.write_file);
       state.tools.spawn = toolEnabledValue(tools.spawn);
       state.tools.coder = toolEnabledValue(tools.coder);
@@ -2134,15 +1966,6 @@ const SettingsView = {
       agentValidationVisible.value = false;
       agentSettingsLoaded.value = true;
       setLoadedAgentSnapshots(snapshotScope);
-    }
-
-    function applySkillsPayload(skills) {
-      const payload = skills && typeof skills === "object" ? skills : {};
-      state.skills.enabled = payload.enabled !== false;
-      state.skills.load_text = formatSkillLoadList(payload.load);
-      state.skills.loaded = normalizeSkillItems(payload.loaded);
-      state.skills.available = normalizeSkillItems(payload.available);
-      skillsValidationVisible.value = false;
     }
 
     function applyMCPPayload(mcp) {
@@ -3317,9 +3140,6 @@ const SettingsView = {
       if (target === "llm") {
         return { llm: buildLLMSettingsPayload() };
       }
-      if (target === "skills") {
-        return { skills: { enabled: !!state.skills.enabled, load: parseSkillLoadText(state.skills.load_text) } };
-      }
       if (target === "tools") {
         return { tools };
       }
@@ -3329,7 +3149,6 @@ const SettingsView = {
       }
       return {
         llm: buildLLMSettingsPayload(),
-        skills: { enabled: !!state.skills.enabled, load: parseSkillLoadText(state.skills.load_text) },
         tools,
         mcp,
       };
@@ -4023,16 +3842,13 @@ const SettingsView = {
     }
 
     async function saveAgentSettings(target = "all", { notify = true } = {}) {
-      const normalizedTarget = ["all", "llm", "skills", "tools", "mcp"].includes(String(target))
+      const normalizedTarget = ["all", "llm", "tools", "mcp"].includes(String(target))
         ? String(target)
         : "all";
       if (agentSettingsReadOnly.value) {
         return false;
       }
       if (normalizedTarget === "llm" && llmSaveDisabled.value) {
-        return false;
-      }
-      if (normalizedTarget === "skills" && skillsSaveDisabled.value) {
         return false;
       }
       if (normalizedTarget === "tools" && toolsSaveDisabled.value) {
@@ -4048,14 +3864,9 @@ const SettingsView = {
         agentValidationVisible.value = true;
         return false;
       }
-      if ((normalizedTarget === "skills" || normalizedTarget === "all") && skillsValidationError.value !== "") {
-        skillsValidationVisible.value = true;
-        return false;
-      }
       agentSaving.value = true;
       agentSavingTarget.value = normalizedTarget;
       agentValidationVisible.value = false;
-      skillsValidationVisible.value = false;
       const targetEndpointRef = settingsEndpointRef.value;
       try {
         const payload = await endpointApiFetch(targetEndpointRef, "/settings/agent", {
@@ -4072,27 +3883,17 @@ const SettingsView = {
             invalidateConsoleSetupReadiness();
           }
           const preservedProfiles = state.llm.profiles;
-          const preservedSkills = JSON.parse(JSON.stringify(state.skills));
           const preservedTools = JSON.parse(JSON.stringify(state.tools));
-          const previousSkillsSnapshot = loadedSkillsSnapshot.value;
           const previousToolsSnapshot = loadedToolsSnapshot.value;
-          const previousSkillsDirty = skillsDirty.value;
           const previousToolsDirty = toolsDirty.value;
           applyPayload(payload, { snapshotScope: normalizedTarget === "llm" ? "llm" : "all" });
           state.llm.profiles = preservedProfiles;
           if (normalizedTarget === "llm") {
-            Object.assign(state.skills, preservedSkills);
             Object.assign(state.tools, preservedTools);
-            loadedSkillsSnapshot.value = previousSkillsSnapshot;
             loadedToolsSnapshot.value = previousToolsSnapshot;
-            skillsDirty.value = previousSkillsDirty;
             toolsDirty.value = previousToolsDirty;
           }
           await loadEndpoints();
-        } else if (normalizedTarget === "skills") {
-          applySkillsPayload(payload?.skills);
-          loadedSkillsSnapshot.value = buildSkillsSnapshot(state);
-          skillsDirty.value = false;
         } else if (normalizedTarget === "tools") {
           loadedToolsSnapshot.value = buildToolsSnapshot(state);
           toolsDirty.value = false;
@@ -4557,46 +4358,6 @@ const SettingsView = {
       updateToolsDirty();
     }
 
-    function setSkillsEnabled(value) {
-      if (agentSettingsReadOnly.value) {
-        return;
-      }
-      state.skills.enabled = !!value;
-      updateSkillsDirty();
-    }
-
-    function explicitSkillLoadEntries() {
-      const entries = parseSkillLoadText(state.skills.load_text);
-      if (!entries.length || (entries.length === 1 && entries[0] === "*")) {
-        return normalizeNamedList(allSkillItems.value.map((skill) => skillLoadEntry(skill)));
-      }
-      return normalizeNamedList(entries.filter((entry) => entry !== "*"));
-    }
-
-    function setSkillLoaded(skill, loaded) {
-      if (agentSettingsReadOnly.value) {
-        return;
-      }
-      const target = skillLoadEntry(skill);
-      if (!target) {
-        return;
-      }
-      let entries = explicitSkillLoadEntries();
-      if (loaded) {
-        if (!entries.some((entry) => skillLoadEntryMatches(skill, entry))) {
-          entries.push(target);
-        }
-      } else {
-        entries = entries.filter((entry) => !skillLoadEntryMatches(skill, entry));
-      }
-      const allItems = allSkillItems.value;
-      const loadsAllSkills =
-        allItems.length > 0 && allItems.every((item) => entries.some((entry) => skillLoadEntryMatches(item, entry)));
-      state.skills.load_text = loadsAllSkills ? "" : formatSkillLoadList(entries);
-      skillsValidationVisible.value = false;
-      updateSkillsDirty();
-    }
-
     function setManagedRuntimeEnabled(id, value) {
       if (!Object.prototype.hasOwnProperty.call(state.managedRuntimes, id)) {
         return;
@@ -4650,7 +4411,7 @@ const SettingsView = {
 
     function ensureSettingsSectionData(sectionID = selectedSectionID.value) {
       const normalizedSectionID = normalizeSettingsSectionID(sectionID);
-      if (["agent", "tools", "skills", "mcp"].includes(normalizedSectionID)) {
+      if (["agent", "tools", "mcp"].includes(normalizedSectionID)) {
         if (!agentSettingsLoaded.value && !agentLoading.value) {
           void loadAgentSettings(settingsEndpointRef.value);
           return;
@@ -4873,7 +4634,6 @@ const SettingsView = {
       agentSettingsReadOnly,
       agentSettingsReadOnlyMessage,
       agentValidationVisible,
-      skillsValidationVisible,
       deleteProfileDialogOpen,
       consoleLoading,
       consoleSaving,
@@ -4937,7 +4697,6 @@ const SettingsView = {
       agentValidationError,
       profileSaveDisabled,
       llmProfileSecretFields,
-      skillsValidationError,
       deleteProfileDialogText,
       deleteProfileDialogActions,
       apiBasePickerItems,
@@ -4963,7 +4722,6 @@ const SettingsView = {
       mobileBarTitle,
       pageClass,
       llmSaveDisabled,
-      skillsSaveDisabled,
       toolsSaveDisabled,
       mcpSaveDisabled,
       mcpValidationError,
@@ -5094,11 +4852,6 @@ const SettingsView = {
       applyModelOption,
       openTestConnection,
       runConnectionTest,
-      setSkillsEnabled,
-      setSkillLoaded,
-      displayedLoadedSkills,
-      displayedAvailableSkills,
-      formatSkillCount,
       setToolEnabled,
       setManagedRuntimeEnabled,
       consoleFieldEnvManaged,
@@ -5930,104 +5683,6 @@ const SettingsView = {
             :validationError="mcpValidationError"
             @save="saveMCPServers"
           />
-
-          <div v-else-if="selectedSection.id === 'skills'" class="settings-panel-body settings-panel-body-plain">
-            <QCard variant="default">
-              <div class="settings-panel-shell">
-                <header class="settings-panel-head">
-                  <div class="settings-panel-copy">
-                    <h3 class="settings-panel-title workspace-document-title">{{ t("settings_skills_title") }}</h3>
-                    <p class="settings-panel-meta">{{ selectedSection.meta }}</p>
-                  </div>
-                </header>
-
-                <QFence
-                  v-if="skillsValidationVisible && skillsValidationError"
-                  type="danger"
-                  icon="PhXCircle"
-                  :text="skillsValidationError"
-                />
-
-                <QFence
-                  v-if="agentSettingsReadOnly"
-                  type="warning"
-                  :text="agentSettingsReadOnlyMessage"
-                />
-
-                <div class="settings-panel-body">
-                  <div class="settings-toggle-list">
-                    <div class="settings-toggle-row">
-                      <div class="settings-toggle-copy">
-                        <strong class="settings-toggle-title">{{ t("settings_skills_enabled_title") }}</strong>
-                        <span class="settings-toggle-note">{{ t("settings_skills_enabled_note") }}</span>
-                      </div>
-                      <QSwitch
-                        :modelValue="state.skills.enabled"
-                        :disabled="agentLoading || agentSaving || agentSettingsReadOnly"
-                        @update:modelValue="setSkillsEnabled"
-                      />
-                    </div>
-                  </div>
-
-                </div>
-              </div>
-            </QCard>
-
-            <QCard variant="default">
-              <div class="settings-skill-list-shell">
-                <header class="settings-skill-list-head">
-                  <h3 class="settings-skill-list-title">{{ t("settings_skills_loaded_title") }}</h3>
-                  <span class="settings-skill-list-count">{{ formatSkillCount(displayedLoadedSkills.length) }}</span>
-                </header>
-                <p v-if="!displayedLoadedSkills.length" class="settings-skill-empty">{{ t("settings_skills_loaded_empty") }}</p>
-                <div v-else class="settings-skill-grid">
-                  <article v-for="skill in displayedLoadedSkills" :key="'loaded-' + (skill.id || skill.name)" class="settings-skill-card">
-                    <div class="settings-skill-card-head">
-                      <div class="settings-skill-card-copy">
-                        <strong class="settings-skill-card-title">{{ skill.name || skill.id }}</strong>
-                        <code v-if="skill.id && skill.id !== skill.name" class="settings-skill-card-id">{{ skill.id }}</code>
-                      </div>
-                      <QSwitch
-                        :modelValue="true"
-                        :aria-label="t('settings_skills_disable_action')"
-                        :disabled="agentLoading || agentSaving || agentSettingsReadOnly"
-                        @update:modelValue="setSkillLoaded(skill, $event)"
-                      />
-                    </div>
-                    <p class="settings-skill-card-desc">{{ skill.description || t("settings_skills_description_empty") }}</p>
-                  </article>
-                </div>
-              </div>
-            </QCard>
-
-            <QCard variant="default">
-              <div class="settings-skill-list-shell">
-                <header class="settings-skill-list-head">
-                  <h3 class="settings-skill-list-title">{{ t("settings_skills_available_title") }}</h3>
-                  <span class="settings-skill-list-count">{{ formatSkillCount(displayedAvailableSkills.length) }}</span>
-                </header>
-                <p v-if="!displayedAvailableSkills.length" class="settings-skill-empty">{{ t("settings_skills_available_empty") }}</p>
-                <div v-else class="settings-skill-grid">
-                  <article v-for="skill in displayedAvailableSkills" :key="'available-' + (skill.id || skill.name)" class="settings-skill-card">
-                    <div class="settings-skill-card-head">
-                      <div class="settings-skill-card-copy">
-                        <strong class="settings-skill-card-title">{{ skill.name || skill.id }}</strong>
-                        <code v-if="skill.id && skill.id !== skill.name" class="settings-skill-card-id">{{ skill.id }}</code>
-                      </div>
-                      <QSwitch
-                        :modelValue="false"
-                        :aria-label="t('settings_skills_enable_action')"
-                        :disabled="agentLoading || agentSaving || agentSettingsReadOnly"
-                        @update:modelValue="setSkillLoaded(skill, $event)"
-                      />
-                    </div>
-                    <p class="settings-skill-card-desc">{{ skill.description || t("settings_skills_description_empty") }}</p>
-                  </article>
-                </div>
-              </div>
-            </QCard>
-
-          </div>
 
           <div v-else-if="selectedSection.id === 'automation'" class="settings-panel-body settings-panel-body-plain">
             <ConfigSettingsPanel

@@ -21,5 +21,4 @@ test("Settings action notices use toast instead of inline fences", async () => {
   assert.doesNotMatch(source, /:text="desktopErr"/);
 
   assert.match(source, /:text="agentValidationError"/);
-  assert.match(source, /:text="skillsValidationError"/);
 });

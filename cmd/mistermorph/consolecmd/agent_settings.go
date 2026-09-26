@@ -41,6 +41,38 @@ func (s *server) handleAgentSettings(w http.ResponseWriter, r *http.Request) {
 	agentsettings.NewHandler(agentsettings.HandlerOptions{Owner: owner}).Settings(w, r)
 }
 
+// The Skills page reads the console agent's skills through the same file owner as its settings.
+func (s *server) agentSkillsHandler() (*agentsettings.Handler, error) {
+	configPath, err := resolveConsoleConfigPath()
+	if err != nil {
+		return nil, err
+	}
+	owner := agentsettings.NewFileOwner(agentsettings.FileOwnerOptions{
+		ConfigPath: configPath,
+		Reader:     s.currentRuntimeConfigReader(),
+		OSStore:    s.secretStore,
+	})
+	return agentsettings.NewHandler(agentsettings.HandlerOptions{Owner: owner}), nil
+}
+
+func (s *server) handleAgentSkills(w http.ResponseWriter, r *http.Request) {
+	handler, err := s.agentSkillsHandler()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	handler.Skills(w, r)
+}
+
+func (s *server) handleAgentSkillDetail(w http.ResponseWriter, r *http.Request) {
+	handler, err := s.agentSkillsHandler()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	handler.SkillDetail(w, r)
+}
+
 func (s *server) handleAgentSettingsModels(w http.ResponseWriter, r *http.Request) {
 	owner := agentsettings.NewFileOwner(agentsettings.FileOwnerOptions{Reader: s.currentRuntimeConfigReader()})
 	agentsettings.NewHandler(agentsettings.HandlerOptions{Owner: owner}).Models(w, r)

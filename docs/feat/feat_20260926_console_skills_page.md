@@ -41,7 +41,7 @@ behind an API and adds provenance.
   watching what happened.
 - Mobile: under More, next to Usage and Audit. The mobile strip already shows the current
   page's icon in the More slot.
-- Icon: `PhPuzzlePiece` (or `PhLightning`), registered in `icons/phosphor.js`.
+- Icon: `PhMagicWand`, the icon the Settings section used.
 - Settings loses its Skills section entirely (no pointer left behind). Tools and MCP stay in
   Settings: they are set up once, while skills are browsed.
 
@@ -71,21 +71,28 @@ Same shape as TODO and Contacts: an index list and a detail pane.
 - Header: the global Enable switch (`skills.enabled`) and an Install button. On mobile the
   install action is the floating add button, as on Chat and TODO.
 - Detail: facts in the mono datasheet style used by Usage, then the rendered `SKILL.md`,
-  read-only. The content is untrusted, so the renderer must sanitise it (no raw HTML, no
-  scripts); check the console's markdown renderer does before reusing it here.
+  read-only, without its frontmatter. The content is untrusted; the console's markdown renderer
+  (the one chat uses) was checked against it: `<script>` is dropped, event-handler attributes
+  are stripped and `javascript:` links lose their href.
 - The per-skill switch moves into the detail header. Changes save immediately (one small
   config write) instead of through a save bar, so this page has no pending-changes state.
+- `skills.load` cannot express "none" (empty means all), so switching off the last loaded skill
+  turns skills off and keeps the list, and switching one on while skills are off loads just
+  that one (`core/skills-load.js`). The old Settings switches turned "none" into "all".
 - Empty state: explains where skills live and offers Install.
 
 ### 3.3 API
 
 The page acts on the selected agent: skills live in each agent's own state dir, and remote
-agents are reached through the existing endpoint proxy.
+agents are reached through the existing endpoint proxy. The routes sit next to the agent
+settings routes on both the daemon (`internal/daemonruntime`) and the console server (the
+console's own agent), and read the same settings view, so the page and the agent agree on what
+is loaded (`internal/agentsettings/skills_catalog.go`).
 
 | Route | Purpose |
 | --- | --- |
-| `GET /skills` | Enabled flag, and all discovered skills with id, name, description, dir, requirements, auth profiles, loaded flag, source (provenance, §4.4) and file list. |
-| `GET /skills/{id}` | The same fields plus `SKILL.md` content (size-capped). |
+| `GET /settings/agent/skills` | Enabled flag, load list, skills roots, read-only state, config revision, and every discovered skill with id, name, description, dir, requirements, auth profiles, loaded flag and file list (dot-folders skipped, capped at 200 files). |
+| `GET /settings/agent/skills/detail?id=<id>` | The same fields plus `SKILL.md` content, capped at 256 KiB. Only discovered skills are readable, so an id cannot reach outside the skills roots. |
 | (existing) agent settings update | Switches keep using the agent settings API's `skills: {enabled, load}` update, as Settings did, so no new write route is needed. |
 
 Agents without these routes answer 404; the page then shows an "update this agent" notice,
@@ -265,7 +272,7 @@ Skills are instructions the agent follows, and they can ship scripts the agent m
 
 | Stage | Scope | Tests |
 | --- | --- | --- |
-| 1 | Skills page, `GET /skills`, `GET /skills/{id}`, `PUT /skills/settings`; Settings section removed; sidebar and mobile entries | Route tests with a temp skills dir; console core tests for list/detail state; screenshots desktop and 390 px |
+| 1 (done) | Skills page; `GET /settings/agent/skills` and `/skills/detail`; switches through the existing settings update; Settings section removed; sidebar and mobile entries | Catalog and route tests with a temp skills dir; `skills-load` toggle tests; page source tests; screenshots at desktop and 390 px |
 | 1b | `skill_used` event and last-used projection | Projection tests |
 | 2 | `internal/skillinstall` extracted from the CLI; GitHub link resolution; `skill_install_preview` and `skill_install` tools for the console runtime only (install behind approval); Install on the Skills page starts a task in a new topic; provenance | Link resolution table tests; limits, path safety and binary rejection; preview-id binding; checksum re-verify; `skill_install` refuses without approval; new install switched on |
 | 3 | Store repo with CI and `index.json`; Store tab; update flow | Index schema tests; install-from-index checksum mismatch rejected; update diff |

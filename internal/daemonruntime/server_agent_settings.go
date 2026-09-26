@@ -29,6 +29,8 @@ func registerRuntimeAgentSettingsRoutes(
 	register("/settings/agent", handler.Settings)
 	register("/settings/agent/models", handler.Models)
 	register("/settings/agent/test", handler.Test)
+	register("/settings/agent/skills", handler.Skills)
+	register("/settings/agent/skills/detail", handler.SkillDetail)
 }
 
 func writeRuntimeAuthError(w http.ResponseWriter) {
