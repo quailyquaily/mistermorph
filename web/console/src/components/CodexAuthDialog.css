@@ -107,7 +107,8 @@
   border-radius: 999px;
   border: 2px solid color-mix(in srgb, var(--codex-auth-accent) 18%, transparent);
   border-top-color: var(--codex-auth-accent);
-  animation: codex-auth-spin 0.8s linear infinite;
+  animation: app-spin 0.8s linear infinite;
+  translate: 0 2px;
 }
 
 .codex-auth-hint {
@@ -225,15 +226,6 @@
   margin-left: auto;
 }
 
-@keyframes codex-auth-spin {
-  from {
-    transform: translateY(2px) rotate(0deg);
-  }
-
-  to {
-    transform: translateY(2px) rotate(360deg);
-  }
-}
 
 @media (max-width: 560px) {
   .codex-auth-row-summary {

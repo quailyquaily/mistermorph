@@ -6417,6 +6417,7 @@ const SettingsView = {
               </div>
             </QCard>
           </div>
+          <Transition name="settings-save-bar">
           <div v-if="sectionSaveUnits.length || sectionSaveFailed" class="settings-save-bar" role="region" :aria-label="t('settings_save_bar_label')">
             <span class="settings-save-bar-mark" :class="{ 'is-error': sectionSaveFailed }" aria-hidden="true"></span>
             <p class="settings-save-bar-text" role="status">
@@ -6430,6 +6431,7 @@ const SettingsView = {
               {{ t('action_save') }}
             </QButton>
           </div>
+          </Transition>
         </div>
       </div>
 

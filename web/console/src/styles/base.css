@@ -23,7 +23,44 @@
   --q-card-title-font-family: var(--font-ui);
   --app-shell-vpad: 0;
   --sidebar-vpad: 16px;
+  /* Motion: short and eased out, like an instrument settling. Reduced motion zeroes them. */
+  --motion-fast: 120ms;
+  --motion-normal: 180ms;
+  --motion-slow: 260ms;
+  --motion-ease: cubic-bezier(0.2, 0, 0, 1);
+  --motion-highlight: 1600ms;
   color-scheme: light;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-fast: 0ms;
+    --motion-normal: 0ms;
+    --motion-slow: 0ms;
+    --motion-highlight: 0ms;
+  }
+}
+
+/* A row that just arrived or changed in a live list: a selection-blue tint that fades back to
+   the row's own background. */
+.is-arrived {
+  animation: app-arrived var(--motion-highlight) ease-in both;
+}
+
+/* Holds the tint long enough to be noticed, then fades out. */
+@keyframes app-arrived {
+  0%,
+  30% {
+    background-color: color-mix(in srgb, var(--q-c-blue) 14%, transparent);
+  }
+}
+
+/* The one spinner. Uses the individual rotate property so an element can still offset itself
+   with translate. */
+@keyframes app-spin {
+  to {
+    rotate: 360deg;
+  }
 }
 
 /* Quail sets its theme (data-theme, e.g. morph) and that theme's --q-* variables on <body>.
@@ -293,4 +330,77 @@ pre {
   min-width: 14px;
   height: 14px;
   color: var(--q-c-red) !important;
+}
+
+/* Indeterminate loading (QProgress :infinite): a hairline with a short segment sweeping across,
+   in place of Quail's striped bar. Value progress bars keep their own look. `body` outranks
+   Quail's equally specific rules, which load later. */
+body .q-progress:has(.q-progress-bar.animated) .q-progress-slot {
+  height: 2px;
+  border-radius: 0;
+  background: var(--line-soft);
+}
+
+body .q-progress .q-progress-slot .q-progress-bar.animated {
+  border-radius: 0;
+  background: none;
+}
+
+body .q-progress .q-progress-slot .q-progress-bar.animated .q-progress-bar-inner {
+  left: 0;
+  right: auto;
+  width: 28%;
+  background: linear-gradient(90deg, transparent, var(--q-c-blue) 45%, var(--q-c-blue) 55%, transparent);
+  animation: app-loading-scan 1.2s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+/* The segment is 28% of the track, so 357% carries it fully across. */
+@keyframes app-loading-scan {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(357%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body .q-progress .q-progress-slot .q-progress-bar.animated .q-progress-bar-inner {
+    width: 100%;
+    opacity: 0.5;
+    animation: none;
+  }
+}
+
+/* Dialogs: Quail fades the mask with Vue's default transition; the dialog itself settles from
+   98% scale as it fades, and reverses when closing. */
+body .q-dialog-mask.v-enter-active,
+body .q-dialog-mask.v-leave-active {
+  transition: opacity var(--motion-normal) var(--motion-ease);
+}
+
+body .q-dialog-mask.v-enter-active .q-dialog,
+body .q-dialog-mask.v-leave-active .q-dialog {
+  transition:
+    opacity var(--motion-normal) var(--motion-ease),
+    scale var(--motion-normal) var(--motion-ease);
+}
+
+body .q-dialog-mask.v-enter-from .q-dialog,
+body .q-dialog-mask.v-leave-to .q-dialog {
+  opacity: 0;
+  scale: 0.98;
+}
+
+/* Dropdown menus drop in from their trigger. */
+body .q-menu {
+  transform-origin: top center;
+  animation: app-menu-in var(--motion-fast) var(--motion-ease) both;
+}
+
+@keyframes app-menu-in {
+  from {
+    opacity: 0;
+    translate: 0 -4px;
+  }
 }

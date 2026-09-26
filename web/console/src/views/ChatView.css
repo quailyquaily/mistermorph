@@ -40,6 +40,54 @@
     minmax(230px, var(--workspace-sidebar-max-width, 310px));
 }
 
+/* While the workspace panel can open, its column stays in the grid and only its width changes,
+   so opening and closing animates. Column gaps become sidebar margins: a closed, zero-width
+   column must not leave a gap behind. Tracks are 4px wider to hold those margins. */
+.chat-shell.can-workspace {
+  --chat-workspace-track: minmax(0px, 0px);
+  --chat-sidebar-track: minmax(234px, calc(var(--workspace-sidebar-max-width, 310px) + 4px));
+  grid-template-columns: minmax(0, 1fr) var(--chat-workspace-track);
+  column-gap: 0;
+  transition: grid-template-columns var(--motion-slow) var(--motion-ease);
+}
+
+.chat-shell.can-workspace.has-sidebar {
+  grid-template-columns: var(--chat-sidebar-track) minmax(0, 1fr) var(--chat-workspace-track);
+}
+
+.chat-shell.can-workspace.has-workspace-panel {
+  --chat-workspace-track: var(--chat-sidebar-track);
+}
+
+.chat-shell.can-workspace > .chat-topic-sidebar {
+  margin-right: 4px;
+}
+
+/* The panel keeps its width and stays pinned to the right edge while the column narrows, so it
+   slides out rather than squashing its contents. */
+.chat-shell.can-workspace > .chat-workspace-sidebar {
+  display: flex;
+  justify-content: flex-end;
+  justify-self: stretch;
+  margin-left: 4px;
+}
+
+.chat-shell.can-workspace > .chat-workspace-sidebar > .chat-workspace-sidebar-shell {
+  flex: 0 0 auto;
+  /* The open width, less the aside's 0.5rem padding on each side. */
+  width: max(100%, calc(var(--workspace-sidebar-max-width, 310px) - 1rem));
+}
+
+.chat-workspace-enter-active,
+.chat-workspace-leave-active {
+  transition: opacity var(--motion-slow) var(--motion-ease);
+}
+
+.chat-workspace-enter-from,
+.chat-workspace-leave-to {
+  opacity: 0;
+}
+
 .chat-page-topics .page-bar {
   padding-block: 8px;
 }
@@ -1230,6 +1278,30 @@ html[data-macos26="true"] .chat-workspace-sidebar-shell-mobile {
   width: 100%;
 }
 
+/* A message that just joined the thread: a sent message rises from the composer, a reply
+   settles in place. Uses translate so item transforms are left alone. */
+.chat-history-item.is-arriving {
+  animation: chat-history-arrive var(--motion-slow) var(--motion-ease) both;
+}
+
+.chat-history-user.is-arriving {
+  animation-name: chat-history-arrive-sent;
+}
+
+@keyframes chat-history-arrive {
+  from {
+    opacity: 0;
+    translate: 0 4px;
+  }
+}
+
+@keyframes chat-history-arrive-sent {
+  from {
+    opacity: 0;
+    translate: 0 14px;
+  }
+}
+
 .chat-history-stack {
   width: 100%;
   min-width: 0;
@@ -1292,6 +1364,27 @@ html[data-macos26="true"] .chat-workspace-sidebar-shell-mobile {
   width: 100%;
   display: grid;
   gap: 14px;
+}
+
+/* An approval waiting for you pings once as it appears: a blue ring spreads from the card
+   and fades. It does not repeat. */
+.chat-history-approval-surface:has(.chat-approval-panel.is-pending) {
+  animation: chat-approval-ping 900ms var(--motion-ease) 1 both;
+}
+
+@keyframes chat-approval-ping {
+  from {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--q-c-blue) 45%, transparent);
+  }
+  to {
+    box-shadow: 0 0 0 8px color-mix(in srgb, var(--q-c-blue) 0%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-history-approval-surface:has(.chat-approval-panel.is-pending) {
+    animation: none;
+  }
 }
 
 .chat-approval-head {
@@ -1599,6 +1692,20 @@ html[data-macos26="true"] .chat-workspace-sidebar-shell-mobile {
   bottom: -1px;
   border-right-width: 1.5px;
   border-bottom-width: 1.5px;
+}
+
+/* Registration marks reach further while the exhibit is in use. */
+.artifact-preview-card:not(.is-fullscreen)::before,
+.artifact-preview-card:not(.is-fullscreen)::after {
+  transition:
+    width var(--motion-normal) var(--motion-ease),
+    height var(--motion-normal) var(--motion-ease);
+}
+
+.artifact-preview-card:not(.is-fullscreen):is(:hover, :focus-within)::before,
+.artifact-preview-card:not(.is-fullscreen):is(:hover, :focus-within)::after {
+  width: 16px;
+  height: 16px;
 }
 
 body.artifact-preview-scroll-lock {

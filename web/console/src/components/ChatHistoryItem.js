@@ -43,6 +43,10 @@ const ChatHistoryItem = {
       type: Object,
       required: true,
     },
+    arriving: {
+      type: Boolean,
+      default: false,
+    },
     submitEndpointRef: {
       type: String,
       default: "",
@@ -98,16 +102,17 @@ const ChatHistoryItem = {
       () => `chat-history-context-notice is-${normalizeTaskStatus(props.item?.status)}`
     );
     const itemClass = computed(() => {
+      const arriving = props.arriving ? " is-arriving" : "";
       if (contextCompactNotice.value) {
-        return "chat-history-item chat-history-context-compact";
+        return "chat-history-item chat-history-context-compact" + arriving;
       }
       if (role.value === "user") {
-        return "chat-history-item chat-history-user";
+        return "chat-history-item chat-history-user" + arriving;
       }
       if (role.value === "agent") {
-        return "chat-history-item chat-history-agent";
+        return "chat-history-item chat-history-agent" + arriving;
       }
-      return "chat-history-item chat-history-system";
+      return "chat-history-item chat-history-system" + arriving;
     });
     const surfaceClass = computed(() => (role.value === "agent" ? "chat-history-copy" : "chat-history-bubble"));
     const reasoningVisible = computed(() => String(props.item?.reasoning || "").trim() !== "");
@@ -303,7 +308,7 @@ const ChatHistoryItem = {
     </div>
     <article
       :class="itemClass"
-      v-memo="[item, copied, expandedPanel, autoPreview, streamProfiler, submitEndpointRef, selectedTopicId, approvalApproveLabel, approvalDenyLabel, approvalTitle]"
+      v-memo="[item, arriving, copied, expandedPanel, autoPreview, streamProfiler, submitEndpointRef, selectedTopicId, approvalApproveLabel, approvalDenyLabel, approvalTitle]"
     >
       <span
         v-if="statusText && role !== 'agent'"

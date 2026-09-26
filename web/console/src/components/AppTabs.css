@@ -1,4 +1,5 @@
 .app-tabs {
+  position: relative;
   display: flex;
   align-items: center;
   height: 38px;
@@ -68,4 +69,29 @@
   line-height: 1.4;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* The sliding highlight behind the active option. */
+.app-tabs-indicator {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: 0;
+  background: color-mix(in srgb, var(--q-c-blue) 16%, var(--q-bg-paper));
+  pointer-events: none;
+}
+
+.app-tabs-indicator.is-ready {
+  transition:
+    transform var(--motion-normal) var(--motion-ease),
+    width var(--motion-normal) var(--motion-ease);
+}
+
+.app-tabs-option {
+  position: relative;
+  z-index: 1;
+}
+
+.app-tabs.has-indicator .app-tabs-option.is-active {
+  background: transparent;
 }

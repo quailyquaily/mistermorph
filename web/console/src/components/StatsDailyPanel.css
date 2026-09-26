@@ -53,6 +53,20 @@
   border-bottom-width: 2px;
 }
 
+/* Registration marks reach further while the chart is in use. */
+.stats-daily::before,
+.stats-daily::after {
+  transition:
+    width var(--motion-normal) var(--motion-ease),
+    height var(--motion-normal) var(--motion-ease);
+}
+
+.stats-daily:is(:hover, :focus-within)::before,
+.stats-daily:is(:hover, :focus-within)::after {
+  width: 16px;
+  height: 16px;
+}
+
 .stats-daily-head {
   display: flex;
   flex-wrap: wrap;
@@ -241,7 +255,7 @@
   width: 62%;
   max-width: 28px;
   min-width: 1px;
-  transition: height 220ms ease;
+  transition: height var(--motion-slow) var(--motion-ease);
 }
 
 .stats-daily-segment {
@@ -532,5 +546,6 @@ button.stats-daily-legend-item:hover {
 @media (prefers-reduced-motion: reduce) {
   .stats-daily-bar-stack {
     transition: none;
+    transition-delay: 0s !important;
   }
 }

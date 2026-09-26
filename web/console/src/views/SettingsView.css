@@ -863,18 +863,9 @@ body:has(.settings-page) .q-dialog .q-menu-item.danger .q-menu-title {
 }
 
 .settings-codex-auth-button.is-loading .icon {
-  animation: settings-codex-spin 0.8s linear infinite;
+  animation: app-spin 0.8s linear infinite;
 }
 
-@keyframes settings-codex-spin {
-  from {
-    transform: rotate(0deg);
-  }
-
-  to {
-    transform: rotate(360deg);
-  }
-}
 
 .settings-toggle-list,
 .settings-console-list {
@@ -1295,6 +1286,20 @@ body:has(.settings-page) .q-dialog .q-menu-item.danger .q-menu-title {
 }
 
 /* Section save bar: pinned to the bottom of the settings pane while the section has unsaved changes. */
+/* The save bar slides up from the bottom when there is something to save. */
+.settings-save-bar-enter-active,
+.settings-save-bar-leave-active {
+  transition:
+    opacity var(--motion-normal) var(--motion-ease),
+    translate var(--motion-normal) var(--motion-ease);
+}
+
+.settings-save-bar-enter-from,
+.settings-save-bar-leave-to {
+  opacity: 0;
+  translate: 0 12px;
+}
+
 .settings-save-bar {
   position: sticky;
   bottom: 12px;

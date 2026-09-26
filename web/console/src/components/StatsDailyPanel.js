@@ -1,4 +1,4 @@
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import "./StatsDailyPanel.css";
 
 import AppTabs from "./AppTabs";
@@ -6,6 +6,7 @@ import AppTabs from "./AppTabs";
 import { endpointState, runtimeApiFetch, translate } from "../core/context";
 import { currentLocale } from "../i18n";
 import { formatCompactCost, formatExactCost } from "../core/cost-format.js";
+import { prefersReducedMotion, tweenValue } from "../core/tween.js";
 import {
   DAILY_METRICS,
   DAILY_RANGES,
@@ -163,32 +164,80 @@ const StatsDailyPanel = {
       return { bottom: (average / scaleMax) * 100 };
     });
 
+    // Figures roll to their new values when the range or metric changes.
+    const ROLL_MS = 420;
+    const figureTargets = computed(() => {
+      const s = series.value;
+      return {
+        average: s.average,
+        peak: s.peak ? s.peak.value : 0,
+        today: s.today,
+        total: s.total,
+        cacheRate: s.cacheRate,
+        rate: s.cache.rate,
+        hits: s.cache.hits,
+        writes: s.cache.writes,
+        uncached: s.cache.uncached,
+        savings: s.cache.delta === null ? null : -s.cache.delta,
+      };
+    });
+    const rolled = reactive({});
+    let rollFrame = 0;
+    watch(
+      figureTargets,
+      (targets) => {
+        cancelAnimationFrame(rollFrame);
+        const from = { ...rolled };
+        if (prefersReducedMotion() || Object.keys(from).length === 0) {
+          Object.assign(rolled, targets);
+          return;
+        }
+        const start = performance.now();
+        const step = (now) => {
+          const elapsed = now - start;
+          for (const [key, value] of Object.entries(targets)) {
+            rolled[key] = tweenValue(from[key], value, elapsed, ROLL_MS);
+          }
+          if (elapsed < ROLL_MS) {
+            rollFrame = requestAnimationFrame(step);
+          }
+        };
+        rollFrame = requestAnimationFrame(step);
+      },
+      { immediate: true },
+    );
+    onBeforeUnmount(() => cancelAnimationFrame(rollFrame));
+
+    function shown(key) {
+      return key in rolled ? rolled[key] : figureTargets.value[key];
+    }
+
     const figures = computed(() => {
       const s = series.value;
       const active = { key: "active", label: t("stats_daily_active"), value: `${s.activeDays}/${s.days.length}` };
       if (isCache.value) {
         return [
-          { key: "rate", label: t("stats_cache_rate"), value: percent(s.cache.rate) },
-          { key: "hits", label: t("stats_daily_cache_hits"), value: compactNumber(s.cache.hits), title: exactNumber(s.cache.hits) },
-          { key: "writes", label: t("stats_daily_cache_writes"), value: compactNumber(s.cache.writes), title: exactNumber(s.cache.writes) },
-          { key: "uncached", label: t("stats_daily_cache_uncached"), value: compactNumber(s.cache.uncached), title: exactNumber(s.cache.uncached) },
-          { key: "savings", label: t("stats_cache_delta"), value: savings(s.cache.delta), title: s.cache.delta === null ? "" : exactCost(-s.cache.delta) },
+          { key: "rate", label: t("stats_cache_rate"), value: percent(shown("rate")) },
+          { key: "hits", label: t("stats_daily_cache_hits"), value: compactNumber(shown("hits")), title: exactNumber(s.cache.hits) },
+          { key: "writes", label: t("stats_daily_cache_writes"), value: compactNumber(shown("writes")), title: exactNumber(s.cache.writes) },
+          { key: "uncached", label: t("stats_daily_cache_uncached"), value: compactNumber(shown("uncached")), title: exactNumber(s.cache.uncached) },
+          { key: "savings", label: t("stats_cache_delta"), value: savings(s.cache.delta === null ? null : -shown("savings")), title: s.cache.delta === null ? "" : exactCost(-s.cache.delta) },
           active,
         ];
       }
       return [
-        { key: "avg", label: t("stats_daily_avg"), value: metricValue(s.average), title: metricExact(s.average) },
+        { key: "avg", label: t("stats_daily_avg"), value: metricValue(shown("average")), title: metricExact(s.average) },
         {
           key: "peak",
           label: t("stats_daily_peak"),
-          value: s.peak ? metricValue(s.peak.value) : "-",
+          value: s.peak ? metricValue(shown("peak")) : "-",
           note: s.peak ? s.peak.date.slice(5) : "",
           title: s.peak ? `${s.peak.date} · ${metricExact(s.peak.value)}` : "",
         },
-        { key: "today", label: t("stats_daily_today"), value: metricValue(s.today), title: metricExact(s.today) },
-        { key: "total", label: t("stats_daily_total"), value: metricValue(s.total), title: metricExact(s.total) },
+        { key: "today", label: t("stats_daily_today"), value: metricValue(shown("today")), title: metricExact(s.today) },
+        { key: "total", label: t("stats_daily_total"), value: metricValue(shown("total")), title: metricExact(s.total) },
         active,
-        { key: "cache", label: t("stats_cache_rate"), value: percent(s.cacheRate) },
+        { key: "cache", label: t("stats_cache_rate"), value: percent(shown("cacheRate")) },
       ];
     });
 
@@ -238,8 +287,23 @@ const StatsDailyPanel = {
       };
     });
 
+    // Bars grow from the baseline, left to right, whenever a range loads; switching the metric
+    // reshapes them with the same stagger.
+    const drawn = ref(false);
+    function redrawBars() {
+      drawn.value = false;
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        drawn.value = true;
+      }));
+    }
+
     function barHeight(day) {
-      return `${barFraction(day.value, series.value.scaleMax) * 100}%`;
+      return drawn.value ? `${barFraction(day.value, series.value.scaleMax) * 100}%` : "0%";
+    }
+
+    function barDelay(index) {
+      const count = series.value.days.length || 1;
+      return `${Math.round(index * Math.min(14, 280 / count))}ms`;
     }
 
     function segmentHeight(day, segment) {
@@ -285,6 +349,7 @@ const StatsDailyPanel = {
         const data = await runtimeApiFetch(`/stats/llm/daily?${query}`);
         if (seq === requestSeq) {
           payload.value = data && typeof data === "object" ? data : null;
+          redrawBars();
         }
       } catch (e) {
         if (seq === requestSeq) {
@@ -353,6 +418,7 @@ const StatsDailyPanel = {
       toggleIsolate,
       legendTitle,
       barHeight,
+      barDelay,
       segmentHeight,
       segmentName,
       segmentClass,
@@ -432,7 +498,7 @@ const StatsDailyPanel = {
               @blur="hovered = null"
               @click="onBarClick(index)"
             >
-              <span class="stats-daily-bar-stack" :style="{ height: barHeight(day) }">
+              <span class="stats-daily-bar-stack" :style="{ height: barHeight(day), transitionDelay: barDelay(index) }">
                 <span
                   v-for="segment in day.segments"
                   :key="segment.key"

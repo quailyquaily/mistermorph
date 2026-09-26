@@ -381,7 +381,7 @@ const ChatStatusCard = {
             </section>
 
             <section v-if="isExpanded(PANEL_ACTIVITY) && activity" class="chat-status-detail">
-              <ol v-if="activityItems.length > 0" class="chat-activity-list">
+              <TransitionGroup v-if="activityItems.length > 0" tag="ol" name="chat-activity" class="chat-activity-list">
                 <li
                   v-for="(entry, entryIndex) in activityItems"
                   :key="itemId + ':activity:' + activityEntryKey(entry, entryIndex)"
@@ -409,7 +409,7 @@ const ChatStatusCard = {
                     <p v-if="activityEntryNote(entry)" class="chat-activity-note">{{ activityEntryNote(entry) }}</p>
                   </div>
                 </li>
-              </ol>
+              </TransitionGroup>
             </section>
           </div>
         </div>

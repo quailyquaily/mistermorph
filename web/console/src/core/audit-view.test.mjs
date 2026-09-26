@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import vm from "node:vm";
 import test from "node:test";
 import { computed, effectScope, nextTick, reactive, ref, watch } from "vue";
+import { createArrivalTracker, createChangeTracker, createHighlightWindow } from "./arrivals.js";
 
 const source = (await readFile(new URL("../views/AuditView.js", import.meta.url), "utf8"))
   .replace(/^import[\s\S]*?;\n/gm, "")
@@ -22,7 +23,8 @@ function mount(t, fetch) {
   const taskResource = { loading: ref(false), error: ref(null), data: ref(null), refresh: async () => {} };
   const context = {
     computed, reactive, ref, watch, URLSearchParams, Date,
-    AppPage: {}, RawJsonDialog: {}, TASK_STATUS_META: [],
+    AppPage: {}, AppSkeleton: {}, RawJsonDialog: {}, TASK_STATUS_META: [],
+    createArrivalTracker, createChangeTracker, createHighlightWindow,
     useRouter: () => ({ push() {} }),
     onMounted: (fn) => { mounted = fn; }, onUnmounted() {},
     window: { innerWidth: 1440, addEventListener() {}, removeEventListener() {}, setInterval(fn) { tick = fn; }, clearInterval() {} },

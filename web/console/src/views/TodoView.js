@@ -7,7 +7,8 @@ import AppPage from "../components/AppPage";
 import AppMarkdownEditor from "../components/AppMarkdownEditor";
 import AppTabs from "../components/AppTabs";
 import TodoCalendar from "../components/TodoCalendar";
-import { currentLocale, runtimeApiFetch, translate } from "../core/context";
+import { createArrivalTracker, createHighlightWindow } from "../core/arrivals";
+import { currentLocale, endpointState, runtimeApiFetch, translate } from "../core/context";
 import { isValidCronExpression } from "../core/cron";
 import { modelVendorMeta } from "../core/model-vendor";
 import { invalidateConsoleSetupReadiness } from "../core/setup";
@@ -674,6 +675,21 @@ const TodoView = {
     const loading = ref(false);
     const saving = ref(false);
     const tasks = ref([]);
+    // A task added to the list flashes where it lands; loads and agent switches do not.
+    const taskArrivals = createArrivalTracker({ edge: "any" });
+    const arrivedTasks = createHighlightWindow(1800);
+    const arrivedTick = ref(0);
+    watch(
+      tasks,
+      (list) => {
+        const arrived = taskArrivals.update(list.map((task) => task._key), endpointState.selectedRef);
+        if (arrived.size > 0) {
+          arrivedTasks.add(arrived);
+          arrivedTick.value += 1;
+        }
+      },
+      { flush: "pre" },
+    );
     const persistedTaskSignatures = ref(new Map());
     const chatOptions = ref([]);
     const llmDefaultRouteModel = ref("");
@@ -1106,6 +1122,9 @@ const TodoView = {
       const classes = ["todo-index-item", "workspace-sidebar-item"];
       if (!isMobile.value && task?._key === selectedTaskKey.value) {
         classes.push("is-active");
+      }
+      if (arrivedTick.value >= 0 && arrivedTasks.has(task?._key)) {
+        classes.push("is-arrived");
       }
       return classes.join(" ");
     }

@@ -1,4 +1,6 @@
-import { onBeforeUpdate, onUpdated } from "vue";
+import { onBeforeUpdate, onUpdated, shallowRef, watch } from "vue";
+
+import { createArrivalTracker } from "../core/arrivals";
 
 import { recordComponentUpdate } from "../core/performance";
 import ChatHistoryItem from "./ChatHistoryItem";
@@ -8,6 +10,8 @@ function itemID(item) {
 }
 
 const RECORD_COMPONENT_PERF = import.meta.env.DEV === true;
+// Longer than the arrival animation, so rapid streaming updates do not cut it short.
+const ARRIVAL_WINDOW_MS = 600;
 
 const ChatHistoryList = {
   components: {
@@ -83,6 +87,30 @@ const ChatHistoryList = {
   setup(props, { emit }) {
     let updateStartedAt = 0;
 
+    // Messages that just joined the thread animate in; history loads and topic switches do not.
+    const arrivals = createArrivalTracker({ edge: "end" });
+    const arrivingUntil = shallowRef(new Map());
+    watch(
+      () => [props.items, props.selectedTopicId, props.loading],
+      () => {
+        if (props.loading) {
+          return;
+        }
+        const now = performance.now();
+        const next = new Map([...arrivingUntil.value].filter(([, until]) => until > now));
+        for (const id of arrivals.update(props.items.map(itemID), props.selectedTopicId)) {
+          next.set(id, now + ARRIVAL_WINDOW_MS);
+        }
+        arrivingUntil.value = next;
+      },
+      { immediate: true, flush: "pre" },
+    );
+
+    function arriving(item) {
+      const until = arrivingUntil.value.get(itemID(item));
+      return until !== undefined && until > performance.now();
+    }
+
     function copied(item) {
       return itemID(item) !== "" && itemID(item) === props.copiedItemId;
     }
@@ -142,6 +170,7 @@ const ChatHistoryList = {
     });
 
     return {
+      arriving,
       autoPreview,
       copied,
       emitApprovalApprove,
@@ -160,6 +189,7 @@ const ChatHistoryList = {
       v-for="item in items"
       :key="item.id"
       :item="item"
+      :arriving="arriving(item)"
       :submit-endpoint-ref="submitEndpointRef"
       :selected-topic-id="selectedTopicId"
       :copied="copied(item)"

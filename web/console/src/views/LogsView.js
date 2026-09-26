@@ -1,15 +1,17 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import "./LogsView.css";
 import AppPage from "../components/AppPage";
+import AppSkeleton from "../components/AppSkeleton";
 import { currentLocale, endpointState, formatBytes, formatShortTime, runtimeApiFetchForEndpoint, translate } from "../core/context";
 import { filterLogEntries, logClock, logDayKey, logDayLabel, logFieldPreview, logSnapshotKey, parseLogLine } from "../core/logs";
+import { contentKeys, createArrivalTracker, createHighlightWindow } from "../core/arrivals";
 
 const LIMIT_OPTIONS = [100, 300, 1000];
 const LEVEL_OPTIONS = ["", "issues", "error", "warn", "info", "debug"];
 const TIME_OPTIONS = [0, 15, 60, 1440];
 
 export default {
-  components: { AppPage },
+  components: { AppPage, AppSkeleton },
   setup() {
     const t = translate;
     const err = ref("");
@@ -36,6 +38,30 @@ export default {
     let generation = 0;
     let entrySeq = 0;
     let refreshTimer;
+
+    // New lines at the bottom flash briefly; the first load, older pages and agent switches do not.
+    const arrivals = createArrivalTracker({ edge: "end" });
+    const arrivedRows = createHighlightWindow(1800);
+    const arrivedTick = ref(0);
+    watch(
+      entries,
+      (list) => {
+        const keys = contentKeys(list.map((entry) => `${entry.file}\n${entry.line}`));
+        list.forEach((entry, index) => {
+          entry.arrivalKey = keys[index];
+        });
+        const arrived = arrivals.update(keys, `${endpointState.selectedRef}|${limit.value}`);
+        if (arrived.size > 0) {
+          arrivedRows.add(arrived);
+          arrivedTick.value += 1;
+        }
+      },
+      { flush: "pre" },
+    );
+
+    function isArrived(entry) {
+      return arrivedTick.value >= 0 && arrivedRows.has(entry.arrivalKey);
+    }
 
     const filteredEntries = computed(() => filterLogEntries(entries.value, query.value, level.value, {
       event: event.value,
@@ -222,6 +248,7 @@ export default {
     });
 
     return {
+      isArrived,
       t, err, unsupported, loading, loadingOlder, limit, query, level, event, timeRange, following, hasNewer,
       entries, filteredEntries, dayGroups, filterActive, activeFilterCount, filtersOpen, nextCursor, logPane, rawEntries,
       metaText, emptyText, limits: LIMIT_OPTIONS, eventOptions, levelOptions, timeOptions,
@@ -291,6 +318,7 @@ export default {
                 <PhCaretUp class="icon" />{{ t(loadingOlder ? 'runtime_loading' : 'logs_load_older') }}
               </button>
             </div>
+            <AppSkeleton v-if="loading && !entries.length" :rows="8" :label="t('runtime_loading')" />
             <div v-if="!filteredEntries.length && !loading" class="logs-empty">
               <PhTerminalWindow class="icon logs-empty-icon" aria-hidden="true" />
               <p>{{ filterActive && entries.length ? t('logs_no_matches') : emptyText }}</p>
@@ -300,7 +328,7 @@ export default {
               <div v-if="group.label" class="logs-marker logs-day-marker">{{ group.label }}</div>
               <template v-for="row in group.rows" :key="row.entry.id">
                 <div v-if="row.fileLabel" class="logs-marker logs-file-marker">{{ row.fileLabel }}</div>
-                <details class="logs-entry" :class="'is-' + (row.entry.level || 'raw')" @toggle="$event.target.open && (following = false)">
+                <details class="logs-entry" :class="['is-' + (row.entry.level || 'raw'), { 'is-arrived': isArrived(row.entry) }]" @toggle="$event.target.open && (following = false)">
                   <summary class="logs-entry-summary">
                     <time :datetime="row.entry.time" :title="row.entry.time">{{ row.clock || '—' }}</time>
                     <span class="logs-level">{{ levelLabel(row.entry.level) }}</span>

@@ -1,0 +1,41 @@
+.app-skeleton {
+  position: relative;
+  display: grid;
+  gap: 0;
+  padding: 4px 0;
+}
+
+.app-skeleton-row {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+  min-height: 33px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.app-skeleton-lead,
+.app-skeleton-bar {
+  display: block;
+  height: 8px;
+  background: color-mix(in srgb, var(--q-c-dark-4) 45%, transparent);
+  animation: app-skeleton-pulse 1.4s ease-in-out infinite both;
+}
+
+.app-skeleton-lead {
+  width: 100%;
+}
+
+@keyframes app-skeleton-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-skeleton-lead,
+  .app-skeleton-bar {
+    animation: none;
+  }
+}

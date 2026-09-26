@@ -212,6 +212,20 @@
   border-bottom-width: 1.5px;
 }
 
+/* Registration marks reach further while the sheet is in use. */
+.logs-table::before,
+.logs-table::after {
+  transition:
+    width var(--motion-normal) var(--motion-ease),
+    height var(--motion-normal) var(--motion-ease);
+}
+
+.logs-table:is(:hover, :focus-within)::before,
+.logs-table:is(:hover, :focus-within)::after {
+  width: 16px;
+  height: 16px;
+}
+
 .logs-columns,
 .logs-entry-summary {
   display: grid;

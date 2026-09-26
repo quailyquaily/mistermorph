@@ -999,6 +999,11 @@ const ChatView = {
       if (consoleTopicsEnabled.value && hasVisibleTopics.value && !mobileTopicSplitEnabled.value) {
         classes.push("has-sidebar");
       }
+      // The workspace column stays in the grid while it can open, so showing and hiding it
+      // animates the column width instead of adding and removing a grid track.
+      if (workspaceSidebarAvailable.value && !mobileMode.value && showChatPane.value) {
+        classes.push("can-workspace");
+      }
       if (desktopWorkspaceSidebarVisible.value) {
         classes.push("has-workspace-panel");
       }
@@ -4377,6 +4382,7 @@ const ChatView = {
               :footer-text="chatDisclaimer"
             />
           </section>
+          <Transition name="chat-workspace">
           <aside
             v-if="desktopWorkspaceSidebarVisible"
             class="chat-workspace-sidebar workspace-sidebar-section"
@@ -4643,6 +4649,7 @@ const ChatView = {
               </div>
             </div>
           </aside>
+          </Transition>
         </section>
         <Teleport to="body">
           <Transition name="chat-workspace-mobile">

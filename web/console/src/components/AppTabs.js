@@ -1,3 +1,4 @@
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import "./AppTabs.css";
 
 function tabID(tab, index) {
@@ -42,10 +43,50 @@ const AppTabs = {
       if (Number.isInteger(nextIndex)) selectTab(props.tabs[nextIndex], nextIndex);
     }
 
-    return { isActive, selectTab, onKeydown };
+    // One highlight that slides to the active option. It is placed without animation first,
+    // then moves; a resize observer keeps it aligned when labels or the container change size.
+    const root = ref(null);
+    const indicator = ref({ visible: false, x: 0, width: 0 });
+    const indicatorReady = ref(false);
+    let resizeObserver = null;
+
+    function placeIndicator() {
+      const el = root.value;
+      const active = el?.querySelector(".app-tabs-option.is-active");
+      if (!el || !active || active.offsetWidth === 0) {
+        indicator.value = { visible: false, x: 0, width: 0 };
+        return;
+      }
+      indicator.value = { visible: true, x: active.offsetLeft, width: active.offsetWidth };
+    }
+
+    onMounted(() => {
+      placeIndicator();
+      requestAnimationFrame(() => {
+        indicatorReady.value = true;
+      });
+      if (typeof ResizeObserver === "function" && root.value) {
+        resizeObserver = new ResizeObserver(placeIndicator);
+        resizeObserver.observe(root.value);
+      }
+    });
+    onBeforeUnmount(() => resizeObserver?.disconnect());
+    watch(
+      () => [tabID(props.modelValue, -1), props.tabs.map((tab, index) => `${tabID(tab, index)}:${tab.title}`).join("|")],
+      () => nextTick(placeIndicator),
+    );
+
+    return { isActive, selectTab, onKeydown, root, indicator, indicatorReady };
   },
   template: `
-    <div class="app-tabs" role="tablist" :aria-label="ariaLabel || undefined">
+    <div ref="root" class="app-tabs" :class="{ 'has-indicator': indicator.visible }" role="tablist" :aria-label="ariaLabel || undefined">
+      <span
+        v-if="indicator.visible"
+        class="app-tabs-indicator"
+        :class="{ 'is-ready': indicatorReady }"
+        :style="{ width: indicator.width + 'px', transform: 'translateX(' + indicator.x + 'px)' }"
+        aria-hidden="true"
+      ></span>
       <button
         v-for="(tab, index) in tabs"
         :key="tab.id ?? index"

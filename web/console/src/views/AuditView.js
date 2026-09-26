@@ -3,11 +3,13 @@ import { useRouter } from "vue-router";
 import "./AuditView.css";
 
 import AppPage from "../components/AppPage";
+import AppSkeleton from "../components/AppSkeleton";
 import RawJsonDialog from "../components/RawJsonDialog";
 import { openRawJsonDesktopWindow } from "../core/desktop-windows";
 import { endpointChannelLabel } from "../core/endpoints";
 import { endpointRoutePath } from "../core/endpoint-routes";
 import { loadResource, resourceKey, useResource } from "../core/resources";
+import { createArrivalTracker, createChangeTracker, createHighlightWindow } from "../core/arrivals";
 import {
   TASK_STATUS_META,
   endpointState,
@@ -278,6 +280,7 @@ function shortenTaskID(raw) {
 const AuditView = {
   components: {
     AppPage,
+    AppSkeleton,
     RawJsonDialog,
   },
   setup() {
@@ -461,6 +464,41 @@ const AuditView = {
         return item;
       }).reverse();
     });
+    // Events and tasks that appear at the top on a refresh flash briefly, as do tasks whose
+    // status changed; the first load, other files, pages and agents do not.
+    const eventArrivals = createArrivalTracker({ edge: "start" });
+    const taskArrivals = createArrivalTracker({ edge: "start" });
+    const taskChanges = createChangeTracker();
+    const arrivedRows = createHighlightWindow(1800);
+    const arrivedTick = ref(0);
+    function markArrived(keys) {
+      if (keys.size > 0) {
+        arrivedRows.add(keys);
+        arrivedTick.value += 1;
+      }
+    }
+    watch(
+      auditItems,
+      (items) => {
+        const scope = `${currentEndpointRef()}|${selectedFile.value}|${pageValue.value}`;
+        markArrived(eventArrivals.update(items.map((item) => item.key), scope));
+      },
+      { flush: "pre" },
+    );
+    watch(
+      taskItems,
+      (items) => {
+        const scope = `${taskFeedEndpointRef.value}|${currentTaskCursor.value}`;
+        const arrived = taskArrivals.update(items.map((item) => item.id), scope);
+        const changed = taskChanges.update(items.map((item) => ({ id: item.id, signature: item.status })), scope);
+        markArrived(new Set([...arrived, ...changed].map((id) => `task:${id}`)));
+      },
+      { flush: "pre" },
+    );
+    function isArrived(key) {
+      return arrivedTick.value >= 0 && arrivedRows.has(key);
+    }
+
     const filteredAuditItems = computed(() => {
       const query = filterText.value.trim().toLowerCase();
       if (!query) return auditItems.value;
@@ -946,6 +984,7 @@ const AuditView = {
       goChat,
       taskStatusLabel,
       taskStatusBadge,
+      isArrived,
       taskSourceLabel,
       taskRuntimeMeta,
       taskModelMeta,
@@ -1052,13 +1091,14 @@ const AuditView = {
                 <span>{{ filterText ? t('audit_filtered_count', { count: filteredItemCount, total: auditItemCount }) : t('audit_page_count', { count: auditItemCount }) }}</span>
                 <span>{{ t('audit_updated', { value: updatedAt }) }}</span>
               </div>
+              <AppSkeleton v-if="loading && !auditItemCount" :rows="6" :label="t('runtime_loading')" />
               <div v-if="meta.exists" class="audit-feed">
                 <section v-for="group in auditGroups" :key="group.key" class="audit-group">
                   <header class="audit-group-head">
                     <span class="audit-group-identity"><span class="audit-group-label">{{ t('audit_run') }}</span><code :title="group.title">{{ group.title }}</code></span>
                     <span class="audit-group-count">{{ t('audit_page_count', { count: group.items.length }) }}</span>
                   </header>
-                  <details v-for="item in group.items" :key="item.key" class="audit-event">
+                  <details v-for="item in group.items" :key="item.key" class="audit-event" :class="{ 'is-arrived': isArrived(item.key) }">
                     <summary class="audit-event-summary">
                       <span class="audit-event-copy">
                         <span class="audit-event-heading">
@@ -1115,7 +1155,7 @@ const AuditView = {
             <template v-else>
               <QFence v-if="taskErr" type="danger" icon="PhXCircle" :text="taskErr" />
               <div class="audit-task-stream">
-                <details v-for="item in taskItems" :key="item.id" class="audit-task">
+                <details v-for="item in taskItems" :key="item.id" class="audit-task" :class="{ 'is-arrived': isArrived('task:' + item.id) }">
                   <summary class="audit-event-summary">
                     <span class="audit-event-copy">
                       <span class="audit-event-heading"><strong class="audit-task-title">{{ taskTitle(item) }}</strong></span>

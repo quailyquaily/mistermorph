@@ -384,3 +384,34 @@
   display: grid;
   gap: 10px;
 }
+
+/* A new activity entry draws in left to right, like a plotter line. */
+.chat-activity-enter-active {
+  transition:
+    clip-path var(--motion-slow) var(--motion-ease),
+    opacity var(--motion-fast) linear;
+}
+
+.chat-activity-enter-from {
+  clip-path: inset(0 100% 0 0);
+  opacity: 0.3;
+}
+
+/* Work in progress breathes: the running tool call and the active plan step pulse slowly. */
+.chat-activity-entry.is-running .chat-activity-dot,
+.chat-plan-step.is-in-progress .chat-plan-step-dot {
+  animation: chat-status-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes chat-status-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-activity-entry.is-running .chat-activity-dot,
+  .chat-plan-step.is-in-progress .chat-plan-step-dot {
+    animation: none;
+  }
+}
