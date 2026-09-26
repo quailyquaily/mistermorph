@@ -495,6 +495,9 @@ skills:
   # Empty means load all discovered skills.
   # Unknown entries are ignored.
   load: [] # e.g. [] | ["skill-creator", "my-skill-id"]
+  store:
+    # Morph Skill Store index read by the console Skills page and skill_install_preview.
+    index_url: "https://raw.githubusercontent.com/quailyquaily/morph-skill-store/main/index.json"
 
 # Shared runtime server settings.
 server:

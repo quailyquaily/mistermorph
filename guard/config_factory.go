@@ -66,10 +66,10 @@ func SnapshotFromReader(reader ConfigReader) (Snapshot, error) {
 	}, nil
 }
 
+// NewChecked builds the guard. With guard.enabled false it still builds an approvals-only guard:
+// every policy stays off (Enabled() is false), but the approval store exists so forced-approval
+// tools (see RequiresForcedApproval) can ask the user.
 func NewChecked(snapshot Snapshot, logger *slog.Logger) (*Guard, error) {
-	if !snapshot.Enabled {
-		return nil, nil
-	}
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -96,8 +96,10 @@ func NewChecked(snapshot Snapshot, logger *slog.Logger) (*Guard, error) {
 		return nil, fmt.Errorf("initialize guard audit sink: %w", err)
 	}
 
+	// The store always exists; guard.approvals.enabled only decides which ordinary tools
+	// (bash, powershell) need approval.
 	var approvals ApprovalStore
-	if snapshot.Config.Approvals.Enabled {
+	{
 		approvalsPath := filepath.Join(guardDir, "approvals", "guard_approvals.json")
 		if err := os.MkdirAll(filepath.Dir(approvalsPath), 0o700); err != nil {
 			return nil, errors.Join(
@@ -121,9 +123,13 @@ func NewChecked(snapshot Snapshot, logger *slog.Logger) (*Guard, error) {
 		approvals = store
 	}
 	cfg := snapshot.Config
-	cfg.Enabled = true
+	cfg.Enabled = snapshot.Enabled
 
-	logger.Info("guard_enabled",
+	event := "guard_enabled"
+	if !snapshot.Enabled {
+		event = "guard_approvals_only"
+	}
+	logger.Info(event,
 		"guard_dir", guardDir,
 		"url_fetch_prefixes", len(snapshot.Config.Network.URLFetch.AllowedURLPrefixes),
 		"audit_jsonl", jsonlPath,

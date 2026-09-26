@@ -1,6 +1,7 @@
 package agentsettings
 
 import (
+	"context"
 	"errors"
 	"io/fs"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/quailyquaily/mistermorph/internal/skillinstall"
 	"github.com/quailyquaily/mistermorph/internal/skillsutil"
 	"github.com/quailyquaily/mistermorph/skills"
 )
@@ -46,6 +48,15 @@ type SkillCatalogEntry struct {
 	AuthProfiles []string           `json:"auth_profiles,omitempty"`
 	Files        []SkillCatalogFile `json:"files"`
 	FilesCapped  bool               `json:"files_capped,omitempty"`
+	// Source is where an installed skill came from; nil for skills added by hand.
+	Source *SkillCatalogSource `json:"source,omitempty"`
+	// Modified lists files changed since install.
+	Modified []string `json:"modified,omitempty"`
+}
+
+type SkillCatalogSource struct {
+	skillinstall.Source
+	InstalledAt string `json:"installed_at,omitempty"`
 }
 
 type SkillCatalogFile struct {
@@ -144,7 +155,16 @@ func catalogEntry(skill skills.Skill) SkillCatalogEntry {
 		name = strings.TrimSpace(skill.ID)
 	}
 	files, capped := listSkillFiles(skill.Dir)
+	var source *SkillCatalogSource
+	var modified []string
+	if prov, ok := skillinstall.ReadProvenance(skill.Dir); ok {
+		source = &SkillCatalogSource{Source: prov.Source, InstalledAt: prov.InstalledAt.UTC().Format("2006-01-02T15:04:05Z")}
+		modified = prov.ModifiedFiles(skill.Dir)
+		sort.Strings(modified)
+	}
 	return SkillCatalogEntry{
+		Source:       source,
+		Modified:     modified,
 		ID:           strings.TrimSpace(skill.ID),
 		Name:         name,
 		Description:  strings.TrimSpace(skill.Description),
@@ -176,7 +196,7 @@ func listSkillFiles(dir string) ([]SkillCatalogFile, bool) {
 			}
 			return nil
 		}
-		if !d.Type().IsRegular() {
+		if !d.Type().IsRegular() || d.Name() == skillinstall.ProvenanceFile {
 			return nil
 		}
 		if len(files) >= maxSkillCatalogFiles {
@@ -258,4 +278,114 @@ func (h *Handler) skillsContext(w http.ResponseWriter, r *http.Request) (AgentSe
 		return AgentSettingsView{}, nil, false
 	}
 	return view, skillsutil.SkillsConfigFromReader(reader).Roots, true
+}
+
+// EnableSkill switches an installed skill on: it turns skills on and, when a load list is in
+// use, adds the skill to it. An empty list already loads every skill.
+func EnableSkill(ctx context.Context, owner Owner, skillID string) error {
+	view, err := owner.View(ctx)
+	if err != nil {
+		return err
+	}
+	current := view.Skills
+	enabled := true
+	var load []string
+	switch {
+	case !current.Enabled:
+		load = []string{skillID}
+	case loadsAllSkills(current.Load):
+		return nil
+	default:
+		load = append([]string{}, current.Load...)
+		for _, entry := range load {
+			if strings.EqualFold(strings.TrimSpace(entry), skillID) {
+				return nil
+			}
+		}
+		load = append(load, skillID)
+	}
+	_, err = owner.Update(ctx, AgentSettingsUpdate{Skills: &SkillsSettingsUpdate{Enabled: &enabled, Load: &load}})
+	return err
+}
+
+func loadsAllSkills(load []string) bool {
+	count := 0
+	for _, entry := range load {
+		entry = strings.TrimSpace(entry)
+		if entry == "*" {
+			return true
+		}
+		if entry != "" {
+			count++
+		}
+	}
+	return count == 0
+}
+
+// SkillStoreEntry is a store skill with its install state on this agent.
+type SkillStoreEntry struct {
+	skillinstall.StoreSkill
+	Installed        bool   `json:"installed"`
+	InstalledVersion string `json:"installed_version,omitempty"`
+	UpdateAvailable  bool   `json:"update_available,omitempty"`
+}
+
+type SkillStoreView struct {
+	IndexURL  string            `json:"index_url"`
+	Repo      string            `json:"repo"`
+	FetchedAt string            `json:"fetched_at"`
+	Skills    []SkillStoreEntry `json:"skills"`
+}
+
+// BuildSkillStoreView marks which store skills are installed (by provenance) and outdated.
+func BuildSkillStoreView(index skillinstall.StoreIndex, catalog SkillCatalog) SkillStoreView {
+	installed := map[string]*SkillCatalogSource{}
+	for _, entry := range catalog.Skills {
+		if entry.Source != nil && entry.Source.StoreID != "" {
+			installed[strings.ToLower(entry.Source.StoreID)] = entry.Source
+		}
+	}
+	view := SkillStoreView{Repo: index.Repo, Skills: []SkillStoreEntry{}}
+	for _, skill := range index.Skills {
+		item := SkillStoreEntry{StoreSkill: skill}
+		if src, ok := installed[strings.ToLower(skill.ID)]; ok {
+			item.Installed = true
+			item.InstalledVersion = src.Version
+			// Versions decide; the commit is only a fallback for entries without one.
+			if src.Version != "" && skill.Version != "" {
+				item.UpdateAvailable = src.Version != skill.Version
+			} else {
+				item.UpdateAvailable = src.Commit != skill.Commit
+			}
+		}
+		view.Skills = append(view.Skills, item)
+	}
+	return view
+}
+
+// SkillStore serves GET /settings/agent/skills/store.
+func (h *Handler) SkillStore(w http.ResponseWriter, r *http.Request) {
+	view, roots, ok := h.skillsContext(w, r)
+	if !ok {
+		return
+	}
+	reader, _ := h.currentReader(w)
+	indexURL := strings.TrimSpace(reader.GetString("skills.store.index_url"))
+	if indexURL == "" {
+		indexURL = skillinstall.DefaultStoreIndexURL
+	}
+	index, fetchedAt, err := skillinstall.DefaultStore().Index(r.Context(), indexURL)
+	if err != nil {
+		writeSettingsError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	catalog, err := BuildSkillCatalog(view.Skills, roots)
+	if err != nil {
+		writeSettingsError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	out := BuildSkillStoreView(index, catalog)
+	out.IndexURL = indexURL
+	out.FetchedAt = fetchedAt.UTC().Format("2006-01-02T15:04:05Z")
+	writeSettingsJSON(w, http.StatusOK, out)
 }

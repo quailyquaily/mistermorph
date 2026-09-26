@@ -156,6 +156,8 @@ type consoleLocalRuntime struct {
 	handler                 http.Handler
 	authToken               string
 	seq                     atomic.Uint64
+	// skillEnabler writes skills.enabled/load after an install; set by the console server.
+	skillEnabler func(ctx context.Context, skillID string) error
 }
 
 type topicDeleterFunc func(id string) (bool, error)
@@ -2517,6 +2519,11 @@ func (r *consoleLocalRuntime) runTask(ctx context.Context, conversationKey strin
 	reg := bundle.taskRuntime.BaseRegistry.Clone()
 	if err := reg.Replace(reactTool); err != nil {
 		return nil, nil, err
+	}
+	for _, tool := range r.skillInstallTools(generation) {
+		if err := reg.Replace(tool); err != nil {
+			return nil, nil, err
+		}
 	}
 	imageToolScope := strings.TrimSpace(job.ConversationKey)
 	if imageToolScope == "" && strings.TrimSpace(job.TopicID) != "" {

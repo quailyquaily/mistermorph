@@ -107,10 +107,12 @@ func (g *Guard) Evaluate(ctx context.Context, meta Meta, a Action) (Result, erro
 }
 
 func (g *Guard) RequestApproval(ctx context.Context, meta Meta, a Action, pre Result, actionSummaryRedacted string, resumeState []byte) (string, error) {
-	if g == nil || !g.cfg.Enabled {
+	// Forced-approval tools can always ask, including on an approvals-only guard.
+	forced := a.Type == ActionToolCallPre && RequiresForcedApproval(a.ToolName)
+	if g == nil || (!g.cfg.Enabled && !forced) {
 		return "", fmt.Errorf("guard is disabled")
 	}
-	if g.approvals == nil || !g.cfg.Approvals.Enabled {
+	if g.approvals == nil || (!g.cfg.Approvals.Enabled && !forced) {
 		return "", fmt.Errorf("approvals are not enabled")
 	}
 	if meta.Time.IsZero() {

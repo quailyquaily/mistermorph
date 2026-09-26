@@ -949,16 +949,23 @@ func (e *Engine) guardPreCheck(ctx context.Context, st *engineLoopState, step in
 		return fmt.Sprintf("Error: tool '%s' not found. Available tools: %s", tc.Name, e.registry.ToolNames()), true, nil, nil
 	}
 
-	if e.guard == nil || !e.guard.Enabled() {
-		return "", false, nil, nil
-	}
-
-	gr, err := e.guard.Evaluate(ctx, guard.Meta{RunID: st.runID, Step: step, Time: time.Now().UTC()}, guard.Action{
+	action := guard.Action{
 		Type:       guard.ActionToolCallPre,
 		Identity:   approvalIdentity,
 		ToolName:   tc.Name,
 		ToolParams: tc.Params,
-	})
+	}
+	meta := guard.Meta{RunID: st.runID, Step: step, Time: time.Now().UTC()}
+	var gr guard.Result
+	switch {
+	case guard.RequiresForcedApproval(tc.Name):
+		// Always asks the user, even with the guard off; denied when approvals cannot be stored.
+		gr, err = guard.EvaluateForced(ctx, e.guard, meta, action)
+	case e.guard == nil || !e.guard.Enabled():
+		return "", false, nil, nil
+	default:
+		gr, err = e.guard.Evaluate(ctx, meta, action)
+	}
 	if err != nil {
 		return "", false, nil, fmt.Errorf("evaluate tool call %q: %w", tc.Name, err)
 	}

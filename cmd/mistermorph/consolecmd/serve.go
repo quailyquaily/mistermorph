@@ -403,6 +403,7 @@ func newServer(cfg serveConfig) (*server, error) {
 		managed:          managed,
 		secretStore:      secref.NewOSStore(),
 	}
+	localRuntime.skillEnabler = srv.enableSkill
 	srv.ensureEndpointStates()
 	return srv, nil
 }
@@ -558,6 +559,7 @@ func (s *server) handler() http.Handler {
 		register("/settings/agent/test", s.handleAgentSettingsTest)
 		register("/settings/agent/skills", s.handleAgentSkills)
 		register("/settings/agent/skills/detail", s.handleAgentSkillDetail)
+		register("/settings/agent/skills/store", s.handleAgentSkillStore)
 		register("/settings/console", s.handleConsoleSettings)
 		register("/settings/system", s.handleSystemSettings)
 		register("/settings/auto-update", s.handleAutoUpdateSettings)

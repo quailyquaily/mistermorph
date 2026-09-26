@@ -20,8 +20,10 @@ func (e *Engine) ResumeWithOptions(ctx context.Context, approvalRequestID string
 }
 
 func (e *Engine) resume(ctx context.Context, approvalRequestID string, opts RunOptions) (*Final, *Context, error) {
-	if e == nil || e.guard == nil || !e.guard.Enabled() {
-		return nil, nil, fmt.Errorf("guard is not enabled")
+	// Approvals can come from an approvals-only guard (forced-approval tools), so resuming needs
+	// the approval store, not an enabled guard.
+	if e == nil || !e.guard.ApprovalsAvailable() {
+		return nil, nil, fmt.Errorf("approvals are unavailable")
 	}
 	if err := e.config.ContextCompaction.Validate(); err != nil {
 		return nil, nil, err
