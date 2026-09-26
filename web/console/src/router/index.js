@@ -260,7 +260,7 @@ const router = createRouter({
 const NAV_ITEMS_META = [
   { id: "/chat", titleKey: "nav_chat", icon: "PhChats" },
   { id: "/contacts", titleKey: "nav_contacts", icon: "PhUsers" },
-  { id: "/todo", titleKey: "nav_todo", icon: "PhTray" },
+  { id: "/todo", titleKey: "nav_todo", icon: "PhListChecks" },
   { id: "__sep_primary", separator: true },
   { id: "/stats", titleKey: "nav_stats", icon: "PhChartBar" },
   { id: "/audit", titleKey: "nav_audit", icon: "PhFingerprint" },

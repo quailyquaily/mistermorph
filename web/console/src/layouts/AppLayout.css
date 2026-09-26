@@ -31,6 +31,14 @@
   min-height: 0;
 }
 
+/* The mobile nav is the shell's last row, not an overlay: the workspace takes the height above
+   it, so no page content sits behind the nav. */
+.app-shell.has-mobile-nav > .workspace {
+  flex: 1 1 0;
+  height: auto;
+  min-height: 0;
+}
+
 .content,
 .content-overview {
   container-type: inline-size;

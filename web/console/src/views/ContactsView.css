@@ -613,7 +613,7 @@
   .contacts-workbench:has(.contacts-detail-card) {
     overflow-x: hidden;
     overflow-y: auto;
-    padding-bottom: calc(72px + env(safe-area-inset-bottom));
+    padding-bottom: 16px;
     scrollbar-width: thin;
     overscroll-behavior: contain;
   }

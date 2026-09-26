@@ -72,7 +72,9 @@ const AppMobileBottomMenu = {
             :aria-label="label"
             tabindex="-1"
           >
-            <span class="mobile-bottom-menu-handle" aria-hidden="true"></span>
+            <header class="mobile-bottom-menu-head">
+              <span class="mobile-bottom-menu-title">{{ label }}</span>
+            </header>
             <slot />
           </section>
         </div>

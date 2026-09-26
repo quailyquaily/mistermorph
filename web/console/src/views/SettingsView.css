@@ -1157,7 +1157,7 @@ body:has(.settings-page) .q-dialog .q-menu-item.danger .q-menu-title {
 
   .settings-panel-scroll {
     height: 100%;
-    padding-bottom: calc(72px + env(safe-area-inset-bottom));
+    padding-bottom: 16px;
   }
 
   .settings-runtime-panel {

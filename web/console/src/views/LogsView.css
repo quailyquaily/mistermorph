@@ -675,7 +675,7 @@
 
 @media (max-width: 920px) {
   .logs-shell {
-    padding-bottom: calc(72px + env(safe-area-inset-bottom));
+    padding-bottom: 12px;
   }
 }
 

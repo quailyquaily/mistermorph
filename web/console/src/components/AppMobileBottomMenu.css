@@ -10,30 +10,45 @@
   background: rgb(20 29 48 / 14%);
 }
 
+/* A sheet docked on the nav strip: full width, square, a hairline top rule, rising from
+   behind the strip. Full-bleed, so no registration marks: the header's square carries it. */
 .mobile-bottom-menu-panel {
   position: absolute;
-  right: auto;
-  bottom: calc(72px + env(safe-area-inset-bottom));
-  left: 50%;
-  width: min(520px, calc(100vw - 20px));
+  right: 0;
+  bottom: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom, 0px));
+  left: 0;
   max-height: min(62dvh, 440px);
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--line-soft) 76%, transparent);
-  border-radius: 16px;
-  background: var(--q-bg-paper);
+  border-top: 1px solid var(--line);
+  background: var(--q-bg-white);
   color: var(--text-0);
-  box-shadow: 0 18px 44px rgb(20 29 48 / 22%);
   outline: none;
-  transform: translateX(-50%);
 }
 
-.mobile-bottom-menu-handle {
-  display: block;
-  width: 32px;
-  height: 3px;
-  margin: 7px auto 4px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--text-2) 34%, transparent);
+.mobile-bottom-menu-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.mobile-bottom-menu-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-2);
+  font: 500 10px/1 var(--font-mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.mobile-bottom-menu-title::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  background: var(--text-2);
 }
 
 .mobile-bottom-menu-panel .mobile-bottom-menu-list {
@@ -47,8 +62,8 @@
   appearance: none;
   width: 100%;
   min-width: 0;
-  min-height: 46px;
-  padding: 0 14px;
+  min-height: 48px;
+  padding: 0 16px;
   border: 1px solid transparent;
   border-right: 0;
   border-left: 0;
@@ -67,10 +82,9 @@
 
 .mobile-bottom-menu-panel
   :is(.nav-link.is-active, .mobile-bottom-menu-item.is-selected) {
-  border-top-color: color-mix(in srgb, var(--q-c-blue) 30%, transparent);
-  border-bottom-color: color-mix(in srgb, var(--q-c-blue) 30%, transparent);
   border-radius: 0;
-  background: color-mix(in srgb, var(--q-c-blue) 10%, transparent);
+  background: color-mix(in srgb, var(--q-c-blue) 8%, transparent);
+  box-shadow: inset 2px 0 0 var(--q-c-blue);
   color: var(--text-0);
 }
 
@@ -86,14 +100,12 @@
 
 .mobile-bottom-menu-enter-active,
 .mobile-bottom-menu-leave-active {
-  transition: opacity 180ms cubic-bezier(0.65, 0, 0.35, 1);
+  transition: opacity var(--motion-normal) var(--motion-ease);
 }
 
 .mobile-bottom-menu-enter-active .mobile-bottom-menu-panel,
 .mobile-bottom-menu-leave-active .mobile-bottom-menu-panel {
-  transition:
-    opacity 180ms cubic-bezier(0.65, 0, 0.35, 1),
-    transform 240ms cubic-bezier(0.16, 1, 0.3, 1);
+  transition: translate var(--motion-normal) var(--motion-ease);
 }
 
 .mobile-bottom-menu-enter-from,
@@ -103,21 +115,5 @@
 
 .mobile-bottom-menu-enter-from .mobile-bottom-menu-panel,
 .mobile-bottom-menu-leave-to .mobile-bottom-menu-panel {
-  opacity: 0;
-  transform: translate(-50%, 10px);
-}
-
-@media (max-width: 380px) {
-  .mobile-bottom-menu-panel {
-    width: calc(100vw - 12px);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .mobile-bottom-menu-enter-active,
-  .mobile-bottom-menu-leave-active,
-  .mobile-bottom-menu-enter-active .mobile-bottom-menu-panel,
-  .mobile-bottom-menu-leave-active .mobile-bottom-menu-panel {
-    transition: none;
-  }
+  translate: 0 16px;
 }

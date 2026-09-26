@@ -29,6 +29,8 @@
   --motion-slow: 260ms;
   --motion-ease: cubic-bezier(0.2, 0, 0, 1);
   --motion-highlight: 1600ms;
+  /* Mobile nav strip height, before the device's bottom safe area. */
+  --mobile-nav-height: 56px;
   color-scheme: light;
 }
 

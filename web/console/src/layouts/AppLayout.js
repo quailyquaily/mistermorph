@@ -19,6 +19,7 @@ const AppLayout = {
       <section
         v-else
         class="app-shell"
+        :class="{ 'has-mobile-nav': mobileBottomNavVisible }"
         :style="{ '--app-viewport-height': appViewportHeight }"
       >
         <div

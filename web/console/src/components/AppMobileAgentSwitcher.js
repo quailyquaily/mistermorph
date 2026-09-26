@@ -27,6 +27,11 @@ const AppMobileAgentSwitcher = {
       type: String,
       default: "",
     },
+    // Whether the nav strip shows this slot as the active one.
+    active: {
+      type: Boolean,
+      default: false,
+    },
     t: {
       type: Function,
       required: true,
@@ -54,6 +59,9 @@ const AppMobileAgentSwitcher = {
     const selectedAvatar = computed(
       () => normalizeText(props.selectedAvatar) || normalizeText(props.selectedItem?.image),
     );
+    const selectedEntry = computed(() => normalizedItems.value.find((item) => item.value === selectedValue.value) || null);
+    const selectedName = computed(() => selectedEntry.value?.title || normalizeText(props.selectedItem?.title) || props.t("nav_agent"));
+    const selectedOnline = computed(() => selectedEntry.value?.connected === true);
     const showFilter = computed(() => normalizedItems.value.length > 8);
     const filteredItems = computed(() => {
       const query = normalizeText(filter.value).toLocaleLowerCase();
@@ -97,6 +105,8 @@ const AppMobileAgentSwitcher = {
     }
 
     return {
+      selectedName,
+      selectedOnline,
       filter,
       selectedValue,
       selectedAvatar,
@@ -113,15 +123,18 @@ const AppMobileAgentSwitcher = {
     <button
       type="button"
       class="mobile-bottom-nav-item mobile-agent-switcher-trigger"
-      :class="{ 'is-active': modelValue }"
-      :title="t('nav_agent')"
-      :aria-label="t('nav_agent')"
+      :class="{ 'is-active': active }"
+      :aria-label="t('nav_agent') + ': ' + selectedName"
       :aria-expanded="modelValue ? 'true' : 'false'"
       aria-haspopup="dialog"
       @click="toggle"
     >
-      <img v-if="selectedAvatar" class="mobile-agent-switcher-avatar" :src="selectedAvatar" alt="" />
-      <span v-else class="mobile-agent-switcher-avatar is-empty" aria-hidden="true"></span>
+      <span class="mobile-agent-switcher-face">
+        <img v-if="selectedAvatar" class="mobile-agent-switcher-avatar" :src="selectedAvatar" alt="" />
+        <span v-else class="mobile-agent-switcher-avatar is-empty" aria-hidden="true"></span>
+        <span class="mobile-agent-switcher-mark" :class="selectedOnline ? 'is-online' : 'is-offline'" aria-hidden="true"></span>
+      </span>
+      <span class="mobile-bottom-nav-label">{{ selectedName }}</span>
     </button>
 
     <AppMobileBottomMenu

@@ -475,7 +475,7 @@
 @media (max-width: 920px) {
   .audit-workbench {
     grid-template-columns: minmax(0, 1fr);
-    padding-bottom: calc(76px + env(safe-area-inset-bottom));
+    padding-bottom: 12px;
   }
 
   .audit-index {
