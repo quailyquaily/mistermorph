@@ -150,6 +150,9 @@ const OverviewView = {
       layoutFrame = window.requestAnimationFrame(updateConnections);
     }
 
+    // Readouts arrive after the first layout and can move the console's portrait.
+    watch(readouts, queueConnections, { flush: "post" });
+
     watch([connectionMap, endpointRows], () => {
       resizeObserver?.disconnect();
       if (connectionMap.value) {
@@ -161,7 +164,7 @@ const OverviewView = {
 
     // Live readings for each online agent: health and uptime, model and running channels, usage.
     async function loadReadouts() {
-      const targets = endpointRows.value.filter((item) => item.connected && !item.local);
+      const targets = endpointRows.value.filter((item) => item.connected);
       const results = await Promise.all(targets.map(async (item) => {
         const [overview, usage] = await Promise.allSettled([
           runtimeApiFetchForEndpoint(item.endpoint_ref, "/overview"),
@@ -181,7 +184,7 @@ const OverviewView = {
     const METER_SEGMENTS = 16;
 
     function readoutFor(item) {
-      const readout = item.connected && !item.local ? readouts.value.get(item.endpoint_ref) : null;
+      const readout = item.connected ? readouts.value.get(item.endpoint_ref) : null;
       if (!readout) return null;
       const rate = readout.cacheRate;
       return {

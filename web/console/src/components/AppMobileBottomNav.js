@@ -66,8 +66,8 @@ const AppMobileBottomNav = {
       ),
     );
     const moreActive = computed(() => moreItems.value.some((item) => isActive(item)));
-    // On a page kept under More, the More slot names that page, so the strip always says where
-    // you are; tapping it still opens the menu.
+    // On a page kept under More, the More slot shows that page's icon, so the strip always says
+    // where you are; tapping it still opens the menu.
     const moreCurrentItem = computed(() => moreItems.value.find((item) => isActive(item)) || null);
     const moreSlot = computed(() => ({
       icon: moreCurrentItem.value?.icon || "PhSquaresFour",
@@ -191,29 +191,27 @@ const AppMobileBottomNav = {
         :href="navHref(item)"
         class="mobile-bottom-nav-item"
         :class="{ 'is-active': activeSlot === index }"
+        :title="item.title"
+        :aria-label="item.title"
         :aria-current="isActive(item) ? 'page' : undefined"
         @focus="$emit('preload', item)"
         @pointerenter="$emit('preload', item)"
         @click.prevent="navigate(item)"
       >
         <component :is="item.icon" v-if="item.icon" class="mobile-bottom-nav-icon icon" aria-hidden="true" />
-        <span class="mobile-bottom-nav-label">{{ item.title }}</span>
       </a>
 
       <button
         type="button"
         class="mobile-bottom-nav-item mobile-bottom-nav-more"
         :class="{ 'is-active': activeSlot === primaryItems.length }"
+        :title="moreActive ? moreSlot.title + ' · ' + t('nav_more') : t('nav_more')"
         :aria-label="moreActive ? moreSlot.title + ' · ' + t('nav_more') : t('nav_more')"
         :aria-expanded="modelValue ? 'true' : 'false'"
         aria-haspopup="dialog"
         @click="toggleMore"
       >
         <component :is="moreSlot.icon" class="mobile-bottom-nav-icon icon" aria-hidden="true" />
-        <span class="mobile-bottom-nav-label">
-          <span class="mobile-bottom-nav-label-text">{{ moreSlot.title }}</span>
-          <PhCaretUp class="mobile-bottom-nav-caret icon" aria-hidden="true" />
-        </span>
       </button>
 
       <AppMobileAgentSwitcher

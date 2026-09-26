@@ -7,6 +7,7 @@ import AppKicker from "../components/AppKicker";
 import AppPage from "../components/AppPage";
 import AppTabs from "../components/AppTabs";
 import ChatComposer from "../components/ChatComposer";
+import AppFab from "../components/AppFab";
 import ChatHistoryList from "../components/ChatHistoryList";
 import { approvalDetailsByID, taskApprovalState } from "../core/chat-approvals";
 import {
@@ -563,6 +564,7 @@ const WorkspaceBrowserRecentItem = {
 
 const ChatView = {
   components: {
+    AppFab,
     AppDialogShell,
     AppKicker,
     AppPage,
@@ -4197,6 +4199,7 @@ const ChatView = {
                 </div>
               </div>
               <QButton
+                v-if="!mobileTopicSplitEnabled"
                 class="plain sm icon chat-topic-sidebar-new"
                 :title="t('chat_topic_new')"
                 :aria-label="t('chat_topic_new')"
@@ -4237,6 +4240,11 @@ const ChatView = {
               </QButton>
             </div>
           </aside>
+          <AppFab
+            v-if="showTopicSidebar && mobileTopicSplitEnabled"
+            :label="t('chat_topic_new')"
+            @click="startNewTopic"
+          />
           <section v-if="showChatPane" :class="chatMainClass" :style="chatMainStyle">
             <header v-if="consoleTopicsEnabled && !showChatPlaceholder" class="chat-desk-head">
               <div class="chat-desk-head-main">

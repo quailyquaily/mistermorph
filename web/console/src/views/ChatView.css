@@ -2545,3 +2545,8 @@ body.artifact-preview-scroll-lock {
     transition: none;
   }
 }
+
+/* The mobile topic list scrolls clear of the floating new-topic button. */
+.chat-shell.is-mobile-topics .chat-topic-list {
+  padding-bottom: calc(52px + 32px);
+}

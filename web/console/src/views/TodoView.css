@@ -1026,3 +1026,10 @@ body:has(.todo-page) .q-dialog .q-menu .q-menu-subtitle {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* On mobile the list scrolls clear of the floating add button. */
+@media (max-width: 920px) {
+  .todo-index-body {
+    padding-bottom: calc(52px + 32px);
+  }
+}

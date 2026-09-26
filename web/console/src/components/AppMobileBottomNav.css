@@ -1,6 +1,6 @@
-/* Mobile nav: a docked strip at the foot of the shell, drawn like the rest of the console:
-   hairline rule, square corners, mono labels. The selected slot is marked by a short blue rule
-   on the strip's top edge that slides between slots. */
+/* Mobile nav: a docked strip of icons at the foot of the shell, drawn like the rest of the
+   console: hairline rule, square corners. The selected slot is marked by a short blue rule on
+   the strip's top edge that slides between slots. */
 .mobile-bottom-nav {
   position: relative;
   z-index: 50;
@@ -32,7 +32,6 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 5px;
   min-width: 0;
   height: var(--mobile-nav-height);
   margin: 0;
@@ -62,44 +61,8 @@
 
 .mobile-bottom-nav-icon {
   flex: 0 0 auto;
-  width: 20px;
-  height: 20px;
-}
-
-.mobile-bottom-nav-label {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  max-width: 100%;
-  overflow: hidden;
-  color: var(--text-2);
-  font: 500 9.5px/1.1 var(--font-mono);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.mobile-bottom-nav-label-text {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.mobile-bottom-nav-item.is-active .mobile-bottom-nav-label {
-  color: var(--text-0);
-}
-
-/* The More slot opens a menu: a small caret says so. */
-.mobile-bottom-nav-caret {
-  flex: 0 0 auto;
-  width: 8px;
-  height: 8px;
-  transition: rotate var(--motion-normal) var(--motion-ease);
-}
-
-.mobile-bottom-nav-more[aria-expanded="true"] .mobile-bottom-nav-caret {
-  rotate: 180deg;
+  width: 22px;
+  height: 22px;
 }
 
 /* The agent slot: its portrait with the same square status mark as the desktop switcher. */

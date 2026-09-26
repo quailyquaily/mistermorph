@@ -124,6 +124,7 @@ const AppMobileAgentSwitcher = {
       type="button"
       class="mobile-bottom-nav-item mobile-agent-switcher-trigger"
       :class="{ 'is-active': active }"
+      :title="selectedName"
       :aria-label="t('nav_agent') + ': ' + selectedName"
       :aria-expanded="modelValue ? 'true' : 'false'"
       aria-haspopup="dialog"
@@ -134,7 +135,6 @@ const AppMobileAgentSwitcher = {
         <span v-else class="mobile-agent-switcher-avatar is-empty" aria-hidden="true"></span>
         <span class="mobile-agent-switcher-mark" :class="selectedOnline ? 'is-online' : 'is-offline'" aria-hidden="true"></span>
       </span>
-      <span class="mobile-bottom-nav-label">{{ selectedName }}</span>
     </button>
 
     <AppMobileBottomMenu

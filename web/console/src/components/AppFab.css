@@ -1,0 +1,80 @@
+/* A square primary button above the nav strip's right end. Registration marks just outside two
+   opposite corners tie it to the console's drawing-sheet frames. */
+.app-fab {
+  --app-fab-size: 52px;
+  appearance: none;
+  position: fixed;
+  z-index: 45;
+  right: 16px;
+  bottom: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom, 0px) + 16px);
+  display: grid;
+  place-items: center;
+  width: var(--app-fab-size);
+  height: var(--app-fab-size);
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--q-button-primary-border, var(--q-c-dark));
+  border-radius: 2px;
+  background: var(--q-button-primary-bg, var(--q-c-dark));
+  color: var(--q-button-primary-text, var(--q-c-white));
+  box-shadow:
+    0 6px 16px rgb(20 29 48 / 20%),
+    0 1px 3px rgb(20 29 48 / 12%);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  animation: app-fab-in var(--motion-slow) var(--motion-ease) both;
+  transition:
+    translate var(--motion-fast) var(--motion-ease),
+    box-shadow var(--motion-fast) var(--motion-ease);
+}
+
+.app-fab::before,
+.app-fab::after {
+  content: "";
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border: 0 solid var(--text-2);
+  pointer-events: none;
+}
+
+.app-fab::before {
+  top: -5px;
+  left: -5px;
+  border-top-width: 1px;
+  border-left-width: 1px;
+}
+
+.app-fab::after {
+  right: -5px;
+  bottom: -5px;
+  border-right-width: 1px;
+  border-bottom-width: 1px;
+}
+
+.app-fab:active:not(:disabled) {
+  translate: 0 1px;
+  box-shadow: 0 2px 6px rgb(20 29 48 / 18%);
+}
+
+.app-fab:focus-visible {
+  outline: 2px solid var(--q-c-blue);
+  outline-offset: 3px;
+}
+
+.app-fab:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.app-fab-icon {
+  width: 22px;
+  height: 22px;
+}
+
+@keyframes app-fab-in {
+  from {
+    opacity: 0;
+    translate: 0 12px;
+  }
+}

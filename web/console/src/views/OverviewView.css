@@ -188,6 +188,64 @@
   color: var(--overview-accent);
 }
 
+/* The console's readout sits to the right of its portrait, joined by a short leader: the
+   portrait stays on the axis the connection lines hang from, clear of the card. */
+.endpoint-overview-list > .is-controller {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: 24px;
+}
+
+.endpoint-overview-list > .is-controller > .endpoint-overview-item {
+  grid-column: 2;
+  width: max-content;
+  max-width: 12rem;
+  margin-inline: 0;
+}
+
+.endpoint-overview-list > .is-controller > .endpoint-overview-readout {
+  grid-column: 3;
+  align-self: end;
+  justify-self: start;
+  width: min(13rem, 100%);
+}
+
+/* Bottom-aligned with the 80px portrait, so 40px up meets the portrait's middle. */
+.endpoint-overview-list > .is-controller .readout-leader-line {
+  top: auto;
+  bottom: 40px;
+  left: -25px;
+  width: 24px;
+  height: 0;
+  border-top: 1px dashed var(--line);
+  border-left: 0;
+}
+
+/* Too narrow for a centred portrait with the card beside it: portrait and card sit side by
+   side as a pair, centred together. */
+@media (max-width: 600px) {
+  .endpoint-overview-list > .is-controller {
+    grid-template-columns: auto minmax(0, 13rem);
+    justify-content: center;
+    column-gap: 16px;
+  }
+
+  .endpoint-overview-list > .is-controller > .endpoint-overview-item {
+    grid-column: 1;
+  }
+
+  .endpoint-overview-list > .is-controller > .endpoint-overview-readout {
+    grid-column: 2;
+    width: 100%;
+  }
+
+  .endpoint-overview-list > .is-controller .readout-leader-line {
+    left: -17px;
+    width: 16px;
+  }
+}
+
 .endpoint-overview-item {
   display: flex;
   flex-direction: column;
@@ -287,9 +345,10 @@ a.endpoint-overview-item:focus-visible {
   bottom: 2px;
   display: grid;
   place-items: center;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
+  /* A square plate, 2px around the mark, cuts it out of the avatar like the other status marks. */
+  width: 13px;
+  height: 13px;
+  border-radius: 2px;
   background: var(--bg-0);
 }
 

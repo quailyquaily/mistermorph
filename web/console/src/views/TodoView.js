@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import "./TodoView.css";
 
+import AppFab from "../components/AppFab";
 import AppPage from "../components/AppPage";
 import AppMarkdownEditor from "../components/AppMarkdownEditor";
 import AppTabs from "../components/AppTabs";
@@ -662,6 +663,7 @@ function normalizeTaskBeforeSave(task) {
 
 const TodoView = {
   components: {
+    AppFab,
     AppPage,
     AppMarkdownEditor,
     AppTabs,
@@ -2473,6 +2475,7 @@ const TodoView = {
               @change="onTodoViewChange"
             />
             <QButton
+              v-if="!isMobile"
               class="plain sm icon todo-index-new"
               :title="t('todo_action_add')"
               :aria-label="t('todo_action_add')"
@@ -2935,6 +2938,12 @@ const TodoView = {
           </div>
         </section>
       </div>
+      <AppFab
+        v-if="isMobile && showIndexPane"
+        :label="t('todo_action_add')"
+        :disabled="loading || saving"
+        @click="addTask"
+      />
       <QMessageDialog
         v-model="deleteDialogOpen"
         icon="PhTrash"
