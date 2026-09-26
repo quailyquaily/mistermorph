@@ -58,9 +58,6 @@ func (e *Engine) resume(ctx context.Context, approvalRequestID string, opts RunO
 	if err != nil {
 		return nil, nil, err
 	}
-	if rs.Version != 0 && rs.Version != 1 {
-		return nil, nil, fmt.Errorf("unsupported resume_state version: %d", rs.Version)
-	}
 
 	ctx = llmstats.WithRunID(ctx, rs.RunID)
 
@@ -149,6 +146,7 @@ func (e *Engine) resume(ctx context.Context, approvalRequestID string, opts RunO
 		approvedActionIdentity:  rs.PendingTool.ApprovalIdentity,
 		nextStep:                rs.Step,
 		fixedMessageCount:       fixedMessageCount,
+		metaMessageIndex:        rs.MetaMessageIndex,
 		messageBoundaries:       cloneMessageBoundaries(rs.MessageBoundaries),
 		checkpointStore:         checkpointStore,
 		checkpoint:              checkpoint,

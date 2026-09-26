@@ -3,12 +3,13 @@ package agent
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/quailyquaily/mistermorph/llm"
 )
 
-type resumeStateV1 struct {
+type resumeState struct {
 	Version int `json:"v"`
 
 	RunID string `json:"run_id"`
@@ -23,6 +24,7 @@ type resumeStateV1 struct {
 	ExtraParams map[string]any  `json:"extra_params,omitempty"`
 	AgentCtx    contextSnapshot `json:"agent_ctx"`
 
+	MetaMessageIndex        *int              `json:"meta_message_index,omitempty"`
 	FixedMessageCount       int               `json:"fixed_message_count,omitempty"`
 	MessageBoundaries       map[int]string    `json:"message_boundaries,omitempty"`
 	Checkpoint              ContextCheckpoint `json:"checkpoint,omitempty"`
@@ -119,15 +121,52 @@ func contextFromSnapshot(s contextSnapshot) *Context {
 	return c
 }
 
-func marshalResumeState(st resumeStateV1) ([]byte, error) {
-	st.Version = 1
+func marshalResumeState(st resumeState) ([]byte, error) {
+	st.Version = 2
 	return json.Marshal(st)
 }
 
-func unmarshalResumeState(b []byte) (resumeStateV1, error) {
-	var st resumeStateV1
+func unmarshalResumeState(b []byte) (resumeState, error) {
+	var st resumeState
 	if err := json.Unmarshal(b, &st); err != nil {
-		return resumeStateV1{}, err
+		return resumeState{}, err
+	}
+	if st.Version < 0 || st.Version > 2 {
+		return resumeState{}, fmt.Errorf("unsupported resume_state version: %d", st.Version)
+	}
+	if st.Version < 2 {
+		st.MetaMessageIndex = nil
+	} else {
+		if st.FixedMessageCount < 0 || st.FixedMessageCount > len(st.Messages) {
+			return resumeState{}, fmt.Errorf("invalid fixed message count")
+		}
+		if err := validateMetaMessageIndex(st.Messages, st.FixedMessageCount, st.MetaMessageIndex); err != nil {
+			return resumeState{}, err
+		}
+		for index := range st.MessageBoundaries {
+			if index < 0 || index >= len(st.Messages) {
+				return resumeState{}, fmt.Errorf("invalid history boundary index %d", index)
+			}
+		}
+		for index := range st.ProtectedMessageIndexes {
+			if index < 0 || index >= len(st.Messages) {
+				return resumeState{}, fmt.Errorf("invalid protected message index %d", index)
+			}
+		}
 	}
 	return st, nil
+}
+
+func validateMetaMessageIndex(messages []llm.Message, fixed int, index *int) error {
+	if index == nil {
+		return nil
+	}
+	if *index < fixed || *index >= len(messages) || *index < 1 {
+		return fmt.Errorf("invalid runtime metadata index %d", *index)
+	}
+	m := messages[*index]
+	if m.Role != "user" || m.Content == "" || len(m.Parts) != 0 || len(m.ToolCalls) != 0 || m.ToolCallID != "" {
+		return fmt.Errorf("invalid runtime metadata message at %d", *index)
+	}
+	return nil
 }

@@ -115,10 +115,30 @@ func (e *Engine) callMainWithContextCompaction(ctx context.Context, st *engineLo
 }
 
 func (e *Engine) mainRequest(st *engineLoopState, reqTools []llm.Tool) llm.Request {
+	messages := st.messages
+	if e.systemPromptCacheControl != nil && st.metaMessageIndex != nil && *st.metaMessageIndex > 1 {
+		// Mark only the stable context before this run's metadata. Work on a
+		// request copy so history, checkpoints and approval snapshots stay intact.
+		index := *st.metaMessageIndex - 1
+		messages = append([]llm.Message(nil), messages...)
+		message := messages[index]
+		message.Parts = append([]llm.Part(nil), message.Parts...)
+		if len(message.Parts) == 0 && strings.TrimSpace(message.Content) != "" {
+			message.Parts = []llm.Part{{Type: llm.PartTypeText, Text: message.Content}}
+		}
+		for i := len(message.Parts) - 1; i >= 0; i-- {
+			if message.Parts[i].Type == llm.PartTypeText && strings.TrimSpace(message.Parts[i].Text) != "" {
+				ctrl := *e.systemPromptCacheControl
+				message.Parts[i].CacheControl = &ctrl
+				break
+			}
+		}
+		messages[index] = message
+	}
 	return llm.Request{
 		Model:            st.model,
 		Scene:            st.scene,
-		Messages:         st.messages,
+		Messages:         messages,
 		Tools:            reqTools,
 		ForceJSON:        true,
 		Parameters:       st.extraParams,
@@ -214,6 +234,7 @@ func (e *Engine) compactContext(ctx context.Context, st *engineLoopState, step i
 	allImageIndexes := imageMessageIndexes(st.messages)
 	blocks := buildTranscriptBlocks(st.messages, transcriptBlockOptions{
 		FixedMessageCount:           st.fixedMessageCount,
+		MetaMessageIndex:            st.metaMessageIndex,
 		PendingToolCallIDs:          pendingToolCallIDs,
 		ProtectedMessageIndexes:     st.protectedMessageIndexes,
 		PreparedImageMessageIndexes: allImageIndexes,
@@ -236,6 +257,7 @@ func (e *Engine) compactContext(ctx context.Context, st *engineLoopState, step i
 	}
 	blocks = buildTranscriptBlocks(st.messages, transcriptBlockOptions{
 		FixedMessageCount:           st.fixedMessageCount,
+		MetaMessageIndex:            st.metaMessageIndex,
 		PendingToolCallIDs:          pendingToolCallIDs,
 		ProtectedMessageIndexes:     st.protectedMessageIndexes,
 		PreparedImageMessageIndexes: preparedFullIndexes,
@@ -247,6 +269,10 @@ func (e *Engine) compactContext(ctx context.Context, st *engineLoopState, step i
 
 	relativeEnd := selection.End - initialSelection.Start
 	messagesToCompact := cloneMessagesForCompaction(prepared.Messages[:relativeEnd])
+	if selection.MetaIndex != nil {
+		index := *selection.MetaIndex - selection.Start
+		messagesToCompact = append(messagesToCompact[:index], messagesToCompact[index+1:]...)
+	}
 	references, imageParts := selectedPreparedImages(prepared, relativeEnd)
 	payloadRaw, err := json.Marshal(messagesToCompactPayload{Messages: messagesToCompact})
 	if err != nil {
@@ -332,6 +358,15 @@ func (e *Engine) compactContext(ctx context.Context, st *engineLoopState, step i
 	}
 
 	oldMessageCount := len(st.messages)
+	if st.metaMessageIndex != nil {
+		index := *st.metaMessageIndex
+		if selection.MetaIndex != nil {
+			index = selection.Start + 1
+		} else if index >= selection.End {
+			index -= selection.End - selection.Start - 1
+		}
+		st.metaMessageIndex = &index
+	}
 	st.messages = newMessages
 	st.messageBoundaries = replaceMessageBoundaries(st.messageBoundaries, selection, coveredThrough)
 	st.protectedMessageIndexes = replaceProtectedMessageIndexes(st.protectedMessageIndexes, selection)
@@ -361,6 +396,9 @@ func replaceProtectedMessageIndexes(indexes map[int]struct{}, selection transcri
 	}
 	out := make(map[int]struct{}, len(indexes))
 	removed := selection.End - selection.Start
+	if selection.MetaIndex != nil {
+		removed--
+	}
 	for index := range indexes {
 		switch {
 		case index < selection.Start:
@@ -484,6 +522,9 @@ func checkpointResultJSON(result llm.Result) ([]byte, error) {
 
 func selectionContainsUserMessage(messages []llm.Message, selection transcriptSelection) bool {
 	for index := selection.Start; index < selection.End && index < len(messages); index++ {
+		if selection.MetaIndex != nil && index == *selection.MetaIndex {
+			continue
+		}
 		if normalizedMessageRole(messages[index].Role) == "user" {
 			return true
 		}
@@ -494,6 +535,9 @@ func selectionContainsUserMessage(messages []llm.Message, selection transcriptSe
 func replaceMessageBoundaries(boundaries map[int]string, selection transcriptSelection, checkpointBoundary string) map[int]string {
 	out := make(map[int]string, len(boundaries)+1)
 	removed := selection.End - selection.Start
+	if selection.MetaIndex != nil {
+		removed--
+	}
 	for index, boundary := range boundaries {
 		switch {
 		case index < selection.Start:

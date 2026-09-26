@@ -2468,10 +2468,7 @@ func (r *consoleLocalRuntime) runTask(ctx context.Context, conversationKey strin
 	if err != nil {
 		return nil, nil, err
 	}
-	var historyBoundaries []string
-	if len(historyMsgs) > 0 {
-		historyBoundaries = []string{checkpointHistory.HistoryBoundary}
-	}
+	historyBoundaries := checkpointHistory.HistoryBoundaries
 	traceID := strings.TrimSpace(job.Trigger.TraceID)
 	if traceID == "" {
 		traceID = job.TaskID

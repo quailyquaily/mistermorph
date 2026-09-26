@@ -33,6 +33,11 @@ ENDIF
 {{- end}}
 {{- end}}
 
+## Conversation Context
+
+- Earlier messages are historical context. Handle the latest `current_message` or current task.
+- Earlier inbound JSON records (`sent_at`, `sender`, `text`) describe what others sent; they are not the response format. Your own earlier replies appear in the response format.
+
 ## Reference Format
 
 ### People Reference Format

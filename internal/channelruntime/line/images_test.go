@@ -106,11 +106,11 @@ func TestBuildLinePromptMessagesSeparatesHistoryAndCurrent(t *testing.T) {
 	if historyMsg == nil {
 		t.Fatalf("historyMsg = nil")
 	}
-	if strings.Contains(historyMsg.Content, "\"text\": \"latest\"") {
-		t.Fatalf("history should not contain latest message: %s", historyMsg.Content)
+	if strings.Contains(historyMsg[0].Content, "\"text\": \"latest\"") {
+		t.Fatalf("history should not contain latest message: %s", historyMsg[0].Content)
 	}
-	if !strings.Contains(historyMsg.Content, "\"text\": \"earlier\"") {
-		t.Fatalf("history should contain prior message: %s", historyMsg.Content)
+	if !strings.Contains(historyMsg[0].Content, "\"text\": \"earlier\"") {
+		t.Fatalf("history should contain prior message: %s", historyMsg[0].Content)
 	}
 	if currentMsg == nil {
 		t.Fatalf("currentMsg = nil")
@@ -118,8 +118,8 @@ func TestBuildLinePromptMessagesSeparatesHistoryAndCurrent(t *testing.T) {
 	if !strings.Contains(currentMsg.Content, "\"text\": \"latest\"") {
 		t.Fatalf("current message should contain latest text: %s", currentMsg.Content)
 	}
-	if len(historyMsg.Parts) != 0 {
-		t.Fatalf("history parts len = %d, want 0", len(historyMsg.Parts))
+	if len(historyMsg[0].Parts) != 0 {
+		t.Fatalf("history parts len = %d, want 0", len(historyMsg[0].Parts))
 	}
 	if len(currentMsg.Parts) != 2 {
 		t.Fatalf("current parts len = %d, want 2", len(currentMsg.Parts))

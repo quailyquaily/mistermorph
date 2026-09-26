@@ -60,12 +60,19 @@ description: 介绍 Agent 的 Prompt 机制
 ```text
 [system] 最终 system prompt
    ->
-[user] 运行时 metadata
+[user] context checkpoint（如有）
    ->
-[history] 历史消息
+[user / assistant] 逐条历史消息
+   ->
+[user] 运行时 metadata
    ->
 [user] 当前消息或原始 task
 ```
+
+历史保留每条消息的边界。外部输入使用 `user`，当前 Agent 已发送的回复使用 `assistant`，并采用 Agent 自己的回复格式（`{"type": "final", "output": ...}`），避免模型照抄外部消息记录作为回答；其他机器人仍属于外部参与者。压缩会保留运行时 metadata，但不会把它放进总结。
+
+启用缓存时，engine 在请求副本中标记历史或 checkpoint 的末尾。Anthropic 和 OpenAI GPT-5.6（Chat Completions 与 Responses）均保留这个标记和 system 标记。实际命中仍取决于 provider 和前缀是否保持一致。
+
 
 ## 独立 Prompt
 
@@ -84,7 +91,7 @@ Mister Morph 里还有一类调用不会先拼出主 Agent 的完整 system prom
 ```text
 主 Agent 主 Loop
   -> 完整 system prompt
-  -> runtime metadata / history / current message
+  -> checkpoint / history / runtime metadata / current message
   -> 可多步、可调工具
 
 独立 llm.Chat

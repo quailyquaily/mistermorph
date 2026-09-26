@@ -945,7 +945,7 @@ func TestBuildChatOptionsMapsPromptCacheOptionsForOpenAIResp(t *testing.T) {
 	}
 }
 
-func TestBuildChatOptionsCombinesGPT56SystemBreakpointWithImplicitCaching(t *testing.T) {
+func TestBuildChatOptionsCombinesGPT56BreakpointsWithImplicitCaching(t *testing.T) {
 	tests := []struct {
 		name              string
 		provider          string
@@ -1003,8 +1003,8 @@ func TestBuildChatOptionsCombinesGPT56SystemBreakpointWithImplicitCaching(t *tes
 			if got := built.Messages[0].Parts[0].CacheControl; got == nil || got.TTL != "" {
 				t.Fatalf("system cache control = %#v, want breakpoint marker without part TTL", got)
 			}
-			if got := built.Messages[1].Parts[0].CacheControl; got != nil {
-				t.Fatalf("user cache control = %#v, want nil", got)
+			if got := built.Messages[1].Parts[0].CacheControl; got == nil || got.TTL != "" {
+				t.Fatalf("user cache control = %#v, want breakpoint marker without part TTL", got)
 			}
 			if got := built.Tools[0].CacheControl; got != nil {
 				t.Fatalf("tool cache control = %#v, want nil", got)
@@ -1378,47 +1378,56 @@ func TestBuildChatOptionsStripsExplicitCacheControlForOpenAI(t *testing.T) {
 	}
 }
 
-func TestBuildChatOptionsStripsOnlySystemPromptCacheControlForBedrock(t *testing.T) {
-	req := llm.Request{
-		Messages: []llm.Message{
-			{
-				Role: "system",
-				Parts: []llm.Part{{
-					Type:         llm.PartTypeText,
-					Text:         "sys",
-					CacheControl: &llm.CacheControl{TTL: "5m"},
+// uniai's Bedrock provider rejects any request with a cache point unless the model ARN is a
+// Claude model, and never accepts cache points on system parts or tools.
+func TestBuildChatOptionsBedrockCacheControl(t *testing.T) {
+	cases := []struct {
+		name     string
+		arn      string
+		wantUser bool
+	}{
+		{name: "claude arn keeps message cache points", arn: "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-sonnet-4-5", wantUser: true},
+		{name: "claude inference profile keeps message cache points", arn: "us.anthropic.claude-sonnet-4-5-v1:0", wantUser: true},
+		{name: "nova arn strips message cache points", arn: "arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-pro-v1:0"},
+		{name: "llama arn strips message cache points", arn: "meta.llama3-70b-instruct-v1:0"},
+		{name: "missing arn strips message cache points"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := llm.Request{
+				Messages: []llm.Message{
+					{Role: "system", Parts: []llm.Part{{Type: llm.PartTypeText, Text: "sys", CacheControl: &llm.CacheControl{TTL: "5m"}}}},
+					{Role: "user", Parts: []llm.Part{{Type: llm.PartTypeText, Text: "history", CacheControl: &llm.CacheControl{TTL: "1h"}}}},
+					{Role: "assistant", Parts: []llm.Part{{Type: llm.PartTypeText, Text: "reply", CacheControl: &llm.CacheControl{TTL: "1h"}}}},
+				},
+				Tools: []llm.Tool{{
+					Name:           "lookup",
+					Description:    "search",
+					ParametersJSON: `{"type":"object","properties":{},"additionalProperties":false}`,
+					CacheControl:   &llm.CacheControl{TTL: "1h"},
 				}},
-			},
-			{
-				Role: "user",
-				Parts: []llm.Part{{
-					Type:         llm.PartTypeText,
-					Text:         "prefix",
-					CacheControl: &llm.CacheControl{TTL: "1h"},
-				}},
-			},
-		},
-		Tools: []llm.Tool{{
-			Name:           "lookup",
-			Description:    "search",
-			ParametersJSON: `{"type":"object","properties":{},"additionalProperties":false}`,
-			CacheControl:   &llm.CacheControl{TTL: "1h"},
-		}},
-	}
-
-	opts := buildChatOptionsForTest(req, "bedrock", "", "", "", false, uniaiapi.ToolsEmulationOff, nil, "", nil)
-	built, err := uniaichat.BuildRequest(opts...)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	if got := built.Messages[0].Parts[0].CacheControl; got != nil {
-		t.Fatalf("system cache control = %#v, want nil", got)
-	}
-	if got := built.Messages[1].Parts[0].CacheControl; got == nil || got.TTL != "1h" {
-		t.Fatalf("user cache control = %#v, want TTL 1h", got)
-	}
-	if got := built.Tools[0].CacheControl; got != nil {
-		t.Fatalf("tool cache control = %#v, want nil", got)
+			}
+			client := &Client{provider: "bedrock", bedrockModelArn: tc.arn, cacheTTL: "short", toolsEmulationMode: uniaiapi.ToolsEmulationOff}
+			built, err := uniaichat.BuildRequest(client.buildChatOptions(req, false)...)
+			if err != nil {
+				t.Fatalf("build request: %v", err)
+			}
+			if got := built.Messages[0].Parts[0].CacheControl; got != nil {
+				t.Fatalf("system cache control = %#v, want nil", got)
+			}
+			if got := built.Tools[0].CacheControl; got != nil {
+				t.Fatalf("tool cache control = %#v, want nil", got)
+			}
+			for _, index := range []int{1, 2} {
+				got := built.Messages[index].Parts[0].CacheControl
+				if tc.wantUser && (got == nil || got.TTL != "1h") {
+					t.Fatalf("message[%d] cache control = %#v, want TTL 1h", index, got)
+				}
+				if !tc.wantUser && got != nil {
+					t.Fatalf("message[%d] cache control = %#v, want nil", index, got)
+				}
+			}
+		})
 	}
 }
 

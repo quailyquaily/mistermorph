@@ -27,7 +27,13 @@ func (c *Client) buildChatOptions(req llm.Request, forceJSON bool) []uniaiapi.Ch
 	defaultReasoningBudget := c.reasoningBudget
 
 	model := firstNonEmpty(req.Model, defaultModel)
-	req = adaptRequestForProvider(req, provider, model, cacheTTL)
+	cacheModel := model
+	if strings.EqualFold(strings.TrimSpace(provider), "bedrock") {
+		// Bedrock serves the configured ARN whatever the request names.
+		cacheModel = c.bedrockModelArn
+	}
+	req = adaptRequestForProvider(req, provider, cacheModel, cacheTTL)
+	req = ensureLeadingUserTurn(req, provider)
 	msgs := make([]uniaiapi.Message, len(req.Messages))
 	for i, m := range req.Messages {
 		msg := uniaiapi.Message{Role: m.Role, Content: m.Content, ReasoningContent: m.ReasoningContent}

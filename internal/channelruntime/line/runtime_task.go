@@ -90,12 +90,8 @@ func runLineTask(
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	var llmHistory []llm.Message
-	var historyBoundaries []string
-	if historyMsg != nil {
-		llmHistory = append(llmHistory, *historyMsg)
-		historyBoundaries = []string{checkpointHistory.HistoryBoundary}
-	}
+	llmHistory := historyMsg
+	historyBoundaries := checkpointHistory.HistoryBoundaries
 
 	meta := map[string]any{
 		"trigger":         "line",
@@ -142,14 +138,8 @@ func runLineTask(
 	return result.Final, result.Context, result.LoadedSkills, nil
 }
 
-func buildLinePromptMessagesWithImageNotes(history []chathistory.ChatHistoryItem, job lineJob, model string, supportsImageParts *bool, fileCacheDir string, logger *slog.Logger) (*llm.Message, *llm.Message, error) {
-	historyRaw := chathistory.RenderHistoryContext(history)
-	var historyMsg *llm.Message
-	if strings.TrimSpace(historyRaw) != "" {
-		msg := llm.Message{Role: "user", Content: historyRaw}
-		historyMsg = &msg
-	}
-
+func buildLinePromptMessagesWithImageNotes(history []chathistory.ChatHistoryItem, job lineJob, model string, supportsImageParts *bool, fileCacheDir string, logger *slog.Logger) ([]llm.Message, *llm.Message, error) {
+	historyMsg := chathistory.RenderHistoryMessages(history)
 	currentRaw := chathistory.RenderCurrentMessage(newLineInboundHistoryItem(job))
 	if len(job.Images) > 0 {
 		currentRaw = imageinput.AppendImageMetadataNotes(currentRaw, job.Images)

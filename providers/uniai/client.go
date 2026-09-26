@@ -59,6 +59,7 @@ type Client struct {
 	reasoningEffort    string
 	reasoningBudget    *int
 	cacheTTL           string
+	bedrockModelArn    string
 	cacheKeyPrefix     string
 	toolsEmulationMode uniaiapi.ToolsEmulationMode
 	client             *uniaiapi.Client
@@ -130,6 +131,7 @@ func New(cfg Config) (*Client, error) {
 		reasoningEffort:    strings.ToLower(strings.TrimSpace(cfg.ReasoningEffort)),
 		reasoningBudget:    cloneInt(cfg.ReasoningBudget),
 		cacheTTL:           strings.TrimSpace(cfg.CacheTTL),
+		bedrockModelArn:    strings.TrimSpace(cfg.AwsBedrockModelArn),
 		cacheKeyPrefix:     strings.TrimSpace(cfg.CacheKeyPrefix),
 		toolsEmulationMode: normalizeToolsEmulationMode(cfg.ToolsEmulationMode),
 		client:             uniaiapi.New(uCfg),

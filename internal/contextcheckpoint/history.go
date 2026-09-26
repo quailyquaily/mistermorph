@@ -12,7 +12,7 @@ import (
 type PreparedHistory struct {
 	Store                  *FileStore
 	History                []chathistory.ChatHistoryItem
-	HistoryBoundary        string
+	HistoryBoundaries      []string
 	CurrentMessageBoundary string
 }
 
@@ -35,8 +35,8 @@ func PrepareHistory(ctx context.Context, root string, conversationKey string, hi
 		History:                filtered,
 		CurrentMessageBoundary: chathistory.BoundaryForItem(current),
 	}
-	if len(filtered) > 0 {
-		prepared.HistoryBoundary = chathistory.BoundaryForItem(filtered[len(filtered)-1])
+	for _, item := range filtered {
+		prepared.HistoryBoundaries = append(prepared.HistoryBoundaries, chathistory.BoundaryForItem(item))
 	}
 	return prepared, nil
 }

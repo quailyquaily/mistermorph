@@ -47,6 +47,7 @@ type engineLoopState struct {
 	// steps when a run starts/resumes, and never persisted in resume state.
 	toolRunCounts map[string]int
 
+	metaMessageIndex        *int
 	fixedMessageCount       int
 	messageBoundaries       map[int]string
 	checkpointStore         ContextCheckpointStore
@@ -162,9 +163,19 @@ func (e *Engine) runLoop(ctx context.Context, st *engineLoopState) (final *Final
 		}
 
 		for _, hook := range e.hooks {
+			var metaContent string
+			if st.metaMessageIndex != nil {
+				metaContent = st.messages[*st.metaMessageIndex].Content
+			}
 			if err := hook(ctx, step, st.agentCtx, &st.messages); err != nil {
 				log.Warn("hook_error", "step", step, "error", err.Error())
 				return nil, st.agentCtx, err
+			}
+			if err := validateMetaMessageIndex(st.messages, st.fixedMessageCount, st.metaMessageIndex); err != nil {
+				return nil, st.agentCtx, err
+			}
+			if st.metaMessageIndex != nil && st.messages[*st.metaMessageIndex].Content != metaContent {
+				return nil, st.agentCtx, fmt.Errorf("hook changed runtime metadata position or content")
 			}
 		}
 
@@ -966,7 +977,7 @@ func (e *Engine) guardPreCheck(ctx context.Context, st *engineLoopState, step in
 
 func (e *Engine) requestToolApproval(ctx context.Context, st *engineLoopState, step int, pending pendingToolSnapshot, pre guard.Result) (*Final, error) {
 	pending.ApprovalIdentity = "tool_" + newRunID()
-	rs := resumeStateV1{
+	rs := resumeState{
 		RunID:                   st.runID,
 		Model:                   st.model,
 		Scene:                   st.scene,
@@ -977,6 +988,7 @@ func (e *Engine) requestToolApproval(ctx context.Context, st *engineLoopState, s
 		ExtraParams:             st.extraParams,
 		AgentCtx:                snapshotFromContext(st.agentCtx),
 		FixedMessageCount:       st.fixedMessageCount,
+		MetaMessageIndex:        st.metaMessageIndex,
 		MessageBoundaries:       st.messageBoundaries,
 		Checkpoint:              st.checkpoint,
 		HasCheckpoint:           st.hasCheckpoint,

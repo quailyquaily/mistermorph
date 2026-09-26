@@ -97,14 +97,8 @@ func runSlackTask(
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
-	var llmHistory []llm.Message
-	if historyMsg != nil {
-		llmHistory = append(llmHistory, *historyMsg)
-	}
-	var historyBoundaries []string
-	if historyMsg != nil {
-		historyBoundaries = []string{checkpointHistory.HistoryBoundary}
-	}
+	llmHistory := historyMsg
+	historyBoundaries := checkpointHistory.HistoryBoundaries
 
 	reg := buildSlackRegistry(rt.BaseRegistry, job.ChatType)
 	toolAPI := newSlackToolAPI(api)
@@ -199,13 +193,8 @@ func slackContextTopicID(job slackJob) string {
 	return strings.TrimSpace(job.ChannelID)
 }
 
-func buildSlackPromptMessagesWithImageNotes(history []chathistory.ChatHistoryItem, job slackJob, model string, supportsImageParts *bool, fileCacheDir string, logger *slog.Logger) (*llm.Message, *llm.Message, error) {
-	historyRaw := chathistory.RenderHistoryContext(history)
-	var historyMsg *llm.Message
-	if strings.TrimSpace(historyRaw) != "" {
-		msg := llm.Message{Role: "user", Content: historyRaw}
-		historyMsg = &msg
-	}
+func buildSlackPromptMessagesWithImageNotes(history []chathistory.ChatHistoryItem, job slackJob, model string, supportsImageParts *bool, fileCacheDir string, logger *slog.Logger) ([]llm.Message, *llm.Message, error) {
+	historyMsg := chathistory.RenderHistoryMessages(history)
 	currentRaw := chathistory.RenderCurrentMessage(newSlackInboundHistoryItem(job))
 	if len(job.Images) > 0 {
 		currentRaw = imageinput.AppendImageMetadataNotes(currentRaw, job.Images)

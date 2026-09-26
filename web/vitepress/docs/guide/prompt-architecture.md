@@ -60,12 +60,19 @@ The order can be understood like this:
 ```text
 [system] final system prompt
    ->
-[user] runtime metadata
+[user] context checkpoint (if any)
    ->
-[history] history messages
+[user / assistant] individual history messages
+   ->
+[user] runtime metadata
    ->
 [user] current message or raw task
 ```
+
+Channel history preserves each message boundary. Inbound messages use `user`; replies sent by the current Agent use `assistant` and the Agent's response shape (`{"type": "final", "output": ...}`), so the model does not copy an inbound record as its answer. Other bots remain external participants. Compaction preserves runtime metadata without including it in the summary.
+
+With caching enabled, the engine marks the end of history or the checkpoint on a request copy. Anthropic and OpenAI GPT-5.6 (Chat Completions and Responses) preserve this marker alongside the system marker. Cache hits still depend on the provider and an unchanged prefix.
+
 
 ## Independent Prompts
 
@@ -84,7 +91,7 @@ You can think of the two paths like this:
 ```text
 Main Agent main loop
   -> full system prompt
-  -> runtime metadata / history / current message
+  -> checkpoint / history / runtime metadata / current message
   -> can run multiple steps and call tools
 
 Independent llm.Chat

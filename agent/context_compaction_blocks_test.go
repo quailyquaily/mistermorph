@@ -194,7 +194,7 @@ func TestTranscriptBlocksSurviveResumeSerialization(t *testing.T) {
 	}
 	want := buildTranscriptBlocks(messages, transcriptBlockOptions{FixedMessageCount: 1})
 
-	raw, err := marshalResumeState(resumeStateV1{Messages: messages})
+	raw, err := marshalResumeState(resumeState{Messages: messages})
 	if err != nil {
 		t.Fatalf("marshal resume state: %v", err)
 	}

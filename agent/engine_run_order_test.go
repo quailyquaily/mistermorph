@@ -10,7 +10,7 @@ import (
 	"github.com/quailyquaily/mistermorph/llm"
 )
 
-func TestRun_MetaPrecedesHistoryAndCurrentMessageIsLast(t *testing.T) {
+func TestRun_HistoryPrecedesMetaAndCurrentMessageIsLast(t *testing.T) {
 	t.Parallel()
 
 	client := newMockClient(finalResponse("ok"))
@@ -41,10 +41,10 @@ func TestRun_MetaPrecedesHistoryAndCurrentMessageIsLast(t *testing.T) {
 	if msgs[0].Role != "system" {
 		t.Fatalf("messages[0].role = %q, want system", msgs[0].Role)
 	}
-	if !strings.Contains(msgs[1].Content, "mister_morph_meta") {
-		t.Fatalf("messages[1] = %q, want injected meta", msgs[1].Content)
+	if !strings.Contains(msgs[2].Content, "mister_morph_meta") {
+		t.Fatalf("messages[1] = %q, want injected meta", msgs[2].Content)
 	}
-	meta := decodeInjectedMeta(t, msgs[1].Content)
+	meta := decodeInjectedMeta(t, msgs[2].Content)
 	if got := strings.TrimSpace(asString(meta["trigger"])); got != "telegram" {
 		t.Fatalf("meta trigger = %q, want telegram", got)
 	}
@@ -57,8 +57,8 @@ func TestRun_MetaPrecedesHistoryAndCurrentMessageIsLast(t *testing.T) {
 	if got := strings.TrimSpace(asString(meta["model"])); got != "gpt-5.5" {
 		t.Fatalf("meta model = %q, want gpt-5.5", got)
 	}
-	if msgs[2].Content != "HISTORY_CONTEXT" {
-		t.Fatalf("messages[2] = %q, want history", msgs[2].Content)
+	if msgs[1].Content != "HISTORY_CONTEXT" {
+		t.Fatalf("messages[2] = %q, want history", msgs[1].Content)
 	}
 	if msgs[3].Content != "CURRENT_TURN" {
 		t.Fatalf("messages[3] = %q, want current turn", msgs[3].Content)

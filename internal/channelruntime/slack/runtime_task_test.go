@@ -153,11 +153,11 @@ func TestBuildSlackPromptMessagesSeparatesHistoryAndCurrent(t *testing.T) {
 	if historyMsg == nil {
 		t.Fatalf("historyMsg = nil")
 	}
-	if strings.Contains(historyMsg.Content, "\"text\": \"latest\"") {
-		t.Fatalf("history should not contain latest message: %s", historyMsg.Content)
+	if strings.Contains(historyMsg[0].Content, "\"text\": \"latest\"") {
+		t.Fatalf("history should not contain latest message: %s", historyMsg[0].Content)
 	}
-	if !strings.Contains(historyMsg.Content, "\"text\": \"earlier\"") {
-		t.Fatalf("history should contain prior message: %s", historyMsg.Content)
+	if !strings.Contains(historyMsg[0].Content, "\"text\": \"earlier\"") {
+		t.Fatalf("history should contain prior message: %s", historyMsg[0].Content)
 	}
 	if currentMsg == nil {
 		t.Fatalf("currentMsg = nil")

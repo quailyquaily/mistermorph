@@ -31,14 +31,7 @@ func (r *consoleLocalRuntime) loadConsoleTopicHistory(job consoleLocalTaskJob) [
 }
 
 func renderConsolePromptMessages(history []chathistory.ChatHistoryItem, job consoleLocalTaskJob, model string, supportsImageParts *bool, imagePaths []string, logger *slog.Logger) ([]llm.Message, *llm.Message, error) {
-	historyRaw := chathistory.RenderHistoryContext(history)
-	historyMsgs := make([]llm.Message, 0, 1)
-	if strings.TrimSpace(historyRaw) != "" {
-		historyMsgs = append(historyMsgs, llm.Message{
-			Role:    "user",
-			Content: historyRaw,
-		})
-	}
+	historyMsgs := chathistory.RenderHistoryMessages(history)
 	currentRaw := chathistory.RenderCurrentMessage(newConsoleInboundHistoryItem(job))
 	currentMsg, err := imageinput.BuildUserMessage(currentRaw, model, imagePaths, imageinput.MessageOptions{
 		MaxImages:          consoleLLMMaxImages,

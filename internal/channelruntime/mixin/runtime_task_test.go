@@ -94,7 +94,7 @@ func TestBuildMixinPromptMessagesSeparatesHistoryAndCurrent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildMixinPromptMessages() error = %v", err)
 	}
-	if historyMessage == nil || !strings.Contains(historyMessage.Content, `"text": "earlier"`) || strings.Contains(historyMessage.Content, `"text": "latest"`) {
+	if historyMessage == nil || !strings.Contains(historyMessage[0].Content, `"text": "earlier"`) || strings.Contains(historyMessage[0].Content, `"text": "latest"`) {
 		t.Fatalf("history message = %#v", historyMessage)
 	}
 	if currentMessage == nil || !strings.Contains(currentMessage.Content, "latest") {

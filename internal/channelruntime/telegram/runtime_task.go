@@ -96,14 +96,8 @@ func runTelegramTask(ctx context.Context, rt *taskruntime.Runtime, api *telegram
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
-	var llmHistory []llm.Message
-	if historyMsg != nil {
-		llmHistory = append(llmHistory, *historyMsg)
-	}
-	var historyBoundaries []string
-	if historyMsg != nil {
-		historyBoundaries = []string{checkpointHistory.HistoryBoundary}
-	}
+	llmHistory := historyMsg
+	historyBoundaries := checkpointHistory.HistoryBoundaries
 
 	// Per-run registry.
 	reg := buildTelegramRegistry(rt.BaseRegistry, job.ChatType)
@@ -231,14 +225,8 @@ func telegramContextTopicID(job telegramJob) string {
 	return topicID
 }
 
-func buildTelegramPromptMessagesWithImageNotes(history []chathistory.ChatHistoryItem, job telegramJob, model string, supportsImageParts *bool, fileCacheDir string, logger *slog.Logger) (*llm.Message, *llm.Message, error) {
-	historyRaw := chathistory.RenderHistoryContext(history)
-	var historyMsg *llm.Message
-	if strings.TrimSpace(historyRaw) != "" {
-		msg := llm.Message{Role: "user", Content: historyRaw}
-		historyMsg = &msg
-	}
-
+func buildTelegramPromptMessagesWithImageNotes(history []chathistory.ChatHistoryItem, job telegramJob, model string, supportsImageParts *bool, fileCacheDir string, logger *slog.Logger) ([]llm.Message, *llm.Message, error) {
+	historyMsg := chathistory.RenderHistoryMessages(history)
 	currentRaw := chathistory.RenderCurrentMessage(newTelegramInboundHistoryItem(job))
 	roots := pathroots.New(job.WorkspaceDir, fileCacheDir, "")
 	imagePaths, quotedImages := telegramPromptImagePaths(history, job, roots)

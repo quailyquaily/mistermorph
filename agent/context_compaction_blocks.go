@@ -15,6 +15,7 @@ const (
 )
 
 type transcriptBlockOptions struct {
+	MetaMessageIndex            *int
 	FixedMessageCount           int
 	PendingToolCallIDs          map[string]struct{}
 	ProtectedMessageIndexes     map[int]struct{}
@@ -25,6 +26,7 @@ type transcriptBlock struct {
 	Start           int
 	End             int
 	EstimatedTokens int
+	Meta            bool
 	Compactable     bool
 	Reason          string
 }
@@ -34,6 +36,7 @@ type transcriptSelection struct {
 	End             int
 	BlockCount      int
 	EstimatedTokens int
+	MetaIndex       *int
 	ReachedTarget   bool
 }
 
@@ -62,6 +65,10 @@ func buildTranscriptBlocks(messages []llm.Message, opts transcriptBlockOptions) 
 			End:             i + 1,
 			EstimatedTokens: estimateMessageTokens(message),
 			Compactable:     true,
+		}
+		if opts.MetaMessageIndex != nil && i == *opts.MetaMessageIndex {
+			block.Meta = true
+			block.EstimatedTokens = 0
 		}
 		switch {
 		case role == "tool":
@@ -159,7 +166,12 @@ func selectTranscriptPrefix(blocks []transcriptBlock, targetTokens int) (transcr
 			break
 		}
 		selection.End = block.End
-		selection.BlockCount++
+		if block.Meta {
+			index := block.Start
+			selection.MetaIndex = &index
+		} else {
+			selection.BlockCount++
+		}
 		selection.EstimatedTokens += block.EstimatedTokens
 		previousEnd = block.End
 		if selection.EstimatedTokens >= targetTokens {

@@ -36,15 +36,22 @@ func adaptRequestForProvider(req llm.Request, provider, model, cacheTTL string) 
 	case "anthropic":
 		return req
 	case "bedrock":
-		return stripExplicitCacheControl(req, true, false, true)
+		// uniai's Bedrock provider takes cache points on message parts only, and only for
+		// Claude model ARNs; any other ARN rejects the whole request.
+		return stripExplicitCacheControl(req, true, !bedrockModelSupportsCachePoints(model), true)
 	case "openai", "openai_resp":
 		if openAIModelMatchesFamily(model, "gpt-5-6") && !strings.EqualFold(strings.TrimSpace(cacheTTL), "off") {
-			return stripExplicitCacheControl(req, false, true, true)
+			return stripExplicitCacheControl(req, false, false, true)
 		}
 		return stripExplicitCacheControl(req, true, true, true)
 	default:
 		return stripExplicitCacheControl(req, true, true, true)
 	}
+}
+
+// bedrockModelSupportsCachePoints mirrors uniai's Bedrock check on the configured model ARN.
+func bedrockModelSupportsCachePoints(modelArn string) bool {
+	return strings.Contains(strings.ToLower(strings.TrimSpace(modelArn)), "anthropic.")
 }
 
 func stripExplicitCacheControl(req llm.Request, stripSystemParts, stripOtherParts, stripTools bool) llm.Request {

@@ -287,29 +287,6 @@ func (e *Engine) Run(ctx context.Context, task string, opts RunOptions) (*Final,
 
 	messages := []llm.Message{systemMessage}
 
-	injectedMeta := runtimeclock.WithRuntimeClockMeta(opts.Meta, time.Now())
-	if modelName := llm.ShortModelName(model); modelName != "" {
-		injectedMeta["model"] = modelName
-	}
-	injectedMeta["run_id"] = runID
-	if _, ok := injectedMeta["host_os"]; !ok {
-		injectedMeta["host_os"] = platformutil.Current()
-	}
-	if metaMsg, ok := buildInjectedMetaMessage(injectedMeta); ok {
-		trigger := ""
-		if v, ok := injectedMeta["trigger"].(string); ok {
-			trigger = strings.TrimSpace(v)
-		}
-		messages = append(messages, llm.Message{Role: "user", Content: metaMsg})
-		log.Debug(
-			"run_meta_injected",
-			"meta_bytes", len(metaMsg),
-			"meta_keys", sortedMapKeys(injectedMeta),
-			"meta_trigger", trigger,
-			"meta_payload", metaMsg,
-		)
-	}
-
 	fixedMessageCount := len(messages)
 	checkpointStore := opts.ContextCheckpointStore
 	if checkpointStore == nil {
@@ -344,6 +321,32 @@ func (e *Engine) Run(ctx context.Context, task string, opts RunOptions) (*Final,
 				messageBoundaries[messageIndex] = boundary
 			}
 		}
+	}
+
+	var metaMessageIndex *int
+	injectedMeta := runtimeclock.WithRuntimeClockMeta(opts.Meta, time.Now())
+	if modelName := llm.ShortModelName(model); modelName != "" {
+		injectedMeta["model"] = modelName
+	}
+	injectedMeta["run_id"] = runID
+	if _, ok := injectedMeta["host_os"]; !ok {
+		injectedMeta["host_os"] = platformutil.Current()
+	}
+	if metaMsg, ok := buildInjectedMetaMessage(injectedMeta); ok {
+		trigger := ""
+		if v, ok := injectedMeta["trigger"].(string); ok {
+			trigger = strings.TrimSpace(v)
+		}
+		index := len(messages)
+		metaMessageIndex = &index
+		messages = append(messages, llm.Message{Role: "user", Content: metaMsg})
+		log.Debug(
+			"run_meta_injected",
+			"meta_bytes", len(metaMsg),
+			"meta_keys", sortedMapKeys(injectedMeta),
+			"meta_trigger", trigger,
+			"meta_payload", metaMsg,
+		)
 	}
 
 	if opts.CurrentMessage != nil {
@@ -390,6 +393,7 @@ func (e *Engine) Run(ctx context.Context, task string, opts RunOptions) (*Final,
 		steerSource:           opts.SteerSource,
 		nextStep:              0,
 		fixedMessageCount:     fixedMessageCount,
+		metaMessageIndex:      metaMessageIndex,
 		messageBoundaries:     messageBoundaries,
 		checkpointStore:       checkpointStore,
 		checkpoint:            loadedCheckpoint,

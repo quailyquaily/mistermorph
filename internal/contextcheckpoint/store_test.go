@@ -246,8 +246,8 @@ func TestPrepareHistoryFiltersCoveredItemsAndBuildsBoundaries(t *testing.T) {
 	if len(prepared.History) != 1 || prepared.History[0].MessageID != "new" {
 		t.Fatalf("prepared history = %+v", prepared)
 	}
-	if prepared.HistoryBoundary != chathistory.BoundaryForItem(history[2]) {
-		t.Fatalf("history boundary = %q", prepared.HistoryBoundary)
+	if len(prepared.HistoryBoundaries) != 1 || prepared.HistoryBoundaries[0] != chathistory.BoundaryForItem(history[2]) {
+		t.Fatalf("history boundaries = %q", prepared.HistoryBoundaries)
 	}
 	if prepared.CurrentMessageBoundary != chathistory.BoundaryForItem(current) {
 		t.Fatalf("current boundary = %q", prepared.CurrentMessageBoundary)

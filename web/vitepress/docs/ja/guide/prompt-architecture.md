@@ -60,12 +60,19 @@ Mister Morph では、これらは `agent/prompts/system.md` を骨格として�
 ```text
 [system] 最終 system prompt
    ->
-[user] 実行時 metadata
+[user] context checkpoint（存在する場合）
    ->
-[history] 履歴メッセージ
+[user / assistant] 個別の履歴メッセージ
+   ->
+[user] 実行時 metadata
    ->
 [user] current message または raw task
 ```
+
+履歴は各メッセージの境界を保持します。外部からの入力は `user`、現在の Agent が送信した返信は `assistant` で、Agent 自身の応答形式（`{"type": "final", "output": ...}`）を使います。これにより、モデルが外部メッセージの記録を回答として模倣しません。他の bot は外部参加者として扱います。圧縮は実行時 metadata を保持し、要約には含めません。
+
+キャッシュが有効な場合、engine はリクエストのコピーで履歴または checkpoint の末尾にマーカーを付けます。Anthropic と OpenAI GPT-5.6（Chat Completions および Responses）は、このマーカーと system のマーカーを保持します。実際のヒットは provider と共通 prefix に依存します。
+
 
 ## 独立 Prompt
 
@@ -84,7 +91,7 @@ Mister Morph には、主 Agent の完全な system prompt を先に組み立て
 ```text
 主 Agent の主 Loop
   -> 完全な system prompt
-  -> runtime metadata / history / current message
+  -> checkpoint / history / runtime metadata / current message
   -> 多段実行でき、ツールも呼べる
 
 独立 llm.Chat

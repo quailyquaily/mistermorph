@@ -129,14 +129,8 @@ func runLarkTask(
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	var llmHistory []llm.Message
-	if historyMsg != nil {
-		llmHistory = append(llmHistory, *historyMsg)
-	}
-	var historyBoundaries []string
-	if historyMsg != nil {
-		historyBoundaries = []string{checkpointHistory.HistoryBoundary}
-	}
+	llmHistory := historyMsg
+	historyBoundaries := checkpointHistory.HistoryBoundaries
 
 	reg := buildLarkRegistry(rt.BaseRegistry, job.ChatType)
 	reactTool, err := registerLarkChannelTools(reg, runtimeOpts.ToolAPI, job.ChatID, job.MessageID, runtimeOpts.FileCacheDir, runtimeOpts.ToolFileMaxBytes)
@@ -200,13 +194,8 @@ func runLarkTask(
 	return result.Final, result.Context, result.LoadedSkills, nil
 }
 
-func buildLarkPromptMessagesWithImageNotes(history []chathistory.ChatHistoryItem, job larkJob, model string, supportsImageParts *bool, fileCacheDir string, logger *slog.Logger) (*llm.Message, *llm.Message, error) {
-	historyRaw := chathistory.RenderHistoryContext(history)
-	var historyMsg *llm.Message
-	if strings.TrimSpace(historyRaw) != "" {
-		msg := llm.Message{Role: "user", Content: historyRaw}
-		historyMsg = &msg
-	}
+func buildLarkPromptMessagesWithImageNotes(history []chathistory.ChatHistoryItem, job larkJob, model string, supportsImageParts *bool, fileCacheDir string, logger *slog.Logger) ([]llm.Message, *llm.Message, error) {
+	historyMsg := chathistory.RenderHistoryMessages(history)
 	currentRaw := chathistory.RenderCurrentMessage(newLarkInboundHistoryItem(job))
 	if len(job.Images) > 0 {
 		currentRaw = imageinput.AppendImageMetadataNotes(currentRaw, job.Images)

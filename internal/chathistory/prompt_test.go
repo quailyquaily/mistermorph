@@ -2,10 +2,49 @@ package chathistory
 
 import (
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestRenderHistoryMessagesRolesAndStablePrefix(t *testing.T) {
+	items := []ChatHistoryItem{
+		{Kind: KindInboundUser, Text: "question", MessageID: "1"},
+		{Kind: KindOutboundAgent, Text: "answer", MessageID: "2"},
+		{Kind: KindInboundUser, Text: "external bot", Sender: ChatHistorySender{IsBot: true}},
+		{Kind: KindOutboundReaction, Text: "👍"},
+		{Kind: KindSystem, Text: "joined"},
+	}
+	first := RenderHistoryMessages(items)
+	second := RenderHistoryMessages(append(items, ChatHistoryItem{Kind: KindInboundUser, Text: "next"}))
+	if len(first) != len(items) || !reflect.DeepEqual(first, second[:len(first)]) {
+		t.Fatal("history prefix changed")
+	}
+	for i, want := range []string{"user", "assistant", "user", "user", "user"} {
+		if first[i].Role != want {
+			t.Fatalf("role[%d] = %s, want %s", i, first[i].Role, want)
+		}
+		var payload map[string]any
+		if err := json.Unmarshal([]byte(first[i].Content), &payload); err != nil {
+			t.Fatal(err)
+		}
+		if want == "assistant" {
+			// The agent's own replies take its response shape, so the model does not copy a
+			// history record as its answer.
+			if !reflect.DeepEqual(payload, map[string]any{"type": "final", "output": items[i].Text}) {
+				t.Fatalf("assistant payload = %#v, want final response shape", payload)
+			}
+			continue
+		}
+		if payload["text"] != items[i].Text || payload["note"] != nil || payload["historical_message"] != nil || payload["type"] != nil {
+			t.Fatalf("unexpected payload: %#v", payload)
+		}
+	}
+	if len(RenderHistoryMessages(nil)) != 0 {
+		t.Fatal("empty history rendered a message")
+	}
+}
 
 func TestRenderHistoryContext(t *testing.T) {
 	t.Parallel()

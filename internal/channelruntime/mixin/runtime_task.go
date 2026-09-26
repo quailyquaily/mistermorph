@@ -161,12 +161,8 @@ func runMixinTask(ctx context.Context, rt *taskruntime.Runtime, toolAPI mixintoo
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	var llmHistory []llm.Message
-	var boundaries []string
-	if historyMessage != nil {
-		llmHistory = append(llmHistory, *historyMessage)
-		boundaries = []string{checkpoint.HistoryBoundary}
-	}
+	llmHistory := historyMessage
+	boundaries := checkpoint.HistoryBoundaries
 	registry := buildMixinRegistry(rt.BaseRegistry, job.ChatType)
 	if err := registerMixinChannelTools(registry, toolAPI, job.ConversationID, mixinReplyRecipient(job.ChatType, job.FromUserID), job.FileCacheDir, mixinFileMaxBytes); err != nil {
 		return nil, nil, nil, err
@@ -217,12 +213,8 @@ func runMixinTask(ctx context.Context, rt *taskruntime.Runtime, toolAPI mixintoo
 	return result.Final, result.Context, result.LoadedSkills, err
 }
 
-func buildMixinPromptMessages(history []chathistory.ChatHistoryItem, job mixinJob, model string, supportsImageParts *bool, logger *slog.Logger) (*llm.Message, *llm.Message, error) {
-	var historyMessage *llm.Message
-	if content := strings.TrimSpace(chathistory.RenderHistoryContext(history)); content != "" {
-		message := llm.Message{Role: "user", Content: content}
-		historyMessage = &message
-	}
+func buildMixinPromptMessages(history []chathistory.ChatHistoryItem, job mixinJob, model string, supportsImageParts *bool, logger *slog.Logger) ([]llm.Message, *llm.Message, error) {
+	historyMessage := chathistory.RenderHistoryMessages(history)
 	currentRaw := chathistory.RenderCurrentMessage(newMixinInboundHistoryItem(job))
 	if len(job.Images) > 0 {
 		currentRaw = imageinput.AppendImageMetadataNotes(currentRaw, job.Images)
