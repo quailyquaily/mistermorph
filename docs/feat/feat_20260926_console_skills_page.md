@@ -1,7 +1,7 @@
 ---
 date: 2026-09-26
 title: Skills page, skill install and the skill store
-status: draft (decisions recorded in §8)
+status: implemented (decisions recorded in §8)
 ---
 
 # Skills page, skill install and the skill store
@@ -47,39 +47,47 @@ behind an API and adds provenance.
 
 ### 3.2 Layout
 
-Same shape as TODO and Contacts: an index list and a detail pane.
+A page bar with the global switch and Install, then Installed / Store tabs, a search box and a
+card grid. A card opens the skill in a side sheet (full screen on phones).
 
 ```text
-+------------------------------+------------------------------------------------+
-| SKILLS            [on] [+]   |  jsonbill                        [loaded ●]    |
-|------------------------------|  Make and send JSON invoices.                  |
-| ● jsonbill                   |  -------------------------------------------   |
-|   Make and send JSON invoi…  |  ID            jsonbill                        |
-| ● inventory-cli              |  LOCATION      ~/.morph/skills/jsonbill        |
-|   Track household inventory  |  SOURCE        built-in · assets/skills        |
-| ○ guizang-ppt-skill          |  REQUIRES      bash, curl                      |
-|   Generate slide decks       |  AUTH PROFILE  jsonbill_api                    |
-|                              |  LAST USED     Sep 25, 14:03 · chat            |
-|                              |  FILES         SKILL.md, scripts/send.sh       |
-|                              |  -------------------------------------------   |
-|                              |  (SKILL.md rendered as Markdown)               |
-+------------------------------+------------------------------------------------+
++----------------------------------------------------------------------------------+
+| Skills                                         LOAD SKILLS [on]   [+ Install]    |
+|----------------------------------------------------------------------------------|
+|  [Installed | Store]                                       [ search skills   ]   |
+|  1 OF 4 LOADED   ~/.morph/skills                                                 |
+|  +-------------------------+ +-------------------------+ +---------------------+ |
+|  | ■ jsonbill        [on]  | | □ weather         [off] | | □ inventory-cli ... | |
+|  | Generate PDF invoices…  | | Look up forecasts…      | | Track inventory…    | |
+|  | - - - - - - - - - - - - | | - - - - - - - - - - - - | | - - - - - - - - - - | |
+|  | STORE V1.0.0  UPDATE    | | SOMEONE/SKILLS  curl    | | LOCAL  inventory    | |
+|  +-------------------------+ +-------------------------+ +---------------------+ |
++----------------------------------------------------------------------------------+
+
+side sheet:  [x] jsonbill                                  ■ LOADED [on]
+             Generate PDF invoices…
+             ! Changed since install: SKILL.md.   (when checksums differ)
+             ↻ Version 1.1.0 is in the store. [Update]
+             SOURCE     Store v1.0.0 @ 3f9c2e1   (links to the pinned folder)
+             INSTALLED  2026-09-20
+             ID / LOCATION / REQUIRES / AUTH PROFILE / FILES
+             > SKILL.md                            (collapsed; rendered on open)
+             To remove a skill, delete its folder.
 ```
 
-- Index rows: name, one-line description and a square status mark (filled = loaded, hollow =
-  available but not loaded), the same marks used for agents.
-- Header: the global Enable switch (`skills.enabled`) and an Install button. On mobile the
-  install action is the floating add button, as on Chat and TODO.
-- Detail: facts in the mono datasheet style used by Usage, then the rendered `SKILL.md`,
-  read-only, without its frontmatter. The content is untrusted; the console's markdown renderer
-  (the one chat uses) was checked against it: `<script>` is dropped, event-handler attributes
-  are stripped and `javascript:` links lose their href.
-- The per-skill switch moves into the detail header. Changes save immediately (one small
-  config write) instead of through a save bar, so this page has no pending-changes state.
+- Cards: name, square status mark (filled = loaded), a switch, a three-line description, and a
+  footer with the source tag (Store vX / owner/repo / Link / Local), Update and Edited tags and
+  the requirements.
+- The switches save immediately (one small config write); the page has no pending state.
 - `skills.load` cannot express "none" (empty means all), so switching off the last loaded skill
   turns skills off and keeps the list, and switching one on while skills are off loads just
   that one (`core/skills-load.js`). The old Settings switches turned "none" into "all".
-- Empty state: explains where skills live and offers Install.
+- The rendered `SKILL.md` is untrusted; the console's markdown renderer (the one chat uses) was
+  checked against it: `<script>` is dropped, event-handler attributes are stripped and
+  `javascript:` links lose their href. It is collapsed by default so the summary and files
+  come first.
+- Mobile: the Install action is the floating add button, as on Chat and TODO.
+- Empty state: offers Install from a link and Browse the store.
 
 ### 3.3 API
 
@@ -91,12 +99,12 @@ is loaded (`internal/agentsettings/skills_catalog.go`).
 
 | Route | Purpose |
 | --- | --- |
-| `GET /settings/agent/skills` | Enabled flag, load list, skills roots, read-only state, config revision, and every discovered skill with id, name, description, dir, requirements, auth profiles, loaded flag and file list (dot-folders skipped, capped at 200 files). |
+| `GET /settings/agent/skills` | Enabled flag, load list, skills roots, read-only state, config revision, and every discovered skill with id, name, description, dir, requirements, auth profiles, loaded flag, file list (dot-folders and the provenance file skipped, capped at 200 files), `source` (from provenance, with `installed_at`) and `modified` (files whose checksum changed since install). |
 | `GET /settings/agent/skills/detail?id=<id>` | The same fields plus `SKILL.md` content, capped at 256 KiB. Only discovered skills are readable, so an id cannot reach outside the skills roots. |
-| (existing) agent settings update | Switches keep using the agent settings API's `skills: {enabled, load}` update, as Settings did, so no new write route is needed. |
+| `GET /settings/agent/skills/store` | The store index (`skills.store.index_url`, cached for 10 minutes) with `installed`, `installed_version` and `update_available` per entry, matched through provenance `store_id`. 502 when the store cannot be reached. |
+| (existing) agent settings update | Switches use the agent settings API's `skills: {enabled, load}` update. |
 
-Agents without these routes answer 404; the page then shows an "update this agent" notice,
-as the daily usage chart does.
+Agents without these routes answer 404; the page then shows an "update this agent" notice.
 
 ### 3.4 Last used
 
@@ -114,71 +122,67 @@ optional for Stage 1; the page works without it.
 Installing a skill is an ordinary agent task, so it appears in the topics list like any other
 conversation, with its review and outcome kept in the history:
 
-1. Skills page → Install → paste a link. The console starts a task in a new topic
-   ("Install skill: <link>") and opens it.
-2. Chat: the user pastes a link into any topic and asks the agent to install it.
-3. Store (Stage 3): Install on a store card starts the same task with the store entry.
+1. Skills page → Install → paste a link. The console posts a task in a new topic and opens it.
+2. Chat: the user pastes a link into a console topic and asks the agent to install it.
+3. Store: Install or Update on a store card starts the same task with the store id.
 
-In all three the agent does the same thing: it calls `skill_install_preview`, explains the
-result in the conversation (what the skill does, its files, requirements and risks), and then
-calls `skill_install`. `skill_install` always requires approval through the existing approval
-card, so nothing is installed until the user approves in that topic; the agent can prepare an
-install but never approve one. The user can ask follow-up questions about the skill before
-approving.
+The task text (localised, `skills_install_task_*`) asks the agent to call
+`skill_install_preview`, explain what the skill does and every risk, and then call
+`skill_install`. `skill_install` always needs approval (§4.3), so nothing is installed until the
+user approves in that topic. The user can ask follow-up questions before approving.
 
-The Skills page shows installs in progress (a row linking to the task's topic) and refreshes
-when a task installs a skill.
-
-Both tools share one backend package (`internal/skillinstall`) extracted from the CLI
-command. The CLI keeps its TTY prompts on top of the same package.
+The tools live in `internal/skillinstall` and are registered only in the console runtime's task
+registry (`consolecmd/skill_install.go`); channels build their own registries and do not get
+them. The existing CLI `skills install` command is unchanged.
 
 ### 4.2 Accepted links
 
 | Link | Handling |
 | --- | --- |
-| Raw `SKILL.md` URL | As today. |
-| `github.com/<owner>/<repo>/blob/<ref>/…/SKILL.md` | Rewritten to the raw URL. |
-| `github.com/<owner>/<repo>/tree/<ref>/<dir>` | The skill directory: list files with the GitHub contents API and take the whole directory (limits below). |
-| `github.com/<owner>/<repo>` | Look for `SKILL.md` at the root, then `skills/*/SKILL.md`; if several are found, the preview asks which. |
-| Anything else | Rejected with a clear message. |
+| `github.com/<owner>/<repo>/tree/<ref>/<dir>` | The skill folder, listed with the git trees API. |
+| `github.com/<owner>/<repo>/blob/<ref>/…/SKILL.md`, `raw.githubusercontent.com/…/SKILL.md` | The folder containing that `SKILL.md`. |
+| `github.com/<owner>/<repo>` | `SKILL.md` at the root, else the only `<dir>/SKILL.md` or `skills/<dir>/SKILL.md`; with several, the preview lists them and the agent asks which. |
+| Any other `https://…/SKILL.md` | That single file. |
+| Anything else (including http) | Rejected. |
 
-For GitHub directories the file list is deterministic, so the LLM file extraction is skipped;
-the reviewer is still used for the risk review. Refs are resolved to a commit SHA at preview
-time, and the install uses that SHA, so what gets installed is what was reviewed.
+GitHub refs are resolved to a commit SHA at preview time and every file is fetched at that SHA.
 
-Limits: https only (the CLI also allows http; the console should not), 512 KiB per file, 2 MiB
-and 50 files per skill, no symlinks, no files outside the skill directory, and no binaries:
-every file must be text (UTF-8, no NUL bytes). The same rule applies to the store.
+Limits (same for the store): 512 KiB per file, 2 MiB and 50 files per skill, no symlinks, safe
+relative paths only, and text only (UTF-8, no NUL bytes).
 
 ### 4.3 Flow
 
 ```text
-task: "Install skill: <link>"
-  agent ──> skill_install_preview {link}
-              resolve link → pin commit → download into a temp dir
-              parse frontmatter, list files, reject binaries and over-limit files
-              LLM review (untrusted content; risks only, no instructions followed)
-              heuristic risk scan (curl|bash, credentials, remote exec, …)
-            <── preview_id, name, description, source, commit, files + sizes,
-                SKILL.md text, requirements, auth profiles, risks,
-                conflict (same id already installed)
+task (new topic)
+  agent ──> skill_install_preview {link | store_id}
+              resolve link → pin commit → download → check limits
+              store: commit and every sha256 must match index.json
+              heuristic risk scan (curl|sh, sudo, credential files, …)
+              separate LLM review: sees SKILL.md as data only (untrusted-data prompt, JSON out)
+              stage files under <state>/skill_install_staging/<preview_id>
+            <── {preview: id, skill_id, name, description, source, files + sha256,
+                 requirements, auth_profiles, risks, review, conflict, expires_at},
+                next_step
   agent explains the preview in the conversation
-  agent ──> skill_install {preview_id, replace?}
-              approval card in the topic ── user approves or denies
-              re-verify checksums of the previewed files, move into place,
-              write provenance, switch the skill on
+  agent ──> skill_install {preview_id, name, source, commit, replace?}
+              approval card (params: name, source, commit, replace) ── approve / deny
+              name, source and commit must equal the preview's; checksums re-verified
+              move into <skills root>/<skill_id>, write provenance, switch the skill on
             <── installed skill
 ```
 
-- The preview is stored server-side under a short-lived id; `skill_install` accepts only that
-  id, so the files installed are byte-for-byte the files that were reviewed and approved.
-- Nothing downloaded is ever executed during preview or install.
-- New installs are switched on immediately: added to `skills.load` when a load list is in use
-  (with an empty list every discovered skill is already loaded).
-- A same-id conflict is part of the preview; approving with `replace` keeps the old copy as
-  `<dir>.bak-<time>` until the install succeeds.
-- The approval card shows the skill name, source, commit, file list and risks, so the decision
-  can be made from the card alone.
+- The agent never sees the raw `SKILL.md` during a preview, only the reviewer's summary, the
+  risk list and the file list, so a malicious skill cannot instruct the installing agent.
+- Previews are single use and expire after 30 minutes.
+- Approval is forced for `skill_install` (`guard/forced.go`): it asks even when the guard is
+  disabled, and if approvals are unavailable the call is denied. The approvals store is now
+  always created so this works with `guard.enabled: false`.
+- Nothing downloaded is executed during preview or install.
+- New installs are switched on immediately (`agentsettings.EnableSkill`): with skills off, skills
+  are turned on with a load list of just the new skill; with an empty or `*` list nothing
+  changes; otherwise the id is appended.
+- A same-id conflict is part of the preview; `replace` keeps the old copy as `<dir>.bak-<time>`
+  until the install succeeds, and restores it on failure.
 
 ### 4.4 Provenance, update and removal
 
@@ -186,72 +190,68 @@ Each installed skill gets `.mistermorph-skill.json`:
 
 ```json
 {
-  "source": "github",
-  "url": "https://github.com/acme/skills/tree/main/pdf-tools",
-  "commit": "3f9c2e1…",
+  "source": {
+    "kind": "store",
+    "url": "https://github.com/quailyquaily/morph-skill-store/tree/3f9c2e1…/skills/weather",
+    "repo": "quailyquaily/morph-skill-store",
+    "path": "skills/weather",
+    "commit": "3f9c2e1…",
+    "store_id": "weather",
+    "version": "1.0.0"
+  },
   "installed_at": "2026-09-26T08:00:00Z",
-  "files": { "SKILL.md": "sha256:…", "scripts/run.sh": "sha256:…" },
-  "store": null
+  "files": { "SKILL.md": "<sha256>", "skill.yaml": "<sha256>" }
 }
 ```
 
-It powers the Source row, "modified locally" (checksums differ) and "update available"
-(Stage 3). Skills without the file are shown as "local".
+`kind` is `github`, `url` or `store`. It powers the Source row, Edited (checksums differ) and
+Update (store version differs). Skills without the file are shown as Local.
 
 Removing a skill is deleting its folder under the skills root; there is no uninstall flow.
-Discovery simply stops finding it, and an id left in `skills.load` is ignored (unknown entries
-already are).
 
 ## 5) Stage 3: the skill store
 
 ### 5.1 Repository
 
-The **Morph Skill Store**, [quailyquaily/morph-skill-store](https://github.com/quailyquaily/morph-skill-store)
-(created, empty so far), accepts third-party skills by pull request:
+The **Morph Skill Store**, [quailyquaily/morph-skill-store](https://github.com/quailyquaily/morph-skill-store),
+accepts third-party skills by pull request:
 
 ```text
 skills/
-  <skill-id>/
-    SKILL.md
-    skill.yaml        # store manifest
-    scripts/…         # optional
+  <id>/
+    SKILL.md          # frontmatter name must match <id>
+    skill.yaml        # version, description, author, license, homepage?, tags?
+    …                 # optional text files
+schema/skill.schema.json
+scripts/build_index.py
 index.json            # generated by CI, never edited by hand
 ```
 
-`skill.yaml`: id, name, version (semver), author, license, homepage, short description,
-tags, requirements, auth profiles, minimum mistermorph version.
+CI:
 
-CI on every PR:
+- Pull requests (`validate.yml`): `build_index.py --check --base origin/main` validates
+  manifests and frontmatter, limits, text-only files and safe names; rejects curl|sh, base64|sh,
+  instruction-override text and request-collector URLs; warns on sudo, rm -rf, credential files,
+  plain http and scripts; requires a version bump for changed skills; refuses hand edits to
+  `index.json`. Maintainer review is required to merge.
+- Main (`index.yml`): rebuilds `index.json` (each skill's fields, the last commit that touched its
+  folder, per-file SHA-256, total size) and commits it if it changed.
 
-- lint frontmatter and manifest; id unique and matching the directory; size limits; text
-  files only (binaries are rejected);
-- a static risk scan, reported on the PR (the same heuristics as §4.3);
-- maintainer review is required to merge.
-
-On merge, CI rebuilds `index.json`: every skill with its manifest fields, the commit it was
-last changed in, and per-file SHA-256 checksums. It is served from the repository itself
-(raw URL on the default branch) and its URL is a config key (`skills.store.index_url`,
-default the Morph Skill Store) so forks and private stores work.
+The console reads it from the raw URL on `main`; `skills.store.index_url` overrides it for forks
+and private stores.
 
 ### 5.2 In the console
 
-- The page gets two tabs: Installed and Store.
-- Store: search and tag filter over `index.json` (cached, refreshed on open), cards with
-  name, author, description and tags, and an Installed badge.
-- Install from the store starts the same install task (§4.1), pinned to the index commit and
-  verified against the index checksums. The LLM review still runs as a second check after the
-  store's own review; store skills are marked "reviewed by the store" and risks are still
-  listed.
-- Installed skills whose provenance points at the store show "Update available" when the
-  index version is newer; Update starts an install task with `replace`, and the preview
-  includes a diff of changed files.
+- Store tab: search (name, id, description, tags) and cards with name, version, description,
+  author, license, file count and size, tags, and Install / Installed / Update to vX.
+- Install starts the task of §4.1 with `store_id`; the preview is pinned to the index commit and
+  checked against the index checksums, and the LLM review still runs as a second check.
+- The store loads in the background on page open so installed cards can show Update.
 
-### 5.3 Trust levels
+### 5.3 Trust
 
-| Source | Badge | Preview |
-| --- | --- | --- |
-| Store | Store | Full preview; risks listed. |
-| Any other link | Unreviewed | Full preview; a warning that nobody else has reviewed it. |
+Store skills show "Store vX" and link-installed ones their repository; both get the same
+preview, risk list and approval. There is no separate "unreviewed" badge yet.
 
 ## 6) Security
 
@@ -259,23 +259,20 @@ Skills are instructions the agent follows, and they can ship scripts the agent m
 `bash`. A malicious skill is effectively a prompt injection with tools.
 
 - Install never runs anything; files only land inside the skills root.
-- Every install is a task whose preview the agent explains in the conversation, and
-  `skill_install` always needs the user's approval in that topic.
-- Pinned commits plus checksums: installed files are exactly the reviewed files.
-- The LLM reviewer treats the content as untrusted and only lists files and risks; its output
-  is advisory and never used to decide what to run.
-- Provenance lets users see where every skill came from and remove it.
-- `requirements` and `auth_profiles` are displayed before install, so users see what a skill
-  expects to use.
+- The installing agent sees a summary from an isolated reviewer, never the skill text itself.
+- `skill_install` always needs the user's approval, even with the guard off.
+- Pinned commits plus checksums: installed files are exactly the previewed files, and store
+  installs are exactly the store's files.
+- Provenance lets users see where every skill came from and whether it was edited.
 
 ## 7) Stages and tests
 
 | Stage | Scope | Tests |
 | --- | --- | --- |
-| 1 (done) | Skills page; `GET /settings/agent/skills` and `/skills/detail`; switches through the existing settings update; Settings section removed; sidebar and mobile entries | Catalog and route tests with a temp skills dir; `skills-load` toggle tests; page source tests; screenshots at desktop and 390 px |
-| 1b | `skill_used` event and last-used projection | Projection tests |
-| 2 | `internal/skillinstall` extracted from the CLI; GitHub link resolution; `skill_install_preview` and `skill_install` tools for the console runtime only (install behind approval); Install on the Skills page starts a task in a new topic; provenance | Link resolution table tests; limits, path safety and binary rejection; preview-id binding; checksum re-verify; `skill_install` refuses without approval; new install switched on |
-| 3 | Store repo with CI and `index.json`; Store tab; update flow | Index schema tests; install-from-index checksum mismatch rejected; update diff |
+| 1 (done) | Skills page; catalog and detail routes; switches; Settings section removed; nav entries | Catalog/route tests; `skills-load` tests; page source tests; screenshots |
+| 1b | `skill_used` event and last-used projection | — |
+| 2 (done) | `internal/skillinstall`; forced approval; console-only tools; Install dialog starts a task in a new topic; provenance; `EnableSkill` | Link table, limits, symlinks, binaries, repo candidates, single-use previews, mismatch refusal, checksum re-verify, replace/backup, forced approval with guard off, `EnableSkill` cases, tool registration |
+| 3 (done) | Store repo scaffold (CI, schema, seed skills); store route; Store tab; Update | Index validation, store checksum mismatch rejected, store view install/update flags, end-to-end run of a CI-built index through preview and install |
 
 ## 8) Decisions
 

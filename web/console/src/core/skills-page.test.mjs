@@ -28,3 +28,11 @@ test("Skills sits after TODO in the navigation", async () => {
   assert.match(source, /\{ id: "\/todo", titleKey: "nav_todo"[^}]*\},\n  \{ id: "\/skills", titleKey: "nav_skills", icon: "PhMagicWand" \}/);
   assert.match(source, /path: `\$\{ENDPOINT_SCOPE_PATH\}\/skills`, component: SkillsView/);
 });
+
+test("the Skills page installs through a chat task and reads the store", async () => {
+  const source = await read("../views/SkillsView.js");
+  assert.match(source, /runtimeApiFetchForEndpoint\(endpointRef, "\/tasks", \{ method: "POST", body: \{ task \} \}\)/);
+  assert.match(source, /endpointRoutePath\(endpointRef, topicID \? `\/chat\/\$\{encodeURIComponent\(topicID\)\}` : "\/chat"\)/);
+  assert.match(source, /"\/settings\/agent\/skills\/store"/);
+  assert.match(source, /<AppTabs/);
+});
