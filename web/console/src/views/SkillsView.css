@@ -1,5 +1,5 @@
-/* Skills: the installed skills and the store as framed datasheets of rows; a skill opens in a
-   side sheet. The page body already carries the side gutter, so nothing here adds one. */
+/* Skills: one framed list with a switch per skill; a skill opens in a side sheet. The page
+   body already carries the side gutter, so nothing here adds one. */
 .skills-page,
 .skills-sheet-layer {
   --skills-accent: color-mix(in srgb, var(--accent-1) 68%, var(--text-0) 32%);
@@ -7,69 +7,12 @@
   --skills-row-hover: color-mix(in srgb, var(--q-c-blue) 4%, transparent);
 }
 
-/* Page bar: title and tabs on the left, search, the global switch and Install on the right. */
-.skills-bar-leading {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  min-width: 0;
-}
-
-.skills-bar-leading .skills-bar-title {
-  flex: 0 0 auto;
-}
-
-.skills-tabs {
-  flex: 0 0 auto;
-}
-
-.skills-search {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  width: 220px;
-  min-width: 0;
-  height: 30px;
-  padding: 0 10px;
-  border: 1px solid var(--line);
-  border-radius: 2px;
-  background: var(--q-bg-white);
-  color: var(--text-2);
-  transition: border-color var(--motion-fast) var(--motion-ease);
-}
-
-.skills-search:focus-within {
-  border-color: var(--text-1);
-}
-
-.skills-search .icon {
-  flex: 0 0 auto;
-  width: 14px;
-  height: 14px;
-}
-
-.skills-search input {
-  flex: 1 1 auto;
-  min-width: 0;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: var(--text-0);
-  font: inherit;
-  font-size: var(--font-size-meta);
-}
-
-.skills-search input::-webkit-search-cancel-button {
-  display: none;
-}
-
 .skills-master {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   height: 30px;
-  padding: 0 4px 0 12px;
-  border-left: 1px solid var(--line-soft);
+  padding: 0 4px;
   cursor: pointer;
 }
 
@@ -128,16 +71,6 @@ body .skills-sheet .q-button.xs.icon .button-inner {
   padding-bottom: 32px;
 }
 
-.skills-toolbar {
-  display: grid;
-  gap: 10px;
-}
-
-.skills-toolbar .skills-search {
-  width: 100%;
-  height: 34px;
-}
-
 .skills-notice {
   margin: 0;
   color: var(--text-2);
@@ -149,133 +82,84 @@ body .skills-sheet .q-button.xs.icon .button-inner {
   color: var(--danger);
 }
 
-/* The panel: a drawing sheet with registration marks, as on the Usage page. */
-.skills-panel {
+.skills-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: var(--q-bg-white);
+  color: var(--text-2);
+  transition: border-color var(--motion-fast) var(--motion-ease);
+}
+
+.skills-search:focus-within {
+  border-color: var(--text-1);
+}
+
+.skills-search .icon {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+}
+
+.skills-search input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text-0);
+  font: inherit;
+  font-size: var(--font-size-meta);
+}
+
+/* The list: a drawing sheet with registration marks, as on the Usage page. */
+.skills-list {
   position: relative;
   display: grid;
-  align-content: start;
-  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
   border: 1px solid var(--skills-rule);
   background: var(--q-card-bg, var(--q-bg-white));
 }
 
-.skills-panel::before,
-.skills-panel::after {
+.skills-list::before,
+.skills-list::after {
   content: "";
   position: absolute;
+  z-index: 2;
   width: 12px;
   height: 12px;
   border: 0 solid color-mix(in srgb, var(--skills-accent) 72%, transparent);
   pointer-events: none;
 }
 
-.skills-panel::before {
+.skills-list::before {
   top: -1px;
   left: -1px;
   border-top-width: 2px;
   border-left-width: 2px;
 }
 
-.skills-panel::after {
+.skills-list::after {
   right: -1px;
   bottom: -1px;
   border-right-width: 2px;
   border-bottom-width: 2px;
 }
 
-.skills-panel-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 6px 16px;
-  padding: 16px 20px 14px;
-  border-bottom: 1px solid var(--skills-rule);
-}
-
-.skills-panel-heading {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px 12px;
-  min-width: 0;
-}
-
-.skills-panel-title {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0;
-  color: var(--text-0);
-  font: 600 var(--font-size-meta) / 1.4 var(--font-mono);
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-.skills-panel-title::before {
-  content: "";
-  width: 6px;
-  height: 6px;
-  background: var(--skills-accent);
-}
-
-.skills-panel-sub {
-  min-width: 0;
-  color: var(--text-2);
-  font: 400 10.5px/1.4 var(--font-mono);
-  overflow-wrap: anywhere;
-}
-
-.skills-panel-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  color: var(--q-c-blue);
-  text-decoration: none;
-}
-
-.skills-panel-link:hover {
-  text-decoration: underline;
-}
-
-.skills-panel-link .icon {
-  width: 11px;
-  height: 11px;
-}
-
-.skills-panel-count {
-  color: var(--text-1);
-  font: 500 10px/1.4 var(--font-mono);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.skills-panel-count.is-off {
-  color: var(--text-2);
-}
-
-.skills-panel > .app-skeleton,
-.skills-panel > .skills-empty-note {
-  margin: 16px 20px;
-}
-
-/* Rows: mark, name and description, requirements, switch, caret. The whole row opens the
-   skill; the switch and buttons sit above that. */
-.skills-rows {
-  display: grid;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
+/* A row is the skill's name and description with its switch; the whole row opens the skill. */
 .skills-row {
   position: relative;
   display: grid;
-  grid-template-columns: 8px minmax(0, 1fr) minmax(0, 200px) auto 14px;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 16px;
-  min-height: 64px;
+  gap: 20px;
+  min-height: 60px;
   padding: 12px 20px;
   border-top: 1px dashed var(--line-soft);
   transition: background-color var(--motion-fast) var(--motion-ease);
@@ -285,7 +169,7 @@ body .skills-sheet .q-button.xs.icon .button-inner {
   border-top: 0;
 }
 
-.skills-row:not(.is-store):hover,
+.skills-row:hover,
 .skills-row.is-active {
   background: var(--skills-row-hover);
 }
@@ -298,12 +182,6 @@ body .skills-sheet .q-button.xs.icon .button-inner {
   left: 0;
   width: 2px;
   background: var(--skills-accent);
-}
-
-.skills-row.is-store {
-  grid-template-columns: 32px minmax(0, 1fr) auto;
-  align-items: start;
-  padding: 16px 20px;
 }
 
 .skills-row-open {
@@ -323,30 +201,16 @@ body .skills-sheet .q-button.xs.icon .button-inner {
   outline-offset: -2px;
 }
 
-.skills-row-switch,
-.skills-row-action,
-.skills-row a {
+.skills-row-switch {
   position: relative;
   z-index: 1;
 }
 
 .skills-row-main {
   display: grid;
-  gap: 4px;
+  gap: 3px;
   min-width: 0;
   pointer-events: none;
-}
-
-.skills-row.is-store .skills-row-main {
-  pointer-events: auto;
-}
-
-.skills-row-titleline {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 8px;
-  min-width: 0;
 }
 
 .skills-row-name {
@@ -358,15 +222,7 @@ body .skills-sheet .q-button.xs.icon .button-inner {
   line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.skills-row:not(.is-on):not(.is-store) .skills-row-name {
-  color: var(--text-1);
-}
-
-.skills-row-version {
-  color: var(--text-2);
-  font: 400 10.5px/1 var(--font-mono);
+  transition: color var(--motion-fast) var(--motion-ease);
 }
 
 .skills-row-desc {
@@ -380,132 +236,15 @@ body .skills-sheet .q-button.xs.icon .button-inner {
   -webkit-line-clamp: 2;
 }
 
-.skills-row-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2px 12px;
-  margin: 2px 0 0;
+/* Skills that are off read quieter, so the loaded ones stand out without a second marker. */
+.skills-row:not(.is-on) .skills-row-name {
   color: var(--text-2);
-  font: 400 10px/1.5 var(--font-mono);
-}
-
-.skills-row-reqs {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--text-2);
-  font: 400 10px/1.4 var(--font-mono);
-  text-align: right;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  pointer-events: none;
-}
-
-.skills-row-caret {
-  width: 14px;
-  height: 14px;
-  color: var(--text-2);
-  pointer-events: none;
-  transition: translate var(--motion-fast) var(--motion-ease);
-}
-
-.skills-row:hover .skills-row-caret {
-  translate: 2px 0;
-  color: var(--text-0);
-}
-
-.skills-row-action {
-  display: flex;
-  align-items: center;
-  min-height: 28px;
-}
-
-/* The store rows' initial: a small drafted plate instead of an icon nobody drew. */
-.skills-glyph {
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  border: 1px solid var(--skills-rule);
-  border-radius: 2px;
-  color: var(--skills-accent);
-  font: 600 13px/1 var(--font-mono);
-}
-
-.skills-tag {
-  display: inline-flex;
-  align-items: center;
-  max-width: 100%;
-  padding: 1px 5px;
-  overflow: hidden;
-  border: 1px solid var(--line-soft);
-  border-radius: 2px;
-  color: var(--text-1);
-  font: 500 9px/1.4 var(--font-mono);
-  letter-spacing: 0.06em;
-  text-overflow: ellipsis;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.skills-tag.is-local {
-  border-style: dashed;
-  color: var(--text-2);
-}
-
-.skills-tag.is-plain {
-  border-color: transparent;
-  background: color-mix(in srgb, var(--text-2) 8%, transparent);
-  color: var(--text-2);
-  text-transform: none;
-}
-
-.skills-tag.is-update {
-  border-color: color-mix(in srgb, var(--q-c-blue) 45%, transparent);
-  color: var(--q-c-blue);
-}
-
-.skills-tag.is-warn {
-  border-color: color-mix(in srgb, var(--danger) 40%, transparent);
-  color: var(--danger);
-}
-
-.skills-installed {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  height: 28px;
-  color: var(--text-2);
-  font: 500 10px/1 var(--font-mono);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.skills-installed .icon {
-  width: 13px;
-  height: 13px;
-  color: var(--status-on);
-}
-
-/* Loaded is a filled square, not loaded a hollow one: the console's status marks. */
-.skills-mark {
-  display: inline-block;
-  flex: 0 0 auto;
-  width: var(--status-mark-size);
-  height: var(--status-mark-size);
-  border: 1px solid var(--status-off);
-  border-radius: 1px;
-}
-
-.skills-mark.is-on {
-  border-color: var(--status-on);
-  background: var(--status-on);
 }
 
 .skills-empty {
   display: grid;
   justify-items: start;
-  gap: 8px;
-  margin: 16px 20px 20px;
+  gap: 6px;
   padding: 18px;
   border: 1px dashed var(--line);
   border-radius: 2px;
@@ -522,13 +261,6 @@ body .skills-sheet .q-button.xs.icon .button-inner {
   font-size: var(--font-size-meta);
   line-height: 1.5;
   overflow-wrap: anywhere;
-}
-
-.skills-empty-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 4px;
 }
 
 /* Side sheet: slides in from the right over a light scrim; full screen on phones. */
@@ -574,33 +306,15 @@ body .skills-sheet .q-button.xs.icon .button-inner {
 .skills-sheet-head {
   display: grid;
   gap: 8px;
-  padding: 14px 24px 18px;
+  padding: 18px 16px 18px 24px;
   border-bottom: 1px solid var(--line-soft);
 }
 
-.skills-sheet-topline {
-  display: flex;
+.skills-sheet-titleline {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
-  margin-right: -8px;
-}
-
-.skills-sheet-kicker {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--text-2);
-  font: 600 10px/1.4 var(--font-mono);
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-.skills-sheet-kicker::before {
-  content: "";
-  width: 6px;
-  height: 6px;
-  background: var(--skills-accent);
 }
 
 .skills-sheet-title {
@@ -613,34 +327,10 @@ body .skills-sheet .q-button.xs.icon .button-inner {
 
 .skills-sheet-desc {
   margin: 0;
+  padding-right: 8px;
   color: var(--text-1);
   font-size: var(--font-size-ui);
   line-height: 1.55;
-}
-
-.skills-sheet-toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-self: start;
-  gap: 8px;
-  margin-top: 6px;
-  padding: 6px 8px 6px 10px;
-  border: 1px solid var(--line-soft);
-  border-radius: 2px;
-  cursor: pointer;
-}
-
-.skills-sheet-state {
-  min-width: 88px;
-  color: var(--text-2);
-  font: 500 10px/1 var(--font-mono);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.skills-sheet-state.is-on {
-  color: var(--text-0);
 }
 
 .skills-sheet-body {
@@ -665,7 +355,7 @@ body .skills-sheet .q-button.xs.icon .button-inner {
   gap: 8px;
   margin: 0;
   padding: 8px 10px;
-  border: 1px solid color-mix(in srgb, var(--q-c-blue) 35%, transparent);
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent);
   border-radius: 2px;
   color: var(--text-1);
   font-size: var(--font-size-meta);
@@ -682,14 +372,6 @@ body .skills-sheet .q-button.xs.icon .button-inner {
   flex: 0 0 auto;
   width: 14px;
   height: 14px;
-  color: var(--q-c-blue);
-}
-
-.skills-callout.is-warn {
-  border-color: color-mix(in srgb, var(--danger) 35%, transparent);
-}
-
-.skills-callout.is-warn .icon {
   color: var(--danger);
 }
 
@@ -740,22 +422,8 @@ body .skills-sheet .q-button.xs.icon .button-inner {
   text-decoration: underline;
 }
 
-.skills-fact-sub {
-  margin-left: 6px;
-  color: var(--text-2);
-}
 
-.skills-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
 
-.skills-tags code {
-  padding: 1px 6px;
-  border: 1px solid var(--line-soft);
-  border-radius: 2px;
-}
 
 .skills-files {
   display: grid;
@@ -909,11 +577,6 @@ body .skills-sheet .q-button.xs.icon .button-inner {
   line-height: 1.5;
 }
 
-.skills-remove-path {
-  color: var(--text-1);
-  font: 400 11px/1.5 var(--font-mono);
-  overflow-wrap: anywhere;
-}
 
 .skills-remove-actions {
   display: flex;
@@ -935,12 +598,6 @@ body .skills-sheet .q-button.xs.icon .button-inner {
   padding-top: 14px;
 }
 
-.skills-dialog-label {
-  color: var(--text-2);
-  font: 500 10px/1.4 var(--font-mono);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
 
 
 
@@ -958,55 +615,13 @@ body .skills-sheet .q-button.xs.icon .button-inner {
   margin-top: 6px;
 }
 
-@media (max-width: 1180px) {
-  .skills-row {
-    grid-template-columns: 8px minmax(0, 1fr) auto 14px;
-  }
-
-  .skills-row-reqs {
-    display: none;
-  }
-
-  .skills-search {
-    width: 160px;
-  }
-}
-
 @media (max-width: 920px) {
   .skills-shell {
     padding-bottom: calc(var(--mobile-nav-height, 0px) + 96px);
   }
 
-  .skills-master {
-    border-left: 0;
-  }
-
-  .skills-panel-head {
-    padding: 14px 16px 12px;
-  }
-
   .skills-row {
-    grid-template-columns: 8px minmax(0, 1fr) auto;
-    gap: 12px;
     padding: 12px 16px;
-  }
-
-  .skills-row-caret {
-    display: none;
-  }
-
-  .skills-row.is-store {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 10px;
-    padding: 14px 16px;
-  }
-
-  .skills-row.is-store .skills-glyph {
-    display: none;
-  }
-
-  .skills-row.is-store .skills-row-action {
-    justify-content: flex-start;
   }
 
   .skills-sheet {
@@ -1015,7 +630,7 @@ body .skills-sheet .q-button.xs.icon .button-inner {
   }
 
   .skills-sheet-head {
-    padding: calc(env(safe-area-inset-top, 0px) + 10px) 16px 16px;
+    padding: calc(env(safe-area-inset-top, 0px) + 12px) 8px 16px 16px;
   }
 
   .skills-sheet-body {

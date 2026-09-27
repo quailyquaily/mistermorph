@@ -47,40 +47,32 @@ behind an API and adds provenance.
 
 ### 3.2 Layout
 
-The page bar holds the title and the Installed / Store tabs (as TODO does), then search, the
-global switch and Install. The body is one framed panel in the Usage page's drawing-sheet
-style (registration marks, mono header), with one row per skill. A row opens the skill in a
-side sheet (full screen on phones). The page body's gutter is the only side padding.
+The page shows only what is needed to manage skills and add new ones.
 
 ```text
-Skills  [Installed|Store]                 [search skills]  LOAD SKILLS [on]  [+ Install]
-┌──────────────────────────────────────────────────────────────────────────────────────┐
-│ ■ INSTALLED  ~/.morph/skills                                          1 OF 4 LOADED  │
-├──────────────────────────────────────────────────────────────────────────────────────┤
-│ ■  jsonbill  STORE V1.0.0  UPDATE                    http_client · file_io   [on]  › │
-│    Generate PDF invoices from JSON…                                                  │
-│ - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -  │
-│ □  weather  SOMEONE/SKILLS                                        curl       [off] › │
-│    Look up forecasts with wttr.in…                                                   │
-└──────────────────────────────────────────────────────────────────────────────────────┘
+Skills                                               LOAD SKILLS [on]  [+ Add skill]
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│ jsonbill                                                                   [on]  │
+│ Generate PDF invoices from JSON…                                                 │
+│ - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -  │
+│ weather                                                                    [off] │
+│ Look up forecasts with wttr.in…                                                  │
+└──────────────────────────────────────────────────────────────────────────────────┘
 
-side sheet:  ■ SKILL                                                       [x]
-             jsonbill
+side sheet:  jsonbill                                         [switch]  [x]
              Generate PDF invoices…
-             [□ NOT LOADED  (switch)]
-             ! Changed since install: SKILL.md.   (when checksums differ)
-             ↻ Version 1.1.0 is in the store. [Update]
-             SOURCE / INSTALLED / LOCATION / REQUIRES / AUTH PROFILE / FILES
-             > SKILL.md                            (collapsed; rendered on open)
+             ! Edited since it was added: SKILL.md.   (only when checksums differ)
+             SOURCE    owner/repo @ 3f9c2e1 · 2026-09-20   (only for skills added from a link)
+             LOCATION / REQUIRES / AUTH PROFILE / FILES   (rows only when they have values)
+             > SKILL.md                                    (collapsed)
              ─────────────────────────────────────────────
-             [Remove]  → Remove jsonbill? …folder…  [Cancel] [Remove]
+             [Remove]  → Remove jsonbill? …  [Cancel] [Remove]
 ```
 
-- Installed rows: status mark (filled = loaded), name, source tag (Store vX / owner/repo /
-  Link / Local), Update and Edited tags, a two-line description, the requirements (hidden
-  below 1180 px) and a compact switch.
-- Store rows: an initial plate, name, version, tags, description, author, license, size, and
-  Install / Installed / Update to vX.
+- A row is the name, the description and a switch; the switch is the loaded state, and skills
+  that are off have a quieter name. Search appears only when there are more than 8 skills.
+- Add skill (the floating button on phones) asks for a link and starts the install task.
+- The Store tab is not on the page for now; the store route and tools stay in the backend.
 - The switches save immediately (one small config write); the page has no pending state.
 - `skills.load` cannot express "none" (empty means all), so switching off the last loaded skill
   turns skills off and keeps the list, and switching one on while skills are off loads just
@@ -247,6 +239,9 @@ The console reads it from the raw URL on `main`; `skills.store.index_url` overri
 and private stores.
 
 ### 5.2 In the console
+
+Not on the page for now (the Store tab was taken out to keep the page to managing and adding
+skills). The backend below is in place for when it returns.
 
 - Store tab: search (name, id, description, tags) and cards with name, version, description,
   author, license, file count and size, tags, and Install / Installed / Update to vX.

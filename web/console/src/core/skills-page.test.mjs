@@ -29,12 +29,12 @@ test("Skills sits after TODO in the navigation", async () => {
   assert.match(source, /path: `\$\{ENDPOINT_SCOPE_PATH\}\/skills`, component: SkillsView/);
 });
 
-test("the Skills page installs through a chat task and reads the store", async () => {
+test("Add skill starts a chat task in a new topic; the page has no store", async () => {
   const source = await read("../views/SkillsView.js");
   assert.match(source, /runtimeApiFetchForEndpoint\(endpointRef, "\/tasks", \{ method: "POST", body: \{ task \} \}\)/);
   assert.match(source, /endpointRoutePath\(endpointRef, topicID \? `\/chat\/\$\{encodeURIComponent\(topicID\)\}` : "\/chat"\)/);
-  assert.match(source, /"\/settings\/agent\/skills\/store"/);
-  assert.match(source, /<AppTabs/);
+  assert.doesNotMatch(source, /skills\/store/);
+  assert.doesNotMatch(source, /AppTabs/);
 });
 
 test("the Skills page removes a skill after an inline confirmation", async () => {

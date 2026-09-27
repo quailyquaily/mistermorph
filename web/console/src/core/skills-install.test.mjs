@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { filterSkills, normalizeInstallLink, normalizeStoreSkill, skillInstallTask, skillSourceInfo } from "./skills-install.js";
+import { filterSkills, normalizeInstallLink, skillInstallTask, skillSourceInfo } from "./skills-install.js";
 
 const t = (key, params = {}) => `${key}:${JSON.stringify(params)}`;
 
@@ -12,9 +12,8 @@ test("install links must be https", () => {
   assert.equal(normalizeInstallLink("javascript:alert(1)"), "");
 });
 
-test("install tasks name the link or the store id", () => {
+test("install tasks name the link", () => {
   assert.equal(skillInstallTask(t, { link: "https://github.com/o/r" }), 'skills_install_task_link:{"link":"https://github.com/o/r"}');
-  assert.equal(skillInstallTask(t, { storeID: "pdf", name: "PDF" }), 'skills_install_task_store:{"name":"PDF","id":"pdf"}');
   assert.equal(skillInstallTask(t, { link: "ftp://x" }), "");
 });
 
@@ -24,11 +23,9 @@ test("skills without provenance are local", () => {
   assert.deepEqual([info.kind, info.storeID, info.version, info.installedAt], ["store", "pdf", "1.0.0", "2026-09-26T00:00:00Z"]);
 });
 
-test("store entries normalise and filter", () => {
-  const item = normalizeStoreSkill({ id: "pdf", name: "PDF", tags: ["docs", ""], files: { "SKILL.md": "x", "a.md": "y" }, update_available: true });
-  assert.equal(item.fileCount, 2);
-  assert.deepEqual(item.tags, ["docs"]);
-  assert.equal(item.updateAvailable, true);
-  assert.deepEqual(filterSkills([item], "DOCS").map((s) => s.id), ["pdf"]);
-  assert.deepEqual(filterSkills([item], "nope"), []);
+test("skills filter by name, id and description", () => {
+  const items = [{ id: "pdf", name: "PDF tools", description: "Merge documents" }];
+  assert.deepEqual(filterSkills(items, "MERGE").map((s) => s.id), ["pdf"]);
+  assert.deepEqual(filterSkills(items, "nope"), []);
+  assert.equal(filterSkills(items, " "), items);
 });
