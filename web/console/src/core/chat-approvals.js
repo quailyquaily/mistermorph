@@ -80,9 +80,36 @@ function approvalParameterEntries(params) {
     });
 }
 
-// What a skill_install approval card shows: the preview the call would install, with every risk,
-// so the user decides on the card itself. Approve is what installs the skill. It returns null for
-// other tools, and { expired: true } when the preview is gone (approving would fail).
+const SEVERITY_ORDER = ["critical", "high", "medium", "low", "info"];
+
+function severityOf(value) {
+  const s = String(value || "").trim().toLowerCase();
+  return SEVERITY_ORDER.includes(s) ? s : "medium";
+}
+
+function normalizeFinding(raw, index) {
+  const verified = raw?.evidence_verified;
+  return {
+    id: `${index}`,
+    severity: severityOf(raw?.severity),
+    category: String(raw?.category || "").trim(),
+    title: String(raw?.title || "").trim(),
+    file: String(raw?.file || "").trim(),
+    line: Number(raw?.line) > 0 ? Number(raw.line) : 0,
+    evidence: String(raw?.evidence || "").trim(),
+    rationale: String(raw?.rationale || "").trim(),
+    source: raw?.source === "review" ? "review" : "check",
+    evidenceVerified: typeof verified === "boolean" ? verified : null,
+  };
+}
+
+// Audit statuses that mean a file was examined in full.
+const FULLY_EXAMINED = new Set(["reviewed", "inspected"]);
+
+// What a skill_install approval card shows: the preview the call would install, with the overall
+// assessment and audit coverage first, then findings by severity, so the user decides on the card.
+// Approve is what installs the skill. It returns null for other tools, and { expired: true } when
+// the preview is gone (approving would fail).
 function skillInstallApproval(approval) {
   if (String(approval?.toolName || "").trim().toLowerCase() !== "skill_install") {
     return null;
@@ -102,6 +129,30 @@ function skillInstallApproval(approval) {
     String(params.source ?? "").trim() !== String(source.url ?? "").trim() ||
     String(params.commit ?? "").trim() !== commit;
   const conflict = isPlainObject(preview.conflict) ? preview.conflict : null;
+
+  const findings = (Array.isArray(preview.findings) ? preview.findings : [])
+    .filter(isPlainObject)
+    .map(normalizeFinding)
+    .filter((f) => f.title)
+    .sort((a, b) => SEVERITY_ORDER.indexOf(a.severity) - SEVERITY_ORDER.indexOf(b.severity));
+
+  const rawAssessment = isPlainObject(preview.assessment) ? preview.assessment : {};
+  const audit = (Array.isArray(preview.audit) ? preview.audit : []).filter(isPlainObject).map((raw) => ({
+    path: String(raw.path || "").trim(),
+    kind: String(raw.kind || "").trim(),
+    status: String(raw.status || "").trim(),
+    note: String(raw.note || "").trim(),
+  }));
+  const coverage = {};
+  for (const item of audit) {
+    coverage[item.status] = (coverage[item.status] || 0) + 1;
+  }
+  const reviewError = String(preview.review_error || "").trim();
+  const incompleteReasons = textList(rawAssessment.incomplete_reasons);
+  // An assessment that does not say it is complete is treated as incomplete.
+  const complete = rawAssessment.complete === true && incompleteReasons.length === 0 && !reviewError;
+  const level = ["none", ...SEVERITY_ORDER].includes(rawAssessment.level) ? rawAssessment.level : "none";
+
   return {
     expired: false,
     mismatch,
@@ -118,9 +169,28 @@ function skillInstallApproval(approval) {
     authProfiles: textList(preview.auth_profiles),
     summary: String(review?.summary || "").trim(),
     capabilities: textList(review?.capabilities),
-    // Every risk: the isolated review's, then the file checks'.
-    risks: [...textList(review?.risks), ...textList(preview.risks)],
-    reviewError: String(preview.review_error || "").trim(),
+    reviewError,
+    assessment: {
+      complete,
+      level,
+      score: Math.max(0, Math.min(100, Number(rawAssessment.score) || 0)),
+      rubric: String(rawAssessment.rubric || "").trim(),
+      incompleteReasons,
+    },
+    coverage: {
+      files: audit.length || files.length,
+      reviewed: coverage.reviewed || 0,
+      inspected: coverage.inspected || 0,
+      partlyReviewed: coverage.partly_reviewed || 0,
+      patternChecked: coverage.pattern_checked || 0,
+      reviewFailed: coverage.review_failed || 0,
+      notInspected: coverage.not_inspected || 0,
+      // Files not examined in full, for the expandable list.
+      gaps: audit.filter((item) => !FULLY_EXAMINED.has(item.status)),
+    },
+    // Issues first (most severe first); info findings are notes, not risks.
+    issues: findings.filter((f) => f.severity !== "info"),
+    notes: findings.filter((f) => f.severity === "info"),
     replaces: conflict ? String(conflict.dir || "").trim() : "",
     replace: params.replace === true,
   };

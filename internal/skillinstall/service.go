@@ -22,21 +22,13 @@ import (
 const defaultPreviewTTL = 30 * time.Minute
 
 // Review is an isolated model's reading of a skill. The skill text is untrusted, so the review
-// is advisory: it never decides what gets installed.
+// is advisory: it never decides what gets installed. Its findings are merged into
+// Preview.Findings; Summary and Capabilities come from the part that read SKILL.md.
 type Review struct {
-	Summary      string   `json:"summary"`
-	Capabilities []string `json:"capabilities,omitempty"`
-	Risks        []string `json:"risks,omitempty"`
+	Summary      string    `json:"summary"`
+	Capabilities []string  `json:"capabilities,omitempty"`
+	Findings     []Finding `json:"findings,omitempty"`
 }
-
-// ReviewInput is what the reviewer sees.
-type ReviewInput struct {
-	Source  Source
-	SkillMD string
-	Files   []string
-}
-
-type ReviewFunc func(context.Context, ReviewInput) (Review, error)
 
 // Options configure a preview or an install. SkillsRoot and StagingDir are required.
 type Options struct {
@@ -61,20 +53,23 @@ type Expectation struct {
 
 // Preview is what the user approves.
 type Preview struct {
-	ID           string    `json:"preview_id"`
-	SkillID      string    `json:"skill_id"`
-	Name         string    `json:"name"`
-	Description  string    `json:"description"`
-	Source       Source    `json:"source"`
-	Files        []File    `json:"files"`
-	TotalBytes   int64     `json:"total_bytes"`
-	Requirements []string  `json:"requirements,omitempty"`
-	AuthProfiles []string  `json:"auth_profiles,omitempty"`
-	Risks        []string  `json:"risks,omitempty"`
-	Review       *Review   `json:"review,omitempty"`
-	ReviewError  string    `json:"review_error,omitempty"`
-	Conflict     *Conflict `json:"conflict,omitempty"`
-	ExpiresAt    time.Time `json:"expires_at"`
+	ID           string   `json:"preview_id"`
+	SkillID      string   `json:"skill_id"`
+	Name         string   `json:"name"`
+	Description  string   `json:"description"`
+	Source       Source   `json:"source"`
+	Files        []File   `json:"files"`
+	TotalBytes   int64    `json:"total_bytes"`
+	Requirements []string `json:"requirements,omitempty"`
+	AuthProfiles []string `json:"auth_profiles,omitempty"`
+	// Assessment, Findings (most severe first) and Audit (how far each file was examined).
+	Assessment  Assessment  `json:"assessment"`
+	Findings    []Finding   `json:"findings,omitempty"`
+	Audit       []FileAudit `json:"audit"`
+	Review      *Review     `json:"review,omitempty"`
+	ReviewError string      `json:"review_error,omitempty"`
+	Conflict    *Conflict   `json:"conflict,omitempty"`
+	ExpiresAt   time.Time   `json:"expires_at"`
 }
 
 // Conflict reports a skill already installed under the same id.
@@ -155,7 +150,6 @@ func (s *Service) Preview(ctx context.Context, opts Options, link string, expect
 		Source:       got.source,
 		Requirements: fm.Requirements,
 		AuthProfiles: fm.AuthProfiles,
-		Risks:        scanRisks(got.files),
 		ExpiresAt:    s.now().Add(s.ttl),
 	}
 	for _, file := range got.files {
@@ -170,18 +164,12 @@ func (s *Service) Preview(ctx context.Context, opts Options, link string, expect
 		}
 		preview.Conflict = conflict
 	}
-	if opts.Review != nil {
-		paths := make([]string, 0, len(preview.Files))
-		for _, file := range preview.Files {
-			paths = append(paths, file.Path)
-		}
-		review, err := opts.Review(ctx, ReviewInput{Source: got.source, SkillMD: skillMD, Files: paths})
-		if err != nil {
-			preview.ReviewError = err.Error()
-		} else {
-			preview.Review = &review
-		}
-	}
+	audit := runAudit(ctx, opts.Review, got.source, got.files)
+	preview.Findings = audit.findings
+	preview.Audit = audit.audits
+	preview.Review = audit.review
+	preview.ReviewError = strings.Join(audit.reviewErrors, "; ")
+	preview.Assessment = assess(audit.findings, audit.audits, audit.reviewRan, audit.reviewErrors)
 
 	dir := filepath.Join(opts.StagingDir, preview.ID)
 	if err := stageFiles(dir, got.files); err != nil {

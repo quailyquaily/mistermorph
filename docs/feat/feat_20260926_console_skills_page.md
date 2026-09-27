@@ -167,6 +167,27 @@ start with their type's signature (`assets.go`); those have no per-file cap and 
 preview's risks as checked only by type. Anything else, such as executables and archives, is
 refused.
 
+The preview audits every file without running anything (`audit.go`, `audit_run.go`,
+`inspect.go`):
+
+- Fixed checks on every text file, with more for scripts: command execution, code built or
+  loaded at run time, network requests and the hosts named, environment and credential access,
+  deletes, file writes, persistence (cron, launch agents, start-up files), instruction overrides,
+  data-collection endpoints, `git pull`, plain http. Each finding carries a severity (info, low,
+  medium, high, critical), category, file, line, evidence and rationale.
+- A model review with no tools reads the text files as data, in batches of 128 KiB (at most 8,
+  SKILL.md first, then scripts, then other text), and returns findings in the same shape. Each is
+  validated: unknown severities become medium, files must be in its batch, and evidence is marked
+  unverified when it is not in the file.
+- Images and fonts are parsed per type: PNG chunks, checksums and a full decode; JPEG and GIF
+  decodes; WebP and AVIF container walks; ICO directories; WOFF/WOFF2/TTF/OTF table bounds. Data
+  after the end of the file and embedded program, archive or script signatures are high findings.
+- `Assessment`: a score from a fixed rubric (`ScoringRubric`; each distinct issue counts once:
+  critical 50, high 25, medium 10, low 3, info 0, capped at 100) and a level (the higher of the
+  worst finding and the score's band). It is complete only when the review read every text file
+  in full and every image and font was inspected; otherwise the card says "Not fully assessed",
+  never a low risk, and lists the files not fully examined (`Preview.Audit`).
+
 If the preview fails, the agent stops and says why; the task text and the preview tool both tell
 it never to install the skill another way (git clone, bash, write_file), since that would skip
 the approval.

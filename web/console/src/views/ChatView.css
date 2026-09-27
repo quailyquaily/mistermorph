@@ -1572,22 +1572,249 @@ html[data-macos26="true"] .chat-workspace-sidebar-shell-mobile {
   overflow-wrap: anywhere;
 }
 
-.chat-skill-preview-section.is-risks {
-  padding: 10px 12px;
-  border-left: 2px solid var(--q-c-orange);
-  background: color-mix(in srgb, var(--q-c-orange) 7%, transparent);
-}
-
-.chat-skill-preview-section.is-risks .chat-skill-preview-list li::marker {
-  color: var(--q-c-orange);
-}
-
 .chat-skill-preview-warning {
   margin: 0;
   color: var(--danger);
   font-size: var(--font-size-ui);
   line-height: 1.5;
   overflow-wrap: anywhere;
+}
+
+/* Severity colours: text at 4.5:1 or better on its tint; each is paired with a label and an icon,
+   so colour is never the only signal. "Not fully assessed" has its own colour, distinct from every
+   severity, and "no issues" is neutral, not green: an empty list does not mean safe. */
+.chat-skill-preview {
+  --sev-critical-fg: #7f1d1d;
+  --sev-critical-bg: #fdecec;
+  --sev-critical-line: #b91c1c;
+  --sev-high-fg: #9a3412;
+  --sev-high-bg: #fdf0e7;
+  --sev-high-line: #c2410c;
+  --sev-medium-fg: #854d0e;
+  --sev-medium-bg: #fdf6e3;
+  --sev-medium-line: #ca8a04;
+  --sev-low-fg: #1e4e8c;
+  --sev-low-bg: #eaf2fb;
+  --sev-low-line: #3b82f6;
+  --sev-info-fg: #475569;
+  --sev-info-bg: #f1f5f9;
+  --sev-info-line: #94a3b8;
+  --sev-incomplete-fg: #5b21b6;
+  --sev-incomplete-bg: #f3effd;
+  --sev-incomplete-line: #7c3aed;
+}
+
+.chat-skill-assessment {
+  --fg: var(--sev-info-fg);
+  --bg: var(--sev-info-bg);
+  --line: var(--sev-info-line);
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border-left: 3px solid var(--line);
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.chat-skill-assessment.is-level-critical { --fg: var(--sev-critical-fg); --bg: var(--sev-critical-bg); --line: var(--sev-critical-line); }
+.chat-skill-assessment.is-level-high { --fg: var(--sev-high-fg); --bg: var(--sev-high-bg); --line: var(--sev-high-line); }
+.chat-skill-assessment.is-level-medium { --fg: var(--sev-medium-fg); --bg: var(--sev-medium-bg); --line: var(--sev-medium-line); }
+.chat-skill-assessment.is-level-low { --fg: var(--sev-low-fg); --bg: var(--sev-low-bg); --line: var(--sev-low-line); }
+.chat-skill-assessment.is-incomplete {
+  --fg: var(--sev-incomplete-fg);
+  --bg: var(--sev-incomplete-bg);
+  --line: var(--sev-incomplete-line);
+  border-left-style: dashed;
+}
+
+.chat-skill-assessment-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.chat-skill-assessment-icon {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  margin-top: 1px;
+}
+
+.chat-skill-assessment-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.chat-skill-assessment-title {
+  font-size: var(--font-size-body);
+  line-height: 1.35;
+  font-weight: 700;
+}
+
+.chat-skill-assessment-score,
+.chat-skill-coverage,
+.chat-skill-rubric {
+  margin: 0;
+  font-size: var(--font-size-ui);
+  line-height: 1.5;
+}
+
+.chat-skill-assessment-reasons {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding-left: 18px;
+  font-size: var(--font-size-ui);
+  line-height: 1.5;
+}
+
+.chat-skill-coverage {
+  color: var(--text-1);
+}
+
+.chat-skill-details > summary {
+  cursor: pointer;
+  width: fit-content;
+  color: var(--text-1);
+  font-size: var(--font-size-ui);
+  line-height: 1.5;
+}
+
+.chat-skill-details > summary:hover {
+  color: var(--text-0);
+}
+
+.chat-skill-rubric {
+  margin-top: 6px;
+  color: var(--text-1);
+}
+
+.chat-skill-gap-list,
+.chat-skill-note-list,
+.chat-skill-findings {
+  display: grid;
+  gap: 6px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--font-size-ui);
+  line-height: 1.5;
+  color: var(--text-1);
+}
+
+.chat-skill-gap-list li,
+.chat-skill-note-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  min-width: 0;
+}
+
+.chat-skill-gap-list code,
+.chat-skill-finding-file {
+  color: var(--text-1);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-meta);
+  overflow-wrap: anywhere;
+}
+
+.chat-skill-gap-status {
+  color: var(--sev-incomplete-fg);
+  font-weight: 600;
+}
+
+.chat-skill-gap-note {
+  color: var(--text-2);
+  overflow-wrap: anywhere;
+}
+
+.chat-skill-severity {
+  --fg: var(--sev-info-fg);
+  --bg: var(--sev-info-bg);
+  --line: var(--sev-info-line);
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: var(--bg);
+  color: var(--fg);
+  font-size: var(--font-size-meta);
+  font-weight: 700;
+  line-height: 1.5;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.chat-skill-severity .icon {
+  width: 13px;
+  height: 13px;
+}
+
+.chat-skill-severity.is-critical { --fg: var(--sev-critical-fg); --bg: var(--sev-critical-bg); --line: var(--sev-critical-line); }
+.chat-skill-severity.is-high { --fg: var(--sev-high-fg); --bg: var(--sev-high-bg); --line: var(--sev-high-line); }
+.chat-skill-severity.is-medium { --fg: var(--sev-medium-fg); --bg: var(--sev-medium-bg); --line: var(--sev-medium-line); }
+.chat-skill-severity.is-low { --fg: var(--sev-low-fg); --bg: var(--sev-low-bg); --line: var(--sev-low-line); }
+
+.chat-skill-finding {
+  border-left: 3px solid var(--sev-info-line);
+  padding: 6px 0 6px 10px;
+}
+
+.chat-skill-finding.is-critical { border-left-color: var(--sev-critical-line); }
+.chat-skill-finding.is-high { border-left-color: var(--sev-high-line); }
+.chat-skill-finding.is-medium { border-left-color: var(--sev-medium-line); }
+.chat-skill-finding.is-low { border-left-color: var(--sev-low-line); }
+
+.chat-skill-finding summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  cursor: pointer;
+  list-style-position: outside;
+}
+
+.chat-skill-finding-title {
+  color: var(--text-0);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.chat-skill-finding-body {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.chat-skill-evidence {
+  max-width: 100%;
+  margin: 0;
+  padding: 8px 10px;
+  overflow-x: auto;
+  border: 1px solid color-mix(in srgb, var(--line-soft) 86%, transparent);
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--q-c-blue) 3%, var(--bg-1));
+  color: var(--text-0);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-meta);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.chat-skill-evidence code {
+  font: inherit;
+}
+
+.chat-skill-finding-source {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--font-size-meta);
 }
 
 .chat-skill-preview-note {
