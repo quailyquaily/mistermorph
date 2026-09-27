@@ -1,5 +1,17 @@
 /* Skills: TODO's layout. The skills list is the secondary sidebar; the selected skill fills the
    main area as a card. */
+/* As on TODO, the sidebar and the card carry their own spacing, so the page body has none. */
+.skills-page .page-body {
+  min-width: 0;
+  max-width: 100%;
+  gap: 0;
+  padding: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
+}
+
 .skills-page-bar {
   flex: 1 1 auto;
   min-width: 0;
