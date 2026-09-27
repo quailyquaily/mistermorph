@@ -150,6 +150,7 @@ const SETUP_FREE_PATHS = new Set([
 	"/troubleshooting",
   "/settings",
   "/settings/agent",
+  "/settings/routes",
   "/settings/tools",
   "/settings/skills",
   "/settings/persona",

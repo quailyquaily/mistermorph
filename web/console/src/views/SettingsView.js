@@ -134,6 +134,7 @@ const LOCAL_CONSOLE_ENDPOINT_REF = "ep_console_local";
 const SETTINGS_DEFAULT_SECTION_ID = "persona";
 const SETTINGS_SECTION_IDS = new Set([
   "agent",
+  "routes",
   "tools",
   "mcp",
   "persona",
@@ -1183,6 +1184,13 @@ const SettingsView = {
           icon: "PhRobot",
           title: t("settings_agent_block_title"),
           meta: t("settings_section_agent_meta"),
+          saveKind: "agent",
+        },
+        {
+          id: "routes",
+          icon: "PhArrowsSplit",
+          title: t("settings_routes_title"),
+          meta: t("settings_section_routes_meta"),
           saveKind: "agent",
         },
         {
@@ -4433,7 +4441,7 @@ const SettingsView = {
 
     function ensureSettingsSectionData(sectionID = selectedSectionID.value) {
       const normalizedSectionID = normalizeSettingsSectionID(sectionID);
-      if (["agent", "tools", "mcp"].includes(normalizedSectionID)) {
+      if (["agent", "routes", "tools", "mcp"].includes(normalizedSectionID)) {
         if (!agentSettingsLoaded.value && !agentLoading.value) {
           void loadAgentSettings(settingsEndpointRef.value);
           return;
@@ -5182,22 +5190,24 @@ const SettingsView = {
               </div>
             </QCard>
 
-            <ModelRoutesPanel
-              :values="agentConfigValues"
-              :fieldStates="agentFieldStates"
-              :profiles="routeProfileOptions"
-              :loading="agentLoading"
-              :saving="agentSaving && agentSavingTarget === 'config'"
-              saveScope="agent"
-              @save="saveConfigSettings('agent', $event)"
-            />
-
             <ConfigSettingsPanel
               v-for="group in LLM_SYSTEM_CONFIG_GROUPS"
               :key="group.id"
               :groups="[group]"
               :values="agentConfigValues"
               :fieldStates="agentFieldStates"
+              :loading="agentLoading"
+              :saving="agentSaving && agentSavingTarget === 'config'"
+              saveScope="agent"
+              @save="saveConfigSettings('agent', $event)"
+            />
+          </div>
+
+          <div v-else-if="selectedSection.id === 'routes'" class="settings-panel-body settings-panel-body-plain">
+            <ModelRoutesPanel
+              :values="agentConfigValues"
+              :fieldStates="agentFieldStates"
+              :profiles="routeProfileOptions"
               :loading="agentLoading"
               :saving="agentSaving && agentSavingTarget === 'config'"
               saveScope="agent"
