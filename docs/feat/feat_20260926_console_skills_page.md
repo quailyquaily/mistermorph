@@ -47,20 +47,33 @@ behind an API and adds provenance.
 
 ### 3.2 Layout
 
-The page reuses existing console parts rather than drawing its own:
+The page has the same shape as Chat and TODO: a secondary sidebar listing the skills, and the
+selected skill in the main area.
 
-- The list is the Settings card of switch rows (`QCard` + `ui-toggle-*`): name, description,
-  switch. A row also opens its skill. Search appears only when there are more than 8 skills.
-- The selected skill opens in Chat's right side panel (`ui-side-panel-*`: a card in its own grid
-  column that slides open on desktop, a sheet over a mask on phones), with a switch row, Chat's
-  property list for Source / Location / Requires / Auth profile / Files, "View SKILL.md" (a
-  dialog), and Remove at the bottom like Chat's Delete Topic, confirmed with the same
-  `QMessageDialog`.
-- The page bar has a plain "+" (Add skill; the floating button on phones) and a "⋯" menu, in
-  Quail's menu frame, that holds the Load skills switch.
+```text
+┌ Skills        + ⋯ ┐┌───────────────────────────────────────────────────────────────┐
+│ jsonbill        ● ││ jsonbill                                  Load this skill [on]│
+│  Generate PDF…    ││ Generate PDF invoices from JSON…                              │
+│ weather         ○ ││ SOURCE        LOCATION              REQUIRES                  │
+│  Look up fore…    ││ owner/repo@…  ~/.morph/skills/…     http_client, file_io      │
+│                   ││ FILES  SKILL.md 3.7 KiB                                       │
+│                   ││ ───────────────────────────────────────────────────────────── │
+│                   ││ (SKILL.md rendered)                                           │
+│                   ││ ───────────────────────────────────────────────────────────── │
+│                   ││ Remove                                                        │
+└───────────────────┘└───────────────────────────────────────────────────────────────┘
+```
 
-Those shared styles moved from `ChatView.css` and `SettingsView.css` into `views/common.css`,
-under their old names plus `ui-*` names, so Chat and Settings are unchanged.
+- Sidebar: the shared `workspace-sidebar-*` list, like Chat's topics and TODO's list. The header
+  has a plain "+" (Add skill) and a "⋯" menu, in Quail's menu frame, holding the Load skills
+  switch. Rows show the name, the description as meta, and TODO's on/off dot. Search appears
+  only when there are more than 8 skills. Desktop always shows a skill (the first by default).
+- Main area: TODO's editor card. The header has the name, the description and the on/off
+  switch; then Chat's property rows (`ui-property-*`, shared from Chat's topic panel) for
+  Source (only for skills added from a link), Location, Requires, Auth profile and Files; then
+  the rendered `SKILL.md`; then Remove, confirmed with the same dialog as Chat's Delete Topic.
+- Phones: the list first; a skill opens full screen with a back button. Add skill is the
+  floating button.
 - The switches save immediately (one small config write); the page has no pending state.
 - `skills.load` cannot express "none" (empty means all), so switching off the last loaded skill
   turns skills off and keeps the list, and switching one on while skills are off loads just
