@@ -186,6 +186,10 @@
   white-space: normal;
 }
 
+.skills-detail-pane {
+  min-width: 0;
+}
+
 /* The selected skill: TODO's editor card. */
 .skills-detail-card.q-card-default {
   margin: 8px 8px 8px 16px;
@@ -476,8 +480,9 @@
     display: none;
   }
 
-  /* The page itself does not scroll: the sidebar list and the card scroll on their own, as on
-     Chat. */
+  /* The page itself does not scroll: the sidebar list scrolls on its own, and the right column
+     scrolls the whole card, which is as tall as its content. The scrollbar sits at the window's
+     edge, not inside the card. */
   .skills-page .page-body {
     overflow: hidden;
   }
@@ -492,15 +497,10 @@
     height: 100%;
   }
 
-  .skills-detail-card.q-card-default {
-    height: calc(100% - 16px);
-    overflow: hidden;
-  }
-
-  .skills-detail-card.q-card-default > .q-card-body {
-    height: 100%;
+  .skills-detail-pane {
+    min-width: 0;
+    min-height: 0;
     overflow-y: auto;
-    scrollbar-width: thin;
     overscroll-behavior: contain;
   }
 }

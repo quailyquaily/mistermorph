@@ -83,6 +83,7 @@ const SkillsView = {
     const removeErr = ref("");
     const menuOpen = ref(false);
     const menuRoot = ref(null);
+    const detailPane = ref(null);
 
     const addOpen = ref(false);
     const addLink = ref("");
@@ -362,6 +363,10 @@ const SkillsView = {
       () => selected.value?.id || "",
       (id) => {
         filesExpanded.value = false;
+        // Another skill opens at its top, not at the last one's scroll position.
+        if (detailPane.value) {
+          detailPane.value.scrollTop = 0;
+        }
         void loadDetail(id);
       },
     );
@@ -423,6 +428,7 @@ const SkillsView = {
       removeDialogText,
       menuOpen,
       menuRoot,
+      detailPane,
       addOpen,
       addLink,
       addBusy,
@@ -525,103 +531,105 @@ const SkillsView = {
           </div>
         </aside>
 
-        <QCard v-if="showDetail" class="skills-detail-card" variant="default">
-          <div class="skills-detail">
-            <header class="skills-detail-head">
-              <div class="skills-detail-copy">
-                <h3 class="workspace-document-title skills-detail-title">{{ selected.name }}</h3>
-                <p v-if="selected.description" class="skills-detail-meta">{{ selected.description }}</p>
-              </div>
-              <QDropdownMenu
-                class="skills-actions-menu"
-                :items="skillActionMenuItems"
-                hideSelected
-                hideActionLabel
-                :loading="removeBusy"
-              >
-                <PhDotsThree class="skills-actions-menu-icon" />
-                <span class="skills-actions-menu-accessible">{{ t('skills_more') }}</span>
-              </QDropdownMenu>
-            </header>
-
-            <QFence v-if="catalog.readOnly && catalog.readOnlyReason" type="warning" :text="catalog.readOnlyReason" />
-            <QFence v-if="err" type="danger" icon="PhXCircle" :text="err" />
-            <p v-if="selected.modified.length" class="skills-detail-warning">
-              <PhWarning class="icon" aria-hidden="true" />
-              <span>{{ t('skills_modified_since', { files: selected.modified.join(', ') }) }}</span>
-            </p>
-
-            <dl class="ui-property-list skills-properties">
-              <div class="ui-property-row skills-property-enabled">
-                <dt class="ui-property-label">{{ t('skills_field_enabled') }}</dt>
-                <dd class="ui-property-value skills-enabled-value">
-                  <QSwitch
-                    :modelValue="isOn(selected)"
-                    :disabled="locked"
-                    :aria-label="t('skills_load_toggle', { name: selected.name })"
-                    @update:modelValue="setLoaded(selected, $event)"
-                  />
-                  <span class="skills-enabled-note">{{ enabledNote }}</span>
-                </dd>
-              </div>
-              <div v-if="sourceText(selected)" class="ui-property-row">
-                <dt class="ui-property-label">{{ t('skills_fact_source') }}</dt>
-                <dd class="ui-property-value">
-                  <a v-if="selected.source.url" :href="selected.source.url" target="_blank" rel="noopener noreferrer" class="skills-link">{{ sourceText(selected) }}</a>
-                  <span v-else>{{ sourceText(selected) }}</span>
-                </dd>
-              </div>
-              <div class="ui-property-row">
-                <dt class="ui-property-label">{{ t('skills_fact_location') }}</dt>
-                <dd class="ui-property-value is-code"><code :title="selected.dir">{{ selected.dir }}</code></dd>
-              </div>
-              <div v-if="selected.requirements.length" class="ui-property-row">
-                <dt class="ui-property-label">{{ t('skills_fact_requires') }}</dt>
-                <dd class="ui-property-value">{{ selected.requirements.join(', ') }}</dd>
-              </div>
-              <div v-if="selected.authProfiles.length" class="ui-property-row">
-                <dt class="ui-property-label">{{ t('skills_fact_auth') }}</dt>
-                <dd class="ui-property-value">{{ selected.authProfiles.join(', ') }}</dd>
-              </div>
-              <div class="ui-property-row">
-                <dt class="ui-property-label">{{ t('skills_fact_files') }}</dt>
-                <dd class="ui-property-value">
-                  <button
-                    type="button"
-                    class="skills-files-toggle"
-                    :aria-expanded="filesExpanded ? 'true' : 'false'"
-                    @click="filesExpanded = !filesExpanded"
-                  >
-                    <span>{{ filesSummary }}</span>
-                    <PhCaretDown class="icon" :class="{ 'is-open': filesExpanded }" aria-hidden="true" />
-                  </button>
-                  <ul v-if="filesExpanded" class="skills-files">
-                    <li v-for="file in selected.files" :key="file.path">
-                      <code>{{ file.path }}</code>
-                      <span>{{ formatBytes(file.size) }}</span>
-                    </li>
-                  </ul>
-                </dd>
-              </div>
-            </dl>
-
-            <section class="skills-doc" :aria-label="'SKILL.md'">
-              <header class="skills-doc-head">
-                <span class="skills-doc-label">SKILL.md</span>
-                <span v-if="documentSize" class="skills-doc-size">{{ documentSize }}</span>
+        <div v-if="showDetail || !isMobile" ref="detailPane" class="skills-detail-pane">
+          <QCard v-if="showDetail" class="skills-detail-card" variant="default">
+            <div class="skills-detail">
+              <header class="skills-detail-head">
+                <div class="skills-detail-copy">
+                  <h3 class="workspace-document-title skills-detail-title">{{ selected.name }}</h3>
+                  <p v-if="selected.description" class="skills-detail-meta">{{ selected.description }}</p>
+                </div>
+                <QDropdownMenu
+                  class="skills-actions-menu"
+                  :items="skillActionMenuItems"
+                  hideSelected
+                  hideActionLabel
+                  :loading="removeBusy"
+                >
+                  <PhDotsThree class="skills-actions-menu-icon" />
+                  <span class="skills-actions-menu-accessible">{{ t('skills_more') }}</span>
+                </QDropdownMenu>
               </header>
-              <QFence v-if="detail && detail.truncated" type="warning" :text="t('skills_content_truncated')" />
-              <div v-if="detailLoading && !detail" class="skills-index-loading" aria-hidden="true">
-                <QSkeleton variant="card" height="120px" :count="1" />
-              </div>
-              <MarkdownContent v-else-if="documentSource" class="skills-doc-body" :source="documentSource" />
-            </section>
-          </div>
-        </QCard>
 
-        <div v-else-if="!isMobile && !loading" class="skills-detail-empty">
-          <QFence v-if="err" type="danger" icon="PhXCircle" :text="err" />
-          <p class="skills-index-note">{{ skills.length ? '' : t('skills_empty_title') }}</p>
+              <QFence v-if="catalog.readOnly && catalog.readOnlyReason" type="warning" :text="catalog.readOnlyReason" />
+              <QFence v-if="err" type="danger" icon="PhXCircle" :text="err" />
+              <p v-if="selected.modified.length" class="skills-detail-warning">
+                <PhWarning class="icon" aria-hidden="true" />
+                <span>{{ t('skills_modified_since', { files: selected.modified.join(', ') }) }}</span>
+              </p>
+
+              <dl class="ui-property-list skills-properties">
+                <div class="ui-property-row skills-property-enabled">
+                  <dt class="ui-property-label">{{ t('skills_field_enabled') }}</dt>
+                  <dd class="ui-property-value skills-enabled-value">
+                    <QSwitch
+                      :modelValue="isOn(selected)"
+                      :disabled="locked"
+                      :aria-label="t('skills_load_toggle', { name: selected.name })"
+                      @update:modelValue="setLoaded(selected, $event)"
+                    />
+                    <span class="skills-enabled-note">{{ enabledNote }}</span>
+                  </dd>
+                </div>
+                <div v-if="sourceText(selected)" class="ui-property-row">
+                  <dt class="ui-property-label">{{ t('skills_fact_source') }}</dt>
+                  <dd class="ui-property-value">
+                    <a v-if="selected.source.url" :href="selected.source.url" target="_blank" rel="noopener noreferrer" class="skills-link">{{ sourceText(selected) }}</a>
+                    <span v-else>{{ sourceText(selected) }}</span>
+                  </dd>
+                </div>
+                <div class="ui-property-row">
+                  <dt class="ui-property-label">{{ t('skills_fact_location') }}</dt>
+                  <dd class="ui-property-value is-code"><code :title="selected.dir">{{ selected.dir }}</code></dd>
+                </div>
+                <div v-if="selected.requirements.length" class="ui-property-row">
+                  <dt class="ui-property-label">{{ t('skills_fact_requires') }}</dt>
+                  <dd class="ui-property-value">{{ selected.requirements.join(', ') }}</dd>
+                </div>
+                <div v-if="selected.authProfiles.length" class="ui-property-row">
+                  <dt class="ui-property-label">{{ t('skills_fact_auth') }}</dt>
+                  <dd class="ui-property-value">{{ selected.authProfiles.join(', ') }}</dd>
+                </div>
+                <div class="ui-property-row">
+                  <dt class="ui-property-label">{{ t('skills_fact_files') }}</dt>
+                  <dd class="ui-property-value">
+                    <button
+                      type="button"
+                      class="skills-files-toggle"
+                      :aria-expanded="filesExpanded ? 'true' : 'false'"
+                      @click="filesExpanded = !filesExpanded"
+                    >
+                      <span>{{ filesSummary }}</span>
+                      <PhCaretDown class="icon" :class="{ 'is-open': filesExpanded }" aria-hidden="true" />
+                    </button>
+                    <ul v-if="filesExpanded" class="skills-files">
+                      <li v-for="file in selected.files" :key="file.path">
+                        <code>{{ file.path }}</code>
+                        <span>{{ formatBytes(file.size) }}</span>
+                      </li>
+                    </ul>
+                  </dd>
+                </div>
+              </dl>
+
+              <section class="skills-doc" :aria-label="'SKILL.md'">
+                <header class="skills-doc-head">
+                  <span class="skills-doc-label">SKILL.md</span>
+                  <span v-if="documentSize" class="skills-doc-size">{{ documentSize }}</span>
+                </header>
+                <QFence v-if="detail && detail.truncated" type="warning" :text="t('skills_content_truncated')" />
+                <div v-if="detailLoading && !detail" class="skills-index-loading" aria-hidden="true">
+                  <QSkeleton variant="card" height="120px" :count="1" />
+                </div>
+                <MarkdownContent v-else-if="documentSource" class="skills-doc-body" :source="documentSource" />
+              </section>
+            </div>
+          </QCard>
+
+          <div v-else-if="!isMobile && !loading" class="skills-detail-empty">
+            <QFence v-if="err" type="danger" icon="PhXCircle" :text="err" />
+            <p class="skills-index-note">{{ skills.length ? '' : t('skills_empty_title') }}</p>
+          </div>
         </div>
       </div>
 
