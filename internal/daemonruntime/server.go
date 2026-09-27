@@ -119,6 +119,8 @@ type TaskTopicRoutes struct {
 	Stop                 StopFunc
 	TopicMetadata        TopicMetadataFunc
 	RegenerateTopicTitle func(context.Context, string) (TopicInfo, error)
+	// ReplySuggestions serves GET /tasks/{id}/suggestions; nil where the runtime has none.
+	ReplySuggestions func(context.Context, string) (ReplySuggestions, error)
 }
 
 type ApprovalRoutes struct {

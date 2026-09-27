@@ -78,6 +78,7 @@ import {
   LLM_CONTEXT_CONFIG_GROUPS,
   LLM_SYSTEM_CONFIG_GROUPS,
   REMOTE_CONTROL_CONFIG_GROUPS,
+  CONSOLE_CHAT_CONFIG_GROUPS,
   SECURITY_CONFIG_GROUPS,
   SYSTEM_ADVANCED_CONFIG_GROUPS,
   SYSTEM_CONFIG_GROUPS,
@@ -4695,6 +4696,7 @@ const SettingsView = {
       LLM_SYSTEM_CONFIG_GROUPS,
       CONSOLE_DEPLOYMENT_CONFIG_GROUPS,
       REMOTE_CONTROL_CONFIG_GROUPS,
+      CONSOLE_CHAT_CONFIG_GROUPS,
       AUTOMATION_CONFIG_GROUPS,
       SECURITY_CONFIG_GROUPS,
       SYSTEM_ADVANCED_CONFIG_GROUPS,
@@ -5723,6 +5725,15 @@ const SettingsView = {
             />
             <ConfigSettingsPanel
               :groups="REMOTE_CONTROL_CONFIG_GROUPS"
+              :values="consoleConfigValues"
+              :fieldStates="consoleFieldStates"
+              :loading="consoleLoading"
+              :saving="consoleSaving && consoleSavingTarget === 'config'"
+              saveScope="console"
+              @save="saveConfigSettings('console', $event)"
+            />
+            <ConfigSettingsPanel
+              :groups="CONSOLE_CHAT_CONFIG_GROUPS"
               :values="consoleConfigValues"
               :fieldStates="consoleFieldStates"
               :loading="consoleLoading"

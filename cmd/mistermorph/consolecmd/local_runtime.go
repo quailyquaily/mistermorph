@@ -142,6 +142,7 @@ type consoleLocalRuntime struct {
 	mixinConnected          atomic.Bool
 	awarenessMu             sync.Mutex
 	topicTitleRegenerations sync.Map
+	replySuggestionCache    replySuggestionCache
 	streamHub               *consoleStreamHub
 	notificationHub         *consoleNotificationHub
 	awarenessPokeRequests   chan awarenessloop.PokeRequest
@@ -1180,6 +1181,9 @@ func (r *consoleLocalRuntime) routesOptions(authToken string) daemonruntime.Rout
 			TopicDeleter: topicDeleterFunc(r.deleteTopic),
 			RegenerateTopicTitle: func(ctx context.Context, topicID string) (daemonruntime.TopicInfo, error) {
 				return r.regenerateTopicTitle(ctx, generation, topicID)
+			},
+			ReplySuggestions: func(ctx context.Context, taskID string) (daemonruntime.ReplySuggestions, error) {
+				return r.replySuggestions(ctx, generation, taskID)
 			},
 			Submit: func(ctx context.Context, req daemonruntime.SubmitTaskRequest) (daemonruntime.SubmitTaskResponse, error) {
 				if generation == nil {

@@ -171,6 +171,21 @@ export default {
       type: String,
       default: "",
     },
+    // A reply the user is likely to send: ghost text in the empty composer; Tab fills it in and
+    // Escape dismisses it.
+    replySuggestion: {
+      type: String,
+      default: "",
+    },
+    // Likely replies as chips above the input (phones, which have no Tab key); a tap fills one in.
+    replySuggestions: {
+      type: Array,
+      default: () => [],
+    },
+    replySuggestionHint: {
+      type: String,
+      default: "",
+    },
     sendDisabled: {
       type: Boolean,
       default: false,
@@ -288,6 +303,8 @@ export default {
     "requestCommands",
     "requestSkills",
     "heightChange",
+    "replySuggestionUsed",
+    "replySuggestionDismiss",
   ],
   setup(props, { emit, expose }) {
     const composerRoot = ref(null);
@@ -324,6 +341,26 @@ export default {
         commands: props.commands,
       })
     );
+    const replyGhostActive = computed(
+      () => Boolean(props.replySuggestion) && normalizedText(props.modelValue) === "" && !props.disabled
+    );
+    const inputPlaceholder = computed(() => (replyGhostActive.value ? props.replySuggestion : props.placeholder));
+    const replyChipsVisible = computed(
+      () => props.replySuggestions.length > 0 && normalizedText(props.modelValue) === "" && !props.disabled
+    );
+
+    // Fills the composer with a suggested reply; the user still reviews and sends it.
+    function useReplySuggestion(text) {
+      const value = normalizedText(text).trim();
+      if (!value) {
+        return;
+      }
+      resetHistoryNavigation();
+      emit("update:modelValue", value);
+      void syncHeight(value);
+      emit("replySuggestionUsed", value);
+    }
+
     const rootClass = computed(() => {
       const classes = ["chat-composer"];
       if (props.landing) {
@@ -681,6 +718,18 @@ export default {
       if (handleSuggestionKeydown(event)) {
         return;
       }
+      if (replyGhostActive.value && !event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey) {
+        if (event.key === "Tab") {
+          event.preventDefault();
+          useReplySuggestion(props.replySuggestion);
+          return;
+        }
+        if (event.key === "Escape") {
+          event.preventDefault();
+          emit("replySuggestionDismiss");
+          return;
+        }
+      }
       if (
         props.submitOnEnter &&
         event?.key === "Enter" &&
@@ -984,6 +1033,10 @@ export default {
     expose({ focus, insertText, syncHeight, closeSuggestions });
 
     return {
+      replyGhostActive,
+      inputPlaceholder,
+      replyChipsVisible,
+      useReplySuggestion,
       inputValue,
       highlightSegments,
       composerRoot,
@@ -1029,6 +1082,16 @@ export default {
         aria-hidden="true"
       ></div>
       <div class="chat-composer-surface">
+        <div v-if="replyChipsVisible" class="chat-composer-reply-chips" role="group" :aria-label="replySuggestionHint">
+          <button
+            v-for="(item, index) in replySuggestions"
+            :key="index + ':' + item.text"
+            type="button"
+            class="chat-composer-reply-chip"
+            @mousedown.prevent
+            @click="useReplySuggestion(item.text)"
+          >{{ item.text }}</button>
+        </div>
         <div
           v-if="suggestionsVisible"
           class="chat-composer-suggestions"
@@ -1143,13 +1206,16 @@ export default {
               class="chat-composer-input"
               :value="inputValue"
               rows="1"
+              :class="{ 'is-reply-ghost': replyGhostActive }"
               :disabled="disabled"
-              :placeholder="placeholder"
+              :placeholder="inputPlaceholder"
+              :title="replyGhostActive ? replySuggestion : undefined"
               @input="handleInput"
               @keydown="handleKeydown"
               @keyup="handleKeyup"
               @scroll="handleInputScroll"
             ></textarea>
+            <kbd v-if="replyGhostActive && replySuggestionHint" class="chat-composer-reply-hint" aria-hidden="true">{{ replySuggestionHint }}</kbd>
           </div>
           <div class="chat-composer-actions">
             <template v-if="llmProfileItems.length > 1">

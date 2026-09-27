@@ -380,6 +380,71 @@
   -webkit-text-fill-color: var(--text-2);
 }
 
+/* A suggested reply as ghost text: the placeholder, with room for the "Tab" hint beside it. */
+.chat-composer-input.is-reply-ghost {
+  padding-right: 7.5em;
+  text-overflow: ellipsis;
+}
+
+.chat-composer-input.is-reply-ghost::placeholder {
+  color: var(--text-1);
+  -webkit-text-fill-color: var(--text-1);
+  opacity: 0.72;
+}
+
+.chat-composer-reply-hint {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  z-index: 2;
+  transform: translateY(-50%);
+  padding: 2px 6px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: var(--q-field-bg);
+  color: var(--text-2);
+  font: 500 11px/1.2 var(--font-mono);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* Suggested replies as chips above the input, on phones. */
+.chat-composer-reply-chips {
+  /* Scrolls sideways inside the composer; its chips must not widen the page. */
+  contain: inline-size;
+  min-width: 0;
+  display: flex;
+  gap: 6px;
+  padding: 8px 10px 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.chat-composer-reply-chips::-webkit-scrollbar {
+  display: none;
+}
+
+.chat-composer-reply-chip {
+  flex: 0 0 auto;
+  max-width: min(80vw, 320px);
+  min-height: 32px;
+  padding: 4px 10px;
+  overflow: hidden;
+  border: 1px solid var(--q-field-border-color);
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--q-c-blue) 6%, transparent);
+  color: var(--text-0);
+  font: inherit;
+  font-size: var(--font-size-ui);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.chat-composer-reply-chip:active {
+  background: color-mix(in srgb, var(--q-c-blue) 14%, transparent);
+}
+
 .chat-composer-input::selection {
   background: color-mix(in srgb, var(--line) 54%, transparent);
   color: transparent;

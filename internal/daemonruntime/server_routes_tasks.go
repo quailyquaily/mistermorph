@@ -152,6 +152,34 @@ func (routes *routeRegistration) registerTaskRoutes() {
 			http.Error(w, "missing task_id", http.StatusBadRequest)
 			return
 		}
+		if strings.HasSuffix(suffix, "/suggestions") {
+			if r.Method != http.MethodGet {
+				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+			suggest := routes.options.TaskTopic.ReplySuggestions
+			if suggest == nil {
+				http.NotFound(w, r)
+				return
+			}
+			taskID := strings.TrimSpace(strings.TrimSuffix(suffix, "/suggestions"))
+			if taskID == "" || strings.Contains(taskID, "/") {
+				http.Error(w, "missing task_id", http.StatusBadRequest)
+				return
+			}
+			resp, err := suggest(r.Context(), taskID)
+			if err != nil {
+				if msg, ok := badRequestMessage(err); ok {
+					http.Error(w, msg, http.StatusBadRequest)
+					return
+				}
+				http.Error(w, strings.TrimSpace(err.Error()), http.StatusServiceUnavailable)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(resp)
+			return
+		}
 		if strings.HasSuffix(suffix, "/stop") {
 			if r.Method != http.MethodPost {
 				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
