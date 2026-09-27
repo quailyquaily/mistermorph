@@ -312,7 +312,7 @@ export default {
     const registryKey = `model-routes-${getCurrentInstance()?.uid ?? Math.random()}`;
     onMounted(() => {
       if (registered.value) {
-        saveRegistry.register({ key: registryKey, scope: props.saveScope, label: () => "Model routes", dirty: () => dirty.value, collectUpdate });
+        saveRegistry.register({ key: registryKey, scope: props.saveScope, label: () => "Model Routes", dirty: () => dirty.value, collectUpdate });
       }
     });
     onBeforeUnmount(() => {
@@ -352,7 +352,7 @@ export default {
       <div class="settings-panel-shell">
         <header class="settings-panel-head">
           <div class="settings-panel-copy">
-            <h3 class="settings-panel-title workspace-document-title">Model routes</h3>
+            <h3 class="settings-panel-title workspace-document-title">Model Routes</h3>
             <p class="settings-panel-meta">Where each kind of work sends its requests. Pulses show traffic, more often for bigger shares; dashed lines are fallbacks, in order. Select a route to change it.</p>
           </div>
           <QButton v-if="!registered" class="primary" :loading="saving" :disabled="loading || saving || !dirty" @click="save">Save</QButton>

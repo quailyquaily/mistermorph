@@ -109,7 +109,7 @@ export const ROUTE_PURPOSES = [
   },
   { key: "awareness", path: "llm.routes.awareness", label: "Awareness", note: "Background awareness checks." },
   { key: "think", path: "llm.routes.think", label: "Think", note: "/think tasks, run with reasoning effort xhigh." },
-  { key: "plan_create", path: "llm.routes.plan_create", label: "Plan creation", note: "Writing plans with plan_create." },
+  { key: "plan_create", path: "llm.routes.plan_create", label: "Plan", note: "Writing plans with plan_create." },
 ];
 
 export function routeIsUnset(route) {
