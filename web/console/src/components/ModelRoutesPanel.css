@@ -398,6 +398,39 @@
   font-size: var(--font-size-meta);
 }
 
+/* Adding a profile opens the Models page; it looks like an empty profile box. */
+.model-routes-add-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 40px;
+  padding: 6px 10px;
+  border: 1px dashed var(--q-field-border-color);
+  border-radius: 2px;
+  background: transparent;
+  color: var(--text-1);
+  font: inherit;
+  font-size: var(--font-size-ui);
+  cursor: pointer;
+}
+
+.model-routes-add-button:hover:not(:disabled) {
+  border-color: var(--q-c-blue);
+  color: var(--text-0);
+}
+
+.model-routes-add-button:disabled {
+  cursor: default;
+  opacity: 0.56;
+}
+
+.model-routes-add-button .icon {
+  width: 14px;
+  height: 14px;
+}
+
 .model-routes-inspector {
   display: flex;
   flex-wrap: wrap;

@@ -4427,6 +4427,39 @@ const SettingsView = {
       });
     }
 
+    // "Add profile" on Model Routes: go to Models and start a new profile there. Cleared if the
+    // move is cancelled (unsaved changes), so no profile appears later by surprise.
+    const pendingProfileAdd = ref(false);
+
+    function addProfileFromRoutes() {
+      pendingProfileAdd.value = true;
+      const nextPath = settingsSectionPath(endpointState.selectedRef, "agent");
+      void router.push(nextPath).then((failure) => {
+        if (failure) {
+          pendingProfileAdd.value = false;
+        } else if (isMobile.value) {
+          mobilePanelVisible.value = true;
+        }
+      });
+    }
+
+    watch(
+      () => [selectedSectionID.value, agentSettingsLoaded.value],
+      ([sectionID, loaded]) => {
+        if (!pendingProfileAdd.value || sectionID !== "agent" || !loaded) {
+          return;
+        }
+        pendingProfileAdd.value = false;
+        addLLMProfile();
+        void nextTick(() => {
+          const cards = document.querySelectorAll(".settings-profile-card");
+          const card = cards[cards.length - 1];
+          card?.scrollIntoView({ behavior: "smooth", block: "center" });
+          card?.querySelector("input, textarea")?.focus({ preventScroll: true });
+        });
+      }
+    );
+
     function isSelectedSection(item) {
       return !isMobile.value && String(item?.id || "") === selectedSectionID.value;
     }
@@ -4654,6 +4687,7 @@ const SettingsView = {
     );
 
     return {
+      addProfileFromRoutes,
       t,
       lang,
       loggingOut,
@@ -5212,6 +5246,7 @@ const SettingsView = {
               :saving="agentSaving && agentSavingTarget === 'config'"
               saveScope="agent"
               @save="saveConfigSettings('agent', $event)"
+              @add-profile="addProfileFromRoutes"
             />
           </div>
 

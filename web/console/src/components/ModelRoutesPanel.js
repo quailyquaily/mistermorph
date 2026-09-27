@@ -33,7 +33,8 @@ export default {
     saving: { type: Boolean, default: false },
     saveScope: { type: String, default: "" },
   },
-  emits: ["save", "update:dirty"],
+  // add-profile: open the Models page with a new profile started; profiles are made there.
+  emits: ["save", "update:dirty", "add-profile"],
   setup(props, { emit }) {
     const saveRegistry = inject("settingsSaveRegistry", null);
     const registered = computed(() => Boolean(saveRegistry && props.saveScope));
@@ -496,6 +497,12 @@ export default {
               </div>
             </li>
             <li v-if="!selected && hiddenProfiles > 0" class="model-routes-more">+{{ hiddenProfiles }} more profiles; select a route to use them</li>
+            <li class="model-routes-add">
+              <button type="button" class="model-routes-add-button" :disabled="loading || saving" @click="$emit('add-profile')">
+                <PhPlus class="icon" aria-hidden="true" />
+                <span>Add profile</span>
+              </button>
+            </li>
           </ol>
         </div>
 
