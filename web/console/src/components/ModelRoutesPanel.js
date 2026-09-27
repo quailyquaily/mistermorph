@@ -1,41 +1,29 @@
-import { computed, getCurrentInstance, inject, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
+import { computed, getCurrentInstance, inject, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 
 import {
-  ROUTE_MODE_DEFAULT,
-  ROUTE_MODE_PROFILE,
   ROUTE_MODE_SPLIT,
   ROUTE_PURPOSES,
+  addToSplit,
   percentWeights,
+  removeFromSplit,
   routeFromValue,
   routeIsUnset,
   routeProblems,
-  routeTargets,
+  routeSingleProfile,
   routeToValue,
+  setShare,
+  toggleFallback,
+  useProfile,
 } from "../core/model-routes";
-import SettingChoices from "./SettingChoices";
-import SettingSelect from "./SettingSelect";
 import "./ModelRoutesPanel.css";
 
-const MODES = [
-  { value: ROUTE_MODE_DEFAULT, title: "Default" },
-  { value: ROUTE_MODE_PROFILE, title: "One profile" },
-  { value: ROUTE_MODE_SPLIT, title: "Split" },
-];
+const SHARE_STEP = 5;
 
-function cloneRoute(route) {
-  return {
-    mode: route.mode,
-    profile: route.profile,
-    candidates: route.candidates.map((item) => ({ ...item })),
-    fallbacks: [...route.fallbacks],
-  };
-}
-
-// Model routes (llm.routes.*): which profile handles each kind of work, as a list of routes with a
-// one-line summary each, edited in place. Unset routes use the default profile.
+// Model routes (llm.routes.*) as a map: the kinds of work on the left, model profiles on the right,
+// and lines showing where each one's requests go. Line weight is the share; dashed, numbered lines
+// are fallbacks in order. Select a route to change it from the profiles: Use, Split, or Fallback.
 export default {
   name: "ModelRoutesPanel",
-  components: { SettingChoices, SettingSelect },
   props: {
     values: { type: Object, default: () => ({}) },
     fieldStates: { type: Object, default: () => ({}) },
@@ -51,28 +39,26 @@ export default {
     const registered = computed(() => Boolean(saveRegistry && props.saveScope));
     const draft = reactive({});
     const original = ref({});
-    const open = ref("");
+    const selected = ref("");
     const validationError = ref("");
 
     function replaceDraft() {
-      const next = {};
-      for (const purpose of ROUTE_PURPOSES) {
-        next[purpose.key] = routeFromValue(props.values?.[purpose.path]);
-      }
       for (const key of Object.keys(draft)) {
         delete draft[key];
       }
-      for (const [key, route] of Object.entries(next)) {
-        draft[key] = cloneRoute(route);
+      const saved = {};
+      for (const purpose of ROUTE_PURPOSES) {
+        const route = routeFromValue(props.values?.[purpose.path]);
+        draft[purpose.key] = route;
+        saved[purpose.key] = JSON.stringify(routeToValue(route));
       }
-      original.value = Object.fromEntries(Object.entries(next).map(([key, route]) => [key, JSON.stringify(routeToValue(route))]));
+      original.value = saved;
       validationError.value = "";
     }
 
     watch(() => props.values, replaceDraft, { deep: true, immediate: true });
 
-    const knownProfiles = computed(() => props.profiles.map((item) => item.value));
-    const profileNames = computed(() => knownProfiles.value.filter(Boolean));
+    const knownProfiles = computed(() => props.profiles.map((item) => item.value).filter(Boolean));
 
     function changed(purpose) {
       return JSON.stringify(routeToValue(draft[purpose.key])) !== original.value[purpose.key];
@@ -85,95 +71,160 @@ export default {
     const purposes = computed(() =>
       ROUTE_PURPOSES.filter((purpose) => !purpose.legacy || !routeIsUnset(routeFromValue(props.values?.[purpose.path])))
     );
+    const selectedPurpose = computed(() => purposes.value.find((purpose) => purpose.key === selected.value) || null);
 
     function problems(purpose) {
       return routeProblems(draft[purpose.key], knownProfiles.value.length ? knownProfiles.value : null);
     }
 
-    function stateFor(purpose) {
-      return props.fieldStates?.[purpose.path] || {};
+    function locked(purpose) {
+      return props.loading || props.saving || props.fieldStates?.[purpose.path]?.editable === false;
     }
 
-    function disabled(purpose) {
-      return props.loading || props.saving || stateFor(purpose).editable === false;
-    }
-
-    function summary(purpose) {
-      const route = draft[purpose.key];
-      return routeTargets(route);
-    }
-
-    function setMode(purpose, mode) {
-      const route = draft[purpose.key];
-      route.mode = mode;
-      if (mode === ROUTE_MODE_PROFILE && !route.profile) {
-        route.profile = route.candidates[0]?.profile || "";
+    // Every line on the map.
+    const edges = computed(() => {
+      const out = [];
+      for (const purpose of purposes.value) {
+        const route = draft[purpose.key];
+        if (route.mode === ROUTE_MODE_SPLIT) {
+          const shares = percentWeights(route.candidates);
+          route.candidates.forEach((item, index) => {
+            out.push({ id: `${purpose.key}:s:${index}`, purpose: purpose.key, profile: item.profile || "?", share: shares[index], index, kind: "split" });
+          });
+        } else {
+          out.push({ id: `${purpose.key}:r`, purpose: purpose.key, profile: routeSingleProfile(route) || "default", share: 100, kind: "route", implicit: routeIsUnset(route) || route.mode !== "profile" });
+        }
+        route.fallbacks.forEach((name, index) => {
+          out.push({ id: `${purpose.key}:f:${index}`, purpose: purpose.key, profile: name, order: index + 1, kind: "fallback" });
+        });
       }
-      if (mode === ROUTE_MODE_SPLIT && !route.candidates.length) {
-        route.candidates = [
-          { profile: route.profile || "default", weight: 50 },
-          { profile: "", weight: 50 },
-        ];
+      return out;
+    });
+
+    // Profiles in use, plus every profile while a route is selected. A profile a route names but
+    // the config does not have is shown as missing.
+    const profileNodes = computed(() => {
+      const used = new Set(edges.value.map((edge) => edge.profile));
+      const listed = props.profiles.map((item) => ({ name: item.value, note: item.note || "", missing: false }));
+      const names = new Set(listed.map((item) => item.name));
+      const nodes = listed.filter((item) => selected.value || used.has(item.name) || item.name === "default");
+      for (const name of used) {
+        if (!names.has(name)) {
+          nodes.push({ name, note: "", missing: true });
+        }
       }
+      return nodes;
+    });
+    const hiddenProfiles = computed(() => props.profiles.length - profileNodes.value.filter((node) => !node.missing).length);
+
+    // Where the selected route sends a profile's requests: "use", "split", "fallback" (with order), or "".
+    function roleOf(name) {
+      const purpose = selectedPurpose.value;
+      if (!purpose) {
+        return { role: "" };
+      }
+      const route = draft[purpose.key];
+      const fallback = route.fallbacks.indexOf(name);
+      if (route.mode === ROUTE_MODE_SPLIT) {
+        const index = route.candidates.findIndex((item) => item.profile === name);
+        if (index >= 0) {
+          return { role: "split", share: percentWeights(route.candidates)[index] };
+        }
+      } else if (routeSingleProfile(route) === name) {
+        return { role: "use", implicit: route.mode !== "profile" };
+      }
+      return fallback >= 0 ? { role: "fallback", order: fallback + 1 } : { role: "" };
+    }
+
+    function edit(change) {
+      const purpose = selectedPurpose.value;
+      if (!purpose || locked(purpose)) {
+        return;
+      }
+      draft[purpose.key] = change(draft[purpose.key]);
       validationError.value = "";
     }
 
-    // Splits are edited as whole percentages that always add up to 100.
-    function percent(purpose, index) {
-      return percentWeights(draft[purpose.key].candidates)[index];
+    const actions = {
+      use: (name) => edit((route) => useProfile(route, name)),
+      split: (name) => edit((route) => addToSplit(route, name)),
+      unsplit: (name) => edit((route) => removeFromSplit(route, name)),
+      fallback: (name) => edit((route) => toggleFallback(route, name)),
+      reset: () => edit(() => routeFromValue(null)),
+      step: (index, delta) =>
+        edit((route) => setShare(route, index, percentWeights(route.candidates)[index] + delta)),
+    };
+
+    function splitIndex(name) {
+      const purpose = selectedPurpose.value;
+      return purpose ? draft[purpose.key].candidates.findIndex((item) => item.profile === name) : -1;
     }
 
-    function setPercent(purpose, index, raw) {
-      const route = draft[purpose.key];
-      const value = Math.max(1, Math.min(99, Math.round(Number(raw) || 0)));
-      const others = route.candidates.length - 1;
-      if (others <= 0) {
-        route.candidates[0].weight = 100;
+    function select(purpose) {
+      selected.value = selected.value === purpose.key ? "" : purpose.key;
+    }
+
+    // Line geometry, measured from the nodes.
+    const canvas = ref(null);
+    const geometry = reactive({ width: 0, height: 0, from: {}, to: {} });
+    let observer = null;
+
+    function measure() {
+      const root = canvas.value;
+      if (!root) {
         return;
       }
-      const current = percentWeights(route.candidates);
-      const rest = current.reduce((sum, weight, i) => (i === index ? sum : sum + weight), 0);
-      const left = 100 - value;
-      const scaled = route.candidates.map((_, i) => (i === index ? value : rest > 0 ? (current[i] / rest) * left : left / others));
-      route.candidates.forEach((item, i) => {
-        item.weight = scaled[i];
-      });
-      const whole = percentWeights(route.candidates);
-      route.candidates.forEach((item, i) => {
-        item.weight = Math.max(1, whole[i]);
-      });
-    }
-
-    // A new profile gets an equal share; the others shrink in proportion.
-    function addShare(purpose) {
-      const route = draft[purpose.key];
-      const share = Math.round(100 / (route.candidates.length + 1));
-      const current = percentWeights(route.candidates);
-      route.candidates.forEach((item, i) => {
-        item.weight = (current[i] * (100 - share)) / 100;
-      });
-      route.candidates.push({ profile: "", weight: share });
-      const whole = percentWeights(route.candidates);
-      route.candidates.forEach((item, i) => {
-        item.weight = Math.max(1, whole[i]);
-      });
-    }
-
-    function removeShare(purpose, index) {
-      const route = draft[purpose.key];
-      route.candidates.splice(index, 1);
-      if (!route.candidates.length) {
-        route.mode = ROUTE_MODE_DEFAULT;
+      const box = root.getBoundingClientRect();
+      geometry.width = box.width;
+      geometry.height = box.height;
+      const from = {};
+      const to = {};
+      for (const el of root.querySelectorAll("[data-route]")) {
+        const r = el.getBoundingClientRect();
+        from[el.dataset.route] = { x: r.right - box.left, y: r.top - box.top + r.height / 2 };
       }
+      for (const el of root.querySelectorAll("[data-profile]")) {
+        const r = el.getBoundingClientRect();
+        to[el.dataset.profile] = { x: r.left - box.left, y: r.top - box.top + r.height / 2 };
+      }
+      geometry.from = from;
+      geometry.to = to;
     }
 
-    function resetRoute(purpose) {
-      draft[purpose.key] = routeFromValue(null);
-    }
+    watch([edges, profileNodes, selected], () => void nextTick(measure), { deep: true });
+    onMounted(() => {
+      void nextTick(measure);
+      if (typeof ResizeObserver !== "undefined" && canvas.value) {
+        observer = new ResizeObserver(measure);
+        observer.observe(canvas.value);
+      }
+    });
+    onBeforeUnmount(() => observer?.disconnect());
 
-    function toggle(purpose) {
-      open.value = open.value === purpose.key ? "" : purpose.key;
-    }
+    const lines = computed(() =>
+      edges.value
+        .map((edge) => {
+          const a = geometry.from[edge.purpose];
+          const b = geometry.to[edge.profile];
+          if (!a || !b) {
+            return null;
+          }
+          const bend = Math.max(24, (b.x - a.x) / 2);
+          const offset = edge.kind === "fallback" ? 4 : 0;
+          const path = `M ${a.x} ${a.y + offset} C ${a.x + bend} ${a.y + offset}, ${b.x - bend} ${b.y + offset}, ${b.x} ${b.y + offset}`;
+          const width = edge.kind === "fallback" ? 1.5 : 1.5 + (edge.share / 100) * 4;
+          return {
+            ...edge,
+            path,
+            width,
+            mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 + offset },
+            end: { x: b.x - 14, y: b.y + offset },
+            active: selected.value === edge.purpose,
+            dim: Boolean(selected.value) && selected.value !== edge.purpose,
+          };
+        })
+        .filter(Boolean)
+    );
 
     function buildUpdate() {
       const changes = {};
@@ -211,9 +262,8 @@ export default {
 
     function save() {
       try {
-        const update = buildUpdate();
+        emit("save", buildUpdate());
         validationError.value = "";
-        emit("save", update);
       } catch (error) {
         validationError.value = error?.message || "Invalid route";
       }
@@ -232,28 +282,26 @@ export default {
     });
 
     return {
-      MODES,
-      ROUTE_MODE_PROFILE,
-      ROUTE_MODE_SPLIT,
+      SHARE_STEP,
       draft,
-      open,
+      selected,
+      selectedPurpose,
       validationError,
       dirty,
       registered,
       purposes,
-      profileNames,
+      profileNodes,
+      hiddenProfiles,
+      lines,
+      geometry,
+      canvas,
       problems,
-      stateFor,
-      disabled,
-      summary,
+      locked,
       changed,
-      setMode,
-      percent,
-      setPercent,
-      addShare,
-      removeShare,
-      resetRoute,
-      toggle,
+      roleOf,
+      splitIndex,
+      actions,
+      select,
       save,
     };
   },
@@ -263,129 +311,120 @@ export default {
         <header class="settings-panel-head">
           <div class="settings-panel-copy">
             <h3 class="settings-panel-title workspace-document-title">Model routes</h3>
-            <p class="settings-panel-meta">Choose which model profile handles each kind of work. A route left on Default uses the default profile.</p>
+            <p class="settings-panel-meta">Where each kind of work sends its requests. Select one to change it; thicker lines carry more, dashed lines are fallbacks in order.</p>
           </div>
           <QButton v-if="!registered" class="primary" :loading="saving" :disabled="loading || saving || !dirty" @click="save">Save</QButton>
         </header>
         <div v-if="validationError" class="config-settings-error" role="alert">{{ validationError }}</div>
 
-        <ul class="model-routes-list">
-          <li v-for="purpose in purposes" :key="purpose.key" :class="['model-route', { 'is-open': open === purpose.key }]">
-            <div class="model-route-row">
-              <div class="model-route-copy">
-                <strong class="model-route-label">
+        <div v-if="selectedPurpose" class="model-routes-inspector">
+          <span class="model-routes-inspector-title">{{ selectedPurpose.label }}</span>
+          <span v-if="problems(selectedPurpose).length" class="model-route-problems" role="alert">{{ problems(selectedPurpose).join(' ') }}</span>
+          <span v-else-if="locked(selectedPurpose)" class="model-routes-node-note">This route is managed outside the settings file.</span>
+          <span v-else class="model-routes-node-note">Use sends everything to one profile; Split shares requests; Fallback is tried, in order, when a request fails.</span>
+          <QButton class="plain xs" :disabled="locked(selectedPurpose)" @click="actions.reset()">Reset to default</QButton>
+          <QButton class="plain xs" @click="selected = ''">Done</QButton>
+        </div>
+
+        <div ref="canvas" class="model-routes-map" :class="{ 'has-selection': selected }">
+          <svg class="model-routes-lines" :viewBox="'0 0 ' + geometry.width + ' ' + geometry.height" aria-hidden="true">
+            <path
+              v-for="line in lines"
+              :key="line.id"
+              :d="line.path"
+              :class="['model-routes-line', 'is-' + line.kind, { 'is-active': line.active, 'is-dim': line.dim, 'is-implicit': line.implicit }]"
+              :stroke-width="line.width"
+            />
+          </svg>
+
+          <!-- Shares and fallback order sit on the lines; the selected split gets steppers. -->
+          <template v-for="line in lines" :key="'label:' + line.id">
+            <span
+              v-if="line.kind === 'fallback'"
+              class="model-routes-order"
+              :class="{ 'is-active': line.active, 'is-dim': line.dim }"
+              :style="{ left: line.end.x + 'px', top: line.end.y + 'px' }"
+              :title="'Fallback ' + line.order"
+            >{{ line.order }}</span>
+            <span
+              v-else-if="line.kind === 'split' && !line.active"
+              class="model-routes-share"
+              :class="{ 'is-dim': line.dim }"
+              :style="{ left: line.mid.x + 'px', top: line.mid.y + 'px' }"
+            >{{ line.share }}%</span>
+            <span
+              v-else-if="line.kind === 'split'"
+              class="model-routes-stepper is-on-line"
+              :style="{ left: line.mid.x + 'px', top: line.mid.y + 'px' }"
+            >
+              <button type="button" :aria-label="'Less to ' + line.profile" :disabled="line.share <= 1" @click="actions.step(line.index, -SHARE_STEP)">−</button>
+              <span>{{ line.share }}%</span>
+              <button type="button" :aria-label="'More to ' + line.profile" :disabled="line.share >= 99" @click="actions.step(line.index, SHARE_STEP)">+</button>
+            </span>
+          </template>
+
+          <ol class="model-routes-column is-routes" aria-label="Kinds of work">
+            <li v-for="purpose in purposes" :key="purpose.key">
+              <button
+                type="button"
+                :data-route="purpose.key"
+                :class="['model-routes-node', 'is-route', { 'is-selected': selected === purpose.key, 'has-problem': problems(purpose).length }]"
+                :aria-pressed="selected === purpose.key ? 'true' : 'false'"
+                @click="select(purpose)"
+              >
+                <span class="model-routes-node-title">
                   {{ purpose.label }}
                   <span v-if="purpose.legacy" class="model-route-tag">Legacy</span>
-                  <span v-if="changed(purpose)" class="model-route-tag is-changed">Unsaved</span>
-                </strong>
-                <span class="model-route-note">{{ purpose.note }}</span>
-              </div>
-              <div class="model-route-summary" :aria-label="purpose.label + ' route'">
-                <span v-for="(target, index) in summary(purpose)" :key="index" class="model-route-target">
-                  <code>{{ target.profile || '?' }}</code>
-                  <span v-if="summary(purpose).length > 1" class="model-route-share">{{ target.share }}%</span>
+                  <span v-if="changed(purpose)" class="model-routes-dot" title="Unsaved"></span>
                 </span>
-                <span v-if="draft[purpose.key].fallbacks.length" class="model-route-fallbacks">
-                  then {{ draft[purpose.key].fallbacks.join(' → ') }}
+                <span class="model-routes-node-note">{{ purpose.note }}</span>
+              </button>
+            </li>
+          </ol>
+
+          <ol class="model-routes-column is-profiles" aria-label="Profiles">
+            <li v-for="node in profileNodes" :key="node.name">
+              <div
+                :data-profile="node.name"
+                :class="['model-routes-node', 'is-profile', 'is-' + (roleOf(node.name).role || 'idle'), { 'is-missing': node.missing }]"
+              >
+                <span class="model-routes-node-copy">
+                <span class="model-routes-node-title">
+                  <code>{{ node.name }}</code>
+                  <span v-if="roleOf(node.name).role === 'use'" class="model-routes-role">{{ roleOf(node.name).implicit ? 'default' : 'all' }}</span>
+                  <span v-else-if="roleOf(node.name).role === 'split'" class="model-routes-role is-share">{{ roleOf(node.name).share }}%</span>
+                  <span v-if="roleOf(node.name).role === 'split' && !locked(selectedPurpose)" class="model-routes-stepper is-in-node">
+                    <button type="button" :aria-label="'Less to ' + node.name" :disabled="roleOf(node.name).share <= 1" @click="actions.step(splitIndex(node.name), -SHARE_STEP)">−</button>
+                    <span>{{ roleOf(node.name).share }}%</span>
+                    <button type="button" :aria-label="'More to ' + node.name" :disabled="roleOf(node.name).share >= 99" @click="actions.step(splitIndex(node.name), SHARE_STEP)">+</button>
+                  </span>
+                  <span v-else-if="roleOf(node.name).role === 'fallback'" class="model-routes-role">fallback {{ roleOf(node.name).order }}</span>
                 </span>
-              </div>
-              <QButton
-                class="plain xs"
-                :disabled="disabled(purpose)"
-                :aria-expanded="open === purpose.key ? 'true' : 'false'"
-                @click="toggle(purpose)"
-              >{{ open === purpose.key ? 'Done' : 'Edit' }}</QButton>
-            </div>
+                <span v-if="node.missing" class="model-routes-node-note is-problem">No profile has this name.</span>
+                <span v-else-if="node.note" class="model-routes-node-note">{{ node.note }}</span>
+                </span>
 
-            <p v-if="stateFor(purpose).editable === false" class="settings-field-note">This route is managed outside the settings file.</p>
-            <p v-if="problems(purpose).length" class="model-route-problems" role="alert">{{ problems(purpose).join(' ') }}</p>
-
-            <div v-if="open === purpose.key" class="model-route-editor">
-              <div class="model-route-modes" role="radiogroup" :aria-label="purpose.label">
-                <button
-                  v-for="mode in MODES"
-                  :key="mode.value"
-                  type="button"
-                  role="radio"
-                  :aria-checked="draft[purpose.key].mode === mode.value ? 'true' : 'false'"
-                  :class="['model-route-mode', { 'is-active': draft[purpose.key].mode === mode.value }]"
-                  :disabled="disabled(purpose)"
-                  @click="setMode(purpose, mode.value)"
-                >{{ mode.title }}</button>
-              </div>
-
-              <div v-if="draft[purpose.key].mode === ROUTE_MODE_PROFILE" class="model-route-field">
-                <span class="settings-field-label">Profile</span>
-                <SettingSelect
-                  :modelValue="draft[purpose.key].profile"
-                  :options="profiles"
-                  label="Profile"
-                  placeholder="Choose a profile"
-                  :disabled="disabled(purpose)"
-                  @update:modelValue="draft[purpose.key].profile = $event"
-                />
-              </div>
-
-              <div v-else-if="draft[purpose.key].mode === ROUTE_MODE_SPLIT" class="model-route-field">
-                <span class="settings-field-label">Split requests between</span>
-                <div class="model-route-bar" aria-hidden="true">
-                  <span
-                    v-for="(item, index) in draft[purpose.key].candidates"
-                    :key="'bar:' + index"
-                    class="model-route-bar-part"
-                    :style="{ flexGrow: percent(purpose, index) }"
-                  >{{ item.profile || '?' }}</span>
+                <div v-if="selectedPurpose && !locked(selectedPurpose)" class="model-routes-actions">
+                  <button
+                    v-if="roleOf(node.name).role !== 'use' || roleOf(node.name).implicit"
+                    type="button"
+                    @click="actions.use(node.name)"
+                  >Use</button>
+                  <button v-if="roleOf(node.name).role === 'split'" type="button" @click="actions.unsplit(node.name)">Remove</button>
+                  <button v-else-if="roleOf(node.name).role !== 'use' || roleOf(node.name).implicit" type="button" @click="actions.split(node.name)">Split</button>
+                  <button
+                    v-if="roleOf(node.name).role === '' || roleOf(node.name).role === 'fallback'"
+                    type="button"
+                    :aria-pressed="roleOf(node.name).role === 'fallback' ? 'true' : 'false'"
+                    @click="actions.fallback(node.name)"
+                  >{{ roleOf(node.name).role === 'fallback' ? 'No fallback' : 'Fallback' }}</button>
                 </div>
-                <div v-for="(item, index) in draft[purpose.key].candidates" :key="'share:' + index" class="model-route-share-row">
-                  <SettingSelect
-                    :modelValue="item.profile"
-                    :options="profiles"
-                    :label="'Share ' + (index + 1)"
-                    placeholder="Choose a profile"
-                    :disabled="disabled(purpose)"
-                    @update:modelValue="item.profile = $event"
-                  />
-                  <label class="model-route-percent">
-                    <input
-                      class="model-route-percent-input"
-                      type="number"
-                      min="1"
-                      max="99"
-                      step="1"
-                      :value="percent(purpose, index)"
-                      :aria-label="'Share ' + (index + 1) + ' percent'"
-                      :disabled="disabled(purpose) || draft[purpose.key].candidates.length < 2"
-                      @change="setPercent(purpose, index, $event.target.value)"
-                    />
-                    <span aria-hidden="true">%</span>
-                  </label>
-                  <QButton class="plain xs icon" :aria-label="'Remove share ' + (index + 1)" :disabled="disabled(purpose)" @click="removeShare(purpose, index)">
-                    <PhX class="icon" />
-                  </QButton>
-                </div>
-                <QButton class="plain xs model-route-add" :disabled="disabled(purpose)" @click="addShare(purpose)">
-                  <PhPlus class="icon" /> Add a profile
-                </QButton>
               </div>
+            </li>
+            <li v-if="!selected && hiddenProfiles > 0" class="model-routes-more">+{{ hiddenProfiles }} more profiles; select a route to use them</li>
+          </ol>
+        </div>
 
-              <div class="model-route-field">
-                <span class="settings-field-label">If it fails, try in order</span>
-                <SettingChoices
-                  :modelValue="draft[purpose.key].fallbacks"
-                  :options="profileNames"
-                  label="Fallback profiles"
-                  :disabled="disabled(purpose)"
-                  @update:modelValue="draft[purpose.key].fallbacks = $event"
-                />
-                <p class="settings-field-note">Tried in the order you tick them. Leave empty for no fallback.</p>
-              </div>
-
-              <div class="model-route-editor-foot">
-                <QButton class="plain xs" :disabled="disabled(purpose)" @click="resetRoute(purpose)">Reset to default</QButton>
-              </div>
-            </div>
-          </li>
-        </ul>
       </div>
     </QCard>
   `,

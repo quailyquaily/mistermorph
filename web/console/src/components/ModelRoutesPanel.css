@@ -1,46 +1,290 @@
-/* Model routes: one row per route with a summary of where its requests go; the editor opens in
-   place below the row. */
-.model-routes-list {
+/* Model routes as a map: routes on the left, profiles on the right, lines between them (an SVG
+   layer under the nodes). Labels sit on the lines. */
+.model-routes-map {
+  position: relative;
   display: grid;
+  grid-template-columns: minmax(150px, 1fr) minmax(56px, 0.9fr) minmax(170px, 1fr);
+  align-items: center;
+  column-gap: 0;
+  padding: 8px 0 4px;
+}
+
+.model-routes-lines {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.model-routes-line {
+  fill: none;
+  stroke: color-mix(in srgb, var(--q-c-blue) 55%, var(--text-2));
+  stroke-linecap: round;
+  opacity: 0.75;
+  transition: opacity 0.15s ease, stroke 0.15s ease;
+}
+
+.model-routes-line.is-implicit {
+  stroke: var(--text-2);
+  opacity: 0.35;
+}
+
+.model-routes-line.is-fallback {
+  stroke: var(--text-2);
+  stroke-dasharray: 4 4;
+  opacity: 0.6;
+}
+
+.model-routes-line.is-active {
+  stroke: var(--q-c-blue);
+  opacity: 1;
+}
+
+.model-routes-line.is-dim {
+  opacity: 0.12;
+}
+
+.model-routes-column {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 10px;
   margin: 0;
   padding: 0;
   list-style: none;
-  border-top: 1px solid color-mix(in srgb, var(--line-soft) 82%, transparent);
-}
-
-.model-route {
-  display: grid;
-  gap: 8px;
-  padding: 12px 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--line-soft) 82%, transparent);
-}
-
-.model-route-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, auto) auto;
-  align-items: center;
-  gap: 12px;
-}
-
-.model-route-copy {
-  display: grid;
-  gap: 2px;
   min-width: 0;
 }
 
-.model-route-label {
+.model-routes-column.is-routes {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.model-routes-column.is-profiles {
+  grid-column: 3;
+  grid-row: 1;
+}
+
+.model-routes-node {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--q-card-border-color);
+  border-radius: 2px;
+  background: var(--q-bg-white, var(--bg-1));
+  color: var(--text-0);
+  font: inherit;
+  text-align: left;
+}
+
+.model-routes-node.is-route {
+  cursor: pointer;
+}
+
+.model-routes-node.is-route:hover {
+  border-color: color-mix(in srgb, var(--q-c-blue) 45%, var(--q-card-border-color));
+}
+
+.model-routes-node.is-selected {
+  border-color: var(--q-c-blue);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--q-c-blue) 22%, transparent);
+}
+
+.model-routes-node.has-problem {
+  border-color: var(--danger);
+}
+
+.model-routes-map.has-selection .model-routes-node.is-route:not(.is-selected) {
+  opacity: 0.6;
+}
+
+.model-routes-node.is-profile.is-use,
+.model-routes-node.is-profile.is-split {
+  border-color: var(--q-c-blue);
+  background: color-mix(in srgb, var(--q-c-blue) 6%, var(--q-bg-white, var(--bg-1)));
+}
+
+.model-routes-node.is-profile.is-fallback {
+  border-style: dashed;
+  border-color: var(--text-2);
+}
+
+.model-routes-node.is-missing {
+  border-color: var(--danger);
+  border-style: dashed;
+}
+
+.model-routes-node-title {
   display: flex;
   align-items: baseline;
   flex-wrap: wrap;
   gap: 6px;
-  color: var(--text-0);
+  min-width: 0;
   font-size: var(--font-size-ui);
+  font-weight: 600;
+  overflow-wrap: anywhere;
 }
 
-.model-route-note {
+.model-routes-node-title code {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-ui);
+  font-weight: 600;
+}
+
+.model-routes-node-note {
   color: var(--text-2);
   font-size: var(--font-size-meta);
-  line-height: 1.45;
+  font-weight: 400;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.model-routes-node-note.is-problem {
+  color: var(--danger);
+}
+
+.model-routes-role {
+  padding: 0 5px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--q-c-blue) 12%, transparent);
+  color: var(--q-c-blue);
+  font: 500 10px/1.6 var(--font-mono);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.model-routes-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--q-c-blue);
+}
+
+.model-routes-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.model-routes-actions button,
+.model-routes-stepper button {
+  min-height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--q-field-border-color);
+  border-radius: 2px;
+  background: var(--q-field-bg);
+  color: var(--text-1);
+  font: inherit;
+  font-size: var(--font-size-meta);
+  cursor: pointer;
+}
+
+.model-routes-actions button:hover,
+.model-routes-stepper button:hover:not(:disabled) {
+  border-color: var(--q-c-blue);
+  color: var(--text-0);
+}
+
+.model-routes-actions button[aria-pressed="true"] {
+  border-style: dashed;
+}
+
+.model-routes-share,
+.model-routes-order,
+.model-routes-stepper.is-on-line {
+  position: absolute;
+  z-index: 2;
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+}
+
+.model-routes-share {
+  padding: 0 5px;
+  border-radius: 2px;
+  background: var(--q-bg-white, var(--bg-1));
+  color: var(--text-1);
+  font: 500 11px/1.6 var(--font-mono);
+}
+
+.model-routes-order {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border: 1px dashed var(--text-2);
+  border-radius: 50%;
+  background: var(--q-bg-white, var(--bg-1));
+  color: var(--text-1);
+  font: 600 10px/1 var(--font-mono);
+}
+
+.model-routes-order.is-active {
+  border-color: var(--q-c-blue);
+  color: var(--q-c-blue);
+}
+
+.model-routes-share.is-dim,
+.model-routes-order.is-dim {
+  opacity: 0.25;
+}
+
+.model-routes-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px;
+  border: 1px solid var(--q-c-blue);
+  border-radius: 2px;
+  background: var(--q-bg-white, var(--bg-1));
+  color: var(--q-c-blue);
+  font: 600 11px/1 var(--font-mono);
+}
+
+/* The in-node stepper is for phones, where the gap between the columns is too narrow. */
+.model-routes-stepper.is-in-node {
+  display: none;
+}
+
+.model-routes-stepper button {
+  min-height: 22px;
+  min-width: 22px;
+  padding: 0;
+}
+
+.model-routes-stepper button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.model-routes-more {
+  color: var(--text-2);
+  font-size: var(--font-size-meta);
+}
+
+.model-routes-inspector {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 10px 12px;
+  border-left: 2px solid var(--q-c-blue);
+  background: color-mix(in srgb, var(--q-c-blue) 4%, transparent);
+}
+
+.model-routes-inspector-title {
+  font-size: var(--font-size-ui);
+  font-weight: 700;
+}
+
+.model-routes-inspector .model-route-problems,
+.model-routes-inspector .model-routes-node-note {
+  flex: 1 1 240px;
 }
 
 .model-route-tag {
@@ -53,42 +297,6 @@
   text-transform: uppercase;
 }
 
-.model-route-tag.is-changed {
-  border-color: color-mix(in srgb, var(--q-c-blue) 50%, transparent);
-  color: var(--q-c-blue);
-}
-
-.model-route-summary {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  align-items: baseline;
-  gap: 4px 8px;
-  min-width: 0;
-  font-size: var(--font-size-meta);
-}
-
-.model-route-target {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 4px;
-}
-
-.model-route-target code {
-  padding: 1px 6px;
-  border-radius: 2px;
-  background: color-mix(in srgb, var(--q-c-blue) 8%, transparent);
-  color: var(--text-0);
-  font-family: var(--font-mono);
-  font-size: var(--font-size-meta);
-  overflow-wrap: anywhere;
-}
-
-.model-route-share,
-.model-route-fallbacks {
-  color: var(--text-2);
-}
-
 .model-route-problems {
   margin: 0;
   color: var(--danger);
@@ -96,126 +304,66 @@
   line-height: 1.45;
 }
 
-.model-route-editor {
+/* While a route is selected, both columns start at the top and profiles are compact rows with
+   their buttons beside the name, so the list stays short. */
+.model-routes-map.has-selection {
+  align-items: start;
+}
+
+.model-routes-node-copy {
   display: grid;
-  gap: 14px;
-  padding: 12px 14px;
-  border-left: 2px solid color-mix(in srgb, var(--q-c-blue) 40%, transparent);
-  background: color-mix(in srgb, var(--q-c-blue) 3%, transparent);
+  gap: 2px;
+  min-width: 0;
 }
 
-.model-route-modes {
-  display: inline-flex;
-  width: fit-content;
-  border: 1px solid var(--q-field-border-color);
-  border-radius: 2px;
-  overflow: hidden;
-}
-
-.model-route-mode {
-  min-height: 32px;
-  padding: 0 14px;
-  border: 0;
-  border-right: 1px solid var(--q-field-border-color);
-  background: var(--q-field-bg);
-  color: var(--text-1);
-  font: inherit;
-  font-size: var(--font-size-ui);
-  cursor: pointer;
-}
-
-.model-route-mode:last-child {
-  border-right: 0;
-}
-
-.model-route-mode.is-active {
-  background: color-mix(in srgb, var(--q-c-blue) 14%, var(--q-field-bg));
-  color: var(--text-0);
-  font-weight: 600;
-}
-
-.model-route-mode:disabled {
-  cursor: default;
-  opacity: 0.56;
-}
-
-.model-route-field {
-  display: grid;
+.model-routes-map.has-selection .model-routes-column.is-profiles {
   gap: 6px;
-  min-width: 0;
 }
 
-.model-route-bar {
-  display: flex;
-  height: 22px;
-  overflow: hidden;
-  border-radius: 2px;
-  font: 500 11px/22px var(--font-mono);
-}
-
-.model-route-bar-part {
-  flex-basis: 0;
-  min-width: 0;
-  padding: 0 6px;
-  overflow: hidden;
-  color: var(--text-0);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  background: color-mix(in srgb, var(--q-c-blue) 18%, transparent);
-}
-
-.model-route-bar-part:nth-child(2n) {
-  background: color-mix(in srgb, var(--q-c-blue) 32%, transparent);
-}
-
-.model-route-share-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 96px auto;
+.model-routes-map.has-selection .model-routes-node.is-profile {
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
+  padding: 6px 8px;
 }
 
-.model-route-percent {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  color: var(--text-2);
+.model-routes-map.has-selection .model-routes-actions {
+  flex-wrap: nowrap;
+  margin-top: 0;
 }
 
-.model-route-percent-input {
-  width: 64px;
-  min-height: 40px;
-  padding: 0 8px;
-  border: 1px solid var(--q-field-border-color);
-  border-radius: var(--q-field-radius);
-  background: var(--q-field-bg);
-  color: var(--text-0);
-  font: inherit;
-  font-family: var(--font-mono);
-  text-align: right;
+.model-routes-inspector {
+  margin-bottom: 8px;
 }
 
-.model-route-percent-input:disabled {
-  opacity: 0.56;
-}
-
-.model-route-add {
-  justify-self: start;
-}
-
-.model-route-editor-foot {
-  display: flex;
-  justify-content: flex-end;
-}
-
-@media (max-width: 920px) {
-  .model-route-row {
-    grid-template-columns: minmax(0, 1fr) auto;
+/* Phones: narrower columns; notes hide on routes to keep the map readable. */
+@media (max-width: 600px) {
+  .model-routes-map {
+    grid-template-columns: minmax(0, 1fr) 36px minmax(0, 1.1fr);
   }
 
-  .model-route-summary {
-    grid-column: 1 / -1;
-    grid-row: 2;
-    justify-content: flex-start;
+  .model-routes-node.is-route .model-routes-node-note {
+    display: none;
+  }
+
+  .model-routes-node {
+    padding: 7px 8px;
+  }
+
+  .model-routes-map.has-selection .model-routes-node.is-profile {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .model-routes-map.has-selection .model-routes-actions {
+    flex-wrap: wrap;
+  }
+
+  .model-routes-stepper.is-on-line,
+  .model-routes-role.is-share {
+    display: none;
+  }
+
+  .model-routes-stepper.is-in-node {
+    display: inline-flex;
   }
 }

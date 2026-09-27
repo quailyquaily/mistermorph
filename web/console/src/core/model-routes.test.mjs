@@ -65,3 +65,42 @@ test("percentWeights always adds up to 100", () => {
   assert.deepEqual(percentWeights([{ weight: 3 }, { weight: 1 }]), [75, 25]);
   assert.deepEqual(percentWeights([{ weight: 0 }, { weight: 0 }]), [50, 50]);
 });
+
+import { addToSplit, removeFromSplit, setShare, toggleFallback, useProfile } from "./model-routes.js";
+
+const shares = (route) => route.candidates.map((item) => `${item.profile}:${item.weight}`).join(" ");
+
+test("map edits: use, split, remove, fallback", () => {
+  const unset = routeFromValue({});
+  const one = useProfile(unset, "cheap");
+  assert.deepEqual(routeToValue(one), { profile: "cheap" });
+
+  // Splitting from one profile keeps it and adds the new one at an equal share.
+  const two = addToSplit(one, "backup");
+  assert.equal(shares(two), "cheap:50 backup:50");
+  const three = addToSplit(two, "nest");
+  assert.equal(shares(three), "cheap:34 backup:33 nest:33");
+  assert.equal(three.candidates.reduce((sum, item) => sum + item.weight, 0), 100);
+  // Splitting from the default route starts from "default".
+  assert.equal(shares(addToSplit(unset, "cheap")), "default:50 cheap:50");
+
+  // Removing down to one profile turns the split back into that profile.
+  assert.deepEqual(routeToValue(removeFromSplit(two, "cheap")), { profile: "backup" });
+
+  // Fallbacks keep their order; a profile used directly stops being a fallback.
+  const withFallbacks = toggleFallback(toggleFallback(one, "backup"), "default");
+  assert.deepEqual(withFallbacks.fallbacks, ["backup", "default"]);
+  assert.deepEqual(toggleFallback(withFallbacks, "backup").fallbacks, ["default"]);
+  assert.deepEqual(useProfile(withFallbacks, "backup").fallbacks, ["default"]);
+  // The input route is never changed.
+  assert.deepEqual(routeToValue(one), { profile: "cheap" });
+});
+
+test("setShare keeps a split adding up to 100", () => {
+  const split = addToSplit(addToSplit(routeFromValue({ profile: "a" }), "b"), "c");
+  const moved = setShare(split, 0, 70);
+  assert.equal(moved.candidates[0].weight, 70);
+  assert.equal(moved.candidates.reduce((sum, item) => sum + item.weight, 0), 100);
+  assert.equal(setShare(split, 0, 100).candidates[0].weight, 98);
+  assert.equal(setShare(split, 0, 0).candidates[0].weight, 1);
+});

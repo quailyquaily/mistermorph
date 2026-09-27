@@ -145,3 +145,101 @@ export function percentWeights(candidates) {
   }
   return out;
 }
+
+// Edits made on the routing map. Each returns a new route; the input is not changed.
+
+function copy(route) {
+  return {
+    mode: route.mode,
+    profile: route.profile,
+    candidates: route.candidates.map((item) => ({ ...item })),
+    fallbacks: [...route.fallbacks],
+  };
+}
+
+// withWholeShares rescales candidate weights to whole percentages adding up to 100.
+function withWholeShares(route) {
+  const whole = percentWeights(route.candidates);
+  route.candidates.forEach((item, index) => {
+    item.weight = Math.max(1, whole[index]);
+  });
+  return route;
+}
+
+// Every request goes to one profile. A profile that was a fallback stops being one.
+export function useProfile(route, name) {
+  const next = copy(route);
+  next.mode = ROUTE_MODE_PROFILE;
+  next.profile = name;
+  next.candidates = [];
+  next.fallbacks = next.fallbacks.filter((item) => item !== name);
+  return next;
+}
+
+// Adds a profile to a split with an equal share, the others shrinking in proportion. A route on
+// one profile (or the default) becomes a split between that profile and the new one.
+export function addToSplit(route, name) {
+  const next = copy(route);
+  if (next.mode !== ROUTE_MODE_SPLIT) {
+    const current = next.mode === ROUTE_MODE_PROFILE && text(next.profile) ? text(next.profile) : "default";
+    next.mode = ROUTE_MODE_SPLIT;
+    next.candidates = [{ profile: current, weight: 100 }];
+  }
+  if (next.candidates.some((item) => item.profile === name)) {
+    return next;
+  }
+  const share = Math.round(100 / (next.candidates.length + 1));
+  const current = percentWeights(next.candidates);
+  next.candidates.forEach((item, index) => {
+    item.weight = (current[index] * (100 - share)) / 100;
+  });
+  next.candidates.push({ profile: name, weight: share });
+  next.fallbacks = next.fallbacks.filter((item) => item !== name);
+  return withWholeShares(next);
+}
+
+// Removes a profile from a split; a split left with one profile becomes that profile.
+export function removeFromSplit(route, name) {
+  const next = copy(route);
+  next.candidates = next.candidates.filter((item) => item.profile !== name);
+  if (next.candidates.length === 1) {
+    return useProfile(next, next.candidates[0].profile);
+  }
+  if (!next.candidates.length) {
+    next.mode = ROUTE_MODE_DEFAULT;
+    return next;
+  }
+  return withWholeShares(next);
+}
+
+// Adds a fallback at the end of the order, or removes it.
+export function toggleFallback(route, name) {
+  const next = copy(route);
+  next.fallbacks = next.fallbacks.includes(name) ? next.fallbacks.filter((item) => item !== name) : [...next.fallbacks, name];
+  return next;
+}
+
+// Sets one share of a split to a whole percentage (1 to 99); the others take the rest in proportion.
+export function setShare(route, index, percent) {
+  const next = copy(route);
+  const count = next.candidates.length;
+  if (count < 2 || index < 0 || index >= count) {
+    return next;
+  }
+  const value = Math.max(1, Math.min(100 - (count - 1), Math.round(Number(percent) || 0)));
+  const current = percentWeights(next.candidates);
+  const rest = current.reduce((sum, weight, i) => (i === index ? sum : sum + weight), 0);
+  const left = 100 - value;
+  next.candidates.forEach((item, i) => {
+    item.weight = i === index ? value : rest > 0 ? (current[i] / rest) * left : left / (count - 1);
+  });
+  return withWholeShares(next);
+}
+
+// Which profile a route uses, or "" when it is a split. An unset route uses "default".
+export function routeSingleProfile(route) {
+  if (route.mode === ROUTE_MODE_SPLIT) {
+    return "";
+  }
+  return route.mode === ROUTE_MODE_PROFILE ? text(route.profile) : "default";
+}
