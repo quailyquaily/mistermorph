@@ -1338,7 +1338,7 @@ const ChatView = {
       syncMobileTopicView({
         preferChat: Boolean(creatingTopic.value || normalizeTopicID(selectedTopicID.value)),
       });
-      focusComposer();
+      focusComposerOnEnter();
     }
 
     async function ensureComposerSkillsLoaded() {
@@ -1522,6 +1522,15 @@ const ChatView = {
       void nextTick(() => {
         composerRef.value?.focus?.();
       });
+    }
+
+    // Entering a conversation focuses the composer on desktop only: on a phone, focus opens the
+    // keyboard over the conversation the user came to read.
+    function focusComposerOnEnter() {
+      if (mobileMode.value) {
+        return;
+      }
+      focusComposer();
     }
 
     function insertComposerText(rawText) {
@@ -3587,7 +3596,7 @@ const ChatView = {
       rememberTopicSelection(submitEndpointRef.value, normalized);
       syncMobileTopicView({ preferChat: true });
       void loadHistory().finally(() => {
-        focusComposer();
+        focusComposerOnEnter();
       });
       void syncChatRoute(normalized);
     }
@@ -3821,7 +3830,7 @@ const ChatView = {
         preferredTopicID: routeTopicID.value,
         preserveSelection: Boolean(routeTopicID.value),
       }).finally(() => {
-        focusComposer();
+        focusComposerOnEnter();
       });
       void loadComposerLLMProfiles();
       syncComposer();
@@ -3864,7 +3873,7 @@ const ChatView = {
           preferredTopicID: routeTopicID.value,
           preserveSelection: Boolean(routeTopicID.value),
         }).finally(() => {
-          focusComposer();
+          focusComposerOnEnter();
         });
         void loadComposerLLMProfiles();
         syncComposer();
@@ -3915,7 +3924,7 @@ const ChatView = {
       () => routeTopicID.value,
       () => {
         void syncTopicFromRoute().finally(() => {
-          focusComposer();
+          focusComposerOnEnter();
         });
       }
     );
@@ -3923,7 +3932,7 @@ const ChatView = {
       () => showChatPane.value,
       (visible) => {
         if (visible) {
-          focusComposer();
+          focusComposerOnEnter();
         }
       }
     );
