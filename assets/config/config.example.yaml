@@ -321,6 +321,8 @@ tools:
     # Console only. Install a previewed skill; always asks the user to approve first.
     # Off by default: a task that names it as $skill_install (such as the Skills page's Add skill) still gets it.
     enabled: false
+    # Largest skill, all files together, that skill_install_preview downloads (bytes). 0 uses the default, 16 MiB.
+    max_bytes: 16777216
   url_fetch:
     # Enable the url_fetch tool (HTTP(S) GET/POST/PUT/DELETE, truncated output).
     enabled: true

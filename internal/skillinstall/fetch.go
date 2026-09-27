@@ -19,8 +19,10 @@ import (
 
 const (
 	MaxFileBytes  = 512 * 1024
-	MaxSkillBytes = 2 * 1024 * 1024
 	MaxSkillFiles = 50
+	// DefaultMaxSkillBytes caps a whole skill unless Options.MaxSkillBytes
+	// (tools.skill_install.max_bytes) sets another limit.
+	DefaultMaxSkillBytes = 16 * 1024 * 1024
 )
 
 const (
@@ -57,6 +59,15 @@ type fetcher struct {
 	http      *http.Client
 	githubAPI string
 	githubRaw string
+	// maxSkillBytes caps the whole skill; 0 means DefaultMaxSkillBytes.
+	maxSkillBytes int64
+}
+
+func (f fetcher) skillByteLimit() int64 {
+	if f.maxSkillBytes > 0 {
+		return f.maxSkillBytes
+	}
+	return DefaultMaxSkillBytes
 }
 
 func (f fetcher) client() *http.Client {
@@ -181,8 +192,8 @@ func (f fetcher) fetchGitHub(ctx context.Context, target Target) (fetched, error
 	for _, entry := range entries {
 		total += entry.Size
 	}
-	if total > MaxSkillBytes {
-		return fetched{}, fmt.Errorf("the skill is %d bytes; the limit is %d", total, MaxSkillBytes)
+	if limit := f.skillByteLimit(); total > limit {
+		return fetched{}, fmt.Errorf("the skill is %d bytes; the limit is %d (tools.skill_install.max_bytes)", total, limit)
 	}
 
 	out := fetched{source: Source{

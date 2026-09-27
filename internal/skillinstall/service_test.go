@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -191,6 +192,27 @@ func TestPreviewRejectsBinaryAndSymlinks(t *testing.T) {
 				t.Fatal("Preview() succeeded")
 			}
 		})
+	}
+}
+
+func TestPreviewSizeLimitComesFromOptions(t *testing.T) {
+	// 3 MiB of text: over the old fixed 2 MiB, under the 16 MiB default. Six files keep each under
+	// the 512 KiB per-file limit.
+	files := map[string]string{"s/SKILL.md": pdfSkill}
+	for i := 0; i < 6; i++ {
+		files[fmt.Sprintf("s/ref/%d.md", i)] = strings.Repeat("x", 512*1024)
+	}
+	server := fakeGitHub(t, fakeRepo{files: files})
+	link := "https://github.com/acme/skills/tree/main/s"
+
+	opts, _ := testOptions(t, server)
+	if _, err := NewService().Preview(context.Background(), opts, link, nil); err != nil {
+		t.Fatalf("default limit: Preview() error = %v", err)
+	}
+	opts.MaxSkillBytes = 1024 * 1024
+	_, err := NewService().Preview(context.Background(), opts, link, nil)
+	if err == nil || !strings.Contains(err.Error(), "the limit is 1048576") {
+		t.Fatalf("1 MiB limit: Preview() error = %v", err)
 	}
 }
 

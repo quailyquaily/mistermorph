@@ -65,6 +65,7 @@ func AgentFields() []Field {
 		{Path: "tools.image_edit.enabled", Kind: KindBool, ApplyMode: ApplyNextGeneration},
 		{Path: "tools.skill_install_preview.enabled", Kind: KindBool, ApplyMode: ApplyNextGeneration},
 		{Path: "tools.skill_install.enabled", Kind: KindBool, ApplyMode: ApplyNextGeneration},
+		{Path: "tools.skill_install.max_bytes", Kind: KindInt, ApplyMode: ApplyNextGeneration, Min: &zero},
 		{Path: "tools.url_fetch.enabled", Kind: KindBool, ApplyMode: ApplyNextGeneration},
 		{Path: "tools.url_fetch.timeout", Kind: KindDuration, ApplyMode: ApplyNextGeneration},
 		{Path: "tools.url_fetch.max_bytes", Kind: KindInt, ApplyMode: ApplyNextGeneration, Min: &zero},

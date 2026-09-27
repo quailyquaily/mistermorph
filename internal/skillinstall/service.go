@@ -46,6 +46,8 @@ type Options struct {
 	GitHubAPI  string
 	GitHubRaw  string
 	Review     ReviewFunc
+	// MaxSkillBytes caps a whole skill's size; 0 means DefaultMaxSkillBytes.
+	MaxSkillBytes int64
 	// Enable switches an installed skill on (skills.enabled / skills.load).
 	Enable func(ctx context.Context, skillID string) error
 }
@@ -126,7 +128,7 @@ func (s *Service) Preview(ctx context.Context, opts Options, link string, expect
 	if err != nil {
 		return Preview{}, err
 	}
-	got, err := fetcher{http: opts.HTTPClient, githubAPI: opts.GitHubAPI, githubRaw: opts.GitHubRaw}.fetch(ctx, target)
+	got, err := fetcher{http: opts.HTTPClient, githubAPI: opts.GitHubAPI, githubRaw: opts.GitHubRaw, maxSkillBytes: opts.MaxSkillBytes}.fetch(ctx, target)
 	if err != nil {
 		return Preview{}, err
 	}

@@ -46,6 +46,8 @@ func (r *consoleLocalRuntime) skillInstallTools(generation *consoleLocalRuntimeG
 				StagingDir: filepath.Join(stateDir, "skill_install_staging"),
 				Review:     skillinstall.LLMReviewer(client, model),
 				Enable:     r.enableInstalledSkill,
+				// Read per call, so a changed limit applies to the next preview.
+				MaxSkillBytes: reader.GetInt64("tools.skill_install.max_bytes"),
 			}, nil
 		},
 		StoreIndexURL: func() string { return skillStoreIndexURL(reader) },

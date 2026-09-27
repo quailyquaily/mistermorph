@@ -146,6 +146,13 @@ export const TOOL_ADVANCED_CONFIG_GROUPS = {
       { path: "tools.bash.rewrite.binary", label: "Rewrite binary", type: "string" },
     ],
   }],
+  skill_install: [{
+    id: "skill-install",
+    title: "skill_install",
+    fields: [
+      { path: "tools.skill_install.max_bytes", label: "Skill maximum bytes (all files)", type: "int" },
+    ],
+  }],
   powershell: [{
     id: "powershell",
     title: "powershell",

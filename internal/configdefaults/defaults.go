@@ -240,6 +240,8 @@ func Apply(v *viper.Viper) {
 	// $skill_install), such as the Skills page's Add skill, gets them.
 	v.SetDefault("tools.skill_install_preview.enabled", false)
 	v.SetDefault("tools.skill_install.enabled", false)
+	// Largest skill (all files together) that skill_install_preview downloads.
+	v.SetDefault("tools.skill_install.max_bytes", int64(16*1024*1024))
 
 	v.SetDefault("acp.agents", []map[string]any{})
 }
