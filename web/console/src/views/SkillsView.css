@@ -216,7 +216,7 @@
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  height: 44px;
+  height: 32px;
   cursor: pointer;
 }
 
@@ -227,14 +227,20 @@
   text-transform: uppercase;
 }
 
-/* The "⋯" menu button, as on TODO. */
-.skills-actions-menu,
+/* The "⋯" menu button, as on TODO, but as tall as the switch beside it (QSwitch's --switch-h,
+   which is scoped to the switch and so cannot be read here). */
+.skills-detail-toolbar .skills-actions-menu {
+  flex: 0 0 auto;
+}
+
+/* Out-ranks the themes' `body[data-theme] .q-dropdown-menu { width: 100% }`. */
+.skills-detail-toolbar .q-dropdown-menu.skills-actions-menu,
 .skills-actions-menu .q-dropdown-menu-inner,
 .skills-actions-menu .q-dropdown-menu-action {
-  width: 44px;
-  min-width: 44px;
-  height: 44px;
-  min-height: 44px;
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  min-height: 32px;
 }
 
 .skills-actions-menu .q-dropdown-menu-action {
