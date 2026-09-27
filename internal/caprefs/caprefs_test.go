@@ -21,6 +21,8 @@ func TestNames(t *testing.T) {
 		{name: "embedded word ignored", text: "foo$bar", want: nil},
 		{name: "punctuation colon", text: "$bash: run tests", want: []string{"bash"}},
 		{name: "colon has no special syntax", text: "$tool:bash", want: []string{"tool"}},
+		{name: "sentence full stop is not part of the name", text: "then call $skill_install.", want: []string{"skill_install"}},
+		{name: "trailing dots and dashes trimmed", text: "use $my.skill-name... or $bash-", want: []string{"my.skill-name", "bash"}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
