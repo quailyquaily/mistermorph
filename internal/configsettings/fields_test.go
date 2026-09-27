@@ -27,6 +27,7 @@ func TestPublicFieldSetsHaveUniquePathsAndApplyModes(t *testing.T) {
 	for _, path := range []string{
 		"llm.cache_ttl",
 		"llm.routes.main_loop",
+		"llm.routes.decision",
 		"llm.routes.addressing",
 		"max_steps",
 		"tools.bash.timeout",

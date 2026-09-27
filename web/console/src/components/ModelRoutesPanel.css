@@ -1,0 +1,221 @@
+/* Model routes: one row per route with a summary of where its requests go; the editor opens in
+   place below the row. */
+.model-routes-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid color-mix(in srgb, var(--line-soft) 82%, transparent);
+}
+
+.model-route {
+  display: grid;
+  gap: 8px;
+  padding: 12px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--line-soft) 82%, transparent);
+}
+
+.model-route-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, auto) auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.model-route-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.model-route-label {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+  color: var(--text-0);
+  font-size: var(--font-size-ui);
+}
+
+.model-route-note {
+  color: var(--text-2);
+  font-size: var(--font-size-meta);
+  line-height: 1.45;
+}
+
+.model-route-tag {
+  padding: 0 5px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  color: var(--text-2);
+  font: 500 10px/1.5 var(--font-mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.model-route-tag.is-changed {
+  border-color: color-mix(in srgb, var(--q-c-blue) 50%, transparent);
+  color: var(--q-c-blue);
+}
+
+.model-route-summary {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: baseline;
+  gap: 4px 8px;
+  min-width: 0;
+  font-size: var(--font-size-meta);
+}
+
+.model-route-target {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.model-route-target code {
+  padding: 1px 6px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--q-c-blue) 8%, transparent);
+  color: var(--text-0);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-meta);
+  overflow-wrap: anywhere;
+}
+
+.model-route-share,
+.model-route-fallbacks {
+  color: var(--text-2);
+}
+
+.model-route-problems {
+  margin: 0;
+  color: var(--danger);
+  font-size: var(--font-size-meta);
+  line-height: 1.45;
+}
+
+.model-route-editor {
+  display: grid;
+  gap: 14px;
+  padding: 12px 14px;
+  border-left: 2px solid color-mix(in srgb, var(--q-c-blue) 40%, transparent);
+  background: color-mix(in srgb, var(--q-c-blue) 3%, transparent);
+}
+
+.model-route-modes {
+  display: inline-flex;
+  width: fit-content;
+  border: 1px solid var(--q-field-border-color);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.model-route-mode {
+  min-height: 32px;
+  padding: 0 14px;
+  border: 0;
+  border-right: 1px solid var(--q-field-border-color);
+  background: var(--q-field-bg);
+  color: var(--text-1);
+  font: inherit;
+  font-size: var(--font-size-ui);
+  cursor: pointer;
+}
+
+.model-route-mode:last-child {
+  border-right: 0;
+}
+
+.model-route-mode.is-active {
+  background: color-mix(in srgb, var(--q-c-blue) 14%, var(--q-field-bg));
+  color: var(--text-0);
+  font-weight: 600;
+}
+
+.model-route-mode:disabled {
+  cursor: default;
+  opacity: 0.56;
+}
+
+.model-route-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.model-route-bar {
+  display: flex;
+  height: 22px;
+  overflow: hidden;
+  border-radius: 2px;
+  font: 500 11px/22px var(--font-mono);
+}
+
+.model-route-bar-part {
+  flex-basis: 0;
+  min-width: 0;
+  padding: 0 6px;
+  overflow: hidden;
+  color: var(--text-0);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: color-mix(in srgb, var(--q-c-blue) 18%, transparent);
+}
+
+.model-route-bar-part:nth-child(2n) {
+  background: color-mix(in srgb, var(--q-c-blue) 32%, transparent);
+}
+
+.model-route-share-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 96px auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.model-route-percent {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-2);
+}
+
+.model-route-percent-input {
+  width: 64px;
+  min-height: 40px;
+  padding: 0 8px;
+  border: 1px solid var(--q-field-border-color);
+  border-radius: var(--q-field-radius);
+  background: var(--q-field-bg);
+  color: var(--text-0);
+  font: inherit;
+  font-family: var(--font-mono);
+  text-align: right;
+}
+
+.model-route-percent-input:disabled {
+  opacity: 0.56;
+}
+
+.model-route-add {
+  justify-self: start;
+}
+
+.model-route-editor-foot {
+  display: flex;
+  justify-content: flex-end;
+}
+
+@media (max-width: 920px) {
+  .model-route-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .model-route-summary {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-content: flex-start;
+  }
+}

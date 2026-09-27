@@ -8,6 +8,7 @@ import AppPage from "../components/AppPage";
 import AuthProfilesPanel from "../components/AuthProfilesPanel";
 import CodexAuthDialog from "../components/CodexAuthDialog";
 import ConfigSettingsPanel from "../components/ConfigSettingsPanel";
+import ModelRoutesPanel from "../components/ModelRoutesPanel";
 import ConsolePasswordPanel from "../components/ConsolePasswordPanel";
 import ConsoleEndpointsPanel from "../components/ConsoleEndpointsPanel";
 import XAIAuthDialog from "../components/XAIAuthDialog";
@@ -652,6 +653,7 @@ const SettingsView = {
     AuthProfilesPanel,
     CodexAuthDialog,
     ConfigSettingsPanel,
+    ModelRoutesPanel,
     ConsolePasswordPanel,
     ConsoleEndpointsPanel,
     XAIAuthDialog,
@@ -1534,6 +1536,11 @@ const SettingsView = {
         }))
         .filter((item) => item.value !== "")
     );
+    // Routes can also name the top-level model, which is the "default" profile.
+    const routeProfileOptions = computed(() => [
+      { title: "default", value: "default", note: trimText(state.llm.model) },
+      ...profileOptions.value.filter((item) => item.value !== "default"),
+    ]);
     function profileValidationError(profile) {
       const name = trimText(profile?.name);
       if (!name) {
@@ -4710,6 +4717,7 @@ const SettingsView = {
       reasoningEffortItems,
       toolsEmulationItems,
       profileOptions,
+      routeProfileOptions,
       agentValidationError,
       profileSaveDisabled,
       llmProfileSecretFields,
@@ -5173,6 +5181,16 @@ const SettingsView = {
                 </div>
               </div>
             </QCard>
+
+            <ModelRoutesPanel
+              :values="agentConfigValues"
+              :fieldStates="agentFieldStates"
+              :profiles="routeProfileOptions"
+              :loading="agentLoading"
+              :saving="agentSaving && agentSavingTarget === 'config'"
+              saveScope="agent"
+              @save="saveConfigSettings('agent', $event)"
+            />
 
             <ConfigSettingsPanel
               v-for="group in LLM_SYSTEM_CONFIG_GROUPS"

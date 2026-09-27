@@ -37,6 +37,7 @@ func AgentFields() []Field {
 		{Path: "llm.image.options.gemini", Kind: KindJSON, ApplyMode: ApplyNextGeneration, Default: map[string]any{}},
 		{Path: "llm.image.options.cloudflare", Kind: KindJSON, ApplyMode: ApplyNextGeneration, Default: map[string]any{}},
 		{Path: "llm.routes.main_loop", Kind: KindJSON, ApplyMode: ApplyNextGeneration, Default: map[string]any{}},
+		{Path: "llm.routes.decision", Kind: KindJSON, ApplyMode: ApplyNextGeneration, Default: map[string]any{}},
 		{Path: "llm.routes.addressing", Kind: KindJSON, ApplyMode: ApplyNextGeneration, Default: map[string]any{}},
 		{Path: "llm.routes.awareness", Kind: KindJSON, ApplyMode: ApplyNextGeneration, Default: map[string]any{}},
 		{Path: "llm.routes.think", Kind: KindJSON, ApplyMode: ApplyNextGeneration, Default: map[string]any{}},
