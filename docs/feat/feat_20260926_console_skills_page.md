@@ -47,37 +47,40 @@ behind an API and adds provenance.
 
 ### 3.2 Layout
 
-A page bar with the global switch and Install, then Installed / Store tabs, a search box and a
-card grid. A card opens the skill in a side sheet (full screen on phones).
+The page bar holds the title and the Installed / Store tabs (as TODO does), then search, the
+global switch and Install. The body is one framed panel in the Usage page's drawing-sheet
+style (registration marks, mono header), with one row per skill. A row opens the skill in a
+side sheet (full screen on phones). The page body's gutter is the only side padding.
 
 ```text
-+----------------------------------------------------------------------------------+
-| Skills                                         LOAD SKILLS [on]   [+ Install]    |
-|----------------------------------------------------------------------------------|
-|  [Installed | Store]                                       [ search skills   ]   |
-|  1 OF 4 LOADED   ~/.morph/skills                                                 |
-|  +-------------------------+ +-------------------------+ +---------------------+ |
-|  | ■ jsonbill        [on]  | | □ weather         [off] | | □ inventory-cli ... | |
-|  | Generate PDF invoices…  | | Look up forecasts…      | | Track inventory…    | |
-|  | - - - - - - - - - - - - | | - - - - - - - - - - - - | | - - - - - - - - - - | |
-|  | STORE V1.0.0  UPDATE    | | SOMEONE/SKILLS  curl    | | LOCAL  inventory    | |
-|  +-------------------------+ +-------------------------+ +---------------------+ |
-+----------------------------------------------------------------------------------+
+Skills  [Installed|Store]                 [search skills]  LOAD SKILLS [on]  [+ Install]
+┌──────────────────────────────────────────────────────────────────────────────────────┐
+│ ■ INSTALLED  ~/.morph/skills                                          1 OF 4 LOADED  │
+├──────────────────────────────────────────────────────────────────────────────────────┤
+│ ■  jsonbill  STORE V1.0.0  UPDATE                    http_client · file_io   [on]  › │
+│    Generate PDF invoices from JSON…                                                  │
+│ - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -  │
+│ □  weather  SOMEONE/SKILLS                                        curl       [off] › │
+│    Look up forecasts with wttr.in…                                                   │
+└──────────────────────────────────────────────────────────────────────────────────────┘
 
-side sheet:  [x] jsonbill                                  ■ LOADED [on]
+side sheet:  ■ SKILL                                                       [x]
+             jsonbill
              Generate PDF invoices…
+             [□ NOT LOADED  (switch)]
              ! Changed since install: SKILL.md.   (when checksums differ)
              ↻ Version 1.1.0 is in the store. [Update]
-             SOURCE     Store v1.0.0 @ 3f9c2e1   (links to the pinned folder)
-             INSTALLED  2026-09-20
-             ID / LOCATION / REQUIRES / AUTH PROFILE / FILES
+             SOURCE / INSTALLED / LOCATION / REQUIRES / AUTH PROFILE / FILES
              > SKILL.md                            (collapsed; rendered on open)
-             To remove a skill, delete its folder.
+             ─────────────────────────────────────────────
+             [Remove]  → Remove jsonbill? …folder…  [Cancel] [Remove]
 ```
 
-- Cards: name, square status mark (filled = loaded), a switch, a three-line description, and a
-  footer with the source tag (Store vX / owner/repo / Link / Local), Update and Edited tags and
-  the requirements.
+- Installed rows: status mark (filled = loaded), name, source tag (Store vX / owner/repo /
+  Link / Local), Update and Edited tags, a two-line description, the requirements (hidden
+  below 1180 px) and a compact switch.
+- Store rows: an initial plate, name, version, tags, description, author, license, size, and
+  Install / Installed / Update to vX.
 - The switches save immediately (one small config write); the page has no pending state.
 - `skills.load` cannot express "none" (empty means all), so switching off the last loaded skill
   turns skills off and keeps the list, and switching one on while skills are off loads just
@@ -101,6 +104,7 @@ is loaded (`internal/agentsettings/skills_catalog.go`).
 | --- | --- |
 | `GET /settings/agent/skills` | Enabled flag, load list, skills roots, read-only state, config revision, and every discovered skill with id, name, description, dir, requirements, auth profiles, loaded flag, file list (dot-folders and the provenance file skipped, capped at 200 files), `source` (from provenance, with `installed_at`) and `modified` (files whose checksum changed since install). |
 | `GET /settings/agent/skills/detail?id=<id>` | The same fields plus `SKILL.md` content, capped at 256 KiB. Only discovered skills are readable, so an id cannot reach outside the skills roots. |
+| `POST /settings/agent/skills/remove` `{id}` | Deletes the skill's folder (only a direct child of a skills root; a linked folder loses its link, not its target) and drops the id from `skills.load` unless it was the only entry. 404 for unknown ids, 409 for nested skills. |
 | `GET /settings/agent/skills/store` | The store index (`skills.store.index_url`, cached for 10 minutes) with `installed`, `installed_version` and `update_available` per entry, matched through provenance `store_id`. 502 when the store cannot be reached. |
 | (existing) agent settings update | Switches use the agent settings API's `skills: {enabled, load}` update. |
 
@@ -207,7 +211,9 @@ Each installed skill gets `.mistermorph-skill.json`:
 `kind` is `github`, `url` or `store`. It powers the Source row, Edited (checksums differ) and
 Update (store version differs). Skills without the file are shown as Local.
 
-Removing a skill is deleting its folder under the skills root; there is no uninstall flow.
+Remove, at the bottom of a skill's side sheet, asks in place (the footer turns into a
+confirmation showing the folder) and then calls `POST /settings/agent/skills/remove`. Deleting
+the folder by hand works too.
 
 ## 5) Stage 3: the skill store
 
@@ -285,5 +291,5 @@ Skills are instructions the agent follows, and they can ship scripts the agent m
 | New installs | Switched on immediately. |
 | Where installs start | The web console only: the Skills page, the Store tab and console chat topics. |
 | Built-in skills | Not needed any more; the page neither lists nor installs them. |
-| Removing a skill | Delete its folder under the skills root. No uninstall flow or route. |
+| Removing a skill | Remove in the side sheet deletes the skill's folder after a confirmation. |
 | Settings | The Skills section is removed. |

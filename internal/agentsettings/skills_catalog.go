@@ -2,7 +2,9 @@ package agentsettings
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
 	"net/http"
 	"os"
@@ -71,7 +73,10 @@ type SkillDetail struct {
 	ContentTruncated bool   `json:"content_truncated,omitempty"`
 }
 
-var errSkillNotFound = errors.New("skill not found")
+var (
+	errSkillNotFound     = errors.New("skill not found")
+	errSkillNotRemovable = errors.New("only skills directly inside the skills folder can be removed here")
+)
 
 // BuildSkillCatalog lists the skills under roots. Loaded state comes from the settings view,
 // so the page and the agent agree on what is loaded.
@@ -388,4 +393,122 @@ func (h *Handler) SkillStore(w http.ResponseWriter, r *http.Request) {
 	out.IndexURL = indexURL
 	out.FetchedAt = fetchedAt.UTC().Format("2006-01-02T15:04:05Z")
 	writeSettingsJSON(w, http.StatusOK, out)
+}
+
+// RemovedSkill is the result of RemoveSkill.
+type RemovedSkill struct {
+	ID  string `json:"id"`
+	Dir string `json:"dir"`
+}
+
+// RemoveSkill deletes a discovered skill's folder and drops it from the load list. Only a
+// direct child of a skills root can be removed; a linked folder loses its link, not its target.
+func RemoveSkill(ctx context.Context, owner Owner, roots []string, id string) (RemovedSkill, error) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return RemovedSkill{}, errSkillNotFound
+	}
+	discovered, err := discoverSkillsWithFrontmatter(roots)
+	if err != nil {
+		return RemovedSkill{}, err
+	}
+	var dir string
+	for _, skill := range discovered {
+		if strings.EqualFold(strings.TrimSpace(skill.ID), id) {
+			id, dir = strings.TrimSpace(skill.ID), skill.Dir
+			break
+		}
+	}
+	if dir == "" {
+		return RemovedSkill{}, errSkillNotFound
+	}
+	if !isDirectChildOfRoot(dir, roots) {
+		return RemovedSkill{}, errSkillNotRemovable
+	}
+	if err := os.RemoveAll(dir); err != nil {
+		return RemovedSkill{}, err
+	}
+	// Keep the load list meaning the same: drop the id, unless it was the only entry (an
+	// empty list would load every skill; an unknown id is ignored).
+	view, err := owner.View(ctx)
+	if err != nil {
+		return RemovedSkill{ID: id, Dir: dir}, nil
+	}
+	var kept []string
+	found := false
+	for _, entry := range view.Skills.Load {
+		if strings.EqualFold(strings.TrimSpace(entry), id) {
+			found = true
+			continue
+		}
+		kept = append(kept, entry)
+	}
+	if found && len(kept) > 0 {
+		if _, err := owner.Update(ctx, AgentSettingsUpdate{Skills: &SkillsSettingsUpdate{Load: &kept}}); err != nil {
+			return RemovedSkill{ID: id, Dir: dir}, fmt.Errorf("removed %s but could not update skills.load: %w", id, err)
+		}
+	}
+	return RemovedSkill{ID: id, Dir: dir}, nil
+}
+
+func isDirectChildOfRoot(dir string, roots []string) bool {
+	for _, root := range roots {
+		rel, err := filepath.Rel(filepath.Clean(root), filepath.Clean(dir))
+		if err == nil && rel != "." && rel != ".." && !strings.ContainsRune(rel, filepath.Separator) {
+			return true
+		}
+	}
+	return false
+}
+
+// RemoveSkillRoute serves POST /settings/agent/skills/remove with {"id": "<skill id>"}.
+func (h *Handler) RemoveSkillRoute(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeSettingsError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	if h == nil || h.owner == nil {
+		writeSettingsError(w, http.StatusServiceUnavailable, "agent settings are unavailable")
+		return
+	}
+	var req struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<16)).Decode(&req); err != nil {
+		writeSettingsError(w, http.StatusBadRequest, "invalid json")
+		return
+	}
+	view, err := h.owner.View(r.Context())
+	if err != nil {
+		writeSettingsError(w, settingsErrorStatus(err), err.Error())
+		return
+	}
+	if view.ReadOnly {
+		writeSettingsError(w, http.StatusConflict, firstNonEmptyString(view.ReadOnlyReason, "agent settings are read-only"))
+		return
+	}
+	reader, ok := h.currentReader(w)
+	if !ok {
+		return
+	}
+	removed, err := RemoveSkill(r.Context(), h.owner, skillsutil.SkillsConfigFromReader(reader).Roots, req.ID)
+	switch {
+	case errors.Is(err, errSkillNotFound):
+		writeSettingsError(w, http.StatusNotFound, err.Error())
+	case errors.Is(err, errSkillNotRemovable):
+		writeSettingsError(w, http.StatusConflict, err.Error())
+	case err != nil:
+		writeSettingsError(w, http.StatusInternalServerError, err.Error())
+	default:
+		writeSettingsJSON(w, http.StatusOK, removed)
+	}
+}
+
+func firstNonEmptyString(values ...string) string {
+	for _, v := range values {
+		if strings.TrimSpace(v) != "" {
+			return v
+		}
+	}
+	return ""
 }

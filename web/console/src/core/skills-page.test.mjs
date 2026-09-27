@@ -36,3 +36,10 @@ test("the Skills page installs through a chat task and reads the store", async (
   assert.match(source, /"\/settings\/agent\/skills\/store"/);
   assert.match(source, /<AppTabs/);
 });
+
+test("the Skills page removes a skill after an inline confirmation", async () => {
+  const source = await read("../views/SkillsView.js");
+  assert.match(source, /endpointApiFetch\(endpointState\.selectedRef, "\/settings\/agent\/skills\/remove", \{ method: "POST", body: \{ id: skill\.id \} \}\)/);
+  assert.match(source, /@click="askRemove\(selected\)"/);
+  assert.match(source, /@click="confirmRemove"/);
+});

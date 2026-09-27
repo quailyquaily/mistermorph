@@ -2,6 +2,7 @@ package agentsettings
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -117,4 +118,71 @@ func TestSkillCatalogReadsProvenance(t *testing.T) {
 			t.Fatal("provenance file listed")
 		}
 	}
+}
+
+func TestRemoveSkill(t *testing.T) {
+	writeSkill := func(t *testing.T, dir string) {
+		t.Helper()
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte("---\nname: x\n---\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Run("deletes the folder and drops it from the load list", func(t *testing.T) {
+		root := t.TempDir()
+		writeSkill(t, filepath.Join(root, "pdf"))
+		owner := &fakeSkillsOwner{skills: SkillsSettingsPayload{Enabled: true, Load: []string{"a", "PDF"}}}
+		got, err := RemoveSkill(context.Background(), owner, []string{root}, "pdf")
+		if err != nil || got.ID != "pdf" {
+			t.Fatalf("RemoveSkill() = %+v, %v", got, err)
+		}
+		if _, err := os.Stat(filepath.Join(root, "pdf")); !os.IsNotExist(err) {
+			t.Fatal("folder still exists")
+		}
+		if len(owner.updates) != 1 || !reflect.DeepEqual(*owner.updates[0].Load, []string{"a"}) {
+			t.Fatalf("updates = %+v", owner.updates)
+		}
+	})
+	t.Run("keeps a load list that only named it", func(t *testing.T) {
+		root := t.TempDir()
+		writeSkill(t, filepath.Join(root, "pdf"))
+		owner := &fakeSkillsOwner{skills: SkillsSettingsPayload{Enabled: true, Load: []string{"pdf"}}}
+		if _, err := RemoveSkill(context.Background(), owner, []string{root}, "pdf"); err != nil {
+			t.Fatal(err)
+		}
+		if len(owner.updates) != 0 {
+			t.Fatalf("an empty list would load every skill; updates = %+v", owner.updates)
+		}
+	})
+	t.Run("a linked folder loses only its link", func(t *testing.T) {
+		root, target := t.TempDir(), t.TempDir()
+		writeSkill(t, filepath.Join(target, "real"))
+		if err := os.Symlink(filepath.Join(target, "real"), filepath.Join(root, "linked")); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := RemoveSkill(context.Background(), &fakeSkillsOwner{}, []string{root}, "linked"); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := os.Stat(filepath.Join(target, "real", "SKILL.md")); err != nil {
+			t.Fatalf("link target was deleted: %v", err)
+		}
+		if _, err := os.Lstat(filepath.Join(root, "linked")); !os.IsNotExist(err) {
+			t.Fatal("link still exists")
+		}
+	})
+	t.Run("refuses unknown and nested skills", func(t *testing.T) {
+		root := t.TempDir()
+		writeSkill(t, filepath.Join(root, "group", "inner"))
+		if _, err := RemoveSkill(context.Background(), &fakeSkillsOwner{}, []string{root}, "missing"); !errors.Is(err, errSkillNotFound) {
+			t.Fatalf("missing: %v", err)
+		}
+		if _, err := RemoveSkill(context.Background(), &fakeSkillsOwner{}, []string{root}, "group/inner"); !errors.Is(err, errSkillNotRemovable) {
+			t.Fatalf("nested: %v", err)
+		}
+		if _, err := os.Stat(filepath.Join(root, "group", "inner", "SKILL.md")); err != nil {
+			t.Fatal("nested skill was deleted")
+		}
+	})
 }

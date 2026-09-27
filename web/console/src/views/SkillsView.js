@@ -75,6 +75,10 @@ const SkillsView = {
     const store = ref({ loaded: false, loading: false, error: "", unsupported: false, repo: "", skills: [] });
     let storeSeq = 0;
 
+    const removeTarget = ref(null);
+    const removeBusy = ref(false);
+    const removeErr = ref("");
+
     const installOpen = ref(false);
     const installLink = ref("");
     const installBusy = ref(false);
@@ -275,6 +279,32 @@ const SkillsView = {
       void saveSkills(skillToggleSettings({ enabled: catalog.value.enabled, load: catalog.value.load }, skills.value, skill, Boolean(value)));
     }
 
+    function askRemove(skill) {
+      removeErr.value = "";
+      removeTarget.value = skill;
+    }
+
+    // Removing deletes the skill's folder on the agent; the load list drops its id.
+    async function confirmRemove() {
+      const skill = removeTarget.value;
+      if (!skill || removeBusy.value) {
+        return;
+      }
+      removeBusy.value = true;
+      removeErr.value = "";
+      try {
+        await endpointApiFetch(endpointState.selectedRef, "/settings/agent/skills/remove", { method: "POST", body: { id: skill.id } });
+        removeTarget.value = null;
+        closeSkill();
+        await load();
+        void loadStore();
+      } catch (e) {
+        removeErr.value = e?.status === 404 ? t("skills_remove_unsupported") : e.message || t("skills_remove_failed");
+      } finally {
+        removeBusy.value = false;
+      }
+    }
+
     function openInstall() {
       installLink.value = "";
       installErr.value = "";
@@ -319,6 +349,10 @@ const SkillsView = {
     }
 
     function onKeydown(event) {
+      if (event.key === "Escape" && removeTarget.value && !removeBusy.value) {
+        removeTarget.value = null;
+        return;
+      }
       if (event.key === "Escape" && selected.value && !installOpen.value) {
         closeSkill();
       }
@@ -329,6 +363,7 @@ const SkillsView = {
       (id) => {
         filesExpanded.value = false;
         docOpen.value = false;
+        removeTarget.value = null;
         void loadDetail(id);
       },
     );
@@ -394,6 +429,11 @@ const SkillsView = {
       visibleFiles,
       hiddenFileCount,
       filesExpanded,
+      removeTarget,
+      removeBusy,
+      removeErr,
+      askRemove,
+      confirmRemove,
       installOpen,
       installLink,
       installBusy,
@@ -417,10 +457,20 @@ const SkillsView = {
   },
   template: `
     <AppPage :title="t('skills_title')" class="skills-page">
+      <template #leading>
+        <div class="skills-bar-leading">
+          <h2 class="page-title page-bar-title workspace-section-title skills-bar-title">{{ t('skills_title') }}</h2>
+          <AppTabs v-if="!isMobile" class="skills-tabs" :tabs="tabs" :modelValue="activeTab" :ariaLabel="t('skills_title')" @update:modelValue="selectTab" />
+        </div>
+      </template>
       <template #actions>
+        <label v-if="!isMobile" class="skills-search">
+          <PhMagnifyingGlass class="icon" aria-hidden="true" />
+          <input v-model="query" type="search" :placeholder="t('skills_search')" :aria-label="t('skills_search')" />
+        </label>
         <label class="skills-master" :title="t('skills_enabled_note')">
           <span class="skills-master-label">{{ t('skills_enabled') }}</span>
-          <QSwitch :modelValue="catalog.enabled" :disabled="locked || unsupported" :aria-label="t('skills_enabled')" @update:modelValue="setEnabled" />
+          <QSwitch class="skills-switch" :modelValue="catalog.enabled" :disabled="locked || unsupported" :aria-label="t('skills_enabled')" @update:modelValue="setEnabled" />
         </label>
         <QButton v-if="!isMobile" class="primary xs skills-install-button" :disabled="unsupported" @click="openInstall">
           <PhPlus class="icon" />
@@ -429,7 +479,7 @@ const SkillsView = {
       </template>
 
       <div class="skills-shell">
-        <div class="skills-toolbar">
+        <div v-if="isMobile" class="skills-toolbar">
           <AppTabs class="skills-tabs" :tabs="tabs" :modelValue="activeTab" :ariaLabel="t('skills_title')" @update:modelValue="selectTab" />
           <label class="skills-search">
             <PhMagnifyingGlass class="icon" aria-hidden="true" />
@@ -439,18 +489,20 @@ const SkillsView = {
 
         <p v-if="catalog.readOnly && catalog.readOnlyReason" class="skills-notice">{{ catalog.readOnlyReason }}</p>
         <p v-if="err" class="skills-notice is-error">{{ err }}</p>
-        <p v-if="!catalog.enabled && !unsupported" class="skills-notice">{{ t('skills_enabled_note') }}</p>
 
         <section v-if="activeTab.id === 'installed'" class="skills-panel" :aria-label="t('skills_tab_installed')">
-          <p v-if="skills.length" class="skills-summary">
-            <span>{{ t('skills_loaded_count', { loaded: loadedCount, total: skills.length }) }}</span>
-            <code class="skills-summary-path">{{ skillsRoot }}</code>
-          </p>
+          <header class="skills-panel-head">
+            <div class="skills-panel-heading">
+              <h3 class="skills-panel-title">{{ t('skills_tab_installed') }}</h3>
+              <code class="skills-panel-sub">{{ skillsRoot }}</code>
+            </div>
+            <span v-if="skills.length" class="skills-panel-count" :class="{ 'is-off': !catalog.enabled }">
+              {{ catalog.enabled ? t('skills_loaded_count', { loaded: loadedCount, total: skills.length }) : t('skills_all_off') }}
+            </span>
+          </header>
 
           <AppSkeleton v-if="loading && !skills.length && !unsupported" :rows="4" :label="t('runtime_loading')" />
-          <div v-else-if="unsupported" class="skills-empty">
-            <p class="skills-empty-note">{{ t('skills_unsupported') }}</p>
-          </div>
+          <p v-else-if="unsupported" class="skills-empty-note">{{ t('skills_unsupported') }}</p>
           <div v-else-if="!skills.length" class="skills-empty">
             <strong class="skills-empty-title">{{ t('skills_empty_title') }}</strong>
             <p class="skills-empty-note">{{ t('skills_empty_install_note', { path: skillsRoot }) }}</p>
@@ -459,52 +511,54 @@ const SkillsView = {
               <QButton class="plain xs" @click="selectTab(tabs[1])">{{ t('skills_browse_store') }}</QButton>
             </div>
           </div>
-          <p v-else-if="!visibleSkills.length" class="skills-empty-note skills-no-match">{{ t('skills_no_match') }}</p>
-          <div v-else class="skills-grid">
-            <article
+          <p v-else-if="!visibleSkills.length" class="skills-empty-note">{{ t('skills_no_match') }}</p>
+          <ul v-else class="skills-rows">
+            <li
               v-for="skill in visibleSkills"
               :key="skill.id"
-              class="skills-card"
+              class="skills-row"
               :class="{ 'is-on': isOn(skill), 'is-active': selected && selected.id === skill.id }"
             >
-              <button type="button" class="skills-card-open" :aria-label="t('skills_open', { name: skill.name })" @click="openSkill(skill)"></button>
-              <header class="skills-card-head">
-                <span class="skills-mark" :class="isOn(skill) ? 'is-on' : 'is-off'" :title="isOn(skill) ? t('skills_loaded') : t('skills_not_loaded')"></span>
-                <h3 class="skills-card-title">{{ skill.name }}</h3>
-                <QSwitch
-                  class="skills-card-switch"
-                  :modelValue="isOn(skill)"
-                  :disabled="locked"
-                  :aria-label="t('skills_load_toggle', { name: skill.name })"
-                  @update:modelValue="setLoaded(skill, $event)"
-                />
-              </header>
-              <p class="skills-card-desc">{{ skill.description || t('skills_description_empty') }}</p>
-              <footer class="skills-card-foot">
-                <span class="skills-tag" :class="'is-' + skill.source.kind">{{ sourceLabel(skill) }}</span>
-                <span v-if="storeEntryFor(skill) && storeEntryFor(skill).updateAvailable" class="skills-tag is-update">
-                  {{ t('skills_update_available') }}
-                </span>
-                <span v-if="skill.modified.length" class="skills-tag is-warn">{{ t('skills_modified') }}</span>
-                <span v-if="skill.requirements.length" class="skills-card-reqs">{{ skill.requirements.join(' · ') }}</span>
-              </footer>
-            </article>
-          </div>
+              <button type="button" class="skills-row-open" :aria-label="t('skills_open', { name: skill.name })" @click="openSkill(skill)"></button>
+              <span class="skills-mark" :class="isOn(skill) ? 'is-on' : 'is-off'" :title="isOn(skill) ? t('skills_loaded') : t('skills_not_loaded')"></span>
+              <div class="skills-row-main">
+                <div class="skills-row-titleline">
+                  <strong class="skills-row-name">{{ skill.name }}</strong>
+                  <span class="skills-tag" :class="'is-' + skill.source.kind">{{ sourceLabel(skill) }}</span>
+                  <span v-if="storeEntryFor(skill) && storeEntryFor(skill).updateAvailable" class="skills-tag is-update">{{ t('skills_update_available') }}</span>
+                  <span v-if="skill.modified.length" class="skills-tag is-warn">{{ t('skills_modified') }}</span>
+                </div>
+                <p class="skills-row-desc">{{ skill.description || t('skills_description_empty') }}</p>
+              </div>
+              <span class="skills-row-reqs" :title="skill.requirements.join(', ')">{{ skill.requirements.join(' · ') }}</span>
+              <QSwitch
+                class="skills-switch skills-row-switch"
+                :modelValue="isOn(skill)"
+                :disabled="locked"
+                :aria-label="t('skills_load_toggle', { name: skill.name })"
+                @update:modelValue="setLoaded(skill, $event)"
+              />
+              <PhCaretRight class="icon skills-row-caret" aria-hidden="true" />
+            </li>
+          </ul>
         </section>
 
         <section v-else class="skills-panel" :aria-label="t('skills_tab_store')">
-          <p class="skills-summary">
-            <span>{{ t('skills_store_intro') }}</span>
-            <a class="skills-summary-link" :href="STORE_REPO_URL" target="_blank" rel="noopener noreferrer">
-              {{ store.repo || 'quailyquaily/morph-skill-store' }}
-              <PhArrowUpRight class="icon" aria-hidden="true" />
-            </a>
-          </p>
+          <header class="skills-panel-head">
+            <div class="skills-panel-heading">
+              <h3 class="skills-panel-title">{{ t('skills_store_title') }}</h3>
+              <a class="skills-panel-sub skills-panel-link" :href="STORE_REPO_URL" target="_blank" rel="noopener noreferrer">
+                {{ store.repo || 'quailyquaily/morph-skill-store' }}
+                <PhArrowUpRight class="icon" aria-hidden="true" />
+              </a>
+            </div>
+            <span v-if="store.skills.length" class="skills-panel-count">
+              {{ updateCount ? t('skills_store_count_updates', { total: store.skills.length, updates: updateCount }) : t('skills_store_count', { total: store.skills.length }) }}
+            </span>
+          </header>
 
           <AppSkeleton v-if="store.loading && !store.skills.length" :rows="4" :label="t('runtime_loading')" />
-          <div v-else-if="store.unsupported" class="skills-empty">
-            <p class="skills-empty-note">{{ t('skills_store_unsupported') }}</p>
-          </div>
+          <p v-else-if="store.unsupported" class="skills-empty-note">{{ t('skills_store_unsupported') }}</p>
           <div v-else-if="store.error" class="skills-empty">
             <strong class="skills-empty-title">{{ t('skills_store_unavailable') }}</strong>
             <p class="skills-empty-note">{{ store.error }}</p>
@@ -516,22 +570,25 @@ const SkillsView = {
             <strong class="skills-empty-title">{{ t('skills_store_empty_title') }}</strong>
             <p class="skills-empty-note">{{ t('skills_store_empty_note') }}</p>
           </div>
-          <p v-else-if="!storeSkills.length" class="skills-empty-note skills-no-match">{{ t('skills_no_match') }}</p>
-          <div v-else class="skills-grid">
-            <article v-for="item in storeSkills" :key="item.id" class="skills-card is-store">
-              <header class="skills-card-head">
-                <h3 class="skills-card-title">{{ item.name }}</h3>
-                <span v-if="item.version" class="skills-card-version">v{{ item.version }}</span>
-              </header>
-              <p class="skills-card-desc">{{ item.description || t('skills_description_empty') }}</p>
-              <p class="skills-card-meta">
-                <span v-if="item.author">{{ item.author }}</span>
-                <span v-if="item.license">{{ item.license }}</span>
-                <span v-if="item.fileCount">{{ t('skills_store_files', { count: item.fileCount, size: formatBytes(item.totalBytes) }) }}</span>
-              </p>
-              <footer class="skills-card-foot">
-                <span v-for="tag in item.tags.slice(0, 3)" :key="tag" class="skills-tag">{{ tag }}</span>
-                <span class="skills-card-spacer"></span>
+          <p v-else-if="!storeSkills.length" class="skills-empty-note">{{ t('skills_no_match') }}</p>
+          <ul v-else class="skills-rows">
+            <li v-for="item in storeSkills" :key="item.id" class="skills-row is-store">
+              <span class="skills-glyph" aria-hidden="true">{{ item.name.slice(0, 1).toUpperCase() }}</span>
+              <div class="skills-row-main">
+                <div class="skills-row-titleline">
+                  <strong class="skills-row-name">{{ item.name }}</strong>
+                  <span v-if="item.version" class="skills-row-version">v{{ item.version }}</span>
+                  <span v-for="tag in item.tags.slice(0, 3)" :key="tag" class="skills-tag is-plain">{{ tag }}</span>
+                </div>
+                <p class="skills-row-desc">{{ item.description || t('skills_description_empty') }}</p>
+                <p class="skills-row-meta">
+                  <span v-if="item.author">{{ item.author }}</span>
+                  <span v-if="item.license">{{ item.license }}</span>
+                  <span v-if="item.fileCount">{{ t('skills_store_files', { count: item.fileCount, size: formatBytes(item.totalBytes) }) }}</span>
+                  <span v-if="item.requirements.length">{{ item.requirements.join(' · ') }}</span>
+                </p>
+              </div>
+              <div class="skills-row-action">
                 <QButton v-if="item.updateAvailable" class="outlined xs" :loading="installBusy" @click="installFromStore(item)">
                   {{ t('skills_update_to', { version: item.version }) }}
                 </QButton>
@@ -540,9 +597,9 @@ const SkillsView = {
                   {{ t('skills_installed') }}
                 </span>
                 <QButton v-else class="outlined xs" :loading="installBusy" @click="installFromStore(item)">{{ t('skills_install') }}</QButton>
-              </footer>
-            </article>
-          </div>
+              </div>
+            </li>
+          </ul>
         </section>
       </div>
 
@@ -553,25 +610,25 @@ const SkillsView = {
           <div v-if="selected" class="skills-sheet-layer" @click.self="closeSkill">
             <aside class="skills-sheet" role="dialog" :aria-label="selected.name">
               <header class="skills-sheet-head">
-                <QButton class="plain xs icon skills-sheet-close" :title="t('action_close')" :aria-label="t('action_close')" @click="closeSkill">
-                  <PhX class="icon" />
-                </QButton>
-                <div class="skills-sheet-copy">
-                  <h2 class="skills-sheet-title">{{ selected.name }}</h2>
-                  <p class="skills-sheet-desc">{{ selected.description || t('skills_description_empty') }}</p>
+                <div class="skills-sheet-topline">
+                  <span class="skills-sheet-kicker">{{ t('skills_sheet_kicker') }}</span>
+                  <QButton class="plain xs icon skills-sheet-close" :title="t('action_close')" :aria-label="t('action_close')" @click="closeSkill">
+                    <PhX class="icon" />
+                  </QButton>
                 </div>
-                <div class="skills-sheet-toggle">
-                  <span class="skills-sheet-state" :class="{ 'is-on': isOn(selected) }">
-                    <span class="skills-mark" :class="isOn(selected) ? 'is-on' : 'is-off'"></span>
-                    {{ isOn(selected) ? t('skills_loaded') : t('skills_not_loaded') }}
-                  </span>
+                <h2 class="skills-sheet-title">{{ selected.name }}</h2>
+                <p class="skills-sheet-desc">{{ selected.description || t('skills_description_empty') }}</p>
+                <label class="skills-sheet-toggle">
+                  <span class="skills-mark" :class="isOn(selected) ? 'is-on' : 'is-off'"></span>
+                  <span class="skills-sheet-state" :class="{ 'is-on': isOn(selected) }">{{ isOn(selected) ? t('skills_loaded') : t('skills_not_loaded') }}</span>
                   <QSwitch
+                    class="skills-switch"
                     :modelValue="isOn(selected)"
                     :disabled="locked"
                     :aria-label="t('skills_load_toggle', { name: selected.name })"
                     @update:modelValue="setLoaded(selected, $event)"
                   />
-                </div>
+                </label>
               </header>
 
               <div class="skills-sheet-body">
@@ -597,10 +654,6 @@ const SkillsView = {
                   <div v-if="selected.source.installedAt" class="skills-fact">
                     <dt>{{ t('skills_fact_installed') }}</dt>
                     <dd>{{ selected.source.installedAt.slice(0, 10) }}</dd>
-                  </div>
-                  <div class="skills-fact">
-                    <dt>{{ t('skills_fact_id') }}</dt>
-                    <dd><code>{{ selected.id }}</code></dd>
                   </div>
                   <div class="skills-fact">
                     <dt>{{ t('skills_fact_location') }}</dt>
@@ -642,33 +695,53 @@ const SkillsView = {
                     <MarkdownContent v-else-if="documentSource" :source="documentSource" />
                   </div>
                 </section>
-
-                <p class="skills-sheet-remove">{{ t('skills_remove_note') }}</p>
               </div>
+
+              <footer class="skills-sheet-foot" :class="{ 'is-confirming': removeTarget }">
+                <template v-if="removeTarget">
+                  <div class="skills-remove-confirm" role="alertdialog" :aria-label="t('skills_remove_title', { name: removeTarget.name })">
+                    <strong class="skills-remove-title">{{ t('skills_remove_title', { name: removeTarget.name }) }}</strong>
+                    <p class="skills-remove-text">{{ t('skills_remove_body') }}</p>
+                    <code class="skills-remove-path">{{ removeTarget.dir }}</code>
+                    <p v-if="removeTarget.source.kind === 'local'" class="skills-remove-text">{{ t('skills_remove_local_note') }}</p>
+                    <p v-if="removeErr" class="skills-notice is-error">{{ removeErr }}</p>
+                  </div>
+                  <div class="skills-remove-actions">
+                    <QButton class="plain xs" :disabled="removeBusy" @click="removeTarget = null">{{ t('action_cancel') }}</QButton>
+                    <QButton class="danger xs" :loading="removeBusy" @click="confirmRemove">{{ t('skills_remove') }}</QButton>
+                  </div>
+                </template>
+                <QButton v-else class="danger outlined xs skills-remove-button" :disabled="catalog.readOnly" @click="askRemove(selected)">
+                  <PhTrash class="icon" />
+                  <span>{{ t('skills_remove') }}</span>
+                </QButton>
+              </footer>
             </aside>
           </div>
         </Transition>
       </Teleport>
 
-      <AppDialogShell
-        :modelValue="installOpen"
-        :title="t('skills_install_title')"
-        width="520px"
-        :closeDisabled="installBusy"
-        @update:modelValue="installOpen = $event"
-        @close="installOpen = false"
-      >
-        <form class="skills-install-form" @submit.prevent="submitInstallLink">
-          <label class="skills-install-label" for="skills-install-link">{{ t('skills_install_link_label') }}</label>
-          <QInput id="skills-install-link" v-model="installLink" :placeholder="t('skills_install_link_placeholder')" :disabled="installBusy" />
-          <p class="skills-install-note">{{ t('skills_install_note') }}</p>
-          <p v-if="installErr" class="skills-notice is-error">{{ installErr }}</p>
-          <div class="skills-install-actions">
-            <QButton type="button" class="plain" :disabled="installBusy" @click="installOpen = false">{{ t('action_cancel') }}</QButton>
-            <QButton type="submit" class="primary" :loading="installBusy" :disabled="!installLinkValid">{{ t('skills_install_start') }}</QButton>
-          </div>
-        </form>
-      </AppDialogShell>
+      <Teleport to="body">
+        <AppDialogShell
+          :modelValue="installOpen"
+          :title="t('skills_install_title')"
+          width="520px"
+          :closeDisabled="installBusy"
+          @update:modelValue="installOpen = $event"
+          @close="installOpen = false"
+        >
+          <form class="skills-dialog-body" @submit.prevent="submitInstallLink">
+            <label class="skills-dialog-label" for="skills-install-link">{{ t('skills_install_link_label') }}</label>
+            <QInput id="skills-install-link" v-model="installLink" :placeholder="t('skills_install_link_placeholder')" :disabled="installBusy" />
+            <p class="skills-dialog-note">{{ t('skills_install_note') }}</p>
+            <p v-if="installErr" class="skills-notice is-error">{{ installErr }}</p>
+            <div class="skills-dialog-actions">
+              <QButton type="button" class="plain" :disabled="installBusy" @click="installOpen = false">{{ t('action_cancel') }}</QButton>
+              <QButton type="submit" class="primary" :loading="installBusy" :disabled="!installLinkValid">{{ t('skills_install_start') }}</QButton>
+            </div>
+          </form>
+        </AppDialogShell>
+      </Teleport>
     </AppPage>
   `,
 };
