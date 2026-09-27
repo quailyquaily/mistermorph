@@ -23,9 +23,15 @@ func NewTools(deps ToolDeps) (*PreviewTool, *InstallTool) {
 	return &PreviewTool{deps: deps}, &InstallTool{deps: deps}
 }
 
+// The tools' names, which are also their config keys: tools.<name>.enabled.
+const (
+	PreviewToolName = "skill_install_preview"
+	InstallToolName = "skill_install"
+)
+
 type PreviewTool struct{ deps ToolDeps }
 
-func (t *PreviewTool) Name() string { return "skill_install_preview" }
+func (t *PreviewTool) Name() string { return PreviewToolName }
 
 func (t *PreviewTool) Description() string {
 	return "Preview a skill before installing it. Pass `link` (a GitHub repository, folder or SKILL.md link, or an https link to a SKILL.md) or `store_id` (a Morph Skill Store skill). " +
@@ -91,7 +97,7 @@ func replaceHint(p Preview) string {
 
 type InstallTool struct{ deps ToolDeps }
 
-func (t *InstallTool) Name() string { return "skill_install" }
+func (t *InstallTool) Name() string { return InstallToolName }
 
 func (t *InstallTool) Description() string {
 	return "Install a skill previewed with skill_install_preview. Always asks the user to approve first. Pass the preview's preview_id, name, source (its source url) and commit exactly as returned; " +

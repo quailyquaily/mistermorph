@@ -967,6 +967,12 @@ func applyAgentSettingsUpdateDocument(doc *yaml.Node, current FileSettings, valu
 		if enabled := toolEnabledUpdateValue(values.Tools.ImageEdit); enabled != nil {
 			configbootstrap.SetMappingBoolPath(toolsNode, "image_edit", "enabled", *enabled)
 		}
+		if enabled := toolEnabledUpdateValue(values.Tools.SkillInstallPreview); enabled != nil {
+			configbootstrap.SetMappingBoolPath(toolsNode, "skill_install_preview", "enabled", *enabled)
+		}
+		if enabled := toolEnabledUpdateValue(values.Tools.SkillInstall); enabled != nil {
+			configbootstrap.SetMappingBoolPath(toolsNode, "skill_install", "enabled", *enabled)
+		}
 	}
 	if values.MCP != nil && values.MCP.Servers != nil {
 		servers, err := normalizeMCPServers(*values.MCP.Servers)
@@ -2438,18 +2444,20 @@ func readAgentSettingsFromReader(r interface {
 	return FileSettings{
 		LLM: SettingsPayloadFromRuntimeValues(values),
 		Tools: ToolsSettingsPayload{
-			WriteFile:     ToolEnabledPayload{Enabled: r.GetBool("tools.write_file.enabled")},
-			Spawn:         ToolEnabledPayload{Enabled: r.GetBool("tools.spawn.enabled")},
-			Coder:         ToolEnabledPayload{Enabled: r.GetBool("tools.coder.enabled")},
-			ContactsSend:  ToolEnabledPayload{Enabled: r.GetBool("tools.contacts_send.enabled")},
-			TodoUpdate:    ToolEnabledPayload{Enabled: r.GetBool("tools.todo_update.enabled")},
-			PlanCreate:    ToolEnabledPayload{Enabled: r.GetBool("tools.plan_create.enabled")},
-			URLFetch:      ToolEnabledPayload{Enabled: r.GetBool("tools.url_fetch.enabled")},
-			WebSearch:     ToolEnabledPayload{Enabled: r.GetBool("tools.web_search.enabled")},
-			Bash:          ToolEnabledPayload{Enabled: r.GetBool("tools.bash.enabled")},
-			PowerShell:    ToolEnabledPayload{Enabled: r.GetBool("tools.powershell.enabled")},
-			ImageGenerate: ToolEnabledPayload{Enabled: r.GetBool("tools.image_generate.enabled")},
-			ImageEdit:     ToolEnabledPayload{Enabled: r.GetBool("tools.image_edit.enabled")},
+			WriteFile:           ToolEnabledPayload{Enabled: r.GetBool("tools.write_file.enabled")},
+			Spawn:               ToolEnabledPayload{Enabled: r.GetBool("tools.spawn.enabled")},
+			Coder:               ToolEnabledPayload{Enabled: r.GetBool("tools.coder.enabled")},
+			ContactsSend:        ToolEnabledPayload{Enabled: r.GetBool("tools.contacts_send.enabled")},
+			TodoUpdate:          ToolEnabledPayload{Enabled: r.GetBool("tools.todo_update.enabled")},
+			PlanCreate:          ToolEnabledPayload{Enabled: r.GetBool("tools.plan_create.enabled")},
+			URLFetch:            ToolEnabledPayload{Enabled: r.GetBool("tools.url_fetch.enabled")},
+			WebSearch:           ToolEnabledPayload{Enabled: r.GetBool("tools.web_search.enabled")},
+			Bash:                ToolEnabledPayload{Enabled: r.GetBool("tools.bash.enabled")},
+			PowerShell:          ToolEnabledPayload{Enabled: r.GetBool("tools.powershell.enabled")},
+			ImageGenerate:       ToolEnabledPayload{Enabled: r.GetBool("tools.image_generate.enabled")},
+			ImageEdit:           ToolEnabledPayload{Enabled: r.GetBool("tools.image_edit.enabled")},
+			SkillInstallPreview: ToolEnabledPayload{Enabled: r.GetBool("tools.skill_install_preview.enabled")},
+			SkillInstall:        ToolEnabledPayload{Enabled: r.GetBool("tools.skill_install.enabled")},
 		},
 	}, nil
 }

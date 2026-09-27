@@ -22,15 +22,37 @@ func TestSkillInstallToolsAreConsoleOnly(t *testing.T) {
 		bundle: &consoleLocalRuntimeBundle{taskRuntime: &taskruntime.Runtime{}},
 	}
 	rt := &consoleLocalRuntime{}
-	got := rt.skillInstallTools(gen)
-	var names []string
-	for _, tool := range got {
-		names = append(names, tool.Name())
+	names := func(task string) string {
+		var out []string
+		for _, tool := range rt.skillInstallTools(gen, task) {
+			out = append(out, tool.Name())
+		}
+		return strings.Join(out, ",")
 	}
-	if strings.Join(names, ",") != "skill_install_preview,skill_install" {
-		t.Fatalf("tools = %v", names)
+	// Off by default; a task that names a tool with $ gets it for that run.
+	for _, tc := range []struct {
+		name, task, want string
+	}{
+		{name: "off by default", task: "install the skill at https://example.test", want: ""},
+		{name: "plain words do not count", task: "call skill_install_preview then skill_install", want: ""},
+		{name: "both named", task: "Preview it with $skill_install_preview, then call $skill_install.", want: "skill_install_preview,skill_install"},
+		{name: "one named", task: "use $skill_install_preview only", want: "skill_install_preview"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := names(tc.task); got != tc.want {
+				t.Fatalf("tools = %q, want %q", got, tc.want)
+			}
+		})
 	}
-	if rt.skillInstallTools(nil) != nil {
+	reader.Set("tools.skill_install_preview.enabled", true)
+	if got := names("anything"); got != "skill_install_preview" {
+		t.Fatalf("enabled in config: tools = %q", got)
+	}
+	reader.Set("tools.skill_install.enabled", true)
+	if got := names("anything"); got != "skill_install_preview,skill_install" {
+		t.Fatalf("both enabled in config: tools = %q", got)
+	}
+	if rt.skillInstallTools(nil, "$skill_install") != nil {
 		t.Fatal("expected no tools without a generation")
 	}
 	if err := rt.enableInstalledSkill(context.Background(), "pdf"); err == nil {

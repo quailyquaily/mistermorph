@@ -43,3 +43,20 @@ test("the Skills page removes a skill after a confirmation", async () => {
   assert.match(source, /action: \(\) => askRemove\(selected\.value\)/);
   assert.match(source, /action: confirmRemove/);
 });
+
+test("Add skill's task names both install tools with $, which turns them on for that task", async () => {
+  const source = await read("../i18n/index.js");
+  const lines = source.split("\n").filter((line) => line.includes("skills_install_task_link:"));
+  assert.equal(lines.length, 3);
+  for (const line of lines) {
+    assert.match(line, /\$skill_install_preview\b/);
+    assert.match(line, /\$skill_install\b(?!_)/);
+  }
+});
+
+test("Settings lists the skill install tools, off by default", async () => {
+  const source = await read("../views/SettingsView.js");
+  assert.match(source, /\{ id: "skill_install_preview", titleKey: "settings_tool_skill_install_preview"/);
+  assert.match(source, /\{ id: "skill_install", titleKey: "settings_tool_skill_install"/);
+  assert.match(source, /skill_install_preview: false,\n\s+skill_install: false,/);
+});

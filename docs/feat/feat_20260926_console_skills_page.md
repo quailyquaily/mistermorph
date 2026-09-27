@@ -124,13 +124,19 @@ conversation, with its review and outcome kept in the history:
 3. Store: Install or Update on a store card starts the same task with the store id.
 
 The task text (localised, `skills_install_task_*`) asks the agent to call
-`skill_install_preview`, explain what the skill does and every risk, and then call
-`skill_install`. `skill_install` always needs approval (§4.3), so nothing is installed until the
+`$skill_install_preview`, explain what the skill does and every risk, and then call
+`$skill_install`. `skill_install` always needs approval (§4.3), so nothing is installed until the
 user approves in that topic. The user can ask follow-up questions before approving.
 
 The tools live in `internal/skillinstall` and are registered only in the console runtime's task
 registry (`consolecmd/skill_install.go`); channels build their own registries and do not get
 them. The existing CLI `skills install` command is unchanged.
+
+Both tools are off by default (`tools.skill_install_preview.enabled`,
+`tools.skill_install.enabled`) and listed on Settings → Tools. As with the built-in tools, a task
+that names one with `$` gets it for that run, so Add skill (and a chat message that writes
+`$skill_install_preview`) works with them off. With them off, a plain chat request to install a
+skill (path 2 above) does not get the tools unless it names them.
 
 ### 4.2 Accepted links
 

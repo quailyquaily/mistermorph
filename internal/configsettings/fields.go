@@ -63,6 +63,8 @@ func AgentFields() []Field {
 		{Path: "tools.plan_create.max_steps", Kind: KindInt, ApplyMode: ApplyNextGeneration, Min: &one},
 		{Path: "tools.image_generate.enabled", Kind: KindBool, ApplyMode: ApplyNextGeneration},
 		{Path: "tools.image_edit.enabled", Kind: KindBool, ApplyMode: ApplyNextGeneration},
+		{Path: "tools.skill_install_preview.enabled", Kind: KindBool, ApplyMode: ApplyNextGeneration},
+		{Path: "tools.skill_install.enabled", Kind: KindBool, ApplyMode: ApplyNextGeneration},
 		{Path: "tools.url_fetch.enabled", Kind: KindBool, ApplyMode: ApplyNextGeneration},
 		{Path: "tools.url_fetch.timeout", Kind: KindDuration, ApplyMode: ApplyNextGeneration},
 		{Path: "tools.url_fetch.max_bytes", Kind: KindInt, ApplyMode: ApplyNextGeneration, Min: &zero},

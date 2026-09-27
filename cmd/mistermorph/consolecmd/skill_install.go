@@ -8,18 +8,28 @@ import (
 	"strings"
 
 	"github.com/quailyquaily/mistermorph/internal/agentsettings"
+	"github.com/quailyquaily/mistermorph/internal/caprefs"
 	"github.com/quailyquaily/mistermorph/internal/skillinstall"
 	"github.com/quailyquaily/mistermorph/internal/skillsutil"
 	"github.com/quailyquaily/mistermorph/tools"
 )
 
 // skillInstallTools are console-only: the web console is where the user reads the preview and
-// approves the install.
-func (r *consoleLocalRuntime) skillInstallTools(generation *consoleLocalRuntimeGeneration) []tools.Tool {
+// approves the install. Each is off by default (tools.<name>.enabled); like the built-in tools, a
+// task that names one as $skill_install_preview or $skill_install gets it for that run, which is
+// how the Skills page's Add skill works.
+func (r *consoleLocalRuntime) skillInstallTools(generation *consoleLocalRuntimeGeneration, task string) []tools.Tool {
 	if generation == nil || generation.bundle == nil || generation.bundle.taskRuntime == nil {
 		return nil
 	}
 	reader := generation.reader
+	refs := skillInstallToolRefs(task, skillsutil.ResolveTaskSkillRefs(task, skillsutil.SkillsConfigFromReader(reader)))
+	wants := func(name string) bool {
+		return refs[name] || (reader != nil && reader.GetBool("tools."+name+".enabled"))
+	}
+	if !wants(skillinstall.PreviewToolName) && !wants(skillinstall.InstallToolName) {
+		return nil
+	}
 	stateDir := generation.paths.StateDir
 	client := generation.bundle.taskRuntime.BootstrapMainClient
 	model := generation.bundle.defaultModel
@@ -40,7 +50,30 @@ func (r *consoleLocalRuntime) skillInstallTools(generation *consoleLocalRuntimeG
 		},
 		StoreIndexURL: func() string { return skillStoreIndexURL(reader) },
 	})
-	return []tools.Tool{preview, install}
+	var out []tools.Tool
+	if wants(preview.Name()) {
+		out = append(out, preview)
+	}
+	if wants(install.Name()) {
+		out = append(out, install)
+	}
+	return out
+}
+
+// skillInstallToolRefs finds $skill_install_preview and $skill_install in a task, skipping names
+// that a skill of the same name already took (as toolsutil.ExplicitBuiltinToolRefs does).
+func skillInstallToolRefs(task string, consumed map[string]bool) map[string]bool {
+	out := map[string]bool{}
+	for _, name := range caprefs.Names(task) {
+		name = strings.ToLower(strings.TrimSpace(name))
+		if consumed[name] {
+			continue
+		}
+		if name == skillinstall.PreviewToolName || name == skillinstall.InstallToolName {
+			out[name] = true
+		}
+	}
+	return out
 }
 
 // enableInstalledSkill switches a new skill on through the settings file, like the Skills page.

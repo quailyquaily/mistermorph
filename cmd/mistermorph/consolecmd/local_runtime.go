@@ -2520,7 +2520,7 @@ func (r *consoleLocalRuntime) runTask(ctx context.Context, conversationKey strin
 	if err := reg.Replace(reactTool); err != nil {
 		return nil, nil, err
 	}
-	for _, tool := range r.skillInstallTools(generation) {
+	for _, tool := range r.skillInstallTools(generation, task) {
 		if err := reg.Replace(tool); err != nil {
 			return nil, nil, err
 		}

@@ -236,6 +236,10 @@ func Apply(v *viper.Viper) {
 
 	v.SetDefault("tools.contacts_send.enabled", true)
 	v.SetDefault("tools.todo_update.enabled", true)
+	// Console-only skill install tools: off, so only a task that names them ($skill_install_preview,
+	// $skill_install), such as the Skills page's Add skill, gets them.
+	v.SetDefault("tools.skill_install_preview.enabled", false)
+	v.SetDefault("tools.skill_install.enabled", false)
 
 	v.SetDefault("acp.agents", []map[string]any{})
 }

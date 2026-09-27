@@ -114,6 +114,10 @@ const TOOL_ITEMS = [
   { id: "powershell", titleKey: "settings_tool_powershell", noteKey: "settings_tool_note_powershell" },
   { id: "image_generate", titleKey: "settings_tool_image_generate", noteKey: "settings_tool_note_image_generate" },
   { id: "image_edit", titleKey: "settings_tool_image_edit", noteKey: "settings_tool_note_image_edit" },
+  // Console only, off by default: Add skill on the Skills page names them with $, which turns them
+  // on for that one task.
+  { id: "skill_install_preview", titleKey: "settings_tool_skill_install_preview", noteKey: "settings_tool_note_skill_install_preview" },
+  { id: "skill_install", titleKey: "settings_tool_skill_install", noteKey: "settings_tool_note_skill_install" },
 ];
 
 const MANAGED_RUNTIME_ITEMS = [
@@ -483,6 +487,8 @@ function buildToolsSnapshot(state) {
       powershell: !!state.tools.powershell,
       image_generate: !!state.tools.image_generate,
       image_edit: !!state.tools.image_edit,
+      skill_install_preview: !!state.tools.skill_install_preview,
+      skill_install: !!state.tools.skill_install,
     },
   });
 }
@@ -837,6 +843,8 @@ const SettingsView = {
         powershell: false,
         image_generate: true,
         image_edit: true,
+        skill_install_preview: false,
+        skill_install: false,
       },
       mcp: {
         servers: [],
@@ -1807,6 +1815,8 @@ const SettingsView = {
       state.tools.powershell = false;
       state.tools.image_generate = true;
       state.tools.image_edit = true;
+      state.tools.skill_install_preview = false;
+      state.tools.skill_install = false;
       state.mcp.servers = [];
       llmEnvManaged.value = {};
       llmSecretFields.value = {};
@@ -1958,6 +1968,8 @@ const SettingsView = {
       state.tools.powershell = toolEnabledValue(tools.powershell);
       state.tools.image_generate = toolEnabledValue(tools.image_generate);
       state.tools.image_edit = toolEnabledValue(tools.image_edit);
+      state.tools.skill_install_preview = toolEnabledValue(tools.skill_install_preview);
+      state.tools.skill_install = toolEnabledValue(tools.skill_install);
       applyMCPPayload(mcp);
       llmEnvManaged.value = llmEnvManagedPayload;
       llmSecretFields.value = llmSecretFieldsPayload;
@@ -3136,6 +3148,8 @@ const SettingsView = {
         powershell: { enabled: state.tools.powershell },
         image_generate: { enabled: state.tools.image_generate },
         image_edit: { enabled: state.tools.image_edit },
+        skill_install_preview: { enabled: state.tools.skill_install_preview },
+        skill_install: { enabled: state.tools.skill_install },
       };
       if (target === "llm") {
         return { llm: buildLLMSettingsPayload() };
