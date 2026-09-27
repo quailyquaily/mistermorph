@@ -391,8 +391,35 @@
   color: var(--text-2);
 }
 
+/* No skill open: an Add skill icon button in the middle of the right column (phones use the
+   floating button instead). */
 .skills-detail-empty {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 12px;
+  min-height: 100%;
   padding: 24px 16px;
+}
+
+.skills-detail-empty-body {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 12px;
+  grid-row: 2;
+  text-align: center;
+}
+
+.skills-empty-add.q-button {
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  padding: 0;
+}
+
+.skills-empty-add .icon {
+  width: 18px;
+  height: 18px;
 }
 
 /* SKILL.md, in console colours rather than the renderer's warm paper theme. Its headings sit a

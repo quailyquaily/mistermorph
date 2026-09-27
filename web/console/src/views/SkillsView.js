@@ -628,7 +628,18 @@ const SkillsView = {
 
           <div v-else-if="!isMobile && !loading" class="skills-detail-empty">
             <QFence v-if="err" type="danger" icon="PhXCircle" :text="err" />
-            <p class="skills-index-note">{{ skills.length ? '' : t('skills_empty_title') }}</p>
+            <div class="skills-detail-empty-body">
+              <QButton
+                class="outlined icon skills-empty-add"
+                :title="t('skills_add')"
+                :aria-label="t('skills_add')"
+                :disabled="unsupported"
+                @click="openAdd"
+              >
+                <PhPlus class="icon" />
+              </QButton>
+              <p v-if="!skills.length" class="skills-index-note">{{ t('skills_empty_title') }}</p>
+            </div>
           </div>
         </div>
       </div>
