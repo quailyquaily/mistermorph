@@ -35,7 +35,9 @@ type File struct {
 	Path   string `json:"path"`
 	Size   int64  `json:"size"`
 	SHA256 string `json:"sha256"`
-	data   []byte
+	// Kind is "image" or "font" for those files (see assets.go); empty for text.
+	Kind string `json:"kind,omitempty"`
+	data []byte
 }
 
 // fetched is a skill downloaded and pinned, not yet staged.
@@ -205,7 +207,11 @@ func (f fetcher) fetchGitHub(ctx context.Context, target Target) (fetched, error
 	}}
 	for _, entry := range entries {
 		rel := strings.TrimPrefix(entry.Path, prefix)
-		data, err := f.get(ctx, fmt.Sprintf("%s/%s/%s/%s", f.rawBase(), repo, commit.SHA, escapePath(entry.Path)), MaxFileBytes)
+		limit := int64(MaxFileBytes)
+		if _, ok := assetTypeFor(rel); ok {
+			limit = f.skillByteLimit()
+		}
+		data, err := f.get(ctx, fmt.Sprintf("%s/%s/%s/%s", f.rawBase(), repo, commit.SHA, escapePath(entry.Path)), limit)
 		if err != nil {
 			return fetched{}, err
 		}
@@ -246,20 +252,29 @@ func pickRepoSkill(repo string, tree []githubTreeEntry) (string, error) {
 	return "", errCandidates{Repo: repo, Paths: candidates}
 }
 
-// newFile checks one file: a safe relative path, within the size limit, and text.
+// newFile checks one file: a safe relative path, and either an image or font whose bytes match
+// its type, or text within the per-file limit.
 func newFile(rel string, data []byte) (File, error) {
 	clean := path.Clean(strings.TrimPrefix(rel, "/"))
 	if clean == "." || clean == ".." || strings.HasPrefix(clean, "../") || path.IsAbs(rel) {
 		return File{}, fmt.Errorf("unsafe path %q", rel)
 	}
+	sum := sha256.Sum256(data)
+	file := File{Path: clean, Size: int64(len(data)), SHA256: hex.EncodeToString(sum[:]), data: data}
+	if asset, ok := assetTypeFor(clean); ok {
+		if !asset.match(data) {
+			return File{}, fmt.Errorf("%s is not a valid %s file", clean, strings.TrimPrefix(path.Ext(clean), "."))
+		}
+		file.Kind = asset.kind
+		return file, nil
+	}
 	if int64(len(data)) > MaxFileBytes {
 		return File{}, fmt.Errorf("%s is larger than %d bytes", clean, MaxFileBytes)
 	}
 	if !isText(data) {
-		return File{}, fmt.Errorf("%s is not a text file; skills can only contain text", clean)
+		return File{}, fmt.Errorf("%s is not a text file; skills can only contain text, images and fonts", clean)
 	}
-	sum := sha256.Sum256(data)
-	return File{Path: clean, Size: int64(len(data)), SHA256: hex.EncodeToString(sum[:]), data: data}, nil
+	return file, nil
 }
 
 func isText(data []byte) bool {

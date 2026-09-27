@@ -216,6 +216,50 @@ func TestPreviewSizeLimitComesFromOptions(t *testing.T) {
 	}
 }
 
+func TestPreviewAcceptsImagesAndFontsByTheirBytes(t *testing.T) {
+	png := "\x89PNG\r\n\x1a\n" + strings.Repeat("\x00", 64)
+	bigFont := "wOF2" + strings.Repeat("\x00", 3*512*1024) // over the per-file text limit
+	link := "https://github.com/acme/skills/tree/main/s"
+
+	server := fakeGitHub(t, fakeRepo{files: map[string]string{
+		"s/SKILL.md":          pdfSkill,
+		"s/assets/logo.png":   png,
+		"s/assets/font.woff2": bigFont,
+	}})
+	opts, _ := testOptions(t, server)
+	preview, err := NewService().Preview(context.Background(), opts, link, nil)
+	if err != nil {
+		t.Fatalf("Preview() error = %v", err)
+	}
+	kinds := map[string]string{}
+	for _, f := range preview.Files {
+		kinds[f.Path] = f.Kind
+	}
+	if kinds["assets/logo.png"] != "image" || kinds["assets/font.woff2"] != "font" || kinds["SKILL.md"] != "" {
+		t.Fatalf("file kinds = %v", kinds)
+	}
+	if !strings.Contains(strings.Join(preview.Risks, "\n"), "ships 2 image and font files") {
+		t.Fatalf("risks = %v", preview.Risks)
+	}
+
+	for name, file := range map[string]string{
+		"executable renamed .png": "\x7fELF\x02\x01\x01\x00",
+		"unknown binary type":     "\x00\x01\x02",
+	} {
+		t.Run(name, func(t *testing.T) {
+			p := "s/assets/logo.png"
+			if name == "unknown binary type" {
+				p = "s/tool.bin"
+			}
+			server := fakeGitHub(t, fakeRepo{files: map[string]string{"s/SKILL.md": pdfSkill, p: file}})
+			opts, _ := testOptions(t, server)
+			if _, err := NewService().Preview(context.Background(), opts, link, nil); err == nil {
+				t.Fatal("Preview() succeeded")
+			}
+		})
+	}
+}
+
 func TestReplaceKeepsNothingBehindAndRefusesWithoutReplace(t *testing.T) {
 	server := fakeGitHub(t, pdfRepo())
 	opts, _ := testOptions(t, server)

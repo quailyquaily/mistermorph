@@ -51,6 +51,8 @@ test("Add skill's task names both install tools with $, which turns them on for 
   for (const line of lines) {
     assert.match(line, /\$skill_install_preview\b/);
     assert.match(line, /\$skill_install\b(?!_)/);
+    // A failed preview must not turn into an install by other means.
+    assert.match(line, /git clone/);
   }
 });
 

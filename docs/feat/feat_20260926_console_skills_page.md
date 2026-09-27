@@ -150,8 +150,16 @@ skill (path 2 above) does not get the tools unless it names them.
 
 GitHub refs are resolved to a commit SHA at preview time and every file is fetched at that SHA.
 
-Limits (same for the store): 512 KiB per file, 2 MiB and 50 files per skill, no symlinks, safe
-relative paths only, and text only (UTF-8, no NUL bytes).
+Limits (same for the store): 50 files and `tools.skill_install.max_bytes` (16 MiB by default)
+per skill, no symlinks, safe relative paths only. Files are text (UTF-8, no NUL bytes, 512 KiB
+each) or images and fonts (png, jpg, gif, webp, avif, ico, woff, woff2, ttf, otf) whose bytes
+start with their type's signature (`assets.go`); those have no per-file cap and are listed in the
+preview's risks as checked only by type. Anything else, such as executables and archives, is
+refused.
+
+If the preview fails, the agent stops and says why; the task text and the preview tool both tell
+it never to install the skill another way (git clone, bash, write_file), since that would skip
+the approval.
 
 ### 4.3 Flow
 

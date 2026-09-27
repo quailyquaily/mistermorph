@@ -159,7 +159,7 @@ func (s *Service) Preview(ctx context.Context, opts Options, link string, expect
 		ExpiresAt:    s.now().Add(s.ttl),
 	}
 	for _, file := range got.files {
-		preview.Files = append(preview.Files, File{Path: file.Path, Size: file.Size, SHA256: file.SHA256})
+		preview.Files = append(preview.Files, File{Path: file.Path, Size: file.Size, SHA256: file.SHA256, Kind: file.Kind})
 		preview.TotalBytes += file.Size
 	}
 	if existing := filepath.Join(opts.SkillsRoot, skillID); dirExists(existing) {

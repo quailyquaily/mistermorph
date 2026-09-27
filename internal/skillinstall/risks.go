@@ -31,8 +31,12 @@ var scriptExtensions = map[string]bool{".sh": true, ".bash": true, ".zsh": true,
 // scanRisks returns plain-language notes about a skill's files.
 func scanRisks(files []File) []string {
 	found := map[string]bool{}
-	var scripts []string
+	var scripts, assets []string
 	for _, file := range files {
+		if file.Kind != "" {
+			assets = append(assets, file.Path)
+			continue
+		}
 		text := string(file.data)
 		for _, pattern := range riskPatterns {
 			if pattern.re.MatchString(text) {
@@ -51,5 +55,16 @@ func scanRisks(files []File) []string {
 	if len(scripts) > 0 {
 		out = append(out, fmt.Sprintf("ships scripts the agent may run: %s", strings.Join(scripts, ", ")))
 	}
+	if len(assets) > 0 {
+		out = append(out, fmt.Sprintf("ships %d image and font files, checked only by file type and not reviewed: %s", len(assets), listSome(assets, 5)))
+	}
 	return out
+}
+
+// listSome names up to n items and counts the rest.
+func listSome(items []string, n int) string {
+	if len(items) <= n {
+		return strings.Join(items, ", ")
+	}
+	return fmt.Sprintf("%s and %d more", strings.Join(items[:n], ", "), len(items)-n)
 }
