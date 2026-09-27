@@ -200,12 +200,78 @@
   min-width: 0;
 }
 
-.skills-detail-head {
+/* The bar at the top of the card: the switch, and the "⋯" menu that holds Remove. */
+.skills-detail-toolbar {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 8px;
   min-width: 0;
+  padding-bottom: 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--line-soft) 82%, transparent);
+}
+
+.skills-enabled-control {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  height: 44px;
+  cursor: pointer;
+}
+
+.skills-enabled-label {
+  color: var(--text-2);
+  font: 500 11px/1 var(--font-mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+/* The "⋯" menu button, as on TODO. */
+.skills-actions-menu,
+.skills-actions-menu .q-dropdown-menu-inner,
+.skills-actions-menu .q-dropdown-menu-action {
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
+}
+
+.skills-actions-menu .q-dropdown-menu-action {
+  justify-content: center;
+  padding: 0;
+}
+
+.skills-actions-menu .q-menu {
+  right: 0;
+  left: auto;
+}
+
+.skills-actions-menu .chevron-icon,
+.skills-actions-menu .empty-block {
+  display: none;
+}
+
+.skills-actions-menu .q-menu-title {
+  white-space: nowrap;
+}
+
+.skills-actions-menu-icon {
+  width: 16px;
+  min-width: 16px;
+  height: 16px;
+}
+
+.skills-actions-menu-accessible {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .skills-detail-copy {
@@ -224,20 +290,6 @@
   color: var(--text-2);
   font-size: var(--font-size-meta);
   line-height: 1.5;
-}
-
-.skills-enabled-control {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  cursor: pointer;
-}
-
-.skills-enabled-label {
-  color: var(--text-1);
-  font-size: var(--font-size-meta);
-  white-space: nowrap;
 }
 
 .skills-detail-warning {
@@ -320,18 +372,6 @@
   text-decoration: underline;
 }
 
-.skills-detail-foot {
-  display: flex;
-  padding-top: 12px;
-  border-top: 1px solid color-mix(in srgb, var(--line-soft) 82%, transparent);
-}
-
-.skills-remove-button .icon {
-  width: 14px;
-  min-width: 14px;
-  height: 14px;
-}
-
 .skills-detail-empty {
   padding: 24px 16px;
 }
@@ -396,6 +436,34 @@
   .skills-page-bar-back {
     display: none;
   }
+
+  /* The page itself does not scroll: the sidebar list and the card scroll on their own, as on
+     Chat. */
+  .skills-page .page-body {
+    overflow: hidden;
+  }
+
+  .skills-workbench {
+    height: 100%;
+    align-items: stretch;
+  }
+
+  .skills-index {
+    position: static;
+    height: 100%;
+  }
+
+  .skills-detail-card.q-card-default {
+    height: calc(100% - 16px);
+    overflow: hidden;
+  }
+
+  .skills-detail-card.q-card-default > .q-card-body {
+    height: 100%;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    overscroll-behavior: contain;
+  }
 }
 
 @media (max-width: 920px) {
@@ -422,9 +490,5 @@
 
   .skills-detail-card.q-card-default {
     margin: 8px 12px calc(var(--mobile-nav-height, 0px) + 16px);
-  }
-
-  .skills-detail-head {
-    flex-direction: column;
   }
 }

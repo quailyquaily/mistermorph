@@ -51,7 +51,7 @@ function skillSourceText(skill) {
   return `${where}${at}${when}`;
 }
 
-// The agent's skills: a list with a switch per skill, a side sheet per skill, and Add skill,
+// The agent's skills: a sidebar list, a card per skill with its switch and "⋯" menu, and Add skill,
 // which starts a chat task where the agent reviews the skill and the user approves the install.
 const SkillsView = {
   components: {
@@ -249,6 +249,16 @@ const SkillsView = {
         }
       },
     });
+    // The skill's "⋯" menu, as on TODO's editor.
+    const skillActionMenuItems = computed(() => [
+      {
+        id: "remove",
+        title: t("skills_remove"),
+        danger: true,
+        disabled: catalog.value.readOnly || removeBusy.value,
+        action: () => askRemove(selected.value),
+      },
+    ]);
     const removeDialogActions = computed(() => [
       { name: "cancel", label: t("action_cancel"), class: "outlined", action: cancelRemove },
       { name: "remove", label: t("skills_remove"), class: "danger", action: confirmRemove },
@@ -393,6 +403,7 @@ const SkillsView = {
       removeErr,
       removeDialogOpen,
       removeDialogActions,
+      skillActionMenuItems,
       removeDialogText,
       menuOpen,
       menuRoot,
@@ -503,13 +514,9 @@ const SkillsView = {
             <QFence v-if="catalog.readOnly && catalog.readOnlyReason" type="warning" :text="catalog.readOnlyReason" />
             <QFence v-if="err" type="danger" icon="PhXCircle" :text="err" />
 
-            <header class="skills-detail-head">
-              <div class="skills-detail-copy">
-                <h3 class="workspace-document-title skills-detail-title">{{ selected.name }}</h3>
-                <p v-if="selected.description" class="skills-detail-meta">{{ selected.description }}</p>
-              </div>
+            <div class="skills-detail-toolbar">
               <label class="skills-enabled-control">
-                <span class="skills-enabled-label">{{ t('skills_panel_load') }}</span>
+                <span class="skills-enabled-label" aria-hidden="true">{{ t('skills_field_enabled') }}</span>
                 <QSwitch
                   :modelValue="isOn(selected)"
                   :disabled="locked"
@@ -517,6 +524,21 @@ const SkillsView = {
                   @update:modelValue="setLoaded(selected, $event)"
                 />
               </label>
+              <QDropdownMenu
+                class="skills-actions-menu"
+                :items="skillActionMenuItems"
+                hideSelected
+                hideActionLabel
+                :loading="removeBusy"
+              >
+                <PhDotsThree class="skills-actions-menu-icon" />
+                <span class="skills-actions-menu-accessible">{{ t('skills_more') }}</span>
+              </QDropdownMenu>
+            </div>
+
+            <header class="skills-detail-copy">
+              <h3 class="workspace-document-title skills-detail-title">{{ selected.name }}</h3>
+              <p v-if="selected.description" class="skills-detail-meta">{{ selected.description }}</p>
             </header>
 
             <p v-if="selected.modified.length" class="skills-detail-warning">
@@ -567,13 +589,6 @@ const SkillsView = {
               </div>
               <MarkdownContent v-else-if="documentSource" :source="documentSource" />
             </section>
-
-            <footer class="skills-detail-foot">
-              <QButton class="danger plain sm skills-remove-button" :loading="removeBusy" :disabled="catalog.readOnly" @click="askRemove(selected)">
-                <PhTrash class="icon" />
-                <span>{{ t('skills_remove') }}</span>
-              </QButton>
-            </footer>
           </div>
         </QCard>
 

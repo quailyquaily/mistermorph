@@ -40,6 +40,6 @@ test("Add skill starts a chat task in a new topic; the page has no store", async
 test("the Skills page removes a skill after a confirmation", async () => {
   const source = await read("../views/SkillsView.js");
   assert.match(source, /endpointApiFetch\(endpointState\.selectedRef, "\/settings\/agent\/skills\/remove", \{ method: "POST", body: \{ id: skill\.id \} \}\)/);
-  assert.match(source, /@click="askRemove\(selected\)"/);
+  assert.match(source, /action: \(\) => askRemove\(selected\.value\)/);
   assert.match(source, /action: confirmRemove/);
 });
