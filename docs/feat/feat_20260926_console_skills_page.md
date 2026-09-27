@@ -47,32 +47,20 @@ behind an API and adds provenance.
 
 ### 3.2 Layout
 
-The page shows only what is needed to manage skills and add new ones.
+The page reuses existing console parts rather than drawing its own:
 
-```text
-Skills                                               LOAD SKILLS [on]  [+ Add skill]
-┌──────────────────────────────────────────────────────────────────────────────────┐
-│ jsonbill                                                                   [on]  │
-│ Generate PDF invoices from JSON…                                                 │
-│ - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -  │
-│ weather                                                                    [off] │
-│ Look up forecasts with wttr.in…                                                  │
-└──────────────────────────────────────────────────────────────────────────────────┘
+- The list is the Settings card of switch rows (`QCard` + `ui-toggle-*`): name, description,
+  switch. A row also opens its skill. Search appears only when there are more than 8 skills.
+- The selected skill opens in Chat's right side panel (`ui-side-panel-*`: a card in its own grid
+  column that slides open on desktop, a sheet over a mask on phones), with a switch row, Chat's
+  property list for Source / Location / Requires / Auth profile / Files, "View SKILL.md" (a
+  dialog), and Remove at the bottom like Chat's Delete Topic, confirmed with the same
+  `QMessageDialog`.
+- The page bar has a plain "+" (Add skill; the floating button on phones) and a "⋯" menu, in
+  Quail's menu frame, that holds the Load skills switch.
 
-side sheet:  jsonbill                                         [switch]  [x]
-             Generate PDF invoices…
-             ! Edited since it was added: SKILL.md.   (only when checksums differ)
-             SOURCE    owner/repo @ 3f9c2e1 · 2026-09-20   (only for skills added from a link)
-             LOCATION / REQUIRES / AUTH PROFILE / FILES   (rows only when they have values)
-             > SKILL.md                                    (collapsed)
-             ─────────────────────────────────────────────
-             [Remove]  → Remove jsonbill? …  [Cancel] [Remove]
-```
-
-- A row is the name, the description and a switch; the switch is the loaded state, and skills
-  that are off have a quieter name. Search appears only when there are more than 8 skills.
-- Add skill (the floating button on phones) asks for a link and starts the install task.
-- The Store tab is not on the page for now; the store route and tools stay in the backend.
+Those shared styles moved from `ChatView.css` and `SettingsView.css` into `views/common.css`,
+under their old names plus `ui-*` names, so Chat and Settings are unchanged.
 - The switches save immediately (one small config write); the page has no pending state.
 - `skills.load` cannot express "none" (empty means all), so switching off the last loaded skill
   turns skills off and keeps the list, and switching one on while skills are off loads just

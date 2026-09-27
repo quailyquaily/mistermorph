@@ -18,7 +18,7 @@ test("the Skills page switches skills with toggles, not a load-list text box", a
   assert.match(source, /endpointApiFetch\(endpointRef, "\/settings\/agent\/skills"\)/);
   assert.match(source, /\/settings\/agent\/skills\/detail\?id=/);
   assert.match(source, /body: \{ config_revision: catalog\.value\.revision, skills: \{ enabled: next\.enabled, load: next\.load \} \}/);
-  assert.match(source, /@update:modelValue="setLoaded\(selected, \$event\)"/);
+  assert.match(source, /@toggle="setLoaded\(selected, \$event\)"/);
   assert.match(source, /@update:modelValue="setEnabled"/);
   assert.doesNotMatch(source, /QTextarea/);
 });
@@ -37,9 +37,9 @@ test("Add skill starts a chat task in a new topic; the page has no store", async
   assert.doesNotMatch(source, /AppTabs/);
 });
 
-test("the Skills page removes a skill after an inline confirmation", async () => {
+test("the Skills page removes a skill after a confirmation", async () => {
   const source = await read("../views/SkillsView.js");
   assert.match(source, /endpointApiFetch\(endpointState\.selectedRef, "\/settings\/agent\/skills\/remove", \{ method: "POST", body: \{ id: skill\.id \} \}\)/);
-  assert.match(source, /@click="askRemove\(selected\)"/);
-  assert.match(source, /@click="confirmRemove"/);
+  assert.match(source, /@remove="askRemove\(selected\)"/);
+  assert.match(source, /action: confirmRemove/);
 });

@@ -39,10 +39,122 @@ function normalizeSkill(item) {
   };
 }
 
+// Only skills added from a link have a source worth showing.
+function skillSourceText(skill) {
+  const source = skill?.source || {};
+  if (source.kind === "local") {
+    return "";
+  }
+  const where = source.repo || source.url;
+  const at = source.commit ? ` @ ${source.commit.slice(0, 7)}` : "";
+  const when = source.installedAt ? ` · ${source.installedAt.slice(0, 10)}` : "";
+  return `${where}${at}${when}`;
+}
+
+// The skill's side panel content, used by the desktop column and the phone sheet.
+const SkillPanel = {
+  props: {
+    skill: { type: Object, required: true },
+    on: { type: Boolean, default: false },
+    locked: { type: Boolean, default: false },
+    readOnly: { type: Boolean, default: false },
+    removeBusy: { type: Boolean, default: false },
+  },
+  emits: ["close", "toggle", "open-doc", "remove"],
+  setup(props) {
+    const filesExpanded = ref(false);
+    watch(
+      () => props.skill.id,
+      () => {
+        filesExpanded.value = false;
+      },
+    );
+    const visibleFiles = computed(() => (filesExpanded.value ? props.skill.files : props.skill.files.slice(0, FILES_PREVIEW)));
+    const hiddenFileCount = computed(() => Math.max(0, props.skill.files.length - FILES_PREVIEW));
+    return { t: translate, filesExpanded, visibleFiles, hiddenFileCount, formatBytes, sourceText: skillSourceText };
+  },
+  template: `
+    <div class="ui-side-panel-pane skills-panel-pane">
+      <header class="ui-side-panel-toolbar">
+        <div class="ui-side-panel-copy">
+          <h3 class="skills-panel-title">{{ skill.name }}</h3>
+        </div>
+        <div class="ui-side-panel-toolbar-actions">
+          <QButton class="plain xs icon" :title="t('action_close')" :aria-label="t('action_close')" @click="$emit('close')">
+            <PhX class="icon" />
+          </QButton>
+        </div>
+      </header>
+      <div class="skills-panel-body">
+        <p v-if="skill.description" class="skills-panel-desc">{{ skill.description }}</p>
+        <div class="ui-toggle-row skills-panel-toggle">
+          <span class="ui-toggle-title">{{ t('skills_panel_load') }}</span>
+          <QSwitch
+            :modelValue="on"
+            :disabled="locked"
+            :aria-label="t('skills_load_toggle', { name: skill.name })"
+            @update:modelValue="$emit('toggle', $event)"
+          />
+        </div>
+        <p v-if="skill.modified.length" class="ui-toggle-note skills-panel-warning">
+          <PhWarning class="icon" aria-hidden="true" />
+          <span>{{ t('skills_modified_since', { files: skill.modified.join(', ') }) }}</span>
+        </p>
+        <dl class="ui-property-list">
+          <div v-if="sourceText(skill)" class="ui-property-row">
+            <dt class="ui-property-label">{{ t('skills_fact_source') }}</dt>
+            <dd class="ui-property-value">
+              <a v-if="skill.source.url" :href="skill.source.url" target="_blank" rel="noopener noreferrer" class="skills-link">{{ sourceText(skill) }}</a>
+              <span v-else>{{ sourceText(skill) }}</span>
+            </dd>
+          </div>
+          <div class="ui-property-row">
+            <dt class="ui-property-label">{{ t('skills_fact_location') }}</dt>
+            <dd class="ui-property-value is-code"><code :title="skill.dir">{{ skill.dir }}</code></dd>
+          </div>
+          <div v-if="skill.requirements.length" class="ui-property-row">
+            <dt class="ui-property-label">{{ t('skills_fact_requires') }}</dt>
+            <dd class="ui-property-value">{{ skill.requirements.join(', ') }}</dd>
+          </div>
+          <div v-if="skill.authProfiles.length" class="ui-property-row">
+            <dt class="ui-property-label">{{ t('skills_fact_auth') }}</dt>
+            <dd class="ui-property-value">{{ skill.authProfiles.join(', ') }}</dd>
+          </div>
+          <div class="ui-property-row">
+            <dt class="ui-property-label">{{ t('skills_fact_files') }}</dt>
+            <dd class="ui-property-value">
+              <ul class="skills-files">
+                <li v-for="file in visibleFiles" :key="file.path">
+                  <code>{{ file.path }}</code>
+                  <span>{{ formatBytes(file.size) }}</span>
+                </li>
+              </ul>
+              <button v-if="hiddenFileCount > 0" type="button" class="skills-text-button" @click="filesExpanded = !filesExpanded">
+                {{ filesExpanded ? t('skills_files_less') : t('skills_files_more', { count: skill.files.length }) }}
+              </button>
+            </dd>
+          </div>
+        </dl>
+        <QButton class="plain sm ui-side-panel-danger-action" @click="$emit('open-doc')">
+          <PhCode class="icon" />
+          <span>{{ t('skills_view_doc') }}</span>
+        </QButton>
+      </div>
+      <footer class="ui-side-panel-danger-zone">
+        <QButton class="danger plain sm ui-side-panel-danger-action" :loading="removeBusy" :disabled="readOnly" @click="$emit('remove')">
+          <PhTrash class="icon" />
+          <span>{{ t('skills_remove') }}</span>
+        </QButton>
+      </footer>
+    </div>
+  `,
+};
+
 // The agent's skills: a list with a switch per skill, a side sheet per skill, and Add skill,
 // which starts a chat task where the agent reviews the skill and the user approves the install.
 const SkillsView = {
   components: {
+    SkillPanel,
     AppDialogShell,
     AppFab,
     AppPage,
@@ -60,9 +172,9 @@ const SkillsView = {
     const catalog = ref({ enabled: true, load: [], roots: [], readOnly: false, readOnlyReason: "", revision: "", skills: [] });
     const detail = ref(null);
     const detailLoading = ref(false);
+    // SKILL.md opens in a dialog; the side panel is too narrow to read it.
     const docOpen = ref(false);
     const isMobile = ref(false);
-    const filesExpanded = ref(false);
     const query = ref("");
     let listSeq = 0;
     let detailSeq = 0;
@@ -70,6 +182,8 @@ const SkillsView = {
     const removeTarget = ref(null);
     const removeBusy = ref(false);
     const removeErr = ref("");
+    const menuOpen = ref(false);
+    const menuRoot = ref(null);
 
     const addOpen = ref(false);
     const addLink = ref("");
@@ -85,12 +199,6 @@ const SkillsView = {
     const documentSource = computed(() => stripFrontmatter(detail.value?.content));
     const skillsRoot = computed(() => catalog.value.roots[0] || "~/.morph/skills");
     const addLinkValid = computed(() => Boolean(normalizeInstallLink(addLink.value)));
-    // Long file lists (assets, screenshots) collapse to the first few.
-    const visibleFiles = computed(() => {
-      const files = selected.value?.files || [];
-      return filesExpanded.value ? files : files.slice(0, FILES_PREVIEW);
-    });
-    const hiddenFileCount = computed(() => Math.max(0, (selected.value?.files || []).length - FILES_PREVIEW));
 
     function refreshMobileMode() {
       isMobile.value = typeof window !== "undefined" && window.innerWidth <= 920;
@@ -120,17 +228,6 @@ const SkillsView = {
       return Boolean(skill?.loaded && catalog.value.enabled);
     }
 
-    // Only skills added from a link have a source worth showing.
-    function sourceText(skill) {
-      const source = skill?.source || {};
-      if (source.kind === "local") {
-        return "";
-      }
-      const where = source.repo || source.url;
-      const at = source.commit ? ` @ ${source.commit.slice(0, 7)}` : "";
-      const when = source.installedAt ? ` · ${source.installedAt.slice(0, 10)}` : "";
-      return `${where}${at}${when}`;
-    }
 
     async function load() {
       const seq = ++listSeq;
@@ -228,6 +325,39 @@ const SkillsView = {
       removeTarget.value = skill;
     }
 
+    function cancelRemove() {
+      if (!removeBusy.value) {
+        removeTarget.value = null;
+      }
+    }
+
+    const removeDialogOpen = computed({
+      get: () => Boolean(removeTarget.value),
+      set: (open) => {
+        if (!open) {
+          cancelRemove();
+        }
+      },
+    });
+    const removeDialogActions = computed(() => [
+      { name: "cancel", label: t("action_cancel"), class: "outlined", action: cancelRemove },
+      { name: "remove", label: t("skills_remove"), class: "danger", action: confirmRemove },
+    ]);
+    const removeDialogText = computed(() => {
+      const skill = removeTarget.value;
+      if (!skill) {
+        return "";
+      }
+      const body = skill.source.kind === "local" ? t("skills_remove_body_local") : t("skills_remove_body");
+      return removeErr.value ? `${body}\n\n${removeErr.value}` : body;
+    });
+
+    function closeMenuOnOutside(event) {
+      if (menuOpen.value && menuRoot.value && !menuRoot.value.contains(event.target)) {
+        menuOpen.value = false;
+      }
+    }
+
     // Removing deletes the skill's folder on the agent; the load list drops its id.
     async function confirmRemove() {
       const skill = removeTarget.value;
@@ -284,9 +414,11 @@ const SkillsView = {
       if (event.key !== "Escape") {
         return;
       }
-      if (removeTarget.value && !removeBusy.value) {
-        removeTarget.value = null;
-      } else if (selected.value && !addOpen.value) {
+      if (menuOpen.value) {
+        menuOpen.value = false;
+      } else if (removeTarget.value) {
+        cancelRemove();
+      } else if (selected.value && !addOpen.value && !docOpen.value) {
         closeSkill();
       }
     }
@@ -294,9 +426,7 @@ const SkillsView = {
     watch(
       () => selected.value?.id || "",
       (id) => {
-        filesExpanded.value = false;
         docOpen.value = false;
-        removeTarget.value = null;
         void loadDetail(id);
       },
     );
@@ -312,6 +442,7 @@ const SkillsView = {
       refreshMobileMode();
       window.addEventListener("resize", refreshMobileMode);
       window.addEventListener("keydown", onKeydown);
+      document.addEventListener("pointerdown", closeMenuOnOutside);
       void load();
       if (selected.value) {
         void loadDetail(selected.value.id);
@@ -320,6 +451,7 @@ const SkillsView = {
     onUnmounted(() => {
       window.removeEventListener("resize", refreshMobileMode);
       window.removeEventListener("keydown", onKeydown);
+      document.removeEventListener("pointerdown", closeMenuOnOutside);
     });
 
     return {
@@ -340,22 +472,22 @@ const SkillsView = {
       docOpen,
       documentSource,
       skillsRoot,
-      visibleFiles,
-      hiddenFileCount,
-      filesExpanded,
       removeTarget,
       removeBusy,
       removeErr,
+      removeDialogOpen,
+      removeDialogActions,
+      removeDialogText,
+      menuOpen,
+      menuRoot,
       addOpen,
       addLink,
       addBusy,
       addErr,
       addLinkValid,
-      formatBytes,
       openSkill,
       closeSkill,
       isOn,
-      sourceText,
       setEnabled,
       setLoaded,
       askRemove,
@@ -367,175 +499,169 @@ const SkillsView = {
   template: `
     <AppPage :title="t('skills_title')" class="skills-page">
       <template #actions>
-        <label class="skills-master" :title="t('skills_enabled_note')">
-          <span class="skills-master-label">{{ t('skills_enabled') }}</span>
-          <QSwitch class="skills-switch" :modelValue="catalog.enabled" :disabled="locked || unsupported" :aria-label="t('skills_enabled')" @update:modelValue="setEnabled" />
-        </label>
-        <QButton v-if="!isMobile" class="primary xs skills-add-button" :disabled="unsupported" @click="openAdd">
+        <QButton
+          v-if="!isMobile"
+          class="plain sm icon"
+          :title="t('skills_add')"
+          :aria-label="t('skills_add')"
+          :disabled="unsupported"
+          @click="openAdd"
+        >
           <PhPlus class="icon" />
-          <span>{{ t('skills_add') }}</span>
         </QButton>
+        <div ref="menuRoot" class="skills-menu">
+          <QButton
+            class="plain sm icon"
+            :title="t('skills_more')"
+            :aria-label="t('skills_more')"
+            aria-haspopup="true"
+            :aria-expanded="menuOpen ? 'true' : 'false'"
+            @click="menuOpen = !menuOpen"
+          >
+            <PhDotsThree class="icon" />
+          </QButton>
+          <div v-if="menuOpen" class="q-menu skills-menu-popup" role="menu">
+            <label class="q-menu-item" role="menuitemcheckbox" :aria-checked="catalog.enabled ? 'true' : 'false'">
+              <div class="q-menu-item-inner skills-menu-item">
+                <span class="skills-menu-copy">
+                  <span class="q-menu-title">{{ t('skills_enabled') }}</span>
+                  <span class="skills-menu-note">{{ t('skills_enabled_note') }}</span>
+                </span>
+                <QSwitch :modelValue="catalog.enabled" :disabled="locked || unsupported" :aria-label="t('skills_enabled')" @update:modelValue="setEnabled" />
+              </div>
+            </label>
+          </div>
+        </div>
       </template>
 
-      <div class="skills-shell">
-        <p v-if="catalog.readOnly && catalog.readOnlyReason" class="skills-notice">{{ catalog.readOnlyReason }}</p>
-        <p v-if="err" class="skills-notice is-error">{{ err }}</p>
+      <div class="skills-layout" :class="{ 'has-panel': selected && !isMobile }">
+        <section class="skills-main">
+          <QFence v-if="catalog.readOnly && catalog.readOnlyReason" type="warning" :text="catalog.readOnlyReason" />
+          <QFence v-if="err" type="danger" icon="PhXCircle" :text="err" />
 
-        <label v-if="showSearch" class="skills-search">
-          <PhMagnifyingGlass class="icon" aria-hidden="true" />
-          <input v-model="query" type="search" :placeholder="t('skills_search')" :aria-label="t('skills_search')" />
-        </label>
+          <label v-if="showSearch" class="skills-search">
+            <PhMagnifyingGlass class="icon" aria-hidden="true" />
+            <input v-model="query" type="search" :placeholder="t('skills_search')" :aria-label="t('skills_search')" />
+          </label>
 
-        <AppSkeleton v-if="loading && !skills.length && !unsupported" :rows="4" :label="t('runtime_loading')" />
-        <p v-else-if="unsupported" class="skills-empty-note">{{ t('skills_unsupported') }}</p>
-        <div v-else-if="!skills.length" class="skills-empty">
-          <strong class="skills-empty-title">{{ t('skills_empty_title') }}</strong>
-          <p class="skills-empty-note">{{ t('skills_empty_add_note', { path: skillsRoot }) }}</p>
-        </div>
-        <p v-else-if="!visibleSkills.length" class="skills-empty-note">{{ t('skills_no_match') }}</p>
-        <ul v-else class="skills-list" :class="{ 'is-all-off': !catalog.enabled }">
-          <li
-            v-for="skill in visibleSkills"
-            :key="skill.id"
-            class="skills-row"
-            :class="{ 'is-on': isOn(skill), 'is-active': selected && selected.id === skill.id }"
-          >
-            <button type="button" class="skills-row-open" :aria-label="t('skills_open', { name: skill.name })" @click="openSkill(skill)"></button>
-            <div class="skills-row-main">
-              <strong class="skills-row-name">{{ skill.name }}</strong>
-              <p v-if="skill.description" class="skills-row-desc">{{ skill.description }}</p>
+          <QCard variant="default" class="skills-card">
+            <AppSkeleton v-if="loading && !skills.length && !unsupported" :rows="4" :label="t('runtime_loading')" />
+            <p v-else-if="unsupported" class="ui-toggle-note">{{ t('skills_unsupported') }}</p>
+            <div v-else-if="!skills.length" class="skills-empty">
+              <strong class="ui-toggle-title">{{ t('skills_empty_title') }}</strong>
+              <p class="ui-toggle-note">{{ t('skills_empty_add_note', { path: skillsRoot }) }}</p>
             </div>
-            <QSwitch
-              class="skills-switch skills-row-switch"
-              :modelValue="isOn(skill)"
-              :disabled="locked"
-              :aria-label="t('skills_load_toggle', { name: skill.name })"
-              @update:modelValue="setLoaded(skill, $event)"
-            />
-          </li>
-        </ul>
+            <p v-else-if="!visibleSkills.length" class="ui-toggle-note">{{ t('skills_no_match') }}</p>
+            <div v-else class="ui-toggle-list skills-list" :class="{ 'is-all-off': !catalog.enabled }">
+              <div
+                v-for="skill in visibleSkills"
+                :key="skill.id"
+                class="ui-toggle-row skills-row"
+                :class="{ 'is-on': isOn(skill), 'is-active': selected && selected.id === skill.id }"
+              >
+                <button type="button" class="skills-row-open" :aria-label="t('skills_open', { name: skill.name })" @click="openSkill(skill)"></button>
+                <div class="ui-toggle-copy">
+                  <strong class="ui-toggle-title">{{ skill.name }}</strong>
+                  <span v-if="skill.description" class="ui-toggle-note skills-row-note">{{ skill.description }}</span>
+                </div>
+                <QSwitch
+                  class="skills-row-switch"
+                  :modelValue="isOn(skill)"
+                  :disabled="locked"
+                  :aria-label="t('skills_load_toggle', { name: skill.name })"
+                  @update:modelValue="setLoaded(skill, $event)"
+                />
+              </div>
+            </div>
+          </QCard>
+        </section>
+
+        <Transition name="ui-side-panel">
+          <aside v-if="selected && !isMobile" class="ui-side-panel workspace-sidebar-section skills-panel" :aria-label="selected.name">
+            <div class="ui-side-panel-shell skills-panel-shell">
+              <SkillPanel
+                :skill="selected"
+                :on="isOn(selected)"
+                :locked="locked"
+                :readOnly="catalog.readOnly"
+                :removeBusy="removeBusy"
+                @close="closeSkill"
+                @toggle="setLoaded(selected, $event)"
+                @open-doc="docOpen = true"
+                @remove="askRemove(selected)"
+              />
+            </div>
+          </aside>
+        </Transition>
       </div>
 
       <AppFab v-if="isMobile && !selected" icon="PhPlus" :label="t('skills_add')" :disabled="unsupported" @click="openAdd" />
 
       <Teleport to="body">
-        <Transition name="skills-sheet">
-          <div v-if="selected" class="skills-sheet-layer" @click.self="closeSkill">
-            <aside class="skills-sheet" role="dialog" :aria-label="selected.name">
-              <header class="skills-sheet-head">
-                <div class="skills-sheet-titleline">
-                  <h2 class="skills-sheet-title">{{ selected.name }}</h2>
-                  <QSwitch
-                    class="skills-switch"
-                    :modelValue="isOn(selected)"
-                    :disabled="locked"
-                    :aria-label="t('skills_load_toggle', { name: selected.name })"
-                    @update:modelValue="setLoaded(selected, $event)"
-                  />
-                  <QButton class="plain xs icon skills-sheet-close" :title="t('action_close')" :aria-label="t('action_close')" @click="closeSkill">
-                    <PhX class="icon" />
-                  </QButton>
-                </div>
-                <p v-if="selected.description" class="skills-sheet-desc">{{ selected.description }}</p>
-              </header>
-
-              <div class="skills-sheet-body">
-                <p v-if="selected.modified.length" class="skills-callout">
-                  <PhWarning class="icon" aria-hidden="true" />
-                  <span>{{ t('skills_modified_since', { files: selected.modified.join(', ') }) }}</span>
-                </p>
-
-                <dl class="skills-facts">
-                  <div v-if="sourceText(selected)" class="skills-fact">
-                    <dt>{{ t('skills_fact_source') }}</dt>
-                    <dd>
-                      <a v-if="selected.source.url" :href="selected.source.url" target="_blank" rel="noopener noreferrer" class="skills-fact-link">{{ sourceText(selected) }}</a>
-                      <span v-else>{{ sourceText(selected) }}</span>
-                    </dd>
-                  </div>
-                  <div class="skills-fact">
-                    <dt>{{ t('skills_fact_location') }}</dt>
-                    <dd><code>{{ selected.dir }}</code></dd>
-                  </div>
-                  <div v-if="selected.requirements.length" class="skills-fact">
-                    <dt>{{ t('skills_fact_requires') }}</dt>
-                    <dd>{{ selected.requirements.join(', ') }}</dd>
-                  </div>
-                  <div v-if="selected.authProfiles.length" class="skills-fact">
-                    <dt>{{ t('skills_fact_auth') }}</dt>
-                    <dd>{{ selected.authProfiles.join(', ') }}</dd>
-                  </div>
-                  <div class="skills-fact">
-                    <dt>{{ t('skills_fact_files') }}</dt>
-                    <dd>
-                      <ul class="skills-files">
-                        <li v-for="file in visibleFiles" :key="file.path">
-                          <code>{{ file.path }}</code>
-                          <span class="skills-file-size">{{ formatBytes(file.size) }}</span>
-                        </li>
-                      </ul>
-                      <button v-if="hiddenFileCount > 0" type="button" class="skills-text-button" @click="filesExpanded = !filesExpanded">
-                        {{ filesExpanded ? t('skills_files_less') : t('skills_files_more', { count: selected.files.length }) }}
-                      </button>
-                      <p v-if="selected.filesCapped" class="skills-fact-note">{{ t('skills_files_capped', { count: selected.files.length }) }}</p>
-                    </dd>
-                  </div>
-                </dl>
-
-                <section class="skills-doc-block">
-                  <button type="button" class="skills-doc-toggle" :aria-expanded="docOpen ? 'true' : 'false'" @click="docOpen = !docOpen">
-                    <PhCaretRight class="icon skills-doc-caret" :class="{ 'is-open': docOpen }" aria-hidden="true" />
-                    <span>SKILL.md</span>
-                  </button>
-                  <div v-if="docOpen" class="skills-doc">
-                    <p v-if="detail && detail.truncated" class="skills-notice">{{ t('skills_content_truncated') }}</p>
-                    <AppSkeleton v-if="detailLoading && !detail" :rows="6" :label="t('runtime_loading')" />
-                    <MarkdownContent v-else-if="documentSource" :source="documentSource" />
-                  </div>
-                </section>
+        <Transition name="ui-side-panel-mobile">
+          <div v-if="selected && isMobile" class="ui-side-panel-mobile-layer">
+            <div class="ui-side-panel-mobile-mask" aria-hidden="true" @click="closeSkill"></div>
+            <aside class="ui-side-panel-mobile-panel" :aria-label="selected.name" tabindex="-1">
+              <div class="ui-side-panel-shell-mobile skills-panel-shell">
+                <SkillPanel
+                  :skill="selected"
+                  :on="isOn(selected)"
+                  :locked="locked"
+                  :readOnly="catalog.readOnly"
+                  :removeBusy="removeBusy"
+                  @close="closeSkill"
+                  @toggle="setLoaded(selected, $event)"
+                  @open-doc="docOpen = true"
+                  @remove="askRemove(selected)"
+                />
               </div>
-
-              <footer class="skills-sheet-foot" :class="{ 'is-confirming': removeTarget }">
-                <template v-if="removeTarget">
-                  <div class="skills-remove-confirm" role="alertdialog" :aria-label="t('skills_remove_title', { name: removeTarget.name })">
-                    <strong class="skills-remove-title">{{ t('skills_remove_title', { name: removeTarget.name }) }}</strong>
-                    <p class="skills-remove-text">{{ removeTarget.source.kind === 'local' ? t('skills_remove_body_local') : t('skills_remove_body') }}</p>
-                    <p v-if="removeErr" class="skills-notice is-error">{{ removeErr }}</p>
-                  </div>
-                  <div class="skills-remove-actions">
-                    <QButton class="plain xs" :disabled="removeBusy" @click="removeTarget = null">{{ t('action_cancel') }}</QButton>
-                    <QButton class="danger xs" :loading="removeBusy" @click="confirmRemove">{{ t('skills_remove') }}</QButton>
-                  </div>
-                </template>
-                <QButton v-else class="danger outlined xs skills-remove-button" :disabled="catalog.readOnly" @click="askRemove(selected)">
-                  <PhTrash class="icon" />
-                  <span>{{ t('skills_remove') }}</span>
-                </QButton>
-              </footer>
             </aside>
           </div>
         </Transition>
       </Teleport>
 
       <Teleport to="body">
-        <AppDialogShell
-          :modelValue="addOpen"
-          :title="t('skills_add_title')"
-          width="520px"
-          :closeDisabled="addBusy"
-          @update:modelValue="addOpen = $event"
-          @close="addOpen = false"
-        >
-          <form class="skills-dialog-body" @submit.prevent="submitAdd">
-            <QInput v-model="addLink" :placeholder="t('skills_install_link_placeholder')" :aria-label="t('skills_add_title')" :disabled="addBusy" />
-            <p class="skills-dialog-note">{{ t('skills_add_note') }}</p>
-            <p v-if="addErr" class="skills-notice is-error">{{ addErr }}</p>
-            <div class="skills-dialog-actions">
-              <QButton type="button" class="plain" :disabled="addBusy" @click="addOpen = false">{{ t('action_cancel') }}</QButton>
-              <QButton type="submit" class="primary" :loading="addBusy" :disabled="!addLinkValid">{{ t('skills_add_start') }}</QButton>
+        <div class="ui-dialog-host">
+          <QMessageDialog
+            v-model="removeDialogOpen"
+            icon="PhTrash"
+            iconColor="red"
+            :title="removeTarget ? t('skills_remove_title', { name: removeTarget.name }) : ''"
+            :text="removeDialogText"
+            :actions="removeDialogActions"
+          />
+          <AppDialogShell
+            :modelValue="docOpen && Boolean(selected)"
+            :title="selected ? selected.name + ' · SKILL.md' : ''"
+            width="760px"
+            @update:modelValue="docOpen = $event"
+            @close="docOpen = false"
+          >
+            <div class="skills-doc">
+              <QFence v-if="detail && detail.truncated" type="warning" :text="t('skills_content_truncated')" />
+              <AppSkeleton v-if="detailLoading && !detail" :rows="6" :label="t('runtime_loading')" />
+              <MarkdownContent v-else-if="documentSource" :source="documentSource" />
             </div>
-          </form>
-        </AppDialogShell>
+          </AppDialogShell>
+          <AppDialogShell
+            :modelValue="addOpen"
+            :title="t('skills_add_title')"
+            width="520px"
+            :closeDisabled="addBusy"
+            @update:modelValue="addOpen = $event"
+            @close="addOpen = false"
+          >
+            <form class="skills-add-form" @submit.prevent="submitAdd">
+              <QInput v-model="addLink" :placeholder="t('skills_install_link_placeholder')" :aria-label="t('skills_add_title')" :disabled="addBusy" />
+              <p class="ui-toggle-note">{{ t('skills_add_note') }}</p>
+              <QFence v-if="addErr" type="danger" icon="PhXCircle" :text="addErr" />
+              <div class="skills-add-actions">
+                <QButton type="button" class="outlined" :disabled="addBusy" @click="addOpen = false">{{ t('action_cancel') }}</QButton>
+                <QButton type="submit" class="primary" :loading="addBusy" :disabled="!addLinkValid">{{ t('skills_add_start') }}</QButton>
+              </div>
+            </form>
+          </AppDialogShell>
+        </div>
       </Teleport>
     </AppPage>
   `,

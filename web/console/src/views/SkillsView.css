@@ -1,69 +1,20 @@
-/* Skills: one framed list with a switch per skill; a skill opens in a side sheet. The page
-   body already carries the side gutter, so nothing here adds one. */
-.skills-page,
-.skills-sheet-layer {
-  --skills-accent: color-mix(in srgb, var(--accent-1) 68%, var(--text-0) 32%);
-  --skills-rule: color-mix(in srgb, var(--line) 74%, var(--accent-1) 26%);
-  --skills-row-hover: color-mix(in srgb, var(--q-c-blue) 4%, transparent);
+/* Skills: the Settings card of switch rows, and Chat's side panel for the selected skill. */
+
+/* Like Chat, the panel's column stays in the grid and only its width changes, so it slides. */
+.skills-layout {
+  --skills-panel-track: minmax(0px, 0px);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--skills-panel-track);
+  align-items: start;
+  min-width: 0;
+  transition: grid-template-columns var(--motion-slow) var(--motion-ease);
 }
 
-.skills-master {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  height: 30px;
-  padding: 0 4px;
-  cursor: pointer;
+.skills-layout.has-panel {
+  --skills-panel-track: minmax(234px, calc(var(--workspace-sidebar-max-width, 310px) + 4px));
 }
 
-.skills-master-label {
-  color: var(--text-2);
-  font: 500 10px/1 var(--font-mono);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-/* A compact switch: the rows would be dominated by the default 52px one. */
-.skills-switch.q-switch {
-  --switch-w: 34px;
-  --switch-h: 20px;
-  flex: 0 0 auto;
-}
-
-.skills-switch.q-switch .q-switch-inner .q-switch-handle {
-  top: 3px;
-  left: 3px;
-  width: 14px;
-  height: 14px;
-}
-
-.skills-switch.q-switch .q-switch-checkbox:checked + .q-switch-inner .q-switch-handle {
-  transform: translate(14px);
-}
-
-body .skills-page .q-button.xs,
-body .skills-sheet .q-button.xs {
-  height: 28px;
-}
-
-body .skills-page .q-button.xs .button-inner,
-body .skills-sheet .q-button.xs .button-inner {
-  gap: 6px;
-  padding: 0 10px;
-}
-
-body .skills-page .q-button.xs .icon,
-body .skills-sheet .q-button.xs .icon {
-  width: 14px;
-  height: 14px;
-}
-
-body .skills-sheet .q-button.xs.icon .button-inner {
-  padding: 0 7px;
-}
-
-.skills-shell {
+.skills-main {
   display: grid;
   align-content: start;
   gap: 12px;
@@ -71,359 +22,88 @@ body .skills-sheet .q-button.xs.icon .button-inner {
   padding-bottom: 32px;
 }
 
-.skills-notice {
-  margin: 0;
-  color: var(--text-2);
-  font-size: var(--font-size-meta);
-  line-height: 1.45;
-}
-
-.skills-notice.is-error {
-  color: var(--danger);
-}
-
-.skills-search {
+.skills-layout > .ui-side-panel {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 32px;
-  padding: 0 10px;
-  border: 1px solid var(--line);
-  border-radius: 2px;
-  background: var(--q-bg-white);
-  color: var(--text-2);
-  transition: border-color var(--motion-fast) var(--motion-ease);
-}
-
-.skills-search:focus-within {
-  border-color: var(--text-1);
-}
-
-.skills-search .icon {
-  flex: 0 0 auto;
-  width: 14px;
-  height: 14px;
-}
-
-.skills-search input {
-  flex: 1 1 auto;
-  min-width: 0;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: var(--text-0);
-  font: inherit;
-  font-size: var(--font-size-meta);
-}
-
-/* The list: a drawing sheet with registration marks, as on the Usage page. */
-.skills-list {
-  position: relative;
-  display: grid;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  border: 1px solid var(--skills-rule);
-  background: var(--q-card-bg, var(--q-bg-white));
-}
-
-.skills-list::before,
-.skills-list::after {
-  content: "";
-  position: absolute;
-  z-index: 2;
-  width: 12px;
-  height: 12px;
-  border: 0 solid color-mix(in srgb, var(--skills-accent) 72%, transparent);
-  pointer-events: none;
-}
-
-.skills-list::before {
-  top: -1px;
-  left: -1px;
-  border-top-width: 2px;
-  border-left-width: 2px;
-}
-
-.skills-list::after {
-  right: -1px;
-  bottom: -1px;
-  border-right-width: 2px;
-  border-bottom-width: 2px;
-}
-
-/* A row is the skill's name and description with its switch; the whole row opens the skill. */
-.skills-row {
-  position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 20px;
-  min-height: 60px;
-  padding: 12px 20px;
-  border-top: 1px dashed var(--line-soft);
-  transition: background-color var(--motion-fast) var(--motion-ease);
-}
-
-.skills-row:first-child {
-  border-top: 0;
-}
-
-.skills-row:hover,
-.skills-row.is-active {
-  background: var(--skills-row-hover);
-}
-
-.skills-row.is-active::before {
-  content: "";
-  position: absolute;
+  justify-content: flex-end;
+  justify-self: stretch;
   top: 0;
-  bottom: 0;
-  left: 0;
-  width: 2px;
-  background: var(--skills-accent);
+  height: calc(100dvh - var(--workspace-head-height) - 2 * var(--content-gutter-y, 20px));
+  margin-left: 4px;
+  padding-top: 0;
 }
 
-.skills-row-open {
-  appearance: none;
-  position: absolute;
-  inset: 0;
-  z-index: 0;
+/* Chat's shell has a row for its tabs; this panel has none, so the pane takes the full height. */
+.skills-panel-shell {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.skills-layout > .ui-side-panel > .ui-side-panel-shell {
+  flex: 0 0 auto;
+  width: max(100%, calc(var(--workspace-sidebar-max-width, 310px) - 1rem));
+}
+
+.skills-panel-pane {
+  padding-top: 16px;
+}
+
+.skills-panel-title {
   margin: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  cursor: pointer;
-}
-
-.skills-row-open:focus-visible {
-  outline: 2px solid var(--q-c-blue);
-  outline-offset: -2px;
-}
-
-.skills-row-switch {
-  position: relative;
-  z-index: 1;
-}
-
-.skills-row-main {
-  display: grid;
-  gap: 3px;
-  min-width: 0;
-  pointer-events: none;
-}
-
-.skills-row-name {
-  min-width: 0;
-  overflow: hidden;
   color: var(--text-0);
   font-size: var(--font-size-ui);
   font-weight: 600;
   line-height: 1.35;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  transition: color var(--motion-fast) var(--motion-ease);
-}
-
-.skills-row-desc {
-  display: -webkit-box;
-  margin: 0;
-  overflow: hidden;
-  color: var(--text-2);
-  font-size: var(--font-size-meta);
-  line-height: 1.5;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
-/* Skills that are off read quieter, so the loaded ones stand out without a second marker. */
-.skills-row:not(.is-on) .skills-row-name {
-  color: var(--text-2);
-}
-
-.skills-empty {
-  display: grid;
-  justify-items: start;
-  gap: 6px;
-  padding: 18px;
-  border: 1px dashed var(--line);
-  border-radius: 2px;
-}
-
-.skills-empty-title {
-  color: var(--text-0);
-  font-size: var(--font-size-ui);
-}
-
-.skills-empty-note {
-  margin: 0;
-  color: var(--text-2);
-  font-size: var(--font-size-meta);
-  line-height: 1.5;
   overflow-wrap: anywhere;
 }
 
-/* Side sheet: slides in from the right over a light scrim; full screen on phones. */
-.skills-sheet-layer {
-  position: fixed;
-  inset: 0;
-  z-index: 60;
-  display: flex;
-  justify-content: flex-end;
-  background: rgb(20 29 48 / 16%);
-}
-
-.skills-sheet {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  width: min(520px, 100%);
-  height: 100%;
-  border-left: 1px solid var(--line);
-  background: var(--bg-0, var(--q-bg-white));
-  box-shadow: -12px 0 32px rgb(20 29 48 / 12%);
-}
-
-.skills-sheet-enter-active,
-.skills-sheet-leave-active {
-  transition: background-color var(--motion-normal) var(--motion-ease);
-}
-
-.skills-sheet-enter-active .skills-sheet,
-.skills-sheet-leave-active .skills-sheet {
-  transition: translate var(--motion-normal) var(--motion-ease);
-}
-
-.skills-sheet-enter-from,
-.skills-sheet-leave-to {
-  background-color: transparent;
-}
-
-.skills-sheet-enter-from .skills-sheet,
-.skills-sheet-leave-to .skills-sheet {
-  translate: 100% 0;
-}
-
-.skills-sheet-head {
-  display: grid;
-  gap: 8px;
-  padding: 18px 16px 18px 24px;
-  border-bottom: 1px solid var(--line-soft);
-}
-
-.skills-sheet-titleline {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 12px;
-}
-
-.skills-sheet-title {
-  margin: 0;
-  color: var(--text-0);
-  font-size: var(--font-size-title);
-  line-height: 1.2;
-  overflow-wrap: anywhere;
-}
-
-.skills-sheet-desc {
-  margin: 0;
-  padding-right: 8px;
-  color: var(--text-1);
-  font-size: var(--font-size-ui);
-  line-height: 1.55;
-}
-
-.skills-sheet-body {
-  display: grid;
-  align-content: start;
-  gap: 18px;
+.skills-panel-body {
+  flex: 1 1 auto;
   min-height: 0;
-  padding: 18px 24px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
   overflow-y: auto;
 }
 
-.skills-sheet-foot {
-  display: flex;
-  justify-content: flex-start;
-  padding: 12px 24px calc(env(safe-area-inset-bottom, 0px) + 12px);
-  border-top: 1px solid var(--line-soft);
-}
-
-.skills-callout {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.skills-panel-desc {
   margin: 0;
-  padding: 8px 10px;
-  border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent);
-  border-radius: 2px;
   color: var(--text-1);
   font-size: var(--font-size-meta);
-  line-height: 1.45;
+  line-height: 1.55;
 }
 
-.skills-callout > span {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow-wrap: anywhere;
+.skills-panel-toggle.ui-toggle-row {
+  padding: 10px 0;
+  border-top: 1px solid color-mix(in srgb, var(--line-soft) 82%, transparent);
 }
 
-.skills-callout .icon {
-  flex: 0 0 auto;
-  width: 14px;
-  height: 14px;
+.skills-panel-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
   color: var(--danger);
 }
 
-/* Facts as a datasheet: mono labels on the left, values on the right. */
-.skills-facts {
-  display: grid;
-  margin: 0;
+.skills-panel-warning .icon {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  margin-top: 2px;
 }
 
-.skills-fact {
-  display: grid;
-  grid-template-columns: 96px minmax(0, 1fr);
-  gap: 12px;
-  padding: 9px 0;
-  border-bottom: 1px dashed var(--line-soft);
+.skills-panel-body .ui-property-list {
+  border-top: 0;
 }
 
-.skills-fact:first-child {
-  border-top: 1px solid var(--line-soft);
-}
-
-.skills-fact dt {
-  padding-top: 2px;
-  color: var(--text-2);
-  font: 400 9.5px/1.4 var(--font-mono);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.skills-fact dd {
-  margin: 0;
-  min-width: 0;
-  color: var(--text-0);
-  font: 400 11.5px/1.5 var(--font-mono);
+.skills-link {
+  color: var(--q-c-blue);
+  text-decoration: none;
   overflow-wrap: anywhere;
 }
 
-.skills-fact code {
-  font: inherit;
-}
-
-.skills-fact-link {
-  color: var(--q-c-blue);
-  text-decoration: none;
-}
-
-.skills-fact-link:hover {
+.skills-link:hover {
   text-decoration: underline;
 }
-
-
-
 
 .skills-files {
   display: grid;
@@ -441,24 +121,26 @@ body .skills-sheet .q-button.xs.icon .button-inner {
 
 .skills-files code {
   min-width: 0;
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  color: var(--text-0);
+  font-family: var(--font-mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.skills-file-size {
+.skills-files span {
   flex: 0 0 auto;
   color: var(--text-2);
 }
 
 .skills-text-button {
   appearance: none;
-  margin: 6px 0 0;
+  margin: 4px 0 0;
   padding: 0;
   border: 0;
   background: transparent;
   color: var(--q-c-blue);
-  font: 500 10px/1.4 var(--font-mono);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  font: inherit;
   cursor: pointer;
 }
 
@@ -466,61 +148,158 @@ body .skills-sheet .q-button.xs.icon .button-inner {
   text-decoration: underline;
 }
 
-.skills-fact-note {
-  margin: 4px 0 0;
-  color: var(--text-2);
-  font-size: var(--font-size-meta);
+/* The page bar's menu: one row holding the global switch, in Quail's menu frame. */
+.skills-menu {
+  position: relative;
 }
 
-.skills-doc-block {
-  display: grid;
-  gap: 10px;
+.skills-menu-popup.q-menu {
+  top: 100%;
+  right: 0;
+  left: auto;
+  width: 300px;
+  z-index: 30;
 }
 
-.skills-doc-toggle {
-  appearance: none;
-  display: inline-flex;
-  align-items: center;
-  justify-self: start;
-  gap: 6px;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--text-1);
-  font: 500 10.5px/1.4 var(--font-mono);
-  letter-spacing: 0.1em;
+.skills-menu-item.q-menu-item-inner {
+  gap: 16px;
+  justify-content: space-between;
   cursor: pointer;
 }
 
-.skills-doc-toggle:hover {
-  color: var(--text-0);
-}
-
-.skills-doc-caret {
-  width: 12px;
-  height: 12px;
-  transition: rotate var(--motion-fast) var(--motion-ease);
-}
-
-.skills-doc-caret.is-open {
-  rotate: 90deg;
-}
-
-/* The rendered SKILL.md, in console colours rather than the renderer's warm paper theme. */
-.skills-doc {
+.skills-menu-copy {
+  display: grid;
+  gap: 3px;
   min-width: 0;
-  padding-top: 4px;
-  border-top: 1px solid var(--line-soft);
+}
+
+.skills-menu-note {
+  color: var(--text-2);
+  font-size: var(--font-size-meta);
+  line-height: 1.45;
+}
+
+.skills-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: var(--q-bg-white);
+  color: var(--text-2);
+}
+
+.skills-search:focus-within {
+  border-color: var(--text-1);
+}
+
+.skills-search .icon {
+  width: 14px;
+  height: 14px;
+}
+
+.skills-search input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text-0);
+  font: inherit;
+  font-size: var(--font-size-ui);
+}
+
+/* The list is Settings' switch rows; a row also opens its skill. */
+.skills-card .ui-toggle-list {
+  border-top: 0;
+}
+
+.skills-row.ui-toggle-row {
+  position: relative;
+}
+
+.skills-row-open {
+  appearance: none;
+  position: absolute;
+  inset: 0 -12px;
+  z-index: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+  transition: background-color var(--motion-fast) var(--motion-ease);
+}
+
+.skills-row-open:hover,
+.skills-row.is-active .skills-row-open {
+  background: color-mix(in srgb, var(--q-c-dark) 4%, transparent);
+}
+
+.skills-row-open:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent-1) 48%, transparent);
+  outline-offset: -2px;
+}
+
+.skills-row .ui-toggle-copy {
+  position: relative;
+  pointer-events: none;
+}
+
+.skills-row-switch {
+  position: relative;
+  z-index: 1;
+}
+
+.skills-row-note {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.skills-row:not(.is-on) .ui-toggle-title {
+  color: var(--text-2);
+}
+
+.skills-empty {
+  display: grid;
+  gap: 4px;
+}
+
+.skills-add-form {
+  display: grid;
+  gap: 12px;
+  padding-top: 14px;
+}
+
+.skills-add-form .ui-toggle-note {
+  margin: 0;
+}
+
+.skills-add-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* SKILL.md in its dialog, in console colours rather than the renderer's warm paper theme. */
+.skills-doc {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  max-height: min(70vh, 720px);
+  padding-top: 8px;
+  overflow-y: auto;
 }
 
 .skills-doc .mmr-root {
   background: transparent !important;
 }
 
-/* The renderer lays the document out as a grid; its children must be allowed to shrink, or one
-   long URL or inline code token widens every paragraph past the sheet. Code blocks keep their own
-   horizontal scroll. */
 .skills-doc .mmr-document > * {
   min-width: 0;
   max-width: 100%;
@@ -550,106 +329,8 @@ body .skills-sheet .q-button.xs.icon .button-inner {
   --mmr-radius: 2px;
 }
 
-/* Remove asks in the sheet's footer, next to the button that started it. */
-.skills-sheet-foot.is-confirming {
-  display: grid;
-  gap: 12px;
-  border-top-color: color-mix(in srgb, var(--danger) 45%, transparent);
-  background: color-mix(in srgb, var(--danger) 5%, transparent);
-  animation: skills-confirm-in var(--motion-normal) var(--motion-ease) both;
-}
-
-.skills-remove-confirm {
-  display: grid;
-  gap: 6px;
-  min-width: 0;
-}
-
-.skills-remove-title {
-  color: var(--text-0);
-  font-size: var(--font-size-ui);
-}
-
-.skills-remove-text {
-  margin: 0;
-  color: var(--text-1);
-  font-size: var(--font-size-meta);
-  line-height: 1.5;
-}
-
-
-.skills-remove-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-@keyframes skills-confirm-in {
-  from {
-    opacity: 0;
-    translate: 0 6px;
-  }
-}
-
-/* The Install dialog. */
-.skills-dialog-body {
-  display: grid;
-  gap: 10px;
-  padding-top: 14px;
-}
-
-
-
-
-.skills-dialog-note {
-  margin: 0;
-  color: var(--text-2);
-  font-size: var(--font-size-meta);
-  line-height: 1.5;
-}
-
-.skills-dialog-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 6px;
-}
-
 @media (max-width: 920px) {
-  .skills-shell {
+  .skills-main {
     padding-bottom: calc(var(--mobile-nav-height, 0px) + 96px);
-  }
-
-  .skills-row {
-    padding: 12px 16px;
-  }
-
-  .skills-sheet {
-    width: 100%;
-    border-left: 0;
-  }
-
-  .skills-sheet-head {
-    padding: calc(env(safe-area-inset-top, 0px) + 12px) 8px 16px 16px;
-  }
-
-  .skills-sheet-body {
-    padding: 16px 16px 24px;
-  }
-
-  .skills-sheet-foot {
-    padding-inline: 16px;
-  }
-
-  .skills-fact {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 4px;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .skills-sheet-enter-active .skills-sheet,
-  .skills-sheet-leave-active .skills-sheet {
-    transition: none;
   }
 }
