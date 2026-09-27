@@ -1,5 +1,6 @@
 import { computed, onBeforeUpdate, onUpdated } from "vue";
 
+import { translate } from "../core/context";
 import { approvalParameterEntries, skillInstallApproval } from "../core/chat-approvals";
 import { recordComponentUpdate } from "../core/performance";
 import ChatRichContent from "./ChatRichContent";
@@ -198,13 +199,16 @@ const ChatHistoryItem = {
         String(props.item?.taskId || "").trim() !== "" &&
         !isTerminalStatus(normalizeTaskStatus(props.item?.status))
     );
-    const statusText = computed(() => {
-      const durationText = String(props.item?.durationText || "").trim();
-      if (props.item?.durationVisible === true && durationText) {
-        return durationText;
-      }
-      return String(props.item?.timeText || "").trim();
-    });
+    const statusIsDuration = computed(
+      () => props.item?.durationVisible === true && String(props.item?.durationText || "").trim() !== ""
+    );
+    const statusText = computed(() =>
+      String(statusIsDuration.value ? props.item?.durationText : props.item?.timeText || "").trim()
+    );
+    // The duration shows as a thinking icon and "2m23s"; the words go to the label and tooltip.
+    const statusLabel = computed(() =>
+      statusIsDuration.value ? translate("chat_task_duration_thought", { duration: statusText.value }) : null
+    );
     const statusInteractive = computed(
       () => role.value === "agent" && String(props.item?.durationText || props.item?.rawJSON || "").trim() !== ""
     );
@@ -300,6 +304,8 @@ const ChatHistoryItem = {
       retryNotices,
       statusInteractive,
       statusText,
+      statusIsDuration,
+      statusLabel,
       streaming,
       surfaceClass,
       taskActivity,
@@ -322,12 +328,15 @@ const ChatHistoryItem = {
       <span
         v-if="statusText && role !== 'agent'"
         :class="statusInteractive ? 'chat-history-status is-clickable' : 'chat-history-status'"
+        :title="statusLabel"
+        :aria-label="statusLabel"
         :role="statusInteractive ? 'button' : null"
         :tabindex="statusInteractive ? 0 : null"
         @click="emitTimeClick"
         @keydown.enter.prevent="emitTimeClick"
         @keydown.space.prevent="emitTimeClick"
       >
+        <PhChatCircleDots v-if="statusIsDuration" class="chat-history-status-icon" aria-hidden="true" />
         {{ statusText }}
       </span>
       <template v-if="contextCompactNotice">
@@ -351,12 +360,15 @@ const ChatHistoryItem = {
               <span
                 v-if="statusText"
                 :class="statusInteractive ? 'chat-history-status is-clickable' : 'chat-history-status'"
+                :title="statusLabel"
+                :aria-label="statusLabel"
                 :role="statusInteractive ? 'button' : null"
                 :tabindex="statusInteractive ? 0 : null"
                 @click="emitTimeClick"
                 @keydown.enter.prevent="emitTimeClick"
                 @keydown.space.prevent="emitTimeClick"
               >
+                <PhChatCircleDots v-if="statusIsDuration" class="chat-history-status-icon" aria-hidden="true" />
                 {{ statusText }}
               </span>
             </template>
@@ -364,12 +376,15 @@ const ChatHistoryItem = {
           <span
             v-else-if="statusText"
             :class="statusInteractive ? 'chat-history-status is-clickable' : 'chat-history-status'"
+            :title="statusLabel"
+            :aria-label="statusLabel"
             :role="statusInteractive ? 'button' : null"
             :tabindex="statusInteractive ? 0 : null"
             @click="emitTimeClick"
             @keydown.enter.prevent="emitTimeClick"
             @keydown.space.prevent="emitTimeClick"
           >
+            <PhChatCircleDots v-if="statusIsDuration" class="chat-history-status-icon" aria-hidden="true" />
             {{ statusText }}
           </span>
           <div

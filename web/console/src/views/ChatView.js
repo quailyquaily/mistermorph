@@ -2997,7 +2997,7 @@ const ChatView = {
             pendingText: preservePendingText ? existingItem?.text : "",
           }),
           timeText: historyTimeLabel(detail?.finished_at || detail?.started_at || detail?.created_at),
-          durationText: taskDurationLabel(detail, t),
+          durationText: taskDurationLabel(detail),
           rawJSON: taskRawJSON(detail),
           pendingSeed,
         });

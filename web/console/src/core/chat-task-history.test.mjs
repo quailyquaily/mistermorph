@@ -27,11 +27,6 @@ function t(key, vars = {}) {
     chat_result_empty: "No output.",
     chat_polling_hint: `${vars.name || "Agent"} is working...`,
     chat_agent_name_fallback: "Agent",
-    chat_duration_hour: `${vars.value} hour`,
-    chat_duration_hours: `${vars.value} hours`,
-    chat_duration_minute: `${vars.value} min`,
-    chat_duration_second: `${vars.value} sec`,
-    chat_task_duration_thought: `Thought for ${vars.duration}`,
   };
   return messages[key] || key;
 }

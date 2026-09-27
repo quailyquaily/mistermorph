@@ -128,32 +128,28 @@ function taskDurationMs(task, now = Date.now()) {
   return endMs - startedMs;
 }
 
-function durationPartsLabel(durationMs, t) {
+// Compact and unit-lettered, the same in every locale: "45s", "2m23s", "1h5m0s".
+function durationPartsLabel(durationMs) {
   const totalSeconds = Math.max(1, Math.round(Number(durationMs || 0) / 1000));
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
-  const parts = [];
   if (hours > 0) {
-    parts.push(t(hours === 1 ? "chat_duration_hour" : "chat_duration_hours", { value: hours }));
+    return `${hours}h${minutes}m${seconds}s`;
   }
   if (minutes > 0) {
-    parts.push(t("chat_duration_minute", { value: minutes }));
+    return `${minutes}m${seconds}s`;
   }
-  if (seconds > 0 || parts.length === 0) {
-    parts.push(t("chat_duration_second", { value: seconds }));
-  }
-  return parts.join(" ");
+  return `${seconds}s`;
 }
 
-function taskDurationLabel(task, t, now = Date.now()) {
+// Shown beside a thinking icon; the icon's label spells it out ("Thought for 2m23s").
+function taskDurationLabel(task, now = Date.now()) {
   const durationMs = taskDurationMs(task, now);
   if (durationMs <= 0) {
     return "";
   }
-  return t("chat_task_duration_thought", {
-    duration: durationPartsLabel(durationMs, t),
-  });
+  return durationPartsLabel(durationMs);
 }
 
 function taskRawJSON(task) {
@@ -385,7 +381,7 @@ function taskHistoryItems(task, t, options = {}) {
       approvalError: "",
       status: normalizeTaskStatus(task?.status),
       timeText: historyTimeLabel(task?.finished_at || task?.started_at || task?.created_at, locale, now),
-      durationText: taskDurationLabel(task, t, now),
+      durationText: taskDurationLabel(task, now),
       durationVisible: false,
       durationVisibleManual: false,
       taskId: taskID,
