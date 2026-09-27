@@ -1275,3 +1275,8 @@ body:has(.settings-page) .q-dialog .q-menu-item.danger .q-menu-title {
 .settings-panel-body textarea::placeholder {
   color: color-mix(in srgb, var(--q-field-placeholder-color, var(--text-2)) 65%, transparent);
 }
+
+/* Why the Add Profile dialog cannot save yet. */
+.settings-add-profile-error {
+  color: var(--danger);
+}

@@ -1312,7 +1312,7 @@ const SettingsView = {
           units.push({ key: "llm", label: title, save: () => saveAgentSettings("llm", { notify: false }) });
         }
         for (const profile of state.llm.profiles) {
-          if (profileDirty(profile)) {
+          if (!profile._draft && profileDirty(profile)) {
             units.push({
               key: `profile:${profile._key}`,
               label: trimText(profile.name) || title,
@@ -1536,6 +1536,7 @@ const SettingsView = {
     );
     const profileOptions = computed(() =>
       state.llm.profiles
+        .filter((profile) => !profile._draft)
         .map((profile) => ({
           id: profile._key,
           title: trimText(profile.name) || t("settings_agent_profile_placeholder"),
@@ -2065,6 +2066,61 @@ const SettingsView = {
       profile[key] = nextValue;
       if (Object.prototype.hasOwnProperty.call(llmProfileSecretFields(profile), key)) {
         profile._secretDirty.add(key);
+      }
+    }
+
+    // The Add Profile dialog, shared by Models and Model Routes. The new profile lives in the list
+    // as a draft (so the form, model picker and sign-in dialogs work by its key) but stays out of the
+    // list, the save bar and route choices until Create saves it; Cancel removes it.
+    const addProfileKey = ref("");
+    const addProfileDraft = computed(
+      () => state.llm.profiles.find((item) => item._key === addProfileKey.value && item._draft) || null
+    );
+    const addProfileOpen = computed({
+      get: () => Boolean(addProfileDraft.value),
+      set: (open) => {
+        if (!open) cancelAddProfile();
+      },
+    });
+    const addProfileError = computed(() => {
+      const draft = addProfileDraft.value;
+      return draft && trimText(draft.name) ? profileValidationError(draft) : "";
+    });
+
+    const addProfileSaving = computed(
+      () => Boolean(addProfileDraft.value) && agentSavingTarget.value === `profile:${addProfileDraft.value._key}`
+    );
+    const addProfileSaveDisabled = computed(() => {
+      const draft = addProfileDraft.value;
+      return !draft || !trimText(draft.name) || profileSaveDisabled(draft);
+    });
+
+    function openAddProfileDialog() {
+      if (agentSettingsReadOnly.value || agentLoading.value || addProfileDraft.value) {
+        return;
+      }
+      const profile = buildLLMProfileState();
+      profile._draft = true;
+      state.llm.profiles.push(profile);
+      addProfileKey.value = profile._key;
+    }
+
+    function cancelAddProfile() {
+      const index = state.llm.profiles.findIndex((item) => item._key === addProfileKey.value && item._draft);
+      if (index >= 0) {
+        state.llm.profiles.splice(index, 1);
+      }
+      addProfileKey.value = "";
+    }
+
+    async function createProfile() {
+      const draft = addProfileDraft.value;
+      if (!draft) {
+        return;
+      }
+      if (await saveLLMProfile(draft._key)) {
+        delete draft._draft;
+        addProfileKey.value = "";
       }
     }
 
@@ -4427,39 +4483,6 @@ const SettingsView = {
       });
     }
 
-    // "Add profile" on Model Routes: go to Models and start a new profile there. Cleared if the
-    // move is cancelled (unsaved changes), so no profile appears later by surprise.
-    const pendingProfileAdd = ref(false);
-
-    function addProfileFromRoutes() {
-      pendingProfileAdd.value = true;
-      const nextPath = settingsSectionPath(endpointState.selectedRef, "agent");
-      void router.push(nextPath).then((failure) => {
-        if (failure) {
-          pendingProfileAdd.value = false;
-        } else if (isMobile.value) {
-          mobilePanelVisible.value = true;
-        }
-      });
-    }
-
-    watch(
-      () => [selectedSectionID.value, agentSettingsLoaded.value],
-      ([sectionID, loaded]) => {
-        if (!pendingProfileAdd.value || sectionID !== "agent" || !loaded) {
-          return;
-        }
-        pendingProfileAdd.value = false;
-        addLLMProfile();
-        void nextTick(() => {
-          const cards = document.querySelectorAll(".settings-profile-card");
-          const card = cards[cards.length - 1];
-          card?.scrollIntoView({ behavior: "smooth", block: "center" });
-          card?.querySelector("input, textarea")?.focus({ preventScroll: true });
-        });
-      }
-    );
-
     function isSelectedSection(item) {
       return !isMobile.value && String(item?.id || "") === selectedSectionID.value;
     }
@@ -4687,7 +4710,13 @@ const SettingsView = {
     );
 
     return {
-      addProfileFromRoutes,
+      addProfileDraft,
+      addProfileOpen,
+      addProfileError,
+      addProfileSaving,
+      addProfileSaveDisabled,
+      openAddProfileDialog,
+      createProfile,
       t,
       lang,
       loggingOut,
@@ -5069,7 +5098,7 @@ const SettingsView = {
                       </header>
 
                       <div class="settings-profile-list">
-                        <article v-for="profile in state.llm.profiles" :key="profile._key" class="settings-profile-card">
+                        <article v-for="profile in state.llm.profiles.filter((item) => !item._draft)" :key="profile._key" class="settings-profile-card">
                           <div class="settings-profile-toolbar">
                             <span
                               class="settings-profile-status"
@@ -5144,7 +5173,7 @@ const SettingsView = {
                           type="button"
                           class="placeholder settings-profile-placeholder"
                           :disabled="agentLoading || agentSaving || agentSettingsReadOnly"
-                          @click="addLLMProfile"
+                          @click="openAddProfileDialog"
                         >
                           <PhPlus class="icon" />
                           {{ t("settings_agent_profile_add") }}
@@ -5246,7 +5275,7 @@ const SettingsView = {
               :saving="agentSaving && agentSavingTarget === 'config'"
               saveScope="agent"
               @save="saveConfigSettings('agent', $event)"
-              @add-profile="addProfileFromRoutes"
+              @add-profile="openAddProfileDialog"
             />
           </div>
 
@@ -6177,6 +6206,56 @@ const SettingsView = {
           </Transition>
         </div>
       </div>
+
+      <SettingDialog
+        v-model="addProfileOpen"
+        :title="t('settings_agent_profile_add')"
+        width="720px"
+        :saving="addProfileSaving"
+        :saveDisabled="addProfileSaveDisabled"
+        @save="createProfile"
+      >
+        <template v-if="addProfileDraft">
+          <div class="settings-field settings-profile-name">
+            <span class="settings-field-label">{{ t("settings_agent_profile_name_label") }}</span>
+            <QInput
+              :modelValue="addProfileDraft.name"
+              :placeholder="t('settings_agent_profile_name_placeholder')"
+              :disabled="agentSaving || agentSettingsReadOnly"
+              @update:modelValue="updateProfileField(addProfileDraft._key, { field: 'name', value: $event })"
+            />
+            <p v-if="addProfileError" class="settings-field-note settings-add-profile-error" role="alert">{{ addProfileError }}</p>
+          </div>
+          <LLMConfigForm
+            :config="addProfileDraft"
+            :busy="agentLoading || agentSaving"
+            :disabledReason="agentFormDisabledReason"
+            :readOnly="agentSettingsReadOnly"
+            :envManaged="llmProfileEnvManaged(addProfileDraft)"
+            :secretFields="llmProfileSecretFields(addProfileDraft)"
+            :providerItems="providerItems"
+            :reasoningEffortItems="reasoningEffortItems"
+            :toolsEmulationItems="toolsEmulationItems"
+            :enableModelPicker="true"
+            :modelLookupCredentialsReady="profileModelLookupCredentialsReady(addProfileDraft)"
+            :showCodexAuthAction="profileUsesCodexProvider(addProfileDraft)"
+            :codexAuthDisabled="profileCodexAuthDisabled(addProfileDraft)"
+            :codexAuthState="codexAuthButtonState"
+            :codexAuthTitle="codexAuthButtonTitle"
+            :showXAIAuthAction="profileUsesXAIProvider(addProfileDraft)"
+            :xaiAuthState="xaiAuthButtonState"
+            :xaiAuthTitle="xaiAuthButtonTitle"
+            :showProAuthAction="profileUsesProProvider(addProfileDraft)"
+            :proAuthState="proAuthButtonState"
+            :proAuthTitle="proAuthButtonTitle"
+            @update-field="updateProfileField(addProfileDraft._key, $event)"
+            @open-model-picker="openModelPicker(addProfileDraft._key)"
+            @open-codex-auth="openCodexAuthDialog"
+            @open-xai-auth="openXAIAuthDialog"
+            @open-pro-auth="openProAuthDialog"
+          />
+        </template>
+      </SettingDialog>
 
       <SettingDialog
         v-model="advancedSettingsOpen"
