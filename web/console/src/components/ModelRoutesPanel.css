@@ -19,32 +19,163 @@
   pointer-events: none;
 }
 
+/* Lines, draw-in and traffic follow the Overview's connection map. */
+.model-routes-map {
+  --routes-accent: var(--q-button-primary-bg);
+  --routes-node-step: 70ms;
+  --routes-plot-start: 260ms;
+  --routes-plot-step: 110ms;
+}
+
+.model-routes-map.is-drawn {
+  --routes-plot-start: 0ms;
+  --routes-plot-step: 0ms;
+}
+
 .model-routes-line {
   fill: none;
-  stroke: color-mix(in srgb, var(--q-c-blue) 55%, var(--text-2));
+  stroke: color-mix(in srgb, var(--routes-accent) 30%, var(--bg-0));
   stroke-linecap: round;
-  opacity: 0.75;
-  transition: opacity 0.15s ease, stroke 0.15s ease;
+  stroke-linejoin: round;
+  transition: stroke 0.2s ease, opacity 0.2s ease;
 }
 
+/* A route left on the default profile: the same line, a little quieter. */
 .model-routes-line.is-implicit {
-  stroke: var(--text-2);
-  opacity: 0.35;
+  stroke: color-mix(in srgb, var(--routes-accent) 20%, var(--bg-0));
 }
 
+/* Fallbacks are only used when a request fails: dashed, no traffic. */
 .model-routes-line.is-fallback {
-  stroke: var(--text-2);
-  stroke-dasharray: 4 4;
-  opacity: 0.6;
+  stroke: color-mix(in srgb, var(--q-c-orange) 65%, var(--bg-0));
+  stroke-dasharray: 4 6;
 }
 
 .model-routes-line.is-active {
-  stroke: var(--q-c-blue);
+  stroke: var(--routes-accent);
   opacity: 1;
 }
 
+.model-routes-line.is-fallback.is-active {
+  stroke: var(--q-c-orange);
+}
+
 .model-routes-line.is-dim {
-  opacity: 0.12;
+  opacity: 0.18;
+}
+
+.model-routes-plot {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 10px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: var(--line-length);
+  stroke-dashoffset: var(--line-length);
+  animation: model-routes-plot 800ms cubic-bezier(0.55, 0, 0.25, 1) forwards;
+  animation-delay: calc(var(--routes-plot-start) + var(--plot-index, 0) * var(--routes-plot-step));
+}
+
+.model-routes-traffic {
+  fill: none;
+  animation: model-routes-fade-in 400ms ease-out both;
+  animation-delay: 1.2s;
+}
+
+.model-routes-map.is-drawn .model-routes-traffic {
+  animation-delay: 0ms;
+}
+
+.model-routes-pulse {
+  animation: model-routes-pulse var(--line-period) linear infinite;
+  animation-delay: var(--line-delay);
+}
+
+.model-routes-glow {
+  fill: none;
+  stroke: var(--routes-accent);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  /* Center each tapered layer on the same position along the curve. */
+  stroke-dasharray: var(--pulse-length) var(--line-length);
+  animation: model-routes-flow var(--line-period) linear infinite;
+  animation-delay: var(--line-delay);
+}
+
+.model-routes-traffic.is-implicit .model-routes-glow {
+  stroke: color-mix(in srgb, var(--routes-accent) 60%, var(--bg-0));
+}
+
+.model-routes-arrival {
+  fill: none;
+  stroke: var(--routes-accent);
+  stroke-width: 1px;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: model-routes-arrival var(--line-period) cubic-bezier(0.25, 1, 0.5, 1) infinite;
+  animation-delay: var(--line-delay);
+}
+
+.model-routes-traffic.is-implicit .model-routes-arrival {
+  stroke: color-mix(in srgb, var(--routes-accent) 60%, var(--bg-0));
+}
+
+/* Nodes fade in one after another; opacity only, since lines are measured from their positions. */
+.model-routes-column > li {
+  animation: model-routes-node-in 380ms cubic-bezier(0.25, 1, 0.5, 1) both;
+  animation-delay: calc(var(--node-index, 0) * var(--routes-node-step));
+}
+
+.model-routes-map.is-drawn .model-routes-column > li {
+  animation: none;
+}
+
+@keyframes model-routes-plot {
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes model-routes-pulse {
+  0%, 100% { opacity: 0; }
+  5%, 95% { opacity: 1; }
+}
+
+@keyframes model-routes-flow {
+  from { stroke-dashoffset: calc(var(--pulse-length) / 2); }
+  to { stroke-dashoffset: calc(var(--pulse-length) / 2 - var(--line-length)); }
+}
+
+@keyframes model-routes-arrival {
+  0% { transform: scale(0.8); opacity: 0.6; }
+  28%, 100% { transform: scale(1.6); opacity: 0; }
+}
+
+@keyframes model-routes-node-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes model-routes-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .model-routes-column > li,
+  .model-routes-traffic,
+  .model-routes-pulse,
+  .model-routes-glow,
+  .model-routes-arrival {
+    animation: none;
+  }
+
+  .model-routes-traffic {
+    display: none;
+  }
+
+  .model-routes-plot {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
 }
 
 .model-routes-column {

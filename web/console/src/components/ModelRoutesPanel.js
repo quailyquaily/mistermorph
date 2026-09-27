@@ -201,30 +201,70 @@ export default {
     });
     onBeforeUnmount(() => observer?.disconnect());
 
-    const lines = computed(() =>
-      edges.value
+    // Lines in the Overview's style: out of the route, onto a vertical rail with rounded corners,
+    // and into the profile. Each profile has its own rail, so lines to one profile merge and lines
+    // to different profiles do not overlap.
+    const measurePath = typeof document !== "undefined" ? document.createElementNS("http://www.w3.org/2000/svg", "path") : null;
+
+    function railPath(a, b, railX, offset) {
+      const ay = a.y + offset;
+      const by = b.y + offset;
+      const dy = by - ay;
+      if (Math.abs(dy) < 1) {
+        return `M ${a.x} ${ay} H ${b.x}`;
+      }
+      const dir = Math.sign(dy);
+      const r = Math.min(10, Math.abs(dy) / 2, Math.max(0, railX - a.x), Math.max(0, b.x - railX));
+      return `M ${a.x} ${ay} H ${railX - r} Q ${railX} ${ay} ${railX} ${ay + dir * r} V ${by - dir * r} Q ${railX} ${by} ${railX + r} ${by} H ${b.x}`;
+    }
+
+    const lines = computed(() => {
+      const order = profileNodes.value.map((node) => node.name);
+      const xs = [...Object.values(geometry.from).map((p) => p.x), 0];
+      const left = Math.max(...xs);
+      const right = Math.min(...Object.values(geometry.to).map((p) => p.x), geometry.width);
+      return edges.value
         .map((edge) => {
           const a = geometry.from[edge.purpose];
           const b = geometry.to[edge.profile];
           if (!a || !b) {
             return null;
           }
-          const bend = Math.max(24, (b.x - a.x) / 2);
+          const slot = Math.max(0, order.indexOf(edge.profile));
+          const railX = left + ((right - left) * (slot + 1)) / (order.length + 1);
           const offset = edge.kind === "fallback" ? 4 : 0;
-          const path = `M ${a.x} ${a.y + offset} C ${a.x + bend} ${a.y + offset}, ${b.x - bend} ${b.y + offset}, ${b.x} ${b.y + offset}`;
-          const width = edge.kind === "fallback" ? 1.5 : 1.5 + (edge.share / 100) * 4;
+          const path = railPath(a, b, railX, offset);
+          let length = Math.abs(b.x - a.x) + Math.abs(b.y - a.y);
+          if (measurePath) {
+            measurePath.setAttribute("d", path);
+            length = measurePath.getTotalLength();
+          }
           return {
             ...edge,
             path,
-            width,
-            mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 + offset },
-            end: { x: b.x - 14, y: b.y + offset },
+            length,
+            width: edge.kind === "fallback" ? 1 : 1.5,
+            // Bigger shares carry traffic more often.
+            period: edge.kind === "fallback" ? 0 : Math.min(7, 3 * Math.sqrt(100 / Math.max(1, edge.share))),
+            // Shares and steppers sit on the last straight run into the profile.
+            mid: { x: (railX + b.x) / 2, y: b.y + offset },
+            end: { x: b.x - 12, y: b.y + offset },
+            arrive: { x: b.x, y: b.y + offset },
             active: selected.value === edge.purpose,
             dim: Boolean(selected.value) && selected.value !== edge.purpose,
           };
         })
-        .filter(Boolean)
-    );
+        .filter(Boolean);
+    });
+
+    // Lines draw in one after another on first show; lines added later draw in at once.
+    const drawn = ref(false);
+    const uid = `mr${getCurrentInstance()?.uid ?? Math.floor(Math.random() * 1e6)}`;
+    onMounted(() => {
+      window.setTimeout(() => {
+        drawn.value = true;
+      }, 1800);
+    });
 
     function buildUpdate() {
       const changes = {};
@@ -293,6 +333,8 @@ export default {
       profileNodes,
       hiddenProfiles,
       lines,
+      drawn,
+      uid,
       geometry,
       canvas,
       problems,
@@ -311,7 +353,7 @@ export default {
         <header class="settings-panel-head">
           <div class="settings-panel-copy">
             <h3 class="settings-panel-title workspace-document-title">Model routes</h3>
-            <p class="settings-panel-meta">Where each kind of work sends its requests. Select one to change it; thicker lines carry more, dashed lines are fallbacks in order.</p>
+            <p class="settings-panel-meta">Where each kind of work sends its requests. Pulses show traffic, more often for bigger shares; dashed lines are fallbacks, in order. Select a route to change it.</p>
           </div>
           <QButton v-if="!registered" class="primary" :loading="saving" :disabled="loading || saving || !dirty" @click="save">Save</QButton>
         </header>
@@ -326,15 +368,47 @@ export default {
           <QButton class="plain xs" @click="selected = ''">Done</QButton>
         </div>
 
-        <div ref="canvas" class="model-routes-map" :class="{ 'has-selection': selected }">
-          <svg class="model-routes-lines" :viewBox="'0 0 ' + geometry.width + ' ' + geometry.height" aria-hidden="true">
+        <div ref="canvas" class="model-routes-map" :class="{ 'has-selection': selected, 'is-drawn': drawn }">
+          <svg class="model-routes-lines" :viewBox="'0 0 ' + geometry.width + ' ' + geometry.height" aria-hidden="true" focusable="false">
+            <defs>
+              <!-- Each line draws in like a pen plotter; a mask keeps dashed lines' own pattern. -->
+              <mask
+                v-for="(line, index) in lines"
+                :id="uid + '-plot-' + line.id"
+                :key="'mask:' + line.id"
+                maskUnits="userSpaceOnUse"
+                x="-2000" y="-2000" width="6000" height="6000"
+              >
+                <path class="model-routes-plot" :d="line.path" :style="{ '--line-length': line.length + 'px', '--plot-index': index }" />
+              </mask>
+            </defs>
             <path
               v-for="line in lines"
               :key="line.id"
               :d="line.path"
+              :mask="'url(#' + uid + '-plot-' + line.id + ')'"
               :class="['model-routes-line', 'is-' + line.kind, { 'is-active': line.active, 'is-dim': line.dim, 'is-implicit': line.implicit }]"
               :stroke-width="line.width"
             />
+            <!-- Traffic: a tapered pulse along each live line, and a ring where it arrives. -->
+            <template v-for="(line, index) in lines" :key="'traffic:' + line.id">
+              <g
+                v-if="line.period && !line.dim"
+                :class="['model-routes-traffic', { 'is-implicit': line.implicit }]"
+                :style="{ '--line-length': line.length + 'px', '--line-period': line.period + 's', '--line-delay': (-index * 0.45) + 's' }"
+              >
+                <g class="model-routes-pulse">
+                  <path
+                    v-for="part in 6"
+                    :key="part"
+                    class="model-routes-glow"
+                    :d="line.path"
+                    :style="{ '--pulse-length': (19 - part * 3) + 'px', strokeWidth: 0.4 + part * 0.6, strokeOpacity: part / 6 }"
+                  />
+                </g>
+                <circle class="model-routes-arrival" :cx="line.arrive.x" :cy="line.arrive.y" r="5" />
+              </g>
+            </template>
           </svg>
 
           <!-- Shares and fallback order sit on the lines; the selected split gets steppers. -->
@@ -364,7 +438,7 @@ export default {
           </template>
 
           <ol class="model-routes-column is-routes" aria-label="Kinds of work">
-            <li v-for="purpose in purposes" :key="purpose.key">
+            <li v-for="(purpose, index) in purposes" :key="purpose.key" :style="{ '--node-index': index }">
               <button
                 type="button"
                 :data-route="purpose.key"
@@ -383,7 +457,7 @@ export default {
           </ol>
 
           <ol class="model-routes-column is-profiles" aria-label="Profiles">
-            <li v-for="node in profileNodes" :key="node.name">
+            <li v-for="(node, index) in profileNodes" :key="node.name" :style="{ '--node-index': index + 1 }">
               <div
                 :data-profile="node.name"
                 :class="['model-routes-node', 'is-profile', 'is-' + (roleOf(node.name).role || 'idle'), { 'is-missing': node.missing }]"
