@@ -14,7 +14,6 @@ import { skillToggleSettings } from "../core/skills-load.js";
 
 // Search appears once the list is long enough to need it.
 const SEARCH_THRESHOLD = 8;
-const FILES_PREVIEW = 8;
 
 // The frontmatter is shown as facts above the document, so the rendered SKILL.md starts after it.
 function stripFrontmatter(content) {
@@ -51,7 +50,8 @@ function skillSourceText(skill) {
   return `${where}${at}${when}`;
 }
 
-// The agent's skills: a sidebar list, a card per skill with its switch and "⋯" menu, and Add skill,
+// The agent's skills: a sidebar list, a card per skill (its name and "⋯" menu, its properties with
+// the switch first, then SKILL.md), and Add skill,
 // which starts a chat task where the agent reviews the skill and the user approves the install.
 const SkillsView = {
   components: {
@@ -101,11 +101,26 @@ const SkillsView = {
     // Phones show the list or one skill; desktop shows both, as on TODO.
     const showIndex = computed(() => !isMobile.value || !selected.value);
     const showDetail = computed(() => Boolean(selected.value));
-    const visibleFiles = computed(() => {
+    // Files fold into one line; SKILL.md is what the card is for.
+    const filesSummary = computed(() => {
       const files = selected.value?.files || [];
-      return filesExpanded.value ? files : files.slice(0, FILES_PREVIEW);
+      const bytes = files.reduce((sum, file) => sum + (Number(file.size) || 0), 0);
+      return t(files.length === 1 ? "skills_files_summary_one" : "skills_files_summary", { count: files.length, size: formatBytes(bytes) });
     });
-    const hiddenFileCount = computed(() => Math.max(0, (selected.value?.files || []).length - FILES_PREVIEW));
+    const documentSize = computed(() => {
+      const file = (selected.value?.files || []).find((item) => item.path === "SKILL.md");
+      return file ? formatBytes(file.size) : "";
+    });
+    // What the switch means for this skill: a $name reference in a task loads it either way.
+    const enabledNote = computed(() => {
+      if (!selected.value) {
+        return "";
+      }
+      if (!catalog.value.enabled) {
+        return t("skills_enabled_note_all_off");
+      }
+      return selected.value.loaded ? t("skills_enabled_note_on") : t("skills_enabled_note_off", { name: selected.value.name });
+    });
 
     function refreshMobileMode() {
       isMobile.value = typeof window !== "undefined" && window.innerWidth <= 920;
@@ -390,8 +405,9 @@ const SkillsView = {
       detail,
       detailLoading,
       filesExpanded,
-      visibleFiles,
-      hiddenFileCount,
+      filesSummary,
+      documentSize,
+      enabledNote,
       showIndex,
       showDetail,
       formatBytes,
@@ -511,19 +527,11 @@ const SkillsView = {
 
         <QCard v-if="showDetail" class="skills-detail-card" variant="default">
           <div class="skills-detail">
-            <QFence v-if="catalog.readOnly && catalog.readOnlyReason" type="warning" :text="catalog.readOnlyReason" />
-            <QFence v-if="err" type="danger" icon="PhXCircle" :text="err" />
-
-            <div class="skills-detail-toolbar">
-              <label class="skills-enabled-control">
-                <span class="skills-enabled-label" aria-hidden="true">{{ t('skills_field_enabled') }}</span>
-                <QSwitch
-                  :modelValue="isOn(selected)"
-                  :disabled="locked"
-                  :aria-label="t('skills_load_toggle', { name: selected.name })"
-                  @update:modelValue="setLoaded(selected, $event)"
-                />
-              </label>
+            <header class="skills-detail-head">
+              <div class="skills-detail-copy">
+                <h3 class="workspace-document-title skills-detail-title">{{ selected.name }}</h3>
+                <p v-if="selected.description" class="skills-detail-meta">{{ selected.description }}</p>
+              </div>
               <QDropdownMenu
                 class="skills-actions-menu"
                 :items="skillActionMenuItems"
@@ -534,19 +542,28 @@ const SkillsView = {
                 <PhDotsThree class="skills-actions-menu-icon" />
                 <span class="skills-actions-menu-accessible">{{ t('skills_more') }}</span>
               </QDropdownMenu>
-            </div>
-
-            <header class="skills-detail-copy">
-              <h3 class="workspace-document-title skills-detail-title">{{ selected.name }}</h3>
-              <p v-if="selected.description" class="skills-detail-meta">{{ selected.description }}</p>
             </header>
 
+            <QFence v-if="catalog.readOnly && catalog.readOnlyReason" type="warning" :text="catalog.readOnlyReason" />
+            <QFence v-if="err" type="danger" icon="PhXCircle" :text="err" />
             <p v-if="selected.modified.length" class="skills-detail-warning">
               <PhWarning class="icon" aria-hidden="true" />
               <span>{{ t('skills_modified_since', { files: selected.modified.join(', ') }) }}</span>
             </p>
 
             <dl class="ui-property-list skills-properties">
+              <div class="ui-property-row skills-property-enabled">
+                <dt class="ui-property-label">{{ t('skills_field_enabled') }}</dt>
+                <dd class="ui-property-value skills-enabled-value">
+                  <QSwitch
+                    :modelValue="isOn(selected)"
+                    :disabled="locked"
+                    :aria-label="t('skills_load_toggle', { name: selected.name })"
+                    @update:modelValue="setLoaded(selected, $event)"
+                  />
+                  <span class="skills-enabled-note">{{ enabledNote }}</span>
+                </dd>
+              </div>
               <div v-if="sourceText(selected)" class="ui-property-row">
                 <dt class="ui-property-label">{{ t('skills_fact_source') }}</dt>
                 <dd class="ui-property-value">
@@ -569,25 +586,35 @@ const SkillsView = {
               <div class="ui-property-row">
                 <dt class="ui-property-label">{{ t('skills_fact_files') }}</dt>
                 <dd class="ui-property-value">
-                  <ul class="skills-files">
-                    <li v-for="file in visibleFiles" :key="file.path">
+                  <button
+                    type="button"
+                    class="skills-files-toggle"
+                    :aria-expanded="filesExpanded ? 'true' : 'false'"
+                    @click="filesExpanded = !filesExpanded"
+                  >
+                    <span>{{ filesSummary }}</span>
+                    <PhCaretDown class="icon" :class="{ 'is-open': filesExpanded }" aria-hidden="true" />
+                  </button>
+                  <ul v-if="filesExpanded" class="skills-files">
+                    <li v-for="file in selected.files" :key="file.path">
                       <code>{{ file.path }}</code>
                       <span>{{ formatBytes(file.size) }}</span>
                     </li>
                   </ul>
-                  <button v-if="hiddenFileCount > 0" type="button" class="skills-text-button" @click="filesExpanded = !filesExpanded">
-                    {{ filesExpanded ? t('skills_files_less') : t('skills_files_more', { count: selected.files.length }) }}
-                  </button>
                 </dd>
               </div>
             </dl>
 
-            <section class="skills-doc">
+            <section class="skills-doc" :aria-label="'SKILL.md'">
+              <header class="skills-doc-head">
+                <span class="skills-doc-label">SKILL.md</span>
+                <span v-if="documentSize" class="skills-doc-size">{{ documentSize }}</span>
+              </header>
               <QFence v-if="detail && detail.truncated" type="warning" :text="t('skills_content_truncated')" />
               <div v-if="detailLoading && !detail" class="skills-index-loading" aria-hidden="true">
                 <QSkeleton variant="card" height="120px" :count="1" />
               </div>
-              <MarkdownContent v-else-if="documentSource" :source="documentSource" />
+              <MarkdownContent v-else-if="documentSource" class="skills-doc-body" :source="documentSource" />
             </section>
           </div>
         </QCard>

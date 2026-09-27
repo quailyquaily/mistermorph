@@ -200,41 +200,22 @@
   min-width: 0;
 }
 
-/* The bar at the top of the card: the switch, and the "⋯" menu that holds Remove. */
-.skills-detail-toolbar {
+/* The card's head: the skill's name and description, and the "⋯" menu (Remove) at its top right. */
+.skills-detail-head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 8px;
+  gap: 16px;
   min-width: 0;
-  padding-bottom: 12px;
-  border-bottom: 1px solid color-mix(in srgb, var(--line-soft) 82%, transparent);
 }
 
-.skills-enabled-control {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  height: 32px;
-  cursor: pointer;
-}
-
-.skills-enabled-label {
-  color: var(--text-2);
-  font: 500 11px/1 var(--font-mono);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-/* The "⋯" menu button, as on TODO, but as tall as the switch beside it (QSwitch's --switch-h,
-   which is scoped to the switch and so cannot be read here). */
-.skills-detail-toolbar .skills-actions-menu {
+/* The "⋯" menu button, as on TODO, at 32px to sit beside the title. */
+.skills-detail-head .skills-actions-menu {
   flex: 0 0 auto;
 }
 
 /* Out-ranks the themes' `body[data-theme] .q-dropdown-menu { width: 100% }`. */
-.skills-detail-toolbar .q-dropdown-menu.skills-actions-menu,
+.skills-detail-head .q-dropdown-menu.skills-actions-menu,
 .skills-actions-menu .q-dropdown-menu-inner,
 .skills-actions-menu .q-dropdown-menu-action {
   width: 32px;
@@ -281,9 +262,11 @@
 }
 
 .skills-detail-copy {
+  flex: 1 1 auto;
   display: grid;
-  gap: 4px;
+  gap: 6px;
   min-width: 0;
+  padding-top: 2px;
 }
 
 .skills-detail-title {
@@ -295,7 +278,7 @@
   margin: 0;
   color: var(--text-2);
   font-size: var(--font-size-meta);
-  line-height: 1.5;
+  line-height: 1.55;
 }
 
 .skills-detail-warning {
@@ -315,14 +298,26 @@
   margin-top: 1px;
 }
 
-/* Properties sit side by side in the wide card and stack on phones. */
-.skills-properties.ui-property-list {
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  column-gap: 24px;
+/* Properties: one column of label | value rows, the switch first. */
+.skills-properties .ui-property-row {
+  grid-template-columns: 112px minmax(0, 1fr);
+  align-items: baseline;
+  column-gap: 16px;
 }
 
-.skills-properties .ui-property-row {
-  align-content: start;
+.skills-properties .skills-property-enabled {
+  align-items: center;
+}
+
+.skills-enabled-value {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+.skills-enabled-note {
+  color: var(--text-2);
 }
 
 .skills-link {
@@ -335,10 +330,39 @@
   text-decoration: underline;
 }
 
+.skills-files-toggle {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-1);
+  font: inherit;
+  cursor: pointer;
+}
+
+.skills-files-toggle:hover {
+  color: var(--text-0);
+}
+
+.skills-files-toggle .icon {
+  width: 12px;
+  height: 12px;
+  color: var(--text-2);
+  transition: transform 0.16s ease;
+}
+
+.skills-files-toggle .icon.is-open {
+  transform: rotate(180deg);
+}
+
 .skills-files {
   display: grid;
   gap: 2px;
-  margin: 0;
+  margin: 8px 0 0;
   padding: 0;
   list-style: none;
 }
@@ -363,30 +387,39 @@
   color: var(--text-2);
 }
 
-.skills-text-button {
-  appearance: none;
-  margin: 4px 0 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--q-c-blue);
-  font: inherit;
-  cursor: pointer;
-}
-
-.skills-text-button:hover {
-  text-decoration: underline;
-}
-
 .skills-detail-empty {
   padding: 24px 16px;
 }
 
-/* SKILL.md, in console colours rather than the renderer's warm paper theme. */
+/* SKILL.md, in console colours rather than the renderer's warm paper theme. Its headings sit a
+   step below the skill's name so the file does not read as a second title. */
 .skills-doc {
   display: grid;
   gap: 12px;
   min-width: 0;
+  padding-top: 4px;
+}
+
+.skills-doc-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.skills-doc-label {
+  color: var(--text-2);
+  font: 500 11px/1 var(--font-mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.skills-doc-size {
+  color: var(--text-2);
+  font-size: var(--font-size-meta);
+}
+
+.skills-doc .mmr-document h1 {
+  font-size: 1.35em;
 }
 
 .skills-doc .mmr-root {
@@ -496,5 +529,10 @@
 
   .skills-detail-card.q-card-default {
     margin: 8px 12px calc(var(--mobile-nav-height, 0px) + 16px);
+  }
+
+  .skills-properties .ui-property-row {
+    grid-template-columns: 88px minmax(0, 1fr);
+    column-gap: 12px;
   }
 }
