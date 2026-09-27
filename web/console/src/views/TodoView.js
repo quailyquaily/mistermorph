@@ -2601,7 +2601,7 @@ const TodoView = {
                   />
                 </div>
                 <div class="todo-editor-actions">
-                  <QButton class="primary" :disabled="!canSave" :loading="saving" @click="save">
+                  <QButton class="primary xs" :disabled="!canSave" :loading="saving" @click="save">
                     {{ t("action_save") }}
                   </QButton>
                   <QDropdownMenu

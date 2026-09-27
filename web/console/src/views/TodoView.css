@@ -384,7 +384,7 @@
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  height: 44px;
+  height: 32px;
 }
 
 .todo-enabled-label {
@@ -398,13 +398,14 @@
   flex: 0 0 auto;
 }
 
+/* The toolbar's controls share the switch's 32px height (QSwitch's --switch-h); Save is `xs`. */
 .todo-task-actions-menu,
 .todo-task-actions-menu .q-dropdown-menu-inner,
 .todo-task-actions-menu .q-dropdown-menu-action {
-  width: 44px;
-  min-width: 44px;
-  height: 44px;
-  min-height: 44px;
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  min-height: 32px;
 }
 
 .todo-task-actions-menu .q-dropdown-menu-action {
