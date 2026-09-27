@@ -2526,6 +2526,10 @@ func (r *consoleLocalRuntime) runTask(ctx context.Context, conversationKey strin
 			return nil, nil, err
 		}
 	}
+	installOnly := skillInstallOnlyTask(generation, task)
+	if installOnly {
+		reg = restrictToSkillInstallTools(reg, reactTool.Name())
+	}
 	imageToolScope := strings.TrimSpace(job.ConversationKey)
 	if imageToolScope == "" && strings.TrimSpace(job.TopicID) != "" {
 		imageToolScope = "console:" + strings.TrimSpace(job.TopicID)
@@ -2552,6 +2556,11 @@ func (r *consoleLocalRuntime) runTask(ctx context.Context, conversationKey strin
 		ContextCheckpointStore:  checkpointHistory.Store,
 		HistoryBoundaries:       historyBoundaries,
 		CurrentMessageBoundary:  checkpointHistory.CurrentMessageBoundary,
+	}
+	if installOnly {
+		// No runtime tools (spawn, coder, images, plan, ...) and no engine subtasks either.
+		runReq.DisableRuntimeTools = true
+		runReq.EngineToolsConfig = &agent.EngineToolsConfig{}
 	}
 	var result taskruntime.RunResult
 	var runErr error

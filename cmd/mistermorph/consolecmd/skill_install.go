@@ -64,6 +64,34 @@ func (r *consoleLocalRuntime) skillInstallTools(generation *consoleLocalRuntimeG
 	return out
 }
 
+// skillInstallOnlyTask reports whether a task names the install tools ($skill_install_preview or
+// $skill_install), as Add skill's task does. Such a task runs with only those tools (see
+// restrictToSkillInstallTools): while a skill is previewed and installed the agent cannot run
+// commands, write files, fetch URLs or start subtasks, so it cannot install the skill around the
+// preview and the approval, and the skill's untrusted text cannot steer it into doing so.
+func skillInstallOnlyTask(generation *consoleLocalRuntimeGeneration, task string) bool {
+	if generation == nil {
+		return false
+	}
+	consumed := skillsutil.ResolveTaskSkillRefs(task, skillsutil.SkillsConfigFromReader(generation.reader))
+	return len(skillInstallToolRefs(task, consumed)) > 0
+}
+
+// restrictToSkillInstallTools keeps only the install tools and the given harmless extras.
+func restrictToSkillInstallTools(reg *tools.Registry, extras ...string) *tools.Registry {
+	keep := map[string]bool{skillinstall.PreviewToolName: true, skillinstall.InstallToolName: true}
+	for _, name := range extras {
+		keep[name] = true
+	}
+	out := tools.NewRegistry()
+	for _, tool := range reg.All() {
+		if keep[tool.Name()] {
+			_ = out.Register(tool)
+		}
+	}
+	return out
+}
+
 // skillInstallToolRefs finds $skill_install_preview and $skill_install in a task, skipping names
 // that a skill of the same name already took (as toolsutil.ExplicitBuiltinToolRefs does).
 func skillInstallToolRefs(task string, consumed map[string]bool) map[string]bool {

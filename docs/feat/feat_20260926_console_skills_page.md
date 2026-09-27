@@ -132,6 +132,12 @@ review's and the file checks'). Approving installs exactly those files; denying 
 is disabled when the preview has expired or been used, when the call does not match it, or when
 it would overwrite an installed skill without `replace`, since the install would fail.
 
+A Console task that names `$skill_install_preview` or `$skill_install` (every Add skill task)
+runs with only those two tools and the Console's message-reaction tool: no bash, file writes,
+URL fetches, web search, MCP, runtime tools, or engine subtasks (spawn, acp_spawn, coder), for
+the whole task including its resume after approval (`restrictToSkillInstallTools`). The
+preview's review is a separate model call with no tools that reads the skill only as data.
+
 The tools live in `internal/skillinstall` and are registered only in the console runtime's task
 registry (`consolecmd/skill_install.go`); channels build their own registries and do not get
 them. The existing CLI `skills install` command is unchanged.

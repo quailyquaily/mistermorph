@@ -2,6 +2,7 @@ package consolecmd
 
 import (
 	"context"
+	"sort"
 	"strings"
 	"testing"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/daemonruntime"
 	"github.com/quailyquaily/mistermorph/internal/runtimepaths"
 	"github.com/quailyquaily/mistermorph/internal/skillinstall"
+	"github.com/quailyquaily/mistermorph/tools"
 	"github.com/spf13/viper"
 )
 
@@ -78,3 +80,41 @@ func TestWithSkillInstallPreviewOnlyTouchesSkillInstall(t *testing.T) {
 		t.Fatalf("missing preview attached: %s", missing.SkillPreview)
 	}
 }
+
+func TestSkillInstallTasksRunWithOnlyTheInstallTools(t *testing.T) {
+	gen := &consoleLocalRuntimeGeneration{reader: viper.New()}
+	for task, want := range map[string]bool{
+		"Install the skill at https://x. Preview it with $skill_install_preview, then call $skill_install.": true,
+		"just $skill_install":                        true,
+		"install a skill with skill_install_preview": false,
+		"run $bash please":                           false,
+	} {
+		if got := skillInstallOnlyTask(gen, task); got != want {
+			t.Errorf("skillInstallOnlyTask(%q) = %v, want %v", task, got, want)
+		}
+	}
+	if skillInstallOnlyTask(nil, "$skill_install") {
+		t.Error("expected false without a generation")
+	}
+
+	reg := tools.NewRegistry()
+	for _, name := range []string{"bash", "url_fetch", "write_file", "read_file", "web_search", "skill_install_preview", "skill_install", "message_react"} {
+		_ = reg.Register(namedTool(name))
+	}
+	got := restrictToSkillInstallTools(reg, "message_react")
+	var names []string
+	for _, tool := range got.All() {
+		names = append(names, tool.Name())
+	}
+	sort.Strings(names)
+	if strings.Join(names, ",") != "message_react,skill_install,skill_install_preview" {
+		t.Fatalf("tools = %v", names)
+	}
+}
+
+type namedTool string
+
+func (n namedTool) Name() string                                            { return string(n) }
+func (n namedTool) Description() string                                     { return "" }
+func (n namedTool) ParameterSchema() string                                 { return `{"type":"object"}` }
+func (n namedTool) Execute(context.Context, map[string]any) (string, error) { return "", nil }
