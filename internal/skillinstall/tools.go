@@ -36,7 +36,7 @@ func (t *PreviewTool) Name() string { return PreviewToolName }
 func (t *PreviewTool) Description() string {
 	return "Preview a skill before installing it. Pass `link` (a GitHub repository, folder or SKILL.md link, or an https link to a SKILL.md) or `store_id` (a Morph Skill Store skill). " +
 		"Downloads and pins the skill, runs a separate safety review, and returns what it does, its files, requirements and risks. Installs nothing. " +
-		"Use it only when the user asks to install a skill. Then explain the result to the user in plain words, including every risk, and call skill_install with the returned values. " +
+		"Use it only when the user asks to install a skill. Then call skill_install with the returned values: its approval card shows the user this preview with every risk, and approving installs the skill. " +
 		"If the preview fails, tell the user why and stop: never install the skill another way (git clone, bash, write_file), since that skips the user's approval."
 }
 
@@ -81,9 +81,9 @@ func (t *PreviewTool) Execute(ctx context.Context, params map[string]any) (strin
 	}
 	out := map[string]any{
 		"preview": preview,
-		"next_step": "Tell the user what this skill does, what it needs and every risk, in plain words. If they want it, call skill_install with " +
-			"preview_id, name, source (the source url) and commit exactly as given here" + replaceHint(preview) +
-			". The user approves the install on an approval card; the preview expires at expires_at.",
+		"next_step": "Call skill_install now with preview_id, name, source (the source url) and commit exactly as given here" + replaceHint(preview) +
+			". Its approval card shows the user this preview with every risk; approving installs the skill, denying cancels it. " +
+			"Then tell the user the outcome. The preview expires at expires_at.",
 	}
 	data, _ := json.MarshalIndent(out, "", "  ")
 	return string(data), nil

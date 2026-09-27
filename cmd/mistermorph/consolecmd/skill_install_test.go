@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/taskruntime"
+	"github.com/quailyquaily/mistermorph/internal/daemonruntime"
 	"github.com/quailyquaily/mistermorph/internal/runtimepaths"
 	"github.com/quailyquaily/mistermorph/internal/skillinstall"
 	"github.com/spf13/viper"
@@ -63,5 +64,17 @@ func TestSkillInstallToolsAreConsoleOnly(t *testing.T) {
 	}
 	if got := skillStoreIndexURL(viper.New()); got != skillinstall.DefaultStoreIndexURL {
 		t.Fatalf("default index url = %q", got)
+	}
+}
+
+func TestWithSkillInstallPreviewOnlyTouchesSkillInstall(t *testing.T) {
+	other := withSkillInstallPreview(daemonruntime.ApprovalInfo{ToolName: "bash", ToolParams: map[string]any{"preview_id": "x"}})
+	if other.SkillPreview != nil {
+		t.Fatalf("bash approval got a skill preview: %s", other.SkillPreview)
+	}
+	// An unknown or expired preview attaches nothing; the card then says the preview expired.
+	missing := withSkillInstallPreview(daemonruntime.ApprovalInfo{ToolName: "skill_install", ToolParams: map[string]any{"preview_id": "nope"}})
+	if missing.SkillPreview != nil {
+		t.Fatalf("missing preview attached: %s", missing.SkillPreview)
 	}
 }

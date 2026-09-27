@@ -265,6 +265,19 @@ func (s *Service) Install(ctx context.Context, opts Options, req InstallRequest)
 	return Installed{SkillID: p.SkillID, Name: p.Name, Dir: target, Source: p.Source, Replaced: backup != ""}, nil
 }
 
+// LookupPreview returns a preview that has not expired or been installed, so the approval card
+// can show what an install would put on disk, with every risk, before the user approves it.
+func (s *Service) LookupPreview(id string) (Preview, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.dropExpiredLocked()
+	staged, ok := s.previews[strings.TrimSpace(id)]
+	if !ok {
+		return Preview{}, false
+	}
+	return staged.preview, true
+}
+
 func (s *Service) dropExpiredLocked() {
 	now := s.now()
 	for id, staged := range s.previews {

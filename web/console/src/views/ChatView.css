@@ -1489,6 +1489,114 @@ html[data-macos26="true"] .chat-workspace-sidebar-shell-mobile {
   margin-top: 2px;
 }
 
+/* skill_install: the preview that approving would install, with every risk. */
+.chat-skill-preview {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.chat-skill-preview-head {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.chat-skill-preview-name {
+  color: var(--text-0);
+  font-size: var(--font-size-ui);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.chat-skill-preview-description,
+.chat-skill-preview-text {
+  margin: 0;
+  max-width: 72ch;
+  color: var(--text-1);
+  font-size: var(--font-size-ui);
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.chat-skill-preview-description {
+  color: var(--text-2);
+}
+
+.chat-skill-preview-link {
+  color: var(--q-c-blue);
+  font-size: var(--font-size-ui);
+  overflow-wrap: anywhere;
+  text-decoration: none;
+}
+
+.chat-skill-preview-link:hover {
+  text-decoration: underline;
+}
+
+.chat-skill-preview-commit {
+  margin-left: 6px;
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-meta);
+}
+
+.chat-skill-preview .chat-approval-param dd {
+  color: var(--text-1);
+  font-size: var(--font-size-ui);
+  line-height: 1.5;
+}
+
+.chat-skill-preview-section {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.chat-skill-preview-label {
+  margin: 0;
+  color: var(--text-2);
+  font: 500 11px/1.3 var(--font-mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.chat-skill-preview-list {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-1);
+  font-size: var(--font-size-ui);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.chat-skill-preview-section.is-risks {
+  padding: 10px 12px;
+  border-left: 2px solid var(--q-c-orange);
+  background: color-mix(in srgb, var(--q-c-orange) 7%, transparent);
+}
+
+.chat-skill-preview-section.is-risks .chat-skill-preview-list li::marker {
+  color: var(--q-c-orange);
+}
+
+.chat-skill-preview-warning {
+  margin: 0;
+  color: var(--danger);
+  font-size: var(--font-size-ui);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.chat-skill-preview-note {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--font-size-meta);
+  line-height: 1.45;
+}
+
 .chat-approval-actions {
   display: flex;
   align-items: center;

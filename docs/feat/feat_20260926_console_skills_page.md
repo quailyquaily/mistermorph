@@ -124,9 +124,13 @@ conversation, with its review and outcome kept in the history:
 3. Store: Install or Update on a store card starts the same task with the store id.
 
 The task text (localised, `skills_install_task_*`) asks the agent to call
-`$skill_install_preview`, explain what the skill does and every risk, and then call
-`$skill_install`. `skill_install` always needs approval (§4.3), so nothing is installed until the
-user approves in that topic. The user can ask follow-up questions before approving.
+`$skill_install_preview` and then `$skill_install` with the preview's values right away.
+`skill_install` always needs approval (§4.3), and its approval card is where the user decides:
+the Console attaches the preview that call would install (`ApprovalInfo.skill_preview`, looked up
+by `preview_id`), and the card shows its source, files, the isolated review, and every risk (the
+review's and the file checks'). Approving installs exactly those files; denying cancels. Approve
+is disabled when the preview has expired or been used, when the call does not match it, or when
+it would overwrite an installed skill without `replace`, since the install would fail.
 
 The tools live in `internal/skillinstall` and are registered only in the console runtime's task
 registry (`consolecmd/skill_install.go`); channels build their own registries and do not get

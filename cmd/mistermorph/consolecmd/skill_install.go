@@ -2,6 +2,7 @@ package consolecmd
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/quailyquaily/mistermorph/internal/agentsettings"
 	"github.com/quailyquaily/mistermorph/internal/caprefs"
+	"github.com/quailyquaily/mistermorph/internal/daemonruntime"
 	"github.com/quailyquaily/mistermorph/internal/skillinstall"
 	"github.com/quailyquaily/mistermorph/internal/skillsutil"
 	"github.com/quailyquaily/mistermorph/tools"
@@ -85,6 +87,26 @@ func (r *consoleLocalRuntime) enableInstalledSkill(ctx context.Context, skillID 
 		return errors.New("settings are not writable here")
 	}
 	return fn(ctx, skillID)
+}
+
+// withSkillInstallPreview attaches, to a skill_install approval, the preview that call would
+// install, so the approval card lists every risk before the user approves. Approving is what
+// installs the skill.
+func withSkillInstallPreview(info daemonruntime.ApprovalInfo) daemonruntime.ApprovalInfo {
+	if !strings.EqualFold(strings.TrimSpace(info.ToolName), skillinstall.InstallToolName) {
+		return info
+	}
+	id, _ := info.ToolParams["preview_id"].(string)
+	preview, ok := skillinstall.DefaultService().LookupPreview(id)
+	if !ok {
+		return info
+	}
+	data, err := json.Marshal(preview)
+	if err != nil {
+		return info
+	}
+	info.SkillPreview = data
+	return info
 }
 
 func skillStoreIndexURL(reader interface{ GetString(string) string }) string {

@@ -2,6 +2,7 @@ package daemonruntime
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/quailyquaily/mistermorph/internal/taskdomain"
@@ -78,6 +79,9 @@ type ApprovalInfo struct {
 	CreatedAt             time.Time      `json:"created_at"`
 	ExpiresAt             time.Time      `json:"expires_at"`
 	PendingAt             *time.Time     `json:"pending_at,omitempty"`
+	// SkillPreview is, for a skill_install call, the preview it would install (skillinstall.Preview):
+	// source, review, every risk and the files. Absent when that preview has expired.
+	SkillPreview json.RawMessage `json:"skill_preview,omitempty"`
 }
 
 type ApprovalListResponse struct {

@@ -374,3 +374,36 @@ func newTestServer(t *testing.T, handler http.Handler) *httptest.Server {
 	t.Cleanup(server.Close)
 	return server
 }
+
+func TestLookupPreviewUntilInstalledOrExpired(t *testing.T) {
+	server := fakeGitHub(t, pdfRepo())
+	opts, _ := testOptions(t, server)
+	svc := NewService()
+	now := time.Now()
+	svc.now = func() time.Time { return now }
+	link := "https://github.com/acme/skills/tree/main/pdf-tools"
+
+	preview, err := svc.Preview(context.Background(), opts, link, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, ok := svc.LookupPreview(" " + preview.ID + " ")
+	if !ok || got.ID != preview.ID || len(got.Risks) == 0 {
+		t.Fatalf("LookupPreview() = %+v, %v", got, ok)
+	}
+	if _, err := svc.Install(context.Background(), opts, InstallRequest{PreviewID: preview.ID, Name: preview.Name, SourceURL: preview.Source.URL, Commit: preview.Source.Commit}); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := svc.LookupPreview(preview.ID); ok {
+		t.Fatal("an installed preview is still returned")
+	}
+
+	expiring, err := svc.Preview(context.Background(), opts, link, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now = now.Add(defaultPreviewTTL + time.Minute)
+	if _, ok := svc.LookupPreview(expiring.ID); ok {
+		t.Fatal("an expired preview is still returned")
+	}
+}

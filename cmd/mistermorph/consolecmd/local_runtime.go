@@ -1454,7 +1454,7 @@ func (r *consoleLocalRuntime) listApprovals(ctx context.Context, req daemonrunti
 		if !ok || rec.Status != guard.ApprovalPending || (!rec.ExpiresAt.IsZero() && now.After(rec.ExpiresAt)) {
 			continue
 		}
-		items = append(items, daemonruntime.ApprovalInfo{
+		items = append(items, withSkillInstallPreview(daemonruntime.ApprovalInfo{
 			ApprovalRequestID:     approvalID,
 			TaskID:                strings.TrimSpace(task.ID),
 			RunID:                 strings.TrimSpace(rec.RunID),
@@ -1469,7 +1469,7 @@ func (r *consoleLocalRuntime) listApprovals(ctx context.Context, req daemonrunti
 			CreatedAt:             rec.CreatedAt,
 			ExpiresAt:             rec.ExpiresAt,
 			PendingAt:             task.PendingAt,
-		})
+		}))
 		if len(items) >= limit {
 			break
 		}
@@ -1494,6 +1494,7 @@ func (r *consoleLocalRuntime) getApproval(ctx context.Context, approvalID string
 		if task, ok := r.store.Get(info.TaskID); ok {
 			info.TopicID = strings.TrimSpace(task.TopicID)
 		}
+		info = withSkillInstallPreview(info)
 	}
 	return info, found, err
 }

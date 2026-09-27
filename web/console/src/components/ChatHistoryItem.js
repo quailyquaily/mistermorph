@@ -1,8 +1,9 @@
 import { computed, onBeforeUpdate, onUpdated } from "vue";
 
-import { approvalParameterEntries } from "../core/chat-approvals";
+import { approvalParameterEntries, skillInstallApproval } from "../core/chat-approvals";
 import { recordComponentUpdate } from "../core/performance";
 import ChatRichContent from "./ChatRichContent";
+import ChatSkillInstallPreview from "./ChatSkillInstallPreview";
 import ChatStatusCard from "./ChatStatusCard";
 import ChatSystemMessage from "./ChatSystemMessage";
 
@@ -34,6 +35,7 @@ const RECORD_COMPONENT_PERF = import.meta.env.DEV === true;
 const ChatHistoryItem = {
   components: {
     ChatRichContent,
+    ChatSkillInstallPreview,
     ChatStatusCard,
     ChatSystemMessage,
   },
@@ -161,7 +163,12 @@ const ChatHistoryItem = {
     const approvalReasons = computed(() =>
       Array.isArray(props.item?.approval?.reasons) ? props.item.approval.reasons : []
     );
-    const approvalParams = computed(() => approvalParameterEntries(props.item?.approval?.toolParams));
+    // skill_install shows the preview it would install, with every risk, instead of raw parameters.
+    const skillInstall = computed(() => skillInstallApproval(props.item?.approval));
+    const approvalParams = computed(() => (skillInstall.value ? [] : approvalParameterEntries(props.item?.approval?.toolParams)));
+    const approvalApproveDisabled = computed(
+      () => Boolean(props.item?.approvalBusy) || Boolean(skillInstall.value && !skillInstall.value.canApprove)
+    );
     const approvalMessageVisible = computed(
       () =>
         approvalPending.value &&
@@ -269,6 +276,8 @@ const ChatHistoryItem = {
       approvalHeading,
       approvalPanelClass,
       approvalParams,
+      approvalApproveDisabled,
+      skillInstall,
       approvalPending,
       approvalReasons,
       approvalToolName,
@@ -407,7 +416,8 @@ const ChatHistoryItem = {
                 </div>
               </header>
               <p v-if="approvalMessageVisible" class="chat-approval-message">{{ approvalMessage }}</p>
-              <ul v-if="approvalReasons.length" class="chat-approval-reasons">
+              <ChatSkillInstallPreview v-if="skillInstall" :preview="skillInstall" />
+              <ul v-if="approvalReasons.length && !skillInstall" class="chat-approval-reasons">
                 <li v-for="(reason, index) in approvalReasons" :key="reason + ':' + index">{{ reason }}</li>
               </ul>
               <dl v-if="approvalParams.length" class="chat-approval-params">
@@ -437,7 +447,7 @@ const ChatHistoryItem = {
                 </QButton>
                 <QButton
                   class="primary xs"
-                  :disabled="item.approvalBusy"
+                  :disabled="approvalApproveDisabled"
                   @click.stop="emitApprovalApprove"
                 >
                   {{ approvalApproveLabel }}
