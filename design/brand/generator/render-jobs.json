@@ -1,0 +1,212 @@
+[
+ {
+  "svg": "icons/night/icon-1024.svg",
+  "png": "icons/night/icon-1024.png",
+  "size": 1024
+ },
+ {
+  "svg": "icons/night/icon-256.svg",
+  "png": "icons/night/icon-256.png",
+  "size": 256
+ },
+ {
+  "svg": "icons/night/icon-128.svg",
+  "png": "icons/night/icon-128.png",
+  "size": 128
+ },
+ {
+  "svg": "icons/night/icon-64.svg",
+  "png": "icons/night/icon-64.png",
+  "size": 64
+ },
+ {
+  "svg": "icons/night/icon-32.svg",
+  "png": "icons/night/icon-32.png",
+  "size": 32
+ },
+ {
+  "svg": "icons/night/icon-16.svg",
+  "png": "icons/night/icon-16.png",
+  "size": 16
+ },
+ {
+  "svg": "icons/paper/icon-1024.svg",
+  "png": "icons/paper/icon-1024.png",
+  "size": 1024
+ },
+ {
+  "svg": "icons/paper/icon-256.svg",
+  "png": "icons/paper/icon-256.png",
+  "size": 256
+ },
+ {
+  "svg": "icons/paper/icon-128.svg",
+  "png": "icons/paper/icon-128.png",
+  "size": 128
+ },
+ {
+  "svg": "icons/paper/icon-64.svg",
+  "png": "icons/paper/icon-64.png",
+  "size": 64
+ },
+ {
+  "svg": "icons/paper/icon-32.svg",
+  "png": "icons/paper/icon-32.png",
+  "size": 32
+ },
+ {
+  "svg": "icons/paper/icon-16.svg",
+  "png": "icons/paper/icon-16.png",
+  "size": 16
+ },
+ {
+  "svg": "icons/aojashin/icon-1024.svg",
+  "png": "icons/aojashin/icon-1024.png",
+  "size": 1024
+ },
+ {
+  "svg": "icons/aojashin/icon-256.svg",
+  "png": "icons/aojashin/icon-256.png",
+  "size": 256
+ },
+ {
+  "svg": "icons/aojashin/icon-128.svg",
+  "png": "icons/aojashin/icon-128.png",
+  "size": 128
+ },
+ {
+  "svg": "icons/aojashin/icon-64.svg",
+  "png": "icons/aojashin/icon-64.png",
+  "size": 64
+ },
+ {
+  "svg": "icons/aojashin/icon-32.svg",
+  "png": "icons/aojashin/icon-32.png",
+  "size": 32
+ },
+ {
+  "svg": "icons/aojashin/icon-16.svg",
+  "png": "icons/aojashin/icon-16.png",
+  "size": 16
+ },
+ {
+  "svg": "icons/suimen/icon-1024.svg",
+  "png": "icons/suimen/icon-1024.png",
+  "size": 1024
+ },
+ {
+  "svg": "icons/suimen/icon-256.svg",
+  "png": "icons/suimen/icon-256.png",
+  "size": 256
+ },
+ {
+  "svg": "icons/suimen/icon-128.svg",
+  "png": "icons/suimen/icon-128.png",
+  "size": 128
+ },
+ {
+  "svg": "icons/suimen/icon-64.svg",
+  "png": "icons/suimen/icon-64.png",
+  "size": 64
+ },
+ {
+  "svg": "icons/suimen/icon-32.svg",
+  "png": "icons/suimen/icon-32.png",
+  "size": 32
+ },
+ {
+  "svg": "icons/suimen/icon-16.svg",
+  "png": "icons/suimen/icon-16.png",
+  "size": 16
+ },
+ {
+  "svg": "icons/rinko/icon-1024.svg",
+  "png": "icons/rinko/icon-1024.png",
+  "size": 1024
+ },
+ {
+  "svg": "icons/rinko/icon-256.svg",
+  "png": "icons/rinko/icon-256.png",
+  "size": 256
+ },
+ {
+  "svg": "icons/rinko/icon-128.svg",
+  "png": "icons/rinko/icon-128.png",
+  "size": 128
+ },
+ {
+  "svg": "icons/rinko/icon-64.svg",
+  "png": "icons/rinko/icon-64.png",
+  "size": 64
+ },
+ {
+  "svg": "icons/rinko/icon-32.svg",
+  "png": "icons/rinko/icon-32.png",
+  "size": 32
+ },
+ {
+  "svg": "icons/rinko/icon-16.svg",
+  "png": "icons/rinko/icon-16.png",
+  "size": 16
+ },
+ {
+  "svg": "icons/bunko/icon-1024.svg",
+  "png": "icons/bunko/icon-1024.png",
+  "size": 1024
+ },
+ {
+  "svg": "icons/bunko/icon-256.svg",
+  "png": "icons/bunko/icon-256.png",
+  "size": 256
+ },
+ {
+  "svg": "icons/bunko/icon-128.svg",
+  "png": "icons/bunko/icon-128.png",
+  "size": 128
+ },
+ {
+  "svg": "icons/bunko/icon-64.svg",
+  "png": "icons/bunko/icon-64.png",
+  "size": 64
+ },
+ {
+  "svg": "icons/bunko/icon-32.svg",
+  "png": "icons/bunko/icon-32.png",
+  "size": 32
+ },
+ {
+  "svg": "icons/bunko/icon-16.svg",
+  "png": "icons/bunko/icon-16.png",
+  "size": 16
+ },
+ {
+  "svg": "icons/denko/icon-1024.svg",
+  "png": "icons/denko/icon-1024.png",
+  "size": 1024
+ },
+ {
+  "svg": "icons/denko/icon-256.svg",
+  "png": "icons/denko/icon-256.png",
+  "size": 256
+ },
+ {
+  "svg": "icons/denko/icon-128.svg",
+  "png": "icons/denko/icon-128.png",
+  "size": 128
+ },
+ {
+  "svg": "icons/denko/icon-64.svg",
+  "png": "icons/denko/icon-64.png",
+  "size": 64
+ },
+ {
+  "svg": "icons/denko/icon-32.svg",
+  "png": "icons/denko/icon-32.png",
+  "size": 32
+ },
+ {
+  "svg": "icons/denko/icon-16.svg",
+  "png": "icons/denko/icon-16.png",
+  "size": 16
+ }
+]
