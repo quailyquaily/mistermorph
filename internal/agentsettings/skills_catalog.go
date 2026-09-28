@@ -428,8 +428,8 @@ func RemoveSkill(ctx context.Context, owner Owner, roots []string, id string) (R
 	if err := os.RemoveAll(dir); err != nil {
 		return RemovedSkill{}, err
 	}
-	// Keep the load list meaning the same: drop the id, unless it was the only entry (an
-	// empty list would load every skill; an unknown id is ignored).
+	// Keep the load list meaning the same: drop the id. If it was the only entry, turn automatic
+	// loading off instead, since an empty list would load every skill.
 	view, err := owner.View(ctx)
 	if err != nil {
 		return RemovedSkill{ID: id, Dir: dir}, nil
@@ -443,8 +443,13 @@ func RemoveSkill(ctx context.Context, owner Owner, roots []string, id string) (R
 		}
 		kept = append(kept, entry)
 	}
-	if found && len(kept) > 0 {
-		if _, err := owner.Update(ctx, AgentSettingsUpdate{Skills: &SkillsSettingsUpdate{Load: &kept}}); err != nil {
+	if found {
+		update := &SkillsSettingsUpdate{Load: &kept}
+		if len(kept) == 0 {
+			kept, disabled := []string{}, false
+			update = &SkillsSettingsUpdate{Enabled: &disabled, Load: &kept}
+		}
+		if _, err := owner.Update(ctx, AgentSettingsUpdate{Skills: update}); err != nil {
 			return RemovedSkill{ID: id, Dir: dir}, fmt.Errorf("removed %s but could not update skills.load: %w", id, err)
 		}
 	}

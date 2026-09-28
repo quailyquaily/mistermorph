@@ -303,7 +303,7 @@ func (o *FileOwner) Update(ctx context.Context, update AgentSettingsUpdate) (Age
 	if err != nil {
 		return AgentSettingsView{}, err
 	}
-	if _, err := validateAgentConfigDocument(serialized, effectiveLLM); err != nil {
+	if _, err := validateAgentConfigDocument(serialized, effectiveLLM, skillsLoadFromConfigFile(o.configPath)); err != nil {
 		return AgentSettingsView{}, &StatusError{Status: http.StatusBadRequest, Message: err.Error()}
 	}
 	if err := os.MkdirAll(filepath.Dir(o.configPath), 0o755); err != nil {
@@ -1109,7 +1109,9 @@ func setMCPServersNode(mcpNode *yaml.Node, servers []MCPServerSettings) error {
 	return nil
 }
 
-func validateAgentConfigDocument(data []byte, effectiveLLM LLMSettingsPayload) (*viper.Viper, error) {
+// previousSkillsLoad is skills.load as it was before this save. Skills listed there are not required to exist, so a
+// skill removed from disk doesn't block saving unrelated settings; the runtime skips missing skills anyway.
+func validateAgentConfigDocument(data []byte, effectiveLLM LLMSettingsPayload, previousSkillsLoad []string) (*viper.Viper, error) {
 	tmp := viper.New()
 	configdefaults.Apply(tmp)
 	tmp.SetConfigType("yaml")
@@ -1160,7 +1162,7 @@ func validateAgentConfigDocument(data []byte, effectiveLLM LLMSettingsPayload) (
 			return nil, err
 		}
 	}
-	if err := validateAgentSkillsLoad(tmp); err != nil {
+	if err := validateAgentSkillsLoad(tmp, previousSkillsLoad); err != nil {
 		return nil, err
 	}
 	acpNames := map[string]bool{}
@@ -1933,13 +1935,38 @@ func isInvalidConfigYAMLError(err error) bool {
 	return err != nil && strings.Contains(strings.ToLower(err.Error()), "invalid config yaml")
 }
 
-func validateAgentSkillsLoad(reader *viper.Viper) error {
+// skillsLoadFromConfigFile returns skills.load from the config file on disk, or nil if it can't be read.
+func skillsLoadFromConfigFile(configPath string) []string {
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return nil
+	}
+	reader := viper.New()
+	reader.SetConfigType("yaml")
+	if err := reader.ReadConfig(bytes.NewReader(data)); err != nil {
+		return nil
+	}
+	return reader.GetStringSlice("skills.load")
+}
+
+func validateAgentSkillsLoad(reader *viper.Viper, previous []string) error {
 	cfg := skillsutil.SkillsConfigFromReader(reader)
 	requested, err := normalizeSkillLoadSettings(cfg.Requested)
 	if err != nil {
 		return err
 	}
 	if len(requested) == 0 || (len(requested) == 1 && requested[0] == "*") {
+		return nil
+	}
+	existing := map[string]bool{}
+	for _, value := range previous {
+		existing[strings.ToLower(strings.TrimSpace(value))] = true
+	}
+	unchanged := len(existing) == len(requested)
+	for _, query := range requested {
+		unchanged = unchanged && existing[strings.ToLower(query)]
+	}
+	if unchanged {
 		return nil
 	}
 	discovered, err := skills.Discover(skills.DiscoverOptions{Roots: cfg.Roots})
@@ -1957,6 +1984,9 @@ func validateAgentSkillsLoad(reader *viper.Viper) error {
 	for _, query := range requested {
 		sk, err := skills.Resolve(discovered, query)
 		if err != nil {
+			if existing[strings.ToLower(query)] {
+				continue
+			}
 			return fmt.Errorf("unknown skill %q", query)
 		}
 		key := strings.ToLower(strings.TrimSpace(sk.ID))

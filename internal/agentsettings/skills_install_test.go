@@ -145,15 +145,17 @@ func TestRemoveSkill(t *testing.T) {
 			t.Fatalf("updates = %+v", owner.updates)
 		}
 	})
-	t.Run("keeps a load list that only named it", func(t *testing.T) {
+	t.Run("turns automatic loading off when it was the only entry", func(t *testing.T) {
 		root := t.TempDir()
 		writeSkill(t, filepath.Join(root, "pdf"))
 		owner := &fakeSkillsOwner{skills: SkillsSettingsPayload{Enabled: true, Load: []string{"pdf"}}}
 		if _, err := RemoveSkill(context.Background(), owner, []string{root}, "pdf"); err != nil {
 			t.Fatal(err)
 		}
-		if len(owner.updates) != 0 {
-			t.Fatalf("an empty list would load every skill; updates = %+v", owner.updates)
+		// An empty list alone would load every skill.
+		if len(owner.updates) != 1 || owner.updates[0].Enabled == nil || *owner.updates[0].Enabled ||
+			owner.updates[0].Load == nil || len(*owner.updates[0].Load) != 0 {
+			t.Fatalf("updates = %+v", owner.updates)
 		}
 	})
 	t.Run("a linked folder loses only its link", func(t *testing.T) {
