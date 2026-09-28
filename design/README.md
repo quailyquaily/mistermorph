@@ -31,9 +31,11 @@ The generator is deterministic: running it again reproduces these files exactly.
 
 ## In the product
 
-The night icon is shipped in the web console (favicons, home-screen icons, the login, boot splash and default
-avatar) and the desktop app (`desktop/wails/packaging/appicon.png`). The console's SVG logos all use the 64 drawing,
-because they are shown below 64 CSS px on screens that are mostly retina.
+The console's SVG logos use Aojashin for the light theme and Suimen for the dark theme. The login, boot splash and
+default avatar are Aojashin, since the console has only a light theme so far; `favicon.svg` carries both and follows
+the browser's colour scheme. The bitmap icons (`favicon.ico`, the home-screen icons) and the desktop app
+(`desktop/wails/packaging/appicon.png`) can't follow a theme and keep the night icon. The console's SVG logos all use
+the 64 drawing, because they are shown below 64 CSS px on screens that are mostly retina.
 
 Not done yet:
 
@@ -42,5 +44,5 @@ Not done yet:
 - The desktop packaging scripts (`package-darwin.sh`, `generate-desktop-windows-resources.sh`) still derive the small
   desktop sizes by scaling `appicon.png`, so Finder lists, the taskbar and window titles get the scaled 1024 drawing
   instead of the 32 and 16 drawings.
-- The cyber colourways are not used anywhere in the product yet.
+- Suimen, in the dark favicon, is the only cyber colourway in the product so far.
 - The UI themes in `ui/` are mockups; the console still has one light theme. `DESIGN.md` §7 has the plan.
