@@ -1,7 +1,4 @@
 .boot-splash {
-  --boot-mark: rgba(23, 32, 25, 0.76);
-  --boot-track: rgba(23, 32, 25, 0.1);
-  --boot-signal: rgba(78, 122, 96, 0.32);
   position: fixed;
   inset: 0;
   z-index: 9999;
@@ -16,49 +13,26 @@
   opacity: 0;
 }
 
+/* Hidden until the load has taken long enough to need it (--boot-reveal, set by BootSplash.js),
+   then in quickly, so the icon is whole and recognisable at once. */
 .boot-splash__center {
   display: grid;
-  justify-items: center;
-  gap: 18px;
-}
-
-.boot-splash__mark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 38px;
-  height: 38px;
+  place-items: center;
+  animation: boot-appear 160ms cubic-bezier(0.22, 1, 0.36, 1) var(--boot-reveal, 300ms) both;
 }
 
 .boot-splash__logo {
   display: block;
-  width: 28px;
-  height: 28px;
-  object-fit: contain;
+  width: 56px;
+  height: 56px;
 }
 
-.boot-splash__signal {
-  position: relative;
-  width: 88px;
-  height: 2px;
-  overflow: hidden;
-  background: var(--boot-track);
-}
-
-.boot-splash__signal-bar {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(90deg, transparent, var(--boot-signal), transparent);
-  animation: boot-scan 1.4s ease-in-out infinite;
-  transform: translateX(-140%);
-}
-
-@keyframes boot-scan {
-  0% {
-    transform: translateX(-140%);
+@keyframes boot-appear {
+  from {
+    opacity: 0;
   }
-  100% {
-    transform: translateX(220%);
+  to {
+    opacity: 1;
   }
 }
 
@@ -67,7 +41,8 @@
     transition: none;
   }
 
-  .boot-splash__signal-bar {
-    animation: none;
+  /* Still revealed late, so a fast load shows nothing; just without the fade. */
+  .boot-splash__center {
+    animation-duration: 1ms;
   }
 }

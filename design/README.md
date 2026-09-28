@@ -31,8 +31,9 @@ The generator is deterministic: running it again reproduces these files exactly.
 
 ## In the product
 
-The console's SVG logos use Aojashin for the light theme and Suimen for the dark theme. The login, boot splash and
-default avatar are Aojashin, since the console has only a light theme so far; `favicon.svg` carries both and follows
+The console's SVG logos use Aojashin for the light theme and Suimen for the dark theme. The login and default avatar
+are Aojashin, since the console has only a light theme so far; the boot splash is the Aojashin 64 drawing with the ghost
+drifting through it (`web/console/src/core/ghost-mark.js`, the drift quickened to a 2.4 s figure of eight); `favicon.svg` carries both and follows
 the browser's colour scheme. The bitmap icons (`favicon.ico`, the home-screen icons) and the desktop app
 (`desktop/wails/packaging/appicon.png`) can't follow a theme and keep the night icon. The console's SVG logos all use
 the 64 drawing, because they are shown below 64 CSS px on screens that are mostly retina.
