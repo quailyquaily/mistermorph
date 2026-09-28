@@ -15,7 +15,7 @@ PALETTES = {
     'bunko': dict(bg='#07080F', field='#1C2342', line='#F2F7FF', edge='#1A1F33', split=('#1FE5FF', '#FF2E8A'), glow=None),
     'denko': dict(bg='#0B0A1A', field='#34204A', line='#4DF3FF', edge='#221A36', split=None, glow='#28D8FF'),
     'kohaku': dict(bg='#0C0A08', field='#3A2A14', line='#FFB547', edge='#261D12', split=None, glow='#FF9A1F'),
-    'aojashin': dict(bg='#2463AE', field='#5287C7', line='#FFFFFF', edge='#1D5496', split=None, glow=None),
+    'aojashin': dict(bg='#F1F4F8', field='#B8C9E2', line='#2463AE', edge='#D5DFEC', split=None, glow=None),
     'suimen': dict(bg='#041417', field='#12403F', line='#D6FFF6', edge='#0F2A2C', split=('#22F2D0', '#FF3D7F'), glow=None),
 }
 

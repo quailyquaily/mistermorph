@@ -24,7 +24,7 @@ COLOURWAYS = {
                   ground=YORU, field='#44504E', ghost=HONE),
     'paper': dict(kanji='和紙', name='Washi', role='Light surfaces, print, the docs in light mode.',
                   ground=KINARI, field='#BDB7AC', ghost=SUMI),
-    'aojashin': dict(kanji='青写真', name='Aojashin', role='Paper, drawn in blueprint blue: light surfaces with a cooler, technical tone.'),
+    'aojashin': dict(kanji='青写真', name='Aojashin', role='Paper, drawn in blueprint blue: a cooler light mode.'),
     'suimen': dict(kanji='水面', name='Suimen', role='The cyber edition: dark themes, launches, the alternate icon.'),
     'rinko': dict(kanji='燐光', name='Rinkō', role='Phosphor: terminals, CLI output, special editions.'),
     'bunko': dict(kanji='分光', name='Bunkō', role='Dispersion on indigo: an alternate icon.'),

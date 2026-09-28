@@ -92,7 +92,7 @@ The mark sits left of the name, with the katakana beneath the name in dot matrix
 |---|---|---|---|---|---|---|
 | 夜 | Yoru | `#0B1012` | `#44504E` | `#E7E4DA` | | The default: app icon, favicon, dark surfaces |
 | 和紙 | Washi | `#F2EDE2` | `#BDB7AC` | `#1E1E20` | | Light surfaces, print, the docs in light mode |
-| 青写真 | Aojashin | `#2463AE` | `#5287C7` | `#FFFFFF` | UI page `#F1F4F8`, ink `#0E2C57` | Paper, drawn in blueprint blue: cooler, more technical light surfaces |
+| 青写真 | Aojashin | `#F1F4F8` | `#B8C9E2` | `#2463AE` | ink `#0E2C57` | Paper, drawn in blueprint blue: a cooler light mode |
 | 水面 | Suimen | `#041417` | `#12403F` | `#D6FFF6` | split `#22F2D0` / `#FF3D7F` | The cyber edition |
 | 燐光 | Rinkō | `#03100E` | `#0F3A32` | `#7CFFC4` | glow `#3DFFA8` | Phosphor: terminals, special editions |
 | 分光 | Bunkō | `#07080F` | `#1C2342` | `#F2F7FF` | split `#1FE5FF` / `#FF2E8A` | Alternate icon |
@@ -101,8 +101,9 @@ The mark sits left of the name, with the katakana beneath the name in dot matrix
 Yoru, Washi and Aojashin are the everyday set. The four cyber colourways are editions: special releases, alternate
 icons, and themes people choose.
 
-Aojashin (青写真, a blueprint, and in Japanese also a plan for the future) keeps its blue for the icon and the UI's
-structure. A saturated blue page proved too heavy to read on for hours, so its UI page is quiet cool paper.
+Aojashin (青写真, a blueprint, and in Japanese also a plan for the future) is Washi in a cooler key: light mode
+throughout, cool paper with the ghost drawn in blueprint blue. In the UI the blue marks only what matters: the
+active item, the primary action, selection and links.
 
 ### Cyber effects
 
@@ -146,13 +147,13 @@ an implementation.
 | `panel` | Secondary column | `#EEE8DB` | `#EBF0F6` | `#0D1315` | `#05181B` | `#041311` | `#090B14` | `#0D0B20` |
 | `surface` | Cards | `#FAF7F0` | `#F9FBFD` | `#121A1C` | `#082125` | `#061A16` | `#0E111D` | `#13102A` |
 | `surface2` | Own messages, code | `#E9E3D6` | `#E4EBF4` | `#172124` | `#0B2A2E` | `#08211C` | `#121629` | `#1A1636` |
-| `sb` | Sidebar | `#1E1E20` | `#2463AE` | `#070B0C` | `#021013` | `#020B0A` | `#05060B` | `#07061A` |
+| `sb` | Sidebar | `#1E1E20` | `#E6EDF6` | `#070B0C` | `#021013` | `#020B0A` | `#05060B` | `#07061A` |
 | `t0` | Primary text | `#1E1E20` | `#0E2C57` | `#E7E4DA` | `#D6FFF6` | `#CFFFE8` | `#F2F7FF` | `#E6F9FF` |
 | `t1` | Secondary text | `#4A4843` | `#34507A` | `#B3B6AF` | `#9CCFC6` | `#8FD9B6` | `#AEB6CC` | `#A9B6D6` |
 | `t2` | Tertiary text | `#696662` | `#566A8A` | `#7F8F8C` | `#5FA79C` | `#4E9C7C` | `#7D85A1` | `#8380A4` |
 | `line` | Borders | `#D6CFBF` | `#C8D4E4` | `#243134` | `#12403F` | `#0F3A32` | `#1C2342` | `#2A2046` |
 | `accent` | Selection, links | `#2F4A6D` | `#2463AE` | `#9FC3C9` | `#22F2D0` | `#7CFFC4` | `#1FE5FF` | `#4DF3FF` |
-| `sbaccent` | Active item on the sidebar | `#9FB6D6` | `#FFFFFF` | `#9FC3C9` | `#22F2D0` | `#7CFFC4` | `#1FE5FF` | `#4DF3FF` |
+| `sbaccent` | Active item on the sidebar | `#9FB6D6` | `#2463AE` | `#9FC3C9` | `#22F2D0` | `#7CFFC4` | `#1FE5FF` | `#4DF3FF` |
 | `primary` | Primary button | `#1E1E20` | `#2463AE` | `#E7E4DA` | `#22F2D0` | `#7CFFC4` | `#F2F7FF` | `#4DF3FF` |
 | `danger` | Destructive, errors | `#B8412D` | `#B8412D` | `#E0694F` | `#FF3D7F` | `#FF6B5B` | `#FF2E8A` | `#FF4D8D` |
 | `ok` | Healthy status | `#3F6D5E` | `#2F7A62` | `#7FB89E` | `#22F2D0` | `#7CFFC4` | `#1FE5FF` | `#4DF3FF` |
@@ -168,7 +169,7 @@ ground (page, panel and card; sidebar and its active row).
 | Theme | Primary text | Secondary | Tertiary | Accent | On primary | Danger | Sidebar text | Sidebar dim | Sidebar accent |
 |---|---|---|---|---|---|---|---|---|---|
 | 和紙 Washi | 14.3 | 7.8 | 4.7 | 7.7 | 14.3 | 4.7 | 13.1 | 4.7 | 6.5 |
-| 青写真 Aojashin | 12.6 | 7.4 | 4.8 | 5.5 | 6.1 | 5.0 | 6.1 | 4.6 | 6.1 |
+| 青写真 Aojashin | 12.6 | 7.4 | 4.8 | 5.5 | 6.1 | 5.0 | 11.7 | 4.7 | 4.6 |
 | 夜 Yoru | 15.0 | 9.3 | 5.2 | 10.1 | 15.0 | 5.7 | 15.5 | 4.9 | 8.8 |
 | 水面 Suimen | 17.4 | 10.9 | 6.0 | 13.1 | 13.1 | 5.6 | 17.9 | 5.4 | 10.6 |
 | 燐光 Rinkō | 17.6 | 11.8 | 5.5 | 15.6 | 15.6 | 6.9 | 18.1 | 5.1 | 13.6 |
@@ -176,7 +177,7 @@ ground (page, panel and card; sidebar and its active row).
 | 電光 Denkō | 18.0 | 9.6 | 4.9 | 14.5 | 14.5 | 6.2 | 18.4 | 4.6 | 12.9 |
 
 Washi's sidebar is ink on a paper theme, so the indigo accent can't mark the active item there; `sbaccent` is a pale
-indigo that can. Aojashin's sidebar is blueprint blue, so its active item is marked in white.
+indigo that can. Aojashin's sidebar is light, so its active item is marked in blueprint blue.
 
 ### Patterns
 
@@ -237,6 +238,7 @@ Eight rounds of exploration, all on the design canvas, in order:
 The brand sheet and the UI mockups followed. Two refinements came after:
 
 - **青写真 Aojashin.** A paper clone in blueprint blue. The first version painted the whole UI blue, which was too dark
-  and too heavy for a page people read on for hours; the page became cool paper and the blue moved to the structure.
+  and too heavy for a page people read on for hours. The page became cool paper, then the whole colourway moved to
+  light mode: a paper icon with blue lines, and a light sidebar.
 - **Retina.** Most screens are 2×, so the drawing is chosen by device pixels, and UI logos below 64 CSS px use the
   64 drawing.
