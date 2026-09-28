@@ -15,6 +15,7 @@ import {
   toggleFallback,
   useProfile,
 } from "../core/model-routes";
+import { layoutRouteLines } from "../core/route-lines";
 import "./ModelRoutesPanel.css";
 
 const SHARE_STEP = 5;
@@ -186,7 +187,7 @@ export default {
       }
       for (const el of root.querySelectorAll("[data-profile]")) {
         const r = el.getBoundingClientRect();
-        to[el.dataset.profile] = { x: r.left - box.left, y: r.top - box.top + r.height / 2 };
+        to[el.dataset.profile] = { x: r.left - box.left, y: r.top - box.top + r.height / 2, top: r.top - box.top, bottom: r.bottom - box.top };
       }
       geometry.from = from;
       geometry.to = to;
@@ -202,40 +203,22 @@ export default {
     });
     onBeforeUnmount(() => observer?.disconnect());
 
-    // Lines in the Overview's style: out of the route, onto a vertical rail with rounded corners,
-    // and into the profile. Each profile has its own rail, so lines to one profile merge and lines
-    // to different profiles do not overlap.
+    // Orthogonal lines with rounded corners; see core/route-lines.js.
     const measurePath = typeof document !== "undefined" ? document.createElementNS("http://www.w3.org/2000/svg", "path") : null;
 
-    function railPath(a, b, railX, offset) {
-      const ay = a.y + offset;
-      const by = b.y + offset;
-      const dy = by - ay;
-      if (Math.abs(dy) < 1) {
-        return `M ${a.x} ${ay} H ${b.x}`;
-      }
-      const dir = Math.sign(dy);
-      const r = Math.min(10, Math.abs(dy) / 2, Math.max(0, railX - a.x), Math.max(0, b.x - railX));
-      return `M ${a.x} ${ay} H ${railX - r} Q ${railX} ${ay} ${railX} ${ay + dir * r} V ${by - dir * r} Q ${railX} ${by} ${railX + r} ${by} H ${b.x}`;
-    }
-
     const lines = computed(() => {
-      const order = profileNodes.value.map((node) => node.name);
-      const xs = [...Object.values(geometry.from).map((p) => p.x), 0];
-      const left = Math.max(...xs);
-      const right = Math.min(...Object.values(geometry.to).map((p) => p.x), geometry.width);
+      const layout = layoutRouteLines(edges.value, geometry.from, geometry.to);
       return edges.value
         .map((edge) => {
-          const a = geometry.from[edge.purpose];
-          const b = geometry.to[edge.profile];
-          if (!a || !b) {
+          const placed = layout[edge.id];
+          if (!placed) {
             return null;
           }
-          const slot = Math.max(0, order.indexOf(edge.profile));
-          const railX = left + ((right - left) * (slot + 1)) / (order.length + 1);
-          const offset = edge.kind === "fallback" ? 4 : 0;
-          const path = railPath(a, b, railX, offset);
-          let length = Math.abs(b.x - a.x) + Math.abs(b.y - a.y);
+          const { path, entry, label } = placed;
+          let length = 0;
+          for (let i = 1; i < placed.points.length; i++) {
+            length += Math.abs(placed.points[i][0] - placed.points[i - 1][0]) + Math.abs(placed.points[i][1] - placed.points[i - 1][1]);
+          }
           if (measurePath) {
             measurePath.setAttribute("d", path);
             length = measurePath.getTotalLength();
@@ -247,10 +230,10 @@ export default {
             width: edge.kind === "fallback" ? 1 : 1.5,
             // Bigger shares carry traffic more often.
             period: edge.kind === "fallback" ? 0 : Math.min(7, 3 * Math.sqrt(100 / Math.max(1, edge.share))),
-            // Shares and steppers sit on the last straight run into the profile.
-            mid: { x: (railX + b.x) / 2, y: b.y + offset },
-            end: { x: b.x - 12, y: b.y + offset },
-            arrive: { x: b.x, y: b.y + offset },
+            // Shares and steppers sit on the line's longest horizontal run.
+            mid: label,
+            end: { x: entry.x - 12, y: entry.y },
+            arrive: entry,
             active: selected.value === edge.purpose,
             dim: Boolean(selected.value) && selected.value !== edge.purpose,
           };
