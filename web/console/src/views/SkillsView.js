@@ -9,18 +9,18 @@ import AppSkeleton from "../components/AppSkeleton";
 import MarkdownContent from "../components/MarkdownContent";
 import { endpointApiFetch, endpointState, formatBytes, runtimeApiFetchForEndpoint, translate } from "../core/context";
 import { endpointRoutePath } from "../core/endpoint-routes";
-import { filterSkills, normalizeInstallLink, skillInstallTask, skillSourceInfo } from "../core/skills-install.js";
+import {
+  filterSkills,
+  normalizeInstallLink,
+  normalizeStoreSkill,
+  skillInstallTask,
+  skillSourceInfo,
+  stripFrontmatter,
+} from "../core/skills-install.js";
 import { skillToggleSettings } from "../core/skills-load.js";
 
 // Search appears once the list is long enough to need it.
 const SEARCH_THRESHOLD = 8;
-
-// The frontmatter is shown as facts above the document, so the rendered SKILL.md starts after it.
-function stripFrontmatter(content) {
-  const text = String(content || "");
-  const match = text.match(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/);
-  return match ? text.slice(match[0].length).trimStart() : text;
-}
 
 function normalizeSkill(item) {
   return {
@@ -53,6 +53,7 @@ function skillSourceText(skill) {
 // The agent's skills: a sidebar list, a card per skill (its name and "⋯" menu, its properties with
 // the switch first, then SKILL.md), and Add skill,
 // which starts a chat task where the agent reviews the skill and the user approves the install.
+// The store has its own view (SkillStoreView); here it only marks installed skills with updates.
 const SkillsView = {
   components: {
     AppDialogShell,
@@ -90,11 +91,23 @@ const SkillsView = {
     const addBusy = ref(false);
     const addErr = ref("");
 
+    // The store, read in the background so skills installed from it can show updates.
+    const storeSkills = ref([]);
+    const installBusy = ref(false);
+    let storeSeq = 0;
+
     const skills = computed(() => catalog.value.skills);
     const showSearch = computed(() => skills.value.length > SEARCH_THRESHOLD);
     const visibleSkills = computed(() => (showSearch.value ? filterSkills(skills.value, query.value) : skills.value));
     const selectedID = computed(() => String(route.query.skill || "").trim());
     const selected = computed(() => skills.value.find((skill) => skill.id.toLowerCase() === selectedID.value.toLowerCase()) || null);
+    // The newer store version of an installed skill, when it came from the store and has one.
+    function updateFor(skill) {
+      const id = skill?.source?.kind === "store" ? skill.source.storeID.toLowerCase() : "";
+      const entry = id ? storeSkills.value.find((item) => item.id.toLowerCase() === id) : null;
+      return entry?.updateAvailable ? entry : null;
+    }
+    const selectedUpdate = computed(() => updateFor(selected.value));
     const locked = computed(() => saving.value || catalog.value.readOnly);
     const documentSource = computed(() => stripFrontmatter(detail.value?.content));
     const skillsRoot = computed(() => catalog.value.roots[0] || "~/.morph/skills");
@@ -212,6 +225,22 @@ const SkillsView = {
       } finally {
         if (seq === detailSeq) {
           detailLoading.value = false;
+        }
+      }
+    }
+
+    async function loadStore() {
+      const seq = ++storeSeq;
+      try {
+        const data = await endpointApiFetch(endpointState.selectedRef, "/settings/agent/skills/store");
+        if (seq === storeSeq) {
+          const repo = String(data?.repo || "");
+          storeSkills.value = (Array.isArray(data?.skills) ? data.skills : []).map((item) => normalizeStoreSkill(item, repo));
+        }
+      } catch {
+        // Without the store there are no updates to show; the store view reports why.
+        if (seq === storeSeq) {
+          storeSkills.value = [];
         }
       }
     }
@@ -346,6 +375,30 @@ const SkillsView = {
       }
     }
 
+    // Updating from the store is the same review in chat, replacing the installed copy.
+    async function updateFromStore(entry) {
+      const task = skillInstallTask(t, { storeID: entry?.id, name: entry?.name, update: true });
+      if (!task || installBusy.value) {
+        return;
+      }
+      const endpointRef = endpointState.selectedRef;
+      installBusy.value = true;
+      err.value = "";
+      try {
+        const submitted = await runtimeApiFetchForEndpoint(endpointRef, "/tasks", { method: "POST", body: { task } });
+        const topicID = String(submitted?.topic_id || "").trim();
+        await router.push(endpointRoutePath(endpointRef, topicID ? `/chat/${encodeURIComponent(topicID)}` : "/chat"));
+      } catch (e) {
+        err.value = e.message || t("skills_install_failed");
+      } finally {
+        installBusy.value = false;
+      }
+    }
+
+    function openStore() {
+      void router.push(endpointRoutePath(endpointState.selectedRef, "/skills/store"));
+    }
+
     function onKeydown(event) {
       if (event.key !== "Escape") {
         return;
@@ -374,8 +427,10 @@ const SkillsView = {
       () => endpointState.selectedRef,
       () => {
         detail.value = null;
+        storeSkills.value = [];
         closeSkill();
         void load();
+        void loadStore();
       },
     );
     onMounted(() => {
@@ -384,6 +439,7 @@ const SkillsView = {
       window.addEventListener("keydown", onKeydown);
       document.addEventListener("pointerdown", closeMenuOnOutside);
       void load();
+      void loadStore();
       if (selected.value) {
         void loadDetail(selected.value.id);
       }
@@ -443,6 +499,11 @@ const SkillsView = {
       confirmRemove,
       openAdd,
       submitAdd,
+      updateFor,
+      selectedUpdate,
+      installBusy,
+      updateFromStore,
+      openStore,
     };
   },
   template: `
@@ -461,6 +522,15 @@ const SkillsView = {
           <header class="skills-index-head workspace-sidebar-head">
             <h3 class="workspace-section-title">{{ t('skills_title') }}</h3>
             <div class="skills-index-actions">
+              <QButton
+                class="plain sm icon skills-index-button"
+                :title="t('skills_store_browse')"
+                :aria-label="t('skills_store_browse')"
+                :disabled="unsupported"
+                @click="openStore"
+              >
+                <PhStorefront class="icon" />
+              </QButton>
               <QButton
                 v-if="!isMobile"
                 class="plain sm icon skills-index-button"
@@ -523,6 +593,7 @@ const SkillsView = {
                   <span class="workspace-sidebar-item-title">{{ skill.name }}</span>
                   <span v-if="skill.description" class="skills-index-item-meta workspace-sidebar-item-meta">{{ skill.description }}</span>
                 </span>
+                <span v-if="updateFor(skill)" class="skills-update-mark">{{ t('skills_update_available') }}</span>
                 <span class="workspace-sidebar-item-marker" :title="isOn(skill) ? t('skills_on') : t('skills_off')">
                   <QBadge dot :type="isOn(skill) ? 'success' : 'default'" size="sm" />
                 </span>
@@ -553,6 +624,12 @@ const SkillsView = {
 
               <QFence v-if="catalog.readOnly && catalog.readOnlyReason" type="warning" :text="catalog.readOnlyReason" />
               <QFence v-if="err" type="danger" icon="PhXCircle" :text="err" />
+              <div v-if="selectedUpdate" class="skills-update">
+                <span>{{ t('skills_update_note', { version: selectedUpdate.version }) }}</span>
+                <QButton class="outlined xs" :loading="installBusy" :disabled="locked" @click="updateFromStore(selectedUpdate)">
+                  {{ t('skills_update_to', { version: selectedUpdate.version }) }}
+                </QButton>
+              </div>
               <p v-if="selected.modified.length" class="skills-detail-warning">
                 <PhWarning class="icon" aria-hidden="true" />
                 <span>{{ t('skills_modified_since', { files: selected.modified.join(', ') }) }}</span>
@@ -639,6 +716,10 @@ const SkillsView = {
                 <PhPlus class="icon" />
               </QButton>
               <p v-if="!skills.length" class="skills-index-note">{{ t('skills_empty_title') }}</p>
+              <QButton v-if="!skills.length" class="plain sm" :disabled="unsupported" @click="openStore">
+                <PhStorefront class="icon" />
+                <span>{{ t('skills_store_browse') }}</span>
+              </QButton>
             </div>
           </div>
         </div>

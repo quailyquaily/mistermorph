@@ -48,6 +48,7 @@ const ROUTE_VIEW_LOADERS = {
   stats: () => import("../views/StatsView"),
   todo: () => import("../views/TodoView"),
   skills: () => import("../views/SkillsView"),
+  skillStore: () => import("../views/SkillStoreView"),
 };
 const routePreloadPromises = new Map();
 
@@ -66,6 +67,7 @@ const SettingsView = ROUTE_VIEW_LOADERS.settings;
 const StatsView = ROUTE_VIEW_LOADERS.stats;
 const TodoView = ROUTE_VIEW_LOADERS.todo;
 const SkillsView = ROUTE_VIEW_LOADERS.skills;
+const SkillStoreView = ROUTE_VIEW_LOADERS.skillStore;
 
 const RootRedirectView = {
   template: `<div aria-hidden="true"></div>`,
@@ -110,6 +112,8 @@ function preloadKeyForPath(path) {
       return "todo";
     case "/skills":
       return "skills";
+    case "/skills/store":
+      return "skillStore";
     default:
       return "";
   }
@@ -220,6 +224,7 @@ const routes = [
   { path: `${ENDPOINT_SCOPE_PATH}/logs`, component: LogsView, meta: { endpointScoped: true } },
   { path: `${ENDPOINT_SCOPE_PATH}/todo`, component: TodoView, meta: { endpointScoped: true } },
   { path: `${ENDPOINT_SCOPE_PATH}/skills`, component: SkillsView, meta: { endpointScoped: true } },
+  { path: `${ENDPOINT_SCOPE_PATH}/skills/store`, component: SkillStoreView, meta: { endpointScoped: true } },
   {
     path: `${ENDPOINT_SCOPE_PATH}/contacts`,
     component: ContactsView,

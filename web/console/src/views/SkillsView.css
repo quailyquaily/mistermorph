@@ -105,6 +105,29 @@
   overflow-wrap: anywhere;
 }
 
+/* An installed store skill with a newer version in the store. */
+.skills-update-mark {
+  flex: 0 0 auto;
+  align-self: center;
+  color: var(--q-c-blue);
+  font-size: var(--font-size-meta);
+  white-space: nowrap;
+}
+
+.skills-update {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--q-c-blue) 30%, transparent);
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--q-c-blue) 6%, transparent);
+  color: var(--text-1);
+  font-size: var(--font-size-meta);
+}
+
 .skills-index-loading {
   padding: 0 var(--workspace-sidebar-list-gutter);
 }

@@ -84,7 +84,7 @@ func Apply(v *viper.Viper) {
 
 	v.SetDefault("skills.enabled", true)
 	v.SetDefault("skills.dir_name", "skills")
-	v.SetDefault("skills.store.index_url", "https://raw.githubusercontent.com/quailyquaily/morph-skill-store/main/index.json")
+	v.SetDefault("skills.store.index_url", "https://raw.githubusercontent.com/quailyquaily/morph-skill-store/master/index.json")
 
 	v.SetDefault("tasks.dir_name", "tasks")
 	v.SetDefault("tasks.persistence_targets", []string{"console"})

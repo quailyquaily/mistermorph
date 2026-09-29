@@ -9,8 +9,8 @@ import (
 )
 
 // The model reads text files in batches, each a separate call with no tools. SKILL.md goes first,
-// then scripts, then other text. Files past the last batch are only pattern-checked, and a file
-// longer than a batch is cut; either way the assessment is then not complete.
+// then scripts, then other text. Files past the last batch are not read, and a file longer than a
+// batch is cut; either way the assessment is then not complete.
 const (
 	reviewBatchBytes      = 128 * 1024
 	maxReviewBatches      = 8
@@ -27,8 +27,8 @@ type auditResult struct {
 	reviewRan    bool
 }
 
-// runAudit checks every file with fixed checks, inspects images and fonts, has the model review
-// the text files, and never runs anything from the skill.
+// runAudit inspects images and fonts, has the model review the text files (there are no keyword
+// rules: judging what a text asks for needs its context), and never runs anything from the skill.
 func runAudit(ctx context.Context, review ReviewFunc, source Source, files []File) auditResult {
 	var res auditResult
 	auditIndex := map[string]int{}
@@ -41,8 +41,7 @@ func runAudit(ctx context.Context, review ReviewFunc, source Source, files []Fil
 			fa.Status, fa.Note = status, note
 			res.findings = append(res.findings, findings...)
 		} else {
-			fa.Status = AuditPatternChecked
-			res.findings = append(res.findings, checkText(f, kind)...)
+			fa.Status = AuditNotReviewed
 			textFiles = append(textFiles, f)
 		}
 		auditIndex[f.Path] = len(res.audits)

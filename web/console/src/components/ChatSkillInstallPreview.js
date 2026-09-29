@@ -193,10 +193,7 @@ const ChatSkillInstallPreview = {
                   <div class="chat-skill-finding-body">
                     <pre v-if="finding.evidence" class="chat-skill-evidence"><code>{{ finding.evidence }}</code></pre>
                     <p v-if="finding.rationale" class="chat-skill-preview-text">{{ finding.rationale }}</p>
-                    <p class="chat-skill-finding-source">
-                      {{ finding.source === 'review' ? t('chat_skill_source_review') : t('chat_skill_source_check') }}
-                      <template v-if="finding.evidenceVerified === false"> · {{ t('chat_skill_evidence_unverified') }}</template>
-                    </p>
+                    <p v-if="finding.evidenceVerified === false" class="chat-skill-finding-source">{{ t('chat_skill_evidence_unverified') }}</p>
                   </div>
                 </details>
               </li>

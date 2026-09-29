@@ -51,9 +51,9 @@ const skillPreview = {
   audit: [
     { path: "SKILL.md", kind: "instructions", status: "reviewed" },
     { path: "a.png", kind: "image", status: "inspected", note: "PNG 4x4" },
-    { path: "ref.md", kind: "text", status: "pattern_checked" },
+    { path: "ref.md", kind: "text", status: "not_reviewed" },
   ],
-  assessment: { complete: false, incomplete_reasons: ["1 text files were only pattern-checked; the model did not read them"], level: "high", score: 35, rubric: "rubric" },
+  assessment: { complete: false, incomplete_reasons: ["1 text files were not read by the model review"], level: "high", score: 35, rubric: "rubric" },
 };
 const skillParams = { preview_id: "p1", name: "guizang-ppt-skill", source: skillPreview.source.url, commit: skillPreview.source.commit };
 

@@ -14,7 +14,7 @@ import (
 )
 
 // DefaultStoreIndexURL is the Morph Skill Store's index, built by the store repository's CI.
-const DefaultStoreIndexURL = "https://raw.githubusercontent.com/quailyquaily/morph-skill-store/main/index.json"
+const DefaultStoreIndexURL = "https://raw.githubusercontent.com/quailyquaily/morph-skill-store/master/index.json"
 
 const storeCacheTTL = 10 * time.Minute
 

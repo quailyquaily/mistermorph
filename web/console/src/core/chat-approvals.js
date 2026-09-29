@@ -182,7 +182,7 @@ function skillInstallApproval(approval) {
       reviewed: coverage.reviewed || 0,
       inspected: coverage.inspected || 0,
       partlyReviewed: coverage.partly_reviewed || 0,
-      patternChecked: coverage.pattern_checked || 0,
+      notReviewed: coverage.not_reviewed || 0,
       reviewFailed: coverage.review_failed || 0,
       notInspected: coverage.not_inspected || 0,
       // Files not examined in full, for the expandable list.

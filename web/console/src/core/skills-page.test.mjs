@@ -29,12 +29,20 @@ test("Skills sits after TODO in the navigation", async () => {
   assert.match(source, /path: `\$\{ENDPOINT_SCOPE_PATH\}\/skills`, component: SkillsView/);
 });
 
-test("Add skill starts a chat task in a new topic; the page has no store", async () => {
+test("Add skill starts a chat task in a new topic; the store has its own view under Skills", async () => {
   const source = await read("../views/SkillsView.js");
   assert.match(source, /runtimeApiFetchForEndpoint\(endpointRef, "\/tasks", \{ method: "POST", body: \{ task \} \}\)/);
   assert.match(source, /endpointRoutePath\(endpointRef, topicID \? `\/chat\/\$\{encodeURIComponent\(topicID\)\}` : "\/chat"\)/);
-  assert.doesNotMatch(source, /skills\/store/);
-  assert.doesNotMatch(source, /AppTabs/);
+  assert.match(source, /endpointRoutePath\(endpointState\.selectedRef, "\/skills\/store"\)/);
+  const router = await read("../router/index.js");
+  assert.match(router, /path: `\$\{ENDPOINT_SCOPE_PATH\}\/skills\/store`, component: SkillStoreView/);
+});
+
+test("the store installs and updates through the same review in chat", async () => {
+  const source = await read("../views/SkillStoreView.js");
+  assert.match(source, /"\/settings\/agent\/skills\/store"/);
+  assert.match(source, /skillInstallTask\(t, \{ storeID: skill\?\.id, name: skill\?\.name, update \}\)/);
+  assert.match(source, /runtimeApiFetchForEndpoint\(endpointRef, "\/tasks", \{ method: "POST", body: \{ task \} \}\)/);
 });
 
 test("the Skills page removes a skill after a confirmation", async () => {
@@ -44,15 +52,19 @@ test("the Skills page removes a skill after a confirmation", async () => {
   assert.match(source, /action: confirmRemove/);
 });
 
-test("Add skill's task names both install tools with $, which turns them on for that task", async () => {
+test("install tasks name both install tools with $, which turns them on for that task", async () => {
   const source = await read("../i18n/index.js");
-  const lines = source.split("\n").filter((line) => line.includes("skills_install_task_link:"));
-  assert.equal(lines.length, 3);
+  const lines = source.split("\n").filter((line) => /skills_install_task_(link|store|store_update):/.test(line));
+  assert.equal(lines.length, 9);
   for (const line of lines) {
     assert.match(line, /\$skill_install_preview\b/);
     assert.match(line, /\$skill_install\b(?!_)/);
     // A failed preview must not turn into an install by other means.
     assert.match(line, /git clone/);
+  }
+  // Updating replaces the installed copy, which skill_install does only when asked.
+  for (const line of lines.filter((line) => line.includes("skills_install_task_store_update:"))) {
+    assert.match(line, /replace: true/);
   }
 });
 
