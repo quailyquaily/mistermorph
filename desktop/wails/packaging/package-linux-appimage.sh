@@ -13,7 +13,9 @@ ARCH="${ARCH:-amd64}"
 DESKTOP_BIN="${DESKTOP_BIN:-${ROOT_DIR}/dist/MrMorph}"
 BACKEND_BIN="${BACKEND_BIN:-${ROOT_DIR}/dist/morph}"
 BUNDLED_BACKEND_NAME="${BUNDLED_BACKEND_NAME:-morph}"
-ICON_PNG="${ICON_PNG:-${ROOT_DIR}/desktop/wails/packaging/appicon.png}"
+# The icon theme: every freedesktop size drawn for that size, plus a scalable SVG
+# (design/brand/generator/platforms.py).
+ICON_THEME_SOURCE="${ICON_THEME_SOURCE:-${ROOT_DIR}/desktop/wails/packaging/icons/linux/hicolor}"
 OUT_DIR="${OUT_DIR:-${ROOT_DIR}/dist}"
 WORK_ROOT="${WORK_ROOT:-${OUT_DIR}/appimage-work}"
 APPIMAGE_NAME="${APPIMAGE_NAME:-MrMorph-linux-${ARCH}.AppImage}"
@@ -36,6 +38,22 @@ require_file() {
   fi
 }
 
+install_icon_theme() {
+  local target="$1"
+  local size_dir
+  for size_dir in "${ICON_THEME_SOURCE}"/*; do
+    [[ -d "${size_dir}/apps" ]] || continue
+    local size_name
+    size_name="$(basename "${size_dir}")"
+    mkdir -p "${target}/${size_name}/apps"
+    if [[ "${size_name}" == "scalable" ]]; then
+      install -m 0644 "${size_dir}/apps/icon.svg" "${target}/${size_name}/apps/${APPLICATION_ID}.svg"
+    else
+      install -m 0644 "${size_dir}/apps/icon.png" "${target}/${size_name}/apps/${APPLICATION_ID}.png"
+    fi
+  done
+}
+
 for command_name in curl find ldd readelf tar; do
   if ! command -v "${command_name}" >/dev/null 2>&1; then
     echo "missing required command: ${command_name}" >&2
@@ -45,11 +63,11 @@ done
 
 require_file "${DESKTOP_BIN}"
 require_file "${BACKEND_BIN}"
-require_file "${ICON_PNG}"
+require_file "${ICON_THEME_SOURCE}/256x256/apps/icon.png"
 
 DESKTOP_BIN="$(abspath "${DESKTOP_BIN}")"
 BACKEND_BIN="$(abspath "${BACKEND_BIN}")"
-ICON_PNG="$(abspath "${ICON_PNG}")"
+ICON_THEME_SOURCE="$(abspath "${ICON_THEME_SOURCE}")"
 OUT_DIR="$(abspath "${OUT_DIR}")"
 WORK_ROOT="$(abspath "${WORK_ROOT}")"
 TOOLS_DIR="${WORK_ROOT}/tools"
@@ -81,7 +99,8 @@ mkdir -p "${OUT_DIR}" "${TOOLS_DIR}" "${APPDIR}/usr/bin"
 cp "${DESKTOP_BIN}" "${APPDIR}/usr/bin/${APP_BINARY_NAME}"
 chmod +x "${APPDIR}/usr/bin/${APP_BINARY_NAME}"
 
-cp "${ICON_PNG}" "${APPDIR}/.DirIcon"
+install_icon_theme "${APPDIR}/usr/share/icons/hicolor"
+cp "${ICON_THEME_SOURCE}/256x256/apps/icon.png" "${APPDIR}/.DirIcon"
 ln -sf ".DirIcon" "${APPDIR}/${APPLICATION_ID}.png"
 
 cat > "${DESKTOP_FILE}" <<EOF

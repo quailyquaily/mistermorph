@@ -14,12 +14,13 @@ ARCH="${ARCH:-amd64}"
 DESKTOP_BIN="${DESKTOP_BIN:-${ROOT_DIR}/dist/MrMorph}"
 BACKEND_BIN="${BACKEND_BIN:-${ROOT_DIR}/dist/morph}"
 BUNDLED_BACKEND_NAME="${BUNDLED_BACKEND_NAME:-morph}"
-ICON_PNG="${ICON_PNG:-${ROOT_DIR}/desktop/wails/packaging/appicon.png}"
+# The icon theme: every freedesktop size drawn for that size, plus a scalable SVG
+# (design/brand/generator/platforms.py).
+ICON_THEME_SOURCE="${ICON_THEME_SOURCE:-${ROOT_DIR}/desktop/wails/packaging/icons/linux/hicolor}"
 OUT_DIR="${OUT_DIR:-${ROOT_DIR}/dist}"
 WORK_ROOT="${WORK_ROOT:-${OUT_DIR}/deb-work}"
 DEB_NAME="${DEB_NAME:-MrMorph-linux-${ARCH}.deb}"
 INSTALL_DIR="${INSTALL_DIR:-/opt/mistermorph}"
-ICON_THEME_SIZE="${ICON_THEME_SIZE:-512x512}"
 DESKTOP_FILE_NAME="${DESKTOP_FILE_NAME:-${DESKTOP_FILE_ID}.desktop}"
 
 abspath() {
@@ -37,6 +38,22 @@ require_file() {
     echo "missing required file: ${path}" >&2
     exit 1
   fi
+}
+
+install_icon_theme() {
+  local target="$1"
+  local size_dir
+  for size_dir in "${ICON_THEME_SOURCE}"/*; do
+    [[ -d "${size_dir}/apps" ]] || continue
+    local size_name
+    size_name="$(basename "${size_dir}")"
+    mkdir -p "${target}/${size_name}/apps"
+    if [[ "${size_name}" == "scalable" ]]; then
+      install -m 0644 "${size_dir}/apps/icon.svg" "${target}/${size_name}/apps/${APPLICATION_ID}.svg"
+    else
+      install -m 0644 "${size_dir}/apps/icon.png" "${target}/${size_name}/apps/${APPLICATION_ID}.png"
+    fi
+  done
 }
 
 for command_name in dpkg-deb find install ln; do
@@ -66,11 +83,11 @@ fi
 
 require_file "${DESKTOP_BIN}"
 require_file "${BACKEND_BIN}"
-require_file "${ICON_PNG}"
+require_file "${ICON_THEME_SOURCE}/128x128/apps/icon.png"
 
 DESKTOP_BIN="$(abspath "${DESKTOP_BIN}")"
 BACKEND_BIN="$(abspath "${BACKEND_BIN}")"
-ICON_PNG="$(abspath "${ICON_PNG}")"
+ICON_THEME_SOURCE="$(abspath "${ICON_THEME_SOURCE}")"
 OUT_DIR="$(abspath "${OUT_DIR}")"
 WORK_ROOT="$(abspath "${WORK_ROOT}")"
 OUTPUT_PATH="${OUT_DIR}/${DEB_NAME}"
@@ -84,13 +101,12 @@ mkdir -p \
   "${PACKAGE_ROOT}/usr/bin" \
   "${PACKAGE_ROOT}/usr/share/applications" \
   "${PACKAGE_ROOT}/usr/share/doc/${PACKAGE_NAME}" \
-  "${PACKAGE_ROOT}/usr/share/icons/hicolor/${ICON_THEME_SIZE}/apps" \
   "${PACKAGE_ROOT}/usr/share/pixmaps"
 
 install -m 0755 "${DESKTOP_BIN}" "${PACKAGE_ROOT}${INSTALL_DIR}/${APP_BINARY_NAME}"
 install -m 0755 "${BACKEND_BIN}" "${PACKAGE_ROOT}${INSTALL_DIR}/${BUNDLED_BACKEND_NAME}"
-install -m 0644 "${ICON_PNG}" "${PACKAGE_ROOT}/usr/share/icons/hicolor/${ICON_THEME_SIZE}/apps/${APPLICATION_ID}.png"
-install -m 0644 "${ICON_PNG}" "${PACKAGE_ROOT}/usr/share/pixmaps/${APPLICATION_ID}.png"
+install_icon_theme "${PACKAGE_ROOT}/usr/share/icons/hicolor"
+install -m 0644 "${ICON_THEME_SOURCE}/128x128/apps/icon.png" "${PACKAGE_ROOT}/usr/share/pixmaps/${APPLICATION_ID}.png"
 install -m 0644 "${ROOT_DIR}/LICENSE" "${PACKAGE_ROOT}/usr/share/doc/${PACKAGE_NAME}/copyright"
 ln -s "${INSTALL_DIR}/${APP_BINARY_NAME}" "${PACKAGE_ROOT}/usr/bin/${APP_BINARY_NAME}"
 

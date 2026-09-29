@@ -2,15 +2,15 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ICON_PNG="${ICON_PNG:-${ROOT_DIR}/desktop/wails/packaging/appicon.png}"
 WINDOWS_PACKAGING_DIR="${WINDOWS_PACKAGING_DIR:-${ROOT_DIR}/desktop/wails/packaging/windows}"
-ICON_ICO="${ICON_ICO:-${WINDOWS_PACKAGING_DIR}/appicon.ico}"
+# The icon: 16 to 256 px, each size drawn for that size (design/brand/generator/platforms.py).
+ICON_ICO="${ICON_ICO:-${ROOT_DIR}/desktop/wails/packaging/icons/windows/appicon.ico}"
 MANIFEST_PATH="${MANIFEST_PATH:-${WINDOWS_PACKAGING_DIR}/wails.exe.manifest}"
 ARCH="${ARCH:-amd64}"
 SYSO_OUT="${SYSO_OUT:-${ROOT_DIR}/desktop/wails/rsrc_windows_${ARCH}.syso}"
 
-if [[ ! -f "${ICON_PNG}" ]]; then
-  echo "missing icon PNG: ${ICON_PNG}" >&2
+if [[ ! -f "${ICON_ICO}" ]]; then
+  echo "missing Windows icon: ${ICON_ICO}" >&2
   exit 1
 fi
 
@@ -20,18 +20,13 @@ if [[ ! -f "${MANIFEST_PATH}" ]]; then
 fi
 
 mkdir -p "${WINDOWS_PACKAGING_DIR}"
-rm -f "${ICON_ICO}" "${SYSO_OUT}"
+rm -f "${SYSO_OUT}"
 
 wails_version="$(go list -m -f '{{.Version}}' github.com/wailsapp/wails/v3)"
 if [[ -z "${wails_version}" ]]; then
   echo "failed to resolve github.com/wailsapp/wails/v3 version from go.mod" >&2
   exit 1
 fi
-
-echo "==> Generating Windows .ico from ${ICON_PNG}"
-go run "github.com/wailsapp/wails/v3/cmd/wails3@${wails_version}" generate icons \
-  -input "${ICON_PNG}" \
-  -windowsfilename "${ICON_ICO}"
 
 echo "==> Generating Windows .syso for ${ARCH}"
 go run "github.com/wailsapp/wails/v3/cmd/wails3@${wails_version}" generate syso \

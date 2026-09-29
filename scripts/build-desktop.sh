@@ -109,7 +109,7 @@ Notes:
   - --frontend-config accepts an absolute path, a repo-root-relative path, or
     a path relative to web/console, for example: vite.config.pro.js
   - --tags can be repeated. Values are passed to go build as one tag list.
-  - Windows builds generate icon resources from desktop/wails/packaging/appicon.png.
+  - Windows builds embed desktop/wails/packaging/icons/windows/appicon.ico.
 EOF
 }
 

@@ -12,7 +12,8 @@ ARCH="${ARCH:-arm64}"
 DESKTOP_BIN="${DESKTOP_BIN:-${ROOT_DIR}/dist/MrMorph}"
 BACKEND_BIN="${BACKEND_BIN:-${ROOT_DIR}/dist/morph}"
 BUNDLED_BACKEND_NAME="${BUNDLED_BACKEND_NAME:-morph}"
-ICON_PNG="${ICON_PNG:-${ROOT_DIR}/desktop/wails/packaging/appicon.png}"
+# The iconset: every size drawn for that size, on the macOS icon grid (design/brand/generator/platforms.py).
+ICONSET_SOURCE="${ICONSET_SOURCE:-${ROOT_DIR}/desktop/wails/packaging/icons/macos}"
 DMG_BACKGROUND_SOURCE="${DMG_BACKGROUND_SOURCE:-${ROOT_DIR}/desktop/wails/packaging/dmg-background.png}"
 OUT_DIR="${OUT_DIR:-${ROOT_DIR}/dist}"
 APP_DIR="${OUT_DIR}/${APP_BUNDLE_NAME}.app"
@@ -43,7 +44,7 @@ require_file() {
   fi
 }
 
-for command_name in codesign ditto hdiutil iconutil osascript sips tar; do
+for command_name in codesign ditto hdiutil iconutil osascript tar; do
   if ! command -v "${command_name}" >/dev/null 2>&1; then
     echo "missing required command: ${command_name}" >&2
     exit 1
@@ -52,7 +53,6 @@ done
 
 require_file "${DESKTOP_BIN}"
 require_file "${BACKEND_BIN}"
-require_file "${ICON_PNG}"
 require_file "${DMG_BACKGROUND_SOURCE}"
 
 mkdir -p "${OUT_DIR}" "${APP_DIR}/Contents/MacOS" "${APP_DIR}/Contents/Resources"
@@ -60,22 +60,11 @@ rm -rf "${APP_DIR}" "${DMG_PATH}" "${TARBALL_PATH}" "${ICNS_PATH}"
 mkdir -p "${APP_DIR}/Contents/MacOS" "${APP_DIR}/Contents/Resources"
 mkdir -p "${ICONSET_DIR}" "${DMG_STAGING_DIR}/.background"
 
-render_icon() {
-  local size="$1"
-  local filename="$2"
-  sips -z "${size}" "${size}" "${ICON_PNG}" --out "${ICONSET_DIR}/${filename}" >/dev/null
-}
-
-render_icon 16 icon_16x16.png
-render_icon 32 icon_16x16@2x.png
-render_icon 32 icon_32x32.png
-render_icon 64 icon_32x32@2x.png
-render_icon 128 icon_128x128.png
-render_icon 256 icon_128x128@2x.png
-render_icon 256 icon_256x256.png
-render_icon 512 icon_256x256@2x.png
-render_icon 512 icon_512x512.png
-render_icon 1024 icon_512x512@2x.png
+for icon_name in icon_16x16.png icon_16x16@2x.png icon_32x32.png icon_32x32@2x.png icon_128x128.png \
+  icon_128x128@2x.png icon_256x256.png icon_256x256@2x.png icon_512x512.png icon_512x512@2x.png; do
+  require_file "${ICONSET_SOURCE}/${icon_name}"
+  cp "${ICONSET_SOURCE}/${icon_name}" "${ICONSET_DIR}/${icon_name}"
+done
 iconutil -c icns "${ICONSET_DIR}" -o "${ICNS_PATH}"
 
 cp "${ICNS_PATH}" "${APP_DIR}/Contents/Resources/mistermorph.icns"

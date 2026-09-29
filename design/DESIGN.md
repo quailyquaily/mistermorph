@@ -90,9 +90,9 @@ The mark sits left of the name, with the katakana beneath the name in dot matrix
 
 | | Colourway | Ground | Field | Ghost | Extra | Role |
 |---|---|---|---|---|---|---|
-| 夜 | Yoru | `#0B1012` | `#44504E` | `#E7E4DA` | | The default: app icon, favicon, dark surfaces |
+| 夜 | Yoru | `#0B1012` | `#44504E` | `#E7E4DA` | | Dark surfaces |
 | 和紙 | Washi | `#F2EDE2` | `#BDB7AC` | `#1E1E20` | | Light surfaces, print, the docs in light mode |
-| 青写真 | Aojashin | `#F1F4F8` | `#B8C9E2` | `#2463AE` | ink `#0E2C57` | Paper, drawn in blueprint blue: a cooler light mode |
+| 青写真 | Aojashin | `#F1F4F8` | `#B8C9E2` | `#2463AE` | ink `#0E2C57` | Paper, drawn in blueprint blue: a cooler light mode. The default: app icon, favicon |
 | 水面 | Suimen | `#041417` | `#12403F` | `#D6FFF6` | split `#22F2D0` / `#FF3D7F` | The cyber edition |
 | 燐光 | Rinkō | `#03100E` | `#0F3A32` | `#7CFFC4` | glow `#3DFFA8` | Phosphor: terminals, special editions |
 | 分光 | Bunkō | `#07080F` | `#1C2342` | `#F2F7FF` | split `#1FE5FF` / `#FF2E8A` | Alternate icon |

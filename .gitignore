@@ -26,9 +26,12 @@ cmd/mistermorph/consolecmd/static/*
 bin/
 dist/
 resources/
-desktop/wails/packaging/windows/appicon.ico
 desktop/wails/rsrc_windows_*.syso
 
 # Editor swap files
 *.swp
 web/vitepress/docs/.vitepress/.temp/@localSearchIndexja.BHJ1zQza.js
+
+# Intermediate files of design/brand/generator/platforms.py.
+design/brand/platforms/.build/
+design/brand/generator/platform-jobs.json

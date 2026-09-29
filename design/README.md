@@ -29,21 +29,36 @@ node design/brand/generator/render.mjs          # PNGs; needs playwright-core, a
 
 The generator is deterministic: running it again reproduces these files exactly.
 
+The app icon for each platform comes from `platforms.py`, which writes straight into the product:
+
+```sh
+python3 design/brand/generator/platforms.py                                          # SVG sources and job list
+node design/brand/generator/render.mjs design/brand/generator/platform-jobs.json .   # PNGs, from the repo root
+python3 design/brand/generator/platforms.py --pack                                   # the .ico files, and copies
+```
+
 ## In the product
 
 The console's SVG logos use Aojashin for the light theme and Suimen for the dark theme. The login and default avatar
 are Aojashin, since the console has only a light theme so far; the boot splash is the Aojashin 64 drawing with the ghost
 drifting through it (`web/console/src/core/ghost-mark.js`, the drift quickened to a 2.4 s figure of eight); `favicon.svg` carries both and follows
-the browser's colour scheme. The bitmap icons (`favicon.ico`, the home-screen icons) and the desktop app
-(`desktop/wails/packaging/appicon.png`) can't follow a theme and keep the night icon. The console's SVG logos all use
-the 64 drawing, because they are shown below 64 CSS px on screens that are mostly retina.
+the browser's colour scheme. The console's SVG logos all use the 64 drawing, because they are shown below 64 CSS px on
+screens that are mostly retina.
+
+The app icons can't follow a theme, so they are Aojashin. Each platform gets its own spec, and every bitmap uses the
+drawing made for its size (16 below 24 px, then 32, 64 from 48, 128 from 96, 256 from 192, 1024 from 512):
+
+| Platform | Files | Spec |
+|---|---|---|
+| macOS | `desktop/wails/packaging/icons/macos/`, the iconset `package-darwin.sh` turns into the `.icns`; `packaging/appicon.png` is its 1024 | Big Sur's grid: the tile is 824/1024 of the canvas, centred over a soft shadow |
+| Windows | `desktop/wails/packaging/icons/windows/appicon.ico`: 16, 20, 24, 32, 40, 48, 64, 96, 256 | The tile fills the canvas, margin 1/32 |
+| Linux | `desktop/wails/packaging/icons/linux/hicolor/`: 16 to 512 and `scalable/`, installed as the icon theme by the `.deb` and the AppImage | As Windows |
+| Window icon | macOS: `appicon.png`; Linux and Windows: the 256 Linux icon (`desktop/wails/icon*.go`) | |
+| Web | `web/console/public/`: `favicon.ico` (16, 32, 48); `android-chrome-*` for the manifest's `any`; `maskable-*` and `apple-touch-icon.png`, full-bleed squares for the platform to mask | The ghost stays inside the maskable safe zone |
 
 Not done yet:
 
 - The docs site and the project site (`web/vitepress`, `theme/`) keep their previous logo and favicons.
 
-- The desktop packaging scripts (`package-darwin.sh`, `generate-desktop-windows-resources.sh`) still derive the small
-  desktop sizes by scaling `appicon.png`, so Finder lists, the taskbar and window titles get the scaled 1024 drawing
-  instead of the 32 and 16 drawings.
 - Suimen, in the dark favicon, is the only cyber colourway in the product so far.
 - The UI themes in `ui/` are mockups; the console still has one light theme. `DESIGN.md` §7 has the plan.
