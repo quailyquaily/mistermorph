@@ -9,6 +9,7 @@ import CodexAuthDialog from "../components/CodexAuthDialog";
 import XAIAuthDialog from "../components/XAIAuthDialog";
 import ProAuthDialog from "../components/ProAuthDialog";
 import InferenceProviderPicker from "../components/InferenceProviderPicker";
+import EnvManagedField from "../components/EnvManagedField";
 import SetupConnectionTestDialog from "../components/SetupConnectionTestDialog";
 import SetupPickerDialog from "../components/SetupPickerDialog";
 import defaultAvatarMarkup from "../assets/images/app_logo_current.svg?raw";
@@ -226,6 +227,7 @@ function resolveDoneGreetingKey(date = new Date()) {
 
 const SetupView = {
   components: {
+    EnvManagedField,
     ImageUploadField,
     AppMarkdownEditor,
     CodexAuthDialog,
@@ -1919,10 +1921,7 @@ const SetupView = {
           <div class="setup-field is-wide">
             <span class="setup-field-label">{{ t("settings_agent_provider_label") }}</span>
             <div v-if="providerHasAuthAction" class="setup-field-control">
-              <div v-if="providerManagedField" class="setup-env-managed">
-                <code class="setup-env-managed-env">{{ llmFieldManagedHeadline(providerManagedField) }}</code>
-                <p class="setup-env-managed-body">{{ t("settings_env_managed_body") }}</p>
-              </div>
+              <EnvManagedField v-if="providerManagedField" :name="llmFieldManagedHeadline(providerManagedField)" />
               <InferenceProviderPicker
                 v-else
                 :modelValue="providerItem?.value || ''"
@@ -1976,10 +1975,7 @@ const SetupView = {
                 <PhXCircle v-else class="icon" />
               </QButton>
             </div>
-            <div v-else-if="providerManagedField" class="setup-env-managed">
-              <code class="setup-env-managed-env">{{ llmFieldManagedHeadline(providerManagedField) }}</code>
-              <p class="setup-env-managed-body">{{ t("settings_env_managed_body") }}</p>
-            </div>
+            <EnvManagedField v-else-if="providerManagedField" :name="llmFieldManagedHeadline(providerManagedField)" />
             <InferenceProviderPicker
               v-else
               :modelValue="providerItem?.value || ''"
@@ -1992,10 +1988,7 @@ const SetupView = {
 
           <label v-if="showEndpointField" class="setup-field is-wide">
             <span class="setup-field-label">{{ t("settings_agent_endpoint_label") }}</span>
-            <div v-if="isLLMFieldEnvManaged('endpoint')" class="setup-env-managed">
-              <code class="setup-env-managed-env">{{ llmFieldManagedHeadline("endpoint") }}</code>
-              <p class="setup-env-managed-body">{{ t("settings_env_managed_body") }}</p>
-            </div>
+            <EnvManagedField v-if="isLLMFieldEnvManaged('endpoint')" :name="llmFieldManagedHeadline('endpoint')" />
             <div v-else class="setup-field-control">
               <QInput
                 v-model="llmForm.endpoint"
@@ -2017,10 +2010,7 @@ const SetupView = {
 
           <label v-if="showCloudflareAccountField" class="setup-field is-wide">
             <span class="setup-field-label">{{ t("settings_agent_cloudflare_account_label") }}</span>
-            <div v-if="isLLMFieldEnvManaged('cloudflare_account_id')" class="setup-env-managed">
-              <code class="setup-env-managed-env">{{ llmFieldManagedHeadline("cloudflare_account_id") }}</code>
-              <p class="setup-env-managed-body">{{ t("settings_env_managed_body") }}</p>
-            </div>
+            <EnvManagedField v-if="isLLMFieldEnvManaged('cloudflare_account_id')" :name="llmFieldManagedHeadline('cloudflare_account_id')" />
             <QInput
               v-else
               v-model="llmForm.cloudflare_account_id"
@@ -2031,10 +2021,7 @@ const SetupView = {
 
           <label v-if="showBedrockFields" class="setup-field is-wide">
             <span class="setup-field-label">{{ t("settings_agent_bedrock_aws_key_label") }}</span>
-            <div v-if="isLLMFieldEnvManaged('bedrock_aws_key')" class="setup-env-managed">
-              <code class="setup-env-managed-env">{{ llmFieldManagedHeadline("bedrock_aws_key") }}</code>
-              <p class="setup-env-managed-body">{{ t("settings_env_managed_body") }}</p>
-            </div>
+            <EnvManagedField v-if="isLLMFieldEnvManaged('bedrock_aws_key')" :name="llmFieldManagedHeadline('bedrock_aws_key')" />
             <QInput
               v-else
               v-model="llmForm.bedrock_aws_key"
@@ -2046,10 +2033,7 @@ const SetupView = {
 
           <label v-if="showBedrockFields" class="setup-field is-wide">
             <span class="setup-field-label">{{ t("settings_agent_bedrock_aws_secret_label") }}</span>
-            <div v-if="isLLMFieldEnvManaged('bedrock_aws_secret')" class="setup-env-managed">
-              <code class="setup-env-managed-env">{{ llmFieldManagedHeadline("bedrock_aws_secret") }}</code>
-              <p class="setup-env-managed-body">{{ t("settings_env_managed_body") }}</p>
-            </div>
+            <EnvManagedField v-if="isLLMFieldEnvManaged('bedrock_aws_secret')" :name="llmFieldManagedHeadline('bedrock_aws_secret')" />
             <QInput
               v-else
               v-model="llmForm.bedrock_aws_secret"
@@ -2061,10 +2045,7 @@ const SetupView = {
 
           <label v-if="showBedrockFields" class="setup-field">
             <span class="setup-field-label">{{ t("settings_agent_bedrock_region_label") }}</span>
-            <div v-if="isLLMFieldEnvManaged('bedrock_region')" class="setup-env-managed">
-              <code class="setup-env-managed-env">{{ llmFieldManagedHeadline("bedrock_region") }}</code>
-              <p class="setup-env-managed-body">{{ t("settings_env_managed_body") }}</p>
-            </div>
+            <EnvManagedField v-if="isLLMFieldEnvManaged('bedrock_region')" :name="llmFieldManagedHeadline('bedrock_region')" />
             <QInput
               v-else
               v-model="llmForm.bedrock_region"
@@ -2075,10 +2056,7 @@ const SetupView = {
 
           <label v-if="showBedrockFields" class="setup-field">
             <span class="setup-field-label">{{ t("settings_agent_bedrock_model_arn_label") }}</span>
-            <div v-if="isLLMFieldEnvManaged('bedrock_model_arn')" class="setup-env-managed">
-              <code class="setup-env-managed-env">{{ llmFieldManagedHeadline("bedrock_model_arn") }}</code>
-              <p class="setup-env-managed-body">{{ t("settings_env_managed_body") }}</p>
-            </div>
+            <EnvManagedField v-if="isLLMFieldEnvManaged('bedrock_model_arn')" :name="llmFieldManagedHeadline('bedrock_model_arn')" />
             <QInput
               v-else
               v-model="llmForm.bedrock_model_arn"
@@ -2089,10 +2067,7 @@ const SetupView = {
 
           <label v-if="showCredentialFields" class="setup-field is-wide">
             <span class="setup-field-label">{{ t(credentialLabelKey) }}</span>
-            <div v-if="showCloudflareAccountField ? isLLMFieldEnvManaged('cloudflare_api_token') : isLLMFieldEnvManaged('api_key')" class="setup-env-managed">
-              <code class="setup-env-managed-env">{{ llmFieldManagedHeadline(showCloudflareAccountField ? "cloudflare_api_token" : "api_key") }}</code>
-              <p class="setup-env-managed-body">{{ t("settings_env_managed_body") }}</p>
-            </div>
+            <EnvManagedField v-if="showCloudflareAccountField ? isLLMFieldEnvManaged('cloudflare_api_token') : isLLMFieldEnvManaged('api_key')" :name="llmFieldManagedHeadline(showCloudflareAccountField ? 'cloudflare_api_token' : 'api_key')" />
             <QInput
               v-else-if="showCloudflareAccountField"
               v-model="llmForm.cloudflare_api_token"
@@ -2122,10 +2097,7 @@ const SetupView = {
 
           <label class="setup-field is-wide">
             <span class="setup-field-label">{{ t("settings_agent_model_label") }}</span>
-            <div v-if="isLLMFieldEnvManaged('model')" class="setup-env-managed">
-              <code class="setup-env-managed-env">{{ llmFieldManagedHeadline("model") }}</code>
-              <p class="setup-env-managed-body">{{ t("settings_env_managed_body") }}</p>
-            </div>
+            <EnvManagedField v-if="isLLMFieldEnvManaged('model')" :name="llmFieldManagedHeadline('model')" />
             <div v-else class="setup-field-control">
               <QInput
                 v-model="llmForm.model"

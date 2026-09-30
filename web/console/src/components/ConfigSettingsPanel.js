@@ -3,10 +3,11 @@ import { computed, getCurrentInstance, inject, onBeforeUnmount, onMounted, react
 import { buildConfigUpdate, createConfigDraft } from "../core/config-fields";
 import SettingSelect from "./SettingSelect";
 import SettingChoices from "./SettingChoices";
+import EnvManagedField from "./EnvManagedField";
 
 export default {
   name: "ConfigSettingsPanel",
-  components: { SettingSelect, SettingChoices },
+  components: { EnvManagedField, SettingSelect, SettingChoices },
   props: {
     groups: { type: Array, default: () => [] },
     values: { type: Object, default: () => ({}) },
@@ -21,6 +22,8 @@ export default {
     // When set ("agent", "console" or "system") and a settings save registry is provided, the panel
     // hands its changes to the section save bar instead of showing its own Save button.
     saveScope: { type: String, default: "" },
+    // Field paths not shown right now. Their drafts are kept, so hiding a field loses no edit.
+    hiddenPaths: { type: Array, default: () => [] },
   },
   emits: ["save", "update:dirty"],
   setup(props, { emit }) {
@@ -72,6 +75,11 @@ export default {
     function dependencyNote(field) {
       const parent = fieldsByPath.value.get(field.dependsOn);
       return `Turn on ${parent?.label || field.dependsOn} to change this.`;
+    }
+
+    function visibleFields(group) {
+      const hidden = new Set(props.hiddenPaths);
+      return (Array.isArray(group.fields) ? group.fields : []).filter((field) => !hidden.has(field.path));
     }
 
     function groupInactiveNote(group) {
@@ -195,6 +203,7 @@ export default {
       fieldInactive,
       dependencyNote,
       groupInactiveNote,
+      visibleFields,
       restartRequired,
       updateField,
       resetField,
@@ -245,7 +254,7 @@ export default {
           <p v-if="groupInactiveNote(group)" class="config-settings-inactive-note">{{ groupInactiveNote(group) }}</p>
           <div class="settings-panel-body config-settings-fields">
             <div
-              v-for="field in group.fields"
+              v-for="field in visibleFields(group)"
               :key="field.path"
               :class="['settings-field', {
                 'is-wide': field.wide || field.type === 'json' || field.type === 'string_list' || field.type === 'bool',
@@ -272,10 +281,7 @@ export default {
                 <span v-if="restartRequired(field)" class="config-settings-restart">Restart required</span>
               </div>
 
-              <div v-if="environmentManaged(field)" class="settings-env-managed">
-                <code class="settings-env-managed-env">{{ environmentManagedName(field) }}</code>
-                <p class="settings-env-managed-body">Managed by the environment variable.</p>
-              </div>
+              <EnvManagedField v-if="environmentManaged(field)" :name="environmentManagedName(field)" />
               <SettingSelect
                 v-else-if="field.type === 'select'"
                 :modelValue="draft[field.path]"

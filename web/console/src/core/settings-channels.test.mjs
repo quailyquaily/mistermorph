@@ -5,7 +5,7 @@ import test from "node:test";
 const settingsViewSource = new URL("../views/SettingsView.js", import.meta.url);
 const i18nSource = new URL("../i18n/index.js", import.meta.url);
 
-test("console channel settings expose line, lark, and mixin alongside telegram and slack", async () => {
+test("console channel settings expose line, lark, mixin, and discord alongside telegram and slack", async () => {
   const source = await readFile(settingsViewSource, "utf8");
   const i18n = await readFile(i18nSource, "utf8");
 
@@ -27,7 +27,7 @@ test("console channel settings expose line, lark, and mixin alongside telegram a
   assert.match(source, /\["line", consoleLineDirty, "settings_console_line_title"\]/);
   assert.match(source, /\["lark", consoleLarkDirty, "settings_console_lark_title"\]/);
   assert.match(source, /\["mixin", consoleMixinDirty, "settings_console_mixin_title"\]/);
-  assert.match(source, /const known = \["runtimes", "telegram", "slack", "line", "lark", "mixin", "guard"\];/);
+  assert.match(source, /const known = \["runtimes", "telegram", "slack", "line", "lark", "mixin", "discord", "guard"\];/);
   assert.match(source, /mixin: mixinSaveDisabled,/);
   assert.match(source, /consoleFieldEnvManaged\('line', 'channel_access_token'\)/);
   assert.match(source, /consoleFieldEnvManaged\('lark', 'app_secret'\)/);
@@ -40,4 +40,14 @@ test("console channel settings expose line, lark, and mixin alongside telegram a
   assert.match(i18n, /settings_console_runtime_lark:/);
   assert.match(i18n, /settings_console_mixin_keystore_file_label:/);
   assert.match(i18n, /settings_console_runtime_mixin:/);
+
+  assert.match(source, /id:\s*"discord",\s*titleKey:\s*"settings_console_runtime_discord"/);
+  assert.match(source, /discord:\s*buildEmptyDiscordConsoleState\(\)/);
+  assert.match(source, /data\?\.discord && typeof data\.discord === "object"/);
+  assert.match(source, /if \(target === "discord"\)/);
+  assert.match(source, /\["discord", consoleDiscordDirty, "settings_console_discord_title"\]/);
+  assert.match(source, /discord: discordSaveDisabled,/);
+  assert.match(source, /consoleFieldEnvManaged\('discord', 'bot_token'\)/);
+  assert.match(i18n, /settings_console_discord_bot_token_label:/);
+  assert.match(i18n, /settings_console_runtime_discord:/);
 });

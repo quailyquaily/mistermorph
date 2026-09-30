@@ -16,9 +16,10 @@ import slackLogo from "../assets/images/channels/slack.svg";
 import lineLogo from "../assets/images/channels/line.svg";
 import larkLogo from "../assets/images/channels/lark.svg";
 import mixinLogo from "../assets/images/channels/mixin.svg";
+import discordLogo from "../assets/images/channels/discord.svg";
 
 const SHOW_ADDRESSES_STORAGE_KEY = "mistermorph_console_overview_show_addresses";
-const CHANNEL_LOGOS = { telegram: telegramLogo, slack: slackLogo, line: lineLogo, lark: larkLogo, mixin: mixinLogo };
+const CHANNEL_LOGOS = { telegram: telegramLogo, slack: slackLogo, line: lineLogo, lark: larkLogo, mixin: mixinLogo, discord: discordLogo };
 
 const OverviewView = {
   components: {

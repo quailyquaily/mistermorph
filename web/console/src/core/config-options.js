@@ -12,4 +12,4 @@ export const CACHE_TTL_OPTIONS = [
 ];
 
 export const HTTP_METHOD_OPTIONS = ["GET", "POST", "PUT", "PATCH", "DELETE"];
-export const TASK_TARGET_OPTIONS = ["console", "telegram", "slack", "line", "lark", "mixin"];
+export const TASK_TARGET_OPTIONS = ["console", "telegram", "slack", "line", "lark", "mixin", "discord"];

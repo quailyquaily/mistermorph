@@ -69,6 +69,7 @@ import {
   PhQuestion,
   PhStorefront,
   PhWallet,
+  PhLockSimple,
   PhX,
   PhXCircle,
 } from "@phosphor-icons/vue";
@@ -168,6 +169,7 @@ const sources = {
   PhQuestion,
   PhStorefront,
   PhWallet,
+  PhLockSimple,
   PhX,
   PhXCircle,
 };

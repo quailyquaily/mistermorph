@@ -1,0 +1,60 @@
+/* Looks like a locked input: the same height, border and corners as the fields around it. */
+.env-managed-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  height: 44px;
+  padding: 0 10px 0 12px;
+  border: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--bg-2) 70%, var(--q-bg-paper));
+  color: var(--text-1);
+  font: inherit;
+  text-align: left;
+  cursor: copy;
+  transition: border-color 120ms ease;
+}
+
+.env-managed-field:hover {
+  border-color: var(--line);
+}
+
+.env-managed-field:focus-visible {
+  outline: 2px solid var(--q-c-blue);
+  outline-offset: 2px;
+}
+
+.env-managed-field-icon {
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  color: var(--text-2);
+}
+
+.env-managed-field-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0;
+  background: none;
+  color: var(--text-1);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-meta);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.env-managed-field-tag {
+  flex: 0 0 auto;
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-meta);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.env-managed-field.is-copied .env-managed-field-tag {
+  color: var(--status-on);
+}

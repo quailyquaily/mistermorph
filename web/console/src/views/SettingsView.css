@@ -742,56 +742,8 @@ body:has(.settings-page) .q-dialog .q-menu-item.danger .q-menu-title {
   min-height: 360px;
 }
 
-.settings-env-managed {
-  --settings-env-managed-bg: color-mix(in srgb, var(--q-bg-paper) 95%, transparent);
-  --settings-env-managed-stripe-light: color-mix(in srgb, var(--settings-env-managed-bg) 1%, var(--q-c-white) 0%);
-  --settings-env-managed-stripe-dark: color-mix(in srgb, var(--settings-env-managed-bg) 82%, var(--line) 68%);
-  display: grid;
-  grid-template-rows: auto auto;
-  align-content: center;
-  min-height: 44px;
-  height: 44px;
-  gap: 1px;
-  padding: 5px 10px 4px;
-  border: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
-  border-radius: 2px;
-  background:
-    repeating-linear-gradient(
-      45deg,
-      var(--settings-env-managed-stripe-light) 0 12px,
-      var(--settings-env-managed-stripe-dark) 12px 24px
-    );
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--q-c-white) 75%, transparent);
-  overflow: hidden;
-}
 
-.settings-env-managed-env {
-  display: block;
-  max-width: 100%;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--text-0);
-  font-family: var(--font-mono);
-  font-size: var(--font-size-meta);
-  font-weight: 500;
-  letter-spacing: 0.01em;
-  line-height: 1.25;
-  overflow: hidden;
-  overflow-wrap: normal;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 
-.settings-env-managed-body {
-  margin: 0;
-  overflow: hidden;
-  color: var(--text-2);
-  font-size: var(--font-size-ui);
-  line-height: 1.2;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 
 .settings-field-hint {
   margin: 0;
@@ -1280,3 +1232,264 @@ body:has(.settings-page) .q-dialog .q-menu-item.danger .q-menu-title {
 .settings-add-profile-error {
   color: var(--danger);
 }
+
+/* Channels: a tile per channel, in color once it is configured and in gray until then. A tile
+   opens the channel's settings in a panel from the right. */
+/* Tiles keep one size; opening the pane only changes how many fit in a row. */
+.settings-channel-groups {
+  display: grid;
+  align-content: start;
+  gap: 22px;
+  min-width: 0;
+}
+
+.settings-channel-group {
+  display: grid;
+  gap: 10px;
+}
+
+.settings-channel-group-title {
+  justify-self: start;
+}
+
+.settings-channel-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 144px);
+  gap: 12px;
+}
+
+.settings-channel-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 144px;
+  aspect-ratio: 1 / 1;
+  padding: 12px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: var(--bg-2);
+  color: var(--text-0);
+  font: inherit;
+  cursor: pointer;
+  transition: border-color 120ms ease;
+}
+
+.settings-channel-tile:hover,
+.settings-channel-tile.is-active {
+  border-color: color-mix(in srgb, var(--q-c-blue) 45%, var(--line));
+}
+
+.settings-channel-tile:focus-visible {
+  outline: 2px solid var(--q-c-blue);
+  outline-offset: 2px;
+}
+
+.settings-channel-tile-logo {
+  width: 44px;
+  height: 44px;
+  filter: grayscale(1);
+  opacity: 0.45;
+  transition: filter 180ms ease, opacity 180ms ease;
+}
+
+.settings-channel-tile.is-configured .settings-channel-tile-logo,
+.settings-channel-tile:hover .settings-channel-tile-logo {
+  filter: none;
+  opacity: 1;
+}
+
+.settings-channel-tile:not(.is-configured):hover .settings-channel-tile-logo {
+  opacity: 0.8;
+}
+
+.settings-channel-tile-name {
+  max-width: 100%;
+  color: var(--text-1);
+  font-size: var(--font-size-meta);
+  line-height: 1.35;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+
+/* Top right: running inside Console. Top left: unsaved changes. */
+.settings-channel-tile-running {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: var(--status-mark-size);
+  height: var(--status-mark-size);
+  border-radius: 1px;
+  background: var(--status-on);
+}
+
+.settings-channel-tile-dirty {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  width: var(--status-mark-size);
+  height: var(--status-mark-size);
+  border-radius: 1px;
+  background: var(--status-pending);
+}
+
+/* The layout: the tiles, and the open channel's pane in a column at the right, as Store's. */
+.settings-channels {
+  --settings-channel-pane-width: 440px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 16px;
+}
+
+.settings-channels.has-pane {
+  grid-template-columns: minmax(0, 1fr) minmax(340px, var(--settings-channel-pane-width));
+}
+
+.settings-channel-pane {
+  position: sticky;
+  top: 12px;
+  min-width: 0;
+  height: calc(100dvh - var(--workspace-head-height, 48px) - 32px);
+  max-height: 900px;
+}
+
+.settings-channel-pane-shell {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--q-bg-white);
+  color: var(--text-0);
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--q-c-dark) 7%, transparent);
+}
+
+html[data-macos26="true"] .settings-channel-pane-shell {
+  border-radius: 16px;
+}
+
+.settings-channel-pane-scroll {
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  overscroll-behavior: contain;
+}
+
+.settings-channel-pane-scroll > .settings-panel-shell {
+  gap: 0;
+}
+
+.settings-channel-pane-scroll .settings-panel-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  align-items: center;
+  padding: 16px 12px 12px 18px;
+  background: var(--q-bg-white);
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--line-soft) 60%, transparent);
+}
+
+.settings-channel-pane-scroll .settings-panel-body {
+  margin-top: 0;
+  padding: 14px 18px 24px;
+}
+
+/* The pane is narrow: one field per row. */
+.settings-channel-pane-scroll .settings-form-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.settings-channel-console {
+  display: grid;
+  gap: 6px;
+  padding: 0 18px 24px;
+}
+
+.settings-channel-runtime-row {
+  padding: 4px 0 0;
+  border-bottom: 0;
+}
+
+/* The group trigger fields follow the trigger mode, inside the same padding. */
+.settings-channel-trigger-config {
+  margin-top: -8px;
+  padding: 0 18px 24px;
+}
+
+.settings-channel-trigger-config .config-settings-fields {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.settings-channel-trigger-config .settings-panel-body {
+  margin-top: 0;
+}
+
+.settings-channel-pane-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 18px;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--line-soft) 70%, transparent);
+}
+
+.settings-channel-pane-foot-text {
+  margin: 0;
+  color: var(--text-1);
+  font-size: var(--font-size-meta);
+}
+
+.settings-channel-pane-foot-text.is-error {
+  color: var(--q-c-red);
+}
+
+.settings-channel-pane-enter-active,
+.settings-channel-pane-leave-active {
+  transition: opacity var(--motion-slow, 240ms) var(--motion-ease, ease);
+}
+
+.settings-channel-pane-enter-from,
+.settings-channel-pane-leave-to {
+  opacity: 0;
+}
+
+/* Phones: the pane is a sheet from the right over a mask. */
+.settings-channel-pane-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  background: rgb(0 0 0 / 24%);
+}
+
+.settings-channel-pane.is-sheet {
+  position: fixed;
+  inset: 0 0 0 auto;
+  z-index: 1000;
+  width: min(100vw, 480px);
+  height: 100%;
+  max-height: none;
+}
+
+.settings-channel-pane.is-sheet .settings-channel-pane-shell {
+  border: 0;
+  border-radius: 0;
+}
+
+.settings-channel-sheet-enter-active {
+  transition: transform 280ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.settings-channel-sheet-leave-active {
+  transition: transform 200ms cubic-bezier(0.7, 0, 0.84, 0);
+}
+
+.settings-channel-sheet-enter-from,
+.settings-channel-sheet-leave-to {
+  transform: translate3d(100%, 0, 0);
+}
+

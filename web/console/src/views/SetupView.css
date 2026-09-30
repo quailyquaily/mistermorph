@@ -162,37 +162,8 @@
   color: var(--text-2);
 }
 
-.setup-env-managed {
-  display: grid;
-  gap: 6px;
-  padding: 10px 12px;
-  border: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
-  border-radius: 2px;
-  background: color-mix(in srgb, var(--q-bg-paper) 95%, transparent);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--q-c-white) 75%, transparent);
-}
 
-.setup-env-managed-env {
-  display: block;
-  max-width: 100%;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--text-1);
-  font-family: var(--font-mono);
-  font-size: var(--font-size-meta);
-  font-weight: 500;
-  letter-spacing: 0.01em;
-  line-height: 1.3;
-  overflow-wrap: anywhere;
-}
 
-.setup-env-managed-body {
-  margin: 0;
-  font-size: var(--font-size-ui);
-  line-height: 1.5;
-  color: var(--text-2);
-}
 
 .setup-form .q-input,
 .setup-form .q-textarea,

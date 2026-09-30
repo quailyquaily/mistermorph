@@ -3,6 +3,7 @@ import { storeToRefs } from "pinia";
 import { useToast } from "quail-ui";
 import "./ContactsView.css";
 
+import channelDiscordLogoURL from "../assets/images/channels/discord.svg";
 import channelLarkLogoURL from "../assets/images/channels/lark.svg";
 import channelLineLogoURL from "../assets/images/channels/line.svg";
 import channelMixinLogoURL from "../assets/images/channels/mixin.svg";
@@ -14,6 +15,7 @@ import { currentLocale, endpointState, formatShortTime, formatTime, runtimeApiFe
 import { useContactsStore } from "../stores/contactsStore";
 
 const CHANNEL_LOGOS = {
+  discord: channelDiscordLogoURL,
   lark: channelLarkLogoURL,
   line: channelLineLogoURL,
   mixin: channelMixinLogoURL,
@@ -67,6 +69,8 @@ function fallbackHandleFromContactID(item, channel) {
       return prefix === "lark" || prefix === "lark_user" ? parts[parts.length - 1] : "";
     case "mixin":
       return prefix === "mixin" ? parts[parts.length - 1] : "";
+    case "discord":
+      return prefix === "discord_user" ? parts[parts.length - 1] : "";
     default:
       return "";
   }
@@ -86,6 +90,8 @@ function channelLabel(t, raw) {
       return t("endpoint_channel_lark");
     case "mixin":
       return t("endpoint_channel_mixin");
+    case "discord":
+      return t("endpoint_channel_discord");
     case "console":
       return t("endpoint_channel_console");
     default:
@@ -128,6 +134,7 @@ function channelHandles(t, item) {
       ? `@${mixinIdentity}`
       : String(item?.mixin_user_id || "").trim() || fallbackHandleFromContactID(item, "mixin"),
   );
+  push("discord", String(item?.discord_user_id || "").trim() || fallbackHandleFromContactID(item, "discord"));
 
   return out;
 }

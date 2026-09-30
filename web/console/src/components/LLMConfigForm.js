@@ -25,10 +25,12 @@ import {
 } from "../core/setup-contract";
 import InferenceProviderPicker from "./InferenceProviderPicker";
 import SettingSelect from "./SettingSelect";
+import EnvManagedField from "./EnvManagedField";
 import { CACHE_TTL_OPTIONS, IMAGE_PARTS_OPTIONS } from "../core/config-options";
 
 const LLMConfigForm = {
   components: {
+    EnvManagedField,
     InferenceProviderPicker,
     SettingSelect,
   },
@@ -409,10 +411,7 @@ const LLMConfigForm = {
       <div class="settings-field is-wide">
         <span class="settings-field-label">{{ t("settings_agent_provider_label") }}</span>
         <div v-if="providerHasAuthAction" class="settings-field-control">
-          <div v-if="providerManagedField" class="settings-env-managed">
-            <code class="settings-env-managed-env">{{ fieldManagedHeadline(providerManagedField) }}</code>
-            <p class="settings-env-managed-body">{{ t("settings_env_managed_body") }}</p>
-          </div>
+          <EnvManagedField v-if="providerManagedField" :name="fieldManagedHeadline(providerManagedField)" />
           <InferenceProviderPicker
             v-else
             :modelValue="providerItem?.value || ''"
@@ -468,10 +467,7 @@ const LLMConfigForm = {
             <PhXCircle v-else class="icon" />
           </QButton>
         </div>
-        <div v-else-if="providerManagedField" class="settings-env-managed">
-          <code class="settings-env-managed-env">{{ fieldManagedHeadline(providerManagedField) }}</code>
-          <p class="settings-env-managed-body">{{ t("settings_env_managed_body") }}</p>
-        </div>
+        <EnvManagedField v-else-if="providerManagedField" :name="fieldManagedHeadline(providerManagedField)" />
         <InferenceProviderPicker
           v-else
           :modelValue="providerItem?.value || ''"
@@ -486,10 +482,7 @@ const LLMConfigForm = {
 
       <div v-if="showEndpointField" class="settings-field is-wide">
         <span class="settings-field-label">{{ t("settings_agent_endpoint_label") }}</span>
-        <div v-if="isFieldEnvManaged('endpoint')" class="settings-env-managed">
-          <code class="settings-env-managed-env">{{ fieldManagedHeadline("endpoint") }}</code>
-          <p class="settings-env-managed-body">{{ t("settings_env_managed_body") }}</p>
-        </div>
+        <EnvManagedField v-if="isFieldEnvManaged('endpoint')" :name="fieldManagedHeadline('endpoint')" />
         <div v-else-if="endpointHasPickerAction" class="settings-field-control">
           <QInput
             :modelValue="config.endpoint"
@@ -519,10 +512,7 @@ const LLMConfigForm = {
 
       <div v-if="showCloudflareAccountField" class="settings-field is-wide">
         <span class="settings-field-label">{{ t("settings_agent_cloudflare_account_label") }}</span>
-        <div v-if="isFieldEnvManaged('cloudflare_account_id')" class="settings-env-managed">
-          <code class="settings-env-managed-env">{{ fieldManagedHeadline("cloudflare_account_id") }}</code>
-          <p class="settings-env-managed-body">{{ t("settings_env_managed_body") }}</p>
-        </div>
+        <EnvManagedField v-if="isFieldEnvManaged('cloudflare_account_id')" :name="fieldManagedHeadline('cloudflare_account_id')" />
         <QInput
           v-else
           :modelValue="config.cloudflare_account_id"
@@ -534,10 +524,7 @@ const LLMConfigForm = {
 
       <div v-if="showBedrockFields" class="settings-field is-wide">
         <span class="settings-field-label">{{ t("settings_agent_bedrock_aws_key_label") }}</span>
-        <div v-if="isFieldEnvManaged('bedrock_aws_key')" class="settings-env-managed">
-          <code class="settings-env-managed-env">{{ fieldManagedHeadline("bedrock_aws_key") }}</code>
-          <p class="settings-env-managed-body">{{ t("settings_env_managed_body") }}</p>
-        </div>
+        <EnvManagedField v-if="isFieldEnvManaged('bedrock_aws_key')" :name="fieldManagedHeadline('bedrock_aws_key')" />
         <QInput
           v-else
           :modelValue="config.bedrock_aws_key"
@@ -550,10 +537,7 @@ const LLMConfigForm = {
 
       <div v-if="showBedrockFields" class="settings-field is-wide">
         <span class="settings-field-label">{{ t("settings_agent_bedrock_aws_secret_label") }}</span>
-        <div v-if="isFieldEnvManaged('bedrock_aws_secret')" class="settings-env-managed">
-          <code class="settings-env-managed-env">{{ fieldManagedHeadline("bedrock_aws_secret") }}</code>
-          <p class="settings-env-managed-body">{{ t("settings_env_managed_body") }}</p>
-        </div>
+        <EnvManagedField v-if="isFieldEnvManaged('bedrock_aws_secret')" :name="fieldManagedHeadline('bedrock_aws_secret')" />
         <QInput
           v-else
           :modelValue="config.bedrock_aws_secret"
@@ -566,10 +550,7 @@ const LLMConfigForm = {
 
       <div v-if="showBedrockFields" class="settings-field">
         <span class="settings-field-label">{{ t("settings_agent_bedrock_region_label") }}</span>
-        <div v-if="isFieldEnvManaged('bedrock_region')" class="settings-env-managed">
-          <code class="settings-env-managed-env">{{ fieldManagedHeadline("bedrock_region") }}</code>
-          <p class="settings-env-managed-body">{{ t("settings_env_managed_body") }}</p>
-        </div>
+        <EnvManagedField v-if="isFieldEnvManaged('bedrock_region')" :name="fieldManagedHeadline('bedrock_region')" />
         <QInput
           v-else
           :modelValue="config.bedrock_region"
@@ -581,10 +562,7 @@ const LLMConfigForm = {
 
       <div v-if="showBedrockFields" class="settings-field">
         <span class="settings-field-label">{{ t("settings_agent_bedrock_model_arn_label") }}</span>
-        <div v-if="isFieldEnvManaged('bedrock_model_arn')" class="settings-env-managed">
-          <code class="settings-env-managed-env">{{ fieldManagedHeadline("bedrock_model_arn") }}</code>
-          <p class="settings-env-managed-body">{{ t("settings_env_managed_body") }}</p>
-        </div>
+        <EnvManagedField v-if="isFieldEnvManaged('bedrock_model_arn')" :name="fieldManagedHeadline('bedrock_model_arn')" />
         <QInput
           v-else
           :modelValue="config.bedrock_model_arn"
@@ -596,15 +574,10 @@ const LLMConfigForm = {
 
       <div v-if="showCredentialFields" class="settings-field">
         <span class="settings-field-label">{{ t(credentialLabelKey) }}</span>
-        <div
+        <EnvManagedField
           v-if="showCloudflareAccountField ? isFieldEnvManaged('cloudflare_api_token') : isFieldEnvManaged('api_key')"
-          class="settings-env-managed"
-        >
-          <code class="settings-env-managed-env">
-            {{ fieldManagedHeadline(showCloudflareAccountField ? "cloudflare_api_token" : "api_key") }}
-          </code>
-          <p class="settings-env-managed-body">{{ t("settings_env_managed_body") }}</p>
-        </div>
+          :name="fieldManagedHeadline(showCloudflareAccountField ? 'cloudflare_api_token' : 'api_key')"
+        />
         <QInput
           v-else-if="showCloudflareAccountField"
           :modelValue="config.cloudflare_api_token"
@@ -636,10 +609,7 @@ const LLMConfigForm = {
 
       <div :class="['settings-field', showCredentialFields ? '' : 'is-wide']">
         <span class="settings-field-label">{{ t("settings_agent_model_label") }}</span>
-        <div v-if="isFieldEnvManaged('model')" class="settings-env-managed">
-          <code class="settings-env-managed-env">{{ fieldManagedHeadline("model") }}</code>
-          <p class="settings-env-managed-body">{{ t("settings_env_managed_body") }}</p>
-        </div>
+        <EnvManagedField v-if="isFieldEnvManaged('model')" :name="fieldManagedHeadline('model')" />
         <div v-else class="settings-field-control">
           <QInput
             :modelValue="config.model"
@@ -665,10 +635,7 @@ const LLMConfigForm = {
       <div v-if="showAdvanced" class="settings-field-row is-wide is-three">
         <div class="settings-field">
           <span class="settings-field-label">{{ t("settings_llm_reasoning_label") }}</span>
-          <div v-if="isFieldEnvManaged('reasoning_effort')" class="settings-env-managed">
-            <code class="settings-env-managed-env">{{ fieldManagedHeadline("reasoning_effort") }}</code>
-            <p class="settings-env-managed-body">{{ t("settings_env_managed_body") }}</p>
-          </div>
+          <EnvManagedField v-if="isFieldEnvManaged('reasoning_effort')" :name="fieldManagedHeadline('reasoning_effort')" />
           <QDropdownMenu
             v-else
             :key="String(config.reasoning_effort || '') || 'reasoning'"
@@ -682,10 +649,7 @@ const LLMConfigForm = {
 
         <div class="settings-field">
           <span class="settings-field-label">{{ t("settings_llm_tools_emulation_label") }}</span>
-          <div v-if="isFieldEnvManaged('tools_emulation_mode')" class="settings-env-managed">
-            <code class="settings-env-managed-env">{{ fieldManagedHeadline("tools_emulation_mode") }}</code>
-            <p class="settings-env-managed-body">{{ t("settings_env_managed_body") }}</p>
-          </div>
+          <EnvManagedField v-if="isFieldEnvManaged('tools_emulation_mode')" :name="fieldManagedHeadline('tools_emulation_mode')" />
           <QDropdownMenu
             v-else
             :key="String(config.tools_emulation_mode || '') || 'tools-emulation'"
@@ -699,10 +663,7 @@ const LLMConfigForm = {
 
         <div class="settings-field">
           <span class="settings-field-label">{{ t("settings_agent_context_window_tokens_label") }}</span>
-          <div v-if="isFieldEnvManaged('context_window_tokens')" class="settings-env-managed">
-            <code class="settings-env-managed-env">{{ fieldManagedHeadline("context_window_tokens") }}</code>
-            <p class="settings-env-managed-body">{{ t("settings_env_managed_body") }}</p>
-          </div>
+          <EnvManagedField v-if="isFieldEnvManaged('context_window_tokens')" :name="fieldManagedHeadline('context_window_tokens')" />
           <QInput
             v-else
             :modelValue="config.context_window_tokens"

@@ -538,6 +538,8 @@ function kickerChannelLabel(mode) {
       return "Lark";
 	case "mixin":
 	  return "Mixin";
+    case "discord":
+      return "Discord";
     default:
       return "Endpoint";
   }

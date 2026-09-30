@@ -53,7 +53,7 @@ const CHAT_PLATFORM_LOGOS = {
   slack: channelSlackLogoURL,
   telegram: channelTelegramLogoURL,
 };
-const CONTACT_REF_PROTOCOLS = new Set(["tg", "slack", "line", "line_user", "lark", "lark_user", "discord"]);
+const CONTACT_REF_PROTOCOLS = new Set(["tg", "slack", "line", "line_user", "lark", "lark_user", "discord", "discord_user"]);
 const UTC_TIMEZONE_ITEMS = [
   { value: "UTC-12", label: "UTC-12", cityKey: "todo_timezone_city_baker_island" },
   { value: "UTC-11", label: "UTC-11", cityKey: "todo_timezone_city_pago_pago" },
@@ -510,6 +510,9 @@ function chatPlatformFromID(chatID) {
   }
   if (protocol === "lark_user") {
     return "lark";
+  }
+  if (protocol === "discord_user") {
+    return "discord";
   }
   if (protocol === "slack" || protocol === "line" || protocol === "lark" || protocol === "discord") {
     return protocol;

@@ -68,25 +68,21 @@ test("single LLM controls avoid the settings field control wrapper", async () =>
   assert.match(formSource, /const providerHasAuthAction = computed\(/);
   assert.match(formSource, /const endpointHasPickerAction = computed\(/);
   assert.match(formSource, /<div v-if="providerHasAuthAction" class="settings-field-control">/);
-  assert.match(formSource, /<div v-if="providerHasAuthAction" class="settings-field-control">[\s\S]*?<div v-if="providerManagedField" class="settings-env-managed">/);
+  assert.match(formSource, /<div v-if="providerHasAuthAction" class="settings-field-control">[\s\S]*?<EnvManagedField v-if="providerManagedField"/);
   assert.match(formSource, /<InferenceProviderPicker\s+v-else/);
   assert.match(formSource, /<div v-else-if="endpointHasPickerAction" class="settings-field-control">/);
   assert.match(formSource, /<QInput\s+v-else\s+:modelValue="config\.endpoint"/);
 });
 
 test("environment-managed fields match the 44px input height", async () => {
-  const cssSource = await readFile(new URL("../views/SettingsView.css", import.meta.url), "utf8");
+  const cssSource = await readFile(new URL("../components/EnvManagedField.css", import.meta.url), "utf8");
 
-  const blockStart = cssSource.indexOf(".settings-env-managed {");
-  assert.notEqual(blockStart, -1, "settings-env-managed block not found");
+  const blockStart = cssSource.indexOf(".env-managed-field {");
+  assert.notEqual(blockStart, -1, "env-managed-field block not found");
   const blockEnd = cssSource.indexOf("}", blockStart);
-  assert.notEqual(blockEnd, -1, "settings-env-managed block end not found");
   const block = cssSource.slice(blockStart, blockEnd);
 
-  assert.match(block, /min-height:\s*44px;/);
   assert.match(block, /height:\s*44px;/);
-  assert.match(block, /grid-template-rows:\s*auto\s+auto;/);
-  assert.match(block, /gap:\s*1px;/);
-  assert.match(cssSource, /\.settings-env-managed-env\s*\{[\s\S]*text-overflow:\s*ellipsis;/);
-  assert.match(cssSource, /\.settings-env-managed-env\s*\{[\s\S]*white-space:\s*nowrap;/);
+  assert.match(cssSource, /\.env-managed-field-name\s*\{[\s\S]*text-overflow:\s*ellipsis;/);
+  assert.match(cssSource, /\.env-managed-field-name\s*\{[\s\S]*white-space:\s*nowrap;/);
 });

@@ -162,13 +162,6 @@ function channelFields(channel, options = {}) {
       { path: `${channel}.webhook_path`, label: "Webhook path", type: "string" },
     );
   }
-  if (options.group !== false) {
-    fields.push(
-      { path: `${channel}.record_untriggered`, label: "Record untriggered group messages", type: "bool" },
-      { path: `${channel}.addressing_confidence_threshold`, label: "Addressing confidence threshold", type: "float" },
-      { path: `${channel}.addressing_interject_threshold`, label: "Addressing interject threshold", type: "float" },
-    );
-  }
   if (options.poll) fields.push({ path: `${channel}.poll_timeout`, label: "Poll timeout", type: "string" });
   fields.push(
     { path: `${channel}.task_timeout`, label: "Task timeout", type: "string" },
@@ -184,6 +177,28 @@ export const CHANNEL_CONFIG_GROUPS = [
   channelFields("line", { title: "LINE", baseURL: true, webhook: true }),
   channelFields("lark", { title: "Lark", baseURL: true }),
   channelFields("mixin", { title: "Mixin", group: false }),
+  channelFields("discord", { title: "Discord", baseURL: true }),
+];
+
+// Group trigger fields, shown in the channel's pane under its trigger mode (not in Advanced).
+function channelTriggerFields(channel, title) {
+  return {
+    id: channel,
+    title: `${title} group trigger`,
+    fields: [
+      { path: `${channel}.addressing_confidence_threshold`, label: "Addressing confidence threshold", type: "float" },
+      { path: `${channel}.addressing_interject_threshold`, label: "Addressing interject threshold", type: "float" },
+      { path: `${channel}.record_untriggered`, label: "Record untriggered group messages", type: "bool" },
+    ],
+  };
+}
+
+export const CHANNEL_TRIGGER_CONFIG_GROUPS = [
+  channelTriggerFields("telegram", "Telegram"),
+  channelTriggerFields("slack", "Slack"),
+  channelTriggerFields("line", "LINE"),
+  channelTriggerFields("lark", "Lark"),
+  channelTriggerFields("discord", "Discord"),
 ];
 
 export const AUTOMATION_CONFIG_GROUPS = [

@@ -5,6 +5,7 @@ import { captureUnsavedScopes, mergeConfigUpdates, restoreUnsavedScopes } from "
 import "./SettingsView.css";
 
 import AppPage from "../components/AppPage";
+import EnvManagedField from "../components/EnvManagedField";
 import AuthProfilesPanel from "../components/AuthProfilesPanel";
 import CodexAuthDialog from "../components/CodexAuthDialog";
 import ConfigSettingsPanel from "../components/ConfigSettingsPanel";
@@ -22,6 +23,12 @@ import SettingDialog from "../components/SettingDialog";
 import SetupConnectionTestDialog from "../components/SetupConnectionTestDialog";
 import SetupPickerDialog from "../components/SetupPickerDialog";
 import RuntimePanel from "./RuntimeView";
+import channelDiscordLogoURL from "../assets/images/channels/discord.svg";
+import channelLarkLogoURL from "../assets/images/channels/lark.svg";
+import channelLineLogoURL from "../assets/images/channels/line.svg";
+import channelMixinLogoURL from "../assets/images/channels/mixin.svg";
+import channelSlackLogoURL from "../assets/images/channels/slack.svg";
+import channelTelegramLogoURL from "../assets/images/channels/telegram.svg";
 import defaultAvatarMarkup from "../assets/images/app_logo_current.svg?raw";
 import {
   apiFetch,
@@ -74,6 +81,7 @@ import { openReentrantDialog } from "../core/reentrant-dialog";
 import {
   AUTOMATION_CONFIG_GROUPS,
   CHANNEL_CONFIG_GROUPS,
+  CHANNEL_TRIGGER_CONFIG_GROUPS,
   CONSOLE_DEPLOYMENT_CONFIG_GROUPS,
   DEFAULT_MODEL_ADVANCED_CONFIG_GROUPS,
   LLM_CONTEXT_CONFIG_GROUPS,
@@ -126,6 +134,18 @@ const MANAGED_RUNTIME_ITEMS = [
   { id: "slack", titleKey: "settings_console_runtime_slack", noteKey: "settings_console_runtime_note_slack" },
   { id: "lark", titleKey: "settings_console_runtime_lark", noteKey: "settings_console_runtime_note_lark" },
   { id: "mixin", titleKey: "settings_console_runtime_mixin", noteKey: "settings_console_runtime_note_mixin" },
+  { id: "discord", titleKey: "settings_console_runtime_discord", noteKey: "settings_console_runtime_note_discord" },
+];
+
+// The channels on the Channels page. A channel counts as configured when every credential it needs
+// is set, in config or by an environment variable.
+const CHANNEL_ITEMS = [
+  { id: "telegram", titleKey: "settings_console_telegram_title", logo: channelTelegramLogoURL, required: ["bot_token"] },
+  { id: "slack", titleKey: "settings_console_slack_title", logo: channelSlackLogoURL, required: ["bot_token", "app_token"] },
+  { id: "discord", titleKey: "settings_console_discord_title", logo: channelDiscordLogoURL, required: ["bot_token"] },
+  { id: "lark", titleKey: "settings_console_lark_title", logo: channelLarkLogoURL, required: ["app_id", "app_secret"] },
+  { id: "line", titleKey: "settings_console_line_title", logo: channelLineLogoURL, required: ["channel_access_token", "channel_secret"] },
+  { id: "mixin", titleKey: "settings_console_mixin_title", logo: channelMixinLogoURL, required: ["keystore_file"] },
 ];
 
 const CHANNEL_GROUP_TRIGGER_VALUES = ["smart", "strict", "talkative"];
@@ -157,7 +177,8 @@ function settingsRouteSection(route) {
 }
 
 function normalizeSettingsSectionID(value) {
-  const id = String(value || "").trim();
+  // Running a channel inside Console moved from its own section into the channel's panel.
+  const id = String(value || "").trim() === "runtimes" ? "channels" : String(value || "").trim();
   return SETTINGS_SECTION_IDS.has(id) ? id : SETTINGS_DEFAULT_SECTION_ID;
 }
 
@@ -230,6 +251,16 @@ function buildEmptyLarkConsoleState() {
     app_secret: "",
     allowed_chat_ids_text: "",
     group_trigger_mode: "smart",
+  };
+}
+
+function buildEmptyDiscordConsoleState() {
+  return {
+    bot_token: "",
+    allowed_guild_ids_text: "",
+    allowed_channel_ids_text: "",
+    allowed_user_ids_text: "",
+    group_trigger_mode: "strict",
   };
 }
 
@@ -411,6 +442,12 @@ function normalizeConsoleGroupTriggerMode(value) {
   return CHANNEL_GROUP_TRIGGER_VALUES.includes(next) ? next : "smart";
 }
 
+// Discord defaults to strict: the one mode that works without the Message Content intent.
+function normalizeDiscordGroupTriggerMode(value) {
+  const next = String(value || "").trim().toLowerCase();
+  return CHANNEL_GROUP_TRIGGER_VALUES.includes(next) ? next : "strict";
+}
+
 function parseConfigListText(value) {
   return normalizeNamedList(String(value || "").split(/\r?\n|,/));
 }
@@ -575,6 +612,7 @@ function buildConsoleManagedRuntimeSnapshot(state) {
     slack: !!state.managedRuntimes.slack,
     lark: !!state.managedRuntimes.lark,
     mixin: !!state.managedRuntimes.mixin,
+    discord: !!state.managedRuntimes.discord,
   });
 }
 
@@ -626,6 +664,17 @@ function buildConsoleMixinSnapshot(state) {
   });
 }
 
+function buildConsoleDiscordSnapshot(state) {
+  recordSnapshotBuild("settings.console.discord");
+  return JSON.stringify({
+    bot_token: trimText(state.discord.bot_token),
+    allowed_guild_ids: parseConfigListText(state.discord.allowed_guild_ids_text),
+    allowed_channel_ids: parseConfigListText(state.discord.allowed_channel_ids_text),
+    allowed_user_ids: parseConfigListText(state.discord.allowed_user_ids_text),
+    group_trigger_mode: normalizeDiscordGroupTriggerMode(state.discord.group_trigger_mode),
+  });
+}
+
 function buildConsoleGuardSnapshot(state) {
   recordSnapshotBuild("settings.console.guard");
   return JSON.stringify({
@@ -650,6 +699,7 @@ function buildConsoleGuardSnapshot(state) {
 const SettingsView = {
   components: {
     AppPage,
+    EnvManagedField,
     AuthProfilesPanel,
     CodexAuthDialog,
     ConfigSettingsPanel,
@@ -744,6 +794,7 @@ const SettingsView = {
     const loadedConsoleLineSnapshot = ref("");
     const loadedConsoleLarkSnapshot = ref("");
     const loadedConsoleMixinSnapshot = ref("");
+    const loadedConsoleDiscordSnapshot = ref("");
     const loadedConsoleGuardSnapshot = ref("");
     const consoleManagedDirty = ref(false);
     const consoleTelegramDirty = ref(false);
@@ -751,6 +802,7 @@ const SettingsView = {
     const consoleLineDirty = ref(false);
     const consoleLarkDirty = ref(false);
     const consoleMixinDirty = ref(false);
+    const consoleDiscordDirty = ref(false);
     const consoleGuardDirty = ref(false);
     const consoleSettingsLoaded = ref(false);
     const consoleEnvManaged = ref({});
@@ -857,12 +909,14 @@ const SettingsView = {
         slack: false,
         lark: false,
         mixin: false,
+        discord: false,
       },
       telegram: buildEmptyTelegramConsoleState(),
       slack: buildEmptySlackConsoleState(),
       line: buildEmptyLineConsoleState(),
       lark: buildEmptyLarkConsoleState(),
       mixin: buildEmptyMixinConsoleState(),
+      discord: buildEmptyDiscordConsoleState(),
       guard: buildEmptyGuardConsoleState(),
     });
 
@@ -988,6 +1042,7 @@ const SettingsView = {
       loadedConsoleLineSnapshot.value = buildConsoleLineSnapshot(state);
       loadedConsoleLarkSnapshot.value = buildConsoleLarkSnapshot(state);
       loadedConsoleMixinSnapshot.value = buildConsoleMixinSnapshot(state);
+      loadedConsoleDiscordSnapshot.value = buildConsoleDiscordSnapshot(state);
       loadedConsoleGuardSnapshot.value = buildConsoleGuardSnapshot(state);
       consoleManagedDirty.value = false;
       consoleTelegramDirty.value = false;
@@ -995,6 +1050,7 @@ const SettingsView = {
       consoleLineDirty.value = false;
       consoleLarkDirty.value = false;
       consoleMixinDirty.value = false;
+      consoleDiscordDirty.value = false;
       consoleGuardDirty.value = false;
     }
 
@@ -1005,6 +1061,7 @@ const SettingsView = {
       loadedConsoleLineSnapshot.value = "";
       loadedConsoleLarkSnapshot.value = "";
       loadedConsoleMixinSnapshot.value = "";
+      loadedConsoleDiscordSnapshot.value = "";
       loadedConsoleGuardSnapshot.value = "";
       consoleManagedDirty.value = false;
       consoleTelegramDirty.value = false;
@@ -1012,6 +1069,7 @@ const SettingsView = {
       consoleLineDirty.value = false;
       consoleLarkDirty.value = false;
       consoleMixinDirty.value = false;
+      consoleDiscordDirty.value = false;
       consoleGuardDirty.value = false;
       consoleSettingsLoaded.value = false;
     }
@@ -1048,6 +1106,12 @@ const SettingsView = {
 
     function updateConsoleMixinDirty() {
       consoleMixinDirty.value = buildConsoleMixinSnapshot(state) !== loadedConsoleMixinSnapshot.value;
+    }
+
+    function updateConsoleDiscordDirty() {
+      consoleDiscordDirty.value =
+        consoleSecretDirty.has("discord.bot_token") ||
+        buildConsoleDiscordSnapshot(state) !== loadedConsoleDiscordSnapshot.value;
     }
 
     function updateConsoleGuardDirty() {
@@ -1215,13 +1279,6 @@ const SettingsView = {
           saveKind: "console",
         });
         items.push({
-          id: "runtimes",
-          icon: "PhBroadcast",
-          title: t("settings_console_runtime_title"),
-          meta: t("settings_section_runtimes_meta"),
-          saveKind: "console",
-        });
-        items.push({
           id: "security",
           icon: "PhShieldCheck",
           title: t("settings_console_guard_title"),
@@ -1294,10 +1351,81 @@ const SettingsView = {
         ["line", consoleLineDirty, "settings_console_line_title"],
         ["lark", consoleLarkDirty, "settings_console_lark_title"],
         ["mixin", consoleMixinDirty, "settings_console_mixin_title"],
+        ["discord", consoleDiscordDirty, "settings_console_discord_title"],
+        ["runtimes", consoleManagedDirty, "settings_channel_run_in_console"],
       ],
       security: [["guard", consoleGuardDirty, "settings_console_guard_title"]],
       runtimes: [["runtimes", consoleManagedDirty, ""]],
     };
+
+    // Channels: a tile per channel, and the channel's settings in a panel from the right.
+    const openChannel = ref("");
+    const channelDirtyRefs = {
+      telegram: consoleTelegramDirty,
+      slack: consoleSlackDirty,
+      line: consoleLineDirty,
+      lark: consoleLarkDirty,
+      mixin: consoleMixinDirty,
+      discord: consoleDiscordDirty,
+    };
+    function channelFieldSet(kind, field) {
+      return (
+        trimText(state[kind]?.[field]) !== "" ||
+        consoleSecretField(kind, field)?.configured === true ||
+        consoleFieldEnvManaged(kind, field)
+      );
+    }
+    function channelManagedItem(id) {
+      return MANAGED_RUNTIME_ITEMS.find((item) => item.id === id) || null;
+    }
+    const channelTiles = computed(() =>
+      CHANNEL_ITEMS.map((item) => {
+        const configured = item.required.every((field) => channelFieldSet(item.id, field));
+        return {
+          ...item,
+          configured,
+          running: configured && !!channelManagedItem(item.id) && !!state.managedRuntimes[item.id],
+          dirty: !!channelDirtyRefs[item.id]?.value,
+        };
+      })
+    );
+    // Configured channels first, then the ones not set up; an empty group is not shown.
+    const channelGroups = computed(() =>
+      [
+        { id: "configured", titleKey: "settings_channel_group_configured", items: channelTiles.value.filter((item) => item.configured) },
+        { id: "unconfigured", titleKey: "settings_channel_group_unconfigured", items: channelTiles.value.filter((item) => !item.configured) },
+      ].filter((group) => group.items.length > 0)
+    );
+    // Each threshold is read in one trigger mode only: confidence in smart, interject in talkative;
+    // strict reads neither. "Record untriggered" applies in every mode.
+    function channelTriggerHiddenPaths(id) {
+      const mode = id === "discord"
+        ? normalizeDiscordGroupTriggerMode(state.discord.group_trigger_mode)
+        : normalizeConsoleGroupTriggerMode(state[id]?.group_trigger_mode);
+      const confidence = `${id}.addressing_confidence_threshold`;
+      const interject = `${id}.addressing_interject_threshold`;
+      if (mode === "smart") return [interject];
+      if (mode === "talkative") return [confidence];
+      return [confidence, interject];
+    }
+    const openChannelTitleKey = computed(
+      () => CHANNEL_ITEMS.find((item) => item.id === openChannel.value)?.titleKey || "settings_console_channels_title"
+    );
+    // Closing keeps the draft: it stays in the save bar, and the tile shows it is unsaved.
+    function openChannelPane(id) {
+      openChannel.value = openChannel.value === id ? "" : id;
+    }
+    function closeChannelPane() {
+      openChannel.value = "";
+    }
+    function onChannelPaneKeydown(event) {
+      if (event.key === "Escape" && openChannel.value) {
+        closeChannelPane();
+      }
+    }
+    watch(() => selectedSection.value?.id, closeChannelPane);
+    onMounted(() => window.addEventListener("keydown", onChannelPaneKeydown));
+    onUnmounted(() => window.removeEventListener("keydown", onChannelPaneKeydown));
 
     const sectionSaveUnits = computed(() => {
       const id = selectedSection.value?.id || "";
@@ -1752,6 +1880,7 @@ const SettingsView = {
         consoleLineDirty.value ||
         consoleLarkDirty.value ||
         consoleMixinDirty.value ||
+        consoleDiscordDirty.value ||
         consoleGuardDirty.value
     );
     const consoleSaveDisabled = computed(
@@ -1771,6 +1900,9 @@ const SettingsView = {
     );
     const mixinSaveDisabled = computed(
       () => consoleLoading.value || consoleSaving.value || !consoleMixinDirty.value
+    );
+    const discordSaveDisabled = computed(
+      () => consoleLoading.value || consoleSaving.value || !consoleDiscordDirty.value
     );
     const guardSaveDisabled = computed(
       () => consoleLoading.value || consoleSaving.value || !consoleGuardDirty.value
@@ -2815,6 +2947,7 @@ const SettingsView = {
       { id: "line", dirty: () => consoleLineDirty.value, slice: () => state.line, sync: updateConsoleLineDirty },
       { id: "lark", dirty: () => consoleLarkDirty.value, slice: () => state.lark, sync: updateConsoleLarkDirty },
       { id: "mixin", dirty: () => consoleMixinDirty.value, slice: () => state.mixin, sync: updateConsoleMixinDirty },
+      { id: "discord", dirty: () => consoleDiscordDirty.value, slice: () => state.discord, sync: updateConsoleDiscordDirty },
       { id: "guard", dirty: () => consoleGuardDirty.value, slice: () => state.guard, sync: updateConsoleGuardDirty },
     ];
 
@@ -2830,6 +2963,7 @@ const SettingsView = {
       const line = data?.line && typeof data.line === "object" ? data.line : {};
       const lark = data?.lark && typeof data.lark === "object" ? data.lark : {};
       const mixin = data?.mixin && typeof data.mixin === "object" ? data.mixin : {};
+      const discord = data?.discord && typeof data.discord === "object" ? data.discord : {};
       const guard = data?.guard && typeof data.guard === "object" ? data.guard : {};
       const guardNetwork = guard?.network && typeof guard.network === "object" ? guard.network : {};
       const guardURLFetch =
@@ -2867,6 +3001,11 @@ const SettingsView = {
       state.lark.group_trigger_mode = normalizeConsoleGroupTriggerMode(lark.group_trigger_mode);
       state.mixin.keystore_file = typeof mixin.keystore_file === "string" ? mixin.keystore_file : "";
       state.mixin.allowed_conversation_ids_text = formatConfigList(mixin.allowed_conversation_ids);
+      state.discord.bot_token = typeof discord.bot_token === "string" ? discord.bot_token : "";
+      state.discord.allowed_guild_ids_text = formatConfigList(discord.allowed_guild_ids);
+      state.discord.allowed_channel_ids_text = formatConfigList(discord.allowed_channel_ids);
+      state.discord.allowed_user_ids_text = formatConfigList(discord.allowed_user_ids);
+      state.discord.group_trigger_mode = normalizeDiscordGroupTriggerMode(discord.group_trigger_mode);
       state.guard.enabled = typeof guard.enabled === "boolean" ? guard.enabled : true;
       state.guard.url_fetch_allowed_url_prefixes_text = formatConfigList(guardURLFetch.allowed_url_prefixes);
       state.guard.deny_private_ips =
@@ -2891,11 +3030,13 @@ const SettingsView = {
       state.managedRuntimes.slack = false;
       state.managedRuntimes.lark = false;
       state.managedRuntimes.mixin = false;
+      state.managedRuntimes.discord = false;
       Object.assign(state.telegram, buildEmptyTelegramConsoleState());
       Object.assign(state.slack, buildEmptySlackConsoleState());
       Object.assign(state.line, buildEmptyLineConsoleState());
       Object.assign(state.lark, buildEmptyLarkConsoleState());
       Object.assign(state.mixin, buildEmptyMixinConsoleState());
+      Object.assign(state.discord, buildEmptyDiscordConsoleState());
       Object.assign(state.guard, buildEmptyGuardConsoleState());
       consoleEnvManaged.value = {};
       consoleSecretFields.value = {};
@@ -3616,6 +3757,10 @@ const SettingsView = {
         consoleEnvManaged.value?.mixin && typeof consoleEnvManaged.value.mixin === "object"
           ? consoleEnvManaged.value.mixin
           : {};
+      const discordEnv =
+        consoleEnvManaged.value?.discord && typeof consoleEnvManaged.value.discord === "object"
+          ? consoleEnvManaged.value.discord
+          : {};
       const managed_runtimes = MANAGED_RUNTIME_ITEMS.filter((item) => state.managedRuntimes[item.id]).map((item) => item.id);
       const telegram = {
         allowed_chat_ids: parseConfigListText(state.telegram.allowed_chat_ids_text),
@@ -3669,6 +3814,17 @@ const SettingsView = {
         keystore_file: consoleFieldRawValue(mixinEnv, "keystore_file") || trimText(state.mixin.keystore_file),
         allowed_conversation_ids: parseConfigListText(state.mixin.allowed_conversation_ids_text),
       };
+      const discord = {
+        allowed_guild_ids: parseConfigListText(state.discord.allowed_guild_ids_text),
+        allowed_channel_ids: parseConfigListText(state.discord.allowed_channel_ids_text),
+        allowed_user_ids: parseConfigListText(state.discord.allowed_user_ids_text),
+        group_trigger_mode: normalizeDiscordGroupTriggerMode(state.discord.group_trigger_mode),
+      };
+      discord.bot_token = consoleFieldRawValue(discordEnv, "bot_token") || includeConsoleSecretValue(
+        "discord",
+        "bot_token",
+        state.discord.bot_token,
+      );
       const guard = {
         enabled: !!state.guard.enabled,
         network: {
@@ -3704,10 +3860,13 @@ const SettingsView = {
       if (target === "mixin") {
         return { mixin };
       }
+      if (target === "discord") {
+        return { discord };
+      }
       if (target === "guard") {
         return { guard };
       }
-      return { managed_runtimes, telegram, slack, line, lark, mixin, guard };
+      return { managed_runtimes, telegram, slack, line, lark, mixin, discord, guard };
     }
 
     function consoleFieldEntry(kind, field) {
@@ -3837,6 +3996,20 @@ const SettingsView = {
       }
       state.mixin[key] = String(value || "");
       updateConsoleMixinDirty();
+    }
+
+    function updateDiscordField(field, value) {
+      const key = String(field || "").trim();
+      if (!key || !Object.prototype.hasOwnProperty.call(state.discord, key)) {
+        return;
+      }
+      state.discord[key] = String(value || "");
+      markConsoleSecretDirty("discord", key);
+      updateConsoleDiscordDirty();
+    }
+
+    function updateDiscordGroupTrigger(item) {
+      updateDiscordField("group_trigger_mode", item?.value || "strict");
     }
 
     function updateGuardField(field, value) {
@@ -4000,7 +4173,7 @@ const SettingsView = {
     }
 
     async function saveConsoleSettings(target = "all", { notify = true } = {}) {
-      const known = ["runtimes", "telegram", "slack", "line", "lark", "mixin", "guard"];
+      const known = ["runtimes", "telegram", "slack", "line", "lark", "mixin", "discord", "guard"];
       const requested = Array.isArray(target) ? target.map(String) : [String(target)];
       const targets = requested.includes("all") ? ["all"] : requested.filter((item) => known.includes(item));
       if (!selectedEndpointIsConsole.value || targets.length === 0) {
@@ -4013,6 +4186,7 @@ const SettingsView = {
         line: lineSaveDisabled,
         lark: larkSaveDisabled,
         mixin: mixinSaveDisabled,
+        discord: discordSaveDisabled,
         guard: guardSaveDisabled,
       };
       if (targets[0] === "all" && (consoleLoading.value || consoleSaving.value || !consoleDirty.value)) {
@@ -4803,6 +4977,15 @@ const SettingsView = {
       sectionSaveFailed,
       sectionSaveBusy,
       saveSection,
+      openChannel,
+      channelTiles,
+      channelGroups,
+      channelTriggerHiddenPaths,
+      CHANNEL_TRIGGER_CONFIG_GROUPS,
+      openChannelTitleKey,
+      openChannelPane,
+      closeChannelPane,
+      channelManagedItem,
       leaveDialogOpen,
       leaveDialogText,
       leaveDialogActions,
@@ -4824,6 +5007,7 @@ const SettingsView = {
       lineSaveDisabled,
       larkSaveDisabled,
       mixinSaveDisabled,
+      discordSaveDisabled,
       guardSaveDisabled,
       personaDirty,
       personaSaveDisabled,
@@ -4956,6 +5140,8 @@ const SettingsView = {
       updateLineField,
       updateLarkField,
       updateMixinField,
+      updateDiscordField,
+      updateDiscordGroupTrigger,
       updateTelegramGroupTrigger,
       updateSlackGroupTrigger,
       updateLineGroupTrigger,
@@ -5278,7 +5464,41 @@ const SettingsView = {
           </div>
 
           <div v-else-if="selectedSection.id === 'channels'" class="settings-panel-body settings-panel-body-plain">
-            <QCard variant="default">
+            <div class="settings-channels" :class="{ 'has-pane': openChannel && !isMobile }">
+              <div class="settings-channel-groups">
+                <section v-for="group in channelGroups" :key="group.id" class="settings-channel-group">
+                  <h3 class="ui-kicker settings-channel-group-title">{{ t(group.titleKey) }}</h3>
+                  <div class="settings-channel-grid">
+                    <button
+                      v-for="item in group.items"
+                      :key="item.id"
+                      type="button"
+                      class="settings-channel-tile"
+                      :class="{ 'is-configured': item.configured, 'is-active': openChannel === item.id }"
+                      :aria-pressed="openChannel === item.id ? 'true' : 'false'"
+                      @click="openChannelPane(item.id)"
+                    >
+                      <img class="settings-channel-tile-logo" :src="item.logo" alt="" />
+                      <span class="settings-channel-tile-name">{{ t(item.titleKey) }}</span>
+                      <span v-if="item.running" class="settings-channel-tile-running" :title="t('settings_channel_state_running')" :aria-label="t('settings_channel_state_running')"></span>
+                      <span v-if="item.dirty" class="settings-channel-tile-dirty" :title="t('settings_channel_unsaved')" :aria-label="t('settings_channel_unsaved')"></span>
+                    </button>
+                  </div>
+                </section>
+              </div>
+              <div v-if="openChannel && isMobile" class="settings-channel-pane-mask" aria-hidden="true" @click="closeChannelPane"></div>
+              <Transition :name="isMobile ? 'settings-channel-sheet' : 'settings-channel-pane'">
+                <aside
+                  v-show="openChannel"
+                  class="settings-channel-pane"
+                  :class="{ 'is-sheet': isMobile }"
+                  :role="isMobile ? 'dialog' : null"
+                  :aria-modal="isMobile ? 'true' : null"
+                  :aria-label="t(openChannelTitleKey)"
+                >
+                  <div class="settings-channel-pane-shell">
+                      <div class="settings-channel-pane-scroll">
+            <template v-if="openChannel === 'telegram'">
               <div class="settings-panel-shell">
                 <header class="settings-panel-head settings-channel-panel-head">
                   <div class="settings-panel-copy">
@@ -5296,6 +5516,9 @@ const SettingsView = {
                       <PhDotsThree class="settings-llm-actions-menu-icon" />
                       <span class="settings-llm-actions-menu-accessible">{{ t("todo_action_more") }}</span>
                     </QDropdownMenu>
+                    <QButton class="plain xs icon" :title="t('settings_channel_close')" :aria-label="t('settings_channel_close')" @click="closeChannelPane">
+                      <PhX class="icon" />
+                    </QButton>
                   </div>
                 </header>
 
@@ -5303,10 +5526,7 @@ const SettingsView = {
                   <div class="settings-form-grid">
                     <div class="settings-field is-wide">
                       <span class="settings-field-label">{{ t("settings_console_telegram_bot_token_label") }}</span>
-                      <div v-if="consoleFieldEnvManaged('telegram', 'bot_token')" class="settings-env-managed">
-                        <code class="settings-env-managed-env">{{ consoleFieldManagedHeadline("telegram", "bot_token") }}</code>
-                        <p class="settings-env-managed-body">{{ t("settings_env_managed_body") }}</p>
-                      </div>
+                      <EnvManagedField v-if="consoleFieldEnvManaged('telegram', 'bot_token')" :name="consoleFieldManagedHeadline('telegram', 'bot_token')" />
                       <QInput
                         v-else
                         :modelValue="state.telegram.bot_token"
@@ -5342,9 +5562,9 @@ const SettingsView = {
                   </div>
                 </div>
               </div>
-            </QCard>
+            </template>
 
-            <QCard variant="default">
+                        <template v-if="openChannel === 'slack'">
               <div class="settings-panel-shell">
                 <header class="settings-panel-head settings-channel-panel-head">
                   <div class="settings-panel-copy">
@@ -5362,6 +5582,9 @@ const SettingsView = {
                       <PhDotsThree class="settings-llm-actions-menu-icon" />
                       <span class="settings-llm-actions-menu-accessible">{{ t("todo_action_more") }}</span>
                     </QDropdownMenu>
+                    <QButton class="plain xs icon" :title="t('settings_channel_close')" :aria-label="t('settings_channel_close')" @click="closeChannelPane">
+                      <PhX class="icon" />
+                    </QButton>
                   </div>
                 </header>
 
@@ -5369,10 +5592,7 @@ const SettingsView = {
                   <div class="settings-form-grid">
                     <div class="settings-field is-wide">
                       <span class="settings-field-label">{{ t("settings_console_slack_bot_token_label") }}</span>
-                      <div v-if="consoleFieldEnvManaged('slack', 'bot_token')" class="settings-env-managed">
-                        <code class="settings-env-managed-env">{{ consoleFieldManagedHeadline("slack", "bot_token") }}</code>
-                        <p class="settings-env-managed-body">{{ t("settings_env_managed_body") }}</p>
-                      </div>
+                      <EnvManagedField v-if="consoleFieldEnvManaged('slack', 'bot_token')" :name="consoleFieldManagedHeadline('slack', 'bot_token')" />
                       <QInput
                         v-else
                         :modelValue="state.slack.bot_token"
@@ -5385,10 +5605,7 @@ const SettingsView = {
 
                     <div class="settings-field is-wide">
                       <span class="settings-field-label">{{ t("settings_console_slack_app_token_label") }}</span>
-                      <div v-if="consoleFieldEnvManaged('slack', 'app_token')" class="settings-env-managed">
-                        <code class="settings-env-managed-env">{{ consoleFieldManagedHeadline("slack", "app_token") }}</code>
-                        <p class="settings-env-managed-body">{{ t("settings_env_managed_body") }}</p>
-                      </div>
+                      <EnvManagedField v-if="consoleFieldEnvManaged('slack', 'app_token')" :name="consoleFieldManagedHeadline('slack', 'app_token')" />
                       <QInput
                         v-else
                         :modelValue="state.slack.app_token"
@@ -5436,9 +5653,9 @@ const SettingsView = {
                   </div>
                 </div>
               </div>
-            </QCard>
+            </template>
 
-            <QCard variant="default">
+                        <template v-if="openChannel === 'line'">
               <div class="settings-panel-shell">
                 <header class="settings-panel-head settings-channel-panel-head">
                   <div class="settings-panel-copy">
@@ -5456,6 +5673,9 @@ const SettingsView = {
                       <PhDotsThree class="settings-llm-actions-menu-icon" />
                       <span class="settings-llm-actions-menu-accessible">{{ t("todo_action_more") }}</span>
                     </QDropdownMenu>
+                    <QButton class="plain xs icon" :title="t('settings_channel_close')" :aria-label="t('settings_channel_close')" @click="closeChannelPane">
+                      <PhX class="icon" />
+                    </QButton>
                   </div>
                 </header>
 
@@ -5463,10 +5683,7 @@ const SettingsView = {
                   <div class="settings-form-grid">
                     <div class="settings-field is-wide">
                       <span class="settings-field-label">{{ t("settings_console_line_channel_access_token_label") }}</span>
-                      <div v-if="consoleFieldEnvManaged('line', 'channel_access_token')" class="settings-env-managed">
-                        <code class="settings-env-managed-env">{{ consoleFieldManagedHeadline("line", "channel_access_token") }}</code>
-                        <p class="settings-env-managed-body">{{ t("settings_env_managed_body") }}</p>
-                      </div>
+                      <EnvManagedField v-if="consoleFieldEnvManaged('line', 'channel_access_token')" :name="consoleFieldManagedHeadline('line', 'channel_access_token')" />
                       <QInput
                         v-else
                         :modelValue="state.line.channel_access_token"
@@ -5479,10 +5696,7 @@ const SettingsView = {
 
                     <div class="settings-field is-wide">
                       <span class="settings-field-label">{{ t("settings_console_line_channel_secret_label") }}</span>
-                      <div v-if="consoleFieldEnvManaged('line', 'channel_secret')" class="settings-env-managed">
-                        <code class="settings-env-managed-env">{{ consoleFieldManagedHeadline("line", "channel_secret") }}</code>
-                        <p class="settings-env-managed-body">{{ t("settings_env_managed_body") }}</p>
-                      </div>
+                      <EnvManagedField v-if="consoleFieldEnvManaged('line', 'channel_secret')" :name="consoleFieldManagedHeadline('line', 'channel_secret')" />
                       <QInput
                         v-else
                         :modelValue="state.line.channel_secret"
@@ -5518,9 +5732,9 @@ const SettingsView = {
                   </div>
                 </div>
               </div>
-            </QCard>
+            </template>
 
-            <QCard variant="default">
+                        <template v-if="openChannel === 'lark'">
               <div class="settings-panel-shell">
                 <header class="settings-panel-head settings-channel-panel-head">
                   <div class="settings-panel-copy">
@@ -5538,6 +5752,9 @@ const SettingsView = {
                       <PhDotsThree class="settings-llm-actions-menu-icon" />
                       <span class="settings-llm-actions-menu-accessible">{{ t("todo_action_more") }}</span>
                     </QDropdownMenu>
+                    <QButton class="plain xs icon" :title="t('settings_channel_close')" :aria-label="t('settings_channel_close')" @click="closeChannelPane">
+                      <PhX class="icon" />
+                    </QButton>
                   </div>
                 </header>
 
@@ -5545,10 +5762,7 @@ const SettingsView = {
                   <div class="settings-form-grid">
                     <div class="settings-field is-wide">
                       <span class="settings-field-label">{{ t("settings_console_lark_app_id_label") }}</span>
-                      <div v-if="consoleFieldEnvManaged('lark', 'app_id')" class="settings-env-managed">
-                        <code class="settings-env-managed-env">{{ consoleFieldManagedHeadline("lark", "app_id") }}</code>
-                        <p class="settings-env-managed-body">{{ t("settings_env_managed_body") }}</p>
-                      </div>
+                      <EnvManagedField v-if="consoleFieldEnvManaged('lark', 'app_id')" :name="consoleFieldManagedHeadline('lark', 'app_id')" />
                       <QInput
                         v-else
                         :modelValue="state.lark.app_id"
@@ -5560,10 +5774,7 @@ const SettingsView = {
 
                     <div class="settings-field is-wide">
                       <span class="settings-field-label">{{ t("settings_console_lark_app_secret_label") }}</span>
-                      <div v-if="consoleFieldEnvManaged('lark', 'app_secret')" class="settings-env-managed">
-                        <code class="settings-env-managed-env">{{ consoleFieldManagedHeadline("lark", "app_secret") }}</code>
-                        <p class="settings-env-managed-body">{{ t("settings_env_managed_body") }}</p>
-                      </div>
+                      <EnvManagedField v-if="consoleFieldEnvManaged('lark', 'app_secret')" :name="consoleFieldManagedHeadline('lark', 'app_secret')" />
                       <QInput
                         v-else
                         :modelValue="state.lark.app_secret"
@@ -5599,9 +5810,9 @@ const SettingsView = {
                   </div>
                 </div>
               </div>
-            </QCard>
+            </template>
 
-            <QCard variant="default">
+                        <template v-if="openChannel === 'mixin'">
               <div class="settings-panel-shell">
                 <header class="settings-panel-head settings-channel-panel-head">
                   <div class="settings-panel-copy">
@@ -5619,6 +5830,9 @@ const SettingsView = {
                       <PhDotsThree class="settings-llm-actions-menu-icon" />
                       <span class="settings-llm-actions-menu-accessible">{{ t("todo_action_more") }}</span>
                     </QDropdownMenu>
+                    <QButton class="plain xs icon" :title="t('settings_channel_close')" :aria-label="t('settings_channel_close')" @click="closeChannelPane">
+                      <PhX class="icon" />
+                    </QButton>
                   </div>
                 </header>
 
@@ -5626,10 +5840,7 @@ const SettingsView = {
                   <div class="settings-form-grid">
                     <div class="settings-field is-wide">
                       <span class="settings-field-label">{{ t("settings_console_mixin_keystore_file_label") }}</span>
-                      <div v-if="consoleFieldEnvManaged('mixin', 'keystore_file')" class="settings-env-managed">
-                        <code class="settings-env-managed-env">{{ consoleFieldManagedHeadline("mixin", "keystore_file") }}</code>
-                        <p class="settings-env-managed-body">{{ t("settings_env_managed_body") }}</p>
-                      </div>
+                      <EnvManagedField v-if="consoleFieldEnvManaged('mixin', 'keystore_file')" :name="consoleFieldManagedHeadline('mixin', 'keystore_file')" />
                       <QInput
                         v-else
                         :modelValue="state.mixin.keystore_file"
@@ -5655,8 +5866,143 @@ const SettingsView = {
                   </div>
                 </div>
               </div>
-            </QCard>
+            </template>
 
+                        <template v-if="openChannel === 'discord'">
+              <div class="settings-panel-shell">
+                <header class="settings-panel-head settings-channel-panel-head">
+                  <div class="settings-panel-copy">
+                    <h3 class="settings-panel-title workspace-document-title">{{ t("settings_console_discord_title") }}</h3>
+                    <p class="settings-panel-meta">{{ t("settings_console_discord_token_note") }}</p>
+                  </div>
+                  <div class="settings-profile-actions settings-default-llm-actions">
+                    <QDropdownMenu
+                      class="settings-llm-actions-menu"
+                      :items="channelActionMenuItems('discord')"
+                      hideSelected
+                      hideActionLabel
+                      :disabled="consoleLoading || consoleSaving"
+                    >
+                      <PhDotsThree class="settings-llm-actions-menu-icon" />
+                      <span class="settings-llm-actions-menu-accessible">{{ t("todo_action_more") }}</span>
+                    </QDropdownMenu>
+                    <QButton class="plain xs icon" :title="t('settings_channel_close')" :aria-label="t('settings_channel_close')" @click="closeChannelPane">
+                      <PhX class="icon" />
+                    </QButton>
+                  </div>
+                </header>
+
+                <div class="settings-panel-body">
+                  <div class="settings-form-grid">
+                    <div class="settings-field is-wide">
+                      <span class="settings-field-label">{{ t("settings_console_discord_bot_token_label") }}</span>
+                      <EnvManagedField v-if="consoleFieldEnvManaged('discord', 'bot_token')" :name="consoleFieldManagedHeadline('discord', 'bot_token')" />
+                      <QInput
+                        v-else
+                        :modelValue="state.discord.bot_token"
+                        inputType="password"
+                        :placeholder="consoleSecretPlaceholder('discord', 'bot_token', 'settings_console_discord_bot_token_placeholder')"
+                        :disabled="consoleLoading || consoleSaving || !consoleSecretEditable('discord', 'bot_token')"
+                        @update:modelValue="updateDiscordField('bot_token', $event)"
+                      />
+                    </div>
+
+                    <div class="settings-field is-wide">
+                      <span class="settings-field-label">{{ t("settings_console_discord_allowed_guild_ids_label") }}</span>
+                      <QTextarea
+                        :modelValue="state.discord.allowed_guild_ids_text"
+                        :rows="3"
+                        :placeholder="t('settings_console_discord_allowed_ids_placeholder')"
+                        :disabled="consoleLoading || consoleSaving"
+                        @update:modelValue="updateDiscordField('allowed_guild_ids_text', $event)"
+                      />
+                      <p class="settings-field-note">{{ t("settings_console_discord_allowed_guild_ids_note") }}</p>
+                    </div>
+
+                    <div class="settings-field is-wide">
+                      <span class="settings-field-label">{{ t("settings_console_discord_allowed_channel_ids_label") }}</span>
+                      <QTextarea
+                        :modelValue="state.discord.allowed_channel_ids_text"
+                        :rows="3"
+                        :placeholder="t('settings_console_discord_allowed_ids_placeholder')"
+                        :disabled="consoleLoading || consoleSaving"
+                        @update:modelValue="updateDiscordField('allowed_channel_ids_text', $event)"
+                      />
+                      <p class="settings-field-note">{{ t("settings_console_discord_allowed_channel_ids_note") }}</p>
+                    </div>
+
+                    <div class="settings-field is-wide">
+                      <span class="settings-field-label">{{ t("settings_console_discord_allowed_user_ids_label") }}</span>
+                      <QTextarea
+                        :modelValue="state.discord.allowed_user_ids_text"
+                        :rows="3"
+                        :placeholder="t('settings_console_discord_allowed_ids_placeholder')"
+                        :disabled="consoleLoading || consoleSaving"
+                        @update:modelValue="updateDiscordField('allowed_user_ids_text', $event)"
+                      />
+                      <p class="settings-field-note">{{ t("settings_console_discord_allowed_user_ids_note") }}</p>
+                    </div>
+
+                    <div class="settings-field is-wide">
+                      <span class="settings-field-label">{{ t("settings_console_group_trigger_label") }}</span>
+                      <QDropdownMenu
+                        :key="state.discord.group_trigger_mode || 'discord-group-trigger'"
+                        :items="groupTriggerItems"
+                        :initialItem="groupTriggerItems.find((item) => item.value === state.discord.group_trigger_mode) || groupTriggerItems[1]"
+                        @change="updateDiscordGroupTrigger"
+                      />
+                      <p class="settings-field-note">{{ t("settings_console_discord_group_trigger_note") }}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </template>
+                    <!-- Kept mounted while the pane is closed, so a draft here is not lost. -->
+                    <div
+                      v-for="group in CHANNEL_TRIGGER_CONFIG_GROUPS"
+                      v-show="openChannel === group.id"
+                      :key="group.id"
+                      class="settings-channel-trigger-config"
+                    >
+                      <ConfigSettingsPanel
+                        :groups="[group]"
+                        :values="consoleConfigValues"
+                        :fieldStates="consoleFieldStates"
+                        :loading="consoleLoading"
+                        :saving="consoleSaving && consoleSavingTarget === 'config'"
+                        :hiddenPaths="channelTriggerHiddenPaths(group.id)"
+                        embedded
+                        hideSingleGroupHeading
+                        saveScope="console"
+                        @save="saveConfigSettings('console', $event)"
+                      />
+                    </div>
+                    <div v-if="channelManagedItem(openChannel)" class="settings-channel-console">
+                      <div class="settings-toggle-row settings-channel-runtime-row">
+                        <div class="settings-toggle-copy">
+                          <strong class="settings-toggle-title">{{ t("settings_channel_run_in_console") }}</strong>
+                          <span class="settings-toggle-note">{{ t(channelManagedItem(openChannel).noteKey) }}</span>
+                        </div>
+                        <QSwitch
+                          :modelValue="state.managedRuntimes[openChannel]"
+                          :disabled="consoleLoading || consoleSaving"
+                          @update:modelValue="setManagedRuntimeEnabled(openChannel, $event)"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                      <footer v-if="sectionSaveUnits.length || sectionSaveFailed" class="settings-channel-pane-foot">
+                        <p class="settings-channel-pane-foot-text" :class="{ 'is-error': sectionSaveFailed }" role="status">
+                          {{ sectionSaveFailed ? t('settings_save_bar_failed', { items: sectionSaveFailed }) : t('settings_channel_unsaved_note') }}
+                        </p>
+                        <QButton class="primary" :loading="sectionSaving" :disabled="sectionSaveBusy || !sectionSaveUnits.length" @click="saveSection">
+                          {{ t('action_save') }}
+                        </QButton>
+                      </footer>
+                    </div>
+                </aside>
+              </Transition>
+            </div>
           </div>
 
           <div v-else-if="selectedSection.id === 'security'" class="settings-panel-body settings-panel-body-plain">
@@ -6161,19 +6507,6 @@ const SettingsView = {
                   </div>
                 </div>
 
-                <div v-else-if="selectedSection.id === 'runtimes'" class="settings-toggle-list">
-                  <div v-for="item in managedRuntimeItems" :key="item.id" class="settings-toggle-row">
-                    <div class="settings-toggle-copy">
-                      <strong class="settings-toggle-title">{{ t(item.titleKey) }}</strong>
-                      <span class="settings-toggle-note">{{ t(item.noteKey) }}</span>
-                    </div>
-                    <QSwitch
-                      :modelValue="state.managedRuntimes[item.id]"
-                      :disabled="consoleLoading || consoleSaving"
-                      @update:modelValue="setManagedRuntimeEnabled(item.id, $event)"
-                    />
-                  </div>
-                </div>
               </div>
               </div>
             </QCard>
