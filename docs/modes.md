@@ -51,6 +51,12 @@ For the other runtime modes, use the docs below.
 - Purpose: Mixin Blaze WebSocket bot runtime
 - Docs: [mixin.md](./mixin.md)
 
+## Discord
+
+- Command: `morph discord`
+- Purpose: Discord Gateway bot runtime (DMs, server channels, threads)
+- Docs: [discord.md](./discord.md)
+
 ## Note
 
 Legacy standalone daemon mode (`morph serve`) has been removed.

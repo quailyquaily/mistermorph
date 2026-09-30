@@ -19,10 +19,12 @@ import (
 	"github.com/google/uuid"
 	"github.com/quailyquaily/mistermorph/contacts"
 	busruntime "github.com/quailyquaily/mistermorph/internal/bus"
+	discordbus "github.com/quailyquaily/mistermorph/internal/bus/adapters/discord"
 	linebus "github.com/quailyquaily/mistermorph/internal/bus/adapters/line"
 	mixinbus "github.com/quailyquaily/mistermorph/internal/bus/adapters/mixin"
 	slackbus "github.com/quailyquaily/mistermorph/internal/bus/adapters/slack"
 	telegrambus "github.com/quailyquaily/mistermorph/internal/bus/adapters/telegram"
+	"github.com/quailyquaily/mistermorph/internal/discordapi"
 	refid "github.com/quailyquaily/mistermorph/internal/entryutil/refid"
 	larkapi "github.com/quailyquaily/mistermorph/internal/larkapi"
 	"github.com/quailyquaily/mistermorph/internal/mixinapi"
@@ -45,6 +47,8 @@ type SenderOptions struct {
 	LarkAppSecret     string
 	LarkBaseURL       string
 	MixinKeystoreFile string
+	DiscordBotToken   string
+	DiscordBaseURL    string
 	BusMaxInFlight    int
 	Logger            *slog.Logger
 }
@@ -55,6 +59,9 @@ type RoutingSender struct {
 	slackDelivery     *slackbus.DeliveryAdapter
 	lineDelivery      *linebus.DeliveryAdapter
 	mixinDelivery     *mixinbus.DeliveryAdapter
+	discordDelivery   *discordbus.DeliveryAdapter
+	discordClient     *discordapi.Client
+	discordInitErr    error
 	telegramClient    *http.Client
 	lineClient        *http.Client
 	larkClient        *http.Client
@@ -199,6 +206,16 @@ func NewRoutingSender(ctx context.Context, opts SenderOptions) (*RoutingSender, 
 		_ = sender.Close()
 		return nil, err
 	}
+	if token := strings.TrimSpace(opts.DiscordBotToken); token != "" {
+		sender.discordClient, sender.discordInitErr = discordapi.NewClient(token, discordapi.ClientOptions{BaseURL: strings.TrimSpace(opts.DiscordBaseURL)})
+	} else {
+		sender.discordInitErr = fmt.Errorf("discord sender is not configured")
+	}
+	sender.discordDelivery, err = discordbus.NewDeliveryAdapter(discordbus.DeliveryAdapterOptions{SendText: sender.sendDiscordTarget})
+	if err != nil {
+		_ = sender.Close()
+		return nil, err
+	}
 
 	busHandler := func(deliverCtx context.Context, msg busruntime.BusMessage) error {
 		switch msg.Direction {
@@ -224,6 +241,8 @@ func NewRoutingSender(ctx context.Context, opts SenderOptions) (*RoutingSender, 
 			accepted, deduped, deliverErr = sender.lineDelivery.Deliver(deliverCtx, msg)
 		case busruntime.ChannelMixin:
 			accepted, deduped, deliverErr = sender.mixinDelivery.Deliver(deliverCtx, msg)
+		case busruntime.ChannelDiscord:
+			accepted, deduped, deliverErr = sender.discordDelivery.Deliver(deliverCtx, msg)
 		default:
 			deliverErr = fmt.Errorf("unsupported outbound channel: %s", msg.Channel)
 		}
@@ -320,6 +339,12 @@ func (s *RoutingSender) Send(ctx context.Context, contact contacts.Contact, deci
 			return false, false, resolveErr
 		}
 		return s.publishMixin(ctx, target, decision)
+	case contacts.ChannelDiscord:
+		target, resolveErr := ResolveDiscordTargetWithChatID(contact, decision.ChatID)
+		if resolveErr != nil {
+			return false, false, resolveErr
+		}
+		return s.publishDiscord(ctx, target, decision)
 	default:
 		return false, false, fmt.Errorf("unsupported delivery channel: %s", channel)
 	}
@@ -529,6 +554,58 @@ func (s *RoutingSender) publishMixin(ctx context.Context, target mixinSendTarget
 		CreatedAt:       time.Now().UTC(),
 		Extensions: busruntime.MessageExtensions{
 			ChannelID: conversationID,
+			ReplyTo:   strings.TrimSpace(envelope.ReplyTo),
+		},
+	}
+	return s.publishAndAwait(ctx, message)
+}
+
+// publishDiscord sends to a Discord channel, opening the DM channel first when the target is a
+// user without one.
+func (s *RoutingSender) publishDiscord(ctx context.Context, target discordSendTarget, decision contacts.ShareDecision) (bool, bool, error) {
+	if s == nil || s.bus == nil {
+		return false, false, fmt.Errorf("discord sender is not configured")
+	}
+	if s.discordInitErr != nil {
+		return false, false, s.discordInitErr
+	}
+	idempotencyKey := strings.TrimSpace(decision.IdempotencyKey)
+	if idempotencyKey == "" {
+		return false, false, fmt.Errorf("idempotency_key is required")
+	}
+	channelID := strings.TrimSpace(target.ChannelID)
+	if userID := strings.TrimSpace(target.UserID); channelID == "" && userID != "" {
+		channel, err := s.discordClient.CreateDM(ctx, userID)
+		if err != nil {
+			return false, false, err
+		}
+		channelID = strings.TrimSpace(channel.ID)
+	}
+	conversationKey, err := busruntime.BuildDiscordConversationKey(channelID)
+	if err != nil {
+		return false, false, err
+	}
+	payloadRaw, err := buildEnvelopePayload(decision, decision.ContentType, decision.PayloadBase64, time.Now().UTC())
+	if err != nil {
+		return false, false, err
+	}
+	var envelope busruntime.MessageEnvelope
+	if err := json.Unmarshal(payloadRaw, &envelope); err != nil {
+		return false, false, err
+	}
+	message := busruntime.BusMessage{
+		ID:              "bus_" + uuid.NewString(),
+		Direction:       busruntime.DirectionOutbound,
+		Channel:         busruntime.ChannelDiscord,
+		Topic:           contacts.ShareTopic,
+		ConversationKey: conversationKey,
+		ParticipantKey:  strings.TrimSpace(target.UserID),
+		IdempotencyKey:  idempotencyKey,
+		CorrelationID:   "contactsruntime:discord:" + idempotencyKey,
+		PayloadBase64:   base64.RawURLEncoding.EncodeToString(payloadRaw),
+		CreatedAt:       time.Now().UTC(),
+		Extensions: busruntime.MessageExtensions{
+			ChannelID: channelID,
 			ReplyTo:   strings.TrimSpace(envelope.ReplyTo),
 		},
 	}
@@ -1025,6 +1102,28 @@ func (s *RoutingSender) sendMixinTarget(ctx context.Context, target mixinbus.Del
 	return s.mixinMessages.SendMessages(ctx, []mixinapi.MessageRequest{message})
 }
 
+// sendDiscordTarget sends text to a Discord channel, split into messages of at most 2000
+// characters, pinging nobody.
+func (s *RoutingSender) sendDiscordTarget(ctx context.Context, channelID, text string, opts discordbus.SendTextOptions) error {
+	if s == nil || s.discordClient == nil {
+		if s != nil && s.discordInitErr != nil {
+			return s.discordInitErr
+		}
+		return fmt.Errorf("discord sender is not configured")
+	}
+	for index, part := range discordapi.SplitContent(text, 0) {
+		msg := discordapi.MessageCreate{Content: part, AllowedMentions: discordapi.NoMentions()}
+		if index == 0 && strings.TrimSpace(opts.ReplyToMessageID) != "" {
+			no := false
+			msg.MessageReference = &discordapi.MessageReference{MessageID: strings.TrimSpace(opts.ReplyToMessageID), FailIfNotExists: &no}
+		}
+		if _, err := s.discordClient.CreateMessage(ctx, channelID, msg); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (s *RoutingSender) ensureMixinClient() error {
 	s.mixinOnce.Do(func() {
 		if s.mixinClient == nil && s.mixinKeystoreFile == "" {
@@ -1395,6 +1494,59 @@ func ResolveMixinTargetWithChatID(contact contacts.Contact, chatIDHint string) (
 		return mixinSendTarget{UserID: userID}, nil
 	}
 	return mixinSendTarget{}, fmt.Errorf("mixin chat_id %q not found in mixin_chat_ids and no mixin_user_id fallback", chatID)
+}
+
+type discordSendTarget struct {
+	UserID    string
+	ChannelID string
+}
+
+// ResolveDiscordTarget prefers the user's DM channel, then the user (a DM channel is opened), then
+// a channel the contact was seen in.
+func ResolveDiscordTarget(contact contacts.Contact) (discordSendTarget, error) {
+	if dm := refid.NormalizeDiscordID(contact.DiscordDMChannelID); dm != "" {
+		return discordSendTarget{UserID: refid.NormalizeDiscordID(contact.DiscordUserID), ChannelID: dm}, nil
+	}
+	if userID := refid.NormalizeDiscordID(contact.DiscordUserID); userID != "" {
+		return discordSendTarget{UserID: userID}, nil
+	}
+	if userID, ok := refid.ParseDiscordUserContactID(contact.ContactID); ok {
+		return discordSendTarget{UserID: userID}, nil
+	}
+	channelIDs := append([]string(nil), contact.DiscordChannelIDs...)
+	sort.Strings(channelIDs)
+	for _, raw := range channelIDs {
+		if channelID := refid.NormalizeDiscordID(raw); channelID != "" {
+			return discordSendTarget{ChannelID: channelID}, nil
+		}
+	}
+	if channelID, ok, err := refid.ParseDiscordChatIDHint(contact.ContactID); ok && err == nil {
+		return discordSendTarget{ChannelID: channelID}, nil
+	}
+	return discordSendTarget{}, fmt.Errorf("discord target not found in discord_user_id/discord_dm_channel_id/discord_channel_ids/contact_id")
+}
+
+// ResolveDiscordTargetWithChatID uses a "discord:<channel_id>" hint when the contact was seen there.
+func ResolveDiscordTargetWithChatID(contact contacts.Contact, chatIDHint string) (discordSendTarget, error) {
+	channelID, hasHint, err := refid.ParseDiscordChatIDHint(chatIDHint)
+	if err != nil {
+		return discordSendTarget{}, err
+	}
+	if !hasHint {
+		return ResolveDiscordTarget(contact)
+	}
+	if refid.NormalizeDiscordID(contact.DiscordDMChannelID) == channelID {
+		return discordSendTarget{UserID: refid.NormalizeDiscordID(contact.DiscordUserID), ChannelID: channelID}, nil
+	}
+	for _, raw := range contact.DiscordChannelIDs {
+		if refid.NormalizeDiscordID(raw) == channelID {
+			return discordSendTarget{ChannelID: channelID}, nil
+		}
+	}
+	if contact.Synthetic {
+		return discordSendTarget{ChannelID: channelID}, nil
+	}
+	return discordSendTarget{}, fmt.Errorf("discord chat_id %q is not a channel this contact was seen in", channelID)
 }
 
 func ResolveSlackTarget(contact contacts.Contact) (slackbus.DeliveryTarget, string, error) {

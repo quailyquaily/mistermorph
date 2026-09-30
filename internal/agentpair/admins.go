@@ -78,6 +78,13 @@ func normalizeStableIdentity(raw string) (string, error) {
 			return "", fmt.Errorf("Mixin identity must be mixin:<user_uuid>")
 		}
 		return "mixin:" + id.String(), nil
+	case strings.HasPrefix(lower, "discord_user:"):
+		userID := strings.TrimSpace(value[len("discord_user:"):])
+		id, err := strconv.ParseUint(userID, 10, 64)
+		if err != nil || id == 0 {
+			return "", fmt.Errorf("Discord identity must be discord_user:<user_id>")
+		}
+		return "discord_user:" + strconv.FormatUint(id, 10), nil
 	default:
 		return "", fmt.Errorf("unsupported platform identity")
 	}

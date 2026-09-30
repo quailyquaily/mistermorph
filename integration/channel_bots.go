@@ -14,6 +14,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/acpclient"
 	"github.com/quailyquaily/mistermorph/internal/channelopts"
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/depsutil"
+	discordruntime "github.com/quailyquaily/mistermorph/internal/channelruntime/discord"
 	mixinruntime "github.com/quailyquaily/mistermorph/internal/channelruntime/mixin"
 	slackruntime "github.com/quailyquaily/mistermorph/internal/channelruntime/slack"
 	telegramruntime "github.com/quailyquaily/mistermorph/internal/channelruntime/telegram"
@@ -65,6 +66,18 @@ type MixinOptions struct {
 	AllowedConversationIDs []string
 	TaskTimeout            time.Duration
 	MaxConcurrency         int
+}
+
+type DiscordOptions struct {
+	BotToken                      string
+	AllowedGuildIDs               []string
+	AllowedChannelIDs             []string
+	AllowedUserIDs                []string
+	TaskTimeout                   time.Duration
+	MaxConcurrency                int
+	GroupTriggerMode              string
+	AddressingConfidenceThreshold float64
+	AddressingInterjectThreshold  float64
 }
 
 type TelegramHooks struct {
@@ -128,6 +141,19 @@ func (rt *Runtime) NewMixinBot(opts MixinOptions) (BotRunner, error) {
 		return nil, fmt.Errorf("mixin credentials: %w", err)
 	}
 	return &mixinBotRunner{rt: rt, opts: opts, credentials: credentials}, nil
+}
+
+func (rt *Runtime) NewDiscordBot(opts DiscordOptions) (BotRunner, error) {
+	if rt == nil {
+		return nil, fmt.Errorf("runtime is nil")
+	}
+	if err := rt.snapshot().InitErr; err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(opts.BotToken) == "" {
+		return nil, fmt.Errorf("discord bot token is required")
+	}
+	return &discordBotRunner{rt: rt, opts: opts}, nil
 }
 
 type telegramBotRunner struct {
@@ -276,6 +302,51 @@ func (r *mixinBotRunner) Run(ctx context.Context) error {
 }
 
 func (r *mixinBotRunner) Close() error {
+	if r == nil {
+		return nil
+	}
+	return r.state.close()
+}
+
+type discordBotRunner struct {
+	rt    *Runtime
+	opts  DiscordOptions
+	state runState
+}
+
+func (r *discordBotRunner) Run(ctx context.Context) error {
+	if r == nil {
+		return fmt.Errorf("discord runner is nil")
+	}
+	return runChannelLoop(ctx, &r.state, "discord", r.rt, func(runCtx context.Context, snap runtimeSnapshot) (runErr error) {
+		common, cleanup, err := r.rt.prepareChannelDependencies(runCtx, snap)
+		if err != nil {
+			return err
+		}
+		defer func() { runErr = errors.Join(runErr, cleanup()) }()
+		runOpts := channelopts.BuildDiscordRunOptions(snap.Discord, channelopts.DiscordInput{
+			BotToken:                      r.opts.BotToken,
+			AllowedGuildIDs:               append([]string(nil), r.opts.AllowedGuildIDs...),
+			AllowedChannelIDs:             append([]string(nil), r.opts.AllowedChannelIDs...),
+			AllowedUserIDs:                append([]string(nil), r.opts.AllowedUserIDs...),
+			GroupTriggerMode:              r.opts.GroupTriggerMode,
+			AddressingConfidenceThreshold: r.opts.AddressingConfidenceThreshold,
+			AddressingInterjectThreshold:  r.opts.AddressingInterjectThreshold,
+			TaskTimeout:                   r.opts.TaskTimeout,
+			MaxConcurrency:                r.opts.MaxConcurrency,
+			InspectPrompt:                 r.rt.inspect.Prompt,
+			InspectRequest:                r.rt.inspect.Request,
+		})
+		runOpts.EngineToolsConfig.SpawnEnabled = runOpts.EngineToolsConfig.SpawnEnabled && r.rt.isBuiltinToolSelected(toolsutil.BuiltinSpawn)
+		runOpts.EngineToolsConfig.ACPSpawnEnabled = runOpts.EngineToolsConfig.ACPSpawnEnabled && r.rt.isBuiltinToolSelected(toolsutil.BuiltinACPSpawn)
+		runOpts.EngineToolsConfig.CoderEnabled = runOpts.EngineToolsConfig.CoderEnabled && r.rt.isBuiltinToolSelected(toolsutil.BuiltinCoder)
+		deps := r.rt.discordDependencies(snap)
+		deps.CommonDependencies = common
+		return discordruntime.Run(runCtx, deps, runOpts)
+	})
+}
+
+func (r *discordBotRunner) Close() error {
 	if r == nil {
 		return nil
 	}
@@ -504,6 +575,18 @@ func (rt *Runtime) mixinDependencies(snap runtimeSnapshot) mixinruntime.Dependen
 	base := rt.sharedDependencies(snap)
 	return mixinruntime.Dependencies{
 		CommonDependencies: base,
+		HandleModelCommand: func(text string) (string, bool, error) {
+			return llmselect.ExecuteCommandText(snap.LLMValues, rt.selection, text)
+		},
+		HandleSkillCommand: func(currentLoaded []string) (string, error) {
+			return skillsutil.RenderSkillStatus(snap.SkillsConfig, currentLoaded)
+		},
+	}
+}
+
+func (rt *Runtime) discordDependencies(snap runtimeSnapshot) discordruntime.Dependencies {
+	return discordruntime.Dependencies{
+		CommonDependencies: rt.sharedDependencies(snap),
 		HandleModelCommand: func(text string) (string, bool, error) {
 			return llmselect.ExecuteCommandText(snap.LLMValues, rt.selection, text)
 		},

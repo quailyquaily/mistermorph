@@ -211,6 +211,15 @@ func (s *Service) upsertContact(ctx context.Context, contact Contact, now time.T
 		if len(contact.MixinChatIDs) == 0 && len(existing.MixinChatIDs) > 0 {
 			contact.MixinChatIDs = append([]string(nil), existing.MixinChatIDs...)
 		}
+		if contact.DiscordUserID == "" && existing.DiscordUserID != "" {
+			contact.DiscordUserID = existing.DiscordUserID
+		}
+		if contact.DiscordDMChannelID == "" && existing.DiscordDMChannelID != "" {
+			contact.DiscordDMChannelID = existing.DiscordDMChannelID
+		}
+		if len(contact.DiscordChannelIDs) == 0 && len(existing.DiscordChannelIDs) > 0 {
+			contact.DiscordChannelIDs = append([]string(nil), existing.DiscordChannelIDs...)
+		}
 		if strings.TrimSpace(contact.SlackTeamID) == "" && strings.TrimSpace(existing.SlackTeamID) != "" {
 			contact.SlackTeamID = existing.SlackTeamID
 		}
@@ -302,6 +311,9 @@ func pairContactIdentityMatches(a, b Contact) bool {
 		return true
 	}
 	if aUserID, bUserID := refid.NormalizeMixinID(a.MixinUserID), refid.NormalizeMixinID(b.MixinUserID); aUserID != "" && aUserID == bUserID {
+		return true
+	}
+	if aUserID, bUserID := refid.NormalizeDiscordID(a.DiscordUserID), refid.NormalizeDiscordID(b.DiscordUserID); aUserID != "" && aUserID == bUserID {
 		return true
 	}
 	return false
@@ -505,7 +517,7 @@ func contactNotFoundError(contactID string) error {
 	contactID = strings.TrimSpace(contactID)
 	if protocol, id, ok := refid.Parse(contactID); ok {
 		switch protocol {
-		case "tg", "slack", "line", "line_user", "lark", "lark_user", "mixin":
+		case "tg", "slack", "line", "line_user", "lark", "lark_user", "mixin", "discord", "discord_user":
 			return fmt.Errorf("contact not found: %s", contactID)
 		default:
 			return fmt.Errorf("hint: protocol '%q' is not mapped. Try to find other ways to send to '%s' in protocol/tool '%s'.", protocol, id, protocol)
@@ -579,6 +591,11 @@ func syntheticChatContact(contactID string) (Contact, bool, error) {
 	} else if ok {
 		return Contact{ContactID: value, Synthetic: true, Kind: KindHuman, Channel: ChannelMixin, MixinChatIDs: []string{chatID}}, true, nil
 	}
+	if chatID, ok, err := refid.ParseDiscordChatIDHint(value); err != nil {
+		return Contact{}, false, err
+	} else if ok {
+		return Contact{ContactID: value, Synthetic: true, Kind: KindHuman, Channel: ChannelDiscord, DiscordChannelIDs: []string{chatID}}, true, nil
+	}
 	return Contact{}, false, nil
 }
 
@@ -618,6 +635,8 @@ func ResolveDecisionChannel(contact Contact, decision ShareDecision) (string, er
 			available = hasLarkTarget(contact)
 		case ChannelMixin:
 			available = hasMixinTarget(contact)
+		case ChannelDiscord:
+			available = hasDiscordTarget(contact)
 		}
 		if !available {
 			return "", fmt.Errorf("explicit %s target is unavailable for contact_id=%s", channel, decision.ContactID)
@@ -645,6 +664,10 @@ func ResolveDecisionChannel(contact Contact, decision ShareDecision) (string, er
 		if hasMixinTarget(contact) {
 			return ChannelMixin, nil
 		}
+	case ChannelDiscord:
+		if hasDiscordTarget(contact) {
+			return ChannelDiscord, nil
+		}
 	}
 	if hasSlackTarget(contact) {
 		return ChannelSlack, nil
@@ -660,6 +683,9 @@ func ResolveDecisionChannel(contact Contact, decision ShareDecision) (string, er
 	}
 	if hasMixinTarget(contact) {
 		return ChannelMixin, nil
+	}
+	if hasDiscordTarget(contact) {
+		return ChannelDiscord, nil
 	}
 	return "", fmt.Errorf("unable to resolve delivery channel for contact_id=%s", contact.ContactID)
 }
@@ -680,6 +706,8 @@ func contactReferenceChannel(contactID string) string {
 		return ChannelLark
 	case "mixin":
 		return ChannelMixin
+	case "discord", "discord_user":
+		return ChannelDiscord
 	default:
 		return ""
 	}
@@ -844,6 +872,22 @@ func hasLarkTarget(contact Contact) bool {
 	return ok && chatID != ""
 }
 
+func hasDiscordTarget(contact Contact) bool {
+	if refid.NormalizeDiscordID(contact.DiscordUserID) != "" || refid.NormalizeDiscordID(contact.DiscordDMChannelID) != "" {
+		return true
+	}
+	for _, raw := range contact.DiscordChannelIDs {
+		if refid.NormalizeDiscordID(raw) != "" {
+			return true
+		}
+	}
+	if _, ok := refid.ParseDiscordUserContactID(contact.ContactID); ok {
+		return true
+	}
+	_, ok, err := refid.ParseDiscordChatIDHint(contact.ContactID)
+	return ok && err == nil
+}
+
 func hasMixinTarget(contact Contact) bool {
 	if refid.NormalizeMixinID(contact.MixinUserID) != "" {
 		return true
@@ -915,6 +959,14 @@ func deriveContactID(contact Contact) string {
 			return "mixin:" + chatID
 		}
 	}
+	if userID := refid.NormalizeDiscordID(contact.DiscordUserID); userID != "" {
+		return "discord_user:" + userID
+	}
+	for _, raw := range contact.DiscordChannelIDs {
+		if channelID := refid.NormalizeDiscordID(raw); channelID != "" {
+			return "discord:" + channelID
+		}
+	}
 	for _, raw := range normalizeStringSlice(contact.LarkChatIDs) {
 		chatID := refid.NormalizeLarkID(raw)
 		if chatID != "" {
@@ -967,6 +1019,9 @@ func resolveChannelFromChatIDHint(chatID string) (string, bool, error) {
 		case "mixin":
 			_, _, err := refid.ParseMixinChatIDHint(value)
 			return ChannelMixin, true, err
+		case "discord":
+			_, _, err := refid.ParseDiscordChatIDHint(value)
+			return ChannelDiscord, true, err
 		case "tg":
 			_, _, err := refid.ParseTelegramChatIDHint(value)
 			return ChannelTelegram, true, err

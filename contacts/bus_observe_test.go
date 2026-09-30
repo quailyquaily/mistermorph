@@ -605,3 +605,31 @@ func timePtr(ts time.Time) *time.Time {
 	t := ts.UTC()
 	return &t
 }
+
+func TestObserveInboundBusMessage_DiscordDMAndServer(t *testing.T) {
+	ctx := context.Background()
+	svc := NewService(NewFileStore(t.TempDir()))
+	now := time.Date(2026, 9, 30, 10, 0, 0, 0, time.UTC)
+	observe := func(key, chatType string) {
+		t.Helper()
+		if err := svc.ObserveInboundBusMessage(ctx, busruntime.BusMessage{
+			Direction: busruntime.DirectionInbound, Channel: busruntime.ChannelDiscord, ConversationKey: key,
+			Extensions: busruntime.MessageExtensions{ChatType: chatType, FromUserRef: "42", FromUsername: "ann", FromDisplayName: "Ann"},
+		}, now); err != nil {
+			t.Fatalf("ObserveInboundBusMessage(%s) error = %v", key, err)
+		}
+	}
+	observe("discord:900", "private")
+	observe("discord:200", "group")
+	observe("discord:201", "group")
+	ann, ok, err := svc.GetContact(ctx, "discord_user:42")
+	if err != nil || !ok {
+		t.Fatalf("GetContact() = %v, %v", ok, err)
+	}
+	if ann.Channel != ChannelDiscord || ann.ContactNickname != "Ann" || ann.DiscordUserID != "42" || ann.DiscordDMChannelID != "900" {
+		t.Fatalf("contact = %#v", ann)
+	}
+	if len(ann.DiscordChannelIDs) != 2 || ann.DiscordChannelIDs[0] != "200" || ann.DiscordChannelIDs[1] != "201" {
+		t.Fatalf("channel ids = %v", ann.DiscordChannelIDs)
+	}
+}

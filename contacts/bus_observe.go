@@ -29,6 +29,9 @@ type observedContactCandidate struct {
 	MixinUserID         string
 	MixinIdentityNumber string
 	MixinChatIDs        []string
+	DiscordUserID       string
+	DiscordDMChannelID  string
+	DiscordChannelIDs   []string
 	SlackTeamID         string
 	SlackUserID         string
 	SlackDMChannelID    string
@@ -72,6 +75,8 @@ func (s *Service) ObserveInboundBusMessageWithResult(ctx context.Context, msg bu
 		return ObserveInboundResult{}, s.observeLarkInboundBusMessage(ctx, msg, now)
 	case busruntime.ChannelMixin:
 		return ObserveInboundResult{}, s.observeMixinInboundBusMessage(ctx, msg, now)
+	case busruntime.ChannelDiscord:
+		return ObserveInboundResult{}, s.observeDiscordInboundBusMessage(ctx, msg, now)
 	default:
 		return ObserveInboundResult{}, nil
 	}
@@ -338,6 +343,43 @@ func (s *Service) observeMixinInboundBusMessage(ctx context.Context, msg busrunt
 	}}, now)
 }
 
+// observeDiscordInboundBusMessage records the sender as discord_user:<id>, with the DM channel for a
+// private message or the channel for a server message.
+func (s *Service) observeDiscordInboundBusMessage(ctx context.Context, msg busruntime.BusMessage, now time.Time) error {
+	channelID, err := busruntime.ParseDiscordConversationKey(msg.ConversationKey)
+	if err != nil {
+		return err
+	}
+	userID := refid.NormalizeDiscordID(msg.Extensions.FromUserRef)
+	if userID == "" {
+		userID = refid.NormalizeDiscordID(msg.ParticipantKey)
+	}
+	if userID == "" {
+		return nil
+	}
+	nickname := strings.TrimSpace(msg.Extensions.FromDisplayName)
+	if nickname == "" {
+		nickname = strings.TrimSpace(msg.Extensions.FromUsername)
+	}
+	kind := KindHuman
+	if msg.Extensions.FromIsAgent {
+		kind = KindAgent
+	}
+	candidate := observedContactCandidate{
+		PrimaryContactID: "discord_user:" + userID,
+		Kind:             kind,
+		Channel:          ChannelDiscord,
+		Nickname:         nickname,
+		DiscordUserID:    userID,
+	}
+	if strings.EqualFold(strings.TrimSpace(msg.Extensions.ChatType), "private") {
+		candidate.DiscordDMChannelID = channelID
+	} else {
+		candidate.DiscordChannelIDs = []string{channelID}
+	}
+	return s.applyObservedCandidates(ctx, []observedContactCandidate{candidate}, now)
+}
+
 func slackContactIDFromUser(teamID, userID string) string {
 	teamID = strings.TrimSpace(teamID)
 	userID = strings.TrimSpace(userID)
@@ -453,6 +495,7 @@ func (s *Service) upsertObservedCandidate(ctx context.Context, candidate observe
 		applyObservedLineMerge(&existing, candidate)
 		applyObservedLarkMerge(&existing, candidate)
 		applyObservedMixinMerge(&existing, candidate)
+		applyObservedDiscordMerge(&existing, candidate)
 		applyObservedSlackMerge(&existing, candidate)
 		existing.LastInteractionAt = &lastInteraction
 		return s.UpsertContact(ctx, existing, now)
@@ -471,6 +514,9 @@ func (s *Service) upsertObservedCandidate(ctx context.Context, candidate observe
 		MixinUserID:         refid.NormalizeMixinID(candidate.MixinUserID),
 		MixinIdentityNumber: strings.TrimSpace(candidate.MixinIdentityNumber),
 		MixinChatIDs:        normalizeMixinIDs(candidate.MixinChatIDs),
+		DiscordUserID:       refid.NormalizeDiscordID(candidate.DiscordUserID),
+		DiscordDMChannelID:  refid.NormalizeDiscordID(candidate.DiscordDMChannelID),
+		DiscordChannelIDs:   normalizeDiscordIDs(candidate.DiscordChannelIDs),
 		SlackTeamID:         strings.TrimSpace(candidate.SlackTeamID),
 		SlackUserID:         strings.TrimSpace(candidate.SlackUserID),
 		SlackDMChannelID:    strings.TrimSpace(candidate.SlackDMChannelID),
@@ -481,6 +527,7 @@ func (s *Service) upsertObservedCandidate(ctx context.Context, candidate observe
 	applyObservedLineMerge(&contact, candidate)
 	applyObservedLarkMerge(&contact, candidate)
 	applyObservedMixinMerge(&contact, candidate)
+	applyObservedDiscordMerge(&contact, candidate)
 	applyObservedSlackMerge(&contact, candidate)
 	return s.UpsertContact(ctx, contact, now)
 }
@@ -604,6 +651,19 @@ func applyObservedMixinMerge(contact *Contact, candidate observedContactCandidat
 	contact.MixinChatIDs = mergeMixinChatIDs(contact.MixinChatIDs, candidate.MixinChatIDs...)
 }
 
+func applyObservedDiscordMerge(contact *Contact, candidate observedContactCandidate) {
+	if contact == nil {
+		return
+	}
+	if userID := refid.NormalizeDiscordID(candidate.DiscordUserID); userID != "" && contact.DiscordUserID == "" {
+		contact.DiscordUserID = userID
+	}
+	if dm := refid.NormalizeDiscordID(candidate.DiscordDMChannelID); dm != "" {
+		contact.DiscordDMChannelID = dm
+	}
+	contact.DiscordChannelIDs = normalizeDiscordIDs(append(append([]string(nil), contact.DiscordChannelIDs...), candidate.DiscordChannelIDs...))
+}
+
 func mergeObservedTGGroupChatIDs(base []int64, chatID int64) []int64 {
 	if chatID == 0 {
 		return normalizeInt64Slice(base)
@@ -649,6 +709,19 @@ func normalizeMixinIDs(items []string) []string {
 	seen := make(map[string]bool, len(items))
 	for _, raw := range items {
 		id := refid.NormalizeMixinID(raw)
+		if id != "" && !seen[id] {
+			seen[id] = true
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
+func normalizeDiscordIDs(items []string) []string {
+	out := make([]string, 0, len(items))
+	seen := make(map[string]bool, len(items))
+	for _, raw := range items {
+		id := refid.NormalizeDiscordID(raw)
 		if id != "" && !seen[id] {
 			seen[id] = true
 			out = append(out, id)

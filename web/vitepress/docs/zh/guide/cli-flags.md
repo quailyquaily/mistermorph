@@ -146,6 +146,20 @@ description: mistermorph 的命令行参数总览。
 - `--mixin-task-timeout`：单条消息的 agent 超时。
 - `--mixin-max-concurrency`：同时处理的 Mixin conversation 最大数量。
 
+## `discord`
+
+- `--inspect-prompt`：把 prompt messages 写到 `./dump`。
+- `--inspect-request`：把 LLM 请求/响应写到 `./dump`。
+- `--discord-bot-token`：Discord bot token。
+- `--discord-allowed-guild-id`：允许的 Discord 服务器 ID，可重复。
+- `--discord-allowed-channel-id`：允许的 Discord 频道 ID；父频道被允许时子区也被允许。可重复。
+- `--discord-allowed-user-id`：允许私信的 Discord 用户 ID，可重复。
+- `--discord-group-trigger-mode`：服务器触发模式，`strict|smart|talkative`（默认 `strict`）。
+- `--discord-addressing-confidence-threshold`：addressing 置信度下限。
+- `--discord-addressing-interject-threshold`：插话分数下限。
+- `--discord-task-timeout`：单条消息的 agent 超时。
+- `--discord-max-concurrency`：同时处理的 Discord 会话最大数量。
+
 ## `install`
 
 - `-y, --yes`：跳过确认提示。

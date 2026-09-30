@@ -33,6 +33,7 @@
 - [LINE](./line.md)
 - [Lark](./lark.md)
 - [Mixin Messenger](./mixin.md)
+- [Discord](./discord.md)
 
 ## Localized README
 

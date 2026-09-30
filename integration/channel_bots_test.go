@@ -46,6 +46,16 @@ func TestNewMixinBotValidatesCredentials(t *testing.T) {
 	}
 }
 
+func TestNewDiscordBotRequiresToken(t *testing.T) {
+	rt := New(DefaultConfig())
+	if _, err := rt.NewDiscordBot(DiscordOptions{}); err == nil {
+		t.Fatal("expected error when the Discord bot token is missing")
+	}
+	if runner, err := rt.NewDiscordBot(DiscordOptions{BotToken: "token"}); err != nil || runner == nil {
+		t.Fatalf("NewDiscordBot() = %v, %v", runner, err)
+	}
+}
+
 func validMixinOptions() MixinOptions {
 	return MixinOptions{
 		ClientID:   "773e5e77-4107-45c2-b648-8fc722ed77f5",

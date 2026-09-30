@@ -58,7 +58,7 @@ func (r *UntriggeredRecorder) Record(message UntriggeredMessage) error {
 	}
 	channel := strings.TrimSpace(message.Channel)
 	switch channel {
-	case channels.Telegram, channels.Slack, channels.Line, channels.Lark:
+	case channels.Telegram, channels.Slack, channels.Line, channels.Lark, channels.Discord:
 	default:
 		return fmt.Errorf("unsupported channel %q", channel)
 	}

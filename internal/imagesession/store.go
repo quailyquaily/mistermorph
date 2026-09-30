@@ -397,6 +397,8 @@ func runtimeFromConversationID(conversationID string) string {
 		return "lark"
 	case strings.HasPrefix(conversationID, "line:"):
 		return "line"
+	case strings.HasPrefix(conversationID, "discord:"):
+		return "discord"
 	case strings.HasPrefix(conversationID, "console:"):
 		return "console"
 	case strings.HasPrefix(conversationID, "chat:"):

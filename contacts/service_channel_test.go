@@ -99,7 +99,7 @@ func TestResolveDecisionChannel_InvalidProtocolHint(t *testing.T) {
 		ContactID: "contact:test",
 		Channel:   ChannelTelegram,
 	}, ShareDecision{
-		ChatID: "discord:123",
+		ChatID: "discord:abc",
 	})
 	if err == nil {
 		t.Fatalf("ResolveDecisionChannel() expected error")
@@ -173,5 +173,25 @@ func TestSyntheticMixinReferenceIsChatTarget(t *testing.T) {
 	}
 	if contact.MixinUserID != "" || len(contact.MixinChatIDs) != 1 || contact.MixinChatIDs[0] != chatID {
 		t.Fatalf("synthetic Mixin contact = %#v", contact)
+	}
+}
+
+func TestResolveDecisionChannel_DiscordTargets(t *testing.T) {
+	contact := Contact{ContactID: "discord_user:42", Channel: ChannelDiscord, DiscordUserID: "42", DiscordChannelIDs: []string{"200"}}
+	if channel, err := ResolveDecisionChannel(contact, ShareDecision{}); err != nil || channel != ChannelDiscord {
+		t.Fatalf("default route = %q, %v", channel, err)
+	}
+	if channel, err := ResolveDecisionChannel(contact, ShareDecision{ChatID: "discord:200"}); err != nil || channel != ChannelDiscord {
+		t.Fatalf("chat route = %q, %v", channel, err)
+	}
+	if contactReferenceChannel("discord_user:42") != ChannelDiscord || contactReferenceChannel("discord:200") != ChannelDiscord {
+		t.Fatal("discord references do not map to the discord channel")
+	}
+}
+
+func TestSyntheticDiscordReferenceIsChannelTarget(t *testing.T) {
+	contact, ok, err := syntheticChatContact("discord:200")
+	if err != nil || !ok || contact.Channel != ChannelDiscord || len(contact.DiscordChannelIDs) != 1 || contact.DiscordChannelIDs[0] != "200" {
+		t.Fatalf("syntheticChatContact() = %#v, %v, %v", contact, ok, err)
 	}
 }

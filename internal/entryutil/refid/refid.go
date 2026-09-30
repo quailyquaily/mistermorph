@@ -226,6 +226,41 @@ func ParseMixinContactID(raw string) (string, bool) {
 	return id, hasHint && err == nil
 }
 
+// NormalizeDiscordID returns a Discord snowflake ID in canonical decimal form, or "".
+func NormalizeDiscordID(raw string) string {
+	id, err := strconv.ParseUint(strings.TrimSpace(raw), 10, 64)
+	if err != nil || id == 0 {
+		return ""
+	}
+	return strconv.FormatUint(id, 10)
+}
+
+// ParseDiscordChatIDHint parses "discord:<channel_id>": a channel, thread or DM channel.
+func ParseDiscordChatIDHint(raw string) (string, bool, error) {
+	value := strings.TrimSpace(raw)
+	if value == "" || !strings.HasPrefix(strings.ToLower(value), "discord:") {
+		return "", false, nil
+	}
+	id := NormalizeDiscordID(value[len("discord:"):])
+	if id == "" {
+		return "", true, fmt.Errorf("invalid chat_id: %s", value)
+	}
+	return id, true, nil
+}
+
+// ParseDiscordUserContactID parses "discord_user:<user_id>" contact IDs.
+func ParseDiscordUserContactID(raw string) (string, bool) {
+	value := strings.TrimSpace(raw)
+	if !strings.HasPrefix(strings.ToLower(value), "discord_user:") {
+		return "", false
+	}
+	userID := NormalizeDiscordID(value[len("discord_user:"):])
+	if userID == "" {
+		return "", false
+	}
+	return userID, true
+}
+
 // LineIDLooksLikeUserID reports whether ID shape looks like a LINE user id.
 func LineIDLooksLikeUserID(value string) bool {
 	return strings.HasPrefix(strings.ToUpper(strings.TrimSpace(value)), "U")

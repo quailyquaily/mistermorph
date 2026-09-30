@@ -258,6 +258,10 @@ func NormalizeChatID(raw string) (string, error) {
 		if _, _, err := refid.ParseMixinChatIDHint(value); err != nil {
 			return "", err
 		}
+	case "discord":
+		if _, _, err := refid.ParseDiscordChatIDHint(value); err != nil {
+			return "", err
+		}
 	default:
 		return "", fmt.Errorf("invalid chat_id: %s", strings.TrimSpace(raw))
 	}
@@ -272,7 +276,7 @@ func PlatformFromChatID(chatID string) string {
 	switch protocol {
 	case "tg":
 		return "telegram"
-	case "slack", "line", "lark", "mixin":
+	case "slack", "line", "lark", "mixin", "discord":
 		return protocol
 	default:
 		return ""

@@ -855,15 +855,18 @@ func channelOverviewFromMode(mode string) map[string]any {
 	telegramRunning := mode == "telegram"
 	slackRunning := mode == "slack"
 	mixinRunning := mode == "mixin"
+	discordRunning := mode == "discord"
 	return map[string]any{
-		"configured":          telegramRunning || slackRunning || mixinRunning,
+		"configured":          telegramRunning || slackRunning || mixinRunning || discordRunning,
 		"telegram_configured": telegramRunning,
 		"slack_configured":    slackRunning,
 		"mixin_configured":    mixinRunning,
+		"discord_configured":  discordRunning,
 		"running":             mode,
 		"telegram_running":    telegramRunning,
 		"slack_running":       slackRunning,
 		"mixin_running":       mixinRunning,
+		"discord_running":     discordRunning,
 	}
 }
 

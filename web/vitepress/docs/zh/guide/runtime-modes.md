@@ -54,3 +54,13 @@ mistermorph mixin --log-level info
 ```
 
 `mixin.keystore_file` 指向 Mixin Developer Dashboard 生成的 Ed25519 keystore。配置方法见 [Mixin Messenger 文档](https://github.com/quailyquaily/mistermorph/blob/master/docs/mixin.md)。
+
+## Discord Bot
+
+通过 Gateway 单独运行 Discord runtime，支持私信、服务器频道和子区：
+
+```bash
+mistermorph discord --log-level info
+```
+
+设置 `discord.bot_token`（或 `MISTER_MORPH_DISCORD_BOT_TOKEN`）。在服务器里，默认的 `strict` 触发模式只回应 @提及和回复。配置方法见 [Discord 文档](https://github.com/quailyquaily/mistermorph/blob/master/docs/discord.md)。

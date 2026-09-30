@@ -42,6 +42,9 @@ var larkRuntimePromptBlockTemplateSource string
 //go:embed prompts/block_mixin.md
 var mixinRuntimePromptBlockTemplateSource string
 
+//go:embed prompts/block_discord.md
+var discordRuntimePromptBlockTemplateSource string
+
 var groupUsernamesBlockTemplate = prompttmpl.MustParse(
 	"group_usernames_block",
 	groupUsernamesBlockTemplateSource,
@@ -90,6 +93,12 @@ var mixinRuntimePromptBlockTemplate = prompttmpl.MustParse(
 	template.FuncMap{},
 )
 
+var discordRuntimePromptBlockTemplate = prompttmpl.MustParse(
+	"discord_runtime_block",
+	discordRuntimePromptBlockTemplateSource,
+	template.FuncMap{},
+)
+
 type telegramRuntimePromptBlockData struct {
 	IsGroup bool
 }
@@ -110,6 +119,10 @@ type larkRuntimePromptBlockData struct {
 }
 
 type mixinRuntimePromptBlockData struct {
+	IsGroup bool
+}
+
+type discordRuntimePromptBlockData struct {
 	IsGroup bool
 }
 
@@ -297,6 +310,17 @@ func AppendLarkRuntimeBlocks(spec *agent.PromptSpec, isGroup bool, reactionEmoji
 
 func AppendMixinRuntimeBlocks(spec *agent.PromptSpec, isGroup bool) {
 	content, err := prompttmpl.Render(mixinRuntimePromptBlockTemplate, mixinRuntimePromptBlockData{IsGroup: isGroup})
+	if err != nil {
+		return
+	}
+	content = strings.TrimSpace(content)
+	if content != "" {
+		spec.Blocks = append(spec.Blocks, agent.PromptBlock{Content: content})
+	}
+}
+
+func AppendDiscordRuntimeBlocks(spec *agent.PromptSpec, isGroup bool) {
+	content, err := prompttmpl.Render(discordRuntimePromptBlockTemplate, discordRuntimePromptBlockData{IsGroup: isGroup})
 	if err != nil {
 		return
 	}

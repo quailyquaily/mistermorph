@@ -25,12 +25,16 @@ const (
 	DefaultServerMaxQueue         = 100
 	DefaultGroupTriggerMode       = "smart"
 	DefaultAddressingThreshold    = 0.6
-	DefaultTelegramPollTimeout    = 30 * time.Second
-	DefaultSlackBaseURL           = "https://slack.com/api"
-	DefaultLineBaseURL            = "https://api.line.me"
-	DefaultLineWebhookListen      = "127.0.0.1:18080"
-	DefaultLineWebhookPath        = "/line/webhook"
-	DefaultLarkBaseURL            = "https://open.feishu.cn/open-apis"
+	// Discord defaults to strict: the only mode that works without the privileged Message Content
+	// intent.
+	DefaultDiscordGroupTriggerMode = "strict"
+	DefaultDiscordBaseURL          = "https://discord.com/api/v10"
+	DefaultTelegramPollTimeout     = 30 * time.Second
+	DefaultSlackBaseURL            = "https://slack.com/api"
+	DefaultLineBaseURL             = "https://api.line.me"
+	DefaultLineWebhookListen       = "127.0.0.1:18080"
+	DefaultLineWebhookPath         = "/line/webhook"
+	DefaultLarkBaseURL             = "https://open.feishu.cn/open-apis"
 )
 
 // Apply sets all shared defaults used by CLI and desktop console mode.
@@ -158,6 +162,19 @@ func Apply(v *viper.Viper) {
 	v.SetDefault("mixin.task_timeout", 0*time.Second)
 	v.SetDefault("mixin.max_concurrency", DefaultChannelMaxConcurrency)
 	v.SetDefault("mixin.serve_listen", "")
+
+	v.SetDefault("discord.base_url", DefaultDiscordBaseURL)
+	v.SetDefault("discord.bot_token", "")
+	v.SetDefault("discord.allowed_guild_ids", []string{})
+	v.SetDefault("discord.allowed_channel_ids", []string{})
+	v.SetDefault("discord.allowed_user_ids", []string{})
+	v.SetDefault("discord.group_trigger_mode", DefaultDiscordGroupTriggerMode)
+	v.SetDefault("discord.record_untriggered", false)
+	v.SetDefault("discord.addressing_confidence_threshold", DefaultAddressingThreshold)
+	v.SetDefault("discord.addressing_interject_threshold", DefaultAddressingThreshold)
+	v.SetDefault("discord.task_timeout", 0*time.Second)
+	v.SetDefault("discord.max_concurrency", DefaultChannelMaxConcurrency)
+	v.SetDefault("discord.serve_listen", "")
 
 	v.SetDefault("heartbeat.enabled", true)
 	v.SetDefault("heartbeat.interval", DefaultHeartbeatInterval)

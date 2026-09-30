@@ -9,12 +9,13 @@ func TestParseAdminsUsesStablePlatformIDs(t *testing.T) {
 		"line_user:U345",
 		"lark_user:ou_456",
 		"mixin:11111111-1111-1111-1111-111111111111",
+		"discord_user:0123456789012345678",
 		"tg:1234",
 	})
 	if err != nil {
 		t.Fatalf("ParseAdmins() error = %v", err)
 	}
-	for _, id := range []string{"tg:1234", "slack:T123:U234", "line_user:U345", "lark_user:ou_456", "mixin:11111111-1111-1111-1111-111111111111"} {
+	for _, id := range []string{"tg:1234", "slack:T123:U234", "line_user:U345", "lark_user:ou_456", "mixin:11111111-1111-1111-1111-111111111111", "discord_user:123456789012345678"} {
 		if !admins.Contains(id) {
 			t.Errorf("admins does not contain %q", id)
 		}
@@ -54,5 +55,13 @@ func TestParseAdminsRejectsMalformedIDs(t *testing.T) {
 				t.Fatalf("ParseAdmins(%q) expected error", raw)
 			}
 		})
+	}
+}
+
+func TestParseAdminsRejectsMalformedDiscordIDs(t *testing.T) {
+	for _, raw := range []string{"discord_user:ann", "discord_user:0", "discord_user:"} {
+		if _, err := ParseAdmins([]string{raw}); err == nil {
+			t.Errorf("ParseAdmins(%q) accepted", raw)
+		}
 	}
 }

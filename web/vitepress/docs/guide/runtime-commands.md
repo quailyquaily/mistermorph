@@ -12,10 +12,12 @@ Commands are messages that start with `/` inside interactive chat, Console tasks
 > In Slack group chats, commands must explicitly address the bot. In Telegram group chats, normal bot commands such as `/models@BotName` are supported.
 >
 > In Mixin groups, prefix the command with the bot's Mixin ID mention, for example `@7000123456 /models`.
+>
+> On Discord, the commands are also registered as slash commands. A typed command in a server must mention the bot, for example `@Morph /models`.
 
 ## Common Commands
 
-These commands are available in CLI chat, Console Web, Telegram, Slack, LINE, Lark, and Mixin Messenger.
+These commands are available in CLI chat, Console Web, Telegram, Slack, LINE, Lark, Mixin Messenger, and Discord.
 
 | Command | What it does |
 |---|---|
@@ -86,3 +88,11 @@ These commands are only available in Telegram.
 |---|---|
 | `/id` | Shows the current Mixin conversation UUID and type. |
 | `/reset` | Clears conversation history, sticky skills, and checkpoint state. |
+
+## Discord Only
+
+| Command | What it does |
+|---|---|
+| `/id` | Shows the current chat id (`discord:<channel_id>`), server id, chat type, and your user reference. |
+| `/reset` | Clears conversation history, sticky skills, and checkpoint state. |
+| `/approve <id>`, `/deny <id>` | Decides a pending approval; the approval message also has buttons. |

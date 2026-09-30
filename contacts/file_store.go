@@ -588,6 +588,9 @@ type contactProfileSection struct {
 	MixinUserID         string   `yaml:"mixin_user_id"`
 	MixinIdentityNumber string   `yaml:"mixin_identity_number"`
 	MixinChatIDs        []string `yaml:"mixin_chat_ids"`
+	DiscordUserID       string   `yaml:"discord_user_id"`
+	DiscordDMChannelID  string   `yaml:"discord_dm_channel_id"`
+	DiscordChannelIDs   []string `yaml:"discord_channel_ids"`
 	SlackTeamID         string   `yaml:"slack_team_id"`
 	SlackUserID         string   `yaml:"slack_user_id"`
 	SlackDMChannelID    string   `yaml:"slack_dm_channel_id"`
@@ -909,6 +912,9 @@ func contactFromProfileSection(title string, profile contactProfileSection) (Con
 		MixinUserID:         refid.NormalizeMixinID(profile.MixinUserID),
 		MixinIdentityNumber: strings.TrimSpace(profile.MixinIdentityNumber),
 		MixinChatIDs:        normalizeMixinIDs(profile.MixinChatIDs),
+		DiscordUserID:       refid.NormalizeDiscordID(profile.DiscordUserID),
+		DiscordDMChannelID:  refid.NormalizeDiscordID(profile.DiscordDMChannelID),
+		DiscordChannelIDs:   normalizeDiscordIDs(profile.DiscordChannelIDs),
 		SlackTeamID:         strings.TrimSpace(profile.SlackTeamID),
 		SlackUserID:         strings.TrimSpace(profile.SlackUserID),
 		SlackDMChannelID:    strings.TrimSpace(profile.SlackDMChannelID),
@@ -955,7 +961,7 @@ func contactFromProfileSection(title string, profile contactProfileSection) (Con
 	case "":
 		channel := strings.ToLower(strings.TrimSpace(profile.Channel))
 		switch channel {
-		case "", ChannelTelegram, ChannelSlack, ChannelLine, ChannelLark, ChannelMixin, "discord":
+		case "", ChannelTelegram, ChannelSlack, ChannelLine, ChannelLark, ChannelMixin, ChannelDiscord:
 			contact.Kind = KindHuman
 		default:
 			contact.Kind = KindAgent
@@ -1006,6 +1012,9 @@ func profileSectionFromContact(contact Contact) (contactProfileSection, string) 
 		MixinUserID:         refid.NormalizeMixinID(contact.MixinUserID),
 		MixinIdentityNumber: strings.TrimSpace(contact.MixinIdentityNumber),
 		MixinChatIDs:        normalizeMixinIDs(contact.MixinChatIDs),
+		DiscordUserID:       refid.NormalizeDiscordID(contact.DiscordUserID),
+		DiscordDMChannelID:  refid.NormalizeDiscordID(contact.DiscordDMChannelID),
+		DiscordChannelIDs:   normalizeDiscordIDs(contact.DiscordChannelIDs),
 		SlackTeamID:         strings.TrimSpace(contact.SlackTeamID),
 		SlackUserID:         strings.TrimSpace(contact.SlackUserID),
 		SlackDMChannelID:    strings.TrimSpace(contact.SlackDMChannelID),
@@ -1024,6 +1033,8 @@ func profileSectionFromContact(contact Contact) (contactProfileSection, string) 
 			profile.Channel = ChannelLark
 		case profile.MixinUserID != "" || len(profile.MixinChatIDs) > 0 || strings.HasPrefix(strings.ToLower(profile.ContactID), "mixin:"):
 			profile.Channel = ChannelMixin
+		case profile.DiscordUserID != "" || profile.DiscordDMChannelID != "" || len(profile.DiscordChannelIDs) > 0 || strings.HasPrefix(strings.ToLower(profile.ContactID), "discord"):
+			profile.Channel = ChannelDiscord
 		case profile.SlackTeamID != "" || profile.SlackUserID != "" || profile.SlackDMChannelID != "" || len(profile.SlackChannelIDs) > 0 || strings.HasPrefix(strings.ToLower(profile.ContactID), "slack:"):
 			profile.Channel = ChannelSlack
 		default:
@@ -1376,6 +1387,9 @@ func normalizeContact(c Contact, now time.Time) Contact {
 	c.MixinUserID = refid.NormalizeMixinID(c.MixinUserID)
 	c.MixinIdentityNumber = strings.TrimSpace(c.MixinIdentityNumber)
 	c.MixinChatIDs = normalizeMixinIDs(c.MixinChatIDs)
+	c.DiscordUserID = refid.NormalizeDiscordID(c.DiscordUserID)
+	c.DiscordDMChannelID = refid.NormalizeDiscordID(c.DiscordDMChannelID)
+	c.DiscordChannelIDs = normalizeDiscordIDs(c.DiscordChannelIDs)
 	for i := range c.LarkChatIDs {
 		c.LarkChatIDs[i] = refid.NormalizeLarkID(c.LarkChatIDs[i])
 	}
@@ -1399,6 +1413,9 @@ func normalizeContact(c Contact, now time.Time) Contact {
 	}
 	if len(c.MixinChatIDs) == 0 {
 		c.MixinChatIDs = nil
+	}
+	if len(c.DiscordChannelIDs) == 0 {
+		c.DiscordChannelIDs = nil
 	}
 	if len(c.SlackChannelIDs) == 0 {
 		c.SlackChannelIDs = nil
@@ -1451,6 +1468,8 @@ func normalizeContact(c Contact, now time.Time) Contact {
 			c.Channel = ChannelLark
 		case strings.HasPrefix(strings.ToLower(c.ContactID), "mixin:"), c.MixinUserID != "", len(c.MixinChatIDs) > 0:
 			c.Channel = ChannelMixin
+		case strings.HasPrefix(strings.ToLower(c.ContactID), "discord"), c.DiscordUserID != "", c.DiscordDMChannelID != "", len(c.DiscordChannelIDs) > 0:
+			c.Channel = ChannelDiscord
 		case strings.HasPrefix(strings.ToLower(c.ContactID), "slack:"), c.SlackTeamID != "", c.SlackUserID != "", c.SlackDMChannelID != "", len(c.SlackChannelIDs) > 0:
 			c.Channel = ChannelSlack
 		}
@@ -1514,6 +1533,14 @@ func normalizeContact(c Contact, now time.Time) Contact {
 			c.MixinUserID = id
 		}
 	}
+	if c.DiscordUserID == "" {
+		if id, ok := refid.ParseDiscordUserContactID(c.ContactID); ok {
+			c.DiscordUserID = id
+		}
+	}
+	if chatID, ok, err := refid.ParseDiscordChatIDHint(c.ContactID); ok && err == nil {
+		c.DiscordChannelIDs = normalizeDiscordIDs(append(c.DiscordChannelIDs, chatID))
+	}
 
 	if c.TGUsername == "" && c.TGUserID == 0 && c.TGPrivateChatID == 0 && len(c.TGGroupChatIDs) == 0 && c.Channel == ChannelTelegram {
 		if alias := extractTelegramAlias(c.ContactID); alias != "" {
@@ -1530,7 +1557,7 @@ func normalizeContact(c Contact, now time.Time) Contact {
 func normalizeContactChannel(raw string) string {
 	value := strings.ToLower(strings.TrimSpace(raw))
 	switch value {
-	case ChannelConsole, ChannelTelegram, ChannelSlack, ChannelLine, ChannelLark, ChannelMixin, "discord":
+	case ChannelConsole, ChannelTelegram, ChannelSlack, ChannelLine, ChannelLark, ChannelMixin, ChannelDiscord:
 		return value
 	default:
 		return ""

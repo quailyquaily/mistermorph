@@ -30,6 +30,7 @@ type runtimeSnapshot struct {
 	Telegram            channelopts.TelegramConfig
 	Slack               channelopts.SlackConfig
 	Mixin               channelopts.MixinConfig
+	Discord             channelopts.DiscordConfig
 	MCPServers          []mcphost.ServerConfig
 	ACPAgents           []acpclient.AgentConfig
 	Paths               runtimepaths.Paths

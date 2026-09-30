@@ -291,6 +291,23 @@ Shell 默认值按平台区分：
 | `mixin.max_concurrency` | conversation 并发处理上限。 |
 | `mixin.serve_listen` | Mixin runtime API 监听地址。 |
 
+## Discord
+
+| 字段 | 含义 |
+|---|---|
+| `discord.base_url` | REST API 地址（仅用于测试）。 |
+| `discord.bot_token` | Discord bot token。 |
+| `discord.allowed_guild_ids` | 允许的服务器 ID；空表示 bot 所在的所有服务器。 |
+| `discord.allowed_channel_ids` | 允许的频道 ID；父频道被允许时子区也被允许。 |
+| `discord.allowed_user_ids` | 允许私信的用户 ID；空表示任何人。 |
+| `discord.group_trigger_mode` | 服务器触发模式，默认 `strict`。 |
+| `discord.record_untriggered` | 是否把未触发的服务器消息写入 journal。 |
+| `discord.addressing_confidence_threshold` | addressing 置信度下限。 |
+| `discord.addressing_interject_threshold` | 插话分数下限。 |
+| `discord.task_timeout` | 单条消息任务超时。 |
+| `discord.max_concurrency` | 会话并发处理上限。 |
+| `discord.serve_listen` | Discord runtime API 监听地址。 |
+
 ## Heartbeat
 
 | 字段 | 含义 |

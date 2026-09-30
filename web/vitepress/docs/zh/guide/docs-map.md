@@ -48,6 +48,7 @@ description: 仓库中更完整设计文档的入口索引。
 - [`docs/line.md`](https://github.com/quailyquaily/mistermorph/blob/master/docs/line.md)
 - [`docs/lark.md`](https://github.com/quailyquaily/mistermorph/blob/master/docs/lark.md)
 - [`docs/mixin.md`](https://github.com/quailyquaily/mistermorph/blob/master/docs/mixin.md)
+- [`docs/discord.md`](https://github.com/quailyquaily/mistermorph/blob/master/docs/discord.md)
 
 ## 治理与状态
 

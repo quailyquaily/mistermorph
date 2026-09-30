@@ -16,6 +16,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/configbootstrap"
 	"github.com/quailyquaily/mistermorph/internal/configrevision"
 	"github.com/quailyquaily/mistermorph/internal/configsettings"
+	"github.com/quailyquaily/mistermorph/internal/entryutil/refid"
 	"github.com/quailyquaily/mistermorph/internal/fsstore"
 	"github.com/quailyquaily/mistermorph/internal/secref"
 	"github.com/spf13/viper"
@@ -63,6 +64,14 @@ type consoleMixinSettingsPayload struct {
 	AllowedConversationIDs []string `json:"allowed_conversation_ids"`
 }
 
+type consoleDiscordSettingsPayload struct {
+	BotToken          string   `json:"bot_token"`
+	AllowedGuildIDs   []string `json:"allowed_guild_ids"`
+	AllowedChannelIDs []string `json:"allowed_channel_ids"`
+	AllowedUserIDs    []string `json:"allowed_user_ids"`
+	GroupTriggerMode  string   `json:"group_trigger_mode"`
+}
+
 type consoleGuardURLFetchSettingsPayload struct {
 	AllowedURLPrefixes []string `json:"allowed_url_prefixes"`
 	DenyPrivateIPs     bool     `json:"deny_private_ips"`
@@ -96,6 +105,7 @@ type consoleSettingsPayload struct {
 	Line            consoleLineSettingsPayload     `json:"line"`
 	Lark            consoleLarkSettingsPayload     `json:"lark"`
 	Mixin           consoleMixinSettingsPayload    `json:"mixin"`
+	Discord         consoleDiscordSettingsPayload  `json:"discord"`
 	Guard           consoleGuardSettingsPayload    `json:"guard"`
 }
 
@@ -130,6 +140,14 @@ type consoleLarkSettingsUpdatePayload struct {
 type consoleMixinSettingsUpdatePayload struct {
 	KeystoreFile           *string   `json:"keystore_file,omitempty"`
 	AllowedConversationIDs *[]string `json:"allowed_conversation_ids,omitempty"`
+}
+
+type consoleDiscordSettingsUpdatePayload struct {
+	BotToken          *string   `json:"bot_token,omitempty"`
+	AllowedGuildIDs   *[]string `json:"allowed_guild_ids,omitempty"`
+	AllowedChannelIDs *[]string `json:"allowed_channel_ids,omitempty"`
+	AllowedUserIDs    *[]string `json:"allowed_user_ids,omitempty"`
+	GroupTriggerMode  *string   `json:"group_trigger_mode,omitempty"`
 }
 
 type consoleGuardURLFetchSettingsUpdatePayload struct {
@@ -168,6 +186,7 @@ type consoleSettingsUpdatePayload struct {
 	Line            *consoleLineSettingsUpdatePayload     `json:"line,omitempty"`
 	Lark            *consoleLarkSettingsUpdatePayload     `json:"lark,omitempty"`
 	Mixin           *consoleMixinSettingsUpdatePayload    `json:"mixin,omitempty"`
+	Discord         *consoleDiscordSettingsUpdatePayload  `json:"discord,omitempty"`
 	Guard           *consoleGuardSettingsUpdatePayload    `json:"guard,omitempty"`
 	NewPassword     *string                               `json:"new_password,omitempty"`
 	ClearPassword   bool                                  `json:"clear_password,omitempty"`
@@ -181,6 +200,7 @@ type consoleSettingsEnvManagedPayload struct {
 	Line     map[string]agentsettings.EnvManagedField `json:"line,omitempty"`
 	Lark     map[string]agentsettings.EnvManagedField `json:"lark,omitempty"`
 	Mixin    map[string]agentsettings.EnvManagedField `json:"mixin,omitempty"`
+	Discord  map[string]agentsettings.EnvManagedField `json:"discord,omitempty"`
 }
 
 type consoleSettingsSecretFieldsPayload struct {
@@ -188,6 +208,7 @@ type consoleSettingsSecretFieldsPayload struct {
 	Slack    map[string]agentsettings.SecretFieldStatus `json:"slack,omitempty"`
 	Line     map[string]agentsettings.SecretFieldStatus `json:"line,omitempty"`
 	Lark     map[string]agentsettings.SecretFieldStatus `json:"lark,omitempty"`
+	Discord  map[string]agentsettings.SecretFieldStatus `json:"discord,omitempty"`
 }
 
 func prepareConsoleSecretUpdates(ctx context.Context, req *consoleSettingsUpdatePayload, store secref.OSStore) ([]string, error) {
@@ -217,6 +238,9 @@ func prepareConsoleSecretUpdates(ctx context.Context, req *consoleSettingsUpdate
 	}
 	if req.Lark != nil {
 		fields = append(fields, secretField{name: "lark.app_secret", value: &req.Lark.AppSecret})
+	}
+	if req.Discord != nil {
+		fields = append(fields, secretField{name: "discord.bot_token", value: &req.Discord.BotToken})
 	}
 	type replacement struct {
 		field secretField
@@ -300,6 +324,7 @@ func (s *server) handleConsoleSettingsGet(w http.ResponseWriter, _ *http.Request
 		"line":             settings.Line,
 		"lark":             settings.Lark,
 		"mixin":            settings.Mixin,
+		"discord":          settings.Discord,
 		"guard":            settings.Guard,
 		"endpoints":        consoleEndpointSettingsFromDocument(doc),
 		"auth_profiles":    consoleAuthProfileSettingsFromDocument(doc),
@@ -397,7 +422,7 @@ func (s *server) handleConsoleSettingsPut(w http.ResponseWriter, r *http.Request
 	}
 	next := current
 	serialized := snapshot.Data
-	hasLegacyUpdate := req.ManagedRuntimes != nil || req.Telegram != nil || req.Slack != nil || req.Line != nil || req.Lark != nil || req.Mixin != nil || req.Guard != nil
+	hasLegacyUpdate := req.ManagedRuntimes != nil || req.Telegram != nil || req.Slack != nil || req.Line != nil || req.Lark != nil || req.Mixin != nil || req.Discord != nil || req.Guard != nil
 	if hasLegacyUpdate {
 		next, err = normalizeConsoleSettingsUpdatePayload(current, req)
 		if err != nil {
@@ -537,6 +562,7 @@ func (s *server) handleConsoleSettingsPut(w http.ResponseWriter, r *http.Request
 		"line":             next.Line,
 		"lark":             next.Lark,
 		"mixin":            next.Mixin,
+		"discord":          next.Discord,
 		"guard":            next.Guard,
 		"endpoints":        consoleEndpointSettingsFromDocument(doc),
 		"auth_profiles":    consoleAuthProfileSettingsFromDocument(doc),
@@ -630,6 +656,13 @@ func writeConsoleSettings(configPath string, values consoleSettingsPayload) ([]b
 		configbootstrap.DeleteMappingKey(mixinNode, removedKey)
 	}
 
+	discordNode := configbootstrap.EnsureMappingValue(root, "discord")
+	configbootstrap.SetOrDeleteMappingScalar(discordNode, "bot_token", strings.TrimSpace(values.Discord.BotToken))
+	setMappingOrderedStringList(discordNode, "allowed_guild_ids", normalizeConsoleStringList(values.Discord.AllowedGuildIDs))
+	setMappingOrderedStringList(discordNode, "allowed_channel_ids", normalizeConsoleStringList(values.Discord.AllowedChannelIDs))
+	setMappingOrderedStringList(discordNode, "allowed_user_ids", normalizeConsoleStringList(values.Discord.AllowedUserIDs))
+	configbootstrap.SetOrDeleteMappingScalar(discordNode, "group_trigger_mode", strings.TrimSpace(values.Discord.GroupTriggerMode))
+
 	guardNode := configbootstrap.EnsureMappingValue(root, "guard")
 	configbootstrap.SetMappingBoolValue(guardNode, "enabled", values.Guard.Enabled)
 	networkNode := configbootstrap.EnsureMappingValue(guardNode, "network")
@@ -685,6 +718,13 @@ func readConsoleSettingsFromReader(r interface {
 			KeystoreFile:           strings.TrimSpace(r.GetString("mixin.keystore_file")),
 			AllowedConversationIDs: normalizeConsoleStringList(r.GetStringSlice("mixin.allowed_conversation_ids")),
 		},
+		Discord: consoleDiscordSettingsPayload{
+			BotToken:          strings.TrimSpace(r.GetString("discord.bot_token")),
+			AllowedGuildIDs:   normalizeConsoleStringList(r.GetStringSlice("discord.allowed_guild_ids")),
+			AllowedChannelIDs: normalizeConsoleStringList(r.GetStringSlice("discord.allowed_channel_ids")),
+			AllowedUserIDs:    normalizeConsoleStringList(r.GetStringSlice("discord.allowed_user_ids")),
+			GroupTriggerMode:  normalizeConsoleDiscordGroupTriggerMode(r.GetString("discord.group_trigger_mode")),
+		},
 		Guard: consoleGuardSettingsPayload{
 			Enabled: r.GetBool("guard.enabled"),
 			Network: consoleGuardNetworkSettingsPayload{
@@ -712,6 +752,18 @@ func normalizeConsoleSettingsPayload(in consoleSettingsPayload) (consoleSettings
 	}
 	telegramAllowed := normalizeConsoleStringList(in.Telegram.AllowedChatIDs)
 	if _, err := channelopts.ParseTelegramAllowedChatIDs(telegramAllowed); err != nil {
+		return consoleSettingsPayload{}, err
+	}
+	discordGuilds, err := normalizeConsoleDiscordIDs("discord.allowed_guild_ids", in.Discord.AllowedGuildIDs)
+	if err != nil {
+		return consoleSettingsPayload{}, err
+	}
+	discordChannels, err := normalizeConsoleDiscordIDs("discord.allowed_channel_ids", in.Discord.AllowedChannelIDs)
+	if err != nil {
+		return consoleSettingsPayload{}, err
+	}
+	discordUsers, err := normalizeConsoleDiscordIDs("discord.allowed_user_ids", in.Discord.AllowedUserIDs)
+	if err != nil {
 		return consoleSettingsPayload{}, err
 	}
 	return consoleSettingsPayload{
@@ -743,6 +795,13 @@ func normalizeConsoleSettingsPayload(in consoleSettingsPayload) (consoleSettings
 		Mixin: consoleMixinSettingsPayload{
 			KeystoreFile:           strings.TrimSpace(in.Mixin.KeystoreFile),
 			AllowedConversationIDs: normalizeConsoleStringList(in.Mixin.AllowedConversationIDs),
+		},
+		Discord: consoleDiscordSettingsPayload{
+			BotToken:          strings.TrimSpace(in.Discord.BotToken),
+			AllowedGuildIDs:   discordGuilds,
+			AllowedChannelIDs: discordChannels,
+			AllowedUserIDs:    discordUsers,
+			GroupTriggerMode:  normalizeConsoleDiscordGroupTriggerMode(in.Discord.GroupTriggerMode),
 		},
 		Guard: consoleGuardSettingsPayload{
 			Enabled: in.Guard.Enabled,
@@ -840,6 +899,23 @@ func normalizeConsoleSettingsUpdatePayload(
 			next.Mixin.AllowedConversationIDs = normalizeConsoleStringList(*in.Mixin.AllowedConversationIDs)
 		}
 	}
+	if in.Discord != nil {
+		if in.Discord.BotToken != nil {
+			next.Discord.BotToken = strings.TrimSpace(*in.Discord.BotToken)
+		}
+		if in.Discord.AllowedGuildIDs != nil {
+			next.Discord.AllowedGuildIDs = normalizeConsoleStringList(*in.Discord.AllowedGuildIDs)
+		}
+		if in.Discord.AllowedChannelIDs != nil {
+			next.Discord.AllowedChannelIDs = normalizeConsoleStringList(*in.Discord.AllowedChannelIDs)
+		}
+		if in.Discord.AllowedUserIDs != nil {
+			next.Discord.AllowedUserIDs = normalizeConsoleStringList(*in.Discord.AllowedUserIDs)
+		}
+		if in.Discord.GroupTriggerMode != nil {
+			next.Discord.GroupTriggerMode = normalizeConsoleDiscordGroupTriggerMode(*in.Discord.GroupTriggerMode)
+		}
+	}
 	if in.Guard != nil {
 		if in.Guard.Enabled != nil {
 			next.Guard.Enabled = *in.Guard.Enabled
@@ -903,6 +979,29 @@ func normalizeConsoleGroupTriggerMode(value string) string {
 	}
 }
 
+// normalizeConsoleDiscordGroupTriggerMode defaults to strict, as the Discord runtime does.
+func normalizeConsoleDiscordGroupTriggerMode(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case consoleGroupTriggerSmart:
+		return consoleGroupTriggerSmart
+	case consoleGroupTriggerTalkative:
+		return consoleGroupTriggerTalkative
+	default:
+		return consoleGroupTriggerStrict
+	}
+}
+
+// normalizeConsoleDiscordIDs checks that every entry is a Discord ID (a snowflake).
+func normalizeConsoleDiscordIDs(field string, values []string) ([]string, error) {
+	out := normalizeConsoleStringList(values)
+	for _, value := range out {
+		if refid.NormalizeDiscordID(value) == "" {
+			return nil, fmt.Errorf("invalid %s entry %q: not a Discord ID", field, value)
+		}
+	}
+	return out, nil
+}
+
 func buildConsoleSettingsResponseView(
 	settings consoleSettingsPayload,
 	doc *yaml.Node,
@@ -949,6 +1048,11 @@ func buildConsoleSettingsResponseView(
 	if len(envManaged.Mixin) == 0 {
 		envManaged.Mixin = nil
 	}
+	settings.Discord, envManaged.Discord = buildConsoleDiscordSettingsResponseView(
+		settings.Discord,
+		configbootstrap.FindMappingValue(root, "discord"),
+		envManaged.Discord,
+	)
 	secretFields := buildConsoleSettingsSecretFields(root, envManaged)
 	settings.Telegram.BotToken = ""
 	settings.Slack.BotToken = ""
@@ -956,6 +1060,7 @@ func buildConsoleSettingsResponseView(
 	settings.Line.ChannelAccessToken = ""
 	settings.Line.ChannelSecret = ""
 	settings.Lark.AppSecret = ""
+	settings.Discord.BotToken = ""
 	return settings, envManaged, secretFields
 }
 
@@ -980,6 +1085,11 @@ func buildConsoleSettingsSecretFields(root *yaml.Node, envManaged consoleSetting
 			configbootstrap.FindMappingValue(root, "lark"),
 			envManaged.Lark,
 			"app_secret",
+		),
+		Discord: consoleSettingsSecretStatuses(
+			configbootstrap.FindMappingValue(root, "discord"),
+			envManaged.Discord,
+			"bot_token",
 		),
 	}
 }
@@ -1025,6 +1135,21 @@ func buildConsoleTelegramSettingsResponseView(
 	node *yaml.Node,
 	envManaged map[string]agentsettings.EnvManagedField,
 ) (consoleTelegramSettingsPayload, map[string]agentsettings.EnvManagedField) {
+	envManaged = applyConsoleSettingsYAMLEnvManaged(node, envManaged, "bot_token")
+	if _, ok := envManaged["bot_token"]; ok && consoleSettingsShouldHideSensitiveField(node, "bot_token") {
+		settings.BotToken = ""
+	}
+	if len(envManaged) == 0 {
+		return settings, nil
+	}
+	return settings, envManaged
+}
+
+func buildConsoleDiscordSettingsResponseView(
+	settings consoleDiscordSettingsPayload,
+	node *yaml.Node,
+	envManaged map[string]agentsettings.EnvManagedField,
+) (consoleDiscordSettingsPayload, map[string]agentsettings.EnvManagedField) {
 	envManaged = applyConsoleSettingsYAMLEnvManaged(node, envManaged, "bot_token")
 	if _, ok := envManaged["bot_token"]; ok && consoleSettingsShouldHideSensitiveField(node, "bot_token") {
 		settings.BotToken = ""
@@ -1214,6 +1339,9 @@ func currentConsoleSettingsEnvManaged() consoleSettingsEnvManagedPayload {
 	}
 	if field, ok := agentsettings.ManagedEnvField(false, "MISTER_MORPH_MIXIN_KEYSTORE_FILE"); ok {
 		out.Mixin = map[string]agentsettings.EnvManagedField{"keystore_file": field}
+	}
+	if field, ok := agentsettings.ManagedEnvField(true, "MISTER_MORPH_DISCORD_BOT_TOKEN"); ok {
+		out.Discord = map[string]agentsettings.EnvManagedField{"bot_token": field}
 	}
 	return out
 }

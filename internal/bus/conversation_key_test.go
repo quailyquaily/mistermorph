@@ -80,6 +80,25 @@ func TestBuildConversationKeyMixin(t *testing.T) {
 	}
 }
 
+func TestDiscordConversationKey(t *testing.T) {
+	key, err := BuildDiscordConversationKey(" 1234567890123456789 ")
+	if err != nil || key != "discord:1234567890123456789" {
+		t.Fatalf("BuildDiscordConversationKey() = %q, %v", key, err)
+	}
+	id, err := ParseDiscordConversationKey(key)
+	if err != nil || id != "1234567890123456789" {
+		t.Fatalf("ParseDiscordConversationKey() = %q, %v", id, err)
+	}
+	for _, bad := range []string{"", "abc", "0", "-5", "12 34"} {
+		if _, err := BuildDiscordConversationKey(bad); err == nil {
+			t.Fatalf("BuildDiscordConversationKey(%q) accepted", bad)
+		}
+	}
+	if _, err := ParseDiscordConversationKey("slack:123"); err == nil {
+		t.Fatal("a slack key parsed as discord")
+	}
+}
+
 func TestBuildConversationKeyRejectsInvalidInput(t *testing.T) {
 	cases := []struct {
 		name    string

@@ -35,6 +35,8 @@ type ContactsSendToolOptions struct {
 	LarkAppSecret     string
 	LarkBaseURL       string
 	MixinKeystoreFile string
+	DiscordBotToken   string
+	DiscordBaseURL    string
 	FailureCooldown   time.Duration
 }
 
@@ -160,6 +162,8 @@ func executeContactSendTool(ctx context.Context, params map[string]any, opts Con
 		LarkAppSecret:     strings.TrimSpace(opts.LarkAppSecret),
 		LarkBaseURL:       strings.TrimSpace(opts.LarkBaseURL),
 		MixinKeystoreFile: strings.TrimSpace(opts.MixinKeystoreFile),
+		DiscordBotToken:   strings.TrimSpace(opts.DiscordBotToken),
+		DiscordBaseURL:    strings.TrimSpace(opts.DiscordBaseURL),
 	})
 	if err != nil {
 		return "", err

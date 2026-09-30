@@ -127,6 +127,8 @@ type StaticContactsSendConfig struct {
 	LarkAppSecret     string
 	LarkBaseURL       string
 	MixinKeystoreFile string
+	DiscordBotToken   string
+	DiscordBaseURL    string
 	FailureCooldown   time.Duration
 }
 
@@ -250,6 +252,8 @@ func StaticRegistryConfigFromReader(reader StaticRegistryConfigReader) (StaticRe
 			LarkAppSecret:     strings.TrimSpace(reader.GetString("lark.app_secret")),
 			LarkBaseURL:       strings.TrimSpace(reader.GetString("lark.base_url")),
 			MixinKeystoreFile: pathutil.ResolveConfigRelativePath(reader.GetString("mixin.keystore_file"), reader.GetString("config")),
+			DiscordBotToken:   strings.TrimSpace(reader.GetString("discord.bot_token")),
+			DiscordBaseURL:    strings.TrimSpace(reader.GetString("discord.base_url")),
 			FailureCooldown:   failureCooldown,
 		},
 	}, nil
@@ -400,6 +404,8 @@ func RegisterStaticTools(reg *tools.Registry, cfg StaticRegistryConfig, selected
 		LarkAppSecret:     strings.TrimSpace(cfg.ContactsSend.LarkAppSecret),
 		LarkBaseURL:       strings.TrimSpace(cfg.ContactsSend.LarkBaseURL),
 		MixinKeystoreFile: strings.TrimSpace(cfg.ContactsSend.MixinKeystoreFile),
+		DiscordBotToken:   strings.TrimSpace(cfg.ContactsSend.DiscordBotToken),
+		DiscordBaseURL:    strings.TrimSpace(cfg.ContactsSend.DiscordBaseURL),
 		FailureCooldown:   cfg.ContactsSend.FailureCooldown,
 	}
 	if isSelected(BuiltinAgentSend) {

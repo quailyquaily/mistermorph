@@ -282,6 +282,20 @@ description: 列出 integration 包的导出函数、方法、结构体字段，
 | `TaskTimeout` | `time.Duration` | 单个 task 的执行超时。 |
 | `MaxConcurrency` | `int` | conversation 最大并发数。 |
 
+### `type DiscordOptions struct`
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `BotToken` | `string` | Discord bot token。 |
+| `AllowedGuildIDs` | `[]string` | 允许的服务器 ID。 |
+| `AllowedChannelIDs` | `[]string` | 允许的频道 ID；父频道被允许时子区也被允许。 |
+| `AllowedUserIDs` | `[]string` | 允许私信的用户 ID。 |
+| `TaskTimeout` | `time.Duration` | 单个 task 的执行超时。 |
+| `MaxConcurrency` | `int` | 会话最大并发数。 |
+| `GroupTriggerMode` | `string` | 服务器触发模式，默认 `strict`。 |
+| `AddressingConfidenceThreshold` | `float64` | addressing 命中阈值。 |
+| `AddressingInterjectThreshold` | `float64` | 插话阈值。 |
+
 ### `type TelegramHooks struct`
 
 | 字段 | 类型 | 说明 |
@@ -321,6 +335,15 @@ description: 列出 integration 包的导出函数、方法、结构体字段，
 | 参数 | `opts integration.MixinOptions` |
 | 返回值 | `integration.BotRunner`、`error` |
 | 说明 | 构造 Mixin Messenger runner。client ID、session ID 或 Ed25519 私钥无效时会直接返回错误。 |
+
+
+### `(*Runtime).NewDiscordBot(opts DiscordOptions) (BotRunner, error)`
+
+| 项 | 值 |
+| --- | --- |
+| 参数 | `opts integration.DiscordOptions` |
+| 返回值 | `integration.BotRunner`、`error` |
+| 说明 | 构造 Discord runner。`BotToken` 为空时会直接返回错误。 |
 
 ## 事件别名类型
 

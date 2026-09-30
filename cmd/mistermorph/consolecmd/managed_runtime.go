@@ -14,6 +14,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/agentsettings"
 	"github.com/quailyquaily/mistermorph/internal/channelopts"
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/depsutil"
+	discordruntime "github.com/quailyquaily/mistermorph/internal/channelruntime/discord"
 	larkruntime "github.com/quailyquaily/mistermorph/internal/channelruntime/lark"
 	mixinruntime "github.com/quailyquaily/mistermorph/internal/channelruntime/mixin"
 	slackruntime "github.com/quailyquaily/mistermorph/internal/channelruntime/slack"
@@ -39,6 +40,7 @@ const (
 	managedRuntimeSlack    = "slack"
 	managedRuntimeLark     = "lark"
 	managedRuntimeMixin    = "mixin"
+	managedRuntimeDiscord  = "discord"
 )
 
 type managedRuntimeSupervisor struct {
@@ -85,7 +87,7 @@ func normalizeManagedRuntimeKinds(raw []string) ([]string, error) {
 			continue
 		}
 		switch kind {
-		case managedRuntimeTelegram, managedRuntimeSlack, managedRuntimeLark, managedRuntimeMixin:
+		case managedRuntimeTelegram, managedRuntimeSlack, managedRuntimeLark, managedRuntimeMixin, managedRuntimeDiscord:
 		default:
 			return nil, fmt.Errorf("unsupported console.managed_runtimes entry %q", item)
 		}
@@ -309,8 +311,11 @@ func stopManagedRuntimeExecution(active *managedRuntimeExecution, localRuntime *
 	if localRuntime != nil {
 		for _, kind := range kinds {
 			localRuntime.SetManagedRuntimeRunning(kind, false)
-			if kind == managedRuntimeMixin {
+			switch kind {
+			case managedRuntimeMixin:
 				localRuntime.mixinConnected.Store(false)
+			case managedRuntimeDiscord:
+				localRuntime.discordConnected.Store(false)
 			}
 		}
 	}
@@ -464,6 +469,40 @@ func (s *managedRuntimeSupervisor) buildRuntime(kind string, reader *viper.Viper
 		return func(ctx context.Context) error {
 			return mixinruntime.Run(ctx, runtimeDeps, runOpts)
 		}, cleanup, nil
+	case managedRuntimeDiscord:
+		deps, cleanup, err := buildManagedRuntimeDepsFromReader(s.logger(), reader)
+		if err != nil {
+			return nil, nil, err
+		}
+		cfg := channelopts.DiscordConfigFromReader(reader)
+		runOpts := channelopts.BuildDiscordRunOptions(cfg, channelopts.DiscordInput{
+			BotToken:      strings.TrimSpace(reader.GetString("discord.bot_token")),
+			InspectPrompt: s.inspectPrompt, InspectRequest: s.inspectRequest,
+		})
+		runOpts.ServerListen = ""
+		runOpts.ServerAuthToken = ""
+		runOpts.OnConnectionChange = func(connected bool) {
+			if s.localRuntime != nil {
+				s.localRuntime.discordConnected.Store(connected)
+			}
+		}
+		runOpts.TaskStore, err = newManagedRuntimeTaskStore(kind, runOpts.ServerMaxQueue, deps)
+		if err != nil {
+			cleanup()
+			return nil, nil, err
+		}
+		runtimeDeps := discordruntime.Dependencies{
+			CommonDependencies: deps,
+			HandleModelCommand: func(text string) (string, bool, error) {
+				return llmselect.ExecuteCommandText(runtimeValues, llmselect.ProcessStore(), text)
+			},
+			HandleSkillCommand: func(currentLoaded []string) (string, error) {
+				return skillsutil.RenderSkillStatus(skillsutil.SkillsConfigFromReader(reader), currentLoaded)
+			},
+		}
+		return func(ctx context.Context) error {
+			return discordruntime.Run(ctx, runtimeDeps, runOpts)
+		}, cleanup, nil
 	default:
 		return nil, nil, fmt.Errorf("unsupported managed runtime %q", kind)
 	}
@@ -496,6 +535,10 @@ func managedRuntimeMissingCredential(kind string, reader *viper.Viper) (string, 
 		if strings.TrimSpace(reader.GetString("mixin.keystore_file")) == "" {
 			return "mixin.keystore_file", "set MISTER_MORPH_MIXIN_KEYSTORE_FILE or mixin.keystore_file", true
 		}
+	case managedRuntimeDiscord:
+		if strings.TrimSpace(reader.GetString("discord.bot_token")) == "" {
+			return "discord.bot_token", "set MISTER_MORPH_DISCORD_BOT_TOKEN or discord.bot_token", true
+		}
 	}
 	return "", "", false
 }
@@ -518,7 +561,7 @@ func managedRuntimeKindsFromReader(r interface {
 
 func newManagedRuntimeTaskStore(kind string, maxItems int, deps depsutil.CommonDependencies) (daemonruntime.TaskView, error) {
 	switch kind {
-	case managedRuntimeTelegram, managedRuntimeSlack, managedRuntimeLark, managedRuntimeMixin:
+	case managedRuntimeTelegram, managedRuntimeSlack, managedRuntimeLark, managedRuntimeMixin, managedRuntimeDiscord:
 		return daemonruntime.NewTaskViewForTarget(kind, maxItems, daemonruntime.TaskViewConfig{
 			PersistenceTargets: deps.TaskPersistenceTargets,
 			TasksDir:           deps.RuntimePaths.TasksDir,

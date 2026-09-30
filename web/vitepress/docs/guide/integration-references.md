@@ -282,6 +282,20 @@ If you mainly want to see how to configure `integration.Config`, use `PreparedRu
 | `TaskTimeout` | `time.Duration` | Per-task run timeout. |
 | `MaxConcurrency` | `int` | Maximum concurrent conversation count. |
 
+### `type DiscordOptions struct`
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `BotToken` | `string` | Discord bot token. |
+| `AllowedGuildIDs` | `[]string` | Allowed server ids. |
+| `AllowedChannelIDs` | `[]string` | Allowed channel ids; a thread is allowed when its parent is. |
+| `AllowedUserIDs` | `[]string` | Allowed user ids for DMs. |
+| `TaskTimeout` | `time.Duration` | Per-task run timeout. |
+| `MaxConcurrency` | `int` | Maximum concurrent conversation count. |
+| `GroupTriggerMode` | `string` | Server trigger mode; default `strict`. |
+| `AddressingConfidenceThreshold` | `float64` | Addressing hit threshold. |
+| `AddressingInterjectThreshold` | `float64` | Interject threshold. |
+
 ### `type TelegramHooks struct`
 
 | Field | Type | Description |
@@ -321,6 +335,14 @@ If you mainly want to see how to configure `integration.Config`, use `PreparedRu
 | Parameters | `opts integration.MixinOptions` |
 | Returns | `integration.BotRunner`, `error` |
 | Description | Builds a Mixin Messenger runner. Returns an error immediately if the client ID, session ID, or Ed25519 private key is invalid. |
+
+### `(*Runtime).NewDiscordBot(opts DiscordOptions) (BotRunner, error)`
+
+| Item | Value |
+| --- | --- |
+| Parameters | `opts integration.DiscordOptions` |
+| Returns | `integration.BotRunner`, `error` |
+| Description | Builds a Discord runner. Returns an error immediately if `BotToken` is empty. |
 
 ## Event Alias Types
 

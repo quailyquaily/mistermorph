@@ -244,3 +244,17 @@ func TestStorePutMixinChatProfile(t *testing.T) {
 		t.Fatalf("item = %#v", items[0])
 	}
 }
+
+func TestStorePutDiscordChatProfile(t *testing.T) {
+	store := NewStore(t.TempDir())
+	if err := store.Put(context.Background(), Info{ChatID: "discord:200", Type: "group", Name: "Morph HQ / general", FetchedAt: time.Now().UTC()}); err != nil {
+		t.Fatalf("Put() error = %v", err)
+	}
+	items, _, err := store.Read(context.Background())
+	if err != nil || len(items) != 1 || items[0].Platform != "discord" || items[0].Name != "Morph HQ / general" {
+		t.Fatalf("Read() = %#v, %v", items, err)
+	}
+	if _, err := NormalizeChatID("discord:general"); err == nil {
+		t.Fatal("a non-numeric discord chat id was accepted")
+	}
+}

@@ -103,6 +103,7 @@ func TestConfigReadersKeepServeListenAsExplicitOverride(t *testing.T) {
 		{name: "line", read: func(r ConfigReader) string { return LineConfigFromReader(r).ServerListen }},
 		{name: "lark", read: func(r ConfigReader) string { return LarkConfigFromReader(r).ServerListen }},
 		{name: "mixin", read: func(r ConfigReader) string { return MixinConfigFromReader(r).ServerListen }},
+		{name: "discord", read: func(r ConfigReader) string { return DiscordConfigFromReader(r).ServerListen }},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -197,6 +198,7 @@ func TestConfigReadersShareEngineToolsConfig(t *testing.T) {
 		LineConfigFromReader(r).EngineToolsConfig,
 		LarkConfigFromReader(r).EngineToolsConfig,
 		MixinConfigFromReader(r).EngineToolsConfig,
+		DiscordConfigFromReader(r).EngineToolsConfig,
 	}
 	for i, got := range configs {
 		if got.SpawnEnabled != want.SpawnEnabled || got.ACPSpawnEnabled != want.ACPSpawnEnabled || got.CoderEnabled != want.CoderEnabled || len(got.CoderPathExtra) != 1 || got.CoderPathExtra[0] != want.CoderPathExtra[0] {

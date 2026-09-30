@@ -8,6 +8,7 @@ const (
 	ChannelLine     = "line"
 	ChannelLark     = "lark"
 	ChannelMixin    = "mixin"
+	ChannelDiscord  = "discord"
 
 	KindInboundUser      = "inbound_user"
 	KindInboundReaction  = "inbound_reaction"

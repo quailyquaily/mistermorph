@@ -130,6 +130,12 @@ func normalizeContactsSendTargetID(raw string) string {
 			return ""
 		}
 		return "lark_user:" + openID
+	case "discord", "discord_user":
+		discordID := refid.NormalizeDiscordID(id)
+		if discordID == "" {
+			return ""
+		}
+		return protocol + ":" + discordID
 	default:
 		normalized, ok := refid.Normalize(raw)
 		if !ok {

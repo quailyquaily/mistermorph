@@ -54,3 +54,13 @@ mistermorph mixin --log-level info
 ```
 
 `mixin.keystore_file` には Mixin Developer Dashboard で生成した Ed25519 keystore を指定します。設定方法は [Mixin Messenger ドキュメント](https://github.com/quailyquaily/mistermorph/blob/master/docs/mixin.md)を参照してください。
+
+## Discord Bot
+
+Gateway を使う Discord runtime を単独で起動します。DM、サーバーのチャンネル、スレッドに対応します。
+
+```bash
+mistermorph discord --log-level info
+```
+
+`discord.bot_token`（または `MISTER_MORPH_DISCORD_BOT_TOKEN`）を設定します。サーバーでは、既定の `strict` トリガーはメンションと返信にだけ応答します。設定方法は [Discord ドキュメント](https://github.com/quailyquaily/mistermorph/blob/master/docs/discord.md)を参照してください。

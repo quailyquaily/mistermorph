@@ -11,6 +11,7 @@ import (
 
 	"github.com/quailyquaily/mistermorph/cmd/mistermorph/chatcmd"
 	"github.com/quailyquaily/mistermorph/cmd/mistermorph/consolecmd"
+	"github.com/quailyquaily/mistermorph/cmd/mistermorph/discordcmd"
 	"github.com/quailyquaily/mistermorph/cmd/mistermorph/larkcmd"
 	"github.com/quailyquaily/mistermorph/cmd/mistermorph/linecmd"
 	"github.com/quailyquaily/mistermorph/cmd/mistermorph/mixincmd"
@@ -162,6 +163,13 @@ func newRootRuntime() *rootRuntime {
 		Dependencies:       mixinRuntime.Dependencies(registryResolver, guardResolver),
 		HandleModelCommand: mixinRuntime.HandleModelCommand,
 		HandleSkillCommand: mixinRuntime.HandleSkillCommand,
+	}))
+
+	discordRuntime := newChannelCommandRuntime()
+	cmd.AddCommand(discordcmd.NewCommand(discordcmd.Dependencies{
+		Dependencies:       discordRuntime.Dependencies(registryResolver, guardResolver),
+		HandleModelCommand: discordRuntime.HandleModelCommand,
+		HandleSkillCommand: discordRuntime.HandleSkillCommand,
 	}))
 	cmd.AddCommand(newToolsCmd(registryResolver.Registry))
 	cmd.AddCommand(newAuthCmd())
@@ -557,7 +565,7 @@ func shouldPrepareRootRegistry(cmd *cobra.Command) bool {
 	switch cmd.CommandPath() {
 	case "morph", "morph chat":
 		return !cmd.Flags().Changed("runtime-url")
-	case "morph run", "morph telegram", "morph slack", "morph line", "morph lark", "morph mixin", "morph tools":
+	case "morph run", "morph telegram", "morph slack", "morph line", "morph lark", "morph mixin", "morph discord", "morph tools":
 		return true
 	default:
 		return false

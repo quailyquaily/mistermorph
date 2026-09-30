@@ -140,6 +140,7 @@ type consoleLocalRuntime struct {
 	managedRuntimeMu        sync.RWMutex
 	managedRuntimeRunning   map[string]bool
 	mixinConnected          atomic.Bool
+	discordConnected        atomic.Bool
 	awarenessMu             sync.Mutex
 	topicTitleRegenerations sync.Map
 	streamHub               *consoleStreamHub
@@ -1240,13 +1241,16 @@ func (r *consoleLocalRuntime) routesOptions(authToken string) daemonruntime.Rout
 						strings.TrimSpace(reader.GetString("slack.app_token")) != "",
 					"lark_configured": strings.TrimSpace(reader.GetString("lark.app_id")) != "" &&
 						strings.TrimSpace(reader.GetString("lark.app_secret")) != "",
-					"mixin_configured": strings.TrimSpace(reader.GetString("mixin.keystore_file")) != "",
-					"running":          "console",
-					"telegram_running": r.isManagedRuntimeRunning("telegram"),
-					"slack_running":    r.isManagedRuntimeRunning("slack"),
-					"lark_running":     r.isManagedRuntimeRunning("lark"),
-					"mixin_running":    r.isManagedRuntimeRunning("mixin"),
-					"mixin_connected":  r.mixinConnected.Load(),
+					"mixin_configured":   strings.TrimSpace(reader.GetString("mixin.keystore_file")) != "",
+					"discord_configured": strings.TrimSpace(reader.GetString("discord.bot_token")) != "",
+					"running":            "console",
+					"telegram_running":   r.isManagedRuntimeRunning("telegram"),
+					"slack_running":      r.isManagedRuntimeRunning("slack"),
+					"lark_running":       r.isManagedRuntimeRunning("lark"),
+					"mixin_running":      r.isManagedRuntimeRunning("mixin"),
+					"mixin_connected":    r.mixinConnected.Load(),
+					"discord_running":    r.isManagedRuntimeRunning("discord"),
+					"discord_connected":  r.discordConnected.Load(),
 				},
 				"poke_enabled":     r.canPokeAwareness(),
 				"cron_run_enabled": r.canRunCron(),

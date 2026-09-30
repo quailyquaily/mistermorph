@@ -153,6 +153,20 @@ description: mistermorph が現在サポートしているコマンドライン�
 - `--mixin-task-timeout`: メッセージ単位の agent timeout。
 - `--mixin-max-concurrency`: 同時処理する Mixin conversation の最大数。
 
+## `discord`
+
+- `--inspect-prompt`: prompt messages を `./dump` に出力します。
+- `--inspect-request`: LLM request/response を `./dump` に出力します。
+- `--discord-bot-token`: Discord bot token。
+- `--discord-allowed-guild-id`: 許可する Discord サーバー ID。繰り返し指定可。
+- `--discord-allowed-channel-id`: 許可する Discord チャンネル ID。親チャンネルが許可されていればスレッドも許可されます。繰り返し指定可。
+- `--discord-allowed-user-id`: DM を許可する Discord ユーザー ID。繰り返し指定可。
+- `--discord-group-trigger-mode`: サーバーのトリガーモード、`strict|smart|talkative`（既定は `strict`）。
+- `--discord-addressing-confidence-threshold`: addressing の confidence の下限。
+- `--discord-addressing-interject-threshold`: interject スコアの下限。
+- `--discord-task-timeout`: メッセージ単位の agent timeout。
+- `--discord-max-concurrency`: 同時処理する Discord 会話の最大数。
+
 ## `install`
 
 - `-y, --yes`: 確認プロンプトをスキップする。

@@ -96,6 +96,7 @@ Channel setup:
 - [LINE](docs/line.md)
 - [Lark](docs/lark.md)
 - [Mixin Messenger](docs/mixin.md)
+- [Discord](docs/discord.md)
 
 Full docs index: [docs/README.md](docs/README.md)
 

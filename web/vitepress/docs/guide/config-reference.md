@@ -263,6 +263,21 @@ Shell defaults are platform-specific:
 - `mixin.max_concurrency`
 - `mixin.serve_listen`
 
+## Discord
+
+- `discord.base_url`
+- `discord.bot_token`
+- `discord.allowed_guild_ids`
+- `discord.allowed_channel_ids`
+- `discord.allowed_user_ids`
+- `discord.group_trigger_mode`
+- `discord.record_untriggered`
+- `discord.addressing_confidence_threshold`
+- `discord.addressing_interject_threshold`
+- `discord.task_timeout`
+- `discord.max_concurrency`
+- `discord.serve_listen`
+
 ## Heartbeat
 
 - `heartbeat.enabled`

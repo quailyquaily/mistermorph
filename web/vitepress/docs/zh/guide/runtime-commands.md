@@ -12,10 +12,12 @@ description: Chat、Console 和其他 Channels 支持的命令。
 > Slack 群聊里，命令需要明确提到 bot。Telegram 群聊可以使用普通 bot command，例如 `/models@BotName`。
 >
 > Mixin 群聊里，需要在命令前提到 Bot 的 Mixin ID，例如 `@7000123456 /models`。
+>
+> Discord 上，这些命令也注册成了斜杠命令。在服务器里手动输入命令时，需要先 @提及 bot，例如 `@Morph /models`。
 
 ## 通用命令
 
-这些命令在 CLI chat、Console Web、Telegram、Slack、LINE、Lark 和 Mixin Messenger 中可用。
+这些命令在 CLI chat、Console Web、Telegram、Slack、LINE、Lark、Mixin Messenger 和 Discord 中可用。
 
 | 命令 | 作用 |
 |---|---|
@@ -86,3 +88,11 @@ description: Chat、Console 和其他 Channels 支持的命令。
 |---|---|
 | `/id` | 显示当前 Mixin conversation UUID 和类型。 |
 | `/reset` | 清空 conversation 历史、sticky skills 和 checkpoint 状态。 |
+
+## Discord 特有的命令
+
+| 命令 | 作用 |
+|---|---|
+| `/id` | 显示当前 chat id（`discord:<channel_id>`）、服务器 ID、会话类型和你的用户引用。 |
+| `/reset` | 清空会话历史、sticky skills 和 checkpoint 状态。 |
+| `/approve <id>`、`/deny <id>` | 处理待审批请求；审批消息里也有按钮。 |

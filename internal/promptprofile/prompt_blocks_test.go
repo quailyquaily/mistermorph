@@ -161,6 +161,19 @@ func TestAppendMixinRuntimeBlocks(t *testing.T) {
 	}
 }
 
+func TestAppendDiscordRuntimeBlocks(t *testing.T) {
+	for _, isGroup := range []bool{false, true} {
+		spec := agent.PromptSpec{}
+		AppendDiscordRuntimeBlocks(&spec, isGroup)
+		if len(spec.Blocks) != 1 || !strings.Contains(spec.Blocks[0].Content, "[[ Discord Policies ]]") {
+			t.Fatalf("isGroup=%v blocks = %#v", isGroup, spec.Blocks)
+		}
+		if got := strings.Contains(spec.Blocks[0].Content, "[[ Discord Server Policies ]]"); got != isGroup {
+			t.Fatalf("isGroup=%v server policy present=%v", isGroup, got)
+		}
+	}
+}
+
 func TestAppendTodoWorkflowBlock_RequiresTodoUpdateTool(t *testing.T) {
 	spec := agent.PromptSpec{}
 	reg := tools.NewRegistry()

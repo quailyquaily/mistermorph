@@ -27,6 +27,7 @@ const (
 	ChannelLine     = channels.Line
 	ChannelLark     = channels.Lark
 	ChannelMixin    = channels.Mixin
+	ChannelDiscord  = channels.Discord
 	ShareTopic      = "chat.message"
 )
 
@@ -48,6 +49,9 @@ type Contact struct {
 	MixinUserID         string     `json:"mixin_user_id,omitempty"`
 	MixinIdentityNumber string     `json:"mixin_identity_number,omitempty"`
 	MixinChatIDs        []string   `json:"mixin_chat_ids,omitempty"`
+	DiscordUserID       string     `json:"discord_user_id,omitempty"`
+	DiscordDMChannelID  string     `json:"discord_dm_channel_id,omitempty"`
+	DiscordChannelIDs   []string   `json:"discord_channel_ids,omitempty"`
 	SlackTeamID         string     `json:"slack_team_id,omitempty"`
 	SlackUserID         string     `json:"slack_user_id,omitempty"`
 	SlackDMChannelID    string     `json:"slack_dm_channel_id,omitempty"`

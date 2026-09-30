@@ -166,3 +166,21 @@ func TestParseMixinIDs(t *testing.T) {
 		t.Fatalf("invalid hint = ok %v, err %v", ok, err)
 	}
 }
+
+func TestDiscordReferences(t *testing.T) {
+	if id, ok, err := ParseDiscordChatIDHint("discord:1234567890123"); !ok || err != nil || id != "1234567890123" {
+		t.Fatalf("chat hint = %q, %v, %v", id, ok, err)
+	}
+	if _, ok, err := ParseDiscordChatIDHint("discord:abc"); !ok || err == nil {
+		t.Fatal("an invalid discord chat id was accepted")
+	}
+	if _, ok, _ := ParseDiscordChatIDHint("slack:C1"); ok {
+		t.Fatal("a slack hint was taken as discord")
+	}
+	if id, ok := ParseDiscordUserContactID("discord_user:42"); !ok || id != "42" {
+		t.Fatalf("user id = %q, %v", id, ok)
+	}
+	if _, ok := ParseDiscordUserContactID("discord:42"); ok {
+		t.Fatal("a channel reference was taken as a user")
+	}
+}

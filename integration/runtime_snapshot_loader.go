@@ -86,6 +86,7 @@ func loadRuntimeSnapshotFromReader(v *viper.Viper) runtimeSnapshot {
 		Telegram:            channelopts.TelegramConfigFromReader(v),
 		Slack:               channelopts.SlackConfigFromReader(v),
 		Mixin:               channelopts.MixinConfigFromReader(v),
+		Discord:             channelopts.DiscordConfigFromReader(v),
 		MCPServers:          mcphost.MCPConfigFromReader(v),
 		ACPAgents:           acpclient.AgentsFromReader(v),
 		Paths:               paths,

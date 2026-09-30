@@ -541,6 +541,9 @@ func contactReferences(contact contacts.Contact) []string {
 	if identityNumber := strings.TrimSpace(contact.MixinIdentityNumber); identityNumber != "" {
 		refs = append(refs, "mixin:@"+identityNumber)
 	}
+	if userID := strings.TrimSpace(contact.DiscordUserID); userID != "" {
+		refs = append(refs, "discord_user:"+userID)
+	}
 	return refs
 }
 
@@ -561,6 +564,8 @@ func channelForReference(ref string) string {
 		return contacts.ChannelLark
 	case strings.HasPrefix(lower, "mixin:"):
 		return contacts.ChannelMixin
+	case strings.HasPrefix(lower, "discord_user:"):
+		return contacts.ChannelDiscord
 	default:
 		return ""
 	}

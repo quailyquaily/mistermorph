@@ -7,7 +7,7 @@
 //
 // In addition to one-shot task execution (RunTask), it can also expose
 // long-running channel runners via Runtime.NewTelegramBot(...) and
-// Runtime.NewSlackBot(...), and Runtime.NewMixinBot(...).
+// Runtime.NewSlackBot(...), Runtime.NewMixinBot(...), and Runtime.NewDiscordBot(...).
 //
 // Configuration is explicit via Config.Set(...) / Config.Overrides.
 // The embedding host owns env/config-file loading and passes resolved values in.

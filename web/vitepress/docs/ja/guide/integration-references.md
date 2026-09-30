@@ -282,6 +282,20 @@ description: integration パッケージの公開関数、メソッド、構造�
 | `TaskTimeout` | `time.Duration` | 1 task あたりの実行 timeout。 |
 | `MaxConcurrency` | `int` | conversation の最大同時実行数。 |
 
+### `type DiscordOptions struct`
+
+| フィールド | 型 | 説明 |
+| --- | --- | --- |
+| `BotToken` | `string` | Discord bot token。 |
+| `AllowedGuildIDs` | `[]string` | 許可するサーバー ID。 |
+| `AllowedChannelIDs` | `[]string` | 許可するチャンネル ID。親チャンネルが許可されていればスレッドも許可。 |
+| `AllowedUserIDs` | `[]string` | DM を許可するユーザー ID。 |
+| `TaskTimeout` | `time.Duration` | 1 task あたりの実行 timeout。 |
+| `MaxConcurrency` | `int` | 会話の最大同時実行数。 |
+| `GroupTriggerMode` | `string` | サーバーのトリガーモード。既定は `strict`。 |
+| `AddressingConfidenceThreshold` | `float64` | addressing のしきい値。 |
+| `AddressingInterjectThreshold` | `float64` | interject のしきい値。 |
+
 ### `type TelegramHooks struct`
 
 | フィールド | 型 | 説明 |
@@ -321,6 +335,15 @@ description: integration パッケージの公開関数、メソッド、構造�
 | 引数 | `opts integration.MixinOptions` |
 | 戻り値 | `integration.BotRunner`、`error` |
 | 説明 | Mixin Messenger runner を構築します。client ID、session ID、Ed25519 private key が無効なら即座に error を返します。 |
+
+
+### `(*Runtime).NewDiscordBot(opts DiscordOptions) (BotRunner, error)`
+
+| 項目 | 値 |
+| --- | --- |
+| 引数 | `opts integration.DiscordOptions` |
+| 戻り値 | `integration.BotRunner`、`error` |
+| 説明 | Discord runner を構築します。`BotToken` が空なら即座に error を返します。 |
 
 ## イベント alias 型
 

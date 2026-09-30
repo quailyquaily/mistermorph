@@ -97,6 +97,20 @@ func TestApplyDisablesRecordUntriggeredByDefault(t *testing.T) {
 	}
 }
 
+func TestApplySetsDiscordDefaults(t *testing.T) {
+	v := viper.New()
+	Apply(v)
+	if got := v.GetString("discord.group_trigger_mode"); got != "strict" {
+		t.Fatalf("discord.group_trigger_mode = %q, want strict", got)
+	}
+	if got := v.GetString("discord.base_url"); got != "https://discord.com/api/v10" {
+		t.Fatalf("discord.base_url = %q", got)
+	}
+	if got := v.GetInt("discord.max_concurrency"); got != DefaultChannelMaxConcurrency {
+		t.Fatalf("discord.max_concurrency = %d", got)
+	}
+}
+
 func TestApplySetsMixinDefaults(t *testing.T) {
 	v := viper.New()
 	Apply(v)

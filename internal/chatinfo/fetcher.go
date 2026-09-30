@@ -20,6 +20,7 @@ const (
 	defaultSlackBaseURL    = "https://slack.com/api"
 	defaultLineBaseURL     = "https://api.line.me"
 	defaultLarkBaseURL     = "https://open.feishu.cn/open-apis"
+	defaultDiscordBaseURL  = "https://discord.com/api/v10"
 )
 
 type FetcherOptions struct {
@@ -33,6 +34,8 @@ type FetcherOptions struct {
 	LarkAppID        string
 	LarkAppSecret    string
 	LarkBaseURL      string
+	DiscordBotToken  string
+	DiscordBaseURL   string
 }
 
 type FetcherOptionsReader interface {
@@ -52,6 +55,8 @@ func FetcherOptionsFromReader(reader FetcherOptionsReader) FetcherOptions {
 		LarkAppID:        strings.TrimSpace(reader.GetString("lark.app_id")),
 		LarkAppSecret:    strings.TrimSpace(reader.GetString("lark.app_secret")),
 		LarkBaseURL:      strings.TrimSpace(reader.GetString("lark.base_url")),
+		DiscordBotToken:  strings.TrimSpace(reader.GetString("discord.bot_token")),
+		DiscordBaseURL:   strings.TrimSpace(reader.GetString("discord.base_url")),
 	}
 }
 
@@ -65,6 +70,8 @@ type Fetcher struct {
 	lineBaseURL      string
 	larkBaseURL      string
 	larkTokenClient  *larkapi.TenantTokenClient
+	discordBotToken  string
+	discordBaseURL   string
 }
 
 func NewFetcher(opts FetcherOptions) *Fetcher {
@@ -83,6 +90,8 @@ func NewFetcher(opts FetcherOptions) *Fetcher {
 		lineBaseURL:      baseURLOrDefault(opts.LineBaseURL, defaultLineBaseURL),
 		larkBaseURL:      larkBaseURL,
 		larkTokenClient:  larkapi.NewTenantTokenClient(client, larkBaseURL, opts.LarkAppID, opts.LarkAppSecret),
+		discordBotToken:  strings.TrimSpace(opts.DiscordBotToken),
+		discordBaseURL:   baseURLOrDefault(opts.DiscordBaseURL, defaultDiscordBaseURL),
 	}
 }
 
@@ -101,6 +110,8 @@ func (f *Fetcher) RefreshChatInfo(ctx context.Context, chatID string) (Info, err
 		return f.fetchLine(ctx, chatID)
 	case "lark":
 		return f.fetchLark(ctx, chatID)
+	case "discord":
+		return f.fetchDiscord(ctx, chatID)
 	default:
 		return Info{}, fmt.Errorf("unsupported chat_id: %s", chatID)
 	}
@@ -250,6 +261,30 @@ func (f *Fetcher) fetchLine(ctx context.Context, chatID string) (Info, error) {
 		Type:     "group",
 		Name:     strings.TrimSpace(resp.GroupName),
 	}, nil
+}
+
+// fetchDiscord reads a channel's name. A DM channel has none; a thread is named for itself.
+func (f *Fetcher) fetchDiscord(ctx context.Context, chatID string) (Info, error) {
+	if f == nil || f.discordBotToken == "" {
+		return Info{}, fmt.Errorf("discord bot token is required")
+	}
+	channelID, _, err := refid.ParseDiscordChatIDHint(chatID)
+	if err != nil {
+		return Info{}, err
+	}
+	var resp struct {
+		ID   string `json:"id"`
+		Type int    `json:"type"`
+		Name string `json:"name"`
+	}
+	if err := f.doJSON(ctx, http.MethodGet, joinURL(f.discordBaseURL, "/channels/"+channelID), "Bot "+f.discordBotToken, nil, &resp); err != nil {
+		return Info{}, err
+	}
+	chatType := "group"
+	if resp.Type == 1 || resp.Type == 3 {
+		chatType = "private"
+	}
+	return Info{ChatID: chatID, Platform: "discord", Type: chatType, Name: strings.TrimSpace(resp.Name)}, nil
 }
 
 func (f *Fetcher) fetchLark(ctx context.Context, chatID string) (Info, error) {

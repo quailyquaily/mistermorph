@@ -133,7 +133,7 @@ func ConsoleFields() []Field {
 	}
 
 	groupTrigger := []string{"smart", "strict", "talkative"}
-	for _, channel := range []string{"telegram", "slack", "line", "lark"} {
+	for _, channel := range []string{"telegram", "slack", "line", "lark", "discord"} {
 		fields = append(fields,
 			Field{Path: channel + ".group_trigger_mode", Kind: KindString, ApplyMode: ApplyRuntimeRestart, Enum: groupTrigger},
 			Field{Path: channel + ".record_untriggered", Kind: KindBool, ApplyMode: ApplyRuntimeRestart},
@@ -168,6 +168,11 @@ func ConsoleFields() []Field {
 		Field{Path: "mixin.task_timeout", Kind: KindDuration, ApplyMode: ApplyRuntimeRestart},
 		Field{Path: "mixin.max_concurrency", Kind: KindInt, ApplyMode: ApplyRuntimeRestart, Min: &one},
 		Field{Path: "mixin.serve_listen", Kind: KindString, ApplyMode: ApplyProcessRestart},
+		Field{Path: "discord.base_url", Kind: KindString, ApplyMode: ApplyRuntimeRestart},
+		Field{Path: "discord.bot_token", Kind: KindString, Sensitive: true, ApplyMode: ApplyRuntimeRestart},
+		Field{Path: "discord.allowed_guild_ids", Kind: KindStringList, ApplyMode: ApplyRuntimeRestart},
+		Field{Path: "discord.allowed_channel_ids", Kind: KindStringList, ApplyMode: ApplyRuntimeRestart},
+		Field{Path: "discord.allowed_user_ids", Kind: KindStringList, ApplyMode: ApplyRuntimeRestart},
 	)
 	return fields
 }

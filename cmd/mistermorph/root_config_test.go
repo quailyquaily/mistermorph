@@ -30,6 +30,7 @@ func TestShouldPrepareRootRegistry(t *testing.T) {
 		{path: "morph line", want: true},
 		{path: "morph lark", want: true},
 		{path: "morph mixin", want: true},
+		{path: "morph discord", want: true},
 		{path: "morph tools", want: true},
 		{path: "morph console serve", want: false},
 		{path: "morph version", want: false},

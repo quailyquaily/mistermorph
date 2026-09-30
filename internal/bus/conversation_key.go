@@ -90,6 +90,33 @@ func BuildMixinConversationKey(conversationID string) (string, error) {
 	return BuildConversationKey(ChannelMixin, id.String())
 }
 
+// BuildDiscordConversationKey keys a Discord channel, thread or DM channel by its snowflake ID.
+func BuildDiscordConversationKey(channelID string) (string, error) {
+	channelID, err := normalizeDiscordSnowflake(channelID)
+	if err != nil {
+		return "", err
+	}
+	return BuildConversationKey(ChannelDiscord, channelID)
+}
+
+func ParseDiscordConversationKey(conversationKey string) (string, error) {
+	const prefix = "discord:"
+	value := strings.TrimSpace(conversationKey)
+	if !strings.HasPrefix(strings.ToLower(value), prefix) {
+		return "", fmt.Errorf("discord conversation key is invalid")
+	}
+	return normalizeDiscordSnowflake(value[len(prefix):])
+}
+
+func normalizeDiscordSnowflake(value string) (string, error) {
+	value = strings.TrimSpace(value)
+	id, err := strconv.ParseUint(value, 10, 64)
+	if err != nil || id == 0 {
+		return "", fmt.Errorf("discord channel id is invalid")
+	}
+	return strconv.FormatUint(id, 10), nil
+}
+
 func ParseMixinConversationKey(conversationKey string) (string, error) {
 	const prefix = "mixin:"
 	value := strings.TrimSpace(conversationKey)

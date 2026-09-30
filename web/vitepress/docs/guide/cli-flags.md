@@ -153,6 +153,20 @@ This command accepts an optional `profile-name` positional argument. Without one
 - `--mixin-task-timeout`: Per-message agent timeout.
 - `--mixin-max-concurrency`: Max number of Mixin conversations processed concurrently.
 
+## `discord`
+
+- `--inspect-prompt`: Dump prompt messages into `./dump`.
+- `--inspect-request`: Dump LLM request/response payloads into `./dump`.
+- `--discord-bot-token`: Discord bot token.
+- `--discord-allowed-guild-id`: Allowed Discord server id. Repeatable.
+- `--discord-allowed-channel-id`: Allowed Discord channel id; a thread is allowed when its parent is. Repeatable.
+- `--discord-allowed-user-id`: Allowed Discord user id for DMs. Repeatable.
+- `--discord-group-trigger-mode`: Server trigger mode, `strict|smart|talkative` (default `strict`).
+- `--discord-addressing-confidence-threshold`: Minimum addressing confidence.
+- `--discord-addressing-interject-threshold`: Minimum interject score.
+- `--discord-task-timeout`: Per-message agent timeout.
+- `--discord-max-concurrency`: Max number of Discord conversations processed concurrently.
+
 ## `install`
 
 - `-y, --yes`: Skip confirmation prompts.
