@@ -24,8 +24,10 @@ func NormalizePlanSteps(p *Plan) {
 			st = PlanStatusPending
 		}
 		normalized = append(normalized, PlanStep{
-			Step:   step,
-			Status: st,
+			Step:      step,
+			Status:    st,
+			Note:      strings.TrimSpace(p.Steps[i].Note),
+			ToolCalls: p.Steps[i].ToolCalls,
 		})
 	}
 	p.Steps = normalized
@@ -56,17 +58,30 @@ func NormalizePlanSteps(p *Plan) {
 	}
 }
 
-func AdvancePlanOnSuccess(p *Plan) (completedIndex int, completedStep string, startedIndex int, startedStep string, ok bool) {
-	completedIndex = -1
-	startedIndex = -1
-	if p == nil || len(p.Steps) == 0 {
-		return -1, "", -1, "", false
+// RecordPlanStepToolCall counts a tool call against the step in progress.
+func RecordPlanStepToolCall(p *Plan) {
+	if p == nil {
+		return
 	}
-
-	cur := -1
-	next := -1
 	for i := range p.Steps {
-		if p.Steps[i].Status == PlanStatusInProgress && cur == -1 {
+		if p.Steps[i].Status == PlanStatusInProgress {
+			p.Steps[i].ToolCalls++
+			return
+		}
+	}
+}
+
+// CompletePlanStep closes the step in progress with the agent's note and starts the next pending
+// step. It does nothing while the step has made no tool call: text sent with a step's first tool
+// calls announces its work rather than reporting it.
+func CompletePlanStep(p *Plan, note string) (completedIndex int, completedStep string, startedIndex int, startedStep string, ok bool) {
+	completedIndex, startedIndex = -1, -1
+	if p == nil {
+		return completedIndex, "", startedIndex, "", false
+	}
+	cur, next := -1, -1
+	for i := range p.Steps {
+		if cur == -1 && p.Steps[i].Status == PlanStatusInProgress {
 			cur = i
 			continue
 		}
@@ -74,18 +89,17 @@ func AdvancePlanOnSuccess(p *Plan) (completedIndex int, completedStep string, st
 			next = i
 		}
 	}
-
-	if cur != -1 {
-		completedIndex = cur
-		completedStep = p.Steps[cur].Step
-		p.Steps[cur].Status = PlanStatusCompleted
+	if cur == -1 || p.Steps[cur].ToolCalls == 0 {
+		return completedIndex, "", startedIndex, "", false
 	}
+	completedIndex, completedStep = cur, p.Steps[cur].Step
+	p.Steps[cur].Status = PlanStatusCompleted
+	p.Steps[cur].Note = strings.TrimSpace(note)
 	if next != -1 {
-		startedIndex = next
-		startedStep = p.Steps[next].Step
+		startedIndex, startedStep = next, p.Steps[next].Step
 		p.Steps[next].Status = PlanStatusInProgress
 	}
-	return completedIndex, completedStep, startedIndex, startedStep, cur != -1
+	return completedIndex, completedStep, startedIndex, startedStep, true
 }
 
 func CurrentPlanStep(p *Plan) (index int, step string, ok bool) {
@@ -113,4 +127,19 @@ func CompleteAllPlanSteps(p *Plan) {
 	for i := range p.Steps {
 		p.Steps[i].Status = PlanStatusCompleted
 	}
+}
+
+// PlanNotes are the notes of the completed steps, in order: what the agent told the user as it
+// finished each step.
+func PlanNotes(p *Plan) []string {
+	if p == nil {
+		return nil
+	}
+	var notes []string
+	for _, step := range p.Steps {
+		if note := strings.TrimSpace(step.Note); note != "" && step.Status == PlanStatusCompleted {
+			notes = append(notes, note)
+		}
+	}
+	return notes
 }

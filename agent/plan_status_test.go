@@ -31,50 +31,65 @@ func TestNormalizePlanStepsDropsEmptySteps(t *testing.T) {
 	}
 }
 
-func TestAdvancePlanOnSuccessNoInProgressStepReturnsFalse(t *testing.T) {
-	plan := &Plan{
-		Steps: PlanSteps{
-			{Step: "done", Status: PlanStatusCompleted},
-		},
+func TestCompletePlanStepWaitsForTheStepsFirstToolCall(t *testing.T) {
+	plan := &Plan{Steps: PlanSteps{
+		{Step: "collect data", Status: PlanStatusInProgress},
+		{Step: "summarize", Status: PlanStatusPending},
+	}}
+	if _, _, _, _, ok := CompletePlanStep(plan, "I'll collect the data."); ok {
+		t.Fatal("a step with no tool call closed")
 	}
-
-	completedIndex, completedStep, startedIndex, startedStep, ok := AdvancePlanOnSuccess(plan)
-	if ok {
-		t.Fatal("ok = true, want false")
+	RecordPlanStepToolCall(plan)
+	completedIndex, completedStep, startedIndex, startedStep, ok := CompletePlanStep(plan, "  Found 12 rows.  ")
+	if !ok || completedIndex != 0 || completedStep != "collect data" || startedIndex != 1 || startedStep != "summarize" {
+		t.Fatalf("CompletePlanStep = (%d, %q, %d, %q, %v)", completedIndex, completedStep, startedIndex, startedStep, ok)
 	}
-	if completedIndex != -1 || completedStep != "" {
-		t.Fatalf("completed = (%d, %q), want (-1, \"\")", completedIndex, completedStep)
+	if plan.Steps[0].Status != PlanStatusCompleted || plan.Steps[0].Note != "Found 12 rows." {
+		t.Fatalf("steps[0] = %+v", plan.Steps[0])
 	}
-	if startedIndex != -1 || startedStep != "" {
-		t.Fatalf("started = (%d, %q), want (-1, \"\")", startedIndex, startedStep)
+	// The next step has made no call yet, so text does not close it.
+	if _, _, _, _, ok := CompletePlanStep(plan, "Summarizing now."); ok || plan.Steps[1].Status != PlanStatusInProgress {
+		t.Fatalf("steps[1] = %+v, closed without a tool call", plan.Steps[1])
 	}
 }
 
-func TestAdvancePlanOnSuccessAdvancesNormalizedPlan(t *testing.T) {
-	plan := &Plan{
-		Steps: PlanSteps{
-			{Step: "collect data", Status: PlanStatusInProgress},
-			{Step: "summarize", Status: PlanStatusPending},
-		},
+func TestCompletePlanStepWithNoStepInProgress(t *testing.T) {
+	plan := &Plan{Steps: PlanSteps{{Step: "done", Status: PlanStatusCompleted, ToolCalls: 2}}}
+	completedIndex, completedStep, startedIndex, startedStep, ok := CompletePlanStep(plan, "note")
+	if ok || completedIndex != -1 || completedStep != "" || startedIndex != -1 || startedStep != "" {
+		t.Fatalf("CompletePlanStep = (%d, %q, %d, %q, %v)", completedIndex, completedStep, startedIndex, startedStep, ok)
 	}
+	if _, _, _, _, ok := CompletePlanStep(nil, "note"); ok {
+		t.Fatal("nil plan closed a step")
+	}
+}
 
-	completedIndex, completedStep, startedIndex, startedStep, ok := AdvancePlanOnSuccess(plan)
-	if !ok {
-		t.Fatal("ok = false, want true")
+func TestNormalizePlanStepsKeepsNotesAndCounts(t *testing.T) {
+	plan := &Plan{Steps: PlanSteps{{Step: "read", Status: PlanStatusCompleted, Note: " 6 sections ", ToolCalls: 1}}}
+	NormalizePlanSteps(plan)
+	if plan.Steps[0].Note != "6 sections" || plan.Steps[0].ToolCalls != 1 {
+		t.Fatalf("steps[0] = %+v", plan.Steps[0])
 	}
-	if completedIndex != 0 || completedStep != "collect data" {
-		t.Fatalf("completed = (%d, %q), want (0, %q)", completedIndex, completedStep, "collect data")
+}
+
+// Models that answer in the response format sometimes wrap the step's message in it, as in a
+// console task where gpt-5.6-sol sent a plan response with each step's tool calls.
+func TestPlanStepNoteFromText(t *testing.T) {
+	cases := []struct {
+		name, text, want string
+	}{
+		{"plain text", "  官网可正常访问，主体为 ARCH株式会社。 ", "官网可正常访问，主体为 ARCH株式会社。"},
+		{"plan response", `{"type":"plan","reasoning":"官网可正常访问，主体为 ARCH株式会社。","steps":[{"step":"查看官网","status":"completed"},{"step":"查询登记","status":"in_progress"}]}`, "官网可正常访问，主体为 ARCH株式会社。"},
+		{"fenced final response", "```json\n{\"type\":\"final\",\"output\":\"Read 6 sections.\"}\n```", "Read 6 sections."},
+		{"plan response without reasoning", `{"type":"plan","steps":[{"step":"a","status":"completed"}]}`, ""},
+		{"other JSON", `{"status":"ok"}`, ""},
+		{"text that only starts with a brace", "{draft} is saved as draft.md.", "{draft} is saved as draft.md."},
 	}
-	if startedIndex != 1 || startedStep != "summarize" {
-		t.Fatalf("started = (%d, %q), want (1, %q)", startedIndex, startedStep, "summarize")
-	}
-	if len(plan.Steps) != 2 {
-		t.Fatalf("len(plan.Steps) = %d, want 2", len(plan.Steps))
-	}
-	if plan.Steps[0].Status != PlanStatusCompleted {
-		t.Fatalf("steps[0].status = %q, want %q", plan.Steps[0].Status, PlanStatusCompleted)
-	}
-	if plan.Steps[1].Status != PlanStatusInProgress {
-		t.Fatalf("steps[1].status = %q, want %q", plan.Steps[1].Status, PlanStatusInProgress)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := planStepNoteFromText(tc.text); got != tc.want {
+				t.Fatalf("planStepNoteFromText(%q) = %q, want %q", tc.text, got, tc.want)
+			}
+		})
 	}
 }

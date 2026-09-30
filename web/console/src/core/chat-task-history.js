@@ -186,10 +186,11 @@ function normalizePlanStatus(raw) {
 function normalizePlan(raw) {
   const steps = Array.isArray(raw?.steps)
     ? raw.steps
-        .map((step) => ({
-          step: String(step?.step || "").trim(),
-          status: normalizePlanStatus(step?.status),
-        }))
+        .map((step) => {
+          const out = { step: String(step?.step || "").trim(), status: normalizePlanStatus(step?.status) };
+          const note = String(step?.note || "").trim();
+          return note ? { ...out, note } : out;
+        })
         .filter((step) => step.step)
     : [];
   return steps.length > 0 ? { steps } : null;
@@ -393,6 +394,20 @@ function taskHistoryItems(task, t, options = {}) {
   return items;
 }
 
+// What each finished plan step produced, in the agent's words: the agent reports a step done with a
+// line of text, and the chat shows each as a message of its own, before the task's reply. They come
+// from the plan, so they appear as the plan streams in.
+function planStepMessages(plan) {
+  const steps = Array.isArray(plan?.steps) ? plan.steps : [];
+  const out = [];
+  steps.forEach((step, index) => {
+    if (step?.status === "completed" && step.note) {
+      out.push({ key: `step:${index}`, text: step.note });
+    }
+  });
+  return out;
+}
+
 function taskListHistoryItems(tasks, t, options = {}) {
   const sortedTasks = Array.isArray(tasks) ? [...tasks] : [];
   sortedTasks.sort((left, right) => {
@@ -435,4 +450,5 @@ export {
   taskPlan,
   taskRawJSON,
   taskReasoning,
+  planStepMessages,
 };

@@ -5,8 +5,10 @@ import {
   isTerminalStatus,
   normalizeTaskStatus,
   normalizeActivity,
+  normalizePlan,
   taskAgentText,
   taskListHistoryItems,
+  planStepMessages,
 } from "./chat-task-history.js";
 
 test("normalizeActivity retains separate retry notices with their reasons", () => {
@@ -99,4 +101,16 @@ test("task status helpers and taskAgentText keep runtime semantics", () => {
     ),
     "Keep the streamed text."
   );
+});
+
+test("finished plan steps with a note become the agent's messages", () => {
+  const plan = normalizePlan({
+    steps: [
+      { step: "read", status: "completed", note: " 6 sections. " },
+      { step: "write", status: "completed" },
+      { step: "check", status: "in_progress", note: "not yet" },
+    ],
+  });
+  assert.deepEqual(planStepMessages(plan), [{ key: "step:0", text: "6 sections." }]);
+  assert.deepEqual(planStepMessages(null), []);
 });

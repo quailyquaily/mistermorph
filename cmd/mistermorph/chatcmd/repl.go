@@ -383,7 +383,7 @@ func runREPL(sess *chatSession, model *chatModel, options ...tea.ProgramOption) 
 					continue
 				}
 
-				rawOutput := formatRawChatOutput(result.final)
+				rawOutput := formatRawChatHistoryOutput(result.final)
 				displayOutput := formatChatOutput(result.final)
 				safeSend(p, agentResultMsg{output: displayOutput})
 

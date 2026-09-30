@@ -27,6 +27,12 @@ type ToolCall struct {
 type PlanStep struct {
 	Step   string `json:"step"`
 	Status string `json:"status,omitempty"` // pending|in_progress|completed
+	// Note is what the step produced, in the agent's words: the text it wrote with its tool calls
+	// when the step was done. It is sent to the user as a message.
+	Note string `json:"note,omitempty"`
+	// ToolCalls counts the tool calls made while the step was in progress. A step closes only
+	// after it has made one, so a line announcing the step's work does not close it.
+	ToolCalls int `json:"tool_calls,omitempty"`
 }
 
 type PlanSteps []PlanStep
@@ -61,9 +67,11 @@ type Plan struct {
 type PlanStepUpdate struct {
 	CompletedIndex int
 	CompletedStep  string
-	StartedIndex   int
-	StartedStep    string
-	Reason         string
+	// CompletedNote is what the completed step produced, for the user; empty when it had none.
+	CompletedNote string
+	StartedIndex  int
+	StartedStep   string
+	Reason        string
 }
 
 type Final struct {

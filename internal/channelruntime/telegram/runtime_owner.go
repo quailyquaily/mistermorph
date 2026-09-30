@@ -370,7 +370,7 @@ func (s *telegramRuntimeState) runJob(workerCtx context.Context, conversationKey
 	runtimeOpts := runtimeTaskOptions{
 		FileCacheDir: s.options.FileCacheDir,
 	}
-	final, _, loadedSkills, reaction, runErr := runTelegramTask(
+	final, agentCtx, loadedSkills, reaction, runErr := runTelegramTask(
 		runCtx,
 		runtimeBundle.TaskRuntime,
 		s.api,
@@ -500,6 +500,10 @@ func (s *telegramRuntimeState) runJob(workerCtx context.Context, conversationKey
 				note = "[reacted: " + emoji + "]"
 			}
 			current = append(current, newTelegramOutboundReactionHistoryItem(chatID, job.ChatType, note, reaction.Emoji, time.Now().UTC(), s.botUser))
+		}
+		// The messages sent as plan steps finished come before the reply, as in the chat.
+		for _, note := range telegramPlanStepNotes(final, agentCtx) {
+			current = append(current, newTelegramOutboundAgentHistoryItem(chatID, job.ChatType, note, time.Now().UTC(), s.botUser))
 		}
 		if publishText {
 			current = append(current, newTelegramOutboundAgentHistoryItem(chatID, job.ChatType, outText, time.Now().UTC(), s.botUser))
@@ -1254,4 +1258,14 @@ func (s *telegramRuntimeState) handleUpdate(update telegramUpdate) {
 	if !accepted {
 		s.logger.Debug("telegram_bus_inbound_deduped", "chat_id", chatID, "message_id", message.MessageID)
 	}
+}
+
+func telegramPlanStepNotes(final *agent.Final, runCtx *agent.Context) []string {
+	if runCtx != nil && runCtx.Plan != nil {
+		return agent.PlanNotes(runCtx.Plan)
+	}
+	if final != nil {
+		return agent.PlanNotes(final.Plan)
+	}
+	return nil
 }

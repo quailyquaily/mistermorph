@@ -432,6 +432,7 @@ func (e *Engine) runLoop(ctx context.Context, st *engineLoopState) (final *Final
 					})
 				}
 				assistantTextAdded = true
+				e.closePlanStepWithText(ctx, st, step, result.Text)
 			}
 
 			// --- Phase 1: serial pre-check (repeat limit, guard) ---
@@ -592,32 +593,10 @@ func (e *Engine) runLoop(ctx context.Context, st *engineLoopState) (final *Final
 					e.onToolCallDone(st.agentCtx, tc, item.observation, item.err)
 				}
 
-				if item.err == nil && st.agentCtx.Plan != nil && tc.Name != "plan_create" {
-					completedIdx, completedStep, startedIdx, startedStep, ok := AdvancePlanOnSuccess(st.agentCtx.Plan)
-					if ok {
-						planFields := []any{
-							"step", step,
-							"tool", tc.Name,
-							"plan_step_index", completedIdx,
-							"plan_step", completedStep,
-						}
-						if startedIdx != -1 && strings.TrimSpace(startedStep) != "" {
-							planFields = append(planFields,
-								"next_plan_step_index", startedIdx,
-								"next_plan_step", startedStep,
-							)
-						}
-						log.Info("plan_step_completed", planFields...)
-						if e.onPlanStepUpdate != nil {
-							e.onPlanStepUpdate(st.agentCtx, PlanStepUpdate{
-								CompletedIndex: completedIdx,
-								CompletedStep:  completedStep,
-								StartedIndex:   startedIdx,
-								StartedStep:    startedStep,
-								Reason:         "tool_success",
-							})
-						}
-					}
+				// Steps close when the agent reports them done (closePlanStepWithText), not on a
+				// tool's success; the count lets a step close only after it has done something.
+				if st.agentCtx.Plan != nil && tc.Name != "plan_create" {
+					RecordPlanStepToolCall(st.agentCtx.Plan)
 				}
 
 				if item.err != nil {
@@ -1220,4 +1199,88 @@ func wrapUntrustedToolObservation(toolName, observation string) string {
 	b.WriteString(observation)
 	b.WriteString("\n>>> TOOL OUTPUT END <<<\n")
 	return b.String()
+}
+
+// closePlanStepWithText closes the plan step in progress when the agent sends text with its tool
+// calls: the text is what the step produced, and it goes to the user as a message. Text sent before
+// the step has made a tool call announces the step's work, so it closes nothing. The note is
+// guarded like any output; a blocked note still closes the step, without a message.
+func (e *Engine) closePlanStepWithText(ctx context.Context, st *engineLoopState, step int, text string) {
+	plan := st.agentCtx.Plan
+	if plan == nil || strings.TrimSpace(text) == "" || !planStepInProgressHasWork(plan) {
+		return
+	}
+	note := planStepNoteFromText(text)
+	guarded, err := e.guardOutputValue(ctx, st, step, map[string]any{"note": note})
+	if err != nil {
+		st.log.Warn("plan_step_note_blocked", "step", step, "error", err.Error())
+		note = ""
+	} else if m, ok := guarded.(map[string]any); ok {
+		note, _ = m["note"].(string)
+		note = strings.TrimSpace(note)
+	}
+	completedIdx, completedStep, startedIdx, startedStep, ok := CompletePlanStep(plan, note)
+	if !ok {
+		return
+	}
+	fields := []any{"step", step, "plan_step_index", completedIdx, "plan_step", completedStep, "reason", "agent", "note_len", len(note)}
+	if startedIdx != -1 {
+		fields = append(fields, "next_plan_step_index", startedIdx, "next_plan_step", startedStep)
+	}
+	st.log.Info("plan_step_completed", fields...)
+	if e.onPlanStepUpdate != nil {
+		e.onPlanStepUpdate(st.agentCtx, PlanStepUpdate{
+			CompletedIndex: completedIdx,
+			CompletedStep:  completedStep,
+			CompletedNote:  note,
+			StartedIndex:   startedIdx,
+			StartedStep:    startedStep,
+			Reason:         "agent",
+		})
+	}
+}
+
+// planStepNoteFromText is the message in the text a model sends with its tool calls. Models that
+// answer in the response format sometimes wrap it as a plan or final response ({"type":"plan",
+// "reasoning":…}); then the message is its reasoning or output, never the JSON. Other JSON is not a
+// message. The step still closes either way.
+func planStepNoteFromText(text string) string {
+	trimmed := strings.TrimSpace(text)
+	body := trimmed
+	if strings.HasPrefix(body, "```") {
+		body = strings.TrimPrefix(body, "```json")
+		body = strings.TrimPrefix(body, "```")
+		body = strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(body), "```"))
+	}
+	if !strings.HasPrefix(body, "{") {
+		return trimmed
+	}
+	if resp, err := ParseResponse(llm.Result{Text: body}); err == nil {
+		switch resp.Type {
+		case TypePlan:
+			if plan := resp.PlanPayload(); plan != nil {
+				return strings.TrimSpace(plan.Thought)
+			}
+		case TypeFinal, TypeFinalAnswer:
+			if final := resp.FinalPayload(); final != nil {
+				if output, ok := final.Output.(string); ok {
+					return strings.TrimSpace(output)
+				}
+			}
+		}
+		return ""
+	}
+	if json.Valid([]byte(body)) {
+		return ""
+	}
+	return trimmed
+}
+
+func planStepInProgressHasWork(p *Plan) bool {
+	for i := range p.Steps {
+		if p.Steps[i].Status == PlanStatusInProgress {
+			return p.Steps[i].ToolCalls > 0
+		}
+	}
+	return false
 }

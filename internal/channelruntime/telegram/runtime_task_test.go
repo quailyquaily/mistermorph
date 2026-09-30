@@ -520,3 +520,29 @@ func TestBuildTelegramCurrentMessageSkipsUnsupportedImageFormats(t *testing.T) {
 		t.Fatalf("content = %q, want history", msg.Content)
 	}
 }
+
+func TestTelegramPlanUpdateSendsTheStepNoteAsAMessage(t *testing.T) {
+	plan := &agent.Plan{Steps: []agent.PlanStep{
+		{Step: "read", Status: agent.PlanStatusCompleted, Note: "6 sections."},
+		{Step: "write", Status: agent.PlanStatusInProgress},
+	}}
+	out := telegramPlanUpdateOutbound(42, 7, plan, agent.PlanStepUpdate{
+		CompletedIndex: 0, CompletedStep: "read", CompletedNote: "6 sections.", StartedIndex: 1, StartedStep: "write", Reason: "agent",
+	})
+	if len(out) != 2 {
+		t.Fatalf("outbound = %+v", out)
+	}
+	if out[0].text != "6 sections." || telegramOutboundKind(out[0].correlationID) != "message" {
+		t.Fatalf("note = %+v, want a message of its own", out[0])
+	}
+	if out[1].text != "write" || telegramOutboundKind(out[1].correlationID) != "plan_progress" {
+		t.Fatalf("plan line = %+v, want the plan quote update", out[1])
+	}
+	// The plan's creation and a last step without a next one send only what they have.
+	if got := telegramPlanUpdateOutbound(42, 7, plan, agent.PlanStepUpdate{CompletedIndex: -1, StartedIndex: 0, StartedStep: "read", Reason: "plan_created"}); len(got) != 1 || telegramOutboundKind(got[0].correlationID) != "plan_progress" {
+		t.Fatalf("plan created = %+v", got)
+	}
+	if got := telegramPlanUpdateOutbound(42, 7, plan, agent.PlanStepUpdate{CompletedIndex: 1, CompletedNote: "Done.", StartedIndex: -1, Reason: "agent"}); len(got) != 1 || got[0].text != "Done." {
+		t.Fatalf("last step = %+v", got)
+	}
+}

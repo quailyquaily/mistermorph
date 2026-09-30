@@ -47,6 +47,9 @@ func BuildTaskHistory(tasks []taskdomain.TaskInfo, job taskdomain.TaskInfo, limi
 			history = append(history, inbound)
 		}
 		if strings.TrimSpace(task.SteerTargetTaskID) == "" {
+			// What the finished plan steps told the user comes before the reply; items with the same
+			// time keep this order when sorted below.
+			history = append(history, TaskStepMessages(task)...)
 			if outbound, ok := TaskOutbound(task); ok {
 				history = append(history, outbound)
 			}
@@ -106,6 +109,11 @@ func TaskOutbound(task taskdomain.TaskInfo) (ChatHistoryItem, bool) {
 	if text == "" {
 		return ChatHistoryItem{}, false
 	}
+	return taskOutboundItem(task, text), true
+}
+
+// taskOutboundItem is one message from the agent in a task's topic, sent when the task finished.
+func taskOutboundItem(task taskdomain.TaskInfo, text string) ChatHistoryItem {
 	return ChatHistoryItem{
 		Channel:          "console",
 		Kind:             KindOutboundAgent,
@@ -121,7 +129,45 @@ func TaskOutbound(task taskdomain.TaskInfo) (ChatHistoryItem, bool) {
 			DisplayRef: "agent",
 		},
 		Text: text,
-	}, true
+	}
+}
+
+// TaskStepMessages are the messages the agent sent as it finished plan steps: each completed
+// step's note, in order.
+func TaskStepMessages(task taskdomain.TaskInfo) []ChatHistoryItem {
+	notes := taskStepNotes(task.Result)
+	if len(notes) == 0 {
+		return nil
+	}
+	out := make([]ChatHistoryItem, 0, len(notes))
+	for _, note := range notes {
+		out = append(out, taskOutboundItem(task, note))
+	}
+	return out
+}
+
+func taskStepNotes(result any) []string {
+	if result == nil {
+		return nil
+	}
+	data, err := json.Marshal(result)
+	if err != nil {
+		return nil
+	}
+	var decoded struct {
+		Plan  *agent.Plan `json:"plan"`
+		Final *struct {
+			Plan *agent.Plan `json:"plan"`
+		} `json:"final"`
+	}
+	if json.Unmarshal(data, &decoded) != nil {
+		return nil
+	}
+	plan := decoded.Plan
+	if plan == nil && decoded.Final != nil {
+		plan = decoded.Final.Plan
+	}
+	return agent.PlanNotes(plan)
 }
 
 func taskInboundSentAt(task taskdomain.TaskInfo) time.Time {

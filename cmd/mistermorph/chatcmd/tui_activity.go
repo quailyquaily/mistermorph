@@ -29,6 +29,10 @@ func configureChatSessionCallbacks(sess *chatSession, logger *slog.Logger) {
 		if logger != nil {
 			logger.Debug("plan_step_update_callback", "completedIndex", update.CompletedIndex, "startedIndex", update.StartedIndex, "startedStep", update.StartedStep, "reason", update.Reason)
 		}
+		// A finished step's note is the agent's own message, shown like its reply.
+		if note := strings.TrimSpace(update.CompletedNote); note != "" {
+			_, _ = fmt.Fprintln(sess.currentWriter(), formatChatStepMessage(note))
+		}
 		total := 0
 		if runCtx != nil && runCtx.Plan != nil {
 			total = len(runCtx.Plan.Steps)

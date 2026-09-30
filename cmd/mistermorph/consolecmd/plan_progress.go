@@ -13,6 +13,8 @@ type consolePlanProgress struct {
 type consolePlanStep struct {
 	Step   string `json:"step"`
 	Status string `json:"status,omitempty"`
+	// Note is what the finished step produced; the chat shows it as the agent's message.
+	Note string `json:"note,omitempty"`
 }
 
 func cloneConsolePlanProgress(progress *consolePlanProgress) *consolePlanProgress {
@@ -39,6 +41,7 @@ func buildConsolePlanProgress(plan *agent.Plan) *consolePlanProgress {
 		steps = append(steps, consolePlanStep{
 			Step:   step,
 			Status: strings.TrimSpace(raw.Status),
+			Note:   strings.TrimSpace(raw.Note),
 		})
 	}
 	if len(steps) == 0 {

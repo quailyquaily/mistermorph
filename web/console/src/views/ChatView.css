@@ -1286,6 +1286,11 @@ html[data-macos26="true"] .chat-workspace-sidebar-shell-mobile {
   overflow: visible;
 }
 
+/* A plan step's message is a message of its own, so it keeps more room than a paragraph does. */
+.chat-history-step {
+  margin-bottom: 8px;
+}
+
 /* Reasoning is a side note: muted, smaller, and cut off from the answer by a dashed line. */
 .chat-history-reasoning {
   padding-bottom: 14px;

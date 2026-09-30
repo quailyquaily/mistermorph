@@ -1347,3 +1347,61 @@ func TestOnToolCallDone_CalledWithError(t *testing.T) {
 		t.Errorf("expected error='boom', got %v", calledErr)
 	}
 }
+
+// Steps close when the agent sends text with its tool calls, after the step has made a call; the
+// text becomes the step's note. Tool calls alone no longer advance the plan.
+func TestPlanStepClosesOnTheAgentsText(t *testing.T) {
+	reg := baseRegistry()
+	for _, name := range []string{"read_file", "write_file", "check"} {
+		reg.Register(&mockTool{name: name, result: "ok"})
+	}
+	withText := func(text, tool string) llm.Result {
+		r := toolCallResponse(tool)
+		r.Text = text
+		return r
+	}
+	client := newMockClient(
+		llm.Result{Text: `{"type":"plan","steps":[{"step":"read"},{"step":"write"},{"step":"check"}]}`},
+		withText("I'll read the file first.", "read_file"),
+		withText("The file has 6 sections.", "write_file"),
+		toolCallResponse("check"),
+		finalResponse("done"),
+	)
+	var updates []PlanStepUpdate
+	var statuses [][]string
+	e := New(client, reg, Config{MaxSteps: 10}, DefaultPromptSpec(),
+		WithPlanStepUpdate(func(ctx *Context, update PlanStepUpdate) {
+			updates = append(updates, update)
+			var row []string
+			for _, step := range ctx.Plan.Steps {
+				row = append(row, step.Status)
+			}
+			statuses = append(statuses, row)
+		}),
+	)
+	final, _, err := e.Run(context.Background(), "test", RunOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(updates) != 2 || updates[0].Reason != "plan_created" {
+		t.Fatalf("updates = %+v, want plan_created then one agent update", updates)
+	}
+	got := updates[1]
+	if got.Reason != "agent" || got.CompletedIndex != 0 || got.CompletedNote != "The file has 6 sections." || got.StartedIndex != 1 {
+		t.Fatalf("agent update = %+v", got)
+	}
+	if want := []string{PlanStatusCompleted, PlanStatusInProgress, PlanStatusPending}; fmt.Sprint(statuses[1]) != fmt.Sprint(want) {
+		t.Fatalf("statuses after the note = %v, want %v", statuses[1], want)
+	}
+	if final == nil || final.Plan == nil {
+		t.Fatal("final plan missing")
+	}
+	for _, step := range final.Plan.Steps {
+		if step.Status != PlanStatusCompleted {
+			t.Fatalf("final plan = %+v, want every step completed", final.Plan.Steps)
+		}
+	}
+	if final.Plan.Steps[0].Note != "The file has 6 sections." || final.Plan.Steps[1].ToolCalls != 2 {
+		t.Fatalf("final plan = %+v", final.Plan.Steps)
+	}
+}

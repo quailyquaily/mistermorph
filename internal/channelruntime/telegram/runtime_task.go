@@ -125,13 +125,10 @@ func runTelegramTask(ctx context.Context, rt *taskruntime.Runtime, api *telegram
 		if runCtx == nil || runCtx.Plan == nil {
 			return
 		}
-		msg := telegramPlanProgressText(runCtx.Plan, update)
-		if strings.TrimSpace(msg) == "" {
-			return
-		}
-		correlationID := fmt.Sprintf("telegram:plan:%d:%d", job.ChatID, job.MessageID)
-		if err := sendTelegramText(context.Background(), job.ChatID, job.MessageThreadID, msg, correlationID); err != nil {
-			logger.Warn("telegram_bus_publish_error", "channel", busruntime.ChannelTelegram, "chat_id", job.ChatID, "message_id", job.MessageID, "bus_error_code", string(busruntime.ErrorCodeOf(err)), "error", err.Error())
+		for _, out := range telegramPlanUpdateOutbound(job.ChatID, job.MessageID, runCtx.Plan, update) {
+			if err := sendTelegramText(context.Background(), job.ChatID, job.MessageThreadID, out.text, out.correlationID); err != nil {
+				logger.Warn("telegram_bus_publish_error", "channel", busruntime.ChannelTelegram, "chat_id", job.ChatID, "message_id", job.MessageID, "bus_error_code", string(busruntime.ErrorCodeOf(err)), "error", err.Error())
+			}
 		}
 	}
 	meta := job.Meta
@@ -313,6 +310,24 @@ func buildTelegramRegistry(baseReg *tools.Registry, chatType string) *tools.Regi
 		reg.Remove(toolsutil.BuiltinContactsSend)
 	}
 	return reg
+}
+
+type telegramOutboundText struct {
+	text          string
+	correlationID string
+}
+
+// telegramPlanUpdateOutbound is what a plan update sends: a finished step's note as the agent's own
+// message, then the next step for the plan quote (a ":plan:" correlation edits that one message).
+func telegramPlanUpdateOutbound(chatID, messageID int64, plan *agent.Plan, update agent.PlanStepUpdate) []telegramOutboundText {
+	var out []telegramOutboundText
+	if note := strings.TrimSpace(update.CompletedNote); note != "" {
+		out = append(out, telegramOutboundText{text: note, correlationID: fmt.Sprintf("telegram:step:%d:%d:%d", chatID, messageID, update.CompletedIndex)})
+	}
+	if line := strings.TrimSpace(telegramPlanProgressText(plan, update)); line != "" {
+		out = append(out, telegramOutboundText{text: line, correlationID: fmt.Sprintf("telegram:plan:%d:%d", chatID, messageID)})
+	}
+	return out
 }
 
 func telegramPlanProgressText(plan *agent.Plan, update agent.PlanStepUpdate) string {

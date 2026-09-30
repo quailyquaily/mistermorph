@@ -2,6 +2,7 @@ import { computed, onBeforeUpdate, onUpdated } from "vue";
 
 import { translate } from "../core/context";
 import { approvalParameterEntries, skillInstallApproval } from "../core/chat-approvals";
+import { planStepMessages } from "../core/chat-task-history";
 import { recordComponentUpdate } from "../core/performance";
 import ChatRichContent from "./ChatRichContent";
 import ChatSkillInstallPreview from "./ChatSkillInstallPreview";
@@ -118,6 +119,8 @@ const ChatHistoryItem = {
       return "chat-history-item chat-history-system" + arriving;
     });
     const surfaceClass = computed(() => (role.value === "agent" ? "chat-history-copy" : "chat-history-bubble"));
+    // What the finished plan steps produced, each a message of its own before the reply.
+    const stepMessages = computed(() => (role.value === "agent" ? planStepMessages(props.item?.plan) : []));
     const reasoningVisible = computed(() => String(props.item?.reasoning || "").trim() !== "");
     const activityEntries = computed(() => {
       const activity = props.item?.activity;
@@ -275,6 +278,7 @@ const ChatHistoryItem = {
 
     return {
       agentBubbleVisible,
+      stepMessages,
       approvalMessage,
       approvalMessageVisible,
       approvalHeading,
@@ -400,6 +404,18 @@ const ChatHistoryItem = {
               :auto-preview="autoPreview"
               :streaming="streaming"
               stream-mode="typewriter"
+              :stream-profiler="streamProfiler"
+              format="auto"
+              theme="blueprint"
+              @rendered="emitRendered"
+            />
+          </div>
+          <div v-for="message in stepMessages" :key="message.key" :class="surfaceClass" class="chat-history-step">
+            <ChatRichContent
+              class="chat-history-markdown"
+              :source="message.text"
+              :endpoint-ref="submitEndpointRef"
+              :fallback-topic-id="selectedTopicId"
               :stream-profiler="streamProfiler"
               format="auto"
               theme="blueprint"

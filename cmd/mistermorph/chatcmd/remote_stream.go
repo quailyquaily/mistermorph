@@ -34,6 +34,7 @@ type remoteStreamFrame struct {
 		Steps []struct {
 			Step   string `json:"step"`
 			Status string `json:"status"`
+			Note   string `json:"note"`
 		} `json:"steps"`
 	} `json:"plan"`
 	Activity *struct {
@@ -89,6 +90,7 @@ type remoteStreamSub struct {
 	text, activity string
 	reasoning      string
 	plan, history  []string
+	notesShown     int // step messages already printed
 	ended          bool
 	hasTrace       bool
 	retry          time.Time
@@ -242,6 +244,19 @@ func (m *chatModel) streamUpdate(e remoteStreamEvent) tea.Cmd {
 	s.plan, s.history = nil, nil
 	s.activity = ""
 	if f.Plan != nil {
+		// Finished steps' notes are the agent's messages: print the ones not printed yet.
+		var notes []string
+		for _, step := range f.Plan.Steps {
+			if note := strings.TrimSpace(step.Note); note != "" && step.Status == "completed" {
+				notes = append(notes, note)
+			}
+		}
+		if len(notes) > s.notesShown {
+			for _, note := range notes[s.notesShown:] {
+				transcript = tea.Batch(transcript, m.enqueueTranscript(formatChatStepMessage(note)))
+			}
+			s.notesShown = len(notes)
+		}
 		for i, step := range f.Plan.Steps {
 			if i == 6 {
 				s.plan = append(s.plan, fmt.Sprintf("… %d more steps", len(f.Plan.Steps)-i))

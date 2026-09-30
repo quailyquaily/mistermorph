@@ -17,7 +17,8 @@ test("reasoning expands into the existing Markdown chat bubble", async () => {
     item,
     /<div\s+v-if="reasoningVisible && expandedPanel === 'reasoning'"\s+:class="surfaceClass"\s+class="chat-history-reasoning"\s*>\s*<ChatRichContent\s+class="chat-history-markdown"\s+:source="item\.reasoning"[\s\S]*?theme="blueprint"/u
   );
-  assert.equal((item.match(/<ChatRichContent\b/gu) || []).length, 2);
+  // Reasoning, the plan steps' messages, and the reply.
+  assert.equal((item.match(/<ChatRichContent\b/gu) || []).length, 3);
 
   assert.match(statusCard, /hasReasoning/u);
   assert.equal(statusCard.includes("chat-reasoning-text"), false);
