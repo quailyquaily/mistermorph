@@ -536,13 +536,6 @@ console:
   password_hash: "" # or set via MISTER_MORPH_CONSOLE_PASSWORD_HASH
   # Session TTL for console bearer token.
   session_ttl: "12h"
-  # Suggested replies: when an answer asks you something a short reply can answer, the composer
-  # offers up to 3 likely replies (Tab fills the top one on desktop; chips on phones). Made with the
-  # main model, only for answers you view. Off by default.
-  reply_suggestions:
-    enabled: false
-    # The top reply shows as composer ghost text at or above this probability (0-1).
-    min_probability: 0.6
   # Channel runtimes managed in-process by `morph console serve`.
   # Managed runtimes are merged into Console itself:
   # - they do not appear as separate endpoints

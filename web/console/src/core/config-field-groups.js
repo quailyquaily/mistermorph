@@ -295,23 +295,6 @@ export const SYSTEM_ADVANCED_CONFIG_GROUPS = [
   },
 ];
 
-export const CONSOLE_CHAT_CONFIG_GROUPS = [
-  {
-    id: "reply-suggestions",
-    title: "Reply suggestions",
-    note: "When an answer asks you something a short reply can answer, the composer offers the replies you are likely to send: the top one as ghost text (Tab fills it in) on desktop, chips on phones. Made with the main model, only for answers you view.",
-    fields: [
-      { path: "console.reply_suggestions.enabled", label: "Suggest replies", type: "bool" },
-      {
-        path: "console.reply_suggestions.min_probability",
-        label: "Ghost text minimum probability",
-        type: "float",
-        note: "0 to 1. The top reply shows as ghost text only at or above this. Phones show chips from 0.2.",
-      },
-    ],
-  },
-];
-
 export const REMOTE_CONTROL_CONFIG_GROUPS = [
   {
     id: "incoming-control",

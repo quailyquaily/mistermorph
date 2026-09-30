@@ -84,25 +84,6 @@ type ApprovalInfo struct {
 	SkillPreview json.RawMessage `json:"skill_preview,omitempty"`
 }
 
-// ReplySuggestions are the replies a user is likely to send to a finished task's answer.
-type ReplySuggestions struct {
-	TaskID  string `json:"task_id"`
-	Enabled bool   `json:"enabled"`
-	// ExpectsReply is whether the answer asks the user something a short reply can answer.
-	ExpectsReply bool `json:"expects_reply"`
-	// MinProbability is the configured bar for offering the top reply as composer ghost text.
-	MinProbability float64           `json:"min_probability"`
-	Suggestions    []ReplySuggestion `json:"suggestions"`
-	Error          string            `json:"error,omitempty"`
-}
-
-type ReplySuggestion struct {
-	Text        string  `json:"text"`
-	Probability float64 `json:"probability"`
-	// ProbabilitySource is "evaluate" (the provider's own probability) or "model" (the model's estimate).
-	ProbabilitySource string `json:"probability_source"`
-}
-
 type ApprovalListResponse struct {
 	Items []ApprovalInfo `json:"items"`
 	Limit int            `json:"limit,omitempty"`

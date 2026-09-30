@@ -238,10 +238,6 @@ func Apply(v *viper.Viper) {
 	v.SetDefault("tools.todo_update.enabled", true)
 	// Console-only skill install tools: off, so only a task that names them ($skill_install_preview,
 	// $skill_install), such as the Skills page's Add skill, gets them.
-	// Suggested replies in the Console's composer: off until turned on; the top reply becomes
-	// ghost text at min_probability or above.
-	v.SetDefault("console.reply_suggestions.enabled", false)
-	v.SetDefault("console.reply_suggestions.min_probability", 0.6)
 	v.SetDefault("tools.skill_install_preview.enabled", false)
 	v.SetDefault("tools.skill_install.enabled", false)
 	// Largest skill (all files together) that skill_install_preview downloads.

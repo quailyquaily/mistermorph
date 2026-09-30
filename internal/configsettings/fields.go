@@ -108,8 +108,6 @@ func ConsoleFields() []Field {
 		{Path: "console.password_hash", Kind: KindString, Sensitive: true, ApplyMode: ApplyProcessRestart},
 		{Path: "console.session_ttl", Kind: KindDuration, ApplyMode: ApplyProcessRestart},
 		{Path: "console.managed_runtimes", Kind: KindStringList, ApplyMode: ApplyRuntimeRestart},
-		{Path: "console.reply_suggestions.enabled", Kind: KindBool, ApplyMode: ApplyNextGeneration},
-		{Path: "console.reply_suggestions.min_probability", Kind: KindFloat, ApplyMode: ApplyNextGeneration, Min: &zero, Max: &one},
 		{Path: "server.auth_token", Kind: KindString, Sensitive: true, ApplyMode: ApplyRuntimeRestart},
 
 		{Path: "heartbeat.enabled", Kind: KindBool, ApplyMode: ApplyRuntimeRestart},

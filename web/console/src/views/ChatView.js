@@ -10,7 +10,6 @@ import ChatComposer from "../components/ChatComposer";
 import AppFab from "../components/AppFab";
 import ChatHistoryList from "../components/ChatHistoryList";
 import { approvalDetailsByID, taskApprovalState } from "../core/chat-approvals";
-import { latestAnswerTaskID, replySuggestionView } from "../core/reply-suggestions";
 import {
   buildComposerSubmission,
   composerFileDraftKey,
@@ -3955,63 +3954,7 @@ const ChatView = {
       syncComposer();
     });
 
-    // Suggested replies for the latest finished answer (console.reply_suggestions). Asked for once
-    // per answer, when it is shown; the Console decides whether the answer expects a reply.
-    const replySuggestionResult = shallowRef(null);
-    const replySuggestionDismissedTaskID = ref("");
-    const replySuggestionRequested = new Set();
-    const replySuggestionTaskID = computed(() => latestAnswerTaskID(chatHistoryItems.value));
-    const replySuggestions = computed(() =>
-      replySuggestionView({
-        result: replySuggestionResult.value,
-        taskID: replySuggestionTaskID.value,
-        input: taskInput.value,
-        sending: sending.value,
-        readonly: chatReadonly.value,
-        mobile: mobileMode.value,
-        dismissedTaskID: replySuggestionDismissedTaskID.value,
-      })
-    );
-
-    async function loadReplySuggestions(taskID) {
-      const endpointRef = submitEndpointRef.value;
-      const key = `${endpointRef}:${taskID}`;
-      if (!taskID || !endpointRef || chatReadonly.value || replySuggestionRequested.has(key)) {
-        return;
-      }
-      replySuggestionRequested.add(key);
-      try {
-        const result = await runtimeApiFetchForEndpoint(endpointRef, `/tasks/${encodeURIComponent(taskID)}/suggestions`);
-        // A failed attempt is not cached by the Console; let a later view try again.
-        if (result?.error) {
-          replySuggestionRequested.delete(key);
-        }
-        if (replySuggestionTaskID.value === taskID && submitEndpointRef.value === endpointRef) {
-          replySuggestionResult.value = result;
-        }
-      } catch {
-        // Older agents have no suggestions route; stay quiet.
-      }
-    }
-
-    function dismissReplySuggestion() {
-      replySuggestionDismissedTaskID.value = replySuggestionTaskID.value;
-    }
-
-    watch(
-      () => [replySuggestionTaskID.value, submitEndpointRef.value],
-      ([taskID]) => {
-        if (replySuggestionResult.value?.task_id !== taskID) {
-          replySuggestionResult.value = null;
-        }
-        void loadReplySuggestions(taskID);
-      },
-      { immediate: true }
-    );
-
     return {
-      replySuggestions,
-      dismissReplySuggestion,
       t,
       chatHistoryItems,
       copiedHistoryItemID,
@@ -4422,10 +4365,6 @@ const ChatView = {
               v-model="taskInput"
               :disabled="composerDisabled"
               :placeholder="composerPlaceholder"
-              :reply-suggestion="replySuggestions.ghost"
-              :reply-suggestions="replySuggestions.chips"
-              :reply-suggestion-hint="mobileMode ? t('chat_reply_suggestions_label') : t('chat_reply_suggestion_hint')"
-              @reply-suggestion-dismiss="dismissReplySuggestion"
               :send-disabled="sendDisabled"
               :sending="sending"
               :stop-mode="composerStopMode"
