@@ -33,6 +33,10 @@ const SetupPickerDialog = {
         filterPlaceholder: String(props.filterPlaceholder || ""),
         emptyText: String(props.emptyText || ""),
         showValue: props.showValue !== false,
+        selectedValue: String(props.selectedValue || ""),
+        groupByPrefix: props.groupByPrefix === true,
+        allowCustom: props.allowCustom === true,
+        customLabel: String(props.customLabel || ""),
       };
     }
 
@@ -83,8 +87,13 @@ const SetupPickerDialog = {
         :filterPlaceholder="filterPlaceholder"
         :emptyText="emptyText"
         :showValue="showValue"
+        :selectedValue="selectedValue"
+        :groupByPrefix="groupByPrefix"
+        :allowCustom="allowCustom"
+        :customLabel="customLabel"
         :resetKey="desktopRequestID"
         @select="selectItem"
+        @close="close"
       />
     </AppDialogShell>
   `,

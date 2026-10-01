@@ -48,17 +48,20 @@ type LLMSettingsPayload struct {
 }
 
 type ModelLookupRequest struct {
-	TargetProfile     string
-	InferenceProvider string
-	Provider          string
-	Endpoint          string
-	APIKey            string
-	FileStateDir      string
+	CloudflareAccountID string
+	TargetProfile       string
+	InferenceProvider   string
+	Provider            string
+	Endpoint            string
+	APIKey              string
+	FileStateDir        string
 }
 
 type ModelLookupConfig struct {
-	Endpoint string
-	APIKey   string
+	Provider            string
+	CloudflareAccountID string
+	Endpoint            string
+	APIKey              string
 }
 
 func SettingsPayloadFromRuntimeValues(values llmutil.RuntimeValues) LLMSettingsPayload {
@@ -306,7 +309,7 @@ func NormalizeAgentSettingsProfileProvider(provider string) string {
 	}
 }
 
-func ResolveOpenAICompatibleModelLookup(
+func ResolveModelLookup(
 	current LLMSettingsPayload,
 	req ModelLookupRequest,
 	resolveField func(string) (string, error),
@@ -365,6 +368,25 @@ func ResolveOpenAICompatibleModelLookup(
 		}
 	}
 	provider := strings.TrimSpace(resolved.Provider)
+	accountID := strings.TrimSpace(req.CloudflareAccountID)
+	if provider == "cloudflare" {
+		if accountID == "" {
+			saved, savedErr := llmutil.ResolveRuntimeValuesInferenceProvider(llmutil.RuntimeValues{InferenceProvider: current.InferenceProvider, Provider: current.Provider, Endpoint: current.Endpoint})
+			if savedErr == nil && saved.Provider == "cloudflare" {
+				accountID = current.CloudflareAccountID
+			}
+		}
+		if resolveField != nil {
+			accountID, err = resolveField(accountID)
+			if err != nil {
+				return ModelLookupConfig{}, err
+			}
+		}
+		accountID = strings.TrimSpace(accountID)
+		if accountID == "" {
+			return ModelLookupConfig{}, fmt.Errorf("cloudflare account id is required")
+		}
+	}
 	endpoint := strings.TrimSpace(llmutil.EndpointForProviderWithValues(provider, resolved))
 	if endpoint == "" {
 		if info, ok := llmutil.InferenceProviderInfoByValue(resolved.InferenceProvider); ok && info.RequiresAPIBase {
@@ -376,8 +398,10 @@ func ResolveOpenAICompatibleModelLookup(
 		return ModelLookupConfig{}, fmt.Errorf("api key is required")
 	}
 	return ModelLookupConfig{
-		Endpoint: endpoint,
-		APIKey:   apiKey,
+		Provider:            provider,
+		CloudflareAccountID: accountID,
+		Endpoint:            endpoint,
+		APIKey:              apiKey,
 	}, nil
 }
 
@@ -399,6 +423,9 @@ func savedAPIKeyForConnection(values llmutil.RuntimeValues, saved LLMConfigField
 	storedEndpoint := llmutil.EndpointForProviderWithValues(stored.Provider, stored)
 	if strings.TrimRight(currentEndpoint, "/") != strings.TrimRight(storedEndpoint, "/") {
 		return ""
+	}
+	if current.Provider == "cloudflare" {
+		return FirstNonEmpty(saved.CloudflareAPIToken, saved.APIKey)
 	}
 	return strings.TrimSpace(saved.APIKey)
 }

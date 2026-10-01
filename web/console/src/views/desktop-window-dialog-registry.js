@@ -87,6 +87,10 @@ export const DESKTOP_WINDOW_DIALOGS = {
         filterPlaceholder: payload.filterPlaceholder || "",
         emptyText: payload.emptyText || "",
         showValue: payload.showValue !== false,
+        selectedValue: payload.selectedValue || "",
+        groupByPrefix: payload.groupByPrefix === true,
+        allowCustom: payload.allowCustom === true,
+        customLabel: payload.customLabel || "",
         resetKey: payload.request_id || "",
       };
     },

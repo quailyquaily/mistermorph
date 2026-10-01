@@ -48,8 +48,8 @@ func TestSettingsPayloadFromRuntimeValuesProfileDoesNotUseDefaultProvider(t *tes
 	}
 }
 
-func TestResolveOpenAICompatibleModelLookup_DerivesBuiltInEndpoint(t *testing.T) {
-	got, err := ResolveOpenAICompatibleModelLookup(
+func TestResolveModelLookup_DerivesBuiltInEndpoint(t *testing.T) {
+	got, err := ResolveModelLookup(
 		LLMSettingsPayload{},
 		ModelLookupRequest{
 			InferenceProvider: llmutil.InferenceProviderGroq,
@@ -58,7 +58,7 @@ func TestResolveOpenAICompatibleModelLookup_DerivesBuiltInEndpoint(t *testing.T)
 		nil,
 	)
 	if err != nil {
-		t.Fatalf("ResolveOpenAICompatibleModelLookup() error = %v", err)
+		t.Fatalf("ResolveModelLookup() error = %v", err)
 	}
 	if got.Endpoint != llmutil.DefaultGroqEndpoint {
 		t.Fatalf("endpoint = %q, want %q", got.Endpoint, llmutil.DefaultGroqEndpoint)
@@ -68,8 +68,8 @@ func TestResolveOpenAICompatibleModelLookup_DerivesBuiltInEndpoint(t *testing.T)
 	}
 }
 
-func TestResolveOpenAICompatibleModelLookup_ExplicitEndpointOverridesCurrentInferenceProvider(t *testing.T) {
-	got, err := ResolveOpenAICompatibleModelLookup(
+func TestResolveModelLookup_ExplicitEndpointOverridesCurrentInferenceProvider(t *testing.T) {
+	got, err := ResolveModelLookup(
 		LLMSettingsPayload{
 			LLMConfigFieldsPayload: LLMConfigFieldsPayload{
 				InferenceProvider: llmutil.InferenceProviderOpenAI,
@@ -85,7 +85,7 @@ func TestResolveOpenAICompatibleModelLookup_ExplicitEndpointOverridesCurrentInfe
 		nil,
 	)
 	if err != nil {
-		t.Fatalf("ResolveOpenAICompatibleModelLookup() error = %v", err)
+		t.Fatalf("ResolveModelLookup() error = %v", err)
 	}
 	if got.Endpoint != "https://models.example.test" {
 		t.Fatalf("endpoint = %q, want explicit endpoint", got.Endpoint)
@@ -95,7 +95,7 @@ func TestResolveOpenAICompatibleModelLookup_ExplicitEndpointOverridesCurrentInfe
 	}
 }
 
-func TestResolveOpenAICompatibleModelLookup_ExplicitRouteDoesNotUseUnrelatedConnectionFields(t *testing.T) {
+func TestResolveModelLookup_ExplicitRouteDoesNotUseUnrelatedConnectionFields(t *testing.T) {
 	current := LLMSettingsPayload{LLMConfigFieldsPayload: LLMConfigFieldsPayload{
 		InferenceProvider: llmutil.InferenceProviderOpenAI,
 		Provider:          "openai_resp",
@@ -104,7 +104,7 @@ func TestResolveOpenAICompatibleModelLookup_ExplicitRouteDoesNotUseUnrelatedConn
 	}}
 
 	t.Run("api base", func(t *testing.T) {
-		_, err := ResolveOpenAICompatibleModelLookup(
+		_, err := ResolveModelLookup(
 			current,
 			ModelLookupRequest{InferenceProvider: llmutil.InferenceProviderOpenAIResponseCompatible},
 			nil,
@@ -115,7 +115,7 @@ func TestResolveOpenAICompatibleModelLookup_ExplicitRouteDoesNotUseUnrelatedConn
 	})
 
 	t.Run("api key", func(t *testing.T) {
-		_, err := ResolveOpenAICompatibleModelLookup(
+		_, err := ResolveModelLookup(
 			current,
 			ModelLookupRequest{InferenceProvider: llmutil.InferenceProviderGroq},
 			nil,

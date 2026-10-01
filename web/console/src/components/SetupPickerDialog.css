@@ -8,40 +8,122 @@
   width: 100%;
 }
 
+/* Plain rows, as the app's other lists: a hover and a keyboard highlight, no boxes. */
 .setup-picker-list {
-  display: grid;
-  gap: 8px;
-  max-height: min(60vh, 420px);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-height: min(60vh, 440px);
+  margin: 0 -6px;
+  padding: 0 6px 2px;
   overflow: auto;
+  scrollbar-width: thin;
+}
+
+.setup-picker-group {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 8px 4px;
+  background: var(--q-bg-white);
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-meta);
+  letter-spacing: 0.04em;
+}
+
+.setup-picker-group:first-child {
+  padding-top: 2px;
+}
+
+.setup-picker-group-title {
+  text-transform: uppercase;
+}
+
+/* Rows keep their height; the list scrolls instead of squeezing them. */
+.setup-picker-group,
+.setup-picker-item,
+.setup-picker-empty {
+  flex: 0 0 auto;
 }
 
 .setup-picker-item {
   width: 100%;
-  padding: 10px 12px;
-  border: 1px solid color-mix(in srgb, var(--line-soft) 80%, transparent);
+  height: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 2px;
   background: transparent;
   color: inherit;
+  font: inherit;
   text-align: left;
-  display: grid;
-  gap: 6px;
   cursor: default;
 }
 
-.setup-picker-item:hover,
+.setup-picker-item.is-active {
+  background: color-mix(in srgb, var(--line-soft) 45%, transparent);
+}
+
 .setup-picker-item:focus-visible {
-  outline: none;
-  border-color: color-mix(in srgb, var(--line-soft) 45%, var(--text-0) 20%);
-  background: color-mix(in srgb, var(--line-soft) 22%, transparent);
+  outline: 2px solid var(--q-c-blue);
+  outline-offset: -2px;
 }
 
 .setup-picker-item-copy {
+  flex: 1 1 auto;
+  min-width: 0;
   display: grid;
-  gap: 4px;
+  gap: 3px;
 }
 
 .setup-picker-item-title {
-  font-size: var(--font-size-ui);
+  min-width: 0;
+  overflow-wrap: anywhere;
   color: var(--text-0);
+  font-size: var(--font-size-ui);
+}
+
+.setup-picker-item-title mark {
+  padding: 0;
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--q-c-blue) 18%, transparent);
+  color: inherit;
+}
+
+.setup-picker-item.is-selected .setup-picker-item-title {
+  color: var(--q-c-blue);
+}
+
+.setup-picker-item-meta {
+  flex: 0 0 auto;
+  color: var(--text-2);
+  font-size: var(--font-size-meta);
+  white-space: nowrap;
+}
+
+/* Not recommended: still selectable, but quieter than the rest. */
+.setup-picker-item.is-avoid .setup-picker-item-title,
+.setup-picker-item.is-avoid .setup-picker-item-meta {
+  color: var(--text-2);
+}
+
+.setup-picker-item.is-avoid.is-selected .setup-picker-item-title {
+  color: var(--q-c-blue);
+}
+
+.setup-picker-item-check {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  color: var(--q-c-blue);
 }
 
 .setup-picker-item-note {
@@ -54,8 +136,26 @@
   font-family: var(--font-mono);
   font-size: var(--font-size-meta);
   line-height: 1.4;
-  color: var(--text-1);
+  color: var(--text-2);
   word-break: break-all;
+}
+
+.setup-picker-custom {
+  margin-top: 6px;
+  border-top: 1px solid color-mix(in srgb, var(--line-soft) 80%, transparent);
+  border-radius: 0;
+}
+
+.setup-picker-custom .setup-picker-item-title {
+  flex: 1 1 auto;
+  color: var(--text-1);
+}
+
+.setup-picker-item-key {
+  flex: 0 0 auto;
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-meta);
 }
 
 .setup-picker-empty {

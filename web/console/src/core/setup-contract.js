@@ -49,10 +49,10 @@ const SETUP_PROVIDER_UI_META = {
   [SETUP_PROVIDER_OPENAI]: { supportsModelLookup: true },
   [SETUP_PROVIDER_OPENAI_CODEX]: { supportsCustomAPIBase: true, supportsAPIKey: true },
   [SETUP_PROVIDER_XAI_OAUTH]: {},
-  [SETUP_PROVIDER_GEMINI]: {},
-  [SETUP_PROVIDER_ANTHROPIC]: {},
+  [SETUP_PROVIDER_GEMINI]: { supportsModelLookup: true },
+  [SETUP_PROVIDER_ANTHROPIC]: { supportsModelLookup: true },
   [SETUP_PROVIDER_BEDROCK]: {},
-  [SETUP_PROVIDER_CLOUDFLARE]: {},
+  [SETUP_PROVIDER_CLOUDFLARE]: { supportsModelLookup: true },
   [SETUP_PROVIDER_MISTERMORPH_PRO]: { supportsModelLookup: true },
   [SETUP_PROVIDER_XAI]: { supportsModelLookup: true },
   [SETUP_PROVIDER_META]: {},
@@ -63,7 +63,7 @@ const SETUP_PROVIDER_UI_META = {
   [SETUP_PROVIDER_SAKANA]: { supportsModelLookup: true },
   [SETUP_PROVIDER_OPENAI_CHAT_COMPATIBLE]: { requiresAPIBase: true, supportsModelLookup: true },
   [SETUP_PROVIDER_OPENAI_RESPONSE_COMPATIBLE]: { requiresAPIBase: true, supportsModelLookup: true },
-  [SETUP_PROVIDER_ANTHROPIC_COMPATIBLE]: { requiresAPIBase: true },
+  [SETUP_PROVIDER_ANTHROPIC_COMPATIBLE]: { requiresAPIBase: true, supportsModelLookup: true },
 };
 
 const OPENAI_COMPATIBLE_API_BASE_OPTIONS = [

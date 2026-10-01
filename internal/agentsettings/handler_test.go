@@ -196,14 +196,15 @@ func TestHandlerModelsUsesOwnerCurrentReader(t *testing.T) {
 	owner := &handlerTestOwner{reader: NewReaderSnapshot(reader)}
 	handler := NewHandler(HandlerOptions{
 		Owner: owner,
-		FetchModels: func(_ context.Context, endpoint, apiKey string) ([]string, error) {
+		FetchModels: func(_ context.Context, lookup ModelLookupConfig) ([]ModelInfo, error) {
+			endpoint, apiKey := lookup.Endpoint, lookup.APIKey
 			if endpoint != "https://runtime.example/v1" {
 				t.Fatalf("endpoint = %q, want runtime endpoint", endpoint)
 			}
 			if apiKey != "runtime-key" {
 				t.Fatalf("api key = %q, want runtime key", apiKey)
 			}
-			return []string{"gpt-5", "gpt-5-mini"}, nil
+			return []ModelInfo{{ID: "gpt-5", Created: 2}, {ID: "gpt-5-mini", Created: 1}}, nil
 		},
 	})
 
@@ -270,12 +271,13 @@ func TestHandlerModelsUsesStoredAPIKey(t *testing.T) {
 			called := false
 			handler := NewHandler(HandlerOptions{
 				Owner: owner,
-				FetchModels: func(_ context.Context, endpoint, apiKey string) ([]string, error) {
+				FetchModels: func(_ context.Context, lookup ModelLookupConfig) ([]ModelInfo, error) {
+					apiKey := lookup.APIKey
 					called = true
 					if tc.wantKey == "" || apiKey != tc.wantKey {
 						t.Fatalf("API key = %q, want %q", apiKey, tc.wantKey)
 					}
-					return []string{"test-model"}, nil
+					return []ModelInfo{{ID: "test-model"}}, nil
 				},
 			})
 			recorder := httptest.NewRecorder()

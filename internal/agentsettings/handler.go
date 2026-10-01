@@ -190,14 +190,14 @@ type RuntimeConfigSource interface {
 
 type HandlerOptions struct {
 	Owner                 Owner
-	FetchModels           func(context.Context, string, string) ([]string, error)
+	FetchModels           func(context.Context, ModelLookupConfig) ([]ModelInfo, error)
 	ConnectionTest        func(context.Context, LLMSettingsPayload, Reader, ConnectionTestOptions) (ConnectionTestResult, error)
 	ConnectionTestOptions ConnectionTestOptions
 }
 
 type Handler struct {
 	owner                 Owner
-	fetchModels           func(context.Context, string, string) ([]string, error)
+	fetchModels           func(context.Context, ModelLookupConfig) ([]ModelInfo, error)
 	connectionTest        func(context.Context, LLMSettingsPayload, Reader, ConnectionTestOptions) (ConnectionTestResult, error)
 	connectionTestOptions ConnectionTestOptions
 }
@@ -205,7 +205,7 @@ type Handler struct {
 func NewHandler(opts HandlerOptions) *Handler {
 	fetchModels := opts.FetchModels
 	if fetchModels == nil {
-		fetchModels = FetchOpenAICompatibleModels
+		fetchModels = FetchModels
 	}
 	connectionTest := opts.ConnectionTest
 	if connectionTest == nil {
@@ -281,11 +281,12 @@ func settingsErrorStatus(err error) int {
 }
 
 type ModelsRequest struct {
-	TargetProfile     string `json:"target_profile,omitempty"`
-	InferenceProvider string `json:"inference_provider"`
-	Provider          string `json:"provider"`
-	Endpoint          string `json:"endpoint"`
-	APIKey            string `json:"api_key"`
+	CloudflareAccountID string `json:"cloudflare_account_id"`
+	TargetProfile       string `json:"target_profile,omitempty"`
+	InferenceProvider   string `json:"inference_provider"`
+	Provider            string `json:"provider"`
+	Endpoint            string `json:"endpoint"`
+	APIKey              string `json:"api_key"`
 }
 
 func (h *Handler) Models(w http.ResponseWriter, r *http.Request) {
@@ -313,15 +314,16 @@ func (h *Handler) Models(w http.ResponseWriter, r *http.Request) {
 		writeSettingsError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	lookup, err := ResolveOpenAICompatibleModelLookup(
+	lookup, err := ResolveModelLookup(
 		current,
 		ModelLookupRequest{
-			TargetProfile:     req.TargetProfile,
-			InferenceProvider: req.InferenceProvider,
-			Provider:          req.Provider,
-			Endpoint:          req.Endpoint,
-			APIKey:            req.APIKey,
-			FileStateDir:      values.FileStateDir,
+			CloudflareAccountID: req.CloudflareAccountID,
+			TargetProfile:       req.TargetProfile,
+			InferenceProvider:   req.InferenceProvider,
+			Provider:            req.Provider,
+			Endpoint:            req.Endpoint,
+			APIKey:              req.APIKey,
+			FileStateDir:        values.FileStateDir,
 		},
 		func(value string) (string, error) {
 			return ResolveConnectionTestFieldValue(value, configutil.SecretRefSourceFromReader(reader))
@@ -331,12 +333,17 @@ func (h *Handler) Models(w http.ResponseWriter, r *http.Request) {
 		writeSettingsError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	models, err := h.fetchModels(r.Context(), lookup.Endpoint, lookup.APIKey)
+	models, err := h.fetchModels(r.Context(), lookup)
 	if err != nil {
 		writeSettingsError(w, http.StatusBadGateway, err.Error())
 		return
 	}
-	writeSettingsJSON(w, http.StatusOK, map[string]any{"items": models})
+	// items keeps the plain list of names for older clients; models adds when each was published.
+	ids := make([]string, 0, len(models))
+	for _, model := range models {
+		ids = append(ids, model.ID)
+	}
+	writeSettingsJSON(w, http.StatusOK, map[string]any{"items": ids, "models": models})
 }
 
 type ConnectionTestRequest struct {

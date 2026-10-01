@@ -14,6 +14,7 @@ import SetupConnectionTestDialog from "../components/SetupConnectionTestDialog";
 import SetupPickerDialog from "../components/SetupPickerDialog";
 import defaultAvatarMarkup from "../assets/images/app_logo_current.svg?raw";
 import {
+  currentLocale,
   endpointApiFetch,
   formatTime,
   loadEndpoints,
@@ -82,6 +83,7 @@ import {
   PERSONA_SOUL_ENDPOINT,
 } from "../core/persona-profile";
 import { endpointState } from "../stores";
+import { modelPickerItemsFromPayload } from "../core/setup-picker";
 
 const TOTAL_STEPS = 3;
 const PREVIOUS_STAGE = {
@@ -506,7 +508,8 @@ const SetupView = {
         loading.value ||
         saving.value ||
         !showOpenAICompatibleHelpers.value ||
-        (showProOAuthFields.value ? proAuthNeedsLogin.value : !hasLLMFieldValue("api_key"))
+        (showProOAuthFields.value ? proAuthNeedsLogin.value : !hasLLMFieldValue(credentialFieldName.value)) ||
+        (showCloudflareAccountField.value && !hasLLMFieldValue("cloudflare_account_id"))
     );
     const apiBasePickerItems = computed(() =>
       OPENAI_COMPATIBLE_API_BASE_OPTIONS.map((item) => ({
@@ -1489,7 +1492,7 @@ const SetupView = {
       modelPickerError.value = "";
       modelPickerItems.value = [];
       const provider = providerChoice.value;
-      const apiKeyRaw = llmFieldEnvRawValue("api_key");
+      const apiKeyRaw = llmFieldEnvRawValue(credentialFieldName.value);
       try {
         const payload = await endpointApiFetch(
           setupEndpointRef.value,
@@ -1498,23 +1501,18 @@ const SetupView = {
             method: "POST",
             body: {
               inference_provider: provider,
+              cloudflare_account_id: showCloudflareAccountField.value ? llmFieldValue("cloudflare_account_id") : "",
               endpoint: setupProviderSupportsCustomAPIBase(provider)
                 ? llmFieldValue("endpoint")
                 : "",
               api_key:
                 provider === SETUP_PROVIDER_MISTERMORPH_PRO
                   ? ""
-                  : apiKeyRaw || llmFieldValue("api_key"),
+                  : apiKeyRaw || llmFieldValue(credentialFieldName.value),
             },
           },
         );
-        const items = Array.isArray(payload?.items) ? payload.items : [];
-        modelPickerItems.value = items.map((value) => ({
-          id: value,
-          title: value,
-          value,
-          note: "",
-        }));
+        modelPickerItems.value = modelPickerItemsFromPayload(payload, currentLocale());
       } catch (e) {
         modelPickerError.value = e.message || t("msg_load_failed");
       } finally {
@@ -2350,6 +2348,10 @@ const SetupView = {
           :filterPlaceholder="t('setup_llm_model_picker_filter_placeholder')"
           :emptyText="t('setup_llm_model_picker_empty')"
           :showValue="false"
+          :selectedValue="llmForm.model"
+          groupByPrefix
+          allowCustom
+          :customLabel="t('setup_llm_model_picker_custom')"
           @select="applyModelOption"
         />
 

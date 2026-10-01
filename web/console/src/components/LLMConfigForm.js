@@ -260,7 +260,8 @@ const LLMConfigForm = {
       if (showProOAuthFields.value) {
         return !proAuthNeedsLogin.value;
       }
-      return hasLLMFieldValue(props.config, props.envManaged, "api_key") || isSecretConfigured("api_key");
+      const credentialField = showCloudflareAccountField.value ? "cloudflare_api_token" : "api_key";
+      return hasLLMFieldValue(props.config, props.envManaged, credentialField) || isSecretConfigured(credentialField);
     });
     const modelLookupDisabled = computed(
       () =>
@@ -268,7 +269,8 @@ const LLMConfigForm = {
         props.readOnly ||
         !props.enableModelPicker ||
         !showOpenAICompatibleHelpers.value ||
-        !modelLookupCredentialsReadyValue.value,
+        !modelLookupCredentialsReadyValue.value ||
+        (showCloudflareAccountField.value && !hasLLMFieldValue(props.config, props.envManaged, "cloudflare_account_id")),
     );
     const credentialHelp = computed(() => {
       const provider = effectiveProviderChoice.value;

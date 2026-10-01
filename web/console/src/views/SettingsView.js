@@ -31,6 +31,7 @@ import channelSlackLogoURL from "../assets/images/channels/slack.svg";
 import channelTelegramLogoURL from "../assets/images/channels/telegram.svg";
 import defaultAvatarMarkup from "../assets/images/app_logo_current.svg?raw";
 import {
+  currentLocale,
   apiFetch,
   authState,
   endpointApiFetch,
@@ -108,6 +109,7 @@ import {
   PERSONA_IDENTITY_ENDPOINT,
   PERSONA_SOUL_ENDPOINT,
 } from "../core/persona-profile";
+import { modelPickerItemsFromPayload } from "../core/setup-picker";
 
 const TOOL_ITEMS = [
   { id: "read_file", titleKey: "settings_tool_read_file", noteKey: "settings_tool_note_read_file", toggle: false },
@@ -843,6 +845,12 @@ const SettingsView = {
     const modelPickerLoading = ref(false);
     const modelPickerError = ref("");
     const modelPickerItems = ref([]);
+    // The model in use by what the picker was opened for: a profile, or the default model.
+    const modelPickerSelectedValue = computed(() => {
+      const targetProfile = state.llm.profiles.find((profile) => profile._key === modelPickerTargetProfileKey.value) || null;
+      return trimText(targetProfile ? targetProfile.model : state.llm.model);
+    });
+
     const testConnectionOpen = ref(false);
     const testConnectionLoading = ref(false);
     const testConnectionError = ref("");
@@ -3530,6 +3538,10 @@ const SettingsView = {
       if (provider === SETUP_PROVIDER_XAI_OAUTH) {
         return !selectedEndpointIsConsole.value || xaiAuthReady.value;
       }
+      if (provider === SETUP_PROVIDER_CLOUDFLARE) {
+        return hasLLMFieldOrSecretValue(profile, envManaged, llmProfileSecretFields(profile), "cloudflare_api_token") &&
+          hasLLMFieldValue(profile, envManaged, "cloudflare_account_id");
+      }
       if (!setupProviderRequiresAPIKey(provider)) {
         return true;
       }
@@ -4487,18 +4499,22 @@ const SettingsView = {
       const endpoint = targetProfile
         ? llmFieldValue(targetProfile, targetProfileEnvManaged, "endpoint")
         : llmFieldValue(state.llm, llmEnvManaged.value, "endpoint");
+      const credentialField = providerChoice === SETUP_PROVIDER_CLOUDFLARE ? "cloudflare_api_token" : "api_key";
       const apiKey = targetProfile
-        ? llmFieldValue(targetProfile, targetProfileEnvManaged, "api_key")
-        : llmFieldValue(state.llm, llmEnvManaged.value, "api_key");
+        ? llmFieldValue(targetProfile, targetProfileEnvManaged, credentialField)
+        : llmFieldValue(state.llm, llmEnvManaged.value, credentialField);
       const apiKeyRaw = targetProfile
-        ? llmFieldEnvRawValue(targetProfileEnvManaged, "api_key")
-        : llmFieldEnvRawValue(llmEnvManaged.value, "api_key");
+        ? llmFieldEnvRawValue(targetProfileEnvManaged, credentialField)
+        : llmFieldEnvRawValue(llmEnvManaged.value, credentialField);
       try {
         const payload = await endpointApiFetch(targetEndpointRef, "/settings/agent/models", {
           method: "POST",
           body: {
             target_profile: targetProfile ? trimText(targetProfile._savedName) || trimText(targetProfile.name) : "",
             inference_provider: providerChoice,
+            cloudflare_account_id: providerChoice === SETUP_PROVIDER_CLOUDFLARE
+              ? llmFieldValue(targetProfile || state.llm, targetProfileEnvManaged || llmEnvManaged.value, "cloudflare_account_id")
+              : "",
             endpoint: setupProviderSupportsCustomAPIBase(providerChoice) ? endpoint : "",
             api_key:
               providerChoice === SETUP_PROVIDER_MISTERMORPH_PRO
@@ -4506,13 +4522,7 @@ const SettingsView = {
                 : apiKeyRaw || apiKey,
           },
         });
-        const items = Array.isArray(payload?.items) ? payload.items : [];
-        modelPickerItems.value = items.map((value) => ({
-          id: value,
-          title: value,
-          value,
-          note: "",
-        }));
+        modelPickerItems.value = modelPickerItemsFromPayload(payload, currentLocale());
       } catch (e) {
         modelPickerError.value = agentSettingsErrorMessage(e, targetEndpointRef, "msg_load_failed");
       } finally {
@@ -4977,6 +4987,7 @@ const SettingsView = {
       sectionSaveFailed,
       sectionSaveBusy,
       saveSection,
+      modelPickerSelectedValue,
       openChannel,
       channelTiles,
       channelGroups,
@@ -6639,6 +6650,10 @@ const SettingsView = {
         :filterPlaceholder="t('setup_llm_model_picker_filter_placeholder')"
         :emptyText="t('setup_llm_model_picker_empty')"
         :showValue="false"
+        :selectedValue="modelPickerSelectedValue"
+        groupByPrefix
+        allowCustom
+        :customLabel="t('setup_llm_model_picker_custom')"
         @select="applyModelOption"
       />
 

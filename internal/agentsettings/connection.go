@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/llminspect"
 	"github.com/quailyquaily/mistermorph/internal/llmutil"
 	"github.com/quailyquaily/mistermorph/internal/secref"
+	uniaiapi "github.com/quailyquaily/uniai"
 )
 
 type ConnectionTestOptions struct {
@@ -113,44 +115,54 @@ func RunConnectionTest(ctx context.Context, values llmutil.RuntimeValues, opts C
 	}, nil
 }
 
-func FetchOpenAICompatibleModels(ctx context.Context, endpoint string, apiKey string) ([]string, error) {
-	modelsURL, err := NormalizeOpenAICompatibleModelsURL(endpoint)
-	if err != nil {
-		return nil, err
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, modelsURL, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(apiKey))
-	req.Header.Set("Accept", "application/json")
-	resp, err := (&http.Client{Timeout: 15 * time.Second}).Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("model lookup failed: %w", err)
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if err != nil {
-		return nil, fmt.Errorf("model lookup failed: %w", err)
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		msg := strings.TrimSpace(string(body))
-		if msg == "" {
-			msg = resp.Status
+// ModelInfo is one model a provider lists. Created is when the provider published it (Unix
+// seconds), or 0 when the provider does not say.
+type ModelInfo struct {
+	ID      string `json:"id"`
+	Created int64  `json:"created,omitempty"`
+}
+
+// FetchModels lists the provider's models, newest first; models without a date come
+// last, in name order.
+func FetchModels(ctx context.Context, lookup ModelLookupConfig) ([]ModelInfo, error) {
+	cfg := uniaiapi.Config{Provider: lookup.Provider, ModelsHTTPClient: &http.Client{Timeout: 15 * time.Second}}
+	endpoint := strings.TrimRight(strings.TrimSpace(lookup.Endpoint), "/")
+	apiKey := strings.TrimSpace(lookup.APIKey)
+	switch lookup.Provider {
+	case "anthropic":
+		modelsURL, err := NormalizeOpenAICompatibleModelsURL(endpoint)
+		if err != nil {
+			return nil, err
 		}
-		return nil, fmt.Errorf("model lookup failed: %s", msg)
+		cfg.AnthropicAPIBase = strings.TrimSuffix(modelsURL, "/models")
+		cfg.AnthropicAPIKey = apiKey
+	case "gemini":
+		cfg.GeminiAPIBase = strings.TrimSuffix(endpoint, "/v1beta")
+		cfg.GeminiAPIKey = apiKey
+	case "cloudflare":
+		cfg.CloudflareAPIBase = endpoint
+		cfg.CloudflareAPIToken = apiKey
+		cfg.CloudflareAccountID = lookup.CloudflareAccountID
+	case "", "openai", "openai_resp", "xai", "deepseek", "meta", "sakana":
+		modelsURL, err := NormalizeOpenAICompatibleModelsURL(endpoint)
+		if err != nil {
+			return nil, err
+		}
+		// These routes use the OpenAI catalog format at the resolved endpoint.
+		cfg.Provider = "openai"
+		cfg.OpenAIAPIBase = strings.TrimSuffix(modelsURL, "/models")
+		cfg.OpenAIAPIKey = apiKey
+	default:
+		return nil, fmt.Errorf("model lookup is not supported for provider %q", lookup.Provider)
 	}
-	var payload struct {
-		Data []struct {
-			ID string `json:"id"`
-		} `json:"data"`
+	client := uniaiapi.New(cfg)
+	catalog, err := client.ListModels(ctx, "")
+	if err != nil {
+		return nil, fmt.Errorf("model lookup failed: %w", err)
 	}
-	if err := json.Unmarshal(body, &payload); err != nil {
-		return nil, fmt.Errorf("invalid models response")
-	}
-	seen := make(map[string]struct{}, len(payload.Data))
-	models := make([]string, 0, len(payload.Data))
-	for _, item := range payload.Data {
+	seen := make(map[string]struct{}, len(catalog))
+	models := make([]ModelInfo, 0, len(catalog))
+	for _, item := range catalog {
 		id := strings.TrimSpace(item.ID)
 		if id == "" {
 			continue
@@ -159,10 +171,51 @@ func FetchOpenAICompatibleModels(ctx context.Context, endpoint string, apiKey st
 			continue
 		}
 		seen[id] = struct{}{}
-		models = append(models, id)
+		// uniai preserves provider-specific creation timestamps in Raw.
+		var metadata struct {
+			Created   json.RawMessage `json:"created"`
+			CreatedAt string          `json:"created_at"`
+		}
+		if err := json.Unmarshal(item.Raw, &metadata); err != nil {
+			return nil, fmt.Errorf("invalid model metadata: %w", err)
+		}
+		created := parseModelCreated(metadata.Created)
+		if created == 0 && metadata.CreatedAt != "" {
+			if timestamp, err := time.Parse(time.RFC3339, metadata.CreatedAt); err == nil {
+				created = timestamp.Unix()
+			}
+		}
+		models = append(models, ModelInfo{ID: id, Created: created})
 	}
-	sort.Strings(models)
+	sortModelsNewestFirst(models)
 	return models, nil
+}
+
+// parseModelCreated reads a model's created time: Unix seconds as a number (OpenAI and most
+// others), or milliseconds, or a numeric string. Anything else is 0.
+func parseModelCreated(raw json.RawMessage) int64 {
+	text := strings.Trim(strings.TrimSpace(string(raw)), `"`)
+	if text == "" || text == "null" {
+		return 0
+	}
+	value, err := strconv.ParseFloat(text, 64)
+	if err != nil || value <= 0 {
+		return 0
+	}
+	created := int64(value)
+	if created > 1e12 {
+		created /= 1000
+	}
+	return created
+}
+
+func sortModelsNewestFirst(models []ModelInfo) {
+	sort.SliceStable(models, func(i, j int) bool {
+		if models[i].Created != models[j].Created {
+			return models[i].Created > models[j].Created
+		}
+		return models[i].ID < models[j].ID
+	})
 }
 
 func NormalizeOpenAICompatibleModelsURL(endpoint string) (string, error) {
