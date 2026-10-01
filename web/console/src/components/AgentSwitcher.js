@@ -116,7 +116,7 @@ const AgentSwitcher = {
       default: false,
     },
   },
-  emits: ["change", "desk", "overview"],
+  emits: ["change", "overview"],
   setup(props, { emit }) {
     const t = translate;
     const root = ref(null);
@@ -234,12 +234,6 @@ const AgentSwitcher = {
       emit("overview");
     }
 
-    function openDesk() {
-      closeMenu();
-      dialogOpen.value = false;
-      emit("desk");
-    }
-
     function updateFilter(value) {
       filter.value = String(value || "");
     }
@@ -312,7 +306,6 @@ const AgentSwitcher = {
       toggleSwitcher,
       onTriggerKeydown,
       selectItem,
-      openDesk,
       openOverview,
       updateFilter,
     };
@@ -359,16 +352,6 @@ const AgentSwitcher = {
           type="button"
           class="agent-switcher-route"
           data-agent-switcher-action
-          @click="openDesk"
-        >
-          <PhGridFour class="agent-switcher-route-icon" />
-          <span class="agent-switcher-name">{{ t('endpoint_switcher_desk') }}</span>
-          <PhCaretRight class="agent-switcher-route-arrow" />
-        </button>
-        <button
-          type="button"
-          class="agent-switcher-route"
-          data-agent-switcher-action
           @click="openOverview"
         >
           <PhNetwork class="agent-switcher-route-icon" />
@@ -408,15 +391,6 @@ const AgentSwitcher = {
                 {{ t('endpoint_switcher_empty') }}
               </p>
             </div>
-            <button
-              type="button"
-              class="agent-switcher-route"
-              @click="openDesk"
-            >
-              <PhGridFour class="agent-switcher-route-icon" />
-              <span class="agent-switcher-name">{{ t('endpoint_switcher_desk') }}</span>
-              <PhCaretRight class="agent-switcher-route-arrow" />
-            </button>
             <button type="button" class="agent-switcher-route" @click="openOverview">
               <PhNetwork class="agent-switcher-route-icon" />
               <span class="agent-switcher-name">{{ t('nav_overview') }}</span>

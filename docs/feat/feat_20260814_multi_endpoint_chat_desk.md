@@ -1,8 +1,10 @@
 ---
 date: 2026-08-14
 title: 多 Endpoint Chat 工作台
-status: implemented
+status: removed
 ---
+
+> 2026-10-01：工作台（Agent Desk）已删除，`/chat/desk` 重定向到普通 Chat。本文仅作记录。
 
 # 多 Endpoint Chat 工作台
 

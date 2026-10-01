@@ -33,7 +33,6 @@ import { routeExtensions } from "../core/route-extensions";
 import "../views/common.css";
 
 const ROUTE_VIEW_LOADERS = {
-  agentDesk: () => import("../views/AgentDeskView"),
   audit: () => import("../views/AuditView"),
   bootPreview: () => import("../views/BootPreviewView"),
   chat: () => import("../views/ChatView"),
@@ -52,7 +51,6 @@ const ROUTE_VIEW_LOADERS = {
 };
 const routePreloadPromises = new Map();
 
-const AgentDeskView = ROUTE_VIEW_LOADERS.agentDesk;
 const AuditView = ROUTE_VIEW_LOADERS.audit;
 const BootPreviewView = ROUTE_VIEW_LOADERS.bootPreview;
 const ChatView = ROUTE_VIEW_LOADERS.chat;
@@ -86,9 +84,6 @@ function isDesktopWindowPath(path) {
 
 function preloadKeyForPath(path) {
   const value = pagePath(path);
-  if (value === "/chat/desk") {
-    return "agentDesk";
-  }
   if (value === "/chat" || value.startsWith("/chat/")) {
     return "chat";
   }
@@ -186,7 +181,6 @@ const routes = [
   { path: "/login", component: LoginView, meta: { public: true, shellless: true } },
   { path: "/__boot-preview", component: BootPreviewView, meta: { public: true, shellless: true } },
   { path: "/overview", component: OverviewView },
-  { path: "/chat/desk", component: AgentDeskView },
   { path: `${ENDPOINT_SCOPE_PATH}/setup`, component: SetupView, meta: { endpointScoped: true } },
   {
     path: `${ENDPOINT_SCOPE_PATH}/setup/llm`,
@@ -247,6 +241,8 @@ const routes = [
   { path: "/setup/done", redirect: legacyEndpointRedirect("/setup/done") },
 	{ path: "/troubleshooting", redirect: legacyEndpointRedirect("/troubleshooting") },
   { path: "/chat", redirect: legacyEndpointRedirect("/chat") },
+  // Agent Desk was removed; its old address opens Chat.
+  { path: "/chat/desk", redirect: legacyEndpointRedirect("/chat") },
   { path: "/chat/:topic_id", redirect: legacyEndpointRedirect("/chat/:topic_id") },
   { path: "/runtime", redirect: legacyEndpointRedirect("/settings/runtime") },
   { path: "/dashboard", redirect: legacyEndpointRedirect("/settings/runtime") },

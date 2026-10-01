@@ -51,8 +51,7 @@ function useAppShell() {
     const pagePath = endpointPagePath(route.path) || route.path;
     return pagePath === "/setup" || pagePath.startsWith("/setup/");
   });
-  const inAgentDesk = computed(() => route.path === "/chat/desk");
-  const inStandalone = computed(() => inOverview.value || inSetup.value || inAgentDesk.value);
+  const inStandalone = computed(() => inOverview.value || inSetup.value);
   const inWorkspacePage = computed(() => !inShellless.value && !inStandalone.value);
   const currentPath = computed(() => route.path);
   const endpointViewKey = computed(() =>
@@ -108,7 +107,7 @@ function useAppShell() {
   }
 
   function preloadSharedResources() {
-    if (inShellless.value || inSetup.value || inAgentDesk.value || !authValid.value) {
+    if (inShellless.value || inSetup.value || !authValid.value) {
       return;
     }
     const endpointRef = String(endpointState.selectedRef || "").trim();

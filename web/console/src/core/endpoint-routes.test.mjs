@@ -26,7 +26,6 @@ test("endpoint page paths can be retained while switching agents", () => {
   assert.equal(endpointPagePath("/e/ep_remote_b/chat/topic_123"), "/chat/topic_123");
   assert.equal(endpointPagePath("/overview"), "");
   assert.equal(endpointPagePath("/e/default/setup/llm"), "/setup/llm");
-  assert.equal(endpointPagePath("/chat/desk"), "");
 });
 
 test("switching agents retains the page but uses the target agent's chat topic", () => {

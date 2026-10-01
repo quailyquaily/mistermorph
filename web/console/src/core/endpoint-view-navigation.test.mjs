@@ -7,15 +7,13 @@ async function viewSource(name) {
 }
 
 test("endpoint entry points navigate directly to scoped chat routes", async () => {
-  const [overview, desk, login, setup] = await Promise.all([
+  const [overview, login, setup] = await Promise.all([
     viewSource("OverviewView"),
-    viewSource("AgentDeskView"),
     viewSource("LoginView"),
     viewSource("SetupView"),
   ]);
 
   assert.match(overview, /endpointRoutePath\(item\.endpoint_ref, "\/chat"\)/);
-  assert.match(desk, /endpointRoutePath\(endpointRef, chatPagePath\)/);
   assert.match(login, /endpointRoutePath\(targetRef, "\/chat"\)/);
   assert.match(setup, /endpointRoutePath\(setupEndpointRef\.value, "\/chat"\)/);
 });
