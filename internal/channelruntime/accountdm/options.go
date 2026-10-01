@@ -28,20 +28,5 @@ func normalizeOptions(opts Options) Options {
 		opts.ServerMaxQueue = configdefaults.DefaultServerMaxQueue
 	}
 	opts.AgentLimits = opts.AgentLimits.NormalizeForRuntime()
-	opts.AllowedUserIDs = normalizeStrings(opts.AllowedUserIDs)
 	return opts
-}
-
-func normalizeStrings(values []string) []string {
-	out := make([]string, 0, len(values))
-	seen := make(map[string]bool, len(values))
-	for _, raw := range values {
-		value := strings.TrimSpace(raw)
-		if value == "" || seen[value] {
-			continue
-		}
-		seen[value] = true
-		out = append(out, value)
-	}
-	return out
 }

@@ -172,7 +172,6 @@ This command accepts an optional `profile-name` positional argument. Without one
 - `--inspect-prompt`: Dump prompt messages into `./dump`.
 - `--inspect-request`: Dump LLM request/response payloads into `./dump`.
 - `--wechat-bot-token`: WeChat bot token (normally written by `wechat login`).
-- `--wechat-allowed-user-id`: Allowed WeChat user id. Repeatable.
 - `--wechat-task-timeout`: Per-message agent timeout.
 - `--wechat-max-concurrency`: Max number of WeChat conversations processed concurrently.
 

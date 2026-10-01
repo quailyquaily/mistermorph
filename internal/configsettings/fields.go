@@ -182,7 +182,6 @@ func ConsoleFields() []Field {
 		Field{Path: "wechat.bot_token", Kind: KindString, Sensitive: true, ApplyMode: ApplyRuntimeRestart},
 		Field{Path: "wechat.bot_id", Kind: KindString, ApplyMode: ApplyRuntimeRestart},
 		Field{Path: "wechat.base_url", Kind: KindString, ApplyMode: ApplyRuntimeRestart},
-		Field{Path: "wechat.allowed_user_ids", Kind: KindStringList, ApplyMode: ApplyRuntimeRestart},
 		Field{Path: "whatsapp.api_token", Kind: KindString, Sensitive: true, ApplyMode: ApplyRuntimeRestart},
 	)
 	return fields

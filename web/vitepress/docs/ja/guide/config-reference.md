@@ -283,7 +283,6 @@ Shell のデフォルト値はプラットフォームごとに分かれます�
 - `wechat.bot_token`
 - `wechat.bot_id`
 - `wechat.base_url`
-- `wechat.allowed_user_ids`
 - `wechat.task_timeout`
 - `wechat.max_concurrency`
 - `wechat.serve_listen`

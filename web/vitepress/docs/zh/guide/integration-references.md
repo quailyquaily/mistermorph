@@ -303,7 +303,6 @@ description: 列出 integration 包的导出函数、方法、结构体字段，
 | `BotToken` | `string` | 微信 bot token，即 `morph wechat login` 保存的值。 |
 | `BotID` | `string` | 已连接的 bot ID，来自同一次登录。 |
 | `BaseURL` | `string` | 登录返回的 iLink API 地址；为空时用默认地址。 |
-| `AllowedUserIDs` | `[]string` | 允许的微信用户 ID；为空表示允许任何给 bot 发消息的人。 |
 | `TaskTimeout` | `time.Duration` | 单个 task 的执行超时。 |
 | `MaxConcurrency` | `int` | 会话最大并发数。 |
 

@@ -565,8 +565,8 @@ telegram:
   # - smart: every group message goes through addressing LLM classification; `addressed=true` is required.
   # - talkative: every group message goes through addressing LLM classification; does not require `addressed=true`.
   group_trigger_mode: "talkative"
-  # Persist valid group messages rejected by group trigger to the shared journal.
-  record_untriggered: false
+  # Record every group message to the shared journal, also those that do not trigger a reply.
+  record_untriggered: true
   # Group reply policy is fixed to humanlike (not configurable).
   # Minimum confidence required to accept the LLM addressing classification.
   addressing_confidence_threshold: 0.7
@@ -601,9 +601,9 @@ slack:
   # - strict: only explicit triggers (app_mention/@bot mention) in groups.
   # - smart: every group message goes through addressing LLM classification; `addressed=true` is required.
   # - talkative: every group message goes through addressing LLM classification; does not require `addressed=true`.
-  group_trigger_mode: "smart"
-  # Persist valid group messages rejected by group trigger to the shared journal.
-  record_untriggered: false
+  group_trigger_mode: "talkative"
+  # Record every group message to the shared journal, also those that do not trigger a reply.
+  record_untriggered: true
   # Minimum confidence required to accept the LLM addressing classification.
   addressing_confidence_threshold: 0.6
   # Minimum interject required to accept the LLM addressing classification.
@@ -634,9 +634,9 @@ line:
   # - strict: only explicit triggers in groups.
   # - smart: every group message goes through addressing LLM classification; `addressed=true` is required.
   # - talkative: every group message goes through addressing LLM classification; does not require `addressed=true`.
-  group_trigger_mode: "smart"
-  # Persist valid group messages rejected by group trigger to the shared journal.
-  record_untriggered: false
+  group_trigger_mode: "talkative"
+  # Record every group message to the shared journal, also those that do not trigger a reply.
+  record_untriggered: true
   # Minimum confidence required to accept the LLM addressing classification.
   addressing_confidence_threshold: 0.6
   # Minimum interject required to accept the LLM addressing classification.
@@ -666,9 +666,9 @@ lark:
   # - strict: only explicit triggers in groups.
   # - smart: every group message goes through addressing LLM classification; `addressed=true` is required.
   # - talkative: every group message goes through addressing LLM classification; does not require `addressed=true`.
-  group_trigger_mode: "smart"
-  # Persist valid group messages rejected by group trigger to the shared journal.
-  record_untriggered: false
+  group_trigger_mode: "talkative"
+  # Record every group message to the shared journal, also those that do not trigger a reply.
+  record_untriggered: true
   # Minimum confidence required to accept the LLM addressing classification.
   addressing_confidence_threshold: 0.6
   # Minimum interject required to accept the LLM addressing classification.
@@ -717,8 +717,8 @@ discord:
   # - talkative: every server message goes through addressing LLM classification; does not require `addressed=true`.
   # smart and talkative need the privileged Message Content intent (Developer Portal -> Bot).
   group_trigger_mode: "strict"
-  # Persist valid server messages rejected by group trigger to the shared journal.
-  record_untriggered: false
+  # Record every server message to the shared journal, also those that do not trigger a reply.
+  record_untriggered: true
   # Minimum confidence required to accept the LLM addressing classification.
   addressing_confidence_threshold: 0.6
   # Minimum interject required to accept the LLM addressing classification.
@@ -739,8 +739,6 @@ wechat:
   # The bot's ID and API host, written by the QR login. Not secrets.
   bot_id: ""
   base_url: ""
-  # Optional allowlist of WeChat user IDs. Empty allows everyone who can reach the bot.
-  allowed_user_ids: []
   # Per-message agent timeout (0 uses top-level timeout).
   task_timeout: "0s"
   # Max number of conversations processed concurrently.

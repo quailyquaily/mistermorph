@@ -49,10 +49,6 @@ func runLoop(ctx context.Context, d Dependencies, opts Options) error {
 	name := string(channel)
 	logger = logger.With("channel", name)
 	transport := opts.Transport
-	allowed := make(map[string]bool, len(opts.AllowedUserIDs))
-	for _, id := range opts.AllowedUserIDs {
-		allowed[id] = true
-	}
 
 	daemonStore := opts.TaskStore
 	if daemonStore == nil {
@@ -436,16 +432,12 @@ func runLoop(ctx context.Context, d Dependencies, opts Options) error {
 
 	peers := newPeerBook(d.RuntimePaths.StateDir, channel)
 	unregister := livesend.Register(name, &liveSender{
-		channel: channel, transport: transport, bus: bus, receipts: receipts, allowed: opts.AllowedUserIDs, peers: peers,
+		channel: channel, transport: transport, bus: bus, receipts: receipts, peers: peers,
 	})
 	defer unregister()
 
-	logger.Info("runtime_start", "allowed_user_ids", len(opts.AllowedUserIDs), "task_timeout", opts.TaskTimeout.String(), "max_concurrency", opts.MaxConcurrency)
+	logger.Info("runtime_start", "task_timeout", opts.TaskTimeout.String(), "max_concurrency", opts.MaxConcurrency)
 	err = transport.Run(ctx, func(messageCtx context.Context, in Inbound) error {
-		if len(allowed) > 0 && !allowed[in.PeerID] && commandName(in.Text) != "/id" {
-			logger.Debug("unauthorized_user", "peer_id", in.PeerID, "message_id", in.MessageID)
-			return nil
-		}
 		peers.add(in.AccountID, in.PeerID)
 		if in.Unsupported {
 			first, seenErr := inboundAdapter.FirstSeen(messageCtx, in.AccountID, in.PeerID, in.MessageID)

@@ -227,7 +227,6 @@ wechat:
   bot_token: ""        # 扫码登录写入；也可用 MISTER_MORPH_WECHAT_BOT_TOKEN
   bot_id: ""           # 扫码登录写入，不是密钥
   base_url: ""         # 扫码登录返回的服务地址，不是密钥
-  allowed_user_ids: [] # 可选白名单；空表示允许所有能联系到 Bot 的用户
   task_timeout: "0s"
   max_concurrency: 3
   serve_listen: ""
@@ -242,7 +241,7 @@ console:
   managed_runtimes: [wechat, whatsapp]
 ```
 
-`wechat.allowed_user_ids` 用于兜底：同一个 Bot 可能被他人扫码添加或转发，白名单为空时与其他 channel 一样允许所有人，填写后只回应列出的用户。WhatsApp 不需要这一项，平台本身只允许创建者与 Agent 通信。
+两个 channel 都不设白名单：微信只有扫码人能与 Bot 对话，WhatsApp 只允许创建者与 Agent 通信，平台已经限定了使用者。
 
 **密钥与现有机制对齐**：`wechat.bot_token` 和 `whatsapp.api_token` 与其他 channel 的 token 一样，可以写明文、写 `${ENV}`、写 `internal/secref` 的引用（环境变量、AWS Secrets Manager、系统密钥库），也可以由 `MISTER_MORPH_*` 环境变量提供。Console 设置里只写不读，保存时与其他 channel 一样存入系统密钥库、配置里只留引用。扫码登录得到的 token 走同一条路径（见 5.4）。
 
@@ -304,7 +303,7 @@ Phase 1–4 已实现，尚未用真实账号手工收发：
 - 协议 client：`internal/wechatapi`（含 CDN 媒体的 AES-128-ECB 加解密、上传与下载；下载只接受微信域名的 https 地址，CDN 请求不带 bot token）、`internal/whatsappapi`（含 `/media` 上传、元信息与下载；token 只发往 WhatsApp 自身域名，校验 SHA-256 与大小上限，媒体方法各自限速）。全部以 fake server 测试。
 - 共用私聊引擎 `internal/channelruntime/accountdm`，transport 在 `internal/channelruntime/wechat`、`internal/channelruntime/whatsapp`；按账号的 poller 锁 `internal/runtimelock`。
 - 媒体：入站图片交给模型（每条最多 3 张），其他文件、视频、未转写语音存入 `file_cache_dir/<channel>/` 并在消息里注明路径；重放的消息先查收件箱，不会重复下载。出站由 `wechat_send_file` / `whatsapp_send_file` 工具发送 `file_cache_dir` 内的文件。
-- 主动发送：`internal/livesend` 让同一进程里运行中的 runtime 代为发送，`contacts_send`、cron（`chat_id` 为 `wechat:<user>` / `whatsapp:<user>`）和 heartbeat 都走这条路。微信仍受 `context_token` 约束，只能发给启动后发过消息的用户；heartbeat 只发给白名单用户。WhatsApp 记住创建者（`file_state_dir/accountdm/`），重启后照常通知。`morph wechat` / `morph whatsapp` 在开启 heartbeat 或 cron 时同时运行 awareness runtime。
+- 主动发送：`internal/livesend` 让同一进程里运行中的 runtime 代为发送，`contacts_send`、cron（`chat_id` 为 `wechat:<user>` / `whatsapp:<user>`）和 heartbeat 都走这条路。微信仍受 `context_token` 约束，只能发给启动后发过消息的用户。heartbeat 发给账号的使用者（微信的扫码人、WhatsApp 的创建者），使用者记在 `file_state_dir/accountdm/`，重启后照常通知。`morph wechat` / `morph whatsapp` 在开启 heartbeat 或 cron 时同时运行 awareness runtime。
 - CLI：`morph wechat`、`morph wechat login|logout`、`morph whatsapp`。
 - Console：托管 runtime、设置页（微信扫码面板、白名单；WhatsApp API key 只写不读）、扫码接口 `/settings/wechat/login/start|poll`、`/settings/wechat/logout`；token 只在服务端保存，浏览器只拿二维码链接。Runtime 页显示连接状态（含需要重新登录）。
 - 嵌入：`integration.Runtime.NewWeChatBot`、`NewWhatsAppBot`。

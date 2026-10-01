@@ -79,7 +79,7 @@ func TestApplySetsEmptyDefaultWorkspaceDir(t *testing.T) {
 	}
 }
 
-func TestApplyDisablesRecordUntriggeredByDefault(t *testing.T) {
+func TestApplyRecordsAllGroupMessagesByDefault(t *testing.T) {
 	v := viper.New()
 	Apply(v)
 	for _, key := range []string{
@@ -87,12 +87,13 @@ func TestApplyDisablesRecordUntriggeredByDefault(t *testing.T) {
 		"slack.record_untriggered",
 		"line.record_untriggered",
 		"lark.record_untriggered",
+		"discord.record_untriggered",
 	} {
 		if !v.IsSet(key) {
 			t.Fatalf("%s has no registered default", key)
 		}
-		if v.GetBool(key) {
-			t.Fatalf("%s = true, want false", key)
+		if !v.GetBool(key) {
+			t.Fatalf("%s = false, want true", key)
 		}
 	}
 }

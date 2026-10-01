@@ -83,7 +83,6 @@ type Transport interface {
 type Options struct {
 	Channel           busruntime.Channel
 	Transport         Transport
-	AllowedUserIDs    []string
 	PromptBlocks      func(spec *agent.PromptSpec)
 	TaskTimeout       time.Duration
 	MaxConcurrency    int

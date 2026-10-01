@@ -13,7 +13,6 @@ import (
 
 // AccountDMConfig is what WeChat and WhatsApp read from config, besides their credentials.
 type AccountDMConfig struct {
-	AllowedUserIDs    []string
 	TaskTimeout       time.Duration
 	GlobalTaskTimeout time.Duration
 	MaxConcurrency    int
@@ -42,9 +41,6 @@ func accountDMConfigFromReader(r ConfigReader, channel string) AccountDMConfig {
 		AgentLimits:       agentLimitsFromReader(r),
 		EngineToolsConfig: engineToolsConfigFromReader(r),
 	}
-	if channel == "wechat" {
-		cfg.AllowedUserIDs = append([]string(nil), r.GetStringSlice("wechat.allowed_user_ids")...)
-	}
 	return cfg
 }
 
@@ -54,7 +50,6 @@ func (cfg AccountDMConfig) engineOptions(inspectPrompt, inspectRequest bool) acc
 		taskTimeout = cfg.GlobalTaskTimeout
 	}
 	return accountdm.Options{
-		AllowedUserIDs:    normalizeTrimmedUniqueStrings(cfg.AllowedUserIDs),
 		TaskTimeout:       taskTimeout,
 		MaxConcurrency:    cfg.MaxConcurrency,
 		FileCacheDir:      cfg.FileCacheDir,

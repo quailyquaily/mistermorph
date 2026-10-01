@@ -165,7 +165,7 @@ lark:
   app_id: ""
   app_secret: ""
   allowed_chat_ids: []
-  group_trigger_mode: "smart"
+  group_trigger_mode: "talkative"
   addressing_confidence_threshold: 0.6
   addressing_interject_threshold: 0.6
   task_timeout: "0s"

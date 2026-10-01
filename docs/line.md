@@ -139,7 +139,7 @@ line:
   webhook_listen: "127.0.0.1:18080"
   webhook_path: "/line/webhook"
   allowed_group_ids: [] # empty means allow all groups
-  group_trigger_mode: "smart" # strict|smart|talkative
+  group_trigger_mode: "talkative" # strict|smart|talkative
   addressing_confidence_threshold: 0.6
   addressing_interject_threshold: 0.6
   task_timeout: "0s" # 0 means use top-level timeout

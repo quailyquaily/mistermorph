@@ -99,8 +99,8 @@ func TestNormalizeRunOptionsDefaults(t *testing.T) {
 	if got.Server.Listen != "127.0.0.1:8787" {
 		t.Fatalf("server listen = %q, want 127.0.0.1:8787", got.Server.Listen)
 	}
-	if got.GroupTriggerMode != "smart" {
-		t.Fatalf("group trigger mode = %q, want smart", got.GroupTriggerMode)
+	if got.GroupTriggerMode != "talkative" {
+		t.Fatalf("group trigger mode = %q, want talkative", got.GroupTriggerMode)
 	}
 	if got.AddressingConfidenceThreshold != 0.6 {
 		t.Fatalf("confidence threshold = %v, want 0.6", got.AddressingConfidenceThreshold)

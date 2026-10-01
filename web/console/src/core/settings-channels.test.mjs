@@ -27,7 +27,7 @@ test("console channel settings expose line, lark, mixin, and discord alongside t
   assert.match(source, /\["line", consoleLineDirty, "settings_console_line_title"\]/);
   assert.match(source, /\["lark", consoleLarkDirty, "settings_console_lark_title"\]/);
   assert.match(source, /\["mixin", consoleMixinDirty, "settings_console_mixin_title"\]/);
-  assert.match(source, /const known = \["runtimes", "telegram", "slack", "line", "lark", "mixin", "discord", "wechat", "whatsapp", "guard"\];/);
+  assert.match(source, /const known = \["runtimes", "telegram", "slack", "line", "lark", "mixin", "discord", "whatsapp", "guard"\];/);
   assert.match(source, /mixin: mixinSaveDisabled,/);
   assert.match(source, /consoleFieldEnvManaged\('line', 'channel_access_token'\)/);
   assert.match(source, /consoleFieldEnvManaged\('lark', 'app_secret'\)/);
@@ -54,7 +54,8 @@ test("console channel settings expose line, lark, mixin, and discord alongside t
   // WeChat logs in by QR code (the token stays on the server); WhatsApp takes a write-only API key.
   assert.match(source, /id:\s*"wechat",\s*titleKey:\s*"settings_console_runtime_wechat"/);
   assert.match(source, /id:\s*"whatsapp",\s*titleKey:\s*"settings_console_runtime_whatsapp"/);
-  assert.match(source, /\["wechat", consoleWeChatDirty, "settings_console_wechat_title"\]/);
+  // WeChat has nothing to edit: only the person who scanned can use the bot.
+  assert.doesNotMatch(source, /consoleWeChatDirty/);
   assert.match(source, /\["whatsapp", consoleWhatsAppDirty, "settings_console_whatsapp_title"\]/);
   assert.match(source, /<WeChatLoginPanel/);
   assert.match(source, /consoleFieldEnvManaged\('wechat', 'bot_token'\)/);

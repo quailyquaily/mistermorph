@@ -147,7 +147,7 @@ slack:
   app_token: "xapp-..."
   allowed_team_ids: []
   allowed_channel_ids: []
-  group_trigger_mode: "smart" # strict|smart|talkative
+  group_trigger_mode: "talkative" # strict|smart|talkative
   addressing_confidence_threshold: 0.6
   addressing_interject_threshold: 0.6
   task_timeout: "0s"

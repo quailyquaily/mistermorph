@@ -130,22 +130,24 @@ What this means in practice:
 - If rebuilding fails, the old snapshot keeps running.
 - In-flight tasks keep their bound generation. New tasks use the next generation only after the swap.
 
-## Untriggered Group Messages
+## Recording All Group Messages
 
-Each group-chat channel has its own switch for recording valid messages that do not pass group trigger admission:
+Each group-chat channel has its own switch, shown in Console as "Record all group messages". Messages that trigger a reply are always recorded with their task; this switch also records the valid messages that do not pass group trigger admission, so the agent sees the whole conversation:
 
 ```yaml
 telegram:
-  record_untriggered: false
+  record_untriggered: true
 slack:
-  record_untriggered: false
+  record_untriggered: true
 line:
-  record_untriggered: false
+  record_untriggered: true
 lark:
-  record_untriggered: false
+  record_untriggered: true
+discord:
+  record_untriggered: true
 ```
 
-The switches are independent and default to `false`. When enabled, the channel writes a compact `conversation/untriggered_inbound` event to the shared journal. It does not create a task or call another LLM. Messages rejected before trigger admission, including commands, private messages, unauthorized messages, bot messages, and duplicates caught by existing ingress filtering, are not recorded. The feature adds no dedupe state. Stored text is limited to 2048 bytes; attachments are represented only by `has_attachment: true`.
+The switches are independent and default to `true`. When enabled, the channel writes a compact `conversation/untriggered_inbound` event to the shared journal. It does not create a task or call another LLM. Messages rejected before trigger admission, including commands, private messages, unauthorized messages, bot messages, and duplicates caught by existing ingress filtering, are not recorded. The feature adds no dedupe state. Stored text is limited to 2048 bytes; attachments are represented only by `has_attachment: true`.
 
 There is no global fallback or CLI flag for this setting.
 

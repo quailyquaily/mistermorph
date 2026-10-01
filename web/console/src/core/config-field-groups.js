@@ -190,7 +190,7 @@ function channelTriggerFields(channel, title) {
     fields: [
       { path: `${channel}.addressing_confidence_threshold`, label: "Addressing confidence threshold", type: "float" },
       { path: `${channel}.addressing_interject_threshold`, label: "Addressing interject threshold", type: "float" },
-      { path: `${channel}.record_untriggered`, label: "Record untriggered group messages", type: "bool" },
+      { path: `${channel}.record_untriggered`, label: "Record all group messages", type: "bool" },
     ],
   };
 }

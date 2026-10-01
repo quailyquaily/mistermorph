@@ -23,7 +23,7 @@ const (
 	DefaultChannelMaxConcurrency  = 3
 	DefaultBusMaxInFlight         = 1024
 	DefaultServerMaxQueue         = 100
-	DefaultGroupTriggerMode       = "smart"
+	DefaultGroupTriggerMode       = "talkative"
 	DefaultAddressingThreshold    = 0.6
 	// Discord defaults to strict: the only mode that works without the privileged Message Content
 	// intent.
@@ -112,7 +112,7 @@ func Apply(v *viper.Viper) {
 
 	v.SetDefault("telegram.poll_timeout", DefaultTelegramPollTimeout)
 	v.SetDefault("telegram.group_trigger_mode", DefaultGroupTriggerMode)
-	v.SetDefault("telegram.record_untriggered", false)
+	v.SetDefault("telegram.record_untriggered", true)
 	v.SetDefault("telegram.addressing_confidence_threshold", DefaultAddressingThreshold)
 	v.SetDefault("telegram.addressing_interject_threshold", DefaultAddressingThreshold)
 	v.SetDefault("telegram.max_concurrency", DefaultChannelMaxConcurrency)
@@ -126,7 +126,7 @@ func Apply(v *viper.Viper) {
 	v.SetDefault("slack.task_timeout", 0*time.Second)
 	v.SetDefault("slack.max_concurrency", DefaultChannelMaxConcurrency)
 	v.SetDefault("slack.group_trigger_mode", DefaultGroupTriggerMode)
-	v.SetDefault("slack.record_untriggered", false)
+	v.SetDefault("slack.record_untriggered", true)
 	v.SetDefault("slack.addressing_confidence_threshold", DefaultAddressingThreshold)
 	v.SetDefault("slack.addressing_interject_threshold", DefaultAddressingThreshold)
 	v.SetDefault("slack.serve_listen", "")
@@ -140,7 +140,7 @@ func Apply(v *viper.Viper) {
 	v.SetDefault("line.task_timeout", 0*time.Second)
 	v.SetDefault("line.max_concurrency", DefaultChannelMaxConcurrency)
 	v.SetDefault("line.group_trigger_mode", DefaultGroupTriggerMode)
-	v.SetDefault("line.record_untriggered", false)
+	v.SetDefault("line.record_untriggered", true)
 	v.SetDefault("line.addressing_confidence_threshold", DefaultAddressingThreshold)
 	v.SetDefault("line.addressing_interject_threshold", DefaultAddressingThreshold)
 	v.SetDefault("line.serve_listen", "")
@@ -152,7 +152,7 @@ func Apply(v *viper.Viper) {
 	v.SetDefault("lark.task_timeout", 0*time.Second)
 	v.SetDefault("lark.max_concurrency", DefaultChannelMaxConcurrency)
 	v.SetDefault("lark.group_trigger_mode", DefaultGroupTriggerMode)
-	v.SetDefault("lark.record_untriggered", false)
+	v.SetDefault("lark.record_untriggered", true)
 	v.SetDefault("lark.addressing_confidence_threshold", DefaultAddressingThreshold)
 	v.SetDefault("lark.addressing_interject_threshold", DefaultAddressingThreshold)
 	v.SetDefault("lark.serve_listen", "")
@@ -169,7 +169,7 @@ func Apply(v *viper.Viper) {
 	v.SetDefault("discord.allowed_channel_ids", []string{})
 	v.SetDefault("discord.allowed_user_ids", []string{})
 	v.SetDefault("discord.group_trigger_mode", DefaultDiscordGroupTriggerMode)
-	v.SetDefault("discord.record_untriggered", false)
+	v.SetDefault("discord.record_untriggered", true)
 	v.SetDefault("discord.addressing_confidence_threshold", DefaultAddressingThreshold)
 	v.SetDefault("discord.addressing_interject_threshold", DefaultAddressingThreshold)
 	v.SetDefault("discord.task_timeout", 0*time.Second)
@@ -179,7 +179,6 @@ func Apply(v *viper.Viper) {
 	v.SetDefault("wechat.bot_token", "")
 	v.SetDefault("wechat.bot_id", "")
 	v.SetDefault("wechat.base_url", "")
-	v.SetDefault("wechat.allowed_user_ids", []string{})
 	v.SetDefault("wechat.task_timeout", 0*time.Second)
 	v.SetDefault("wechat.max_concurrency", DefaultChannelMaxConcurrency)
 	v.SetDefault("wechat.serve_listen", "")

@@ -72,12 +72,11 @@ type consoleDiscordSettingsPayload struct {
 	GroupTriggerMode  string   `json:"group_trigger_mode"`
 }
 
-// consoleWeChatSettingsPayload: the bot token comes only from QR login (or the environment), so
-// the form shows whether it is set and which bot is bound, and edits only the allowlist.
+// consoleWeChatSettingsPayload is read-only: the bot comes from QR login (or the environment), and
+// only the person who scanned can use it, so there is nothing to edit.
 type consoleWeChatSettingsPayload struct {
-	BotToken       string   `json:"bot_token"`
-	BotID          string   `json:"bot_id"`
-	AllowedUserIDs []string `json:"allowed_user_ids"`
+	BotToken string `json:"bot_token"`
+	BotID    string `json:"bot_id"`
 }
 
 type consoleWhatsAppSettingsPayload struct {
@@ -164,10 +163,6 @@ type consoleDiscordSettingsUpdatePayload struct {
 	GroupTriggerMode  *string   `json:"group_trigger_mode,omitempty"`
 }
 
-type consoleWeChatSettingsUpdatePayload struct {
-	AllowedUserIDs *[]string `json:"allowed_user_ids,omitempty"`
-}
-
 type consoleWhatsAppSettingsUpdatePayload struct {
 	APIToken *string `json:"api_token,omitempty"`
 }
@@ -209,7 +204,6 @@ type consoleSettingsUpdatePayload struct {
 	Lark            *consoleLarkSettingsUpdatePayload     `json:"lark,omitempty"`
 	Mixin           *consoleMixinSettingsUpdatePayload    `json:"mixin,omitempty"`
 	Discord         *consoleDiscordSettingsUpdatePayload  `json:"discord,omitempty"`
-	WeChat          *consoleWeChatSettingsUpdatePayload   `json:"wechat,omitempty"`
 	WhatsApp        *consoleWhatsAppSettingsUpdatePayload `json:"whatsapp,omitempty"`
 	Guard           *consoleGuardSettingsUpdatePayload    `json:"guard,omitempty"`
 	NewPassword     *string                               `json:"new_password,omitempty"`
@@ -455,7 +449,7 @@ func (s *server) handleConsoleSettingsPut(w http.ResponseWriter, r *http.Request
 	}
 	next := current
 	serialized := snapshot.Data
-	hasLegacyUpdate := req.ManagedRuntimes != nil || req.Telegram != nil || req.Slack != nil || req.Line != nil || req.Lark != nil || req.Mixin != nil || req.Discord != nil || req.WeChat != nil || req.WhatsApp != nil || req.Guard != nil
+	hasLegacyUpdate := req.ManagedRuntimes != nil || req.Telegram != nil || req.Slack != nil || req.Line != nil || req.Lark != nil || req.Mixin != nil || req.Discord != nil || req.WhatsApp != nil || req.Guard != nil
 	if hasLegacyUpdate {
 		next, err = normalizeConsoleSettingsUpdatePayload(current, req)
 		if err != nil {
@@ -698,10 +692,6 @@ func writeConsoleSettings(configPath string, values consoleSettingsPayload) ([]b
 	setMappingOrderedStringList(discordNode, "allowed_user_ids", normalizeConsoleStringList(values.Discord.AllowedUserIDs))
 	configbootstrap.SetOrDeleteMappingScalar(discordNode, "group_trigger_mode", strings.TrimSpace(values.Discord.GroupTriggerMode))
 
-	// wechat.bot_token, bot_id and base_url belong to QR login; the form never rewrites them.
-	wechatNode := configbootstrap.EnsureMappingValue(root, "wechat")
-	setMappingOrderedStringList(wechatNode, "allowed_user_ids", normalizeConsoleStringList(values.WeChat.AllowedUserIDs))
-
 	whatsappNode := configbootstrap.EnsureMappingValue(root, "whatsapp")
 	configbootstrap.SetOrDeleteMappingScalar(whatsappNode, "api_token", strings.TrimSpace(values.WhatsApp.APIToken))
 
@@ -768,9 +758,8 @@ func readConsoleSettingsFromReader(r interface {
 			GroupTriggerMode:  normalizeConsoleDiscordGroupTriggerMode(r.GetString("discord.group_trigger_mode")),
 		},
 		WeChat: consoleWeChatSettingsPayload{
-			BotToken:       strings.TrimSpace(r.GetString("wechat.bot_token")),
-			BotID:          strings.TrimSpace(r.GetString("wechat.bot_id")),
-			AllowedUserIDs: normalizeConsoleStringList(r.GetStringSlice("wechat.allowed_user_ids")),
+			BotToken: strings.TrimSpace(r.GetString("wechat.bot_token")),
+			BotID:    strings.TrimSpace(r.GetString("wechat.bot_id")),
 		},
 		WhatsApp: consoleWhatsAppSettingsPayload{
 			APIToken: strings.TrimSpace(r.GetString("whatsapp.api_token")),
@@ -816,12 +805,6 @@ func normalizeConsoleSettingsPayload(in consoleSettingsPayload) (consoleSettings
 	if err != nil {
 		return consoleSettingsPayload{}, err
 	}
-	wechatUsers := normalizeConsoleStringList(in.WeChat.AllowedUserIDs)
-	for _, id := range wechatUsers {
-		if refid.NormalizeWeChatID(id) == "" {
-			return consoleSettingsPayload{}, fmt.Errorf("invalid wechat.allowed_user_ids entry %q: a WeChat user ID has no spaces or colons", id)
-		}
-	}
 	return consoleSettingsPayload{
 		ManagedRuntimes: managedKinds,
 		Telegram: consoleTelegramSettingsPayload{
@@ -860,9 +843,8 @@ func normalizeConsoleSettingsPayload(in consoleSettingsPayload) (consoleSettings
 			GroupTriggerMode:  normalizeConsoleDiscordGroupTriggerMode(in.Discord.GroupTriggerMode),
 		},
 		WeChat: consoleWeChatSettingsPayload{
-			BotToken:       strings.TrimSpace(in.WeChat.BotToken),
-			BotID:          strings.TrimSpace(in.WeChat.BotID),
-			AllowedUserIDs: wechatUsers,
+			BotToken: strings.TrimSpace(in.WeChat.BotToken),
+			BotID:    strings.TrimSpace(in.WeChat.BotID),
 		},
 		WhatsApp: consoleWhatsAppSettingsPayload{
 			APIToken: strings.TrimSpace(in.WhatsApp.APIToken),
@@ -980,9 +962,6 @@ func normalizeConsoleSettingsUpdatePayload(
 			next.Discord.GroupTriggerMode = normalizeConsoleDiscordGroupTriggerMode(*in.Discord.GroupTriggerMode)
 		}
 	}
-	if in.WeChat != nil && in.WeChat.AllowedUserIDs != nil {
-		next.WeChat.AllowedUserIDs = normalizeConsoleStringList(*in.WeChat.AllowedUserIDs)
-	}
 	if in.WhatsApp != nil && in.WhatsApp.APIToken != nil {
 		next.WhatsApp.APIToken = strings.TrimSpace(*in.WhatsApp.APIToken)
 	}
@@ -1042,10 +1021,10 @@ func normalizeConsoleGroupTriggerMode(value string) string {
 	switch strings.ToLower(strings.TrimSpace(value)) {
 	case consoleGroupTriggerStrict:
 		return consoleGroupTriggerStrict
-	case consoleGroupTriggerTalkative:
-		return consoleGroupTriggerTalkative
-	default:
+	case consoleGroupTriggerSmart:
 		return consoleGroupTriggerSmart
+	default:
+		return consoleGroupTriggerTalkative
 	}
 }
 

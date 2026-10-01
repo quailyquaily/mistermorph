@@ -165,7 +165,6 @@ description: mistermorph 的命令行参数总览。
 - `--inspect-prompt`：把 prompt messages 写到 `./dump`。
 - `--inspect-request`：把 LLM 请求/响应写到 `./dump`。
 - `--wechat-bot-token`：微信 bot token（通常由 `wechat login` 写入）。
-- `--wechat-allowed-user-id`：允许的微信用户 ID，可重复。
 - `--wechat-task-timeout`：单条消息的 agent 超时。
 - `--wechat-max-concurrency`：同时处理的微信会话最大数量。
 

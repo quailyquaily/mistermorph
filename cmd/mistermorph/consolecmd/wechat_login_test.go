@@ -45,7 +45,7 @@ func TestWeChatLoginFromConsoleSavesTheTokenServerSide(t *testing.T) {
 		}
 	}))
 	defer ilink.Close()
-	configPath := useConsoleTestConfig(t, "wechat:\n  allowed_user_ids: [u1]\n")
+	configPath := useConsoleTestConfig(t, "wechat:\n  task_timeout: 5m\n")
 	store := &consoleSettingsTestOSStore{}
 	srv := &server{secretStore: store, wechatLogins: newWeChatLoginStore()}
 	srv.wechatLogins.options = wechatlogin.Options{BaseURL: ilink.URL}
@@ -84,8 +84,8 @@ func TestWeChatLoginFromConsoleSavesTheTokenServerSide(t *testing.T) {
 	if len(store.puts) != 1 || !strings.Contains(string(raw), secref.OSSecretRef(store.puts[0])) || strings.Contains(string(raw), "SECRET") {
 		t.Fatalf("token not saved as an OS secret ref (puts %v):\n%s", store.puts, raw)
 	}
-	if !strings.Contains(string(raw), "u1") {
-		t.Fatalf("login dropped the allowlist:\n%s", raw)
+	if !strings.Contains(string(raw), "task_timeout: 5m") {
+		t.Fatalf("login dropped other wechat settings:\n%s", raw)
 	}
 
 	rec := httptest.NewRecorder()
@@ -106,7 +106,7 @@ func TestConsoleSettingsWeChatAndWhatsApp(t *testing.T) {
 	configPath := useConsoleTestConfig(t, "wechat:\n  bot_token: "+secref.OSSecretRef(tokenID)+"\n  bot_id: bot@im.bot\n")
 	store := &consoleSettingsTestOSStore{values: map[string]string{tokenID: "wechat-token"}}
 	srv := &server{secretStore: store}
-	body := `{"wechat":{"allowed_user_ids":["a@im.wechat"]},"whatsapp":{"api_token":"wa-key"}}`
+	body := `{"whatsapp":{"api_token":"wa-key"}}`
 	rec := httptest.NewRecorder()
 	srv.handleConsoleSettings(rec, httptest.NewRequest(http.MethodPut, "/api/settings/console", strings.NewReader(body)))
 	if rec.Code != http.StatusOK {
@@ -114,7 +114,7 @@ func TestConsoleSettingsWeChatAndWhatsApp(t *testing.T) {
 	}
 	raw, _ := os.ReadFile(configPath)
 	text := string(raw)
-	if !strings.Contains(text, secref.OSSecretRef(tokenID)) || !strings.Contains(text, "bot@im.bot") || !strings.Contains(text, "a@im.wechat") {
+	if !strings.Contains(text, secref.OSSecretRef(tokenID)) || !strings.Contains(text, "bot@im.bot") {
 		t.Fatalf("wechat settings not kept:\n%s", text)
 	}
 	if strings.Contains(text, "wa-key") || len(store.puts) != 1 || store.labels[store.puts[0]] != "whatsapp.api_token" {
@@ -133,11 +133,5 @@ func TestConsoleSettingsWeChatAndWhatsApp(t *testing.T) {
 	}
 	if !payload.SecretFields.WeChat["bot_token"].Configured || !payload.SecretFields.WhatsApp["api_token"].Configured {
 		t.Fatalf("secret fields = %+v", payload.SecretFields)
-	}
-
-	rec = httptest.NewRecorder()
-	srv.handleConsoleSettings(rec, httptest.NewRequest(http.MethodPut, "/api/settings/console", strings.NewReader(`{"wechat":{"allowed_user_ids":["bad id"]}}`)))
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("invalid wechat user id accepted: %d", rec.Code)
 	}
 }

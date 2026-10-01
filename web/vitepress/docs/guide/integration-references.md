@@ -303,7 +303,6 @@ If you mainly want to see how to configure `integration.Config`, use `PreparedRu
 | `BotToken` | `string` | WeChat bot token, as `morph wechat login` saves it. |
 | `BotID` | `string` | The bound bot's id, from the same login. |
 | `BaseURL` | `string` | iLink API host from the login; empty uses the default. |
-| `AllowedUserIDs` | `[]string` | Allowed WeChat user ids; empty allows anyone who messages the bot. |
 | `TaskTimeout` | `time.Duration` | Per-task run timeout. |
 | `MaxConcurrency` | `int` | Maximum concurrent conversation count. |
 

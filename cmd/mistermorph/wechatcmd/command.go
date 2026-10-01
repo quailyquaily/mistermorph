@@ -42,9 +42,6 @@ func NewCommand(d Dependencies) *cobra.Command {
 			if token := strings.TrimSpace(configutil.FlagOrViperString(cmd, "wechat-bot-token", "wechat.bot_token")); token != "" {
 				cfg.BotToken = token
 			}
-			if ids := configutil.FlagOrViperStringArray(cmd, "wechat-allowed-user-id", "wechat.allowed_user_ids"); len(ids) > 0 {
-				cfg.AllowedUserIDs = ids
-			}
 			if timeout := configutil.FlagOrViperDuration(cmd, "wechat-task-timeout", "wechat.task_timeout"); timeout > 0 {
 				cfg.TaskTimeout = timeout
 			}
@@ -65,7 +62,6 @@ func NewCommand(d Dependencies) *cobra.Command {
 		},
 	}
 	cmd.Flags().String("wechat-bot-token", "", "WeChat bot token (normally written by `morph wechat login`).")
-	cmd.Flags().StringArray("wechat-allowed-user-id", nil, "Allowed WeChat user id(s). If empty, allows everyone who can reach the bot.")
 	cmd.Flags().Duration("wechat-task-timeout", 0, "Per-message agent timeout (0 uses --timeout).")
 	cmd.Flags().Int("wechat-max-concurrency", 0, "Max number of WeChat conversations processed concurrently.")
 	cmd.Flags().Bool("inspect-prompt", false, "Dump prompts (messages) to ./dump/prompt_wechat_YYYYMMDD_HHmmss.md.")
@@ -156,9 +152,6 @@ func login(ctx context.Context, out io.Writer, in *bufio.Reader, configPath stri
 			return err
 		}
 		fmt.Fprintf(out, "Connected bot %s. Saved to %s (the token is in the system keyring).\nStart it with: morph wechat\n", step.Result.BotID, configPath)
-		if step.Result.UserID != "" {
-			fmt.Fprintf(out, "Scanned by %s; add it to wechat.allowed_user_ids to keep everyone else out.\n", step.Result.UserID)
-		}
 		return nil
 	}
 }

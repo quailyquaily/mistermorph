@@ -77,7 +77,7 @@ func TestLoginFollowsARedirectAndSavesTheCredentials(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "config.yaml")
 	oldID, _ := secref.NewOSSecretID()
-	if err := os.WriteFile(configPath, []byte("wechat:\n  allowed_user_ids: [u1]\n  bot_token: \""+secref.OSSecretRef(oldID)+"\"\n"), 0o600); err != nil {
+	if err := os.WriteFile(configPath, []byte("wechat:\n  task_timeout: 5m\n  bot_token: \""+secref.OSSecretRef(oldID)+"\"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	store := &memoryStore{secrets: map[string][]byte{oldID: []byte("old")}}
@@ -87,7 +87,7 @@ func TestLoginFollowsARedirectAndSavesTheCredentials(t *testing.T) {
 	raw, _ := os.ReadFile(configPath)
 	config := string(raw)
 	if !strings.Contains(config, "bot_token: ${secret:") || strings.Contains(config, "T1") || !strings.Contains(config, "bot_id: bot@im.bot") ||
-		!strings.Contains(config, "base_url: https://api.example.test") || !strings.Contains(config, "allowed_user_ids") {
+		!strings.Contains(config, "base_url: https://api.example.test") || !strings.Contains(config, "task_timeout: 5m") {
 		t.Fatalf("config = %s", config)
 	}
 	if _, found := store.secrets[oldID]; found || len(store.secrets) != 1 {

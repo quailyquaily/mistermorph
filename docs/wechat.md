@@ -36,13 +36,12 @@ wechat:
   bot_token: ""         # written by login; or MISTER_MORPH_WECHAT_BOT_TOKEN
   bot_id: ""            # written by login
   base_url: ""          # written by login; empty uses https://ilinkai.weixin.qq.com
-  allowed_user_ids: []  # empty answers anyone who messages the bot
   task_timeout: "0s"
   max_concurrency: 3
   serve_listen: ""
 ```
 
-Send `/id` to the bot to see your WeChat user ID (it looks like `o9cq80...@im.wechat`). The login also reports the ID of the person who scanned the QR code; add it to `allowed_user_ids` to keep everyone else out.
+There is no allowlist: WeChat lets only the person who scanned the QR code chat with the bot. Send `/id` to the bot to see your WeChat user ID (it looks like `o9cq80...@im.wechat`).
 
 ## Start the runtime
 
@@ -54,7 +53,6 @@ The main CLI overrides are:
 
 ```text
 --wechat-bot-token
---wechat-allowed-user-id
 --wechat-task-timeout
 --wechat-max-concurrency
 ```
@@ -94,7 +92,7 @@ WeChat only accepts a message that carries the context of the user's latest mess
 
 - `contacts_send` to a `wechat_user:<user_id>` contact, or with `chat_id: wechat:<user_id>`.
 - Cron tasks whose `chat_id` is `wechat:<user_id>`.
-- Heartbeat notifications, which `morph wechat` sends when heartbeat is enabled. They go only to the users in `wechat.allowed_user_ids`; with no allowlist, they are not sent, so a bot anyone can add never broadcasts.
+- Heartbeat notifications, which `morph wechat` sends when heartbeat is enabled, to you: the runtime remembers who wrote to the bot (in `file_state_dir/accountdm/`), and on WeChat that is only the person who scanned.
 
 WeChat users are stored as `wechat_user:<user_id>`; conversations are keyed `wechat:<bot_id>:<user_id>`.
 

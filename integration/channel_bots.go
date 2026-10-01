@@ -89,7 +89,6 @@ type WeChatOptions struct {
 	BotToken       string
 	BotID          string
 	BaseURL        string
-	AllowedUserIDs []string
 	TaskTimeout    time.Duration
 	MaxConcurrency int
 }
@@ -421,18 +420,11 @@ func (r *wechatBotRunner) Run(ctx context.Context) error {
 		if base := strings.TrimSpace(r.opts.BaseURL); base != "" {
 			cfg.BaseURL = base
 		}
-		r.opts.applyTo(&cfg.AccountDMConfig)
+		applyAccountDMLimits(&cfg.AccountDMConfig, r.opts.TaskTimeout, r.opts.MaxConcurrency)
 		runOpts := channelopts.BuildWeChatRunOptions(cfg, "integration", r.rt.inspect.Prompt, r.rt.inspect.Request)
 		r.rt.gateEngineTools(&runOpts.EngineToolsConfig)
 		return wechatruntime.Run(runCtx, r.rt.accountDMDependencies(snap, common), runOpts)
 	})
-}
-
-func (o WeChatOptions) applyTo(cfg *channelopts.AccountDMConfig) {
-	if len(o.AllowedUserIDs) > 0 {
-		cfg.AllowedUserIDs = append([]string(nil), o.AllowedUserIDs...)
-	}
-	applyAccountDMLimits(cfg, o.TaskTimeout, o.MaxConcurrency)
 }
 
 func (r *wechatBotRunner) Close() error {

@@ -315,7 +315,6 @@ Shell 默认值按平台区分：
 | `wechat.bot_token` | 微信 bot token；通常由 `wechat login` 写成系统密钥环引用。 |
 | `wechat.bot_id` | 已连接的 bot ID，由登录写入。 |
 | `wechat.base_url` | iLink API 地址，由登录写入。 |
-| `wechat.allowed_user_ids` | 允许的用户 ID；空表示任何人。 |
 | `wechat.task_timeout` | 单条消息任务超时。 |
 | `wechat.max_concurrency` | 会话并发处理上限。 |
 | `wechat.serve_listen` | 微信 runtime API 监听地址。 |

@@ -46,8 +46,8 @@ func TestNormalizeRunOptionsDefaults(t *testing.T) {
 	if got.MaxConcurrency != 3 {
 		t.Fatalf("max concurrency = %d, want 3", got.MaxConcurrency)
 	}
-	if got.GroupTriggerMode != "smart" {
-		t.Fatalf("group trigger mode = %q, want smart", got.GroupTriggerMode)
+	if got.GroupTriggerMode != "talkative" {
+		t.Fatalf("group trigger mode = %q, want talkative", got.GroupTriggerMode)
 	}
 	if got.BaseURL != "https://slack.com/api" {
 		t.Fatalf("base url = %q, want https://slack.com/api", got.BaseURL)

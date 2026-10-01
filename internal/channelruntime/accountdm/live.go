@@ -20,7 +20,6 @@ type liveSender struct {
 	transport Transport
 	bus       *busruntime.Inproc
 	receipts  *deliveryReceipts
-	allowed   []string
 	peers     *peerBook
 	seq       uint64
 	seqMu     sync.Mutex
@@ -41,15 +40,10 @@ func (s *liveSender) SendText(ctx context.Context, peerID, text string) error {
 	return publishAndWait(ctx, s.bus, s.receipts, s.channel, account, peerID, text, "", correlation)
 }
 
-// NotifyTargets: the allowlist when one is set. Otherwise only on WhatsApp, the users who wrote to
-// this agent (its creator): a WeChat bot anyone can add never broadcasts to strangers.
+// NotifyTargets are the users who wrote to this account. Both platforms let only one person use
+// the account (the WeChat user who scanned the QR code, the WhatsApp agent's creator), so that is
+// its owner.
 func (s *liveSender) NotifyTargets() []string {
-	if len(s.allowed) > 0 {
-		return append([]string(nil), s.allowed...)
-	}
-	if s.channel != busruntime.ChannelWhatsApp {
-		return nil
-	}
 	return s.peers.list(s.transport.AccountID())
 }
 

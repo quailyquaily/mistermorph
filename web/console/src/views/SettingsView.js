@@ -231,7 +231,7 @@ function buildEmptyTelegramConsoleState() {
   return {
     bot_token: "",
     allowed_chat_ids_text: "",
-    group_trigger_mode: "smart",
+    group_trigger_mode: "talkative",
   };
 }
 
@@ -241,7 +241,7 @@ function buildEmptySlackConsoleState() {
     app_token: "",
     allowed_team_ids_text: "",
     allowed_channel_ids_text: "",
-    group_trigger_mode: "smart",
+    group_trigger_mode: "talkative",
   };
 }
 
@@ -250,7 +250,7 @@ function buildEmptyLineConsoleState() {
     channel_access_token: "",
     channel_secret: "",
     allowed_group_ids_text: "",
-    group_trigger_mode: "smart",
+    group_trigger_mode: "talkative",
   };
 }
 
@@ -259,7 +259,7 @@ function buildEmptyLarkConsoleState() {
     app_id: "",
     app_secret: "",
     allowed_chat_ids_text: "",
-    group_trigger_mode: "smart",
+    group_trigger_mode: "talkative",
   };
 }
 
@@ -273,11 +273,11 @@ function buildEmptyDiscordConsoleState() {
   };
 }
 
-// The WeChat bot token comes from QR login and never reaches the browser; bot_id shows which bot.
+// WeChat has nothing to edit: the bot comes from QR login (its token never reaches the browser),
+// and bot_id shows which bot is connected.
 function buildEmptyWeChatConsoleState() {
   return {
     bot_id: "",
-    allowed_user_ids_text: "",
   };
 }
 
@@ -462,7 +462,7 @@ function normalizeNamedList(values) {
 
 function normalizeConsoleGroupTriggerMode(value) {
   const next = String(value || "").trim().toLowerCase();
-  return CHANNEL_GROUP_TRIGGER_VALUES.includes(next) ? next : "smart";
+  return CHANNEL_GROUP_TRIGGER_VALUES.includes(next) ? next : "talkative";
 }
 
 // Discord defaults to strict: the one mode that works without the Message Content intent.
@@ -700,13 +700,6 @@ function buildConsoleDiscordSnapshot(state) {
   });
 }
 
-function buildConsoleWeChatSnapshot(state) {
-  recordSnapshotBuild("settings.console.wechat");
-  return JSON.stringify({
-    allowed_user_ids: parseConfigListText(state.wechat.allowed_user_ids_text),
-  });
-}
-
 function buildConsoleWhatsAppSnapshot(state) {
   recordSnapshotBuild("settings.console.whatsapp");
   return JSON.stringify({
@@ -835,7 +828,6 @@ const SettingsView = {
     const loadedConsoleLarkSnapshot = ref("");
     const loadedConsoleMixinSnapshot = ref("");
     const loadedConsoleDiscordSnapshot = ref("");
-    const loadedConsoleWeChatSnapshot = ref("");
     const loadedConsoleWhatsAppSnapshot = ref("");
     const loadedConsoleGuardSnapshot = ref("");
     const consoleManagedDirty = ref(false);
@@ -845,7 +837,6 @@ const SettingsView = {
     const consoleLarkDirty = ref(false);
     const consoleMixinDirty = ref(false);
     const consoleDiscordDirty = ref(false);
-    const consoleWeChatDirty = ref(false);
     const consoleWhatsAppDirty = ref(false);
     const consoleGuardDirty = ref(false);
     const consoleSettingsLoaded = ref(false);
@@ -1097,7 +1088,6 @@ const SettingsView = {
       loadedConsoleLarkSnapshot.value = buildConsoleLarkSnapshot(state);
       loadedConsoleMixinSnapshot.value = buildConsoleMixinSnapshot(state);
       loadedConsoleDiscordSnapshot.value = buildConsoleDiscordSnapshot(state);
-      loadedConsoleWeChatSnapshot.value = buildConsoleWeChatSnapshot(state);
       loadedConsoleWhatsAppSnapshot.value = buildConsoleWhatsAppSnapshot(state);
       loadedConsoleGuardSnapshot.value = buildConsoleGuardSnapshot(state);
       consoleManagedDirty.value = false;
@@ -1107,7 +1097,6 @@ const SettingsView = {
       consoleLarkDirty.value = false;
       consoleMixinDirty.value = false;
       consoleDiscordDirty.value = false;
-      consoleWeChatDirty.value = false;
       consoleWhatsAppDirty.value = false;
       consoleGuardDirty.value = false;
     }
@@ -1120,7 +1109,6 @@ const SettingsView = {
       loadedConsoleLarkSnapshot.value = "";
       loadedConsoleMixinSnapshot.value = "";
       loadedConsoleDiscordSnapshot.value = "";
-      loadedConsoleWeChatSnapshot.value = "";
       loadedConsoleWhatsAppSnapshot.value = "";
       loadedConsoleGuardSnapshot.value = "";
       consoleManagedDirty.value = false;
@@ -1130,7 +1118,6 @@ const SettingsView = {
       consoleLarkDirty.value = false;
       consoleMixinDirty.value = false;
       consoleDiscordDirty.value = false;
-      consoleWeChatDirty.value = false;
       consoleWhatsAppDirty.value = false;
       consoleGuardDirty.value = false;
       consoleSettingsLoaded.value = false;
@@ -1174,10 +1161,6 @@ const SettingsView = {
       consoleDiscordDirty.value =
         consoleSecretDirty.has("discord.bot_token") ||
         buildConsoleDiscordSnapshot(state) !== loadedConsoleDiscordSnapshot.value;
-    }
-
-    function updateConsoleWeChatDirty() {
-      consoleWeChatDirty.value = buildConsoleWeChatSnapshot(state) !== loadedConsoleWeChatSnapshot.value;
     }
 
     function updateConsoleWhatsAppDirty() {
@@ -1424,7 +1407,6 @@ const SettingsView = {
         ["lark", consoleLarkDirty, "settings_console_lark_title"],
         ["mixin", consoleMixinDirty, "settings_console_mixin_title"],
         ["discord", consoleDiscordDirty, "settings_console_discord_title"],
-        ["wechat", consoleWeChatDirty, "settings_console_wechat_title"],
         ["whatsapp", consoleWhatsAppDirty, "settings_console_whatsapp_title"],
         ["runtimes", consoleManagedDirty, "settings_channel_run_in_console"],
       ],
@@ -1441,7 +1423,6 @@ const SettingsView = {
       lark: consoleLarkDirty,
       mixin: consoleMixinDirty,
       discord: consoleDiscordDirty,
-      wechat: consoleWeChatDirty,
       whatsapp: consoleWhatsAppDirty,
     };
     function channelFieldSet(kind, field) {
@@ -1473,7 +1454,7 @@ const SettingsView = {
       ].filter((group) => group.items.length > 0)
     );
     // Each threshold is read in one trigger mode only: confidence in smart, interject in talkative;
-    // strict reads neither. "Record untriggered" applies in every mode.
+    // strict reads neither. "Record all group messages" applies in every mode.
     function channelTriggerHiddenPaths(id) {
       const mode = id === "discord"
         ? normalizeDiscordGroupTriggerMode(state.discord.group_trigger_mode)
@@ -1957,7 +1938,6 @@ const SettingsView = {
         consoleLarkDirty.value ||
         consoleMixinDirty.value ||
         consoleDiscordDirty.value ||
-        consoleWeChatDirty.value ||
         consoleWhatsAppDirty.value ||
         consoleGuardDirty.value
     );
@@ -1981,9 +1961,6 @@ const SettingsView = {
     );
     const discordSaveDisabled = computed(
       () => consoleLoading.value || consoleSaving.value || !consoleDiscordDirty.value
-    );
-    const wechatSaveDisabled = computed(
-      () => consoleLoading.value || consoleSaving.value || !consoleWeChatDirty.value
     );
     const whatsappSaveDisabled = computed(
       () => consoleLoading.value || consoleSaving.value || !consoleWhatsAppDirty.value
@@ -3032,7 +3009,6 @@ const SettingsView = {
       { id: "lark", dirty: () => consoleLarkDirty.value, slice: () => state.lark, sync: updateConsoleLarkDirty },
       { id: "mixin", dirty: () => consoleMixinDirty.value, slice: () => state.mixin, sync: updateConsoleMixinDirty },
       { id: "discord", dirty: () => consoleDiscordDirty.value, slice: () => state.discord, sync: updateConsoleDiscordDirty },
-      { id: "wechat", dirty: () => consoleWeChatDirty.value, slice: () => state.wechat, sync: updateConsoleWeChatDirty },
       { id: "whatsapp", dirty: () => consoleWhatsAppDirty.value, slice: () => state.whatsapp, sync: updateConsoleWhatsAppDirty },
       { id: "guard", dirty: () => consoleGuardDirty.value, slice: () => state.guard, sync: updateConsoleGuardDirty },
     ];
@@ -3095,7 +3071,6 @@ const SettingsView = {
       state.discord.allowed_user_ids_text = formatConfigList(discord.allowed_user_ids);
       state.discord.group_trigger_mode = normalizeDiscordGroupTriggerMode(discord.group_trigger_mode);
       state.wechat.bot_id = typeof wechat.bot_id === "string" ? wechat.bot_id : "";
-      state.wechat.allowed_user_ids_text = formatConfigList(wechat.allowed_user_ids);
       state.whatsapp.api_token = typeof whatsapp.api_token === "string" ? whatsapp.api_token : "";
       state.guard.enabled = typeof guard.enabled === "boolean" ? guard.enabled : true;
       state.guard.url_fetch_allowed_url_prefixes_text = formatConfigList(guardURLFetch.allowed_url_prefixes);
@@ -3928,9 +3903,6 @@ const SettingsView = {
         "bot_token",
         state.discord.bot_token,
       );
-      const wechat = {
-        allowed_user_ids: parseConfigListText(state.wechat.allowed_user_ids_text),
-      };
       const whatsapp = {};
       whatsapp.api_token = consoleFieldRawValue(whatsappEnv, "api_token") || includeConsoleSecretValue(
         "whatsapp",
@@ -3975,16 +3947,13 @@ const SettingsView = {
       if (target === "discord") {
         return { discord };
       }
-      if (target === "wechat") {
-        return { wechat };
-      }
       if (target === "whatsapp") {
         return { whatsapp };
       }
       if (target === "guard") {
         return { guard };
       }
-      return { managed_runtimes, telegram, slack, line, lark, mixin, discord, wechat, whatsapp, guard };
+      return { managed_runtimes, telegram, slack, line, lark, mixin, discord, whatsapp, guard };
     }
 
     function consoleFieldEntry(kind, field) {
@@ -4072,11 +4041,11 @@ const SettingsView = {
     }
 
     function updateTelegramGroupTrigger(item) {
-      updateTelegramField("group_trigger_mode", item?.value || "smart");
+      updateTelegramField("group_trigger_mode", item?.value || "talkative");
     }
 
     function updateSlackGroupTrigger(item) {
-      updateSlackField("group_trigger_mode", item?.value || "smart");
+      updateSlackField("group_trigger_mode", item?.value || "talkative");
     }
 
     function updateLineField(field, value) {
@@ -4100,11 +4069,11 @@ const SettingsView = {
     }
 
     function updateLineGroupTrigger(item) {
-      updateLineField("group_trigger_mode", item?.value || "smart");
+      updateLineField("group_trigger_mode", item?.value || "talkative");
     }
 
     function updateLarkGroupTrigger(item) {
-      updateLarkField("group_trigger_mode", item?.value || "smart");
+      updateLarkField("group_trigger_mode", item?.value || "talkative");
     }
 
     function updateMixinField(field, value) {
@@ -4128,15 +4097,6 @@ const SettingsView = {
 
     function updateDiscordGroupTrigger(item) {
       updateDiscordField("group_trigger_mode", item?.value || "strict");
-    }
-
-    function updateWeChatField(field, value) {
-      const key = String(field || "").trim();
-      if (!key || !Object.prototype.hasOwnProperty.call(state.wechat, key)) {
-        return;
-      }
-      state.wechat[key] = String(value || "");
-      updateConsoleWeChatDirty();
     }
 
     function updateWhatsAppField(field, value) {
@@ -4324,7 +4284,7 @@ const SettingsView = {
     }
 
     async function saveConsoleSettings(target = "all", { notify = true } = {}) {
-      const known = ["runtimes", "telegram", "slack", "line", "lark", "mixin", "discord", "wechat", "whatsapp", "guard"];
+      const known = ["runtimes", "telegram", "slack", "line", "lark", "mixin", "discord", "whatsapp", "guard"];
       const requested = Array.isArray(target) ? target.map(String) : [String(target)];
       const targets = requested.includes("all") ? ["all"] : requested.filter((item) => known.includes(item));
       if (!selectedEndpointIsConsole.value || targets.length === 0) {
@@ -4338,7 +4298,6 @@ const SettingsView = {
         lark: larkSaveDisabled,
         mixin: mixinSaveDisabled,
         discord: discordSaveDisabled,
-        wechat: wechatSaveDisabled,
         whatsapp: whatsappSaveDisabled,
         guard: guardSaveDisabled,
       };
@@ -5160,7 +5119,6 @@ const SettingsView = {
       larkSaveDisabled,
       mixinSaveDisabled,
       discordSaveDisabled,
-      wechatSaveDisabled,
       whatsappSaveDisabled,
       guardSaveDisabled,
       personaDirty,
@@ -5295,7 +5253,6 @@ const SettingsView = {
       updateLarkField,
       updateMixinField,
       updateDiscordField,
-      updateWeChatField,
       updateWhatsAppField,
       reloadConsoleSettingsAfterWeChatLogin,
       consoleSecretField,
@@ -5713,7 +5670,7 @@ const SettingsView = {
                       <QDropdownMenu
                         :key="state.telegram.group_trigger_mode || 'telegram-group-trigger'"
                         :items="groupTriggerItems"
-                        :initialItem="groupTriggerItems.find((item) => item.value === state.telegram.group_trigger_mode) || groupTriggerItems[0]"
+                        :initialItem="groupTriggerItems.find((item) => item.value === state.telegram.group_trigger_mode) || groupTriggerItems[2]"
                         @change="updateTelegramGroupTrigger"
                       />
                       <p class="settings-field-note">{{ t("settings_console_telegram_group_trigger_note") }}</p>
@@ -5804,7 +5761,7 @@ const SettingsView = {
                       <QDropdownMenu
                         :key="state.slack.group_trigger_mode || 'slack-group-trigger'"
                         :items="groupTriggerItems"
-                        :initialItem="groupTriggerItems.find((item) => item.value === state.slack.group_trigger_mode) || groupTriggerItems[0]"
+                        :initialItem="groupTriggerItems.find((item) => item.value === state.slack.group_trigger_mode) || groupTriggerItems[2]"
                         @change="updateSlackGroupTrigger"
                       />
                       <p class="settings-field-note">{{ t("settings_console_slack_group_trigger_note") }}</p>
@@ -5883,7 +5840,7 @@ const SettingsView = {
                       <QDropdownMenu
                         :key="state.line.group_trigger_mode || 'line-group-trigger'"
                         :items="groupTriggerItems"
-                        :initialItem="groupTriggerItems.find((item) => item.value === state.line.group_trigger_mode) || groupTriggerItems[0]"
+                        :initialItem="groupTriggerItems.find((item) => item.value === state.line.group_trigger_mode) || groupTriggerItems[2]"
                         @change="updateLineGroupTrigger"
                       />
                       <p class="settings-field-note">{{ t("settings_console_line_group_trigger_note") }}</p>
@@ -5961,7 +5918,7 @@ const SettingsView = {
                       <QDropdownMenu
                         :key="state.lark.group_trigger_mode || 'lark-group-trigger'"
                         :items="groupTriggerItems"
-                        :initialItem="groupTriggerItems.find((item) => item.value === state.lark.group_trigger_mode) || groupTriggerItems[0]"
+                        :initialItem="groupTriggerItems.find((item) => item.value === state.lark.group_trigger_mode) || groupTriggerItems[2]"
                         @change="updateLarkGroupTrigger"
                       />
                       <p class="settings-field-note">{{ t("settings_console_lark_group_trigger_note") }}</p>
@@ -6154,18 +6111,6 @@ const SettingsView = {
                         :disabled="consoleLoading || consoleSaving"
                         @changed="reloadConsoleSettingsAfterWeChatLogin"
                       />
-                    </div>
-
-                    <div class="settings-field is-wide">
-                      <span class="settings-field-label">{{ t("settings_console_wechat_allowed_user_ids_label") }}</span>
-                      <QTextarea
-                        :modelValue="state.wechat.allowed_user_ids_text"
-                        :rows="4"
-                        :placeholder="t('settings_console_wechat_allowed_user_ids_placeholder')"
-                        :disabled="consoleLoading || consoleSaving"
-                        @update:modelValue="updateWeChatField('allowed_user_ids_text', $event)"
-                      />
-                      <p class="settings-field-note">{{ t("settings_console_wechat_allowed_user_ids_note") }}</p>
                     </div>
                   </div>
                 </div>
