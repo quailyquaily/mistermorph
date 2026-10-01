@@ -31,6 +31,8 @@ type runtimeSnapshot struct {
 	Slack               channelopts.SlackConfig
 	Mixin               channelopts.MixinConfig
 	Discord             channelopts.DiscordConfig
+	WeChat              channelopts.WeChatConfig
+	WhatsApp            channelopts.WhatsAppConfig
 	MCPServers          []mcphost.ServerConfig
 	ACPAgents           []acpclient.AgentConfig
 	Paths               runtimepaths.Paths

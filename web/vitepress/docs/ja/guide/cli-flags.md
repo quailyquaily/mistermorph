@@ -167,6 +167,25 @@ description: mistermorph が現在サポートしているコマンドライン�
 - `--discord-task-timeout`: メッセージ単位の agent timeout。
 - `--discord-max-concurrency`: 同時処理する Discord 会話の最大数。
 
+## `wechat`
+
+- `--inspect-prompt`: prompt messages を `./dump` に出力します。
+- `--inspect-request`: LLM request/response を `./dump` に出力します。
+- `--wechat-bot-token`: WeChat bot token（通常は `wechat login` が書き込みます）。
+- `--wechat-allowed-user-id`: 許可する WeChat ユーザー ID。繰り返し指定可。
+- `--wechat-task-timeout`: メッセージごとの agent タイムアウト。
+- `--wechat-max-concurrency`: 同時処理する WeChat 会話の最大数。
+
+`wechat login`: QR コードで WeChat bot を接続し、token をシステムのキーリングに保存します。 `wechat logout`: WeChat bot の接続を解除し、token を削除します。
+
+## `whatsapp`
+
+- `--inspect-prompt`: prompt messages を `./dump` に出力します。
+- `--inspect-request`: LLM request/response を `./dump` に出力します。
+- `--whatsapp-api-token`: agent の API key。
+- `--whatsapp-task-timeout`: メッセージごとの agent タイムアウト。
+- `--whatsapp-max-concurrency`: 同時処理する WhatsApp 会話の最大数。
+
 ## `install`
 
 - `-y, --yes`: 確認プロンプトをスキップする。

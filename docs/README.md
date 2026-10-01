@@ -34,6 +34,8 @@
 - [Lark](./lark.md)
 - [Mixin Messenger](./mixin.md)
 - [Discord](./discord.md)
+- [WeChat](./wechat.md)
+- [WhatsApp](./whatsapp.md)
 
 ## Localized README
 

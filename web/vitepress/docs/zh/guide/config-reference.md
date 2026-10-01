@@ -308,6 +308,27 @@ Shell 默认值按平台区分：
 | `discord.max_concurrency` | 会话并发处理上限。 |
 | `discord.serve_listen` | Discord runtime API 监听地址。 |
 
+## 微信
+
+| 字段 | 含义 |
+|---|---|
+| `wechat.bot_token` | 微信 bot token；通常由 `wechat login` 写成系统密钥环引用。 |
+| `wechat.bot_id` | 已连接的 bot ID，由登录写入。 |
+| `wechat.base_url` | iLink API 地址，由登录写入。 |
+| `wechat.allowed_user_ids` | 允许的用户 ID；空表示任何人。 |
+| `wechat.task_timeout` | 单条消息任务超时。 |
+| `wechat.max_concurrency` | 会话并发处理上限。 |
+| `wechat.serve_listen` | 微信 runtime API 监听地址。 |
+
+## WhatsApp
+
+| 字段 | 含义 |
+|---|---|
+| `whatsapp.api_token` | agent 的 API key。 |
+| `whatsapp.task_timeout` | 单条消息任务超时。 |
+| `whatsapp.max_concurrency` | 会话并发处理上限。 |
+| `whatsapp.serve_listen` | WhatsApp runtime API 监听地址。 |
+
 ## Heartbeat
 
 | 字段 | 含义 |

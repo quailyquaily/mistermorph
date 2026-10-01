@@ -19,6 +19,8 @@ import (
 	"github.com/quailyquaily/mistermorph/cmd/mistermorph/skillscmd"
 	"github.com/quailyquaily/mistermorph/cmd/mistermorph/slackcmd"
 	"github.com/quailyquaily/mistermorph/cmd/mistermorph/telegramcmd"
+	"github.com/quailyquaily/mistermorph/cmd/mistermorph/wechatcmd"
+	"github.com/quailyquaily/mistermorph/cmd/mistermorph/whatsappcmd"
 	"github.com/quailyquaily/mistermorph/guard"
 	"github.com/quailyquaily/mistermorph/internal/acpclient"
 	"github.com/quailyquaily/mistermorph/internal/configutil"
@@ -170,6 +172,21 @@ func newRootRuntime() *rootRuntime {
 		Dependencies:       discordRuntime.Dependencies(registryResolver, guardResolver),
 		HandleModelCommand: discordRuntime.HandleModelCommand,
 		HandleSkillCommand: discordRuntime.HandleSkillCommand,
+	}))
+
+	wechatRuntime := newChannelCommandRuntime()
+	cmd.AddCommand(wechatcmd.NewCommand(wechatcmd.Dependencies{
+		Dependencies:       wechatRuntime.Dependencies(registryResolver, guardResolver),
+		HandleModelCommand: wechatRuntime.HandleModelCommand,
+		HandleSkillCommand: wechatRuntime.HandleSkillCommand,
+		ConfigPath:         authLoginConfigPath,
+	}))
+
+	whatsappRuntime := newChannelCommandRuntime()
+	cmd.AddCommand(whatsappcmd.NewCommand(whatsappcmd.Dependencies{
+		Dependencies:       whatsappRuntime.Dependencies(registryResolver, guardResolver),
+		HandleModelCommand: whatsappRuntime.HandleModelCommand,
+		HandleSkillCommand: whatsappRuntime.HandleSkillCommand,
 	}))
 	cmd.AddCommand(newToolsCmd(registryResolver.Registry))
 	cmd.AddCommand(newAuthCmd())
@@ -565,7 +582,7 @@ func shouldPrepareRootRegistry(cmd *cobra.Command) bool {
 	switch cmd.CommandPath() {
 	case "morph", "morph chat":
 		return !cmd.Flags().Changed("runtime-url")
-	case "morph run", "morph telegram", "morph slack", "morph line", "morph lark", "morph mixin", "morph discord", "morph tools":
+	case "morph run", "morph telegram", "morph slack", "morph line", "morph lark", "morph mixin", "morph discord", "morph wechat", "morph whatsapp", "morph tools":
 		return true
 	default:
 		return false

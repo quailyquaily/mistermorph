@@ -17,7 +17,7 @@ Commands are messages that start with `/` inside interactive chat, Console tasks
 
 ## Common Commands
 
-These commands are available in CLI chat, Console Web, Telegram, Slack, LINE, Lark, Mixin Messenger, and Discord.
+These commands are available in CLI chat, Console Web, Telegram, Slack, LINE, Lark, Mixin Messenger, Discord, WeChat, and WhatsApp.
 
 | Command | What it does |
 |---|---|
@@ -96,3 +96,10 @@ These commands are only available in Telegram.
 | `/id` | Shows the current chat id (`discord:<channel_id>`), server id, chat type, and your user reference. |
 | `/reset` | Clears conversation history, sticky skills, and checkpoint state. |
 | `/approve <id>`, `/deny <id>` | Decides a pending approval; the approval message also has buttons. |
+
+## WeChat and WhatsApp
+
+| Command | What it does |
+|---|---|
+| `/id` | Shows the chat id (`wechat:<user_id>` or `whatsapp:<user_id>`), your user reference, and the bot or agent account. |
+| `/approve <id>`, `/deny <id>` | Decides a pending approval. |

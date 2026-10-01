@@ -94,6 +94,8 @@ CLI モードと設定の詳細は [../modes.md](../modes.md) と [../configurat
 - [Lark](../lark.md)
 - [Mixin Messenger](../mixin.md)
 - [Discord](../discord.md)
+- [WeChat](../wechat.md)
+- [WhatsApp](../whatsapp.md)
 
 完全なドキュメント一覧は [../README.md](../README.md) を参照してください。
 

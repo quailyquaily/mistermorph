@@ -296,6 +296,25 @@ description: integration パッケージの公開関数、メソッド、構造�
 | `AddressingConfidenceThreshold` | `float64` | addressing のしきい値。 |
 | `AddressingInterjectThreshold` | `float64` | interject のしきい値。 |
 
+### `type WeChatOptions struct`
+
+| フィールド | 型 | 説明 |
+| --- | --- | --- |
+| `BotToken` | `string` | WeChat bot token。`morph wechat login` が保存する値です。 |
+| `BotID` | `string` | 接続した bot の ID。同じログインで得られます。 |
+| `BaseURL` | `string` | ログインで返された iLink API ホスト。空なら既定のホストを使います。 |
+| `AllowedUserIDs` | `[]string` | 許可する WeChat ユーザー ID。空なら bot にメッセージを送った誰でも許可します。 |
+| `TaskTimeout` | `time.Duration` | 1 task あたりの実行 timeout。 |
+| `MaxConcurrency` | `int` | 会話の最大同時実行数。 |
+
+### `type WhatsAppOptions struct`
+
+| フィールド | 型 | 説明 |
+| --- | --- | --- |
+| `APIToken` | `string` | agent の API key（WhatsApp の「チャット情報 > API key」）。 |
+| `TaskTimeout` | `time.Duration` | 1 task あたりの実行 timeout。 |
+| `MaxConcurrency` | `int` | 会話の最大同時実行数。 |
+
 ### `type TelegramHooks struct`
 
 | フィールド | 型 | 説明 |
@@ -344,6 +363,22 @@ description: integration パッケージの公開関数、メソッド、構造�
 | 引数 | `opts integration.DiscordOptions` |
 | 戻り値 | `integration.BotRunner`、`error` |
 | 説明 | Discord runner を構築します。`BotToken` が空なら即座に error を返します。 |
+
+### `(*Runtime).NewWeChatBot(opts WeChatOptions) (BotRunner, error)`
+
+| 項目 | 値 |
+| --- | --- |
+| 引数 | `opts integration.WeChatOptions` |
+| 戻り値 | `integration.BotRunner`、`error` |
+| 説明 | WeChat runner を構築します。`BotToken` が空なら即座に error を返します。 |
+
+### `(*Runtime).NewWhatsAppBot(opts WhatsAppOptions) (BotRunner, error)`
+
+| 項目 | 値 |
+| --- | --- |
+| 引数 | `opts integration.WhatsAppOptions` |
+| 戻り値 | `integration.BotRunner`、`error` |
+| 説明 | WhatsApp runner を構築します。`APIToken` が空なら即座に error を返します。 |
 
 ## イベント alias 型
 

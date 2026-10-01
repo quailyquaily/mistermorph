@@ -491,7 +491,7 @@ tasks:
   dir_name: "tasks"
   # Targets whose task projections are restored after restart.
   # Accepted task and topic changes from every target are still written to the journal.
-  # Supported values: console, telegram, slack, line, lark, mixin, discord
+  # Supported values: console, telegram, slack, line, lark, mixin, discord, wechat, whatsapp
   persistence_targets: ["console"]
   # Maximum size of each task journal segment.
   rotate_max_bytes: 67108864
@@ -541,8 +541,8 @@ console:
   # Managed runtimes are merged into Console itself:
   # - they do not appear as separate endpoints
   # - they do not run their own heartbeat
-  # Supported values today: telegram, slack, lark, mixin, discord
-  managed_runtimes: [] # e.g. ["telegram", "slack", "lark", "mixin", "discord"]
+  # Supported values today: telegram, slack, lark, mixin, discord, wechat, whatsapp
+  managed_runtimes: [] # e.g. ["telegram", "slack", "lark", "mixin", "discord", "wechat", "whatsapp"]
   # Console always includes one built-in local runtime endpoint in-process.
   # Additional external runtime endpoints shown in Console endpoint selector.
   # Use ${ENV_VAR} syntax in auth_token to reference environment variables.
@@ -728,6 +728,37 @@ discord:
   # Max number of conversations processed concurrently.
   max_concurrency: 3
   # Runtime API listen address for Discord runtime (standard base path: `/runtime`).
+  # Protected by server.auth_token.
+  serve_listen: ""
+
+# WeChat bot mode (`morph wechat`, Tencent iLink protocol, private chats only).
+# Run `morph wechat login` (or connect in Console) to scan the QR code; it fills these in.
+wechat:
+  # Bot token from the QR login. Prefer env var: MISTER_MORPH_WECHAT_BOT_TOKEN
+  bot_token: ""
+  # The bot's ID and API host, written by the QR login. Not secrets.
+  bot_id: ""
+  base_url: ""
+  # Optional allowlist of WeChat user IDs. Empty allows everyone who can reach the bot.
+  allowed_user_ids: []
+  # Per-message agent timeout (0 uses top-level timeout).
+  task_timeout: "0s"
+  # Max number of conversations processed concurrently.
+  max_concurrency: 3
+  # Runtime API listen address for WeChat runtime (standard base path: `/runtime`).
+  # Protected by server.auth_token.
+  serve_listen: ""
+
+# WhatsApp agent mode (`morph whatsapp`, WhatsApp Agent Platform v1, a private chat with the agent's creator).
+whatsapp:
+  # The agent's API key (WhatsApp > Settings > Agents, then Chat info > API key).
+  # Prefer env var: MISTER_MORPH_WHATSAPP_API_TOKEN
+  api_token: ""
+  # Per-message agent timeout (0 uses top-level timeout).
+  task_timeout: "0s"
+  # Max number of conversations processed concurrently.
+  max_concurrency: 3
+  # Runtime API listen address for WhatsApp runtime (standard base path: `/runtime`).
   # Protected by server.auth_token.
   serve_listen: ""
 

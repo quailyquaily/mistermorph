@@ -45,6 +45,12 @@ var mixinRuntimePromptBlockTemplateSource string
 //go:embed prompts/block_discord.md
 var discordRuntimePromptBlockTemplateSource string
 
+//go:embed prompts/block_wechat.md
+var weChatRuntimePromptBlock string
+
+//go:embed prompts/block_whatsapp.md
+var whatsAppRuntimePromptBlock string
+
 var groupUsernamesBlockTemplate = prompttmpl.MustParse(
 	"group_usernames_block",
 	groupUsernamesBlockTemplateSource,
@@ -326,6 +332,25 @@ func AppendDiscordRuntimeBlocks(spec *agent.PromptSpec, isGroup bool) {
 	}
 	content = strings.TrimSpace(content)
 	if content != "" {
+		spec.Blocks = append(spec.Blocks, agent.PromptBlock{Content: content})
+	}
+}
+
+// AppendWeChatRuntimeBlocks adds the WeChat channel's policies.
+func AppendWeChatRuntimeBlocks(spec *agent.PromptSpec) {
+	appendStaticBlock(spec, weChatRuntimePromptBlock)
+}
+
+// AppendWhatsAppRuntimeBlocks adds the WhatsApp channel's policies.
+func AppendWhatsAppRuntimeBlocks(spec *agent.PromptSpec) {
+	appendStaticBlock(spec, whatsAppRuntimePromptBlock)
+}
+
+func appendStaticBlock(spec *agent.PromptSpec, content string) {
+	if spec == nil {
+		return
+	}
+	if content = strings.TrimSpace(content); content != "" {
 		spec.Blocks = append(spec.Blocks, agent.PromptBlock{Content: content})
 	}
 }

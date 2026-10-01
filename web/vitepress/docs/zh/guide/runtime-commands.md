@@ -17,7 +17,7 @@ description: Chat、Console 和其他 Channels 支持的命令。
 
 ## 通用命令
 
-这些命令在 CLI chat、Console Web、Telegram、Slack、LINE、Lark、Mixin Messenger 和 Discord 中可用。
+这些命令在 CLI chat、Console Web、Telegram、Slack、LINE、Lark、Mixin Messenger、Discord、微信和 WhatsApp 中可用。
 
 | 命令 | 作用 |
 |---|---|
@@ -96,3 +96,10 @@ description: Chat、Console 和其他 Channels 支持的命令。
 | `/id` | 显示当前 chat id（`discord:<channel_id>`）、服务器 ID、会话类型和你的用户引用。 |
 | `/reset` | 清空会话历史、sticky skills 和 checkpoint 状态。 |
 | `/approve <id>`、`/deny <id>` | 处理待审批请求；审批消息里也有按钮。 |
+
+## 微信和 WhatsApp
+
+| 命令 | 作用 |
+|---|---|
+| `/id` | 显示 chat id（`wechat:<user_id>` 或 `whatsapp:<user_id>`）、你的用户引用，以及 bot 或 agent 账号。 |
+| `/approve <id>`、`/deny <id>` | 处理待审批请求。 |

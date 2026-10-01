@@ -258,3 +258,20 @@ func TestStorePutDiscordChatProfile(t *testing.T) {
 		t.Fatal("a non-numeric discord chat id was accepted")
 	}
 }
+
+func TestNormalizeChatIDAcceptsWeChatAndWhatsApp(t *testing.T) {
+	for raw, want := range map[string]string{
+		"wechat:o9u@im.wechat": "wechat:o9u@im.wechat",
+		"whatsapp:509":         "whatsapp:509",
+		"whatsapp:user:509":    "whatsapp:509",
+	} {
+		if got, err := NormalizeChatID(raw); err != nil || got != want {
+			t.Fatalf("NormalizeChatID(%q) = %q, %v", raw, got, err)
+		}
+	}
+	for _, raw := range []string{"wechat:has space", "whatsapp:abc"} {
+		if _, err := NormalizeChatID(raw); err == nil {
+			t.Fatalf("NormalizeChatID(%q) accepted", raw)
+		}
+	}
+}

@@ -296,6 +296,25 @@ description: 列出 integration 包的导出函数、方法、结构体字段，
 | `AddressingConfidenceThreshold` | `float64` | addressing 命中阈值。 |
 | `AddressingInterjectThreshold` | `float64` | 插话阈值。 |
 
+### `type WeChatOptions struct`
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `BotToken` | `string` | 微信 bot token，即 `morph wechat login` 保存的值。 |
+| `BotID` | `string` | 已连接的 bot ID，来自同一次登录。 |
+| `BaseURL` | `string` | 登录返回的 iLink API 地址；为空时用默认地址。 |
+| `AllowedUserIDs` | `[]string` | 允许的微信用户 ID；为空表示允许任何给 bot 发消息的人。 |
+| `TaskTimeout` | `time.Duration` | 单个 task 的执行超时。 |
+| `MaxConcurrency` | `int` | 会话最大并发数。 |
+
+### `type WhatsAppOptions struct`
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `APIToken` | `string` | agent 的 API key（WhatsApp 中「聊天信息 > API key」）。 |
+| `TaskTimeout` | `time.Duration` | 单个 task 的执行超时。 |
+| `MaxConcurrency` | `int` | 会话最大并发数。 |
+
 ### `type TelegramHooks struct`
 
 | 字段 | 类型 | 说明 |
@@ -344,6 +363,22 @@ description: 列出 integration 包的导出函数、方法、结构体字段，
 | 参数 | `opts integration.DiscordOptions` |
 | 返回值 | `integration.BotRunner`、`error` |
 | 说明 | 构造 Discord runner。`BotToken` 为空时会直接返回错误。 |
+
+### `(*Runtime).NewWeChatBot(opts WeChatOptions) (BotRunner, error)`
+
+| 项 | 值 |
+| --- | --- |
+| 参数 | `opts integration.WeChatOptions` |
+| 返回值 | `integration.BotRunner`、`error` |
+| 说明 | 构造微信 runner。`BotToken` 为空时会直接返回错误。 |
+
+### `(*Runtime).NewWhatsAppBot(opts WhatsAppOptions) (BotRunner, error)`
+
+| 项 | 值 |
+| --- | --- |
+| 参数 | `opts integration.WhatsAppOptions` |
+| 返回值 | `integration.BotRunner`、`error` |
+| 说明 | 构造 WhatsApp runner。`APIToken` 为空时会直接返回错误。 |
 
 ## 事件别名类型
 

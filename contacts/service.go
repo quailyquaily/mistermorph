@@ -217,6 +217,12 @@ func (s *Service) upsertContact(ctx context.Context, contact Contact, now time.T
 		if contact.DiscordDMChannelID == "" && existing.DiscordDMChannelID != "" {
 			contact.DiscordDMChannelID = existing.DiscordDMChannelID
 		}
+		if contact.WeChatUserID == "" && existing.WeChatUserID != "" {
+			contact.WeChatUserID = existing.WeChatUserID
+		}
+		if contact.WhatsAppUserID == "" && existing.WhatsAppUserID != "" {
+			contact.WhatsAppUserID = existing.WhatsAppUserID
+		}
 		if len(contact.DiscordChannelIDs) == 0 && len(existing.DiscordChannelIDs) > 0 {
 			contact.DiscordChannelIDs = append([]string(nil), existing.DiscordChannelIDs...)
 		}
@@ -314,6 +320,12 @@ func pairContactIdentityMatches(a, b Contact) bool {
 		return true
 	}
 	if aUserID, bUserID := refid.NormalizeDiscordID(a.DiscordUserID), refid.NormalizeDiscordID(b.DiscordUserID); aUserID != "" && aUserID == bUserID {
+		return true
+	}
+	if aID, bID := refid.NormalizeWeChatID(a.WeChatUserID), refid.NormalizeWeChatID(b.WeChatUserID); aID != "" && aID == bID {
+		return true
+	}
+	if aID, bID := refid.NormalizeWhatsAppID(a.WhatsAppUserID), refid.NormalizeWhatsAppID(b.WhatsAppUserID); aID != "" && aID == bID {
 		return true
 	}
 	return false
@@ -517,7 +529,7 @@ func contactNotFoundError(contactID string) error {
 	contactID = strings.TrimSpace(contactID)
 	if protocol, id, ok := refid.Parse(contactID); ok {
 		switch protocol {
-		case "tg", "slack", "line", "line_user", "lark", "lark_user", "mixin", "discord", "discord_user":
+		case "tg", "slack", "line", "line_user", "lark", "lark_user", "mixin", "discord", "discord_user", "wechat", "wechat_user", "whatsapp", "whatsapp_user":
 			return fmt.Errorf("contact not found: %s", contactID)
 		default:
 			return fmt.Errorf("hint: protocol '%q' is not mapped. Try to find other ways to send to '%s' in protocol/tool '%s'.", protocol, id, protocol)
@@ -637,6 +649,10 @@ func ResolveDecisionChannel(contact Contact, decision ShareDecision) (string, er
 			available = hasMixinTarget(contact)
 		case ChannelDiscord:
 			available = hasDiscordTarget(contact)
+		case ChannelWeChat:
+			available = refid.NormalizeWeChatID(contact.WeChatUserID) != ""
+		case ChannelWhatsApp:
+			available = refid.NormalizeWhatsAppID(contact.WhatsAppUserID) != ""
 		}
 		if !available {
 			return "", fmt.Errorf("explicit %s target is unavailable for contact_id=%s", channel, decision.ContactID)
@@ -668,6 +684,14 @@ func ResolveDecisionChannel(contact Contact, decision ShareDecision) (string, er
 		if hasDiscordTarget(contact) {
 			return ChannelDiscord, nil
 		}
+	case ChannelWeChat:
+		if refid.NormalizeWeChatID(contact.WeChatUserID) != "" {
+			return ChannelWeChat, nil
+		}
+	case ChannelWhatsApp:
+		if refid.NormalizeWhatsAppID(contact.WhatsAppUserID) != "" {
+			return ChannelWhatsApp, nil
+		}
 	}
 	if hasSlackTarget(contact) {
 		return ChannelSlack, nil
@@ -686,6 +710,12 @@ func ResolveDecisionChannel(contact Contact, decision ShareDecision) (string, er
 	}
 	if hasDiscordTarget(contact) {
 		return ChannelDiscord, nil
+	}
+	if refid.NormalizeWhatsAppID(contact.WhatsAppUserID) != "" {
+		return ChannelWhatsApp, nil
+	}
+	if refid.NormalizeWeChatID(contact.WeChatUserID) != "" {
+		return ChannelWeChat, nil
 	}
 	return "", fmt.Errorf("unable to resolve delivery channel for contact_id=%s", contact.ContactID)
 }
@@ -708,6 +738,10 @@ func contactReferenceChannel(contactID string) string {
 		return ChannelMixin
 	case "discord", "discord_user":
 		return ChannelDiscord
+	case "wechat", "wechat_user":
+		return ChannelWeChat
+	case "whatsapp", "whatsapp_user":
+		return ChannelWhatsApp
 	default:
 		return ""
 	}
@@ -1022,6 +1056,12 @@ func resolveChannelFromChatIDHint(chatID string) (string, bool, error) {
 		case "discord":
 			_, _, err := refid.ParseDiscordChatIDHint(value)
 			return ChannelDiscord, true, err
+		case "wechat":
+			_, _, err := refid.ParseWeChatChatIDHint(value)
+			return ChannelWeChat, true, err
+		case "whatsapp":
+			_, _, err := refid.ParseWhatsAppChatIDHint(value)
+			return ChannelWhatsApp, true, err
 		case "tg":
 			_, _, err := refid.ParseTelegramChatIDHint(value)
 			return ChannelTelegram, true, err

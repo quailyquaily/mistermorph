@@ -540,6 +540,10 @@ function kickerChannelLabel(mode) {
 	  return "Mixin";
     case "discord":
       return "Discord";
+    case "wechat":
+      return "WeChat";
+    case "whatsapp":
+      return "WhatsApp";
     default:
       return "Endpoint";
   }

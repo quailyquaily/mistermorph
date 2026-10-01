@@ -64,3 +64,24 @@ mistermorph discord --log-level info
 ```
 
 `discord.bot_token`（または `MISTER_MORPH_DISCORD_BOT_TOKEN`）を設定します。サーバーでは、既定の `strict` トリガーはメンションと返信にだけ応答します。設定方法は [Discord ドキュメント](https://github.com/quailyquaily/mistermorph/blob/master/docs/discord.md)を参照してください。
+
+## WeChat Bot
+
+Tencent の iLink プロトコルで WeChat runtime を単独で起動します。DM のみ対応です。まず QR コードで bot を接続します:
+
+```bash
+mistermorph wechat login
+mistermorph wechat --log-level info
+```
+
+設定方法は [WeChat ドキュメント](https://github.com/quailyquaily/mistermorph/blob/master/docs/wechat.md)を参照してください。
+
+## WhatsApp Agent
+
+Agent Platform で WhatsApp runtime を単独で起動します。agent の作成者との DM に対応します:
+
+```bash
+mistermorph whatsapp --log-level info
+```
+
+`whatsapp.api_token`（または `MISTER_MORPH_WHATSAPP_API_TOKEN`）に agent の API key を設定します。 設定方法は [WhatsApp ドキュメント](https://github.com/quailyquaily/mistermorph/blob/master/docs/whatsapp.md)を参照してください。

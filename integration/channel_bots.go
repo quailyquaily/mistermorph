@@ -13,11 +13,14 @@ import (
 	"github.com/quailyquaily/mistermorph/guard"
 	"github.com/quailyquaily/mistermorph/internal/acpclient"
 	"github.com/quailyquaily/mistermorph/internal/channelopts"
+	"github.com/quailyquaily/mistermorph/internal/channelruntime/accountdm"
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/depsutil"
 	discordruntime "github.com/quailyquaily/mistermorph/internal/channelruntime/discord"
 	mixinruntime "github.com/quailyquaily/mistermorph/internal/channelruntime/mixin"
 	slackruntime "github.com/quailyquaily/mistermorph/internal/channelruntime/slack"
 	telegramruntime "github.com/quailyquaily/mistermorph/internal/channelruntime/telegram"
+	wechatruntime "github.com/quailyquaily/mistermorph/internal/channelruntime/wechat"
+	whatsappruntime "github.com/quailyquaily/mistermorph/internal/channelruntime/whatsapp"
 	"github.com/quailyquaily/mistermorph/internal/llmselect"
 	"github.com/quailyquaily/mistermorph/internal/llmstats"
 	"github.com/quailyquaily/mistermorph/internal/llmutil"
@@ -78,6 +81,24 @@ type DiscordOptions struct {
 	GroupTriggerMode              string
 	AddressingConfidenceThreshold float64
 	AddressingInterjectThreshold  float64
+}
+
+// WeChatOptions runs a WeChat bot (private chats, over Tencent's iLink protocol). BotToken, BotID
+// and BaseURL are what `morph wechat login` saves; an empty BaseURL uses the default host.
+type WeChatOptions struct {
+	BotToken       string
+	BotID          string
+	BaseURL        string
+	AllowedUserIDs []string
+	TaskTimeout    time.Duration
+	MaxConcurrency int
+}
+
+// WhatsAppOptions runs a WhatsApp agent (Agent Platform v1); APIToken is the agent's API key.
+type WhatsAppOptions struct {
+	APIToken       string
+	TaskTimeout    time.Duration
+	MaxConcurrency int
 }
 
 type TelegramHooks struct {
@@ -154,6 +175,32 @@ func (rt *Runtime) NewDiscordBot(opts DiscordOptions) (BotRunner, error) {
 		return nil, fmt.Errorf("discord bot token is required")
 	}
 	return &discordBotRunner{rt: rt, opts: opts}, nil
+}
+
+func (rt *Runtime) NewWeChatBot(opts WeChatOptions) (BotRunner, error) {
+	if rt == nil {
+		return nil, fmt.Errorf("runtime is nil")
+	}
+	if err := rt.snapshot().InitErr; err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(opts.BotToken) == "" {
+		return nil, fmt.Errorf("wechat bot token is required (run `morph wechat login`)")
+	}
+	return &wechatBotRunner{rt: rt, opts: opts}, nil
+}
+
+func (rt *Runtime) NewWhatsAppBot(opts WhatsAppOptions) (BotRunner, error) {
+	if rt == nil {
+		return nil, fmt.Errorf("runtime is nil")
+	}
+	if err := rt.snapshot().InitErr; err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(opts.APIToken) == "" {
+		return nil, fmt.Errorf("whatsapp api token is required")
+	}
+	return &whatsappBotRunner{rt: rt, opts: opts}, nil
 }
 
 type telegramBotRunner struct {
@@ -351,6 +398,108 @@ func (r *discordBotRunner) Close() error {
 		return nil
 	}
 	return r.state.close()
+}
+
+type wechatBotRunner struct {
+	rt    *Runtime
+	opts  WeChatOptions
+	state runState
+}
+
+func (r *wechatBotRunner) Run(ctx context.Context) error {
+	if r == nil {
+		return fmt.Errorf("wechat runner is nil")
+	}
+	return runChannelLoop(ctx, &r.state, "wechat", r.rt, func(runCtx context.Context, snap runtimeSnapshot) (runErr error) {
+		common, cleanup, err := r.rt.prepareChannelDependencies(runCtx, snap)
+		if err != nil {
+			return err
+		}
+		defer func() { runErr = errors.Join(runErr, cleanup()) }()
+		cfg := snap.WeChat
+		cfg.BotToken, cfg.BotID = strings.TrimSpace(r.opts.BotToken), strings.TrimSpace(r.opts.BotID)
+		if base := strings.TrimSpace(r.opts.BaseURL); base != "" {
+			cfg.BaseURL = base
+		}
+		r.opts.applyTo(&cfg.AccountDMConfig)
+		runOpts := channelopts.BuildWeChatRunOptions(cfg, "integration", r.rt.inspect.Prompt, r.rt.inspect.Request)
+		r.rt.gateEngineTools(&runOpts.EngineToolsConfig)
+		return wechatruntime.Run(runCtx, r.rt.accountDMDependencies(snap, common), runOpts)
+	})
+}
+
+func (o WeChatOptions) applyTo(cfg *channelopts.AccountDMConfig) {
+	if len(o.AllowedUserIDs) > 0 {
+		cfg.AllowedUserIDs = append([]string(nil), o.AllowedUserIDs...)
+	}
+	applyAccountDMLimits(cfg, o.TaskTimeout, o.MaxConcurrency)
+}
+
+func (r *wechatBotRunner) Close() error {
+	if r == nil {
+		return nil
+	}
+	return r.state.close()
+}
+
+type whatsappBotRunner struct {
+	rt    *Runtime
+	opts  WhatsAppOptions
+	state runState
+}
+
+func (r *whatsappBotRunner) Run(ctx context.Context) error {
+	if r == nil {
+		return fmt.Errorf("whatsapp runner is nil")
+	}
+	return runChannelLoop(ctx, &r.state, "whatsapp", r.rt, func(runCtx context.Context, snap runtimeSnapshot) (runErr error) {
+		common, cleanup, err := r.rt.prepareChannelDependencies(runCtx, snap)
+		if err != nil {
+			return err
+		}
+		defer func() { runErr = errors.Join(runErr, cleanup()) }()
+		cfg := snap.WhatsApp
+		cfg.APIToken = strings.TrimSpace(r.opts.APIToken)
+		applyAccountDMLimits(&cfg.AccountDMConfig, r.opts.TaskTimeout, r.opts.MaxConcurrency)
+		runOpts := channelopts.BuildWhatsAppRunOptions(cfg, "integration", r.rt.inspect.Prompt, r.rt.inspect.Request)
+		r.rt.gateEngineTools(&runOpts.EngineToolsConfig)
+		return whatsappruntime.Run(runCtx, r.rt.accountDMDependencies(snap, common), runOpts)
+	})
+}
+
+func (r *whatsappBotRunner) Close() error {
+	if r == nil {
+		return nil
+	}
+	return r.state.close()
+}
+
+func applyAccountDMLimits(cfg *channelopts.AccountDMConfig, taskTimeout time.Duration, maxConcurrency int) {
+	if taskTimeout > 0 {
+		cfg.TaskTimeout = taskTimeout
+	}
+	if maxConcurrency > 0 {
+		cfg.MaxConcurrency = maxConcurrency
+	}
+}
+
+// gateEngineTools turns off the engine tools the embedding runtime did not select.
+func (rt *Runtime) gateEngineTools(cfg *agent.EngineToolsConfig) {
+	cfg.SpawnEnabled = cfg.SpawnEnabled && rt.isBuiltinToolSelected(toolsutil.BuiltinSpawn)
+	cfg.ACPSpawnEnabled = cfg.ACPSpawnEnabled && rt.isBuiltinToolSelected(toolsutil.BuiltinACPSpawn)
+	cfg.CoderEnabled = cfg.CoderEnabled && rt.isBuiltinToolSelected(toolsutil.BuiltinCoder)
+}
+
+func (rt *Runtime) accountDMDependencies(snap runtimeSnapshot, common depsutil.CommonDependencies) accountdm.Dependencies {
+	return accountdm.Dependencies{
+		CommonDependencies: common,
+		HandleModelCommand: func(text string) (string, bool, error) {
+			return llmselect.ExecuteCommandText(snap.LLMValues, rt.selection, text)
+		},
+		HandleSkillCommand: func(currentLoaded []string) (string, error) {
+			return skillsutil.RenderSkillStatus(snap.SkillsConfig, currentLoaded)
+		},
+	}
 }
 
 type runState struct {

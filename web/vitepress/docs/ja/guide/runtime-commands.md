@@ -17,7 +17,7 @@ description: chat、Console、channel runtime で使えるコマンド。
 
 ## 共通コマンド
 
-次のコマンドは CLI chat、Console Web、Telegram、Slack、LINE、Lark、Mixin Messenger、Discord で使えます。
+次のコマンドは CLI chat、Console Web、Telegram、Slack、LINE、Lark、Mixin Messenger、Discord、WeChat、WhatsApp で使えます。
 
 | コマンド | 内容 |
 |---|---|
@@ -96,3 +96,10 @@ task の実行中に通常の non-command message を送ると、新しい task 
 | `/id` | 現在の chat id（`discord:<channel_id>`）、サーバー ID、type、自分のユーザー参照を表示します。 |
 | `/reset` | conversation history、sticky skills、checkpoint state を消します。 |
 | `/approve <id>`、`/deny <id>` | 保留中の承認を決定します。承認メッセージにもボタンがあります。 |
+
+## WeChat と WhatsApp
+
+| コマンド | 内容 |
+|---|---|
+| `/id` | chat id（`wechat:<user_id>` または `whatsapp:<user_id>`）、自分のユーザー参照、bot または agent のアカウントを表示します。 |
+| `/approve <id>`、`/deny <id>` | 保留中の承認を決定します。 |

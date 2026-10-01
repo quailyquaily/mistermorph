@@ -1,0 +1,18 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+<circle cx="256" cy="256" r="256" fill="url(#wechat_bg)"/>
+<ellipse cx="214" cy="212" rx="114" ry="96" fill="white"/>
+<path d="M156 282L134 330L198 300Z" fill="white"/>
+<ellipse cx="320" cy="302" rx="106" ry="92" fill="#13C25C"/>
+<path d="M374 362L396 400L336 376Z" fill="white"/>
+<ellipse cx="320" cy="302" rx="92" ry="78" fill="white"/>
+<circle cx="176" cy="188" r="15" fill="#13C25C"/>
+<circle cx="252" cy="188" r="15" fill="#13C25C"/>
+<circle cx="290" cy="286" r="12" fill="#13C25C"/>
+<circle cx="350" cy="286" r="12" fill="#13C25C"/>
+<defs>
+<linearGradient id="wechat_bg" x1="256" y1="0" x2="256" y2="512" gradientUnits="userSpaceOnUse">
+<stop stop-color="#2BD66E"/>
+<stop offset="1" stop-color="#07B04F"/>
+</linearGradient>
+</defs>
+</svg>

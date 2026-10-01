@@ -2,6 +2,8 @@ import { storeToRefs } from "pinia";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 
 import channelDiscordLogoURL from "../assets/images/channels/discord.svg";
+import channelWeChatLogoURL from "../assets/images/channels/wechat.svg";
+import channelWhatsAppLogoURL from "../assets/images/channels/whatsapp.svg";
 import channelLarkLogoURL from "../assets/images/channels/lark.svg";
 import channelLineLogoURL from "../assets/images/channels/line.svg";
 import channelMixinLogoURL from "../assets/images/channels/mixin.svg";
@@ -24,6 +26,8 @@ const CHANNEL_LOGOS = {
   mixin: channelMixinLogoURL,
   slack: channelSlackLogoURL,
   telegram: channelTelegramLogoURL,
+  wechat: channelWeChatLogoURL,
+  whatsapp: channelWhatsAppLogoURL,
 };
 
 function trimText(value) {

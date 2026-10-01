@@ -8,4 +8,6 @@ const (
 	Lark     = "lark"
 	Discord  = "discord"
 	Mixin    = "mixin"
+	WeChat   = "wechat"
+	WhatsApp = "whatsapp"
 )

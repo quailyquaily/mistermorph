@@ -32,6 +32,8 @@ type observedContactCandidate struct {
 	DiscordUserID       string
 	DiscordDMChannelID  string
 	DiscordChannelIDs   []string
+	WeChatUserID        string
+	WhatsAppUserID      string
 	SlackTeamID         string
 	SlackUserID         string
 	SlackDMChannelID    string
@@ -77,6 +79,8 @@ func (s *Service) ObserveInboundBusMessageWithResult(ctx context.Context, msg bu
 		return ObserveInboundResult{}, s.observeMixinInboundBusMessage(ctx, msg, now)
 	case busruntime.ChannelDiscord:
 		return ObserveInboundResult{}, s.observeDiscordInboundBusMessage(ctx, msg, now)
+	case busruntime.ChannelWeChat, busruntime.ChannelWhatsApp:
+		return ObserveInboundResult{}, s.observeAccountDMInboundBusMessage(ctx, msg, now)
 	default:
 		return ObserveInboundResult{}, nil
 	}
@@ -380,6 +384,38 @@ func (s *Service) observeDiscordInboundBusMessage(ctx context.Context, msg busru
 	return s.applyObservedCandidates(ctx, []observedContactCandidate{candidate}, now)
 }
 
+// observeAccountDMInboundBusMessage records the sender of a WeChat or WhatsApp private message as
+// wechat_user:<id> or whatsapp_user:<id>. Both channels only have private chats with one bound
+// account, so the peer in the conversation key is the sender.
+func (s *Service) observeAccountDMInboundBusMessage(ctx context.Context, msg busruntime.BusMessage, now time.Time) error {
+	_, peerID, err := busruntime.ParseAccountConversationKey(msg.Channel, msg.ConversationKey)
+	if err != nil {
+		return err
+	}
+	nickname := strings.TrimSpace(msg.Extensions.FromDisplayName)
+	if nickname == "" {
+		nickname = strings.TrimSpace(msg.Extensions.FromUsername)
+	}
+	candidate := observedContactCandidate{Kind: KindHuman, Nickname: nickname}
+	switch msg.Channel {
+	case busruntime.ChannelWeChat:
+		id := refid.NormalizeWeChatID(peerID)
+		if id == "" {
+			return nil
+		}
+		candidate.PrimaryContactID, candidate.Channel, candidate.WeChatUserID = "wechat_user:"+id, ChannelWeChat, id
+	case busruntime.ChannelWhatsApp:
+		id := refid.NormalizeWhatsAppID(peerID)
+		if id == "" {
+			return nil
+		}
+		candidate.PrimaryContactID, candidate.Channel, candidate.WhatsAppUserID = "whatsapp_user:"+id, ChannelWhatsApp, id
+	default:
+		return nil
+	}
+	return s.applyObservedCandidates(ctx, []observedContactCandidate{candidate}, now)
+}
+
 func slackContactIDFromUser(teamID, userID string) string {
 	teamID = strings.TrimSpace(teamID)
 	userID = strings.TrimSpace(userID)
@@ -517,6 +553,8 @@ func (s *Service) upsertObservedCandidate(ctx context.Context, candidate observe
 		DiscordUserID:       refid.NormalizeDiscordID(candidate.DiscordUserID),
 		DiscordDMChannelID:  refid.NormalizeDiscordID(candidate.DiscordDMChannelID),
 		DiscordChannelIDs:   normalizeDiscordIDs(candidate.DiscordChannelIDs),
+		WeChatUserID:        refid.NormalizeWeChatID(candidate.WeChatUserID),
+		WhatsAppUserID:      refid.NormalizeWhatsAppID(candidate.WhatsAppUserID),
 		SlackTeamID:         strings.TrimSpace(candidate.SlackTeamID),
 		SlackUserID:         strings.TrimSpace(candidate.SlackUserID),
 		SlackDMChannelID:    strings.TrimSpace(candidate.SlackDMChannelID),
@@ -654,6 +692,12 @@ func applyObservedMixinMerge(contact *Contact, candidate observedContactCandidat
 func applyObservedDiscordMerge(contact *Contact, candidate observedContactCandidate) {
 	if contact == nil {
 		return
+	}
+	if id := refid.NormalizeWeChatID(candidate.WeChatUserID); id != "" && contact.WeChatUserID == "" {
+		contact.WeChatUserID = id
+	}
+	if id := refid.NormalizeWhatsAppID(candidate.WhatsAppUserID); id != "" && contact.WhatsAppUserID == "" {
+		contact.WhatsAppUserID = id
 	}
 	if userID := refid.NormalizeDiscordID(candidate.DiscordUserID); userID != "" && contact.DiscordUserID == "" {
 		contact.DiscordUserID = userID

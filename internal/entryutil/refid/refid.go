@@ -265,3 +265,67 @@ func ParseDiscordUserContactID(raw string) (string, bool) {
 func LineIDLooksLikeUserID(value string) bool {
 	return strings.HasPrefix(strings.ToUpper(strings.TrimSpace(value)), "U")
 }
+
+// NormalizeWeChatID returns a WeChat iLink user or bot ID, or "" when it is empty or holds ":" or
+// spaces (IDs are opaque, such as "o9cq...@im.wechat").
+func NormalizeWeChatID(raw string) string {
+	value := strings.TrimSpace(raw)
+	if value == "" || strings.ContainsAny(value, ": \t\r\n") {
+		return ""
+	}
+	return value
+}
+
+// ParseWeChatChatIDHint parses a "wechat:<user_id>" chat id into the user's id.
+func ParseWeChatChatIDHint(raw string) (string, bool, error) {
+	return parseChatIDHint(raw, "wechat:", NormalizeWeChatID)
+}
+
+// ParseWhatsAppChatIDHint parses a "whatsapp:<user_id>" chat id into the user's id.
+func ParseWhatsAppChatIDHint(raw string) (string, bool, error) {
+	return parseChatIDHint(raw, "whatsapp:", NormalizeWhatsAppID)
+}
+
+func parseChatIDHint(raw, prefix string, normalize func(string) string) (string, bool, error) {
+	value := strings.TrimSpace(raw)
+	if value == "" || !strings.HasPrefix(strings.ToLower(value), prefix) {
+		return "", false, nil
+	}
+	id := normalize(value[len(prefix):])
+	if id == "" {
+		return "", true, fmt.Errorf("invalid chat_id: %s", value)
+	}
+	return id, true, nil
+}
+
+// ParseWeChatUserContactID parses "wechat_user:<id>" contact IDs.
+func ParseWeChatUserContactID(raw string) (string, bool) {
+	value := strings.TrimSpace(raw)
+	if !strings.HasPrefix(strings.ToLower(value), "wechat_user:") {
+		return "", false
+	}
+	id := NormalizeWeChatID(value[len("wechat_user:"):])
+	return id, id != ""
+}
+
+// NormalizeWhatsAppID returns a WhatsApp user ID without its "user:" prefix (the API's ids are
+// integers), or "".
+func NormalizeWhatsAppID(raw string) string {
+	value := strings.TrimSpace(raw)
+	value = strings.TrimPrefix(value, "user:")
+	id, err := strconv.ParseUint(value, 10, 64)
+	if err != nil || id == 0 {
+		return ""
+	}
+	return strconv.FormatUint(id, 10)
+}
+
+// ParseWhatsAppUserContactID parses "whatsapp_user:<id>" contact IDs.
+func ParseWhatsAppUserContactID(raw string) (string, bool) {
+	value := strings.TrimSpace(raw)
+	if !strings.HasPrefix(strings.ToLower(value), "whatsapp_user:") {
+		return "", false
+	}
+	id := NormalizeWhatsAppID(value[len("whatsapp_user:"):])
+	return id, id != ""
+}

@@ -64,3 +64,24 @@ mistermorph discord --log-level info
 ```
 
 设置 `discord.bot_token`（或 `MISTER_MORPH_DISCORD_BOT_TOKEN`）。在服务器里，默认的 `strict` 触发模式只回应 @提及和回复。配置方法见 [Discord 文档](https://github.com/quailyquaily/mistermorph/blob/master/docs/discord.md)。
+
+## 微信 Bot
+
+通过腾讯 iLink 协议单独运行微信 runtime，仅支持私聊。先扫码连接 bot：
+
+```bash
+mistermorph wechat login
+mistermorph wechat --log-level info
+```
+
+配置方法见 [微信文档](https://github.com/quailyquaily/mistermorph/blob/master/docs/wechat.md)。
+
+## WhatsApp Agent
+
+通过 Agent Platform 单独运行 WhatsApp runtime，与 agent 的创建者私聊：
+
+```bash
+mistermorph whatsapp --log-level info
+```
+
+把 `whatsapp.api_token`（或 `MISTER_MORPH_WHATSAPP_API_TOKEN`）设为 agent 的 API key。 配置方法见 [WhatsApp 文档](https://github.com/quailyquaily/mistermorph/blob/master/docs/whatsapp.md)。

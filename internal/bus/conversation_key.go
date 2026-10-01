@@ -117,6 +117,34 @@ func normalizeDiscordSnowflake(value string) (string, error) {
 	return strconv.FormatUint(id, 10), nil
 }
 
+// BuildAccountConversationKey keys a private conversation of a bound account with one peer:
+// "<prefix>:<account>:<peer>". WeChat and WhatsApp keep the account in the key, so rebinding to
+// another account never reads the old account's history. Neither part may contain ":" or spaces.
+func BuildAccountConversationKey(channel Channel, accountID, peerID string) (string, error) {
+	accountID = strings.TrimSpace(accountID)
+	peerID = strings.TrimSpace(peerID)
+	for _, part := range []string{accountID, peerID} {
+		if part == "" || strings.ContainsAny(part, ": \t\r\n") {
+			return "", fmt.Errorf("%s conversation part %q is invalid", channel, part)
+		}
+	}
+	return BuildConversationKey(channel, accountID+":"+peerID)
+}
+
+// ParseAccountConversationKey reads back BuildAccountConversationKey: the account and the peer.
+func ParseAccountConversationKey(channel Channel, conversationKey string) (string, string, error) {
+	prefix := conversationKeyPrefix(channel)
+	value := strings.TrimSpace(conversationKey)
+	if prefix == "" || !strings.HasPrefix(value, prefix+":") {
+		return "", "", fmt.Errorf("%s conversation key is invalid", channel)
+	}
+	parts := strings.SplitN(value[len(prefix)+1:], ":", 3)
+	if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" || strings.TrimSpace(parts[1]) == "" {
+		return "", "", fmt.Errorf("%s conversation key is invalid", channel)
+	}
+	return parts[0], parts[1], nil
+}
+
 func ParseMixinConversationKey(conversationKey string) (string, error) {
 	const prefix = "mixin:"
 	value := strings.TrimSpace(conversationKey)
@@ -146,6 +174,10 @@ func conversationKeyPrefix(channel Channel) string {
 		return "discord"
 	case ChannelMixin:
 		return "mixin"
+	case ChannelWeChat:
+		return "wechat"
+	case ChannelWhatsApp:
+		return "whatsapp"
 	default:
 		return ""
 	}

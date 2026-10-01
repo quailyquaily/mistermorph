@@ -23,11 +23,14 @@ import SettingDialog from "../components/SettingDialog";
 import SetupConnectionTestDialog from "../components/SetupConnectionTestDialog";
 import SetupPickerDialog from "../components/SetupPickerDialog";
 import RuntimePanel from "./RuntimeView";
+import WeChatLoginPanel from "../components/WeChatLoginPanel";
 import channelDiscordLogoURL from "../assets/images/channels/discord.svg";
 import channelLarkLogoURL from "../assets/images/channels/lark.svg";
 import channelLineLogoURL from "../assets/images/channels/line.svg";
 import channelMixinLogoURL from "../assets/images/channels/mixin.svg";
 import channelSlackLogoURL from "../assets/images/channels/slack.svg";
+import channelWeChatLogoURL from "../assets/images/channels/wechat.svg";
+import channelWhatsAppLogoURL from "../assets/images/channels/whatsapp.svg";
 import channelTelegramLogoURL from "../assets/images/channels/telegram.svg";
 import defaultAvatarMarkup from "../assets/images/app_logo_current.svg?raw";
 import {
@@ -137,6 +140,8 @@ const MANAGED_RUNTIME_ITEMS = [
   { id: "lark", titleKey: "settings_console_runtime_lark", noteKey: "settings_console_runtime_note_lark" },
   { id: "mixin", titleKey: "settings_console_runtime_mixin", noteKey: "settings_console_runtime_note_mixin" },
   { id: "discord", titleKey: "settings_console_runtime_discord", noteKey: "settings_console_runtime_note_discord" },
+  { id: "wechat", titleKey: "settings_console_runtime_wechat", noteKey: "settings_console_runtime_note_wechat" },
+  { id: "whatsapp", titleKey: "settings_console_runtime_whatsapp", noteKey: "settings_console_runtime_note_whatsapp" },
 ];
 
 // The channels on the Channels page. A channel counts as configured when every credential it needs
@@ -145,6 +150,8 @@ const CHANNEL_ITEMS = [
   { id: "telegram", titleKey: "settings_console_telegram_title", logo: channelTelegramLogoURL, required: ["bot_token"] },
   { id: "slack", titleKey: "settings_console_slack_title", logo: channelSlackLogoURL, required: ["bot_token", "app_token"] },
   { id: "discord", titleKey: "settings_console_discord_title", logo: channelDiscordLogoURL, required: ["bot_token"] },
+  { id: "wechat", titleKey: "settings_console_wechat_title", logo: channelWeChatLogoURL, required: ["bot_token"] },
+  { id: "whatsapp", titleKey: "settings_console_whatsapp_title", logo: channelWhatsAppLogoURL, required: ["api_token"] },
   { id: "lark", titleKey: "settings_console_lark_title", logo: channelLarkLogoURL, required: ["app_id", "app_secret"] },
   { id: "line", titleKey: "settings_console_line_title", logo: channelLineLogoURL, required: ["channel_access_token", "channel_secret"] },
   { id: "mixin", titleKey: "settings_console_mixin_title", logo: channelMixinLogoURL, required: ["keystore_file"] },
@@ -263,6 +270,20 @@ function buildEmptyDiscordConsoleState() {
     allowed_channel_ids_text: "",
     allowed_user_ids_text: "",
     group_trigger_mode: "strict",
+  };
+}
+
+// The WeChat bot token comes from QR login and never reaches the browser; bot_id shows which bot.
+function buildEmptyWeChatConsoleState() {
+  return {
+    bot_id: "",
+    allowed_user_ids_text: "",
+  };
+}
+
+function buildEmptyWhatsAppConsoleState() {
+  return {
+    api_token: "",
   };
 }
 
@@ -615,6 +636,8 @@ function buildConsoleManagedRuntimeSnapshot(state) {
     lark: !!state.managedRuntimes.lark,
     mixin: !!state.managedRuntimes.mixin,
     discord: !!state.managedRuntimes.discord,
+    wechat: !!state.managedRuntimes.wechat,
+    whatsapp: !!state.managedRuntimes.whatsapp,
   });
 }
 
@@ -677,6 +700,20 @@ function buildConsoleDiscordSnapshot(state) {
   });
 }
 
+function buildConsoleWeChatSnapshot(state) {
+  recordSnapshotBuild("settings.console.wechat");
+  return JSON.stringify({
+    allowed_user_ids: parseConfigListText(state.wechat.allowed_user_ids_text),
+  });
+}
+
+function buildConsoleWhatsAppSnapshot(state) {
+  recordSnapshotBuild("settings.console.whatsapp");
+  return JSON.stringify({
+    api_token: trimText(state.whatsapp.api_token),
+  });
+}
+
 function buildConsoleGuardSnapshot(state) {
   recordSnapshotBuild("settings.console.guard");
   return JSON.stringify({
@@ -702,6 +739,7 @@ const SettingsView = {
   components: {
     AppPage,
     EnvManagedField,
+    WeChatLoginPanel,
     AuthProfilesPanel,
     CodexAuthDialog,
     ConfigSettingsPanel,
@@ -797,6 +835,8 @@ const SettingsView = {
     const loadedConsoleLarkSnapshot = ref("");
     const loadedConsoleMixinSnapshot = ref("");
     const loadedConsoleDiscordSnapshot = ref("");
+    const loadedConsoleWeChatSnapshot = ref("");
+    const loadedConsoleWhatsAppSnapshot = ref("");
     const loadedConsoleGuardSnapshot = ref("");
     const consoleManagedDirty = ref(false);
     const consoleTelegramDirty = ref(false);
@@ -805,6 +845,8 @@ const SettingsView = {
     const consoleLarkDirty = ref(false);
     const consoleMixinDirty = ref(false);
     const consoleDiscordDirty = ref(false);
+    const consoleWeChatDirty = ref(false);
+    const consoleWhatsAppDirty = ref(false);
     const consoleGuardDirty = ref(false);
     const consoleSettingsLoaded = ref(false);
     const consoleEnvManaged = ref({});
@@ -918,6 +960,8 @@ const SettingsView = {
         lark: false,
         mixin: false,
         discord: false,
+        wechat: false,
+        whatsapp: false,
       },
       telegram: buildEmptyTelegramConsoleState(),
       slack: buildEmptySlackConsoleState(),
@@ -925,6 +969,8 @@ const SettingsView = {
       lark: buildEmptyLarkConsoleState(),
       mixin: buildEmptyMixinConsoleState(),
       discord: buildEmptyDiscordConsoleState(),
+      wechat: buildEmptyWeChatConsoleState(),
+      whatsapp: buildEmptyWhatsAppConsoleState(),
       guard: buildEmptyGuardConsoleState(),
     });
 
@@ -1051,6 +1097,8 @@ const SettingsView = {
       loadedConsoleLarkSnapshot.value = buildConsoleLarkSnapshot(state);
       loadedConsoleMixinSnapshot.value = buildConsoleMixinSnapshot(state);
       loadedConsoleDiscordSnapshot.value = buildConsoleDiscordSnapshot(state);
+      loadedConsoleWeChatSnapshot.value = buildConsoleWeChatSnapshot(state);
+      loadedConsoleWhatsAppSnapshot.value = buildConsoleWhatsAppSnapshot(state);
       loadedConsoleGuardSnapshot.value = buildConsoleGuardSnapshot(state);
       consoleManagedDirty.value = false;
       consoleTelegramDirty.value = false;
@@ -1059,6 +1107,8 @@ const SettingsView = {
       consoleLarkDirty.value = false;
       consoleMixinDirty.value = false;
       consoleDiscordDirty.value = false;
+      consoleWeChatDirty.value = false;
+      consoleWhatsAppDirty.value = false;
       consoleGuardDirty.value = false;
     }
 
@@ -1070,6 +1120,8 @@ const SettingsView = {
       loadedConsoleLarkSnapshot.value = "";
       loadedConsoleMixinSnapshot.value = "";
       loadedConsoleDiscordSnapshot.value = "";
+      loadedConsoleWeChatSnapshot.value = "";
+      loadedConsoleWhatsAppSnapshot.value = "";
       loadedConsoleGuardSnapshot.value = "";
       consoleManagedDirty.value = false;
       consoleTelegramDirty.value = false;
@@ -1078,6 +1130,8 @@ const SettingsView = {
       consoleLarkDirty.value = false;
       consoleMixinDirty.value = false;
       consoleDiscordDirty.value = false;
+      consoleWeChatDirty.value = false;
+      consoleWhatsAppDirty.value = false;
       consoleGuardDirty.value = false;
       consoleSettingsLoaded.value = false;
     }
@@ -1120,6 +1174,16 @@ const SettingsView = {
       consoleDiscordDirty.value =
         consoleSecretDirty.has("discord.bot_token") ||
         buildConsoleDiscordSnapshot(state) !== loadedConsoleDiscordSnapshot.value;
+    }
+
+    function updateConsoleWeChatDirty() {
+      consoleWeChatDirty.value = buildConsoleWeChatSnapshot(state) !== loadedConsoleWeChatSnapshot.value;
+    }
+
+    function updateConsoleWhatsAppDirty() {
+      consoleWhatsAppDirty.value =
+        consoleSecretDirty.has("whatsapp.api_token") ||
+        buildConsoleWhatsAppSnapshot(state) !== loadedConsoleWhatsAppSnapshot.value;
     }
 
     function updateConsoleGuardDirty() {
@@ -1360,6 +1424,8 @@ const SettingsView = {
         ["lark", consoleLarkDirty, "settings_console_lark_title"],
         ["mixin", consoleMixinDirty, "settings_console_mixin_title"],
         ["discord", consoleDiscordDirty, "settings_console_discord_title"],
+        ["wechat", consoleWeChatDirty, "settings_console_wechat_title"],
+        ["whatsapp", consoleWhatsAppDirty, "settings_console_whatsapp_title"],
         ["runtimes", consoleManagedDirty, "settings_channel_run_in_console"],
       ],
       security: [["guard", consoleGuardDirty, "settings_console_guard_title"]],
@@ -1375,6 +1441,8 @@ const SettingsView = {
       lark: consoleLarkDirty,
       mixin: consoleMixinDirty,
       discord: consoleDiscordDirty,
+      wechat: consoleWeChatDirty,
+      whatsapp: consoleWhatsAppDirty,
     };
     function channelFieldSet(kind, field) {
       return (
@@ -1889,6 +1957,8 @@ const SettingsView = {
         consoleLarkDirty.value ||
         consoleMixinDirty.value ||
         consoleDiscordDirty.value ||
+        consoleWeChatDirty.value ||
+        consoleWhatsAppDirty.value ||
         consoleGuardDirty.value
     );
     const consoleSaveDisabled = computed(
@@ -1911,6 +1981,12 @@ const SettingsView = {
     );
     const discordSaveDisabled = computed(
       () => consoleLoading.value || consoleSaving.value || !consoleDiscordDirty.value
+    );
+    const wechatSaveDisabled = computed(
+      () => consoleLoading.value || consoleSaving.value || !consoleWeChatDirty.value
+    );
+    const whatsappSaveDisabled = computed(
+      () => consoleLoading.value || consoleSaving.value || !consoleWhatsAppDirty.value
     );
     const guardSaveDisabled = computed(
       () => consoleLoading.value || consoleSaving.value || !consoleGuardDirty.value
@@ -2956,6 +3032,8 @@ const SettingsView = {
       { id: "lark", dirty: () => consoleLarkDirty.value, slice: () => state.lark, sync: updateConsoleLarkDirty },
       { id: "mixin", dirty: () => consoleMixinDirty.value, slice: () => state.mixin, sync: updateConsoleMixinDirty },
       { id: "discord", dirty: () => consoleDiscordDirty.value, slice: () => state.discord, sync: updateConsoleDiscordDirty },
+      { id: "wechat", dirty: () => consoleWeChatDirty.value, slice: () => state.wechat, sync: updateConsoleWeChatDirty },
+      { id: "whatsapp", dirty: () => consoleWhatsAppDirty.value, slice: () => state.whatsapp, sync: updateConsoleWhatsAppDirty },
       { id: "guard", dirty: () => consoleGuardDirty.value, slice: () => state.guard, sync: updateConsoleGuardDirty },
     ];
 
@@ -2972,6 +3050,8 @@ const SettingsView = {
       const lark = data?.lark && typeof data.lark === "object" ? data.lark : {};
       const mixin = data?.mixin && typeof data.mixin === "object" ? data.mixin : {};
       const discord = data?.discord && typeof data.discord === "object" ? data.discord : {};
+      const wechat = data?.wechat && typeof data.wechat === "object" ? data.wechat : {};
+      const whatsapp = data?.whatsapp && typeof data.whatsapp === "object" ? data.whatsapp : {};
       const guard = data?.guard && typeof data.guard === "object" ? data.guard : {};
       const guardNetwork = guard?.network && typeof guard.network === "object" ? guard.network : {};
       const guardURLFetch =
@@ -3014,6 +3094,9 @@ const SettingsView = {
       state.discord.allowed_channel_ids_text = formatConfigList(discord.allowed_channel_ids);
       state.discord.allowed_user_ids_text = formatConfigList(discord.allowed_user_ids);
       state.discord.group_trigger_mode = normalizeDiscordGroupTriggerMode(discord.group_trigger_mode);
+      state.wechat.bot_id = typeof wechat.bot_id === "string" ? wechat.bot_id : "";
+      state.wechat.allowed_user_ids_text = formatConfigList(wechat.allowed_user_ids);
+      state.whatsapp.api_token = typeof whatsapp.api_token === "string" ? whatsapp.api_token : "";
       state.guard.enabled = typeof guard.enabled === "boolean" ? guard.enabled : true;
       state.guard.url_fetch_allowed_url_prefixes_text = formatConfigList(guardURLFetch.allowed_url_prefixes);
       state.guard.deny_private_ips =
@@ -3039,12 +3122,16 @@ const SettingsView = {
       state.managedRuntimes.lark = false;
       state.managedRuntimes.mixin = false;
       state.managedRuntimes.discord = false;
+      state.managedRuntimes.wechat = false;
+      state.managedRuntimes.whatsapp = false;
       Object.assign(state.telegram, buildEmptyTelegramConsoleState());
       Object.assign(state.slack, buildEmptySlackConsoleState());
       Object.assign(state.line, buildEmptyLineConsoleState());
       Object.assign(state.lark, buildEmptyLarkConsoleState());
       Object.assign(state.mixin, buildEmptyMixinConsoleState());
       Object.assign(state.discord, buildEmptyDiscordConsoleState());
+      Object.assign(state.wechat, buildEmptyWeChatConsoleState());
+      Object.assign(state.whatsapp, buildEmptyWhatsAppConsoleState());
       Object.assign(state.guard, buildEmptyGuardConsoleState());
       consoleEnvManaged.value = {};
       consoleSecretFields.value = {};
@@ -3773,6 +3860,10 @@ const SettingsView = {
         consoleEnvManaged.value?.discord && typeof consoleEnvManaged.value.discord === "object"
           ? consoleEnvManaged.value.discord
           : {};
+      const whatsappEnv =
+        consoleEnvManaged.value?.whatsapp && typeof consoleEnvManaged.value.whatsapp === "object"
+          ? consoleEnvManaged.value.whatsapp
+          : {};
       const managed_runtimes = MANAGED_RUNTIME_ITEMS.filter((item) => state.managedRuntimes[item.id]).map((item) => item.id);
       const telegram = {
         allowed_chat_ids: parseConfigListText(state.telegram.allowed_chat_ids_text),
@@ -3837,6 +3928,15 @@ const SettingsView = {
         "bot_token",
         state.discord.bot_token,
       );
+      const wechat = {
+        allowed_user_ids: parseConfigListText(state.wechat.allowed_user_ids_text),
+      };
+      const whatsapp = {};
+      whatsapp.api_token = consoleFieldRawValue(whatsappEnv, "api_token") || includeConsoleSecretValue(
+        "whatsapp",
+        "api_token",
+        state.whatsapp.api_token,
+      );
       const guard = {
         enabled: !!state.guard.enabled,
         network: {
@@ -3875,10 +3975,16 @@ const SettingsView = {
       if (target === "discord") {
         return { discord };
       }
+      if (target === "wechat") {
+        return { wechat };
+      }
+      if (target === "whatsapp") {
+        return { whatsapp };
+      }
       if (target === "guard") {
         return { guard };
       }
-      return { managed_runtimes, telegram, slack, line, lark, mixin, discord, guard };
+      return { managed_runtimes, telegram, slack, line, lark, mixin, discord, wechat, whatsapp, guard };
     }
 
     function consoleFieldEntry(kind, field) {
@@ -4022,6 +4128,39 @@ const SettingsView = {
 
     function updateDiscordGroupTrigger(item) {
       updateDiscordField("group_trigger_mode", item?.value || "strict");
+    }
+
+    function updateWeChatField(field, value) {
+      const key = String(field || "").trim();
+      if (!key || !Object.prototype.hasOwnProperty.call(state.wechat, key)) {
+        return;
+      }
+      state.wechat[key] = String(value || "");
+      updateConsoleWeChatDirty();
+    }
+
+    function updateWhatsAppField(field, value) {
+      const key = String(field || "").trim();
+      if (!key || !Object.prototype.hasOwnProperty.call(state.whatsapp, key)) {
+        return;
+      }
+      state.whatsapp[key] = String(value || "");
+      markConsoleSecretDirty("whatsapp", key);
+      updateConsoleWhatsAppDirty();
+    }
+
+    // WeChat login and unbind write config on the server. Reload it, keeping unsaved drafts.
+    async function reloadConsoleSettingsAfterWeChatLogin() {
+      const targetEndpointRef = settingsEndpointRef.value;
+      try {
+        const data = await endpointApiFetch(targetEndpointRef, "/settings/console");
+        if (settingsEndpointRef.value !== targetEndpointRef) {
+          return;
+        }
+        applyConsolePayload(data, { savedScopes: [] });
+      } catch (e) {
+        toast.error(e.message || t("msg_load_failed"));
+      }
     }
 
     function updateGuardField(field, value) {
@@ -4185,7 +4324,7 @@ const SettingsView = {
     }
 
     async function saveConsoleSettings(target = "all", { notify = true } = {}) {
-      const known = ["runtimes", "telegram", "slack", "line", "lark", "mixin", "discord", "guard"];
+      const known = ["runtimes", "telegram", "slack", "line", "lark", "mixin", "discord", "wechat", "whatsapp", "guard"];
       const requested = Array.isArray(target) ? target.map(String) : [String(target)];
       const targets = requested.includes("all") ? ["all"] : requested.filter((item) => known.includes(item));
       if (!selectedEndpointIsConsole.value || targets.length === 0) {
@@ -4199,6 +4338,8 @@ const SettingsView = {
         lark: larkSaveDisabled,
         mixin: mixinSaveDisabled,
         discord: discordSaveDisabled,
+        wechat: wechatSaveDisabled,
+        whatsapp: whatsappSaveDisabled,
         guard: guardSaveDisabled,
       };
       if (targets[0] === "all" && (consoleLoading.value || consoleSaving.value || !consoleDirty.value)) {
@@ -5019,6 +5160,8 @@ const SettingsView = {
       larkSaveDisabled,
       mixinSaveDisabled,
       discordSaveDisabled,
+      wechatSaveDisabled,
+      whatsappSaveDisabled,
       guardSaveDisabled,
       personaDirty,
       personaSaveDisabled,
@@ -5152,6 +5295,11 @@ const SettingsView = {
       updateLarkField,
       updateMixinField,
       updateDiscordField,
+      updateWeChatField,
+      updateWhatsAppField,
+      reloadConsoleSettingsAfterWeChatLogin,
+      consoleSecretField,
+      endpointApiFetch,
       updateDiscordGroupTrigger,
       updateTelegramGroupTrigger,
       updateSlackGroupTrigger,
@@ -5963,6 +6111,105 @@ const SettingsView = {
                         @change="updateDiscordGroupTrigger"
                       />
                       <p class="settings-field-note">{{ t("settings_console_discord_group_trigger_note") }}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </template>
+                        <template v-if="openChannel === 'wechat'">
+              <div class="settings-panel-shell">
+                <header class="settings-panel-head settings-channel-panel-head">
+                  <div class="settings-panel-copy">
+                    <h3 class="settings-panel-title workspace-document-title">{{ t("settings_console_wechat_title") }}</h3>
+                    <p class="settings-panel-meta">{{ t("settings_console_wechat_note") }}</p>
+                  </div>
+                  <div class="settings-profile-actions settings-default-llm-actions">
+                    <QDropdownMenu
+                      class="settings-llm-actions-menu"
+                      :items="channelActionMenuItems('wechat')"
+                      hideSelected
+                      hideActionLabel
+                      :disabled="consoleLoading || consoleSaving"
+                    >
+                      <PhDotsThree class="settings-llm-actions-menu-icon" />
+                      <span class="settings-llm-actions-menu-accessible">{{ t("todo_action_more") }}</span>
+                    </QDropdownMenu>
+                    <QButton class="plain xs icon" :title="t('settings_channel_close')" :aria-label="t('settings_channel_close')" @click="closeChannelPane">
+                      <PhX class="icon" />
+                    </QButton>
+                  </div>
+                </header>
+
+                <div class="settings-panel-body">
+                  <div class="settings-form-grid">
+                    <div class="settings-field is-wide">
+                      <span class="settings-field-label">{{ t("settings_console_wechat_account_label") }}</span>
+                      <EnvManagedField v-if="consoleFieldEnvManaged('wechat', 'bot_token')" :name="consoleFieldManagedHeadline('wechat', 'bot_token')" />
+                      <WeChatLoginPanel
+                        v-else
+                        :request="endpointApiFetch"
+                        :endpointRef="settingsEndpointRef"
+                        :configured="consoleSecretField('wechat', 'bot_token')?.configured === true"
+                        :botId="state.wechat.bot_id"
+                        :disabled="consoleLoading || consoleSaving"
+                        @changed="reloadConsoleSettingsAfterWeChatLogin"
+                      />
+                    </div>
+
+                    <div class="settings-field is-wide">
+                      <span class="settings-field-label">{{ t("settings_console_wechat_allowed_user_ids_label") }}</span>
+                      <QTextarea
+                        :modelValue="state.wechat.allowed_user_ids_text"
+                        :rows="4"
+                        :placeholder="t('settings_console_wechat_allowed_user_ids_placeholder')"
+                        :disabled="consoleLoading || consoleSaving"
+                        @update:modelValue="updateWeChatField('allowed_user_ids_text', $event)"
+                      />
+                      <p class="settings-field-note">{{ t("settings_console_wechat_allowed_user_ids_note") }}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </template>
+
+                        <template v-if="openChannel === 'whatsapp'">
+              <div class="settings-panel-shell">
+                <header class="settings-panel-head settings-channel-panel-head">
+                  <div class="settings-panel-copy">
+                    <h3 class="settings-panel-title workspace-document-title">{{ t("settings_console_whatsapp_title") }}</h3>
+                    <p class="settings-panel-meta">{{ t("settings_console_whatsapp_note") }}</p>
+                  </div>
+                  <div class="settings-profile-actions settings-default-llm-actions">
+                    <QDropdownMenu
+                      class="settings-llm-actions-menu"
+                      :items="channelActionMenuItems('whatsapp')"
+                      hideSelected
+                      hideActionLabel
+                      :disabled="consoleLoading || consoleSaving"
+                    >
+                      <PhDotsThree class="settings-llm-actions-menu-icon" />
+                      <span class="settings-llm-actions-menu-accessible">{{ t("todo_action_more") }}</span>
+                    </QDropdownMenu>
+                    <QButton class="plain xs icon" :title="t('settings_channel_close')" :aria-label="t('settings_channel_close')" @click="closeChannelPane">
+                      <PhX class="icon" />
+                    </QButton>
+                  </div>
+                </header>
+
+                <div class="settings-panel-body">
+                  <div class="settings-form-grid">
+                    <div class="settings-field is-wide">
+                      <span class="settings-field-label">{{ t("settings_console_whatsapp_api_token_label") }}</span>
+                      <EnvManagedField v-if="consoleFieldEnvManaged('whatsapp', 'api_token')" :name="consoleFieldManagedHeadline('whatsapp', 'api_token')" />
+                      <QInput
+                        v-else
+                        :modelValue="state.whatsapp.api_token"
+                        inputType="password"
+                        :placeholder="consoleSecretPlaceholder('whatsapp', 'api_token', 'settings_console_whatsapp_api_token_placeholder')"
+                        :disabled="consoleLoading || consoleSaving || !consoleSecretEditable('whatsapp', 'api_token')"
+                        @update:modelValue="updateWhatsAppField('api_token', $event)"
+                      />
+                      <p class="settings-field-note">{{ t("settings_console_whatsapp_api_token_note") }}</p>
                     </div>
                   </div>
                 </div>

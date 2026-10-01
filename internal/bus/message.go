@@ -25,6 +25,8 @@ const (
 	ChannelLark     Channel = Channel(channels.Lark)
 	ChannelDiscord  Channel = Channel(channels.Discord)
 	ChannelMixin    Channel = Channel(channels.Mixin)
+	ChannelWeChat   Channel = Channel(channels.WeChat)
+	ChannelWhatsApp Channel = Channel(channels.WhatsApp)
 )
 
 type MessageExtensions struct {

@@ -247,3 +247,19 @@ func TestSlackRuntimeHooksBridge(t *testing.T) {
 		t.Fatalf("unexpected error event: %#v", errEvent)
 	}
 }
+
+func TestNewWeChatAndWhatsAppBotsRequireCredentials(t *testing.T) {
+	rt := New(DefaultConfig())
+	if _, err := rt.NewWeChatBot(WeChatOptions{}); err == nil {
+		t.Fatal("expected error when the WeChat bot token is missing")
+	}
+	if runner, err := rt.NewWeChatBot(WeChatOptions{BotToken: "token", BotID: "bot@im.bot"}); err != nil || runner == nil {
+		t.Fatalf("NewWeChatBot() = %v, %v", runner, err)
+	}
+	if _, err := rt.NewWhatsAppBot(WhatsAppOptions{}); err == nil {
+		t.Fatal("expected error when the WhatsApp API token is missing")
+	}
+	if runner, err := rt.NewWhatsAppBot(WhatsAppOptions{APIToken: "token"}); err != nil || runner == nil {
+		t.Fatalf("NewWhatsAppBot() = %v, %v", runner, err)
+	}
+}

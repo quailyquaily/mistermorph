@@ -13,12 +13,15 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/acpclient"
 	"github.com/quailyquaily/mistermorph/internal/agentsettings"
 	"github.com/quailyquaily/mistermorph/internal/channelopts"
+	"github.com/quailyquaily/mistermorph/internal/channelruntime/accountdm"
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/depsutil"
 	discordruntime "github.com/quailyquaily/mistermorph/internal/channelruntime/discord"
 	larkruntime "github.com/quailyquaily/mistermorph/internal/channelruntime/lark"
 	mixinruntime "github.com/quailyquaily/mistermorph/internal/channelruntime/mixin"
 	slackruntime "github.com/quailyquaily/mistermorph/internal/channelruntime/slack"
 	telegramruntime "github.com/quailyquaily/mistermorph/internal/channelruntime/telegram"
+	wechatruntime "github.com/quailyquaily/mistermorph/internal/channelruntime/wechat"
+	whatsappruntime "github.com/quailyquaily/mistermorph/internal/channelruntime/whatsapp"
 	"github.com/quailyquaily/mistermorph/internal/daemonruntime"
 	"github.com/quailyquaily/mistermorph/internal/llmconfig"
 	"github.com/quailyquaily/mistermorph/internal/llmselect"
@@ -41,6 +44,8 @@ const (
 	managedRuntimeLark     = "lark"
 	managedRuntimeMixin    = "mixin"
 	managedRuntimeDiscord  = "discord"
+	managedRuntimeWeChat   = "wechat"
+	managedRuntimeWhatsApp = "whatsapp"
 )
 
 type managedRuntimeSupervisor struct {
@@ -87,7 +92,7 @@ func normalizeManagedRuntimeKinds(raw []string) ([]string, error) {
 			continue
 		}
 		switch kind {
-		case managedRuntimeTelegram, managedRuntimeSlack, managedRuntimeLark, managedRuntimeMixin, managedRuntimeDiscord:
+		case managedRuntimeTelegram, managedRuntimeSlack, managedRuntimeLark, managedRuntimeMixin, managedRuntimeDiscord, managedRuntimeWeChat, managedRuntimeWhatsApp:
 		default:
 			return nil, fmt.Errorf("unsupported console.managed_runtimes entry %q", item)
 		}
@@ -316,6 +321,8 @@ func stopManagedRuntimeExecution(active *managedRuntimeExecution, localRuntime *
 				localRuntime.mixinConnected.Store(false)
 			case managedRuntimeDiscord:
 				localRuntime.discordConnected.Store(false)
+			case managedRuntimeWeChat, managedRuntimeWhatsApp:
+				localRuntime.SetAccountDMStatus(kind, "")
 			}
 		}
 	}
@@ -503,6 +510,44 @@ func (s *managedRuntimeSupervisor) buildRuntime(kind string, reader *viper.Viper
 		return func(ctx context.Context) error {
 			return discordruntime.Run(ctx, runtimeDeps, runOpts)
 		}, cleanup, nil
+	case managedRuntimeWeChat:
+		deps, cleanup, err := buildManagedRuntimeDepsFromReader(s.logger(), reader)
+		if err != nil {
+			return nil, nil, err
+		}
+		runOpts := channelopts.BuildWeChatRunOptions(channelopts.WeChatConfigFromReader(reader), "console", s.inspectPrompt, s.inspectRequest)
+		runOpts.ServerListen = ""
+		runOpts.ServerAuthToken = ""
+		runOpts.OnStatusChange = s.accountDMStatusFunc(kind)
+		runOpts.TaskStore, err = newManagedRuntimeTaskStore(kind, runOpts.ServerMaxQueue, deps)
+		if err != nil {
+			cleanup()
+			return nil, nil, err
+		}
+		runtimeDeps := s.accountDMDependencies(deps, runtimeValues, reader)
+		return func(ctx context.Context) error {
+			s.accountDMStatusFunc(kind)(wechatruntime.StatusConnecting)
+			return wechatruntime.Run(ctx, runtimeDeps, runOpts)
+		}, cleanup, nil
+	case managedRuntimeWhatsApp:
+		deps, cleanup, err := buildManagedRuntimeDepsFromReader(s.logger(), reader)
+		if err != nil {
+			return nil, nil, err
+		}
+		runOpts := channelopts.BuildWhatsAppRunOptions(channelopts.WhatsAppConfigFromReader(reader), "console", s.inspectPrompt, s.inspectRequest)
+		runOpts.ServerListen = ""
+		runOpts.ServerAuthToken = ""
+		runOpts.OnStatusChange = s.accountDMStatusFunc(kind)
+		runOpts.TaskStore, err = newManagedRuntimeTaskStore(kind, runOpts.ServerMaxQueue, deps)
+		if err != nil {
+			cleanup()
+			return nil, nil, err
+		}
+		runtimeDeps := s.accountDMDependencies(deps, runtimeValues, reader)
+		return func(ctx context.Context) error {
+			s.accountDMStatusFunc(kind)(whatsappruntime.StatusConnecting)
+			return whatsappruntime.Run(ctx, runtimeDeps, runOpts)
+		}, cleanup, nil
 	default:
 		return nil, nil, fmt.Errorf("unsupported managed runtime %q", kind)
 	}
@@ -539,8 +584,37 @@ func managedRuntimeMissingCredential(kind string, reader *viper.Viper) (string, 
 		if strings.TrimSpace(reader.GetString("discord.bot_token")) == "" {
 			return "discord.bot_token", "set MISTER_MORPH_DISCORD_BOT_TOKEN or discord.bot_token", true
 		}
+	case managedRuntimeWeChat:
+		if strings.TrimSpace(reader.GetString("wechat.bot_token")) == "" {
+			return "wechat.bot_token", "log in to WeChat from Settings > Channels, run `morph wechat login`, or set MISTER_MORPH_WECHAT_BOT_TOKEN", true
+		}
+	case managedRuntimeWhatsApp:
+		if strings.TrimSpace(reader.GetString("whatsapp.api_token")) == "" {
+			return "whatsapp.api_token", "set MISTER_MORPH_WHATSAPP_API_TOKEN or whatsapp.api_token", true
+		}
 	}
 	return "", "", false
+}
+
+// accountDMStatusFunc records a WeChat or WhatsApp runtime's connection status for the overview.
+func (s *managedRuntimeSupervisor) accountDMStatusFunc(kind string) func(string) {
+	return func(status string) {
+		if s.localRuntime != nil {
+			s.localRuntime.SetAccountDMStatus(kind, status)
+		}
+	}
+}
+
+func (s *managedRuntimeSupervisor) accountDMDependencies(deps depsutil.CommonDependencies, runtimeValues llmutil.RuntimeValues, reader *viper.Viper) accountdm.Dependencies {
+	return accountdm.Dependencies{
+		CommonDependencies: deps,
+		HandleModelCommand: func(text string) (string, bool, error) {
+			return llmselect.ExecuteCommandText(runtimeValues, llmselect.ProcessStore(), text)
+		},
+		HandleSkillCommand: func(currentLoaded []string) (string, error) {
+			return skillsutil.RenderSkillStatus(skillsutil.SkillsConfigFromReader(reader), currentLoaded)
+		},
+	}
 }
 
 func (s *managedRuntimeSupervisor) logger() *slog.Logger {
@@ -561,7 +635,7 @@ func managedRuntimeKindsFromReader(r interface {
 
 func newManagedRuntimeTaskStore(kind string, maxItems int, deps depsutil.CommonDependencies) (daemonruntime.TaskView, error) {
 	switch kind {
-	case managedRuntimeTelegram, managedRuntimeSlack, managedRuntimeLark, managedRuntimeMixin, managedRuntimeDiscord:
+	case managedRuntimeTelegram, managedRuntimeSlack, managedRuntimeLark, managedRuntimeMixin, managedRuntimeDiscord, managedRuntimeWeChat, managedRuntimeWhatsApp:
 		return daemonruntime.NewTaskViewForTarget(kind, maxItems, daemonruntime.TaskViewConfig{
 			PersistenceTargets: deps.TaskPersistenceTargets,
 			TasksDir:           deps.RuntimePaths.TasksDir,

@@ -168,11 +168,22 @@ func ConsoleFields() []Field {
 		Field{Path: "mixin.task_timeout", Kind: KindDuration, ApplyMode: ApplyRuntimeRestart},
 		Field{Path: "mixin.max_concurrency", Kind: KindInt, ApplyMode: ApplyRuntimeRestart, Min: &one},
 		Field{Path: "mixin.serve_listen", Kind: KindString, ApplyMode: ApplyProcessRestart},
+		Field{Path: "wechat.task_timeout", Kind: KindDuration, ApplyMode: ApplyRuntimeRestart},
+		Field{Path: "wechat.max_concurrency", Kind: KindInt, ApplyMode: ApplyRuntimeRestart, Min: &one},
+		Field{Path: "wechat.serve_listen", Kind: KindString, ApplyMode: ApplyProcessRestart},
+		Field{Path: "whatsapp.task_timeout", Kind: KindDuration, ApplyMode: ApplyRuntimeRestart},
+		Field{Path: "whatsapp.max_concurrency", Kind: KindInt, ApplyMode: ApplyRuntimeRestart, Min: &one},
+		Field{Path: "whatsapp.serve_listen", Kind: KindString, ApplyMode: ApplyProcessRestart},
 		Field{Path: "discord.base_url", Kind: KindString, ApplyMode: ApplyRuntimeRestart},
 		Field{Path: "discord.bot_token", Kind: KindString, Sensitive: true, ApplyMode: ApplyRuntimeRestart},
 		Field{Path: "discord.allowed_guild_ids", Kind: KindStringList, ApplyMode: ApplyRuntimeRestart},
 		Field{Path: "discord.allowed_channel_ids", Kind: KindStringList, ApplyMode: ApplyRuntimeRestart},
 		Field{Path: "discord.allowed_user_ids", Kind: KindStringList, ApplyMode: ApplyRuntimeRestart},
+		Field{Path: "wechat.bot_token", Kind: KindString, Sensitive: true, ApplyMode: ApplyRuntimeRestart},
+		Field{Path: "wechat.bot_id", Kind: KindString, ApplyMode: ApplyRuntimeRestart},
+		Field{Path: "wechat.base_url", Kind: KindString, ApplyMode: ApplyRuntimeRestart},
+		Field{Path: "wechat.allowed_user_ids", Kind: KindStringList, ApplyMode: ApplyRuntimeRestart},
+		Field{Path: "whatsapp.api_token", Kind: KindString, Sensitive: true, ApplyMode: ApplyRuntimeRestart},
 	)
 	return fields
 }

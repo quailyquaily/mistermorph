@@ -178,6 +178,8 @@ export const CHANNEL_CONFIG_GROUPS = [
   channelFields("lark", { title: "Lark", baseURL: true }),
   channelFields("mixin", { title: "Mixin", group: false }),
   channelFields("discord", { title: "Discord", baseURL: true }),
+  channelFields("wechat", { title: "WeChat" }),
+  channelFields("whatsapp", { title: "WhatsApp" }),
 ];
 
 // Group trigger fields, shown in the channel's pane under its trigger mode (not in Advanced).

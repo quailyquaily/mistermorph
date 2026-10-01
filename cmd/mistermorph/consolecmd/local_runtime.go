@@ -141,6 +141,7 @@ type consoleLocalRuntime struct {
 	managedRuntimeRunning   map[string]bool
 	mixinConnected          atomic.Bool
 	discordConnected        atomic.Bool
+	accountDMStatus         map[string]string
 	awarenessMu             sync.Mutex
 	topicTitleRegenerations sync.Map
 	streamHub               *consoleStreamHub
@@ -1241,16 +1242,24 @@ func (r *consoleLocalRuntime) routesOptions(authToken string) daemonruntime.Rout
 						strings.TrimSpace(reader.GetString("slack.app_token")) != "",
 					"lark_configured": strings.TrimSpace(reader.GetString("lark.app_id")) != "" &&
 						strings.TrimSpace(reader.GetString("lark.app_secret")) != "",
-					"mixin_configured":   strings.TrimSpace(reader.GetString("mixin.keystore_file")) != "",
-					"discord_configured": strings.TrimSpace(reader.GetString("discord.bot_token")) != "",
-					"running":            "console",
-					"telegram_running":   r.isManagedRuntimeRunning("telegram"),
-					"slack_running":      r.isManagedRuntimeRunning("slack"),
-					"lark_running":       r.isManagedRuntimeRunning("lark"),
-					"mixin_running":      r.isManagedRuntimeRunning("mixin"),
-					"mixin_connected":    r.mixinConnected.Load(),
-					"discord_running":    r.isManagedRuntimeRunning("discord"),
-					"discord_connected":  r.discordConnected.Load(),
+					"mixin_configured":    strings.TrimSpace(reader.GetString("mixin.keystore_file")) != "",
+					"discord_configured":  strings.TrimSpace(reader.GetString("discord.bot_token")) != "",
+					"wechat_configured":   strings.TrimSpace(reader.GetString("wechat.bot_token")) != "",
+					"whatsapp_configured": strings.TrimSpace(reader.GetString("whatsapp.api_token")) != "",
+					"running":             "console",
+					"telegram_running":    r.isManagedRuntimeRunning("telegram"),
+					"slack_running":       r.isManagedRuntimeRunning("slack"),
+					"lark_running":        r.isManagedRuntimeRunning("lark"),
+					"mixin_running":       r.isManagedRuntimeRunning("mixin"),
+					"mixin_connected":     r.mixinConnected.Load(),
+					"discord_running":     r.isManagedRuntimeRunning("discord"),
+					"discord_connected":   r.discordConnected.Load(),
+					"wechat_running":      r.isManagedRuntimeRunning("wechat"),
+					"wechat_status":       r.accountDMStatusOf("wechat"),
+					"wechat_connected":    r.accountDMStatusOf("wechat") == "online",
+					"whatsapp_running":    r.isManagedRuntimeRunning("whatsapp"),
+					"whatsapp_status":     r.accountDMStatusOf("whatsapp"),
+					"whatsapp_connected":  r.accountDMStatusOf("whatsapp") == "online",
 				},
 				"poke_enabled":     r.canPokeAwareness(),
 				"cron_run_enabled": r.canRunCron(),
@@ -1275,6 +1284,28 @@ func (r *consoleLocalRuntime) SetManagedRuntimeRunning(kind string, running bool
 		r.managedRuntimeRunning = map[string]bool{}
 	}
 	r.managedRuntimeRunning[kind] = running
+}
+
+// SetAccountDMStatus records a WeChat or WhatsApp runtime's connection status; "" clears it.
+func (r *consoleLocalRuntime) SetAccountDMStatus(kind string, status string) {
+	if r == nil {
+		return
+	}
+	r.managedRuntimeMu.Lock()
+	defer r.managedRuntimeMu.Unlock()
+	if r.accountDMStatus == nil {
+		r.accountDMStatus = map[string]string{}
+	}
+	r.accountDMStatus[strings.ToLower(strings.TrimSpace(kind))] = strings.TrimSpace(status)
+}
+
+func (r *consoleLocalRuntime) accountDMStatusOf(kind string) string {
+	if r == nil {
+		return ""
+	}
+	r.managedRuntimeMu.RLock()
+	defer r.managedRuntimeMu.RUnlock()
+	return r.accountDMStatus[kind]
 }
 
 func (r *consoleLocalRuntime) isManagedRuntimeRunning(kind string) bool {

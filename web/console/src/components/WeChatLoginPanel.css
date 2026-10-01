@@ -1,0 +1,106 @@
+.wechat-login {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.wechat-login-session {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+  border-radius: 2px;
+}
+
+/* The QR code stays dark on light in both themes, so phones can read it. */
+.wechat-login-qr {
+  display: grid;
+  place-items: center;
+  width: 196px;
+  height: 196px;
+  padding: 8px;
+  background: #fff;
+}
+
+.wechat-login-qr img {
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+}
+
+.wechat-login-status {
+  margin: 0;
+  font-size: var(--font-size-meta);
+  color: var(--text-1);
+  text-align: center;
+}
+
+.wechat-login-code {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  max-width: 280px;
+}
+
+.wechat-login-code > :first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.wechat-login-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.wechat-login-bound {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 44px;
+  padding: 6px 6px 6px 12px;
+  border: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+  border-radius: 2px;
+}
+
+.wechat-login-bound-copy {
+  display: grid;
+  min-width: 0;
+}
+
+.wechat-login-bound-label {
+  font-size: var(--font-size-meta);
+  color: var(--text-2);
+}
+
+.wechat-login-bound-id {
+  overflow: hidden;
+  padding: 0;
+  background: none;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-meta);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wechat-login-start {
+  justify-self: start;
+}
+
+.wechat-login-notice,
+.wechat-login-error {
+  margin: 0;
+  font-size: var(--font-size-meta);
+  line-height: 1.5;
+}
+
+.wechat-login-notice {
+  color: var(--text-2);
+}
+
+.wechat-login-error {
+  color: var(--danger);
+}

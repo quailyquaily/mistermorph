@@ -64,3 +64,24 @@ mistermorph discord --log-level info
 ```
 
 Set `discord.bot_token` (or `MISTER_MORPH_DISCORD_BOT_TOKEN`). In servers the default `strict` trigger answers mentions and replies only. See the [Discord setup document](https://github.com/quailyquaily/mistermorph/blob/master/docs/discord.md).
+
+## WeChat Bot
+
+Run a standalone WeChat runtime over Tencent's iLink protocol, for private chats. Connect the bot first by scanning a QR code:
+
+```bash
+mistermorph wechat login
+mistermorph wechat --log-level info
+```
+
+See the [WeChat setup document](https://github.com/quailyquaily/mistermorph/blob/master/docs/wechat.md).
+
+## WhatsApp Agent
+
+Run a standalone WhatsApp runtime over the Agent Platform, for the private chat with the agent's creator:
+
+```bash
+mistermorph whatsapp --log-level info
+```
+
+Set `whatsapp.api_token` (or `MISTER_MORPH_WHATSAPP_API_TOKEN`) to the agent's API key. See the [WhatsApp setup document](https://github.com/quailyquaily/mistermorph/blob/master/docs/whatsapp.md).

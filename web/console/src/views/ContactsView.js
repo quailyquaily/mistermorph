@@ -4,6 +4,8 @@ import { useToast } from "quail-ui";
 import "./ContactsView.css";
 
 import channelDiscordLogoURL from "../assets/images/channels/discord.svg";
+import channelWeChatLogoURL from "../assets/images/channels/wechat.svg";
+import channelWhatsAppLogoURL from "../assets/images/channels/whatsapp.svg";
 import channelLarkLogoURL from "../assets/images/channels/lark.svg";
 import channelLineLogoURL from "../assets/images/channels/line.svg";
 import channelMixinLogoURL from "../assets/images/channels/mixin.svg";
@@ -16,6 +18,8 @@ import { useContactsStore } from "../stores/contactsStore";
 
 const CHANNEL_LOGOS = {
   discord: channelDiscordLogoURL,
+  wechat: channelWeChatLogoURL,
+  whatsapp: channelWhatsAppLogoURL,
   lark: channelLarkLogoURL,
   line: channelLineLogoURL,
   mixin: channelMixinLogoURL,
@@ -71,6 +75,10 @@ function fallbackHandleFromContactID(item, channel) {
       return prefix === "mixin" ? parts[parts.length - 1] : "";
     case "discord":
       return prefix === "discord_user" ? parts[parts.length - 1] : "";
+    case "wechat":
+      return prefix === "wechat_user" ? parts[parts.length - 1] : "";
+    case "whatsapp":
+      return prefix === "whatsapp_user" ? parts[parts.length - 1] : "";
     default:
       return "";
   }
@@ -92,6 +100,10 @@ function channelLabel(t, raw) {
       return t("endpoint_channel_mixin");
     case "discord":
       return t("endpoint_channel_discord");
+    case "wechat":
+      return t("endpoint_channel_wechat");
+    case "whatsapp":
+      return t("endpoint_channel_whatsapp");
     case "console":
       return t("endpoint_channel_console");
     default:
@@ -135,6 +147,8 @@ function channelHandles(t, item) {
       : String(item?.mixin_user_id || "").trim() || fallbackHandleFromContactID(item, "mixin"),
   );
   push("discord", String(item?.discord_user_id || "").trim() || fallbackHandleFromContactID(item, "discord"));
+  push("wechat", String(item?.wechat_user_id || "").trim() || fallbackHandleFromContactID(item, "wechat"));
+  push("whatsapp", String(item?.whatsapp_user_id || "").trim() || fallbackHandleFromContactID(item, "whatsapp"));
 
   return out;
 }

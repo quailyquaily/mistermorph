@@ -278,6 +278,23 @@ Shell defaults are platform-specific:
 - `discord.max_concurrency`
 - `discord.serve_listen`
 
+## WeChat
+
+- `wechat.bot_token`
+- `wechat.bot_id`
+- `wechat.base_url`
+- `wechat.allowed_user_ids`
+- `wechat.task_timeout`
+- `wechat.max_concurrency`
+- `wechat.serve_listen`
+
+## WhatsApp
+
+- `whatsapp.api_token`
+- `whatsapp.task_timeout`
+- `whatsapp.max_concurrency`
+- `whatsapp.serve_listen`
+
 ## Heartbeat
 
 - `heartbeat.enabled`

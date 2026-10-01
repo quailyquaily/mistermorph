@@ -1,0 +1,12 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+<circle cx="256" cy="256" r="256" fill="url(#whatsapp_bg)"/>
+<path d="M170 328L146 396L218 374" fill="white"/>
+<circle cx="258" cy="250" r="122" stroke="white" stroke-width="26"/>
+<path transform="translate(258 250) scale(0.56) translate(-132 -124)" d="M231.88 175.08A56.26 56.26 0 0 1 176 224C96.6 224 32 159.4 32 80A56.26 56.26 0 0 1 80.92 24.12a16 16 0 0 1 16.62 9.52l21.12 47.15A16 16 0 0 1 117.39 96c-.18.27-.37.52-.57.77L96 121.45c7.49 15.22 23.41 31 38.83 38.51l24.34-20.71a16 16 0 0 1 15.92-1.96l47.11 21.11A16 16 0 0 1 231.88 175.08Z" fill="white"/>
+<defs>
+<linearGradient id="whatsapp_bg" x1="256" y1="0" x2="256" y2="512" gradientUnits="userSpaceOnUse">
+<stop stop-color="#5FFC7B"/>
+<stop offset="1" stop-color="#25D366"/>
+</linearGradient>
+</defs>
+</svg>

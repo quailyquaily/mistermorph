@@ -117,3 +117,25 @@ func TestBuildConversationKeyRejectsInvalidInput(t *testing.T) {
 		})
 	}
 }
+
+func TestAccountConversationKeys(t *testing.T) {
+	key, err := BuildAccountConversationKey(ChannelWhatsApp, "123", "509")
+	if err != nil || key != "whatsapp:123:509" {
+		t.Fatalf("key = %q, %v", key, err)
+	}
+	account, peer, err := ParseAccountConversationKey(ChannelWhatsApp, key)
+	if err != nil || account != "123" || peer != "509" {
+		t.Fatalf("parse = %q %q %v", account, peer, err)
+	}
+	if _, err := BuildAccountConversationKey(ChannelWeChat, "bot@im.bot", "user:1"); err == nil {
+		t.Fatal("a peer with a colon was accepted")
+	}
+	if key, err := BuildAccountConversationKey(ChannelWeChat, "bot@im.bot", "o9x@im.wechat"); err != nil || key != "wechat:bot@im.bot:o9x@im.wechat" {
+		t.Fatalf("wechat key = %q, %v", key, err)
+	}
+	for _, bad := range []string{"whatsapp:123", "whatsapp:123:509:9", "wechat:1:2", "whatsapp::509"} {
+		if _, _, err := ParseAccountConversationKey(ChannelWhatsApp, bad); err == nil {
+			t.Errorf("%q parsed", bad)
+		}
+	}
+}

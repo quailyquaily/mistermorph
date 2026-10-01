@@ -118,6 +118,9 @@ importers:
       pinia:
         specifier: ^3.0.4
         version: 3.0.4(vue@3.5.30)
+      qrcode:
+        specifier: ^1.5.4
+        version: 1.5.4
       quail-ui:
         specifier: 0.9.10
         version: 0.9.10

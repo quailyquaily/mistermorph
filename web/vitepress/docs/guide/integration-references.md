@@ -296,6 +296,25 @@ If you mainly want to see how to configure `integration.Config`, use `PreparedRu
 | `AddressingConfidenceThreshold` | `float64` | Addressing hit threshold. |
 | `AddressingInterjectThreshold` | `float64` | Interject threshold. |
 
+### `type WeChatOptions struct`
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `BotToken` | `string` | WeChat bot token, as `morph wechat login` saves it. |
+| `BotID` | `string` | The bound bot's id, from the same login. |
+| `BaseURL` | `string` | iLink API host from the login; empty uses the default. |
+| `AllowedUserIDs` | `[]string` | Allowed WeChat user ids; empty allows anyone who messages the bot. |
+| `TaskTimeout` | `time.Duration` | Per-task run timeout. |
+| `MaxConcurrency` | `int` | Maximum concurrent conversation count. |
+
+### `type WhatsAppOptions struct`
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `APIToken` | `string` | The agent's API key (Chat info > API key in WhatsApp). |
+| `TaskTimeout` | `time.Duration` | Per-task run timeout. |
+| `MaxConcurrency` | `int` | Maximum concurrent conversation count. |
+
 ### `type TelegramHooks struct`
 
 | Field | Type | Description |
@@ -343,6 +362,22 @@ If you mainly want to see how to configure `integration.Config`, use `PreparedRu
 | Parameters | `opts integration.DiscordOptions` |
 | Returns | `integration.BotRunner`, `error` |
 | Description | Builds a Discord runner. Returns an error immediately if `BotToken` is empty. |
+
+### `(*Runtime).NewWeChatBot(opts WeChatOptions) (BotRunner, error)`
+
+| Item | Value |
+| --- | --- |
+| Parameters | `opts integration.WeChatOptions` |
+| Returns | `integration.BotRunner`, `error` |
+| Description | Builds a WeChat runner. Returns an error immediately if `BotToken` is empty. |
+
+### `(*Runtime).NewWhatsAppBot(opts WhatsAppOptions) (BotRunner, error)`
+
+| Item | Value |
+| --- | --- |
+| Parameters | `opts integration.WhatsAppOptions` |
+| Returns | `integration.BotRunner`, `error` |
+| Description | Builds a WhatsApp runner. Returns an error immediately if `APIToken` is empty. |
 
 ## Event Alias Types
 

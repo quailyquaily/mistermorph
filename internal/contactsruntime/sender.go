@@ -27,6 +27,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/discordapi"
 	refid "github.com/quailyquaily/mistermorph/internal/entryutil/refid"
 	larkapi "github.com/quailyquaily/mistermorph/internal/larkapi"
+	"github.com/quailyquaily/mistermorph/internal/livesend"
 	"github.com/quailyquaily/mistermorph/internal/mixinapi"
 	"github.com/quailyquaily/mistermorph/internal/slackclient"
 )
@@ -345,9 +346,54 @@ func (s *RoutingSender) Send(ctx context.Context, contact contacts.Contact, deci
 			return false, false, resolveErr
 		}
 		return s.publishDiscord(ctx, target, decision)
+	case contacts.ChannelWeChat, contacts.ChannelWhatsApp:
+		peerID, resolveErr := ResolveAccountDMTarget(channel, contact, decision.ChatID)
+		if resolveErr != nil {
+			return false, false, resolveErr
+		}
+		return s.publishAccountDM(ctx, channel, peerID, decision)
 	default:
 		return false, false, fmt.Errorf("unsupported delivery channel: %s", channel)
 	}
+}
+
+// ResolveAccountDMTarget is the WeChat or WhatsApp user to send to: the chat_id hint when given (it
+// must be the contact's own), else the contact's user ID.
+func ResolveAccountDMTarget(channel string, contact contacts.Contact, chatIDHint string) (string, error) {
+	parse, known := refid.ParseWeChatChatIDHint, refid.NormalizeWeChatID(contact.WeChatUserID)
+	if channel == contacts.ChannelWhatsApp {
+		parse, known = refid.ParseWhatsAppChatIDHint, refid.NormalizeWhatsAppID(contact.WhatsAppUserID)
+	}
+	peerID, hasHint, err := parse(chatIDHint)
+	if err != nil {
+		return "", err
+	}
+	if !hasHint {
+		if known == "" {
+			return "", fmt.Errorf("contact %s has no %s user id", contact.ContactID, channel)
+		}
+		return known, nil
+	}
+	if known != "" && known != peerID && !contact.Synthetic {
+		return "", fmt.Errorf("%s chat_id %q is not this contact's", channel, chatIDHint)
+	}
+	return peerID, nil
+}
+
+// publishAccountDM sends through the channel's runtime in this process: WeChat replies need the
+// conversation context only that runtime holds.
+func (s *RoutingSender) publishAccountDM(ctx context.Context, channel, peerID string, decision contacts.ShareDecision) (bool, bool, error) {
+	text, _, err := decodeEnvelopeTextAndExtras(decision.ContentType, decision.PayloadBase64)
+	if err != nil {
+		return false, false, err
+	}
+	if strings.TrimSpace(text) == "" {
+		return false, false, fmt.Errorf("%s message text is empty", channel)
+	}
+	if err := livesend.Send(ctx, channel, peerID, text); err != nil {
+		return false, false, err
+	}
+	return true, false, nil
 }
 
 func (s *RoutingSender) publishTelegram(ctx context.Context, target any, decision contacts.ShareDecision) (bool, bool, error) {

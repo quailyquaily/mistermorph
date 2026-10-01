@@ -97,6 +97,8 @@ Channel setup:
 - [Lark](docs/lark.md)
 - [Mixin Messenger](docs/mixin.md)
 - [Discord](docs/discord.md)
+- [WeChat](docs/wechat.md)
+- [WhatsApp](docs/whatsapp.md)
 
 Full docs index: [docs/README.md](docs/README.md)
 

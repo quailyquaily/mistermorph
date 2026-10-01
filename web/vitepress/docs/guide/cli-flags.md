@@ -167,6 +167,25 @@ This command accepts an optional `profile-name` positional argument. Without one
 - `--discord-task-timeout`: Per-message agent timeout.
 - `--discord-max-concurrency`: Max number of Discord conversations processed concurrently.
 
+## `wechat`
+
+- `--inspect-prompt`: Dump prompt messages into `./dump`.
+- `--inspect-request`: Dump LLM request/response payloads into `./dump`.
+- `--wechat-bot-token`: WeChat bot token (normally written by `wechat login`).
+- `--wechat-allowed-user-id`: Allowed WeChat user id. Repeatable.
+- `--wechat-task-timeout`: Per-message agent timeout.
+- `--wechat-max-concurrency`: Max number of WeChat conversations processed concurrently.
+
+`wechat login`: Connects a WeChat bot by QR code and saves its token in the system keyring. `wechat logout`: Disconnects the WeChat bot and deletes its token.
+
+## `whatsapp`
+
+- `--inspect-prompt`: Dump prompt messages into `./dump`.
+- `--inspect-request`: Dump LLM request/response payloads into `./dump`.
+- `--whatsapp-api-token`: The agent's API key.
+- `--whatsapp-task-timeout`: Per-message agent timeout.
+- `--whatsapp-max-concurrency`: Max number of WhatsApp conversations processed concurrently.
+
 ## `install`
 
 - `-y, --yes`: Skip confirmation prompts.

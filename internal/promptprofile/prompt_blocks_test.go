@@ -244,3 +244,16 @@ func (t *testTool) ParameterSchema() string { return "{}" }
 func (t *testTool) Execute(context.Context, map[string]any) (string, error) {
 	return "", nil
 }
+
+func TestAppendPrivateChannelRuntimeBlocks(t *testing.T) {
+	for name, appendBlocks := range map[string]func(*agent.PromptSpec){
+		"[[ WeChat Policies ]]":   AppendWeChatRuntimeBlocks,
+		"[[ WhatsApp Policies ]]": AppendWhatsAppRuntimeBlocks,
+	} {
+		spec := agent.PromptSpec{}
+		appendBlocks(&spec)
+		if len(spec.Blocks) != 1 || !strings.Contains(spec.Blocks[0].Content, name) {
+			t.Fatalf("%s: blocks = %#v", name, spec.Blocks)
+		}
+	}
+}

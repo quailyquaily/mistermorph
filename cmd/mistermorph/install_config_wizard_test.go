@@ -336,7 +336,7 @@ func TestPatchInitConfigWithSetup_OpenAICompatiblePrunesCloudflareBlock(t *testi
 	if gotPricingFile := cfg.GetString("llm.pricing_file"); gotPricingFile != "" {
 		t.Fatalf("llm.pricing_file = %q, want empty", gotPricingFile)
 	}
-	if strings.Contains(got, "\n  cloudflare:\n") || strings.Contains(got, "account_id:") || strings.Contains(got, "api_token:") {
+	if strings.Contains(got, "\n  cloudflare:\n") || strings.Contains(got, "\n    account_id:") || strings.Contains(got, "\n    api_token:") {
 		t.Fatalf("patched config should not include cloudflare block: %s", got)
 	}
 }
@@ -353,7 +353,7 @@ func TestPatchInitConfigWithSetup_DefaultPrunesCloudflareBlock(t *testing.T) {
 	}
 	cfg := loadPatchedConfig(t, got)
 
-	if strings.Contains(got, "\n  cloudflare:\n") || strings.Contains(got, "account_id:") || strings.Contains(got, "api_token:") {
+	if strings.Contains(got, "\n  cloudflare:\n") || strings.Contains(got, "\n    account_id:") || strings.Contains(got, "\n    api_token:") {
 		t.Fatalf("default patched config should not include cloudflare block: %s", got)
 	}
 	if strings.Contains(got, "\n  endpoint: \"https://api.openai.com\"") ||

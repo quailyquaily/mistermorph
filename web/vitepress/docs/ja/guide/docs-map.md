@@ -49,6 +49,8 @@ description: より詳細な設計・実装文書への入口。
 - [`docs/lark.md`](https://github.com/quailyquaily/mistermorph/blob/master/docs/lark.md)
 - [`docs/mixin.md`](https://github.com/quailyquaily/mistermorph/blob/master/docs/mixin.md)
 - [`docs/discord.md`](https://github.com/quailyquaily/mistermorph/blob/master/docs/discord.md)
+- [`docs/wechat.md`](https://github.com/quailyquaily/mistermorph/blob/master/docs/wechat.md)
+- [`docs/whatsapp.md`](https://github.com/quailyquaily/mistermorph/blob/master/docs/whatsapp.md)
 
 ## 運用・状態管理
 

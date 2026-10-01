@@ -8,6 +8,8 @@ import lineLogo from "../assets/images/channels/line.svg";
 import larkLogo from "../assets/images/channels/lark.svg";
 import mixinLogo from "../assets/images/channels/mixin.svg";
 import discordLogo from "../assets/images/channels/discord.svg";
+import wechatLogo from "../assets/images/channels/wechat.svg";
+import whatsappLogo from "../assets/images/channels/whatsapp.svg";
 
 import AppDialogShell from "../components/AppDialogShell";
 import PokeDialogContent from "../components/PokeDialogContent";
@@ -113,12 +115,18 @@ const RuntimePanel = {
       channel_lark_configured: false,
       channel_mixin_configured: false,
       channel_discord_configured: false,
+      channel_wechat_configured: false,
+      channel_whatsapp_configured: false,
       channel_running_telegram: false,
       channel_running_slack: false,
       channel_running_line: false,
       channel_running_lark: false,
       channel_running_mixin: false,
       channel_running_discord: false,
+      channel_running_wechat: false,
+      channel_running_whatsapp: false,
+      channel_status_wechat: "",
+      channel_status_whatsapp: "",
       runtime_go_version: "-",
       runtime_goroutines: 0,
       runtime_heap_alloc_bytes: 0,
@@ -218,7 +226,37 @@ const RuntimePanel = {
         configured: overview.channel_discord_configured,
         running: overview.channel_running_discord,
       },
+      {
+        key: "wechat",
+        logo: wechatLogo,
+        title: t("endpoint_channel_wechat"),
+        configured: overview.channel_wechat_configured,
+        running: overview.channel_running_wechat,
+        status: overview.channel_status_wechat,
+      },
+      {
+        key: "whatsapp",
+        logo: whatsappLogo,
+        title: t("endpoint_channel_whatsapp"),
+        configured: overview.channel_whatsapp_configured,
+        running: overview.channel_running_whatsapp,
+        status: overview.channel_status_whatsapp,
+      },
     ]);
+    // WeChat and WhatsApp report their connection: a lost session needs a new login.
+    function channelStatusClass(item) {
+      if (!item.running) return "is-unknown";
+      if (item.status === "reauth_needed") return "is-error";
+      if (item.status === "disconnected" || item.status === "connecting") return "is-stale";
+      return "is-healthy";
+    }
+    function channelStatusText(item) {
+      if (!item.running) return t("runtime_not_running");
+      if (item.status === "reauth_needed") return t("runtime_channel_reauth_needed");
+      if (item.status === "disconnected") return t("runtime_channel_reconnecting");
+      if (item.status === "connecting") return t("runtime_channel_connecting");
+      return t("runtime_status_running");
+    }
     const configuredChannels = computed(() => channelRows.value.filter(item => item.configured));
     const unconfiguredChannels = computed(() => channelRows.value.filter(item => !item.configured));
     const runtimeMetrics = computed(() => runtimeRows(t, overview));
@@ -259,18 +297,26 @@ const RuntimePanel = {
         const larkRunning = toBool(channel.lark_running, false) || runningChannel === "lark";
         const mixinRunning = toBool(channel.mixin_running, false) || runningChannel === "mixin";
         const discordRunning = toBool(channel.discord_running, false) || runningChannel === "discord";
+        const wechatRunning = toBool(channel.wechat_running, false) || runningChannel === "wechat";
+        const whatsappRunning = toBool(channel.whatsapp_running, false) || runningChannel === "whatsapp";
         overview.channel_running_telegram = telegramRunning;
         overview.channel_running_slack = slackRunning;
         overview.channel_running_line = lineRunning;
         overview.channel_running_lark = larkRunning;
         overview.channel_running_mixin = mixinRunning;
         overview.channel_running_discord = discordRunning;
+        overview.channel_running_wechat = wechatRunning;
+        overview.channel_running_whatsapp = whatsappRunning;
+        overview.channel_status_wechat = String(channel.wechat_status || "").trim();
+        overview.channel_status_whatsapp = String(channel.whatsapp_status || "").trim();
         overview.channel_telegram_configured = toBool(channel.telegram_configured, false) || telegramRunning;
         overview.channel_slack_configured = toBool(channel.slack_configured, false) || slackRunning;
         overview.channel_line_configured = toBool(channel.line_configured, false) || lineRunning;
         overview.channel_lark_configured = toBool(channel.lark_configured, false) || larkRunning;
         overview.channel_mixin_configured = toBool(channel.mixin_configured, false) || mixinRunning;
         overview.channel_discord_configured = toBool(channel.discord_configured, false) || discordRunning;
+        overview.channel_wechat_configured = toBool(channel.wechat_configured, false) || wechatRunning;
+        overview.channel_whatsapp_configured = toBool(channel.whatsapp_configured, false) || whatsappRunning;
         const rt = data && typeof data.runtime === "object" ? data.runtime : {};
         overview.runtime_go_version = rt.go_version || "-";
         overview.runtime_goroutines = toInt(rt.goroutines, 0);
@@ -395,6 +441,8 @@ const RuntimePanel = {
 
     return {
       t,
+      channelStatusClass,
+      channelStatusText,
       err,
       loading,
       poking,
@@ -478,9 +526,9 @@ const RuntimePanel = {
               <ul v-if="configuredChannels.length" class="runtime-channels">
                 <li v-for="item in configuredChannels" :key="item.key" class="runtime-channel-row">
                   <span class="runtime-channel-name"><img :src="item.logo" alt="" />{{ item.title }}</span>
-                  <span class="runtime-status" :class="item.running ? 'is-healthy' : 'is-unknown'">
+                  <span class="runtime-status" :class="channelStatusClass(item)">
                     <span class="runtime-status-dot" aria-hidden="true"></span>
-                    {{ item.running ? t("runtime_status_running") : t("runtime_not_running") }}
+                    {{ channelStatusText(item) }}
                   </span>
                 </li>
               </ul>

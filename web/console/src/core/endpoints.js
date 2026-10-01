@@ -61,6 +61,10 @@ function endpointChannelLabel(mode, t) {
 	  return t("endpoint_channel_mixin");
     case "discord":
       return t("endpoint_channel_discord");
+    case "wechat":
+      return t("endpoint_channel_wechat");
+    case "whatsapp":
+      return t("endpoint_channel_whatsapp");
     default:
       return String(mode || "").trim() || t("chat_readonly_unknown_channel");
   }
@@ -84,6 +88,10 @@ function endpointChannelTone(mode) {
 	  return "mixin";
     case "discord":
       return "discord";
+    case "wechat":
+      return "wechat";
+    case "whatsapp":
+      return "whatsapp";
     default:
       return "default";
   }

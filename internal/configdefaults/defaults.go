@@ -176,6 +176,19 @@ func Apply(v *viper.Viper) {
 	v.SetDefault("discord.max_concurrency", DefaultChannelMaxConcurrency)
 	v.SetDefault("discord.serve_listen", "")
 
+	v.SetDefault("wechat.bot_token", "")
+	v.SetDefault("wechat.bot_id", "")
+	v.SetDefault("wechat.base_url", "")
+	v.SetDefault("wechat.allowed_user_ids", []string{})
+	v.SetDefault("wechat.task_timeout", 0*time.Second)
+	v.SetDefault("wechat.max_concurrency", DefaultChannelMaxConcurrency)
+	v.SetDefault("wechat.serve_listen", "")
+
+	v.SetDefault("whatsapp.api_token", "")
+	v.SetDefault("whatsapp.task_timeout", 0*time.Second)
+	v.SetDefault("whatsapp.max_concurrency", DefaultChannelMaxConcurrency)
+	v.SetDefault("whatsapp.serve_listen", "")
+
 	v.SetDefault("heartbeat.enabled", true)
 	v.SetDefault("heartbeat.interval", DefaultHeartbeatInterval)
 	v.SetDefault("cron.enabled", true)

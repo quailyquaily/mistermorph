@@ -15,6 +15,8 @@ import { modelVendorMeta } from "../core/model-vendor";
 import { invalidateConsoleSetupReadiness } from "../core/setup";
 import { requestSystemNotificationPermission } from "../core/system-notifications";
 import channelDiscordLogoURL from "../assets/images/channels/discord.svg";
+import channelWeChatLogoURL from "../assets/images/channels/wechat.svg";
+import channelWhatsAppLogoURL from "../assets/images/channels/whatsapp.svg";
 import channelLarkLogoURL from "../assets/images/channels/lark.svg";
 import channelLineLogoURL from "../assets/images/channels/line.svg";
 import channelSlackLogoURL from "../assets/images/channels/slack.svg";
@@ -48,12 +50,14 @@ const CONSOLE_NOTIFICATION_CHAT_ID = "console:user";
 const CONSOLE_NOTIFICATION_ICON = "PhDesktop";
 const CHAT_PLATFORM_LOGOS = {
   discord: channelDiscordLogoURL,
+  wechat: channelWeChatLogoURL,
+  whatsapp: channelWhatsAppLogoURL,
   lark: channelLarkLogoURL,
   line: channelLineLogoURL,
   slack: channelSlackLogoURL,
   telegram: channelTelegramLogoURL,
 };
-const CONTACT_REF_PROTOCOLS = new Set(["tg", "slack", "line", "line_user", "lark", "lark_user", "discord", "discord_user"]);
+const CONTACT_REF_PROTOCOLS = new Set(["tg", "slack", "line", "line_user", "lark", "lark_user", "discord", "discord_user", "wechat", "wechat_user", "whatsapp", "whatsapp_user"]);
 const UTC_TIMEZONE_ITEMS = [
   { value: "UTC-12", label: "UTC-12", cityKey: "todo_timezone_city_baker_island" },
   { value: "UTC-11", label: "UTC-11", cityKey: "todo_timezone_city_pago_pago" },
@@ -514,7 +518,13 @@ function chatPlatformFromID(chatID) {
   if (protocol === "discord_user") {
     return "discord";
   }
-  if (protocol === "slack" || protocol === "line" || protocol === "lark" || protocol === "discord") {
+  if (protocol === "wechat_user") {
+    return "wechat";
+  }
+  if (protocol === "whatsapp_user") {
+    return "whatsapp";
+  }
+  if (["slack", "line", "lark", "discord", "wechat", "whatsapp"].includes(protocol)) {
     return protocol;
   }
   return "";

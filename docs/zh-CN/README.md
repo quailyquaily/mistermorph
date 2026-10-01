@@ -94,6 +94,8 @@ CLI 模式与配置说明见：[../modes.md](../modes.md)、[../configuration.md
 - [Lark](../lark.md)
 - [Mixin Messenger](../mixin.md)
 - [Discord](../discord.md)
+- [WeChat](../wechat.md)
+- [WhatsApp](../whatsapp.md)
 
 完整文档索引：[../README.md](../README.md)
 

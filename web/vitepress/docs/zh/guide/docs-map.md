@@ -49,6 +49,8 @@ description: 仓库中更完整设计文档的入口索引。
 - [`docs/lark.md`](https://github.com/quailyquaily/mistermorph/blob/master/docs/lark.md)
 - [`docs/mixin.md`](https://github.com/quailyquaily/mistermorph/blob/master/docs/mixin.md)
 - [`docs/discord.md`](https://github.com/quailyquaily/mistermorph/blob/master/docs/discord.md)
+- [`docs/wechat.md`](https://github.com/quailyquaily/mistermorph/blob/master/docs/wechat.md)
+- [`docs/whatsapp.md`](https://github.com/quailyquaily/mistermorph/blob/master/docs/whatsapp.md)
 
 ## 治理与状态
 
