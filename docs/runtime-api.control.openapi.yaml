@@ -1,0 +1,1106 @@
+# Current implementation reference; see runtime-api.md for behavior and scope.
+openapi: 3.0.3
+info:
+  title: MisterMorph Runtime API — Control
+  version: '2026-10-02'
+  description: 'Control subset for external processes: discover runtime health, submit tasks, query authoritative
+    status and final results, continue topics, stop work, inspect/approve/deny approvals, and subscribe
+    to Console progress snapshots. Shares the same server, Bearer token and operation definitions as runtime-api.full.openapi.yaml.
+    This is a documentation subset, not a separate listener or token scope. See runtime-api.md.'
+servers:
+- url: http://127.0.0.1:9080/runtime
+  description: Default Console listener after setting server.auth_token. Replace with the full runtime
+    base URL, including any console.base_path or reverse-proxy prefix.
+security:
+- RuntimeBearer: []
+tags:
+- name: Runtime
+- name: Tasks
+- name: Topics
+- name: Approvals
+- name: Streaming
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      tags:
+      - Runtime
+      summary: Read runtime health and submission availability
+      description: Public when HealthEnabled is registered. This is the runtime health route, not the
+        Console Web listener /health. submit_enabled is the only submission capability flag; it does not
+        advertise every optional feature.
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+      security: []
+    head:
+      operationId: headHealth
+      tags:
+      - Runtime
+      summary: Check runtime health without a body
+      responses:
+        '200':
+          description: Check runtime health without a body
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+      security: []
+  /tasks:
+    get:
+      operationId: listTasks
+      tags:
+      - Tasks
+      summary: List tasks newest first
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          $ref: '#/components/schemas/TaskStatus'
+        description: Optional status filter; the server also accepts case-insensitive values and an empty
+          value for all statuses.
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 20
+      - name: topic_id
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+        description: Opaque next_cursor from a previous page. Omit for the newest page; do not construct
+          or decode cursors.
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+    post:
+      operationId: submitTask
+      tags:
+      - Tasks
+      summary: Submit task text or a runtime command
+      description: Returns HTTP 200 after submission, not the final agent result. Some commands and steering
+        acknowledgements finish synchronously. Console may steer an active task in the same topic when
+        no file references are supplied. Follow steer_target_task_id when present. A runtime without Submit
+        returns 405. No idempotency key or automatic retry guarantee. The JSON decoder reads up to 1 MiB.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitTaskRequest'
+            example:
+              task: Summarize the project structure.
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubmitTaskResponse'
+              example:
+                id: task-example
+                status: queued
+                topic_id: topic-example
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /tasks/{task_id}:
+    get:
+      operationId: getTask
+      tags:
+      - Tasks
+      summary: Read task status and result
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskInfo'
+              example:
+                id: task-example
+                status: done
+                task: Summarize the project structure.
+                model: configured-model
+                timeout: 2m
+                created_at: '2026-10-02T00:00:00Z'
+                finished_at: '2026-10-02T00:00:10Z'
+                topic_id: topic-example
+                result:
+                  final:
+                    output: The CLI starts the runtime and dispatches tasks to the agent engine.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      description: Authoritative task state and result endpoint. Poll until done, failed or canceled.
+        pending requires an approval decision. HTTP 200 reports successful lookup, not successful execution;
+        inspect status and error. Console normally places the answer at result.final.output. WebSocket
+        previews do not replace this result.
+  /tasks/{task_id}/stop:
+    post:
+      operationId: stopTask
+      tags:
+      - Tasks
+      summary: Request cancellation by task ID
+      description: No request body. Console returns 200 with found=false when no active task matches.
+        Cancellation is asynchronous; keep polling.
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StopTaskResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /topics:
+    get:
+      operationId: listTopics
+      tags:
+      - Topics
+      summary: List topics by most recent update
+      description: Requires a topic reader. There is no POST /topics; Console creates a topic when a task
+        is first submitted without topic_id.
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 100
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+        description: Opaque next_cursor from a previous page. Omit for the newest page; do not construct
+          or decode cursors.
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /topics/{topic_id}:
+    get:
+      operationId: getTopic
+      tags:
+      - Topics
+      summary: Read a topic
+      parameters:
+      - name: topic_id
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicInfo'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /topics/{topic_id}/stop:
+    post:
+      operationId: stopTopic
+      tags:
+      - Topics
+      summary: Request cancellation for a topic
+      description: No request body. Stops work through the runtime conversation controller; it does not
+        delete the topic.
+      parameters:
+      - name: topic_id
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StopTaskResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /approvals:
+    get:
+      operationId: listApprovals
+      tags:
+      - Approvals
+      summary: List pending approvals
+      description: This is a bounded list, not a cursor page.
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - pending
+          default: pending
+        description: Only pending is supported, case-insensitively.
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 20
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /approvals/{approval_id}:
+    get:
+      operationId: getApproval
+      tags:
+      - Approvals
+      summary: Read an approval request
+      parameters:
+      - name: approval_id
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalInfo'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /approvals/{approval_id}/approve:
+    post:
+      operationId: approveApproval
+      tags:
+      - Approvals
+      summary: Approve a pending action
+      description: An empty body is allowed. The path ID overrides any approval_request_id in JSON. Read
+        status, resumed and error in the response; HTTP 200 alone does not mean execution resumed. Continue
+        polling the task after the decision.
+      parameters:
+      - name: approval_id
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApprovalDecisionRequest'
+            example:
+              actor: external-client
+              note: Reviewed the requested action.
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalDecisionResponse'
+              example:
+                approval_request_id: approval-example
+                task_id: task-example
+                status: approved
+                resumed: true
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /approvals/{approval_id}/deny:
+    post:
+      operationId: denyApproval
+      tags:
+      - Approvals
+      summary: Deny a pending action
+      description: An empty body is allowed. The path ID overrides any approval_request_id in JSON. Read
+        status, resumed and error in the response; HTTP 200 alone does not mean execution resumed. Continue
+        polling the task after the decision.
+      parameters:
+      - name: approval_id
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApprovalDecisionRequest'
+            example:
+              actor: external-client
+              note: Reviewed the requested action.
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalDecisionResponse'
+              example:
+                approval_request_id: approval-example
+                task_id: task-example
+                status: denied
+                resumed: false
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /stream/ws:
+    get:
+      operationId: streamTask
+      tags:
+      - Streaming
+      summary: Subscribe to Console task snapshots
+      description: Console only. WebSocket upgrade with the same Authorization Bearer token. No ticket
+        or client subscription message is needed. JSON frames follow StreamFrame. A successful upgrade
+        does not establish that a task exists. Poll GET /tasks/{task_id} for authoritative state and final
+        results. See runtime-api.md for heartbeat, reconnect and snapshot semantics.
+      parameters:
+      - name: task_id
+        in: query
+        required: true
+        schema:
+          type: string
+          minLength: 1
+      responses:
+        '101':
+          description: Subscribe to Console task snapshots
+        '400':
+          description: Missing task_id or invalid WebSocket upgrade
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JSONError'
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Missing or invalid runtime token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JSONError'
+            text/plain:
+              schema:
+                type: string
+        '403':
+          description: Origin rejected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JSONError'
+            text/plain:
+              schema:
+                type: string
+        '405':
+          description: Method not allowed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JSONError'
+            text/plain:
+              schema:
+                type: string
+        '503':
+          description: Stream unavailable or shutting down
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JSONError'
+            text/plain:
+              schema:
+                type: string
+      x-websocket-message:
+        $ref: '#/components/schemas/StreamFrame'
+components:
+  securitySchemes:
+    RuntimeBearer:
+      type: http
+      scheme: bearer
+      description: The configured server.auth_token. This is not a Console browser session token.
+  responses:
+    BadRequest:
+      description: Invalid JSON, parameter or runtime request.
+      content:
+        text/plain:
+          schema:
+            type: string
+    Unauthorized:
+      description: Missing or invalid Authorization Bearer token.
+      content:
+        text/plain:
+          schema:
+            type: string
+    NotFound:
+      description: Resource or route not found.
+      content:
+        text/plain:
+          schema:
+            type: string
+    MethodNotAllowed:
+      description: Unsupported method; task submission can also be disabled.
+      content:
+        text/plain:
+          schema:
+            type: string
+    Unavailable:
+      description: Required runtime capability is absent, queue is full, or execution/storage is unavailable.
+      content:
+        text/plain:
+          schema:
+            type: string
+  schemas:
+    TaskStatus:
+      type: string
+      enum:
+      - queued
+      - running
+      - pending
+      - done
+      - failed
+      - canceled
+      description: pending waits for approval. done, failed and canceled are terminal task states.
+    FileReference:
+      type: object
+      properties:
+        dir_name:
+          type: string
+          enum:
+          - workspace_dir
+          - file_state_dir
+          - file_cache_dir
+        path:
+          type: string
+          description: Server-side path within the selected root. Relative paths are portable; traversal
+            or symlink escape is rejected.
+      required:
+      - dir_name
+      - path
+      x-source: internal/taskdomain/domain.go:FileReference
+    TaskTrigger:
+      type: object
+      properties:
+        source:
+          type: string
+        event:
+          type: string
+        ref:
+          type: string
+        trace_id:
+          type: string
+      x-source: internal/taskdomain/domain.go:TaskTrigger
+    TaskParticipant:
+      type: object
+      properties:
+        id:
+          type: string
+        nickname:
+          type: string
+      required:
+      - id
+      x-source: internal/taskdomain/domain.go:TaskParticipant
+    TaskConversation:
+      type: object
+      properties:
+        conversation_id:
+          type: string
+        conversation_type:
+          type: string
+        participants:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaskParticipant'
+          nullable: true
+      x-source: internal/taskdomain/domain.go:TaskConversation
+    TaskInfo:
+      type: object
+      properties:
+        id:
+          type: string
+        status:
+          $ref: '#/components/schemas/TaskStatus'
+        task:
+          type: string
+        model:
+          type: string
+        llm_profile:
+          type: string
+        timeout:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        started_at:
+          type: string
+          format: date-time
+        pending_at:
+          type: string
+          format: date-time
+        resumed_at:
+          type: string
+          format: date-time
+        finished_at:
+          type: string
+          format: date-time
+        approval_request_id:
+          type: string
+        error:
+          type: string
+        result:
+          description: Runtime-dependent JSON value. Console commonly stores the answer in result.final.output,
+            alongside retained execution details. output may itself be structured JSON. Do not assume
+            a plain string or require a fixed result envelope.
+        topic_id:
+          type: string
+        steer_target_task_id:
+          type: string
+        file_references:
+          type: array
+          items:
+            $ref: '#/components/schemas/FileReference'
+          nullable: true
+        conversation:
+          $ref: '#/components/schemas/TaskConversation'
+      required:
+      - id
+      - status
+      - task
+      - model
+      - timeout
+      - created_at
+      x-source: internal/taskdomain/domain.go:TaskInfo
+    TopicInfo:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        icon:
+          type: string
+        title_customized:
+          type: boolean
+        title_revision:
+          type: integer
+        llm_title_generated_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        deleted_at:
+          type: string
+          format: date-time
+      required:
+      - id
+      - created_at
+      - updated_at
+      x-source: internal/taskdomain/domain.go:TopicInfo
+    SubmitTaskRequest:
+      type: object
+      properties:
+        task:
+          type: string
+          minLength: 1
+          description: Nonblank task text, or a supported runtime slash command.
+        model:
+          type: string
+          description: Runtime-specific model override. For persistent Console profile selection use the
+            /models command in task text.
+        llm_profile:
+          type: string
+          description: Configured LLM profile for this submission; accepted behavior depends on the runtime.
+        timeout:
+          type: string
+          description: Positive Go duration, for example 30s or 2m. Omit to use the runtime default.
+        topic_id:
+          type: string
+          description: 'Console: omit to create a topic on first submission; otherwise use an existing
+            topic ID. An unknown explicit ID is rejected. The reserved default topic is also accepted.'
+        topic_title:
+          type: string
+          description: Optional initial topic title.
+        workspace_dir:
+          type: string
+          description: Existing directory on the server. Console may attach it to the selected or new
+            topic.
+        file_references:
+          type: array
+          items:
+            $ref: '#/components/schemas/FileReference'
+          nullable: true
+        trigger:
+          $ref: '#/components/schemas/TaskTrigger'
+      required:
+      - task
+      x-source: internal/daemonruntime/types.go:SubmitTaskRequest
+    SubmitTaskResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        status:
+          $ref: '#/components/schemas/TaskStatus'
+        topic_id:
+          type: string
+        steer_target_task_id:
+          type: string
+          description: When present, this submission records steering input for this active task. Continue
+            tracking that task for the main result.
+      required:
+      - id
+      - status
+      x-source: internal/daemonruntime/types.go:SubmitTaskResponse
+    StopTaskResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          description: Console returns stopping or not_found. stopping acknowledges cancellation; poll
+            the task for its final state.
+        found:
+          type: boolean
+        task_id:
+          type: string
+        topic_id:
+          type: string
+        progress:
+          type: string
+        message:
+          type: string
+      required:
+      - status
+      - found
+      x-source: internal/daemonruntime/types.go:StopTaskResponse
+    ApprovalInfo:
+      type: object
+      properties:
+        approval_request_id:
+          type: string
+        task_id:
+          type: string
+        run_id:
+          type: string
+        status:
+          type: string
+        tool_name:
+          type: string
+        tool_params:
+          type: object
+          additionalProperties: true
+        action_summary_redacted:
+          type: string
+        reasons:
+          type: array
+          items:
+            type: string
+          nullable: true
+        runtime:
+          type: string
+        target:
+          type: string
+        topic_id:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        pending_at:
+          type: string
+          format: date-time
+        skill_preview: {}
+      required:
+      - approval_request_id
+      - status
+      - created_at
+      - expires_at
+      x-source: internal/daemonruntime/types.go:ApprovalInfo
+    ApprovalDecisionResponse:
+      type: object
+      properties:
+        approval_request_id:
+          type: string
+        task_id:
+          type: string
+        status:
+          type: string
+        resumed:
+          type: boolean
+        error:
+          type: string
+      required:
+      - approval_request_id
+      - status
+      - resumed
+      x-source: internal/daemonruntime/types.go:ApprovalDecisionResponse
+    ApprovalDecisionRequest:
+      type: object
+      properties:
+        approval_request_id:
+          type: string
+          description: Optional; the path ID overrides this value.
+        actor:
+          type: string
+        note:
+          type: string
+      x-source: internal/daemonruntime/types.go:ApprovalDecisionRequest
+    ApprovalList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApprovalInfo'
+          nullable: true
+        limit:
+          type: integer
+      required:
+      - items
+    TaskPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaskInfo'
+          nullable: true
+        limit:
+          type: integer
+        next_cursor:
+          type: string
+        has_next:
+          type: boolean
+      required:
+      - items
+      - limit
+      - has_next
+    TopicPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TopicInfo'
+          nullable: true
+        limit:
+          type: integer
+        next_cursor:
+          type: string
+        has_next:
+          type: boolean
+      required:
+      - items
+      - limit
+      - has_next
+    Health:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        time:
+          type: string
+          format: date-time
+        submit_enabled:
+          type: boolean
+        mode:
+          type: string
+        agent_name:
+          type: string
+        agent_avatar_url:
+          type: string
+        instance_id:
+          type: string
+      required:
+      - ok
+      - time
+      - submit_enabled
+    PlanStep:
+      type: object
+      properties:
+        step:
+          type: string
+        status:
+          type: string
+        note:
+          type: string
+      required:
+      - step
+      x-source: cmd/mistermorph/consolecmd/plan_progress.go:consolePlanStep
+    PlanProgress:
+      type: object
+      properties:
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanStep'
+    ActivityEntry:
+      type: object
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+        at:
+          type: string
+        stream:
+          type: string
+        output:
+          type: string
+        args:
+          type: object
+          additionalProperties: true
+        summary:
+          type: string
+        error:
+          type: string
+        task_id:
+          type: string
+        mode:
+          type: string
+        profile:
+          type: string
+        output_kind:
+          type: string
+      required:
+      - id
+      - kind
+      x-source: cmd/mistermorph/consolecmd/activity_progress.go:consoleActivityEntry
+    ActivityProgress:
+      type: object
+      properties:
+        current:
+          $ref: '#/components/schemas/ActivityEntry'
+        history:
+          type: array
+          items:
+            $ref: '#/components/schemas/ActivityEntry'
+    FileChange:
+      type: object
+      properties:
+        path:
+          type: string
+        before:
+          type: string
+        after:
+          type: string
+      required:
+      - path
+      - before
+      - after
+      x-source: internal/chattrace/trace.go:FileChange
+    TraceEntry:
+      type: object
+      properties:
+        seq:
+          type: integer
+        at:
+          type: string
+          format: date-time
+        deadline:
+          type: string
+          format: date-time
+        event:
+          type: object
+          additionalProperties: true
+        plan:
+          type: object
+          additionalProperties: true
+        file:
+          $ref: '#/components/schemas/FileChange'
+      required:
+      - seq
+      - at
+      - event
+      x-source: internal/chattrace/trace.go:Entry
+    TraceSnapshot:
+      type: object
+      properties:
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/TraceEntry'
+          nullable: true
+        omitted:
+          type: integer
+      required:
+      - entries
+      description: Bounded retained execution records. event and plan are extensible agent payloads; consumers
+        should tolerate new event types and fields.
+    StreamFrame:
+      type: object
+      properties:
+        trace:
+          $ref: '#/components/schemas/TraceSnapshot'
+        task_id:
+          type: string
+        seq:
+          type: integer
+        status:
+          type: string
+        text:
+          type: string
+        reasoning:
+          type: string
+        error:
+          type: string
+        plan:
+          $ref: '#/components/schemas/PlanProgress'
+        activity:
+          $ref: '#/components/schemas/ActivityProgress'
+        preview:
+          type: boolean
+        done:
+          type: boolean
+      required:
+      - task_id
+      - seq
+      x-source: cmd/mistermorph/consolecmd/streaming.go:consoleStreamFrame
+      description: Console server-to-client JSON snapshot, not a text delta. seq is global to this in-memory
+        stream hub, not contiguous per task and not a durable replay cursor. See runtime-api.md.
+    JSONError:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        error:
+          type: string
+      required:
+      - error

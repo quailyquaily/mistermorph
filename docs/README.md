@@ -11,6 +11,7 @@
 ## Product Reference
 
 - [Console](./console.md)
+- [Runtime API](./runtime-api.md) ([Control OpenAPI](./runtime-api.control.openapi.yaml), [Full OpenAPI](./runtime-api.full.openapi.yaml))
 - [Extension Points](./ext.md)
 - [ACP](./acp.md)
 - [Aqua Connection](./aqua.md)

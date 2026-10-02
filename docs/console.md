@@ -21,6 +21,11 @@ popup-close handler and the full Quail UI stylesheet.
 
 ## Runtime Notes
 
+For external process integration, see the [Runtime API guide](runtime-api.md)
+and [Control OpenAPI specification](runtime-api.control.openapi.yaml).
+The [Full specification](runtime-api.full.openapi.yaml) also covers runtime
+data and management operations.
+
 - Console APIs are served under `<console.base_path>/api` (default: `/api`).
 - Runtime views (`Chat`, `Runtime`, `Tasks`, `Stats`, `Audit`, `Files`, `Contacts`) read from the endpoint selected in the top bar.
 - `console` always exposes one built-in local runtime endpoint (`Console Local`).
