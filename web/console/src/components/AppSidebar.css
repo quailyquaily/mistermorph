@@ -13,6 +13,9 @@
   min-height: 0;
   min-width: 0;
   overflow: hidden;
+  /* The sidebar is navigation: clicks and drags should not select its text. */
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .sidebar-slot {
