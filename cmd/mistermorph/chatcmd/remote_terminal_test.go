@@ -170,7 +170,9 @@ def wait(predicate, label, timeout=12):
     while time.monotonic() < deadline:
         pump()
         if predicate(): return
-        if proc.poll() is not None: raise AssertionError('child exited: ' + label)
+        if proc.poll() is not None:
+            if predicate(): return
+            raise AssertionError('child exited: ' + label)
     raise AssertionError('timeout: ' + label)
 def expect(s, start=0, timeout=12):
     wait(lambda: s in text(start), repr(s), timeout)
