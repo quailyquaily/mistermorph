@@ -167,6 +167,10 @@ func (e *Engine) mainRequest(st *engineLoopState, reqTools []llm.Tool) llm.Reque
 		}
 		messages[index] = message
 	}
+	validateResult := validateMainResult
+	if st.reacted {
+		validateResult = validateMainResultAfterReaction
+	}
 	return llm.Request{
 		Model:            st.model,
 		Scene:            st.scene,
@@ -176,7 +180,7 @@ func (e *Engine) mainRequest(st *engineLoopState, reqTools []llm.Tool) llm.Reque
 		Parameters:       st.extraParams,
 		ReasoningDetails: st.reasoningDetails,
 		OnStream:         st.onStream,
-		ValidateResult:   validateMainResult,
+		ValidateResult:   validateResult,
 	}
 }
 

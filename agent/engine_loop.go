@@ -36,6 +36,8 @@ type engineLoopState struct {
 	parseFailures              int
 	requestedWrites            []string
 	disableToolsForFormatRetry bool
+	// reacted is set once message_react succeeds; the run may then end with an empty final.
+	reacted bool
 
 	pendingTool            *pendingToolSnapshot
 	approvedActionIdentity string
@@ -256,7 +258,7 @@ func (e *Engine) runLoop(ctx context.Context, st *engineLoopState) (final *Final
 			}
 
 			if resp.Type == "" {
-				parsed, parseErr := ParseResponse(result)
+				parsed, parseErr := parseResponse(result, st.reacted)
 				if parseErr != nil {
 					st.parseFailures++
 					st.agentCtx.Metrics.ParseRetries = st.parseFailures
@@ -547,6 +549,10 @@ func (e *Engine) runLoop(ctx context.Context, st *engineLoopState) (final *Final
 					if guardErr != nil {
 						return guardErr
 					}
+				}
+
+				if item.executed && item.err == nil && item.toolNameKey == reactionToolName {
+					st.reacted = true
 				}
 
 				if !item.skip && item.err != nil {
@@ -1098,6 +1104,9 @@ func toolActivityID(step int, tc *ToolCall) string {
 	_, _ = hasher.Write([]byte(sig))
 	return fmt.Sprintf("tool:%d:%016x", step, hasher.Sum64())
 }
+
+// reactionToolName is the tool that replies with an emoji reaction.
+const reactionToolName = "message_react"
 
 func normalizedToolName(name string) string {
 	return strings.ToLower(strings.TrimSpace(name))

@@ -17,12 +17,19 @@ var (
 )
 
 func ParseResponse(result llm.Result) (*AgentResponse, error) {
+	return parseResponse(result, false)
+}
+
+// parseResponse parses the model's response. allowEmptyFinal accepts a final without output as a
+// lightweight one: after a reaction in the same run, an empty final means the reaction was the
+// whole reply.
+func parseResponse(result llm.Result, allowEmptyFinal bool) (*AgentResponse, error) {
 	var lastErr error
 
 	if result.JSON != nil {
 		data, err := json.Marshal(result.JSON)
 		if err == nil {
-			resp, err := unmarshalAndValidate(data)
+			resp, err := unmarshalAndValidate(data, allowEmptyFinal)
 			if err == nil {
 				return resp, nil
 			}
@@ -40,7 +47,7 @@ func ParseResponse(result llm.Result) (*AgentResponse, error) {
 
 	if candidates, err := jsonutil.FindJSONCandidates(text); err == nil {
 		for _, data := range candidates {
-			resp, err := unmarshalAndValidate(data)
+			resp, err := unmarshalAndValidate(data, allowEmptyFinal)
 			if err == nil {
 				return resp, nil
 			}
@@ -56,7 +63,7 @@ func ParseResponse(result llm.Result) (*AgentResponse, error) {
 	return nil, ErrParseFailure
 }
 
-func unmarshalAndValidate(data []byte) (*AgentResponse, error) {
+func unmarshalAndValidate(data []byte, allowEmptyFinal bool) (*AgentResponse, error) {
 	var resp AgentResponse
 	if err := json.Unmarshal(data, &resp); err != nil {
 		return nil, err
@@ -85,7 +92,7 @@ func unmarshalAndValidate(data []byte) (*AgentResponse, error) {
 		}
 	}
 
-	return validate(&resp)
+	return validate(&resp, allowEmptyFinal)
 }
 
 func rawResponsePayload(data []byte) (json.RawMessage, error) {
@@ -97,7 +104,7 @@ func rawResponsePayload(data []byte) (json.RawMessage, error) {
 	return json.Marshal(payload)
 }
 
-func validate(resp *AgentResponse) (*AgentResponse, error) {
+func validate(resp *AgentResponse, allowEmptyFinal bool) (*AgentResponse, error) {
 	switch resp.Type {
 	case TypeToolCall:
 		return nil, ErrInvalidToolCall
@@ -110,20 +117,11 @@ func validate(resp *AgentResponse) (*AgentResponse, error) {
 		if final == nil {
 			return nil, ErrInvalidFinal
 		}
-		if !final.IsLightweight {
-			if final.Output == nil {
+		if !final.IsLightweight && finalOutputEmpty(final.Output) {
+			if !allowEmptyFinal {
 				return nil, ErrInvalidFinal
 			}
-			if output, ok := final.Output.(string); ok {
-				output = strings.TrimSpace(output)
-				var decoded string
-				if json.Unmarshal([]byte(output), &decoded) == nil {
-					output = strings.TrimSpace(decoded)
-				}
-				if output == "" || output == "null" {
-					return nil, ErrInvalidFinal
-				}
-			}
+			final.IsLightweight = true
 		}
 	default:
 		return nil, ErrParseFailure
@@ -131,14 +129,40 @@ func validate(resp *AgentResponse) (*AgentResponse, error) {
 	return resp, nil
 }
 
+func finalOutputEmpty(output any) bool {
+	if output == nil {
+		return true
+	}
+	text, ok := output.(string)
+	if !ok {
+		return false
+	}
+	text = strings.TrimSpace(text)
+	var decoded string
+	if json.Unmarshal([]byte(text), &decoded) == nil {
+		text = strings.TrimSpace(decoded)
+	}
+	return text == "" || text == "null"
+}
+
 func validateMainResult(result llm.Result) error {
+	return checkMainResult(result, false)
+}
+
+// validateMainResultAfterReaction is validateMainResult for a run that has already reacted, where
+// a final without output is the expected end.
+func validateMainResultAfterReaction(result llm.Result) error {
+	return checkMainResult(result, true)
+}
+
+func checkMainResult(result llm.Result, allowEmptyFinal bool) error {
 	if len(result.ToolCalls) > 0 {
 		return nil
 	}
 	if text := strings.TrimSpace(result.Text); result.JSON == nil && (text == "" || text == "null") {
 		return ErrInvalidFinal
 	}
-	_, err := ParseResponse(result)
+	_, err := parseResponse(result, allowEmptyFinal)
 	if errors.Is(err, ErrInvalidFinal) {
 		return err
 	}
