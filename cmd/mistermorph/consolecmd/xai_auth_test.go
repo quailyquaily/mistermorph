@@ -178,8 +178,7 @@ func TestXAIAuthLoginSessionExpires(t *testing.T) {
 func TestXAIAuthRoutesRequireConsoleSession(t *testing.T) {
 	srv := &server{
 		cfg: serveConfig{
-			passwordOptional: true,
-			password:         "configured",
+			password: "configured",
 		},
 		sessions:  newSessionStore(""),
 		xaiLogins: newXAILoginStore(),

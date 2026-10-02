@@ -12,8 +12,8 @@ import (
 
 func TestConsoleDefaultsToServe(t *testing.T) {
 	for _, args := range [][]string{
-		{"console", "--console-listen", "127.0.0.1:9081", "--allow-empty-password"},
-		{"console", "serve", "--console-listen", "127.0.0.1:9081", "--allow-empty-password"},
+		{"console", "--console-listen", "127.0.0.1:9081"},
+		{"console", "serve", "--console-listen", "127.0.0.1:9081"},
 	} {
 		t.Run(strings.Join(args[:2], " "), func(t *testing.T) {
 			resetRootConfigForTest(t)
@@ -37,9 +37,8 @@ func TestConsoleDefaultsToServe(t *testing.T) {
 			run := func(cmd *cobra.Command, _ []string) error {
 				ran = true
 				listen, _ := cmd.Flags().GetString("console-listen")
-				allow, _ := cmd.Flags().GetBool("allow-empty-password")
-				if listen != "127.0.0.1:9081" || !allow {
-					t.Errorf("flags = %q, %v", listen, allow)
+				if listen != "127.0.0.1:9081" {
+					t.Errorf("console-listen = %q", listen)
 				}
 				if !isConsoleRepairCommand(cmd) || !shouldCheckOSSecretStore(cmd) || shouldPrepareRootRegistry(cmd) {
 					t.Error("incorrect console preflight policy")

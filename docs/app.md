@@ -52,7 +52,7 @@ The wrapper only handles lifecycle, process management, restart, and proxying.
                            | Child: bundled backend `console serve` |
                            | listen: 127.0.0.1:<random>       |
                            | base path: /console              |
-                           | allow-empty-password: enabled    |
+                           | login: off without a password    |
                            +----------------------------------+
 ```
 
@@ -74,7 +74,7 @@ First run:
 
 ```text
 incomplete config
-  -> console backend starts with allow-empty-password
+  -> console backend starts without login (no password set)
   -> frontend routes to /setup
   -> user saves agent settings + identity/soul
   -> frontend calls App.RestartApp()

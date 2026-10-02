@@ -79,7 +79,6 @@ description: mistermorph が現在サポートしているコマンドライン�
 
 ## `console serve`
 
-- `--allow-empty-password`: `console.password` / `console.password_hash` なしでも console を起動できるようにする。
 - `--console-base-path`: Console の base path。
 - `--console-listen`: Console サーバーの listen アドレス。
 - `--console-session-ttl`: Console bearer token の session TTL。

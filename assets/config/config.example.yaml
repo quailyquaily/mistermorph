@@ -531,12 +531,13 @@ console:
   # Optional static directory for SPA build artifacts.
   # Can be overridden by --console-static-dir.
   static_dir: ""
-  # Prefer password_hash in production; set via env when possible.
+  # Leave both password and password_hash empty to use the console without logging in; then keep
+  # `listen` on a loopback address. Prefer password_hash in production; set via env when possible.
   password: "" # or set via MISTER_MORPH_CONSOLE_PASSWORD
   # Bcrypt hash string, e.g. "$2a$..."
   password_hash: "" # or set via MISTER_MORPH_CONSOLE_PASSWORD_HASH
-  # Session TTL for console bearer token.
-  session_ttl: "12h"
+  # Session TTL for console bearer token (7 days).
+  session_ttl: "168h"
   # Channel runtimes managed in-process by `morph console serve`.
   # Managed runtimes are merged into Console itself:
   # - they do not appear as separate endpoints

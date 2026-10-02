@@ -9,7 +9,7 @@ import (
 )
 
 func TestConsoleCommandsRouteReturnsRuntimeCommandSuggestions(t *testing.T) {
-	srv := &server{cfg: serveConfig{basePath: "/console", passwordOptional: true}}
+	srv := &server{cfg: serveConfig{basePath: "/console"}}
 	req := httptest.NewRequest(http.MethodGet, "/console/api/commands", nil)
 	rec := httptest.NewRecorder()
 	srv.handler().ServeHTTP(rec, req)

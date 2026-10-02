@@ -47,7 +47,6 @@ type serveConfig struct {
 	inspectPrompt    bool
 	inspectRequest   bool
 	sessionTTL       time.Duration
-	passwordOptional bool
 	password         string
 	passwordHash     string
 	version          string
@@ -162,8 +161,10 @@ func newServeCmd(version ...string) *cobra.Command {
 			for _, warning := range cfg.endpointWarnings {
 				_, _ = fmt.Fprintf(os.Stderr, "warn: %s\n", warning)
 			}
-			if cfg.authDisabled() {
-				_, _ = fmt.Fprintln(os.Stderr, "warn: console password is not configured; authentication is disabled by --allow-empty-password")
+			// Without a password the console needs no login; that is only worth a warning when others
+			// can reach it.
+			if cfg.authDisabled() && !listenIsLoopback(cfg.listen) {
+				_, _ = fmt.Fprintf(os.Stderr, "warn: console listens on %s without a password; anyone who can reach it can use it. Set console.password.\n", cfg.listen)
 			}
 			return runConsole(cmd.Context(), cfg)
 		},
@@ -172,8 +173,10 @@ func newServeCmd(version ...string) *cobra.Command {
 	cmd.Flags().String("console-listen", "127.0.0.1:9080", "Console server listen address.")
 	cmd.Flags().String("console-base-path", "/", "Console base path.")
 	cmd.Flags().String("console-static-dir", "", "Mistermorph Console SPA static directory.")
-	cmd.Flags().Duration("console-session-ttl", 12*time.Hour, "Session TTL for console bearer token.")
-	cmd.Flags().Bool("allow-empty-password", false, "Allow console to run without console.password/console.password_hash. If a password is configured, login is still required.")
+	cmd.Flags().Duration("console-session-ttl", 7*24*time.Hour, "Session TTL for console bearer token.")
+	// Kept so existing launch commands still start: without a password the console needs no login.
+	cmd.Flags().Bool("allow-empty-password", false, "")
+	_ = cmd.Flags().MarkDeprecated("allow-empty-password", "an empty console password now means no login is required")
 	cmd.Flags().Bool("inspect-prompt", false, "Dump prompts (messages) to ./dump/prompt_console_YYYYMMDD_HHmmss.md.")
 	cmd.Flags().Bool("inspect-request", false, "Dump LLM request/response payloads to ./dump/request_console_YYYYMMDD_HHmmss.md.")
 
@@ -202,11 +205,7 @@ func loadServeConfig(cmd *cobra.Command, version ...string) (serveConfig, error)
 
 	sessionTTL := configutil.FlagOrViperDuration(cmd, "console-session-ttl", "console.session_ttl")
 	if sessionTTL <= 0 {
-		sessionTTL = 12 * time.Hour
-	}
-	passwordOptional, err := cmd.Flags().GetBool("allow-empty-password")
-	if err != nil {
-		return serveConfig{}, err
+		sessionTTL = 7 * 24 * time.Hour
 	}
 	inspectPrompt, err := cmd.Flags().GetBool("inspect-prompt")
 	if err != nil {
@@ -235,7 +234,6 @@ func loadServeConfig(cmd *cobra.Command, version ...string) (serveConfig, error)
 		inspectPrompt:    inspectPrompt,
 		inspectRequest:   inspectRequest,
 		sessionTTL:       sessionTTL,
-		passwordOptional: passwordOptional,
 		password:         viper.GetString("console.password"),
 		passwordHash:     viper.GetString("console.password_hash"),
 		version:          strings.TrimSpace(buildVersion),
@@ -247,8 +245,9 @@ func loadServeConfig(cmd *cobra.Command, version ...string) (serveConfig, error)
 	}, nil
 }
 
+// authDisabled reports whether the console runs without login: no password is set, or it is blank.
 func (c serveConfig) authDisabled() bool {
-	return c.passwordOptional && !consolePasswordConfigured(c.password, c.passwordHash)
+	return !consolePasswordConfigured(c.password, c.passwordHash)
 }
 
 func (c serveConfig) staticAssetsEnabled() bool {
@@ -1604,4 +1603,18 @@ func setNoCacheHeaders(h http.Header) {
 
 func writeError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]any{"error": strings.TrimSpace(msg)})
+}
+
+// listenIsLoopback reports whether a listen address only takes connections from this machine.
+func listenIsLoopback(listen string) bool {
+	host, _, err := net.SplitHostPort(strings.TrimSpace(listen))
+	if err != nil {
+		return false
+	}
+	host = strings.Trim(host, "[]")
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }

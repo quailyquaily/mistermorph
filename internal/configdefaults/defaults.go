@@ -107,7 +107,7 @@ func Apply(v *viper.Viper) {
 	v.SetDefault("console.static_dir", "")
 	v.SetDefault("console.password", "")
 	v.SetDefault("console.password_hash", "")
-	v.SetDefault("console.session_ttl", 12*time.Hour)
+	v.SetDefault("console.session_ttl", 7*24*time.Hour)
 	v.SetDefault("console.endpoints", []map[string]any{})
 
 	v.SetDefault("telegram.poll_timeout", DefaultTelegramPollTimeout)

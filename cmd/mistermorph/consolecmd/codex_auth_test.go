@@ -16,9 +16,8 @@ import (
 func TestCodexRefreshRouteRequiresConsoleSession(t *testing.T) {
 	srv := &server{
 		cfg: serveConfig{
-			stateDir:         t.TempDir(),
-			passwordOptional: true,
-			password:         "configured",
+			stateDir: t.TempDir(),
+			password: "configured",
 		},
 		sessions: newSessionStore(""),
 	}

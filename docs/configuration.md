@@ -255,7 +255,6 @@ Global flags:
 - `--console-base-path`
 - `--console-static-dir`
 - `--console-session-ttl`
-- `--allow-empty-password`
 
 `telegram`:
 

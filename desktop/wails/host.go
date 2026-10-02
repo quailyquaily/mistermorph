@@ -243,12 +243,11 @@ func (h *DesktopHost) waitUntilReady(ctx context.Context, listenAddr string, pro
 }
 
 func buildConsoleServeArgs(argsHead []string, cfg DesktopHostConfig, listenAddr string) []string {
-	args := make([]string, 0, len(argsHead)+7)
+	args := make([]string, 0, len(argsHead)+6)
 	args = append(args, argsHead...)
 	args = append(args,
 		"--console-listen", listenAddr,
 		"--console-base-path", normalizeConsoleBasePath(cfg.ConsoleBasePath),
-		"--allow-empty-password",
 	)
 	if cfg.ConfigPath != "" {
 		args = append(args, "--config", cfg.ConfigPath)

@@ -132,7 +132,7 @@ func (s *sessionStore) Create(ttl time.Duration) (string, time.Time, error) {
 		return "", time.Time{}, fmt.Errorf("nil session store")
 	}
 	if ttl <= 0 {
-		ttl = 12 * time.Hour
+		ttl = 7 * 24 * time.Hour
 	}
 
 	buf := make([]byte, 32)

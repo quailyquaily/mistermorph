@@ -72,7 +72,6 @@ description: mistermorph 的命令行参数总览。
 
 ## `console serve`
 
-- `--allow-empty-password`：允许在未设置 `console.password` / `console.password_hash` 时启动 console。
 - `--console-base-path`：Console base path。
 - `--console-listen`：Console 服务监听地址。
 - `--console-session-ttl`：Console bearer token 的 session TTL。

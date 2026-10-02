@@ -79,7 +79,6 @@ This command accepts an optional `profile-name` positional argument. Without one
 
 ## `console serve`
 
-- `--allow-empty-password`: Allow console to run without `console.password` or `console.password_hash`.
 - `--console-base-path`: Console base path.
 - `--console-listen`: Console server listen address.
 - `--console-session-ttl`: Session TTL for console bearer token.
