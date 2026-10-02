@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/quailyquaily/mistermorph/internal/topiccontext"
+	"github.com/quailyquaily/mistermorph/internal/topicstate"
 )
 
 func TestSetTopicTagsSurvivesReloadAndKeepsTheTopicOrder(t *testing.T) {
@@ -123,5 +124,42 @@ func TestTopicContextRoute(t *testing.T) {
 				t.Fatalf("body = %s", rec.Body.String())
 			}
 		})
+	}
+}
+
+func TestTopicLayoutRoute(t *testing.T) {
+	root := t.TempDir()
+	routes := TaskTopicRoutes{
+		TopicLayout:    func() (topicstate.Layout, error) { return topicstate.LoadLayout(root) },
+		SetTopicLayout: func(layout topicstate.Layout) (topicstate.Layout, error) { return topicstate.SaveLayout(root, layout) },
+	}
+	call := func(opts RoutesOptions, method, body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, "/topics/layout", strings.NewReader(body))
+		req.Header.Set("Authorization", "Bearer token")
+		rec := httptest.NewRecorder()
+		NewHandler(opts).ServeHTTP(rec, req)
+		return rec
+	}
+	opts := RoutesOptions{AuthToken: "token", TaskTopic: routes}
+
+	rec := call(opts, http.MethodPut, `{"tag_order":["tag:b","tag:a","tag:b"],"topic_order":{"tag:a":["t2","t1"]}}`)
+	if rec.Code != 200 {
+		t.Fatalf("PUT status = %d: %s", rec.Code, rec.Body.String())
+	}
+	rec = call(opts, http.MethodGet, "")
+	var got topicstate.Layout
+	_ = json.Unmarshal(rec.Body.Bytes(), &got)
+	if rec.Code != 200 || strings.Join(got.TagOrder, ",") != "tag:b,tag:a" || strings.Join(got.TopicOrder["tag:a"], ",") != "t2,t1" {
+		t.Fatalf("GET = %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := call(opts, http.MethodPost, `{}`); rec.Code != 405 {
+		t.Fatalf("POST status = %d", rec.Code)
+	}
+	if rec := call(opts, http.MethodPut, `{`); rec.Code != 400 {
+		t.Fatalf("bad json status = %d", rec.Code)
+	}
+	// A runtime without a layout does not have the route, whatever the topic routes are.
+	if rec := call(RoutesOptions{AuthToken: "token"}, http.MethodGet, ""); rec.Code != 404 {
+		t.Fatalf("unsupported status = %d", rec.Code)
 	}
 }

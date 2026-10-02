@@ -10,6 +10,7 @@ import (
 
 	"github.com/quailyquaily/mistermorph/internal/pagination"
 	"github.com/quailyquaily/mistermorph/internal/taskdomain"
+	"github.com/quailyquaily/mistermorph/internal/topicstate"
 )
 
 func (routes *routeRegistration) registerTaskRoutes() {
@@ -202,6 +203,43 @@ func (routes *routeRegistration) registerTaskRoutes() {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(info)
+	})
+
+	// The tag view's arrangement: the order of the tag groups and of the topics within them.
+	mux.HandleFunc("/topics/layout", func(w http.ResponseWriter, r *http.Request) {
+		if !checkAuth(r, authToken) {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		if opts.TopicLayout == nil || opts.SetTopicLayout == nil {
+			http.NotFound(w, r)
+			return
+		}
+		var (
+			layout topicstate.Layout
+			err    error
+		)
+		switch r.Method {
+		case http.MethodGet:
+			layout, err = opts.TopicLayout()
+		case http.MethodPut:
+			var req topicstate.Layout
+			if decodeErr := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&req); decodeErr != nil {
+				http.Error(w, "invalid json", http.StatusBadRequest)
+				return
+			}
+			layout, err = opts.SetTopicLayout(req)
+		default:
+			w.Header().Set("Allow", "GET, PUT")
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if err != nil {
+			http.Error(w, strings.TrimSpace(err.Error()), http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(layout)
 	})
 
 	mux.HandleFunc("/topics/", func(w http.ResponseWriter, r *http.Request) {

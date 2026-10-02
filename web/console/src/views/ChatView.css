@@ -248,6 +248,75 @@
   outline-style: solid;
 }
 
+/* A foldable group's heading is a toggle; a tag group's heading can also be dragged to move it. */
+.chat-topic-group-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+}
+
+.chat-topic-group-toggle:hover {
+  color: var(--text-0);
+}
+
+.chat-topic-day-label[draggable="true"] {
+  cursor: grab;
+}
+
+.chat-topic-group-caret {
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  margin-right: -4px;
+  transition: transform 120ms ease;
+}
+
+.chat-topic-group-caret.is-open {
+  transform: rotate(90deg);
+}
+
+.chat-topic-group-count {
+  flex: 0 0 auto;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.chat-topic-day.is-collapsed {
+  padding-bottom: 2px;
+}
+
+/* Where a dragged topic or group would land: a line before or after it. */
+.chat-topic-item.is-drop-before {
+  box-shadow: inset 0 2px 0 var(--q-c-blue);
+}
+
+.chat-topic-item.is-drop-after,
+.chat-topic-day.is-drop-at-end {
+  box-shadow: inset 0 -2px 0 var(--q-c-blue);
+}
+
+.chat-topic-day.is-group-drop-before {
+  box-shadow: 0 -2px 0 var(--q-c-blue);
+}
+
+.chat-topic-day.is-group-drop-after {
+  box-shadow: 0 2px 0 var(--q-c-blue);
+}
+
+.chat-topic-day.is-dragging {
+  opacity: 0.45;
+}
+
 .chat-topic-drop-hint {
   margin: 0;
   padding: 6px 14px 10px;

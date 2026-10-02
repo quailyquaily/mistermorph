@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/quailyquaily/mistermorph/internal/topiccontext"
+	"github.com/quailyquaily/mistermorph/internal/topicstate"
 	"io"
 	"log/slog"
 	"mime"
@@ -139,6 +140,10 @@ type TaskTopicRoutes struct {
 	RegenerateTopicTitle func(context.Context, string) (TopicInfo, error)
 	// SetTopicTags replaces a topic's tags; nil when the runtime has no taggable topics.
 	SetTopicTags func(topicID string, tags []string) (TopicInfo, error)
+	// TopicLayout and SetTopicLayout read and replace how the tag view is arranged; nil when the
+	// runtime keeps no layout.
+	TopicLayout    func() (topicstate.Layout, error)
+	SetTopicLayout func(topicstate.Layout) (topicstate.Layout, error)
 }
 
 type ApprovalRoutes struct {

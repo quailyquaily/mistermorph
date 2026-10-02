@@ -161,6 +161,10 @@ execution resumed. These endpoints require the runtime token.
 In Console, `PUT /topics/{topic_id}/tags` with `{"tags": [...]}` replaces a topic's
 tags; topics carry them in `tags`. The reserved tag `pinned` pins the topic to the
 top of the Console topic list.
+`GET /topics/layout` and `PUT /topics/layout` read and replace how the topic
+list's tag view is arranged: `tag_order` lists the tag groups in order, and
+`topic_order` lists the topic IDs of a tag group or the pinned group in order.
+Groups are named `tag:<tag>` (lower case) and `pinned`.
 
 Deleting a topic uses `DELETE /topics/{topic_id}` and returns 204 with no body.
 Console also stops topic work and removes its context. This is distinct from

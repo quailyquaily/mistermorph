@@ -492,6 +492,60 @@ paths:
           $ref: '#/components/responses/MethodNotAllowed'
         '503':
           $ref: '#/components/responses/Unavailable'
+  /topics/layout:
+    get:
+      operationId: getTopicLayout
+      tags:
+      - Topics
+      summary: Read the topic list's tag view layout
+      description: Console only. The order of the tag groups and of the topics within them, as arranged
+        in the Console topic list. Groups and topics the layout leaves out keep their default order.
+      responses:
+        '200':
+          description: The layout.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicLayout'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+    put:
+      operationId: setTopicLayout
+      tags:
+      - Topics
+      summary: Replace the topic list's tag view layout
+      description: Console only. Replaces the whole layout. Names are trimmed; empty and repeated ones
+        and empty groups are dropped. At most 500 groups and 2,000 topics per group. JSON body limit
+        is 1 MiB.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicLayout'
+      responses:
+        '200':
+          description: The stored layout.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicLayout'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+        '503':
+          $ref: '#/components/responses/Unavailable'
   /topic/{topic_id}/context:
     get:
       operationId: getTopicContext
@@ -4407,6 +4461,25 @@ components:
       - timeout
       - created_at
       x-source: internal/taskdomain/domain.go:TaskInfo
+    TopicLayout:
+      type: object
+      description: 'Groups are named "tag:<tag>" (the tag in lower case) and "pinned".'
+      properties:
+        tag_order:
+          type: array
+          description: Tag groups in the order shown.
+          items:
+            type: string
+        topic_order:
+          type: object
+          description: Topic IDs in the order shown, by group.
+          additionalProperties:
+            type: array
+            items:
+              type: string
+      required:
+      - tag_order
+      - topic_order
     TopicContextPart:
       type: object
       description: One part of a request. Top-level parts have kind system, skills, tools, history, current

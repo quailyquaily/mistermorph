@@ -1254,6 +1254,9 @@ func (r *consoleLocalRuntime) deleteTopic(id string) (bool, error) {
 		if err := topicstate.Remove(filepath.Dir(topicContextPath), conversationKey); err != nil {
 			logger.Warn("console_topic_folder_delete_failed", "topic_id", id, "error", err.Error())
 		}
+		if err := topicstate.RemoveTopicFromLayout(filepath.Dir(topicContextPath), id); err != nil {
+			logger.Warn("console_topic_layout_update_failed", "topic_id", id, "error", err.Error())
+		}
 	}
 	return true, nil
 }
@@ -1280,6 +1283,12 @@ func (r *consoleLocalRuntime) routesOptions(authToken string) daemonruntime.Rout
 			TopicReader:  r.store,
 			TopicDeleter: topicDeleterFunc(r.deleteTopic),
 			SetTopicTags: r.store.SetTopicTags,
+			TopicLayout: func() (topicstate.Layout, error) {
+				return topicstate.LoadLayout(paths.StateDir)
+			},
+			SetTopicLayout: func(layout topicstate.Layout) (topicstate.Layout, error) {
+				return topicstate.SaveLayout(paths.StateDir, layout)
+			},
 			RegenerateTopicTitle: func(ctx context.Context, topicID string) (daemonruntime.TopicInfo, error) {
 				return r.regenerateTopicTitle(ctx, generation, topicID)
 			},

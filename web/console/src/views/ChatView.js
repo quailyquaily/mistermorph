@@ -68,6 +68,14 @@ import {
   withPinned,
 } from "../core/topic-tags";
 import {
+  arrangeTopicGroups,
+  isMovableTagGroup,
+  moveGroupTopic,
+  moveTagGroup,
+  normalizeTopicLayout,
+  orderGroupTopics,
+} from "../core/topic-layout";
+import {
   apiFetch,
   buildConsoleStreamURL,
   createConsoleStreamTicket,
@@ -216,12 +224,31 @@ function normalizeRecentWorkspaceDirs(raw) {
 
 // The topic sidebar lists topics by date or by tag. The choice is a per-browser convenience.
 const TOPIC_SIDEBAR_VIEW_STORAGE_KEY = "mistermorph.chat.topicSidebarView";
+const TOPIC_GROUPS_COLLAPSED_STORAGE_KEY = "mistermorph.chat.topicGroupsCollapsed";
 
 function loadTopicSidebarView() {
   try {
     return localStorage.getItem(TOPIC_SIDEBAR_VIEW_STORAGE_KEY) === "tags" ? "tags" : "date";
   } catch {
     return "date";
+  }
+}
+
+// Folded topic groups are remembered per browser, by group key.
+function loadCollapsedTopicGroups() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(TOPIC_GROUPS_COLLAPSED_STORAGE_KEY) || "[]");
+    return new Set(Array.isArray(raw) ? raw.map(String) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function saveCollapsedTopicGroups(keys) {
+  try {
+    localStorage.setItem(TOPIC_GROUPS_COLLAPSED_STORAGE_KEY, JSON.stringify([...keys]));
+  } catch {
+    // The folds just are not remembered.
   }
 }
 
@@ -1038,13 +1065,66 @@ const ChatView = {
       return groups;
     });
 
+    // How the tag view is arranged, kept by the runtime (GET/PUT /topics/layout). A runtime without
+    // it shows the default order, and its groups cannot be reordered.
+    const topicLayout = ref(normalizeTopicLayout(null));
+    const topicLayoutSupported = ref(false);
+    let topicLayoutEndpoint = null;
+    let topicLayoutSaves = 0;
+
+    async function loadTopicLayout() {
+      const endpointRef = submitEndpointRef.value;
+      topicLayoutEndpoint = endpointRef;
+      try {
+        const data = await runtimeApiFetchForEndpoint(endpointRef, "/topics/layout");
+        if (submitEndpointRef.value !== endpointRef || topicLayoutSaves > 0) return;
+        topicLayout.value = normalizeTopicLayout(data);
+        topicLayoutSupported.value = true;
+      } catch {
+        if (submitEndpointRef.value !== endpointRef) return;
+        topicLayout.value = normalizeTopicLayout(null);
+        topicLayoutSupported.value = false;
+      }
+    }
+
+    // Shows the new layout at once; it goes back if the save fails.
+    async function saveTopicLayout(next) {
+      if (!next || !topicLayoutSupported.value) return;
+      const endpointRef = submitEndpointRef.value;
+      const previous = topicLayout.value;
+      topicLayout.value = normalizeTopicLayout(next);
+      topicLayoutSaves += 1;
+      try {
+        const saved = await runtimeApiFetchForEndpoint(endpointRef, "/topics/layout", { method: "PUT", body: topicLayout.value });
+        if (submitEndpointRef.value === endpointRef && topicLayoutSaves === 1) {
+          topicLayout.value = normalizeTopicLayout(saved);
+        }
+      } catch (e) {
+        if (submitEndpointRef.value === endpointRef) {
+          topicLayout.value = previous;
+          toast.error(e?.message || t("chat_topics_layout_failed"));
+        }
+      } finally {
+        topicLayoutSaves -= 1;
+      }
+    }
+
     const topicTagGroups = computed(() =>
-      groupTopicsByTag(visibleTopics.value, { pinned: t("chat_topics_pinned"), untagged: t("chat_topics_untagged") })
+      arrangeTopicGroups(
+        groupTopicsByTag(visibleTopics.value, { pinned: t("chat_topics_pinned"), untagged: t("chat_topics_untagged") }),
+        topicLayout.value
+      )
     );
     const pinnedTopicGroup = computed(() => {
       const { pinned } = splitPinnedTopics(visibleTopics.value);
       return pinned.length > 0
-        ? { key: "pinned", label: t("chat_topics_pinned"), topics: pinned, pinned: true, drop: { kind: "pin" } }
+        ? {
+            key: "pinned",
+            label: t("chat_topics_pinned"),
+            topics: orderGroupTopics(pinned, topicLayout.value.topic_order.pinned),
+            pinned: true,
+            drop: { kind: "pin" },
+          }
         : null;
     });
     // While a topic is dragged, a pinned group is always there to drop it on, even an empty one.
@@ -1134,10 +1214,37 @@ const ChatView = {
       return saveTopicTags(workspaceTopicID.value, withPinned(selectedTopicOrdinaryTags.value, Boolean(pinned)));
     }
 
+    // Tag groups, and the pinned group in either view, fold to their heading.
+    const collapsedTopicGroups = ref(loadCollapsedTopicGroups());
+
+    function topicGroupCollapsible(group) {
+      return Boolean(group?.label) && (topicSidebarView.value === "tags" || group.pinned);
+    }
+
+    function topicGroupCollapsed(group) {
+      return topicGroupCollapsible(group) && collapsedTopicGroups.value.has(group.key);
+    }
+
+    function toggleTopicGroup(group) {
+      if (!topicGroupCollapsible(group)) return;
+      const keys = new Set(collapsedTopicGroups.value);
+      if (keys.has(group.key)) keys.delete(group.key);
+      else keys.add(group.key);
+      collapsedTopicGroups.value = keys;
+      saveCollapsedTopicGroups(keys);
+    }
+
     // Dragging a topic onto a group gives it that group's tag: a tag group adds its tag, the pinned
     // group pins it, and the untagged group clears its ordinary tags. Date groups take no drops.
+    // Within a tag group or the pinned group, a topic can be dragged to a new place; tag groups can
+    // be dragged by their heading to reorder them.
     const draggedTopicID = ref("");
+    const draggedGroupKey = ref("");
     const topicDropKey = ref("");
+    // Where a dragged topic would land: before or after topicID in groupKey, or at its end.
+    const topicDropMark = ref(null);
+    // Where a dragged tag group would land: before or after groupKey.
+    const groupDropMark = ref(null);
 
     function onTopicDragStart(event, topic) {
       const topicID = normalizeTopicID(topic?.id);
@@ -1152,47 +1259,144 @@ const ChatView = {
 
     function onTopicDragEnd() {
       draggedTopicID.value = "";
+      draggedGroupKey.value = "";
       topicDropKey.value = "";
+      topicDropMark.value = null;
+      groupDropMark.value = null;
+    }
+
+    // Only topics with a tag or a pin have an order to change.
+    function topicGroupReorderable(group) {
+      return (
+        topicLayoutSupported.value &&
+        Boolean(group?.drop) &&
+        !group.untagged &&
+        (topicSidebarView.value === "tags" || group.pinned)
+      );
+    }
+
+    function groupHasTopic(group, topicID) {
+      return (group?.topics || []).some((topic) => normalizeTopicID(topic?.id) === topicID);
+    }
+
+    // What dropping the dragged topic on a group does: "reorder" within a group it is already in,
+    // "tag" to give it the group's tag, or nothing.
+    function topicDropAction(group) {
+      const topic = draggedTopicID.value ? findTopic(draggedTopicID.value) : null;
+      if (!topic || !group?.drop) return "";
+      if (groupHasTopic(group, draggedTopicID.value)) return topicGroupReorderable(group) ? "reorder" : "";
+      return tagsAfterDrop(topic, group.drop) ? "tag" : "";
     }
 
     function topicGroupAccepts(group) {
-      const topic = draggedTopicID.value ? findTopic(draggedTopicID.value) : null;
-      return Boolean(topic && group?.drop && tagsAfterDrop(topic, group.drop));
+      return Boolean(topicDropAction(group));
+    }
+
+    function pointerAfterMiddle(event) {
+      const rect = event.currentTarget.getBoundingClientRect();
+      return event.clientY > rect.top + rect.height / 2;
+    }
+
+    function onTopicItemDragOver(event, group, topic) {
+      if (!draggedTopicID.value || topicDropAction(group) !== "reorder") return;
+      const topicID = normalizeTopicID(topic?.id);
+      topicDropMark.value = topicID === draggedTopicID.value ? null : { groupKey: group.key, topicID, after: pointerAfterMiddle(event) };
     }
 
     function onTopicGroupDragOver(event, group) {
-      if (!topicGroupAccepts(group)) return;
+      if (draggedGroupKey.value) {
+        if (!isMovableTagGroup(group) || group.key === draggedGroupKey.value) {
+          groupDropMark.value = null;
+          return;
+        }
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "move";
+        groupDropMark.value = { groupKey: group.key, after: pointerAfterMiddle(event) };
+        return;
+      }
+      const action = topicDropAction(group);
+      if (!action) return;
       event.preventDefault();
-      event.dataTransfer.dropEffect = "copy";
+      event.dataTransfer.dropEffect = action === "reorder" ? "move" : "copy";
       topicDropKey.value = group.key;
-    }
-
-    function onTopicGroupDragLeave(event, group) {
-      if (topicDropKey.value === group.key && !event.currentTarget.contains(event.relatedTarget)) {
-        topicDropKey.value = "";
+      // Off the topics (the heading, the gap below), the topic goes to the end of the group.
+      if (action === "reorder" && !event.target.closest?.(".chat-topic-item")) {
+        topicDropMark.value = { groupKey: group.key, topicID: "", after: false };
       }
     }
 
+    function onTopicGroupDragLeave(event, group) {
+      if (event.currentTarget.contains(event.relatedTarget)) return;
+      if (topicDropKey.value === group.key) topicDropKey.value = "";
+      if (topicDropMark.value?.groupKey === group.key) topicDropMark.value = null;
+      if (groupDropMark.value?.groupKey === group.key) groupDropMark.value = null;
+    }
+
     function onTopicGroupDrop(event, group) {
-      const topic = draggedTopicID.value ? findTopic(draggedTopicID.value) : null;
-      const next = topic && group?.drop ? tagsAfterDrop(topic, group.drop) : null;
+      if (draggedGroupKey.value) {
+        const mark = groupDropMark.value?.groupKey === group.key ? groupDropMark.value : null;
+        const dragged = draggedGroupKey.value;
+        onTopicDragEnd();
+        if (!mark) return;
+        event.preventDefault();
+        const shownKeys = topicSidebarGroups.value.filter(isMovableTagGroup).map((item) => item.key);
+        saveTopicLayout(moveTagGroup(topicLayout.value, shownKeys, dragged, mark.groupKey, mark.after));
+        return;
+      }
+      const topicID = draggedTopicID.value;
+      const topic = topicID ? findTopic(topicID) : null;
+      const action = topicDropAction(group);
+      const mark = topicDropMark.value?.groupKey === group.key ? topicDropMark.value : null;
       onTopicDragEnd();
-      if (!next) return;
+      if (!topic || !action) return;
       event.preventDefault();
-      saveTopicTags(topic.id, next);
+      if (action === "tag") {
+        saveTopicTags(topic.id, tagsAfterDrop(topic, group.drop));
+        return;
+      }
+      if (mark) {
+        const shownIDs = group.topics.map((item) => normalizeTopicID(item?.id));
+        saveTopicLayout(moveGroupTopic(topicLayout.value, group.key, shownIDs, topicID, mark.topicID || null, mark.after));
+      }
+    }
+
+    function topicGroupDraggable(group) {
+      return !mobileMode.value && topicSidebarView.value === "tags" && topicLayoutSupported.value && isMovableTagGroup(group);
+    }
+
+    function onTopicGroupHeadDragStart(event, group) {
+      if (!topicGroupDraggable(group)) {
+        event.preventDefault();
+        return;
+      }
+      draggedGroupKey.value = group.key;
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", group.label);
     }
 
     function topicGroupClass(group) {
+      const groupMark = groupDropMark.value?.groupKey === group.key ? groupDropMark.value : null;
       return [
         "chat-topic-day",
         {
           "is-tag-group": topicSidebarView.value === "tags" || group.pinned,
           "is-untagged": group.untagged,
           "is-pinned-group": group.pinned,
+          "is-collapsed": topicGroupCollapsed(group),
           "is-drop-target": Boolean(draggedTopicID.value) && topicGroupAccepts(group),
           "is-drop-over": topicDropKey.value === group.key,
+          "is-dragging": draggedGroupKey.value === group.key,
+          "is-group-drop-before": Boolean(groupMark && !groupMark.after),
+          "is-group-drop-after": Boolean(groupMark && groupMark.after),
+          "is-drop-at-end": topicDropMark.value?.groupKey === group.key && !topicDropMark.value.topicID,
         },
       ];
+    }
+
+    function topicDropMarkClass(group, topic) {
+      const mark = topicDropMark.value;
+      if (!mark || mark.groupKey !== group.key || mark.topicID !== normalizeTopicID(topic?.id)) return "";
+      return mark.after ? "is-drop-after" : "is-drop-before";
     }
 
     const shellClass = computed(() => {
@@ -3273,6 +3477,9 @@ const ChatView = {
         resetTopicState();
         return true;
       }
+      if (topicLayoutEndpoint !== submitEndpointRef.value) {
+        loadTopicLayout();
+      }
       const preferredTopicID = normalizeTopicID(options.preferredTopicID);
       const preserveDraft = Boolean(options.preserveDraft);
       const preserveSelection = Boolean(options.preserveSelection);
@@ -4372,8 +4579,15 @@ const ChatView = {
       draggedTopicID,
       onTopicDragStart,
       onTopicDragEnd,
+      onTopicItemDragOver,
       onTopicGroupDragOver,
       onTopicGroupDragLeave,
+      onTopicGroupHeadDragStart,
+      topicGroupDraggable,
+      topicGroupCollapsible,
+      topicGroupCollapsed,
+      toggleTopicGroup,
+      topicDropMarkClass,
       onTopicGroupDrop,
       topicGroupClass,
       topicItemClass,
@@ -4486,23 +4700,44 @@ const ChatView = {
                 @dragleave="onTopicGroupDragLeave($event, group)"
                 @drop="onTopicGroupDrop($event, group)"
               >
-                <h4 v-if="group.label" class="chat-topic-day-label">
-                  <PhPushPin v-if="group.pinned" class="chat-topic-tag-label-icon" aria-hidden="true" />
-                  <PhTag v-else-if="topicSidebarView === 'tags' && !group.untagged" class="chat-topic-tag-label-icon" aria-hidden="true" />
+                <h4
+                  v-if="group.label && topicGroupCollapsible(group)"
+                  class="chat-topic-day-label is-foldable"
+                  :draggable="topicGroupDraggable(group) ? 'true' : 'false'"
+                  @dragstart="onTopicGroupHeadDragStart($event, group)"
+                  @dragend="onTopicDragEnd"
+                >
+                  <button
+                    type="button"
+                    class="chat-topic-group-toggle"
+                    :aria-expanded="topicGroupCollapsed(group) ? 'false' : 'true'"
+                    :title="topicGroupCollapsed(group) ? t('chat_topics_group_expand') : t('chat_topics_group_collapse')"
+                    @click="toggleTopicGroup(group)"
+                  >
+                    <PhCaretRight :class="['chat-topic-group-caret', { 'is-open': !topicGroupCollapsed(group) }]" aria-hidden="true" />
+                    <PhPushPin v-if="group.pinned" class="chat-topic-tag-label-icon" aria-hidden="true" />
+                    <PhTag v-else-if="!group.untagged" class="chat-topic-tag-label-icon" aria-hidden="true" />
+                    <span class="chat-topic-day-label-text">{{ group.label }}</span>
+                    <span v-if="topicGroupCollapsed(group)" class="chat-topic-group-count">{{ group.topics.length }}</span>
+                  </button>
+                </h4>
+                <h4 v-else-if="group.label" class="chat-topic-day-label">
                   <span class="chat-topic-day-label-text">{{ group.label }}</span>
                 </h4>
+                <template v-if="!topicGroupCollapsed(group)">
                 <p v-if="group.topics.length === 0" class="chat-topic-drop-hint">{{ t("chat_topics_drop_to_pin") }}</p>
                 <button
                   v-for="topic in group.topics"
                   :key="topic.id"
                   type="button"
-                  :class="topicItemClass(topic)"
+                  :class="[topicItemClass(topic), topicDropMarkClass(group, topic)]"
                   :title="topicTime(topic) || undefined"
                   :aria-current="topicIsActive(topic) ? 'page' : undefined"
                   :draggable="mobileMode ? 'false' : 'true'"
                   @click="selectTopic(topic.id)"
                   @dragstart="onTopicDragStart($event, topic)"
                   @dragend="onTopicDragEnd"
+                  @dragover="onTopicItemDragOver($event, group, topic)"
                 >
                   <span
                     class="topic-icon chat-topic-item-icon"
@@ -4513,6 +4748,7 @@ const ChatView = {
                     <span class="chat-topic-item-title workspace-sidebar-item-title">{{ topicTitle(topic) }}</span>
                   </span>
                 </button>
+                </template>
               </section>
               <QButton
                 v-if="topicsNextCursor"
