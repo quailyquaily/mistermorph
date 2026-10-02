@@ -29,6 +29,11 @@ const AppNavList = {
       type: Function,
       default: null,
     },
+    // Icons only: the folded sidebar. Each link names itself in a tooltip.
+    collapsed: {
+      type: Boolean,
+      default: false,
+    },
   },
   emits: ["navigate", "preload"],
   setup() {
@@ -61,8 +66,9 @@ const AppNavList = {
       const value = typeof item?.id === "string" ? item.id.trim() : "";
       return value || "/";
     },
+    // The slot's content has no icon-only form, so the folded sidebar leaves it out.
     shouldRenderBeforeRuntimeSlot(item) {
-      return !!this.sidebarBeforeRuntimeSlot && item?.pagePath === "/settings";
+      return !!this.sidebarBeforeRuntimeSlot && !this.collapsed && item?.pagePath === "/settings";
     },
     onNavigate(item) {
       this.$emit("navigate", item);
@@ -72,7 +78,7 @@ const AppNavList = {
     },
   },
   template: `
-    <div :class="mobile ? 'sidebar-nav mobile-nav-list' : 'sidebar-nav'">
+    <div :class="['sidebar-nav', { 'mobile-nav-list': mobile, 'is-collapsed': collapsed }]">
       <template v-for="item in navItems" :key="keyPrefix + item.id">
         <QDivider v-if="item.separator" class="nav-divider" aria-hidden="true" />
         <template v-else>
@@ -89,6 +95,8 @@ const AppNavList = {
             :href="navHref(item)"
             :class="navClass(item)"
             :aria-current="navCurrent(item)"
+            :title="collapsed ? item.title : undefined"
+            :aria-label="collapsed ? item.title : undefined"
             @focus="onPreload(item)"
             @pointerenter="onPreload(item)"
             @click.prevent="onNavigate(item)"

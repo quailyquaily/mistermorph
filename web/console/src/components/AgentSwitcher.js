@@ -319,6 +319,7 @@ const AgentSwitcher = {
         :aria-label="t('endpoint_switcher_label')"
         :aria-haspopup="longMode ? 'dialog' : 'listbox'"
         :aria-expanded="open ? 'true' : 'false'"
+        :title="compact ? triggerName : undefined"
         @click="toggleSwitcher"
         @keydown="onTriggerKeydown"
       >

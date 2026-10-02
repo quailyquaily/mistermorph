@@ -1,5 +1,6 @@
 .app-shell {
   --sidebar-width: 200px;
+  --sidebar-collapsed-width: 52px;
   --chrome-bar-height: 54px;
   --workspace-head-height: var(--chrome-bar-height);
   --content-gutter-x: clamp(16px, 2vw, 28px);
@@ -24,6 +25,31 @@
   min-height: calc(100vh - var(--app-shell-vpad));
   min-height: calc(100dvh - var(--app-shell-vpad));
   overflow: hidden;
+}
+
+.workspace:not(.is-mobile) {
+  transition: grid-template-columns 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* The folded sidebar: its icons only. */
+.workspace.is-sidebar-collapsed {
+  grid-template-columns: var(--sidebar-collapsed-width) minmax(0, 1fr);
+}
+
+/* While the edge is dragged, the column follows the pointer without easing. */
+.workspace.is-resizing {
+  transition: none;
+}
+
+body.is-resizing-sidebar {
+  cursor: col-resize;
+  user-select: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace:not(.is-mobile) {
+    transition: none;
+  }
 }
 
 .workspace.is-mobile {

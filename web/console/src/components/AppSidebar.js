@@ -31,16 +31,21 @@ const AppSidebar = {
       type: Function,
       required: true,
     },
+    collapsed: {
+      type: Boolean,
+      default: false,
+    },
   },
-  emits: ["navigate", "preload", "endpoint-change", "go-settings"],
+  emits: ["navigate", "preload", "endpoint-change", "go-settings", "edge-pointerdown", "edge-keydown"],
   setup() {
     const sidebarBottomLeftSlot = computed(() => uiSlots["sidebar.bottom_left"] || null);
     return { sidebarBottomLeftSlot };
   },
   template: `
-    <aside class="sidebar">
+    <aside :class="['sidebar', { 'is-collapsed': collapsed }]">
       <AppSidebarControls
         :t="t"
+        :compact="collapsed"
         :endpointItems="endpointItems"
         :selectedEndpointItem="selectedEndpointItem"
         @endpoint-change="$emit('endpoint-change', $event)"
@@ -51,11 +56,12 @@ const AppSidebar = {
         :navItems="navItems"
         :currentPath="currentPath"
         :selectedEndpointItem="selectedEndpointItem"
+        :collapsed="collapsed"
         :t="t"
         @navigate="$emit('navigate', $event)"
         @preload="$emit('preload', $event)"
       />
-      <div v-if="sidebarBottomLeftSlot" class="sidebar-slot sidebar-slot-bottom-left">
+      <div v-if="sidebarBottomLeftSlot && !collapsed" class="sidebar-slot sidebar-slot-bottom-left">
         <component
           :is="sidebarBottomLeftSlot"
           :selectedEndpointItem="selectedEndpointItem"
@@ -63,6 +69,16 @@ const AppSidebar = {
           :t="t"
         />
       </div>
+      <div
+        class="sidebar-edge"
+        role="separator"
+        aria-orientation="vertical"
+        tabindex="0"
+        :title="collapsed ? t('sidebar_expand') : t('sidebar_collapse')"
+        :aria-label="collapsed ? t('sidebar_expand') : t('sidebar_collapse')"
+        @pointerdown="$emit('edge-pointerdown', $event)"
+        @keydown="$emit('edge-keydown', $event)"
+      ></div>
     </aside>
   `,
 };

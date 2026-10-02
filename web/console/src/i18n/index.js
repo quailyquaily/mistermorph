@@ -1347,6 +1347,8 @@ const I18N = {
 	endpoint_channel_whatsapp: "WhatsApp",
     endpoint_location_local: "in-process",
 
+    sidebar_collapse: "Drag to fold the sidebar",
+    sidebar_expand: "Drag to unfold the sidebar",
     nav_overview: "Overview",
     nav_chat: "Chat",
     nav_runtime: "Runtime",
@@ -2770,6 +2772,8 @@ const I18N = {
 	endpoint_channel_whatsapp: "WhatsApp",
     endpoint_location_local: "进程内",
 
+    sidebar_collapse: "拖动以收起侧边栏",
+    sidebar_expand: "拖动以展开侧边栏",
     nav_overview: "概览",
     nav_chat: "聊天",
     nav_runtime: "运行时",
@@ -4202,6 +4206,8 @@ const I18N = {
 	endpoint_channel_whatsapp: "WhatsApp",
     endpoint_location_local: "プロセス内",
 
+    sidebar_collapse: "ドラッグしてサイドバーを折りたたむ",
+    sidebar_expand: "ドラッグしてサイドバーを展開",
     nav_overview: "概要",
     nav_chat: "チャット",
     nav_runtime: "ランタイム",

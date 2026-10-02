@@ -38,3 +38,54 @@
 html[data-macos26="true"] .sidebar {
   border-radius: 16px;
 }
+
+/* The sidebar's right edge: drag it to fold the sidebar to its icons, or to unfold it. */
+.sidebar-edge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 3;
+  width: 6px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.sidebar-edge::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 2px;
+  background: transparent;
+  transition: background-color 0.16s ease;
+}
+
+.sidebar-edge:hover::after,
+.sidebar-edge:focus-visible::after,
+.workspace.is-resizing .sidebar-edge::after {
+  background: color-mix(in srgb, var(--q-c-blue-light) 70%, transparent);
+}
+
+.sidebar-edge:focus-visible {
+  outline: none;
+}
+
+.sidebar.is-collapsed .nav-label {
+  display: none;
+}
+
+.sidebar.is-collapsed .nav-link {
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+  padding: 0;
+}
+
+.sidebar.is-collapsed .nav-icon {
+  justify-self: center;
+}
+
+.sidebar.is-collapsed .nav-divider {
+  margin: 12px 10px;
+}

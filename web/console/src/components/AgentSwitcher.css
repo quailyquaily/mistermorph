@@ -287,6 +287,22 @@
   padding: 4px;
 }
 
+/* In the folded sidebar the switcher shows the agent's avatar only; opened, it widens to its names. */
+.agent-switcher.is-compact:not(.is-open) .agent-switcher-trigger {
+  grid-template-columns: var(--agent-switcher-avatar-size);
+  justify-content: center;
+  padding: 0;
+}
+
+.agent-switcher.is-compact:not(.is-open) .agent-switcher-trigger .agent-switcher-name,
+.agent-switcher.is-compact:not(.is-open) .agent-switcher-trigger .agent-switcher-chevron {
+  display: none;
+}
+
+.agent-switcher.sidebar-controls.is-compact.is-open {
+  width: 240px;
+}
+
 @media (pointer: coarse) {
   .agent-switcher-option,
   .agent-switcher-route {

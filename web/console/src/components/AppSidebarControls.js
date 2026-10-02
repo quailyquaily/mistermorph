@@ -20,6 +20,10 @@ const AppSidebarControls = {
       type: Function,
       required: true,
     },
+    compact: {
+      type: Boolean,
+      default: false,
+    },
   },
   emits: ["endpoint-change", "go-overview", "go-settings"],
   setup() {
@@ -39,6 +43,7 @@ const AppSidebarControls = {
       :selectedAvatar="personaAvatarURL || (selectedEndpointItem && selectedEndpointItem.image) || sidebarLogoURL"
       :selectedName="personaName || (selectedEndpointItem && selectedEndpointItem.title) || t('endpoint_placeholder')"
       :placeholder="t('endpoint_placeholder')"
+      :compact="compact"
       @change="$emit('endpoint-change', $event)"
       @overview="$emit('go-overview')"
     />
