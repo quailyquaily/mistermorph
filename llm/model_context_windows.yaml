@@ -2,6 +2,14 @@ version: 1
 models:
   # OpenAI
   - provider: openai
+    model: gpt-6.1-sol
+    aliases:
+      - openai/gpt-6.1-sol
+    context_window_tokens: 1050000
+    sources:
+      - url: https://developers.openai.com/api/docs/models
+        checked_at: "2026-10-02"
+  - provider: openai
     model: gpt-6-sol
     aliases:
       - openai/gpt-6-sol
@@ -155,6 +163,16 @@ models:
 
   # Anthropic
   - provider: anthropic
+    model: claude-sonnet-5-5
+    aliases:
+      - anthropic/claude-sonnet-5-5
+      - claude-sonnet-5.5
+      - anthropic/claude-sonnet-5.5
+    context_window_tokens: 1000000
+    sources:
+      - url: https://platform.claude.com/docs/en/about-claude/models/overview
+        checked_at: "2026-10-02"
+  - provider: anthropic
     model: claude-fable-5-1
     aliases:
       - anthropic/claude-fable-5-1
@@ -290,6 +308,51 @@ models:
     sources:
       - url: https://ai.google.dev/gemini-api/docs/latest-model
         checked_at: "2026-09-06"
+  - provider: gemini
+    model: gemini-3.7-flash
+    aliases:
+      - google/gemini-3.7-flash
+      - models/gemini-3.7-flash
+    context_window_tokens: 1048576
+    sources:
+      - url: https://ai.google.dev/gemini-api/docs/models/gemini-3.7-flash
+        checked_at: "2026-10-02"
+  - provider: gemini
+    model: gemini-3.6-flash
+    aliases:
+      - google/gemini-3.6-flash
+      - models/gemini-3.6-flash
+    context_window_tokens: 1048576
+    sources:
+      - url: https://ai.google.dev/gemini-api/docs/models/gemini-3.6-flash
+        checked_at: "2026-10-02"
+  - provider: gemini
+    model: gemini-3.5-flash-lite
+    aliases:
+      - google/gemini-3.5-flash-lite
+      - models/gemini-3.5-flash-lite
+    context_window_tokens: 1048576
+    sources:
+      - url: https://ai.google.dev/gemini-api/docs/models/gemini-3.5-flash-lite
+        checked_at: "2026-10-02"
+  - provider: gemini
+    model: gemini-3.1-pro-preview
+    aliases:
+      - google/gemini-3.1-pro-preview
+      - models/gemini-3.1-pro-preview
+    context_window_tokens: 1048576
+    sources:
+      - url: https://ai.google.dev/gemini-api/docs/models/gemini-3.1-pro-preview
+        checked_at: "2026-10-02"
+  - provider: gemini
+    model: gemini-3.1-flash-lite
+    aliases:
+      - google/gemini-3.1-flash-lite
+      - models/gemini-3.1-flash-lite
+    context_window_tokens: 1048576
+    sources:
+      - url: https://ai.google.dev/gemini-api/docs/models/gemini-3.1-flash-lite
+        checked_at: "2026-10-02"
   - provider: gemini
     model: gemini-3.5-flash
     aliases:
@@ -484,10 +547,10 @@ models:
   # Moonshot Kimi
   - provider: moonshot
     model: kimi-k3
-    context_window_tokens: 1000000
+    context_window_tokens: 1048576
     sources:
-      - url: https://platform.kimi.ai/docs/models
-        checked_at: "2026-07-26"
+      - url: https://platform.kimi.ai/docs/pricing/chat
+        checked_at: "2026-10-02"
   - provider: moonshot
     model: kimi-k2.7-code
     context_window_tokens: 262144
@@ -598,6 +661,14 @@ models:
       - url: https://api-docs.deepseek.com/quick_start/pricing/
         checked_at: "2026-05-24"
   - provider: deepseek
+    model: deepseek-flash
+    aliases:
+      - deepseek/deepseek-flash
+    context_window_tokens: 1000000
+    sources:
+      - url: https://api-docs.deepseek.com/quick_start/pricing
+        checked_at: "2026-10-02"
+  - provider: deepseek
     model: deepseek-v4-pro
     context_window_tokens: 1000000
     sources:
@@ -605,6 +676,23 @@ models:
         checked_at: "2026-05-24"
 
   # xAI
+  - provider: xai
+    model: grok-4.7
+    aliases:
+      - xai/grok-4.7
+      - grok-4.7-latest
+    context_window_tokens: 500000
+    sources:
+      - url: https://docs.x.ai/docs/models
+        checked_at: "2026-10-02"
+  - provider: xai
+    model: grok-build-0.1
+    aliases:
+      - xai/grok-build-0.1
+    context_window_tokens: 256000
+    sources:
+      - url: https://docs.x.ai/docs/models
+        checked_at: "2026-10-02"
   - provider: xai
     model: grok-4.6
     aliases:

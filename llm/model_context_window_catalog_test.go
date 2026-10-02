@@ -61,7 +61,7 @@ func TestResolveModelContextWindowCatalogExamples(t *testing.T) {
 		"claude-haiku-4-5":                       200000,
 		"gemini-3.8-flash":                       1048576,
 		"gemini-2.5-pro":                         1048576,
-		"kimi-k3":                                1000000,
+		"kimi-k3":                                1048576,
 		"kimi-k2.7-code":                         262144,
 		"kimi-k2.7-code-highspeed":               262144,
 		"kimi-k2.6":                              262144,
@@ -106,5 +106,23 @@ func TestResolveModelContextWindowCatalogExamples(t *testing.T) {
 				t.Fatalf("context window = %d, want %d", got.ContextWindowTokens, want)
 			}
 		})
+	}
+}
+
+func TestModelContextWindowCatalogNewModels(t *testing.T) {
+	for model, want := range map[string]int64{
+		"claude-sonnet-5-5":             1000000,
+		"anthropic/claude-sonnet-5.5":   1000000,
+		"gpt-6.1-sol":                   1050000,
+		"gemini-3.7-flash":              1048576,
+		"models/gemini-3.1-pro-preview": 1048576,
+		"grok-4.7":                      500000,
+		"deepseek-flash":                1000000,
+		"kimi-k3":                       1048576,
+	} {
+		entry, ok := ResolveModelContextWindow(model)
+		if !ok || entry.ContextWindowTokens != want {
+			t.Errorf("ResolveModelContextWindow(%q) = %d, %v; want %d", model, entry.ContextWindowTokens, ok, want)
+		}
 	}
 }

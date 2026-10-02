@@ -58,6 +58,12 @@
 - Prefer `MISTER_MORPH_API_KEY` over committing `api_key` in config; treat logs as sensitive when enabling debug/thought output.
 - When adding/changing config keys, update `assets/config/config.example.yaml` (the template used for docs and examples).
 
+## Model Catalogs
+
+- Model pricing comes from uniai (`uniai.DefaultPricingCatalog`, picked up by bumping the uniai version). Each time model pricing is updated (new models or new prices), update the context window sizes in `llm/model_context_windows.yaml` as well: add every new model (with its common aliases), and correct changed windows.
+- Take window sizes only from the provider's official docs, and record the page in `sources` with the `checked_at` date. Do not guess a size; leave a model out until its docs state one.
+- Add new models to the lookup checks in `llm/model_context_window_catalog_test.go`.
+
 ## Commit & Pull Request Guidelines
 
 - This checkout may not include Git history; if it does, match existing conventions. Otherwise, use Conventional Commits (`feat:`, `fix:`, `docs:`, `refactor:`).
