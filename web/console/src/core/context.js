@@ -68,6 +68,21 @@ function defaultPerfSource(pathname) {
   return "page";
 }
 
+// Called when the console rejects the session token (401), so the app can send the user to log
+// in. /auth/me is left to the router's guard, which checks the session on every navigation.
+let authExpiredHandler = null;
+
+function onAuthExpired(handler) {
+  authExpiredHandler = typeof handler === "function" ? handler : null;
+}
+
+function handleUnauthorized(pathname) {
+  authState.clear();
+  if (pathname !== "/auth/me") {
+    authExpiredHandler?.();
+  }
+}
+
 async function apiFetch(pathname, options = {}) {
   const method = options.method || "GET";
   const headers = { ...(options.headers || {}) };
@@ -98,7 +113,7 @@ async function apiFetch(pathname, options = {}) {
     const parsed = raw ? safeJSON(raw, { error: raw }) : {};
     if (!resp.ok) {
       if (resp.status === 401 && !options.noAuth && resp.headers.get("X-MisterMorph-Proxy-Upstream") !== "1") {
-        authState.clear();
+        handleUnauthorized(pathname);
       }
       const err = new Error(parsed.error || `HTTP ${resp.status}`);
       err.status = resp.status;
@@ -158,7 +173,7 @@ async function apiFetchBlob(pathname, options = {}) {
       const raw = await resp.text();
       const parsed = raw ? safeJSON(raw, { error: raw }) : {};
       if (resp.status === 401 && !options.noAuth && resp.headers.get("X-MisterMorph-Proxy-Upstream") !== "1") {
-        authState.clear();
+        handleUnauthorized(pathname);
       }
       const err = new Error(parsed.error || `HTTP ${resp.status}`);
       err.status = resp.status;
@@ -529,6 +544,7 @@ export {
   authValid,
   endpointState,
   apiFetch,
+  onAuthExpired,
   fetchConsoleAuthConfig,
   ensureConsoleSession,
   loadEndpoints,

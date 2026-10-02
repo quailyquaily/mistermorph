@@ -1,4 +1,5 @@
-import { createRouter, createWebHistory } from "vue-router";
+import { watch } from "vue";
+import { START_LOCATION, createRouter, createWebHistory } from "vue-router";
 
 import {
   BASE_PATH,
@@ -8,6 +9,7 @@ import {
   ensureConsoleSession,
   endpointState,
   ensureEndpointsLoaded,
+  onAuthExpired,
 } from "../core/context";
 import {
   blockingSetupIntegrityItems,
@@ -384,6 +386,54 @@ router.beforeEach(async (to) => {
 
 router.afterEach((to) => {
   markRouteInteractive(to);
+});
+
+// When the session ends, by its expiry time or by the console rejecting the token, go to the login
+// page and come back here after logging in. Without a password the login page logs in by itself.
+function redirectToLogin() {
+  const current = router.currentRoute.value;
+  // Before the first navigation the guard sends an expired session to the login page itself,
+  // keeping the address that was opened.
+  if (current === START_LOCATION || current.meta?.public === true || current.path === "/login") {
+    return;
+  }
+  void router.replace({ path: "/login", query: { redirect: current.fullPath } });
+}
+
+function expireSession() {
+  authState.clear();
+  redirectToLogin();
+}
+
+onAuthExpired(redirectToLogin);
+
+// setTimeout waits at most about 24.8 days; a later expiry is checked again then.
+const MAX_TIMER_MS = 2 ** 31 - 1;
+let sessionExpiryTimer = 0;
+
+function msUntilExpiry() {
+  if (!authState.token || !authState.expiresAt) return null;
+  const at = new Date(authState.expiresAt).getTime();
+  return Number.isFinite(at) ? at - Date.now() : null;
+}
+
+function scheduleSessionExpiry() {
+  window.clearTimeout(sessionExpiryTimer);
+  sessionExpiryTimer = 0;
+  const ms = msUntilExpiry();
+  if (ms === null) return;
+  if (ms <= 0) {
+    expireSession();
+    return;
+  }
+  sessionExpiryTimer = window.setTimeout(scheduleSessionExpiry, Math.min(ms, MAX_TIMER_MS));
+}
+
+watch(() => [authState.token, authState.expiresAt], scheduleSessionExpiry, { immediate: true });
+
+// Timers do not run while a computer sleeps, so check again when the page comes back.
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") scheduleSessionExpiry();
 });
 
 export { router, NAV_ITEMS_META, preloadRouteComponent };
