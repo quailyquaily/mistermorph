@@ -29,6 +29,7 @@ const (
 var (
 	ErrTopicTitleChanged = errors.New("topic was renamed or deleted during generation")
 	ErrTopicTitleBusy    = errors.New("topic name generation is already in progress")
+	ErrTopicNotFound     = errors.New("topic not found")
 )
 
 type ConsoleFileStoreOptions struct {
@@ -640,6 +641,38 @@ func (s *ConsoleFileStore) CompleteTopicTitleRegeneration(id string, revision ui
 	return topic, nil
 }
 
+// SetTopicTags replaces a topic's tags. It leaves updated_at alone, so tagging does not move the
+// topic in the date-ordered list.
+func (s *ConsoleFileStore) SetTopicTags(id string, tags []string) (TopicInfo, error) {
+	if s == nil {
+		return TopicInfo{}, fmt.Errorf("console task store is nil")
+	}
+	id = strings.TrimSpace(id)
+	normalized, err := taskdomain.NormalizeTopicTags(tags)
+	if err != nil {
+		return TopicInfo{}, BadRequest(err.Error())
+	}
+	unlock, err := s.lockShared()
+	if err != nil {
+		return TopicInfo{}, err
+	}
+	defer unlock()
+	topic, ok := s.topics[id]
+	if !ok || topicDeleted(topic) {
+		return TopicInfo{}, ErrTopicNotFound
+	}
+	topic.Tags = normalized
+	now := time.Now().UTC()
+	cursor, err := s.appendTopicEventLocked(taskdomain.JournalTypeTopicTagsUpdated, topic, now, TaskTrigger{})
+	if err != nil {
+		return TopicInfo{}, err
+	}
+	s.topics[id] = topic
+	s.projectionCursor = cursor
+	s.persistTopicsProjectionLocked(now)
+	return topic, nil
+}
+
 func (s *ConsoleFileStore) saveTopicTitleLocked(topic TopicInfo, now time.Time) error {
 	topic = normalizeTopicInfo(topic)
 	cursor, err := s.appendTopicEventLocked(taskdomain.JournalTypeTopicTitleUpdated, topic, now, TaskTrigger{})
@@ -899,7 +932,7 @@ func (s *ConsoleFileStore) replayJournalLocked(cursor domainjournal.Cursor) erro
 			return nil
 		}
 		switch rec.Event.Type {
-		case taskdomain.JournalTypeTopicUpsert, taskdomain.JournalTypeTopicTitleUpdated, taskdomain.JournalTypeTopicDeleted:
+		case taskdomain.JournalTypeTopicUpsert, taskdomain.JournalTypeTopicTitleUpdated, taskdomain.JournalTypeTopicTagsUpdated, taskdomain.JournalTypeTopicDeleted:
 			if payload.Topic == nil {
 				return nil
 			}

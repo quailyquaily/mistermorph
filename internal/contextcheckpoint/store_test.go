@@ -12,6 +12,7 @@ import (
 
 	"github.com/quailyquaily/mistermorph/agent"
 	"github.com/quailyquaily/mistermorph/internal/chathistory"
+	"github.com/quailyquaily/mistermorph/internal/topicstate"
 	"github.com/quailyquaily/mistermorph/llm"
 )
 
@@ -286,5 +287,53 @@ func TestFilterMessageHistoryKeepsOnlyMessagesAfterCoveredBoundary(t *testing.T)
 	unmatchedMessages, unmatchedBoundaries := FilterMessageHistory(messages, boundaries, "unknown")
 	if len(unmatchedMessages) != len(messages) || len(unmatchedBoundaries) != len(boundaries) {
 		t.Fatalf("unknown boundary changed history: messages=%#v boundaries=%#v", unmatchedMessages, unmatchedBoundaries)
+	}
+}
+
+func TestFileStoreMovesALegacyCheckpointIntoTheTopicFolder(t *testing.T) {
+	root := t.TempDir()
+	key := "console:topic-legacy"
+	store, err := NewFileStore(root, key)
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	now := time.Now().UTC().Truncate(time.Second)
+	raw, err := json.Marshal(agent.ContextCheckpoint{
+		Version:         1,
+		Revision:        1,
+		Message:         llm.Message{Role: "user", Content: "legacy"},
+		CoveredThrough:  "boundary:legacy",
+		CompactionCount: 1,
+		CreatedAt:       now,
+		UpdatedAt:       now,
+	})
+	if err != nil {
+		t.Fatalf("marshal checkpoint: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(store.legacyPath), 0o700); err != nil {
+		t.Fatalf("create legacy directory: %v", err)
+	}
+	if err := os.WriteFile(store.legacyPath, raw, 0o600); err != nil {
+		t.Fatalf("write legacy checkpoint: %v", err)
+	}
+
+	got, found, err := store.Load(context.Background())
+	if err != nil || !found || got.Message.Content != "legacy" {
+		t.Fatalf("Load() = %+v found:%v err:%v", got, found, err)
+	}
+	if want := filepath.Join(root, "topics", topicstate.Key(key), "context_checkpoint.json"); store.path != want {
+		t.Fatalf("path = %q, want %q", store.path, want)
+	}
+	if _, err := os.Stat(store.path); err != nil {
+		t.Fatalf("moved checkpoint missing: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "context_checkpoints")); !os.IsNotExist(err) {
+		t.Fatalf("legacy folder should be gone, stat err = %v", err)
+	}
+	if err := store.Delete(context.Background(), 1); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "topics", topicstate.Key(key))); !os.IsNotExist(err) {
+		t.Fatalf("empty topic folder should be gone, stat err = %v", err)
 	}
 }

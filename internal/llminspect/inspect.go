@@ -370,6 +370,13 @@ func WrapClient(base llm.Client, opts ClientOptions) llm.Client {
 	}
 }
 
+func (c *client) Unwrap() llm.Client {
+	if c == nil {
+		return nil
+	}
+	return c.base
+}
+
 func (c *client) Chat(ctx context.Context, req llm.Request) (llm.Result, error) {
 	if c == nil || c.base == nil {
 		return llm.Result{}, fmt.Errorf("inspect client is not initialized")

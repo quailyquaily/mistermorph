@@ -158,6 +158,10 @@ ID in the body. Inspect `status`, `resumed` and `error` in the response, then
 continue querying the associated task. HTTP 200 alone does not establish that
 execution resumed. These endpoints require the runtime token.
 
+In Console, `PUT /topics/{topic_id}/tags` with `{"tags": [...]}` replaces a topic's
+tags; topics carry them in `tags`. The reserved tag `pinned` pins the topic to the
+top of the Console topic list.
+
 Deleting a topic uses `DELETE /topics/{topic_id}` and returns 204 with no body.
 Console also stops topic work and removes its context. This is distinct from
 stopping an execution or resetting its model context.
@@ -169,6 +173,10 @@ existing directory to a topic. `DELETE /workspace?topic_id=...` removes the
 attachment and resolves the server default; it does not disable workspace
 access. `GET /topic/{topic_id}/metadata` reports workspace resolution and
 model context usage. Notice the singular `topic` in this metadata path.
+In Console, `GET /topic/{topic_id}/context` returns the topic's last main request split into
+parts (system prompt sections, skills, tool definitions, history, the current message and this
+run's steps) with token counts that add up to the reported total. When the provider can
+count tokens, the first look counts the parts with it; otherwise they are estimated locally.
 
 Upload with `POST /files/upload`, using multipart field `files` once per file.
 The entire request is limited to 64 MiB. Destination precedence is explicit

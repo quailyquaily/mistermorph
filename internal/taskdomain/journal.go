@@ -18,6 +18,7 @@ const (
 
 	JournalTypeTopicUpsert       = "topic_upsert"
 	JournalTypeTopicTitleUpdated = "topic_title_updated"
+	JournalTypeTopicTagsUpdated  = "topic_tags_updated"
 	JournalTypeTopicDeleted      = "topic_deleted"
 )
 

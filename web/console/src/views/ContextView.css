@@ -1,0 +1,530 @@
+/* The page scrolls; the overview and the item list stay in view beside the text. */
+.context-page .page-body {
+  --context-sticky-height: calc(100dvh - var(--workspace-head-height) - 40px);
+  min-height: 0;
+  overflow: auto;
+}
+
+.context-page-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* Three panes: the window at a glance, the selected part's items, and the selected item's text. */
+.context-view {
+  --context-system: #7c2d12;
+  --context-skills: #ea580c;
+  --context-tools: #f59e0b;
+  --context-history: #a8a29e;
+  --context-current: #e11d48;
+  --context-steps: #facc15;
+  --context-pane-line: color-mix(in srgb, var(--line) 60%, transparent);
+  --context-hover: color-mix(in srgb, var(--line) 30%, transparent);
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 340px) minmax(0, 320px) minmax(0, 1fr);
+  align-items: start;
+  gap: 0;
+  min-width: 0;
+}
+
+.context-view > .q-progress,
+.context-view > .q-fence,
+.context-view-empty {
+  grid-column: 1 / -1;
+  align-self: start;
+}
+
+.is-system { --context-color: var(--context-system); }
+.is-skills { --context-color: var(--context-skills); }
+.is-tools { --context-color: var(--context-tools); }
+.is-history { --context-color: var(--context-history); }
+.is-current { --context-color: var(--context-current); }
+.is-steps { --context-color: var(--context-steps); }
+
+.context-view-empty,
+.context-view-note {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--font-size-meta);
+  line-height: 1.5;
+}
+
+.context-view-overview,
+.context-view-items,
+.context-view-text {
+  min-width: 0;
+}
+
+.context-view-overview,
+.context-view-items {
+  position: sticky;
+  top: 0;
+  max-height: var(--context-sticky-height);
+  overflow: auto;
+}
+
+/* With no part selected, the item and text panes hold one hint. */
+.context-view-hint {
+  grid-column: 2 / -1;
+  margin: 0;
+  padding: 40px 16px;
+  border-left: 1px solid var(--context-pane-line);
+  color: var(--text-2);
+  font-size: var(--font-size-meta);
+  text-align: center;
+}
+
+.context-view-overview {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 4px 24px 24px 0;
+}
+
+.context-view-items,
+.context-view-text {
+  padding: 4px 16px 24px;
+  border-left: 1px solid var(--context-pane-line);
+}
+
+/* The header: a ring for the whole window, the parts as arcs, the compaction point as a tick. */
+.context-view-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+
+.context-view-ring {
+  position: relative;
+  flex: 0 0 auto;
+  width: 96px;
+  height: 96px;
+}
+
+.context-view-ring svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.context-view-ring circle {
+  fill: none;
+  stroke-width: 10;
+}
+
+.context-view-ring-track {
+  stroke: color-mix(in srgb, var(--line) 45%, transparent);
+}
+
+.context-view-ring-arc {
+  stroke: var(--context-color);
+  transform: rotate(-90deg);
+  transform-origin: 50% 50%;
+}
+
+.context-view-ring-trigger {
+  stroke: var(--text-0);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.context-view-ring-value {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--text-0);
+  font-size: 1.1rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+.context-view-head-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+}
+
+.context-view-big {
+  color: var(--text-0);
+  font-size: 1.75rem;
+  font-weight: 600;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.context-view-big small {
+  margin-left: 6px;
+  color: var(--text-2);
+  font-size: var(--font-size-meta);
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+.context-view-sub {
+  color: var(--text-2);
+  font-size: var(--font-size-meta);
+}
+
+.context-view-trigger-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+  padding: 1px 8px;
+  border: 1px solid var(--context-pane-line);
+  border-radius: 999px;
+  color: var(--text-1);
+  font-size: 11px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+/* The chip carries the ring's tick, so the two read together. */
+.context-view-trigger-chip::before {
+  content: "";
+  width: 2px;
+  height: 10px;
+  border-radius: 1px;
+  background: var(--text-0);
+}
+
+/* The used space as 20×20 cells, each part a run of its colour; the free space is left out. */
+.context-view-grid {
+  display: grid;
+  grid-template-columns: repeat(20, 1fr);
+  gap: 2px;
+}
+
+.context-view-cell {
+  aspect-ratio: 1;
+  border-radius: 1.5px;
+  background: var(--context-color);
+  cursor: pointer;
+  transition: opacity 120ms ease;
+}
+
+.context-view-cell.is-dim {
+  opacity: 0.22;
+}
+
+/* A cache tag: the cached prefix ends in this cell. */
+.context-view-cell.is-cache {
+  position: relative;
+}
+
+.context-view-cell.is-cache::after,
+.context-view-cache-dot {
+  border-radius: 50%;
+  background: var(--q-bg-paper);
+  box-shadow: 0 0 0 1px var(--text-0);
+}
+
+.context-view-cell.is-cache::after {
+  content: "";
+  position: absolute;
+  inset: 25%;
+}
+
+.context-view-cache-key {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -8px 0 0;
+  color: var(--text-2);
+  font-size: var(--font-size-meta);
+}
+
+.context-view-cache-dot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+}
+
+.context-view-cache-badge {
+  flex: 0 0 auto;
+  padding: 0 5px;
+  border: 1px solid var(--context-pane-line);
+  border-radius: 3px;
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.context-view-legend {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.context-view-legend-item,
+.context-view-item {
+  display: grid;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin: 0;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--text-1);
+  font: inherit;
+  font-size: var(--font-size-meta);
+  text-align: left;
+  cursor: pointer;
+}
+
+.context-view-legend-item {
+  grid-template-columns: auto minmax(0, 1fr) auto 3.5em;
+}
+
+.context-view-item {
+  grid-template-columns: minmax(0, 1fr) 56px 4.5em;
+}
+
+.context-view-legend-item:hover,
+.context-view-item:hover {
+  background: var(--context-hover);
+}
+
+.context-view-legend-item.is-selected,
+.context-view-item.is-selected {
+  background: var(--context-hover);
+  color: var(--text-0);
+}
+
+.context-view-item-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.context-view-legend-name,
+.context-view-item-label,
+.context-view-text-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.context-view-num {
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-meta);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.context-view-swatch {
+  flex: 0 0 auto;
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  background: var(--context-color);
+}
+
+.context-view-items {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.context-view-pane-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin-bottom: 6px;
+  padding: 6px 8px;
+  color: var(--text-0);
+  font-size: var(--font-size-meta);
+  font-weight: 600;
+}
+
+.context-view-pane-head .context-view-num {
+  margin-left: auto;
+  font-weight: 400;
+}
+
+.context-view-item-bar {
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--line) 40%, transparent);
+}
+
+.context-view-item-bar > span {
+  display: block;
+  height: 100%;
+  min-width: 2px;
+  background: var(--context-color);
+}
+
+.context-view-text {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.context-view-text pre {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--line) 22%, transparent);
+  color: var(--text-1);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-meta);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Narrower: the items sit above the text in the second column. */
+@media (max-width: 1100px) {
+  .context-view {
+    grid-template-columns: minmax(0, 300px) minmax(0, 1fr);
+  }
+
+  .context-view-overview {
+    grid-row: 1 / span 2;
+  }
+
+  /* The item list sits above the text and scrolls away with the page. */
+  .context-view-items {
+    position: static;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .context-view-text {
+    border-top: 1px solid var(--context-pane-line);
+  }
+
+  .context-view-hint {
+    grid-column: 2;
+    grid-row: 1 / -1;
+  }
+}
+
+/* Phones: one level at a time (overview, a part's items, an item's text), each the full width. */
+.context-view.is-phone {
+  display: flex;
+  flex-direction: column;
+}
+
+.is-phone .context-view-overview {
+  position: static;
+  max-height: none;
+  overflow: visible;
+  gap: 18px;
+  padding: 0;
+}
+
+.is-phone .context-view-ring {
+  width: 84px;
+  height: 84px;
+}
+
+.is-phone .context-view-grid {
+  gap: 1.5px;
+}
+
+.is-phone .context-view-legend-item {
+  grid-template-columns: auto minmax(0, 1fr) auto 3.5em auto;
+  min-height: 44px;
+  padding: 8px 4px;
+}
+
+.is-phone .context-view-items {
+  position: static;
+  max-height: none;
+  overflow: visible;
+  padding: 0;
+  border: 0;
+}
+
+/* Two lines per item: its label and size, then a preview of its text. */
+.is-phone .context-view-item {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-areas:
+    "name num chevron"
+    "snippet snippet chevron";
+  row-gap: 2px;
+  min-height: 52px;
+  padding: 8px 4px;
+  border-bottom: 1px solid color-mix(in srgb, var(--context-pane-line) 50%, transparent);
+  border-radius: 0;
+}
+
+.is-phone .context-view-item .context-view-item-name {
+  grid-area: name;
+  color: var(--text-0);
+}
+
+.is-phone .context-view-item .context-view-num {
+  grid-area: num;
+}
+
+.is-phone .context-view-item .context-view-chevron {
+  grid-area: chevron;
+}
+
+.is-phone .context-view-item-bar {
+  display: none;
+}
+
+.context-view-item-snippet {
+  grid-area: snippet;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The bar already names the part; its head keeps the size. */
+.is-phone .context-view-items .context-view-pane-name {
+  display: none;
+}
+
+.is-phone .context-view-text {
+  padding: 0;
+  border: 0;
+}
+
+/* The bar already names the item; the head keeps its size and cache tag. */
+.is-phone .context-view-text .context-view-text-title {
+  display: none;
+}
+
+.is-phone .context-view-pane-head {
+  padding: 0 4px;
+}
+
+.is-phone .context-view-text pre {
+  padding: 12px;
+  font-size: 12px;
+}
+
+.context-view-chevron {
+  width: 14px;
+  height: 14px;
+  color: var(--text-2);
+}

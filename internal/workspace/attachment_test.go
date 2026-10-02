@@ -3,12 +3,14 @@ package workspace
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/quailyquaily/mistermorph/internal/fsstore"
+	"github.com/quailyquaily/mistermorph/internal/topicstate"
 )
 
 func TestParseCommandArgs(t *testing.T) {
@@ -217,7 +219,7 @@ func TestStoreSetWaitsForCrossProcessLock(t *testing.T) {
 	dir := t.TempDir()
 	done := make(chan error, 1)
 
-	err := fsstore.WithLock(context.Background(), store.lockPath, func() error {
+	err := fsstore.WithLock(context.Background(), topicstate.LockPath(store.stateDir, scopeKey), func() error {
 		go func() {
 			_, _, err := store.Set(scopeKey, Attachment{WorkspaceDir: dir})
 			done <- err
@@ -251,5 +253,33 @@ func TestStoreSetWaitsForCrossProcessLock(t *testing.T) {
 	}
 	if got.WorkspaceDir != dir {
 		t.Fatalf("workspace dir = %q, want %q", got.WorkspaceDir, dir)
+	}
+}
+
+func TestStoreMovesTheLegacyFileIntoTopicFolders(t *testing.T) {
+	root := t.TempDir()
+	legacy := filepath.Join(root, "workspace_attachments.json")
+	raw := `{"version":1,"attachments":{"console:a":{"workspace_dir":"/srv/a"},"console:b":{"workspace_dir":"/srv/b"}}}`
+	if err := os.WriteFile(legacy, []byte(raw), 0o600); err != nil {
+		t.Fatalf("write legacy: %v", err)
+	}
+	store := NewStore(legacy)
+	for key, want := range map[string]string{"console:a": "/srv/a", "console:b": "/srv/b"} {
+		got, ok, err := store.Get(key)
+		if err != nil || !ok || got.WorkspaceDir != want {
+			t.Fatalf("Get(%q) = %+v ok=%v err=%v", key, got, ok, err)
+		}
+		if _, err := os.Stat(filepath.Join(root, "topics", topicstate.Key(key), "workspace.json")); err != nil {
+			t.Fatalf("topic file for %q missing: %v", key, err)
+		}
+	}
+	if _, err := os.Stat(legacy); !os.IsNotExist(err) {
+		t.Fatalf("legacy file should be gone, stat err = %v", err)
+	}
+	if _, had, err := store.Delete("console:a"); err != nil || !had {
+		t.Fatalf("Delete() had=%v err=%v", had, err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "topics", topicstate.Key("console:a"))); !os.IsNotExist(err) {
+		t.Fatalf("empty topic folder should be gone, stat err = %v", err)
 	}
 }

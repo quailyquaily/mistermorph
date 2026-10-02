@@ -2,10 +2,13 @@ package topiccontext
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/quailyquaily/mistermorph/internal/topicstate"
 )
 
 func TestStoreUpdateFromSampleUsesConfiguredWindow(t *testing.T) {
@@ -196,5 +199,34 @@ func TestStoreConcurrentWritesKeepItems(t *testing.T) {
 		if item.UsedInputTokens != int64(100+i) {
 			t.Fatalf("Get(%q).used = %d, want %d", key, item.UsedInputTokens, 100+i)
 		}
+	}
+}
+
+func TestStoreMovesTheLegacyFileIntoTopicFolders(t *testing.T) {
+	root := t.TempDir()
+	legacy := filepath.Join(root, "topic_context.json")
+	raw := `{"version":1,"items":{"console:a":{"conversation_key":"console:a","model":"m","context_window_tokens":1000,"used_input_tokens":250}}}`
+	if err := os.WriteFile(legacy, []byte(raw), 0o600); err != nil {
+		t.Fatalf("write legacy: %v", err)
+	}
+	store := NewStore(legacy)
+	item, ok, err := store.Get("console:a")
+	if err != nil || !ok {
+		t.Fatalf("Get() ok=%v err=%v", ok, err)
+	}
+	if item.UsedInputTokens != 250 || item.UsageRatio != 0.25 {
+		t.Fatalf("item = %+v", item)
+	}
+	if _, err := os.Stat(filepath.Join(root, "topics", topicstate.Key("console:a"), "context.json")); err != nil {
+		t.Fatalf("topic file missing: %v", err)
+	}
+	if _, err := os.Stat(legacy); !os.IsNotExist(err) {
+		t.Fatalf("legacy file should be gone, stat err = %v", err)
+	}
+	if err := store.Delete("console:a"); err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+	if _, ok, _ := store.Get("console:a"); ok {
+		t.Fatalf("item still there after Delete()")
 	}
 }

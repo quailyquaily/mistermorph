@@ -3,6 +3,7 @@ package uniai
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -200,6 +201,34 @@ func (c *Client) Chat(ctx context.Context, req llm.Request) (llm.Result, error) 
 		Usage:     usage,
 		Duration:  time.Since(start),
 	}, nil
+}
+
+// CountTokens asks the provider how many input tokens req holds, without running it. The request
+// is built as Chat would build it. Providers uniai cannot count return llm.ErrTokenCountUnsupported.
+func (c *Client) CountTokens(ctx context.Context, req llm.Request) (int, error) {
+	if c == nil || c.client == nil || !c.client.SupportsCountTokens(c.provider) {
+		return 0, llm.ErrTokenCountUnsupported
+	}
+	if c.requestTimeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, c.requestTimeout)
+		defer cancel()
+	}
+	if strings.TrimSpace(req.InferenceProvider) == "" && c.inferenceProvider != "" {
+		req.InferenceProvider = c.inferenceProvider
+	}
+	req.OnStream = nil
+	count, err := c.client.CountTokens(ctx, c.buildChatOptions(req, false)...)
+	if err != nil {
+		if errors.Is(err, uniaiapi.ErrTokenCountUnsupported) {
+			return 0, fmt.Errorf("%w: %v", llm.ErrTokenCountUnsupported, err)
+		}
+		return 0, err
+	}
+	if count == nil {
+		return 0, fmt.Errorf("uniai: empty token count")
+	}
+	return count.InputTokens, nil
 }
 
 func supportsStreaming(provider string) bool {

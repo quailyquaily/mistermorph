@@ -108,6 +108,14 @@ func WrapRuntimeImageClient(base llm.ImageClient, provider, apiBase, defaultMode
 	})
 }
 
+// Unwrap gives counting and other capabilities of the wrapped client; counting records no usage.
+func (c *UsageClient) Unwrap() llm.Client {
+	if c == nil {
+		return nil
+	}
+	return c.Base
+}
+
 func (c *UsageClient) Chat(ctx context.Context, req llm.Request) (llm.Result, error) {
 	if c == nil || c.Base == nil {
 		return llm.Result{}, fmt.Errorf("usage client is not initialized")
@@ -136,7 +144,7 @@ func (c *UsageClient) Chat(ctx context.Context, req llm.Request) (llm.Result, er
 		DurationMs: durationMillis(res.Duration, finished.Sub(start)),
 	})
 	appendUsageRecord(c.Journal, c.Logger, rec)
-	c.TopicContextStore.ObserveUsage(ctx, topiccontext.UsageSample{
+	sample := topiccontext.UsageSample{
 		RunID:                    rec.RunID,
 		OriginEventID:            rec.OriginEventID,
 		Scene:                    rec.Scene,
@@ -148,7 +156,9 @@ func (c *UsageClient) Chat(ctx context.Context, req llm.Request) (llm.Result, er
 		CachedInputTokens:        rec.CachedInputTokens,
 		CacheCreationInputTokens: rec.CacheCreationInputTokens,
 		UpdatedAt:                finished,
-	})
+	}
+	c.TopicContextStore.ObserveUsage(ctx, sample)
+	c.TopicContextStore.ObserveRequest(ctx, req, sample)
 	return res, nil
 }
 

@@ -13,12 +13,19 @@ import (
 
 	"github.com/quailyquaily/mistermorph/agent"
 	"github.com/quailyquaily/mistermorph/internal/fsstore"
+	"github.com/quailyquaily/mistermorph/internal/topicstate"
 )
 
+// FileStore keeps a conversation's checkpoint in its topic folder,
+// file_state_dir/topics/<key>/context_checkpoint.json. A checkpoint still in the old
+// context_checkpoints folder is moved there when it is first read.
 type FileStore struct {
-	path     string
-	lockPath string
-	mu       sync.Mutex
+	path       string
+	legacyPath string
+	root       string
+	key        string
+	lockPath   string
+	mu         sync.Mutex
 }
 
 func NewFileStore(root string, conversationKey string) (*FileStore, error) {
@@ -37,8 +44,11 @@ func NewFileStore(root string, conversationKey string) (*FileStore, error) {
 		return nil, err
 	}
 	return &FileStore{
-		path:     filepath.Join(root, "context_checkpoints", key+".json"),
-		lockPath: lockPath,
+		path:       filepath.Join(topicstate.Dir(root, conversationKey), "context_checkpoint.json"),
+		legacyPath: filepath.Join(root, "context_checkpoints", key+".json"),
+		root:       root,
+		key:        conversationKey,
+		lockPath:   lockPath,
 	}, nil
 }
 
@@ -137,11 +147,15 @@ func (s *FileStore) Delete(ctx context.Context, expectedRevision int64) error {
 		if err := os.Remove(s.path); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return fmt.Errorf("delete context checkpoint: %w", err)
 		}
+		topicstate.RemoveIfEmpty(s.root, s.key)
 		return nil
 	})
 }
 
 func (s *FileStore) readLocked() (agent.ContextCheckpoint, bool, error) {
+	if err := s.moveLegacyLocked(); err != nil {
+		return agent.ContextCheckpoint{}, false, err
+	}
 	var checkpoint agent.ContextCheckpoint
 	found, err := fsstore.ReadJSONStrict(s.path, &checkpoint)
 	if err != nil {
@@ -157,4 +171,24 @@ func (s *FileStore) readLocked() (agent.ContextCheckpoint, bool, error) {
 		return agent.ContextCheckpoint{}, false, fmt.Errorf("stored context checkpoint is invalid: %w", err)
 	}
 	return checkpoint, true, nil
+}
+
+// moveLegacyLocked moves a checkpoint from the old context_checkpoints folder into the topic
+// folder, unless one is already there.
+func (s *FileStore) moveLegacyLocked() error {
+	if _, err := os.Stat(s.legacyPath); err != nil {
+		return nil
+	}
+	if _, err := os.Stat(s.path); err == nil {
+		return nil
+	}
+	if err := fsstore.EnsureDir(filepath.Dir(s.path), 0o700); err != nil {
+		return err
+	}
+	if err := os.Rename(s.legacyPath, s.path); err != nil {
+		return fmt.Errorf("move context checkpoint into topic folder: %w", err)
+	}
+	// The old folder goes once its last checkpoint has moved.
+	_ = os.Remove(filepath.Dir(s.legacyPath))
+	return nil
 }

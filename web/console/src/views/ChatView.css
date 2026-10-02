@@ -184,6 +184,86 @@
   height: 13px;
 }
 
+/* One toggle arranges the topic list by tag; off, it is by date. */
+.chat-topic-view-toggle {
+  flex: 0 0 auto;
+  min-width: 32px;
+  min-height: 32px;
+  margin-left: auto;
+  padding: 0 6px !important;
+}
+
+.chat-topic-view-toggle .icon {
+  width: 14px;
+  min-width: 14px;
+  height: 14px;
+}
+
+/* The toggle and the add button sit together, without the head's gap between them. */
+.chat-topic-view-toggle + .chat-topic-sidebar-new {
+  margin-left: -12px;
+}
+
+.chat-topic-view-toggle.is-active {
+  color: var(--q-c-blue) !important;
+  background: color-mix(in srgb, var(--q-c-blue) 12%, transparent) !important;
+}
+
+.chat-topic-tags-hint {
+  margin: 0;
+  padding: 10px 14px 2px;
+  color: var(--text-2);
+  font-size: var(--font-size-meta);
+  line-height: 1.5;
+}
+
+/* In the tag view the group label is the tag, so it keeps its own case. */
+.chat-topic-day.is-tag-group .chat-topic-day-label {
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+
+.chat-topic-day-label-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-topic-tag-label-icon {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  margin-right: -4px;
+}
+
+/* Dragging a topic marks the groups it can be dropped on; the one under the pointer is filled. */
+.chat-topic-day.is-drop-target {
+  border-radius: 2px;
+  outline: 1px dashed color-mix(in srgb, var(--q-c-blue) 45%, transparent);
+  outline-offset: -1px;
+}
+
+.chat-topic-day.is-drop-over {
+  background: color-mix(in srgb, var(--q-c-blue) 10%, transparent);
+  outline-style: solid;
+}
+
+.chat-topic-drop-hint {
+  margin: 0;
+  padding: 6px 14px 10px;
+  color: var(--text-2);
+  font-size: var(--font-size-meta);
+  line-height: 1.5;
+}
+
+.chat-topic-item[draggable="true"] {
+  cursor: pointer;
+}
+
+.chat-topic-item[draggable="true"]:active {
+  cursor: grabbing;
+}
+
 .chat-topic-list {
   min-height: 0;
   overflow-x: hidden;
@@ -553,65 +633,138 @@ html[data-macos26="true"] .chat-workspace-sidebar-shell-mobile {
   overflow: hidden;
 }
 
-.chat-topic-context-progress {
-  display: grid;
-  gap: 8px;
-  padding: 12px 0;
-  border-top: 1px solid color-mix(in srgb, var(--line-soft) 82%, transparent);
-  border-bottom: 1px solid color-mix(in srgb, var(--line-soft) 82%, transparent);
-}
-
-.chat-topic-context-progress-head {
+/* Window used: a static meter, not Quail's progress bar, which animates while below its maximum. */
+.chat-topic-context-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  font-size: var(--font-size-meta);
-  line-height: 1.3;
-  color: var(--text-2);
 }
 
-.chat-topic-context-progress-head span {
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.chat-topic-context-progress-head strong {
-  flex: 0 0 auto;
-  font-size: var(--font-size-meta);
-  font-weight: 600;
-  color: var(--text-0);
-}
-
-.chat-topic-context-progress .q-progress {
-  width: 100%;
-}
-
-.chat-topic-context-progress-foot {
+/* The meter and its inspect button share a line. */
+.chat-topic-context-line {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  font-family: var(--font-mono);
-  font-size: var(--font-size-meta);
-  line-height: 1.35;
-  color: var(--text-2);
+  gap: 6px;
 }
 
-.chat-topic-context-progress-foot span {
+.chat-topic-context-unknown {
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
+  color: var(--text-2);
+  font-size: var(--font-size-meta);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.chat-topic-context-progress-foot span:last-child {
-  flex: 0 1 auto;
-  text-align: right;
+.chat-topic-context-line .chat-topic-context-meter {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
-.chat-topic-context-progress + .chat-topic-property-list {
-  border-top: 0;
+/* A small square button at the end of the meter. */
+.chat-topic-context-inspect.q-button {
+  flex: 0 0 auto;
+  width: 22px;
+  min-width: 22px;
+  height: 22px;
+  min-height: 22px;
+  padding: 0;
+  border-radius: 4px;
+}
+
+.chat-topic-context-inspect .icon {
+  width: 13px;
+  height: 13px;
+}
+
+.chat-topic-context-ratio {
+  flex: 0 0 auto;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--text-0);
+}
+
+.chat-topic-context-value {
+  display: grid;
+  gap: 6px;
+}
+
+.chat-topic-context-meter {
+  --context-new: var(--q-c-blue);
+  --context-cached: color-mix(in srgb, var(--q-c-blue) 40%, var(--q-bg-paper));
+  position: relative;
+  height: 8px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--line) 50%, transparent);
+}
+
+.chat-topic-context-row.is-near .chat-topic-context-meter {
+  --context-new: var(--status-pending);
+  --context-cached: color-mix(in srgb, var(--status-pending) 40%, var(--q-bg-paper));
+}
+
+.chat-topic-context-row.is-over .chat-topic-context-meter {
+  --context-new: var(--status-error);
+  --context-cached: color-mix(in srgb, var(--status-error) 40%, var(--q-bg-paper));
+}
+
+.chat-topic-context-meter-cached,
+.chat-topic-context-meter-fresh {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  max-width: 100%;
+}
+
+.chat-topic-context-meter-cached {
+  border-radius: 2px 0 0 2px;
+  background: var(--context-cached);
+}
+
+.chat-topic-context-meter-fresh {
+  background: var(--context-new);
+}
+
+/* The compaction point: a thin, quiet line across the track. */
+.chat-topic-context-meter-trigger {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: color-mix(in srgb, var(--text-0) 40%, transparent);
+}
+
+
+
+
+/* Pinned and Tags are property rows like the ones below them. */
+/* The pin row is one line: its label on the left, the switch on the right. */
+.chat-topic-property-row.chat-topic-pin-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.chat-topic-pin-value {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+}
+
+.chat-topic-tags-row .chat-topic-property-value {
+  display: grid;
+  gap: 6px;
+}
+
+.chat-topic-tags-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: var(--font-size-meta);
+  line-height: 1.5;
 }
 
 .chat-topic-danger-zone {

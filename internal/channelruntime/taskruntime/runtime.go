@@ -52,6 +52,13 @@ func (c *ownedRuntimeClient) Chat(ctx context.Context, req llm.Request) (llm.Res
 	return c.base.Chat(ctx, req)
 }
 
+func (c *ownedRuntimeClient) Unwrap() llm.Client {
+	if c == nil {
+		return nil
+	}
+	return c.base
+}
+
 func (c *ownedRuntimeClient) Close() error {
 	if c == nil {
 		return nil

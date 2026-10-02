@@ -248,6 +248,45 @@ func (routes *routeRegistration) registerTaskRoutes() {
 			_ = json.NewEncoder(w).Encode(updated)
 			return
 		}
+		if strings.HasSuffix(suffix, "/tags") {
+			if r.Method != http.MethodPut {
+				w.Header().Set("Allow", "PUT")
+				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+			id := strings.TrimSuffix(suffix, "/tags")
+			if id == "" || strings.Contains(id, "/") {
+				http.Error(w, "missing topic_id", http.StatusBadRequest)
+				return
+			}
+			if opts.SetTopicTags == nil {
+				http.Error(w, "topic tags are unavailable", http.StatusServiceUnavailable)
+				return
+			}
+			var req struct {
+				Tags []string `json:"tags"`
+			}
+			if err := json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(&req); err != nil {
+				http.Error(w, "invalid json", http.StatusBadRequest)
+				return
+			}
+			tagged, err := opts.SetTopicTags(id, req.Tags)
+			if err != nil {
+				if errors.Is(err, ErrTopicNotFound) {
+					http.NotFound(w, r)
+					return
+				}
+				if msg, ok := badRequestMessage(err); ok {
+					http.Error(w, msg, http.StatusBadRequest)
+					return
+				}
+				http.Error(w, strings.TrimSpace(err.Error()), http.StatusServiceUnavailable)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(tagged)
+			return
+		}
 		if strings.HasSuffix(suffix, "/stop") {
 			if r.Method != http.MethodPost {
 				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

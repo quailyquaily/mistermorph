@@ -93,6 +93,15 @@ func mergeClientConfig(base llmconfig.ClientConfig, override llmconfig.ClientCon
 	return base
 }
 
+// Unwrap is the only candidate when there is one. A route that splits requests across models has no
+// single client to count with, so it unwraps to nothing.
+func (c *weightedRouteClient) Unwrap() llm.Client {
+	if c == nil || len(c.candidates) != 1 {
+		return nil
+	}
+	return c.candidates[0].Client
+}
+
 func (c *weightedRouteClient) Chat(ctx context.Context, req llm.Request) (llm.Result, error) {
 	if c == nil || len(c.candidates) == 0 {
 		return llm.Result{}, io.ErrClosedPipe

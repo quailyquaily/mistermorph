@@ -204,6 +204,29 @@ func (routes *routeRegistration) registerSystemRoutes() {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
+		if strings.HasSuffix(r.URL.Path, "/context") {
+			topicID := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/topic/"), "/context")
+			if topicID == "" || strings.Contains(topicID, "/") {
+				http.Error(w, "topic_id is required", http.StatusBadRequest)
+				return
+			}
+			if routes.options.TaskTopic.TopicContext == nil {
+				http.Error(w, "topic context is unavailable", http.StatusServiceUnavailable)
+				return
+			}
+			payload, err := routes.options.TaskTopic.TopicContext(r.Context(), topicID)
+			if err != nil {
+				if msg, ok := badRequestMessage(err); ok {
+					http.Error(w, msg, http.StatusBadRequest)
+					return
+				}
+				http.Error(w, strings.TrimSpace(err.Error()), http.StatusServiceUnavailable)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(payload)
+			return
+		}
 		if topicMetadata == nil {
 			http.Error(w, "topic metadata is unavailable", http.StatusServiceUnavailable)
 			return

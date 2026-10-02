@@ -10,9 +10,8 @@ import (
 
 	"github.com/quailyquaily/mistermorph/internal/fsstore"
 	"github.com/quailyquaily/mistermorph/internal/pathutil"
+	"github.com/quailyquaily/mistermorph/internal/topicstate"
 )
-
-const attachmentStoreVersion = 1
 
 type Attachment struct {
 	WorkspaceDir string `json:"workspace_dir"`
@@ -31,10 +30,16 @@ type Resolution struct {
 	Source       Source
 }
 
+// Store keeps each conversation's attached workspace in its topic folder,
+// file_state_dir/topics/<key>/workspace.json. path names the old shared file,
+// workspace_attachments.json in the state dir; whatever it still holds is moved into the topic
+// folders the first time the store is used.
 type Store struct {
-	path     string
-	lockPath string
-	mu       sync.Mutex
+	path      string
+	stateDir  string
+	mu        sync.Mutex
+	migrateMu sync.Mutex
+	migrated  bool
 }
 
 type attachmentFile struct {
@@ -42,43 +47,34 @@ type attachmentFile struct {
 	Attachments map[string]Attachment `json:"attachments"`
 }
 
+const attachmentFileName = "workspace.json"
+
 func NewStore(path string) *Store {
 	path = strings.TrimSpace(path)
-	lockPath := ""
+	stateDir := ""
 	if path != "" {
-		lockPath = path + ".lck"
+		stateDir = filepath.Dir(path)
 	}
-	return &Store{
-		path:     path,
-		lockPath: lockPath,
-	}
+	return &Store{path: path, stateDir: stateDir}
 }
 
 func (s *Store) Get(scopeKey string) (Attachment, bool, error) {
 	scopeKey = strings.TrimSpace(scopeKey)
-	if s == nil || scopeKey == "" {
+	if s == nil || s.stateDir == "" || scopeKey == "" {
 		return Attachment{}, false, nil
+	}
+	if err := s.migrateLegacy(); err != nil {
+		return Attachment{}, false, err
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	data, err := s.readLocked()
-	if err != nil {
-		return Attachment{}, false, err
-	}
-	att, ok := data.Attachments[scopeKey]
-	if !ok {
-		return Attachment{}, false, nil
-	}
-	if strings.TrimSpace(att.WorkspaceDir) == "" {
-		return Attachment{}, false, nil
-	}
-	return att, true, nil
+	return s.readLocked(scopeKey)
 }
 
 func (s *Store) Set(scopeKey string, attachment Attachment) (Attachment, bool, error) {
 	scopeKey = strings.TrimSpace(scopeKey)
 	attachment.WorkspaceDir = strings.TrimSpace(attachment.WorkspaceDir)
-	if s == nil || scopeKey == "" {
+	if s == nil || s.stateDir == "" || scopeKey == "" {
 		return Attachment{}, false, nil
 	}
 	if attachment.WorkspaceDir == "" {
@@ -86,14 +82,13 @@ func (s *Store) Set(scopeKey string, attachment Attachment) (Attachment, bool, e
 	}
 	var prev Attachment
 	var hadPrev bool
-	err := s.withMutationLock(func() error {
-		data, err := s.readLocked()
+	err := s.withMutationLock(scopeKey, func() error {
+		var err error
+		prev, hadPrev, err = s.readLocked(scopeKey)
 		if err != nil {
 			return err
 		}
-		prev, hadPrev = data.Attachments[scopeKey]
-		data.Attachments[scopeKey] = attachment
-		return s.writeLocked(data)
+		return fsstore.WriteJSONAtomic(s.attachmentPath(scopeKey), attachment, fsstore.FileOptions{})
 	})
 	if err != nil {
 		return Attachment{}, false, err
@@ -103,22 +98,22 @@ func (s *Store) Set(scopeKey string, attachment Attachment) (Attachment, bool, e
 
 func (s *Store) Delete(scopeKey string) (Attachment, bool, error) {
 	scopeKey = strings.TrimSpace(scopeKey)
-	if s == nil || scopeKey == "" {
+	if s == nil || s.stateDir == "" || scopeKey == "" {
 		return Attachment{}, false, nil
 	}
 	var prev Attachment
 	var hadPrev bool
-	err := s.withMutationLock(func() error {
-		data, err := s.readLocked()
-		if err != nil {
+	err := s.withMutationLock(scopeKey, func() error {
+		var err error
+		prev, hadPrev, err = s.readLocked(scopeKey)
+		if err != nil || !hadPrev {
 			return err
 		}
-		prev, hadPrev = data.Attachments[scopeKey]
-		if !hadPrev {
-			return nil
+		if err := os.Remove(s.attachmentPath(scopeKey)); err != nil && !os.IsNotExist(err) {
+			return err
 		}
-		delete(data.Attachments, scopeKey)
-		return s.writeLocked(data)
+		topicstate.RemoveIfEmpty(s.stateDir, scopeKey)
+		return nil
 	})
 	if err != nil {
 		return Attachment{}, false, err
@@ -126,60 +121,78 @@ func (s *Store) Delete(scopeKey string) (Attachment, bool, error) {
 	return prev, hadPrev, nil
 }
 
-func (s *Store) withMutationLock(fn func() error) error {
-	if s == nil || fn == nil {
-		return nil
+func (s *Store) withMutationLock(scopeKey string, fn func() error) error {
+	if err := s.migrateLegacy(); err != nil {
+		return err
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.lockPath == "" {
-		return fn()
-	}
-	return fsstore.WithLock(context.Background(), s.lockPath, fn)
+	return fsstore.WithLock(context.Background(), topicstate.LockPath(s.stateDir, scopeKey), fn)
 }
 
-func (s *Store) readLocked() (attachmentFile, error) {
-	data := attachmentFile{
-		Version:     attachmentStoreVersion,
-		Attachments: map[string]Attachment{},
-	}
-	if s == nil || s.path == "" {
-		return data, nil
-	}
-	var persisted attachmentFile
-	found, err := fsstore.ReadJSON(s.path, &persisted)
-	if err != nil {
-		return data, err
-	}
-	if !found {
-		return data, nil
-	}
-	if persisted.Version <= 0 {
-		persisted.Version = attachmentStoreVersion
-	}
-	if persisted.Attachments == nil {
-		persisted.Attachments = map[string]Attachment{}
-	}
-	for scopeKey, att := range persisted.Attachments {
-		scopeKey = strings.TrimSpace(scopeKey)
-		att.WorkspaceDir = strings.TrimSpace(att.WorkspaceDir)
-		if scopeKey == "" || att.WorkspaceDir == "" {
-			continue
-		}
-		data.Attachments[scopeKey] = att
-	}
-	return data, nil
+func (s *Store) attachmentPath(scopeKey string) string {
+	return filepath.Join(topicstate.Dir(s.stateDir, scopeKey), attachmentFileName)
 }
 
-func (s *Store) writeLocked(data attachmentFile) error {
-	if s == nil || s.path == "" {
+func (s *Store) readLocked(scopeKey string) (Attachment, bool, error) {
+	var att Attachment
+	found, err := fsstore.ReadJSON(s.attachmentPath(scopeKey), &att)
+	if err != nil || !found {
+		return Attachment{}, false, err
+	}
+	att.WorkspaceDir = strings.TrimSpace(att.WorkspaceDir)
+	if att.WorkspaceDir == "" {
+		return Attachment{}, false, nil
+	}
+	return att, true, nil
+}
+
+// migrateLegacy moves the attachments of the old shared file into their topic folders, keeping
+// any attachment already there, and then removes the old file.
+func (s *Store) migrateLegacy() error {
+	s.migrateMu.Lock()
+	defer s.migrateMu.Unlock()
+	if s.migrated || s.path == "" {
 		return nil
 	}
-	if data.Attachments == nil {
-		data.Attachments = map[string]Attachment{}
+	if _, err := os.Stat(s.path); os.IsNotExist(err) {
+		s.migrated = true
+		return nil
 	}
-	data.Version = attachmentStoreVersion
-	return fsstore.WriteJSONAtomic(s.path, data, fsstore.FileOptions{})
+	lockPath := s.path + ".lck"
+	err := fsstore.WithLock(context.Background(), lockPath, func() error {
+		var persisted attachmentFile
+		found, err := fsstore.ReadJSON(s.path, &persisted)
+		if err != nil || !found {
+			return err
+		}
+		for scopeKey, att := range persisted.Attachments {
+			scopeKey = strings.TrimSpace(scopeKey)
+			att.WorkspaceDir = strings.TrimSpace(att.WorkspaceDir)
+			if scopeKey == "" || att.WorkspaceDir == "" {
+				continue
+			}
+			err := fsstore.WithLock(context.Background(), topicstate.LockPath(s.stateDir, scopeKey), func() error {
+				if _, err := os.Stat(s.attachmentPath(scopeKey)); err == nil {
+					return nil
+				}
+				return fsstore.WriteJSONAtomic(s.attachmentPath(scopeKey), att, fsstore.FileOptions{})
+			})
+			if err != nil {
+				return err
+			}
+		}
+		if err := os.Remove(s.path); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("move workspace attachments into topic folders: %w", err)
+	}
+	_ = os.Remove(lockPath)
+	s.migrated = true
+	return nil
 }
 
 type CommandAction string

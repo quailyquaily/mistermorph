@@ -37,6 +37,7 @@ const ROUTE_VIEW_LOADERS = {
   bootPreview: () => import("../views/BootPreviewView"),
   chat: () => import("../views/ChatView"),
   contacts: () => import("../views/ContactsView"),
+  context: () => import("../views/ContextView"),
   desktopWindow: () => import("../views/DesktopWindowView"),
   login: () => import("../views/LoginView"),
   logs: () => import("../views/LogsView"),
@@ -55,6 +56,7 @@ const AuditView = ROUTE_VIEW_LOADERS.audit;
 const BootPreviewView = ROUTE_VIEW_LOADERS.bootPreview;
 const ChatView = ROUTE_VIEW_LOADERS.chat;
 const ContactsView = ROUTE_VIEW_LOADERS.contacts;
+const ContextView = ROUTE_VIEW_LOADERS.context;
 const DesktopWindowView = ROUTE_VIEW_LOADERS.desktopWindow;
 const LoginView = ROUTE_VIEW_LOADERS.login;
 const LogsView = ROUTE_VIEW_LOADERS.logs;
@@ -84,6 +86,9 @@ function isDesktopWindowPath(path) {
 
 function preloadKeyForPath(path) {
   const value = pagePath(path);
+  if (/^\/chat\/[^/]+\/context$/.test(value)) {
+    return "context";
+  }
   if (value === "/chat" || value.startsWith("/chat/")) {
     return "chat";
   }
@@ -211,6 +216,11 @@ const routes = [
   {
     path: `${ENDPOINT_SCOPE_PATH}/chat/:topic_id`,
     component: ChatView,
+    meta: { endpointScoped: true, mobileBottomNav: false },
+  },
+  {
+    path: `${ENDPOINT_SCOPE_PATH}/chat/:topic_id/context`,
+    component: ContextView,
     meta: { endpointScoped: true, mobileBottomNav: false },
   },
   { path: `${ENDPOINT_SCOPE_PATH}/stats`, component: StatsView, meta: { endpointScoped: true } },

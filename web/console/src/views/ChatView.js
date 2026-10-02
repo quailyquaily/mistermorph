@@ -9,6 +9,7 @@ import AppTabs from "../components/AppTabs";
 import ChatComposer from "../components/ChatComposer";
 import AppFab from "../components/AppFab";
 import ChatHistoryList from "../components/ChatHistoryList";
+import TopicTagsEditor from "../components/TopicTagsEditor";
 import { approvalDetailsByID, taskApprovalState } from "../core/chat-approvals";
 import {
   buildComposerSubmission,
@@ -54,6 +55,18 @@ import { modelVendorMeta } from "../core/model-vendor";
 import { loadResource, resourceKey } from "../core/resources";
 import { workspaceTreeIcon } from "../core/workspace-icons";
 import { topicIcon, useTopicMetadata } from "../core/topic-metadata";
+import { contextMeter } from "../core/context-meter";
+import {
+  groupTopicsByTag,
+  knownTopicTags,
+  ordinaryTopicTags,
+  sameTopicTags,
+  splitPinnedTopics,
+  tagsAfterDrop,
+  topicPinned,
+  topicTags,
+  withPinned,
+} from "../core/topic-tags";
 import {
   apiFetch,
   buildConsoleStreamURL,
@@ -199,6 +212,25 @@ function normalizeRecentWorkspaceDirs(raw) {
     }
   }
   return items;
+}
+
+// The topic sidebar lists topics by date or by tag. The choice is a per-browser convenience.
+const TOPIC_SIDEBAR_VIEW_STORAGE_KEY = "mistermorph.chat.topicSidebarView";
+
+function loadTopicSidebarView() {
+  try {
+    return localStorage.getItem(TOPIC_SIDEBAR_VIEW_STORAGE_KEY) === "tags" ? "tags" : "date";
+  } catch {
+    return "date";
+  }
+}
+
+function saveTopicSidebarView(view) {
+  try {
+    localStorage.setItem(TOPIC_SIDEBAR_VIEW_STORAGE_KEY, view);
+  } catch {
+    // The choice just is not remembered.
+  }
 }
 
 function loadRecentWorkspaceDirs() {
@@ -578,6 +610,7 @@ const ChatView = {
     ChatComposer,
     ChatHistoryList,
     RawJsonDialog,
+    TopicTagsEditor,
     WorkspaceBrowserRecentItem,
   },
   setup() {
@@ -606,6 +639,9 @@ const ChatView = {
     const topicDeleteTarget = ref(null);
     const topicDeleting = ref(false);
     const topicDeleteError = ref("");
+    const topicSidebarView = ref(loadTopicSidebarView());
+    const topicTagSaves = ref(new Set());
+    const topicTagsError = ref("");
     const topicNameRequests = ref(new Set());
     const topicNameFailure = ref(null);
     const taskInput = ref("");
@@ -990,7 +1026,7 @@ const ChatView = {
     // Consecutive topics from the same local day share one date header instead of repeating the date per row.
     const topicDayGroups = computed(() => {
       const groups = [];
-      for (const topic of visibleTopics.value) {
+      for (const topic of splitPinnedTopics(visibleTopics.value).rest) {
         const dayKey = topicDayKey(topic);
         const last = groups[groups.length - 1];
         if (last && last.dayKey === dayKey) {
@@ -1001,6 +1037,163 @@ const ChatView = {
       }
       return groups;
     });
+
+    const topicTagGroups = computed(() =>
+      groupTopicsByTag(visibleTopics.value, { pinned: t("chat_topics_pinned"), untagged: t("chat_topics_untagged") })
+    );
+    const pinnedTopicGroup = computed(() => {
+      const { pinned } = splitPinnedTopics(visibleTopics.value);
+      return pinned.length > 0
+        ? { key: "pinned", label: t("chat_topics_pinned"), topics: pinned, pinned: true, drop: { kind: "pin" } }
+        : null;
+    });
+    // While a topic is dragged, a pinned group is always there to drop it on, even an empty one.
+    const topicSidebarGroups = computed(() => {
+      const groups =
+        topicSidebarView.value === "tags"
+          ? topicTagGroups.value
+          : [...(pinnedTopicGroup.value ? [pinnedTopicGroup.value] : []), ...topicDayGroups.value];
+      if (draggedTopicID.value && !groups.some((group) => group.pinned)) {
+        return [{ key: "pinned", label: t("chat_topics_pinned"), topics: [], pinned: true, drop: { kind: "pin" } }, ...groups];
+      }
+      return groups;
+    });
+    const knownTags = computed(() => knownTopicTags(topics.value));
+    const selectedTopicOrdinaryTags = computed(() => ordinaryTopicTags(selectedTopic.value));
+    const selectedTopicPinned = computed(() => topicPinned(selectedTopic.value));
+    // Tags belong to topics the runtime stores, so a topic still being created has none yet.
+    const topicTagsAvailable = computed(
+      () =>
+        Boolean(workspaceTopicID.value) &&
+        topics.value.some((topic) => normalizeTopicID(topic?.id) === normalizeTopicID(workspaceTopicID.value))
+    );
+    const topicTagsSaving = computed(() => topicTagSaves.value.has(normalizeTopicID(workspaceTopicID.value)));
+
+    function setTopicSidebarView(view) {
+      topicSidebarView.value = view === "tags" ? "tags" : "date";
+      saveTopicSidebarView(topicSidebarView.value);
+    }
+
+    function findTopic(topicID) {
+      return topics.value.find((topic) => normalizeTopicID(topic?.id) === topicID) || null;
+    }
+
+    // Saves a topic's whole tag list. The list shows the change at once and goes back if the save
+    // fails; one save per topic runs at a time.
+    async function saveTopicTags(rawTopicID, nextTags) {
+      const topicID = normalizeTopicID(rawTopicID);
+      const endpointRef = submitEndpointRef.value;
+      const topic = findTopic(topicID);
+      if (!topic || topicTagSaves.value.has(topicID) || sameTopicTags(topicTags(topic), nextTags)) {
+        return false;
+      }
+      const previous = topicTags(topic);
+      const applyTags = (tags) => {
+        topics.value = topics.value.map((item) =>
+          normalizeTopicID(item?.id) === topicID ? { ...item, tags: [...tags] } : item
+        );
+      };
+      applyTags(nextTags);
+      topicTagSaves.value = new Set([...topicTagSaves.value, topicID]);
+      if (topicID === normalizeTopicID(workspaceTopicID.value)) {
+        topicTagsError.value = "";
+      }
+      try {
+        const updated = await runtimeApiFetchForEndpoint(endpointRef, `/topics/${encodeURIComponent(topicID)}/tags`, {
+          method: "PUT",
+          body: { tags: nextTags },
+        });
+        if (submitEndpointRef.value === endpointRef) {
+          applyTags(topicTags(updated));
+        }
+        return true;
+      } catch (e) {
+        if (submitEndpointRef.value !== endpointRef) {
+          return false;
+        }
+        applyTags(previous);
+        const message = e?.message || t("chat_topic_tags_failed");
+        if (topicID === normalizeTopicID(workspaceTopicID.value)) {
+          topicTagsError.value = message;
+        } else {
+          toast.error(message);
+        }
+        return false;
+      } finally {
+        const saves = new Set(topicTagSaves.value);
+        saves.delete(topicID);
+        topicTagSaves.value = saves;
+      }
+    }
+
+    function saveSelectedTopicTags(ordinaryTags) {
+      return saveTopicTags(workspaceTopicID.value, withPinned(ordinaryTags, selectedTopicPinned.value));
+    }
+
+    function setSelectedTopicPinned(pinned) {
+      return saveTopicTags(workspaceTopicID.value, withPinned(selectedTopicOrdinaryTags.value, Boolean(pinned)));
+    }
+
+    // Dragging a topic onto a group gives it that group's tag: a tag group adds its tag, the pinned
+    // group pins it, and the untagged group clears its ordinary tags. Date groups take no drops.
+    const draggedTopicID = ref("");
+    const topicDropKey = ref("");
+
+    function onTopicDragStart(event, topic) {
+      const topicID = normalizeTopicID(topic?.id);
+      if (!topicID || !findTopic(topicID)) {
+        event.preventDefault();
+        return;
+      }
+      draggedTopicID.value = topicID;
+      event.dataTransfer.effectAllowed = "copyMove";
+      event.dataTransfer.setData("text/plain", topicTitle(topic));
+    }
+
+    function onTopicDragEnd() {
+      draggedTopicID.value = "";
+      topicDropKey.value = "";
+    }
+
+    function topicGroupAccepts(group) {
+      const topic = draggedTopicID.value ? findTopic(draggedTopicID.value) : null;
+      return Boolean(topic && group?.drop && tagsAfterDrop(topic, group.drop));
+    }
+
+    function onTopicGroupDragOver(event, group) {
+      if (!topicGroupAccepts(group)) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "copy";
+      topicDropKey.value = group.key;
+    }
+
+    function onTopicGroupDragLeave(event, group) {
+      if (topicDropKey.value === group.key && !event.currentTarget.contains(event.relatedTarget)) {
+        topicDropKey.value = "";
+      }
+    }
+
+    function onTopicGroupDrop(event, group) {
+      const topic = draggedTopicID.value ? findTopic(draggedTopicID.value) : null;
+      const next = topic && group?.drop ? tagsAfterDrop(topic, group.drop) : null;
+      onTopicDragEnd();
+      if (!next) return;
+      event.preventDefault();
+      saveTopicTags(topic.id, next);
+    }
+
+    function topicGroupClass(group) {
+      return [
+        "chat-topic-day",
+        {
+          "is-tag-group": topicSidebarView.value === "tags" || group.pinned,
+          "is-untagged": group.untagged,
+          "is-pinned-group": group.pinned,
+          "is-drop-target": Boolean(draggedTopicID.value) && topicGroupAccepts(group),
+          "is-drop-over": topicDropKey.value === group.key,
+        },
+      ];
+    }
 
     const shellClass = computed(() => {
       const classes = ["chat-shell"];
@@ -1057,6 +1250,9 @@ const ChatView = {
       () => Boolean(workspaceTopicID.value) && !selectedTopicIsReserved.value
     );
     const topicDeleteDisabled = computed(() => !topicDeleteAvailable.value || topicDeleting.value);
+    watch(workspaceTopicID, () => {
+      topicTagsError.value = "";
+    });
     const topicNameRequestKey = computed(() => JSON.stringify([submitEndpointRef.value, selectedTopicID.value]));
     const topicRegenerating = computed(() => topicNameRequests.value.has(topicNameRequestKey.value));
     const topicRegenerateError = computed(() =>
@@ -1097,19 +1293,42 @@ const ChatView = {
       }
       const ratio = topicContextUsageRatio(context);
       if (ratio === null) {
-        return null;
+        // The window size is unknown (a model missing from the catalog, with none configured): show
+        // the tokens used, without a meter, so the row and its inspect button stay.
+        const used = Number(context.used_input_tokens);
+        if (!Number.isFinite(used) || used <= 0) {
+          return null;
+        }
+        const label = formatTokenCount(used);
+        return { label, title: `${label} · ${t("chat_topic_context_window_unknown")}`, meter: null, fill: 0, unknownWindow: true };
       }
       const label = formatUsageRatio(ratio);
-      const usedInputLabel = formatTokenCount(context.used_input_tokens);
-      const windowLabel = formatTokenCount(context.context_window_tokens);
+      const meter = contextMeter(context);
+      if (!meter) {
+        // Without the window size there is only the ratio the runtime reported.
+        return { label, title: `${t("chat_topic_context_ratio_label")}: ${label}`, meter: null, fill: Math.min(ratio, 1) };
+      }
+      const parts = [
+        `${t("chat_topic_context_cached_label")}: ${formatTokenCount(meter.cached)}`,
+        `${t("chat_topic_context_new_label")}: ${formatTokenCount(meter.fresh)}`,
+        `${t("chat_topic_context_free_label")}: ${formatTokenCount(meter.free)}`,
+      ];
+      if (meter.trigger) {
+        parts.push(`${t("chat_topic_context_compacts_label")}: ${formatTokenCount(meter.trigger)}`);
+      }
       return {
-        value: Math.min(ratio, 1),
         label,
-        usedInputLabel,
-        windowLabel,
-        title: `${t("chat_topic_context_ratio_label")}: ${label}; ${t("chat_topic_context_used_label")}: ${usedInputLabel}; ${t("chat_topic_context_window_label")}: ${windowLabel}`,
+        meter,
+        fill: Math.min(meter.ratio, 1),
+        title: `${t("chat_topic_context_ratio_label")}: ${label} (${formatTokenCount(meter.used)} / ${formatTokenCount(meter.window)})\n${parts.join("\n")}`,
       };
     });
+    function openContextInspector() {
+      const topicID = normalizeTopicID(workspaceTopicID.value);
+      if (topicID) {
+        router.push(endpointRoutePath(endpointState.selectedRef, `/chat/${encodeURIComponent(topicID)}/context`));
+      }
+    }
     const topicDeleteDialogText = computed(() =>
       t("chat_topic_delete_confirm", {
         title: topicTitle(topicDeleteTarget.value || selectedTopic.value || {}),
@@ -4009,6 +4228,8 @@ const ChatView = {
       selectedWorkspacePanelTab,
       topicPropertyRows,
       topicContextProgress,
+      openContextInspector,
+      workspaceTopicID,
       topicDeleteAvailable,
       topicDeleteDisabled,
       topicDeleting,
@@ -4137,6 +4358,24 @@ const ChatView = {
       topicIcon,
       topicTime,
       topicDayGroups,
+      topicSidebarGroups,
+      topicSidebarView,
+      setTopicSidebarView,
+      knownTags,
+      selectedTopicOrdinaryTags,
+      selectedTopicPinned,
+      topicTagsAvailable,
+      topicTagsSaving,
+      topicTagsError,
+      saveSelectedTopicTags,
+      setSelectedTopicPinned,
+      draggedTopicID,
+      onTopicDragStart,
+      onTopicDragEnd,
+      onTopicGroupDragOver,
+      onTopicGroupDragLeave,
+      onTopicGroupDrop,
+      topicGroupClass,
       topicItemClass,
       topicIsActive,
       clickTopicSidebarTitle,
@@ -4214,6 +4453,15 @@ const ChatView = {
                 </div>
               </div>
               <QButton
+                :class="['plain sm icon chat-topic-view-toggle', { 'is-active': topicSidebarView === 'tags' }]"
+                :title="topicSidebarView === 'tags' ? t('chat_topics_view_date') : t('chat_topics_view_tags')"
+                :aria-label="t('chat_topics_view_tags')"
+                :aria-pressed="topicSidebarView === 'tags' ? 'true' : 'false'"
+                @click="setTopicSidebarView(topicSidebarView === 'tags' ? 'date' : 'tags')"
+              >
+                <PhTag class="icon" />
+              </QButton>
+              <QButton
                 v-if="!mobileTopicSplitEnabled"
                 class="plain sm icon chat-topic-sidebar-new"
                 :title="t('chat_topic_new')"
@@ -4224,8 +4472,26 @@ const ChatView = {
               </QButton>
             </header>
             <div :class="topicsLoading ? 'chat-topic-list workspace-sidebar-list is-busy' : 'chat-topic-list workspace-sidebar-list'">
-              <section v-for="group in topicDayGroups" :key="group.key" class="chat-topic-day">
-                <h4 v-if="group.label" class="chat-topic-day-label">{{ group.label }}</h4>
+              <p
+                v-if="topicSidebarView === 'tags' && knownTags.length === 0 && topicSidebarGroups.length > 0"
+                class="chat-topic-tags-hint"
+              >
+                {{ t("chat_topics_tags_hint") }}
+              </p>
+              <section
+                v-for="group in topicSidebarGroups"
+                :key="group.key"
+                :class="topicGroupClass(group)"
+                @dragover="onTopicGroupDragOver($event, group)"
+                @dragleave="onTopicGroupDragLeave($event, group)"
+                @drop="onTopicGroupDrop($event, group)"
+              >
+                <h4 v-if="group.label" class="chat-topic-day-label">
+                  <PhPushPin v-if="group.pinned" class="chat-topic-tag-label-icon" aria-hidden="true" />
+                  <PhTag v-else-if="topicSidebarView === 'tags' && !group.untagged" class="chat-topic-tag-label-icon" aria-hidden="true" />
+                  <span class="chat-topic-day-label-text">{{ group.label }}</span>
+                </h4>
+                <p v-if="group.topics.length === 0" class="chat-topic-drop-hint">{{ t("chat_topics_drop_to_pin") }}</p>
                 <button
                   v-for="topic in group.topics"
                   :key="topic.id"
@@ -4233,7 +4499,10 @@ const ChatView = {
                   :class="topicItemClass(topic)"
                   :title="topicTime(topic) || undefined"
                   :aria-current="topicIsActive(topic) ? 'page' : undefined"
+                  :draggable="mobileMode ? 'false' : 'true'"
                   @click="selectTopic(topic.id)"
+                  @dragstart="onTopicDragStart($event, topic)"
+                  @dragend="onTopicDragEnd"
                 >
                   <span
                     class="topic-icon chat-topic-item-icon"
@@ -4618,24 +4887,81 @@ const ChatView = {
                       :text="topicDeleteError || topicRegenerateError"
                     />
 
-                    <section
-                      v-if="topicContextProgress"
-                      class="chat-topic-context-progress"
-                      :title="topicContextProgress.title"
-                      :aria-label="topicContextProgress.title"
-                    >
-                      <div class="chat-topic-context-progress-head">
-                        <span>{{ t("chat_topic_context_ratio_label") }}</span>
-                        <strong>{{ topicContextProgress.label }}</strong>
-                      </div>
-                      <QProgress :value="topicContextProgress.value" :max="1" />
-                      <div class="chat-topic-context-progress-foot">
-                        <span>{{ topicContextProgress.usedInputLabel }}</span>
-                        <span>{{ topicContextProgress.windowLabel }}</span>
-                      </div>
-                    </section>
-
                     <dl class="chat-topic-property-list">
+                      <template v-if="topicTagsAvailable">
+                        <div class="chat-topic-property-row chat-topic-pin-row">
+                          <dt class="chat-topic-property-label">{{ t("chat_topic_pin_label") }}</dt>
+                          <dd class="chat-topic-property-value chat-topic-pin-value">
+                            <QSwitch
+                              :modelValue="selectedTopicPinned"
+                              :disabled="topicTagsSaving"
+                              :aria-label="t('chat_topic_pin_label')"
+                              @update:modelValue="setSelectedTopicPinned"
+                            />
+                          </dd>
+                        </div>
+                        <div class="chat-topic-property-row chat-topic-tags-row">
+                          <dt class="chat-topic-property-label">{{ t("chat_topic_tags_label") }}</dt>
+                          <dd class="chat-topic-property-value">
+                            <TopicTagsEditor
+                              :tags="selectedTopicOrdinaryTags"
+                              :known="knownTags"
+                              :saving="topicTagsSaving"
+                              :disabled="topicTagsSaving"
+                              @change="saveSelectedTopicTags"
+                            />
+                            <p v-if="topicTagsError" class="chat-topic-tags-error" role="alert">{{ topicTagsError }}</p>
+                          </dd>
+                        </div>
+                      </template>
+                      <div
+                        v-if="topicContextProgress"
+                        :class="['chat-topic-property-row', 'chat-topic-context-row', topicContextProgress.meter ? 'is-' + topicContextProgress.meter.state : '']"
+                        :title="topicContextProgress.title"
+                      >
+                        <dt class="chat-topic-property-label chat-topic-context-head">
+                          <span>{{ t("chat_topic_context_ratio_label") }}</span>
+                          <strong class="chat-topic-context-ratio">{{ topicContextProgress.label }}</strong>
+                        </dt>
+                        <dd class="chat-topic-property-value chat-topic-context-value">
+                          <div class="chat-topic-context-line">
+                            <span v-if="topicContextProgress.unknownWindow" class="chat-topic-context-unknown">{{ t("chat_topic_context_window_unknown") }}</span>
+                            <div
+                              v-else
+                              class="chat-topic-context-meter"
+                              role="meter"
+                              aria-valuemin="0"
+                              aria-valuemax="100"
+                              :aria-valuenow="Math.round(topicContextProgress.fill * 100)"
+                              :aria-label="t('chat_topic_context_ratio_label')"
+                              :aria-valuetext="topicContextProgress.label"
+                            >
+                              <template v-if="topicContextProgress.meter">
+                                <span class="chat-topic-context-meter-cached" :style="{ width: topicContextProgress.meter.cachedShare * 100 + '%' }"></span>
+                                <span
+                                  class="chat-topic-context-meter-fresh"
+                                  :style="{ left: topicContextProgress.meter.cachedShare * 100 + '%', width: topicContextProgress.meter.freshShare * 100 + '%' }"
+                                ></span>
+                                <span
+                                  v-if="topicContextProgress.meter.triggerShare !== null"
+                                  class="chat-topic-context-meter-trigger"
+                                  :style="{ left: topicContextProgress.meter.triggerShare * 100 + '%' }"
+                                  aria-hidden="true"
+                                ></span>
+                              </template>
+                              <span v-else class="chat-topic-context-meter-fresh" :style="{ width: topicContextProgress.fill * 100 + '%' }"></span>
+                            </div>
+                            <QButton
+                              class="outlined xs icon chat-topic-context-inspect"
+                              :title="t('context_inspector_open')"
+                              :aria-label="t('context_inspector_open')"
+                              @click="openContextInspector"
+                            >
+                              <PhMagnifyingGlass class="icon" />
+                            </QButton>
+                          </div>
+                        </dd>
+                      </div>
                       <div v-for="row in topicPropertyRows" :key="row.key" class="chat-topic-property-row">
                         <dt class="chat-topic-property-label">{{ row.label }}</dt>
                         <dd :class="row.code ? 'chat-topic-property-value is-code' : 'chat-topic-property-value'">
@@ -4895,24 +5221,81 @@ const ChatView = {
                     :text="topicDeleteError || topicRegenerateError"
                   />
 
-                  <section
-                    v-if="topicContextProgress"
-                    class="chat-topic-context-progress"
-                    :title="topicContextProgress.title"
-                    :aria-label="topicContextProgress.title"
-                  >
-                    <div class="chat-topic-context-progress-head">
-                      <span>{{ t("chat_topic_context_ratio_label") }}</span>
-                      <strong>{{ topicContextProgress.label }}</strong>
-                    </div>
-                    <QProgress :value="topicContextProgress.value" :max="1" />
-                    <div class="chat-topic-context-progress-foot">
-                      <span>{{ topicContextProgress.usedInputLabel }}</span>
-                      <span>{{ topicContextProgress.windowLabel }}</span>
-                    </div>
-                  </section>
-
                   <dl class="chat-topic-property-list">
+                    <template v-if="topicTagsAvailable">
+                      <div class="chat-topic-property-row chat-topic-pin-row">
+                        <dt class="chat-topic-property-label">{{ t("chat_topic_pin_label") }}</dt>
+                        <dd class="chat-topic-property-value chat-topic-pin-value">
+                          <QSwitch
+                            :modelValue="selectedTopicPinned"
+                            :disabled="topicTagsSaving"
+                            :aria-label="t('chat_topic_pin_label')"
+                            @update:modelValue="setSelectedTopicPinned"
+                          />
+                        </dd>
+                      </div>
+                      <div class="chat-topic-property-row chat-topic-tags-row">
+                        <dt class="chat-topic-property-label">{{ t("chat_topic_tags_label") }}</dt>
+                        <dd class="chat-topic-property-value">
+                          <TopicTagsEditor
+                            :tags="selectedTopicOrdinaryTags"
+                            :known="knownTags"
+                            :saving="topicTagsSaving"
+                            :disabled="topicTagsSaving"
+                            @change="saveSelectedTopicTags"
+                          />
+                          <p v-if="topicTagsError" class="chat-topic-tags-error" role="alert">{{ topicTagsError }}</p>
+                        </dd>
+                      </div>
+                    </template>
+                    <div
+                      v-if="topicContextProgress"
+                      :class="['chat-topic-property-row', 'chat-topic-context-row', topicContextProgress.meter ? 'is-' + topicContextProgress.meter.state : '']"
+                      :title="topicContextProgress.title"
+                    >
+                      <dt class="chat-topic-property-label chat-topic-context-head">
+                        <span>{{ t("chat_topic_context_ratio_label") }}</span>
+                        <strong class="chat-topic-context-ratio">{{ topicContextProgress.label }}</strong>
+                      </dt>
+                      <dd class="chat-topic-property-value chat-topic-context-value">
+                        <div class="chat-topic-context-line">
+                          <span v-if="topicContextProgress.unknownWindow" class="chat-topic-context-unknown">{{ t("chat_topic_context_window_unknown") }}</span>
+                          <div
+                            v-else
+                            class="chat-topic-context-meter"
+                            role="meter"
+                            aria-valuemin="0"
+                            aria-valuemax="100"
+                            :aria-valuenow="Math.round(topicContextProgress.fill * 100)"
+                            :aria-label="t('chat_topic_context_ratio_label')"
+                            :aria-valuetext="topicContextProgress.label"
+                          >
+                            <template v-if="topicContextProgress.meter">
+                              <span class="chat-topic-context-meter-cached" :style="{ width: topicContextProgress.meter.cachedShare * 100 + '%' }"></span>
+                              <span
+                                class="chat-topic-context-meter-fresh"
+                                :style="{ left: topicContextProgress.meter.cachedShare * 100 + '%', width: topicContextProgress.meter.freshShare * 100 + '%' }"
+                              ></span>
+                              <span
+                                v-if="topicContextProgress.meter.triggerShare !== null"
+                                class="chat-topic-context-meter-trigger"
+                                :style="{ left: topicContextProgress.meter.triggerShare * 100 + '%' }"
+                                aria-hidden="true"
+                              ></span>
+                            </template>
+                            <span v-else class="chat-topic-context-meter-fresh" :style="{ width: topicContextProgress.fill * 100 + '%' }"></span>
+                          </div>
+                          <QButton
+                            class="outlined xs icon chat-topic-context-inspect"
+                            :title="t('context_inspector_open')"
+                            :aria-label="t('context_inspector_open')"
+                            @click="openContextInspector"
+                          >
+                            <PhMagnifyingGlass class="icon" />
+                          </QButton>
+                        </div>
+                      </dd>
+                    </div>
                     <div v-for="row in topicPropertyRows" :key="row.key" class="chat-topic-property-row">
                       <dt class="chat-topic-property-label">{{ row.label }}</dt>
                       <dd :class="row.code ? 'chat-topic-property-value is-code' : 'chat-topic-property-value'">

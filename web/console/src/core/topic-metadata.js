@@ -2,6 +2,7 @@ import { onMounted, onUnmounted, watch } from "vue";
 import "../styles/topic-icons.css";
 import { runtimeApiFetchForEndpoint } from "./context";
 import { loadResource, resourceKey } from "./resources";
+import { sameTopicTags } from "./topic-tags";
 
 const topicIcons = import.meta.glob("../assets/topic-icons/*.svg", {
   eager: true,
@@ -36,7 +37,7 @@ export function useTopicMetadata(topics, endpointRef) {
       topics.value = topics.value.map((topic) => {
         const next = updated.get(topic.id);
         if (!next || topic !== original.get(topic.id) || Number(next.title_revision || 0) < Number(topic.title_revision || 0) || Date.parse(next.updated_at) < Date.parse(topic.updated_at)) return topic;
-        if (next.title === topic.title && next.icon === topic.icon && next.llm_title_generated_at === topic.llm_title_generated_at && next.title_revision === topic.title_revision) return topic;
+        if (next.title === topic.title && next.icon === topic.icon && next.llm_title_generated_at === topic.llm_title_generated_at && next.title_revision === topic.title_revision && sameTopicTags(next.tags || [], topic.tags || [])) return topic;
         return { ...topic, ...next };
       });
     } catch {

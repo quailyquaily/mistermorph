@@ -59,6 +59,14 @@ func NewFallbackClient(opts FallbackClientOptions) llm.Client {
 	}
 }
 
+// Unwrap is the primary client: the one a request goes to first.
+func (c *fallbackClient) Unwrap() llm.Client {
+	if c == nil {
+		return nil
+	}
+	return c.primary
+}
+
 func (c *fallbackClient) Chat(ctx context.Context, req llm.Request) (llm.Result, error) {
 	if c == nil || c.primary == nil {
 		return llm.Result{}, errors.New("fallback client is not initialized")

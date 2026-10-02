@@ -58,7 +58,7 @@ func (e *Engine) callMainWithContextCompaction(ctx context.Context, st *engineLo
 	}
 
 	request := e.mainRequest(st, reqTools)
-	result, err := e.client.Chat(ctx, request)
+	result, err := e.client.Chat(llm.WithRequestLayout(ctx, mainRequestLayout(st, request)), request)
 	if err == nil {
 		e.recordSuccessfulMainInput(st, request, result)
 		st.protectedMessageIndexes = nil
@@ -96,7 +96,7 @@ func (e *Engine) callMainWithContextCompaction(ctx context.Context, st *engineLo
 	}
 
 	retryRequest := e.mainRequest(st, reqTools)
-	retryResult, retryErr := e.client.Chat(ctx, retryRequest)
+	retryResult, retryErr := e.client.Chat(llm.WithRequestLayout(ctx, mainRequestLayout(st, retryRequest)), retryRequest)
 	if retryErr != nil {
 		if llm.IsContextLengthError(retryErr) {
 			st.log.Warn(
@@ -112,6 +112,38 @@ func (e *Engine) callMainWithContextCompaction(ctx context.Context, st *engineLo
 	e.recordSuccessfulMainInput(st, retryRequest, retryResult)
 	st.protectedMessageIndexes = nil
 	return retryResult, nil
+}
+
+// mainRequestLayout tags the messages of a main request: the system prompt, the summary of compacted
+// context, history, this run's metadata, the current message (the first user message after the
+// metadata), and the steps of this run after it.
+func mainRequestLayout(st *engineLoopState, request llm.Request) llm.RequestLayout {
+	kinds := make([]string, len(request.Messages))
+	meta := -1
+	if st.metaMessageIndex != nil {
+		meta = *st.metaMessageIndex
+	}
+	current := -1
+	if meta >= 0 && meta+1 < len(request.Messages) && normalizedMessageRole(request.Messages[meta+1].Role) == "user" {
+		current = meta + 1
+	}
+	for i, message := range request.Messages {
+		switch {
+		case i < st.fixedMessageCount && normalizedMessageRole(message.Role) == "system":
+			kinds[i] = llm.MessageKindSystem
+		case st.hasCheckpoint && i == st.fixedMessageCount:
+			kinds[i] = llm.MessageKindSummary
+		case i == meta:
+			kinds[i] = llm.MessageKindMeta
+		case i == current:
+			kinds[i] = llm.MessageKindCurrent
+		case meta >= 0 && i > meta:
+			kinds[i] = llm.MessageKindStep
+		default:
+			kinds[i] = llm.MessageKindHistory
+		}
+	}
+	return llm.RequestLayout{MessageKinds: kinds}
 }
 
 func (e *Engine) mainRequest(st *engineLoopState, reqTools []llm.Tool) llm.Request {

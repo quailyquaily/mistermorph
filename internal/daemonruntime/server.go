@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/quailyquaily/mistermorph/internal/topiccontext"
 	"io"
 	"log/slog"
 	"mime"
@@ -84,6 +85,19 @@ type uploadedFile struct {
 
 type TopicMetadataFunc func(ctx context.Context, topicID string) (TopicMetadata, error)
 
+// TopicContext is the context window inspector's view of a topic: its last main request, split into
+// parts. Available is false until the topic has had a run.
+type TopicContext struct {
+	Available bool `json:"available"`
+	*topiccontext.Snapshot
+	CompactionTriggerTokens int64 `json:"compaction_trigger_tokens,omitempty"`
+	// CountNote says why parts are still estimated when the provider could count them:
+	// model_changed (the main model is no longer the one that ran) or count_failed.
+	CountNote string `json:"count_note,omitempty"`
+}
+
+type TopicContextFunc func(ctx context.Context, topicID string) (TopicContext, error)
+
 type TopicMetadata struct {
 	TopicID         string                 `json:"topic_id"`
 	ConversationKey string                 `json:"conversation_key,omitempty"`
@@ -106,9 +120,12 @@ type TopicMetadataContext struct {
 	CachedInputTokens        int64   `json:"cached_input_tokens,omitempty"`
 	CacheCreationInputTokens int64   `json:"cache_creation_input_tokens,omitempty"`
 	UsageRatio               float64 `json:"usage_ratio,omitempty"`
-	LastRunID                string  `json:"last_run_id,omitempty"`
-	LastOriginEventID        string  `json:"last_origin_event_id,omitempty"`
-	UpdatedAt                string  `json:"updated_at,omitempty"`
+	// CompactionTriggerTokens is the input size at which a run compacts the topic's context; 0 when
+	// compaction is off or the window is unknown.
+	CompactionTriggerTokens int64  `json:"compaction_trigger_tokens,omitempty"`
+	LastRunID               string `json:"last_run_id,omitempty"`
+	LastOriginEventID       string `json:"last_origin_event_id,omitempty"`
+	UpdatedAt               string `json:"updated_at,omitempty"`
 }
 
 type TaskTopicRoutes struct {
@@ -118,7 +135,10 @@ type TaskTopicRoutes struct {
 	Submit               SubmitFunc
 	Stop                 StopFunc
 	TopicMetadata        TopicMetadataFunc
+	TopicContext         TopicContextFunc
 	RegenerateTopicTitle func(context.Context, string) (TopicInfo, error)
+	// SetTopicTags replaces a topic's tags; nil when the runtime has no taggable topics.
+	SetTopicTags func(topicID string, tags []string) (TopicInfo, error)
 }
 
 type ApprovalRoutes struct {

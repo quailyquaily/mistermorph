@@ -56,6 +56,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/todo"
 	"github.com/quailyquaily/mistermorph/internal/toolsutil"
 	"github.com/quailyquaily/mistermorph/internal/topiccontext"
+	"github.com/quailyquaily/mistermorph/internal/topicstate"
 	"github.com/quailyquaily/mistermorph/internal/workspace"
 	"github.com/quailyquaily/mistermorph/internal/xaiauth"
 	"github.com/quailyquaily/mistermorph/llm"
@@ -138,6 +139,7 @@ type consoleLocalRuntime struct {
 	generation              *consoleLocalRuntimeGeneration
 	nextGeneration          uint64
 	managedRuntimeMu        sync.RWMutex
+	topicContextCountMu     sync.Mutex
 	managedRuntimeRunning   map[string]bool
 	mixinConnected          atomic.Bool
 	discordConnected        atomic.Bool
@@ -1016,12 +1018,96 @@ func (r *consoleLocalRuntime) topicMetadataForTopic(ctx context.Context, topicID
 			CachedInputTokens:        item.CachedInputTokens,
 			CacheCreationInputTokens: item.CacheCreationInputTokens,
 			UsageRatio:               item.UsageRatio,
+			CompactionTriggerTokens:  topicCompactionTriggerTokens(item.ContextWindowTokens, r.currentConfigReader()),
 			LastRunID:                item.LastRunID,
 			LastOriginEventID:        item.LastOriginEventID,
 			UpdatedAt:                item.UpdatedAt,
 		}
 	}
 	return payload, nil
+}
+
+// topicContextForTopic is the topic's last main request, split into parts, for the inspector. The
+// first time a request is inspected, its parts are counted by the provider when it can count them;
+// otherwise, or when that fails, the local estimates stay.
+func (r *consoleLocalRuntime) topicContextForTopic(ctx context.Context, topicID, topicContextPath string) (daemonruntime.TopicContext, error) {
+	topicID = strings.TrimSpace(topicID)
+	if topicID == "" {
+		return daemonruntime.TopicContext{}, daemonruntime.BadRequest("topic_id is required")
+	}
+	conversationKey := buildConsoleConversationKey(topicID)
+	store := topiccontext.NewStore(topicContextPath)
+	snapshot, ok, err := store.Snapshot(conversationKey)
+	if err != nil || !ok {
+		return daemonruntime.TopicContext{}, err
+	}
+	countNote := ""
+	if snapshot.Method != topiccontext.MethodProvider && !snapshot.CountUnsupported {
+		snapshot, countNote = r.countTopicContext(ctx, store, conversationKey, snapshot)
+	}
+	return daemonruntime.TopicContext{
+		Available:               true,
+		Snapshot:                &snapshot,
+		CompactionTriggerTokens: topicCompactionTriggerTokens(snapshot.ContextWindowTokens, r.currentConfigReader()),
+		CountNote:               countNote,
+	}, nil
+}
+
+// countTopicContext counts a snapshot with the main route's client. It says why the counts are
+// still estimates when they are: the model changed since the request, or counting failed.
+func (r *consoleLocalRuntime) countTopicContext(ctx context.Context, store *topiccontext.Store, conversationKey string, snapshot topiccontext.Snapshot) (topiccontext.Snapshot, string) {
+	r.topicContextCountMu.Lock()
+	defer r.topicContextCountMu.Unlock()
+	generation := r.currentGeneration()
+	if generation == nil || generation.commonDeps.ResolveLLMRoute == nil || generation.commonDeps.CreateLLMClient == nil {
+		return snapshot, ""
+	}
+	generation.acquire()
+	defer generation.release()
+	route, err := generation.commonDeps.ResolveLLMRoute(llmutil.RoutePurposeMainLoop)
+	if err != nil {
+		return snapshot, ""
+	}
+	if !sameModel(route.ClientConfig.Model, snapshot.Model) {
+		return snapshot, "model_changed"
+	}
+	client, err := generation.commonDeps.CreateLLMClient(route)
+	if err != nil {
+		return snapshot, ""
+	}
+	if closer, ok := client.(io.Closer); ok {
+		defer closer.Close()
+	}
+	countCtx, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+	counted, err := store.CountSnapshot(countCtx, conversationKey, func(ctx context.Context, req llm.Request) (int, error) {
+		return llm.CountTokens(ctx, client, req)
+	})
+	switch {
+	case err == nil:
+		return counted, ""
+	case errors.Is(err, llm.ErrTokenCountUnsupported), errors.Is(err, topiccontext.ErrNoStoredRequest):
+		return counted, ""
+	default:
+		r.currentLogger().Warn("topic_context_count_failed", "conversation_key", conversationKey, "error", err.Error())
+		return counted, "count_failed"
+	}
+}
+
+func sameModel(a, b string) bool {
+	return strings.EqualFold(llm.ShortModelName(strings.TrimSpace(a)), llm.ShortModelName(strings.TrimSpace(b)))
+}
+
+// topicCompactionTriggerTokens is where the topic's next run would compact its context, under the
+// current config.
+func topicCompactionTriggerTokens(contextWindowTokens int64, reader *viper.Viper) int64 {
+	if reader == nil {
+		return 0
+	}
+	return agent.ContextCompactionTriggerTokens(contextWindowTokens, agent.NewContextCompactionConfig(
+		reader.GetBool("context_compaction.enabled"),
+		reader.GetFloat64("context_compaction.trigger_ratio"),
+	))
 }
 
 func (r *consoleLocalRuntime) setWorkspaceForTopic(_ context.Context, topicID string, workspaceDir string) (daemonruntime.WorkspaceResolution, error) {
@@ -1156,6 +1242,19 @@ func (r *consoleLocalRuntime) deleteTopic(id string) (bool, error) {
 	if store != nil {
 		_, _, _ = store.Delete(conversationKey)
 	}
+	topicContextPath := r.runtimePaths.TopicContextPath
+	if generation := r.currentGeneration(); generation != nil {
+		topicContextPath = generation.paths.TopicContextPath
+	}
+	if err := topiccontext.NewStore(topicContextPath).Delete(conversationKey); err != nil {
+		logger.Warn("console_topic_context_delete_failed", "topic_id", id, "error", err.Error())
+	}
+	// Whatever else the topic kept (its context snapshot) goes with its folder.
+	if strings.TrimSpace(topicContextPath) != "" {
+		if err := topicstate.Remove(filepath.Dir(topicContextPath), conversationKey); err != nil {
+			logger.Warn("console_topic_folder_delete_failed", "topic_id", id, "error", err.Error())
+		}
+	}
 	return true, nil
 }
 
@@ -1180,6 +1279,7 @@ func (r *consoleLocalRuntime) routesOptions(authToken string) daemonruntime.Rout
 			TaskReader:   r.store,
 			TopicReader:  r.store,
 			TopicDeleter: topicDeleterFunc(r.deleteTopic),
+			SetTopicTags: r.store.SetTopicTags,
 			RegenerateTopicTitle: func(ctx context.Context, topicID string) (daemonruntime.TopicInfo, error) {
 				return r.regenerateTopicTitle(ctx, generation, topicID)
 			},
@@ -1193,6 +1293,9 @@ func (r *consoleLocalRuntime) routesOptions(authToken string) daemonruntime.Rout
 			Stop: r.stopTask,
 			TopicMetadata: func(ctx context.Context, topicID string) (daemonruntime.TopicMetadata, error) {
 				return r.topicMetadataForTopic(ctx, topicID, paths.TopicContextPath, defaultWorkspaceDir)
+			},
+			TopicContext: func(ctx context.Context, topicID string) (daemonruntime.TopicContext, error) {
+				return r.topicContextForTopic(ctx, topicID, paths.TopicContextPath)
 			},
 		},
 		Approvals: daemonruntime.ApprovalRoutes{

@@ -445,6 +445,137 @@ paths:
           $ref: '#/components/responses/Unavailable'
         '409':
           $ref: '#/components/responses/Conflict'
+  /topics/{topic_id}/tags:
+    put:
+      operationId: setTopicTags
+      tags:
+      - Topics
+      summary: Replace a topic's tags
+      description: Console only. Replaces the whole tag list; send an empty list to clear it. Each tag is
+        trimmed and its inner whitespace folded; empty tags and case-insensitive duplicates are dropped,
+        keeping the first spelling. At most 5 tags of up to 32 characters, plus the reserved tag pinned. Does not change updated_at.
+        JSON body limit is 64 KiB.
+      parameters:
+      - name: topic_id
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                tags:
+                  type: array
+                  items:
+                    type: string
+              required:
+              - tags
+      responses:
+        '200':
+          description: The updated topic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicInfo'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /topic/{topic_id}/context:
+    get:
+      operationId: getTopicContext
+      tags:
+      - Topics
+      summary: Inspect a topic's last main request
+      description: Console only. The topic's last main-loop request split into parts (system prompt
+        sections, skills, tool definitions, history, the current message and this run's steps), each
+        with a token count and its text, truncated at 16 KiB. Providers report only the request's total
+        input. The first look asks the provider to count growing prefixes of the request when it can
+        (method provider); otherwise parts are estimated locally. Either way they are scaled to the
+        billed total. Only the latest request is kept; available is false before the topic's first run.
+      parameters:
+      - name: topic_id
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  available:
+                    type: boolean
+                  conversation_key:
+                    type: string
+                  topic_id:
+                    type: string
+                  run_id:
+                    type: string
+                  model:
+                    type: string
+                  captured_at:
+                    type: string
+                    format: date-time
+                  context_window_tokens:
+                    type: integer
+                  input_tokens:
+                    type: integer
+                  cached_input_tokens:
+                    type: integer
+                  cache_creation_input_tokens:
+                    type: integer
+                  compaction_trigger_tokens:
+                    type: integer
+                  method:
+                    type: string
+                    enum:
+                    - estimate
+                    - provider
+                    description: provider when the model's provider counted the parts (on the first
+                      look), else estimate.
+                  counted_input_tokens:
+                    type: integer
+                    description: The provider's count of the whole request.
+                  counted_at:
+                    type: string
+                    format: date-time
+                  count_unsupported:
+                    type: boolean
+                    description: The provider cannot count this request, so it stays estimated.
+                  count_note:
+                    type: string
+                    enum:
+                    - model_changed
+                    - count_failed
+                    description: Why a countable request is still estimated.
+                  parts:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TopicContextPart'
+                required:
+                - available
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/Unavailable'
   /topic/{topic_id}/metadata:
     get:
       operationId: getTopicMetadata
@@ -4276,6 +4407,44 @@ components:
       - timeout
       - created_at
       x-source: internal/taskdomain/domain.go:TaskInfo
+    TopicContextPart:
+      type: object
+      description: One part of a request. Top-level parts have kind system, skills, tools, history, current
+        or steps; their children are sections, tools or messages, with tokens adding up to the parent.
+      properties:
+        kind:
+          type: string
+        label:
+          type: string
+        role:
+          type: string
+        tool:
+          type: string
+        tokens:
+          type: integer
+        chars:
+          type: integer
+        images:
+          type: integer
+        content:
+          type: string
+        truncated:
+          type: boolean
+        cache_breakpoint:
+          type: boolean
+          description: The request tagged this part for prompt caching; the cached prefix ends with it.
+        cache_ttl:
+          type: string
+          description: The cache tag's lifetime, when it names one (for example `1h`).
+        children:
+          type: array
+          items:
+            $ref: '#/components/schemas/TopicContextPart'
+      required:
+      - kind
+      - tokens
+      - chars
+      x-source: internal/topiccontext/snapshot.go:Part
     TopicInfo:
       type: object
       properties:
@@ -4287,6 +4456,16 @@ components:
           type: string
         title_customized:
           type: boolean
+        tags:
+          type: array
+          maxItems: 6
+          items:
+            type: string
+            minLength: 1
+            maxLength: 32
+          description: Labels set with PUT /topics/{topic_id}/tags. The reserved tag pinned (stored in
+            lower case) pins the topic to the top of its list; it does not count toward the five-tag
+            limit. Absent when the topic has none.
         title_revision:
           type: integer
         llm_title_generated_at:
@@ -4634,6 +4813,10 @@ components:
           type: integer
         usage_ratio:
           type: number
+        compaction_trigger_tokens:
+          type: integer
+          description: Input size at which the next run compacts this topic's context, under the current
+            config and the default output reserve. Absent when compaction is off or the window is unknown.
         last_run_id:
           type: string
         last_origin_event_id:
