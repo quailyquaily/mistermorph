@@ -722,7 +722,10 @@ const ChatView = {
     const workspaceBrowserCreateField = ref(null);
     const pendingWorkspaceDir = ref("");
     const composerFileDrafts = new Map();
-    const pollTimers = new Set();
+    // Running tasks being followed: taskID -> { historyID, endpointRef, timer, failures }. Their
+    // polls survive network errors and restart at once when the page or the network comes back.
+    const trackedTasks = new Map();
+    let pollGeneration = 0;
     const streamSockets = new Map();
     const approvalDetailAttempts = new Set();
     const composerRef = ref(null);
@@ -3032,10 +3035,11 @@ const ChatView = {
     }
 
     function clearPollTimers() {
-      for (const timerID of pollTimers) {
-        window.clearTimeout(timerID);
+      pollGeneration += 1;
+      for (const tracked of trackedTasks.values()) {
+        window.clearTimeout(tracked.timer);
       }
-      pollTimers.clear();
+      trackedTasks.clear();
     }
 
     function closeTaskStream(taskID) {
@@ -3068,7 +3072,13 @@ const ChatView = {
         return;
       }
       const existing = streamSockets.get(key);
-      if (existing && existing.historyID === historyID && existing.endpointRef === endpointRef) {
+      // A socket the browser dropped while the page was in the background is replaced.
+      if (
+        existing &&
+        existing.historyID === historyID &&
+        existing.endpointRef === endpointRef &&
+        existing.socket.readyState <= WebSocket.OPEN
+      ) {
         return;
       }
       closeTaskStream(key);
@@ -3386,15 +3396,47 @@ const ChatView = {
       }
     }
 
-    function schedulePoll(fn) {
-      const timerID = window.setTimeout(async () => {
-        pollTimers.delete(timerID);
-        await fn();
-      }, POLL_INTERVAL_MS);
-      pollTimers.add(timerID);
+    // Polls a task again after delay, replacing any poll already waiting for it.
+    function scheduleTaskPoll(taskID, historyID, endpointRef, delay = POLL_INTERVAL_MS) {
+      const key = String(taskID || "").trim();
+      if (!key) return;
+      const tracked = trackedTasks.get(key) || { failures: 0 };
+      window.clearTimeout(tracked.timer);
+      const generation = pollGeneration;
+      tracked.historyID = historyID;
+      tracked.endpointRef = endpointRef;
+      tracked.timer = window.setTimeout(() => {
+        if (generation === pollGeneration) void pollTask(key, historyID, endpointRef);
+      }, delay);
+      trackedTasks.set(key, tracked);
+    }
+
+    // A failed request that is worth trying again: the network (the phone was asleep, the
+    // connection is switching), or the server being briefly unavailable.
+    function transientRequestError(e) {
+      const status = Number(e?.status) || 0;
+      return status === 0 || status === 408 || status === 429 || status >= 500;
+    }
+
+    const POLL_RETRY_MAX_MS = 15000;
+
+    // When the page is shown again or the network returns, follow the running tasks again at
+    // once: poll each now and reopen its stream.
+    function resumeTrackedTasks() {
+      if (!viewActive || document.visibilityState === "hidden") return;
+      for (const [taskID, tracked] of trackedTasks) {
+        tracked.failures = 0;
+        void startTaskStream(taskID, tracked.historyID, tracked.endpointRef);
+        scheduleTaskPoll(taskID, tracked.historyID, tracked.endpointRef, 0);
+      }
     }
 
     async function pollTask(taskID, historyID, endpointRef) {
+      const generation = pollGeneration;
+      const key = String(taskID || "").trim();
+      if (key && !trackedTasks.has(key)) {
+        trackedTasks.set(key, { historyID, endpointRef, timer: 0, failures: 0 });
+      }
       try {
         const detail = await runtimeApiFetchForEndpoint(endpointRef, `/tasks/${encodeURIComponent(taskID)}`);
         const status = normalizeTaskStatus(detail?.status);
@@ -3432,19 +3474,30 @@ const ChatView = {
         if (nextApproval) {
           void loadApprovalDetails(endpointRef);
         }
+        const tracked = trackedTasks.get(key);
+        if (tracked) tracked.failures = 0;
         if (isTerminalStatus(status)) {
+          trackedTasks.delete(key);
           closeTaskStream(taskID);
           if (consoleTopicsEnabled.value) {
             void refreshWorkspaceState();
           }
           scrollHistoryToBottom();
         }
-        if (!isTerminalStatus(status)) {
-          schedulePoll(async () => {
-            await pollTask(taskID, historyID, endpointRef);
-          });
+        if (!isTerminalStatus(status) && generation === pollGeneration) {
+          scheduleTaskPoll(key, historyID, endpointRef);
         }
       } catch (e) {
+        if (generation !== pollGeneration) return;
+        if (transientRequestError(e)) {
+          // Keep the reply as it is and try again, waiting longer each time.
+          const tracked = trackedTasks.get(key) || { failures: 0 };
+          tracked.failures = (tracked.failures || 0) + 1;
+          trackedTasks.set(key, tracked);
+          scheduleTaskPoll(key, historyID, endpointRef, Math.min(POLL_INTERVAL_MS * 2 ** tracked.failures, POLL_RETRY_MAX_MS));
+          return;
+        }
+        trackedTasks.delete(key);
         patchAgentHistoryItem(taskID, historyID, {
           status: "failed",
           approvalBusy: false,
@@ -3644,9 +3697,7 @@ const ChatView = {
         for (const item of chatHistoryItems.value) {
           if (item.role === "agent" && item.taskId && !isTerminalStatus(item.status)) {
             void startTaskStream(item.taskId, item.id, endpointRef);
-            schedulePoll(async () => {
-              await pollTask(item.taskId, item.id, endpointRef);
-            });
+            scheduleTaskPoll(item.taskId, item.id, endpointRef);
           }
         }
         return true;
@@ -4267,8 +4318,17 @@ const ChatView = {
       void loadComposerLLMProfiles();
       syncComposer();
     });
+    function onPageVisibilityChange() {
+      if (document.visibilityState === "visible") resumeTrackedTasks();
+    }
+    document.addEventListener("visibilitychange", onPageVisibilityChange);
+    window.addEventListener("online", resumeTrackedTasks);
+    window.addEventListener("pageshow", resumeTrackedTasks);
     onUnmounted(() => {
       viewActive = false;
+      document.removeEventListener("visibilitychange", onPageVisibilityChange);
+      window.removeEventListener("online", resumeTrackedTasks);
+      window.removeEventListener("pageshow", resumeTrackedTasks);
       closeComposerFilePreview();
       historyLoadVersion += 1;
       persistComposerDraft();
