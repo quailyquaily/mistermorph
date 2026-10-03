@@ -336,6 +336,9 @@ func (s *consoleReasoningSink) Snapshot() string {
 	return text
 }
 
+// consoleReplySnapshotInterval is how often, at most, the console sends a growing reply.
+const consoleReplySnapshotInterval = 100 * time.Millisecond
+
 func newConsoleReplySink(hub *consoleStreamHub, taskID string, logger *slog.Logger, outputGuard *guard.Guard) *consoleReplySink {
 	return &consoleReplySink{
 		hub:            hub,

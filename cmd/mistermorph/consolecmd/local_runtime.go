@@ -2287,8 +2287,11 @@ func (r *consoleLocalRuntime) handleTaskJob(workerCtx context.Context, conversat
 	if bundle := job.Generation.bundle; bundle != nil {
 		previewSink.observer = newConsoleLLMObserver(bundle.taskRuntime, job.Model, logger)
 	}
+	// The console draws the reply as it grows, so it takes snapshots more often than the
+	// streamer's default; channels that edit real messages keep theirs.
 	streamer := streaming.NewFinalOutputStreamer(streaming.FinalOutputStreamerOptions{
-		Sink: replySink,
+		Sink:        replySink,
+		MinInterval: consoleReplySnapshotInterval,
 	})
 	streamTracker := newConsoleStreamTracker(logger, job.TaskID)
 	onStream := func(event llm.StreamEvent) error {

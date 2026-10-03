@@ -98,8 +98,8 @@ When not calling tools, you MUST respond with JSON in the following format:
 ```json
 {
   "type": "final",
-  "reasoning": "brief reasoning (optional)",
   "output": "your final answer",
+  "reasoning": "brief reasoning (optional)",
   "reaction": "optional emoji reaction to the user message, e.g. 👍 or 🤔",
   "is_lightweight": true|false,
 }
