@@ -653,6 +653,9 @@ const ChatView = {
     const copiedHistoryItemID = ref("");
     const historyLoading = ref(false);
     const historyLoadingOlder = ref(false);
+    // Which topic the history on screen belongs to. While another topic's history loads, the list
+    // shows a placeholder thread instead of the old messages; a reload of the same topic keeps them.
+    const historyItemsScope = ref("");
     const historyNextCursor = ref("");
     const historyViewport = ref(null);
     const topics = shallowRef([]);
@@ -3637,7 +3640,16 @@ const ChatView = {
       }
     }
 
+    function historyScope() {
+      if (!consoleTopicsEnabled.value) return String(submitEndpointRef.value || "");
+      const topic = creatingTopic.value ? "\u0001new" : normalizeTopicID(selectedTopicID.value);
+      return `${submitEndpointRef.value || ""}\u0000${topic}`;
+    }
+
+    const historySwitching = computed(() => historyLoading.value && historyItemsScope.value !== historyScope());
+
     async function loadHistory(options = {}) {
+      const scope = historyScope();
       clearPollTimers();
       clearStreamSockets();
       err.value = "";
@@ -3650,6 +3662,7 @@ const ChatView = {
       if (!endpointRef) {
         applyComposerTopicLLMProfile("");
         replaceHistoryItems([]);
+        historyItemsScope.value = scope;
         historyLoading.value = false;
         return true;
       }
@@ -3711,6 +3724,7 @@ const ChatView = {
         return false;
       } finally {
         if (viewActive && currentHistoryLoadVersion === historyLoadVersion) {
+          historyItemsScope.value = scope;
           historyLoading.value = false;
         }
       }
@@ -4234,6 +4248,8 @@ const ChatView = {
           }
           creatingTopic.value = false;
           selectedTopicID.value = topicID;
+          // The thread on screen is this topic's: its first exchange.
+          historyItemsScope.value = historyScope();
           if (String(requestBody.workspace_dir || "").trim()) {
             pendingWorkspaceDir.value = "";
             applyWorkspacePayload({
@@ -4451,6 +4467,7 @@ const ChatView = {
       chatHistoryItems,
       copiedHistoryItemID,
       historyLoading,
+      historySwitching,
       historyLoadingOlder,
       historyNextCursor,
       historyViewport,
@@ -4906,7 +4923,7 @@ const ChatView = {
                 </QButton>
                 <ChatHistoryList
                   :items="chatHistoryItems"
-                  :loading="historyLoading"
+                  :loading="historySwitching"
                   :loading-text="t('chat_history_loading')"
                   :empty-text="t('chat_empty')"
                   :submit-endpoint-ref="submitEndpointRef"

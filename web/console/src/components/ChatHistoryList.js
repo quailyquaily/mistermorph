@@ -86,6 +86,13 @@ const ChatHistoryList = {
   },
   setup(props, { emit }) {
     let updateStartedAt = 0;
+    // The placeholder thread while a topic's history loads: a question and a reply of a few lines,
+    // three times. Fixed widths, so it reads as a conversation without looking random.
+    const skeletonTurns = [
+      { ask: 34, reply: [92, 86, 58] },
+      { ask: 52, reply: [88, 94, 76, 40] },
+      { ask: 26, reply: [84, 62] },
+    ];
 
     // Messages that just joined the thread animate in; history loads and topic switches do not.
     const arrivals = createArrivalTracker({ edge: "end" });
@@ -177,6 +184,7 @@ const ChatHistoryList = {
       emitApprovalDeny,
       emitCopy,
       emitPreviewFile,
+      skeletonTurns,
       emitRendered,
       emitTimeClick,
       emitToggleStatus,
@@ -184,7 +192,18 @@ const ChatHistoryList = {
     };
   },
   template: `
-    <p v-if="loading" class="muted">{{ loadingText }}</p>
+    <div v-if="loading" class="chat-history-skeleton" role="status" :aria-label="loadingText">
+      <div v-for="(turn, index) in skeletonTurns" :key="index" class="chat-history-skeleton-turn">
+        <span class="chat-history-skeleton-bubble" :style="{ width: turn.ask + '%' }"></span>
+        <span
+          v-for="(width, line) in turn.reply"
+          :key="line"
+          class="chat-history-skeleton-line"
+          :style="{ width: width + '%' }"
+        ></span>
+      </div>
+    </div>
+    <template v-else>
     <ChatHistoryItem
       v-for="item in items"
       :key="item.id"
@@ -209,6 +228,7 @@ const ChatHistoryList = {
       @approval-approve="emitApprovalApprove"
       @approval-deny="emitApprovalDeny"
     />
+    </template>
     <p v-if="items.length === 0 && !loading" class="muted">{{ emptyText }}</p>
     <p v-if="footerText && !loading" class="chat-history-disclaimer">{{ footerText }}</p>
   `,

@@ -1451,6 +1451,85 @@ html[data-macos26="true"] .chat-workspace-sidebar-shell-mobile {
   text-align: center;
 }
 
+/* While a topic's history loads: a placeholder thread in the shape of the real one, user
+   questions on the right and replies as lines of text on the left. It fades in after a beat, so a
+   quick load shows nothing at all, and a light sweep runs across it while it waits. */
+.chat-history-skeleton {
+  display: grid;
+  gap: 28px;
+  width: 100%;
+  animation: chat-history-skeleton-in 240ms var(--motion-ease, ease) 160ms both;
+}
+
+.chat-history-skeleton-turn {
+  display: grid;
+  gap: 10px;
+}
+
+.chat-history-skeleton-bubble,
+.chat-history-skeleton-line {
+  display: block;
+  border-radius: 3px;
+  background:
+    linear-gradient(
+        100deg,
+        transparent 30%,
+        color-mix(in srgb, var(--q-bg-white) 70%, transparent) 50%,
+        transparent 70%
+      )
+      0 0 / 300% 100% no-repeat,
+    color-mix(in srgb, var(--q-c-dark-4) 34%, transparent);
+  animation: chat-history-skeleton-sweep 1.6s ease-in-out infinite;
+}
+
+.chat-history-skeleton-bubble {
+  justify-self: end;
+  height: 38px;
+  min-width: 96px;
+  max-width: min(58ch, 70%);
+  margin-bottom: 8px;
+  border-radius: 8px;
+  background-color: color-mix(in srgb, var(--q-c-blue) 9%, color-mix(in srgb, var(--q-c-dark-4) 18%, transparent));
+}
+
+.chat-history-skeleton-line {
+  height: 10px;
+  max-width: min(82ch, calc(100% - var(--chat-history-agent-padding-right, 24px)));
+}
+
+.chat-history-skeleton-turn:nth-child(2) .chat-history-skeleton-bubble,
+.chat-history-skeleton-turn:nth-child(2) .chat-history-skeleton-line {
+  animation-delay: 120ms;
+}
+
+.chat-history-skeleton-turn:nth-child(3) .chat-history-skeleton-bubble,
+.chat-history-skeleton-turn:nth-child(3) .chat-history-skeleton-line {
+  animation-delay: 240ms;
+}
+
+@keyframes chat-history-skeleton-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes chat-history-skeleton-sweep {
+  from {
+    background-position: 100% 0, 0 0;
+  }
+  to {
+    background-position: -50% 0, 0 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-history-skeleton,
+  .chat-history-skeleton-bubble,
+  .chat-history-skeleton-line {
+    animation: none;
+  }
+}
+
 .chat-history-item {
   position: relative;
   display: grid;
