@@ -1,9 +1,12 @@
+/* The splash covers the app with the page's own background (the morph theme's #edf3f8), so an app
+   that renders while the loader is still showing stays hidden until the splash fades away. */
 .boot-splash {
   position: fixed;
   inset: 0;
   z-index: 9999;
   display: grid;
   place-items: center;
+  background: #edf3f8;
   opacity: 1;
   transition: opacity 220ms cubic-bezier(0.22, 1, 0.36, 1);
   pointer-events: none;
@@ -14,17 +17,11 @@
 }
 
 /* Hidden until the load has taken long enough to need it (--boot-reveal, set by BootSplash.js),
-   then in quickly, so the icon is whole and recognisable at once. */
+   then in quickly. */
 .boot-splash__center {
   display: grid;
   place-items: center;
   animation: boot-appear 160ms cubic-bezier(0.22, 1, 0.36, 1) var(--boot-reveal, 300ms) both;
-}
-
-.boot-splash__logo {
-  display: block;
-  width: 56px;
-  height: 56px;
 }
 
 @keyframes boot-appear {
@@ -34,6 +31,11 @@
   to {
     opacity: 1;
   }
+}
+
+/* The name, drawn as mosaic pieces on a canvas (BootSplash.js). */
+.boot-mosaic {
+  display: block;
 }
 
 @media (prefers-reduced-motion: reduce) {
