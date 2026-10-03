@@ -292,6 +292,22 @@ function buildPollingHint(agentName, t, seed) {
   });
 }
 
+// The action of the polling hint, in English, for the mosaic word that stands in for it: the mosaic
+// font has Latin letters only. Same order as POLLING_ACTION_KEYS, so the word matches the hint.
+const POLLING_ACTION_WORDS = ["pondering", "thinking", "researching", "weighing", "reflecting", "tinkering"];
+
+function pollingActionWord(seed) {
+  return POLLING_ACTION_WORDS[stableHash(seed || "agent") % POLLING_ACTION_WORDS.length];
+}
+
+// Whether a task's reply has nothing to show yet: no output, no error, no approval to answer, and
+// still running. Its text is then the polling hint.
+function taskAwaitingReply(task) {
+  if (taskApprovalState(task)) return false;
+  if (taskOutputText(task) || String(task?.error || "").trim()) return false;
+  return !isTerminalStatus(normalizeTaskStatus(task?.status));
+}
+
 function historyPendingSeed(item, fallback = "agent") {
   const candidates = [item?.pendingSeed, item?.taskId, item?.id, fallback];
   for (const candidate of candidates) {
@@ -374,6 +390,7 @@ function taskHistoryItems(task, t, options = {}) {
         agentName: options.agentName,
         pendingSeed: taskID,
       }),
+      awaiting: taskAwaitingReply(task),
       plan: taskPlan(task),
       activity: taskActivity(task),
       reasoning: taskReasoning(task),
@@ -432,6 +449,8 @@ function taskListHistoryItems(tasks, t, options = {}) {
 export {
   agentDisplayName,
   buildPollingHint,
+  pollingActionWord,
+  taskAwaitingReply,
   chatApprovalReasonText,
   historyPendingSeed,
   historyTimeLabel,

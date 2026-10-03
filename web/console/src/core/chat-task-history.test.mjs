@@ -114,3 +114,15 @@ test("finished plan steps with a note become the agent's messages", () => {
   assert.deepEqual(planStepMessages(plan), [{ key: "step:0", text: "6 sections." }]);
   assert.deepEqual(planStepMessages(null), []);
 });
+
+test("a reply awaits until it has words, an error, an approval, or an end", async () => {
+  const { taskAwaitingReply, pollingActionWord } = await import("./chat-task-history.js");
+  assert.equal(taskAwaitingReply({ id: "t", status: "running" }), true);
+  assert.equal(taskAwaitingReply({ id: "t", status: "queued" }), true);
+  assert.equal(taskAwaitingReply({ id: "t", status: "running", result: { final: { output: "hi" } } }), false);
+  assert.equal(taskAwaitingReply({ id: "t", status: "running", error: "boom" }), false);
+  assert.equal(taskAwaitingReply({ id: "t", status: "done" }), false);
+  assert.equal(taskAwaitingReply({ id: "t", status: "pending", approval_request_id: "a" }), false);
+  assert.equal(pollingActionWord("seed"), pollingActionWord("seed"));
+  assert.match(pollingActionWord("seed"), /^[a-z]+$/);
+});

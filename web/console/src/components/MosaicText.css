@@ -1,0 +1,10 @@
+.mosaic-text {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+  line-height: 0;
+}
+
+.mosaic-text canvas {
+  display: block;
+}

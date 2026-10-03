@@ -29,6 +29,7 @@ import { rememberLastTopicID } from "../core/chat-topic-memory";
 import {
   agentDisplayName,
   buildPollingHint,
+  taskAwaitingReply,
   chatApprovalReasonText,
   historyPendingSeed,
   historyTimeLabel as formatChatHistoryTime,
@@ -3133,8 +3134,10 @@ const ChatView = {
         }
         if (!isPreview && typeof frame.text === "string" && frame.text !== "") {
           patch.text = frame.text;
+          patch.awaiting = false;
         } else if (!isPreview && typeof frame.error === "string" && frame.error !== "") {
           patch.text = frame.error;
+          patch.awaiting = false;
         }
         if (typeof frame.status === "string" && frame.status !== "") {
           patch.status = normalizeTaskStatus(frame.status);
@@ -3245,6 +3248,7 @@ const ChatView = {
         rawJSON: String(partial?.rawJSON || ""),
         pendingSeed: String(partial?.pendingSeed || ""),
         presentation: String(partial?.presentation || ""),
+        awaiting: partial?.awaiting === true,
       };
       replaceHistoryItems([...chatHistoryItems.value, item]);
       return item.id;
@@ -3469,6 +3473,8 @@ const ChatView = {
             pendingSeed,
             pendingText: preservePendingText ? existingItem?.text : "",
           }),
+          // Still the polling hint, unless the stream has already shown words.
+          awaiting: taskAwaitingReply(detail) && existingItem?.awaiting !== false,
           timeText: historyTimeLabel(detail?.finished_at || detail?.started_at || detail?.created_at),
           durationText: taskDurationLabel(detail),
           rawJSON: taskRawJSON(detail),
@@ -4047,6 +4053,7 @@ const ChatView = {
             approvalError: "",
             status: "queued",
             text: buildPollingHint(activeAgentName.value, t, historyPendingSeed(item, taskID)),
+            awaiting: true,
           });
         } else {
           patchHistoryItem(itemID, {
@@ -4184,6 +4191,7 @@ const ChatView = {
       const agentHistoryID = pushHistoryItem({
         role: "agent",
         text: buildPollingHint(activeAgentName.value, t, pendingSeed),
+        awaiting: true,
         status: "queued",
         timeText: "",
         pendingSeed,

@@ -1451,6 +1451,18 @@ html[data-macos26="true"] .chat-workspace-sidebar-shell-mobile {
   text-align: center;
 }
 
+/* A reply on its way: its action word assembling from mosaic pieces. It is exactly one line of the
+   reply's text (.chat-history-copy .mmr-document), so the first words take its place without the
+   bubble changing size. */
+.chat-history-awaiting {
+  display: flex;
+  align-items: center;
+  font-size: var(--font-size-body);
+  line-height: 1.7;
+  height: calc(var(--font-size-body) * 1.7);
+  height: 1lh;
+}
+
 /* While a topic's history loads: a placeholder thread in the shape of the real one, user
    questions on the right and replies as lines of text on the left. It fades in after a beat, so a
    quick load shows nothing at all, and a light sweep runs across it while it waits. */

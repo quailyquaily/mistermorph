@@ -2,12 +2,13 @@ import { computed, onBeforeUpdate, onUpdated } from "vue";
 
 import { translate } from "../core/context";
 import { approvalParameterEntries, skillInstallApproval } from "../core/chat-approvals";
-import { planStepMessages } from "../core/chat-task-history";
+import { planStepMessages, pollingActionWord } from "../core/chat-task-history";
 import { recordComponentUpdate } from "../core/performance";
 import ChatRichContent from "./ChatRichContent";
 import ChatSkillInstallPreview from "./ChatSkillInstallPreview";
 import ChatStatusCard from "./ChatStatusCard";
 import ChatSystemMessage from "./ChatSystemMessage";
+import MosaicText from "./MosaicText";
 
 function roleOf(item) {
   return String(item?.role || "").trim().toLowerCase();
@@ -40,6 +41,7 @@ const ChatHistoryItem = {
     ChatSkillInstallPreview,
     ChatStatusCard,
     ChatSystemMessage,
+    MosaicText,
   },
   emits: ["approval-approve", "approval-deny", "copy", "preview-file", "rendered", "time-click", "toggle-status"],
   props: {
@@ -189,12 +191,22 @@ const ChatHistoryItem = {
     const agentBubbleVisible = computed(
       () => !approvalVisible.value && String(props.item?.text || "") !== ""
     );
+    // A reply with nothing to show yet: its words assemble from mosaic pieces in place of the hint
+    // ("Morph is thinking..."), which stays for screen readers.
+    const awaitingWord = computed(() =>
+      role.value === "agent" &&
+      props.item?.awaiting === true &&
+      !isTerminalStatus(normalizeTaskStatus(props.item?.status))
+        ? pollingActionWord(props.item?.pendingSeed || props.item?.taskId || props.item?.id)
+        : ""
+    );
     const copyAvailable = computed(
       () =>
         !contextCompactNotice.value &&
         !approvalVisible.value &&
         (role.value === "agent" || role.value === "user") &&
-        String(props.item?.text || "").trim() !== ""
+        String(props.item?.text || "").trim() !== "" &&
+        !awaitingWord.value
     );
     const streaming = computed(
       () =>
@@ -278,6 +290,7 @@ const ChatHistoryItem = {
 
     return {
       agentBubbleVisible,
+      awaitingWord,
       stepMessages,
       approvalMessage,
       approvalMessageVisible,
@@ -422,7 +435,10 @@ const ChatHistoryItem = {
               @rendered="emitRendered"
             />
           </div>
-          <div v-if="agentBubbleVisible" :class="surfaceClass">
+          <div v-if="agentBubbleVisible && awaitingWord" :class="surfaceClass" class="chat-history-awaiting">
+            <MosaicText :text="awaitingWord" :label="item.text" />
+          </div>
+          <div v-else-if="agentBubbleVisible" :class="surfaceClass">
             <ChatRichContent
               class="chat-history-markdown"
               :source="item.text"
