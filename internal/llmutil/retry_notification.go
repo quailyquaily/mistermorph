@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -57,11 +58,20 @@ func retryReasonDescription(err error) string {
 	if ok {
 		return strings.TrimSpace(fmt.Sprintf("HTTP %d %s", status, http.StatusText(status)))
 	}
+	if reason == "status_429" {
+		return "HTTP 429 Too Many Requests"
+	}
 	if reason == "timeout" {
 		return "Request timed out"
 	}
 	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
 		return "Response stream interrupted"
+	}
+	if errors.Is(err, syscall.ECONNREFUSED) {
+		return "Connection refused"
+	}
+	if errors.Is(err, syscall.ECONNRESET) {
+		return "Connection reset"
 	}
 	var dnsErr *net.DNSError
 	if errors.As(err, &dnsErr) {
@@ -71,5 +81,34 @@ func retryReasonDescription(err error) string {
 	if errors.As(err, &opErr) {
 		return "Network connection failed"
 	}
+	// Provider SDKs often flatten the cause into the message, so the types above are gone.
+	if description, ok := retryReasonFromMessage(strings.ToLower(message)); ok {
+		return description
+	}
 	return "Model service request failed"
+}
+
+var retryMessageReasons = []struct {
+	needles     []string
+	description string
+}{
+	{[]string{"connection refused"}, "Connection refused"},
+	{[]string{"connection reset", "broken pipe"}, "Connection reset"},
+	{[]string{"no such host", "server misbehaving"}, "DNS lookup failed"},
+	{[]string{"x509:", "tls:", "certificate"}, "TLS handshake failed"},
+	{[]string{"unexpected eof", ": eof", "stream error"}, "Response stream interrupted"},
+	{[]string{"network is unreachable", "no route to host", "dial tcp"}, "Network connection failed"},
+	{[]string{"overloaded"}, "Model service overloaded"},
+	{[]string{"invalid anthropic replay content", "marshaljson", "json: "}, "Request or response encoding failed"},
+}
+
+func retryReasonFromMessage(message string) (string, bool) {
+	for _, entry := range retryMessageReasons {
+		for _, needle := range entry.needles {
+			if strings.Contains(message, needle) {
+				return entry.description, true
+			}
+		}
+	}
+	return "", false
 }
