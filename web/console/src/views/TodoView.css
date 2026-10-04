@@ -55,6 +55,42 @@
   grid-template-columns: minmax(0, 1.45fr) minmax(360px, 0.55fr);
 }
 
+/* On a wide screen the calendar and its side panel share one row exactly the page's height: the
+   panel (a day's overview, or a TODO's editor) scrolls within it instead of setting the row's
+   height, so opening a TODO never resizes the calendar. */
+@media (min-width: 921px) {
+  .todo-workbench.is-calendar {
+    grid-template-rows: minmax(0, 1fr);
+    height: 100%;
+  }
+
+  .todo-workbench.is-calendar > .todo-calendar {
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  /* The side panel looks like Chat's right pane (.chat-workspace-sidebar-shell): a white panel
+     with rounded corners and a soft shadow, inset from the page, without the card's border and
+     corner brackets. It scrolls down only: overflow-y alone would also let a sub-pixel of width
+     scroll sideways. */
+  .todo-workbench.is-calendar > .todo-editor-card.q-card-default {
+    align-self: stretch;
+    min-height: 0;
+    margin: 0.5rem;
+    overflow-x: hidden;
+    overflow-y: auto;
+    border: 0 !important;
+    border-radius: 8px;
+    background: var(--q-bg-white);
+    box-shadow: 0 1px 4px color-mix(in srgb, var(--q-c-dark) 7%, transparent);
+  }
+
+  body[data-theme] .todo-workbench.is-calendar > .todo-editor-card.q-card-default::before,
+  body[data-theme] .todo-workbench.is-calendar > .todo-editor-card.q-card-default::after {
+    display: none;
+  }
+}
+
 .todo-index {
   --workspace-sidebar-head-pad: 0 0 0 var(--content-gutter-x);
   --workspace-sidebar-list-gap: 6px;
@@ -697,6 +733,19 @@ body:has(.todo-page) .q-dialog .q-menu .q-menu-subtitle {
 .todo-repeat-kind-tabs .app-tabs-option-label {
   min-width: 0;
   white-space: nowrap;
+}
+
+/* The repeat field sizes its tabs to the space it has: in a narrow panel (the calendar's side
+   panel) the five options lose their side padding and use the meta size, so every label fits. */
+.todo-repeat-field {
+  container-type: inline-size;
+}
+
+@container (max-width: 380px) {
+  .todo-repeat-kind-tabs .app-tabs-option {
+    padding: 0 4px;
+    font-size: var(--font-size-meta);
+  }
 }
 
 .todo-repeat-kind-tabs.is-disabled {

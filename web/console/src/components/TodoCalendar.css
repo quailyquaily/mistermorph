@@ -49,15 +49,9 @@
   gap: 2px;
 }
 
-/* A compact outlined button, lighter than the header's icon buttons are tall. Quail's button
-   styles load later, so the size is marked important. */
-.todo-calendar-today.q-button {
-  height: 26px !important;
-  min-height: 26px;
+/* Today is an icon button, set a little apart from the previous and next arrows. */
+.todo-calendar-today {
   margin-right: 6px;
-  padding: 0 10px !important;
-  border: 1px solid var(--line-soft) !important;
-  font-size: var(--font-size-meta);
 }
 
 .todo-calendar-month-nav .icon {

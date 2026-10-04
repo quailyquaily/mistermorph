@@ -292,7 +292,14 @@ const TodoCalendar = {
         <div class="todo-calendar-month-nav">
           <h3 class="todo-calendar-month-title">{{ monthTitle }}</h3>
           <div class="todo-calendar-month-steps">
-            <QButton class="plain sm todo-calendar-today" @click="showToday">{{ t("todo_calendar_today") }}</QButton>
+            <QButton
+              class="plain sm icon todo-calendar-today"
+              :title="t('todo_calendar_today')"
+              :aria-label="t('todo_calendar_today')"
+              @click="showToday"
+            >
+              <PhCalendarDot class="icon" />
+            </QButton>
             <QButton class="plain sm icon" :title="t('todo_calendar_previous')" :aria-label="t('todo_calendar_previous')" @click="setMonth(-1)">
               <PhCaretLeft class="icon" />
             </QButton>
