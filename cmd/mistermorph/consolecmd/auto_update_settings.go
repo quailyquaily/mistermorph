@@ -24,10 +24,13 @@ const autoUpdateSettingsKey = "auto_update"
 const autoUpdateCheckTimeout = 30 * time.Second
 const consoleUpdateUserAgent = "mistermorph-console"
 
-var autoUpdateManifestURL = updatecheck.DefaultManifestURL
+// autoUpdateManifestURL overrides the channel manifest URL in tests.
+var autoUpdateManifestURL = ""
 
 type autoUpdatePayload struct {
 	Enabled bool `json:"enabled"`
+	// Channel is the configured release channel; empty means the build channel.
+	Channel string `json:"channel"`
 }
 
 type autoUpdateSettingsPayload struct {
@@ -35,7 +38,8 @@ type autoUpdateSettingsPayload struct {
 }
 
 type autoUpdateUpdatePayload struct {
-	Enabled *bool `json:"enabled,omitempty"`
+	Enabled *bool   `json:"enabled,omitempty"`
+	Channel *string `json:"channel,omitempty"`
 }
 
 type autoUpdateSettingsUpdatePayload struct {
@@ -64,10 +68,32 @@ func (s *server) handleAutoUpdateCheck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The channel query parameter checks a channel before it is saved;
+	// otherwise the configured channel is used.
+	channel := strings.TrimSpace(r.URL.Query().Get("channel"))
+	if channel == "" {
+		configPath, err := resolveConsoleConfigPath()
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		settings, err := readAutoUpdateSettings(configPath)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		channel = settings.AutoUpdate.Channel
+	}
+	if _, err := updatecheck.NormalizeChannel(channel); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(r.Context(), autoUpdateCheckTimeout)
 	defer cancel()
 
 	result, err := updatecheck.Check(ctx, updatecheck.Options{
+		Channel:        channel,
 		CurrentVersion: s.autoUpdateCurrentVersion(),
 		ManifestURL:    autoUpdateManifestURL,
 		UserAgent:      consoleUpdateUserAgent,
@@ -108,6 +134,8 @@ func (s *server) handleAutoUpdateSettingsGet(w http.ResponseWriter, _ *http.Requ
 		"auto_update":     settings.AutoUpdate,
 		"config_path":     configPath,
 		"current_version": s.autoUpdateCurrentVersion(),
+		"build_channel":   updatecheck.BuildChannel(),
+		"channels":        updatecheck.Channels(),
 		"config_revision": snapshot.Revision,
 	})
 }
@@ -137,7 +165,11 @@ func (s *server) handleAutoUpdateSettingsPut(w http.ResponseWriter, r *http.Requ
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	next := normalizeAutoUpdateSettingsUpdatePayload(current, req)
+	next, err := normalizeAutoUpdateSettingsUpdatePayload(current, req)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	serialized, err := writeAutoUpdateSettings(configPath, next)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -189,6 +221,7 @@ func defaultAutoUpdateSettingsPayload() autoUpdateSettingsPayload {
 
 func readAutoUpdateSettingsFromReader(r interface {
 	GetBool(string) bool
+	GetString(string) string
 }) autoUpdateSettingsPayload {
 	if r == nil {
 		return autoUpdateSettingsPayload{}
@@ -196,6 +229,7 @@ func readAutoUpdateSettingsFromReader(r interface {
 	return autoUpdateSettingsPayload{
 		AutoUpdate: autoUpdatePayload{
 			Enabled: r.GetBool("auto_update.enabled"),
+			Channel: strings.ToLower(strings.TrimSpace(r.GetString("auto_update.channel"))),
 		},
 	}
 }
@@ -203,12 +237,21 @@ func readAutoUpdateSettingsFromReader(r interface {
 func normalizeAutoUpdateSettingsUpdatePayload(
 	current autoUpdateSettingsPayload,
 	in autoUpdateSettingsUpdatePayload,
-) autoUpdateSettingsPayload {
+) (autoUpdateSettingsPayload, error) {
 	next := current
 	if in.AutoUpdate != nil && in.AutoUpdate.Enabled != nil {
 		next.AutoUpdate.Enabled = *in.AutoUpdate.Enabled
 	}
-	return next
+	if in.AutoUpdate != nil && in.AutoUpdate.Channel != nil {
+		channel := strings.ToLower(strings.TrimSpace(*in.AutoUpdate.Channel))
+		if channel != "" {
+			if _, err := updatecheck.NormalizeChannel(channel); err != nil {
+				return autoUpdateSettingsPayload{}, err
+			}
+		}
+		next.AutoUpdate.Channel = channel
+	}
+	return next, nil
 }
 
 func writeAutoUpdateSettings(configPath string, values autoUpdateSettingsPayload) ([]byte, error) {
@@ -223,6 +266,7 @@ func writeAutoUpdateSettings(configPath string, values autoUpdateSettingsPayload
 	removeLegacyDesktopAutoUpdate(root)
 	autoUpdateNode := configbootstrap.EnsureMappingValue(root, autoUpdateSettingsKey)
 	configbootstrap.SetMappingBoolValue(autoUpdateNode, "enabled", values.AutoUpdate.Enabled)
+	configbootstrap.SetOrDeleteMappingScalar(autoUpdateNode, "channel", values.AutoUpdate.Channel)
 	return configbootstrap.MarshalDocument(doc)
 }
 

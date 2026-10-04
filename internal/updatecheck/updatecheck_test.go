@@ -99,8 +99,9 @@ func TestCheckAutoDownloadsAndVerifiesAsset(t *testing.T) {
 	if string(got) != string(asset) {
 		t.Fatalf("downloaded asset = %q, want %q", string(got), string(asset))
 	}
-	if filepath.Dir(filepath.Dir(result.DownloadPath)) != filepath.Clean(cacheDir) {
-		t.Fatalf("download path = %q, want under %q", result.DownloadPath, cacheDir)
+	wantDir := filepath.Join(cacheDir, BuildChannel(), "0.2.42")
+	if filepath.Dir(result.DownloadPath) != wantDir {
+		t.Fatalf("download path = %q, want under %q", result.DownloadPath, wantDir)
 	}
 }
 
@@ -122,6 +123,76 @@ func TestCheckUnknownCurrentVersionDoesNotDownload(t *testing.T) {
 	}
 	if result.Downloaded {
 		t.Fatalf("Downloaded = true, want false")
+	}
+}
+
+func TestCheckOtherChannelOffersSameVersion(t *testing.T) {
+	asset := []byte("desktop update asset")
+	serverURL := newUpdateTestServer(t, asset)
+	other := ChannelPro
+	if BuildChannel() == ChannelPro {
+		other = ChannelCommunity
+	}
+
+	result, err := Check(context.Background(), Options{
+		Channel:        other,
+		CurrentVersion: "0.2.42",
+		ManifestURL:    serverURL + "/update.json",
+	})
+	if err != nil {
+		t.Fatalf("Check() error = %v", err)
+	}
+	if !result.UpdateAvailable || !result.ChannelSwitch {
+		t.Fatalf("result = %#v, want a channel switch update", result)
+	}
+	if result.Channel != other || result.CurrentChannel != BuildChannel() {
+		t.Fatalf("channels = %q from %q, want %q from %q", result.Channel, result.CurrentChannel, other, BuildChannel())
+	}
+}
+
+func TestCheckBuildChannelSameVersionIsUpToDate(t *testing.T) {
+	asset := []byte("desktop update asset")
+	serverURL := newUpdateTestServer(t, asset)
+
+	result, err := Check(context.Background(), Options{
+		Channel:        BuildChannel(),
+		CurrentVersion: "0.2.42",
+		ManifestURL:    serverURL + "/update.json",
+	})
+	if err != nil {
+		t.Fatalf("Check() error = %v", err)
+	}
+	if result.UpdateAvailable || result.ChannelSwitch || result.Status != "up_to_date" {
+		t.Fatalf("result = %#v, want up_to_date", result)
+	}
+}
+
+func TestCheckRejectsUnknownChannel(t *testing.T) {
+	if _, err := Check(context.Background(), Options{Channel: "nightly"}); err == nil {
+		t.Fatal("Check() error = nil, want unknown channel error")
+	}
+}
+
+func TestNormalizeChannel(t *testing.T) {
+	cases := map[string]string{
+		"":            BuildChannel(),
+		" Community ": ChannelCommunity,
+		"PRO":         ChannelPro,
+	}
+	for in, want := range cases {
+		got, err := NormalizeChannel(in)
+		if err != nil || got != want {
+			t.Fatalf("NormalizeChannel(%q) = %q, %v; want %q", in, got, err, want)
+		}
+	}
+}
+
+func TestManifestURL(t *testing.T) {
+	if got := ManifestURL("", ChannelPro); got != "https://downloads.mistermorph.com/pro/latest/update.json" {
+		t.Fatalf("ManifestURL() = %q", got)
+	}
+	if got := ManifestURL("https://example.test/", ChannelCommunity); got != "https://example.test/community/latest/update.json" {
+		t.Fatalf("ManifestURL() = %q", got)
 	}
 }
 

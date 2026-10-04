@@ -4,7 +4,7 @@ Desktop app, CLI, and reusable Go runtime for AI agents.
 
 Other languages: [简体中文](docs/zh-CN/README.md) | [日本語](docs/ja-JP/README.md)
 
-To try Mister Morph, start with the desktop App from [GitHub Releases](https://github.com/quailyquaily/mistermorph/releases). It includes the Console UI, starts the local backend, and guides first-run setup.
+To try Mister Morph, start with the desktop App from the [downloads page](https://mistermorph.com/downloads/). It includes the Console UI, starts the local backend, and guides first-run setup.
 
 ## Why Mister Morph
 
@@ -18,7 +18,7 @@ To try Mister Morph, start with the desktop App from [GitHub Releases](https://g
 
 ### Desktop App (recommended)
 
-1. Download a release asset from the [GitHub Releases](https://github.com/quailyquaily/mistermorph/releases) page:
+1. Download a release asset from the [downloads page](https://mistermorph.com/downloads/) (all releases and change logs: [mistermorph.com/releases](https://mistermorph.com/releases/); [GitHub Releases](https://github.com/quailyquaily/mistermorph/releases) keeps the latest 10):
    - macOS: `MrMorph-darwin-arm64.dmg`
    - Linux: `MrMorph-linux-amd64.AppImage` or `MrMorph-linux-amd64.deb`
    - Windows: `MrMorph-windows-amd64.zip`

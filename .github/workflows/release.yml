@@ -9,6 +9,24 @@ on:
 permissions:
   contents: write
 
+# Shared by mistermorph and mistermorph-pro. Only the channel block differs
+# between the two repositories; keep everything else identical.
+env:
+  # --- Release channel -------------------------------------------------------
+  RELEASE_CHANNEL: community
+  GO_BUILD_TAGS: ""
+  GORELEASER_CONFIG: .goreleaser.yaml
+  CONSOLE_VITE_CONFIG: vite.config.js
+  # Number of public GitHub releases to keep; 0 publishes to R2 only.
+  GITHUB_RELEASES_TO_KEEP: "10"
+  # ---------------------------------------------------------------------------
+  R2_BUCKET: ${{ secrets.R2_BUCKET || vars.R2_BUCKET }}
+  R2_PUBLIC_BASE_URL: ${{ secrets.R2_PUBLIC_BASE_URL || vars.R2_PUBLIC_BASE_URL }}
+  R2_ENDPOINT: https://${{ secrets.CF_ACCOUNT_ID }}.r2.cloudflarestorage.com
+  AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+  AWS_DEFAULT_REGION: auto
+
 jobs:
   goreleaser:
     runs-on: ubuntu-latest
@@ -40,14 +58,38 @@ jobs:
         run: pnpm --dir web/console install --frozen-lockfile
 
       - name: Build frontend
-        run: pnpm --dir web/console build
+        run: pnpm --dir web/console exec vite build --config "${CONSOLE_VITE_CONFIG}"
 
       - name: Stage console assets
         shell: bash
         run: ./scripts/stage-console-assets.sh
 
       - name: Run tests
-        run: go test ./...
+        run: go test -tags "${GO_BUILD_TAGS}" ./...
+
+      - name: Validate R2 settings
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        env:
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+        run: |
+          missing=()
+          for name in \
+            CF_ACCOUNT_ID \
+            AWS_ACCESS_KEY_ID \
+            AWS_SECRET_ACCESS_KEY \
+            R2_BUCKET \
+            R2_PUBLIC_BASE_URL
+          do
+            if [[ -z "${!name}" ]]; then
+              missing+=("${name}")
+            fi
+          done
+          if (( ${#missing[@]} > 0 )); then
+            printf 'Missing required R2 release settings:\n' >&2
+            printf '  %s\n' "${missing[@]}" >&2
+            exit 1
+          fi
 
       - name: Run GoReleaser (tag release)
         if: startsWith(github.ref, 'refs/tags/')
@@ -55,9 +97,24 @@ jobs:
         with:
           distribution: goreleaser
           version: latest
-          args: release --clean
+          args: release --clean --config ${{ env.GORELEASER_CONFIG }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload CLI release files to R2
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: |
+          mkdir -p dist/cli-release
+          find dist -maxdepth 1 -type f \( -name "*.tar.gz" -o -name "*.zip" -o -name "checksums.txt" \) -exec cp {} dist/cli-release/ \;
+          if ! find dist/cli-release -type f | grep -q .; then
+            echo "no CLI release files found" >&2
+            exit 1
+          fi
+          aws s3 cp dist/cli-release "s3://${R2_BUCKET}/${RELEASE_CHANNEL}/releases/${GITHUB_REF_NAME}/" \
+            --recursive \
+            --endpoint-url "${R2_ENDPOINT}" \
+            --no-progress
 
       - name: Run GoReleaser (snapshot)
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
@@ -65,7 +122,7 @@ jobs:
         with:
           distribution: goreleaser
           version: latest
-          args: release --snapshot --clean
+          args: release --snapshot --clean --config ${{ env.GORELEASER_CONFIG }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -96,7 +153,6 @@ jobs:
             raw_desktop_binary: dist/MrMorph
             bundled_backend_binary: dist/morph
             package_kind: appimage
-            go_build_tags: "wailsdesktop production"
           - label: macos-arm64
             os: macos-14
             goos: darwin
@@ -107,7 +163,6 @@ jobs:
             raw_desktop_binary: dist/MrMorph
             bundled_backend_binary: dist/morph
             package_kind: dmg
-            go_build_tags: "wailsdesktop production"
 
     steps:
       - name: Checkout
@@ -134,7 +189,7 @@ jobs:
         run: pnpm --dir web/console install --frozen-lockfile
 
       - name: Build frontend
-        run: pnpm --dir web/console build
+        run: pnpm --dir web/console exec vite build --config "${CONSOLE_VITE_CONFIG}"
 
       - name: Stage console assets
         shell: bash
@@ -147,7 +202,8 @@ jobs:
           sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev
 
       - name: Verify desktop package compiles
-        run: go test -tags "${{ matrix.go_build_tags }}" ./desktop/wails -count=1
+        shell: bash
+        run: go test -tags "wailsdesktop production ${GO_BUILD_TAGS}" ./desktop/wails -count=1
 
       - name: Build desktop app binary
         shell: bash
@@ -156,13 +212,13 @@ jobs:
           desktop_version="${GITHUB_REF_NAME#v}"
           desktop_ldflags="-s -w -X main.desktopVersion=${desktop_version}"
           GOOS="${{ matrix.goos }}" GOARCH="${{ matrix.goarch }}" \
-            go build -trimpath -tags "${{ matrix.go_build_tags }}" -ldflags "${desktop_ldflags}" -o "${{ matrix.raw_desktop_binary }}" ./desktop/wails
+            go build -trimpath -tags "wailsdesktop production ${GO_BUILD_TAGS}" -ldflags "${desktop_ldflags}" -o "${{ matrix.raw_desktop_binary }}" ./desktop/wails
 
       - name: Build bundled backend binary
         shell: bash
         run: |
           CGO_ENABLED=0 GOOS="${{ matrix.goos }}" GOARCH="${{ matrix.goarch }}" \
-            go build -trimpath -ldflags "-s -w" -o "${{ matrix.bundled_backend_binary }}" ./cmd/mistermorph
+            go build -trimpath -tags "${GO_BUILD_TAGS}" -ldflags "-s -w" -o "${{ matrix.bundled_backend_binary }}" ./cmd/mistermorph
 
       - name: Validate macOS signing secrets
         if: matrix.package_kind == 'dmg'
@@ -297,23 +353,24 @@ jobs:
             cp "dist/${{ matrix.deb_asset }}" "dist/${{ matrix.deb_asset }}.sha256" dist/release-upload/
           fi
 
-      - name: Upload workflow artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.label }}
-          path: dist/release-upload/*
-          if-no-files-found: error
-          retention-days: 3
+      - name: Upload desktop release files to R2
+        shell: bash
+        run: |
+          aws s3 cp dist/release-upload "s3://${R2_BUCKET}/${RELEASE_CHANNEL}/releases/${GITHUB_REF_NAME}/" \
+            --recursive \
+            --endpoint-url "${R2_ENDPOINT}" \
+            --no-progress
 
-      - name: Upload release assets
+      - name: Upload desktop release files to GitHub
+        if: env.GITHUB_RELEASES_TO_KEEP != '0'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
           gh release upload "${GITHUB_REF_NAME}" dist/release-upload/* --clobber
 
-  update-manifest:
-    name: Build Release Update Manifest
+  release-metadata:
+    name: Publish Release Metadata
     if: startsWith(github.ref, 'refs/tags/')
     needs: desktop-apps
     runs-on: ubuntu-latest
@@ -327,37 +384,16 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Download desktop workflow artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: dist/release-artifacts
+      - name: Publish update manifest and release index to R2
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: ./scripts/release-publish-metadata.sh
 
-      - name: Fetch GitHub release metadata
+      - name: Prune old GitHub releases
+        if: env.GITHUB_RELEASES_TO_KEEP != '0'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
-        run: |
-          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${GITHUB_REF_NAME}" > dist/release.json
-
-      - name: Generate Wails update manifest
-        shell: bash
-        run: |
-          go run ./scripts/release-update-manifest \
-            -release-json dist/release.json \
-            -artifacts-dir dist/release-artifacts \
-            -output dist/update.json
-
-      - name: Upload workflow artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: update-manifest
-          path: dist/update.json
-          if-no-files-found: error
-          retention-days: 3
-
-      - name: Upload release asset
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        shell: bash
-        run: |
-          gh release upload "${GITHUB_REF_NAME}" "dist/update.json" --clobber
+        run: ./scripts/release-prune-github.sh "${GITHUB_RELEASES_TO_KEEP}"

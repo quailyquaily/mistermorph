@@ -16,19 +16,21 @@ import (
 	"strings"
 )
 
-const (
-	DefaultManifestURL = "https://downloads.mistermorph.com/latest/update.json"
-	defaultUserAgent   = "mistermorph-update-check"
-)
+const defaultUserAgent = "mistermorph-update-check"
 
 type Options struct {
 	AutoDownload   bool
 	CacheDir       string
 	CurrentVersion string
-	ManifestURL    string
-	UserAgent      string
-	GOOS           string
-	GOARCH         string
+	// Channel is the release channel to check. Empty means the build channel.
+	// Checking a channel other than the build channel offers its latest
+	// release regardless of version, so a user can switch channels.
+	Channel string
+	// ManifestURL overrides the channel's manifest URL.
+	ManifestURL string
+	UserAgent   string
+	GOOS        string
+	GOARCH      string
 }
 
 type Manifest struct {
@@ -47,6 +49,9 @@ type Platform struct {
 
 type Result struct {
 	Status          string `json:"status"`
+	Channel         string `json:"channel"`
+	CurrentChannel  string `json:"current_channel"`
+	ChannelSwitch   bool   `json:"channel_switch"`
 	CurrentVersion  string `json:"current_version"`
 	LatestVersion   string `json:"latest_version"`
 	Platform        string `json:"platform"`
@@ -63,9 +68,14 @@ type Result struct {
 }
 
 func Check(ctx context.Context, opts Options) (Result, error) {
+	channel, err := NormalizeChannel(opts.Channel)
+	if err != nil {
+		return Result{}, err
+	}
+	opts.Channel = channel
 	manifestURL := strings.TrimSpace(opts.ManifestURL)
 	if manifestURL == "" {
-		manifestURL = DefaultManifestURL
+		manifestURL = ManifestURL(DefaultBaseURL, channel)
 	}
 
 	manifest, err := FetchManifest(ctx, manifestURL, opts.UserAgent)
@@ -101,6 +111,9 @@ func Check(ctx context.Context, opts Options) (Result, error) {
 
 	result := Result{
 		Status:         "up_to_date",
+		Channel:        channel,
+		CurrentChannel: buildChannel,
+		ChannelSwitch:  channel != buildChannel,
 		CurrentVersion: currentVersion,
 		LatestVersion:  latestVersion,
 		Platform:       platformKey,
@@ -112,13 +125,15 @@ func Check(ctx context.Context, opts Options) (Result, error) {
 		Checksum:       strings.TrimSpace(platform.Checksum),
 	}
 
-	compare, comparable := CompareVersions(currentVersion, latestVersion)
-	if !comparable {
-		result.Status = "current_version_unknown"
-		return result, nil
-	}
-	if compare >= 0 {
-		return result, nil
+	if !result.ChannelSwitch {
+		compare, comparable := CompareVersions(currentVersion, latestVersion)
+		if !comparable {
+			result.Status = "current_version_unknown"
+			return result, nil
+		}
+		if compare >= 0 {
+			return result, nil
+		}
 	}
 
 	result.Status = "update_available"
@@ -170,8 +185,13 @@ func DownloadAsset(ctx context.Context, opts Options, version string, platformKe
 		}
 	}
 
+	channel, err := NormalizeChannel(opts.Channel)
+	if err != nil {
+		return "", "", err
+	}
+	// Channels share version numbers and asset names, so keep their caches apart.
 	assetName := AssetName(platform.URL, version, platformKey)
-	dstDir := filepath.Join(cacheDir, sanitizeTag(version))
+	dstDir := filepath.Join(cacheDir, channel, sanitizeTag(version))
 	if err := os.MkdirAll(dstDir, 0o755); err != nil {
 		return "", "", fmt.Errorf("create update cache dir: %w", err)
 	}

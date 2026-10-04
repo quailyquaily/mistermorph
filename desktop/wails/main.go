@@ -126,7 +126,7 @@ func main() {
 	}
 
 	appBinding := NewApp(host.ConsoleURL(), logPath, startedAt, logFile)
-	appBinding.SetAutoUpdateConfig(desktopCfg.AutoUpdate)
+	appBinding.SetAutoUpdateConfig(desktopCfg.AutoUpdate, cfgPath)
 	app := application.New(buildDesktopAppOptions(host, appBinding))
 	appBinding.Attach(app)
 	if startupErr != nil {

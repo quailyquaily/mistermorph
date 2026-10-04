@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+
+	"github.com/quailyquaily/mistermorph/internal/updatecheck"
 )
 
 func TestDesktopBackendBinaryName(t *testing.T) {
@@ -40,10 +42,11 @@ func TestDesktopBackendAutoDownloadEnabled(t *testing.T) {
 }
 
 func TestPickReleaseAsset(t *testing.T) {
-	assets := []githubReleaseAsset{
-		{Name: "checksums.txt", BrowserDownloadURL: "https://example.com/checksums.txt"},
-		{Name: "morph_0.2.1_linux_amd64.tar.gz", BrowserDownloadURL: "https://example.com/morph_0.2.1_linux_amd64.tar.gz"},
-		{Name: "morph_0.2.1_darwin_arm64.tar.gz", BrowserDownloadURL: "https://example.com/morph_0.2.1_darwin_arm64.tar.gz"},
+	assets := []updatecheck.ReleaseFile{
+		{Name: "checksums.txt", URL: "https://example.com/checksums.txt"},
+		{Name: "MrMorph-linux-amd64.tar.gz", URL: "https://example.com/MrMorph-linux-amd64.tar.gz"},
+		{Name: "morph_0.2.1_linux_amd64.tar.gz", URL: "https://example.com/morph_0.2.1_linux_amd64.tar.gz"},
+		{Name: "morph_0.2.1_darwin_arm64.tar.gz", URL: "https://example.com/morph_0.2.1_darwin_arm64.tar.gz"},
 	}
 	asset, err := pickReleaseAsset(assets, "linux", "amd64")
 	if err != nil {

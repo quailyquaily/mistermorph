@@ -7,17 +7,17 @@ import (
 	"archive/zip"
 	"compress/gzip"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	goRuntime "runtime"
 	"strconv"
 	"strings"
+
+	"github.com/quailyquaily/mistermorph/internal/updatecheck"
 )
 
 const (
@@ -27,19 +27,8 @@ const (
 	desktopBackendCacheDirEnv     = "MISTERMORPH_DESKTOP_BACKEND_CACHE_DIR"
 	desktopAppDirEnv              = "APPDIR"
 
-	desktopBackendRepoReleaseAPI = "https://api.github.com/repos/quailyquaily/mistermorph/releases"
-	desktopBackendHTTPUserAgent  = "mistermorph-desktop-host"
+	desktopBackendHTTPUserAgent = "mistermorph-desktop-host"
 )
-
-type githubRelease struct {
-	TagName string               `json:"tag_name"`
-	Assets  []githubReleaseAsset `json:"assets"`
-}
-
-type githubReleaseAsset struct {
-	Name               string `json:"name"`
-	BrowserDownloadURL string `json:"browser_download_url"`
-}
 
 func resolveDesktopBackendCandidates(selfExePath string, explicitPath string) []string {
 	out := make([]string, 0, 8)
@@ -206,11 +195,12 @@ func desktopBackendCacheDir() (string, error) {
 }
 
 func downloadMistermorphBinary(ctx context.Context, version string) (string, error) {
-	rel, err := fetchGitHubRelease(ctx, version)
+	// The backend must come from the same channel the desktop app was built for.
+	rel, err := updatecheck.FetchRelease(ctx, updatecheck.DefaultBaseURL, updatecheck.BuildChannel(), version, desktopBackendHTTPUserAgent)
 	if err != nil {
 		return "", err
 	}
-	asset, err := pickReleaseAsset(rel.Assets, goRuntime.GOOS, goRuntime.GOARCH)
+	asset, err := pickReleaseAsset(rel.Files, goRuntime.GOOS, goRuntime.GOARCH)
 	if err != nil {
 		return "", err
 	}
@@ -223,7 +213,7 @@ func downloadMistermorphBinary(ctx context.Context, version string) (string, err
 		return "", fmt.Errorf("create cache dir: %w", err)
 	}
 
-	tag := strings.TrimSpace(rel.TagName)
+	tag := strings.TrimSpace(rel.Tag)
 	if tag == "" {
 		tag = "latest"
 	}
@@ -231,13 +221,16 @@ func downloadMistermorphBinary(ctx context.Context, version string) (string, err
 	if goRuntime.GOOS == "windows" {
 		dstName += ".exe"
 	}
-	dstPath := filepath.Join(cacheDir, dstName)
+	dstPath := filepath.Join(cacheDir, updatecheck.BuildChannel(), dstName)
+	if err := os.MkdirAll(filepath.Dir(dstPath), 0o755); err != nil {
+		return "", fmt.Errorf("create cache dir: %w", err)
+	}
 	if isExecutableFile(dstPath) {
 		return dstPath, nil
 	}
 
-	archivePath := filepath.Join(cacheDir, asset.Name)
-	if err := downloadFile(ctx, archivePath, asset.BrowserDownloadURL); err != nil {
+	archivePath := filepath.Join(filepath.Dir(dstPath), asset.Name)
+	if err := downloadFile(ctx, archivePath, asset.URL); err != nil {
 		return "", fmt.Errorf("download asset %s: %w", asset.Name, err)
 	}
 	if err := extractBinaryFromArchive(archivePath, dstPath, desktopBackendBinaryBaseName()); err != nil {
@@ -249,40 +242,11 @@ func downloadMistermorphBinary(ctx context.Context, version string) (string, err
 	return dstPath, nil
 }
 
-func fetchGitHubRelease(ctx context.Context, version string) (githubRelease, error) {
-	endpoint := desktopBackendRepoReleaseAPI + "/latest"
-	if v := strings.TrimSpace(version); v != "" && !strings.EqualFold(v, "latest") {
-		endpoint = desktopBackendRepoReleaseAPI + "/tags/" + url.PathEscape(v)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-	if err != nil {
-		return githubRelease{}, err
-	}
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("User-Agent", desktopBackendHTTPUserAgent)
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return githubRelease{}, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return githubRelease{}, fmt.Errorf("github release api status %d", resp.StatusCode)
-	}
-
-	var out githubRelease
-	if err := json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&out); err != nil {
-		return githubRelease{}, fmt.Errorf("decode release metadata: %w", err)
-	}
-	return out, nil
-}
-
-func pickReleaseAsset(assets []githubReleaseAsset, goos, goarch string) (githubReleaseAsset, error) {
+func pickReleaseAsset(assets []updatecheck.ReleaseFile, goos, goarch string) (updatecheck.ReleaseFile, error) {
 	suffix := "_" + goos + "_" + goarch
 	for _, asset := range assets {
 		name := strings.TrimSpace(asset.Name)
-		if name == "" || strings.TrimSpace(asset.BrowserDownloadURL) == "" {
+		if name == "" || strings.TrimSpace(asset.URL) == "" {
 			continue
 		}
 		if !strings.Contains(name, suffix) {
@@ -295,7 +259,7 @@ func pickReleaseAsset(assets []githubReleaseAsset, goos, goarch string) (githubR
 			return asset, nil
 		}
 	}
-	return githubReleaseAsset{}, fmt.Errorf("no release asset found for %s/%s", goos, goarch)
+	return updatecheck.ReleaseFile{}, fmt.Errorf("no release asset found for %s/%s", goos, goarch)
 }
 
 func downloadFile(ctx context.Context, dstPath string, srcURL string) error {

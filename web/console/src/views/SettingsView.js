@@ -176,7 +176,7 @@ const SETTINGS_SECTION_IDS = new Set([
   "runtime",
   "credits",
 ]);
-const UPDATE_RELEASES_URL = "https://github.com/quailyquaily/mistermorph/releases";
+const UPDATE_RELEASES_URL = "https://mistermorph.com/releases/";
 let llmProfileKeySeed = 0;
 let mcpSettingsKeySeed = 0;
 
@@ -2003,7 +2003,11 @@ const SettingsView = {
     const desktopUpdateCheckHint = computed(() =>
       t("settings_desktop_update_check_hint", { version: desktopDisplayedCurrentVersion.value })
     );
-    const desktopUpdateLatestVersionText = computed(() => trimText(desktopUpdateResult.value?.latest_version) || "-");
+    const desktopUpdateLatestVersionText = computed(() => {
+      const version = trimText(desktopUpdateResult.value?.latest_version) || "-";
+      const channel = trimText(desktopUpdateResult.value?.channel);
+      return channel ? `${version} · ${channel}` : version;
+    });
     const desktopUpdateReleaseNotes = computed(
       () => String(desktopUpdateResult.value?.release_notes || "").trim() || t("settings_desktop_update_changelog_empty")
     );
@@ -2013,7 +2017,14 @@ const SettingsView = {
       const result = desktopUpdateResult.value;
       const current = normalizeAppVersion(result?.current_version);
       const latest = normalizeAppVersion(result?.latest_version);
-      if (!result || !desktopUpdateAssetURL.value || !current || current.toLowerCase() === "dev") {
+      if (!result || !desktopUpdateAssetURL.value) {
+        return true;
+      }
+      // Switching channels offers the other channel's build at any version.
+      if (result.channel_switch === true) {
+        return false;
+      }
+      if (!current || current.toLowerCase() === "dev") {
         return true;
       }
       const comparison = compareAppVersions(current, latest);
@@ -4546,7 +4557,8 @@ const SettingsView = {
     }
 
     function openDesktopUpdateReleases() {
-      openExternalURL(UPDATE_RELEASES_URL);
+      const channel = trimText(desktopUpdateResult.value?.channel);
+      openExternalURL(channel ? `${UPDATE_RELEASES_URL}?channel=${encodeURIComponent(channel)}` : UPDATE_RELEASES_URL);
     }
 
     async function logout() {

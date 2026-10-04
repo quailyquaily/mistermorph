@@ -20,6 +20,8 @@ type desktopRuntimeConfig struct {
 
 type desktopAutoUpdateConfig struct {
 	Enabled bool
+	// Channel is the release channel to follow; empty means the build channel.
+	Channel string
 }
 
 func defaultDesktopRuntimeConfig() desktopRuntimeConfig {
@@ -39,6 +41,7 @@ func loadDesktopRuntimeConfig(path string) (desktopRuntimeConfig, error) {
 		return cfg, fmt.Errorf("read desktop config: %w", err)
 	}
 	cfg.AutoUpdate.Enabled = v.GetBool("auto_update.enabled")
+	cfg.AutoUpdate.Channel = strings.TrimSpace(v.GetString("auto_update.channel"))
 	return cfg, nil
 }
 

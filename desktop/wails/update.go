@@ -19,7 +19,7 @@ var desktopVersion = "dev"
 type DesktopUpdateCheckResult = updatecheck.Result
 
 func runDesktopCheckUpdateCommand(ctx context.Context, cfg desktopRuntimeConfig, out io.Writer) error {
-	result, err := updatecheck.Check(ctx, newDesktopUpdateCheckOptions(cfg.AutoUpdate.Enabled))
+	result, err := updatecheck.Check(ctx, newDesktopUpdateCheckOptions(cfg.AutoUpdate))
 	if err != nil {
 		return err
 	}
@@ -38,15 +38,16 @@ func startDesktopAutoUpdateCheck(ctx context.Context, cfg desktopAutoUpdateConfi
 		checkCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 		defer cancel()
 
-		result, err := updatecheck.Check(checkCtx, newDesktopUpdateCheckOptions(true))
+		result, err := updatecheck.Check(checkCtx, newDesktopUpdateCheckOptions(cfg))
 		if err != nil {
 			logDesktopUpdateEvent(logWriter, "auto_update_failed error=%q", compactDesktopLogValue(err.Error(), 1000))
 			return
 		}
 		logDesktopUpdateEvent(
 			logWriter,
-			"auto_update_checked status=%q current=%q latest=%q platform=%q downloaded=%t",
+			"auto_update_checked status=%q channel=%q current=%q latest=%q platform=%q downloaded=%t",
 			result.Status,
+			result.Channel,
 			result.CurrentVersion,
 			result.LatestVersion,
 			result.Platform,
@@ -63,13 +64,14 @@ func logDesktopUpdateEvent(logWriter io.Writer, format string, args ...any) {
 	}
 }
 
-func newDesktopUpdateCheckOptions(autoDownload bool) updatecheck.Options {
+func newDesktopUpdateCheckOptions(cfg desktopAutoUpdateConfig) updatecheck.Options {
 	opts := updatecheck.Options{
-		AutoDownload:   autoDownload,
+		AutoDownload:   cfg.Enabled,
+		Channel:        cfg.Channel,
 		CurrentVersion: desktopVersion,
 		UserAgent:      desktopBackendHTTPUserAgent,
 	}
-	if autoDownload {
+	if cfg.Enabled {
 		cacheDir, err := desktopUpdateCacheDir()
 		if err != nil {
 			return opts

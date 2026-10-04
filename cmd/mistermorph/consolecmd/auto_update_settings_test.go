@@ -251,6 +251,8 @@ func TestHandleAutoUpdateCheck(t *testing.T) {
 		autoUpdateManifestURL = previousManifestURL
 	})
 
+	setAutoUpdateTestConfig(t, "auto_update:\n  enabled: false\n")
+
 	req := httptest.NewRequest(http.MethodPost, "/api/settings/auto-update/check", nil)
 	rec := httptest.NewRecorder()
 
@@ -271,5 +273,115 @@ func TestHandleAutoUpdateCheck(t *testing.T) {
 	}
 	if payload.Downloaded {
 		t.Fatalf("Downloaded = true, want false")
+	}
+}
+
+func setAutoUpdateTestConfig(t *testing.T, content string) string {
+	t.Helper()
+	configPath := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(configPath, []byte(content), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+	prevConfig, hadConfig := viper.Get("config"), viper.IsSet("config")
+	viper.Set("config", configPath)
+	t.Cleanup(func() {
+		if hadConfig {
+			viper.Set("config", prevConfig)
+		} else {
+			viper.Set("config", nil)
+		}
+	})
+	return configPath
+}
+
+func TestHandleAutoUpdateSettingsPutChannel(t *testing.T) {
+	configPath := setAutoUpdateTestConfig(t, "auto_update:\n  enabled: true\n")
+
+	req := httptest.NewRequest(http.MethodPut, "/api/settings/auto-update", bytes.NewBufferString(`{"auto_update":{"channel":" Pro "}}`))
+	rec := httptest.NewRecorder()
+	(&server{}).handleAutoUpdateSettings(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d (%s)", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	got, err := readAutoUpdateSettings(configPath)
+	if err != nil {
+		t.Fatalf("readAutoUpdateSettings() error = %v", err)
+	}
+	if !got.AutoUpdate.Enabled || got.AutoUpdate.Channel != "pro" {
+		t.Fatalf("settings = %#v, want enabled pro", got.AutoUpdate)
+	}
+
+	req = httptest.NewRequest(http.MethodPut, "/api/settings/auto-update", bytes.NewBufferString(`{"auto_update":{"channel":""}}`))
+	rec = httptest.NewRecorder()
+	(&server{}).handleAutoUpdateSettings(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d (%s)", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	raw, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	if strings.Contains(string(raw), "channel") {
+		t.Fatalf("config = %q, want channel removed", raw)
+	}
+}
+
+func TestHandleAutoUpdateSettingsPutRejectsUnknownChannel(t *testing.T) {
+	setAutoUpdateTestConfig(t, "auto_update:\n  enabled: false\n")
+
+	req := httptest.NewRequest(http.MethodPut, "/api/settings/auto-update", bytes.NewBufferString(`{"auto_update":{"channel":"nightly"}}`))
+	rec := httptest.NewRecorder()
+	(&server{}).handleAutoUpdateSettings(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d (%s)", rec.Code, http.StatusBadRequest, rec.Body.String())
+	}
+}
+
+func TestHandleAutoUpdateCheckOtherChannel(t *testing.T) {
+	asset := []byte("desktop update asset")
+	var manifestURL string
+	manifestURL = testhttp.WithDefaultTransport(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sum := sha256.Sum256(asset)
+		_ = json.NewEncoder(w).Encode(updatecheck.Manifest{
+			Version: "0.2.42",
+			Platforms: map[string]updatecheck.Platform{
+				updatecheck.PlatformKey(runtime.GOOS, runtime.GOARCH): {
+					URL:      manifestURL + "/asset.tar.gz",
+					Size:     int64(len(asset)),
+					Checksum: "sha256:" + hex.EncodeToString(sum[:]),
+				},
+			},
+		})
+	}))
+	previousManifestURL := autoUpdateManifestURL
+	autoUpdateManifestURL = manifestURL + "/update.json"
+	t.Cleanup(func() {
+		autoUpdateManifestURL = previousManifestURL
+	})
+	other := updatecheck.ChannelPro
+	if updatecheck.BuildChannel() == updatecheck.ChannelPro {
+		other = updatecheck.ChannelCommunity
+	}
+	setAutoUpdateTestConfig(t, "auto_update:\n  channel: "+other+"\n")
+
+	req := httptest.NewRequest(http.MethodPost, "/api/settings/auto-update/check", nil)
+	rec := httptest.NewRecorder()
+	(&server{cfg: serveConfig{version: "0.2.42"}}).handleAutoUpdateCheck(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d (%s)", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	var payload updatecheck.Result
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	if !payload.UpdateAvailable || !payload.ChannelSwitch || payload.Channel != other {
+		t.Fatalf("payload = %#v, want switch to %s", payload, other)
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/api/settings/auto-update/check?channel=nightly", nil)
+	rec = httptest.NewRecorder()
+	(&server{cfg: serveConfig{version: "0.2.42"}}).handleAutoUpdateCheck(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d (%s)", rec.Code, http.StatusBadRequest, rec.Body.String())
 	}
 }

@@ -262,6 +262,7 @@ export const SYSTEM_UPDATE_CONFIG_GROUPS = [
     title: "Updates",
     fields: [
       { path: "auto_update.enabled", label: "Automatic updates", type: "bool" },
+      { path: "auto_update.channel", label: "Release channel", type: "select", options: ["", "community", "pro"] },
     ],
   },
 ];

@@ -43,7 +43,7 @@ func TestResolveDesktopConfigPath_DefaultIgnoresCWD(t *testing.T) {
 
 func TestLoadDesktopRuntimeConfig_AutoUpdateEnabled(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yaml")
-	if err := os.WriteFile(path, []byte("auto_update:\n  enabled: true\n"), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte("auto_update:\n  enabled: true\n  channel: pro\n"), 0o600); err != nil {
 		t.Fatalf("WriteFile(config.yaml) error = %v", err)
 	}
 
@@ -53,6 +53,9 @@ func TestLoadDesktopRuntimeConfig_AutoUpdateEnabled(t *testing.T) {
 	}
 	if !cfg.AutoUpdate.Enabled {
 		t.Fatalf("auto update enabled = false, want true")
+	}
+	if cfg.AutoUpdate.Channel != "pro" {
+		t.Fatalf("auto update channel = %q, want pro", cfg.AutoUpdate.Channel)
 	}
 }
 

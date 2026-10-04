@@ -12,6 +12,24 @@ on:
 permissions:
   contents: write
 
+# Shared by mistermorph and mistermorph-pro. Only the channel block differs
+# between the two repositories; keep everything else identical.
+env:
+  # --- Release channel -------------------------------------------------------
+  RELEASE_CHANNEL: community
+  GO_BUILD_TAGS: ""
+  CONSOLE_VITE_CONFIG: vite.config.js
+  PRODUCT_NAME: MisterMorph
+  # Number of public GitHub releases to keep; 0 publishes to R2 only.
+  GITHUB_RELEASES_TO_KEEP: "10"
+  # ---------------------------------------------------------------------------
+  R2_BUCKET: ${{ secrets.R2_BUCKET || vars.R2_BUCKET }}
+  R2_PUBLIC_BASE_URL: ${{ secrets.R2_PUBLIC_BASE_URL || vars.R2_PUBLIC_BASE_URL }}
+  R2_ENDPOINT: https://${{ secrets.CF_ACCOUNT_ID }}.r2.cloudflarestorage.com
+  AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+  AWS_DEFAULT_REGION: auto
+
 jobs:
   build-sign-package:
     name: Build, Sign, and Package Windows Artifacts
@@ -39,7 +57,7 @@ jobs:
           if (-not $matchingTag) {
             throw "Checked out commit is not tagged with $env:RELEASE_TAG"
           }
-          gh release view $env:RELEASE_TAG | Out-Null
+          gh api "repos/$env:GITHUB_REPOSITORY/releases/tags/$env:RELEASE_TAG" | Out-Null
           if ($LASTEXITCODE -ne 0) {
             throw "GitHub release does not exist: $env:RELEASE_TAG"
           }
@@ -65,14 +83,15 @@ jobs:
         run: pnpm --dir web/console install --frozen-lockfile
 
       - name: Build frontend
-        run: pnpm --dir web/console build
+        run: pnpm --dir web/console exec vite build --config "$env:CONSOLE_VITE_CONFIG"
 
       - name: Stage console assets
         shell: bash
         run: ./scripts/stage-console-assets.sh
 
       - name: Verify desktop package compiles
-        run: go test -tags "wailsdesktop production" ./desktop/wails -count=1
+        shell: bash
+        run: go test -tags "wailsdesktop production ${GO_BUILD_TAGS}" ./desktop/wails -count=1
 
       - name: Generate Windows desktop resources
         shell: bash
@@ -93,20 +112,20 @@ jobs:
           cli_ldflags="-s -w -X main.version=${version} -X main.commit=${commit} -X main.date=${commit_date}"
 
           GOOS=windows GOARCH=amd64 \
-            go build -trimpath -tags "wailsdesktop production" \
+            go build -trimpath -tags "wailsdesktop production ${GO_BUILD_TAGS}" \
             -ldflags "-s -w -X main.desktopVersion=${version} -H=windowsgui" \
             -o "${unsigned_dir}/MrMorph.exe" ./desktop/wails
 
           CGO_ENABLED=0 GOOS=windows GOARCH=amd64 \
-            go build -trimpath -ldflags "-s -w" \
+            go build -trimpath -tags "${GO_BUILD_TAGS}" -ldflags "-s -w" \
             -o "${unsigned_dir}/morph.exe" ./cmd/mistermorph
 
           CGO_ENABLED=0 GOOS=windows GOARCH=amd64 \
-            go build -trimpath -ldflags "${cli_ldflags}" \
+            go build -trimpath -tags "${GO_BUILD_TAGS}" -ldflags "${cli_ldflags}" \
             -o "${unsigned_dir}/morph-amd64.exe" ./cmd/mistermorph
 
           CGO_ENABLED=0 GOOS=windows GOARCH=arm64 \
-            go build -trimpath -ldflags "${cli_ldflags}" \
+            go build -trimpath -tags "${GO_BUILD_TAGS}" -ldflags "${cli_ldflags}" \
             -o "${unsigned_dir}/morph-arm64.exe" ./cmd/mistermorph
 
       - name: Setup Java for CodeSignTool
@@ -281,7 +300,7 @@ jobs:
           Copy-Item "$signedDir/morph.exe" "$desktopDir/morph.exe"
           Copy-Item "LICENSE" "$desktopDir/LICENSE"
           @"
-          MisterMorph Desktop for Windows.
+          $($env:PRODUCT_NAME) Desktop for Windows.
 
           Keep MrMorph.exe and morph.exe in the same directory.
           Launch the app with MrMorph.exe.
@@ -313,8 +332,6 @@ jobs:
             Set-Content "$releaseDir/$desktopAsset.sha256" -Encoding ascii
 
       - name: Merge Windows CLI checksums
-        env:
-          GH_TOKEN: ${{ github.token }}
         shell: pwsh
         run: |
           $version = $env:RELEASE_TAG -replace '^v', ''
@@ -322,11 +339,13 @@ jobs:
           $checksumDir = "dist/existing-checksums"
           New-Item -ItemType Directory -Force -Path $checksumDir | Out-Null
 
-          gh release download $env:RELEASE_TAG `
-            --pattern "checksums.txt" `
-            --dir $checksumDir
+          aws s3 cp `
+            "s3://$($env:R2_BUCKET)/$($env:RELEASE_CHANNEL)/releases/$($env:RELEASE_TAG)/checksums.txt" `
+            "$checksumDir/checksums.txt" `
+            --endpoint-url $env:R2_ENDPOINT `
+            --no-progress
           if ($LASTEXITCODE -ne 0) {
-            throw "Failed to download the GoReleaser checksum file"
+            throw "Failed to download the GoReleaser checksum file from R2"
           }
 
           $cliAssets = @(
@@ -354,64 +373,32 @@ jobs:
             Sort-Object |
             Set-Content "$releaseDir/checksums.txt" -Encoding ascii
 
-      - name: Upload Windows release assets
+      - name: Upload Windows release files to R2
+        shell: bash
+        run: |
+          aws s3 cp dist/release-upload "s3://${R2_BUCKET}/${RELEASE_CHANNEL}/releases/${RELEASE_TAG}/" \
+            --recursive \
+            --endpoint-url "${R2_ENDPOINT}" \
+            --no-progress
+
+      - name: Upload Windows release files to GitHub
+        if: env.GITHUB_RELEASES_TO_KEEP != '0'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: pwsh
         run: |
-          $releaseAssets = Get-ChildItem "dist/release-upload" -File |
-            Where-Object { $_.Name -ne "checksums.txt" }
-          foreach ($asset in $releaseAssets) {
+          foreach ($asset in Get-ChildItem "dist/release-upload" -File) {
             gh release upload $env:RELEASE_TAG $asset.FullName --clobber
             if ($LASTEXITCODE -ne 0) {
               throw "Failed to upload release asset: $($asset.Name)"
             }
           }
-          gh release upload $env:RELEASE_TAG "dist/release-upload/checksums.txt" --clobber
-          if ($LASTEXITCODE -ne 0) {
-            throw "Failed to upload release asset: checksums.txt"
-          }
 
-      - name: Generate Windows update manifest
+      - name: Publish update manifest and release index to R2
         env:
           GH_TOKEN: ${{ github.token }}
-        shell: pwsh
-        run: |
-          $manifestDir = "dist/update-manifest"
-          $checksumDir = "$manifestDir/checksums"
-          New-Item -ItemType Directory -Force -Path $checksumDir | Out-Null
-
-          gh release download $env:RELEASE_TAG `
-            --pattern "MrMorph-*.sha256" `
-            --dir $checksumDir `
-            --clobber
-          if ($LASTEXITCODE -ne 0) {
-            throw "Failed to download desktop checksum files"
-          }
-
-          gh api "repos/$env:GITHUB_REPOSITORY/releases/tags/$env:RELEASE_TAG" |
-            Set-Content "$manifestDir/release.json" -Encoding utf8NoBOM
-          if ($LASTEXITCODE -ne 0) {
-            throw "Failed to fetch release metadata"
-          }
-
-          go run ./scripts/release-update-manifest `
-            -release-json "$manifestDir/release.json" `
-            -artifacts-dir $checksumDir `
-            -output "dist/update.json"
-          if ($LASTEXITCODE -ne 0) {
-            throw "Failed to generate Windows update manifest"
-          }
-
-      - name: Upload Windows update manifest
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: pwsh
-        run: |
-          gh release upload $env:RELEASE_TAG "dist/update.json" --clobber
-          if ($LASTEXITCODE -ne 0) {
-            throw "Failed to upload update.json"
-          }
+        shell: bash
+        run: ./scripts/release-publish-metadata.sh
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
@@ -419,6 +406,6 @@ jobs:
           name: windows-release-${{ inputs.tag }}
           path: |
             dist/release-upload/*
-            dist/update.json
+            dist/release-metadata/*
           if-no-files-found: error
           retention-days: 3

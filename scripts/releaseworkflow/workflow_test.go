@@ -40,7 +40,8 @@ func TestWindowsSigningWorkflowContract(t *testing.T) {
 		"morph-amd64.exe",
 		"morph-arm64.exe",
 		"signtool verify /pa /all /v /tw",
-		"Generate Windows update manifest",
+		"Publish update manifest and release index to R2",
+		"./scripts/release-publish-metadata.sh",
 		"gh release upload",
 	}
 	for _, token := range required {
@@ -58,8 +59,8 @@ func TestWindowsSigningWorkflowContract(t *testing.T) {
 		`$signedFiles = @(Get-ChildItem $signedDir -File -Filter "*.exe")`,
 		"signtool verify /pa /all /v /tw",
 		"Package Windows release assets",
-		"Upload Windows release assets",
-		"Generate Windows update manifest",
+		"Upload Windows release files to R2",
+		"Publish update manifest and release index to R2",
 	)
 
 	for _, token := range []string{
@@ -121,7 +122,7 @@ func TestReleaseArtifactNames(t *testing.T) {
 		required []string
 	}{
 		{[]string{".goreleaser.yaml"}, []string{`name_template: "morph_{{ .Version }}_{{ .Os }}_{{ .Arch }}"`}},
-		{[]string{"scripts", "install-release.sh"}, []string{`/morph_${ASSET_VERSION}_${OS}_${ARCH}.${ARCHIVE_EXT}`}},
+		{[]string{"scripts", "install-release.sh"}, []string{`ASSET_NAME="morph_${ASSET_VERSION}_${OS}_${ARCH}.${ARCHIVE_EXT}"`}},
 		{[]string{"desktop", "wails", "packaging", "package-darwin.sh"}, []string{`MrMorph-darwin-${ARCH}.dmg`, `MrMorph-darwin-${ARCH}.tar.gz`}},
 		{[]string{"desktop", "wails", "packaging", "package-linux-appimage.sh"}, []string{`MrMorph-linux-${ARCH}.AppImage`, `MrMorph-linux-${ARCH}.tar.gz`}},
 		{[]string{"desktop", "wails", "packaging", "package-linux-deb.sh"}, []string{`MrMorph-linux-${ARCH}.deb`}},
@@ -136,6 +137,35 @@ func TestReleaseArtifactNames(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestReleaseWorkflowsPublishToChannel(t *testing.T) {
+	for _, name := range []string{"release.yml", "windows-signing.yml"} {
+		workflow := readRepoFile(t, ".github", "workflows", name)
+		for _, token := range []string{
+			"RELEASE_CHANNEL: ",
+			"GITHUB_RELEASES_TO_KEEP: ",
+			"${RELEASE_CHANNEL}/releases/",
+			"./scripts/release-publish-metadata.sh",
+		} {
+			if !strings.Contains(workflow, token) {
+				t.Errorf("%s missing %q", name, token)
+			}
+		}
+		// Every channel writes under its own prefix; nothing may write the
+		// shared, unprefixed paths used before channels existed.
+		for _, token := range []string{"/latest/update.json", "R2_PREFIX: releases/"} {
+			if strings.Contains(workflow, token) {
+				t.Errorf("%s writes an unprefixed path %q", name, token)
+			}
+		}
+	}
+
+	release := readRepoFile(t, ".github", "workflows", "release.yml")
+	assertOrdered(t, release,
+		"Publish update manifest and release index to R2",
+		"./scripts/release-prune-github.sh",
+	)
 }
 
 func TestAutomaticReleaseExcludesUnsignedWindowsArtifacts(t *testing.T) {

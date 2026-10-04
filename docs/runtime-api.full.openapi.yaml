@@ -3789,8 +3789,19 @@ paths:
       tags:
       - Management
       summary: Check available application updates
-      description: Console only. No request body. Fetches the release manifest with a 30-second timeout;
-        does not install an update.
+      description: Console only. No request body. Fetches the release channel's manifest with a 30-second
+        timeout; does not install an update. Uses the configured auto_update.channel unless the channel
+        query parameter is set.
+      parameters:
+      - name: channel
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - community
+          - pro
+        description: Check this release channel instead of the configured one.
       responses:
         '200':
           description: Success
@@ -3798,6 +3809,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/UpdateCheckResult'
+        '400':
+          description: Invalid request or configuration.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JSONError'
         '401':
           description: Missing or invalid runtime token.
           content:
@@ -7174,6 +7191,14 @@ components:
         enabled:
           type: boolean
           nullable: true
+        channel:
+          type: string
+          nullable: true
+          enum:
+          - ''
+          - community
+          - pro
+          description: Release channel to follow. An empty string follows the channel the build came from.
       x-source: cmd/mistermorph/consolecmd/auto_update_settings.go:autoUpdateUpdatePayload
     CodexAuthStatus:
       type: object
@@ -7273,6 +7298,16 @@ components:
       properties:
         status:
           type: string
+        channel:
+          type: string
+          description: Release channel that was checked.
+        current_channel:
+          type: string
+          description: Release channel this build came from.
+        channel_switch:
+          type: boolean
+          description: True when channel differs from current_channel; the other channel's latest release
+            is then offered regardless of version.
         current_version:
           type: string
         latest_version:
@@ -7566,12 +7601,24 @@ components:
           properties:
             enabled:
               type: boolean
+            channel:
+              type: string
+              description: Configured release channel. Empty means the build channel.
           required:
           - enabled
+          - channel
         config_path:
           type: string
         current_version:
           type: string
+        build_channel:
+          type: string
+          description: Release channel this build came from (GET only).
+        channels:
+          type: array
+          items:
+            type: string
+          description: Available release channels (GET only).
         config_revision:
           type: string
         apply_mode:

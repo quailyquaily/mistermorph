@@ -77,6 +77,8 @@ Update config:
 ```yaml
 auto_update:
   enabled: true
+  # Optional: community or pro. Empty follows the channel this build came from.
+  channel: ""
 ```
 
 When enabled, the desktop host checks the release `update.json` on startup and downloads the verified update package into the user cache. `--check-update` also uses this setting to decide whether to download. This step prepares the update package but does not replace the running app yet; Wails v3 alpha.93 does not expose an updater service package, so applying the update still needs a platform-specific install/relaunch step in this repository.
@@ -89,13 +91,13 @@ Backend binary candidate order:
 2. `./bin/morph`
 3. sibling paths near the desktop executable (`morph`; legacy `mistermorphc`, `mistermorph`, and `mistermorph-backend` names are still accepted)
 4. `PATH` lookup (`mistermorph`)
-5. download from GitHub releases (enabled by default)
+5. download from the build channel's release on `downloads.mistermorph.com` (enabled by default)
 
 Optional envs:
 
 - `MISTERMORPH_DESKTOP_BACKEND_AUTO_DOWNLOAD=true|false` (default `true`)
 - `MISTERMORPH_DESKTOP_BACKEND_VERSION=latest|vX.Y.Z` (default `latest`)
-- `MISTERMORPH_DESKTOP_BACKEND_CACHE_DIR=/abs/path` (default: user cache dir under `mistermorph/desktop/backend`)
+- `MISTERMORPH_DESKTOP_BACKEND_CACHE_DIR=/abs/path` (default: user cache dir under `mistermorph/desktop/backend`; each channel uses its own subfolder)
 - `MISTERMORPH_DESKTOP_WEBVIEW_GPU_POLICY=ondemand|always|never` (Linux only, default `ondemand`)
 
 ## Release packaging
@@ -107,13 +109,19 @@ Tag releases now build desktop release assets in GitHub Actions:
 - Windows: `MrMorph-windows-amd64.zip`
 - Update manifest: `update.json`
 
-The release workflow generates `update.json` from the published release metadata and uploads it alongside the desktop assets.
+The release workflow generates `update.json` from the published release metadata and uploads it to Cloudflare R2 with the desktop assets.
 The manifest prefers the macOS/Linux `tar.gz` assets and the Windows `.zip` asset.
-The desktop runtime checks the stable latest-release URL:
+Each release channel (`community` from this repository, `pro` from MisterMorph Pro) has its own folder:
 
 ```text
-https://downloads.mistermorph.com/latest/update.json
+https://downloads.mistermorph.com/<channel>/latest/update.json          newest stable release
+https://downloads.mistermorph.com/<channel>/releases/index.json         every release, without notes
+https://downloads.mistermorph.com/<channel>/releases/<tag>/release.json notes and files of one release
+https://downloads.mistermorph.com/<channel>/releases/<tag>/<file>       release files
 ```
+
+The desktop runtime checks the channel set in `auto_update.channel`, defaulting to the channel it was built for (the `pro` build tag selects `pro`).
+Choosing the other channel offers that channel's latest release as an update, even at the same version.
 
 Every desktop release package bundles a sibling `morph` backend binary.
 The Linux deb package installs the app under `/opt/mistermorph`, adds the desktop entry under `/usr/share/applications`, and installs the app icon into the hicolor icon theme and `/usr/share/pixmaps`.

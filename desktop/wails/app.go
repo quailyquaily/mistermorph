@@ -43,19 +43,20 @@ const (
 )
 
 type App struct {
-	wailsApp            *application.App
-	consoleURL          string
-	logPath             string
-	startedAt           time.Time
-	logWriter           io.Writer
-	windowParents       map[string]string
-	autoUpdate          desktopAutoUpdateConfig
-	autoUpdateMu        sync.RWMutex
-	windowMu            sync.RWMutex
-	restartMu           sync.Mutex
-	restarting          bool
-	readyOnce           sync.Once
-	notificationService *desktopNotificationManager
+	wailsApp             *application.App
+	consoleURL           string
+	logPath              string
+	startedAt            time.Time
+	logWriter            io.Writer
+	windowParents        map[string]string
+	autoUpdate           desktopAutoUpdateConfig
+	autoUpdateConfigPath string
+	autoUpdateMu         sync.RWMutex
+	windowMu             sync.RWMutex
+	restartMu            sync.Mutex
+	restarting           bool
+	readyOnce            sync.Once
+	notificationService  *desktopNotificationManager
 }
 
 type DesktopNotificationRequest struct {
@@ -115,13 +116,33 @@ func (a *App) ShowNotification(req DesktopNotificationRequest) error {
 	})
 }
 
-func (a *App) SetAutoUpdateConfig(cfg desktopAutoUpdateConfig) {
+func (a *App) SetAutoUpdateConfig(cfg desktopAutoUpdateConfig, configPath string) {
 	if a == nil {
 		return
 	}
 	a.autoUpdateMu.Lock()
 	defer a.autoUpdateMu.Unlock()
 	a.autoUpdate = cfg
+	a.autoUpdateConfigPath = configPath
+}
+
+// currentAutoUpdateConfig re-reads the config file so that settings changed in
+// the console (such as the release channel) apply without a restart.
+func (a *App) currentAutoUpdateConfig() desktopAutoUpdateConfig {
+	if a == nil {
+		return desktopAutoUpdateConfig{}
+	}
+	a.autoUpdateMu.RLock()
+	cfg, configPath := a.autoUpdate, a.autoUpdateConfigPath
+	a.autoUpdateMu.RUnlock()
+	if configPath == "" {
+		return cfg
+	}
+	loaded, err := loadDesktopRuntimeConfig(configPath)
+	if err != nil {
+		return cfg
+	}
+	return loaded.AutoUpdate
 }
 
 func (a *App) Attach(wailsApp *application.App) {
@@ -483,13 +504,7 @@ func (a *App) OpenDesktopLog() error {
 }
 
 func (a *App) CheckUpdate() (DesktopUpdateCheckResult, error) {
-	autoDownload := false
-	if a != nil {
-		a.autoUpdateMu.RLock()
-		autoDownload = a.autoUpdate.Enabled
-		a.autoUpdateMu.RUnlock()
-	}
-	return updatecheck.Check(context.Background(), newDesktopUpdateCheckOptions(autoDownload))
+	return updatecheck.Check(context.Background(), newDesktopUpdateCheckOptions(a.currentAutoUpdateConfig()))
 }
 
 func (a *App) ReportFrontendReady() {
