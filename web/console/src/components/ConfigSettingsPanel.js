@@ -4,10 +4,11 @@ import { buildConfigUpdate, createConfigDraft } from "../core/config-fields";
 import SettingSelect from "./SettingSelect";
 import SettingChoices from "./SettingChoices";
 import EnvManagedField from "./EnvManagedField";
+import SecretInput from "./SecretInput";
 
 export default {
   name: "ConfigSettingsPanel",
-  components: { EnvManagedField, SettingSelect, SettingChoices },
+  components: { EnvManagedField, SecretInput, SettingSelect, SettingChoices },
   props: {
     groups: { type: Array, default: () => [] },
     values: { type: Object, default: () => ({}) },
@@ -309,11 +310,20 @@ export default {
                 :disabled="fieldDisabled(field, group)"
                 @update:modelValue="updateField(field, $event)"
               />
+              <SecretInput
+                v-else-if="field.secret"
+                :modelValue="draft[field.path]"
+                :status="stateFor(field)"
+                :revealPath="field.path"
+                :placeholder="field.placeholder || ''"
+                :disabled="fieldDisabled(field, group)"
+                @update:modelValue="updateField(field, $event)"
+              />
               <QInput
                 v-else
                 :modelValue="draft[field.path]"
                 :inputType="inputType(field)"
-                :placeholder="field.secret && stateFor(field).configured ? 'Configured — enter a new value to replace' : field.placeholder || ''"
+                :placeholder="field.placeholder || ''"
                 :disabled="fieldDisabled(field, group)"
                 @update:modelValue="updateField(field, $event)"
               />

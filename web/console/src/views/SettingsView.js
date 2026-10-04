@@ -6,6 +6,7 @@ import "./SettingsView.css";
 
 import AppPage from "../components/AppPage";
 import EnvManagedField from "../components/EnvManagedField";
+import SecretInput from "../components/SecretInput";
 import AuthProfilesPanel from "../components/AuthProfilesPanel";
 import CodexAuthDialog from "../components/CodexAuthDialog";
 import ConfigSettingsPanel from "../components/ConfigSettingsPanel";
@@ -730,6 +731,7 @@ function buildConsoleGuardSnapshot(state) {
 
 const SettingsView = {
   components: {
+    SecretInput,
     AppPage,
     EnvManagedField,
     WeChatLoginPanel,
@@ -1224,6 +1226,21 @@ const SettingsView = {
     ]);
     const settingsEndpointRef = computed(() => trimText(endpointState.selectedRef) || LOCAL_CONSOLE_ENDPOINT_REF);
     const consoleRuntimeEndpoints = computed(() => settingsEndpointRef.value === LOCAL_CONSOLE_ENDPOINT_REF ? endpointState.items : []);
+    // Stored secrets can be revealed for this console's own config only: a remote runtime's
+    // secrets are in its own config.
+    const secretRevealLocal = computed(() => settingsEndpointRef.value === LOCAL_CONSOLE_ENDPOINT_REF);
+
+    // The config path an LLM form's secrets sit under: llm, or a saved profile's llm.profiles.<name>.
+    function llmRevealPrefix(profile) {
+      if (!secretRevealLocal.value) return "";
+      if (!profile || profile === state.llm) return "llm";
+      const name = trimText(profile._savedName);
+      return name ? `llm.profiles.${name}` : "";
+    }
+
+    function consoleSecretRevealPath(kind, field) {
+      return secretRevealLocal.value ? `${kind}.${field}` : "";
+    }
     const selectedEndpointIsConsole = computed(
       () =>
         settingsEndpointRef.value === LOCAL_CONSOLE_ENDPOINT_REF ||
@@ -4000,12 +4017,6 @@ const SettingsView = {
       }
     }
 
-    function consoleSecretPlaceholder(kind, field, fallbackKey) {
-      return consoleSecretField(kind, field)?.configured === true
-        ? t("settings_secret_configured_placeholder")
-        : t(fallbackKey);
-    }
-
     function consoleSecretEditable(kind, field) {
       return consoleSecretField(kind, field)?.editable !== false;
     }
@@ -5245,7 +5256,6 @@ const SettingsView = {
       setManagedRuntimeEnabled,
       consoleFieldEnvManaged,
       consoleFieldManagedHeadline,
-      consoleSecretPlaceholder,
       consoleSecretEditable,
       updateTelegramField,
       updateSlackField,
@@ -5256,6 +5266,8 @@ const SettingsView = {
       updateWhatsAppField,
       reloadConsoleSettingsAfterWeChatLogin,
       consoleSecretField,
+      consoleSecretRevealPath,
+      llmRevealPrefix,
       endpointApiFetch,
       updateDiscordGroupTrigger,
       updateTelegramGroupTrigger,
@@ -5365,6 +5377,7 @@ const SettingsView = {
                         :readOnly="agentSettingsReadOnly"
                         :envManaged="llmEnvManaged"
                         :secretFields="llmSecretFields"
+                        :revealPrefix="llmRevealPrefix()"
                         :providerItems="providerItems"
                         :reasoningEffortItems="reasoningEffortItems"
                         :toolsEmulationItems="toolsEmulationItems"
@@ -5446,6 +5459,7 @@ const SettingsView = {
                             :readOnly="agentSettingsReadOnly"
                             :envManaged="llmProfileEnvManaged(profile)"
                             :secretFields="llmProfileSecretFields(profile)"
+                            :revealPrefix="llmRevealPrefix(profile)"
                             :providerItems="providerItems"
                             :reasoningEffortItems="reasoningEffortItems"
                             :toolsEmulationItems="toolsEmulationItems"
@@ -5643,11 +5657,12 @@ const SettingsView = {
                     <div class="settings-field is-wide">
                       <span class="settings-field-label">{{ t("settings_console_telegram_bot_token_label") }}</span>
                       <EnvManagedField v-if="consoleFieldEnvManaged('telegram', 'bot_token')" :name="consoleFieldManagedHeadline('telegram', 'bot_token')" />
-                      <QInput
+                      <SecretInput
                         v-else
                         :modelValue="state.telegram.bot_token"
-                        inputType="password"
-                        :placeholder="consoleSecretPlaceholder('telegram', 'bot_token', 'settings_console_telegram_bot_token_placeholder')"
+                        :status="consoleSecretField('telegram', 'bot_token')"
+                        :revealPath="consoleSecretRevealPath('telegram', 'bot_token')"
+                        :placeholder="t('settings_console_telegram_bot_token_placeholder')"
                         :disabled="consoleLoading || consoleSaving || !consoleSecretEditable('telegram', 'bot_token')"
                         @update:modelValue="updateTelegramField('bot_token', $event)"
                       />
@@ -5709,11 +5724,12 @@ const SettingsView = {
                     <div class="settings-field is-wide">
                       <span class="settings-field-label">{{ t("settings_console_slack_bot_token_label") }}</span>
                       <EnvManagedField v-if="consoleFieldEnvManaged('slack', 'bot_token')" :name="consoleFieldManagedHeadline('slack', 'bot_token')" />
-                      <QInput
+                      <SecretInput
                         v-else
                         :modelValue="state.slack.bot_token"
-                        inputType="password"
-                        :placeholder="consoleSecretPlaceholder('slack', 'bot_token', 'settings_console_slack_bot_token_placeholder')"
+                        :status="consoleSecretField('slack', 'bot_token')"
+                        :revealPath="consoleSecretRevealPath('slack', 'bot_token')"
+                        :placeholder="t('settings_console_slack_bot_token_placeholder')"
                         :disabled="consoleLoading || consoleSaving || !consoleSecretEditable('slack', 'bot_token')"
                         @update:modelValue="updateSlackField('bot_token', $event)"
                       />
@@ -5722,11 +5738,12 @@ const SettingsView = {
                     <div class="settings-field is-wide">
                       <span class="settings-field-label">{{ t("settings_console_slack_app_token_label") }}</span>
                       <EnvManagedField v-if="consoleFieldEnvManaged('slack', 'app_token')" :name="consoleFieldManagedHeadline('slack', 'app_token')" />
-                      <QInput
+                      <SecretInput
                         v-else
                         :modelValue="state.slack.app_token"
-                        inputType="password"
-                        :placeholder="consoleSecretPlaceholder('slack', 'app_token', 'settings_console_slack_app_token_placeholder')"
+                        :status="consoleSecretField('slack', 'app_token')"
+                        :revealPath="consoleSecretRevealPath('slack', 'app_token')"
+                        :placeholder="t('settings_console_slack_app_token_placeholder')"
                         :disabled="consoleLoading || consoleSaving || !consoleSecretEditable('slack', 'app_token')"
                         @update:modelValue="updateSlackField('app_token', $event)"
                       />
@@ -5800,11 +5817,12 @@ const SettingsView = {
                     <div class="settings-field is-wide">
                       <span class="settings-field-label">{{ t("settings_console_line_channel_access_token_label") }}</span>
                       <EnvManagedField v-if="consoleFieldEnvManaged('line', 'channel_access_token')" :name="consoleFieldManagedHeadline('line', 'channel_access_token')" />
-                      <QInput
+                      <SecretInput
                         v-else
                         :modelValue="state.line.channel_access_token"
-                        inputType="password"
-                        :placeholder="consoleSecretPlaceholder('line', 'channel_access_token', 'settings_console_line_channel_access_token_placeholder')"
+                        :status="consoleSecretField('line', 'channel_access_token')"
+                        :revealPath="consoleSecretRevealPath('line', 'channel_access_token')"
+                        :placeholder="t('settings_console_line_channel_access_token_placeholder')"
                         :disabled="consoleLoading || consoleSaving || !consoleSecretEditable('line', 'channel_access_token')"
                         @update:modelValue="updateLineField('channel_access_token', $event)"
                       />
@@ -5813,11 +5831,12 @@ const SettingsView = {
                     <div class="settings-field is-wide">
                       <span class="settings-field-label">{{ t("settings_console_line_channel_secret_label") }}</span>
                       <EnvManagedField v-if="consoleFieldEnvManaged('line', 'channel_secret')" :name="consoleFieldManagedHeadline('line', 'channel_secret')" />
-                      <QInput
+                      <SecretInput
                         v-else
                         :modelValue="state.line.channel_secret"
-                        inputType="password"
-                        :placeholder="consoleSecretPlaceholder('line', 'channel_secret', 'settings_console_line_channel_secret_placeholder')"
+                        :status="consoleSecretField('line', 'channel_secret')"
+                        :revealPath="consoleSecretRevealPath('line', 'channel_secret')"
+                        :placeholder="t('settings_console_line_channel_secret_placeholder')"
                         :disabled="consoleLoading || consoleSaving || !consoleSecretEditable('line', 'channel_secret')"
                         @update:modelValue="updateLineField('channel_secret', $event)"
                       />
@@ -5891,11 +5910,12 @@ const SettingsView = {
                     <div class="settings-field is-wide">
                       <span class="settings-field-label">{{ t("settings_console_lark_app_secret_label") }}</span>
                       <EnvManagedField v-if="consoleFieldEnvManaged('lark', 'app_secret')" :name="consoleFieldManagedHeadline('lark', 'app_secret')" />
-                      <QInput
+                      <SecretInput
                         v-else
                         :modelValue="state.lark.app_secret"
-                        inputType="password"
-                        :placeholder="consoleSecretPlaceholder('lark', 'app_secret', 'settings_console_lark_app_secret_placeholder')"
+                        :status="consoleSecretField('lark', 'app_secret')"
+                        :revealPath="consoleSecretRevealPath('lark', 'app_secret')"
+                        :placeholder="t('settings_console_lark_app_secret_placeholder')"
                         :disabled="consoleLoading || consoleSaving || !consoleSecretEditable('lark', 'app_secret')"
                         @update:modelValue="updateLarkField('app_secret', $event)"
                       />
@@ -6013,11 +6033,12 @@ const SettingsView = {
                     <div class="settings-field is-wide">
                       <span class="settings-field-label">{{ t("settings_console_discord_bot_token_label") }}</span>
                       <EnvManagedField v-if="consoleFieldEnvManaged('discord', 'bot_token')" :name="consoleFieldManagedHeadline('discord', 'bot_token')" />
-                      <QInput
+                      <SecretInput
                         v-else
                         :modelValue="state.discord.bot_token"
-                        inputType="password"
-                        :placeholder="consoleSecretPlaceholder('discord', 'bot_token', 'settings_console_discord_bot_token_placeholder')"
+                        :status="consoleSecretField('discord', 'bot_token')"
+                        :revealPath="consoleSecretRevealPath('discord', 'bot_token')"
+                        :placeholder="t('settings_console_discord_bot_token_placeholder')"
                         :disabled="consoleLoading || consoleSaving || !consoleSecretEditable('discord', 'bot_token')"
                         @update:modelValue="updateDiscordField('bot_token', $event)"
                       />
@@ -6146,11 +6167,12 @@ const SettingsView = {
                     <div class="settings-field is-wide">
                       <span class="settings-field-label">{{ t("settings_console_whatsapp_api_token_label") }}</span>
                       <EnvManagedField v-if="consoleFieldEnvManaged('whatsapp', 'api_token')" :name="consoleFieldManagedHeadline('whatsapp', 'api_token')" />
-                      <QInput
+                      <SecretInput
                         v-else
                         :modelValue="state.whatsapp.api_token"
-                        inputType="password"
-                        :placeholder="consoleSecretPlaceholder('whatsapp', 'api_token', 'settings_console_whatsapp_api_token_placeholder')"
+                        :status="consoleSecretField('whatsapp', 'api_token')"
+                        :revealPath="consoleSecretRevealPath('whatsapp', 'api_token')"
+                        :placeholder="t('settings_console_whatsapp_api_token_placeholder')"
                         :disabled="consoleLoading || consoleSaving || !consoleSecretEditable('whatsapp', 'api_token')"
                         @update:modelValue="updateWhatsAppField('api_token', $event)"
                       />
@@ -6799,6 +6821,7 @@ const SettingsView = {
           :readOnly="agentSettingsReadOnly"
           :envManaged="llmProfileEnvManaged(advancedSettingsProfile)"
           :secretFields="llmProfileSecretFields(advancedSettingsProfile)"
+          :revealPrefix="llmRevealPrefix(advancedSettingsProfile)"
           :providerItems="providerItems"
           :reasoningEffortItems="reasoningEffortItems"
           :toolsEmulationItems="toolsEmulationItems"

@@ -26,11 +26,14 @@ import {
 import InferenceProviderPicker from "./InferenceProviderPicker";
 import SettingSelect from "./SettingSelect";
 import EnvManagedField from "./EnvManagedField";
+import SecretInput from "./SecretInput";
+import { llmSecretConfigPath } from "../core/secret-storage";
 import { CACHE_TTL_OPTIONS, IMAGE_PARTS_OPTIONS } from "../core/config-options";
 
 const LLMConfigForm = {
   components: {
     EnvManagedField,
+    SecretInput,
     InferenceProviderPicker,
     SettingSelect,
   },
@@ -47,6 +50,12 @@ const LLMConfigForm = {
     envManaged: {
       type: Object,
       default: () => ({}),
+    },
+    // The config path this form's secrets sit under (llm, llm.profiles.<name>), for revealing them;
+    // empty when they cannot be revealed.
+    revealPrefix: {
+      type: String,
+      default: "",
     },
     secretFields: {
       type: Object,
@@ -140,10 +149,6 @@ const LLMConfigForm = {
 
     function isSecretEditable(field) {
       return props.secretFields?.[field]?.editable !== false;
-    }
-
-    function secretPlaceholder(field, fallbackKey) {
-      return isSecretConfigured(field) ? t("settings_secret_configured_placeholder") : t(fallbackKey);
     }
 
     const providerItem = computed(() => {
@@ -397,8 +402,8 @@ const LLMConfigForm = {
       isFieldEnvManaged,
       fieldManagedHeadline,
       isSecretConfigured,
+      llmSecretConfigPath,
       isSecretEditable,
-      secretPlaceholder,
       fieldValue,
       updateField,
       onProviderChange,
@@ -527,11 +532,12 @@ const LLMConfigForm = {
       <div v-if="showBedrockFields" class="settings-field is-wide">
         <span class="settings-field-label">{{ t("settings_agent_bedrock_aws_key_label") }}</span>
         <EnvManagedField v-if="isFieldEnvManaged('bedrock_aws_key')" :name="fieldManagedHeadline('bedrock_aws_key')" />
-        <QInput
+        <SecretInput
           v-else
           :modelValue="config.bedrock_aws_key"
-          inputType="password"
-          :placeholder="secretPlaceholder('bedrock_aws_key', 'settings_agent_bedrock_aws_key_placeholder')"
+          :status="secretFields?.['bedrock_aws_key']"
+          :revealPath="llmSecretConfigPath(revealPrefix, 'bedrock_aws_key')"
+          :placeholder="t('settings_agent_bedrock_aws_key_placeholder')"
           :disabled="busy || readOnly || !isSecretEditable('bedrock_aws_key')"
           @update:modelValue="updateField('bedrock_aws_key', $event)"
         />
@@ -540,11 +546,12 @@ const LLMConfigForm = {
       <div v-if="showBedrockFields" class="settings-field is-wide">
         <span class="settings-field-label">{{ t("settings_agent_bedrock_aws_secret_label") }}</span>
         <EnvManagedField v-if="isFieldEnvManaged('bedrock_aws_secret')" :name="fieldManagedHeadline('bedrock_aws_secret')" />
-        <QInput
+        <SecretInput
           v-else
           :modelValue="config.bedrock_aws_secret"
-          inputType="password"
-          :placeholder="secretPlaceholder('bedrock_aws_secret', 'settings_agent_bedrock_aws_secret_placeholder')"
+          :status="secretFields?.['bedrock_aws_secret']"
+          :revealPath="llmSecretConfigPath(revealPrefix, 'bedrock_aws_secret')"
+          :placeholder="t('settings_agent_bedrock_aws_secret_placeholder')"
           :disabled="busy || readOnly || !isSecretEditable('bedrock_aws_secret')"
           @update:modelValue="updateField('bedrock_aws_secret', $event)"
         />
@@ -580,19 +587,21 @@ const LLMConfigForm = {
           v-if="showCloudflareAccountField ? isFieldEnvManaged('cloudflare_api_token') : isFieldEnvManaged('api_key')"
           :name="fieldManagedHeadline(showCloudflareAccountField ? 'cloudflare_api_token' : 'api_key')"
         />
-        <QInput
+        <SecretInput
           v-else-if="showCloudflareAccountField"
           :modelValue="config.cloudflare_api_token"
-          inputType="password"
-          :placeholder="secretPlaceholder('cloudflare_api_token', credentialPlaceholderKey)"
+          :status="secretFields?.['cloudflare_api_token']"
+          :revealPath="llmSecretConfigPath(revealPrefix, 'cloudflare_api_token')"
+          :placeholder="t(credentialPlaceholderKey)"
           :disabled="busy || readOnly || !isSecretEditable('cloudflare_api_token')"
           @update:modelValue="updateField('cloudflare_api_token', $event)"
         />
-        <QInput
+        <SecretInput
           v-else
           :modelValue="config.api_key"
-          inputType="password"
-          :placeholder="secretPlaceholder('api_key', credentialPlaceholderKey)"
+          :status="secretFields?.['api_key']"
+          :revealPath="llmSecretConfigPath(revealPrefix, 'api_key')"
+          :placeholder="t(credentialPlaceholderKey)"
           :disabled="busy || readOnly || !isSecretEditable('api_key')"
           @update:modelValue="updateField('api_key', $event)"
         />
@@ -682,10 +691,10 @@ const LLMConfigForm = {
       <template v-if="showAdvanced">
         <div v-if="showBedrockFields" class="settings-field is-wide">
           <span class="settings-field-label">AWS session token</span>
-          <QInput
+          <SecretInput
             :modelValue="config.bedrock_aws_session_token"
-            inputType="password"
-            :placeholder="isSecretConfigured('bedrock_aws_session_token') ? t('settings_secret_configured_placeholder') : ''"
+            :status="secretFields?.['bedrock_aws_session_token']"
+            :revealPath="llmSecretConfigPath(revealPrefix, 'bedrock_aws_session_token')"
             :disabled="busy || readOnly || !isSecretEditable('bedrock_aws_session_token')"
             @update:modelValue="updateField('bedrock_aws_session_token', $event)"
           />

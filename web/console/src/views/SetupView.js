@@ -10,6 +10,9 @@ import XAIAuthDialog from "../components/XAIAuthDialog";
 import ProAuthDialog from "../components/ProAuthDialog";
 import InferenceProviderPicker from "../components/InferenceProviderPicker";
 import EnvManagedField from "../components/EnvManagedField";
+import SecretInput from "../components/SecretInput";
+import { llmSecretConfigPath } from "../core/secret-storage";
+import { CONSOLE_LOCAL_ENDPOINT_REF } from "../core/endpoints";
 import SetupConnectionTestDialog from "../components/SetupConnectionTestDialog";
 import SetupPickerDialog from "../components/SetupPickerDialog";
 import defaultAvatarMarkup from "../assets/images/app_logo_current.svg?raw";
@@ -229,6 +232,7 @@ function resolveDoneGreetingKey(date = new Date()) {
 
 const SetupView = {
   components: {
+    SecretInput,
     EnvManagedField,
     ImageUploadField,
     AppMarkdownEditor,
@@ -247,6 +251,11 @@ const SetupView = {
     const setupEndpointRef = computed(() =>
       endpointRefFromRouteParam(route.params.endpoint_ref),
     );
+
+    // Stored secrets can be revealed for this console's own config only.
+    function setupSecretRevealPath(field) {
+      return setupEndpointRef.value === CONSOLE_LOCAL_ENDPOINT_REF ? llmSecretConfigPath("llm", field) : "";
+    }
 
     const loading = ref(false);
     const saving = ref(false);
@@ -824,12 +833,6 @@ const SetupView = {
     function includeLLMSecret(field) {
       const value = String(llmForm[field] || "").trim();
       return value !== "" || llmSecretFields.value?.[field]?.configured !== true ? value : undefined;
-    }
-
-    function llmSecretPlaceholder(field, fallbackKey) {
-      return llmSecretFields.value?.[field]?.configured === true
-        ? t("settings_secret_configured_placeholder")
-        : t(fallbackKey);
     }
 
     function llmSecretEditable(field) {
@@ -1766,7 +1769,8 @@ const SetupView = {
       providerManagedField,
       providerChoice,
       llmEnvManaged,
-      llmSecretPlaceholder,
+      llmSecretFields,
+      setupSecretRevealPath,
       llmSecretEditable,
       showCloudflareAccountField,
       showCodexOAuthFields,
@@ -2020,11 +2024,12 @@ const SetupView = {
           <label v-if="showBedrockFields" class="setup-field is-wide">
             <span class="setup-field-label">{{ t("settings_agent_bedrock_aws_key_label") }}</span>
             <EnvManagedField v-if="isLLMFieldEnvManaged('bedrock_aws_key')" :name="llmFieldManagedHeadline('bedrock_aws_key')" />
-            <QInput
+            <SecretInput
               v-else
               v-model="llmForm.bedrock_aws_key"
-              inputType="password"
-              :placeholder="llmSecretPlaceholder('bedrock_aws_key', 'settings_agent_bedrock_aws_key_placeholder')"
+              :status="llmSecretFields?.['bedrock_aws_key']"
+              :revealPath="setupSecretRevealPath('bedrock_aws_key')"
+              :placeholder="t('settings_agent_bedrock_aws_key_placeholder')"
               :disabled="loading || saving || !llmSecretEditable('bedrock_aws_key')"
             />
           </label>
@@ -2032,11 +2037,12 @@ const SetupView = {
           <label v-if="showBedrockFields" class="setup-field is-wide">
             <span class="setup-field-label">{{ t("settings_agent_bedrock_aws_secret_label") }}</span>
             <EnvManagedField v-if="isLLMFieldEnvManaged('bedrock_aws_secret')" :name="llmFieldManagedHeadline('bedrock_aws_secret')" />
-            <QInput
+            <SecretInput
               v-else
               v-model="llmForm.bedrock_aws_secret"
-              inputType="password"
-              :placeholder="llmSecretPlaceholder('bedrock_aws_secret', 'settings_agent_bedrock_aws_secret_placeholder')"
+              :status="llmSecretFields?.['bedrock_aws_secret']"
+              :revealPath="setupSecretRevealPath('bedrock_aws_secret')"
+              :placeholder="t('settings_agent_bedrock_aws_secret_placeholder')"
               :disabled="loading || saving || !llmSecretEditable('bedrock_aws_secret')"
             />
           </label>
@@ -2066,18 +2072,20 @@ const SetupView = {
           <label v-if="showCredentialFields" class="setup-field is-wide">
             <span class="setup-field-label">{{ t(credentialLabelKey) }}</span>
             <EnvManagedField v-if="showCloudflareAccountField ? isLLMFieldEnvManaged('cloudflare_api_token') : isLLMFieldEnvManaged('api_key')" :name="llmFieldManagedHeadline(showCloudflareAccountField ? 'cloudflare_api_token' : 'api_key')" />
-            <QInput
+            <SecretInput
               v-else-if="showCloudflareAccountField"
               v-model="llmForm.cloudflare_api_token"
-              inputType="password"
-              :placeholder="llmSecretPlaceholder('cloudflare_api_token', credentialPlaceholderKey)"
+              :status="llmSecretFields?.['cloudflare_api_token']"
+              :revealPath="setupSecretRevealPath('cloudflare_api_token')"
+              :placeholder="t(credentialPlaceholderKey)"
               :disabled="loading || saving || !llmSecretEditable('cloudflare_api_token')"
             />
-            <QInput
+            <SecretInput
               v-else
               v-model="llmForm.api_key"
-              inputType="password"
-              :placeholder="llmSecretPlaceholder('api_key', credentialPlaceholderKey)"
+              :status="llmSecretFields?.['api_key']"
+              :revealPath="setupSecretRevealPath('api_key')"
+              :placeholder="t(credentialPlaceholderKey)"
               :disabled="loading || saving || !llmSecretEditable('api_key')"
             />
             <p v-if="credentialHelp" class="setup-field-hint">

@@ -1,5 +1,6 @@
 import {
   PhArrowClockwise,
+  PhArrowCounterClockwise,
   PhArrowLeft,
   PhArrowRight,
   PhArrowsSplit,
@@ -16,6 +17,7 @@ import {
   PhCalendarCheck,
   PhCalendarBlank,
   PhCalendarDot,
+  PhCloud,
   PhChat,
   PhChats,
   PhCheck,
@@ -103,6 +105,7 @@ function normalizeIcon(component, name) {
 
 const sources = {
   PhArrowClockwise,
+  PhArrowCounterClockwise,
   PhArrowLeft,
   PhArrowRight,
   PhArrowsSplit,
@@ -119,6 +122,7 @@ const sources = {
   PhCalendarCheck,
   PhCalendarBlank,
   PhCalendarDot,
+  PhCloud,
   PhChat,
   PhChats,
   PhCheck,

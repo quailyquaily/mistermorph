@@ -1,11 +1,12 @@
 import { computed, reactive, ref, watch } from "vue";
+import SecretInput from "./SecretInput";
 import SettingDialog from "./SettingDialog";
 import { translate } from "../core/context";
 import "./ConsoleEndpointsPanel.css";
 
 export default {
   name: "ConsoleEndpointsPanel",
-  components: { SettingDialog },
+  components: { SecretInput, SettingDialog },
   props: {
     endpoints: { type: Array, default: () => [] },
     runtimeEndpoints: { type: Array, default: () => [] },
@@ -126,7 +127,7 @@ export default {
           <label class="settings-field is-wide"><span class="settings-field-label">Runtime API URL</span><QInput v-model="draft.url" placeholder="https://agent.example.com/runtime" :disabled="saving" /></label>
           <label class="settings-field is-wide">
             <span class="settings-field-label">{{ t('remote_access_token') }}</span>
-            <QInput v-model="draft.auth_token" inputType="password" :placeholder="t(draft.configured ? 'remote_token_keep' : 'remote_token_required')" :disabled="saving" />
+            <SecretInput v-model="draft.auth_token" :status="{ configured: draft.configured }" :placeholder="t('remote_token_required')" :disabled="saving" />
             <span class="settings-field-note">{{ t('remote_token_note') }}</span>
           </label>
           <p v-if="editorError" class="settings-field-note console-endpoint-error" role="alert">{{ editorError }}</p>
