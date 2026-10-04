@@ -24,6 +24,7 @@ done
 if (( ${#missing[@]} > 0 )); then
   printf 'Missing required release settings:\n' >&2
   printf '  %s\n' "${missing[@]}" >&2
+  printf 'AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY come from the R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY secrets.\n' >&2
   exit 1
 fi
 export AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-auto}"
