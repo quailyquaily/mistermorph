@@ -1,0 +1,6 @@
+# Non-sensitive seed for new Console state. Configure the model in Console,
+# or supply MISTER_MORPH_LLM_* environment variables at deployment time.
+console:
+  endpoints: []
+auto_update:
+  enabled: false

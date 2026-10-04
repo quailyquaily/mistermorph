@@ -1,135 +1,96 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [[ $# -ne 0 ]]; then
+  echo "Usage: ./deploy.sh (set WRANGLER_ENV and WRANGLER_CONFIG_PATH in the environment)." >&2
+  exit 1
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${SCRIPT_DIR}"
 
-STAGED_CONFIG_PATH="${SCRIPT_DIR}/config.runtime.yaml"
+# env.sh is local executable configuration; never include it in the image.
+if [[ -f ./env.sh ]]; then
+  source ./env.sh
+fi
 
 WRANGLER_ENV="${WRANGLER_ENV:-}"
-SKIP_NPM_INSTALL="${SKIP_NPM_INSTALL:-0}"
 WRANGLER_CONFIG_PATH="${WRANGLER_CONFIG_PATH:-${SCRIPT_DIR}/wrangler.jsonc}"
-MISTER_MORPH_CONFIG_PATH="${MISTER_MORPH_CONFIG_PATH:-${SCRIPT_DIR}/config.yaml}"
 
-cleanup() {
-  rm -f "${STAGED_CONFIG_PATH}"
-}
+MISTER_MORPH_CONSOLE_PASSWORD="${MISTER_MORPH_CONSOLE_PASSWORD:-}"
+MISTER_MORPH_CONSOLE_PASSWORD_HASH="${MISTER_MORPH_CONSOLE_PASSWORD_HASH:-}"
+MISTER_MORPH_SERVER_AUTH_TOKEN="${MISTER_MORPH_SERVER_AUTH_TOKEN:-}"
 
-trap cleanup EXIT
+if [[ -z "${MISTER_MORPH_CONSOLE_PASSWORD//[[:space:]]/}" && -z "${MISTER_MORPH_CONSOLE_PASSWORD_HASH//[[:space:]]/}" ]]; then
+  echo "Set MISTER_MORPH_CONSOLE_PASSWORD or MISTER_MORPH_CONSOLE_PASSWORD_HASH." >&2
+  exit 1
+fi
+if [[ -z "${MISTER_MORPH_SERVER_AUTH_TOKEN//[[:space:]]/}" ]]; then
+  echo "Set a stable MISTER_MORPH_SERVER_AUTH_TOKEN for container administration." >&2
+  exit 1
+fi
+if [[ -n "${MISTER_MORPH_CONFIG_PATH:-}" && ! -f "${MISTER_MORPH_CONFIG_PATH}" ]]; then
+  echo "MISTER_MORPH_CONFIG_PATH must name an existing YAML file." >&2
+  exit 1
+fi
+if [[ -n "${MISTER_MORPH_CONFIG_PATH:-}" && "$(wc -c < "${MISTER_MORPH_CONFIG_PATH}")" -gt 5120 ]]; then
+  echo "The config seed exceeds the 5120-byte Worker secret limit; use a minimal YAML seed." >&2
+  exit 1
+fi
+if [[ "${MISTER_MORPH_ALLOW_EPHEMERAL_STATE:-0}" != "1" ]]; then
+  for key in MISTER_MORPH_R2_ACCOUNT_ID MISTER_MORPH_R2_BUCKET MISTER_MORPH_R2_PREFIX MISTER_MORPH_R2_ACCESS_KEY_ID MISTER_MORPH_R2_SECRET_ACCESS_KEY; do
+    if [[ -z "${!key:-}" ]]; then
+      echo "Missing ${key}; configure R2 backup or explicitly allow ephemeral state." >&2
+      exit 1
+    fi
+    export "${key}"
+  done
+fi
 
-require_cmd() {
-  local cmd="$1"
-  if ! command -v "${cmd}" >/dev/null 2>&1; then
-    echo "Missing required command: ${cmd}" >&2
+for command in node npm npx docker; do
+  if ! command -v "${command}" >/dev/null 2>&1; then
+    echo "Missing required command: ${command}" >&2
     exit 1
   fi
-}
-
-wrangler() {
-  npx --yes wrangler --config "${WRANGLER_CONFIG_PATH}" "$@"
-}
-
-put_secret() {
-  local name="$1"
-  local value="$2"
-  local -a cmd=(secret put "${name}")
-
-  if [[ -n "${WRANGLER_ENV}" ]]; then
-    cmd+=(--env "${WRANGLER_ENV}")
-  fi
-
-  printf '%s' "${value}" | wrangler "${cmd[@]}" >/dev/null
-  echo "Set Cloudflare secret: ${name}"
-}
-
-add_optional_var() {
-  local name="$1"
-  local value="${!name:-}"
-  if [[ -n "${value}" ]]; then
-    DEPLOY_VAR_FLAGS+=(--var "${name}:${value}")
-    echo "Set Cloudflare var from shell env: ${name}"
-  fi
-}
-
-require_cmd npm
-require_cmd docker
-
-if [[ "${SKIP_NPM_INSTALL}" != "1" ]]; then
-  npm install
-fi
-
-if ! wrangler whoami >/dev/null 2>&1; then
-  echo "Wrangler is not authenticated. Run: npx wrangler login" >&2
-  exit 1
-fi
-
-if [[ -z "${MISTER_MORPH_LLM_API_KEY:-}" ]]; then
-  echo "MISTER_MORPH_LLM_API_KEY is required." >&2
-  echo "Example: MISTER_MORPH_LLM_API_KEY=... ./deploy.sh" >&2
-  exit 1
-fi
-
-if [[ ! -f "${MISTER_MORPH_CONFIG_PATH}" ]]; then
-  echo "Config file not found: ${MISTER_MORPH_CONFIG_PATH}" >&2
-  exit 1
-fi
-
-cp "${MISTER_MORPH_CONFIG_PATH}" "${STAGED_CONFIG_PATH}"
-echo "Using config file: ${MISTER_MORPH_CONFIG_PATH}"
-
-GENERATED_SERVER_TOKEN=0
-if [[ -z "${MISTER_MORPH_SERVER_AUTH_TOKEN:-}" ]]; then
-  if command -v openssl >/dev/null 2>&1; then
-    MISTER_MORPH_SERVER_AUTH_TOKEN="$(openssl rand -hex 24)"
-  else
-    MISTER_MORPH_SERVER_AUTH_TOKEN="$(date +%s%N | sha256sum | cut -c1-48)"
-  fi
-  GENERATED_SERVER_TOKEN=1
-fi
-
-put_secret "MISTER_MORPH_LLM_API_KEY" "${MISTER_MORPH_LLM_API_KEY}"
-put_secret "MISTER_MORPH_SERVER_AUTH_TOKEN" "${MISTER_MORPH_SERVER_AUTH_TOKEN}"
-
-if [[ -n "${MISTER_MORPH_TELEGRAM_BOT_TOKEN:-}" ]]; then
-  put_secret "MISTER_MORPH_TELEGRAM_BOT_TOKEN" "${MISTER_MORPH_TELEGRAM_BOT_TOKEN}"
-fi
-
-DEPLOY_VAR_FLAGS=()
-OPTIONAL_VAR_KEYS=(
-  MISTER_MORPH_LLM_PROVIDER
-  MISTER_MORPH_LLM_ENDPOINT
-  MISTER_MORPH_LLM_MODEL
-  MISTER_MORPH_LOG_LEVEL
-  MISTER_MORPH_TOOLS_BASH_ENABLED
-  MISTER_MORPH_RUN_MODE
-  MISTER_MORPH_WORKSPACE_DIR
-  MISTER_MORPH_FILE_STATE_DIR
-  MISTER_MORPH_FILE_CACHE_DIR
-  MISTER_MORPH_SKIP_BOOTSTRAP_INSTALL
-)
-for key in "${OPTIONAL_VAR_KEYS[@]}"; do
-  add_optional_var "${key}"
 done
+if [[ "${SKIP_NPM_INSTALL:-0}" != "1" ]]; then
+  npm ci
+fi
 
-echo "Deploying Cloudflare Worker + Container..."
+WRANGLER=(npx --no-install wrangler --config "${WRANGLER_CONFIG_PATH}")
+ENV_FLAGS=()
 if [[ -n "${WRANGLER_ENV}" ]]; then
-  wrangler deploy --env "${WRANGLER_ENV}" "${DEPLOY_VAR_FLAGS[@]}" "$@"
-else
-  wrangler deploy "${DEPLOY_VAR_FLAGS[@]}" "$@"
+  ENV_FLAGS+=(--env "${WRANGLER_ENV}")
 fi
+"${WRANGLER[@]}" whoami >/dev/null
 
-echo
-if [[ "${GENERATED_SERVER_TOKEN}" == "1" ]]; then
-  echo "Generated MISTER_MORPH_SERVER_AUTH_TOKEN and stored it as a Cloudflare secret (value hidden)."
-  echo "If you need to call protected endpoints manually, deploy with an explicit token:"
-  echo 'MISTER_MORPH_SERVER_AUTH_TOKEN="<your-token>" ./deploy.sh'
-  echo
-fi
+# Always send both password fields so changing from a hash to plaintext (or back)
+# cannot leave an old credential taking precedence. Do not print secret values.
+export MISTER_MORPH_CONSOLE_PASSWORD MISTER_MORPH_CONSOLE_PASSWORD_HASH MISTER_MORPH_SERVER_AUTH_TOKEN
+export MISTER_MORPH_CONFIG_PATH
+export MISTER_MORPH_ALLOW_EPHEMERAL_STATE MISTER_MORPH_R2_BACKUP_INTERVAL
+node --input-type=module <<'JS' | "${WRANGLER[@]}" secret bulk "${ENV_FLAGS[@]}"
+import fs from "node:fs";
+const secrets = {
+  MISTER_MORPH_CONSOLE_PASSWORD: process.env.MISTER_MORPH_CONSOLE_PASSWORD || "",
+  MISTER_MORPH_CONSOLE_PASSWORD_HASH: process.env.MISTER_MORPH_CONSOLE_PASSWORD_HASH || "",
+  MISTER_MORPH_SERVER_AUTH_TOKEN: process.env.MISTER_MORPH_SERVER_AUTH_TOKEN,
+  MISTER_MORPH_ALLOW_EPHEMERAL_STATE: process.env.MISTER_MORPH_ALLOW_EPHEMERAL_STATE || "0",
+  MISTER_MORPH_R2_BACKUP_INTERVAL: process.env.MISTER_MORPH_R2_BACKUP_INTERVAL || "60",
+};
+for (const key of ["MISTER_MORPH_R2_ACCOUNT_ID", "MISTER_MORPH_R2_BUCKET", "MISTER_MORPH_R2_PREFIX", "MISTER_MORPH_R2_ACCESS_KEY_ID", "MISTER_MORPH_R2_SECRET_ACCESS_KEY"]) {
+  if (process.env[key]) secrets[key] = process.env[key];
+}
+if (process.env.MISTER_MORPH_LLM_API_KEY) secrets.MISTER_MORPH_LLM_API_KEY = process.env.MISTER_MORPH_LLM_API_KEY;
+if (process.env.MISTER_MORPH_CONFIG_PATH) {
+  secrets.MISTER_MORPH_CONFIG_YAML = fs.readFileSync(process.env.MISTER_MORPH_CONFIG_PATH, "utf8");
+}
+process.stdout.write(JSON.stringify(secrets));
+JS
 
-if [[ "${MISTER_MORPH_RUN_MODE:-serve}" == "telegram" ]]; then
-  echo "Telegram mode deployed. Example status check (replace worker domain):"
-  echo 'curl -H "Authorization: Bearer $MISTER_MORPH_SERVER_AUTH_TOKEN" https://<worker-domain>/_mistermorph/state'
-else
-  echo "Serve mode deployed. Example health check (replace worker domain):"
-  echo 'curl -H "Authorization: Bearer $MISTER_MORPH_SERVER_AUTH_TOKEN" https://<worker-domain>/health'
-fi
+VAR_FLAGS=()
+for key in MISTER_MORPH_LLM_INFERENCE_PROVIDER MISTER_MORPH_LLM_PROVIDER MISTER_MORPH_LLM_ENDPOINT MISTER_MORPH_LLM_MODEL MISTER_MORPH_LOG_LEVEL MISTER_MORPH_TOOLS_BASH_ENABLED; do
+  if [[ -n "${!key:-}" ]]; then VAR_FLAGS+=(--var "${key}:${!key}"); fi
+done
+"${WRANGLER[@]}" deploy "${ENV_FLAGS[@]}" "${VAR_FLAGS[@]}"
+echo "Console deployed. Open the Worker URL and sign in with the Console password."

@@ -9,7 +9,7 @@ If you are choosing where to deploy `mistermorph`, use this quick comparison fir
 | Target | Pros | Cons | Best for |
 |---|---|---|---|
 | AWS Lightsail Containers | Fastest path to container rollout; simple shell-based deploy flow | AWS-specific; less flexible than full VM control | Telegram bot or small production setup on AWS |
-| Cloudflare Worker + Container | Edge entrypoint; easy global ingress; good for `serve` HTTP mode | Extra moving parts (Worker + container + Wrangler); Cloudflare platform coupling | Public HTTP endpoint and edge routing |
+| Cloudflare Worker + Container | Edge entrypoint; easy global ingress; Console UI and API | Extra moving parts (Worker + container + Wrangler); Cloudflare platform coupling | Public Console with R2 state backups |
 | systemd on Linux VM | Full control over host, files, and networking; straightforward operations model | You manage OS patching/backup/monitoring yourself | Self-hosted VM/bare metal with existing ops practices |
 
 Deployment docs:

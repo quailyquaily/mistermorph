@@ -1,125 +1,23 @@
 import { Container, getContainer } from "@cloudflare/containers";
-import { env as workerEnv } from "cloudflare:workers";
 
-const DEFAULT_INSTANCE_NAME = "default";
-const INSTANCE_PARAM = "instance";
-const ADMIN_PREFIX = "/_mistermorph";
-const LIFECYCLE_STATE_KEY = "mistermorph:lifecycle";
+const INSTANCE_NAME = "default";
+const ADMIN_PREFIX = "/_mistermorph/";
+const PAUSED_KEY = "mistermorph:paused";
+const LIFECYCLE_KEY = "mistermorph:lifecycle";
 
-function sanitizeInstanceName(value) {
-  if (!value) {
-    return DEFAULT_INSTANCE_NAME;
-  }
-  const normalized = value.trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "-");
-  const compact = normalized.replace(/-+/g, "-").slice(0, 63).replace(/^-|-$/g, "");
-  return compact || DEFAULT_INSTANCE_NAME;
+function nonempty(value) {
+  return typeof value === "string" && value.trim().length > 0;
 }
 
-function optionalString(value) {
-  if (typeof value !== "string") {
-    return null;
-  }
-  const trimmed = value.trim();
-  return trimmed || null;
+function hasConsolePassword(env) {
+  return nonempty(env.MISTER_MORPH_CONSOLE_PASSWORD) || nonempty(env.MISTER_MORPH_CONSOLE_PASSWORD_HASH);
 }
 
 function jsonResponse(data, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: {
-      "content-type": "application/json; charset=utf-8",
-    },
+    headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
   });
-}
-
-function readBearerToken(request) {
-  const auth = request.headers.get("authorization");
-  if (!auth) {
-    return null;
-  }
-  const match = auth.match(/^Bearer\s+(.+)$/i);
-  if (!match) {
-    return null;
-  }
-  const token = match[1].trim();
-  return token || null;
-}
-
-function isAdminAuthorized(request) {
-  const expected = optionalString(workerEnv.MISTER_MORPH_SERVER_AUTH_TOKEN);
-  if (!expected) {
-    return true;
-  }
-  const actual = readBearerToken(request);
-  return actual === expected;
-}
-
-function requireAdminAuth(request) {
-  if (isAdminAuthorized(request)) {
-    return null;
-  }
-  return jsonResponse({ ok: false, error: "unauthorized" }, 401);
-}
-
-function stringifyUnknown(value) {
-  if (value instanceof Error) {
-    return value.stack || value.message || String(value);
-  }
-  if (typeof value === "string") {
-    return value;
-  }
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return String(value);
-  }
-}
-
-function truncateText(value, maxLen = 240) {
-  if (typeof value !== "string") {
-    return "";
-  }
-  if (value.length <= maxLen) {
-    return value;
-  }
-  return value.slice(0, maxLen) + "...";
-}
-
-async function telegramGetMe(token) {
-  const resp = await fetch(`https://api.telegram.org/bot${token}/getMe`);
-  const raw = await resp.text();
-  if (!resp.ok) {
-    return {
-      ok: false,
-      status: resp.status,
-      error: truncateText(raw),
-    };
-  }
-  try {
-    const payload = JSON.parse(raw);
-    if (!payload?.ok) {
-      return {
-        ok: false,
-        status: resp.status,
-        error: truncateText(payload?.description || raw),
-      };
-    }
-    return {
-      ok: true,
-      status: resp.status,
-      bot: {
-        id: payload?.result?.id ?? null,
-        username: payload?.result?.username ?? null,
-      },
-    };
-  } catch {
-    return {
-      ok: false,
-      status: resp.status,
-      error: "invalid telegram getMe response",
-      raw: truncateText(raw),
-    };
-  }
 }
 
 export class MisterMorphContainer extends Container {
@@ -127,221 +25,123 @@ export class MisterMorphContainer extends Container {
   sleepAfter = "15m";
   enableInternet = true;
 
-  async readLifecycle() {
-    const data = await this.ctx.storage.get(LIFECYCLE_STATE_KEY);
-    if (data && typeof data === "object") {
-      return data;
-    }
-    return {};
-  }
-
-  async writeLifecycle(patch) {
-    const cur = await this.readLifecycle();
-    const next = {
-      ...cur,
-      ...patch,
-      updatedAt: Date.now(),
-    };
-    await this.ctx.storage.put(LIFECYCLE_STATE_KEY, next);
-    return next;
-  }
-
-  async lifecycle() {
-    return this.readLifecycle();
-  }
-
-  async onStart() {
-    console.log("mistermorph_container_start");
-    const cur = await this.readLifecycle();
-    const starts = Number(cur?.starts) || 0;
-    return this.writeLifecycle({
-      starts: starts + 1,
-      lastStartAt: Date.now(),
-    });
-  }
-
-  onStop(reason) {
-    console.warn("mistermorph_container_stop", stringifyUnknown(reason));
-    return this.writeLifecycle({
-      lastStopAt: Date.now(),
-      lastStop: reason,
-    });
-  }
-
-  onError(error) {
-    console.error("mistermorph_container_error", stringifyUnknown(error));
-    return this.writeLifecycle({
-      lastErrorAt: Date.now(),
-      lastError: stringifyUnknown(error),
-    });
-  }
-
-  get envVars() {
-    const stateDir = optionalString(workerEnv.MISTER_MORPH_FILE_STATE_DIR) || "/tmp/mistermorph/state";
-    const cacheDir = optionalString(workerEnv.MISTER_MORPH_FILE_CACHE_DIR) || "/tmp/mistermorph/cache";
-    const vars = {
-      MISTER_MORPH_LOG_FORMAT: "json",
-      MISTER_MORPH_FILE_STATE_DIR: stateDir,
-      MISTER_MORPH_FILE_CACHE_DIR: cacheDir,
-      MISTER_MORPH_SKIP_BOOTSTRAP_INSTALL: "1",
-    };
-
-    const optionalKeys = [
+  constructor(ctx, env) {
+    super(ctx, env);
+    // Assign an own field: the SDK's envVars field would shadow a getter.
+    this.envVars = {};
+    for (const key of [
+      "MISTER_MORPH_CONSOLE_PASSWORD",
+      "MISTER_MORPH_CONSOLE_PASSWORD_HASH",
+      "MISTER_MORPH_SERVER_AUTH_TOKEN",
+      "MISTER_MORPH_CONFIG_YAML",
+      "MISTER_MORPH_LLM_API_KEY",
+      "MISTER_MORPH_LLM_INFERENCE_PROVIDER",
       "MISTER_MORPH_LLM_PROVIDER",
       "MISTER_MORPH_LLM_ENDPOINT",
       "MISTER_MORPH_LLM_MODEL",
       "MISTER_MORPH_LOG_LEVEL",
       "MISTER_MORPH_TOOLS_BASH_ENABLED",
-      "MISTER_MORPH_RUN_MODE",
-      "MISTER_MORPH_SKIP_BOOTSTRAP_INSTALL",
-      "MISTER_MORPH_LLM_API_KEY",
-      "MISTER_MORPH_SERVER_AUTH_TOKEN",
-      "MISTER_MORPH_TELEGRAM_BOT_TOKEN",
-    ];
-    for (const key of optionalKeys) {
-      const value = optionalString(workerEnv[key]);
-      if (value) {
-        vars[key] = value;
-      }
+      "MISTER_MORPH_ALLOW_EPHEMERAL_STATE",
+      "MISTER_MORPH_R2_ACCOUNT_ID",
+      "MISTER_MORPH_R2_BUCKET",
+      "MISTER_MORPH_R2_PREFIX",
+      "MISTER_MORPH_R2_ACCESS_KEY_ID",
+      "MISTER_MORPH_R2_SECRET_ACCESS_KEY",
+      "MISTER_MORPH_R2_BACKUP_INTERVAL",
+    ]) {
+      if (nonempty(env[key])) this.envVars[key] = env[key];
     }
+  }
 
-    return vars;
+  async lifecycle() {
+    return (await this.ctx.storage.get(LIFECYCLE_KEY)) || {};
+  }
+
+  async onStart() {
+    const previous = await this.lifecycle();
+    await this.ctx.storage.put(LIFECYCLE_KEY, { ...previous, lastStartAt: Date.now() });
+  }
+
+  async onStop(reason) {
+    const previous = await this.lifecycle();
+    await this.ctx.storage.put(LIFECYCLE_KEY, { ...previous, lastStopAt: Date.now(), lastStop: reason });
+  }
+
+  // Console may run background tasks and channel connections without HTTP traffic.
+  async onActivityExpired() {
+    this.renewActivityTimeout();
+  }
+
+  async keepAlive() {
+    if (!(await this.ctx.storage.get(PAUSED_KEY))) await this.start();
+  }
+
+  async resume() {
+    await this.ctx.storage.put(PAUSED_KEY, false);
+    await this.start();
+  }
+
+  async pause() {
+    await this.ctx.storage.put(PAUSED_KEY, true);
+    await this.stop();
+  }
+
+  async fetch(request) {
+    if (await this.ctx.storage.get(PAUSED_KEY)) {
+      return jsonResponse({ error: "console is stopped by the administrator" }, 503);
+    }
+    return super.fetch(request);
   }
 }
 
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    const instanceName = sanitizeInstanceName(url.searchParams.get(INSTANCE_PARAM));
-    const runMode = optionalString(workerEnv.MISTER_MORPH_RUN_MODE) || "serve";
+    const instance = url.searchParams.get("instance");
+    if (instance && instance !== INSTANCE_NAME) {
+      return jsonResponse({ error: "only the default Console instance is supported" }, 400);
+    }
+
+    const admin = url.pathname.startsWith(ADMIN_PREFIX);
+    if (admin) {
+      const token = env.MISTER_MORPH_SERVER_AUTH_TOKEN;
+      const actual = request.headers.get("authorization")?.match(/^Bearer\s+(.+)$/i)?.[1];
+      if (!nonempty(token) || actual !== token) {
+        return jsonResponse({ error: "unauthorized" }, 401);
+      }
+      const method = { start: "POST", stop: "POST", state: "GET", lifecycle: "GET" }[url.pathname.slice(ADMIN_PREFIX.length)];
+      if (!method) return jsonResponse({ error: "not found" }, 404);
+      if (request.method !== method) {
+        return new Response(null, { status: 405, headers: { Allow: method } });
+      }
+      // No public hard-destroy endpoint: shutdown must let Console flush its state.
+      if (url.searchParams.has("hard")) {
+        return jsonResponse({ error: "hard stop is not supported" }, 400);
+      }
+    }
+    if (!hasConsolePassword(env)) {
+      return jsonResponse({ error: "Console password is not configured" }, 503);
+    }
     if (!env.MISTER_MORPH_CONTAINER) {
-      return jsonResponse(
-        {
-          ok: false,
-          error: "missing durable object binding: MISTER_MORPH_CONTAINER",
-          hint: "Check wrangler env.* durable_objects + containers config.",
-        },
-        500
-      );
+      return jsonResponse({ error: "missing container binding" }, 503);
     }
-    const container = getContainer(env.MISTER_MORPH_CONTAINER, instanceName);
-
-    if (url.pathname === `${ADMIN_PREFIX}/start`) {
-      const unauthorized = requireAdminAuth(request);
-      if (unauthorized) return unauthorized;
-      await container.start();
+    const container = getContainer(env.MISTER_MORPH_CONTAINER, INSTANCE_NAME);
+    if (admin) {
+      const action = url.pathname.slice(ADMIN_PREFIX.length);
+      if (action === "start") await container.resume();
+      if (action === "stop") await container.pause();
       const state = await container.getState();
-      return jsonResponse({ ok: true, mode: runMode, instance: instanceName, state });
+      const lifecycle = action === "lifecycle" ? await container.lifecycle() : undefined;
+      return jsonResponse({ ok: true, mode: "console", instance: INSTANCE_NAME, state, lifecycle });
     }
+    // Console authenticates browser sessions and runtime API requests itself.
+    // Login and static assets must remain reachable before a browser has a session.
+    url.searchParams.delete("instance");
+    return container.fetch(new Request(url.toString(), request));
+  },
 
-    if (url.pathname === `${ADMIN_PREFIX}/stop`) {
-      const unauthorized = requireAdminAuth(request);
-      if (unauthorized) return unauthorized;
-      const hard = ["1", "true", "yes"].includes((url.searchParams.get("hard") || "").toLowerCase());
-      if (hard) {
-        await container.destroy();
-      } else {
-        await container.stop();
-      }
-      const [state, lifecycle] = await Promise.all([
-        container.getState(),
-        container.lifecycle(),
-      ]);
-      return jsonResponse({
-        ok: true,
-        mode: runMode,
-        instance: instanceName,
-        action: hard ? "destroy" : "stop",
-        state,
-        lifecycle,
-      });
-    }
-
-    if (url.pathname === `${ADMIN_PREFIX}/state`) {
-      const unauthorized = requireAdminAuth(request);
-      if (unauthorized) return unauthorized;
-      const state = await container.getState();
-      return jsonResponse({ ok: true, mode: runMode, instance: instanceName, state });
-    }
-
-    if (url.pathname === `${ADMIN_PREFIX}/lifecycle`) {
-      const unauthorized = requireAdminAuth(request);
-      if (unauthorized) return unauthorized;
-      const [state, lifecycle] = await Promise.all([
-        container.getState(),
-        container.lifecycle(),
-      ]);
-      return jsonResponse({
-        ok: true,
-        mode: runMode,
-        instance: instanceName,
-        state,
-        lifecycle,
-      });
-    }
-
-    if (url.pathname === `${ADMIN_PREFIX}/preflight`) {
-      const unauthorized = requireAdminAuth(request);
-      if (unauthorized) return unauthorized;
-      const checks = [];
-      const issues = [];
-
-      const llmKey = optionalString(workerEnv.MISTER_MORPH_LLM_API_KEY);
-      checks.push({
-        key: "MISTER_MORPH_LLM_API_KEY",
-        present: Boolean(llmKey),
-      });
-      if (!llmKey) {
-        issues.push("missing MISTER_MORPH_LLM_API_KEY");
-      }
-
-      if (runMode === "telegram") {
-        const tgToken = optionalString(workerEnv.MISTER_MORPH_TELEGRAM_BOT_TOKEN);
-        checks.push({
-          key: "MISTER_MORPH_TELEGRAM_BOT_TOKEN",
-          present: Boolean(tgToken),
-        });
-        if (!tgToken) {
-          issues.push("missing MISTER_MORPH_TELEGRAM_BOT_TOKEN");
-        } else {
-          const tg = await telegramGetMe(tgToken);
-          checks.push({
-            key: "telegram.getMe",
-            ...tg,
-          });
-          if (!tg.ok) {
-            issues.push(`telegram getMe failed: ${tg.error || "unknown error"}`);
-          }
-        }
-      }
-
-      return jsonResponse({
-        ok: issues.length === 0,
-        mode: runMode,
-        instance: instanceName,
-        checks,
-        issues,
-      });
-    }
-
-    if (runMode === "telegram") {
-      await container.start();
-      const state = await container.getState();
-      return jsonResponse(
-        {
-          ok: true,
-          mode: runMode,
-          instance: instanceName,
-          state,
-          message: "Container is running in telegram mode. Use Telegram bot to interact.",
-        },
-        202
-      );
-    }
-
-    url.searchParams.delete(INSTANCE_PARAM);
-    const upstreamRequest = new Request(url.toString(), request);
-
-    return container.fetch(upstreamRequest);
+  async scheduled(_event, env) {
+    if (!hasConsolePassword(env)) throw new Error("Console password is not configured");
+    await getContainer(env.MISTER_MORPH_CONTAINER, INSTANCE_NAME).keepAlive();
   },
 };

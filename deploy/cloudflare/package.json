@@ -4,12 +4,13 @@
   "type": "module",
   "scripts": {
     "deploy": "wrangler deploy",
-    "dev": "wrangler dev"
+    "dev": "wrangler dev",
+    "test": "node --test *.test.mjs"
   },
   "dependencies": {
-    "@cloudflare/containers": "latest"
+    "@cloudflare/containers": "0.1.0"
   },
   "devDependencies": {
-    "wrangler": "latest"
+    "wrangler": "4.65.0"
   }
 }

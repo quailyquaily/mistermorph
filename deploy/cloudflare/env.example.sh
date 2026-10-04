@@ -1,46 +1,36 @@
 #!/usr/bin/env bash
-# Copy this file to ./env.sh and fill in real values.
-# Do not commit your env.sh with real secrets.
+# Copy to env.sh. deploy.sh and run-local.sh load it before applying defaults.
+# Keep this file private. Existing shell values take precedence over these defaults.
+export CLOUDFLARE_ACCOUNT_ID="${CLOUDFLARE_ACCOUNT_ID:-}"
+export CLOUDFLARE_API_TOKEN="${CLOUDFLARE_API_TOKEN:-}"
+export WRANGLER_ENV="${WRANGLER_ENV:-prod}"
 
-# Cloudflare auth for Wrangler (required in CI; optional locally if you already ran `wrangler login`).
-export CLOUDFLARE_ACCOUNT_ID="your-cloudflare-account-id"
-export CLOUDFLARE_API_TOKEN="your-cloudflare-api-token"
+# Required: Console login and a separate, stable administration token.
+# A bcrypt hash can replace the plaintext password. Quote hashes with single quotes.
+export MISTER_MORPH_CONSOLE_PASSWORD="${MISTER_MORPH_CONSOLE_PASSWORD:-}"
+export MISTER_MORPH_CONSOLE_PASSWORD_HASH="${MISTER_MORPH_CONSOLE_PASSWORD_HASH:-}"
+export MISTER_MORPH_SERVER_AUTH_TOKEN="${MISTER_MORPH_SERVER_AUTH_TOKEN:-}"
 
-# Required: LLM key used by mistermorph.
-export MISTER_MORPH_LLM_API_KEY="your-openai-api-key"
+# R2 S3 credentials scoped to one private bucket with Object Read & Write access.
+# Use a different prefix for every deployment/environment. Never share a prefix
+# between running Consoles. Wrangler credentials above are not R2 credentials.
+export MISTER_MORPH_R2_ACCOUNT_ID="${MISTER_MORPH_R2_ACCOUNT_ID:-${CLOUDFLARE_ACCOUNT_ID}}"
+export MISTER_MORPH_R2_BUCKET="${MISTER_MORPH_R2_BUCKET:-}"
+export MISTER_MORPH_R2_PREFIX="${MISTER_MORPH_R2_PREFIX:-console-prod}"
+export MISTER_MORPH_R2_ACCESS_KEY_ID="${MISTER_MORPH_R2_ACCESS_KEY_ID:-}"
+export MISTER_MORPH_R2_SECRET_ACCESS_KEY="${MISTER_MORPH_R2_SECRET_ACCESS_KEY:-}"
+export MISTER_MORPH_R2_BACKUP_INTERVAL="${MISTER_MORPH_R2_BACKUP_INTERVAL:-60}"
+# Testing only: 1 bypasses R2 and accepts data loss when a cloud container stops.
+export MISTER_MORPH_ALLOW_EPHEMERAL_STATE="${MISTER_MORPH_ALLOW_EPHEMERAL_STATE:-0}"
 
-# Optional: fixed auth token for `mistermorph serve`.
-# If left empty, deploy.sh will generate one during deployment.
-export MISTER_MORPH_SERVER_AUTH_TOKEN=""
-
-# Optional: Telegram bot token (only if you need telegram mode later).
-export MISTER_MORPH_TELEGRAM_BOT_TOKEN=""
-
-# Optional: Wrangler target environment (for example: "prod", "staging").
-export WRANGLER_ENV=""
-
-# Optional: custom config.yaml path (absolute or relative).
-# Example: /home/you/morph/config.prod.yaml
-export MISTER_MORPH_CONFIG_PATH=""
-
-# Optional runtime overrides (deploy.sh passes them to wrangler via --var).
-export MISTER_MORPH_LLM_PROVIDER=""
-export MISTER_MORPH_LLM_ENDPOINT=""
-export MISTER_MORPH_LLM_MODEL=""
-export MISTER_MORPH_LOG_LEVEL=""
-export MISTER_MORPH_TOOLS_BASH_ENABLED=""
-# Optional run mode: "serve" (default) or "telegram".
-export MISTER_MORPH_RUN_MODE=""
-# Optional runtime paths. Leave empty to use defaults:
-# - MISTER_MORPH_WORKSPACE_DIR has no default; its directory must already exist
-# - MISTER_MORPH_FILE_STATE_DIR=/tmp/mistermorph/state
-# - MISTER_MORPH_FILE_CACHE_DIR=/tmp/mistermorph/cache
-export MISTER_MORPH_WORKSPACE_DIR=""
-export MISTER_MORPH_FILE_STATE_DIR=""
-export MISTER_MORPH_FILE_CACHE_DIR=""
-# Optional: set to 0 to enable bootstrap install in container entrypoint.
-# Default in Cloudflare deployment is 1 (skip).
-export MISTER_MORPH_SKIP_BOOTSTRAP_INSTALL=""
-
-# Optional: set to 1 to skip npm install.
-export SKIP_NPM_INSTALL=0
+# Optional: seed new Console state from a YAML file, uploaded as a Worker secret.
+# This does not overwrite config edited in Console or restored from R2.
+export MISTER_MORPH_CONFIG_PATH="${MISTER_MORPH_CONFIG_PATH:-}"
+# Optional: leave empty and complete model setup in Console.
+export MISTER_MORPH_LLM_API_KEY="${MISTER_MORPH_LLM_API_KEY:-}"
+export MISTER_MORPH_LLM_INFERENCE_PROVIDER="${MISTER_MORPH_LLM_INFERENCE_PROVIDER:-}"
+export MISTER_MORPH_LLM_ENDPOINT="${MISTER_MORPH_LLM_ENDPOINT:-}"
+export MISTER_MORPH_LLM_MODEL="${MISTER_MORPH_LLM_MODEL:-}"
+export MISTER_MORPH_LOG_LEVEL="${MISTER_MORPH_LOG_LEVEL:-}"
+export MISTER_MORPH_TOOLS_BASH_ENABLED="${MISTER_MORPH_TOOLS_BASH_ENABLED:-}"
+export SKIP_NPM_INSTALL="${SKIP_NPM_INSTALL:-0}"

@@ -8,7 +8,7 @@ Use target-specific READMEs for exact setup steps, env vars, and troubleshooting
 ## Quick Decision Guide
 
 1. Choose **AWS Lightsail** if you want the fastest container rollout for a Telegram bot and you are already on AWS.
-2. Choose **Cloudflare Worker + Container** if you want edge ingress and public HTTP access for `serve` mode.
+2. Choose **Cloudflare Worker + Container** if you want edge ingress and public access to Console with R2 state backups.
 3. Choose **systemd on VM/server** if you want maximum control over host, networking, storage, and hardening.
 
 ## Deployment Docs Index
@@ -16,7 +16,7 @@ Use target-specific READMEs for exact setup steps, env vars, and troubleshooting
 | Target | Best for | Entry doc |
 |---|---|---|
 | AWS Lightsail Containers | Telegram bot mode with simple one-command rollout | [`deploy/lightsail/README.md`](./lightsail/README.md) |
-| Cloudflare Worker + Container | Edge ingress + containerized `serve` mode (optional telegram mode) | [`deploy/cloudflare/README.md`](./cloudflare/README.md) |
+| Cloudflare Worker + Container | Edge ingress + containerized Console with R2 state backups | [`deploy/cloudflare/README.md`](./cloudflare/README.md) |
 | systemd on VM/server | Self-hosted Linux VM with hardened service unit | [`deploy/systemd/README.md`](./systemd/README.md) |
 
 ## Pros and Cons
@@ -37,13 +37,14 @@ Cons:
 
 Pros:
 - Edge front door with global ingress.
-- Strong fit for `serve` mode with HTTP API exposure.
+- Console UI and API behind one public endpoint.
 - Built-in request routing and lightweight control endpoints.
 
 Cons:
 - More moving parts (Worker + container + Wrangler).
 - Cloudflare platform coupling.
-- Operational model is less straightforward than plain VM + systemd.
+- R2 backups have a recovery window; container disk is ephemeral.
+- Console stays running and incurs continuous container usage.
 
 ### systemd on VM/server
 

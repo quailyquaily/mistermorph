@@ -1,133 +1,141 @@
-# Deploy MisterMorph to Cloudflare Containers
+# Deploy Console to Cloudflare Containers
 
-This folder contains a Cloudflare Worker + Container setup for `mistermorph serve`.
-
-## Files
-
-- `Dockerfile`: builds and runs `mistermorph` in daemon mode (`serve` on port `8787`)
-- `config.yaml`: container-side runtime config (`--config /app/config.yaml`)
-- `src/index.js`: Worker entrypoint, routes requests to container instances
-- `wrangler.jsonc`: Cloudflare Containers and Durable Object bindings
-- `env.example.sh`: environment variable template (`account id`, `api token`, LLM key, etc.)
-- `deploy.sh`: one-command deployment helper
-
-## Prerequisites
-
-- Docker
-- Node.js + npm
-- Cloudflare account
-- `wrangler` authentication completed (`npx wrangler login`)
+This target runs `mistermorph console serve` on port `8787`, behind a Worker.
+The image builds and embeds the Console frontend. The legacy standalone `serve`
+and `telegram` entrypoints are no longer supported by this target.
 
 ## Deploy
 
+You need Docker, Node.js, npm, a Cloudflare account with Containers access, and
+Wrangler authentication. The helper installs the pinned deployment dependencies
+with `npm ci`. The frontend build uses pnpm inside Docker.
+
+1. Create a private R2 bucket and S3 credentials with Object Read & Write access
+   scoped to that bucket. See [R2 credentials](https://developers.cloudflare.com/r2/api/tokens/).
+2. Copy `env.example.sh` to `env.sh` and fill in the Console password, a separate
+   administration token, and R2 settings. Choose a unique R2 prefix per deployment.
+3. Run:
+
 ```bash
 cd deploy/cloudflare
-cp env.example.sh env.sh
-# edit env.sh and fill real values
 ./deploy.sh
 ```
 
-Manual deploy (without helper script):
+The script loads `env.sh`. The example preserves values already exported in the
+shell. It requires an explicit administration token and never rotates one silently.
+Secrets are uploaded together with `wrangler secret bulk`; the script does not print
+their values. `WRANGLER_ENV` selects the target environment (`prod` in the example).
+For local Wrangler OAuth authentication, leave `CLOUDFLARE_API_TOKEN` unset and run
+`npx --no-install wrangler login` after installing dependencies.
+
+Open the Worker URL and sign in with `MISTER_MORPH_CONSOLE_PASSWORD`. Alternatively,
+set `MISTER_MORPH_CONSOLE_PASSWORD_HASH` to a bcrypt hash and sign in with its password.
+An LLM key is optional at deployment time: complete setup in Console, or configure
+`MISTER_MORPH_LLM_API_KEY`, `MISTER_MORPH_LLM_INFERENCE_PROVIDER`,
+`MISTER_MORPH_LLM_ENDPOINT`, and `MISTER_MORPH_LLM_MODEL` before deploying.
+
+The minimal `config.example.yaml` seeds new state. To use another seed, set
+`MISTER_MORPH_CONFIG_PATH` to an existing YAML file. The helper uploads its contents
+as `MISTER_MORPH_CONFIG_YAML`, a Worker secret; it never copies that file into the
+image. Seeds must fit the [5 KB Worker variable limit](https://developers.cloudflare.com/workers/platform/limits/#environment-variables);
+use a minimal YAML file rather than the full commented reference template.
+A seed applies only when state has no `config.yaml`. Later configuration
+changes belong in Console. To remove an old seed or optional API-key override,
+use `wrangler secret delete NAME` with the same config/environment.
+
+The helper accepts no CLI arguments: use `WRANGLER_ENV` and `WRANGLER_CONFIG_PATH`
+so secret uploads and deployment always target the same Worker. It is a deployment
+command, not a dry run.
+
+The root `.dockerignore` limits the build context to source inputs and excludes
+local credentials, generated assets, and dependencies. These rules live at the
+context root because Wrangler builds with a generated Dockerfile. Runtime images copy only
+the compiled program, entrypoint, and non-sensitive seed.
+
+## State and lifecycle
+
+Console uses `/data/state`, including `/data/state/config.yaml`. The entrypoint:
+
+- Restores `<R2_PREFIX>/state.tar.gz` before starting Console. A missing object
+  means new state; a failed R2 request or corrupt archive stops startup.
+- Uploads an archive every `MISTER_MORPH_R2_BACKUP_INTERVAL` seconds (default `60`).
+- Forwards shutdown signals to Console, waits for it to exit, then uploads a final
+  archive. A failed final backup produces a nonzero exit status.
+
+**R2 backup is not a persistent disk or a transaction across files.** An abrupt
+termination can lose writes since the last successful backup. A live backup can
+capture files at different points in time. Only state under `/data/state` is saved;
+cache files and paths outside it are not. Backup failures are logged. Monitor them
+and keep independent copies of important backups. The bucket contains configuration,
+conversation data, and possibly credentials entered in Console; keep it private.
+
+This implementation deliberately uses local files plus R2 backups, rather than
+putting application state on an object-storage FUSE mount with different filesystem
+semantics. For workloads requiring durable acknowledgement of every write, use a
+host with persistent storage. Cloudflare documents the [ephemeral disk lifecycle](https://developers.cloudflare.com/containers/concepts/architecture/).
+
+A single named instance (`default`) owns the state, with `max_instances: 1`.
+Requests cannot select another instance. Never run two deployments with the same
+bucket and prefix. Existing deployments with other instance IDs must stop those
+instances before migrating to this configuration.
+
+Console stays running when browser traffic is idle. A five-minute Cron Trigger
+starts it again after an unexpected exit. This incurs continuous container usage;
+it is not a scale-to-zero configuration. Platform restarts and deploys can still
+interrupt work. The admin stop endpoint pauses Cron recovery and browser access
+until an explicit admin start. Updating secrets does not change environment
+variables inside an already running container; restart it to apply them.
+
+For disposable tests only, `MISTER_MORPH_ALLOW_EPHEMERAL_STATE=1` disables R2 backup.
+Cloud deployments with this setting lose state on container replacement.
+
+## Authentication and administration
+
+Console handles browser login and runtime API authentication. The Worker permits
+requests to login and static assets before authentication, so an anonymous request
+can start the one configured instance. Apply Cloudflare Access or edge rate limits
+if you need to restrict access before container startup.
+
+Worker management endpoints require `MISTER_MORPH_SERVER_AUTH_TOKEN`; they reject
+requests if that token is absent. Console requests fail closed when neither a
+Console password nor password hash is configured.
 
 ```bash
-npx wrangler deploy --config ./wrangler.jsonc --env prod
+curl -H "Authorization: Bearer $MISTER_MORPH_SERVER_AUTH_TOKEN" \
+  https://<worker-domain>/_mistermorph/state
+curl -X POST -H "Authorization: Bearer $MISTER_MORPH_SERVER_AUTH_TOKEN" \
+  https://<worker-domain>/_mistermorph/stop
+curl -X POST -H "Authorization: Bearer $MISTER_MORPH_SERVER_AUTH_TOKEN" \
+  https://<worker-domain>/_mistermorph/start
 ```
 
-Optional env vars:
+`GET /_mistermorph/lifecycle` returns lifecycle information. Start and stop require
+POST. Stop initiates graceful shutdown; poll state until it has stopped before
+starting again. The old `hard=1` operation is rejected so shutdown can save state.
 
-- `MISTER_MORPH_SERVER_AUTH_TOKEN`: bearer token for `mistermorph serve` (auto-generated if omitted)
-- `MISTER_MORPH_TELEGRAM_BOT_TOKEN`: if you want to run Telegram mode later
-- `WRANGLER_ENV`: target wrangler environment
-- `SKIP_NPM_INSTALL=1`: skip `npm install`
-- `WRANGLER_CONFIG_PATH`: override wrangler config path (default: `./wrangler.jsonc`)
-- `MISTER_MORPH_CONFIG_PATH`: custom `config.yaml` path (default: `./config.yaml`)
-- `MISTER_MORPH_LLM_PROVIDER` / `MISTER_MORPH_LLM_ENDPOINT` / `MISTER_MORPH_LLM_MODEL`
-- `MISTER_MORPH_LOG_LEVEL` / `MISTER_MORPH_TOOLS_BASH_ENABLED`
-- `MISTER_MORPH_RUN_MODE` (`serve` or `telegram`)
-- `MISTER_MORPH_WORKSPACE_DIR` (optional default project directory; the directory must exist in the container)
-- `MISTER_MORPH_FILE_STATE_DIR` / `MISTER_MORPH_FILE_CACHE_DIR` (defaults: `/tmp/mistermorph/state`, `/tmp/mistermorph/cache`)
-- `MISTER_MORPH_SKIP_BOOTSTRAP_INSTALL` (`1` to skip `mistermorph install --yes` in entrypoint; Cloudflare default is `1`)
-
-`config.yaml` stores non-sensitive defaults. Secrets still come from Cloudflare secrets env vars:
-
-- `CLOUDFLARE_ACCOUNT_ID`
-- `CLOUDFLARE_API_TOKEN`
-- `MISTER_MORPH_LLM_API_KEY`
-- `MISTER_MORPH_SERVER_AUTH_TOKEN`
-
-`deploy.sh` will auto-load `./env.sh` if the file exists.
-If `MISTER_MORPH_CONFIG_PATH` is set, `deploy.sh` will stage that file into the image for this deployment only.
-If runtime override vars (above) are set in shell, `deploy.sh` passes them to Wrangler with `--var`.
-
-Example with an external config path:
+View logs with:
 
 ```bash
-MISTER_MORPH_CONFIG_PATH="/absolute/path/to/config.yaml" ./deploy.sh
+npx --no-install wrangler tail --config ./wrangler.jsonc --env prod
 ```
 
-Run in Telegram mode:
+## Local verification
 
 ```bash
-MISTER_MORPH_RUN_MODE="telegram" \
-MISTER_MORPH_TELEGRAM_BOT_TOKEN="123456:bot-token" \
-./deploy.sh
+node --test deploy/cloudflare/*.test.mjs
 ```
 
-Recommended:
-- Set `telegram.allowed_chat_ids` in your `config.yaml`.
-- Keep `MISTER_MORPH_TELEGRAM_BOT_TOKEN` in secret env (not in config file).
-
-## Observe runtime status
-
-Tail deployment/runtime logs:
+Tests use fake cloud commands and do not connect to Cloudflare or a database.
+To build and run the full Console image locally:
 
 ```bash
-npx wrangler tail --config ./wrangler.jsonc --env prod
+cd deploy/cloudflare
+./run-local.sh
+# Or seed an empty volume from a YAML file:
+./run-local.sh ./custom.yaml
 ```
 
-Look for:
-- `mistermorph_boot mode=telegram` (container entrypoint started in telegram mode)
-- `telegram_start` (mistermorph telegram loop started)
-
-Container control/state endpoints (protected by `MISTER_MORPH_SERVER_AUTH_TOKEN`):
-
-```bash
-curl -X POST -H "Authorization: Bearer <token>" "https://<worker-domain>/_mistermorph/start?instance=default"
-curl -X POST -H "Authorization: Bearer <token>" "https://<worker-domain>/_mistermorph/stop?instance=default"
-# hard stop + destroy container process:
-curl -X POST -H "Authorization: Bearer <token>" "https://<worker-domain>/_mistermorph/stop?instance=default&hard=1"
-curl -H "Authorization: Bearer <token>" "https://<worker-domain>/_mistermorph/state?instance=default"
-curl -H "Authorization: Bearer <token>" "https://<worker-domain>/_mistermorph/lifecycle?instance=default"
-```
-
-In telegram mode, normal HTTP proxy endpoints are not used; requests return a mode/status JSON response.
-
-## Common errors
-
-- `Unexpected fields found in containers field: "disk"`:
-  - This has been removed from `wrangler.jsonc`; use `instance_type` only.
-- `No environment found in configuration with name "prod"`:
-  - Ensure `WRANGLER_ENV=prod` only when `env.prod` exists in `wrangler.jsonc`.
-- `Authentication error [code: 10000]`:
-  - Usually means `CLOUDFLARE_ACCOUNT_ID`/`CLOUDFLARE_API_TOKEN` is invalid or token permissions are insufficient.
-  - Quick checks:
-    - `npx wrangler whoami`
-    - `echo \"$CLOUDFLARE_ACCOUNT_ID\"`
-    - Confirm the API token includes Workers deploy permissions for that account.
-  - If you use OAuth login locally, try unsetting token env vars:
-    - `unset CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID`
-    - `npx wrangler login`
-    - rerun `./deploy.sh`
-
-## Routing
-
-- Default instance: all requests
-- Select instance via query param: `?instance=my-session`
-
-Example:
-
-```bash
-curl -H "Authorization: Bearer <token>" "https://<worker-domain>/health"
-```
-
-(` /health` applies to `serve` mode. For `telegram` mode use `/_mistermorph/state`.)
+Open `http://127.0.0.1:8787`. Local runs save state in the named Docker volume
+`mistermorph-console-state`, and do not read or write the cloud R2 backup. Set
+`MISTER_MORPH_LOCAL_STATE_VOLUME` for a separate test installation. An existing
+volume keeps its Console configuration even if you supply a different seed.

@@ -1,0 +1,13 @@
+# Keep the Lightsail build inputs (including its staged runtime config) available
+# when the root Cloudflare build context is filtered.
+.git
+**/node_modules
+go.work
+go.work.sum
+**/env.sh
+**/.env
+**/.env.*
+/config.yaml
+/dump
+/bin
+/dist
