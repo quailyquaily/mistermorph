@@ -308,6 +308,56 @@ func TestTopicsRoutesListAndDelete(t *testing.T) {
 	})
 }
 
+func TestTopicsRouteCreatesEmptyTopic(t *testing.T) {
+	var gotTitle string
+	mux := http.NewServeMux()
+	RegisterRoutes(mux, RoutesOptions{
+		Mode:      "console",
+		AuthToken: "token",
+		TaskTopic: TaskTopicRoutes{CreateTopic: func(title string) (TopicInfo, error) {
+			gotTitle = title
+			return TopicInfo{ID: "topic_new", Title: title}, nil
+		}},
+	})
+
+	for _, tc := range []struct {
+		name, body, wantTitle string
+	}{
+		{name: "titled", body: `{"title":"  Probe  "}`, wantTitle: "Probe"},
+		{name: "empty body", body: "", wantTitle: ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/topics", strings.NewReader(tc.body))
+			req.Header.Set("Authorization", "Bearer token")
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusCreated {
+				t.Fatalf("status = %d, want %d (%s)", rec.Code, http.StatusCreated, rec.Body.String())
+			}
+			var payload TopicInfo
+			if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+				t.Fatalf("json.Unmarshal() error = %v", err)
+			}
+			if payload.ID != "topic_new" || gotTitle != tc.wantTitle {
+				t.Fatalf("payload = %+v, title = %q, want topic_new with %q", payload, gotTitle, tc.wantTitle)
+			}
+		})
+	}
+
+	t.Run("without creator", func(t *testing.T) {
+		mux := http.NewServeMux()
+		RegisterRoutes(mux, RoutesOptions{Mode: "telegram", AuthToken: "token", TaskTopic: TaskTopicRoutes{TopicReader: &stubTopicStore{}}})
+		req := httptest.NewRequest(http.MethodPost, "/topics", strings.NewReader(`{}`))
+		req.Header.Set("Authorization", "Bearer token")
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		if rec.Code != http.StatusMethodNotAllowed {
+			t.Fatalf("status = %d, want %d", rec.Code, http.StatusMethodNotAllowed)
+		}
+	})
+}
+
 func TestTopicsRouteDeleteDistinguishesNotFoundAndPersistenceFailure(t *testing.T) {
 	t.Run("not found", func(t *testing.T) {
 		mux := http.NewServeMux()

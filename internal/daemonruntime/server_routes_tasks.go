@@ -20,6 +20,7 @@ func (routes *routeRegistration) registerTaskRoutes() {
 	reader := opts.TaskReader
 	topicReader := opts.TopicReader
 	topicDeleter := opts.TopicDeleter
+	createTopic := opts.CreateTopic
 	submit := opts.Submit
 	stop := opts.Stop
 
@@ -136,6 +137,29 @@ func (routes *routeRegistration) registerTaskRoutes() {
 			})
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(page)
+			return
+		case http.MethodPost:
+			if createTopic == nil {
+				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+			var req CreateTopicRequest
+			if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+				http.Error(w, "invalid json", http.StatusBadRequest)
+				return
+			}
+			topic, err := createTopic(strings.TrimSpace(req.Title))
+			if err != nil {
+				if msg, ok := badRequestMessage(err); ok {
+					http.Error(w, msg, http.StatusBadRequest)
+					return
+				}
+				http.Error(w, strings.TrimSpace(err.Error()), http.StatusServiceUnavailable)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(topic)
 			return
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

@@ -178,16 +178,28 @@ func (s *ConsoleFileStore) ApplyConfig(opts ConsoleFileStoreOptions) error {
 	return nil
 }
 
+// CreateTopic creates an empty topic with a seed title, which a generated title may replace.
 func (s *ConsoleFileStore) CreateTopic(title string) (TopicInfo, error) {
+	return s.createTopic(title, false)
+}
+
+// CreateNamedTopic creates an empty topic whose title, when given, is the user's own: generated
+// titles leave it alone. Without a title the topic is named after its first task.
+func (s *ConsoleFileStore) CreateNamedTopic(title string) (TopicInfo, error) {
+	return s.createTopic(title, strings.TrimSpace(title) != "")
+}
+
+func (s *ConsoleFileStore) createTopic(title string, customized bool) (TopicInfo, error) {
 	if s == nil {
 		return TopicInfo{}, fmt.Errorf("console task store is nil")
 	}
 	now := time.Now().UTC()
 	topic := TopicInfo{
-		ID:        buildConsoleTopicID(),
-		Title:     strings.TrimSpace(title),
-		CreatedAt: now,
-		UpdatedAt: now,
+		ID:              buildConsoleTopicID(),
+		Title:           strings.TrimSpace(title),
+		TitleCustomized: customized,
+		CreatedAt:       now,
+		UpdatedAt:       now,
 	}
 
 	unlock, err := s.lockShared()

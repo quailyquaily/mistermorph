@@ -5,7 +5,7 @@ Two standalone OpenAPI 3.0.3 documents are available:
 
 | Document | Scope |
 | --- | --- |
-| [Control](runtime-api.control.openapi.yaml) | 12 paths, 14 operations: health, task submission, status and final results, topic history, cancellation, approval queries and decisions, and the Console task WebSocket. Start here for an external process client. |
+| [Control](runtime-api.control.openapi.yaml) | 12 paths, 15 operations: health, topic creation, task submission, status and final results, topic history, cancellation, approval queries and decisions, and the Console task WebSocket. Start here for an external process client. |
 | [Full](runtime-api.full.openapi.yaml) | All Control operations plus workspace, files, contacts, schedules, observability, settings, provider login and setup routes mounted under the runtime base URL. |
 
 Both files can be imported independently into an OpenAPI viewer or client
@@ -99,8 +99,11 @@ assume every runtime returns a string or an identical result envelope.
 
 For an ordinary Console submission, omitting `topic_id` creates a topic.
 Supplying it continues an existing topic; an unknown explicit ID is rejected.
-There is no empty-topic creation endpoint. Save the returned ID before sending
-another message:
+To hold a topic ID before the first message (for example to attach a
+workspace first), create an empty topic with `POST /topics`, optionally with
+`{"title": "..."}`; it answers 201 with the `TopicInfo`. A given title is kept;
+without one, the topic is named after its first message. Save the returned ID
+before sending another message:
 
 ```bash
 jq -n --arg topic "$MORPH_TOPIC_ID" \

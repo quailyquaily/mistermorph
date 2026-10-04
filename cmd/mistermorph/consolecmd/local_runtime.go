@@ -1282,6 +1282,9 @@ func (r *consoleLocalRuntime) routesOptions(authToken string) daemonruntime.Rout
 			TaskReader:   r.store,
 			TopicReader:  r.store,
 			TopicDeleter: topicDeleterFunc(r.deleteTopic),
+			CreateTopic: func(title string) (daemonruntime.TopicInfo, error) {
+				return r.store.CreateNamedTopic(sanitizeConsoleTopicTitle(title))
+			},
 			SetTopicTags: r.store.SetTopicTags,
 			TopicLayout: func() (topicstate.Layout, error) {
 				return topicstate.LoadLayout(paths.StateDir)

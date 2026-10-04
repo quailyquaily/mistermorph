@@ -92,7 +92,9 @@ func (r *consoleLocalRuntime) acceptTask(generation *consoleLocalRuntimeGenerati
 		}
 		validatedWorkspaceDir = dir
 	}
-	autoRenameTopic := topicID == "" && explicitTopicTitle == ""
+	// A new topic is named after its first task; so is an existing one still without a title,
+	// such as one made empty with POST /topics. maybeRefreshTopicTitle leaves named topics alone.
+	autoRenameTopic := explicitTopicTitle == "" && (topicID == "" || r.topicAwaitsTitle(topicID))
 	topicTitle = explicitTopicTitle
 	if topicID == "" {
 		topicTitle = seedConsoleTopicTitle(task, explicitTopicTitle)
@@ -364,4 +366,14 @@ func shouldAutoRenameConsoleTopic(topicID string, task string, currentTitle stri
 		return false
 	}
 	return currentTitle == seedConsoleTopicTitle(task, "")
+}
+
+// topicAwaitsTitle reports whether a topic exists with no title yet and nothing that names it.
+func (r *consoleLocalRuntime) topicAwaitsTitle(topicID string) bool {
+	if r == nil || r.store == nil {
+		return false
+	}
+	topic, ok := r.store.GetTopic(topicID)
+	return ok && topic != nil && strings.TrimSpace(topic.Title) == "" && !topic.TitleCustomized &&
+		topic.TitleRevision == 0 && topic.LLMTitleGeneratedAt == nil
 }

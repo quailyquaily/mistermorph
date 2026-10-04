@@ -1035,3 +1035,35 @@ func mustParseTime(t *testing.T, raw string) time.Time {
 	}
 	return parsed.UTC()
 }
+
+func TestCreateNamedTopicKeepsAGivenTitle(t *testing.T) {
+	store, err := NewConsoleFileStore(ConsoleFileStoreOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	named, err := store.CreateNamedTopic("  Release checklist ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if named.Title != "Release checklist" || !named.TitleCustomized {
+		t.Fatalf("named topic = %+v, want a customized title", named)
+	}
+	// A generated title leaves a chosen one alone.
+	if err := store.SetTopicTitleFromLLM(named.ID, named.Title, "Something else", "code"); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := store.GetTopic(named.ID); got == nil || got.Title != "Release checklist" {
+		t.Fatalf("title after generation = %+v", got)
+	}
+	unnamed, err := store.CreateNamedTopic("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if unnamed.Title != "" || unnamed.TitleCustomized {
+		t.Fatalf("unnamed topic = %+v, want no title and not customized", unnamed)
+	}
+	// CreateTopic's seed title stays open to a generated one.
+	if seeded, _ := store.CreateTopic("seed"); seeded.TitleCustomized {
+		t.Fatalf("seeded topic = %+v, want not customized", seeded)
+	}
+}

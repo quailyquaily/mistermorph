@@ -222,3 +222,28 @@ func TestConsoleTopicNamingKeepsExistingTitleOnFailureOrManualEdit(t *testing.T)
 		})
 	}
 }
+
+func TestTopicAwaitsTitleOnlyForUntitledTopics(t *testing.T) {
+	store, err := daemonruntime.NewConsoleFileStore(daemonruntime.ConsoleFileStoreOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rt := &consoleLocalRuntime{store: store}
+	untitled, _ := store.CreateNamedTopic("")
+	named, _ := store.CreateNamedTopic("Mine")
+	seeded, _ := store.CreateTopic("seed")
+	for _, tc := range []struct {
+		name string
+		id   string
+		want bool
+	}{
+		{"untitled", untitled.ID, true},
+		{"named", named.ID, false},
+		{"seeded", seeded.ID, false},
+		{"missing", "nope", false},
+	} {
+		if got := rt.topicAwaitsTitle(tc.id); got != tc.want {
+			t.Errorf("%s: topicAwaitsTitle = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}

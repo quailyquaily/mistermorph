@@ -40,6 +40,10 @@ type SubmitTaskResponse struct {
 	SteerTargetTaskID string     `json:"steer_target_task_id,omitempty"`
 }
 
+type CreateTopicRequest struct {
+	Title string `json:"title,omitempty"`
+}
+
 type StopTaskRequest struct {
 	TaskID  string `json:"task_id,omitempty"`
 	TopicID string `json:"topic_id,omitempty"`

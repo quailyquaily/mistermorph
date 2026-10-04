@@ -130,9 +130,12 @@ type TopicMetadataContext struct {
 }
 
 type TaskTopicRoutes struct {
-	TaskReader           TaskReader
-	TopicReader          TopicReader
-	TopicDeleter         TopicDeleter
+	TaskReader   TaskReader
+	TopicReader  TopicReader
+	TopicDeleter TopicDeleter
+	// CreateTopic creates an empty topic, so a client can hold its ID before the first task;
+	// nil when the runtime creates topics only through task submission.
+	CreateTopic          func(title string) (TopicInfo, error)
 	Submit               SubmitFunc
 	Stop                 StopFunc
 	TopicMetadata        TopicMetadataFunc

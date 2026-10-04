@@ -291,8 +291,8 @@ paths:
       tags:
       - Topics
       summary: List topics by most recent update
-      description: Requires a topic reader. There is no POST /topics; Console creates a topic when a task
-        is first submitted without topic_id.
+      description: Requires a topic reader. Console also creates a topic when a task is first submitted
+        without topic_id.
       parameters:
       - name: limit
         in: query
@@ -316,6 +316,39 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TopicPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+    post:
+      operationId: createTopic
+      tags:
+      - Topics
+      summary: Create an empty topic
+      description: Creates a topic with no tasks, so a client holds its ID before the first submission and
+        can attach a workspace to it. Pass the returned id as topic_id. The body and title are optional;
+        a title has its whitespace folded and is cut to 72 characters, and is kept as given (generated
+        titles do not replace it). Without one, the topic is named after its first task. A runtime
+        without a topic creator (only Console has one) returns 405. The JSON decoder reads up to 1 MiB.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTopicRequest'
+            example:
+              title: Release checklist
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicInfo'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -4558,6 +4591,12 @@ components:
       - created_at
       - updated_at
       x-source: internal/taskdomain/domain.go:TopicInfo
+    CreateTopicRequest:
+      type: object
+      properties:
+        title:
+          type: string
+      x-source: internal/daemonruntime/types.go:CreateTopicRequest
     SubmitTaskRequest:
       type: object
       properties:
