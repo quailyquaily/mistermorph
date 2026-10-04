@@ -35,10 +35,29 @@
   padding-left: var(--content-gutter-x);
 }
 
+/* The month on the left, the way to move through months on the right: Today, then ‹ ›. */
 .todo-calendar-month-nav {
-  justify-content: flex-end;
-  gap: 6px;
+  justify-content: space-between;
+  gap: 12px;
   padding-right: var(--content-gutter-x);
+}
+
+.todo-calendar-month-steps {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+}
+
+/* A compact outlined button, lighter than the header's icon buttons are tall. Quail's button
+   styles load later, so the size is marked important. */
+.todo-calendar-today.q-button {
+  height: 26px !important;
+  min-height: 26px;
+  margin-right: 6px;
+  padding: 0 10px !important;
+  border: 1px solid var(--line-soft) !important;
+  font-size: var(--font-size-meta);
 }
 
 .todo-calendar-month-nav .icon {
@@ -48,13 +67,15 @@
 }
 
 .todo-calendar-month-title {
-  min-width: 15ch;
+  min-width: 0;
   margin: 0;
+  overflow: hidden;
   color: var(--text-0);
-  font-size: var(--font-size-body);
+  font-size: 1.125rem;
   font-weight: 680;
   line-height: 1.2;
-  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .todo-calendar-add {
@@ -80,17 +101,30 @@
   white-space: nowrap;
 }
 
-.todo-view-tabs {
+/* One toggle switches between the list and the calendar (as the tag toggle does in Chat); it sits
+   against the add button, without the header's gap between them. */
+.todo-view-toggle {
   flex: 0 0 auto;
-  min-width: 0;
+  min-width: 32px;
+  min-height: 32px;
+  margin-left: auto;
+  padding: 0 6px !important;
 }
 
-.todo-view-tabs .app-tabs-option {
-  flex: 0 0 auto;
+.todo-view-toggle .icon {
+  width: 14px;
+  min-width: 14px;
+  height: 14px;
 }
 
-.todo-view-tabs .app-tabs-option-label {
-  white-space: nowrap;
+.todo-view-toggle.is-active {
+  color: var(--q-c-blue) !important;
+  background: color-mix(in srgb, var(--q-c-blue) 12%, transparent) !important;
+}
+
+.todo-view-toggle + .todo-index-new,
+.todo-view-toggle + .todo-calendar-add {
+  margin-left: -12px;
 }
 
 .todo-calendar-weekdays,
@@ -143,6 +177,25 @@
 
 .todo-calendar-day:not(.is-outside) {
   background: var(--q-bg-white);
+}
+
+/* Weekends (the week starts on Sunday) carry a faint tint, so a week reads at a glance. */
+.todo-calendar-day:not(.is-outside):is(:nth-child(7n + 1), :nth-child(7n)) {
+  background: color-mix(in srgb, var(--q-c-blue) 2.5%, var(--q-bg-white));
+}
+
+.todo-calendar-weekdays > span:is(:first-child, :last-child) {
+  color: color-mix(in srgb, var(--text-2) 70%, transparent);
+}
+
+/* Today stays easy to find while another day is selected. */
+.todo-calendar-day.is-today:not(.is-outside) {
+  background: color-mix(in srgb, var(--q-c-blue) 6%, var(--q-bg-white));
+}
+
+/* Day cells size their task chips (container queries below). */
+.todo-calendar-day {
+  container-type: inline-size;
 }
 
 .todo-calendar-day:not(.is-selected):hover {
@@ -263,20 +316,34 @@
   font-family: var(--font-mono);
 }
 
-/* Month cells are narrow: status, then the run time (never truncated), then the title. */
+/* In a month cell the title leads, the run time follows smaller; a cell too narrow for both shows
+   the title only (the time stays in the tooltip). */
 .todo-calendar-day .todo-calendar-entry {
-  grid-template-columns: 7px auto minmax(0, 1fr);
+  grid-template-columns: 6px minmax(0, 1fr) auto;
+  gap: 6px;
+  padding: 3px 6px 3px 5px;
+  border-radius: 2px;
+}
+
+.todo-calendar-day .todo-calendar-status {
+  width: 6px;
+  height: 6px;
+  border-radius: 1px;
 }
 
 .todo-calendar-day .todo-calendar-entry-meta {
-  grid-column: 2;
-  grid-row: 1;
   overflow: visible;
+  font-size: 10.5px;
 }
 
-.todo-calendar-day .todo-calendar-entry-title {
-  grid-column: 3;
-  grid-row: 1;
+@container (max-width: 132px) {
+  .todo-calendar-day .todo-calendar-entry {
+    grid-template-columns: 6px minmax(0, 1fr);
+  }
+
+  .todo-calendar-day .todo-calendar-entry-meta {
+    display: none;
+  }
 }
 
 .todo-calendar-entry-title {
@@ -387,8 +454,13 @@
     padding: 0 var(--content-gutter-x) 8px;
   }
 
-  .todo-calendar-month-nav .todo-calendar-today {
-    margin-left: auto;
+  .todo-calendar-month-nav {
+    justify-content: space-between;
+  }
+
+  /* Phones add a TODO with the floating button, as the list does. */
+  .todo-calendar-add.q-button {
+    display: none !important;
   }
 
   .todo-calendar-weekdays > span {
@@ -464,8 +536,8 @@
 
   .todo-calendar-agenda-head strong {
     color: var(--text-0);
-    font-family: var(--font-mono);
     font-size: var(--font-size-ui);
+    font-weight: 650;
   }
 
   .todo-calendar-agenda > p {
@@ -488,6 +560,6 @@
 
 @media (max-width: 520px) {
   .todo-calendar-month-title {
-    min-width: 12ch;
+    font-size: var(--font-size-body);
   }
 }

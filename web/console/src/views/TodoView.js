@@ -21,6 +21,7 @@ import channelLarkLogoURL from "../assets/images/channels/lark.svg";
 import channelLineLogoURL from "../assets/images/channels/line.svg";
 import channelSlackLogoURL from "../assets/images/channels/slack.svg";
 import channelTelegramLogoURL from "../assets/images/channels/telegram.svg";
+import AppSkeleton from "../components/AppSkeleton";
 
 const REPEAT_KINDS = [
   { id: "hourly", labelKey: "todo_repeat_hourly" },
@@ -676,6 +677,7 @@ function normalizeTaskBeforeSave(task) {
 
 const TodoView = {
   components: {
+    AppSkeleton,
     AppFab,
     AppPage,
     AppMarkdownEditor,
@@ -731,11 +733,6 @@ const TodoView = {
     const heartbeatEnabled = ref(true);
     const runningTaskKey = ref("");
     const calendarView = computed(() => trimText(route.query.view).toLowerCase() === "calendar");
-    const todoViewTabs = computed(() => [
-      { id: "list", title: t("todo_view_list") },
-      { id: "calendar", title: t("todo_view_calendar") },
-    ]);
-    const selectedTodoViewTab = computed(() => todoViewTabs.value[calendarView.value ? 1 : 0]);
 
     const heartbeatSelected = computed(() => selectedTaskKey.value === HEARTBEAT_ITEM_KEY);
     const heartbeatDisabled = computed(() => heartbeatEnabled.value === false);
@@ -968,8 +965,9 @@ const TodoView = {
       void router.push({ query });
     }
 
-    function onTodoViewChange(detail) {
-      setTodoView(detail?.tab?.id === "calendar" ? "calendar" : "list");
+    // One toggle switches between the list and the calendar.
+    function toggleTodoView() {
+      setTodoView(calendarView.value ? "list" : "calendar");
     }
 
     function taskTitle(task) {
@@ -2366,8 +2364,6 @@ const TodoView = {
       canRunSelectedTask,
       runningTaskKey,
       calendarView,
-      todoViewTabs,
-      selectedTodoViewTab,
       isMobile,
       showIndexPane,
       showEditorPane,
@@ -2434,7 +2430,7 @@ const TodoView = {
       selectTask,
       selectCalendarDate,
       showIndexView,
-      onTodoViewChange,
+      toggleTodoView,
       setTodoView,
       load,
       runSelectedTaskNow,
@@ -2480,13 +2476,15 @@ const TodoView = {
         <aside v-if="!calendarView && showIndexPane" class="todo-index workspace-sidebar-section" :aria-label="t('todo_nav_title')">
           <div class="todo-index-head workspace-sidebar-head">
             <h3 class="workspace-section-title todo-section-title">{{ t('todo_title') }}</h3>
-            <AppTabs
-              class="todo-view-tabs todo-index-view-tabs"
-              :tabs="todoViewTabs"
-              :modelValue="selectedTodoViewTab"
-              :ariaLabel="t('todo_nav_title')"
-              @change="onTodoViewChange"
-            />
+            <QButton
+              class="plain sm icon todo-view-toggle"
+              :title="t('todo_view_calendar')"
+              :aria-label="t('todo_view_calendar')"
+              aria-pressed="false"
+              @click="toggleTodoView"
+            >
+              <PhCalendarBlank class="icon" />
+            </QButton>
             <QButton
               v-if="!isMobile"
               class="plain sm icon todo-index-new"
@@ -2500,7 +2498,7 @@ const TodoView = {
 
           <div class="todo-index-body">
             <div v-if="loading || heartbeatLoading" class="todo-index-loading" aria-hidden="true">
-              <QSkeleton variant="card" height="60px" :count="3" />
+              <AppSkeleton variant="card" height="60px" :count="3" />
             </div>
 
             <section class="todo-index-group todo-heartbeat-group">

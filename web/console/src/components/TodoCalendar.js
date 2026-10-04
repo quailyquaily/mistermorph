@@ -2,9 +2,9 @@ import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import "./TodoCalendar.css";
 
-import AppTabs from "./AppTabs";
 import { currentLocale, translate } from "../core/context";
 import { projectTodoCalendar, visibleCalendarDays } from "../core/todo-calendar";
+import AppSkeleton from "./AppSkeleton";
 
 const MONTH_PATTERN = /^(\d{4})-(\d{2})$/;
 const DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
@@ -56,7 +56,7 @@ function browserTimezone() {
 }
 
 const TodoCalendar = {
-  components: { AppTabs },
+  components: { AppSkeleton },
   props: {
     tasks: { type: Array, default: () => [] },
     tasksLoading: { type: Boolean, default: false },
@@ -91,11 +91,6 @@ const TodoCalendar = {
       t("todo_weekday_fri"),
       t("todo_weekday_sat"),
     ]);
-    const viewTabs = computed(() => [
-      { id: "list", title: t("todo_view_list") },
-      { id: "calendar", title: t("todo_view_calendar") },
-    ]);
-    const selectedViewTab = computed(() => viewTabs.value[1]);
     const taskByID = computed(() => {
       const result = new Map();
       props.tasks.forEach((task) => {
@@ -229,11 +224,6 @@ const TodoCalendar = {
       });
     }
 
-    function onViewChange(detail) {
-      if (detail?.tab?.id === "list") {
-        emit("show-list");
-      }
-    }
 
     watch(
       activeMonthKey,
@@ -255,8 +245,6 @@ const TodoCalendar = {
       days,
       monthTitle,
       weekdayLabels,
-      viewTabs,
-      selectedViewTab,
       selectedDate,
       selectedDateTitle,
       selectedDateEntries,
@@ -275,7 +263,6 @@ const TodoCalendar = {
       toggleOverflow,
       setMonth,
       showToday,
-      onViewChange,
     };
   },
   template: `
@@ -283,13 +270,15 @@ const TodoCalendar = {
       <header class="todo-calendar-toolbar">
         <div class="todo-calendar-toolbar-primary">
           <h3 class="workspace-section-title todo-section-title">{{ t('todo_title') }}</h3>
-          <AppTabs
-            class="todo-view-tabs todo-calendar-view-tabs"
-            :tabs="viewTabs"
-            :modelValue="selectedViewTab"
-            :ariaLabel="t('todo_nav_title')"
-            @change="onViewChange"
-          />
+          <QButton
+            class="plain sm icon todo-view-toggle is-active"
+            :title="t('todo_view_list')"
+            :aria-label="t('todo_view_calendar')"
+            aria-pressed="true"
+            @click="$emit('show-list')"
+          >
+            <PhCalendarBlank class="icon" />
+          </QButton>
           <QButton
             class="plain sm icon todo-calendar-add"
             :title="t('todo_action_add')"
@@ -301,14 +290,16 @@ const TodoCalendar = {
         </div>
 
         <div class="todo-calendar-month-nav">
-          <QButton class="plain sm icon" :title="t('todo_calendar_previous')" :aria-label="t('todo_calendar_previous')" @click="setMonth(-1)">
-            <PhArrowLeft class="icon" />
-          </QButton>
           <h3 class="todo-calendar-month-title">{{ monthTitle }}</h3>
-          <QButton class="plain sm icon" :title="t('todo_calendar_next')" :aria-label="t('todo_calendar_next')" @click="setMonth(1)">
-            <PhArrowRight class="icon" />
-          </QButton>
-          <QButton class="plain sm todo-calendar-today" @click="showToday">{{ t("todo_calendar_today") }}</QButton>
+          <div class="todo-calendar-month-steps">
+            <QButton class="plain sm todo-calendar-today" @click="showToday">{{ t("todo_calendar_today") }}</QButton>
+            <QButton class="plain sm icon" :title="t('todo_calendar_previous')" :aria-label="t('todo_calendar_previous')" @click="setMonth(-1)">
+              <PhCaretLeft class="icon" />
+            </QButton>
+            <QButton class="plain sm icon" :title="t('todo_calendar_next')" :aria-label="t('todo_calendar_next')" @click="setMonth(1)">
+              <PhCaretRight class="icon" />
+            </QButton>
+          </div>
         </div>
       </header>
 
@@ -317,7 +308,7 @@ const TodoCalendar = {
       </div>
 
       <div v-if="tasksLoading" class="todo-calendar-loading" aria-hidden="true">
-        <QSkeleton variant="card" height="118px" :count="3" />
+        <AppSkeleton variant="card" height="118px" :count="3" />
       </div>
 
       <div v-else class="todo-calendar-grid" role="grid">
