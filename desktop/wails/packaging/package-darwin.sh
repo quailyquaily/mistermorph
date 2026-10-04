@@ -3,8 +3,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-APP_BUNDLE_NAME="${APP_BUNDLE_NAME:-MisterMorph}"
-APP_DISPLAY_NAME="${APP_DISPLAY_NAME:-MisterMorph}"
+APP_BUNDLE_NAME="${APP_BUNDLE_NAME:-MrMorph}"
+APP_DISPLAY_NAME="${APP_DISPLAY_NAME:-MrMorph}"
 APP_EXECUTABLE_NAME="${APP_EXECUTABLE_NAME:-MrMorph}"
 BUNDLE_ID="${BUNDLE_ID:-com.mistermorph}"
 VERSION="${VERSION:-0.0.0}"

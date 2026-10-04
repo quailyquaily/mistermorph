@@ -85,9 +85,9 @@ If `CODESIGN_IDENTITY` is not set, the script uses ad hoc signing for local test
 Useful checks on macOS:
 
 ```bash
-codesign --verify --deep --strict --verbose=2 MisterMorph.app
-spctl --assess --type execute --verbose MisterMorph.app
-xcrun stapler validate MisterMorph.app
+codesign --verify --deep --strict --verbose=2 MrMorph.app
+spctl --assess --type execute --verbose MrMorph.app
+xcrun stapler validate MrMorph.app
 xcrun stapler validate MrMorph-darwin-arm64.dmg
 ```
 
