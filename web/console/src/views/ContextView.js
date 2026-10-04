@@ -132,8 +132,12 @@ const ContextView = {
     }
 
     // The first line of an item's text, as a preview in the item list.
+    // The first line of an item's text, as a preview in the item list. Headings ("## Persona",
+    // "[[ Persona ]]") only repeat the label, so the first line that is not one is used.
     function snippet(part) {
-      const line = String(part?.content || "").split("\n").map((text) => text.trim()).find(Boolean) || "";
+      const lines = String(part?.content || "").split("\n").map((text) => text.trim()).filter(Boolean);
+      const heading = /^(#{1,6}\s|\[\[.*\]\]$)/;
+      const line = lines.find((text) => !heading.test(text)) || lines[0] || "";
       return line.length > 160 ? `${line.slice(0, 160)}…` : line;
     }
 
@@ -287,7 +291,8 @@ const ContextView = {
             <header class="context-view-pane-head">
               <span class="context-view-swatch" aria-hidden="true"></span>
               <span class="context-view-pane-name">{{ partLabel(selected.kind) }}</span>
-              <span class="context-view-num">{{ formatTokens(selected.tokens) }}</span>
+              <span class="context-view-pane-count">{{ t("context_inspector_items", { count: selected.items.length }) }}</span>
+              <span class="context-view-num">{{ formatTokens(selected.tokens) }} {{ t("context_inspector_tokens") }}</span>
             </header>
             <button
               v-for="entry in selected.items"

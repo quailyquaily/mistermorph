@@ -424,9 +424,12 @@
 }
 
 /* Phones: one level at a time (overview, a part's items, an item's text), each the full width. */
+/* A column: each pane spans the full width (the desktop grid's align-items: start would shrink
+   them to their content). */
 .context-view.is-phone {
   display: flex;
   flex-direction: column;
+  align-items: stretch;
 }
 
 .is-phone .context-view-overview {
@@ -490,6 +493,11 @@
   display: none;
 }
 
+/* Rows open the text on a phone; none stays marked as selected. */
+.is-phone .context-view-item.is-selected:not(:hover) {
+  background: transparent;
+}
+
 .context-view-item-snippet {
   grid-area: snippet;
   min-width: 0;
@@ -515,7 +523,23 @@
 }
 
 .is-phone .context-view-pane-head {
-  padding: 0 4px;
+  padding: 0 4px 6px;
+  border-bottom: 1px solid var(--context-pane-line);
+}
+
+/* The bar names the part; its list's head says how many items it holds. */
+.context-view-pane-count {
+  display: none;
+  color: var(--text-2);
+  font-weight: 400;
+}
+
+.is-phone .context-view-items .context-view-pane-count {
+  display: inline;
+}
+
+.is-phone .context-view-items .context-view-swatch {
+  display: none;
 }
 
 .is-phone .context-view-text pre {
