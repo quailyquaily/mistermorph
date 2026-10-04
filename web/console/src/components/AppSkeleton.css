@@ -27,6 +27,33 @@
   width: 100%;
 }
 
+/* Cards: hairline boxes, each a title bar over a few text bars. */
+.app-skeleton.is-cards {
+  gap: 8px;
+  padding: 0;
+}
+
+.app-skeleton-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 44px;
+  padding: 14px 16px;
+  overflow: hidden;
+  border: 1px solid var(--line-soft);
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--q-bg-white) 60%, transparent);
+}
+
+.app-skeleton-card .app-skeleton-bar {
+  flex: 0 0 auto;
+}
+
+.app-skeleton-card .app-skeleton-bar.is-title {
+  height: 10px;
+  background: color-mix(in srgb, var(--q-c-dark-4) 62%, transparent);
+}
+
 @keyframes app-skeleton-pulse {
   50% {
     opacity: 0.45;

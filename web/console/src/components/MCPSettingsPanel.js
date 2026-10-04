@@ -4,6 +4,7 @@ import AppTabs from "./AppTabs";
 import SettingDialog from "./SettingDialog";
 import { translate } from "../core/context";
 import "./MCPSettingsPanel.css";
+import AppSkeleton from "./AppSkeleton";
 
 let mcpKeySeed = 0;
 
@@ -40,7 +41,7 @@ function emptyServer() {
 }
 
 const MCPSettingsPanel = {
-  components: { AppTabs, SettingDialog },
+  components: { AppSkeleton, AppTabs, SettingDialog },
   props: {
     modelValue: { type: Array, default: () => [] },
     loading: { type: Boolean, default: false },
@@ -209,8 +210,7 @@ const MCPSettingsPanel = {
 
           <div class="settings-panel-body mcp-settings-body">
             <div v-if="loading" class="mcp-settings-skeleton" aria-hidden="true">
-              <QSkeleton height="72px" />
-              <QSkeleton height="72px" />
+              <AppSkeleton variant="card" height="72px" :count="2" />
             </div>
 
             <div v-else-if="!servers.length" class="mcp-settings-empty">

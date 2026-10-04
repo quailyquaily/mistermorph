@@ -573,7 +573,7 @@ const SkillsView = {
               <input v-model="query" type="search" :placeholder="t('skills_search')" :aria-label="t('skills_search')" />
             </label>
             <div v-if="loading && !skills.length && !unsupported" class="skills-index-loading" aria-hidden="true">
-              <QSkeleton variant="card" height="52px" :count="3" />
+              <AppSkeleton variant="card" height="52px" :count="3" />
             </div>
             <p v-else-if="unsupported" class="skills-index-note">{{ t('skills_unsupported') }}</p>
             <p v-else-if="!skills.length" class="skills-index-note">{{ t('skills_empty_add_note', { path: skillsRoot }) }}</p>
@@ -696,7 +696,7 @@ const SkillsView = {
                 </header>
                 <QFence v-if="detail && detail.truncated" type="warning" :text="t('skills_content_truncated')" />
                 <div v-if="detailLoading && !detail" class="skills-index-loading" aria-hidden="true">
-                  <QSkeleton variant="card" height="120px" :count="1" />
+                  <AppSkeleton variant="card" height="120px" :count="1" />
                 </div>
                 <MarkdownContent v-else-if="documentSource" class="skills-doc-body" :source="documentSource" />
               </section>

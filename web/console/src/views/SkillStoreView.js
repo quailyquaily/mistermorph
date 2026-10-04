@@ -14,6 +14,7 @@ import {
   storeTags,
   stripFrontmatter,
 } from "../core/skills-install.js";
+import AppSkeleton from "../components/AppSkeleton";
 
 // How many tags a card shows; the sheet shows them all.
 const CARD_TAGS = 3;
@@ -21,7 +22,7 @@ const CARD_TAGS = 3;
 // The skill's details: its name and close in a fixed header, then Install, properties and SKILL.md
 // in a body that scrolls. Shown in the side panel (desktop) and the slide-in panel (phones).
 const StoreSkillDetail = {
-  components: { MarkdownContent },
+  components: { AppSkeleton, MarkdownContent },
   props: {
     skill: { type: Object, required: true },
     links: { type: Object, required: true },
@@ -106,7 +107,7 @@ const StoreSkillDetail = {
 
       <section class="store-doc" :aria-label="'SKILL.md'">
         <span class="store-doc-label">SKILL.md</span>
-        <QSkeleton v-if="doc.loading" variant="card" height="120px" :count="1" />
+        <AppSkeleton v-if="doc.loading" variant="card" height="120px" :count="1" />
         <p v-else-if="doc.failed" class="store-note">
           {{ t('skills_store_doc_failed') }}
           <a v-if="links.folder" :href="links.folder" target="_blank" rel="noopener noreferrer" class="store-link">GitHub</a>
@@ -122,6 +123,7 @@ const StoreSkillDetail = {
 // GitHub at the commit the store pins), and Install or Update, which start the same review in chat as Add skill.
 const SkillStoreView = {
   components: {
+    AppSkeleton,
     AppPage,
     StoreSkillDetail,
   },
@@ -358,7 +360,7 @@ const SkillStoreView = {
         </div>
 
         <div v-if="loading && !skills.length" class="store-grid" aria-hidden="true">
-          <QSkeleton v-for="n in 6" :key="n" variant="card" height="148px" :count="1" />
+          <AppSkeleton v-for="n in 6" :key="n" variant="card" height="148px" />
         </div>
         <p v-else-if="unsupported" class="store-note">{{ t('skills_store_unsupported') }}</p>
         <div v-else-if="error" class="store-note store-error">

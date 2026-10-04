@@ -15,6 +15,7 @@ import AppPage from "../components/AppPage";
 import ContactAvatar from "../components/ContactAvatar";
 import { currentLocale, endpointState, formatShortTime, formatTime, runtimeApiFetch, translate } from "../core/context";
 import { useContactsStore } from "../stores/contactsStore";
+import AppSkeleton from "../components/AppSkeleton";
 
 const CHANNEL_LOGOS = {
   discord: channelDiscordLogoURL,
@@ -198,6 +199,7 @@ function relativeTime(value) {
 
 const ContactsView = {
   components: {
+    AppSkeleton,
     AppPage,
     ContactAvatar,
   },
@@ -675,7 +677,7 @@ const ContactsView = {
             </div>
 
             <div v-if="loading" class="contacts-index-loading" aria-hidden="true">
-              <QSkeleton variant="card" height="62px" :count="4" />
+              <AppSkeleton variant="card" height="62px" :count="4" />
             </div>
             <QFence v-else-if="err" class="contacts-index-error" type="danger" icon="PhXCircle" :text="err" />
 
@@ -813,7 +815,7 @@ const ContactsView = {
             </header>
 
             <div v-if="editing" class="contacts-editor-body">
-              <QSkeleton v-if="editorLoading" variant="card" height="360px" :count="1" />
+              <AppSkeleton v-if="editorLoading" variant="card" height="360px" :count="1" />
               <template v-else>
                 <QFence v-if="editorErr" type="danger" icon="PhXCircle" :text="editorErr" />
                 <QTextarea
