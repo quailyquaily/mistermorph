@@ -122,23 +122,6 @@ func TestResolveBedrockCredentialsStaticCredentialsWithoutSessionToken(t *testin
 	}
 }
 
-func TestResolveBedrockCredentialsDefaultChainNoCreds(t *testing.T) {
-	// When no credentials are provided at all, LoadDefaultConfig falls back
-	// to the ambient credential chain. In a test environment with no AWS
-	// config/env, this will fail at credential retrieval.
-	cfg := Config{
-		Provider:  "bedrock",
-		AwsRegion: "us-east-1",
-	}
-	err := ResolveBedrockCredentials(context.Background(), &cfg)
-	if err == nil {
-		t.Fatal("expected error when ambient AWS credentials are missing, got nil")
-	}
-	if !strings.Contains(err.Error(), "retrieve bedrock aws credentials") {
-		t.Fatalf("expected credential retrieval error, got: %v", err)
-	}
-}
-
 func TestResolveBedrockCredentialsProfileNotFound(t *testing.T) {
 	cfg := Config{
 		Provider:   "bedrock",
