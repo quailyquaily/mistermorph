@@ -503,8 +503,27 @@ func (a *App) OpenDesktopLog() error {
 	return nil
 }
 
-func (a *App) CheckUpdate() (DesktopUpdateCheckResult, error) {
-	return updatecheck.Check(context.Background(), newDesktopUpdateCheckOptions(a.currentAutoUpdateConfig()))
+// CheckUpdate checks for an update. channel overrides the saved release
+// channel so the console can check a channel before it is saved; nil uses the
+// saved setting and an empty string the build channel.
+func (a *App) CheckUpdate(channel *string) (DesktopUpdateCheckResult, error) {
+	var logWriter io.Writer
+	if a != nil {
+		logWriter = a.logWriter
+	}
+	cfg := a.currentAutoUpdateConfig()
+	if channel != nil {
+		cfg.Channel = strings.TrimSpace(*channel)
+	}
+	opts := newDesktopUpdateCheckOptions(cfg)
+	resolvedChannel, _ := updatecheck.NormalizeChannel(opts.Channel)
+	manifestURL, _ := updatecheck.ResolveManifestURL(opts)
+	logDesktopUpdateEvent(logWriter, "check_update channel=%q manifest_url=%q", resolvedChannel, manifestURL)
+	result, err := updatecheck.Check(context.Background(), opts)
+	if err != nil {
+		logDesktopUpdateEvent(logWriter, "check_update_failed manifest_url=%q error=%q", manifestURL, compactDesktopLogValue(err.Error(), 1000))
+	}
+	return result, err
 }
 
 func (a *App) ReportFrontendReady() {

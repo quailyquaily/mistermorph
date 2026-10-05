@@ -96,8 +96,8 @@ Enable update checks in config:
 ```yaml
 auto_update:
   enabled: true
-  # Optional: community or pro. Empty follows the channel this build came from.
-  channel: ""
+  # Optional: community or pro. Defaults to the channel this build came from.
+  channel: community
 ```
 
 With this enabled, desktop startup checks the latest update manifest of the release channel, `https://downloads.mistermorph.com/<channel>/latest/update.json`, and downloads a verified update package into the user cache. `--check-update` also uses this setting to decide whether to download. It does not replace the running app yet; Wails v3 alpha.93 does not expose an updater service package, so applying the update still needs a platform-specific install/relaunch step in this repository.

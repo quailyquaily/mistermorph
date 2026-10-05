@@ -68,10 +68,11 @@ func (s *server) handleAutoUpdateCheck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// The channel query parameter checks a channel before it is saved;
-	// otherwise the configured channel is used.
-	channel := strings.TrimSpace(r.URL.Query().Get("channel"))
-	if channel == "" {
+	// The channel query parameter checks a channel before it is saved; an
+	// empty value means the build channel. Without it the saved channel is used.
+	query := r.URL.Query()
+	channel := strings.TrimSpace(query.Get("channel"))
+	if !query.Has("channel") {
 		configPath, err := resolveConsoleConfigPath()
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
@@ -92,13 +93,18 @@ func (s *server) handleAutoUpdateCheck(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), autoUpdateCheckTimeout)
 	defer cancel()
 
-	result, err := updatecheck.Check(ctx, updatecheck.Options{
+	opts := updatecheck.Options{
 		Channel:        channel,
 		CurrentVersion: s.autoUpdateCurrentVersion(),
 		ManifestURL:    autoUpdateManifestURL,
 		UserAgent:      consoleUpdateUserAgent,
-	})
+	}
+	resolvedChannel, _ := updatecheck.NormalizeChannel(channel)
+	manifestURL, _ := updatecheck.ResolveManifestURL(opts)
+	s.logger().Info("console_update_check", "channel", resolvedChannel, "manifest_url", manifestURL)
+	result, err := updatecheck.Check(ctx, opts)
 	if err != nil {
+		s.logger().Warn("console_update_check_failed", "channel", resolvedChannel, "manifest_url", manifestURL, "error", err.Error())
 		writeError(w, http.StatusBadGateway, err.Error())
 		return
 	}

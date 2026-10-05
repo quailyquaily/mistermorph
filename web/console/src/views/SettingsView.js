@@ -866,6 +866,7 @@ const SettingsView = {
     const desktopSettingsLoaded = ref(false);
     const desktopChecksumCopied = ref(false);
     const desktopChangelogField = ref(null);
+    const updateConfigPanel = ref(null);
     const systemLoading = ref(false);
     const systemSaving = ref(false);
     const systemSettingsLoaded = ref(false);
@@ -4496,10 +4497,16 @@ const SettingsView = {
       desktopChecksumCopied.value = false;
       const requestSeq = desktopSettingsRequestSeq;
       const targetEndpointRef = consoleEndpointRef.value;
+      // Check the channel shown in the dropdown, even before it is saved.
+      const draftChannel = updateConfigPanel.value?.draft?.["auto_update.channel"];
+      const channel = typeof draftChannel === "string" ? draftChannel.trim() : null;
+      const checkPath = channel === null
+        ? "/settings/auto-update/check"
+        : `/settings/auto-update/check?channel=${encodeURIComponent(channel)}`;
       try {
         const result = canCheckDesktopUpdate() && targetEndpointRef === LOCAL_CONSOLE_ENDPOINT_REF
-          ? await checkDesktopUpdate()
-          : await endpointApiFetch(targetEndpointRef, "/settings/auto-update/check", { method: "POST" });
+          ? await checkDesktopUpdate(channel)
+          : await endpointApiFetch(targetEndpointRef, checkPath, { method: "POST" });
         if (!isCurrentDesktopSettingsRequest(requestSeq, targetEndpointRef)) {
           return;
         }
@@ -5056,6 +5063,7 @@ const SettingsView = {
       desktopChecking,
       desktopChecksumCopied,
       desktopChangelogField,
+      updateConfigPanel,
       llmConfigPath,
       consoleConfigPath,
       agentConfigValues,
@@ -6571,6 +6579,7 @@ const SettingsView = {
             <QCard variant="default">
               <div class="settings-panel-shell">
                 <ConfigSettingsPanel
+                  ref="updateConfigPanel"
                   :groups="SYSTEM_UPDATE_CONFIG_GROUPS"
                   :values="systemConfigValues"
                   :fieldStates="systemFieldStates"

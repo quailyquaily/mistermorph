@@ -44,6 +44,9 @@ func TestReadAutoUpdateSettingsDefaultDisabled(t *testing.T) {
 	if got.AutoUpdate.Enabled {
 		t.Fatalf("auto update enabled = true, want false")
 	}
+	if got.AutoUpdate.Channel != updatecheck.BuildChannel() {
+		t.Fatalf("auto update channel = %q, want build channel %q", got.AutoUpdate.Channel, updatecheck.BuildChannel())
+	}
 }
 
 func TestWriteAutoUpdateSettingsPreservesOtherConfig(t *testing.T) {
@@ -376,6 +379,22 @@ func TestHandleAutoUpdateCheckOtherChannel(t *testing.T) {
 	}
 	if !payload.UpdateAvailable || !payload.ChannelSwitch || payload.Channel != other {
 		t.Fatalf("payload = %#v, want switch to %s", payload, other)
+	}
+
+	// An unsaved choice in the dropdown wins over the saved channel; empty
+	// means the build channel.
+	req = httptest.NewRequest(http.MethodPost, "/api/settings/auto-update/check?channel=", nil)
+	rec = httptest.NewRecorder()
+	(&server{cfg: serveConfig{version: "0.2.42"}}).handleAutoUpdateCheck(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d (%s)", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	payload = updatecheck.Result{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	if payload.ChannelSwitch || payload.Channel != updatecheck.BuildChannel() || payload.UpdateAvailable {
+		t.Fatalf("payload = %#v, want the build channel without a switch", payload)
 	}
 
 	req = httptest.NewRequest(http.MethodPost, "/api/settings/auto-update/check?channel=nightly", nil)

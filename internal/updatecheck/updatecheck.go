@@ -67,15 +67,27 @@ type Result struct {
 	DownloadPath    string `json:"download_path,omitempty"`
 }
 
+// ResolveManifestURL returns the manifest URL that Check fetches for opts.
+func ResolveManifestURL(opts Options) (string, error) {
+	if manifestURL := strings.TrimSpace(opts.ManifestURL); manifestURL != "" {
+		return manifestURL, nil
+	}
+	channel, err := NormalizeChannel(opts.Channel)
+	if err != nil {
+		return "", err
+	}
+	return ManifestURL(DefaultBaseURL, channel), nil
+}
+
 func Check(ctx context.Context, opts Options) (Result, error) {
 	channel, err := NormalizeChannel(opts.Channel)
 	if err != nil {
 		return Result{}, err
 	}
 	opts.Channel = channel
-	manifestURL := strings.TrimSpace(opts.ManifestURL)
-	if manifestURL == "" {
-		manifestURL = ManifestURL(DefaultBaseURL, channel)
+	manifestURL, err := ResolveManifestURL(opts)
+	if err != nil {
+		return Result{}, err
 	}
 
 	manifest, err := FetchManifest(ctx, manifestURL, opts.UserAgent)

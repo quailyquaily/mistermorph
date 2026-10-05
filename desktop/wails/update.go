@@ -38,9 +38,13 @@ func startDesktopAutoUpdateCheck(ctx context.Context, cfg desktopAutoUpdateConfi
 		checkCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 		defer cancel()
 
-		result, err := updatecheck.Check(checkCtx, newDesktopUpdateCheckOptions(cfg))
+		opts := newDesktopUpdateCheckOptions(cfg)
+		channel, _ := updatecheck.NormalizeChannel(opts.Channel)
+		manifestURL, _ := updatecheck.ResolveManifestURL(opts)
+		logDesktopUpdateEvent(logWriter, "auto_update_check channel=%q manifest_url=%q", channel, manifestURL)
+		result, err := updatecheck.Check(checkCtx, opts)
 		if err != nil {
-			logDesktopUpdateEvent(logWriter, "auto_update_failed error=%q", compactDesktopLogValue(err.Error(), 1000))
+			logDesktopUpdateEvent(logWriter, "auto_update_failed manifest_url=%q error=%q", manifestURL, compactDesktopLogValue(err.Error(), 1000))
 			return
 		}
 		logDesktopUpdateEvent(

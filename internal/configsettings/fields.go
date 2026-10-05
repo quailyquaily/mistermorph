@@ -220,6 +220,6 @@ func SystemFields() []Field {
 		{Path: "bus.max_inflight", Kind: KindInt, ApplyMode: ApplyProcessRestart, Min: &one},
 		{Path: "user_agent", Kind: KindString, ApplyMode: ApplyProcessRestart},
 		{Path: "auto_update.enabled", Kind: KindBool, ApplyMode: ApplyImmediate},
-		{Path: "auto_update.channel", Kind: KindString, ApplyMode: ApplyImmediate, Enum: []string{"", "community", "pro"}},
+		{Path: "auto_update.channel", Kind: KindString, ApplyMode: ApplyImmediate, Enum: []string{"community", "pro"}},
 	}
 }

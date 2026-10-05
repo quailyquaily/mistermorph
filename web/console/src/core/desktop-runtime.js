@@ -172,12 +172,13 @@ export function hideDesktopWindow() {
   return postDesktopRawMessage(DESKTOP_HIDE_WINDOW_MESSAGE);
 }
 
-export async function checkDesktopUpdate() {
+// channel is the release channel to check; null uses the saved setting.
+export async function checkDesktopUpdate(channel = null) {
   const call = desktopCallByName();
   if (!call) {
     throw new Error("desktop update binding is unavailable");
   }
-  return await call(desktopBindingName("CheckUpdate"));
+  return await call(desktopBindingName("CheckUpdate"), channel);
 }
 
 export async function requestDesktopNotificationPermission() {

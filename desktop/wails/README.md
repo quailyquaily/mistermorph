@@ -77,8 +77,8 @@ Update config:
 ```yaml
 auto_update:
   enabled: true
-  # Optional: community or pro. Empty follows the channel this build came from.
-  channel: ""
+  # Optional: community or pro. Defaults to the channel this build came from.
+  channel: community
 ```
 
 When enabled, the desktop host checks the release `update.json` on startup and downloads the verified update package into the user cache. `--check-update` also uses this setting to decide whether to download. This step prepares the update package but does not replace the running app yet; Wails v3 alpha.93 does not expose an updater service package, so applying the update still needs a platform-specific install/relaunch step in this repository.

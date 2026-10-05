@@ -7195,10 +7195,9 @@ components:
           type: string
           nullable: true
           enum:
-          - ''
           - community
           - pro
-          description: Release channel to follow. An empty string follows the channel the build came from.
+          description: Release channel to follow. Defaults to the channel the build came from.
       x-source: cmd/mistermorph/consolecmd/auto_update_settings.go:autoUpdateUpdatePayload
     CodexAuthStatus:
       type: object
@@ -7603,7 +7602,7 @@ components:
               type: boolean
             channel:
               type: string
-              description: Configured release channel. Empty means the build channel.
+              description: Configured release channel; defaults to the build channel.
           required:
           - enabled
           - channel

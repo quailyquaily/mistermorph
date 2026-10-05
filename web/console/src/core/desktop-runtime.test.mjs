@@ -137,7 +137,11 @@ test("desktop update check uses configured binding name", async () => {
   const { canCheckDesktopUpdate, checkDesktopUpdate } = await importDesktopRuntime();
   assert.equal(canCheckDesktopUpdate(), true);
   assert.deepEqual(await checkDesktopUpdate(), { status: "up_to_date" });
-  assert.deepEqual(calls, [["custom.App.CheckUpdate"]]);
+  assert.deepEqual(await checkDesktopUpdate("community"), { status: "up_to_date" });
+  assert.deepEqual(calls, [
+    ["custom.App.CheckUpdate", null],
+    ["custom.App.CheckUpdate", "community"],
+  ]);
 });
 
 test("desktop notifications use configured native bindings", async () => {

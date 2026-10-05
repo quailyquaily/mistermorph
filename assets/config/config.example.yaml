@@ -22,10 +22,10 @@ auto_update:
   # Shared update policy. Desktop startup checks use this setting, and
   # --check-update uses it to decide whether to download verified packages.
   enabled: false
-  # Release channel to follow: community or pro. Empty means the channel this
+  # Release channel to follow: community or pro. Defaults to the channel this
   # build came from. Choosing the other channel offers its latest release as an
   # update, even at the same version.
-  channel: ""
+  # channel: community
 
 llm:
   # Human-facing inference provider. This derives the protocol provider and API Base.
