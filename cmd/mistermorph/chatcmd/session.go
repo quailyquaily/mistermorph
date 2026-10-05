@@ -238,21 +238,16 @@ func (s *chatSession) prepareRuntimeForTaskRoute(ctx context.Context, task strin
 	if strings.TrimSpace(selectionKey) != "" {
 		ctx = llmstats.WithRunID(ctx, selectionKey)
 	}
-	imageValues := llmutil.RuntimeValuesWithClientConfig(currentRoute.Values, runCfg)
+	// llm.routes.image picks the image model; without it, images use the chat's current model.
+	imageValues, err := llmutil.ImageRouteValues(s.llmValues, llmutil.RuntimeValuesWithClientConfig(currentRoute.Values, runCfg))
+	if err != nil {
+		return nil, err
+	}
 	if s.cmd != nil && s.cmd.Flags().Changed("llm-request-timeout") && runCfg.RequestTimeout > 0 {
 		imageValues.ImageTimeoutRaw = runCfg.RequestTimeout.String()
 	}
 	runtimeToolsCfg := s.runtimeToolsCfg
-	runtimeToolsCfg.Image = toolsutil.ApplyImageToolLLMConfig(runtimeToolsCfg.Image, toolsutil.ImageToolLLMConfig{
-		Provider:            imageValues.Provider,
-		APIKey:              imageValues.APIKey,
-		Model:               imageValues.Model,
-		ImageProvider:       imageValues.ImageProvider,
-		ImageAPIKey:         imageValues.ImageAPIKey,
-		ImageModel:          imageValues.ImageModel,
-		CloudflareAccountID: imageValues.CloudflareAccountID,
-		CloudflareAPIToken:  imageValues.CloudflareAPIToken,
-	})
+	runtimeToolsCfg.Image = toolsutil.ApplyImageToolLLMConfig(runtimeToolsCfg.Image, toolsutil.ImageToolLLMConfigFromValues(imageValues))
 	prepared, err := s.taskRuntime.PrepareEngine(ctx, taskruntime.RunRequest{
 		Task:                    task,
 		Route:                   &currentRoute,
@@ -470,7 +465,11 @@ func buildChatSession(cmd *cobra.Command, deps Dependencies) (*chatSession, erro
 		},
 		CreateLLMClient: createLLMClient,
 		CreateImageClient: func() (llm.ImageClient, error) {
-			return llmutil.ImageClientFromValuesWithStats(llmValues, logger)
+			imageValues, err := llmutil.ImageRouteValues(llmValues, llmValues)
+			if err != nil {
+				return nil, err
+			}
+			return llmutil.ImageClientFromValuesWithStats(imageValues, logger)
 		},
 		Registry: func() *tools.Registry {
 			return buildChatToolRegistry(deps, nil)

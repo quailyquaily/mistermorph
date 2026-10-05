@@ -353,7 +353,9 @@ Core LLM:
 - For GPT-5.6-family OpenAI and Responses-compatible requests, the runtime generates `prompt_cache_key` and marks the fixed system prompt as an explicit cache breakpoint when caching is enabled. It leaves `prompt_cache_options` unset so the provider's default implicit breakpoint remains active.
 - `llm.tools_emulation_mode` controls tool-call emulation for models without native tool calling.
 - `llm.profiles` defines independent named LLM configurations; blank fields do not fall back to top-level `llm` values.
-- `llm.routes` routes semantic purposes such as `main_loop`, `addressing`, `awareness`, `think`, and `plan_create`. `heartbeat` is still accepted as a legacy alias for `awareness`.
+- `llm.routes` routes semantic purposes such as `main_loop`, `addressing`, `awareness`, `think`, `plan_create`, and `image`. `heartbeat` is still accepted as a legacy alias for `awareness`.
+- `llm.routes.image` picks the profile that `image_generate` and `image_edit` use. It takes one profile (a name, or an object with `profile`); candidates and fallbacks are not supported. Without it, images use the model the task is running on. `llm.image.request_timeout` and `llm.image.options.*` apply to whichever model makes the images.
+- `llm.image.provider`, `llm.image.endpoint`, `llm.image.api_key`, and `llm.image.model` are no longer read. Startup logs a warning when a config still sets them; move those values into a profile and set `llm.routes.image` to its name.
 - Each route can be a simple profile name or an object with `profile`, `candidates`, and `fallback_profiles`.
 - `candidates` enables per-run weighted traffic split; one candidate is selected once for the current run and reused for all LLM calls in that run.
 - `fallback_profiles` is route-local and only applies after the chosen primary route candidate fails with a fallback-eligible error.
@@ -436,9 +438,9 @@ llm:
 
 Named profiles and routes may select `xai_oauth` in the same way. Do not set an endpoint, API key, or `Authorization` header for it; those values are ignored. OAuth tokens remain in `<file_state_dir>/auth/xai.json` and are not returned to Console clients.
 
-Named profiles are independent LLM configurations. A blank profile field does not use the corresponding top-level `llm` value. Configure each profile's inference provider, model, credentials, endpoint, and optional runtime fields explicitly. `llm.pricing_file`, `llm.image`, and the process state directory remain shared runtime settings.
+Named profiles are independent LLM configurations. A blank profile field does not use the corresponding top-level `llm` value. Configure each profile's inference provider, model, credentials, endpoint, and optional runtime fields explicitly. `llm.pricing_file`, `llm.image.request_timeout`, `llm.image.options`, and the process state directory remain shared runtime settings.
 
-Chat requests support text and image input. The OAuth login does not provide credentials for `image_generate` or `image_edit`; configure `llm.image` separately for those tools.
+Chat requests support text and image input. The OAuth login does not provide credentials for `image_generate` or `image_edit`; route those tools to a profile with its own key through `llm.routes.image`.
 
 MisterMorph uses the xAI shared public OAuth client also used by OpenClaw. It requests `openid`, `profile`, `offline_access`, `grok-cli:access`, and `api:access`; it does not request email data. The inference endpoint remains fixed at `https://api.x.ai/v1`, and user-configured credential headers are ignored.
 
@@ -477,4 +479,5 @@ llm:
       fallback_profiles: [reasoning]
     plan_create: reasoning
     think: reasoning
+    image: cheap # image_generate and image_edit use this profile's provider, key and model
 ```

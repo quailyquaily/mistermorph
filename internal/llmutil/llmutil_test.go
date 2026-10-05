@@ -222,7 +222,7 @@ func TestResolveRouteRejectsNegativeContextWindowTokens(t *testing.T) {
 	}
 }
 
-func TestRuntimeValuesFromReader_ReadsImageConfig(t *testing.T) {
+func TestRuntimeValuesFromReader_ReadsSharedImageConfig(t *testing.T) {
 	v := viper.New()
 	v.SetConfigType("yaml")
 	if err := v.ReadConfig(strings.NewReader(`
@@ -230,10 +230,6 @@ llm:
   provider: openai
   api_key: chat-key
   image:
-    provider: gemini
-    endpoint: https://example.test/images
-    api_key: image-key
-    model: image-model
     request_timeout: 180s
     options:
       openai:
@@ -245,18 +241,6 @@ llm:
 	}
 
 	values := requireRuntimeValues(t, v)
-	if values.ImageProvider != "gemini" {
-		t.Fatalf("ImageProvider = %q, want gemini", values.ImageProvider)
-	}
-	if values.ImageEndpoint != "https://example.test/images" {
-		t.Fatalf("ImageEndpoint = %q", values.ImageEndpoint)
-	}
-	if values.ImageAPIKey != "image-key" {
-		t.Fatalf("ImageAPIKey = %q, want image-key", values.ImageAPIKey)
-	}
-	if values.ImageModel != "image-model" {
-		t.Fatalf("ImageModel = %q, want image-model", values.ImageModel)
-	}
 	if values.ImageTimeoutRaw != "180s" {
 		t.Fatalf("ImageTimeoutRaw = %q, want 180s", values.ImageTimeoutRaw)
 	}
@@ -268,21 +252,67 @@ llm:
 	}
 }
 
-func TestRuntimeValuesFromReader_KeepsImageModelExplicit(t *testing.T) {
+func TestImageRouteValuesUsesTheRoutedProfile(t *testing.T) {
 	v := viper.New()
 	v.SetConfigType("yaml")
 	if err := v.ReadConfig(strings.NewReader(`
 llm:
   provider: openai
+  api_key: chat-key
   model: gpt-5.5
   image:
-    provider: openai
+    request_timeout: 45s
+  profiles:
+    painter:
+      inference_provider: gemini
+      api_key: gemini-key
+      model: gemini-image
+  routes:
+    image: painter
 `)); err != nil {
 		t.Fatalf("ReadConfig() error = %v", err)
 	}
 	values := requireRuntimeValues(t, v)
-	if values.ImageModel != "" {
-		t.Fatalf("ImageModel = %q, want empty explicit image model", values.ImageModel)
+	image, err := ImageRouteValues(values, values)
+	if err != nil {
+		t.Fatalf("ImageRouteValues() error = %v", err)
+	}
+	meta := ResolveImageClientMetadata(image)
+	if meta.Provider != "gemini" || meta.Model != "gemini-image" {
+		t.Fatalf("image metadata = %#v, want gemini/gemini-image", meta)
+	}
+	if image.APIKey != "gemini-key" {
+		t.Fatalf("image api key = %q, want the profile's key", image.APIKey)
+	}
+	// Shared image settings stay available on the routed profile.
+	if image.ImageTimeoutRaw != "45s" {
+		t.Fatalf("ImageTimeoutRaw = %q, want 45s", image.ImageTimeoutRaw)
+	}
+}
+
+func TestImageRouteValuesFollowsTheCurrentModelWithoutARoute(t *testing.T) {
+	values := RuntimeValues{Provider: "openai", APIKey: "default-key", Model: "gpt-5.5"}
+	current := RuntimeValues{Provider: "gemini", APIKey: "profile-key", Model: "gemini-2.5"}
+	image, err := ImageRouteValues(values, current)
+	if err != nil {
+		t.Fatalf("ImageRouteValues() error = %v", err)
+	}
+	if image.Model != "gemini-2.5" || image.APIKey != "profile-key" {
+		t.Fatalf("image values = %#v, want the current model", image)
+	}
+}
+
+func TestImageRouteValuesRejectsCandidatesAndMissingProfiles(t *testing.T) {
+	withCandidates := RuntimeValues{Routes: RoutesConfig{PurposeRoutes: PurposeRoutes{Image: RoutePolicyConfig{
+		Candidates: []RouteCandidateConfig{{Profile: "a", Weight: 1}},
+	}}}}
+	if _, err := ImageRouteValues(withCandidates, withCandidates); err == nil || !strings.Contains(err.Error(), "llm.routes.image") {
+		t.Fatalf("ImageRouteValues() error = %v, want an llm.routes.image error", err)
+	}
+	missing := RuntimeValues{Routes: RoutesConfig{PurposeRoutes: PurposeRoutes{Image: RoutePolicyConfig{Profile: "nope"}}}}
+	var missingErr *MissingProfileError
+	if _, err := ImageRouteValues(missing, missing); !errors.As(err, &missingErr) {
+		t.Fatalf("ImageRouteValues() error = %v, want MissingProfileError", err)
 	}
 }
 
@@ -698,22 +728,6 @@ func TestImageEndpointForValuesDoesNotInheritCodexEndpoint(t *testing.T) {
 	if got := imageEndpointForValues(values.Provider, normalizeImageProviderForUniai(values.Provider), values); got != "" {
 		t.Fatalf("image endpoint = %q, want empty", got)
 	}
-	values.ImageEndpoint = "https://api.openai.com/v1"
-	if got := imageEndpointForValues(values.Provider, normalizeImageProviderForUniai(values.Provider), values); got != values.ImageEndpoint {
-		t.Fatalf("image endpoint = %q, want explicit image endpoint", got)
-	}
-}
-
-func TestImageEndpointForValuesDoesNotInheritMismatchedProviderEndpoint(t *testing.T) {
-	values := RuntimeValues{
-		Provider:      "openai",
-		Endpoint:      "https://api.openai.com",
-		ImageProvider: "gemini",
-	}
-	imageProvider := normalizeImageProviderForUniai(values.ImageProvider)
-	if got := imageEndpointForValues(values.ImageProvider, imageProvider, values); got != "" {
-		t.Fatalf("image endpoint = %q, want empty", got)
-	}
 }
 
 func TestModelForProviderWithValues_AzureDeploymentFirst(t *testing.T) {
@@ -1001,10 +1015,6 @@ func TestResolveRoute_NamedProfileDoesNotInheritTopLevelLLMFields(t *testing.T) 
 		PricingFile:        "./pricing.yaml",
 		ConfigPath:         "/config/config.yaml",
 		FileStateDir:       "/state",
-		ImageProvider:      "gemini",
-		ImageEndpoint:      "https://images.example.test",
-		ImageAPIKey:        "image-key",
-		ImageModel:         "image-model",
 		ImageTimeoutRaw:    "45s",
 		Profiles: map[string]ProfileConfig{
 			"cheap": {
@@ -1089,9 +1099,7 @@ func TestResolveRoute_NamedProfileDoesNotInheritTopLevelLLMFields(t *testing.T) 
 	if resolved.Values.PricingFile != values.PricingFile || resolved.Values.ConfigPath != values.ConfigPath || resolved.Values.FileStateDir != values.FileStateDir {
 		t.Errorf("shared runtime paths = %#v, want pricing/config/state preserved", resolved.Values)
 	}
-	if resolved.Values.ImageProvider != values.ImageProvider || resolved.Values.ImageEndpoint != values.ImageEndpoint ||
-		resolved.Values.ImageAPIKey != values.ImageAPIKey || resolved.Values.ImageModel != values.ImageModel ||
-		resolved.Values.ImageTimeoutRaw != values.ImageTimeoutRaw {
+	if resolved.Values.ImageTimeoutRaw != values.ImageTimeoutRaw {
 		t.Errorf("image runtime config = %#v, want shared image config preserved", resolved.Values)
 	}
 }

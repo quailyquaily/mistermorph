@@ -1194,23 +1194,23 @@ func TestFileOwnerProtectsAdditionalAgentSecret(t *testing.T) {
 	})
 	view, err := owner.Update(context.Background(), AgentSettingsUpdate{
 		ConfigChanges: map[string]json.RawMessage{
-			"llm.image.api_key": json.RawMessage(`"image-secret"`),
+			"llm.bedrock.aws_secret": json.RawMessage(`"bedrock-secret"`),
 		},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(backend.puts) != 1 || backend.labels[backend.puts[0]] != "llm.image.api_key" {
+	if len(backend.puts) != 1 || backend.labels[backend.puts[0]] != "llm.bedrock.aws_secret" {
 		t.Fatalf("stored secret puts=%v labels=%v", backend.puts, backend.labels)
 	}
-	if state := view.FieldStates["llm.image.api_key"]; !state.Configured || state.Source != "config_os_ref" {
+	if state := view.FieldStates["llm.bedrock.aws_secret"]; !state.Configured || state.Source != "config_os_ref" {
 		t.Fatalf("secret field state = %#v", state)
 	}
 	raw, err := os.ReadFile(configPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(raw), "image-secret") || !strings.Contains(string(raw), secref.OSSecretRef(backend.puts[0])) {
+	if strings.Contains(string(raw), "bedrock-secret") || !strings.Contains(string(raw), secref.OSSecretRef(backend.puts[0])) {
 		t.Fatalf("secret was not protected:\n%s", raw)
 	}
 }

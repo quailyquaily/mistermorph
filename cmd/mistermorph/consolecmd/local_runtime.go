@@ -331,11 +331,15 @@ func buildConsoleLocalRuntimeConfigSnapshot(logger *slog.Logger, inspectors *con
 				)
 			},
 			CreateImageClient: func() (llm.ImageClient, error) {
-				client, err := llmutil.ImageClientFromValues(llmValues)
+				imageValues, err := llmutil.ImageRouteValues(llmValues, llmValues)
 				if err != nil {
 					return nil, err
 				}
-				meta := llmutil.ResolveImageClientMetadata(llmValues)
+				client, err := llmutil.ImageClientFromValues(imageValues)
+				if err != nil {
+					return nil, err
+				}
+				meta := llmutil.ResolveImageClientMetadata(imageValues)
 				return llmstats.WrapImageClient(client, llmstats.ClientOptions{
 					Provider:     meta.Provider,
 					APIBase:      meta.Endpoint,

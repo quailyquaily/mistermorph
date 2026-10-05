@@ -108,10 +108,15 @@ func consoleUsagePathTestReader(stateDir string) *viper.Viper {
 	reader.Set("llm.endpoint", "https://example.test/v1")
 	reader.Set("llm.api_key", "test-key")
 	reader.Set("llm.model", "test-model")
-	reader.Set("llm.image.provider", "openai")
-	reader.Set("llm.image.endpoint", "https://example.test/v1")
-	reader.Set("llm.image.api_key", "test-key")
-	reader.Set("llm.image.model", "test-image-model")
+	reader.Set("llm.profiles", map[string]any{
+		"image": map[string]any{
+			"provider": "openai",
+			"endpoint": "https://example.test/v1",
+			"api_key":  "test-key",
+			"model":    "test-image-model",
+		},
+	})
+	reader.Set("llm.routes", map[string]any{"image": "image"})
 	reader.Set("guard.enabled", false)
 	return reader
 }

@@ -383,16 +383,19 @@ func integrationLifecycleConfig(t *testing.T) Config {
 	cfg.Set("llm.provider", "openai")
 	cfg.Set("llm.api_key", "test")
 	cfg.Set("llm.model", "main-model")
-	cfg.Set("llm.image.provider", "openai")
-	cfg.Set("llm.image.api_key", "test")
-	cfg.Set("llm.image.model", "image-model")
 	cfg.Set("llm.profiles", map[string]any{
 		"plan": map[string]any{
 			"model": "plan-model",
 		},
+		"image": map[string]any{
+			"provider": "openai",
+			"api_key":  "test",
+			"model":    "image-model",
+		},
 	})
 	cfg.Set("llm.routes", map[string]any{
 		"plan_create": "plan",
+		"image":       "image",
 	})
 	cfg.Set("telegram.serve_listen", "127.0.0.1:0")
 	cfg.Set("slack.serve_listen", "127.0.0.1:0")

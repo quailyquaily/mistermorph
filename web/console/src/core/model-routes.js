@@ -54,8 +54,12 @@ export function routeToValue(route) {
 
 // Problems the server would reject or that would fail at run time. `known` is the list of profile
 // names that exist (including "default"); pass null to skip that check.
-export function routeProblems(route, known = null) {
+// single: the route takes one profile (llm.routes.image), so splits and fallbacks are problems.
+export function routeProblems(route, known = null, { single = false } = {}) {
   const problems = [];
+  if (single && (route.mode === ROUTE_MODE_SPLIT || names(route.fallbacks).length)) {
+    problems.push("This route takes one profile: no split and no fallbacks.");
+  }
   const missing = (name) => Array.isArray(known) && name && !known.includes(name);
   if (route.mode === ROUTE_MODE_PROFILE) {
     if (!text(route.profile)) {
@@ -110,6 +114,14 @@ export const ROUTE_PURPOSES = [
   { key: "awareness", path: "llm.routes.awareness", label: "Awareness", note: "Background awareness checks." },
   { key: "think", path: "llm.routes.think", label: "Think", note: "/think tasks, run with reasoning effort xhigh." },
   { key: "plan_create", path: "llm.routes.plan_create", label: "Plan", note: "Writing plans with plan_create." },
+  // Image requests go to one model: no split, no fallbacks. Unset, images use the task's model.
+  {
+    key: "image",
+    path: "llm.routes.image",
+    label: "Image",
+    note: "image_generate and image_edit. One profile; unset uses the task's model.",
+    single: true,
+  },
 ];
 
 export function routeIsUnset(route) {

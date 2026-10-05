@@ -42,10 +42,6 @@ Console Settings covers every supported public field on this page. It submits on
 - `llm.bedrock.model_arn`
 - `llm.cloudflare.account_id`
 - `llm.cloudflare.api_token`
-- `llm.image.provider`
-- `llm.image.endpoint`
-- `llm.image.api_key`
-- `llm.image.model`
 - `llm.image.request_timeout`
 - `llm.image.options.openai`
 - `llm.image.options.gemini`
@@ -53,11 +49,12 @@ Console Settings covers every supported public field on this page. It submits on
 - `llm.profiles.<profile>.*` (named profile overrides, including `inference_provider`)
 - `llm.profiles.<profile>.supports_image_parts`
 - `llm.profiles.<profile>.headers.<name>` (optional profile-scoped headers)
-- `llm.routes.<purpose>` (`main_loop|addressing|awareness|heartbeat|think|plan_create`)
+- `llm.routes.<purpose>` (`main_loop|addressing|awareness|heartbeat|think|plan_create|image`)
 - `llm.routes.<purpose>.profile`
 - `llm.routes.<purpose>.candidates[].profile`
 - `llm.routes.<purpose>.candidates[].weight`
 - `llm.routes.<purpose>.fallback_profiles[]`
+- `llm.routes.image` (the profile used by `image_generate` and `image_edit`; one profile only, no candidates or fallbacks)
 
 ## Logging
 

@@ -76,7 +76,9 @@ export default {
     const selectedPurpose = computed(() => purposes.value.find((purpose) => purpose.key === selected.value) || null);
 
     function problems(purpose) {
-      return routeProblems(draft[purpose.key], knownProfiles.value.length ? knownProfiles.value : null);
+      return routeProblems(draft[purpose.key], knownProfiles.value.length ? knownProfiles.value : null, {
+        single: purpose.single === true,
+      });
     }
 
     function locked(purpose) {
@@ -347,6 +349,7 @@ export default {
           <span class="model-routes-inspector-title">{{ selectedPurpose.label }}</span>
           <span v-if="problems(selectedPurpose).length" class="model-route-problems" role="alert">{{ problems(selectedPurpose).join(' ') }}</span>
           <span v-else-if="locked(selectedPurpose)" class="model-routes-node-note">This route is managed outside the settings file.</span>
+          <span v-else-if="selectedPurpose.single" class="model-routes-node-note">Use picks the one profile for these requests; this route has no split or fallbacks.</span>
           <span v-else class="model-routes-node-note">Use sends everything to one profile; Split shares requests; Fallback is tried, in order, when a request fails.</span>
           <QButton class="plain xs" :disabled="locked(selectedPurpose)" @click="actions.reset()">Reset to default</QButton>
           <QButton class="plain xs" @click="selected = ''">Done</QButton>
@@ -469,9 +472,9 @@ export default {
                     @click="actions.use(node.name)"
                   >Use</button>
                   <button v-if="roleOf(node.name).role === 'split'" type="button" @click="actions.unsplit(node.name)">Remove</button>
-                  <button v-else-if="roleOf(node.name).role !== 'use' || roleOf(node.name).implicit" type="button" @click="actions.split(node.name)">Split</button>
+                  <button v-else-if="!selectedPurpose.single && (roleOf(node.name).role !== 'use' || roleOf(node.name).implicit)" type="button" @click="actions.split(node.name)">Split</button>
                   <button
-                    v-if="roleOf(node.name).role === '' || roleOf(node.name).role === 'fallback'"
+                    v-if="!selectedPurpose.single && (roleOf(node.name).role === '' || roleOf(node.name).role === 'fallback')"
                     type="button"
                     :aria-pressed="roleOf(node.name).role === 'fallback' ? 'true' : 'false'"
                     @click="actions.fallback(node.name)"

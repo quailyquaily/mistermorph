@@ -28,10 +28,6 @@ func AgentFields() []Field {
 		{Path: "llm.bedrock.model_arn", Kind: KindString, ApplyMode: ApplyNextGeneration},
 		{Path: "llm.cloudflare.account_id", Kind: KindString, ApplyMode: ApplyNextGeneration},
 		{Path: "llm.cloudflare.api_token", Kind: KindString, Sensitive: true, ApplyMode: ApplyNextGeneration},
-		{Path: "llm.image.provider", Kind: KindString, ApplyMode: ApplyNextGeneration},
-		{Path: "llm.image.endpoint", Kind: KindString, ApplyMode: ApplyNextGeneration},
-		{Path: "llm.image.api_key", Kind: KindString, Sensitive: true, ApplyMode: ApplyNextGeneration},
-		{Path: "llm.image.model", Kind: KindString, ApplyMode: ApplyNextGeneration},
 		{Path: "llm.image.request_timeout", Kind: KindDuration, ApplyMode: ApplyNextGeneration},
 		{Path: "llm.image.options.openai", Kind: KindJSON, ApplyMode: ApplyNextGeneration, Default: map[string]any{}},
 		{Path: "llm.image.options.gemini", Kind: KindJSON, ApplyMode: ApplyNextGeneration, Default: map[string]any{}},
@@ -42,6 +38,7 @@ func AgentFields() []Field {
 		{Path: "llm.routes.awareness", Kind: KindJSON, ApplyMode: ApplyNextGeneration, Default: map[string]any{}},
 		{Path: "llm.routes.think", Kind: KindJSON, ApplyMode: ApplyNextGeneration, Default: map[string]any{}},
 		{Path: "llm.routes.plan_create", Kind: KindJSON, ApplyMode: ApplyNextGeneration, Default: map[string]any{}},
+		{Path: "llm.routes.image", Kind: KindJSON, ApplyMode: ApplyNextGeneration, Default: map[string]any{}},
 
 		{Path: "max_steps", Kind: KindInt, ApplyMode: ApplyNextGeneration, Min: &one},
 		{Path: "parse_retries", Kind: KindInt, ApplyMode: ApplyNextGeneration, Min: &zero},

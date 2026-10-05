@@ -7,6 +7,7 @@ import (
 	"unicode"
 
 	"github.com/quailyquaily/mistermorph/internal/imagesession"
+	"github.com/quailyquaily/mistermorph/internal/llmutil"
 	"github.com/quailyquaily/mistermorph/internal/pathroots"
 	"github.com/quailyquaily/mistermorph/llm"
 	"github.com/quailyquaily/mistermorph/tools"
@@ -28,13 +29,12 @@ type ImageToolsRegisterConfig struct {
 	SessionScope    imagesession.Scope
 }
 
+// ImageToolLLMConfig is the image model's settings: the profile llm.routes.image points at, or
+// the caller's current model when no image route is set (see llmutil.ImageRouteValues).
 type ImageToolLLMConfig struct {
 	Provider            string
 	APIKey              string
 	Model               string
-	ImageProvider       string
-	ImageAPIKey         string
-	ImageModel          string
 	CloudflareAccountID string
 	CloudflareAPIToken  string
 }
@@ -54,16 +54,33 @@ func LoadImageToolsRegisterConfigFromReader(r runtimeRegisterConfigReader) Image
 			Cloudflare: loadImageOptionsMap(r, "llm.image.options.cloudflare"),
 		},
 	}
-	return ApplyImageToolLLMConfig(cfg, ImageToolLLMConfig{
+	llmCfg := ImageToolLLMConfig{
 		Provider:            r.GetString("llm.provider"),
 		APIKey:              r.GetString("llm.api_key"),
 		Model:               r.GetString("llm.model"),
-		ImageProvider:       r.GetString("llm.image.provider"),
-		ImageAPIKey:         r.GetString("llm.image.api_key"),
-		ImageModel:          r.GetString("llm.image.model"),
 		CloudflareAccountID: r.GetString("llm.cloudflare.account_id"),
 		CloudflareAPIToken:  r.GetString("llm.cloudflare.api_token"),
-	})
+	}
+	// With llm.routes.image set, availability depends on that profile, not on the default model.
+	if reader, ok := r.(llmutil.ConfigReader); ok {
+		if values, err := llmutil.RuntimeValuesFromReader(reader); err == nil {
+			if imageValues, err := llmutil.ImageRouteValues(values, values); err == nil {
+				llmCfg = ImageToolLLMConfigFromValues(imageValues)
+			}
+		}
+	}
+	return ApplyImageToolLLMConfig(cfg, llmCfg)
+}
+
+// ImageToolLLMConfigFromValues reads the image model's settings from resolved runtime values.
+func ImageToolLLMConfigFromValues(values llmutil.RuntimeValues) ImageToolLLMConfig {
+	return ImageToolLLMConfig{
+		Provider:            values.Provider,
+		APIKey:              values.APIKey,
+		Model:               values.Model,
+		CloudflareAccountID: values.CloudflareAccountID,
+		CloudflareAPIToken:  values.CloudflareAPIToken,
+	}
 }
 
 type ImageToolRetentionMode string
@@ -366,24 +383,17 @@ func firstNonEmptyImageRegister(items ...string) string {
 	return ""
 }
 
+// ResolveImageToolLLMConfig reports the image provider and model, and whether they can be used:
+// OpenAI and Gemini need an API key, Cloudflare an account ID and a token. OAuth sign-ins (Codex,
+// xAI) do not grant image access, so those providers are never configured for images.
 func ResolveImageToolLLMConfig(cfg ImageToolLLMConfig) (provider string, model string, configured bool) {
-	provider = normalizeImageToolProvider(firstNonEmptyImageRegister(cfg.ImageProvider, cfg.Provider))
-	model = firstNonEmptyImageRegister(cfg.ImageModel, cfg.Model)
-	if provider == "" {
-		return provider, model, false
-	}
-	imageSpecific := strings.TrimSpace(cfg.ImageProvider) != "" ||
-		strings.TrimSpace(cfg.ImageAPIKey) != ""
-	switch provider {
-	case "openai", "gemini":
-		if imageSpecific {
-			return provider, model, imageAPIKeyAvailableForProvider(provider, cfg)
-		}
-		return provider, model, inheritedImageConfigAvailable(cfg)
+	source := strings.ToLower(strings.TrimSpace(cfg.Provider))
+	provider = normalizeImageToolProvider(source)
+	model = strings.TrimSpace(cfg.Model)
+	switch source {
+	case "openai", "openai_resp", "gemini":
+		return provider, model, strings.TrimSpace(cfg.APIKey) != ""
 	case "cloudflare":
-		if !imageSpecific {
-			return provider, model, false
-		}
 		return provider, model, cloudflareImageConfigAvailable(cfg)
 	default:
 		return provider, model, false
@@ -408,30 +418,9 @@ func normalizeImageToolProvider(provider string) string {
 	}
 }
 
-func inheritedImageConfigAvailable(cfg ImageToolLLMConfig) bool {
-	provider := strings.ToLower(strings.TrimSpace(cfg.Provider))
-	if provider != "openai" && provider != "gemini" {
-		return false
-	}
-	return strings.TrimSpace(cfg.APIKey) != ""
-}
-
-func imageAPIKeyAvailableForProvider(provider string, cfg ImageToolLLMConfig) bool {
-	if strings.TrimSpace(cfg.ImageAPIKey) != "" {
-		return true
-	}
-	if strings.TrimSpace(cfg.APIKey) == "" {
-		return false
-	}
-	return strings.EqualFold(strings.TrimSpace(cfg.Provider), provider)
-}
-
 func cloudflareImageConfigAvailable(cfg ImageToolLLMConfig) bool {
 	if strings.TrimSpace(cfg.CloudflareAccountID) == "" {
 		return false
 	}
-	if strings.TrimSpace(cfg.ImageAPIKey) != "" || strings.TrimSpace(cfg.CloudflareAPIToken) != "" {
-		return true
-	}
-	return strings.TrimSpace(cfg.APIKey) != "" && strings.EqualFold(strings.TrimSpace(cfg.Provider), "cloudflare")
+	return strings.TrimSpace(cfg.CloudflareAPIToken) != "" || strings.TrimSpace(cfg.APIKey) != ""
 }

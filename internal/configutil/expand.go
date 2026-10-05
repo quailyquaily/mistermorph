@@ -173,7 +173,41 @@ func readExpandedConfigRaw(
 	} else {
 		v.SetConfigType(ext)
 	}
-	return v.ReadConfig(strings.NewReader(result.Value))
+	if err := v.ReadConfig(strings.NewReader(result.Value)); err != nil {
+		return err
+	}
+	warnRemovedConfigKeys(v, filepath.Base(path), warn)
+	return nil
+}
+
+// removedImageModelKeys were replaced by llm.routes.image, which points at a profile. They are no
+// longer read; llm.image.request_timeout and llm.image.options still are.
+var removedImageModelKeys = []string{
+	"llm.image.provider",
+	"llm.image.endpoint",
+	"llm.image.api_key",
+	"llm.image.model",
+}
+
+func warnRemovedConfigKeys(v *viper.Viper, name string, warn func(format string, args ...any)) {
+	if v == nil || warn == nil {
+		return
+	}
+	var found []string
+	for _, key := range removedImageModelKeys {
+		if v.InConfig(key) {
+			found = append(found, key)
+		}
+	}
+	if len(found) == 0 {
+		return
+	}
+	verb := "are"
+	if len(found) == 1 {
+		verb = "is"
+	}
+	warn("config %s: %s %s no longer used; add the image model as a profile under llm.profiles and set llm.routes.image to its name",
+		name, strings.Join(found, ", "), verb)
 }
 
 func expandStructuredConfigScalarRefs(

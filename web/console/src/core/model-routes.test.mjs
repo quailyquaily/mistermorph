@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { percentWeights, routeFromValue, routeProblems, routeShares, routeTargets, routeToValue } from "./model-routes.js";
+import { percentWeights, ROUTE_PURPOSES, routeFromValue, routeProblems, routeShares, routeTargets, routeToValue } from "./model-routes.js";
 
 test("routeFromValue reads every form the config accepts", () => {
   const cases = [
@@ -103,4 +103,18 @@ test("setShare keeps a split adding up to 100", () => {
   assert.equal(moved.candidates.reduce((sum, item) => sum + item.weight, 0), 100);
   assert.equal(setShare(split, 0, 100).candidates[0].weight, 98);
   assert.equal(setShare(split, 0, 0).candidates[0].weight, 1);
+});
+
+test("single-profile routes reject splits and fallbacks", () => {
+  const known = ["default", "cheap", "painter"];
+  assert.deepEqual(routeProblems(routeFromValue("painter"), known, { single: true }), []);
+  assert.deepEqual(
+    routeProblems(routeFromValue({ profile: "painter", fallback_profiles: ["cheap"] }), known, { single: true }),
+    ["This route takes one profile: no split and no fallbacks."],
+  );
+  assert.deepEqual(
+    routeProblems(routeFromValue({ candidates: [{ profile: "cheap", weight: 1 }, { profile: "painter", weight: 1 }] }), known, { single: true }),
+    ["This route takes one profile: no split and no fallbacks."],
+  );
+  assert.ok(ROUTE_PURPOSES.some((purpose) => purpose.key === "image" && purpose.single));
 });

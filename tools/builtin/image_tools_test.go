@@ -134,7 +134,7 @@ func TestImageGenerateToolValidationErrors(t *testing.T) {
 		Roots:   pathroots.New("", cacheDir, ""),
 	})
 
-	if _, err := tool.Execute(context.Background(), map[string]any{"prompt": "生成图片"}); err == nil || !strings.Contains(err.Error(), "llm.image.model") {
+	if _, err := tool.Execute(context.Background(), map[string]any{"prompt": "生成图片"}); err == nil || !strings.Contains(err.Error(), "llm.routes.image") {
 		t.Fatalf("expected missing model error, got %v", err)
 	}
 

@@ -359,11 +359,15 @@ func (r *llmRuntimeResolver) CreateImageClient() (llm.ImageClient, error) {
 	if err != nil {
 		return nil, err
 	}
-	client, err := llmutil.ImageClientFromValues(values)
+	imageValues, err := llmutil.ImageRouteValues(values, values)
 	if err != nil {
 		return nil, err
 	}
-	meta := llmutil.ResolveImageClientMetadata(values)
+	client, err := llmutil.ImageClientFromValues(imageValues)
+	if err != nil {
+		return nil, err
+	}
+	meta := llmutil.ResolveImageClientMetadata(imageValues)
 	return llmstats.WrapImageClient(client, llmstats.ClientOptions{
 		Provider:     meta.Provider,
 		APIBase:      meta.Endpoint,

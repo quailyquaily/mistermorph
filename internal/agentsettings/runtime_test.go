@@ -94,8 +94,7 @@ func TestResolveConnectionTestValuesNamedProfileIgnoresDefaultLLMFields(t *testi
 	reader.Set("llm.cache_key_prefix", "reader-cache")
 	reader.Set("llm.temperature", "0.8")
 	reader.Set("llm.pricing_file", "./pricing.yaml")
-	reader.Set("llm.image.provider", "gemini")
-	reader.Set("llm.image.model", "gemini-image")
+	reader.Set("llm.image.request_timeout", "45s")
 	reader.Set("config", "/config/config.yaml")
 	reader.Set("file_state_dir", "/state")
 
@@ -138,7 +137,7 @@ func TestResolveConnectionTestValuesNamedProfileIgnoresDefaultLLMFields(t *testi
 	if values.PricingFile != "./pricing.yaml" || values.ConfigPath != "/config/config.yaml" || values.FileStateDir != "/state" {
 		t.Fatalf("shared runtime paths = %+v", values)
 	}
-	if values.ImageProvider != "gemini" || values.ImageModel != "gemini-image" {
+	if values.ImageTimeoutRaw != "45s" {
 		t.Fatalf("shared image config = %+v", values)
 	}
 }

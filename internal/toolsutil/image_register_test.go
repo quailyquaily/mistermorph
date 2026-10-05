@@ -210,12 +210,19 @@ file_cache_dir: /cache
 file_state_dir: /state
 llm:
   provider: openai
-  api_key: image-key
+  api_key: chat-key
+  model: gpt-5.5
   image:
-    model: gpt-image-2
     options:
       openai:
         quality: high
+  profiles:
+    painter:
+      provider: openai
+      api_key: image-key
+      model: gpt-image-2
+  routes:
+    image: painter
 tools:
   image_generate:
     enabled: true
@@ -319,8 +326,6 @@ llm:
   provider: openai_codex
   api_key: ignored-for-images
   model: gpt-5.5
-  image:
-    endpoint: https://api.openai.com/v1
 tools:
   image_generate:
     enabled: true
@@ -360,7 +365,7 @@ tools:
 	}
 }
 
-func TestLoadImageToolsRegisterConfigAllowsExplicitImageProviderWithXAIOAuth(t *testing.T) {
+func TestLoadImageToolsRegisterConfigAllowsImageRouteWithXAIOAuth(t *testing.T) {
 	v := viper.New()
 	v.SetConfigType("yaml")
 	if err := v.ReadConfig(strings.NewReader(`
@@ -368,10 +373,14 @@ file_cache_dir: /cache
 llm:
   provider: xai_oauth
   model: grok-4.5
-  image:
-    provider: openai
-    api_key: image-key
-    model: gpt-image-2
+  profiles:
+    painter:
+      provider: openai
+      api_key: image-key
+      model: gpt-image-2
+  routes:
+    image:
+      profile: painter
 tools:
   image_generate:
     enabled: true
@@ -384,55 +393,7 @@ tools:
 	}
 }
 
-func TestLoadImageToolsRegisterConfigExplicitImageKeyWithCodexChatProvider(t *testing.T) {
-	v := viper.New()
-	v.SetConfigType("yaml")
-	if err := v.ReadConfig(strings.NewReader(`
-file_cache_dir: /cache
-llm:
-  provider: openai_codex
-  model: gpt-5.5
-  image:
-    api_key: image-key
-tools:
-  image_generate:
-    enabled: true
-`)); err != nil {
-		t.Fatalf("ReadConfig() error = %v", err)
-	}
-	cfg := LoadImageToolsRegisterConfigFromReader(v)
-	if cfg.Provider != "openai" {
-		t.Fatalf("provider = %q, want openai", cfg.Provider)
-	}
-	if !cfg.Configured {
-		t.Fatalf("Configured = false, want true")
-	}
-}
-
-func TestLoadImageToolsRegisterConfigDoesNotInheritCodexKeyThroughExplicitOpenAIProvider(t *testing.T) {
-	v := viper.New()
-	v.SetConfigType("yaml")
-	if err := v.ReadConfig(strings.NewReader(`
-file_cache_dir: /cache
-llm:
-  provider: openai_codex
-  api_key: codex-key
-  model: gpt-5.5
-  image:
-    provider: openai
-tools:
-  image_generate:
-    enabled: true
-`)); err != nil {
-		t.Fatalf("ReadConfig() error = %v", err)
-	}
-	cfg := LoadImageToolsRegisterConfigFromReader(v)
-	if cfg.Configured {
-		t.Fatalf("Configured = true, want false")
-	}
-}
-
-func TestLoadImageToolsRegisterConfigRejectsMismatchedInheritedAPIKey(t *testing.T) {
+func TestLoadImageToolsRegisterConfigRejectsImageRouteToCodexProfile(t *testing.T) {
 	v := viper.New()
 	v.SetConfigType("yaml")
 	if err := v.ReadConfig(strings.NewReader(`
@@ -441,8 +402,40 @@ llm:
   provider: openai
   api_key: openai-key
   model: gpt-5.5
-  image:
-    provider: gemini
+  profiles:
+    codex:
+      provider: openai_codex
+      api_key: codex-key
+      model: gpt-5.5
+  routes:
+    image: codex
+tools:
+  image_generate:
+    enabled: true
+`)); err != nil {
+		t.Fatalf("ReadConfig() error = %v", err)
+	}
+	cfg := LoadImageToolsRegisterConfigFromReader(v)
+	if cfg.Configured {
+		t.Fatalf("Configured = true, want false: a Codex sign-in does not grant image access")
+	}
+}
+
+func TestLoadImageToolsRegisterConfigRejectsImageProfileWithoutKey(t *testing.T) {
+	v := viper.New()
+	v.SetConfigType("yaml")
+	if err := v.ReadConfig(strings.NewReader(`
+file_cache_dir: /cache
+llm:
+  provider: openai
+  api_key: openai-key
+  model: gpt-5.5
+  profiles:
+    painter:
+      provider: gemini
+      model: gemini-image
+  routes:
+    image: painter
 tools:
   image_generate:
     enabled: true

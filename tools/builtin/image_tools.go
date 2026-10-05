@@ -83,7 +83,7 @@ func (t *ImageGenerateTool) Execute(ctx context.Context, params map[string]any) 
 		return "", fmt.Errorf("image_generate tool is disabled")
 	}
 	if strings.TrimSpace(t.cfg.Model) == "" {
-		return "", fmt.Errorf("llm.image.model and llm.model are not configured")
+		return "", fmt.Errorf("no image model: set llm.routes.image to a profile with a model, or set llm.model")
 	}
 	if t.cfg.Client == nil {
 		return "", fmt.Errorf("image client is not configured")
@@ -169,7 +169,7 @@ func (t *ImageEditTool) Execute(ctx context.Context, params map[string]any) (str
 		return "", fmt.Errorf("image_edit tool is disabled")
 	}
 	if strings.TrimSpace(t.cfg.Model) == "" {
-		return "", fmt.Errorf("llm.image.model and llm.model are not configured")
+		return "", fmt.Errorf("no image model: set llm.routes.image to a profile with a model, or set llm.model")
 	}
 	if t.cfg.Client == nil {
 		return "", fmt.Errorf("image client is not configured")

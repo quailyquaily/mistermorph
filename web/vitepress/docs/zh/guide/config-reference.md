@@ -46,10 +46,6 @@ Console Settings 覆盖本页所有仍受支持的公开字段。浏览器只提
 | `llm.bedrock.model_arn` | Bedrock 模型 ARN。 |
 | `llm.cloudflare.account_id` | Cloudflare Workers AI 账号 ID。 |
 | `llm.cloudflare.api_token` | Cloudflare Workers AI API Token。 |
-| `llm.image.provider` | 图像模型提供方；为空时可继承部分主 LLM 配置。 |
-| `llm.image.endpoint` | 图像模型 API 基础地址。 |
-| `llm.image.api_key` | 图像模型 API Key。 |
-| `llm.image.model` | `image_generate` 和 `image_edit` 使用的图像模型名。 |
 | `llm.image.request_timeout` | 图像模型请求超时。 |
 | `llm.image.options.openai` | OpenAI 图像模型的额外 provider options。 |
 | `llm.image.options.gemini` | Gemini 图像模型的额外 provider options。 |
@@ -57,7 +53,8 @@ Console Settings 覆盖本页所有仍受支持的公开字段。浏览器只提
 | `llm.profiles.<profile>.*` | 命名 LLM 配置档；可覆盖 `inference_provider`、model、key 等，用于路由不同任务。 |
 | `llm.profiles.<profile>.supports_image_parts` | 命名 profile 是否支持图片消息部分的显式覆盖。 |
 | `llm.profiles.<profile>.headers.<name>` | profile 级自定义请求头；同名 header 会覆盖顶层 `llm.headers`。 |
-| `llm.routes.<purpose>` | route 定义；`purpose` 支持 `main_loop/addressing/awareness/heartbeat/think/plan_create`。 |
+| `llm.routes.<purpose>` | route 定义；`purpose` 支持 `main_loop/addressing/awareness/heartbeat/think/plan_create/image`。 |
+| `llm.routes.image` | `image_generate` 和 `image_edit` 使用的 profile；只能指定一个 profile，不支持 candidates 和 fallback。未设置时使用当前任务的模型。 |
 | `llm.routes.<purpose>.profile` | 固定把该 route 绑定到一个 profile。 |
 | `llm.routes.<purpose>.candidates[].profile` | 该 route 参与分流的 profile。 |
 | `llm.routes.<purpose>.candidates[].weight` | 该候选 profile 的权重；当前 run 内只会选中一个主候选。 |

@@ -384,16 +384,17 @@ func imageToolsRegisterConfigFromSnapshot(snap runtimeSnapshot, values llmutil.R
 		FileCacheDir:    snap.Paths.CacheDir,
 		FileStateDir:    snap.Paths.StateDir,
 		Options:         snap.LLMValues.ImageOptions,
-	}, toolsutil.ImageToolLLMConfig{
-		Provider:            values.Provider,
-		APIKey:              values.APIKey,
-		Model:               values.Model,
-		ImageProvider:       values.ImageProvider,
-		ImageAPIKey:         values.ImageAPIKey,
-		ImageModel:          values.ImageModel,
-		CloudflareAccountID: values.CloudflareAccountID,
-		CloudflareAPIToken:  values.CloudflareAPIToken,
-	})
+	}, toolsutil.ImageToolLLMConfigFromValues(imageModelValues(values)))
+}
+
+// imageModelValues is the model llm.routes.image points at, or values itself when no image route is
+// set or the route cannot be resolved (the image client reports that error when it is created).
+func imageModelValues(values llmutil.RuntimeValues) llmutil.RuntimeValues {
+	imageValues, err := llmutil.ImageRouteValues(values, values)
+	if err != nil {
+		return values
+	}
+	return imageValues
 }
 
 func (rt *Runtime) RequestTimeout() time.Duration {

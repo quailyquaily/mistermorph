@@ -49,12 +49,9 @@ type RuntimeValues struct {
 	FileStateDir       string `config:"file_state_dir"`
 	Profiles           map[string]ProfileConfig
 	Routes             RoutesConfig
-	ImageProvider      string
-	ImageEndpoint      string
-	ImageAPIKey        string
-	ImageModel         string
-	ImageTimeoutRaw    string
-	ImageOptions       llm.ImageProviderOptions
+	// The image model is chosen by llm.routes.image; only these image settings are shared.
+	ImageTimeoutRaw string
+	ImageOptions    llm.ImageProviderOptions
 
 	BedrockAWSKey          string `config:"llm.bedrock.aws_key"`
 	BedrockAWSSecret       string `config:"llm.bedrock.aws_secret"`
@@ -121,10 +118,6 @@ func RuntimeValuesFromReader(r ConfigReader) (RuntimeValues, error) {
 		FileStateDir:       strings.TrimSpace(r.GetString("file_state_dir")),
 		Profiles:           profiles,
 		Routes:             routes,
-		ImageProvider:      strings.TrimSpace(r.GetString("llm.image.provider")),
-		ImageEndpoint:      strings.TrimSpace(r.GetString("llm.image.endpoint")),
-		ImageAPIKey:        strings.TrimSpace(r.GetString("llm.image.api_key")),
-		ImageModel:         strings.TrimSpace(r.GetString("llm.image.model")),
 		ImageTimeoutRaw:    strings.TrimSpace(r.GetString("llm.image.request_timeout")),
 		ImageOptions: llm.ImageProviderOptions{
 			OpenAI:     openAIImageOptions,
@@ -159,9 +152,31 @@ func RuntimeValuesWithClientConfig(values RuntimeValues, cfg llmconfig.ClientCon
 	return out
 }
 
+// ImageRouteValues returns the settings of the model that generates and edits images. With
+// llm.routes.image set, that is the route's profile. Otherwise the image model is the one the
+// caller is already using (current), as before image routes existed.
+func ImageRouteValues(values RuntimeValues, current RuntimeValues) (RuntimeValues, error) {
+	if values.Routes.ParseErr != nil {
+		return RuntimeValues{}, values.Routes.ParseErr
+	}
+	policy := values.Routes.Image
+	if err := validateRoutePolicy(policy, RoutePurposeImage); err != nil {
+		return RuntimeValues{}, err
+	}
+	if strings.TrimSpace(policy.Profile) == "" {
+		return current, nil
+	}
+	profile, err := ResolveProfile(values, policy.Profile)
+	if err != nil {
+		return RuntimeValues{}, err
+	}
+	return profile.Values, nil
+}
+
+// ImageClientFromValues builds the image client from an image route's values (see ImageRouteValues).
 func ImageClientFromValues(values RuntimeValues) (llm.ImageClient, error) {
 	meta := ResolveImageClientMetadata(values)
-	apiKey := firstNonEmpty(values.ImageAPIKey, APIKeyForProviderWithValues(meta.Provider, values))
+	apiKey := APIKeyForProviderWithValues(meta.Provider, values)
 	requestTimeout, err := requestTimeoutFromValue(values.ImageTimeoutRaw, "llm.image.request_timeout")
 	if err != nil {
 		return nil, err
@@ -197,17 +212,15 @@ func ImageClientFromValuesWithStats(values RuntimeValues, logger *slog.Logger) (
 }
 
 func ResolveImageClientMetadata(values RuntimeValues) ImageClientMetadata {
-	if strings.TrimSpace(values.ImageProvider) == "" {
-		if resolved, err := ResolveRuntimeValuesInferenceProvider(values); err == nil {
-			values = resolved
-		}
+	if resolved, err := ResolveRuntimeValuesInferenceProvider(values); err == nil {
+		values = resolved
 	}
-	sourceProvider := strings.ToLower(firstNonEmpty(values.ImageProvider, values.Provider))
+	sourceProvider := strings.ToLower(strings.TrimSpace(values.Provider))
 	provider := normalizeImageProviderForUniai(sourceProvider)
 	return ImageClientMetadata{
 		Provider: provider,
 		Endpoint: imageEndpointForValues(sourceProvider, provider, values),
-		Model:    firstNonEmpty(values.ImageModel, values.Model),
+		Model:    strings.TrimSpace(values.Model),
 	}
 }
 
@@ -222,13 +235,8 @@ func normalizeImageProviderForUniai(provider string) string {
 }
 
 func imageEndpointForValues(sourceProvider string, imageProvider string, values RuntimeValues) string {
-	if endpoint := strings.TrimSpace(values.ImageEndpoint); endpoint != "" {
-		return endpoint
-	}
-	if normalizeProvider(values.Provider) == "openai_codex" || normalizeProvider(sourceProvider) == "openai_codex" {
-		return ""
-	}
-	if normalizeImageProviderForUniai(values.Provider) != imageProvider {
+	// The Codex endpoint serves chat only; images use the provider's own API base.
+	if normalizeProvider(sourceProvider) == "openai_codex" {
 		return ""
 	}
 	return EndpointForProviderWithValues(imageProvider, values)

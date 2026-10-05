@@ -42,10 +42,6 @@ Console Settings は、このページにあるサポート中の公開フィー
 - `llm.bedrock.model_arn`
 - `llm.cloudflare.account_id`
 - `llm.cloudflare.api_token`
-- `llm.image.provider`
-- `llm.image.endpoint`
-- `llm.image.api_key`
-- `llm.image.model`
 - `llm.image.request_timeout`
 - `llm.image.options.openai`
 - `llm.image.options.gemini`
@@ -58,6 +54,7 @@ Console Settings は、このページにあるサポート中の公開フィー
 - `llm.routes.<purpose>.candidates[].profile`
 - `llm.routes.<purpose>.candidates[].weight`
 - `llm.routes.<purpose>.fallback_profiles[]`
+- `llm.routes.image`（`image_generate` と `image_edit` が使う profile。1 つだけ指定でき、candidates と fallback は使えません）
 
 ## Logging
 

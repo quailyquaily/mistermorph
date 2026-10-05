@@ -4,7 +4,6 @@ import {
   CACHE_TTL_OPTIONS,
   HEARTBEAT_INTERVAL_OPTIONS,
   IMAGE_PARTS_OPTIONS,
-  IMAGE_PROVIDER_OPTIONS,
   LOGGING_LEVEL_OPTIONS,
   REASONING_EFFORT_OPTIONS,
   TASK_TARGET_OPTIONS,
@@ -48,13 +47,9 @@ export const DEFAULT_MODEL_ADVANCED_CONFIG_GROUPS = [
 export const LLM_SYSTEM_CONFIG_GROUPS = [
   {
     id: "image-model",
-    title: "Image model",
-    note: "Used by image_generate and image_edit. Empty fields use the supported default-model inheritance rules.",
+    title: "Image generation",
+    note: "Settings for image_generate and image_edit. Which model makes the images is the Image route in Model Routes.",
     fields: [
-      { path: "llm.image.provider", label: "Provider", type: "select", options: IMAGE_PROVIDER_OPTIONS },
-      { path: "llm.image.endpoint", label: "API base", type: "string" },
-      { path: "llm.image.api_key", label: "API key", type: "string", secret: true },
-      { path: "llm.image.model", label: "Model", type: "string" },
       { path: "llm.image.request_timeout", label: "Request timeout", type: "string", duration: true, editor: "duration" },
       { path: "llm.image.options.openai", label: "OpenAI options", type: "json", wide: true },
       { path: "llm.image.options.gemini", label: "Gemini options", type: "json", wide: true },

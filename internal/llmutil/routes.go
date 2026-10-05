@@ -17,6 +17,7 @@ const (
 	RoutePurposeHeartbeat  = "heartbeat"
 	RoutePurposeThink      = "think"
 	RoutePurposePlanCreate = "plan_create"
+	RoutePurposeImage      = "image"
 	RouteProfileDefault    = "default"
 	ProfileSourceConfig    = "config"
 	ReasoningEffortXHigh   = "xhigh"
@@ -86,6 +87,9 @@ type PurposeRoutes struct {
 	Heartbeat  RoutePolicyConfig `mapstructure:"heartbeat"`
 	Think      RoutePolicyConfig `mapstructure:"think"`
 	PlanCreate RoutePolicyConfig `mapstructure:"plan_create"`
+	// Image picks the profile for image_generate and image_edit. It takes one profile:
+	// image requests have no candidates or fallbacks.
+	Image RoutePolicyConfig `mapstructure:"image"`
 }
 
 type RoutesConfig struct {
@@ -388,6 +392,7 @@ func normalizePurposeRoutes(cfg PurposeRoutes) PurposeRoutes {
 	cfg.Heartbeat = normalizeRoutePolicy(cfg.Heartbeat)
 	cfg.Think = normalizeRoutePolicy(cfg.Think)
 	cfg.PlanCreate = normalizeRoutePolicy(cfg.PlanCreate)
+	cfg.Image = normalizeRoutePolicy(cfg.Image)
 	return cfg
 }
 
@@ -427,6 +432,8 @@ func routeTargetForPurpose(routes PurposeRoutes, purpose string) RoutePolicyConf
 		return routes.Think
 	case RoutePurposePlanCreate:
 		return routes.PlanCreate
+	case RoutePurposeImage:
+		return routes.Image
 	default:
 		return RoutePolicyConfig{}
 	}
@@ -480,10 +487,6 @@ func runtimeValuesForNamedProfile(shared RuntimeValues, profile ProfileConfig) R
 		PricingFile:            shared.PricingFile,
 		ConfigPath:             shared.ConfigPath,
 		FileStateDir:           shared.FileStateDir,
-		ImageProvider:          shared.ImageProvider,
-		ImageEndpoint:          shared.ImageEndpoint,
-		ImageAPIKey:            shared.ImageAPIKey,
-		ImageModel:             shared.ImageModel,
 		ImageTimeoutRaw:        shared.ImageTimeoutRaw,
 		ImageOptions:           shared.ImageOptions,
 		BedrockAWSKey:          profile.Bedrock.AWSKey,
@@ -669,6 +672,9 @@ func validateRoutePolicy(policy RoutePolicyConfig, purpose string) error {
 	if strings.TrimSpace(policy.Profile) != "" && len(policy.Candidates) > 0 {
 		return fmt.Errorf("llm.routes.%s cannot set both profile and candidates", purpose)
 	}
+	if purpose == RoutePurposeImage && (len(policy.Candidates) > 0 || len(policy.FallbackProfiles) > 0) {
+		return fmt.Errorf("llm.routes.%s takes one profile; candidates and fallback_profiles are not supported", purpose)
+	}
 	return nil
 }
 
@@ -739,6 +745,10 @@ func parseRoutesConfig(raw map[string]any) (RoutesConfig, error) {
 	if err != nil {
 		return RoutesConfig{}, err
 	}
+	image, err := parseRoutePolicyValue(raw[RoutePurposeImage], "llm.routes."+RoutePurposeImage)
+	if err != nil {
+		return RoutesConfig{}, err
+	}
 	return RoutesConfig{
 		PurposeRoutes: PurposeRoutes{
 			MainLoop:   mainLoop,
@@ -748,6 +758,7 @@ func parseRoutesConfig(raw map[string]any) (RoutesConfig, error) {
 			Heartbeat:  heartbeat,
 			Think:      think,
 			PlanCreate: planCreate,
+			Image:      image,
 		},
 	}, nil
 }

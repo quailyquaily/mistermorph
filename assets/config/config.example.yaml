@@ -98,15 +98,11 @@ llm:
   cloudflare:
     account_id: ""
     api_token: "${CLOUDFLARE_API_TOKEN}"
-  # Optional image model configuration for image_generate and image_edit.
-  # If empty, image config can inherit top-level llm.* only when llm.provider is openai or gemini and llm.api_key is set.
-  # openai_codex and xai_oauth can accept image inputs in chat, but do not provide
-  # credentials for image_generate or image_edit. Configure llm.image explicitly for those tools.
+  # Shared settings for image_generate and image_edit. The image model itself is a profile
+  # chosen by routes.image (below); without that route, images use the current chat model.
+  # openai_codex and xai_oauth accept image inputs in chat but do not grant image generation,
+  # so with either of them, route images to a profile with an OpenAI, Gemini, or Cloudflare key.
   image:
-    provider: ""
-    endpoint: ""
-    api_key: ""
-    model: ""
     request_timeout: "180s"
     options:
       openai: {}
@@ -163,6 +159,7 @@ llm:
   #   awareness: cheap
   #   think: reasoning
   #   plan_create: reasoning
+  #   image: painter # a profile with an image model, e.g. inference_provider: openai, model: gpt-image-2
 logging:
   # debug|info|warn|error
   # - info: emits high-level progress (run_start, tool_call, tool_done, final)

@@ -305,17 +305,12 @@ func New(deps Dependencies) *cobra.Command {
 				defer func() { _ = promptInspector.Close() }()
 			}
 			runtimeToolsCfg := toolsutil.LoadRuntimeToolsRegisterConfigFromViper()
-			imageValues := mainRoute.Values
-			runtimeToolsCfg.Image = toolsutil.ApplyImageToolLLMConfig(runtimeToolsCfg.Image, toolsutil.ImageToolLLMConfig{
-				Provider:            imageValues.Provider,
-				APIKey:              imageValues.APIKey,
-				Model:               imageValues.Model,
-				ImageProvider:       imageValues.ImageProvider,
-				ImageAPIKey:         imageValues.ImageAPIKey,
-				ImageModel:          imageValues.ImageModel,
-				CloudflareAccountID: imageValues.CloudflareAccountID,
-				CloudflareAPIToken:  imageValues.CloudflareAPIToken,
-			})
+			// llm.routes.image picks the image model; without it, images use the run's model.
+			imageValues, err := llmutil.ImageRouteValues(llmValues, mainRoute.Values)
+			if err != nil {
+				return err
+			}
+			runtimeToolsCfg.Image = toolsutil.ApplyImageToolLLMConfig(runtimeToolsCfg.Image, toolsutil.ImageToolLLMConfigFromValues(imageValues))
 
 			var hook agent.Hook
 			if interactive {

@@ -631,11 +631,15 @@ func (rt *Runtime) sharedDependencies(snap runtimeSnapshot) depsutil.CommonDepen
 			return rt.buildLLMClient(route, snap.Logger, usageClientWrap)
 		},
 		CreateImageClient: func() (llm.ImageClient, error) {
-			client, err := rt.buildDeps.buildImageClient(snap.LLMValues, snap.Logger)
+			imageValues, err := llmutil.ImageRouteValues(snap.LLMValues, snap.LLMValues)
+			if err != nil {
+				return nil, err
+			}
+			client, err := rt.buildDeps.buildImageClient(imageValues, snap.Logger)
 			if err != nil {
 				return client, err
 			}
-			meta := llmutil.ResolveImageClientMetadata(snap.LLMValues)
+			meta := llmutil.ResolveImageClientMetadata(imageValues)
 			return llmstats.WrapImageClient(client, llmstats.ClientOptions{
 				Provider:     meta.Provider,
 				APIBase:      meta.Endpoint,

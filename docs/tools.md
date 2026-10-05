@@ -365,8 +365,8 @@ Constraints:
 
 - Controlled by `tools.image_generate.enabled`.
 - Registered only when the current task has explicit image intent, or when the current session has retained image-tool state.
-- Uses `llm.image.model`, or the current runtime model when the image model is empty.
-- `openai_codex` and `xai_oauth` do not provide image-generation credentials. Use explicit `llm.image` credentials with either OAuth chat provider.
+- Uses the profile `llm.routes.image` points at, or the current runtime model when no image route is set.
+- `openai_codex` and `xai_oauth` do not provide image-generation credentials. With either OAuth chat provider, route images to a profile with an OpenAI, Gemini, or Cloudflare key.
 - Produces exactly one image.
 - Output files are limited to `workspace_dir` and `file_cache_dir`.
 - Returned MIME type decides the extension. A conflicting `output_path` extension returns an error.
@@ -388,8 +388,8 @@ Constraints:
 
 - Controlled by `tools.image_edit.enabled`.
 - Registered only when the current task has explicit image intent, or when the current session has retained image-tool state.
-- Uses `llm.image.model`, or the current runtime model when the image model is empty.
-- `openai_codex` and `xai_oauth` do not provide image-editing credentials. Use explicit `llm.image` credentials with either OAuth chat provider.
+- Uses the profile `llm.routes.image` points at, or the current runtime model when no image route is set.
+- `openai_codex` and `xai_oauth` do not provide image-editing credentials. With either OAuth chat provider, route images to a profile with an OpenAI, Gemini, or Cloudflare key.
 - Accepts exactly one input image and produces exactly one output image.
 - Input and output files are limited to `workspace_dir` and `file_cache_dir`; `file_state_dir` is not accepted.
 - Current-turn channel image attachments are exposed to the model as `file_cache_dir/...` aliases when available.

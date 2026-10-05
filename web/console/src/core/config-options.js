@@ -44,13 +44,6 @@ export const REASONING_EFFORT_OPTIONS = [
   { title: "Extra high", value: "xhigh" },
 ];
 
-export const IMAGE_PROVIDER_OPTIONS = [
-  { title: "Same as default model", value: "" },
-  { title: "OpenAI", value: "openai" },
-  { title: "Gemini", value: "gemini" },
-  { title: "Cloudflare", value: "cloudflare" },
-];
-
 export const AWS_REGION_OPTIONS = [
   "us-east-1", "us-east-2", "us-west-1", "us-west-2",
   "ca-central-1", "sa-east-1",

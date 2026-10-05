@@ -122,11 +122,15 @@ func BuildGenerationDependencies(ctx context.Context, base CommonDependencies, r
 			)
 		},
 		CreateImageClient: func() (llm.ImageClient, error) {
-			client, err := llmutil.ImageClientFromValues(runtimeValues)
+			imageValues, err := llmutil.ImageRouteValues(runtimeValues, runtimeValues)
 			if err != nil {
 				return nil, err
 			}
-			meta := llmutil.ResolveImageClientMetadata(runtimeValues)
+			client, err := llmutil.ImageClientFromValues(imageValues)
+			if err != nil {
+				return nil, err
+			}
+			meta := llmutil.ResolveImageClientMetadata(imageValues)
 			return llmstats.WrapImageClient(client, llmstats.ClientOptions{
 				Provider:     meta.Provider,
 				APIBase:      meta.Endpoint,
