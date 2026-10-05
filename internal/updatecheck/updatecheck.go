@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -17,6 +18,20 @@ import (
 )
 
 const defaultUserAgent = "mistermorph-update-check"
+
+// ErrManifestNotFound means the manifest URL returned 404, which for a channel
+// means nothing has been released to it yet.
+var ErrManifestNotFound = errors.New("update manifest not found")
+
+// unpublishedChannelError reads as a plain sentence and still matches
+// ErrManifestNotFound.
+type unpublishedChannelError struct{ channel string }
+
+func (e unpublishedChannelError) Error() string {
+	return fmt.Sprintf("no %s release has been published yet", e.channel)
+}
+
+func (e unpublishedChannelError) Unwrap() error { return ErrManifestNotFound }
 
 type Options struct {
 	AutoDownload   bool
@@ -91,6 +106,9 @@ func Check(ctx context.Context, opts Options) (Result, error) {
 	}
 
 	manifest, err := FetchManifest(ctx, manifestURL, opts.UserAgent)
+	if errors.Is(err, ErrManifestNotFound) {
+		return Result{}, unpublishedChannelError{channel: channel}
+	}
 	if err != nil {
 		return Result{}, err
 	}
@@ -176,6 +194,9 @@ func FetchManifest(ctx context.Context, manifestURL string, userAgent string) (M
 		return Manifest{}, err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return Manifest{}, ErrManifestNotFound
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return Manifest{}, fmt.Errorf("update manifest http status %d", resp.StatusCode)
 	}

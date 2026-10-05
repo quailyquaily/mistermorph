@@ -5,10 +5,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/quailyquaily/mistermorph/internal/testhttp"
@@ -223,4 +225,21 @@ func newUpdateTestServer(t *testing.T, asset []byte) string {
 		}
 	}))
 	return serverURL
+}
+
+func TestCheckReportsUnpublishedChannel(t *testing.T) {
+	serverURL := testhttp.WithDefaultTransport(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
+	}))
+
+	_, err := Check(context.Background(), Options{
+		Channel:     ChannelPro,
+		ManifestURL: serverURL + "/pro/latest/update.json",
+	})
+	if !errors.Is(err, ErrManifestNotFound) {
+		t.Fatalf("Check() error = %v, want ErrManifestNotFound", err)
+	}
+	if !strings.Contains(err.Error(), "no pro release has been published yet") {
+		t.Fatalf("Check() error = %q, want a message naming the channel", err)
+	}
 }
