@@ -886,117 +886,75 @@ body:has(.settings-page) .q-dialog .q-menu-item.danger .q-menu-title {
   height: 13px;
 }
 
-.settings-console-row--desktop-update {
-  align-items: center;
+/* ---------- Updates ---------- */
+/* Same width as the outlined buttons in the rows below. */
+.settings-update-channel-select,
+.settings-update-channel-select .q-dropdown-menu,
+.settings-update-channel-select .q-dropdown-menu-action {
+  width: 180px;
 }
 
-.settings-desktop-update-check-button {
-  flex: 0 0 auto;
-  min-width: 34px;
-  width: 34px;
-  min-height: 34px;
-  padding: 0 7px !important;
+@media (max-width: 760px) {
+  .settings-update-channel-select,
+  .settings-update-channel-select .q-dropdown-menu,
+  .settings-update-channel-select .q-dropdown-menu-action {
+    width: 100%;
+  }
 }
 
-.settings-desktop-update-result {
-  display: grid;
-  gap: 12px;
-  padding: 12px;
-  border: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--q-bg-paper) 94%, var(--q-bg-subtle));
-}
-
-.settings-desktop-update-result-head,
-.settings-desktop-update-checksum-row {
-  min-width: 0;
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.settings-desktop-update-label {
-  color: var(--text-2);
-  font-size: var(--font-size-meta);
-  line-height: 1.4;
-}
-
-.settings-desktop-update-version {
-  min-width: 0;
+.settings-update-state.is-available {
   color: var(--text-0);
-  font-size: var(--font-size-ui);
-  font-weight: 600;
-  line-height: 1.35;
-  text-align: right;
-  overflow-wrap: anywhere;
+  font-weight: 500;
 }
 
-.settings-desktop-update-changelog-field {
-  display: grid;
-  gap: 6px;
-  min-width: 0;
+.settings-update-state.is-error {
+  color: var(--q-c-red);
 }
 
-.settings-desktop-update-changelog .textarea {
-  min-height: 132px;
-  resize: vertical;
-  color: var(--text-1);
-  font-family: var(--font-ui);
-  line-height: 1.55;
+.settings-update-release {
+  align-items: flex-start;
 }
 
-.settings-desktop-update-changelog .textarea:read-only {
-  cursor: default;
-}
-
-.settings-desktop-update-checksum-button {
-  min-width: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: flex-end;
+.settings-update-release-copy {
+  flex: 1 1 auto;
   gap: 8px;
-  max-width: min(100%, 560px);
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--text-0);
+}
+
+.settings-update-release-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+}
+
+.settings-update-link {
   cursor: pointer;
 }
 
-.settings-desktop-update-checksum-button:disabled {
-  cursor: default;
-  color: var(--text-2);
+.settings-update-notes {
+  max-height: 240px;
+  overflow: auto;
+  color: var(--text-1);
+  font-size: var(--font-size-meta);
 }
 
-.settings-desktop-update-checksum-button code {
-  min-width: 0;
+/* Commit hashes read as quiet references, not code chips. */
+.settings-update-notes .mmr-document code.mmr-inline-copy {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: inherit;
+}
+
+.settings-update-checksum {
   padding: 0;
   border: 0;
   background: transparent;
   color: inherit;
+  font-family: var(--font-mono);
   font-size: var(--font-size-meta);
-  line-height: 1.45;
-  text-align: right;
-  overflow-wrap: anywhere;
-}
-
-.settings-desktop-update-checksum-icon {
-  flex: 0 0 auto;
-  width: 13px;
-  height: 13px;
-  color: var(--text-2);
-}
-
-.settings-desktop-update-result-actions {
-  display: flex;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.settings-desktop-update-result-action {
-  gap: 7px;
 }
 
 @media (max-width: 920px) {
@@ -1112,17 +1070,6 @@ body:has(.settings-page) .q-dialog .q-menu-item.danger .q-menu-title {
   .settings-console-row > .q-switch {
     flex: 0 0 auto;
     width: auto;
-  }
-
-  .settings-desktop-update-result-head,
-  .settings-desktop-update-checksum-row {
-    display: grid;
-    justify-content: stretch;
-  }
-
-  .settings-desktop-update-result-actions,
-  .settings-desktop-update-result-action {
-    width: 100%;
   }
 
   .settings-fallback-row {

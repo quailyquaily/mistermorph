@@ -1,4 +1,18 @@
-function displayValue(value, type) {
+// Go prints durations in full ("30m0s"); drop the zero units so they match presets like "30m".
+export function compactDuration(value) {
+  const text = String(value ?? "").trim();
+  if (!/^(\d+h)?(\d+m)?(\d+(\.\d+)?s)?$/.test(text) || text === "") {
+    return text;
+  }
+  const compact = text.replace(/(^|[hm])0s$/, "$1").replace(/(\d+h)0m$/, "$1");
+  return compact || "0s";
+}
+
+function displayValue(value, field) {
+  const type = field.type;
+  if (field.duration) {
+    return compactDuration(value === undefined || value === null ? "" : value);
+  }
   if (type === "string_list") {
     return Array.isArray(value) ? value.map((item) => String(item)).join("\n") : "";
   }
@@ -15,7 +29,7 @@ export function createConfigDraft(values, fields) {
   const source = values && typeof values === "object" ? values : {};
   const draft = {};
   for (const field of Array.isArray(fields) ? fields : []) {
-    draft[field.path] = displayValue(source[field.path], field.type);
+    draft[field.path] = displayValue(source[field.path], field);
   }
   return draft;
 }
@@ -63,7 +77,17 @@ function parseValue(value, field) {
       throw new Error(`${field.label || field.path} must be valid JSON`);
     }
   }
-  return String(value ?? "").trim();
+  const text = String(value ?? "").trim();
+  if (field.validate === "listen" && text !== "" && !isListenAddress(text)) {
+    throw new Error(`${field.label || field.path} must be host:port, like 127.0.0.1:9080 or :8080`);
+  }
+  return text;
+}
+
+// host:port, :port or [ipv6]:port, with a port from 0 to 65535.
+export function isListenAddress(text) {
+  const match = /^(\[[0-9a-fA-F:.]+\]|[^\s:\[\]]*):(\d{1,5})$/.exec(String(text ?? "").trim());
+  return Boolean(match) && Number(match[2]) <= 65535;
 }
 
 export function buildConfigUpdate(draft, original, resetPaths, fields) {

@@ -1,0 +1,464 @@
+/* Settings fields, drawn from scratch so each control is one box with one focus ring.
+   Metrics match the console's inputs: 44px tall, 2px corners, a 1px inset line. */
+
+/* The menu is teleported to <body>, outside any .sf, so it needs the same variables. */
+.sf,
+.sf-menu {
+  --sf-height: 44px;
+  --sf-line: rgba(40, 78, 120, 0.2);
+  --sf-line-strong: rgba(66, 111, 158, 0.62);
+  --sf-ring: rgba(66, 111, 158, 0.16);
+  --sf-fill: rgba(255, 255, 255, 0.94);
+  --sf-hover: rgba(66, 111, 158, 0.06);
+  --sf-active: rgba(66, 111, 158, 0.1);
+  --sf-accent: var(--accent-1, #426f9e);
+  --sf-error: var(--q-c-red, #a84b5f);
+}
+
+.sf {
+  min-width: 0;
+  font-family: var(--font-ui);
+  font-size: var(--font-size-ui);
+  color: var(--text-0);
+}
+
+/* The box. */
+.sf-box {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  height: var(--sf-height);
+  border-radius: 2px;
+  background: var(--sf-fill);
+  box-shadow: inset 0 0 0 1px var(--sf-line);
+  transition: box-shadow var(--motion-fast, 120ms) ease;
+}
+
+.sf-box:hover:not(.is-disabled) {
+  box-shadow: inset 0 0 0 1px rgba(40, 78, 120, 0.32);
+}
+
+.sf-box:focus-within,
+.sf-box.is-open {
+  box-shadow: inset 0 0 0 1px var(--sf-line-strong), 0 0 0 1px var(--sf-ring);
+}
+
+.sf-box.is-invalid {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--sf-error) 70%, transparent);
+}
+
+.sf-box.is-disabled {
+  background: color-mix(in srgb, var(--sf-fill) 60%, transparent);
+  color: var(--text-2);
+  cursor: not-allowed;
+}
+
+/* Text entry inside a box: no border, no spinners, no clear icon. */
+.sf-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  padding: 0 12px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  outline: none;
+}
+
+.sf-input::placeholder {
+  color: var(--text-2);
+  opacity: 0.75;
+}
+
+.sf-input:disabled {
+  cursor: not-allowed;
+}
+
+.sf-input.is-mono {
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+.sf-input.is-number {
+  font-variant-numeric: tabular-nums;
+}
+
+/* A part of the box that is a button: a unit, a menu, an action. */
+.sf-part {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 0 2px 2px 0;
+  background: transparent;
+  color: var(--text-1);
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.sf-part.is-lead {
+  border-radius: 2px 0 0 2px;
+}
+
+.sf-part:hover:not(:disabled) {
+  background: var(--sf-hover);
+  color: var(--text-0);
+}
+
+.sf-part:focus-visible {
+  outline: none;
+  background: var(--sf-active);
+  color: var(--text-0);
+}
+
+.sf-part:disabled {
+  cursor: not-allowed;
+}
+
+.sf-part.is-quiet {
+  color: var(--text-2);
+}
+
+.sf-part .sf-icon {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+/* A hairline between parts of one box. */
+.sf-sep {
+  flex: 0 0 1px;
+  align-self: center;
+  height: 20px;
+  background: var(--sf-line);
+}
+
+.sf-chevron {
+  width: 12px;
+  height: 12px;
+  color: var(--text-2);
+  transition: transform var(--motion-fast, 120ms) ease;
+}
+
+.is-open .sf-chevron {
+  transform: rotate(180deg);
+}
+
+/* A box that is a single button (a select). */
+.sf-trigger {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  outline: none;
+}
+
+.sf-trigger:disabled {
+  cursor: not-allowed;
+}
+
+.sf-trigger-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sf-trigger-text.is-placeholder,
+.sf-muted {
+  color: var(--text-2);
+}
+
+/* The floating list: teleported to <body>, so dialogs and scroll areas never clip it. */
+.sf-menu {
+  position: fixed;
+  z-index: 2000;
+  box-sizing: border-box;
+  min-width: 160px;
+  max-height: 300px;
+  padding: 4px;
+  overflow-y: auto;
+  border-radius: 2px;
+  background: var(--q-bg-white, #fbfdff);
+  box-shadow: 0 0 0 1px var(--sf-line), 0 10px 28px rgba(24, 24, 50, 0.12);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-ui);
+  color: var(--text-0);
+  outline: none;
+}
+
+.sf-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 34px;
+  padding: 0 10px;
+  border-radius: 2px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.sf-option.is-active {
+  background: var(--sf-active);
+}
+
+.sf-option.is-selected {
+  color: var(--sf-accent);
+  font-weight: 600;
+}
+
+.sf-option-hint {
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+/* Ratio: a track and a readout. */
+.sf-ratio {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  height: var(--sf-height);
+}
+
+.sf-ratio-track {
+  position: relative;
+  height: 24px;
+}
+
+.sf-ratio-range {
+  --pct: 50%;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.sf-ratio-range:disabled {
+  cursor: not-allowed;
+}
+
+.sf-ratio-range::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(to right, var(--sf-accent) var(--pct), var(--sf-line) var(--pct));
+}
+
+.sf-ratio-range::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--sf-line);
+}
+
+.sf-ratio-range::-moz-range-progress {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--sf-accent);
+}
+
+.sf-ratio-range::-webkit-slider-thumb {
+  width: 16px;
+  height: 16px;
+  margin-top: -6px;
+  border: 2px solid var(--sf-accent);
+  border-radius: 50%;
+  background: var(--q-bg-white, #fff);
+  box-shadow: 0 1px 3px rgba(24, 24, 50, 0.18);
+  -webkit-appearance: none;
+  appearance: none;
+  transition: transform var(--motion-fast, 120ms) ease;
+}
+
+.sf-ratio-range::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--sf-accent);
+  border-radius: 50%;
+  background: var(--q-bg-white, #fff);
+}
+
+.sf-ratio-range:hover:not(:disabled)::-webkit-slider-thumb,
+.sf-ratio-range:focus-visible::-webkit-slider-thumb {
+  transform: scale(1.15);
+}
+
+.sf-ratio-range:focus-visible {
+  outline: none;
+}
+
+.sf-ratio-range:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 4px var(--sf-ring);
+}
+
+.sf-ratio-range:disabled::-webkit-slider-thumb {
+  border-color: var(--text-2);
+}
+
+.sf-ratio-ticks {
+  position: absolute;
+  inset: auto 0 -2px;
+  display: flex;
+  justify-content: space-between;
+  pointer-events: none;
+}
+
+.sf-ratio-ticks span {
+  width: 1px;
+  height: 4px;
+  background: var(--sf-line);
+}
+
+.sf-ratio-value {
+  min-width: 3.5em;
+  color: var(--text-0);
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.sf-ratio-value small {
+  margin-left: 1px;
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+/* Choices: toggles laid out as chips. */
+.sf-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.sf-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  margin: 0;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 2px;
+  background: var(--sf-fill);
+  box-shadow: inset 0 0 0 1px var(--sf-line);
+  color: var(--text-1);
+  font: inherit;
+  cursor: pointer;
+  transition: background-color var(--motion-fast, 120ms) ease, box-shadow var(--motion-fast, 120ms) ease;
+}
+
+.sf-chip:hover:not(:disabled) {
+  box-shadow: inset 0 0 0 1px rgba(40, 78, 120, 0.32);
+  color: var(--text-0);
+}
+
+.sf-chip:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1px var(--sf-line-strong), 0 0 0 1px var(--sf-ring);
+}
+
+.sf-chip[aria-checked="true"] {
+  background: color-mix(in srgb, var(--sf-accent) 10%, var(--sf-fill));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--sf-accent) 55%, transparent);
+  color: var(--sf-accent);
+  font-weight: 600;
+}
+
+.sf-chip:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.sf-chip .sf-icon {
+  width: 13px;
+  height: 13px;
+}
+
+/* Rows of boxes for lists and maps. */
+.sf-rows {
+  display: grid;
+  gap: 8px;
+}
+
+.sf-row {
+  display: grid;
+  gap: 4px;
+}
+
+/* In a two-value row (name and value), the value gets the larger share. */
+.sf-row .sf-input {
+  flex: 2 1 0;
+}
+
+.sf-row .sf-input + .sf-sep + .sf-input {
+  flex-grow: 3;
+}
+
+.sf-add {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  margin: 0;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--text-1);
+  font: inherit;
+  cursor: pointer;
+}
+
+.sf-add:hover:not(:disabled),
+.sf-add:focus-visible {
+  outline: none;
+  color: var(--sf-accent);
+}
+
+.sf-add .sf-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.sf-error {
+  margin: 0;
+  color: var(--sf-error);
+  font-size: var(--font-size-meta);
+}
+
+/* Visually hidden, still read by screen readers. */
+.sf-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}

@@ -5,6 +5,8 @@ import { captureUnsavedScopes, mergeConfigUpdates, restoreUnsavedScopes } from "
 import "./SettingsView.css";
 
 import AppPage from "../components/AppPage";
+import MarkdownContent from "../components/MarkdownContent";
+import SettingSelect from "../components/SettingSelect";
 import EnvManagedField from "../components/EnvManagedField";
 import SecretInput from "../components/SecretInput";
 import AuthProfilesPanel from "../components/AuthProfilesPanel";
@@ -63,6 +65,7 @@ import useProAuthFlow from "../composables/useProAuthFlow";
 import useXAIAuthFlow from "../composables/useXAIAuthFlow";
 import {
   canCheckDesktopUpdate,
+  canPickDesktopDirectory,
   checkDesktopUpdate,
   desktopRuntimeVersion,
 } from "../core/desktop-runtime";
@@ -95,7 +98,6 @@ import {
   SECURITY_CONFIG_GROUPS,
   SYSTEM_ADVANCED_CONFIG_GROUPS,
   SYSTEM_CONFIG_GROUPS,
-  SYSTEM_UPDATE_CONFIG_GROUPS,
   TOOL_ADVANCED_CONFIG_GROUPS,
 } from "../core/config-field-groups";
 import {
@@ -353,63 +355,6 @@ function lineCount(value) {
     return 0;
   }
   return text.split(/\r?\n/).length;
-}
-
-function normalizeAppVersion(version) {
-  return trimText(version).replace(/^v/i, "");
-}
-
-function parseComparableVersion(version) {
-  let normalized = normalizeAppVersion(version);
-  if (!normalized || normalized.toLowerCase() === "dev") {
-    return null;
-  }
-  const buildIndex = normalized.indexOf("+");
-  if (buildIndex >= 0) {
-    normalized = normalized.slice(0, buildIndex);
-  }
-  const [core, pre = ""] = normalized.split("-", 2);
-  const parts = core.split(".");
-  if (!parts.length) {
-    return null;
-  }
-  const nums = [];
-  for (const part of parts) {
-    if (!/^\d+$/.test(part)) {
-      return null;
-    }
-    nums.push(Number(part));
-  }
-  return { parts: nums, pre };
-}
-
-function compareAppVersions(current, latest) {
-  const left = parseComparableVersion(current);
-  const right = parseComparableVersion(latest);
-  if (!left || !right) {
-    return null;
-  }
-  const maxLen = Math.max(left.parts.length, right.parts.length);
-  for (let index = 0; index < maxLen; index += 1) {
-    const a = index < left.parts.length ? left.parts[index] : 0;
-    const b = index < right.parts.length ? right.parts[index] : 0;
-    if (a < b) {
-      return -1;
-    }
-    if (a > b) {
-      return 1;
-    }
-  }
-  if (left.pre === right.pre) {
-    return 0;
-  }
-  if (left.pre === "") {
-    return 1;
-  }
-  if (right.pre === "") {
-    return -1;
-  }
-  return left.pre < right.pre ? -1 : 1;
 }
 
 async function copyTextToClipboard(text) {
@@ -731,6 +676,8 @@ function buildConsoleGuardSnapshot(state) {
 
 const SettingsView = {
   components: {
+    MarkdownContent,
+    SettingSelect,
     SecretInput,
     AppPage,
     EnvManagedField,
@@ -823,6 +770,14 @@ const SettingsView = {
       action: () => { consoleEndpointErrorOpen.value = false; },
     }]);
     const authProfiles = ref([]);
+    // Allowed auth profiles are picked from the profiles defined above them.
+    const securityConfigGroups = computed(() => {
+      const names = authProfiles.value.map((profile) => trimText(profile?.name)).filter(Boolean);
+      return SECURITY_CONFIG_GROUPS.map((group) => ({
+        ...group,
+        fields: group.fields.map((field) => (field.path === "secrets.allow_profiles" ? { ...field, options: names } : field)),
+      }));
+    });
     const loadedConsoleManagedSnapshot = ref("");
     const loadedConsoleTelegramSnapshot = ref("");
     const loadedConsoleSlackSnapshot = ref("");
@@ -865,8 +820,13 @@ const SettingsView = {
     const desktopUpdateResult = ref(null);
     const desktopSettingsLoaded = ref(false);
     const desktopChecksumCopied = ref(false);
-    const desktopChangelogField = ref(null);
-    const updateConfigPanel = ref(null);
+    const desktopBuildChannel = ref("");
+    // The saved auto_update settings. Both apply as soon as they change, like Language.
+    const autoUpdateEnabled = ref(false);
+    const autoUpdateChannel = ref("");
+    const autoUpdateRevision = ref("");
+    const autoUpdateSaving = ref(false);
+    const desktopUpdateError = ref("");
     const systemLoading = ref(false);
     const systemSaving = ref(false);
     const systemSettingsLoaded = ref(false);
@@ -1408,6 +1368,11 @@ const SettingsView = {
     // Section save bar. Every section saves from one place: its own draft scopes (below) plus any
     // ConfigSettingsPanel that registered through this provider while the section is mounted.
     const saveRegistryEntries = reactive(new Map());
+    // Browse only makes sense for this machine's settings: a picked folder is a local path.
+    provide(
+      "settingsCanBrowsePaths",
+      computed(() => settingsEndpointRef.value === LOCAL_CONSOLE_ENDPOINT_REF && canPickDesktopDirectory())
+    );
     provide("settingsSaveRegistry", {
       register(entry) {
         saveRegistryEntries.set(entry.key, entry);
@@ -2001,36 +1966,94 @@ const SettingsView = {
     const desktopDisplayedCurrentVersion = computed(
       () => trimText(desktopUpdateResult.value?.current_version) || trimText(desktopCurrentVersion.value) || "dev"
     );
-    const desktopUpdateCheckHint = computed(() =>
-      t("settings_desktop_update_check_hint", { version: desktopDisplayedCurrentVersion.value })
-    );
-    const desktopUpdateLatestVersionText = computed(() => {
-      const version = trimText(desktopUpdateResult.value?.latest_version) || "-";
-      const channel = trimText(desktopUpdateResult.value?.channel);
+    function updateChannelLabel(channel) {
+      const value = trimText(channel);
+      if (value === "community" || value === "pro") {
+        return t(`settings_update_channel_${value}`);
+      }
+      return value;
+    }
+    function displayVersion(version) {
+      const value = trimText(version);
+      if (!value || value.toLowerCase() === "dev") {
+        return "dev";
+      }
+      return value.startsWith("v") ? value : `v${value}`;
+    }
+    const desktopInstalledText = computed(() => {
+      const version = displayVersion(desktopDisplayedCurrentVersion.value);
+      const channel = updateChannelLabel(desktopBuildChannel.value);
       return channel ? `${version} · ${channel}` : version;
     });
-    const desktopUpdateReleaseNotes = computed(
-      () => String(desktopUpdateResult.value?.release_notes || "").trim() || t("settings_desktop_update_changelog_empty")
+    // idle → not checked yet; current, available, unknown (dev build), or error after a check.
+    const desktopUpdateState = computed(() => {
+      if (desktopChecking.value) return "checking";
+      if (desktopUpdateError.value) return "error";
+      const result = desktopUpdateResult.value;
+      if (!result) return "idle";
+      if (result.update_available === true || result.channel_switch === true) return "available";
+      if (result.status === "current_version_unknown") return "unknown";
+      return "current";
+    });
+    const desktopUpdateStateText = computed(() => {
+      const result = desktopUpdateResult.value;
+      const version = displayVersion(result?.latest_version);
+      const channel = updateChannelLabel(result?.channel);
+      switch (desktopUpdateState.value) {
+        case "checking":
+          return t("settings_update_checking");
+        case "error":
+          return t("settings_update_failed", { error: desktopUpdateError.value });
+        case "available":
+          return result?.channel_switch === true
+            ? t("settings_update_switch_available", { channel, version })
+            : t("settings_update_available", { version });
+        case "unknown":
+          return t("settings_update_dev_build", { channel, version });
+        case "current":
+          return t("settings_update_up_to_date", { channel });
+        default:
+          return t("settings_update_not_checked");
+      }
+    });
+    const desktopUpdateHasRelease = computed(() => {
+      const state = desktopUpdateState.value;
+      return (state === "available" || state === "unknown") && Boolean(trimText(desktopUpdateResult.value?.latest_version));
+    });
+    const desktopUpdateReleaseTitle = computed(() => {
+      const result = desktopUpdateResult.value;
+      return t("settings_update_release_title", {
+        channel: updateChannelLabel(result?.channel),
+        version: displayVersion(result?.latest_version),
+      });
+    });
+    const desktopUpdateReleaseDate = computed(() => {
+      const raw = trimText(desktopUpdateResult.value?.release_date);
+      const date = raw ? new Date(raw) : null;
+      if (!date || Number.isNaN(date.getTime())) return "";
+      try {
+        return new Intl.DateTimeFormat(lang.value || undefined, { dateStyle: "medium" }).format(date);
+      } catch {
+        return date.toISOString().slice(0, 10);
+      }
+    });
+    // GoReleaser notes start with a "## Changelog" heading and full commit hashes; drop the
+    // heading and shorten the hashes so the notes read as a plain list.
+    const desktopUpdateNotesSource = computed(() =>
+      String(desktopUpdateResult.value?.release_notes || "")
+        .replace(/^\s*#{1,6}\s*changelog\s*$/im, "")
+        .replace(/^(\s*[-*+]\s+)([0-9a-f]{40})\b/gim, (_, bullet, sha) => `${bullet}\`${sha.slice(0, 7)}\``)
+        .trim()
     );
     const desktopUpdateChecksum = computed(() => trimText(desktopUpdateResult.value?.checksum));
-    const desktopUpdateAssetURL = computed(() => trimText(desktopUpdateResult.value?.asset_url));
-    const desktopUpdateDownloadDisabled = computed(() => {
-      const result = desktopUpdateResult.value;
-      const current = normalizeAppVersion(result?.current_version);
-      const latest = normalizeAppVersion(result?.latest_version);
-      if (!result || !desktopUpdateAssetURL.value) {
-        return true;
-      }
-      // Switching channels offers the other channel's build at any version.
-      if (result.channel_switch === true) {
-        return false;
-      }
-      if (!current || current.toLowerCase() === "dev") {
-        return true;
-      }
-      const comparison = compareAppVersions(current, latest);
-      return comparison !== -1;
+    const desktopUpdateChecksumShort = computed(() => {
+      const value = desktopUpdateChecksum.value.replace(/^sha256:/i, "");
+      return value.length > 24 ? `${value.slice(0, 12)}…${value.slice(-8)}` : value;
     });
+    const desktopUpdateAssetURL = computed(() => trimText(desktopUpdateResult.value?.asset_url));
+    // The release card offers the build whenever there is one: an update, a channel switch, or the
+    // latest release for a development build.
+    const desktopUpdateDownloadDisabled = computed(() => !desktopUpdateAssetURL.value);
     let agentSettingsRequestSeq = 0;
     let personaSettingsRequestSeq = 0;
     let consoleSettingsRequestSeq = 0;
@@ -3201,6 +3224,8 @@ const SettingsView = {
         }
         const nativeVersion = targetEndpointRef === LOCAL_CONSOLE_ENDPOINT_REF ? desktopRuntimeVersion() : "";
         desktopCurrentVersion.value = nativeVersion || trimText(data?.current_version) || "dev";
+        desktopBuildChannel.value = trimText(data?.build_channel);
+        applyAutoUpdateSettings(data);
         desktopSettingsLoaded.value = true;
       } catch (e) {
         if (isCurrentDesktopSettingsRequest(requestSeq, targetEndpointRef)) {
@@ -4489,17 +4514,79 @@ const SettingsView = {
       }
     }
 
+    const updateChannelOptions = computed(() => [
+      { title: t("settings_update_channel_community"), value: "community" },
+      { title: t("settings_update_channel_pro"), value: "pro" },
+    ]);
+
+    function applyAutoUpdateSettings(payload) {
+      const settings = payload?.auto_update || {};
+      autoUpdateEnabled.value = settings.enabled === true;
+      autoUpdateChannel.value = trimText(settings.channel) || trimText(payload?.build_channel) || desktopBuildChannel.value;
+      const revision = trimText(payload?.config_revision);
+      if (revision) {
+        autoUpdateRevision.value = revision;
+      }
+    }
+
+    async function saveAutoUpdateSettings(change) {
+      const targetEndpointRef = consoleEndpointRef.value;
+      autoUpdateSaving.value = true;
+      try {
+        const payload = await endpointApiFetch(targetEndpointRef, "/settings/auto-update", {
+          method: "PUT",
+          body: {
+            config_revision: settingsConfigRevision.value || autoUpdateRevision.value,
+            auto_update: change,
+          },
+        });
+        if (targetEndpointRef !== consoleEndpointRef.value) {
+          return;
+        }
+        applyAutoUpdateSettings({ ...payload, build_channel: desktopBuildChannel.value });
+        // Keep the other System saves on the new revision of the same config file.
+        if (trimText(payload?.config_revision)) {
+          settingsConfigRevision.value = payload.config_revision;
+        }
+      } catch (e) {
+        toast.error(e.message || t("msg_save_failed"));
+        await loadDesktopSettings();
+      } finally {
+        autoUpdateSaving.value = false;
+      }
+    }
+
+    function setAutoUpdateChannel(value) {
+      const channel = trimText(value);
+      if (!channel || channel === autoUpdateChannel.value) {
+        return;
+      }
+      autoUpdateChannel.value = channel;
+      // A result belongs to the channel it checked.
+      desktopUpdateResult.value = null;
+      desktopUpdateError.value = "";
+      void saveAutoUpdateSettings({ channel });
+    }
+
+    function setAutoUpdateEnabled(value) {
+      const enabled = value === true;
+      if (enabled === autoUpdateEnabled.value) {
+        return;
+      }
+      autoUpdateEnabled.value = enabled;
+      void saveAutoUpdateSettings({ enabled });
+    }
+
     async function runDesktopUpdateCheck() {
       if (desktopCheckDisabled.value) {
         return;
       }
       desktopChecking.value = true;
+      desktopUpdateError.value = "";
       desktopChecksumCopied.value = false;
       const requestSeq = desktopSettingsRequestSeq;
       const targetEndpointRef = consoleEndpointRef.value;
-      // Check the channel shown in the dropdown, even before it is saved.
-      const draftChannel = updateConfigPanel.value?.draft?.["auto_update.channel"];
-      const channel = typeof draftChannel === "string" ? draftChannel.trim() : null;
+      const channel = trimText(autoUpdateChannel.value) || null;
       const checkPath = channel === null
         ? "/settings/auto-update/check"
         : `/settings/auto-update/check?channel=${encodeURIComponent(channel)}`;
@@ -4512,24 +4599,15 @@ const SettingsView = {
         }
         desktopUpdateResult.value = result;
         desktopCurrentVersion.value = trimText(desktopUpdateResult.value?.current_version) || desktopCurrentVersion.value;
-        await nextTick();
-        syncDesktopChangelogReadonly();
       } catch (e) {
         if (isCurrentDesktopSettingsRequest(requestSeq, targetEndpointRef)) {
-          toast.error(e.message || t("msg_load_failed"));
+          desktopUpdateResult.value = null;
+          desktopUpdateError.value = e.message || t("msg_load_failed");
         }
       } finally {
         if (isCurrentDesktopSettingsRequest(requestSeq, targetEndpointRef)) {
           desktopChecking.value = false;
         }
-      }
-    }
-
-    function syncDesktopChangelogReadonly() {
-      const root = desktopChangelogField.value?.$el || desktopChangelogField.value;
-      const textarea = root?.querySelector?.("textarea");
-      if (textarea) {
-        textarea.readOnly = true;
       }
     }
 
@@ -4982,9 +5060,6 @@ const SettingsView = {
       }
     });
 
-    watch(desktopUpdateReleaseNotes, () => {
-      void nextTick(syncDesktopChangelogReadonly);
-    });
 
     watch(
       showCodexAuthCard,
@@ -5062,8 +5137,13 @@ const SettingsView = {
       desktopLoading,
       desktopChecking,
       desktopChecksumCopied,
-      desktopChangelogField,
-      updateConfigPanel,
+      desktopBuildChannel,
+      autoUpdateEnabled,
+      autoUpdateChannel,
+      autoUpdateSaving,
+      updateChannelOptions,
+      setAutoUpdateChannel,
+      setAutoUpdateEnabled,
       llmConfigPath,
       consoleConfigPath,
       agentConfigValues,
@@ -5081,6 +5161,7 @@ const SettingsView = {
       consoleEndpointErrorTitle,
       consoleEndpointErrorActions,
       authProfiles,
+      securityConfigGroups,
       consolePasswordConfigured,
       systemConfigValues,
       systemFieldStates,
@@ -5089,10 +5170,8 @@ const SettingsView = {
       CONSOLE_DEPLOYMENT_CONFIG_GROUPS,
       REMOTE_CONTROL_CONFIG_GROUPS,
       AUTOMATION_CONFIG_GROUPS,
-      SECURITY_CONFIG_GROUPS,
       SYSTEM_ADVANCED_CONFIG_GROUPS,
       SYSTEM_CONFIG_GROUPS,
-      SYSTEM_UPDATE_CONFIG_GROUPS,
       desktopUpdateResult,
       state,
       llmEnvManaged,
@@ -5156,11 +5235,18 @@ const SettingsView = {
       personaSaveDisabled,
       personaEditorMeta,
       desktopCheckDisabled,
-      desktopUpdateCheckHint,
-      desktopUpdateLatestVersionText,
-      desktopUpdateReleaseNotes,
+      updateChannelLabel,
+      desktopInstalledText,
+      desktopUpdateState,
+      desktopUpdateStateText,
+      desktopUpdateHasRelease,
+      desktopUpdateReleaseTitle,
+      desktopUpdateReleaseDate,
+      desktopUpdateNotesSource,
+      desktopUpdateChecksumShort,
       desktopUpdateChecksum,
       desktopUpdateDownloadDisabled,
+      desktopUpdateAssetURL,
       testConnectionDisabled,
       profileIsInUse,
       llmActionMenuItems,
@@ -6353,7 +6439,7 @@ const SettingsView = {
             </QCard>
 
             <ConfigSettingsPanel
-              :groups="SECURITY_CONFIG_GROUPS"
+              :groups="securityConfigGroups"
               :values="consoleConfigValues"
               :fieldStates="consoleFieldStates"
               :inactiveGroups="state.guard.enabled ? {} : { 'guard-storage': t('settings_guard_details_inactive') }"
@@ -6384,6 +6470,7 @@ const SettingsView = {
           <div v-else-if="selectedSection.id === 'automation'" class="settings-panel-body settings-panel-body-plain">
             <ConfigSettingsPanel
               :groups="AUTOMATION_CONFIG_GROUPS"
+              hideSingleGroupHeading
               :values="consoleConfigValues"
               :fieldStates="consoleFieldStates"
               :loading="consoleLoading"
@@ -6578,85 +6665,86 @@ const SettingsView = {
 
             <QCard variant="default">
               <div class="settings-panel-shell">
-                <ConfigSettingsPanel
-                  ref="updateConfigPanel"
-                  :groups="SYSTEM_UPDATE_CONFIG_GROUPS"
-                  :values="systemConfigValues"
-                  :fieldStates="systemFieldStates"
-                  :loading="systemLoading"
-                  :saving="systemSaving"
-                  :embedded="true"
-                  saveScope="system"
-                  @save="saveConfigSettings('system', $event)"
-                >
-                  <template #heading>
+                <header class="settings-panel-head">
+                  <div class="settings-panel-copy">
                     <h3 class="settings-panel-title workspace-document-title">{{ t("settings_auto_update_card_title") }}</h3>
                     <p class="settings-panel-meta">{{ t("settings_auto_update_card_hint") }}</p>
-                  </template>
-                </ConfigSettingsPanel>
+                  </div>
+                </header>
 
                 <div class="settings-panel-body">
                   <div class="settings-console-list">
-                    <div class="settings-console-row settings-console-row--desktop-update">
+                    <div class="settings-console-row">
                       <div class="settings-card-copy">
-                        <h4 class="settings-card-title">{{ t("settings_desktop_update_check_title") }}</h4>
-                        <p class="settings-card-note">{{ desktopUpdateCheckHint }}</p>
+                        <h4 class="settings-card-title">{{ t("settings_update_channel_title") }}</h4>
+                        <p class="settings-card-note">{{ t("settings_update_channel_hint") }}</p>
+                      </div>
+                      <SettingSelect
+                        class="settings-console-control settings-update-channel-select"
+                        :modelValue="autoUpdateChannel"
+                        :options="updateChannelOptions"
+                        :label="t('settings_update_channel_title')"
+                        :disabled="desktopLoading || autoUpdateSaving"
+                        @update:modelValue="setAutoUpdateChannel"
+                      />
+                    </div>
+                    <div class="settings-console-row">
+                      <div class="settings-card-copy">
+                        <h4 class="settings-card-title">{{ t("settings_update_auto_title") }}</h4>
+                        <p class="settings-card-note">{{ t("settings_update_auto_hint") }}</p>
+                      </div>
+                      <QSwitch
+                        :modelValue="autoUpdateEnabled"
+                        :disabled="desktopLoading || autoUpdateSaving"
+                        @update:modelValue="setAutoUpdateEnabled"
+                      />
+                    </div>
+                    <div class="settings-console-row" :class="{ 'settings-console-row-end': !desktopUpdateHasRelease }">
+                      <div class="settings-card-copy">
+                        <h4 class="settings-card-title">{{ t("settings_update_version_title") }}</h4>
+                        <p class="settings-card-note">{{ desktopInstalledText }}</p>
+                        <p class="settings-card-note settings-update-state" :class="'is-' + desktopUpdateState" role="status" aria-live="polite">
+                          {{ desktopUpdateStateText }}
+                        </p>
                       </div>
                       <QButton
-                        class="outlined sm icon settings-desktop-update-check-button"
+                        class="outlined settings-console-control settings-console-action"
                         :loading="desktopChecking"
                         :disabled="desktopCheckDisabled"
-                        :title="t('settings_desktop_update_check_action')"
-                        :aria-label="t('settings_desktop_update_check_action')"
                         @click="runDesktopUpdateCheck"
                       >
                         <PhArrowClockwise class="icon settings-console-action-icon" />
+                        {{ t("settings_update_check_action") }}
                       </QButton>
                     </div>
-                  </div>
 
-                  <div v-if="desktopUpdateResult" class="settings-desktop-update-result">
-                    <div class="settings-desktop-update-result-head">
-                      <span class="settings-desktop-update-label">{{ t("settings_desktop_update_latest_version") }}</span>
-                      <strong class="settings-desktop-update-version">{{ desktopUpdateLatestVersionText }}</strong>
-                    </div>
-
-                    <div class="settings-desktop-update-checksum-row">
-                      <span class="settings-desktop-update-label">{{ t("settings_desktop_update_checksum_label") }}</span>
-                      <button
-                        type="button"
-                        class="settings-desktop-update-checksum-button"
-                        :disabled="!desktopUpdateChecksum"
-                        :title="t('settings_desktop_update_checksum_copy_title')"
-                        :aria-label="t('settings_desktop_update_checksum_copy_title')"
-                        @click="copyDesktopUpdateChecksum"
-                      >
-                        <code>{{ desktopUpdateChecksum || "-" }}</code>
-                        <PhCheckCircle v-if="desktopChecksumCopied" class="icon settings-desktop-update-checksum-icon" />
-                        <PhCopy v-else class="icon settings-desktop-update-checksum-icon" />
-                      </button>
-                    </div>
-
-                    <label class="settings-desktop-update-changelog-field">
-                      <span class="settings-desktop-update-label">{{ t("settings_desktop_update_changelog_label") }}</span>
-                      <QTextarea
-                        ref="desktopChangelogField"
-                        class="settings-desktop-update-changelog"
-                        :modelValue="desktopUpdateReleaseNotes"
-                        :rows="8"
-                      />
-                    </label>
-
-                    <div class="settings-desktop-update-result-actions">
+                    <div v-if="desktopUpdateHasRelease" class="settings-console-row settings-console-row-end settings-update-release">
+                      <div class="settings-card-copy settings-update-release-copy">
+                        <h4 class="settings-card-title">{{ desktopUpdateReleaseTitle }}</h4>
+                        <p class="settings-card-note settings-update-release-meta">
+                          <span v-if="desktopUpdateReleaseDate">{{ desktopUpdateReleaseDate }}</span>
+                          <button type="button" class="settings-field-link settings-update-link" @click="openDesktopUpdateReleases">
+                            {{ t("settings_update_all_releases") }}
+                            <PhArrowUpRight class="icon settings-field-link-icon" />
+                          </button>
+                        </p>
+                        <MarkdownContent v-if="desktopUpdateNotesSource" class="settings-update-notes" :source="desktopUpdateNotesSource" />
+                        <p v-else class="settings-card-note">{{ t("settings_desktop_update_changelog_empty") }}</p>
+                        <button
+                          v-if="desktopUpdateChecksum"
+                          type="button"
+                          class="settings-field-link settings-update-link"
+                          :title="desktopUpdateChecksum"
+                          :aria-label="t('settings_desktop_update_checksum_copy_title')"
+                          @click="copyDesktopUpdateChecksum"
+                        >
+                          SHA256 <code class="settings-update-checksum">{{ desktopUpdateChecksumShort }}</code>
+                          <PhCheckCircle v-if="desktopChecksumCopied" class="icon settings-field-link-icon" />
+                          <PhCopy v-else class="icon settings-field-link-icon" />
+                        </button>
+                      </div>
                       <QButton
-                        class="plain sm settings-desktop-update-result-action"
-                        @click="openDesktopUpdateReleases"
-                      >
-                        <PhArrowUpRight class="icon settings-console-action-icon" />
-                        {{ t("settings_desktop_update_view_releases_action") }}
-                      </QButton>
-                      <QButton
-                        class="outlined sm settings-desktop-update-result-action"
+                        class="outlined settings-console-control settings-console-action"
                         :disabled="desktopUpdateDownloadDisabled"
                         @click="openDesktopUpdateDownload"
                       >

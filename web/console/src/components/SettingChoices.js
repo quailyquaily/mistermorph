@@ -1,6 +1,8 @@
 import { computed } from "vue";
-import "./SettingOptions.css";
+import "./SettingFields.css";
 
+// Several values from a known list, as toggles laid out like chips. Values already stored that are
+// not in the list still show, so they can be turned off.
 export default {
   props: {
     modelValue: { type: Array, default: () => [] },
@@ -11,20 +13,30 @@ export default {
   emits: ["update:modelValue"],
   setup(props, { emit }) {
     const items = computed(() => [...new Set([...props.options, ...props.modelValue])]);
-    function toggle(value, checked) {
+    function toggle(value) {
       if (props.disabled) return;
-      emit("update:modelValue", checked
+      const on = !props.modelValue.includes(value);
+      emit("update:modelValue", on
         ? [...new Set([...props.modelValue, value])]
-        : props.modelValue.filter(item => item !== value));
+        : props.modelValue.filter((item) => item !== value));
     }
     return { items, toggle };
   },
   template: `
-    <div class="settings-enum-choices" role="group" :aria-label="label || undefined">
-      <label v-for="item in items" :key="item" class="settings-enum-choice">
-        <input type="checkbox" :checked="modelValue.includes(item)" :disabled="disabled" @change="toggle(item, $event.target.checked)" />
-        <span>{{ item }}</span>
-      </label>
+    <div class="sf sf-chips" role="group" :aria-label="label || undefined">
+      <button
+        v-for="item in items"
+        :key="item"
+        type="button"
+        class="sf-chip"
+        role="checkbox"
+        :aria-checked="modelValue.includes(item) ? 'true' : 'false'"
+        :disabled="disabled"
+        @click="toggle(item)"
+      >
+        <PhCheck v-if="modelValue.includes(item)" class="sf-icon" />
+        {{ item }}
+      </button>
     </div>
   `,
 };

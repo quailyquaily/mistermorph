@@ -38,6 +38,7 @@ const ROUTE_VIEW_LOADERS = {
   audit: () => import("../views/AuditView"),
   bootPreview: () => import("../views/BootPreviewView"),
   chat: () => import("../views/ChatView"),
+  componentsPreview: () => import("../views/ComponentsPreviewView"),
   contacts: () => import("../views/ContactsView"),
   context: () => import("../views/ContextView"),
   desktopWindow: () => import("../views/DesktopWindowView"),
@@ -56,6 +57,7 @@ const routePreloadPromises = new Map();
 
 const AuditView = ROUTE_VIEW_LOADERS.audit;
 const BootPreviewView = ROUTE_VIEW_LOADERS.bootPreview;
+const ComponentsPreviewView = ROUTE_VIEW_LOADERS.componentsPreview;
 const ChatView = ROUTE_VIEW_LOADERS.chat;
 const ContactsView = ROUTE_VIEW_LOADERS.contacts;
 const ContextView = ROUTE_VIEW_LOADERS.context;
@@ -187,6 +189,7 @@ function legacyEndpointRedirect(pattern) {
 const routes = [
   { path: "/login", component: LoginView, meta: { public: true, shellless: true } },
   { path: "/__boot-preview", component: BootPreviewView, meta: { public: true, shellless: true } },
+  { path: "/__components", component: ComponentsPreviewView, meta: { public: true, shellless: true } },
   { path: "/overview", component: OverviewView },
   { path: `${ENDPOINT_SCOPE_PATH}/setup`, component: SetupView, meta: { endpointScoped: true } },
   {

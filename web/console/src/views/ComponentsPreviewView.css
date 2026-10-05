@@ -1,0 +1,133 @@
+/* /__components: settings controls on one page. */
+.components-preview-scroll {
+  position: fixed;
+  inset: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--q-bg-paper, var(--q-bg-white));
+}
+
+.components-preview {
+  box-sizing: border-box;
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 32px 24px 96px;
+  color: var(--text-0);
+}
+
+.components-preview-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.components-preview-title {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.components-preview-meta,
+.components-preview-note {
+  margin: 4px 0 0;
+  color: var(--text-2);
+  font-size: var(--font-size-meta);
+  line-height: 1.5;
+}
+
+.components-preview-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.components-preview-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--font-size-ui);
+}
+
+.components-preview-nav {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  padding: 12px 0;
+  background: var(--q-bg-paper, var(--q-bg-white));
+  border-bottom: 1px solid var(--line);
+  font-size: var(--font-size-meta);
+}
+
+.components-preview-nav a {
+  color: var(--text-1);
+  text-decoration: none;
+}
+
+.components-preview-nav a:hover {
+  color: var(--text-0);
+  text-decoration: underline;
+}
+
+.components-preview-section {
+  display: grid;
+  gap: 16px;
+  padding: 32px 0;
+  border-bottom: 1px solid var(--line);
+  scroll-margin-top: 48px;
+}
+
+.components-preview-section h2 {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.components-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px 32px;
+}
+
+.components-preview-grid.is-wide {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.components-preview-demo {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-width: 0;
+}
+
+.components-preview-demo.is-wide {
+  grid-column: 1 / -1;
+}
+
+.components-preview-demo > code,
+.components-preview-update {
+  display: block;
+  overflow-x: auto;
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  white-space: pre;
+}
+
+.components-preview-demo > code::before {
+  content: "saves ";
+  color: var(--text-3, var(--text-2));
+}
+
+@media (max-width: 760px) {
+  .components-preview-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

@@ -181,6 +181,23 @@ export async function checkDesktopUpdate(channel = null) {
   return await call(desktopBindingName("CheckUpdate"), channel);
 }
 
+export function canPickDesktopDirectory() {
+  return isDesktopRuntime() && desktopCallByName() !== null;
+}
+
+// Shows the native folder picker. Resolves to the chosen folder, or "" when the user cancels.
+export async function pickDesktopDirectory({ title = "", current = "" } = {}) {
+  const call = desktopCallByName();
+  if (!call) {
+    throw new Error("desktop folder picker is unavailable");
+  }
+  const picked = await call(desktopBindingName("PickDirectory"), {
+    title: String(title || "").trim(),
+    current: String(current || "").trim(),
+  });
+  return typeof picked === "string" ? picked : "";
+}
+
 export async function requestDesktopNotificationPermission() {
   const call = desktopCallByName();
   if (!call) {

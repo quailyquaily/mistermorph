@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/pkg/browser"
+	"github.com/quailyquaily/mistermorph/internal/pathutil"
 	"github.com/quailyquaily/mistermorph/internal/updatecheck"
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
@@ -491,6 +492,32 @@ func (a *App) QuitApp() {
 	if a.wailsApp != nil {
 		a.wailsApp.Quit()
 	}
+}
+
+// DesktopDirectoryRequest asks the user to choose a folder for a path setting.
+type DesktopDirectoryRequest struct {
+	Title   string `json:"title"`
+	Current string `json:"current"`
+}
+
+// PickDirectory shows the native folder picker and returns the chosen folder,
+// or "" when the user cancels.
+func (a *App) PickDirectory(req DesktopDirectoryRequest) (string, error) {
+	if a == nil || a.wailsApp == nil {
+		return "", fmt.Errorf("desktop app is not ready")
+	}
+	dialog := a.wailsApp.Dialog.OpenFile().
+		CanChooseFiles(false).
+		CanChooseDirectories(true).
+		CanCreateDirectories(true).
+		ShowHiddenFiles(true)
+	if title := strings.TrimSpace(req.Title); title != "" {
+		dialog = dialog.SetTitle(title)
+	}
+	if current := strings.TrimSpace(req.Current); current != "" {
+		dialog = dialog.SetDirectory(pathutil.ExpandHomePath(current))
+	}
+	return dialog.PromptForSingleSelection()
 }
 
 func (a *App) OpenDesktopLog() error {
