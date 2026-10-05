@@ -98,8 +98,19 @@
   color: inherit;
 }
 
+/* The selected item stands out with weight and a tint, not a lighter color (blue text next to
+   dark text read as disabled). The check mark carries the accent. */
+.setup-picker-item.is-selected {
+  background: color-mix(in srgb, var(--q-c-blue) 9%, transparent);
+}
+
+.setup-picker-item.is-selected.is-active {
+  background: color-mix(in srgb, var(--q-c-blue) 14%, transparent);
+}
+
 .setup-picker-item.is-selected .setup-picker-item-title {
-  color: var(--q-c-blue);
+  color: var(--text-0);
+  font-weight: 600;
 }
 
 .setup-picker-item-meta {
@@ -116,7 +127,7 @@
 }
 
 .setup-picker-item.is-avoid.is-selected .setup-picker-item-title {
-  color: var(--q-c-blue);
+  color: var(--text-0);
 }
 
 .setup-picker-item-check {

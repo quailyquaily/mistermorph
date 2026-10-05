@@ -11,6 +11,7 @@ import SettingPath from "../components/SettingPath";
 import SettingPercent from "../components/SettingPercent";
 import SettingRows from "../components/SettingRows";
 import SettingSelect from "../components/SettingSelect";
+import SetupPickerDialogContent from "../components/SetupPickerDialogContent";
 import {
   ADMIN_PLATFORM_OPTIONS,
   AWS_REGION_OPTIONS,
@@ -77,6 +78,7 @@ const ComponentsPreviewView = {
     SettingPercent,
     SettingRows,
     SettingSelect,
+    SetupPickerDialogContent,
   },
   setup() {
     const disabled = ref(false);
@@ -110,7 +112,16 @@ const ComponentsPreviewView = {
       rowsIdentities: "tg:@admin\nslack:T123:U234\nmixin:773e5e77-4107-45c2-b648-8fc722ed77f5",
       rowsUnreadable: "{\"not\": [\"a map of strings\"]}",
       secret: "",
+      pickedModel: "gpt-5-mini",
     });
+
+    const PICKER_MODELS = [
+      { id: "gpt-5", title: "gpt-5", value: "gpt-5", meta: "400K" },
+      { id: "gpt-5-mini", title: "gpt-5-mini", value: "gpt-5-mini", meta: "400K" },
+      { id: "gpt-5-nano", title: "gpt-5-nano", value: "gpt-5-nano", meta: "400K" },
+      { id: "gpt-4.1", title: "gpt-4.1", value: "gpt-4.1", meta: "1M" },
+      { id: "o4-mini", title: "o4-mini", value: "o4-mini", meta: "200K" },
+    ];
 
     const panelUpdate = ref(null);
     const panelValues = ref({ ...PANEL_VALUES });
@@ -138,6 +149,7 @@ const ComponentsPreviewView = {
       { id: "choices", title: "SettingChoices" },
       { id: "rows", title: "SettingRows" },
       { id: "secret", title: "SecretInput & EnvManagedField" },
+      { id: "picker", title: "SetupPickerDialogContent" },
       { id: "panel", title: "ConfigSettingsPanel" },
     ]);
 
@@ -150,6 +162,7 @@ const ComponentsPreviewView = {
       TASK_TARGET_OPTIONS,
       PANEL_GROUPS,
       PANEL_STATES,
+      PICKER_MODELS,
       disabled,
       showBrowse,
       v,
@@ -371,6 +384,22 @@ const ComponentsPreviewView = {
             <span class="settings-field-label">From the environment</span>
             <EnvManagedField name="MISTER_MORPH_LLM_API_KEY" />
           </div>
+        </div>
+      </section>
+
+      <section id="picker" class="components-preview-section">
+        <h2>SetupPickerDialogContent</h2>
+        <p class="components-preview-note">The list inside the model picker. The selected item is marked by weight, a tint and a check, not a lighter color.</p>
+        <div class="components-preview-demo components-preview-picker">
+          <SetupPickerDialogContent
+            :items="PICKER_MODELS"
+            :selectedValue="v.pickedModel"
+            filterPlaceholder="Filter models"
+            emptyText="No models"
+            :showValue="false"
+            @select="v.pickedModel = $event.value"
+          />
+          <code>{{ show(v.pickedModel) }}</code>
         </div>
       </section>
 

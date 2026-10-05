@@ -220,9 +220,15 @@
   background: var(--sf-active);
 }
 
+/* Selected: weight and a tint, never a lighter color, so it does not read as disabled. */
 .sf-option.is-selected {
-  color: var(--sf-accent);
+  background: color-mix(in srgb, var(--sf-accent) 8%, transparent);
+  color: var(--text-0);
   font-weight: 600;
+}
+
+.sf-option.is-selected.is-active {
+  background: color-mix(in srgb, var(--sf-accent) 14%, transparent);
 }
 
 .sf-option-hint {

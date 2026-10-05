@@ -488,48 +488,187 @@
   gap: 12px;
 }
 
-.settings-profile-card {
+.settings-profiles-main {
   display: grid;
-  gap: 12px;
-  padding: 14px;
-  border: 1px solid color-mix(in srgb, var(--line) 74%, transparent);
-  background: color-mix(in srgb, var(--q-bg-paper) 96%, transparent);
-}
-
-.settings-profile-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
   gap: 16px;
   min-width: 0;
 }
 
-.settings-profile-status {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 7px;
-  color: var(--text-2);
-  font-size: var(--font-size-meta);
-  font-weight: 600;
-  line-height: 1;
+/* Profiles: one row each; the profile's settings open in the panel at the right. */
+.settings-profile-list {
+  gap: 0;
+  border-top: 1px solid var(--line-soft);
 }
 
-.settings-profile-status-dot {
+.settings-profile-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--line-soft) 82%, transparent);
+}
+
+.settings-profile-row-main {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  margin: 0;
+  padding: 12px 8px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.settings-profile-row-main:hover,
+.settings-profile-row-main:focus-visible {
+  outline: none;
+  background: color-mix(in srgb, var(--accent-1) 5%, transparent);
+}
+
+.settings-profile-row.is-active .settings-profile-row-main {
+  background: color-mix(in srgb, var(--accent-1) 9%, transparent);
+}
+
+/* The provider's logo; a profile in use carries the status mark on its corner. */
+.settings-profile-row-icon {
+  position: relative;
+  flex: 0 0 auto;
+  display: grid;
+}
+
+.settings-profile-row-badge {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
   width: var(--status-mark-size);
   height: var(--status-mark-size);
-  border: 1px solid var(--status-off);
+  border: 2px solid var(--q-bg-white, #fbfdff);
   border-radius: 1px;
-  background: transparent;
-}
-
-.settings-profile-status.is-in-use {
-  color: var(--text-1);
-}
-
-.settings-profile-status.is-in-use .settings-profile-status-dot {
-  border-color: var(--status-on);
   background: var(--status-on);
+  box-sizing: content-box;
+}
+
+.settings-profile-row-text {
+  flex: 1 1 auto;
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.settings-profile-row-name {
+  overflow: hidden;
+  color: var(--text-0);
+  font-size: var(--font-size-ui);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-profile-row-meta {
+  overflow: hidden;
+  color: var(--text-2);
+  font-size: var(--font-size-meta);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-profile-row-dirty {
+  position: static;
+  flex: 0 0 auto;
+}
+
+.settings-profile-row-caret {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  color: var(--text-2);
+}
+
+.settings-profile-list > .settings-profile-placeholder {
+  margin-top: 12px;
+}
+
+.settings-profile-pane-body {
+  display: grid;
+  gap: 16px;
+}
+
+/* Advanced settings fold inside the profile panel, like System's. */
+.settings-profile-advanced {
+  display: grid;
+  border-top: 1px solid var(--line-soft);
+}
+
+/* A quiet disclosure: the same type as a field label, a caret that turns when open. */
+.settings-profile-advanced > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  color: var(--text-1);
+  font-size: var(--font-size-ui);
+  font-weight: 500;
+  line-height: 1.35;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.settings-profile-advanced > summary::-webkit-details-marker {
+  display: none;
+}
+
+.settings-profile-advanced > summary:hover,
+.settings-profile-advanced > summary:focus-visible {
+  outline: none;
+  color: var(--text-0);
+}
+
+.settings-profile-advanced > summary .icon {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  color: var(--text-2);
+  transition: transform 160ms ease;
+}
+
+.settings-profile-advanced[open] > summary .icon {
+  transform: rotate(90deg);
+}
+
+.settings-profile-advanced > summary:focus-visible span {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.settings-profile-advanced-body {
+  display: grid;
+  gap: 16px;
+  padding-bottom: 8px;
+}
+
+/* The panel is narrow: the form's three-across row stacks like the other fields. */
+.settings-profile-pane .settings-field-row.is-three {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* The panel's actions sit at its end, apart from the settings: Benchmark, then Delete. */
+.settings-profile-pane-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.settings-profile-pane-actions .q-button {
+  gap: 6px;
 }
 
 .settings-profile-actions {
@@ -600,10 +739,6 @@
 .settings-page .q-menu-item.danger .q-menu-title,
 body:has(.settings-page) .q-dialog .q-menu-item.danger .q-menu-title {
   color: inherit !important;
-}
-
-.settings-profile-head {
-  display: block;
 }
 
 .settings-profile-name {

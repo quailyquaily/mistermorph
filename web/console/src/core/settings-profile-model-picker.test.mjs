@@ -8,21 +8,22 @@ async function readSettingsView() {
   return readFile(settingsViewSource, "utf8");
 }
 
+// A profile's form lives in the profile panel (openedProfile), not in the list.
 test("profile LLM forms expose the model picker", async () => {
   const source = await readSettingsView();
-  const profileFormStart = source.indexOf('<LLMConfigForm\n                            :config="profile"');
+  const profileFormStart = source.indexOf('<LLMConfigForm\n                          :config="openedProfile"');
   assert.notEqual(profileFormStart, -1, "profile LLMConfigForm not found");
   const profileFormEnd = source.indexOf("/>", profileFormStart);
   assert.notEqual(profileFormEnd, -1, "profile LLMConfigForm end not found");
   const profileForm = source.slice(profileFormStart, profileFormEnd);
 
   assert.match(profileForm, /:enableModelPicker="true"/);
-  assert.match(profileForm, /@open-model-picker="openModelPicker\(profile\._key\)"/);
+  assert.match(profileForm, /@open-model-picker="openModelPicker\(openedProfile\._key\)"/);
 });
 
 test("profile LLM forms use only profile-local settings", async () => {
   const source = await readSettingsView();
-  const profileFormStart = source.indexOf('<LLMConfigForm\n                            :config="profile"');
+  const profileFormStart = source.indexOf('<LLMConfigForm\n                          :config="openedProfile"');
   assert.notEqual(profileFormStart, -1, "profile LLMConfigForm not found");
   const profileFormEnd = source.indexOf("/>", profileFormStart);
   assert.notEqual(profileFormEnd, -1, "profile LLMConfigForm end not found");

@@ -131,3 +131,7 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+.components-preview-picker {
+  max-width: 520px;
+}

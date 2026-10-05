@@ -6,6 +6,7 @@ import "./SettingsView.css";
 
 import AppPage from "../components/AppPage";
 import MarkdownContent from "../components/MarkdownContent";
+import { inferenceProviderLogo } from "../core/inference-provider-logos";
 import SettingSelect from "../components/SettingSelect";
 import EnvManagedField from "../components/EnvManagedField";
 import SecretInput from "../components/SecretInput";
@@ -330,15 +331,6 @@ function buildLLMProfileState(data = {}) {
   profile._savedName = trimText(profile.name);
   profile._savedSnapshot = JSON.stringify(serializeLLMProfile(profile));
   return profile;
-}
-
-function cloneLLMProfileState(profile) {
-  return {
-    ...profile,
-    _envManaged: { ...profile?._envManaged },
-    _secretFields: { ...profile?._secretFields },
-    _secretDirty: new Set(profile?._secretDirty || []),
-  };
 }
 
 function trimText(value) {
@@ -735,7 +727,6 @@ const SettingsView = {
     const advancedSettingsTitle = ref("");
     const advancedSettingsScope = ref("agent");
     const advancedSettingsGroups = ref([]);
-    const advancedSettingsProfile = ref(null);
     const advancedSettingsDirty = ref(false);
     const advancedConfigPanel = ref(null);
     const llmConfigPath = ref("");
@@ -1175,9 +1166,7 @@ const SettingsView = {
         : agentSaving.value && agentSavingTarget.value === "config"
     );
     const advancedSettingsSaveDisabled = computed(() =>
-      advancedSettingsProfile.value
-        ? profileSaveDisabled(advancedSettingsProfile.value)
-        : advancedSettingsLoading.value || advancedSettingsSaving.value || !advancedSettingsDirty.value
+      advancedSettingsLoading.value || advancedSettingsSaving.value || !advancedSettingsDirty.value
     );
     const managedRuntimeItems = computed(() => MANAGED_RUNTIME_ITEMS);
     const groupTriggerItems = computed(() => [
@@ -1459,13 +1448,56 @@ const SettingsView = {
       openChannel.value = "";
     }
     function onChannelPaneKeydown(event) {
-      if (event.key === "Escape" && openChannel.value) {
+      // A field that used Escape itself (closing its list) keeps the pane open.
+      if (event.key === "Escape" && !event.defaultPrevented && openChannel.value) {
         closeChannelPane();
       }
     }
     watch(() => selectedSection.value?.id, closeChannelPane);
     onMounted(() => window.addEventListener("keydown", onChannelPaneKeydown));
     onUnmounted(() => window.removeEventListener("keydown", onChannelPaneKeydown));
+
+    // Models: profiles are listed as one-line rows; a profile's settings open in a panel from the
+    // right, the same panel Channels uses. Closing keeps the draft in the save bar.
+    const openProfileKey = ref("");
+    const openedProfile = computed(
+      () => state.llm.profiles.find((item) => item._key === openProfileKey.value && !item._draft) || null
+    );
+    function openProfilePane(key) {
+      openProfileKey.value = openProfileKey.value === key ? "" : key;
+    }
+    function closeProfilePane() {
+      openProfileKey.value = "";
+    }
+    // Provider and model in one line, for the list and the panel header.
+    function profileSummary(profile) {
+      const choice = profileProviderChoice(profile);
+      const provider = providerItems.find((item) => item.value === choice)?.title || "";
+      const model = trimText(profile?.model);
+      return [provider, model].filter(Boolean).join(" · ");
+    }
+    // The provider's logo for a profile row, with initials when there is no logo.
+    function profileLogo(profile) {
+      const choice = profileProviderChoice(profile);
+      const logo = inferenceProviderLogo(choice);
+      const title = providerItems.find((item) => item.value === choice)?.title || "";
+      const initials = title
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((word) => word[0].toUpperCase())
+        .join("");
+      return { src: logo.src, className: logo.className || "is-fallback", text: initials || "LLM" };
+    }
+
+    function onProfilePaneKeydown(event) {
+      if (event.key === "Escape" && !event.defaultPrevented && openProfileKey.value) {
+        closeProfilePane();
+      }
+    }
+    watch(() => selectedSection.value?.id, closeProfilePane);
+    onMounted(() => window.addEventListener("keydown", onProfilePaneKeydown));
+    onUnmounted(() => window.removeEventListener("keydown", onProfilePaneKeydown));
 
     const sectionSaveUnits = computed(() => {
       const id = selectedSection.value?.id || "";
@@ -3710,7 +3742,6 @@ const SettingsView = {
       advancedSettingsTitle.value = advancedSettingsDialogTitle(name);
       advancedSettingsScope.value = scope;
       advancedSettingsGroups.value = groups;
-      advancedSettingsProfile.value = null;
       advancedSettingsDirty.value = false;
       advancedSettingsOpen.value = true;
     }
@@ -3721,16 +3752,6 @@ const SettingsView = {
         "agent",
         DEFAULT_MODEL_ADVANCED_CONFIG_GROUPS,
       );
-    }
-
-    function openProfileAdvancedSettings(profile) {
-      const name = trimText(profile?.name) || t("settings_agent_profile_placeholder");
-      advancedSettingsTitle.value = advancedSettingsDialogTitle(name);
-      advancedSettingsScope.value = "agent";
-      advancedSettingsGroups.value = [];
-      advancedSettingsProfile.value = profile ? cloneLLMProfileState(profile) : null;
-      advancedSettingsDirty.value = false;
-      advancedSettingsOpen.value = true;
     }
 
     function openToolAdvancedSettings(item) {
@@ -3755,21 +3776,8 @@ const SettingsView = {
     }
 
     function closeAdvancedSettings() {
-      advancedSettingsProfile.value = null;
       advancedSettingsGroups.value = [];
       advancedSettingsDirty.value = false;
-    }
-
-    function updateAdvancedProfileField({ field, value }) {
-      const profile = advancedSettingsProfile.value;
-      const key = String(field || "").trim();
-      if (!profile || !key || !Object.prototype.hasOwnProperty.call(profile, key)) return;
-      const nextValue = String(value || "");
-      if (profile[key] === nextValue) return;
-      profile[key] = nextValue;
-      if (Object.prototype.hasOwnProperty.call(llmProfileSecretFields(profile), key)) {
-        profile._secretDirty.add(key);
-      }
     }
 
     async function saveAdvancedConfigSettings(update) {
@@ -3791,51 +3799,30 @@ const SettingsView = {
       }
     }
 
-    async function saveAdvancedSettings() {
-      const profile = advancedSettingsProfile.value;
-      if (!profile) {
-        advancedConfigPanel.value?.save();
-        return;
-      }
-      if (await saveLLMProfile(profile._key, profile)) {
-        advancedSettingsOpen.value = false;
-        closeAdvancedSettings();
-      }
+    function saveAdvancedSettings() {
+      advancedConfigPanel.value?.save();
     }
 
-    function llmActionMenuItems(profile = null) {
-      const items = [
+    // The default model's "···" menu. A profile's actions are in its panel.
+    function llmActionMenuItems() {
+      return [
         {
           id: "advanced",
           title: t("settings_advanced_action"),
           disabled: agentLoading.value || agentSaving.value,
-          action: () => profile ? openProfileAdvancedSettings(profile) : openDefaultLLMAdvancedSettings(),
+          action: () => openDefaultLLMAdvancedSettings(),
         },
-        ...(!profile ? [{
+        {
           id: "context",
           title: "Context compaction",
           disabled: agentLoading.value || agentSaving.value,
           action: () => openConfigAdvancedSettings("Context compaction", "agent", LLM_CONTEXT_CONFIG_GROUPS),
-        }] : []),
+        },
         {
           id: "benchmark",
           title: t("setup_llm_test_button"),
-          disabled: profile ? testConnectionDisabledForProfile(profile) : testConnectionDisabled.value,
-          action: () => openTestConnection(profile?._key),
-        },
-      ];
-      if (!profile) {
-        return items;
-      }
-      return [
-        ...items,
-        { id: "delete-divider", divider: true },
-        {
-          id: "delete",
-          title: t("action_delete"),
-          danger: true,
-          disabled: agentLoading.value || agentSaving.value || agentSettingsReadOnly.value,
-          action: () => confirmRemoveLLMProfile(profile._key),
+          disabled: testConnectionDisabled.value,
+          action: () => openTestConnection(),
         },
       ];
     }
@@ -5199,6 +5186,12 @@ const SettingsView = {
       saveSection,
       modelPickerSelectedValue,
       openChannel,
+      openProfileKey,
+      openedProfile,
+      openProfilePane,
+      closeProfilePane,
+      profileSummary,
+      profileLogo,
       channelTiles,
       channelGroups,
       channelTriggerHiddenPaths,
@@ -5249,11 +5242,11 @@ const SettingsView = {
       desktopUpdateAssetURL,
       testConnectionDisabled,
       profileIsInUse,
+      profileDirty,
       llmActionMenuItems,
       advancedSettingsOpen,
       advancedSettingsTitle,
       advancedSettingsGroups,
-      advancedSettingsProfile,
       advancedSettingsValues,
       advancedSettingsFieldStates,
       advancedSettingsLoading,
@@ -5264,7 +5257,6 @@ const SettingsView = {
       openToolAdvancedSettings,
       channelActionMenuItems,
       closeAdvancedSettings,
-      updateAdvancedProfileField,
       saveAdvancedConfigSettings,
       saveAdvancedSettings,
       showCodexAuthCard,
@@ -5357,6 +5349,7 @@ const SettingsView = {
       openModelPicker,
       applyModelOption,
       openTestConnection,
+      testConnectionDisabledForProfile,
       runConnectionTest,
       setToolEnabled,
       setManagedRuntimeEnabled,
@@ -5439,6 +5432,8 @@ const SettingsView = {
 
         <div v-if="showPanelPane && selectedSection" class="settings-panel-scroll">
           <div v-if="selectedSection.id === 'agent'" class="settings-panel-body settings-panel-body-plain">
+            <div class="settings-channels settings-profiles-layout" :class="{ 'has-pane': openedProfile && !isMobile }">
+            <div class="settings-profiles-main">
             <QCard variant="default">
               <div class="settings-panel-shell">
                 <header class="settings-panel-head settings-llm-panel-head">
@@ -5517,77 +5512,36 @@ const SettingsView = {
                       </header>
 
                       <div class="settings-profile-list">
-                        <article v-for="profile in state.llm.profiles.filter((item) => !item._draft)" :key="profile._key" class="settings-profile-card">
-                          <div class="settings-profile-toolbar">
+                        <div
+                          v-for="profile in state.llm.profiles.filter((item) => !item._draft)"
+                          :key="profile._key"
+                          class="settings-profile-row"
+                          :class="{ 'is-active': openProfileKey === profile._key }"
+                        >
+                          <button
+                            type="button"
+                            class="settings-profile-row-main"
+                            :aria-pressed="openProfileKey === profile._key ? 'true' : 'false'"
+                            @click="openProfilePane(profile._key)"
+                          >
                             <span
-                              class="settings-profile-status"
-                              :class="{ 'is-in-use': profileIsInUse(profile) }"
+                              class="settings-profile-row-icon"
+                              :title="t(profileIsInUse(profile) ? 'settings_agent_profile_status_in_use' : 'settings_agent_profile_status_available')"
                             >
-                              <span class="settings-profile-status-dot" aria-hidden="true"></span>
-                              {{
-                                t(
-                                  profileIsInUse(profile)
-                                    ? "settings_agent_profile_status_in_use"
-                                    : "settings_agent_profile_status_available"
-                                )
-                              }}
+                              <span class="inference-provider-logo" :class="profileLogo(profile).className" aria-hidden="true">
+                                <img v-if="profileLogo(profile).src" class="inference-provider-logo-image" :src="profileLogo(profile).src" alt="" />
+                                <span v-else class="inference-provider-logo-fallback">{{ profileLogo(profile).text }}</span>
+                              </span>
+                              <span v-if="profileIsInUse(profile)" class="settings-profile-row-badge" aria-hidden="true"></span>
                             </span>
-                            <div class="settings-profile-actions">
-                              <QDropdownMenu
-                                class="settings-llm-actions-menu"
-                                :items="llmActionMenuItems(profile)"
-                                hideSelected
-                                hideActionLabel
-                                :disabled="agentLoading || agentSaving || agentSettingsReadOnly"
-                              >
-                                <PhDotsThree class="settings-llm-actions-menu-icon" />
-                                <span class="settings-llm-actions-menu-accessible">{{ t("todo_action_more") }}</span>
-                              </QDropdownMenu>
-                            </div>
-                          </div>
-
-                          <div class="settings-profile-head">
-                            <div class="settings-field settings-profile-name">
-                              <span class="settings-field-label">{{ t("settings_agent_profile_name_label") }}</span>
-                              <QInput
-                                :modelValue="profile.name"
-                                :placeholder="t('settings_agent_profile_name_placeholder')"
-                                :disabled="agentLoading || agentSaving || agentSettingsReadOnly"
-                                @update:modelValue="updateProfileField(profile._key, { field: 'name', value: $event })"
-                              />
-                            </div>
-                          </div>
-
-                          <LLMConfigForm
-                            :config="profile"
-                            :busy="agentLoading || agentSaving"
-                            :disabledReason="agentFormDisabledReason"
-                            :readOnly="agentSettingsReadOnly"
-                            :envManaged="llmProfileEnvManaged(profile)"
-                            :secretFields="llmProfileSecretFields(profile)"
-                            :revealPrefix="llmRevealPrefix(profile)"
-                            :providerItems="providerItems"
-                            :reasoningEffortItems="reasoningEffortItems"
-                            :toolsEmulationItems="toolsEmulationItems"
-                            :enableModelPicker="true"
-                            :modelLookupCredentialsReady="profileModelLookupCredentialsReady(profile)"
-                            :showCodexAuthAction="profileUsesCodexProvider(profile)"
-                            :codexAuthDisabled="profileCodexAuthDisabled(profile)"
-                            :codexAuthState="codexAuthButtonState"
-                            :codexAuthTitle="codexAuthButtonTitle"
-                            :showXAIAuthAction="profileUsesXAIProvider(profile)"
-                            :xaiAuthState="xaiAuthButtonState"
-                            :xaiAuthTitle="xaiAuthButtonTitle"
-                            :showProAuthAction="profileUsesProProvider(profile)"
-                            :proAuthState="proAuthButtonState"
-                            :proAuthTitle="proAuthButtonTitle"
-                            @update-field="updateProfileField(profile._key, $event)"
-                            @open-model-picker="openModelPicker(profile._key)"
-                            @open-codex-auth="openCodexAuthDialog"
-                            @open-xai-auth="openXAIAuthDialog"
-                            @open-pro-auth="openProAuthDialog"
-                          />
-                        </article>
+                            <span class="settings-profile-row-text">
+                              <span class="settings-profile-row-name">{{ profile.name || t("settings_agent_profile_placeholder") }}</span>
+                              <span class="settings-profile-row-meta">{{ profileSummary(profile) || t("settings_agent_profile_not_set") }}</span>
+                            </span>
+                            <span v-if="profileDirty(profile)" class="settings-channel-tile-dirty settings-profile-row-dirty" :title="t('settings_channel_unsaved')" :aria-label="t('settings_channel_unsaved')"></span>
+                            <PhCaretRight class="icon settings-profile-row-caret" aria-hidden="true" />
+                          </button>
+                        </div>
 
                         <QButton
                           type="button"
@@ -5684,6 +5638,134 @@ const SettingsView = {
               saveScope="agent"
               @save="saveConfigSettings('agent', $event)"
             />
+            </div>
+
+            <div v-if="openedProfile && isMobile" class="settings-channel-pane-mask" aria-hidden="true" @click="closeProfilePane"></div>
+            <Transition :name="isMobile ? 'settings-channel-sheet' : 'settings-channel-pane'">
+              <aside
+                v-if="openedProfile"
+                :key="openedProfile._key"
+                class="settings-channel-pane settings-profile-pane"
+                :class="{ 'is-sheet': isMobile }"
+                :role="isMobile ? 'dialog' : null"
+                :aria-modal="isMobile ? 'true' : null"
+                :aria-label="openedProfile.name || t('settings_agent_profile_placeholder')"
+              >
+                <div class="settings-channel-pane-shell">
+                  <div class="settings-channel-pane-scroll">
+                    <div class="settings-panel-shell">
+                      <header class="settings-panel-head settings-channel-panel-head">
+                        <div class="settings-panel-copy">
+                          <h3 class="settings-panel-title workspace-document-title">{{ openedProfile.name || t("settings_agent_profile_placeholder") }}</h3>
+                          <p class="settings-panel-meta">
+                            {{ t(profileIsInUse(openedProfile) ? "settings_agent_profile_status_in_use" : "settings_agent_profile_status_available") }}<template v-if="profileSummary(openedProfile)"> · {{ profileSummary(openedProfile) }}</template>
+                          </p>
+                        </div>
+                        <div class="settings-profile-actions settings-default-llm-actions">
+                          <QButton class="plain xs icon" :title="t('settings_channel_close')" :aria-label="t('settings_channel_close')" @click="closeProfilePane">
+                            <PhX class="icon" />
+                          </QButton>
+                        </div>
+                      </header>
+
+                      <div class="settings-panel-body settings-profile-pane-body">
+                        <div class="settings-field settings-profile-name">
+                          <span class="settings-field-label">{{ t("settings_agent_profile_name_label") }}</span>
+                          <QInput
+                            :modelValue="openedProfile.name"
+                            :placeholder="t('settings_agent_profile_name_placeholder')"
+                            :disabled="agentLoading || agentSaving || agentSettingsReadOnly"
+                            @update:modelValue="updateProfileField(openedProfile._key, { field: 'name', value: $event })"
+                          />
+                        </div>
+                        <LLMConfigForm
+                          :config="openedProfile"
+                          :busy="agentLoading || agentSaving"
+                          :disabledReason="agentFormDisabledReason"
+                          :readOnly="agentSettingsReadOnly"
+                          :envManaged="llmProfileEnvManaged(openedProfile)"
+                          :secretFields="llmProfileSecretFields(openedProfile)"
+                          :revealPrefix="llmRevealPrefix(openedProfile)"
+                          :providerItems="providerItems"
+                          :reasoningEffortItems="reasoningEffortItems"
+                          :toolsEmulationItems="toolsEmulationItems"
+                          :enableModelPicker="true"
+                          :modelLookupCredentialsReady="profileModelLookupCredentialsReady(openedProfile)"
+                          :showCodexAuthAction="profileUsesCodexProvider(openedProfile)"
+                          :codexAuthDisabled="profileCodexAuthDisabled(openedProfile)"
+                          :codexAuthState="codexAuthButtonState"
+                          :codexAuthTitle="codexAuthButtonTitle"
+                          :showXAIAuthAction="profileUsesXAIProvider(openedProfile)"
+                          :xaiAuthState="xaiAuthButtonState"
+                          :xaiAuthTitle="xaiAuthButtonTitle"
+                          :showProAuthAction="profileUsesProProvider(openedProfile)"
+                          :proAuthState="proAuthButtonState"
+                          :proAuthTitle="proAuthButtonTitle"
+                          @update-field="updateProfileField(openedProfile._key, $event)"
+                          @open-model-picker="openModelPicker(openedProfile._key)"
+                          @open-codex-auth="openCodexAuthDialog"
+                          @open-xai-auth="openXAIAuthDialog"
+                          @open-pro-auth="openProAuthDialog"
+                        />
+
+                        <!-- Less common settings stay folded; edits join the same draft and save bar. -->
+                        <details class="settings-profile-advanced">
+                          <summary>
+                            <PhCaretRight class="icon" aria-hidden="true" />
+                            <span>{{ t("settings_advanced_action") }}</span>
+                          </summary>
+                          <div class="settings-profile-advanced-body">
+                            <LLMConfigForm
+                              :config="openedProfile"
+                              :busy="agentLoading || agentSaving"
+                              :disabledReason="agentFormDisabledReason"
+                              :readOnly="agentSettingsReadOnly"
+                              :envManaged="llmProfileEnvManaged(openedProfile)"
+                              :secretFields="llmProfileSecretFields(openedProfile)"
+                              :revealPrefix="llmRevealPrefix(openedProfile)"
+                              :providerItems="providerItems"
+                              :reasoningEffortItems="reasoningEffortItems"
+                              :toolsEmulationItems="toolsEmulationItems"
+                              :showAdvanced="true"
+                              :advancedOnly="true"
+                              @update-field="updateProfileField(openedProfile._key, $event)"
+                            />
+                          </div>
+                        </details>
+
+                        <div class="settings-profile-pane-actions">
+                          <QButton
+                            class="outlined"
+                            :disabled="testConnectionDisabledForProfile(openedProfile)"
+                            @click="openTestConnection(openedProfile._key)"
+                          >
+                            <PhGauge class="icon" />
+                            {{ t("setup_llm_test_button") }}
+                          </QButton>
+                          <QButton
+                            class="outlined danger"
+                            :disabled="agentLoading || agentSaving || agentSettingsReadOnly"
+                            @click="confirmRemoveLLMProfile(openedProfile._key)"
+                          >
+                            <PhTrash class="icon" />
+                            {{ t("settings_agent_profile_delete") }}
+                          </QButton>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <footer v-if="sectionSaveUnits.length || sectionSaveFailed" class="settings-channel-pane-foot">
+                    <p class="settings-channel-pane-foot-text" :class="{ 'is-error': sectionSaveFailed }" role="status">
+                      {{ sectionSaveFailed ? t('settings_save_bar_failed', { items: sectionSaveFailed }) : t('settings_channel_unsaved_note') }}
+                    </p>
+                    <QButton class="primary" :loading="sectionSaving" :disabled="sectionSaveBusy || !sectionSaveUnits.length" @click="saveSection">
+                      {{ t('action_save') }}
+                    </QButton>
+                  </footer>
+                </div>
+              </aside>
+            </Transition>
+            </div>
           </div>
 
           <div v-else-if="selectedSection.id === 'routes'" class="settings-panel-body settings-panel-body-plain">
@@ -6917,29 +6999,12 @@ const SettingsView = {
         v-model="advancedSettingsOpen"
         :title="advancedSettingsTitle"
         width="760px"
-        :saving="advancedSettingsSaving || (advancedSettingsProfile && agentSaving)"
+        :saving="advancedSettingsSaving"
         :saveDisabled="advancedSettingsSaveDisabled"
         @cancel="closeAdvancedSettings"
         @save="saveAdvancedSettings"
       >
-        <LLMConfigForm
-          v-if="advancedSettingsProfile"
-          :config="advancedSettingsProfile"
-          :busy="agentLoading || agentSaving"
-          :disabledReason="agentFormDisabledReason"
-          :readOnly="agentSettingsReadOnly"
-          :envManaged="llmProfileEnvManaged(advancedSettingsProfile)"
-          :secretFields="llmProfileSecretFields(advancedSettingsProfile)"
-          :revealPrefix="llmRevealPrefix(advancedSettingsProfile)"
-          :providerItems="providerItems"
-          :reasoningEffortItems="reasoningEffortItems"
-          :toolsEmulationItems="toolsEmulationItems"
-          :showAdvanced="true"
-          :advancedOnly="true"
-          @update-field="updateAdvancedProfileField"
-        />
         <ConfigSettingsPanel
-          v-else
           ref="advancedConfigPanel"
           :groups="advancedSettingsGroups"
           :values="advancedSettingsValues"
