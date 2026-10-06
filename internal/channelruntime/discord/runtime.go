@@ -33,6 +33,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/taskdomain"
 	"github.com/quailyquaily/mistermorph/internal/textutil"
 	"github.com/quailyquaily/mistermorph/internal/workspace"
+	"github.com/quailyquaily/mistermorph/tools"
 	discordtools "github.com/quailyquaily/mistermorph/tools/discord"
 )
 
@@ -525,7 +526,12 @@ func runDiscordLoop(ctx context.Context, d Dependencies, opts RunOptions) error 
 			historySnapshot := append([]chathistory.ChatHistoryItem(nil), history[conversationKey]...)
 			stateMu.Unlock()
 			reactTool := discordtools.NewReactTool(discordToolAPI{api: api}, inbound.ChannelID, inbound.MessageID)
-			decision, accepted, decideErr := decideDiscordGroupTrigger(llmstats.WithRunID(handlerCtx, taskID), triggerOptions(bundle), inbound, botID, historySnapshot, reactTool)
+			// A $name reference asks for a task, so the group check offers no emoji reply for it.
+			var groupReact tools.Tool
+			if !runtimecore.HasCapabilityReference(text) {
+				groupReact = reactTool
+			}
+			decision, accepted, decideErr := decideDiscordGroupTrigger(llmstats.WithRunID(handlerCtx, taskID), triggerOptions(bundle), inbound, botID, historySnapshot, groupReact)
 			if decideErr != nil {
 				generation.Release()
 				logger.Warn("discord_addressing_llm_error", "channel_id", inbound.ChannelID, "message_id", inbound.MessageID, "error", decideErr.Error())

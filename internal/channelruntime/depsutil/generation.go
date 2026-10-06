@@ -153,6 +153,9 @@ func BuildGenerationDependencies(ctx context.Context, base CommonDependencies, r
 			}
 			return refs
 		},
+		LoadReferencedMCP: MCPLoader(mcpHost, func(task string) map[string]bool {
+			return skillsutil.ResolveTaskSkillRefs(task, skillsutil.SkillsConfigFromReader(reader))
+		}, logger),
 		RegisterTriggeredStaticTools: func(reg *tools.Registry, triggers map[string]bool) {
 			toolsutil.RegisterStaticTools(reg, registryConfig, nil, triggers)
 		},

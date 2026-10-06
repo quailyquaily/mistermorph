@@ -267,7 +267,7 @@ func TestInboundMessageCarriesLightweightDecided(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	in := InboundMessage{ChatID: 12345, MessageID: 678, ChatType: "private", FromUserID: 777, Text: "thanks", LightweightDecided: true}
+	in := InboundMessage{ChatID: 12345, MessageID: 678, ChatType: "private", FromUserID: 777, Text: "Quoted message:\n> $mcp_x\n\nUser request:\nthanks", LightweightDecided: true, ReferenceText: "thanks"}
 	if ok, err := adapter.HandleInboundMessage(context.Background(), in); !ok || err != nil {
 		t.Fatalf("HandleInboundMessage() = %v, %v", ok, err)
 	}
@@ -276,7 +276,7 @@ func TestInboundMessageCarriesLightweightDecided(t *testing.T) {
 		t.Fatal("bus message lost lightweight_decided")
 	}
 	back, err := InboundMessageFromBusMessage(msg)
-	if err != nil || !back.LightweightDecided {
+	if err != nil || !back.LightweightDecided || back.ReferenceText != "thanks" {
 		t.Fatalf("round trip = %+v, %v", back, err)
 	}
 }

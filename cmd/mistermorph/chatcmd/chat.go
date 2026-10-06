@@ -7,6 +7,7 @@ import (
 
 	"github.com/quailyquaily/mistermorph/guard"
 	"github.com/quailyquaily/mistermorph/internal/configdefaults"
+	"github.com/quailyquaily/mistermorph/internal/mcphost"
 	"github.com/quailyquaily/mistermorph/tools"
 	"github.com/spf13/cobra"
 )
@@ -16,6 +17,7 @@ type Dependencies struct {
 	RegistryFromViper            func() *tools.Registry
 	RegisterTriggeredStaticTools func(*tools.Registry, map[string]bool)
 	GuardFromViper               func(*slog.Logger) (*guard.Guard, error)
+	MCPHost                      func() *mcphost.Host
 }
 
 func New(deps Dependencies) *cobra.Command {

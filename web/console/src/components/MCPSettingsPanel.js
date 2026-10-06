@@ -26,6 +26,7 @@ function cloneServer(server) {
     _key: String(server?._key || nextKey("server")),
     name: String(server?.name || ""),
     enable: server?.enable !== false,
+    on_demand: server?.on_demand === true,
     type: server?.type === "http" ? "http" : "stdio",
     command: String(server?.command || ""),
     args_text: String(server?.args_text || ""),
@@ -99,6 +100,11 @@ const MCPSettingsPanel = {
 
     function updateEditor(field, value) {
       editor[field] = String(value ?? "");
+      dialogError.value = "";
+    }
+
+    function updateOnDemand(value) {
+      editor.on_demand = !!value;
       dialogError.value = "";
     }
 
@@ -182,6 +188,7 @@ const MCPSettingsPanel = {
       updatePair,
       removePair,
       saveEditor,
+      updateOnDemand,
       deleteEditor,
     };
   },
@@ -224,6 +231,7 @@ const MCPSettingsPanel = {
                 <div class="settings-toggle-copy mcp-server-copy">
                   <strong class="settings-toggle-title">{{ server.name }}</strong>
                   <span class="settings-toggle-note">{{ server.type === 'http' ? server.url : server.command }}</span>
+                  <span v-if="server.on_demand" class="settings-toggle-note">{{ t("settings_mcp_on_demand_hint", { name: server.name }) }}</span>
                 </div>
                 <div class="settings-toggle-actions">
                   <QButton
@@ -271,6 +279,14 @@ const MCPSettingsPanel = {
               <span class="settings-field-label">{{ t("settings_mcp_name") }}</span>
               <QInput :modelValue="editor.name" :placeholder="t('settings_mcp_name_placeholder')" :disabled="busy" @update:modelValue="updateEditor('name', $event)" />
             </label>
+
+            <div class="settings-toggle-row mcp-on-demand-row">
+              <div class="settings-toggle-copy">
+                <strong class="settings-toggle-title">{{ t("settings_mcp_on_demand") }}</strong>
+                <span class="settings-toggle-note">{{ t("settings_mcp_on_demand_note", { name: editor.name.trim() || "<name>" }) }}</span>
+              </div>
+              <QSwitch :modelValue="editor.on_demand" :disabled="busy" :aria-label="t('settings_mcp_on_demand')" @update:modelValue="updateOnDemand" />
+            </div>
 
             <template v-if="editor.type === 'http'">
               <label class="settings-field is-wide">

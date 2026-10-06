@@ -23,6 +23,8 @@ import (
 type mcpRegistration struct {
 	tools []tools.Tool
 	close func() error
+	// servers is each configured server's startup status, for loading $mcp_<name> references.
+	servers []mcphost.ServerStatus
 }
 
 type runtimeBuildDependencies struct {
@@ -55,8 +57,9 @@ func connectIntegrationMCP(ctx context.Context, configs []mcphost.ServerConfig, 
 		return mcpRegistration{}, nil
 	}
 	return mcpRegistration{
-		tools: append([]tools.Tool(nil), host.Tools()...),
-		close: host.Close,
+		tools:   append([]tools.Tool(nil), host.Tools()...),
+		close:   host.Close,
+		servers: host.Servers(),
 	}, nil
 }
 

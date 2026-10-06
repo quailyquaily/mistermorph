@@ -55,6 +55,9 @@ type MessageExtensions struct {
 	ImagePending        bool                 `json:"image_pending,omitempty"`
 	// LightweightDecided: a decision-route check already chose a text reply for this message.
 	LightweightDecided bool `json:"lightweight_decided,omitempty"`
+	// ReferenceText is where $name references are read when the message text also carries
+	// context the user did not write, such as a quoted message.
+	ReferenceText string `json:"reference_text,omitempty"`
 }
 
 type MessageParticipant struct {

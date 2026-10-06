@@ -773,6 +773,9 @@ func buildManagedRuntimeDepsFromReader(logger *slog.Logger, reader *viper.Viper)
 			}
 			return refs
 		},
+		LoadReferencedMCP: depsutil.MCPLoader(mcpHost, func(task string) map[string]bool {
+			return skillsutil.ResolveTaskSkillRefs(task, skillsutil.SkillsConfigFromReader(reader))
+		}, logger),
 		RegisterTriggeredStaticTools: func(reg *tools.Registry, triggers map[string]bool) {
 			toolsutil.RegisterStaticTools(reg, staticRegistryConfig, nil, triggers)
 		},

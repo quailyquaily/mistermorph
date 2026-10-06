@@ -613,6 +613,7 @@ func (s *telegramRuntimeState) enqueueInbound(ctx context.Context, message busru
 			MentionUsers:       append([]string(nil), inbound.MentionUsers...),
 			Generation:         generationLease,
 			LightweightDecided: inbound.LightweightDecided,
+			ReferenceText:      inbound.ReferenceText,
 		}
 	}
 	if s.taskStore != nil {
@@ -1090,7 +1091,8 @@ func (s *telegramRuntimeState) handleUpdate(update telegramUpdate) {
 			s.stateMu.Unlock()
 			var addressingReactionTool *telegramtools.ReactTool
 			var reactionTool tools.Tool
-			if s.api != nil && message.MessageID > 0 {
+			// A $name reference asks for a task, so the group check offers no emoji reply for it.
+			if s.api != nil && message.MessageID > 0 && !runtimecore.HasCapabilityReference(rawText) {
 				addressingReactionTool = telegramtools.NewReactTool(newTelegramToolAPI(s.api), chatID, message.MessageID, s.allowedChatIDs)
 				reactionTool = addressingReactionTool
 			}
@@ -1213,12 +1215,16 @@ func (s *telegramRuntimeState) handleUpdate(update telegramUpdate) {
 		text = appendDownloadedFilesToTask(text, downloaded, downloadRoots)
 	}
 	imageAttachments := collectDownloadedImageAttachments(downloaded, 3)
+	// referenceText is the user's own text when a quoted message is added to the task, so a
+	// $name in the quoted message selects no skill, tool or MCP server.
+	referenceText := ""
 	if message.ReplyTo != nil {
 		if quoted := buildReplyContext(message.ReplyTo); quoted != "" {
 			if strings.TrimSpace(text) == "" {
 				text = "Please read the quoted message, and proceed according to the previous context, or your understanding, in the same langauge."
 			}
-			text = "Quoted message:\n> " + quoted + "\n\nUser request:\n" + strings.TrimSpace(text)
+			referenceText = strings.TrimSpace(text)
+			text = "Quoted message:\n> " + quoted + "\n\nUser request:\n" + referenceText
 		}
 	}
 	mentionUsers := dedupeNonEmptyStrings(mentionCandidates)
@@ -1265,6 +1271,7 @@ func (s *telegramRuntimeState) handleUpdate(update telegramUpdate) {
 		MentionParticipants: mentionParticipants,
 		ImageAttachments:    imageAttachments,
 		LightweightDecided:  lightweightDecided,
+		ReferenceText:       referenceText,
 	})
 	if publishErr != nil {
 		s.logger.Warn("telegram_bus_publish_error", "channel", busruntime.ChannelTelegram, "chat_id", chatID, "message_id", message.MessageID, "bus_error_code", string(busruntime.ErrorCodeOf(publishErr)), "error", publishErr.Error())

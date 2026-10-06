@@ -49,6 +49,8 @@ type telegramJob struct {
 	Generation       *runtimecore.RuntimeGenerationLease
 	// LightweightDecided: the decision route already chose a text reply for this message.
 	LightweightDecided bool
+	// ReferenceText is the user's own text when Text includes a quoted message.
+	ReferenceText string
 }
 
 func (j telegramJob) runtimeBundle(fallback *runtimecore.ChannelRuntimeBundle) *runtimecore.ChannelRuntimeBundle {

@@ -603,7 +603,8 @@ func (s *slackRuntimeState) handleSocketEnvelope(ctx context.Context, envelope s
 		decisionCtx := llmstats.WithRunID(ctx, slackTaskID(event.TeamID, event.ChannelID, event.MessageTS))
 		var addressingReactionTool *slacktools.ReactTool
 		var reactionTool tools.Tool
-		if s.api != nil && strings.TrimSpace(event.ChannelID) != "" && strings.TrimSpace(event.MessageTS) != "" {
+		// A $name reference asks for a task, so the group check offers no emoji reply for it.
+		if s.api != nil && strings.TrimSpace(event.ChannelID) != "" && strings.TrimSpace(event.MessageTS) != "" && !runtimecore.HasCapabilityReference(event.Text) {
 			addressingReactionTool = slacktools.NewReactTool(newSlackToolAPI(s.api), event.ChannelID, event.MessageTS, s.allowedChannels, s.availableEmojiNames)
 			reactionTool = addressingReactionTool
 		}

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/quailyquaily/mistermorph/agent"
+	"github.com/quailyquaily/mistermorph/internal/caprefs"
 	"github.com/quailyquaily/mistermorph/internal/chathistory"
 	"github.com/quailyquaily/mistermorph/internal/grouptrigger"
 	"github.com/quailyquaily/mistermorph/internal/promptprofile"
@@ -103,10 +104,17 @@ func RunLightweightPrecheck(ctx context.Context, bundle *ChannelRuntimeBundle, r
 }
 
 // LightweightPrecheckApplies reports whether a message may be pre-checked: it carries text the
-// check can read, has no attachments the check cannot see, and is not a command.
+// check can read, has no attachments the check cannot see, is not a command, and references no
+// skill, tool or MCP server with $name, which asks for a task, never for an emoji.
 func LightweightPrecheckApplies(text string, hasAttachments bool) bool {
 	text = strings.TrimSpace(text)
-	return text != "" && !hasAttachments && !strings.HasPrefix(text, "/")
+	return text != "" && !hasAttachments && !strings.HasPrefix(text, "/") && !HasCapabilityReference(text)
+}
+
+// HasCapabilityReference reports whether text holds a $name reference. Such a message is never
+// answered with only an emoji, by the pre-check or by the group check.
+func HasCapabilityReference(text string) bool {
+	return len(caprefs.Names(text)) > 0
 }
 
 var silentPersonaLogger = slog.New(slog.NewTextHandler(io.Discard, nil))

@@ -783,6 +783,9 @@ func buildConsoleLocalRuntimeBundle(
 	deps := snapshot.commonDeps
 	deps.Registry = func() *tools.Registry { return baseRegistry }
 	deps.AwarenessRegistry = func() *tools.Registry { return awarenessRegistry }
+	deps.LoadReferencedMCP = depsutil.MCPLoader(mcpHost, func(task string) map[string]bool {
+		return skillsutil.ResolveTaskSkillRefs(task, skillsutil.SkillsConfigFromReader(snapshot.reader))
+	}, logger)
 	deps.Guard = func(guardLogger *slog.Logger) (*guard.Guard, error) {
 		if guardLogger == nil {
 			guardLogger = logger

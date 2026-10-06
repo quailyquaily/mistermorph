@@ -572,6 +572,18 @@ func runAwarenessTask(ctx context.Context, d Dependencies, opts awarenessTaskOpt
 		ToolTriggers:  toolTriggers,
 		PersonaDir:    d.RuntimePaths.PersonaDir,
 	})
+	// Heartbeat and cron tasks may load $mcp_<name> servers too, for this run only.
+	if d.LoadReferencedMCP != nil {
+		closeMCP, mcpErr := d.LoadReferencedMCP(runCtx, task, reg)
+		if mcpErr != nil {
+			return "", mcpErr
+		}
+		defer func() {
+			if closeErr := closeMCP(); closeErr != nil && opts.Logger != nil {
+				opts.Logger.Warn("awareness_mcp_close_failed", "error", closeErr.Error())
+			}
+		}()
+	}
 	promptprofile.ApplyPersonaIdentity(&promptSpec, opts.Logger, d.RuntimePaths.PersonaDir)
 	promptprofile.AppendPlanCreateGuidanceBlock(&promptSpec, reg)
 	if d.PromptAugment != nil {

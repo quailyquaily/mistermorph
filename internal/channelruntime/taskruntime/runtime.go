@@ -172,6 +172,9 @@ type RunRequest struct {
 	// LightweightDecided is set when a decision-route check already chose a text reply, so the
 	// run's prompt leaves out the lightweight-reaction rules.
 	LightweightDecided bool
+	// ReferenceText is where $skill, $tool and $mcp_<name> references are read, when it differs
+	// from Task: a channel that adds a quoted message to the task passes the user's own text here.
+	ReferenceText string
 }
 
 type RunResult struct {
@@ -526,11 +529,12 @@ func (rt *Runtime) prepareRun(ctx context.Context, req RunRequest) (preparedRunt
 	planClient := mainClient
 	planModel := strings.TrimSpace(mainRoute.ClientConfig.Model)
 	var ownedImageClient llm.ImageClient
+	closeTaskMCP := func() error { return nil }
 	var cleanupOnce sync.Once
 	var cleanupErr error
 	cleanup := func() error {
 		cleanupOnce.Do(func() {
-			cleanupErr = closeRuntimeClientScope(logger, runClientOwners, ownedImageClient)
+			cleanupErr = errors.Join(closeTaskMCP(), closeRuntimeClientScope(logger, runClientOwners, ownedImageClient))
 		})
 		return cleanupErr
 	}
@@ -566,6 +570,10 @@ func (rt *Runtime) prepareRun(ctx context.Context, req RunRequest) (preparedRunt
 	if reg == nil {
 		reg = rt.BaseRegistry.Clone()
 	}
+	referenceText := task
+	if text := strings.TrimSpace(req.ReferenceText); text != "" {
+		referenceText = text
+	}
 	var toolTriggers map[string]bool
 	runtimeToolsConfig := rt.commonDeps.RuntimeToolsConfig
 	if req.RuntimeToolsConfig != nil {
@@ -584,7 +592,7 @@ func (rt *Runtime) prepareRun(ctx context.Context, req RunRequest) (preparedRunt
 	}
 	if !req.DisableRuntimeTools {
 		if rt.commonDeps.ToolTriggers != nil {
-			toolTriggers = rt.commonDeps.ToolTriggers(task)
+			toolTriggers = rt.commonDeps.ToolTriggers(referenceText)
 		}
 		for name, triggered := range req.ToolTriggers {
 			if !triggered {
@@ -640,9 +648,18 @@ func (rt *Runtime) prepareRun(ctx context.Context, req RunRequest) (preparedRunt
 			ToolTriggers:     toolTriggers,
 			PersonaDir:       rt.commonDeps.RuntimePaths.PersonaDir,
 		})
+		// $mcp_<name> servers are connected for this run only, before the prompt and tool schemas
+		// are built, and closed with the run. Resume prepares the run again and reconnects them.
+		if rt.commonDeps.LoadReferencedMCP != nil {
+			closeMCP, mcpErr := rt.commonDeps.LoadReferencedMCP(ctx, referenceText, reg)
+			if mcpErr != nil {
+				return preparedRuntimeRun{}, mcpErr
+			}
+			closeTaskMCP = closeMCP
+		}
 	}
 
-	promptSpec, loadedSkills, err := rt.commonDeps.PromptSpec(ctx, logger, rt.LogOptions, task, mainClient, model, req.StickySkills)
+	promptSpec, loadedSkills, err := rt.commonDeps.PromptSpec(ctx, logger, rt.LogOptions, referenceText, mainClient, model, req.StickySkills)
 	if err != nil {
 		return preparedRuntimeRun{}, err
 	}

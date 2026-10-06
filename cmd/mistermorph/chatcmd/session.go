@@ -478,6 +478,9 @@ func buildChatSession(cmd *cobra.Command, deps Dependencies) (*chatSession, erro
 			skillsCfg := skillsutil.SkillsConfigFromRunCmd(cmd)
 			return toolsutil.BuiltinToolTriggers(task, skillsutil.ResolveTaskSkillRefs(task, skillsCfg))
 		},
+		LoadReferencedMCP: chatMCPLoader(deps, func(task string) map[string]bool {
+			return skillsutil.ResolveTaskSkillRefs(task, skillsutil.SkillsConfigFromRunCmd(cmd))
+		}, logger),
 		RegisterTriggeredStaticTools: deps.RegisterTriggeredStaticTools,
 		ACPAgents:                    acpclient.AgentsFromViper,
 		RuntimeToolsConfig:           runtimeToolsCfg,
@@ -552,4 +555,11 @@ func (s *chatSession) cleanup() {
 		}
 		s.taskRuntime = nil
 	}
+}
+
+func chatMCPLoader(deps Dependencies, skillRefs func(string) map[string]bool, logger *slog.Logger) func(context.Context, string, *tools.Registry) (func() error, error) {
+	if deps.MCPHost == nil {
+		return nil
+	}
+	return depsutil.MCPLoader(deps.MCPHost(), skillRefs, logger)
 }

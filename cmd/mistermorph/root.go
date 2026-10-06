@@ -120,12 +120,14 @@ func newRootRuntime() *rootRuntime {
 		RegistryFromViper:            registryResolver.Registry,
 		RegisterTriggeredStaticTools: registryResolver.RegisterTriggeredStaticTools,
 		GuardFromViper:               guardResolver.Guard,
+		MCPHost:                      registryResolver.MCPHost,
 	}))
 	chat := chatcmd.New(chatcmd.Dependencies{
 		Version:                      version,
 		RegistryFromViper:            registryResolver.Registry,
 		RegisterTriggeredStaticTools: registryResolver.RegisterTriggeredStaticTools,
 		GuardFromViper:               guardResolver.Guard,
+		MCPHost:                      registryResolver.MCPHost,
 	})
 	cmd.AddCommand(chat)
 	// The root command is also the default chat entry point.
@@ -459,6 +461,16 @@ func (r *registryRuntimeResolver) Registry() *tools.Registry {
 		return nil
 	}
 	return registry.Clone()
+}
+
+// MCPHost returns the MCP servers connected at startup, with each configured server's status.
+func (r *registryRuntimeResolver) MCPHost() *mcphost.Host {
+	if r == nil {
+		return nil
+	}
+	r.lifecycleMu.Lock()
+	defer r.lifecycleMu.Unlock()
+	return r.mcpHost
 }
 
 func (r *registryRuntimeResolver) AwarenessRegistry() *tools.Registry {

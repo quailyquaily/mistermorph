@@ -22,15 +22,19 @@ import (
 type PromptSpecFunc func(ctx context.Context, logger *slog.Logger, logOpts agent.LogOptions, task string, client llm.Client, model string, stickySkills []string) (agent.PromptSpec, []string, error)
 
 type CommonDependencies struct {
-	Logger                       func() (*slog.Logger, error)
-	LogOptions                   func() agent.LogOptions
-	ResolveLLMRoute              func(purpose string) (llmutil.ResolvedRoute, error)
-	ResolveLLMRouteWithProfile   func(purpose, profile string) (llmutil.ResolvedRoute, error)
-	CreateLLMClient              func(route llmutil.ResolvedRoute) (llm.Client, error)
-	CreateImageClient            func() (llm.ImageClient, error)
-	Registry                     func() *tools.Registry
-	AwarenessRegistry            func() *tools.Registry
-	ToolTriggers                 func(task string) map[string]bool
+	Logger                     func() (*slog.Logger, error)
+	LogOptions                 func() agent.LogOptions
+	ResolveLLMRoute            func(purpose string) (llmutil.ResolvedRoute, error)
+	ResolveLLMRouteWithProfile func(purpose, profile string) (llmutil.ResolvedRoute, error)
+	CreateLLMClient            func(route llmutil.ResolvedRoute) (llm.Client, error)
+	CreateImageClient          func() (llm.ImageClient, error)
+	Registry                   func() *tools.Registry
+	AwarenessRegistry          func() *tools.Registry
+	ToolTriggers               func(task string) map[string]bool
+	// LoadReferencedMCP connects the MCP servers a task references with $mcp_<name> that are not
+	// already loaded, and registers their tools in the task's registry. The returned function
+	// closes them when the task's run ends; it is never nil. A nil LoadReferencedMCP loads nothing.
+	LoadReferencedMCP            func(ctx context.Context, text string, reg *tools.Registry) (func() error, error)
 	RegisterTriggeredStaticTools func(*tools.Registry, map[string]bool)
 	ACPAgents                    func() []acpclient.AgentConfig
 	RuntimeToolsConfig           toolsutil.RuntimeToolsRegisterConfig

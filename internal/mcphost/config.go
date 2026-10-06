@@ -2,6 +2,7 @@ package mcphost
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/spf13/cast"
@@ -11,6 +12,7 @@ import (
 type ServerConfig struct {
 	Name         string            `json:"name" yaml:"name"`
 	Enable       bool              `json:"enable" yaml:"enable"`                                   // set false to disable; default true
+	OnDemand     bool              `json:"on_demand,omitempty" yaml:"on_demand,omitempty"`         // connect only for tasks that reference $mcp_<name>
 	Type         string            `json:"type" yaml:"type"`                                       // "stdio" (default) | "http"
 	Command      string            `json:"command,omitempty" yaml:"command,omitempty"`             // stdio only
 	Args         []string          `json:"args,omitempty" yaml:"args,omitempty"`                   // stdio only
@@ -20,9 +22,22 @@ type ServerConfig struct {
 	AllowedTools []string          `json:"allowed_tools,omitempty" yaml:"allowed_tools,omitempty"` // whitelist; empty = all
 }
 
-func (c *ServerConfig) Validate() error {
+var serverNamePattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]*$`)
+
+// ValidateName checks the identifier used in MCP tool names, including for disabled servers.
+func (c *ServerConfig) ValidateName() error {
 	if strings.TrimSpace(c.Name) == "" {
 		return fmt.Errorf("mcp server name is required")
+	}
+	if !serverNamePattern.MatchString(c.Name) {
+		return fmt.Errorf("mcp server name %q must start with an ASCII letter and contain only ASCII letters, digits, underscores, or hyphens", c.Name)
+	}
+	return nil
+}
+
+func (c *ServerConfig) Validate() error {
+	if err := c.ValidateName(); err != nil {
+		return err
 	}
 	typ := strings.ToLower(strings.TrimSpace(c.Type))
 	if typ == "" {
@@ -97,6 +112,7 @@ func ParseServers(raw any) []ServerConfig {
 		cfg := ServerConfig{
 			Name:         cast.ToString(m["name"]),
 			Enable:       m["enable"] == nil || cast.ToBool(m["enable"]),
+			OnDemand:     cast.ToBool(m["on_demand"]),
 			Type:         cast.ToString(m["type"]),
 			Command:      cast.ToString(m["command"]),
 			URL:          cast.ToString(m["url"]),

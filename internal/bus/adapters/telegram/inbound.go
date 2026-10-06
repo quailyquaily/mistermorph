@@ -38,6 +38,8 @@ type InboundMessage struct {
 	ImagePaths          []string
 	ImageAttachments    []busruntime.ImageAttachment
 	LightweightDecided  bool
+	// ReferenceText is the user's own text when Text includes a quoted message.
+	ReferenceText string
 }
 
 type InboundAdapter struct {
@@ -172,6 +174,7 @@ func (a *InboundAdapter) HandleInboundMessage(ctx context.Context, msg InboundMe
 			ImagePaths:          imagePaths,
 			ImageAttachments:    imageAttachments,
 			LightweightDecided:  msg.LightweightDecided,
+			ReferenceText:       strings.TrimSpace(msg.ReferenceText),
 		},
 	}
 	platformMessageID := fmt.Sprintf("%d:%d", chatID, messageID)
@@ -244,6 +247,7 @@ func InboundMessageFromBusMessage(msg busruntime.BusMessage) (InboundMessage, er
 		ImagePaths:          imagePaths,
 		ImageAttachments:    imageAttachments,
 		LightweightDecided:  msg.Extensions.LightweightDecided,
+		ReferenceText:       strings.TrimSpace(msg.Extensions.ReferenceText),
 	}, nil
 }
 

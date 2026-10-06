@@ -486,6 +486,11 @@ func runLineLoop(ctx context.Context, d Dependencies, opts RunOptions) error {
 			if addressingLLMTimeout <= 0 {
 				addressingLLMTimeout = requestTimeout
 			}
+			// A $name reference asks for a task, so the group check offers no emoji reply for it.
+			var groupEmoji func(context.Context, string) error
+			if !runtimecore.HasCapabilityReference(inbound.Text) {
+				groupEmoji = sendEmoji
+			}
 			dec, accepted, decErr := decideLineGroupTrigger(
 				decisionCtx,
 				addressingBundle.AddressingClient,
@@ -497,7 +502,7 @@ func runLineLoop(ctx context.Context, d Dependencies, opts RunOptions) error {
 				addressingConfidenceThreshold,
 				addressingInterjectThreshold,
 				historySnapshot,
-				sendEmoji,
+				groupEmoji,
 				d.RuntimePaths.PersonaDir,
 			)
 			addressingLease.Release()

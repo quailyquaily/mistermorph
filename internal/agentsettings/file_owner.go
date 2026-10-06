@@ -1019,7 +1019,9 @@ func normalizeMCPServers(values []MCPServerSettings) ([]MCPServerSettings, error
 	servers := make([]MCPServerSettings, len(values))
 	seen := make(map[string]struct{}, len(values))
 	for i, value := range values {
-		value.Name = strings.TrimSpace(value.Name)
+		if err := value.ValidateName(); err != nil {
+			return nil, err
+		}
 		value.Type = strings.ToLower(strings.TrimSpace(value.Type))
 		if value.Type == "" {
 			value.Type = "stdio"
@@ -1046,8 +1048,6 @@ func normalizeMCPServers(values []MCPServerSettings) ([]MCPServerSettings, error
 			if err := value.Validate(); err != nil {
 				return nil, err
 			}
-		} else if value.Name == "" {
-			return nil, fmt.Errorf("mcp server name is required")
 		} else if value.Type != "stdio" && value.Type != "http" {
 			return nil, fmt.Errorf("mcp server %q: unsupported type %q (supported: stdio, http)", value.Name, value.Type)
 		}

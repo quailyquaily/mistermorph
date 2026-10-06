@@ -24,6 +24,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/llmselect"
 	"github.com/quailyquaily/mistermorph/internal/llmstats"
 	"github.com/quailyquaily/mistermorph/internal/llmutil"
+	"github.com/quailyquaily/mistermorph/internal/mcphost"
 	"github.com/quailyquaily/mistermorph/internal/mixinapi"
 	"github.com/quailyquaily/mistermorph/internal/skillsutil"
 	"github.com/quailyquaily/mistermorph/internal/toolsutil"
@@ -600,6 +601,7 @@ func (rt *Runtime) prepareChannelDependencies(ctx context.Context, snap runtimeS
 
 	common := rt.sharedDependencies(snap)
 	common.Registry = func() *tools.Registry { return baseRegistry.Clone() }
+	common.LoadReferencedMCP = rt.mcpLoader(registration.servers, snap, logger)
 	common.AwarenessRegistry = func() *tools.Registry { return awarenessRegistry.Clone() }
 	return common, cleanup, nil
 }
@@ -753,4 +755,11 @@ func (rt *Runtime) promptSpecWithSkillsFromConfig(ctx context.Context, logger *s
 		cfg.Requested = append(cfg.Requested, stickySkills...)
 	}
 	return skillsutil.PromptSpecWithSkills(ctx, logger, logOpts, task, client, model, cfg)
+}
+
+// mcpLoader loads the $mcp_<name> servers a task references; a skill of the same reference wins.
+func (rt *Runtime) mcpLoader(servers []mcphost.ServerStatus, snap runtimeSnapshot, logger *slog.Logger) func(context.Context, string, *tools.Registry) (func() error, error) {
+	return depsutil.MCPLoaderFromServers(servers, func(task string) map[string]bool {
+		return skillsutil.ResolveTaskSkillRefs(task, snap.SkillsConfig)
+	}, logger)
 }

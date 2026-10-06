@@ -402,8 +402,9 @@ tools:
 # Connect to external MCP tool servers. Tools are namespaced as mcp_<name>__<tool>.
 mcp:
   servers: []
-  # - name: "filesystem"
-  #   enable: true               # set false to disable; default true
+  # - name: "filesystem"        # [A-Za-z][A-Za-z0-9_-]*; no spaces (including disabled entries)
+  #   enable: true               # set false to turn the server off; default true
+  #   on_demand: false           # true: not connected at startup; a task loads it by writing $mcp_<name>
   #   type: "stdio"              # stdio (default) | http
   #   command: "npx"
   #   args: ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"]

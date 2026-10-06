@@ -32,3 +32,22 @@ func TestNames(t *testing.T) {
 		})
 	}
 }
+
+func TestRefsKeepRawAndTrimmedNames(t *testing.T) {
+	got := Refs("see $mcp_github-work. then $mcp_github- and $MCP_GITHUB-WORK. again")
+	want := []Ref{
+		{Raw: "mcp_github-work.", Name: "mcp_github-work"},
+		{Raw: "mcp_github-", Name: "mcp_github"},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("Refs() = %#v, want %#v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("Refs()[%d] = %#v, want %#v", i, got[i], want[i])
+		}
+	}
+	if names := Names("$mcp_github- and $mcp_github"); len(names) != 1 || names[0] != "mcp_github" {
+		t.Fatalf("Names() = %v, want the trimmed name once", names)
+	}
+}

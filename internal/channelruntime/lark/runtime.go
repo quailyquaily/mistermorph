@@ -422,7 +422,8 @@ func runLarkLoop(ctx context.Context, d Dependencies, opts RunOptions) error {
 			}
 			var groupReactTool *larktools.ReactTool
 			var react func(context.Context, string) error
-			if strings.TrimSpace(inbound.MessageID) != "" {
+			// A $name reference asks for a task, so the group check offers no emoji reply for it.
+			if strings.TrimSpace(inbound.MessageID) != "" && !runtimecore.HasCapabilityReference(inbound.Text) {
 				groupReactTool = larktools.NewReactTool(newLarkToolAPI(api), inbound.MessageID)
 				react = grouptrigger.ReactWith(groupReactTool)
 			}

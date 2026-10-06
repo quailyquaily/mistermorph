@@ -1826,3 +1826,114 @@ func TestRunLightweightDecidedReachesPrompt(t *testing.T) {
 		})
 	}
 }
+
+type mcpLoadRecorder struct {
+	texts  []string
+	closed int
+	err    error
+}
+
+func (r *mcpLoadRecorder) load(_ context.Context, text string, reg *tools.Registry) (func() error, error) {
+	r.texts = append(r.texts, text)
+	if r.err != nil {
+		return func() error { return nil }, r.err
+	}
+	if err := reg.Register(stubTaskRuntimeTool{name: "mcp_github-work__get_issue"}); err != nil {
+		return nil, err
+	}
+	return func() error {
+		r.closed++
+		return nil
+	}, nil
+}
+
+type stubTaskRuntimeTool struct{ name string }
+
+func (t stubTaskRuntimeTool) Name() string          { return t.name }
+func (stubTaskRuntimeTool) Description() string     { return "stub" }
+func (stubTaskRuntimeTool) ParameterSchema() string { return `{}` }
+func (stubTaskRuntimeTool) Execute(context.Context, map[string]any) (string, error) {
+	return "ok", nil
+}
+
+func TestRunLoadsReferencedMCPForTheRunOnly(t *testing.T) {
+	route := llmutil.ResolvedRoute{ClientConfig: llmconfig.ClientConfig{Provider: "openai", Model: "gpt-5.2"}}
+	newRuntime := func(recorder *mcpLoadRecorder, client *stubTaskRuntimeClient) *Runtime {
+		t.Helper()
+		rt, err := Bootstrap(depsutil.CommonDependencies{
+			Logger:            func() (*slog.Logger, error) { return slog.Default(), nil },
+			LogOptions:        func() agent.LogOptions { return agent.LogOptions{} },
+			ResolveLLMRoute:   func(string) (llmutil.ResolvedRoute, error) { return route, nil },
+			CreateLLMClient:   func(llmutil.ResolvedRoute) (llm.Client, error) { return client, nil },
+			Registry:          func() *tools.Registry { return tools.NewRegistry() },
+			LoadReferencedMCP: recorder.load,
+			PromptSpec: func(_ context.Context, _ *slog.Logger, _ agent.LogOptions, _ string, _ llm.Client, _ string, _ []string) (agent.PromptSpec, []string, error) {
+				return agent.DefaultPromptSpec(), nil, nil
+			},
+		}, BootstrapOptions{AgentConfig: agent.Config{MaxSteps: 2, ParseRetries: 0, ToolRepeatLimit: 2}})
+		if err != nil {
+			t.Fatalf("Bootstrap() error = %v", err)
+		}
+		return rt
+	}
+
+	t.Run("tools in the first request, closed with the run", func(t *testing.T) {
+		recorder := &mcpLoadRecorder{}
+		client := &stubTaskRuntimeClient{}
+		rt := newRuntime(recorder, client)
+		_, err := rt.Run(context.Background(), RunRequest{
+			Task:          "Quoted message:\n> $mcp_other\n\nUser request:\n$mcp_github-work find it",
+			ReferenceText: "$mcp_github-work find it",
+		})
+		if err != nil {
+			t.Fatalf("Run() error = %v", err)
+		}
+		if len(recorder.texts) != 1 || recorder.texts[0] != "$mcp_github-work find it" {
+			t.Fatalf("loaded from %q, want the reference text only", recorder.texts)
+		}
+		found := false
+		for _, tool := range client.requests[0].Tools {
+			found = found || tool.Name == "mcp_github-work__get_issue"
+		}
+		if !found {
+			t.Fatalf("first request tools lack the loaded MCP tool")
+		}
+		if recorder.closed != 1 {
+			t.Fatalf("closed = %d, want 1 after the run", recorder.closed)
+		}
+	})
+
+	t.Run("a failed load fails the run before any model request", func(t *testing.T) {
+		recorder := &mcpLoadRecorder{err: fmt.Errorf(`mcp server "github-work": connect: refused`)}
+		client := &stubTaskRuntimeClient{}
+		rt := newRuntime(recorder, client)
+		_, err := rt.Run(context.Background(), RunRequest{Task: "$mcp_github-work find it"})
+		if err == nil || !strings.Contains(err.Error(), `mcp server "github-work"`) {
+			t.Fatalf("Run() error = %v, want the server's failure", err)
+		}
+		if len(client.requests) != 0 {
+			t.Fatalf("model requests = %d, want none", len(client.requests))
+		}
+	})
+
+	t.Run("resume reconnects and closes again", func(t *testing.T) {
+		recorder := &mcpLoadRecorder{}
+		rt := newRuntime(recorder, &stubTaskRuntimeClient{})
+		// The approval does not exist, so the engine stops after the run was prepared.
+		_, _ = rt.Resume(context.Background(), "missing-approval", RunRequest{Task: "$mcp_github-work find it"})
+		if len(recorder.texts) != 1 || recorder.closed != 1 {
+			t.Fatalf("loads = %d, closed = %d; want the resumed run to reconnect and close", len(recorder.texts), recorder.closed)
+		}
+	})
+
+	t.Run("subtasks load nothing", func(t *testing.T) {
+		recorder := &mcpLoadRecorder{}
+		rt := newRuntime(recorder, &stubTaskRuntimeClient{})
+		if _, err := rt.Run(context.Background(), RunRequest{Task: "$mcp_github-work", DisableRuntimeTools: true}); err != nil {
+			t.Fatalf("Run() error = %v", err)
+		}
+		if len(recorder.texts) != 0 {
+			t.Fatalf("loaded %v with runtime tools disabled", recorder.texts)
+		}
+	})
+}

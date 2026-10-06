@@ -515,6 +515,7 @@ function buildMCPServerState(server) {
     _key: nextMCPSettingsKey("server"),
     name: trimText(value.name),
     enable: value.enable !== false,
+    on_demand: value.on_demand === true,
     type: trimText(value.type).toLowerCase() === "http" ? "http" : "stdio",
     command: typeof value.command === "string" ? value.command : "",
     args_text: Array.isArray(value.args) ? value.args.map((item) => String(item ?? "")).join("\n") : "",
@@ -549,6 +550,7 @@ function serializeMCPServer(server) {
   return {
     name: trimText(server?.name),
     enable: server?.enable !== false,
+    on_demand: server?.on_demand === true,
     type: server?.type === "http" ? "http" : "stdio",
     command: trimText(server?.command),
     args: parseMCPLineList(server?.args_text),

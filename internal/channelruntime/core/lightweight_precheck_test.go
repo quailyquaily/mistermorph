@@ -43,6 +43,9 @@ func TestLightweightPrecheckApplies(t *testing.T) {
 		{text: "  ", want: false},
 		{text: "thanks!", attachments: true, want: false},
 		{text: "/think about it", want: false},
+		{text: "$mcp_github-work thanks", want: false},
+		{text: "thanks, please run $bash", want: false},
+		{text: "that costs $5", want: true},
 	}
 	for _, tt := range tests {
 		if got := LightweightPrecheckApplies(tt.text, tt.attachments); got != tt.want {

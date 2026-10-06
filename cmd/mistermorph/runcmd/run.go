@@ -26,6 +26,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/llmstats"
 	"github.com/quailyquaily/mistermorph/internal/llmutil"
 	"github.com/quailyquaily/mistermorph/internal/logutil"
+	"github.com/quailyquaily/mistermorph/internal/mcphost"
 	"github.com/quailyquaily/mistermorph/internal/outputfmt"
 	"github.com/quailyquaily/mistermorph/internal/pathroots"
 	"github.com/quailyquaily/mistermorph/internal/processsignal"
@@ -45,6 +46,7 @@ type Dependencies struct {
 	RegistryFromViper            func() *tools.Registry
 	RegisterTriggeredStaticTools func(*tools.Registry, map[string]bool)
 	GuardFromViper               func(*slog.Logger) (*guard.Guard, error)
+	MCPHost                      func() *mcphost.Host
 }
 
 const defaultHeartbeatTask = "Run the heartbeat check."
@@ -146,6 +148,9 @@ func newCLIRunPreparer(prep cliRunPreparation, deps Dependencies) (*taskruntime.
 		ToolTriggers: func(task string) map[string]bool {
 			return toolsutil.BuiltinToolTriggers(task, skillsutil.ResolveTaskSkillRefs(task, prep.skillsConfig))
 		},
+		LoadReferencedMCP: mcpLoader(deps.MCPHost, func(task string) map[string]bool {
+			return skillsutil.ResolveTaskSkillRefs(task, prep.skillsConfig)
+		}, prep.logger),
 		RegisterTriggeredStaticTools: deps.RegisterTriggeredStaticTools,
 		ACPAgents: func() []acpclient.AgentConfig {
 			return append([]acpclient.AgentConfig(nil), prep.acpAgents...)
@@ -571,4 +576,11 @@ func readMultiline(r *bufio.Reader) (string, error) {
 		}
 	}
 	return strings.Join(lines, "\n"), nil
+}
+
+func mcpLoader(host func() *mcphost.Host, skillRefs func(string) map[string]bool, logger *slog.Logger) func(context.Context, string, *tools.Registry) (func() error, error) {
+	if host == nil {
+		return nil
+	}
+	return depsutil.MCPLoader(host(), skillRefs, logger)
 }
