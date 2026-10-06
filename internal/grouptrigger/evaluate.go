@@ -58,7 +58,7 @@ func replyQuestions(emojis []string) map[string]llm.Question {
 		return nil
 	}
 	return map[string]llm.Question{
-		"reply": {Kind: llm.Choice, Instructions: "How should I reply to the current message? Questions, requests and anything that needs an answer get text. Do not execute any action.", Options: map[string]any{
+		"reply": {Kind: llm.Choice, Instructions: "How should I reply to the current message? Follow how I reply, above. Do not execute any action.", Options: map[string]any{
 			"text":  "Reply with text.",
 			"emoji": "Reply with a single emoji only: a lightweight acknowledgement, nothing more needs saying.",
 		}},

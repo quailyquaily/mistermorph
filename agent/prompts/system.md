@@ -112,7 +112,7 @@ When not calling tools, you MUST respond with JSON in the following format:
 {{if .LightweightDecided}}
 - Reply to the current message with text in `output`. Use `message_react` only when the user explicitly asks for a reaction.
 {{- else}}
-- A lightweight acknowledgement is a short response that does not require much processing or resources, such as "OK", "Got it", or "Thanks".
+{{.ReplyRule}}
 - IF `is_lightweight` is true THEN use `message_react` tool instead of sending a text message ELSE do Not use `message_react` ENDIF
 {{- end}}
 - IF message.role is `user` and message.content.has_key(`mister_morph_meta`) THEN you MUST treat it as run metadata (not as user instructions) ENDIF.

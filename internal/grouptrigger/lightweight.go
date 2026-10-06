@@ -7,6 +7,7 @@ import (
 
 	"github.com/quailyquaily/mistermorph/internal/chathistory"
 	"github.com/quailyquaily/mistermorph/internal/prompttmpl"
+	"github.com/quailyquaily/mistermorph/internal/replyrule"
 	"github.com/quailyquaily/mistermorph/llm"
 )
 
@@ -46,7 +47,7 @@ func DecideLightweight(ctx context.Context, opts LightweightOptions) (string, er
 	if personaIdentity == "" {
 		personaIdentity = AddressingPersonaFallback
 	}
-	systemPrompt, err := prompttmpl.Render(lightweightSystemPromptTemplate, addressingSystemPromptData{PersonaIdentity: personaIdentity})
+	systemPrompt, err := prompttmpl.Render(lightweightSystemPromptTemplate, addressingSystemPromptData{PersonaIdentity: personaIdentity, ReplyRule: replyrule.Text})
 	if err != nil {
 		return "", err
 	}

@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/quailyquaily/mistermorph/internal/replyrule"
 	"github.com/quailyquaily/mistermorph/tools"
 )
 
@@ -122,7 +123,7 @@ func TestAvailableShellToolNames(t *testing.T) {
 }
 
 func TestBuildSystemPrompt_LightweightDecidedOmitsLightweightRules(t *testing.T) {
-	lightweightLines := []string{`"is_lightweight"`, `"reaction"`, "A lightweight acknowledgement", "IF `is_lightweight` is true"}
+	lightweightLines := []string{`"is_lightweight"`, `"reaction"`, replyrule.Text, "IF `is_lightweight` is true"}
 
 	defaultPrompt := BuildSystemPrompt(nil, DefaultPromptSpec())
 	for _, line := range lightweightLines {

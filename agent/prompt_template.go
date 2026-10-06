@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/quailyquaily/mistermorph/internal/prompttmpl"
+	"github.com/quailyquaily/mistermorph/internal/replyrule"
 	"github.com/quailyquaily/mistermorph/tools"
 )
 
@@ -36,6 +37,7 @@ type systemPromptTemplateData struct {
 	HasPlanCreate        bool
 	IncludeResponseRules bool
 	LightweightDecided   bool
+	ReplyRule            string
 	Rules                []string
 }
 
@@ -46,6 +48,7 @@ func renderSystemPrompt(registry *tools.Registry, spec PromptSpec) (string, erro
 		Blocks:               make([]systemPromptTemplateBlock, 0, len(spec.Blocks)),
 		IncludeResponseRules: !spec.FinalOnlyResponse,
 		LightweightDecided:   spec.LightweightDecided,
+		ReplyRule:            replyrule.Text,
 		Rules:                make([]string, 0, len(spec.Rules)),
 	}
 	for _, sk := range spec.Skills {

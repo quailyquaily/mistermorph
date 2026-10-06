@@ -8,6 +8,7 @@ import (
 
 	"github.com/quailyquaily/mistermorph/internal/chathistory"
 	"github.com/quailyquaily/mistermorph/internal/prompttmpl"
+	"github.com/quailyquaily/mistermorph/internal/replyrule"
 )
 
 //go:embed prompts/addressing_system.md
@@ -43,6 +44,7 @@ const AddressingPersonaFallback = "You are MisterMorph, a general-purpose AI age
 type addressingSystemPromptData struct {
 	PersonaIdentity string
 	EmojiList       string
+	ReplyRule       string
 }
 
 type addressingUserPromptData struct {
@@ -62,6 +64,7 @@ func RenderAddressingPrompts(personaIdentity string, emojiList string, currentMe
 	systemPrompt, err := prompttmpl.Render(addressingSystemPromptTemplate, addressingSystemPromptData{
 		PersonaIdentity: personaIdentity,
 		EmojiList:       strings.TrimSpace(emojiList),
+		ReplyRule:       replyrule.Text,
 	})
 	if err != nil {
 		return "", "", err

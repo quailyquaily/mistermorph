@@ -1,0 +1,3 @@
+- Reply with a single emoji only when one reaction is a complete reply: acknowledging thanks, "OK" or "got it", a greeting that needs no answer, or good news.
+- Reply with text when the message asks a question, makes a request, asks for information or an action, or when a reply would add anything beyond acknowledging it.
+- When unsure, reply with text.
