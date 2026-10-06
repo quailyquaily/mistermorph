@@ -68,7 +68,7 @@ func DecideViaLLM(ctx context.Context, opts LLMDecisionOptions) (Addressing, boo
 	}
 	addressed := res.Answers["addressed"]
 	wanna := res.Answers["wanna_interject"]
-	out := Addressing{Confidence: *res.Answers["confidence"].ScoreValue / 9, Interject: *res.Answers["interject"].ScoreValue / 9, Impulse: *res.Answers["impulse"].ScoreValue / 9, Reason: "text_selected"}
+	out := Addressing{Model: res.Model, Confidence: *res.Answers["confidence"].ScoreValue / 9, Interject: *res.Answers["interject"].ScoreValue / 9, Impulse: *res.Answers["impulse"].ScoreValue / 9, Reason: "text_selected"}
 	if res.Emulated {
 		out.Addressed = *addressed.BooleanValue
 		out.WannaInterject = *wanna.BooleanValue

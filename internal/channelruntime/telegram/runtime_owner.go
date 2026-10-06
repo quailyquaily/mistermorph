@@ -241,7 +241,6 @@ func bootstrapTelegramRuntimeState(ctx context.Context, d Dependencies, opts Run
 		"telegram_history_mode_cap_others", 8,
 		"reactions_enabled", true,
 		"group_trigger_mode", state.groupTriggerMode,
-		"group_reply_policy", "humanlike",
 		"addressing_confidence_threshold", opts.AddressingConfidenceThreshold,
 		"addressing_interject_threshold", opts.AddressingInterjectThreshold,
 		"telegram_history_cap", state.historyCap,
@@ -1124,7 +1123,7 @@ func (s *telegramRuntimeState) handleUpdate(update telegramUpdate) {
 			}
 			if addressingReactionTool != nil {
 				if reaction := addressingReactionTool.LastReaction(); reaction != nil {
-					s.logger.Info("telegram_group_addressing_reaction_applied", "chat_id", reaction.ChatID, "message_id", reaction.MessageID, "emoji", reaction.Emoji, "source", reaction.Source)
+					s.logger.Info("telegram_group_addressing_reaction_applied", "chat_id", reaction.ChatID, "message_id", reaction.MessageID, "emoji", reaction.Emoji, "source", reaction.Source, "model", decision.Addressing.Model)
 				}
 			}
 			if decisionErr != nil {
@@ -1135,6 +1134,7 @@ func (s *telegramRuntimeState) handleUpdate(update telegramUpdate) {
 				s.logger.Info("telegram_group_ignored",
 					"chat_id", chatID,
 					"type", chatType,
+					"model", decision.Addressing.Model,
 					"text_len", len(text),
 					"llm_attempted", decision.AddressingLLMAttempted,
 					"llm_ok", decision.AddressingLLMOK,
@@ -1160,6 +1160,7 @@ func (s *telegramRuntimeState) handleUpdate(update telegramUpdate) {
 			s.logger.Info("telegram_group_trigger",
 				"chat_id", chatID,
 				"type", chatType,
+				"model", decision.Addressing.Model,
 				"reason", decision.Reason,
 				"llm_addressed", decision.Addressing.Addressed,
 				"confidence", decision.Addressing.Confidence,

@@ -21,6 +21,7 @@ type Decision struct {
 }
 
 type Addressing struct {
+	Model          string
 	Addressed      bool
 	Confidence     float64
 	WannaInterject bool
