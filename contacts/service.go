@@ -3,6 +3,7 @@ package contacts
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"sort"
 	"strconv"
@@ -21,6 +22,18 @@ const (
 type Sender interface {
 	Send(ctx context.Context, contact Contact, decision ShareDecision) (accepted bool, deduped bool, err error)
 }
+
+// PartialDeliveryError is a Send error after the file was delivered and only the text that follows
+// it failed. The delivery counts as sent, so a retry never uploads the file again.
+type PartialDeliveryError struct {
+	Err error
+}
+
+func (e *PartialDeliveryError) Error() string {
+	return "file sent, but the message text failed: " + e.Err.Error()
+}
+
+func (e *PartialDeliveryError) Unwrap() error { return e.Err }
 
 type ServiceOptions struct {
 	FailureCooldown time.Duration
@@ -463,7 +476,7 @@ func (s *Service) applySendOutcomeToContacts(ctx context.Context, now time.Time,
 		if contact.Synthetic {
 			continue
 		}
-		if outcome.Error != "" {
+		if outcome.Error != "" && !outcome.Partial {
 			cooldown := now.Add(s.failureCooldown)
 			contact.CooldownUntil = &cooldown
 		} else {
@@ -790,6 +803,7 @@ func (s *Service) sendWithBusOutbox(ctx context.Context, now time.Time, contact 
 		ItemID:         decision.ItemID,
 		ContentType:    decision.ContentType,
 		PayloadBase64:  decision.PayloadBase64,
+		File:           decision.File,
 	}
 	var current *BusOutboxRecord
 	if exists {
@@ -806,6 +820,12 @@ func (s *Service) sendWithBusOutbox(ctx context.Context, now time.Time, contact 
 	}
 
 	accepted, deduped, sendErr := sender.Send(ctx, contact, decision)
+	var partial *PartialDeliveryError
+	if errors.As(sendErr, &partial) {
+		outcome.Partial = true
+		outcome.Error = sendErr.Error()
+		accepted, sendErr = true, nil
+	}
 	if sendErr != nil {
 		outcome.Error = sendErr.Error()
 		failedRecord, err := NextOutboxRecord(&pendingRecord, baseRecord, OutboxTransition{

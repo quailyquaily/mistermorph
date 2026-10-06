@@ -283,7 +283,7 @@ Errors (string matching):
 
 ## `contacts_send`
 
-Purpose: send one message to one or more contacts (auto-routed via Telegram/Slack/LINE/Lark).
+Purpose: send one message or one local file to one or more contacts (auto-routed via Telegram/Slack/LINE/Lark/Discord/Mixin/WeChat/WhatsApp).
 
 Contact profile maintenance:
 
@@ -297,8 +297,10 @@ Parameters:
 | `contact_id` | `string` | Yes | None | Target contact ID. Multiple contacts may be passed as comma-separated values. |
 | `chat_id` | `string` | No | Empty | Optional chat hint (for example `tg:-1001234567890`, `slack:T001:C002`, `line:Cgroup001`). |
 | `content_type` | `string` | No | `application/json` | Payload type; must be envelope JSON type. |
-| `message_text` | `string` | Conditionally required | None | Message text; the tool wraps it into an envelope. |
-| `message_base64` | `string` | Conditionally required | None | base64url-encoded envelope JSON. |
+| `message_text` | `string` | Conditionally required | None | Message text; the tool wraps it into an envelope. With `path`, the file's optional caption. |
+| `message_base64` | `string` | Conditionally required | None | base64url-encoded envelope JSON. Cannot be combined with `path`. |
+| `path` | `string` | No | None | A local file to send, under `file_cache_dir` or the task's workspace directory. |
+| `filename` | `string` | No | Basename of `path` | Display filename for `path`; requires `path`. |
 | `session_id` | `string` | No | Empty | Session ID (UUIDv7). `contacts_send` always sends `chat.message`. |
 | `reply_to` | `string` | No | Empty | Optional reply target `message_id`. |
 
@@ -317,16 +319,59 @@ Constraints:
     - Slack: used directly as `slack:<team_id>:<channel_id>`.
     - LINE: used only when matching `line_chat_ids`; otherwise falls back to `line_user_id`.
     - If still unavailable, the tool returns an error.
-- At least one of `message_text` or `message_base64` is required.
+- Without `path`, at least one of `message_text` or `message_base64` is required.
 - `content_type` defaults to `application/json`, and must be `application/json` (parameters allowed, for example `application/json; charset=utf-8`).
 - If `message_base64` is provided, decoded payload must be envelope JSON containing `message_id` / `text` / `sent_at (RFC3339)` / `session_id (UUIDv7)`.
 - Sending to human contacts is allowed by default; actual deliverability still depends on sendable targets in contact profiles (private/group chat IDs).
+
+### Sending a file
+
+Pass `path` to send one file. The destination is chosen exactly as for text; the file never picks a different channel.
+
+```json
+{
+  "contact_id": "tg:123456",
+  "path": "file_cache_dir/reports/weekly.pdf",
+  "filename": "weekly-report.pdf",
+  "message_text": "This week's report."
+}
+```
+
+- Where the file may come from: `file_cache_dir` and the task's workspace directory (the attached workspace, or the default `workspace_dir`). `file_cache_dir/...` and `workspace_dir/...` aliases pick a root; a relative path is looked up in `file_cache_dir`, then in the workspace; an absolute path must lie inside one of them after resolving symlinks. `file_state_dir` is never allowed, even inside a workspace. A file produced elsewhere must be copied into `file_cache_dir` first.
+- Rejected before anything is sent: an empty or non-string `path`, `filename` without `path`, `path` with `message_base64`, a non-string `message_text`, a directory, a missing file, a file outside both roots, a symlink that escapes them, and a file over 20 MiB.
+- One file per call. `message_text` is optional; when given it is a caption:
+
+| Channel | File | Caption |
+|---|---|---|
+| Telegram | Always a document (`sendDocument`), keeping a topic target | Attached up to 1,024 characters; longer text follows as a message |
+| Slack | External upload shared in the channel | The upload's initial comment |
+| Lark | File message to the chat or user | Always a separate message after the file |
+| Discord | Attachment in the channel, opening a DM when needed; at most 10 MiB | Attached up to 2,000 characters; longer text follows as a message |
+| Mixin | Data attachment in the conversation | Always a separate message after the file |
+| WeChat, WhatsApp | Through the running channel runtime, as `wechat_send_file` / `whatsapp_send_file` do (images and videos as media) | As their file transports handle it |
+| LINE | Not supported; the call fails | |
+
+- With several contacts, each planned destination gets one upload, and mentions are kept in its caption.
+- The file is checked again just before the upload. A file that disappeared or changed fails that delivery; the caption is never sent alone.
+- When the file goes out but a caption sent after it fails, the outcome has `accepted: true`, `partial: true` and an `error`. The delivery counts as sent, so it is not uploaded again.
+- WeChat and WhatsApp need their runtime running in the same process; no other account connection is made.
+- The delivery record in the contacts outbox keeps the file's path, display filename, size and SHA-256, never its bytes.
+- With the guard enabled, every file send writes a `FileSend` event to the guard audit log with the recipients, resolved path, display filename, size, SHA-256 and status (`sent`, `partial` or `failed`). File sends follow the same guard and approval rules as text; scheduled tasks need no extra approval.
+
+A scheduled or awareness task can ask for a file explicitly:
+
+```text
+$contacts_send Generate the weekly report, save it under file_cache_dir, and send the PDF
+to tg:123456. Include a short summary as message_text.
+```
+
+The reference only makes `contacts_send` available; the model still calls it with the file and recipient. A cron notification target alone never sends an attachment.
 
 ## `agent_send`
 
 Purpose: send a message to one or more active Agent contacts.
 
-Parameters and return values are identical to `contacts_send`. Both tools use the same parsing, routing, batch planning, message envelope, sender, and outbox implementation.
+Parameters and return values are those of `contacts_send` without `path` and `filename`: `agent_send` sends text only and rejects file parameters. Both tools use the same parsing, routing, batch planning, message envelope, sender, and outbox implementation.
 
 Constraints:
 

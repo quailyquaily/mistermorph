@@ -75,15 +75,30 @@ type ShareDecision struct {
 	ContentType         string   `json:"content_type"`
 	PayloadBase64       string   `json:"payload_base64"`
 	IdempotencyKey      string   `json:"idempotency_key"`
+	// File is a local file to send, with the payload text as its caption.
+	File *ShareFile `json:"file,omitempty"`
+}
+
+// ShareFile describes a validated local file to send. Delivery records keep this metadata, never
+// the file's bytes.
+type ShareFile struct {
+	// Path is the file's resolved absolute path.
+	Path string `json:"path"`
+	// Filename is the display filename the recipient sees.
+	Filename string `json:"filename"`
+	Size     int64  `json:"size"`
+	SHA256   string `json:"sha256"`
 }
 
 type ShareOutcome struct {
-	ContactID      string    `json:"contact_id"`
-	PeerID         string    `json:"peer_id,omitempty"`
-	ItemID         string    `json:"item_id"`
-	IdempotencyKey string    `json:"idempotency_key"`
-	Accepted       bool      `json:"accepted"`
-	Deduped        bool      `json:"deduped"`
-	Error          string    `json:"error,omitempty"`
-	SentAt         time.Time `json:"sent_at"`
+	ContactID      string `json:"contact_id"`
+	PeerID         string `json:"peer_id,omitempty"`
+	ItemID         string `json:"item_id"`
+	IdempotencyKey string `json:"idempotency_key"`
+	Accepted       bool   `json:"accepted"`
+	Deduped        bool   `json:"deduped"`
+	Error          string `json:"error,omitempty"`
+	// Partial means a file was delivered but the text that follows it failed; Error says why.
+	Partial bool      `json:"partial,omitempty"`
+	SentAt  time.Time `json:"sent_at"`
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/chatinfo"
 	"github.com/quailyquaily/mistermorph/internal/contactsruntime"
 	refid "github.com/quailyquaily/mistermorph/internal/entryutil/refid"
+	"github.com/quailyquaily/mistermorph/internal/pathroots"
 	"github.com/quailyquaily/mistermorph/internal/pathutil"
 )
 
@@ -38,6 +39,9 @@ type ContactsSendToolOptions struct {
 	DiscordBotToken   string
 	DiscordBaseURL    string
 	FailureCooldown   time.Duration
+	// PathRoots are where a file to send may come from: file_cache_dir and the task's workspace.
+	// FileStateDir is never sent from.
+	PathRoots pathroots.PathRoots
 }
 
 type ContactsSendTool struct {
@@ -51,50 +55,66 @@ func NewContactsSendTool(opts ContactsSendToolOptions) *ContactsSendTool {
 func (t *ContactsSendTool) Name() string { return "contacts_send" }
 
 func (t *ContactsSendTool) Description() string {
-	return `Sends a message to one or more contacts.
+	return `Sends a message or a file to one or more contacts.
 		IF sending to multiple contacts THEN pass comma-separated contact_id values.
 	  Message routes automatically across Slack, Telegram, LINE, Lark, and Mixin based on chat_id/contact reachability.
+		To send a file, pass its path; message_text becomes an optional caption. One file per call, at most 20 MiB.
+		Files can be sent on Telegram, Slack, Lark, Discord, Mixin, WeChat and WhatsApp, not LINE.
+		The file must be under file_cache_dir or workspace_dir; copy a file from anywhere else into file_cache_dir first.
 		NEVER send message to people who is talking with you, or the people in the chat history.`
 }
 
 func (t *ContactsSendTool) ParameterSchema() string {
-	return contactSendParameterSchema()
+	return contactSendParameterSchema(true)
 }
 
-func contactSendParameterSchema() string {
-	s := map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"contact_id": map[string]any{
-				"type":        "string",
-				"description": "Target contact_id. Multiple contacts may be provided as a comma-separated list. e.g.: slack:<team_id>:<user_id>, tg:@<username>, tg:<chat_id>, line_user:<user_id>, line:<chat_id>, lark_user:<open_id>, lark:<chat_id>, mixin:<user_uuid>.",
-			},
-			"message_text": map[string]any{
-				"type":        "string",
-				"description": "Plain text body; tool wraps it into envelope JSON.",
-			},
-			"message_base64": map[string]any{
-				"type":        "string",
-				"description": "Optional base64 JSON envelope payload when message_text is not used.",
-			},
-			"chat_id": map[string]any{
-				"type":        "string",
-				"description": "Optional chat id hint. e.g. slack:<team_id>:<channel_id>, tg:<chat_id>, line:<chat_id>, lark:<chat_id>, or mixin:<conversation_uuid>.",
-			},
-			"content_type": map[string]any{
-				"type":        "string",
-				"description": "Optional Payload type (default application/json).",
-			},
-			"session_id": map[string]any{
-				"type":        "string",
-				"description": "Optional UUIDv7 session_id; auto-generated when omitted.",
-			},
-			"reply_to": map[string]any{
-				"type":        "string",
-				"description": "Optional reply_to message_id.",
-			},
+// contactSendParameterSchema is the schema of contacts_send, and of agent_send without the file
+// parameters.
+func contactSendParameterSchema(withFile bool) string {
+	properties := map[string]any{
+		"contact_id": map[string]any{
+			"type":        "string",
+			"description": "Target contact_id. Multiple contacts may be provided as a comma-separated list. e.g.: slack:<team_id>:<user_id>, tg:@<username>, tg:<chat_id>, line_user:<user_id>, line:<chat_id>, lark_user:<open_id>, lark:<chat_id>, mixin:<user_uuid>.",
 		},
-		"required": []string{"contact_id"},
+		"message_text": map[string]any{
+			"type":        "string",
+			"description": "Plain text body; tool wraps it into envelope JSON. With path, the file's caption.",
+		},
+		"message_base64": map[string]any{
+			"type":        "string",
+			"description": "Optional base64 JSON envelope payload when message_text is not used.",
+		},
+		"chat_id": map[string]any{
+			"type":        "string",
+			"description": "Optional chat id hint. e.g. slack:<team_id>:<channel_id>, tg:<chat_id>, line:<chat_id>, lark:<chat_id>, or mixin:<conversation_uuid>.",
+		},
+		"content_type": map[string]any{
+			"type":        "string",
+			"description": "Optional Payload type (default application/json).",
+		},
+		"session_id": map[string]any{
+			"type":        "string",
+			"description": "Optional UUIDv7 session_id; auto-generated when omitted.",
+		},
+		"reply_to": map[string]any{
+			"type":        "string",
+			"description": "Optional reply_to message_id.",
+		},
+	}
+	if withFile {
+		properties["path"] = map[string]any{
+			"type":        "string",
+			"description": "Optional local file to send. Supports file_cache_dir/... and workspace_dir/... aliases, absolute paths inside either, and relative paths (looked up in file_cache_dir, then workspace_dir). message_text becomes the caption; it may be omitted. Cannot be combined with message_base64.",
+		}
+		properties["filename"] = map[string]any{
+			"type":        "string",
+			"description": "Optional display filename for path; defaults to the file's name.",
+		}
+	}
+	s := map[string]any{
+		"type":       "object",
+		"properties": properties,
+		"required":   []string{"contact_id"},
 	}
 	b, _ := json.MarshalIndent(s, "", "  ")
 	return string(b)
@@ -109,6 +129,7 @@ func (t *ContactsSendTool) Execute(ctx context.Context, params map[string]any) (
 
 type contactSendExecutionPolicy struct {
 	toolName                 string
+	allowFiles               bool
 	blockCurrentConversation bool
 	activeAgentsOnly         bool
 	activeAgentIDs           map[string]struct{}
@@ -116,6 +137,7 @@ type contactSendExecutionPolicy struct {
 
 var contactsSendPolicy = contactSendExecutionPolicy{
 	toolName:                 "contacts_send",
+	allowFiles:               true,
 	blockCurrentConversation: true,
 }
 
@@ -128,6 +150,10 @@ func executeContactSendTool(ctx context.Context, params map[string]any, opts Con
 		return "", err
 	}
 	chatID, err := parseContactsSendChatID(params)
+	if err != nil {
+		return "", err
+	}
+	file, err := parseContactsSendFile(ctx, params, opts.PathRoots, policy)
 	if err != nil {
 		return "", err
 	}
@@ -176,7 +202,7 @@ func executeContactSendTool(ctx context.Context, params map[string]any, opts Con
 			FailureCooldown: opts.FailureCooldown,
 		},
 	)
-	return executeContactsSendResolved(ctx, params, contactIDs, chatID, svc, sender, time.Now().UTC(), policy)
+	return executeContactsSendResolved(ctx, params, contactIDs, chatID, file, svc, sender, time.Now().UTC(), policy)
 }
 
 func executeContactsSendResolved(
@@ -184,6 +210,7 @@ func executeContactsSendResolved(
 	params map[string]any,
 	contactIDs []string,
 	chatID string,
+	file *contacts.ShareFile,
 	svc *contacts.Service,
 	sender contacts.Sender,
 	now time.Time,
@@ -196,9 +223,9 @@ func executeContactsSendResolved(
 		return "", fmt.Errorf("contacts sender is required")
 	}
 	if len(contactIDs) == 1 {
-		return executeContactsSendSingle(ctx, params, strings.TrimSpace(contactIDs[0]), chatID, svc, sender, now, policy)
+		return executeContactsSendSingle(ctx, params, strings.TrimSpace(contactIDs[0]), chatID, file, svc, sender, now, policy)
 	}
-	baseText, err := contactsSendBaseMessageText(params)
+	baseText, err := contactsSendBaseText(params, file)
 	if err != nil {
 		return "", err
 	}
@@ -221,7 +248,7 @@ func executeContactsSendResolved(
 	outcomes := make([]map[string]any, 0, len(plan))
 	for _, item := range plan {
 		sendParams := contactsSendParamsWithText(params, item.Text(baseText))
-		contentType, payload, err := resolveSendPayload(sendParams, now)
+		contentType, payload, err := buildSendPayload(sendParams, now, file != nil)
 		if err != nil {
 			return "", err
 		}
@@ -231,6 +258,7 @@ func executeContactsSendResolved(
 			ChatID:              item.ChatID,
 			ContentType:         contentType,
 			PayloadBase64:       payload,
+			File:                file,
 		}
 		decision.ItemID = "manual_" + uuid.NewString()
 		decision.IdempotencyKey = "manual:" + uuid.NewString()
@@ -239,12 +267,18 @@ func executeContactsSendResolved(
 		if err != nil {
 			return "", err
 		}
-		outcomes = append(outcomes, map[string]any{
+		result := map[string]any{
 			"chat_id":    item.ChatID,
 			"mentions":   append([]string(nil), item.Mentions...),
 			"recipients": append([]string(nil), item.RecipientContactIDs...),
 			"outcome":    outcome,
-		})
+		}
+		if file != nil {
+			if err := auditContactsSendFile(ctx, policy.toolName, file, item.RecipientContactIDs, outcome); err != nil {
+				result["audit_error"] = err.Error()
+			}
+		}
+		outcomes = append(outcomes, result)
 	}
 	out, _ := json.MarshalIndent(map[string]any{
 		"outcomes": outcomes,
@@ -257,6 +291,7 @@ func executeContactsSendSingle(
 	params map[string]any,
 	contactID string,
 	chatID string,
+	file *contacts.ShareFile,
 	svc *contacts.Service,
 	sender contacts.Sender,
 	now time.Time,
@@ -275,11 +310,11 @@ func executeContactsSendSingle(
 			return "", err
 		}
 	}
-	sendParams, err := contactsSendParamsWithSingleMention(params, contactID, resolvedChatID, contact)
+	sendParams, err := contactsSendParamsWithSingleMention(params, contactID, resolvedChatID, contact, file)
 	if err != nil {
 		return "", err
 	}
-	contentType, payload, err := resolveSendPayload(sendParams, now)
+	contentType, payload, err := buildSendPayload(sendParams, now, file != nil)
 	if err != nil {
 		return "", err
 	}
@@ -288,6 +323,7 @@ func executeContactsSendSingle(
 		ChatID:        resolvedChatID,
 		ContentType:   contentType,
 		PayloadBase64: payload,
+		File:          file,
 	}
 	decision.ItemID = "manual_" + uuid.NewString()
 	decision.IdempotencyKey = "manual:" + uuid.NewString()
@@ -296,9 +332,15 @@ func executeContactsSendSingle(
 	if err != nil {
 		return "", err
 	}
-	out, _ := json.MarshalIndent(map[string]any{
+	result := map[string]any{
 		"outcome": outcome,
-	}, "", "  ")
+	}
+	if file != nil {
+		if err := auditContactsSendFile(ctx, policy.toolName, file, []string{contactID}, outcome); err != nil {
+			result["audit_error"] = err.Error()
+		}
+	}
+	out, _ := json.MarshalIndent(result, "", "  ")
 	return string(out), nil
 }
 
@@ -321,7 +363,7 @@ func resolveContactsSendChatTargetHint(contactID string, chatID string) (string,
 	return targetChatID, nil
 }
 
-func contactsSendParamsWithSingleMention(params map[string]any, contactID string, chatID string, contact contacts.Contact) (map[string]any, error) {
+func contactsSendParamsWithSingleMention(params map[string]any, contactID string, chatID string, contact contacts.Contact, file *contacts.ShareFile) (map[string]any, error) {
 	channel, err := contacts.ResolveDecisionChannel(contact, contacts.ShareDecision{
 		ContactID: contactID,
 		ChatID:    chatID,
@@ -333,7 +375,7 @@ func contactsSendParamsWithSingleMention(params map[string]any, contactID string
 	if mention == "" {
 		return params, nil
 	}
-	baseText, err := contactsSendBaseMessageText(params)
+	baseText, err := contactsSendBaseText(params, file)
 	if err != nil {
 		return nil, err
 	}
@@ -801,6 +843,16 @@ func contactsSendEscapeLarkText(value string) string {
 	return replacer.Replace(strings.TrimSpace(value))
 }
 
+// contactsSendBaseText is the message text before mentions: a file's optional caption, or the
+// required message text.
+func contactsSendBaseText(params map[string]any, file *contacts.ShareFile) (string, error) {
+	if file != nil {
+		text, _ := params["message_text"].(string)
+		return strings.TrimSpace(text), nil
+	}
+	return contactsSendBaseMessageText(params)
+}
+
 func contactsSendBaseMessageText(params map[string]any) (string, error) {
 	if text, ok := params["message_text"].(string); ok {
 		text = strings.TrimSpace(text)
@@ -887,6 +939,12 @@ func parseContactsSendChatID(params map[string]any) (string, error) {
 }
 
 func resolveSendPayload(params map[string]any, now time.Time) (string, string, error) {
+	return buildSendPayload(params, now, false)
+}
+
+// buildSendPayload builds the message envelope. allowEmptyText is for a file, whose caption is
+// optional.
+func buildSendPayload(params map[string]any, now time.Time, allowEmptyText bool) (string, string, error) {
 	contentType, _ := params["content_type"].(string)
 	contentType = strings.TrimSpace(contentType)
 	if contentType == "" {
@@ -906,9 +964,9 @@ func resolveSendPayload(params map[string]any, now time.Time) (string, string, e
 	replyTo, _ := params["reply_to"].(string)
 	replyTo = strings.TrimSpace(replyTo)
 
-	if text, ok := params["message_text"].(string); ok {
+	if text, ok := params["message_text"].(string); ok || allowEmptyText {
 		text = strings.TrimSpace(text)
-		if text != "" {
+		if text != "" || allowEmptyText {
 			resolvedSessionID := sessionID
 			if resolvedSessionID == "" {
 				generatedSessionID, err := generateUUIDv7SessionID()

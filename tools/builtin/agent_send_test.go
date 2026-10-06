@@ -18,8 +18,21 @@ func TestAgentSendToolUsesContactsSendParameters(t *testing.T) {
 	contactsTool := NewContactsSendTool(ContactsSendToolOptions{Enabled: true})
 	agentTool := NewAgentSendTool(ContactsSendToolOptions{Enabled: true})
 
-	if agentTool.ParameterSchema() != contactsTool.ParameterSchema() {
-		t.Fatal("agent_send and contacts_send parameter schemas differ")
+	var contactsSchema, agentSchema map[string]any
+	if err := json.Unmarshal([]byte(contactsTool.ParameterSchema()), &contactsSchema); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal([]byte(agentTool.ParameterSchema()), &agentSchema); err != nil {
+		t.Fatal(err)
+	}
+	// agent_send is contacts_send without the file parameters.
+	contactsProps := contactsSchema["properties"].(map[string]any)
+	delete(contactsProps, "path")
+	delete(contactsProps, "filename")
+	contactsRaw, _ := json.Marshal(contactsSchema)
+	agentRaw, _ := json.Marshal(agentSchema)
+	if string(agentRaw) != string(contactsRaw) {
+		t.Fatalf("agent_send schema = %s, want %s", agentRaw, contactsRaw)
 	}
 }
 

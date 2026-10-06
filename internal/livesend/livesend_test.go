@@ -16,7 +16,26 @@ func (f *fakeSender) SendText(_ context.Context, peerID, text string) error {
 	return nil
 }
 
+func (f *fakeSender) SendFile(_ context.Context, peerID, path, filename, caption string) error {
+	f.sent = append(f.sent, peerID+":file:"+path+":"+filename+":"+caption)
+	return nil
+}
+
 func (f *fakeSender) NotifyTargets() []string { return f.targets }
+
+func TestSendFileGoesToTheRunningRuntime(t *testing.T) {
+	if err := SendFile(context.Background(), "whatsapp", "u1", "/c/a.pdf", "a.pdf", ""); !errors.Is(err, ErrNotRunning) {
+		t.Fatalf("SendFile with nothing running = %v", err)
+	}
+	sender := &fakeSender{}
+	defer Register("whatsapp", sender)()
+	if err := SendFile(context.Background(), "whatsapp", " u1 ", "/c/a.pdf", "a.pdf", "hi"); err != nil {
+		t.Fatalf("SendFile() error = %v", err)
+	}
+	if len(sender.sent) != 1 || sender.sent[0] != "u1:file:/c/a.pdf:a.pdf:hi" {
+		t.Fatalf("sent %v", sender.sent)
+	}
+}
 
 func TestTheLatestRegisteredRuntimeSends(t *testing.T) {
 	if err := Send(context.Background(), "wechat", "u1", "hi"); !errors.Is(err, ErrNotRunning) {

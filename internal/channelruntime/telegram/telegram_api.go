@@ -8,15 +8,15 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"mime/multipart"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/quailyquaily/mistermorph/internal/telegramapi"
 )
 
 // Telegram API
@@ -772,93 +772,28 @@ func (api *telegramAPI) editMessageWithParseMode(ctx context.Context, chatID int
 }
 
 func (api *telegramAPI) sendDocumentInThread(ctx context.Context, chatID int64, messageThreadID int64, filePath string, filename string, caption string) error {
-	return api.sendMultipartFile(ctx, chatID, messageThreadID, filePath, filename, caption, "sendDocument", "document", "file")
+	return api.sendFile(ctx, chatID, messageThreadID, filePath, filename, caption, "sendDocument", "document", "file")
 }
 
 func (api *telegramAPI) sendPhotoInThread(ctx context.Context, chatID int64, messageThreadID int64, filePath string, filename string, caption string) error {
-	return api.sendMultipartFile(ctx, chatID, messageThreadID, filePath, filename, caption, "sendPhoto", "photo", "photo")
+	return api.sendFile(ctx, chatID, messageThreadID, filePath, filename, caption, "sendPhoto", "photo", "photo")
 }
 
 func (api *telegramAPI) sendVoiceInThread(ctx context.Context, chatID int64, messageThreadID int64, filePath string, filename string, caption string) error {
-	return api.sendMultipartFile(ctx, chatID, messageThreadID, filePath, filename, caption, "sendVoice", "voice", "voice.ogg")
+	return api.sendFile(ctx, chatID, messageThreadID, filePath, filename, caption, "sendVoice", "voice", "voice.ogg")
 }
 
-func (api *telegramAPI) sendMultipartFile(ctx context.Context, chatID int64, messageThreadID int64, filePath string, filename string, caption string, method string, formField string, fallbackFilename string) error {
-	filePath = strings.TrimSpace(filePath)
-	if filePath == "" {
-		return fmt.Errorf("missing file path")
-	}
-
-	f, err := os.Open(filePath)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	st, err := f.Stat()
-	if err != nil {
-		return err
-	}
-	if st.IsDir() {
-		return fmt.Errorf("path is a directory: %s", filePath)
-	}
-
-	filename = strings.TrimSpace(filename)
-	if filename == "" {
-		filename = filepath.Base(filePath)
-	}
-	if filename == "" {
-		filename = fallbackFilename
-	}
-	caption = strings.TrimSpace(caption)
-
-	pr, pw := io.Pipe()
-	mw := multipart.NewWriter(pw)
-	go func() {
-		defer pw.Close()
-		defer mw.Close()
-
-		_ = mw.WriteField("chat_id", strconv.FormatInt(chatID, 10))
-		if messageThreadID > 0 {
-			_ = mw.WriteField("message_thread_id", strconv.FormatInt(messageThreadID, 10))
-		}
-		if caption != "" {
-			_ = mw.WriteField("caption", caption)
-		}
-
-		part, err := mw.CreateFormFile(formField, filename)
-		if err != nil {
-			_ = pw.CloseWithError(err)
-			return
-		}
-		if _, err := io.Copy(part, f); err != nil {
-			_ = pw.CloseWithError(err)
-			return
-		}
-	}()
-
-	url := fmt.Sprintf("%s/bot%s/%s", api.baseURL, api.token, method)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, pr)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", mw.FormDataContentType())
-
-	resp, err := api.http.Do(req)
-	if err != nil {
-		return err
-	}
-	raw, _ := io.ReadAll(resp.Body)
-	_ = resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("telegram http %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))
-	}
-	var ok telegramOKResponse
-	_ = json.Unmarshal(raw, &ok)
-	if !ok.OK {
-		return fmt.Errorf("telegram %s: ok=false", method)
-	}
-	return nil
+func (api *telegramAPI) sendFile(ctx context.Context, chatID int64, messageThreadID int64, filePath string, filename string, caption string, method string, formField string, fallbackFilename string) error {
+	return telegramapi.SendFile(ctx, api.http, api.baseURL, api.token, telegramapi.Upload{
+		ChatID:           strconv.FormatInt(chatID, 10),
+		MessageThreadID:  messageThreadID,
+		FilePath:         filePath,
+		Filename:         filename,
+		Caption:          caption,
+		Method:           method,
+		FormField:        formField,
+		FallbackFilename: fallbackFilename,
+	})
 }
 
 func (api *telegramAPI) setMessageReaction(ctx context.Context, chatID int64, messageID int64, reactions []telegramReactionType, isBig *bool) error {

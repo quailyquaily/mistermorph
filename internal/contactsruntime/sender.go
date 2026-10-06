@@ -9,7 +9,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -65,14 +64,12 @@ type RoutingSender struct {
 	discordInitErr    error
 	telegramClient    *http.Client
 	lineClient        *http.Client
-	larkClient        *http.Client
 	slackPoster       *slackclient.Client
 	telegramBaseURL   string
 	telegramBotToken  string
 	lineBaseURL       string
 	lineToken         string
-	larkBaseURL       string
-	larkTokenClient   *larkapi.TenantTokenClient
+	lark              *larkapi.Client
 	mixinClient       mixinSenderClient
 	mixinBotID        string
 	mixinMessages     *mixinapi.MessageSender
@@ -105,24 +102,8 @@ type mixinSenderClient interface {
 	ReadConversation(context.Context, string) (mixinapi.Conversation, error)
 	CreateContactConversation(context.Context, string) (mixinapi.Conversation, error)
 	SendMessages(context.Context, []mixinapi.MessageRequest) error
-}
-
-type larkSendMessageRequest struct {
-	ReceiveID string `json:"receive_id"`
-	MsgType   string `json:"msg_type"`
-	Content   string `json:"content"`
-	UUID      string `json:"uuid,omitempty"`
-}
-
-type larkReplyMessageRequest struct {
-	Content string `json:"content"`
-	MsgType string `json:"msg_type"`
-	UUID    string `json:"uuid,omitempty"`
-}
-
-type larkMessageResponse struct {
-	Code int    `json:"code"`
-	Msg  string `json:"msg"`
+	CreateAttachment(context.Context) (mixinapi.Attachment, error)
+	UploadAttachment(ctx context.Context, attachment mixinapi.Attachment, contentType string, size int64, source io.Reader) error
 }
 
 func NewRoutingSender(ctx context.Context, opts SenderOptions) (*RoutingSender, error) {
@@ -169,18 +150,18 @@ func NewRoutingSender(ctx context.Context, opts SenderOptions) (*RoutingSender, 
 		bus:               inprocBus,
 		telegramClient:    &http.Client{Timeout: 30 * time.Second},
 		lineClient:        &http.Client{Timeout: 30 * time.Second},
-		larkClient:        &http.Client{Timeout: 30 * time.Second},
 		telegramBaseURL:   baseURL,
 		telegramBotToken:  strings.TrimSpace(opts.TelegramBotToken),
 		lineBaseURL:       lineBaseURL,
 		lineToken:         strings.TrimSpace(opts.LineChannelToken),
-		larkBaseURL:       larkBaseURL,
 		slackPoster:       slackclient.New(&http.Client{Timeout: 30 * time.Second}, slackBaseURL, strings.TrimSpace(opts.SlackBotToken)),
 		logger:            logger,
 		pending:           make(map[string]chan deliveryResult),
 		mixinKeystoreFile: strings.TrimSpace(opts.MixinKeystoreFile),
 	}
-	sender.larkTokenClient = larkapi.NewTenantTokenClient(sender.larkClient, larkBaseURL, strings.TrimSpace(opts.LarkAppID), strings.TrimSpace(opts.LarkAppSecret))
+	larkHTTP := &http.Client{Timeout: 30 * time.Second}
+	larkTokens := larkapi.NewTenantTokenClient(larkHTTP, larkBaseURL, strings.TrimSpace(opts.LarkAppID), strings.TrimSpace(opts.LarkAppSecret))
+	sender.lark = larkapi.NewClient(larkHTTP, larkBaseURL, larkTokens)
 	sender.telegramDelivery, err = telegrambus.NewDeliveryAdapter(telegrambus.DeliveryAdapterOptions{
 		SendText: sender.sendTelegramTarget,
 	})
@@ -304,6 +285,9 @@ func (s *RoutingSender) Send(ctx context.Context, contact contacts.Contact, deci
 		if resolveErr != nil {
 			return false, false, resolveErr
 		}
+		if decision.File != nil {
+			return s.sendSlackFile(ctx, target, decision)
+		}
 		return s.publishSlack(ctx, target, decision)
 	case contacts.ChannelTelegram:
 		var target any
@@ -321,8 +305,14 @@ func (s *RoutingSender) Send(ctx context.Context, contact contacts.Contact, deci
 				return false, false, resolveErr
 			}
 		}
+		if decision.File != nil {
+			return s.sendTelegramFile(ctx, target, decision)
+		}
 		return s.publishTelegram(ctx, target, decision)
 	case contacts.ChannelLine:
+		if decision.File != nil {
+			return false, false, fmt.Errorf("line does not support file delivery")
+		}
 		target, resolveErr := ResolveLineTargetWithChatID(contact, decision.ChatID)
 		if resolveErr != nil {
 			return false, false, resolveErr
@@ -333,11 +323,17 @@ func (s *RoutingSender) Send(ctx context.Context, contact contacts.Contact, deci
 		if resolveErr != nil {
 			return false, false, resolveErr
 		}
+		if decision.File != nil {
+			return s.sendLarkFile(ctx, target, decision)
+		}
 		return s.publishLark(ctx, target, decision)
 	case contacts.ChannelMixin:
 		target, resolveErr := ResolveMixinTargetWithChatID(contact, decision.ChatID)
 		if resolveErr != nil {
 			return false, false, resolveErr
+		}
+		if decision.File != nil {
+			return s.sendMixinFile(ctx, target, decision)
 		}
 		return s.publishMixin(ctx, target, decision)
 	case contacts.ChannelDiscord:
@@ -345,11 +341,17 @@ func (s *RoutingSender) Send(ctx context.Context, contact contacts.Contact, deci
 		if resolveErr != nil {
 			return false, false, resolveErr
 		}
+		if decision.File != nil {
+			return s.sendDiscordFile(ctx, target, decision)
+		}
 		return s.publishDiscord(ctx, target, decision)
 	case contacts.ChannelWeChat, contacts.ChannelWhatsApp:
 		peerID, resolveErr := ResolveAccountDMTarget(channel, contact, decision.ChatID)
 		if resolveErr != nil {
 			return false, false, resolveErr
+		}
+		if decision.File != nil {
+			return s.sendAccountDMFile(ctx, channel, peerID, decision)
 		}
 		return s.publishAccountDM(ctx, channel, peerID, decision)
 	default:
@@ -559,16 +561,9 @@ func (s *RoutingSender) publishMixin(ctx context.Context, target mixinSendTarget
 	if idempotencyKey == "" {
 		return false, false, fmt.Errorf("idempotency_key is required")
 	}
-	conversationID := strings.TrimSpace(target.ConversationID)
-	if userID := strings.TrimSpace(target.UserID); conversationID == "" && userID != "" {
-		conversation, err := s.mixinClient.CreateContactConversation(ctx, userID)
-		if err != nil {
-			return false, false, err
-		}
-		conversationID = strings.TrimSpace(conversation.ConversationID)
-	}
-	if conversationID == "" {
-		return false, false, fmt.Errorf("mixin conversation_id is required")
+	conversationID, err := s.mixinConversationID(ctx, target)
+	if err != nil {
+		return false, false, err
 	}
 	payloadRaw, err := buildEnvelopePayload(decision, decision.ContentType, decision.PayloadBase64, time.Now().UTC())
 	if err != nil {
@@ -606,6 +601,35 @@ func (s *RoutingSender) publishMixin(ctx context.Context, target mixinSendTarget
 	return s.publishAndAwait(ctx, message)
 }
 
+// mixinConversationID is the target's conversation, created for a user who has none.
+func (s *RoutingSender) mixinConversationID(ctx context.Context, target mixinSendTarget) (string, error) {
+	conversationID := strings.TrimSpace(target.ConversationID)
+	if userID := strings.TrimSpace(target.UserID); conversationID == "" && userID != "" {
+		conversation, err := s.mixinClient.CreateContactConversation(ctx, userID)
+		if err != nil {
+			return "", err
+		}
+		conversationID = strings.TrimSpace(conversation.ConversationID)
+	}
+	if conversationID == "" {
+		return "", fmt.Errorf("mixin conversation_id is required")
+	}
+	return conversationID, nil
+}
+
+// discordChannelID is the target's channel, opening the DM channel for a user without one.
+func (s *RoutingSender) discordChannelID(ctx context.Context, target discordSendTarget) (string, error) {
+	channelID := strings.TrimSpace(target.ChannelID)
+	if userID := strings.TrimSpace(target.UserID); channelID == "" && userID != "" {
+		channel, err := s.discordClient.CreateDM(ctx, userID)
+		if err != nil {
+			return "", err
+		}
+		channelID = strings.TrimSpace(channel.ID)
+	}
+	return channelID, nil
+}
+
 // publishDiscord sends to a Discord channel, opening the DM channel first when the target is a
 // user without one.
 func (s *RoutingSender) publishDiscord(ctx context.Context, target discordSendTarget, decision contacts.ShareDecision) (bool, bool, error) {
@@ -619,13 +643,9 @@ func (s *RoutingSender) publishDiscord(ctx context.Context, target discordSendTa
 	if idempotencyKey == "" {
 		return false, false, fmt.Errorf("idempotency_key is required")
 	}
-	channelID := strings.TrimSpace(target.ChannelID)
-	if userID := strings.TrimSpace(target.UserID); channelID == "" && userID != "" {
-		channel, err := s.discordClient.CreateDM(ctx, userID)
-		if err != nil {
-			return false, false, err
-		}
-		channelID = strings.TrimSpace(channel.ID)
+	channelID, err := s.discordChannelID(ctx, target)
+	if err != nil {
+		return false, false, err
 	}
 	conversationKey, err := busruntime.BuildDiscordConversationKey(channelID)
 	if err != nil {
@@ -973,7 +993,7 @@ func (s *RoutingSender) sendLarkTarget(ctx context.Context, target larkSendTarge
 	if ctx == nil {
 		return fmt.Errorf("context is required")
 	}
-	if s.larkClient == nil || s.larkTokenClient == nil {
+	if s.lark == nil {
 		return fmt.Errorf("lark sender is not configured")
 	}
 	resolvedTarget, err := normalizeLarkSendTarget(target)
@@ -986,19 +1006,19 @@ func (s *RoutingSender) sendLarkTarget(ctx context.Context, target larkSendTarge
 	}
 	replyTo := strings.TrimSpace(env.ReplyTo)
 	if replyTo != "" {
-		replyErr := s.larkReplyText(ctx, replyTo, text)
+		replyErr := s.lark.ReplyMessage(ctx, replyTo, "text", map[string]string{"text": text})
 		if replyErr == nil {
 			return nil
 		}
 		if resolvedTarget.ReceiveIDType != "chat_id" {
 			return replyErr
 		}
-		if sendErr := s.larkSendText(ctx, resolvedTarget.ReceiveIDType, resolvedTarget.ReceiveID, text); sendErr != nil {
+		if sendErr := s.lark.SendMessage(ctx, resolvedTarget.ReceiveIDType, resolvedTarget.ReceiveID, "text", map[string]string{"text": text}); sendErr != nil {
 			return fmt.Errorf("lark reply failed: %v; fallback send failed: %w", replyErr, sendErr)
 		}
 		return nil
 	}
-	return s.larkSendText(ctx, resolvedTarget.ReceiveIDType, resolvedTarget.ReceiveID, text)
+	return s.lark.SendMessage(ctx, resolvedTarget.ReceiveIDType, resolvedTarget.ReceiveID, "text", map[string]string{"text": text})
 }
 
 func (s *RoutingSender) sendTelegramTarget(ctx context.Context, target any, text string, opts telegrambus.SendTextOptions) error {
@@ -1263,82 +1283,6 @@ func (s *RoutingSender) sendLineTarget(ctx context.Context, target any, text str
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("line http %d: %s", resp.StatusCode, strings.TrimSpace(string(respRaw)))
-	}
-	return nil
-}
-
-func (s *RoutingSender) larkSendText(ctx context.Context, receiveIDType, receiveID, text string) error {
-	contentRaw, err := json.Marshal(map[string]string{"text": strings.TrimSpace(text)})
-	if err != nil {
-		return fmt.Errorf("marshal lark content: %w", err)
-	}
-	endpoint := strings.TrimRight(strings.TrimSpace(s.larkBaseURL), "/") + "/im/v1/messages?receive_id_type=" + url.QueryEscape(strings.TrimSpace(receiveIDType))
-	return s.larkPostJSON(ctx, endpoint, larkSendMessageRequest{
-		ReceiveID: strings.TrimSpace(receiveID),
-		MsgType:   "text",
-		Content:   string(contentRaw),
-		UUID:      uuid.NewString(),
-	})
-}
-
-func (s *RoutingSender) larkReplyText(ctx context.Context, messageID, text string) error {
-	contentRaw, err := json.Marshal(map[string]string{"text": strings.TrimSpace(text)})
-	if err != nil {
-		return fmt.Errorf("marshal lark content: %w", err)
-	}
-	endpoint := strings.TrimRight(strings.TrimSpace(s.larkBaseURL), "/") + "/im/v1/messages/" + url.PathEscape(strings.TrimSpace(messageID)) + "/reply"
-	return s.larkPostJSON(ctx, endpoint, larkReplyMessageRequest{
-		Content: string(contentRaw),
-		MsgType: "text",
-		UUID:    uuid.NewString(),
-	})
-}
-
-func (s *RoutingSender) larkPostJSON(ctx context.Context, endpoint string, payload any) error {
-	if s == nil {
-		return fmt.Errorf("sender is required")
-	}
-	if ctx == nil {
-		return fmt.Errorf("context is required")
-	}
-	if s.larkClient == nil || s.larkTokenClient == nil {
-		return fmt.Errorf("lark sender is not configured")
-	}
-	bodyRaw, err := json.Marshal(payload)
-	if err != nil {
-		return err
-	}
-	token, err := s.larkTokenClient.Token(ctx)
-	if err != nil {
-		return err
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(bodyRaw))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/json; charset=utf-8")
-	req.Header.Set("Accept", "application/json")
-
-	resp, err := s.larkClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	respRaw, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return err
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("lark http %d: %s", resp.StatusCode, strings.TrimSpace(string(respRaw)))
-	}
-	var out larkMessageResponse
-	if err := json.Unmarshal(respRaw, &out); err != nil {
-		return fmt.Errorf("decode lark response: %w", err)
-	}
-	if out.Code != 0 {
-		return fmt.Errorf("lark api code %d: %s", out.Code, strings.TrimSpace(out.Msg))
 	}
 	return nil
 }

@@ -3,6 +3,7 @@ package accountdm
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -38,6 +39,28 @@ func (s *liveSender) SendText(ctx context.Context, peerID, text string) error {
 	correlation := fmt.Sprintf("%s:live:%d:%d", s.channel, time.Now().UnixNano(), s.seq)
 	s.seqMu.Unlock()
 	return publishAndWait(ctx, s.bus, s.receipts, s.channel, account, peerID, text, "", correlation)
+}
+
+// SendFile sends a file the way the runtime's send-file tool does: straight through the transport,
+// which handles images, videos and captions.
+func (s *liveSender) SendFile(ctx context.Context, peerID, path, filename, caption string) error {
+	account := s.transport.AccountID()
+	if account == "" {
+		return fmt.Errorf("%s has not connected yet", s.channel)
+	}
+	if strings.TrimSpace(peerID) == "" {
+		return fmt.Errorf("%s recipient is required", s.channel)
+	}
+	if limit := s.transport.MaxFileBytes(); limit > 0 {
+		info, err := os.Stat(path)
+		if err != nil {
+			return err
+		}
+		if info.Size() > limit {
+			return fmt.Errorf("file too large for %s (>%d bytes): %s", s.channel, limit, path)
+		}
+	}
+	return s.transport.SendFile(ctx, account, peerID, outboundFile(path, filename, caption))
 }
 
 // NotifyTargets are the users who wrote to this account. Both platforms let only one person use

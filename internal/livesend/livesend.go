@@ -16,6 +16,9 @@ import (
 type Sender interface {
 	// SendText sends text to a user of the channel, in order with the runtime's other messages.
 	SendText(ctx context.Context, peerID, text string) error
+	// SendFile sends a local file to a user of the channel, with caption as the transport handles
+	// one. The runtime applies its transport's file size limit.
+	SendFile(ctx context.Context, peerID, path, filename, caption string) error
 	// NotifyTargets are the users heartbeat notifications go to.
 	NotifyTargets() []string
 }
@@ -69,6 +72,15 @@ func Send(ctx context.Context, channel, peerID, text string) error {
 		return err
 	}
 	return sender.SendText(ctx, strings.TrimSpace(peerID), text)
+}
+
+// SendFile sends a local file to peerID through the channel's running runtime.
+func SendFile(ctx context.Context, channel, peerID, path, filename, caption string) error {
+	sender, err := lookup(channel)
+	if err != nil {
+		return err
+	}
+	return sender.SendFile(ctx, strings.TrimSpace(peerID), path, filename, caption)
 }
 
 // Notify sends text to each of the channel's notification targets. It returns the first error but

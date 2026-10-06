@@ -35,6 +35,8 @@ const (
 	ActionToolCallPost  ActionType = "ToolCallPost"
 	ActionOutputPublish ActionType = "OutputPublish"
 	ActionSkillInstall  ActionType = "SkillInstall"
+	// ActionFileSend records a local file a tool sent out; its Value is a FileSend.
+	ActionFileSend ActionType = "FileSend"
 )
 
 type Meta struct {

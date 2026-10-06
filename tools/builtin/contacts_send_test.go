@@ -478,7 +478,7 @@ func TestExecuteContactsSendBatchLoopsAndMentionsSharedTelegramChats(t *testing.
 	_, err = executeContactsSendResolved(ctx, map[string]any{
 		"contact_id":   "tg:@john_wick,tg:@rose,tg:@ada",
 		"message_text": "Hello, world",
-	}, contactIDs, "", svc, sender, now, contactsSendPolicy)
+	}, contactIDs, "", nil, svc, sender, now, contactsSendPolicy)
 	if err != nil {
 		t.Fatalf("executeContactsSendResolved() error = %v", err)
 	}
@@ -558,7 +558,7 @@ func TestExecuteContactsSendBatchHonorsExplicitTelegramChatID(t *testing.T) {
 		t.Fatalf("parseContactsSendContactIDs() error = %v", err)
 	}
 	sender := &recordingContactsSendSender{}
-	_, err = executeContactsSendResolved(ctx, params, contactIDs, "tg:-5002", svc, sender, now, contactsSendPolicy)
+	_, err = executeContactsSendResolved(ctx, params, contactIDs, "tg:-5002", nil, svc, sender, now, contactsSendPolicy)
 	if err != nil {
 		t.Fatalf("executeContactsSendResolved() error = %v", err)
 	}
@@ -607,7 +607,7 @@ func TestExecuteContactsSendBatchRejectsExplicitChatUnavailableToRecipient(t *te
 		t.Fatalf("parseContactsSendContactIDs() error = %v", err)
 	}
 	sender := &recordingContactsSendSender{}
-	_, err = executeContactsSendResolved(ctx, params, contactIDs, "tg:-2001", svc, sender, now, contactsSendPolicy)
+	_, err = executeContactsSendResolved(ctx, params, contactIDs, "tg:-2001", nil, svc, sender, now, contactsSendPolicy)
 	if err == nil {
 		t.Fatalf("executeContactsSendResolved() expected unavailable chat_id error")
 	}
@@ -655,7 +655,7 @@ func TestExecuteContactsSendBatchRecordsFailureCooldownForAllMergedRecipients(t 
 	_, err = executeContactsSendResolved(ctx, map[string]any{
 		"contact_id":   "tg:@john_wick,tg:@rose",
 		"message_text": "Hello, world",
-	}, contactIDs, "", svc, sender, now, contactsSendPolicy)
+	}, contactIDs, "", nil, svc, sender, now, contactsSendPolicy)
 	if err != nil {
 		t.Fatalf("executeContactsSendResolved() error = %v", err)
 	}
@@ -703,7 +703,7 @@ func TestExecuteContactsSendSinglePrefixesTelegramMention(t *testing.T) {
 	_, err = executeContactsSendResolved(ctx, map[string]any{
 		"contact_id":   "tg:@ballcatcat",
 		"message_text": "看电视哦！👀",
-	}, contactIDs, "", svc, sender, now, contactsSendPolicy)
+	}, contactIDs, "", nil, svc, sender, now, contactsSendPolicy)
 	if err != nil {
 		t.Fatalf("executeContactsSendResolved() error = %v", err)
 	}
@@ -738,7 +738,7 @@ func TestExecuteContactsSendSingleKeepsExplicitTelegramRoute(t *testing.T) {
 	_, err := executeContactsSendResolved(ctx, map[string]any{
 		"contact_id":   "tg:@smith_bot",
 		"message_text": "continue",
-	}, []string{"tg:@smith_bot"}, "", svc, sender, now, contactsSendPolicy)
+	}, []string{"tg:@smith_bot"}, "", nil, svc, sender, now, contactsSendPolicy)
 	if err != nil {
 		t.Fatalf("executeContactsSendResolved() error = %v", err)
 	}
@@ -762,7 +762,7 @@ func TestExecuteContactsSendSingleChatIDTarget(t *testing.T) {
 		"contact_id":   "tg:-100123",
 		"chat_id":      "tg:-100123",
 		"message_text": "hello room",
-	}, []string{"tg:-100123"}, "tg:-100123", svc, sender, now, contactsSendPolicy)
+	}, []string{"tg:-100123"}, "tg:-100123", nil, svc, sender, now, contactsSendPolicy)
 	if err != nil {
 		t.Fatalf("executeContactsSendResolved() error = %v", err)
 	}
@@ -793,7 +793,7 @@ func TestExecuteContactsSendSingleChatIDTargetUsesContactIDWhenChatIDEmpty(t *te
 	_, err := executeContactsSendResolved(ctx, map[string]any{
 		"contact_id":   "tg:-100123_77",
 		"message_text": "hello topic",
-	}, []string{"tg:-100123_77"}, "", svc, sender, now, contactsSendPolicy)
+	}, []string{"tg:-100123_77"}, "", nil, svc, sender, now, contactsSendPolicy)
 	if err != nil {
 		t.Fatalf("executeContactsSendResolved() error = %v", err)
 	}
@@ -816,7 +816,7 @@ func TestExecuteContactsSendSingleChatIDTargetRejectsMismatchedHint(t *testing.T
 		"contact_id":   "tg:-100123",
 		"chat_id":      "tg:-100456",
 		"message_text": "hello room",
-	}, []string{"tg:-100123"}, "tg:-100456", svc, sender, now, contactsSendPolicy)
+	}, []string{"tg:-100123"}, "tg:-100456", nil, svc, sender, now, contactsSendPolicy)
 	if err == nil {
 		t.Fatalf("executeContactsSendResolved() expected mismatched chat_id error")
 	}

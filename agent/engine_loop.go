@@ -1051,6 +1051,9 @@ func (e *Engine) executeTool(ctx context.Context, st *engineLoopState, step int,
 	if sink, ok := EventSinkFromContext(ctx); ok {
 		toolCtx = WithEventSinkContext(toolCtx, sink)
 	}
+	if e.guard != nil && e.guard.Enabled() {
+		toolCtx = guard.WithAuditContext(toolCtx, e.guard, guard.Meta{RunID: st.runID, Step: step})
+	}
 	if e.guard != nil && e.guard.Enabled() && strings.EqualFold(tc.Name, "url_fetch") {
 		if p, ok := e.guard.NetworkPolicyForURLFetch(); ok && len(p.AllowedURLPrefixes) > 0 {
 			toolCtx = guard.WithNetworkPolicy(toolCtx, p)

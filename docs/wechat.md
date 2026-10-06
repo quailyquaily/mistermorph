@@ -90,7 +90,7 @@ After a restart, messages sent while Morph was down may be delivered again by We
 
 WeChat only accepts a message that carries the context of the user's latest message, and that context lives in the running runtime. So everything sent outside a reply goes through the runtime in the same process (`morph wechat`, or the Console runtime), and reaches only users who have written to the bot since it started:
 
-- `contacts_send` to a `wechat_user:<user_id>` contact, or with `chat_id: wechat:<user_id>`.
+- `contacts_send` to a `wechat_user:<user_id>` contact, or with `chat_id: wechat:<user_id>`, including files sent with its `path` parameter.
 - Cron tasks whose `chat_id` is `wechat:<user_id>`.
 - Heartbeat notifications, which `morph wechat` sends when heartbeat is enabled, to you: the runtime remembers who wrote to the bot (in `file_state_dir/accountdm/`), and on WeChat that is only the person who scanned.
 

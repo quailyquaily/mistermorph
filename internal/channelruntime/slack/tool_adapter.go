@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/quailyquaily/mistermorph/internal/slackclient"
 	slacktools "github.com/quailyquaily/mistermorph/tools/slack"
 )
 
@@ -29,5 +30,5 @@ func (a *slackToolAPI) SendFile(ctx context.Context, channelID, threadTS, filePa
 	if a == nil || a.api == nil {
 		return fmt.Errorf("slack api not available")
 	}
-	return a.api.uploadFile(ctx, channelID, threadTS, filePath, filename, title, initialComment)
+	return slackclient.New(a.api.http, a.api.baseURL, a.api.botToken).UploadFile(ctx, channelID, threadTS, filePath, filename, title, initialComment)
 }

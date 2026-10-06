@@ -1765,6 +1765,7 @@ func normalizeBusOutboxRecordWithOptions(record BusOutboxRecord, allowLegacyZero
 		ItemID:         strings.TrimSpace(record.ItemID),
 		ContentType:    strings.TrimSpace(record.ContentType),
 		PayloadBase64:  strings.TrimSpace(record.PayloadBase64),
+		File:           record.File,
 		Status:         status,
 		Attempts:       record.Attempts,
 		Accepted:       record.Accepted,

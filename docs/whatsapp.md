@@ -71,7 +71,7 @@ When WhatsApp rejects the key, the runtime stops polling, logs `reauth_needed`, 
 
 Messages sent outside a reply go through the runtime in the same process (`morph whatsapp`, or the Console runtime), so they share its rate limit:
 
-- `contacts_send` to a `whatsapp_user:<user_id>` contact, or with `chat_id: whatsapp:<user_id>`.
+- `contacts_send` to a `whatsapp_user:<user_id>` contact, or with `chat_id: whatsapp:<user_id>`, including files sent with its `path` parameter.
 - Cron tasks whose `chat_id` is `whatsapp:<user_id>`.
 - Heartbeat notifications, which `morph whatsapp` sends when heartbeat is enabled, to the agent's creator. The runtime remembers the creator once they have written (in `file_state_dir/accountdm/`), so notifications keep working after a restart.
 

@@ -22,7 +22,7 @@ func TestLarkAPISendPhotoUploadsImageThenSendsImageMessage(t *testing.T) {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 
-	var sent larkSendMessageRequest
+	var sent larkapi.SendMessageRequest
 	server := testhttp.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case larkapi.TenantAccessTokenPath:
@@ -85,7 +85,7 @@ func TestLarkAPISendVoiceUploadsOpusAndSendsAudioMessage(t *testing.T) {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 
-	var sent larkSendMessageRequest
+	var sent larkapi.SendMessageRequest
 	server := testhttp.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case larkapi.TenantAccessTokenPath:

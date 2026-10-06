@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -22,6 +23,7 @@ type fakeMixinSenderClient struct {
 	conversation mixinapi.Conversation
 	readCalls    int
 	batches      [][]mixinapi.MessageRequest
+	uploads      []string
 }
 
 func (f *fakeMixinSenderClient) ReadConversation(context.Context, string) (mixinapi.Conversation, error) {
@@ -31,6 +33,16 @@ func (f *fakeMixinSenderClient) ReadConversation(context.Context, string) (mixin
 
 func (f *fakeMixinSenderClient) CreateContactConversation(context.Context, string) (mixinapi.Conversation, error) {
 	return mixinapi.Conversation{}, nil
+}
+
+func (f *fakeMixinSenderClient) CreateAttachment(context.Context) (mixinapi.Attachment, error) {
+	return mixinapi.Attachment{AttachmentID: "att-1"}, nil
+}
+
+func (f *fakeMixinSenderClient) UploadAttachment(_ context.Context, _ mixinapi.Attachment, contentType string, _ int64, source io.Reader) error {
+	raw, err := io.ReadAll(source)
+	f.uploads = append(f.uploads, contentType+"|"+string(raw))
+	return err
 }
 
 func (f *fakeMixinSenderClient) SendMessages(_ context.Context, messages []mixinapi.MessageRequest) error {

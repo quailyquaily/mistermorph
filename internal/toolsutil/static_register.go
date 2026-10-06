@@ -407,6 +407,7 @@ func RegisterStaticTools(reg *tools.Registry, cfg StaticRegistryConfig, selected
 		DiscordBotToken:   strings.TrimSpace(cfg.ContactsSend.DiscordBotToken),
 		DiscordBaseURL:    strings.TrimSpace(cfg.ContactsSend.DiscordBaseURL),
 		FailureCooldown:   cfg.ContactsSend.FailureCooldown,
+		PathRoots:         cfg.Common.PathRoots,
 	}
 	if isSelected(BuiltinAgentSend) {
 		available, err := builtin.AgentSendAvailable(context.Background(), cfg.ContactsSend.ContactsDir)

@@ -31,6 +31,7 @@ type BusOutboxRecord struct {
 	ItemID         string            `json:"item_id,omitempty"`
 	ContentType    string            `json:"content_type,omitempty"`
 	PayloadBase64  string            `json:"payload_base64,omitempty"`
+	File           *ShareFile        `json:"file,omitempty"`
 	Status         BusDeliveryStatus `json:"status"`
 	Attempts       int               `json:"attempts"`
 	Accepted       bool              `json:"accepted,omitempty"`

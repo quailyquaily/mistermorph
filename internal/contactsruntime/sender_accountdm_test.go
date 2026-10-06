@@ -19,6 +19,11 @@ func (l *liveRecorder) SendText(_ context.Context, peerID, text string) error {
 	return nil
 }
 
+func (l *liveRecorder) SendFile(_ context.Context, peerID, path, filename, caption string) error {
+	l.sent = append(l.sent, peerID+"|file:"+path+"|"+filename+"|"+caption)
+	return nil
+}
+
 func (l *liveRecorder) NotifyTargets() []string { return nil }
 
 func TestSendToWeChatGoesThroughTheRunningRuntime(t *testing.T) {

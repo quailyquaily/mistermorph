@@ -27,7 +27,7 @@ func (t *AgentSendTool) Description() string {
 }
 
 func (t *AgentSendTool) ParameterSchema() string {
-	return contactSendParameterSchema()
+	return contactSendParameterSchema(false)
 }
 
 func (t *AgentSendTool) Execute(ctx context.Context, params map[string]any) (string, error) {

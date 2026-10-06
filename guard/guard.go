@@ -418,6 +418,8 @@ func (g *Guard) summarizeActionRedacted(a Action) string {
 		return string(a.Type) + " tool=" + strings.TrimSpace(a.ToolName)
 	case ActionOutputPublish:
 		return "OutputPublish content=[redacted_summary]"
+	case ActionFileSend:
+		return g.summarizeFileSend(a)
 	default:
 		return string(a.Type)
 	}
