@@ -6,6 +6,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/imagesession"
 	"github.com/quailyquaily/mistermorph/llm"
 	"github.com/quailyquaily/mistermorph/tools"
+	"github.com/quailyquaily/mistermorph/tools/builtin"
 	"github.com/spf13/viper"
 )
 
@@ -33,6 +34,10 @@ type RuntimeToolLLMOptions struct {
 	ImageRetained    bool
 	ToolTriggers     map[string]bool
 	PersonaDir       string
+	// DecisionClient, when set, is the decision route's own client, for structured judgments
+	// such as matching a TODO to delete.
+	DecisionClient llm.Client
+	DecisionModel  string
 }
 
 func LoadRuntimeToolsRegisterConfigFromViper() RuntimeToolsRegisterConfig {
@@ -83,4 +88,12 @@ func RegisterRuntimeTools(reg *tools.Registry, cfg RuntimeToolsRegisterConfig, o
 	RegisterImageTools(reg, imageCfg, opts.ImageClient, imageTriggered)
 	RegisterPlanTool(reg, cfg.PlanCreate, planClient, planModel, opts.PersonaDir)
 	RegisterTodoUpdateTool(reg, cfg.TodoUpdate, opts.DefaultClient, opts.DefaultModel)
+	if opts.DecisionClient != nil {
+		if tool, ok := reg.Get(BuiltinTodoUpdate); ok {
+			if todoTool, ok := tool.(*builtin.TodoUpdateTool); ok {
+				todoTool.DecisionClient = opts.DecisionClient
+				todoTool.DecisionModel = opts.DecisionModel
+			}
+		}
+	}
 }

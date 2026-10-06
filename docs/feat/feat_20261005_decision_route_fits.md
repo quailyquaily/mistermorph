@@ -57,6 +57,8 @@ These hold a client but do not generate anything, so they are not listed:
 
 ## Fits: matching a TODO to delete
 
+> **Implemented (2026-10-06):** when the decision route has its own profile and `todo_update` is enabled, `taskruntime` passes the decision client to the tool, and `cron.LLMSemanticResolver` asks one Evaluate choice (`task_<i>`, `no_match`, `ambiguous`; scene `todo.delete_match`). It falls back to Chat when Evaluate is unsupported or there are more than 253 tasks; an invalid answer is an error. Awareness runs (heartbeat, cron) still use the Chat path.
+
 ### Today
 
 When `todo_update` deletes a task, `cron.Store` calls `MatchTaskIndex` so the model can pick, from the tasks in `cron.yaml`, the one the user wants deleted (`internal/cron/store.go:166`). It uses Chat with `ForceJSON` and returns one of three statuses:

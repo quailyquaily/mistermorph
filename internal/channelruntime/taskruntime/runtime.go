@@ -636,7 +636,10 @@ func (rt *Runtime) prepareRun(ctx context.Context, req RunRequest) (preparedRunt
 				}
 			}
 		}
+		decisionClient, decisionModel := rt.decisionClientForRun(ctx, logger, mainRoute, runtimeToolsConfig, runClientOwners)
 		toolsutil.RegisterRuntimeTools(reg, runtimeToolsConfig, toolsutil.RuntimeToolLLMOptions{
+			DecisionClient:   decisionClient,
+			DecisionModel:    decisionModel,
 			DefaultClient:    mainClient,
 			DefaultModel:     model,
 			PlanCreateClient: planClient,
@@ -735,6 +738,27 @@ func (rt *Runtime) prepareRun(ctx context.Context, req RunRequest) (preparedRunt
 		cleanup:             cleanup,
 		contextWindowTokens: mainRoute.ClientConfig.ContextWindowTokens,
 	}, nil
+}
+
+// decisionClientForRun returns the decision route's client for runtime tools that make
+// structured judgments (todo_update's delete matching), when the route has its own profile.
+// Otherwise those tools keep using the main client, and nil is returned.
+func (rt *Runtime) decisionClientForRun(ctx context.Context, logger *slog.Logger, mainRoute llmutil.ResolvedRoute, cfg toolsutil.RuntimeToolsRegisterConfig, owners *runtimeClientOwners) (llm.Client, string) {
+	if !cfg.TodoUpdate.Enabled {
+		return nil, ""
+	}
+	route, err := rt.ResolveRouteForRun(ctx, llmutil.RoutePurposeDecision)
+	if err != nil || route.SameProfile(mainRoute) {
+		return nil, ""
+	}
+	client, err := rt.createClientForRoute(route, owners)
+	if err != nil {
+		if logger != nil {
+			logger.Warn("decision_client_unavailable", "purpose", "todo_update", "error", err.Error())
+		}
+		return nil, ""
+	}
+	return client, strings.TrimSpace(route.ClientConfig.Model)
 }
 
 func (rt *Runtime) appendImageSessionBlock(ctx context.Context, logger *slog.Logger, scopeKey string, spec *agent.PromptSpec) {

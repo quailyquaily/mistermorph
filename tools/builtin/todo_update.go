@@ -24,6 +24,9 @@ type TodoUpdateTool struct {
 	Client     llm.Client
 	Model      string
 	AddContext todo.AddResolveContext
+	// DecisionClient, when set, matches a delete request to a task on the decision route.
+	DecisionClient llm.Client
+	DecisionModel  string
 }
 
 var todoUpdateEnglishSpeakerWordPattern = regexp.MustCompile(`(?i)\b(i|me|my|myself)\b`)
@@ -271,7 +274,10 @@ func (t *TodoUpdateTool) Execute(ctx context.Context, params map[string]any) (st
 			if strings.TrimSpace(t.Model) == "" {
 				return "", fmt.Errorf("todo_update unavailable (missing llm model)")
 			}
-			store.Semantics = cronstore.NewLLMSemanticResolver(t.Client, t.Model)
+			resolver := cronstore.NewLLMSemanticResolver(t.Client, t.Model)
+			resolver.Decision = t.DecisionClient
+			resolver.DecisionModel = strings.TrimSpace(t.DecisionModel)
+			store.Semantics = resolver
 		}
 		result, err = store.Delete(ctx, id, content)
 	default:
