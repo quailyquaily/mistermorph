@@ -2,7 +2,9 @@ import { computed, ref, watch } from "vue";
 import { translate } from "../core/context";
 import "./SetupConnectionTestDialog.css";
 
-const TEST_CONNECTION_BENCHMARK_IDS = ["text_reply", "json_response", "tool_calling"];
+const TEST_CONNECTION_BENCHMARK_IDS = ["text_reply", "json_response", "tool_calling", "evaluate"];
+// Evaluate-only providers run just the judgment benchmark.
+const EVALUATE_ONLY_PROVIDERS = new Set(["typesafe"]);
 
 export const setupConnectionTestDialogContentProps = {
   loading: Boolean,
@@ -55,7 +57,9 @@ const SetupConnectionTestDialogContent = {
     const hasBenchmarks = computed(() => Array.isArray(props.benchmarks) && props.benchmarks.length > 0);
     const visibleBenchmarks = computed(() => {
       if (props.loading && !hasBenchmarks.value) {
-        return TEST_CONNECTION_BENCHMARK_IDS.map((id) => ({
+        const provider = String(props.provider || "").trim().toLowerCase();
+        const ids = EVALUATE_ONLY_PROVIDERS.has(provider) ? ["evaluate"] : TEST_CONNECTION_BENCHMARK_IDS;
+        return ids.map((id) => ({
           id,
           ok: false,
           running: true,

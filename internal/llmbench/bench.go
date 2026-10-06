@@ -22,7 +22,9 @@ type BenchmarkResult struct {
 	RawResponse string `json:"raw_response,omitempty"`
 }
 
-const BenchmarksPerRun = 3
+// BenchmarksPerRun is how many benchmarks a Chat profile runs: text, JSON, tool calling and
+// Evaluate. See BenchmarkCount for Evaluate-only profiles.
+const BenchmarksPerRun = 4
 
 type ProfileMetadata struct {
 	Profile  string
@@ -63,6 +65,19 @@ func RunWithProgress(
 	onBenchmark func(BenchmarkResult),
 ) ProfileResult {
 	model := strings.TrimSpace(meta.Model)
+	if BenchmarkCount(meta.Provider) == 1 {
+		evaluateResult := RunEvaluateBenchmark(ctx, client, model)
+		if onBenchmark != nil {
+			onBenchmark(evaluateResult)
+		}
+		return ProfileResult{
+			Profile:    strings.TrimSpace(meta.Profile),
+			Provider:   strings.TrimSpace(meta.Provider),
+			APIBase:    strings.TrimSpace(meta.APIBase),
+			Model:      model,
+			Benchmarks: []BenchmarkResult{evaluateResult},
+		}
+	}
 	textResult := RunTextBenchmark(ctx, client, model)
 	if onBenchmark != nil {
 		onBenchmark(textResult)
@@ -75,12 +90,16 @@ func RunWithProgress(
 	if onBenchmark != nil {
 		onBenchmark(toolResult)
 	}
+	evaluateResult := RunEvaluateBenchmark(ctx, client, model)
+	if onBenchmark != nil {
+		onBenchmark(evaluateResult)
+	}
 	return ProfileResult{
 		Profile:    strings.TrimSpace(meta.Profile),
 		Provider:   strings.TrimSpace(meta.Provider),
 		APIBase:    strings.TrimSpace(meta.APIBase),
 		Model:      model,
-		Benchmarks: []BenchmarkResult{textResult, jsonResult, toolResult},
+		Benchmarks: []BenchmarkResult{textResult, jsonResult, toolResult, evaluateResult},
 	}
 }
 

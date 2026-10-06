@@ -113,7 +113,14 @@ func defaultRunBenchmarkCommand(
 	}
 
 	totalProfiles := len(names)
-	totalBenchmarks := totalProfiles * llmbench.BenchmarksPerRun
+	totalBenchmarks := 0
+	for _, name := range names {
+		provider := ""
+		if resolved, err := llmutil.ResolveProfile(values, name); err == nil {
+			provider = resolved.ClientConfig.Provider
+		}
+		totalBenchmarks += llmbench.BenchmarkCount(provider)
+	}
 	completedBenchmarks := 0
 
 	if profileName != "" {
