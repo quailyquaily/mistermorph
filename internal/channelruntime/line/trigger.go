@@ -3,15 +3,13 @@ package line
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"strings"
 	"time"
 
-	"github.com/quailyquaily/mistermorph/agent"
 	linebus "github.com/quailyquaily/mistermorph/internal/bus/adapters/line"
+	runtimecore "github.com/quailyquaily/mistermorph/internal/channelruntime/core"
 	"github.com/quailyquaily/mistermorph/internal/chathistory"
 	"github.com/quailyquaily/mistermorph/internal/grouptrigger"
-	"github.com/quailyquaily/mistermorph/internal/promptprofile"
 	"github.com/quailyquaily/mistermorph/llm"
 )
 
@@ -106,7 +104,7 @@ func lineAddressingDecisionViaLLM(
 	if canReact {
 		reactionEmojis = grouptrigger.DefaultLightweightEmojis
 	}
-	systemPrompt, userPrompt, err := grouptrigger.RenderAddressingPrompts(loadLineAddressingPersonaIdentity(personaDir...), strings.Join(reactionEmojis, ","), currentMessage, historyMessages)
+	systemPrompt, userPrompt, err := grouptrigger.RenderAddressingPrompts(runtimecore.PersonaIdentity(personaDir...), strings.Join(reactionEmojis, ","), currentMessage, historyMessages)
 	if err != nil {
 		return grouptrigger.Addressing{}, false, fmt.Errorf("render addressing prompts: %w", err)
 	}
@@ -118,10 +116,4 @@ func lineAddressingDecisionViaLLM(
 		UserPrompt:     userPrompt,
 		ReactionEmojis: reactionEmojis,
 	})
-}
-
-func loadLineAddressingPersonaIdentity(personaDir ...string) string {
-	spec := agent.PromptSpec{}
-	promptprofile.ApplyPersonaIdentity(&spec, slog.Default(), personaDir...)
-	return strings.TrimSpace(spec.Identity)
 }

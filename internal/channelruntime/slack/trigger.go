@@ -3,17 +3,14 @@ package slack
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"strings"
 	"time"
 
-	"github.com/quailyquaily/mistermorph/agent"
 	slackbus "github.com/quailyquaily/mistermorph/internal/bus/adapters/slack"
 	runtimecore "github.com/quailyquaily/mistermorph/internal/channelruntime/core"
 	"github.com/quailyquaily/mistermorph/internal/chathistory"
 	"github.com/quailyquaily/mistermorph/internal/grouptrigger"
 	"github.com/quailyquaily/mistermorph/internal/llmstats"
-	"github.com/quailyquaily/mistermorph/internal/promptprofile"
 	"github.com/quailyquaily/mistermorph/llm"
 	"github.com/quailyquaily/mistermorph/tools"
 	slacktools "github.com/quailyquaily/mistermorph/tools/slack"
@@ -81,7 +78,7 @@ func slackAddressingDecisionViaLLM(ctx context.Context, client llm.Client, model
 	if model == "" {
 		return grouptrigger.Addressing{}, false, fmt.Errorf("missing model for addressing_llm")
 	}
-	personaIdentity := loadAddressingPersonaIdentity(personaDir...)
+	personaIdentity := runtimecore.PersonaIdentity(personaDir...)
 	historyMessages := chathistory.BuildMessages(chathistory.ChannelSlack, history)
 	currentMessage := map[string]any{
 		"team_id":       event.TeamID,
@@ -109,12 +106,6 @@ func slackAddressingDecisionViaLLM(ctx context.Context, client llm.Client, model
 		UserPrompt:     userPrompt,
 		ReactionEmojis: reactionEmojis,
 	})
-}
-
-func loadAddressingPersonaIdentity(personaDir ...string) string {
-	spec := agent.PromptSpec{}
-	promptprofile.ApplyPersonaIdentity(&spec, slog.Default(), personaDir...)
-	return strings.TrimSpace(spec.Identity)
 }
 
 // runLightweightPrecheck asks the decision route whether a message addressed to the bot needs

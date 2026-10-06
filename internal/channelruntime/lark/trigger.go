@@ -8,13 +8,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/quailyquaily/mistermorph/agent"
 	larkbus "github.com/quailyquaily/mistermorph/internal/bus/adapters/lark"
 	runtimecore "github.com/quailyquaily/mistermorph/internal/channelruntime/core"
 	"github.com/quailyquaily/mistermorph/internal/chathistory"
 	"github.com/quailyquaily/mistermorph/internal/grouptrigger"
 	"github.com/quailyquaily/mistermorph/internal/llmstats"
-	"github.com/quailyquaily/mistermorph/internal/promptprofile"
 	"github.com/quailyquaily/mistermorph/llm"
 	larktools "github.com/quailyquaily/mistermorph/tools/lark"
 )
@@ -99,7 +97,7 @@ func larkAddressingDecisionViaLLM(
 	if canReact {
 		reactionEmojis = larktools.StandardReactionEmojiTypes()
 	}
-	systemPrompt, userPrompt, err := grouptrigger.RenderAddressingPrompts(loadLarkAddressingPersonaIdentity(personaDir...), strings.Join(reactionEmojis, ","), currentMessage, historyMessages)
+	systemPrompt, userPrompt, err := grouptrigger.RenderAddressingPrompts(runtimecore.PersonaIdentity(personaDir...), strings.Join(reactionEmojis, ","), currentMessage, historyMessages)
 	if err != nil {
 		return grouptrigger.Addressing{}, false, fmt.Errorf("render addressing prompts: %w", err)
 	}
@@ -111,12 +109,6 @@ func larkAddressingDecisionViaLLM(
 		UserPrompt:     userPrompt,
 		ReactionEmojis: reactionEmojis,
 	})
-}
-
-func loadLarkAddressingPersonaIdentity(personaDir ...string) string {
-	spec := agent.PromptSpec{}
-	promptprofile.ApplyPersonaIdentity(&spec, slog.Default(), personaDir...)
-	return strings.TrimSpace(spec.Identity)
 }
 
 // runLarkLightweightPrecheck asks the decision route whether a message addressed to the bot needs

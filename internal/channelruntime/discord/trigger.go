@@ -3,15 +3,13 @@ package discord
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"strings"
 	"time"
 
-	"github.com/quailyquaily/mistermorph/agent"
 	discordbus "github.com/quailyquaily/mistermorph/internal/bus/adapters/discord"
+	runtimecore "github.com/quailyquaily/mistermorph/internal/channelruntime/core"
 	"github.com/quailyquaily/mistermorph/internal/chathistory"
 	"github.com/quailyquaily/mistermorph/internal/grouptrigger"
-	"github.com/quailyquaily/mistermorph/internal/promptprofile"
 	"github.com/quailyquaily/mistermorph/llm"
 	"github.com/quailyquaily/mistermorph/tools"
 )
@@ -63,8 +61,6 @@ func discordAddressingDecisionViaLLM(ctx context.Context, opts discordTriggerOpt
 	if model == "" {
 		return grouptrigger.Addressing{}, false, fmt.Errorf("missing model for addressing_llm")
 	}
-	spec := agent.PromptSpec{}
-	promptprofile.ApplyPersonaIdentity(&spec, slog.Default(), opts.PersonaDir)
 	currentMessage := map[string]any{
 		"guild_id":      inbound.GuildID,
 		"channel_id":    inbound.ChannelID,
@@ -74,7 +70,7 @@ func discordAddressingDecisionViaLLM(ctx context.Context, opts discordTriggerOpt
 		"text":          inbound.Text,
 		"mention_users": append([]string(nil), inbound.MentionUserIDs...),
 	}
-	systemPrompt, userPrompt, err := grouptrigger.RenderAddressingPrompts(strings.TrimSpace(spec.Identity), discordReactionEmojis, currentMessage, chathistory.BuildMessages(chathistory.ChannelDiscord, history))
+	systemPrompt, userPrompt, err := grouptrigger.RenderAddressingPrompts(runtimecore.PersonaIdentity(opts.PersonaDir), discordReactionEmojis, currentMessage, chathistory.BuildMessages(chathistory.ChannelDiscord, history))
 	if err != nil {
 		return grouptrigger.Addressing{}, false, fmt.Errorf("render addressing prompts: %w", err)
 	}

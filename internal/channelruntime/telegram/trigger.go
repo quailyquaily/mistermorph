@@ -3,17 +3,13 @@ package telegram
 import (
 	"context"
 	"fmt"
-	"io"
-	"log/slog"
 	"strings"
 	"time"
 
-	"github.com/quailyquaily/mistermorph/agent"
 	runtimecore "github.com/quailyquaily/mistermorph/internal/channelruntime/core"
 	"github.com/quailyquaily/mistermorph/internal/chathistory"
 	"github.com/quailyquaily/mistermorph/internal/grouptrigger"
 	"github.com/quailyquaily/mistermorph/internal/llmstats"
-	"github.com/quailyquaily/mistermorph/internal/promptprofile"
 	"github.com/quailyquaily/mistermorph/llm"
 	"github.com/quailyquaily/mistermorph/tools"
 	telegramtools "github.com/quailyquaily/mistermorph/tools/telegram"
@@ -171,7 +167,7 @@ func addressingDecisionViaLLM(
 		sender["chat_id"] = msg.Chat.ID
 		sender["chat_type"] = strings.TrimSpace(msg.Chat.Type)
 	}
-	sys, user, err := grouptrigger.RenderAddressingPrompts(loadAddressingPersonaIdentity(personaDir...), strings.Join(telegramtools.StandardReactionEmojis(), ","), currentMessage, historyMessages)
+	sys, user, err := grouptrigger.RenderAddressingPrompts(runtimecore.PersonaIdentity(personaDir...), strings.Join(telegramtools.StandardReactionEmojis(), ","), currentMessage, historyMessages)
 	if err != nil {
 		return grouptrigger.Addressing{}, false, fmt.Errorf("render addressing prompts: %w", err)
 	}
@@ -187,18 +183,6 @@ func addressingDecisionViaLLM(
 		UserPrompt:     user,
 		ReactionEmojis: reactionEmojis,
 	})
-}
-
-var silentPromptProfileLogger = slog.New(slog.NewTextHandler(io.Discard, nil))
-
-func loadAddressingPersonaIdentity(personaDir ...string) string {
-	spec := agent.PromptSpec{}
-	promptprofile.ApplyPersonaIdentity(&spec, silentPromptProfileLogger, personaDir...)
-	persona := strings.TrimSpace(spec.Identity)
-	if persona == "" {
-		return ""
-	}
-	return persona
 }
 
 // runLightweightPrecheck asks the decision route whether a message addressed to the bot needs

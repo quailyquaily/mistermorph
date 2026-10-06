@@ -119,9 +119,10 @@ func HasCapabilityReference(text string) bool {
 
 var silentPersonaLogger = slog.New(slog.NewTextHandler(io.Discard, nil))
 
-// PersonaIdentity loads the persona identity text used by decision-route prompts.
-func PersonaIdentity(personaDir string) string {
+// PersonaIdentity loads the persona identity text used by decision-route prompts: the group check
+// and the lightweight pre-check. An empty or missing personaDir uses the default persona directory.
+func PersonaIdentity(personaDir ...string) string {
 	spec := agent.PromptSpec{}
-	promptprofile.ApplyPersonaIdentity(&spec, silentPersonaLogger, personaDir)
+	promptprofile.ApplyPersonaIdentity(&spec, silentPersonaLogger, personaDir...)
 	return strings.TrimSpace(spec.Identity)
 }
