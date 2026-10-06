@@ -263,6 +263,10 @@ func Apply(v *viper.Viper) {
 
 	v.SetDefault("tools.contacts_send.enabled", true)
 	v.SetDefault("tools.todo_update.enabled", true)
+	// On: MCP tools stay hidden until the model finds them. Without MCP tools to hide, tool_search
+	// is not offered, so nothing changes.
+	v.SetDefault("tools.tool_search.enabled", true)
+	v.SetDefault("tools.tool_search.always_loaded", []string{})
 	// Console-only skill install tools: off, so only a task that names them ($skill_install_preview,
 	// $skill_install), such as the Skills page's Add skill, gets them.
 	v.SetDefault("tools.skill_install_preview.enabled", false)

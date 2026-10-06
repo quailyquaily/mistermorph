@@ -38,6 +38,8 @@ type engineLoopState struct {
 	disableToolsForFormatRetry bool
 	// reacted is set once message_react succeeds; the run may then end with an empty final.
 	reacted bool
+	// search is the run's tool visibility when tool search is on.
+	search *runToolSearch
 
 	pendingTool            *pendingToolSnapshot
 	approvedActionIdentity string
@@ -80,6 +82,7 @@ func (e *Engine) runLoop(ctx context.Context, st *engineLoopState) (final *Final
 	if st == nil || st.agentCtx == nil {
 		return nil, nil, fmt.Errorf("nil engine state")
 	}
+	ctx = withRunToolSearch(ctx, st.search)
 	if st.toolRunCounts == nil {
 		st.toolRunCounts = rebuildToolTrackingFromSteps(st.agentCtx.Steps)
 	}
@@ -557,6 +560,9 @@ func (e *Engine) runLoop(ctx context.Context, st *engineLoopState) (final *Final
 				if item.executed && item.err == nil && item.toolNameKey == reactionToolName {
 					st.reacted = true
 				}
+				if item.executed && item.err == nil {
+					st.noteToolUsed(e, tc.Name)
+				}
 
 				if !item.skip && item.err != nil {
 					// Failed or canceled calls do not consume the successful-call limit.
@@ -840,6 +846,8 @@ func (e *Engine) runLoop(ctx context.Context, st *engineLoopState) (final *Final
 
 			st.pendingTool = nil
 			st.approvedActionIdentity = ""
+			// Tools found during this step become callable from the next one.
+			e.applyFoundTools(st)
 
 			if earlyStop {
 				final, err := e.finalEgress(ctx, st, step, &Final{Output: "", Plan: st.agentCtx.Plan}, nil)
@@ -933,8 +941,8 @@ func formatSteerMessage(text string) string {
 // guardPreCheck runs the guard pre-tool decision serially. A non-nil approval
 // result tells the caller to finish earlier calls before persisting resume state.
 func (e *Engine) guardPreCheck(ctx context.Context, st *engineLoopState, step int, tc *ToolCall, approvalIdentity string) (observation string, denied bool, approval *guard.Result, err error) {
-	if _, found := e.registry.Get(tc.Name); !found {
-		return fmt.Sprintf("Error: tool '%s' not found. Available tools: %s", tc.Name, e.registry.ToolNames()), true, nil, nil
+	if _, found := e.lookupTool(st, tc.Name); !found {
+		return e.unknownToolMessage(st, tc.Name), true, nil, nil
 	}
 
 	action := guard.Action{
@@ -994,6 +1002,10 @@ func (e *Engine) requestToolApproval(ctx context.Context, st *engineLoopState, s
 		HasLastMainInputTokens:  st.hasLastMainInputTokens,
 		PendingTool:             pending,
 	}
+	if st.search != nil {
+		rs.VisibleTools = st.search.visibleNames()
+		rs.FoundTools = st.search.conversationTools()
+	}
 	resumeState, err := marshalResumeState(rs)
 	if err != nil {
 		return nil, fmt.Errorf("marshal approval resume state: %w", err)
@@ -1019,9 +1031,9 @@ func (e *Engine) requestToolApproval(ctx context.Context, st *engineLoopState, s
 
 // executeTool runs the tool. Safe for concurrent use.
 func (e *Engine) executeTool(ctx context.Context, st *engineLoopState, step int, tc *ToolCall) (string, error) {
-	tool, found := e.registry.Get(tc.Name)
+	tool, found := e.lookupTool(st, tc.Name)
 	if !found {
-		return fmt.Sprintf("Error: tool '%s' not found. Available tools: %s", tc.Name, e.registry.ToolNames()), fmt.Errorf("tool not found")
+		return e.unknownToolMessage(st, tc.Name), fmt.Errorf("tool not found")
 	}
 
 	toolCtx := ctx

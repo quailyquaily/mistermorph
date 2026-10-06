@@ -13,6 +13,7 @@ type ServerConfig struct {
 	Name         string            `json:"name" yaml:"name"`
 	Enable       bool              `json:"enable" yaml:"enable"`                                   // set false to disable; default true
 	OnDemand     bool              `json:"on_demand,omitempty" yaml:"on_demand,omitempty"`         // connect only for tasks that reference $mcp_<name>
+	Description  string            `json:"description,omitempty" yaml:"description,omitempty"`     // helps tool_search find the server before connecting it
 	Type         string            `json:"type" yaml:"type"`                                       // "stdio" (default) | "http"
 	Command      string            `json:"command,omitempty" yaml:"command,omitempty"`             // stdio only
 	Args         []string          `json:"args,omitempty" yaml:"args,omitempty"`                   // stdio only
@@ -113,6 +114,7 @@ func ParseServers(raw any) []ServerConfig {
 			Name:         cast.ToString(m["name"]),
 			Enable:       m["enable"] == nil || cast.ToBool(m["enable"]),
 			OnDemand:     cast.ToBool(m["on_demand"]),
+			Description:  strings.TrimSpace(cast.ToString(m["description"])),
 			Type:         cast.ToString(m["type"]),
 			Command:      cast.ToString(m["command"]),
 			URL:          cast.ToString(m["url"]),

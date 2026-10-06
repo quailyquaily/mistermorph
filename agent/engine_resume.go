@@ -81,6 +81,19 @@ func (e *Engine) resume(ctx context.Context, approvalRequestID string, opts RunO
 	}
 
 	agentCtx := contextFromSnapshot(rs.AgentCtx)
+	// Restore what was visible at the pause, not a fresh search; older records use the run's
+	// initial set.
+	var visibleNames []string
+	if e.toolSearch != nil {
+		visibleNames = rs.VisibleTools
+		if len(visibleNames) == 0 {
+			visibleNames = e.toolSearch.Visible
+		}
+	}
+	search := e.startToolSearch(ctx, visibleNames, rs.FoundTools)
+	if search != nil {
+		agentCtx.FoundTools = search.conversationTools()
+	}
 	log := e.log.With("run_id", rs.RunID, "model", rs.Model)
 	toolLog := e.log.With("run_id", rs.RunID)
 	checkpointStore := opts.ContextCheckpointStore
@@ -137,7 +150,8 @@ func (e *Engine) resume(ctx context.Context, approvalRequestID string, opts RunO
 		messages:                rs.Messages,
 		agentCtx:                agentCtx,
 		extraParams:             rs.ExtraParams,
-		tools:                   buildLLMTools(e.registry),
+		tools:                   e.llmToolsForRun(search),
+		search:                  search,
 		planRequired:            rs.PlanRequired,
 		reasoningDetails:        opts.ReasoningDetails,
 		onStream:                opts.OnStream,

@@ -27,6 +27,7 @@ function cloneServer(server) {
     name: String(server?.name || ""),
     enable: server?.enable !== false,
     on_demand: server?.on_demand === true,
+    description: String(server?.description || ""),
     type: server?.type === "http" ? "http" : "stdio",
     command: String(server?.command || ""),
     args_text: String(server?.args_text || ""),
@@ -287,6 +288,12 @@ const MCPSettingsPanel = {
               </div>
               <QSwitch :modelValue="editor.on_demand" :disabled="busy" :aria-label="t('settings_mcp_on_demand')" @update:modelValue="updateOnDemand" />
             </div>
+
+            <label class="settings-field is-wide">
+              <span class="settings-field-label">{{ t("settings_mcp_description") }}</span>
+              <QInput :modelValue="editor.description" :placeholder="t('settings_mcp_description_placeholder')" :disabled="busy" @update:modelValue="updateEditor('description', $event)" />
+              <span class="settings-panel-meta">{{ t("settings_mcp_description_note") }}</span>
+            </label>
 
             <template v-if="editor.type === 'http'">
               <label class="settings-field is-wide">

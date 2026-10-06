@@ -36,6 +36,10 @@ type resumeState struct {
 	HasLastMainInputTokens  bool              `json:"has_last_main_input_tokens,omitempty"`
 
 	PendingTool pendingToolSnapshot `json:"pending_tool"`
+
+	// VisibleTools and FoundTools keep tool search's state across an approval pause.
+	VisibleTools []string `json:"visible_tools,omitempty"`
+	FoundTools   []string `json:"found_tools,omitempty"`
 }
 
 type pendingToolSnapshot struct {

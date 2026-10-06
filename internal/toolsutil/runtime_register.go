@@ -14,12 +14,21 @@ type RuntimeToolsRegisterConfig struct {
 	PlanCreate PlanCreateRegisterConfig
 	TodoUpdate TodoUpdateRegisterConfig
 	Image      ImageToolsRegisterConfig
+	ToolSearch ToolSearchConfig
+}
+
+// ToolSearchConfig is tools.tool_search: when enabled, MCP tools stay hidden until the model
+// finds them with tool_search, except AlwaysLoaded.
+type ToolSearchConfig struct {
+	Enabled      bool
+	AlwaysLoaded []string
 }
 
 type runtimeRegisterConfigReader interface {
 	GetBool(string) bool
 	GetInt(string) int
 	GetString(string) string
+	GetStringSlice(string) []string
 	IsSet(string) bool
 }
 
@@ -49,7 +58,23 @@ func LoadRuntimeToolsRegisterConfigFromReader(r runtimeRegisterConfigReader) Run
 		PlanCreate: LoadPlanCreateRegisterConfigFromReader(r),
 		TodoUpdate: LoadTodoUpdateRegisterConfigFromReader(r),
 		Image:      LoadImageToolsRegisterConfigFromReader(r),
+		ToolSearch: ToolSearchConfig{
+			Enabled:      r.GetBool("tools.tool_search.enabled"),
+			AlwaysLoaded: normalizeToolNames(r.GetStringSlice("tools.tool_search.always_loaded")),
+		},
 	}
+}
+
+func normalizeToolNames(names []string) []string {
+	out := make([]string, 0, len(names))
+	seen := make(map[string]bool, len(names))
+	for _, name := range names {
+		if name = strings.TrimSpace(name); name != "" && !seen[name] {
+			seen[name] = true
+			out = append(out, name)
+		}
+	}
+	return out
 }
 
 func RegisterRuntimeTools(reg *tools.Registry, cfg RuntimeToolsRegisterConfig, opts RuntimeToolLLMOptions) {

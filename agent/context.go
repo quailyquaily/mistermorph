@@ -24,6 +24,8 @@ type Context struct {
 	Plan           *Plan
 	Metrics        *Metrics
 	RawFinalAnswer json.RawMessage
+	// FoundTools are the hidden tools the run found or used through tool search, most recent first.
+	FoundTools []string
 }
 
 func NewContext(task string, maxSteps int) *Context {

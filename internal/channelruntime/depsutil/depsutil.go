@@ -11,6 +11,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/acpclient"
 	"github.com/quailyquaily/mistermorph/internal/agentsettings"
 	"github.com/quailyquaily/mistermorph/internal/llmutil"
+	"github.com/quailyquaily/mistermorph/internal/mcphost"
 	"github.com/quailyquaily/mistermorph/internal/outputfmt"
 	"github.com/quailyquaily/mistermorph/internal/runtimepaths"
 	"github.com/quailyquaily/mistermorph/internal/secref"
@@ -34,7 +35,9 @@ type CommonDependencies struct {
 	// LoadReferencedMCP connects the MCP servers a task references with $mcp_<name> that are not
 	// already loaded, and registers their tools in the task's registry. The returned function
 	// closes them when the task's run ends; it is never nil. A nil LoadReferencedMCP loads nothing.
-	LoadReferencedMCP            func(ctx context.Context, text string, reg *tools.Registry) (func() error, error)
+	LoadReferencedMCP func(ctx context.Context, text string, reg *tools.Registry) (func() error, error)
+	// MCPServers is each configured MCP server's startup status, for tool search.
+	MCPServers                   []mcphost.ServerStatus
 	RegisterTriggeredStaticTools func(*tools.Registry, map[string]bool)
 	ACPAgents                    func() []acpclient.AgentConfig
 	RuntimeToolsConfig           toolsutil.RuntimeToolsRegisterConfig

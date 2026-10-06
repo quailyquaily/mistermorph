@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -335,5 +337,36 @@ func TestFileStoreMovesALegacyCheckpointIntoTheTopicFolder(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(root, "topics", topicstate.Key(key))); !os.IsNotExist(err) {
 		t.Fatalf("empty topic folder should be gone, stat err = %v", err)
+	}
+}
+
+func TestFoundToolsKeepMostRecentAndClearOnReset(t *testing.T) {
+	root := t.TempDir()
+	key := "tg:42"
+	if err := SaveFoundTools(root, key, []string{"b", "a"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveFoundTools(root, key, []string{"c", "a"}, []string{"b", "a"}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := LoadFoundTools(root, key)
+	if err != nil || strings.Join(got, ",") != "c,a,b" {
+		t.Fatalf("found tools = %v, %v; want c,a,b", got, err)
+	}
+	many := make([]string, 0, MaxFoundTools+5)
+	for i := 0; i < MaxFoundTools+5; i++ {
+		many = append(many, fmt.Sprintf("t%d", i))
+	}
+	if err := SaveFoundTools(root, key, many, got); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := LoadFoundTools(root, key); len(got) != MaxFoundTools || got[0] != "t0" {
+		t.Fatalf("capped tools = %v", got)
+	}
+	if err := Reset(context.Background(), root, key); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := LoadFoundTools(root, key); len(got) != 0 {
+		t.Fatalf("after reset = %v, want none", got)
 	}
 }

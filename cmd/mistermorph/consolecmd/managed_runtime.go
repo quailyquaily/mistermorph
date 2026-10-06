@@ -773,6 +773,7 @@ func buildManagedRuntimeDepsFromReader(logger *slog.Logger, reader *viper.Viper)
 			}
 			return refs
 		},
+		MCPServers: mcpHost.Servers(),
 		LoadReferencedMCP: depsutil.MCPLoader(mcpHost, func(task string) map[string]bool {
 			return skillsutil.ResolveTaskSkillRefs(task, skillsutil.SkillsConfigFromReader(reader))
 		}, logger),

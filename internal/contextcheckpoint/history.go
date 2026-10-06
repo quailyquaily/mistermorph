@@ -45,6 +45,10 @@ func Reset(ctx context.Context, root string, conversationKey string) error {
 	if strings.TrimSpace(conversationKey) == "" {
 		return nil
 	}
+	// A reset also forgets the tools the conversation found through tool search.
+	if err := ClearFoundTools(root, conversationKey); err != nil {
+		return err
+	}
 	store, err := NewFileStore(root, conversationKey)
 	if err != nil {
 		return err

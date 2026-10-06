@@ -602,6 +602,7 @@ func (rt *Runtime) prepareChannelDependencies(ctx context.Context, snap runtimeS
 	common := rt.sharedDependencies(snap)
 	common.Registry = func() *tools.Registry { return baseRegistry.Clone() }
 	common.LoadReferencedMCP = rt.mcpLoader(registration.servers, snap, logger)
+	common.MCPServers = registration.servers
 	common.AwarenessRegistry = func() *tools.Registry { return awarenessRegistry.Clone() }
 	return common, cleanup, nil
 }

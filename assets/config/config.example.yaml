@@ -308,6 +308,15 @@ tools:
   todo_update:
     # Enable cron task update tool (todo_update).
     enabled: true
+  tool_search:
+    # Hide MCP tools until the model finds them with tool_search, so each request carries fewer
+    # tool definitions. Built-in tools stay visible. A found tool stays visible for the rest of
+    # the conversation (/reset forgets it). A search may connect an enabled on-demand server.
+    # tool_search is offered only when there are MCP tools or servers to find; otherwise nothing
+    # changes. Set false to send every MCP tool's definition with every request.
+    enabled: true
+    # MCP tool names visible from the first request, e.g. mcp_github-work__get_issue.
+    always_loaded: []
   plan_create:
     # Enable planning tool (plan_create) in run/serve/telegram runtimes.
     enabled: true
@@ -405,6 +414,7 @@ mcp:
   # - name: "filesystem"        # [A-Za-z][A-Za-z0-9_-]*; no spaces (including disabled entries)
   #   enable: true               # set false to turn the server off; default true
   #   on_demand: false           # true: not connected at startup; a task loads it by writing $mcp_<name>
+  #   description: ""            # helps tools.tool_search find the server before connecting it
   #   type: "stdio"              # stdio (default) | http
   #   command: "npx"
   #   args: ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"]

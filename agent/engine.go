@@ -184,6 +184,9 @@ type Engine struct {
 	acpAgents        []acpclient.AgentConfig
 
 	guard *guard.Guard
+
+	// toolSearch, when set, hides the tools it marks until the model finds them with tool_search.
+	toolSearch *ToolSearchOptions
 }
 
 func New(client llm.Client, registry *tools.Registry, cfg Config, spec PromptSpec, opts ...Option) *Engine {
@@ -216,11 +219,20 @@ func New(client llm.Client, registry *tools.Registry, cfg Config, spec PromptSpe
 	if e.subtaskRunner == nil {
 		e.subtaskRunner = &localSubtaskRunner{engine: e}
 	}
+	if e.toolSearch != nil {
+		if err := e.registry.Register(&toolSearchTool{engine: e}); err != nil {
+			// The runtime refuses a registry with its own tool_search before getting here.
+			e.log.Warn("tool_search_disabled", "error", err.Error())
+			e.toolSearch = nil
+		} else {
+			e.spec.Blocks = append(e.spec.Blocks, PromptBlock{Content: toolSearchPrompt(e.toolSearch.Catalog)})
+		}
+	}
 	registerEngineTools(
 		e.registry,
 		e.engineToolsConfig,
 		spawnToolDeps{
-			LookupTool:   e.registry.Get,
+			LookupTool:   e.lookupSubtaskTool,
 			DefaultModel: e.config.DefaultModel,
 			Runner:       e.subtaskRunner,
 		},
@@ -268,11 +280,17 @@ func (e *Engine) Run(ctx context.Context, task string, opts RunOptions) (*Final,
 		defer opts.SteerSource.Close()
 	}
 
+	var visibleNames []string
+	if e.toolSearch != nil {
+		visibleNames = e.toolSearch.Visible
+	}
+	search := e.startToolSearch(ctx, visibleNames, nil)
+	promptRegistry := e.visibleRegistry(search)
 	var systemPrompt string
 	if e.promptBuilder != nil {
-		systemPrompt = e.promptBuilder(e.registry, task)
+		systemPrompt = e.promptBuilder(promptRegistry, task)
 	} else {
-		systemPrompt = BuildSystemPrompt(e.registry, e.spec)
+		systemPrompt = BuildSystemPrompt(promptRegistry, e.spec)
 	}
 
 	systemMessage := llm.Message{Role: "system", Content: systemPrompt}
@@ -385,7 +403,8 @@ func (e *Engine) Run(ctx context.Context, task string, opts RunOptions) (*Final,
 		messages:              messages,
 		agentCtx:              agentCtx,
 		extraParams:           extraParams,
-		tools:                 buildLLMTools(e.registry),
+		tools:                 e.llmToolsForRun(search),
+		search:                search,
 		planRequired:          false,
 		requestedWrites:       requestedWrites,
 		reasoningDetails:      opts.ReasoningDetails,
@@ -436,4 +455,17 @@ func sortedMapKeys(m map[string]any) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// lookupSubtaskTool finds a tool a subtask may be given. Tools hidden by tool search are never
+// handed to subtasks, found or not.
+func (e *Engine) lookupSubtaskTool(name string) (tools.Tool, bool) {
+	tool, ok := e.registry.Get(name)
+	if !ok || e.toolSearch == nil {
+		return tool, ok
+	}
+	if e.toolSearch.Hidden(tool) || name == toolSearchToolName {
+		return nil, false
+	}
+	return tool, true
 }

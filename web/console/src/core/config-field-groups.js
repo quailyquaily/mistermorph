@@ -248,6 +248,25 @@ export const AUTOMATION_CONFIG_GROUPS = [
   },
 ];
 
+export const TOOL_SEARCH_CONFIG_GROUPS = [
+  {
+    id: "tool-search",
+    title: "Tool search",
+    note: "On by default. Hides MCP tools until the model finds them with tool_search, so each request carries fewer tool definitions; tool_search is offered only when there is an MCP tool or server to find. Found tools stay visible for the rest of the conversation; /reset forgets them.",
+    fields: [
+      { path: "tools.tool_search.enabled", label: "Tool search", type: "bool" },
+      {
+        path: "tools.tool_search.always_loaded",
+        label: "Always visible MCP tools",
+        type: "string_list",
+        wide: true,
+        dependsOn: "tools.tool_search.enabled",
+        note: "One tool name per line, such as mcp_github-work__get_issue.",
+      },
+    ],
+  },
+];
+
 export const SECURITY_CONFIG_GROUPS = [
   {
     id: "guard-storage",

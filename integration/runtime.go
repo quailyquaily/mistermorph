@@ -266,6 +266,7 @@ func (rt *Runtime) newRunEngineWithRegistry(ctx context.Context, task string, ba
 	common := rt.sharedDependencies(snap)
 	common.Registry = func() *tools.Registry { return reg.Clone() }
 	common.LoadReferencedMCP = rt.mcpLoader(mcp.servers, snap, logger)
+	common.MCPServers = mcp.servers
 	common.RegisterTriggeredStaticTools = func(reg *tools.Registry, triggers map[string]bool) {
 		rt.registerStaticTools(reg, runStaticRegistry, logger, false, triggers)
 	}

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/quailyquaily/mistermorph/tools"
 )
 
 // ToolAdapter wraps an MCP server tool as a tools.Tool implementation.
@@ -100,4 +101,10 @@ func formatCallToolResult(result *mcp.CallToolResult) string {
 	}
 
 	return strings.Join(parts, "\n")
+}
+
+// IsTool reports whether a registered tool comes from an MCP server.
+func IsTool(tool tools.Tool) bool {
+	_, ok := tool.(*ToolAdapter)
+	return ok
 }

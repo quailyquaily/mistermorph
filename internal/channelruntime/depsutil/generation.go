@@ -153,6 +153,7 @@ func BuildGenerationDependencies(ctx context.Context, base CommonDependencies, r
 			}
 			return refs
 		},
+		MCPServers: mcpHost.Servers(),
 		LoadReferencedMCP: MCPLoader(mcpHost, func(task string) map[string]bool {
 			return skillsutil.ResolveTaskSkillRefs(task, skillsutil.SkillsConfigFromReader(reader))
 		}, logger),

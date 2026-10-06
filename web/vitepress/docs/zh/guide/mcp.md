@@ -70,6 +70,24 @@ $mcp_github-work 找到描述这个 bug 的 issue。
 - 启动时已连接的 server 无需引用。启动时连接失败的 server，会在引用它的任务中重新尝试连接。
 - 若 30 秒内无法连接，或没有允许的工具，任务会失败，错误信息中包含 server 名称。
 
+## 工具搜索
+
+MCP 工具很多时，每个请求都会带上全部工具定义。工具搜索（默认开启）会隐藏 MCP 工具，直到模型需要时才出现：
+
+```yaml
+tools:
+  tool_search:
+    enabled: true       # 默认值；设为 false 则每个请求都带上全部 MCP 工具
+    always_loaded: []   # 始终可见的 MCP 工具名
+```
+
+只有存在可查找的内容（MCP 工具，或启用的 on-demand server）时才会提供 `tool_search`。没有 MCP 时请求不变。
+
+- 内置工具始终可见。MCP 工具被隐藏，模型通过 `tool_search` 工具按名称或描述找到它们。
+- 搜索时可以指定 server（`server`），这会为该任务连接一个启用的 on-demand server 并搜索它的工具。给 server 加上 `description`，便于在连接前被找到。
+- 找到的工具从下一步起可以调用，并在整个会话中保持可见；`/reset` 会清除。
+- `$mcp_<name>` 仍会从第一个请求起显示该 server 允许的全部工具。
+
 ## 生命周期
 
 1. 读取 `mcp.servers`

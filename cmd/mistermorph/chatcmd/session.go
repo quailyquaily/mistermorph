@@ -24,6 +24,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/llmstats"
 	"github.com/quailyquaily/mistermorph/internal/llmutil"
 	"github.com/quailyquaily/mistermorph/internal/logutil"
+	"github.com/quailyquaily/mistermorph/internal/mcphost"
 	"github.com/quailyquaily/mistermorph/internal/pathroots"
 	"github.com/quailyquaily/mistermorph/internal/pathutil"
 	"github.com/quailyquaily/mistermorph/internal/processsignal"
@@ -478,6 +479,7 @@ func buildChatSession(cmd *cobra.Command, deps Dependencies) (*chatSession, erro
 			skillsCfg := skillsutil.SkillsConfigFromRunCmd(cmd)
 			return toolsutil.BuiltinToolTriggers(task, skillsutil.ResolveTaskSkillRefs(task, skillsCfg))
 		},
+		MCPServers: chatMCPServers(deps),
 		LoadReferencedMCP: chatMCPLoader(deps, func(task string) map[string]bool {
 			return skillsutil.ResolveTaskSkillRefs(task, skillsutil.SkillsConfigFromRunCmd(cmd))
 		}, logger),
@@ -562,4 +564,11 @@ func chatMCPLoader(deps Dependencies, skillRefs func(string) map[string]bool, lo
 		return nil
 	}
 	return depsutil.MCPLoader(deps.MCPHost(), skillRefs, logger)
+}
+
+func chatMCPServers(deps Dependencies) []mcphost.ServerStatus {
+	if deps.MCPHost == nil {
+		return nil
+	}
+	return deps.MCPHost().Servers()
 }

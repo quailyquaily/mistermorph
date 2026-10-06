@@ -23,6 +23,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/pathroots"
 	"github.com/quailyquaily/mistermorph/internal/promptprofile"
 	"github.com/quailyquaily/mistermorph/internal/toolsutil"
+	"github.com/quailyquaily/mistermorph/internal/topiccontext"
 	"github.com/quailyquaily/mistermorph/llm"
 	"github.com/quailyquaily/mistermorph/tools"
 )
@@ -366,6 +367,10 @@ type preparedRuntimeRun struct {
 	loadedSkills        []string
 	cleanup             func() error
 	contextWindowTokens int64
+	// conversationKey and foundTools keep tool search's finds for the conversation.
+	conversationKey string
+	foundTools      []string
+	toolSearch      bool
 }
 
 // PreparedEngine owns the Engine and all per-run clients created while
@@ -432,6 +437,7 @@ func (rt *Runtime) Run(ctx context.Context, req RunRequest) (RunResult, error) {
 		DisableContextCompaction: req.DisableContextCompaction,
 		ContextCompactionOnly:    contextCompactionOnly,
 	})
+	rt.saveFoundTools(prepared, runCtx)
 	if err != nil {
 		return RunResult{Final: final, Context: runCtx, LoadedSkills: prepared.loadedSkills}, err
 	}
@@ -459,6 +465,7 @@ func (rt *Runtime) Resume(ctx context.Context, approvalRequestID string, req Run
 		ContextCheckpointStore:   req.ContextCheckpointStore,
 		DisableContextCompaction: req.DisableContextCompaction,
 	})
+	rt.saveFoundTools(prepared, runCtx)
 	if err != nil {
 		return RunResult{Final: final, Context: runCtx, LoadedSkills: prepared.loadedSkills}, err
 	}
@@ -530,11 +537,12 @@ func (rt *Runtime) prepareRun(ctx context.Context, req RunRequest) (preparedRunt
 	planModel := strings.TrimSpace(mainRoute.ClientConfig.Model)
 	var ownedImageClient llm.ImageClient
 	closeTaskMCP := func() error { return nil }
+	closeToolSearch := func() error { return nil }
 	var cleanupOnce sync.Once
 	var cleanupErr error
 	cleanup := func() error {
 		cleanupOnce.Do(func() {
-			cleanupErr = errors.Join(closeTaskMCP(), closeRuntimeClientScope(logger, runClientOwners, ownedImageClient))
+			cleanupErr = errors.Join(closeToolSearch(), closeTaskMCP(), closeRuntimeClientScope(logger, runClientOwners, ownedImageClient))
 		})
 		return cleanupErr
 	}
@@ -570,6 +578,9 @@ func (rt *Runtime) prepareRun(ctx context.Context, req RunRequest) (preparedRunt
 	if reg == nil {
 		reg = rt.BaseRegistry.Clone()
 	}
+	var toolSearchOption agent.Option
+	var conversationKey string
+	var foundTools []string
 	referenceText := task
 	if text := strings.TrimSpace(req.ReferenceText); text != "" {
 		referenceText = text
@@ -653,12 +664,32 @@ func (rt *Runtime) prepareRun(ctx context.Context, req RunRequest) (preparedRunt
 		})
 		// $mcp_<name> servers are connected for this run only, before the prompt and tool schemas
 		// are built, and closed with the run. Resume prepares the run again and reconnects them.
+		registeredBefore := toolNameSet(reg)
 		if rt.commonDeps.LoadReferencedMCP != nil {
 			closeMCP, mcpErr := rt.commonDeps.LoadReferencedMCP(ctx, referenceText, reg)
 			if mcpErr != nil {
 				return preparedRuntimeRun{}, mcpErr
 			}
 			closeTaskMCP = closeMCP
+		}
+		// With tool search, MCP tools stay hidden until found, except the referenced servers'
+		// tools and the tools this conversation found before.
+		if runtimeToolsConfig.ToolSearch.Enabled {
+			if scope, ok := topiccontext.ScopeFromContext(ctx); ok {
+				conversationKey = scope.ConversationKey
+				if found, loadErr := contextcheckpoint.LoadFoundTools(rt.contextCheckpointRoot(), conversationKey); loadErr != nil {
+					logger.Warn("tool_search_found_tools_unreadable", "error", loadErr.Error())
+				} else {
+					foundTools = found
+				}
+			}
+			visible := append(newToolNames(reg, registeredBefore), foundTools...)
+			option, closeSearch, searchErr := ToolSearchOption(reg, rt.commonDeps.MCPServers, runtimeToolsConfig.ToolSearch, visible, logger)
+			if searchErr != nil {
+				return preparedRuntimeRun{}, searchErr
+			}
+			closeToolSearch = closeSearch
+			toolSearchOption = option
 		}
 	}
 
@@ -719,6 +750,9 @@ func (rt *Runtime) prepareRun(ctx context.Context, req RunRequest) (preparedRunt
 	if req.OnToolCallDone != nil {
 		engineOpts = append(engineOpts, agent.WithOnToolCallDone(req.OnToolCallDone))
 	}
+	if toolSearchOption != nil {
+		engineOpts = append(engineOpts, toolSearchOption)
+	}
 	engine := agent.New(
 		mainClient,
 		reg,
@@ -737,7 +771,40 @@ func (rt *Runtime) prepareRun(ctx context.Context, req RunRequest) (preparedRunt
 		loadedSkills:        loadedSkills,
 		cleanup:             cleanup,
 		contextWindowTokens: mainRoute.ClientConfig.ContextWindowTokens,
+		conversationKey:     conversationKey,
+		foundTools:          foundTools,
+		toolSearch:          toolSearchOption != nil,
 	}, nil
+}
+
+func toolNameSet(reg *tools.Registry) map[string]bool {
+	names := make(map[string]bool)
+	for _, tool := range reg.All() {
+		names[tool.Name()] = true
+	}
+	return names
+}
+
+// newToolNames are the tools registered since before was taken.
+func newToolNames(reg *tools.Registry, before map[string]bool) []string {
+	var out []string
+	for _, tool := range reg.All() {
+		if !before[tool.Name()] {
+			out = append(out, tool.Name())
+		}
+	}
+	return out
+}
+
+// saveFoundTools keeps the tools this run found or used through tool search for the
+// conversation's next runs.
+func (rt *Runtime) saveFoundTools(prepared preparedRuntimeRun, runCtx *agent.Context) {
+	if !prepared.toolSearch || prepared.conversationKey == "" || runCtx == nil || len(runCtx.FoundTools) == 0 {
+		return
+	}
+	if err := contextcheckpoint.SaveFoundTools(rt.contextCheckpointRoot(), prepared.conversationKey, runCtx.FoundTools, prepared.foundTools); err != nil && prepared.logger != nil {
+		prepared.logger.Warn("tool_search_found_tools_save_failed", "error", err.Error())
+	}
 }
 
 // decisionClientForRun returns the decision route's client for runtime tools that make

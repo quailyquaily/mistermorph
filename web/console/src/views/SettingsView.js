@@ -89,6 +89,7 @@ import { endpointRoutePath } from "../core/endpoint-routes";
 import { openReentrantDialog } from "../core/reentrant-dialog";
 import {
   AUTOMATION_CONFIG_GROUPS,
+  TOOL_SEARCH_CONFIG_GROUPS,
   CHANNEL_CONFIG_GROUPS,
   CHANNEL_TRIGGER_CONFIG_GROUPS,
   CONSOLE_DEPLOYMENT_CONFIG_GROUPS,
@@ -516,6 +517,7 @@ function buildMCPServerState(server) {
     name: trimText(value.name),
     enable: value.enable !== false,
     on_demand: value.on_demand === true,
+    description: typeof value.description === "string" ? value.description : "",
     type: trimText(value.type).toLowerCase() === "http" ? "http" : "stdio",
     command: typeof value.command === "string" ? value.command : "",
     args_text: Array.isArray(value.args) ? value.args.map((item) => String(item ?? "")).join("\n") : "",
@@ -551,6 +553,7 @@ function serializeMCPServer(server) {
     name: trimText(server?.name),
     enable: server?.enable !== false,
     on_demand: server?.on_demand === true,
+    description: trimText(server?.description),
     type: server?.type === "http" ? "http" : "stdio",
     command: trimText(server?.command),
     args: parseMCPLineList(server?.args_text),
@@ -5159,6 +5162,7 @@ const SettingsView = {
       CONSOLE_DEPLOYMENT_CONFIG_GROUPS,
       REMOTE_CONTROL_CONFIG_GROUPS,
       AUTOMATION_CONFIG_GROUPS,
+      TOOL_SEARCH_CONFIG_GROUPS,
       SYSTEM_ADVANCED_CONFIG_GROUPS,
       SYSTEM_CONFIG_GROUPS,
       desktopUpdateResult,
@@ -6540,16 +6544,26 @@ const SettingsView = {
             />
           </div>
 
-          <MCPSettingsPanel
-            v-else-if="selectedSection.id === 'mcp'"
-            :modelValue="state.mcp.servers"
-            :loading="agentLoading"
-            :saving="agentSaving && agentSavingTarget === 'mcp'"
-            :readOnly="agentSettingsReadOnly"
-            :readOnlyMessage="agentSettingsReadOnlyMessage"
-            :validationError="mcpValidationError"
-            @save="saveMCPServers"
-          />
+          <div v-else-if="selectedSection.id === 'mcp'" class="settings-panel-body settings-panel-body-plain">
+            <MCPSettingsPanel
+              :modelValue="state.mcp.servers"
+              :loading="agentLoading"
+              :saving="agentSaving && agentSavingTarget === 'mcp'"
+              :readOnly="agentSettingsReadOnly"
+              :readOnlyMessage="agentSettingsReadOnlyMessage"
+              :validationError="mcpValidationError"
+              @save="saveMCPServers"
+            />
+            <ConfigSettingsPanel
+              :groups="TOOL_SEARCH_CONFIG_GROUPS"
+              :values="agentConfigValues"
+              :fieldStates="agentFieldStates"
+              :loading="agentLoading"
+              :saving="agentSaving && agentSavingTarget === 'config'"
+              saveScope="agent"
+              @save="saveConfigSettings('agent', $event)"
+            />
+          </div>
 
           <div v-else-if="selectedSection.id === 'automation'" class="settings-panel-body settings-panel-body-plain">
             <ConfigSettingsPanel

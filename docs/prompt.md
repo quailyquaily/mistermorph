@@ -56,6 +56,10 @@ These blocks are applied in the major runtime task flows:
 - Prompt rendering: `renderTelegramAddressingPrompts(...)`
 - Lightweight reaction path can use `message_react`.
 
+### Tool search
+
+With `tools.tool_search.enabled`, the system prompt lists only visible tools and adds a `[[ Tool Search ]]` block; hidden MCP tools appear in no prompt text. Each request's `Tools` carries the visible set, which grows when `tool_search` finds tools. See [Tool search](feat/feat_20261006_tool_search_progressive_disclosure.md).
+
 ### Lightweight rules in the main loop
 
 When a decision-route check already chose a text reply (`RunRequest.LightweightDecided`), the

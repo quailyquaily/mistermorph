@@ -70,6 +70,24 @@ $mcp_github-work Find the issue that describes this bug.
 - A server connected at startup needs no reference. One that failed to connect at startup is retried for a task that references it.
 - If the server cannot be connected within 30 seconds, or has no allowed tools, the task fails with an error naming the server.
 
+## Tool Search
+
+With many MCP tools, every request would carry all of their definitions. Tool search, on by default, hides MCP tools until the model asks for them:
+
+```yaml
+tools:
+  tool_search:
+    enabled: true       # default; false sends every MCP tool with every request
+    always_loaded: []   # MCP tool names to keep visible
+```
+
+`tool_search` is offered only when there is something to find: MCP tools, or an enabled on-demand server. Without MCP, requests are unchanged.
+
+- Built-in tools stay visible. MCP tools are hidden, and the model finds them with the `tool_search` tool by name or description.
+- A search can name a server (`server`), which connects an enabled on-demand server for that task and searches its tools. Give servers a `description` so they can be found before connecting.
+- A found tool can be called from the next step, and stays visible for the rest of the conversation. `/reset` forgets it.
+- `$mcp_<name>` still makes all of that server's allowed tools visible from the first request.
+
 ## Lifecycle
 
 1. Runtime reads `mcp.servers`.

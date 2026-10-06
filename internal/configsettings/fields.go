@@ -58,6 +58,8 @@ func AgentFields() []Field {
 		{Path: "tools.contacts_send.enabled", Kind: KindBool, ApplyMode: ApplyNextGeneration},
 		{Path: "tools.todo_update.enabled", Kind: KindBool, ApplyMode: ApplyNextGeneration},
 		{Path: "tools.plan_create.enabled", Kind: KindBool, ApplyMode: ApplyNextGeneration},
+		{Path: "tools.tool_search.enabled", Kind: KindBool, ApplyMode: ApplyNextGeneration},
+		{Path: "tools.tool_search.always_loaded", Kind: KindStringList, ApplyMode: ApplyNextGeneration},
 		{Path: "tools.plan_create.max_steps", Kind: KindInt, ApplyMode: ApplyNextGeneration, Min: &one},
 		{Path: "tools.image_generate.enabled", Kind: KindBool, ApplyMode: ApplyNextGeneration},
 		{Path: "tools.image_edit.enabled", Kind: KindBool, ApplyMode: ApplyNextGeneration},

@@ -573,6 +573,10 @@ func runAwarenessTask(ctx context.Context, d Dependencies, opts awarenessTaskOpt
 		PersonaDir:    d.RuntimePaths.PersonaDir,
 	})
 	// Heartbeat and cron tasks may load $mcp_<name> servers too, for this run only.
+	registeredBefore := make(map[string]bool)
+	for _, tool := range reg.All() {
+		registeredBefore[tool.Name()] = true
+	}
 	if d.LoadReferencedMCP != nil {
 		closeMCP, mcpErr := d.LoadReferencedMCP(runCtx, task, reg)
 		if mcpErr != nil {
@@ -584,6 +588,22 @@ func runAwarenessTask(ctx context.Context, d Dependencies, opts awarenessTaskOpt
 			}
 		}()
 	}
+	// Tool search applies here too; awareness runs have no conversation to remember finds.
+	var referenced []string
+	for _, tool := range reg.All() {
+		if !registeredBefore[tool.Name()] {
+			referenced = append(referenced, tool.Name())
+		}
+	}
+	toolSearchOption, closeToolSearch, searchErr := taskruntime.ToolSearchOption(reg, d.MCPServers, d.RuntimeToolsConfig.ToolSearch, referenced, opts.Logger)
+	if searchErr != nil {
+		return "", searchErr
+	}
+	defer func() {
+		if closeErr := closeToolSearch(); closeErr != nil && opts.Logger != nil {
+			opts.Logger.Warn("awareness_tool_search_close_failed", "error", closeErr.Error())
+		}
+	}()
 	promptprofile.ApplyPersonaIdentity(&promptSpec, opts.Logger, d.RuntimePaths.PersonaDir)
 	promptprofile.AppendPlanCreateGuidanceBlock(&promptSpec, reg)
 	if d.PromptAugment != nil {
@@ -610,6 +630,7 @@ func runAwarenessTask(ctx context.Context, d Dependencies, opts awarenessTaskOpt
 		agent.WithACPAgents(acpAgents),
 		agent.WithSystemPromptCacheControl(systemPromptCacheControl),
 		agent.WithGuard(opts.SharedGuard),
+		toolSearchOption,
 	)
 	final, _, err := engine.Run(runCtx, task, agent.RunOptions{
 		Model: taskModel,

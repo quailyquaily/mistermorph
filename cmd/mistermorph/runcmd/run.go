@@ -148,6 +148,7 @@ func newCLIRunPreparer(prep cliRunPreparation, deps Dependencies) (*taskruntime.
 		ToolTriggers: func(task string) map[string]bool {
 			return toolsutil.BuiltinToolTriggers(task, skillsutil.ResolveTaskSkillRefs(task, prep.skillsConfig))
 		},
+		MCPServers: mcpServers(deps.MCPHost),
 		LoadReferencedMCP: mcpLoader(deps.MCPHost, func(task string) map[string]bool {
 			return skillsutil.ResolveTaskSkillRefs(task, prep.skillsConfig)
 		}, prep.logger),
@@ -583,4 +584,11 @@ func mcpLoader(host func() *mcphost.Host, skillRefs func(string) map[string]bool
 		return nil
 	}
 	return depsutil.MCPLoader(host(), skillRefs, logger)
+}
+
+func mcpServers(host func() *mcphost.Host) []mcphost.ServerStatus {
+	if host == nil {
+		return nil
+	}
+	return host().Servers()
 }
