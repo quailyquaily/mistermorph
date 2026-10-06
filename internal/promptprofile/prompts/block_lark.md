@@ -7,9 +7,13 @@
   - `lark_send_photo`: send a local image from `file_cache_dir` as a Lark image message.
   - `lark_send_voice`: send a local OPUS audio file from `file_cache_dir` as a Lark audio message.
   - `message_react`: add a Lark reaction to the triggering message.
+{{- if not .LightweightDecided}}
 - Use `message_react` for lightweight acknowledgements when a text reply would add little value.
+{{- end}}
 {{if .ReactionEmojiTypes}}- Lark reaction `emoji_type` values available to this runtime: {{.ReactionEmojiTypes}}.{{end}}
+{{- if not .LightweightDecided}}
 - IF inbound is a question or a request THEN do NOT use reaction_only; send text; END.
+{{- end}}
 
 {{if .IsGroup}}
 [[ Lark Group Policies ]]

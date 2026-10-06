@@ -78,6 +78,8 @@ type slackJob struct {
 	Version          uint64
 	MentionUsers     []string
 	Generation       *runtimecore.RuntimeGenerationLease
+	// LightweightDecided: the decision route already chose a text reply for this message.
+	LightweightDecided bool
 }
 
 func (j slackJob) runtimeBundle(fallback *runtimecore.ChannelRuntimeBundle) *runtimecore.ChannelRuntimeBundle {

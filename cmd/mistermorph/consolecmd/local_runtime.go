@@ -2603,6 +2603,15 @@ func (r *consoleLocalRuntime) runTask(ctx context.Context, conversationKey strin
 	if reasoningEffort != "" {
 		selectedRoute = llmutil.ResolvedRouteWithReasoningEffort(selectedRoute, reasoningEffort)
 	}
+	lightweightDecided := false
+	if !projectGuide && routePurpose == "" && consoleLightweightPrecheckApplies(job, task) {
+		switch result, emoji := r.runConsoleLightweightPrecheck(ctx, generation, job, selectedRoute); result {
+		case runtimecore.PrecheckHandled:
+			return &agent.Final{Output: emoji}, nil, nil
+		case runtimecore.PrecheckText:
+			lightweightDecided = true
+		}
+	}
 	model := strings.TrimSpace(job.Model)
 	if model == "" || routePurpose == llmutil.RoutePurposeThink {
 		model = strings.TrimSpace(selectedRoute.ClientConfig.Model)
@@ -2699,6 +2708,7 @@ func (r *consoleLocalRuntime) runTask(ctx context.Context, conversationKey strin
 		RoutePurpose:            routePurpose,
 		ReasoningEffortOverride: reasoningEffort,
 		Scene:                   "console.loop",
+		LightweightDecided:      lightweightDecided,
 		History:                 historyMsgs,
 		CurrentMessage:          currentMsg,
 		Registry:                reg,

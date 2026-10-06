@@ -42,6 +42,9 @@ func TestBootstrapChannelRuntimeReusesMainClientForSameAddressingProfile(t *test
 	if bundle.AddressingClient != bundle.TaskRuntime.BootstrapMainClient {
 		t.Fatalf("addressing client should reuse main client for same profile")
 	}
+	if bundle.LightweightPrecheck {
+		t.Fatalf("lightweight pre-check should be off when decision shares the main profile")
+	}
 	bundle.Cleanup()
 	bundle.Cleanup()
 	if created[0].closeCalls != 1 {
@@ -65,6 +68,9 @@ func TestBootstrapChannelRuntimeCreatesAddressingClientForDifferentProfile(t *te
 	}
 	if bundle.AddressingModel != "addressing-model" {
 		t.Fatalf("addressing model = %q, want %q", bundle.AddressingModel, "addressing-model")
+	}
+	if !bundle.LightweightPrecheck {
+		t.Fatalf("lightweight pre-check should be on for a separate decision profile")
 	}
 	bundle.Cleanup()
 	bundle.Cleanup()

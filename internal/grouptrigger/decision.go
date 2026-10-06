@@ -21,15 +21,17 @@ type Decision struct {
 }
 
 type Addressing struct {
-	Model          string
-	Addressed      bool
-	Confidence     float64
-	WannaInterject bool
-	Interject      float64
-	Impulse        float64
-	IsLightweight  bool
-	Reaction       string
-	Reason         string
+	Model string
+	// Confidence is how likely the message is addressed to the agent (0-1); smart mode accepts it
+	// at addressing_confidence_threshold or above.
+	Confidence float64
+	// Interject is how strongly the agent wants to join (0-1); talkative mode accepts it above
+	// addressing_interject_threshold.
+	Interject     float64
+	Impulse       float64
+	IsLightweight bool
+	Reaction      string
+	Reason        string
 }
 
 type AddressingFunc func(ctx context.Context) (Addressing, bool, error)
@@ -43,7 +45,8 @@ type DecideOptions struct {
 	AddressingFallbackReason string
 	AddressingTimeout        time.Duration
 	Addressing               AddressingFunc
-	ReactionTool             tools.Tool
+	// React delivers the chosen emoji: a native reaction, or a message where the channel has none.
+	React func(ctx context.Context, emoji string) error
 }
 
 type LLMDecisionOptions struct {
@@ -116,18 +119,15 @@ func Decide(ctx context.Context, opts DecideOptions) (Decision, bool, error) {
 
 	switch mode {
 	case "smart":
-		if llmDec.Addressed && llmDec.Confidence >= confidenceThreshold {
+		if llmDec.Confidence >= confidenceThreshold {
 			dec.UsedAddressingLLM = true
-			return finishDecision(addrCtx, dec, opts.ReactionTool)
+			return finishDecision(addrCtx, dec, opts.React)
 		}
-		dec.Reason = "not_addressed"
-		if llmDec.Addressed {
-			dec.Reason = "below_threshold"
-		}
+		dec.Reason = "below_threshold"
 	case "talkative":
-		if llmDec.WannaInterject && llmDec.Interject > interjectThreshold {
+		if llmDec.Interject > interjectThreshold {
 			dec.UsedAddressingLLM = true
-			return finishDecision(addrCtx, dec, opts.ReactionTool)
+			return finishDecision(addrCtx, dec, opts.React)
 		}
 		dec.Reason = "below_threshold"
 	}
@@ -135,17 +135,17 @@ func Decide(ctx context.Context, opts DecideOptions) (Decision, bool, error) {
 }
 
 // finishDecision applies a constrained reaction only after the response gate.
-func finishDecision(ctx context.Context, dec Decision, reactionTool tools.Tool) (Decision, bool, error) {
+func finishDecision(ctx context.Context, dec Decision, react func(context.Context, string) error) (Decision, bool, error) {
 	if err := ctx.Err(); err != nil {
 		return dec, false, err
 	}
 	if !dec.Addressing.IsLightweight {
 		return dec, true, nil
 	}
-	if reactionTool == nil || dec.Addressing.Reaction == "" {
+	if react == nil || dec.Addressing.Reaction == "" {
 		return dec, false, fmt.Errorf("reaction selected without executable reaction")
 	}
-	if _, err := reactionTool.Execute(ctx, map[string]any{"emoji": dec.Addressing.Reaction}); err != nil {
+	if err := react(ctx, dec.Addressing.Reaction); err != nil {
 		return dec, false, err
 	}
 	dec.ReactionHandled = true
@@ -168,4 +168,15 @@ func normalizeAddressing(in Addressing) Addressing {
 	in.Impulse = clamp01(in.Impulse)
 	in.Reason = strings.TrimSpace(in.Reason)
 	return in
+}
+
+// ReactWith adapts a channel's message_react tool to DecideOptions.React; nil gives nil.
+func ReactWith(tool tools.Tool) func(context.Context, string) error {
+	if tool == nil {
+		return nil
+	}
+	return func(ctx context.Context, emoji string) error {
+		_, err := tool.Execute(ctx, map[string]any{"emoji": emoji})
+		return err
+	}
 }

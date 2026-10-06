@@ -178,3 +178,25 @@ func TestParseResponseTriesAllJSONCandidatesBeforeSchemaFailure(t *testing.T) {
 		t.Fatalf("ParseResponse() = %#v, want final output done", resp)
 	}
 }
+
+func TestParseTextOnlyIgnoresLightweightClaim(t *testing.T) {
+	textOnly := parseOptions{textOnly: true}
+	resp, err := parseResponseWith(llm.Result{Text: `{"type":"final","output":"hi","is_lightweight":true}`}, textOnly)
+	if err != nil {
+		t.Fatalf("parseResponseWith() error = %v", err)
+	}
+	if resp.FinalPayload().IsLightweight {
+		t.Fatal("text-only final kept is_lightweight")
+	}
+	for _, fields := range []string{`"is_lightweight":true`, `"is_lightweight":true,"output":""`} {
+		_, err := parseResponseWith(llm.Result{Text: `{"type":"final",` + fields + `}`}, textOnly)
+		if !errors.Is(err, ErrInvalidFinal) {
+			t.Fatalf("%s: error = %v, want ErrInvalidFinal", fields, err)
+		}
+	}
+	// After a reaction the run may still end without text, as an explicitly requested reaction.
+	resp, err = parseResponseWith(llm.Result{Text: `{"type":"final","output":""}`}, parseOptions{textOnly: true, allowEmptyFinal: true})
+	if err != nil || !resp.FinalPayload().IsLightweight {
+		t.Fatalf("after reaction: resp = %+v, err = %v", resp, err)
+	}
+}

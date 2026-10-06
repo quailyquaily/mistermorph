@@ -61,6 +61,8 @@ type dmJob struct {
 	SentAt           time.Time
 	Version          uint64
 	Generation       *runtimecore.RuntimeGenerationLease
+	// LightweightDecided: the decision route already chose a text reply for this message.
+	LightweightDecided bool
 }
 
 func (j dmJob) runtimeBundle() *runtimecore.ChannelRuntimeBundle {
@@ -187,6 +189,7 @@ func runTask(ctx context.Context, rt *taskruntime.Runtime, env taskEnv, j dmJob,
 		RoutePurpose:            routePurpose,
 		ReasoningEffortOverride: reasoningEffort,
 		Scene:                   string(env.channel) + ".loop",
+		LightweightDecided:      j.LightweightDecided,
 		History:                 chathistory.RenderHistoryMessages(checkpoint.History),
 		CurrentMessage:          &current,
 		Meta:                    meta,

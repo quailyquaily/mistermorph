@@ -436,6 +436,37 @@ func runMixinLoop(ctx context.Context, d Dependencies, opts RunOptions) error {
 				return err
 			}
 		}
+		// Mixin has no reactions, so an emoji reply is sent as a message.
+		lightweightDecided := false
+		if !chatcommands.IsContextCompactCommand(text) && runtimecore.LightweightPrecheckApplies(text, len(inbound.ImageAttachments) > 0) {
+			if lease, captureErr := generations.Capture(); captureErr == nil {
+				stateMu.Lock()
+				historySnapshot := append([]chathistory.ChatHistoryItem(nil), history[conversationKey]...)
+				stateMu.Unlock()
+				result, emoji := runtimecore.RunLightweightPrecheck(llmstats.WithRunID(handlerCtx, mixinTaskID(inbound.ConversationID, inbound.MessageID)), lease.Bundle(), runtimecore.LightweightPrecheckRequest{
+					Scene:          "mixin.lightweight_decision",
+					PersonaDir:     d.RuntimePaths.PersonaDir,
+					CurrentMessage: map[string]any{"conversation_id": inbound.ConversationID, "chat_type": inbound.ChatType, "user_id": inbound.FromUserID, "text": text},
+					History:        chathistory.BuildMessages(chathistory.ChannelMixin, historySnapshot),
+					Logger:         logger,
+					Deliver: func(sendCtx context.Context, emoji string) error {
+						_, err := publishMixinBusOutbound(sendCtx, bus, inbound.ConversationID, mixinReplyRecipient(inbound.ChatType, inbound.FromUserID), emoji, inbound.MessageID, "mixin:lightweight:"+inbound.MessageID)
+						return err
+					},
+				})
+				lease.Release()
+				switch result {
+				case runtimecore.PrecheckHandled:
+					job := mixinJobFromInbound(inbound)
+					stateMu.Lock()
+					history[conversationKey] = trimMixinHistory(append(history[conversationKey], newMixinInboundHistoryItem(job), newMixinOutboundHistoryItem(job, emoji, time.Now().UTC())))
+					stateMu.Unlock()
+					return nil
+				case runtimecore.PrecheckText:
+					lightweightDecided = true
+				}
+			}
+		}
 		resolution, err := workspace.Resolve(workspaceStore, conversationKey, d.DefaultWorkspaceDir)
 		if err != nil {
 			return err
@@ -466,6 +497,7 @@ func runMixinLoop(ctx context.Context, d Dependencies, opts RunOptions) error {
 				Text: text, ImagePaths: imagePaths, Images: append([]chathistory.ChatHistoryImage(nil), images...),
 				WorkspaceDir: resolution.WorkspaceDir, FileCacheDir: opts.FileCacheDir, Route: &admittedRoute, SentAt: inbound.SentAt,
 				Version: version, MentionUsers: append([]string(nil), inbound.MentionUserIDs...), EventID: inbound.MessageID, Generation: generation,
+				LightweightDecided: lightweightDecided,
 			}
 		}
 		createdAt := inbound.SentAt.UTC()

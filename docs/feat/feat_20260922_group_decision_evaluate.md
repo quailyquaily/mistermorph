@@ -6,6 +6,13 @@ status: implemented-v1
 
 # 群聊回应判断接入 Evaluate 与 decision 路由
 
+> **Update (2026-10-06):** The questions below have changed.
+>
+> - `addressed` and `wanna_interject` are gone. `smart` accepts on `confidence >= addressing_confidence_threshold` alone, and `talkative` on `interject > addressing_interject_threshold` alone, so the configured thresholds are the only gate. `confidence` now means how likely the message is addressed to the agent, not how sure the judgment is.
+> - `response` is split into `reply` (`text` or `emoji`) and `emoji` (which one). As one choice, the many emoji options outweighed `text`, and the Jev evaluator chose an emoji almost every time. Without emojis, neither question is asked.
+>
+> See [Lightweight reply pre-check](feat_20261006_lightweight_precheck.md).
+
 ## 目标
 
 把群聊回应判断从 Chat 加手写 JSON 解析，改为 uniai `Client.Evaluate`。新增 `llm.routes.decision`，为判断任务选择模型配置；不配置时使用顶层默认 LLM。

@@ -66,6 +66,8 @@ type discordJob struct {
 	// FromInteraction marks a slash command; MessageID is then its interaction ID.
 	FromInteraction bool
 	Generation      *runtimecore.RuntimeGenerationLease
+	// LightweightDecided: the decision route already chose a text reply for this message.
+	LightweightDecided bool
 }
 
 func (j discordJob) runtimeBundle() *runtimecore.ChannelRuntimeBundle {
@@ -215,6 +217,7 @@ func runDiscordTask(ctx context.Context, rt *taskruntime.Runtime, env discordTas
 		RoutePurpose:            routePurpose,
 		ReasoningEffortOverride: reasoningEffort,
 		Scene:                   "discord.loop",
+		LightweightDecided:      job.LightweightDecided,
 		History:                 historyMessages,
 		CurrentMessage:          currentMessage,
 		Meta:                    meta,

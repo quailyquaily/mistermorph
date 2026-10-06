@@ -517,6 +517,9 @@ func runDiscordLoop(ctx context.Context, d Dependencies, opts RunOptions) error 
 			generation.Release()
 			return fmt.Errorf("discord runtime generation is unavailable")
 		}
+		// lightweightDecided: a decision-route check chose text, so the run skips the lightweight
+		// rules and the pre-check below does not run again.
+		lightweightDecided := false
 		if isGroup && !compactOnly {
 			stateMu.Lock()
 			historySnapshot := append([]chathistory.ChatHistoryItem(nil), history[conversationKey]...)
@@ -548,6 +551,43 @@ func runDiscordLoop(ctx context.Context, d Dependencies, opts RunOptions) error 
 				appendHistory(conversationKey, items...)
 				return nil
 			}
+			lightweightDecided = decision.UsedAddressingLLM && bundle.LightweightPrecheck
+		}
+		// A slash command needs a reply to fill its placeholder, so it is never answered by a reaction.
+		if !lightweightDecided && !compactOnly && !fromInteraction && runtimecore.LightweightPrecheckApplies(text, len(inbound.ImageAttachments) > 0) {
+			stateMu.Lock()
+			historySnapshot := append([]chathistory.ChatHistoryItem(nil), history[conversationKey]...)
+			stateMu.Unlock()
+			reactTool := discordtools.NewReactTool(discordToolAPI{api: api}, inbound.ChannelID, inbound.MessageID)
+			result, emoji := runtimecore.RunLightweightPrecheck(llmstats.WithRunID(handlerCtx, taskID), bundle, runtimecore.LightweightPrecheckRequest{
+				Scene:      "discord.lightweight_decision",
+				PersonaDir: d.RuntimePaths.PersonaDir,
+				CurrentMessage: map[string]any{
+					"guild_id":      inbound.GuildID,
+					"channel_id":    inbound.ChannelID,
+					"chat_type":     inbound.ChatType,
+					"message_id":    inbound.MessageID,
+					"user_id":       inbound.UserID,
+					"text":          inbound.Text,
+					"mention_users": append([]string(nil), inbound.MentionUserIDs...),
+				},
+				History: chathistory.BuildMessages(chathistory.ChannelDiscord, historySnapshot),
+				Emojis:  strings.Split(discordReactionEmojis, ","),
+				Logger:  logger,
+				Deliver: func(ctx context.Context, emoji string) error {
+					_, err := reactTool.Execute(ctx, map[string]any{"emoji": emoji})
+					return err
+				},
+			})
+			switch result {
+			case runtimecore.PrecheckHandled:
+				generation.Release()
+				job := discordJobFromInbound(inbound)
+				appendHistory(conversationKey, newDiscordInboundHistoryItem(job), newDiscordOutboundHistoryItem(job, botName, "[reacted: "+emoji+"]", time.Now().UTC()))
+				return nil
+			case runtimecore.PrecheckText:
+				lightweightDecided = true
+			}
 		}
 		resolution, err := workspace.Resolve(workspaceStore, conversationKey, d.DefaultWorkspaceDir)
 		if err != nil {
@@ -573,6 +613,7 @@ func runDiscordLoop(ctx context.Context, d Dependencies, opts RunOptions) error 
 			job.Version = version
 			job.Generation = generation
 			job.FromInteraction = fromInteraction
+			job.LightweightDecided = lightweightDecided
 			return job
 		}
 		createdAt := inbound.SentAt.UTC()

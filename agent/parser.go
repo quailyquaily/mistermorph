@@ -24,12 +24,23 @@ func ParseResponse(result llm.Result) (*AgentResponse, error) {
 // lightweight one: after a reaction in the same run, an empty final means the reaction was the
 // whole reply.
 func parseResponse(result llm.Result, allowEmptyFinal bool) (*AgentResponse, error) {
+	return parseResponseWith(result, parseOptions{allowEmptyFinal: allowEmptyFinal})
+}
+
+type parseOptions struct {
+	allowEmptyFinal bool
+	// textOnly ignores a final's is_lightweight claim: the run must reply with text unless it has
+	// already reacted (allowEmptyFinal).
+	textOnly bool
+}
+
+func parseResponseWith(result llm.Result, opts parseOptions) (*AgentResponse, error) {
 	var lastErr error
 
 	if result.JSON != nil {
 		data, err := json.Marshal(result.JSON)
 		if err == nil {
-			resp, err := unmarshalAndValidate(data, allowEmptyFinal)
+			resp, err := unmarshalAndValidate(data, opts)
 			if err == nil {
 				return resp, nil
 			}
@@ -47,7 +58,7 @@ func parseResponse(result llm.Result, allowEmptyFinal bool) (*AgentResponse, err
 
 	if candidates, err := jsonutil.FindJSONCandidates(text); err == nil {
 		for _, data := range candidates {
-			resp, err := unmarshalAndValidate(data, allowEmptyFinal)
+			resp, err := unmarshalAndValidate(data, opts)
 			if err == nil {
 				return resp, nil
 			}
@@ -63,7 +74,7 @@ func parseResponse(result llm.Result, allowEmptyFinal bool) (*AgentResponse, err
 	return nil, ErrParseFailure
 }
 
-func unmarshalAndValidate(data []byte, allowEmptyFinal bool) (*AgentResponse, error) {
+func unmarshalAndValidate(data []byte, opts parseOptions) (*AgentResponse, error) {
 	var resp AgentResponse
 	if err := json.Unmarshal(data, &resp); err != nil {
 		return nil, err
@@ -92,7 +103,7 @@ func unmarshalAndValidate(data []byte, allowEmptyFinal bool) (*AgentResponse, er
 		}
 	}
 
-	return validate(&resp, allowEmptyFinal)
+	return validate(&resp, opts)
 }
 
 func rawResponsePayload(data []byte) (json.RawMessage, error) {
@@ -104,7 +115,7 @@ func rawResponsePayload(data []byte) (json.RawMessage, error) {
 	return json.Marshal(payload)
 }
 
-func validate(resp *AgentResponse, allowEmptyFinal bool) (*AgentResponse, error) {
+func validate(resp *AgentResponse, opts parseOptions) (*AgentResponse, error) {
 	switch resp.Type {
 	case TypeToolCall:
 		return nil, ErrInvalidToolCall
@@ -117,8 +128,11 @@ func validate(resp *AgentResponse, allowEmptyFinal bool) (*AgentResponse, error)
 		if final == nil {
 			return nil, ErrInvalidFinal
 		}
+		if opts.textOnly && !opts.allowEmptyFinal {
+			final.IsLightweight = false
+		}
 		if !final.IsLightweight && finalOutputEmpty(final.Output) {
-			if !allowEmptyFinal {
+			if !opts.allowEmptyFinal {
 				return nil, ErrInvalidFinal
 			}
 			final.IsLightweight = true

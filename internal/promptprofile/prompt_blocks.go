@@ -106,14 +106,18 @@ var discordRuntimePromptBlockTemplate = prompttmpl.MustParse(
 )
 
 type telegramRuntimePromptBlockData struct {
-	IsGroup bool
+	IsGroup            bool
+	LightweightDecided bool
 }
 
 type slackRuntimePromptBlockData struct {
-	IsGroup bool
+	IsGroup            bool
+	LightweightDecided bool
 }
 
-type consoleRuntimePromptBlockData struct{}
+type consoleRuntimePromptBlockData struct {
+	LightweightDecided bool
+}
 
 type lineRuntimePromptBlockData struct {
 	IsGroup bool
@@ -122,6 +126,7 @@ type lineRuntimePromptBlockData struct {
 type larkRuntimePromptBlockData struct {
 	IsGroup            bool
 	ReactionEmojiTypes string
+	LightweightDecided bool
 }
 
 type mixinRuntimePromptBlockData struct {
@@ -129,7 +134,8 @@ type mixinRuntimePromptBlockData struct {
 }
 
 type discordRuntimePromptBlockData struct {
-	IsGroup bool
+	IsGroup            bool
+	LightweightDecided bool
 }
 
 type groupUsernamesPromptBlockData struct {
@@ -205,7 +211,8 @@ func AppendWakeSignalBlock(spec *agent.PromptSpec, input awarenessdomain.PokeInp
 
 func AppendTelegramRuntimeBlocks(spec *agent.PromptSpec, isGroup bool, mentionUsers []string) {
 	content, err := prompttmpl.Render(telegramRuntimePromptBlockTemplate, telegramRuntimePromptBlockData{
-		IsGroup: isGroup,
+		IsGroup:            isGroup,
+		LightweightDecided: spec.LightweightDecided,
 	})
 	if err == nil {
 		content = strings.TrimSpace(content)
@@ -238,7 +245,8 @@ func AppendTelegramRuntimeBlocks(spec *agent.PromptSpec, isGroup bool, mentionUs
 
 func AppendSlackRuntimeBlocks(spec *agent.PromptSpec, isGroup bool, mentionUsers []string) {
 	content, err := prompttmpl.Render(slackRuntimePromptBlockTemplate, slackRuntimePromptBlockData{
-		IsGroup: isGroup,
+		IsGroup:            isGroup,
+		LightweightDecided: spec.LightweightDecided,
 	})
 	if err == nil {
 		content = strings.TrimSpace(content)
@@ -268,7 +276,9 @@ func AppendSlackRuntimeBlocks(spec *agent.PromptSpec, isGroup bool, mentionUsers
 }
 
 func AppendConsoleRuntimeBlocks(spec *agent.PromptSpec) {
-	content, err := prompttmpl.Render(consoleRuntimePromptBlockTemplate, consoleRuntimePromptBlockData{})
+	content, err := prompttmpl.Render(consoleRuntimePromptBlockTemplate, consoleRuntimePromptBlockData{
+		LightweightDecided: spec.LightweightDecided,
+	})
 	if err != nil {
 		return
 	}
@@ -301,6 +311,7 @@ func AppendLarkRuntimeBlocks(spec *agent.PromptSpec, isGroup bool, reactionEmoji
 	content, err := prompttmpl.Render(larkRuntimePromptBlockTemplate, larkRuntimePromptBlockData{
 		IsGroup:            isGroup,
 		ReactionEmojiTypes: strings.TrimSpace(reactionEmojiTypes),
+		LightweightDecided: spec.LightweightDecided,
 	})
 	if err != nil {
 		return
@@ -326,7 +337,10 @@ func AppendMixinRuntimeBlocks(spec *agent.PromptSpec, isGroup bool) {
 }
 
 func AppendDiscordRuntimeBlocks(spec *agent.PromptSpec, isGroup bool) {
-	content, err := prompttmpl.Render(discordRuntimePromptBlockTemplate, discordRuntimePromptBlockData{IsGroup: isGroup})
+	content, err := prompttmpl.Render(discordRuntimePromptBlockTemplate, discordRuntimePromptBlockData{
+		IsGroup:            isGroup,
+		LightweightDecided: spec.LightweightDecided,
+	})
 	if err != nil {
 		return
 	}

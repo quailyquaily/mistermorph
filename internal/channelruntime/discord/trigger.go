@@ -48,7 +48,7 @@ func decideDiscordGroupTrigger(ctx context.Context, opts discordTriggerOptions, 
 		ExplicitMatched:          addressed,
 		AddressingFallbackReason: opts.Mode,
 		AddressingTimeout:        opts.Timeout,
-		ReactionTool:             reactionTool,
+		React:                    grouptrigger.ReactWith(reactionTool),
 		Addressing: func(addrCtx context.Context) (grouptrigger.Addressing, bool, error) {
 			return discordAddressingDecisionViaLLM(addrCtx, opts, inbound, history, reactionTool)
 		},

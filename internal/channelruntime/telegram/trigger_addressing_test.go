@@ -20,22 +20,29 @@ func (s *stubAddressingLLMClient) Chat(context.Context, llm.Request) (llm.Result
 }
 func (s *stubAddressingLLMClient) Evaluate(_ context.Context, req llm.EvaluateRequest) (*llm.EvaluateResult, error) {
 	s.calls = append(s.calls, req)
-	yes := true
 	score := 9.0
-	selected := s.response
-	if selected == "" {
-		for key, value := range req.Questions["response"].Options {
-			if value == "🤨" {
-				selected = key
+	confidence := 0.0
+	if s.addressed {
+		confidence = 9
+	}
+	answers := map[string]llm.Answer{
+		"confidence": {Kind: llm.Score, ScoreValue: &confidence}, "interject": {Kind: llm.Score, ScoreValue: &score}, "impulse": {Kind: llm.Score, ScoreValue: &score},
+	}
+	if _, ok := req.Questions["reply"]; ok {
+		// An empty response means: reply with the 🤨 emoji.
+		reply, emoji := s.response, "emoji_0"
+		if reply == "" {
+			reply = "emoji"
+			for key, value := range req.Questions["emoji"].Options {
+				if value == "🤨" {
+					emoji = key
+				}
 			}
 		}
+		answers["reply"] = llm.Answer{Kind: llm.Choice, Selected: reply}
+		answers["emoji"] = llm.Answer{Kind: llm.Choice, Selected: emoji}
 	}
-	return &llm.EvaluateResult{Emulated: true, Answers: map[string]llm.Answer{
-		"addressed":       {Kind: llm.Boolean, BooleanValue: &s.addressed},
-		"wanna_interject": {Kind: llm.Boolean, BooleanValue: &yes},
-		"confidence":      {Kind: llm.Score, ScoreValue: &score}, "interject": {Kind: llm.Score, ScoreValue: &score}, "impulse": {Kind: llm.Score, ScoreValue: &score},
-		"response": {Kind: llm.Choice, Selected: selected},
-	}}, nil
+	return &llm.EvaluateResult{Emulated: true, Answers: answers}, nil
 }
 
 type stubAddressingTool struct {
@@ -78,12 +85,12 @@ func TestAddressingEvaluationReactionAvailability(t *testing.T) {
 			if err != nil || !ok || got.IsLightweight || len(client.calls) != 1 {
 				t.Fatalf("got=%+v ok=%v err=%v calls=%d", got, ok, err, len(client.calls))
 			}
-			options := client.calls[0].Questions["response"].Options
-			if !enabled && len(options) != 1 {
-				t.Fatalf("reaction offered without a tool: %v", options)
+			questions := client.calls[0].Questions
+			if _, offered := questions["reply"]; offered != enabled {
+				t.Fatalf("reply question offered = %v with tool = %v", offered, enabled)
 			}
-			if enabled && options["reaction_0"] != "👍" {
-				t.Fatalf("missing first allowed reaction: %v", options)
+			if enabled && questions["emoji"].Options["emoji_0"] != "👍" {
+				t.Fatalf("missing first allowed reaction: %v", questions["emoji"].Options)
 			}
 		})
 	}

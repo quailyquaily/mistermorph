@@ -175,6 +175,17 @@ func (s *slackRuntimeState) enqueueInbound(ctx context.Context, msg busruntime.B
 			return publishErr
 		}
 	}
+	// A group message the decision route already judged arrives decided; others addressed to the
+	// bot may be pre-checked here, after steering, so a message to a running task still steers it.
+	lightweightDecided := inbound.LightweightDecided
+	if !lightweightDecided && !contextCompactionOnly && runtimecore.LightweightPrecheckApplies(text, len(inbound.ImageAttachments) > 0) {
+		switch s.runLightweightPrecheck(ctx, inbound, historyScopeKey) {
+		case runtimecore.PrecheckHandled:
+			return nil
+		case runtimecore.PrecheckText:
+			lightweightDecided = true
+		}
+	}
 	workspaceResolution, err := workspace.Resolve(s.workspaceStore, msg.ConversationKey, s.dependencies.DefaultWorkspaceDir)
 	if err != nil {
 		return err
@@ -200,26 +211,27 @@ func (s *slackRuntimeState) enqueueInbound(ctx context.Context, msg busruntime.B
 	buildJob := func(version uint64) slackJob {
 		admittedRoute := taskRoute
 		return slackJob{
-			TaskID:          jobTaskID,
-			ConversationKey: msg.ConversationKey,
-			TeamID:          inbound.TeamID,
-			ChannelID:       inbound.ChannelID,
-			ChatType:        inbound.ChatType,
-			MessageTS:       inbound.MessageTS,
-			ThreadTS:        inbound.ThreadTS,
-			UserID:          inbound.UserID,
-			Username:        inbound.Username,
-			DisplayName:     inbound.DisplayName,
-			FromIsAgent:     inbound.FromIsAgent,
-			Text:            text,
-			ImagePaths:      imagePaths,
-			Images:          append([]chathistory.ChatHistoryImage(nil), images...),
-			WorkspaceDir:    workspaceDir,
-			Route:           &admittedRoute,
-			SentAt:          inbound.SentAt,
-			Version:         version,
-			MentionUsers:    append([]string(nil), inbound.MentionUsers...),
-			Generation:      generationLease,
+			TaskID:             jobTaskID,
+			ConversationKey:    msg.ConversationKey,
+			TeamID:             inbound.TeamID,
+			ChannelID:          inbound.ChannelID,
+			ChatType:           inbound.ChatType,
+			MessageTS:          inbound.MessageTS,
+			ThreadTS:           inbound.ThreadTS,
+			UserID:             inbound.UserID,
+			Username:           inbound.Username,
+			DisplayName:        inbound.DisplayName,
+			FromIsAgent:        inbound.FromIsAgent,
+			Text:               text,
+			ImagePaths:         imagePaths,
+			Images:             append([]chathistory.ChatHistoryImage(nil), images...),
+			WorkspaceDir:       workspaceDir,
+			Route:              &admittedRoute,
+			SentAt:             inbound.SentAt,
+			Version:            version,
+			MentionUsers:       append([]string(nil), inbound.MentionUsers...),
+			Generation:         generationLease,
+			LightweightDecided: lightweightDecided,
 		}
 	}
 	if s.taskStore != nil {
@@ -583,6 +595,7 @@ func (s *slackRuntimeState) handleSocketEnvelope(ctx context.Context, envelope s
 		event.Text = normalizedCommandText
 	}
 
+	lightweightDecided := false
 	if isGroup && !contextCompactionOnly {
 		s.mu.Lock()
 		historySnapshot := append([]chathistory.ChatHistoryItem(nil), s.history[historyScopeKey]...)
@@ -653,9 +666,7 @@ func (s *slackRuntimeState) handleSocketEnvelope(ctx context.Context, envelope s
 				"image_file_count", len(event.ImageFiles),
 				"llm_attempted", decision.AddressingLLMAttempted,
 				"llm_ok", decision.AddressingLLMOK,
-				"llm_addressed", decision.Addressing.Addressed,
 				"confidence", decision.Addressing.Confidence,
-				"wanna_interject", decision.Addressing.WannaInterject,
 				"interject", decision.Addressing.Interject,
 				"impulse", decision.Addressing.Impulse,
 				"is_lightweight", decision.Addressing.IsLightweight,
@@ -683,6 +694,7 @@ func (s *slackRuntimeState) handleSocketEnvelope(ctx context.Context, envelope s
 			s.appendIgnoredInboundHistory(event)
 			return nil
 		}
+		lightweightDecided = decision.UsedAddressingLLM && runtimeBundle.LightweightPrecheck
 		event.ThreadTS = quoteReplyThreadTSForGroupTrigger(event, decision)
 	}
 	workspaceResolution, err := workspace.Resolve(s.workspaceStore, conversationKey, s.dependencies.DefaultWorkspaceDir)
@@ -725,20 +737,21 @@ func (s *slackRuntimeState) handleSocketEnvelope(ctx context.Context, envelope s
 	}
 
 	accepted, err := s.inboundAdapter.HandleInboundMessage(ctx, slackbus.InboundMessage{
-		TeamID:           event.TeamID,
-		ChannelID:        event.ChannelID,
-		ChatType:         event.ChatType,
-		MessageTS:        event.MessageTS,
-		ThreadTS:         event.ThreadTS,
-		UserID:           event.UserID,
-		Username:         event.Username,
-		DisplayName:      event.DisplayName,
-		FromIsAgent:      event.IsAgent,
-		Text:             event.Text,
-		SentAt:           event.SentAt,
-		MentionUsers:     append([]string(nil), event.MentionUsers...),
-		EventID:          event.EventID,
-		ImageAttachments: append([]busruntime.ImageAttachment(nil), event.ImageAttachments...),
+		TeamID:             event.TeamID,
+		ChannelID:          event.ChannelID,
+		ChatType:           event.ChatType,
+		MessageTS:          event.MessageTS,
+		ThreadTS:           event.ThreadTS,
+		UserID:             event.UserID,
+		Username:           event.Username,
+		DisplayName:        event.DisplayName,
+		FromIsAgent:        event.IsAgent,
+		Text:               event.Text,
+		SentAt:             event.SentAt,
+		MentionUsers:       append([]string(nil), event.MentionUsers...),
+		EventID:            event.EventID,
+		ImageAttachments:   append([]busruntime.ImageAttachment(nil), event.ImageAttachments...),
+		LightweightDecided: lightweightDecided,
 	})
 	if err != nil {
 		s.logger.Warn("slack_bus_publish_error", "channel_id", event.ChannelID, "message_ts", event.MessageTS, "bus_error_code", string(busruntime.ErrorCodeOf(err)), "error", err.Error())

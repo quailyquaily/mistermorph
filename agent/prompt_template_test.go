@@ -120,3 +120,29 @@ func TestAvailableShellToolNames(t *testing.T) {
 		t.Fatalf("availableShellToolNames() = %v, want [bash powershell]", gotNames)
 	}
 }
+
+func TestBuildSystemPrompt_LightweightDecidedOmitsLightweightRules(t *testing.T) {
+	lightweightLines := []string{`"is_lightweight"`, `"reaction"`, "A lightweight acknowledgement", "IF `is_lightweight` is true"}
+
+	defaultPrompt := BuildSystemPrompt(nil, DefaultPromptSpec())
+	for _, line := range lightweightLines {
+		if !strings.Contains(defaultPrompt, line) {
+			t.Fatalf("default prompt missing %q", line)
+		}
+	}
+
+	spec := DefaultPromptSpec()
+	spec.LightweightDecided = true
+	decided := BuildSystemPrompt(nil, spec)
+	for _, line := range lightweightLines {
+		if strings.Contains(decided, line) {
+			t.Fatalf("decided prompt still contains %q", line)
+		}
+	}
+	if !strings.Contains(decided, "Use `message_react` only when the user explicitly asks for a reaction.") {
+		t.Fatalf("decided prompt missing the explicit-reaction rule: %s", decided)
+	}
+	if !strings.Contains(decided, "IF `type` is `final` THEN use the `output` as the response") {
+		t.Fatalf("decided prompt dropped the other response rules: %s", decided)
+	}
+}

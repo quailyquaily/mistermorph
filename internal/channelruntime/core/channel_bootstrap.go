@@ -30,8 +30,11 @@ type ChannelRuntimeBundle struct {
 	AddressingRoute  llmutil.ResolvedRoute
 	AddressingClient llm.Client
 	AddressingModel  string
-	Cleanup          func()
-	done             <-chan struct{}
+	// LightweightPrecheck is true when the decision route uses its own profile, so asking it
+	// whether a message needs only an emoji is quicker than a main-loop turn.
+	LightweightPrecheck bool
+	Cleanup             func()
+	done                <-chan struct{}
 }
 
 func BootstrapChannelRuntime(ctx context.Context, d depsutil.CommonDependencies, opts ChannelBootstrapOptions) (ChannelRuntimeBundle, error) {
@@ -124,12 +127,13 @@ func BootstrapChannelRuntime(ctx context.Context, d depsutil.CommonDependencies,
 		})
 	}
 	return ChannelRuntimeBundle{
-		TaskRuntime:      execRuntime,
-		AddressingRoute:  addressingRoute,
-		AddressingClient: addressingClient,
-		AddressingModel:  strings.TrimSpace(addressingRoute.ClientConfig.Model),
-		Cleanup:          cleanup,
-		done:             generationCtx.Done(),
+		TaskRuntime:         execRuntime,
+		AddressingRoute:     addressingRoute,
+		AddressingClient:    addressingClient,
+		AddressingModel:     strings.TrimSpace(addressingRoute.ClientConfig.Model),
+		LightweightPrecheck: !addressingRoute.SameProfile(mainRoute),
+		Cleanup:             cleanup,
+		done:                generationCtx.Done(),
 	}, nil
 }
 

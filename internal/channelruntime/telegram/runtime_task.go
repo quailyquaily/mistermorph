@@ -158,6 +158,7 @@ func runTelegramTask(ctx context.Context, rt *taskruntime.Runtime, api *telegram
 		RoutePurpose:            routePurpose,
 		ReasoningEffortOverride: reasoningEffort,
 		Scene:                   "telegram.loop",
+		LightweightDecided:      job.LightweightDecided,
 		History:                 llmHistory,
 		Meta:                    meta,
 		CurrentMessage:          currentMsg,

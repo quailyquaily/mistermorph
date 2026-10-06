@@ -97,6 +97,8 @@ type mixinJob struct {
 	MentionUsers     []string
 	EventID          string
 	Generation       *runtimecore.RuntimeGenerationLease
+	// LightweightDecided: the decision route already chose a text reply for this message.
+	LightweightDecided bool
 }
 
 func (j mixinJob) runtimeBundle() *runtimecore.ChannelRuntimeBundle {
@@ -182,6 +184,7 @@ func runMixinTask(ctx context.Context, rt *taskruntime.Runtime, toolAPI mixintoo
 		RoutePurpose:            routePurpose,
 		ReasoningEffortOverride: reasoningEffort,
 		Scene:                   "mixin.loop",
+		LightweightDecided:      job.LightweightDecided,
 		History:                 llmHistory,
 		CurrentMessage:          currentMessage,
 		Meta:                    meta,

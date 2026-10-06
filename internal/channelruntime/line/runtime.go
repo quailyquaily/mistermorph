@@ -54,6 +54,8 @@ type lineJob struct {
 	MentionUsers    []string
 	EventID         string
 	Generation      *runtimecore.RuntimeGenerationLease
+	// LightweightDecided: the decision route already chose a text reply for this message.
+	LightweightDecided bool
 }
 
 func (j lineJob) runtimeBundle() *runtimecore.ChannelRuntimeBundle {
@@ -444,6 +446,26 @@ func runLineLoop(ctx context.Context, d Dependencies, opts RunOptions) error {
 		if handledCommand, cmdErr := maybeHandleLineCommand(ctx, d, inprocBus, workspaceStore, msg.ConversationKey, inbound, currentSkills); handledCommand {
 			return cmdErr
 		}
+		// lightweightDecided: a decision-route check chose text, so the run skips the lightweight
+		// rules and the pre-check below does not run again.
+		lightweightDecided := false
+		// LINE has no reactions, so an emoji reply is sent as a message.
+		sentEmoji := ""
+		sendEmoji := func(sendCtx context.Context, emoji string) error {
+			correlationID := fmt.Sprintf("line:lightweight:%s:%s", inbound.ChatID, inbound.MessageID)
+			if _, err := publishLineBusOutbound(sendCtx, inprocBus, inbound.ChatID, emoji, inbound.ReplyToken, correlationID); err != nil {
+				return err
+			}
+			sentEmoji = emoji
+			return nil
+		}
+		appendLightweightHistory := func() {
+			job := lineJobFromInbound(inbound)
+			mu.Lock()
+			cur := append(history[msg.ConversationKey], newLineInboundHistoryItem(job), newLineOutboundAgentHistoryItem(job, sentEmoji, time.Now().UTC()))
+			history[msg.ConversationKey] = trimChatHistoryItems(cur, lineHistoryCapForMode(groupTriggerMode))
+			mu.Unlock()
+		}
 		if !contextCompactionOnly && strings.EqualFold(strings.TrimSpace(inbound.ChatType), "group") {
 			mu.Lock()
 			historySnapshot := append([]chathistory.ChatHistoryItem(nil), history[msg.ConversationKey]...)
@@ -475,6 +497,7 @@ func runLineLoop(ctx context.Context, d Dependencies, opts RunOptions) error {
 				addressingConfidenceThreshold,
 				addressingInterjectThreshold,
 				historySnapshot,
+				sendEmoji,
 				d.RuntimePaths.PersonaDir,
 			)
 			addressingLease.Release()
@@ -491,9 +514,7 @@ func runLineLoop(ctx context.Context, d Dependencies, opts RunOptions) error {
 					"text_len", len(text),
 					"llm_attempted", dec.AddressingLLMAttempted,
 					"llm_ok", dec.AddressingLLMOK,
-					"llm_addressed", dec.Addressing.Addressed,
 					"confidence", dec.Addressing.Confidence,
-					"wanna_interject", dec.Addressing.WannaInterject,
 					"interject", dec.Addressing.Interject,
 					"impulse", dec.Addressing.Impulse,
 					"is_lightweight", dec.Addressing.IsLightweight,
@@ -525,12 +546,15 @@ func runLineLoop(ctx context.Context, d Dependencies, opts RunOptions) error {
 				}
 				return nil
 			}
+			if dec.ReactionHandled {
+				appendLightweightHistory()
+				return nil
+			}
+			lightweightDecided = dec.UsedAddressingLLM && addressingBundle.LightweightPrecheck
 			logger.Info("line_group_trigger",
 				"chat_id", inbound.ChatID,
 				"reason", dec.Reason,
-				"llm_addressed", dec.Addressing.Addressed,
 				"confidence", dec.Addressing.Confidence,
-				"wanna_interject", dec.Addressing.WannaInterject,
 				"interject", dec.Addressing.Interject,
 				"impulse", dec.Addressing.Impulse,
 				"is_lightweight", dec.Addressing.IsLightweight,
@@ -541,6 +565,36 @@ func runLineLoop(ctx context.Context, d Dependencies, opts RunOptions) error {
 				correlationID := fmt.Sprintf("line:steer:%s:%s", inbound.ChatID, inbound.MessageID)
 				_, publishErr := publishLineBusOutbound(ctx, inprocBus, inbound.ChatID, runtimecontrol.SteerFeedback(result.Found, result.Queued), inbound.ReplyToken, correlationID)
 				return publishErr
+			}
+		}
+		if !lightweightDecided && !contextCompactionOnly && runtimecore.LightweightPrecheckApplies(text, inbound.ImagePending || len(inbound.ImageAttachments) > 0) {
+			mu.Lock()
+			historySnapshot := append([]chathistory.ChatHistoryItem(nil), history[msg.ConversationKey]...)
+			mu.Unlock()
+			if lease, captureErr := runtimeGenerations.Capture(); captureErr == nil {
+				result, _ := runtimecore.RunLightweightPrecheck(llmstats.WithMetadata(ctx, lineTaskID(inbound.ChatID, inbound.MessageID), inbound.EventID), lease.Bundle(), runtimecore.LightweightPrecheckRequest{
+					Scene:      "line.lightweight_decision",
+					PersonaDir: d.RuntimePaths.PersonaDir,
+					CurrentMessage: map[string]any{
+						"chat_id":       strings.TrimSpace(inbound.ChatID),
+						"chat_type":     strings.TrimSpace(inbound.ChatType),
+						"message_id":    strings.TrimSpace(inbound.MessageID),
+						"from_user_id":  strings.TrimSpace(inbound.FromUserID),
+						"text":          strings.TrimSpace(inbound.Text),
+						"mention_users": append([]string(nil), inbound.MentionUsers...),
+					},
+					History: chathistory.BuildMessages(chathistory.ChannelLine, historySnapshot),
+					Logger:  logger,
+					Deliver: sendEmoji,
+				})
+				lease.Release()
+				switch result {
+				case runtimecore.PrecheckHandled:
+					appendLightweightHistory()
+					return nil
+				case runtimecore.PrecheckText:
+					lightweightDecided = true
+				}
 			}
 		}
 		workspaceResolution, err := workspace.Resolve(workspaceStore, msg.ConversationKey, d.DefaultWorkspaceDir)
@@ -615,25 +669,26 @@ func runLineLoop(ctx context.Context, d Dependencies, opts RunOptions) error {
 		buildJob := func(version uint64) lineJob {
 			admittedRoute := taskRoute
 			return lineJob{
-				TaskID:          jobTaskID,
-				ConversationKey: msg.ConversationKey,
-				ChatID:          inbound.ChatID,
-				ChatType:        inbound.ChatType,
-				MessageID:       inbound.MessageID,
-				ReplyToken:      inbound.ReplyToken,
-				FromUserID:      inbound.FromUserID,
-				FromUsername:    inbound.FromUsername,
-				DisplayName:     inbound.DisplayName,
-				Text:            text,
-				ImagePaths:      imagePaths,
-				Images:          append([]chathistory.ChatHistoryImage(nil), images...),
-				WorkspaceDir:    workspaceDir,
-				Route:           &admittedRoute,
-				SentAt:          inbound.SentAt,
-				Version:         version,
-				MentionUsers:    append([]string(nil), inbound.MentionUsers...),
-				EventID:         inbound.EventID,
-				Generation:      generationLease,
+				TaskID:             jobTaskID,
+				ConversationKey:    msg.ConversationKey,
+				ChatID:             inbound.ChatID,
+				ChatType:           inbound.ChatType,
+				MessageID:          inbound.MessageID,
+				ReplyToken:         inbound.ReplyToken,
+				FromUserID:         inbound.FromUserID,
+				FromUsername:       inbound.FromUsername,
+				DisplayName:        inbound.DisplayName,
+				Text:               text,
+				ImagePaths:         imagePaths,
+				Images:             append([]chathistory.ChatHistoryImage(nil), images...),
+				WorkspaceDir:       workspaceDir,
+				Route:              &admittedRoute,
+				SentAt:             inbound.SentAt,
+				Version:            version,
+				MentionUsers:       append([]string(nil), inbound.MentionUsers...),
+				EventID:            inbound.EventID,
+				Generation:         generationLease,
+				LightweightDecided: lightweightDecided,
 			}
 		}
 		if daemonStore != nil {

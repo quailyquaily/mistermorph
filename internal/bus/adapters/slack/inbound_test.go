@@ -220,3 +220,34 @@ func TestInboundMessageFromBusMessage(t *testing.T) {
 		t.Fatalf("image source attachment id = %q, want F111", inbound.ImageAttachments[0].SourceAttachmentID)
 	}
 }
+
+func TestInboundMessageCarriesLightweightDecided(t *testing.T) {
+	bus, err := busruntime.NewInproc(busruntime.InprocOptions{MaxInFlight: 4, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer bus.Close()
+	adapter, err := NewInboundAdapter(InboundAdapterOptions{Bus: bus, Store: contacts.NewFileStore(t.TempDir())})
+	if err != nil {
+		t.Fatal(err)
+	}
+	delivered := make(chan busruntime.BusMessage, 1)
+	if err := bus.Subscribe(busruntime.TopicChatMessage, func(_ context.Context, msg busruntime.BusMessage) error {
+		delivered <- msg
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	in := InboundMessage{TeamID: "T111", ChannelID: "C222", ChatType: "im", MessageTS: "1739667600.000100", UserID: "U333", Text: "thanks", LightweightDecided: true}
+	if ok, err := adapter.HandleInboundMessage(context.Background(), in); !ok || err != nil {
+		t.Fatalf("HandleInboundMessage() = %v, %v", ok, err)
+	}
+	msg := <-delivered
+	if !msg.Extensions.LightweightDecided {
+		t.Fatal("bus message lost lightweight_decided")
+	}
+	back, err := InboundMessageFromBusMessage(msg)
+	if err != nil || !back.LightweightDecided {
+		t.Fatalf("round trip = %+v, %v", back, err)
+	}
+}

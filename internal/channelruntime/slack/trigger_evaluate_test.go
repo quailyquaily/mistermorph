@@ -37,13 +37,19 @@ func TestAddressingEvaluationReactionAvailability(t *testing.T) {
 			if !errors.Is(err, llm.ErrEvaluateInvalidResponse) || len(client.requests) != 1 {
 				t.Fatalf("err=%v requests=%d", err, len(client.requests))
 			}
-			want := map[string]any{"text": "Respond with text; not a lightweight acknowledgement."}
-			if enabled {
-				want["reaction_0"] = "thumbsup"
-				want["reaction_1"] = "eyes"
+			questions := client.requests[0].Questions
+			if !enabled {
+				if _, ok := questions["reply"]; ok {
+					t.Fatalf("reply offered without a reaction tool: %v", questions)
+				}
+				return
 			}
-			if got := client.requests[0].Questions["response"].Options; !reflect.DeepEqual(got, want) {
-				t.Fatalf("options=%v want %v", got, want)
+			want := map[string]any{"emoji_0": "thumbsup", "emoji_1": "eyes"}
+			if got := questions["emoji"].Options; !reflect.DeepEqual(got, want) {
+				t.Fatalf("emoji options=%v want %v", got, want)
+			}
+			if got := len(questions["reply"].Options); got != 2 {
+				t.Fatalf("reply options=%d want text and emoji", got)
 			}
 		})
 	}

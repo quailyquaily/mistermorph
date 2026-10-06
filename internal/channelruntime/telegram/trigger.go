@@ -9,8 +9,10 @@ import (
 	"time"
 
 	"github.com/quailyquaily/mistermorph/agent"
+	runtimecore "github.com/quailyquaily/mistermorph/internal/channelruntime/core"
 	"github.com/quailyquaily/mistermorph/internal/chathistory"
 	"github.com/quailyquaily/mistermorph/internal/grouptrigger"
+	"github.com/quailyquaily/mistermorph/internal/llmstats"
 	"github.com/quailyquaily/mistermorph/internal/promptprofile"
 	"github.com/quailyquaily/mistermorph/llm"
 	"github.com/quailyquaily/mistermorph/tools"
@@ -60,7 +62,7 @@ func groupTriggerDecision(
 		ExplicitMatched:          explicitMentioned,
 		AddressingFallbackReason: mode,
 		AddressingTimeout:        addressingLLMTimeout,
-		ReactionTool:             addressingReactionTool,
+		React:                    grouptrigger.ReactWith(addressingReactionTool),
 		Addressing: func(addrCtx context.Context) (grouptrigger.Addressing, bool, error) {
 			return addressingDecisionViaLLM(addrCtx, client, model, msg, text, history, addressingReactionTool, personaDir...)
 		},
@@ -197,4 +199,48 @@ func loadAddressingPersonaIdentity(personaDir ...string) string {
 		return ""
 	}
 	return persona
+}
+
+// runLightweightPrecheck asks the decision route whether a message addressed to the bot needs
+// only a reaction, and reacts when so.
+func (s *telegramRuntimeState) runLightweightPrecheck(msg *telegramMessage, text string, conversationKey string) (runtimecore.PrecheckResult, string) {
+	if msg == nil || msg.Chat == nil || s.api == nil || msg.MessageID <= 0 {
+		return runtimecore.PrecheckSkipped, ""
+	}
+	generationLease, runtimeBundle, err := s.captureRuntimeGeneration()
+	if err != nil {
+		return runtimecore.PrecheckSkipped, ""
+	}
+	defer func() {
+		if generationLease != nil {
+			generationLease.Release()
+		}
+	}()
+	s.stateMu.Lock()
+	history := append([]chathistory.ChatHistoryItem(nil), s.history[conversationKey]...)
+	s.stateMu.Unlock()
+	currentMessage := map[string]any{"text": strings.TrimSpace(text)}
+	sender := map[string]any{"chat_id": msg.Chat.ID, "chat_type": strings.TrimSpace(msg.Chat.Type)}
+	if msg.From != nil {
+		sender["id"] = msg.From.ID
+		sender["is_bot"] = msg.From.IsBot
+		sender["username"] = strings.TrimSpace(msg.From.Username)
+		sender["display_name"] = strings.TrimSpace(telegramDisplayName(msg.From))
+	}
+	currentMessage["sender"] = sender
+	chatID := msg.Chat.ID
+	ctx := llmstats.WithRunID(context.Background(), telegramTaskID(chatID, msg.MessageThreadID, msg.MessageID))
+	return runtimecore.RunLightweightPrecheck(ctx, runtimeBundle, runtimecore.LightweightPrecheckRequest{
+		Scene:          "telegram.lightweight_decision",
+		PersonaDir:     s.dependencies.RuntimePaths.PersonaDir,
+		CurrentMessage: currentMessage,
+		History:        chathistory.BuildMessages(chathistory.ChannelTelegram, history),
+		Emojis:         telegramtools.StandardReactionEmojis(),
+		Logger:         s.logger,
+		Deliver: func(ctx context.Context, emoji string) error {
+			tool := telegramtools.NewReactTool(newTelegramToolAPI(s.api), chatID, msg.MessageID, s.allowedChatIDs)
+			_, err := tool.Execute(ctx, map[string]any{"emoji": emoji})
+			return err
+		},
+	})
 }

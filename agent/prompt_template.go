@@ -35,6 +35,7 @@ type systemPromptTemplateData struct {
 	ToolSummaries        string
 	HasPlanCreate        bool
 	IncludeResponseRules bool
+	LightweightDecided   bool
 	Rules                []string
 }
 
@@ -44,6 +45,7 @@ func renderSystemPrompt(registry *tools.Registry, spec PromptSpec) (string, erro
 		Skills:               make([]systemPromptTemplateSkill, 0, len(spec.Skills)),
 		Blocks:               make([]systemPromptTemplateBlock, 0, len(spec.Blocks)),
 		IncludeResponseRules: !spec.FinalOnlyResponse,
+		LightweightDecided:   spec.LightweightDecided,
 		Rules:                make([]string, 0, len(spec.Rules)),
 	}
 	for _, sk := range spec.Skills {

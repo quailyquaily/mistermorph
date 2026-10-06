@@ -3,6 +3,7 @@ package taskruntime
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"path/filepath"
 	"strings"
@@ -1784,5 +1785,44 @@ func TestRunResolvesMainModelLate(t *testing.T) {
 	}
 	if got := client.requests[1].Model; got != "gpt-4.1-mini" {
 		t.Fatalf("second request model = %q, want gpt-4.1-mini", got)
+	}
+}
+
+func TestRunLightweightDecidedReachesPrompt(t *testing.T) {
+	route := llmutil.ResolvedRoute{ClientConfig: llmconfig.ClientConfig{Provider: "openai", Model: "gpt-5.2"}}
+	for _, decided := range []bool{false, true} {
+		t.Run(fmt.Sprintf("decided=%v", decided), func(t *testing.T) {
+			client := &stubTaskRuntimeClient{}
+			rt, err := Bootstrap(depsutil.CommonDependencies{
+				Logger:          func() (*slog.Logger, error) { return slog.Default(), nil },
+				LogOptions:      func() agent.LogOptions { return agent.LogOptions{} },
+				ResolveLLMRoute: func(string) (llmutil.ResolvedRoute, error) { return route, nil },
+				CreateLLMClient: func(llmutil.ResolvedRoute) (llm.Client, error) { return client, nil },
+				Registry:        func() *tools.Registry { return tools.NewRegistry() },
+				PromptSpec: func(_ context.Context, _ *slog.Logger, _ agent.LogOptions, _ string, _ llm.Client, _ string, _ []string) (agent.PromptSpec, []string, error) {
+					return agent.DefaultPromptSpec(), nil, nil
+				},
+			}, BootstrapOptions{AgentConfig: agent.Config{MaxSteps: 2, ParseRetries: 0, ToolRepeatLimit: 2}})
+			if err != nil {
+				t.Fatalf("Bootstrap() error = %v", err)
+			}
+			sawDecided := false
+			_, err = rt.Run(context.Background(), RunRequest{
+				Task:               "thanks",
+				LightweightDecided: decided,
+				PromptAugment: func(spec *agent.PromptSpec, _ *tools.Registry) {
+					sawDecided = spec.LightweightDecided
+				},
+			})
+			if err != nil {
+				t.Fatalf("Run() error = %v", err)
+			}
+			if sawDecided != decided {
+				t.Fatalf("PromptAugment saw LightweightDecided = %v, want %v", sawDecided, decided)
+			}
+			if got := strings.Contains(client.requests[0].Messages[0].Content, `"is_lightweight"`); got == decided {
+				t.Fatalf("system prompt has is_lightweight = %v with decided = %v", got, decided)
+			}
+		})
 	}
 }

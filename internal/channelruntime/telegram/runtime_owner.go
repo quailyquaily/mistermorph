@@ -590,28 +590,29 @@ func (s *telegramRuntimeState) enqueueInbound(ctx context.Context, message busru
 	buildJob := func(version uint64) telegramJob {
 		admittedRoute := taskRoute
 		return telegramJob{
-			TaskID:           jobTaskID,
-			ConversationKey:  message.ConversationKey,
-			ChatID:           inbound.ChatID,
-			MessageThreadID:  inbound.MessageThreadID,
-			MessageID:        inbound.MessageID,
-			ReplyToMessageID: inbound.ReplyToMessageID,
-			SentAt:           inbound.SentAt,
-			ChatType:         inbound.ChatType,
-			FromUserID:       inbound.FromUserID,
-			FromUsername:     inbound.FromUsername,
-			FromFirstName:    inbound.FromFirstName,
-			FromLastName:     inbound.FromLastName,
-			FromDisplayName:  inbound.FromDisplayName,
-			FromIsAgent:      inbound.FromIsAgent,
-			Text:             text,
-			ImagePaths:       imagePaths,
-			Images:           append([]chathistory.ChatHistoryImage(nil), images...),
-			WorkspaceDir:     workspaceDir,
-			Route:            &admittedRoute,
-			Version:          version,
-			MentionUsers:     append([]string(nil), inbound.MentionUsers...),
-			Generation:       generationLease,
+			TaskID:             jobTaskID,
+			ConversationKey:    message.ConversationKey,
+			ChatID:             inbound.ChatID,
+			MessageThreadID:    inbound.MessageThreadID,
+			MessageID:          inbound.MessageID,
+			ReplyToMessageID:   inbound.ReplyToMessageID,
+			SentAt:             inbound.SentAt,
+			ChatType:           inbound.ChatType,
+			FromUserID:         inbound.FromUserID,
+			FromUsername:       inbound.FromUsername,
+			FromFirstName:      inbound.FromFirstName,
+			FromLastName:       inbound.FromLastName,
+			FromDisplayName:    inbound.FromDisplayName,
+			FromIsAgent:        inbound.FromIsAgent,
+			Text:               text,
+			ImagePaths:         imagePaths,
+			Images:             append([]chathistory.ChatHistoryImage(nil), images...),
+			WorkspaceDir:       workspaceDir,
+			Route:              &admittedRoute,
+			Version:            version,
+			MentionUsers:       append([]string(nil), inbound.MentionUsers...),
+			Generation:         generationLease,
+			LightweightDecided: inbound.LightweightDecided,
 		}
 	}
 	if s.taskStore != nil {
@@ -942,6 +943,9 @@ func (s *telegramRuntimeState) handleUpdate(update telegramUpdate) {
 
 	contextCompactionOnly := chatcommands.IsContextCompactCommand(text)
 	replyToMessageID := int64(0)
+	// lightweightDecided: a decision-route check chose text, so the main loop skips the
+	// lightweight-reaction rules and the pre-check below does not run again.
+	lightweightDecided := false
 	switch normalizedCommand {
 	case "/stop":
 		if !chatAuthorized {
@@ -1138,9 +1142,7 @@ func (s *telegramRuntimeState) handleUpdate(update telegramUpdate) {
 					"text_len", len(text),
 					"llm_attempted", decision.AddressingLLMAttempted,
 					"llm_ok", decision.AddressingLLMOK,
-					"llm_addressed", decision.Addressing.Addressed,
 					"confidence", decision.Addressing.Confidence,
-					"wanna_interject", decision.Addressing.WannaInterject,
 					"interject", decision.Addressing.Interject,
 					"impulse", decision.Addressing.Impulse,
 					"is_lightweight", decision.Addressing.IsLightweight,
@@ -1156,15 +1158,14 @@ func (s *telegramRuntimeState) handleUpdate(update telegramUpdate) {
 				appendIgnoredInboundHistory(rawText)
 				return
 			}
+			lightweightDecided = decision.UsedAddressingLLM && runtimeBundle.LightweightPrecheck
 			replyToMessageID = quoteReplyMessageIDForGroupTrigger(message, decision)
 			s.logger.Info("telegram_group_trigger",
 				"chat_id", chatID,
 				"type", chatType,
 				"model", decision.Addressing.Model,
 				"reason", decision.Reason,
-				"llm_addressed", decision.Addressing.Addressed,
 				"confidence", decision.Addressing.Confidence,
-				"wanna_interject", decision.Addressing.WannaInterject,
 				"interject", decision.Addressing.Interject,
 				"impulse", decision.Addressing.Impulse,
 				"is_lightweight", decision.Addressing.IsLightweight,
@@ -1233,6 +1234,19 @@ func (s *telegramRuntimeState) handleUpdate(update telegramUpdate) {
 			return
 		}
 	}
+	if !lightweightDecided && !contextCompactionOnly && runtimecore.LightweightPrecheckApplies(text, len(downloaded) > 0 || len(imageAttachments) > 0) {
+		switch result, emoji := s.runLightweightPrecheck(message, text, conversationKey); result {
+		case runtimecore.PrecheckHandled:
+			appendIgnoredInboundHistory(rawText)
+			s.stateMu.Lock()
+			current := append(s.history[conversationKey], newTelegramOutboundReactionHistoryItem(chatID, chatType, "[reacted: "+emoji+"]", emoji, time.Now().UTC(), s.botUser))
+			s.history[conversationKey] = trimChatHistoryItems(current, s.historyCap)
+			s.stateMu.Unlock()
+			return
+		case runtimecore.PrecheckText:
+			lightweightDecided = true
+		}
+	}
 	accepted, publishErr := s.inboundAdapter.HandleInboundMessage(context.Background(), telegrambus.InboundMessage{
 		ChatID:              chatID,
 		MessageThreadID:     messageThreadID,
@@ -1250,6 +1264,7 @@ func (s *telegramRuntimeState) handleUpdate(update telegramUpdate) {
 		MentionUsers:        mentionUsers,
 		MentionParticipants: mentionParticipants,
 		ImageAttachments:    imageAttachments,
+		LightweightDecided:  lightweightDecided,
 	})
 	if publishErr != nil {
 		s.logger.Warn("telegram_bus_publish_error", "channel", busruntime.ChannelTelegram, "chat_id", chatID, "message_id", message.MessageID, "bus_error_code", string(busruntime.ErrorCodeOf(publishErr)), "error", publishErr.Error())

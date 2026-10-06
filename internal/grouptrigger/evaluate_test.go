@@ -17,7 +17,7 @@ type evaluationStub struct {
 
 func TestEvaluateLimitsReactionOptions(t *testing.T) {
 	r := judgmentResult()
-	r.Answers["response"] = llm.Answer{Kind: llm.Choice, Selected: "text"}
+	r.Answers["reply"] = llm.Answer{Kind: llm.Choice, Selected: "text"}
 	c := &evaluationStub{result: r}
 	emojis := []string{"", "👍", "👍"}
 	for i := 0; i < 300; i++ {
@@ -27,7 +27,7 @@ func TestEvaluateLimitsReactionOptions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := len(c.calls[0].Questions["response"].Options); got != 255 {
+	if got := len(c.calls[0].Questions["emoji"].Options); got != 255 {
 		t.Fatalf("options=%d want 255", got)
 	}
 }
@@ -46,22 +46,17 @@ type reactionStub struct {
 	err       error
 }
 
-func (s *reactionStub) Name() string            { return "message_react" }
-func (s *reactionStub) Description() string     { return "react" }
-func (s *reactionStub) ParameterSchema() string { return `{}` }
-func (s *reactionStub) Execute(_ context.Context, p map[string]any) (string, error) {
+func (s *reactionStub) react(_ context.Context, emoji string) error {
 	s.execCount++
-	s.lastEmoji, _ = p["emoji"].(string)
-	return "ok", s.err
+	s.lastEmoji = emoji
+	return s.err
 }
 
 func judgmentResult() *llm.EvaluateResult {
-	yes := true
 	score := 8.0
 	return &llm.EvaluateResult{Emulated: true, Answers: map[string]llm.Answer{
-		"addressed": {Kind: llm.Boolean, BooleanValue: &yes}, "wanna_interject": {Kind: llm.Boolean, BooleanValue: &yes},
 		"confidence": {Kind: llm.Score, ScoreValue: &score}, "interject": {Kind: llm.Score, ScoreValue: &score}, "impulse": {Kind: llm.Score, ScoreValue: &score},
-		"response": {Kind: llm.Choice, Selected: "reaction_0"},
+		"reply": {Kind: llm.Choice, Selected: "emoji"}, "emoji": {Kind: llm.Choice, Selected: "emoji_0"},
 	}}
 }
 
@@ -76,11 +71,13 @@ func TestEvaluateDecisionDoesNotSendBeforeGate(t *testing.T) {
 		if len(client.calls) != 1 || tool.execCount != 0 {
 			t.Fatal("judgment performed side effect")
 		}
-		if client.calls[0].Questions["response"].Options["reaction_0"] != "👍" {
+		if client.calls[0].Questions["emoji"].Options["emoji_0"] != "👍" {
 			t.Fatal("missing constrained reaction")
 		}
-		result.Addressed = allow
-		dec, accepted, err := Decide(context.Background(), DecideOptions{Mode: "smart", ConfidenceThreshold: .7, ReactionTool: tool, Addressing: func(context.Context) (Addressing, bool, error) { return result, true, nil }})
+		if !allow {
+			result.Confidence = 0.6
+		}
+		dec, accepted, err := Decide(context.Background(), DecideOptions{Mode: "smart", ConfidenceThreshold: .7, React: tool.react, Addressing: func(context.Context) (Addressing, bool, error) { return result, true, nil }})
 		if err != nil || accepted != allow || dec.ReactionHandled != allow {
 			t.Fatalf("dec=%+v accepted=%v err=%v", dec, accepted, err)
 		}
@@ -96,9 +93,12 @@ func TestEvaluateDecisionDoesNotSendBeforeGate(t *testing.T) {
 
 func TestEvaluateDecisionRejectsInvalidAnswers(t *testing.T) {
 	for _, mutate := range []func(*llm.EvaluateResult){
-		func(r *llm.EvaluateResult) { delete(r.Answers, "addressed") },
+		func(r *llm.EvaluateResult) { delete(r.Answers, "confidence") },
 		func(r *llm.EvaluateResult) {
-			r.Answers["response"] = llm.Answer{Kind: llm.Choice, Selected: "arbitrary"}
+			r.Answers["interject"] = llm.Answer{Kind: llm.Choice, Selected: "text"}
+		},
+		func(r *llm.EvaluateResult) {
+			r.Answers["emoji"] = llm.Answer{Kind: llm.Choice, Selected: "arbitrary"}
 		},
 		func(r *llm.EvaluateResult) {
 			n := math.NaN()
@@ -125,18 +125,18 @@ func TestEvaluateDecisionRejectsInvalidAnswers(t *testing.T) {
 func TestEvaluateDecisionNativeAndNoReaction(t *testing.T) {
 	r := judgmentResult()
 	r.Emulated = false
-	p := .5
-	r.Answers["addressed"] = llm.Answer{Kind: llm.Boolean, ProbabilityTrue: &p}
-	p2 := .9
-	r.Answers["wanna_interject"] = llm.Answer{Kind: llm.Boolean, ProbabilityTrue: &p2}
-	r.Answers["response"] = llm.Answer{Kind: llm.Choice, Selected: "text"}
+	confidence, interject := 4.5, 9.0
+	r.Answers["confidence"] = llm.Answer{Kind: llm.Score, ScoreValue: &confidence}
+	r.Answers["interject"] = llm.Answer{Kind: llm.Score, ScoreValue: &interject}
+	delete(r.Answers, "reply")
+	delete(r.Answers, "emoji")
 	c := &evaluationStub{result: r}
 	got, ok, err := DecideViaLLM(context.Background(), LLMDecisionOptions{Client: c})
-	if err != nil || !ok || got.Addressed || !got.WannaInterject || got.IsLightweight {
+	if err != nil || !ok || got.Confidence != 0.5 || got.Interject != 1 || got.IsLightweight {
 		t.Fatalf("got=%+v err=%v", got, err)
 	}
-	if len(c.calls[0].Questions["response"].Options) != 1 {
-		t.Fatal("reaction offered without tool")
+	if len(c.calls[0].Questions) != 3 {
+		t.Fatalf("questions = %d, want only confidence, interject and impulse without emojis", len(c.calls[0].Questions))
 	}
 }
 
@@ -145,17 +145,47 @@ func TestDecisionReactionFailureAndCancellation(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		tool := &reactionStub{err: errors.New("send failed")}
-		_, accepted, err := Decide(ctx, DecideOptions{Mode: "smart", ReactionTool: tool, Addressing: func(context.Context) (Addressing, bool, error) {
+		_, accepted, err := Decide(ctx, DecideOptions{Mode: "smart", React: tool.react, Addressing: func(context.Context) (Addressing, bool, error) {
 			if cancelled {
 				cancel()
 			}
-			return Addressing{Addressed: true, Confidence: 1, IsLightweight: true, Reaction: "👍"}, true, nil
+			return Addressing{Confidence: 1, IsLightweight: true, Reaction: "👍"}, true, nil
 		}})
 		if err == nil || accepted {
 			t.Fatal("failure accepted")
 		}
 		if cancelled && tool.execCount != 0 {
 			t.Fatal("sent after cancellation")
+		}
+	}
+}
+
+func TestEvaluateAsksTextOrEmojiApartFromWhichEmoji(t *testing.T) {
+	emojis := []string{"👍", "👀", "🎉"}
+	for _, tt := range []struct {
+		reply     string
+		wantEmoji string
+	}{
+		{reply: "text"},
+		{reply: "emoji", wantEmoji: "👀"},
+	} {
+		r := judgmentResult()
+		r.Answers["reply"] = llm.Answer{Kind: llm.Choice, Selected: tt.reply}
+		r.Answers["emoji"] = llm.Answer{Kind: llm.Choice, Selected: "emoji_1"}
+		c := &evaluationStub{result: r}
+		got, _, err := DecideViaLLM(context.Background(), LLMDecisionOptions{Client: c, ReactionEmojis: emojis})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Reaction != tt.wantEmoji || got.IsLightweight != (tt.wantEmoji != "") {
+			t.Fatalf("reply %q: got %+v, want emoji %q", tt.reply, got, tt.wantEmoji)
+		}
+		reply := c.calls[0].Questions["reply"].Options
+		if len(reply) != 2 || reply["text"] == nil || reply["emoji"] == nil {
+			t.Fatalf("reply options = %v, want only text and emoji", reply)
+		}
+		if got := len(c.calls[0].Questions["emoji"].Options); got != len(emojis) {
+			t.Fatalf("emoji options = %d, want %d", got, len(emojis))
 		}
 	}
 }

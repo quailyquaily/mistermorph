@@ -37,6 +37,7 @@ type InboundMessage struct {
 	MentionParticipants []busruntime.MessageParticipant
 	ImagePaths          []string
 	ImageAttachments    []busruntime.ImageAttachment
+	LightweightDecided  bool
 }
 
 type InboundAdapter struct {
@@ -170,6 +171,7 @@ func (a *InboundAdapter) HandleInboundMessage(ctx context.Context, msg InboundMe
 			MentionParticipants: mentionParticipants,
 			ImagePaths:          imagePaths,
 			ImageAttachments:    imageAttachments,
+			LightweightDecided:  msg.LightweightDecided,
 		},
 	}
 	platformMessageID := fmt.Sprintf("%d:%d", chatID, messageID)
@@ -241,6 +243,7 @@ func InboundMessageFromBusMessage(msg busruntime.BusMessage) (InboundMessage, er
 		MentionParticipants: mentionParticipants,
 		ImagePaths:          imagePaths,
 		ImageAttachments:    imageAttachments,
+		LightweightDecided:  msg.Extensions.LightweightDecided,
 	}, nil
 }
 

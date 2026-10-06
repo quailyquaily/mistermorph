@@ -53,6 +53,8 @@ type MessageExtensions struct {
 	ImageAttachments    []ImageAttachment    `json:"image_attachments,omitempty"`
 	ImageKeys           []string             `json:"image_keys,omitempty"`
 	ImagePending        bool                 `json:"image_pending,omitempty"`
+	// LightweightDecided: a decision-route check already chose a text reply for this message.
+	LightweightDecided bool `json:"lightweight_decided,omitempty"`
 }
 
 type MessageParticipant struct {

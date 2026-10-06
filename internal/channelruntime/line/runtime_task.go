@@ -113,6 +113,7 @@ func runLineTask(
 		RoutePurpose:            routePurpose,
 		ReasoningEffortOverride: reasoningEffort,
 		Scene:                   "line.loop",
+		LightweightDecided:      job.LightweightDecided,
 		History:                 llmHistory,
 		Meta:                    meta,
 		CurrentMessage:          currentMsg,

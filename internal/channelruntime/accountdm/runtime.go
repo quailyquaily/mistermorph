@@ -356,6 +356,40 @@ func runLoop(ctx context.Context, d Dependencies, opts Options) error {
 				return answer(runtimecontrol.SteerFeedback(result.Found, result.Queued), "steer:"+in.MessageID)
 			}
 		}
+		// These channels have no reactions, so an emoji reply is sent as a message.
+		lightweightDecided := false
+		if !compactOnly && runtimecore.LightweightPrecheckApplies(text, len(imagePaths) > 0) {
+			if lease, captureErr := generations.Capture(); captureErr == nil {
+				stateMu.Lock()
+				historySnapshot := append([]chathistory.ChatHistoryItem(nil), history[conversationKey]...)
+				stateMu.Unlock()
+				result, emoji := runtimecore.RunLightweightPrecheck(handlerCtx, lease.Bundle(), runtimecore.LightweightPrecheckRequest{
+					Scene:          name + ".lightweight_decision",
+					PersonaDir:     d.RuntimePaths.PersonaDir,
+					CurrentMessage: map[string]any{"chat_type": "private", "user_id": in.PeerID, "display_name": in.DisplayName, "text": text},
+					History:        chathistory.BuildMessages(string(channel), historySnapshot),
+					Logger:         logger,
+					Deliver: func(_ context.Context, emoji string) error {
+						return answer(emoji, "lightweight:"+in.MessageID)
+					},
+				})
+				lease.Release()
+				switch result {
+				case runtimecore.PrecheckHandled:
+					j := dmJob{
+						Channel: channel, ConversationKey: conversationKey, AccountID: in.AccountID, PeerID: in.PeerID,
+						MessageID: in.MessageID, ReplyToMessageID: in.ReplyToMessageID, DisplayName: in.DisplayName, Text: text, SentAt: in.SentAt,
+					}
+					now := time.Now().UTC()
+					stateMu.Lock()
+					history[conversationKey] = trimHistory(append(history[conversationKey], inboundHistoryItem(j), outboundHistoryItem(j, emoji, now)))
+					stateMu.Unlock()
+					return nil
+				case runtimecore.PrecheckText:
+					lightweightDecided = true
+				}
+			}
+		}
 		taskID := daemonruntime.BuildTaskID(taskIDPrefix(channel), in.AccountID+":"+in.PeerID, in.MessageID)
 		generation, err := generations.Capture()
 		if err != nil {
@@ -383,6 +417,7 @@ func runLoop(ctx context.Context, d Dependencies, opts Options) error {
 				MessageID: in.MessageID, ReplyToMessageID: in.ReplyToMessageID, DisplayName: in.DisplayName, Text: text,
 				ImagePaths: imagePaths, FileCacheDir: opts.FileCacheDir,
 				WorkspaceDir: resolution.WorkspaceDir, Route: &admittedRoute, SentAt: in.SentAt, Version: version, Generation: generation,
+				LightweightDecided: lightweightDecided,
 			}
 		}
 		createdAt := in.SentAt.UTC()

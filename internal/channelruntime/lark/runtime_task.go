@@ -55,6 +55,8 @@ type larkJob struct {
 	MentionUsers    []string
 	EventID         string
 	Generation      *runtimecore.RuntimeGenerationLease
+	// LightweightDecided: the decision route already chose a text reply for this message.
+	LightweightDecided bool
 }
 
 func (j larkJob) runtimeBundle() *runtimecore.ChannelRuntimeBundle {
@@ -159,6 +161,7 @@ func runLarkTask(
 		RoutePurpose:            routePurpose,
 		ReasoningEffortOverride: reasoningEffort,
 		Scene:                   "lark.loop",
+		LightweightDecided:      job.LightweightDecided,
 		History:                 llmHistory,
 		Meta:                    meta,
 		CurrentMessage:          currentMsg,

@@ -12,6 +12,9 @@ type PromptSpec struct {
 	Skills            []PromptSkill
 	Blocks            []PromptBlock
 	FinalOnlyResponse bool
+	// LightweightDecided means a decision-route check already chose a text reply for this run, so
+	// the prompt leaves out the lightweight-reaction rules and the final is never lightweight.
+	LightweightDecided bool
 }
 
 type PromptBlock struct {

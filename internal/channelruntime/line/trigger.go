@@ -28,6 +28,7 @@ func decideLineGroupTrigger(
 	addressingConfidenceThreshold float64,
 	addressingInterjectThreshold float64,
 	history []chathistory.ChatHistoryItem,
+	react func(context.Context, string) error,
 	personaDir ...string,
 ) (lineGroupTriggerDecision, bool, error) {
 	explicitReason, explicitMatched := lineExplicitTriggerReason(inbound, botUserID)
@@ -39,8 +40,9 @@ func decideLineGroupTrigger(
 		ExplicitMatched:          explicitMatched,
 		AddressingFallbackReason: mode,
 		AddressingTimeout:        addressingLLMTimeout,
+		React:                    react,
 		Addressing: func(addrCtx context.Context) (grouptrigger.Addressing, bool, error) {
-			return lineAddressingDecisionViaLLM(addrCtx, client, model, inbound, history, personaDir...)
+			return lineAddressingDecisionViaLLM(addrCtx, client, model, inbound, history, react != nil, personaDir...)
 		},
 	})
 }
@@ -79,6 +81,7 @@ func lineAddressingDecisionViaLLM(
 	model string,
 	inbound linebus.InboundMessage,
 	history []chathistory.ChatHistoryItem,
+	canReact bool,
 	personaDir ...string,
 ) (grouptrigger.Addressing, bool, error) {
 	if ctx == nil || client == nil {
@@ -98,16 +101,22 @@ func lineAddressingDecisionViaLLM(
 		"text":          strings.TrimSpace(inbound.Text),
 		"mention_users": append([]string(nil), inbound.MentionUsers...),
 	}
-	systemPrompt, userPrompt, err := grouptrigger.RenderAddressingPrompts(loadLineAddressingPersonaIdentity(personaDir...), "", currentMessage, historyMessages)
+	// LINE has no reactions; a chosen emoji is sent as a message.
+	var reactionEmojis []string
+	if canReact {
+		reactionEmojis = grouptrigger.DefaultLightweightEmojis
+	}
+	systemPrompt, userPrompt, err := grouptrigger.RenderAddressingPrompts(loadLineAddressingPersonaIdentity(personaDir...), strings.Join(reactionEmojis, ","), currentMessage, historyMessages)
 	if err != nil {
 		return grouptrigger.Addressing{}, false, fmt.Errorf("render addressing prompts: %w", err)
 	}
 	return grouptrigger.DecideViaLLM(ctx, grouptrigger.LLMDecisionOptions{
-		Client:       client,
-		Model:        model,
-		Scene:        "line.addressing_decision",
-		SystemPrompt: systemPrompt,
-		UserPrompt:   userPrompt,
+		Client:         client,
+		Model:          model,
+		Scene:          "line.addressing_decision",
+		SystemPrompt:   systemPrompt,
+		UserPrompt:     userPrompt,
+		ReactionEmojis: reactionEmojis,
 	})
 }
 

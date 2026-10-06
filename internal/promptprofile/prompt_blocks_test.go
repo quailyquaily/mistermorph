@@ -2,6 +2,7 @@ package promptprofile
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -255,5 +256,53 @@ func TestAppendPrivateChannelRuntimeBlocks(t *testing.T) {
 		if len(spec.Blocks) != 1 || !strings.Contains(spec.Blocks[0].Content, name) {
 			t.Fatalf("%s: blocks = %#v", name, spec.Blocks)
 		}
+	}
+}
+
+func TestRuntimeBlocksOmitLightweightRulesWhenDecided(t *testing.T) {
+	render := func(decided, isGroup bool, appendBlocks func(*agent.PromptSpec, bool)) string {
+		spec := agent.PromptSpec{LightweightDecided: decided}
+		appendBlocks(&spec, isGroup)
+		var parts []string
+		for _, block := range spec.Blocks {
+			parts = append(parts, block.Content)
+		}
+		return strings.Join(parts, "\n")
+	}
+	channels := map[string]func(*agent.PromptSpec, bool){
+		"telegram": func(spec *agent.PromptSpec, isGroup bool) { AppendTelegramRuntimeBlocks(spec, isGroup, nil) },
+		"slack":    func(spec *agent.PromptSpec, isGroup bool) { AppendSlackRuntimeBlocks(spec, isGroup, nil) },
+		"discord":  AppendDiscordRuntimeBlocks,
+		"lark":     func(spec *agent.PromptSpec, isGroup bool) { AppendLarkRuntimeBlocks(spec, isGroup, "THUMBSUP,OK") },
+		"console":  func(spec *agent.PromptSpec, _ bool) { AppendConsoleRuntimeBlocks(spec) },
+	}
+	lightweightMarkers := []string{"lightweight", "reaction_only", "instead of text", "instead of replying with text"}
+	for name, appendBlocks := range channels {
+		for _, isGroup := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/group=%v", name, isGroup), func(t *testing.T) {
+				before := render(false, isGroup, appendBlocks)
+				if !strings.Contains(before, "lightweight") && !strings.Contains(before, "reaction_only") {
+					t.Fatalf("default block has no lightweight rule:\n%s", before)
+				}
+				after := render(true, isGroup, appendBlocks)
+				for _, marker := range lightweightMarkers {
+					if strings.Contains(after, marker) {
+						t.Fatalf("decided block still contains %q:\n%s", marker, after)
+					}
+				}
+			})
+		}
+	}
+
+	slack := render(true, false, func(spec *agent.PromptSpec, isGroup bool) { AppendSlackRuntimeBlocks(spec, isGroup, nil) })
+	if !strings.Contains(slack, "pass Slack emoji `name` format") {
+		t.Fatalf("decided Slack block dropped the reaction format note:\n%s", slack)
+	}
+	lark := render(true, false, func(spec *agent.PromptSpec, isGroup bool) { AppendLarkRuntimeBlocks(spec, isGroup, "THUMBSUP,OK") })
+	if !strings.Contains(lark, "THUMBSUP,OK") {
+		t.Fatalf("decided Lark block dropped the emoji types:\n%s", lark)
+	}
+	if console := render(true, false, func(spec *agent.PromptSpec, _ bool) { AppendConsoleRuntimeBlocks(spec) }); console != "" {
+		t.Fatalf("decided Console block = %q, want none", console)
 	}
 }

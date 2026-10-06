@@ -27,31 +27,20 @@ func (s *stubLineAddressingLLMClient) Evaluate(_ context.Context, req llm.Evalua
 	}
 	// Existing behavioral fixtures are translated to native Evaluate answers.
 	var value struct {
-		Addressed      bool
-		Confidence     float64
-		WannaInterject bool `json:"wanna_interject"`
-		Interject      float64
-		Impulse        float64
+		Confidence float64
+		Interject  float64
+		Impulse    float64
 	}
 	if err := json.Unmarshal([]byte(s.results[0].Text), &value); err != nil {
 		return nil, err
 	}
 	s.results = s.results[1:]
-	addressed, wanna := 0.0, 0.0
-	if value.Addressed {
-		addressed = 1
-	}
-	if value.WannaInterject {
-		wanna = 1
-	}
 	confidence, interject, impulse := value.Confidence*9, value.Interject*9, value.Impulse*9
-	if len(req.Questions["response"].Options) != 1 {
-		return nil, fmt.Errorf("LINE must not offer reactions")
+	if _, ok := req.Questions["reply"]; ok {
+		return nil, fmt.Errorf("emoji replies offered without a way to send them")
 	}
 	return &llm.EvaluateResult{Answers: map[string]llm.Answer{
-		"addressed": {Kind: llm.Boolean, ProbabilityTrue: &addressed}, "wanna_interject": {Kind: llm.Boolean, ProbabilityTrue: &wanna},
 		"confidence": {Kind: llm.Score, ScoreValue: &confidence}, "interject": {Kind: llm.Score, ScoreValue: &interject}, "impulse": {Kind: llm.Score, ScoreValue: &impulse},
-		"response": {Kind: llm.Choice, Selected: "text"},
 	}}, nil
 }
 
@@ -96,7 +85,7 @@ func TestDecideLineGroupTriggerStrict(t *testing.T) {
 		EventID:      "ev_1",
 		ReplyToken:   "rtok_1",
 	}
-	dec, ok, err := decideLineGroupTrigger(nil, nil, "", inboundMention, "Ubot001", "strict", 0, 0.6, 0.6, nil)
+	dec, ok, err := decideLineGroupTrigger(nil, nil, "", inboundMention, "Ubot001", "strict", 0, 0.6, 0.6, nil, nil)
 	if err != nil {
 		t.Fatalf("decideLineGroupTrigger(mention) error = %v", err)
 	}
@@ -114,7 +103,7 @@ func TestDecideLineGroupTriggerStrict(t *testing.T) {
 		ChatID:     "Cgroup123",
 		MessageID:  "m_1002",
 	}
-	_, ok, err = decideLineGroupTrigger(nil, nil, "", inboundIgnored, "Ubot001", "strict", 0, 0.6, 0.6, nil)
+	_, ok, err = decideLineGroupTrigger(nil, nil, "", inboundIgnored, "Ubot001", "strict", 0, 0.6, 0.6, nil, nil)
 	if err != nil {
 		t.Fatalf("decideLineGroupTrigger(non_mention) error = %v", err)
 	}
@@ -138,7 +127,7 @@ func TestDecideLineGroupTriggerSmart(t *testing.T) {
 		MessageID:  "m_1001",
 		FromUserID: "U123",
 	}
-	_, ok, err := decideLineGroupTrigger(context.Background(), client, "gpt-5.2", inbound, "Ubot001", "smart", 0, 0.6, 0.6, nil)
+	_, ok, err := decideLineGroupTrigger(context.Background(), client, "gpt-5.2", inbound, "Ubot001", "smart", 0, 0.6, 0.6, nil, nil)
 	if err != nil {
 		t.Fatalf("decideLineGroupTrigger(smart) error = %v", err)
 	}
@@ -162,7 +151,7 @@ func TestDecideLineGroupTriggerTalkative(t *testing.T) {
 		MessageID:  "m_1001",
 		FromUserID: "U123",
 	}
-	_, ok, err := decideLineGroupTrigger(context.Background(), client, "gpt-5.2", inbound, "Ubot001", "talkative", 0, 0.6, 0.6, nil)
+	_, ok, err := decideLineGroupTrigger(context.Background(), client, "gpt-5.2", inbound, "Ubot001", "talkative", 0, 0.6, 0.6, nil, nil)
 	if err != nil {
 		t.Fatalf("decideLineGroupTrigger(talkative) error = %v", err)
 	}
@@ -187,7 +176,7 @@ func TestLineAddressingDecisionViaLLM_UsesTextWithoutReactionTool(t *testing.T) 
 		Text:         "ok",
 		ReplyToken:   "rtok",
 		MentionUsers: nil,
-	}, nil)
+	}, nil, false)
 	if err != nil {
 		t.Fatalf("lineAddressingDecisionViaLLM() error = %v", err)
 	}

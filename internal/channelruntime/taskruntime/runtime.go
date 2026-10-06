@@ -169,6 +169,9 @@ type RunRequest struct {
 	DisableContextCompaction bool
 	RuntimeToolsConfig       *toolsutil.RuntimeToolsRegisterConfig
 	CreateImageClient        func() (llm.ImageClient, error)
+	// LightweightDecided is set when a decision-route check already chose a text reply, so the
+	// run's prompt leaves out the lightweight-reaction rules.
+	LightweightDecided bool
 }
 
 type RunResult struct {
@@ -643,6 +646,7 @@ func (rt *Runtime) prepareRun(ctx context.Context, req RunRequest) (preparedRunt
 	if err != nil {
 		return preparedRuntimeRun{}, err
 	}
+	promptSpec.LightweightDecided = req.LightweightDecided
 	promptprofile.ApplyPersonaIdentity(&promptSpec, logger, rt.commonDeps.RuntimePaths.PersonaDir)
 	promptprofile.AppendPlanCreateGuidanceBlock(&promptSpec, reg)
 	if !req.DisableTodoWorkflow {

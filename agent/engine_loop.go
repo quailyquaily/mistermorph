@@ -258,7 +258,10 @@ func (e *Engine) runLoop(ctx context.Context, st *engineLoopState) (final *Final
 			}
 
 			if resp.Type == "" {
-				parsed, parseErr := parseResponse(result, st.reacted)
+				parsed, parseErr := parseResponseWith(result, parseOptions{
+					allowEmptyFinal: st.reacted,
+					textOnly:        e.spec.LightweightDecided,
+				})
 				if parseErr != nil {
 					st.parseFailures++
 					st.agentCtx.Metrics.ParseRetries = st.parseFailures

@@ -125,8 +125,10 @@ Examples:
 `group_trigger_mode` behavior:
 
 - `strict`: only explicit triggers (reply/mention/command path) run.
-- `smart`: requires `addressed=true` and `confidence >= threshold`.
-- `talkative`: requires `wanna_interject=true` and `interject > threshold`.
+- `smart`: requires `confidence >= addressing_confidence_threshold`, where `confidence` is how likely the message is addressed to the bot.
+- `talkative`: requires `interject > addressing_interject_threshold`, where `interject` is how strongly the bot wants to join.
+
+How to reply is asked separately: `reply` (`text` or `emoji`), and `emoji` (which one, used only when `reply` is `emoji`).
 
 ### 3.2 Explicit signals
 
@@ -172,13 +174,29 @@ Important edge case:
 - with `tool_choice=auto`, model may also choose not to emit a tool call.
 - so "lightweight=true but no pre-run reaction" is possible in current behavior.
 
-### 3.5 Trigger output metadata
+### 3.5 Lightweight pre-check (decision route)
+
+When `llm.routes.decision` uses a different profile from the main loop
+(`ChannelRuntimeBundle.LightweightPrecheck`), messages addressed to the bot (private chats, and
+group messages accepted by an explicit trigger) are pre-checked before they are published to the
+bus: the decision route answers only "text or which emoji" (`grouptrigger.DecideLightweight`).
+
+- Emoji: the runtime reacts with it and records the inbound message and the reaction in history.
+  The main run does not start.
+- Text: the message is published with `LightweightDecided`, and the main run's prompt leaves out
+  the lightweight-reaction rules, so `final.is_lightweight` is always false.
+- Error, or the reaction fails: the main run starts as before, with the lightweight rules.
+
+The pre-check is skipped for commands, `/compact`, messages with files or images, and messages
+steered into a running task. A group message that the addressing classification judged as text
+is also published with `LightweightDecided`; it is not checked twice. See
+[Lightweight reply pre-check](feat/feat_20261006_lightweight_precheck.md).
+
+### 3.6 Trigger output metadata
 
 `Decision.Addressing` contains fields like:
 
-- `addressed`
 - `confidence`
-- `wanna_interject`
 - `interject`
 - `impulse`
 - `is_lightweight`
@@ -235,7 +253,9 @@ Result:
 - main-run may react again
 - same inbound message may receive two reaction API calls
 
-This is expected with current design.
+This is expected when the decision route shares the main profile. With a separate decision
+profile, a pre-run that chose text publishes the message with `LightweightDecided`, and the main
+run no longer has the rules that lead it to react instead of replying (see 3.5).
 
 ## 7) Logging Signals
 

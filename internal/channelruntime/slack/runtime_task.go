@@ -138,6 +138,7 @@ func runSlackTask(
 		RoutePurpose:            routePurpose,
 		ReasoningEffortOverride: reasoningEffort,
 		Scene:                   "slack.loop",
+		LightweightDecided:      job.LightweightDecided,
 		History:                 llmHistory,
 		Meta:                    meta,
 		CurrentMessage:          currentMsg,

@@ -34,6 +34,8 @@ type InboundMessage struct {
 	EventID          string
 	ImagePaths       []string
 	ImageAttachments []busruntime.ImageAttachment
+	// LightweightDecided: the decision route already chose a text reply for this message.
+	LightweightDecided bool
 }
 
 type InboundAdapter struct {
@@ -143,21 +145,22 @@ func (a *InboundAdapter) HandleInboundMessage(ctx context.Context, msg InboundMe
 		PayloadBase64:   payloadBase64,
 		CreatedAt:       sentAt,
 		Extensions: busruntime.MessageExtensions{
-			PlatformMessageID: platformMessageID,
-			ReplyTo:           threadTS,
-			SessionID:         sessionID,
-			ChatType:          chatType,
-			FromUsername:      strings.TrimSpace(msg.Username),
-			FromDisplayName:   strings.TrimSpace(msg.DisplayName),
-			FromIsAgent:       msg.FromIsAgent,
-			TeamID:            teamID,
-			ChannelID:         channelID,
-			FromUserRef:       userID,
-			ThreadTS:          threadTS,
-			EventID:           strings.TrimSpace(msg.EventID),
-			MentionUsers:      mentionUsers,
-			ImagePaths:        imagePaths,
-			ImageAttachments:  imageAttachments,
+			PlatformMessageID:  platformMessageID,
+			ReplyTo:            threadTS,
+			SessionID:          sessionID,
+			ChatType:           chatType,
+			FromUsername:       strings.TrimSpace(msg.Username),
+			FromDisplayName:    strings.TrimSpace(msg.DisplayName),
+			FromIsAgent:        msg.FromIsAgent,
+			TeamID:             teamID,
+			ChannelID:          channelID,
+			FromUserRef:        userID,
+			ThreadTS:           threadTS,
+			EventID:            strings.TrimSpace(msg.EventID),
+			MentionUsers:       mentionUsers,
+			ImagePaths:         imagePaths,
+			ImageAttachments:   imageAttachments,
+			LightweightDecided: msg.LightweightDecided,
 		},
 	}
 	return a.flow.PublishValidatedInbound(ctx, platformMessageID, busMsg)
@@ -217,21 +220,22 @@ func InboundMessageFromBusMessage(msg busruntime.BusMessage) (InboundMessage, er
 	}
 
 	return InboundMessage{
-		TeamID:           teamID,
-		ChannelID:        channelID,
-		ChatType:         chatType,
-		MessageTS:        messageTS,
-		ThreadTS:         threadTS,
-		UserID:           userID,
-		Username:         strings.TrimSpace(msg.Extensions.FromUsername),
-		DisplayName:      strings.TrimSpace(msg.Extensions.FromDisplayName),
-		FromIsAgent:      msg.Extensions.FromIsAgent,
-		Text:             strings.TrimSpace(env.Text),
-		SentAt:           sentAt.UTC(),
-		MentionUsers:     mentionUsers,
-		EventID:          strings.TrimSpace(msg.Extensions.EventID),
-		ImagePaths:       imagePaths,
-		ImageAttachments: imageAttachments,
+		TeamID:             teamID,
+		ChannelID:          channelID,
+		ChatType:           chatType,
+		MessageTS:          messageTS,
+		ThreadTS:           threadTS,
+		UserID:             userID,
+		Username:           strings.TrimSpace(msg.Extensions.FromUsername),
+		DisplayName:        strings.TrimSpace(msg.Extensions.FromDisplayName),
+		FromIsAgent:        msg.Extensions.FromIsAgent,
+		Text:               strings.TrimSpace(env.Text),
+		SentAt:             sentAt.UTC(),
+		MentionUsers:       mentionUsers,
+		EventID:            strings.TrimSpace(msg.Extensions.EventID),
+		ImagePaths:         imagePaths,
+		ImageAttachments:   imageAttachments,
+		LightweightDecided: msg.Extensions.LightweightDecided,
 	}, nil
 }
 

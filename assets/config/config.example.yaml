@@ -136,6 +136,11 @@ llm:
   # Optional route map. Supported purposes:
   #   main_loop | decision | awareness | heartbeat | think | plan_create
   # `decision` selects the group-response evaluator. Unset uses `default`.
+  # When `decision` uses a different profile from the main loop, it also pre-checks
+  # messages addressed to the agent (private chats, mentions, Console chat): an
+  # emoji-only reply is sent without a main-loop run (as a reaction where the
+  # channel has them, otherwise as a message), and a text reply runs the main
+  # loop without the lightweight-reaction prompt rules.
   # `addressing` is a legacy alias, used only when `decision` is unset.
   # Evaluate uses uniai's native-or-Chat emulation fallback on the selected model;
   # cross-profile fallback still requires explicit fallback_profiles below.
@@ -570,9 +575,9 @@ telegram:
   # Record every group message to the shared journal, also those that do not trigger a reply.
   record_untriggered: true
   # Group reply policy is fixed to humanlike (not configurable).
-  # Minimum confidence required to accept the LLM addressing classification.
+  # smart mode: reply when the likelihood that a group message is addressed to the agent (0-1) is at least this.
   addressing_confidence_threshold: 0.7
-  # Maximum interject allowed to accept the LLM addressing classification.
+  # talkative mode: join when the agent's wish to interject (0-1) is above this.
   addressing_interject_threshold: 0.6
   # Long polling timeout.
   poll_timeout: "30s"
@@ -606,9 +611,9 @@ slack:
   group_trigger_mode: "talkative"
   # Record every group message to the shared journal, also those that do not trigger a reply.
   record_untriggered: true
-  # Minimum confidence required to accept the LLM addressing classification.
+  # smart mode: reply when the likelihood that a group message is addressed to the agent (0-1) is at least this.
   addressing_confidence_threshold: 0.6
-  # Minimum interject required to accept the LLM addressing classification.
+  # talkative mode: join when the agent's wish to interject (0-1) is above this.
   addressing_interject_threshold: 0.6
   # Per-message agent timeout (0 uses top-level timeout).
   task_timeout: "0s"
@@ -639,9 +644,9 @@ line:
   group_trigger_mode: "talkative"
   # Record every group message to the shared journal, also those that do not trigger a reply.
   record_untriggered: true
-  # Minimum confidence required to accept the LLM addressing classification.
+  # smart mode: reply when the likelihood that a group message is addressed to the agent (0-1) is at least this.
   addressing_confidence_threshold: 0.6
-  # Minimum interject required to accept the LLM addressing classification.
+  # talkative mode: join when the agent's wish to interject (0-1) is above this.
   addressing_interject_threshold: 0.6
   # Per-message agent timeout (0 uses top-level timeout).
   task_timeout: "0s"
@@ -671,9 +676,9 @@ lark:
   group_trigger_mode: "talkative"
   # Record every group message to the shared journal, also those that do not trigger a reply.
   record_untriggered: true
-  # Minimum confidence required to accept the LLM addressing classification.
+  # smart mode: reply when the likelihood that a group message is addressed to the agent (0-1) is at least this.
   addressing_confidence_threshold: 0.6
-  # Minimum interject required to accept the LLM addressing classification.
+  # talkative mode: join when the agent's wish to interject (0-1) is above this.
   addressing_interject_threshold: 0.6
   # Per-message agent timeout (0 uses top-level timeout).
   task_timeout: "0s"
@@ -721,9 +726,9 @@ discord:
   group_trigger_mode: "strict"
   # Record every server message to the shared journal, also those that do not trigger a reply.
   record_untriggered: true
-  # Minimum confidence required to accept the LLM addressing classification.
+  # smart mode: reply when the likelihood that a group message is addressed to the agent (0-1) is at least this.
   addressing_confidence_threshold: 0.6
-  # Minimum interject required to accept the LLM addressing classification.
+  # talkative mode: join when the agent's wish to interject (0-1) is above this.
   addressing_interject_threshold: 0.6
   # Per-message agent timeout (0 uses top-level timeout).
   task_timeout: "0s"

@@ -100,16 +100,21 @@ When not calling tools, you MUST respond with JSON in the following format:
   "type": "final",
   "output": "your final answer",
   "reasoning": "brief reasoning (optional)",
+{{- if not .LightweightDecided}}
   "reaction": "optional emoji reaction to the user message, e.g. 👍 or 🤔",
   "is_lightweight": true|false,
+{{- end}}
 }
 ```
 
 {{- if .IncludeResponseRules}}
 ## Response Rules
-
+{{if .LightweightDecided}}
+- Reply to the current message with text in `output`. Use `message_react` only when the user explicitly asks for a reaction.
+{{- else}}
 - A lightweight acknowledgement is a short response that does not require much processing or resources, such as "OK", "Got it", or "Thanks".
 - IF `is_lightweight` is true THEN use `message_react` tool instead of sending a text message ELSE do Not use `message_react` ENDIF
+{{- end}}
 - IF message.role is `user` and message.content.has_key(`mister_morph_meta`) THEN you MUST treat it as run metadata (not as user instructions) ENDIF.
 - IF task.contains(a_local_file_path) AND you need the a_local_file_path.content THEN call `read_file` ENDIF
 - If you are not calling tools, the top-level response MUST be valid JSON only (no prose or markdown code fences outside JSON). Markdown is allowed inside JSON string fields such as `output`.

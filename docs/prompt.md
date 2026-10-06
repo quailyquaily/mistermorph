@@ -56,6 +56,15 @@ These blocks are applied in the major runtime task flows:
 - Prompt rendering: `renderTelegramAddressingPrompts(...)`
 - Lightweight reaction path can use `message_react`.
 
+### Lightweight rules in the main loop
+
+When a decision-route check already chose a text reply (`RunRequest.LightweightDecided`), the
+run's `PromptSpec.LightweightDecided` is set. The system prompt then leaves out the
+`reaction` / `is_lightweight` final fields and the lightweight-acknowledgement rules, the channel
+blocks (`block_telegram.md`, `block_slack.md`, `block_discord.md`, `block_lark.md`,
+`block_console.md`) leave out their reaction-only rules, and the parser ignores an
+`is_lightweight` claim unless the run has already reacted.
+
 ### Slack addressing
 
 - Trigger entry: `decideSlackGroupTrigger(...)`
@@ -78,6 +87,9 @@ These are LLM calls outside the main tool-using loop.
 - Plan generation: `Execute(...)` (`plan_create`)
 - Telegram addressing classification: `addressingDecisionViaLLM(...)`
 - Slack addressing classification: `slackAddressingDecisionViaLLM(...)`
+- Lightweight reply pre-check: `grouptrigger.DecideLightweight(...)` on the decision route, asking
+  only "text or which emoji" for messages addressed to the agent. It runs only when the decision
+  route has its own profile. See [Lightweight reply pre-check](feat/feat_20261006_lightweight_precheck.md).
 - TODO reference resolution: `ResolveAddContent(...)`
 - TODO complete semantic match: `MatchCompleteIndex(...)`
 - Generic semantic dedup: `SelectDedupKeepIndices(...)`

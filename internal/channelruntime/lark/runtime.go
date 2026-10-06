@@ -20,6 +20,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/chatcommands"
 	"github.com/quailyquaily/mistermorph/internal/chathistory"
 	"github.com/quailyquaily/mistermorph/internal/daemonruntime"
+	"github.com/quailyquaily/mistermorph/internal/grouptrigger"
 	"github.com/quailyquaily/mistermorph/internal/larkapi"
 	"github.com/quailyquaily/mistermorph/internal/llmstats"
 	"github.com/quailyquaily/mistermorph/internal/outputfmt"
@@ -29,6 +30,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/taskdomain"
 	"github.com/quailyquaily/mistermorph/internal/textutil"
 	"github.com/quailyquaily/mistermorph/internal/workspace"
+	larktools "github.com/quailyquaily/mistermorph/tools/lark"
 )
 
 func runLarkLoop(ctx context.Context, d Dependencies, opts RunOptions) error {
@@ -388,6 +390,16 @@ func runLarkLoop(ctx context.Context, d Dependencies, opts RunOptions) error {
 		if handledCommand, cmdErr := maybeHandleLarkCommand(ctx, d, inprocBus, workspaceStore, msg.ConversationKey, inbound, currentSkills); handledCommand {
 			return cmdErr
 		}
+		// lightweightDecided: a decision-route check chose text, so the run skips the lightweight
+		// rules and the pre-check below does not run again.
+		lightweightDecided := false
+		appendLightweightHistory := func(emojiType string) {
+			job := larkJobFromInbound(inbound)
+			mu.Lock()
+			cur := append(history[msg.ConversationKey], newLarkInboundHistoryItem(job), newLarkOutboundAgentHistoryItem(job, "[reacted: "+emojiType+"]", time.Now().UTC()))
+			history[msg.ConversationKey] = trimChatHistoryItems(cur, larkHistoryCapForMode(groupTriggerMode))
+			mu.Unlock()
+		}
 		if !contextCompactionOnly && strings.EqualFold(strings.TrimSpace(inbound.ChatType), "group") {
 			mu.Lock()
 			historySnapshot := append([]chathistory.ChatHistoryItem(nil), history[msg.ConversationKey]...)
@@ -408,6 +420,12 @@ func runLarkLoop(ctx context.Context, d Dependencies, opts RunOptions) error {
 			if addressingLLMTimeout <= 0 {
 				addressingLLMTimeout = requestTimeout
 			}
+			var groupReactTool *larktools.ReactTool
+			var react func(context.Context, string) error
+			if strings.TrimSpace(inbound.MessageID) != "" {
+				groupReactTool = larktools.NewReactTool(newLarkToolAPI(api), inbound.MessageID)
+				react = grouptrigger.ReactWith(groupReactTool)
+			}
 			dec, accepted, decErr := decideLarkGroupTrigger(
 				decisionCtx,
 				addressingBundle.AddressingClient,
@@ -418,6 +436,7 @@ func runLarkLoop(ctx context.Context, d Dependencies, opts RunOptions) error {
 				addressingConfidenceThreshold,
 				addressingInterjectThreshold,
 				historySnapshot,
+				react,
 				d.RuntimePaths.PersonaDir,
 			)
 			addressingLease.Release()
@@ -431,9 +450,7 @@ func runLarkLoop(ctx context.Context, d Dependencies, opts RunOptions) error {
 					"text_len", len(text),
 					"llm_attempted", dec.AddressingLLMAttempted,
 					"llm_ok", dec.AddressingLLMOK,
-					"llm_addressed", dec.Addressing.Addressed,
 					"confidence", dec.Addressing.Confidence,
-					"wanna_interject", dec.Addressing.WannaInterject,
 					"interject", dec.Addressing.Interject,
 					"impulse", dec.Addressing.Impulse,
 					"is_lightweight", dec.Addressing.IsLightweight,
@@ -466,12 +483,19 @@ func runLarkLoop(ctx context.Context, d Dependencies, opts RunOptions) error {
 				}
 				return nil
 			}
+			if dec.ReactionHandled {
+				emojiType := dec.Addressing.Reaction
+				if reaction := groupReactTool.LastReaction(); reaction != nil {
+					emojiType = reaction.EmojiType
+				}
+				appendLightweightHistory(emojiType)
+				return nil
+			}
+			lightweightDecided = dec.UsedAddressingLLM && addressingBundle.LightweightPrecheck
 			logger.Info("lark_group_trigger",
 				"chat_id", inbound.ChatID,
 				"reason", dec.Reason,
-				"llm_addressed", dec.Addressing.Addressed,
 				"confidence", dec.Addressing.Confidence,
-				"wanna_interject", dec.Addressing.WannaInterject,
 				"interject", dec.Addressing.Interject,
 				"impulse", dec.Addressing.Impulse,
 				"is_lightweight", dec.Addressing.IsLightweight,
@@ -482,6 +506,17 @@ func runLarkLoop(ctx context.Context, d Dependencies, opts RunOptions) error {
 				correlationID := fmt.Sprintf("lark:steer:%s:%s", inbound.ChatID, inbound.MessageID)
 				_, publishErr := publishLarkBusOutbound(ctx, inprocBus, inbound.ChatID, runtimecontrol.SteerFeedback(result.Found, result.Queued), inbound.MessageID, correlationID)
 				return publishErr
+			}
+		}
+		if !lightweightDecided && !contextCompactionOnly && strings.TrimSpace(inbound.MessageID) != "" &&
+			runtimecore.LightweightPrecheckApplies(text, len(inbound.ImageKeys) > 0 || len(inbound.ImageAttachments) > 0) {
+			result, emojiType := runLarkLightweightPrecheck(ctx, runtimeGenerations, api, inbound, msg.ConversationKey, history, &mu, d.RuntimePaths.PersonaDir, logger)
+			switch result {
+			case runtimecore.PrecheckHandled:
+				appendLightweightHistory(emojiType)
+				return nil
+			case runtimecore.PrecheckText:
+				lightweightDecided = true
 			}
 		}
 		workspaceResolution, err := workspace.Resolve(workspaceStore, msg.ConversationKey, d.DefaultWorkspaceDir)
@@ -522,23 +557,24 @@ func runLarkLoop(ctx context.Context, d Dependencies, opts RunOptions) error {
 		buildJob := func(version uint64) larkJob {
 			admittedRoute := taskRoute
 			return larkJob{
-				TaskID:          jobTaskID,
-				ConversationKey: msg.ConversationKey,
-				ChatID:          inbound.ChatID,
-				ChatType:        inbound.ChatType,
-				MessageID:       inbound.MessageID,
-				FromUserID:      inbound.FromUserID,
-				DisplayName:     inbound.DisplayName,
-				Text:            text,
-				ImagePaths:      imagePaths,
-				Images:          append([]chathistory.ChatHistoryImage(nil), images...),
-				WorkspaceDir:    workspaceDir,
-				Route:           &admittedRoute,
-				SentAt:          inbound.SentAt,
-				Version:         version,
-				MentionUsers:    append([]string(nil), inbound.MentionUsers...),
-				EventID:         inbound.EventID,
-				Generation:      generationLease,
+				TaskID:             jobTaskID,
+				ConversationKey:    msg.ConversationKey,
+				ChatID:             inbound.ChatID,
+				ChatType:           inbound.ChatType,
+				MessageID:          inbound.MessageID,
+				FromUserID:         inbound.FromUserID,
+				DisplayName:        inbound.DisplayName,
+				Text:               text,
+				ImagePaths:         imagePaths,
+				Images:             append([]chathistory.ChatHistoryImage(nil), images...),
+				WorkspaceDir:       workspaceDir,
+				Route:              &admittedRoute,
+				SentAt:             inbound.SentAt,
+				Version:            version,
+				MentionUsers:       append([]string(nil), inbound.MentionUsers...),
+				EventID:            inbound.EventID,
+				Generation:         generationLease,
+				LightweightDecided: lightweightDecided,
 			}
 		}
 		if daemonStore != nil {

@@ -47,6 +47,8 @@ type telegramJob struct {
 	Meta             map[string]any
 	MentionUsers     []string
 	Generation       *runtimecore.RuntimeGenerationLease
+	// LightweightDecided: the decision route already chose a text reply for this message.
+	LightweightDecided bool
 }
 
 func (j telegramJob) runtimeBundle(fallback *runtimecore.ChannelRuntimeBundle) *runtimecore.ChannelRuntimeBundle {
