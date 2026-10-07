@@ -156,10 +156,23 @@ function taskRawJSON(task) {
   return task ? stringifyResult(task) : "";
 }
 
+// A list of strings, the shape a model most often returns instead of text, shows as a Markdown
+// list, like the server's outputfmt.FormatFinalOutput.
+function markdownList(items) {
+  if (!Array.isArray(items) || items.length === 0 || !items.every((item) => typeof item === "string")) {
+    return "";
+  }
+  return items.map((item) => `- ${item.trim()}`).join("\n");
+}
+
 function taskOutputText(task) {
   const finalOutput = task?.result?.final?.output;
   if (typeof finalOutput === "string") {
     return finalOutput.trim();
+  }
+  const list = markdownList(finalOutput);
+  if (list) {
+    return list;
   }
   if (finalOutput !== undefined && finalOutput !== null) {
     return stringifyResult(finalOutput);

@@ -25,6 +25,9 @@ func TestFormatFinalOutput(t *testing.T) {
 		{"zero", &agent.Final{Output: 0}, "0"},
 		{"array", &agent.Final{Output: []string{}}, "[]"},
 		{"object", &agent.Final{Output: map[string]any{"value": nil}}, "{\n  \"value\": null\n}"},
+		{"list of strings", &agent.Final{Output: []any{"Registration", " `read_file` "}}, "- Registration\n- `read_file`"},
+		{"empty list", &agent.Final{Output: []any{}}, "[]"},
+		{"mixed list", &agent.Final{Output: []any{"a", 1.0}}, "[\n  \"a\",\n  1\n]"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := FormatFinalOutput(tc.final); got != tc.want {

@@ -16,6 +16,12 @@ func FormatFinalOutput(final *agent.Final) string {
 	switch v := final.Output.(type) {
 	case string:
 		return normalizeFinalStringOutput(v)
+	case []any:
+		if list, ok := markdownList(v); ok {
+			return list
+		}
+		b, _ := json.MarshalIndent(v, "", "  ")
+		return strings.TrimSpace(string(b))
 	default:
 		b, _ := json.MarshalIndent(v, "", "  ")
 		if string(b) == "null" {
@@ -23,6 +29,23 @@ func FormatFinalOutput(final *agent.Final) string {
 		}
 		return strings.TrimSpace(string(b))
 	}
+}
+
+// markdownList renders a list of strings, the shape a model most often returns instead of text,
+// as a Markdown bullet list.
+func markdownList(items []any) (string, bool) {
+	if len(items) == 0 {
+		return "", false
+	}
+	lines := make([]string, 0, len(items))
+	for _, item := range items {
+		text, ok := item.(string)
+		if !ok {
+			return "", false
+		}
+		lines = append(lines, "- "+strings.TrimSpace(text))
+	}
+	return strings.Join(lines, "\n"), true
 }
 
 func normalizeFinalStringOutput(raw string) string {

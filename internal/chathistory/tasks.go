@@ -208,12 +208,12 @@ func TaskResultOutput(result any) string {
 	case string:
 		return strings.TrimSpace(value)
 	case agent.Final:
-		return TaskResultOutput(value.Output)
+		return stringifyTaskResultValue(value.Output)
 	case *agent.Final:
 		if value == nil {
 			return ""
 		}
-		return TaskResultOutput(value.Output)
+		return stringifyTaskResultValue(value.Output)
 	case map[string]any:
 		if nested, ok := value["final"]; ok {
 			if text := TaskResultOutput(nested); text != "" {

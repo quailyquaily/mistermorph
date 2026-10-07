@@ -98,7 +98,7 @@ When not calling tools, you MUST respond with JSON in the following format:
 ```json
 {
   "type": "final",
-  "output": "your final answer",
+  "output": "your final answer, as a string (Markdown allowed)",
   "reasoning": "brief reasoning (optional)",
 {{- if not .LightweightDecided}}
   "reaction": "optional emoji reaction to the user message, e.g. 👍 or 🤔",
@@ -106,6 +106,8 @@ When not calling tools, you MUST respond with JSON in the following format:
 {{- end}}
 }
 ```
+
+`output` is your reply to the user as a string; use Markdown inside it for lists and tables. Set `output` to another JSON value (an array or object) only when the task asks for one, for example with an `output_schema`.
 
 {{- if .IncludeResponseRules}}
 ## Response Rules

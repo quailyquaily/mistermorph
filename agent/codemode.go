@@ -19,7 +19,7 @@ const codeModeToolName = "codemode"
 // Code Mode defaults.
 const (
 	DefaultCodeModeTimeout      = 120 * time.Second
-	DefaultCodeModeMaxToolCalls = 32
+	DefaultCodeModeMaxToolCalls = 256
 	DefaultCodeModeMaxParallel  = 4
 )
 
@@ -57,6 +57,7 @@ const codeModePromptBlock = `[[ Code Mode ]]
 - ` + "`searchTools(query, {server, limit})`" + ` finds tools, and ` + "`describeTool(name)`" + ` returns {name, description, inputSchema}. Tools a search finds can be called in the same script.
 - Only ` + "`text(value)`" + `, ` + "`console.log(...)`" + ` and the returned value come back to you; intermediate results do not. Do the work in the script (parse, count, search, filter) and return only the values you need, not whole tool results.
 - Scripts cannot call ` + "`bash`" + `, ` + "`powershell`" + `, ` + "`plan_create`" + `, ` + "`message_react`" + `, ` + "`tool_search`" + ` or tools that need approval: call those directly. There are no timers, no imports, no filesystem or network APIs other than your tools.
+- A script's output is material for you, not the reply: write your final answer to the user as text, for example a Markdown list, not the script's JSON.
 - If the result's status is ` + "`requires_direct_call`" + `, make the pending call directly; do not rerun the script to repeat calls that already succeeded.`
 
 // codeModeTool is codemode. It reads the run's state from the context, like tool_search.

@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/quailyquaily/mistermorph/agent"
 	"github.com/quailyquaily/mistermorph/internal/taskdomain"
 )
 
@@ -48,5 +49,25 @@ func TestBuildTaskHistoryIncludesPlanStepMessagesBeforeTheReply(t *testing.T) {
 func TestTaskStepMessagesWithoutAPlan(t *testing.T) {
 	if got := TaskStepMessages(taskdomain.TaskInfo{ID: "t", Result: map[string]any{"final": map[string]any{"output": "hi"}}}); len(got) != 0 {
 		t.Fatalf("step messages = %+v", got)
+	}
+}
+
+func TestTaskResultOutputKeepsRepliesThatAreNotText(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		result any
+		want   string
+	}{
+		{"text", map[string]any{"final": &agent.Final{Output: " done "}}, "done"},
+		{"list", map[string]any{"final": &agent.Final{Output: []any{"a", "b"}}}, `["a","b"]`},
+		{"object", map[string]any{"final": agent.Final{Output: map[string]any{"n": 1}}}, `{"n":1}`},
+		{"stored as JSON", map[string]any{"final": map[string]any{"output": []any{"a"}}}, `["a"]`},
+		{"no output", map[string]any{"final": &agent.Final{}}, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := TaskResultOutput(tc.result); got != tc.want {
+				t.Fatalf("TaskResultOutput() = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }
