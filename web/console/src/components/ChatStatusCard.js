@@ -174,6 +174,24 @@ function activityParams(entry) {
   return items;
 }
 
+// activityChildren are the tool calls a codemode script made, shown under its entry.
+function activityChildren(entry) {
+  return Array.isArray(entry?.children) ? entry.children.filter(Boolean) : [];
+}
+
+function activityChildCount(entry) {
+  return activityChildren(entry).length + (Number(entry?.childrenOmitted) || 0);
+}
+
+function activityChildClass(child) {
+  return `chat-activity-child is-${normalizeTaskStatus(child?.status).replaceAll("_", "-")}`;
+}
+
+function activityChildParam(child) {
+  const params = activityParams(child);
+  return params.length > 0 ? params[0].value : "";
+}
+
 function activityEntryNote(entry) {
   const errorText = cleanText(entry?.error);
   if (errorText) {
@@ -303,6 +321,10 @@ const ChatStatusCard = {
       activityEntryTitle,
       activityKindLabel,
       activityParams,
+      activityChildren,
+      activityChildCount,
+      activityChildClass,
+      activityChildParam,
       planProgressText,
       planStepClass,
     };
@@ -391,7 +413,10 @@ const ChatStatusCard = {
                   <div class="chat-activity-copy">
                     <div class="chat-activity-line">
                       <span class="chat-activity-kind">{{ activityKindLabel(entry, t) }}</span>
-                      <span class="chat-activity-name">{{ activityEntryTitle(entry) }}</span>
+                      <span class="chat-activity-name">
+                        {{ activityEntryTitle(entry) }}
+                        <span v-if="activityChildCount(entry) > 0" class="chat-activity-count">{{ t("chat_activity_calls", { count: activityChildCount(entry) }) }}</span>
+                      </span>
                       <time v-if="activityEntryTimeText(entry)" class="chat-activity-time">
                         {{ activityEntryTimeText(entry) }}
                       </time>
@@ -406,7 +431,22 @@ const ChatStatusCard = {
                         <span class="chat-activity-param-value">{{ param.value }}</span>
                       </span>
                     </div>
-                    <p v-if="activityEntryNote(entry)" class="chat-activity-note">{{ activityEntryNote(entry) }}</p>
+                    <p v-if="activityEntryNote(entry) && activityChildren(entry).length === 0" class="chat-activity-note">{{ activityEntryNote(entry) }}</p>
+                    <ol v-if="activityChildren(entry).length > 0" class="chat-activity-children">
+                      <li v-if="entry.childrenOmitted > 0" class="chat-activity-child is-omitted">
+                        {{ t("chat_activity_calls_omitted", { count: entry.childrenOmitted }) }}
+                      </li>
+                      <li
+                        v-for="(child, childIndex) in activityChildren(entry)"
+                        :key="itemId + ':activity:child:' + activityEntryKey(child, childIndex)"
+                        :class="activityChildClass(child)"
+                      >
+                        <span class="chat-activity-child-dot" aria-hidden="true"></span>
+                        <span class="chat-activity-name">{{ activityEntryTitle(child) }}</span>
+                        <span v-if="activityChildParam(child)" class="chat-activity-param-value">{{ activityChildParam(child) }}</span>
+                        <p v-if="child.error" class="chat-activity-note">{{ child.error }}</p>
+                      </li>
+                    </ol>
                   </div>
                 </li>
               </TransitionGroup>

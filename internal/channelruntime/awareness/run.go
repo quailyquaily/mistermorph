@@ -604,6 +604,10 @@ func runAwarenessTask(ctx context.Context, d Dependencies, opts awarenessTaskOpt
 			opts.Logger.Warn("awareness_tool_search_close_failed", "error", closeErr.Error())
 		}
 	}()
+	codeModeOption, codeModeErr := taskruntime.CodeModeOption(reg, d.RuntimeToolsConfig.CodeMode)
+	if codeModeErr != nil {
+		return "", codeModeErr
+	}
 	promptprofile.ApplyPersonaIdentity(&promptSpec, opts.Logger, d.RuntimePaths.PersonaDir)
 	promptprofile.AppendPlanCreateGuidanceBlock(&promptSpec, reg)
 	if d.PromptAugment != nil {
@@ -631,6 +635,7 @@ func runAwarenessTask(ctx context.Context, d Dependencies, opts awarenessTaskOpt
 		agent.WithSystemPromptCacheControl(systemPromptCacheControl),
 		agent.WithGuard(opts.SharedGuard),
 		toolSearchOption,
+		codeModeOption,
 	)
 	final, _, err := engine.Run(runCtx, task, agent.RunOptions{
 		Model: taskModel,

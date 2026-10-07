@@ -111,6 +111,9 @@ type runToolSearch struct {
 	mu      sync.Mutex
 	visible map[string]bool
 	pending []tools.Tool
+	// handoff are tools a codemode script stopped at for approval: visible on the next step so
+	// the model can call them directly, without counting as found.
+	handoff []tools.Tool
 	found   []string
 	touched []string
 }
@@ -238,7 +241,22 @@ func (e *Engine) applyFoundTools(st *engineLoopState) {
 	search.mu.Lock()
 	pending := search.pending
 	search.pending = nil
-	added := make([]string, 0, len(pending))
+	added := make([]string, 0, len(pending)+len(search.handoff))
+	for _, tool := range search.handoff {
+		name := tool.Name()
+		if search.visible[name] {
+			continue
+		}
+		if _, exists := e.registry.Get(name); !exists {
+			if err := e.registry.Register(tool); err != nil {
+				st.log.Warn("codemode_handoff_register_failed", "tool", name, "error", err.Error())
+				continue
+			}
+		}
+		search.visible[name] = true
+		added = append(added, name)
+	}
+	search.handoff = nil
 	for _, tool := range pending {
 		name := tool.Name()
 		if search.visible[name] {
@@ -383,32 +401,10 @@ func (t *toolSearchTool) Execute(ctx context.Context, params map[string]any) (st
 				matches = append(matches, m)
 			}
 		}
-		if search.opts.Catalog != nil {
-			for _, srv := range search.opts.Catalog.Servers() {
-				if class, matched, ok := matchText(query, srv.Name, srv.Description); ok {
-					matches = append(matches, toolSearchMatch{class: class, matched: matched, name: srv.Name, server: srv})
-				}
-			}
-		}
+		matches = append(matches, matchServers(search.opts.Catalog, query)...)
 	}
-	sort.SliceStable(matches, func(i, j int) bool {
-		a, b := matches[i], matches[j]
-		if a.class != b.class {
-			return a.class < b.class
-		}
-		if a.matched != b.matched {
-			return a.matched > b.matched
-		}
-		if a.isTool != b.isTool {
-			return a.isTool
-		}
-		return a.name < b.name
-	})
 	out := toolSearchOutput{Tools: []toolSearchToolResult{}, Servers: []toolSearchServerResult{}}
-	if len(matches) > limit {
-		out.HasMore = true
-		matches = matches[:limit]
-	}
+	matches, out.HasMore = rankMatches(matches, limit)
 
 	search.mu.Lock()
 	room := search.opts.MaxFound - len(search.found) - len(search.pending)
@@ -441,6 +437,41 @@ func (t *toolSearchTool) Execute(ctx context.Context, params map[string]any) (st
 		return "", err
 	}
 	return string(data), nil
+}
+
+// matchServers are the catalog's servers that match query.
+func matchServers(catalog ToolCatalog, query string) []toolSearchMatch {
+	if catalog == nil {
+		return nil
+	}
+	var out []toolSearchMatch
+	for _, srv := range catalog.Servers() {
+		if class, matched, ok := matchText(query, srv.Name, srv.Description); ok {
+			out = append(out, toolSearchMatch{class: class, matched: matched, name: srv.Name, server: srv})
+		}
+	}
+	return out
+}
+
+// rankMatches orders matches best first and keeps at most limit; hasMore reports a cut.
+func rankMatches(matches []toolSearchMatch, limit int) ([]toolSearchMatch, bool) {
+	sort.SliceStable(matches, func(i, j int) bool {
+		a, b := matches[i], matches[j]
+		if a.class != b.class {
+			return a.class < b.class
+		}
+		if a.matched != b.matched {
+			return a.matched > b.matched
+		}
+		if a.isTool != b.isTool {
+			return a.isTool
+		}
+		return a.name < b.name
+	})
+	if len(matches) > limit {
+		return matches[:limit], true
+	}
+	return matches, false
 }
 
 func (s *runToolSearch) serverOf(name string) string {

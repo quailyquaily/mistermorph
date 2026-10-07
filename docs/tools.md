@@ -14,6 +14,7 @@ This document describes the built-in and runtime-injected tool parameters curren
   - `spawn`: registered when an agent engine is assembled for a run; depends on the current subtask runner, parent tool lookup, and default model.
   - `coder`: registered when an agent engine is assembled for a run; depends on the current subtask runner and starts the local Codex or Claude Code CLI.
   - `acp_spawn`: registered when an agent engine is assembled for a run; depends on ACP agent profiles plus the current subtask runner.
+  - `codemode`: registered by the engine when `tools.codemode.enabled` (default on); runs a JavaScript program that calls the run's tools. Never given to subtasks. See [`codemode`](#codemode).
 - `runtime-dependent` tools:
   - `todo_update`: runtime-injected, depends on active LLM client/model plus cron/contacts paths from runtime config.
   - `plan_create`: runtime-injected, depends on active LLM client/model.
@@ -381,6 +382,64 @@ Constraints:
 - A multi-target call is rejected before sending anything when any target is not an active Agent.
 - `agent_send` has no separate config key. Removing or deactivating all Agent Contacts makes it unavailable.
 - `contacts_send` registration and group-chat restrictions are unchanged.
+
+## `codemode`
+
+Purpose: run a JavaScript program that calls the run's tools, so the model can chain and filter several tool calls in one step and keep intermediate results out of the conversation. It runs on [moejs](https://github.com/Calcium-Ion/moejs), inside the process.
+
+Parameters:
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `code` | `string` | Yes | JavaScript, run as the body of an async function: top-level `await` and `return` work. No TypeScript, no Markdown fences. |
+
+```js
+const [readme, mod] = await Promise.all([
+  tools.read_file({path: "README.md"}),
+  tools.read_file({path: "go.mod"}),
+]);
+text(readme.split("\n")[0]);
+return mod.match(/^go .*/m)[0];
+```
+
+What a script has:
+
+| Global | Contract |
+|---|---|
+| `tools[name](args)` | Calls a tool with an argument object; resolves to its text result, rejects with a `ToolError` (`name`, `tool`, `message`) |
+| `searchTools(query, {server, limit})` | Finds tools and servers; tools it finds can be called in the same script |
+| `describeTool(name)` | `{name, description, inputSchema}` of a callable tool |
+| `text(value)`, `console.log(...values)` | Append to the output; non-strings as JSON |
+| `return value` | Appended like `text` |
+
+Nothing else: no timers, imports, `eval`, filesystem, network, environment or process access except through tools. Builtins are frozen.
+
+Result (the tool's observation):
+
+```json
+{
+  "status": "completed",
+  "output": ["# MisterMorph", "go 1.25.0"],
+  "calls": [{"tool": "read_file", "outcome": "succeeded"}, {"tool": "read_file", "outcome": "succeeded"}],
+  "elapsed_ms": 3
+}
+```
+
+- `status`: `completed`, `failed`, `timed_out`, `cancelled`, `output_limit`, `memory_limit` or `requires_direct_call`; `error` says why when not completed.
+- `calls`: each operation with `succeeded`, `failed`, `denied`, `not_started`, `cancelled` or `requires_approval`. Only the output reaches the model; intermediate results do not.
+- `pending_call`: with `requires_direct_call`, the call the model must make directly.
+
+Rules:
+
+- Every call goes through the same checks as a direct call: visibility, `tool_repeat_limit`, guard pre-check and output redaction, hooks, events and audit. A guard deny rejects the call's promise; a call that needs approval stops the script with `requires_direct_call`. The script is never rerun automatically.
+- Scripts cannot call `codemode`, `tool_search`, `plan_create`, `message_react`, `bash`, `powershell`, `skill_install` or tools that end the run.
+- With tool search, a script can call MCP tools the model already sees, and tools its own `searchTools` found (a `server` search connects that server). Those stay invisible to the model and are not remembered by the conversation.
+- Read-only (parallel-safe) calls run concurrently up to `max_parallel_calls`; any other call runs alone, in issue order.
+- When the script ends, calls it issued but that have not started are dropped (`not_started`); started calls finish within the deadline. A timeout or cancellation cancels them.
+- One script is one step toward `max_steps`.
+- Limits: `timeout` (default 120s, also bounded by the task deadline), `max_tool_calls` (32, including searches), `max_parallel_calls` (4); source 64 KiB, one tool argument object 256 KiB, one result 1 MiB, all results 8 MiB, output 64 KiB or 256 items.
+- Memory is watched, not capped: while scripts run, the process heap is sampled every 100 ms, each result logs its approximate heap growth, and running scripts stop with `memory_limit` when the heap passes 90% of `GOMEMLIMIT` (2 GiB without one). A single large allocation can still exhaust the process. Set `tools.codemode.enabled: false` to turn it off.
+- In the Console activity panel a script is one entry with its calls listed under it; the CLI prints them indented under `▸ codemode`.
 
 ## `plan_create`
 

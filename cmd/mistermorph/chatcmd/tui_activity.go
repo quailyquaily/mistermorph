@@ -54,6 +54,10 @@ func configureChatSessionCallbacks(sess *chatSession, logger *slog.Logger) {
 
 	sess.onToolCallStart = func(_ *agent.Context, call agent.ToolCall) {
 		sess.setActivity(formatChatToolActivity(call), true)
+		if call.Name == "codemode" {
+			// The script's calls print, indented, as they finish, before the codemode result.
+			_, _ = fmt.Fprintln(sess.currentWriter(), chatSecondaryStyle.Render("▸ codemode"))
+		}
 		if call.Name != "write_file" {
 			return
 		}
@@ -83,11 +87,28 @@ func configureChatSessionCallbacks(sess *chatSession, logger *slog.Logger) {
 			outputLines[index] = chatMutedStyle.Render(line)
 		}
 		writer := sess.currentWriter()
+		// A call a codemode script made prints as one indented line; its output stays in the script.
+		nested := call.ParentID != ""
+		prefix := ""
+		if nested {
+			prefix = "    "
+			toolCall = toolLines[0]
+			outputLines = nil
+		}
 		if callErr != nil {
 			errorLines := indentChatLines([]string{"error: " + escapeTerminalControls(strings.TrimSpace(callErr.Error()))}, width)
-			_, _ = fmt.Fprintf(writer, "%s %s\n", chatErrorStyle.Render("×"), toolCall)
+			if nested {
+				for index, line := range errorLines {
+					errorLines[index] = prefix + line
+				}
+			}
+			_, _ = fmt.Fprintf(writer, "%s%s %s\n", prefix, chatErrorStyle.Render("×"), toolCall)
 			if len(outputLines) > 0 {
 				_, _ = fmt.Fprintln(writer, strings.Join(outputLines, "\n"))
+			}
+			if nested {
+				_, _ = fmt.Fprintf(writer, "%s\n", strings.Join(errorLines, "\n"))
+				return
 			}
 			_, _ = fmt.Fprintf(writer, "%s\n\n", strings.Join(errorLines, "\n"))
 			sess.setActivity("waiting for model", false)
@@ -96,12 +117,14 @@ func configureChatSessionCallbacks(sess *chatSession, logger *slog.Logger) {
 		if call.Name == "plan_create" {
 			return
 		}
-		_, _ = fmt.Fprintf(writer, "%s %s\n", chatSuccessStyle.Render("✓"), toolCall)
+		_, _ = fmt.Fprintf(writer, "%s%s %s\n", prefix, chatSuccessStyle.Render("✓"), toolCall)
 		if len(outputLines) > 0 {
 			_, _ = fmt.Fprintln(writer, strings.Join(outputLines, "\n"))
 		}
-		_, _ = fmt.Fprintln(writer)
-		sess.setActivity("waiting for model", false)
+		if !nested {
+			_, _ = fmt.Fprintln(writer)
+			sess.setActivity("waiting for model", false)
+		}
 		if call.Name != "write_file" {
 			return
 		}

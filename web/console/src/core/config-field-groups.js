@@ -115,6 +115,15 @@ export const TOOL_ADVANCED_CONFIG_GROUPS = {
       { path: "tools.plan_create.max_steps", label: "Plan maximum steps", type: "int" },
     ],
   }],
+  codemode: [{
+    id: "codemode",
+    title: "codemode",
+    fields: [
+      { path: "tools.codemode.timeout", label: "Script timeout", type: "string", duration: true, editor: "duration" },
+      { path: "tools.codemode.max_tool_calls", label: "Maximum tool calls per script", type: "int" },
+      { path: "tools.codemode.max_parallel_calls", label: "Maximum parallel calls", type: "int" },
+    ],
+  }],
   url_fetch: [{
     id: "url-fetch",
     title: "url_fetch",

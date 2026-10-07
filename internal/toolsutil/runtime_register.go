@@ -2,6 +2,7 @@ package toolsutil
 
 import (
 	"strings"
+	"time"
 
 	"github.com/quailyquaily/mistermorph/internal/imagesession"
 	"github.com/quailyquaily/mistermorph/llm"
@@ -15,6 +16,16 @@ type RuntimeToolsRegisterConfig struct {
 	TodoUpdate TodoUpdateRegisterConfig
 	Image      ImageToolsRegisterConfig
 	ToolSearch ToolSearchConfig
+	CodeMode   CodeModeConfig
+}
+
+// CodeModeConfig is tools.codemode: the codemode tool, which runs a model-written JavaScript
+// program that calls the run's tools.
+type CodeModeConfig struct {
+	Enabled          bool
+	Timeout          time.Duration
+	MaxToolCalls     int
+	MaxParallelCalls int
 }
 
 // ToolSearchConfig is tools.tool_search: when enabled, MCP tools stay hidden until the model
@@ -26,6 +37,7 @@ type ToolSearchConfig struct {
 
 type runtimeRegisterConfigReader interface {
 	GetBool(string) bool
+	GetDuration(string) time.Duration
 	GetInt(string) int
 	GetString(string) string
 	GetStringSlice(string) []string
@@ -61,6 +73,12 @@ func LoadRuntimeToolsRegisterConfigFromReader(r runtimeRegisterConfigReader) Run
 		ToolSearch: ToolSearchConfig{
 			Enabled:      r.GetBool("tools.tool_search.enabled"),
 			AlwaysLoaded: normalizeToolNames(r.GetStringSlice("tools.tool_search.always_loaded")),
+		},
+		CodeMode: CodeModeConfig{
+			Enabled:          r.GetBool("tools.codemode.enabled"),
+			Timeout:          r.GetDuration("tools.codemode.timeout"),
+			MaxToolCalls:     r.GetInt("tools.codemode.max_tool_calls"),
+			MaxParallelCalls: r.GetInt("tools.codemode.max_parallel_calls"),
 		},
 	}
 }

@@ -29,25 +29,27 @@ const (
 )
 
 type Event struct {
-	Kind            string         `json:"kind"`
-	RunID           string         `json:"run_id,omitempty"`
-	Model           string         `json:"model,omitempty"`
-	Step            int            `json:"step,omitempty"`
-	ActivityID      string         `json:"activity_id,omitempty"`
-	ConversationKey string         `json:"conversation_key,omitempty"`
-	TopicID         string         `json:"topic_id,omitempty"`
-	ToolName        string         `json:"tool_name,omitempty"`
-	TaskID          string         `json:"task_id,omitempty"`
-	Status          string         `json:"status,omitempty"`
-	Reason          string         `json:"reason,omitempty"`
-	Mode            string         `json:"mode,omitempty"`
-	Profile         string         `json:"profile,omitempty"`
-	Stream          string         `json:"stream,omitempty"`
-	Text            string         `json:"text,omitempty"`
-	Summary         string         `json:"summary,omitempty"`
-	OutputKind      string         `json:"output_kind,omitempty"`
-	Error           string         `json:"error,omitempty"`
-	Args            map[string]any `json:"args,omitempty"`
+	Kind       string `json:"kind"`
+	RunID      string `json:"run_id,omitempty"`
+	Model      string `json:"model,omitempty"`
+	Step       int    `json:"step,omitempty"`
+	ActivityID string `json:"activity_id,omitempty"`
+	// ParentActivityID links a tool call a codemode script made to the codemode call.
+	ParentActivityID string         `json:"parent_activity_id,omitempty"`
+	ConversationKey  string         `json:"conversation_key,omitempty"`
+	TopicID          string         `json:"topic_id,omitempty"`
+	ToolName         string         `json:"tool_name,omitempty"`
+	TaskID           string         `json:"task_id,omitempty"`
+	Status           string         `json:"status,omitempty"`
+	Reason           string         `json:"reason,omitempty"`
+	Mode             string         `json:"mode,omitempty"`
+	Profile          string         `json:"profile,omitempty"`
+	Stream           string         `json:"stream,omitempty"`
+	Text             string         `json:"text,omitempty"`
+	Summary          string         `json:"summary,omitempty"`
+	OutputKind       string         `json:"output_kind,omitempty"`
+	Error            string         `json:"error,omitempty"`
+	Args             map[string]any `json:"args,omitempty"`
 }
 
 type EventSink interface {

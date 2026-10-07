@@ -14,6 +14,24 @@ import (
 	"github.com/quailyquaily/mistermorph/tools"
 )
 
+// CodeModeOption prepares codemode for one run, or returns nil when tools.codemode is off.
+func CodeModeOption(reg *tools.Registry, cfg toolsutil.CodeModeConfig) (agent.Option, error) {
+	if !cfg.Enabled || reg == nil {
+		return nil, nil
+	}
+	if cfg.Timeout <= 0 || cfg.MaxToolCalls <= 0 || cfg.MaxParallelCalls <= 0 {
+		return nil, fmt.Errorf("tools.codemode.timeout, max_tool_calls and max_parallel_calls must be positive")
+	}
+	if _, exists := reg.Get("codemode"); exists {
+		return nil, fmt.Errorf("a registered tool is named codemode, which Code Mode needs; rename that tool or turn tools.codemode off")
+	}
+	return agent.WithCodeMode(agent.CodeModeOptions{
+		Timeout:          cfg.Timeout,
+		MaxToolCalls:     cfg.MaxToolCalls,
+		MaxParallelCalls: cfg.MaxParallelCalls,
+	}), nil
+}
+
 // ToolSearchOption prepares tool search for one run: MCP tools stay hidden until the model finds
 // them, except cfg.AlwaysLoaded and visible (tools found earlier in the conversation, and tools of
 // servers the task referenced). It returns a nil option when tool search is off or nothing would

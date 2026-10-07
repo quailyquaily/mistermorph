@@ -127,6 +127,7 @@ const TOOL_ITEMS = [
   { id: "contacts_send", titleKey: "settings_tool_contacts_send", noteKey: "settings_tool_note_contacts_send" },
   { id: "todo_update", titleKey: "settings_tool_todo_update", noteKey: "settings_tool_note_todo_update" },
   { id: "plan_create", titleKey: "settings_tool_plan_create", noteKey: "settings_tool_note_plan_create" },
+  { id: "codemode", titleKey: "settings_tool_codemode", noteKey: "settings_tool_note_codemode" },
   { id: "url_fetch", titleKey: "settings_tool_url_fetch", noteKey: "settings_tool_note_url_fetch" },
   { id: "web_search", titleKey: "settings_tool_web_search", noteKey: "settings_tool_note_web_search" },
   { id: "bash", titleKey: "settings_tool_bash", noteKey: "settings_tool_note_bash" },
@@ -482,6 +483,7 @@ function buildToolsSnapshot(state) {
       contacts_send: !!state.tools.contacts_send,
       todo_update: !!state.tools.todo_update,
       plan_create: !!state.tools.plan_create,
+      codemode: !!state.tools.codemode,
       url_fetch: !!state.tools.url_fetch,
       web_search: !!state.tools.web_search,
       bash: !!state.tools.bash,
@@ -892,6 +894,7 @@ const SettingsView = {
         contacts_send: true,
         todo_update: true,
         plan_create: true,
+        codemode: true,
         url_fetch: true,
         web_search: true,
         bash: true,
@@ -2107,6 +2110,7 @@ const SettingsView = {
       state.tools.contacts_send = true;
       state.tools.todo_update = true;
       state.tools.plan_create = true;
+      state.tools.codemode = true;
       state.tools.url_fetch = true;
       state.tools.web_search = true;
       state.tools.bash = true;
@@ -2260,6 +2264,7 @@ const SettingsView = {
       state.tools.contacts_send = toolEnabledValue(tools.contacts_send);
       state.tools.todo_update = toolEnabledValue(tools.todo_update);
       state.tools.plan_create = toolEnabledValue(tools.plan_create);
+      state.tools.codemode = toolEnabledValue(tools.codemode);
       state.tools.url_fetch = toolEnabledValue(tools.url_fetch);
       state.tools.web_search = toolEnabledValue(tools.web_search);
       state.tools.bash = toolEnabledValue(tools.bash);
@@ -3515,6 +3520,7 @@ const SettingsView = {
         contacts_send: { enabled: state.tools.contacts_send },
         todo_update: { enabled: state.tools.todo_update },
         plan_create: { enabled: state.tools.plan_create },
+        codemode: { enabled: state.tools.codemode },
         url_fetch: { enabled: state.tools.url_fetch },
         web_search: { enabled: state.tools.web_search },
         bash: { enabled: state.tools.bash },

@@ -946,6 +946,9 @@ func applyAgentSettingsUpdateDocument(doc *yaml.Node, current FileSettings, valu
 		if enabled := toolEnabledUpdateValue(values.Tools.TodoUpdate); enabled != nil {
 			configbootstrap.SetMappingBoolPath(toolsNode, "todo_update", "enabled", *enabled)
 		}
+		if enabled := toolEnabledUpdateValue(values.Tools.CodeMode); enabled != nil {
+			configbootstrap.SetMappingBoolPath(toolsNode, "codemode", "enabled", *enabled)
+		}
 		if enabled := toolEnabledUpdateValue(values.Tools.PlanCreate); enabled != nil {
 			configbootstrap.SetMappingBoolPath(toolsNode, "plan_create", "enabled", *enabled)
 		}
@@ -2480,6 +2483,7 @@ func readAgentSettingsFromReader(r interface {
 			ContactsSend:        ToolEnabledPayload{Enabled: r.GetBool("tools.contacts_send.enabled")},
 			TodoUpdate:          ToolEnabledPayload{Enabled: r.GetBool("tools.todo_update.enabled")},
 			PlanCreate:          ToolEnabledPayload{Enabled: r.GetBool("tools.plan_create.enabled")},
+			CodeMode:            ToolEnabledPayload{Enabled: r.GetBool("tools.codemode.enabled")},
 			URLFetch:            ToolEnabledPayload{Enabled: r.GetBool("tools.url_fetch.enabled")},
 			WebSearch:           ToolEnabledPayload{Enabled: r.GetBool("tools.web_search.enabled")},
 			Bash:                ToolEnabledPayload{Enabled: r.GetBool("tools.bash.enabled")},

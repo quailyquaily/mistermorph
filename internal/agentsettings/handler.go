@@ -93,6 +93,7 @@ type ToolsSettingsPayload struct {
 	ContactsSend  ToolEnabledPayload `json:"contacts_send"`
 	TodoUpdate    ToolEnabledPayload `json:"todo_update"`
 	PlanCreate    ToolEnabledPayload `json:"plan_create"`
+	CodeMode      ToolEnabledPayload `json:"codemode"`
 	URLFetch      ToolEnabledPayload `json:"url_fetch"`
 	WebSearch     ToolEnabledPayload `json:"web_search"`
 	Bash          ToolEnabledPayload `json:"bash"`
@@ -111,6 +112,7 @@ type ToolsSettingsUpdate struct {
 	ContactsSend        *ToolEnabledUpdate `json:"contacts_send,omitempty"`
 	TodoUpdate          *ToolEnabledUpdate `json:"todo_update,omitempty"`
 	PlanCreate          *ToolEnabledUpdate `json:"plan_create,omitempty"`
+	CodeMode            *ToolEnabledUpdate `json:"codemode,omitempty"`
 	URLFetch            *ToolEnabledUpdate `json:"url_fetch,omitempty"`
 	WebSearch           *ToolEnabledUpdate `json:"web_search,omitempty"`
 	Bash                *ToolEnabledUpdate `json:"bash,omitempty"`

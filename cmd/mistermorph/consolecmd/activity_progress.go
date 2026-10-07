@@ -10,6 +10,8 @@ import (
 const (
 	consoleActivityHistoryLimit   = 24
 	consoleActivityOutputMaxChars = 6000
+	// consoleActivityChildLimit bounds the nested calls kept under one codemode entry.
+	consoleActivityChildLimit = 12
 )
 
 type consoleActivityProgress struct {
@@ -32,6 +34,10 @@ type consoleActivityEntry struct {
 	Mode       string         `json:"mode,omitempty"`
 	Profile    string         `json:"profile,omitempty"`
 	OutputKind string         `json:"output_kind,omitempty"`
+	// Children are the tool calls a codemode script made, most recent last; ChildrenOmitted
+	// counts earlier ones dropped to stay within consoleActivityChildLimit.
+	Children        []consoleActivityEntry `json:"children,omitempty"`
+	ChildrenOmitted int                    `json:"children_omitted,omitempty"`
 }
 
 func cloneConsoleActivityProgress(progress *consoleActivityProgress) *consoleActivityProgress {
@@ -67,6 +73,12 @@ func cloneConsoleActivityEntry(entry *consoleActivityEntry) *consoleActivityEntr
 	if len(entry.Args) > 0 {
 		out.Args = cloneConsoleArgs(entry.Args)
 	}
+	if len(entry.Children) > 0 {
+		out.Children = make([]consoleActivityEntry, 0, len(entry.Children))
+		for i := range entry.Children {
+			out.Children = append(out.Children, *cloneConsoleActivityEntry(&entry.Children[i]))
+		}
+	}
 	return &out
 }
 
@@ -92,6 +104,16 @@ func updateConsoleActivityProgress(progress *consoleActivityProgress, event agen
 	}
 	if progress == nil {
 		progress = &consoleActivityProgress{}
+	}
+	if parentID := strings.TrimSpace(event.ParentActivityID); parentID != "" {
+		for i := range progress.History {
+			if progress.History[i].ID == parentID {
+				progress.History[i] = mergeConsoleActivityChild(progress.History[i], *entry)
+				progress.Current = cloneConsoleActivityEntry(&progress.History[i])
+				return cloneConsoleActivityProgress(progress), true
+			}
+		}
+		// The parent scrolled out of the history: show the call on its own.
 	}
 
 	index := -1
@@ -213,6 +235,23 @@ func buildConsoleActivityEntry(event agent.Event) *consoleActivityEntry {
 		entry.Name = "subtask"
 	}
 	return entry
+}
+
+// mergeConsoleActivityChild records a nested call under its codemode entry, so a script takes one
+// history slot however many calls it makes.
+func mergeConsoleActivityChild(parent consoleActivityEntry, child consoleActivityEntry) consoleActivityEntry {
+	for i := range parent.Children {
+		if parent.Children[i].ID == child.ID {
+			parent.Children[i] = mergeConsoleActivityEntry(parent.Children[i], child)
+			return parent
+		}
+	}
+	parent.Children = append(parent.Children, child)
+	if extra := len(parent.Children) - consoleActivityChildLimit; extra > 0 {
+		parent.Children = append([]consoleActivityEntry(nil), parent.Children[extra:]...)
+		parent.ChildrenOmitted += extra
+	}
+	return parent
 }
 
 func mergeConsoleActivityEntry(base consoleActivityEntry, update consoleActivityEntry) consoleActivityEntry {

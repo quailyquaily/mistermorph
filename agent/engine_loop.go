@@ -944,7 +944,11 @@ func (e *Engine) guardPreCheck(ctx context.Context, st *engineLoopState, step in
 	if _, found := e.lookupTool(st, tc.Name); !found {
 		return e.unknownToolMessage(st, tc.Name), true, nil, nil
 	}
+	return e.guardDecide(ctx, st, step, tc, approvalIdentity)
+}
 
+// guardDecide is the guard's pre-tool decision for a call whose tool was already found.
+func (e *Engine) guardDecide(ctx context.Context, st *engineLoopState, step int, tc *ToolCall, approvalIdentity string) (observation string, denied bool, approval *guard.Result, err error) {
 	action := guard.Action{
 		Type:       guard.ActionToolCallPre,
 		Identity:   approvalIdentity,
@@ -1035,15 +1039,20 @@ func (e *Engine) executeTool(ctx context.Context, st *engineLoopState, step int,
 	if !found {
 		return e.unknownToolMessage(st, tc.Name), fmt.Errorf("tool not found")
 	}
+	return e.executeFoundTool(ctx, st, step, tc, tool)
+}
 
+// executeFoundTool runs a tool already found for the call, with the run's context values.
+func (e *Engine) executeFoundTool(ctx context.Context, st *engineLoopState, step int, tc *ToolCall, tool tools.Tool) (string, error) {
 	toolCtx := ctx
 	EmitEvent(ctx, nil, Event{
-		Kind:       EventKindToolStart,
-		Step:       step,
-		ActivityID: toolActivityID(step, tc),
-		ToolName:   strings.TrimSpace(tc.Name),
-		Status:     "running",
-		Args:       toolDisplayArgsSummary(strings.TrimSpace(tc.Name), tc.Params, e.logOpts),
+		Kind:             EventKindToolStart,
+		Step:             step,
+		ActivityID:       toolActivityID(step, tc),
+		ParentActivityID: tc.ParentID,
+		ToolName:         strings.TrimSpace(tc.Name),
+		Status:           "running",
+		Args:             toolDisplayArgsSummary(strings.TrimSpace(tc.Name), tc.Params, e.logOpts),
 	})
 	if e.subtaskRunner != nil {
 		toolCtx = WithSubtaskRunnerContext(toolCtx, e.subtaskRunner)
@@ -1053,6 +1062,9 @@ func (e *Engine) executeTool(ctx context.Context, st *engineLoopState, step int,
 	}
 	if e.guard != nil && e.guard.Enabled() {
 		toolCtx = guard.WithAuditContext(toolCtx, e.guard, guard.Meta{RunID: st.runID, Step: step})
+	}
+	if tool.Name() == codeModeToolName {
+		toolCtx = withCodeModeCall(toolCtx, &codeModeCall{st: st, step: step, call: *tc})
 	}
 	if e.guard != nil && e.guard.Enabled() && strings.EqualFold(tc.Name, "url_fetch") {
 		if p, ok := e.guard.NetworkPolicyForURLFetch(); ok && len(p.AllowedURLPrefixes) > 0 {

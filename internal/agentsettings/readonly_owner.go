@@ -91,6 +91,7 @@ func toolsSettingsFromReader(reader Reader) ToolsSettingsPayload {
 		ContactsSend: ToolEnabledPayload{Enabled: reader.GetBool("tools.contacts_send.enabled")},
 		TodoUpdate:   ToolEnabledPayload{Enabled: reader.GetBool("tools.todo_update.enabled")},
 		PlanCreate:   ToolEnabledPayload{Enabled: reader.GetBool("tools.plan_create.enabled")},
+		CodeMode:     ToolEnabledPayload{Enabled: reader.GetBool("tools.codemode.enabled")},
 		URLFetch:     ToolEnabledPayload{Enabled: reader.GetBool("tools.url_fetch.enabled")},
 		WebSearch:    ToolEnabledPayload{Enabled: reader.GetBool("tools.web_search.enabled")},
 		Bash:         ToolEnabledPayload{Enabled: reader.GetBool("tools.bash.enabled")},

@@ -187,6 +187,7 @@ type Engine struct {
 
 	// toolSearch, when set, hides the tools it marks until the model finds them with tool_search.
 	toolSearch *ToolSearchOptions
+	codeMode   *CodeModeOptions
 }
 
 func New(client llm.Client, registry *tools.Registry, cfg Config, spec PromptSpec, opts ...Option) *Engine {
@@ -226,6 +227,15 @@ func New(client llm.Client, registry *tools.Registry, cfg Config, spec PromptSpe
 			e.toolSearch = nil
 		} else {
 			e.spec.Blocks = append(e.spec.Blocks, PromptBlock{Content: toolSearchPrompt(e.toolSearch.Catalog)})
+		}
+	}
+	if e.codeMode != nil {
+		if err := e.registry.Register(&codeModeTool{engine: e}); err != nil {
+			// The runtime refuses a registry with its own codemode before getting here.
+			e.log.Warn("codemode_disabled", "error", err.Error())
+			e.codeMode = nil
+		} else {
+			e.spec.Blocks = append(e.spec.Blocks, PromptBlock{Content: codeModePromptBlock})
 		}
 	}
 	registerEngineTools(
@@ -457,10 +467,13 @@ func sortedMapKeys(m map[string]any) []string {
 	return out
 }
 
-// lookupSubtaskTool finds a tool a subtask may be given. Tools hidden by tool search are never
-// handed to subtasks, found or not.
+// lookupSubtaskTool finds a tool a subtask may be given. Tools hidden by tool search and
+// codemode are never handed to subtasks.
 func (e *Engine) lookupSubtaskTool(name string) (tools.Tool, bool) {
 	tool, ok := e.registry.Get(name)
+	if name == codeModeToolName {
+		return nil, false
+	}
 	if !ok || e.toolSearch == nil {
 		return tool, ok
 	}

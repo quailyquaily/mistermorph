@@ -1,7 +1,7 @@
 ---
 date: 2026-10-07
 title: "Code Mode for tool orchestration with moejs"
-status: draft
+status: implemented-v1
 ---
 
 # Code Mode for tool orchestration with moejs
@@ -12,7 +12,7 @@ Let the model write JavaScript that calls MisterMorph tools, combines their resu
 
 Code Mode complements [MCP tool search](feat_20261006_tool_search_progressive_disclosure.md). Search reduces the definitions sent to the model. Code Mode reduces model round trips and the intermediate results sent back to it.
 
-This is a design proposal. This change adds no runtime code or dependency.
+This document is the design; "Implementation notes (v1)" records how it was built.
 
 ## Design references
 
@@ -45,7 +45,7 @@ The implementation must reuse these mechanisms and make their boundaries explici
 
 Add one engine-owned tool named `codemode`. It can discover and invoke eligible built-in, runtime, embedder, and MCP tools. Keep existing direct tools and `tool_search` available under their current rules.
 
-To the model, `codemode` is an ordinary function tool with a JSON schema. In the code it is not a `tools.Tool` in the registry: it lives in `agent/` as an engine option (for example `WithCodeMode`), the way `tool_search` does, so that nested calls go through the engine's own per-call path (visibility, guard, repeat counts, redaction, events) with the run's state. The engine handles a `codemode` call itself instead of looking it up in the registry.
+To the model, `codemode` is an ordinary function tool with a JSON schema. In the code it is not a tool the runtime registers: it lives in `agent/` as an engine option (`WithCodeMode`), and the engine registers it itself the way it registers `tool_search`. When the engine executes a `codemode` call it puts the run's state in the call's context, so nested calls go through the engine's own per-call path (visibility, guard, repeat counts, redaction, events) with that state.
 
 The first version includes async JavaScript, bounded tool concurrency, sequential composition, local result filtering, and tool discovery. It excludes TypeScript execution, persistent JavaScript state, direct model APIs, and automatic script replay.
 
@@ -277,6 +277,19 @@ Keep MCP session lifecycle in the existing task catalog. Script termination ends
 
 Existing `$tool`, `$skill`, and `$mcp_<name>` references keep their meaning. Disabling Code Mode restores current behavior without changing MCP configuration or direct tool visibility. An unsupported provider reports the normal tool-call limitation; it must not fall back to executing the script through unrestricted `bash`.
 
+## Implementation notes (v1)
+
+- `internal/codemode` is the bridge: one fresh moejs runtime per invocation (`DisableDynamicCode`, shared frozen builtins, no importer), a JavaScript prelude that defines `tools`, `searchTools`, `describeTool`, `text` and `console`, the call scheduler, the ending rules, the fixed limits and `MemoryWatcher`. The script is the body of an async function after the prelude; error positions are shifted back to the script's lines. A leading Markdown fence is rejected explicitly, because a fence is valid JavaScript (an empty tagged template).
+- Arguments are validated in JavaScript (functions, symbols, BigInt, non-finite numbers, cycles, depth) and cross into Go as JSON text, so the host gets a frozen copy.
+- Host contract (`codemode.Host`): `Check` (on the invocation's goroutine, just before an operation starts: allow, reject, or require approval), `ParallelSafe`, `Run` (may run concurrently), `Finish` (on the invocation's goroutine: redaction and events). The engine's tool loop is waiting on the `codemode` call meanwhile, so `Check` and `Finish` may touch the run state.
+- Two contexts: operations run under the deadline, task cancellation and the memory watcher; the script can also be stopped by the output limit without cancelling started calls.
+- `agent/codemode.go`: `WithCodeMode`, the `codemode` tool, the prompt block and `codeModeHost`. Engine refactors: `executeFoundTool` and `guardDecide` (the parts of `executeTool` and `guardPreCheck` after the visibility lookup), `ToolCall.ParentID` and `Event.ParentActivityID`. Script-found tools are kept in the invocation, never registered; `runToolSearch.handoff` makes an approval-handoff tool visible for the next step without counting it as found.
+- Nested calls reserve and release `tool_repeat_limit` counts like direct calls but are not recorded as run steps, so a resumed run does not count them again.
+- Config `tools.codemode.{enabled,timeout,max_tool_calls,max_parallel_calls}`, on by default; `taskruntime.CodeModeOption` for task preparation and awareness, skipped for subtask runs (`DisableRuntimeTools`). Console: a tool toggle and the three limits under it.
+- Activity: the Console groups nested calls under the `codemode` entry (at most 12 kept, with a count of earlier ones); the CLI prints `▸ codemode` when the script starts and each nested call indented as it finishes.
+- With every approval-requiring built-in tool excluded, the approval handoff has no built-in trigger today; it is covered by bridge tests with a fake host.
+- Not done yet: the benchmarks against ordinary tool calls.
+
 ## Acceptance criteria
 
 | Case | Expected result |
@@ -291,7 +304,7 @@ Existing `$tool`, `$skill`, and `$mcp_<name>` references keep their meaning. Dis
 | Hidden MCP discovery | Existing server policy and limits apply; selected tools become script-callable without bulk schema disclosure |
 | Disabled or excluded tool | Search, description, guessed names, and script invocation cannot reach it |
 | Activity display | Nested calls appear under their `codemode` entry in the Console (one history slot) and indented in the CLI; hooks still fire for them |
-| Engine ownership | `codemode` is not in the tool registry; nested calls update the run's repeat counts and emit tool events like direct calls |
+| Engine ownership | `codemode` is registered by the engine, never by the runtime; nested calls update the run's repeat counts and emit tool events like direct calls |
 | Invalid arguments and result errors | Normalized errors; no mutation of queued arguments; output policy runs before script access |
 | Nested denial | Promise rejects with the guard's reason; the script can catch it |
 | Nested approval | No bypass; handoff identifies the exact pending operation and preserves completed-call status |

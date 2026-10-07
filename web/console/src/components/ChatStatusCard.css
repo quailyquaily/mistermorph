@@ -295,6 +295,57 @@
   background: var(--q-c-red-light);
 }
 
+.chat-activity-count {
+  margin-left: 6px;
+  opacity: 0.7;
+}
+
+.chat-activity-children {
+  margin: 0;
+  padding: 0 0 0 4px;
+  list-style: none;
+  display: grid;
+  gap: 4px;
+  border-left: 1px solid color-mix(in srgb, var(--q-c-white) 15%, transparent);
+}
+
+.chat-activity-child {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  align-items: baseline;
+  gap: 2px 7px;
+  padding-left: 8px;
+}
+
+.chat-activity-child .chat-activity-note {
+  grid-column: 2 / -1;
+}
+
+.chat-activity-child.is-omitted {
+  display: block;
+  opacity: 0.6;
+}
+
+.chat-activity-child-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--q-c-white) 30%, transparent);
+}
+
+.chat-activity-child.is-running .chat-activity-child-dot {
+  background: var(--q-c-orange-light);
+}
+
+.chat-activity-child.is-done .chat-activity-child-dot {
+  background: var(--q-c-green-light);
+}
+
+.chat-activity-child.is-failed .chat-activity-child-dot {
+  background: var(--q-c-red-light);
+}
+
 .chat-activity-copy {
   min-width: 0;
   display: grid;

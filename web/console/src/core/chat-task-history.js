@@ -234,6 +234,8 @@ function normalizeActivityEntry(raw) {
     mode: String(raw?.mode || "").trim(),
     profile: String(raw?.profile || "").trim(),
     outputKind: String(raw?.output_kind || "").trim(),
+    children: Array.isArray(raw?.children) ? raw.children.map((child) => normalizeActivityEntry(child)).filter(Boolean) : [],
+    childrenOmitted: Math.max(0, Number(raw?.children_omitted) || 0),
   };
 }
 

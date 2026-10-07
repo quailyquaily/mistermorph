@@ -22,6 +22,9 @@ type ToolCall struct {
 	Params           map[string]any `json:"tool_params"`
 	RawArguments     string         `json:"raw_arguments,omitempty"`
 	ThoughtSignature string         `json:"thought_signature,omitempty"`
+	// ParentID is the activity ID of the codemode call that made this call from a script; empty
+	// for a call the model made. It is never sent to the provider.
+	ParentID string `json:"parent_tool_call_id,omitempty"`
 }
 
 type PlanStep struct {

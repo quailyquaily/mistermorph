@@ -753,6 +753,16 @@ func (rt *Runtime) prepareRun(ctx context.Context, req RunRequest) (preparedRunt
 	if toolSearchOption != nil {
 		engineOpts = append(engineOpts, toolSearchOption)
 	}
+	// Subtasks (DisableRuntimeTools) never get codemode.
+	if !req.DisableRuntimeTools {
+		codeModeOption, err := CodeModeOption(reg, runtimeToolsConfig.CodeMode)
+		if err != nil {
+			return preparedRuntimeRun{}, err
+		}
+		if codeModeOption != nil {
+			engineOpts = append(engineOpts, codeModeOption)
+		}
+	}
 	engine := agent.New(
 		mainClient,
 		reg,
