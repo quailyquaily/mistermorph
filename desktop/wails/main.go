@@ -43,7 +43,6 @@ func buildDesktopRuntimeJavaScript(goos, osVersion string) string {
 		"window.__MISTERMORPH_DESKTOP_BINDINGS__ = {" +
 		`"CheckUpdate":"` + desktopAppBindingPrefix + `CheckUpdate",` +
 		`"OpenDesktopLog":"` + desktopAppBindingPrefix + `OpenDesktopLog",` +
-		`"OpenWindow":"` + desktopAppBindingPrefix + `OpenWindow",` +
 		`"PickDirectory":"` + desktopAppBindingPrefix + `PickDirectory",` +
 		`"QuitApp":"` + desktopAppBindingPrefix + `QuitApp",` +
 		`"ReportFrontendReady":"` + desktopAppBindingPrefix + `ReportFrontendReady",` +

@@ -1,11 +1,6 @@
-import { computed } from "vue";
+import { computed, ref, watch } from "vue";
 import AppDialogShell from "./AppDialogShell";
 import SetupPickerDialogContent, { setupPickerDialogContentProps } from "./SetupPickerDialogContent";
-import { useDesktopPayloadDialog } from "../core/desktop-payload-dialog";
-import {
-  openSetupPickerDesktopWindow,
-  SETUP_PICKER_WINDOW_ID,
-} from "../core/desktop-windows";
 
 const SetupPickerDialog = {
   components: {
@@ -24,22 +19,6 @@ const SetupPickerDialog = {
   setup(props, { emit }) {
     const resolvedTitle = computed(() => String(props.title || "").trim());
 
-    function payload() {
-      return {
-        items: Array.isArray(props.items) ? props.items : [],
-        loading: props.loading === true,
-        error: String(props.error || ""),
-        title: resolvedTitle.value,
-        filterPlaceholder: String(props.filterPlaceholder || ""),
-        emptyText: String(props.emptyText || ""),
-        showValue: props.showValue !== false,
-        selectedValue: String(props.selectedValue || ""),
-        groupByPrefix: props.groupByPrefix === true,
-        allowCustom: props.allowCustom === true,
-        customLabel: String(props.customLabel || ""),
-      };
-    }
-
     function close() {
       emit("update:modelValue", false);
     }
@@ -49,26 +28,22 @@ const SetupPickerDialog = {
       close();
     }
 
-    const desktopDialog = useDesktopPayloadDialog({
-      open: () => props.modelValue,
-      windowID: SETUP_PICKER_WINDOW_ID,
-      title: () => resolvedTitle.value,
-      payload,
-      openWindow: openSetupPickerDesktopWindow,
-      close,
-      onMessage(message) {
-        if (message?.type === "setup-picker:selected") {
-          selectItem(message?.payload?.item || null);
-        }
+    // Each opening starts the picker afresh (filter cleared, selection scrolled into view).
+    const openCount = ref(0);
+    watch(
+      () => props.modelValue,
+      (open) => {
+        if (open) openCount.value += 1;
       },
-    });
+      { immediate: true }
+    );
 
     return {
       resolvedTitle,
-      webDialogOpen: desktopDialog.webDialogOpen,
+      webDialogOpen: computed(() => props.modelValue),
       close,
       selectItem,
-      desktopRequestID: desktopDialog.requestID,
+      openCount,
     };
   },
   template: `
@@ -91,7 +66,7 @@ const SetupPickerDialog = {
         :groupByPrefix="groupByPrefix"
         :allowCustom="allowCustom"
         :customLabel="customLabel"
-        :resetKey="desktopRequestID"
+        :resetKey="openCount"
         @select="selectItem"
         @close="close"
       />

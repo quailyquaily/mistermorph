@@ -13,8 +13,6 @@ import whatsappLogo from "../assets/images/channels/whatsapp.svg";
 
 import AppDialogShell from "../components/AppDialogShell";
 import PokeDialogContent from "../components/PokeDialogContent";
-import { onDesktopWindowMessage } from "../core/desktop-runtime";
-import { openPokeDesktopWindow } from "../core/desktop-windows";
 import { endpointDisplayItem, endpointChannelLabel } from "../core/endpoints";
 import {
   endpointState,
@@ -94,8 +92,6 @@ const RuntimePanel = {
     const pokeBody = ref("");
     const pokeError = ref("");
     let refreshTimer = null;
-    let removeDesktopWindowMessage = null;
-
     const overview = reactive({
       version: "-",
       started_at: "",
@@ -338,9 +334,6 @@ const RuntimePanel = {
       if (pokeDisabled.value) {
         return;
       }
-      if (await openPokeDesktopWindow({ title: t("runtime_poke_dialog_title") }).catch(() => false)) {
-        return;
-      }
       pokeBody.value = "";
       pokeError.value = "";
       pokeDialogOpen.value = true;
@@ -398,17 +391,7 @@ const RuntimePanel = {
       }
     }
 
-    function handleDesktopWindowMessage(message) {
-      if (message?.type !== "runtime:poke-submitted") {
-        return;
-      }
-      if (typeof message?.payload?.poked_at === "string" && message.payload.poked_at) {
-        overview.last_poke_at = message.payload.poked_at;
-      }
-    }
-
     onMounted(() => {
-      removeDesktopWindowMessage = onDesktopWindowMessage(handleDesktopWindowMessage);
       void load();
       refreshTimer = window.setInterval(() => {
         void load();
@@ -432,10 +415,6 @@ const RuntimePanel = {
       if (refreshTimer !== null) {
         window.clearInterval(refreshTimer);
         refreshTimer = null;
-      }
-      if (removeDesktopWindowMessage) {
-        removeDesktopWindowMessage();
-        removeDesktopWindowMessage = null;
       }
     });
 

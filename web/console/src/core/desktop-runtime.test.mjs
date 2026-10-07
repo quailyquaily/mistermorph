@@ -1,8 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-const DESKTOP_WINDOW_MESSAGE_EVENT = "mistermorph:desktop-window-message";
-
 function createLocalStorage() {
   const values = new Map();
   return {
@@ -56,65 +54,6 @@ async function importDesktopRuntime() {
   url.search = `test=${Date.now()}-${Math.random()}`;
   return await import(url.href);
 }
-
-test("desktop window messages fan out to all local subscribers", async () => {
-  const win = installDesktopWindow();
-  const { onDesktopWindowMessage } = await importDesktopRuntime();
-  const received = [];
-  const offA = onDesktopWindowMessage((message) => received.push(["a", message.type]));
-  const offB = onDesktopWindowMessage((message) => received.push(["b", message.type]));
-
-  win.dispatchDesktopEvent(DESKTOP_WINDOW_MESSAGE_EVENT, {
-    detail: {
-      type: "dialog:update",
-      window_id: "codex-auth",
-      _delivery_id: "fanout-1",
-    },
-  });
-
-  assert.deepEqual(received, [
-    ["a", "dialog:update"],
-    ["b", "dialog:update"],
-  ]);
-  offA();
-  offB();
-});
-
-test("desktop window messages dedupe repeated delivery ids before fan-out", async () => {
-  const win = installDesktopWindow();
-  const { onDesktopWindowMessage } = await importDesktopRuntime();
-  const received = [];
-  const off = onDesktopWindowMessage((message) => received.push(message.type));
-  const detail = {
-    type: "dialog:update",
-    window_id: "codex-auth",
-    _delivery_id: "dedupe-1",
-  };
-
-  win.dispatchDesktopEvent(DESKTOP_WINDOW_MESSAGE_EVENT, { detail });
-  win.dispatchDesktopEvent(DESKTOP_WINDOW_MESSAGE_EVENT, { detail });
-
-  assert.deepEqual(received, ["dialog:update"]);
-  off();
-});
-
-test("desktop window message subscribers can be removed", async () => {
-  const win = installDesktopWindow();
-  const { onDesktopWindowMessage } = await importDesktopRuntime();
-  const received = [];
-  const off = onDesktopWindowMessage((message) => received.push(message.type));
-  off();
-
-  win.dispatchDesktopEvent(DESKTOP_WINDOW_MESSAGE_EVENT, {
-    detail: {
-      type: "dialog:update",
-      window_id: "codex-auth",
-      _delivery_id: "removed-1",
-    },
-  });
-
-  assert.deepEqual(received, []);
-});
 
 test("desktop update check uses configured binding name", async () => {
   const win = installDesktopWindow();

@@ -41,7 +41,6 @@ const ROUTE_VIEW_LOADERS = {
   componentsPreview: () => import("../views/ComponentsPreviewView"),
   contacts: () => import("../views/ContactsView"),
   context: () => import("../views/ContextView"),
-  desktopWindow: () => import("../views/DesktopWindowView"),
   login: () => import("../views/LoginView"),
   logs: () => import("../views/LogsView"),
   overview: () => import("../views/OverviewView"),
@@ -61,7 +60,6 @@ const ComponentsPreviewView = ROUTE_VIEW_LOADERS.componentsPreview;
 const ChatView = ROUTE_VIEW_LOADERS.chat;
 const ContactsView = ROUTE_VIEW_LOADERS.contacts;
 const ContextView = ROUTE_VIEW_LOADERS.context;
-const DesktopWindowView = ROUTE_VIEW_LOADERS.desktopWindow;
 const LoginView = ROUTE_VIEW_LOADERS.login;
 const LogsView = ROUTE_VIEW_LOADERS.logs;
 const OverviewView = ROUTE_VIEW_LOADERS.overview;
@@ -81,11 +79,6 @@ const ENDPOINT_SCOPE_PATH = `${ENDPOINT_ROUTE_PREFIX}/:endpoint_ref`;
 
 function pagePath(path) {
   return endpointPagePath(path) || String(path || "").trim();
-}
-
-function isDesktopWindowPath(path) {
-  const value = String(path || "").trim();
-  return value === "/window" || value.startsWith("/window/");
 }
 
 function preloadKeyForPath(path) {
@@ -270,7 +263,6 @@ const routes = [
   { path: "/contacts", redirect: legacyEndpointRedirect("/contacts") },
   { path: "/settings/:section", redirect: legacyEndpointRedirect("/settings/:section") },
   { path: "/settings", redirect: legacyEndpointRedirect("/settings") },
-  { path: "/window/:window_id?", component: DesktopWindowView, meta: { shellless: true } },
   ...extensionRoutes,
   { path: "/", component: RootRedirectView, meta: { shellless: true } },
 ];
@@ -372,7 +364,7 @@ router.beforeEach(async (to) => {
   }
   const setupState = await resolveConsoleSetupStage(endpointState.items);
   if (setupState.stage !== "ready") {
-    if (SETUP_FREE_PATHS.has(toPagePath) || isDesktopWindowPath(to.path)) {
+    if (SETUP_FREE_PATHS.has(toPagePath)) {
       return true;
     }
     return { path: setupStagePath(setupState.stage), query: { redirect: to.fullPath } };

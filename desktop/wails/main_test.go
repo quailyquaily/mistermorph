@@ -36,7 +36,6 @@ func TestDesktopRuntimeJavaScriptIncludesBindingNames(t *testing.T) {
 		"__MISTERMORPH_DESKTOP_VERSION__",
 		desktopAppBindingPrefix + "CheckUpdate",
 		desktopAppBindingPrefix + "OpenDesktopLog",
-		desktopAppBindingPrefix + "OpenWindow",
 		desktopAppBindingPrefix + "PickDirectory",
 		desktopAppBindingPrefix + "QuitApp",
 		desktopAppBindingPrefix + "ReportFrontendReady",

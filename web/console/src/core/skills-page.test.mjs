@@ -68,9 +68,8 @@ test("install tasks name both install tools with $, which turns them on for that
   }
 });
 
-test("Settings lists the skill install tools, off by default", async () => {
+test("Settings shows the skill install tools as Console channel tools, with no setting", async () => {
   const source = await read("../views/SettingsView.js");
-  assert.match(source, /\{ id: "skill_install_preview", titleKey: "settings_tool_skill_install_preview"/);
-  assert.match(source, /\{ id: "skill_install", titleKey: "settings_tool_skill_install"/);
-  assert.match(source, /skill_install_preview: false,\n\s+skill_install: false,/);
+  assert.match(source, /\{ id: "console", title: "Console", icon: "PhAppWindow", tools: \[[^\]]*"skill_install_preview", "skill_install"\] \}/);
+  assert.doesNotMatch(source, /skill_install_preview: false/);
 });

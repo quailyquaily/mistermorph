@@ -5,7 +5,6 @@ import "./AuditView.css";
 import AppPage from "../components/AppPage";
 import AppSkeleton from "../components/AppSkeleton";
 import RawJsonDialog from "../components/RawJsonDialog";
-import { openRawJsonDesktopWindow } from "../core/desktop-windows";
 import { endpointChannelLabel } from "../core/endpoints";
 import { endpointRoutePath } from "../core/endpoint-routes";
 import { loadResource, resourceKey, useResource } from "../core/resources";
@@ -533,9 +532,6 @@ const AuditView = {
         return;
       }
       const json = String(item.rawPretty || item.raw || "").trim();
-      if (await openRawJsonDesktopWindow({ title: "RAW JSON", json }).catch(() => false)) {
-        return;
-      }
       rawDialogJSON.value = json;
       rawDialogOpen.value = true;
     }
@@ -730,9 +726,6 @@ const AuditView = {
           );
         }
         const json = JSON.stringify(data, null, 2);
-        if (await openRawJsonDesktopWindow({ title: "RAW JSON", json }).catch(() => false)) {
-          return;
-        }
         rawDialogJSON.value = json;
         rawDialogOpen.value = rawDialogJSON.value !== "";
       } catch (e) {

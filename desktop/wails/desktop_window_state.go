@@ -140,3 +140,10 @@ func constrainDesktopMainWindowStateToArea(state desktopMainWindowState, area de
 	}
 	return state, true
 }
+
+func clampDesktopWindowDimension(value, fallback, minValue, maxValue int) int {
+	if value <= 0 {
+		return fallback
+	}
+	return min(max(value, minValue), maxValue)
+}

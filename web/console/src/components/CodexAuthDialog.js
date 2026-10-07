@@ -1,9 +1,7 @@
 import { computed } from "vue";
 import { translate } from "../core/context";
-import { useDesktopPayloadDialog } from "../core/desktop-payload-dialog";
 import AppDialogShell from "./AppDialogShell";
 import DeviceAuthDialogContent, { deviceAuthStateProps } from "./DeviceAuthDialogContent";
-import { CODEX_AUTH_WINDOW_ID, openCodexAuthDesktopWindow } from "../core/desktop-windows";
 
 export const CODEX_USAGE_URL = "https://chatgpt.com/codex/settings/usage";
 
@@ -21,21 +19,6 @@ const CodexAuthDialog = {
     const t = translate;
     const accountLabel = computed(() => String(props.status?.account_id || "").trim());
 
-    function payload() {
-      return {
-        loading: props.loading === true,
-        busy: props.busy === true,
-        error: String(props.error || ""),
-        status: props.status && typeof props.status === "object" ? props.status : {},
-        summary: String(props.summary || ""),
-        loginSession: String(props.loginSession || ""),
-        verificationURL: String(props.verificationURL || ""),
-        userCode: String(props.userCode || ""),
-        loginExpiresLabel: String(props.loginExpiresLabel || ""),
-        accountLabel: accountLabel.value,
-      };
-    }
-
     function close() {
       emit("update:modelValue", false);
     }
@@ -44,27 +27,13 @@ const CodexAuthDialog = {
       emit("logout");
     }
 
-    const desktopDialog = useDesktopPayloadDialog({
-      open: () => props.modelValue,
-      windowID: CODEX_AUTH_WINDOW_ID,
-      title: () => t("settings_codex_auth_title"),
-      payload,
-      openWindow: openCodexAuthDesktopWindow,
-      close,
-      onMessage(message) {
-        if (message?.type === "codex-auth:logout") {
-          logout();
-        }
-      },
-    });
-
     return {
       t,
       CODEX_USAGE_URL,
       accountLabel,
       close,
       logout,
-      webDialogOpen: desktopDialog.webDialogOpen,
+      webDialogOpen: computed(() => props.modelValue),
     };
   },
   template: `

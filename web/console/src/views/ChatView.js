@@ -49,7 +49,6 @@ import {
   taskRawJSON,
   taskReasoning,
 } from "../core/chat-task-history";
-import { openRawJsonDesktopWindow } from "../core/desktop-windows";
 import { endpointChannelLabel } from "../core/endpoints";
 import { endpointRoutePath } from "../core/endpoint-routes";
 import { modelVendorMeta } from "../core/model-vendor";
@@ -3847,9 +3846,6 @@ const ChatView = {
       if (!json) {
         rawDialogJSON.value = "";
         rawDialogOpen.value = false;
-        return;
-      }
-      if (await openRawJsonDesktopWindow({ title: "RAW JSON", json }).catch(() => false)) {
         return;
       }
       rawDialogJSON.value = json;
