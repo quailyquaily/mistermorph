@@ -59,7 +59,6 @@ func engineToolsConfigFromReader(reader agentsettings.Reader, fallback *agent.En
 		return config
 	}
 	config.SpawnEnabled = reader.GetBool("tools.spawn.enabled")
-	config.ACPSpawnEnabled = reader.GetBool("tools.acp_spawn.enabled")
 	config.CoderEnabled = reader.GetBool("tools.coder.enabled")
 	config.CoderPathExtra = append([]string(nil), reader.GetStringSlice("tools.coder.path_extra")...)
 	return config

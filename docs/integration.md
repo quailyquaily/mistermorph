@@ -53,7 +53,6 @@ check `rt.Err()` before creating registries, engines, or bots.
 | Per-task references to enabled tools such as `$bash` | Yes | Yes | Yes |
 | Configured `image_generate` and `image_edit` tools | Yes | Yes | Yes |
 | MCP tools from `mcp.servers` | Yes | Yes | Yes |
-| ACP agents and `acp_spawn` | Yes | Yes | Yes |
 | Skills, Guard, prompt blocks, and LLM routes | Yes | Yes | Yes |
 
 The Integration package does not currently expose LINE or Lark bot constructors. Use the CLI for those channel runtimes.

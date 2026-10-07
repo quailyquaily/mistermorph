@@ -14,7 +14,6 @@ import (
 
 	"github.com/quailyquaily/mistermorph/agent"
 	"github.com/quailyquaily/mistermorph/guard"
-	"github.com/quailyquaily/mistermorph/internal/acpclient"
 	awarenessdomain "github.com/quailyquaily/mistermorph/internal/awareness"
 	"github.com/quailyquaily/mistermorph/internal/awarenessutil"
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/depsutil"
@@ -89,7 +88,6 @@ type cliRunPreparation struct {
 	clientDecorator    taskruntime.ClientDecorator
 	createLLMClient    func(llmutil.ResolvedRoute) (llm.Client, error)
 	createImageClient  func() (llm.ImageClient, error)
-	acpAgents          []acpclient.AgentConfig
 }
 
 func applyRunClientConfigOverrides(cmd *cobra.Command, cfg *llmconfig.ClientConfig) {
@@ -153,12 +151,9 @@ func newCLIRunPreparer(prep cliRunPreparation, deps Dependencies) (*taskruntime.
 			return skillsutil.ResolveTaskSkillRefs(task, prep.skillsConfig)
 		}, prep.logger),
 		RegisterTriggeredStaticTools: deps.RegisterTriggeredStaticTools,
-		ACPAgents: func() []acpclient.AgentConfig {
-			return append([]acpclient.AgentConfig(nil), prep.acpAgents...)
-		},
-		RuntimeToolsConfig: prep.runtimeToolsConfig,
-		RuntimePaths:       prep.runtimePaths,
-		Guard:              deps.GuardFromViper,
+		RuntimeToolsConfig:           prep.runtimeToolsConfig,
+		RuntimePaths:                 prep.runtimePaths,
+		Guard:                        deps.GuardFromViper,
 		PromptSpec: func(ctx context.Context, logger *slog.Logger, logOpts agent.LogOptions, task string, client llm.Client, model string, stickySkills []string) (agent.PromptSpec, []string, error) {
 			skillsCfg := prep.skillsConfig
 			skillsCfg.Requested = append(append([]string(nil), skillsCfg.Requested...), stickySkills...)
@@ -394,9 +389,8 @@ func New(deps Dependencies) *cobra.Command {
 					),
 				},
 				engineToolsConfig: agent.EngineToolsConfig{
-					SpawnEnabled:    viper.GetBool("tools.spawn.enabled"),
-					ACPSpawnEnabled: viper.GetBool("tools.acp_spawn.enabled"),
-					CoderEnabled:    viper.GetBool("tools.coder.enabled"),
+					SpawnEnabled: viper.GetBool("tools.spawn.enabled"),
+					CoderEnabled: viper.GetBool("tools.coder.enabled"),
 					PathRoots: pathroots.New(
 						"",
 						strings.TrimSpace(viper.GetString("file_cache_dir")),
@@ -407,7 +401,6 @@ func New(deps Dependencies) *cobra.Command {
 				clientDecorator:   clientDecorator,
 				createLLMClient:   createLLMClient,
 				createImageClient: createImageClient,
-				acpAgents:         acpclient.AgentsFromViper(),
 			}, deps)
 			if err != nil {
 				return err

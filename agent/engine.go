@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/quailyquaily/mistermorph/guard"
-	"github.com/quailyquaily/mistermorph/internal/acpclient"
 	"github.com/quailyquaily/mistermorph/internal/llmstats"
 	"github.com/quailyquaily/mistermorph/internal/platformutil"
 	"github.com/quailyquaily/mistermorph/internal/runtimeclock"
@@ -141,12 +140,6 @@ func WithEngineToolsConfig(cfg EngineToolsConfig) Option {
 	}
 }
 
-func WithACPAgents(configs []acpclient.AgentConfig) Option {
-	return func(e *Engine) {
-		e.acpAgents = acpclient.CloneAgents(configs)
-	}
-}
-
 type Config struct {
 	MaxSteps          int
 	MaxTokenBudget    int
@@ -181,7 +174,6 @@ type Engine struct {
 
 	subClientFactory SubClientFactory
 	subtaskRunner    SubtaskRunner
-	acpAgents        []acpclient.AgentConfig
 
 	guard *guard.Guard
 
@@ -245,13 +237,6 @@ func New(client llm.Client, registry *tools.Registry, cfg Config, spec PromptSpe
 			LookupTool:   e.lookupSubtaskTool,
 			DefaultModel: e.config.DefaultModel,
 			Runner:       e.subtaskRunner,
-		},
-		acpSpawnToolDeps{
-			LookupAgent: func(name string) (acpclient.AgentConfig, bool) {
-				return acpclient.FindAgent(e.acpAgents, name)
-			},
-			Runner:    e.subtaskRunner,
-			RunPrompt: acpclient.RunPrompt,
 		},
 		coderToolDeps{
 			Runner: e.subtaskRunner,

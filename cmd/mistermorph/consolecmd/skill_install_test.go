@@ -32,7 +32,7 @@ func TestSkillInstallToolsAreConsoleOnly(t *testing.T) {
 		}
 		return strings.Join(out, ",")
 	}
-	// Off by default; a task that names a tool with $ gets it for that run.
+	// Only a task that names a tool with $ gets it, for that run.
 	for _, tc := range []struct {
 		name, task, want string
 	}{
@@ -47,13 +47,11 @@ func TestSkillInstallToolsAreConsoleOnly(t *testing.T) {
 			}
 		})
 	}
+	// The removed tools.<name>.enabled switches no longer add them.
 	reader.Set("tools.skill_install_preview.enabled", true)
-	if got := names("anything"); got != "skill_install_preview" {
-		t.Fatalf("enabled in config: tools = %q", got)
-	}
 	reader.Set("tools.skill_install.enabled", true)
-	if got := names("anything"); got != "skill_install_preview,skill_install" {
-		t.Fatalf("both enabled in config: tools = %q", got)
+	if got := names("anything"); got != "" {
+		t.Fatalf("old config switches still add tools: %q", got)
 	}
 	if rt.skillInstallTools(nil, "$skill_install") != nil {
 		t.Fatal("expected no tools without a generation")

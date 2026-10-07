@@ -20,7 +20,6 @@ import (
 	"github.com/quailyquaily/mistermorph/agent"
 	"github.com/quailyquaily/mistermorph/contacts"
 	"github.com/quailyquaily/mistermorph/guard"
-	"github.com/quailyquaily/mistermorph/internal/acpclient"
 	awarenessdomain "github.com/quailyquaily/mistermorph/internal/awareness"
 	busruntime "github.com/quailyquaily/mistermorph/internal/bus"
 	"github.com/quailyquaily/mistermorph/internal/channelopts"
@@ -353,16 +352,10 @@ func buildConsoleLocalRuntimeConfigSnapshot(logger *slog.Logger, inspectors *con
 			ToolTriggers: func(task string) map[string]bool {
 				cfg := skillsutil.SkillsConfigFromReader(reader)
 				refs := toolsutil.BuiltinToolTriggers(task, skillsutil.ResolveTaskSkillRefs(task, cfg))
-				if len(acpclient.AgentsFromReader(reader)) == 0 {
-					delete(refs, toolsutil.BuiltinACPSpawn)
-				}
 				return refs
 			},
 			RegisterTriggeredStaticTools: func(reg *tools.Registry, triggers map[string]bool) {
 				toolsutil.RegisterStaticTools(reg, staticRegistryConfig, nil, triggers)
-			},
-			ACPAgents: func() []acpclient.AgentConfig {
-				return acpclient.AgentsFromReader(reader)
 			},
 			PromptSpec: func(ctx context.Context, logger *slog.Logger, logOpts agent.LogOptions, task string, client llm.Client, model string, stickySkills []string) (agent.PromptSpec, []string, error) {
 				cfg := skillsutil.SkillsConfigFromReader(reader)

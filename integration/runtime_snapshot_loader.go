@@ -7,7 +7,6 @@ import (
 
 	"github.com/quailyquaily/mistermorph/agent"
 	"github.com/quailyquaily/mistermorph/guard"
-	"github.com/quailyquaily/mistermorph/internal/acpclient"
 	"github.com/quailyquaily/mistermorph/internal/agentsettings"
 	"github.com/quailyquaily/mistermorph/internal/channelopts"
 	"github.com/quailyquaily/mistermorph/internal/llmutil"
@@ -71,7 +70,6 @@ func loadRuntimeSnapshotFromReader(v *viper.Viper) runtimeSnapshot {
 		StaticRegistry: staticRegistry,
 		Registry: registrySnapshot{
 			ToolsSpawnEnabled:         v.GetBool("tools.spawn.enabled"),
-			ToolsACPSpawnEnabled:      v.GetBool("tools.acp_spawn.enabled"),
 			ToolsCoderEnabled:         v.GetBool("tools.coder.enabled"),
 			ToolsCoderPathExtra:       append([]string(nil), v.GetStringSlice("tools.coder.path_extra")...),
 			ToolsPlanCreateEnabled:    v.GetBool("tools.plan_create.enabled"),
@@ -90,7 +88,6 @@ func loadRuntimeSnapshotFromReader(v *viper.Viper) runtimeSnapshot {
 		WeChat:              channelopts.WeChatConfigFromReader(v),
 		WhatsApp:            channelopts.WhatsAppConfigFromReader(v),
 		MCPServers:          mcphost.MCPConfigFromReader(v),
-		ACPAgents:           acpclient.AgentsFromReader(v),
 		Paths:               paths,
 		DefaultWorkspaceDir: defaultWorkspaceDir,
 		AgentSettings:       agentsettings.NewReaderSnapshot(v),

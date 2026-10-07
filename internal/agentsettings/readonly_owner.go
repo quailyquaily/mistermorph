@@ -92,12 +92,10 @@ func toolsSettingsFromReader(reader Reader) ToolsSettingsPayload {
 		TodoUpdate:   ToolEnabledPayload{Enabled: reader.GetBool("tools.todo_update.enabled")},
 		PlanCreate:   ToolEnabledPayload{Enabled: reader.GetBool("tools.plan_create.enabled")},
 		CodeMode:     ToolEnabledPayload{Enabled: reader.GetBool("tools.codemode.enabled")},
+		ToolSearch:   ToolEnabledPayload{Enabled: reader.GetBool("tools.tool_search.enabled")},
 		URLFetch:     ToolEnabledPayload{Enabled: reader.GetBool("tools.url_fetch.enabled")},
 		WebSearch:    ToolEnabledPayload{Enabled: reader.GetBool("tools.web_search.enabled")},
 		Bash:         ToolEnabledPayload{Enabled: reader.GetBool("tools.bash.enabled")},
 		PowerShell:   ToolEnabledPayload{Enabled: reader.GetBool("tools.powershell.enabled")},
-
-		SkillInstallPreview: ToolEnabledPayload{Enabled: reader.GetBool("tools.skill_install_preview.enabled")},
-		SkillInstall:        ToolEnabledPayload{Enabled: reader.GetBool("tools.skill_install.enabled")},
 	}
 }

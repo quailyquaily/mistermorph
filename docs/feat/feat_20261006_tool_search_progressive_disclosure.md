@@ -28,7 +28,7 @@ This is separate from [dynamic MCP loading](feat_20261006_dynamic_mcp_loading.md
 When tool search is enabled:
 
 - Built-in, runtime, engine and embedder tools stay visible exactly as today.
-- MCP tools are hidden until the model finds them with `tool_search`, except those listed in `always_loaded` or loaded by a `$mcp_<name>` reference.
+- MCP tools are hidden until the model finds them with `tool_search`, except those loaded by a `$mcp_<name>` reference.
 - A found tool stays visible for the rest of the conversation.
 
 Search makes tools visible; it does not run them, and it is not authorization (see "Policy"). Skills keep their existing discovery and loading. This feature does not search skills.
@@ -39,7 +39,6 @@ Search makes tools visible; it does not run them, and it is not authorization (s
 tools:
   tool_search:
     enabled: true
-    always_loaded: []   # MCP tool names to keep visible, e.g. mcp_github-work__get_issue
 
 mcp:
   servers:
@@ -53,14 +52,14 @@ mcp:
 ```
 
 - `tool_search.enabled` turns the feature on. On by default; with it off, nothing changes. Embedders using `integration` keep it off unless they enable it.
-- `always_loaded` lists exact MCP tool names that are visible from the first request. An entry whose server is not connected is skipped with a log line naming it; listing a tool does not connect its server or grant anything.
+- An `always_loaded` list of MCP tools visible from the first request was implemented in v1 and removed on 2026-10-07: a tool the conversation uses stays visible anyway, and `$mcp_<name>` loads a server's tools for a task.
 - `description` is an optional MCP server field, used to find a server before connecting it. Without it the server is found by name only. Never connect a server just to read its description. Commands, URLs, environment variables and headers are never search metadata.
 
 `tool_search` is offered to the model only when something is hidden: a connected server's tools that are not visible, or an enabled on-demand server. With no MCP servers configured, enabling the feature changes nothing.
 
 A registered tool named `tool_search` (for example from an embedder) conflicts with the feature: preparation fails with an error naming it, rather than replacing either tool.
 
-Document both settings in `assets/config/config.example.yaml`. The Console settings expose the switch and `always_loaded`, and the MCP server dialog edits `description` next to "Load on demand". Standalone and Console-managed runtimes read the same settings.
+Document the setting in `assets/config/config.example.yaml`. The Console settings expose the switch, and the MCP server dialog edits `description` next to "Load on demand". Standalone and Console-managed runtimes read the same settings.
 
 ## What the model can find
 
@@ -213,7 +212,7 @@ Log search duration, match counts, newly visible tool names, connection outcomes
 | --- | --- |
 | Feature off | Tool lists, prompts, references, connection timing, execution and the unknown-tool error are unchanged |
 | No MCP configured | `tool_search` is not offered; nothing changes |
-| Large MCP catalog | The first request has the built-in tools, `tool_search`, `always_loaded` entries and `$mcp_` references' tools; no hidden tool in the prompt |
+| Large MCP catalog | The first request has the built-in tools, `tool_search` and `$mcp_` references' tools; no hidden tool in the prompt |
 | Search finds three tools | Exactly those three schemas appear in the next request, not in the result text |
 | Repeated or exact-name search | Stable ranking, no duplicates; exact allowed names are found |
 | No match or invalid query | Empty result or argument error; nothing made visible in bulk |

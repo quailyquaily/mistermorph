@@ -45,10 +45,9 @@ func consoleEngineToolsConfigFromReader(r interface {
 		return agent.EngineToolsConfig{}
 	}
 	return agent.EngineToolsConfig{
-		SpawnEnabled:    r.GetBool("tools.spawn.enabled"),
-		ACPSpawnEnabled: r.GetBool("tools.acp_spawn.enabled"),
-		CoderEnabled:    r.GetBool("tools.coder.enabled"),
-		CoderPathExtra:  append([]string(nil), r.GetStringSlice("tools.coder.path_extra")...),
+		SpawnEnabled:   r.GetBool("tools.spawn.enabled"),
+		CoderEnabled:   r.GetBool("tools.coder.enabled"),
+		CoderPathExtra: append([]string(nil), r.GetStringSlice("tools.coder.path_extra")...),
 	}
 }
 

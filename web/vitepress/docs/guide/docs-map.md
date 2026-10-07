@@ -18,7 +18,6 @@ description: Where to find deeper design and runtime documents in the repo.
   - [Built-in Tools](/guide/built-in-tools)
   - [Commands](/guide/runtime-commands)
   - [Subagents](/guide/subagents)
-  - [ACP](/guide/acp)
   - [MCP](/guide/mcp)
   - [LLM Routing Policies](/guide/llm-routing)
 - Developer

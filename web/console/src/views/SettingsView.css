@@ -954,6 +954,70 @@ body:has(.settings-page) .q-dialog .q-menu-item.danger .q-menu-title {
 }
 
 
+.settings-tool-groups {
+  display: grid;
+  gap: 24px;
+}
+
+.settings-tool-group {
+  display: grid;
+  gap: 8px;
+}
+
+.settings-tool-group-head {
+  display: grid;
+  gap: 2px;
+}
+
+.settings-tool-group-title {
+  margin: 0;
+  color: var(--text-1);
+  font-size: var(--font-size-meta);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.settings-tool-group-note {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--font-size-meta);
+  line-height: 1.45;
+}
+
+.settings-tool-main {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.settings-tool-icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--text-1);
+}
+
+.settings-tool-logo {
+  object-fit: contain;
+}
+
+.settings-tool-names {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  color: var(--text-2);
+  font-size: var(--font-size-meta);
+}
+
+.settings-tool-automatic {
+  color: var(--text-2);
+  font-size: var(--font-size-meta);
+  white-space: nowrap;
+}
+
 .settings-toggle-list,
 .settings-console-list {
   display: grid;

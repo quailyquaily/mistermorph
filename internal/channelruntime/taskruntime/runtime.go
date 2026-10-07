@@ -12,7 +12,6 @@ import (
 
 	"github.com/quailyquaily/mistermorph/agent"
 	"github.com/quailyquaily/mistermorph/guard"
-	"github.com/quailyquaily/mistermorph/internal/acpclient"
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/depsutil"
 	"github.com/quailyquaily/mistermorph/internal/chatcommands"
 	"github.com/quailyquaily/mistermorph/internal/chathistory"
@@ -127,7 +126,6 @@ type Runtime struct {
 	PlanRoute  llmutil.ResolvedRoute
 	PlanClient llm.Client
 	PlanModel  string
-	ACPAgents  []acpclient.AgentConfig
 
 	ImageClient    llm.ImageClient
 	ImageSession   *imagesession.Store
@@ -265,10 +263,6 @@ func NewRunPreparer(d depsutil.CommonDependencies, opts BootstrapOptions) (*Runt
 			return nil, fmt.Errorf("initialize guard: %w", errors.Join(err, closeErr))
 		}
 	}
-	var acpAgents []acpclient.AgentConfig
-	if d.ACPAgents != nil {
-		acpAgents = d.ACPAgents()
-	}
 	return &Runtime{
 		commonDeps:            d,
 		bootstrapClientOwners: &runtimeClientOwners{},
@@ -279,7 +273,6 @@ func NewRunPreparer(d depsutil.CommonDependencies, opts BootstrapOptions) (*Runt
 		ClientDecorator:       opts.ClientDecorator,
 		BaseRegistry:          baseRegistry,
 		SharedGuard:           sharedGuard,
-		ACPAgents:             acpAgents,
 		ImageSession:          imageSession,
 		imageRetention:        toolsutil.NewImageToolRetentionStore(),
 	}, nil
@@ -614,9 +607,6 @@ func (rt *Runtime) prepareRun(ctx context.Context, req RunRequest) (preparedRunt
 			}
 			toolTriggers[name] = true
 		}
-		if len(rt.ACPAgents) == 0 {
-			delete(toolTriggers, toolsutil.BuiltinACPSpawn)
-		}
 		if rt.commonDeps.RegisterTriggeredStaticTools != nil {
 			reg.Remove(toolsutil.BuiltinAgentSend)
 			if toolTriggers == nil {
@@ -727,7 +717,6 @@ func (rt *Runtime) prepareRun(ctx context.Context, req RunRequest) (preparedRunt
 		agent.WithLogOptions(rt.LogOptions),
 		agent.WithSubtaskRunner(boundSubtaskRunner{runtime: rt, route: mainRoute}),
 		agent.WithEngineToolsConfig(engineToolsConfig),
-		agent.WithACPAgents(rt.ACPAgents),
 	}
 	if systemPromptCacheControl != nil {
 		engineOpts = append(engineOpts, agent.WithSystemPromptCacheControl(systemPromptCacheControl))
@@ -990,9 +979,8 @@ func (rt *Runtime) runSubtask(ctx context.Context, req agent.SubtaskRequest, rou
 			Registry:            req.Registry,
 			DisableRuntimeTools: true,
 			EngineToolsConfig: &agent.EngineToolsConfig{
-				SpawnEnabled:    false,
-				ACPSpawnEnabled: false,
-				CoderEnabled:    false,
+				SpawnEnabled: false,
+				CoderEnabled: false,
 			},
 			Meta: meta,
 		})

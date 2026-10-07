@@ -606,3 +606,15 @@ func TestCoderStreamCollectorCodexRecoversFromStreamError(t *testing.T) {
 		t.Fatalf("successful turn: output=%q error=%q", collector.Output(), collector.Error())
 	}
 }
+
+type execDirectSubtaskRunner struct {
+	req SubtaskRequest
+}
+
+func (r *execDirectSubtaskRunner) RunSubtask(ctx context.Context, req SubtaskRequest) (*SubtaskResult, error) {
+	r.req = req
+	if req.RunFunc == nil {
+		return nil, nil
+	}
+	return req.RunFunc(ctx)
+}

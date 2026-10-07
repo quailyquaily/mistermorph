@@ -78,6 +78,15 @@ import {
   PhLockSimple,
   PhX,
   PhXCircle,
+  PhFileText,
+  PhPencilSimpleLine,
+  PhBinoculars,
+  PhGitFork,
+  PhCodeBlock,
+  PhPaintBrush,
+  PhDownloadSimple,
+  PhAppWindow,
+  PhBracketsCurly,
 } from "@phosphor-icons/vue";
 import { defineComponent, h } from "vue";
 
@@ -184,6 +193,15 @@ const sources = {
   PhLockSimple,
   PhX,
   PhXCircle,
+  PhFileText,
+  PhPencilSimpleLine,
+  PhBinoculars,
+  PhGitFork,
+  PhCodeBlock,
+  PhPaintBrush,
+  PhDownloadSimple,
+  PhAppWindow,
+  PhBracketsCurly,
 };
 
 export const phosphorIcons = Object.fromEntries(

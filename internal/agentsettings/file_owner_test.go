@@ -1215,30 +1215,6 @@ func TestFileOwnerProtectsAdditionalAgentSecret(t *testing.T) {
 	}
 }
 
-func TestFileOwnerRejectsInvalidACPAgentConfig(t *testing.T) {
-	configPath := filepath.Join(t.TempDir(), "config.yaml")
-	initial := "llm:\n  provider: openai\n  model: test\n"
-	if err := os.WriteFile(configPath, []byte(initial), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	owner := NewFileOwner(FileOwnerOptions{ConfigPath: configPath, Reader: readFileOwnerTestConfig(t, configPath)})
-	_, err := owner.Update(context.Background(), AgentSettingsUpdate{
-		ConfigChanges: map[string]json.RawMessage{
-			"acp.agents": json.RawMessage(`[{"name":"codex"}]`),
-		},
-	})
-	if err == nil || !strings.Contains(err.Error(), "command is required") {
-		t.Fatalf("Update() error = %v, want invalid ACP command", err)
-	}
-	raw, readErr := os.ReadFile(configPath)
-	if readErr != nil {
-		t.Fatal(readErr)
-	}
-	if string(raw) != initial {
-		t.Fatalf("invalid update changed config:\n%s", raw)
-	}
-}
-
 func TestFileOwnerReturnsConfigPathIOError(t *testing.T) {
 	root := t.TempDir()
 	blockedParent := filepath.Join(root, "not-a-directory")

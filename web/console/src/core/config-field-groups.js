@@ -155,13 +155,6 @@ export const TOOL_ADVANCED_CONFIG_GROUPS = {
       { path: "tools.bash.rewrite.binary", label: "Rewrite binary", type: "string", placeholder: "rtk", dependsOn: "tools.bash.rewrite.enabled" },
     ],
   }],
-  skill_install: [{
-    id: "skill-install",
-    title: "skill_install",
-    fields: [
-      { path: "tools.skill_install.max_bytes", label: "Skill maximum size (all files)", type: "int", editor: "bytes" },
-    ],
-  }],
   powershell: [{
     id: "powershell",
     title: "powershell",
@@ -252,25 +245,6 @@ export const AUTOMATION_CONFIG_GROUPS = [
         allowCustom: true,
         duration: true,
         dependsOn: "heartbeat.enabled",
-      },
-    ],
-  },
-];
-
-export const TOOL_SEARCH_CONFIG_GROUPS = [
-  {
-    id: "tool-search",
-    title: "Tool search",
-    note: "On by default. Hides MCP tools until the model finds them with tool_search, so each request carries fewer tool definitions; tool_search is offered only when there is an MCP tool or server to find. Found tools stay visible for the rest of the conversation; /reset forgets them.",
-    fields: [
-      { path: "tools.tool_search.enabled", label: "Tool search", type: "bool" },
-      {
-        path: "tools.tool_search.always_loaded",
-        label: "Always visible MCP tools",
-        type: "string_list",
-        wide: true,
-        dependsOn: "tools.tool_search.enabled",
-        note: "One tool name per line, such as mcp_github-work__get_issue.",
       },
     ],
   },

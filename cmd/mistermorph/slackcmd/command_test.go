@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/quailyquaily/mistermorph/internal/acpclient"
 	"github.com/quailyquaily/mistermorph/internal/channelopts"
 	awarenessruntime "github.com/quailyquaily/mistermorph/internal/channelruntime/awareness"
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/depsutil"
@@ -112,13 +111,12 @@ func dependencyCapabilitiesForTest() depsutil.CommonDependencies {
 		ToolTriggers:               func(string) map[string]bool { return map[string]bool{"sentinel": true} },
 		RegisterTriggeredStaticTools: func(*tools.Registry, map[string]bool) {
 		},
-		ACPAgents: func() []acpclient.AgentConfig { return []acpclient.AgentConfig{{Name: "sentinel"}} },
 	}
 }
 
 func assertDependencyCapabilities(t *testing.T, got depsutil.CommonDependencies) {
 	t.Helper()
-	if got.ResolveLLMRouteWithProfile == nil || got.AwarenessRegistry == nil || got.ToolTriggers == nil || got.RegisterTriggeredStaticTools == nil || got.ACPAgents == nil {
+	if got.ResolveLLMRouteWithProfile == nil || got.AwarenessRegistry == nil || got.ToolTriggers == nil || got.RegisterTriggeredStaticTools == nil {
 		t.Fatalf("common dependency capability was dropped: %#v", got)
 	}
 }

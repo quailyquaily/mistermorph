@@ -181,16 +181,14 @@ func TestTelegramConfigFromReaderReadsContextCompaction(t *testing.T) {
 
 func TestConfigReadersShareEngineToolsConfig(t *testing.T) {
 	r := stubConfigReader{
-		"tools.spawn.enabled":     true,
-		"tools.acp_spawn.enabled": true,
-		"tools.coder.enabled":     true,
-		"tools.coder.path_extra":  []string{"/opt/coder"},
+		"tools.spawn.enabled":    true,
+		"tools.coder.enabled":    true,
+		"tools.coder.path_extra": []string{"/opt/coder"},
 	}
 	want := agent.EngineToolsConfig{
-		SpawnEnabled:    true,
-		ACPSpawnEnabled: true,
-		CoderEnabled:    true,
-		CoderPathExtra:  []string{"/opt/coder"},
+		SpawnEnabled:   true,
+		CoderEnabled:   true,
+		CoderPathExtra: []string{"/opt/coder"},
 	}
 	configs := []agent.EngineToolsConfig{
 		TelegramConfigFromReader(r).EngineToolsConfig,
@@ -201,7 +199,7 @@ func TestConfigReadersShareEngineToolsConfig(t *testing.T) {
 		DiscordConfigFromReader(r).EngineToolsConfig,
 	}
 	for i, got := range configs {
-		if got.SpawnEnabled != want.SpawnEnabled || got.ACPSpawnEnabled != want.ACPSpawnEnabled || got.CoderEnabled != want.CoderEnabled || len(got.CoderPathExtra) != 1 || got.CoderPathExtra[0] != want.CoderPathExtra[0] {
+		if got.SpawnEnabled != want.SpawnEnabled || got.CoderEnabled != want.CoderEnabled || len(got.CoderPathExtra) != 1 || got.CoderPathExtra[0] != want.CoderPathExtra[0] {
 			t.Fatalf("config %d engine tools = %+v, want %+v", i, got, want)
 		}
 	}

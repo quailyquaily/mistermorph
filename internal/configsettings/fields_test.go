@@ -31,7 +31,6 @@ func TestPublicFieldSetsHaveUniquePathsAndApplyModes(t *testing.T) {
 		"llm.routes.addressing",
 		"max_steps",
 		"tools.bash.timeout",
-		"acp.agents",
 		"telegram.record_untriggered",
 		"heartbeat.interval",
 		"server.auth_token",

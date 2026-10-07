@@ -194,7 +194,7 @@ const MCPSettingsPanel = {
     };
   },
   template: `
-    <div class="settings-panel-body settings-panel-body-plain mcp-settings-panel">
+    <div class="mcp-settings-panel">
       <QCard variant="default">
         <div class="settings-panel-shell">
           <header class="settings-panel-head">

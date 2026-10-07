@@ -1,3 +1,15 @@
+/* The Settings page's MCP section is the page container; the panel's card sits in it like the
+   section's other cards. */
+.mcp-settings-panel {
+  min-width: 0;
+  display: grid;
+}
+
+.mcp-settings-panel > .q-card.q-card-default {
+  min-height: 0;
+  align-content: start;
+}
+
 .mcp-settings-body {
   gap: 0;
 }

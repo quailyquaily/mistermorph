@@ -78,7 +78,6 @@ With many MCP tools, every request would carry all of their definitions. Tool se
 tools:
   tool_search:
     enabled: true       # default; false sends every MCP tool with every request
-    always_loaded: []   # MCP tool names to keep visible
 ```
 
 `tool_search` is offered only when there is something to find: MCP tools, or an enabled on-demand server. Without MCP, requests are unchanged.

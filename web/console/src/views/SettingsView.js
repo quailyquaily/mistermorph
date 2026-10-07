@@ -21,10 +21,18 @@ import ProAuthDialog from "../components/ProAuthDialog";
 import ImageUploadField from "../components/ImageUploadField";
 import LLMConfigForm from "../components/LLMConfigForm";
 import MCPSettingsPanel from "../components/MCPSettingsPanel";
+import toolChannelTelegramLogoURL from "../assets/images/channels/telegram.svg";
+import toolChannelSlackLogoURL from "../assets/images/channels/slack.svg";
+import toolChannelLarkLogoURL from "../assets/images/channels/lark.svg";
+import toolChannelDiscordLogoURL from "../assets/images/channels/discord.svg";
+import toolChannelMixinLogoURL from "../assets/images/channels/mixin.svg";
+import toolChannelWeChatLogoURL from "../assets/images/channels/wechat.svg";
+import toolChannelWhatsAppLogoURL from "../assets/images/channels/whatsapp.svg";
 import AppMarkdownEditor from "../components/AppMarkdownEditor";
 import SettingsCreditsPanel from "../components/SettingsCreditsPanel";
 import SettingDialog from "../components/SettingDialog";
 import SetupConnectionTestDialog from "../components/SetupConnectionTestDialog";
+import RawJsonDialog from "../components/RawJsonDialog";
 import SetupPickerDialog from "../components/SetupPickerDialog";
 import RuntimePanel from "./RuntimeView";
 import WeChatLoginPanel from "../components/WeChatLoginPanel";
@@ -89,7 +97,6 @@ import { endpointRoutePath } from "../core/endpoint-routes";
 import { openReentrantDialog } from "../core/reentrant-dialog";
 import {
   AUTOMATION_CONFIG_GROUPS,
-  TOOL_SEARCH_CONFIG_GROUPS,
   CHANNEL_CONFIG_GROUPS,
   CHANNEL_TRIGGER_CONFIG_GROUPS,
   CONSOLE_DEPLOYMENT_CONFIG_GROUPS,
@@ -120,24 +127,46 @@ import {
 import { modelPickerItemsFromPayload } from "../core/setup-picker";
 
 const TOOL_ITEMS = [
-  { id: "read_file", titleKey: "settings_tool_read_file", noteKey: "settings_tool_note_read_file", toggle: false },
-  { id: "write_file", titleKey: "settings_tool_write_file", noteKey: "settings_tool_note_write_file" },
-  { id: "spawn", titleKey: "settings_tool_spawn", noteKey: "settings_tool_note_spawn" },
-  { id: "coder", titleKey: "settings_tool_coder", noteKey: "settings_tool_note_coder" },
-  { id: "contacts_send", titleKey: "settings_tool_contacts_send", noteKey: "settings_tool_note_contacts_send" },
-  { id: "todo_update", titleKey: "settings_tool_todo_update", noteKey: "settings_tool_note_todo_update" },
-  { id: "plan_create", titleKey: "settings_tool_plan_create", noteKey: "settings_tool_note_plan_create" },
-  { id: "codemode", titleKey: "settings_tool_codemode", noteKey: "settings_tool_note_codemode" },
-  { id: "url_fetch", titleKey: "settings_tool_url_fetch", noteKey: "settings_tool_note_url_fetch" },
-  { id: "web_search", titleKey: "settings_tool_web_search", noteKey: "settings_tool_note_web_search" },
-  { id: "bash", titleKey: "settings_tool_bash", noteKey: "settings_tool_note_bash" },
-  { id: "powershell", titleKey: "settings_tool_powershell", noteKey: "settings_tool_note_powershell" },
-  { id: "image_generate", titleKey: "settings_tool_image_generate", noteKey: "settings_tool_note_image_generate" },
-  { id: "image_edit", titleKey: "settings_tool_image_edit", noteKey: "settings_tool_note_image_edit" },
+  { id: "read_file", icon: "PhFileText", titleKey: "settings_tool_read_file", noteKey: "settings_tool_note_read_file", toggle: false },
+  { id: "write_file", icon: "PhPencilSimpleLine", titleKey: "settings_tool_write_file", noteKey: "settings_tool_note_write_file" },
+  { id: "spawn", icon: "PhGitFork", titleKey: "settings_tool_spawn", noteKey: "settings_tool_note_spawn" },
+  { id: "coder", icon: "PhCodeBlock", titleKey: "settings_tool_coder", noteKey: "settings_tool_note_coder" },
+  { id: "contacts_send", icon: "PhPaperPlaneTilt", titleKey: "settings_tool_contacts_send", noteKey: "settings_tool_note_contacts_send" },
+  { id: "agent_send", icon: "PhRobot", titleKey: "settings_tool_agent_send", noteKey: "settings_tool_note_agent_send", automatic: true },
+  { id: "todo_update", icon: "PhCalendarCheck", titleKey: "settings_tool_todo_update", noteKey: "settings_tool_note_todo_update" },
+  { id: "plan_create", icon: "PhListChecks", titleKey: "settings_tool_plan_create", noteKey: "settings_tool_note_plan_create" },
+  { id: "codemode", icon: "PhCode", titleKey: "settings_tool_codemode", noteKey: "settings_tool_note_codemode" },
+  { id: "tool_search", icon: "PhBinoculars", titleKey: "settings_tool_tool_search", noteKey: "settings_tool_note_tool_search" },
+  { id: "url_fetch", icon: "PhLink", titleKey: "settings_tool_url_fetch", noteKey: "settings_tool_note_url_fetch" },
+  { id: "web_search", icon: "PhMagnifyingGlass", titleKey: "settings_tool_web_search", noteKey: "settings_tool_note_web_search" },
+  { id: "bash", icon: "PhTerminalWindow", titleKey: "settings_tool_bash", noteKey: "settings_tool_note_bash" },
+  { id: "powershell", icon: "PhTerminalWindow", titleKey: "settings_tool_powershell", noteKey: "settings_tool_note_powershell" },
+  { id: "image_generate", icon: "PhMagicWand", titleKey: "settings_tool_image_generate", noteKey: "settings_tool_note_image_generate" },
+  { id: "image_edit", icon: "PhPaintBrush", titleKey: "settings_tool_image_edit", noteKey: "settings_tool_note_image_edit" },
   // Console only, off by default: Add skill on the Skills page names them with $, which turns them
   // on for that one task.
-  { id: "skill_install_preview", titleKey: "settings_tool_skill_install_preview", noteKey: "settings_tool_note_skill_install_preview" },
-  { id: "skill_install", titleKey: "settings_tool_skill_install", noteKey: "settings_tool_note_skill_install" },
+];
+
+// The Tools page lists tools in these groups, in this order.
+const TOOL_GROUPS = [
+  { id: "files", titleKey: "settings_tool_group_files", items: ["read_file", "write_file", "bash", "powershell"] },
+  { id: "web", titleKey: "settings_tool_group_web", items: ["url_fetch", "web_search"] },
+  { id: "workflow", titleKey: "settings_tool_group_workflow", items: ["plan_create", "todo_update", "codemode", "tool_search"] },
+  { id: "delegation", titleKey: "settings_tool_group_delegation", items: ["spawn", "coder"] },
+  { id: "messaging", titleKey: "settings_tool_group_messaging", items: ["contacts_send", "agent_send"] },
+  { id: "images", titleKey: "settings_tool_group_images", items: ["image_generate", "image_edit"] },
+];
+
+// Tools a channel runtime adds in its own chats. They have no setting: each follows its channel.
+const TOOL_CHANNELS = [
+  { id: "console", title: "Console", icon: "PhAppWindow", tools: ["skill_install_preview", "skill_install"] },
+  { id: "telegram", title: "Telegram", logo: toolChannelTelegramLogoURL, tools: ["telegram_send_file", "telegram_send_photo", "telegram_send_voice", "message_react"] },
+  { id: "slack", title: "Slack", logo: toolChannelSlackLogoURL, tools: ["slack_send_file", "message_react"] },
+  { id: "lark", title: "Lark", logo: toolChannelLarkLogoURL, tools: ["lark_send_file", "lark_send_photo", "lark_send_voice", "message_react"] },
+  { id: "discord", title: "Discord", logo: toolChannelDiscordLogoURL, tools: ["discord_send_file", "message_react"] },
+  { id: "mixin", title: "Mixin", logo: toolChannelMixinLogoURL, tools: ["mixin_send_file", "mixin_send_photo", "mixin_send_audio"] },
+  { id: "wechat", title: "WeChat", logo: toolChannelWeChatLogoURL, tools: ["wechat_send_file"] },
+  { id: "whatsapp", title: "WhatsApp", logo: toolChannelWhatsAppLogoURL, tools: ["whatsapp_send_file"] },
 ];
 
 const MANAGED_RUNTIME_ITEMS = [
@@ -484,14 +513,13 @@ function buildToolsSnapshot(state) {
       todo_update: !!state.tools.todo_update,
       plan_create: !!state.tools.plan_create,
       codemode: !!state.tools.codemode,
+      tool_search: !!state.tools.tool_search,
       url_fetch: !!state.tools.url_fetch,
       web_search: !!state.tools.web_search,
       bash: !!state.tools.bash,
       powershell: !!state.tools.powershell,
       image_generate: !!state.tools.image_generate,
       image_edit: !!state.tools.image_edit,
-      skill_install_preview: !!state.tools.skill_install_preview,
-      skill_install: !!state.tools.skill_install,
     },
   });
 }
@@ -675,6 +703,7 @@ function buildConsoleGuardSnapshot(state) {
 
 const SettingsView = {
   components: {
+    RawJsonDialog,
     MarkdownContent,
     SettingSelect,
     SecretInput,
@@ -895,14 +924,13 @@ const SettingsView = {
         todo_update: true,
         plan_create: true,
         codemode: true,
+        tool_search: true,
         url_fetch: true,
         web_search: true,
         bash: true,
         powershell: false,
         image_generate: true,
         image_edit: true,
-        skill_install_preview: false,
-        skill_install: false,
       },
       mcp: {
         servers: [],
@@ -1159,6 +1187,35 @@ const SettingsView = {
       { title: t("settings_llm_tools_emulation_force"), value: "force" },
     ]);
     const toolItems = computed(() => TOOL_ITEMS);
+    // Tool schema preview: the catalog is loaded once, on the first preview.
+    let toolSchemaCatalog = null;
+    const toolSchemaPreview = reactive({ open: false, title: "", json: "" });
+    async function showToolSchema(title, pick) {
+      toolSchemaPreview.title = title;
+      toolSchemaPreview.json = "";
+      toolSchemaPreview.open = true;
+      try {
+        if (!toolSchemaCatalog) {
+          toolSchemaCatalog = await apiFetch("/settings/tools/schemas");
+        }
+        const value = pick(toolSchemaCatalog);
+        toolSchemaPreview.json = value ? JSON.stringify(value, null, 2) : t("settings_tool_schema_missing");
+      } catch (err) {
+        toolSchemaPreview.json = String(err?.message || err || "");
+      }
+    }
+    function previewToolSchema(item) {
+      return showToolSchema(item.id, (catalog) => catalog?.tools?.[item.id]);
+    }
+    function previewChannelToolSchemas(channel) {
+      return showToolSchema(channel.title, (catalog) => catalog?.channels?.[channel.id]);
+    }
+    const toolGroups = computed(() =>
+      TOOL_GROUPS.map((group) => ({
+        ...group,
+        items: group.items.map((id) => TOOL_ITEMS.find((item) => item.id === id)).filter(Boolean),
+      }))
+    );
     const advancedSettingsValues = computed(() =>
       advancedSettingsScope.value === "console" ? consoleConfigValues.value : agentConfigValues.value
     );
@@ -2111,14 +2168,13 @@ const SettingsView = {
       state.tools.todo_update = true;
       state.tools.plan_create = true;
       state.tools.codemode = true;
+      state.tools.tool_search = true;
       state.tools.url_fetch = true;
       state.tools.web_search = true;
       state.tools.bash = true;
       state.tools.powershell = false;
       state.tools.image_generate = true;
       state.tools.image_edit = true;
-      state.tools.skill_install_preview = false;
-      state.tools.skill_install = false;
       state.mcp.servers = [];
       llmEnvManaged.value = {};
       llmSecretFields.value = {};
@@ -2265,14 +2321,13 @@ const SettingsView = {
       state.tools.todo_update = toolEnabledValue(tools.todo_update);
       state.tools.plan_create = toolEnabledValue(tools.plan_create);
       state.tools.codemode = toolEnabledValue(tools.codemode);
+      state.tools.tool_search = toolEnabledValue(tools.tool_search);
       state.tools.url_fetch = toolEnabledValue(tools.url_fetch);
       state.tools.web_search = toolEnabledValue(tools.web_search);
       state.tools.bash = toolEnabledValue(tools.bash);
       state.tools.powershell = toolEnabledValue(tools.powershell);
       state.tools.image_generate = toolEnabledValue(tools.image_generate);
       state.tools.image_edit = toolEnabledValue(tools.image_edit);
-      state.tools.skill_install_preview = toolEnabledValue(tools.skill_install_preview);
-      state.tools.skill_install = toolEnabledValue(tools.skill_install);
       applyMCPPayload(mcp);
       llmEnvManaged.value = llmEnvManagedPayload;
       llmSecretFields.value = llmSecretFieldsPayload;
@@ -3521,14 +3576,13 @@ const SettingsView = {
         todo_update: { enabled: state.tools.todo_update },
         plan_create: { enabled: state.tools.plan_create },
         codemode: { enabled: state.tools.codemode },
+        tool_search: { enabled: state.tools.tool_search },
         url_fetch: { enabled: state.tools.url_fetch },
         web_search: { enabled: state.tools.web_search },
         bash: { enabled: state.tools.bash },
         powershell: { enabled: state.tools.powershell },
         image_generate: { enabled: state.tools.image_generate },
         image_edit: { enabled: state.tools.image_edit },
-        skill_install_preview: { enabled: state.tools.skill_install_preview },
-        skill_install: { enabled: state.tools.skill_install },
       };
       if (target === "llm") {
         return { llm: buildLLMSettingsPayload() };
@@ -5168,7 +5222,6 @@ const SettingsView = {
       CONSOLE_DEPLOYMENT_CONFIG_GROUPS,
       REMOTE_CONTROL_CONFIG_GROUPS,
       AUTOMATION_CONFIG_GROUPS,
-      TOOL_SEARCH_CONFIG_GROUPS,
       SYSTEM_ADVANCED_CONFIG_GROUPS,
       SYSTEM_CONFIG_GROUPS,
       desktopUpdateResult,
@@ -5187,6 +5240,11 @@ const SettingsView = {
       deleteProfileDialogActions,
       apiBasePickerItems,
       toolItems,
+      toolGroups,
+      toolSchemaPreview,
+      previewToolSchema,
+      previewChannelToolSchemas,
+      TOOL_CHANNELS,
       managedRuntimeItems,
       groupTriggerItems,
       settingsSections,
@@ -6560,15 +6618,6 @@ const SettingsView = {
               :validationError="mcpValidationError"
               @save="saveMCPServers"
             />
-            <ConfigSettingsPanel
-              :groups="TOOL_SEARCH_CONFIG_GROUPS"
-              :values="agentConfigValues"
-              :fieldStates="agentFieldStates"
-              :loading="agentLoading"
-              :saving="agentSaving && agentSavingTarget === 'config'"
-              saveScope="agent"
-              @save="saveConfigSettings('agent', $event)"
-            />
           </div>
 
           <div v-else-if="selectedSection.id === 'automation'" class="settings-panel-body settings-panel-body-plain">
@@ -6918,31 +6967,84 @@ const SettingsView = {
               />
 
               <div class="settings-panel-body">
-                <div v-if="selectedSection.id === 'tools'" class="settings-toggle-list">
-                  <div v-for="item in toolItems" :key="item.id" class="settings-toggle-row">
-                    <div class="settings-toggle-copy">
-                      <strong class="settings-toggle-title">{{ t(item.titleKey) }}</strong>
-                      <span class="settings-toggle-note">{{ t(item.noteKey) }}</span>
+                <div v-if="selectedSection.id === 'tools'" class="settings-tool-groups">
+                  <section v-for="group in toolGroups" :key="group.id" class="settings-tool-group">
+                    <header class="settings-tool-group-head">
+                      <h4 class="settings-tool-group-title">{{ t(group.titleKey) }}</h4>
+                      <p v-if="group.noteKey" class="settings-tool-group-note">{{ t(group.noteKey) }}</p>
+                    </header>
+                    <div class="settings-toggle-list">
+                      <div v-for="item in group.items" :key="item.id" class="settings-toggle-row">
+                        <div class="settings-tool-main">
+                          <component :is="item.icon" class="settings-tool-icon" />
+                          <div class="settings-toggle-copy">
+                            <strong class="settings-toggle-title">{{ t(item.titleKey) }}</strong>
+                            <span class="settings-toggle-note">{{ t(item.noteKey) }}</span>
+                          </div>
+                        </div>
+                        <div class="settings-toggle-actions">
+                          <QButton
+                            v-if="TOOL_ADVANCED_CONFIG_GROUPS[item.id]"
+                            type="button"
+                            class="plain xs icon"
+                            :title="t('settings_advanced_action')"
+                            :aria-label="t('settings_advanced_action')"
+                            :disabled="agentLoading || agentSaving"
+                            @click="openToolAdvancedSettings(item)"
+                          >
+                            <PhGearSix class="icon" />
+                          </QButton>
+                          <QButton
+                            type="button"
+                            class="plain xs icon"
+                            :title="t('settings_tool_schema_preview')"
+                            :aria-label="t('settings_tool_schema_preview')"
+                            @click="previewToolSchema(item)"
+                          >
+                            <PhBracketsCurly class="icon" />
+                          </QButton>
+                          <span v-if="item.automatic" class="settings-tool-automatic">{{ t("settings_tool_automatic") }}</span>
+                          <QSwitch
+                            v-else
+                            :modelValue="item.toggle === false ? true : state.tools[item.id]"
+                            :disabled="item.toggle === false || agentLoading || agentSaving || agentSettingsReadOnly"
+                            @update:modelValue="setToolEnabled(item.id, $event)"
+                          />
+                        </div>
+                      </div>
                     </div>
-                    <div class="settings-toggle-actions">
-                      <QButton
-                        v-if="TOOL_ADVANCED_CONFIG_GROUPS[item.id]"
-                        type="button"
-                        class="plain xs icon"
-                        :title="t('settings_advanced_action')"
-                        :aria-label="t('settings_advanced_action')"
-                        :disabled="agentLoading || agentSaving"
-                        @click="openToolAdvancedSettings(item)"
-                      >
-                        <PhGearSix class="icon" />
-                      </QButton>
-                      <QSwitch
-                        :modelValue="item.toggle === false ? true : state.tools[item.id]"
-                        :disabled="item.toggle === false || agentLoading || agentSaving || agentSettingsReadOnly"
-                        @update:modelValue="setToolEnabled(item.id, $event)"
-                      />
+                  </section>
+                  <section class="settings-tool-group">
+                    <header class="settings-tool-group-head">
+                      <h4 class="settings-tool-group-title">{{ t("settings_tool_group_channels") }}</h4>
+                      <p class="settings-tool-group-note">{{ t("settings_tool_group_note_channels") }}</p>
+                    </header>
+                    <div class="settings-toggle-list">
+                      <div v-for="channel in TOOL_CHANNELS" :key="channel.id" class="settings-toggle-row">
+                        <div class="settings-tool-main">
+                          <img v-if="channel.logo" :src="channel.logo" class="settings-tool-icon settings-tool-logo" alt="" />
+                          <component :is="channel.icon" v-else class="settings-tool-icon" />
+                          <div class="settings-toggle-copy">
+                            <strong class="settings-toggle-title">{{ channel.title }}</strong>
+                            <span class="settings-tool-names">
+                              <code v-for="name in channel.tools" :key="name">{{ name }}</code>
+                            </span>
+                          </div>
+                        </div>
+                        <div class="settings-toggle-actions">
+                          <QButton
+                            type="button"
+                            class="plain xs icon"
+                            :title="t('settings_tool_schema_preview')"
+                            :aria-label="t('settings_tool_schema_preview')"
+                            @click="previewChannelToolSchemas(channel)"
+                          >
+                            <PhBracketsCurly class="icon" />
+                          </QButton>
+                        </div>
+                      </div>
                     </div>
-                  </div>
+                  </section>
                 </div>
 
               </div>
@@ -7068,6 +7170,12 @@ const SettingsView = {
         @select="applyModelOption"
       />
 
+      <RawJsonDialog
+        :open="toolSchemaPreview.open"
+        :title="toolSchemaPreview.title"
+        :json="toolSchemaPreview.json"
+        @close="toolSchemaPreview.open = false"
+      />
       <SetupConnectionTestDialog
         v-model="testConnectionOpen"
         :loading="testConnectionLoading"

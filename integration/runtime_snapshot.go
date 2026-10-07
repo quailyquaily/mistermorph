@@ -6,7 +6,6 @@ import (
 
 	"github.com/quailyquaily/mistermorph/agent"
 	"github.com/quailyquaily/mistermorph/guard"
-	"github.com/quailyquaily/mistermorph/internal/acpclient"
 	"github.com/quailyquaily/mistermorph/internal/agentsettings"
 	"github.com/quailyquaily/mistermorph/internal/channelopts"
 	"github.com/quailyquaily/mistermorph/internal/llmutil"
@@ -34,7 +33,6 @@ type runtimeSnapshot struct {
 	WeChat              channelopts.WeChatConfig
 	WhatsApp            channelopts.WhatsAppConfig
 	MCPServers          []mcphost.ServerConfig
-	ACPAgents           []acpclient.AgentConfig
 	Paths               runtimepaths.Paths
 	DefaultWorkspaceDir string
 	AgentSettings       *agentsettings.ReaderSnapshot
@@ -42,7 +40,6 @@ type runtimeSnapshot struct {
 
 type registrySnapshot struct {
 	ToolsSpawnEnabled         bool
-	ToolsACPSpawnEnabled      bool
 	ToolsCoderEnabled         bool
 	ToolsCoderPathExtra       []string
 	ToolsPlanCreateEnabled    bool

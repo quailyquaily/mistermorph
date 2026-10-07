@@ -51,10 +51,6 @@ func TestManagedRuntimeDepsExposeConsoleAwarenessRegistry(t *testing.T) {
 	reader.Set("file_state_dir", t.TempDir())
 	reader.Set("guard.enabled", true)
 	reader.Set("tools.contacts_send.enabled", true)
-	reader.Set("acp.agents", []any{map[string]any{
-		"name":    "test-agent",
-		"command": "test-command",
-	}})
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
 	deps, cleanup, err := buildManagedRuntimeDepsFromReader(logger, reader)
@@ -65,13 +61,6 @@ func TestManagedRuntimeDepsExposeConsoleAwarenessRegistry(t *testing.T) {
 
 	if deps.AwarenessRegistry == nil {
 		t.Fatal("AwarenessRegistry = nil")
-	}
-	if deps.ACPAgents == nil {
-		t.Fatal("ACPAgents = nil")
-	}
-	agents := deps.ACPAgents()
-	if len(agents) != 1 || agents[0].Name != "test-agent" {
-		t.Fatalf("ACPAgents() = %#v, want configured agent", agents)
 	}
 	if _, ok := deps.Registry().Get(toolsutil.BuiltinContactsSend); ok {
 		t.Fatalf("base registry includes %q, want excluded outside awareness", toolsutil.BuiltinContactsSend)

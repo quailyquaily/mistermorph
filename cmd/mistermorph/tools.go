@@ -52,12 +52,6 @@ func runToolsCmd(cmd *cobra.Command, _ []string, registryFactory func() *tools.R
 			Description: "Starts a subtask with its own context and a restricted tool whitelist, then returns a structured result envelope.",
 		})
 	}
-	if viper.GetBool("tools.acp_spawn.enabled") {
-		addToolPreview(extraPreviews, toolPreview{
-			Name:        "acp_spawn",
-			Description: "Starts a one-shot external ACP agent subtask over stdio and returns a structured result envelope.",
-		})
-	}
 	if viper.GetBool("tools.coder.enabled") {
 		addToolPreview(extraPreviews, toolPreview{
 			Name:        "coder",

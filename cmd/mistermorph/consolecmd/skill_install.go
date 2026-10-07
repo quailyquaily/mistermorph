@@ -26,9 +26,8 @@ func (r *consoleLocalRuntime) skillInstallTools(generation *consoleLocalRuntimeG
 	}
 	reader := generation.reader
 	refs := skillInstallToolRefs(task, skillsutil.ResolveTaskSkillRefs(task, skillsutil.SkillsConfigFromReader(reader)))
-	wants := func(name string) bool {
-		return refs[name] || (reader != nil && reader.GetBool("tools."+name+".enabled"))
-	}
+	// The install tools have no setting: only a task that names them, such as Add skill's, gets them.
+	wants := func(name string) bool { return refs[name] }
 	if !wants(skillinstall.PreviewToolName) && !wants(skillinstall.InstallToolName) {
 		return nil
 	}
@@ -48,8 +47,6 @@ func (r *consoleLocalRuntime) skillInstallTools(generation *consoleLocalRuntimeG
 				StagingDir: filepath.Join(stateDir, "skill_install_staging"),
 				Review:     skillinstall.LLMReviewer(client, model),
 				Enable:     r.enableInstalledSkill,
-				// Read per call, so a changed limit applies to the next preview.
-				MaxSkillBytes: reader.GetInt64("tools.skill_install.max_bytes"),
 			}, nil
 		},
 		StoreIndexURL: func() string { return skillStoreIndexURL(reader) },

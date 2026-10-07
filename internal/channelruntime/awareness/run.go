@@ -12,7 +12,6 @@ import (
 
 	"github.com/quailyquaily/mistermorph/agent"
 	"github.com/quailyquaily/mistermorph/guard"
-	"github.com/quailyquaily/mistermorph/internal/acpclient"
 	awarenessdomain "github.com/quailyquaily/mistermorph/internal/awareness"
 	"github.com/quailyquaily/mistermorph/internal/awarenessutil"
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/depsutil"
@@ -492,13 +491,6 @@ func runAwarenessTask(ctx context.Context, d Dependencies, opts awarenessTaskOpt
 	if d.ToolTriggers != nil {
 		toolTriggers = d.ToolTriggers(task)
 	}
-	var acpAgents []acpclient.AgentConfig
-	if d.ACPAgents != nil {
-		acpAgents = d.ACPAgents()
-	}
-	if len(acpAgents) == 0 {
-		delete(toolTriggers, toolsutil.BuiltinACPSpawn)
-	}
 	if len(opts.BashEnv) > 0 {
 		if toolTriggers == nil {
 			toolTriggers = make(map[string]bool)
@@ -631,7 +623,6 @@ func runAwarenessTask(ctx context.Context, d Dependencies, opts awarenessTaskOpt
 		agent.WithLogger(opts.Logger),
 		agent.WithLogOptions(opts.LogOptions),
 		agent.WithEngineToolsConfig(engineToolsConfig),
-		agent.WithACPAgents(acpAgents),
 		agent.WithSystemPromptCacheControl(systemPromptCacheControl),
 		agent.WithGuard(opts.SharedGuard),
 		toolSearchOption,

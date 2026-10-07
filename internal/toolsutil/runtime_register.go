@@ -29,10 +29,9 @@ type CodeModeConfig struct {
 }
 
 // ToolSearchConfig is tools.tool_search: when enabled, MCP tools stay hidden until the model
-// finds them with tool_search, except AlwaysLoaded.
+// finds them with tool_search.
 type ToolSearchConfig struct {
-	Enabled      bool
-	AlwaysLoaded []string
+	Enabled bool
 }
 
 type runtimeRegisterConfigReader interface {
@@ -71,8 +70,7 @@ func LoadRuntimeToolsRegisterConfigFromReader(r runtimeRegisterConfigReader) Run
 		TodoUpdate: LoadTodoUpdateRegisterConfigFromReader(r),
 		Image:      LoadImageToolsRegisterConfigFromReader(r),
 		ToolSearch: ToolSearchConfig{
-			Enabled:      r.GetBool("tools.tool_search.enabled"),
-			AlwaysLoaded: normalizeToolNames(r.GetStringSlice("tools.tool_search.always_loaded")),
+			Enabled: r.GetBool("tools.tool_search.enabled"),
 		},
 		CodeMode: CodeModeConfig{
 			Enabled:          r.GetBool("tools.codemode.enabled"),
@@ -81,18 +79,6 @@ func LoadRuntimeToolsRegisterConfigFromReader(r runtimeRegisterConfigReader) Run
 			MaxParallelCalls: r.GetInt("tools.codemode.max_parallel_calls"),
 		},
 	}
-}
-
-func normalizeToolNames(names []string) []string {
-	out := make([]string, 0, len(names))
-	seen := make(map[string]bool, len(names))
-	for _, name := range names {
-		if name = strings.TrimSpace(name); name != "" && !seen[name] {
-			seen[name] = true
-			out = append(out, name)
-		}
-	}
-	return out
 }
 
 func RegisterRuntimeTools(reg *tools.Registry, cfg RuntimeToolsRegisterConfig, opts RuntimeToolLLMOptions) {

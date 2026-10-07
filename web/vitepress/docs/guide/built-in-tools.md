@@ -17,7 +17,7 @@ Mistermorph does not register every tool as one flat bundle. Tools are layered b
 | Group | When available | Tools |
 |---|---|---|
 | Static tools | Available from config alone | `read_file`, `write_file`, `bash`, `powershell`, `url_fetch`, `web_search`, `contacts_send` |
-| Engine tools | Available when an agent engine is assembled for a run | `spawn`, `coder`, `acp_spawn` |
+| Engine tools | Available when an agent engine is assembled for a run | `spawn`, `coder` |
 | Runtime tools | Available when the LLM or required context is available | `plan_create`, `todo_update`, `image_generate`, `image_edit` |
 | Channel-specific tools | Available when the current channel is Telegram / Slack or another concrete channel runtime | `telegram_send_voice`, `telegram_send_photo`, `telegram_send_file`, `message_react` |
 
@@ -90,15 +90,6 @@ Starts a subagent with its own context and an explicit tool whitelist. The paren
 
 For parameter details, result envelope fields, test prompts, and the difference from `bash.run_in_subtask=true`, see [Subagents](/guide/subagents).
 
-### `acp_spawn`
-
-Starts an external ACP-compatible agent through a configured profile. The parent agent still waits synchronously, but the inner work runs through ACP instead of another local Mister Morph loop.
-
-- Key limits: can be disabled via `tools.acp_spawn.enabled`; requires a matching profile under `acp.agents`; current transport is `stdio` only.
-- Current behavior: one `acp_spawn` call creates one ACP session, serves file and terminal callbacks, and returns the same `SubtaskResult` envelope shape as other isolated task paths.
-
-For profile config, runtime behavior, and practical Codex adapter notes, see [ACP](/guide/acp).
-
 ### `coder`
 
 Runs a coding subtask with the local Codex or Claude Code CLI. The CLI stdout is read as streaming JSON/JSONL and text deltas are forwarded as tool-output events before the final `SubtaskResult` envelope is returned.
@@ -111,7 +102,7 @@ Both CLIs report startup, tool activity, and the remaining task time in Console 
 
 Each call saves `stdout.jsonl` and `stderr.log` in a separate `file_cache_dir/coder/codex-*` or `file_cache_dir/coder/claude-*` directory, or the system temporary directory when no cache directory is configured. Claude also writes `debug.log`. The progress output reports the directory. These raw logs can contain prompts and file contents; they remain local and are not automatically deleted. Timeout errors include elapsed time, the last activity, the stderr tail, and the log directory. The CLI shares the parent task deadline; `llm.request_timeout` does not control it.
 
-Use this for Codex / Claude Code delegation. Keep `acp_spawn` for agents that really need ACP.
+Use this for Codex / Claude Code delegation.
 
 ## Runtime Tools
 
@@ -195,7 +186,6 @@ tools:
   write_file: ...
   spawn: ...
   coder: ...
-  acp_spawn: ...
   bash: ...
   powershell: ...
   url_fetch: ...
@@ -205,6 +195,6 @@ tools:
   plan_create: ...
 ```
 
-Console Setup / Settings and the `/api/settings/agent` payload use the same nested shape, for example `tools.spawn.enabled`, `tools.coder.enabled`, and `tools.acp_spawn.enabled`.
+Console Setup / Settings and the `/api/settings/agent` payload use the same nested shape, for example `tools.spawn.enabled` and `tools.coder.enabled`.
 
 For the full configuration, see [Config Reference](/guide/config-reference.md).

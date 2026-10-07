@@ -94,33 +94,30 @@ type ToolsSettingsPayload struct {
 	TodoUpdate    ToolEnabledPayload `json:"todo_update"`
 	PlanCreate    ToolEnabledPayload `json:"plan_create"`
 	CodeMode      ToolEnabledPayload `json:"codemode"`
+	ToolSearch    ToolEnabledPayload `json:"tool_search"`
 	URLFetch      ToolEnabledPayload `json:"url_fetch"`
 	WebSearch     ToolEnabledPayload `json:"web_search"`
 	Bash          ToolEnabledPayload `json:"bash"`
 	PowerShell    ToolEnabledPayload `json:"powershell"`
 	ImageGenerate ToolEnabledPayload `json:"image_generate"`
 	ImageEdit     ToolEnabledPayload `json:"image_edit"`
-	// Console-only; off by default.
-	SkillInstallPreview ToolEnabledPayload `json:"skill_install_preview"`
-	SkillInstall        ToolEnabledPayload `json:"skill_install"`
 }
 
 type ToolsSettingsUpdate struct {
-	WriteFile           *ToolEnabledUpdate `json:"write_file,omitempty"`
-	Spawn               *ToolEnabledUpdate `json:"spawn,omitempty"`
-	Coder               *ToolEnabledUpdate `json:"coder,omitempty"`
-	ContactsSend        *ToolEnabledUpdate `json:"contacts_send,omitempty"`
-	TodoUpdate          *ToolEnabledUpdate `json:"todo_update,omitempty"`
-	PlanCreate          *ToolEnabledUpdate `json:"plan_create,omitempty"`
-	CodeMode            *ToolEnabledUpdate `json:"codemode,omitempty"`
-	URLFetch            *ToolEnabledUpdate `json:"url_fetch,omitempty"`
-	WebSearch           *ToolEnabledUpdate `json:"web_search,omitempty"`
-	Bash                *ToolEnabledUpdate `json:"bash,omitempty"`
-	PowerShell          *ToolEnabledUpdate `json:"powershell,omitempty"`
-	ImageGenerate       *ToolEnabledUpdate `json:"image_generate,omitempty"`
-	ImageEdit           *ToolEnabledUpdate `json:"image_edit,omitempty"`
-	SkillInstallPreview *ToolEnabledUpdate `json:"skill_install_preview,omitempty"`
-	SkillInstall        *ToolEnabledUpdate `json:"skill_install,omitempty"`
+	WriteFile     *ToolEnabledUpdate `json:"write_file,omitempty"`
+	Spawn         *ToolEnabledUpdate `json:"spawn,omitempty"`
+	Coder         *ToolEnabledUpdate `json:"coder,omitempty"`
+	ContactsSend  *ToolEnabledUpdate `json:"contacts_send,omitempty"`
+	TodoUpdate    *ToolEnabledUpdate `json:"todo_update,omitempty"`
+	PlanCreate    *ToolEnabledUpdate `json:"plan_create,omitempty"`
+	CodeMode      *ToolEnabledUpdate `json:"codemode,omitempty"`
+	ToolSearch    *ToolEnabledUpdate `json:"tool_search,omitempty"`
+	URLFetch      *ToolEnabledUpdate `json:"url_fetch,omitempty"`
+	WebSearch     *ToolEnabledUpdate `json:"web_search,omitempty"`
+	Bash          *ToolEnabledUpdate `json:"bash,omitempty"`
+	PowerShell    *ToolEnabledUpdate `json:"powershell,omitempty"`
+	ImageGenerate *ToolEnabledUpdate `json:"image_generate,omitempty"`
+	ImageEdit     *ToolEnabledUpdate `json:"image_edit,omitempty"`
 }
 
 type SkillsSettingsPayload struct {

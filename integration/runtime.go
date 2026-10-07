@@ -280,9 +280,7 @@ func (rt *Runtime) newRunEngineWithRegistry(ctx context.Context, task string, ba
 		}
 	}
 	engineToolsConfig := agent.EngineToolsConfig{
-		SpawnEnabled: snap.Registry.ToolsSpawnEnabled && rt.isBuiltinToolSelected(toolsutil.BuiltinSpawn),
-		ACPSpawnEnabled: snap.Registry.ToolsACPSpawnEnabled &&
-			rt.isBuiltinToolSelected(toolsutil.BuiltinACPSpawn),
+		SpawnEnabled:   snap.Registry.ToolsSpawnEnabled && rt.isBuiltinToolSelected(toolsutil.BuiltinSpawn),
 		CoderEnabled:   snap.Registry.ToolsCoderEnabled && rt.isBuiltinToolSelected(toolsutil.BuiltinCoder),
 		PathRoots:      runStaticRegistry.Common.PathRoots,
 		CoderPathExtra: append([]string(nil), snap.Registry.ToolsCoderPathExtra...),

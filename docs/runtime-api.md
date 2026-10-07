@@ -306,8 +306,7 @@ runtime token when exposed there. Their availability is marked per operation.
 
 Console browser sessions, endpoint selection, proxying, notifications and
 artifact tickets belong to `/api` and are described in [Console](console.md).
-They are not runtime control endpoints. ACP is also separate: MisterMorph is
-currently an [ACP client](acp.md), not an ACP server.
+They are not runtime control endpoints.
 
 ## Maintaining this reference
 

@@ -224,7 +224,6 @@ func Apply(v *viper.Viper) {
 	v.SetDefault("tools.write_file.enabled", true)
 	v.SetDefault("tools.write_file.max_bytes", 512*1024)
 	v.SetDefault("tools.spawn.enabled", true)
-	v.SetDefault("tools.acp_spawn.enabled", false)
 	v.SetDefault("tools.coder.enabled", false)
 	v.SetDefault("tools.coder.path_extra", []string{})
 
@@ -266,17 +265,9 @@ func Apply(v *viper.Viper) {
 	// On: MCP tools stay hidden until the model finds them. Without MCP tools to hide, tool_search
 	// is not offered, so nothing changes.
 	v.SetDefault("tools.tool_search.enabled", true)
-	v.SetDefault("tools.tool_search.always_loaded", []string{})
 	v.SetDefault("tools.codemode.enabled", true)
 	v.SetDefault("tools.codemode.timeout", 120*time.Second)
 	v.SetDefault("tools.codemode.max_tool_calls", 256)
 	v.SetDefault("tools.codemode.max_parallel_calls", 4)
-	// Console-only skill install tools: off, so only a task that names them ($skill_install_preview,
-	// $skill_install), such as the Skills page's Add skill, gets them.
-	v.SetDefault("tools.skill_install_preview.enabled", false)
-	v.SetDefault("tools.skill_install.enabled", false)
-	// Largest skill (all files together) that skill_install_preview downloads.
-	v.SetDefault("tools.skill_install.max_bytes", int64(16*1024*1024))
 
-	v.SetDefault("acp.agents", []map[string]any{})
 }

@@ -13,7 +13,6 @@ This document describes the built-in and runtime-injected tool parameters curren
 - `engine-scoped` tools:
   - `spawn`: registered when an agent engine is assembled for a run; depends on the current subtask runner, parent tool lookup, and default model.
   - `coder`: registered when an agent engine is assembled for a run; depends on the current subtask runner and starts the local Codex or Claude Code CLI.
-  - `acp_spawn`: registered when an agent engine is assembled for a run; depends on ACP agent profiles plus the current subtask runner.
   - `codemode`: registered by the engine when `tools.codemode.enabled` (default on); runs a JavaScript program that calls the run's tools. Never given to subtasks. See [`codemode`](#codemode).
 - `runtime-dependent` tools:
   - `todo_update`: runtime-injected, depends on active LLM client/model plus cron/contacts paths from runtime config.
@@ -73,7 +72,7 @@ LLM tool call -> registry.Get(name) -> tool.Execute(...)
 Flow notes:
 
 - Phase A (static): build base registry via `RegisterStaticTools`.
-- Phase A.5 (engine tools): register engine-scoped tools such as `spawn`, `coder`, and `acp_spawn` when `agent.New(...)` assembles a runnable engine.
+- Phase A.5 (engine tools): register engine-scoped tools such as `spawn` and `coder` when `agent.New(...)` assembles a runnable engine.
 - Phase B (runtime deps): build `RuntimeToolsRegisterConfig`, then inject via `RegisterRuntimeTools`.
 - Tool `enabled=false` means the tool is not exposed by default. A task can opt in for one turn with `$name`, for example `$bash` or `$image_generate`.
 - `$name` does not execute a tool directly. It only makes the matched tool schema available for the current task.
@@ -107,7 +106,7 @@ Flow notes:
 
 - `tools` command prints:
   - `Core tools`: from base registry.
-  - `Extra tools`: preview of engine-scoped and runtime-dependent tools (currently `spawn`, `coder`, `acp_spawn`, `plan_create`, `todo_update`, and image tools when task intent allows them).
+  - `Extra tools`: preview of engine-scoped and runtime-dependent tools (currently `spawn`, `coder`, `plan_create`, `todo_update`, and image tools when task intent allows them).
   - `Telegram tools`: static preview rows for Telegram runtime tools.
 
 ## `read_file`

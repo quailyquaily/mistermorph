@@ -17,7 +17,7 @@ Mistermorph のツールは、最初からすべてを一括登録するわけ�
 | 分類 | いつ使えるか | ツール |
 |---|---|---|
 | 静的ツール | 設定だけで利用可能 | `read_file`、`write_file`、`bash`、`powershell`、`url_fetch`、`web_search`、`contacts_send` |
-| Engine ツール | agent engine が 1 回組み上がると利用可能 | `spawn`、`coder`、`acp_spawn` |
+| Engine ツール | agent engine が 1 回組み上がると利用可能 | `spawn`、`coder` |
 | ランタイムツール | LLM や必要な文脈が利用可能なとき | `plan_create`、`todo_update`、`image_generate`、`image_edit` |
 | チャネル専用ツール | 現在の Channel が Telegram / Slack などの具体的 runtime のとき | `telegram_send_voice`、`telegram_send_photo`、`telegram_send_file`、`message_react` |
 
@@ -90,15 +90,6 @@ Web 検索を行い、構造化された検索結果を返します。手がか�
 
 引数の詳細、返り値 envelope の各フィールド、test prompt、`bash.run_in_subtask=true` との違いは [Subagents](/ja/guide/subagents) を参照してください。
 
-### `acp_spawn`
-
-設定済み profile を通して外部 ACP agent を起動します。親 agent は同期で待ちますが、内側の実行は別のローカル Mister Morph loop ではなく ACP 経由です。
-
-- 主な制約: `tools.acp_spawn.enabled` で無効化できます。対応する profile が `acp.agents` に必要です。現在の transport は `stdio` のみです。
-- 現在の挙動: 1 回の `acp_spawn` は 1 つの ACP session を作り、file / terminal callback を処理し、他の分離実行と同じ `SubtaskResult` envelope を返します。
-
-profile 設定、実行時の流れ、Codex adapter の注意点は [ACP](/ja/guide/acp) を参照してください。
-
 ### `coder`
 
 ローカルの Codex または Claude Code CLI で coding サブタスクを実行します。CLI stdout は streaming JSON/JSONL として読み、テキスト差分は tool-output event として流し、最後に `SubtaskResult` envelope を返します。
@@ -107,7 +98,7 @@ profile 設定、実行時の流れ、Codex adapter の注意点は [ACP](/ja/gu
 - Codex の既定: `codex exec --dangerously-bypass-approvals-and-sandbox --json -C <cwd> -`
 - Claude の既定: `claude -p <task> --output-format stream-json --verbose --include-partial-messages --no-session-persistence --dangerously-skip-permissions`
 
-Codex / Claude Code への委譲にはこちらを使います。`acp_spawn` は本当に ACP が必要な agent 向けに残します。
+Codex / Claude Code への委譲にはこちらを使います。
 
 ## ランタイムツール
 
@@ -191,7 +182,6 @@ tools:
   write_file: ...
   spawn: ...
   coder: ...
-  acp_spawn: ...
   bash: ...
   powershell: ...
   url_fetch: ...
@@ -201,6 +191,6 @@ tools:
   plan_create: ...
 ```
 
-Console の Setup / Settings 画面と `/api/settings/agent` の `tools` payload も、`tools.spawn.enabled`、`tools.coder.enabled`、`tools.acp_spawn.enabled` のような同じ入れ子構造を使います。
+Console の Setup / Settings 画面と `/api/settings/agent` の `tools` payload も、`tools.spawn.enabled`、`tools.coder.enabled` のような同じ入れ子構造を使います。
 
 完全な設定は [設定フィールド](/ja/guide/config-reference.md) を参照してください。

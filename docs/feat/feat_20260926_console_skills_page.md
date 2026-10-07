@@ -142,11 +142,11 @@ The tools live in `internal/skillinstall` and are registered only in the console
 registry (`consolecmd/skill_install.go`); channels build their own registries and do not get
 them. The existing CLI `skills install` command is unchanged.
 
-Both tools are off by default (`tools.skill_install_preview.enabled`,
-`tools.skill_install.enabled`) and listed on Settings → Tools. As with the built-in tools, a task
-that names one with `$` gets it for that run, so Add skill (and a chat message that writes
-`$skill_install_preview`) works with them off. With them off, a plain chat request to install a
-skill (path 2 above) does not get the tools unless it names them.
+Neither tool has a setting. A task that names one with `$` gets it for that run, so Add skill
+(and a chat message that writes `$skill_install_preview`) works; a plain chat request to install a
+skill (path 2 above) does not get the tools unless it names them. Settings → Tools lists them under
+the Console's channel tools. (Until 2026-10-07 they also had `tools.<name>.enabled` switches, off by
+default, and `tools.skill_install.max_bytes`.)
 
 ### 4.2 Accepted links
 
@@ -160,7 +160,7 @@ skill (path 2 above) does not get the tools unless it names them.
 
 GitHub refs are resolved to a commit SHA at preview time and every file is fetched at that SHA.
 
-Limits (same for the store): 50 files and `tools.skill_install.max_bytes` (16 MiB by default)
+Limits (same for the store): 50 files and 16 MiB
 per skill, no symlinks, safe relative paths only. Files are text (UTF-8, no NUL bytes, 512 KiB
 each) or images and fonts (png, jpg, gif, webp, avif, ico, woff, woff2, ttf, otf) whose bytes
 start with their type's signature (`assets.go`); those have no per-file cap and are listed in the

@@ -586,6 +586,7 @@ func (s *server) handler() http.Handler {
 	mux.HandleFunc(apiPrefix+"/endpoints", s.withAuth(s.handleEndpoints))
 	mux.HandleFunc(apiPrefix+"/commands", s.withAuth(s.handleRuntimeCommands))
 	mux.HandleFunc(apiPrefix+"/settings/credits", s.withAuth(s.handleCredits))
+	mux.HandleFunc(apiPrefix+"/settings/tools/schemas", s.withAuth(s.handleToolSchemas))
 	mux.HandleFunc(apiPrefix+"/proxy", s.withAuth(s.handleProxy))
 	mux.HandleFunc(apiPrefix+"/proxy/download", s.withAuth(s.handleProxyDownload))
 	mux.HandleFunc(apiPrefix+"/artifacts/preview-ticket", s.withAuth(s.handleArtifactPreviewTicket))

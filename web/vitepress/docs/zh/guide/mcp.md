@@ -78,7 +78,6 @@ MCP 工具很多时，每个请求都会带上全部工具定义。工具搜索�
 tools:
   tool_search:
     enabled: true       # 默认值；设为 false 则每个请求都带上全部 MCP 工具
-    always_loaded: []   # 始终可见的 MCP 工具名
 ```
 
 只有存在可查找的内容（MCP 工具，或启用的 on-demand server）时才会提供 `tool_search`。没有 MCP 时请求不变。

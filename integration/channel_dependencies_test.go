@@ -34,7 +34,7 @@ func TestSharedDependenciesRetainCommonCapabilities(t *testing.T) {
 	if err := common.Validate(); err != nil {
 		t.Fatalf("common dependency validation failed: %v", err)
 	}
-	if common.ACPAgents == nil || common.PromptAugment == nil {
+	if common.PromptAugment == nil {
 		t.Fatal("optional common behavior was dropped")
 	}
 	if common.RuntimePaths.StateDir == "" || len(common.TaskPersistenceTargets) != 1 || common.TaskPersistenceTargets[0] != "telegram" || common.TaskRotateMaxBytes != 12345 {

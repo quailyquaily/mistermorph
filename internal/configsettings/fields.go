@@ -54,12 +54,10 @@ func AgentFields() []Field {
 		{Path: "tools.spawn.enabled", Kind: KindBool, ApplyMode: ApplyNextGeneration},
 		{Path: "tools.coder.enabled", Kind: KindBool, ApplyMode: ApplyNextGeneration},
 		{Path: "tools.coder.path_extra", Kind: KindStringList, ApplyMode: ApplyNextGeneration},
-		{Path: "tools.acp_spawn.enabled", Kind: KindBool, ApplyMode: ApplyNextGeneration},
 		{Path: "tools.contacts_send.enabled", Kind: KindBool, ApplyMode: ApplyNextGeneration},
 		{Path: "tools.todo_update.enabled", Kind: KindBool, ApplyMode: ApplyNextGeneration},
 		{Path: "tools.plan_create.enabled", Kind: KindBool, ApplyMode: ApplyNextGeneration},
 		{Path: "tools.tool_search.enabled", Kind: KindBool, ApplyMode: ApplyNextGeneration},
-		{Path: "tools.tool_search.always_loaded", Kind: KindStringList, ApplyMode: ApplyNextGeneration},
 		{Path: "tools.codemode.enabled", Kind: KindBool, ApplyMode: ApplyNextGeneration},
 		{Path: "tools.codemode.timeout", Kind: KindDuration, ApplyMode: ApplyNextGeneration},
 		{Path: "tools.codemode.max_tool_calls", Kind: KindInt, ApplyMode: ApplyNextGeneration, Min: &one},
@@ -67,9 +65,6 @@ func AgentFields() []Field {
 		{Path: "tools.plan_create.max_steps", Kind: KindInt, ApplyMode: ApplyNextGeneration, Min: &one},
 		{Path: "tools.image_generate.enabled", Kind: KindBool, ApplyMode: ApplyNextGeneration},
 		{Path: "tools.image_edit.enabled", Kind: KindBool, ApplyMode: ApplyNextGeneration},
-		{Path: "tools.skill_install_preview.enabled", Kind: KindBool, ApplyMode: ApplyNextGeneration},
-		{Path: "tools.skill_install.enabled", Kind: KindBool, ApplyMode: ApplyNextGeneration},
-		{Path: "tools.skill_install.max_bytes", Kind: KindInt, ApplyMode: ApplyNextGeneration, Min: &zero},
 		{Path: "tools.url_fetch.enabled", Kind: KindBool, ApplyMode: ApplyNextGeneration},
 		{Path: "tools.url_fetch.timeout", Kind: KindDuration, ApplyMode: ApplyNextGeneration},
 		{Path: "tools.url_fetch.max_bytes", Kind: KindInt, ApplyMode: ApplyNextGeneration, Min: &zero},
@@ -96,7 +91,6 @@ func AgentFields() []Field {
 		{Path: "skills.load", Kind: KindStringList, ApplyMode: ApplyNextGeneration},
 		{Path: "skills.dir_name", Kind: KindString, ApplyMode: ApplyRuntimeRestart},
 		{Path: "mcp.servers", Kind: KindJSON, ApplyMode: ApplyNextGeneration, Default: []any{}},
-		{Path: "acp.agents", Kind: KindJSON, ApplyMode: ApplyNextGeneration, Default: []any{}},
 	}
 }
 

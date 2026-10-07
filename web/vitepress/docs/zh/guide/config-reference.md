@@ -172,19 +172,6 @@ Shell 默认值按平台区分：
 | `mcp.servers[].headers` | `http` 模式自定义请求头（支持 `${ENV_VAR}`）。 |
 | `mcp.servers[].allowed_tools` | 该服务器允许暴露的工具白名单；空表示全部。 |
 
-## ACP
-
-| 字段 | 含义 |
-|---|---|
-| `acp.agents[].name` | ACP agent 名称。 |
-| `acp.agents[].command` | 启动命令。 |
-| `acp.agents[].args` | 命令参数。 |
-| `acp.agents[].env` | 子进程环境变量。 |
-| `acp.agents[].cwd` | 默认工作目录。 |
-| `acp.agents[].read_roots` | 允许读取的根目录。 |
-| `acp.agents[].write_roots` | 允许写入的根目录。 |
-| `acp.agents[].session_options` | 传给 ACP session 的额外配置。 |
-
 ## Bus / Contacts / Tasks / Skills
 
 | 字段 | 含义 |

@@ -22,7 +22,6 @@ import (
 	"github.com/quailyquaily/mistermorph/cmd/mistermorph/wechatcmd"
 	"github.com/quailyquaily/mistermorph/cmd/mistermorph/whatsappcmd"
 	"github.com/quailyquaily/mistermorph/guard"
-	"github.com/quailyquaily/mistermorph/internal/acpclient"
 	"github.com/quailyquaily/mistermorph/internal/configutil"
 	"github.com/quailyquaily/mistermorph/internal/llmconfig"
 	"github.com/quailyquaily/mistermorph/internal/llmselect"
@@ -607,9 +606,6 @@ func shouldPrepareRootRegistry(cmd *cobra.Command) bool {
 
 func explicitBuiltinToolsForTask(task string, cfg skillsutil.SkillsConfig) map[string]bool {
 	refs := toolsutil.BuiltinToolTriggers(task, skillsutil.ResolveTaskSkillRefs(task, cfg))
-	if len(acpclient.AgentsFromViper()) == 0 {
-		delete(refs, toolsutil.BuiltinACPSpawn)
-	}
 	return refs
 }
 

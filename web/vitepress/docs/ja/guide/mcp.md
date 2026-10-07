@@ -78,7 +78,6 @@ MCP のツールが多いと、すべてのリクエストにその定義が含�
 tools:
   tool_search:
     enabled: true       # 既定値。false にすると全 MCP ツールを毎回送る
-    always_loaded: []   # 常に表示しておく MCP ツール名
 ```
 
 `tool_search` は、見つける対象（MCP のツール、または有効な on-demand server）があるときだけ提供される。MCP がなければリクエストは変わらない。

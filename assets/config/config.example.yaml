@@ -298,10 +298,6 @@ tools:
     # path_extra:
     #   - "/opt/coder/bin"
     path_extra: []
-  acp_spawn:
-    # Enable the acp_spawn tool.
-    # This controls the explicit ACP subtask entry only.
-    enabled: false
   contacts_send:
     # Enable contacts_send tool.
     enabled: true
@@ -315,8 +311,6 @@ tools:
     # tool_search is offered only when there are MCP tools or servers to find; otherwise nothing
     # changes. Set false to send every MCP tool's definition with every request.
     enabled: true
-    # MCP tool names visible from the first request, e.g. mcp_github-work__get_issue.
-    always_loaded: []
   codemode:
     # Offer the codemode tool: the model writes JavaScript that calls its tools, so it can chain
     # and filter tool calls in one step and keep intermediate results out of the conversation.
@@ -343,16 +337,6 @@ tools:
   image_edit:
     # Enable image editing. The tool is registered only when the current task has explicit image intent or retained image-tool state.
     enabled: true
-  skill_install_preview:
-    # Console only. Download a skill and review it before installing (installs nothing).
-    # Off by default: a task that names it as $skill_install_preview (such as the Skills page's Add skill) still gets it.
-    enabled: false
-  skill_install:
-    # Console only. Install a previewed skill; always asks the user to approve first.
-    # Off by default: a task that names it as $skill_install (such as the Skills page's Add skill) still gets it.
-    enabled: false
-    # Largest skill, all files together, that skill_install_preview downloads (bytes). 0 uses the default, 16 MiB.
-    max_bytes: 16777216
   url_fetch:
     # Enable the url_fetch tool (HTTP(S) GET/POST/PUT/DELETE, truncated output).
     enabled: true
@@ -443,58 +427,6 @@ mcp:
   #   headers:                   # custom HTTP headers (e.g. auth); values support ${ENV_VAR}
   #     Authorization: "Bearer ${MCP_REMOTE_TOKEN}"
   #   allowed_tools: ["search"]
-
-# ACP external agents.
-# ACP tools are engine-scoped. Enable `tools.acp_spawn.enabled` to expose the explicit entry.
-# Each ACP profile runs as a local child process over stdio.
-acp:
-  agents: []
-  # - name: "codex"
-  #   # Published adapter on npm:
-  #   command: "npx"
-  #   args: ["-y", "@archkk/acp-codex"]
-  #   # Or install globally and call the bin directly:
-  #   # command: "mistermorph-acp-codex"
-  #   # args: []
-  #   # Or use another compatible adapter:
-  #   # command: "codex-acp"
-  #   # args: []
-  #   env: {}
-  #   cwd: "."
-  #   read_roots: ["."]
-  #   write_roots: ["."]
-  #   session_options: {}        # forwarded to session/new._meta; advertised config ids also receive session/set_config_option
-  #   # Example for adapters that advertise these config ids:
-  #   # session_options:
-  #   #   mode: "auto"
-  #   #   reasoning_effort: "low"
-  # - name: "claude"
-  #   # Published adapter on npm:
-  #   command: "npx"
-  #   args: ["-y", "@archkk/acp-claude"]
-  #   # Or install globally and call the bin directly:
-  #   # command: "mistermorph-acp-claude"
-  #   # args: []
-  #   env: {}
-  #   cwd: "."
-  #   read_roots: ["."]
-  #   write_roots: ["."]
-  #   session_options:
-  #     permission_mode: "dontAsk"
-  #     allowed_tools: ["Read", "Edit", "Write", "Bash", "Glob", "Grep"]
-  #     max_turns: 8
-  #   # Set bare: true only when you authenticate with API keys or explicit settings.
-  #   # Claude Code bare mode skips OAuth and keychain reads.
-  # - name: "cursor"
-  #   # Cursor CLI already speaks ACP directly.
-  #   command: "agent"
-  #   args: ["acp"]
-  #   env: {}
-  #   # Optional: pass flags before the final `acp` subcommand, e.g.:
-  #   # args: ["--api-key", "${CURSOR_API_KEY}", "acp"]
-  #   cwd: "."
-  #   read_roots: ["."]
-  #   write_roots: ["."]
 
 # Message bus
 bus:

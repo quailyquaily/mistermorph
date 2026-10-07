@@ -31,7 +31,6 @@ const (
 	BuiltinContactsSend  = "contacts_send"
 	BuiltinAgentSend     = "agent_send"
 	BuiltinSpawn         = "spawn"
-	BuiltinACPSpawn      = "acp_spawn"
 	BuiltinCoder         = "coder"
 )
 
@@ -49,7 +48,6 @@ var builtinToolNameSet = map[string]struct{}{
 	BuiltinContactsSend:  {},
 	BuiltinAgentSend:     {},
 	BuiltinSpawn:         {},
-	BuiltinACPSpawn:      {},
 	BuiltinCoder:         {},
 }
 

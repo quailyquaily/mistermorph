@@ -17,7 +17,7 @@ Mistermorph 的工具不是一次性全部固定注册，而是按运行环境�
 | 分组 | 什么时候出现 | 工具 |
 |---|---|---|
 | 静态工具 | 仅靠配置即可创建 | `read_file`、`write_file`、`bash`、`powershell`、`url_fetch`、`web_search`、`contacts_send` |
-| Engine 工具 | 某次 agent engine 装配完成后可用 | `spawn`、`coder`、`acp_spawn` |
+| Engine 工具 | 某次 agent engine 装配完成后可用 | `spawn`、`coder` |
 | 运行时工具 | 当 LLM 或者依赖的上下文可用时 | `plan_create`、`todo_update`、`image_generate`、`image_edit` |
 | 通道专属工具 | 当前正在使用 Telegram / Slack 等具体 Channel | `telegram_send_voice`、`telegram_send_photo`、`telegram_send_file`、`message_react` |
 
@@ -91,16 +91,6 @@ Shell 的默认启用状态按平台区分：
 
 参数细节、返回 envelope 字段、测试 prompt，以及它和 `bash.run_in_subtask=true` 的差别，见 [Subagents](/zh/guide/subagents)。
 
-### `acp_spawn`
-
-通过配置好的 profile 启动一个外部 ACP agent。父 agent 仍然同步等待，但内部执行走的是 ACP，会话和回调也由 ACP client 处理，而不是再起一个本地 Mister Morph loop。
-
-关键限制：可通过 `tools.acp_spawn.enabled` 关闭；必须能在 `acp.agents` 里找到对应 profile；当前只支持 `stdio`。
-
-当前行为：一次 `acp_spawn` 调用会创建一个 ACP session，处理文件和终端回调，并返回和其他隔离任务路径相同的 `SubtaskResult` envelope。
-
-profile 配置、运行时行为和 Codex 适配层示例，见 [ACP](/zh/guide/acp)。
-
 ### `coder`
 
 用本机 Codex 或 Claude Code CLI 运行 coding 子任务。CLI stdout 会按 streaming JSON/JSONL 读取，文本增量会先作为 tool-output event 发出，结束后再返回 `SubtaskResult` envelope。
@@ -110,7 +100,7 @@ profile 配置、运行时行为和 Codex 适配层示例，见 [ACP](/zh/guide/
 - Codex 默认路径：`codex exec --dangerously-bypass-approvals-and-sandbox --json -C <cwd> -`
 - Claude 默认路径：`claude -p <task> --output-format stream-json --verbose --include-partial-messages --no-session-persistence --dangerously-skip-permissions`
 
-Codex / Claude Code 委托优先用它。`acp_spawn` 保留给真正需要 ACP 协议的 agent。
+Codex / Claude Code 委托优先用它。
 
 ## 运行时工具
 
@@ -199,7 +189,6 @@ tools:
   write_file: ...
   spawn: ...
   coder: ...
-  acp_spawn: ...
   bash: ...
   powershell: ...
   url_fetch: ...
@@ -209,6 +198,6 @@ tools:
   plan_create: ...
 ```
 
-Console 的 Setup / Settings 页面，以及 `/api/settings/agent` 的 `tools` payload，也使用同一套嵌套结构，例如 `tools.spawn.enabled`、`tools.coder.enabled` 和 `tools.acp_spawn.enabled`。
+Console 的 Setup / Settings 页面，以及 `/api/settings/agent` 的 `tools` payload，也使用同一套嵌套结构，例如 `tools.spawn.enabled` 和 `tools.coder.enabled`。
 
 完整的配置请参考 [配置字段](/zh/guide/config-reference.md)。

@@ -11,7 +11,6 @@ import (
 
 	"github.com/quailyquaily/mistermorph/agent"
 	"github.com/quailyquaily/mistermorph/guard"
-	"github.com/quailyquaily/mistermorph/internal/acpclient"
 	"github.com/quailyquaily/mistermorph/internal/channelopts"
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/accountdm"
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/depsutil"
@@ -238,7 +237,6 @@ func (r *telegramBotRunner) Run(ctx context.Context) error {
 			return err
 		}
 		runOpts.EngineToolsConfig.SpawnEnabled = runOpts.EngineToolsConfig.SpawnEnabled && r.rt.isBuiltinToolSelected(toolsutil.BuiltinSpawn)
-		runOpts.EngineToolsConfig.ACPSpawnEnabled = runOpts.EngineToolsConfig.ACPSpawnEnabled && r.rt.isBuiltinToolSelected(toolsutil.BuiltinACPSpawn)
 		runOpts.EngineToolsConfig.CoderEnabled = runOpts.EngineToolsConfig.CoderEnabled && r.rt.isBuiltinToolSelected(toolsutil.BuiltinCoder)
 		deps := r.rt.telegramDependencies(snap)
 		deps.CommonDependencies = common
@@ -286,7 +284,6 @@ func (r *slackBotRunner) Run(ctx context.Context) error {
 			InspectRequest:                r.rt.inspect.Request,
 		})
 		runOpts.EngineToolsConfig.SpawnEnabled = runOpts.EngineToolsConfig.SpawnEnabled && r.rt.isBuiltinToolSelected(toolsutil.BuiltinSpawn)
-		runOpts.EngineToolsConfig.ACPSpawnEnabled = runOpts.EngineToolsConfig.ACPSpawnEnabled && r.rt.isBuiltinToolSelected(toolsutil.BuiltinACPSpawn)
 		runOpts.EngineToolsConfig.CoderEnabled = runOpts.EngineToolsConfig.CoderEnabled && r.rt.isBuiltinToolSelected(toolsutil.BuiltinCoder)
 		deps := r.rt.slackDependencies(snap)
 		deps.CommonDependencies = common
@@ -340,7 +337,6 @@ func (r *mixinBotRunner) Run(ctx context.Context) error {
 		})
 		runOpts.Credentials = r.credentials
 		runOpts.EngineToolsConfig.SpawnEnabled = runOpts.EngineToolsConfig.SpawnEnabled && r.rt.isBuiltinToolSelected(toolsutil.BuiltinSpawn)
-		runOpts.EngineToolsConfig.ACPSpawnEnabled = runOpts.EngineToolsConfig.ACPSpawnEnabled && r.rt.isBuiltinToolSelected(toolsutil.BuiltinACPSpawn)
 		runOpts.EngineToolsConfig.CoderEnabled = runOpts.EngineToolsConfig.CoderEnabled && r.rt.isBuiltinToolSelected(toolsutil.BuiltinCoder)
 		deps := r.rt.mixinDependencies(snap)
 		deps.CommonDependencies = common
@@ -385,7 +381,6 @@ func (r *discordBotRunner) Run(ctx context.Context) error {
 			InspectRequest:                r.rt.inspect.Request,
 		})
 		runOpts.EngineToolsConfig.SpawnEnabled = runOpts.EngineToolsConfig.SpawnEnabled && r.rt.isBuiltinToolSelected(toolsutil.BuiltinSpawn)
-		runOpts.EngineToolsConfig.ACPSpawnEnabled = runOpts.EngineToolsConfig.ACPSpawnEnabled && r.rt.isBuiltinToolSelected(toolsutil.BuiltinACPSpawn)
 		runOpts.EngineToolsConfig.CoderEnabled = runOpts.EngineToolsConfig.CoderEnabled && r.rt.isBuiltinToolSelected(toolsutil.BuiltinCoder)
 		deps := r.rt.discordDependencies(snap)
 		deps.CommonDependencies = common
@@ -479,7 +474,6 @@ func applyAccountDMLimits(cfg *channelopts.AccountDMConfig, taskTimeout time.Dur
 // gateEngineTools turns off the engine tools the embedding runtime did not select.
 func (rt *Runtime) gateEngineTools(cfg *agent.EngineToolsConfig) {
 	cfg.SpawnEnabled = cfg.SpawnEnabled && rt.isBuiltinToolSelected(toolsutil.BuiltinSpawn)
-	cfg.ACPSpawnEnabled = cfg.ACPSpawnEnabled && rt.isBuiltinToolSelected(toolsutil.BuiltinACPSpawn)
 	cfg.CoderEnabled = cfg.CoderEnabled && rt.isBuiltinToolSelected(toolsutil.BuiltinCoder)
 }
 
@@ -663,16 +657,10 @@ func (rt *Runtime) sharedDependencies(snap runtimeSnapshot) depsutil.CommonDepen
 			if !rt.features.PlanTool {
 				delete(refs, toolsutil.BuiltinPlanCreate)
 			}
-			if len(snap.ACPAgents) == 0 {
-				delete(refs, toolsutil.BuiltinACPSpawn)
-			}
 			return refs
 		},
 		RegisterTriggeredStaticTools: func(reg *tools.Registry, triggers map[string]bool) {
 			rt.registerStaticTools(reg, snap.StaticRegistry, snap.Logger, false, triggers)
-		},
-		ACPAgents: func() []acpclient.AgentConfig {
-			return acpclient.CloneAgents(snap.ACPAgents)
 		},
 		RuntimeToolsConfig: toolsutil.RuntimeToolsRegisterConfig{
 			PlanCreate: toolsutil.BuildPlanCreateRegisterConfig(planEnabled, snap.Registry.ToolsPlanCreateMaxSteps),

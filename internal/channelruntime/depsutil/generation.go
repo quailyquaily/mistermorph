@@ -9,7 +9,6 @@ import (
 
 	"github.com/quailyquaily/mistermorph/agent"
 	"github.com/quailyquaily/mistermorph/guard"
-	"github.com/quailyquaily/mistermorph/internal/acpclient"
 	"github.com/quailyquaily/mistermorph/internal/agentsettings"
 	"github.com/quailyquaily/mistermorph/internal/configdefaults"
 	"github.com/quailyquaily/mistermorph/internal/llmconfig"
@@ -85,7 +84,6 @@ func BuildGenerationDependencies(ctx context.Context, base CommonDependencies, r
 		})
 	}
 	logOptions := logutil.LogOptionsFromConfig(logutil.LogOptionsConfigFromReader(reader))
-	acpAgents := acpclient.AgentsFromReader(readerViper)
 	deps := CommonDependencies{
 		Logger: func() (*slog.Logger, error) {
 			return logger, nil
@@ -148,9 +146,6 @@ func BuildGenerationDependencies(ctx context.Context, base CommonDependencies, r
 		ToolTriggers: func(task string) map[string]bool {
 			cfg := skillsutil.SkillsConfigFromReader(reader)
 			refs := toolsutil.BuiltinToolTriggers(task, skillsutil.ResolveTaskSkillRefs(task, cfg))
-			if len(acpAgents) == 0 {
-				delete(refs, toolsutil.BuiltinACPSpawn)
-			}
 			return refs
 		},
 		MCPServers: mcpHost.Servers(),
@@ -159,9 +154,6 @@ func BuildGenerationDependencies(ctx context.Context, base CommonDependencies, r
 		}, logger),
 		RegisterTriggeredStaticTools: func(reg *tools.Registry, triggers map[string]bool) {
 			toolsutil.RegisterStaticTools(reg, registryConfig, nil, triggers)
-		},
-		ACPAgents: func() []acpclient.AgentConfig {
-			return acpclient.CloneAgents(acpAgents)
 		},
 		RuntimeToolsConfig:     toolsutil.LoadRuntimeToolsRegisterConfigFromReader(reader),
 		RuntimePaths:           paths,

@@ -33,8 +33,8 @@ func CodeModeOption(reg *tools.Registry, cfg toolsutil.CodeModeConfig) (agent.Op
 }
 
 // ToolSearchOption prepares tool search for one run: MCP tools stay hidden until the model finds
-// them, except cfg.AlwaysLoaded and visible (tools found earlier in the conversation, and tools of
-// servers the task referenced). It returns a nil option when tool search is off or nothing would
+// them, except visible (tools found earlier in the conversation, and tools of servers the task
+// referenced). It returns a nil option when tool search is off or nothing would
 // be hidden. The returned close function releases servers the run connected; it is never nil.
 func ToolSearchOption(reg *tools.Registry, servers []mcphost.ServerStatus, cfg toolsutil.ToolSearchConfig, visible []string, logger *slog.Logger) (agent.Option, func() error, error) {
 	noop := func() error { return nil }
@@ -44,7 +44,7 @@ func ToolSearchOption(reg *tools.Registry, servers []mcphost.ServerStatus, cfg t
 	if _, exists := reg.Get("tool_search"); exists {
 		return nil, noop, fmt.Errorf("a registered tool is named tool_search, which tool search needs; rename that tool or turn tools.tool_search off")
 	}
-	initial := append(append([]string(nil), cfg.AlwaysLoaded...), visible...)
+	initial := append([]string(nil), visible...)
 	catalog := newRunToolCatalog(reg, servers, logger)
 	if !catalog.hidesSomething(initial) {
 		return nil, noop, nil

@@ -28,9 +28,6 @@ func TestChannelCommandRuntimeSplitsRuntimeAndAwarenessRegistries(t *testing.T) 
 	if deps.AwarenessRegistry == nil {
 		t.Fatal("AwarenessRegistry is nil")
 	}
-	if deps.ACPAgents == nil {
-		t.Fatal("ACPAgents is nil")
-	}
 
 	runtimeReg := deps.Registry()
 	if _, ok := runtimeReg.Get(toolsutil.BuiltinContactsSend); ok {

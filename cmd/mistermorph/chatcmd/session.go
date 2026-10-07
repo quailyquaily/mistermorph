@@ -14,7 +14,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/quailyquaily/mistermorph/agent"
-	"github.com/quailyquaily/mistermorph/internal/acpclient"
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/depsutil"
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/taskruntime"
 	"github.com/quailyquaily/mistermorph/internal/configutil"
@@ -484,7 +483,6 @@ func buildChatSession(cmd *cobra.Command, deps Dependencies) (*chatSession, erro
 			return skillsutil.ResolveTaskSkillRefs(task, skillsutil.SkillsConfigFromRunCmd(cmd))
 		}, logger),
 		RegisterTriggeredStaticTools: deps.RegisterTriggeredStaticTools,
-		ACPAgents:                    acpclient.AgentsFromViper,
 		RuntimeToolsConfig:           runtimeToolsCfg,
 		RuntimePaths:                 runtimePaths,
 		Guard:                        deps.GuardFromViper,
@@ -505,11 +503,10 @@ func buildChatSession(cmd *cobra.Command, deps Dependencies) (*chatSession, erro
 		},
 	}
 	engineToolsConfig := agent.EngineToolsConfig{
-		SpawnEnabled:    viper.GetBool("tools.spawn.enabled"),
-		ACPSpawnEnabled: viper.GetBool("tools.acp_spawn.enabled"),
-		CoderEnabled:    viper.GetBool("tools.coder.enabled"),
-		PathRoots:       pathroots.New("", fileCacheDir, fileStateDir),
-		CoderPathExtra:  append([]string(nil), viper.GetStringSlice("tools.coder.path_extra")...),
+		SpawnEnabled:   viper.GetBool("tools.spawn.enabled"),
+		CoderEnabled:   viper.GetBool("tools.coder.enabled"),
+		PathRoots:      pathroots.New("", fileCacheDir, fileStateDir),
+		CoderPathExtra: append([]string(nil), viper.GetStringSlice("tools.coder.path_extra")...),
 	}
 	taskRuntime, err := taskruntime.NewRunPreparer(common, taskruntime.BootstrapOptions{
 		AgentConfig: agent.Config{

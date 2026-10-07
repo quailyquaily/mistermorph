@@ -1,26 +1,21 @@
 package agent
 
 import (
-	"context"
-
-	"github.com/quailyquaily/mistermorph/internal/acpclient"
 	"github.com/quailyquaily/mistermorph/internal/pathroots"
 	"github.com/quailyquaily/mistermorph/tools"
 )
 
 type EngineToolsConfig struct {
-	SpawnEnabled    bool
-	ACPSpawnEnabled bool
-	CoderEnabled    bool
-	ToolTriggers    map[string]bool
-	PathRoots       pathroots.PathRoots
-	CoderPathExtra  []string
+	SpawnEnabled   bool
+	CoderEnabled   bool
+	ToolTriggers   map[string]bool
+	PathRoots      pathroots.PathRoots
+	CoderPathExtra []string
 }
 
 func DefaultEngineToolsConfig() EngineToolsConfig {
 	return EngineToolsConfig{
-		SpawnEnabled:    true,
-		ACPSpawnEnabled: false,
+		SpawnEnabled: true,
 	}
 }
 
@@ -30,12 +25,6 @@ type spawnToolDeps struct {
 	Runner       SubtaskRunner
 }
 
-type acpSpawnToolDeps struct {
-	LookupAgent func(name string) (acpclient.AgentConfig, bool)
-	Runner      SubtaskRunner
-	RunPrompt   func(ctx context.Context, cfg acpclient.PreparedAgentConfig, req acpclient.RunRequest) (acpclient.RunResult, error)
-}
-
 type coderToolDeps struct {
 	Runner    SubtaskRunner
 	RunCLI    coderCLIRunFunc
@@ -43,17 +32,12 @@ type coderToolDeps struct {
 	PathExtra []string
 }
 
-func registerEngineTools(reg *tools.Registry, cfg EngineToolsConfig, spawnDeps spawnToolDeps, acpDeps acpSpawnToolDeps, coderDeps coderToolDeps) {
+func registerEngineTools(reg *tools.Registry, cfg EngineToolsConfig, spawnDeps spawnToolDeps, coderDeps coderToolDeps) {
 	if reg == nil {
 		return
 	}
 	if cfg.SpawnEnabled || cfg.ToolTriggers[spawnToolName] {
 		if err := reg.Replace(newSpawnTool(spawnDeps)); err != nil {
-			panic(err)
-		}
-	}
-	if cfg.ACPSpawnEnabled || cfg.ToolTriggers[acpSpawnToolName] {
-		if err := reg.Replace(newACPSpawnTool(acpDeps)); err != nil {
 			panic(err)
 		}
 	}

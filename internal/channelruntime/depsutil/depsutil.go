@@ -8,7 +8,6 @@ import (
 
 	"github.com/quailyquaily/mistermorph/agent"
 	"github.com/quailyquaily/mistermorph/guard"
-	"github.com/quailyquaily/mistermorph/internal/acpclient"
 	"github.com/quailyquaily/mistermorph/internal/agentsettings"
 	"github.com/quailyquaily/mistermorph/internal/llmutil"
 	"github.com/quailyquaily/mistermorph/internal/mcphost"
@@ -39,7 +38,6 @@ type CommonDependencies struct {
 	// MCPServers is each configured MCP server's startup status, for tool search.
 	MCPServers                   []mcphost.ServerStatus
 	RegisterTriggeredStaticTools func(*tools.Registry, map[string]bool)
-	ACPAgents                    func() []acpclient.AgentConfig
 	RuntimeToolsConfig           toolsutil.RuntimeToolsRegisterConfig
 	RuntimePaths                 runtimepaths.Paths
 	DefaultWorkspaceDir          string

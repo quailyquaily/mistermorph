@@ -158,17 +158,6 @@ Shell のデフォルト値はプラットフォームごとに分かれます�
 - `mcp.servers[].headers`
 - `mcp.servers[].allowed_tools`
 
-## ACP
-
-- `acp.agents[].name`
-- `acp.agents[].command`
-- `acp.agents[].args`
-- `acp.agents[].env`
-- `acp.agents[].cwd`
-- `acp.agents[].read_roots`
-- `acp.agents[].write_roots`
-- `acp.agents[].session_options`
-
 ## Bus / Contacts / Tasks / Skills
 
 - `bus.max_inflight`
