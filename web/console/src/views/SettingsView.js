@@ -74,6 +74,7 @@ import useProAuthFlow from "../composables/useProAuthFlow";
 import useXAIAuthFlow from "../composables/useXAIAuthFlow";
 import {
   canCheckDesktopUpdate,
+  canPickDesktopDirectory,
   checkDesktopUpdate,
   desktopRuntimeVersion,
 } from "../core/desktop-runtime";
@@ -1475,10 +1476,10 @@ const SettingsView = {
     // Section save bar. Every section saves from one place: its own draft scopes (below) plus any
     // ConfigSettingsPanel that registered through this provider while the section is mounted.
     const saveRegistryEntries = reactive(new Map());
-    // Path fields browse this console's own file system: a picked folder is a path its backend can use.
+    // Browse only makes sense for this machine's settings: a picked folder is a local path.
     provide(
-      "settingsBrowseEndpointRef",
-      computed(() => (settingsEndpointRef.value === LOCAL_CONSOLE_ENDPOINT_REF ? LOCAL_CONSOLE_ENDPOINT_REF : ""))
+      "settingsCanBrowsePaths",
+      computed(() => settingsEndpointRef.value === LOCAL_CONSOLE_ENDPOINT_REF && canPickDesktopDirectory())
     );
     provide("settingsSaveRegistry", {
       register(entry) {

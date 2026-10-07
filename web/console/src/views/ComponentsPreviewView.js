@@ -83,11 +83,8 @@ const ComponentsPreviewView = {
   setup() {
     const disabled = ref(false);
     const showBrowse = ref(false);
-    // SettingPath only shows Browse when the settings page offers an endpoint to browse.
-    provide(
-      "settingsBrowseEndpointRef",
-      computed(() => (showBrowse.value ? "ep_console_local" : ""))
-    );
+    // SettingPath only shows Browse when settings may pick local folders (desktop app, local endpoint).
+    provide("settingsCanBrowsePaths", showBrowse);
 
     const v = reactive({
       selectPlain: "warn",

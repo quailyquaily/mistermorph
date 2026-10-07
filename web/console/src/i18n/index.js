@@ -1361,8 +1361,6 @@ const I18N = {
     action_copy: "Copy",
     action_refresh: "Refresh",
     action_logout: "Logout",
-    action_browse: "Browse",
-    action_choose: "Choose",
 
     msg_load_failed: "Load failed",
     msg_read_failed: "Read failed",
@@ -2864,8 +2862,6 @@ const I18N = {
     action_copy: "复制",
     action_refresh: "刷新",
     action_logout: "退出",
-    action_browse: "浏览",
-    action_choose: "选择",
 
     msg_load_failed: "加载失败",
     msg_read_failed: "读取失败",
@@ -4376,8 +4372,6 @@ const I18N = {
     action_copy: "コピー",
     action_refresh: "更新",
     action_logout: "ログアウト",
-    action_browse: "参照",
-    action_choose: "選択",
 
     msg_load_failed: "読み込みに失敗しました",
     msg_read_failed: "読み取りに失敗しました",
