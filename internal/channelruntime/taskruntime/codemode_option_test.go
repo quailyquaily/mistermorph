@@ -15,7 +15,7 @@ func TestCodeModeOption(t *testing.T) {
 	reader := viper.New()
 	configdefaults.Apply(reader)
 	cfg := toolsutil.LoadRuntimeToolsRegisterConfigFromReader(reader).CodeMode
-	if !cfg.Enabled || cfg.Timeout != 120*time.Second || cfg.MaxToolCalls != 32 || cfg.MaxParallelCalls != 4 {
+	if !cfg.Enabled || cfg.Timeout != 120*time.Second || cfg.MaxToolCalls != 256 || cfg.MaxParallelCalls != 4 {
 		t.Fatalf("defaults = %+v", cfg)
 	}
 

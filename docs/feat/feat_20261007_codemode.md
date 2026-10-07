@@ -66,7 +66,7 @@ tools:
   codemode:
     enabled: true
     timeout: "120s"
-    max_tool_calls: 32
+    max_tool_calls: 256
     max_parallel_calls: 4
 ```
 

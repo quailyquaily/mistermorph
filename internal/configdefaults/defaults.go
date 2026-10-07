@@ -269,7 +269,7 @@ func Apply(v *viper.Viper) {
 	v.SetDefault("tools.tool_search.always_loaded", []string{})
 	v.SetDefault("tools.codemode.enabled", true)
 	v.SetDefault("tools.codemode.timeout", 120*time.Second)
-	v.SetDefault("tools.codemode.max_tool_calls", 32)
+	v.SetDefault("tools.codemode.max_tool_calls", 256)
 	v.SetDefault("tools.codemode.max_parallel_calls", 4)
 	// Console-only skill install tools: off, so only a task that names them ($skill_install_preview,
 	// $skill_install), such as the Skills page's Add skill, gets them.

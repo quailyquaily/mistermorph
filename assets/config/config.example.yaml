@@ -329,7 +329,7 @@ tools:
     # Longest one script may run, including the tool calls it waits for.
     timeout: "120s"
     # Most tool calls, searches and descriptions one script may make.
-    max_tool_calls: 32
+    max_tool_calls: 256
     # Most read-only tool calls one script may run at the same time.
     max_parallel_calls: 4
   plan_create:
