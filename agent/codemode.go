@@ -51,7 +51,8 @@ func WithCodeMode(opts CodeModeOptions) Option {
 var codeModeMemory = codemode.NewMemoryWatcher()
 
 const codeModePromptBlock = `[[ Code Mode ]]
-- ` + "`codemode`" + ` runs JavaScript (the body of an async function) that calls your tools, so you can chain and filter tool calls without a model step per call. Use it for several dependent or repetitive calls, or to keep large results out of the conversation.
+- ` + "`codemode`" + ` runs JavaScript (the body of an async function) that calls your tools and returns only what the script outputs.
+- Prefer ` + "`codemode`" + ` over direct tool calls when you would make two or more calls and combine their results, when one call depends on another's result, or when you need only part of a result that may be large, even from a single call (a file's headings, matching lines of a log, a count, a few fields of a listing): read it in the script, extract what you need there, and return just that. Use a direct call only when you need a result in full.
 - Call a tool with ` + "`await tools[\"name\"](args)`" + `; it returns the tool's text result (use JSON.parse when the tool documents JSON) and throws a ToolError on failure. Promise.all runs read-only calls in parallel.
 - ` + "`searchTools(query, {server, limit})`" + ` finds tools, and ` + "`describeTool(name)`" + ` returns {name, description, inputSchema}. Tools a search finds can be called in the same script.
 - Only ` + "`text(value)`" + `, ` + "`console.log(...)`" + ` and the returned value come back to you; intermediate results do not. Do the work in the script (parse, count, search, filter) and return only the values you need, not whole tool results.
@@ -66,7 +67,7 @@ type codeModeTool struct {
 func (t *codeModeTool) Name() string { return codeModeToolName }
 
 func (t *codeModeTool) Description() string {
-	return "Runs JavaScript that calls your tools and returns only what it outputs. See the Code Mode section of the system prompt."
+	return "Runs JavaScript that calls your tools and returns only what the script outputs. Use it instead of several direct calls, or to extract a small part of a large result. See the Code Mode section of the system prompt."
 }
 
 func (t *codeModeTool) ParameterSchema() string {

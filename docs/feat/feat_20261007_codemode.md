@@ -288,7 +288,33 @@ Existing `$tool`, `$skill`, and `$mcp_<name>` references keep their meaning. Dis
 - Config `tools.codemode.{enabled,timeout,max_tool_calls,max_parallel_calls}`, on by default; `taskruntime.CodeModeOption` for task preparation and awareness, skipped for subtask runs (`DisableRuntimeTools`). Console: a tool toggle and the three limits under it.
 - Activity: the Console groups nested calls under the `codemode` entry (at most 12 kept, with a count of earlier ones); the CLI prints `▸ codemode` when the script starts and each nested call indented as it finishes.
 - With every approval-requiring built-in tool excluded, the approval handoff has no built-in trigger today; it is covered by bridge tests with a fake host.
-- Not done yet: the benchmarks against ordinary tool calls.
+- The prompt block says when to prefer `codemode`. With only a description of the API, a real model never chose it unprompted; see "Benchmarks (v1)".
+
+### Benchmarks (v1)
+
+Engine side, scripted model (`BenchmarkCodeModeWorkflows` in `agent/codemode_bench_test.go`, AMD 7840U):
+
+| Workflow | Model requests | Tool-result bytes to the model | Engine time | Allocated |
+| --- | --- | --- | --- | --- |
+| 3 dependent calls, direct | 4 | 6,021 | 0.2 ms | 63 KB |
+| 3 dependent calls, codemode | 2 | 179 | 1.1 ms | 259 KB |
+| 6 parallel-safe calls (5 ms each), direct | 2 | 12,006 | 6.1 ms | 102 KB |
+| 6 parallel-safe calls, codemode | 2 | 327 | 11.6 ms | 296 KB |
+| Filter a 500 KB log, direct | 2 | 510,016 | 0.05 ms | 47 KB |
+| Filter a 500 KB log, codemode | 2 | 121 | 3.3 ms | 2.9 MB |
+
+A script costs about 1 to 3 ms of engine time, small against one model request. The parallel case takes two waves because `max_parallel_calls` is 4, while a direct parallel batch has no cap.
+
+Real model (the configured `gpt-6-astra`), one run per cell, tasks that do not mention codemode:
+
+| Task | Off: requests / bytes | On, first prompt | On, final prompt |
+| --- | --- | --- | --- |
+| Find the module path in go.mod, then check README.md for it | 4 / 12,554 | 4 / 12,529, no script | 4 / 7,511, one script; correct |
+| Count lines of five files | 2 / 391 (one `bash wc -l`) | same | same: one `bash` call is already best |
+| List the `##` headings of docs/tools.md (35 KB) | 2 / 35,333 | 2 / 35,333, no script | 2 / 514, one script; correct |
+
+With the first prompt block, which only described the API, the model never used `codemode` unprompted. Saying when to prefer it (several calls to combine, dependent calls, or only part of a large result even from one call) made it use a script where one helps and keep `bash` where that is simpler. Single runs, so the numbers show the direction, not a measured average; no token-reduction percentage is claimed.
+
 
 ## Acceptance criteria
 
