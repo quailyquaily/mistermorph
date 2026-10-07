@@ -136,6 +136,9 @@ type server struct {
 	webSockets                  consoleWebSocketHandlers
 	secretStore                 secref.OSStore
 	settingsWriteMu             sync.Mutex
+	// stopServing ends serve as SIGTERM would; set while serve runs.
+	stopMu      sync.Mutex
+	stopServing context.CancelFunc
 }
 
 const endpointHealthTimeout = 2 * time.Second
@@ -448,6 +451,9 @@ func (s *server) serve(ctx context.Context, ln net.Listener) error {
 	}
 	runCtx, cancelRun := context.WithCancel(ctx)
 	defer cancelRun()
+	s.stopMu.Lock()
+	s.stopServing = cancelRun
+	s.stopMu.Unlock()
 
 	apiPrefix := joinBasePath(s.cfg.basePath, "/api")
 	httpSrv := newConsoleHTTPServer(s)
@@ -587,6 +593,7 @@ func (s *server) handler() http.Handler {
 	mux.HandleFunc(apiPrefix+"/commands", s.withAuth(s.handleRuntimeCommands))
 	mux.HandleFunc(apiPrefix+"/settings/credits", s.withAuth(s.handleCredits))
 	mux.HandleFunc(apiPrefix+"/settings/tools/schemas", s.withAuth(s.handleToolSchemas))
+	mux.HandleFunc(apiPrefix+"/system/restart", s.withAuth(s.handleSystemRestart))
 	mux.HandleFunc(apiPrefix+"/proxy", s.withAuth(s.handleProxy))
 	mux.HandleFunc(apiPrefix+"/proxy/download", s.withAuth(s.handleProxyDownload))
 	mux.HandleFunc(apiPrefix+"/artifacts/preview-ticket", s.withAuth(s.handleArtifactPreviewTicket))

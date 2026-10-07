@@ -1711,3 +1711,56 @@ html[data-macos26="true"] .settings-channel-pane-shell {
   transform: translate3d(100%, 0, 0);
 }
 
+
+.settings-restart-banner {
+  /* Stays in view while the panel scrolls, so a save made further down still shows it. */
+  position: sticky;
+  top: 8px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 16px var(--content-gutter-x) 0 0;
+  padding: 10px 14px;
+  border: 1px solid color-mix(in srgb, var(--q-c-orange-light) 45%, var(--line));
+  background: color-mix(in srgb, var(--q-c-orange-light) 10%, var(--q-bg-paper));
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--text-0) 8%, transparent);
+}
+
+.settings-restart-icon {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  color: var(--q-c-orange-light);
+}
+
+.settings-restart-icon.is-spinning {
+  animation: app-spin 0.8s linear infinite;
+}
+
+.settings-restart-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  color: var(--text-0);
+  font-size: var(--font-size-meta);
+  line-height: 1.45;
+}
+
+.settings-restart-error {
+  display: block;
+  color: var(--danger);
+}
+
+.settings-restart-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
+@media (max-width: 720px) {
+  .settings-restart-banner {
+    margin-left: var(--content-gutter-x);
+    flex-wrap: wrap;
+  }
+}

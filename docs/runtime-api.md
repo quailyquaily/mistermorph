@@ -300,6 +300,8 @@ runtime token when exposed there. Their availability is marked per operation.
 | `GET /auth/pro/status`; `POST /auth/pro/login/start`, `/auth/pro/login/poll`, `/auth/pro/logout` | Console; [Pro login](../cmd/mistermorph/consolecmd/pro_auth.go). |
 | `GET, PUT /settings/console` | Console; [channel and Console settings](../cmd/mistermorph/consolecmd/console_settings.go). |
 | `GET, PUT /settings/system` | Console; [system settings](../cmd/mistermorph/consolecmd/system_settings.go). |
+| `GET /settings/tools/schemas` | Console; [tool schemas](../cmd/mistermorph/consolecmd/tool_schemas.go). |
+| `POST /system/restart` | Console; [process restart](../cmd/mistermorph/consolecmd/system_restart.go). |
 | `GET, PUT /settings/auto-update`; `POST /settings/auto-update/check` | Console; [update settings](../cmd/mistermorph/consolecmd/auto_update_settings.go). |
 | `POST /settings/wechat/login/start`, `/settings/wechat/login/poll`, `/settings/wechat/logout` | Console; [WeChat login](../cmd/mistermorph/consolecmd/wechat_login.go). |
 | `GET /setup/integrity`; `GET, PUT /setup/file`; `PUT, DELETE /setup/secret` | Console; [setup repair](../cmd/mistermorph/consolecmd/setup_repair.go). |

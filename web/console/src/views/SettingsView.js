@@ -980,7 +980,49 @@ const SettingsView = {
       return strongest;
     }
 
+    // A saved change that needs a restart shows the restart banner until the process restarts.
+    const restartState = reactive({ pending: false, busy: false, restarting: false, tasksRunning: false, error: "" });
+
+    function sleep(ms) {
+      return new Promise((resolve) => window.setTimeout(resolve, ms));
+    }
+
+    async function restartProcess(force = false) {
+      restartState.busy = true;
+      restartState.error = "";
+      try {
+        await apiFetch("/system/restart", { method: "POST", body: { force } });
+      } catch (err) {
+        restartState.busy = false;
+        if (err?.status === 409) {
+          restartState.tasksRunning = true;
+          return;
+        }
+        restartState.error = String(err?.message || err || "");
+        return;
+      }
+      restartState.tasksRunning = false;
+      restartState.restarting = true;
+      // The old server answers for a moment before it stops; then wait until the new one answers.
+      await sleep(1500);
+      for (let attempt = 0; attempt < 90; attempt += 1) {
+        try {
+          await apiFetch("/auth/config", { noAuth: true, perfSource: "bootstrap" });
+          window.location.reload();
+          return;
+        } catch {
+          await sleep(1000);
+        }
+      }
+      restartState.restarting = false;
+      restartState.busy = false;
+      restartState.error = t("settings_restart_timeout");
+    }
+
     function settingsSavedMessage(payload) {
+      if (["process_restart", "runtime_restart"].includes(trimText(payload?.apply_mode))) {
+        restartState.pending = true;
+      }
       switch (trimText(payload?.apply_mode)) {
         case "process_restart":
           return t("msg_save_process_restart");
@@ -5254,6 +5296,8 @@ const SettingsView = {
       toolItems,
       toolGroups,
       toolSchemaPreview,
+      restartState,
+      restartProcess,
       previewToolSchema,
       previewChannelToolSchema,
       TOOL_CHANNEL_ROWS,
@@ -5514,6 +5558,22 @@ const SettingsView = {
         </aside>
 
         <div v-if="showPanelPane && selectedSection" class="settings-panel-scroll">
+          <div v-if="restartState.pending" class="settings-restart-banner" role="status">
+            <PhArrowClockwise class="icon settings-restart-icon" :class="{ 'is-spinning': restartState.restarting }" />
+            <p class="settings-restart-text">
+              <template v-if="restartState.restarting">{{ t("settings_restart_restarting") }}</template>
+              <template v-else-if="restartState.tasksRunning">{{ t("settings_restart_tasks_running") }}</template>
+              <template v-else>{{ t("settings_restart_pending") }}</template>
+              <span v-if="restartState.error" class="settings-restart-error">{{ restartState.error }}</span>
+            </p>
+            <div v-if="!restartState.restarting" class="settings-restart-actions">
+              <template v-if="restartState.tasksRunning">
+                <QButton class="plain xs" :disabled="restartState.busy" @click="restartState.tasksRunning = false">{{ t("action_cancel") }}</QButton>
+                <QButton class="primary xs" :loading="restartState.busy" @click="restartProcess(true)">{{ t("settings_restart_anyway") }}</QButton>
+              </template>
+              <QButton v-else class="primary xs" :loading="restartState.busy" @click="restartProcess(false)">{{ t("settings_restart_now") }}</QButton>
+            </div>
+          </div>
           <div v-if="selectedSection.id === 'agent'" class="settings-panel-body settings-panel-body-plain">
             <div class="settings-channels settings-profiles-layout" :class="{ 'has-pane': openedProfile && !isMobile }">
             <div class="settings-profiles-main">

@@ -40,6 +40,16 @@ data and management operations.
 - A remote endpoint whose health payload reports `mode: console` exposes the same target-owned settings as the built-in local Console. The SPA sends those requests through `/api/proxy` to the remote Console's `/runtime` API.
 - Task WebSocket frames from a remote Console are relayed by the current Console. The browser never receives the remote runtime token, and task polling remains active as the fallback.
 
+## Restart
+
+Settings that only apply after a restart (`process_restart` and `runtime_restart` fields) show a **Restart now** banner once saved. It calls `POST /api/system/restart`:
+
+- The request is refused with `409` while Console tasks are queued or running, unless it sends `{"force": true}`; the banner then asks before restarting anyway.
+- The server shuts down as on SIGTERM: it stops serving, stops managed runtimes and closes stores and MCP servers. Then the process runs the same binary again with the same arguments, environment and working directory.
+- On Linux and macOS the binary replaces the program in the same process (`execve`), so the PID does not change and systemd, launchd, Docker and the desktop app keep tracking it: no stop, failure or start-limit count. A binary replaced on disk since startup (an update or a rebuild) is the one that starts.
+- On Windows a new process starts and the old one exits; under a Windows service manager, restart the service instead.
+- The Console is unreachable for about a second; the page waits until it answers again and reloads.
+
 ## Architecture (ASCII)
 
 ```text
@@ -161,6 +171,8 @@ Console settings:
 - `GET /settings/auto-update`
 - `PUT /settings/auto-update`
 - `POST /settings/auto-update/check`
+- `GET /settings/tools/schemas`: built-in tools' descriptions and parameter schemas, with channel tools per channel, for the Tools page.
+- `POST /system/restart` (`{"force": false}`): restarts this Console process; see [Restart](#restart).
 - `/auth/codex/*`
 - `/auth/xai/*`
 - `/auth/pro/*`
