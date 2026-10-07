@@ -1,6 +1,6 @@
 # Demos: Embedding `mistermorph`
 
-This folder contains two demos showing how to embed `mistermorph` into another project.
+This folder contains three demos showing how to embed `mistermorph` into another project.
 
 ## Deployment options (pros/cons)
 
@@ -31,3 +31,9 @@ It now includes three runtime modes in one program:
 ## 2) Embed as a CLI subprocess
 
 See `demo/embed-cli/`.
+
+## 3) Connect a Console to your program
+
+See `demo/embed-console/`.
+
+A Go program that serves the runtime API with `rt.ServeRuntimeAPI(...)`, so a Console can add it as an endpoint: chat with it, using its own tools, and watch the tasks it runs.

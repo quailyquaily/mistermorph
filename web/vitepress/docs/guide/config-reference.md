@@ -175,6 +175,7 @@ Shell defaults are platform-specific:
 ## Server and Console
 
 - `server.auth_token`
+- `server.listen`
 - `server.max_queue`
 - `console.listen`
 - `console.base_path`

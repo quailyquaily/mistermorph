@@ -14,6 +14,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/pathroots"
 	"github.com/quailyquaily/mistermorph/internal/taskdomain"
 	"github.com/quailyquaily/mistermorph/internal/textutil"
+	"github.com/quailyquaily/mistermorph/tools"
 )
 
 const defaultIntegrationTaskTarget = "integration"
@@ -32,6 +33,10 @@ type RunTaskOptions struct {
 
 	// PersistTask writes the one-shot run lifecycle into the task journal.
 	PersistTask bool
+
+	// Registry, when set, is the tool registry the run starts from (cloned, so it can be shared),
+	// such as rt.NewRegistry() with the program's own tools added. Nil uses the built-in tools.
+	Registry *tools.Registry
 }
 
 type RunTaskResult struct {
@@ -106,7 +111,7 @@ func (rt *Runtime) RunTaskWithOptions(ctx context.Context, task string, opts Run
 		}
 	}
 
-	prepared, err := rt.newRunEngineWithRegistry(ctx, task, nil, profile)
+	prepared, err := rt.newRunEngineWithRegistry(ctx, task, opts.Registry, profile)
 	if err != nil {
 		if taskJournal != nil {
 			err = errors.Join(err, appendIntegrationTaskFailed(taskJournal, taskTrigger, taskInfo, err, false))

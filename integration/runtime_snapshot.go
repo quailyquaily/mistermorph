@@ -36,6 +36,15 @@ type runtimeSnapshot struct {
 	Paths               runtimepaths.Paths
 	DefaultWorkspaceDir string
 	AgentSettings       *agentsettings.ReaderSnapshot
+	TaskTimeout         time.Duration
+	Server              serverSnapshot
+}
+
+// serverSnapshot is the runtime API that ServeRuntimeAPI serves.
+type serverSnapshot struct {
+	Listen    string
+	AuthToken string
+	MaxQueue  int
 }
 
 type registrySnapshot struct {

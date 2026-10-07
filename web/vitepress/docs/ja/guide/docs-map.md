@@ -23,6 +23,7 @@ description: より詳細な設計・実装文書への入口。
 - 開発者
   - [自分の AI Agent を作る](/ja/guide/build-your-own-agent)
   - [自分の AI Agent を作る：上級編](/ja/guide/build-your-own-agent-advanced)
+  - [Console からプログラムに接続する](/ja/guide/connect-console)
   - [Agent レイヤ拡張](/ja/guide/agent-level-customization)
 - リファレンス
   - [Integration API](/ja/guide/integration-references)

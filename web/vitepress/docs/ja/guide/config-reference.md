@@ -175,6 +175,7 @@ Shell のデフォルト値はプラットフォームごとに分かれます�
 ## Server / Console
 
 - `server.auth_token`
+- `server.listen`
 - `server.max_queue`
 - `console.listen`
 - `console.base_path`

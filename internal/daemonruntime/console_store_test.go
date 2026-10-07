@@ -1067,3 +1067,39 @@ func TestCreateNamedTopicKeepsAGivenTitle(t *testing.T) {
 		t.Fatalf("seeded topic = %+v, want not customized", seeded)
 	}
 }
+
+func TestConsoleFileStoreTargetsShareAJournalWithoutMixing(t *testing.T) {
+	stateDir := t.TempDir()
+	journalDir := filepath.Join(stateDir, "journal")
+	open := func(target string) *ConsoleFileStore {
+		t.Helper()
+		store, err := NewConsoleFileStore(ConsoleFileStoreOptions{
+			RootDir:    filepath.Join(stateDir, "tasks", target),
+			Target:     target,
+			Persist:    true,
+			JournalDir: journalDir,
+		})
+		if err != nil {
+			t.Fatalf("NewConsoleFileStore(%s) error = %v", target, err)
+		}
+		return store
+	}
+	console := open("console")
+	program := open("integration")
+	if err := console.Upsert(TaskInfo{ID: "console_task", Status: TaskDone, Task: "a"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := program.Upsert(TaskInfo{ID: "program_task", Status: TaskDone, Task: "b"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := console.Get("program_task"); ok {
+		t.Fatal("console store sees the integration task")
+	}
+	if _, ok := program.Get("console_task"); ok {
+		t.Fatal("integration store sees the console task")
+	}
+	reopened := open("integration")
+	if _, ok := reopened.Get("program_task"); !ok {
+		t.Fatal("reopened integration store lost its task")
+	}
+}

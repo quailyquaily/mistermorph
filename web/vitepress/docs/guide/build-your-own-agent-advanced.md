@@ -303,3 +303,7 @@ sl, _ := rt.NewSlackBot(integration.SlackOptions{
 })
 _ = sl
 ```
+
+## Manage It from a Console
+
+Serve the runtime API with `rt.ServeRuntimeAPI(...)` and add the program to a Console as an endpoint: you can then chat with it, with its own tools, and watch the tasks it runs. See [Connect a Console to Your Program](/guide/connect-console).

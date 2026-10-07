@@ -23,6 +23,7 @@ description: 仓库中更完整设计文档的入口索引。
 - 开发者
   - [创建自己的 AI Agent](/zh/guide/build-your-own-agent)
   - [创建自己的 AI Agent：进阶](/zh/guide/build-your-own-agent-advanced)
+  - [用 Console 连接你的程序](/zh/guide/connect-console)
   - [Agent 底层扩展](/zh/guide/agent-level-customization)
 - 参考
   - [Integration API](/zh/guide/integration-references)

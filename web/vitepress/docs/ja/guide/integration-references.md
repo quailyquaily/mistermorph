@@ -113,6 +113,7 @@ description: integration パッケージの公開関数、メソッド、構造�
 | `TopicID` | `string` | 任意の topic id。空なら `Agent.Meta["topic_id"]`、それも空なら空のまま。 |
 | `TraceID` | `string` | 任意の外部 trace / correlation id。空なら `Agent.Meta["trace_id"]`、それも空なら空のまま。 |
 | `PersistTask` | `bool` | one-shot の queued/running/done/failed ライフサイクルを task journal に書く。 |
+| `Registry` | `*tools.Registry` | 任意。実行の起点にするツール registry（複製して使う）。たとえば独自ツールを加えた `rt.NewRegistry()`。nil なら組み込みツール。 |
 
 ### `type RunTaskResult struct`
 
@@ -232,6 +233,22 @@ description: integration パッケージの公開関数、メソッド、構造�
 | 引数 | なし |
 | 戻り値 | `time.Duration` |
 | 説明 | 現在の runtime スナップショットから解決された LLM request timeout を返します。 |
+
+## Runtime API
+
+### `type RuntimeAPIOptions struct`
+
+| フィールド | 型 | 説明 |
+| --- | --- | --- |
+| `Registry` | `*tools.Registry` | 各チャットメッセージが使うツール registry。たとえば独自ツールを加えた `rt.NewRegistry()`。nil なら組み込みツール。 |
+
+### `(*Runtime).ServeRuntimeAPI(ctx context.Context, opts RuntimeAPIOptions) error`
+
+| 項目 | 内容 |
+| --- | --- |
+| 引数 | `ctx context.Context`：これが終わるまで提供する；`opts integration.RuntimeAPIOptions`：チャットのオプション |
+| 戻り値 | `error`：起動時の設定エラーや待ち受けエラー。`ctx` が終わったあとは `nil` |
+| 説明 | `server.listen` の `/runtime` 以下で runtime API を提供します。`server.auth_token` で保護され、Console からプログラムを endpoint として追加できます。Console からのチャットはこの runtime で実行され、同じトピックの直前のやり取りが履歴として付きます。`RunTaskWithOptions` で永続化したタスクも一覧に出ます。終了時は自分が始めたチャットをキャンセルし、終わるまで待ちます。[Console からプログラムに接続する](/ja/guide/connect-console)を参照。 |
 
 ## Channel Runner
 

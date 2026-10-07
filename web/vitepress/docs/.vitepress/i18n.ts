@@ -145,6 +145,14 @@ const sidebarSpec: SidebarSpec = [
         }
       },
       {
+        slug: 'connect-console',
+        text: {
+          en: 'Connect a Console to Your Program',
+          zh: '用 Console 连接你的程序',
+          ja: 'Console からプログラムに接続する'
+        }
+      },
+      {
         slug: 'agent-level-customization',
         text: {
           en: 'Agent-Level Customization',

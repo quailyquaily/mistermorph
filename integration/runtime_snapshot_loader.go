@@ -91,5 +91,11 @@ func loadRuntimeSnapshotFromReader(v *viper.Viper) runtimeSnapshot {
 		Paths:               paths,
 		DefaultWorkspaceDir: defaultWorkspaceDir,
 		AgentSettings:       agentsettings.NewReaderSnapshot(v),
+		TaskTimeout:         v.GetDuration("timeout"),
+		Server: serverSnapshot{
+			Listen:    strings.TrimSpace(v.GetString("server.listen")),
+			AuthToken: strings.TrimSpace(v.GetString("server.auth_token")),
+			MaxQueue:  v.GetInt("server.max_queue"),
+		},
 	}
 }

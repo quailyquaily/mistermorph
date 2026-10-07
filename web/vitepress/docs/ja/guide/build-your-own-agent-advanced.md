@@ -303,3 +303,7 @@ sl, _ := rt.NewSlackBot(integration.SlackOptions{
 })
 _ = sl
 ```
+
+## Console から管理する
+
+`rt.ServeRuntimeAPI(...)` で runtime API を提供し、プログラムを endpoint として Console に追加すると、Console から独自ツール付きでチャットしたり、実行したタスクを確認したりできます。[Console からプログラムに接続する](/ja/guide/connect-console)を参照してください。

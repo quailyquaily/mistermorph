@@ -113,6 +113,7 @@ If you mainly want to see how to configure `integration.Config`, use `PreparedRu
 | `TopicID` | `string` | Optional topic id. Empty uses `Agent.Meta["topic_id"]`, then stays empty. |
 | `TraceID` | `string` | Optional external trace/correlation id. Empty uses `Agent.Meta["trace_id"]`, then stays empty. |
 | `PersistTask` | `bool` | Writes queued/running/done/failed one-shot lifecycle events to the task journal. |
+| `Registry` | `*tools.Registry` | Optional tool registry the run starts from (cloned), such as `rt.NewRegistry()` with your own tools added. Nil uses the built-in tools. |
 
 ### `type RunTaskResult struct`
 
@@ -232,6 +233,22 @@ If you mainly want to see how to configure `integration.Config`, use `PreparedRu
 | Parameters | none |
 | Returns | `time.Duration` |
 | Description | Returns the LLM request timeout resolved from the current runtime snapshot. |
+
+## Runtime API
+
+### `type RuntimeAPIOptions struct`
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `Registry` | `*tools.Registry` | Tool registry every chat message runs with, such as `rt.NewRegistry()` with your own tools added. Nil uses the built-in tools. |
+
+### `(*Runtime).ServeRuntimeAPI(ctx context.Context, opts RuntimeAPIOptions) error`
+
+| Item | Value |
+| --- | --- |
+| Parameters | `ctx context.Context`: serves until it ends; `opts integration.RuntimeAPIOptions`: options for the chats |
+| Returns | `error`: a configuration or listen error at start; `nil` after `ctx` ends |
+| Description | Serves the runtime API on `server.listen`, under `/runtime`, protected by `server.auth_token`, so a Console can add the program as an endpoint. Console chats run through this runtime with their topic's earlier exchanges as history; tasks persisted with `RunTaskWithOptions` are listed too. On shutdown it cancels the chats it started and waits for them. See [Connect a Console to Your Program](/guide/connect-console). |
 
 ## Channel Runner
 

@@ -113,6 +113,7 @@ description: 列出 integration 包的导出函数、方法、结构体字段，
 | `TopicID` | `string` | 可选 topic id。留空时先读 `Agent.Meta["topic_id"]`，再保持为空。 |
 | `TraceID` | `string` | 可选外部 trace / correlation id。留空时先读 `Agent.Meta["trace_id"]`，再保持为空。 |
 | `PersistTask` | `bool` | 把 one-shot 生命周期事件 queued/running/done/failed 写入 task journal。 |
+| `Registry` | `*tools.Registry` | 可选。本次运行起始使用的工具 registry（会被复制），例如加入了你自己工具的 `rt.NewRegistry()`。为空时使用内置工具。 |
 
 ### `type RunTaskResult struct`
 
@@ -232,6 +233,22 @@ description: 列出 integration 包的导出函数、方法、结构体字段，
 | 参数 | 无 |
 | 返回值 | `time.Duration` |
 | 说明 | 返回当前 runtime 快照解析出的 LLM request timeout。 |
+
+## 运行时 API
+
+### `type RuntimeAPIOptions struct`
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `Registry` | `*tools.Registry` | 每条对话消息使用的工具 registry，例如加入了你自己工具的 `rt.NewRegistry()`。为空时使用内置工具。 |
+
+### `(*Runtime).ServeRuntimeAPI(ctx context.Context, opts RuntimeAPIOptions) error`
+
+| 项目 | 内容 |
+| --- | --- |
+| 参数 | `ctx context.Context`：服务到它结束为止；`opts integration.RuntimeAPIOptions`：对话的选项 |
+| 返回值 | `error`：启动时的配置或监听错误；`ctx` 结束后返回 `nil` |
+| 说明 | 在 `server.listen` 的 `/runtime` 下提供运行时 API，由 `server.auth_token` 保护，让 Console 能把程序加为 endpoint。Console 里的对话由这个 runtime 运行，并带上同一话题之前的对话作为历史；用 `RunTaskWithOptions` 持久化的任务也会列出。退出时会取消它启动的对话并等待它们结束。见 [用 Console 连接你的程序](/zh/guide/connect-console)。 |
 
 ## Channel Runner
 

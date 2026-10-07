@@ -33,7 +33,10 @@ var (
 )
 
 type ConsoleFileStoreOptions struct {
-	RootDir        string
+	RootDir string
+	// Target names the runtime whose journal records the store reads and writes. Empty means
+	// "console"; an embedding program serving its own runtime API uses its own target.
+	Target         string
 	Persist        bool
 	Journal        *domainjournal.Journal
 	JournalDir     string
@@ -51,6 +54,7 @@ type ConsoleFileStore struct {
 	mu sync.RWMutex
 
 	rootDir              string
+	target               string
 	topicsProjectionPath string
 	journalDir           string
 	persist              bool
@@ -88,6 +92,7 @@ func NewConsoleFileStore(opts ConsoleFileStoreOptions) (*ConsoleFileStore, error
 	}
 	s := &ConsoleFileStore{
 		rootDir:              filepath.Clean(rootDir),
+		target:               consoleStoreTarget(opts.Target),
 		topicsProjectionPath: cleanOptionalPath(opts.TopicsProjectionPath),
 		persist:              opts.Persist,
 		skipRecovery:         opts.SkipRecovery,
@@ -940,7 +945,7 @@ func (s *ConsoleFileStore) replayJournalLocked(cursor domainjournal.Cursor) erro
 			return fmt.Errorf("decode console task journal payload %s:%d: %w", rec.Cursor.File, rec.Cursor.Line, err)
 		}
 		s.projectionCursor = rec.Cursor
-		if strings.TrimSpace(payload.Target) != "" && !strings.EqualFold(strings.TrimSpace(payload.Target), "console") {
+		if strings.TrimSpace(payload.Target) != "" && !strings.EqualFold(strings.TrimSpace(payload.Target), s.target) {
 			return nil
 		}
 		switch rec.Event.Type {
@@ -1016,7 +1021,7 @@ func (s *ConsoleFileStore) appendTaskEventLocked(info TaskInfo, topic *TopicInfo
 	if s.journal == nil {
 		return domainjournal.Cursor{}, nil
 	}
-	return taskdomain.AppendJournalEvent(s.journal, "console", defaultType, now, trigger, &info, topic)
+	return taskdomain.AppendJournalEvent(s.journal, s.target, defaultType, now, trigger, &info, topic)
 }
 
 func (s *ConsoleFileStore) appendTopicEventLocked(typ string, topic TopicInfo, now time.Time, trigger TaskTrigger) (domainjournal.Cursor, error) {
@@ -1024,7 +1029,7 @@ func (s *ConsoleFileStore) appendTopicEventLocked(typ string, topic TopicInfo, n
 		return domainjournal.Cursor{}, nil
 	}
 	topic = normalizeTopicInfo(topic)
-	return taskdomain.AppendJournalEvent(s.journal, "console", typ, now, trigger, nil, &topic)
+	return taskdomain.AppendJournalEvent(s.journal, s.target, typ, now, trigger, nil, &topic)
 }
 
 func (s *ConsoleFileStore) persistSnapshotLocked(now time.Time) error {
@@ -1093,7 +1098,7 @@ func (s *ConsoleFileStore) seedJournalLocked(journal *domainjournal.Journal, now
 		if strings.TrimSpace(topic.ID) == "" {
 			continue
 		}
-		next, err := taskdomain.AppendJournalEvent(journal, "console", taskdomain.JournalTypeTopicUpsert, now, TaskTrigger{}, nil, &topic)
+		next, err := taskdomain.AppendJournalEvent(journal, s.target, taskdomain.JournalTypeTopicUpsert, now, TaskTrigger{}, nil, &topic)
 		if err != nil {
 			return domainjournal.Cursor{}, err
 		}
@@ -1114,7 +1119,7 @@ func (s *ConsoleFileStore) seedJournalLocked(journal *domainjournal.Journal, now
 		if strings.TrimSpace(item.ID) == "" {
 			continue
 		}
-		next, err := taskdomain.AppendJournalEvent(journal, "console", taskdomain.JournalTypeTaskUpsert, now, s.triggerForTaskLocked(item.ID, TaskTrigger{}), &item, nil)
+		next, err := taskdomain.AppendJournalEvent(journal, s.target, taskdomain.JournalTypeTaskUpsert, now, s.triggerForTaskLocked(item.ID, TaskTrigger{}), &item, nil)
 		if err != nil {
 			return domainjournal.Cursor{}, err
 		}
@@ -1205,6 +1210,13 @@ func (s *ConsoleFileStore) triggerForTaskLocked(taskID string, trigger TaskTrigg
 		return saved
 	}
 	return TaskTrigger{}
+}
+
+func consoleStoreTarget(target string) string {
+	if target = strings.TrimSpace(target); target != "" {
+		return target
+	}
+	return "console"
 }
 
 func buildConsoleTopicID() string {

@@ -138,7 +138,6 @@ func TestApplyDoesNotRegisterRemovedConfig(t *testing.T) {
 		"contacts.proactive.max_turns_per_session",
 		"contacts.proactive.session_cooldown",
 		"console.enabled",
-		"server.listen",
 		"submit.wait",
 		"submit.poll_interval",
 	} {

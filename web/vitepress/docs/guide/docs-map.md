@@ -23,6 +23,7 @@ description: Where to find deeper design and runtime documents in the repo.
 - Developer
   - [Create Your Own AI Agent](/guide/build-your-own-agent)
   - [Create Your Own AI Agent: Advanced](/guide/build-your-own-agent-advanced)
+  - [Connect a Console to Your Program](/guide/connect-console)
   - [Agent-Level Customization](/guide/agent-level-customization)
 - References
   - [Integration API](/guide/integration-references)

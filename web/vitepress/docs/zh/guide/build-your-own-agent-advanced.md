@@ -304,3 +304,7 @@ sl, _ := rt.NewSlackBot(integration.SlackOptions{
 })
 _ = sl
 ```
+
+## 用 Console 管理它
+
+用 `rt.ServeRuntimeAPI(...)` 提供运行时 API，再把程序作为 endpoint 加到 Console 里：之后就能在 Console 里和它对话（使用它自己的工具），并查看它运行的任务。见 [用 Console 连接你的程序](/zh/guide/connect-console)。

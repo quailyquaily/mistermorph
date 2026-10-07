@@ -49,6 +49,8 @@ function endpointChannelLabel(mode, t) {
       return t("endpoint_channel_console");
     case "serve":
       return t("endpoint_channel_serve");
+    case "integration":
+      return t("endpoint_channel_integration");
     case "telegram":
       return t("endpoint_channel_telegram");
     case "slack":
@@ -76,6 +78,8 @@ function endpointChannelTone(mode) {
       return "console";
     case "serve":
       return "serve";
+    case "integration":
+      return "integration";
     case "telegram":
       return "telegram";
     case "slack":

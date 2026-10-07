@@ -191,6 +191,7 @@ Shell 默认值按平台区分：
 | 字段 | 含义 |
 |---|---|
 | `server.auth_token` | 运行时 API 鉴权 token（Bearer）。 |
+| `server.listen` | 基于 integration 的程序用 `Runtime.ServeRuntimeAPI` 提供运行时 API 的监听地址；CLI 命令不读取它。 |
 | `server.max_queue` | 任务队列最大长度。 |
 | `console.listen` | Console API + 静态资源监听地址。 |
 | `console.base_path` | Console 路由基础路径。 |
