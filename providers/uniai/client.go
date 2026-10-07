@@ -104,6 +104,7 @@ func New(cfg Config) (*Client, error) {
 		AzureOpenAIEndpoint: strings.TrimSpace(azureEndpoint),
 		AzureOpenAIModel:    strings.TrimSpace(azureDeployment),
 		AnthropicAPIKey:     strings.TrimSpace(anthropicKey),
+		AnthropicAPIBase:    normalizeOpenAIBase(cfg.Endpoint),
 		AnthropicModel:      strings.TrimSpace(anthropicModel),
 		AwsKey:              strings.TrimSpace(cfg.AwsKey),
 		AwsSecret:           strings.TrimSpace(cfg.AwsSecret),
