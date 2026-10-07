@@ -1,10 +1,13 @@
-import { inject, ref } from "vue";
-import { pickDesktopDirectory } from "../core/desktop-runtime";
+import { computed, inject, ref } from "vue";
+import FolderBrowserDialog from "./FolderBrowserDialog";
+import { translate } from "../core/context";
 import "./SettingFields.css";
 
-// A folder path in one box, with Browse at its end. Browse only shows in the desktop app while
-// editing this machine's settings, where a picked folder is a path the backend can use.
+// A folder path in one box, with Browse at its end. Browse opens the folder browser on the
+// endpoint whose settings these are, so a picked folder is a path that endpoint can use; it shows
+// only where the settings page offers that endpoint.
 export default {
+  components: { FolderBrowserDialog },
   props: {
     modelValue: { type: String, default: "" },
     disabled: Boolean,
@@ -13,25 +16,21 @@ export default {
   },
   emits: ["update:modelValue"],
   setup(props, { emit }) {
-    const canBrowse = inject("settingsCanBrowsePaths", ref(false));
+    const browseEndpointRef = inject("settingsBrowseEndpointRef", ref(""));
+    const canBrowse = computed(() => String(browseEndpointRef.value || "").trim() !== "");
     const browsing = ref(false);
-    const error = ref("");
 
-    async function browse() {
-      if (props.disabled || browsing.value) return;
+    function browse() {
+      if (props.disabled || !canBrowse.value) return;
       browsing.value = true;
-      error.value = "";
-      try {
-        const picked = await pickDesktopDirectory({ title: props.label, current: props.modelValue });
-        if (picked) emit("update:modelValue", picked);
-      } catch (e) {
-        error.value = e?.message || "Could not open the folder picker.";
-      } finally {
-        browsing.value = false;
-      }
     }
 
-    return { canBrowse, browsing, error, browse };
+    function pick(path) {
+      emit("update:modelValue", path);
+      browsing.value = false;
+    }
+
+    return { t: translate, browseEndpointRef, canBrowse, browsing, browse, pick };
   },
   template: `
     <div class="sf">
@@ -48,13 +47,22 @@ export default {
         />
         <template v-if="canBrowse">
           <span class="sf-sep" aria-hidden="true"></span>
-          <button type="button" class="sf-part" :disabled="disabled || browsing" @click="browse">
+          <button type="button" class="sf-part" :disabled="disabled" @click="browse">
             <PhFolderOpen class="sf-icon" />
-            {{ browsing ? "Opening…" : "Browse" }}
+            {{ t("action_browse") }}
           </button>
         </template>
       </div>
-      <p v-if="error" class="sf-error">{{ error }}</p>
+      <FolderBrowserDialog
+        v-if="browsing"
+        :modelValue="browsing"
+        :endpointRef="browseEndpointRef"
+        :title="label"
+        :initialPath="modelValue"
+        :confirmLabel="t('action_choose')"
+        @close="browsing = false"
+        @confirm="pick"
+      />
     </div>
   `,
 };

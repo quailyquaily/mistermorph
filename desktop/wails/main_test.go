@@ -37,7 +37,6 @@ func TestDesktopRuntimeJavaScriptIncludesBindingNames(t *testing.T) {
 		desktopAppBindingPrefix + "CheckUpdate",
 		desktopAppBindingPrefix + "OpenDesktopLog",
 		desktopAppBindingPrefix + "OpenWindow",
-		desktopAppBindingPrefix + "PickDirectory",
 		desktopAppBindingPrefix + "QuitApp",
 		desktopAppBindingPrefix + "ReportFrontendReady",
 		desktopAppBindingPrefix + "RequestNotificationPermission",

@@ -44,7 +44,6 @@ func buildDesktopRuntimeJavaScript(goos, osVersion string) string {
 		`"CheckUpdate":"` + desktopAppBindingPrefix + `CheckUpdate",` +
 		`"OpenDesktopLog":"` + desktopAppBindingPrefix + `OpenDesktopLog",` +
 		`"OpenWindow":"` + desktopAppBindingPrefix + `OpenWindow",` +
-		`"PickDirectory":"` + desktopAppBindingPrefix + `PickDirectory",` +
 		`"QuitApp":"` + desktopAppBindingPrefix + `QuitApp",` +
 		`"ReportFrontendReady":"` + desktopAppBindingPrefix + `ReportFrontendReady",` +
 		`"RequestNotificationPermission":"` + desktopAppBindingPrefix + `RequestNotificationPermission",` +

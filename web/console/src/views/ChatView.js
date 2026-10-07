@@ -10,6 +10,7 @@ import ChatComposer from "../components/ChatComposer";
 import AppFab from "../components/AppFab";
 import ChatHistoryList from "../components/ChatHistoryList";
 import TopicTagsEditor from "../components/TopicTagsEditor";
+import FolderBrowserDialog from "../components/FolderBrowserDialog";
 import { approvalDetailsByID, taskApprovalState } from "../core/chat-approvals";
 import {
   buildComposerSubmission,
@@ -55,6 +56,8 @@ import { endpointRoutePath } from "../core/endpoint-routes";
 import { modelVendorMeta } from "../core/model-vendor";
 import { loadResource, resourceKey } from "../core/resources";
 import { workspaceTreeIcon } from "../core/workspace-icons";
+import { buildTreeRows, hasOwnTreePath, setTreeExpanded, setTreeItems } from "../core/folder-tree";
+import { rememberRecentFolder } from "../core/recent-folders";
 import { topicIcon, useTopicMetadata } from "../core/topic-metadata";
 import { contextMeter } from "../core/context-meter";
 import {
@@ -99,14 +102,7 @@ const CHAT_COMPOSER_MIN_HEIGHT = 80;
 const DEFAULT_TOPIC_ID = "default";
 const AWARENESS_TOPIC_ID = "_awareness";
 const LOCAL_CONSOLE_ENDPOINT_REF = "ep_console_local";
-const RECENT_WORKSPACE_DIRS_STORAGE_KEY = "mistermorph_console_recent_workspaces_v1";
 const WORKSPACE_SIDEBAR_OPEN_STORAGE_KEY = "mistermorph_console_workspace_sidebar_open_v1";
-const RECENT_WORKSPACE_DIRS_LIMIT = 32;
-const WORKSPACE_BROWSER_SOURCE_RECENT = "recent";
-const WORKSPACE_BROWSER_SOURCE_HOME = "home";
-const WORKSPACE_BROWSER_SOURCE_SYSTEM = "system";
-const WORKSPACE_BROWSER_SOURCE_STATE_DIR = "state_dir";
-const WORKSPACE_BROWSER_SOURCE_CACHE_DIR = "cache_dir";
 const COMPOSER_FILE_IMAGE_EXTENSIONS = new Set([
   ".png",
   ".jpg",
@@ -158,70 +154,8 @@ function hasArtifactBlock(raw) {
   return /(^|\n)(`{3,}|~{3,})[ \t]*artifact[^\n]*\n/iu.test(String(raw || ""));
 }
 
-function hasOwnTreePath(map, path) {
-  return Boolean(map) && Object.prototype.hasOwnProperty.call(map, path);
-}
-
-function normalizeTreeItems(raw) {
-  if (!Array.isArray(raw)) {
-    return [];
-  }
-  return raw
-    .map((item) => ({
-      name: String(item?.name || "").trim(),
-      path: String(item?.path || "").trim(),
-      is_dir: item?.is_dir === true,
-      has_children: item?.has_children === true,
-      size_bytes: Number.isFinite(Number(item?.size_bytes)) ? Math.trunc(Number(item.size_bytes)) : -1,
-    }))
-    .filter((item) => item.name && item.path);
-}
-
-function buildTreeRows(itemsByPath, expandedByPath, parentPath = "", depth = 0) {
-  const items = Array.isArray(itemsByPath?.[parentPath]) ? itemsByPath[parentPath] : [];
-  const rows = [];
-  for (const entry of items) {
-    const entryPath = String(entry?.path || "").trim();
-    const hasLoadedChildren = hasOwnTreePath(itemsByPath, entryPath);
-    const hasVisibleChildren = hasLoadedChildren && Array.isArray(itemsByPath?.[entryPath]) && itemsByPath[entryPath].length > 0;
-    const expandable = Boolean(entry?.is_dir) && (entry?.has_children || hasVisibleChildren);
-    const expanded = expandable && expandedByPath?.[entryPath] === true;
-    rows.push({
-      key: `${parentPath}:${entryPath}`,
-      depth,
-      entry,
-      expandable,
-      expanded,
-    });
-    if (expandable && expanded && hasLoadedChildren) {
-      rows.push(...buildTreeRows(itemsByPath, expandedByPath, entryPath, depth + 1));
-    }
-  }
-  return rows;
-}
-
 const WORKSPACE_TAB_ID = "workspace";
 const TOPIC_TAB_ID = "topic";
-
-function normalizeRecentWorkspaceDirs(raw) {
-  if (!Array.isArray(raw)) {
-    return [];
-  }
-  const seen = new Set();
-  const items = [];
-  for (const item of raw) {
-    const path = String(item || "").trim();
-    if (!path || seen.has(path)) {
-      continue;
-    }
-    seen.add(path);
-    items.push(path);
-    if (items.length >= RECENT_WORKSPACE_DIRS_LIMIT) {
-      break;
-    }
-  }
-  return items;
-}
 
 // The topic sidebar lists topics by date or by tag. The choice is a per-browser convenience.
 const TOPIC_SIDEBAR_VIEW_STORAGE_KEY = "mistermorph.chat.topicSidebarView";
@@ -261,39 +195,6 @@ function saveTopicSidebarView(view) {
   }
 }
 
-function loadRecentWorkspaceDirs() {
-  if (typeof localStorage === "undefined") {
-    return [];
-  }
-  try {
-    const raw = localStorage.getItem(RECENT_WORKSPACE_DIRS_STORAGE_KEY);
-    if (!raw) {
-      return [];
-    }
-    return normalizeRecentWorkspaceDirs(JSON.parse(raw));
-  } catch {
-    return [];
-  }
-}
-
-function saveRecentWorkspaceDirs(items) {
-  if (typeof localStorage === "undefined") {
-    return;
-  }
-  localStorage.setItem(
-    RECENT_WORKSPACE_DIRS_STORAGE_KEY,
-    JSON.stringify(normalizeRecentWorkspaceDirs(items))
-  );
-}
-
-function rememberRecentWorkspaceDir(items, dir) {
-  const path = String(dir || "").trim();
-  if (!path) {
-    return normalizeRecentWorkspaceDirs(items);
-  }
-  return normalizeRecentWorkspaceDirs([path, ...(Array.isArray(items) ? items : [])]);
-}
-
 function loadWorkspaceSidebarOpen() {
   if (typeof localStorage === "undefined") {
     return false;
@@ -313,63 +214,6 @@ function saveWorkspaceSidebarOpen(open) {
     WORKSPACE_SIDEBAR_OPEN_STORAGE_KEY,
     open ? "true" : "false"
   );
-}
-
-function workspaceBrowserSource(sourceID, stateDir = "", cacheDir = "") {
-  const value = String(sourceID || "").trim();
-  if (value === WORKSPACE_BROWSER_SOURCE_RECENT) {
-    return {
-      id: WORKSPACE_BROWSER_SOURCE_RECENT,
-      kind: "recent",
-      path: "",
-      selection: "",
-    };
-  }
-  if (value === WORKSPACE_BROWSER_SOURCE_SYSTEM) {
-    return {
-      id: WORKSPACE_BROWSER_SOURCE_SYSTEM,
-      kind: "system",
-      path: "",
-      selection: "",
-    };
-  }
-  const statePath = String(stateDir || "").trim();
-  if (value === WORKSPACE_BROWSER_SOURCE_STATE_DIR && statePath) {
-    return {
-      id: WORKSPACE_BROWSER_SOURCE_STATE_DIR,
-      kind: "place",
-      path: statePath,
-      selection: statePath,
-    };
-  }
-  const cachePath = String(cacheDir || "").trim();
-  if (value === WORKSPACE_BROWSER_SOURCE_CACHE_DIR && cachePath) {
-    return {
-      id: WORKSPACE_BROWSER_SOURCE_CACHE_DIR,
-      kind: "place",
-      path: cachePath,
-      selection: cachePath,
-    };
-  }
-  return {
-    id: WORKSPACE_BROWSER_SOURCE_HOME,
-    kind: "home",
-    path: "~",
-    selection: "",
-  };
-}
-
-function browserPathLabel(path) {
-  const value = String(path || "").trim();
-  if (!value) {
-    return "";
-  }
-  const normalized = value.replace(/[\\/]+$/u, "");
-  if (!normalized) {
-    return value;
-  }
-  const parts = normalized.split(/[\\/]/u).filter(Boolean);
-  return parts.length > 0 ? parts[parts.length - 1] : value;
 }
 
 function splitWorkspaceDisplayPath(path) {
@@ -609,25 +453,6 @@ function kickerChannelLabel(mode) {
   }
 }
 
-const WorkspaceBrowserRecentItem = {
-  props: {
-    name: {
-      type: String,
-      required: true,
-    },
-    path: {
-      type: String,
-      required: true,
-    },
-  },
-  template: `
-    <span class="chat-workspace-recent-item">
-      <span class="chat-workspace-recent-item-name">{{ name }}</span>
-      <span class="chat-workspace-recent-item-path">{{ path }}</span>
-    </span>
-  `,
-};
-
 const ChatView = {
   components: {
     AppFab,
@@ -638,8 +463,8 @@ const ChatView = {
     ChatComposer,
     ChatHistoryList,
     RawJsonDialog,
+    FolderBrowserDialog,
     TopicTagsEditor,
-    WorkspaceBrowserRecentItem,
   },
   setup() {
     const t = translate;
@@ -708,22 +533,7 @@ const ChatView = {
     const workspaceTreeError = ref("");
     const workspaceTreeSelectionPath = ref("");
     const workspaceBrowserOpen = ref(false);
-    const workspaceBrowserItems = shallowRef({});
-    const workspaceBrowserExpanded = ref({ "": true });
-    const workspaceBrowserLoading = ref(false);
-    const workspaceBrowserLoadingPath = ref("");
-    const workspaceBrowserError = ref("");
-    const workspaceBrowserSourceID = ref(WORKSPACE_BROWSER_SOURCE_HOME);
-    const workspaceBrowserRecentDirs = ref(loadRecentWorkspaceDirs());
-    const workspaceBrowserStateDir = ref("");
-    const workspaceBrowserCacheDir = ref("");
-    const workspaceBrowserSelection = ref("");
-    const workspaceBrowserShowHidden = ref(false);
     const workspaceBrowserPendingMode = ref(false);
-    const workspaceBrowserCreateOpen = ref(false);
-    const workspaceBrowserCreateName = ref("");
-    const workspaceBrowserCreating = ref(false);
-    const workspaceBrowserCreateField = ref(null);
     const pendingWorkspaceDir = ref("");
     const composerFileDrafts = new Map();
     // Running tasks being followed: taskID -> { historyID, endpointRef, timer, failures }. Their
@@ -1629,86 +1439,10 @@ const ChatView = {
       );
       return row?.entry || null;
     });
-    const workspaceBrowserRecentItems = computed(() =>
-      workspaceBrowserRecentDirs.value.map((path) => ({
-        path,
-        title: browserPathLabel(path),
-        meta: path,
-      }))
-    );
-    const workspaceBrowserPlaceSourceItems = computed(() => {
-      return [
-        {
-          id: WORKSPACE_BROWSER_SOURCE_STATE_DIR,
-          title: t("chat_workspace_dialog_state_dir"),
-          path: workspaceBrowserStateDir.value,
-        },
-        {
-          id: WORKSPACE_BROWSER_SOURCE_CACHE_DIR,
-          title: t("chat_workspace_dialog_cache_dir"),
-          path: workspaceBrowserCacheDir.value,
-        },
-      ].filter((item) => String(item.path || "").trim() !== "");
-    });
-    const workspaceBrowserCurrentSource = computed(() =>
-      workspaceBrowserSource(
-        workspaceBrowserSourceID.value,
-        workspaceBrowserStateDir.value,
-        workspaceBrowserCacheDir.value
-      )
-    );
-    const workspaceBrowserRows = computed(() => {
-      if (workspaceBrowserCurrentSource.value.kind === "recent") {
-        return workspaceBrowserRecentItems.value.map((item) => ({
-          key: `recent:${item.path}`,
-          depth: 0,
-          source: "recent",
-          entry: {
-            name: item.title,
-            path: item.path,
-            is_dir: true,
-            has_children: false,
-          },
-          expandable: false,
-          expanded: false,
-        }));
-      }
-      return buildTreeRows(
-        workspaceBrowserItems.value,
-        workspaceBrowserExpanded.value,
-        workspaceBrowserCurrentSource.value.path
-      );
-    });
-    const workspaceBrowserCreateParent = computed(() => {
-      const selectedPath = String(workspaceBrowserSelection.value || "").trim();
-      if (selectedPath) {
-        return selectedPath;
-      }
-      const source = workspaceBrowserCurrentSource.value;
-      if (source.kind === "home" || source.kind === "place") {
-        return String(source.path || "").trim();
-      }
-      return "";
-    });
-    const workspaceBrowserCreateDisabled = computed(
-      () =>
-        workspaceBrowserLoading.value ||
-        workspaceSaving.value ||
-        workspaceBrowserCreating.value ||
-        !String(submitEndpointRef.value || "").trim() ||
-        !workspaceBrowserCreateParent.value
-    );
-    const workspaceBrowserCreateSubmitDisabled = computed(
-      () => workspaceBrowserCreateDisabled.value || !String(workspaceBrowserCreateName.value || "").trim()
+    const workspaceBrowserInitialPath = computed(() =>
+      String(workspaceBrowserPendingMode.value ? pendingWorkspaceDir.value : workspaceDir.value || "").trim()
     );
     const workspaceBrowserConfirmDisabled = computed(() => {
-      if (
-        workspaceSaving.value ||
-        workspaceBrowserCreating.value ||
-        String(workspaceBrowserSelection.value || "").trim() === ""
-      ) {
-        return true;
-      }
       if (workspaceBrowserPendingMode.value) {
         return !String(submitEndpointRef.value || "").trim();
       }
@@ -1716,11 +1450,6 @@ const ChatView = {
     });
     const workspaceSidebarToggleLabel = computed(() =>
       workspaceSidebarOpen.value ? t("chat_workspace_sidebar_close") : t("chat_workspace_sidebar_open")
-    );
-    const workspaceBrowserEmptyText = computed(() =>
-      workspaceBrowserCurrentSource.value.kind === "recent"
-        ? t("chat_workspace_dialog_recent_empty")
-        : t("chat_workspace_dialog_empty")
     );
     const chatPlaceholderHint = computed(() => {
       if (visibleTopics.value.length > 0) {
@@ -2245,23 +1974,6 @@ const ChatView = {
       }
     }
 
-    function setTreeItems(target, path, items) {
-      target.value = {
-        ...target.value,
-        [path]: normalizeTreeItems(items),
-      };
-    }
-
-    function setTreeExpanded(target, path, expanded) {
-      const nextValue = { ...target.value };
-      if (expanded) {
-        nextValue[path] = true;
-      } else {
-        delete nextValue[path];
-      }
-      target.value = nextValue;
-    }
-
     function resetWorkspaceTreeState() {
       workspaceTreeItems.value = {};
       workspaceTreeExpanded.value = { "": true };
@@ -2269,30 +1981,6 @@ const ChatView = {
       workspaceTreeLoadingPath.value = "";
       workspaceTreeError.value = "";
       workspaceTreeSelectionPath.value = "";
-    }
-
-    function resetWorkspaceBrowserState() {
-      workspaceBrowserItems.value = {};
-      workspaceBrowserExpanded.value = { "": true };
-      workspaceBrowserLoading.value = false;
-      workspaceBrowserLoadingPath.value = "";
-      workspaceBrowserError.value = "";
-      workspaceBrowserSelection.value = "";
-      workspaceBrowserCreateOpen.value = false;
-      workspaceBrowserCreateName.value = "";
-      workspaceBrowserCreating.value = false;
-    }
-
-    function saveWorkspaceBrowserRecentDirs(items) {
-      const nextItems = normalizeRecentWorkspaceDirs(items);
-      workspaceBrowserRecentDirs.value = nextItems;
-      saveRecentWorkspaceDirs(nextItems);
-    }
-
-    function rememberWorkspaceBrowserRecentDir(dir) {
-      saveWorkspaceBrowserRecentDirs(
-        rememberRecentWorkspaceDir(workspaceBrowserRecentDirs.value, dir)
-      );
     }
 
     function resetWorkspaceState() {
@@ -2310,9 +1998,6 @@ const ChatView = {
       pendingWorkspaceDir.value = "";
       workspaceSidebarTabID.value = TOPIC_TAB_ID;
       resetWorkspaceTreeState();
-      resetWorkspaceBrowserState();
-      workspaceBrowserStateDir.value = "";
-      workspaceBrowserCacheDir.value = "";
     }
 
     function applyWorkspacePayload(data) {
@@ -2327,10 +2012,6 @@ const ChatView = {
       workspaceSource.value = nextSource;
       workspaceError.value = "";
       resetWorkspaceTreeState();
-      resetWorkspaceBrowserState();
-      if (nextDir) {
-        workspaceBrowserSelection.value = nextDir;
-      }
     }
 
     function applyTopicMetadataPayload(data) {
@@ -2433,14 +2114,6 @@ const ChatView = {
       }
     }
 
-    function workspaceBrowserSourceItemClass(sourceID) {
-      const classes = ["workspace-sidebar-item", "chat-workspace-dialog-sidebar-item"];
-      if (String(sourceID || "").trim() === workspaceBrowserSourceID.value) {
-        classes.push("is-active");
-      }
-      return classes.join(" ");
-    }
-
     async function loadWorkspaceTree(treePath = "", options = {}) {
       const endpointRef = String(submitEndpointRef.value || "").trim();
       const topicID = String(workspaceTopicID.value || "").trim();
@@ -2506,20 +2179,6 @@ const ChatView = {
         classes.push("is-dir");
       }
       if (String(row?.entry?.path || "").trim() === String(workspaceTreeSelectionPath.value || "").trim()) {
-        classes.push("is-selected");
-      }
-      return classes.join(" ");
-    }
-
-    function workspaceBrowserTreeEntryClass(row) {
-      const classes = ["chat-workspace-tree-entry", "is-actionable", "is-selectable"];
-      if (row?.entry?.is_dir) {
-        classes.push("is-dir");
-      }
-      if (row?.source === "recent") {
-        classes.push("is-recent");
-      }
-      if (String(workspaceBrowserSelection.value || "").trim() === String(row?.entry?.path || "").trim()) {
         classes.push("is-selected");
       }
       return classes.join(" ");
@@ -2607,13 +2266,6 @@ const ChatView = {
       }
       workspaceBrowserPendingMode.value = pendingMode;
       workspaceBrowserOpen.value = true;
-      workspaceBrowserError.value = "";
-      workspaceBrowserShowHidden.value = false;
-      await activateWorkspaceBrowserSource(WORKSPACE_BROWSER_SOURCE_HOME);
-      const selectedDir = String(pendingMode ? pendingWorkspaceDir.value : workspaceDir.value || "").trim();
-      if (selectedDir) {
-        workspaceBrowserSelection.value = selectedDir;
-      }
     }
 
     async function openComposerWorkspaceBrowser() {
@@ -2621,202 +2273,25 @@ const ChatView = {
     }
 
     function closeWorkspaceBrowser() {
-      if (workspaceBrowserCreating.value) {
-        return;
-      }
       workspaceBrowserOpen.value = false;
       workspaceBrowserPendingMode.value = false;
-      workspaceBrowserError.value = "";
-      workspaceBrowserCreateOpen.value = false;
-      workspaceBrowserCreateName.value = "";
     }
 
-    async function activateWorkspaceBrowserSource(sourceID) {
-      const source = workspaceBrowserSource(
-        sourceID,
-        workspaceBrowserStateDir.value,
-        workspaceBrowserCacheDir.value
-      );
-      workspaceBrowserSourceID.value = source.id;
-      resetWorkspaceBrowserState();
-      if (source.kind === "recent") {
-        workspaceBrowserError.value = "";
-        return true;
-      }
-      const ok = await loadWorkspaceBrowser(source.path);
-      if (ok) {
-        workspaceBrowserSelection.value = source.selection;
-      }
-      return ok;
-    }
-
-    async function loadWorkspaceBrowser(treePath = "") {
-      const endpointRef = String(submitEndpointRef.value || "").trim();
-      const path = String(treePath || "").trim();
-      if (!endpointRef) {
-        resetWorkspaceBrowserState();
-        workspaceBrowserStateDir.value = "";
-        workspaceBrowserCacheDir.value = "";
-        return false;
-      }
-      workspaceBrowserLoading.value = true;
-      workspaceBrowserLoadingPath.value = path;
-      try {
-        const query = new URLSearchParams();
-        if (path) {
-          query.set("path", path);
-        }
-        if (workspaceBrowserShowHidden.value) {
-          query.set("show_hidden", "true");
-        }
-        const data = await runtimeApiFetchForEndpoint(
-          endpointRef,
-          query.toString() ? `/workspace/browse?${query.toString()}` : "/workspace/browse"
-        );
-        workspaceBrowserStateDir.value = String(data?.state_dir || "").trim();
-        workspaceBrowserCacheDir.value = String(data?.cache_dir || "").trim();
-        setTreeItems(workspaceBrowserItems, path, data?.items);
-        if (path) {
-          setTreeExpanded(workspaceBrowserExpanded, path, true);
-        }
-        workspaceBrowserError.value = "";
-        return true;
-      } catch (e) {
-        workspaceBrowserError.value = e?.message || t("msg_load_failed");
-        return false;
-      } finally {
-        if (workspaceBrowserLoadingPath.value === path) {
-          workspaceBrowserLoading.value = false;
-          workspaceBrowserLoadingPath.value = "";
-        }
-      }
-    }
-
-    async function setWorkspaceBrowserShowHidden(value) {
-      const nextValue = Boolean(value);
-      if (workspaceBrowserShowHidden.value === nextValue) {
-        return;
-      }
-      workspaceBrowserShowHidden.value = nextValue;
-      if (!workspaceBrowserOpen.value || workspaceBrowserCurrentSource.value.kind === "recent") {
-        return;
-      }
-      const source = workspaceBrowserCurrentSource.value;
-      resetWorkspaceBrowserState();
-      const ok = await loadWorkspaceBrowser(source.path);
-      if (ok) {
-        workspaceBrowserSelection.value = source.selection;
-      }
-    }
-
-    async function toggleWorkspaceBrowserNode(entry) {
-      const path = String(entry?.path || "").trim();
-      if (!entry?.is_dir || !path) {
-        return;
-      }
-      if (workspaceBrowserExpanded.value[path]) {
-        setTreeExpanded(workspaceBrowserExpanded, path, false);
-        return;
-      }
-      if (!hasOwnTreePath(workspaceBrowserItems.value, path)) {
-        const ok = await loadWorkspaceBrowser(path);
-        if (!ok) {
-          return;
-        }
-      }
-      setTreeExpanded(workspaceBrowserExpanded, path, true);
-    }
-
-    async function selectWorkspaceBrowserNode(row) {
-      const entry = row?.entry || row;
-      if (!entry?.is_dir) {
-        return;
-      }
-      workspaceBrowserSelection.value = String(entry.path || "").trim();
-      if (!row?.expandable || workspaceBrowserCurrentSource.value.kind === "recent") {
-        return;
-      }
-      await toggleWorkspaceBrowserNode(entry);
-    }
-
-    function openWorkspaceBrowserCreate() {
-      if (workspaceBrowserCreateDisabled.value) {
-        return;
-      }
-      workspaceBrowserCreateOpen.value = true;
-      workspaceBrowserCreateName.value = "";
-      void nextTick(() => {
-        workspaceBrowserCreateField.value?.querySelector("input")?.focus();
-      });
-    }
-
-    function cancelWorkspaceBrowserCreate() {
-      if (workspaceBrowserCreating.value) {
-        return;
-      }
-      workspaceBrowserCreateOpen.value = false;
-      workspaceBrowserCreateName.value = "";
-    }
-
-    async function createWorkspaceBrowserDir() {
-      const endpointRef = String(submitEndpointRef.value || "").trim();
-      const parentPath = String(workspaceBrowserCreateParent.value || "").trim();
-      const name = String(workspaceBrowserCreateName.value || "").trim();
-      if (!endpointRef || !parentPath || !name || workspaceBrowserCreating.value) {
-        return;
-      }
-
-      const sourceKind = workspaceBrowserCurrentSource.value.kind;
-      workspaceBrowserCreating.value = true;
-      workspaceBrowserError.value = "";
-      try {
-        const data = await runtimeApiFetchForEndpoint(endpointRef, "/workspace/directory", {
-          method: "POST",
-          body: {
-            parent_path: parentPath,
-            name,
-          },
-        });
-        const createdPath = String(data?.path || "").trim();
-        if (!createdPath) {
-          throw new Error(t("msg_save_failed"));
-        }
-        if (sourceKind === "recent") {
-          rememberWorkspaceBrowserRecentDir(createdPath);
-        } else {
-          const refreshed = await loadWorkspaceBrowser(parentPath);
-          if (!refreshed) {
-            return;
-          }
-        }
-        workspaceBrowserSelection.value = createdPath;
-        workspaceBrowserCreateOpen.value = false;
-        workspaceBrowserCreateName.value = "";
-      } catch (e) {
-        toast.error(e?.message || t("msg_save_failed"));
-      } finally {
-        workspaceBrowserCreating.value = false;
-      }
-    }
-
-    async function attachWorkspace() {
+    async function attachWorkspace(dir) {
       const endpointRef = String(submitEndpointRef.value || "").trim();
       const topicID = String(workspaceTopicID.value || "").trim();
-      const nextDir = String(workspaceBrowserSelection.value || "").trim();
+      const nextDir = String(dir || "").trim();
       if (!endpointRef || !nextDir || workspaceSaving.value) {
         return;
       }
       if (workspaceBrowserPendingMode.value || !topicID) {
         pendingWorkspaceDir.value = nextDir;
-        rememberWorkspaceBrowserRecentDir(nextDir);
         workspaceBrowserOpen.value = false;
         workspaceBrowserPendingMode.value = false;
-        workspaceBrowserError.value = "";
         return;
       }
       workspaceSaving.value = true;
       workspaceError.value = "";
-      workspaceBrowserError.value = "";
       try {
         const data = await runtimeApiFetchForEndpoint(endpointRef, "/workspace", {
           method: "PUT",
@@ -2825,7 +2300,7 @@ const ChatView = {
             workspace_dir: nextDir,
           }
         });
-        rememberWorkspaceBrowserRecentDir(String(data?.workspace_dir || nextDir || "").trim());
+        rememberRecentFolder(String(data?.workspace_dir || nextDir || "").trim());
         applyWorkspacePayload(data);
         workspaceBrowserOpen.value = false;
         if (workspaceSidebarOpen.value) {
@@ -4265,7 +3740,7 @@ const ChatView = {
               workspace_dir: requestBody.workspace_dir,
               source: "attachment",
             });
-            rememberWorkspaceBrowserRecentDir(requestBody.workspace_dir);
+            rememberRecentFolder(requestBody.workspace_dir);
           }
           rememberTopicSelection(submitEndpointRef.value, topicID);
           await loadTopics({
@@ -4546,25 +4021,9 @@ const ChatView = {
       workspaceTreeRows,
       workspaceSelectedTreeEntry,
       workspaceBrowserOpen,
-      workspaceBrowserLoading,
-      workspaceBrowserLoadingPath,
-      workspaceBrowserError,
-      workspaceBrowserRows,
-      workspaceBrowserRecentItems,
-      workspaceBrowserPlaceSourceItems,
-      workspaceBrowserSelection,
-      workspaceBrowserShowHidden,
-      workspaceBrowserCreateOpen,
-      workspaceBrowserCreateName,
-      workspaceBrowserCreating,
-      workspaceBrowserCreateField,
-      workspaceBrowserCreateParent,
-      workspaceBrowserCreateDisabled,
-      workspaceBrowserCreateSubmitDisabled,
+      workspaceBrowserInitialPath,
       pendingWorkspaceDir,
-      workspaceBrowserEmptyText,
       workspaceBrowserConfirmDisabled,
-      workspaceBrowserTreeEntryClass,
       formatBytes,
       workspaceTreeIcon,
       workspaceTreeEntryClass,
@@ -4631,14 +4090,6 @@ const ChatView = {
       removeComposerFile,
       closeComposerFilePreview,
       closeWorkspaceBrowser,
-      activateWorkspaceBrowserSource,
-      workspaceBrowserSourceItemClass,
-      setWorkspaceBrowserShowHidden,
-      toggleWorkspaceBrowserNode,
-      selectWorkspaceBrowserNode,
-      openWorkspaceBrowserCreate,
-      cancelWorkspaceBrowserCreate,
-      createWorkspaceBrowserDir,
       attachWorkspace,
       detachWorkspace,
       selectTopic,
@@ -5656,193 +5107,16 @@ const ChatView = {
             </div>
           </Transition>
         </Teleport>
-        <AppDialogShell
+        <FolderBrowserDialog
           v-if="workspaceBrowserOpen"
           :modelValue="workspaceBrowserOpen"
-          :title="t('chat_workspace_dialog_title')"
-          width="720px"
-          :closeDisabled="workspaceSaving || workspaceBrowserCreating"
+          :endpointRef="submitEndpointRef"
+          :initialPath="workspaceBrowserInitialPath"
+          :busy="workspaceSaving"
+          :confirmDisabled="workspaceBrowserConfirmDisabled"
           @close="closeWorkspaceBrowser"
-        >
-          <section class="chat-workspace-dialog">
-            <QFence
-              v-if="workspaceBrowserError"
-              class="chat-workspace-pane-fence"
-              type="danger"
-              icon="PhXCircle"
-              :text="workspaceBrowserError"
-            />
-
-            <div class="chat-workspace-dialog-shell">
-              <aside class="chat-workspace-dialog-sidebar workspace-sidebar-section">
-                <section class="chat-workspace-dialog-sidebar-group">
-                  <p class="chat-workspace-dialog-sidebar-title ui-kicker">{{ t("chat_workspace_dialog_places") }}</p>
-                  <div class="chat-workspace-dialog-sidebar-list workspace-sidebar-list">
-                    <button
-                      type="button"
-                      :class="workspaceBrowserSourceItemClass('recent')"
-                      :disabled="workspaceBrowserCreating"
-                      @click="activateWorkspaceBrowserSource('recent')"
-                    >
-                      <span class="workspace-sidebar-item-copy">
-                        <span class="workspace-sidebar-item-title">{{ t("chat_workspace_dialog_recent") }}</span>
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      :class="workspaceBrowserSourceItemClass('home')"
-                      :disabled="workspaceBrowserCreating"
-                      @click="activateWorkspaceBrowserSource('home')"
-                    >
-                      <span class="workspace-sidebar-item-copy">
-                        <span class="workspace-sidebar-item-title">{{ t("chat_workspace_dialog_home") }}</span>
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      :class="workspaceBrowserSourceItemClass('system')"
-                      :disabled="workspaceBrowserCreating"
-                      @click="activateWorkspaceBrowserSource('system')"
-                    >
-                      <span class="workspace-sidebar-item-copy">
-                        <span class="workspace-sidebar-item-title">{{ t("chat_workspace_dialog_system") }}</span>
-                      </span>
-                    </button>
-                    <button
-                      v-for="item in workspaceBrowserPlaceSourceItems"
-                      :key="item.id"
-                      type="button"
-                      :class="workspaceBrowserSourceItemClass(item.id)"
-                      :title="item.path"
-                      :disabled="workspaceBrowserCreating"
-                      @click="activateWorkspaceBrowserSource(item.id)"
-                    >
-                      <span class="workspace-sidebar-item-copy">
-                        <span class="workspace-sidebar-item-title">{{ item.title }}</span>
-                      </span>
-                    </button>
-                  </div>
-                </section>
-              </aside>
-
-              <div class="chat-workspace-dialog-main">
-                <div class="chat-workspace-browser-toolbar">
-                  <span class="chat-workspace-browser-parent">
-                    <span class="chat-workspace-browser-parent-label ui-kicker">
-                      {{ t("chat_workspace_dialog_create_in") }}
-                    </span>
-                    <code
-                      class="chat-workspace-browser-parent-path"
-                      :title="workspaceBrowserCreateParent"
-                    >{{ workspaceBrowserCreateParent || t("chat_workspace_dialog_selection_empty") }}</code>
-                  </span>
-                  <QButton
-                    class="plain xs chat-workspace-browser-create-button"
-                    :disabled="workspaceBrowserCreateDisabled || workspaceBrowserCreateOpen"
-                    @click="openWorkspaceBrowserCreate"
-                  >
-                    <PhPlus class="icon" />
-                    <span>{{ t("chat_workspace_dialog_new_directory") }}</span>
-                  </QButton>
-                </div>
-
-                <div v-if="workspaceBrowserCreateOpen" class="chat-workspace-browser-create">
-                  <div ref="workspaceBrowserCreateField" class="chat-workspace-browser-create-field">
-                    <QInput
-                      v-model="workspaceBrowserCreateName"
-                      :placeholder="t('chat_workspace_dialog_directory_name')"
-                      :aria-label="t('chat_workspace_dialog_directory_name')"
-                      :disabled="workspaceBrowserCreating"
-                      @keydown.enter.prevent="createWorkspaceBrowserDir"
-                    />
-                  </div>
-                  <div class="chat-workspace-browser-create-actions">
-                    <QButton
-                      class="plain sm"
-                      :disabled="workspaceBrowserCreating"
-                      @click="cancelWorkspaceBrowserCreate"
-                    >
-                      {{ t("action_cancel") }}
-                    </QButton>
-                    <QButton
-                      class="primary sm"
-                      :loading="workspaceBrowserCreating"
-                      :disabled="workspaceBrowserCreateSubmitDisabled"
-                      @click="createWorkspaceBrowserDir"
-                    >
-                      {{ t("chat_workspace_dialog_create_directory") }}
-                    </QButton>
-                  </div>
-                </div>
-
-                <div class="chat-workspace-browser-shell">
-                  <p
-                    v-if="workspaceBrowserLoading && workspaceBrowserRows.length === 0"
-                    class="chat-workspace-tree-status"
-                  >
-                    {{ t("chat_workspace_dialog_loading") }}
-                  </p>
-                  <div v-else-if="workspaceBrowserRows.length > 0" class="chat-workspace-tree-list is-browser">
-                    <div
-                      v-for="row in workspaceBrowserRows"
-                      :key="'browser:' + row.key"
-                      class="chat-workspace-tree-row"
-                      :style="{ '--tree-depth': row.depth }"
-                    >
-                      <button
-                        type="button"
-                        :class="workspaceBrowserTreeEntryClass(row)"
-                        :disabled="!row.entry.is_dir || workspaceBrowserCreating"
-                        :title="row.entry.path"
-                        @click="selectWorkspaceBrowserNode(row)"
-                      >
-                        <span class="chat-workspace-tree-kind" aria-hidden="true">
-                          <img class="chat-workspace-tree-icon" :src="workspaceTreeIcon(row.entry, row.expanded)" alt="" />
-                        </span>
-                        <WorkspaceBrowserRecentItem
-                          v-if="row.source === 'recent'"
-                          :name="row.entry.name"
-                          :path="row.entry.path"
-                        />
-                        <span v-else class="chat-workspace-tree-name">{{ row.entry.name }}</span>
-                      </button>
-                    </div>
-                  </div>
-                  <p v-else class="chat-workspace-tree-status">{{ workspaceBrowserEmptyText }}</p>
-                </div>
-              </div>
-
-              <div class="chat-workspace-dialog-actions">
-                <div class="chat-workspace-dialog-options">
-                  <QSwitch
-                    :modelValue="workspaceBrowserShowHidden"
-                    :disabled="workspaceBrowserLoading || workspaceBrowserCreating"
-                    :aria-label="t('chat_workspace_dialog_show_hidden')"
-                    @update:modelValue="setWorkspaceBrowserShowHidden"
-                  />
-                  <span class="chat-workspace-dialog-option-label">{{ t("chat_workspace_dialog_show_hidden") }}</span>
-                </div>
-                <div class="chat-workspace-dialog-action-buttons">
-                  <QButton
-                    class="plain sm"
-                    :disabled="workspaceSaving || workspaceBrowserCreating"
-                    @click="closeWorkspaceBrowser"
-                  >
-                    {{ t("action_cancel") }}
-                  </QButton>
-                  <QButton
-                    class="primary sm"
-                    :loading="workspaceSaving"
-                    :disabled="workspaceBrowserConfirmDisabled"
-                    @click="attachWorkspace"
-                  >
-                    {{ t("chat_workspace_action_attach") }}
-                  </QButton>
-                </div>
-              </div>
-            </div>
-          </section>
-        </AppDialogShell>
+          @confirm="attachWorkspace"
+        />
         <AppDialogShell
           v-if="composerFilePreviewOpen"
           v-model="composerFilePreviewOpen"
