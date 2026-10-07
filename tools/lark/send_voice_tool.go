@@ -28,7 +28,7 @@ func NewSendVoiceTool(api API, chatID string, cacheDir string, maxBytes int64) *
 	}
 }
 
-func (t *SendVoiceTool) Name() string { return "lark_send_voice" }
+func (t *SendVoiceTool) Name() string { return "send_voice" }
 
 func (t *SendVoiceTool) Description() string {
 	return "Sends a local OPUS audio file from file_cache_dir to the current Lark chat as an audio message."
@@ -56,7 +56,7 @@ func (t *SendVoiceTool) ParameterSchema() string {
 
 func (t *SendVoiceTool) Execute(ctx context.Context, params map[string]any) (string, error) {
 	if t == nil || t.api == nil {
-		return "", fmt.Errorf("lark_send_voice is disabled")
+		return "", fmt.Errorf("send_voice is disabled")
 	}
 	if strings.TrimSpace(t.chatID) == "" {
 		return "", fmt.Errorf("lark chat id is not configured")

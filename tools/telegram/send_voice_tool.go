@@ -32,7 +32,7 @@ func NewSendVoiceTool(api API, defaultChatID int64, messageThreadID int64, cache
 	}
 }
 
-func (t *SendVoiceTool) Name() string { return "telegram_send_voice" }
+func (t *SendVoiceTool) Name() string { return "send_voice" }
 
 func (t *SendVoiceTool) Description() string {
 	return "Sends a Telegram voice message from a local audio file under `file_cache_dir`. Use chat_id when not running in an active chat context." +
@@ -65,7 +65,7 @@ func (t *SendVoiceTool) ParameterSchema() string {
 
 func (t *SendVoiceTool) Execute(ctx context.Context, params map[string]any) (string, error) {
 	if t == nil || t.api == nil {
-		return "", fmt.Errorf("telegram_send_voice is disabled")
+		return "", fmt.Errorf("send_voice is disabled")
 	}
 
 	chatID := t.defaultTo
@@ -103,7 +103,7 @@ func (t *SendVoiceTool) Execute(ctx context.Context, params map[string]any) (str
 	}
 	filename = filecache.SanitizeFilename(filename)
 
-	// Voice captions are intentionally not supported by telegram_send_voice.
+	// Voice captions are intentionally not supported by send_voice.
 	messageThreadID := int64(0)
 	if chatID == t.defaultTo {
 		messageThreadID = t.threadID

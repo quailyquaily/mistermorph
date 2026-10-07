@@ -23,10 +23,10 @@ type SendFileTool struct {
 	maxBytes int64
 }
 
-// NewSendFileTool builds "<channel>_send_file"; platform is the name the description uses.
-func NewSendFileTool(channel, platform string, send SendFunc, cacheDir string, maxBytes int64) *SendFileTool {
+// NewSendFileTool builds send_file; platform is the channel name the description uses.
+func NewSendFileTool(platform string, send SendFunc, cacheDir string, maxBytes int64) *SendFileTool {
 	return &SendFileTool{
-		name: strings.TrimSpace(channel) + "_send_file", platform: strings.TrimSpace(platform),
+		name: "send_file", platform: strings.TrimSpace(platform),
 		send: send, cacheDir: strings.TrimSpace(cacheDir), maxBytes: maxBytes,
 	}
 }

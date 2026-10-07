@@ -163,7 +163,7 @@ func TestRegisterLarkChannelTools(t *testing.T) {
 	if reactTool == nil {
 		t.Fatalf("reactTool = nil")
 	}
-	for _, name := range []string{"lark_send_file", "lark_send_photo", "lark_send_voice", "message_react"} {
+	for _, name := range []string{"send_file", "send_photo", "send_voice", "message_react"} {
 		if _, ok := reg.Get(name); !ok {
 			t.Fatalf("registry missing %s; names=%s", name, reg.ToolNames())
 		}

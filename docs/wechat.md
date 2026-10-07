@@ -77,7 +77,7 @@ or turn on **Run in Console** in the WeChat pane. The WeChat runtime then shares
 - Answers are plain text; Markdown is not rendered by WeChat. Answers longer than 4,000 characters are split at paragraphs and lines.
 - A planned task does not get a progress message; each finished step's note is sent as a message of its own before the final answer.
 - Images are downloaded, decrypted (WeChat's CDN stores media AES-128 encrypted) and saved to `file_cache_dir/wechat/`, then given to the model, up to three per message. Files, videos, and voice messages WeChat did not transcribe are saved there too and named in the message, so the agent can read them with its tools. Files over 50 MB are not downloaded.
-- The agent can send a file under `file_cache_dir` with the `wechat_send_file` tool: an image or video is sent as one, anything else as a file.
+- The agent can send a file under `file_cache_dir` with the `send_file` tool: an image or video is sent as one, anything else as a file.
 - Commands work as typed text: `/help`, `/models`, `/skills`, `/reset`, `/stop`, `/id`, `/approve <id>`, `/deny <id>`.
 
 ## Session expiry

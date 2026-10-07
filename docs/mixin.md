@@ -98,9 +98,9 @@ The runtime accepts images, files, and audio. Downloads are stored under `file_c
 The following tools are available inside a Mixin task:
 
 ```text
-mixin_send_file
-mixin_send_photo
-mixin_send_audio
+send_file
+send_photo
+send_voice
 ```
 
 When a tool needs approval, the bot sends the reason, the complete tool parameters, and two commands:

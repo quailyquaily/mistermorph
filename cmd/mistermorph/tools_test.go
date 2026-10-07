@@ -32,9 +32,9 @@ func TestToolsCommand_IncludesRuntimeTools(t *testing.T) {
 		"read_file",
 		"spawn",
 		"plan_create",
-		"telegram_send_file",
-		"telegram_send_photo",
-		"telegram_send_voice",
+		"send_file",
+		"send_photo",
+		"send_voice",
 		"message_react",
 	}
 	for _, want := range checks {

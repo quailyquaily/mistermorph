@@ -28,10 +28,10 @@ func NewSendPhotoTool(api API, chatID string, cacheDir string, maxBytes int64) *
 	}
 }
 
-func (t *SendPhotoTool) Name() string { return "lark_send_photo" }
+func (t *SendPhotoTool) Name() string { return "send_photo" }
 
 func (t *SendPhotoTool) Description() string {
-	return "Sends a local image from file_cache_dir to the current Lark chat as an image message. Use lark_send_file when it should be delivered as a file."
+	return "Sends a local image from file_cache_dir to the current Lark chat as an image message. Use send_file when it should be delivered as a file."
 }
 
 func (t *SendPhotoTool) ParameterSchema() string {
@@ -56,7 +56,7 @@ func (t *SendPhotoTool) ParameterSchema() string {
 
 func (t *SendPhotoTool) Execute(ctx context.Context, params map[string]any) (string, error) {
 	if t == nil || t.api == nil {
-		return "", fmt.Errorf("lark_send_photo is disabled")
+		return "", fmt.Errorf("send_photo is disabled")
 	}
 	if strings.TrimSpace(t.chatID) == "" {
 		return "", fmt.Errorf("lark chat id is not configured")

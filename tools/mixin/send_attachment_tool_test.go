@@ -53,9 +53,9 @@ func TestSendAttachmentToolUploadsAndSendsCategoryPayload(t *testing.T) {
 		wantCategory string
 		wantMIME     string
 	}{
-		{kind: AttachmentFile, filename: "report.txt", content: []byte("report"), wantName: "mixin_send_file", wantCategory: mixinapi.MessageCategoryEncryptedData, wantMIME: "text/plain"},
-		{kind: AttachmentPhoto, filename: "photo.png", content: imageData.Bytes(), wantName: "mixin_send_photo", wantCategory: mixinapi.MessageCategoryEncryptedImage, wantMIME: "image/png"},
-		{kind: AttachmentAudio, filename: "voice.ogg", content: []byte("OggS-audio"), wantName: "mixin_send_audio", wantCategory: mixinapi.MessageCategoryEncryptedAudio, wantMIME: "audio/ogg"},
+		{kind: AttachmentFile, filename: "report.txt", content: []byte("report"), wantName: "send_file", wantCategory: mixinapi.MessageCategoryEncryptedData, wantMIME: "text/plain"},
+		{kind: AttachmentPhoto, filename: "photo.png", content: imageData.Bytes(), wantName: "send_photo", wantCategory: mixinapi.MessageCategoryEncryptedImage, wantMIME: "image/png"},
+		{kind: AttachmentAudio, filename: "voice.ogg", content: []byte("OggS-audio"), wantName: "send_voice", wantCategory: mixinapi.MessageCategoryEncryptedAudio, wantMIME: "audio/ogg"},
 	}
 	for _, tt := range tests {
 		t.Run(string(tt.kind), func(t *testing.T) {

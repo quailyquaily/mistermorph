@@ -40,7 +40,7 @@ func NewSendFileTool(api API, defaultChannelID, defaultThreadTS string, allowedC
 	}
 }
 
-func (t *SendFileTool) Name() string { return "slack_send_file" }
+func (t *SendFileTool) Name() string { return "send_file" }
 
 func (t *SendFileTool) Description() string {
 	return "Uploads a local file under file_cache_dir to Slack. Use this when you need to send generated artifacts back to the current channel."
@@ -84,7 +84,7 @@ func (t *SendFileTool) ParameterSchema() string {
 
 func (t *SendFileTool) Execute(ctx context.Context, params map[string]any) (string, error) {
 	if t == nil || t.api == nil {
-		return "", fmt.Errorf("slack_send_file is disabled")
+		return "", fmt.Errorf("send_file is disabled")
 	}
 
 	channelID := strings.TrimSpace(t.defaultChannelID)

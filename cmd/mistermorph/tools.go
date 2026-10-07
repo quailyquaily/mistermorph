@@ -72,15 +72,15 @@ func runToolsCmd(cmd *cobra.Command, _ []string, registryFactory func() *tools.R
 	telegramPreviews := map[string]toolPreview{}
 	// Telegram-only tools are injected at runtime and are not part of the base registry.
 	addToolPreview(telegramPreviews, toolPreview{
-		Name:        "telegram_send_file",
+		Name:        "send_file",
 		Description: "[telegram only] Sends a local file (under file_cache_dir) to the active chat.",
 	})
 	addToolPreview(telegramPreviews, toolPreview{
-		Name:        "telegram_send_photo",
+		Name:        "send_photo",
 		Description: "[telegram only] Sends a local image (under file_cache_dir) to the active chat as an inline photo.",
 	})
 	addToolPreview(telegramPreviews, toolPreview{
-		Name:        "telegram_send_voice",
+		Name:        "send_voice",
 		Description: "[telegram only] Sends a voice message from a local audio file under file_cache_dir.",
 	})
 	addToolPreview(telegramPreviews, toolPreview{

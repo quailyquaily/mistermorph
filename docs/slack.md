@@ -74,7 +74,7 @@ Required `Bot Token Scopes`:
 - `mpim:read` (required to load group direct message information)
 - `chat:write`
 - `files:read` (required for image attachments)
-- `files:write` (required by `slack_send_file`)
+- `files:write` (required by `send_file`)
 - `emoji:read` (required to load workspace emoji names for `message_react`)
 - `reactions:write` (required by `message_react`)
 - `users:read`

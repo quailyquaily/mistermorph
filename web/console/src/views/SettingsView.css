@@ -1004,12 +1004,84 @@ body:has(.settings-page) .q-dialog .q-menu-item.danger .q-menu-title {
   object-fit: contain;
 }
 
-.settings-tool-names {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 8px;
-  color: var(--text-2);
+.settings-tool-matrix-wrap {
+  overflow-x: auto;
+  border-top: 1px solid var(--line-soft);
+}
+
+.settings-tool-matrix {
+  width: 100%;
+  border-collapse: collapse;
   font-size: var(--font-size-meta);
+}
+
+.settings-tool-matrix th,
+.settings-tool-matrix td {
+  padding: 8px 6px;
+  border-bottom: 1px solid color-mix(in srgb, var(--line-soft) 82%, transparent);
+  text-align: center;
+  vertical-align: middle;
+}
+
+.settings-tool-matrix tbody tr:last-child th,
+.settings-tool-matrix tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.settings-tool-matrix thead th {
+  color: var(--text-1);
+  font-weight: 500;
+}
+
+.settings-tool-matrix tbody th {
+  text-align: left;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.settings-tool-matrix-channel {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.settings-tool-matrix-tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-0);
+}
+
+.settings-tool-matrix-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--q-c-green-light);
+  cursor: pointer;
+}
+
+.settings-tool-matrix-cell .icon {
+  width: 16px;
+  height: 16px;
+}
+
+.settings-tool-matrix-cell:hover,
+.settings-tool-matrix-cell:focus-visible {
+  border-color: var(--line-soft);
+  background: color-mix(in srgb, var(--text-0) 6%, transparent);
+}
+
+.settings-tool-matrix-none {
+  color: var(--text-2);
+  opacity: 0.5;
 }
 
 .settings-tool-automatic {

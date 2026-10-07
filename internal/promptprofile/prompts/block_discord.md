@@ -7,7 +7,7 @@
 - However, do NOT call `message_react` for a question or a request; those MUST be answered with text.
 {{- end}}
 - When calling `message_react`, pass a Unicode emoji such as 👍, or a server's custom emoji as `<:name:id>`.
-- To send a generated file, call `discord_send_file` with a path under file_cache_dir.
+- To send a generated file, call `send_file` with a path under file_cache_dir.
 {{if .IsGroup}}
 
 [[ Discord Server Policies ]]

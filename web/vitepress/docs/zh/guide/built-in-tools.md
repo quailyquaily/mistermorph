@@ -19,7 +19,7 @@ Mistermorph 的工具不是一次性全部固定注册，而是按运行环境�
 | 静态工具 | 仅靠配置即可创建 | `read_file`、`write_file`、`bash`、`powershell`、`url_fetch`、`web_search`、`contacts_send` |
 | Engine 工具 | 某次 agent engine 装配完成后可用 | `spawn`、`coder` |
 | 运行时工具 | 当 LLM 或者依赖的上下文可用时 | `plan_create`、`todo_update`、`image_generate`、`image_edit` |
-| 通道专属工具 | 当前正在使用 Telegram / Slack 等具体 Channel | `telegram_send_voice`、`telegram_send_photo`、`telegram_send_file`、`message_react` |
+| 通道专属工具 | 当前正在使用 Telegram / Slack 等具体 Channel | `send_voice`、`send_photo`、`send_file`、`message_react` |
 
 ## 静态工具
 
@@ -144,23 +144,23 @@ Codex / Claude Code 委托优先用它。
 
 这些工具不会在普通 CLI / 通用 embedding 场景中出现，只有对应通道 runtime 具备上下文时才会注入。
 
-### `telegram_send_voice`
+### `send_file`
 
-把本地语音文件发回当前 Telegram 会话，适合发送已经生成好的语音结果。
+把 `file_cache_dir` 中的本地文件发到当前会话：Telegram 里是文档，Slack 里是上传文件，Lark 里是文件消息，Discord 和 Mixin 里是附件，WeChat 和 WhatsApp 里是文件（图片、视频按媒体发送）。
 
-关键限制：只支持本地文件发送；文件通常应位于 `file_cache_dir`；不负责实时文字转语音。
+关键限制：只支持本地缓存目录下的文件；目录路径无效；受各渠道的文件大小上限限制。
 
-### `telegram_send_photo`
+### `send_photo`
 
-把本地图片以内联照片形式发回 Telegram。
+把本地图片以内联照片形式发到当前 Telegram、Lark 或 Mixin 会话。
 
-关键限制：这是「照片」发送，不是「文件」发送；如果你希望对方收到文档附件，应改用 `telegram_send_file`。
+关键限制：这是「照片」发送，不是「文件」发送；如果你希望对方收到文档附件，应改用 `send_file`。
 
-### `telegram_send_file`
+### `send_voice`
 
-把本地缓存文件作为文档发送到 Telegram，会保留更像附件的交付形态。
+把本地音频文件作为语音消息发到当前 Telegram、Lark 或 Mixin 会话。
 
-关键限制：只支持本地缓存目录下的文件；目录路径无效；受文件大小上限限制。
+关键限制：只支持本地文件发送；文件通常应位于 `file_cache_dir`；Lark 需要 OPUS 音频；不负责文字转语音。
 
 ### `message_react`
 

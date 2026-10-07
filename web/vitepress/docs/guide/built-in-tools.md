@@ -19,7 +19,7 @@ Mistermorph does not register every tool as one flat bundle. Tools are layered b
 | Static tools | Available from config alone | `read_file`, `write_file`, `bash`, `powershell`, `url_fetch`, `web_search`, `contacts_send` |
 | Engine tools | Available when an agent engine is assembled for a run | `spawn`, `coder` |
 | Runtime tools | Available when the LLM or required context is available | `plan_create`, `todo_update`, `image_generate`, `image_edit` |
-| Channel-specific tools | Available when the current channel is Telegram / Slack or another concrete channel runtime | `telegram_send_voice`, `telegram_send_photo`, `telegram_send_file`, `message_react` |
+| Channel-specific tools | Available when the current channel is Telegram / Slack or another concrete channel runtime | `send_voice`, `send_photo`, `send_file`, `message_react` |
 
 ## Static Tools
 
@@ -142,23 +142,23 @@ Edits one local image from a prompt and saves the result under `file_cache_dir` 
 
 These tools do not exist in plain CLI or generic embedding scenarios. They are injected only when the corresponding channel runtime has enough context.
 
-### `telegram_send_voice`
+### `send_file`
 
-Sends a local voice file back to the current Telegram chat.
+Sends a local file from `file_cache_dir` to the current chat: a document in Telegram, an upload in Slack, a file message in Lark, an attachment in Discord and Mixin, and a file (or image or video) in WeChat and WhatsApp.
 
-- Key limits: only local-file sending is supported; files are typically expected under `file_cache_dir`; this tool does not do inline text-to-speech generation.
+- Key limits: only local cached files are allowed; directories are invalid; each channel's file-size cap applies.
 
-### `telegram_send_photo`
+### `send_photo`
 
-Sends a local image back to Telegram as an inline photo.
+Sends a local image to the current Telegram, Lark or Mixin chat as an inline photo.
 
-- Key limits: this is a photo-style send, not a document send; use `telegram_send_file` if the user should receive it as a file attachment.
+- Key limits: this is a photo-style send, not a document send; use `send_file` if the user should receive it as a file attachment.
 
-### `telegram_send_file`
+### `send_voice`
 
-Sends a local cached file to Telegram as a document.
+Sends a local audio file to the current Telegram, Lark or Mixin chat as a voice message.
 
-- Key limits: only local cached files are allowed; directories are invalid; file-size caps apply.
+- Key limits: only local-file sending is supported; files are typically expected under `file_cache_dir`; Lark expects OPUS audio; this tool does not do text-to-speech.
 
 ### `message_react`
 

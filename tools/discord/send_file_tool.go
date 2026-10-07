@@ -32,7 +32,7 @@ func NewSendFileTool(api API, channelID, replyToMessageID, cacheDir string, maxB
 	}
 }
 
-func (t *SendFileTool) Name() string { return "discord_send_file" }
+func (t *SendFileTool) Name() string { return "send_file" }
 
 func (t *SendFileTool) Description() string {
 	return "Uploads a local file under file_cache_dir to the current Discord conversation. Use it to send generated artifacts. Files over 10 MB are refused."
@@ -55,7 +55,7 @@ func (t *SendFileTool) ParameterSchema() string {
 
 func (t *SendFileTool) Execute(ctx context.Context, params map[string]any) (string, error) {
 	if t == nil || t.api == nil || t.channelID == "" {
-		return "", fmt.Errorf("discord_send_file is disabled")
+		return "", fmt.Errorf("send_file is disabled")
 	}
 	rawPath, _ := params["path"].(string)
 	path, err := filecache.ResolveFile(t.cacheDir, strings.TrimSpace(rawPath), t.maxBytes)

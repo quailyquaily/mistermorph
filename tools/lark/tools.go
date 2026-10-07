@@ -36,7 +36,7 @@ func NewSendFileTool(api API, chatID string, cacheDir string, maxBytes int64) *S
 	}
 }
 
-func (t *SendFileTool) Name() string { return "lark_send_file" }
+func (t *SendFileTool) Name() string { return "send_file" }
 
 func (t *SendFileTool) Description() string {
 	return "Sends a local file from file_cache_dir to the current Lark chat as a file message."
@@ -68,7 +68,7 @@ func (t *SendFileTool) ParameterSchema() string {
 
 func (t *SendFileTool) Execute(ctx context.Context, params map[string]any) (string, error) {
 	if t == nil || t.api == nil {
-		return "", fmt.Errorf("lark_send_file is disabled")
+		return "", fmt.Errorf("send_file is disabled")
 	}
 	if strings.TrimSpace(t.chatID) == "" {
 		return "", fmt.Errorf("lark chat id is not configured")

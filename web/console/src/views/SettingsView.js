@@ -159,14 +159,24 @@ const TOOL_GROUPS = [
 
 // Tools a channel runtime adds in its own chats. They have no setting: each follows its channel.
 const TOOL_CHANNELS = [
-  { id: "console", title: "Console", icon: "PhAppWindow", tools: ["skill_install_preview", "skill_install"] },
-  { id: "telegram", title: "Telegram", logo: toolChannelTelegramLogoURL, tools: ["telegram_send_file", "telegram_send_photo", "telegram_send_voice", "message_react"] },
-  { id: "slack", title: "Slack", logo: toolChannelSlackLogoURL, tools: ["slack_send_file", "message_react"] },
-  { id: "lark", title: "Lark", logo: toolChannelLarkLogoURL, tools: ["lark_send_file", "lark_send_photo", "lark_send_voice", "message_react"] },
-  { id: "discord", title: "Discord", logo: toolChannelDiscordLogoURL, tools: ["discord_send_file", "message_react"] },
-  { id: "mixin", title: "Mixin", logo: toolChannelMixinLogoURL, tools: ["mixin_send_file", "mixin_send_photo", "mixin_send_audio"] },
-  { id: "wechat", title: "WeChat", logo: toolChannelWeChatLogoURL, tools: ["wechat_send_file"] },
-  { id: "whatsapp", title: "WhatsApp", logo: toolChannelWhatsAppLogoURL, tools: ["whatsapp_send_file"] },
+  { id: "console", title: "Console", icon: "PhAppWindow", tools: ["message_react", "skill_install_preview", "skill_install"] },
+  { id: "telegram", title: "Telegram", logo: toolChannelTelegramLogoURL, tools: ["send_file", "send_photo", "send_voice", "message_react"] },
+  { id: "slack", title: "Slack", logo: toolChannelSlackLogoURL, tools: ["send_file", "message_react"] },
+  { id: "lark", title: "Lark", logo: toolChannelLarkLogoURL, tools: ["send_file", "send_photo", "send_voice", "message_react"] },
+  { id: "discord", title: "Discord", logo: toolChannelDiscordLogoURL, tools: ["send_file", "message_react"] },
+  { id: "mixin", title: "Mixin", logo: toolChannelMixinLogoURL, tools: ["send_file", "send_photo", "send_voice"] },
+  { id: "wechat", title: "WeChat", logo: toolChannelWeChatLogoURL, tools: ["send_file"] },
+  { id: "whatsapp", title: "WhatsApp", logo: toolChannelWhatsAppLogoURL, tools: ["send_file"] },
+];
+
+// Rows of the channel tool matrix: the tools channel runtimes add, by name.
+const TOOL_CHANNEL_ROWS = [
+  { id: "send_file", icon: "PhPaperclip" },
+  { id: "send_photo", icon: "PhImage" },
+  { id: "send_voice", icon: "PhMicrophone" },
+  { id: "message_react", icon: "PhSmiley" },
+  { id: "skill_install_preview", icon: "PhEye" },
+  { id: "skill_install", icon: "PhDownloadSimple" },
 ];
 
 const MANAGED_RUNTIME_ITEMS = [
@@ -1207,8 +1217,10 @@ const SettingsView = {
     function previewToolSchema(item) {
       return showToolSchema(item.id, (catalog) => catalog?.tools?.[item.id]);
     }
-    function previewChannelToolSchemas(channel) {
-      return showToolSchema(channel.title, (catalog) => catalog?.channels?.[channel.id]);
+    function previewChannelToolSchema(channel, row) {
+      return showToolSchema(`${row.id} · ${channel.title}`, (catalog) =>
+        (catalog?.channels?.[channel.id] || []).find((tool) => tool.name === row.id)
+      );
     }
     const toolGroups = computed(() =>
       TOOL_GROUPS.map((group) => ({
@@ -5243,7 +5255,8 @@ const SettingsView = {
       toolGroups,
       toolSchemaPreview,
       previewToolSchema,
-      previewChannelToolSchemas,
+      previewChannelToolSchema,
+      TOOL_CHANNEL_ROWS,
       TOOL_CHANNELS,
       managedRuntimeItems,
       groupTriggerItems,
@@ -7019,30 +7032,44 @@ const SettingsView = {
                       <h4 class="settings-tool-group-title">{{ t("settings_tool_group_channels") }}</h4>
                       <p class="settings-tool-group-note">{{ t("settings_tool_group_note_channels") }}</p>
                     </header>
-                    <div class="settings-toggle-list">
-                      <div v-for="channel in TOOL_CHANNELS" :key="channel.id" class="settings-toggle-row">
-                        <div class="settings-tool-main">
-                          <img v-if="channel.logo" :src="channel.logo" class="settings-tool-icon settings-tool-logo" alt="" />
-                          <component :is="channel.icon" v-else class="settings-tool-icon" />
-                          <div class="settings-toggle-copy">
-                            <strong class="settings-toggle-title">{{ channel.title }}</strong>
-                            <span class="settings-tool-names">
-                              <code v-for="name in channel.tools" :key="name">{{ name }}</code>
-                            </span>
-                          </div>
-                        </div>
-                        <div class="settings-toggle-actions">
-                          <QButton
-                            type="button"
-                            class="plain xs icon"
-                            :title="t('settings_tool_schema_preview')"
-                            :aria-label="t('settings_tool_schema_preview')"
-                            @click="previewChannelToolSchemas(channel)"
-                          >
-                            <PhBracketsCurly class="icon" />
-                          </QButton>
-                        </div>
-                      </div>
+                    <div class="settings-tool-matrix-wrap">
+                      <table class="settings-tool-matrix">
+                        <thead>
+                          <tr>
+                            <th scope="col"></th>
+                            <th v-for="channel in TOOL_CHANNELS" :key="channel.id" scope="col">
+                              <span class="settings-tool-matrix-channel">
+                                <img v-if="channel.logo" :src="channel.logo" class="settings-tool-icon settings-tool-logo" alt="" />
+                                <component :is="channel.icon" v-else class="settings-tool-icon" />
+                                <span>{{ channel.title }}</span>
+                              </span>
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr v-for="row in TOOL_CHANNEL_ROWS" :key="row.id">
+                            <th scope="row">
+                              <span class="settings-tool-matrix-tool">
+                                <component :is="row.icon" class="settings-tool-icon" />
+                                <code>{{ row.id }}</code>
+                              </span>
+                            </th>
+                            <td v-for="channel in TOOL_CHANNELS" :key="channel.id">
+                              <button
+                                v-if="channel.tools.includes(row.id)"
+                                type="button"
+                                class="settings-tool-matrix-cell"
+                                :title="t('settings_tool_schema_preview') + ': ' + row.id + ' · ' + channel.title"
+                                :aria-label="t('settings_tool_schema_preview') + ': ' + row.id + ' · ' + channel.title"
+                                @click="previewChannelToolSchema(channel, row)"
+                              >
+                                <PhCheck class="icon" />
+                              </button>
+                              <span v-else class="settings-tool-matrix-none" aria-hidden="true">·</span>
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
                     </div>
                   </section>
                 </div>

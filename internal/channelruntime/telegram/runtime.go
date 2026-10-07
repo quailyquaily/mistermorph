@@ -225,11 +225,11 @@ func emojiForTelegramPlanStep(step string) string {
 		return "📖"
 	case strings.Contains(lower, "write_file"):
 		return "✍️"
-	case strings.Contains(lower, "_send_file"):
+	case strings.Contains(lower, "send_file"):
 		return "🗂️"
-	case strings.Contains(lower, "_send_photo"):
+	case strings.Contains(lower, "send_photo"):
 		return "📷"
-	case strings.Contains(lower, "_send_voice"):
+	case strings.Contains(lower, "send_voice"):
 		return "🎙️"
 	case strings.Contains(lower, "bash"):
 		return "🧑‍💻"

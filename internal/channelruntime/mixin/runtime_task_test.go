@@ -107,7 +107,7 @@ func TestRegisterMixinChannelTools(t *testing.T) {
 	if err := registerMixinChannelTools(registry, stubMixinAttachmentAPI{}, testConversationID, testUserID, t.TempDir(), 1024); err != nil {
 		t.Fatalf("registerMixinChannelTools() error = %v", err)
 	}
-	for _, name := range []string{"mixin_send_file", "mixin_send_photo", "mixin_send_audio"} {
+	for _, name := range []string{"send_file", "send_photo", "send_voice"} {
 		if _, ok := registry.Get(name); !ok {
 			t.Fatalf("tool %q was not registered", name)
 		}

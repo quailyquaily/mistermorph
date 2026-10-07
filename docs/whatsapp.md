@@ -56,7 +56,7 @@ or turn on **Run in Console** in the WhatsApp pane. The runtime then shares the 
 - A planned task does not get a progress message, and messages are never edited; each finished step's note is sent as a message of its own before the final answer.
 - No "typing…" indicator: the platform only offers it together with a read receipt.
 - Images and stickers are downloaded (their SHA-256 checked) to `file_cache_dir/whatsapp/` and given to the model, with the caption as the message text. Documents, videos and audio, voice notes included, are saved there too and named in the message; voice notes are not transcribed. Reactions are ignored.
-- The agent can send a file under `file_cache_dir` with the `whatsapp_send_file` tool: as an image, video, audio or document by its type. Images are limited to 5 MB (a larger one goes as a document) and everything else to 16 MB.
+- The agent can send a file under `file_cache_dir` with the `send_file` tool: as an image, video, audio or document by its type. Images are limited to 5 MB (a larger one goes as a document) and everything else to 16 MB.
 - Commands work as typed text: `/help`, `/models`, `/skills`, `/reset`, `/stop`, `/id`, `/approve <id>`, `/deny <id>`.
 
 The platform allows about 12 sends a minute, and 12 calls a minute to each media method. Sends refused for rate or capacity are retried up to three times; a send whose outcome is unknown (a server error or timeout) is not retried, so a message is never sent twice.

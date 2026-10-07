@@ -19,7 +19,7 @@ Mistermorph のツールは、最初からすべてを一括登録するわけ�
 | 静的ツール | 設定だけで利用可能 | `read_file`、`write_file`、`bash`、`powershell`、`url_fetch`、`web_search`、`contacts_send` |
 | Engine ツール | agent engine が 1 回組み上がると利用可能 | `spawn`、`coder` |
 | ランタイムツール | LLM や必要な文脈が利用可能なとき | `plan_create`、`todo_update`、`image_generate`、`image_edit` |
-| チャネル専用ツール | 現在の Channel が Telegram / Slack などの具体的 runtime のとき | `telegram_send_voice`、`telegram_send_photo`、`telegram_send_file`、`message_react` |
+| チャネル専用ツール | 現在の Channel が Telegram / Slack などの具体的 runtime のとき | `send_voice`、`send_photo`、`send_file`、`message_react` |
 
 ## 静的ツール
 
@@ -138,23 +138,23 @@ TODO と `HEARTBEAT.md` の実行時の流れは [TODO と Heartbeat](/ja/guide/
 
 これらのツールは、通常の CLI や汎用 embedding では存在しません。対応するチャネル runtime に十分な文脈があるときだけ注入されます。
 
-### `telegram_send_voice`
+### `send_file`
 
-ローカルの音声ファイルを現在の Telegram チャットへ送ります。
+`file_cache_dir` のローカルファイルを現在のチャットへ送ります。Telegram ではドキュメント、Slack ではアップロード、Lark ではファイルメッセージ、Discord と Mixin では添付、WeChat と WhatsApp ではファイル（画像や動画はメディア）として届きます。
 
-- 主な制約: ローカルファイル送信のみ対応します。通常は `file_cache_dir` 配下のファイルが前提で、インラインの text-to-speech 生成は行いません。
+- 主な制約: 送れるのはローカルのキャッシュファイルだけです。ディレクトリは無効で、各チャネルのファイルサイズ上限があります。
 
-### `telegram_send_photo`
+### `send_photo`
 
-ローカル画像を Telegram にインライン写真として送ります。
+ローカル画像を現在の Telegram、Lark、Mixin チャットへインライン写真として送ります。
 
-- 主な制約: これは写真送信であり、文書送信ではありません。添付ファイルとして届けたい場合は `telegram_send_file` を使います。
+- 主な制約: これは写真送信であり、文書送信ではありません。添付ファイルとして届けたい場合は `send_file` を使います。
 
-### `telegram_send_file`
+### `send_voice`
 
-ローカルのキャッシュファイルを Telegram にドキュメントとして送ります。
+ローカルの音声ファイルを現在の Telegram、Lark、Mixin チャットへボイスメッセージとして送ります。
 
-- 主な制約: 送れるのはローカルのキャッシュファイルだけです。ディレクトリは無効で、ファイルサイズ上限もあります。
+- 主な制約: ローカルファイル送信のみ対応します。通常は `file_cache_dir` 配下のファイルが前提です。Lark は OPUS 音声が必要で、text-to-speech 生成は行いません。
 
 ### `message_react`
 

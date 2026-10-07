@@ -108,7 +108,7 @@ Inside a Discord task the agent can use:
 
 ```text
 message_react       add an emoji reaction to the triggering message
-discord_send_file   upload a file from file_cache_dir (up to 10 MB)
+send_file   upload a file from file_cache_dir (up to 10 MB)
 ```
 
 ## Approvals

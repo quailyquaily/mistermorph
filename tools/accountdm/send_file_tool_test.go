@@ -16,11 +16,11 @@ func TestSendFileToolSendsOnlyFilesUnderTheCache(t *testing.T) {
 	outside := filepath.Join(t.TempDir(), "secret.txt")
 	_ = os.WriteFile(outside, []byte("x"), 0o600)
 	var got []string
-	tool := NewSendFileTool("wechat", "WeChat", func(_ context.Context, path, filename, message string) error {
+	tool := NewSendFileTool("WeChat", func(_ context.Context, path, filename, message string) error {
 		got = append(got, filepath.Base(path)+"|"+filename+"|"+message)
 		return nil
 	}, cacheDir, 1<<20)
-	if tool.Name() != "wechat_send_file" || !strings.Contains(tool.Description(), "WeChat") {
+	if tool.Name() != "send_file" || !strings.Contains(tool.Description(), "WeChat") {
 		t.Fatalf("tool = %s: %s", tool.Name(), tool.Description())
 	}
 	if _, err := tool.Execute(context.Background(), map[string]any{"path": "report.pdf", "message": "done"}); err != nil {

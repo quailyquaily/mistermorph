@@ -29,6 +29,13 @@ func TestHandleToolSchemas(t *testing.T) {
 		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 			t.Fatal(err)
 		}
+		console := map[string]bool{}
+		for _, tool := range body.Channels["console"] {
+			console[tool.Name] = true
+		}
+		if !console["message_react"] || !console["skill_install"] {
+			t.Fatalf("console tools = %v", console)
+		}
 		if body.Tools["codemode"].Name != "codemode" || len(body.Channels["telegram"]) == 0 {
 			t.Fatalf("catalog = %d tools, %d channels", len(body.Tools), len(body.Channels))
 		}

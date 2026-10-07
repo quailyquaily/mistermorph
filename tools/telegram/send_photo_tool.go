@@ -30,10 +30,10 @@ func NewSendPhotoTool(api API, chatID int64, messageThreadID int64, cacheDir str
 	}
 }
 
-func (t *SendPhotoTool) Name() string { return "telegram_send_photo" }
+func (t *SendPhotoTool) Name() string { return "send_photo" }
 
 func (t *SendPhotoTool) Description() string {
-	return "Sends a local image (from file_cache_dir) back to the current chat as an inline Telegram photo. Use telegram_send_file instead when you want it delivered as a document."
+	return "Sends a local image (from file_cache_dir) back to the current chat as an inline Telegram photo. Use send_file instead when you want it delivered as a document."
 }
 
 func (t *SendPhotoTool) ParameterSchema() string {
@@ -57,7 +57,7 @@ func (t *SendPhotoTool) ParameterSchema() string {
 
 func (t *SendPhotoTool) Execute(ctx context.Context, params map[string]any) (string, error) {
 	if t == nil || t.api == nil {
-		return "", fmt.Errorf("telegram_send_photo is disabled")
+		return "", fmt.Errorf("send_photo is disabled")
 	}
 	rawPath, _ := params["path"].(string)
 	rawPath = strings.TrimSpace(rawPath)

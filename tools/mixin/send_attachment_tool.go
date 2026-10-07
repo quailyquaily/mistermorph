@@ -59,11 +59,11 @@ func NewSendAttachmentTool(api AttachmentAPI, conversationID, recipientID, cache
 func (t *SendAttachmentTool) Name() string {
 	switch t.kind {
 	case AttachmentPhoto:
-		return "mixin_send_photo"
+		return "send_photo"
 	case AttachmentAudio:
-		return "mixin_send_audio"
+		return "send_voice"
 	default:
-		return "mixin_send_file"
+		return "send_file"
 	}
 }
 
@@ -197,7 +197,7 @@ func mixinAttachmentMetadata(file *os.File, path string, kind AttachmentKind) (s
 	switch kind {
 	case AttachmentPhoto:
 		if !strings.HasPrefix(detected, "image/") {
-			return "", 0, 0, fmt.Errorf("mixin_send_photo requires an image file")
+			return "", 0, 0, fmt.Errorf("send_photo requires an image file")
 		}
 		config, _, err := image.DecodeConfig(file)
 		if err != nil {
@@ -206,7 +206,7 @@ func mixinAttachmentMetadata(file *os.File, path string, kind AttachmentKind) (s
 		return detected, config.Width, config.Height, nil
 	case AttachmentAudio:
 		if !strings.HasPrefix(mimeType, "audio/") {
-			return "", 0, 0, fmt.Errorf("mixin_send_audio requires an audio file")
+			return "", 0, 0, fmt.Errorf("send_voice requires an audio file")
 		}
 	}
 	return mimeType, 0, 0, nil

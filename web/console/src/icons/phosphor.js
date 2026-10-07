@@ -87,6 +87,9 @@ import {
   PhDownloadSimple,
   PhAppWindow,
   PhBracketsCurly,
+  PhImage,
+  PhMicrophone,
+  PhSmiley,
 } from "@phosphor-icons/vue";
 import { defineComponent, h } from "vue";
 
@@ -202,6 +205,9 @@ const sources = {
   PhDownloadSimple,
   PhAppWindow,
   PhBracketsCurly,
+  PhImage,
+  PhMicrophone,
+  PhSmiley,
 };
 
 export const phosphorIcons = Object.fromEntries(

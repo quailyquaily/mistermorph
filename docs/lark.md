@@ -136,9 +136,9 @@ Runtime simplifications:
 
 Channel tools registered in Lark task runs:
 
-- `lark_send_file`: uploads a local file under `file_cache_dir` and sends it as a Lark file message.
-- `lark_send_photo`: uploads a local image under `file_cache_dir` and sends it as a Lark image message.
-- `lark_send_voice`: uploads a local OPUS audio file under `file_cache_dir` and sends it as a Lark audio message.
+- `send_file`: uploads a local file under `file_cache_dir` and sends it as a Lark file message.
+- `send_photo`: uploads a local image under `file_cache_dir` and sends it as a Lark image message.
+- `send_voice`: uploads a local OPUS audio file under `file_cache_dir` and sends it as a Lark audio message.
 - `message_react`: adds a Lark message reaction to the current inbound `message_id`.
 
 All file tools reject paths outside `file_cache_dir`.
@@ -227,7 +227,7 @@ The implementation should assume:
 - event subscription enabled for message receive events
 - message send and reply permissions granted
 - message resource download permissions granted for image input
-- image/file upload permissions granted when `lark_send_photo`, `lark_send_file`, or `lark_send_voice` are used
+- image/file upload permissions granted when `send_photo`, `send_file`, or `send_voice` are used
 - message reaction permission granted when `message_react` is used
 - the app has been added to the target group chats or users can reach it in private chat
 
@@ -283,7 +283,7 @@ Resolved on 2026-05-19:
 
 - The official SDK WebSocket client replaced webhook ingress.
 - Webhook ingress was deleted without compatibility mode.
-- Lark gained Telegram-equivalent channel tools in the same work: `lark_send_file`, `lark_send_photo`, `lark_send_voice`, and `message_react`.
+- Lark gained Telegram-equivalent channel tools in the same work: `send_file`, `send_photo`, `send_voice`, and `message_react`.
 
 ## 12. References
 

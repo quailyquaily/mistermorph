@@ -18,7 +18,7 @@ This document describes the built-in and runtime-injected tool parameters curren
   - `todo_update`: runtime-injected, depends on active LLM client/model plus cron/contacts paths from runtime config.
   - `plan_create`: runtime-injected, depends on active LLM client/model.
   - `image_generate`, `image_edit`: per-task runtime tools. They depend on usable image LLM config, `file_cache_dir`, and image intent/retention state.
-  - `telegram_send_voice`, `telegram_send_photo`, `telegram_send_file`: runtime-injected, depend on active Telegram API context/chat metadata.
+  - `send_voice`, `send_photo`, `send_file`: runtime-injected, depend on active Telegram API context/chat metadata.
   - `message_react`: runtime-injected in Telegram and Slack runtimes; params/context differ by channel.
 
 ### 2) ASCII architecture
@@ -85,7 +85,7 @@ Flow notes:
 - Phase C (task shaping):
   - `run`/`serve`/integration run-engine: inject runtime tools directly into execution registry.
   - `telegram`/`slack`/`line`: copy base registry per task, re-register runtime tools on task registry, then bind task context with `SetTodoUpdateToolAddContext`.
-  - Telegram-only task registry adds `telegram_send_voice`, `telegram_send_photo`, `telegram_send_file`, `message_react`.
+  - Telegram-only task registry adds `send_voice`, `send_photo`, `send_file`, `message_react`.
   - Slack task registry may add `message_react` when runtime context allows.
 - Image-tool retention:
   - console web topics and CLI chat sessions keep image tools after the first image-intent task.
@@ -348,7 +348,7 @@ Pass `path` to send one file. The destination is chosen exactly as for text; the
 | Lark | File message to the chat or user | Always a separate message after the file |
 | Discord | Attachment in the channel, opening a DM when needed; at most 10 MiB | Attached up to 2,000 characters; longer text follows as a message |
 | Mixin | Data attachment in the conversation | Always a separate message after the file |
-| WeChat, WhatsApp | Through the running channel runtime, as `wechat_send_file` / `whatsapp_send_file` do (images and videos as media) | As their file transports handle it |
+| WeChat, WhatsApp | Through the running channel runtime, as `send_file` / `send_file` do (images and videos as media) | As their file transports handle it |
 | LINE | Not supported; the call fails | |
 
 - With several contacts, each planned destination gets one upload, and mentions are kept in its caption.
@@ -498,7 +498,7 @@ Constraints:
 - Current-turn channel image attachments are exposed to the model as `file_cache_dir/...` aliases when available.
 - Successful `image_generate` and `image_edit` calls set the current session active image when the runtime has a conversation scope.
 
-## `telegram_send_file`
+## `send_file` (Telegram)
 
 Purpose: send a local cached file (document) to the current Telegram chat.
 
@@ -517,7 +517,7 @@ Constraints:
 - Only files under `file_cache_dir` can be sent; directories return errors.
 - File size is limited by tool cap (currently 20 MiB by default).
 
-## `telegram_send_photo`
+## `send_photo` (Telegram)
 
 Purpose: send a local cached image to the current Telegram chat as an inline photo.
 
@@ -534,9 +534,9 @@ Constraints:
 - `path` supports `file_cache_dir/<path>` alias form.
 - Only files under `file_cache_dir` can be sent; directories return errors.
 - File size is limited by tool cap (currently 20 MiB by default).
-- This tool sends the image as an inline Telegram photo; use `telegram_send_file` when the user should receive it as a document.
+- This tool sends the image as an inline Telegram photo; use `send_file` when the user should receive it as a document.
 
-## `telegram_send_voice`
+## `send_voice` (Telegram)
 
 Purpose: send a Telegram voice message from a local voice file.
 

@@ -178,7 +178,7 @@ func runTask(ctx context.Context, rt *taskruntime.Runtime, env taskEnv, j dmJob,
 		send := func(sendCtx context.Context, path, filename, message string) error {
 			return env.sendFile(sendCtx, j.AccountID, j.PeerID, outboundFile(path, filename, message))
 		}
-		if err := registry.Replace(dmtools.NewSendFileTool(string(env.channel), platformName(env.channel), send, j.FileCacheDir, env.maxFileBytes)); err != nil {
+		if err := registry.Replace(dmtools.NewSendFileTool(platformName(env.channel), send, j.FileCacheDir, env.maxFileBytes)); err != nil {
 			return taskResult{}, err
 		}
 	}

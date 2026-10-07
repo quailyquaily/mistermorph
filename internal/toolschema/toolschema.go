@@ -81,23 +81,24 @@ func Build() Catalog {
 			mixintools.NewSendAttachmentTool(nil, "", "", "", 0, mixintools.AttachmentPhoto),
 			mixintools.NewSendAttachmentTool(nil, "", "", "", 0, mixintools.AttachmentAudio),
 		},
-		"wechat":   {dmtools.NewSendFileTool("wechat", "WeChat", nil, "", 0)},
-		"whatsapp": {dmtools.NewSendFileTool("whatsapp", "WhatsApp", nil, "", 0)},
+		"wechat":   {dmtools.NewSendFileTool("WeChat", nil, "", 0)},
+		"whatsapp": {dmtools.NewSendFileTool("WhatsApp", nil, "", 0)},
 	}
 
 	out := Catalog{Tools: map[string]Tool{}, Channels: map[string][]Tool{}}
 	for _, tool := range general {
-		out.Tools[tool.Name()] = describe(tool)
+		out.Tools[tool.Name()] = Describe(tool)
 	}
 	for channel, list := range channels {
 		for _, tool := range list {
-			out.Channels[channel] = append(out.Channels[channel], describe(tool))
+			out.Channels[channel] = append(out.Channels[channel], Describe(tool))
 		}
 	}
 	return out
 }
 
-func describe(tool tools.Tool) Tool {
+// Describe reads a tool's name, description and parameter schema.
+func Describe(tool tools.Tool) Tool {
 	schema := json.RawMessage(strings.TrimSpace(tool.ParameterSchema()))
 	if !json.Valid(schema) {
 		schema = json.RawMessage(`{}`)

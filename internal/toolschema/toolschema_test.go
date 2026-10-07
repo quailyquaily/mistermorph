@@ -21,13 +21,13 @@ func TestBuildListsEveryToolOnTheToolsPage(t *testing.T) {
 	}
 	channels := map[string][]string{
 		"console":  {"skill_install_preview", "skill_install"},
-		"telegram": {"telegram_send_file", "telegram_send_photo", "telegram_send_voice", "message_react"},
-		"slack":    {"slack_send_file", "message_react"},
-		"lark":     {"lark_send_file", "lark_send_photo", "lark_send_voice", "message_react"},
-		"discord":  {"discord_send_file", "message_react"},
-		"mixin":    {"mixin_send_file", "mixin_send_photo", "mixin_send_audio"},
-		"wechat":   {"wechat_send_file"},
-		"whatsapp": {"whatsapp_send_file"},
+		"telegram": {"send_file", "send_photo", "send_voice", "message_react"},
+		"slack":    {"send_file", "message_react"},
+		"lark":     {"send_file", "send_photo", "send_voice", "message_react"},
+		"discord":  {"send_file", "message_react"},
+		"mixin":    {"send_file", "send_photo", "send_voice"},
+		"wechat":   {"send_file"},
+		"whatsapp": {"send_file"},
 	}
 	for channel, names := range channels {
 		got := catalog.Channels[channel]

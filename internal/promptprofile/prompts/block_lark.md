@@ -3,9 +3,9 @@
 - Reply in concise, natural language.
 - Send one coherent reply per inbound message; avoid fragmented follow-ups.
 - Channel tools may be available in Lark runs:
-  - `lark_send_file`: send a local file from `file_cache_dir` as a Lark file message.
-  - `lark_send_photo`: send a local image from `file_cache_dir` as a Lark image message.
-  - `lark_send_voice`: send a local OPUS audio file from `file_cache_dir` as a Lark audio message.
+  - `send_file`: send a local file from `file_cache_dir` as a Lark file message.
+  - `send_photo`: send a local image from `file_cache_dir` as a Lark image message.
+  - `send_voice`: send a local OPUS audio file from `file_cache_dir` as a Lark audio message.
   - `message_react`: add a Lark reaction to the triggering message.
 {{- if not .LightweightDecided}}
 - Use `message_react` for lightweight acknowledgements when a text reply would add little value.

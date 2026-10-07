@@ -45,7 +45,7 @@ func NewSendFileTool(api API, chatID int64, messageThreadID int64, cacheDir stri
 	}
 }
 
-func (t *SendFileTool) Name() string { return "telegram_send_file" }
+func (t *SendFileTool) Name() string { return "send_file" }
 
 func (t *SendFileTool) Description() string {
 	return "Sends a local file (from file_cache_dir) back to the current chat as a document. If you need more advanced behavior, describe it in text instead."
@@ -76,7 +76,7 @@ func (t *SendFileTool) ParameterSchema() string {
 
 func (t *SendFileTool) Execute(ctx context.Context, params map[string]any) (string, error) {
 	if t == nil || t.api == nil {
-		return "", fmt.Errorf("telegram_send_file is disabled")
+		return "", fmt.Errorf("send_file is disabled")
 	}
 	rawPath, _ := params["path"].(string)
 	rawPath = strings.TrimSpace(rawPath)
