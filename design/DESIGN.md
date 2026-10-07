@@ -136,8 +136,7 @@ Rinkō is the exception: its UI is set entirely in Geist Mono, like a terminal.
 
 ## 7. The UI
 
-The mockups in [`ui/`](ui/) show the console's chat screen in all seven colourways. They are a specification, not yet
-an implementation.
+The console's themes in all seven colourways. They are a specification, not yet an implementation.
 
 ### Tokens
 
@@ -158,8 +157,6 @@ an implementation.
 | `danger` | Destructive, errors | `#B8412D` | `#B8412D` | `#E0694F` | `#FF3D7F` | `#FF6B5B` | `#FF2E8A` | `#FF4D8D` |
 | `ok` | Healthy status | `#3F6D5E` | `#2F7A62` | `#7FB89E` | `#22F2D0` | `#7CFFC4` | `#1FE5FF` | `#4DF3FF` |
 | `warn` | Pending, medium risk | `#B7791F` | `#A86A12` | `#D9A441` | `#FFC857` | `#FFB547` | `#FFC24D` | `#FFC24D` |
-
-The full set, including the sidebar's own text colours, is in [`ui/themes.json`](ui/themes.json).
 
 ### Contrast
 

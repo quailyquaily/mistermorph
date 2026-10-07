@@ -208,5 +208,215 @@
   "svg": "icons/denko/icon-16.svg",
   "png": "icons/denko/icon-16.png",
   "size": 16
+ },
+ {
+  "svg": "icons/night/icon-circle-1024.svg",
+  "png": "icons/night/icon-circle-1024.png",
+  "size": 1024
+ },
+ {
+  "svg": "icons/night/icon-circle-256.svg",
+  "png": "icons/night/icon-circle-256.png",
+  "size": 256
+ },
+ {
+  "svg": "icons/night/icon-circle-128.svg",
+  "png": "icons/night/icon-circle-128.png",
+  "size": 128
+ },
+ {
+  "svg": "icons/night/icon-circle-64.svg",
+  "png": "icons/night/icon-circle-64.png",
+  "size": 64
+ },
+ {
+  "svg": "icons/night/icon-circle-32.svg",
+  "png": "icons/night/icon-circle-32.png",
+  "size": 32
+ },
+ {
+  "svg": "icons/night/icon-circle-16.svg",
+  "png": "icons/night/icon-circle-16.png",
+  "size": 16
+ },
+ {
+  "svg": "icons/paper/icon-circle-1024.svg",
+  "png": "icons/paper/icon-circle-1024.png",
+  "size": 1024
+ },
+ {
+  "svg": "icons/paper/icon-circle-256.svg",
+  "png": "icons/paper/icon-circle-256.png",
+  "size": 256
+ },
+ {
+  "svg": "icons/paper/icon-circle-128.svg",
+  "png": "icons/paper/icon-circle-128.png",
+  "size": 128
+ },
+ {
+  "svg": "icons/paper/icon-circle-64.svg",
+  "png": "icons/paper/icon-circle-64.png",
+  "size": 64
+ },
+ {
+  "svg": "icons/paper/icon-circle-32.svg",
+  "png": "icons/paper/icon-circle-32.png",
+  "size": 32
+ },
+ {
+  "svg": "icons/paper/icon-circle-16.svg",
+  "png": "icons/paper/icon-circle-16.png",
+  "size": 16
+ },
+ {
+  "svg": "icons/aojashin/icon-circle-1024.svg",
+  "png": "icons/aojashin/icon-circle-1024.png",
+  "size": 1024
+ },
+ {
+  "svg": "icons/aojashin/icon-circle-256.svg",
+  "png": "icons/aojashin/icon-circle-256.png",
+  "size": 256
+ },
+ {
+  "svg": "icons/aojashin/icon-circle-128.svg",
+  "png": "icons/aojashin/icon-circle-128.png",
+  "size": 128
+ },
+ {
+  "svg": "icons/aojashin/icon-circle-64.svg",
+  "png": "icons/aojashin/icon-circle-64.png",
+  "size": 64
+ },
+ {
+  "svg": "icons/aojashin/icon-circle-32.svg",
+  "png": "icons/aojashin/icon-circle-32.png",
+  "size": 32
+ },
+ {
+  "svg": "icons/aojashin/icon-circle-16.svg",
+  "png": "icons/aojashin/icon-circle-16.png",
+  "size": 16
+ },
+ {
+  "svg": "icons/suimen/icon-circle-1024.svg",
+  "png": "icons/suimen/icon-circle-1024.png",
+  "size": 1024
+ },
+ {
+  "svg": "icons/suimen/icon-circle-256.svg",
+  "png": "icons/suimen/icon-circle-256.png",
+  "size": 256
+ },
+ {
+  "svg": "icons/suimen/icon-circle-128.svg",
+  "png": "icons/suimen/icon-circle-128.png",
+  "size": 128
+ },
+ {
+  "svg": "icons/suimen/icon-circle-64.svg",
+  "png": "icons/suimen/icon-circle-64.png",
+  "size": 64
+ },
+ {
+  "svg": "icons/suimen/icon-circle-32.svg",
+  "png": "icons/suimen/icon-circle-32.png",
+  "size": 32
+ },
+ {
+  "svg": "icons/suimen/icon-circle-16.svg",
+  "png": "icons/suimen/icon-circle-16.png",
+  "size": 16
+ },
+ {
+  "svg": "icons/rinko/icon-circle-1024.svg",
+  "png": "icons/rinko/icon-circle-1024.png",
+  "size": 1024
+ },
+ {
+  "svg": "icons/rinko/icon-circle-256.svg",
+  "png": "icons/rinko/icon-circle-256.png",
+  "size": 256
+ },
+ {
+  "svg": "icons/rinko/icon-circle-128.svg",
+  "png": "icons/rinko/icon-circle-128.png",
+  "size": 128
+ },
+ {
+  "svg": "icons/rinko/icon-circle-64.svg",
+  "png": "icons/rinko/icon-circle-64.png",
+  "size": 64
+ },
+ {
+  "svg": "icons/rinko/icon-circle-32.svg",
+  "png": "icons/rinko/icon-circle-32.png",
+  "size": 32
+ },
+ {
+  "svg": "icons/rinko/icon-circle-16.svg",
+  "png": "icons/rinko/icon-circle-16.png",
+  "size": 16
+ },
+ {
+  "svg": "icons/bunko/icon-circle-1024.svg",
+  "png": "icons/bunko/icon-circle-1024.png",
+  "size": 1024
+ },
+ {
+  "svg": "icons/bunko/icon-circle-256.svg",
+  "png": "icons/bunko/icon-circle-256.png",
+  "size": 256
+ },
+ {
+  "svg": "icons/bunko/icon-circle-128.svg",
+  "png": "icons/bunko/icon-circle-128.png",
+  "size": 128
+ },
+ {
+  "svg": "icons/bunko/icon-circle-64.svg",
+  "png": "icons/bunko/icon-circle-64.png",
+  "size": 64
+ },
+ {
+  "svg": "icons/bunko/icon-circle-32.svg",
+  "png": "icons/bunko/icon-circle-32.png",
+  "size": 32
+ },
+ {
+  "svg": "icons/bunko/icon-circle-16.svg",
+  "png": "icons/bunko/icon-circle-16.png",
+  "size": 16
+ },
+ {
+  "svg": "icons/denko/icon-circle-1024.svg",
+  "png": "icons/denko/icon-circle-1024.png",
+  "size": 1024
+ },
+ {
+  "svg": "icons/denko/icon-circle-256.svg",
+  "png": "icons/denko/icon-circle-256.png",
+  "size": 256
+ },
+ {
+  "svg": "icons/denko/icon-circle-128.svg",
+  "png": "icons/denko/icon-circle-128.png",
+  "size": 128
+ },
+ {
+  "svg": "icons/denko/icon-circle-64.svg",
+  "png": "icons/denko/icon-circle-64.png",
+  "size": 64
+ },
+ {
+  "svg": "icons/denko/icon-circle-32.svg",
+  "png": "icons/denko/icon-circle-32.png",
+  "size": 32
+ },
+ {
+  "svg": "icons/denko/icon-circle-16.svg",
+  "png": "icons/denko/icon-circle-16.png",
+  "size": 16
  }
 ]

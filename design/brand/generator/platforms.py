@@ -1,4 +1,4 @@
-"""The app icon for each platform, drawn to that platform's spec from the per-size drawings.
+"""The app icon for each platform, drawn to that platform's spec from the per-size circle drawings.
 
     python3 design/brand/generator/platforms.py            # SVG sources and the PNG job list
     node design/brand/generator/render.mjs design/brand/generator/platform-jobs.json .
@@ -7,14 +7,17 @@
 Every bitmap uses the drawing made for its size, never a scaled-down large one:
 
 - macOS (desktop/wails/packaging/icons/macos): the iconset for iconutil, 16 to 1024 px. Big Sur's
-  icon grid: the rounded tile is 824/1024 of the canvas, centred, over a soft shadow.
+  icon grid: the tile is 824/1024 of the canvas, centred, over a soft shadow.
 - Windows (desktop/wails/packaging/icons/windows/appicon.ico): 16, 20, 24, 32, 40, 48, 64, 96 and
   256 px, the tile filling the canvas with a margin of 1/32.
 - Linux (desktop/wails/packaging/icons/linux/hicolor): the freedesktop icon theme's sizes, 16 to
   512 px, plus scalable/apps/icon.svg; the tile fills the canvas with a margin of 1/32.
-- Web (web/console/public): favicon.ico (16, 32, 48), the rounded tile for the manifest's "any"
-  icons, full-bleed squares for its "maskable" icons and for apple-touch-icon.png (both masked
-  by the platform).
+- Web (web/console/public): favicon.ico (16, 32, 48) and the manifest's "any" icons; full-bleed
+  squares for its "maskable" icons and for apple-touch-icon.png (both masked by the platform), the
+  circle inside the safe zone.
+- Console SVGs (web/console): the logos and favicon.svg, the drawing at 64 (they show below 64 CSS
+  px on screens that are mostly retina); favicon.svg is Aojashin in light mode, Suimen in dark.
+  safari-pinned-tab.svg is the 16 drawing's lines in one colour.
 """
 import json, os, shutil, struct, sys
 
@@ -22,7 +25,7 @@ sys.dont_write_bytecode = True
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
-import cyber  # noqa: E402
+import circle  # noqa: E402
 
 ROOT = os.path.abspath(os.path.join(HERE, '..', '..', '..'))
 BUILD = os.path.join(ROOT, 'design', 'brand', 'platforms', '.build')
@@ -51,11 +54,14 @@ def drawing_for(pixels):
 
 
 def tile(pixels, square=False):
-    """The icon at the drawing for its size, in the 100-unit box."""
-    label = drawing_for(pixels)
-    if label in ('32', '16'):
-        return cyber.small(label, COLOURWAY, rx=0 if square else 22.4)
-    return cyber.cyber(label, COLOURWAY, square=square)
+    """The circle icon at the drawing for its size, in the 100-unit box. A square is for a platform that masks the
+    icon to its own shape: the ground fills it, and the circle shrinks to 0.9 so the ghost (radius 43 x 0.9 = 38.7)
+    stays inside the maskable safe zone (radius 40)."""
+    drawing = circle.circle_icon(drawing_for(pixels), COLOURWAY)
+    if not square:
+        return drawing
+    return (f'<rect width="100" height="100" fill="{circle.COLOURS[COLOURWAY]["bg"]}"></rect>'
+            f'<g transform="translate(5 5) scale(0.9)">{drawing}</g>')
 
 
 def svg(size, body, defs=''):
@@ -99,6 +105,28 @@ def plan():
     return jobs
 
 
+def console_svgs():
+    """The console's own SVGs: the logos and the favicon that follows the colour scheme."""
+    attrs = 'viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Mister Morph"'
+    light, dark = circle.circle_icon('64', 'aojashin'), circle.circle_icon('64', 'suimen')
+    files = {
+        os.path.join(WEB_ASSETS, 'app_logo.svg'): f'<svg width="512" height="512" {attrs}>{light}</svg>',
+        os.path.join(WEB_ASSETS, 'app_logo_current.svg'):
+            f'<svg class="sidebar-brand-logo" width="512" height="512" {attrs}>{light}</svg>',
+        os.path.join(WEB, 'favicon.svg'):
+            f'<svg width="32" height="32" {attrs}><style>.dark{{display:none}}@media (prefers-color-scheme: dark)'
+            f'{{.light{{display:none}}.dark{{display:inline}}}}</style><g class="light">{light}</g>'
+            f'<g class="dark">{dark}</g></svg>',
+    }
+    # Safari's pinned tab is a one-colour silhouette: the lines of the 16 drawing, without the panel.
+    lines = circle.circle_icon('16', 'aojashin').split('</circle>', 1)[1]
+    lines = lines.replace(circle.COLOURS['aojashin']['line'], '#000')
+    files[os.path.join(WEB, 'safari-pinned-tab.svg')] = f'<svg width="16" height="16" {attrs}>{lines}</svg>'
+    for path, text in files.items():
+        with open(path, 'w') as fh:
+            fh.write(text + '\n')
+
+
 def write_sources():
     shutil.rmtree(BUILD, ignore_errors=True)
     listed = []
@@ -116,7 +144,8 @@ def write_sources():
     os.makedirs(os.path.dirname(scalable), exist_ok=True)
     with open(scalable, 'w') as fh:
         fh.write(filled(512).replace('width="512" height="512"', 'width="512" height="512" role="img" aria-label="Mister Morph"'))
-    print(f'wrote {len(listed)} jobs to platform-jobs.json and the scalable Linux icon')
+    console_svgs()
+    print(f'wrote {len(listed)} jobs to platform-jobs.json, the scalable Linux icon and the console SVGs')
 
 
 def ico(pngs, path):

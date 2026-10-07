@@ -10,6 +10,7 @@ sys.dont_write_bytecode = True
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
+import circle  # noqa: E402
 import cyber  # noqa: E402
 import meisai  # noqa: E402
 import sizes  # noqa: E402
@@ -65,6 +66,12 @@ def main():
         for label in SIZES:
             rel = f'icons/{cw}/icon-{label}.svg'
             write(rel, doc(icon(cw, label), int(label)))
+            jobs.append({'svg': rel, 'png': rel[:-4] + '.png', 'size': int(label)})
+    # The circle alternative, beside the regular icons: a round panel, no field texture.
+    for cw in circle.COLOURWAYS:
+        for label in SIZES:
+            rel = f'icons/{cw}/icon-circle-{label}.svg'
+            write(rel, doc(circle.circle_icon(label, cw), int(label)))
             jobs.append({'svg': rel, 'png': rel[:-4] + '.png', 'size': int(label)})
     # Marks: no background, for lockups and inline use.
     write('marks/mark.svg', doc(five('currentColor'), 100))
