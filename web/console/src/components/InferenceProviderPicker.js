@@ -40,6 +40,7 @@ const DEFAULT_PROVIDER_GROUP = "api";
 const PROVIDER_GROUPS = [
   { id: "api", labelKey: "settings_inference_provider_group_api" },
   { id: "account", labelKey: "settings_inference_provider_group_account" },
+  { id: "local_gateway", labelKey: "settings_inference_provider_group_local_gateway" },
   { id: "compatible", labelKey: "settings_inference_provider_group_compatible" },
 ];
 

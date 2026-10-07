@@ -157,7 +157,8 @@
   border-color: color-mix(in srgb, #d97757 38%, var(--line-soft));
 }
 
-.inference-provider-logo.is-xai {
+.inference-provider-logo.is-xai,
+.inference-provider-logo.is-magpie {
   --provider-logo-bg: #fff;
   --provider-logo-size: 72%;
 }

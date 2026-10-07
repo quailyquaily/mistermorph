@@ -2,6 +2,16 @@
 
 这批文件先用于选型和界面预览，不代表每家都已经拿到了完整品牌包。
 
+- `cc-switch.svg`
+  - 来源：`https://github.com/farion1231/cc-switch/blob/efd236a474aee8d31c51c99684a7a6df712ad90e/src/assets/icons/logo.svg`
+  - 说明：CC Switch 官方仓库的彩色 logo，保留原始 SVG。
+  - 许可：MIT，版权及许可全文见 `cc-switch.LICENSE`。
+
+- `magpie.svg`
+  - 来源：`https://github.com/yetone/magpie/blob/8b14afea15322f035f7c68b7e941e0aa68a92f45/internal/gui/assets/icons/magpie.svg`
+  - 说明：Magpie 官方仓库的喜鹊图标，保留原始 SVG。
+  - 许可：MIT，版权及许可全文见 `magpie.LICENSE`。
+
 - `openai.svg`
   - 来源：`https://openai.com/brand/`
   - 说明：自动化访问品牌页时被 Cloudflare 拦截；当前文件取自 `openai.com` 官方页面内嵌的 knot SVG。

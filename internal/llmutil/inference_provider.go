@@ -9,6 +9,8 @@ import (
 
 const (
 	InferenceProviderOpenAI                   = "openai"
+	InferenceProviderMagpie                   = "magpie"
+	InferenceProviderCCSwitch                 = "cc_switch"
 	InferenceProviderOpenAICodex              = "openai_codex"
 	InferenceProviderGemini                   = "gemini"
 	InferenceProviderAnthropic                = "anthropic"
@@ -30,6 +32,8 @@ const (
 
 const (
 	DefaultOpenAIEndpoint         = "https://api.openai.com"
+	DefaultMagpieEndpoint         = "http://127.0.0.1:3425/v1"
+	DefaultCCSwitchEndpoint       = "http://127.0.0.1:15721/v1"
 	DefaultGeminiEndpoint         = "https://generativelanguage.googleapis.com"
 	DefaultAnthropicEndpoint      = "https://api.anthropic.com"
 	DefaultCloudflareEndpoint     = "https://api.cloudflare.com/client/v4"
@@ -56,6 +60,8 @@ type InferenceProviderInfo struct {
 var inferenceProviderRegistry = []InferenceProviderInfo{
 	{Label: "TypeSafe (Evaluate only)", Value: "typesafe", Provider: "typesafe", SupportsCustomAPIBase: true},
 	{Label: "OpenAI", Value: InferenceProviderOpenAI, Provider: "openai_resp", Endpoint: DefaultOpenAIEndpoint},
+	{Label: "Magpie", Value: InferenceProviderMagpie, Provider: "openai_resp", Endpoint: DefaultMagpieEndpoint, SupportsCustomAPIBase: true},
+	{Label: "CC Switch", Value: InferenceProviderCCSwitch, Provider: "openai_resp", Endpoint: DefaultCCSwitchEndpoint, SupportsCustomAPIBase: true},
 	{Label: "OpenAI Codex", Value: InferenceProviderOpenAICodex, Provider: "openai_codex", SupportsCustomAPIBase: true},
 	{Label: "Google Gemini", Value: InferenceProviderGemini, Provider: "gemini", Endpoint: DefaultGeminiEndpoint},
 	{Label: "Claude AI", Value: InferenceProviderAnthropic, Provider: "anthropic", Endpoint: DefaultAnthropicEndpoint},
@@ -103,7 +109,7 @@ func ResolveRuntimeValuesInferenceProvider(values RuntimeValues) (RuntimeValues,
 	values.InferenceProvider = info.Value
 	values.Provider = info.Provider
 	if info.SupportsCustomAPIBase {
-		values.Endpoint = strings.TrimSpace(values.Endpoint)
+		values.Endpoint = firstNonEmpty(values.Endpoint, info.Endpoint)
 	} else {
 		values.Endpoint = strings.TrimSpace(info.Endpoint)
 	}

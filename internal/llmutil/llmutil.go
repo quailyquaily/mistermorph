@@ -266,7 +266,12 @@ func EndpointForProviderWithValues(provider string, values RuntimeValues) string
 
 func APIKeyForProviderWithValues(provider string, values RuntimeValues) string {
 	provider = normalizeProvider(provider)
-	if normalizeInferenceProvider(values.InferenceProvider) == InferenceProviderMisterMorphPro {
+	switch normalizeInferenceProvider(values.InferenceProvider) {
+	case InferenceProviderMagpie:
+		return firstNonEmpty(values.APIKey, "magpie")
+	case InferenceProviderCCSwitch:
+		return firstNonEmpty(values.APIKey, "PROXY_MANAGED")
+	case InferenceProviderMisterMorphPro:
 		if apiKey, ok, err := proaccount.ReadSubscriptionAPIKey(values.FileStateDir); err == nil && ok {
 			return apiKey
 		}

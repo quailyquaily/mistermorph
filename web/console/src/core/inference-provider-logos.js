@@ -5,6 +5,8 @@ import deepseekLogo from "../assets/model-vendors/deepseek.png";
 import geminiLogo from "../assets/model-vendors/gemini.png";
 import groqLogo from "../assets/model-vendors/groq.svg";
 import kimiLogo from "../assets/model-vendors/kimi.svg";
+import magpieLogo from "../assets/model-vendors/magpie.svg";
+import ccSwitchLogo from "../assets/model-vendors/cc-switch.svg";
 import metaLogo from "../assets/model-vendors/meta.svg";
 import openAILogo from "../assets/model-vendors/openai.svg";
 import openRouterLogo from "../assets/model-vendors/openrouter.svg";
@@ -14,6 +16,8 @@ import misterMorphLogo from "../assets/images/app_logo_current.svg";
 
 const INFERENCE_PROVIDER_LOGOS = {
   openai: { src: openAILogo, className: "is-openai" },
+  magpie: { src: magpieLogo, className: "is-magpie" },
+  cc_switch: { src: ccSwitchLogo, className: "is-cc-switch" },
   openai_codex: { src: openAILogo, className: "is-openai" },
   xai_oauth: { src: xAILogo, className: "is-xai" },
   gemini: { src: geminiLogo, className: "is-gemini" },

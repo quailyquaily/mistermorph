@@ -5,6 +5,8 @@ import soulTemplate from "../../../../assets/config/persona/soul.md?raw";
 
 const SETUP_PROVIDER_NONE = "";
 const SETUP_PROVIDER_OPENAI = "openai";
+const SETUP_PROVIDER_MAGPIE = "magpie";
+const SETUP_PROVIDER_CC_SWITCH = "cc_switch";
 const SETUP_PROVIDER_OPENAI_CHAT_COMPATIBLE = "openai_chat_compatible";
 const SETUP_PROVIDER_OPENAI_RESPONSE_COMPATIBLE = "openai_response_compatible";
 const SETUP_PROVIDER_ANTHROPIC_COMPATIBLE = "anthropic_compatible";
@@ -26,6 +28,8 @@ const SETUP_PROVIDER_SAKANA = "sakana";
 
 const SETUP_PROVIDER_OPTIONS = [
   { title: "OpenAI", value: SETUP_PROVIDER_OPENAI, group: "api" },
+  { title: "Magpie", value: SETUP_PROVIDER_MAGPIE, group: "local_gateway" },
+  { title: "CC Switch", value: SETUP_PROVIDER_CC_SWITCH, group: "local_gateway" },
   { title: "OpenAI Codex", value: SETUP_PROVIDER_OPENAI_CODEX, group: "account" },
   { title: "xAI Grok OAuth", value: SETUP_PROVIDER_XAI_OAUTH, group: "account" },
   { title: "Google Gemini", value: SETUP_PROVIDER_GEMINI, group: "api" },
@@ -47,6 +51,8 @@ const SETUP_PROVIDER_OPTIONS = [
 
 const SETUP_PROVIDER_UI_META = {
   [SETUP_PROVIDER_OPENAI]: { supportsModelLookup: true },
+  [SETUP_PROVIDER_MAGPIE]: { supportsCustomAPIBase: true, supportsAPIKey: true, supportsModelLookup: true },
+  [SETUP_PROVIDER_CC_SWITCH]: { supportsCustomAPIBase: true, supportsAPIKey: true, supportsModelLookup: true },
   [SETUP_PROVIDER_OPENAI_CODEX]: { supportsCustomAPIBase: true, supportsAPIKey: true },
   [SETUP_PROVIDER_XAI_OAUTH]: {},
   [SETUP_PROVIDER_GEMINI]: { supportsModelLookup: true },
@@ -190,6 +196,10 @@ function normalizeSetupProviderChoice(provider, options = {}) {
       return SETUP_PROVIDER_OPENAI;
     case SETUP_PROVIDER_OPENAI_RESPONSE_COMPATIBLE:
       return SETUP_PROVIDER_OPENAI_RESPONSE_COMPATIBLE;
+    case SETUP_PROVIDER_MAGPIE:
+      return SETUP_PROVIDER_MAGPIE;
+    case SETUP_PROVIDER_CC_SWITCH:
+      return SETUP_PROVIDER_CC_SWITCH;
     case SETUP_PROVIDER_GEMINI:
       return SETUP_PROVIDER_GEMINI;
     case SETUP_PROVIDER_ANTHROPIC:
@@ -258,6 +268,8 @@ function setupProviderSupportsModelLookup(choice) {
 function setupProviderRequiresAPIKey(choice) {
   const provider = normalizeSetupProviderChoice(choice, { allowEmpty: true });
   return ![
+    SETUP_PROVIDER_MAGPIE,
+    SETUP_PROVIDER_CC_SWITCH,
     SETUP_PROVIDER_CLOUDFLARE,
     SETUP_PROVIDER_BEDROCK,
     SETUP_PROVIDER_OPENAI_CODEX,
@@ -292,6 +304,8 @@ export {
   SETUP_PROVIDER_GROQ,
   SETUP_PROVIDER_KIMI,
   SETUP_PROVIDER_META,
+  SETUP_PROVIDER_MAGPIE,
+  SETUP_PROVIDER_CC_SWITCH,
   SETUP_PROVIDER_MISTERMORPH_PRO,
   SETUP_PROVIDER_OPENAI,
   SETUP_PROVIDER_OPENAI_CHAT_COMPATIBLE,

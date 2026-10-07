@@ -29,7 +29,7 @@ auto_update:
 
 llm:
   # Human-facing inference provider. This derives the protocol provider and API Base.
-  # Supported: openai|openai_codex|gemini|anthropic|bedrock|cloudflare|mistermorph_pro|xai|xai_oauth|meta|deepseek|kimi|openrouter|groq|sakana|openai_chat_compatible|openai_response_compatible|anthropic_compatible.
+  # Supported: openai|magpie|cc_switch|openai_codex|gemini|anthropic|bedrock|cloudflare|mistermorph_pro|xai|xai_oauth|meta|deepseek|kimi|openrouter|groq|sakana|openai_chat_compatible|openai_response_compatible|anthropic_compatible.
   inference_provider: openai
   # Protocol provider. Usually derived from inference_provider; kept for older configs and advanced overrides.
   provider: openai_resp
@@ -40,9 +40,14 @@ llm:
   # context_window_tokens: 100000
   # API Base. Required for *_compatible inference providers. For openai_codex,
   # this is an optional override; empty uses the default Codex endpoint.
+  # For magpie, empty uses http://127.0.0.1:3425/v1 (OpenAI Responses protocol).
+  # For cc_switch, empty uses http://127.0.0.1:15721/v1 (OpenAI Responses protocol).
+  # Enable Codex routing in CC Switch and configure its upstream provider.
   endpoint: "https://api.openai.com"
   # Provider API key. For openai_codex, this is used only when endpoint is
   # also non-empty; otherwise authentication uses Codex OAuth.
+  # For magpie, empty uses "magpie".
+  # For cc_switch, empty uses "PROXY_MANAGED"; CC Switch supplies the upstream key.
   # Use ${ENV_VAR}, ${aws-sm:<secret-id>}, or a Console-managed ${secret:<opaque-id>} reference.
   api_key: "${OPENAI_API_KEY}" # or set via MISTER_MORPH_LLM_API_KEY
   # Optional custom HTTP headers for LLM requests.

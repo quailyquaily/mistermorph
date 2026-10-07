@@ -68,6 +68,52 @@ func TestResolveModelLookup_DerivesBuiltInEndpoint(t *testing.T) {
 	}
 }
 
+func TestResolveModelLookupMagpie(t *testing.T) {
+	for _, tt := range []struct {
+		name, savedKey, requestKey, wantKey string
+	}{
+		{"default", "", "", "magpie"},
+		{"saved", "saved-key", "", "saved-key"},
+		{"explicit", "saved-key", "request-key", "request-key"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ResolveModelLookup(
+				LLMSettingsPayload{LLMConfigFieldsPayload: LLMConfigFieldsPayload{InferenceProvider: "magpie", APIKey: tt.savedKey}},
+				ModelLookupRequest{InferenceProvider: "magpie", APIKey: tt.requestKey}, nil,
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.Provider != "openai_resp" || got.Endpoint != "http://127.0.0.1:3425/v1" || got.APIKey != tt.wantKey {
+				t.Fatalf("unexpected Magpie model lookup: %+v", got)
+			}
+		})
+	}
+}
+
+func TestResolveModelLookupCCSwitch(t *testing.T) {
+	for _, tt := range []struct {
+		name, savedKey, requestKey, wantKey string
+	}{
+		{"default", "", "", "PROXY_MANAGED"},
+		{"saved", "saved-key", "", "saved-key"},
+		{"explicit", "saved-key", "request-key", "request-key"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ResolveModelLookup(
+				LLMSettingsPayload{LLMConfigFieldsPayload: LLMConfigFieldsPayload{InferenceProvider: "cc_switch", APIKey: tt.savedKey}},
+				ModelLookupRequest{InferenceProvider: "cc_switch", APIKey: tt.requestKey}, nil,
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.Provider != "openai_resp" || got.Endpoint != "http://127.0.0.1:15721/v1" || got.APIKey != tt.wantKey {
+				t.Fatalf("unexpected CCSwitch model lookup: %+v", got)
+			}
+		})
+	}
+}
+
 func TestResolveModelLookup_ExplicitEndpointOverridesCurrentInferenceProvider(t *testing.T) {
 	got, err := ResolveModelLookup(
 		LLMSettingsPayload{
