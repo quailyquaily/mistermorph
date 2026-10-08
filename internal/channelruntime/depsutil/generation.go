@@ -100,6 +100,7 @@ func BuildGenerationDependencies(ctx context.Context, base CommonDependencies, r
 		ResolveLLMRouteWithProfile: func(purpose, profile string) (llmutil.ResolvedRoute, error) {
 			return llmutil.ResolveRouteWithProfileOverride(runtimeValues, purpose, profile)
 		},
+		LLMValues: func() (llmutil.RuntimeValues, error) { return runtimeValues, nil },
 		CreateLLMClient: func(route llmutil.ResolvedRoute) (llm.Client, error) {
 			return llmutil.BuildRouteClient(
 				route,

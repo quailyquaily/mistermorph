@@ -122,7 +122,7 @@ func applyPromptCacheOptions(provider, model, cacheTTL, cacheKeyPrefix string, r
 	var target structs.JSONMap
 	normalizedProvider := strings.ToLower(strings.TrimSpace(provider))
 	switch normalizedProvider {
-	case "openai", "openai_resp":
+	case "openai", "openai_resp", "openai_codex":
 		target = openAIOptions
 	case "azure":
 		target = azureOptions
@@ -209,6 +209,21 @@ func explicitCacheTTLForProvider(provider, rawTTL string) string {
 
 func derivedPromptCacheKey(provider, model, cacheKeyPrefix string, req llm.Request) string {
 	switch strings.ToLower(strings.TrimSpace(provider)) {
+	case "openai_codex":
+		// Hash long IDs rather than truncating so conversations sharing a long
+		// prefix remain distinct. Short IDs are passed through unchanged.
+		sessionID := strings.TrimSpace(req.SessionID)
+		if sessionID == "" {
+			return ""
+		}
+		if prefix := strings.TrimSpace(cacheKeyPrefix); prefix != "" {
+			sessionID = prefix + "-" + sessionID
+		}
+		if len(sessionID) <= 64 {
+			return sessionID
+		}
+		sum := sha256.Sum256([]byte(sessionID))
+		return "mm-" + base64.RawURLEncoding.EncodeToString(sum[:])
 	case "openai", "openai_resp", "azure":
 	default:
 		return ""

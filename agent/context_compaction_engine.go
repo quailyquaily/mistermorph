@@ -172,6 +172,7 @@ func (e *Engine) mainRequest(st *engineLoopState, reqTools []llm.Tool) llm.Reque
 		validateResult = validateMainResultAfterReaction
 	}
 	return llm.Request{
+		SessionID:        st.sessionID,
 		Model:            st.model,
 		Scene:            st.scene,
 		Messages:         messages,

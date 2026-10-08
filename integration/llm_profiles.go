@@ -10,12 +10,14 @@ import (
 var errRuntimeNil = fmt.Errorf("runtime is nil")
 
 type LLMProfile struct {
-	Name              string `json:"name"`
-	Source            string `json:"source,omitempty"`
-	InferenceProvider string `json:"inference_provider,omitempty"`
-	Provider          string `json:"provider"`
-	ModelName         string `json:"model_name"`
-	APIBase           string `json:"api_base,omitempty"`
+	Name              string   `json:"name"`
+	Source            string   `json:"source,omitempty"`
+	InferenceProvider string   `json:"inference_provider,omitempty"`
+	Provider          string   `json:"provider"`
+	ModelName         string   `json:"model_name"`
+	APIBase           string   `json:"api_base,omitempty"`
+	Description       string   `json:"description,omitempty"`
+	Abilities         []string `json:"abilities,omitempty"`
 }
 
 type LLMProfileCandidate struct {
@@ -120,5 +122,7 @@ func profileFromInfo(info llmselect.ProfileInfo) LLMProfile {
 		Provider:          strings.TrimSpace(info.Provider),
 		ModelName:         strings.TrimSpace(info.ModelName),
 		APIBase:           strings.TrimSpace(info.APIBase),
+		Description:       strings.TrimSpace(info.Description),
+		Abilities:         append([]string(nil), info.Abilities...),
 	}
 }

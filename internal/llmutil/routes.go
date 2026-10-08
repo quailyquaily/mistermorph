@@ -35,6 +35,10 @@ func (e *MissingProfileError) Error() string {
 }
 
 type ProfileConfig struct {
+	// Description tells the model what the profile is good for when it picks one for a subtask.
+	Description string `mapstructure:"description" yaml:"description"`
+	// Abilities lists what the profile can be used for (see NormalizeAbilities); empty means all.
+	Abilities          []string          `mapstructure:"abilities" yaml:"abilities"`
 	InferenceProvider  string            `mapstructure:"inference_provider" yaml:"inference_provider"`
 	Provider           string            `mapstructure:"provider" yaml:"provider"`
 	Endpoint           string            `mapstructure:"endpoint" yaml:"endpoint"`
@@ -231,6 +235,11 @@ func ResolveProfile(values RuntimeValues, profileName string) (ResolvedProfile, 
 	if err != nil {
 		return ResolvedProfile{}, err
 	}
+	abilities, err := NormalizeAbilities(resolvedValues.Abilities)
+	if err != nil {
+		return ResolvedProfile{}, fmt.Errorf("%s: %w", profileConfigKey(profileName, "abilities"), err)
+	}
+	resolvedValues.Abilities = abilities
 	resolvedValues, err = ResolveRuntimeValuesInferenceProvider(resolvedValues)
 	if err != nil {
 		return ResolvedProfile{}, err
@@ -348,6 +357,8 @@ func loadLLMRoutesFromReader(r ConfigReader) (RoutesConfig, error) {
 }
 
 func normalizeProfileConfig(cfg ProfileConfig) ProfileConfig {
+	cfg.Description = strings.TrimSpace(cfg.Description)
+	cfg.Abilities = append([]string(nil), cfg.Abilities...)
 	cfg.InferenceProvider = strings.TrimSpace(cfg.InferenceProvider)
 	cfg.Provider = strings.TrimSpace(cfg.Provider)
 	cfg.Endpoint = strings.TrimSpace(cfg.Endpoint)
@@ -469,6 +480,9 @@ func runtimeValuesForDefaultProfile(values RuntimeValues) RuntimeValues {
 
 func runtimeValuesForNamedProfile(shared RuntimeValues, profile ProfileConfig) RuntimeValues {
 	out := RuntimeValues{
+		UserAgent:              shared.UserAgent,
+		Description:            profile.Description,
+		Abilities:              append([]string(nil), profile.Abilities...),
 		InferenceProvider:      profile.InferenceProvider,
 		Provider:               profile.Provider,
 		Endpoint:               profile.Endpoint,

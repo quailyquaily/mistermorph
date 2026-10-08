@@ -624,6 +624,7 @@ func (rt *Runtime) sharedDependencies(snap runtimeSnapshot) depsutil.CommonDepen
 		ResolveLLMRouteWithProfile: func(purpose, profile string) (llmutil.ResolvedRoute, error) {
 			return llmutil.ResolveRouteWithProfileOverride(snap.LLMValues, purpose, profile)
 		},
+		LLMValues: func() (llmutil.RuntimeValues, error) { return snap.LLMValues, nil },
 		CreateLLMClient: func(route llmutil.ResolvedRoute) (llm.Client, error) {
 			return rt.buildLLMClient(route, snap.Logger, usageClientWrap)
 		},

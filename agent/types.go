@@ -123,10 +123,12 @@ type Step struct {
 }
 
 type RunOptions struct {
-	Model   string
-	Scene   string
-	History []llm.Message
-	Meta    map[string]any
+	// SessionID identifies the conversation for provider caching across runs.
+	SessionID string
+	Model     string
+	Scene     string
+	History   []llm.Message
+	Meta      map[string]any
 	// CurrentMessage, when set, is appended as the final user turn after meta and history.
 	CurrentMessage *llm.Message
 	// OnStream receives provider stream events for each model call in this run.

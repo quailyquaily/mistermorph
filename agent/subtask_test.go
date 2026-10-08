@@ -20,10 +20,12 @@ func (noopSubtaskClient) Chat(context.Context, llm.Request) (llm.Result, error) 
 type stubSubtaskRunner struct {
 	req    SubtaskRequest
 	result *SubtaskResult
+	called bool
 }
 
 func (s *stubSubtaskRunner) RunSubtask(_ context.Context, req SubtaskRequest) (*SubtaskResult, error) {
 	s.req = req
+	s.called = true
 	return s.result, nil
 }
 
@@ -162,7 +164,7 @@ func TestSpawnToolUsesInjectedRunner(t *testing.T) {
 	out, err := tool.Execute(context.Background(), map[string]any{
 		"task":            "fetch something",
 		"tools":           []any{"url_fetch"},
-		"model":           "gpt-5.4",
+		"model_profile":   "fast",
 		"output_schema":   "subtask.test.v1",
 		"observe_profile": "web_extract",
 	})
@@ -173,8 +175,8 @@ func TestSpawnToolUsesInjectedRunner(t *testing.T) {
 	if runner.req.Task != "fetch something" {
 		t.Fatalf("runner task = %q, want fetch something", runner.req.Task)
 	}
-	if runner.req.Model != "gpt-5.4" {
-		t.Fatalf("runner model = %q, want gpt-5.4", runner.req.Model)
+	if runner.req.ModelProfile != "fast" {
+		t.Fatalf("runner model profile = %q, want fast", runner.req.ModelProfile)
 	}
 	if runner.req.OutputSchema != "subtask.test.v1" {
 		t.Fatalf("runner output schema = %q, want subtask.test.v1", runner.req.OutputSchema)

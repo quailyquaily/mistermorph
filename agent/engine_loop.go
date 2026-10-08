@@ -19,11 +19,12 @@ import (
 )
 
 type engineLoopState struct {
-	runID   string
-	model   string
-	scene   string
-	log     *slog.Logger
-	toolLog *slog.Logger
+	sessionID string
+	runID     string
+	model     string
+	scene     string
+	log       *slog.Logger
+	toolLog   *slog.Logger
 
 	messages                   []llm.Message
 	agentCtx                   *Context
@@ -985,6 +986,7 @@ func (e *Engine) guardDecide(ctx context.Context, st *engineLoopState, step int,
 func (e *Engine) requestToolApproval(ctx context.Context, st *engineLoopState, step int, pending pendingToolSnapshot, pre guard.Result) (*Final, error) {
 	pending.ApprovalIdentity = "tool_" + newRunID()
 	rs := resumeState{
+		SessionID:               st.sessionID,
 		RunID:                   st.runID,
 		Model:                   st.model,
 		Scene:                   st.scene,

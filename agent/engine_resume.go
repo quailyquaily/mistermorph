@@ -142,6 +142,7 @@ func (e *Engine) resume(ctx context.Context, approvalRequestID string, opts RunO
 	}
 
 	return e.runLoop(ctx, &engineLoopState{
+		sessionID:               rs.SessionID,
 		runID:                   rs.RunID,
 		model:                   rs.Model,
 		scene:                   rs.Scene,

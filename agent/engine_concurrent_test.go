@@ -494,55 +494,6 @@ func TestSpawnTool_MissingTaskError(t *testing.T) {
 	}
 }
 
-func TestSpawnTool_SubClientFactory_Called(t *testing.T) {
-	t.Parallel()
-
-	reg := tools.NewRegistry()
-	reg.Register(&mockTool{name: "read_file", result: "content"})
-
-	parentClient := newMockClient()
-	subClient := newMockClient(finalResponse("sub done"))
-
-	var factoryPrefix string
-	cleanupCalled := false
-
-	cfg := baseCfg()
-	cfg.DefaultModel = "test-model"
-	e := New(parentClient, reg, cfg, DefaultPromptSpec(),
-		WithSubClientFactory(func(prefix string) (llm.Client, func()) {
-			factoryPrefix = prefix
-			return subClient, func() { cleanupCalled = true }
-		}),
-	)
-
-	spawnT, _ := e.registry.Get("spawn")
-	result, err := spawnT.Execute(context.Background(), map[string]any{
-		"task":  "test sub-client factory",
-		"tools": []any{"read_file"},
-	})
-	if err != nil {
-		t.Fatalf("spawn Execute error: %v", err)
-	}
-	if result == "" {
-		t.Fatal("expected non-empty result")
-	}
-	if factoryPrefix != "spawn" {
-		t.Fatalf("factory prefix = %q, want %q", factoryPrefix, "spawn")
-	}
-	if !cleanupCalled {
-		t.Fatal("cleanup function should have been called after sub-agent completes")
-	}
-
-	parentCalls := parentClient.allCalls()
-	if len(parentCalls) != 0 {
-		t.Fatalf("parent client should not have been called, got %d calls", len(parentCalls))
-	}
-	subCalls := subClient.allCalls()
-	if len(subCalls) == 0 {
-		t.Fatal("sub client should have been called")
-	}
-}
-
 func TestOnToolStart_CalledBeforeExecution(t *testing.T) {
 	t.Parallel()
 
@@ -616,32 +567,5 @@ func TestOnToolStart_NilIgnored(t *testing.T) {
 	e := New(client, baseRegistry(), baseCfg(), DefaultPromptSpec(), WithOnToolStart(nil))
 	if e.onToolStart != nil {
 		t.Fatal("expected onToolStart to remain nil for nil input")
-	}
-}
-
-func TestSpawnTool_SubClientFactory_Nil_UsesEngineClient(t *testing.T) {
-	t.Parallel()
-
-	reg := tools.NewRegistry()
-	reg.Register(&mockTool{name: "read_file", result: "content"})
-
-	client := newMockClient(finalResponse("done"))
-
-	cfg := baseCfg()
-	cfg.DefaultModel = "test-model"
-	e := New(client, reg, cfg, DefaultPromptSpec())
-
-	spawnT, _ := e.registry.Get("spawn")
-	_, err := spawnT.Execute(context.Background(), map[string]any{
-		"task":  "test no factory",
-		"tools": []any{"read_file"},
-	})
-	if err != nil {
-		t.Fatalf("spawn Execute error: %v", err)
-	}
-
-	calls := client.allCalls()
-	if len(calls) == 0 {
-		t.Fatal("engine client should have been called when no SubClientFactory is set")
 	}
 }

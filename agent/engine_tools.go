@@ -20,9 +20,8 @@ func DefaultEngineToolsConfig() EngineToolsConfig {
 }
 
 type spawnToolDeps struct {
-	LookupTool   func(name string) (tools.Tool, bool)
-	DefaultModel string
-	Runner       SubtaskRunner
+	LookupTool func(name string) (tools.Tool, bool)
+	Runner     SubtaskRunner
 }
 
 type coderToolDeps struct {
@@ -32,13 +31,23 @@ type coderToolDeps struct {
 	PathExtra []string
 }
 
-func registerEngineTools(reg *tools.Registry, cfg EngineToolsConfig, spawnDeps spawnToolDeps, coderDeps coderToolDeps) {
+// registerEngineTools registers the enabled engine tools and returns the prompt blocks that go
+// with them.
+func registerEngineTools(reg *tools.Registry, cfg EngineToolsConfig, spawnDeps spawnToolDeps, coderDeps coderToolDeps, modelProfiles ModelProfileLister) []PromptBlock {
 	if reg == nil {
-		return
+		return nil
 	}
+	var blocks []PromptBlock
 	if cfg.SpawnEnabled || cfg.ToolTriggers[spawnToolName] {
 		if err := reg.Replace(newSpawnTool(spawnDeps)); err != nil {
 			panic(err)
+		}
+		blocks = append(blocks, PromptBlock{Content: subtaskDelegationPromptBlock})
+		if modelProfiles != nil {
+			if err := reg.Replace(newListModelProfilesTool(modelProfiles)); err != nil {
+				panic(err)
+			}
+			blocks = append(blocks, PromptBlock{Content: modelProfilesPromptBlock})
 		}
 	}
 	if cfg.CoderEnabled || cfg.ToolTriggers[coderToolName] {
@@ -48,4 +57,5 @@ func registerEngineTools(reg *tools.Registry, cfg EngineToolsConfig, spawnDeps s
 			panic(err)
 		}
 	}
+	return blocks
 }

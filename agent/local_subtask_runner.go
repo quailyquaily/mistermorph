@@ -19,6 +19,13 @@ func (r *localSubtaskRunner) RunSubtask(ctx context.Context, req SubtaskRequest)
 	if err := ValidateSubtaskStart(ctx); err != nil {
 		return FailedSubtaskResult("", err), nil
 	}
+	target, err := r.subtaskTarget(ctx, req)
+	if err != nil {
+		return FailedSubtaskResult("", err), nil
+	}
+	if target.Close != nil {
+		defer target.Close()
+	}
 
 	taskID, runCtx, meta := PrepareSubtaskContext(ctx, req.Meta)
 	log := r.engine.log
@@ -30,10 +37,11 @@ func (r *localSubtaskRunner) RunSubtask(ctx context.Context, req SubtaskRequest)
 		Profile:    string(NormalizeObserveProfile(string(req.ObserveProfile))),
 		Status:     "running",
 		Text:       req.Task,
-		Model:      req.resolvedModel(r.engine.config.DefaultModel),
+		Model:      target.Model,
 	})
 	if log != nil {
-		log.Info("subtask_start", "task_id", taskID, "mode", localSubtaskMode(req), "output_schema", strings.TrimSpace(req.OutputSchema))
+		log.Info("subtask_start", "task_id", taskID, "mode", localSubtaskMode(req), "output_schema", strings.TrimSpace(req.OutputSchema),
+			"model_profile", strings.TrimSpace(req.ModelProfile), "model", target.Model)
 	}
 
 	var result *SubtaskResult
@@ -45,7 +53,7 @@ func (r *localSubtaskRunner) RunSubtask(ctx context.Context, req SubtaskRequest)
 			result = NormalizeDirectSubtaskResult(taskID, req.OutputSchema, directResult)
 		}
 	} else {
-		result = r.runAgentSubtask(runCtx, meta, taskID, req)
+		result = r.runAgentSubtask(runCtx, meta, taskID, req, target)
 	}
 
 	if log != nil && result != nil {
@@ -65,30 +73,48 @@ func (r *localSubtaskRunner) RunSubtask(ctx context.Context, req SubtaskRequest)
 	return result, nil
 }
 
-func (r *localSubtaskRunner) runAgentSubtask(ctx context.Context, meta map[string]any, taskID string, req SubtaskRequest) *SubtaskResult {
-	client := r.engine.client
-	var cleanup func()
-	if r.engine.subClientFactory != nil {
-		client, cleanup = r.engine.subClientFactory("spawn")
+// subtaskTarget picks the client a subtask runs on: the parent's, or the selected profile's.
+func (r *localSubtaskRunner) subtaskTarget(ctx context.Context, req SubtaskRequest) (SubtaskProfile, error) {
+	profile := strings.TrimSpace(req.ModelProfile)
+	if profile == "" {
+		return SubtaskProfile{
+			Client:                   r.engine.client,
+			Model:                    strings.TrimSpace(r.engine.config.DefaultModel),
+			SystemPromptCacheControl: r.engine.systemPromptCacheControl,
+		}, nil
 	}
-	if cleanup != nil {
-		defer cleanup()
+	if r.engine.subtaskProfileResolver == nil {
+		return SubtaskProfile{}, SubtaskProfileError(profile, fmt.Errorf("model profiles are not supported by this runtime"))
 	}
+	target, err := r.engine.subtaskProfileResolver(ctx, profile)
+	if err != nil {
+		return SubtaskProfile{}, SubtaskProfileError(profile, err)
+	}
+	if target.Client == nil {
+		if target.Close != nil {
+			target.Close()
+		}
+		return SubtaskProfile{}, SubtaskProfileError(profile, fmt.Errorf("no client for this profile"))
+	}
+	target.Model = strings.TrimSpace(target.Model)
+	return target, nil
+}
 
+func (r *localSubtaskRunner) runAgentSubtask(ctx context.Context, meta map[string]any, taskID string, req SubtaskRequest, target SubtaskProfile) *SubtaskResult {
 	subOpts := []Option{WithLogger(r.engine.log)}
 	if r.engine.guard != nil {
 		subOpts = append(subOpts, WithGuard(r.engine.guard))
 	}
-	if r.engine.systemPromptCacheControl != nil {
-		subOpts = append(subOpts, WithSystemPromptCacheControl(r.engine.systemPromptCacheControl))
+	if target.SystemPromptCacheControl != nil {
+		subOpts = append(subOpts, WithSystemPromptCacheControl(target.SystemPromptCacheControl))
 	}
 
-	subEngine := New(client, req.Registry, Config{
+	subEngine := New(target.Client, req.Registry, Config{
 		MaxSteps:          r.engine.config.MaxSteps,
 		MaxTokenBudget:    r.engine.config.MaxTokenBudget,
 		ParseRetries:      r.engine.config.ParseRetries,
 		ToolRepeatLimit:   r.engine.config.ToolRepeatLimit,
-		DefaultModel:      req.resolvedModel(r.engine.config.DefaultModel),
+		DefaultModel:      target.Model,
 		ToolCallTimeout:   r.engine.config.ToolCallTimeout,
 		ContextCompaction: r.engine.config.ContextCompaction,
 	}, r.engine.spec, append(subOpts, WithEngineToolsConfig(EngineToolsConfig{
@@ -97,9 +123,10 @@ func (r *localSubtaskRunner) runAgentSubtask(ctx context.Context, meta map[strin
 	}))...)
 
 	final, _, err := subEngine.Run(ctx, BuildSubtaskTask(req.Task, req.OutputSchema), RunOptions{
-		Model: req.resolvedModel(r.engine.config.DefaultModel),
-		Scene: "spawn.subtask",
-		Meta:  meta,
+		SessionID: taskID,
+		Model:     target.Model,
+		Scene:     "spawn.subtask",
+		Meta:      meta,
 	})
 	if err != nil {
 		return FailedSubtaskResult(taskID, err)
@@ -174,12 +201,4 @@ func NormalizeDirectSubtaskResult(taskID string, outputSchema string, result *Su
 		}
 	}
 	return &out
-}
-
-func (req SubtaskRequest) resolvedModel(defaultModel string) string {
-	model := strings.TrimSpace(req.Model)
-	if model != "" {
-		return model
-	}
-	return strings.TrimSpace(defaultModel)
 }

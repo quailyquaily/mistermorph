@@ -20,6 +20,8 @@ type ProfileInfo struct {
 	Provider          string
 	ModelName         string
 	APIBase           string
+	Description       string
+	Abilities         []string
 }
 
 type CandidateInfo struct {
@@ -157,6 +159,8 @@ func profileInfoFromResolved(name string, source string, values llmutil.RuntimeV
 		Provider:          strings.TrimSpace(cfg.Provider),
 		ModelName:         strings.TrimSpace(cfg.Model),
 		APIBase:           strings.TrimSpace(cfg.Endpoint),
+		Description:       strings.TrimSpace(values.Description),
+		Abilities:         append([]string(nil), values.Abilities...),
 	}
 }
 

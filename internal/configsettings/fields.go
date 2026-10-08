@@ -8,6 +8,7 @@ func AgentFields() []Field {
 		{Path: "llm.provider", Kind: KindString, ApplyMode: ApplyNextGeneration},
 		{Path: "llm.endpoint", Kind: KindString, ApplyMode: ApplyNextGeneration},
 		{Path: "llm.model", Kind: KindString, ApplyMode: ApplyNextGeneration},
+		{Path: "llm.abilities", Kind: KindStringList, ApplyMode: ApplyNextGeneration, Enum: []string{"text", "image", "decision"}},
 		{Path: "llm.context_window_tokens", Kind: KindInt, ApplyMode: ApplyNextGeneration, Min: &zero},
 		{Path: "llm.api_key", Kind: KindString, Sensitive: true, ApplyMode: ApplyNextGeneration},
 		{Path: "llm.headers", Kind: KindStringMap, ApplyMode: ApplyNextGeneration, Default: map[string]string{}},

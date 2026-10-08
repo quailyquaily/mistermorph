@@ -16,6 +16,8 @@ import (
 )
 
 type LLMConfigFieldsUpdate struct {
+	Description            *string            `json:"description,omitempty"`
+	Abilities              *[]string          `json:"abilities,omitempty"`
 	InferenceProvider      *string            `json:"inference_provider,omitempty"`
 	Provider               *string            `json:"provider,omitempty"`
 	Endpoint               *string            `json:"endpoint,omitempty"`

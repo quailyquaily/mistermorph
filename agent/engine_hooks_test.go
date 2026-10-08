@@ -638,7 +638,7 @@ func TestPromptBuilder_DefaultUsedWhenNil(t *testing.T) {
 		t.Fatal("expected at least one LLM call")
 	}
 
-	expected := BuildSystemPrompt(reg, DefaultPromptSpec())
+	expected := BuildSystemPrompt(reg, e.spec)
 	if calls[0].Messages[0].Content != expected {
 		t.Error("expected default BuildSystemPrompt to be used when promptBuilder is nil")
 	}
@@ -666,7 +666,7 @@ func TestRun_AddsSystemPromptCacheControlPart(t *testing.T) {
 		t.Fatal("expected at least one LLM call")
 	}
 
-	expected := BuildSystemPrompt(reg, DefaultPromptSpec())
+	expected := BuildSystemPrompt(reg, e.spec)
 	msg := calls[0].Messages[0]
 	if msg.Content != expected {
 		t.Fatalf("system prompt content = %q, want %q", msg.Content, expected)
@@ -1175,7 +1175,7 @@ func TestNoOptions_BehaviorUnchanged(t *testing.T) {
 	}
 
 	calls := client.allCalls()
-	expected := BuildSystemPrompt(reg, DefaultPromptSpec())
+	expected := BuildSystemPrompt(reg, e.spec)
 	if calls[0].Messages[0].Content != expected {
 		t.Error("expected default prompt when no promptBuilder")
 	}

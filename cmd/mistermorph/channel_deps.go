@@ -37,6 +37,7 @@ func (r channelCommandRuntime) Dependencies(registry *registryRuntimeResolver, g
 			}
 			return llmutil.ResolveRouteWithProfileOverride(values, purpose, profile)
 		},
+		LLMValues:         r.llm.Values,
 		CreateLLMClient:   r.llm.CreateClient,
 		CreateImageClient: r.llm.CreateImageClient,
 		Registry:          registry.Registry,

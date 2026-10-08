@@ -9,6 +9,8 @@ import (
 )
 
 type LLMConfigFieldsPayload struct {
+	Description            string            `json:"description"`
+	Abilities              []string          `json:"abilities"`
 	InferenceProvider      string            `json:"inference_provider"`
 	Provider               string            `json:"provider"`
 	Endpoint               string            `json:"endpoint"`
@@ -72,6 +74,8 @@ func SettingsPayloadFromRuntimeValues(values llmutil.RuntimeValues) LLMSettingsP
 	provider := strings.TrimSpace(displayValues.Provider)
 	payload := LLMSettingsPayload{
 		LLMConfigFieldsPayload: LLMConfigFieldsPayload{
+			Description:            strings.TrimSpace(displayValues.Description),
+			Abilities:              normalizedAbilitiesForDisplay(displayValues.Abilities),
 			InferenceProvider:      strings.TrimSpace(displayValues.InferenceProvider),
 			Provider:               provider,
 			Endpoint:               llmutil.EndpointForProviderWithValues(provider, displayValues),
@@ -141,6 +145,8 @@ func ProfileSettingsPayloadFromConfig(
 	payload := LLMProfileSettingsPayload{
 		Name: strings.TrimSpace(name),
 		LLMConfigFieldsPayload: LLMConfigFieldsPayload{
+			Description:            strings.TrimSpace(cfg.Description),
+			Abilities:              normalizedAbilitiesForDisplay(cfg.Abilities),
 			InferenceProvider:      strings.TrimSpace(cfg.InferenceProvider),
 			Provider:               strings.TrimSpace(cfg.Provider),
 			Endpoint:               strings.TrimSpace(cfg.Endpoint),
@@ -169,6 +175,21 @@ func ProfileSettingsPayloadFromConfig(
 	}
 	payload.LLMConfigFieldsPayload = SanitizeProviderSpecificLLMFields(payload.LLMConfigFieldsPayload, effectiveProvider)
 	return payload
+}
+
+// normalizedAbilitiesForDisplay shows abilities the way they are saved. An unknown value is kept
+// as written, so the person can see and fix it.
+func normalizedAbilitiesForDisplay(raw []string) []string {
+	if normalized, err := llmutil.NormalizeAbilities(raw); err == nil {
+		return normalized
+	}
+	out := make([]string, 0, len(raw))
+	for _, value := range raw {
+		if value = strings.TrimSpace(value); value != "" {
+			out = append(out, value)
+		}
+	}
+	return out
 }
 
 func optionalBoolString(value *bool) string {

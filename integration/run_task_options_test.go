@@ -20,6 +20,9 @@ import (
 
 func TestRunTaskWithOptionsGeneratesIDsAndDoesNotInventTraceOrTopic(t *testing.T) {
 	chat := func(ctx context.Context, req llm.Request) (llm.Result, error) {
+		if req.SessionID != "" {
+			t.Fatalf("invented session ID: %q", req.SessionID)
+		}
 		return llm.Result{Text: `{"type":"final","output":"ok"}`}, nil
 	}
 
@@ -54,6 +57,9 @@ func TestRunTaskWithOptionsGeneratesIDsAndDoesNotInventTraceOrTopic(t *testing.T
 func TestRunTaskWithOptionsInjectsMetaAndPersistsTaskJournal(t *testing.T) {
 	var captured llm.Request
 	chat := func(ctx context.Context, req llm.Request) (llm.Result, error) {
+		if req.SessionID != "integration:topic_explicit" {
+			t.Fatalf("session ID = %q", req.SessionID)
+		}
 		captured = req
 		return llm.Result{Text: `{"type":"final","output":"ok"}`}, nil
 	}

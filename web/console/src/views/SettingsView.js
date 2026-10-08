@@ -245,6 +245,8 @@ function settingsSectionPath(endpointRef, id) {
 
 function buildEmptyLLMForm() {
   return {
+    description: "",
+    abilities: "",
     inference_provider: "",
     provider: "",
     endpoint: "",
@@ -378,6 +380,13 @@ function trimText(value) {
   return String(value || "").trim();
 }
 
+function splitAbilities(value) {
+  return String(value || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 function normalizeText(value) {
   return String(value || "").replace(/\r\n/g, "\n");
 }
@@ -465,6 +474,8 @@ function toolEnabledValue(entry) {
 function serializeLLMProfile(profile) {
   return {
     name: trimText(profile?.name),
+    description: trimText(profile?.description),
+    abilities: trimText(profile?.abilities),
     inference_provider: trimText(profile?.inference_provider),
     provider: trimText(profile?.provider),
     endpoint: trimText(profile?.endpoint),
@@ -500,6 +511,7 @@ function buildLLMSnapshot(state) {
       provider: trimText(state.llm.provider),
       endpoint: trimText(state.llm.endpoint),
       model: trimText(state.llm.model),
+      description: trimText(state.llm.description),
       api_key: trimText(state.llm.api_key),
       bedrock_aws_key: trimText(state.llm.bedrock_aws_key),
       bedrock_aws_secret: trimText(state.llm.bedrock_aws_secret),
@@ -2298,6 +2310,7 @@ const SettingsView = {
       state.llm.provider = typeof llm.provider === "string" ? llm.provider : "";
       state.llm.endpoint = typeof llm.endpoint === "string" ? llm.endpoint : "";
       state.llm.model = typeof llm.model === "string" ? llm.model : "";
+      state.llm.description = typeof llm.description === "string" ? llm.description : "";
       state.llm.context_window_tokens = typeof llm.context_window_tokens === "string" ? llm.context_window_tokens : "";
       state.llm.supports_image_parts = typeof llm.supports_image_parts === "string" ? llm.supports_image_parts : "";
       agentConfigValues.value["llm.supports_image_parts"] = state.llm.supports_image_parts;
@@ -2333,6 +2346,8 @@ const SettingsView = {
             typeof llmProfileSecretFieldsPayload[trimText(profile?.name)] === "object"
               ? llmProfileSecretFieldsPayload[trimText(profile?.name)]
               : {},
+          description: typeof profile?.description === "string" ? profile.description : "",
+          abilities: Array.isArray(profile?.abilities) ? profile.abilities.join(",") : "",
           inference_provider: normalizeSetupProviderChoice(profile?.inference_provider || profile?.provider, { allowEmpty: true }),
           provider: typeof profile?.provider === "string" ? profile.provider : "",
           endpoint: typeof profile?.endpoint === "string" ? profile.endpoint : "",
@@ -2661,6 +2676,8 @@ const SettingsView = {
       const providerRaw = llmFieldEnvRawValue(envManaged, "provider");
       const payload = {
         name: trimText(profile.name),
+        description: trimText(profile.description),
+        abilities: splitAbilities(profile.abilities),
         inference_provider: providerRaw === "" ? inferenceProviderRaw || trimText(profile.inference_provider) : inferenceProviderRaw,
         provider: providerRaw,
         endpoint:
@@ -3676,6 +3693,7 @@ const SettingsView = {
       if (!isLLMFieldEnvManaged(llmEnvManaged.value, "model")) {
         payload.model = trimText(state.llm.model);
       }
+      payload.description = trimText(state.llm.description);
       if (provider === SETUP_PROVIDER_BEDROCK) {
         if (!isLLMFieldEnvManaged(llmEnvManaged.value, "bedrock_aws_key")) {
           payload.bedrock_aws_key = includeSecretValue(

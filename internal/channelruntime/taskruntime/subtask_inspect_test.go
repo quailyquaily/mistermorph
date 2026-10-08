@@ -21,7 +21,7 @@ func TestRuntimeSubtaskInspectionLifecycleAfterCancel(t *testing.T) {
 	}))
 	runtime := &Runtime{Logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
 	result, err := runtime.RunSubtask(ctx, agent.SubtaskRequest{
-		Task: "inspect this task", Model: "test-model",
+		Task: "inspect this task",
 		RunFunc: func(ctx context.Context) (*agent.SubtaskResult, error) {
 			cancel()
 			return nil, ctx.Err()
@@ -33,7 +33,7 @@ func TestRuntimeSubtaskInspectionLifecycleAfterCancel(t *testing.T) {
 	if len(events) != 2 || events[0].Kind != agent.EventKindSubtaskStart || events[1].Kind != agent.EventKindSubtaskDone {
 		t.Fatalf("missing lifecycle events: %+v", events)
 	}
-	if events[0].Text != "inspect this task" || events[0].Model != "test-model" || events[0].RunID != "parent" || events[1].TaskID != result.TaskID {
+	if events[0].Text != "inspect this task" || events[0].RunID != "parent" || events[1].TaskID != result.TaskID {
 		t.Fatalf("missing or incorrect inspection metadata: %+v", events)
 	}
 }

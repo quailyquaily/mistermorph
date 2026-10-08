@@ -615,6 +615,10 @@ func runAwarenessTask(ctx context.Context, d Dependencies, opts awarenessTaskOpt
 		firstNonEmpty(engineToolsConfig.PathRoots.FileStateDir, d.RuntimeToolsConfig.Image.FileStateDir),
 	)
 
+	currentProfile := opts.Route.Profile
+	if useTaskRoute {
+		currentProfile = taskRoute.Profile
+	}
 	engine := agent.New(
 		taskClient,
 		reg,
@@ -625,6 +629,8 @@ func runAwarenessTask(ctx context.Context, d Dependencies, opts awarenessTaskOpt
 		agent.WithEngineToolsConfig(engineToolsConfig),
 		agent.WithSystemPromptCacheControl(systemPromptCacheControl),
 		agent.WithGuard(opts.SharedGuard),
+		agent.WithSubtaskProfileResolver(taskruntime.SubtaskProfileResolver(d)),
+		agent.WithModelProfiles(taskruntime.ModelProfileLister(d, currentProfile)),
 		toolSearchOption,
 		codeModeOption,
 	)

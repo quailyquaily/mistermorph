@@ -19,6 +19,7 @@ var testFields = []Field{
 	{Path: "logging.level", Kind: KindString, ApplyMode: ApplyProcessRestart, Enum: []string{"debug", "info", "warn", "error"}},
 	{Path: "logging.redact_keys", Kind: KindStringList, ApplyMode: ApplyProcessRestart},
 	{Path: "server.auth_token", Kind: KindString, Sensitive: true, ApplyMode: ApplyRuntimeRestart},
+	{Path: "llm.abilities", Kind: KindStringList, ApplyMode: ApplyNextGeneration, Enum: []string{"text", "image"}},
 }
 
 func TestViewReportsDefaultsExplicitValuesAndSecretState(t *testing.T) {
@@ -92,6 +93,7 @@ func TestApplyRejectsUnknownAndInvalidFields(t *testing.T) {
 		{name: "below minimum", update: Update{Changes: map[string]json.RawMessage{"max_steps": json.RawMessage("0")}}},
 		{name: "invalid duration", update: Update{Changes: map[string]json.RawMessage{"timeout": json.RawMessage(`"later"`)}}},
 		{name: "invalid enum", update: Update{Changes: map[string]json.RawMessage{"logging.level": json.RawMessage(`"verbose"`)}}},
+		{name: "invalid list enum", update: Update{Changes: map[string]json.RawMessage{"llm.abilities": json.RawMessage(`["text","txt"]`)}}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

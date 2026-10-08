@@ -135,6 +135,8 @@ type Runtime struct {
 type PromptAugmentFunc func(spec *agent.PromptSpec, reg *tools.Registry)
 
 type RunRequest struct {
+	// SessionID overrides the conversation scope used for provider caching.
+	SessionID                string
 	Task                     string
 	Model                    string
 	Route                    *llmutil.ResolvedRoute
@@ -414,7 +416,14 @@ func (rt *Runtime) Run(ctx context.Context, req RunRequest) (RunResult, error) {
 	defer prepared.close()
 
 	contextCompactionOnly := chatcommands.IsContextCompactCommand(prepared.task)
+	sessionID := strings.TrimSpace(req.SessionID)
+	if sessionID == "" {
+		if scope, ok := topiccontext.ScopeFromContext(ctx); ok {
+			sessionID = scope.ConversationKey
+		}
+	}
 	final, runCtx, err := prepared.engine.Run(ctx, prepared.task, agent.RunOptions{
+		SessionID:                sessionID,
 		Model:                    prepared.model,
 		Scene:                    prepared.scene,
 		History:                  append([]llm.Message(nil), req.History...),
@@ -718,6 +727,11 @@ func (rt *Runtime) prepareRun(ctx context.Context, req RunRequest) (preparedRunt
 		agent.WithSubtaskRunner(boundSubtaskRunner{runtime: rt, route: mainRoute}),
 		agent.WithEngineToolsConfig(engineToolsConfig),
 	}
+	if engineToolsConfig.SpawnEnabled || engineToolsConfig.ToolTriggers["spawn"] {
+		if lister := ModelProfileLister(rt.commonDeps, mainRoute.Profile); lister != nil {
+			engineOpts = append(engineOpts, agent.WithModelProfiles(lister))
+		}
+	}
 	if systemPromptCacheControl != nil {
 		engineOpts = append(engineOpts, agent.WithSystemPromptCacheControl(systemPromptCacheControl))
 	}
@@ -941,6 +955,13 @@ func (rt *Runtime) runSubtask(ctx context.Context, req agent.SubtaskRequest, rou
 	if task == "" && req.RunFunc == nil {
 		return nil, fmt.Errorf("empty subtask")
 	}
+	if profile := strings.TrimSpace(req.ModelProfile); profile != "" && req.RunFunc == nil {
+		selected, err := resolveSubtaskProfileRoute(rt.commonDeps, profile)
+		if err != nil {
+			return agent.FailedSubtaskResult("", agent.SubtaskProfileError(profile, err)), nil
+		}
+		route = &selected
+	}
 
 	taskID, runCtx, meta := agent.PrepareSubtaskContext(ctx, req.Meta)
 	logger := rt.Logger
@@ -951,16 +972,21 @@ func (rt *Runtime) runSubtask(ctx context.Context, req agent.SubtaskRequest, rou
 	if req.RunFunc != nil {
 		mode = "direct"
 	}
+	model := ""
+	if route != nil {
+		model = strings.TrimSpace(route.ClientConfig.Model)
+	}
 	agent.EmitEvent(ctx, nil, agent.Event{
 		Kind:    agent.EventKindSubtaskStart,
 		TaskID:  taskID,
 		Text:    task,
-		Model:   strings.TrimSpace(req.Model),
+		Model:   model,
 		Mode:    mode,
 		Profile: string(agent.NormalizeObserveProfile(string(req.ObserveProfile))),
 		Status:  "running",
 	})
-	logger.Info("subtask_start", "task_id", taskID, "mode", mode, "output_schema", strings.TrimSpace(req.OutputSchema))
+	logger.Info("subtask_start", "task_id", taskID, "mode", mode, "output_schema", strings.TrimSpace(req.OutputSchema),
+		"model_profile", strings.TrimSpace(req.ModelProfile), "model", model)
 
 	var result *agent.SubtaskResult
 	if req.RunFunc != nil {
@@ -972,8 +998,8 @@ func (rt *Runtime) runSubtask(ctx context.Context, req agent.SubtaskRequest, rou
 		}
 	} else {
 		runResult, err := rt.Run(runCtx, RunRequest{
+			SessionID:           taskID,
 			Task:                agent.BuildSubtaskTask(task, req.OutputSchema),
-			Model:               strings.TrimSpace(req.Model),
 			Route:               route,
 			Scene:               "spawn.subtask",
 			Registry:            req.Registry,

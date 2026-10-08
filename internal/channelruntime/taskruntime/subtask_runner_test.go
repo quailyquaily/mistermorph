@@ -30,7 +30,7 @@ func (t stubAllowedSubtaskTool) Execute(context.Context, map[string]any) (string
 
 type subtaskRouteSnapshotParentClient struct {
 	requests      []llm.Request
-	spawnModel    string
+	spawnProfile  string
 	requestedTool string
 }
 
@@ -43,8 +43,8 @@ func (c *subtaskRouteSnapshotParentClient) Chat(_ context.Context, req llm.Reque
 		"task":  "run child task",
 		"tools": []any{c.requestedTool},
 	}
-	if strings.TrimSpace(c.spawnModel) != "" {
-		arguments["model"] = c.spawnModel
+	if strings.TrimSpace(c.spawnProfile) != "" {
+		arguments["model_profile"] = c.spawnProfile
 	}
 	return llm.Result{ToolCalls: []llm.ToolCall{{
 		ID:        "call_spawn",
@@ -128,7 +128,6 @@ func TestPreparedEngineSpawnUsesParentConcreteRouteSnapshot(t *testing.T) {
 		task          string
 		profile       string
 		runID         string
-		spawnModel    string
 		resolvedRoute llmutil.ResolvedRoute
 		wantRoute     llmutil.ResolvedRoute
 	}{
@@ -154,21 +153,11 @@ func TestPreparedEngineSpawnUsesParentConcreteRouteSnapshot(t *testing.T) {
 			resolvedRoute: profileRoute,
 			wantRoute:     profileRoute,
 		},
-		{
-			name:          "explicit child model",
-			task:          "run parent task",
-			profile:       "selected",
-			runID:         "parent-profile-model-override",
-			spawnModel:    "child-model-override",
-			resolvedRoute: profileRoute,
-			wantRoute:     profileRoute,
-		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			parentClient := &subtaskRouteSnapshotParentClient{
-				spawnModel:    tt.spawnModel,
 				requestedTool: "allowed_tool",
 			}
 			childClient := &stubTaskRuntimeClient{result: llm.Result{Text: `{"type":"final","output":"child done"}`}}
@@ -237,9 +226,6 @@ func TestPreparedEngineSpawnUsesParentConcreteRouteSnapshot(t *testing.T) {
 				t.Fatalf("child requests = %d, want 1", len(childClient.requests))
 			}
 			wantChildModel := tt.wantRoute.ClientConfig.Model
-			if tt.spawnModel != "" {
-				wantChildModel = tt.spawnModel
-			}
 			if got := childClient.requests[0].Model; got != wantChildModel {
 				t.Fatalf("child request model = %q, want %q", got, wantChildModel)
 			}
@@ -355,7 +341,6 @@ func TestRunSubtaskReturnsEnvelope(t *testing.T) {
 	reg.Register(stubAllowedSubtaskTool{name: "bash"})
 	result, err := rt.RunSubtask(ctx, agent.SubtaskRequest{
 		Task:         "ping",
-		Model:        "gpt-5.4",
 		OutputSchema: "subtask.test.v1",
 		Registry:     reg,
 	})
@@ -387,8 +372,8 @@ func TestRunSubtaskReturnsEnvelope(t *testing.T) {
 	if got := client.requests[0].Scene; got != "spawn.subtask" {
 		t.Fatalf("request scene = %q, want spawn.subtask", got)
 	}
-	if got := client.requests[0].Model; got != "gpt-5.4" {
-		t.Fatalf("request model = %q, want gpt-5.4", got)
+	if got := client.requests[0].Model; got != "gpt-5.2" {
+		t.Fatalf("request model = %q, want the route's gpt-5.2", got)
 	}
 	if len(client.requests[0].Tools) != 1 || client.requests[0].Tools[0].Name != "bash" {
 		t.Fatalf("request tools = %#v, want only bash", client.requests[0].Tools)

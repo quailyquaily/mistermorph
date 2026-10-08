@@ -26,11 +26,14 @@ type CommonDependencies struct {
 	LogOptions                 func() agent.LogOptions
 	ResolveLLMRoute            func(purpose string) (llmutil.ResolvedRoute, error)
 	ResolveLLMRouteWithProfile func(purpose, profile string) (llmutil.ResolvedRoute, error)
-	CreateLLMClient            func(route llmutil.ResolvedRoute) (llm.Client, error)
-	CreateImageClient          func() (llm.ImageClient, error)
-	Registry                   func() *tools.Registry
-	AwarenessRegistry          func() *tools.Registry
-	ToolTriggers               func(task string) map[string]bool
+	// LLMValues returns the LLM config the routes above resolve from. Spawn subtasks use it to
+	// list model profiles and select one by name; nil turns profile selection off.
+	LLMValues         func() (llmutil.RuntimeValues, error)
+	CreateLLMClient   func(route llmutil.ResolvedRoute) (llm.Client, error)
+	CreateImageClient func() (llm.ImageClient, error)
+	Registry          func() *tools.Registry
+	AwarenessRegistry func() *tools.Registry
+	ToolTriggers      func(task string) map[string]bool
 	// LoadReferencedMCP connects the MCP servers a task references with $mcp_<name> that are not
 	// already loaded, and registers their tools in the task's registry. The returned function
 	// closes them when the task's run ends; it is never nil. A nil LoadReferencedMCP loads nothing.

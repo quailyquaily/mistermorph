@@ -1259,3 +1259,114 @@ func readFileOwnerTestConfigWithSource(t *testing.T, configPath string, source s
 	reader.Set("config", configPath)
 	return reader
 }
+
+func TestFileOwnerReadsAndUpdatesProfileDescriptionAndAbilities(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.yaml")
+	config := `llm:
+  provider: openai
+  model: gpt-main
+  description: Complex analysis.
+  abilities: [text, decision]
+  profiles:
+    fast:
+      provider: openai
+      model: gpt-fast
+      description: Short summaries.
+      abilities: [text]
+`
+	if err := os.WriteFile(configPath, []byte(config), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	backend := &fakeFileOwnerSecretBackend{values: map[string]string{}}
+	owner := NewFileOwner(FileOwnerOptions{
+		ConfigPath:   configPath,
+		Reader:       readFileOwnerTestConfigWithSource(t, configPath, backend),
+		SecretSource: backend,
+		OSStore:      backend,
+	})
+
+	before, err := owner.View(context.Background())
+	if err != nil {
+		t.Fatalf("View() error = %v", err)
+	}
+	if before.LLM.Description != "Complex analysis." || strings.Join(before.LLM.Abilities, ",") != "text,decision" {
+		t.Fatalf("top-level view = description %q abilities %v", before.LLM.Description, before.LLM.Abilities)
+	}
+	profile := before.LLM.Profiles[0]
+	if profile.Description != "Short summaries." || strings.Join(profile.Abilities, ",") != "text" {
+		t.Fatalf("profile view = %#v", profile)
+	}
+
+	profile.Description = "Extraction and classification."
+	profile.Abilities = []string{"Text", "image"}
+	update := LLMProfileUpdate{OriginalName: "fast", LLMProfileSettingsPayload: profile}
+	description := "Hard problems."
+	abilities := []string{}
+	if _, err := owner.Update(context.Background(), AgentSettingsUpdate{LLM: LLMSettingsUpdate{
+		LLMConfigFieldsUpdate: LLMConfigFieldsUpdate{Description: &description, Abilities: &abilities},
+	}}); err != nil {
+		t.Fatalf("Update(top-level) error = %v", err)
+	}
+	if _, err := owner.Update(context.Background(), AgentSettingsUpdate{LLM: LLMSettingsUpdate{Profile: &update}}); err != nil {
+		t.Fatalf("Update(profile) error = %v", err)
+	}
+
+	after, err := owner.View(context.Background())
+	if err != nil {
+		t.Fatalf("View() error = %v", err)
+	}
+	if after.LLM.Description != "Hard problems." || len(after.LLM.Abilities) != 0 {
+		t.Fatalf("top-level after = description %q abilities %v", after.LLM.Description, after.LLM.Abilities)
+	}
+	got := after.LLM.Profiles[0]
+	if got.Description != "Extraction and classification." || strings.Join(got.Abilities, ",") != "text,image" {
+		t.Fatalf("profile after = description %q abilities %v", got.Description, got.Abilities)
+	}
+	raw, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Count(string(raw), "abilities:") != 1 {
+		t.Fatalf("cleared top-level abilities should be removed:\n%s", raw)
+	}
+}
+
+func TestFileOwnerRejectsUnknownAbility(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.yaml")
+	config := `llm:
+  provider: openai
+  model: gpt-main
+  profiles:
+    fast:
+      provider: openai
+      model: gpt-fast
+`
+	if err := os.WriteFile(configPath, []byte(config), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	backend := &fakeFileOwnerSecretBackend{values: map[string]string{}}
+	owner := NewFileOwner(FileOwnerOptions{
+		ConfigPath:   configPath,
+		Reader:       readFileOwnerTestConfigWithSource(t, configPath, backend),
+		SecretSource: backend,
+		OSStore:      backend,
+	})
+	view, err := owner.View(context.Background())
+	if err != nil {
+		t.Fatalf("View() error = %v", err)
+	}
+
+	profile := view.LLM.Profiles[0]
+	profile.Abilities = []string{"txt"}
+	update := LLMProfileUpdate{OriginalName: "fast", LLMProfileSettingsPayload: profile}
+	if _, err := owner.Update(context.Background(), AgentSettingsUpdate{LLM: LLMSettingsUpdate{Profile: &update}}); err == nil || !strings.Contains(err.Error(), "txt") {
+		t.Fatalf("Update(profile) error = %v, want unknown ability error", err)
+	}
+
+	abilities := []string{"txt"}
+	if _, err := owner.Update(context.Background(), AgentSettingsUpdate{LLM: LLMSettingsUpdate{
+		LLMConfigFieldsUpdate: LLMConfigFieldsUpdate{Abilities: &abilities},
+	}}); err == nil || !strings.Contains(err.Error(), "llm.abilities") {
+		t.Fatalf("Update(top-level) error = %v, want llm.abilities error", err)
+	}
+}

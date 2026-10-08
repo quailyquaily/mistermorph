@@ -25,10 +25,11 @@ import {
 } from "../core/setup-contract";
 import InferenceProviderPicker from "./InferenceProviderPicker";
 import SettingSelect from "./SettingSelect";
+import SettingChoices from "./SettingChoices";
 import EnvManagedField from "./EnvManagedField";
 import SecretInput from "./SecretInput";
 import { llmSecretConfigPath } from "../core/secret-storage";
-import { CACHE_TTL_OPTIONS, IMAGE_PARTS_OPTIONS } from "../core/config-options";
+import { CACHE_TTL_OPTIONS, IMAGE_PARTS_OPTIONS, PROFILE_ABILITY_OPTIONS } from "../core/config-options";
 
 const LLMConfigForm = {
   components: {
@@ -36,6 +37,7 @@ const LLMConfigForm = {
     SecretInput,
     InferenceProviderPicker,
     SettingSelect,
+    SettingChoices,
   },
   props: {
     config: {
@@ -308,6 +310,14 @@ const LLMConfigForm = {
       };
     });
 
+    // Abilities are kept in the form as a comma-separated string, like the other fields.
+    const abilityValues = computed(() =>
+      String(props.config?.abilities || "")
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean),
+    );
+
     function updateField(field, value) {
       if (props.readOnly) {
         return;
@@ -370,6 +380,8 @@ const LLMConfigForm = {
       t,
       CACHE_TTL_OPTIONS,
       IMAGE_PARTS_OPTIONS,
+      PROFILE_ABILITY_OPTIONS,
+      abilityValues,
       providerItem,
       providerManagedField,
       effectiveProviderChoice,
@@ -641,6 +653,16 @@ const LLMConfigForm = {
           </QButton>
         </div>
       </div>
+      <div class="settings-field is-wide">
+        <span class="settings-field-label">Description</span>
+        <QInput
+          :modelValue="config.description"
+          placeholder="What this profile is good for"
+          :disabled="busy || readOnly"
+          @update:modelValue="updateField('description', $event)"
+        />
+        <p class="settings-field-note">Shown to the agent when it picks a profile for a subtask.</p>
+      </div>
       </template>
 
       <div v-if="showAdvanced" class="settings-field-row is-wide is-three">
@@ -714,6 +736,17 @@ const LLMConfigForm = {
             :disabled="busy || readOnly"
             @update:modelValue="updateField('azure_deployment', $event)"
           />
+        </div>
+        <div class="settings-field is-wide">
+          <span class="settings-field-label">Abilities</span>
+          <SettingChoices
+            :modelValue="abilityValues"
+            :options="PROFILE_ABILITY_OPTIONS"
+            label="Abilities"
+            :disabled="busy || readOnly"
+            @update:modelValue="updateField('abilities', $event.join(','))"
+          />
+          <p class="settings-field-note">None selected means all. Only profiles with text can run subtasks.</p>
         </div>
         <div class="settings-field">
           <span class="settings-field-label">Supports image parts</span>

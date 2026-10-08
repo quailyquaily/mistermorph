@@ -1135,6 +1135,9 @@ func validateAgentConfigDocument(data []byte, effectiveLLM LLMSettingsPayload, p
 	values.CloudflareAccountID = firstNonEmpty(strings.TrimSpace(effectiveLLM.CloudflareAccountID), values.CloudflareAccountID)
 	values.ReasoningEffortRaw = firstNonEmpty(strings.TrimSpace(effectiveLLM.ReasoningEffort), values.ReasoningEffortRaw)
 	values.ToolsEmulationMode = firstNonEmpty(strings.TrimSpace(effectiveLLM.ToolsEmulationMode), values.ToolsEmulationMode)
+	if _, err := llmutil.NormalizeAbilities(values.Abilities); err != nil {
+		return nil, fmt.Errorf("llm.abilities: %w", err)
+	}
 	if err := validateAgentLLMRoute(values, llmutil.RoutePurposeMainLoop); err != nil {
 		return nil, err
 	}
@@ -1222,6 +1225,12 @@ func agentSettingsTestTargetProfile(req agentSettingsTestRequest) string {
 
 func applyLLMSettingsUpdate(current LLMSettingsPayload, incoming LLMSettingsUpdate) LLMSettingsPayload {
 	merged := current
+	if incoming.Description != nil {
+		merged.Description = strings.TrimSpace(*incoming.Description)
+	}
+	if incoming.Abilities != nil {
+		merged.Abilities = append([]string(nil), (*incoming.Abilities)...)
+	}
 	if incoming.InferenceProvider != nil {
 		merged.InferenceProvider = strings.TrimSpace(*incoming.InferenceProvider)
 	} else if incoming.Provider != nil || incoming.Endpoint != nil {
@@ -1312,6 +1321,13 @@ func applyLLMSettingsUpdate(current LLMSettingsPayload, incoming LLMSettingsUpda
 
 func LLMSettingsPayloadAsNonEmptyUpdate(values LLMSettingsPayload) LLMSettingsUpdate {
 	update := LLMSettingsUpdate{}
+	if value := strings.TrimSpace(values.Description); value != "" {
+		update.Description = stringPointer(value)
+	}
+	if len(values.Abilities) > 0 {
+		abilities := append([]string(nil), values.Abilities...)
+		update.Abilities = &abilities
+	}
 	if value := strings.TrimSpace(values.InferenceProvider); value != "" {
 		update.InferenceProvider = stringPointer(value)
 	}
@@ -1431,6 +1447,7 @@ func normalizeLLMProfileSettings(profiles []LLMProfileSettingsPayload) ([]LLMPro
 		normalized := LLMProfileSettingsPayload{
 			Name: name,
 			LLMConfigFieldsPayload: LLMConfigFieldsPayload{
+				Description:            strings.TrimSpace(profile.Description),
 				InferenceProvider:      strings.TrimSpace(profile.InferenceProvider),
 				Provider:               strings.TrimSpace(profile.Provider),
 				Endpoint:               strings.TrimSpace(profile.Endpoint),
@@ -1462,6 +1479,11 @@ func normalizeLLMProfileSettings(profiles []LLMProfileSettingsPayload) ([]LLMPro
 		default:
 			return nil, fmt.Errorf("profile %q supports_image_parts must be true, false, or empty", name)
 		}
+		abilities, err := llmutil.NormalizeAbilities(profile.Abilities)
+		if err != nil {
+			return nil, fmt.Errorf("llm.profiles.%s.abilities: %w", name, err)
+		}
+		normalized.Abilities = abilities
 		normalized.LLMConfigFieldsPayload = ResolveInferenceProviderSettingsFields(normalized.LLMConfigFieldsPayload)
 		if strings.EqualFold(normalized.Provider, "cloudflare") {
 			normalized.CloudflareAPIToken = firstNonEmpty(normalized.CloudflareAPIToken, normalized.APIKey)
@@ -1562,7 +1584,10 @@ func deleteSingleLLMProfileNode(llmNode *yaml.Node, name string) error {
 }
 
 func llmProfileSettingsAsUpdate(profile LLMProfileSettingsPayload) LLMConfigFieldsUpdate {
+	abilities := append([]string(nil), profile.Abilities...)
 	return LLMConfigFieldsUpdate{
+		Description:            stringPointer(profile.Description),
+		Abilities:              &abilities,
 		InferenceProvider:      stringPointer(profile.InferenceProvider),
 		Provider:               stringPointer(profile.Provider),
 		Endpoint:               stringPointer(profile.Endpoint),
@@ -1593,6 +1618,12 @@ func llmProfileSettingsAsUpdate(profile LLMProfileSettingsPayload) LLMConfigFiel
 func applyLLMConfigFieldsUpdate(node *yaml.Node, effective LLMConfigFieldsPayload, update LLMConfigFieldsUpdate) {
 	if node == nil || node.Kind != yaml.MappingNode {
 		return
+	}
+	if update.Description != nil {
+		configbootstrap.SetOrDeleteMappingScalar(node, "description", strings.TrimSpace(*update.Description))
+	}
+	if update.Abilities != nil {
+		setAbilitiesNode(node, *update.Abilities)
 	}
 	if update.InferenceProvider != nil {
 		configbootstrap.SetOrDeleteMappingScalar(node, "inference_provider", *update.InferenceProvider)
@@ -1809,6 +1840,35 @@ func setLLMProfilesNode(llmNode *yaml.Node, profiles []LLMProfileSettingsPayload
 		profilesNode,
 	)
 	return nil
+}
+
+// setAbilitiesNode writes abilities as given after trimming; validation reports unknown values.
+// An empty list removes the key, which means every ability.
+func setAbilitiesNode(node *yaml.Node, abilities []string) {
+	values := make([]string, 0, len(abilities))
+	for _, value := range abilities {
+		if value = strings.ToLower(strings.TrimSpace(value)); value != "" {
+			values = append(values, value)
+		}
+	}
+	if len(values) == 0 {
+		configbootstrap.DeleteMappingKey(node, "abilities")
+		return
+	}
+	list := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq", Style: yaml.FlowStyle}
+	for _, value := range values {
+		list.Content = append(list.Content, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: value})
+	}
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		if strings.EqualFold(strings.TrimSpace(node.Content[i].Value), "abilities") {
+			node.Content[i+1] = list
+			return
+		}
+	}
+	node.Content = append(node.Content,
+		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "abilities"},
+		list,
+	)
 }
 
 func setMappingOrderedStringList(node *yaml.Node, key string, values []string) {

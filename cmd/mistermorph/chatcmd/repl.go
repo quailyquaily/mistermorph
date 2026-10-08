@@ -692,8 +692,10 @@ func runREPL(sess *chatSession, model *chatModel, options ...tea.ProgramOption) 
 				active = currentTurn
 				historySnapshot := append([]llm.Message(nil), history...)
 				historyBoundarySnapshot := append([]string(nil), historyBoundaries...)
+				sessionID := sess.conversationKey()
 				startChatTurn(sess, currentTurn, turnCtx, resultCh, func(turnCtx context.Context) (*agent.Final, *agent.Context, error) {
 					return prepared.Engine.Run(turnCtx, runInput, agent.RunOptions{
+						SessionID:              sessionID,
 						Model:                  strings.TrimSpace(prepared.Model),
 						Scene:                  "chat.loop",
 						History:                historySnapshot,

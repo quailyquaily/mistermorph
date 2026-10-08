@@ -28,11 +28,14 @@ type ConfigReader interface {
 }
 
 type RuntimeValues struct {
-	InferenceProvider  string `config:"llm.inference_provider"`
-	Provider           string `config:"llm.provider"`
-	Endpoint           string `config:"llm.endpoint"`
-	APIKey             string `config:"llm.api_key"`
-	Model              string `config:"llm.model"`
+	UserAgent          string   `config:"user_agent"`
+	Description        string   `config:"llm.description"`
+	Abilities          []string `config:"llm.abilities"`
+	InferenceProvider  string   `config:"llm.inference_provider"`
+	Provider           string   `config:"llm.provider"`
+	Endpoint           string   `config:"llm.endpoint"`
+	APIKey             string   `config:"llm.api_key"`
+	Model              string   `config:"llm.model"`
 	SupportsImageParts *bool
 	ContextWindowRaw   string `config:"llm.context_window_tokens"`
 	Headers            map[string]string
@@ -85,6 +88,10 @@ func RuntimeValuesFromReader(r ConfigReader) (RuntimeValues, error) {
 	if err != nil {
 		return RuntimeValues{}, err
 	}
+	var abilities []string
+	if err := r.UnmarshalKey("llm.abilities", &abilities); err != nil {
+		return RuntimeValues{}, fmt.Errorf("decode llm.abilities: %w", err)
+	}
 	openAIImageOptions, err := loadAnyMapKeyFromReader(r, "llm.image.options.openai")
 	if err != nil {
 		return RuntimeValues{}, err
@@ -98,6 +105,9 @@ func RuntimeValuesFromReader(r ConfigReader) (RuntimeValues, error) {
 		return RuntimeValues{}, err
 	}
 	return RuntimeValues{
+		UserAgent:          strings.TrimSpace(r.GetString("user_agent")),
+		Description:        strings.TrimSpace(r.GetString("llm.description")),
+		Abilities:          abilities,
 		InferenceProvider:  strings.TrimSpace(r.GetString("llm.inference_provider")),
 		Provider:           strings.TrimSpace(r.GetString("llm.provider")),
 		Endpoint:           strings.TrimSpace(r.GetString("llm.endpoint")),
@@ -314,6 +324,22 @@ func ModelForProviderWithValues(provider string, values RuntimeValues) string {
 }
 
 func ClientFromConfigWithValues(cfg llmconfig.ClientConfig, values RuntimeValues) (llm.Client, error) {
+	if userAgent := strings.TrimSpace(values.UserAgent); userAgent != "" {
+		hasUserAgent := false
+		for name := range cfg.Headers {
+			if strings.EqualFold(strings.TrimSpace(name), "User-Agent") {
+				hasUserAgent = true
+				break
+			}
+		}
+		if !hasUserAgent {
+			cfg.Headers = cloneStringMap(cfg.Headers)
+			if cfg.Headers == nil {
+				cfg.Headers = make(map[string]string)
+			}
+			cfg.Headers["User-Agent"] = userAgent
+		}
+	}
 	toolsEmulationMode, err := toolsEmulationModeFromValue(values.ToolsEmulationMode)
 	if err != nil {
 		return nil, err

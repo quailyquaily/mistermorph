@@ -463,6 +463,7 @@ func buildChatSession(cmd *cobra.Command, deps Dependencies) (*chatSession, erro
 		ResolveLLMRouteWithProfile: func(purpose, profile string) (llmutil.ResolvedRoute, error) {
 			return llmutil.ResolveRouteWithProfileOverride(llmValues, purpose, profile)
 		},
+		LLMValues:       func() (llmutil.RuntimeValues, error) { return llmValues, nil },
 		CreateLLMClient: createLLMClient,
 		CreateImageClient: func() (llm.ImageClient, error) {
 			imageValues, err := llmutil.ImageRouteValues(llmValues, llmValues)

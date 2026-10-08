@@ -554,6 +554,9 @@ func decodeValue(raw json.RawMessage, field Field) (any, error) {
 			if !ok {
 				return nil, fmt.Errorf("item %d must be a string", i+1)
 			}
+			if len(field.Enum) > 0 && !containsString(field.Enum, text) {
+				return nil, fmt.Errorf("item %d must be one of %s", i+1, strings.Join(field.Enum, ", "))
+			}
 			result[i] = text
 		}
 		return result, nil

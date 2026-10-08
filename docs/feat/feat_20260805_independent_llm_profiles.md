@@ -34,6 +34,7 @@ status: implemented
 
 以下配置仍是所有 route 共用的运行上下文，不属于 profile 继承：
 
+- 顶层 `user_agent`：LLM 请求未显式配置 `headers.User-Agent` 时使用；请求头名称不区分大小写。
 - `llm.pricing_file`
 - `llm.image.*`
 - `config` 和 `file_state_dir`

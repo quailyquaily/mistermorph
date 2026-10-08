@@ -23,6 +23,9 @@ export const HEARTBEAT_INTERVAL_OPTIONS = [
 ];
 
 export const HTTP_METHOD_OPTIONS = ["GET", "POST", "PUT", "PATCH", "DELETE"];
+// Profile abilities (llm.abilities, llm.profiles.<name>.abilities). None selected means all.
+export const PROFILE_ABILITY_OPTIONS = ["text", "image", "decision"];
+
 export const TASK_TARGET_OPTIONS = ["console", "telegram", "slack", "line", "lark", "mixin", "discord", "wechat", "whatsapp"];
 
 // Empty choices name what the empty value does.

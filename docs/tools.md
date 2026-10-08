@@ -11,7 +11,8 @@ This document describes the built-in and runtime-injected tool parameters curren
   - `contacts_send` is static, but default exposure is limited to awareness runs when enabled, or to explicit `$contacts_send` opt-in.
   - `agent_send` is exposed only while `contacts/ACTIVE.md` contains at least one `kind: agent` Contact.
 - `engine-scoped` tools:
-  - `spawn`: registered when an agent engine is assembled for a run; depends on the current subtask runner, parent tool lookup, and default model.
+  - `spawn`: registered when an agent engine is assembled for a run; depends on the current subtask runner and parent tool lookup. See [`spawn`](#spawn).
+  - `list_model_profiles`: registered next to `spawn` when more than one model profile can run a subtask. See [`list_model_profiles`](#list_model_profiles).
   - `coder`: registered when an agent engine is assembled for a run; depends on the current subtask runner and starts the local Codex or Claude Code CLI.
   - `codemode`: registered by the engine when `tools.codemode.enabled` (default on); runs a JavaScript program that calls the run's tools. Never given to subtasks. See [`codemode`](#codemode).
 - `runtime-dependent` tools:
@@ -106,7 +107,7 @@ Flow notes:
 
 - `tools` command prints:
   - `Core tools`: from base registry.
-  - `Extra tools`: preview of engine-scoped and runtime-dependent tools (currently `spawn`, `coder`, `plan_create`, `todo_update`, and image tools when task intent allows them).
+  - `Extra tools`: preview of engine-scoped and runtime-dependent tools (currently `spawn`, `coder`, `plan_create`, `todo_update`, and image tools when task intent allows them). `list_model_profiles` depends on the configured profiles and is not previewed.
   - `Telegram tools`: static preview rows for Telegram runtime tools.
 
 ## `read_file`
@@ -381,6 +382,52 @@ Constraints:
 - A multi-target call is rejected before sending anything when any target is not an active Agent.
 - `agent_send` has no separate config key. Removing or deactivating all Agent Contacts makes it unavailable.
 - `contacts_send` registration and group-chat restrictions are unchanged.
+
+## `spawn`
+
+Purpose: run a self-contained subtask in a sub-agent with its own context and a restricted tool whitelist, and get back a short result instead of the intermediate content. The call blocks until the sub-agent finishes; sub-agents run one at a time. When `spawn` is available, the prompt asks the model to delegate subtasks that would produce a lot of intermediate content (searching and filtering web pages, reading long logs, inspecting many files) and to ask for a concise conclusion with the evidence needed to check it.
+
+Parameters:
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `task` | `string` | Yes | Task prompt. The sub-agent does not see the conversation, so it carries the background, goal and what to return. |
+| `tools` | `array<string>` | Yes | Tool whitelist, taken from the parent's registry. Cannot include `spawn`. |
+| `model_profile` | `string` | No | Model profile the sub-agent runs on. Omit it to keep the parent's configuration (including a manually selected profile or the weighted candidate picked for the run). |
+| `output_schema` | `string` | No | Schema identifier; the sub-agent's `output` must then be JSON. |
+| `observe_profile` | `string` | No | Local observer profile: `default`, `long_shell` or `web_extract`. |
+
+The `model` parameter was replaced by `model_profile`; passing `model` returns an error.
+
+`model_profile`:
+
+- The sub-agent uses the profile's own provider, connection, credentials, model and inference settings, including reasoning effort; the parent's reasoning effort override is not passed on. `default` means the top-level `llm.*` config, not "same as the parent".
+- If the profile fails at request time, the sub-agent falls back to `llm.routes.main_loop.fallback_profiles` (which can include the parent's model).
+- The profile must have the `text` ability (`abilities` empty or containing `text`) and must not use `typesafe`. An unknown profile, a profile that fails to resolve or cannot run a subtask, or a runtime without profile support returns a failed envelope without starting the sub-agent; its `error` says why and suggests another profile or omitting `model_profile`.
+- Selecting a profile affects only that subtask, not the session's main profile.
+
+Result: a JSON envelope with `task_id`, `status` (`done` or `failed`), `summary`, `output_kind` (`text` or `json`), `output_schema`, `output` and `error`.
+
+## `list_model_profiles`
+
+Purpose: list the model profiles a `spawn` subtask can select. No parameters; read-only; makes no model requests.
+
+Registered next to `spawn` only when more than one profile can run a subtask: `default` plus every named profile whose `abilities` include `text` (empty means all), excluding `typesafe` profiles. The prompt tells the model to call it when it wants a different configuration for a subtask and to reuse an earlier result.
+
+```json
+{
+  "profiles": [
+    {"name": "default", "model": "gpt-5.4", "description": "Complex analysis.", "current": true},
+    {"name": "cheap", "model": "gpt-4.1-mini", "description": "Extraction and short summaries; favors speed."},
+    {"name": "broken", "model": "", "description": "", "error": "llm.profiles.broken.request_timeout: ..."}
+  ]
+}
+```
+
+- Order: `default` first, then named profiles by name.
+- `description` comes from `llm.description` / `llm.profiles.<name>.description`; empty when not set.
+- `current` marks the profile the parent is running on.
+- A profile that fails to resolve is listed with `error`; the others are still listed. Credentials, headers and endpoints are never returned.
 
 ## `codemode`
 

@@ -22,8 +22,10 @@ const (
 )
 
 type SubtaskRequest struct {
-	Task           string
-	Model          string
+	Task string
+	// ModelProfile names the model profile the subtask runs on. Empty keeps the configuration the
+	// parent task already selected.
+	ModelProfile   string
 	OutputSchema   string
 	ObserveProfile ObserveProfile
 	Registry       *tools.Registry
@@ -87,6 +89,12 @@ func SubtaskDepthFromContext(ctx context.Context) int {
 		return 0
 	}
 	return v
+}
+
+// SubtaskProfileError reports why a subtask could not run on the model profile it selected, and
+// tells the model what it can do instead.
+func SubtaskProfileError(profile string, err error) error {
+	return fmt.Errorf("model_profile %q: %w. Choose another profile, or omit model_profile to use the current model", strings.TrimSpace(profile), err)
 }
 
 func ValidateSubtaskStart(ctx context.Context) error {

@@ -60,6 +60,9 @@ func (rt *Runtime) RunTaskWithOptions(ctx context.Context, task string, opts Run
 	}
 	runID := taskID
 	topicID := firstNonEmpty(opts.TopicID, metaString(runOpts.Meta, "topic_id"))
+	if strings.TrimSpace(runOpts.SessionID) == "" && topicID != "" {
+		runOpts.SessionID = "integration:" + topicID
+	}
 	traceID := firstNonEmpty(opts.TraceID, metaString(runOpts.Meta, "trace_id"))
 	result := RunTaskResult{
 		TaskID:  taskID,

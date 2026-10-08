@@ -15,7 +15,8 @@
 #   - Preferred: MISTER_MORPH_LLM_PROVIDER, MISTER_MORPH_LLM_ENDPOINT, MISTER_MORPH_LLM_MODEL, MISTER_MORPH_LLM_API_KEY
 #   - Cloudflare: MISTER_MORPH_LLM_CLOUDFLARE_ACCOUNT_ID, MISTER_MORPH_LLM_CLOUDFLARE_API_TOKEN
 
-# Global User-Agent for outbound HTTP requests (tools like url_fetch, web_search, etc).
+# Global User-Agent for outbound HTTP requests, including LLM calls and HTTP tools.
+# LLM profiles can override it with their own headers.User-Agent.
 user_agent: "mistermorph/1.0 (+https://github.com/quailyquaily)"
 
 auto_update:
@@ -36,6 +37,15 @@ llm:
   # Default model used by the main agent loop.
   # For openai_codex, an empty model uses gpt-5.6-luna.
   model: "gpt-5.4"
+  # Optional description of this (default) profile: what it is good for, its limits,
+  # and whether it favors speed or cost. list_model_profiles shows it to the agent
+  # when it picks a profile for a spawn subtask. It is a hint, not an instruction.
+  # description: "Complex analysis and reviewing results."
+  # Optional abilities of this profile: text | image | decision.
+  # text = chat with tool calls (can run the agent loop and spawn subtasks),
+  # image = image generation/editing, decision = Evaluate requests.
+  # Empty or unset means every ability. Only profiles with text can run spawn subtasks.
+  # abilities: ["text"]
   # Optional model context window, in tokens. Empty or 0 uses the built-in catalog when known.
   # context_window_tokens: 100000
   # API Base. Required for *_compatible inference providers. For openai_codex,
@@ -51,6 +61,7 @@ llm:
   # Use ${ENV_VAR}, ${aws-sm:<secret-id>}, or a Console-managed ${secret:<opaque-id>} reference.
   api_key: "${OPENAI_API_KEY}" # or set via MISTER_MORPH_LLM_API_KEY
   # Optional custom HTTP headers for LLM requests.
+  # User-Agent defaults to the top-level user_agent unless explicitly set here.
   # headers:
   #   YOUR-HEADER: "${YOUR_HEADER_VALUE}"
   #   "-X-ABC-TOKEN": "${ABC_TOKEN}"
@@ -61,6 +72,8 @@ llm:
   #   - long
   #   - Go duration strings such as "5m", "1h", "24h"
   # The runtime maps this to provider-supported cache buckets automatically.
+  # Codex: off skips the automatic session cache key; other values do not set a TTL.
+  # Codex uses the session cache key for its session routing headers as well.
   cache_ttl: "short"
   # Optional prefix added to generated prompt_cache_key values for providers that support it.
   # Change this value to force a new cache group during testing.
@@ -114,9 +127,13 @@ llm:
       gemini: {}
       cloudflare: {}
   # Optional named LLM profiles. Each profile is independent and does not inherit
-  # provider, endpoint, credentials, model, or other LLM fields from top-level llm.*.
+  # provider, endpoint, credentials, model, or other LLM fields from top-level llm.*
+  # (including description and abilities).
+  # The agent can run a spawn subtask on any profile with the text ability by passing
+  # model_profile; with more than one such profile, it can list them with list_model_profiles.
   # profiles:
   #   cheap:
+  #     description: "Extraction, classification and short summaries; favors speed."
   #     inference_provider: openai
   #     model: "gpt-4.1-mini"
   #     api_key: "${OPENAI_API_KEY}"
@@ -138,6 +155,12 @@ llm:
   #     inference_provider: xai_oauth
   #     model: "grok-4.5"
   #     reasoning_effort: "high"
+  #   painter:
+  #     description: "Image generation."
+  #     abilities: ["image"] # not offered for spawn subtasks
+  #     inference_provider: openai
+  #     model: "gpt-image-2"
+  #     api_key: "${OPENAI_API_KEY}"
   # Optional route map. Supported purposes:
   #   main_loop | decision | awareness | heartbeat | think | plan_create
   # `decision` selects the group-response evaluator. Unset uses `default`.

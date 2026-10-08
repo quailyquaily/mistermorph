@@ -350,9 +350,29 @@ Core LLM:
 - Bedrock uses `llm.bedrock.*`.
 - `llm.cache_ttl` controls cache intent across providers. Supported values are `off`, `short`, `long`, and Go duration strings such as `5m`, `1h`, and `24h`. The runtime maps this to each provider's supported cache buckets.
 - `llm.cache_key_prefix` is optional and defaults to empty. For providers that support `prompt_cache_key`, the runtime prepends it to the generated key so changing the value forces a new cache group.
+
+Codex subscription requests carry a stable conversation ID through `agent.RunOptions.SessionID`
+and `llm.Request.SessionID`. Channel runtimes use the existing conversation key; local chat
+uses its topic scope, and integration callers can provide `SessionID` or `TopicID`.
+The ID stays the same across turns and approval resumes. Independent subtasks use their own
+task IDs. Runs without a conversation ID leave session caching unspecified rather than using
+a changing run ID. Clearing history within the same conversation does not change its ID.
+
+For `openai_codex`, the adapter maps this ID to `openai.prompt_cache_key`, with the optional
+`cache_key_prefix`. Keys over 64 bytes are hashed to preserve distinction between long IDs.
+`cache_ttl: off` skips the automatic key; other TTL values do not add a Codex retention field.
+An explicit `Parameters["openai"]["prompt_cache_key"]` takes precedence over the generated key.
+
+uniai `v0.1.67` sends the key in the request body and in the `session-id` and
+`x-client-request-id` headers. These headers are set per request, so concurrent sessions
+can share a client. This does not add WebSocket continuation or guarantee a server-side
+cache hit.
+
 - For GPT-5.6-family OpenAI and Responses-compatible requests, the runtime generates `prompt_cache_key` and marks the fixed system prompt as an explicit cache breakpoint when caching is enabled. It leaves `prompt_cache_options` unset so the provider's default implicit breakpoint remains active.
 - `llm.tools_emulation_mode` controls tool-call emulation for models without native tool calling.
 - `llm.profiles` defines independent named LLM configurations; blank fields do not fall back to top-level `llm` values.
+- `llm.description` and `llm.profiles.<name>.description` are optional notes on what a profile is good for. `list_model_profiles` shows them to the agent when it picks a profile for a `spawn` subtask (`model_profile`). They are hints, not instructions, and do not change routing.
+- `llm.abilities` and `llm.profiles.<name>.abilities` list what a profile can be used for: `text` (chat with tool calls, including subtasks), `image`, `decision`. Empty or unset means all. Unknown values are config errors. Only profiles with `text` (and not `typesafe`) can run `spawn` subtasks; routes do not check abilities yet.
 - `llm.routes` routes semantic purposes such as `main_loop`, `addressing`, `awareness`, `think`, `plan_create`, and `image`. `heartbeat` is still accepted as a legacy alias for `awareness`.
 - `llm.routes.image` picks the profile that `image_generate` and `image_edit` use. It takes one profile (a name, or an object with `profile`); candidates and fallbacks are not supported. Without it, images use the model the task is running on. `llm.image.request_timeout` and `llm.image.options.*` apply to whichever model makes the images.
 - `llm.image.provider`, `llm.image.endpoint`, `llm.image.api_key`, and `llm.image.model` are no longer read. Startup logs a warning when a config still sets them; move those values into a profile and set `llm.routes.image` to its name.

@@ -53,7 +53,7 @@ func TestRegisterEngineToolsExplicitSpawn(t *testing.T) {
 	registerEngineTools(reg, EngineToolsConfig{
 		SpawnEnabled: false,
 		ToolTriggers: map[string]bool{"spawn": true},
-	}, spawnToolDeps{}, coderToolDeps{})
+	}, spawnToolDeps{}, coderToolDeps{}, nil)
 
 	if _, ok := reg.Get("spawn"); !ok {
 		t.Fatalf("spawn not registered")
@@ -62,13 +62,13 @@ func TestRegisterEngineToolsExplicitSpawn(t *testing.T) {
 
 func TestRegisterEngineToolsCoderSwitch(t *testing.T) {
 	reg := tools.NewRegistry()
-	registerEngineTools(reg, EngineToolsConfig{}, spawnToolDeps{}, coderToolDeps{})
+	registerEngineTools(reg, EngineToolsConfig{}, spawnToolDeps{}, coderToolDeps{}, nil)
 	if _, ok := reg.Get("coder"); ok {
 		t.Fatal("coder should not be registered by default")
 	}
 
 	reg = tools.NewRegistry()
-	registerEngineTools(reg, EngineToolsConfig{CoderEnabled: true}, spawnToolDeps{}, coderToolDeps{})
+	registerEngineTools(reg, EngineToolsConfig{CoderEnabled: true}, spawnToolDeps{}, coderToolDeps{}, nil)
 	if _, ok := reg.Get("coder"); !ok {
 		t.Fatal("coder should be registered when enabled")
 	}
@@ -76,7 +76,7 @@ func TestRegisterEngineToolsCoderSwitch(t *testing.T) {
 	reg = tools.NewRegistry()
 	registerEngineTools(reg, EngineToolsConfig{
 		ToolTriggers: map[string]bool{"coder": true},
-	}, spawnToolDeps{}, coderToolDeps{})
+	}, spawnToolDeps{}, coderToolDeps{}, nil)
 	if _, ok := reg.Get("coder"); !ok {
 		t.Fatal("coder should be registered by explicit trigger")
 	}
@@ -87,7 +87,7 @@ func TestRegisterEngineToolsPassesCoderPathExtra(t *testing.T) {
 	registerEngineTools(reg, EngineToolsConfig{
 		CoderEnabled:   true,
 		CoderPathExtra: []string{"/opt/coder/bin"},
-	}, spawnToolDeps{}, coderToolDeps{})
+	}, spawnToolDeps{}, coderToolDeps{}, nil)
 
 	tool, ok := reg.Get("coder")
 	if !ok {

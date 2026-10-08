@@ -114,6 +114,9 @@ type Result struct {
 }
 
 type Request struct {
+	// SessionID is stable across conversation turns, independent of run IDs.
+	// Empty leaves session-based provider caching unspecified.
+	SessionID         string
 	Model             string
 	InferenceProvider string
 	Scene             string

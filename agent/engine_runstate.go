@@ -12,10 +12,11 @@ import (
 type resumeState struct {
 	Version int `json:"v"`
 
-	RunID string `json:"run_id"`
-	Model string `json:"model"`
-	Scene string `json:"scene,omitempty"`
-	Step  int    `json:"step"`
+	SessionID string `json:"session_id,omitempty"`
+	RunID     string `json:"run_id"`
+	Model     string `json:"model"`
+	Scene     string `json:"scene,omitempty"`
+	Step      int    `json:"step"`
 
 	PlanRequired  bool `json:"plan_required"`
 	ParseFailures int  `json:"parse_failures"`

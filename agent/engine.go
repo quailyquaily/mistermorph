@@ -113,15 +113,35 @@ func WithFallbackFinal(fn func() *Final) Option {
 	}
 }
 
-// SubClientFactory creates an LLM client for a sub-agent with the given prefix
-// (used for inspection dump filenames). The returned cleanup function must be
-// called after the sub-agent completes to close any resources (e.g. dump files).
-type SubClientFactory func(prefix string) (client llm.Client, cleanup func())
+// SubtaskProfile is what a subtask runs on when spawn selects a model profile.
+type SubtaskProfile struct {
+	Client                   llm.Client
+	Model                    string
+	SystemPromptCacheControl *llm.CacheControl
+	// Close, when set, is called after the subtask ends.
+	Close func()
+}
 
-func WithSubClientFactory(fn SubClientFactory) Option {
+// SubtaskProfileResolver resolves a model profile by name for a subtask the engine runs itself.
+// It returns an error for a profile that does not exist or cannot run a subtask.
+type SubtaskProfileResolver func(ctx context.Context, profile string) (SubtaskProfile, error)
+
+// WithSubtaskProfileResolver lets spawn's model_profile work when the engine runs subtasks itself.
+// Without it, a subtask that selects a profile fails. It is not used with WithSubtaskRunner.
+func WithSubtaskProfileResolver(fn SubtaskProfileResolver) Option {
 	return func(e *Engine) {
 		if fn != nil {
-			e.subClientFactory = fn
+			e.subtaskProfileResolver = fn
+		}
+	}
+}
+
+// WithModelProfiles registers list_model_profiles next to spawn, listing the profiles a subtask
+// can select. Leave it out when there is nothing to choose between.
+func WithModelProfiles(fn ModelProfileLister) Option {
+	return func(e *Engine) {
+		if fn != nil {
+			e.modelProfiles = fn
 		}
 	}
 }
@@ -172,8 +192,9 @@ type Engine struct {
 	onPlanStepUpdate func(ctx *Context, update PlanStepUpdate)
 	fallbackFinal    func() *Final
 
-	subClientFactory SubClientFactory
-	subtaskRunner    SubtaskRunner
+	subtaskRunner          SubtaskRunner
+	subtaskProfileResolver SubtaskProfileResolver
+	modelProfiles          ModelProfileLister
 
 	guard *guard.Guard
 
@@ -230,19 +251,20 @@ func New(client llm.Client, registry *tools.Registry, cfg Config, spec PromptSpe
 			e.spec.Blocks = append(e.spec.Blocks, PromptBlock{Content: codeModePromptBlock})
 		}
 	}
-	registerEngineTools(
+	blocks := registerEngineTools(
 		e.registry,
 		e.engineToolsConfig,
 		spawnToolDeps{
-			LookupTool:   e.lookupSubtaskTool,
-			DefaultModel: e.config.DefaultModel,
-			Runner:       e.subtaskRunner,
+			LookupTool: e.lookupSubtaskTool,
+			Runner:     e.subtaskRunner,
 		},
 		coderToolDeps{
 			Runner: e.subtaskRunner,
 			RunCLI: runCoderCLI,
 		},
+		e.modelProfiles,
 	)
+	e.spec.Blocks = append(e.spec.Blocks, blocks...)
 	return e
 }
 
@@ -390,6 +412,7 @@ func (e *Engine) Run(ctx context.Context, task string, opts RunOptions) (*Final,
 	}
 
 	loopState := &engineLoopState{
+		sessionID:             strings.TrimSpace(opts.SessionID),
 		runID:                 runID,
 		model:                 model,
 		scene:                 strings.TrimSpace(opts.Scene),

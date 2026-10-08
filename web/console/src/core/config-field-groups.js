@@ -5,6 +5,7 @@ import {
   HEARTBEAT_INTERVAL_OPTIONS,
   IMAGE_PARTS_OPTIONS,
   LOGGING_LEVEL_OPTIONS,
+  PROFILE_ABILITY_OPTIONS,
   REASONING_EFFORT_OPTIONS,
   TASK_TARGET_OPTIONS,
 } from "./config-options";
@@ -15,6 +16,14 @@ export const DEFAULT_MODEL_ADVANCED_CONFIG_GROUPS = [
     title: "Default model",
     note: "Low-frequency request and provider settings for the default profile.",
     fields: [
+      {
+        path: "llm.abilities",
+        label: "Abilities",
+        type: "string_list",
+        options: PROFILE_ABILITY_OPTIONS,
+        wide: true,
+        note: "None selected means all. Only profiles with text can run subtasks.",
+      },
       { path: "llm.context_window_tokens", label: "Context window", type: "int" },
       { path: "llm.supports_image_parts", label: "Supports image parts", type: "select", options: IMAGE_PARTS_OPTIONS },
       { path: "llm.headers", label: "HTTP headers", type: "json", wide: true, editor: "rows", rows: "map", addLabel: "Add header" },

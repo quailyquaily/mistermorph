@@ -23,9 +23,8 @@ func (t *spawnTool) Name() string { return spawnToolName }
 
 func (t *spawnTool) Description() string {
 	return "Spawn a sub-agent to handle a self-contained sub-task. " +
-		"The sub-agent runs with its own context and a restricted set of tools you specify. " +
-		"This call blocks until the sub-agent completes and returns a structured JSON envelope. " +
-		"Use this to parallelise independent work items."
+		"The sub-agent runs with its own context and a restricted set of tools you specify, and does not see this conversation. " +
+		"This call blocks until the sub-agent completes and returns a structured JSON envelope; sub-agents run one at a time."
 }
 
 func (t *spawnTool) ParameterSchema() string {
@@ -41,9 +40,9 @@ func (t *spawnTool) ParameterSchema() string {
 				"items":       map[string]any{"type": "string"},
 				"description": "Whitelist of tool names the sub-agent can use. Cannot include 'spawn'.",
 			},
-			"model": map[string]any{
+			"model_profile": map[string]any{
 				"type":        "string",
-				"description": "Optional model override for the sub-agent. Defaults to the parent's model.",
+				"description": "Optional model profile name for the sub-agent. Omit it to use the current model.",
 			},
 			"output_schema": map[string]any{
 				"type":        "string",
@@ -65,6 +64,9 @@ func (t *spawnTool) Execute(ctx context.Context, params map[string]any) (string,
 	task = strings.TrimSpace(task)
 	if task == "" {
 		return "", fmt.Errorf("missing required param: task")
+	}
+	if _, ok := params["model"]; ok {
+		return "", fmt.Errorf("param model is not supported; use model_profile with a profile name, or omit it to use the current model")
 	}
 
 	rawTools, _ := params["tools"].([]any)
@@ -95,18 +97,14 @@ func (t *spawnTool) Execute(ctx context.Context, params map[string]any) (string,
 		return "", fmt.Errorf("none of the requested tools are available in the parent registry")
 	}
 
-	model, _ := params["model"].(string)
-	model = strings.TrimSpace(model)
-	if model == "" {
-		model = strings.TrimSpace(t.deps.DefaultModel)
-	}
+	modelProfile, _ := params["model_profile"].(string)
 	outputSchema, _ := params["output_schema"].(string)
 	outputSchema = strings.TrimSpace(outputSchema)
 	observeProfile, _ := params["observe_profile"].(string)
 
 	req := SubtaskRequest{
 		Task:           task,
-		Model:          model,
+		ModelProfile:   strings.TrimSpace(modelProfile),
 		OutputSchema:   outputSchema,
 		ObserveProfile: NormalizeObserveProfile(observeProfile),
 		Registry:       subRegistry,
