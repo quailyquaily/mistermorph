@@ -91,7 +91,7 @@
   --workspace-sidebar-head-pad: 0;
   --workspace-sidebar-list-gutter: 16px;
   --workspace-sidebar-list-pad: var(--workspace-sidebar-list-gutter);
-  --workspace-sidebar-list-gap: 6px;
+  --workspace-sidebar-list-gap: 2px;
   --workspace-sidebar-item-pad: 12px 13px 11px 14px;
   width: 100%;
   max-width: var(--workspace-sidebar-max-width);

@@ -62,6 +62,13 @@
   height: 1rem;
 }
 
+/* An icon-only option is a square segment. */
+.app-tabs-option.is-icon-only {
+  flex: 0 0 auto;
+  width: 32px;
+  padding: 0;
+}
+
 /* The label clips for the ellipsis, so its line box must be tall enough for descenders. */
 .app-tabs-option-label {
   min-width: 0;

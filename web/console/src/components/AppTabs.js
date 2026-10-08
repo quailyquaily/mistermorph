@@ -11,6 +11,8 @@ const AppTabs = {
     modelValue: { type: Object, default: null },
     disabled: { type: Boolean, default: false },
     ariaLabel: { type: String, default: "" },
+    // Shows only each tab's icon; its title becomes the tooltip and accessible name.
+    iconOnly: { type: Boolean, default: false },
   },
   emits: ["update:modelValue", "change"],
   setup(props, { emit }) {
@@ -92,8 +94,10 @@ const AppTabs = {
         :key="tab.id ?? index"
         type="button"
         class="app-tabs-option"
-        :class="{ 'is-active': isActive(tab, index) }"
+        :class="{ 'is-active': isActive(tab, index), 'is-icon-only': iconOnly && tab.icon }"
         role="tab"
+        :title="iconOnly && tab.icon ? tab.title : undefined"
+        :aria-label="iconOnly && tab.icon ? tab.title : undefined"
         :aria-selected="isActive(tab, index)"
         :tabindex="isActive(tab, index) ? 0 : -1"
         :data-tab-index="index"
@@ -102,7 +106,7 @@ const AppTabs = {
         @keydown="onKeydown($event)"
       >
         <component v-if="tab.icon" :is="tab.icon" class="app-tabs-option-icon" aria-hidden="true" />
-        <span class="app-tabs-option-label">{{ tab.title }}</span>
+        <span v-if="!(iconOnly && tab.icon)" class="app-tabs-option-label">{{ tab.title }}</span>
       </button>
     </div>
   `,

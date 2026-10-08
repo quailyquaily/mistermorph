@@ -1,7 +1,14 @@
+import AppErrorNotice from "./AppErrorNotice";
 import "./AppPage.css";
 
 const AppPage = {
+  components: { AppErrorNotice },
   props: {
+    // A page-level error (a failed load, the network): shown floating over the page, not in it.
+    error: {
+      type: String,
+      default: "",
+    },
     title: {
       type: String,
       default: "",
@@ -43,6 +50,7 @@ const AppPage = {
       <div class="page-body">
         <slot />
       </div>
+      <AppErrorNotice :message="error" />
     </section>
   `,
 };

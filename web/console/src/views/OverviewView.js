@@ -254,7 +254,7 @@ const OverviewView = {
     };
   },
   template: `
-    <AppPage class="overview-view" :hideDesktopBar="true" :hideMobileBar="true">
+    <AppPage class="overview-view" :hideDesktopBar="true" :hideMobileBar="true" :error="err">
       <h1 class="overview-title">{{ t('nav_overview') }}</h1>
       <QButton
         v-if="endpointRows.length"
@@ -269,7 +269,6 @@ const OverviewView = {
         <PhEyeSlash v-else :size="20" aria-hidden="true" />
       </QButton>
       <QProgress v-if="loading && endpointRows.length === 0" :infinite="true" />
-      <QFence v-if="err" type="danger" icon="PhXCircle" :text="err" />
 
       <section class="overview-page">
         <div v-if="endpointRows.length" ref="connectionMap" class="overview-connection-map">

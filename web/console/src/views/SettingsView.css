@@ -41,7 +41,7 @@
 }
 
 .settings-index {
-  --workspace-sidebar-list-gap: 6px;
+  --workspace-sidebar-list-gap: 2px;
   position: sticky;
   top: 0;
   display: grid;

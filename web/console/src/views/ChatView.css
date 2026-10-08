@@ -74,8 +74,8 @@
 
 .chat-shell.can-workspace > .chat-workspace-sidebar > .chat-workspace-sidebar-shell {
   flex: 0 0 auto;
-  /* The open width, less the aside's 0.5rem padding on each side. */
-  width: max(100%, calc(var(--workspace-sidebar-max-width, 310px) - 1rem));
+  /* The open width: the track is 4px wider than the sidebar, for the margin above. */
+  width: max(100%, var(--workspace-sidebar-max-width, 310px));
 }
 
 .chat-workspace-enter-active,
@@ -334,6 +334,8 @@
 }
 
 .chat-topic-list {
+  /* This list's children are topic groups, not items: items are 2px apart inside each group. */
+  --workspace-sidebar-list-gap: 6px;
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
@@ -354,6 +356,10 @@
 /* Topics are grouped under one date header per day, so rows carry only the title. */
 .chat-topic-day + .chat-topic-day {
   margin-top: 6px;
+}
+
+.chat-topic-item + .chat-topic-item {
+  margin-top: 2px;
 }
 
 .chat-topic-day-label {
@@ -450,63 +456,65 @@
   padding: clamp(20px, 5vw, 40px);
 }
 
-.chat-desk-head {
-  display: grid;
-  align-items: center;
-  height: var(--workspace-head-height);
-  min-height: var(--workspace-head-height);
-  padding: 0 var(--chat-history-gutter-x);
-  background:
-    linear-gradient(
-      180deg,
-      var(--q-bg-paper) 0%,
-      color-mix(in srgb, var(--q-bg-paper) 72%, transparent) 38%,
-      transparent 100%);
-  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--line-soft) 48%, transparent);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
+/* The workspace panel mirrors the topic sidebar: it sits on the page, not in a card, with a
+   header row level with the topic sidebar's header. The chat sheet sits between the two. */
+.chat-shell {
+  position: relative;
+  --chat-workspace-dock-size: 38px;
+  --chat-workspace-gutter: 16px;
 }
 
-.chat-desk-head-main {
-  min-width: 0;
+/* The panel toggle stays put at the top-right corner on the header line, over the chat while the
+   panel is closed and in the panel's header once it slides out beneath it. It is a one-segment
+   version of the panel's tabs (AppTabs): the same outlined box and inset, and when the panel is
+   open, the same selected fill. */
+.chat-workspace-dock {
+  position: absolute;
+  top: calc((var(--workspace-head-height) - var(--chat-workspace-dock-size)) / 2);
+  right: var(--chat-workspace-gutter);
+  z-index: 5;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  pointer-events: auto;
+  width: var(--chat-workspace-dock-size);
+  height: var(--chat-workspace-dock-size);
+  padding: 2px;
+  border: 1px solid var(--line-soft);
+  background: var(--q-bg-page);
 }
 
-.chat-desk-copy {
-  min-width: 0;
-  display: grid;
-  gap: 5px;
+.chat-workspace-dock .chat-workspace-toggle.q-button {
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0 !important;
+  /* Square like the tab segments; Quail's theme rounds buttons with !important. */
+  border-radius: 0 !important;
+  color: var(--text-2);
+  transition:
+    background-color var(--motion-normal) var(--motion-ease),
+    color var(--motion-normal) var(--motion-ease);
 }
 
-.chat-desk-title {
-  margin: 0;
-  height: 24px;
-  max-width: min(100%, 34rem);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.chat-workspace-dock .chat-workspace-toggle.q-button:hover {
+  color: var(--text-0);
 }
 
-.chat-desk-tools {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  gap: 8px;
+/* Quail's theme gives plain buttons an !important background from a scoped selector, so this
+   needs the extra weight. */
+body[data-theme] .chat-workspace-dock .chat-workspace-toggle.q-button[aria-expanded="true"] {
+  background: color-mix(in srgb, var(--q-c-blue) 16%, var(--q-bg-paper)) !important;
+  color: var(--q-c-secondary) !important;
 }
 
-.chat-workspace-toggle {
-  min-width: 34px;
-  min-height: 34px;
-  padding: 0 6px !important;
+.chat-workspace-dock .chat-workspace-toggle .icon {
+  width: 1rem;
+  height: 1rem;
 }
 
-.chat-workspace-toggle.is-active {
-  background: color-mix(in srgb, var(--accent-1) 10%, var(--q-bg-paper));
-  color: var(--q-c-dark);
+/* The panel opens on the right, so the drawn sidebar is on the right too. */
+.chat-workspace-toggle-icon {
+  transform: scaleX(-1);
 }
 
 .chat-workspace-sidebar {
@@ -514,7 +522,7 @@
   top: calc(var(--chrome-bar-height) + 14px);
   min-height: 0;
   justify-self: start;
-  padding: 0.5rem;
+  padding: 0;
   overflow: hidden;
 }
 
@@ -530,13 +538,84 @@
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  gap: 10px;
-  overflow: hidden;
-  border-radius: 8px;
-  background: var(--q-bg-white);
+  /* The mobile panel is teleported to body, outside the layout that sets the head height. */
+  grid-template-rows: var(--workspace-head-height, 54px) minmax(0, 1fr);
   color: var(--text-0);
-  box-shadow: 0 1px 4px color-mix(in srgb, var(--q-c-dark) 7%, transparent);
+}
+
+/* Same height as the topic sidebar's header, without a rule: the panel has no lines. On desktop
+   it leaves room on the right for the toggle, which sits over it. */
+.chat-workspace-head {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  padding: 0 var(--chat-workspace-gutter, 16px);
+}
+
+.chat-workspace-sidebar-shell .chat-workspace-head {
+  padding-right: calc(var(--chat-workspace-gutter) * 2 + var(--chat-workspace-dock-size) - 8px);
+}
+
+/* In the panel, properties are one key/value grid: mono labels in a column of their own and
+   every value starting on the same edge, with space instead of rules between rows. */
+.chat-workspace-pane .chat-topic-property-list {
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 16px 18px;
+  padding-top: 6px;
+  border-top: 0;
+}
+
+.chat-workspace-pane .chat-topic-property-list > .chat-topic-property-row {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
+  /* The shared row style sets its own gap, which a subgrid would use instead of the list's. */
+  gap: 0 18px;
+  align-items: center;
+  min-height: 24px;
+  padding: 0;
+  border-bottom: 0;
+}
+
+.chat-workspace-pane .chat-topic-property-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  line-height: 1.2;
+}
+
+.chat-workspace-pane .chat-topic-property-value {
+  min-width: 0;
+}
+
+.chat-workspace-pane .chat-topic-pin-value {
+  justify-content: flex-start;
+}
+
+/* The usage row starts a second group: what the topic has used and when. */
+.chat-workspace-pane .chat-topic-property-list > .chat-topic-context-row {
+  align-items: baseline;
+  margin-top: 8px;
+}
+
+.chat-workspace-pane .chat-topic-property-list > .chat-topic-property-row.is-meta {
+  min-height: 0;
+}
+
+/* Created and Updated read as one pair. */
+.chat-workspace-pane .chat-topic-property-list > .chat-topic-property-row.is-meta + .is-meta {
+  margin-top: -6px;
+}
+
+.chat-workspace-pane .chat-topic-property-row.is-meta .chat-topic-property-value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-1);
+}
+
+.chat-workspace-tabs {
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
 .chat-workspace-sidebar-shell {
@@ -574,10 +653,12 @@
   outline-offset: -2px;
 }
 
+/* On phones the panel is a drawer over the chat, so it needs its own paper and an edge. */
 .chat-workspace-sidebar-shell-mobile {
   width: auto;
-  height: calc(100% - 10px);
-  margin: 6px 4px 4px 0;
+  height: 100%;
+  border-left: 1px solid var(--line);
+  background: var(--q-bg-paper);
 }
 
 .chat-workspace-mobile-enter-active {
@@ -606,17 +687,8 @@
   transform: translate3d(100%, 0, 0);
 }
 
-html[data-macos26="true"] .chat-workspace-sidebar-shell,
-html[data-macos26="true"] .chat-workspace-sidebar-shell-mobile {
-  border-radius: 16px;
-}
-
-.chat-workspace-tabs-shell {
-  padding: 14px 16px 0;
-}
-
 .chat-workspace-tabs .app-tabs-option {
-  flex: 1 1 0;
+  flex: 0 1 auto;
   min-width: 0;
 }
 
@@ -635,7 +707,7 @@ html[data-macos26="true"] .chat-workspace-sidebar-shell-mobile {
   flex-direction: column;
   gap: 12px;
   overflow: hidden;
-  padding: 0 14px 16px;
+  padding: 4px var(--chat-workspace-gutter, 16px) 16px;
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -711,29 +783,12 @@ html[data-macos26="true"] .chat-workspace-sidebar-shell-mobile {
   overflow: hidden;
 }
 
-/* Window used: a static meter, not Quail's progress bar, which animates while below its maximum. */
-.chat-topic-context-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-/* The meter and its inspect button share a line. */
+/* Window used: the count and its inspect button share a line, with a static meter under it (not
+   Quail's progress bar, which animates while below its maximum). */
 .chat-topic-context-line {
   display: flex;
   align-items: center;
   gap: 6px;
-}
-
-.chat-topic-context-unknown {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  color: var(--text-2);
-  font-size: var(--font-size-meta);
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .chat-topic-context-line .chat-topic-context-meter {
@@ -758,7 +813,10 @@ html[data-macos26="true"] .chat-workspace-sidebar-shell-mobile {
 }
 
 .chat-topic-context-ratio {
-  flex: 0 0 auto;
+  flex: 1 1 auto;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-meta);
+  font-variant-numeric: tabular-nums;
   font-weight: 600;
   letter-spacing: 0;
   color: var(--text-0);
@@ -766,7 +824,7 @@ html[data-macos26="true"] .chat-workspace-sidebar-shell-mobile {
 
 .chat-topic-context-value {
   display: grid;
-  gap: 6px;
+  gap: 4px;
 }
 
 .chat-topic-context-meter {
@@ -845,23 +903,53 @@ html[data-macos26="true"] .chat-workspace-sidebar-shell-mobile {
   line-height: 1.5;
 }
 
-.chat-topic-danger-zone {
-  margin-top: auto;
-  padding-top: 12px;
+/* The Topic tab opens with the topic's name, and its two actions sit beside it: regenerate acts
+   on the name, delete on the whole topic. */
+.chat-topic-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 14px;
 }
 
-.chat-topic-danger-action,
-.chat-topic-regenerate-action {
-  width: 100%;
-  justify-content: center;
+/* One line; a long name ends in an ellipsis and shows in full on hover. */
+.chat-topic-panel-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-size: var(--font-size-ui);
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--text-0);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.chat-topic-danger-action .icon,
-.chat-topic-regenerate-action .icon {
-  width: 14px;
-  min-width: 14px;
-  height: 14px;
+/* The buttons stay inside the content edge: the panel clips anything past it. */
+.chat-topic-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
 }
+
+.chat-topic-panel .chat-topic-actions .q-button.icon {
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0 !important;
+  border-radius: 0 !important;
+}
+
+.chat-topic-actions .q-button .icon {
+  width: 1rem;
+  min-width: 1rem;
+  height: 1rem;
+}
+
+
 
 .chat-workspace-tree-shell {
   flex: 1 1 auto;
@@ -2827,12 +2915,10 @@ body.artifact-preview-scroll-lock {
 
 @media (min-width: 921px) {
   .chat-main:not(.is-readonly) {
-    --chat-overlay-head-h: var(--workspace-head-height);
     --chat-overlay-compose-h: 80px;
     grid-template-rows: minmax(0, 1fr);
   }
 
-  .chat-main:not(.is-readonly):not(.is-placeholder-mode) > .chat-desk-head,
   .chat-main:not(.is-readonly):not(.is-placeholder-mode) > .chat-placeholder,
   .chat-main:not(.is-readonly):not(.is-placeholder-mode) > .chat-history,
   .chat-main:not(.is-readonly):not(.is-placeholder-mode) > .chat-composer {
@@ -2840,27 +2926,19 @@ body.artifact-preview-scroll-lock {
     grid-row: 1;
   }
 
-  .chat-main:not(.is-readonly):not(.is-placeholder-mode) > .chat-desk-head {
-    align-self: start;
-    width: 100%;
-    z-index: 2;
-    padding: 0 var(--chat-history-gutter-x);
-    pointer-events: none;
-  }
-
   .chat-main:not(.is-readonly):not(.is-placeholder-mode) > .chat-placeholder {
     align-self: stretch;
     min-height: 0;
     overflow: auto;
     padding:
-      calc(var(--chat-overlay-head-h) + clamp(12px, 3vw, 34px))
+      clamp(12px, 3vw, 34px)
       var(--chat-history-gutter-x)
       calc(var(--chat-overlay-compose-h) + 18px);
   }
 
   .chat-main:not(.is-readonly):not(.is-placeholder-mode) > .chat-history {
     height: 100%;
-    padding-top: calc(var(--chat-overlay-head-h) + 12px);
+    padding-top: 20px;
     padding-bottom: calc(var(--chat-overlay-compose-h) + 16px);
   }
 
@@ -3111,14 +3189,6 @@ body.artifact-preview-scroll-lock {
 
   .chat-main:not(.is-readonly) > .chat-composer {
     grid-row: 2;
-  }
-
-  .chat-desk-head {
-    display: none;
-  }
-
-  .chat-desk-tools {
-    align-self: flex-start;
   }
 
   .chat-workspace-tree-list.is-browser {

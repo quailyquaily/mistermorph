@@ -369,9 +369,8 @@ const StatsView = {
     };
   },
   template: `
-    <AppPage :title="t('stats_title')">
+    <AppPage :title="t('stats_title')" :error="err">
       <QProgress v-if="loading" :infinite="true" />
-      <QFence v-if="err" type="danger" icon="PhXCircle" :text="err" />
 
       <section class="stats-page">
         <header class="stats-hero block-default">

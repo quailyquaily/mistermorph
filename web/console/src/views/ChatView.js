@@ -82,6 +82,7 @@ import {
   currentLocale,
   endpointState,
   formatBytes,
+  formatShortTime,
   formatTime,
   runtimeApiDownloadForEndpoint,
   runtimeApiFetchForEndpoint,
@@ -1484,13 +1485,15 @@ const ChatView = {
         {
           key: "created",
           label: t("chat_topic_created_label"),
-          value: formatTime(topic.created_at),
+          value: formatShortTime(topic.created_at),
+          title: formatTime(topic.created_at),
           code: false,
         },
         {
           key: "updated",
           label: t("chat_topic_updated_label"),
-          value: formatTime(topic.updated_at),
+          value: formatShortTime(topic.updated_at),
+          title: formatTime(topic.updated_at),
           code: false,
         },
       ];
@@ -1568,9 +1571,6 @@ const ChatView = {
         }
         if (workspaceSource.value === "default") {
           return t("chat_workspace_hint_default");
-        }
-        if (workspaceSource.value === "attachment") {
-          return t("chat_workspace_hint_attachment");
         }
         return "";
       }
@@ -4696,6 +4696,7 @@ const ChatView = {
   template: `
     <AppPage
       :title="t('chat_title')"
+      :error="err"
       :class="pageClass"
       :hideDesktopBar="true"
       :hideMobileBar="showTopicSidebar"
@@ -4724,7 +4725,6 @@ const ChatView = {
           </QButton>
         </div>
       </template>
-      <QFence v-if="err" type="danger" icon="PhXCircle" :text="err" />
       <input
         ref="composerFileInput"
         type="file"
@@ -4847,23 +4847,6 @@ const ChatView = {
             @click="startNewTopic"
           />
           <section v-if="showChatPane" :class="chatMainClass" :style="chatMainStyle">
-            <header v-if="consoleTopicsEnabled && !showChatPlaceholder" class="chat-desk-head">
-              <div class="chat-desk-head-main">
-                <div class="chat-desk-copy">
-                  <h3 class="chat-desk-title workspace-document-title">{{ deskTitle }}</h3>
-                </div>
-                <div v-if="workspaceSidebarAvailable" class="chat-desk-tools">
-                  <QButton
-                    :class="workspaceSidebarOpen ? 'plain sm icon chat-workspace-toggle is-active' : 'plain sm icon chat-workspace-toggle'"
-                    :title="workspaceSidebarToggleLabel"
-                    :aria-label="workspaceSidebarToggleLabel"
-                    @click="toggleWorkspaceSidebar"
-                  >
-                    <PhSidebarSimple class="icon" />
-                  </QButton>
-                </div>
-              </div>
-            </header>
             <section v-if="showChatPlaceholder" class="chat-placeholder">
               <div class="chat-placeholder-copy">
                 <h3 class="chat-placeholder-title workspace-document-title">{{ deskTitle }}</h3>
@@ -4998,15 +4981,16 @@ const ChatView = {
             :aria-label="t('chat_workspace_label')"
           >
             <div class="chat-workspace-sidebar-shell">
-              <div class="chat-workspace-tabs-shell">
+              <header class="chat-workspace-head">
                 <AppTabs
                   class="chat-workspace-tabs"
+                  iconOnly
                   :tabs="workspacePanelTabs"
                   :modelValue="selectedWorkspacePanelTab"
                   :ariaLabel="t('chat_workspace_label')"
                   @change="onWorkspaceTabChange"
                 />
-              </div>
+              </header>
 
               <div class="chat-workspace-pane ui-track-panel">
                 <template v-if="workspaceSidebarTabID === 'workspace'">
@@ -5204,6 +5188,32 @@ const ChatView = {
                       :text="topicDeleteError || topicRegenerateError"
                     />
 
+                    <header class="chat-topic-panel-head">
+                      <h4 class="chat-topic-panel-title" :title="deskTitle">{{ deskTitle }}</h4>
+                      <div v-if="topicDeleteAvailable" class="chat-topic-actions">
+                        <QButton
+                          class="plain sm icon chat-topic-regenerate-action"
+                          :title="t('chat_topic_regenerate_action')"
+                          :aria-label="t('chat_topic_regenerate_action')"
+                          :loading="topicRegenerating"
+                          :disabled="topicRegenerateDisabled"
+                          @click="regenerateTopicName"
+                        >
+                          <PhMagicWand class="icon" />
+                        </QButton>
+                        <QButton
+                          class="danger plain sm icon chat-topic-danger-action"
+                          :title="t('chat_topic_delete_action')"
+                          :aria-label="t('chat_topic_delete_action')"
+                          :loading="topicDeleting"
+                          :disabled="topicDeleteDisabled"
+                          @click="confirmDeleteTopic"
+                        >
+                          <PhTrash class="icon" />
+                        </QButton>
+                      </div>
+                    </header>
+
                     <dl class="chat-topic-property-list">
                       <template v-if="topicTagsAvailable">
                         <div class="chat-topic-property-row chat-topic-pin-row">
@@ -5236,40 +5246,12 @@ const ChatView = {
                         :class="['chat-topic-property-row', 'chat-topic-context-row', topicContextProgress.meter ? 'is-' + topicContextProgress.meter.state : '']"
                         :title="topicContextProgress.title"
                       >
-                        <dt class="chat-topic-property-label chat-topic-context-head">
-                          <span>{{ t("chat_topic_context_ratio_label") }}</span>
-                          <strong class="chat-topic-context-ratio">{{ topicContextProgress.label }}</strong>
-                        </dt>
+                        <dt class="chat-topic-property-label">{{ t("chat_topic_context_ratio_label") }}</dt>
                         <dd class="chat-topic-property-value chat-topic-context-value">
                           <div class="chat-topic-context-line">
-                            <span v-if="topicContextProgress.unknownWindow" class="chat-topic-context-unknown">{{ t("chat_topic_context_window_unknown") }}</span>
-                            <div
-                              v-else
-                              class="chat-topic-context-meter"
-                              role="meter"
-                              aria-valuemin="0"
-                              aria-valuemax="100"
-                              :aria-valuenow="Math.round(topicContextProgress.fill * 100)"
-                              :aria-label="t('chat_topic_context_ratio_label')"
-                              :aria-valuetext="topicContextProgress.label"
-                            >
-                              <template v-if="topicContextProgress.meter">
-                                <span class="chat-topic-context-meter-cached" :style="{ width: topicContextProgress.meter.cachedShare * 100 + '%' }"></span>
-                                <span
-                                  class="chat-topic-context-meter-fresh"
-                                  :style="{ left: topicContextProgress.meter.cachedShare * 100 + '%', width: topicContextProgress.meter.freshShare * 100 + '%' }"
-                                ></span>
-                                <span
-                                  v-if="topicContextProgress.meter.triggerShare !== null"
-                                  class="chat-topic-context-meter-trigger"
-                                  :style="{ left: topicContextProgress.meter.triggerShare * 100 + '%' }"
-                                  aria-hidden="true"
-                                ></span>
-                              </template>
-                              <span v-else class="chat-topic-context-meter-fresh" :style="{ width: topicContextProgress.fill * 100 + '%' }"></span>
-                            </div>
+                            <strong class="chat-topic-context-ratio">{{ topicContextProgress.label }}</strong>
                             <QButton
-                              class="outlined xs icon chat-topic-context-inspect"
+                              class="plain xs icon chat-topic-context-inspect"
                               :title="t('context_inspector_open')"
                               :aria-label="t('context_inspector_open')"
                               @click="openContextInspector"
@@ -5277,45 +5259,64 @@ const ChatView = {
                               <PhMagnifyingGlass class="icon" />
                             </QButton>
                           </div>
+                          <div
+                            v-if="!topicContextProgress.unknownWindow"
+                            class="chat-topic-context-meter"
+                            role="meter"
+                            aria-valuemin="0"
+                            aria-valuemax="100"
+                            :aria-valuenow="Math.round(topicContextProgress.fill * 100)"
+                            :aria-label="t('chat_topic_context_ratio_label')"
+                            :aria-valuetext="topicContextProgress.label"
+                          >
+                            <template v-if="topicContextProgress.meter">
+                              <span class="chat-topic-context-meter-cached" :style="{ width: topicContextProgress.meter.cachedShare * 100 + '%' }"></span>
+                              <span
+                                class="chat-topic-context-meter-fresh"
+                                :style="{ left: topicContextProgress.meter.cachedShare * 100 + '%', width: topicContextProgress.meter.freshShare * 100 + '%' }"
+                              ></span>
+                              <span
+                                v-if="topicContextProgress.meter.triggerShare !== null"
+                                class="chat-topic-context-meter-trigger"
+                                :style="{ left: topicContextProgress.meter.triggerShare * 100 + '%' }"
+                                aria-hidden="true"
+                              ></span>
+                            </template>
+                            <span v-else class="chat-topic-context-meter-fresh" :style="{ width: topicContextProgress.fill * 100 + '%' }"></span>
+                          </div>
                         </dd>
                       </div>
-                      <div v-for="row in topicPropertyRows" :key="row.key" class="chat-topic-property-row">
+                      <div v-for="row in topicPropertyRows" :key="row.key" class="chat-topic-property-row is-meta">
                         <dt class="chat-topic-property-label">{{ row.label }}</dt>
                         <dd :class="row.code ? 'chat-topic-property-value is-code' : 'chat-topic-property-value'">
                           <code v-if="row.code" :title="row.value">{{ row.value }}</code>
-                          <span v-else>{{ row.value }}</span>
+                          <span v-else :title="row.title || undefined">{{ row.value }}</span>
                         </dd>
                       </div>
                     </dl>
 
-                    <QButton
-                      v-if="topicDeleteAvailable"
-                      class="plain sm chat-topic-regenerate-action"
-                      :loading="topicRegenerating"
-                      :disabled="topicRegenerateDisabled"
-                      @click="regenerateTopicName"
-                    >
-                      <PhMagicWand class="icon" />
-                      <span>{{ t("chat_topic_regenerate_action") }}</span>
-                    </QButton>
-
-                    <footer v-if="topicDeleteAvailable" class="chat-topic-danger-zone">
-                      <QButton
-                        class="danger plain sm chat-topic-danger-action"
-                        :loading="topicDeleting"
-                        :disabled="topicDeleteDisabled"
-                        @click="confirmDeleteTopic"
-                      >
-                        <PhTrash class="icon" />
-                        <span>{{ t("chat_topic_delete_action") }}</span>
-                      </QButton>
-                    </footer>
                   </section>
                 </template>
               </div>
             </div>
           </aside>
           </Transition>
+          <!-- The panel toggle stays at the top-right corner, on the header line: over the chat
+               while the panel is closed, in the panel's header once it slides out beneath it. -->
+          <div
+            v-if="consoleTopicsEnabled && !showChatPlaceholder && workspaceSidebarAvailable && !mobileMode && showChatPane"
+            :class="['chat-workspace-dock', { 'is-open': desktopWorkspaceSidebarVisible }]"
+          >
+            <QButton
+              class="plain sm icon chat-workspace-toggle"
+              :title="workspaceSidebarToggleLabel"
+              :aria-label="workspaceSidebarToggleLabel"
+              :aria-expanded="desktopWorkspaceSidebarVisible ? 'true' : 'false'"
+              @click="toggleWorkspaceSidebar"
+            >
+              <PhSidebarSimple class="icon chat-workspace-toggle-icon" />
+            </QButton>
+          </div>
         </section>
         <Teleport to="body">
           <Transition name="chat-workspace-mobile">
@@ -5332,15 +5333,16 @@ const ChatView = {
                 tabindex="-1"
               >
                 <div class="chat-workspace-sidebar-shell-mobile">
-            <div class="chat-workspace-tabs-shell">
+            <header class="chat-workspace-head">
               <AppTabs
                 class="chat-workspace-tabs"
+                iconOnly
                 :tabs="workspacePanelTabs"
                 :modelValue="selectedWorkspacePanelTab"
                 :ariaLabel="t('chat_workspace_label')"
                 @change="onWorkspaceTabChange"
               />
-            </div>
+            </header>
 
             <div class="chat-workspace-pane ui-track-panel">
               <template v-if="workspaceSidebarTabID === 'workspace'">
@@ -5538,6 +5540,32 @@ const ChatView = {
                     :text="topicDeleteError || topicRegenerateError"
                   />
 
+                  <header class="chat-topic-panel-head">
+                    <h4 class="chat-topic-panel-title" :title="deskTitle">{{ deskTitle }}</h4>
+                    <div v-if="topicDeleteAvailable" class="chat-topic-actions">
+                      <QButton
+                        class="plain sm icon chat-topic-regenerate-action"
+                        :title="t('chat_topic_regenerate_action')"
+                        :aria-label="t('chat_topic_regenerate_action')"
+                        :loading="topicRegenerating"
+                        :disabled="topicRegenerateDisabled"
+                        @click="regenerateTopicName"
+                      >
+                        <PhMagicWand class="icon" />
+                      </QButton>
+                      <QButton
+                        class="danger plain sm icon chat-topic-danger-action"
+                        :title="t('chat_topic_delete_action')"
+                        :aria-label="t('chat_topic_delete_action')"
+                        :loading="topicDeleting"
+                        :disabled="topicDeleteDisabled"
+                        @click="confirmDeleteTopic"
+                      >
+                        <PhTrash class="icon" />
+                      </QButton>
+                    </div>
+                  </header>
+
                   <dl class="chat-topic-property-list">
                     <template v-if="topicTagsAvailable">
                       <div class="chat-topic-property-row chat-topic-pin-row">
@@ -5570,40 +5598,12 @@ const ChatView = {
                       :class="['chat-topic-property-row', 'chat-topic-context-row', topicContextProgress.meter ? 'is-' + topicContextProgress.meter.state : '']"
                       :title="topicContextProgress.title"
                     >
-                      <dt class="chat-topic-property-label chat-topic-context-head">
-                        <span>{{ t("chat_topic_context_ratio_label") }}</span>
-                        <strong class="chat-topic-context-ratio">{{ topicContextProgress.label }}</strong>
-                      </dt>
+                      <dt class="chat-topic-property-label">{{ t("chat_topic_context_ratio_label") }}</dt>
                       <dd class="chat-topic-property-value chat-topic-context-value">
                         <div class="chat-topic-context-line">
-                          <span v-if="topicContextProgress.unknownWindow" class="chat-topic-context-unknown">{{ t("chat_topic_context_window_unknown") }}</span>
-                          <div
-                            v-else
-                            class="chat-topic-context-meter"
-                            role="meter"
-                            aria-valuemin="0"
-                            aria-valuemax="100"
-                            :aria-valuenow="Math.round(topicContextProgress.fill * 100)"
-                            :aria-label="t('chat_topic_context_ratio_label')"
-                            :aria-valuetext="topicContextProgress.label"
-                          >
-                            <template v-if="topicContextProgress.meter">
-                              <span class="chat-topic-context-meter-cached" :style="{ width: topicContextProgress.meter.cachedShare * 100 + '%' }"></span>
-                              <span
-                                class="chat-topic-context-meter-fresh"
-                                :style="{ left: topicContextProgress.meter.cachedShare * 100 + '%', width: topicContextProgress.meter.freshShare * 100 + '%' }"
-                              ></span>
-                              <span
-                                v-if="topicContextProgress.meter.triggerShare !== null"
-                                class="chat-topic-context-meter-trigger"
-                                :style="{ left: topicContextProgress.meter.triggerShare * 100 + '%' }"
-                                aria-hidden="true"
-                              ></span>
-                            </template>
-                            <span v-else class="chat-topic-context-meter-fresh" :style="{ width: topicContextProgress.fill * 100 + '%' }"></span>
-                          </div>
+                          <strong class="chat-topic-context-ratio">{{ topicContextProgress.label }}</strong>
                           <QButton
-                            class="outlined xs icon chat-topic-context-inspect"
+                            class="plain xs icon chat-topic-context-inspect"
                             :title="t('context_inspector_open')"
                             :aria-label="t('context_inspector_open')"
                             @click="openContextInspector"
@@ -5611,39 +5611,42 @@ const ChatView = {
                             <PhMagnifyingGlass class="icon" />
                           </QButton>
                         </div>
+                        <div
+                          v-if="!topicContextProgress.unknownWindow"
+                          class="chat-topic-context-meter"
+                          role="meter"
+                          aria-valuemin="0"
+                          aria-valuemax="100"
+                          :aria-valuenow="Math.round(topicContextProgress.fill * 100)"
+                          :aria-label="t('chat_topic_context_ratio_label')"
+                          :aria-valuetext="topicContextProgress.label"
+                        >
+                          <template v-if="topicContextProgress.meter">
+                            <span class="chat-topic-context-meter-cached" :style="{ width: topicContextProgress.meter.cachedShare * 100 + '%' }"></span>
+                            <span
+                              class="chat-topic-context-meter-fresh"
+                              :style="{ left: topicContextProgress.meter.cachedShare * 100 + '%', width: topicContextProgress.meter.freshShare * 100 + '%' }"
+                            ></span>
+                            <span
+                              v-if="topicContextProgress.meter.triggerShare !== null"
+                              class="chat-topic-context-meter-trigger"
+                              :style="{ left: topicContextProgress.meter.triggerShare * 100 + '%' }"
+                              aria-hidden="true"
+                            ></span>
+                          </template>
+                          <span v-else class="chat-topic-context-meter-fresh" :style="{ width: topicContextProgress.fill * 100 + '%' }"></span>
+                        </div>
                       </dd>
                     </div>
-                    <div v-for="row in topicPropertyRows" :key="row.key" class="chat-topic-property-row">
+                    <div v-for="row in topicPropertyRows" :key="row.key" class="chat-topic-property-row is-meta">
                       <dt class="chat-topic-property-label">{{ row.label }}</dt>
                       <dd :class="row.code ? 'chat-topic-property-value is-code' : 'chat-topic-property-value'">
                         <code v-if="row.code" :title="row.value">{{ row.value }}</code>
-                        <span v-else>{{ row.value }}</span>
+                        <span v-else :title="row.title || undefined">{{ row.value }}</span>
                       </dd>
                     </div>
                   </dl>
 
-                  <QButton
-                    v-if="topicDeleteAvailable"
-                    class="plain sm chat-topic-regenerate-action"
-                    :loading="topicRegenerating"
-                    :disabled="topicRegenerateDisabled"
-                    @click="regenerateTopicName"
-                  >
-                    <PhMagicWand class="icon" />
-                    <span>{{ t("chat_topic_regenerate_action") }}</span>
-                  </QButton>
-
-                  <footer v-if="topicDeleteAvailable" class="chat-topic-danger-zone">
-                    <QButton
-                      class="danger plain sm chat-topic-danger-action"
-                      :loading="topicDeleting"
-                      :disabled="topicDeleteDisabled"
-                      @click="confirmDeleteTopic"
-                    >
-                      <PhTrash class="icon" />
-                      <span>{{ t("chat_topic_delete_action") }}</span>
-                    </QButton>
-                  </footer>
                 </section>
               </template>
             </div>

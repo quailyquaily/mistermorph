@@ -256,7 +256,7 @@ export default {
     };
   },
   template: `
-    <AppPage :title="t('logs_title')" class="logs-page">
+    <AppPage :title="t('logs_title')" class="logs-page" :error="err">
       <section class="logs-shell">
         <div class="logs-toolbar">
           <div class="logs-filter logs-search">
@@ -301,7 +301,6 @@ export default {
         </div>
 
         <QProgress v-if="loading && !entries.length" :infinite="true" />
-        <QFence v-if="err" type="danger" icon="PhXCircle" :text="err" />
         <div v-if="hasNewer" class="logs-newer-note" role="status">
           <span>{{ t('logs_new_available') }}</span>
           <QButton class="outlined sm" :disabled="loading || loadingOlder" @click="resumeFollowing">{{ t('logs_latest') }}</QButton>

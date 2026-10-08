@@ -11,6 +11,7 @@ import ProAuthDialog from "../components/ProAuthDialog";
 import InferenceProviderPicker from "../components/InferenceProviderPicker";
 import EnvManagedField from "../components/EnvManagedField";
 import SecretInput from "../components/SecretInput";
+import AppErrorNotice, { isNetworkErrorMessage } from "../components/AppErrorNotice";
 import { llmSecretConfigPath } from "../core/secret-storage";
 import { CONSOLE_LOCAL_ENDPOINT_REF } from "../core/endpoints";
 import SetupConnectionTestDialog from "../components/SetupConnectionTestDialog";
@@ -232,6 +233,7 @@ function resolveDoneGreetingKey(date = new Date()) {
 
 const SetupView = {
   components: {
+    AppErrorNotice,
     SecretInput,
     EnvManagedField,
     ImageUploadField,
@@ -1736,6 +1738,7 @@ const SetupView = {
     });
 
     return {
+      isNetworkErrorMessage,
       t,
       routeStage,
       stageMeta,
@@ -1901,6 +1904,7 @@ const SetupView = {
   },
   template: `
     <section :class="screenClass">
+      <AppErrorNotice class="is-viewport" :message="isNetworkErrorMessage(err) ? err : ''" />
       <QCard class="setup-shell stat-item" variant="default">
         <header class="setup-head">
           <p class="ui-kicker setup-step">{{ stageKicker }}</p>
@@ -2123,7 +2127,7 @@ const SetupView = {
             </div>
           </label>
 
-          <QFence v-if="err" class="setup-error is-wide" type="danger" icon="PhXCircle" :text="err" />
+          <QFence v-if="err && !isNetworkErrorMessage(err)" class="setup-error is-wide" type="danger" icon="PhXCircle" :text="err" />
 
           <div class="setup-footer is-wide">
             <div class="setup-footer-side">
@@ -2202,7 +2206,7 @@ const SetupView = {
             />
           </label>
 
-          <QFence v-if="err" class="setup-error is-wide" type="danger" icon="PhXCircle" :text="err" />
+          <QFence v-if="err && !isNetworkErrorMessage(err)" class="setup-error is-wide" type="danger" icon="PhXCircle" :text="err" />
 
           <div class="setup-footer setup-footer-persona is-wide">
             <div class="setup-footer-side">
@@ -2296,7 +2300,7 @@ const SetupView = {
             />
           </section>
 
-          <QFence v-if="err" class="setup-error is-wide" type="danger" icon="PhXCircle" :text="err" />
+          <QFence v-if="err && !isNetworkErrorMessage(err)" class="setup-error is-wide" type="danger" icon="PhXCircle" :text="err" />
 
           <div class="setup-footer is-wide">
             <div class="setup-footer-side">
