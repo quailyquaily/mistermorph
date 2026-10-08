@@ -2702,7 +2702,7 @@ body.artifact-preview-scroll-lock {
 }
 
 .chat-history-user {
-  --chat-user-bg: color-mix(in srgb, var(--q-c-blue) 7%, var(--q-bg-white));
+  --chat-user-bg: var(--q-bg-white);
   --chat-user-edge: color-mix(in srgb, var(--q-c-dark-4) 62%, var(--q-bg-white));
   --chat-user-tail: 8px;
 }
