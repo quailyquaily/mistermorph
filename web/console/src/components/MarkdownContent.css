@@ -1,0 +1,23 @@
+/* Tables in rendered Markdown: a thin outer line and row dividers, no cell grid, and only a light
+   tint on the header. Scoped to the host so these rules win over the renderer's own stylesheet,
+   which loads after this one. */
+.chat-markdown-content .mmr-document table {
+  border: 1px solid var(--line-soft);
+  background: transparent;
+}
+
+.chat-markdown-content .mmr-document th,
+.chat-markdown-content .mmr-document td {
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--line-soft) 60%, transparent);
+}
+
+.chat-markdown-content .mmr-document tr:last-child > td {
+  border-bottom: 0;
+}
+
+.chat-markdown-content .mmr-document th {
+  border-bottom-color: var(--line-soft);
+  background: color-mix(in srgb, var(--q-c-dark-4) 12%, transparent);
+  font-weight: 600;
+}

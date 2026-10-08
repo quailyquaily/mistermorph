@@ -1023,11 +1023,6 @@ export default {
   },
   template: `
     <div ref="composerRoot" :class="rootClass" @pointerdown="handlePointerDown">
-      <div
-        v-if="!landing"
-        class="chat-composer-gradient-blur"
-        aria-hidden="true"
-      ></div>
       <div class="chat-composer-surface">
         <div
           v-if="suggestionsVisible"

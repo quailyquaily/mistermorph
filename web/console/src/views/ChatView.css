@@ -408,6 +408,15 @@
 
 .chat-main {
   --chat-history-gutter-x: clamp(12px, 2vw, 20px);
+  /* On a wide pane, messages and the composer share one centered column instead of spreading
+     to the edges: replies stay at --chat-measure, and sent messages sit near them. */
+  --chat-column: 52rem;
+  /* The composer's side margin that centers it on the history column; the history's scrollbar
+     takes room on the right only. */
+  --chat-column-side: max(
+    var(--chat-history-gutter-x),
+    calc((100% - var(--chat-history-scrollbar-w, 0px) - var(--chat-column)) / 2)
+  );
   min-height: 0;
   height: 100%;
   display: grid;
@@ -430,8 +439,8 @@
 }
 
 .chat-main:not(.is-readonly):not(.is-placeholder-mode) > .chat-composer {
-  margin-left: var(--chat-history-gutter-x);
-  margin-right: calc(var(--chat-history-gutter-x) + var(--chat-history-scrollbar-w, 0px));
+  margin-left: var(--chat-column-side);
+  margin-right: calc(var(--chat-column-side) + var(--chat-history-scrollbar-w, 0px));
   padding-bottom: max(10px, env(safe-area-inset-bottom, 0px));
 }
 
@@ -1432,6 +1441,12 @@ html[data-macos26="true"] .chat-workspace-sidebar-shell-mobile {
   scrollbar-width: thin;
   scrollbar-gutter: stable;
   overscroll-behavior: contain;
+}
+
+.chat-history > * {
+  width: 100%;
+  max-width: var(--chat-column);
+  margin-inline: auto;
 }
 
 .chat-history-load-older {

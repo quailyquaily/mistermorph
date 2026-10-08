@@ -1,4 +1,5 @@
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
+import "./MarkdownContent.css";
 
 import { recordMarkdownMount, recordMarkdownUpdate } from "../core/performance";
 

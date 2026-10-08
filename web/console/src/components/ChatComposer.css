@@ -10,30 +10,6 @@
   pointer-events: auto;
 }
 
-.chat-composer-gradient-blur {
-  position: absolute;
-  inset: -72px -12px 0;
-  z-index: 0;
-  pointer-events: none;
-  background: transparent;
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
-  mask-image: linear-gradient(
-    to bottom,
-    transparent 0%,
-    rgb(0 0 0 / 8%) 24%,
-    rgb(0 0 0 / 52%) 64%,
-    #000 100%
-  );
-  -webkit-mask-image: linear-gradient(
-    to bottom,
-    transparent 0%,
-    rgb(0 0 0 / 8%) 24%,
-    rgb(0 0 0 / 52%) 64%,
-    #000 100%
-  );
-}
-
 .chat-composer-landing {
   width: min(100%, 46rem);
   max-width: 46rem;
@@ -47,15 +23,19 @@
   border-radius: var(--q-field-radius);
   background: var(--q-field-bg);
   box-shadow: var(--q-field-shadow);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
   overflow: visible;
-  transition: border-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+  transition:
+    border-color var(--motion-slow) var(--motion-ease),
+    box-shadow var(--motion-slow) var(--motion-ease);
 }
 
+/* Focus is a soft lift, not a hard outline: the border only moves partway toward the field focus
+   color, and a faint ring and shadow carry the rest. */
 .chat-composer-surface:has(textarea:focus) {
-  border-color: var(--q-field-border-color-focus);
-  box-shadow: var(--q-field-shadow-focus, var(--q-field-shadow));
+  border-color: color-mix(in srgb, var(--q-field-border-color-focus) 45%, var(--q-field-border-color));
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--q-field-border-color-focus) 8%, transparent),
+    0 6px 20px -10px rgb(0 0 0 / 16%);
 }
 
 .chat-composer-files {
