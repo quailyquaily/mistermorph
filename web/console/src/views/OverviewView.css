@@ -410,43 +410,19 @@ a.endpoint-overview-item:active .endpoint-overview-portrait {
 
 /* ---- Agent readouts: a small instrument datasheet under each agent. ---- */
 
+/* A hairline sheet in AppSection's terms: its line and paper, no corner marks, an untinted head. */
 .endpoint-overview-readout {
-  --readout-rule: color-mix(in srgb, var(--q-c-dark-4) 55%, transparent);
+  --readout-rule: var(--line-soft);
   position: relative;
   display: grid;
   width: 100%;
   margin-top: 0;
   border: 1px solid var(--readout-rule);
-  border-radius: 1px;
-  background: color-mix(in srgb, var(--q-bg-white) 88%, transparent);
+  border-radius: 2px;
+  background: var(--bg-2);
   color: var(--text-2);
   font-family: var(--font-mono);
   text-align: left;
-}
-
-/* Registration marks on opposite corners, as on the other drawing-style panels. */
-.endpoint-overview-readout::before,
-.endpoint-overview-readout::after {
-  content: "";
-  position: absolute;
-  width: 7px;
-  height: 7px;
-  border: 0 solid var(--q-c-dark);
-  pointer-events: none;
-}
-
-.endpoint-overview-readout::before {
-  top: -1px;
-  left: -1px;
-  border-top-width: 1.5px;
-  border-left-width: 1.5px;
-}
-
-.endpoint-overview-readout::after {
-  right: -1px;
-  bottom: -1px;
-  border-right-width: 1.5px;
-  border-bottom-width: 1.5px;
 }
 
 .readout-leader-line {
@@ -457,15 +433,24 @@ a.endpoint-overview-item:active .endpoint-overview-portrait {
   border-left: 1px dashed var(--line);
 }
 
+/* The head reads like an AppSection's, small: a square mark and the bracketed model, both in the
+   agent's colour (its avatar's), channels at the far end. */
 .readout-head {
+  --readout-tone: var(--readout-color, color-mix(in srgb, var(--accent-1) 68%, var(--text-0) 32%));
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  gap: 7px;
   min-width: 0;
   padding: 6px 8px;
   border-bottom: 1px solid var(--readout-rule);
-  background: color-mix(in srgb, var(--q-c-blue) 5%, transparent);
+}
+
+.readout-mark {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 1px;
+  background: var(--readout-tone);
 }
 
 .readout-model {
@@ -487,7 +472,8 @@ a.endpoint-overview-item:active .endpoint-overview-portrait {
 
 .readout-model::before,
 .readout-model::after {
-  color: color-mix(in srgb, var(--text-2) 60%, transparent);
+  color: var(--readout-tone);
+  opacity: 0.55;
 }
 
 .readout-model::before {
@@ -501,6 +487,7 @@ a.endpoint-overview-item:active .endpoint-overview-portrait {
 .readout-channels {
   display: flex;
   flex: 0 0 auto;
+  margin-left: auto;
   gap: 4px;
 }
 
@@ -554,7 +541,7 @@ a.endpoint-overview-item:active .endpoint-overview-portrait {
 .readout-meter {
   align-items: center;
   padding: 7px 8px 8px;
-  border-top: 1px dashed var(--readout-rule);
+  border-top: 1px solid var(--readout-rule);
 }
 
 .readout-segments {
@@ -568,7 +555,7 @@ a.endpoint-overview-item:active .endpoint-overview-portrait {
 }
 
 .readout-segments > i {
-  background: color-mix(in srgb, var(--q-c-dark-4) 35%, transparent);
+  background: var(--line-soft);
 }
 
 .readout-segments > i.is-lit {

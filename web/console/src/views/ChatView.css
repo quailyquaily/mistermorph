@@ -2394,63 +2394,27 @@ body[data-theme] .chat-workspace-dock .chat-workspace-toggle.q-button[aria-expan
   min-width: 0;
 }
 
-/* A web artifact is an exhibit sheet inside the reply: hairline frame, registration marks on
-   opposite corners, a title strip naming the file. Uses Quail variables directly because the
-   fullscreen card is teleported to <body>, outside the chat's token scope. */
-.artifact-preview-card {
-  position: relative;
-  display: grid;
-  gap: 0;
+/* A web artifact is a boxed AppSection inside the reply: the head names the kind and the file, with
+   plain actions; the body holds the frame flush to the box. Fullscreen, the card is teleported to
+   <body> and drops the head and the box. */
+.artifact-preview-card.app-section.is-boxed {
   margin-block: 14px;
-  border: 1px solid var(--line-faint);
-  border-radius: 2px;
-  background: var(--q-bg-white);
 }
 
-.artifact-preview-card:not(.is-fullscreen)::before,
-.artifact-preview-card:not(.is-fullscreen)::after {
-  content: "";
-  position: absolute;
-  z-index: 1;
-  width: 10px;
-  height: 10px;
-  border: 0 solid var(--q-c-dark);
-  pointer-events: none;
+.artifact-preview-card > .app-section-body {
+  gap: 0;
+  padding: 0;
 }
 
-.artifact-preview-card:not(.is-fullscreen)::before {
-  top: -1px;
-  left: -1px;
-  border-top-width: 1.5px;
-  border-left-width: 1.5px;
-}
-
-.artifact-preview-card:not(.is-fullscreen)::after {
-  right: -1px;
-  bottom: -1px;
-  border-right-width: 1.5px;
-  border-bottom-width: 1.5px;
-}
-
-/* Registration marks reach further while the exhibit is in use. */
-.artifact-preview-card:not(.is-fullscreen)::before,
-.artifact-preview-card:not(.is-fullscreen)::after {
-  transition:
-    width var(--motion-normal) var(--motion-ease),
-    height var(--motion-normal) var(--motion-ease);
-}
-
-.artifact-preview-card:not(.is-fullscreen):is(:hover, :focus-within)::before,
-.artifact-preview-card:not(.is-fullscreen):is(:hover, :focus-within)::after {
-  width: 16px;
-  height: 16px;
+.artifact-preview-card > .app-section-body > .app-notice {
+  margin: 12px var(--app-section-padding);
 }
 
 body.artifact-preview-scroll-lock {
   overflow: hidden;
 }
 
-.artifact-preview-card.is-fullscreen {
+.artifact-preview-card.app-section.is-fullscreen {
   position: fixed;
   inset: 0;
   z-index: 70;
@@ -2461,49 +2425,13 @@ body.artifact-preview-scroll-lock {
   background: #fff;
 }
 
-.artifact-preview-head {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px;
-  align-items: center;
-  min-height: 40px;
-  padding: 4px 6px 4px 14px;
-}
-
-.artifact-preview-copy {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-  min-width: 0;
-}
-
-.artifact-preview-kicker {
-  flex: 0 0 auto;
-  margin: 0;
-  color: var(--q-c-dark-3);
-  font: 500 11px/1.4 var(--font-mono);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+.artifact-preview-card.is-fullscreen > .app-section-body {
+  grid-template-rows: minmax(0, 1fr);
+  min-height: 0;
 }
 
 .artifact-preview-name {
-  min-width: 0;
-  margin: 0;
-  overflow: hidden;
-  color: var(--q-c-dark-2);
-  font: 12px/1.4 var(--font-mono);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.artifact-preview-actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-}
-
-.artifact-preview-actions .q-button {
-  border-radius: 2px !important;
+  font-family: var(--font-mono);
 }
 
 .artifact-preview-corner {
@@ -2521,7 +2449,6 @@ body.artifact-preview-scroll-lock {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  border-top: 1px solid var(--line-faint);
   background: #fff;
 }
 

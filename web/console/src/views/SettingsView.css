@@ -283,10 +283,10 @@
   margin-top: 0;
 }
 
+/* Inside the workbench, not at the page's edge: a fixed 16px, like the gaps between and inside the
+   sections. The sidebar is the left edge. */
 .settings-panel-body-plain {
-  margin-right: var(--content-gutter-x);
-  margin-bottom: var(--content-gutter-y);
-  margin-left: 0;
+  margin: 16px 16px 16px 0;
 }
 
 .settings-system-advanced {
@@ -1330,8 +1330,8 @@ body:has(.settings-page) .q-dialog .q-menu-item.danger .q-menu-title {
   display: flex;
   align-items: center;
   gap: 12px;
-  /* Same gutters as .settings-panel-body-plain so the bar lines up with the section cards. */
-  margin: 0 var(--content-gutter-x) 12px 0;
+  /* Same right margin as .settings-panel-body-plain so the bar lines up with the section cards. */
+  margin: 0 16px 12px 0;
   padding: 10px 14px;
   border: 1px solid var(--line);
   border-radius: 2px;
@@ -1382,6 +1382,7 @@ body:has(.settings-page) .q-dialog .q-menu-item.danger .q-menu-title {
 
 @media (max-width: 920px) {
   .settings-save-bar {
+    margin-right: var(--content-gutter-x);
     margin-left: var(--content-gutter-x);
   }
 }

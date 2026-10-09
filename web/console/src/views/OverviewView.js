@@ -363,9 +363,10 @@ const OverviewView = {
               </component>
               <!-- Outside the link: the readout is information only, clicking it does not navigate. -->
               <template v-for="readout in [readoutFor(item)]" :key="'readout'">
-                <span v-if="readout" class="endpoint-overview-readout">
+                <span v-if="readout" class="endpoint-overview-readout" :style="{ '--readout-color': avatarColors.get(item.avatar_url) || undefined }">
                   <span class="readout-leader-line" aria-hidden="true"></span>
                   <span class="readout-head">
+                    <span class="readout-mark" aria-hidden="true"></span>
                     <span v-if="readout.model" class="readout-model" :title="readout.model"><span>{{ readout.model }}</span></span>
                     <span class="readout-channels">
                       <img v-for="channel in readout.channels" :key="channel.key" :src="channel.logo" :alt="channel.title" :title="channel.title" />
@@ -402,7 +403,6 @@ const OverviewView = {
                     :aria-valuenow="parseInt(readout.cache.percent)"
                     :aria-label="t('overview_readout_cache')"
                     :title="t('overview_readout_cache_hint')"
-                    :style="{ '--readout-color': avatarColors.get(item.avatar_url) || undefined }"
                   >
                     <span class="readout-key">{{ t('overview_readout_cache') }}</span>
                     <span class="readout-segments" aria-hidden="true">

@@ -329,46 +329,42 @@ const ArtifactPreviewCard = {
   },
   template: `
     <Teleport to="body" :disabled="!previewFullscreen">
-      <section :class="previewCardClass">
-        <header v-if="!previewFullscreen" class="artifact-preview-head">
-          <div class="artifact-preview-copy">
-            <p class="artifact-preview-kicker">{{ artifactLabel }}</p>
-            <p v-if="artifactName" class="artifact-preview-name" :title="displayPath">{{ artifactName }}</p>
-          </div>
-          <div class="artifact-preview-actions">
-            <QButton
-              class="plain xs icon"
-              :title="expanded ? t('artifact_preview_action_collapse') : t('artifact_preview_action_expand')"
-              :aria-label="expanded ? t('artifact_preview_action_collapse') : t('artifact_preview_action_expand')"
-              :disabled="!canPreview"
-              :loading="loading"
-              @click="togglePreview"
-            >
-              <PhCaretUp v-if="expanded" class="icon" />
-              <PhCaretDown v-else class="icon" />
-            </QButton>
-            <QButton
-              class="plain xs icon"
-              :title="t('chat_workspace_action_download')"
-              :aria-label="t('chat_workspace_action_download')"
-              :disabled="!canPreview"
-              :loading="downloading"
-              @click="downloadArtifact"
-            >
-              <PhCloudArrowDown class="icon" />
-            </QButton>
-            <QButton
-              class="plain xs icon"
-              :title="fullscreenActionLabel"
-              :aria-label="fullscreenActionLabel"
-              :disabled="!canPreview || !expanded || !entryURL"
-              @click="toggleFullscreenPreview"
-            >
-              <PhXCircle v-if="previewFullscreen" class="icon" />
-              <PhCornersOut v-else class="icon" />
-            </QButton>
-          </div>
-        </header>
+      <AppSection variant="boxed" :class="previewCardClass" :title="previewFullscreen ? '' : artifactLabel">
+        <template v-if="!previewFullscreen && artifactName" #meta>
+          <span class="artifact-preview-name" :title="displayPath">{{ artifactName }}</span>
+        </template>
+        <template v-if="!previewFullscreen" #actions>
+          <QButton
+            class="plain xs icon"
+            :title="expanded ? t('artifact_preview_action_collapse') : t('artifact_preview_action_expand')"
+            :aria-label="expanded ? t('artifact_preview_action_collapse') : t('artifact_preview_action_expand')"
+            :disabled="!canPreview"
+            :loading="loading"
+            @click="togglePreview"
+          >
+            <PhCaretUp v-if="expanded" class="icon" />
+            <PhCaretDown v-else class="icon" />
+          </QButton>
+          <QButton
+            class="plain xs icon"
+            :title="t('chat_workspace_action_download')"
+            :aria-label="t('chat_workspace_action_download')"
+            :disabled="!canPreview"
+            :loading="downloading"
+            @click="downloadArtifact"
+          >
+            <PhCloudArrowDown class="icon" />
+          </QButton>
+          <QButton
+            class="plain xs icon"
+            :title="fullscreenActionLabel"
+            :aria-label="fullscreenActionLabel"
+            :disabled="!canPreview || !expanded || !entryURL"
+            @click="toggleFullscreenPreview"
+          >
+            <PhCornersOut class="icon" />
+          </QButton>
+        </template>
 
         <div v-if="previewFullscreen" class="artifact-preview-corner">
           <QButton
@@ -404,7 +400,7 @@ const ArtifactPreviewCard = {
             :title="displayPath"
           ></iframe>
         </div>
-      </section>
+      </AppSection>
     </Teleport>
   `,
 };
