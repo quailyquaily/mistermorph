@@ -243,6 +243,21 @@ const ComponentsPreviewView = {
             <template #actions><QButton class="plain xs">Restart</QButton></template>
             <p class="components-preview-note">Body content sits under the head.</p>
           </AppSection>
+          <AppSection variant="boxed" title="A command and a menu" meta="Save beside a plain dropdown, as in a TODO's head.">
+            <template #actions>
+              <QButton class="plain xs">Save</QButton>
+              <QDropdownMenu
+                class="components-preview-menu"
+                variant="plain"
+                :items="[{ title: 'Duplicate', value: 'duplicate' }, { title: 'Delete', value: 'delete' }]"
+                hideSelected
+                hideActionLabel
+              >
+                <PhDotsThree class="icon" />
+              </QDropdownMenu>
+            </template>
+            <p class="components-preview-note">The menu keeps to its trigger's width.</p>
+          </AppSection>
           <AppSection variant="boxed">
             <p class="components-preview-note">A boxed section without a head.</p>
           </AppSection>

@@ -731,10 +731,6 @@ const ContactsView = {
               <span>{{ kindText(selectedContact) }}</span>
               <span aria-hidden="true">·</span>
               <span>{{ channelLabel(t, selectedContact.channel) }}</span>
-              <span :class="isActive(selectedContact) ? 'contacts-status is-active' : 'contacts-status is-inactive'">
-                <span class="contacts-status-dot" aria-hidden="true"></span>
-                {{ statusText(selectedContact) }}
-              </span>
             </span>
           </template>
           <template v-if="!editing" #actions>

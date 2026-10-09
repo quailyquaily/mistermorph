@@ -2551,7 +2551,16 @@ const TodoView = {
                 </div>
               </div>
 
-              <p v-else-if="!loading" class="todo-empty-list">{{ t("todo_empty_list") }}</p>
+              <div v-else-if="!loading" class="todo-empty-list">
+                <p class="todo-empty-list-title">
+                  <span class="todo-empty-list-mark" aria-hidden="true"></span>{{ t("todo_empty_list") }}
+                </p>
+                <p class="todo-empty-list-hint">{{ t("todo_empty_list_hint") }}</p>
+                <QButton class="placeholder sm todo-empty-list-add" @click="addTask">
+                  <PhPlus class="icon" />
+                  {{ t("todo_action_add") }}
+                </QButton>
+              </div>
             </section>
           </div>
         </aside>

@@ -114,7 +114,6 @@
   gap: 12px;
 }
 
-.todo-empty-list,
 .todo-field-note {
   margin: 0;
   font-size: var(--font-size-meta);
@@ -205,9 +204,49 @@
   white-space: normal;
 }
 
+/* No scheduled TODOs: a status line in the console's terms (a hollow mark, the mono label), what a
+   TODO is for, and the add command as a placeholder, where the first TODO will appear. */
 .todo-empty-list {
-  margin-left: var(--content-gutter-x);
-  max-width: 24ch;
+  display: grid;
+  gap: 6px;
+  margin: 4px 0 0 var(--content-gutter-x);
+}
+
+.todo-empty-list-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-1);
+}
+
+.todo-empty-list-mark {
+  flex: 0 0 auto;
+  width: var(--status-mark-size, 7px);
+  height: var(--status-mark-size, 7px);
+  border: 1px solid var(--status-off);
+  border-radius: 1px;
+}
+
+.todo-empty-list-hint {
+  margin: 0 0 6px;
+  font-size: var(--font-size-meta);
+  line-height: 1.45;
+  color: var(--text-2);
+}
+
+.todo-empty-list-add {
+  width: 100%;
+}
+
+.todo-empty-list-add .icon {
+  width: 14px;
+  height: 14px;
 }
 
 /* The editor (a TODO, the heartbeat, a calendar day) is a boxed section beside the list. Its body
@@ -338,8 +377,9 @@
   text-transform: uppercase;
 }
 
-/* The "⋯" menu in the head's action area, one control high beside Save. */
-.todo-task-actions-menu,
+/* The "⋯" menu in the head's action area, one control high beside Save. Scoped to the action area
+   to out-rank the themes' `body[data-theme] .q-dropdown-menu { width: 100% }`. */
+.app-section-actions .q-dropdown-menu.todo-task-actions-menu,
 .todo-task-actions-menu .q-dropdown-menu-inner,
 .todo-task-actions-menu .q-dropdown-menu-action {
   width: 32px;

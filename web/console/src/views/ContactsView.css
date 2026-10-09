@@ -191,27 +191,6 @@
   gap: 7px;
 }
 
-.contacts-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  margin-left: 3px;
-  color: var(--text-1);
-}
-
-.contacts-status-dot {
-  width: var(--status-mark-size);
-  min-width: var(--status-mark-size);
-  height: var(--status-mark-size);
-  border: 1px solid var(--status-off);
-  border-radius: 1px;
-}
-
-.contacts-status.is-active .contacts-status-dot {
-  border-color: var(--status-on);
-  background: var(--status-on);
-}
-
 .contacts-detail-persona {
   max-width: 68ch;
   margin: 0;

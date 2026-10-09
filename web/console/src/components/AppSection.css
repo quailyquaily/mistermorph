@@ -116,6 +116,46 @@
   margin-right: -6px;
 }
 
+/* A dropdown in the action area takes its trigger's width; Quail's themes stretch every dropdown
+   to its container, which would squeeze the buttons beside it. */
+.app-section .app-section-actions .q-dropdown-menu {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 0;
+}
+
+.app-section .app-section-actions .q-dropdown-menu .q-dropdown-menu-inner {
+  width: auto;
+  min-width: 0;
+}
+
+.app-section .app-section-actions .q-dropdown-menu .q-dropdown-menu-action {
+  height: var(--app-section-control);
+  min-height: var(--app-section-control);
+}
+
+/* An icon-only menu ("⋯") is a square, one control high, opening to the left. */
+.app-section .app-section-actions .q-dropdown-menu .q-dropdown-menu-action.hide-selected {
+  justify-content: center;
+  width: var(--app-section-control);
+  min-width: var(--app-section-control);
+  padding: 0;
+}
+
+.app-section-actions .q-dropdown-menu .q-dropdown-menu-action.hide-selected :is(.chevron-icon, .empty-block) {
+  display: none;
+}
+
+.app-section-actions .q-dropdown-menu .q-dropdown-menu-action.hide-selected > svg {
+  width: 16px;
+  height: 16px;
+}
+
+.app-section-actions .q-dropdown-menu .q-menu {
+  right: 0;
+  left: auto;
+}
+
 /* A dropdown in the action area is a plain one (variant="plain"), so its hover, press and open
    states are Quail's plain button's. The theme still frames every dropdown trigger and fills
    plain ones at rest, both with !important; here the trigger rests bare, like a plain button. */
