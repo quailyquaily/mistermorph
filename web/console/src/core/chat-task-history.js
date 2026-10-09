@@ -461,6 +461,24 @@ function taskListHistoryItems(tasks, t, options = {}) {
   return placeSteeredAgentsAfterUsers(items);
 }
 
+// Merges a fresh load of a topic's latest tasks into the history on screen. The fresh items replace
+// the ones on screen for the same tasks, and older items loaded beyond that page stay before them.
+// overlap is false when no task on screen is in the fresh page; the older items are then dropped,
+// since tasks may be missing between them and the page.
+function mergeRefreshedHistoryItems(currentItems, freshItems) {
+  const current = Array.isArray(currentItems) ? currentItems : [];
+  const fresh = Array.isArray(freshItems) ? freshItems : [];
+  const freshTaskIDs = new Set(fresh.map((item) => String(item?.taskId || "").trim()).filter(Boolean));
+  const firstShared = current.findIndex((item) => freshTaskIDs.has(String(item?.taskId || "").trim()));
+  if (firstShared < 0) {
+    return { items: fresh, overlap: false };
+  }
+  const older = current
+    .slice(0, firstShared)
+    .filter((item) => String(item?.taskId || "").trim() !== "");
+  return { items: [...older, ...fresh], overlap: true };
+}
+
 export {
   agentDisplayName,
   buildPollingHint,
@@ -471,6 +489,7 @@ export {
   historyTimeLabel,
   isContextCompactCommand,
   isTerminalStatus,
+  mergeRefreshedHistoryItems,
   normalizeActivity,
   normalizeHistoryFileReferences,
   normalizePlan,

@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   isTerminalStatus,
+  mergeRefreshedHistoryItems,
   normalizeTaskStatus,
   normalizeActivity,
   normalizePlan,
@@ -125,4 +126,38 @@ test("a reply awaits until it has words, an error, an approval, or an end", asyn
   assert.equal(taskAwaitingReply({ id: "t", status: "pending", approval_request_id: "a" }), false);
   assert.equal(pollingActionWord("seed"), pollingActionWord("seed"));
   assert.match(pollingActionWord("seed"), /^[a-z]+$/);
+});
+
+test("mergeRefreshedHistoryItems adds tasks from another device and keeps older pages", () => {
+  const item = (taskId, role, text = "") => ({ id: `${taskId}:${role}`, taskId, role, text });
+  const current = [
+    item("t0", "user"),
+    item("t0", "agent"),
+    item("t1", "user"),
+    item("t1", "agent", "partial"),
+  ];
+  const fresh = [
+    item("t1", "user"),
+    item("t2", "user", "steered from another device"),
+    item("t1", "agent", "final"),
+  ];
+  const merged = mergeRefreshedHistoryItems(current, fresh);
+  assert.equal(merged.overlap, true);
+  assert.deepEqual(
+    merged.items.map((entry) => entry.id),
+    ["t0:user", "t0:agent", "t1:user", "t2:user", "t1:agent"]
+  );
+  assert.equal(merged.items[4].text, "final");
+});
+
+test("mergeRefreshedHistoryItems drops static and unconnected items", () => {
+  const fresh = [{ id: "t5:user", taskId: "t5", role: "user" }];
+  assert.deepEqual(
+    mergeRefreshedHistoryItems([{ id: "chat-intro", role: "agent" }], fresh),
+    { items: fresh, overlap: false }
+  );
+  assert.deepEqual(
+    mergeRefreshedHistoryItems([{ id: "t1:user", taskId: "t1", role: "user" }], fresh),
+    { items: fresh, overlap: false }
+  );
 });

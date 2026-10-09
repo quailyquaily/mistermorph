@@ -35,6 +35,7 @@ import {
   historyTimeLabel as formatChatHistoryTime,
   isContextCompactCommand,
   isTerminalStatus,
+  mergeRefreshedHistoryItems,
   normalizeActivity,
   normalizeHistoryFileReferences,
   normalizePlan,
@@ -3427,7 +3428,8 @@ const ChatView = {
     const POLL_RETRY_MAX_MS = 15000;
 
     // When the page is shown again or the network returns, follow the running tasks again at
-    // once: poll each now and reopen its stream.
+    // once: poll each now and reopen its stream. The history reloads too, for what another device
+    // added meanwhile.
     function resumeTrackedTasks() {
       if (!viewActive || document.visibilityState === "hidden") return;
       for (const [taskID, tracked] of trackedTasks) {
@@ -3435,6 +3437,7 @@ const ChatView = {
         void startTaskStream(taskID, tracked.historyID, tracked.endpointRef);
         scheduleTaskPoll(taskID, tracked.historyID, tracked.endpointRef, 0);
       }
+      void refreshHistory();
     }
 
     async function pollTask(taskID, historyID, endpointRef) {
@@ -3491,6 +3494,8 @@ const ChatView = {
             void refreshWorkspaceState();
           }
           scrollHistoryToBottom();
+          // Another device may have steered messages into this task while it ran.
+          void refreshHistory();
         }
         if (!isTerminalStatus(status) && generation === pollGeneration) {
           scheduleTaskPoll(key, historyID, endpointRef);
@@ -3731,6 +3736,71 @@ const ChatView = {
         if (viewActive && currentHistoryLoadVersion === historyLoadVersion) {
           historyItemsScope.value = scope;
           historyLoading.value = false;
+        }
+      }
+    }
+
+    // Reloads the topic's latest tasks in place, for what another device added while this page was
+    // following it: a message steered into a running task, or a new task. Nothing is cleared while it
+    // loads, older loaded pages stay, and the view only follows the bottom if it already did.
+    async function refreshHistory() {
+      if (!viewActive || sending.value || historyLoading.value || historyLoadingOlder.value) {
+        return;
+      }
+      const endpointRef = submitEndpointRef.value;
+      if (!endpointRef) {
+        return;
+      }
+      let path = `/tasks?limit=${CHAT_HISTORY_LIMIT}`;
+      if (consoleTopicsEnabled.value) {
+        const topicID = normalizeTopicID(selectedTopicID.value);
+        if (creatingTopic.value || !topicID) {
+          return;
+        }
+        path = `/tasks?limit=${CHAT_HISTORY_LIMIT}&topic_id=${encodeURIComponent(topicID)}`;
+      }
+      const scope = historyScope();
+      const currentHistoryLoadVersion = historyLoadVersion;
+      let data;
+      try {
+        data = await loadResource(
+          resourceKey("chat", "history", endpointRef, path),
+          () => runtimeApiFetchForEndpoint(endpointRef, path)
+        );
+      } catch {
+        // The tasks being followed keep their own polling; the next refresh tries again.
+        return;
+      }
+      if (
+        !viewActive ||
+        sending.value ||
+        historyLoadingOlder.value ||
+        currentHistoryLoadVersion !== historyLoadVersion ||
+        scope !== historyScope()
+      ) {
+        return;
+      }
+      const tasks = Array.isArray(data?.items) ? data.items : [];
+      if (tasks.length === 0) {
+        return;
+      }
+      const freshItems = taskListHistoryItems(tasks, t, {
+        agentName: activeAgentName.value,
+        endpointRef,
+        locale: currentLocale(),
+      });
+      const merged = mergeRefreshedHistoryItems(chatHistoryItems.value, freshItems);
+      if (!merged.overlap) {
+        historyNextCursor.value = String(data?.next_cursor || "").trim();
+      }
+      replaceHistoryItems(merged.items);
+      scrollHistoryToBottom();
+      void loadApprovalDetails(endpointRef, currentHistoryLoadVersion);
+      for (const item of chatHistoryItems.value) {
+        const taskID = String(item?.taskId || "").trim();
+        if (item.role === "agent" && taskID && !isTerminalStatus(item.status) && !trackedTasks.has(taskID)) {
+          void startTaskStream(taskID, item.id, endpointRef);
+          scheduleTaskPoll(taskID, item.id, endpointRef, 0);
         }
       }
     }
