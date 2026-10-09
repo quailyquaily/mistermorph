@@ -6,7 +6,7 @@
 .workspace-section-title,
 .workspace-document-title {
   margin: 0;
-  font-family: var(--q-card-title-font-family);
+  font-family: var(--font-title);
   font-size: var(--font-size-title);
   font-weight: 600;
   line-height: 1.04;
@@ -208,7 +208,7 @@
   min-width: 0;
   min-height: 22px;
   display: -webkit-box;
-  font-family: var(--q-card-title-font-family);
+  font-family: var(--font-title);
   font-size: var(--font-size-ui);
   line-height: 1.08;
   letter-spacing: -0.025em;

@@ -141,7 +141,7 @@
 .stats-ledger-value {
   display: block;
   min-width: 0;
-  font-family: var(--q-card-title-font-family);
+  font-family: var(--font-title);
   font-size: var(--font-size-body);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -342,7 +342,7 @@
 }
 
 .stats-request-pill-value {
-  font-family: var(--q-card-title-font-family);
+  font-family: var(--font-title);
   font-size: var(--font-size-body);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -545,7 +545,7 @@
 
 .stats-model-ledger-value-cell {
   min-width: 132px;
-  font-family: var(--q-card-title-font-family);
+  font-family: var(--font-title);
   font-size: var(--font-size-body);
   font-weight: 600;
   line-height: 1.05;

@@ -6,12 +6,12 @@
 }
 
 .logs-shell {
-  /* Page tokens: the sheet uses the lighter card hairline (--q-card-border-color) rather than --line. */
+  /* Page tokens: the sheet uses the faint hairline (--line-faint) rather than --line. */
   --logs-ink: var(--q-c-dark);
   --logs-text: var(--q-c-dark-2);
   --logs-muted: var(--q-c-dark-3);
-  --logs-line: var(--q-card-border-color);
-  --logs-line-soft: color-mix(in srgb, var(--q-card-border-color) 60%, transparent);
+  --logs-line: var(--line-faint);
+  --logs-line-soft: color-mix(in srgb, var(--line-faint) 60%, transparent);
   --logs-paper: var(--q-bg-white);
   --logs-sunken: var(--q-bg-paper);
   --logs-accent: var(--q-c-blue);
@@ -184,7 +184,7 @@
   flex-direction: column;
   border: 1px solid var(--logs-line);
   border-radius: 2px;
-  background: var(--q-card-bg, var(--logs-paper));
+  background: color-mix(in srgb, var(--logs-paper) 88%, transparent);
 }
 
 .logs-table::before,

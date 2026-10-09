@@ -23,7 +23,6 @@
   --font-size-display: 2rem;
   --font-size-hero: clamp(2.5rem, 2rem + 2vw, 4rem);
   --q-font-serif: var(--font-ui);
-  --q-card-title-font-family: var(--font-ui);
   --app-shell-vpad: 0;
   --sidebar-vpad: 16px;
   /* Motion: short and eased out, like an instrument settling. Reduced motion zeroes them. */
@@ -253,7 +252,7 @@ pre {
 .app-dialog-title {
   margin: 0;
   overflow: hidden;
-  font-family: var(--q-card-title-font-family);
+  font-family: var(--font-title);
   font-size: var(--font-size-body);
   font-weight: 600;
   line-height: 1.2;

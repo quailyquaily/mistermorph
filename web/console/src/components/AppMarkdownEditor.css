@@ -79,7 +79,7 @@ body:has(.markdown-editor-toolbar-picker) .q-dialog .q-menu .q-menu-subtitle {
 }
 
 body:has(.markdown-editor-toolbar-picker) .q-dialog .q-menu .q-menu-title {
-  font-family: var(--q-card-title-font-family);
+  font-family: var(--font-title);
   font-size: var(--font-size-ui);
   line-height: 1.08;
   letter-spacing: -0.025em;

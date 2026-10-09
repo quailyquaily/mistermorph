@@ -17,7 +17,7 @@
   margin: 0;
   overflow: hidden;
   color: var(--text-0);
-  font-family: var(--q-card-title-font-family);
+  font-family: var(--font-title);
   font-size: var(--font-size-body);
   font-weight: 600;
   line-height: 1.2;
