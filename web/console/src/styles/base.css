@@ -7,11 +7,14 @@
   --text-2: var(--q-c-dark-3);
   --line: color-mix(in srgb, var(--q-c-dark-4) 72%, transparent);
   --line-soft: color-mix(in srgb, var(--q-c-dark-4) 52%, transparent);
+  /* The faintest hairline: chat bubbles and previews. */
+  --line-faint: rgba(40, 78, 120, 0.16);
   --accent-0: var(--q-c-secondary);
   --accent-1: var(--q-c-blue);
   --ok: var(--q-c-green);
   --danger: var(--q-c-red);
   --font-ui: var(--q-font-ui);
+  --font-title: var(--font-ui);
   --font-mono: var(--q-font-mono);
   --font-size-meta: 0.75rem;
   --font-size-ui: 0.875rem;

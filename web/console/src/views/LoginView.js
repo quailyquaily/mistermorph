@@ -137,60 +137,56 @@ const LoginView = {
   },
   template: `
     <main class="login-page">
-      <section class="login-sheet" aria-labelledby="login-title">
-        <header class="login-head">
+      <div class="login-stack">
+        <header class="login-brand">
           <img class="login-logo" src="${loginLogoUrl}" alt="" />
-          <div class="login-head-copy">
-            <h1 id="login-title" class="login-title">Mister Morph</h1>
-            <p class="login-subtitle">{{ t("login_subtitle") }}</p>
-          </div>
+          <h1 class="login-title">Mister Morph</h1>
         </header>
 
-        <form class="login-form" novalidate @submit.prevent="submit">
-          <input class="login-username" type="text" name="username" autocomplete="username" value="console" tabindex="-1" aria-hidden="true" readonly />
-          <label class="login-label" for="login-password">{{ t("login_password_label") }}</label>
-          <div class="login-field" :class="{ 'has-error': err }">
-            <input
-              id="login-password"
-              ref="passwordInput"
-              v-model="password"
-              class="login-input"
-              name="password"
-              :type="showPassword ? 'text' : 'password'"
-              autocomplete="current-password"
-              :placeholder="t('login_password_placeholder')"
-              :disabled="busy"
-              :aria-invalid="err ? 'true' : 'false'"
-              :aria-describedby="err ? 'login-error' : capsLock ? 'login-caps' : undefined"
-              @keydown="onPasswordKey"
-              @keyup="onPasswordKey"
-              @input="err = ''"
-            />
-            <button type="button" class="login-reveal" :disabled="busy" :aria-pressed="showPassword"
-              :aria-label="t(showPassword ? 'login_hide_password' : 'login_show_password')"
-              :title="t(showPassword ? 'login_hide_password' : 'login_show_password')"
-              @click="showPassword = !showPassword">
-              <PhEyeSlash v-if="showPassword" class="icon" />
-              <PhEye v-else class="icon" />
-            </button>
-          </div>
-          <div class="login-message-slot">
-            <p v-if="err" id="login-error" class="login-message is-error" role="alert">{{ err }}</p>
-            <p v-else-if="capsLock" id="login-caps" class="login-message" role="status">{{ t("login_caps_lock") }}</p>
-          </div>
-          <QButton type="submit" class="primary login-submit" :loading="busy">{{ t("login_button") }}</QButton>
-        </form>
+        <AppSection variant="boxed" class="login-sheet" :title="t('login_subtitle')" :level="2">
+          <template #meta>
+            <span class="login-host" :title="host">{{ host }}</span>
+          </template>
+          <form class="login-form" novalidate @submit.prevent="submit">
+            <input class="login-username" type="text" name="username" autocomplete="username" value="console" tabindex="-1" aria-hidden="true" readonly />
+            <label class="login-label" for="login-password">{{ t("login_password_label") }}</label>
+            <div class="login-field" :class="{ 'has-error': err }">
+              <input
+                id="login-password"
+                ref="passwordInput"
+                v-model="password"
+                class="login-input"
+                name="password"
+                :type="showPassword ? 'text' : 'password'"
+                autocomplete="current-password"
+                :placeholder="t('login_password_placeholder')"
+                :disabled="busy"
+                :aria-invalid="err ? 'true' : 'false'"
+                :aria-describedby="err ? 'login-error' : capsLock ? 'login-caps' : undefined"
+                @keydown="onPasswordKey"
+                @keyup="onPasswordKey"
+                @input="err = ''"
+              />
+              <button type="button" class="login-reveal" :disabled="busy" :aria-pressed="showPassword"
+                :aria-label="t(showPassword ? 'login_hide_password' : 'login_show_password')"
+                :title="t(showPassword ? 'login_hide_password' : 'login_show_password')"
+                @click="showPassword = !showPassword">
+                <PhEyeSlash v-if="showPassword" class="icon" />
+                <PhEye v-else class="icon" />
+              </button>
+            </div>
+            <div class="login-message-slot">
+              <p v-if="err" id="login-error" class="login-message is-error" role="alert">{{ err }}</p>
+              <p v-else-if="capsLock" id="login-caps" class="login-message" role="status">{{ t("login_caps_lock") }}</p>
+            </div>
+            <QButton type="submit" class="primary login-submit" :loading="busy">{{ t("login_button") }}</QButton>
+          </form>
+        </AppSection>
 
         <footer class="login-foot">
-          <div class="login-foot-cell">
-            <span class="login-foot-label">{{ t("login_host") }}</span>
-            <span class="login-foot-value" :title="host">{{ host }}</span>
-          </div>
-          <div class="login-foot-cell login-language">
-            <QLanguageSelector :lang="lang" :presist="true" @change="onLanguageChange" />
-          </div>
+          <QLanguageSelector class="login-language" :lang="lang" :presist="true" @change="onLanguageChange" />
         </footer>
-      </section>
+      </div>
     </main>
   `,
 };

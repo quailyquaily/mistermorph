@@ -1177,7 +1177,7 @@ body[data-theme] .chat-workspace-dock .chat-workspace-toggle.q-button[aria-expan
 
 .chat-workspace-empty-title {
   margin: 0;
-  font-family: var(--q-card-title-font-family);
+  font-family: var(--font-title);
   max-width: 20ch;
   font-size: var(--font-size-body);
   line-height: 1.08;
@@ -1710,7 +1710,7 @@ body[data-theme] .chat-workspace-dock .chat-workspace-toggle.q-button[aria-expan
 /* Reasoning is a side note: muted, smaller, and cut off from the answer by a dashed line. */
 .chat-history-reasoning {
   padding-bottom: 14px;
-  border-bottom: 1px dashed var(--q-card-border-color);
+  border-bottom: 1px dashed var(--line-faint);
   color: var(--q-c-dark-3);
 }
 
@@ -1725,7 +1725,7 @@ body[data-theme] .chat-workspace-dock .chat-workspace-toggle.q-button[aria-expan
 .chat-history-bubble {
   position: relative;
   padding: 10px 14px 11px;
-  border: 1px solid var(--q-card-border-color);
+  border: 1px solid var(--line-faint);
   border-radius: 2px;
   background: var(--q-bg-white);
   box-shadow: none;
@@ -1734,7 +1734,7 @@ body[data-theme] .chat-workspace-dock .chat-workspace-toggle.q-button[aria-expan
 
 .chat-history-approval-surface {
   padding: 16px 18px 14px;
-  border: 1px solid var(--q-card-border-color);
+  border: 1px solid var(--line-faint);
   border-radius: 2px;
   background: var(--q-bg-white);
 }
@@ -2402,7 +2402,7 @@ body[data-theme] .chat-workspace-dock .chat-workspace-toggle.q-button[aria-expan
   display: grid;
   gap: 0;
   margin-block: 14px;
-  border: 1px solid var(--q-card-border-color);
+  border: 1px solid var(--line-faint);
   border-radius: 2px;
   background: var(--q-bg-white);
 }
@@ -2521,7 +2521,7 @@ body.artifact-preview-scroll-lock {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  border-top: 1px solid var(--q-card-border-color);
+  border-top: 1px solid var(--line-faint);
   background: #fff;
 }
 
@@ -2904,7 +2904,7 @@ body.artifact-preview-scroll-lock {
   padding: 10px 14px 11px;
   border-radius: 2px;
   border-style: dashed;
-  border-color: var(--q-card-border-color);
+  border-color: var(--line-faint);
   background: transparent;
   box-shadow: none;
 }

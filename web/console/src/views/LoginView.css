@@ -1,11 +1,10 @@
-/* Page tokens: the sheet uses the lighter card hairline (--q-card-border-color) rather than --line. */
+/* The login page: the brand above a boxed AppSection holding the form, the language below. */
 .login-page {
-  --login-ink: var(--q-c-dark);
-  --login-text: var(--q-c-dark-2);
-  --login-muted: var(--q-c-dark-3);
-  --login-line: var(--q-card-border-color);
-  --login-accent: var(--q-c-blue);
-  --login-error: var(--q-c-red);
+  --login-ink: var(--text-0);
+  --login-text: var(--text-1);
+  --login-muted: var(--text-2);
+  --login-accent: var(--accent-1);
+  --login-error: var(--danger);
   --login-label: 500 11px/1.4 var(--font-mono);
   min-height: 100vh;
   min-height: 100dvh;
@@ -14,58 +13,24 @@
   padding: 24px 16px 10vh;
 }
 
-/* Sheet: hairline frame with drafting registration marks, laid out like a drawing title block. */
-.login-sheet {
-  position: relative;
+.login-stack {
+  display: grid;
+  gap: 16px;
   width: min(400px, 100%);
-  border: 1px solid var(--login-line);
-  border-radius: 2px;
-  background: var(--q-card-bg, var(--q-bg-white));
 }
 
-.login-sheet::before,
-.login-sheet::after {
-  content: "";
-  position: absolute;
-  width: 12px;
-  height: 12px;
-  border: 0 solid var(--login-ink);
-  pointer-events: none;
-}
-
-.login-sheet::before {
-  top: -1px;
-  left: -1px;
-  border-top-width: 1.5px;
-  border-left-width: 1.5px;
-}
-
-.login-sheet::after {
-  right: -1px;
-  bottom: -1px;
-  border-right-width: 1.5px;
-  border-bottom-width: 1.5px;
-}
-
-.login-head {
+.login-brand {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 20px 24px;
-  border-bottom: 1px solid var(--login-line);
+  gap: 12px;
+  padding-inline: 2px;
 }
 
 .login-logo {
   display: block;
   flex: 0 0 auto;
-  width: 36px;
-  height: 36px;
-}
-
-.login-head-copy {
-  display: grid;
-  gap: 2px;
-  min-width: 0;
+  width: 32px;
+  height: 32px;
 }
 
 .login-title {
@@ -76,17 +41,13 @@
   text-transform: uppercase;
 }
 
-.login-subtitle {
-  margin: 0;
-  color: var(--login-muted);
-  font: var(--login-label);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+.login-host {
+  font-family: var(--font-mono);
 }
 
 .login-form {
   display: grid;
-  padding: 24px 24px 22px;
+  padding: 8px 8px 4px;
 }
 
 /* Present for password managers only. */
@@ -115,7 +76,7 @@
   height: 42px;
   margin: 0;
   padding: 0 44px 0 12px;
-  border: 1px solid var(--q-field-border-color, var(--login-line));
+  border: 1px solid var(--q-field-border-color, var(--line));
   border-radius: var(--q-field-radius, 2px);
   background: var(--q-field-bg, var(--q-bg-white));
   color: var(--login-ink);
@@ -198,82 +159,33 @@
   min-height: 42px;
 }
 
+/* The language switch rests bare under the sheet, like a plain button. */
 .login-foot {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  border-top: 1px solid var(--login-line);
-  background: var(--q-bg-paper);
-}
-
-.login-foot-cell {
-  display: grid;
-  align-content: center;
-  gap: 2px;
-  min-width: 0;
-  padding: 10px 24px;
-}
-
-.login-foot-cell + .login-foot-cell {
-  border-left: 1px solid var(--login-line);
-  padding: 0;
-}
-
-/* The language switch sits flush in its title-block cell instead of drawing a second box. */
-/* Stretch every wrapper so the hover area fills the whole cell. */
-.login-foot-cell.login-language {
   display: flex;
-  align-items: stretch;
+  justify-content: flex-end;
 }
 
-.login-language .q-dropdown-menu,
+.login-language.q-dropdown-menu,
 .login-language .q-dropdown-menu-inner {
-  display: flex;
-  flex: 1 1 auto;
-  align-items: stretch;
+  width: auto;
+  min-width: 0;
 }
 
-body[data-theme] .login-language .q-dropdown-menu .q-dropdown-menu-action {
-  flex: 1 1 auto;
-  height: auto;
-  min-height: 44px;
-  padding-inline: 14px 12px;
+body[data-theme] .login-language .q-dropdown-menu-action {
+  min-height: 32px;
   border-color: transparent !important;
-  border-radius: 0 !important;
   background-color: transparent !important;
-  color: var(--login-text);
-}
-
-body[data-theme] .login-language .q-dropdown-menu .q-dropdown-menu-action:hover {
-  background-color: color-mix(in srgb, var(--login-accent) 7%, transparent) !important;
-}
-
-.login-foot-label {
   color: var(--login-muted);
-  font: var(--login-label);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
 }
 
-.login-foot-value {
-  overflow: hidden;
+body[data-theme] .login-language .q-dropdown-menu-action:hover {
+  background-color: color-mix(in srgb, var(--login-accent) 7%, transparent) !important;
   color: var(--login-text);
-  font: 12px/1.5 var(--font-mono);
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 @media (max-width: 480px) {
   .login-page {
     align-items: start;
     padding-top: 12vh;
-  }
-
-  .login-head,
-  .login-form {
-    padding-inline: 18px;
-  }
-
-  .login-foot-cell:first-child {
-    padding-inline: 18px;
   }
 }
