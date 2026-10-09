@@ -204,49 +204,28 @@
   white-space: normal;
 }
 
-/* No scheduled TODOs: a status line in the console's terms (a hollow mark, the mono label), what a
-   TODO is for, and the add command as a placeholder, where the first TODO will appear. */
-.todo-empty-list {
-  display: grid;
-  gap: 6px;
-  margin: 4px 0 0 var(--content-gutter-x);
+/* No scheduled TODOs: a dashed row in the list's own geometry, where the first TODO will appear.
+   It names the empty state, says what a TODO is for, and adds one when clicked. */
+.todo-empty-item {
+  border: 1px dashed var(--line-soft);
+  cursor: pointer;
 }
 
-.todo-empty-list-title {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 0;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+.todo-empty-item .workspace-sidebar-item-title {
   color: var(--text-1);
 }
 
-.todo-empty-list-mark {
-  flex: 0 0 auto;
-  width: var(--status-mark-size, 7px);
-  height: var(--status-mark-size, 7px);
-  border: 1px solid var(--status-off);
-  border-radius: 1px;
-}
-
-.todo-empty-list-hint {
-  margin: 0 0 6px;
-  font-size: var(--font-size-meta);
-  line-height: 1.45;
+.todo-empty-item .workspace-sidebar-item-marker {
   color: var(--text-2);
 }
 
-.todo-empty-list-add {
-  width: 100%;
-}
-
-.todo-empty-list-add .icon {
+.todo-empty-item .workspace-sidebar-item-marker .icon {
   width: 14px;
   height: 14px;
+}
+
+.todo-empty-item:is(:hover, :focus-visible) .workspace-sidebar-item-marker {
+  color: currentColor;
 }
 
 /* The editor (a TODO, the heartbeat, a calendar day) is a boxed section beside the list. Its body
