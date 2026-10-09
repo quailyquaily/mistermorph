@@ -306,7 +306,7 @@ export default {
           <QButton class="outlined sm" :disabled="loading || loadingOlder" @click="resumeFollowing">{{ t('logs_latest') }}</QButton>
         </div>
 
-        <div class="logs-table">
+        <AppSection variant="boxed" class="logs-table" :title="t('logs_stream')" :meta="metaText || t('logs_meta_empty')" :level="2">
           <div class="logs-columns" aria-hidden="true">
             <span>{{ t('logs_timestamp') }}</span><span>{{ t('logs_level_short') }}</span><span>{{ t('logs_event_message') }}</span><span></span>
           </div>
@@ -354,14 +354,13 @@ export default {
               </template>
             </section>
           </div>
-        </div>
+        </AppSection>
         <div class="logs-feed-meta">
           <div class="logs-result-info" role="status">
             <span class="logs-result-count">{{ t('logs_visible_count', { count: filteredEntries.length, total: entries.length }) }}</span>
             <span v-if="filterActive" class="logs-filter-scope" :title="t('logs_time_hint')">{{ t('logs_filter_scope') }}</span>
             <QButton v-if="filterActive" class="plain xs logs-clear" @click="clearFilters"><PhX class="icon" />{{ t('logs_clear_filters') }}</QButton>
           </div>
-          <p class="logs-meta">{{ metaText || t('logs_meta_empty') }}</p>
           <div class="logs-limit-group" role="group" :aria-label="t('logs_line_count')">
             <span class="logs-limit-label">{{ t('logs_line_count') }}</span>
             <button v-for="item in limits" :key="item" type="button" class="logs-limit-button" :class="{ 'is-active': limit === item }"

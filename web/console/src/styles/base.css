@@ -14,7 +14,8 @@
   --ok: var(--q-c-green);
   --danger: var(--q-c-red);
   --font-ui: var(--q-font-ui);
-  --font-title: var(--font-ui);
+  /* Titles and figures: IBM Plex Sans (loaded in index.html), over the UI font for scripts it lacks. */
+  --font-title: "IBM Plex Sans", var(--font-ui);
   --font-mono: var(--q-font-mono);
   --font-size-meta: 0.75rem;
   --font-size-ui: 0.875rem;

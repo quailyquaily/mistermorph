@@ -6,19 +6,19 @@
 }
 
 .logs-shell {
-  /* Page tokens: the sheet uses the faint hairline (--line-faint) rather than --line. */
-  --logs-ink: var(--q-c-dark);
-  --logs-text: var(--q-c-dark-2);
-  --logs-muted: var(--q-c-dark-3);
-  --logs-line: var(--line-faint);
-  --logs-line-soft: color-mix(in srgb, var(--line-faint) 60%, transparent);
-  --logs-paper: var(--q-bg-white);
+  /* Page tokens, in the console's terms; the lines are AppSection's. */
+  --logs-ink: var(--text-0);
+  --logs-text: var(--text-1);
+  --logs-muted: var(--text-2);
+  --logs-line: var(--line-soft);
+  --logs-line-soft: color-mix(in srgb, var(--line-soft) 60%, transparent);
+  --logs-paper: var(--bg-2);
   --logs-sunken: var(--q-bg-paper);
-  --logs-accent: var(--q-c-blue);
+  --logs-accent: var(--accent-1);
   --logs-warn: var(--q-c-orange-dark, var(--q-c-orange));
-  --logs-error: var(--q-c-red);
-  --logs-ok: var(--q-c-green);
-  --logs-hover: color-mix(in srgb, var(--q-c-blue) 6%, transparent);
+  --logs-error: var(--danger);
+  --logs-ok: var(--ok);
+  --logs-hover: color-mix(in srgb, var(--accent-1) 6%, transparent);
   --logs-time-w: 96px;
   --logs-level-w: 68px;
   --logs-cols: var(--logs-time-w) var(--logs-level-w) minmax(0, 1fr) 12px;
@@ -173,57 +173,29 @@
   font-size: var(--font-size-meta);
 }
 
-/* Sheet: hairline frame with drafting registration marks on opposite corners. */
+/* The stream is a boxed AppSection: its head names the log and carries the file's meta. The box
+   fills the page's height and the stream scrolls inside it, under the column header. The paper
+   is opaque so the sticky day markers match it. */
 
-.logs-table {
-  position: relative;
+.logs-table.app-section.is-boxed {
   flex: 1 1 auto;
-  min-width: 0;
   min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+  align-content: stretch;
+  background: var(--logs-paper);
+}
+
+.logs-table > .app-section-body {
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--logs-line);
-  border-radius: 2px;
-  background: color-mix(in srgb, var(--logs-paper) 88%, transparent);
+  gap: 0;
+  min-height: 0;
+  padding: 0;
 }
 
-.logs-table::before,
-.logs-table::after {
-  content: "";
-  position: absolute;
-  z-index: 2;
-  width: 10px;
-  height: 10px;
-  border: 0 solid var(--logs-ink);
-  pointer-events: none;
-}
-
-.logs-table::before {
-  top: -1px;
-  left: -1px;
-  border-top-width: 1.5px;
-  border-left-width: 1.5px;
-}
-
-.logs-table::after {
-  right: -1px;
-  bottom: -1px;
-  border-right-width: 1.5px;
-  border-bottom-width: 1.5px;
-}
-
-/* Registration marks reach further while the sheet is in use. */
-.logs-table::before,
-.logs-table::after {
-  transition:
-    width var(--motion-normal) var(--motion-ease),
-    height var(--motion-normal) var(--motion-ease);
-}
-
-.logs-table:is(:hover, :focus-within)::before,
-.logs-table:is(:hover, :focus-within)::after {
-  width: 16px;
-  height: 16px;
+.logs-table .app-section-meta {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
 }
 
 .logs-columns,
@@ -580,7 +552,7 @@
 
 .logs-feed-meta {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
   flex-shrink: 0;
@@ -591,13 +563,7 @@
   line-height: 1.5;
 }
 
-.logs-meta {
-  margin: 0;
-  text-align: center;
-}
-
-.logs-result-count,
-.logs-meta {
+.logs-result-count {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
@@ -658,19 +624,6 @@
   background: color-mix(in srgb, var(--logs-accent) 10%, transparent);
   color: var(--logs-accent);
   font-weight: 600;
-}
-
-@container (max-width: 1000px) {
-  .logs-feed-meta {
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 2px 12px;
-  }
-
-  .logs-meta {
-    grid-column: 1 / -1;
-    grid-row: 2;
-    text-align: start;
-  }
 }
 
 @media (max-width: 920px) {
