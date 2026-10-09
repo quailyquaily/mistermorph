@@ -464,11 +464,6 @@
   overflow-wrap: anywhere;
 }
 
-.skills-doc .mmr-document pre {
-  max-width: 100%;
-  overflow-x: auto;
-}
-
 .skills-doc .mmr-document {
   --mmr-accent: var(--q-c-blue);
   --mmr-text: var(--text-0);
@@ -476,9 +471,6 @@
   --mmr-line: var(--line-soft);
   --mmr-line-strong: var(--line);
   --mmr-surface: color-mix(in srgb, var(--q-c-blue) 4%, transparent);
-  --mmr-code-bg: color-mix(in srgb, var(--q-c-blue) 5%, var(--q-bg-white));
-  --mmr-code-bg-start: color-mix(in srgb, var(--q-c-blue) 4%, var(--q-bg-white));
-  --mmr-code-bg-end: color-mix(in srgb, var(--q-c-blue) 6%, var(--q-bg-white));
   --mmr-quote-bg-start: color-mix(in srgb, var(--q-c-blue) 4%, transparent);
   --mmr-quote-bg-end: color-mix(in srgb, var(--q-c-blue) 2%, transparent);
   --mmr-radius: 2px;

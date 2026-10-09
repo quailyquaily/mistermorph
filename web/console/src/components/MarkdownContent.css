@@ -21,3 +21,82 @@
   background: color-mix(in srgb, var(--q-c-dark-4) 12%, transparent);
   font-weight: 600;
 }
+
+/* Code blocks: one dark panel wherever Markdown is rendered (chat, SKILL.md, release notes). The
+   renderer highlights code with Shiki's github-dark theme whatever its own theme, so the panel
+   is dark to match. */
+.chat-markdown-content {
+  --md-code-bg: color-mix(in srgb, var(--q-c-dark) 92%, var(--q-c-blue) 8%);
+  --md-code-surface: color-mix(in srgb, var(--q-c-dark) 88%, white);
+  --md-code-border: #30363d;
+  --md-code-text: #c9d1d9;
+  --md-code-muted: #8b949e;
+  --md-code-accent: #58a6ff;
+}
+
+.chat-markdown-content .mmr-document .mmr-code-block {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  margin-block: 1em;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border: 1px solid var(--md-code-border);
+  border-radius: 2px;
+  background: var(--md-code-bg);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.chat-markdown-content .mmr-document pre {
+  max-width: 100%;
+  padding: 1.08em 1.12em;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  font-size: var(--font-size-ui);
+  line-height: 1.62;
+  color: var(--md-code-text);
+  box-shadow: none;
+  scrollbar-color: #6e7681 var(--md-code-bg);
+}
+
+.chat-markdown-content .mmr-document .mmr-code-block > pre {
+  min-width: 100%;
+  width: max-content;
+  padding-top: 2.78em;
+  padding-right: 3.35em;
+}
+
+.chat-markdown-content .mmr-code-language {
+  color: var(--md-code-muted);
+}
+
+.chat-markdown-content .mmr-code-copy {
+  border-color: var(--md-code-border);
+  border-radius: 2px;
+  background: var(--md-code-surface);
+  color: var(--md-code-muted);
+  box-shadow: none;
+}
+
+.chat-markdown-content .mmr-code-copy:hover,
+.chat-markdown-content .mmr-code-copy:focus-visible {
+  border-color: var(--md-code-accent);
+  background: #1f2630;
+  color: #f0f6fc;
+}
+
+.chat-markdown-content .mmr-document .mmr-code-block::-webkit-scrollbar {
+  height: 10px;
+}
+
+.chat-markdown-content .mmr-document .mmr-code-block::-webkit-scrollbar-track {
+  background: var(--md-code-bg);
+}
+
+.chat-markdown-content .mmr-document .mmr-code-block::-webkit-scrollbar-thumb {
+  background: #6e7681;
+  border: 2px solid var(--md-code-bg);
+  border-radius: 999px;
+}

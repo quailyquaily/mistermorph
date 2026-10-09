@@ -2495,15 +2495,6 @@ body.artifact-preview-scroll-lock {
   max-height: calc(100vh - 48px);
 }
 
-.chat-history-copy .chat-history-markdown {
-  --chat-code-bg: color-mix(in srgb, var(--q-c-dark) 92%, var(--q-c-blue) 8%);
-  --chat-code-surface: color-mix(in srgb, var(--q-c-dark) 88%, white);
-  --chat-code-border: #30363d;
-  --chat-code-text: #c9d1d9;
-  --chat-code-muted: #8b949e;
-  --chat-code-accent: #58a6ff;
-}
-
 .chat-history-copy .mmr-document {
   font-family: var(--font-ui);
   font-size: var(--font-size-body);
@@ -2540,79 +2531,12 @@ body.artifact-preview-scroll-lock {
   margin-inline: 0;
 }
 
-.chat-history-copy .mmr-document .mmr-code-block {
-  display: block;
-  width: 100%;
-  max-width: 100%;
-  min-width: 0;
-  margin-block: 1em;
-  overflow-x: auto;
-  overflow-y: hidden;
-  border: 1px solid var(--chat-code-border);
-  border-radius: 2px;
-  background: var(--chat-code-bg);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
-}
-
 .chat-history-copy .mmr-document table {
   display: block;
   width: fit-content;
   max-width: 100%;
   min-width: 0;
   overflow-x: auto;
-}
-
-.chat-history-copy .mmr-document pre {
-  max-width: 100%;
-  padding: 1.08em 1.12em;
-  border: 0;
-  border-radius: 2px;
-  background: transparent;
-  font-size: var(--font-size-ui);
-  line-height: 1.62;
-  color: var(--chat-code-text);
-  box-shadow: none;
-  scrollbar-color: #6e7681 var(--chat-code-bg);
-}
-
-.chat-history-copy .mmr-document .mmr-code-block > pre {
-  min-width: 100%;
-  width: max-content;
-  padding-top: 2.78em;
-  padding-right: 3.35em;
-}
-
-.chat-history-copy .mmr-code-language {
-  color: var(--chat-code-muted);
-}
-
-.chat-history-copy .mmr-code-copy {
-  border-color: var(--chat-code-border);
-  border-radius: 2px;
-  background: var(--chat-code-surface);
-  color: var(--chat-code-muted);
-  box-shadow: none;
-}
-
-.chat-history-copy .mmr-code-copy:hover,
-.chat-history-copy .mmr-code-copy:focus-visible {
-  border-color: var(--chat-code-accent);
-  background: #1f2630;
-  color: #f0f6fc;
-}
-
-.chat-history-copy .mmr-document .mmr-code-block::-webkit-scrollbar {
-  height: 10px;
-}
-
-.chat-history-copy .mmr-document .mmr-code-block::-webkit-scrollbar-track {
-  background: var(--chat-code-bg);
-}
-
-.chat-history-copy .mmr-document .mmr-code-block::-webkit-scrollbar-thumb {
-  background: #6e7681;
-  border: 2px solid var(--chat-code-bg);
-  border-radius: 999px;
 }
 
 .chat-history-copy .mmr-diagram {

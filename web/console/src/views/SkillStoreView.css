@@ -407,7 +407,7 @@ html[data-macos26="true"] .store-panel-shell {
   text-transform: uppercase;
 }
 
-/* SKILL.md as on the Skills page: fits the sheet, long lines wrap, code scrolls. */
+/* SKILL.md as on the Skills page: fits the sheet, long lines wrap; code blocks are MarkdownContent's. */
 .store-doc .mmr-document h1 {
   font-size: 1.35em;
 }
@@ -424,9 +424,6 @@ html[data-macos26="true"] .store-panel-shell {
   --mmr-line: var(--line-soft);
   --mmr-line-strong: var(--line);
   --mmr-surface: color-mix(in srgb, var(--q-c-blue) 4%, transparent);
-  --mmr-code-bg: color-mix(in srgb, var(--q-c-blue) 5%, var(--q-bg-white));
-  --mmr-code-bg-start: color-mix(in srgb, var(--q-c-blue) 4%, var(--q-bg-white));
-  --mmr-code-bg-end: color-mix(in srgb, var(--q-c-blue) 6%, var(--q-bg-white));
   --mmr-quote-bg-start: color-mix(in srgb, var(--q-c-blue) 4%, transparent);
   --mmr-quote-bg-end: color-mix(in srgb, var(--q-c-blue) 2%, transparent);
   --mmr-radius: 2px;
@@ -439,11 +436,6 @@ html[data-macos26="true"] .store-panel-shell {
 
 .store-doc .mmr-document :where(p, li, td, th, blockquote, a, code) {
   overflow-wrap: anywhere;
-}
-
-.store-doc .mmr-document pre {
-  max-width: 100%;
-  overflow-x: auto;
 }
 
 @media (prefers-reduced-motion: reduce) {
