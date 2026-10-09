@@ -31,8 +31,10 @@ const AppSection = {
       const level = Number(props.level);
       return level >= 1 && level <= 6 ? "h" + level : "h3";
     });
-    const hasMeta = computed(() => Boolean(props.meta || slots.meta));
-    const hasHead = computed(() => Boolean(props.title || hasMeta.value || slots.actions || slots.lead));
+    // Slots are not reactive, so these are checked on every render rather than cached in a computed;
+    // a computed keeps the head after a conditional slot goes away.
+    const hasMeta = () => Boolean(props.meta || slots.meta);
+    const hasHead = () => Boolean(props.title || hasMeta() || slots.actions || slots.lead);
     const headEl = ref(null);
     if (import.meta.env.DEV) {
       const checkActions = () => {
@@ -50,7 +52,7 @@ const AppSection = {
   },
   template: `
     <component :is="tag" :class="['app-section', 'is-' + kind]">
-      <header v-if="hasHead" ref="headEl" class="app-section-head">
+      <header v-if="hasHead()" ref="headEl" class="app-section-head">
         <div v-if="$slots.lead" class="app-section-lead">
           <slot name="lead" />
         </div>
@@ -60,7 +62,7 @@ const AppSection = {
             <span class="app-section-bracket" aria-hidden="true">[</span><span class="app-section-label-text">{{ title }}</span><span class="app-section-bracket" aria-hidden="true">]</span>
           </span>
         </component>
-        <div v-if="hasMeta" class="app-section-meta" :title="meta || undefined">
+        <div v-if="hasMeta()" class="app-section-meta" :title="meta || undefined">
           <slot name="meta">{{ meta }}</slot>
         </div>
         <div v-if="$slots.actions" class="app-section-actions">

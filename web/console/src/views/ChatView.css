@@ -2401,7 +2401,8 @@ body[data-theme] .chat-workspace-dock .chat-workspace-toggle.q-button[aria-expan
   margin-block: 14px;
 }
 
-.artifact-preview-card > .app-section-body {
+/* Out-ranks AppSection's .app-section.is-boxed > .app-section-body padding. */
+.artifact-preview-card.app-section.is-boxed > .app-section-body {
   gap: 0;
   padding: 0;
 }
@@ -2425,7 +2426,7 @@ body.artifact-preview-scroll-lock {
   background: #fff;
 }
 
-.artifact-preview-card.is-fullscreen > .app-section-body {
+.artifact-preview-card.app-section.is-fullscreen > .app-section-body {
   grid-template-rows: minmax(0, 1fr);
   min-height: 0;
 }
