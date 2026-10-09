@@ -1913,7 +1913,7 @@ const SetupView = {
   },
   template: `
     <section :class="screenClass">
-      <QCard class="setup-shell stat-item" variant="default">
+      <AppSection variant="boxed" class="setup-shell stat-item">
         <header class="setup-head">
           <p class="ui-kicker setup-step">{{ stageKicker }}</p>
           <div class="setup-progress" aria-hidden="true">
@@ -2427,7 +2427,7 @@ const SetupView = {
           :loginExpiresLabel="proLoginExpiresLabel"
           @logout="logoutProAuth"
         />
-      </QCard>
+      </AppSection>
     </section>
   `,
 };

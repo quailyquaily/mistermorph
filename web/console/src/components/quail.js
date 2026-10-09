@@ -3,7 +3,6 @@
 export {
   QBadge,
   QButton,
-  QCard,
   QDatetimePicker,
   QDialog,
   QDivider,

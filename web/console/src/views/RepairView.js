@@ -326,34 +326,29 @@ const RepairView = {
         <AppNotice v-if="err" class="repair-error" type="error" :text="err" />
 
         <section v-if="!loading && items.length > 0" class="repair-list">
-		  <QCard v-for="item in items" :key="issueID(item)" class="repair-item" variant="default">
-            <template #header>
-              <div class="repair-item-head">
-                <div class="repair-item-copy">
-				  <strong class="repair-item-title">{{ issueTitle(item) }}</strong>
-				  <span class="repair-item-resource">{{ item.name }}</span>
-				  <code v-if="fieldLabel(item)" class="repair-item-field">{{ fieldLabel(item) }}</code>
-				  <code class="repair-item-path">{{ item.path }}</code>
-                </div>
-              </div>
+          <AppSection v-for="item in items" :key="issueID(item)" variant="boxed" class="repair-item" :title="issueTitle(item)">
+            <template #meta>
+              <span class="repair-item-resource">{{ item.name }}</span>
+              <code v-if="fieldLabel(item)" class="repair-item-field">{{ fieldLabel(item) }}</code>
             </template>
-			<p class="repair-item-problem">{{ item.error }}</p>
+            <code class="repair-item-path" :title="item.path">{{ item.path }}</code>
+            <p class="repair-item-problem">{{ item.error }}</p>
             <div class="repair-item-actions">
-			  <QButton v-if="canRetry(item)" class="outlined sm" @click="load">{{ t("repair_action_retry") }}</QButton>
-			  <QButton
-				v-if="hasRepairableSecretRef(item)"
-				class="primary sm"
-				@click="openReplaceDialog(item)"
-			  >
-				{{ t("repair_action_replace_secret") }}
-			  </QButton>
-			  <QButton v-if="hasRepairableSecretRef(item)" class="danger sm" @click="openRemoveDialog(item)">
-				{{ t("repair_action_remove_reference") }}
-			  </QButton>
-			  <QButton v-if="canEditSource(item)" class="outlined sm" @click="openEditor(item)">{{ t("repair_action_edit_source") }}</QButton>
-			  <QButton v-if="canUseSetup(item)" class="primary sm" @click="goToSetup(item)">{{ t("repair_action_use_setup") }}</QButton>
+              <QButton v-if="canRetry(item)" class="outlined sm" @click="load">{{ t("repair_action_retry") }}</QButton>
+              <QButton
+                v-if="hasRepairableSecretRef(item)"
+                class="primary sm"
+                @click="openReplaceDialog(item)"
+              >
+                {{ t("repair_action_replace_secret") }}
+              </QButton>
+              <QButton v-if="hasRepairableSecretRef(item)" class="danger sm" @click="openRemoveDialog(item)">
+                {{ t("repair_action_remove_reference") }}
+              </QButton>
+              <QButton v-if="canEditSource(item)" class="outlined sm" @click="openEditor(item)">{{ t("repair_action_edit_source") }}</QButton>
+              <QButton v-if="canUseSetup(item)" class="primary sm" @click="goToSetup(item)">{{ t("repair_action_use_setup") }}</QButton>
             </div>
-          </QCard>
+          </AppSection>
         </section>
 
         <p v-if="!loading && !err && items.length === 0" class="repair-empty">{{ t("repair_empty") }}</p>

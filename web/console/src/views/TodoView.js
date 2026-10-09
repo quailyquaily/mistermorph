@@ -2556,382 +2556,370 @@ const TodoView = {
           </div>
         </aside>
 
-        <QCard v-if="!calendarView && showEditorPane && heartbeatSelected" class="todo-editor-card todo-heartbeat-editor-card" variant="default">
-          <div class="todo-editor-shell todo-heartbeat-editor-shell">
-            <header class="todo-editor-head">
-              <div class="todo-editor-copy">
-                <h3 class="todo-editor-document-title workspace-document-title">{{ t("todo_heartbeat_title") }}</h3>
-                <p class="todo-editor-meta">{{ heartbeatEditorMeta }}</p>
-              </div>
-              <div class="todo-editor-actions">
-                <QButton class="primary" :disabled="!canSave" :loading="heartbeatSaving" @click="save">
-                  {{ t("action_save") }}
-                </QButton>
-              </div>
-            </header>
-
-            <div class="todo-heartbeat-editor-body">
-              <div v-if="heartbeatLoading || heartbeatDisabled" class="todo-heartbeat-editor-notices">
-                <QProgress v-if="heartbeatLoading" :infinite="true" />
-                <AppNotice
-                  v-if="heartbeatDisabled"
-                  type="warning"
-                  :text="t('todo_heartbeat_disabled_hint')"
-                />
-              </div>
-              <div class="todo-heartbeat-editor-frame">
-                <AppMarkdownEditor
-                  :modelValue="heartbeatContent"
-                  height="100%"
-                  :disabled="heartbeatLoading || heartbeatSaving"
-                  :placeholder="t('todo_heartbeat_placeholder')"
-                  :aria-label="t('todo_heartbeat_title')"
-                  @update:modelValue="onHeartbeatContentChange"
-                />
-              </div>
+        <AppSection
+          v-if="!calendarView && showEditorPane && heartbeatSelected"
+          variant="boxed"
+          class="todo-editor-card todo-heartbeat-editor-card"
+          :title="t('todo_heartbeat_title')"
+          :meta="heartbeatEditorMeta"
+        >
+          <template #actions>
+            <QButton class="plain xs" :disabled="!canSave" :loading="heartbeatSaving" @click="save">
+              {{ t("action_save") }}
+            </QButton>
+          </template>
+          <div class="todo-heartbeat-editor-body">
+            <div v-if="heartbeatLoading || heartbeatDisabled" class="todo-heartbeat-editor-notices">
+              <QProgress v-if="heartbeatLoading" :infinite="true" />
+              <AppNotice
+                v-if="heartbeatDisabled"
+                type="warning"
+                :text="t('todo_heartbeat_disabled_hint')"
+              />
+            </div>
+            <div class="todo-heartbeat-editor-frame">
+              <AppMarkdownEditor
+                :modelValue="heartbeatContent"
+                height="100%"
+                :disabled="heartbeatLoading || heartbeatSaving"
+                :placeholder="t('todo_heartbeat_placeholder')"
+                :aria-label="t('todo_heartbeat_title')"
+                @update:modelValue="onHeartbeatContentChange"
+              />
             </div>
           </div>
-        </QCard>
+        </AppSection>
 
-        <QCard
+        <AppSection
           v-else-if="showEditorPane && selectedTask"
-          class="todo-editor-card"
-          variant="default"
+          variant="boxed"
+          class="todo-editor-card todo-task-editor-card"
+          :title="t('todo_detail_title')"
         >
-          <div class="todo-editor-shell">
-            <header class="todo-editor-head todo-task-editor-head">
-              <div class="todo-editor-toolbar">
-                <div class="todo-enabled-control">
-                  <span class="todo-enabled-label" aria-hidden="true">{{ t('todo_field_enabled') }}</span>
-                  <QSwitch
-                    :modelValue="selectedTask.enabled !== false"
-                    :disabled="saving || loading"
-                    :title="t('todo_field_enabled')"
-                    :aria-label="t('todo_field_enabled')"
-                    @update:modelValue="updateTaskEnabled(selectedTask, $event)"
-                  />
-                </div>
-                <div class="todo-editor-actions">
-                  <QButton class="primary xs" :disabled="!canSave" :loading="saving" @click="save">
-                    {{ t("action_save") }}
-                  </QButton>
-                  <QDropdownMenu
-                    class="todo-task-actions-menu"
-                    :items="taskActionMenuItems"
-                    hideSelected
-                    hideActionLabel
-                    :disabled="saving || loading"
-                    :loading="runningTaskKey === selectedTask._key"
-                  >
-                    <PhDotsThree class="todo-task-actions-menu-icon" />
-                    <span class="todo-task-actions-menu-accessible">{{ t("todo_action_more") }}</span>
-                  </QDropdownMenu>
-                </div>
-              </div>
-              <label class="todo-editor-title-field">
-                <QInput
-                  class="todo-title-input"
-                  :modelValue="selectedTask.title"
-                  :placeholder="t('todo_untitled')"
-                  :aria-label="t('todo_field_title')"
+          <template #actions>
+            <QButton class="plain xs" :disabled="!canSave" :loading="saving" @click="save">
+              {{ t("action_save") }}
+            </QButton>
+            <QDropdownMenu
+              class="todo-task-actions-menu"
+              variant="plain"
+              :items="taskActionMenuItems"
+              hideSelected
+              hideActionLabel
+              :disabled="saving || loading"
+              :loading="runningTaskKey === selectedTask._key"
+            >
+              <PhDotsThree class="todo-task-actions-menu-icon" />
+              <span class="todo-task-actions-menu-accessible">{{ t("todo_action_more") }}</span>
+            </QDropdownMenu>
+          </template>
+          <div class="todo-task-editor-head">
+            <label class="todo-editor-title-field">
+              <QInput
+                class="todo-title-input"
+                :modelValue="selectedTask.title"
+                :placeholder="t('todo_untitled')"
+                :aria-label="t('todo_field_title')"
+                :disabled="saving || loading"
+                @update:modelValue="updateTodoTitle(selectedTask, $event)"
+              />
+            </label>
+            <div class="todo-enabled-control">
+              <span class="todo-enabled-label" aria-hidden="true">{{ t('todo_field_enabled') }}</span>
+              <QSwitch
+                :modelValue="selectedTask.enabled !== false"
+                :disabled="saving || loading"
+                :title="t('todo_field_enabled')"
+                :aria-label="t('todo_field_enabled')"
+                @update:modelValue="updateTaskEnabled(selectedTask, $event)"
+              />
+            </div>
+          </div>
+
+          <div class="todo-form">
+            <div class="todo-field is-wide todo-content-field">
+              <AppMarkdownEditor
+                class="todo-content-markdown-editor"
+                :modelValue="selectedTask.content"
+                height="clamp(168px, 26vh, 320px)"
+                :placeholder="t('todo_content_placeholder')"
+                :aria-label="t('todo_field_content')"
+                :disabled="saving || loading"
+                @update:modelValue="updateTaskField(selectedTask, 'content', $event)"
+              />
+            </div>
+
+            <div class="todo-compact-fields">
+              <div class="todo-field">
+                <QDropdownMenu
+                  :key="'timezone-' + selectedTask._key + '-' + selectedTask.tz"
+                  class="todo-dropdown"
+                  :items="timezoneBaseItems"
+                  :initialItem="timezoneItem(selectedTask)"
+                  :placeholder="t('todo_timezone_placeholder')"
+                  use-filter
+                  scroll-height="400px"
+                  use-dialog="always"
                   :disabled="saving || loading"
-                  @update:modelValue="updateTodoTitle(selectedTask, $event)"
-                />
-              </label>
-            </header>
-
-            <div class="todo-form">
-              <div class="todo-field is-wide todo-content-field">
-                <AppMarkdownEditor
-                  class="todo-content-markdown-editor"
-                  :modelValue="selectedTask.content"
-                  height="clamp(168px, 26vh, 320px)"
-                  :placeholder="t('todo_content_placeholder')"
-                  :aria-label="t('todo_field_content')"
-                  :disabled="saving || loading"
-                  @update:modelValue="updateTaskField(selectedTask, 'content', $event)"
-                />
-              </div>
-
-              <div class="todo-compact-fields">
-                <div class="todo-field">
-                  <QDropdownMenu
-                    :key="'timezone-' + selectedTask._key + '-' + selectedTask.tz"
-                    class="todo-dropdown"
-                    :items="timezoneBaseItems"
-                    :initialItem="timezoneItem(selectedTask)"
-                    :placeholder="t('todo_timezone_placeholder')"
-                    use-filter
-                    scroll-height="400px"
-                    use-dialog="always"
-                    :disabled="saving || loading"
-                    @change="updateTimezone(selectedTask, $event)"
-                  >
-                    <template #prepend>
-                      <span class="todo-control-prepend">{{ t("todo_field_timezone") }}</span>
-                    </template>
-                  </QDropdownMenu>
-                </div>
-
-                <div class="todo-field">
-                  <QDropdownMenu
-                    :key="'schedule-' + selectedTask._key + '-' + taskMode(selectedTask)"
-                    class="todo-dropdown"
-                    :items="scheduleModeItems"
-                    :initialItem="scheduleModeItem(selectedTask)"
-                    :placeholder="t('todo_field_schedule')"
-                    :disabled="saving || loading"
-                    @change="updateScheduleFromItem(selectedTask, $event)"
-                  >
-                    <template #prepend>
-                      <span class="todo-control-prepend">{{ t("todo_field_schedule") }}</span>
-                    </template>
-                  </QDropdownMenu>
-                </div>
-
-                <div class="todo-field">
-                  <QDropdownMenu
-                    :key="'llm-profile-' + selectedTask._key + '-' + selectedTask.llm_profile"
-                    class="todo-dropdown todo-dropdown-hide-selected-media llm-profile-dropdown"
-                    :items="llmProfileMenuItems"
-                    :initialItem="llmProfileItem(selectedTask)"
-                    :placeholder="t('todo_llm_profile_placeholder')"
-                    use-filter
-                    use-dialog="always"
-                    :disabled="saving || loading"
-                    @change="updateLLMProfileFromItem(selectedTask, $event)"
-                  >
-                    <template #prepend>
-                      <span class="todo-control-prepend">{{ t("todo_field_llm_profile") }}</span>
-                    </template>
-                  </QDropdownMenu>
-                </div>
-
-                <div class="todo-field">
-                  <QDropdownMenu
-                    :key="'chat-' + selectedTask._key + '-' + selectedTask.chat_id + '-' + chatDropdownRevision"
-                    class="todo-dropdown todo-dropdown-hide-selected-media"
-                    :items="chatMenuItems"
-                    :initialItem="chatItem(selectedTask)"
-                    :placeholder="t('todo_chat_placeholder')"
-                    use-filter
-                    use-dialog="always"
-                    :disabled="saving || loading"
-                    @change="updateChatFromItem(selectedTask, $event)"
-                  >
-                    <template #prepend>
-                      <span class="todo-control-prepend">{{ t("todo_field_chat") }}</span>
-                    </template>
-                  </QDropdownMenu>
-                </div>
-              </div>
-
-              <label v-if="taskMode(selectedTask) === 'once'" class="todo-field is-wide">
-                <QDatetimePicker
-                  class="todo-datetime-picker"
-                  :modelValue="atInputValue(selectedTask)"
-                  accept="datetime"
-                  :disabled="saving || loading"
-                  @update:modelValue="updateAtInput(selectedTask, $event)"
+                  @change="updateTimezone(selectedTask, $event)"
                 >
                   <template #prepend>
-                    <span class="todo-control-prepend todo-datetime-prepend">{{ t("todo_field_at") }}</span>
+                    <span class="todo-control-prepend">{{ t("todo_field_timezone") }}</span>
                   </template>
-                </QDatetimePicker>
-              </label>
+                </QDropdownMenu>
+              </div>
 
-              <div v-else class="todo-field is-wide todo-repeat-field">
-                <AppTabs
-                  :class="saving || loading ? 'todo-repeat-kind-tabs is-disabled' : 'todo-repeat-kind-tabs'"
-                  :tabs="repeatKindTabs"
-                  :modelValue="repeatKindTab(selectedTask)"
+              <div class="todo-field">
+                <QDropdownMenu
+                  :key="'schedule-' + selectedTask._key + '-' + taskMode(selectedTask)"
+                  class="todo-dropdown"
+                  :items="scheduleModeItems"
+                  :initialItem="scheduleModeItem(selectedTask)"
+                  :placeholder="t('todo_field_schedule')"
                   :disabled="saving || loading"
-                  :ariaLabel="t('todo_field_repeat')"
-                  @change="updateRepeatKindFromTab(selectedTask, $event)"
-                />
-
-                <div
-                  v-if="repeatKind(selectedTask) !== 'custom'"
-                  :class="repeatKind(selectedTask) === 'weekly' ? 'todo-repeat-controls is-weekly' : 'todo-repeat-controls'"
+                  @change="updateScheduleFromItem(selectedTask, $event)"
                 >
-                  <label v-if="repeatKind(selectedTask) === 'hourly'" class="todo-field todo-repeat-minute">
-                    <QInput
-                      :key="repeatMinuteInputKey(selectedTask)"
-                      class="todo-minute-input"
-                      :modelValue="repeatMinuteValue(selectedTask)"
-                      inputType="number"
-                      min="0"
-                      step="1"
-                      :aria-label="t('todo_field_minute')"
-                      :disabled="saving || loading"
-                      @update:modelValue="updateRepeatMinute(selectedTask, $event)"
-                    >
-                      <template #prepend>
-                        <span class="todo-control-prepend todo-input-prepend">{{ t("todo_field_minute") }}</span>
-                      </template>
-                    </QInput>
-                  </label>
+                  <template #prepend>
+                    <span class="todo-control-prepend">{{ t("todo_field_schedule") }}</span>
+                  </template>
+                </QDropdownMenu>
+              </div>
 
-                  <label v-else class="todo-field todo-repeat-time">
-                    <QInput
-                      :modelValue="selectedTask.repeat_time"
-                      inputType="time"
-                      :aria-label="t('todo_field_time')"
-                      :disabled="saving || loading"
-                      @update:modelValue="updateRepeatTime(selectedTask, $event)"
-                    >
-                      <template #prepend>
-                        <span class="todo-control-prepend todo-input-prepend">{{ t("todo_field_time") }}</span>
-                      </template>
-                    </QInput>
-                  </label>
+              <div class="todo-field">
+                <QDropdownMenu
+                  :key="'llm-profile-' + selectedTask._key + '-' + selectedTask.llm_profile"
+                  class="todo-dropdown todo-dropdown-hide-selected-media llm-profile-dropdown"
+                  :items="llmProfileMenuItems"
+                  :initialItem="llmProfileItem(selectedTask)"
+                  :placeholder="t('todo_llm_profile_placeholder')"
+                  use-filter
+                  use-dialog="always"
+                  :disabled="saving || loading"
+                  @change="updateLLMProfileFromItem(selectedTask, $event)"
+                >
+                  <template #prepend>
+                    <span class="todo-control-prepend">{{ t("todo_field_llm_profile") }}</span>
+                  </template>
+                </QDropdownMenu>
+              </div>
 
-                  <div v-if="repeatKind(selectedTask) === 'weekly'" class="todo-field todo-weekday-field">
-                    <div class="todo-weekday-picker" role="group" :aria-label="t('todo_field_weekdays')">
-                      <QButton
-                        v-for="day in WEEKDAYS"
-                        :key="day.value"
-                        type="button"
-                        :class="weekdaySelected(selectedTask, day.value) ? 'todo-weekday is-active' : 'todo-weekday'"
-                        :aria-pressed="weekdaySelected(selectedTask, day.value)"
-                        :disabled="saving || loading"
-                        @click="toggleRepeatWeekday(selectedTask, day.value)"
-                      >
-                        {{ weekdayLabel(day.value) }}
-                      </QButton>
-                    </div>
-                  </div>
+              <div class="todo-field">
+                <QDropdownMenu
+                  :key="'chat-' + selectedTask._key + '-' + selectedTask.chat_id + '-' + chatDropdownRevision"
+                  class="todo-dropdown todo-dropdown-hide-selected-media"
+                  :items="chatMenuItems"
+                  :initialItem="chatItem(selectedTask)"
+                  :placeholder="t('todo_chat_placeholder')"
+                  use-filter
+                  use-dialog="always"
+                  :disabled="saving || loading"
+                  @change="updateChatFromItem(selectedTask, $event)"
+                >
+                  <template #prepend>
+                    <span class="todo-control-prepend">{{ t("todo_field_chat") }}</span>
+                  </template>
+                </QDropdownMenu>
+              </div>
+            </div>
 
-                  <label v-if="repeatKind(selectedTask) === 'monthly'" class="todo-field todo-month-day-field">
-                    <QInput
-                      :key="repeatMonthDayInputKey(selectedTask)"
-                      class="todo-month-day-input"
-                      :modelValue="selectedTask.repeat_month_day"
-                      inputType="number"
-                      min="1"
-                      step="1"
-                      :aria-label="t('todo_field_month_day')"
-                      :disabled="saving || loading"
-                      @update:modelValue="updateRepeatMonthDay(selectedTask, $event)"
-                    >
-                      <template #prepend>
-                        <span class="todo-control-prepend todo-input-prepend">{{ t("todo_field_day") }}</span>
-                      </template>
-                    </QInput>
-                  </label>
-                </div>
+            <label v-if="taskMode(selectedTask) === 'once'" class="todo-field is-wide">
+              <QDatetimePicker
+                class="todo-datetime-picker"
+                :modelValue="atInputValue(selectedTask)"
+                accept="datetime"
+                :disabled="saving || loading"
+                @update:modelValue="updateAtInput(selectedTask, $event)"
+              >
+                <template #prepend>
+                  <span class="todo-control-prepend todo-datetime-prepend">{{ t("todo_field_at") }}</span>
+                </template>
+              </QDatetimePicker>
+            </label>
 
-                <label v-else class="todo-field is-wide todo-custom-cron">
+            <div v-else class="todo-field is-wide todo-repeat-field">
+              <AppTabs
+                :class="saving || loading ? 'todo-repeat-kind-tabs is-disabled' : 'todo-repeat-kind-tabs'"
+                :tabs="repeatKindTabs"
+                :modelValue="repeatKindTab(selectedTask)"
+                :disabled="saving || loading"
+                :ariaLabel="t('todo_field_repeat')"
+                @change="updateRepeatKindFromTab(selectedTask, $event)"
+              />
+
+              <div
+                v-if="repeatKind(selectedTask) !== 'custom'"
+                :class="repeatKind(selectedTask) === 'weekly' ? 'todo-repeat-controls is-weekly' : 'todo-repeat-controls'"
+              >
+                <label v-if="repeatKind(selectedTask) === 'hourly'" class="todo-field todo-repeat-minute">
                   <QInput
-                    :modelValue="selectedTask.custom_cron"
-                    :placeholder="t('todo_custom_cron_placeholder')"
-                    :aria-label="t('todo_field_cron')"
+                    :key="repeatMinuteInputKey(selectedTask)"
+                    class="todo-minute-input"
+                    :modelValue="repeatMinuteValue(selectedTask)"
+                    inputType="number"
+                    min="0"
+                    step="1"
+                    :aria-label="t('todo_field_minute')"
                     :disabled="saving || loading"
-                    @update:modelValue="updateCustomCron(selectedTask, $event)"
-                  />
-                  <span class="todo-field-note">{{ t("todo_custom_cron_note") }}</span>
+                    @update:modelValue="updateRepeatMinute(selectedTask, $event)"
+                  >
+                    <template #prepend>
+                      <span class="todo-control-prepend todo-input-prepend">{{ t("todo_field_minute") }}</span>
+                    </template>
+                  </QInput>
                 </label>
 
-              </div>
-
-              <div :class="taskPreviewClass(selectedTask)">
-                <span class="todo-task-preview-label">{{ t("todo_repeat_preview") }}</span>
-                <span class="todo-task-preview-text">
-                  <span
-                    v-for="(part, index) in previewSegments(selectedTask)"
-                    :key="index"
-                    :class="part.type === 'mark' ? 'todo-preview-mark' : 'todo-preview-plain'"
-                  >{{ part.text }}</span>
-                </span>
-              </div>
-
-              <div class="todo-field is-wide todo-bash-env-field">
-                <div class="todo-bash-env-head">
-                  <span class="todo-task-preview-label">{{ t("todo_field_bash_env") }}</span>
-                  <span class="todo-field-note">{{ t("todo_bash_env_hint") }}</span>
-                </div>
-                <div v-if="hasBashEnvRows(selectedTask)" class="todo-bash-env-rows">
-                  <div
-                    v-for="(row, index) in selectedTask.bash_env"
-                    :key="'bash-env-' + selectedTask._key + '-' + index"
-                    class="todo-bash-env-row"
+                <label v-else class="todo-field todo-repeat-time">
+                  <QInput
+                    :modelValue="selectedTask.repeat_time"
+                    inputType="time"
+                    :aria-label="t('todo_field_time')"
+                    :disabled="saving || loading"
+                    @update:modelValue="updateRepeatTime(selectedTask, $event)"
                   >
-                    <label class="todo-field todo-bash-env-name">
-                      <QInput
-                        :modelValue="row.name"
-                        :placeholder="t('todo_bash_env_name')"
-                        :aria-label="t('todo_bash_env_name')"
-                        :disabled="saving || loading"
-                        @update:modelValue="updateBashEnvField(selectedTask, index, 'name', $event)"
-                      />
-                    </label>
-                    <label class="todo-field todo-bash-env-value">
-                      <QInput
-                        :modelValue="row.value"
-                        :placeholder="t('todo_bash_env_value')"
-                        :aria-label="t('todo_bash_env_value')"
-                        :disabled="saving || loading"
-                        @update:modelValue="updateBashEnvField(selectedTask, index, 'value', $event)"
-                      />
-                    </label>
+                    <template #prepend>
+                      <span class="todo-control-prepend todo-input-prepend">{{ t("todo_field_time") }}</span>
+                    </template>
+                  </QInput>
+                </label>
+
+                <div v-if="repeatKind(selectedTask) === 'weekly'" class="todo-field todo-weekday-field">
+                  <div class="todo-weekday-picker" role="group" :aria-label="t('todo_field_weekdays')">
                     <QButton
+                      v-for="day in WEEKDAYS"
+                      :key="day.value"
                       type="button"
-                      class="plain icon todo-bash-env-remove"
-                      :title="t('action_delete')"
-                      :aria-label="t('action_delete')"
+                      :class="weekdaySelected(selectedTask, day.value) ? 'todo-weekday is-active' : 'todo-weekday'"
+                      :aria-pressed="weekdaySelected(selectedTask, day.value)"
                       :disabled="saving || loading"
-                      @click="removeBashEnvRow(selectedTask, index)"
+                      @click="toggleRepeatWeekday(selectedTask, day.value)"
                     >
-                      <PhTrash class="icon" />
+                      {{ weekdayLabel(day.value) }}
                     </QButton>
                   </div>
                 </div>
-                <QButton
-                  type="button"
-                  class="placeholder sm todo-bash-env-add"
-                  :disabled="saving || loading"
-                  @click="addBashEnvRow(selectedTask)"
-                >
-                  <PhPlus class="icon" />
-                  {{ t("todo_bash_env_add") }}
-                </QButton>
+
+                <label v-if="repeatKind(selectedTask) === 'monthly'" class="todo-field todo-month-day-field">
+                  <QInput
+                    :key="repeatMonthDayInputKey(selectedTask)"
+                    class="todo-month-day-input"
+                    :modelValue="selectedTask.repeat_month_day"
+                    inputType="number"
+                    min="1"
+                    step="1"
+                    :aria-label="t('todo_field_month_day')"
+                    :disabled="saving || loading"
+                    @update:modelValue="updateRepeatMonthDay(selectedTask, $event)"
+                  >
+                    <template #prepend>
+                      <span class="todo-control-prepend todo-input-prepend">{{ t("todo_field_day") }}</span>
+                    </template>
+                  </QInput>
+                </label>
               </div>
+
+              <label v-else class="todo-field is-wide todo-custom-cron">
+                <QInput
+                  :modelValue="selectedTask.custom_cron"
+                  :placeholder="t('todo_custom_cron_placeholder')"
+                  :aria-label="t('todo_field_cron')"
+                  :disabled="saving || loading"
+                  @update:modelValue="updateCustomCron(selectedTask, $event)"
+                />
+                <span class="todo-field-note">{{ t("todo_custom_cron_note") }}</span>
+              </label>
+
             </div>
 
-          </div>
-        </QCard>
-        <QCard
-          v-else-if="calendarView && showEditorPane && selectedCalendarDate"
-          class="todo-calendar-day-detail-card todo-editor-card"
-          variant="default"
-        >
-          <section class="todo-calendar-day-detail-shell" :aria-label="t('todo_calendar_agenda')">
-            <header class="todo-calendar-day-detail-head">
-              <h3 class="todo-calendar-day-detail-title workspace-document-title">{{ selectedCalendarDateTitle }}</h3>
-              <span class="todo-calendar-day-detail-count">
-                {{ t("todo_calendar_item_count", { count: selectedCalendarTasks.length }) }}
+            <div :class="taskPreviewClass(selectedTask)">
+              <span class="todo-task-preview-label">{{ t("todo_repeat_preview") }}</span>
+              <span class="todo-task-preview-text">
+                <span
+                  v-for="(part, index) in previewSegments(selectedTask)"
+                  :key="index"
+                  :class="part.type === 'mark' ? 'todo-preview-mark' : 'todo-preview-plain'"
+                >{{ part.text }}</span>
               </span>
-            </header>
-
-            <div v-if="selectedCalendarTasks.length > 0" class="todo-calendar-day-detail-items">
-              <button
-                v-for="task in selectedCalendarTasks"
-                :key="task._key"
-                type="button"
-                :class="['todo-calendar-day-detail-item', { 'is-disabled': task.enabled === false }]"
-                :aria-label="taskTitle(task)"
-                @click="selectTask(task)"
-              >
-                <span class="todo-calendar-day-detail-status" aria-hidden="true"></span>
-                <span class="todo-calendar-day-detail-copy">
-                  <span class="todo-calendar-day-detail-name">{{ taskTitle(task) }}</span>
-                  <span class="todo-calendar-day-detail-meta">{{ scheduleLabel(task) }}</span>
-                </span>
-              </button>
             </div>
-            <p v-else class="todo-calendar-day-detail-empty">{{ t("todo_calendar_day_empty") }}</p>
-          </section>
-        </QCard>
+
+            <div class="todo-field is-wide todo-bash-env-field">
+              <div class="todo-bash-env-head">
+                <span class="todo-task-preview-label">{{ t("todo_field_bash_env") }}</span>
+                <span class="todo-field-note">{{ t("todo_bash_env_hint") }}</span>
+              </div>
+              <div v-if="hasBashEnvRows(selectedTask)" class="todo-bash-env-rows">
+                <div
+                  v-for="(row, index) in selectedTask.bash_env"
+                  :key="'bash-env-' + selectedTask._key + '-' + index"
+                  class="todo-bash-env-row"
+                >
+                  <label class="todo-field todo-bash-env-name">
+                    <QInput
+                      :modelValue="row.name"
+                      :placeholder="t('todo_bash_env_name')"
+                      :aria-label="t('todo_bash_env_name')"
+                      :disabled="saving || loading"
+                      @update:modelValue="updateBashEnvField(selectedTask, index, 'name', $event)"
+                    />
+                  </label>
+                  <label class="todo-field todo-bash-env-value">
+                    <QInput
+                      :modelValue="row.value"
+                      :placeholder="t('todo_bash_env_value')"
+                      :aria-label="t('todo_bash_env_value')"
+                      :disabled="saving || loading"
+                      @update:modelValue="updateBashEnvField(selectedTask, index, 'value', $event)"
+                    />
+                  </label>
+                  <QButton
+                    type="button"
+                    class="plain icon todo-bash-env-remove"
+                    :title="t('action_delete')"
+                    :aria-label="t('action_delete')"
+                    :disabled="saving || loading"
+                    @click="removeBashEnvRow(selectedTask, index)"
+                  >
+                    <PhTrash class="icon" />
+                  </QButton>
+                </div>
+              </div>
+              <QButton
+                type="button"
+                class="placeholder sm todo-bash-env-add"
+                :disabled="saving || loading"
+                @click="addBashEnvRow(selectedTask)"
+              >
+                <PhPlus class="icon" />
+                {{ t("todo_bash_env_add") }}
+              </QButton>
+            </div>
+          </div>
+        </AppSection>
+        <AppSection
+          v-else-if="calendarView && showEditorPane && selectedCalendarDate"
+          variant="boxed"
+          class="todo-calendar-day-detail-card todo-editor-card is-list"
+          :aria-label="t('todo_calendar_agenda')"
+          :title="selectedCalendarDateTitle"
+          :meta="t('todo_calendar_item_count', { count: selectedCalendarTasks.length })"
+        >
+          <div v-if="selectedCalendarTasks.length > 0" class="todo-calendar-day-detail-items">
+            <button
+              v-for="task in selectedCalendarTasks"
+              :key="task._key"
+              type="button"
+              :class="['todo-calendar-day-detail-item', { 'is-disabled': task.enabled === false }]"
+              :aria-label="taskTitle(task)"
+              @click="selectTask(task)"
+            >
+              <span class="todo-calendar-day-detail-status" aria-hidden="true"></span>
+              <span class="todo-calendar-day-detail-copy">
+                <span class="todo-calendar-day-detail-name">{{ taskTitle(task) }}</span>
+                <span class="todo-calendar-day-detail-meta">{{ scheduleLabel(task) }}</span>
+              </span>
+            </button>
+          </div>
+          <p v-else class="todo-calendar-day-detail-empty">{{ t("todo_calendar_day_empty") }}</p>
+        </AppSection>
         <section v-else-if="showEditorPane" class="todo-placeholder">
           <div class="todo-placeholder-copy">
             <h3 class="todo-placeholder-title workspace-document-title">{{ t("todo_detail_empty_title") }}</h3>

@@ -213,8 +213,8 @@
   min-width: 0;
 }
 
-/* The selected skill: TODO's editor card. */
-.skills-detail-card.q-card-default {
+/* The selected skill: a boxed section, as TODO's editor. */
+.skills-detail-card {
   margin: 8px 8px 8px 16px;
   min-width: 0;
   min-height: 0;
@@ -227,22 +227,9 @@
   min-width: 0;
 }
 
-/* The card's head: the skill's name and description, and the "⋯" menu (Remove) at its top right. */
-.skills-detail-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  min-width: 0;
-}
-
-/* The "⋯" menu button, as on TODO, at 32px to sit beside the title. */
-.skills-detail-head .skills-actions-menu {
-  flex: 0 0 auto;
-}
-
-/* Out-ranks the themes' `body[data-theme] .q-dropdown-menu { width: 100% }`. */
-.skills-detail-head .q-dropdown-menu.skills-actions-menu,
+/* The "⋯" menu (Remove) in the head's action area, one control high. Out-ranks the themes'
+   `body[data-theme] .q-dropdown-menu { width: 100% }`. */
+.app-section-actions .q-dropdown-menu.skills-actions-menu,
 .skills-actions-menu .q-dropdown-menu-inner,
 .skills-actions-menu .q-dropdown-menu-action {
   width: 32px;
@@ -288,23 +275,11 @@
   border: 0;
 }
 
-.skills-detail-copy {
-  flex: 1 1 auto;
-  display: grid;
-  gap: 6px;
-  min-width: 0;
-  padding-top: 2px;
-}
-
-.skills-detail-title {
-  margin: 0;
-  overflow-wrap: anywhere;
-}
-
+/* The description opens the body: a whole sentence or two, so it is text, not the head's meta. */
 .skills-detail-meta {
   margin: 0;
-  color: var(--text-2);
-  font-size: var(--font-size-meta);
+  color: var(--text-1);
+  font-size: var(--font-size-ui);
   line-height: 1.55;
 }
 
@@ -577,7 +552,7 @@
     padding-bottom: calc(52px + 32px + var(--mobile-nav-height, 0px));
   }
 
-  .skills-detail-card.q-card-default {
+  .skills-detail-card {
     margin: 8px 12px calc(var(--mobile-nav-height, 0px) + 16px);
   }
 

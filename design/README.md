@@ -62,6 +62,5 @@ Not done yet:
 
 - Suimen, in the dark favicon, is the only cyber colourway in the product so far.
 - The console still has one light theme; the other UI themes are specified in `DESIGN.md` §7.
-- Sections (`DESIGN.md` §7, `web/console/src/components/AppSection.js`) are in Settings and Usage. Contacts,
-  Runtime, Setup, Repair, Audit, Skills and Todo still use Quail's card. The console's `/__components` page shows every
-  form of a section and a notice.
+- Every card in the console is now a section (`DESIGN.md` §7, `web/console/src/components/AppSection.js`); Quail's
+  card is no longer registered. The console's `/__components` page shows every form of a section and a notice.

@@ -17,11 +17,10 @@
   --setup-accent: rgb(62, 99, 132);
 }
 
+/* The wizard is one boxed section without a head: its step, progress and title are its own. */
 .setup-shell {
+  --app-section-padding: 18px;
   width: min(100%, 640px);
-  padding: 16px 18px 18px;
-  display: grid;
-  gap: 16px;
 }
 
 .setup-head {
@@ -578,13 +577,13 @@
 
 @media (max-width: 620px) {
   .setup-screen {
-    /* Keep the sheet and its registration marks inside the screen. */
+    /* Keep the sheet inside the screen. */
     padding: 16px;
   }
 
   .setup-shell {
-    padding: 0;
-    gap: 14px;
+    --app-section-padding: 12px;
+    --app-section-gap: 14px;
   }
 
   .setup-title {

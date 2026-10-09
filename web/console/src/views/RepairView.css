@@ -52,58 +52,23 @@
   align-items: start;
 }
 
+/* One issue: a boxed section. The head names the problem, with the resource and the field as its
+   meta; the body holds the file's path, the error and the ways to fix it. */
 .repair-item {
-  display: grid;
-  min-height: 0;
-  gap: 12px;
-}
-
-.repair-item.q-card-default {
-  min-height: 0;
-  height: auto;
   align-self: start;
 }
 
-.repair-item .q-card-body {
-  display: grid;
-  gap: 12px;
-  align-content: start;
-}
-
-.repair-item .q-card-content,
-.repair-item .q-card-footer {
-  padding-top: 0;
-}
-
-.repair-item-head {
-  display: flex;
-  align-items: start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.repair-item-copy {
-  min-width: 0;
-  display: grid;
-  gap: 6px;
-}
-
 .repair-item-resource {
-	font-size: var(--font-size-meta);
 	color: var(--text-1);
 }
 
 .repair-item-field {
+	margin-left: 10px;
 	width: fit-content;
 	padding: 3px 6px;
 	font-size: var(--font-size-meta);
 	color: var(--accent-strong, var(--primary));
 	background: color-mix(in srgb, var(--primary) 9%, transparent);
-}
-
-.repair-item-title {
-  font-size: var(--font-size-ui);
-  color: var(--text-0);
 }
 
 .repair-item-path {
@@ -118,7 +83,6 @@
 .repair-item-problem {
   margin: 0;
   padding: 10px 12px;
-  margin-bottom: 16px;
   font-family: var(--font-mono);
   font-size: var(--font-size-body);
   line-height: 1.5;

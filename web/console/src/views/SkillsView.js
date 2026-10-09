@@ -603,24 +603,22 @@ const SkillsView = {
         </aside>
 
         <div v-if="showDetail || !isMobile" ref="detailPane" class="skills-detail-pane">
-          <QCard v-if="showDetail" class="skills-detail-card" variant="default">
+          <AppSection v-if="showDetail" variant="boxed" class="skills-detail-card is-literal" :title="selected.name">
+            <template #actions>
+              <QDropdownMenu
+                class="skills-actions-menu"
+                variant="plain"
+                :items="skillActionMenuItems"
+                hideSelected
+                hideActionLabel
+                :loading="removeBusy"
+              >
+                <PhDotsThree class="skills-actions-menu-icon" />
+                <span class="skills-actions-menu-accessible">{{ t('skills_more') }}</span>
+              </QDropdownMenu>
+            </template>
             <div class="skills-detail">
-              <header class="skills-detail-head">
-                <div class="skills-detail-copy">
-                  <h3 class="workspace-document-title skills-detail-title">{{ selected.name }}</h3>
-                  <p v-if="selected.description" class="skills-detail-meta">{{ selected.description }}</p>
-                </div>
-                <QDropdownMenu
-                  class="skills-actions-menu"
-                  :items="skillActionMenuItems"
-                  hideSelected
-                  hideActionLabel
-                  :loading="removeBusy"
-                >
-                  <PhDotsThree class="skills-actions-menu-icon" />
-                  <span class="skills-actions-menu-accessible">{{ t('skills_more') }}</span>
-                </QDropdownMenu>
-              </header>
+              <p v-if="selected.description" class="skills-detail-meta">{{ selected.description }}</p>
 
               <AppNotice v-if="catalog.readOnly && catalog.readOnlyReason" type="warning" :text="catalog.readOnlyReason" />
               <AppNotice v-if="err" type="error" :text="err" />
@@ -701,7 +699,7 @@ const SkillsView = {
                 <MarkdownContent v-else-if="documentSource" class="skills-doc-body" :source="documentSource" />
               </section>
             </div>
-          </QCard>
+          </AppSection>
 
           <div v-else-if="!isMobile && !loading" class="skills-detail-empty">
             <AppNotice v-if="err" type="error" :text="err" />

@@ -1043,19 +1043,21 @@ const AuditView = {
           </div>
         </aside>
 
-        <QCard v-if="showLedgerPane" class="audit-ledger" variant="default">
-          <header class="audit-ledger-head">
-            <QButton v-if="mobileShowBack" class="plain sm icon audit-ledger-back" :aria-label="t('audit_title')" @click="showIndexView">
+        <AppSection
+          v-if="showLedgerPane"
+          variant="boxed"
+          class="audit-ledger"
+          :title="isTasksStreamSelected ? t('tasks_title') : selectedFileTitle"
+          :meta="!isTasksStreamSelected ? selectedFileItem?.subtitle || '' : ''"
+        >
+          <template v-if="mobileShowBack" #lead>
+            <QButton class="plain xs icon audit-ledger-back" :aria-label="t('audit_title')" @click="showIndexView">
               <PhArrowLeft class="icon" />
             </QButton>
-            <div class="audit-ledger-copy">
-              <h3 class="workspace-document-title">{{ isTasksStreamSelected ? t('tasks_title') : selectedFileTitle }}</h3>
-              <p v-if="!isTasksStreamSelected && selectedFileItem?.subtitle" class="audit-ledger-subtitle">{{ selectedFileItem.subtitle }}</p>
-            </div>
-            <div class="audit-ledger-actions">
-              <QButton v-if="!isTasksStreamSelected && pageValue > 1" class="plain sm" :disabled="loading" @click="refreshAudit({ latest: true })">{{ t('audit_latest') }}</QButton>
-            </div>
-          </header>
+          </template>
+          <template v-if="!isTasksStreamSelected && pageValue > 1" #actions>
+            <QButton class="plain xs" :disabled="loading" @click="refreshAudit({ latest: true })">{{ t('audit_latest') }}</QButton>
+          </template>
           <div class="audit-toolbar">
             <div v-if="!isTasksStreamSelected" class="audit-filter">
               <QInput v-model="filterText" class="xs audit-filter-input" :placeholder="t('audit_filter_placeholder')" :aria-label="t('audit_filter_placeholder')" />
@@ -1177,7 +1179,7 @@ const AuditView = {
               </div>
             </template>
           </div>
-        </QCard>
+        </AppSection>
         <RawJsonDialog :open="rawDialogOpen" :json="rawDialogJSON" @close="closeRawDialog" />
       </div>
     </AppPage>

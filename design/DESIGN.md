@@ -206,7 +206,8 @@ indigo that can. Aojashin's sidebar is light, so its active item is marked in bl
   description keeps to one line; what does not fit ends in an ellipsis, with the full text in the tooltip, so
   anything the reader must not miss (such as "Restart required") comes first. The action area is one 32 px control
   high and takes plain buttons and plain dropdowns only, with the same rest and hover states; even Save is plain there.
-  Filled and outlined buttons, tabs and filters go at the top of the body.
+  Filled and outlined buttons, tabs and filters go at the top of the body. A pane that replaces its list on a phone
+  may lead the head with one plain back button, before the mark.
 - **Lists in a section.** A list that opens a section's body, with no label above it, has no top rule: the head's rule
   is already its edge. The body keeps only 4 px above the first row and below the last, and the rows' own 12 px
   padding makes the inset; the last row has no bottom rule. A list further down keeps its top rule as a divider.

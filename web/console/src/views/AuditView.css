@@ -91,20 +91,18 @@
   transform: rotate(90deg);
 }
 
-.audit-ledger.q-card-default {
-  --q-card-padding: 0;
-  grid-template-rows: minmax(0, 1fr);
+/* The open log: a boxed section the height of the workbench. Its body is the toolbar over the
+   entries, which scroll on their own. */
+.audit-ledger {
+  grid-template-rows: auto minmax(0, 1fr);
   margin: 8px 8px 8px 16px;
-  padding: 0;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
 }
 
-.audit-ledger > .q-card-body,
-.audit-ledger > .q-card-body > .q-card-content {
+.app-section.audit-ledger > .app-section-body {
   display: flex;
-  flex: 1 1 auto;
   flex-direction: column;
   min-width: 0;
   min-height: 0;
@@ -112,35 +110,6 @@
   gap: 0;
 }
 
-.audit-ledger-head {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
-  padding: 16px 20px 12px;
-}
-
-.audit-ledger-copy {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.audit-ledger-copy .workspace-document-title {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.audit-ledger-subtitle {
-  margin: 5px 0 0;
-  font-size: var(--font-size-meta);
-  line-height: 1.5;
-  color: var(--text-1);
-  overflow-wrap: anywhere;
-}
-
-.audit-ledger-actions,
 .audit-pagination {
   display: flex;
   align-items: center;
@@ -148,7 +117,7 @@
   gap: 4px;
 }
 
-.audit-ledger .q-button.icon,
+.audit-pagination .q-button.icon,
 .audit-index-head .q-button.icon {
   width: 40px;
   min-width: 40px;
@@ -157,7 +126,6 @@
   padding: 0;
 }
 
-.audit-ledger-actions .icon,
 .audit-pagination .icon,
 .audit-ledger-back .icon,
 .audit-index-head .icon,
@@ -173,7 +141,7 @@
   justify-content: space-between;
   gap: 12px;
   min-width: 0;
-  padding: 0 20px 14px;
+  padding: 12px 16px;
   border-bottom: 1px solid var(--line-soft);
 }
 
@@ -217,7 +185,7 @@
   flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
-  padding: 0 20px 20px;
+  padding: 0 16px 16px;
   overflow-y: auto;
   overflow-x: hidden;
   scrollbar-width: thin;
@@ -482,11 +450,11 @@
     max-width: none;
   }
 
-  .audit-ledger.q-card-default {
+  .audit-ledger {
     margin: 12px;
   }
 
-  .audit-ledger .q-button.icon,
+  .audit-pagination .q-button.icon,
   .audit-index-head .q-button.icon {
     width: 44px;
     min-width: 44px;
@@ -496,14 +464,9 @@
 }
 
 @media (max-width: 620px) {
-  .audit-ledger-head {
-    padding: 8px 12px;
-    gap: 4px;
-  }
-
   .audit-toolbar {
     flex-wrap: wrap;
-    padding: 0 16px 10px;
+    padding: 10px 12px;
     gap: 4px;
   }
 
@@ -525,7 +488,7 @@
   }
 
   .audit-ledger-content {
-    padding-inline: 16px;
+    padding-inline: 12px;
   }
 
   .audit-feed-meta {

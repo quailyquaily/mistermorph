@@ -81,6 +81,7 @@ const RuntimePanel = {
   },
   setup() {
     const t = translate;
+    const technicalOpen = ref(false);
     const notice = useNotice();
     const err = ref("");
     const loading = ref(true);
@@ -420,6 +421,7 @@ const RuntimePanel = {
 
     return {
       t,
+      technicalOpen,
       channelStatusClass,
       channelStatusText,
       err,
@@ -457,23 +459,20 @@ const RuntimePanel = {
   },
   template: `
     <div class="runtime-panel">
-      <QCard class="runtime-status-card" variant="default">
-        <header class="runtime-heading">
-          <div class="runtime-heading-copy">
-            <h2 class="runtime-title workspace-document-title">{{ heroTitle }}</h2>
-            <div class="runtime-heading-meta">
-              <span>{{ modeLabel }}</span>
-              <span class="runtime-status" :class="'is-' + statusTone" role="status">
-                <span class="runtime-status-dot" aria-hidden="true"></span>{{ statusLabel }}
-              </span>
-            </div>
-          </div>
-          <div v-if="canPoke" class="runtime-actions">
-            <QButton class="outlined runtime-poke-button" :loading="poking" :disabled="pokeDisabled" :aria-describedby="awarenessRunning ? 'runtime-poke-busy' : undefined" @click="openPokeDialog">
-              {{ t("runtime_action_poke") }}
-            </QButton>
-          </div>
-        </header>
+      <AppSection variant="boxed" class="runtime-status-card is-literal" :title="heroTitle">
+        <template #meta>
+          <span class="runtime-heading-meta">
+            <span>{{ modeLabel }}</span>
+            <span class="runtime-status" :class="'is-' + statusTone" role="status">
+              <span class="runtime-status-dot" aria-hidden="true"></span>{{ statusLabel }}
+            </span>
+          </span>
+        </template>
+        <template v-if="canPoke" #actions>
+          <QButton class="plain xs" :loading="poking" :disabled="pokeDisabled" :aria-describedby="awarenessRunning ? 'runtime-poke-busy' : undefined" @click="openPokeDialog">
+            {{ t("runtime_action_poke") }}
+          </QButton>
+        </template>
         <p v-if="canPoke && awarenessRunning" id="runtime-poke-busy" class="runtime-note">{{ t("runtime_poke_busy") }}</p>
         <p class="runtime-update" role="status">
           {{ loading ? t("runtime_loading") : hasData ? t("runtime_updated", { time: formatShortTime(lastUpdated) }) : t("runtime_no_data") }}
@@ -487,67 +486,66 @@ const RuntimePanel = {
             <dt>{{ item.label }}</dt><dd>{{ item.value }}</dd>
           </div>
         </dl>
-      </QCard>
+      </AppSection>
 
       <template v-if="hasData">
-        <QCard class="runtime-context-card" variant="default">
-          <div class="runtime-context-grid">
-            <section>
-              <h3 class="runtime-section-title">{{ t("runtime_current_model") }}</h3>
-              <dl class="runtime-ledger">
-                <div v-for="item in routeRows" :key="item.key" class="runtime-ledger-row">
-                  <dt>{{ item.label }}</dt><dd>{{ item.value }}</dd>
-                </div>
-              </dl>
-            </section>
-            <section>
-              <h3 class="runtime-section-title">{{ t("group_channels") }}</h3>
-              <ul v-if="configuredChannels.length" class="runtime-channels">
-                <li v-for="item in configuredChannels" :key="item.key" class="runtime-channel-row">
-                  <span class="runtime-channel-name"><img :src="item.logo" alt="" />{{ item.title }}</span>
-                  <span class="runtime-status" :class="channelStatusClass(item)">
-                    <span class="runtime-status-dot" aria-hidden="true"></span>
-                    {{ channelStatusText(item) }}
-                  </span>
+        <div class="runtime-context-grid">
+          <AppSection variant="boxed" class="is-list" :title="t('runtime_current_model')">
+            <dl class="runtime-ledger">
+              <div v-for="item in routeRows" :key="item.key" class="runtime-ledger-row">
+                <dt>{{ item.label }}</dt><dd>{{ item.value }}</dd>
+              </div>
+            </dl>
+          </AppSection>
+          <AppSection variant="boxed" :title="t('group_channels')">
+            <ul v-if="configuredChannels.length" class="runtime-channels">
+              <li v-for="item in configuredChannels" :key="item.key" class="runtime-channel-row">
+                <span class="runtime-channel-name"><img :src="item.logo" alt="" />{{ item.title }}</span>
+                <span class="runtime-status" :class="channelStatusClass(item)">
+                  <span class="runtime-status-dot" aria-hidden="true"></span>
+                  {{ channelStatusText(item) }}
+                </span>
+              </li>
+            </ul>
+            <details v-if="unconfiguredChannels.length" class="runtime-unconfigured">
+              <summary>
+                <span>{{ t(configuredChannels.length ? "runtime_status_not_configured" : "runtime_no_channels") }}</span>
+                <PhCaretDown class="icon" aria-hidden="true" />
+              </summary>
+              <ul class="runtime-channels">
+                <li v-for="item in unconfiguredChannels" :key="item.key" class="runtime-channel-name">
+                  <img :src="item.logo" alt="" />{{ item.title }}
                 </li>
               </ul>
-              <details v-if="unconfiguredChannels.length" class="runtime-unconfigured">
-                <summary>
-                  <span>{{ t(configuredChannels.length ? "runtime_status_not_configured" : "runtime_no_channels") }}</span>
-                  <PhCaretDown class="icon" aria-hidden="true" />
-                </summary>
-                <ul class="runtime-channels">
-                  <li v-for="item in unconfiguredChannels" :key="item.key" class="runtime-channel-name">
-                    <img :src="item.logo" alt="" />{{ item.title }}
-                  </li>
-                </ul>
-              </details>
-            </section>
-          </div>
-        </QCard>
+            </details>
+          </AppSection>
+        </div>
 
-        <QCard class="runtime-metrics-card" variant="default">
-          <h3 class="runtime-section-title">{{ t("group_runtime") }}</h3>
+        <AppSection variant="boxed" class="is-list" :title="t('group_runtime')">
           <dl class="runtime-ledger runtime-metrics">
             <div v-for="item in runtimeMetrics" :key="item.key" class="runtime-ledger-row">
               <dt>{{ item.label }}</dt><dd>{{ item.value }}</dd>
             </div>
           </dl>
-        </QCard>
+        </AppSection>
 
-        <QCard class="runtime-technical-card" variant="default">
-          <details class="runtime-technical">
-            <summary>
-              <h3 class="runtime-section-title">{{ t("runtime_technical_details") }}</h3>
-              <PhCaretDown class="icon" aria-hidden="true" />
-            </summary>
-            <dl class="runtime-ledger">
-              <div v-for="item in technicalRows" :key="item.key" class="runtime-ledger-row">
-                <dt>{{ item.label }}</dt><dd>{{ item.value }}</dd>
-              </div>
-            </dl>
-          </details>
-        </QCard>
+        <AppSection variant="boxed" class="runtime-technical is-list" :class="{ 'is-open': technicalOpen }" :title="t('runtime_technical_details')">
+          <template #actions>
+            <QButton
+              class="plain xs icon runtime-technical-toggle"
+              :aria-expanded="technicalOpen ? 'true' : 'false'"
+              :aria-label="t('runtime_technical_details')"
+              @click="technicalOpen = !technicalOpen"
+            >
+              <PhCaretDown class="icon" />
+            </QButton>
+          </template>
+          <dl v-if="technicalOpen" class="runtime-ledger">
+            <div v-for="item in technicalRows" :key="item.key" class="runtime-ledger-row">
+              <dt>{{ item.label }}</dt><dd>{{ item.value }}</dd>
+            </div>
+          </dl>
+        </AppSection>
       </template>
 
       <AppDialogShell

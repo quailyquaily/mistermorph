@@ -170,37 +170,6 @@ body[data-theme] .q-badge.q-badge-dot.q-badge-default {
   font-size: var(--font-size-meta);
 }
 
-.q-card:not(.q-card-tile) .q-card-title {
-  font-size: var(--font-size-title);
-}
-
-.q-card:not(.q-card-tile) :is(.q-card-subtitle, .q-card-content) {
-  font-size: var(--font-size-body);
-}
-
-.q-card.q-card-tile .q-card-title {
-  font-size: var(--font-size-ui);
-}
-
-.q-card.q-card-tile .q-card-subtitle {
-  font-size: var(--font-size-meta);
-}
-
-body[data-theme] .q-card :is(
-  .q-card-marker,
-  .q-card-spec-plate,
-  .q-card-spec-number,
-  .q-card-spec-type,
-  .q-card-tile-code
-) {
-  font-size: var(--font-size-meta);
-}
-
-body[data-theme] .q-card.q-card-tile .q-card-tile-code,
-body[data-theme] .q-card.q-card-marker-plate :is(.q-card-spec-number, .q-card-spec-type) {
-  font-size: var(--font-size-meta);
-}
-
 body[data-theme="morph"],
 body[data-theme="warm"] {
   --q-divider-label-font-size: var(--font-size-meta);

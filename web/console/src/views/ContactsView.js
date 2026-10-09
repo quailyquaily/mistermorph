@@ -720,202 +720,170 @@ const ContactsView = {
           </div>
         </aside>
 
-        <QCard v-if="showEditorPane && selectedContact" class="contacts-detail-card" variant="default">
-          <div class="contacts-detail-shell">
-            <header class="contacts-detail-head">
-              <div v-if="isMobile" class="contacts-mobile-actions">
-                <template v-if="editing">
-                  <QButton class="primary contacts-mobile-save" :loading="editorSaving" :disabled="saveDisabled" @click="saveEdit">
-                    {{ t("action_save") }}
-                  </QButton>
-                  <QButton
-                    class="plain icon contacts-mobile-cancel"
-                    :disabled="editorSaving"
-                    :title="t('action_cancel')"
-                    :aria-label="t('action_cancel')"
-                    @click="stopEdit"
-                  >
-                    <PhX class="icon" />
-                  </QButton>
-                </template>
-                <template v-else>
-                  <QButton
-                    class="plain icon contacts-mobile-edit"
-                    :title="t('contacts_action_edit_yaml')"
-                    :aria-label="t('contacts_action_edit_yaml')"
-                    @click="startEdit"
-                  >
-                    <PhPencilSimple class="icon contacts-detail-action-icon" />
-                  </QButton>
-                  <QDropdownMenu
-                    class="contacts-actions-menu"
-                    :items="contactActionMenuItems"
-                    hideSelected
-                    hideActionLabel
-                    :disabled="deleting"
-                  >
-                    <PhDotsThree class="contacts-actions-menu-icon" />
-                    <span class="contacts-actions-menu-accessible">{{ t("todo_action_more") }}</span>
-                  </QDropdownMenu>
-                </template>
-              </div>
+        <AppSection
+          v-if="showEditorPane && selectedContact"
+          variant="boxed"
+          class="contacts-detail-card is-literal"
+          :title="displayName(selectedContact)"
+        >
+          <template #meta>
+            <span class="contacts-detail-meta">
+              <span>{{ kindText(selectedContact) }}</span>
+              <span aria-hidden="true">·</span>
+              <span>{{ channelLabel(t, selectedContact.channel) }}</span>
+              <span :class="isActive(selectedContact) ? 'contacts-status is-active' : 'contacts-status is-inactive'">
+                <span class="contacts-status-dot" aria-hidden="true"></span>
+                {{ statusText(selectedContact) }}
+              </span>
+            </span>
+          </template>
+          <template v-if="!editing" #actions>
+            <QButton
+              class="plain xs icon"
+              :title="t('contacts_action_edit_yaml')"
+              :aria-label="t('contacts_action_edit_yaml')"
+              @click="startEdit"
+            >
+              <PhPencilSimple class="icon contacts-detail-action-icon" />
+            </QButton>
+            <QDropdownMenu
+              class="contacts-actions-menu"
+              variant="plain"
+              :items="contactActionMenuItems"
+              hideSelected
+              hideActionLabel
+              :disabled="deleting"
+            >
+              <PhDotsThree class="contacts-actions-menu-icon" />
+              <span class="contacts-actions-menu-accessible">{{ t("todo_action_more") }}</span>
+            </QDropdownMenu>
+          </template>
 
-              <div class="contacts-detail-identity">
-                <span class="contacts-detail-kind" :title="kindText(selectedContact)" aria-hidden="true">
-                  <ContactAvatar
-                    :item="selectedContact"
-                    :name="displayName(selectedContact)"
-                    :endpointRef="endpointState.selectedRef"
-                    size="detail"
-                  />
-                  <span :class="isAgent(selectedContact) ? 'contacts-kind-badge is-agent' : 'contacts-kind-badge'">
-                    <PhCpu v-if="isAgent(selectedContact)" class="icon" />
-                    <PhUserCircle v-else class="icon" />
-                  </span>
-                </span>
-                <div class="contacts-detail-copy">
-                  <h3 v-if="!isMobile" class="contacts-detail-title workspace-document-title">{{ displayName(selectedContact) }}</h3>
-                  <div class="contacts-detail-meta">
-                    <span>{{ kindText(selectedContact) }}</span>
-                    <span aria-hidden="true">·</span>
-                    <span>{{ channelLabel(t, selectedContact.channel) }}</span>
-                    <span :class="isActive(selectedContact) ? 'contacts-status is-active' : 'contacts-status is-inactive'">
-                      <span class="contacts-status-dot" aria-hidden="true"></span>
-                      {{ statusText(selectedContact) }}
-                    </span>
-                  </div>
-                  <p v-if="selectedContact.persona_brief" class="contacts-detail-persona">
-                    {{ selectedContact.persona_brief }}
-                  </p>
-                </div>
-              </div>
+          <div class="contacts-detail-identity">
+            <span class="contacts-detail-kind" :title="kindText(selectedContact)" aria-hidden="true">
+              <ContactAvatar
+                :item="selectedContact"
+                :name="displayName(selectedContact)"
+                :endpointRef="endpointState.selectedRef"
+                size="detail"
+              />
+              <span :class="isAgent(selectedContact) ? 'contacts-kind-badge is-agent' : 'contacts-kind-badge'">
+                <PhCpu v-if="isAgent(selectedContact)" class="icon" />
+                <PhUserCircle v-else class="icon" />
+              </span>
+            </span>
+            <p v-if="selectedContact.persona_brief" class="contacts-detail-persona">
+              {{ selectedContact.persona_brief }}
+            </p>
+          </div>
 
-              <div v-if="editing && !isMobile" class="contacts-detail-actions">
-                <QButton class="primary" :loading="editorSaving" :disabled="saveDisabled" @click="saveEdit">
+          <div v-if="editing" class="contacts-editor-body">
+            <AppSkeleton v-if="editorLoading" variant="card" height="360px" :count="1" />
+            <template v-else>
+              <AppNotice v-if="editorErr" type="error" :text="editorErr" />
+              <QTextarea
+                v-model="editorYAML"
+                class="contacts-editor-textarea"
+                :rows="26"
+                :disabled="editorSaving"
+                :aria-label="t('contacts_editor_hint')"
+              />
+              <p class="contacts-editor-note">{{ t("contacts_editor_hint") }}</p>
+              <div class="contacts-editor-actions">
+                <QButton class="outlined sm" :disabled="editorSaving" @click="stopEdit">{{ t("action_cancel") }}</QButton>
+                <QButton class="primary sm" :loading="editorSaving" :disabled="saveDisabled" @click="saveEdit">
                   {{ t("action_save") }}
                 </QButton>
-                <QButton class="outlined" :disabled="editorSaving" @click="stopEdit">{{ t("action_cancel") }}</QButton>
               </div>
-              <div v-else-if="!isMobile" class="contacts-detail-actions">
-                <QButton class="outlined contacts-edit-action" @click="startEdit">
-                  <PhPencilSimple class="icon contacts-detail-action-icon" />
-                  <span>{{ t("contacts_action_edit_yaml") }}</span>
-                </QButton>
-                <QDropdownMenu
-                  class="contacts-actions-menu"
-                  :items="contactActionMenuItems"
-                  hideSelected
-                  hideActionLabel
-                  :disabled="deleting"
-                >
-                  <PhDotsThree class="contacts-actions-menu-icon" />
-                  <span class="contacts-actions-menu-accessible">{{ t("todo_action_more") }}</span>
-                </QDropdownMenu>
-              </div>
-            </header>
+            </template>
+          </div>
 
-            <div v-if="editing" class="contacts-editor-body">
-              <AppSkeleton v-if="editorLoading" variant="card" height="360px" :count="1" />
-              <template v-else>
-                <AppNotice v-if="editorErr" type="error" :text="editorErr" />
-                <QTextarea
-                  v-model="editorYAML"
-                  class="contacts-editor-textarea"
-                  :rows="26"
-                  :disabled="editorSaving"
-                  :aria-label="t('contacts_editor_hint')"
-                />
-                <p class="contacts-editor-note">{{ t("contacts_editor_hint") }}</p>
-              </template>
-            </div>
-
-            <div v-else class="contacts-detail-body">
-              <div class="contacts-detail-main">
-                <section class="contacts-detail-section contacts-connections-section">
-                  <h4 class="contacts-detail-section-title">{{ t("contacts_section_connections") }}</h4>
-                  <div class="contacts-connection-list">
-                    <div v-for="connection in selectedConnections" :key="connection.key" class="contacts-connection-row">
-                      <img
-                        v-if="connection.logo"
-                        class="contacts-connection-icon"
-                        :src="connection.logo"
-                        alt=""
-                      />
-                      <PhTerminalWindow
-                        v-else-if="connection.channelKey === 'console'"
-                        class="contacts-connection-icon"
-                        aria-hidden="true"
-                      />
-                      <PhLink v-else class="contacts-connection-icon" aria-hidden="true" />
-                      <div class="contacts-connection-copy">
-                        <strong>{{ connection.channel }}</strong>
-                        <code :title="connection.full">{{ connection.full }}</code>
-                      </div>
-                      <QButton
-                        v-if="connection.copyable !== false"
-                        class="plain icon contacts-copy-action"
-                        :title="t('action_copy')"
-                        :aria-label="t('action_copy')"
-                        @click="copyContactValue(connection.full)"
-                      >
-                        <PhCopy class="icon" />
-                      </QButton>
-                    </div>
-                  </div>
-                  <div class="contacts-internal-id">
-                    <PhFingerprint class="contacts-internal-id-icon" aria-hidden="true" />
-                    <div class="contacts-internal-id-copy">
-                      <span>{{ t("contacts_field_contact_id") }}</span>
-                      <code>{{ selectedContact.contact_id }}</code>
+          <div v-else class="contacts-detail-body">
+            <div class="contacts-detail-main">
+              <section class="contacts-detail-section contacts-connections-section">
+                <h4 class="contacts-detail-section-title">{{ t("contacts_section_connections") }}</h4>
+                <div class="contacts-connection-list">
+                  <div v-for="connection in selectedConnections" :key="connection.key" class="contacts-connection-row">
+                    <img
+                      v-if="connection.logo"
+                      class="contacts-connection-icon"
+                      :src="connection.logo"
+                      alt=""
+                    />
+                    <PhTerminalWindow
+                      v-else-if="connection.channelKey === 'console'"
+                      class="contacts-connection-icon"
+                      aria-hidden="true"
+                    />
+                    <PhLink v-else class="contacts-connection-icon" aria-hidden="true" />
+                    <div class="contacts-connection-copy">
+                      <strong>{{ connection.channel }}</strong>
+                      <code :title="connection.full">{{ connection.full }}</code>
                     </div>
                     <QButton
+                      v-if="connection.copyable !== false"
                       class="plain icon contacts-copy-action"
                       :title="t('action_copy')"
                       :aria-label="t('action_copy')"
-                      @click="copyContactValue(selectedContact.contact_id)"
+                      @click="copyContactValue(connection.full)"
                     >
                       <PhCopy class="icon" />
                     </QButton>
                   </div>
-                </section>
-
-                <section v-if="selectedTopics.length > 0" class="contacts-detail-section">
-                  <h4 class="contacts-detail-section-title">{{ t("contacts_field_topics") }}</h4>
-                  <ul class="contacts-topic-list">
-                    <li v-for="topic in selectedTopics" :key="selectedContact.contact_id + '-' + topic">{{ topic }}</li>
-                  </ul>
-                </section>
-              </div>
-
-              <aside class="contacts-activity-panel">
-                <h4 class="contacts-detail-section-title">{{ t("contacts_section_activity") }}</h4>
-                <div class="contacts-activity-list">
-                  <div class="contacts-activity-item">
-                    <PhClockCounterClockwise class="contacts-activity-icon" aria-hidden="true" />
-                    <div class="contacts-activity-copy">
-                      <span>{{ t("contacts_field_last_interaction") }}</span>
-                      <strong v-if="selectedContact.last_interaction_at">
-                        {{ relativeTime(selectedContact.last_interaction_at) }}
-                      </strong>
-                      <strong v-else>{{ t("contacts_activity_none") }}</strong>
-                      <time v-if="selectedContact.last_interaction_at" :datetime="selectedContact.last_interaction_at">
-                        {{ formatShortTime(selectedContact.last_interaction_at) }}
-                      </time>
-                    </div>
+                </div>
+                <div class="contacts-internal-id">
+                  <PhFingerprint class="contacts-internal-id-icon" aria-hidden="true" />
+                  <div class="contacts-internal-id-copy">
+                    <span>{{ t("contacts_field_contact_id") }}</span>
+                    <code>{{ selectedContact.contact_id }}</code>
                   </div>
-                  <div v-if="selectedContact.cooldown_until" class="contacts-activity-item">
-                    <PhTimer class="contacts-activity-icon" aria-hidden="true" />
-                    <div class="contacts-activity-copy">
-                      <span>{{ t("contacts_field_cooldown") }}</span>
-                      <strong>{{ relativeTime(selectedContact.cooldown_until) }}</strong>
-                      <time :datetime="selectedContact.cooldown_until">{{ formatShortTime(selectedContact.cooldown_until) }}</time>
-                    </div>
+                  <QButton
+                    class="plain icon contacts-copy-action"
+                    :title="t('action_copy')"
+                    :aria-label="t('action_copy')"
+                    @click="copyContactValue(selectedContact.contact_id)"
+                  >
+                    <PhCopy class="icon" />
+                  </QButton>
+                </div>
+              </section>
+
+              <section v-if="selectedTopics.length > 0" class="contacts-detail-section">
+                <h4 class="contacts-detail-section-title">{{ t("contacts_field_topics") }}</h4>
+                <ul class="contacts-topic-list">
+                  <li v-for="topic in selectedTopics" :key="selectedContact.contact_id + '-' + topic">{{ topic }}</li>
+                </ul>
+              </section>
+            </div>
+
+            <aside class="contacts-activity-panel">
+              <h4 class="contacts-detail-section-title">{{ t("contacts_section_activity") }}</h4>
+              <div class="contacts-activity-list">
+                <div class="contacts-activity-item">
+                  <PhClockCounterClockwise class="contacts-activity-icon" aria-hidden="true" />
+                  <div class="contacts-activity-copy">
+                    <span>{{ t("contacts_field_last_interaction") }}</span>
+                    <strong v-if="selectedContact.last_interaction_at">
+                      {{ relativeTime(selectedContact.last_interaction_at) }}
+                    </strong>
+                    <strong v-else>{{ t("contacts_activity_none") }}</strong>
+                    <time v-if="selectedContact.last_interaction_at" :datetime="selectedContact.last_interaction_at">
+                      {{ formatShortTime(selectedContact.last_interaction_at) }}
+                    </time>
                   </div>
                 </div>
-              </aside>
-            </div>
+                <div v-if="selectedContact.cooldown_until" class="contacts-activity-item">
+                  <PhTimer class="contacts-activity-icon" aria-hidden="true" />
+                  <div class="contacts-activity-copy">
+                    <span>{{ t("contacts_field_cooldown") }}</span>
+                    <strong>{{ relativeTime(selectedContact.cooldown_until) }}</strong>
+                    <time :datetime="selectedContact.cooldown_until">{{ formatShortTime(selectedContact.cooldown_until) }}</time>
+                  </div>
+                </div>
+              </div>
+            </aside>
           </div>
-        </QCard>
+        </AppSection>
 
         <section v-else-if="showEditorPane" class="contacts-placeholder">
           <div class="contacts-placeholder-copy">

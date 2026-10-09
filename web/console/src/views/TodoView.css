@@ -70,10 +70,9 @@
   }
 
   /* The side panel looks like Chat's right pane (.chat-workspace-sidebar-shell): a white panel
-     with rounded corners and a soft shadow, inset from the page, without the card's border and
-     corner brackets. It scrolls down only: overflow-y alone would also let a sub-pixel of width
+     with rounded corners and a soft shadow, inset from the page, without the section's frame. It scrolls down only: overflow-y alone would also let a sub-pixel of width
      scroll sideways. */
-  .todo-workbench.is-calendar > .todo-editor-card.q-card-default {
+  .todo-workbench.is-calendar > .todo-editor-card {
     align-self: stretch;
     min-height: 0;
     margin: 0.5rem;
@@ -83,11 +82,6 @@
     border-radius: 8px;
     background: var(--q-bg-white);
     box-shadow: 0 1px 4px color-mix(in srgb, var(--q-c-dark) 7%, transparent);
-  }
-
-  body[data-theme] .todo-workbench.is-calendar > .todo-editor-card.q-card-default::before,
-  body[data-theme] .todo-workbench.is-calendar > .todo-editor-card.q-card-default::after {
-    display: none;
   }
 }
 
@@ -216,42 +210,15 @@
   max-width: 24ch;
 }
 
-.todo-editor-card.q-card-default {
+/* The editor (a TODO, the heartbeat, a calendar day) is a boxed section beside the list. Its body
+   takes the rest of the box's height, so the heartbeat's editor can fill it. */
+.todo-editor-card {
   margin: 8px 8px 8px 16px;
   min-height: 0;
+  grid-template-rows: auto minmax(min-content, 1fr);
+  align-content: stretch;
 }
 
-.todo-editor-card .q-card-body {
-  display: grid;
-  min-width: 0;
-  min-height: 100%;
-  height: auto;
-}
-
-.todo-calendar-day-detail-card .q-card-body {
-  align-content: start;
-}
-
-.todo-calendar-day-detail-shell {
-  min-width: 0;
-  display: grid;
-  align-content: start;
-}
-
-.todo-calendar-day-detail-head {
-  min-width: 0;
-  display: grid;
-  gap: 4px;
-  padding-bottom: 14px;
-  border-bottom: 1px solid var(--line-soft);
-}
-
-.todo-calendar-day-detail-title {
-  min-width: 0;
-  margin: 0;
-}
-
-.todo-calendar-day-detail-count,
 .todo-calendar-day-detail-meta,
 .todo-calendar-day-detail-empty {
   color: var(--text-2);
@@ -322,76 +289,27 @@
   overflow-wrap: anywhere;
 }
 
+.todo-calendar-day-detail-item:last-child {
+  border-bottom: 0;
+}
+
 .todo-calendar-day-detail-empty {
   margin: 0;
   padding: 18px 4px;
 }
 
-.todo-editor-shell {
-  display: grid;
-  grid-template-rows: auto minmax(min-content, 1fr);
-  gap: 14px;
-  min-width: 0;
-  min-height: 100%;
-  height: auto;
-}
-
-.todo-editor-head {
+/* The title field and the Enabled switch open the TODO's body, on one row. */
+.todo-task-editor-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 16px;
   min-width: 0;
-}
-
-.todo-task-editor-head {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  align-items: start;
-  gap: 10px;
-}
-
-.todo-editor-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  min-width: 0;
-  gap: 8px;
-}
-
-.todo-editor-toolbar .todo-editor-actions {
-  order: 0;
-  width: auto;
-}
-
-.todo-task-editor-head .todo-editor-title-field {
-  width: 100%;
-  max-width: none;
-}
-
-.todo-editor-copy {
-  min-width: 0;
-  display: grid;
-  gap: 4px;
 }
 
 .todo-editor-title-field {
   flex: 1 1 auto;
   min-width: 0;
-  max-width: 520px;
   display: block;
-}
-
-.todo-editor-document-title {
-  margin: 0;
-}
-
-.todo-editor-meta {
-  margin: 0;
-  color: var(--text-2);
-  font-size: var(--font-size-meta);
-  line-height: 1.45;
 }
 
 .todo-title-input {
@@ -403,16 +321,6 @@
   min-width: 0;
   font-size: var(--font-size-body);
   font-weight: 600;
-}
-
-.todo-editor-actions {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  flex-wrap: nowrap;
-  gap: 8px;
-  white-space: nowrap;
 }
 
 .todo-enabled-control {
@@ -430,11 +338,7 @@
   text-transform: uppercase;
 }
 
-.todo-editor-actions .q-button {
-  flex: 0 0 auto;
-}
-
-/* The toolbar's controls share the switch's 32px height (QSwitch's --switch-h); Save is `xs`. */
+/* The "⋯" menu in the head's action area, one control high beside Save. */
 .todo-task-actions-menu,
 .todo-task-actions-menu .q-dropdown-menu-inner,
 .todo-task-actions-menu .q-dropdown-menu-action {
@@ -498,7 +402,13 @@ body:has(.todo-page) .q-dialog .q-menu-item.danger .q-menu-title {
   overflow-y: visible;
 }
 
+.todo-heartbeat-editor-card > .app-section-body {
+  grid-template-rows: minmax(0, 1fr);
+  min-height: 0;
+}
+
 .todo-heartbeat-editor-body {
+  height: 100%;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   gap: 8px;
@@ -1012,7 +922,7 @@ body:has(.todo-page) .q-dialog .q-menu .q-menu-subtitle {
     max-width: none;
   }
 
-  .todo-editor-card.q-card-default {
+  .todo-editor-card {
     margin: 16px;
   }
 
@@ -1020,20 +930,12 @@ body:has(.todo-page) .q-dialog .q-menu .q-menu-subtitle {
     margin: 0 var(--content-gutter-x) var(--content-gutter-y);
   }
 
-  .todo-editor-head {
+  .todo-task-editor-head {
     flex-wrap: wrap;
-    align-items: flex-start;
   }
 
   .todo-editor-title-field {
-    order: 2;
-    flex: 0 0 100%;
-    max-width: none;
-  }
-
-  .todo-editor-actions {
-    order: 1;
-    width: 100%;
+    flex: 1 1 100%;
   }
 }
 
@@ -1066,10 +968,6 @@ body:has(.todo-page) .q-dialog .q-menu .q-menu-subtitle {
 
   .todo-index-head {
     gap: 6px;
-  }
-
-  .todo-editor-head {
-    gap: 10px;
   }
 
   .todo-weekday-picker {
