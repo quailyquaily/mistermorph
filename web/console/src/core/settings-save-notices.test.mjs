@@ -4,14 +4,14 @@ import test from "node:test";
 
 const settingsViewSource = new URL("../views/SettingsView.js", import.meta.url);
 
-test("Settings action notices use toast instead of inline fences", async () => {
+test("Settings action notices use the floating notice stack instead of inline notices", async () => {
   const source = await readFile(settingsViewSource, "utf8");
 
-  assert.match(source, /if \(notify\) toast\.success\(t\("msg_save_success"\)\);/);
-  assert.match(source, /if \(notify\) toast\.success\(settingsSavedMessage\(payload\)\);/);
+  assert.match(source, /if \(notify\) notice\.success\(t\("msg_save_success"\)\);/);
+  assert.match(source, /if \(notify\) notice\.success\(settingsSavedMessage\(payload\)\);/);
   // The section save bar reports one combined result.
-  assert.match(source, /toast\.success\(settingsSavedMessage\(\{ apply_mode: takeSavedApplyMode\(\) \}\)\);/);
-  assert.match(source, /toast\.success\(t\("settings_desktop_update_checksum_copied"\)\);/);
+  assert.match(source, /notice\.success\(settingsSavedMessage\(\{ apply_mode: takeSavedApplyMode\(\) \}\)\);/);
+  assert.match(source, /notice\.success\(t\("settings_desktop_update_checksum_copied"\)\);/);
 
   assert.doesNotMatch(source, /:text="agentOk"/);
   assert.doesNotMatch(source, /:text="agentErr"/);

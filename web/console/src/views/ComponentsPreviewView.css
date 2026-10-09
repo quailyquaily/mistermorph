@@ -135,3 +135,43 @@
 .components-preview-picker {
   max-width: 520px;
 }
+
+.components-preview-stack {
+  display: grid;
+  gap: 10px;
+  max-width: 44rem;
+}
+
+.components-preview-narrow {
+  max-width: 260px;
+}
+
+.components-preview-subhead {
+  margin: 20px 0 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+
+.components-preview-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.components-preview-pane-host {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  height: 280px;
+  max-width: 44rem;
+  border: 1px dashed var(--line-soft);
+}
+
+.components-preview-pane-list {
+  padding: 16px;
+  color: var(--text-2);
+  font-size: var(--font-size-meta);
+}

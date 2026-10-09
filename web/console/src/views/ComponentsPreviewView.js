@@ -1,5 +1,6 @@
 import { computed, provide, reactive, ref } from "vue";
 
+import AppTabs from "../components/AppTabs";
 import ConfigSettingsPanel from "../components/ConfigSettingsPanel";
 import EnvManagedField from "../components/EnvManagedField";
 import SecretInput from "../components/SecretInput";
@@ -20,11 +21,13 @@ import {
   LOGGING_LEVEL_OPTIONS,
   TASK_TARGET_OPTIONS,
 } from "../core/config-options";
+import { dismissNotice, pushNotice, useNotice } from "../core/notices";
 import "./SettingsView.css";
 import "./ComponentsPreviewView.css";
 
-// /__components: every custom settings control on one page, in its typical states, with the value
-// each one would save. For reviewing and designing the controls without opening real settings.
+// /__components: every component the console builds itself (not Quail's), on one page in its usual
+// states; settings controls also show the value they would save. For reviewing and designing them
+// without opening the real pages.
 
 const PANEL_GROUPS = [
   {
@@ -67,6 +70,7 @@ const PANEL_STATES = {
 
 const ComponentsPreviewView = {
   components: {
+    AppTabs,
     ConfigSettingsPanel,
     EnvManagedField,
     SecretInput,
@@ -139,7 +143,26 @@ const ComponentsPreviewView = {
       return JSON.stringify(value);
     }
 
+    const notice = useNotice();
+    const noticeDismissed = ref(false);
+    function pinNotice() {
+      pushNotice({ id: "components-preview-pinned", type: "warning", text: "A pinned notice stays until it is dismissed, like a page error.", timeout: 0 });
+    }
+    function clearPinnedNotice() {
+      dismissNotice("components-preview-pinned");
+    }
+    const tabItems = [
+      { id: "topic", title: "Topic", icon: "PhChats" },
+      { id: "workspace", title: "Workspace", icon: "PhCube" },
+      { id: "files", title: "Files", icon: "PhFolderOpen" },
+    ];
+    const tabText = ref(tabItems[0]);
+    const tabIcon = ref(tabItems[1]);
+
     const sections = computed(() => [
+      { id: "section", title: "AppSection" },
+      { id: "notice", title: "AppNotice" },
+      { id: "tabs", title: "AppTabs" },
       { id: "select", title: "SettingSelect" },
       { id: "duration", title: "SettingDuration" },
       { id: "bytes", title: "SettingBytes" },
@@ -169,6 +192,13 @@ const ComponentsPreviewView = {
       show,
       jumpTo,
       sections,
+      notice,
+      noticeDismissed,
+      pinNotice,
+      clearPinnedNotice,
+      tabItems,
+      tabText,
+      tabIcon,
       panelValues,
       panelUpdate,
       savePanel,
@@ -180,8 +210,8 @@ const ComponentsPreviewView = {
     <div class="components-preview">
       <header class="components-preview-head">
         <div>
-          <h1 class="components-preview-title">Settings components</h1>
-          <p class="components-preview-meta">Every custom settings control, in its usual states. Each demo shows the value it would save.</p>
+          <h1 class="components-preview-title">Components</h1>
+          <p class="components-preview-meta">Every component the console builds itself, in its usual states. Settings controls show the value they would save.</p>
         </div>
         <div class="components-preview-toggles">
           <label class="components-preview-toggle"><QSwitch v-model="disabled" /> Disabled</label>
@@ -192,6 +222,83 @@ const ComponentsPreviewView = {
       <nav class="components-preview-nav" aria-label="Components">
         <a v-for="section in sections" :key="section.id" :href="'#' + section.id" @click.prevent="jumpTo(section.id)">{{ section.title }}</a>
       </nav>
+
+      <section id="section" class="components-preview-section">
+        <h2>AppSection</h2>
+        <p class="components-preview-note">A titled block of a page, in place of QCard. The head reads like an AppNotice: square mark and mono bracket label, then the meta, actions at the far end, on a hairline rule. Plain has no frame (settings groups). Boxed is a hairline frame whose top strip is the head (status, list items). Pane has a left hairline, its own scroll and a pinned head (a detail pane beside a list).</p>
+        <h3 class="components-preview-subhead">Plain</h3>
+        <div class="components-preview-stack">
+          <AppSection title="Default model" meta="Used when a task does not name a model.">
+            <template #actions><QButton class="plain xs">Test</QButton></template>
+            <SettingSelect v-model="v.selectPlain" :options="LOGGING_LEVEL_OPTIONS" label="Level" :disabled="disabled" />
+          </AppSection>
+          <AppSection title="Logging" meta="How much the agent writes to its log.">
+            <SettingSelect v-model="v.selectPlain" :options="LOGGING_LEVEL_OPTIONS" label="Level" :disabled="disabled" />
+          </AppSection>
+          <AppSection title="A section with only a title" />
+        </div>
+        <h3 class="components-preview-subhead">Boxed</h3>
+        <div class="components-preview-stack">
+          <AppSection variant="boxed" title="Runtime" meta="Up for 3h 12m · 2 tasks running">
+            <template #actions><QButton class="plain xs">Restart</QButton></template>
+            <p class="components-preview-note">Body content sits under the head.</p>
+          </AppSection>
+          <AppSection variant="boxed">
+            <p class="components-preview-note">A boxed section without a head.</p>
+          </AppSection>
+        </div>
+        <h3 class="components-preview-subhead">Pane</h3>
+        <div class="components-preview-pane-host">
+          <div class="components-preview-pane-list">List</div>
+          <AppSection variant="pane" title="Contact detail" meta="tg:@admin">
+            <template #actions><QButton class="plain xs">Close</QButton></template>
+            <p v-for="n in 12" :key="n" class="components-preview-note">Line {{ n }} of a long pane; the head stays put while this scrolls.</p>
+          </AppSection>
+        </div>
+      </section>
+
+      <section id="notice" class="components-preview-section">
+        <h2>AppNotice</h2>
+        <p class="components-preview-note">A status line: square mark and bracket label in the type's colour, then the message. Inline it replaces QFence; floating it is one entry of the notice stack, which replaces QToast (useNotice). An error that is a network failure gets a plain-language line, with the browser's message in the tooltip.</p>
+        <div class="components-preview-stack">
+          <AppNotice type="error" text="Couldn't save the profile: the endpoint returned 500." />
+          <AppNotice type="warning" text="Settings are read-only: this console is managed by the desktop app." />
+          <AppNotice type="info" text="Changes apply to the next task." />
+          <AppNotice type="success" text="Saved." />
+          <AppNotice type="error" text="Failed to fetch" />
+          <AppNotice v-if="!noticeDismissed" type="info" text="A dismissible notice." dismissible @dismiss="noticeDismissed = true" />
+          <div class="components-preview-narrow">
+            <AppNotice type="error" text="In a narrow pane the message drops below the label and wraps, instead of squeezing beside it." />
+          </div>
+        </div>
+        <h3 class="components-preview-subhead">Floating stack</h3>
+        <div class="components-preview-actions">
+          <QButton class="outlined sm" @click="notice.success('Saved.')">Success</QButton>
+          <QButton class="outlined sm" @click="notice.info('Changes apply to the next task.')">Info</QButton>
+          <QButton class="outlined sm" @click="notice.warning('The model list is cached; refresh to see new models.')">Warning</QButton>
+          <QButton class="outlined sm" @click="notice.error('Could not delete the topic.')">Error</QButton>
+          <QButton class="outlined sm" @click="notice.error('Failed to fetch')">Network error</QButton>
+          <QButton class="outlined sm" @click="pinNotice">Pinned</QButton>
+          <QButton class="plain sm" @click="clearPinnedNotice">Clear pinned</QButton>
+        </div>
+      </section>
+
+      <section id="tabs" class="components-preview-section">
+        <h2>AppTabs</h2>
+        <p class="components-preview-note">A segmented control with a sliding highlight. iconOnly shows square icon segments; each tab's title becomes its tooltip and accessible name.</p>
+        <div class="components-preview-grid">
+          <div class="components-preview-demo">
+            <span class="settings-field-label">With labels</span>
+            <AppTabs :tabs="tabItems" v-model="tabText" ariaLabel="With labels" :disabled="disabled" />
+            <code>{{ show(tabText.id) }}</code>
+          </div>
+          <div class="components-preview-demo">
+            <span class="settings-field-label">iconOnly</span>
+            <AppTabs :tabs="tabItems" v-model="tabIcon" iconOnly ariaLabel="Icon only" :disabled="disabled" />
+            <code>{{ show(tabIcon.id) }}</code>
+          </div>
+        </div>
+      </section>
 
       <section id="select" class="components-preview-section">
         <h2>SettingSelect</h2>

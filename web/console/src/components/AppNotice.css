@@ -1,0 +1,126 @@
+/* A status line: a square mark and a mono bracket label in the type's colour, then the message.
+   The frame is a hairline mixed from the same colour; no fills, no shadow. */
+.app-notice {
+  --notice-tone: var(--text-2);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 10px;
+  row-gap: 2px;
+  min-width: 0;
+  padding: 8px 12px;
+  border: 1px solid color-mix(in srgb, var(--notice-tone) 38%, var(--line-soft));
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--q-bg-paper) 70%, transparent);
+  color: var(--text-1);
+}
+
+.app-notice.is-error {
+  --notice-tone: var(--status-error);
+}
+
+.app-notice.is-warning {
+  --notice-tone: var(--status-pending);
+}
+
+.app-notice.is-success {
+  --notice-tone: var(--status-on);
+}
+
+.app-notice-mark {
+  flex: 0 0 auto;
+  align-self: center;
+  width: var(--status-mark-size, 7px);
+  height: var(--status-mark-size, 7px);
+  border-radius: 1px;
+  background: var(--notice-tone);
+}
+
+.app-notice-label {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--notice-tone);
+}
+
+.app-notice.is-info .app-notice-label {
+  color: var(--text-2);
+}
+
+.app-notice-bracket {
+  opacity: 0.45;
+}
+
+/* The message takes the rest of the line, and drops below the label when the line is too narrow. */
+.app-notice-text {
+  flex: 1 1 14rem;
+  min-width: 0;
+  font-size: var(--font-size-ui);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.app-notice.is-dismissible {
+  padding-right: 4px;
+}
+
+.app-notice-close {
+  appearance: none;
+  flex: 0 0 auto;
+  align-self: center;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin: -4px 0 -4px auto;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  transition:
+    background-color var(--motion-normal) var(--motion-ease),
+    color var(--motion-normal) var(--motion-ease);
+}
+
+.app-notice-close:hover {
+  background: var(--q-button-plain-hover-bg);
+  color: var(--text-0);
+}
+
+.app-notice-close:focus-visible {
+  outline: 2px solid var(--accent-1);
+  outline-offset: -2px;
+}
+
+.app-notice-close-icon {
+  width: 14px;
+  height: 14px;
+}
+
+/* Floating: one line of the stack, on solid paper, sized to its message. */
+.app-notice.is-floating {
+  flex-wrap: nowrap;
+  align-items: center;
+  width: max-content;
+  max-width: 100%;
+  min-height: 38px;
+  padding-block: 4px;
+  background: var(--q-bg-paper);
+}
+
+.app-notice.is-floating .app-notice-text {
+  flex: 1 1 auto;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}

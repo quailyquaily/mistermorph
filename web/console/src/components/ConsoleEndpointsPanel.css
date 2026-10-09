@@ -1,8 +1,9 @@
+/* The agent count leads the head's meta, as a mono figure. */
 .console-endpoint-count {
-  margin-left: 6px;
-  color: var(--text-2);
-  font-size: var(--font-size-ui);
-  font-weight: normal;
+  margin-right: 10px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--text-0);
 }
 
 .console-endpoint-list {
@@ -13,8 +14,13 @@
   display: flex;
   align-items: center;
   gap: 16px;
-  padding: 16px 0;
+  padding: 12px 0;
   border-top: 1px solid var(--line-soft);
+}
+
+/* The list opens the section's body, so the first row's top edge is the head's rule. */
+.app-section-body > .console-endpoint-list:first-child > .console-endpoint-row:not(.console-endpoint-row ~ .console-endpoint-row) {
+  border-top: 0;
 }
 
 .console-endpoint-copy {
@@ -82,16 +88,6 @@
 }
 
 @media (max-width: 620px) {
-  .console-endpoints-panel .settings-panel-head {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .console-endpoints-panel .settings-panel-actions {
-    margin-left: 0;
-    justify-content: flex-start;
-  }
-
   .console-endpoint-row {
     align-items: flex-start;
     flex-direction: column;

@@ -107,102 +107,96 @@ export default {
     return { draft, error, complete, add, remove, save, parseList, bindingsFor, updateInjection, HTTP_METHOD_OPTIONS };
   },
   template: `
-    <QCard variant="default" class="config-settings-group">
-      <div class="settings-panel-shell">
-        <header class="settings-panel-head">
-          <div class="settings-panel-copy">
-            <h3 class="settings-panel-title workspace-document-title">Auth profiles</h3>
-            <p class="settings-panel-meta">Credentials and request limits used by authenticated HTTP tools.</p>
-          </div>
-          <QButton class="primary" :loading="saving" :disabled="loading || saving || !complete" @click="save">Save</QButton>
-        </header>
-        <div class="settings-panel-body settings-collection-list">
-          <div v-if="error" class="config-settings-error" role="alert">{{ error }}</div>
-          <div v-for="(profile, index) in draft" :key="profile._key" class="settings-collection-item">
-            <div class="settings-form-grid">
-              <div class="settings-field">
-                <span class="settings-field-label">Name</span>
-                <QInput v-model="profile.name" :disabled="loading || saving" />
-              </div>
-              <div class="settings-field">
-                <span class="settings-field-label">Credential kind</span>
-                <QInput v-model="profile.credential_kind" :disabled="loading || saving" />
-              </div>
-              <div class="settings-field is-wide">
-                <span class="settings-field-label">Credential secret</span>
-                <QInput
-                  v-model="profile.credential_secret"
-                  inputType="password"
-                  :placeholder="profile._configured ? 'Configured — enter a new value to replace' : 'Required'"
-                  :disabled="loading || saving"
-                />
-              </div>
-              <div class="settings-field">
-                <span class="settings-field-label">Allowed URL prefixes</span>
-                <QTextarea v-model="profile.url_prefixes_text" :rows="4" :disabled="loading || saving" />
-              </div>
-              <div class="settings-field">
-                <span class="settings-field-label">Allowed methods</span>
-                <SettingChoices
-                  :modelValue="parseList(profile.methods_text).map(method => method.toUpperCase())"
-                  :options="HTTP_METHOD_OPTIONS"
-                  label="Allowed methods"
-                  :disabled="loading || saving"
-                  @update:modelValue="profile.methods_text = $event.join('\\n')"
-                />
-              </div>
-              <div class="settings-field is-wide">
-                <span class="settings-field-label">Bindings</span>
-                <div v-for="(binding, tool) in bindingsFor(profile)" :key="tool" class="settings-binding">
-                  <strong class="settings-field-label">{{ tool }}</strong>
-                  <div class="settings-form-grid">
-                    <div class="settings-field">
-                      <span class="settings-field-label">Injection location</span>
-                      <SettingSelect
-                        :modelValue="binding?.inject?.location || ''"
-                        :options="['header']"
-                        label="Injection location"
-                        :disabled="loading || saving"
-                        @update:modelValue="updateInjection(profile, tool, 'location', $event)"
-                      />
-                    </div>
-                    <div class="settings-field">
-                      <span class="settings-field-label">Injection format</span>
-                      <SettingSelect
-                        :modelValue="binding?.inject?.format || ''"
-                        :options="['', 'raw', 'bearer', 'basic']"
-                        placeholder="Default (raw)"
-                        label="Injection format"
-                        :disabled="loading || saving"
-                        @update:modelValue="updateInjection(profile, tool, 'format', $event)"
-                      />
-                    </div>
-                    <div class="settings-field is-wide">
-                      <span class="settings-field-label">Header name</span>
-                      <QInput
-                        :modelValue="binding?.inject?.name || ''"
-                        :disabled="loading || saving"
-                        @update:modelValue="updateInjection(profile, tool, 'name', $event)"
-                      />
-                    </div>
+    <AppSection variant="boxed" class="config-settings-group" title="Auth profiles" meta="Credentials and request limits used by authenticated HTTP tools.">
+      <template #actions>
+        <QButton class="plain xs" :loading="saving" :disabled="loading || saving || !complete" @click="save">Save</QButton>
+      </template>
+      <div class="settings-panel-body settings-collection-list">
+        <div v-if="error" class="config-settings-error" role="alert">{{ error }}</div>
+        <div v-for="(profile, index) in draft" :key="profile._key" class="settings-collection-item">
+          <div class="settings-form-grid">
+            <div class="settings-field">
+              <span class="settings-field-label">Name</span>
+              <QInput v-model="profile.name" :disabled="loading || saving" />
+            </div>
+            <div class="settings-field">
+              <span class="settings-field-label">Credential kind</span>
+              <QInput v-model="profile.credential_kind" :disabled="loading || saving" />
+            </div>
+            <div class="settings-field is-wide">
+              <span class="settings-field-label">Credential secret</span>
+              <QInput
+                v-model="profile.credential_secret"
+                inputType="password"
+                :placeholder="profile._configured ? 'Configured — enter a new value to replace' : 'Required'"
+                :disabled="loading || saving"
+              />
+            </div>
+            <div class="settings-field">
+              <span class="settings-field-label">Allowed URL prefixes</span>
+              <QTextarea v-model="profile.url_prefixes_text" :rows="4" :disabled="loading || saving" />
+            </div>
+            <div class="settings-field">
+              <span class="settings-field-label">Allowed methods</span>
+              <SettingChoices
+                :modelValue="parseList(profile.methods_text).map(method => method.toUpperCase())"
+                :options="HTTP_METHOD_OPTIONS"
+                label="Allowed methods"
+                :disabled="loading || saving"
+                @update:modelValue="profile.methods_text = $event.join('\\n')"
+              />
+            </div>
+            <div class="settings-field is-wide">
+              <span class="settings-field-label">Bindings</span>
+              <div v-for="(binding, tool) in bindingsFor(profile)" :key="tool" class="settings-binding">
+                <strong class="settings-field-label">{{ tool }}</strong>
+                <div class="settings-form-grid">
+                  <div class="settings-field">
+                    <span class="settings-field-label">Injection location</span>
+                    <SettingSelect
+                      :modelValue="binding?.inject?.location || ''"
+                      :options="['header']"
+                      label="Injection location"
+                      :disabled="loading || saving"
+                      @update:modelValue="updateInjection(profile, tool, 'location', $event)"
+                    />
+                  </div>
+                  <div class="settings-field">
+                    <span class="settings-field-label">Injection format</span>
+                    <SettingSelect
+                      :modelValue="binding?.inject?.format || ''"
+                      :options="['', 'raw', 'bearer', 'basic']"
+                      placeholder="Default (raw)"
+                      label="Injection format"
+                      :disabled="loading || saving"
+                      @update:modelValue="updateInjection(profile, tool, 'format', $event)"
+                    />
+                  </div>
+                  <div class="settings-field is-wide">
+                    <span class="settings-field-label">Header name</span>
+                    <QInput
+                      :modelValue="binding?.inject?.name || ''"
+                      :disabled="loading || saving"
+                      @update:modelValue="updateInjection(profile, tool, 'name', $event)"
+                    />
                   </div>
                 </div>
-                <details class="settings-bindings-advanced">
-                  <summary>Advanced bindings (JSON)</summary>
-                  <QTextarea v-model="profile.bindings_text" :rows="8" class="config-settings-json" :disabled="loading || saving" />
-                </details>
               </div>
-              <div class="settings-field-row is-wide is-three">
-                <QSwitch v-model="profile.deny_private_ips" label="Deny private IPs" :disabled="loading || saving" />
-                <QSwitch v-model="profile.follow_redirects" label="Follow redirects" :disabled="loading || saving" />
-                <QSwitch v-model="profile.allow_proxy" label="Allow proxy" :disabled="loading || saving" />
-              </div>
+              <details class="settings-bindings-advanced">
+                <summary>Advanced bindings (JSON)</summary>
+                <QTextarea v-model="profile.bindings_text" :rows="8" class="config-settings-json" :disabled="loading || saving" />
+              </details>
             </div>
-            <QButton class="plain xs danger" :disabled="loading || saving" @click="remove(index)">Remove</QButton>
+            <div class="settings-field-row is-wide is-three">
+              <QSwitch v-model="profile.deny_private_ips" label="Deny private IPs" :disabled="loading || saving" />
+              <QSwitch v-model="profile.follow_redirects" label="Follow redirects" :disabled="loading || saving" />
+              <QSwitch v-model="profile.allow_proxy" label="Allow proxy" :disabled="loading || saving" />
+            </div>
           </div>
-          <QButton class="placeholder" :disabled="loading || saving" @click="add">Add auth profile</QButton>
+          <QButton class="plain xs danger" :disabled="loading || saving" @click="remove(index)">Remove</QButton>
         </div>
+        <QButton class="placeholder" :disabled="loading || saving" @click="add">Add auth profile</QButton>
       </div>
-    </QCard>
+    </AppSection>
   `,
 };

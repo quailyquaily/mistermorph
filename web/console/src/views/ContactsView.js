@@ -1,6 +1,6 @@
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { storeToRefs } from "pinia";
-import { useToast } from "quail-ui";
+import { useNotice } from "../core/notices";
 import "./ContactsView.css";
 
 import channelDiscordLogoURL from "../assets/images/channels/discord.svg";
@@ -205,7 +205,7 @@ const ContactsView = {
   },
   setup() {
     const t = translate;
-    const toast = useToast();
+    const notice = useNotice();
     const contactsStore = useContactsStore();
     const { items, loading } = storeToRefs(contactsStore);
 
@@ -490,9 +490,9 @@ const ContactsView = {
         if (selectedContactID.value === contactID) {
           stopEdit();
         }
-        toast.success(t("msg_save_success"));
+        notice.success(t("msg_save_success"));
       } catch (e) {
-        toast.error(e.message || t("msg_save_failed"));
+        notice.error(e.message || t("msg_save_failed"));
       } finally {
         editorSaving.value = false;
       }
@@ -524,9 +524,9 @@ const ContactsView = {
             throw new Error("copy failed");
           }
         }
-        toast.success(t("contacts_copy_success"));
+        notice.success(t("contacts_copy_success"));
       } catch {
-        toast.error(t("contacts_copy_failed"));
+        notice.error(t("contacts_copy_failed"));
       }
     }
 
@@ -562,9 +562,9 @@ const ContactsView = {
           clearSelection();
         }
         await load();
-        toast.success(t("msg_delete_success"));
+        notice.success(t("msg_delete_success"));
       } catch (e) {
-        toast.error(e.message || t("msg_delete_failed"));
+        notice.error(e.message || t("msg_delete_failed"));
       } finally {
         deleting.value = false;
         deleteTarget.value = null;
@@ -679,7 +679,7 @@ const ContactsView = {
             <div v-if="loading" class="contacts-index-loading" aria-hidden="true">
               <AppSkeleton variant="card" height="62px" :count="4" />
             </div>
-            <QFence v-else-if="err" class="contacts-index-error" type="danger" icon="PhXCircle" :text="err" />
+            <AppNotice v-else-if="err" class="contacts-index-error" type="error" :text="err" />
 
             <div
               v-if="!loading && filteredItems.length > 0"
@@ -817,7 +817,7 @@ const ContactsView = {
             <div v-if="editing" class="contacts-editor-body">
               <AppSkeleton v-if="editorLoading" variant="card" height="360px" :count="1" />
               <template v-else>
-                <QFence v-if="editorErr" type="danger" icon="PhXCircle" :text="editorErr" />
+                <AppNotice v-if="editorErr" type="error" :text="editorErr" />
                 <QTextarea
                   v-model="editorYAML"
                   class="contacts-editor-textarea"

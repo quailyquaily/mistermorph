@@ -210,7 +210,7 @@ const ContextView = {
 
       <section ref="viewEl" :class="['context-view', { 'is-phone': isPhone }]">
         <QProgress v-if="loading && !grid" :infinite="true" />
-        <QFence v-else-if="error" type="danger" icon="PhXCircle" :text="error" />
+        <AppNotice v-else-if="error" type="error" :text="error" />
         <p v-else-if="snapshot && !snapshot.available" class="context-view-empty">{{ t("context_inspector_empty") }}</p>
 
         <template v-else-if="grid">

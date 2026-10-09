@@ -63,10 +63,6 @@
   overscroll-behavior: contain;
 }
 
-.settings-panel-title {
-  margin: 0;
-}
-
 .settings-panel-meta {
   margin: 0;
   font-size: var(--font-size-meta);
@@ -111,30 +107,9 @@
   margin: 16px var(--content-gutter-x) var(--content-gutter-y) 0;
 }
 
-.settings-panel-body-plain > .q-card.q-card-default,
-.settings-channel-card.q-card-default {
-  min-height: 0;
-  align-content: start;
-}
-
-.settings-panel-body-plain > .q-card.q-card-default > .q-card-body,
-.settings-channel-card.q-card-default > .q-card-body {
-  align-content: start;
-}
-
-.settings-panel-shell {
-  display: grid;
-  gap: 14px;
-  min-width: 0;
-}
-
 .config-settings-panel {
   display: grid;
   gap: 16px;
-}
-
-.config-settings-group.q-card-default {
-  min-height: 0;
 }
 
 .config-settings-group.is-embedded + .config-settings-group.is-embedded {
@@ -142,16 +117,12 @@
   border-top: 1px solid var(--line-soft);
 }
 
-.config-settings-group.is-embedded .settings-panel-head {
-  padding: 0;
-}
-
 .config-settings-group.is-embedded .settings-panel-body {
   padding-right: 0;
   padding-left: 0;
 }
 
-.config-settings-group.is-embedded:not(:has(.settings-panel-head)) .settings-panel-body {
+.config-settings-group.is-embedded:not(:has(.app-section-head)) .settings-panel-body {
   margin-top: 0;
 }
 
@@ -300,39 +271,16 @@
   cursor: pointer;
 }
 
-.settings-panel-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.settings-panel-copy {
-  min-width: 0;
-  display: grid;
-  gap: 6px;
-}
-
-.settings-panel-actions {
-  display: flex;
-  flex: 0 0 auto;
-  margin-left: auto;
-  align-items: flex-start;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-.settings-panel-head > .q-button {
-  flex: 0 0 auto;
-  margin-left: auto;
-}
-
 .settings-panel-body {
   min-width: 0;
   margin-top: 16px;
   display: grid;
   align-content: start;
   gap: 16px;
+}
+
+.app-section-body > .settings-panel-body {
+  margin-top: 0;
 }
 
 .settings-panel-body-plain {
@@ -383,11 +331,6 @@
 .settings-channel-grid {
   display: grid;
   gap: 16px;
-}
-
-.settings-channel-card.q-card-default {
-  border: 1px solid color-mix(in srgb, var(--line) 74%, transparent);
-  background: color-mix(in srgb, var(--q-bg-paper) 98%, transparent);
 }
 
 .settings-channel-shell {
@@ -697,6 +640,16 @@
   min-width: 44px;
   height: 44px;
   min-height: 44px;
+}
+
+/* In a section head the menu matches the head's small buttons. */
+.app-section-head .settings-llm-actions-menu,
+.app-section-head .settings-llm-actions-menu .q-dropdown-menu-inner,
+.app-section-head .settings-llm-actions-menu .q-dropdown-menu-action {
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  min-height: 32px;
 }
 
 .settings-llm-actions-menu .q-dropdown-menu-action {
@@ -1097,6 +1050,13 @@ body:has(.settings-page) .q-dialog .q-menu-item.danger .q-menu-title {
   border-top: 1px solid var(--line-soft);
 }
 
+/* A list that opens a section's body has no label above it; the head's rule is already its top
+   edge, so its own would double it. A list further down keeps its rule as a divider. */
+.app-section-body > :is(.settings-toggle-list, .settings-console-list):first-child,
+.app-section-body > :first-child > :is(.settings-toggle-list, .settings-console-list):first-child {
+  border-top: 0;
+}
+
 .settings-toggle-row,
 .settings-console-row {
   display: flex;
@@ -1264,21 +1224,6 @@ body:has(.settings-page) .q-dialog .q-menu-item.danger .q-menu-title {
   .settings-console-row {
     flex-direction: column;
     align-items: stretch;
-  }
-
-  .settings-panel-head {
-    gap: 12px;
-  }
-
-  .settings-password-head {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .settings-password-head .settings-panel-actions {
-    margin-left: 0;
-    justify-content: flex-start;
-    flex-wrap: wrap;
   }
 
   .settings-form-grid {
@@ -1598,18 +1543,17 @@ html[data-macos26="true"] .settings-channel-pane-shell {
   overscroll-behavior: contain;
 }
 
-.settings-channel-pane-scroll > .settings-panel-shell {
+.settings-channel-pane-scroll > .app-section {
   gap: 0;
 }
 
-.settings-channel-pane-scroll .settings-panel-head {
+.settings-channel-pane-scroll > .app-section > .app-section-head {
   position: sticky;
   top: 0;
   z-index: 2;
-  align-items: center;
-  padding: 16px 12px 12px 18px;
+  --app-section-head-height: 48px;
+  padding: 0 12px 0 18px;
   background: var(--q-bg-white);
-  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--line-soft) 60%, transparent);
 }
 
 .settings-channel-pane-scroll .settings-panel-body {
@@ -1763,4 +1707,9 @@ html[data-macos26="true"] .settings-channel-pane-shell {
     margin-left: var(--content-gutter-x);
     flex-wrap: wrap;
   }
+}
+
+/* "Restart required" leads a section head's meta. */
+.app-section-meta .config-settings-restart {
+  margin-right: 8px;
 }

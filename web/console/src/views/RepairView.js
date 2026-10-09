@@ -1,6 +1,6 @@
 import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { useToast } from "quail-ui";
+import { useNotice } from "../core/notices";
 import "./RepairView.css";
 
 import RawTextEditorDialog from "../components/RawTextEditorDialog";
@@ -23,7 +23,7 @@ const RepairView = {
   },
   setup() {
     const t = translate;
-    const toast = useToast();
+    const notice = useNotice();
     const route = useRoute();
     const router = useRouter();
     const setupEndpointRef = computed(() =>
@@ -150,7 +150,7 @@ const RepairView = {
 			invalidateConsoleSetupReadiness();
 			await load();
 		} catch (e) {
-			toast.error(e.message || t("msg_save_failed"));
+			notice.error(e.message || t("msg_save_failed"));
 		} finally {
 			secretSaving.value = false;
 		}
@@ -183,7 +183,7 @@ const RepairView = {
 			invalidateConsoleSetupReadiness();
 			await load();
 		} catch (e) {
-			toast.error(e.message || t("msg_save_failed"));
+			notice.error(e.message || t("msg_save_failed"));
 		} finally {
 			secretSaving.value = false;
 		}
@@ -252,7 +252,7 @@ const RepairView = {
         editorOpen.value = false;
         await load();
       } catch (e) {
-        toast.error(e.message || t("msg_save_failed"));
+        notice.error(e.message || t("msg_save_failed"));
       } finally {
         saving.value = false;
       }
@@ -323,7 +323,7 @@ const RepairView = {
         </header>
 
         <QProgress v-if="loading" :infinite="true" />
-        <QFence v-if="err" class="repair-error" type="danger" icon="PhXCircle" :text="err" />
+        <AppNotice v-if="err" class="repair-error" type="error" :text="err" />
 
         <section v-if="!loading && items.length > 0" class="repair-list">
 		  <QCard v-for="item in items" :key="issueID(item)" class="repair-item" variant="default">

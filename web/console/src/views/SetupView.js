@@ -1,6 +1,6 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { useToast } from "quail-ui";
+import { useNotice } from "../core/notices";
 import "./SetupView.css";
 
 import ImageUploadField from "../components/ImageUploadField";
@@ -11,7 +11,7 @@ import ProAuthDialog from "../components/ProAuthDialog";
 import InferenceProviderPicker from "../components/InferenceProviderPicker";
 import EnvManagedField from "../components/EnvManagedField";
 import SecretInput from "../components/SecretInput";
-import AppErrorNotice, { isNetworkErrorMessage } from "../components/AppErrorNotice";
+import { dismissNotice, isNetworkErrorMessage, pushNotice } from "../core/notices";
 import { llmSecretConfigPath } from "../core/secret-storage";
 import { CONSOLE_LOCAL_ENDPOINT_REF } from "../core/endpoints";
 import SetupConnectionTestDialog from "../components/SetupConnectionTestDialog";
@@ -233,7 +233,6 @@ function resolveDoneGreetingKey(date = new Date()) {
 
 const SetupView = {
   components: {
-    AppErrorNotice,
     SecretInput,
     EnvManagedField,
     ImageUploadField,
@@ -247,7 +246,7 @@ const SetupView = {
   },
   setup() {
     const t = translate;
-    const toast = useToast();
+    const notice = useNotice();
     const route = useRoute();
     const router = useRouter();
     const setupEndpointRef = computed(() =>
@@ -262,6 +261,16 @@ const SetupView = {
     const loading = ref(false);
     const saving = ref(false);
     const err = ref("");
+
+    // A network failure is not about the form: it goes to the floating notice stack.
+    watch(err, (value) => {
+      if (isNetworkErrorMessage(value)) {
+        pushNotice({ id: "setup-network", type: "error", text: value, timeout: 0 });
+      } else {
+        dismissNotice("setup-network");
+      }
+    });
+    onBeforeUnmount(() => dismissNotice("setup-network"));
     const spriteTick = ref(0);
     let spriteTimer = 0;
 
@@ -1162,7 +1171,7 @@ const SetupView = {
         invalidateConsoleSetupReadiness();
         await finishStep();
       } catch (e) {
-        toast.error(e.message || t("msg_save_failed"));
+        notice.error(e.message || t("msg_save_failed"));
       } finally {
         saving.value = false;
       }
@@ -1362,7 +1371,7 @@ const SetupView = {
         invalidateConsoleSetupReadiness();
         await finishStep();
       } catch (e) {
-        toast.error(e.message || t("msg_save_failed"));
+        notice.error(e.message || t("msg_save_failed"));
       } finally {
         saving.value = false;
       }
@@ -1380,7 +1389,7 @@ const SetupView = {
         await loadPersonaAvatar();
         dispatchPersonaAvatarUpdated();
       } catch (e) {
-        toast.error(e.message || t("msg_save_failed"));
+        notice.error(e.message || t("msg_save_failed"));
       } finally {
         personaAvatarBusy.value = false;
       }
@@ -1396,7 +1405,7 @@ const SetupView = {
         setPersonaAvatarObjectURL("");
         dispatchPersonaAvatarUpdated();
       } catch (e) {
-        toast.error(e.message || t("msg_delete_failed"));
+        notice.error(e.message || t("msg_delete_failed"));
       } finally {
         personaAvatarBusy.value = false;
       }
@@ -1438,7 +1447,7 @@ const SetupView = {
         invalidateConsoleSetupReadiness();
         await finishStep();
       } catch (e) {
-        toast.error(e.message || t("msg_save_failed"));
+        notice.error(e.message || t("msg_save_failed"));
       } finally {
         saving.value = false;
       }
@@ -1904,7 +1913,6 @@ const SetupView = {
   },
   template: `
     <section :class="screenClass">
-      <AppErrorNotice class="is-viewport" :message="isNetworkErrorMessage(err) ? err : ''" />
       <QCard class="setup-shell stat-item" variant="default">
         <header class="setup-head">
           <p class="ui-kicker setup-step">{{ stageKicker }}</p>
@@ -2127,7 +2135,7 @@ const SetupView = {
             </div>
           </label>
 
-          <QFence v-if="err && !isNetworkErrorMessage(err)" class="setup-error is-wide" type="danger" icon="PhXCircle" :text="err" />
+          <AppNotice v-if="err && !isNetworkErrorMessage(err)" class="setup-error is-wide" type="error" :text="err" />
 
           <div class="setup-footer is-wide">
             <div class="setup-footer-side">
@@ -2206,7 +2214,7 @@ const SetupView = {
             />
           </label>
 
-          <QFence v-if="err && !isNetworkErrorMessage(err)" class="setup-error is-wide" type="danger" icon="PhXCircle" :text="err" />
+          <AppNotice v-if="err && !isNetworkErrorMessage(err)" class="setup-error is-wide" type="error" :text="err" />
 
           <div class="setup-footer setup-footer-persona is-wide">
             <div class="setup-footer-side">
@@ -2300,7 +2308,7 @@ const SetupView = {
             />
           </section>
 
-          <QFence v-if="err && !isNetworkErrorMessage(err)" class="setup-error is-wide" type="danger" icon="PhXCircle" :text="err" />
+          <AppNotice v-if="err && !isNetworkErrorMessage(err)" class="setup-error is-wide" type="error" :text="err" />
 
           <div class="setup-footer is-wide">
             <div class="setup-footer-side">

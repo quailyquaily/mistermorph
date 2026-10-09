@@ -193,10 +193,9 @@ const SetupConnectionTestDialogContent = {
         <p v-if="!showTarget && showIntro" class="connection-test-intro">{{ t("setup_llm_test_intro") }}</p>
       </div>
 
-      <QFence
+      <AppNotice
         v-if="error"
-        type="danger"
-        icon="PhXCircle"
+        type="error"
         :text="error"
       />
 

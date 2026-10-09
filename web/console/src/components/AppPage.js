@@ -1,10 +1,12 @@
-import AppErrorNotice from "./AppErrorNotice";
+import { getCurrentInstance, onBeforeUnmount, watch } from "vue";
+
+import { dismissNotice, pushNotice } from "../core/notices";
 import "./AppPage.css";
 
 const AppPage = {
-  components: { AppErrorNotice },
   props: {
-    // A page-level error (a failed load, the network): shown floating over the page, not in it.
+    // A page-level error (a failed load, the network): shown in the floating notice stack, not in
+    // the page, and kept until it clears or is dismissed.
     error: {
       type: String,
       default: "",
@@ -25,6 +27,22 @@ const AppPage = {
       type: Boolean,
       default: false,
     },
+  },
+  setup(props) {
+    const noticeID = `page-error-${getCurrentInstance()?.uid ?? Date.now()}`;
+    watch(
+      () => String(props.error || "").trim(),
+      (text) => {
+        if (text) {
+          pushNotice({ id: noticeID, type: "error", text, timeout: 0 });
+        } else {
+          dismissNotice(noticeID);
+        }
+      },
+      { immediate: true },
+    );
+    onBeforeUnmount(() => dismissNotice(noticeID));
+    return {};
   },
   template: `
     <section
@@ -50,7 +68,6 @@ const AppPage = {
       <div class="page-body">
         <slot />
       </div>
-      <AppErrorNotice :message="error" />
     </section>
   `,
 };

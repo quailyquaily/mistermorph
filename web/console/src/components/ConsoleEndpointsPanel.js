@@ -90,35 +90,30 @@ export default {
   },
   template: `
     <div class="console-endpoints-section">
-      <QCard variant="default" class="config-settings-group console-endpoints-panel">
-        <div class="settings-panel-shell">
-          <header class="settings-panel-head">
-            <div class="settings-panel-copy">
-              <h3 class="settings-panel-title workspace-document-title">{{ t('remote_agents_title') }} <span class="console-endpoint-count">{{ endpoints.length }}</span></h3>
-              <p class="settings-panel-meta">{{ t('remote_agents_note') }}</p>
-            </div>
-            <div class="settings-panel-actions">
-              <QButton class="primary" :disabled="loading || saving" @click="edit()"><PhPlus class="icon" />{{ t('overview_add_console') }}</QButton>
-            </div>
-          </header>
-          <div class="console-endpoint-list" :aria-busy="loading || saving">
-            <QProgress v-if="loading" :infinite="true" />
-            <p v-else-if="!rows.length" class="console-endpoint-empty">{{ t('remote_agents_empty') }}</p>
-            <div v-for="endpoint in rows" :key="endpoint.name" class="console-endpoint-row">
-              <div class="console-endpoint-copy">
-                <div class="console-endpoint-heading"><strong>{{ endpoint.name }}</strong>
-                  <span class="console-endpoint-status"><QBadge dot :type="endpoint.status === 'online' ? 'success' : endpoint.status === 'offline' ? 'danger' : 'default'" size="sm" />{{ t('remote_status_' + endpoint.status) }}</span>
-                </div>
-                <code class="console-endpoint-url">{{ endpoint.url }}</code>
+      <AppSection variant="boxed" class="config-settings-group console-endpoints-panel is-list" :title="t('remote_agents_title')">
+        <template #meta>
+          <span class="console-endpoint-count">{{ endpoints.length }}</span>{{ t('remote_agents_note') }}
+        </template>
+        <template #actions>
+          <QButton class="plain xs" :disabled="loading || saving" @click="edit()"><PhPlus class="icon" />{{ t('overview_add_console') }}</QButton>
+        </template>
+        <div class="console-endpoint-list" :aria-busy="loading || saving">
+          <QProgress v-if="loading" :infinite="true" />
+          <p v-else-if="!rows.length" class="console-endpoint-empty">{{ t('remote_agents_empty') }}</p>
+          <div v-for="endpoint in rows" :key="endpoint.name" class="console-endpoint-row">
+            <div class="console-endpoint-copy">
+              <div class="console-endpoint-heading"><strong>{{ endpoint.name }}</strong>
+                <span class="console-endpoint-status"><QBadge dot :type="endpoint.status === 'online' ? 'success' : endpoint.status === 'offline' ? 'danger' : 'default'" size="sm" />{{ t('remote_status_' + endpoint.status) }}</span>
               </div>
-              <div class="console-endpoint-actions">
-                <QButton class="outlined sm" :disabled="loading || saving" :aria-label="t('remote_edit_named', { name: endpoint.name })" @click="edit(endpoint)"><PhPencilSimple class="icon" />{{ t('action_edit') }}</QButton>
-                <QButton class="plain sm icon" :disabled="loading || saving" :title="t('remote_remove_named', { name: endpoint.name })" :aria-label="t('remote_remove_named', { name: endpoint.name })" @click="confirmRemove(endpoint)"><PhTrash class="icon" /></QButton>
-              </div>
+              <code class="console-endpoint-url">{{ endpoint.url }}</code>
+            </div>
+            <div class="console-endpoint-actions">
+              <QButton class="outlined sm" :disabled="loading || saving" :aria-label="t('remote_edit_named', { name: endpoint.name })" @click="edit(endpoint)"><PhPencilSimple class="icon" />{{ t('action_edit') }}</QButton>
+              <QButton class="plain sm icon" :disabled="loading || saving" :title="t('remote_remove_named', { name: endpoint.name })" :aria-label="t('remote_remove_named', { name: endpoint.name })" @click="confirmRemove(endpoint)"><PhTrash class="icon" /></QButton>
             </div>
           </div>
         </div>
-      </QCard>
+      </AppSection>
 
       <SettingDialog v-model="editorOpen" :title="t(editingName === null ? 'overview_add_console' : 'remote_edit_agent')"
         width="520px" :saving="saving" :saveDisabled="loading || !valid" @save="save">

@@ -1,4 +1,4 @@
-import { useToast } from "quail-ui";
+import { useNotice } from "../core/notices";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import "./TodoView.css";
@@ -686,7 +686,7 @@ const TodoView = {
   },
   setup() {
     const t = translate;
-    const toast = useToast();
+    const notice = useNotice();
     const route = useRoute();
     const router = useRouter();
     const loading = ref(false);
@@ -783,7 +783,7 @@ const TodoView = {
         return;
       }
       lastValidationToast = text;
-      toast.error(text);
+      notice.error(text);
     });
     const timezoneBaseItems = computed(() =>
       UTC_TIMEZONE_ITEMS.map((item) => ({
@@ -1049,7 +1049,7 @@ const TodoView = {
               : permission === "unsupported"
                 ? "todo_chat_notification_unsupported"
                 : "todo_chat_notification_required";
-          toast.error(t(key));
+          notice.error(t(key));
           chatDropdownRevision.value += 1;
           return;
         }
@@ -1303,9 +1303,9 @@ const TodoView = {
         draftDirty.value = false;
         tasksDirty.value = false;
         mobileEditorVisible.value = false;
-        toast.success(t("msg_delete_success"));
+        notice.success(t("msg_delete_success"));
       } catch (e) {
-        toast.error(e.message || t("msg_delete_failed"));
+        notice.error(e.message || t("msg_delete_failed"));
       } finally {
         saving.value = false;
         deleteTargetKey.value = "";
@@ -2202,7 +2202,7 @@ const TodoView = {
           heartbeatDirty.value = false;
           return;
         }
-        toast.error(e.message || t("msg_read_failed"));
+        notice.error(e.message || t("msg_read_failed"));
       } finally {
         heartbeatLoading.value = false;
       }
@@ -2226,9 +2226,9 @@ const TodoView = {
         heartbeatMissing.value = false;
         heartbeatDirty.value = false;
         invalidateConsoleSetupReadiness();
-        toast.success(t("msg_save_success"));
+        notice.success(t("msg_save_success"));
       } catch (e) {
-        toast.error(e.message || t("msg_save_failed"));
+        notice.error(e.message || t("msg_save_failed"));
       } finally {
         heartbeatSaving.value = false;
       }
@@ -2258,7 +2258,7 @@ const TodoView = {
         mobileEditorVisible.value = false;
       } catch (e) {
         const message = e.message || t("msg_load_failed");
-        toast.error(message);
+        notice.error(message);
       } finally {
         loading.value = false;
       }
@@ -2271,7 +2271,7 @@ const TodoView = {
       commitSelectedTaskDraft();
       const validationMessages = tasks.value.map((task) => taskValidationMessage(task)).filter(Boolean);
       if (validationMessages.length > 0) {
-        toast.error(validationMessages[0]);
+        notice.error(validationMessages[0]);
         return;
       }
       const nextTasks = tasks.value.map((task) => cloneTaskForDraft(task));
@@ -2293,10 +2293,10 @@ const TodoView = {
         tasksDirty.value = false;
         selectedTaskDraft.value = cloneTaskForDraft(selectedStoredTask.value);
         draftDirty.value = false;
-        toast.success(t("msg_save_success"));
+        notice.success(t("msg_save_success"));
       } catch (e) {
         const message = e.message || t("msg_save_failed");
-        toast.error(message);
+        notice.error(message);
       } finally {
         saving.value = false;
       }
@@ -2316,9 +2316,9 @@ const TodoView = {
         await runtimeApiFetch(`/todo/tasks/${encodeURIComponent(id)}/run`, {
           method: "POST",
         });
-        toast.success(t("todo_run_success"));
+        notice.success(t("todo_run_success"));
       } catch (e) {
-        toast.error(e.message || t("todo_run_failed"));
+        notice.error(e.message || t("todo_run_failed"));
       } finally {
         runningTaskKey.value = "";
       }
@@ -2573,7 +2573,7 @@ const TodoView = {
             <div class="todo-heartbeat-editor-body">
               <div v-if="heartbeatLoading || heartbeatDisabled" class="todo-heartbeat-editor-notices">
                 <QProgress v-if="heartbeatLoading" :infinite="true" />
-                <QFence
+                <AppNotice
                   v-if="heartbeatDisabled"
                   type="warning"
                   :text="t('todo_heartbeat_disabled_hint')"

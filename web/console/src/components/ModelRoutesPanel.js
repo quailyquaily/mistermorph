@@ -334,165 +334,158 @@ export default {
     };
   },
   template: `
-    <QCard variant="default" class="config-settings-group model-routes-panel">
-      <div class="settings-panel-shell">
-        <header class="settings-panel-head">
-          <div class="settings-panel-copy">
-            <h3 class="settings-panel-title workspace-document-title">Model Routes</h3>
-            <p class="settings-panel-meta">Where each kind of work sends its requests. Pulses show traffic, more often for bigger shares; dashed lines are fallbacks, in order. Select a route to change it.</p>
-          </div>
-          <QButton v-if="!registered" class="primary" :loading="saving" :disabled="loading || saving || !dirty" @click="save">Save</QButton>
-        </header>
-        <div v-if="validationError" class="config-settings-error" role="alert">{{ validationError }}</div>
+    <AppSection variant="boxed" class="config-settings-group model-routes-panel" title="Model Routes" meta="Where each kind of work sends its requests. Pulses show traffic, more often for bigger shares; dashed lines are fallbacks, in order. Select a route to change it.">
+      <template #actions>
+        <QButton v-if="!registered" class="plain xs" :loading="saving" :disabled="loading || saving || !dirty" @click="save">Save</QButton>
+      </template>
+      <div v-if="validationError" class="config-settings-error" role="alert">{{ validationError }}</div>
 
-        <div v-if="selectedPurpose" class="model-routes-inspector">
-          <span class="model-routes-inspector-title">{{ selectedPurpose.label }}</span>
-          <span v-if="problems(selectedPurpose).length" class="model-route-problems" role="alert">{{ problems(selectedPurpose).join(' ') }}</span>
-          <span v-else-if="locked(selectedPurpose)" class="model-routes-node-note">This route is managed outside the settings file.</span>
-          <span v-else-if="selectedPurpose.single" class="model-routes-node-note">Use picks the one profile for these requests; this route has no split or fallbacks.</span>
-          <span v-else class="model-routes-node-note">Use sends everything to one profile; Split shares requests; Fallback is tried, in order, when a request fails.</span>
-          <QButton class="plain xs" :disabled="locked(selectedPurpose)" @click="actions.reset()">Reset to default</QButton>
-          <QButton class="plain xs" @click="selected = ''">Done</QButton>
-        </div>
-
-        <div ref="canvas" class="model-routes-map" :class="{ 'has-selection': selected, 'is-drawn': drawn }">
-          <svg class="model-routes-lines" :viewBox="'0 0 ' + geometry.width + ' ' + geometry.height" aria-hidden="true" focusable="false">
-            <defs>
-              <!-- Each line draws in like a pen plotter; a mask keeps dashed lines' own pattern. -->
-              <mask
-                v-for="(line, index) in lines"
-                :id="uid + '-plot-' + line.id"
-                :key="'mask:' + line.id"
-                maskUnits="userSpaceOnUse"
-                x="-2000" y="-2000" width="6000" height="6000"
-              >
-                <path class="model-routes-plot" :d="line.path" :style="{ '--line-length': line.length + 'px', '--plot-index': index }" />
-              </mask>
-            </defs>
-            <path
-              v-for="line in lines"
-              :key="line.id"
-              :d="line.path"
-              :mask="'url(#' + uid + '-plot-' + line.id + ')'"
-              :class="['model-routes-line', 'is-' + line.kind, { 'is-active': line.active, 'is-dim': line.dim, 'is-implicit': line.implicit }]"
-              :stroke-width="line.width"
-            />
-            <!-- Traffic: a tapered pulse along each live line, and a ring where it arrives. -->
-            <template v-for="(line, index) in lines" :key="'traffic:' + line.id">
-              <g
-                v-if="line.period && !line.dim"
-                :class="['model-routes-traffic', { 'is-implicit': line.implicit }]"
-                :style="{ '--line-length': line.length + 'px', '--line-period': line.period + 's', '--line-delay': (-index * 0.45) + 's' }"
-              >
-                <g class="model-routes-pulse">
-                  <path
-                    v-for="part in 6"
-                    :key="part"
-                    class="model-routes-glow"
-                    :d="line.path"
-                    :style="{ '--pulse-length': (19 - part * 3) + 'px', strokeWidth: 0.4 + part * 0.6, strokeOpacity: part / 6 }"
-                  />
-                </g>
-                <circle class="model-routes-arrival" :cx="line.arrive.x" :cy="line.arrive.y" r="5" />
-              </g>
-            </template>
-          </svg>
-
-          <!-- Shares and fallback order sit on the lines; the selected split gets steppers. -->
-          <template v-for="line in lines" :key="'label:' + line.id">
-            <span
-              v-if="line.kind === 'fallback'"
-              class="model-routes-order"
-              :class="{ 'is-active': line.active, 'is-dim': line.dim }"
-              :style="{ left: line.end.x + 'px', top: line.end.y + 'px' }"
-              :title="'Fallback ' + line.order"
-            >{{ line.order }}</span>
-            <span
-              v-else-if="line.kind === 'split' && !line.active"
-              class="model-routes-share"
-              :class="{ 'is-dim': line.dim }"
-              :style="{ left: line.mid.x + 'px', top: line.mid.y + 'px' }"
-            >{{ line.share }}%</span>
-            <span
-              v-else-if="line.kind === 'split'"
-              class="model-routes-stepper is-on-line"
-              :style="{ left: line.mid.x + 'px', top: line.mid.y + 'px' }"
-            >
-              <button type="button" :aria-label="'Less to ' + line.profile" :disabled="line.share <= 1" @click="actions.step(line.index, -SHARE_STEP)">−</button>
-              <span>{{ line.share }}%</span>
-              <button type="button" :aria-label="'More to ' + line.profile" :disabled="line.share >= 99" @click="actions.step(line.index, SHARE_STEP)">+</button>
-            </span>
-          </template>
-
-          <ol class="model-routes-column is-routes" aria-label="Kinds of work">
-            <li v-for="(purpose, index) in purposes" :key="purpose.key" :style="{ '--node-index': index }">
-              <button
-                type="button"
-                :data-route="purpose.key"
-                :class="['model-routes-node', 'is-route', { 'is-selected': selected === purpose.key, 'has-problem': problems(purpose).length }]"
-                :aria-pressed="selected === purpose.key ? 'true' : 'false'"
-                @click="select(purpose)"
-              >
-                <span class="model-routes-node-title">
-                  {{ purpose.label }}
-                  <span v-if="purpose.legacy" class="model-route-tag">Legacy</span>
-                  <span v-if="changed(purpose)" class="model-routes-dot" title="Unsaved"></span>
-                </span>
-                <span class="model-routes-node-note">{{ purpose.note }}</span>
-              </button>
-            </li>
-          </ol>
-
-          <ol class="model-routes-column is-profiles" aria-label="Profiles">
-            <li v-for="(node, index) in profileNodes" :key="node.name" :style="{ '--node-index': index + 1 }">
-              <div
-                :data-profile="node.name"
-                :class="['model-routes-node', 'is-profile', 'is-' + (roleOf(node.name).role || 'idle'), { 'is-missing': node.missing }]"
-              >
-                <span class="model-routes-node-copy">
-                <span class="model-routes-node-title">
-                  <code>{{ node.name }}</code>
-                  <span v-if="roleOf(node.name).role === 'use'" class="model-routes-role">{{ roleOf(node.name).implicit ? 'default' : 'all' }}</span>
-                  <span v-else-if="roleOf(node.name).role === 'split'" class="model-routes-role is-share">{{ roleOf(node.name).share }}%</span>
-                  <span v-if="roleOf(node.name).role === 'split' && !locked(selectedPurpose)" class="model-routes-stepper is-in-node">
-                    <button type="button" :aria-label="'Less to ' + node.name" :disabled="roleOf(node.name).share <= 1" @click="actions.step(splitIndex(node.name), -SHARE_STEP)">−</button>
-                    <span>{{ roleOf(node.name).share }}%</span>
-                    <button type="button" :aria-label="'More to ' + node.name" :disabled="roleOf(node.name).share >= 99" @click="actions.step(splitIndex(node.name), SHARE_STEP)">+</button>
-                  </span>
-                  <span v-else-if="roleOf(node.name).role === 'fallback'" class="model-routes-role">fallback {{ roleOf(node.name).order }}</span>
-                </span>
-                <span v-if="node.missing" class="model-routes-node-note is-problem">No profile has this name.</span>
-                <span v-else-if="node.note" class="model-routes-node-note">{{ node.note }}</span>
-                </span>
-
-                <div v-if="selectedPurpose && !locked(selectedPurpose)" class="model-routes-actions">
-                  <button
-                    v-if="roleOf(node.name).role !== 'use' || roleOf(node.name).implicit"
-                    type="button"
-                    @click="actions.use(node.name)"
-                  >Use</button>
-                  <button v-if="roleOf(node.name).role === 'split'" type="button" @click="actions.unsplit(node.name)">Remove</button>
-                  <button v-else-if="!selectedPurpose.single && (roleOf(node.name).role !== 'use' || roleOf(node.name).implicit)" type="button" @click="actions.split(node.name)">Split</button>
-                  <button
-                    v-if="!selectedPurpose.single && (roleOf(node.name).role === '' || roleOf(node.name).role === 'fallback')"
-                    type="button"
-                    :aria-pressed="roleOf(node.name).role === 'fallback' ? 'true' : 'false'"
-                    @click="actions.fallback(node.name)"
-                  >{{ roleOf(node.name).role === 'fallback' ? 'No fallback' : 'Fallback' }}</button>
-                </div>
-              </div>
-            </li>
-            <li v-if="!selected && hiddenProfiles > 0" class="model-routes-more">+{{ hiddenProfiles }} more profiles; select a route to use them</li>
-            <li class="model-routes-add">
-              <button type="button" class="model-routes-add-button" :disabled="loading || saving" @click="$emit('add-profile')">
-                <PhPlus class="icon" aria-hidden="true" />
-                <span>Add profile</span>
-              </button>
-            </li>
-          </ol>
-        </div>
-
+      <div v-if="selectedPurpose" class="model-routes-inspector">
+        <span class="model-routes-inspector-title">{{ selectedPurpose.label }}</span>
+        <span v-if="problems(selectedPurpose).length" class="model-route-problems" role="alert">{{ problems(selectedPurpose).join(' ') }}</span>
+        <span v-else-if="locked(selectedPurpose)" class="model-routes-node-note">This route is managed outside the settings file.</span>
+        <span v-else-if="selectedPurpose.single" class="model-routes-node-note">Use picks the one profile for these requests; this route has no split or fallbacks.</span>
+        <span v-else class="model-routes-node-note">Use sends everything to one profile; Split shares requests; Fallback is tried, in order, when a request fails.</span>
+        <QButton class="plain xs" :disabled="locked(selectedPurpose)" @click="actions.reset()">Reset to default</QButton>
+        <QButton class="plain xs" @click="selected = ''">Done</QButton>
       </div>
-    </QCard>
+
+      <div ref="canvas" class="model-routes-map" :class="{ 'has-selection': selected, 'is-drawn': drawn }">
+        <svg class="model-routes-lines" :viewBox="'0 0 ' + geometry.width + ' ' + geometry.height" aria-hidden="true" focusable="false">
+          <defs>
+            <!-- Each line draws in like a pen plotter; a mask keeps dashed lines' own pattern. -->
+            <mask
+              v-for="(line, index) in lines"
+              :id="uid + '-plot-' + line.id"
+              :key="'mask:' + line.id"
+              maskUnits="userSpaceOnUse"
+              x="-2000" y="-2000" width="6000" height="6000"
+            >
+              <path class="model-routes-plot" :d="line.path" :style="{ '--line-length': line.length + 'px', '--plot-index': index }" />
+            </mask>
+          </defs>
+          <path
+            v-for="line in lines"
+            :key="line.id"
+            :d="line.path"
+            :mask="'url(#' + uid + '-plot-' + line.id + ')'"
+            :class="['model-routes-line', 'is-' + line.kind, { 'is-active': line.active, 'is-dim': line.dim, 'is-implicit': line.implicit }]"
+            :stroke-width="line.width"
+          />
+          <!-- Traffic: a tapered pulse along each live line, and a ring where it arrives. -->
+          <template v-for="(line, index) in lines" :key="'traffic:' + line.id">
+            <g
+              v-if="line.period && !line.dim"
+              :class="['model-routes-traffic', { 'is-implicit': line.implicit }]"
+              :style="{ '--line-length': line.length + 'px', '--line-period': line.period + 's', '--line-delay': (-index * 0.45) + 's' }"
+            >
+              <g class="model-routes-pulse">
+                <path
+                  v-for="part in 6"
+                  :key="part"
+                  class="model-routes-glow"
+                  :d="line.path"
+                  :style="{ '--pulse-length': (19 - part * 3) + 'px', strokeWidth: 0.4 + part * 0.6, strokeOpacity: part / 6 }"
+                />
+              </g>
+              <circle class="model-routes-arrival" :cx="line.arrive.x" :cy="line.arrive.y" r="5" />
+            </g>
+          </template>
+        </svg>
+
+        <!-- Shares and fallback order sit on the lines; the selected split gets steppers. -->
+        <template v-for="line in lines" :key="'label:' + line.id">
+          <span
+            v-if="line.kind === 'fallback'"
+            class="model-routes-order"
+            :class="{ 'is-active': line.active, 'is-dim': line.dim }"
+            :style="{ left: line.end.x + 'px', top: line.end.y + 'px' }"
+            :title="'Fallback ' + line.order"
+          >{{ line.order }}</span>
+          <span
+            v-else-if="line.kind === 'split' && !line.active"
+            class="model-routes-share"
+            :class="{ 'is-dim': line.dim }"
+            :style="{ left: line.mid.x + 'px', top: line.mid.y + 'px' }"
+          >{{ line.share }}%</span>
+          <span
+            v-else-if="line.kind === 'split'"
+            class="model-routes-stepper is-on-line"
+            :style="{ left: line.mid.x + 'px', top: line.mid.y + 'px' }"
+          >
+            <button type="button" :aria-label="'Less to ' + line.profile" :disabled="line.share <= 1" @click="actions.step(line.index, -SHARE_STEP)">−</button>
+            <span>{{ line.share }}%</span>
+            <button type="button" :aria-label="'More to ' + line.profile" :disabled="line.share >= 99" @click="actions.step(line.index, SHARE_STEP)">+</button>
+          </span>
+        </template>
+
+        <ol class="model-routes-column is-routes" aria-label="Kinds of work">
+          <li v-for="(purpose, index) in purposes" :key="purpose.key" :style="{ '--node-index': index }">
+            <button
+              type="button"
+              :data-route="purpose.key"
+              :class="['model-routes-node', 'is-route', { 'is-selected': selected === purpose.key, 'has-problem': problems(purpose).length }]"
+              :aria-pressed="selected === purpose.key ? 'true' : 'false'"
+              @click="select(purpose)"
+            >
+              <span class="model-routes-node-title">
+                {{ purpose.label }}
+                <span v-if="purpose.legacy" class="model-route-tag">Legacy</span>
+                <span v-if="changed(purpose)" class="model-routes-dot" title="Unsaved"></span>
+              </span>
+              <span class="model-routes-node-note">{{ purpose.note }}</span>
+            </button>
+          </li>
+        </ol>
+
+        <ol class="model-routes-column is-profiles" aria-label="Profiles">
+          <li v-for="(node, index) in profileNodes" :key="node.name" :style="{ '--node-index': index + 1 }">
+            <div
+              :data-profile="node.name"
+              :class="['model-routes-node', 'is-profile', 'is-' + (roleOf(node.name).role || 'idle'), { 'is-missing': node.missing }]"
+            >
+              <span class="model-routes-node-copy">
+              <span class="model-routes-node-title">
+                <code>{{ node.name }}</code>
+                <span v-if="roleOf(node.name).role === 'use'" class="model-routes-role">{{ roleOf(node.name).implicit ? 'default' : 'all' }}</span>
+                <span v-else-if="roleOf(node.name).role === 'split'" class="model-routes-role is-share">{{ roleOf(node.name).share }}%</span>
+                <span v-if="roleOf(node.name).role === 'split' && !locked(selectedPurpose)" class="model-routes-stepper is-in-node">
+                  <button type="button" :aria-label="'Less to ' + node.name" :disabled="roleOf(node.name).share <= 1" @click="actions.step(splitIndex(node.name), -SHARE_STEP)">−</button>
+                  <span>{{ roleOf(node.name).share }}%</span>
+                  <button type="button" :aria-label="'More to ' + node.name" :disabled="roleOf(node.name).share >= 99" @click="actions.step(splitIndex(node.name), SHARE_STEP)">+</button>
+                </span>
+                <span v-else-if="roleOf(node.name).role === 'fallback'" class="model-routes-role">fallback {{ roleOf(node.name).order }}</span>
+              </span>
+              <span v-if="node.missing" class="model-routes-node-note is-problem">No profile has this name.</span>
+              <span v-else-if="node.note" class="model-routes-node-note">{{ node.note }}</span>
+              </span>
+
+              <div v-if="selectedPurpose && !locked(selectedPurpose)" class="model-routes-actions">
+                <button
+                  v-if="roleOf(node.name).role !== 'use' || roleOf(node.name).implicit"
+                  type="button"
+                  @click="actions.use(node.name)"
+                >Use</button>
+                <button v-if="roleOf(node.name).role === 'split'" type="button" @click="actions.unsplit(node.name)">Remove</button>
+                <button v-else-if="!selectedPurpose.single && (roleOf(node.name).role !== 'use' || roleOf(node.name).implicit)" type="button" @click="actions.split(node.name)">Split</button>
+                <button
+                  v-if="!selectedPurpose.single && (roleOf(node.name).role === '' || roleOf(node.name).role === 'fallback')"
+                  type="button"
+                  :aria-pressed="roleOf(node.name).role === 'fallback' ? 'true' : 'false'"
+                  @click="actions.fallback(node.name)"
+                >{{ roleOf(node.name).role === 'fallback' ? 'No fallback' : 'Fallback' }}</button>
+              </div>
+            </div>
+          </li>
+          <li v-if="!selected && hiddenProfiles > 0" class="model-routes-more">+{{ hiddenProfiles }} more profiles; select a route to use them</li>
+          <li class="model-routes-add">
+            <button type="button" class="model-routes-add-button" :disabled="loading || saving" @click="$emit('add-profile')">
+              <PhPlus class="icon" aria-hidden="true" />
+              <span>Add profile</span>
+            </button>
+          </li>
+        </ol>
+      </div>
+    </AppSection>
   `,
 };

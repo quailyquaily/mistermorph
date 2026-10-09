@@ -94,91 +94,73 @@ const SettingsCreditsPanel = {
   template: `
     <div class="settings-panel-body settings-panel-body-plain settings-credits-panel">
       <QProgress v-if="loading" :infinite="true" />
-      <QFence v-if="error" type="danger" icon="PhXCircle" :text="error" />
+      <AppNotice v-if="error" type="error" :text="error" />
 
-      <QCard variant="default">
-        <div class="settings-panel-shell">
-          <header class="settings-panel-head">
-            <div class="settings-panel-copy">
-              <h3 class="settings-panel-title workspace-document-title">{{ t("settings_credits_contributors_title") }}</h3>
-              <p class="settings-panel-meta">{{ t("settings_credits_contributors_meta") }}</p>
-            </div>
-          </header>
-
-          <div class="settings-panel-body">
-            <div v-if="contributors.length" class="settings-credits-contributor-grid">
-              <a
-                v-for="item in contributors"
-                :key="item.id"
-                class="settings-credits-contributor-card"
-                :href="item.link"
-                target="_blank"
-                rel="noopener noreferrer"
-                :aria-label="t('settings_credits_open_profile') + ': ' + item.name"
-              >
-                <span class="settings-credits-contributor-avatar-shell">
-                  <img
-                    v-if="contributorAvatar(item)"
-                    class="settings-credits-contributor-avatar"
-                    :src="contributorAvatar(item)"
-                    :alt="item.name"
-                    loading="lazy"
-                    decoding="async"
-                    @error="markContributorAvatarBroken(item.id)"
-                  />
-                  <span v-else class="settings-credits-contributor-avatar-fallback">
-                    {{ contributorInitials(item.name) }}
-                  </span>
+      <AppSection variant="boxed" :title="t('settings_credits_contributors_title')" :meta="t('settings_credits_contributors_meta')">
+        <div class="settings-panel-body">
+          <div v-if="contributors.length" class="settings-credits-contributor-grid">
+            <a
+              v-for="item in contributors"
+              :key="item.id"
+              class="settings-credits-contributor-card"
+              :href="item.link"
+              target="_blank"
+              rel="noopener noreferrer"
+              :aria-label="t('settings_credits_open_profile') + ': ' + item.name"
+            >
+              <span class="settings-credits-contributor-avatar-shell">
+                <img
+                  v-if="contributorAvatar(item)"
+                  class="settings-credits-contributor-avatar"
+                  :src="contributorAvatar(item)"
+                  :alt="item.name"
+                  loading="lazy"
+                  decoding="async"
+                  @error="markContributorAvatarBroken(item.id)"
+                />
+                <span v-else class="settings-credits-contributor-avatar-fallback">
+                  {{ contributorInitials(item.name) }}
                 </span>
-                <strong class="settings-credits-contributor-name">{{ item.name }}</strong>
-                <PhArrowSquareOut class="settings-credits-external-icon icon" aria-hidden="true" />
-              </a>
-            </div>
-            <p v-else class="settings-credits-empty">{{ t("settings_credits_empty_contributors") }}</p>
+              </span>
+              <strong class="settings-credits-contributor-name">{{ item.name }}</strong>
+              <PhArrowSquareOut class="settings-credits-external-icon icon" aria-hidden="true" />
+            </a>
           </div>
+          <p v-else class="settings-credits-empty">{{ t("settings_credits_empty_contributors") }}</p>
         </div>
-      </QCard>
+      </AppSection>
 
-      <QCard variant="default">
-        <div class="settings-panel-shell">
-          <header class="settings-panel-head">
-            <div class="settings-panel-copy">
-              <h3 class="settings-panel-title workspace-document-title">{{ t("settings_credits_open_source_title") }}</h3>
-              <p class="settings-panel-meta">{{ t("settings_credits_open_source_meta") }}</p>
-            </div>
-          </header>
-
-          <div class="settings-panel-body">
-            <div v-if="openSource.length" class="settings-credits-project-list">
-              <article v-for="item in openSource" :key="item.id" class="settings-credits-project-row">
-                <div class="settings-credits-project-copy">
-                  <div class="settings-credits-project-head">
-                    <strong class="settings-credits-project-title">{{ item.name }}</strong>
-                    <span
-                      v-if="item.license"
-                      class="settings-credits-project-license"
-                      :title="t('settings_credits_license_label')"
-                    >
-                      {{ item.license }}
-                    </span>
-                  </div>
-                  <p class="settings-credits-project-summary">{{ item.summary }}</p>
+      <AppSection variant="boxed" class="is-list" :title="t('settings_credits_open_source_title')" :meta="t('settings_credits_open_source_meta')">
+        <div class="settings-panel-body">
+          <div v-if="openSource.length" class="settings-credits-project-list">
+            <article v-for="item in openSource" :key="item.id" class="settings-credits-project-row">
+              <div class="settings-credits-project-copy">
+                <div class="settings-credits-project-head">
+                  <strong class="settings-credits-project-title">{{ item.name }}</strong>
+                  <span
+                    v-if="item.license"
+                    class="settings-credits-project-license"
+                    :title="t('settings_credits_license_label')"
+                  >
+                    {{ item.license }}
+                  </span>
                 </div>
-                <QButton
-                  v-if="item.link"
-                  class="plain xs icon settings-credits-project-link"
-                  :title="t('settings_credits_open_link')"
-                  :aria-label="t('settings_credits_open_link')"
-                  @click="openExternal(item.link)"
-                >
-                  <PhArrowSquareOut class="settings-credits-external-icon icon" />
-                </QButton>
-              </article>
-            </div>
-            <p v-else class="settings-credits-empty">{{ t("settings_credits_empty_open_source") }}</p>
+                <p class="settings-credits-project-summary">{{ item.summary }}</p>
+              </div>
+              <QButton
+                v-if="item.link"
+                class="plain xs icon settings-credits-project-link"
+                :title="t('settings_credits_open_link')"
+                :aria-label="t('settings_credits_open_link')"
+                @click="openExternal(item.link)"
+              >
+                <PhArrowSquareOut class="settings-credits-external-icon icon" />
+              </QButton>
+            </article>
           </div>
+          <p v-else class="settings-credits-empty">{{ t("settings_credits_empty_open_source") }}</p>
         </div>
-      </QCard>
+      </AppSection>
     </div>
   `,
 };

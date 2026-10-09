@@ -1,6 +1,6 @@
 import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { useToast } from "quail-ui";
+import { useNotice } from "../core/notices";
 import "./ChatView.css";
 
 import AppKicker from "../components/AppKicker";
@@ -643,7 +643,7 @@ const ChatView = {
   },
   setup() {
     const t = translate;
-    const toast = useToast();
+    const notice = useNotice();
     const route = useRoute();
     const router = useRouter();
     const mobileMode = ref(window.innerWidth <= 920);
@@ -1109,7 +1109,7 @@ const ChatView = {
       } catch (e) {
         if (submitEndpointRef.value === endpointRef) {
           topicLayout.value = previous;
-          toast.error(e?.message || t("chat_topics_layout_failed"));
+          notice.error(e?.message || t("chat_topics_layout_failed"));
         }
       } finally {
         topicLayoutSaves -= 1;
@@ -1203,7 +1203,7 @@ const ChatView = {
         if (topicID === normalizeTopicID(workspaceTopicID.value)) {
           topicTagsError.value = message;
         } else {
-          toast.error(message);
+          notice.error(message);
         }
         return false;
       } finally {
@@ -2792,7 +2792,7 @@ const ChatView = {
         workspaceBrowserCreateOpen.value = false;
         workspaceBrowserCreateName.value = "";
       } catch (e) {
-        toast.error(e?.message || t("msg_save_failed"));
+        notice.error(e?.message || t("msg_save_failed"));
       } finally {
         workspaceBrowserCreating.value = false;
       }
@@ -2832,7 +2832,7 @@ const ChatView = {
         }
       } catch (e) {
         const message = e?.message || t("msg_save_failed");
-        toast.error(message);
+        notice.error(message);
       } finally {
         workspaceSaving.value = false;
       }
@@ -2856,7 +2856,7 @@ const ChatView = {
         );
         applyWorkspacePayload(data);
       } catch (e) {
-        toast.error(e?.message || t("msg_save_failed"));
+        notice.error(e?.message || t("msg_save_failed"));
       } finally {
         workspaceSaving.value = false;
       }
@@ -5042,19 +5042,17 @@ const ChatView = {
                       </div>
                     </header>
 
-                    <QFence
+                    <AppNotice
                       v-if="workspaceError"
                       class="chat-workspace-pane-fence"
-                      type="danger"
-                      icon="PhXCircle"
+                      type="error"
                       :text="workspaceError"
                     />
 
-                    <QFence
+                    <AppNotice
                       v-if="workspaceTreeError"
                       class="chat-workspace-pane-fence"
-                      type="danger"
-                      icon="PhXCircle"
+                      type="error"
                       :text="workspaceTreeError"
                     />
 
@@ -5145,11 +5143,10 @@ const ChatView = {
                   </template>
 
                   <template v-else>
-                    <QFence
+                    <AppNotice
                       v-if="workspaceError"
                       class="chat-workspace-pane-fence"
-                      type="danger"
-                      icon="PhXCircle"
+                      type="error"
                       :text="workspaceError"
                     />
 
@@ -5180,11 +5177,10 @@ const ChatView = {
 
                 <template v-else-if="workspaceSidebarTabID === 'topic'">
                   <section class="chat-topic-panel">
-                    <QFence
+                    <AppNotice
                       v-if="topicDeleteError || topicRegenerateError"
                       class="chat-workspace-pane-fence"
-                      type="danger"
-                      icon="PhXCircle"
+                      type="error"
                       :text="topicDeleteError || topicRegenerateError"
                     />
 
@@ -5394,19 +5390,17 @@ const ChatView = {
                     </div>
                   </header>
 
-                  <QFence
+                  <AppNotice
                     v-if="workspaceError"
                     class="chat-workspace-pane-fence"
-                    type="danger"
-                    icon="PhXCircle"
+                    type="error"
                     :text="workspaceError"
                   />
 
-                  <QFence
+                  <AppNotice
                     v-if="workspaceTreeError"
                     class="chat-workspace-pane-fence"
-                    type="danger"
-                    icon="PhXCircle"
+                    type="error"
                     :text="workspaceTreeError"
                   />
 
@@ -5497,11 +5491,10 @@ const ChatView = {
                 </template>
 
                 <template v-else>
-                  <QFence
+                  <AppNotice
                     v-if="workspaceError"
                     class="chat-workspace-pane-fence"
-                    type="danger"
-                    icon="PhXCircle"
+                    type="error"
                     :text="workspaceError"
                   />
 
@@ -5532,11 +5525,10 @@ const ChatView = {
 
               <template v-else-if="workspaceSidebarTabID === 'topic'">
                 <section class="chat-topic-panel">
-                  <QFence
+                  <AppNotice
                     v-if="topicDeleteError || topicRegenerateError"
                     class="chat-workspace-pane-fence"
-                    type="danger"
-                    icon="PhXCircle"
+                    type="error"
                     :text="topicDeleteError || topicRegenerateError"
                   />
 
@@ -5664,11 +5656,10 @@ const ChatView = {
           @close="closeWorkspaceBrowser"
         >
           <section class="chat-workspace-dialog">
-            <QFence
+            <AppNotice
               v-if="workspaceBrowserError"
               class="chat-workspace-pane-fence"
-              type="danger"
-              icon="PhXCircle"
+              type="error"
               :text="workspaceBrowserError"
             />
 
@@ -5877,11 +5868,10 @@ const ChatView = {
                 v-else-if="composerFilePreviewKind === 'text'"
                 class="chat-composer-file-preview-text"
               >{{ composerFilePreviewText }}</pre>
-              <QFence
+              <AppNotice
                 v-else-if="composerFilePreviewError"
                 class="chat-composer-file-preview-error"
-                type="danger"
-                icon="PhXCircle"
+                type="error"
                 :text="composerFilePreviewError"
               />
               <nav

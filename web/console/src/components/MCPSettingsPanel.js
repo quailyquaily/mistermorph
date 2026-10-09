@@ -195,65 +195,58 @@ const MCPSettingsPanel = {
   },
   template: `
     <div class="mcp-settings-panel">
-      <QCard variant="default">
-        <div class="settings-panel-shell">
-          <header class="settings-panel-head">
-            <div class="settings-panel-copy">
-              <h3 class="settings-panel-title workspace-document-title">{{ t("settings_mcp_title") }}</h3>
-              <p class="settings-panel-meta">{{ t("settings_section_mcp_meta") }}</p>
-            </div>
-            <QButton
-              class="outlined icon"
-              :title="t('settings_mcp_add_server')"
-              :aria-label="t('settings_mcp_add_server')"
-              :disabled="busy"
-              @click="openAdd"
-            >
-              <PhPlus class="icon" />
-            </QButton>
-          </header>
+      <AppSection variant="boxed" class="is-list" :title="t('settings_mcp_title')" :meta="t('settings_section_mcp_meta')">
+        <template #actions>
+          <QButton
+            class="plain xs icon"
+            :title="t('settings_mcp_add_server')"
+            :aria-label="t('settings_mcp_add_server')"
+            :disabled="busy"
+            @click="openAdd"
+          >
+            <PhPlus class="icon" />
+          </QButton>
+        </template>
+        <p v-if="readOnly" class="mcp-settings-message is-warning">{{ readOnlyMessage }}</p>
+        <p v-else-if="validationError" class="mcp-settings-message is-error">{{ validationError }}</p>
 
-          <p v-if="readOnly" class="mcp-settings-message is-warning">{{ readOnlyMessage }}</p>
-          <p v-else-if="validationError" class="mcp-settings-message is-error">{{ validationError }}</p>
+        <div class="settings-panel-body mcp-settings-body">
+          <div v-if="loading" class="mcp-settings-skeleton" aria-hidden="true">
+            <AppSkeleton variant="card" height="72px" :count="2" />
+          </div>
 
-          <div class="settings-panel-body mcp-settings-body">
-            <div v-if="loading" class="mcp-settings-skeleton" aria-hidden="true">
-              <AppSkeleton variant="card" height="72px" :count="2" />
-            </div>
+          <div v-else-if="!servers.length" class="mcp-settings-empty">
+            <PhPlugsConnected class="mcp-settings-empty-icon" />
+            <strong>{{ t("settings_mcp_empty") }}</strong>
+            <span>{{ t("settings_mcp_empty_note") }}</span>
+          </div>
 
-            <div v-else-if="!servers.length" class="mcp-settings-empty">
-              <PhPlugsConnected class="mcp-settings-empty-icon" />
-              <strong>{{ t("settings_mcp_empty") }}</strong>
-              <span>{{ t("settings_mcp_empty_note") }}</span>
-            </div>
-
-            <div v-else class="settings-toggle-list mcp-server-list">
-              <section v-for="(server, index) in servers" :key="server._key" class="settings-toggle-row mcp-server-row">
-                <div class="settings-toggle-copy mcp-server-copy">
-                  <strong class="settings-toggle-title">{{ server.name }}</strong>
-                  <span class="settings-toggle-note">{{ server.type === 'http' ? server.url : server.command }}</span>
-                  <span v-if="server.on_demand" class="settings-toggle-note">{{ t("settings_mcp_on_demand_hint", { name: server.name }) }}</span>
-                </div>
-                <div class="settings-toggle-actions">
-                  <QButton
-                    class="plain xs icon"
-                    :title="t('action_edit')"
-                    :aria-label="t('action_edit') + ': ' + server.name"
-                    :disabled="busy"
-                    @click="openEdit(index)"
-                  ><PhGearSix class="icon" /></QButton>
-                  <QSwitch
-                    :modelValue="server.enable !== false"
-                    :disabled="busy"
-                    :aria-label="server.name"
-                    @update:modelValue="setServerEnabled(index, $event)"
-                  />
-                </div>
-              </section>
-            </div>
+          <div v-else class="settings-toggle-list mcp-server-list">
+            <section v-for="(server, index) in servers" :key="server._key" class="settings-toggle-row mcp-server-row">
+              <div class="settings-toggle-copy mcp-server-copy">
+                <strong class="settings-toggle-title">{{ server.name }}</strong>
+                <span class="settings-toggle-note">{{ server.type === 'http' ? server.url : server.command }}</span>
+                <span v-if="server.on_demand" class="settings-toggle-note">{{ t("settings_mcp_on_demand_hint", { name: server.name }) }}</span>
+              </div>
+              <div class="settings-toggle-actions">
+                <QButton
+                  class="plain xs icon"
+                  :title="t('action_edit')"
+                  :aria-label="t('action_edit') + ': ' + server.name"
+                  :disabled="busy"
+                  @click="openEdit(index)"
+                ><PhGearSix class="icon" /></QButton>
+                <QSwitch
+                  :modelValue="server.enable !== false"
+                  :disabled="busy"
+                  :aria-label="server.name"
+                  @update:modelValue="setServerEnabled(index, $event)"
+                />
+              </div>
+            </section>
           </div>
         </div>
-      </QCard>
+      </AppSection>
 
       <SettingDialog
         v-model="dialogOpen"

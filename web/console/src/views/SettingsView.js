@@ -1,6 +1,6 @@
 import { computed, nextTick, onMounted, onUnmounted, provide, reactive, ref, watch } from "vue";
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from "vue-router";
-import { useToast } from "quail-ui";
+import { useNotice } from "../core/notices";
 import { captureUnsavedScopes, mergeConfigUpdates, restoreUnsavedScopes } from "../core/settings-save.js";
 import "./SettingsView.css";
 
@@ -752,7 +752,7 @@ const SettingsView = {
   },
   setup() {
     const t = translate;
-    const toast = useToast();
+    const notice = useNotice();
     const router = useRouter();
     const route = useRoute();
     const lang = computed(() => localeState.lang);
@@ -1774,7 +1774,7 @@ const SettingsView = {
             return;
           }
         }
-        toast.success(settingsSavedMessage({ apply_mode: takeSavedApplyMode() }));
+        notice.success(settingsSavedMessage({ apply_mode: takeSavedApplyMode() }));
       } finally {
         sectionSaving.value = false;
       }
@@ -2608,9 +2608,9 @@ const SettingsView = {
           invalidateConsoleSetupReadiness();
         }
         await loadEndpoints();
-        toast.success(t("msg_delete_success"));
+        notice.success(t("msg_delete_success"));
       } catch (e) {
-        toast.error(agentSettingsErrorMessage(e, targetEndpointRef, "msg_delete_failed"));
+        notice.error(agentSettingsErrorMessage(e, targetEndpointRef, "msg_delete_failed"));
       } finally {
         agentSaving.value = false;
         agentSavingTarget.value = "";
@@ -2972,7 +2972,7 @@ const SettingsView = {
         if (!isCurrentAgentSettingsRequest(requestSeq, targetEndpointRef)) {
           return;
         }
-        toast.error(agentSettingsErrorMessage(e, targetEndpointRef, "msg_load_failed"));
+        notice.error(agentSettingsErrorMessage(e, targetEndpointRef, "msg_load_failed"));
       } finally {
         if (isCurrentAgentSettingsRequest(requestSeq, targetEndpointRef)) {
           agentLoading.value = false;
@@ -3372,7 +3372,7 @@ const SettingsView = {
         applyConsolePayload(data);
       } catch (e) {
         if (isCurrentConsoleSettingsRequest(requestSeq, targetEndpointRef)) {
-          toast.error(e.message || t("msg_load_failed"));
+          notice.error(e.message || t("msg_load_failed"));
         }
       } finally {
         if (isCurrentConsoleSettingsRequest(requestSeq, targetEndpointRef)) {
@@ -3397,7 +3397,7 @@ const SettingsView = {
         desktopSettingsLoaded.value = true;
       } catch (e) {
         if (isCurrentDesktopSettingsRequest(requestSeq, targetEndpointRef)) {
-          toast.error(e.message || t("msg_load_failed"));
+          notice.error(e.message || t("msg_load_failed"));
         }
       } finally {
         if (isCurrentDesktopSettingsRequest(requestSeq, targetEndpointRef)) {
@@ -3420,7 +3420,7 @@ const SettingsView = {
         systemSettingsLoaded.value = true;
       } catch (e) {
         if (targetEndpointRef === settingsEndpointRef.value) {
-          toast.error(e?.message || t("msg_load_failed"));
+          notice.error(e?.message || t("msg_load_failed"));
         }
       } finally {
         if (targetEndpointRef === settingsEndpointRef.value) {
@@ -3525,7 +3525,7 @@ const SettingsView = {
           return;
         }
         personaErr.value = e.message || t("msg_load_failed");
-        toast.error(personaErr.value);
+        notice.error(personaErr.value);
       } finally {
         if (isCurrentPersonaSettingsRequest(requestSeq, targetEndpointRef)) {
           personaLoading.value = false;
@@ -3576,11 +3576,11 @@ const SettingsView = {
         }
         personaOk.value = t("msg_save_success");
         noteSavedApplyMode(null);
-        if (notify) toast.success(personaOk.value);
+        if (notify) notice.success(personaOk.value);
         return true;
       } catch (e) {
         personaErr.value = e.message || t("msg_save_failed");
-        toast.error(personaErr.value);
+        notice.error(personaErr.value);
         return false;
       } finally {
         personaSaving.value = false;
@@ -3605,10 +3605,10 @@ const SettingsView = {
         await loadPersonaAvatar(targetEndpointRef);
         dispatchPersonaAvatarUpdated();
         personaOk.value = t("msg_save_success");
-        toast.success(personaOk.value);
+        notice.success(personaOk.value);
       } catch (e) {
         personaErr.value = e.message || t("msg_save_failed");
-        toast.error(personaErr.value);
+        notice.error(personaErr.value);
       } finally {
         personaAvatarBusy.value = false;
       }
@@ -3629,10 +3629,10 @@ const SettingsView = {
         setPersonaAvatarObjectURL("");
         dispatchPersonaAvatarUpdated();
         personaOk.value = t("msg_delete_success");
-        toast.success(personaOk.value);
+        notice.success(personaOk.value);
       } catch (e) {
         personaErr.value = e.message || t("msg_delete_failed");
-        toast.error(personaErr.value);
+        notice.error(personaErr.value);
       } finally {
         personaAvatarBusy.value = false;
       }
@@ -4291,7 +4291,7 @@ const SettingsView = {
         }
         applyConsolePayload(data, { savedScopes: [] });
       } catch (e) {
-        toast.error(e.message || t("msg_load_failed"));
+        notice.error(e.message || t("msg_load_failed"));
       }
     }
 
@@ -4312,7 +4312,7 @@ const SettingsView = {
       }
       const validationError = profileValidationError(profile);
       if (validationError) {
-        toast.error(validationError);
+        notice.error(validationError);
         return false;
       }
       if (profileSaveDisabled(profile)) {
@@ -4371,10 +4371,10 @@ const SettingsView = {
         }
         await loadEndpoints();
         noteSavedApplyMode(payload);
-        if (notify) toast.success(settingsSavedMessage(payload));
+        if (notify) notice.success(settingsSavedMessage(payload));
         return true;
       } catch (e) {
-        toast.error(agentSettingsErrorMessage(e, targetEndpointRef, "msg_save_failed"));
+        notice.error(agentSettingsErrorMessage(e, targetEndpointRef, "msg_save_failed"));
         return false;
       } finally {
         agentSaving.value = false;
@@ -4444,10 +4444,10 @@ const SettingsView = {
           mcpDirty.value = false;
         }
         noteSavedApplyMode(payload);
-        if (notify) toast.success(t("msg_save_success"));
+        if (notify) notice.success(t("msg_save_success"));
         return true;
       } catch (e) {
-        toast.error(agentSettingsErrorMessage(e, targetEndpointRef, "msg_save_failed"));
+        notice.error(agentSettingsErrorMessage(e, targetEndpointRef, "msg_save_failed"));
         return false;
       } finally {
         agentSaving.value = false;
@@ -4500,11 +4500,11 @@ const SettingsView = {
           typeof payload.config_path === "string" ? payload.config_path : consoleConfigPath.value;
         applyConsolePayload(payload, { savedScopes: targets[0] === "all" ? known : targets });
         noteSavedApplyMode(payload);
-        if (notify) toast.success(settingsSavedMessage(payload));
+        if (notify) notice.success(settingsSavedMessage(payload));
         return true;
       } catch (e) {
         if (isCurrentConsoleSettingsRequest(requestSeq, targetEndpointRef)) {
-          toast.error(e.message || t("msg_save_failed"));
+          notice.error(e.message || t("msg_save_failed"));
         }
         return false;
       } finally {
@@ -4569,7 +4569,7 @@ const SettingsView = {
           systemFieldStates.value = fieldStates;
         }
         noteSavedApplyMode(payload);
-        if (notify) toast.success(settingsSavedMessage(payload));
+        if (notify) notice.success(settingsSavedMessage(payload));
         return true;
       } catch (e) {
         if (e?.status === 409 && targetEndpointRef === settingsEndpointRef.value) {
@@ -4581,7 +4581,7 @@ const SettingsView = {
             await loadSystemSettings();
           }
         }
-        toast.error(e?.message || t("msg_save_failed"));
+        notice.error(e?.message || t("msg_save_failed"));
         return false;
       } finally {
         if (scope === "agent") {
@@ -4615,7 +4615,7 @@ const SettingsView = {
         applyConsolePayload(payload, { savedScopes: [] });
         onComplete?.();
         if (target === "endpoints") await loadEndpoints().catch(() => {});
-        toast.success(settingsSavedMessage(payload));
+        notice.success(settingsSavedMessage(payload));
       } catch (e) {
         if (targetEndpointRef !== settingsEndpointRef.value) return;
         if (target === "endpoints") {
@@ -4631,7 +4631,7 @@ const SettingsView = {
         if (e?.status === 409) {
           await loadConsoleSettings();
         }
-        toast.error(e?.message || t("msg_save_failed"));
+        notice.error(e?.message || t("msg_save_failed"));
       } finally {
         consoleSaving.value = false;
         consoleSavingTarget.value = "";
@@ -4673,7 +4673,7 @@ const SettingsView = {
           settingsConfigRevision.value = payload.config_revision;
         }
       } catch (e) {
-        toast.error(e.message || t("msg_save_failed"));
+        notice.error(e.message || t("msg_save_failed"));
         await loadDesktopSettings();
       } finally {
         autoUpdateSaving.value = false;
@@ -4744,7 +4744,7 @@ const SettingsView = {
         const copied = await copyTextToClipboard(checksum);
         if (copied) {
           desktopChecksumCopied.value = true;
-          toast.success(t("settings_desktop_update_checksum_copied"));
+          notice.success(t("settings_desktop_update_checksum_copied"));
           if (desktopChecksumCopyTimer) {
             window.clearTimeout(desktopChecksumCopyTimer);
           }
@@ -4754,7 +4754,7 @@ const SettingsView = {
           }, 1200);
         }
       } catch (e) {
-        toast.error(e.message || t("msg_save_failed"));
+        notice.error(e.message || t("msg_save_failed"));
       }
     }
 
@@ -5595,198 +5595,191 @@ const SettingsView = {
           <div v-if="selectedSection.id === 'agent'" class="settings-panel-body settings-panel-body-plain">
             <div class="settings-channels settings-profiles-layout" :class="{ 'has-pane': openedProfile && !isMobile }">
             <div class="settings-profiles-main">
-            <QCard variant="default">
-              <div class="settings-panel-shell">
-                <header class="settings-panel-head settings-llm-panel-head">
-                  <div class="settings-panel-copy">
-                    <h3 class="settings-panel-title workspace-document-title">{{ t("settings_agent_block_title") }}</h3>
-                    <p class="settings-panel-meta">{{ selectedSection.meta }}</p>
-                  </div>
-                  <div class="settings-profile-actions settings-default-llm-actions">
-                    <QDropdownMenu
-                      class="settings-llm-actions-menu"
-                      :items="llmActionMenuItems()"
-                      hideSelected
-                      hideActionLabel
-                      :disabled="agentLoading || agentSaving"
-                    >
-                      <PhDotsThree class="settings-llm-actions-menu-icon" />
-                      <span class="settings-llm-actions-menu-accessible">{{ t("todo_action_more") }}</span>
-                    </QDropdownMenu>
-                  </div>
-                </header>
+            <AppSection variant="boxed" :title="t('settings_agent_block_title')" :meta="selectedSection.meta">
+              <template #actions>
+                <div class="settings-profile-actions settings-default-llm-actions">
+                  <QDropdownMenu
+                    class="settings-llm-actions-menu"
+                    variant="plain"
+                    :items="llmActionMenuItems()"
+                    hideSelected
+                    hideActionLabel
+                    :disabled="agentLoading || agentSaving"
+                  >
+                    <PhDotsThree class="settings-llm-actions-menu-icon" />
+                    <span class="settings-llm-actions-menu-accessible">{{ t("todo_action_more") }}</span>
+                  </QDropdownMenu>
+                </div>
+              </template>
+              <AppNotice
+                v-if="agentValidationVisible && agentValidationError"
+                type="error"
+                :text="agentValidationError"
+              />
 
-                <QFence
-                  v-if="agentValidationVisible && agentValidationError"
-                  type="danger"
-                  icon="PhXCircle"
-                  :text="agentValidationError"
-                />
+              <AppNotice
+                v-if="agentSettingsReadOnly"
+                type="warning"
+                :text="agentSettingsReadOnlyMessage"
+              />
 
-                <QFence
-                  v-if="agentSettingsReadOnly"
-                  type="warning"
-                  :text="agentSettingsReadOnlyMessage"
-                />
+              <div class="settings-panel-body">
+                <div class="settings-agent-stack">
+                  <section class="settings-agent-section">
+                    <LLMConfigForm
+                      :config="state.llm"
+                      :busy="agentLoading || agentSaving"
+                      :disabledReason="agentFormDisabledReason"
+                      :readOnly="agentSettingsReadOnly"
+                      :envManaged="llmEnvManaged"
+                      :secretFields="llmSecretFields"
+                      :revealPrefix="llmRevealPrefix()"
+                      :providerItems="providerItems"
+                      :reasoningEffortItems="reasoningEffortItems"
+                      :toolsEmulationItems="toolsEmulationItems"
+                      :enableAPIBasePicker="true"
+                      :enableModelPicker="true"
+                      :showCodexAuthAction="true"
+                      :codexAuthDisabled="defaultCodexAuthDisabled"
+                      :codexAuthState="codexAuthButtonState"
+                      :codexAuthTitle="codexAuthButtonTitle"
+                      :showXAIAuthAction="selectedEndpointIsConsole"
+                      :xaiAuthState="xaiAuthButtonState"
+                      :xaiAuthTitle="xaiAuthButtonTitle"
+                      :showProAuthAction="selectedEndpointIsConsole"
+                      :proAuthState="proAuthButtonState"
+                      :proAuthTitle="proAuthButtonTitle"
+                      @update-field="updateDefaultLLMField"
+                      @open-api-base-picker="openAPIBasePicker"
+                      @open-model-picker="openModelPicker"
+                      @open-codex-auth="openCodexAuthDialog"
+                      @open-xai-auth="openXAIAuthDialog"
+                      @open-pro-auth="openProAuthDialog"
+                    />
+                  </section>
 
-                <div class="settings-panel-body">
-                  <div class="settings-agent-stack">
-                    <section class="settings-agent-section">
-                      <LLMConfigForm
-                        :config="state.llm"
-                        :busy="agentLoading || agentSaving"
-                        :disabledReason="agentFormDisabledReason"
-                        :readOnly="agentSettingsReadOnly"
-                        :envManaged="llmEnvManaged"
-                        :secretFields="llmSecretFields"
-                        :revealPrefix="llmRevealPrefix()"
-                        :providerItems="providerItems"
-                        :reasoningEffortItems="reasoningEffortItems"
-                        :toolsEmulationItems="toolsEmulationItems"
-                        :enableAPIBasePicker="true"
-                        :enableModelPicker="true"
-                        :showCodexAuthAction="true"
-                        :codexAuthDisabled="defaultCodexAuthDisabled"
-                        :codexAuthState="codexAuthButtonState"
-                        :codexAuthTitle="codexAuthButtonTitle"
-                        :showXAIAuthAction="selectedEndpointIsConsole"
-                        :xaiAuthState="xaiAuthButtonState"
-                        :xaiAuthTitle="xaiAuthButtonTitle"
-                        :showProAuthAction="selectedEndpointIsConsole"
-                        :proAuthState="proAuthButtonState"
-                        :proAuthTitle="proAuthButtonTitle"
-                        @update-field="updateDefaultLLMField"
-                        @open-api-base-picker="openAPIBasePicker"
-                        @open-model-picker="openModelPicker"
-                        @open-codex-auth="openCodexAuthDialog"
-                        @open-xai-auth="openXAIAuthDialog"
-                        @open-pro-auth="openProAuthDialog"
-                      />
-                    </section>
+                  <section class="settings-agent-section">
+                    <header class="settings-agent-section-head">
+                      <div class="settings-agent-section-copy">
+                        <strong class="settings-toggle-title">{{ t("settings_agent_profiles_title") }}</strong>
+                        <p class="settings-toggle-note">{{ t("settings_agent_profiles_note") }}</p>
+                      </div>
+                    </header>
 
-                    <section class="settings-agent-section">
-                      <header class="settings-agent-section-head">
-                        <div class="settings-agent-section-copy">
-                          <strong class="settings-toggle-title">{{ t("settings_agent_profiles_title") }}</strong>
-                          <p class="settings-toggle-note">{{ t("settings_agent_profiles_note") }}</p>
-                        </div>
-                      </header>
-
-                      <div class="settings-profile-list">
-                        <div
-                          v-for="profile in state.llm.profiles.filter((item) => !item._draft)"
-                          :key="profile._key"
-                          class="settings-profile-row"
-                          :class="{ 'is-active': openProfileKey === profile._key }"
+                    <div class="settings-profile-list">
+                      <div
+                        v-for="profile in state.llm.profiles.filter((item) => !item._draft)"
+                        :key="profile._key"
+                        class="settings-profile-row"
+                        :class="{ 'is-active': openProfileKey === profile._key }"
+                      >
+                        <button
+                          type="button"
+                          class="settings-profile-row-main"
+                          :aria-pressed="openProfileKey === profile._key ? 'true' : 'false'"
+                          @click="openProfilePane(profile._key)"
                         >
-                          <button
-                            type="button"
-                            class="settings-profile-row-main"
-                            :aria-pressed="openProfileKey === profile._key ? 'true' : 'false'"
-                            @click="openProfilePane(profile._key)"
+                          <span
+                            class="settings-profile-row-icon"
+                            :title="t(profileIsInUse(profile) ? 'settings_agent_profile_status_in_use' : 'settings_agent_profile_status_available')"
                           >
-                            <span
-                              class="settings-profile-row-icon"
-                              :title="t(profileIsInUse(profile) ? 'settings_agent_profile_status_in_use' : 'settings_agent_profile_status_available')"
-                            >
-                              <span class="inference-provider-logo" :class="profileLogo(profile).className" aria-hidden="true">
-                                <img v-if="profileLogo(profile).src" class="inference-provider-logo-image" :src="profileLogo(profile).src" alt="" />
-                                <span v-else class="inference-provider-logo-fallback">{{ profileLogo(profile).text }}</span>
-                              </span>
-                              <span v-if="profileIsInUse(profile)" class="settings-profile-row-badge" aria-hidden="true"></span>
+                            <span class="inference-provider-logo" :class="profileLogo(profile).className" aria-hidden="true">
+                              <img v-if="profileLogo(profile).src" class="inference-provider-logo-image" :src="profileLogo(profile).src" alt="" />
+                              <span v-else class="inference-provider-logo-fallback">{{ profileLogo(profile).text }}</span>
                             </span>
-                            <span class="settings-profile-row-text">
-                              <span class="settings-profile-row-name">{{ profile.name || t("settings_agent_profile_placeholder") }}</span>
-                              <span class="settings-profile-row-meta">{{ profileSummary(profile) || t("settings_agent_profile_not_set") }}</span>
-                            </span>
-                            <span v-if="profileDirty(profile)" class="settings-channel-tile-dirty settings-profile-row-dirty" :title="t('settings_channel_unsaved')" :aria-label="t('settings_channel_unsaved')"></span>
-                            <PhCaretRight class="icon settings-profile-row-caret" aria-hidden="true" />
-                          </button>
-                        </div>
+                            <span v-if="profileIsInUse(profile)" class="settings-profile-row-badge" aria-hidden="true"></span>
+                          </span>
+                          <span class="settings-profile-row-text">
+                            <span class="settings-profile-row-name">{{ profile.name || t("settings_agent_profile_placeholder") }}</span>
+                            <span class="settings-profile-row-meta">{{ profileSummary(profile) || t("settings_agent_profile_not_set") }}</span>
+                          </span>
+                          <span v-if="profileDirty(profile)" class="settings-channel-tile-dirty settings-profile-row-dirty" :title="t('settings_channel_unsaved')" :aria-label="t('settings_channel_unsaved')"></span>
+                          <PhCaretRight class="icon settings-profile-row-caret" aria-hidden="true" />
+                        </button>
+                      </div>
 
-                        <QButton
-                          type="button"
-                          class="placeholder settings-profile-placeholder"
+                      <QButton
+                        type="button"
+                        class="placeholder settings-profile-placeholder"
+                        :disabled="agentLoading || agentSaving || agentSettingsReadOnly"
+                        @click="openAddProfileDialog"
+                      >
+                        <PhPlus class="icon" />
+                        {{ t("settings_agent_profile_add") }}
+                      </QButton>
+                    </div>
+                  </section>
+
+                  <section class="settings-agent-section">
+                    <header class="settings-agent-section-head">
+                      <div class="settings-agent-section-copy">
+                        <strong class="settings-toggle-title">{{ t("settings_agent_fallback_title") }}</strong>
+                        <p class="settings-toggle-note">{{ t("settings_agent_fallback_note") }}</p>
+                      </div>
+                    </header>
+
+                    <p v-if="!profileOptions.length" class="settings-agent-empty">{{ t("settings_agent_fallback_empty") }}</p>
+
+                    <div v-else class="settings-fallback-list">
+                      <div v-for="(fallbackName, index) in state.llm.fallback_profiles" :key="index" class="settings-fallback-row">
+                        <span class="settings-fallback-index">{{ index + 1 }}</span>
+                        <QDropdownMenu
+                          :key="fallbackName + '-' + index"
+                          class="settings-fallback-picker"
+                          :items="profileOptions"
+                          :initialItem="profileOptions.find((item) => item.value === fallbackName) || null"
+                          :placeholder="t('settings_agent_fallback_placeholder')"
                           :disabled="agentLoading || agentSaving || agentSettingsReadOnly"
-                          @click="openAddProfileDialog"
-                        >
-                          <PhPlus class="icon" />
-                          {{ t("settings_agent_profile_add") }}
-                        </QButton>
-                      </div>
-                    </section>
-
-                    <section class="settings-agent-section">
-                      <header class="settings-agent-section-head">
-                        <div class="settings-agent-section-copy">
-                          <strong class="settings-toggle-title">{{ t("settings_agent_fallback_title") }}</strong>
-                          <p class="settings-toggle-note">{{ t("settings_agent_fallback_note") }}</p>
-                        </div>
-                      </header>
-
-                      <p v-if="!profileOptions.length" class="settings-agent-empty">{{ t("settings_agent_fallback_empty") }}</p>
-
-                      <div v-else class="settings-fallback-list">
-                        <div v-for="(fallbackName, index) in state.llm.fallback_profiles" :key="index" class="settings-fallback-row">
-                          <span class="settings-fallback-index">{{ index + 1 }}</span>
-                          <QDropdownMenu
-                            :key="fallbackName + '-' + index"
-                            class="settings-fallback-picker"
-                            :items="profileOptions"
-                            :initialItem="profileOptions.find((item) => item.value === fallbackName) || null"
-                            :placeholder="t('settings_agent_fallback_placeholder')"
+                          @change="updateFallbackProfile(index, $event)"
+                        />
+                        <div class="settings-fallback-actions">
+                          <QButton
+                            type="button"
+                            class="outlined icon settings-fallback-action"
+                            :title="t('settings_agent_order_up')"
+                            :aria-label="t('settings_agent_order_up')"
+                            :disabled="agentLoading || agentSaving || agentSettingsReadOnly || index === 0"
+                            @click="moveFallbackProfile(index, -1)"
+                          >
+                            <PhCaretUp class="icon" />
+                          </QButton>
+                          <QButton
+                            type="button"
+                            class="outlined icon settings-fallback-action"
+                            :title="t('settings_agent_order_down')"
+                            :aria-label="t('settings_agent_order_down')"
+                            :disabled="agentLoading || agentSaving || agentSettingsReadOnly || index === state.llm.fallback_profiles.length - 1"
+                            @click="moveFallbackProfile(index, 1)"
+                          >
+                            <PhCaretDown class="icon" />
+                          </QButton>
+                          <QButton
+                            type="button"
+                            class="danger plain icon settings-fallback-action"
+                            :title="t('action_delete')"
+                            :aria-label="t('action_delete')"
                             :disabled="agentLoading || agentSaving || agentSettingsReadOnly"
-                            @change="updateFallbackProfile(index, $event)"
-                          />
-                          <div class="settings-fallback-actions">
-                            <QButton
-                              type="button"
-                              class="outlined icon settings-fallback-action"
-                              :title="t('settings_agent_order_up')"
-                              :aria-label="t('settings_agent_order_up')"
-                              :disabled="agentLoading || agentSaving || agentSettingsReadOnly || index === 0"
-                              @click="moveFallbackProfile(index, -1)"
-                            >
-                              <PhCaretUp class="icon" />
-                            </QButton>
-                            <QButton
-                              type="button"
-                              class="outlined icon settings-fallback-action"
-                              :title="t('settings_agent_order_down')"
-                              :aria-label="t('settings_agent_order_down')"
-                              :disabled="agentLoading || agentSaving || agentSettingsReadOnly || index === state.llm.fallback_profiles.length - 1"
-                              @click="moveFallbackProfile(index, 1)"
-                            >
-                              <PhCaretDown class="icon" />
-                            </QButton>
-                            <QButton
-                              type="button"
-                              class="danger plain icon settings-fallback-action"
-                              :title="t('action_delete')"
-                              :aria-label="t('action_delete')"
-                              :disabled="agentLoading || agentSaving || agentSettingsReadOnly"
-                              @click="removeFallbackProfile(index)"
-                            >
-                              <PhTrash class="icon" />
-                            </QButton>
-                          </div>
+                            @click="removeFallbackProfile(index)"
+                          >
+                            <PhTrash class="icon" />
+                          </QButton>
                         </div>
-
-                        <QButton
-                          type="button"
-                          class="placeholder settings-profile-placeholder"
-                          :disabled="agentLoading || agentSaving || agentSettingsReadOnly || !profileOptions.length"
-                          @click="addFallbackProfile"
-                        >
-                          <PhPlus class="icon" />
-                          {{ t("settings_agent_fallback_add") }}
-                        </QButton>
                       </div>
-                    </section>
-                  </div>
+
+                      <QButton
+                        type="button"
+                        class="placeholder settings-profile-placeholder"
+                        :disabled="agentLoading || agentSaving || agentSettingsReadOnly || !profileOptions.length"
+                        @click="addFallbackProfile"
+                      >
+                        <PhPlus class="icon" />
+                        {{ t("settings_agent_fallback_add") }}
+                      </QButton>
+                    </div>
+                  </section>
                 </div>
               </div>
-            </QCard>
+            </AppSection>
 
             <ConfigSettingsPanel
               v-for="group in LLM_SYSTEM_CONFIG_GROUPS"
@@ -5814,21 +5807,17 @@ const SettingsView = {
               >
                 <div class="settings-channel-pane-shell">
                   <div class="settings-channel-pane-scroll">
-                    <div class="settings-panel-shell">
-                      <header class="settings-panel-head settings-channel-panel-head">
-                        <div class="settings-panel-copy">
-                          <h3 class="settings-panel-title workspace-document-title">{{ openedProfile.name || t("settings_agent_profile_placeholder") }}</h3>
-                          <p class="settings-panel-meta">
-                            {{ t(profileIsInUse(openedProfile) ? "settings_agent_profile_status_in_use" : "settings_agent_profile_status_available") }}<template v-if="profileSummary(openedProfile)"> · {{ profileSummary(openedProfile) }}</template>
-                          </p>
-                        </div>
+                    <AppSection class="is-literal" :title="openedProfile.name || t('settings_agent_profile_placeholder')">
+                      <template #meta>
+                        {{ t(profileIsInUse(openedProfile) ? "settings_agent_profile_status_in_use" : "settings_agent_profile_status_available") }}<template v-if="profileSummary(openedProfile)"> · {{ profileSummary(openedProfile) }}</template>
+                      </template>
+                      <template #actions>
                         <div class="settings-profile-actions settings-default-llm-actions">
                           <QButton class="plain xs icon" :title="t('settings_channel_close')" :aria-label="t('settings_channel_close')" @click="closeProfilePane">
                             <PhX class="icon" />
                           </QButton>
                         </div>
-                      </header>
-
+                      </template>
                       <div class="settings-panel-body settings-profile-pane-body">
                         <div class="settings-field settings-profile-name">
                           <span class="settings-field-label">{{ t("settings_agent_profile_name_label") }}</span>
@@ -5913,7 +5902,7 @@ const SettingsView = {
                           </QButton>
                         </div>
                       </div>
-                    </div>
+                    </AppSection>
                   </div>
                   <footer v-if="sectionSaveUnits.length || sectionSaveFailed" class="settings-channel-pane-foot">
                     <p class="settings-channel-pane-foot-text" :class="{ 'is-error': sectionSaveFailed }" role="status">
@@ -5978,15 +5967,12 @@ const SettingsView = {
                   <div class="settings-channel-pane-shell">
                       <div class="settings-channel-pane-scroll">
             <template v-if="openChannel === 'telegram'">
-              <div class="settings-panel-shell">
-                <header class="settings-panel-head settings-channel-panel-head">
-                  <div class="settings-panel-copy">
-                    <h3 class="settings-panel-title workspace-document-title">{{ t("settings_console_telegram_title") }}</h3>
-                    <p class="settings-panel-meta">{{ t("settings_console_telegram_token_note") }}</p>
-                  </div>
+              <AppSection :title="t('settings_console_telegram_title')" :meta="t('settings_console_telegram_token_note')">
+                <template #actions>
                   <div class="settings-profile-actions settings-default-llm-actions">
                     <QDropdownMenu
                       class="settings-llm-actions-menu"
+                      variant="plain"
                       :items="channelActionMenuItems('telegram')"
                       hideSelected
                       hideActionLabel
@@ -5999,8 +5985,7 @@ const SettingsView = {
                       <PhX class="icon" />
                     </QButton>
                   </div>
-                </header>
-
+                </template>
                 <div class="settings-panel-body">
                   <div class="settings-form-grid">
                     <div class="settings-field is-wide">
@@ -6041,19 +6026,16 @@ const SettingsView = {
                     </div>
                   </div>
                 </div>
-              </div>
+              </AppSection>
             </template>
 
                         <template v-if="openChannel === 'slack'">
-              <div class="settings-panel-shell">
-                <header class="settings-panel-head settings-channel-panel-head">
-                  <div class="settings-panel-copy">
-                    <h3 class="settings-panel-title workspace-document-title">{{ t("settings_console_slack_title") }}</h3>
-                    <p class="settings-panel-meta">{{ t("settings_console_slack_token_note") }}</p>
-                  </div>
+              <AppSection :title="t('settings_console_slack_title')" :meta="t('settings_console_slack_token_note')">
+                <template #actions>
                   <div class="settings-profile-actions settings-default-llm-actions">
                     <QDropdownMenu
                       class="settings-llm-actions-menu"
+                      variant="plain"
                       :items="channelActionMenuItems('slack')"
                       hideSelected
                       hideActionLabel
@@ -6066,8 +6048,7 @@ const SettingsView = {
                       <PhX class="icon" />
                     </QButton>
                   </div>
-                </header>
-
+                </template>
                 <div class="settings-panel-body">
                   <div class="settings-form-grid">
                     <div class="settings-field is-wide">
@@ -6134,19 +6115,16 @@ const SettingsView = {
                     </div>
                   </div>
                 </div>
-              </div>
+              </AppSection>
             </template>
 
                         <template v-if="openChannel === 'line'">
-              <div class="settings-panel-shell">
-                <header class="settings-panel-head settings-channel-panel-head">
-                  <div class="settings-panel-copy">
-                    <h3 class="settings-panel-title workspace-document-title">{{ t("settings_console_line_title") }}</h3>
-                    <p class="settings-panel-meta">{{ t("settings_console_line_token_note") }}</p>
-                  </div>
+              <AppSection :title="t('settings_console_line_title')" :meta="t('settings_console_line_token_note')">
+                <template #actions>
                   <div class="settings-profile-actions settings-default-llm-actions">
                     <QDropdownMenu
                       class="settings-llm-actions-menu"
+                      variant="plain"
                       :items="channelActionMenuItems('line')"
                       hideSelected
                       hideActionLabel
@@ -6159,8 +6137,7 @@ const SettingsView = {
                       <PhX class="icon" />
                     </QButton>
                   </div>
-                </header>
-
+                </template>
                 <div class="settings-panel-body">
                   <div class="settings-form-grid">
                     <div class="settings-field is-wide">
@@ -6215,19 +6192,16 @@ const SettingsView = {
                     </div>
                   </div>
                 </div>
-              </div>
+              </AppSection>
             </template>
 
                         <template v-if="openChannel === 'lark'">
-              <div class="settings-panel-shell">
-                <header class="settings-panel-head settings-channel-panel-head">
-                  <div class="settings-panel-copy">
-                    <h3 class="settings-panel-title workspace-document-title">{{ t("settings_console_lark_title") }}</h3>
-                    <p class="settings-panel-meta">{{ t("settings_console_lark_token_note") }}</p>
-                  </div>
+              <AppSection :title="t('settings_console_lark_title')" :meta="t('settings_console_lark_token_note')">
+                <template #actions>
                   <div class="settings-profile-actions settings-default-llm-actions">
                     <QDropdownMenu
                       class="settings-llm-actions-menu"
+                      variant="plain"
                       :items="channelActionMenuItems('lark')"
                       hideSelected
                       hideActionLabel
@@ -6240,8 +6214,7 @@ const SettingsView = {
                       <PhX class="icon" />
                     </QButton>
                   </div>
-                </header>
-
+                </template>
                 <div class="settings-panel-body">
                   <div class="settings-form-grid">
                     <div class="settings-field is-wide">
@@ -6294,19 +6267,16 @@ const SettingsView = {
                     </div>
                   </div>
                 </div>
-              </div>
+              </AppSection>
             </template>
 
                         <template v-if="openChannel === 'mixin'">
-              <div class="settings-panel-shell">
-                <header class="settings-panel-head settings-channel-panel-head">
-                  <div class="settings-panel-copy">
-                    <h3 class="settings-panel-title workspace-document-title">{{ t("settings_console_mixin_title") }}</h3>
-                    <p class="settings-panel-meta">{{ t("settings_console_mixin_note") }}</p>
-                  </div>
+              <AppSection :title="t('settings_console_mixin_title')" :meta="t('settings_console_mixin_note')">
+                <template #actions>
                   <div class="settings-profile-actions settings-default-llm-actions">
                     <QDropdownMenu
                       class="settings-llm-actions-menu"
+                      variant="plain"
                       :items="channelActionMenuItems('mixin')"
                       hideSelected
                       hideActionLabel
@@ -6319,8 +6289,7 @@ const SettingsView = {
                       <PhX class="icon" />
                     </QButton>
                   </div>
-                </header>
-
+                </template>
                 <div class="settings-panel-body">
                   <div class="settings-form-grid">
                     <div class="settings-field is-wide">
@@ -6350,19 +6319,16 @@ const SettingsView = {
 
                   </div>
                 </div>
-              </div>
+              </AppSection>
             </template>
 
                         <template v-if="openChannel === 'discord'">
-              <div class="settings-panel-shell">
-                <header class="settings-panel-head settings-channel-panel-head">
-                  <div class="settings-panel-copy">
-                    <h3 class="settings-panel-title workspace-document-title">{{ t("settings_console_discord_title") }}</h3>
-                    <p class="settings-panel-meta">{{ t("settings_console_discord_token_note") }}</p>
-                  </div>
+              <AppSection :title="t('settings_console_discord_title')" :meta="t('settings_console_discord_token_note')">
+                <template #actions>
                   <div class="settings-profile-actions settings-default-llm-actions">
                     <QDropdownMenu
                       class="settings-llm-actions-menu"
+                      variant="plain"
                       :items="channelActionMenuItems('discord')"
                       hideSelected
                       hideActionLabel
@@ -6375,8 +6341,7 @@ const SettingsView = {
                       <PhX class="icon" />
                     </QButton>
                   </div>
-                </header>
-
+                </template>
                 <div class="settings-panel-body">
                   <div class="settings-form-grid">
                     <div class="settings-field is-wide">
@@ -6441,18 +6406,15 @@ const SettingsView = {
                     </div>
                   </div>
                 </div>
-              </div>
+              </AppSection>
             </template>
                         <template v-if="openChannel === 'wechat'">
-              <div class="settings-panel-shell">
-                <header class="settings-panel-head settings-channel-panel-head">
-                  <div class="settings-panel-copy">
-                    <h3 class="settings-panel-title workspace-document-title">{{ t("settings_console_wechat_title") }}</h3>
-                    <p class="settings-panel-meta">{{ t("settings_console_wechat_note") }}</p>
-                  </div>
+              <AppSection :title="t('settings_console_wechat_title')" :meta="t('settings_console_wechat_note')">
+                <template #actions>
                   <div class="settings-profile-actions settings-default-llm-actions">
                     <QDropdownMenu
                       class="settings-llm-actions-menu"
+                      variant="plain"
                       :items="channelActionMenuItems('wechat')"
                       hideSelected
                       hideActionLabel
@@ -6465,8 +6427,7 @@ const SettingsView = {
                       <PhX class="icon" />
                     </QButton>
                   </div>
-                </header>
-
+                </template>
                 <div class="settings-panel-body">
                   <div class="settings-form-grid">
                     <div class="settings-field is-wide">
@@ -6484,19 +6445,16 @@ const SettingsView = {
                     </div>
                   </div>
                 </div>
-              </div>
+              </AppSection>
             </template>
 
                         <template v-if="openChannel === 'whatsapp'">
-              <div class="settings-panel-shell">
-                <header class="settings-panel-head settings-channel-panel-head">
-                  <div class="settings-panel-copy">
-                    <h3 class="settings-panel-title workspace-document-title">{{ t("settings_console_whatsapp_title") }}</h3>
-                    <p class="settings-panel-meta">{{ t("settings_console_whatsapp_note") }}</p>
-                  </div>
+              <AppSection :title="t('settings_console_whatsapp_title')" :meta="t('settings_console_whatsapp_note')">
+                <template #actions>
                   <div class="settings-profile-actions settings-default-llm-actions">
                     <QDropdownMenu
                       class="settings-llm-actions-menu"
+                      variant="plain"
                       :items="channelActionMenuItems('whatsapp')"
                       hideSelected
                       hideActionLabel
@@ -6509,8 +6467,7 @@ const SettingsView = {
                       <PhX class="icon" />
                     </QButton>
                   </div>
-                </header>
-
+                </template>
                 <div class="settings-panel-body">
                   <div class="settings-form-grid">
                     <div class="settings-field is-wide">
@@ -6529,7 +6486,7 @@ const SettingsView = {
                     </div>
                   </div>
                 </div>
-              </div>
+              </AppSection>
             </template>
                     <!-- Kept mounted while the pane is closed, so a draft here is not lost. -->
                     <div
@@ -6580,106 +6537,97 @@ const SettingsView = {
           </div>
 
           <div v-else-if="selectedSection.id === 'security'" class="settings-panel-body settings-panel-body-plain">
-            <QCard variant="default">
-              <div class="settings-panel-shell">
-                <header class="settings-panel-head">
-                  <div class="settings-panel-copy">
-                    <h3 class="settings-panel-title workspace-document-title">{{ t("settings_console_guard_title") }}</h3>
-                    <p class="settings-panel-meta">{{ selectedSection.meta }}</p>
+            <AppSection variant="boxed" :title="t('settings_console_guard_title')" :meta="selectedSection.meta">
+              <div class="settings-panel-body">
+                <div class="settings-form-grid">
+                  <div class="settings-field is-wide">
+                    <span class="settings-field-label">{{ t("settings_console_guard_allowed_url_prefixes_label") }}</span>
+                    <QTextarea
+                      :modelValue="state.guard.url_fetch_allowed_url_prefixes_text"
+                      :rows="4"
+                      :placeholder="t('settings_console_guard_allowed_url_prefixes_placeholder')"
+                      :disabled="consoleLoading || consoleSaving"
+                      @update:modelValue="updateGuardField('url_fetch_allowed_url_prefixes_text', $event)"
+                    />
+                    <p class="settings-field-note">{{ t("settings_console_guard_allowed_url_prefixes_note") }}</p>
                   </div>
-                </header>
+                </div>
 
-                <div class="settings-panel-body">
-                  <div class="settings-form-grid">
-                    <div class="settings-field is-wide">
-                      <span class="settings-field-label">{{ t("settings_console_guard_allowed_url_prefixes_label") }}</span>
-                      <QTextarea
-                        :modelValue="state.guard.url_fetch_allowed_url_prefixes_text"
-                        :rows="4"
-                        :placeholder="t('settings_console_guard_allowed_url_prefixes_placeholder')"
-                        :disabled="consoleLoading || consoleSaving"
-                        @update:modelValue="updateGuardField('url_fetch_allowed_url_prefixes_text', $event)"
-                      />
-                      <p class="settings-field-note">{{ t("settings_console_guard_allowed_url_prefixes_note") }}</p>
+                <div class="settings-toggle-list">
+                  <div class="settings-toggle-row">
+                    <div class="settings-toggle-copy">
+                      <strong class="settings-toggle-title">{{ t("settings_console_guard_enabled_title") }}</strong>
+                      <span class="settings-toggle-note">{{ t("settings_console_guard_enabled_note") }}</span>
                     </div>
+                    <QSwitch
+                      :modelValue="state.guard.enabled"
+                      :disabled="consoleLoading || consoleSaving"
+                      @update:modelValue="updateGuardField('enabled', $event)"
+                    />
                   </div>
 
-                  <div class="settings-toggle-list">
-                    <div class="settings-toggle-row">
-                      <div class="settings-toggle-copy">
-                        <strong class="settings-toggle-title">{{ t("settings_console_guard_enabled_title") }}</strong>
-                        <span class="settings-toggle-note">{{ t("settings_console_guard_enabled_note") }}</span>
-                      </div>
-                      <QSwitch
-                        :modelValue="state.guard.enabled"
-                        :disabled="consoleLoading || consoleSaving"
-                        @update:modelValue="updateGuardField('enabled', $event)"
-                      />
+                  <div class="settings-toggle-row">
+                    <div class="settings-toggle-copy">
+                      <strong class="settings-toggle-title">{{ t("settings_console_guard_deny_private_ips_title") }}</strong>
+                      <span class="settings-toggle-note">{{ t("settings_console_guard_deny_private_ips_note") }}</span>
                     </div>
+                    <QSwitch
+                      :modelValue="state.guard.deny_private_ips"
+                      :disabled="consoleLoading || consoleSaving"
+                      @update:modelValue="updateGuardField('deny_private_ips', $event)"
+                    />
+                  </div>
 
-                    <div class="settings-toggle-row">
-                      <div class="settings-toggle-copy">
-                        <strong class="settings-toggle-title">{{ t("settings_console_guard_deny_private_ips_title") }}</strong>
-                        <span class="settings-toggle-note">{{ t("settings_console_guard_deny_private_ips_note") }}</span>
-                      </div>
-                      <QSwitch
-                        :modelValue="state.guard.deny_private_ips"
-                        :disabled="consoleLoading || consoleSaving"
-                        @update:modelValue="updateGuardField('deny_private_ips', $event)"
-                      />
+                  <div class="settings-toggle-row">
+                    <div class="settings-toggle-copy">
+                      <strong class="settings-toggle-title">{{ t("settings_console_guard_follow_redirects_title") }}</strong>
+                      <span class="settings-toggle-note">{{ t("settings_console_guard_follow_redirects_note") }}</span>
                     </div>
+                    <QSwitch
+                      :modelValue="state.guard.follow_redirects"
+                      :disabled="consoleLoading || consoleSaving"
+                      @update:modelValue="updateGuardField('follow_redirects', $event)"
+                    />
+                  </div>
 
-                    <div class="settings-toggle-row">
-                      <div class="settings-toggle-copy">
-                        <strong class="settings-toggle-title">{{ t("settings_console_guard_follow_redirects_title") }}</strong>
-                        <span class="settings-toggle-note">{{ t("settings_console_guard_follow_redirects_note") }}</span>
-                      </div>
-                      <QSwitch
-                        :modelValue="state.guard.follow_redirects"
-                        :disabled="consoleLoading || consoleSaving"
-                        @update:modelValue="updateGuardField('follow_redirects', $event)"
-                      />
+                  <div class="settings-toggle-row">
+                    <div class="settings-toggle-copy">
+                      <strong class="settings-toggle-title">{{ t("settings_console_guard_allow_proxy_title") }}</strong>
+                      <span class="settings-toggle-note">{{ t("settings_console_guard_allow_proxy_note") }}</span>
                     </div>
+                    <QSwitch
+                      :modelValue="state.guard.allow_proxy"
+                      :disabled="consoleLoading || consoleSaving"
+                      @update:modelValue="updateGuardField('allow_proxy', $event)"
+                    />
+                  </div>
 
-                    <div class="settings-toggle-row">
-                      <div class="settings-toggle-copy">
-                        <strong class="settings-toggle-title">{{ t("settings_console_guard_allow_proxy_title") }}</strong>
-                        <span class="settings-toggle-note">{{ t("settings_console_guard_allow_proxy_note") }}</span>
-                      </div>
-                      <QSwitch
-                        :modelValue="state.guard.allow_proxy"
-                        :disabled="consoleLoading || consoleSaving"
-                        @update:modelValue="updateGuardField('allow_proxy', $event)"
-                      />
+                  <div class="settings-toggle-row">
+                    <div class="settings-toggle-copy">
+                      <strong class="settings-toggle-title">{{ t("settings_console_guard_redaction_title") }}</strong>
+                      <span class="settings-toggle-note">{{ t("settings_console_guard_redaction_note") }}</span>
                     </div>
+                    <QSwitch
+                      :modelValue="state.guard.redaction_enabled"
+                      :disabled="consoleLoading || consoleSaving"
+                      @update:modelValue="updateGuardField('redaction_enabled', $event)"
+                    />
+                  </div>
 
-                    <div class="settings-toggle-row">
-                      <div class="settings-toggle-copy">
-                        <strong class="settings-toggle-title">{{ t("settings_console_guard_redaction_title") }}</strong>
-                        <span class="settings-toggle-note">{{ t("settings_console_guard_redaction_note") }}</span>
-                      </div>
-                      <QSwitch
-                        :modelValue="state.guard.redaction_enabled"
-                        :disabled="consoleLoading || consoleSaving"
-                        @update:modelValue="updateGuardField('redaction_enabled', $event)"
-                      />
+                  <div class="settings-toggle-row">
+                    <div class="settings-toggle-copy">
+                      <strong class="settings-toggle-title">{{ t("settings_console_guard_approvals_title") }}</strong>
+                      <span class="settings-toggle-note">{{ t("settings_console_guard_approvals_note") }}</span>
                     </div>
-
-                    <div class="settings-toggle-row">
-                      <div class="settings-toggle-copy">
-                        <strong class="settings-toggle-title">{{ t("settings_console_guard_approvals_title") }}</strong>
-                        <span class="settings-toggle-note">{{ t("settings_console_guard_approvals_note") }}</span>
-                      </div>
-                      <QSwitch
-                        :modelValue="state.guard.approvals_enabled"
-                        :disabled="consoleLoading || consoleSaving"
-                        @update:modelValue="updateGuardField('approvals_enabled', $event)"
-                      />
-                    </div>
+                    <QSwitch
+                      :modelValue="state.guard.approvals_enabled"
+                      :disabled="consoleLoading || consoleSaving"
+                      @update:modelValue="updateGuardField('approvals_enabled', $event)"
+                    />
                   </div>
                 </div>
               </div>
-            </QCard>
+            </AppSection>
 
             <ConfigSettingsPanel
               :groups="securityConfigGroups"
@@ -6770,94 +6718,85 @@ const SettingsView = {
           <div v-else-if="selectedSection.id === 'persona'" class="settings-panel-body settings-panel-body-plain">
             <QProgress v-if="personaLoading" :infinite="true" />
 
-            <QCard variant="default">
-              <div class="settings-panel-shell settings-persona-card">
-                <header class="settings-panel-head">
-                  <div class="settings-panel-copy">
-                    <h3 class="settings-panel-title workspace-document-title">{{ t("settings_persona_title") }}</h3>
-                    <p class="settings-panel-meta">{{ selectedSection.meta }}</p>
+            <AppSection variant="boxed" class="settings-persona-card" :title="t('settings_persona_title')" :meta="selectedSection.meta">
+              <div class="settings-panel-body">
+                <div class="settings-form-grid settings-persona-form">
+                  <div class="settings-field is-wide settings-persona-avatar-field">
+                    <span class="settings-field-label">{{ t("settings_persona_avatar_title") }}</span>
+                    <ImageUploadField
+                      :previewUrl="personaAvatarURL"
+                      :defaultMarkup="defaultAvatarMarkup"
+                      :disabled="personaAvatarDisabled"
+                      :busy="personaAvatarBusy"
+                      :crop="true"
+                      :outputSize="PERSONA_AVATAR_SIZE"
+                      outputType="image/webp"
+                      :outputQuality="0.9"
+                      :accept="'image/png,image/jpeg,image/webp'"
+                      :allowedTypes="personaAvatarSourceTypes"
+                      :maxBytes="PERSONA_AVATAR_MAX_SOURCE_BYTES"
+                      :dialogTitle="t('settings_persona_avatar_title')"
+                      @save="savePersonaAvatar"
+                      @delete="deletePersonaAvatar"
+                    />
                   </div>
-                </header>
 
-                <div class="settings-panel-body">
-                  <div class="settings-form-grid settings-persona-form">
-                    <div class="settings-field is-wide settings-persona-avatar-field">
-                      <span class="settings-field-label">{{ t("settings_persona_avatar_title") }}</span>
-                      <ImageUploadField
-                        :previewUrl="personaAvatarURL"
-                        :defaultMarkup="defaultAvatarMarkup"
-                        :disabled="personaAvatarDisabled"
-                        :busy="personaAvatarBusy"
-                        :crop="true"
-                        :outputSize="PERSONA_AVATAR_SIZE"
-                        outputType="image/webp"
-                        :outputQuality="0.9"
-                        :accept="'image/png,image/jpeg,image/webp'"
-                        :allowedTypes="personaAvatarSourceTypes"
-                        :maxBytes="PERSONA_AVATAR_MAX_SOURCE_BYTES"
-                        :dialogTitle="t('settings_persona_avatar_title')"
-                        @save="savePersonaAvatar"
-                        @delete="deletePersonaAvatar"
-                      />
+                  <div class="settings-field is-wide">
+                    <span class="settings-field-label">{{ t("settings_persona_identity_name_label") }}</span>
+                    <QInput
+                      v-model="state.persona.name"
+                      :placeholder="t('settings_persona_identity_name_placeholder')"
+                      :disabled="personaLoading || personaSaving"
+                    />
+                  </div>
+
+                  <div class="settings-field">
+                    <span class="settings-field-label">{{ t("settings_persona_identity_emoji_label") }}</span>
+                    <QInput
+                      v-model="state.persona.emoji"
+                      :placeholder="t('settings_persona_identity_emoji_placeholder')"
+                      :disabled="personaLoading || personaSaving"
+                    />
+                  </div>
+
+                  <div class="settings-field">
+                    <span class="settings-field-label">{{ t("settings_persona_identity_creature_label") }}</span>
+                    <QInput
+                      v-model="state.persona.creature"
+                      :placeholder="t('settings_persona_identity_creature_placeholder')"
+                      :disabled="personaLoading || personaSaving"
+                    />
+                  </div>
+
+                  <div class="settings-field is-wide">
+                    <span class="settings-field-label">{{ t("settings_persona_identity_vibe_label") }}</span>
+                    <QTextarea
+                      v-model="state.persona.vibe"
+                      :rows="4"
+                      :placeholder="t('settings_persona_identity_vibe_placeholder')"
+                      :disabled="personaLoading || personaSaving"
+                    />
+                  </div>
+
+                  <div class="settings-field is-wide settings-persona-soul-field">
+                    <div class="settings-persona-soul-label">
+                      <span class="settings-field-label">{{ t("settings_persona_soul_title") }}</span>
+                      <span class="settings-panel-meta">{{ personaEditorMeta }}</span>
                     </div>
-
-                    <div class="settings-field is-wide">
-                      <span class="settings-field-label">{{ t("settings_persona_identity_name_label") }}</span>
-                      <QInput
-                        v-model="state.persona.name"
-                        :placeholder="t('settings_persona_identity_name_placeholder')"
+                    <div class="settings-persona-soul-editor">
+                      <AppMarkdownEditor
+                        :modelValue="soulContent"
+                        height="460px"
                         :disabled="personaLoading || personaSaving"
+                        :placeholder="t('settings_persona_soul_placeholder')"
+                        :aria-label="t('settings_persona_soul_title')"
+                        @update:modelValue="updatePersonaSoulContent"
                       />
-                    </div>
-
-                    <div class="settings-field">
-                      <span class="settings-field-label">{{ t("settings_persona_identity_emoji_label") }}</span>
-                      <QInput
-                        v-model="state.persona.emoji"
-                        :placeholder="t('settings_persona_identity_emoji_placeholder')"
-                        :disabled="personaLoading || personaSaving"
-                      />
-                    </div>
-
-                    <div class="settings-field">
-                      <span class="settings-field-label">{{ t("settings_persona_identity_creature_label") }}</span>
-                      <QInput
-                        v-model="state.persona.creature"
-                        :placeholder="t('settings_persona_identity_creature_placeholder')"
-                        :disabled="personaLoading || personaSaving"
-                      />
-                    </div>
-
-                    <div class="settings-field is-wide">
-                      <span class="settings-field-label">{{ t("settings_persona_identity_vibe_label") }}</span>
-                      <QTextarea
-                        v-model="state.persona.vibe"
-                        :rows="4"
-                        :placeholder="t('settings_persona_identity_vibe_placeholder')"
-                        :disabled="personaLoading || personaSaving"
-                      />
-                    </div>
-
-                    <div class="settings-field is-wide settings-persona-soul-field">
-                      <div class="settings-persona-soul-label">
-                        <span class="settings-field-label">{{ t("settings_persona_soul_title") }}</span>
-                        <span class="settings-panel-meta">{{ personaEditorMeta }}</span>
-                      </div>
-                      <div class="settings-persona-soul-editor">
-                        <AppMarkdownEditor
-                          :modelValue="soulContent"
-                          height="460px"
-                          :disabled="personaLoading || personaSaving"
-                          :placeholder="t('settings_persona_soul_placeholder')"
-                          :aria-label="t('settings_persona_soul_title')"
-                          @update:modelValue="updatePersonaSoulContent"
-                        />
-                      </div>
                     </div>
                   </div>
                 </div>
               </div>
-            </QCard>
+            </AppSection>
           </div>
 
           <RuntimePanel v-else-if="selectedSection.id === 'runtime'" class="settings-runtime-panel" />
@@ -6865,141 +6804,123 @@ const SettingsView = {
           <SettingsCreditsPanel v-else-if="selectedSection.id === 'credits'" />
 
           <div v-else-if="selectedSection.id === 'system'" class="settings-panel-body settings-panel-body-plain">
-            <QCard variant="default">
-              <div class="settings-panel-shell">
-                <header class="settings-panel-head">
-                  <div class="settings-panel-copy">
-                    <h3 class="settings-panel-title workspace-document-title">{{ selectedSection.title }}</h3>
-                    <p class="settings-panel-meta">{{ selectedSection.meta }}</p>
+            <AppSection variant="boxed" class="is-list" :title="selectedSection.title" :meta="selectedSection.meta">
+              <div class="settings-panel-body">
+                <div class="settings-console-list">
+                  <div class="settings-console-row">
+                    <div class="settings-card-copy">
+                      <h4 class="settings-card-title">{{ t("settings_language_title") }}</h4>
+                      <p class="settings-card-note">{{ t("settings_language_hint") }}</p>
+                    </div>
+                    <QLanguageSelector class="settings-console-control" :lang="lang" :presist="true" @change="onLanguageChange" />
                   </div>
-                </header>
-
-                <div class="settings-panel-body">
-                  <div class="settings-console-list">
-                    <div class="settings-console-row">
-                      <div class="settings-card-copy">
-                        <h4 class="settings-card-title">{{ t("settings_language_title") }}</h4>
-                        <p class="settings-card-note">{{ t("settings_language_hint") }}</p>
-                      </div>
-                      <QLanguageSelector class="settings-console-control" :lang="lang" :presist="true" @change="onLanguageChange" />
+                  <div class="settings-console-row">
+                    <div class="settings-card-copy">
+                      <h4 class="settings-card-title">{{ t("settings_logs_title") }}</h4>
+                      <p class="settings-card-note">{{ t("settings_logs_hint") }}</p>
                     </div>
-                    <div class="settings-console-row">
-                      <div class="settings-card-copy">
-                        <h4 class="settings-card-title">{{ t("settings_logs_title") }}</h4>
-                        <p class="settings-card-note">{{ t("settings_logs_hint") }}</p>
-                      </div>
-                      <QButton class="outlined settings-console-control settings-console-action" @click="openLogsPage">
-                        <PhCode class="icon settings-console-action-icon" />
-                        {{ t("settings_logs_open") }}
-                      </QButton>
+                    <QButton class="outlined settings-console-control settings-console-action" @click="openLogsPage">
+                      <PhCode class="icon settings-console-action-icon" />
+                      {{ t("settings_logs_open") }}
+                    </QButton>
+                  </div>
+                  <div class="settings-console-row settings-console-row-end">
+                    <div class="settings-card-copy">
+                      <h4 class="settings-card-title">{{ t("settings_session_title") }}</h4>
+                      <p class="settings-card-note">{{ t("settings_session_hint") }}</p>
                     </div>
-                    <div class="settings-console-row settings-console-row-end">
-                      <div class="settings-card-copy">
-                        <h4 class="settings-card-title">{{ t("settings_session_title") }}</h4>
-                        <p class="settings-card-note">{{ t("settings_session_hint") }}</p>
-                      </div>
-                      <QButton class="outlined danger settings-console-control" :loading="loggingOut" @click="logout">
-                        {{ t("action_logout") }}
-                      </QButton>
-                    </div>
+                    <QButton class="outlined danger settings-console-control" :loading="loggingOut" @click="logout">
+                      {{ t("action_logout") }}
+                    </QButton>
                   </div>
                 </div>
               </div>
-            </QCard>
+            </AppSection>
 
-            <QCard variant="default">
-              <div class="settings-panel-shell">
-                <header class="settings-panel-head">
-                  <div class="settings-panel-copy">
-                    <h3 class="settings-panel-title workspace-document-title">{{ t("settings_auto_update_card_title") }}</h3>
-                    <p class="settings-panel-meta">{{ t("settings_auto_update_card_hint") }}</p>
+            <AppSection variant="boxed" class="is-list" :title="t('settings_auto_update_card_title')" :meta="t('settings_auto_update_card_hint')">
+              <div class="settings-panel-body">
+                <div class="settings-console-list">
+                  <div class="settings-console-row">
+                    <div class="settings-card-copy">
+                      <h4 class="settings-card-title">{{ t("settings_update_channel_title") }}</h4>
+                      <p class="settings-card-note">{{ t("settings_update_channel_hint") }}</p>
+                    </div>
+                    <SettingSelect
+                      class="settings-console-control settings-update-channel-select"
+                      :modelValue="autoUpdateChannel"
+                      :options="updateChannelOptions"
+                      :label="t('settings_update_channel_title')"
+                      :disabled="desktopLoading || autoUpdateSaving"
+                      @update:modelValue="setAutoUpdateChannel"
+                    />
                   </div>
-                </header>
+                  <div class="settings-console-row">
+                    <div class="settings-card-copy">
+                      <h4 class="settings-card-title">{{ t("settings_update_auto_title") }}</h4>
+                      <p class="settings-card-note">{{ t("settings_update_auto_hint") }}</p>
+                    </div>
+                    <QSwitch
+                      :modelValue="autoUpdateEnabled"
+                      :disabled="desktopLoading || autoUpdateSaving"
+                      @update:modelValue="setAutoUpdateEnabled"
+                    />
+                  </div>
+                  <div class="settings-console-row" :class="{ 'settings-console-row-end': !desktopUpdateHasRelease }">
+                    <div class="settings-card-copy">
+                      <h4 class="settings-card-title">{{ t("settings_update_version_title") }}</h4>
+                      <p class="settings-card-note">{{ desktopInstalledText }}</p>
+                      <p class="settings-card-note settings-update-state" :class="'is-' + desktopUpdateState" role="status" aria-live="polite">
+                        {{ desktopUpdateStateText }}
+                      </p>
+                    </div>
+                    <QButton
+                      class="outlined settings-console-control settings-console-action"
+                      :loading="desktopChecking"
+                      :disabled="desktopCheckDisabled"
+                      @click="runDesktopUpdateCheck"
+                    >
+                      <PhArrowClockwise class="icon settings-console-action-icon" />
+                      {{ t("settings_update_check_action") }}
+                    </QButton>
+                  </div>
 
-                <div class="settings-panel-body">
-                  <div class="settings-console-list">
-                    <div class="settings-console-row">
-                      <div class="settings-card-copy">
-                        <h4 class="settings-card-title">{{ t("settings_update_channel_title") }}</h4>
-                        <p class="settings-card-note">{{ t("settings_update_channel_hint") }}</p>
-                      </div>
-                      <SettingSelect
-                        class="settings-console-control settings-update-channel-select"
-                        :modelValue="autoUpdateChannel"
-                        :options="updateChannelOptions"
-                        :label="t('settings_update_channel_title')"
-                        :disabled="desktopLoading || autoUpdateSaving"
-                        @update:modelValue="setAutoUpdateChannel"
-                      />
-                    </div>
-                    <div class="settings-console-row">
-                      <div class="settings-card-copy">
-                        <h4 class="settings-card-title">{{ t("settings_update_auto_title") }}</h4>
-                        <p class="settings-card-note">{{ t("settings_update_auto_hint") }}</p>
-                      </div>
-                      <QSwitch
-                        :modelValue="autoUpdateEnabled"
-                        :disabled="desktopLoading || autoUpdateSaving"
-                        @update:modelValue="setAutoUpdateEnabled"
-                      />
-                    </div>
-                    <div class="settings-console-row" :class="{ 'settings-console-row-end': !desktopUpdateHasRelease }">
-                      <div class="settings-card-copy">
-                        <h4 class="settings-card-title">{{ t("settings_update_version_title") }}</h4>
-                        <p class="settings-card-note">{{ desktopInstalledText }}</p>
-                        <p class="settings-card-note settings-update-state" :class="'is-' + desktopUpdateState" role="status" aria-live="polite">
-                          {{ desktopUpdateStateText }}
-                        </p>
-                      </div>
-                      <QButton
-                        class="outlined settings-console-control settings-console-action"
-                        :loading="desktopChecking"
-                        :disabled="desktopCheckDisabled"
-                        @click="runDesktopUpdateCheck"
-                      >
-                        <PhArrowClockwise class="icon settings-console-action-icon" />
-                        {{ t("settings_update_check_action") }}
-                      </QButton>
-                    </div>
-
-                    <div v-if="desktopUpdateHasRelease" class="settings-console-row settings-console-row-end settings-update-release">
-                      <div class="settings-card-copy settings-update-release-copy">
-                        <h4 class="settings-card-title">{{ desktopUpdateReleaseTitle }}</h4>
-                        <p class="settings-card-note settings-update-release-meta">
-                          <span v-if="desktopUpdateReleaseDate">{{ desktopUpdateReleaseDate }}</span>
-                          <button type="button" class="settings-field-link settings-update-link" @click="openDesktopUpdateReleases">
-                            {{ t("settings_update_all_releases") }}
-                            <PhArrowUpRight class="icon settings-field-link-icon" />
-                          </button>
-                        </p>
-                        <MarkdownContent v-if="desktopUpdateNotesSource" class="settings-update-notes" :source="desktopUpdateNotesSource" />
-                        <p v-else class="settings-card-note">{{ t("settings_desktop_update_changelog_empty") }}</p>
-                        <button
-                          v-if="desktopUpdateChecksum"
-                          type="button"
-                          class="settings-field-link settings-update-link"
-                          :title="desktopUpdateChecksum"
-                          :aria-label="t('settings_desktop_update_checksum_copy_title')"
-                          @click="copyDesktopUpdateChecksum"
-                        >
-                          SHA256 <code class="settings-update-checksum">{{ desktopUpdateChecksumShort }}</code>
-                          <PhCheckCircle v-if="desktopChecksumCopied" class="icon settings-field-link-icon" />
-                          <PhCopy v-else class="icon settings-field-link-icon" />
+                  <div v-if="desktopUpdateHasRelease" class="settings-console-row settings-console-row-end settings-update-release">
+                    <div class="settings-card-copy settings-update-release-copy">
+                      <h4 class="settings-card-title">{{ desktopUpdateReleaseTitle }}</h4>
+                      <p class="settings-card-note settings-update-release-meta">
+                        <span v-if="desktopUpdateReleaseDate">{{ desktopUpdateReleaseDate }}</span>
+                        <button type="button" class="settings-field-link settings-update-link" @click="openDesktopUpdateReleases">
+                          {{ t("settings_update_all_releases") }}
+                          <PhArrowUpRight class="icon settings-field-link-icon" />
                         </button>
-                      </div>
-                      <QButton
-                        class="outlined settings-console-control settings-console-action"
-                        :disabled="desktopUpdateDownloadDisabled"
-                        @click="openDesktopUpdateDownload"
+                      </p>
+                      <MarkdownContent v-if="desktopUpdateNotesSource" class="settings-update-notes" :source="desktopUpdateNotesSource" />
+                      <p v-else class="settings-card-note">{{ t("settings_desktop_update_changelog_empty") }}</p>
+                      <button
+                        v-if="desktopUpdateChecksum"
+                        type="button"
+                        class="settings-field-link settings-update-link"
+                        :title="desktopUpdateChecksum"
+                        :aria-label="t('settings_desktop_update_checksum_copy_title')"
+                        @click="copyDesktopUpdateChecksum"
                       >
-                        <PhCloudArrowDown class="icon settings-console-action-icon" />
-                        {{ t("settings_desktop_update_download_action") }}
-                      </QButton>
+                        SHA256 <code class="settings-update-checksum">{{ desktopUpdateChecksumShort }}</code>
+                        <PhCheckCircle v-if="desktopChecksumCopied" class="icon settings-field-link-icon" />
+                        <PhCopy v-else class="icon settings-field-link-icon" />
+                      </button>
                     </div>
+                    <QButton
+                      class="outlined settings-console-control settings-console-action"
+                      :disabled="desktopUpdateDownloadDisabled"
+                      @click="openDesktopUpdateDownload"
+                    >
+                      <PhCloudArrowDown class="icon settings-console-action-icon" />
+                      {{ t("settings_desktop_update_download_action") }}
+                    </QButton>
                   </div>
                 </div>
               </div>
-            </QCard>
+            </AppSection>
 
             <ConfigSettingsPanel
               v-for="group in SYSTEM_CONFIG_GROUPS"
@@ -7035,23 +6956,14 @@ const SettingsView = {
           </div>
 
           <div v-else class="settings-panel-body settings-panel-body-plain">
-            <QCard variant="default">
-              <div class="settings-panel-shell">
-              <header class="settings-panel-head">
-                <div class="settings-panel-copy">
-                  <h3 class="settings-panel-title workspace-document-title">{{ selectedSection.title }}</h3>
-                  <p class="settings-panel-meta">{{ selectedSection.meta }}</p>
-                </div>
-              </header>
-
-              <QFence
+            <AppSection variant="boxed" :title="selectedSection.title" :meta="selectedSection.meta">
+              <AppNotice
                 v-if="activeSaveKind === 'agent' && agentValidationVisible && agentValidationError"
-                type="danger"
-                icon="PhXCircle"
+                type="error"
                 :text="agentValidationError"
               />
 
-              <QFence
+              <AppNotice
                 v-if="activeSaveKind === 'agent' && agentSettingsReadOnly"
                 type="warning"
                 :text="agentSettingsReadOnlyMessage"
@@ -7153,8 +7065,7 @@ const SettingsView = {
                 </div>
 
               </div>
-              </div>
-            </QCard>
+            </AppSection>
           </div>
           <Transition name="settings-save-bar">
           <div v-if="sectionSaveUnits.length || sectionSaveFailed" class="settings-save-bar" role="region" :aria-label="t('settings_save_bar_label')">

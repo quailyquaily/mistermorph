@@ -55,7 +55,7 @@ const StoreSkillDetail = {
         <QButton v-else class="primary" :loading="installBusy" @click="$emit('install', false)">{{ t('skills_store_install') }}</QButton>
         <p v-if="!skill.installed || skill.updateAvailable" class="store-panel-note">{{ t('skills_store_install_note') }}</p>
       </div>
-      <QFence v-if="installErr" type="danger" icon="PhXCircle" :text="installErr" />
+      <AppNotice v-if="installErr" type="error" :text="installErr" />
 
       <dl class="ui-property-list store-properties">
         <div v-if="skill.version" class="ui-property-row">

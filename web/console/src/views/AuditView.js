@@ -1000,7 +1000,7 @@ const AuditView = {
           </div>
           <div class="audit-index-scroll">
             <QProgress v-if="loading && fileItems.length === 0" :infinite="true" />
-            <QFence v-if="err && isMobile && !showLedgerPane" class="audit-index-error" type="danger" :text="err" />
+            <AppNotice v-if="err && isMobile && !showLedgerPane" class="audit-index-error" type="error" :text="err" />
             <div class="workspace-sidebar-list">
               <button v-for="item in currentFiles" :key="item.key" type="button" :class="auditFileClass(item)"
                 :aria-pressed="isSelectedFileItem(item)" @click="onFileChange(item)">
@@ -1079,7 +1079,7 @@ const AuditView = {
           </div>
           <div class="audit-ledger-content" :aria-busy="isTasksStreamSelected ? taskLoading : loading">
             <template v-if="!isTasksStreamSelected">
-              <QFence v-if="err" type="danger" icon="PhXCircle" :text="err" />
+              <AppNotice v-if="err" type="error" :text="err" />
               <div v-if="updatedAt" class="audit-feed-meta">
                 <span>{{ filterText ? t('audit_filtered_count', { count: filteredItemCount, total: auditItemCount }) : t('audit_page_count', { count: auditItemCount }) }}</span>
                 <span>{{ t('audit_updated', { value: updatedAt }) }}</span>
@@ -1146,7 +1146,7 @@ const AuditView = {
               </div>
             </template>
             <template v-else>
-              <QFence v-if="taskErr" type="danger" icon="PhXCircle" :text="taskErr" />
+              <AppNotice v-if="taskErr" type="error" :text="taskErr" />
               <div class="audit-task-stream">
                 <details v-for="item in taskItems" :key="item.id" class="audit-task" :class="{ 'is-arrived': isArrived('task:' + item.id) }">
                   <summary class="audit-event-summary">

@@ -205,7 +205,7 @@
   width: 100%;
   min-width: 0;
   padding: 8px 10px;
-  border: 1px solid var(--q-card-border-color);
+  border: 1px solid var(--line);
   border-radius: 2px;
   background: var(--q-bg-white, var(--bg-1));
   color: var(--text-0);
@@ -218,7 +218,7 @@
 }
 
 .model-routes-node.is-route:hover {
-  border-color: color-mix(in srgb, var(--q-c-blue) 45%, var(--q-card-border-color));
+  border-color: color-mix(in srgb, var(--q-c-blue) 45%, var(--line));
 }
 
 .model-routes-node.is-selected {

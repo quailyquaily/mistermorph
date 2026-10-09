@@ -1,4 +1,4 @@
-import { useToast } from "quail-ui";
+import { useNotice } from "../core/notices";
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import "./RuntimeView.css";
 
@@ -81,7 +81,7 @@ const RuntimePanel = {
   },
   setup() {
     const t = translate;
-    const toast = useToast();
+    const notice = useNotice();
     const err = ref("");
     const loading = ref(true);
     const loadedEndpointRef = ref("");
@@ -378,13 +378,13 @@ const RuntimePanel = {
         pokeDialogOpen.value = false;
         pokeBody.value = "";
         pokeError.value = "";
-        toast.success(t("runtime_poke_ok"));
+        notice.success(t("runtime_poke_ok"));
       } catch (e) {
         const message = e.message || t("msg_load_failed");
         if (e?.status === 400 || e?.status === 413) {
           pokeError.value = message;
         } else {
-          toast.error(message);
+          notice.error(message);
         }
       } finally {
         poking.value = false;

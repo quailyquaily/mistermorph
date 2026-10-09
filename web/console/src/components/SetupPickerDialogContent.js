@@ -186,7 +186,7 @@ const SetupPickerDialogContent = {
       />
 
       <QProgress v-if="loading" :infinite="true" />
-      <QFence v-if="error" type="danger" icon="PhXCircle" :text="error" />
+      <AppNotice v-if="error" type="error" :text="error" />
 
       <div v-if="!loading" class="setup-picker-list" role="listbox">
         <template v-for="group in rows.groups" :key="group.id">

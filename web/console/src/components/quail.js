@@ -8,7 +8,6 @@ export {
   QDialog,
   QDivider,
   QDropdownMenu,
-  QFence,
   QInput,
   QLanguageSelector,
   QMenu,

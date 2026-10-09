@@ -173,10 +173,9 @@ const DeviceAuthDialogContent = {
     <section class="codex-auth-dialog">
       <p v-if="introText" class="codex-auth-intro">{{ introText }}</p>
 
-      <QFence
+      <AppNotice
         v-if="error"
-        type="danger"
-        icon="PhXCircle"
+        type="error"
         :text="error"
       />
 
@@ -197,10 +196,9 @@ const DeviceAuthDialogContent = {
         </article>
       </div>
 
-      <QFence
+      <AppNotice
         v-if="status?.file_mode_ok === false"
-        type="danger"
-        icon="PhXCircle"
+        type="error"
         :text="status?.file_mode_warning || ''"
       />
 

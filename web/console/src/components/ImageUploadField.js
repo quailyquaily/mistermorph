@@ -1,5 +1,5 @@
 import { computed, ref, watch } from "vue";
-import { useToast } from "quail-ui";
+import { useNotice } from "../core/notices";
 import "./ImageUploadField.css";
 
 import AppDialogShell from "./AppDialogShell";
@@ -67,7 +67,7 @@ const ImageUploadField = {
   emits: ["save", "delete"],
   setup(props, { emit }) {
     const t = translate;
-    const toast = useToast();
+    const notice = useNotice();
     const fileInput = ref(null);
     const selectedFile = ref(null);
     const adjustDialogOpen = ref(false);
@@ -101,11 +101,11 @@ const ImageUploadField = {
       }
       const allowed = Array.isArray(props.allowedTypes) ? props.allowedTypes : [];
       if (allowed.length > 0 && !allowed.includes(file.type)) {
-        toast.error(t("image_upload_error_type"));
+        notice.error(t("image_upload_error_type"));
         return false;
       }
       if (Number(props.maxBytes) > 0 && file.size > Number(props.maxBytes)) {
-        toast.error(t("image_upload_error_size"));
+        notice.error(t("image_upload_error_size"));
         return false;
       }
       return true;

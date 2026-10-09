@@ -225,7 +225,7 @@
   overscroll-behavior: contain;
 }
 
-.audit-ledger-content > .q-fence {
+.audit-ledger-content > .app-notice {
   margin: 14px 0;
 }
 

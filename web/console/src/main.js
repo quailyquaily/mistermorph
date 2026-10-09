@@ -6,6 +6,8 @@ import "./styles/base.css";
 import AppLayout from "./layouts/AppLayout";
 import { dismissBootSplash } from "./components/BootSplash";
 import * as quailComponents from "./components/quail";
+import AppNotice from "./components/AppNotice";
+import AppSection from "./components/AppSection";
 import { authState, endpointState, localeState } from "./core/context";
 import { installDesktopRuntimeMode, reportDesktopFrontendReady } from "./core/desktop-runtime";
 import { installExternalLinkHandler } from "./core/external-links";
@@ -34,6 +36,8 @@ app.use(router);
 for (const [name, component] of Object.entries({ ...quailComponents, ...phosphorIcons })) {
   app.component(name, component);
 }
+app.component("AppNotice", AppNotice);
+app.component("AppSection", AppSection);
 // Preserve the full plugin's outside-click behavior without registering it.
 if (!window.__quailui_click_handler_installed) {
   document.body.addEventListener("click", closePopupMenu);

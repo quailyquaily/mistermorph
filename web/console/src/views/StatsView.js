@@ -373,7 +373,7 @@ const StatsView = {
       <QProgress v-if="loading" :infinite="true" />
 
       <section class="stats-page">
-        <header class="stats-hero block-default">
+        <AppSection variant="boxed" tag="header" class="stats-hero">
           <div class="stats-hero-copy">
             <p v-if="summaryMetaItems.length > 0" class="stats-hero-meta">
               <span
@@ -433,7 +433,7 @@ const StatsView = {
               </section>
             </div>
           </div>
-        </header>
+        </AppSection>
 
         <StatsDailyPanel />
 
@@ -449,17 +449,14 @@ const StatsView = {
           <div v-if="selectedStatsTab && selectedStatsTab.id === 'api_hosts'" class="stats-section-panel">
             <div v-if="visibleHosts.length === 0" class="stats-empty">{{ t("stats_no_data") }}</div>
             <div v-else class="stats-host-list">
-              <article v-for="host in visibleHosts" :key="host.api_host" class="stats-host-block">
-                <header class="stats-host-head">
-                  <div class="stats-host-ident">
-                    <span class="stats-host-eyebrow">{{ t("stats_api_host") }}</span>
-                    <code class="stats-host-name">{{ host.api_host }}</code>
-                  </div>
-                  <div class="stats-request-pill">
+              <AppSection v-for="host in visibleHosts" :key="host.api_host" tag="article" class="stats-host-block" :title="t('stats_api_host')">
+                <template #meta>
+                  <code class="stats-host-name">{{ host.api_host }}</code>
+                  <span class="stats-request-pill">
                     <span class="stats-request-pill-label">{{ t("stats_requests") }}</span>
                     <span class="stats-request-pill-value">{{ formatNumber(host.requests) }}</span>
-                  </div>
-                </header>
+                  </span>
+                </template>
 
                 <section class="stats-band stats-band-cost">
                   <header class="stats-band-head">
@@ -541,20 +538,14 @@ const StatsView = {
                     </table>
                   </div>
                 </div>
-              </article>
+              </AppSection>
             </div>
           </div>
 
           <div v-else class="stats-section-panel">
             <div v-if="visibleModels.length === 0" class="stats-empty">{{ t("stats_no_data") }}</div>
             <div v-else class="stats-host-list">
-              <section class="stats-host-block">
-                <header class="stats-host-head">
-                  <div class="stats-host-ident">
-                    <span class="stats-host-eyebrow">{{ t("stats_group_models") }}</span>
-                    <span class="stats-host-name">{{ t("stats_model") }}</span>
-                  </div>
-                </header>
+              <AppSection class="stats-host-block" :title="t('stats_group_models')">
 
                 <div class="stats-model-table">
                   <div v-for="group in modelLedgerGroups" :key="'models:' + 'group:' + group.key" class="stats-model-ledger-scroll">
@@ -610,7 +601,7 @@ const StatsView = {
                     </table>
                   </div>
                 </div>
-              </section>
+              </AppSection>
             </div>
           </div>
         </section>

@@ -1,0 +1,198 @@
+/* A titled block of a page. The head reads like an AppNotice: a square mark and a mono bracket
+   label in the section's tone, then the meta, actions at the far end, on a hairline rule.
+   Frames are hairlines only; no fills beyond the paper, no shadow, no rounding past 2px.
+   The head is one row of a fixed height, whatever it holds. The meta keeps to one line; the right
+   end is the action area, for plain buttons (plain xs, with or without an icon) and dropdown
+   menus only, one control high. Filled or outlined buttons, tabs and filters belong in the body. */
+.app-section {
+  --app-section-tone: color-mix(in srgb, var(--accent-1) 68%, var(--text-0) 32%);
+  --app-section-line: var(--line-soft);
+  --app-section-gap: 16px;
+  --app-section-padding: 16px;
+  --app-section-head-height: 44px;
+  --app-section-control: 32px;
+  display: grid;
+  align-content: start;
+  gap: var(--app-section-gap);
+  min-width: 0;
+}
+
+.app-section-head {
+  box-sizing: border-box;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  height: var(--app-section-head-height);
+  border-bottom: 1px solid var(--app-section-line);
+}
+
+.app-section-title {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  min-width: 0;
+}
+
+.app-section-mark {
+  flex: 0 0 auto;
+  width: var(--status-mark-size, 7px);
+  height: var(--status-mark-size, 7px);
+  border-radius: 1px;
+  background: var(--app-section-tone);
+}
+
+.app-section-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--text-0);
+}
+
+/* A title that is a name the user gave (a profile, a server) keeps its own case. */
+.app-section.is-literal > .app-section-head .app-section-label {
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+
+.app-section-bracket {
+  font-weight: 400;
+  color: var(--app-section-tone);
+  opacity: 0.55;
+}
+
+/* The meta takes the rest of the row, on one line; what does not fit is cut, and the full text
+   is in the tooltip. */
+.app-section-meta {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--font-size-meta);
+  line-height: 1.45;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text-2);
+}
+
+/* The action area: the right end of the head, one control high. */
+.app-section-actions {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  height: var(--app-section-control);
+  margin-left: auto;
+  margin-right: -6px;
+}
+
+/* A dropdown in the action area is a plain one (variant="plain"), so its hover, press and open
+   states are Quail's plain button's. The theme still frames every dropdown trigger and fills
+   plain ones at rest, both with !important; here the trigger rests bare, like a plain button. */
+.app-section-actions .q-dropdown-menu .q-dropdown-menu-action.plain {
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+.app-section-actions .q-dropdown-menu .q-dropdown-menu-action.plain:not(:hover):not(:focus-visible):not(:active):not(.expanded) {
+  background: transparent !important;
+}
+
+/* Quail tints a plain dropdown a shade lighter on hover than a plain button; match the button. */
+.app-section .app-section-actions .q-dropdown-menu .q-dropdown-menu-action.plain:is(:hover, :focus-visible, :active, .expanded) {
+  background-color: var(--q-button-plain-hover-bg) !important;
+}
+
+.app-section-body {
+  display: grid;
+  align-content: start;
+  gap: var(--app-section-gap);
+  min-width: 0;
+}
+
+/* is-list: the body is a list of rows, each padded top and bottom, with no label above it. The
+   rows' padding is the inset, so the body keeps only a sliver of its own above the first row and
+   below the last; the list should drop its own top and bottom rules there. */
+.app-section.is-list {
+  --app-section-list-inset: 4px;
+}
+
+.app-section.is-list:is(.is-boxed, .is-pane) > .app-section-body {
+  padding-block: var(--app-section-list-inset);
+}
+
+.app-section.is-list.is-plain {
+  gap: var(--app-section-list-inset);
+}
+
+/* A body that renders nothing takes no room: no elements, or only the empty trigger wrapper of a
+   closed dialog kept beside the head's button. */
+.app-section-body:not(:has(> :not(.q-dialog-trigger-wrapper:empty))) {
+  display: none;
+}
+
+.app-section-head:is(:last-child, :has(+ .app-section-body:not(:has(> :not(.q-dialog-trigger-wrapper:empty))))) {
+  border-bottom: 0;
+}
+
+/* Boxed: a hairline frame on the paper. The head is the frame's top strip. */
+.app-section.is-boxed {
+  gap: 0;
+  border: 1px solid var(--app-section-line);
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--q-bg-paper) 70%, transparent);
+}
+
+.app-section.is-boxed > .app-section-head {
+  --app-section-head-height: 48px;
+  padding: 0 var(--app-section-padding);
+}
+
+.app-section.is-boxed > .app-section-body {
+  padding: var(--app-section-padding);
+}
+
+/* Pane: beside a list, divided from it by a left hairline, scrolling on its own. */
+.app-section.is-pane {
+  gap: 0;
+  min-height: 0;
+  height: 100%;
+  border-left: 1px solid var(--app-section-line);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.app-section.is-pane > .app-section-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  --app-section-head-height: 48px;
+  padding: 0 var(--app-section-padding);
+  background: var(--q-bg-paper);
+}
+
+.app-section.is-pane > .app-section-body {
+  padding: var(--app-section-padding);
+}
+
+@media (max-width: 720px) {
+  .app-section {
+    --app-section-padding: 12px;
+  }
+
+  .app-section.is-pane {
+    border-left: 0;
+  }
+}

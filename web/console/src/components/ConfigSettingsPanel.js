@@ -47,6 +47,7 @@ export default {
   setup(props, { emit }) {
     const saveRegistry = inject("settingsSaveRegistry", null);
     const registered = computed(() => Boolean(saveRegistry && props.saveScope));
+    const showHeading = computed(() => !props.hideSingleGroupHeading || props.groups.length > 1);
     const draft = reactive({});
     const original = ref({});
     const reset = reactive({});
@@ -263,6 +264,7 @@ export default {
       sourceLabel,
       inputType,
       registered,
+      showHeading,
       collectUpdate,
       save,
     };
@@ -272,190 +274,179 @@ export default {
       <QProgress v-if="loading" :infinite="true" />
       <div v-if="validationError" class="config-settings-error" role="alert">{{ validationError }}</div>
 
-      <component
-        :is="embedded ? 'section' : 'QCard'"
+      <AppSection
         v-for="group in groups"
         :key="group.id"
-        :variant="embedded ? undefined : 'default'"
+        :variant="embedded ? 'plain' : 'boxed'"
+        :title="showHeading ? group.title : ''"
+        :meta="showHeading ? group.note || '' : ''"
         :class="['config-settings-group', { 'is-embedded': embedded, 'is-inactive': groupInactiveNote(group) }]"
       >
-        <div class="settings-panel-shell">
-          <header
-            v-if="!hideSingleGroupHeading || groups.length > 1 || (!registered && savePlacement === 'header' && group === groups[0])"
-            class="settings-panel-head"
+        <template v-if="!registered && savePlacement === 'header' && group === groups[0]" #actions>
+          <QButton
+            class="plain xs"
+            :loading="saving"
+            :disabled="loading || saving || !dirty"
+            @click="save"
           >
-            <div v-if="!hideSingleGroupHeading || groups.length > 1" class="settings-panel-copy">
-              <slot name="heading" :group="group">
-                <h3 class="settings-panel-title workspace-document-title">{{ group.title }}</h3>
-                <p v-if="group.note" class="settings-panel-meta">{{ group.note }}</p>
-              </slot>
-            </div>
-            <QButton
-              v-if="!registered && savePlacement === 'header' && group === groups[0]"
-              class="primary"
-              :loading="saving"
-              :disabled="loading || saving || !dirty"
-              @click="save"
-            >
-              Save
-            </QButton>
-          </header>
+            Save
+          </QButton>
+        </template>
 
-          <p v-if="groupInactiveNote(group)" class="config-settings-inactive-note">{{ groupInactiveNote(group) }}</p>
-          <div class="settings-panel-body config-settings-fields">
-            <div
-              v-for="field in visibleFields(group)"
-              :key="field.path"
-              :class="['settings-field', {
-                'is-wide': field.wide || field.type === 'json' || field.type === 'string_list' || field.type === 'bool',
-                'is-toggle': field.type === 'bool' && !environmentManaged(field),
-                'is-inactive': fieldInactive(field),
-              }]"
+        <p v-if="groupInactiveNote(group)" class="config-settings-inactive-note">{{ groupInactiveNote(group) }}</p>
+        <div class="settings-panel-body config-settings-fields">
+          <div
+            v-for="field in visibleFields(group)"
+            :key="field.path"
+            :class="['settings-field', {
+              'is-wide': field.wide || field.type === 'json' || field.type === 'string_list' || field.type === 'bool',
+              'is-toggle': field.type === 'bool' && !environmentManaged(field),
+              'is-inactive': fieldInactive(field),
+            }]"
+          >
+            <!-- Switches use the same row as the rest of Settings: text on the left, switch on the right. -->
+            <template v-if="field.type === 'bool' && !environmentManaged(field)">
+              <div class="settings-toggle-copy">
+                <strong class="settings-toggle-title">{{ field.label }}</strong>
+                <span v-if="field.note" class="settings-toggle-note">{{ field.note }}</span>
+                <span v-if="fieldInactive(field)" class="settings-toggle-note config-settings-dependency-note">{{ dependencyNote(field) }}</span>
+                <span v-if="restartRequired(field)" class="config-settings-restart">Restart required</span>
+              </div>
+              <QSwitch
+                :modelValue="draft[field.path]"
+                :disabled="fieldDisabled(field, group)"
+                @update:modelValue="updateField(field, $event)"
+              />
+            </template>
+            <template v-else>
+            <div class="config-settings-label-row">
+              <span class="settings-field-label">{{ field.label }}</span>
+              <span v-if="restartRequired(field)" class="config-settings-restart">Restart required</span>
+            </div>
+
+            <EnvManagedField v-if="environmentManaged(field)" :name="environmentManagedName(field)" />
+            <SettingBytes
+              v-else-if="field.editor === 'bytes'"
+              :modelValue="draft[field.path]"
+              :label="field.label"
+              :disabled="fieldDisabled(field, group)"
+              @update:modelValue="updateField(field, $event)"
+            />
+            <SettingDuration
+              v-else-if="field.editor === 'duration'"
+              :modelValue="draft[field.path]"
+              :label="field.label"
+              :zeroLabel="field.zeroLabel || ''"
+              :disabled="fieldDisabled(field, group)"
+              @update:modelValue="updateField(field, $event)"
+            />
+            <SettingPercent
+              v-else-if="field.editor === 'percent'"
+              :modelValue="draft[field.path]"
+              :label="field.label"
+              :disabled="fieldDisabled(field, group)"
+              @update:modelValue="updateField(field, $event)"
+            />
+            <SettingLimit
+              v-else-if="field.editor === 'limit'"
+              :modelValue="draft[field.path]"
+              :label="field.label"
+              :defaultLimit="field.defaultLimit || ''"
+              :disabled="fieldDisabled(field, group)"
+              @update:modelValue="updateField(field, $event)"
+            />
+            <SettingPath
+              v-else-if="field.editor === 'directory'"
+              :modelValue="draft[field.path]"
+              :label="field.label"
+              :placeholder="field.placeholder || ''"
+              :disabled="fieldDisabled(field, group)"
+              @update:modelValue="updateField(field, $event)"
+            />
+            <SettingRows
+              v-else-if="field.editor === 'rows'"
+              :modelValue="draft[field.path]"
+              :mode="field.rows || 'list'"
+              :platforms="field.platforms || []"
+              :label="field.label"
+              :placeholder="field.placeholder || ''"
+              :addLabel="field.addLabel || 'Add'"
+              :disabled="fieldDisabled(field, group)"
+              @update:modelValue="updateField(field, $event)"
             >
-              <!-- Switches use the same row as the rest of Settings: text on the left, switch on the right. -->
-              <template v-if="field.type === 'bool' && !environmentManaged(field)">
-                <div class="settings-toggle-copy">
-                  <strong class="settings-toggle-title">{{ field.label }}</strong>
-                  <span v-if="field.note" class="settings-toggle-note">{{ field.note }}</span>
-                  <span v-if="fieldInactive(field)" class="settings-toggle-note config-settings-dependency-note">{{ dependencyNote(field) }}</span>
-                  <span v-if="restartRequired(field)" class="config-settings-restart">Restart required</span>
-                </div>
-                <QSwitch
+              <template #fallback>
+                <QTextarea
                   :modelValue="draft[field.path]"
+                  :rows="7"
+                  class="config-settings-json"
                   :disabled="fieldDisabled(field, group)"
                   @update:modelValue="updateField(field, $event)"
                 />
               </template>
-              <template v-else>
-              <div class="config-settings-label-row">
-                <span class="settings-field-label">{{ field.label }}</span>
-                <span v-if="restartRequired(field)" class="config-settings-restart">Restart required</span>
-              </div>
+            </SettingRows>
+            <SettingSelect
+              v-else-if="field.type === 'select'"
+              :modelValue="draft[field.path]"
+              :options="field.options"
+              :allowCustom="field.allowCustom"
+              :customLabel="field.duration ? 'Custom duration' : 'Custom value'"
+              :customPlaceholder="field.duration ? 'e.g. 5m or 1h' : ''"
+              :label="field.label"
+              :placeholder="field.placeholder || 'Default'"
+              :disabled="fieldDisabled(field, group)"
+              @update:modelValue="updateField(field, $event)"
+            />
+            <SettingChoices
+              v-else-if="field.type === 'string_list' && field.options"
+              :modelValue="draft[field.path].split(/\\r?\\n/).map(item => item.trim()).filter(Boolean)"
+              :options="field.options"
+              :label="field.label"
+              :disabled="fieldDisabled(field, group)"
+              @update:modelValue="updateField(field, $event.join('\\n'))"
+            />
+            <QTextarea
+              v-else-if="field.type === 'string_list' || field.type === 'json'"
+              :modelValue="draft[field.path]"
+              :rows="field.type === 'json' ? 7 : 4"
+              :class="{ 'config-settings-json': field.type === 'json' }"
+              :placeholder="field.placeholder || ''"
+              :disabled="fieldDisabled(field, group)"
+              @update:modelValue="updateField(field, $event)"
+            />
+            <SecretInput
+              v-else-if="field.secret"
+              :modelValue="draft[field.path]"
+              :status="stateFor(field)"
+              :revealPath="field.path"
+              :placeholder="field.placeholder || ''"
+              :disabled="fieldDisabled(field, group)"
+              @update:modelValue="updateField(field, $event)"
+            />
+            <QInput
+              v-else
+              :modelValue="draft[field.path]"
+              :inputType="inputType(field)"
+              :placeholder="field.placeholder || ''"
+              :disabled="fieldDisabled(field, group)"
+              @update:modelValue="updateField(field, $event)"
+            />
 
-              <EnvManagedField v-if="environmentManaged(field)" :name="environmentManagedName(field)" />
-              <SettingBytes
-                v-else-if="field.editor === 'bytes'"
-                :modelValue="draft[field.path]"
-                :label="field.label"
-                :disabled="fieldDisabled(field, group)"
-                @update:modelValue="updateField(field, $event)"
-              />
-              <SettingDuration
-                v-else-if="field.editor === 'duration'"
-                :modelValue="draft[field.path]"
-                :label="field.label"
-                :zeroLabel="field.zeroLabel || ''"
-                :disabled="fieldDisabled(field, group)"
-                @update:modelValue="updateField(field, $event)"
-              />
-              <SettingPercent
-                v-else-if="field.editor === 'percent'"
-                :modelValue="draft[field.path]"
-                :label="field.label"
-                :disabled="fieldDisabled(field, group)"
-                @update:modelValue="updateField(field, $event)"
-              />
-              <SettingLimit
-                v-else-if="field.editor === 'limit'"
-                :modelValue="draft[field.path]"
-                :label="field.label"
-                :defaultLimit="field.defaultLimit || ''"
-                :disabled="fieldDisabled(field, group)"
-                @update:modelValue="updateField(field, $event)"
-              />
-              <SettingPath
-                v-else-if="field.editor === 'directory'"
-                :modelValue="draft[field.path]"
-                :label="field.label"
-                :placeholder="field.placeholder || ''"
-                :disabled="fieldDisabled(field, group)"
-                @update:modelValue="updateField(field, $event)"
-              />
-              <SettingRows
-                v-else-if="field.editor === 'rows'"
-                :modelValue="draft[field.path]"
-                :mode="field.rows || 'list'"
-                :platforms="field.platforms || []"
-                :label="field.label"
-                :placeholder="field.placeholder || ''"
-                :addLabel="field.addLabel || 'Add'"
-                :disabled="fieldDisabled(field, group)"
-                @update:modelValue="updateField(field, $event)"
-              >
-                <template #fallback>
-                  <QTextarea
-                    :modelValue="draft[field.path]"
-                    :rows="7"
-                    class="config-settings-json"
-                    :disabled="fieldDisabled(field, group)"
-                    @update:modelValue="updateField(field, $event)"
-                  />
-                </template>
-              </SettingRows>
-              <SettingSelect
-                v-else-if="field.type === 'select'"
-                :modelValue="draft[field.path]"
-                :options="field.options"
-                :allowCustom="field.allowCustom"
-                :customLabel="field.duration ? 'Custom duration' : 'Custom value'"
-                :customPlaceholder="field.duration ? 'e.g. 5m or 1h' : ''"
-                :label="field.label"
-                :placeholder="field.placeholder || 'Default'"
-                :disabled="fieldDisabled(field, group)"
-                @update:modelValue="updateField(field, $event)"
-              />
-              <SettingChoices
-                v-else-if="field.type === 'string_list' && field.options"
-                :modelValue="draft[field.path].split(/\\r?\\n/).map(item => item.trim()).filter(Boolean)"
-                :options="field.options"
-                :label="field.label"
-                :disabled="fieldDisabled(field, group)"
-                @update:modelValue="updateField(field, $event.join('\\n'))"
-              />
-              <QTextarea
-                v-else-if="field.type === 'string_list' || field.type === 'json'"
-                :modelValue="draft[field.path]"
-                :rows="field.type === 'json' ? 7 : 4"
-                :class="{ 'config-settings-json': field.type === 'json' }"
-                :placeholder="field.placeholder || ''"
-                :disabled="fieldDisabled(field, group)"
-                @update:modelValue="updateField(field, $event)"
-              />
-              <SecretInput
-                v-else-if="field.secret"
-                :modelValue="draft[field.path]"
-                :status="stateFor(field)"
-                :revealPath="field.path"
-                :placeholder="field.placeholder || ''"
-                :disabled="fieldDisabled(field, group)"
-                @update:modelValue="updateField(field, $event)"
-              />
-              <QInput
-                v-else
-                :modelValue="draft[field.path]"
-                :inputType="inputType(field)"
-                :placeholder="field.placeholder || ''"
-                :disabled="fieldDisabled(field, group)"
-                @update:modelValue="updateField(field, $event)"
-              />
-
-              <p v-if="fieldInactive(field)" class="settings-field-note config-settings-dependency-note">{{ dependencyNote(field) }}</p>
-              <p v-else-if="field.note" class="settings-field-note">{{ field.note }}</p>
-              <div v-if="sourceLabel(field) || showClear(field)" class="config-settings-field-meta">
-                <span v-if="sourceLabel(field)">{{ sourceLabel(field) }}</span>
-                <span v-else></span>
-                <QButton
-                  v-if="showClear(field)"
-                  class="plain xs"
-                  :disabled="loading || saving"
-                  @click="resetField(field)"
-                >Clear</QButton>
-              </div>
-              </template>
+            <p v-if="fieldInactive(field)" class="settings-field-note config-settings-dependency-note">{{ dependencyNote(field) }}</p>
+            <p v-else-if="field.note" class="settings-field-note">{{ field.note }}</p>
+            <div v-if="sourceLabel(field) || showClear(field)" class="config-settings-field-meta">
+              <span v-if="sourceLabel(field)">{{ sourceLabel(field) }}</span>
+              <span v-else></span>
+              <QButton
+                v-if="showClear(field)"
+                class="plain xs"
+                :disabled="loading || saving"
+                @click="resetField(field)"
+              >Clear</QButton>
             </div>
+            </template>
           </div>
         </div>
-      </component>
+      </AppSection>
 
       <div v-if="!registered && savePlacement === 'footer'" class="config-settings-actions">
         <QButton class="primary" :loading="saving" :disabled="loading || saving || !dirty" @click="save">

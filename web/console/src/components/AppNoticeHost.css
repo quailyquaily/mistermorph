@@ -1,0 +1,59 @@
+/* Placed over the content column of the app shell (.workspace), so it stays put while the page
+   scrolls and stays centred whatever the sidebar's width. */
+.app-notice-host {
+  position: absolute;
+  grid-column: 2;
+  grid-row: 1;
+  top: calc(var(--workspace-head-height) + 12px);
+  left: 50%;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: min(560px, calc(100% - 2 * var(--content-gutter-x)));
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.app-notice-host > * {
+  pointer-events: auto;
+}
+
+.workspace.is-mobile > .app-notice-host {
+  grid-column: 1;
+}
+
+/* A page without a title bar (Chat, Overview) puts it on the header line its sidebars use. */
+@media (min-width: 921px) {
+  .workspace:has(.page-view-hide-desktop-bar) > .app-notice-host {
+    top: calc((var(--workspace-head-height) - 38px) / 2);
+  }
+}
+
+.workspace:has(.page-view-hide-desktop-bar.page-view-hide-mobile-bar) > .app-notice-host {
+  top: calc((var(--workspace-head-height) - 38px) / 2);
+}
+
+.app-notice-host.is-viewport {
+  position: fixed;
+  top: 16px;
+  width: min(560px, calc(100vw - 32px));
+}
+
+.app-notice-host-enter-active,
+.app-notice-host-leave-active {
+  transition:
+    opacity var(--motion-normal) var(--motion-ease),
+    translate var(--motion-normal) var(--motion-ease);
+}
+
+.app-notice-host-enter-from,
+.app-notice-host-leave-to {
+  opacity: 0;
+  translate: 0 -4px;
+}
+
+.app-notice-host-move {
+  transition: transform var(--motion-normal) var(--motion-ease);
+}

@@ -190,6 +190,26 @@ indigo that can. Aojashin's sidebar is light, so its active item is marked in bl
   tertiary monospace.
 - **Status marks.** Square, 7 px: filled when on, hollow when off (the console's existing rule). `ok`, `warn` and
   `danger` colour them.
+- **Notices.** A status line, not a banner: the square mark and a mono label in brackets (`[ERROR]`) in the type's
+  colour, then the message in UI text. The frame is a hairline mixed from the same colour; no fill, no shadow. Inline it
+  sits in the flow; floating, it is one line of the notice stack. A network failure gets a plain-language line, with
+  the browser's message in the tooltip. In the console: `AppNotice` and `AppNoticeHost`, in place of Quail's fence and
+  toast.
+- **Sections.** A titled block of a page, in place of Quail's card. Its head reads like a notice: the square mark in
+  `accent`, the title as a mono label in brackets (capitals, tracked +0.12 em; a name the user gave keeps its own
+  case), the description in tertiary text, and an action area at the right end, all on a hairline. Three forms:
+  - *Plain*: no frame; the head's rule is the only line. For groups within a page.
+  - *Boxed*: a hairline frame on the paper, corner radius 2 px, no fill or shadow of its own; the head is its top
+    strip. For things that stand on their own.
+  - *Pane*: a left hairline, its own scroll, the head pinned. For a detail pane beside a list.
+- **The section head is one fixed row.** 44 px, or 48 px as a box's strip or a pane's head, whatever it holds. The
+  description keeps to one line; what does not fit ends in an ellipsis, with the full text in the tooltip, so
+  anything the reader must not miss (such as "Restart required") comes first. The action area is one 32 px control
+  high and takes plain buttons and plain dropdowns only, with the same rest and hover states; even Save is plain there.
+  Filled and outlined buttons, tabs and filters go at the top of the body.
+- **Lists in a section.** A list that opens a section's body, with no label above it, has no top rule: the head's rule
+  is already its edge. The body keeps only 4 px above the first row and below the last, and the rows' own 12 px
+  padding makes the inset; the last row has no bottom rule. A list further down keeps its top rule as a divider.
 - **Kickers and labels.** Geist Mono, 10.5 px, capitals, tracked +0.16 em, in `t2`, with a hairline running to the
   column's edge.
 - **Type sizes.** UI text 14 px; messages 15 px at 1.7 line height; screen titles 20 px bold.

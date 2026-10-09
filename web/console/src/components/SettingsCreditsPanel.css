@@ -99,6 +99,12 @@
   border-top: 1px solid var(--line-soft);
 }
 
+/* Opening the section's body, the list's top edge is the head's rule. */
+.app-section-body > .settings-credits-project-list:first-child,
+.app-section-body > :first-child > .settings-credits-project-list:first-child {
+  border-top: 0;
+}
+
 .settings-credits-project-row {
   min-width: 0;
   display: grid;
@@ -107,6 +113,10 @@
   gap: 14px;
   padding: 12px 0;
   border-bottom: 1px solid color-mix(in srgb, var(--line-soft) 82%, transparent);
+}
+
+.settings-credits-project-row:last-child {
+  border-bottom: 0;
 }
 
 .settings-credits-project-copy,

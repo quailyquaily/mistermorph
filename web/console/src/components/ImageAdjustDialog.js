@@ -1,5 +1,5 @@
 import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from "vue";
-import { useToast } from "quail-ui";
+import { useNotice } from "../core/notices";
 import "./ImageAdjustDialog.css";
 
 import SettingDialog from "./SettingDialog";
@@ -58,7 +58,7 @@ const ImageAdjustDialog = {
   emits: ["update:modelValue", "save"],
   setup(props, { emit }) {
     const t = translate;
-    const toast = useToast();
+    const notice = useNotice();
     const canvas = ref(null);
     const loading = ref(false);
     const imageReady = ref(false);
@@ -222,7 +222,7 @@ const ImageAdjustDialog = {
           sourceURL = "";
         }
         loading.value = false;
-        toast.error(t("image_adjust_error_load"));
+        notice.error(t("image_adjust_error_load"));
       };
       image.src = sourceURL;
     }
@@ -313,14 +313,14 @@ const ImageAdjustDialog = {
       target.height = output.height;
       const ctx = target.getContext("2d");
       if (!drawAdjustedImage(ctx, output.width, output.height, output.width / viewport.width)) {
-        toast.error(t("image_adjust_error_process"));
+        notice.error(t("image_adjust_error_process"));
         return;
       }
       const blob = await new Promise((resolve) =>
         target.toBlob(resolve, props.outputType, clamp(Number(props.outputQuality) || 0.9, 0.1, 1))
       );
       if (!blob) {
-        toast.error(t("image_adjust_error_process"));
+        notice.error(t("image_adjust_error_process"));
         return;
       }
       emit("save", blob);

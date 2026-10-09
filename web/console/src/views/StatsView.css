@@ -12,7 +12,12 @@
   padding-bottom: 24px;
 }
 
+/* The summary sheet: a boxed AppSection without a head; the layout is on its body. */
 .stats-hero {
+  --app-section-padding: clamp(18px, 2vw, 24px);
+}
+
+.stats-hero > .app-section-body {
   position: relative;
   display: grid;
   grid-template-columns: minmax(0, 0.92fr) minmax(320px, 1.08fr);
@@ -21,57 +26,6 @@
     "spotlight side";
   gap: clamp(18px, 2.4vw, 34px);
   align-items: start;
-}
-
-.stats-hero.block-default {
-  padding: clamp(18px, 2vw, 24px);
-  background: var(--q-card-bg, var(--q-bg-white));
-  border: 1px solid var(--stats-line);
-}
-
-.stats-hero.block-default::before,
-.stats-hero.block-default::after {
-  content: "";
-  position: absolute;
-  width: 12px;
-  height: 12px;
-  border: 2px solid color-mix(in srgb, var(--stats-accent) 72%, transparent);
-  pointer-events: none;
-}
-
-.stats-hero.block-default::before {
-  top: -1px;
-  left: -1px;
-  border-right: none;
-  border-bottom: none;
-}
-
-.stats-hero.block-default::after {
-  right: -1px;
-  bottom: -1px;
-  border-left: none;
-  border-top: none;
-}
-
-.stats-host-block::before {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto;
-  height: 1px;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    color-mix(in srgb, var(--stats-accent) 16%, transparent) 12%,
-    color-mix(in srgb, var(--stats-accent) 42%, transparent) 48%,
-    color-mix(in srgb, var(--stats-accent) 16%, transparent) 86%,
-    transparent 100%
-  );
-  opacity: 0.72;
-  pointer-events: none;
-}
-
-.stats-host-block:first-child::before {
-  display: none;
 }
 
 .stats-hero-copy,
@@ -135,13 +89,6 @@
   pointer-events: none;
 }
 
-.stats-host-head {
-  display: flex;
-  align-items: stretch;
-  justify-content: space-between;
-  gap: 14px;
-}
-
 .stats-hero-meta {
   margin: 0;
   display: flex;
@@ -169,7 +116,6 @@
 
 .stats-hero-primary-label,
 .stats-hero-secondary-label,
-.stats-host-eyebrow,
 .stats-ledger-label,
 .stats-model-head-cell,
 .stats-empty {
@@ -308,24 +254,23 @@
   justify-self: start;
 }
 
-.stats-section-panel,
-.stats-host-list {
+.stats-section-panel {
   display: grid;
   gap: clamp(22px, 2.4vw, 32px);
 }
 
-.stats-host-block {
-  position: relative;
+.stats-host-list {
   display: grid;
-  gap: 14px;
-  padding-top: 16px;
+  gap: clamp(28px, 3vw, 40px);
 }
 
-.stats-host-ident {
-  display: grid;
-  align-content: center;
-  gap: 6px;
-  min-width: 0;
+/* Host and model blocks are plain AppSections: each opens on its head's hairline rule. */
+.stats-host-block {
+  --app-section-gap: 14px;
+}
+
+.stats-host-block .stats-host-name {
+  color: var(--stats-ink);
 }
 
 .stats-host-name,
@@ -379,13 +324,12 @@
   color: var(--stats-muted);
 }
 
+/* Request count after the host name in a section head's meta: a mono label and the figure. */
 .stats-request-pill {
-  display: inline-grid;
-  gap: 3px;
-  justify-items: end;
-  padding: 8px 10px 7px;
-  border: 1px solid var(--stats-line);
-  background: color-mix(in srgb, var(--bg-2) 92%, var(--accent-1) 8%);
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-left: 16px;
 }
 
 .stats-request-pill-label {
@@ -399,7 +343,7 @@
 
 .stats-request-pill-value {
   font-family: var(--q-card-title-font-family);
-  font-size: var(--font-size-title);
+  font-size: var(--font-size-body);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   line-height: 1;
@@ -629,7 +573,7 @@
 }
 
 @media (max-width: 1080px) {
-  .stats-hero {
+  .stats-hero > .app-section-body {
     grid-template-columns: 1fr;
     grid-template-areas:
       "copy"
@@ -649,19 +593,6 @@
 
   .stats-hero-detail-groups .stats-inline-meta-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 860px) {
-  .stats-request-pill {
-    justify-items: start;
-  }
-}
-
-@media (max-width: 720px) {
-  .stats-host-head {
-    flex-direction: column;
-    align-items: flex-start;
   }
 }
 

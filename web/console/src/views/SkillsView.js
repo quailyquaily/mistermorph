@@ -622,8 +622,8 @@ const SkillsView = {
                 </QDropdownMenu>
               </header>
 
-              <QFence v-if="catalog.readOnly && catalog.readOnlyReason" type="warning" :text="catalog.readOnlyReason" />
-              <QFence v-if="err" type="danger" icon="PhXCircle" :text="err" />
+              <AppNotice v-if="catalog.readOnly && catalog.readOnlyReason" type="warning" :text="catalog.readOnlyReason" />
+              <AppNotice v-if="err" type="error" :text="err" />
               <div v-if="selectedUpdate" class="skills-update">
                 <span>{{ t('skills_update_note', { version: selectedUpdate.version }) }}</span>
                 <QButton class="outlined xs" :loading="installBusy" :disabled="locked" @click="updateFromStore(selectedUpdate)">
@@ -694,7 +694,7 @@ const SkillsView = {
                   <span class="skills-doc-label">SKILL.md</span>
                   <span v-if="documentSize" class="skills-doc-size">{{ documentSize }}</span>
                 </header>
-                <QFence v-if="detail && detail.truncated" type="warning" :text="t('skills_content_truncated')" />
+                <AppNotice v-if="detail && detail.truncated" type="warning" :text="t('skills_content_truncated')" />
                 <div v-if="detailLoading && !detail" class="skills-index-loading" aria-hidden="true">
                   <AppSkeleton variant="card" height="120px" :count="1" />
                 </div>
@@ -704,7 +704,7 @@ const SkillsView = {
           </QCard>
 
           <div v-else-if="!isMobile && !loading" class="skills-detail-empty">
-            <QFence v-if="err" type="danger" icon="PhXCircle" :text="err" />
+            <AppNotice v-if="err" type="error" :text="err" />
             <div class="skills-detail-empty-body">
               <QButton
                 class="outlined icon skills-empty-add"
@@ -748,7 +748,7 @@ const SkillsView = {
             <form class="skills-add-form" @submit.prevent="submitAdd">
               <QInput v-model="addLink" :placeholder="t('skills_install_link_placeholder')" :aria-label="t('skills_add_title')" :disabled="addBusy" />
               <p class="skills-index-note">{{ t('skills_add_note') }}</p>
-              <QFence v-if="addErr" type="danger" icon="PhXCircle" :text="addErr" />
+              <AppNotice v-if="addErr" type="error" :text="addErr" />
               <div class="skills-add-actions">
                 <QButton type="button" class="outlined" :disabled="addBusy" @click="addOpen = false">{{ t('action_cancel') }}</QButton>
                 <QButton type="submit" class="primary" :loading="addBusy" :disabled="!addLinkValid">{{ t('skills_add_start') }}</QButton>

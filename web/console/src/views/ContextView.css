@@ -31,7 +31,7 @@
 }
 
 .context-view > .q-progress,
-.context-view > .q-fence,
+.context-view > .app-notice,
 .context-view-empty {
   grid-column: 1 / -1;
   align-self: start;

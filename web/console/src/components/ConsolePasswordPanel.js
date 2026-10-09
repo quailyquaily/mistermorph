@@ -40,22 +40,16 @@ export default {
     return { open, password, confirmation, error, submit };
   },
   template: `
-    <QCard variant="default" class="config-settings-group">
-      <div class="settings-panel-shell">
-        <header class="settings-panel-head settings-password-head">
-          <div class="settings-panel-copy">
-            <h3 class="settings-panel-title workspace-document-title">Web Console sign-in</h3>
-            <p class="settings-panel-meta">Protects browser access to this Console. It is separate from the incoming Runtime API access token.</p>
-            <span class="config-settings-restart">Restart required</span>
-          </div>
-          <div class="settings-panel-actions">
-            <QButton class="primary" :disabled="saving" @click="open = true">
-              {{ configured ? "Change password" : "Set password" }}
-            </QButton>
-          </div>
-        </header>
-      </div>
-
+    <AppSection variant="boxed" class="config-settings-group" title="Web Console sign-in">
+      <template #meta>
+        <span class="config-settings-restart">Restart required</span>
+        Protects browser access to this Console. It is separate from the incoming Runtime API access token.
+      </template>
+      <template #actions>
+        <QButton class="plain xs" :disabled="saving" @click="open = true">
+          {{ configured ? "Change password" : "Set password" }}
+        </QButton>
+      </template>
       <SettingDialog
         v-model="open"
         title="Set Web Console password"
@@ -75,6 +69,6 @@ export default {
           </label>
         </div>
       </SettingDialog>
-    </QCard>
+    </AppSection>
   `,
 };

@@ -433,17 +433,15 @@ const StatsDailyPanel = {
     };
   },
   template: `
-    <section class="stats-daily" :aria-busy="loading ? 'true' : 'false'">
-      <header class="stats-daily-head">
-        <div class="stats-daily-heading">
-          <h2 class="stats-daily-title">{{ t("stats_daily_title") }}</h2>
-          <span class="stats-daily-zone" :title="t('stats_daily_zone', { zone: timeZone })">{{ timeZone }}</span>
-        </div>
-        <div class="stats-daily-controls">
-          <AppTabs :tabs="rangeTabs" :modelValue="rangeTab" :ariaLabel="t('stats_daily_range')" @change="setRange($event.tab.id)" />
-          <AppTabs :tabs="metricTabs" :modelValue="metricTab" :ariaLabel="t('stats_daily_metric')" @change="metric = $event.tab.id" />
-        </div>
-      </header>
+    <AppSection variant="boxed" class="stats-daily" :title="t('stats_daily_title')" :level="2" :aria-busy="loading ? 'true' : 'false'">
+      <template #meta>
+        <span class="stats-daily-zone" :title="t('stats_daily_zone', { zone: timeZone })">{{ timeZone }}</span>
+      </template>
+
+      <div class="stats-daily-controls">
+        <AppTabs :tabs="rangeTabs" :modelValue="rangeTab" :ariaLabel="t('stats_daily_range')" @change="setRange($event.tab.id)" />
+        <AppTabs :tabs="metricTabs" :modelValue="metricTab" :ariaLabel="t('stats_daily_metric')" @change="metric = $event.tab.id" />
+      </div>
 
       <p v-if="err" class="stats-daily-error">{{ err }}</p>
 
@@ -562,7 +560,7 @@ const StatsDailyPanel = {
           </dd>
         </div>
       </dl>
-    </section>
+    </AppSection>
   `,
 };
 

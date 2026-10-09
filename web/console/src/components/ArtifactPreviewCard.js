@@ -381,7 +381,7 @@ const ArtifactPreviewCard = {
           </QButton>
         </div>
 
-        <QFence v-if="error" type="danger" icon="PhXCircle" :text="error" />
+        <AppNotice v-if="error" type="error" :text="error" />
 
         <div v-if="expanded && entryURL" class="artifact-preview-frame-shell" :class="{ 'is-image': isImagePreview }">
           <img
