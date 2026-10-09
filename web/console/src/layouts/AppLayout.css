@@ -1,7 +1,7 @@
 .app-shell {
   --sidebar-width: 200px;
   --sidebar-collapsed-width: 52px;
-  --chrome-bar-height: 54px;
+  --chrome-bar-height: 57px;
   --workspace-head-height: var(--chrome-bar-height);
   --content-gutter-x: clamp(16px, 2vw, 28px);
   --content-gutter-y: clamp(12px, 1.4vw, 20px);

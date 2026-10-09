@@ -539,7 +539,7 @@ body[data-theme] .chat-workspace-dock .chat-workspace-toggle.q-button[aria-expan
   min-height: 0;
   display: grid;
   /* The mobile panel is teleported to body, outside the layout that sets the head height. */
-  grid-template-rows: var(--workspace-head-height, 54px) minmax(0, 1fr);
+  grid-template-rows: var(--workspace-head-height, 57px) minmax(0, 1fr);
   color: var(--text-0);
 }
 
