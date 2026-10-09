@@ -13,6 +13,7 @@ import { installDesktopRuntimeMode, reportDesktopFrontendReady } from "./core/de
 import { installExternalLinkHandler } from "./core/external-links";
 import { installConsolePerformanceObservers } from "./core/performance";
 import { installMacOS26Mode } from "./core/platform";
+import { installPWA } from "./core/pwa";
 import { installSystemNotifications } from "./core/system-notifications";
 import { phosphorIcons } from "./icons/phosphor";
 import { router } from "./router";
@@ -25,6 +26,7 @@ installDesktopRuntimeMode();
 installExternalLinkHandler();
 installConsolePerformanceObservers();
 installSystemNotifications();
+installPWA();
 const platformModeReady = installMacOS26Mode();
 
 const app = createApp(AppLayout);

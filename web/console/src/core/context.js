@@ -535,6 +535,7 @@ function formatBytes(value) {
 }
 
 export {
+  API_BASE,
   BASE_PATH,
   localeState,
   translate,

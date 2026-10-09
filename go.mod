@@ -35,6 +35,7 @@ require (
 	github.com/yuin/goldmark v1.7.16
 	github.com/zalando/go-keyring v0.2.8
 	golang.org/x/crypto v0.50.0
+	golang.org/x/image v0.40.0
 	golang.org/x/net v0.53.0
 	golang.org/x/sys v0.47.0
 	golang.org/x/term v0.42.0

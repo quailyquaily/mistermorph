@@ -1,0 +1,51 @@
+.settings-app-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.settings-app-avatar {
+  flex: none;
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  object-fit: cover;
+  background: color-mix(in srgb, var(--q-bg-paper) 96%, transparent);
+  border: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+}
+
+.settings-app-copy {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.settings-app-name {
+  color: var(--text-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-app-hint {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--font-size-meta);
+  line-height: 1.5;
+}
+
+.settings-app-install {
+  flex: none;
+}
+
+@media (max-width: 560px) {
+  .settings-app-row {
+    flex-wrap: wrap;
+  }
+
+  .settings-app-install {
+    width: 100%;
+  }
+}

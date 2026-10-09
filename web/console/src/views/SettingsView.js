@@ -29,6 +29,7 @@ import toolChannelMixinLogoURL from "../assets/images/channels/mixin.svg";
 import toolChannelWeChatLogoURL from "../assets/images/channels/wechat.svg";
 import toolChannelWhatsAppLogoURL from "../assets/images/channels/whatsapp.svg";
 import AppMarkdownEditor from "../components/AppMarkdownEditor";
+import SettingsAppPanel from "../components/SettingsAppPanel";
 import SettingsCreditsPanel from "../components/SettingsCreditsPanel";
 import SettingDialog from "../components/SettingDialog";
 import SetupConnectionTestDialog from "../components/SetupConnectionTestDialog";
@@ -217,6 +218,7 @@ const SETTINGS_SECTION_IDS = new Set([
   "runtimes",
   "security",
   "console",
+  "app",
   "runtime",
   "credits",
 ]);
@@ -744,6 +746,7 @@ const SettingsView = {
     LLMConfigForm,
     MCPSettingsPanel,
     AppMarkdownEditor,
+    SettingsAppPanel,
     SettingsCreditsPanel,
     SettingDialog,
     SetupConnectionTestDialog,
@@ -1460,6 +1463,13 @@ const SettingsView = {
           saveKind: "",
         });
       }
+      items.push({
+        id: "app",
+        icon: "PhAppWindow",
+        title: t("settings_app_title"),
+        meta: t("settings_section_app_meta"),
+        saveKind: "",
+      });
       items.push({
         id: "runtime",
         icon: "PhPulse",
@@ -6800,6 +6810,8 @@ const SettingsView = {
           </div>
 
           <RuntimePanel v-else-if="selectedSection.id === 'runtime'" class="settings-runtime-panel" />
+
+          <SettingsAppPanel v-else-if="selectedSection.id === 'app'" />
 
           <SettingsCreditsPanel v-else-if="selectedSection.id === 'credits'" />
 

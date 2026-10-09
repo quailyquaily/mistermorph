@@ -602,6 +602,8 @@ func (s *server) handler() http.Handler {
 	mux.HandleFunc(apiPrefix+"/stream/ticket", s.withAuth(s.handleStreamTicket))
 	mux.HandleFunc(apiPrefix+"/stream/ws", s.handleStreamWebSocket)
 	mux.HandleFunc(apiPrefix+"/notifications/ws", s.handleNotificationWebSocket)
+	mux.HandleFunc(apiPrefix+"/pwa/manifest.webmanifest", s.handlePWAManifest)
+	mux.HandleFunc(apiPrefix+"/pwa/icon", s.handlePWAIcon)
 
 	if s.localRuntime != nil && strings.TrimSpace(s.localRuntime.currentConfigReader().GetString("server.auth_token")) != "" {
 		runtimePrefix := joinBasePath(s.cfg.basePath, consoleRuntimeAPIPath)
