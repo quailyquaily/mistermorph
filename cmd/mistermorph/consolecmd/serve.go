@@ -27,6 +27,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/quailyquaily/mistermorph/internal/agentlink"
 	"github.com/quailyquaily/mistermorph/internal/codexauth"
 	"github.com/quailyquaily/mistermorph/internal/configutil"
 	"github.com/quailyquaily/mistermorph/internal/fsstore"
@@ -130,6 +131,7 @@ type server struct {
 	endpointWorkersWG           sync.WaitGroup
 	localRuntime                *consoleLocalRuntime
 	managed                     *managedRuntimeSupervisor
+	agentLink                   *agentLinkSupervisor
 	agentSettingsConnectionTest func(context.Context, llmSettingsPayload, agentSettingsConnectionTestOptions) (agentSettingsTestResult, error)
 	reloadRuntimeConfigFunc     func() error
 	runtimeConfigPollerWG       sync.WaitGroup
@@ -408,6 +410,7 @@ func newServer(cfg serveConfig) (*server, error) {
 		secretStore:      secref.NewOSStore(),
 	}
 	localRuntime.skillEnabler = srv.enableSkill
+	srv.agentLink = newAgentLinkSupervisor(srv)
 	srv.ensureEndpointStates()
 	return srv, nil
 }
@@ -477,6 +480,7 @@ func (s *server) serve(ctx context.Context, ln net.Listener) error {
 		}
 	}
 	s.startEndpointBackground(runCtx)
+	s.agentLink.start(runCtx)
 	s.startRuntimeConfigPoller(runCtx)
 	if s.localRuntime != nil && s.cfg.stateDir != "" {
 		webURL := "http://" + ln.Addr().String() + displayBasePath(s.cfg.basePath)
@@ -629,6 +633,14 @@ func (s *server) handler() http.Handler {
 		runtimeHandler := http.NewServeMux()
 		registerConsoleOwnedSettings(runtimeHandler, "", runtimeAuthorize)
 		runtimeHandler.HandleFunc("/stream/ws", runtimeAuthorize(s.handleRuntimeStreamWebSocket))
+		if s.agentLink != nil {
+			// Served here rather than by the generation handler, which a long-lived stream would hold.
+			runtimeHandler.Handle(agentlink.WebSocketPath, s.agentLink.node.WebSocketHandler(func(r *http.Request) bool {
+				got, ok := bearerToken(r)
+				want := s.localRuntime.currentAuthToken()
+				return ok && want != "" && subtle.ConstantTimeCompare([]byte(got), []byte(want)) == 1
+			}))
+		}
 		runtimeHandler.Handle("/", runtimeFallback)
 		mux.Handle(runtimePrefix+"/", http.StripPrefix(runtimePrefix, runtimeHandler))
 	}
@@ -1027,6 +1039,7 @@ func (s *server) startEndpointBackground(ctx context.Context) {
 		defer ticker.Stop()
 		s.refreshEndpointHealth(ctx)
 		s.refreshEndpointAvatars(ctx)
+		s.syncAgentLinks(ctx)
 		for {
 			select {
 			case <-ctx.Done():
@@ -1036,8 +1049,19 @@ func (s *server) startEndpointBackground(ctx context.Context) {
 			}
 			s.refreshEndpointHealth(ctx)
 			s.refreshEndpointAvatars(ctx)
+			s.syncAgentLinks(ctx)
 		}
 	}()
+}
+
+func (s *server) syncAgentLinks(ctx context.Context) {
+	if s == nil || s.agentLink == nil {
+		return
+	}
+	s.endpointStateMu.RLock()
+	endpoints := append([]runtimeEndpoint(nil), s.endpoints...)
+	s.endpointStateMu.RUnlock()
+	s.agentLink.sync(ctx, endpoints)
 }
 
 func (s *server) refreshEndpointAvatars(ctx context.Context) {
