@@ -4,7 +4,8 @@ import "./AuditView.css";
 
 import AppPage from "../components/AppPage";
 import AppSkeleton from "../components/AppSkeleton";
-import RawJsonDialog from "../components/RawJsonDialog";
+import AppSidePane from "../components/AppSidePane";
+import RawJsonDialogContent from "../components/RawJsonDialogContent";
 import { endpointChannelLabel } from "../core/endpoints";
 import { endpointRoutePath } from "../core/endpoint-routes";
 import { loadResource, resourceKey, useResource } from "../core/resources";
@@ -279,8 +280,9 @@ function shortenTaskID(raw) {
 const AuditView = {
   components: {
     AppPage,
+    AppSidePane,
     AppSkeleton,
-    RawJsonDialog,
+    RawJsonDialogContent,
   },
   setup() {
     const t = translate;
@@ -302,8 +304,13 @@ const AuditView = {
     const lines = ref([]);
     const filterText = ref("");
     const updatedAt = ref("");
-    const rawDialogOpen = ref(false);
-    const rawDialogJSON = ref("");
+    // The entry or task open in the side pane, with its raw JSON. A task's JSON is fetched when it
+    // opens; an entry carries its own.
+    const paneEntry = ref(null);
+    const paneJSON = ref("");
+    const paneLoading = ref(false);
+    const paneErr = ref("");
+    let paneToken = null;
     let initEndpointRef = "";
     let initPromise = null;
     let initToken = null;
@@ -327,6 +334,11 @@ const AuditView = {
     const showLedgerPane = computed(() => !isMobile.value || mobileLedgerVisible.value);
     const mobileShowBack = computed(() => isMobile.value && mobileLedgerVisible.value);
     const pageClass = computed(() => (isMobile.value ? "audit-page audit-page-mobile-split" : "audit-page"));
+    // On desktop the open entry takes a column at the right, as Chat's side panel does.
+    const workbenchClass = computed(() => ({
+      "side-pane-host": !isMobile.value,
+      "is-side-pane-open": !isMobile.value && !!paneEntry.value,
+    }));
     const selectedEndpoint = computed(() => runtimeEndpointByRef(endpointState.selectedRef));
     const taskFeedEndpointRef = computed(() => {
       const selected = selectedEndpoint.value;
@@ -527,17 +539,33 @@ const AuditView = {
       return groups;
     });
 
-    async function openRawDialog(item) {
+    // Another log, page or endpoint lists other entries: the pane closes with the one it showed.
+    watch([selectedStream, selectedFile, pageValue, taskPageIndex, () => endpointState.selectedRef], closePane);
+
+    function isPaneEntry(kind, key) {
+      return paneEntry.value?.kind === kind && paneEntry.value?.key === key;
+    }
+
+    function closePane() {
+      paneEntry.value = null;
+      paneToken = null;
+      paneLoading.value = false;
+      paneErr.value = "";
+    }
+
+    function openEntry(item) {
       if (!item) {
         return;
       }
-      const json = String(item.rawPretty || item.raw || "").trim();
-      rawDialogJSON.value = json;
-      rawDialogOpen.value = true;
-    }
-
-    function closeRawDialog() {
-      rawDialogOpen.value = false;
+      if (isPaneEntry("audit", item.key)) {
+        closePane();
+        return;
+      }
+      paneToken = null;
+      paneLoading.value = false;
+      paneErr.value = "";
+      paneEntry.value = { kind: "audit", key: item.key, item };
+      paneJSON.value = String(item.rawPretty || item.raw || "").trim();
     }
 
     function currentEndpointRef() {
@@ -713,7 +741,16 @@ const AuditView = {
       if (!id) {
         return;
       }
-      taskErr.value = "";
+      if (isPaneEntry("task", id)) {
+        closePane();
+        return;
+      }
+      const token = {};
+      paneToken = token;
+      paneEntry.value = { kind: "task", key: id, item };
+      paneJSON.value = "";
+      paneErr.value = "";
+      paneLoading.value = true;
       try {
         let data;
         const endpointRef = String(item?.source_endpoint_ref || "").trim();
@@ -725,13 +762,19 @@ const AuditView = {
             `/tasks/${encodeURIComponent(id)}`
           );
         }
-        const json = JSON.stringify(data, null, 2);
-        rawDialogJSON.value = json;
-        rawDialogOpen.value = rawDialogJSON.value !== "";
+        if (paneToken !== token) {
+          return;
+        }
+        paneJSON.value = JSON.stringify(data, null, 2);
       } catch (e) {
-        rawDialogJSON.value = "";
-        rawDialogOpen.value = false;
-        taskErr.value = e.message || t("msg_load_failed");
+        if (paneToken !== token) {
+          return;
+        }
+        paneErr.value = e.message || t("msg_load_failed");
+      } finally {
+        if (paneToken === token) {
+          paneLoading.value = false;
+        }
       }
     }
 
@@ -909,7 +952,6 @@ const AuditView = {
       void refreshAudit();
       refreshTimer = window.setInterval(() => {
         if (document.hidden || initPromise || loading.value || taskLoading.value) return;
-        if (document.querySelector(".audit-event[open], .audit-task[open]")) return;
         if (isTasksStreamSelected.value) {
           if (taskPageIndex.value === 0) void loadTaskStream();
         } else if (pageValue.value === 1) {
@@ -985,15 +1027,19 @@ const AuditView = {
       tasksPageText,
       hasPrevTaskPage: computed(() => taskPageIndex.value > 0),
       hasNextTaskPage: computed(() => String(taskNextCursor.value || "").trim() !== ""),
-      rawDialogOpen,
-      rawDialogJSON,
-      openRawDialog,
-      closeRawDialog,
+      workbenchClass,
+      paneEntry,
+      paneJSON,
+      paneLoading,
+      paneErr,
+      isPaneEntry,
+      openEntry,
+      closePane,
     };
   },
   template: `
     <AppPage :title="t('audit_title')" :class="pageClass" :hideDesktopBar="true" :hideMobileBar="true">
-      <div class="audit-workbench">
+      <div class="audit-workbench" :class="workbenchClass">
         <aside v-if="showIndexPane" class="audit-index workspace-sidebar-section" :aria-label="t('audit_title')">
           <div class="audit-index-head workspace-sidebar-head">
             <h3 class="workspace-section-title">{{ t('audit_title') }}</h3>
@@ -1093,8 +1139,8 @@ const AuditView = {
                     <span class="audit-group-identity"><span class="audit-group-label">{{ t('audit_run') }}</span><code :title="group.title">{{ group.title }}</code></span>
                     <span class="audit-group-count">{{ t('audit_page_count', { count: group.items.length }) }}</span>
                   </header>
-                  <details v-for="item in group.items" :key="item.key" class="audit-event" :class="{ 'is-arrived': isArrived(item.key) }">
-                    <summary class="audit-event-summary">
+                  <div v-for="item in group.items" :key="item.key" class="audit-event" :class="{ 'is-arrived': isArrived(item.key), 'is-active': isPaneEntry('audit', item.key) }">
+                    <button type="button" class="audit-event-summary" :aria-pressed="isPaneEntry('audit', item.key) ? 'true' : 'false'" @click="openEntry(item)">
                       <span class="audit-event-copy">
                         <span class="audit-event-heading">
                           <strong>{{ item.parsed ? item.primaryTitle : t('audit_raw') }}</strong>
@@ -1113,29 +1159,8 @@ const AuditView = {
                         </span>
                       </span>
                       <PhCaretRight class="icon audit-event-chevron" />
-                    </summary>
-                    <div class="audit-event-detail">
-                      <template v-if="item.parsed">
-                        <dl class="audit-detail-grid">
-                          <div v-if="item.eventID !== '-'"><dt>{{ t('audit_event_id') }}</dt><dd><code>{{ item.eventID }}</code></dd></div>
-                          <div v-if="item.runID !== '-'"><dt>{{ t('audit_run') }}</dt><dd><code>{{ item.runID }}</code></dd></div>
-                          <div><dt>{{ t('audit_decision') }}</dt><dd>{{ item.decisionLabel }}</dd></div>
-                          <div><dt>{{ t('audit_risk') }}</dt><dd>{{ item.riskLabel }}</dd></div>
-                          <div v-if="item.approvalLabel !== '-'"><dt>{{ t('audit_approval') }}</dt><dd>{{ item.approvalLabel }}</dd></div>
-                          <div v-if="item.actor !== '-'"><dt>{{ t('audit_actor') }}</dt><dd>{{ item.actor }}</dd></div>
-                          <div v-if="item.approvalRequestID !== '-'" class="audit-detail-wide"><dt>{{ t('audit_approval_request') }}</dt><dd><code>{{ item.approvalRequestID }}</code></dd></div>
-                        </dl>
-                        <div v-if="item.summary !== '-'" class="audit-detail-section">
-                          <h4>{{ t('audit_summary') }}</h4><p>{{ item.summary }}</p>
-                        </div>
-                        <div v-if="item.reasonsText !== '-'" class="audit-detail-section">
-                          <h4>{{ t('audit_reasons') }}</h4><p>{{ item.reasonsText }}</p>
-                        </div>
-                      </template>
-                      <pre v-else class="audit-raw-line">{{ item.raw }}</pre>
-                      <QButton class="outlined sm audit-raw-action" @click="openRawDialog(item)"><PhCode class="icon" />{{ t('chat_action_show_raw') }}</QButton>
-                    </div>
-                  </details>
+                    </button>
+                  </div>
                 </section>
                 <div v-if="!loading && !err && auditGroups.length === 0" class="audit-empty">
                   <h3>{{ filterText ? t('audit_filter_empty') : t('audit_empty_title') }}</h3>
@@ -1150,8 +1175,8 @@ const AuditView = {
             <template v-else>
               <AppNotice v-if="taskErr" type="error" :text="taskErr" />
               <div class="audit-task-stream">
-                <details v-for="item in taskItems" :key="item.id" class="audit-task" :class="{ 'is-arrived': isArrived('task:' + item.id) }">
-                  <summary class="audit-event-summary">
+                <div v-for="item in taskItems" :key="item.id" class="audit-task" :class="{ 'is-arrived': isArrived('task:' + item.id), 'is-active': isPaneEntry('task', item.id) }">
+                  <button type="button" class="audit-event-summary" :aria-pressed="isPaneEntry('task', item.id) ? 'true' : 'false'" @click="openTask(item)">
                     <span class="audit-event-copy">
                       <span class="audit-event-heading"><strong class="audit-task-title">{{ taskTitle(item) }}</strong></span>
                       <span class="audit-event-meta">
@@ -1161,17 +1186,8 @@ const AuditView = {
                       </span>
                     </span>
                     <PhCaretRight class="icon audit-event-chevron" />
-                  </summary>
-                  <div class="audit-event-detail">
-                    <p class="audit-task-text">{{ item.task }}</p>
-                    <dl class="audit-detail-grid">
-                      <div class="audit-detail-wide"><dt>{{ t('tasks_task_id_label') }}</dt><dd><code>{{ item.id }}</code></dd></div>
-                      <div><dt>{{ t('stats_model') }}</dt><dd>{{ taskModelMeta(item) }}</dd></div>
-                      <div><dt>{{ t('tasks_runtime_label') }}</dt><dd>{{ taskRuntimeMeta(item) }}</dd></div>
-                    </dl>
-                    <QButton class="outlined sm audit-raw-action" @click="openTask(item)"><PhCode class="icon" />{{ t('chat_action_show_raw') }}</QButton>
-                  </div>
-                </details>
+                  </button>
+                </div>
                 <div v-if="taskItems.length === 0 && !taskLoading && !taskErr" class="audit-empty">
                   <h3>{{ t('tasks_empty_title') }}</h3><p>{{ t('tasks_empty_hint') }}</p>
                   <QButton class="plain sm" @click="goChat">{{ t('tasks_empty_action') }}</QButton>
@@ -1180,7 +1196,83 @@ const AuditView = {
             </template>
           </div>
         </AppSection>
-        <RawJsonDialog :open="rawDialogOpen" :json="rawDialogJSON" @close="closeRawDialog" />
+        <AppSidePane
+          class="audit-pane"
+          :open="!!paneEntry"
+          :sheet="isMobile"
+          :paneKey="paneEntry ? paneEntry.kind + ':' + paneEntry.key : ''"
+          :label="paneEntry?.kind === 'task' ? taskTitle(paneEntry.item) : (paneEntry?.item.parsed ? paneEntry.item.primaryTitle : t('audit_raw'))"
+          @close="closePane"
+        >
+          <AppSection
+            v-if="paneEntry?.kind === 'audit'"
+            class="is-literal"
+            :title="paneEntry.item.parsed ? paneEntry.item.primaryTitle : t('audit_raw')"
+            :meta="paneEntry.item.parsed && paneEntry.item.tsText !== '-' ? paneEntry.item.tsFull || paneEntry.item.tsText : ''"
+          >
+            <template #actions>
+              <QButton class="plain xs icon" :title="t('action_close')" :aria-label="t('action_close')" @click="closePane"><PhX class="icon" /></QButton>
+            </template>
+            <div class="app-side-pane-body audit-pane-body">
+              <template v-if="paneEntry.item.parsed">
+                <div v-if="paneEntry.item.approvalLabel !== '-' || paneEntry.item.decisionLabel !== '-' || paneEntry.item.riskLabel !== '-'" class="audit-event-heading">
+                  <QBadge v-if="paneEntry.item.approvalLabel !== '-'" v-bind="paneEntry.item.approvalBadge" size="sm">{{ paneEntry.item.approvalLabel }}</QBadge>
+                  <QBadge v-else-if="paneEntry.item.decisionLabel !== '-'" v-bind="paneEntry.item.decisionBadge" size="sm">{{ paneEntry.item.decisionLabel }}</QBadge>
+                  <span v-if="paneEntry.item.riskLabel !== '-'" class="audit-event-risk" :class="'is-' + paneEntry.item.riskType">{{ t('audit_risk') }} · {{ paneEntry.item.riskLabel }}</span>
+                </div>
+                <dl class="audit-detail-grid">
+                  <div v-if="paneEntry.item.eventID !== '-'" class="audit-detail-wide"><dt>{{ t('audit_event_id') }}</dt><dd><code>{{ paneEntry.item.eventID }}</code></dd></div>
+                  <div v-if="paneEntry.item.runID !== '-'" class="audit-detail-wide"><dt>{{ t('audit_run') }}</dt><dd><code>{{ paneEntry.item.runID }}</code></dd></div>
+                  <div><dt>{{ t('audit_decision') }}</dt><dd>{{ paneEntry.item.decisionLabel }}</dd></div>
+                  <div><dt>{{ t('audit_risk') }}</dt><dd>{{ paneEntry.item.riskLabel }}</dd></div>
+                  <div v-if="paneEntry.item.approvalLabel !== '-'"><dt>{{ t('audit_approval') }}</dt><dd>{{ paneEntry.item.approvalLabel }}</dd></div>
+                  <div v-if="paneEntry.item.actor !== '-'"><dt>{{ t('audit_actor') }}</dt><dd>{{ paneEntry.item.actor }}</dd></div>
+                  <div v-if="paneEntry.item.toolName !== '-' && paneEntry.item.actionType !== '-'"><dt>{{ t('audit_action') }}</dt><dd>{{ paneEntry.item.actionType }}</dd></div>
+                  <div v-if="paneEntry.item.stepText !== '-'"><dt>{{ t('audit_step') }}</dt><dd>{{ paneEntry.item.stepText }}</dd></div>
+                  <div v-if="paneEntry.item.approvalRequestID !== '-'" class="audit-detail-wide"><dt>{{ t('audit_approval_request') }}</dt><dd><code>{{ paneEntry.item.approvalRequestID }}</code></dd></div>
+                </dl>
+                <div v-if="paneEntry.item.summary !== '-'" class="audit-detail-section">
+                  <h4>{{ t('audit_summary') }}</h4><p>{{ paneEntry.item.summary }}</p>
+                </div>
+                <div v-if="paneEntry.item.reasonsText !== '-'" class="audit-detail-section">
+                  <h4>{{ t('audit_reasons') }}</h4><p>{{ paneEntry.item.reasonsText }}</p>
+                </div>
+              </template>
+              <div v-if="paneJSON" class="audit-detail-section">
+                <h4>{{ t('audit_raw') }}</h4>
+                <div class="audit-pane-raw"><RawJsonDialogContent :json="paneJSON" /></div>
+              </div>
+            </div>
+          </AppSection>
+          <AppSection
+            v-else-if="paneEntry?.kind === 'task'"
+            class="is-literal"
+            :title="taskTitle(paneEntry.item)"
+            :meta="formatTime(paneEntry.item.created_at)"
+          >
+            <template #actions>
+              <QButton class="plain xs icon" :title="t('action_close')" :aria-label="t('action_close')" @click="closePane"><PhX class="icon" /></QButton>
+            </template>
+            <div class="app-side-pane-body audit-pane-body">
+              <div class="audit-event-meta">
+                <QBadge v-bind="taskStatusBadge(paneEntry.item)" size="sm">{{ taskStatusLabel(paneEntry.item) }}</QBadge>
+                <span>{{ taskSourceLabel(paneEntry.item) }}</span>
+              </div>
+              <p class="audit-task-text">{{ paneEntry.item.task }}</p>
+              <dl class="audit-detail-grid">
+                <div class="audit-detail-wide"><dt>{{ t('tasks_task_id_label') }}</dt><dd><code>{{ paneEntry.item.id }}</code></dd></div>
+                <div><dt>{{ t('stats_model') }}</dt><dd>{{ taskModelMeta(paneEntry.item) }}</dd></div>
+                <div><dt>{{ t('tasks_runtime_label') }}</dt><dd>{{ taskRuntimeMeta(paneEntry.item) }}</dd></div>
+              </dl>
+              <div class="audit-detail-section">
+                <h4>{{ t('audit_raw') }}</h4>
+                <AppSkeleton v-if="paneLoading" :rows="4" :label="t('runtime_loading')" />
+                <AppNotice v-else-if="paneErr" type="error" :text="paneErr" />
+                <div v-else-if="paneJSON" class="audit-pane-raw"><RawJsonDialogContent :json="paneJSON" /></div>
+              </div>
+            </div>
+          </AppSection>
+        </AppSidePane>
       </div>
     </AppPage>
   `,

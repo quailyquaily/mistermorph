@@ -1501,94 +1501,38 @@ body:has(.settings-page) .q-dialog .q-menu-item.danger .q-menu-title {
   background: var(--status-pending);
 }
 
-/* The open profile or channel is Chat's side panel: a column at the right of the workbench, on the
-   page rather than in a card, below the page bar like the index. While the section can open one the
-   column stays in the grid and only its width changes, so the pane slides out. The gap goes: the
-   content's own right margin keeps it off the pane. */
-.settings-workbench.can-pane {
-  --settings-pane-width: clamp(320px, 30vw, 420px);
-  --settings-pane-track: minmax(0px, 0px);
+/* The open item (a profile, a channel, an MCP server, a remote agent) is an AppSidePane in a column
+   at the right of the workbench. The content's own right margin keeps it off the pane. */
+.settings-workbench.side-pane-host {
   grid-template-columns:
     minmax(240px, var(--workspace-sidebar-max-width, 310px))
     minmax(0, 1fr)
-    var(--settings-pane-track);
-  column-gap: 0;
-  transition: grid-template-columns var(--motion-slow) var(--motion-ease);
+    var(--side-pane-track);
 }
 
-.settings-workbench.has-pane {
-  --settings-pane-track: minmax(var(--settings-pane-width), var(--settings-pane-width));
-}
-
-.settings-workbench.can-pane > .settings-index {
+.settings-workbench.side-pane-host > .settings-index {
   margin-right: 4px;
 }
 
-/* Pinned to its own cell: a pane that is still leaving never pushes the grid onto a second row. */
-.settings-workbench.can-pane > .settings-channel-pane {
-  grid-column: 3;
-  grid-row: 1;
+/* MCP and Remote agents teleport their pane here; the pane is the grid item, not this slot. */
+.settings-side-pane-slot {
+  display: contents;
 }
 
-/* The pane keeps its width and stays pinned to the right edge while the column narrows, so it
-   slides out rather than squashing its fields. */
-.settings-channel-pane {
-  min-width: 0;
-  min-height: 0;
-  height: 100%;
-  display: flex;
-  justify-content: flex-end;
-  padding-top: var(--workspace-head-height);
-  overflow: hidden;
-}
-
-.settings-channel-pane-shell {
-  flex: 0 0 auto;
-  width: var(--settings-pane-width, 100%);
-  min-width: 0;
-  height: 100%;
-  display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
-  overflow: hidden;
-  color: var(--text-0);
-}
-
-.settings-channel-pane-scroll {
-  min-height: 0;
-  overflow-y: auto;
-  scrollbar-width: thin;
-  overscroll-behavior: contain;
-}
-
-.settings-channel-pane-scroll > .app-section {
-  gap: 0;
-}
-
-/* The head reads like the topic name atop Chat's panel: one line with its icon buttons at the end,
-   held at the top while the fields scroll under it. */
-.settings-channel-pane-scroll > .app-section > .app-section-head {
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  --app-section-head-height: 50px;
-  padding: 0 8px 0 var(--settings-pane-gutter, 16px);
-  background: var(--q-bg-paper);
-}
-
-.settings-channel-pane-scroll .settings-panel-body {
+.app-side-pane .settings-panel-body {
   margin-top: 0;
-  padding: 16px var(--settings-pane-gutter, 16px) 24px;
+  padding: 16px var(--side-pane-gutter) 24px;
 }
 
 /* The pane is narrow: one field per row. */
-.settings-channel-pane-scroll .settings-form-grid {
+.app-side-pane .settings-form-grid {
   grid-template-columns: minmax(0, 1fr);
 }
 
 .settings-channel-console {
   display: grid;
   gap: 6px;
-  padding: 0 var(--settings-pane-gutter, 16px) 24px;
+  padding: 0 var(--side-pane-gutter) 24px;
 }
 
 .settings-channel-runtime-row {
@@ -1599,7 +1543,7 @@ body:has(.settings-page) .q-dialog .q-menu-item.danger .q-menu-title {
 /* The group trigger fields follow the trigger mode, inside the same padding. */
 .settings-channel-trigger-config {
   margin-top: -8px;
-  padding: 0 var(--settings-pane-gutter, 16px) 24px;
+  padding: 0 var(--side-pane-gutter) 24px;
 }
 
 .settings-channel-trigger-config .config-settings-fields {
@@ -1608,86 +1552,6 @@ body:has(.settings-page) .q-dialog .q-menu-item.danger .q-menu-title {
 
 .settings-channel-trigger-config .settings-panel-body {
   margin-top: 0;
-}
-
-.settings-channel-pane-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 12px var(--settings-pane-gutter, 16px) 16px;
-  border-top: 1px solid var(--line-soft);
-}
-
-.settings-channel-pane-foot-text {
-  margin: 0;
-  color: var(--text-1);
-  font-size: var(--font-size-meta);
-}
-
-.settings-channel-pane-foot-text.is-error {
-  color: var(--q-c-red);
-}
-
-.settings-channel-pane-enter-active,
-.settings-channel-pane-leave-active {
-  transition: opacity var(--motion-slow) var(--motion-ease);
-}
-
-.settings-channel-pane-enter-from,
-.settings-channel-pane-leave-to {
-  opacity: 0;
-}
-
-/* Phones: Chat's drawer. The pane comes in from the right over a mask, on its own paper with an
-   edge. */
-.settings-channel-pane-mask {
-  position: fixed;
-  inset: 0;
-  z-index: 999;
-  background: rgb(0 0 0 / 24%);
-}
-
-.settings-channel-pane.is-sheet {
-  position: fixed;
-  inset: 0 0 0 auto;
-  z-index: 1000;
-  width: min(88vw, 400px);
-  height: 100%;
-  padding-top: 0;
-  overscroll-behavior: contain;
-}
-
-.settings-channel-pane.is-sheet .settings-channel-pane-shell {
-  width: 100%;
-  border-left: 1px solid var(--line);
-  background: var(--q-bg-paper);
-}
-
-.settings-channel-sheet-enter-active {
-  transition: transform 280ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.settings-channel-sheet-leave-active {
-  transition: transform 200ms cubic-bezier(0.7, 0, 0.84, 0);
-}
-
-.settings-channel-sheet-enter-from,
-.settings-channel-sheet-leave-to {
-  transform: translate3d(100%, 0, 0);
-}
-
-.settings-channel-mask-enter-active {
-  transition: opacity 280ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.settings-channel-mask-leave-active {
-  transition: opacity 200ms cubic-bezier(0.7, 0, 0.84, 0);
-}
-
-.settings-channel-mask-enter-from,
-.settings-channel-mask-leave-to {
-  opacity: 0;
 }
 
 .settings-restart-banner {

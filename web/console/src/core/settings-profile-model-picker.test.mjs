@@ -11,7 +11,7 @@ async function readSettingsView() {
 // A profile's form lives in the profile panel (openedProfile), not in the list.
 test("profile LLM forms expose the model picker", async () => {
   const source = await readSettingsView();
-  const profileFormStart = source.indexOf('<LLMConfigForm\n                          :config="openedProfile"');
+  const profileFormStart = source.search(/<LLMConfigForm\n\s*:config="openedProfile"/);
   assert.notEqual(profileFormStart, -1, "profile LLMConfigForm not found");
   const profileFormEnd = source.indexOf("/>", profileFormStart);
   assert.notEqual(profileFormEnd, -1, "profile LLMConfigForm end not found");
@@ -23,7 +23,7 @@ test("profile LLM forms expose the model picker", async () => {
 
 test("profile LLM forms use only profile-local settings", async () => {
   const source = await readSettingsView();
-  const profileFormStart = source.indexOf('<LLMConfigForm\n                          :config="openedProfile"');
+  const profileFormStart = source.search(/<LLMConfigForm\n\s*:config="openedProfile"/);
   assert.notEqual(profileFormStart, -1, "profile LLMConfigForm not found");
   const profileFormEnd = source.indexOf("/>", profileFormStart);
   assert.notEqual(profileFormEnd, -1, "profile LLMConfigForm end not found");

@@ -67,8 +67,33 @@
   min-width: 0;
 }
 
+/* The server's name and command open it in the side pane; the switch stays apart. */
 .mcp-server-copy {
+  flex: 1 1 auto;
   min-width: 0;
+  margin: -12px 0;
+  padding: 12px 8px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.mcp-server-copy:hover,
+.mcp-server-copy:focus-visible {
+  outline: none;
+  background: color-mix(in srgb, var(--accent-1) 5%, transparent);
+}
+
+.mcp-server-row.is-active .mcp-server-copy {
+  background: color-mix(in srgb, var(--accent-1) 9%, transparent);
+}
+
+.mcp-server-copy:disabled {
+  cursor: default;
 }
 
 .mcp-server-copy strong,
@@ -78,24 +103,13 @@
   white-space: nowrap;
 }
 
-.mcp-editor-dialog {
+.mcp-editor-body {
   display: grid;
-  gap: 18px;
-}
-
-.mcp-field-head {
-  display: flex;
-  align-items: center;
+  gap: 16px;
 }
 
 .mcp-transport {
   justify-self: start;
-}
-
-.mcp-server-fields {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
 }
 
 .mcp-pairs-field {
@@ -103,41 +117,42 @@
 }
 
 .mcp-field-head {
-  min-height: 32px;
+  display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
+  min-height: 32px;
 }
 
+/* The pane is narrow: a pair's name and value stack, with its delete button beside both. */
 .mcp-pair-row {
   display: grid;
-  grid-template-columns: minmax(140px, 0.7fr) minmax(180px, 1.3fr) 36px;
+  grid-template-columns: minmax(0, 1fr) 36px;
   gap: 8px;
   align-items: center;
 }
 
-.mcp-editor-delete {
-  justify-self: start;
+.mcp-pair-row > :nth-child(2) {
+  grid-column: 1;
 }
 
-@media (max-width: 720px) {
-  .mcp-transport .app-tabs-option {
-    flex: 1 1 0;
-  }
+.mcp-pair-row > :last-child {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}
 
-  .mcp-server-fields {
-    grid-template-columns: 1fr;
-  }
+.mcp-on-demand-row {
+  padding: 0;
+  border-bottom: 0;
+}
 
-  .mcp-pair-row {
-    grid-template-columns: 1fr 36px;
-  }
+/* Delete sits at the pane's end, apart from the settings, as on a model profile. */
+.mcp-editor-actions {
+  display: flex;
+  padding-top: 16px;
+  border-top: 1px solid var(--line-soft);
+}
 
-  .mcp-pair-row > :nth-child(2) {
-    grid-column: 1;
-  }
-
-  .mcp-pair-row > :last-child {
-    grid-column: 2;
-    grid-row: 1 / span 2;
-  }
+.mcp-editor-actions .q-button {
+  gap: 6px;
 }

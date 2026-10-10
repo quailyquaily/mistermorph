@@ -23,7 +23,7 @@ function mount(t, fetch) {
   const taskResource = { loading: ref(false), error: ref(null), data: ref(null), refresh: async () => {} };
   const context = {
     computed, reactive, ref, watch, URLSearchParams, Date,
-    AppPage: {}, AppSkeleton: {}, RawJsonDialog: {}, TASK_STATUS_META: [],
+    AppPage: {}, AppSidePane: {}, AppSkeleton: {}, RawJsonDialogContent: {}, TASK_STATUS_META: [],
     createArrivalTracker, createChangeTracker, createHighlightWindow,
     useRouter: () => ({ push() {} }),
     onMounted: (fn) => { mounted = fn; }, onUnmounted() {},

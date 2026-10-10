@@ -13,8 +13,6 @@
 .console-endpoint-row {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 12px 0;
   border-top: 1px solid var(--line-soft);
 }
 
@@ -23,11 +21,34 @@
   border-top: 0;
 }
 
+/* The whole row opens the agent in the side pane. */
 .console-endpoint-copy {
   flex: 1;
   min-width: 0;
   display: grid;
   gap: 6px;
+  padding: 12px 8px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.console-endpoint-copy:hover,
+.console-endpoint-copy:focus-visible {
+  outline: none;
+  background: color-mix(in srgb, var(--accent-1) 5%, transparent);
+}
+
+.console-endpoint-row.is-active .console-endpoint-copy {
+  background: color-mix(in srgb, var(--accent-1) 9%, transparent);
+}
+
+.console-endpoint-copy:disabled {
+  cursor: default;
 }
 
 .console-endpoint-heading {
@@ -58,11 +79,16 @@
   overflow-wrap: anywhere;
 }
 
-.console-endpoint-actions {
+/* Remove sits at the pane's end, apart from the fields, as on a model profile. */
+.console-endpoint-pane-actions {
   display: flex;
-  align-items: center;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.console-endpoint-pane-actions .q-button {
   gap: 6px;
-  flex-shrink: 0;
 }
 
 .console-endpoint-empty {
@@ -70,10 +96,6 @@
   padding: 20px 0;
   color: var(--text-2);
   font-size: var(--font-size-body);
-}
-
-.console-endpoint-form .console-endpoint-error {
-  grid-column: 1 / -1;
 }
 
 .console-endpoint-error {
@@ -85,21 +107,4 @@
 .console-endpoint-remove-copy {
   font-size: var(--font-size-body);
   overflow-wrap: anywhere;
-}
-
-@media (max-width: 620px) {
-  .console-endpoint-row {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 12px;
-  }
-
-  .console-endpoint-actions {
-    align-self: flex-end;
-  }
-
-  .console-endpoint-actions button {
-    min-height: 40px;
-    min-width: 40px;
-  }
 }

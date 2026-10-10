@@ -21,6 +21,7 @@ import ProAuthDialog from "../components/ProAuthDialog";
 import ImageUploadField from "../components/ImageUploadField";
 import LLMConfigForm from "../components/LLMConfigForm";
 import MCPSettingsPanel from "../components/MCPSettingsPanel";
+import AppSidePane from "../components/AppSidePane";
 import toolChannelTelegramLogoURL from "../assets/images/channels/telegram.svg";
 import toolChannelSlackLogoURL from "../assets/images/channels/slack.svg";
 import toolChannelLarkLogoURL from "../assets/images/channels/lark.svg";
@@ -745,6 +746,7 @@ const SettingsView = {
     ImageUploadField,
     LLMConfigForm,
     MCPSettingsPanel,
+    AppSidePane,
     AppMarkdownEditor,
     SettingsAppPanel,
     SettingsCreditsPanel,
@@ -1588,15 +1590,7 @@ const SettingsView = {
     function closeChannelPane() {
       openChannel.value = "";
     }
-    function onChannelPaneKeydown(event) {
-      // A field that used Escape itself (closing its list) keeps the pane open.
-      if (event.key === "Escape" && !event.defaultPrevented && openChannel.value) {
-        closeChannelPane();
-      }
-    }
     watch(() => selectedSection.value?.id, closeChannelPane);
-    onMounted(() => window.addEventListener("keydown", onChannelPaneKeydown));
-    onUnmounted(() => window.removeEventListener("keydown", onChannelPaneKeydown));
 
     // Models: profiles are listed as one-line rows; a profile's settings open in a panel from the
     // right, the same panel Channels uses. Closing keeps the draft in the save bar.
@@ -1631,14 +1625,7 @@ const SettingsView = {
       return { src: logo.src, className: logo.className || "is-fallback", text: initials || "LLM" };
     }
 
-    function onProfilePaneKeydown(event) {
-      if (event.key === "Escape" && !event.defaultPrevented && openProfileKey.value) {
-        closeProfilePane();
-      }
-    }
     watch(() => selectedSection.value?.id, closeProfilePane);
-    onMounted(() => window.addEventListener("keydown", onProfilePaneKeydown));
-    onUnmounted(() => window.removeEventListener("keydown", onProfilePaneKeydown));
 
     const sectionSaveUnits = computed(() => {
       const id = selectedSection.value?.id || "";
@@ -1791,17 +1778,28 @@ const SettingsView = {
     }
     const showIndexPane = computed(() => !isMobile.value || !mobilePanelVisible.value);
     const showPanelPane = computed(() => !isMobile.value || mobilePanelVisible.value);
-    // On desktop the open profile or channel takes a column at the right of the workbench, as
-    // Chat's side panel does: the column is there while the section can open one, and it widens
-    // when one is open, so opening and closing slide.
-    const sidePaneSection = computed(() => ["agent", "channels"].includes(selectedSection.value?.id));
+    // On desktop the open item (a profile, a channel, an MCP server, a remote agent) takes a column
+    // at the right of the workbench, as Chat's side panel does: the column is there while the
+    // section can open one, and it widens when one is open, so opening and closing slide. MCP and
+    // Remote agents keep their pane in their own panel, which reports whether it is open and moves
+    // the pane into this column.
+    const childPaneOpen = ref(false);
+    watch(() => selectedSection.value?.id, () => {
+      childPaneOpen.value = false;
+    });
+    function onChildPaneChange(open) {
+      childPaneOpen.value = !!open;
+    }
+    const sidePaneSection = computed(() => ["agent", "channels", "mcp", "console"].includes(selectedSection.value?.id));
     const sidePaneOpen = computed(() => {
       const id = selectedSection.value?.id;
-      return (id === "agent" && !!openedProfile.value) || (id === "channels" && !!openChannel.value);
+      if (id === "agent") return !!openedProfile.value;
+      if (id === "channels") return !!openChannel.value;
+      return (id === "mcp" || id === "console") && childPaneOpen.value;
     });
     const workbenchClass = computed(() => ({
-      "can-pane": !isMobile.value && sidePaneSection.value,
-      "has-pane": !isMobile.value && sidePaneOpen.value,
+      "side-pane-host": !isMobile.value && sidePaneSection.value,
+      "is-side-pane-open": !isMobile.value && sidePaneOpen.value,
     }));
     const mobileShowBack = computed(() => isMobile.value && mobilePanelVisible.value);
     const mobileBarTitle = computed(() =>
@@ -5379,6 +5377,7 @@ const SettingsView = {
       mobileBarTitle,
       pageClass,
       workbenchClass,
+      onChildPaneChange,
       llmSaveDisabled,
       toolsSaveDisabled,
       mcpSaveDisabled,
@@ -5973,7 +5972,10 @@ const SettingsView = {
               :readOnly="agentSettingsReadOnly"
               :readOnlyMessage="agentSettingsReadOnlyMessage"
               :validationError="mcpValidationError"
+              :mobile="isMobile"
+              paneTarget="#settings-side-pane-slot"
               @save="saveMCPServers"
+              @pane-change="onChildPaneChange"
             />
           </div>
 
@@ -5998,7 +6000,10 @@ const SettingsView = {
               :loading="consoleLoading || !consoleSettingsLoaded"
               :saving="consoleSaving"
               :addRequested="addConsoleEndpointRequested"
+              :mobile="isMobile"
+              paneTarget="#settings-side-pane-slot"
               @add-opened="consumeConsoleEndpointAddRequest"
+              @pane-change="onChildPaneChange"
               @save="(values, onComplete) => saveConsoleCollection('endpoints', values, onComplete)"
             />
             <ConfigSettingsPanel
@@ -6404,23 +6409,18 @@ const SettingsView = {
           </Transition>
         </div>
 
+        <!-- MCP and Remote agents move their pane here. -->
+        <div id="settings-side-pane-slot" class="settings-side-pane-slot"></div>
         <template v-if="showPanelPane && selectedSection?.id === 'agent'">
-          <Transition name="settings-channel-mask">
-            <div v-if="openedProfile && isMobile" class="settings-channel-pane-mask" aria-hidden="true" @click="closeProfilePane"></div>
-          </Transition>
-          <!-- The pane is keyed by profile: switching profiles fades the old one out before the new one in. -->
-          <Transition :name="isMobile ? 'settings-channel-sheet' : 'settings-channel-pane'" mode="out-in">
-            <aside
-              v-if="openedProfile"
-              :key="openedProfile._key"
-              class="settings-channel-pane settings-profile-pane"
-              :class="{ 'is-sheet': isMobile }"
-              :role="isMobile ? 'dialog' : null"
-              :aria-modal="isMobile ? 'true' : null"
-              :aria-label="openedProfile.name || t('settings_agent_profile_placeholder')"
-            >
-              <div class="settings-channel-pane-shell">
-                <div class="settings-channel-pane-scroll">
+          <!-- Keyed by profile: switching profiles fades the old one out before the new one in. -->
+          <AppSidePane
+            class="settings-profile-pane"
+            :open="!!openedProfile"
+            :sheet="isMobile"
+            :paneKey="openedProfile?._key"
+            :label="openedProfile?.name || t('settings_agent_profile_placeholder')"
+            @close="closeProfilePane"
+          >
                   <AppSection class="is-literal" :title="openedProfile.name || t('settings_agent_profile_placeholder')">
                     <template #meta>
                       {{ t(profileIsInUse(openedProfile) ? "settings_agent_profile_status_in_use" : "settings_agent_profile_status_available") }}<template v-if="profileSummary(openedProfile)"> · {{ profileSummary(openedProfile) }}</template>
@@ -6517,34 +6517,18 @@ const SettingsView = {
                       </div>
                     </div>
                   </AppSection>
-                </div>
-                <footer v-if="sectionSaveUnits.length || sectionSaveFailed" class="settings-channel-pane-foot">
-                  <p class="settings-channel-pane-foot-text" :class="{ 'is-error': sectionSaveFailed }" role="status">
+                <template v-if="sectionSaveUnits.length || sectionSaveFailed" #foot>
+                  <p class="app-side-pane-foot-text" :class="{ 'is-error': sectionSaveFailed }" role="status">
                     {{ sectionSaveFailed ? t('settings_save_bar_failed', { items: sectionSaveFailed }) : t('settings_channel_unsaved_note') }}
                   </p>
                   <QButton class="primary" :loading="sectionSaving" :disabled="sectionSaveBusy || !sectionSaveUnits.length" @click="saveSection">
                     {{ t('action_save') }}
                   </QButton>
-                </footer>
-              </div>
-            </aside>
-          </Transition>
+                </template>
+          </AppSidePane>
         </template>
         <template v-if="showPanelPane && selectedSection?.id === 'channels'">
-          <Transition name="settings-channel-mask">
-            <div v-if="openChannel && isMobile" class="settings-channel-pane-mask" aria-hidden="true" @click="closeChannelPane"></div>
-          </Transition>
-          <Transition :name="isMobile ? 'settings-channel-sheet' : 'settings-channel-pane'">
-            <aside
-              v-show="openChannel"
-              class="settings-channel-pane"
-              :class="{ 'is-sheet': isMobile }"
-              :role="isMobile ? 'dialog' : null"
-              :aria-modal="isMobile ? 'true' : null"
-              :aria-label="t(openChannelTitleKey)"
-            >
-              <div class="settings-channel-pane-shell">
-                  <div class="settings-channel-pane-scroll">
+          <AppSidePane :open="!!openChannel" :sheet="isMobile" :paneKey="openChannel" :label="t(openChannelTitleKey)" @close="closeChannelPane">
         <template v-if="openChannel === 'telegram'">
           <AppSection :title="t('settings_console_telegram_title')" :meta="t('settings_console_telegram_token_note')">
             <template #actions>
@@ -7100,18 +7084,15 @@ const SettingsView = {
                     />
                   </div>
                 </div>
-              </div>
-                  <footer v-if="sectionSaveUnits.length || sectionSaveFailed" class="settings-channel-pane-foot">
-                    <p class="settings-channel-pane-foot-text" :class="{ 'is-error': sectionSaveFailed }" role="status">
+                  <template v-if="sectionSaveUnits.length || sectionSaveFailed" #foot>
+                    <p class="app-side-pane-foot-text" :class="{ 'is-error': sectionSaveFailed }" role="status">
                       {{ sectionSaveFailed ? t('settings_save_bar_failed', { items: sectionSaveFailed }) : t('settings_channel_unsaved_note') }}
                     </p>
                     <QButton class="primary" :loading="sectionSaving" :disabled="sectionSaveBusy || !sectionSaveUnits.length" @click="saveSection">
                       {{ t('action_save') }}
                     </QButton>
-                  </footer>
-                </div>
-            </aside>
-          </Transition>
+                  </template>
+          </AppSidePane>
         </template>
       </div>
 

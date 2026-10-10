@@ -1,0 +1,159 @@
+/* A layout that holds an AppSidePane lists var(--side-pane-track) as its last column. While the pane
+   can open the column stays in the grid and only its width changes, so the pane slides out. The
+   column gap goes: a closed, zero-width column must not leave one behind, so the content keeps
+   itself off the pane with its own margin. */
+.side-pane-host {
+  --side-pane-width: clamp(320px, 30vw, 420px);
+  --side-pane-track: minmax(0px, 0px);
+  column-gap: 0;
+  transition: grid-template-columns var(--motion-slow) var(--motion-ease);
+}
+
+.side-pane-host.is-side-pane-open {
+  --side-pane-track: minmax(var(--side-pane-width), var(--side-pane-width));
+}
+
+/* Pinned to the last column's cell: a pane that is still leaving never pushes the grid onto a
+   second row. The pane sits on the page, not in a card, below the page bar like a sidebar. It
+   keeps its width and stays pinned to the right edge while the column narrows, so it slides out
+   rather than squashing its fields. */
+.app-side-pane {
+  --side-pane-gutter: 16px;
+  grid-column: -2;
+  grid-row: 1;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  justify-content: flex-end;
+  padding-top: var(--side-pane-top, var(--workspace-head-height));
+  overflow: hidden;
+}
+
+.app-side-pane-shell {
+  flex: 0 0 auto;
+  width: var(--side-pane-width, 100%);
+  min-width: 0;
+  height: 100%;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  overflow: hidden;
+  color: var(--text-0);
+}
+
+.app-side-pane-scroll {
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  overscroll-behavior: contain;
+}
+
+.app-side-pane-scroll > .app-section {
+  gap: 0;
+}
+
+/* The head reads like the topic name atop Chat's panel: one line with its icon buttons at the end,
+   held at the top while the fields scroll under it. */
+.app-side-pane-scroll > .app-section > .app-section-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  --app-section-head-height: var(--side-pane-head-height, 50px);
+  /* The close button keeps the pane's gutter on the right, as the title does on the left. */
+  padding: 0 var(--side-pane-gutter);
+  background: var(--q-bg-paper);
+}
+
+.app-side-pane-body {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  padding: 16px var(--side-pane-gutter) 24px;
+}
+
+.app-side-pane-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px var(--side-pane-gutter) 16px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.app-side-pane-foot-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  color: var(--text-1);
+  font-size: var(--font-size-meta);
+  overflow-wrap: anywhere;
+}
+
+.app-side-pane-foot-text.is-error {
+  color: var(--danger);
+}
+
+.app-side-pane-foot > .q-button {
+  flex: 0 0 auto;
+}
+
+.app-side-pane-enter-active,
+.app-side-pane-leave-active {
+  transition: opacity var(--motion-slow) var(--motion-ease);
+}
+
+.app-side-pane-enter-from,
+.app-side-pane-leave-to {
+  opacity: 0;
+}
+
+/* Phones: Chat's drawer. The pane comes in from the right over a mask, on its own paper with an
+   edge. */
+.app-side-pane-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  background: rgb(0 0 0 / 24%);
+}
+
+.app-side-pane.is-sheet {
+  position: fixed;
+  inset: 0 0 0 auto;
+  z-index: 1000;
+  width: min(88vw, 400px);
+  height: 100%;
+  padding-top: 0;
+  overscroll-behavior: contain;
+}
+
+.app-side-pane.is-sheet .app-side-pane-shell {
+  width: 100%;
+  border-left: 1px solid var(--line);
+  background: var(--q-bg-paper);
+}
+
+.app-side-pane-sheet-enter-active {
+  transition: transform 280ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.app-side-pane-sheet-leave-active {
+  transition: transform 200ms cubic-bezier(0.7, 0, 0.84, 0);
+}
+
+.app-side-pane-sheet-enter-from,
+.app-side-pane-sheet-leave-to {
+  transform: translate3d(100%, 0, 0);
+}
+
+.app-side-pane-mask-enter-active {
+  transition: opacity 280ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.app-side-pane-mask-leave-active {
+  transition: opacity 200ms cubic-bezier(0.7, 0, 0.84, 0);
+}
+
+.app-side-pane-mask-enter-from,
+.app-side-pane-mask-leave-to {
+  opacity: 0;
+}

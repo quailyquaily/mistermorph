@@ -14,6 +14,51 @@
   min-height: 0;
 }
 
+/* The open entry is an AppSidePane in a column at the right, as Chat's side panel. Like Chat's, it
+   starts at the top with a head as tall as the index's. */
+.audit-workbench.side-pane-host {
+  grid-template-columns:
+    minmax(220px, var(--workspace-sidebar-max-width, 310px))
+    minmax(0, 1fr)
+    var(--side-pane-track);
+}
+
+.audit-workbench.side-pane-host > .audit-index {
+  margin-right: 4px;
+}
+
+.audit-pane {
+  --side-pane-top: 0px;
+  --side-pane-head-height: var(--workspace-head-height);
+}
+
+.audit-pane-body .audit-detail-section {
+  min-width: 0;
+}
+
+/* The raw JSON in the dark panel Markdown code blocks use, scrolling sideways on its own. */
+.audit-pane-raw {
+  min-width: 0;
+  overflow-x: auto;
+  border: 1px solid #30363d;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--q-c-dark) 92%, var(--q-c-blue) 8%);
+  scrollbar-color: #6e7681 transparent;
+}
+
+.audit-pane-raw .raw-json-tools {
+  position: absolute;
+  top: 0;
+  right: 0;
+  padding: 8px;
+}
+
+.audit-pane-raw .raw-json-body {
+  padding: 12px 14px;
+  font-size: var(--font-size-meta);
+  color: #c9d1d9;
+}
+
 .audit-index {
   --workspace-sidebar-head-pad: 0 var(--content-gutter-x);
   display: grid;
@@ -85,9 +130,7 @@
   height: 14px;
 }
 
-.audit-archives[open] > summary > .icon,
-.audit-event[open] > summary > .audit-event-chevron,
-.audit-task[open] > summary > .audit-event-chevron {
+.audit-archives[open] > summary > .icon {
   transform: rotate(90deg);
 }
 
@@ -128,8 +171,7 @@
 
 .audit-pagination .icon,
 .audit-ledger-back .icon,
-.audit-index-head .icon,
-.audit-raw-action .icon {
+.audit-index-head .icon {
   width: 16px;
   min-width: 16px;
   height: 16px;
@@ -250,16 +292,28 @@
   border-bottom: 1px solid var(--line-soft);
 }
 
+/* A row opens its entry in the side pane. */
 .audit-event-summary {
   display: flex;
   align-items: flex-start;
   gap: 12px;
+  width: 100%;
   padding: 15px 4px;
-  list-style: none;
   min-width: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
-.audit-event-summary::-webkit-details-marker,
+.audit-event.is-active > .audit-event-summary,
+.audit-task.is-active > .audit-event-summary {
+  background: color-mix(in srgb, var(--accent-1) 9%, transparent);
+}
+
 .audit-archives-heading::-webkit-details-marker {
   display: none;
 }
@@ -351,15 +405,6 @@
   color: var(--text-1);
 }
 
-.audit-event-detail {
-  display: grid;
-  gap: 16px;
-  margin: 0 4px;
-  padding: 16px 0 20px;
-  border-top: 1px solid var(--line-soft);
-  min-width: 0;
-}
-
 .audit-detail-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -400,13 +445,6 @@
 
 .audit-detail-grid code {
   font-size: inherit;
-}
-
-.audit-raw-action {
-  justify-self: start;
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
 }
 
 .audit-task-title {
