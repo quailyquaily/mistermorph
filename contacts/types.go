@@ -102,3 +102,9 @@ type ShareOutcome struct {
 	Partial bool      `json:"partial,omitempty"`
 	SentAt  time.Time `json:"sent_at"`
 }
+
+// AgentSendCoolingDown reports whether c is an Agent contact that cannot receive another send at
+// now because it is still cooling down from the last one.
+func (c Contact) AgentSendCoolingDown(now time.Time) bool {
+	return c.Kind == KindAgent && c.CooldownUntil != nil && now.Before(*c.CooldownUntil)
+}

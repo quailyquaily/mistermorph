@@ -39,6 +39,8 @@ type ContactsSendToolOptions struct {
 	DiscordBotToken   string
 	DiscordBaseURL    string
 	FailureCooldown   time.Duration
+	// AgentSendCooldown is the minimum interval between sends to the same Agent contact.
+	AgentSendCooldown time.Duration
 	// PathRoots are where a file to send may come from: file_cache_dir and the task's workspace.
 	// FileStateDir is never sent from.
 	PathRoots pathroots.PathRoots
@@ -199,7 +201,8 @@ func executeContactSendTool(ctx context.Context, params map[string]any, opts Con
 	svc := contacts.NewServiceWithOptions(
 		store,
 		contacts.ServiceOptions{
-			FailureCooldown: opts.FailureCooldown,
+			FailureCooldown:   opts.FailureCooldown,
+			AgentSendCooldown: opts.AgentSendCooldown,
 		},
 	)
 	return executeContactsSendResolved(ctx, params, contactIDs, chatID, file, svc, sender, time.Now().UTC(), policy)
@@ -232,6 +235,11 @@ func executeContactsSendResolved(
 	recipients, err := resolveContactsSendRecipients(ctx, svc, contactIDs, policy)
 	if err != nil {
 		return "", err
+	}
+	for _, recipient := range recipients {
+		if err := checkAgentSendCooldown(policy.toolName, recipient.ContactID, recipient.Contact, now); err != nil {
+			return "", err
+		}
 	}
 	plan, err := planContactsSendBatch(recipients, chatID)
 	if err != nil {
@@ -309,6 +317,9 @@ func executeContactsSendSingle(
 		if err := validateActiveAgentRecipient(policy.activeAgentIDs, contactID, contact); err != nil {
 			return "", err
 		}
+	}
+	if err := checkAgentSendCooldown(policy.toolName, contactID, contact, now); err != nil {
+		return "", err
 	}
 	sendParams, err := contactsSendParamsWithSingleMention(params, contactID, resolvedChatID, contact, file)
 	if err != nil {
@@ -474,6 +485,15 @@ func resolveContactsSendRecipients(ctx context.Context, svc *contacts.Service, c
 		})
 	}
 	return recipients, nil
+}
+
+// checkAgentSendCooldown rejects a send to an Agent contact that is still cooling down from the
+// previous send.
+func checkAgentSendCooldown(toolName, contactID string, contact contacts.Contact, now time.Time) error {
+	if !contact.AgentSendCoolingDown(now) {
+		return nil
+	}
+	return fmt.Errorf("%s target %q is cooling down until %s; wait before messaging this Agent again", toolName, strings.TrimSpace(contactID), contact.CooldownUntil.UTC().Format(time.RFC3339))
 }
 
 func validateContactsSendDefaultRoute(contact contacts.Contact) error {

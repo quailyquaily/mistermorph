@@ -380,7 +380,8 @@ Constraints:
 - Every target is checked again immediately before planning the send. All targets must still be active and have `kind: agent`.
 - Protocol references such as `tg:@username` must resolve to an active Agent Contact. Arbitrary chat or user addresses cannot bypass the check.
 - A multi-target call is rejected before sending anything when any target is not an active Agent.
-- `agent_send` has no separate config key. Removing or deactivating all Agent Contacts makes it unavailable.
+- `agent_send` has no separate enable key. Removing or deactivating all Agent Contacts makes it unavailable.
+- Cooldown: after a send to an Agent contact (through `agent_send` or `contacts_send`), that contact cannot receive another send until `contacts.agent_send.cooldown` has passed (default `30s`, `0` disables it). A call that targets a contact still cooling down is rejected before anything is sent. A failed send to an Agent contact does not start a cooldown.
 - `contacts_send` registration and group-chat restrictions are unchanged.
 
 ## `spawn`

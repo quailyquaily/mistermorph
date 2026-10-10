@@ -475,7 +475,12 @@ contacts:
   dir_name: "contacts"
   proactive:
     # Cooldown applied when proactive/direct send fails (e.g. peer unavailable).
+    # Agent contacts are not cooled down by failures; see agent_send.cooldown.
     failure_cooldown: "1h"
+  agent_send:
+    # Minimum interval between sends (agent_send or contacts_send) to the same Agent contact.
+    # 0 disables it.
+    cooldown: "30s"
 
 # Task projections and journal settings.
 tasks:

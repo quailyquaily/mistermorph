@@ -37,6 +37,9 @@ func (e *PartialDeliveryError) Unwrap() error { return e.Err }
 
 type ServiceOptions struct {
 	FailureCooldown time.Duration
+	// AgentSendCooldown is the minimum interval between sends to the same Agent contact. Zero turns
+	// it off.
+	AgentSendCooldown time.Duration
 }
 
 type EnsureStore interface {
@@ -63,8 +66,9 @@ type ServiceDeps struct {
 type Service struct {
 	ensureStore     EnsureStore
 	contactStore    ContactStore
-	outboxStore     OutboxStore
-	failureCooldown time.Duration
+	outboxStore       OutboxStore
+	failureCooldown   time.Duration
+	agentSendCooldown time.Duration
 }
 
 func NewService(store Store) *Service {
@@ -84,8 +88,9 @@ func NewServiceWithDeps(deps ServiceDeps, opts ServiceOptions) *Service {
 	return &Service{
 		ensureStore:     deps.Ensure,
 		contactStore:    deps.Contacts,
-		outboxStore:     deps.Outbox,
-		failureCooldown: opts.FailureCooldown,
+		outboxStore:       deps.Outbox,
+		failureCooldown:   opts.FailureCooldown,
+		agentSendCooldown: opts.AgentSendCooldown,
 	}
 }
 
@@ -476,7 +481,21 @@ func (s *Service) applySendOutcomeToContacts(ctx context.Context, now time.Time,
 		if contact.Synthetic {
 			continue
 		}
-		if outcome.Error != "" && !outcome.Partial {
+		failed := outcome.Error != "" && !outcome.Partial
+		if contact.Kind == KindAgent {
+			// An Agent contact cools down after each send it received, so two agents cannot keep
+			// messaging each other. A failed send does not cool it down.
+			if failed {
+				continue
+			}
+			ts := now
+			contact.LastInteractionAt = &ts
+			contact.CooldownUntil = nil
+			if s.agentSendCooldown > 0 {
+				until := now.Add(s.agentSendCooldown)
+				contact.CooldownUntil = &until
+			}
+		} else if failed {
 			cooldown := now.Add(s.failureCooldown)
 			contact.CooldownUntil = &cooldown
 		} else {

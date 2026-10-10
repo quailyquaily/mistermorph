@@ -211,6 +211,7 @@ func SystemFields() []Field {
 		{Path: "file_cache.max_total_bytes", Kind: KindInt, ApplyMode: ApplyProcessRestart, Min: &zero},
 		{Path: "contacts.dir_name", Kind: KindString, ApplyMode: ApplyProcessRestart},
 		{Path: "contacts.proactive.failure_cooldown", Kind: KindDuration, ApplyMode: ApplyRuntimeRestart},
+		{Path: "contacts.agent_send.cooldown", Kind: KindDuration, ApplyMode: ApplyRuntimeRestart},
 		{Path: "tasks.dir_name", Kind: KindString, ApplyMode: ApplyProcessRestart},
 		{Path: "tasks.persistence_targets", Kind: KindStringList, ApplyMode: ApplyRuntimeRestart},
 		{Path: "tasks.rotate_max_bytes", Kind: KindInt, ApplyMode: ApplyRuntimeRestart, Min: &zero},

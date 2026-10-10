@@ -36,6 +36,7 @@ const (
 	DefaultLineWebhookListen       = "127.0.0.1:18080"
 	DefaultLineWebhookPath         = "/line/webhook"
 	DefaultLarkBaseURL             = "https://open.feishu.cn/open-apis"
+	DefaultAgentSendCooldown       = 30 * time.Second
 )
 
 // Apply sets all shared defaults used by CLI and desktop console mode.
@@ -97,6 +98,7 @@ func Apply(v *viper.Viper) {
 
 	v.SetDefault("contacts.dir_name", "contacts")
 	v.SetDefault("contacts.proactive.failure_cooldown", 72*time.Hour)
+	v.SetDefault("contacts.agent_send.cooldown", DefaultAgentSendCooldown)
 
 	v.SetDefault("server.listen", "")
 	v.SetDefault("server.max_queue", DefaultServerMaxQueue)

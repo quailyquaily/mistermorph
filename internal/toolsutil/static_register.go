@@ -128,6 +128,7 @@ type StaticContactsSendConfig struct {
 	DiscordBotToken   string
 	DiscordBaseURL    string
 	FailureCooldown   time.Duration
+	AgentSendCooldown time.Duration
 }
 
 type StaticRegistryConfigReader interface {
@@ -253,6 +254,7 @@ func StaticRegistryConfigFromReader(reader StaticRegistryConfigReader) (StaticRe
 			DiscordBotToken:   strings.TrimSpace(reader.GetString("discord.bot_token")),
 			DiscordBaseURL:    strings.TrimSpace(reader.GetString("discord.base_url")),
 			FailureCooldown:   failureCooldown,
+			AgentSendCooldown: reader.GetDuration("contacts.agent_send.cooldown"),
 		},
 	}, nil
 }
@@ -405,6 +407,7 @@ func RegisterStaticTools(reg *tools.Registry, cfg StaticRegistryConfig, selected
 		DiscordBotToken:   strings.TrimSpace(cfg.ContactsSend.DiscordBotToken),
 		DiscordBaseURL:    strings.TrimSpace(cfg.ContactsSend.DiscordBaseURL),
 		FailureCooldown:   cfg.ContactsSend.FailureCooldown,
+		AgentSendCooldown: cfg.ContactsSend.AgentSendCooldown,
 		PathRoots:         cfg.Common.PathRoots,
 	}
 	if isSelected(BuiltinAgentSend) {

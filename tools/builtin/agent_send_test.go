@@ -111,3 +111,79 @@ func TestAgentSendToolOnlySendsToActiveAgents(t *testing.T) {
 		t.Fatalf("active Agent request count = %d, want 1", got)
 	}
 }
+
+func TestAgentSendCooldown(t *testing.T) {
+	ctx := context.Background()
+	setup := func(t *testing.T, ok bool) (string, *atomic.Int32, string) {
+		t.Helper()
+		contactsDir := filepath.Join(t.TempDir(), "contacts")
+		svc := contacts.NewService(contacts.NewFileStore(contactsDir))
+		if _, err := svc.UpsertContact(ctx, contacts.Contact{
+			ContactID:      "contact:smith",
+			Kind:           contacts.KindAgent,
+			Channel:        contacts.ChannelTelegram,
+			TGUsername:     "smith_bot",
+			TGGroupChatIDs: []int64{-1001},
+		}, time.Now().UTC()); err != nil {
+			t.Fatal(err)
+		}
+		var requests atomic.Int32
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			requests.Add(1)
+			w.Header().Set("Content-Type", "application/json")
+			if !ok {
+				w.WriteHeader(http.StatusBadRequest)
+				_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "description": "chat not found"})
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "result": map[string]any{"message_id": 1}})
+		}))
+		t.Cleanup(server.Close)
+		return contactsDir, &requests, server.URL
+	}
+	options := func(contactsDir, baseURL string) ContactsSendToolOptions {
+		return ContactsSendToolOptions{
+			Enabled:           true,
+			ContactsDir:       contactsDir,
+			TelegramBotToken:  "token",
+			TelegramBaseURL:   baseURL,
+			AgentSendCooldown: time.Hour,
+		}
+	}
+	params := map[string]any{"contact_id": "tg:@smith_bot", "message_text": "continue"}
+
+	t.Run("a send starts the cooldown", func(t *testing.T) {
+		contactsDir, requests, baseURL := setup(t, true)
+		agentTool := NewAgentSendTool(options(contactsDir, baseURL))
+		if _, err := agentTool.Execute(ctx, params); err != nil {
+			t.Fatalf("first Execute() error = %v", err)
+		}
+		if _, err := agentTool.Execute(ctx, params); err == nil || !strings.Contains(err.Error(), "cooling down") {
+			t.Fatalf("second Execute() error = %v, want cooldown rejection", err)
+		}
+		contactsTool := NewContactsSendTool(options(contactsDir, baseURL))
+		if _, err := contactsTool.Execute(ctx, params); err == nil || !strings.Contains(err.Error(), "cooling down") {
+			t.Fatalf("contacts_send Execute() error = %v, want cooldown rejection", err)
+		}
+		if got := requests.Load(); got != 1 {
+			t.Fatalf("request count = %d, want 1", got)
+		}
+	})
+
+	t.Run("a failed send does not", func(t *testing.T) {
+		contactsDir, requests, baseURL := setup(t, false)
+		agentTool := NewAgentSendTool(options(contactsDir, baseURL))
+		_, _ = agentTool.Execute(ctx, params)
+		_, _ = agentTool.Execute(ctx, params)
+		if got := requests.Load(); got != 2 {
+			t.Fatalf("request count = %d, want 2", got)
+		}
+		contact, ok, err := contacts.NewFileStore(contactsDir).GetContact(ctx, "contact:smith")
+		if err != nil || !ok {
+			t.Fatalf("GetContact() = %v, %v", ok, err)
+		}
+		if contact.CooldownUntil != nil {
+			t.Fatalf("cooldown_until = %v, want none after failures", contact.CooldownUntil)
+		}
+	})
+}
