@@ -1791,6 +1791,18 @@ const SettingsView = {
     }
     const showIndexPane = computed(() => !isMobile.value || !mobilePanelVisible.value);
     const showPanelPane = computed(() => !isMobile.value || mobilePanelVisible.value);
+    // On desktop the open profile or channel takes a column at the right of the workbench, as
+    // Chat's side panel does: the column is there while the section can open one, and it widens
+    // when one is open, so opening and closing slide.
+    const sidePaneSection = computed(() => ["agent", "channels"].includes(selectedSection.value?.id));
+    const sidePaneOpen = computed(() => {
+      const id = selectedSection.value?.id;
+      return (id === "agent" && !!openedProfile.value) || (id === "channels" && !!openChannel.value);
+    });
+    const workbenchClass = computed(() => ({
+      "can-pane": !isMobile.value && sidePaneSection.value,
+      "has-pane": !isMobile.value && sidePaneOpen.value,
+    }));
     const mobileShowBack = computed(() => isMobile.value && mobilePanelVisible.value);
     const mobileBarTitle = computed(() =>
       mobileShowBack.value ? selectedSection.value?.title || t("settings_title") : t("settings_title")
@@ -5366,6 +5378,7 @@ const SettingsView = {
       mobileShowBack,
       mobileBarTitle,
       pageClass,
+      workbenchClass,
       llmSaveDisabled,
       toolsSaveDisabled,
       mcpSaveDisabled,
@@ -5563,7 +5576,7 @@ const SettingsView = {
           <h2 class="page-title page-bar-title workspace-section-title">{{ mobileBarTitle }}</h2>
         </div>
       </template>
-      <div class="settings-workbench">
+      <div class="settings-workbench" :class="workbenchClass">
         <aside v-if="showIndexPane" class="settings-index workspace-sidebar-section">
           <div class="settings-index-items workspace-sidebar-list">
             <button
@@ -5603,7 +5616,6 @@ const SettingsView = {
             </div>
           </div>
           <div v-if="selectedSection.id === 'agent'" class="settings-panel-body settings-panel-body-plain">
-            <div class="settings-channels settings-profiles-layout" :class="{ 'has-pane': openedProfile && !isMobile }">
             <div class="settings-profiles-main">
             <AppSection variant="boxed" :title="t('settings_agent_block_title')" :meta="selectedSection.meta">
               <template #actions>
@@ -5803,129 +5815,6 @@ const SettingsView = {
               @save="saveConfigSettings('agent', $event)"
             />
             </div>
-
-            <div v-if="openedProfile && isMobile" class="settings-channel-pane-mask" aria-hidden="true" @click="closeProfilePane"></div>
-            <Transition :name="isMobile ? 'settings-channel-sheet' : 'settings-channel-pane'">
-              <aside
-                v-if="openedProfile"
-                :key="openedProfile._key"
-                class="settings-channel-pane settings-profile-pane"
-                :class="{ 'is-sheet': isMobile }"
-                :role="isMobile ? 'dialog' : null"
-                :aria-modal="isMobile ? 'true' : null"
-                :aria-label="openedProfile.name || t('settings_agent_profile_placeholder')"
-              >
-                <div class="settings-channel-pane-shell">
-                  <div class="settings-channel-pane-scroll">
-                    <AppSection class="is-literal" :title="openedProfile.name || t('settings_agent_profile_placeholder')">
-                      <template #meta>
-                        {{ t(profileIsInUse(openedProfile) ? "settings_agent_profile_status_in_use" : "settings_agent_profile_status_available") }}<template v-if="profileSummary(openedProfile)"> · {{ profileSummary(openedProfile) }}</template>
-                      </template>
-                      <template #actions>
-                        <div class="settings-profile-actions settings-default-llm-actions">
-                          <QButton class="plain xs icon" :title="t('settings_channel_close')" :aria-label="t('settings_channel_close')" @click="closeProfilePane">
-                            <PhX class="icon" />
-                          </QButton>
-                        </div>
-                      </template>
-                      <div class="settings-panel-body settings-profile-pane-body">
-                        <div class="settings-field settings-profile-name">
-                          <span class="settings-field-label">{{ t("settings_agent_profile_name_label") }}</span>
-                          <QInput
-                            :modelValue="openedProfile.name"
-                            :placeholder="t('settings_agent_profile_name_placeholder')"
-                            :disabled="agentLoading || agentSaving || agentSettingsReadOnly"
-                            @update:modelValue="updateProfileField(openedProfile._key, { field: 'name', value: $event })"
-                          />
-                        </div>
-                        <LLMConfigForm
-                          :config="openedProfile"
-                          :busy="agentLoading || agentSaving"
-                          :disabledReason="agentFormDisabledReason"
-                          :readOnly="agentSettingsReadOnly"
-                          :envManaged="llmProfileEnvManaged(openedProfile)"
-                          :secretFields="llmProfileSecretFields(openedProfile)"
-                          :revealPrefix="llmRevealPrefix(openedProfile)"
-                          :providerItems="providerItems"
-                          :reasoningEffortItems="reasoningEffortItems"
-                          :toolsEmulationItems="toolsEmulationItems"
-                          :enableModelPicker="true"
-                          :modelLookupCredentialsReady="profileModelLookupCredentialsReady(openedProfile)"
-                          :showCodexAuthAction="profileUsesCodexProvider(openedProfile)"
-                          :codexAuthDisabled="profileCodexAuthDisabled(openedProfile)"
-                          :codexAuthState="codexAuthButtonState"
-                          :codexAuthTitle="codexAuthButtonTitle"
-                          :showXAIAuthAction="profileUsesXAIProvider(openedProfile)"
-                          :xaiAuthState="xaiAuthButtonState"
-                          :xaiAuthTitle="xaiAuthButtonTitle"
-                          :showProAuthAction="profileUsesProProvider(openedProfile)"
-                          :proAuthState="proAuthButtonState"
-                          :proAuthTitle="proAuthButtonTitle"
-                          @update-field="updateProfileField(openedProfile._key, $event)"
-                          @open-model-picker="openModelPicker(openedProfile._key)"
-                          @open-codex-auth="openCodexAuthDialog"
-                          @open-xai-auth="openXAIAuthDialog"
-                          @open-pro-auth="openProAuthDialog"
-                        />
-
-                        <!-- Less common settings stay folded; edits join the same draft and save bar. -->
-                        <details class="settings-profile-advanced">
-                          <summary>
-                            <PhCaretRight class="icon" aria-hidden="true" />
-                            <span>{{ t("settings_advanced_action") }}</span>
-                          </summary>
-                          <div class="settings-profile-advanced-body">
-                            <LLMConfigForm
-                              :config="openedProfile"
-                              :busy="agentLoading || agentSaving"
-                              :disabledReason="agentFormDisabledReason"
-                              :readOnly="agentSettingsReadOnly"
-                              :envManaged="llmProfileEnvManaged(openedProfile)"
-                              :secretFields="llmProfileSecretFields(openedProfile)"
-                              :revealPrefix="llmRevealPrefix(openedProfile)"
-                              :providerItems="providerItems"
-                              :reasoningEffortItems="reasoningEffortItems"
-                              :toolsEmulationItems="toolsEmulationItems"
-                              :showAdvanced="true"
-                              :advancedOnly="true"
-                              @update-field="updateProfileField(openedProfile._key, $event)"
-                            />
-                          </div>
-                        </details>
-
-                        <div class="settings-profile-pane-actions">
-                          <QButton
-                            class="outlined"
-                            :disabled="testConnectionDisabledForProfile(openedProfile)"
-                            @click="openTestConnection(openedProfile._key)"
-                          >
-                            <PhGauge class="icon" />
-                            {{ t("setup_llm_test_button") }}
-                          </QButton>
-                          <QButton
-                            class="outlined danger"
-                            :disabled="agentLoading || agentSaving || agentSettingsReadOnly"
-                            @click="confirmRemoveLLMProfile(openedProfile._key)"
-                          >
-                            <PhTrash class="icon" />
-                            {{ t("settings_agent_profile_delete") }}
-                          </QButton>
-                        </div>
-                      </div>
-                    </AppSection>
-                  </div>
-                  <footer v-if="sectionSaveUnits.length || sectionSaveFailed" class="settings-channel-pane-foot">
-                    <p class="settings-channel-pane-foot-text" :class="{ 'is-error': sectionSaveFailed }" role="status">
-                      {{ sectionSaveFailed ? t('settings_save_bar_failed', { items: sectionSaveFailed }) : t('settings_channel_unsaved_note') }}
-                    </p>
-                    <QButton class="primary" :loading="sectionSaving" :disabled="sectionSaveBusy || !sectionSaveUnits.length" @click="saveSection">
-                      {{ t('action_save') }}
-                    </QButton>
-                  </footer>
-                </div>
-              </aside>
-            </Transition>
-            </div>
           </div>
 
           <div v-else-if="selectedSection.id === 'routes'" class="settings-panel-body settings-panel-body-plain">
@@ -5942,7 +5831,6 @@ const SettingsView = {
           </div>
 
           <div v-else-if="selectedSection.id === 'channels'" class="settings-panel-body settings-panel-body-plain">
-            <div class="settings-channels" :class="{ 'has-pane': openChannel && !isMobile }">
               <div class="settings-channel-groups">
                 <section v-for="group in channelGroups" :key="group.id" class="settings-channel-group">
                   <h3 class="ui-kicker settings-channel-group-title">{{ t(group.titleKey) }}</h3>
@@ -5964,586 +5852,6 @@ const SettingsView = {
                   </div>
                 </section>
               </div>
-              <div v-if="openChannel && isMobile" class="settings-channel-pane-mask" aria-hidden="true" @click="closeChannelPane"></div>
-              <Transition :name="isMobile ? 'settings-channel-sheet' : 'settings-channel-pane'">
-                <aside
-                  v-show="openChannel"
-                  class="settings-channel-pane"
-                  :class="{ 'is-sheet': isMobile }"
-                  :role="isMobile ? 'dialog' : null"
-                  :aria-modal="isMobile ? 'true' : null"
-                  :aria-label="t(openChannelTitleKey)"
-                >
-                  <div class="settings-channel-pane-shell">
-                      <div class="settings-channel-pane-scroll">
-            <template v-if="openChannel === 'telegram'">
-              <AppSection :title="t('settings_console_telegram_title')" :meta="t('settings_console_telegram_token_note')">
-                <template #actions>
-                  <div class="settings-profile-actions settings-default-llm-actions">
-                    <QDropdownMenu
-                      class="settings-llm-actions-menu"
-                      variant="plain"
-                      :items="channelActionMenuItems('telegram')"
-                      hideSelected
-                      hideActionLabel
-                      :disabled="consoleLoading || consoleSaving"
-                    >
-                      <PhDotsThree class="settings-llm-actions-menu-icon" />
-                      <span class="settings-llm-actions-menu-accessible">{{ t("todo_action_more") }}</span>
-                    </QDropdownMenu>
-                    <QButton class="plain xs icon" :title="t('settings_channel_close')" :aria-label="t('settings_channel_close')" @click="closeChannelPane">
-                      <PhX class="icon" />
-                    </QButton>
-                  </div>
-                </template>
-                <div class="settings-panel-body">
-                  <div class="settings-form-grid">
-                    <div class="settings-field is-wide">
-                      <span class="settings-field-label">{{ t("settings_console_telegram_bot_token_label") }}</span>
-                      <EnvManagedField v-if="consoleFieldEnvManaged('telegram', 'bot_token')" :name="consoleFieldManagedHeadline('telegram', 'bot_token')" />
-                      <SecretInput
-                        v-else
-                        :modelValue="state.telegram.bot_token"
-                        :status="consoleSecretField('telegram', 'bot_token')"
-                        :revealPath="consoleSecretRevealPath('telegram', 'bot_token')"
-                        :placeholder="t('settings_console_telegram_bot_token_placeholder')"
-                        :disabled="consoleLoading || consoleSaving || !consoleSecretEditable('telegram', 'bot_token')"
-                        @update:modelValue="updateTelegramField('bot_token', $event)"
-                      />
-                    </div>
-
-                    <div class="settings-field is-wide">
-                      <span class="settings-field-label">{{ t("settings_console_telegram_allowed_chat_ids_label") }}</span>
-                      <QTextarea
-                        :modelValue="state.telegram.allowed_chat_ids_text"
-                        :rows="4"
-                        :placeholder="t('settings_console_telegram_allowed_chat_ids_placeholder')"
-                        :disabled="consoleLoading || consoleSaving"
-                        @update:modelValue="updateTelegramField('allowed_chat_ids_text', $event)"
-                      />
-                      <p class="settings-field-note">{{ t("settings_console_telegram_allowed_chat_ids_note") }}</p>
-                    </div>
-
-                    <div class="settings-field is-wide">
-                      <span class="settings-field-label">{{ t("settings_console_group_trigger_label") }}</span>
-                      <QDropdownMenu
-                        :key="state.telegram.group_trigger_mode || 'telegram-group-trigger'"
-                        :items="groupTriggerItems"
-                        :initialItem="groupTriggerItems.find((item) => item.value === state.telegram.group_trigger_mode) || groupTriggerItems[2]"
-                        @change="updateTelegramGroupTrigger"
-                      />
-                      <p class="settings-field-note">{{ t("settings_console_telegram_group_trigger_note") }}</p>
-                    </div>
-                  </div>
-                </div>
-              </AppSection>
-            </template>
-
-                        <template v-if="openChannel === 'slack'">
-              <AppSection :title="t('settings_console_slack_title')" :meta="t('settings_console_slack_token_note')">
-                <template #actions>
-                  <div class="settings-profile-actions settings-default-llm-actions">
-                    <QDropdownMenu
-                      class="settings-llm-actions-menu"
-                      variant="plain"
-                      :items="channelActionMenuItems('slack')"
-                      hideSelected
-                      hideActionLabel
-                      :disabled="consoleLoading || consoleSaving"
-                    >
-                      <PhDotsThree class="settings-llm-actions-menu-icon" />
-                      <span class="settings-llm-actions-menu-accessible">{{ t("todo_action_more") }}</span>
-                    </QDropdownMenu>
-                    <QButton class="plain xs icon" :title="t('settings_channel_close')" :aria-label="t('settings_channel_close')" @click="closeChannelPane">
-                      <PhX class="icon" />
-                    </QButton>
-                  </div>
-                </template>
-                <div class="settings-panel-body">
-                  <div class="settings-form-grid">
-                    <div class="settings-field is-wide">
-                      <span class="settings-field-label">{{ t("settings_console_slack_bot_token_label") }}</span>
-                      <EnvManagedField v-if="consoleFieldEnvManaged('slack', 'bot_token')" :name="consoleFieldManagedHeadline('slack', 'bot_token')" />
-                      <SecretInput
-                        v-else
-                        :modelValue="state.slack.bot_token"
-                        :status="consoleSecretField('slack', 'bot_token')"
-                        :revealPath="consoleSecretRevealPath('slack', 'bot_token')"
-                        :placeholder="t('settings_console_slack_bot_token_placeholder')"
-                        :disabled="consoleLoading || consoleSaving || !consoleSecretEditable('slack', 'bot_token')"
-                        @update:modelValue="updateSlackField('bot_token', $event)"
-                      />
-                    </div>
-
-                    <div class="settings-field is-wide">
-                      <span class="settings-field-label">{{ t("settings_console_slack_app_token_label") }}</span>
-                      <EnvManagedField v-if="consoleFieldEnvManaged('slack', 'app_token')" :name="consoleFieldManagedHeadline('slack', 'app_token')" />
-                      <SecretInput
-                        v-else
-                        :modelValue="state.slack.app_token"
-                        :status="consoleSecretField('slack', 'app_token')"
-                        :revealPath="consoleSecretRevealPath('slack', 'app_token')"
-                        :placeholder="t('settings_console_slack_app_token_placeholder')"
-                        :disabled="consoleLoading || consoleSaving || !consoleSecretEditable('slack', 'app_token')"
-                        @update:modelValue="updateSlackField('app_token', $event)"
-                      />
-                    </div>
-
-                    <div class="settings-field is-wide">
-                      <span class="settings-field-label">{{ t("settings_console_slack_allowed_team_ids_label") }}</span>
-                      <QTextarea
-                        :modelValue="state.slack.allowed_team_ids_text"
-                        :rows="3"
-                        :placeholder="t('settings_console_slack_allowed_team_ids_placeholder')"
-                        :disabled="consoleLoading || consoleSaving"
-                        @update:modelValue="updateSlackField('allowed_team_ids_text', $event)"
-                      />
-                      <p class="settings-field-note">{{ t("settings_console_slack_allowed_team_ids_note") }}</p>
-                    </div>
-
-                    <div class="settings-field is-wide">
-                      <span class="settings-field-label">{{ t("settings_console_slack_allowed_channel_ids_label") }}</span>
-                      <QTextarea
-                        :modelValue="state.slack.allowed_channel_ids_text"
-                        :rows="4"
-                        :placeholder="t('settings_console_slack_allowed_channel_ids_placeholder')"
-                        :disabled="consoleLoading || consoleSaving"
-                        @update:modelValue="updateSlackField('allowed_channel_ids_text', $event)"
-                      />
-                      <p class="settings-field-note">{{ t("settings_console_slack_allowed_channel_ids_note") }}</p>
-                    </div>
-
-                    <div class="settings-field is-wide">
-                      <span class="settings-field-label">{{ t("settings_console_group_trigger_label") }}</span>
-                      <QDropdownMenu
-                        :key="state.slack.group_trigger_mode || 'slack-group-trigger'"
-                        :items="groupTriggerItems"
-                        :initialItem="groupTriggerItems.find((item) => item.value === state.slack.group_trigger_mode) || groupTriggerItems[2]"
-                        @change="updateSlackGroupTrigger"
-                      />
-                      <p class="settings-field-note">{{ t("settings_console_slack_group_trigger_note") }}</p>
-                    </div>
-                  </div>
-                </div>
-              </AppSection>
-            </template>
-
-                        <template v-if="openChannel === 'line'">
-              <AppSection :title="t('settings_console_line_title')" :meta="t('settings_console_line_token_note')">
-                <template #actions>
-                  <div class="settings-profile-actions settings-default-llm-actions">
-                    <QDropdownMenu
-                      class="settings-llm-actions-menu"
-                      variant="plain"
-                      :items="channelActionMenuItems('line')"
-                      hideSelected
-                      hideActionLabel
-                      :disabled="consoleLoading || consoleSaving"
-                    >
-                      <PhDotsThree class="settings-llm-actions-menu-icon" />
-                      <span class="settings-llm-actions-menu-accessible">{{ t("todo_action_more") }}</span>
-                    </QDropdownMenu>
-                    <QButton class="plain xs icon" :title="t('settings_channel_close')" :aria-label="t('settings_channel_close')" @click="closeChannelPane">
-                      <PhX class="icon" />
-                    </QButton>
-                  </div>
-                </template>
-                <div class="settings-panel-body">
-                  <div class="settings-form-grid">
-                    <div class="settings-field is-wide">
-                      <span class="settings-field-label">{{ t("settings_console_line_channel_access_token_label") }}</span>
-                      <EnvManagedField v-if="consoleFieldEnvManaged('line', 'channel_access_token')" :name="consoleFieldManagedHeadline('line', 'channel_access_token')" />
-                      <SecretInput
-                        v-else
-                        :modelValue="state.line.channel_access_token"
-                        :status="consoleSecretField('line', 'channel_access_token')"
-                        :revealPath="consoleSecretRevealPath('line', 'channel_access_token')"
-                        :placeholder="t('settings_console_line_channel_access_token_placeholder')"
-                        :disabled="consoleLoading || consoleSaving || !consoleSecretEditable('line', 'channel_access_token')"
-                        @update:modelValue="updateLineField('channel_access_token', $event)"
-                      />
-                    </div>
-
-                    <div class="settings-field is-wide">
-                      <span class="settings-field-label">{{ t("settings_console_line_channel_secret_label") }}</span>
-                      <EnvManagedField v-if="consoleFieldEnvManaged('line', 'channel_secret')" :name="consoleFieldManagedHeadline('line', 'channel_secret')" />
-                      <SecretInput
-                        v-else
-                        :modelValue="state.line.channel_secret"
-                        :status="consoleSecretField('line', 'channel_secret')"
-                        :revealPath="consoleSecretRevealPath('line', 'channel_secret')"
-                        :placeholder="t('settings_console_line_channel_secret_placeholder')"
-                        :disabled="consoleLoading || consoleSaving || !consoleSecretEditable('line', 'channel_secret')"
-                        @update:modelValue="updateLineField('channel_secret', $event)"
-                      />
-                    </div>
-
-                    <div class="settings-field is-wide">
-                      <span class="settings-field-label">{{ t("settings_console_line_allowed_group_ids_label") }}</span>
-                      <QTextarea
-                        :modelValue="state.line.allowed_group_ids_text"
-                        :rows="4"
-                        :placeholder="t('settings_console_line_allowed_group_ids_placeholder')"
-                        :disabled="consoleLoading || consoleSaving"
-                        @update:modelValue="updateLineField('allowed_group_ids_text', $event)"
-                      />
-                      <p class="settings-field-note">{{ t("settings_console_line_allowed_group_ids_note") }}</p>
-                    </div>
-
-                    <div class="settings-field is-wide">
-                      <span class="settings-field-label">{{ t("settings_console_group_trigger_label") }}</span>
-                      <QDropdownMenu
-                        :key="state.line.group_trigger_mode || 'line-group-trigger'"
-                        :items="groupTriggerItems"
-                        :initialItem="groupTriggerItems.find((item) => item.value === state.line.group_trigger_mode) || groupTriggerItems[2]"
-                        @change="updateLineGroupTrigger"
-                      />
-                      <p class="settings-field-note">{{ t("settings_console_line_group_trigger_note") }}</p>
-                    </div>
-                  </div>
-                </div>
-              </AppSection>
-            </template>
-
-                        <template v-if="openChannel === 'lark'">
-              <AppSection :title="t('settings_console_lark_title')" :meta="t('settings_console_lark_token_note')">
-                <template #actions>
-                  <div class="settings-profile-actions settings-default-llm-actions">
-                    <QDropdownMenu
-                      class="settings-llm-actions-menu"
-                      variant="plain"
-                      :items="channelActionMenuItems('lark')"
-                      hideSelected
-                      hideActionLabel
-                      :disabled="consoleLoading || consoleSaving"
-                    >
-                      <PhDotsThree class="settings-llm-actions-menu-icon" />
-                      <span class="settings-llm-actions-menu-accessible">{{ t("todo_action_more") }}</span>
-                    </QDropdownMenu>
-                    <QButton class="plain xs icon" :title="t('settings_channel_close')" :aria-label="t('settings_channel_close')" @click="closeChannelPane">
-                      <PhX class="icon" />
-                    </QButton>
-                  </div>
-                </template>
-                <div class="settings-panel-body">
-                  <div class="settings-form-grid">
-                    <div class="settings-field is-wide">
-                      <span class="settings-field-label">{{ t("settings_console_lark_app_id_label") }}</span>
-                      <EnvManagedField v-if="consoleFieldEnvManaged('lark', 'app_id')" :name="consoleFieldManagedHeadline('lark', 'app_id')" />
-                      <QInput
-                        v-else
-                        :modelValue="state.lark.app_id"
-                        :placeholder="t('settings_console_lark_app_id_placeholder')"
-                        :disabled="consoleLoading || consoleSaving"
-                        @update:modelValue="updateLarkField('app_id', $event)"
-                      />
-                    </div>
-
-                    <div class="settings-field is-wide">
-                      <span class="settings-field-label">{{ t("settings_console_lark_app_secret_label") }}</span>
-                      <EnvManagedField v-if="consoleFieldEnvManaged('lark', 'app_secret')" :name="consoleFieldManagedHeadline('lark', 'app_secret')" />
-                      <SecretInput
-                        v-else
-                        :modelValue="state.lark.app_secret"
-                        :status="consoleSecretField('lark', 'app_secret')"
-                        :revealPath="consoleSecretRevealPath('lark', 'app_secret')"
-                        :placeholder="t('settings_console_lark_app_secret_placeholder')"
-                        :disabled="consoleLoading || consoleSaving || !consoleSecretEditable('lark', 'app_secret')"
-                        @update:modelValue="updateLarkField('app_secret', $event)"
-                      />
-                    </div>
-
-                    <div class="settings-field is-wide">
-                      <span class="settings-field-label">{{ t("settings_console_lark_allowed_chat_ids_label") }}</span>
-                      <QTextarea
-                        :modelValue="state.lark.allowed_chat_ids_text"
-                        :rows="4"
-                        :placeholder="t('settings_console_lark_allowed_chat_ids_placeholder')"
-                        :disabled="consoleLoading || consoleSaving"
-                        @update:modelValue="updateLarkField('allowed_chat_ids_text', $event)"
-                      />
-                      <p class="settings-field-note">{{ t("settings_console_lark_allowed_chat_ids_note") }}</p>
-                    </div>
-
-                    <div class="settings-field is-wide">
-                      <span class="settings-field-label">{{ t("settings_console_group_trigger_label") }}</span>
-                      <QDropdownMenu
-                        :key="state.lark.group_trigger_mode || 'lark-group-trigger'"
-                        :items="groupTriggerItems"
-                        :initialItem="groupTriggerItems.find((item) => item.value === state.lark.group_trigger_mode) || groupTriggerItems[2]"
-                        @change="updateLarkGroupTrigger"
-                      />
-                      <p class="settings-field-note">{{ t("settings_console_lark_group_trigger_note") }}</p>
-                    </div>
-                  </div>
-                </div>
-              </AppSection>
-            </template>
-
-                        <template v-if="openChannel === 'mixin'">
-              <AppSection :title="t('settings_console_mixin_title')" :meta="t('settings_console_mixin_note')">
-                <template #actions>
-                  <div class="settings-profile-actions settings-default-llm-actions">
-                    <QDropdownMenu
-                      class="settings-llm-actions-menu"
-                      variant="plain"
-                      :items="channelActionMenuItems('mixin')"
-                      hideSelected
-                      hideActionLabel
-                      :disabled="consoleLoading || consoleSaving"
-                    >
-                      <PhDotsThree class="settings-llm-actions-menu-icon" />
-                      <span class="settings-llm-actions-menu-accessible">{{ t("todo_action_more") }}</span>
-                    </QDropdownMenu>
-                    <QButton class="plain xs icon" :title="t('settings_channel_close')" :aria-label="t('settings_channel_close')" @click="closeChannelPane">
-                      <PhX class="icon" />
-                    </QButton>
-                  </div>
-                </template>
-                <div class="settings-panel-body">
-                  <div class="settings-form-grid">
-                    <div class="settings-field is-wide">
-                      <span class="settings-field-label">{{ t("settings_console_mixin_keystore_file_label") }}</span>
-                      <EnvManagedField v-if="consoleFieldEnvManaged('mixin', 'keystore_file')" :name="consoleFieldManagedHeadline('mixin', 'keystore_file')" />
-                      <QInput
-                        v-else
-                        :modelValue="state.mixin.keystore_file"
-                        :placeholder="t('settings_console_mixin_keystore_file_placeholder')"
-                        :disabled="consoleLoading || consoleSaving"
-                        @update:modelValue="updateMixinField('keystore_file', $event)"
-                      />
-                      <p class="settings-field-note">{{ t("settings_console_mixin_keystore_file_note") }}</p>
-                    </div>
-
-                    <div class="settings-field is-wide">
-                      <span class="settings-field-label">{{ t("settings_console_mixin_allowed_conversation_ids_label") }}</span>
-                      <QTextarea
-                        :modelValue="state.mixin.allowed_conversation_ids_text"
-                        :rows="4"
-                        :placeholder="t('settings_console_mixin_allowed_conversation_ids_placeholder')"
-                        :disabled="consoleLoading || consoleSaving"
-                        @update:modelValue="updateMixinField('allowed_conversation_ids_text', $event)"
-                      />
-                      <p class="settings-field-note">{{ t("settings_console_mixin_allowed_conversation_ids_note") }}</p>
-                    </div>
-
-                  </div>
-                </div>
-              </AppSection>
-            </template>
-
-                        <template v-if="openChannel === 'discord'">
-              <AppSection :title="t('settings_console_discord_title')" :meta="t('settings_console_discord_token_note')">
-                <template #actions>
-                  <div class="settings-profile-actions settings-default-llm-actions">
-                    <QDropdownMenu
-                      class="settings-llm-actions-menu"
-                      variant="plain"
-                      :items="channelActionMenuItems('discord')"
-                      hideSelected
-                      hideActionLabel
-                      :disabled="consoleLoading || consoleSaving"
-                    >
-                      <PhDotsThree class="settings-llm-actions-menu-icon" />
-                      <span class="settings-llm-actions-menu-accessible">{{ t("todo_action_more") }}</span>
-                    </QDropdownMenu>
-                    <QButton class="plain xs icon" :title="t('settings_channel_close')" :aria-label="t('settings_channel_close')" @click="closeChannelPane">
-                      <PhX class="icon" />
-                    </QButton>
-                  </div>
-                </template>
-                <div class="settings-panel-body">
-                  <div class="settings-form-grid">
-                    <div class="settings-field is-wide">
-                      <span class="settings-field-label">{{ t("settings_console_discord_bot_token_label") }}</span>
-                      <EnvManagedField v-if="consoleFieldEnvManaged('discord', 'bot_token')" :name="consoleFieldManagedHeadline('discord', 'bot_token')" />
-                      <SecretInput
-                        v-else
-                        :modelValue="state.discord.bot_token"
-                        :status="consoleSecretField('discord', 'bot_token')"
-                        :revealPath="consoleSecretRevealPath('discord', 'bot_token')"
-                        :placeholder="t('settings_console_discord_bot_token_placeholder')"
-                        :disabled="consoleLoading || consoleSaving || !consoleSecretEditable('discord', 'bot_token')"
-                        @update:modelValue="updateDiscordField('bot_token', $event)"
-                      />
-                    </div>
-
-                    <div class="settings-field is-wide">
-                      <span class="settings-field-label">{{ t("settings_console_discord_allowed_guild_ids_label") }}</span>
-                      <QTextarea
-                        :modelValue="state.discord.allowed_guild_ids_text"
-                        :rows="3"
-                        :placeholder="t('settings_console_discord_allowed_ids_placeholder')"
-                        :disabled="consoleLoading || consoleSaving"
-                        @update:modelValue="updateDiscordField('allowed_guild_ids_text', $event)"
-                      />
-                      <p class="settings-field-note">{{ t("settings_console_discord_allowed_guild_ids_note") }}</p>
-                    </div>
-
-                    <div class="settings-field is-wide">
-                      <span class="settings-field-label">{{ t("settings_console_discord_allowed_channel_ids_label") }}</span>
-                      <QTextarea
-                        :modelValue="state.discord.allowed_channel_ids_text"
-                        :rows="3"
-                        :placeholder="t('settings_console_discord_allowed_ids_placeholder')"
-                        :disabled="consoleLoading || consoleSaving"
-                        @update:modelValue="updateDiscordField('allowed_channel_ids_text', $event)"
-                      />
-                      <p class="settings-field-note">{{ t("settings_console_discord_allowed_channel_ids_note") }}</p>
-                    </div>
-
-                    <div class="settings-field is-wide">
-                      <span class="settings-field-label">{{ t("settings_console_discord_allowed_user_ids_label") }}</span>
-                      <QTextarea
-                        :modelValue="state.discord.allowed_user_ids_text"
-                        :rows="3"
-                        :placeholder="t('settings_console_discord_allowed_ids_placeholder')"
-                        :disabled="consoleLoading || consoleSaving"
-                        @update:modelValue="updateDiscordField('allowed_user_ids_text', $event)"
-                      />
-                      <p class="settings-field-note">{{ t("settings_console_discord_allowed_user_ids_note") }}</p>
-                    </div>
-
-                    <div class="settings-field is-wide">
-                      <span class="settings-field-label">{{ t("settings_console_group_trigger_label") }}</span>
-                      <QDropdownMenu
-                        :key="state.discord.group_trigger_mode || 'discord-group-trigger'"
-                        :items="groupTriggerItems"
-                        :initialItem="groupTriggerItems.find((item) => item.value === state.discord.group_trigger_mode) || groupTriggerItems[1]"
-                        @change="updateDiscordGroupTrigger"
-                      />
-                      <p class="settings-field-note">{{ t("settings_console_discord_group_trigger_note") }}</p>
-                    </div>
-                  </div>
-                </div>
-              </AppSection>
-            </template>
-                        <template v-if="openChannel === 'wechat'">
-              <AppSection :title="t('settings_console_wechat_title')" :meta="t('settings_console_wechat_note')">
-                <template #actions>
-                  <div class="settings-profile-actions settings-default-llm-actions">
-                    <QDropdownMenu
-                      class="settings-llm-actions-menu"
-                      variant="plain"
-                      :items="channelActionMenuItems('wechat')"
-                      hideSelected
-                      hideActionLabel
-                      :disabled="consoleLoading || consoleSaving"
-                    >
-                      <PhDotsThree class="settings-llm-actions-menu-icon" />
-                      <span class="settings-llm-actions-menu-accessible">{{ t("todo_action_more") }}</span>
-                    </QDropdownMenu>
-                    <QButton class="plain xs icon" :title="t('settings_channel_close')" :aria-label="t('settings_channel_close')" @click="closeChannelPane">
-                      <PhX class="icon" />
-                    </QButton>
-                  </div>
-                </template>
-                <div class="settings-panel-body">
-                  <div class="settings-form-grid">
-                    <div class="settings-field is-wide">
-                      <span class="settings-field-label">{{ t("settings_console_wechat_account_label") }}</span>
-                      <EnvManagedField v-if="consoleFieldEnvManaged('wechat', 'bot_token')" :name="consoleFieldManagedHeadline('wechat', 'bot_token')" />
-                      <WeChatLoginPanel
-                        v-else
-                        :request="endpointApiFetch"
-                        :endpointRef="settingsEndpointRef"
-                        :configured="consoleSecretField('wechat', 'bot_token')?.configured === true"
-                        :botId="state.wechat.bot_id"
-                        :disabled="consoleLoading || consoleSaving"
-                        @changed="reloadConsoleSettingsAfterWeChatLogin"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </AppSection>
-            </template>
-
-                        <template v-if="openChannel === 'whatsapp'">
-              <AppSection :title="t('settings_console_whatsapp_title')" :meta="t('settings_console_whatsapp_note')">
-                <template #actions>
-                  <div class="settings-profile-actions settings-default-llm-actions">
-                    <QDropdownMenu
-                      class="settings-llm-actions-menu"
-                      variant="plain"
-                      :items="channelActionMenuItems('whatsapp')"
-                      hideSelected
-                      hideActionLabel
-                      :disabled="consoleLoading || consoleSaving"
-                    >
-                      <PhDotsThree class="settings-llm-actions-menu-icon" />
-                      <span class="settings-llm-actions-menu-accessible">{{ t("todo_action_more") }}</span>
-                    </QDropdownMenu>
-                    <QButton class="plain xs icon" :title="t('settings_channel_close')" :aria-label="t('settings_channel_close')" @click="closeChannelPane">
-                      <PhX class="icon" />
-                    </QButton>
-                  </div>
-                </template>
-                <div class="settings-panel-body">
-                  <div class="settings-form-grid">
-                    <div class="settings-field is-wide">
-                      <span class="settings-field-label">{{ t("settings_console_whatsapp_api_token_label") }}</span>
-                      <EnvManagedField v-if="consoleFieldEnvManaged('whatsapp', 'api_token')" :name="consoleFieldManagedHeadline('whatsapp', 'api_token')" />
-                      <SecretInput
-                        v-else
-                        :modelValue="state.whatsapp.api_token"
-                        :status="consoleSecretField('whatsapp', 'api_token')"
-                        :revealPath="consoleSecretRevealPath('whatsapp', 'api_token')"
-                        :placeholder="t('settings_console_whatsapp_api_token_placeholder')"
-                        :disabled="consoleLoading || consoleSaving || !consoleSecretEditable('whatsapp', 'api_token')"
-                        @update:modelValue="updateWhatsAppField('api_token', $event)"
-                      />
-                      <p class="settings-field-note">{{ t("settings_console_whatsapp_api_token_note") }}</p>
-                    </div>
-                  </div>
-                </div>
-              </AppSection>
-            </template>
-                    <!-- Kept mounted while the pane is closed, so a draft here is not lost. -->
-                    <div
-                      v-for="group in CHANNEL_TRIGGER_CONFIG_GROUPS"
-                      v-show="openChannel === group.id"
-                      :key="group.id"
-                      class="settings-channel-trigger-config"
-                    >
-                      <ConfigSettingsPanel
-                        :groups="[group]"
-                        :values="consoleConfigValues"
-                        :fieldStates="consoleFieldStates"
-                        :loading="consoleLoading"
-                        :saving="consoleSaving && consoleSavingTarget === 'config'"
-                        :hiddenPaths="channelTriggerHiddenPaths(group.id)"
-                        embedded
-                        hideSingleGroupHeading
-                        saveScope="console"
-                        @save="saveConfigSettings('console', $event)"
-                      />
-                    </div>
-                    <div v-if="channelManagedItem(openChannel)" class="settings-channel-console">
-                      <div class="settings-toggle-row settings-channel-runtime-row">
-                        <div class="settings-toggle-copy">
-                          <strong class="settings-toggle-title">{{ t("settings_channel_run_in_console") }}</strong>
-                          <span class="settings-toggle-note">{{ t(channelManagedItem(openChannel).noteKey) }}</span>
-                        </div>
-                        <QSwitch
-                          :modelValue="state.managedRuntimes[openChannel]"
-                          :disabled="consoleLoading || consoleSaving"
-                          @update:modelValue="setManagedRuntimeEnabled(openChannel, $event)"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                      <footer v-if="sectionSaveUnits.length || sectionSaveFailed" class="settings-channel-pane-foot">
-                        <p class="settings-channel-pane-foot-text" :class="{ 'is-error': sectionSaveFailed }" role="status">
-                          {{ sectionSaveFailed ? t('settings_save_bar_failed', { items: sectionSaveFailed }) : t('settings_channel_unsaved_note') }}
-                        </p>
-                        <QButton class="primary" :loading="sectionSaving" :disabled="sectionSaveBusy || !sectionSaveUnits.length" @click="saveSection">
-                          {{ t('action_save') }}
-                        </QButton>
-                      </footer>
-                    </div>
-                </aside>
-              </Transition>
-            </div>
           </div>
 
           <div v-else-if="selectedSection.id === 'security'" class="settings-panel-body settings-panel-body-plain">
@@ -7095,6 +6403,716 @@ const SettingsView = {
           </div>
           </Transition>
         </div>
+
+        <template v-if="showPanelPane && selectedSection?.id === 'agent'">
+          <Transition name="settings-channel-mask">
+            <div v-if="openedProfile && isMobile" class="settings-channel-pane-mask" aria-hidden="true" @click="closeProfilePane"></div>
+          </Transition>
+          <!-- The pane is keyed by profile: switching profiles fades the old one out before the new one in. -->
+          <Transition :name="isMobile ? 'settings-channel-sheet' : 'settings-channel-pane'" mode="out-in">
+            <aside
+              v-if="openedProfile"
+              :key="openedProfile._key"
+              class="settings-channel-pane settings-profile-pane"
+              :class="{ 'is-sheet': isMobile }"
+              :role="isMobile ? 'dialog' : null"
+              :aria-modal="isMobile ? 'true' : null"
+              :aria-label="openedProfile.name || t('settings_agent_profile_placeholder')"
+            >
+              <div class="settings-channel-pane-shell">
+                <div class="settings-channel-pane-scroll">
+                  <AppSection class="is-literal" :title="openedProfile.name || t('settings_agent_profile_placeholder')">
+                    <template #meta>
+                      {{ t(profileIsInUse(openedProfile) ? "settings_agent_profile_status_in_use" : "settings_agent_profile_status_available") }}<template v-if="profileSummary(openedProfile)"> · {{ profileSummary(openedProfile) }}</template>
+                    </template>
+                    <template #actions>
+                      <div class="settings-profile-actions settings-default-llm-actions">
+                        <QButton class="plain xs icon" :title="t('settings_channel_close')" :aria-label="t('settings_channel_close')" @click="closeProfilePane">
+                          <PhX class="icon" />
+                        </QButton>
+                      </div>
+                    </template>
+                    <div class="settings-panel-body settings-profile-pane-body">
+                      <div class="settings-field settings-profile-name">
+                        <span class="settings-field-label">{{ t("settings_agent_profile_name_label") }}</span>
+                        <QInput
+                          :modelValue="openedProfile.name"
+                          :placeholder="t('settings_agent_profile_name_placeholder')"
+                          :disabled="agentLoading || agentSaving || agentSettingsReadOnly"
+                          @update:modelValue="updateProfileField(openedProfile._key, { field: 'name', value: $event })"
+                        />
+                      </div>
+                      <LLMConfigForm
+                        :config="openedProfile"
+                        :busy="agentLoading || agentSaving"
+                        :disabledReason="agentFormDisabledReason"
+                        :readOnly="agentSettingsReadOnly"
+                        :envManaged="llmProfileEnvManaged(openedProfile)"
+                        :secretFields="llmProfileSecretFields(openedProfile)"
+                        :revealPrefix="llmRevealPrefix(openedProfile)"
+                        :providerItems="providerItems"
+                        :reasoningEffortItems="reasoningEffortItems"
+                        :toolsEmulationItems="toolsEmulationItems"
+                        :enableModelPicker="true"
+                        :modelLookupCredentialsReady="profileModelLookupCredentialsReady(openedProfile)"
+                        :showCodexAuthAction="profileUsesCodexProvider(openedProfile)"
+                        :codexAuthDisabled="profileCodexAuthDisabled(openedProfile)"
+                        :codexAuthState="codexAuthButtonState"
+                        :codexAuthTitle="codexAuthButtonTitle"
+                        :showXAIAuthAction="profileUsesXAIProvider(openedProfile)"
+                        :xaiAuthState="xaiAuthButtonState"
+                        :xaiAuthTitle="xaiAuthButtonTitle"
+                        :showProAuthAction="profileUsesProProvider(openedProfile)"
+                        :proAuthState="proAuthButtonState"
+                        :proAuthTitle="proAuthButtonTitle"
+                        @update-field="updateProfileField(openedProfile._key, $event)"
+                        @open-model-picker="openModelPicker(openedProfile._key)"
+                        @open-codex-auth="openCodexAuthDialog"
+                        @open-xai-auth="openXAIAuthDialog"
+                        @open-pro-auth="openProAuthDialog"
+                      />
+
+                      <!-- Less common settings stay folded; edits join the same draft and save bar. -->
+                      <details class="settings-profile-advanced">
+                        <summary>
+                          <PhCaretRight class="icon" aria-hidden="true" />
+                          <span>{{ t("settings_advanced_action") }}</span>
+                        </summary>
+                        <div class="settings-profile-advanced-body">
+                          <LLMConfigForm
+                            :config="openedProfile"
+                            :busy="agentLoading || agentSaving"
+                            :disabledReason="agentFormDisabledReason"
+                            :readOnly="agentSettingsReadOnly"
+                            :envManaged="llmProfileEnvManaged(openedProfile)"
+                            :secretFields="llmProfileSecretFields(openedProfile)"
+                            :revealPrefix="llmRevealPrefix(openedProfile)"
+                            :providerItems="providerItems"
+                            :reasoningEffortItems="reasoningEffortItems"
+                            :toolsEmulationItems="toolsEmulationItems"
+                            :showAdvanced="true"
+                            :advancedOnly="true"
+                            @update-field="updateProfileField(openedProfile._key, $event)"
+                          />
+                        </div>
+                      </details>
+
+                      <div class="settings-profile-pane-actions">
+                        <QButton
+                          class="outlined"
+                          :disabled="testConnectionDisabledForProfile(openedProfile)"
+                          @click="openTestConnection(openedProfile._key)"
+                        >
+                          <PhGauge class="icon" />
+                          {{ t("setup_llm_test_button") }}
+                        </QButton>
+                        <QButton
+                          class="outlined danger"
+                          :disabled="agentLoading || agentSaving || agentSettingsReadOnly"
+                          @click="confirmRemoveLLMProfile(openedProfile._key)"
+                        >
+                          <PhTrash class="icon" />
+                          {{ t("settings_agent_profile_delete") }}
+                        </QButton>
+                      </div>
+                    </div>
+                  </AppSection>
+                </div>
+                <footer v-if="sectionSaveUnits.length || sectionSaveFailed" class="settings-channel-pane-foot">
+                  <p class="settings-channel-pane-foot-text" :class="{ 'is-error': sectionSaveFailed }" role="status">
+                    {{ sectionSaveFailed ? t('settings_save_bar_failed', { items: sectionSaveFailed }) : t('settings_channel_unsaved_note') }}
+                  </p>
+                  <QButton class="primary" :loading="sectionSaving" :disabled="sectionSaveBusy || !sectionSaveUnits.length" @click="saveSection">
+                    {{ t('action_save') }}
+                  </QButton>
+                </footer>
+              </div>
+            </aside>
+          </Transition>
+        </template>
+        <template v-if="showPanelPane && selectedSection?.id === 'channels'">
+          <Transition name="settings-channel-mask">
+            <div v-if="openChannel && isMobile" class="settings-channel-pane-mask" aria-hidden="true" @click="closeChannelPane"></div>
+          </Transition>
+          <Transition :name="isMobile ? 'settings-channel-sheet' : 'settings-channel-pane'">
+            <aside
+              v-show="openChannel"
+              class="settings-channel-pane"
+              :class="{ 'is-sheet': isMobile }"
+              :role="isMobile ? 'dialog' : null"
+              :aria-modal="isMobile ? 'true' : null"
+              :aria-label="t(openChannelTitleKey)"
+            >
+              <div class="settings-channel-pane-shell">
+                  <div class="settings-channel-pane-scroll">
+        <template v-if="openChannel === 'telegram'">
+          <AppSection :title="t('settings_console_telegram_title')" :meta="t('settings_console_telegram_token_note')">
+            <template #actions>
+              <div class="settings-profile-actions settings-default-llm-actions">
+                <QDropdownMenu
+                  class="settings-llm-actions-menu"
+                  variant="plain"
+                  :items="channelActionMenuItems('telegram')"
+                  hideSelected
+                  hideActionLabel
+                  :disabled="consoleLoading || consoleSaving"
+                >
+                  <PhDotsThree class="settings-llm-actions-menu-icon" />
+                  <span class="settings-llm-actions-menu-accessible">{{ t("todo_action_more") }}</span>
+                </QDropdownMenu>
+                <QButton class="plain xs icon" :title="t('settings_channel_close')" :aria-label="t('settings_channel_close')" @click="closeChannelPane">
+                  <PhX class="icon" />
+                </QButton>
+              </div>
+            </template>
+            <div class="settings-panel-body">
+              <div class="settings-form-grid">
+                <div class="settings-field is-wide">
+                  <span class="settings-field-label">{{ t("settings_console_telegram_bot_token_label") }}</span>
+                  <EnvManagedField v-if="consoleFieldEnvManaged('telegram', 'bot_token')" :name="consoleFieldManagedHeadline('telegram', 'bot_token')" />
+                  <SecretInput
+                    v-else
+                    :modelValue="state.telegram.bot_token"
+                    :status="consoleSecretField('telegram', 'bot_token')"
+                    :revealPath="consoleSecretRevealPath('telegram', 'bot_token')"
+                    :placeholder="t('settings_console_telegram_bot_token_placeholder')"
+                    :disabled="consoleLoading || consoleSaving || !consoleSecretEditable('telegram', 'bot_token')"
+                    @update:modelValue="updateTelegramField('bot_token', $event)"
+                  />
+                </div>
+
+                <div class="settings-field is-wide">
+                  <span class="settings-field-label">{{ t("settings_console_telegram_allowed_chat_ids_label") }}</span>
+                  <QTextarea
+                    :modelValue="state.telegram.allowed_chat_ids_text"
+                    :rows="4"
+                    :placeholder="t('settings_console_telegram_allowed_chat_ids_placeholder')"
+                    :disabled="consoleLoading || consoleSaving"
+                    @update:modelValue="updateTelegramField('allowed_chat_ids_text', $event)"
+                  />
+                  <p class="settings-field-note">{{ t("settings_console_telegram_allowed_chat_ids_note") }}</p>
+                </div>
+
+                <div class="settings-field is-wide">
+                  <span class="settings-field-label">{{ t("settings_console_group_trigger_label") }}</span>
+                  <QDropdownMenu
+                    :key="state.telegram.group_trigger_mode || 'telegram-group-trigger'"
+                    :items="groupTriggerItems"
+                    :initialItem="groupTriggerItems.find((item) => item.value === state.telegram.group_trigger_mode) || groupTriggerItems[2]"
+                    @change="updateTelegramGroupTrigger"
+                  />
+                  <p class="settings-field-note">{{ t("settings_console_telegram_group_trigger_note") }}</p>
+                </div>
+              </div>
+            </div>
+          </AppSection>
+        </template>
+
+                    <template v-if="openChannel === 'slack'">
+          <AppSection :title="t('settings_console_slack_title')" :meta="t('settings_console_slack_token_note')">
+            <template #actions>
+              <div class="settings-profile-actions settings-default-llm-actions">
+                <QDropdownMenu
+                  class="settings-llm-actions-menu"
+                  variant="plain"
+                  :items="channelActionMenuItems('slack')"
+                  hideSelected
+                  hideActionLabel
+                  :disabled="consoleLoading || consoleSaving"
+                >
+                  <PhDotsThree class="settings-llm-actions-menu-icon" />
+                  <span class="settings-llm-actions-menu-accessible">{{ t("todo_action_more") }}</span>
+                </QDropdownMenu>
+                <QButton class="plain xs icon" :title="t('settings_channel_close')" :aria-label="t('settings_channel_close')" @click="closeChannelPane">
+                  <PhX class="icon" />
+                </QButton>
+              </div>
+            </template>
+            <div class="settings-panel-body">
+              <div class="settings-form-grid">
+                <div class="settings-field is-wide">
+                  <span class="settings-field-label">{{ t("settings_console_slack_bot_token_label") }}</span>
+                  <EnvManagedField v-if="consoleFieldEnvManaged('slack', 'bot_token')" :name="consoleFieldManagedHeadline('slack', 'bot_token')" />
+                  <SecretInput
+                    v-else
+                    :modelValue="state.slack.bot_token"
+                    :status="consoleSecretField('slack', 'bot_token')"
+                    :revealPath="consoleSecretRevealPath('slack', 'bot_token')"
+                    :placeholder="t('settings_console_slack_bot_token_placeholder')"
+                    :disabled="consoleLoading || consoleSaving || !consoleSecretEditable('slack', 'bot_token')"
+                    @update:modelValue="updateSlackField('bot_token', $event)"
+                  />
+                </div>
+
+                <div class="settings-field is-wide">
+                  <span class="settings-field-label">{{ t("settings_console_slack_app_token_label") }}</span>
+                  <EnvManagedField v-if="consoleFieldEnvManaged('slack', 'app_token')" :name="consoleFieldManagedHeadline('slack', 'app_token')" />
+                  <SecretInput
+                    v-else
+                    :modelValue="state.slack.app_token"
+                    :status="consoleSecretField('slack', 'app_token')"
+                    :revealPath="consoleSecretRevealPath('slack', 'app_token')"
+                    :placeholder="t('settings_console_slack_app_token_placeholder')"
+                    :disabled="consoleLoading || consoleSaving || !consoleSecretEditable('slack', 'app_token')"
+                    @update:modelValue="updateSlackField('app_token', $event)"
+                  />
+                </div>
+
+                <div class="settings-field is-wide">
+                  <span class="settings-field-label">{{ t("settings_console_slack_allowed_team_ids_label") }}</span>
+                  <QTextarea
+                    :modelValue="state.slack.allowed_team_ids_text"
+                    :rows="3"
+                    :placeholder="t('settings_console_slack_allowed_team_ids_placeholder')"
+                    :disabled="consoleLoading || consoleSaving"
+                    @update:modelValue="updateSlackField('allowed_team_ids_text', $event)"
+                  />
+                  <p class="settings-field-note">{{ t("settings_console_slack_allowed_team_ids_note") }}</p>
+                </div>
+
+                <div class="settings-field is-wide">
+                  <span class="settings-field-label">{{ t("settings_console_slack_allowed_channel_ids_label") }}</span>
+                  <QTextarea
+                    :modelValue="state.slack.allowed_channel_ids_text"
+                    :rows="4"
+                    :placeholder="t('settings_console_slack_allowed_channel_ids_placeholder')"
+                    :disabled="consoleLoading || consoleSaving"
+                    @update:modelValue="updateSlackField('allowed_channel_ids_text', $event)"
+                  />
+                  <p class="settings-field-note">{{ t("settings_console_slack_allowed_channel_ids_note") }}</p>
+                </div>
+
+                <div class="settings-field is-wide">
+                  <span class="settings-field-label">{{ t("settings_console_group_trigger_label") }}</span>
+                  <QDropdownMenu
+                    :key="state.slack.group_trigger_mode || 'slack-group-trigger'"
+                    :items="groupTriggerItems"
+                    :initialItem="groupTriggerItems.find((item) => item.value === state.slack.group_trigger_mode) || groupTriggerItems[2]"
+                    @change="updateSlackGroupTrigger"
+                  />
+                  <p class="settings-field-note">{{ t("settings_console_slack_group_trigger_note") }}</p>
+                </div>
+              </div>
+            </div>
+          </AppSection>
+        </template>
+
+                    <template v-if="openChannel === 'line'">
+          <AppSection :title="t('settings_console_line_title')" :meta="t('settings_console_line_token_note')">
+            <template #actions>
+              <div class="settings-profile-actions settings-default-llm-actions">
+                <QDropdownMenu
+                  class="settings-llm-actions-menu"
+                  variant="plain"
+                  :items="channelActionMenuItems('line')"
+                  hideSelected
+                  hideActionLabel
+                  :disabled="consoleLoading || consoleSaving"
+                >
+                  <PhDotsThree class="settings-llm-actions-menu-icon" />
+                  <span class="settings-llm-actions-menu-accessible">{{ t("todo_action_more") }}</span>
+                </QDropdownMenu>
+                <QButton class="plain xs icon" :title="t('settings_channel_close')" :aria-label="t('settings_channel_close')" @click="closeChannelPane">
+                  <PhX class="icon" />
+                </QButton>
+              </div>
+            </template>
+            <div class="settings-panel-body">
+              <div class="settings-form-grid">
+                <div class="settings-field is-wide">
+                  <span class="settings-field-label">{{ t("settings_console_line_channel_access_token_label") }}</span>
+                  <EnvManagedField v-if="consoleFieldEnvManaged('line', 'channel_access_token')" :name="consoleFieldManagedHeadline('line', 'channel_access_token')" />
+                  <SecretInput
+                    v-else
+                    :modelValue="state.line.channel_access_token"
+                    :status="consoleSecretField('line', 'channel_access_token')"
+                    :revealPath="consoleSecretRevealPath('line', 'channel_access_token')"
+                    :placeholder="t('settings_console_line_channel_access_token_placeholder')"
+                    :disabled="consoleLoading || consoleSaving || !consoleSecretEditable('line', 'channel_access_token')"
+                    @update:modelValue="updateLineField('channel_access_token', $event)"
+                  />
+                </div>
+
+                <div class="settings-field is-wide">
+                  <span class="settings-field-label">{{ t("settings_console_line_channel_secret_label") }}</span>
+                  <EnvManagedField v-if="consoleFieldEnvManaged('line', 'channel_secret')" :name="consoleFieldManagedHeadline('line', 'channel_secret')" />
+                  <SecretInput
+                    v-else
+                    :modelValue="state.line.channel_secret"
+                    :status="consoleSecretField('line', 'channel_secret')"
+                    :revealPath="consoleSecretRevealPath('line', 'channel_secret')"
+                    :placeholder="t('settings_console_line_channel_secret_placeholder')"
+                    :disabled="consoleLoading || consoleSaving || !consoleSecretEditable('line', 'channel_secret')"
+                    @update:modelValue="updateLineField('channel_secret', $event)"
+                  />
+                </div>
+
+                <div class="settings-field is-wide">
+                  <span class="settings-field-label">{{ t("settings_console_line_allowed_group_ids_label") }}</span>
+                  <QTextarea
+                    :modelValue="state.line.allowed_group_ids_text"
+                    :rows="4"
+                    :placeholder="t('settings_console_line_allowed_group_ids_placeholder')"
+                    :disabled="consoleLoading || consoleSaving"
+                    @update:modelValue="updateLineField('allowed_group_ids_text', $event)"
+                  />
+                  <p class="settings-field-note">{{ t("settings_console_line_allowed_group_ids_note") }}</p>
+                </div>
+
+                <div class="settings-field is-wide">
+                  <span class="settings-field-label">{{ t("settings_console_group_trigger_label") }}</span>
+                  <QDropdownMenu
+                    :key="state.line.group_trigger_mode || 'line-group-trigger'"
+                    :items="groupTriggerItems"
+                    :initialItem="groupTriggerItems.find((item) => item.value === state.line.group_trigger_mode) || groupTriggerItems[2]"
+                    @change="updateLineGroupTrigger"
+                  />
+                  <p class="settings-field-note">{{ t("settings_console_line_group_trigger_note") }}</p>
+                </div>
+              </div>
+            </div>
+          </AppSection>
+        </template>
+
+                    <template v-if="openChannel === 'lark'">
+          <AppSection :title="t('settings_console_lark_title')" :meta="t('settings_console_lark_token_note')">
+            <template #actions>
+              <div class="settings-profile-actions settings-default-llm-actions">
+                <QDropdownMenu
+                  class="settings-llm-actions-menu"
+                  variant="plain"
+                  :items="channelActionMenuItems('lark')"
+                  hideSelected
+                  hideActionLabel
+                  :disabled="consoleLoading || consoleSaving"
+                >
+                  <PhDotsThree class="settings-llm-actions-menu-icon" />
+                  <span class="settings-llm-actions-menu-accessible">{{ t("todo_action_more") }}</span>
+                </QDropdownMenu>
+                <QButton class="plain xs icon" :title="t('settings_channel_close')" :aria-label="t('settings_channel_close')" @click="closeChannelPane">
+                  <PhX class="icon" />
+                </QButton>
+              </div>
+            </template>
+            <div class="settings-panel-body">
+              <div class="settings-form-grid">
+                <div class="settings-field is-wide">
+                  <span class="settings-field-label">{{ t("settings_console_lark_app_id_label") }}</span>
+                  <EnvManagedField v-if="consoleFieldEnvManaged('lark', 'app_id')" :name="consoleFieldManagedHeadline('lark', 'app_id')" />
+                  <QInput
+                    v-else
+                    :modelValue="state.lark.app_id"
+                    :placeholder="t('settings_console_lark_app_id_placeholder')"
+                    :disabled="consoleLoading || consoleSaving"
+                    @update:modelValue="updateLarkField('app_id', $event)"
+                  />
+                </div>
+
+                <div class="settings-field is-wide">
+                  <span class="settings-field-label">{{ t("settings_console_lark_app_secret_label") }}</span>
+                  <EnvManagedField v-if="consoleFieldEnvManaged('lark', 'app_secret')" :name="consoleFieldManagedHeadline('lark', 'app_secret')" />
+                  <SecretInput
+                    v-else
+                    :modelValue="state.lark.app_secret"
+                    :status="consoleSecretField('lark', 'app_secret')"
+                    :revealPath="consoleSecretRevealPath('lark', 'app_secret')"
+                    :placeholder="t('settings_console_lark_app_secret_placeholder')"
+                    :disabled="consoleLoading || consoleSaving || !consoleSecretEditable('lark', 'app_secret')"
+                    @update:modelValue="updateLarkField('app_secret', $event)"
+                  />
+                </div>
+
+                <div class="settings-field is-wide">
+                  <span class="settings-field-label">{{ t("settings_console_lark_allowed_chat_ids_label") }}</span>
+                  <QTextarea
+                    :modelValue="state.lark.allowed_chat_ids_text"
+                    :rows="4"
+                    :placeholder="t('settings_console_lark_allowed_chat_ids_placeholder')"
+                    :disabled="consoleLoading || consoleSaving"
+                    @update:modelValue="updateLarkField('allowed_chat_ids_text', $event)"
+                  />
+                  <p class="settings-field-note">{{ t("settings_console_lark_allowed_chat_ids_note") }}</p>
+                </div>
+
+                <div class="settings-field is-wide">
+                  <span class="settings-field-label">{{ t("settings_console_group_trigger_label") }}</span>
+                  <QDropdownMenu
+                    :key="state.lark.group_trigger_mode || 'lark-group-trigger'"
+                    :items="groupTriggerItems"
+                    :initialItem="groupTriggerItems.find((item) => item.value === state.lark.group_trigger_mode) || groupTriggerItems[2]"
+                    @change="updateLarkGroupTrigger"
+                  />
+                  <p class="settings-field-note">{{ t("settings_console_lark_group_trigger_note") }}</p>
+                </div>
+              </div>
+            </div>
+          </AppSection>
+        </template>
+
+                    <template v-if="openChannel === 'mixin'">
+          <AppSection :title="t('settings_console_mixin_title')" :meta="t('settings_console_mixin_note')">
+            <template #actions>
+              <div class="settings-profile-actions settings-default-llm-actions">
+                <QDropdownMenu
+                  class="settings-llm-actions-menu"
+                  variant="plain"
+                  :items="channelActionMenuItems('mixin')"
+                  hideSelected
+                  hideActionLabel
+                  :disabled="consoleLoading || consoleSaving"
+                >
+                  <PhDotsThree class="settings-llm-actions-menu-icon" />
+                  <span class="settings-llm-actions-menu-accessible">{{ t("todo_action_more") }}</span>
+                </QDropdownMenu>
+                <QButton class="plain xs icon" :title="t('settings_channel_close')" :aria-label="t('settings_channel_close')" @click="closeChannelPane">
+                  <PhX class="icon" />
+                </QButton>
+              </div>
+            </template>
+            <div class="settings-panel-body">
+              <div class="settings-form-grid">
+                <div class="settings-field is-wide">
+                  <span class="settings-field-label">{{ t("settings_console_mixin_keystore_file_label") }}</span>
+                  <EnvManagedField v-if="consoleFieldEnvManaged('mixin', 'keystore_file')" :name="consoleFieldManagedHeadline('mixin', 'keystore_file')" />
+                  <QInput
+                    v-else
+                    :modelValue="state.mixin.keystore_file"
+                    :placeholder="t('settings_console_mixin_keystore_file_placeholder')"
+                    :disabled="consoleLoading || consoleSaving"
+                    @update:modelValue="updateMixinField('keystore_file', $event)"
+                  />
+                  <p class="settings-field-note">{{ t("settings_console_mixin_keystore_file_note") }}</p>
+                </div>
+
+                <div class="settings-field is-wide">
+                  <span class="settings-field-label">{{ t("settings_console_mixin_allowed_conversation_ids_label") }}</span>
+                  <QTextarea
+                    :modelValue="state.mixin.allowed_conversation_ids_text"
+                    :rows="4"
+                    :placeholder="t('settings_console_mixin_allowed_conversation_ids_placeholder')"
+                    :disabled="consoleLoading || consoleSaving"
+                    @update:modelValue="updateMixinField('allowed_conversation_ids_text', $event)"
+                  />
+                  <p class="settings-field-note">{{ t("settings_console_mixin_allowed_conversation_ids_note") }}</p>
+                </div>
+
+              </div>
+            </div>
+          </AppSection>
+        </template>
+
+                    <template v-if="openChannel === 'discord'">
+          <AppSection :title="t('settings_console_discord_title')" :meta="t('settings_console_discord_token_note')">
+            <template #actions>
+              <div class="settings-profile-actions settings-default-llm-actions">
+                <QDropdownMenu
+                  class="settings-llm-actions-menu"
+                  variant="plain"
+                  :items="channelActionMenuItems('discord')"
+                  hideSelected
+                  hideActionLabel
+                  :disabled="consoleLoading || consoleSaving"
+                >
+                  <PhDotsThree class="settings-llm-actions-menu-icon" />
+                  <span class="settings-llm-actions-menu-accessible">{{ t("todo_action_more") }}</span>
+                </QDropdownMenu>
+                <QButton class="plain xs icon" :title="t('settings_channel_close')" :aria-label="t('settings_channel_close')" @click="closeChannelPane">
+                  <PhX class="icon" />
+                </QButton>
+              </div>
+            </template>
+            <div class="settings-panel-body">
+              <div class="settings-form-grid">
+                <div class="settings-field is-wide">
+                  <span class="settings-field-label">{{ t("settings_console_discord_bot_token_label") }}</span>
+                  <EnvManagedField v-if="consoleFieldEnvManaged('discord', 'bot_token')" :name="consoleFieldManagedHeadline('discord', 'bot_token')" />
+                  <SecretInput
+                    v-else
+                    :modelValue="state.discord.bot_token"
+                    :status="consoleSecretField('discord', 'bot_token')"
+                    :revealPath="consoleSecretRevealPath('discord', 'bot_token')"
+                    :placeholder="t('settings_console_discord_bot_token_placeholder')"
+                    :disabled="consoleLoading || consoleSaving || !consoleSecretEditable('discord', 'bot_token')"
+                    @update:modelValue="updateDiscordField('bot_token', $event)"
+                  />
+                </div>
+
+                <div class="settings-field is-wide">
+                  <span class="settings-field-label">{{ t("settings_console_discord_allowed_guild_ids_label") }}</span>
+                  <QTextarea
+                    :modelValue="state.discord.allowed_guild_ids_text"
+                    :rows="3"
+                    :placeholder="t('settings_console_discord_allowed_ids_placeholder')"
+                    :disabled="consoleLoading || consoleSaving"
+                    @update:modelValue="updateDiscordField('allowed_guild_ids_text', $event)"
+                  />
+                  <p class="settings-field-note">{{ t("settings_console_discord_allowed_guild_ids_note") }}</p>
+                </div>
+
+                <div class="settings-field is-wide">
+                  <span class="settings-field-label">{{ t("settings_console_discord_allowed_channel_ids_label") }}</span>
+                  <QTextarea
+                    :modelValue="state.discord.allowed_channel_ids_text"
+                    :rows="3"
+                    :placeholder="t('settings_console_discord_allowed_ids_placeholder')"
+                    :disabled="consoleLoading || consoleSaving"
+                    @update:modelValue="updateDiscordField('allowed_channel_ids_text', $event)"
+                  />
+                  <p class="settings-field-note">{{ t("settings_console_discord_allowed_channel_ids_note") }}</p>
+                </div>
+
+                <div class="settings-field is-wide">
+                  <span class="settings-field-label">{{ t("settings_console_discord_allowed_user_ids_label") }}</span>
+                  <QTextarea
+                    :modelValue="state.discord.allowed_user_ids_text"
+                    :rows="3"
+                    :placeholder="t('settings_console_discord_allowed_ids_placeholder')"
+                    :disabled="consoleLoading || consoleSaving"
+                    @update:modelValue="updateDiscordField('allowed_user_ids_text', $event)"
+                  />
+                  <p class="settings-field-note">{{ t("settings_console_discord_allowed_user_ids_note") }}</p>
+                </div>
+
+                <div class="settings-field is-wide">
+                  <span class="settings-field-label">{{ t("settings_console_group_trigger_label") }}</span>
+                  <QDropdownMenu
+                    :key="state.discord.group_trigger_mode || 'discord-group-trigger'"
+                    :items="groupTriggerItems"
+                    :initialItem="groupTriggerItems.find((item) => item.value === state.discord.group_trigger_mode) || groupTriggerItems[1]"
+                    @change="updateDiscordGroupTrigger"
+                  />
+                  <p class="settings-field-note">{{ t("settings_console_discord_group_trigger_note") }}</p>
+                </div>
+              </div>
+            </div>
+          </AppSection>
+        </template>
+                    <template v-if="openChannel === 'wechat'">
+          <AppSection :title="t('settings_console_wechat_title')" :meta="t('settings_console_wechat_note')">
+            <template #actions>
+              <div class="settings-profile-actions settings-default-llm-actions">
+                <QDropdownMenu
+                  class="settings-llm-actions-menu"
+                  variant="plain"
+                  :items="channelActionMenuItems('wechat')"
+                  hideSelected
+                  hideActionLabel
+                  :disabled="consoleLoading || consoleSaving"
+                >
+                  <PhDotsThree class="settings-llm-actions-menu-icon" />
+                  <span class="settings-llm-actions-menu-accessible">{{ t("todo_action_more") }}</span>
+                </QDropdownMenu>
+                <QButton class="plain xs icon" :title="t('settings_channel_close')" :aria-label="t('settings_channel_close')" @click="closeChannelPane">
+                  <PhX class="icon" />
+                </QButton>
+              </div>
+            </template>
+            <div class="settings-panel-body">
+              <div class="settings-form-grid">
+                <div class="settings-field is-wide">
+                  <span class="settings-field-label">{{ t("settings_console_wechat_account_label") }}</span>
+                  <EnvManagedField v-if="consoleFieldEnvManaged('wechat', 'bot_token')" :name="consoleFieldManagedHeadline('wechat', 'bot_token')" />
+                  <WeChatLoginPanel
+                    v-else
+                    :request="endpointApiFetch"
+                    :endpointRef="settingsEndpointRef"
+                    :configured="consoleSecretField('wechat', 'bot_token')?.configured === true"
+                    :botId="state.wechat.bot_id"
+                    :disabled="consoleLoading || consoleSaving"
+                    @changed="reloadConsoleSettingsAfterWeChatLogin"
+                  />
+                </div>
+              </div>
+            </div>
+          </AppSection>
+        </template>
+
+                    <template v-if="openChannel === 'whatsapp'">
+          <AppSection :title="t('settings_console_whatsapp_title')" :meta="t('settings_console_whatsapp_note')">
+            <template #actions>
+              <div class="settings-profile-actions settings-default-llm-actions">
+                <QDropdownMenu
+                  class="settings-llm-actions-menu"
+                  variant="plain"
+                  :items="channelActionMenuItems('whatsapp')"
+                  hideSelected
+                  hideActionLabel
+                  :disabled="consoleLoading || consoleSaving"
+                >
+                  <PhDotsThree class="settings-llm-actions-menu-icon" />
+                  <span class="settings-llm-actions-menu-accessible">{{ t("todo_action_more") }}</span>
+                </QDropdownMenu>
+                <QButton class="plain xs icon" :title="t('settings_channel_close')" :aria-label="t('settings_channel_close')" @click="closeChannelPane">
+                  <PhX class="icon" />
+                </QButton>
+              </div>
+            </template>
+            <div class="settings-panel-body">
+              <div class="settings-form-grid">
+                <div class="settings-field is-wide">
+                  <span class="settings-field-label">{{ t("settings_console_whatsapp_api_token_label") }}</span>
+                  <EnvManagedField v-if="consoleFieldEnvManaged('whatsapp', 'api_token')" :name="consoleFieldManagedHeadline('whatsapp', 'api_token')" />
+                  <SecretInput
+                    v-else
+                    :modelValue="state.whatsapp.api_token"
+                    :status="consoleSecretField('whatsapp', 'api_token')"
+                    :revealPath="consoleSecretRevealPath('whatsapp', 'api_token')"
+                    :placeholder="t('settings_console_whatsapp_api_token_placeholder')"
+                    :disabled="consoleLoading || consoleSaving || !consoleSecretEditable('whatsapp', 'api_token')"
+                    @update:modelValue="updateWhatsAppField('api_token', $event)"
+                  />
+                  <p class="settings-field-note">{{ t("settings_console_whatsapp_api_token_note") }}</p>
+                </div>
+              </div>
+            </div>
+          </AppSection>
+        </template>
+                <!-- Kept mounted while the pane is closed, so a draft here is not lost. -->
+                <div
+                  v-for="group in CHANNEL_TRIGGER_CONFIG_GROUPS"
+                  v-show="openChannel === group.id"
+                  :key="group.id"
+                  class="settings-channel-trigger-config"
+                >
+                  <ConfigSettingsPanel
+                    :groups="[group]"
+                    :values="consoleConfigValues"
+                    :fieldStates="consoleFieldStates"
+                    :loading="consoleLoading"
+                    :saving="consoleSaving && consoleSavingTarget === 'config'"
+                    :hiddenPaths="channelTriggerHiddenPaths(group.id)"
+                    embedded
+                    hideSingleGroupHeading
+                    saveScope="console"
+                    @save="saveConfigSettings('console', $event)"
+                  />
+                </div>
+                <div v-if="channelManagedItem(openChannel)" class="settings-channel-console">
+                  <div class="settings-toggle-row settings-channel-runtime-row">
+                    <div class="settings-toggle-copy">
+                      <strong class="settings-toggle-title">{{ t("settings_channel_run_in_console") }}</strong>
+                      <span class="settings-toggle-note">{{ t(channelManagedItem(openChannel).noteKey) }}</span>
+                    </div>
+                    <QSwitch
+                      :modelValue="state.managedRuntimes[openChannel]"
+                      :disabled="consoleLoading || consoleSaving"
+                      @update:modelValue="setManagedRuntimeEnabled(openChannel, $event)"
+                    />
+                  </div>
+                </div>
+              </div>
+                  <footer v-if="sectionSaveUnits.length || sectionSaveFailed" class="settings-channel-pane-foot">
+                    <p class="settings-channel-pane-foot-text" :class="{ 'is-error': sectionSaveFailed }" role="status">
+                      {{ sectionSaveFailed ? t('settings_save_bar_failed', { items: sectionSaveFailed }) : t('settings_channel_unsaved_note') }}
+                    </p>
+                    <QButton class="primary" :loading="sectionSaving" :disabled="sectionSaveBusy || !sectionSaveUnits.length" @click="saveSection">
+                      {{ t('action_save') }}
+                    </QButton>
+                  </footer>
+                </div>
+            </aside>
+          </Transition>
+        </template>
       </div>
 
       <SettingDialog

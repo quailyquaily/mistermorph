@@ -1501,40 +1501,56 @@ body:has(.settings-page) .q-dialog .q-menu-item.danger .q-menu-title {
   background: var(--status-pending);
 }
 
-/* The layout: the tiles, and the open channel's pane in a column at the right, as Store's. */
-.settings-channels {
-  --settings-channel-pane-width: 440px;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  align-items: start;
-  gap: 16px;
+/* The open profile or channel is Chat's side panel: a column at the right of the workbench, on the
+   page rather than in a card, below the page bar like the index. While the section can open one the
+   column stays in the grid and only its width changes, so the pane slides out. The gap goes: the
+   content's own right margin keeps it off the pane. */
+.settings-workbench.can-pane {
+  --settings-pane-width: clamp(320px, 30vw, 420px);
+  --settings-pane-track: minmax(0px, 0px);
+  grid-template-columns:
+    minmax(240px, var(--workspace-sidebar-max-width, 310px))
+    minmax(0, 1fr)
+    var(--settings-pane-track);
+  column-gap: 0;
+  transition: grid-template-columns var(--motion-slow) var(--motion-ease);
 }
 
-.settings-channels.has-pane {
-  grid-template-columns: minmax(0, 1fr) minmax(340px, var(--settings-channel-pane-width));
+.settings-workbench.has-pane {
+  --settings-pane-track: minmax(var(--settings-pane-width), var(--settings-pane-width));
 }
 
+.settings-workbench.can-pane > .settings-index {
+  margin-right: 4px;
+}
+
+/* Pinned to its own cell: a pane that is still leaving never pushes the grid onto a second row. */
+.settings-workbench.can-pane > .settings-channel-pane {
+  grid-column: 3;
+  grid-row: 1;
+}
+
+/* The pane keeps its width and stays pinned to the right edge while the column narrows, so it
+   slides out rather than squashing its fields. */
 .settings-channel-pane {
-  position: sticky;
-  top: 12px;
   min-width: 0;
-  height: calc(100dvh - var(--workspace-head-height, 48px) - 32px);
-  max-height: 900px;
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  justify-content: flex-end;
+  padding-top: var(--workspace-head-height);
+  overflow: hidden;
 }
 
 .settings-channel-pane-shell {
+  flex: 0 0 auto;
+  width: var(--settings-pane-width, 100%);
+  min-width: 0;
+  height: 100%;
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
-  height: 100%;
   overflow: hidden;
-  border-radius: 8px;
-  background: var(--q-bg-white);
   color: var(--text-0);
-  box-shadow: 0 1px 4px color-mix(in srgb, var(--q-c-dark) 7%, transparent);
-}
-
-html[data-macos26="true"] .settings-channel-pane-shell {
-  border-radius: 16px;
 }
 
 .settings-channel-pane-scroll {
@@ -1548,18 +1564,20 @@ html[data-macos26="true"] .settings-channel-pane-shell {
   gap: 0;
 }
 
+/* The head reads like the topic name atop Chat's panel: one line with its icon buttons at the end,
+   held at the top while the fields scroll under it. */
 .settings-channel-pane-scroll > .app-section > .app-section-head {
   position: sticky;
   top: 0;
   z-index: 2;
-  --app-section-head-height: 48px;
-  padding: 0 12px 0 18px;
-  background: var(--q-bg-white);
+  --app-section-head-height: 50px;
+  padding: 0 8px 0 var(--settings-pane-gutter, 16px);
+  background: var(--q-bg-paper);
 }
 
 .settings-channel-pane-scroll .settings-panel-body {
   margin-top: 0;
-  padding: 14px 18px 24px;
+  padding: 16px var(--settings-pane-gutter, 16px) 24px;
 }
 
 /* The pane is narrow: one field per row. */
@@ -1570,7 +1588,7 @@ html[data-macos26="true"] .settings-channel-pane-shell {
 .settings-channel-console {
   display: grid;
   gap: 6px;
-  padding: 0 18px 24px;
+  padding: 0 var(--settings-pane-gutter, 16px) 24px;
 }
 
 .settings-channel-runtime-row {
@@ -1581,7 +1599,7 @@ html[data-macos26="true"] .settings-channel-pane-shell {
 /* The group trigger fields follow the trigger mode, inside the same padding. */
 .settings-channel-trigger-config {
   margin-top: -8px;
-  padding: 0 18px 24px;
+  padding: 0 var(--settings-pane-gutter, 16px) 24px;
 }
 
 .settings-channel-trigger-config .config-settings-fields {
@@ -1597,8 +1615,8 @@ html[data-macos26="true"] .settings-channel-pane-shell {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 12px 18px;
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--line-soft) 70%, transparent);
+  padding: 12px var(--settings-pane-gutter, 16px) 16px;
+  border-top: 1px solid var(--line-soft);
 }
 
 .settings-channel-pane-foot-text {
@@ -1613,7 +1631,7 @@ html[data-macos26="true"] .settings-channel-pane-shell {
 
 .settings-channel-pane-enter-active,
 .settings-channel-pane-leave-active {
-  transition: opacity var(--motion-slow, 240ms) var(--motion-ease, ease);
+  transition: opacity var(--motion-slow) var(--motion-ease);
 }
 
 .settings-channel-pane-enter-from,
@@ -1621,7 +1639,8 @@ html[data-macos26="true"] .settings-channel-pane-shell {
   opacity: 0;
 }
 
-/* Phones: the pane is a sheet from the right over a mask. */
+/* Phones: Chat's drawer. The pane comes in from the right over a mask, on its own paper with an
+   edge. */
 .settings-channel-pane-mask {
   position: fixed;
   inset: 0;
@@ -1633,14 +1652,16 @@ html[data-macos26="true"] .settings-channel-pane-shell {
   position: fixed;
   inset: 0 0 0 auto;
   z-index: 1000;
-  width: min(100vw, 480px);
+  width: min(88vw, 400px);
   height: 100%;
-  max-height: none;
+  padding-top: 0;
+  overscroll-behavior: contain;
 }
 
 .settings-channel-pane.is-sheet .settings-channel-pane-shell {
-  border: 0;
-  border-radius: 0;
+  width: 100%;
+  border-left: 1px solid var(--line);
+  background: var(--q-bg-paper);
 }
 
 .settings-channel-sheet-enter-active {
@@ -1656,6 +1677,18 @@ html[data-macos26="true"] .settings-channel-pane-shell {
   transform: translate3d(100%, 0, 0);
 }
 
+.settings-channel-mask-enter-active {
+  transition: opacity 280ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.settings-channel-mask-leave-active {
+  transition: opacity 200ms cubic-bezier(0.7, 0, 0.84, 0);
+}
+
+.settings-channel-mask-enter-from,
+.settings-channel-mask-leave-to {
+  opacity: 0;
+}
 
 .settings-restart-banner {
   /* Stays in view while the panel scrolls, so a save made further down still shows it. */
