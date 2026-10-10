@@ -21,16 +21,17 @@ const (
 )
 
 const (
-	ChannelConsole  = channels.Console
-	ChannelTelegram = channels.Telegram
-	ChannelSlack    = channels.Slack
-	ChannelLine     = channels.Line
-	ChannelLark     = channels.Lark
-	ChannelMixin    = channels.Mixin
-	ChannelDiscord  = channels.Discord
-	ChannelWeChat   = channels.WeChat
-	ChannelWhatsApp = channels.WhatsApp
-	ShareTopic      = "chat.message"
+	ChannelConsole   = channels.Console
+	ChannelTelegram  = channels.Telegram
+	ChannelSlack     = channels.Slack
+	ChannelLine      = channels.Line
+	ChannelLark      = channels.Lark
+	ChannelMixin     = channels.Mixin
+	ChannelDiscord   = channels.Discord
+	ChannelWeChat    = channels.WeChat
+	ChannelWhatsApp  = channels.WhatsApp
+	ChannelAgentLink = channels.AgentLink
+	ShareTopic       = "chat.message"
 )
 
 type Contact struct {

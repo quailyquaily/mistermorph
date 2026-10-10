@@ -10,4 +10,6 @@ const (
 	Mixin    = "mixin"
 	WeChat   = "wechat"
 	WhatsApp = "whatsapp"
+	// AgentLink is the built-in channel between agents connected to a Console.
+	AgentLink = "agentlink"
 )

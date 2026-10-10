@@ -64,8 +64,8 @@ type ServiceDeps struct {
 }
 
 type Service struct {
-	ensureStore     EnsureStore
-	contactStore    ContactStore
+	ensureStore       EnsureStore
+	contactStore      ContactStore
 	outboxStore       OutboxStore
 	failureCooldown   time.Duration
 	agentSendCooldown time.Duration
@@ -86,8 +86,8 @@ func NewServiceWithOptions(store Store, opts ServiceOptions) *Service {
 func NewServiceWithDeps(deps ServiceDeps, opts ServiceOptions) *Service {
 	opts = normalizeServiceOptions(opts)
 	return &Service{
-		ensureStore:     deps.Ensure,
-		contactStore:    deps.Contacts,
+		ensureStore:       deps.Ensure,
+		contactStore:      deps.Contacts,
 		outboxStore:       deps.Outbox,
 		failureCooldown:   opts.FailureCooldown,
 		agentSendCooldown: opts.AgentSendCooldown,
