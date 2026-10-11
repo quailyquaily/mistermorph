@@ -249,7 +249,41 @@ function normalizeActivityEntry(raw) {
     outputKind: String(raw?.output_kind || "").trim(),
     children: Array.isArray(raw?.children) ? raw.children.map((child) => normalizeActivityEntry(child)).filter(Boolean) : [],
     childrenOmitted: Math.max(0, Number(raw?.children_omitted) || 0),
+    messages: normalizeActivityMessages(raw?.messages),
   };
+}
+
+// The messages agent_send exchanged with another agent over Agent Link.
+function normalizeActivityMessages(raw) {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  return raw
+    .map((message) => ({
+      direction: String(message?.direction || "").trim(),
+      peer: String(message?.peer || "").trim(),
+      text: String(message?.text || "").trim(),
+      at: String(message?.at || "").trim(),
+    }))
+    .filter((message) => ["sent", "reply", "pending"].includes(message.direction));
+}
+
+// What the task exchanged with other agents over Agent Link, in order. A pending note is dropped
+// once that agent's answer is in.
+function agentLinkMessages(activity) {
+  const history = Array.isArray(activity?.history) ? activity.history : [];
+  const out = [];
+  history.forEach((entry) => {
+    const messages = Array.isArray(entry?.messages) ? entry.messages : [];
+    messages.forEach((message, index) => {
+      out.push({ ...message, key: `${entry.id}:agentlink:${index}` });
+    });
+  });
+  return out.filter(
+    (message, index) =>
+      message.direction !== "pending" ||
+      !out.slice(index + 1).some((later) => later.direction === "reply" && later.peer === message.peer)
+  );
 }
 
 function normalizeActivity(raw) {
@@ -504,4 +538,5 @@ export {
   taskRawJSON,
   taskReasoning,
   planStepMessages,
+  agentLinkMessages,
 };

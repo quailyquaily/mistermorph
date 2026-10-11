@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/quailyquaily/mistermorph/contacts"
 	"github.com/quailyquaily/mistermorph/internal/chatinfo"
+	"github.com/quailyquaily/mistermorph/internal/configdefaults"
 	"github.com/quailyquaily/mistermorph/internal/contactsruntime"
 	refid "github.com/quailyquaily/mistermorph/internal/entryutil/refid"
 	"github.com/quailyquaily/mistermorph/internal/pathroots"
@@ -43,6 +44,8 @@ type ContactsSendToolOptions struct {
 	AgentSendCooldown time.Duration
 	// StateDir is the runtime's state dir; its Agent Link node sends to mm: contacts.
 	StateDir string
+	// AgentLinkReplyTimeout is how long agent_send waits for an Agent Link agent's answer.
+	AgentLinkReplyTimeout time.Duration
 	// PathRoots are where a file to send may come from: file_cache_dir and the task's workspace.
 	// FileStateDir is never sent from.
 	PathRoots pathroots.PathRoots
@@ -137,6 +140,10 @@ type contactSendExecutionPolicy struct {
 	blockCurrentConversation bool
 	activeAgentsOnly         bool
 	activeAgentIDs           map[string]struct{}
+	// waitForReplies makes a send over Agent Link wait for the agent's answer.
+	waitForReplies bool
+	stateDir       string
+	replyTimeout   time.Duration
 }
 
 var contactsSendPolicy = contactSendExecutionPolicy{
@@ -179,6 +186,11 @@ func executeContactSendTool(ctx context.Context, params map[string]any, opts Con
 			return "", err
 		}
 		policy.activeAgentIDs = activeAgentIDs
+	}
+	policy.stateDir = strings.TrimSpace(opts.StateDir)
+	policy.replyTimeout = opts.AgentLinkReplyTimeout
+	if policy.replyTimeout <= 0 {
+		policy.replyTimeout = configdefaults.DefaultAgentLinkReplyTimeout
 	}
 
 	sender, err := contactsruntime.NewRoutingSender(ctx, contactsruntime.SenderOptions{
@@ -240,6 +252,9 @@ func executeContactsSendResolved(
 		return "", err
 	}
 	for _, recipient := range recipients {
+		if policy.skipsAgentSendCooldown(ctx, recipient.Contact, chatID) {
+			continue
+		}
 		if err := checkAgentSendCooldown(policy.toolName, recipient.ContactID, recipient.Contact, now); err != nil {
 			return "", err
 		}
@@ -257,8 +272,26 @@ func executeContactsSendResolved(
 	}
 
 	outcomes := make([]map[string]any, 0, len(plan))
+	asks := make([]*agentLinkAsk, 0, len(plan))
+	defer func() {
+		for _, ask := range asks {
+			if ask != nil {
+				ask.stop()
+			}
+		}
+	}()
 	for _, item := range plan {
 		sendParams := contactsSendParamsWithText(params, item.Text(baseText))
+		var itemContact contacts.Contact
+		if policy.waitForReplies {
+			itemContact, err = svc.ResolveSendContact(ctx, item.ContactID)
+			if err != nil {
+				return "", err
+			}
+			if node, instanceID, ok := agentLinkInstanceFor(policy.stateDir, itemContact, item.ChatID); ok {
+				sendParams = agentLinkSessionParams(ctx, sendParams, node, instanceID)
+			}
+		}
 		contentType, payload, err := buildSendPayload(sendParams, now, file != nil)
 		if err != nil {
 			return "", err
@@ -274,10 +307,19 @@ func executeContactsSendResolved(
 		decision.ItemID = "manual_" + uuid.NewString()
 		decision.IdempotencyKey = "manual:" + uuid.NewString()
 
+		ask := expectAgentLinkReply(ctx, policy, itemContact, decision)
 		outcome, err := svc.SendDecision(ctx, now, decision, sender)
+		if err != nil || !outcome.Accepted && !outcome.Queued {
+			ask.abandon()
+			ask = nil
+		}
 		if err != nil {
 			return "", err
 		}
+		if ask != nil {
+			ask.sent(ctx, item.Text(baseText))
+		}
+		asks = append(asks, ask)
 		result := map[string]any{
 			"chat_id":    item.ChatID,
 			"mentions":   append([]string(nil), item.Mentions...),
@@ -290,6 +332,11 @@ func executeContactsSendResolved(
 			}
 		}
 		outcomes = append(outcomes, result)
+	}
+	for i, reply := range waitAgentLinkReplies(ctx, asks, policy.replyTimeout) {
+		if reply != nil {
+			outcomes[i]["reply"] = reply
+		}
 	}
 	out, _ := json.MarshalIndent(map[string]any{
 		"outcomes": outcomes,
@@ -321,12 +368,19 @@ func executeContactsSendSingle(
 			return "", err
 		}
 	}
-	if err := checkAgentSendCooldown(policy.toolName, contactID, contact, now); err != nil {
-		return "", err
+	if !policy.skipsAgentSendCooldown(ctx, contact, resolvedChatID) {
+		if err := checkAgentSendCooldown(policy.toolName, contactID, contact, now); err != nil {
+			return "", err
+		}
 	}
 	sendParams, err := contactsSendParamsWithSingleMention(params, contactID, resolvedChatID, contact, file)
 	if err != nil {
 		return "", err
+	}
+	if policy.waitForReplies {
+		if node, instanceID, ok := agentLinkInstanceFor(policy.stateDir, contact, resolvedChatID); ok {
+			sendParams = agentLinkSessionParams(ctx, sendParams, node, instanceID)
+		}
 	}
 	contentType, payload, err := buildSendPayload(sendParams, now, file != nil)
 	if err != nil {
@@ -342,12 +396,22 @@ func executeContactsSendSingle(
 	decision.ItemID = "manual_" + uuid.NewString()
 	decision.IdempotencyKey = "manual:" + uuid.NewString()
 
+	ask := expectAgentLinkReply(ctx, policy, contact, decision)
 	outcome, err := svc.SendDecision(ctx, now, decision, sender)
+	if err != nil || !outcome.Accepted && !outcome.Queued {
+		ask.abandon()
+		ask = nil
+	}
 	if err != nil {
 		return "", err
 	}
 	result := map[string]any{
 		"outcome": outcome,
+	}
+	if ask != nil {
+		text, _ := sendParams["message_text"].(string)
+		ask.sent(ctx, strings.TrimSpace(text))
+		result["reply"] = waitAgentLinkReplies(ctx, []*agentLinkAsk{ask}, policy.replyTimeout)[0]
 	}
 	if file != nil {
 		if err := auditContactsSendFile(ctx, policy.toolName, file, []string{contactID}, outcome); err != nil {

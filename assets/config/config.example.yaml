@@ -492,6 +492,9 @@ contacts:
     queue_ttl: "24h"
     # An agent unreachable for this long has its contact made inactive.
     inactive_after: "24h"
+    # How long agent_send waits for an Agent Link agent's answer. A later answer arrives in the
+    # conversation that asked as a new message.
+    reply_timeout: "2m"
 
 # Task projections and journal settings.
 tasks:

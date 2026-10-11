@@ -84,6 +84,11 @@ type Node struct {
 	handler  *handlerSlot
 	seen     map[string]time.Time
 	inflight map[string]bool
+	// replies are the sends whose reply someone is waiting for, by message ID.
+	replies map[string]*replyWaiter
+	// asks are the sends that may still get a reply, by message ID; see ExpectReply.
+	asks     map[string]askRecord
+	sessions map[string]string
 	connSeq  uint64
 	// retryBase is the first retry delay; it doubles with each attempt.
 	retryBase time.Duration
@@ -169,6 +174,9 @@ func NewNode(opts Options) (*Node, error) {
 		waiters:   make(map[string][]chan SendResult),
 		seen:      make(map[string]time.Time),
 		inflight:  make(map[string]bool),
+		replies:   make(map[string]*replyWaiter),
+		asks:      make(map[string]askRecord),
+		sessions:  make(map[string]string),
 		listeners: make(map[int]func([]Peer)),
 		kick:      make(chan struct{}, 1),
 		retryBase: time.Second,
@@ -179,6 +187,7 @@ func NewNode(opts Options) (*Node, error) {
 	if err := n.loadSeen(); err != nil {
 		return nil, err
 	}
+	n.loadAsks()
 	ctx, cancel := context.WithCancel(context.Background())
 	n.stop = cancel
 	n.dispatchers.Add(1)
@@ -552,6 +561,13 @@ func (n *Node) handleDeliver(c *nodeConn, frame Frame) {
 		// Another Console is delivering the same message; let the sender retry and find it seen.
 		n.mu.Unlock()
 		reply(StatusUnreachable, "")
+		return
+	}
+	if n.takeReplyLocked(msg) {
+		n.seen[msg.MessageID] = n.opts.Now().UTC()
+		n.saveSeenLocked()
+		n.mu.Unlock()
+		reply(StatusAccepted, "")
 		return
 	}
 	slot := n.handler

@@ -107,10 +107,21 @@ Relaying one message, from A to B:
 - The receiving runtime saves the message, ignores it if it's a repeat, and updates the sender contact's `last_interaction_at`. Then it starts an ordinary channel task. Messages in one conversation also pass the existing per-conversation agent limiter (8 per 10 minutes); over it, the message is rejected with `rate_limited`.
 - Conversation key: `agentlink:<from_instance_id>:<session_id>`. The task sees the sender as contact `mm:<from>`, with its nickname.
 - The task's final reply goes back over Agent Link to `from`, with the same `session_id` and with `reply_to` set to the incoming `message_id`.
+- A message with `reply_to` is an answer, and its task's output is **not** sent back. Without this rule, two agents answer each other's answers until the hop limit stops them (seen in the first live test: one question, three rounds of small talk).
 - Incoming text is untrusted channel input, handled the same way as Telegram or Slack text. Guard, approval and audit rules apply unchanged.
 - Each runtime type that serves `/agentlink/ws` runs such tasks: the Console's local runtime and the standalone channel runtimes. One runner runs per state dir in a process. A host built on the `integration` package serves the route but runs no runner, so messages to it are rejected with `no_handler`.
 - A failed task sends nothing back, so an error does not start another agent's task. A task that ends waiting for an approval fails, because no one can approve over Agent Link.
 - The task prompt says the message comes from another agent and is untrusted input. `contacts_send` cannot message the same agent during the task; the answer goes back as the reply.
+
+### 6a. `agent_send` waits for the answer
+
+The agent that asks owns the conversation: it ends when that agent stops asking and answers its user. No "conversation over" signal is needed.
+
+- Before sending to an `mm:` contact, `agent_send` registers for the answer under the message ID (`Node.ExpectReply`). A delivered message whose `reply_to` matches, from the agent it was sent to, goes to the waiting call instead of the runner, and the tool result carries it: `reply: {status: "replied", from, text, message_id}`.
+- The task then answers its user, or asks a follow-up with another `agent_send`. Follow-ups from the same conversation reuse one `session_id` (`Node.SessionFor`), so the other agent keeps them in one conversation.
+- The wait is `contacts.agent_link.reply_timeout` (default `2m`). After it the result is `reply: {status: "pending"}`, and the answer, when it comes, goes to the conversation that asked: `Node` keeps the origin (`asks.json`, 7 days), and the runner hands it to its `LateReply` hook. The Console steers it into the topic's run if one is going, or starts a task in that topic. Without a hook (channel runtimes), the answer runs as a task of its own, and is not answered.
+- `contacts_send` does not wait.
+- `agent_send` emits `tool_output` events (`agentlink_sent`, `agentlink_reply`, `agentlink_pending`) with the peer's name and the text. The Console keeps them as `messages` on the call's activity entry, and the chat shows them as the exchange between the agents, before the task's reply.
 
 ### 7. Loop control: hop count
 
@@ -128,6 +139,7 @@ Relaying one message, from A to B:
 - **Set it:** after a successful or queued send to an Agent contact, set `cooldown_until = now + contacts.agent_send.cooldown` (default `30s`; `0` turns it off).
 - For agent contacts, a failed send no longer sets the 72h/`failure_cooldown`. Queued Agent Link messages handle temporary unreachability, and a long failure cooldown would cut agents off. Human contacts keep the current failure behaviour.
 - Replies through the channel reply path (§6) don't go through `agent_send`, so the cooldown doesn't apply to them. The hop count (§7) limits them.
+- An `agent_send` over Agent Link from a task no agent started (incoming hop 0) skips the check: it waits for each answer (§6a), so the person's task, bounded by its own limits, drives the exchange. A task another agent started keeps the cooldown. Every successful send still sets `cooldown_until`.
 
 ### 9. Config
 

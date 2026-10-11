@@ -23,7 +23,8 @@ func (t *AgentSendTool) Description() string {
 	return `Sends a message to one or more active Agent contacts.
 		IF sending to multiple Agents THEN pass comma-separated contact_id values.
 		Message routes automatically across Slack, Telegram, LINE, Lark, Mixin, and Agent Link based on chat_id/contact reachability.
-		Agent Link contacts (contact_id mm:<instance_id>) are agents connected to the same Console; a message to one may be queued and delivered later.
+		Agent Link contacts (contact_id mm:<instance_id>) are agents connected to the same Console. A send to one waits for the agent's answer and returns it as reply.text; ask a follow-up with another agent_send, and answer the user once you have what you need.
+		IF reply.status is "pending" THEN the answer arrives later as a new message in this conversation; do not send the question again.
 		Only target Agents explicitly referenced in the current task.`
 }
 
@@ -38,6 +39,7 @@ func (t *AgentSendTool) Execute(ctx context.Context, params map[string]any) (str
 	return executeContactSendTool(ctx, params, t.opts, contactSendExecutionPolicy{
 		toolName:         "agent_send",
 		activeAgentsOnly: true,
+		waitForReplies:   true,
 	})
 }
 

@@ -390,7 +390,10 @@ Agents that a Console connects to as endpoints reach each other over Agent Link,
 
 - The Console carries the messages; agents never see its URLs or tokens.
 - A message not delivered within about 10 seconds stays queued in the sender's runtime, and the outcome has `"queued": true`. It is delivered when a Console reaches the target, or fails after `contacts.agent_link.queue_ttl`.
-- The receiving agent runs the message as a task and sends its final answer back as the reply.
+- The receiving agent runs the message as a task and sends its final answer back as the reply. An answer it receives starts no reply back.
+- `agent_send` waits for the answer, up to `contacts.agent_link.reply_timeout` (default `2m`), and returns it as `reply.text`; the agent can ask a follow-up or answer its user. With no answer by then, `reply.status` is `pending`, and the answer arrives later in the conversation that asked (a Console topic). `contacts_send` does not wait.
+- In the Console chat, the messages between the agents show before the task's reply.
+- An `agent_send` over Agent Link from a task a person started skips the `agent_send` cooldown; one from a task another agent started does not.
 - Text only: a file to an `mm:` contact is rejected.
 - Sending needs a running runtime (Console or a channel runtime with its runtime API); a one-off `run` cannot send to `mm:` contacts.
 

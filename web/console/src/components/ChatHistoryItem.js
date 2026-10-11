@@ -2,7 +2,7 @@ import { computed, onBeforeUpdate, onUpdated } from "vue";
 
 import { translate } from "../core/context";
 import { approvalParameterEntries, skillInstallApproval } from "../core/chat-approvals";
-import { planStepMessages, pollingActionWord } from "../core/chat-task-history";
+import { agentLinkMessages, planStepMessages, pollingActionWord } from "../core/chat-task-history";
 import { recordComponentUpdate } from "../core/performance";
 import ChatRichContent from "./ChatRichContent";
 import ChatSkillInstallPreview from "./ChatSkillInstallPreview";
@@ -132,6 +132,20 @@ const ChatHistoryItem = {
       }
       return entries;
     });
+    // What the task exchanged with other agents over Agent Link, each a message of its own.
+    const agentLinkExchange = computed(() =>
+      role.value === "agent" ? agentLinkMessages({ history: activityEntries.value }) : []
+    );
+    function agentLinkLabel(message) {
+      const peer = message.peer || translate("chat_agentlink_peer_unknown");
+      if (message.direction === "sent") {
+        return translate("chat_agentlink_to", { peer });
+      }
+      if (message.direction === "reply") {
+        return translate("chat_agentlink_from", { peer });
+      }
+      return translate("chat_agentlink_pending", { peer });
+    }
     const retryNotices = computed(() =>
       role.value === "agent" ? activityEntries.value.filter((entry) => entry.kind === "retry") : []
     );
@@ -292,6 +306,8 @@ const ChatHistoryItem = {
       agentBubbleVisible,
       awaitingWord,
       stepMessages,
+      agentLinkExchange,
+      agentLinkLabel,
       approvalMessage,
       approvalMessageVisible,
       approvalHeading,
@@ -425,6 +441,24 @@ const ChatHistoryItem = {
           </div>
           <div v-for="message in stepMessages" :key="message.key" :class="surfaceClass" class="chat-history-step">
             <ChatRichContent
+              class="chat-history-markdown"
+              :source="message.text"
+              :endpoint-ref="submitEndpointRef"
+              :fallback-topic-id="selectedTopicId"
+              :stream-profiler="streamProfiler"
+              format="auto"
+              theme="blueprint"
+              @rendered="emitRendered"
+            />
+          </div>
+          <div
+            v-for="message in agentLinkExchange"
+            :key="message.key"
+            :class="'chat-agentlink-message is-' + message.direction"
+          >
+            <span class="chat-agentlink-label">{{ agentLinkLabel(message) }}</span>
+            <ChatRichContent
+              v-if="message.text"
               class="chat-history-markdown"
               :source="message.text"
               :endpoint-ref="submitEndpointRef"

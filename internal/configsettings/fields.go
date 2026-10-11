@@ -216,6 +216,7 @@ func SystemFields() []Field {
 		{Path: "contacts.agent_link.max_hops", Kind: KindInt, ApplyMode: ApplyRuntimeRestart, Min: &one},
 		{Path: "contacts.agent_link.queue_ttl", Kind: KindDuration, ApplyMode: ApplyProcessRestart},
 		{Path: "contacts.agent_link.inactive_after", Kind: KindDuration, ApplyMode: ApplyProcessRestart},
+		{Path: "contacts.agent_link.reply_timeout", Kind: KindDuration, ApplyMode: ApplyRuntimeRestart},
 		{Path: "tasks.dir_name", Kind: KindString, ApplyMode: ApplyProcessRestart},
 		{Path: "tasks.persistence_targets", Kind: KindStringList, ApplyMode: ApplyRuntimeRestart},
 		{Path: "tasks.rotate_max_bytes", Kind: KindInt, ApplyMode: ApplyRuntimeRestart, Min: &zero},

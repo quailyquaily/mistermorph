@@ -153,3 +153,60 @@ func TestRunnerAnswersAgentLinkMessages(t *testing.T) {
 		}
 	})
 }
+
+func TestRunnerHandlesReplies(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	deps := testDeps(t)
+	lateReplies := make(chan LateReply, 1)
+	stop := Start(ctx, deps, Options{LateReply: func(_ context.Context, reply LateReply) error {
+		lateReplies <- reply
+		return nil
+	}})
+	defer stop()
+	runner, err := link.Shared(link.Options{StateDir: deps.RuntimePaths.StateDir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sender, err := link.NewNode(link.Options{StateDir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sender.Close()
+	var got replies
+	sender.SetHandler(got.handle)
+	relay := link.NewRelay(nil)
+	connect(ctx, runner, relay, "runner")
+	connect(ctx, sender, relay, "sender")
+	waitFor(t, "roster", func() bool { return sender.Reachable(runner.InstanceID()) })
+
+	t.Run("an answer that came late goes to the conversation that asked", func(t *testing.T) {
+		origin := link.Origin{Runtime: "console", ConversationKey: "console:topic-1", TopicID: "topic-1"}
+		_, stopWaiting := runner.ExpectReply("msg_asked", sender.InstanceID(), origin)
+		stopWaiting()
+		env := busruntime.MessageEnvelope{Text: "late answer", SessionID: "0194d8f0-0000-7000-8000-000000000004", ReplyTo: "msg_asked"}
+		if res, err := sender.Send(ctx, runner.InstanceID(), env, 2, 5*time.Second); err != nil || res.Status != link.StatusDelivered {
+			t.Fatalf("Send() = %+v, %v", res, err)
+		}
+		select {
+		case reply := <-lateReplies:
+			if reply.Origin != origin || reply.Message.Envelope.Text != "late answer" || reply.ContactID != link.ContactID(sender.InstanceID()) {
+				t.Fatalf("late reply = %+v", reply)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("the late answer never reached LateReply")
+		}
+	})
+
+	t.Run("an answer to nothing it knows runs a task but is not answered", func(t *testing.T) {
+		env := busruntime.MessageEnvelope{Text: "an answer", SessionID: "0194d8f0-0000-7000-8000-000000000005", ReplyTo: "msg_unknown"}
+		if res, err := sender.Send(ctx, runner.InstanceID(), env, 2, 5*time.Second); err != nil || res.Status != link.StatusDelivered {
+			t.Fatalf("Send() = %+v, %v", res, err)
+		}
+		time.Sleep(500 * time.Millisecond)
+		if n := len(got.snapshot()); n != 0 {
+			t.Fatalf("got %d replies to an answer, want none", n)
+		}
+	})
+}
