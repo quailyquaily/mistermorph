@@ -822,8 +822,9 @@ x:
   client_id: ""
   # OAuth 2.0 client secret, for a confidential app. Prefer env var: MISTER_MORPH_X_CLIENT_SECRET
   client_secret: ""
-  # The agent account's refresh token, printed by `morph x login`.
-  # Prefer env var: MISTER_MORPH_X_REFRESH_TOKEN
+  # Log in once with `morph x login` (or Console > Settings > Channels > X): the login is kept in
+  # file_state_dir/auth/x.json and renewed by the runtime. A refresh token here, or in
+  # MISTER_MORPH_X_REFRESH_TOKEN, is used instead of it (for headless setups).
   refresh_token: ""
   # API base URL (override for mock/testing only).
   base_url: ""

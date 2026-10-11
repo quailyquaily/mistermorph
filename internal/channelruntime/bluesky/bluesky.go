@@ -22,6 +22,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/socialpost"
 	"github.com/quailyquaily/mistermorph/internal/daemonruntime"
 	"github.com/quailyquaily/mistermorph/internal/fsstore"
+	"github.com/quailyquaily/mistermorph/internal/pathutil"
 	"github.com/quailyquaily/mistermorph/internal/promptprofile"
 	"github.com/quailyquaily/mistermorph/internal/runtimelock"
 	"github.com/quailyquaily/mistermorph/internal/textsplit"
@@ -88,7 +89,7 @@ func Run(ctx context.Context, d accountdm.Dependencies, opts RunOptions) error {
 		var err error
 		client, err = blueskyapi.NewClient(blueskyapi.Options{
 			ServiceURL: opts.ServiceURL, Identifier: identifier, AppPassword: opts.AppPassword,
-			Store: sessionStore{path: filepath.Join(d.RuntimePaths.StateDir, "bluesky", "session.json")},
+			Store: sessionStore{path: filepath.Join(pathutil.ResolveStateDir(d.RuntimePaths.StateDir), "auth", "bluesky.json")},
 		})
 		if err != nil {
 			return err
@@ -270,7 +271,7 @@ func (s *statusTracker) noteError(err error) {
 	}
 }
 
-// sessionStore keeps the session in file_state_dir/bluesky/session.json.
+// sessionStore keeps the session in file_state_dir/auth/bluesky.json, beside the other logins.
 type sessionStore struct{ path string }
 
 func (s sessionStore) Load() (blueskyapi.Session, bool) {

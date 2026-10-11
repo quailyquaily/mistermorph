@@ -34,6 +34,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/skillsutil"
 	"github.com/quailyquaily/mistermorph/internal/toolsutil"
 	"github.com/quailyquaily/mistermorph/internal/topiccontext"
+	"github.com/quailyquaily/mistermorph/internal/xlogin"
 	"github.com/quailyquaily/mistermorph/llm"
 	"github.com/quailyquaily/mistermorph/tools"
 	"github.com/spf13/viper"
@@ -644,8 +645,8 @@ func managedRuntimeMissingCredential(kind string, reader *viper.Viper) (string, 
 		if strings.TrimSpace(reader.GetString("x.client_id")) == "" {
 			return "x.client_id", "set x.client_id to the X app's OAuth 2.0 client ID", true
 		}
-		if strings.TrimSpace(reader.GetString("x.refresh_token")) == "" {
-			return "x.refresh_token", "run `morph x login`, then set MISTER_MORPH_X_REFRESH_TOKEN or x.refresh_token", true
+		if !xlogin.Configured(reader.GetString("file_state_dir"), reader.GetString("x.refresh_token")) {
+			return "x login", "log in from Settings > Channels > X, or run `morph x login`", true
 		}
 	}
 	return "", "", false

@@ -45,7 +45,7 @@ morph bluesky
 
 The main CLI overrides are `--bluesky-identifier`, `--bluesky-app-password`, `--bluesky-task-timeout` and `--bluesky-max-concurrency`.
 
-Only one process may serve an account at a time; a second one refuses to start, naming the process that holds the lock (under `file_state_dir/locks`). The session is kept in `file_state_dir/bluesky/session.json` and refreshed, since Bluesky limits logins far more than other calls.
+Only one process may serve an account at a time; a second one refuses to start, naming the process that holds the lock (under `file_state_dir/locks`). The session is kept in `file_state_dir/auth/bluesky.json`, beside the other logins, and refreshed, since Bluesky limits logins far more than other calls.
 
 To expose the standard Runtime API, set `bluesky.serve_listen` and `server.auth_token` (served while `dm.enabled` is on). To run it inside Console, add `bluesky` to `console.managed_runtimes`, or turn on **Run in Console** in the Bluesky pane.
 

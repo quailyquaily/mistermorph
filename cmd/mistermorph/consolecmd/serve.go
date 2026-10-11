@@ -120,6 +120,7 @@ type server struct {
 	limiter                     *loginLimiter
 	xaiLogins                   *xaiLoginStore
 	wechatLogins                *wechatLoginStore
+	xLogins                     *xLoginStore
 	xaiOAuth                    xaiauth.OAuthConfig
 	proLogins                   *proLoginStore
 	endpoints                   []runtimeEndpoint
@@ -401,6 +402,7 @@ func newServer(cfg serveConfig) (*server, error) {
 		limiter:          newLoginLimiter(),
 		xaiLogins:        newXAILoginStore(),
 		wechatLogins:     newWeChatLoginStore(),
+		xLogins:          newXLoginStore(),
 		xaiOAuth:         xaiauth.OAuthConfig{},
 		proLogins:        newProLoginStore(),
 		endpoints:        endpoints,
@@ -575,6 +577,9 @@ func (s *server) handler() http.Handler {
 		register("/settings/console", s.handleConsoleSettings)
 		register("/settings/wechat/login/start", s.handleWeChatLoginStart)
 		register("/settings/wechat/login/poll", s.handleWeChatLoginPoll)
+		register("/settings/x/login/start", s.handleXLoginStart)
+		register("/settings/x/login/poll", s.handleXLoginPoll)
+		register("/settings/x/logout", s.handleXLogout)
 		register("/settings/wechat/logout", s.handleWeChatLogout)
 		register("/settings/system", s.handleSystemSettings)
 		register("/settings/auto-update", s.handleAutoUpdateSettings)

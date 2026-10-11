@@ -105,4 +105,4 @@ mistermorph x login
 mistermorph x --log-level info
 ```
 
-Set `x.client_id`, then `x.refresh_token` from `x login`. See the [X setup document](https://github.com/quailyquaily/mistermorph/blob/master/docs/x.md).
+Set `x.client_id`, then log in once with `x login` (or from Console's X pane). See the [X setup document](https://github.com/quailyquaily/mistermorph/blob/master/docs/x.md).

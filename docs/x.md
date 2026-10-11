@@ -10,13 +10,13 @@ X has no separate kind of bot account. Use an ordinary account made for the agen
 
 1. Create the account, and turn on X's **Automated** label in its settings, naming your own account as the managing account. Say in its bio that it is a bot and who runs it. X's developer guidelines require all three.
 2. In the [X Developer Console](https://developer.x.com), create an app with OAuth 2.0 user authentication (a public or a confidential client), and add `http://127.0.0.1:8765/x/callback` as a callback URL. Buy credits.
-3. Set `x.client_id` (and, for a confidential app, `MISTER_MORPH_X_CLIENT_SECRET`), then run:
+3. Set `x.client_id` (and, for a confidential app, `MISTER_MORPH_X_CLIENT_SECRET`), then log in, **signed in to X as the agent's account**:
+   - In Console: Settings → Channels → X → **Log in to X**. X's page opens in a new tab; approve, and the pane shows the account. The browser must run on the Console's machine, since X sends it back to `127.0.0.1:8765`.
+   - Or in a terminal: `morph x login`, then open the printed URL. On a headless machine, run it there (with an SSH tunnel for port 8765, or a browser on that machine).
 
-   ```bash
-   morph x login
-   ```
+   The login is kept in `file_state_dir/auth/x.json`, beside the other logins. X rotates the refresh token on every use; the runtime saves each new one there, so nothing needs copying into config. `morph x logout` (or **Log out** in the pane) forgets it.
 
-   Open the printed URL, **sign in as the agent's account**, and approve. The command prints a refresh token for `x.refresh_token` (or `MISTER_MORPH_X_REFRESH_TOKEN`) and saves the token pair in `file_state_dir/x/token.json`. X rotates the refresh token on every use; Morph keeps the latest one there.
+   `x.refresh_token` (or `MISTER_MORPH_X_REFRESH_TOKEN`) is only for setups that cannot run the login: a token set there is used instead of the saved login.
 
 ### Mentions need X's approval
 
@@ -28,7 +28,7 @@ X's developer guidelines require approval **before** an app posts AI-generated r
 x:
   client_id: ""
   client_secret: ""                 # or MISTER_MORPH_X_CLIENT_SECRET
-  refresh_token: ""                 # or MISTER_MORPH_X_REFRESH_TOKEN
+  refresh_token: ""                 # optional; normally the saved login is used
   owners: ["@you"]                  # heartbeat notifications go to them
   dm:
     enabled: true
@@ -56,9 +56,9 @@ x:
 morph x
 ```
 
-The main CLI overrides are `--x-refresh-token`, `--x-task-timeout` and `--x-max-concurrency`. Only one process may serve an account at a time. To run it inside Console, add `x` to `console.managed_runtimes`, or turn on **Run in Console** in the X pane; the Runtime page shows its status, and the runtime overview reports the day's calls by kind (`x_usage`).
+The main CLI overrides are `--x-refresh-token` (instead of the saved login), `--x-task-timeout` and `--x-max-concurrency`. Only one process may serve an account at a time. To run it inside Console, add `x` to `console.managed_runtimes`, or turn on **Run in Console** in the X pane; the Runtime page shows its status, and the runtime overview reports the day's calls by kind (`x_usage`).
 
-When X refuses the token the status becomes `reauth_needed` (run `morph x login` again); when the credits run out it becomes `out_of_credits`. Either way polling slows to every 15 minutes until it works again.
+When X refuses the login the status becomes `reauth_needed` (log in again); when the credits run out it becomes `out_of_credits`. Either way polling slows to every 15 minutes until it works again.
 
 ## Direct messages
 

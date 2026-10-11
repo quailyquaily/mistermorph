@@ -19,6 +19,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/entryutil/refid"
 	"github.com/quailyquaily/mistermorph/internal/fsstore"
 	"github.com/quailyquaily/mistermorph/internal/secref"
+	"github.com/quailyquaily/mistermorph/internal/xlogin"
 	"github.com/spf13/viper"
 	"golang.org/x/crypto/bcrypt"
 	"gopkg.in/yaml.v3"
@@ -93,6 +94,8 @@ type consoleXSettingsPayload struct {
 	ClientID     string `json:"client_id"`
 	ClientSecret string `json:"client_secret"`
 	RefreshToken string `json:"refresh_token"`
+	// Login is the account the saved login authorized; it is not a setting.
+	Login xlogin.Status `json:"login"`
 }
 
 type consoleGuardURLFetchSettingsPayload struct {
@@ -828,6 +831,7 @@ func readConsoleSettingsFromReader(r interface {
 			ClientID:     strings.TrimSpace(r.GetString("x.client_id")),
 			ClientSecret: strings.TrimSpace(r.GetString("x.client_secret")),
 			RefreshToken: strings.TrimSpace(r.GetString("x.refresh_token")),
+			Login:        xlogin.Load(r.GetString("file_state_dir")),
 		},
 		Guard: consoleGuardSettingsPayload{
 			Enabled: r.GetBool("guard.enabled"),
@@ -923,6 +927,7 @@ func normalizeConsoleSettingsPayload(in consoleSettingsPayload) (consoleSettings
 			ClientID:     strings.TrimSpace(in.X.ClientID),
 			ClientSecret: strings.TrimSpace(in.X.ClientSecret),
 			RefreshToken: strings.TrimSpace(in.X.RefreshToken),
+			Login:        in.X.Login,
 		},
 		Guard: consoleGuardSettingsPayload{
 			Enabled: in.Guard.Enabled,

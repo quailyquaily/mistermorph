@@ -38,6 +38,7 @@ import RawJsonDialog from "../components/RawJsonDialog";
 import SetupPickerDialog from "../components/SetupPickerDialog";
 import RuntimePanel from "./RuntimeView";
 import WeChatLoginPanel from "../components/WeChatLoginPanel";
+import XLoginPanel from "../components/XLoginPanel";
 import channelDiscordLogoURL from "../assets/images/channels/discord.svg";
 import channelLarkLogoURL from "../assets/images/channels/lark.svg";
 import channelLineLogoURL from "../assets/images/channels/line.svg";
@@ -204,7 +205,7 @@ const CHANNEL_ITEMS = [
   { id: "wechat", titleKey: "settings_console_wechat_title", logo: channelWeChatLogoURL, required: ["bot_token"] },
   { id: "whatsapp", titleKey: "settings_console_whatsapp_title", logo: channelWhatsAppLogoURL, required: ["api_token"] },
   { id: "bluesky", titleKey: "settings_console_bluesky_title", logo: channelBlueskyLogoURL, required: ["identifier", "app_password"] },
-  { id: "x", titleKey: "settings_console_x_title", logo: channelXLogoURL, required: ["client_id", "refresh_token"] },
+  { id: "x", titleKey: "settings_console_x_title", logo: channelXLogoURL, required: ["client_id", "login"] },
   { id: "lark", titleKey: "settings_console_lark_title", logo: channelLarkLogoURL, required: ["app_id", "app_secret"] },
   { id: "line", titleKey: "settings_console_line_title", logo: channelLineLogoURL, required: ["channel_access_token", "channel_secret"] },
   { id: "mixin", titleKey: "settings_console_mixin_title", logo: channelMixinLogoURL, required: ["keystore_file"] },
@@ -356,6 +357,8 @@ function buildEmptyXConsoleState() {
     client_id: "",
     client_secret: "",
     refresh_token: "",
+    // The saved login; read-only here, changed by XLoginPanel.
+    login: { logged_in: false, username: "" },
   };
 }
 
@@ -775,6 +778,7 @@ const SettingsView = {
     AppPage,
     EnvManagedField,
     WeChatLoginPanel,
+    XLoginPanel,
     AuthProfilesPanel,
     CodexAuthDialog,
     ConfigSettingsPanel,
@@ -1614,6 +1618,9 @@ const SettingsView = {
       x: consoleXDirty,
     };
     function channelFieldSet(kind, field) {
+      if (kind === "x" && field === "login") {
+        return state.x.login.logged_in === true || channelFieldSet("x", "refresh_token");
+      }
       return (
         trimText(state[kind]?.[field]) !== "" ||
         consoleSecretField(kind, field)?.configured === true ||
@@ -2212,6 +2219,8 @@ const SettingsView = {
     const xSaveDisabled = computed(
       () => consoleLoading.value || consoleSaving.value || !consoleXDirty.value
     );
+    // A login uses the saved client ID, so it waits until the pane is saved.
+    const xLoginReady = computed(() => trimText(state.x.client_id) !== "" && !consoleXDirty.value);
     const guardSaveDisabled = computed(
       () => consoleLoading.value || consoleSaving.value || !consoleGuardDirty.value
     );
@@ -3403,6 +3412,10 @@ const SettingsView = {
       state.x.client_id = typeof x.client_id === "string" ? x.client_id : "";
       state.x.client_secret = typeof x.client_secret === "string" ? x.client_secret : "";
       state.x.refresh_token = typeof x.refresh_token === "string" ? x.refresh_token : "";
+      state.x.login = {
+        logged_in: x.login?.logged_in === true,
+        username: typeof x.login?.username === "string" ? x.login.username : "",
+      };
       state.guard.enabled = typeof guard.enabled === "boolean" ? guard.enabled : true;
       state.guard.url_fetch_allowed_url_prefixes_text = formatConfigList(guardURLFetch.allowed_url_prefixes);
       state.guard.deny_private_ips =
@@ -5545,6 +5558,7 @@ const SettingsView = {
       whatsappSaveDisabled,
       blueskySaveDisabled,
       xSaveDisabled,
+      xLoginReady,
       guardSaveDisabled,
       personaDirty,
       personaSaveDisabled,
@@ -7319,18 +7333,19 @@ const SettingsView = {
                 </div>
 
                 <div class="settings-field is-wide">
-                  <span class="settings-field-label">{{ t("settings_console_x_refresh_token_label") }}</span>
+                  <span class="settings-field-label">{{ t("settings_console_x_account_label") }}</span>
                   <EnvManagedField v-if="consoleFieldEnvManaged('x', 'refresh_token')" :name="consoleFieldManagedHeadline('x', 'refresh_token')" />
-                  <SecretInput
+                  <XLoginPanel
                     v-else
-                    :modelValue="state.x.refresh_token"
-                    :status="consoleSecretField('x', 'refresh_token')"
-                    :revealPath="consoleSecretRevealPath('x', 'refresh_token')"
-                    :placeholder="t('settings_console_x_refresh_token_placeholder')"
-                    :disabled="consoleLoading || consoleSaving || !consoleSecretEditable('x', 'refresh_token')"
-                    @update:modelValue="updateXField('refresh_token', $event)"
+                    :request="endpointApiFetch"
+                    :endpointRef="settingsEndpointRef"
+                    :loggedIn="state.x.login.logged_in"
+                    :username="state.x.login.username"
+                    :ready="xLoginReady"
+                    :disabled="consoleLoading || consoleSaving"
+                    @changed="reloadConsoleSettingsAfterWeChatLogin"
                   />
-                  <p class="settings-field-note">{{ t("settings_console_x_refresh_token_note") }}</p>
+                  <p class="settings-field-note">{{ t("settings_console_x_account_note") }}</p>
                 </div>
               </div>
             </div>

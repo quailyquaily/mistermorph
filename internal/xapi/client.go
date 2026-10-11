@@ -42,6 +42,9 @@ type Token struct {
 	// Seed is the configured refresh token this pair descends from; a new one in config (after a
 	// new login) replaces the saved pair.
 	Seed string `json:"seed,omitempty"`
+	// UserID and Username name the account that authorized the pair.
+	UserID   string `json:"user_id,omitempty"`
+	Username string `json:"username,omitempty"`
 }
 
 // TokenStore keeps the token pair: X rotates the refresh token on every refresh, so the latest one
@@ -121,7 +124,7 @@ func NewClient(opts Options) (*Client, error) {
 		}
 	}
 	if c.token.RefreshToken == "" && c.token.AccessToken == "" {
-		return nil, fmt.Errorf("x refresh token is required: run `morph x login`")
+		return nil, fmt.Errorf("x is not logged in: run `morph x login`")
 	}
 	return c, nil
 }
@@ -203,7 +206,7 @@ func (c *Client) refresh(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	next.Seed = c.token.Seed
+	next.Seed, next.UserID, next.Username = c.token.Seed, c.token.UserID, c.token.Username
 	c.token = next
 	if c.store != nil {
 		if err := c.store.Save(next); err != nil {

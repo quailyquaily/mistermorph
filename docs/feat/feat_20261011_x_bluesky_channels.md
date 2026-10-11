@@ -238,8 +238,10 @@ bluesky:
 ```
 
 - Secrets come from env vars first and are never returned by the Console API, like the other channels' tokens.
-- `morph x login` runs the OAuth 2.0 PKCE flow once (a local redirect on `127.0.0.1`) and stores the refresh token.
-  The Console takes the resulting refresh token in its channel settings (v1 has no login flow in the Console).
+- Logging in runs the OAuth 2.0 PKCE flow once, with X redirecting to `127.0.0.1:8765`, from `morph x login` or from
+  the Console's X pane (whose server listens for the redirect, so the browser must run on the Console's machine). The
+  token pair is kept in `file_state_dir/auth/x.json`, beside the other logins, and the runtime saves each rotated
+  refresh token there; nothing is copied into config. `x.refresh_token` remains as an override for headless setups.
 - Both channels also take `owners`: who gets heartbeat notifications. WeChat and WhatsApp treat whoever wrote as the
   owner; on these channels anyone may write.
 - `assets/config/config.example.yaml`, the config defaults, the Console settings fields and the docs get the same
@@ -296,8 +298,7 @@ bluesky:
 - On X the first mention poll only records `since_id`; mentions from before the channel first ran are never answered.
 - With links off, URLs are removed from a public reply before it is posted. X still links bare domains.
 - An answer that would pass `max_posts_per_day` is not posted, and its task fails with that reason.
-- Not built: `mentions.review`, a Console login flow for X, files in DMs, unprompted posts, and the `integration`
-  package's bot constructors.
+- Not built: `mentions.review`, files in DMs, unprompted posts, and the `integration` package's bot constructors.
 
 ## 12. Sources
 

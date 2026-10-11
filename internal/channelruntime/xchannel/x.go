@@ -25,6 +25,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/promptprofile"
 	"github.com/quailyquaily/mistermorph/internal/runtimelock"
 	"github.com/quailyquaily/mistermorph/internal/xapi"
+	"github.com/quailyquaily/mistermorph/internal/xlogin"
 )
 
 // Connection states shown in the overview.
@@ -84,13 +85,16 @@ func Run(ctx context.Context, d accountdm.Dependencies, opts RunOptions) error {
 	}
 	client := opts.client
 	if client == nil {
-		if strings.TrimSpace(opts.ClientID) == "" || strings.TrimSpace(opts.RefreshToken) == "" {
-			return fmt.Errorf("missing x.client_id or x.refresh_token: register an app in the X Developer Console, then run `morph x login`")
+		if strings.TrimSpace(opts.ClientID) == "" {
+			return fmt.Errorf("missing x.client_id: register an app in the X Developer Console, then log in (`morph x login`, or Console > Settings > Channels > X)")
+		}
+		if !xlogin.Configured(d.RuntimePaths.StateDir, opts.RefreshToken) {
+			return fmt.Errorf("x is not logged in: run `morph x login`, or log in from Console > Settings > Channels > X")
 		}
 		var err error
 		client, err = xapi.NewClient(xapi.Options{
 			ClientID: opts.ClientID, ClientSecret: opts.ClientSecret, RefreshToken: opts.RefreshToken, BaseURL: opts.BaseURL,
-			Store: tokenStore{path: filepath.Join(d.RuntimePaths.StateDir, "x", "token.json")},
+			Store: xlogin.Store{StateDir: d.RuntimePaths.StateDir},
 		})
 		if err != nil {
 			return err
@@ -208,7 +212,7 @@ func whoAmI(ctx context.Context, client *xapi.Client, status *statusTracker, log
 		switch {
 		case xapi.IsUnauthorized(err):
 			status.set(StatusReauth)
-			return xapi.User{}, fmt.Errorf("x: the token was refused; run `morph x login` again: %w", err)
+			return xapi.User{}, fmt.Errorf("x: the login was refused; log in again (`morph x login`, or Console > Settings > Channels > X): %w", err)
 		case xapi.IsOutOfCredits(err):
 			status.set(StatusNoCredits)
 			return xapi.User{}, fmt.Errorf("x: the account has no API credits left: %w", err)
@@ -292,19 +296,6 @@ func (s *statusTracker) noteError(err error, base time.Duration, backoff *time.D
 	wait := *backoff
 	*backoff = min(*backoff*2, maxBackoff)
 	return wait
-}
-
-// tokenStore keeps the token pair in file_state_dir/x/token.json.
-type tokenStore struct{ path string }
-
-func (s tokenStore) Load() (xapi.Token, bool) {
-	var token xapi.Token
-	ok, err := fsstore.ReadJSON(s.path, &token)
-	return token, ok && err == nil
-}
-
-func (s tokenStore) Save(token xapi.Token) error {
-	return fsstore.WriteJSONAtomic(s.path, token, fsstore.FileOptions{DirPerm: 0o700, FilePerm: 0o600})
 }
 
 // state is what the runtime keeps in file_state_dir/x/state.json: where the mention and message

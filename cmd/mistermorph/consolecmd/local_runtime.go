@@ -58,6 +58,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/topicstate"
 	"github.com/quailyquaily/mistermorph/internal/workspace"
 	"github.com/quailyquaily/mistermorph/internal/xaiauth"
+	"github.com/quailyquaily/mistermorph/internal/xlogin"
 	"github.com/quailyquaily/mistermorph/llm"
 	"github.com/quailyquaily/mistermorph/tools"
 	"github.com/spf13/viper"
@@ -1369,7 +1370,7 @@ func (r *consoleLocalRuntime) routesOptions(authToken string) daemonruntime.Rout
 					"bluesky_configured": strings.TrimSpace(reader.GetString("bluesky.identifier")) != "" &&
 						strings.TrimSpace(reader.GetString("bluesky.app_password")) != "",
 					"x_configured": strings.TrimSpace(reader.GetString("x.client_id")) != "" &&
-						strings.TrimSpace(reader.GetString("x.refresh_token")) != "",
+						xlogin.Configured(reader.GetString("file_state_dir"), reader.GetString("x.refresh_token")),
 					"running":            "console",
 					"telegram_running":   r.isManagedRuntimeRunning("telegram"),
 					"slack_running":      r.isManagedRuntimeRunning("slack"),
