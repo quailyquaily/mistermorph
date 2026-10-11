@@ -30,4 +30,5 @@ func (routes *routeRegistration) register() {
 	routes.registerApprovalRoutes()
 	routes.registerTaskRoutes()
 	routes.registerWorkspaceRoutes()
+	routes.registerAgentLinkRoutes()
 }

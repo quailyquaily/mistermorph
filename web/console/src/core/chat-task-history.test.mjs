@@ -10,6 +10,7 @@ import {
   taskAgentText,
   taskListHistoryItems,
   planStepMessages,
+  agentLinkMessages,
 } from "./chat-task-history.js";
 
 test("normalizeActivity retains separate retry notices with their reasons", () => {
@@ -160,4 +161,23 @@ test("mergeRefreshedHistoryItems drops static and unconnected items", () => {
     mergeRefreshedHistoryItems([{ id: "t1:user", taskId: "t1", role: "user" }], fresh),
     { items: fresh, overlap: false }
   );
+});
+
+test("agentLinkMessages lists the Agent Link exchange and drops a pending note once answered", () => {
+  const activity = normalizeActivity({ history: [
+    { id: "call_1", kind: "tool", name: "agent_send", status: "done", messages: [
+      { direction: "sent", peer: "墨墨", text: "what is your name?" },
+      { direction: "pending", peer: "墨墨" },
+      { direction: "bogus", peer: "墨墨" },
+    ] },
+    { id: "call_2", kind: "tool", name: "agent_send", status: "done", messages: [
+      { direction: "reply", peer: "墨墨", text: "I am 墨墨." },
+    ] },
+    { id: "call_3", kind: "tool", name: "agent_send", status: "running", messages: [
+      { direction: "sent", peer: "Emma", text: "hi" },
+      { direction: "pending", peer: "Emma" },
+    ] },
+  ] });
+  const got = agentLinkMessages(activity).map((m) => `${m.direction}:${m.peer}`);
+  assert.deepEqual(got, ["sent:墨墨", "reply:墨墨", "sent:Emma", "pending:Emma"]);
 });

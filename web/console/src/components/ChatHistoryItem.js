@@ -2,8 +2,9 @@ import { computed, onBeforeUpdate, onUpdated } from "vue";
 
 import { translate } from "../core/context";
 import { approvalParameterEntries, skillInstallApproval } from "../core/chat-approvals";
-import { planStepMessages, pollingActionWord } from "../core/chat-task-history";
+import { agentLinkMessages, planStepMessages, pollingActionWord } from "../core/chat-task-history";
 import { recordComponentUpdate } from "../core/performance";
+import ChatAgentLinkExchange from "./ChatAgentLinkExchange";
 import ChatRichContent from "./ChatRichContent";
 import ChatSkillInstallPreview from "./ChatSkillInstallPreview";
 import ChatStatusCard from "./ChatStatusCard";
@@ -37,6 +38,7 @@ const RECORD_COMPONENT_PERF = import.meta.env.DEV === true;
 
 const ChatHistoryItem = {
   components: {
+    ChatAgentLinkExchange,
     ChatRichContent,
     ChatSkillInstallPreview,
     ChatStatusCard,
@@ -132,6 +134,10 @@ const ChatHistoryItem = {
       }
       return entries;
     });
+    // What the task exchanged with other agents over Agent Link, each a message of its own.
+    const agentLinkExchange = computed(() =>
+      role.value === "agent" ? agentLinkMessages({ history: activityEntries.value }) : []
+    );
     const retryNotices = computed(() =>
       role.value === "agent" ? activityEntries.value.filter((entry) => entry.kind === "retry") : []
     );
@@ -292,6 +298,7 @@ const ChatHistoryItem = {
       agentBubbleVisible,
       awaitingWord,
       stepMessages,
+      agentLinkExchange,
       approvalMessage,
       approvalMessageVisible,
       approvalHeading,
@@ -435,6 +442,13 @@ const ChatHistoryItem = {
               @rendered="emitRendered"
             />
           </div>
+          <ChatAgentLinkExchange
+            :messages="agentLinkExchange"
+            :endpoint-ref="submitEndpointRef"
+            :topic-id="selectedTopicId"
+            :stream-profiler="streamProfiler"
+            @rendered="emitRendered"
+          />
           <div v-if="agentBubbleVisible && awaitingWord" :class="surfaceClass" class="chat-history-awaiting">
             <MosaicText :text="awaitingWord" :label="item.text" />
           </div>

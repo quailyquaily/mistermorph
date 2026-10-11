@@ -151,6 +151,7 @@ type consoleLocalRuntime struct {
 	awarenessCronRequests   chan awarenessloop.CronRequest
 	awarenessCancel         context.CancelFunc
 	awarenessDone           chan struct{}
+	agentLinkStop           func()
 	workspaceStore          *workspace.Store
 	runtimePaths            runtimepaths.Paths
 	runtimePathsSet         bool
@@ -689,6 +690,7 @@ func (r *consoleLocalRuntime) applyPreparedGenerationLocked(generation *consoleL
 	r.handlerMu.Unlock()
 	slog.SetDefault(r.currentLogger())
 	r.reloadAwarenessLoop()
+	r.reloadAgentLinkRunner()
 	if prevGeneration != nil {
 		prevGeneration.retire()
 	}
@@ -834,6 +836,7 @@ func (r *consoleLocalRuntime) Close() {
 		r.consoleExecutionState.close()
 	}
 	r.stopAwarenessLoop()
+	r.stopAgentLinkRunner()
 	if r.bus != nil {
 		_ = r.bus.Close()
 	}

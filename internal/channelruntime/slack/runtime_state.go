@@ -14,6 +14,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/agentpair"
 	busruntime "github.com/quailyquaily/mistermorph/internal/bus"
 	slackbus "github.com/quailyquaily/mistermorph/internal/bus/adapters/slack"
+	agentlinkruntime "github.com/quailyquaily/mistermorph/internal/channelruntime/agentlink"
 	runtimecore "github.com/quailyquaily/mistermorph/internal/channelruntime/core"
 	"github.com/quailyquaily/mistermorph/internal/chathistory"
 	"github.com/quailyquaily/mistermorph/internal/daemonruntime"
@@ -102,6 +103,7 @@ type slackRuntimeState struct {
 	stopWorkers                   context.CancelFunc
 	server                        slackDaemonServer
 	closeOnce                     sync.Once
+	agentLinkStop                 func()
 }
 
 func newSlackRuntimeState(config slackRuntimeStateConfig) (*slackRuntimeState, error) {
@@ -227,6 +229,9 @@ func (s *slackRuntimeState) close() {
 		logger := s.logger
 		if logger == nil {
 			logger = slog.Default()
+		}
+		if s.agentLinkStop != nil {
+			s.agentLinkStop()
 		}
 		if s.server != nil {
 			if err := s.server.Shutdown(context.Background()); err != nil {
@@ -367,7 +372,19 @@ func (s *slackRuntimeState) serveDaemon() error {
 		return err
 	}
 	s.server, err = daemonruntime.StartServer(s.ctx, s.logger, daemonruntime.ServerOptions{Listen: listen, Routes: routes})
-	return err
+	if err != nil {
+		return err
+	}
+	s.agentLinkStop = agentlinkruntime.StartForChannel(s.ctx, s.dependencies.CommonDependencies, agentlinkruntime.Options{
+		TaskTimeout:       s.options.TaskTimeout,
+		MaxConcurrency:    s.options.MaxConcurrency,
+		AgentLimits:       s.options.AgentLimits,
+		EngineToolsConfig: s.options.EngineToolsConfig,
+		InspectPrompt:     s.options.InspectPrompt,
+		InspectRequest:    s.options.InspectRequest,
+		TaskStore:         s.taskStore,
+	})
+	return nil
 }
 
 func (s *slackRuntimeState) listApprovals(ctx context.Context, req daemonruntime.ApprovalListRequest) (daemonruntime.ApprovalListResponse, error) {

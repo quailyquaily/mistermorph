@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/quailyquaily/mistermorph/agent"
+	"github.com/quailyquaily/mistermorph/tools/builtin"
 )
 
 const (
@@ -12,6 +13,10 @@ const (
 	consoleActivityOutputMaxChars = 6000
 	// consoleActivityChildLimit bounds the nested calls kept under one codemode entry.
 	consoleActivityChildLimit = 12
+	// consoleActivityMessageLimit bounds the Agent Link messages kept under one agent_send entry,
+	// and consoleActivityMessageMaxChars the length of each.
+	consoleActivityMessageLimit    = 12
+	consoleActivityMessageMaxChars = 4000
 )
 
 type consoleActivityProgress struct {
@@ -38,6 +43,17 @@ type consoleActivityEntry struct {
 	// counts earlier ones dropped to stay within consoleActivityChildLimit.
 	Children        []consoleActivityEntry `json:"children,omitempty"`
 	ChildrenOmitted int                    `json:"children_omitted,omitempty"`
+	// Messages are what agent_send exchanged with another agent over Agent Link, in order.
+	Messages []consoleActivityMessage `json:"messages,omitempty"`
+}
+
+// consoleActivityMessage is one message between this agent and another over Agent Link.
+type consoleActivityMessage struct {
+	// Direction is "sent", "reply", or "pending" for an answer that has not come yet.
+	Direction string `json:"direction"`
+	Peer      string `json:"peer,omitempty"`
+	Text      string `json:"text,omitempty"`
+	At        string `json:"at,omitempty"`
 }
 
 func cloneConsoleActivityProgress(progress *consoleActivityProgress) *consoleActivityProgress {
@@ -78,6 +94,9 @@ func cloneConsoleActivityEntry(entry *consoleActivityEntry) *consoleActivityEntr
 		for i := range entry.Children {
 			out.Children = append(out.Children, *cloneConsoleActivityEntry(&entry.Children[i]))
 		}
+	}
+	if len(entry.Messages) > 0 {
+		out.Messages = append([]consoleActivityMessage(nil), entry.Messages...)
 	}
 	return &out
 }
@@ -139,6 +158,9 @@ func updateConsoleActivityProgress(progress *consoleActivityProgress, event agen
 }
 
 func updateConsoleActivityOutput(progress *consoleActivityProgress, event agent.Event) (*consoleActivityProgress, bool) {
+	if direction, ok := consoleAgentLinkDirection(event.Stream); ok {
+		return appendConsoleActivityMessage(progress, event, direction)
+	}
 	if progress == nil || event.Text == "" || strings.TrimSpace(event.ToolName) != "coder" {
 		return cloneConsoleActivityProgress(progress), false
 	}
@@ -159,6 +181,50 @@ func updateConsoleActivityOutput(progress *consoleActivityProgress, event agent.
 	progress.History[index] = entry
 	progress.Current = cloneConsoleActivityEntry(&entry)
 	return cloneConsoleActivityProgress(progress), true
+}
+
+// consoleAgentLinkDirection maps the stream of an agent_send tool_output event to a message direction.
+func consoleAgentLinkDirection(stream string) (string, bool) {
+	switch strings.TrimSpace(stream) {
+	case builtin.AgentLinkStreamSent:
+		return "sent", true
+	case builtin.AgentLinkStreamReply:
+		return "reply", true
+	case builtin.AgentLinkStreamPending:
+		return "pending", true
+	}
+	return "", false
+}
+
+// appendConsoleActivityMessage adds a message agent_send exchanged over Agent Link to its call.
+func appendConsoleActivityMessage(progress *consoleActivityProgress, event agent.Event, direction string) (*consoleActivityProgress, bool) {
+	index := consoleActivityOutputIndex(progress, event)
+	if index < 0 {
+		return cloneConsoleActivityProgress(progress), false
+	}
+	entry := progress.History[index]
+	now := time.Now().Format(time.RFC3339Nano)
+	if len(entry.Messages) >= consoleActivityMessageLimit {
+		entry.Messages = entry.Messages[len(entry.Messages)-consoleActivityMessageLimit+1:]
+	}
+	entry.Messages = append(append([]consoleActivityMessage(nil), entry.Messages...), consoleActivityMessage{
+		Direction: direction,
+		Peer:      strings.TrimSpace(event.Summary),
+		Text:      truncateConsoleActivityMessage(event.Text),
+		At:        now,
+	})
+	entry.At = now
+	progress.History[index] = entry
+	progress.Current = cloneConsoleActivityEntry(&entry)
+	return cloneConsoleActivityProgress(progress), true
+}
+
+func truncateConsoleActivityMessage(text string) string {
+	text = strings.TrimSpace(text)
+	if runes := []rune(text); len(runes) > consoleActivityMessageMaxChars {
+		return string(runes[:consoleActivityMessageMaxChars]) + "…"
+	}
+	return text
 }
 
 func consoleActivityOutputIndex(progress *consoleActivityProgress, event agent.Event) int {

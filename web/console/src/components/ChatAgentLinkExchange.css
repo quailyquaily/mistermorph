@@ -1,0 +1,192 @@
+/* The exchange with other agents reads like the status card above it: a mono summary line that
+   folds, over a rail of square dots, one per message. The messages stay on the sheet, set in from
+   the reply, since they are conversation rather than machinery. */
+.chat-agentlink {
+  width: min(100%, 82ch);
+  min-width: 0;
+  margin-bottom: 8px;
+}
+
+.chat-agentlink-head {
+  --chat-agentlink-head-line: 17px;
+  width: fit-content;
+  max-width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  min-height: var(--chat-agentlink-head-line);
+  color: var(--q-c-dark-3);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  line-height: var(--chat-agentlink-head-line);
+  cursor: default;
+}
+
+.chat-agentlink-head:focus-visible {
+  outline: 1px solid color-mix(in srgb, var(--accent-1) 40%, transparent);
+  outline-offset: 2px;
+}
+
+.chat-agentlink-head-label {
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+}
+
+.chat-agentlink-head-value {
+  min-width: 0;
+  color: var(--q-c-dark-2);
+  overflow-wrap: anywhere;
+}
+
+.chat-agentlink-head-count {
+  font-variant-numeric: tabular-nums;
+}
+
+.chat-agentlink-head-icon {
+  display: block;
+  flex: 0 0 auto;
+  width: 11px;
+  min-width: 11px;
+  height: 11px;
+  color: currentColor;
+  transform: rotate(-90deg);
+  transition: transform 140ms ease;
+}
+
+.chat-agentlink-head.is-expanded .chat-agentlink-head-icon {
+  transform: rotate(0deg);
+}
+
+.chat-agentlink-shell {
+  min-width: 0;
+  display: grid;
+  grid-template-rows: 1fr;
+  margin-top: 8px;
+  overflow: hidden;
+}
+
+.chat-agentlink-list {
+  position: relative;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 14px;
+}
+
+.chat-agentlink-message {
+  position: relative;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+}
+
+/* The rail from each dot to the next, stopping short of both. */
+.chat-agentlink-message:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  top: 17px;
+  bottom: -15px;
+  left: 3.5px;
+  width: 1px;
+  background: var(--line-soft);
+}
+
+.chat-agentlink-dot {
+  width: 8px;
+  height: 8px;
+  margin-top: 5px;
+  border-radius: 1px;
+  background: var(--q-c-dark-3);
+}
+
+.chat-agentlink-message.is-reply .chat-agentlink-dot {
+  background: var(--accent-1);
+}
+
+.chat-agentlink-message.is-pending .chat-agentlink-dot {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--q-c-dark-3);
+  animation: chat-agentlink-pulse 1.6s ease-in-out infinite;
+}
+
+.chat-agentlink-copy {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.chat-agentlink-line {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  line-height: 17px;
+}
+
+.chat-agentlink-label {
+  min-width: 0;
+  color: var(--q-c-dark-2);
+  overflow-wrap: anywhere;
+}
+
+.chat-agentlink-message.is-pending .chat-agentlink-label {
+  color: var(--q-c-dark-3);
+}
+
+.chat-agentlink-time {
+  color: var(--q-c-dark-3);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.chat-agentlink-text .mmr-document {
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.chat-agentlink-fold-enter-active {
+  transition:
+    grid-template-rows 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 170ms ease 45ms;
+}
+
+.chat-agentlink-fold-leave-active {
+  transition:
+    grid-template-rows 150ms ease,
+    opacity 120ms ease;
+}
+
+.chat-agentlink-fold-enter-from,
+.chat-agentlink-fold-leave-to {
+  grid-template-rows: 0fr;
+  opacity: 0;
+}
+
+@keyframes chat-agentlink-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-agentlink-head-icon,
+  .chat-agentlink-fold-enter-active,
+  .chat-agentlink-fold-leave-active {
+    transition: none;
+  }
+
+  .chat-agentlink-message.is-pending .chat-agentlink-dot {
+    animation: none;
+  }
+}

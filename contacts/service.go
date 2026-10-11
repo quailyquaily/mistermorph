@@ -35,8 +35,21 @@ func (e *PartialDeliveryError) Error() string {
 
 func (e *PartialDeliveryError) Unwrap() error { return e.Err }
 
+// QueuedDeliveryError is a Send result for a message the transport holds for later delivery. It is
+// not a failure: the transport keeps retrying it.
+type QueuedDeliveryError struct {
+	MessageID string
+}
+
+func (e *QueuedDeliveryError) Error() string {
+	return "message queued for delivery: " + e.MessageID
+}
+
 type ServiceOptions struct {
 	FailureCooldown time.Duration
+	// AgentSendCooldown is the minimum interval between sends to the same Agent contact. Zero turns
+	// it off.
+	AgentSendCooldown time.Duration
 }
 
 type EnsureStore interface {
@@ -61,10 +74,11 @@ type ServiceDeps struct {
 }
 
 type Service struct {
-	ensureStore     EnsureStore
-	contactStore    ContactStore
-	outboxStore     OutboxStore
-	failureCooldown time.Duration
+	ensureStore       EnsureStore
+	contactStore      ContactStore
+	outboxStore       OutboxStore
+	failureCooldown   time.Duration
+	agentSendCooldown time.Duration
 }
 
 func NewService(store Store) *Service {
@@ -82,10 +96,11 @@ func NewServiceWithOptions(store Store, opts ServiceOptions) *Service {
 func NewServiceWithDeps(deps ServiceDeps, opts ServiceOptions) *Service {
 	opts = normalizeServiceOptions(opts)
 	return &Service{
-		ensureStore:     deps.Ensure,
-		contactStore:    deps.Contacts,
-		outboxStore:     deps.Outbox,
-		failureCooldown: opts.FailureCooldown,
+		ensureStore:       deps.Ensure,
+		contactStore:      deps.Contacts,
+		outboxStore:       deps.Outbox,
+		failureCooldown:   opts.FailureCooldown,
+		agentSendCooldown: opts.AgentSendCooldown,
 	}
 }
 
@@ -476,7 +491,21 @@ func (s *Service) applySendOutcomeToContacts(ctx context.Context, now time.Time,
 		if contact.Synthetic {
 			continue
 		}
-		if outcome.Error != "" && !outcome.Partial {
+		failed := outcome.Error != "" && !outcome.Partial
+		if contact.Kind == KindAgent {
+			// An Agent contact cools down after each send it received, so two agents cannot keep
+			// messaging each other. A failed send does not cool it down.
+			if failed {
+				continue
+			}
+			ts := now
+			contact.LastInteractionAt = &ts
+			contact.CooldownUntil = nil
+			if s.agentSendCooldown > 0 {
+				until := now.Add(s.agentSendCooldown)
+				contact.CooldownUntil = &until
+			}
+		} else if failed {
 			cooldown := now.Add(s.failureCooldown)
 			contact.CooldownUntil = &cooldown
 		} else {
@@ -666,6 +695,8 @@ func ResolveDecisionChannel(contact Contact, decision ShareDecision) (string, er
 			available = refid.NormalizeWeChatID(contact.WeChatUserID) != ""
 		case ChannelWhatsApp:
 			available = refid.NormalizeWhatsAppID(contact.WhatsAppUserID) != ""
+		case ChannelAgentLink:
+			_, available = AgentLinkInstanceID(contact.ContactID)
 		}
 		if !available {
 			return "", fmt.Errorf("explicit %s target is unavailable for contact_id=%s", channel, decision.ContactID)
@@ -730,6 +761,9 @@ func ResolveDecisionChannel(contact Contact, decision ShareDecision) (string, er
 	if refid.NormalizeWeChatID(contact.WeChatUserID) != "" {
 		return ChannelWeChat, nil
 	}
+	if _, ok := AgentLinkInstanceID(contact.ContactID); ok {
+		return ChannelAgentLink, nil
+	}
 	return "", fmt.Errorf("unable to resolve delivery channel for contact_id=%s", contact.ContactID)
 }
 
@@ -755,6 +789,8 @@ func contactReferenceChannel(contactID string) string {
 		return ChannelWeChat
 	case "whatsapp", "whatsapp_user":
 		return ChannelWhatsApp
+	case agentLinkProtocol:
+		return ChannelAgentLink
 	default:
 		return ""
 	}
@@ -824,6 +860,11 @@ func (s *Service) sendWithBusOutbox(ctx context.Context, now time.Time, contact 
 	if errors.As(sendErr, &partial) {
 		outcome.Partial = true
 		outcome.Error = sendErr.Error()
+		accepted, sendErr = true, nil
+	}
+	var queued *QueuedDeliveryError
+	if errors.As(sendErr, &queued) {
+		outcome.Queued = true
 		accepted, sendErr = true, nil
 	}
 	if sendErr != nil {
@@ -1082,6 +1123,11 @@ func resolveChannelFromChatIDHint(chatID string) (string, bool, error) {
 		case "whatsapp":
 			_, _, err := refid.ParseWhatsAppChatIDHint(value)
 			return ChannelWhatsApp, true, err
+		case agentLinkProtocol:
+			if _, ok := AgentLinkInstanceID(value); !ok {
+				return ChannelAgentLink, true, fmt.Errorf("invalid agent link chat_id %q", value)
+			}
+			return ChannelAgentLink, true, nil
 		case "tg":
 			_, _, err := refid.ParseTelegramChatIDHint(value)
 			return ChannelTelegram, true, err

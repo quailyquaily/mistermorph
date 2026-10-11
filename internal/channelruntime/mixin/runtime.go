@@ -19,6 +19,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/agentpair"
 	busruntime "github.com/quailyquaily/mistermorph/internal/bus"
 	mixinbus "github.com/quailyquaily/mistermorph/internal/bus/adapters/mixin"
+	agentlinkruntime "github.com/quailyquaily/mistermorph/internal/channelruntime/agentlink"
 	runtimecore "github.com/quailyquaily/mistermorph/internal/channelruntime/core"
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/depsutil"
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/imagehistory"
@@ -334,6 +335,16 @@ func runMixinLoop(ctx context.Context, d Dependencies, opts RunOptions) error {
 			stopDaemon = nil
 			daemonServer = nil
 			logger.Warn("mixin_daemon_server_start_error", "addr", opts.ServerListen, "error", err.Error())
+		} else {
+			stopAgentLink := agentlinkruntime.StartForChannel(daemonCtx, d.CommonDependencies, agentlinkruntime.Options{
+				TaskTimeout: opts.TaskTimeout, MaxConcurrency: opts.MaxConcurrency,
+				AgentLimits: opts.AgentLimits, EngineToolsConfig: opts.EngineToolsConfig,
+				InspectPrompt: opts.InspectPrompt, InspectRequest: opts.InspectRequest, TaskStore: daemonStore,
+			})
+			stopDaemon = func() {
+				cancel()
+				stopAgentLink()
+			}
 		}
 	}
 	defer func() {

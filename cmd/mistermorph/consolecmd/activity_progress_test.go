@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/quailyquaily/mistermorph/agent"
+	"github.com/quailyquaily/mistermorph/tools/builtin"
 )
 
 func TestUpdateConsoleActivityProgressMergesToolLifecycle(t *testing.T) {
@@ -125,5 +126,36 @@ func TestUpdateConsoleActivityProgressAppendsCoderOutput(t *testing.T) {
 	}
 	if progress.Current.Status != "running" {
 		t.Fatalf("progress.Current.Status = %q, want running", progress.Current.Status)
+	}
+}
+
+func TestUpdateConsoleActivityProgressRecordsAgentLinkExchange(t *testing.T) {
+	progress, _ := updateConsoleActivityProgress(nil, agent.Event{
+		Kind: agent.EventKindToolStart, ActivityID: "call_1", ToolName: "agent_send", Status: "running",
+	})
+	for _, event := range []agent.Event{
+		{Stream: builtin.AgentLinkStreamSent, Summary: "墨墨", Text: "what is your name?"},
+		{Stream: builtin.AgentLinkStreamReply, Summary: "墨墨", Text: "I am 墨墨."},
+	} {
+		event.Kind = agent.EventKindToolOutput
+		event.ToolName = "agent_send"
+		event.Status = "running"
+		var changed bool
+		if progress, changed = updateConsoleActivityProgress(progress, event); !changed {
+			t.Fatalf("event %s did not change the activity", event.Stream)
+		}
+	}
+	progress, _ = updateConsoleActivityProgress(progress, agent.Event{
+		Kind: agent.EventKindToolDone, ActivityID: "call_1", ToolName: "agent_send", Status: "done",
+	})
+
+	got := progress.History[0].Messages
+	if len(got) != 2 ||
+		got[0].Direction != "sent" || got[0].Peer != "墨墨" || got[0].Text != "what is your name?" ||
+		got[1].Direction != "reply" || got[1].Text != "I am 墨墨." {
+		t.Fatalf("messages = %+v", got)
+	}
+	if progress.History[0].Status != "done" {
+		t.Fatalf("status = %q, want done", progress.History[0].Status)
 	}
 }

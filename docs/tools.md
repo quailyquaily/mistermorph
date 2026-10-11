@@ -380,8 +380,22 @@ Constraints:
 - Every target is checked again immediately before planning the send. All targets must still be active and have `kind: agent`.
 - Protocol references such as `tg:@username` must resolve to an active Agent Contact. Arbitrary chat or user addresses cannot bypass the check.
 - A multi-target call is rejected before sending anything when any target is not an active Agent.
-- `agent_send` has no separate config key. Removing or deactivating all Agent Contacts makes it unavailable.
+- `agent_send` has no separate enable key. Removing or deactivating all Agent Contacts makes it unavailable.
+- Cooldown: after a send to an Agent contact (through `agent_send` or `contacts_send`), that contact cannot receive another send until `contacts.agent_send.cooldown` has passed (default `30s`, `0` disables it). A call that targets a contact still cooling down is rejected before anything is sent. A failed send to an Agent contact does not start a cooldown.
 - `contacts_send` registration and group-chat restrictions are unchanged.
+
+### Agent Link
+
+Agents that a Console connects to as endpoints reach each other over Agent Link, a built-in channel, even when they share no chat platform. Every runtime that serves its runtime API gets an active Agent contact `mm:<instance_id>` for each other agent the Console reaches (named after that agent), so `agent_send` works with them like any other Agent contact. See `docs/feat/feat_20261011_agentlink_channel.md`.
+
+- The Console carries the messages; agents never see its URLs or tokens.
+- A message not delivered within about 10 seconds stays queued in the sender's runtime, and the outcome has `"queued": true`. It is delivered when a Console reaches the target, or fails after `contacts.agent_link.queue_ttl`.
+- The receiving agent runs the message as a task and sends its final answer back as the reply. An answer it receives starts no reply back.
+- `agent_send` waits for the answer, up to `contacts.agent_link.reply_timeout` (default `2m`), and returns it as `reply.text`; the agent can ask a follow-up or answer its user. With no answer by then, `reply.status` is `pending`, and the answer arrives later in the conversation that asked (a Console topic). `contacts_send` does not wait.
+- In the Console chat, the messages between the agents show before the task's reply.
+- An `agent_send` over Agent Link from a task a person started skips the `agent_send` cooldown; one from a task another agent started does not.
+- Text only: a file to an `mm:` contact is rejected.
+- Sending needs a running runtime (Console or a channel runtime with its runtime API); a one-off `run` cannot send to `mm:` contacts.
 
 ## `spawn`
 

@@ -366,6 +366,61 @@ func (s *FileStore) PutContact(ctx context.Context, contact Contact) error {
 	})
 }
 
+// SetContactStatus moves a contact to the active or inactive list. It reports false when the
+// contact does not exist.
+func (s *FileStore) SetContactStatus(ctx context.Context, contactID string, status Status) (bool, error) {
+	if err := ensureNotCanceled(ctx); err != nil {
+		return false, err
+	}
+	status = normalizeStatus(status)
+	contactID = strings.TrimSpace(contactID)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	lockPath, err := s.stateLockPath()
+	if err != nil {
+		return false, err
+	}
+	found := false
+	err = fsstore.WithLock(ctx, lockPath, func() error {
+		active, err := s.loadContactsMarkdownLocked(s.activeContactsPath(), StatusActive)
+		if err != nil {
+			return err
+		}
+		inactive, err := s.loadContactsMarkdownLocked(s.inactiveContactsPath(), StatusInactive)
+		if err != nil {
+			return err
+		}
+		from, to := inactive, active
+		if status == StatusInactive {
+			from, to = active, inactive
+		}
+		var contact Contact
+		for _, item := range from {
+			if strings.TrimSpace(item.ContactID) == contactID {
+				contact = item
+				found = true
+				break
+			}
+		}
+		if !found {
+			found = hasContactID(to, contactID)
+			return nil
+		}
+		from = removeContactByID(from, contactID)
+		to = append(to, contact)
+		if status == StatusInactive {
+			active, inactive = from, to
+		} else {
+			inactive, active = from, to
+		}
+		if err := s.saveContactsMarkdownLocked(s.activeContactsPath(), "Active Contacts", StatusActive, active); err != nil {
+			return err
+		}
+		return s.saveContactsMarkdownLocked(s.inactiveContactsPath(), "Inactive Contacts", StatusInactive, inactive)
+	})
+	return found, err
+}
+
 func (s *FileStore) ListContacts(ctx context.Context, status Status) ([]Contact, error) {
 	if err := ensureNotCanceled(ctx); err != nil {
 		return nil, err
@@ -1583,7 +1638,7 @@ func normalizeContact(c Contact, now time.Time) Contact {
 func normalizeContactChannel(raw string) string {
 	value := strings.ToLower(strings.TrimSpace(raw))
 	switch value {
-	case ChannelConsole, ChannelTelegram, ChannelSlack, ChannelLine, ChannelLark, ChannelMixin, ChannelDiscord, ChannelWeChat, ChannelWhatsApp:
+	case ChannelConsole, ChannelTelegram, ChannelSlack, ChannelLine, ChannelLark, ChannelMixin, ChannelDiscord, ChannelWeChat, ChannelWhatsApp, ChannelAgentLink:
 		return value
 	default:
 		return ""

@@ -2,9 +2,7 @@ package daemonruntime
 
 import (
 	"context"
-	"crypto/sha256"
 	"crypto/subtle"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -27,6 +25,7 @@ import (
 	"time"
 
 	"github.com/quailyquaily/mistermorph/contacts"
+	"github.com/quailyquaily/mistermorph/internal/agentlink"
 	"github.com/quailyquaily/mistermorph/internal/agentsettings"
 	awarenessdomain "github.com/quailyquaily/mistermorph/internal/awareness"
 	"github.com/quailyquaily/mistermorph/internal/chatinfo"
@@ -870,13 +869,14 @@ func buildRuntimeMetrics() map[string]any {
 	}
 }
 
+// buildRuntimeInstanceID returns the instance ID saved in the state dir, or "" when it cannot be
+// read or created.
 func buildRuntimeInstanceID(stateDir string) string {
-	stateDir = strings.TrimSpace(stateDir)
-	if stateDir == "" {
+	id, err := agentlink.LoadOrCreateInstanceID(stateDir)
+	if err != nil {
 		return ""
 	}
-	sum := sha256.Sum256([]byte(filepath.Clean(stateDir)))
-	return "inst_" + hex.EncodeToString(sum[:8])
+	return id
 }
 
 func channelOverviewFromMode(mode string) map[string]any {

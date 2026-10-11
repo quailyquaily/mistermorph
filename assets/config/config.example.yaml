@@ -475,7 +475,26 @@ contacts:
   dir_name: "contacts"
   proactive:
     # Cooldown applied when proactive/direct send fails (e.g. peer unavailable).
+    # Agent contacts are not cooled down by failures; see agent_send.cooldown.
     failure_cooldown: "1h"
+  agent_send:
+    # Minimum interval between sends (agent_send or contacts_send) to the same Agent contact.
+    # 0 disables it.
+    cooldown: "30s"
+  # Agent Link: a built-in channel between the agents a Console connects to as endpoints.
+  # Every runtime that serves its runtime API (with server.auth_token set) joins; its contacts get
+  # an Agent contact mm:<instance_id> for every other agent the Console reaches.
+  agent_link:
+    enabled: true
+    # A message more than this many replies deep is recorded but starts no task.
+    max_hops: 6
+    # A message still undelivered after this long fails.
+    queue_ttl: "24h"
+    # An agent unreachable for this long has its contact made inactive.
+    inactive_after: "24h"
+    # How long agent_send waits for an Agent Link agent's answer. A later answer arrives in the
+    # conversation that asked as a new message.
+    reply_timeout: "2m"
 
 # Task projections and journal settings.
 tasks:

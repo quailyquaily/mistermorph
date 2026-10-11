@@ -13,6 +13,7 @@ import (
 	"github.com/quailyquaily/mistermorph/contacts"
 	busruntime "github.com/quailyquaily/mistermorph/internal/bus"
 	linebus "github.com/quailyquaily/mistermorph/internal/bus/adapters/line"
+	agentlinkruntime "github.com/quailyquaily/mistermorph/internal/channelruntime/agentlink"
 	runtimecore "github.com/quailyquaily/mistermorph/internal/channelruntime/core"
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/depsutil"
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/imagehistory"
@@ -271,6 +272,16 @@ func runLineLoop(ctx context.Context, d Dependencies, opts RunOptions) error {
 			stopDaemonServer = nil
 			daemonServer = nil
 			logger.Warn("line_daemon_server_start_error", "addr", serverListen, "error", err.Error())
+		} else {
+			stopAgentLink := agentlinkruntime.StartForChannel(daemonServerCtx, d.CommonDependencies, agentlinkruntime.Options{
+				TaskTimeout: opts.TaskTimeout, MaxConcurrency: opts.MaxConcurrency,
+				AgentLimits: opts.AgentLimits, EngineToolsConfig: opts.EngineToolsConfig,
+				InspectPrompt: opts.InspectPrompt, InspectRequest: opts.InspectRequest, TaskStore: daemonStore,
+			})
+			stopDaemonServer = func() {
+				cancelDaemonServer()
+				stopAgentLink()
+			}
 		}
 	}
 
