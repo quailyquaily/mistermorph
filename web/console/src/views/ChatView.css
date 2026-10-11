@@ -1707,36 +1707,6 @@ body[data-theme] .chat-workspace-dock .chat-workspace-toggle.q-button[aria-expan
   margin-bottom: 8px;
 }
 
-/* A message between this agent and another over Agent Link: a quoted exchange, set in from the
-   reply, with who it went to or came from above it. */
-.chat-agentlink-message {
-  width: min(100%, 82ch);
-  min-width: 0;
-  display: grid;
-  gap: 4px;
-  margin-bottom: 8px;
-  padding: 2px 0 2px 12px;
-  border-left: 2px solid var(--line-soft);
-}
-
-.chat-agentlink-message.is-reply {
-  border-left-color: var(--accent-1);
-}
-
-.chat-agentlink-message.is-pending {
-  border-left-style: dashed;
-}
-
-.chat-agentlink-label {
-  color: var(--text-2);
-  font-size: var(--font-size-meta);
-  letter-spacing: 0.02em;
-}
-
-.chat-agentlink-message .mmr-document {
-  font-size: 14px;
-}
-
 /* Reasoning is a side note: muted, smaller, and cut off from the answer by a dashed line. */
 .chat-history-reasoning {
   padding-bottom: 14px;
