@@ -481,6 +481,17 @@ contacts:
     # Minimum interval between sends (agent_send or contacts_send) to the same Agent contact.
     # 0 disables it.
     cooldown: "30s"
+  # Agent Link: a built-in channel between the agents a Console connects to as endpoints.
+  # Every runtime that serves its runtime API (with server.auth_token set) joins; its contacts get
+  # an Agent contact mm:<instance_id> for every other agent the Console reaches.
+  agent_link:
+    enabled: true
+    # A message more than this many replies deep is recorded but starts no task.
+    max_hops: 6
+    # A message still undelivered after this long fails.
+    queue_ttl: "24h"
+    # An agent unreachable for this long has its contact made inactive.
+    inactive_after: "24h"
 
 # Task projections and journal settings.
 tasks:

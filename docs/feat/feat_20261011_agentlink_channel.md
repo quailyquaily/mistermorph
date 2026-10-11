@@ -1,7 +1,7 @@
 ---
 date: 2026-10-11
 title: "Agent Link: a built-in channel between agents connected to a Console"
-status: draft
+status: implemented-v1
 ---
 
 # Agent Link: a built-in channel between agents connected to a Console
@@ -28,11 +28,11 @@ Agents never see a runtime API, URL or token. The Console relays messages over c
 - The Console's local runtime has its own `instance_id` like any other runtime.
 - `/health` keeps returning `instance_id` and `agent_name`.
 - Agent Link contact ID: `mm:<instance_id>`. The display name is `agent_name`, refreshed whenever the list of reachable agents changes. Renaming an agent changes only its nickname, never the contact.
-- Cloning a state dir also clones its ID. When two endpoints report the same `instance_id`, the Console logs a warning and shows it on the endpoint, and leaves both out of Agent Link until the clash is resolved.
+- Cloning a state dir also clones its ID. When a second runtime connects to a Console with an `instance_id` already connected, the Console refuses that connection and logs a warning naming both endpoints. The first one stays on Agent Link. Two processes that share one state dir (for example `morph telegram` and `morph slack`) are the same agent, and only one of them joins.
 
 ### 2. Reachable agents and contacts
 
-Each Console builds a list of reachable agents from the `/health` responses of its endpoints plus its own local runtime: `{instance_id, agent_name}`. Endpoints that are down, have no `instance_id`, or share an `instance_id` with another endpoint are left out.
+Each Console builds a list of reachable agents from the runtimes connected to its relay: its own local runtime and every endpoint whose `/agentlink/ws` stream is open. Each runtime introduces itself with a `hello` frame carrying `{instance_id, agent_name}`. Endpoints that are down, have no Agent Link route (older versions), or repeat a connected `instance_id` are left out.
 
 The Console sends each runtime the full list when it connects and again whenever the list changes (see §3). A runtime combines the lists of all Consoles connected to it, keyed by `instance_id`, and leaves itself out.
 
@@ -41,7 +41,7 @@ The runtime keeps contacts in sync **automatically, with no approval step**:
 - Every agent in the combined list is upserted as an active contact: `contact_id: mm:<instance_id>`, `kind: agent`, `channel: agentlink`, `nickname: <agent_name>`. Upserting at least one makes `agent_send` available, following its existing rule.
 - An agent counts as **reachable** while at least one connected Console lists it.
 - A contact becomes inactive only when no Console has listed it for `contacts.agent_link.inactive_after` (default `24h`). This keeps contacts stable through Console restarts and network blips. Messages to an agent that is active but not reachable wait in the queue (§4).
-- Agent Link contacts are agent contacts like any other. A user can still deactivate one by hand, and the next sync must not reactivate it. Store the manual status separately from the synced reachable state.
+- Agent Link contacts are agent contacts like any other. A user can still deactivate one by hand, and the next sync does not reactivate it. The sync remembers which contacts it deactivated itself in `<state_dir>/agentlink/peers.json`, and reactivates only those.
 
 One agent can be in several Consoles' lists. That's the expected case: it's like one person being in two Telegram groups. There is still one contact and one route, `mm:<instance_id>`. Senders never choose a Console.
 
@@ -55,13 +55,14 @@ JSON frames:
 
 | Direction | Frame | Purpose |
 |---|---|---|
-| runtime → Console | `hello {instance_id, agent_name}` | Identifies the runtime; the Console checks it against `/health` |
+| runtime → Console | `hello {instance_id, agent_name}` | Identifies the runtime; sent again after a rename |
 | Console → runtime | `roster {agents: [{instance_id, agent_name}]}` | Full list of reachable agents, sent on connect and on every change |
 | runtime → Console | `send {lease_id, message}` | Asks the Console to deliver one queued message |
 | Console → runtime | `send_result {lease_id, message_id, status, reason?}` | `delivered`, `rejected` (target refused it, e.g. hop limit) or `unreachable` |
 | Console → runtime | `deliver {message}` | Hands an incoming message to the target runtime |
 | runtime → Console | `deliver_result {message_id, status, reason?}` | `accepted` once saved, or `rejected` |
-| both | `ping` / `pong` | Keepalive |
+| both | `ping` / `pong` | Keepalive: the Console pings every 30s, and either side drops a connection silent for 90s |
+| Console → runtime | `error {reason}` | The Console refuses the connection (`duplicate_instance_id`) |
 
 `message`:
 
@@ -87,26 +88,29 @@ Relaying one message, from A to B:
 - The runtime hands a message to **one** connected Console whose list includes the target, under a lease (default 30s). While the lease is held, no other Console gets the message.
 - Results:
   - `delivered`: the send is complete. The contact's `last_interaction_at` is updated.
-  - `rejected`: the send failed for good. The reason goes to the outbox and the logs.
+  - `rejected`: the send failed for good. The reason goes to the tool result and the logs.
   - `unreachable`, the lease running out, or the connection closing: the message goes back in the queue and may go to a different Console.
 - A message still undelivered after `contacts.agent_link.queue_ttl` (default `24h`) fails.
-- The receiver ignores repeat `message_id`s (`internal/idempotency`), which makes at-least-once delivery safe. A repeat can happen when a Console delivers a message but its confirmation never reaches the sender.
-- `agent_send` waits briefly (up to ~10s) for `delivered`. If none arrives, it returns success with `status: queued` and the `message_id`, so the model doesn't retry and cause a duplicate.
+- The receiver ignores repeat `message_id`s (kept for 7 days in `<state_dir>/agentlink/seen.json`), which makes at-least-once delivery safe. A repeat can happen when a Console delivers a message but its confirmation never reaches the sender.
+- `agent_send` waits briefly (up to ~10s) for `delivered`. If none arrives, it returns success with `queued: true` in the outcome, so the model doesn't retry and cause a duplicate.
 
 ### 5. Routing in `contacts_send` / `agent_send`
 
 - Add `channels.AgentLink = "agentlink"` and the contact constant `contacts.ChannelAgentLink`.
-- `contactsSendRouteCandidates` adds one route for Agent Link contacts: channel `agentlink`, chat ID `mm:<instance_id>`. If an agent contact also has platform routes, the existing ordering still applies. Agent Link comes after the platform routes, so contacts that already work don't change behaviour.
+- `contacts.ResolveDecisionChannel` resolves `mm:` contact IDs and chat IDs to `agentlink`. A contact on a platform channel resolves Agent Link last, so contacts that already work don't change behaviour.
+- The sync (§2) creates a separate `mm:` contact, so an agent that is also reachable on a platform has two contacts, one per route. Merging them is left for later.
 - `contactsruntime.RoutingSender` gets an Agent Link sender that writes to the queue in §4.
 - Agent Link carries text only (as `agent_send` does). `contacts_send` with a file to an `mm:` contact is rejected.
 
 ### 6. Incoming messages become channel tasks
 
-- The receiving runtime saves the message, ignores it if it's a repeat, and reports it to contacts (`ObserveInboundBusMessage` for channel `agentlink`, updating `last_interaction_at`). Then it starts an ordinary channel task.
+- The receiving runtime saves the message, ignores it if it's a repeat, and updates the sender contact's `last_interaction_at`. Then it starts an ordinary channel task. Messages in one conversation also pass the existing per-conversation agent limiter (8 per 10 minutes); over it, the message is rejected with `rate_limited`.
 - Conversation key: `agentlink:<from_instance_id>:<session_id>`. The task sees the sender as contact `mm:<from>`, with its nickname.
 - The task's final reply goes back over Agent Link to `from`, with the same `session_id` and with `reply_to` set to the incoming `message_id`.
 - Incoming text is untrusted channel input, handled the same way as Telegram or Slack text. Guard, approval and audit rules apply unchanged.
-- Each runtime type that serves `/agentlink/ws` must be able to run such tasks: the Console's local runtime and the standalone channel runtimes.
+- Each runtime type that serves `/agentlink/ws` runs such tasks: the Console's local runtime and the standalone channel runtimes. One runner runs per state dir in a process. A host built on the `integration` package serves the route but runs no runner, so messages to it are rejected with `no_handler`.
+- A failed task sends nothing back, so an error does not start another agent's task. A task that ends waiting for an approval fails, because no one can approve over Agent Link.
+- The task prompt says the message comes from another agent and is untrusted input. `contacts_send` cannot message the same agent during the task; the answer goes back as the reply.
 
 ### 7. Loop control: hop count
 
@@ -120,8 +124,8 @@ Relaying one message, from A to B:
 
 `cooldown_until` exists to rate-limit `agent_send`, but nothing checks it. Changes:
 
-- **Check it:** before planning, `agent_send` rejects any target whose `cooldown_until` is later than now. The error gives the time the cooldown ends. If several agents are targeted, the whole call is rejected before anything is sent, which matches the current rule for targets that aren't agents.
-- **Set it:** after a successful or queued `agent_send` to an agent contact, set `cooldown_until = now + contacts.agent_send.cooldown` (default `30s`; `0` turns it off).
+- **Check it:** before planning, `agent_send` and `contacts_send` reject any Agent contact whose `cooldown_until` is later than now, so `contacts_send` cannot get around it. The error gives the time the cooldown ends. If several agents are targeted, the whole call is rejected before anything is sent, which matches the current rule for targets that aren't agents.
+- **Set it:** after a successful or queued send to an Agent contact, set `cooldown_until = now + contacts.agent_send.cooldown` (default `30s`; `0` turns it off).
 - For agent contacts, a failed send no longer sets the 72h/`failure_cooldown`. Queued Agent Link messages handle temporary unreachability, and a long failure cooldown would cut agents off. Human contacts keep the current failure behaviour.
 - Replies through the channel reply path (§6) don't go through `agent_send`, so the cooldown doesn't apply to them. The hop count (§7) limits them.
 
@@ -163,8 +167,17 @@ The Console needs no new keys: `console.endpoints` already defines the members.
 ## Open questions
 
 - Channel and prefix names: `agentlink` / `mm:` are working names.
-- Should Console show Agent Link traffic (queue, recent deliveries, rejected hops) in the side panel for each endpoint?
-- When agent contacts have both a platform route and an Agent Link route, should Agent Link come first instead, since it doesn't depend on a third-party platform?
+- Should Console show Agent Link traffic (queue, recent deliveries, rejected hops, duplicate IDs) in the side panel for each endpoint? v1 only logs it.
+- Should one agent reachable on both a platform and Agent Link have one merged contact instead of two?
+
+## Implementation notes (v1)
+
+- `internal/agentlink`: instance ID (`identity.go`), frames (`protocol.go`), connections (`conn.go`: WebSocket and in-process pipe), the runtime `Node` with its queue (`node.go`), the Console `Relay` (`relay.go`), the WebSocket route (`http.go`), the contact sync (`contactsync.go`) and the hop context (`hop.go`). One `Node` exists per state dir in a process (`agentlink.Shared`).
+- `internal/daemonruntime/server_routes_agentlink.go` serves `/agentlink/ws` when `contacts.agent_link.enabled` is on and the runtime API has an auth token. The Console serves it beside `/stream/ws`, outside its generation handler, so a long-lived stream does not hold a generation.
+- `cmd/mistermorph/consolecmd/agentlink.go` connects the Console's relay to its own runtime in process and dials each endpoint, reconnecting with backoff from 1s to 5 minutes.
+- `internal/channelruntime/agentlink` is the runner (§6). The Console starts it with its awareness loop; the channel runtimes start it with their runtime API.
+- `internal/contactsruntime/agentlink.go` sends to `mm:` contacts; `contacts.QueuedDeliveryError` marks a queued send as a success with `queued: true`.
+- A one-off `run` has no node, so a send to an `mm:` contact fails with "agent link is not running in this process".
 
 ## Implementation steps
 

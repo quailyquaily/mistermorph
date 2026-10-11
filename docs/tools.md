@@ -384,6 +384,16 @@ Constraints:
 - Cooldown: after a send to an Agent contact (through `agent_send` or `contacts_send`), that contact cannot receive another send until `contacts.agent_send.cooldown` has passed (default `30s`, `0` disables it). A call that targets a contact still cooling down is rejected before anything is sent. A failed send to an Agent contact does not start a cooldown.
 - `contacts_send` registration and group-chat restrictions are unchanged.
 
+### Agent Link
+
+Agents that a Console connects to as endpoints reach each other over Agent Link, a built-in channel, even when they share no chat platform. Every runtime that serves its runtime API gets an active Agent contact `mm:<instance_id>` for each other agent the Console reaches (named after that agent), so `agent_send` works with them like any other Agent contact. See `docs/feat/feat_20261011_agentlink_channel.md`.
+
+- The Console carries the messages; agents never see its URLs or tokens.
+- A message not delivered within about 10 seconds stays queued in the sender's runtime, and the outcome has `"queued": true`. It is delivered when a Console reaches the target, or fails after `contacts.agent_link.queue_ttl`.
+- The receiving agent runs the message as a task and sends its final answer back as the reply.
+- Text only: a file to an `mm:` contact is rejected.
+- Sending needs a running runtime (Console or a channel runtime with its runtime API); a one-off `run` cannot send to `mm:` contacts.
+
 ## `spawn`
 
 Purpose: run a self-contained subtask in a sub-agent with its own context and a restricted tool whitelist, and get back a short result instead of the intermediate content. The call blocks until the sub-agent finishes; sub-agents run one at a time. When `spawn` is available, the prompt asks the model to delegate subtasks that would produce a lot of intermediate content (searching and filtering web pages, reading long logs, inspecting many files) and to ask for a concise conclusion with the evidence needed to check it.
