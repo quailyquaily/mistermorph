@@ -45,6 +45,8 @@ import channelMixinLogoURL from "../assets/images/channels/mixin.svg";
 import channelSlackLogoURL from "../assets/images/channels/slack.svg";
 import channelWeChatLogoURL from "../assets/images/channels/wechat.svg";
 import channelWhatsAppLogoURL from "../assets/images/channels/whatsapp.svg";
+import channelBlueskyLogoURL from "../assets/images/channels/bluesky.svg";
+import channelXLogoURL from "../assets/images/channels/x.svg";
 import channelTelegramLogoURL from "../assets/images/channels/telegram.svg";
 import defaultAvatarMarkup from "../assets/images/app_logo_current.svg?raw";
 import {
@@ -189,6 +191,8 @@ const MANAGED_RUNTIME_ITEMS = [
   { id: "discord", titleKey: "settings_console_runtime_discord", noteKey: "settings_console_runtime_note_discord" },
   { id: "wechat", titleKey: "settings_console_runtime_wechat", noteKey: "settings_console_runtime_note_wechat" },
   { id: "whatsapp", titleKey: "settings_console_runtime_whatsapp", noteKey: "settings_console_runtime_note_whatsapp" },
+  { id: "bluesky", titleKey: "settings_console_runtime_bluesky", noteKey: "settings_console_runtime_note_bluesky" },
+  { id: "x", titleKey: "settings_console_runtime_x", noteKey: "settings_console_runtime_note_x" },
 ];
 
 // The channels on the Channels page. A channel counts as configured when every credential it needs
@@ -199,6 +203,8 @@ const CHANNEL_ITEMS = [
   { id: "discord", titleKey: "settings_console_discord_title", logo: channelDiscordLogoURL, required: ["bot_token"] },
   { id: "wechat", titleKey: "settings_console_wechat_title", logo: channelWeChatLogoURL, required: ["bot_token"] },
   { id: "whatsapp", titleKey: "settings_console_whatsapp_title", logo: channelWhatsAppLogoURL, required: ["api_token"] },
+  { id: "bluesky", titleKey: "settings_console_bluesky_title", logo: channelBlueskyLogoURL, required: ["identifier", "app_password"] },
+  { id: "x", titleKey: "settings_console_x_title", logo: channelXLogoURL, required: ["client_id", "refresh_token"] },
   { id: "lark", titleKey: "settings_console_lark_title", logo: channelLarkLogoURL, required: ["app_id", "app_secret"] },
   { id: "line", titleKey: "settings_console_line_title", logo: channelLineLogoURL, required: ["channel_access_token", "channel_secret"] },
   { id: "mixin", titleKey: "settings_console_mixin_title", logo: channelMixinLogoURL, required: ["keystore_file"] },
@@ -334,6 +340,22 @@ function buildEmptyWeChatConsoleState() {
 function buildEmptyWhatsAppConsoleState() {
   return {
     api_token: "",
+  };
+}
+
+function buildEmptyBlueskyConsoleState() {
+  return {
+    service_url: "",
+    identifier: "",
+    app_password: "",
+  };
+}
+
+function buildEmptyXConsoleState() {
+  return {
+    client_id: "",
+    client_secret: "",
+    refresh_token: "",
   };
 }
 
@@ -705,6 +727,24 @@ function buildConsoleWhatsAppSnapshot(state) {
   });
 }
 
+function buildConsoleBlueskySnapshot(state) {
+  recordSnapshotBuild("settings.console.bluesky");
+  return JSON.stringify({
+    service_url: trimText(state.bluesky.service_url),
+    identifier: trimText(state.bluesky.identifier),
+    app_password: trimText(state.bluesky.app_password),
+  });
+}
+
+function buildConsoleXSnapshot(state) {
+  recordSnapshotBuild("settings.console.x");
+  return JSON.stringify({
+    client_id: trimText(state.x.client_id),
+    client_secret: trimText(state.x.client_secret),
+    refresh_token: trimText(state.x.refresh_token),
+  });
+}
+
 function buildConsoleGuardSnapshot(state) {
   recordSnapshotBuild("settings.console.guard");
   return JSON.stringify({
@@ -840,6 +880,8 @@ const SettingsView = {
     const loadedConsoleMixinSnapshot = ref("");
     const loadedConsoleDiscordSnapshot = ref("");
     const loadedConsoleWhatsAppSnapshot = ref("");
+    const loadedConsoleBlueskySnapshot = ref("");
+    const loadedConsoleXSnapshot = ref("");
     const loadedConsoleGuardSnapshot = ref("");
     const consoleManagedDirty = ref(false);
     const consoleTelegramDirty = ref(false);
@@ -849,6 +891,8 @@ const SettingsView = {
     const consoleMixinDirty = ref(false);
     const consoleDiscordDirty = ref(false);
     const consoleWhatsAppDirty = ref(false);
+    const consoleBlueskyDirty = ref(false);
+    const consoleXDirty = ref(false);
     const consoleGuardDirty = ref(false);
     const consoleSettingsLoaded = ref(false);
     const consoleEnvManaged = ref({});
@@ -970,6 +1014,8 @@ const SettingsView = {
         discord: false,
         wechat: false,
         whatsapp: false,
+        bluesky: false,
+        x: false,
       },
       telegram: buildEmptyTelegramConsoleState(),
       slack: buildEmptySlackConsoleState(),
@@ -979,6 +1025,8 @@ const SettingsView = {
       discord: buildEmptyDiscordConsoleState(),
       wechat: buildEmptyWeChatConsoleState(),
       whatsapp: buildEmptyWhatsAppConsoleState(),
+      bluesky: buildEmptyBlueskyConsoleState(),
+      x: buildEmptyXConsoleState(),
       guard: buildEmptyGuardConsoleState(),
     });
 
@@ -1148,6 +1196,8 @@ const SettingsView = {
       loadedConsoleMixinSnapshot.value = buildConsoleMixinSnapshot(state);
       loadedConsoleDiscordSnapshot.value = buildConsoleDiscordSnapshot(state);
       loadedConsoleWhatsAppSnapshot.value = buildConsoleWhatsAppSnapshot(state);
+      loadedConsoleBlueskySnapshot.value = buildConsoleBlueskySnapshot(state);
+      loadedConsoleXSnapshot.value = buildConsoleXSnapshot(state);
       loadedConsoleGuardSnapshot.value = buildConsoleGuardSnapshot(state);
       consoleManagedDirty.value = false;
       consoleTelegramDirty.value = false;
@@ -1157,6 +1207,8 @@ const SettingsView = {
       consoleMixinDirty.value = false;
       consoleDiscordDirty.value = false;
       consoleWhatsAppDirty.value = false;
+      consoleBlueskyDirty.value = false;
+      consoleXDirty.value = false;
       consoleGuardDirty.value = false;
     }
 
@@ -1169,6 +1221,8 @@ const SettingsView = {
       loadedConsoleMixinSnapshot.value = "";
       loadedConsoleDiscordSnapshot.value = "";
       loadedConsoleWhatsAppSnapshot.value = "";
+      loadedConsoleBlueskySnapshot.value = "";
+      loadedConsoleXSnapshot.value = "";
       loadedConsoleGuardSnapshot.value = "";
       consoleManagedDirty.value = false;
       consoleTelegramDirty.value = false;
@@ -1178,6 +1232,8 @@ const SettingsView = {
       consoleMixinDirty.value = false;
       consoleDiscordDirty.value = false;
       consoleWhatsAppDirty.value = false;
+      consoleBlueskyDirty.value = false;
+      consoleXDirty.value = false;
       consoleGuardDirty.value = false;
       consoleSettingsLoaded.value = false;
     }
@@ -1226,6 +1282,19 @@ const SettingsView = {
       consoleWhatsAppDirty.value =
         consoleSecretDirty.has("whatsapp.api_token") ||
         buildConsoleWhatsAppSnapshot(state) !== loadedConsoleWhatsAppSnapshot.value;
+    }
+
+    function updateConsoleBlueskyDirty() {
+      consoleBlueskyDirty.value =
+        consoleSecretDirty.has("bluesky.app_password") ||
+        buildConsoleBlueskySnapshot(state) !== loadedConsoleBlueskySnapshot.value;
+    }
+
+    function updateConsoleXDirty() {
+      consoleXDirty.value =
+        consoleSecretDirty.has("x.client_secret") ||
+        consoleSecretDirty.has("x.refresh_token") ||
+        buildConsoleXSnapshot(state) !== loadedConsoleXSnapshot.value;
     }
 
     function updateConsoleGuardDirty() {
@@ -1523,6 +1592,8 @@ const SettingsView = {
         ["mixin", consoleMixinDirty, "settings_console_mixin_title"],
         ["discord", consoleDiscordDirty, "settings_console_discord_title"],
         ["whatsapp", consoleWhatsAppDirty, "settings_console_whatsapp_title"],
+        ["bluesky", consoleBlueskyDirty, "settings_console_bluesky_title"],
+        ["x", consoleXDirty, "settings_console_x_title"],
         ["runtimes", consoleManagedDirty, "settings_channel_run_in_console"],
       ],
       security: [["guard", consoleGuardDirty, "settings_console_guard_title"]],
@@ -1539,6 +1610,8 @@ const SettingsView = {
       mixin: consoleMixinDirty,
       discord: consoleDiscordDirty,
       whatsapp: consoleWhatsAppDirty,
+      bluesky: consoleBlueskyDirty,
+      x: consoleXDirty,
     };
     function channelFieldSet(kind, field) {
       return (
@@ -2105,6 +2178,8 @@ const SettingsView = {
         consoleMixinDirty.value ||
         consoleDiscordDirty.value ||
         consoleWhatsAppDirty.value ||
+        consoleBlueskyDirty.value ||
+        consoleXDirty.value ||
         consoleGuardDirty.value
     );
     const consoleSaveDisabled = computed(
@@ -2130,6 +2205,12 @@ const SettingsView = {
     );
     const whatsappSaveDisabled = computed(
       () => consoleLoading.value || consoleSaving.value || !consoleWhatsAppDirty.value
+    );
+    const blueskySaveDisabled = computed(
+      () => consoleLoading.value || consoleSaving.value || !consoleBlueskyDirty.value
+    );
+    const xSaveDisabled = computed(
+      () => consoleLoading.value || consoleSaving.value || !consoleXDirty.value
     );
     const guardSaveDisabled = computed(
       () => consoleLoading.value || consoleSaving.value || !consoleGuardDirty.value
@@ -3250,6 +3331,8 @@ const SettingsView = {
       { id: "mixin", dirty: () => consoleMixinDirty.value, slice: () => state.mixin, sync: updateConsoleMixinDirty },
       { id: "discord", dirty: () => consoleDiscordDirty.value, slice: () => state.discord, sync: updateConsoleDiscordDirty },
       { id: "whatsapp", dirty: () => consoleWhatsAppDirty.value, slice: () => state.whatsapp, sync: updateConsoleWhatsAppDirty },
+      { id: "bluesky", dirty: () => consoleBlueskyDirty.value, slice: () => state.bluesky, sync: updateConsoleBlueskyDirty },
+      { id: "x", dirty: () => consoleXDirty.value, slice: () => state.x, sync: updateConsoleXDirty },
       { id: "guard", dirty: () => consoleGuardDirty.value, slice: () => state.guard, sync: updateConsoleGuardDirty },
     ];
 
@@ -3268,6 +3351,8 @@ const SettingsView = {
       const discord = data?.discord && typeof data.discord === "object" ? data.discord : {};
       const wechat = data?.wechat && typeof data.wechat === "object" ? data.wechat : {};
       const whatsapp = data?.whatsapp && typeof data.whatsapp === "object" ? data.whatsapp : {};
+      const bluesky = data?.bluesky && typeof data.bluesky === "object" ? data.bluesky : {};
+      const x = data?.x && typeof data.x === "object" ? data.x : {};
       const guard = data?.guard && typeof data.guard === "object" ? data.guard : {};
       const guardNetwork = guard?.network && typeof guard.network === "object" ? guard.network : {};
       const guardURLFetch =
@@ -3312,6 +3397,12 @@ const SettingsView = {
       state.discord.group_trigger_mode = normalizeDiscordGroupTriggerMode(discord.group_trigger_mode);
       state.wechat.bot_id = typeof wechat.bot_id === "string" ? wechat.bot_id : "";
       state.whatsapp.api_token = typeof whatsapp.api_token === "string" ? whatsapp.api_token : "";
+      state.bluesky.service_url = typeof bluesky.service_url === "string" ? bluesky.service_url : "";
+      state.bluesky.identifier = typeof bluesky.identifier === "string" ? bluesky.identifier : "";
+      state.bluesky.app_password = typeof bluesky.app_password === "string" ? bluesky.app_password : "";
+      state.x.client_id = typeof x.client_id === "string" ? x.client_id : "";
+      state.x.client_secret = typeof x.client_secret === "string" ? x.client_secret : "";
+      state.x.refresh_token = typeof x.refresh_token === "string" ? x.refresh_token : "";
       state.guard.enabled = typeof guard.enabled === "boolean" ? guard.enabled : true;
       state.guard.url_fetch_allowed_url_prefixes_text = formatConfigList(guardURLFetch.allowed_url_prefixes);
       state.guard.deny_private_ips =
@@ -3339,6 +3430,8 @@ const SettingsView = {
       state.managedRuntimes.discord = false;
       state.managedRuntimes.wechat = false;
       state.managedRuntimes.whatsapp = false;
+      state.managedRuntimes.bluesky = false;
+      state.managedRuntimes.x = false;
       Object.assign(state.telegram, buildEmptyTelegramConsoleState());
       Object.assign(state.slack, buildEmptySlackConsoleState());
       Object.assign(state.line, buildEmptyLineConsoleState());
@@ -3347,6 +3440,8 @@ const SettingsView = {
       Object.assign(state.discord, buildEmptyDiscordConsoleState());
       Object.assign(state.wechat, buildEmptyWeChatConsoleState());
       Object.assign(state.whatsapp, buildEmptyWhatsAppConsoleState());
+      Object.assign(state.bluesky, buildEmptyBlueskyConsoleState());
+      Object.assign(state.x, buildEmptyXConsoleState());
       Object.assign(state.guard, buildEmptyGuardConsoleState());
       consoleEnvManaged.value = {};
       consoleSecretFields.value = {};
@@ -4037,6 +4132,14 @@ const SettingsView = {
         consoleEnvManaged.value?.whatsapp && typeof consoleEnvManaged.value.whatsapp === "object"
           ? consoleEnvManaged.value.whatsapp
           : {};
+      const blueskyEnv =
+        consoleEnvManaged.value?.bluesky && typeof consoleEnvManaged.value.bluesky === "object"
+          ? consoleEnvManaged.value.bluesky
+          : {};
+      const xEnv =
+        consoleEnvManaged.value?.x && typeof consoleEnvManaged.value.x === "object"
+          ? consoleEnvManaged.value.x
+          : {};
       const managed_runtimes = MANAGED_RUNTIME_ITEMS.filter((item) => state.managedRuntimes[item.id]).map((item) => item.id);
       const telegram = {
         allowed_chat_ids: parseConfigListText(state.telegram.allowed_chat_ids_text),
@@ -4107,6 +4210,28 @@ const SettingsView = {
         "api_token",
         state.whatsapp.api_token,
       );
+      const bluesky = {
+        service_url: trimText(state.bluesky.service_url),
+        identifier: trimText(state.bluesky.identifier),
+      };
+      bluesky.app_password = consoleFieldRawValue(blueskyEnv, "app_password") || includeConsoleSecretValue(
+        "bluesky",
+        "app_password",
+        state.bluesky.app_password,
+      );
+      const x = {
+        client_id: trimText(state.x.client_id),
+      };
+      x.client_secret = consoleFieldRawValue(xEnv, "client_secret") || includeConsoleSecretValue(
+        "x",
+        "client_secret",
+        state.x.client_secret,
+      );
+      x.refresh_token = consoleFieldRawValue(xEnv, "refresh_token") || includeConsoleSecretValue(
+        "x",
+        "refresh_token",
+        state.x.refresh_token,
+      );
       const guard = {
         enabled: !!state.guard.enabled,
         network: {
@@ -4148,10 +4273,16 @@ const SettingsView = {
       if (target === "whatsapp") {
         return { whatsapp };
       }
+      if (target === "bluesky") {
+        return { bluesky };
+      }
+      if (target === "x") {
+        return { x };
+      }
       if (target === "guard") {
         return { guard };
       }
-      return { managed_runtimes, telegram, slack, line, lark, mixin, discord, whatsapp, guard };
+      return { managed_runtimes, telegram, slack, line, lark, mixin, discord, whatsapp, bluesky, x, guard };
     }
 
     function consoleFieldEntry(kind, field) {
@@ -4299,6 +4430,26 @@ const SettingsView = {
       state.whatsapp[key] = String(value || "");
       markConsoleSecretDirty("whatsapp", key);
       updateConsoleWhatsAppDirty();
+    }
+
+    function updateBlueskyField(field, value) {
+      const key = String(field || "").trim();
+      if (!key || !Object.prototype.hasOwnProperty.call(state.bluesky, key)) {
+        return;
+      }
+      state.bluesky[key] = String(value || "");
+      markConsoleSecretDirty("bluesky", key);
+      updateConsoleBlueskyDirty();
+    }
+
+    function updateXField(field, value) {
+      const key = String(field || "").trim();
+      if (!key || !Object.prototype.hasOwnProperty.call(state.x, key)) {
+        return;
+      }
+      state.x[key] = String(value || "");
+      markConsoleSecretDirty("x", key);
+      updateConsoleXDirty();
     }
 
     // WeChat login and unbind write config on the server. Reload it, keeping unsaved drafts.
@@ -4476,7 +4627,7 @@ const SettingsView = {
     }
 
     async function saveConsoleSettings(target = "all", { notify = true } = {}) {
-      const known = ["runtimes", "telegram", "slack", "line", "lark", "mixin", "discord", "whatsapp", "guard"];
+      const known = ["runtimes", "telegram", "slack", "line", "lark", "mixin", "discord", "whatsapp", "bluesky", "x", "guard"];
       const requested = Array.isArray(target) ? target.map(String) : [String(target)];
       const targets = requested.includes("all") ? ["all"] : requested.filter((item) => known.includes(item));
       if (!selectedEndpointIsConsole.value || targets.length === 0) {
@@ -4491,6 +4642,8 @@ const SettingsView = {
         mixin: mixinSaveDisabled,
         discord: discordSaveDisabled,
         whatsapp: whatsappSaveDisabled,
+        bluesky: blueskySaveDisabled,
+        x: xSaveDisabled,
         guard: guardSaveDisabled,
       };
       if (targets[0] === "all" && (consoleLoading.value || consoleSaving.value || !consoleDirty.value)) {
@@ -5390,6 +5543,8 @@ const SettingsView = {
       mixinSaveDisabled,
       discordSaveDisabled,
       whatsappSaveDisabled,
+      blueskySaveDisabled,
+      xSaveDisabled,
       guardSaveDisabled,
       personaDirty,
       personaSaveDisabled,
@@ -5530,6 +5685,8 @@ const SettingsView = {
       updateMixinField,
       updateDiscordField,
       updateWhatsAppField,
+      updateBlueskyField,
+      updateXField,
       reloadConsoleSettingsAfterWeChatLogin,
       consoleSecretField,
       consoleSecretRevealPath,
@@ -7046,6 +7203,134 @@ const SettingsView = {
                     @update:modelValue="updateWhatsAppField('api_token', $event)"
                   />
                   <p class="settings-field-note">{{ t("settings_console_whatsapp_api_token_note") }}</p>
+                </div>
+              </div>
+            </div>
+          </AppSection>
+        </template>
+                    <template v-if="openChannel === 'bluesky'">
+          <AppSection :title="t('settings_console_bluesky_title')" :meta="t('settings_console_bluesky_note')">
+            <template #actions>
+              <div class="settings-profile-actions settings-default-llm-actions">
+                <QDropdownMenu
+                  class="settings-llm-actions-menu"
+                  variant="plain"
+                  :items="channelActionMenuItems('bluesky')"
+                  hideSelected
+                  hideActionLabel
+                  :disabled="consoleLoading || consoleSaving"
+                >
+                  <PhDotsThree class="settings-llm-actions-menu-icon" />
+                  <span class="settings-llm-actions-menu-accessible">{{ t("todo_action_more") }}</span>
+                </QDropdownMenu>
+                <QButton class="plain xs icon" :title="t('settings_channel_close')" :aria-label="t('settings_channel_close')" @click="closeChannelPane">
+                  <PhX class="icon" />
+                </QButton>
+              </div>
+            </template>
+            <div class="settings-panel-body">
+              <div class="settings-form-grid">
+                <div class="settings-field is-wide">
+                  <span class="settings-field-label">{{ t("settings_console_bluesky_identifier_label") }}</span>
+                  <QInput
+                    :modelValue="state.bluesky.identifier"
+                    :placeholder="t('settings_console_bluesky_identifier_placeholder')"
+                    :disabled="consoleLoading || consoleSaving"
+                    @update:modelValue="updateBlueskyField('identifier', $event)"
+                  />
+                  <p class="settings-field-note">{{ t("settings_console_bluesky_identifier_note") }}</p>
+                </div>
+
+                <div class="settings-field is-wide">
+                  <span class="settings-field-label">{{ t("settings_console_bluesky_app_password_label") }}</span>
+                  <EnvManagedField v-if="consoleFieldEnvManaged('bluesky', 'app_password')" :name="consoleFieldManagedHeadline('bluesky', 'app_password')" />
+                  <SecretInput
+                    v-else
+                    :modelValue="state.bluesky.app_password"
+                    :status="consoleSecretField('bluesky', 'app_password')"
+                    :revealPath="consoleSecretRevealPath('bluesky', 'app_password')"
+                    :placeholder="t('settings_console_bluesky_app_password_placeholder')"
+                    :disabled="consoleLoading || consoleSaving || !consoleSecretEditable('bluesky', 'app_password')"
+                    @update:modelValue="updateBlueskyField('app_password', $event)"
+                  />
+                  <p class="settings-field-note">{{ t("settings_console_bluesky_app_password_note") }}</p>
+                </div>
+
+                <div class="settings-field is-wide">
+                  <span class="settings-field-label">{{ t("settings_console_bluesky_service_url_label") }}</span>
+                  <QInput
+                    :modelValue="state.bluesky.service_url"
+                    :placeholder="t('settings_console_bluesky_service_url_placeholder')"
+                    :disabled="consoleLoading || consoleSaving"
+                    @update:modelValue="updateBlueskyField('service_url', $event)"
+                  />
+                  <p class="settings-field-note">{{ t("settings_console_bluesky_service_url_note") }}</p>
+                </div>
+              </div>
+            </div>
+          </AppSection>
+        </template>
+                    <template v-if="openChannel === 'x'">
+          <AppSection :title="t('settings_console_x_title')" :meta="t('settings_console_x_note')">
+            <template #actions>
+              <div class="settings-profile-actions settings-default-llm-actions">
+                <QDropdownMenu
+                  class="settings-llm-actions-menu"
+                  variant="plain"
+                  :items="channelActionMenuItems('x')"
+                  hideSelected
+                  hideActionLabel
+                  :disabled="consoleLoading || consoleSaving"
+                >
+                  <PhDotsThree class="settings-llm-actions-menu-icon" />
+                  <span class="settings-llm-actions-menu-accessible">{{ t("todo_action_more") }}</span>
+                </QDropdownMenu>
+                <QButton class="plain xs icon" :title="t('settings_channel_close')" :aria-label="t('settings_channel_close')" @click="closeChannelPane">
+                  <PhX class="icon" />
+                </QButton>
+              </div>
+            </template>
+            <div class="settings-panel-body">
+              <div class="settings-form-grid">
+                <div class="settings-field is-wide">
+                  <span class="settings-field-label">{{ t("settings_console_x_client_id_label") }}</span>
+                  <QInput
+                    :modelValue="state.x.client_id"
+                    :placeholder="t('settings_console_x_client_id_placeholder')"
+                    :disabled="consoleLoading || consoleSaving"
+                    @update:modelValue="updateXField('client_id', $event)"
+                  />
+                  <p class="settings-field-note">{{ t("settings_console_x_client_id_note") }}</p>
+                </div>
+
+                <div class="settings-field is-wide">
+                  <span class="settings-field-label">{{ t("settings_console_x_client_secret_label") }}</span>
+                  <EnvManagedField v-if="consoleFieldEnvManaged('x', 'client_secret')" :name="consoleFieldManagedHeadline('x', 'client_secret')" />
+                  <SecretInput
+                    v-else
+                    :modelValue="state.x.client_secret"
+                    :status="consoleSecretField('x', 'client_secret')"
+                    :revealPath="consoleSecretRevealPath('x', 'client_secret')"
+                    :placeholder="t('settings_console_x_client_secret_placeholder')"
+                    :disabled="consoleLoading || consoleSaving || !consoleSecretEditable('x', 'client_secret')"
+                    @update:modelValue="updateXField('client_secret', $event)"
+                  />
+                  <p class="settings-field-note">{{ t("settings_console_x_client_secret_note") }}</p>
+                </div>
+
+                <div class="settings-field is-wide">
+                  <span class="settings-field-label">{{ t("settings_console_x_refresh_token_label") }}</span>
+                  <EnvManagedField v-if="consoleFieldEnvManaged('x', 'refresh_token')" :name="consoleFieldManagedHeadline('x', 'refresh_token')" />
+                  <SecretInput
+                    v-else
+                    :modelValue="state.x.refresh_token"
+                    :status="consoleSecretField('x', 'refresh_token')"
+                    :revealPath="consoleSecretRevealPath('x', 'refresh_token')"
+                    :placeholder="t('settings_console_x_refresh_token_placeholder')"
+                    :disabled="consoleLoading || consoleSaving || !consoleSecretEditable('x', 'refresh_token')"
+                    @update:modelValue="updateXField('refresh_token', $event)"
+                  />
+                  <p class="settings-field-note">{{ t("settings_console_x_refresh_token_note") }}</p>
                 </div>
               </div>
             </div>

@@ -6,6 +6,8 @@ import "./ContactsView.css";
 import channelDiscordLogoURL from "../assets/images/channels/discord.svg";
 import channelWeChatLogoURL from "../assets/images/channels/wechat.svg";
 import channelWhatsAppLogoURL from "../assets/images/channels/whatsapp.svg";
+import channelBlueskyLogoURL from "../assets/images/channels/bluesky.svg";
+import channelXLogoURL from "../assets/images/channels/x.svg";
 import channelLarkLogoURL from "../assets/images/channels/lark.svg";
 import channelLineLogoURL from "../assets/images/channels/line.svg";
 import channelMixinLogoURL from "../assets/images/channels/mixin.svg";
@@ -21,6 +23,8 @@ const CHANNEL_LOGOS = {
   discord: channelDiscordLogoURL,
   wechat: channelWeChatLogoURL,
   whatsapp: channelWhatsAppLogoURL,
+  bluesky: channelBlueskyLogoURL,
+  x: channelXLogoURL,
   lark: channelLarkLogoURL,
   line: channelLineLogoURL,
   mixin: channelMixinLogoURL,
@@ -80,6 +84,10 @@ function fallbackHandleFromContactID(item, channel) {
       return prefix === "wechat_user" ? parts[parts.length - 1] : "";
     case "whatsapp":
       return prefix === "whatsapp_user" ? parts[parts.length - 1] : "";
+    case "bluesky":
+      return prefix === "bluesky_user" ? parts[parts.length - 1] : "";
+    case "x":
+      return prefix === "x_user" ? parts[parts.length - 1] : "";
     default:
       return "";
   }
@@ -105,6 +113,10 @@ function channelLabel(t, raw) {
       return t("endpoint_channel_wechat");
     case "whatsapp":
       return t("endpoint_channel_whatsapp");
+    case "bluesky":
+      return t("endpoint_channel_bluesky");
+    case "x":
+      return t("endpoint_channel_x");
     case "console":
       return t("endpoint_channel_console");
     default:
@@ -150,6 +162,8 @@ function channelHandles(t, item) {
   push("discord", String(item?.discord_user_id || "").trim() || fallbackHandleFromContactID(item, "discord"));
   push("wechat", String(item?.wechat_user_id || "").trim() || fallbackHandleFromContactID(item, "wechat"));
   push("whatsapp", String(item?.whatsapp_user_id || "").trim() || fallbackHandleFromContactID(item, "whatsapp"));
+  push("bluesky", String(item?.bluesky_user_id || "").trim() || fallbackHandleFromContactID(item, "bluesky"));
+  push("x", String(item?.x_user_id || "").trim() || fallbackHandleFromContactID(item, "x"));
 
   return out;
 }

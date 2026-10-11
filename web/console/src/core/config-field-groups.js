@@ -204,7 +204,34 @@ export const CHANNEL_CONFIG_GROUPS = [
   channelFields("discord", { title: "Discord", baseURL: true }),
   channelFields("wechat", { title: "WeChat" }),
   channelFields("whatsapp", { title: "WhatsApp" }),
+  socialChannelFields("bluesky", "Bluesky"),
+  socialChannelFields("x", "X", { baseURL: true, cost: true }),
 ];
+
+// Bluesky and X: direct messages and public mentions, each with its own switch, poll and lists.
+function socialChannelFields(channel, title, options = {}) {
+  const group = channelFields(channel, { title, baseURL: options.baseURL });
+  const ids = { type: "string_list", wide: true, editor: "rows", placeholder: channel === "x" ? "@username" : "alice.bsky.social", addLabel: "Add user" };
+  group.fields.unshift(
+    { path: `${channel}.owners`, label: "Owners (heartbeat notifications)", ...ids },
+    { path: `${channel}.dm.enabled`, label: "Answer direct messages", type: "bool" },
+    { path: `${channel}.dm.poll_interval`, label: "Direct message poll interval", type: "string", duration: true, editor: "duration", dependsOn: `${channel}.dm.enabled` },
+    { path: `${channel}.dm.allowed_user_ids`, label: "Who may send direct messages", ...ids, dependsOn: `${channel}.dm.enabled` },
+    { path: `${channel}.mentions.enabled`, label: "Answer public mentions", type: "bool" },
+    { path: `${channel}.mentions.poll_interval`, label: "Mention poll interval", type: "string", duration: true, editor: "duration", dependsOn: `${channel}.mentions.enabled` },
+    { path: `${channel}.mentions.allowed_user_ids`, label: "Whose mentions are answered", ...ids, dependsOn: `${channel}.mentions.enabled` },
+    { path: `${channel}.mentions.blocked_user_ids`, label: "Never answered", ...ids, dependsOn: `${channel}.mentions.enabled` },
+    { path: `${channel}.mentions.thread_context_depth`, label: "Posts read above a mention", type: "int", dependsOn: `${channel}.mentions.enabled` },
+    { path: `${channel}.mentions.max_reply_posts`, label: "Posts per answer", type: "int", dependsOn: `${channel}.mentions.enabled` },
+  );
+  if (options.cost) {
+    group.fields.splice(group.fields.findIndex((field) => field.path === `${channel}.mentions.max_reply_posts`) + 1, 0,
+      { path: `${channel}.mentions.max_posts_per_day`, label: "Posts per day (0 is no limit)", type: "int", dependsOn: `${channel}.mentions.enabled` },
+      { path: `${channel}.mentions.allow_links_in_posts`, label: "Allow links in posts (cost more)", type: "bool", dependsOn: `${channel}.mentions.enabled` },
+    );
+  }
+  return group;
+}
 
 // Group trigger fields, shown in the channel's pane under its trigger mode (not in Advanced).
 function channelTriggerFields(channel, title) {

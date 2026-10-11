@@ -83,6 +83,18 @@ type consoleWhatsAppSettingsPayload struct {
 	APIToken string `json:"api_token"`
 }
 
+type consoleBlueskySettingsPayload struct {
+	ServiceURL  string `json:"service_url"`
+	Identifier  string `json:"identifier"`
+	AppPassword string `json:"app_password"`
+}
+
+type consoleXSettingsPayload struct {
+	ClientID     string `json:"client_id"`
+	ClientSecret string `json:"client_secret"`
+	RefreshToken string `json:"refresh_token"`
+}
+
 type consoleGuardURLFetchSettingsPayload struct {
 	AllowedURLPrefixes []string `json:"allowed_url_prefixes"`
 	DenyPrivateIPs     bool     `json:"deny_private_ips"`
@@ -119,6 +131,8 @@ type consoleSettingsPayload struct {
 	Discord         consoleDiscordSettingsPayload  `json:"discord"`
 	WeChat          consoleWeChatSettingsPayload   `json:"wechat"`
 	WhatsApp        consoleWhatsAppSettingsPayload `json:"whatsapp"`
+	Bluesky         consoleBlueskySettingsPayload  `json:"bluesky"`
+	X               consoleXSettingsPayload        `json:"x"`
 	Guard           consoleGuardSettingsPayload    `json:"guard"`
 }
 
@@ -167,6 +181,18 @@ type consoleWhatsAppSettingsUpdatePayload struct {
 	APIToken *string `json:"api_token,omitempty"`
 }
 
+type consoleBlueskySettingsUpdatePayload struct {
+	ServiceURL  *string `json:"service_url,omitempty"`
+	Identifier  *string `json:"identifier,omitempty"`
+	AppPassword *string `json:"app_password,omitempty"`
+}
+
+type consoleXSettingsUpdatePayload struct {
+	ClientID     *string `json:"client_id,omitempty"`
+	ClientSecret *string `json:"client_secret,omitempty"`
+	RefreshToken *string `json:"refresh_token,omitempty"`
+}
+
 type consoleGuardURLFetchSettingsUpdatePayload struct {
 	AllowedURLPrefixes *[]string `json:"allowed_url_prefixes,omitempty"`
 	DenyPrivateIPs     *bool     `json:"deny_private_ips,omitempty"`
@@ -205,6 +231,8 @@ type consoleSettingsUpdatePayload struct {
 	Mixin           *consoleMixinSettingsUpdatePayload    `json:"mixin,omitempty"`
 	Discord         *consoleDiscordSettingsUpdatePayload  `json:"discord,omitempty"`
 	WhatsApp        *consoleWhatsAppSettingsUpdatePayload `json:"whatsapp,omitempty"`
+	Bluesky         *consoleBlueskySettingsUpdatePayload  `json:"bluesky,omitempty"`
+	X               *consoleXSettingsUpdatePayload        `json:"x,omitempty"`
 	Guard           *consoleGuardSettingsUpdatePayload    `json:"guard,omitempty"`
 	NewPassword     *string                               `json:"new_password,omitempty"`
 	ClearPassword   bool                                  `json:"clear_password,omitempty"`
@@ -221,6 +249,8 @@ type consoleSettingsEnvManagedPayload struct {
 	Discord  map[string]agentsettings.EnvManagedField `json:"discord,omitempty"`
 	WeChat   map[string]agentsettings.EnvManagedField `json:"wechat,omitempty"`
 	WhatsApp map[string]agentsettings.EnvManagedField `json:"whatsapp,omitempty"`
+	Bluesky  map[string]agentsettings.EnvManagedField `json:"bluesky,omitempty"`
+	X        map[string]agentsettings.EnvManagedField `json:"x,omitempty"`
 }
 
 type consoleSettingsSecretFieldsPayload struct {
@@ -231,6 +261,8 @@ type consoleSettingsSecretFieldsPayload struct {
 	Discord  map[string]agentsettings.SecretFieldStatus `json:"discord,omitempty"`
 	WeChat   map[string]agentsettings.SecretFieldStatus `json:"wechat,omitempty"`
 	WhatsApp map[string]agentsettings.SecretFieldStatus `json:"whatsapp,omitempty"`
+	Bluesky  map[string]agentsettings.SecretFieldStatus `json:"bluesky,omitempty"`
+	X        map[string]agentsettings.SecretFieldStatus `json:"x,omitempty"`
 }
 
 func prepareConsoleSecretUpdates(ctx context.Context, req *consoleSettingsUpdatePayload, store secref.OSStore) ([]string, error) {
@@ -266,6 +298,15 @@ func prepareConsoleSecretUpdates(ctx context.Context, req *consoleSettingsUpdate
 	}
 	if req.WhatsApp != nil {
 		fields = append(fields, secretField{name: "whatsapp.api_token", value: &req.WhatsApp.APIToken})
+	}
+	if req.Bluesky != nil {
+		fields = append(fields, secretField{name: "bluesky.app_password", value: &req.Bluesky.AppPassword})
+	}
+	if req.X != nil {
+		fields = append(fields,
+			secretField{name: "x.client_secret", value: &req.X.ClientSecret},
+			secretField{name: "x.refresh_token", value: &req.X.RefreshToken},
+		)
 	}
 	type replacement struct {
 		field secretField
@@ -352,6 +393,8 @@ func (s *server) handleConsoleSettingsGet(w http.ResponseWriter, _ *http.Request
 		"discord":          settings.Discord,
 		"wechat":           settings.WeChat,
 		"whatsapp":         settings.WhatsApp,
+		"bluesky":          settings.Bluesky,
+		"x":                settings.X,
 		"guard":            settings.Guard,
 		"endpoints":        consoleEndpointSettingsFromDocument(doc),
 		"auth_profiles":    consoleAuthProfileSettingsFromDocument(doc),
@@ -449,7 +492,7 @@ func (s *server) handleConsoleSettingsPut(w http.ResponseWriter, r *http.Request
 	}
 	next := current
 	serialized := snapshot.Data
-	hasLegacyUpdate := req.ManagedRuntimes != nil || req.Telegram != nil || req.Slack != nil || req.Line != nil || req.Lark != nil || req.Mixin != nil || req.Discord != nil || req.WhatsApp != nil || req.Guard != nil
+	hasLegacyUpdate := req.ManagedRuntimes != nil || req.Telegram != nil || req.Slack != nil || req.Line != nil || req.Lark != nil || req.Mixin != nil || req.Discord != nil || req.WhatsApp != nil || req.Bluesky != nil || req.X != nil || req.Guard != nil
 	if hasLegacyUpdate {
 		next, err = normalizeConsoleSettingsUpdatePayload(current, req)
 		if err != nil {
@@ -592,6 +635,8 @@ func (s *server) handleConsoleSettingsPut(w http.ResponseWriter, r *http.Request
 		"discord":          next.Discord,
 		"wechat":           next.WeChat,
 		"whatsapp":         next.WhatsApp,
+		"bluesky":          next.Bluesky,
+		"x":                next.X,
 		"guard":            next.Guard,
 		"endpoints":        consoleEndpointSettingsFromDocument(doc),
 		"auth_profiles":    consoleAuthProfileSettingsFromDocument(doc),
@@ -695,6 +740,16 @@ func writeConsoleSettings(configPath string, values consoleSettingsPayload) ([]b
 	whatsappNode := configbootstrap.EnsureMappingValue(root, "whatsapp")
 	configbootstrap.SetOrDeleteMappingScalar(whatsappNode, "api_token", strings.TrimSpace(values.WhatsApp.APIToken))
 
+	blueskyNode := configbootstrap.EnsureMappingValue(root, "bluesky")
+	configbootstrap.SetOrDeleteMappingScalar(blueskyNode, "service_url", strings.TrimSpace(values.Bluesky.ServiceURL))
+	configbootstrap.SetOrDeleteMappingScalar(blueskyNode, "identifier", strings.TrimSpace(values.Bluesky.Identifier))
+	configbootstrap.SetOrDeleteMappingScalar(blueskyNode, "app_password", strings.TrimSpace(values.Bluesky.AppPassword))
+
+	xNode := configbootstrap.EnsureMappingValue(root, "x")
+	configbootstrap.SetOrDeleteMappingScalar(xNode, "client_id", strings.TrimSpace(values.X.ClientID))
+	configbootstrap.SetOrDeleteMappingScalar(xNode, "client_secret", strings.TrimSpace(values.X.ClientSecret))
+	configbootstrap.SetOrDeleteMappingScalar(xNode, "refresh_token", strings.TrimSpace(values.X.RefreshToken))
+
 	guardNode := configbootstrap.EnsureMappingValue(root, "guard")
 	configbootstrap.SetMappingBoolValue(guardNode, "enabled", values.Guard.Enabled)
 	networkNode := configbootstrap.EnsureMappingValue(guardNode, "network")
@@ -763,6 +818,16 @@ func readConsoleSettingsFromReader(r interface {
 		},
 		WhatsApp: consoleWhatsAppSettingsPayload{
 			APIToken: strings.TrimSpace(r.GetString("whatsapp.api_token")),
+		},
+		Bluesky: consoleBlueskySettingsPayload{
+			ServiceURL:  strings.TrimSpace(r.GetString("bluesky.service_url")),
+			Identifier:  strings.TrimSpace(r.GetString("bluesky.identifier")),
+			AppPassword: strings.TrimSpace(r.GetString("bluesky.app_password")),
+		},
+		X: consoleXSettingsPayload{
+			ClientID:     strings.TrimSpace(r.GetString("x.client_id")),
+			ClientSecret: strings.TrimSpace(r.GetString("x.client_secret")),
+			RefreshToken: strings.TrimSpace(r.GetString("x.refresh_token")),
 		},
 		Guard: consoleGuardSettingsPayload{
 			Enabled: r.GetBool("guard.enabled"),
@@ -848,6 +913,16 @@ func normalizeConsoleSettingsPayload(in consoleSettingsPayload) (consoleSettings
 		},
 		WhatsApp: consoleWhatsAppSettingsPayload{
 			APIToken: strings.TrimSpace(in.WhatsApp.APIToken),
+		},
+		Bluesky: consoleBlueskySettingsPayload{
+			ServiceURL:  strings.TrimSpace(in.Bluesky.ServiceURL),
+			Identifier:  strings.TrimPrefix(strings.TrimSpace(in.Bluesky.Identifier), "@"),
+			AppPassword: strings.TrimSpace(in.Bluesky.AppPassword),
+		},
+		X: consoleXSettingsPayload{
+			ClientID:     strings.TrimSpace(in.X.ClientID),
+			ClientSecret: strings.TrimSpace(in.X.ClientSecret),
+			RefreshToken: strings.TrimSpace(in.X.RefreshToken),
 		},
 		Guard: consoleGuardSettingsPayload{
 			Enabled: in.Guard.Enabled,
@@ -964,6 +1039,28 @@ func normalizeConsoleSettingsUpdatePayload(
 	}
 	if in.WhatsApp != nil && in.WhatsApp.APIToken != nil {
 		next.WhatsApp.APIToken = strings.TrimSpace(*in.WhatsApp.APIToken)
+	}
+	if in.Bluesky != nil {
+		if in.Bluesky.ServiceURL != nil {
+			next.Bluesky.ServiceURL = strings.TrimSpace(*in.Bluesky.ServiceURL)
+		}
+		if in.Bluesky.Identifier != nil {
+			next.Bluesky.Identifier = strings.TrimPrefix(strings.TrimSpace(*in.Bluesky.Identifier), "@")
+		}
+		if in.Bluesky.AppPassword != nil {
+			next.Bluesky.AppPassword = strings.TrimSpace(*in.Bluesky.AppPassword)
+		}
+	}
+	if in.X != nil {
+		if in.X.ClientID != nil {
+			next.X.ClientID = strings.TrimSpace(*in.X.ClientID)
+		}
+		if in.X.ClientSecret != nil {
+			next.X.ClientSecret = strings.TrimSpace(*in.X.ClientSecret)
+		}
+		if in.X.RefreshToken != nil {
+			next.X.RefreshToken = strings.TrimSpace(*in.X.RefreshToken)
+		}
 	}
 	if in.Guard != nil {
 		if in.Guard.Enabled != nil {
@@ -1104,6 +1201,8 @@ func buildConsoleSettingsResponseView(
 	)
 	envManaged.WeChat = consoleSettingsEnvManagedFields(configbootstrap.FindMappingValue(root, "wechat"), envManaged.WeChat, "bot_token")
 	envManaged.WhatsApp = consoleSettingsEnvManagedFields(configbootstrap.FindMappingValue(root, "whatsapp"), envManaged.WhatsApp, "api_token")
+	envManaged.Bluesky = consoleSettingsEnvManagedFields(configbootstrap.FindMappingValue(root, "bluesky"), envManaged.Bluesky, "app_password")
+	envManaged.X = consoleSettingsEnvManagedFields(configbootstrap.FindMappingValue(root, "x"), envManaged.X, "client_secret", "refresh_token")
 	secretFields := buildConsoleSettingsSecretFields(root, envManaged)
 	settings.Telegram.BotToken = ""
 	settings.Slack.BotToken = ""
@@ -1114,6 +1213,9 @@ func buildConsoleSettingsResponseView(
 	settings.Discord.BotToken = ""
 	settings.WeChat.BotToken = ""
 	settings.WhatsApp.APIToken = ""
+	settings.Bluesky.AppPassword = ""
+	settings.X.ClientSecret = ""
+	settings.X.RefreshToken = ""
 	return settings, envManaged, secretFields
 }
 
@@ -1153,6 +1255,16 @@ func buildConsoleSettingsSecretFields(root *yaml.Node, envManaged consoleSetting
 			configbootstrap.FindMappingValue(root, "whatsapp"),
 			envManaged.WhatsApp,
 			"api_token",
+		),
+		Bluesky: consoleSettingsSecretStatuses(
+			configbootstrap.FindMappingValue(root, "bluesky"),
+			envManaged.Bluesky,
+			"app_password",
+		),
+		X: consoleSettingsSecretStatuses(
+			configbootstrap.FindMappingValue(root, "x"),
+			envManaged.X,
+			"client_secret", "refresh_token",
 		),
 	}
 }
@@ -1421,6 +1533,18 @@ func currentConsoleSettingsEnvManaged() consoleSettingsEnvManagedPayload {
 	}
 	if field, ok := agentsettings.ManagedEnvField(true, "MISTER_MORPH_WHATSAPP_API_TOKEN"); ok {
 		out.WhatsApp = map[string]agentsettings.EnvManagedField{"api_token": field}
+	}
+	if field, ok := agentsettings.ManagedEnvField(true, "MISTER_MORPH_BLUESKY_APP_PASSWORD"); ok {
+		out.Bluesky = map[string]agentsettings.EnvManagedField{"app_password": field}
+	}
+	if field, ok := agentsettings.ManagedEnvField(true, "MISTER_MORPH_X_CLIENT_SECRET"); ok {
+		out.X = map[string]agentsettings.EnvManagedField{"client_secret": field}
+	}
+	if field, ok := agentsettings.ManagedEnvField(true, "MISTER_MORPH_X_REFRESH_TOKEN"); ok {
+		if out.X == nil {
+			out.X = map[string]agentsettings.EnvManagedField{}
+		}
+		out.X["refresh_token"] = field
 	}
 	return out
 }
