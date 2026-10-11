@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/quailyquaily/mistermorph/cmd/mistermorph/blueskycmd"
 	"github.com/quailyquaily/mistermorph/cmd/mistermorph/chatcmd"
 	"github.com/quailyquaily/mistermorph/cmd/mistermorph/consolecmd"
 	"github.com/quailyquaily/mistermorph/cmd/mistermorph/discordcmd"
@@ -21,6 +22,7 @@ import (
 	"github.com/quailyquaily/mistermorph/cmd/mistermorph/telegramcmd"
 	"github.com/quailyquaily/mistermorph/cmd/mistermorph/wechatcmd"
 	"github.com/quailyquaily/mistermorph/cmd/mistermorph/whatsappcmd"
+	"github.com/quailyquaily/mistermorph/cmd/mistermorph/xcmd"
 	"github.com/quailyquaily/mistermorph/guard"
 	"github.com/quailyquaily/mistermorph/internal/configutil"
 	"github.com/quailyquaily/mistermorph/internal/llmconfig"
@@ -188,6 +190,20 @@ func newRootRuntime() *rootRuntime {
 		Dependencies:       whatsappRuntime.Dependencies(registryResolver, guardResolver),
 		HandleModelCommand: whatsappRuntime.HandleModelCommand,
 		HandleSkillCommand: whatsappRuntime.HandleSkillCommand,
+	}))
+
+	blueskyRuntime := newChannelCommandRuntime()
+	cmd.AddCommand(blueskycmd.NewCommand(blueskycmd.Dependencies{
+		Dependencies:       blueskyRuntime.Dependencies(registryResolver, guardResolver),
+		HandleModelCommand: blueskyRuntime.HandleModelCommand,
+		HandleSkillCommand: blueskyRuntime.HandleSkillCommand,
+	}))
+
+	xRuntime := newChannelCommandRuntime()
+	cmd.AddCommand(xcmd.NewCommand(xcmd.Dependencies{
+		Dependencies:       xRuntime.Dependencies(registryResolver, guardResolver),
+		HandleModelCommand: xRuntime.HandleModelCommand,
+		HandleSkillCommand: xRuntime.HandleSkillCommand,
 	}))
 	cmd.AddCommand(newToolsCmd(registryResolver.Registry))
 	cmd.AddCommand(newAuthCmd())
@@ -597,7 +613,7 @@ func shouldPrepareRootRegistry(cmd *cobra.Command) bool {
 	switch cmd.CommandPath() {
 	case "morph", "morph chat":
 		return !cmd.Flags().Changed("runtime-url")
-	case "morph run", "morph telegram", "morph slack", "morph line", "morph lark", "morph mixin", "morph discord", "morph wechat", "morph whatsapp", "morph tools":
+	case "morph run", "morph telegram", "morph slack", "morph line", "morph lark", "morph mixin", "morph discord", "morph wechat", "morph whatsapp", "morph bluesky", "morph x", "morph tools":
 		return true
 	default:
 		return false

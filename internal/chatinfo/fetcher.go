@@ -112,8 +112,8 @@ func (f *Fetcher) RefreshChatInfo(ctx context.Context, chatID string) (Info, err
 		return f.fetchLark(ctx, chatID)
 	case "discord":
 		return f.fetchDiscord(ctx, chatID)
-	case "wechat", "whatsapp":
-		// Neither platform has a chat info API; their chats are private chats with one user.
+	case "wechat", "whatsapp", "bluesky", "x":
+		// These chats are private chats with one user, and there is no chat info to fetch.
 		return Info{ChatID: chatID, Platform: protocol, Type: "private"}, nil
 	default:
 		return Info{}, fmt.Errorf("unsupported chat_id: %s", chatID)

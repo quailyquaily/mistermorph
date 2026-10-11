@@ -33,6 +33,8 @@ func TestShouldPrepareRootRegistry(t *testing.T) {
 		{path: "morph discord", want: true},
 		{path: "morph wechat", want: true},
 		{path: "morph whatsapp", want: true},
+		{path: "morph bluesky", want: true},
+		{path: "morph x", want: true},
 		{path: "morph tools", want: true},
 		{path: "morph console serve", want: false},
 		{path: "morph version", want: false},

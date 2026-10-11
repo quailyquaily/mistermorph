@@ -1,6 +1,7 @@
-// Package accountdm adapts private messages of channels with one bound account (WeChat, WhatsApp)
-// to and from the in-process bus. A conversation is "<channel>:<account>:<peer>", so rebinding to
-// another account never mixes histories, and dedupe is per channel, account and message ID.
+// Package accountdm adapts private messages of channels with one bound account (WeChat, WhatsApp,
+// Bluesky, X) to and from the in-process bus. A conversation is "<channel>:<account>:<peer>", so
+// rebinding to another account never mixes histories, and dedupe is per channel, account and
+// message ID.
 package accountdm
 
 import (
@@ -15,6 +16,15 @@ import (
 	baseadapters "github.com/quailyquaily/mistermorph/internal/bus/adapters"
 	"github.com/quailyquaily/mistermorph/internal/idempotency"
 )
+
+// IsAccountDMChannel reports a channel whose private messages go through this adapter.
+func IsAccountDMChannel(channel busruntime.Channel) bool {
+	switch channel {
+	case busruntime.ChannelWeChat, busruntime.ChannelWhatsApp, busruntime.ChannelBluesky, busruntime.ChannelX:
+		return true
+	}
+	return false
+}
 
 type InboundAdapterOptions struct {
 	Channel busruntime.Channel
@@ -45,7 +55,7 @@ type InboundAdapter struct {
 }
 
 func NewInboundAdapter(opts InboundAdapterOptions) (*InboundAdapter, error) {
-	if opts.Channel != busruntime.ChannelWeChat && opts.Channel != busruntime.ChannelWhatsApp {
+	if !IsAccountDMChannel(opts.Channel) {
 		return nil, fmt.Errorf("channel %q is not a private-message channel", opts.Channel)
 	}
 	flow, err := baseadapters.NewInboundFlow(baseadapters.InboundFlowOptions{Bus: opts.Bus, Store: opts.Store, Channel: string(opts.Channel), Now: opts.Now})

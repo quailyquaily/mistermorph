@@ -3,6 +3,7 @@ package promptprofile
 import (
 	_ "embed"
 	"fmt"
+	"strconv"
 	"strings"
 	"text/template"
 
@@ -50,6 +51,15 @@ var weChatRuntimePromptBlock string
 
 //go:embed prompts/block_whatsapp.md
 var whatsAppRuntimePromptBlock string
+
+//go:embed prompts/block_bluesky.md
+var blueskyRuntimePromptBlock string
+
+//go:embed prompts/block_x.md
+var xRuntimePromptBlock string
+
+//go:embed prompts/block_social_post.md
+var socialPostRuntimePromptBlock string
 
 var groupUsernamesBlockTemplate = prompttmpl.MustParse(
 	"group_usernames_block",
@@ -358,6 +368,40 @@ func AppendWeChatRuntimeBlocks(spec *agent.PromptSpec) {
 // AppendWhatsAppRuntimeBlocks adds the WhatsApp channel's policies.
 func AppendWhatsAppRuntimeBlocks(spec *agent.PromptSpec) {
 	appendStaticBlock(spec, whatsAppRuntimePromptBlock)
+}
+
+// AppendBlueskyRuntimeBlocks adds the Bluesky direct-message policies.
+func AppendBlueskyRuntimeBlocks(spec *agent.PromptSpec) {
+	appendStaticBlock(spec, blueskyRuntimePromptBlock)
+}
+
+// AppendXRuntimeBlocks adds the X direct-message policies.
+func AppendXRuntimeBlocks(spec *agent.PromptSpec) {
+	appendStaticBlock(spec, xRuntimePromptBlock)
+}
+
+// SocialPostPolicy describes where a public reply goes, for its prompt block.
+type SocialPostPolicy struct {
+	Platform  string
+	PostLimit string
+	MaxPosts  int
+	// AllowLinks: false asks for no links, which cost extra on X.
+	AllowLinks bool
+}
+
+// AppendSocialPostRuntimeBlocks adds the policies for answering a public mention.
+func AppendSocialPostRuntimeBlocks(spec *agent.PromptSpec, policy SocialPostPolicy) {
+	links := "You may include a link when it helps."
+	if !policy.AllowLinks {
+		links = "Do not include links or URLs."
+	}
+	content := strings.NewReplacer(
+		"{{PLATFORM}}", policy.Platform,
+		"{{POST_LIMIT}}", policy.PostLimit,
+		"{{MAX_POSTS}}", strconv.Itoa(max(policy.MaxPosts, 1)),
+		"{{LINKS}}", links,
+	).Replace(socialPostRuntimePromptBlock)
+	appendStaticBlock(spec, content)
 }
 
 func appendStaticBlock(spec *agent.PromptSpec, content string) {

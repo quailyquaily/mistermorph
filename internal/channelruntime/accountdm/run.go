@@ -1,5 +1,5 @@
-// Package accountdm is the task engine shared by channels that only have private chats with one
-// bound account: WeChat and WhatsApp. A channel package supplies the Transport (how messages are
+// Package accountdm is the task engine shared by the private chats of channels with one bound
+// account: WeChat, WhatsApp, and the direct messages of Bluesky and X. A channel package supplies the Transport (how messages are
 // polled and sent); this package runs the tasks, commands, approvals and history the same way the
 // other channels do.
 package accountdm
@@ -78,6 +78,13 @@ type Transport interface {
 	Typing(ctx context.Context, accountID, peerID string) (stop func())
 	// Overview is the channel's entry in the runtime overview (connected, status, account).
 	Overview() map[string]any
+}
+
+// OwnerTransport is a Transport anyone may write to, which names its owners: heartbeat
+// notifications go to them only, not to everyone who wrote.
+type OwnerTransport interface {
+	Transport
+	Owners() []string
 }
 
 type Options struct {

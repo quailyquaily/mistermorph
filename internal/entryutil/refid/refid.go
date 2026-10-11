@@ -329,3 +329,56 @@ func ParseWhatsAppUserContactID(raw string) (string, bool) {
 	id := NormalizeWhatsAppID(value[len("whatsapp_user:"):])
 	return id, id != ""
 }
+
+// NormalizeBlueskyID returns a Bluesky DID in the form Morph's IDs use, without colons
+// ("did:plc:abc" or "did.plc.abc" -> "did.plc.abc"), or "" when it is not a DID.
+func NormalizeBlueskyID(raw string) string {
+	value := strings.TrimSpace(raw)
+	if strings.HasPrefix(value, "did:") {
+		value = strings.Replace(value, ":", ".", 2)
+	}
+	if !strings.HasPrefix(value, "did.") || strings.Count(value, ".") < 2 || strings.ContainsAny(value, ": \t\r\n") {
+		return ""
+	}
+	return value
+}
+
+// ParseBlueskyChatIDHint parses a "bluesky:<did>" chat id into the user's ID.
+func ParseBlueskyChatIDHint(raw string) (string, bool, error) {
+	return parseChatIDHint(raw, "bluesky:", NormalizeBlueskyID)
+}
+
+// ParseBlueskyUserContactID parses "bluesky_user:<did>" contact IDs.
+func ParseBlueskyUserContactID(raw string) (string, bool) {
+	value := strings.TrimSpace(raw)
+	if !strings.HasPrefix(strings.ToLower(value), "bluesky_user:") {
+		return "", false
+	}
+	id := NormalizeBlueskyID(value[len("bluesky_user:"):])
+	return id, id != ""
+}
+
+// NormalizeXUserID returns an X user ID (an integer), or "".
+func NormalizeXUserID(raw string) string {
+	value := strings.TrimSpace(raw)
+	id, err := strconv.ParseUint(value, 10, 64)
+	if err != nil || id == 0 {
+		return ""
+	}
+	return strconv.FormatUint(id, 10)
+}
+
+// ParseXChatIDHint parses an "x:<user_id>" chat id into the user's ID.
+func ParseXChatIDHint(raw string) (string, bool, error) {
+	return parseChatIDHint(raw, "x:", NormalizeXUserID)
+}
+
+// ParseXUserContactID parses "x_user:<id>" contact IDs.
+func ParseXUserContactID(raw string) (string, bool) {
+	value := strings.TrimSpace(raw)
+	if !strings.HasPrefix(strings.ToLower(value), "x_user:") {
+		return "", false
+	}
+	id := NormalizeXUserID(value[len("x_user:"):])
+	return id, id != ""
+}

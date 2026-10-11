@@ -648,6 +648,8 @@ type contactProfileSection struct {
 	DiscordChannelIDs   []string `yaml:"discord_channel_ids"`
 	WeChatUserID        string   `yaml:"wechat_user_id,omitempty"`
 	WhatsAppUserID      string   `yaml:"whatsapp_user_id,omitempty"`
+	BlueskyUserID       string   `yaml:"bluesky_user_id,omitempty"`
+	XUserID             string   `yaml:"x_user_id,omitempty"`
 	SlackTeamID         string   `yaml:"slack_team_id"`
 	SlackUserID         string   `yaml:"slack_user_id"`
 	SlackDMChannelID    string   `yaml:"slack_dm_channel_id"`
@@ -974,6 +976,8 @@ func contactFromProfileSection(title string, profile contactProfileSection) (Con
 		DiscordChannelIDs:   normalizeDiscordIDs(profile.DiscordChannelIDs),
 		WeChatUserID:        refid.NormalizeWeChatID(profile.WeChatUserID),
 		WhatsAppUserID:      refid.NormalizeWhatsAppID(profile.WhatsAppUserID),
+		BlueskyUserID:       refid.NormalizeBlueskyID(profile.BlueskyUserID),
+		XUserID:             refid.NormalizeXUserID(profile.XUserID),
 		SlackTeamID:         strings.TrimSpace(profile.SlackTeamID),
 		SlackUserID:         strings.TrimSpace(profile.SlackUserID),
 		SlackDMChannelID:    strings.TrimSpace(profile.SlackDMChannelID),
@@ -1020,7 +1024,7 @@ func contactFromProfileSection(title string, profile contactProfileSection) (Con
 	case "":
 		channel := strings.ToLower(strings.TrimSpace(profile.Channel))
 		switch channel {
-		case "", ChannelTelegram, ChannelSlack, ChannelLine, ChannelLark, ChannelMixin, ChannelDiscord, ChannelWeChat, ChannelWhatsApp:
+		case "", ChannelTelegram, ChannelSlack, ChannelLine, ChannelLark, ChannelMixin, ChannelDiscord, ChannelWeChat, ChannelWhatsApp, ChannelBluesky, ChannelX:
 			contact.Kind = KindHuman
 		default:
 			contact.Kind = KindAgent
@@ -1076,6 +1080,8 @@ func profileSectionFromContact(contact Contact) (contactProfileSection, string) 
 		DiscordChannelIDs:   normalizeDiscordIDs(contact.DiscordChannelIDs),
 		WeChatUserID:        refid.NormalizeWeChatID(contact.WeChatUserID),
 		WhatsAppUserID:      refid.NormalizeWhatsAppID(contact.WhatsAppUserID),
+		BlueskyUserID:       refid.NormalizeBlueskyID(contact.BlueskyUserID),
+		XUserID:             refid.NormalizeXUserID(contact.XUserID),
 		SlackTeamID:         strings.TrimSpace(contact.SlackTeamID),
 		SlackUserID:         strings.TrimSpace(contact.SlackUserID),
 		SlackDMChannelID:    strings.TrimSpace(contact.SlackDMChannelID),
@@ -1100,6 +1106,10 @@ func profileSectionFromContact(contact Contact) (contactProfileSection, string) 
 			profile.Channel = ChannelWeChat
 		case profile.WhatsAppUserID != "" || strings.HasPrefix(strings.ToLower(profile.ContactID), "whatsapp"):
 			profile.Channel = ChannelWhatsApp
+		case profile.BlueskyUserID != "" || strings.HasPrefix(strings.ToLower(profile.ContactID), "bluesky"):
+			profile.Channel = ChannelBluesky
+		case profile.XUserID != "" || strings.HasPrefix(strings.ToLower(profile.ContactID), "x_user:") || strings.HasPrefix(strings.ToLower(profile.ContactID), "x:"):
+			profile.Channel = ChannelX
 		case profile.SlackTeamID != "" || profile.SlackUserID != "" || profile.SlackDMChannelID != "" || len(profile.SlackChannelIDs) > 0 || strings.HasPrefix(strings.ToLower(profile.ContactID), "slack:"):
 			profile.Channel = ChannelSlack
 		default:
@@ -1457,6 +1467,8 @@ func normalizeContact(c Contact, now time.Time) Contact {
 	c.DiscordChannelIDs = normalizeDiscordIDs(c.DiscordChannelIDs)
 	c.WeChatUserID = refid.NormalizeWeChatID(c.WeChatUserID)
 	c.WhatsAppUserID = refid.NormalizeWhatsAppID(c.WhatsAppUserID)
+	c.BlueskyUserID = refid.NormalizeBlueskyID(c.BlueskyUserID)
+	c.XUserID = refid.NormalizeXUserID(c.XUserID)
 	for i := range c.LarkChatIDs {
 		c.LarkChatIDs[i] = refid.NormalizeLarkID(c.LarkChatIDs[i])
 	}
@@ -1541,6 +1553,10 @@ func normalizeContact(c Contact, now time.Time) Contact {
 			c.Channel = ChannelWeChat
 		case strings.HasPrefix(strings.ToLower(c.ContactID), "whatsapp"), c.WhatsAppUserID != "":
 			c.Channel = ChannelWhatsApp
+		case strings.HasPrefix(strings.ToLower(c.ContactID), "bluesky"), c.BlueskyUserID != "":
+			c.Channel = ChannelBluesky
+		case strings.HasPrefix(strings.ToLower(c.ContactID), "x_user:"), strings.HasPrefix(strings.ToLower(c.ContactID), "x:"), c.XUserID != "":
+			c.Channel = ChannelX
 		case strings.HasPrefix(strings.ToLower(c.ContactID), "slack:"), c.SlackTeamID != "", c.SlackUserID != "", c.SlackDMChannelID != "", len(c.SlackChannelIDs) > 0:
 			c.Channel = ChannelSlack
 		}
@@ -1622,6 +1638,16 @@ func normalizeContact(c Contact, now time.Time) Contact {
 			c.WhatsAppUserID = id
 		}
 	}
+	if c.BlueskyUserID == "" {
+		if id, ok := refid.ParseBlueskyUserContactID(c.ContactID); ok {
+			c.BlueskyUserID = id
+		}
+	}
+	if c.XUserID == "" {
+		if id, ok := refid.ParseXUserContactID(c.ContactID); ok {
+			c.XUserID = id
+		}
+	}
 
 	if c.TGUsername == "" && c.TGUserID == 0 && c.TGPrivateChatID == 0 && len(c.TGGroupChatIDs) == 0 && c.Channel == ChannelTelegram {
 		if alias := extractTelegramAlias(c.ContactID); alias != "" {
@@ -1638,7 +1664,7 @@ func normalizeContact(c Contact, now time.Time) Contact {
 func normalizeContactChannel(raw string) string {
 	value := strings.ToLower(strings.TrimSpace(raw))
 	switch value {
-	case ChannelConsole, ChannelTelegram, ChannelSlack, ChannelLine, ChannelLark, ChannelMixin, ChannelDiscord, ChannelWeChat, ChannelWhatsApp, ChannelAgentLink:
+	case ChannelConsole, ChannelTelegram, ChannelSlack, ChannelLine, ChannelLark, ChannelMixin, ChannelDiscord, ChannelWeChat, ChannelWhatsApp, ChannelBluesky, ChannelX, ChannelAgentLink:
 		return value
 	default:
 		return ""

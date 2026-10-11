@@ -349,7 +349,7 @@ func (s *RoutingSender) Send(ctx context.Context, contact contacts.Contact, deci
 			return s.sendDiscordFile(ctx, target, decision)
 		}
 		return s.publishDiscord(ctx, target, decision)
-	case contacts.ChannelWeChat, contacts.ChannelWhatsApp:
+	case contacts.ChannelWeChat, contacts.ChannelWhatsApp, contacts.ChannelBluesky, contacts.ChannelX:
 		peerID, resolveErr := ResolveAccountDMTarget(channel, contact, decision.ChatID)
 		if resolveErr != nil {
 			return false, false, resolveErr
@@ -368,12 +368,17 @@ func (s *RoutingSender) Send(ctx context.Context, contact contacts.Contact, deci
 	}
 }
 
-// ResolveAccountDMTarget is the WeChat or WhatsApp user to send to: the chat_id hint when given (it
-// must be the contact's own), else the contact's user ID.
+// ResolveAccountDMTarget is the user of an account channel (WeChat, WhatsApp, Bluesky, X) to send
+// to: the chat_id hint when given (it must be the contact's own), else the contact's user ID.
 func ResolveAccountDMTarget(channel string, contact contacts.Contact, chatIDHint string) (string, error) {
 	parse, known := refid.ParseWeChatChatIDHint, refid.NormalizeWeChatID(contact.WeChatUserID)
-	if channel == contacts.ChannelWhatsApp {
+	switch channel {
+	case contacts.ChannelWhatsApp:
 		parse, known = refid.ParseWhatsAppChatIDHint, refid.NormalizeWhatsAppID(contact.WhatsAppUserID)
+	case contacts.ChannelBluesky:
+		parse, known = refid.ParseBlueskyChatIDHint, refid.NormalizeBlueskyID(contact.BlueskyUserID)
+	case contacts.ChannelX:
+		parse, known = refid.ParseXChatIDHint, refid.NormalizeXUserID(contact.XUserID)
 	}
 	peerID, hasHint, err := parse(chatIDHint)
 	if err != nil {
