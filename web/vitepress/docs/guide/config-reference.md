@@ -281,6 +281,47 @@ Shell defaults are platform-specific:
 - `whatsapp.max_concurrency`
 - `whatsapp.serve_listen`
 
+## Bluesky
+
+- `bluesky.service_url`
+- `bluesky.identifier`
+- `bluesky.app_password`
+- `bluesky.owners`
+- `bluesky.dm.enabled`
+- `bluesky.dm.poll_interval`
+- `bluesky.dm.allowed_user_ids`
+- `bluesky.mentions.enabled`
+- `bluesky.mentions.poll_interval`
+- `bluesky.mentions.allowed_user_ids`
+- `bluesky.mentions.blocked_user_ids`
+- `bluesky.mentions.thread_context_depth`
+- `bluesky.mentions.max_reply_posts`
+- `bluesky.task_timeout`
+- `bluesky.max_concurrency`
+- `bluesky.serve_listen`
+
+## X
+
+- `x.client_id`
+- `x.client_secret`
+- `x.refresh_token`
+- `x.base_url`
+- `x.owners`
+- `x.dm.enabled`
+- `x.dm.poll_interval`
+- `x.dm.allowed_user_ids`
+- `x.mentions.enabled`
+- `x.mentions.poll_interval`
+- `x.mentions.allowed_user_ids`
+- `x.mentions.blocked_user_ids`
+- `x.mentions.thread_context_depth`
+- `x.mentions.max_reply_posts`
+- `x.mentions.max_posts_per_day`
+- `x.mentions.allow_links_in_posts`
+- `x.task_timeout`
+- `x.max_concurrency`
+- `x.serve_listen`
+
 ## Heartbeat
 
 - `heartbeat.enabled`

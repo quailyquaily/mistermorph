@@ -51,6 +51,8 @@ description: Where to find deeper design and runtime documents in the repo.
 - [`docs/discord.md`](https://github.com/quailyquaily/mistermorph/blob/master/docs/discord.md)
 - [`docs/wechat.md`](https://github.com/quailyquaily/mistermorph/blob/master/docs/wechat.md)
 - [`docs/whatsapp.md`](https://github.com/quailyquaily/mistermorph/blob/master/docs/whatsapp.md)
+- [`docs/bluesky.md`](https://github.com/quailyquaily/mistermorph/blob/master/docs/bluesky.md)
+- [`docs/x.md`](https://github.com/quailyquaily/mistermorph/blob/master/docs/x.md)
 
 ## Governance and State
 

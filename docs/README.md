@@ -36,6 +36,8 @@
 - [Discord](./discord.md)
 - [WeChat](./wechat.md)
 - [WhatsApp](./whatsapp.md)
+- [Bluesky](./bluesky.md)
+- [X](./x.md)
 
 ## Localized README
 

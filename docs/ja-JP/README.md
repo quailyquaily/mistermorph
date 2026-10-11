@@ -96,6 +96,8 @@ CLI モードと設定の詳細は [../modes.md](../modes.md) と [../configurat
 - [Discord](../discord.md)
 - [WeChat](../wechat.md)
 - [WhatsApp](../whatsapp.md)
+- [Bluesky](../bluesky.md)
+- [X](../x.md)
 
 完全なドキュメント一覧は [../README.md](../README.md) を参照してください。
 

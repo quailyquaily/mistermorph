@@ -99,6 +99,8 @@ Channel setup:
 - [Discord](docs/discord.md)
 - [WeChat](docs/wechat.md)
 - [WhatsApp](docs/whatsapp.md)
+- [Bluesky](docs/bluesky.md)
+- [X](docs/x.md)
 
 Full docs index: [docs/README.md](docs/README.md)
 
