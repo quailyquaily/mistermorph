@@ -22,7 +22,8 @@ func (t *AgentSendTool) Name() string { return "agent_send" }
 func (t *AgentSendTool) Description() string {
 	return `Sends a message to one or more active Agent contacts.
 		IF sending to multiple Agents THEN pass comma-separated contact_id values.
-		Message routes automatically across Slack, Telegram, LINE, Lark, and Mixin based on chat_id/contact reachability.
+		Message routes automatically across Slack, Telegram, LINE, Lark, Mixin, and Agent Link based on chat_id/contact reachability.
+		Agent Link contacts (contact_id mm:<instance_id>) are agents connected to the same Console; a message to one may be queued and delivered later.
 		Only target Agents explicitly referenced in the current task.`
 }
 

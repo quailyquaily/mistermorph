@@ -16,6 +16,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/agentpair"
 	busruntime "github.com/quailyquaily/mistermorph/internal/bus"
 	discordbus "github.com/quailyquaily/mistermorph/internal/bus/adapters/discord"
+	agentlinkruntime "github.com/quailyquaily/mistermorph/internal/channelruntime/agentlink"
 	runtimecore "github.com/quailyquaily/mistermorph/internal/channelruntime/core"
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/depsutil"
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/imagehistory"
@@ -358,6 +359,16 @@ func runDiscordLoop(ctx context.Context, d Dependencies, opts RunOptions) error 
 			stopDaemon = nil
 			daemonServer = nil
 			logger.Warn("discord_daemon_server_start_error", "addr", opts.ServerListen, "error", err.Error())
+		} else {
+			stopAgentLink := agentlinkruntime.StartForChannel(daemonCtx, d.CommonDependencies, agentlinkruntime.Options{
+				TaskTimeout: opts.TaskTimeout, MaxConcurrency: opts.MaxConcurrency,
+				AgentLimits: opts.AgentLimits, EngineToolsConfig: opts.EngineToolsConfig,
+				InspectPrompt: opts.InspectPrompt, InspectRequest: opts.InspectRequest, TaskStore: daemonStore,
+			})
+			stopDaemon = func() {
+				cancel()
+				stopAgentLink()
+			}
 		}
 	}
 	ingressQueue := newKeyedQueue()

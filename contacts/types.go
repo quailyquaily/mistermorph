@@ -100,8 +100,10 @@ type ShareOutcome struct {
 	Deduped        bool   `json:"deduped"`
 	Error          string `json:"error,omitempty"`
 	// Partial means a file was delivered but the text that follows it failed; Error says why.
-	Partial bool      `json:"partial,omitempty"`
-	SentAt  time.Time `json:"sent_at"`
+	Partial bool `json:"partial,omitempty"`
+	// Queued means the transport holds the message and delivers it later (Agent Link).
+	Queued bool      `json:"queued,omitempty"`
+	SentAt time.Time `json:"sent_at"`
 }
 
 // AgentSendCoolingDown reports whether c is an Agent contact that cannot receive another send at

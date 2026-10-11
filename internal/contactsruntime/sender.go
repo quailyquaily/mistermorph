@@ -49,6 +49,8 @@ type SenderOptions struct {
 	MixinKeystoreFile string
 	DiscordBotToken   string
 	DiscordBaseURL    string
+	// AgentLinkStateDir is the state dir of the runtime whose Agent Link node sends to mm: contacts.
+	AgentLinkStateDir string
 	BusMaxInFlight    int
 	Logger            *slog.Logger
 }
@@ -76,6 +78,7 @@ type RoutingSender struct {
 	mixinKeystoreFile string
 	mixinOnce         sync.Once
 	mixinInitErr      error
+	agentLinkStateDir string
 	logger            *slog.Logger
 	pendingMu         sync.Mutex
 	pending           map[string]chan deliveryResult
@@ -147,6 +150,7 @@ func NewRoutingSender(ctx context.Context, opts SenderOptions) (*RoutingSender, 
 	}
 
 	sender := &RoutingSender{
+		agentLinkStateDir: strings.TrimSpace(opts.AgentLinkStateDir),
 		bus:               inprocBus,
 		telegramClient:    &http.Client{Timeout: 30 * time.Second},
 		lineClient:        &http.Client{Timeout: 30 * time.Second},
@@ -354,6 +358,11 @@ func (s *RoutingSender) Send(ctx context.Context, contact contacts.Contact, deci
 			return s.sendAccountDMFile(ctx, channel, peerID, decision)
 		}
 		return s.publishAccountDM(ctx, channel, peerID, decision)
+	case contacts.ChannelAgentLink:
+		if decision.File != nil {
+			return false, false, fmt.Errorf("agent link does not support file delivery")
+		}
+		return s.sendAgentLink(ctx, contact, decision)
 	default:
 		return false, false, fmt.Errorf("unsupported delivery channel: %s", channel)
 	}

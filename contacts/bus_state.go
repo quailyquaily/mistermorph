@@ -46,7 +46,7 @@ type BusOutboxRecord struct {
 func normalizeBusChannel(channel string) (string, error) {
 	value := strings.ToLower(strings.TrimSpace(channel))
 	switch value {
-	case channels.Telegram, channels.Slack, channels.Line, channels.Lark, channels.Discord, channels.Mixin, channels.WeChat, channels.WhatsApp:
+	case channels.Telegram, channels.Slack, channels.Line, channels.Lark, channels.Discord, channels.Mixin, channels.WeChat, channels.WhatsApp, channels.AgentLink:
 		return value, nil
 	default:
 		return "", fmt.Errorf("unsupported bus channel: %q", channel)

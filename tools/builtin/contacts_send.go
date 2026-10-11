@@ -41,6 +41,8 @@ type ContactsSendToolOptions struct {
 	FailureCooldown   time.Duration
 	// AgentSendCooldown is the minimum interval between sends to the same Agent contact.
 	AgentSendCooldown time.Duration
+	// StateDir is the runtime's state dir; its Agent Link node sends to mm: contacts.
+	StateDir string
 	// PathRoots are where a file to send may come from: file_cache_dir and the task's workspace.
 	// FileStateDir is never sent from.
 	PathRoots pathroots.PathRoots
@@ -192,6 +194,7 @@ func executeContactSendTool(ctx context.Context, params map[string]any, opts Con
 		MixinKeystoreFile: strings.TrimSpace(opts.MixinKeystoreFile),
 		DiscordBotToken:   strings.TrimSpace(opts.DiscordBotToken),
 		DiscordBaseURL:    strings.TrimSpace(opts.DiscordBaseURL),
+		AgentLinkStateDir: strings.TrimSpace(opts.StateDir),
 	})
 	if err != nil {
 		return "", err
@@ -512,6 +515,10 @@ func validateContactsSendDefaultRoute(contact contacts.Contact) error {
 		_, err = contactsruntime.ResolveLarkTarget(contact)
 	case contacts.ChannelMixin:
 		_, err = contactsruntime.ResolveMixinTarget(contact)
+	case contacts.ChannelAgentLink:
+		if _, ok := contacts.AgentLinkInstanceID(contact.ContactID); !ok {
+			err = fmt.Errorf("contact %s is not an Agent Link agent", contact.ContactID)
+		}
 	default:
 		err = fmt.Errorf("unsupported delivery channel: %s", channel)
 	}
