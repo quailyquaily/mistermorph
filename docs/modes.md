@@ -69,6 +69,18 @@ For the other runtime modes, use the docs below.
 - Purpose: WhatsApp Agent Platform runtime (a private chat with the agent's creator)
 - Docs: [whatsapp.md](./whatsapp.md)
 
+## Bluesky
+
+- Command: `morph bluesky`
+- Purpose: a Bluesky account: direct messages, and replies to public mentions
+- Docs: [bluesky.md](./bluesky.md)
+
+## X
+
+- Command: `morph x` (`morph x login` to authorize the account)
+- Purpose: an X account: direct messages, and replies to public mentions once X approves AI replies
+- Docs: [x.md](./x.md)
+
 ## Note
 
 Legacy standalone daemon mode (`morph serve`) has been removed.

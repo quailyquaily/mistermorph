@@ -1,7 +1,7 @@
 ---
 date: 2026-10-11
 title: X and Bluesky Channels
-status: requirements
+status: implemented-v1
 ---
 
 # X and Bluesky Channels
@@ -100,8 +100,10 @@ the rate limits.
   and `reply.parent` (URI and CID). Mentions and links are **facets** with UTF-8 byte offsets. A post holds 300
   graphemes.
 - Direct messages: the `chat.bsky.convo.*` methods, sent to the PDS with the proxy header naming the chat service
-  (`did:web:api.bsky.chat#bsky_chat`). `getLog` with a cursor returns new events (`logCreateMessage` and others);
-  `getConvoForMembers` finds or opens the conversation with a user; `sendMessage` sends.
+  (`did:web:api.bsky.chat#bsky_chat`). `listConvos` (with `readState=unread`) and `listConvoRequests` list the
+  conversations with something new, `getMessages` reads one, `updateRead` marks it read and `acceptConvo` accepts a
+  request; `getConvoForMembers` finds or opens the conversation with a user; `sendMessage` sends (at most 1,000
+  graphemes). `getLog` is the event stream alternative.
 - A user can allow DMs from everyone, from people they follow, or from no one. The agent can only DM someone who
   allows it.
 
@@ -132,15 +134,16 @@ and `Overview`. X and Bluesky DMs fit it:
 
 | Transport method | X | Bluesky |
 | --- | --- | --- |
-| `Run` | Poll `dm_events`, newest after the stored cursor | Poll `chat.bsky.convo.getLog` with the stored cursor |
+| `Run` | Poll `dm_events`, newest after the stored last event ID | Poll unread `listConvos` and `listConvoRequests`, then `getMessages`, then `updateRead` |
 | `SendText` | `POST /2/dm_conversations/with/{id}/messages` | `getConvoForMembers`, then `sendMessage` |
-| `SendFile` | Image as DM media | Not supported in v1 (chat carries text and embeds) |
+| `SendFile` | Not supported in v1 | Not supported in v1 (chat carries text and embeds) |
 | `Typing` | No-op | No-op |
-| `MaxTextLength` | 10,000 | 1,000 (to check) |
+| `MaxTextLength` | 10,000 | 1,000 |
 
 - Poll intervals are set in config. On X every poll is billed, so its default is slower (60s for DMs) than
   Bluesky's (10s).
-- The cursor is stored in the state dir, so a restart neither replays nor skips messages.
+- X's last event ID is stored in the state dir; Bluesky marks conversations read. The accountdm inbox drops a message
+  already answered, so a restart neither answers twice nor skips messages from the last day.
 - X allows a DM only after the user wrote first. The transport rejects an outbound DM (from `contacts_send` or cron)
   to someone who never wrote, with an error saying why.
 
@@ -235,8 +238,12 @@ bluesky:
 ```
 
 - Secrets come from env vars first and are never returned by the Console API, like the other channels' tokens.
-- `morph x login` runs the OAuth 2.0 PKCE flow once (a local redirect on `127.0.0.1`) and stores the refresh token.
-  The Console offers the same flow in its channel settings.
+- Logging in runs the OAuth 2.0 PKCE flow once, with X redirecting to `127.0.0.1:8765`, from `morph x login` or from
+  the Console's X pane (whose server listens for the redirect, so the browser must run on the Console's machine). The
+  token pair is kept in `file_state_dir/auth/x.json`, beside the other logins, and the runtime saves each rotated
+  refresh token there; nothing is copied into config. `x.refresh_token` remains as an override for headless setups.
+- Both channels also take `owners`: who gets heartbeat notifications. WeChat and WhatsApp treat whoever wrote as the
+  owner; on these channels anyone may write.
 - `assets/config/config.example.yaml`, the config defaults, the Console settings fields and the docs get the same
   keys.
 
@@ -245,24 +252,27 @@ bluesky:
 | Object | Morph reference |
 | --- | --- |
 | X user | `x_user:<user_id>` |
-| X DM conversation | `x:<dm_conversation_id>` |
 | X public thread | `x_thread:<root_post_id>` |
-| Bluesky user | `bsky_user:<did>` |
-| Bluesky DM conversation | `bsky:<convo_id>` |
+| Bluesky user | `bluesky_user:<did>`, with the DID's colons written as dots (`did.plc.abc`) |
+| Bluesky DM chat_id | `bluesky:<did>` (same form) |
+| X DM chat_id | `x:<user_id>` |
 | Bluesky public thread | `bluesky_thread:<root_uri>` |
 | Bus and chat history channel | `x`, `bluesky` |
 
 - User IDs are the stable ones (X numeric ID, Bluesky DID), never the handle, which can change. The handle and
   display name are kept as the contact's nickname and refreshed when seen.
-- `contacts.Contact` gains `XUserID` and `BlueskyDID`. `contacts_send` to such a contact sends a DM, never a public
+- Conversation keys of the account channels cannot hold `:`, which a DID does, so Morph writes a DID's first two
+  colons as dots everywhere it is an ID; the Bluesky client turns it back.
+- `contacts.Contact` gains `XUserID` and `BlueskyUserID`. `contacts_send` to such a contact sends a DM, never a public
   post.
-- An account with the X Automated label or the Bluesky `bot` self-label is recorded as `KindAgent`. Its mentions are
-  not answered, so two agents cannot answer each other in public; agent-to-agent talk goes through DMs or Agent Link.
-- Global `admins` accepts `x_user:<id>` and `bsky_user:<did>`.
+- An account with the Bluesky `bot` self-label is not answered in public, nor in DMs unless allowlisted, so two
+  agents cannot answer each other in a loop; agent-to-agent talk goes through allowlisted DMs or Agent Link. X's API
+  does not expose the Automated label, so on X this rests on the allowlists.
+- Global `admins` accepts `x_user:<id>` and `bluesky_user:<did>`.
 
 ## 9. Phases
 
-1. **Bluesky DMs:** session handling, `getLog` polling, `sendMessage`, contacts. No cost and no approval needed, so
+1. **Bluesky DMs:** session handling, conversation polling, `sendMessage`, contacts. No cost and no approval needed, so
    it is the quickest way to prove the shape.
 2. **Bluesky mentions:** the `socialpost` mode, facets, threads, the opt-out list.
 3. **X DMs:** OAuth login, `dm_events` polling, the first-DM rule, usage counters. Test the encrypted-chat question
@@ -272,14 +282,25 @@ bluesky:
 
 ## 10. Open questions
 
-- Which X auth to use: OAuth 2.0 PKCE (refresh token every 2 hours, needs a stored client secret for confidential
-  apps) or OAuth 1.0a user tokens (no expiry). Proposed: OAuth 2.0, which X documents as current.
+- Which X auth to use. Decided: OAuth 2.0 PKCE; the rotating refresh token is saved in the state dir.
 - Do X's classic DM endpoints still reach conversations in the new encrypted X Chat? To test with real accounts.
-- Bluesky's DM text limit and its rate-limit figures, to confirm against the official pages.
+- Bluesky's rate-limit figures, to confirm against the official pages. (The DM limit is 1,000 graphemes, from the
+  `messageInput` lexicon.)
 - Should a public reply be held for approval by the owner in the Console before it is posted? That would make X's
   "AI replies" approval easier to get, at the cost of slow replies. Proposed as an option, `mentions.review: true`.
 
-## 11. Sources
+## 11. Implementation notes (v1)
+
+- All phases 1 to 4 are built; none was run against the real services. The clients are tested against fake servers.
+- `internal/blueskyapi`, `internal/xapi`: the clients. `internal/channelruntime/socialpost`: the public-mention
+  runtime. `internal/channelruntime/bluesky`, `internal/channelruntime/xchannel`: the channels.
+  `cmd/mistermorph/blueskycmd`, `cmd/mistermorph/xcmd`: `morph bluesky`, `morph x`, `morph x login`.
+- On X the first mention poll only records `since_id`; mentions from before the channel first ran are never answered.
+- With links off, URLs are removed from a public reply before it is posted. X still links bare domains.
+- An answer that would pass `max_posts_per_day` is not posted, and its task fails with that reason.
+- Not built: `mentions.review`, files in DMs, unprompted posts, and the `integration` package's bot constructors.
+
+## 12. Sources
 
 - X API overview and pricing: <https://docs.x.com/x-api/introduction>, <https://docs.x.com/x-api/getting-started/pricing>
   (checked 2026-10-11)

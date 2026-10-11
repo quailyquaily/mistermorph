@@ -17,6 +17,8 @@ import { requestSystemNotificationPermission } from "../core/system-notification
 import channelDiscordLogoURL from "../assets/images/channels/discord.svg";
 import channelWeChatLogoURL from "../assets/images/channels/wechat.svg";
 import channelWhatsAppLogoURL from "../assets/images/channels/whatsapp.svg";
+import channelBlueskyLogoURL from "../assets/images/channels/bluesky.svg";
+import channelXLogoURL from "../assets/images/channels/x.svg";
 import channelLarkLogoURL from "../assets/images/channels/lark.svg";
 import channelLineLogoURL from "../assets/images/channels/line.svg";
 import channelSlackLogoURL from "../assets/images/channels/slack.svg";
@@ -53,12 +55,14 @@ const CHAT_PLATFORM_LOGOS = {
   discord: channelDiscordLogoURL,
   wechat: channelWeChatLogoURL,
   whatsapp: channelWhatsAppLogoURL,
+  bluesky: channelBlueskyLogoURL,
+  x: channelXLogoURL,
   lark: channelLarkLogoURL,
   line: channelLineLogoURL,
   slack: channelSlackLogoURL,
   telegram: channelTelegramLogoURL,
 };
-const CONTACT_REF_PROTOCOLS = new Set(["tg", "slack", "line", "line_user", "lark", "lark_user", "discord", "discord_user", "wechat", "wechat_user", "whatsapp", "whatsapp_user"]);
+const CONTACT_REF_PROTOCOLS = new Set(["tg", "slack", "line", "line_user", "lark", "lark_user", "discord", "discord_user", "wechat", "wechat_user", "whatsapp", "whatsapp_user", "bluesky", "bluesky_user", "x", "x_user"]);
 const UTC_TIMEZONE_ITEMS = [
   { value: "UTC-12", label: "UTC-12", cityKey: "todo_timezone_city_baker_island" },
   { value: "UTC-11", label: "UTC-11", cityKey: "todo_timezone_city_pago_pago" },
@@ -525,7 +529,13 @@ function chatPlatformFromID(chatID) {
   if (protocol === "whatsapp_user") {
     return "whatsapp";
   }
-  if (["slack", "line", "lark", "discord", "wechat", "whatsapp"].includes(protocol)) {
+  if (protocol === "bluesky_user") {
+    return "bluesky";
+  }
+  if (protocol === "x_user") {
+    return "x";
+  }
+  if (["slack", "line", "lark", "discord", "wechat", "whatsapp", "bluesky", "x"].includes(protocol)) {
     return protocol;
   }
   return "";

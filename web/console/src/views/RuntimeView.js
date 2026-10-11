@@ -10,6 +10,8 @@ import mixinLogo from "../assets/images/channels/mixin.svg";
 import discordLogo from "../assets/images/channels/discord.svg";
 import wechatLogo from "../assets/images/channels/wechat.svg";
 import whatsappLogo from "../assets/images/channels/whatsapp.svg";
+import blueskyLogo from "../assets/images/channels/bluesky.svg";
+import xLogo from "../assets/images/channels/x.svg";
 
 import AppDialogShell from "../components/AppDialogShell";
 import PokeDialogContent from "../components/PokeDialogContent";
@@ -114,6 +116,8 @@ const RuntimePanel = {
       channel_discord_configured: false,
       channel_wechat_configured: false,
       channel_whatsapp_configured: false,
+      channel_bluesky_configured: false,
+      channel_x_configured: false,
       channel_running_telegram: false,
       channel_running_slack: false,
       channel_running_line: false,
@@ -122,8 +126,12 @@ const RuntimePanel = {
       channel_running_discord: false,
       channel_running_wechat: false,
       channel_running_whatsapp: false,
+      channel_running_bluesky: false,
+      channel_running_x: false,
       channel_status_wechat: "",
       channel_status_whatsapp: "",
+      channel_status_bluesky: "",
+      channel_status_x: "",
       runtime_go_version: "-",
       runtime_goroutines: 0,
       runtime_heap_alloc_bytes: 0,
@@ -239,17 +247,35 @@ const RuntimePanel = {
         running: overview.channel_running_whatsapp,
         status: overview.channel_status_whatsapp,
       },
+      {
+        key: "bluesky",
+        logo: blueskyLogo,
+        title: t("endpoint_channel_bluesky"),
+        configured: overview.channel_bluesky_configured,
+        running: overview.channel_running_bluesky,
+        status: overview.channel_status_bluesky,
+      },
+      {
+        key: "x",
+        logo: xLogo,
+        title: t("endpoint_channel_x"),
+        configured: overview.channel_x_configured,
+        running: overview.channel_running_x,
+        status: overview.channel_status_x,
+      },
     ]);
-    // WeChat and WhatsApp report their connection: a lost session needs a new login.
+    // The account channels report their connection: a lost session needs a new login, and X can run
+    // out of API credits.
     function channelStatusClass(item) {
       if (!item.running) return "is-unknown";
-      if (item.status === "reauth_needed") return "is-error";
+      if (item.status === "reauth_needed" || item.status === "out_of_credits") return "is-error";
       if (item.status === "disconnected" || item.status === "connecting") return "is-stale";
       return "is-healthy";
     }
     function channelStatusText(item) {
       if (!item.running) return t("runtime_not_running");
       if (item.status === "reauth_needed") return t("runtime_channel_reauth_needed");
+      if (item.status === "out_of_credits") return t("runtime_channel_out_of_credits");
       if (item.status === "disconnected") return t("runtime_channel_reconnecting");
       if (item.status === "connecting") return t("runtime_channel_connecting");
       return t("runtime_status_running");
@@ -296,6 +322,8 @@ const RuntimePanel = {
         const discordRunning = toBool(channel.discord_running, false) || runningChannel === "discord";
         const wechatRunning = toBool(channel.wechat_running, false) || runningChannel === "wechat";
         const whatsappRunning = toBool(channel.whatsapp_running, false) || runningChannel === "whatsapp";
+        const blueskyRunning = toBool(channel.bluesky_running, false) || runningChannel === "bluesky";
+        const xRunning = toBool(channel.x_running, false) || runningChannel === "x";
         overview.channel_running_telegram = telegramRunning;
         overview.channel_running_slack = slackRunning;
         overview.channel_running_line = lineRunning;
@@ -306,6 +334,10 @@ const RuntimePanel = {
         overview.channel_running_whatsapp = whatsappRunning;
         overview.channel_status_wechat = String(channel.wechat_status || "").trim();
         overview.channel_status_whatsapp = String(channel.whatsapp_status || "").trim();
+        overview.channel_running_bluesky = blueskyRunning;
+        overview.channel_running_x = xRunning;
+        overview.channel_status_bluesky = String(channel.bluesky_status || "").trim();
+        overview.channel_status_x = String(channel.x_status || "").trim();
         overview.channel_telegram_configured = toBool(channel.telegram_configured, false) || telegramRunning;
         overview.channel_slack_configured = toBool(channel.slack_configured, false) || slackRunning;
         overview.channel_line_configured = toBool(channel.line_configured, false) || lineRunning;
@@ -314,6 +346,8 @@ const RuntimePanel = {
         overview.channel_discord_configured = toBool(channel.discord_configured, false) || discordRunning;
         overview.channel_wechat_configured = toBool(channel.wechat_configured, false) || wechatRunning;
         overview.channel_whatsapp_configured = toBool(channel.whatsapp_configured, false) || whatsappRunning;
+        overview.channel_bluesky_configured = toBool(channel.bluesky_configured, false) || blueskyRunning;
+        overview.channel_x_configured = toBool(channel.x_configured, false) || xRunning;
         const rt = data && typeof data.runtime === "object" ? data.runtime : {};
         overview.runtime_go_version = rt.go_version || "-";
         overview.runtime_goroutines = toInt(rt.goroutines, 0);

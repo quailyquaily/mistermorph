@@ -531,8 +531,13 @@ func runLoop(ctx context.Context, d Dependencies, opts Options) error {
 }
 
 func taskIDPrefix(channel busruntime.Channel) string {
-	if channel == busruntime.ChannelWeChat {
+	switch channel {
+	case busruntime.ChannelWeChat:
 		return "wx"
+	case busruntime.ChannelBluesky:
+		return "bsky"
+	case busruntime.ChannelX:
+		return "xdm"
 	}
 	return "wa"
 }

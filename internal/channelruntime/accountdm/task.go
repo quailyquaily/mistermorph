@@ -32,8 +32,13 @@ import (
 
 // platformName is the channel's name as users know it.
 func platformName(channel busruntime.Channel) string {
-	if channel == busruntime.ChannelWeChat {
+	switch channel {
+	case busruntime.ChannelWeChat:
 		return "WeChat"
+	case busruntime.ChannelBluesky:
+		return "Bluesky"
+	case busruntime.ChannelX:
+		return "X"
 	}
 	return "WhatsApp"
 }
@@ -174,7 +179,7 @@ func runTask(ctx context.Context, rt *taskruntime.Runtime, env taskEnv, j dmJob,
 		string(env.channel) + "_conv_key": j.ConversationKey,
 	}, taskruntime.ObservationMetaIDs{TaskID: j.TaskID, TraceID: j.TaskID, TopicID: j.PeerID, OriginEventID: j.MessageID})
 	registry := rt.BaseRegistry.Clone()
-	if env.sendFile != nil && strings.TrimSpace(j.FileCacheDir) != "" {
+	if env.sendFile != nil && env.maxFileBytes > 0 && strings.TrimSpace(j.FileCacheDir) != "" {
 		send := func(sendCtx context.Context, path, filename, message string) error {
 			return env.sendFile(sendCtx, j.AccountID, j.PeerID, outboundFile(path, filename, message))
 		}

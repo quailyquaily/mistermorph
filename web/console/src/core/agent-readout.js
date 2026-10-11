@@ -2,7 +2,7 @@
 // Overview drawing. Accepts both the nested payload (llm.model, channel.telegram_running) and the
 // flattened field names used elsewhere (llm_model, channel_running_telegram).
 
-const CHANNELS = ["telegram", "slack", "line", "lark", "mixin", "discord", "wechat", "whatsapp"];
+const CHANNELS = ["telegram", "slack", "line", "lark", "mixin", "discord", "wechat", "whatsapp", "bluesky", "x"];
 
 export function formatUptimeShort(seconds) {
   const total = Math.trunc(Number(seconds));

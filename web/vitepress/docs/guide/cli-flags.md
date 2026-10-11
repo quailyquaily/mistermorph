@@ -184,6 +184,25 @@ This command accepts an optional `profile-name` positional argument. Without one
 - `--whatsapp-task-timeout`: Per-message agent timeout.
 - `--whatsapp-max-concurrency`: Max number of WhatsApp conversations processed concurrently.
 
+## `bluesky`
+
+- `--inspect-prompt`: Dump prompt messages into `./dump`.
+- `--inspect-request`: Dump LLM request/response payloads into `./dump`.
+- `--bluesky-identifier`: Handle or DID of the agent's account.
+- `--bluesky-app-password`: App password with direct-message access.
+- `--bluesky-task-timeout`: Per-message agent timeout.
+- `--bluesky-max-concurrency`: Max number of Bluesky conversations processed concurrently.
+
+## `x`
+
+- `--inspect-prompt`: Dump prompt messages into `./dump`.
+- `--inspect-request`: Dump LLM request/response payloads into `./dump`.
+- `--x-refresh-token`: A refresh token to use instead of the saved login.
+- `--x-task-timeout`: Per-message agent timeout.
+- `--x-max-concurrency`: Max number of X conversations processed concurrently.
+
+`x login`: Opens X's authorization page for the app in `x.client_id`, waits for the callback (`--redirect-url`, default `http://127.0.0.1:8765/x/callback`), and saves the login in `file_state_dir/auth/x.json`. `x logout`: Forgets it.
+
 ## `install`
 
 - `-y, --yes`: Skip confirmation prompts.

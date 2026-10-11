@@ -34,6 +34,8 @@ type observedContactCandidate struct {
 	DiscordChannelIDs   []string
 	WeChatUserID        string
 	WhatsAppUserID      string
+	BlueskyUserID       string
+	XUserID             string
 	SlackTeamID         string
 	SlackUserID         string
 	SlackDMChannelID    string
@@ -79,7 +81,7 @@ func (s *Service) ObserveInboundBusMessageWithResult(ctx context.Context, msg bu
 		return ObserveInboundResult{}, s.observeMixinInboundBusMessage(ctx, msg, now)
 	case busruntime.ChannelDiscord:
 		return ObserveInboundResult{}, s.observeDiscordInboundBusMessage(ctx, msg, now)
-	case busruntime.ChannelWeChat, busruntime.ChannelWhatsApp:
+	case busruntime.ChannelWeChat, busruntime.ChannelWhatsApp, busruntime.ChannelBluesky, busruntime.ChannelX:
 		return ObserveInboundResult{}, s.observeAccountDMInboundBusMessage(ctx, msg, now)
 	default:
 		return ObserveInboundResult{}, nil
@@ -384,9 +386,9 @@ func (s *Service) observeDiscordInboundBusMessage(ctx context.Context, msg busru
 	return s.applyObservedCandidates(ctx, []observedContactCandidate{candidate}, now)
 }
 
-// observeAccountDMInboundBusMessage records the sender of a WeChat or WhatsApp private message as
-// wechat_user:<id> or whatsapp_user:<id>. Both channels only have private chats with one bound
-// account, so the peer in the conversation key is the sender.
+// observeAccountDMInboundBusMessage records the sender of a private message on an account channel
+// as <channel>_user:<id> (wechat_user, whatsapp_user, bluesky_user, x_user). These conversations
+// are private chats of one bound account, so the peer in the conversation key is the sender.
 func (s *Service) observeAccountDMInboundBusMessage(ctx context.Context, msg busruntime.BusMessage, now time.Time) error {
 	_, peerID, err := busruntime.ParseAccountConversationKey(msg.Channel, msg.ConversationKey)
 	if err != nil {
@@ -410,6 +412,18 @@ func (s *Service) observeAccountDMInboundBusMessage(ctx context.Context, msg bus
 			return nil
 		}
 		candidate.PrimaryContactID, candidate.Channel, candidate.WhatsAppUserID = "whatsapp_user:"+id, ChannelWhatsApp, id
+	case busruntime.ChannelBluesky:
+		id := refid.NormalizeBlueskyID(peerID)
+		if id == "" {
+			return nil
+		}
+		candidate.PrimaryContactID, candidate.Channel, candidate.BlueskyUserID = "bluesky_user:"+id, ChannelBluesky, id
+	case busruntime.ChannelX:
+		id := refid.NormalizeXUserID(peerID)
+		if id == "" {
+			return nil
+		}
+		candidate.PrimaryContactID, candidate.Channel, candidate.XUserID = "x_user:"+id, ChannelX, id
 	default:
 		return nil
 	}
@@ -555,6 +569,8 @@ func (s *Service) upsertObservedCandidate(ctx context.Context, candidate observe
 		DiscordChannelIDs:   normalizeDiscordIDs(candidate.DiscordChannelIDs),
 		WeChatUserID:        refid.NormalizeWeChatID(candidate.WeChatUserID),
 		WhatsAppUserID:      refid.NormalizeWhatsAppID(candidate.WhatsAppUserID),
+		BlueskyUserID:       refid.NormalizeBlueskyID(candidate.BlueskyUserID),
+		XUserID:             refid.NormalizeXUserID(candidate.XUserID),
 		SlackTeamID:         strings.TrimSpace(candidate.SlackTeamID),
 		SlackUserID:         strings.TrimSpace(candidate.SlackUserID),
 		SlackDMChannelID:    strings.TrimSpace(candidate.SlackDMChannelID),
@@ -698,6 +714,12 @@ func applyObservedDiscordMerge(contact *Contact, candidate observedContactCandid
 	}
 	if id := refid.NormalizeWhatsAppID(candidate.WhatsAppUserID); id != "" && contact.WhatsAppUserID == "" {
 		contact.WhatsAppUserID = id
+	}
+	if id := refid.NormalizeBlueskyID(candidate.BlueskyUserID); id != "" && contact.BlueskyUserID == "" {
+		contact.BlueskyUserID = id
+	}
+	if id := refid.NormalizeXUserID(candidate.XUserID); id != "" && contact.XUserID == "" {
+		contact.XUserID = id
 	}
 	if userID := refid.NormalizeDiscordID(candidate.DiscordUserID); userID != "" && contact.DiscordUserID == "" {
 		contact.DiscordUserID = userID

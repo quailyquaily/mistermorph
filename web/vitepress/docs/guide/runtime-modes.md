@@ -85,3 +85,24 @@ mistermorph whatsapp --log-level info
 ```
 
 Set `whatsapp.api_token` (or `MISTER_MORPH_WHATSAPP_API_TOKEN`) to the agent's API key. See the [WhatsApp setup document](https://github.com/quailyquaily/mistermorph/blob/master/docs/whatsapp.md).
+
+## Bluesky Account
+
+Run a Bluesky account made for the agent: it answers direct messages, and posts that mention it, in the thread:
+
+```bash
+mistermorph bluesky --log-level info
+```
+
+Set `bluesky.identifier` and `bluesky.app_password` (or `MISTER_MORPH_BLUESKY_APP_PASSWORD`). See the [Bluesky setup document](https://github.com/quailyquaily/mistermorph/blob/master/docs/bluesky.md).
+
+## X Account
+
+Run an X account made for the agent: it answers direct messages, and (once X approves AI replies) posts that mention it. Every X API call is billed:
+
+```bash
+mistermorph x login
+mistermorph x --log-level info
+```
+
+Set `x.client_id`, then log in once with `x login` (or from Console's X pane). See the [X setup document](https://github.com/quailyquaily/mistermorph/blob/master/docs/x.md).

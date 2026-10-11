@@ -118,8 +118,9 @@ func normalizeDiscordSnowflake(value string) (string, error) {
 }
 
 // BuildAccountConversationKey keys a private conversation of a bound account with one peer:
-// "<prefix>:<account>:<peer>". WeChat and WhatsApp keep the account in the key, so rebinding to
-// another account never reads the old account's history. Neither part may contain ":" or spaces.
+// "<prefix>:<account>:<peer>". The account channels (WeChat, WhatsApp, Bluesky, X) keep the account
+// in the key, so rebinding to another account never reads the old account's history. Neither part
+// may contain ":" or spaces.
 func BuildAccountConversationKey(channel Channel, accountID, peerID string) (string, error) {
 	accountID = strings.TrimSpace(accountID)
 	peerID = strings.TrimSpace(peerID)
@@ -178,6 +179,10 @@ func conversationKeyPrefix(channel Channel) string {
 		return "wechat"
 	case ChannelWhatsApp:
 		return "whatsapp"
+	case ChannelBluesky:
+		return "bluesky"
+	case ChannelX:
+		return "x"
 	default:
 		return ""
 	}

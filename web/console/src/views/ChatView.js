@@ -605,6 +605,10 @@ function kickerChannelLabel(mode) {
       return "WeChat";
     case "whatsapp":
       return "WhatsApp";
+    case "bluesky":
+      return "Bluesky";
+    case "x":
+      return "X";
     default:
       return "Endpoint";
   }

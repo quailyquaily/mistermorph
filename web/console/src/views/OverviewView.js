@@ -19,9 +19,11 @@ import mixinLogo from "../assets/images/channels/mixin.svg";
 import discordLogo from "../assets/images/channels/discord.svg";
 import wechatLogo from "../assets/images/channels/wechat.svg";
 import whatsappLogo from "../assets/images/channels/whatsapp.svg";
+import blueskyLogo from "../assets/images/channels/bluesky.svg";
+import xLogo from "../assets/images/channels/x.svg";
 
 const SHOW_ADDRESSES_STORAGE_KEY = "mistermorph_console_overview_show_addresses";
-const CHANNEL_LOGOS = { telegram: telegramLogo, slack: slackLogo, line: lineLogo, lark: larkLogo, mixin: mixinLogo, discord: discordLogo, wechat: wechatLogo, whatsapp: whatsappLogo };
+const CHANNEL_LOGOS = { telegram: telegramLogo, slack: slackLogo, line: lineLogo, lark: larkLogo, mixin: mixinLogo, discord: discordLogo, wechat: wechatLogo, whatsapp: whatsappLogo, bluesky: blueskyLogo, x: xLogo };
 
 const OverviewView = {
   components: {

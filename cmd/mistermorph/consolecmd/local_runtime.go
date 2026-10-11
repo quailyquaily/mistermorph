@@ -58,6 +58,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/topicstate"
 	"github.com/quailyquaily/mistermorph/internal/workspace"
 	"github.com/quailyquaily/mistermorph/internal/xaiauth"
+	"github.com/quailyquaily/mistermorph/internal/xlogin"
 	"github.com/quailyquaily/mistermorph/llm"
 	"github.com/quailyquaily/mistermorph/tools"
 	"github.com/spf13/viper"
@@ -1366,20 +1367,30 @@ func (r *consoleLocalRuntime) routesOptions(authToken string) daemonruntime.Rout
 					"discord_configured":  strings.TrimSpace(reader.GetString("discord.bot_token")) != "",
 					"wechat_configured":   strings.TrimSpace(reader.GetString("wechat.bot_token")) != "",
 					"whatsapp_configured": strings.TrimSpace(reader.GetString("whatsapp.api_token")) != "",
-					"running":             "console",
-					"telegram_running":    r.isManagedRuntimeRunning("telegram"),
-					"slack_running":       r.isManagedRuntimeRunning("slack"),
-					"lark_running":        r.isManagedRuntimeRunning("lark"),
-					"mixin_running":       r.isManagedRuntimeRunning("mixin"),
-					"mixin_connected":     r.mixinConnected.Load(),
-					"discord_running":     r.isManagedRuntimeRunning("discord"),
-					"discord_connected":   r.discordConnected.Load(),
-					"wechat_running":      r.isManagedRuntimeRunning("wechat"),
-					"wechat_status":       r.accountDMStatusOf("wechat"),
-					"wechat_connected":    r.accountDMStatusOf("wechat") == "online",
-					"whatsapp_running":    r.isManagedRuntimeRunning("whatsapp"),
-					"whatsapp_status":     r.accountDMStatusOf("whatsapp"),
-					"whatsapp_connected":  r.accountDMStatusOf("whatsapp") == "online",
+					"bluesky_configured": strings.TrimSpace(reader.GetString("bluesky.identifier")) != "" &&
+						strings.TrimSpace(reader.GetString("bluesky.app_password")) != "",
+					"x_configured": strings.TrimSpace(reader.GetString("x.client_id")) != "" &&
+						xlogin.Configured(reader.GetString("file_state_dir"), reader.GetString("x.refresh_token")),
+					"running":            "console",
+					"telegram_running":   r.isManagedRuntimeRunning("telegram"),
+					"slack_running":      r.isManagedRuntimeRunning("slack"),
+					"lark_running":       r.isManagedRuntimeRunning("lark"),
+					"mixin_running":      r.isManagedRuntimeRunning("mixin"),
+					"mixin_connected":    r.mixinConnected.Load(),
+					"discord_running":    r.isManagedRuntimeRunning("discord"),
+					"discord_connected":  r.discordConnected.Load(),
+					"wechat_running":     r.isManagedRuntimeRunning("wechat"),
+					"wechat_status":      r.accountDMStatusOf("wechat"),
+					"wechat_connected":   r.accountDMStatusOf("wechat") == "online",
+					"whatsapp_running":   r.isManagedRuntimeRunning("whatsapp"),
+					"whatsapp_status":    r.accountDMStatusOf("whatsapp"),
+					"whatsapp_connected": r.accountDMStatusOf("whatsapp") == "online",
+					"bluesky_running":    r.isManagedRuntimeRunning("bluesky"),
+					"bluesky_status":     r.accountDMStatusOf("bluesky"),
+					"bluesky_connected":  r.accountDMStatusOf("bluesky") == "online",
+					"x_running":          r.isManagedRuntimeRunning("x"),
+					"x_status":           r.accountDMStatusOf("x"),
+					"x_connected":        r.accountDMStatusOf("x") == "online",
 				},
 				"poke_enabled":     r.canPokeAwareness(),
 				"cron_run_enabled": r.canRunCron(),

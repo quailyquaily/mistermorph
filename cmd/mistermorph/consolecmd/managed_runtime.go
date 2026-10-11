@@ -13,6 +13,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/agentsettings"
 	"github.com/quailyquaily/mistermorph/internal/channelopts"
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/accountdm"
+	blueskyruntime "github.com/quailyquaily/mistermorph/internal/channelruntime/bluesky"
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/depsutil"
 	discordruntime "github.com/quailyquaily/mistermorph/internal/channelruntime/discord"
 	larkruntime "github.com/quailyquaily/mistermorph/internal/channelruntime/lark"
@@ -21,6 +22,7 @@ import (
 	telegramruntime "github.com/quailyquaily/mistermorph/internal/channelruntime/telegram"
 	wechatruntime "github.com/quailyquaily/mistermorph/internal/channelruntime/wechat"
 	whatsappruntime "github.com/quailyquaily/mistermorph/internal/channelruntime/whatsapp"
+	xruntime "github.com/quailyquaily/mistermorph/internal/channelruntime/xchannel"
 	"github.com/quailyquaily/mistermorph/internal/daemonruntime"
 	"github.com/quailyquaily/mistermorph/internal/llmconfig"
 	"github.com/quailyquaily/mistermorph/internal/llmselect"
@@ -32,6 +34,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/skillsutil"
 	"github.com/quailyquaily/mistermorph/internal/toolsutil"
 	"github.com/quailyquaily/mistermorph/internal/topiccontext"
+	"github.com/quailyquaily/mistermorph/internal/xlogin"
 	"github.com/quailyquaily/mistermorph/llm"
 	"github.com/quailyquaily/mistermorph/tools"
 	"github.com/spf13/viper"
@@ -45,6 +48,8 @@ const (
 	managedRuntimeDiscord  = "discord"
 	managedRuntimeWeChat   = "wechat"
 	managedRuntimeWhatsApp = "whatsapp"
+	managedRuntimeBluesky  = "bluesky"
+	managedRuntimeX        = "x"
 )
 
 type managedRuntimeSupervisor struct {
@@ -91,7 +96,7 @@ func normalizeManagedRuntimeKinds(raw []string) ([]string, error) {
 			continue
 		}
 		switch kind {
-		case managedRuntimeTelegram, managedRuntimeSlack, managedRuntimeLark, managedRuntimeMixin, managedRuntimeDiscord, managedRuntimeWeChat, managedRuntimeWhatsApp:
+		case managedRuntimeTelegram, managedRuntimeSlack, managedRuntimeLark, managedRuntimeMixin, managedRuntimeDiscord, managedRuntimeWeChat, managedRuntimeWhatsApp, managedRuntimeBluesky, managedRuntimeX:
 		default:
 			return nil, fmt.Errorf("unsupported console.managed_runtimes entry %q", item)
 		}
@@ -320,7 +325,7 @@ func stopManagedRuntimeExecution(active *managedRuntimeExecution, localRuntime *
 				localRuntime.mixinConnected.Store(false)
 			case managedRuntimeDiscord:
 				localRuntime.discordConnected.Store(false)
-			case managedRuntimeWeChat, managedRuntimeWhatsApp:
+			case managedRuntimeWeChat, managedRuntimeWhatsApp, managedRuntimeBluesky, managedRuntimeX:
 				localRuntime.SetAccountDMStatus(kind, "")
 			}
 		}
@@ -547,6 +552,44 @@ func (s *managedRuntimeSupervisor) buildRuntime(kind string, reader *viper.Viper
 			s.accountDMStatusFunc(kind)(whatsappruntime.StatusConnecting)
 			return whatsappruntime.Run(ctx, runtimeDeps, runOpts)
 		}, cleanup, nil
+	case managedRuntimeBluesky:
+		deps, cleanup, err := buildManagedRuntimeDepsFromReader(s.logger(), reader)
+		if err != nil {
+			return nil, nil, err
+		}
+		runOpts := channelopts.BuildBlueskyRunOptions(channelopts.BlueskyConfigFromReader(reader), "console", s.inspectPrompt, s.inspectRequest)
+		runOpts.ServerListen = ""
+		runOpts.ServerAuthToken = ""
+		runOpts.OnStatusChange = s.accountDMStatusFunc(kind)
+		runOpts.TaskStore, err = newManagedRuntimeTaskStore(kind, runOpts.ServerMaxQueue, deps)
+		if err != nil {
+			cleanup()
+			return nil, nil, err
+		}
+		runtimeDeps := s.accountDMDependencies(deps, runtimeValues, reader)
+		return func(ctx context.Context) error {
+			s.accountDMStatusFunc(kind)(blueskyruntime.StatusConnecting)
+			return blueskyruntime.Run(ctx, runtimeDeps, runOpts)
+		}, cleanup, nil
+	case managedRuntimeX:
+		deps, cleanup, err := buildManagedRuntimeDepsFromReader(s.logger(), reader)
+		if err != nil {
+			return nil, nil, err
+		}
+		runOpts := channelopts.BuildXRunOptions(channelopts.XConfigFromReader(reader), "console", s.inspectPrompt, s.inspectRequest)
+		runOpts.ServerListen = ""
+		runOpts.ServerAuthToken = ""
+		runOpts.OnStatusChange = s.accountDMStatusFunc(kind)
+		runOpts.TaskStore, err = newManagedRuntimeTaskStore(kind, runOpts.ServerMaxQueue, deps)
+		if err != nil {
+			cleanup()
+			return nil, nil, err
+		}
+		runtimeDeps := s.accountDMDependencies(deps, runtimeValues, reader)
+		return func(ctx context.Context) error {
+			s.accountDMStatusFunc(kind)(xruntime.StatusConnecting)
+			return xruntime.Run(ctx, runtimeDeps, runOpts)
+		}, cleanup, nil
 	default:
 		return nil, nil, fmt.Errorf("unsupported managed runtime %q", kind)
 	}
@@ -591,11 +634,25 @@ func managedRuntimeMissingCredential(kind string, reader *viper.Viper) (string, 
 		if strings.TrimSpace(reader.GetString("whatsapp.api_token")) == "" {
 			return "whatsapp.api_token", "set MISTER_MORPH_WHATSAPP_API_TOKEN or whatsapp.api_token", true
 		}
+	case managedRuntimeBluesky:
+		if strings.TrimSpace(reader.GetString("bluesky.identifier")) == "" {
+			return "bluesky.identifier", "set bluesky.identifier to the agent account's handle", true
+		}
+		if strings.TrimSpace(reader.GetString("bluesky.app_password")) == "" {
+			return "bluesky.app_password", "set MISTER_MORPH_BLUESKY_APP_PASSWORD or bluesky.app_password", true
+		}
+	case managedRuntimeX:
+		if strings.TrimSpace(reader.GetString("x.client_id")) == "" {
+			return "x.client_id", "set x.client_id to the X app's OAuth 2.0 client ID", true
+		}
+		if !xlogin.Configured(reader.GetString("file_state_dir"), reader.GetString("x.refresh_token")) {
+			return "x login", "log in from Settings > Channels > X, or run `morph x login`", true
+		}
 	}
 	return "", "", false
 }
 
-// accountDMStatusFunc records a WeChat or WhatsApp runtime's connection status for the overview.
+// accountDMStatusFunc records an account channel runtime's connection status for the overview.
 func (s *managedRuntimeSupervisor) accountDMStatusFunc(kind string) func(string) {
 	return func(status string) {
 		if s.localRuntime != nil {
@@ -634,7 +691,7 @@ func managedRuntimeKindsFromReader(r interface {
 
 func newManagedRuntimeTaskStore(kind string, maxItems int, deps depsutil.CommonDependencies) (daemonruntime.TaskView, error) {
 	switch kind {
-	case managedRuntimeTelegram, managedRuntimeSlack, managedRuntimeLark, managedRuntimeMixin, managedRuntimeDiscord, managedRuntimeWeChat, managedRuntimeWhatsApp:
+	case managedRuntimeTelegram, managedRuntimeSlack, managedRuntimeLark, managedRuntimeMixin, managedRuntimeDiscord, managedRuntimeWeChat, managedRuntimeWhatsApp, managedRuntimeBluesky, managedRuntimeX:
 		return daemonruntime.NewTaskViewForTarget(kind, maxItems, daemonruntime.TaskViewConfig{
 			PersistenceTargets: deps.TaskPersistenceTargets,
 			TasksDir:           deps.RuntimePaths.TasksDir,

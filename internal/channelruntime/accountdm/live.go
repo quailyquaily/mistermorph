@@ -63,10 +63,13 @@ func (s *liveSender) SendFile(ctx context.Context, peerID, path, filename, capti
 	return s.transport.SendFile(ctx, account, peerID, outboundFile(path, filename, caption))
 }
 
-// NotifyTargets are the users who wrote to this account. Both platforms let only one person use
-// the account (the WeChat user who scanned the QR code, the WhatsApp agent's creator), so that is
-// its owner.
+// NotifyTargets are the account's owners. WeChat and WhatsApp let only one person use the account
+// (the WeChat user who scanned the QR code, the WhatsApp agent's creator), so whoever wrote is its
+// owner; a channel anyone may write to names its owners (OwnerTransport).
 func (s *liveSender) NotifyTargets() []string {
+	if owned, ok := s.transport.(OwnerTransport); ok {
+		return owned.Owners()
+	}
 	return s.peers.list(s.transport.AccountID())
 }
 

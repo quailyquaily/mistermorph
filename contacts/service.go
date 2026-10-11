@@ -251,6 +251,12 @@ func (s *Service) upsertContact(ctx context.Context, contact Contact, now time.T
 		if contact.WhatsAppUserID == "" && existing.WhatsAppUserID != "" {
 			contact.WhatsAppUserID = existing.WhatsAppUserID
 		}
+		if contact.BlueskyUserID == "" && existing.BlueskyUserID != "" {
+			contact.BlueskyUserID = existing.BlueskyUserID
+		}
+		if contact.XUserID == "" && existing.XUserID != "" {
+			contact.XUserID = existing.XUserID
+		}
 		if len(contact.DiscordChannelIDs) == 0 && len(existing.DiscordChannelIDs) > 0 {
 			contact.DiscordChannelIDs = append([]string(nil), existing.DiscordChannelIDs...)
 		}
@@ -354,6 +360,12 @@ func pairContactIdentityMatches(a, b Contact) bool {
 		return true
 	}
 	if aID, bID := refid.NormalizeWhatsAppID(a.WhatsAppUserID), refid.NormalizeWhatsAppID(b.WhatsAppUserID); aID != "" && aID == bID {
+		return true
+	}
+	if aID, bID := refid.NormalizeBlueskyID(a.BlueskyUserID), refid.NormalizeBlueskyID(b.BlueskyUserID); aID != "" && aID == bID {
+		return true
+	}
+	if aID, bID := refid.NormalizeXUserID(a.XUserID), refid.NormalizeXUserID(b.XUserID); aID != "" && aID == bID {
 		return true
 	}
 	return false
@@ -571,7 +583,7 @@ func contactNotFoundError(contactID string) error {
 	contactID = strings.TrimSpace(contactID)
 	if protocol, id, ok := refid.Parse(contactID); ok {
 		switch protocol {
-		case "tg", "slack", "line", "line_user", "lark", "lark_user", "mixin", "discord", "discord_user", "wechat", "wechat_user", "whatsapp", "whatsapp_user":
+		case "tg", "slack", "line", "line_user", "lark", "lark_user", "mixin", "discord", "discord_user", "wechat", "wechat_user", "whatsapp", "whatsapp_user", "bluesky", "bluesky_user", "x", "x_user":
 			return fmt.Errorf("contact not found: %s", contactID)
 		default:
 			return fmt.Errorf("hint: protocol '%q' is not mapped. Try to find other ways to send to '%s' in protocol/tool '%s'.", protocol, id, protocol)
@@ -695,6 +707,10 @@ func ResolveDecisionChannel(contact Contact, decision ShareDecision) (string, er
 			available = refid.NormalizeWeChatID(contact.WeChatUserID) != ""
 		case ChannelWhatsApp:
 			available = refid.NormalizeWhatsAppID(contact.WhatsAppUserID) != ""
+		case ChannelBluesky:
+			available = refid.NormalizeBlueskyID(contact.BlueskyUserID) != ""
+		case ChannelX:
+			available = refid.NormalizeXUserID(contact.XUserID) != ""
 		case ChannelAgentLink:
 			_, available = AgentLinkInstanceID(contact.ContactID)
 		}
@@ -736,6 +752,14 @@ func ResolveDecisionChannel(contact Contact, decision ShareDecision) (string, er
 		if refid.NormalizeWhatsAppID(contact.WhatsAppUserID) != "" {
 			return ChannelWhatsApp, nil
 		}
+	case ChannelBluesky:
+		if refid.NormalizeBlueskyID(contact.BlueskyUserID) != "" {
+			return ChannelBluesky, nil
+		}
+	case ChannelX:
+		if refid.NormalizeXUserID(contact.XUserID) != "" {
+			return ChannelX, nil
+		}
 	}
 	if hasSlackTarget(contact) {
 		return ChannelSlack, nil
@@ -760,6 +784,12 @@ func ResolveDecisionChannel(contact Contact, decision ShareDecision) (string, er
 	}
 	if refid.NormalizeWeChatID(contact.WeChatUserID) != "" {
 		return ChannelWeChat, nil
+	}
+	if refid.NormalizeBlueskyID(contact.BlueskyUserID) != "" {
+		return ChannelBluesky, nil
+	}
+	if refid.NormalizeXUserID(contact.XUserID) != "" {
+		return ChannelX, nil
 	}
 	if _, ok := AgentLinkInstanceID(contact.ContactID); ok {
 		return ChannelAgentLink, nil
@@ -789,6 +819,10 @@ func contactReferenceChannel(contactID string) string {
 		return ChannelWeChat
 	case "whatsapp", "whatsapp_user":
 		return ChannelWhatsApp
+	case "bluesky", "bluesky_user":
+		return ChannelBluesky
+	case "x", "x_user":
+		return ChannelX
 	case agentLinkProtocol:
 		return ChannelAgentLink
 	default:
@@ -1123,6 +1157,12 @@ func resolveChannelFromChatIDHint(chatID string) (string, bool, error) {
 		case "whatsapp":
 			_, _, err := refid.ParseWhatsAppChatIDHint(value)
 			return ChannelWhatsApp, true, err
+		case "bluesky":
+			_, _, err := refid.ParseBlueskyChatIDHint(value)
+			return ChannelBluesky, true, err
+		case "x":
+			_, _, err := refid.ParseXChatIDHint(value)
+			return ChannelX, true, err
 		case agentLinkProtocol:
 			if _, ok := AgentLinkInstanceID(value); !ok {
 				return ChannelAgentLink, true, fmt.Errorf("invalid agent link chat_id %q", value)

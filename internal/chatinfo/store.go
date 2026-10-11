@@ -272,6 +272,18 @@ func NormalizeChatID(raw string) (string, error) {
 			return "", err
 		}
 		value = "whatsapp:" + id
+	case "bluesky":
+		id, _, err := refid.ParseBlueskyChatIDHint(value)
+		if err != nil {
+			return "", err
+		}
+		value = "bluesky:" + id
+	case "x":
+		id, _, err := refid.ParseXChatIDHint(value)
+		if err != nil {
+			return "", err
+		}
+		value = "x:" + id
 	default:
 		return "", fmt.Errorf("invalid chat_id: %s", strings.TrimSpace(raw))
 	}
@@ -286,7 +298,7 @@ func PlatformFromChatID(chatID string) string {
 	switch protocol {
 	case "tg":
 		return "telegram"
-	case "slack", "line", "lark", "mixin", "discord", "wechat", "whatsapp":
+	case "slack", "line", "lark", "mixin", "discord", "wechat", "whatsapp", "bluesky", "x":
 		return protocol
 	default:
 		return ""

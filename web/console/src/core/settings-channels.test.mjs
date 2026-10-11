@@ -27,7 +27,7 @@ test("console channel settings expose line, lark, mixin, and discord alongside t
   assert.match(source, /\["line", consoleLineDirty, "settings_console_line_title"\]/);
   assert.match(source, /\["lark", consoleLarkDirty, "settings_console_lark_title"\]/);
   assert.match(source, /\["mixin", consoleMixinDirty, "settings_console_mixin_title"\]/);
-  assert.match(source, /const known = \["runtimes", "telegram", "slack", "line", "lark", "mixin", "discord", "whatsapp", "guard"\];/);
+  assert.match(source, /const known = \["runtimes", "telegram", "slack", "line", "lark", "mixin", "discord", "whatsapp", "bluesky", "x", "guard"\];/);
   assert.match(source, /mixin: mixinSaveDisabled,/);
   assert.match(source, /consoleFieldEnvManaged\('line', 'channel_access_token'\)/);
   assert.match(source, /consoleFieldEnvManaged\('lark', 'app_secret'\)/);

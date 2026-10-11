@@ -776,6 +776,85 @@ whatsapp:
   # Protected by server.auth_token.
   serve_listen: ""
 
+# Bluesky account mode (`morph bluesky`): direct messages, and replies to public mentions.
+# Use an account made for the agent, with the "bot" self-label on its profile.
+bluesky:
+  # The PDS that hosts the account.
+  service_url: "https://bsky.social"
+  # Handle or DID of the agent's account.
+  identifier: ""
+  # App password with direct-message access (Settings > Privacy and security > App passwords,
+  # "Allow access to your direct messages"). Prefer env var: MISTER_MORPH_BLUESKY_APP_PASSWORD
+  app_password: ""
+  # Handles or DIDs of the account's owners: heartbeat notifications go to them by direct message.
+  owners: []
+  dm:
+    enabled: true
+    poll_interval: "10s"
+    # Handles or DIDs who may message the agent. Empty allows anyone the account accepts messages
+    # from; they can then run tasks and approve tool calls, so keep it set on a public account.
+    allowed_user_ids: []
+  mentions:
+    # Answer posts that mention the account or reply to it, in the thread.
+    enabled: true
+    poll_interval: "30s"
+    # Handles or DIDs whose mentions are answered; empty answers anyone.
+    allowed_user_ids: []
+    blocked_user_ids: []
+    # How many posts above a mention the agent reads.
+    thread_context_depth: 6
+    # The most posts one answer is split into.
+    max_reply_posts: 3
+  # Per-message agent timeout (0 uses top-level timeout).
+  task_timeout: "0s"
+  # Max number of conversations processed concurrently.
+  max_concurrency: 3
+  # Runtime API listen address for the Bluesky runtime (standard base path: `/runtime`).
+  # Protected by server.auth_token. Served when dm.enabled is on.
+  serve_listen: ""
+
+# X (Twitter) account mode (`morph x`): direct messages, and replies to public mentions.
+# Use an account made for the agent with X's "Automated" label, and register an app in the X
+# Developer Console (OAuth 2.0, callback http://127.0.0.1:8765/x/callback). Every X API call is
+# billed to the app's credits.
+x:
+  # OAuth 2.0 client ID of the X app.
+  client_id: ""
+  # OAuth 2.0 client secret, for a confidential app. Prefer env var: MISTER_MORPH_X_CLIENT_SECRET
+  client_secret: ""
+  # Log in once with `morph x login` (or Console > Settings > Channels > X): the login is kept in
+  # file_state_dir/auth/x.json and renewed by the runtime. A refresh token here, or in
+  # MISTER_MORPH_X_REFRESH_TOKEN, is used instead of it (for headless setups).
+  refresh_token: ""
+  # API base URL (override for mock/testing only).
+  base_url: ""
+  # User IDs or @usernames of the account's owners: heartbeat notifications go to them. X lets the
+  # account message only people who messaged it first.
+  owners: []
+  dm:
+    enabled: true
+    # Each poll is billed; keep it slow.
+    poll_interval: "60s"
+    # User IDs or @usernames who may message the agent. Empty allows anyone who can message the
+    # account; they can then run tasks and approve tool calls.
+    allowed_user_ids: []
+  mentions:
+    # Off until X approves AI-generated replies for the app (X Developer Guidelines).
+    enabled: false
+    poll_interval: "120s"
+    allowed_user_ids: []
+    blocked_user_ids: []
+    # Each post read is billed, so the agent reads few posts above a mention.
+    thread_context_depth: 3
+    max_reply_posts: 3
+    # The most posts made in a UTC day; 0 is no limit.
+    max_posts_per_day: 50
+    # A post with a link costs over 13 times as much; off removes links from replies.
+    allow_links_in_posts: false
+  task_timeout: "0s"
+  max_concurrency: 3
+  serve_listen: ""
+
 # Heartbeat (periodic awareness/checkpoint).
 # Heartbeat is scheduled by the cron service; set cron.enabled: true to run it.
 heartbeat:

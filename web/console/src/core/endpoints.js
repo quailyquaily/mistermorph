@@ -67,6 +67,10 @@ function endpointChannelLabel(mode, t) {
       return t("endpoint_channel_wechat");
     case "whatsapp":
       return t("endpoint_channel_whatsapp");
+    case "bluesky":
+      return t("endpoint_channel_bluesky");
+    case "x":
+      return t("endpoint_channel_x");
     default:
       return String(mode || "").trim() || t("chat_readonly_unknown_channel");
   }
@@ -96,6 +100,10 @@ function endpointChannelTone(mode) {
       return "wechat";
     case "whatsapp":
       return "whatsapp";
+    case "bluesky":
+      return "bluesky";
+    case "x":
+      return "x";
     default:
       return "default";
   }
