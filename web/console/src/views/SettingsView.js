@@ -810,6 +810,9 @@ const SettingsView = {
     const agentSaving = ref(false);
     const agentSavingTarget = ref("");
     const agentSettingsReadOnly = ref(false);
+    // Set when a remote endpoint has no /settings/agent routes (HTTP 404); the agent, routes, tools
+    // and MCP sections then show a hint instead of an editable form.
+    const agentSettingsUnsupported = ref(false);
     const agentSettingsReadOnlyReason = ref("");
     const agentSettingsReadOnlyMessage = computed(
       () => trimText(agentSettingsReadOnlyReason.value) || t("settings_agent_llm_hint_read_only")
@@ -2357,6 +2360,7 @@ const SettingsView = {
       llmSecretDirty.clear();
       agentSettingsReadOnly.value = false;
       agentSettingsReadOnlyReason.value = "";
+      agentSettingsUnsupported.value = false;
       llmConfigPath.value = "";
       settingsConfigRevision.value = "";
       agentConfigValues.value = {};
@@ -2365,8 +2369,12 @@ const SettingsView = {
       clearLoadedAgentSnapshots();
     }
 
+    function isAgentSettingsUnsupportedError(err, endpointRef) {
+      return trimText(endpointRef) !== LOCAL_CONSOLE_ENDPOINT_REF && err?.status === 404;
+    }
+
     function agentSettingsErrorMessage(err, endpointRef, fallbackKey) {
-      if (trimText(endpointRef) !== LOCAL_CONSOLE_ENDPOINT_REF && err?.status === 404) {
+      if (isAgentSettingsUnsupportedError(err, endpointRef)) {
         return t("settings_agent_endpoint_unsupported");
       }
       return err?.message || t(fallbackKey);
@@ -3076,10 +3084,15 @@ const SettingsView = {
         if (!isCurrentAgentSettingsRequest(requestSeq, targetEndpointRef)) {
           return;
         }
+        agentSettingsUnsupported.value = false;
         llmConfigPath.value = typeof data.config_path === "string" ? data.config_path : "";
         applyPayload(data);
       } catch (e) {
         if (!isCurrentAgentSettingsRequest(requestSeq, targetEndpointRef)) {
+          return;
+        }
+        if (isAgentSettingsUnsupportedError(e, targetEndpointRef)) {
+          agentSettingsUnsupported.value = true;
           return;
         }
         notice.error(agentSettingsErrorMessage(e, targetEndpointRef, "msg_load_failed"));
@@ -5423,6 +5436,7 @@ const SettingsView = {
       agentSavingTarget,
       agentFormDisabledReason,
       agentSettingsReadOnly,
+      agentSettingsUnsupported,
       agentSettingsReadOnlyMessage,
       agentValidationVisible,
       deleteProfileDialogOpen,
@@ -5785,7 +5799,19 @@ const SettingsView = {
               <QButton v-else class="primary xs" :loading="restartState.busy" @click="restartProcess(false)">{{ t("settings_restart_now") }}</QButton>
             </div>
           </div>
-          <div v-if="selectedSection.id === 'agent'" class="settings-panel-body settings-panel-body-plain">
+          <div
+            v-if="agentSettingsUnsupported && ['agent', 'routes', 'tools', 'mcp'].includes(selectedSection.id)"
+            class="settings-panel-body settings-panel-body-plain"
+          >
+            <AppSection variant="boxed" :title="selectedSection.title" :meta="selectedSection.meta">
+              <div class="settings-endpoint-unsupported" role="status">
+                <PhPlugs class="settings-endpoint-unsupported-icon" aria-hidden="true" />
+                <p class="settings-endpoint-unsupported-title">{{ t("settings_agent_endpoint_unsupported") }}</p>
+                <p class="settings-endpoint-unsupported-copy">{{ t("settings_agent_endpoint_unsupported_hint") }}</p>
+              </div>
+            </AppSection>
+          </div>
+          <div v-else-if="selectedSection.id === 'agent'" class="settings-panel-body settings-panel-body-plain">
             <div class="settings-profiles-main">
             <AppSection variant="boxed" :title="t('settings_agent_block_title')" :meta="selectedSection.meta">
               <template #actions>

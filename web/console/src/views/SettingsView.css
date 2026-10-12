@@ -1611,3 +1611,38 @@ body:has(.settings-page) .q-dialog .q-menu-item.danger .q-menu-title {
 .app-section-meta .config-settings-restart {
   margin-right: 8px;
 }
+
+.settings-endpoint-unsupported {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 40px 16px;
+  border: 1px dashed color-mix(in srgb, var(--line-soft) 84%, transparent);
+  border-radius: 2px;
+  text-align: center;
+}
+
+.settings-endpoint-unsupported-icon {
+  width: 28px;
+  height: 28px;
+  margin-bottom: 4px;
+  color: var(--text-2);
+}
+
+.settings-endpoint-unsupported-title {
+  margin: 0;
+  max-width: 36ch;
+  font-family: var(--font-title);
+  font-size: var(--font-size-body);
+  line-height: 1.2;
+  color: color-mix(in srgb, var(--text-0) 82%, var(--text-2));
+}
+
+.settings-endpoint-unsupported-copy {
+  margin: 0;
+  max-width: 48ch;
+  font-size: var(--font-size-meta);
+  line-height: 1.5;
+  color: var(--text-2);
+  text-wrap: pretty;
+}
