@@ -290,6 +290,8 @@ func TestRuntimeAPIListsProgramTasksAndRecoversOnlyItsOwn(t *testing.T) {
 	defer api.close()
 	if info, ok := api.store.Get("program_task"); !ok || info.Status != daemonruntime.TaskDone {
 		t.Fatalf("program_task = %+v, want listed as done", info)
+	} else if final, _ := info.Result.(map[string]any)["final"].(map[string]any); final["output"] != "from the program" {
+		t.Fatalf("program_task result = %#v, want result.final.output", info.Result)
 	}
 	if info, _ := api.store.Get("stale_api"); info == nil || info.Status != daemonruntime.TaskCanceled {
 		t.Fatalf("stale_api = %+v, want canceled", info)

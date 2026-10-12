@@ -429,8 +429,8 @@ func (a *runtimeAPI) recoverStaleTasks() error {
 	return nil
 }
 
-// runtimeAPITaskOutput reads the final output from a task result, whether it holds the agent's
-// final answer (tasks run over the API) or a plain output summary (tasks the program persisted).
+// runtimeAPITaskOutput reads the final output from a task result: result.final.output, as every
+// task stores it now, or result.output, as tasks the program persisted stored it before.
 func runtimeAPITaskOutput(result any) string {
 	if result == nil {
 		return ""

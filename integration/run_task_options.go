@@ -194,7 +194,7 @@ func appendIntegrationTaskDone(journal *domainjournal.Journal, trigger taskdomai
 	output := textutil.TruncateRunes(integrationFinalOutput(final), 4000)
 	task.Status = taskdomain.TaskDone
 	task.FinishedAt = &finishedAt
-	task.Result = map[string]any{"output": output}
+	task.Result = map[string]any{"final": map[string]any{"output": output}} // as tasks run over the API store it
 	_, err := taskdomain.AppendJournalEvent(journal, defaultIntegrationTaskTarget, taskdomain.JournalTypeTaskUpdate, finishedAt, trigger, &task, nil)
 	return err
 }
