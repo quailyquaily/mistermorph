@@ -103,6 +103,11 @@ test("task status helpers and taskAgentText keep runtime semantics", () => {
     ),
     "Keep the streamed text."
   );
+  assert.equal(
+    taskAgentText({ id: "task_program", status: "done", result: { output: " From the program. " } }, t),
+    "From the program."
+  );
+  assert.equal(taskAgentText({ id: "task_empty", status: "done", result: {} }, t), "No output.");
 });
 
 test("finished plan steps with a note become the agent's messages", () => {

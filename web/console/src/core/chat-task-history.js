@@ -177,6 +177,12 @@ function taskOutputText(task) {
   if (finalOutput !== undefined && finalOutput !== null) {
     return stringifyResult(finalOutput);
   }
+  // Tasks an embedding program ran through the integration package used to store a plain
+  // result.output summary instead.
+  const legacyOutput = task?.result?.output;
+  if (typeof legacyOutput === "string") {
+    return legacyOutput.trim();
+  }
   return "";
 }
 
