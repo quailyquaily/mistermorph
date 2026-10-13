@@ -2007,6 +2007,10 @@ const ChatView = {
       if (input) {
         input.value = "";
       }
+      await uploadComposerFileList(files);
+    }
+
+    async function uploadComposerFileList(files) {
       if (files.length === 0 || composerUploading.value) {
         return;
       }
@@ -2117,6 +2121,66 @@ const ChatView = {
           });
         }
       }
+    }
+
+    // Files dragged from the desktop onto the chat pane upload like files picked with the composer's
+    // upload action. Only drags that carry files count, so dragging a topic is unaffected; the depth
+    // counter keeps the overlay up while the pointer crosses child elements.
+    const composerDropActive = ref(false);
+    let composerDragDepth = 0;
+
+    function dragCarriesFiles(event) {
+      return Array.from(event?.dataTransfer?.types || []).includes("Files");
+    }
+
+    function onChatPaneDragEnter(event) {
+      if (!dragCarriesFiles(event)) {
+        return;
+      }
+      event.preventDefault();
+      composerDragDepth += 1;
+      composerDropActive.value = true;
+    }
+
+    function onChatPaneDragOver(event) {
+      if (!dragCarriesFiles(event)) {
+        return;
+      }
+      event.preventDefault();
+      event.dataTransfer.dropEffect = composerAddDisabled.value ? "none" : "copy";
+    }
+
+    function onChatPaneDragLeave(event) {
+      if (!dragCarriesFiles(event)) {
+        return;
+      }
+      composerDragDepth = Math.max(0, composerDragDepth - 1);
+      if (composerDragDepth === 0) {
+        composerDropActive.value = false;
+      }
+    }
+
+    function onChatPaneDrop(event) {
+      if (!dragCarriesFiles(event)) {
+        return;
+      }
+      event.preventDefault();
+      composerDragDepth = 0;
+      composerDropActive.value = false;
+      if (composerAddDisabled.value) {
+        return;
+      }
+      void uploadComposerFileList(Array.from(event.dataTransfer.files || []));
+    }
+
+    // A file dropped outside the chat pane would otherwise make the browser open it in place of
+    // the console. The chat pane's handlers run first and have already accepted the drag there.
+    function preventWindowFileDrop(event) {
+      if (!dragCarriesFiles(event) || event.defaultPrevented) {
+        return;
+      }
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "none";
     }
 
     function releaseComposerFilePreviewURL() {
@@ -4404,6 +4468,8 @@ const ChatView = {
     watch(historyViewport, () => nextTick(syncHistoryScrollbarWidth));
 
     onMounted(() => {
+      window.addEventListener("dragover", preventWindowFileDrop);
+      window.addEventListener("drop", preventWindowFileDrop);
       window.addEventListener("resize", refreshMobileMode);
       window.addEventListener("resize", syncHistoryScrollbarWidth);
       refreshMobileMode();
@@ -4434,6 +4500,8 @@ const ChatView = {
       closeComposerFilePreview();
       historyLoadVersion += 1;
       persistComposerDraft();
+      window.removeEventListener("dragover", preventWindowFileDrop);
+      window.removeEventListener("drop", preventWindowFileDrop);
       window.removeEventListener("resize", refreshMobileMode);
       window.removeEventListener("resize", syncHistoryScrollbarWidth);
       window.removeEventListener("keydown", onMobileWorkspaceSidebarKeydown);
@@ -4705,6 +4773,11 @@ const ChatView = {
       openComposerWorkspaceBrowser,
       openComposerFilePicker,
       uploadComposerFiles,
+      composerDropActive,
+      onChatPaneDragEnter,
+      onChatPaneDragOver,
+      onChatPaneDragLeave,
+      onChatPaneDrop,
       previewComposerFile,
       navigateComposerFilePreview,
       removeComposerFile,
@@ -4929,7 +5002,25 @@ const ChatView = {
             :label="t('chat_topic_new')"
             @click="startNewTopic"
           />
-          <section v-if="showChatPane" :class="chatMainClass" :style="chatMainStyle">
+          <section
+            v-if="showChatPane"
+            :class="chatMainClass"
+            :style="chatMainStyle"
+            @dragenter="onChatPaneDragEnter"
+            @dragover="onChatPaneDragOver"
+            @dragleave="onChatPaneDragLeave"
+            @drop="onChatPaneDrop"
+          >
+            <div
+              v-if="composerDropActive"
+              :class="['chat-file-drop', { 'is-disabled': composerAddDisabled }]"
+              aria-hidden="true"
+            >
+              <PhPaperclip class="chat-file-drop-icon" />
+              <p class="chat-file-drop-title">
+                {{ composerAddDisabled ? t("chat_composer_drop_unavailable") : t("chat_composer_drop_files") }}
+              </p>
+            </div>
             <section v-if="showChatPlaceholder" class="chat-placeholder">
               <div class="chat-placeholder-copy">
                 <h3 class="chat-placeholder-title workspace-document-title">{{ deskTitle }}</h3>

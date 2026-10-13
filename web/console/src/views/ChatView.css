@@ -433,6 +433,44 @@
   isolation: isolate;
 }
 
+/* Shown while files are dragged over the chat pane. pointer-events: none keeps the drag events
+   on the pane itself. */
+.chat-file-drop {
+  position: absolute;
+  inset: 10px;
+  z-index: 60;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 10px;
+  border: 2px dashed color-mix(in srgb, var(--accent-1) 70%, transparent);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--q-bg-paper) 88%, transparent);
+  backdrop-filter: blur(2px);
+  pointer-events: none;
+}
+
+.chat-file-drop.is-disabled {
+  border-color: color-mix(in srgb, var(--line) 80%, transparent);
+}
+
+.chat-file-drop-icon {
+  width: 32px;
+  height: 32px;
+  color: var(--accent-1);
+}
+
+.chat-file-drop.is-disabled .chat-file-drop-icon {
+  color: var(--text-2);
+}
+
+.chat-file-drop-title {
+  margin: 0;
+  font-family: var(--font-title);
+  font-size: var(--font-size-body);
+  color: var(--text-0);
+}
+
 /* Tracing paper over the drafting grid: the body grid shows through faintly so the sheet keeps its
    texture, but no longer cuts through message text. The topic sidebar keeps the full grid. */
 .chat-main::before {
