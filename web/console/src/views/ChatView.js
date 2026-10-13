@@ -697,6 +697,14 @@ const ChatView = {
     const composerFilePreviewID = ref("");
     const composerFilePreviewName = ref("");
     const composerFilePreviewKind = ref("");
+    // An image preview sizes the dialog to the image, up to the fixed height other previews use, so
+    // a wide image leaves no blank band. Decided from the name too, so stepping between images
+    // does not flash the fixed size while the next one loads.
+    const composerFilePreviewFitsImage = computed(
+      () =>
+        composerFilePreviewKind.value === "image" ||
+        COMPOSER_FILE_IMAGE_EXTENSIONS.has(composerFileExtension(composerFilePreviewName.value))
+    );
     const composerFilePreviewURL = ref("");
     const composerFilePreviewText = ref("");
     const composerFilePreviewError = ref("");
@@ -4576,6 +4584,7 @@ const ChatView = {
       composerFilePreviewLoading,
       composerFilePreviewName,
       composerFilePreviewKind,
+      composerFilePreviewFitsImage,
       composerFilePreviewURL,
       composerFilePreviewText,
       composerFilePreviewError,
@@ -5912,10 +5921,10 @@ const ChatView = {
           v-model="composerFilePreviewOpen"
           :title="composerFilePreviewName"
           width="880px"
-          height="min(78vh, 760px)"
+          :height="composerFilePreviewFitsImage ? 'auto' : 'min(78vh, 760px)'"
           @close="closeComposerFilePreview"
         >
-          <section class="chat-composer-file-preview">
+          <section :class="['chat-composer-file-preview', { 'is-image-fit': composerFilePreviewFitsImage }]">
             <div class="chat-composer-file-preview-stage">
               <p v-if="composerFilePreviewLoading" class="chat-composer-file-preview-status">
                 {{ t("chat_composer_file_preview_loading") }}

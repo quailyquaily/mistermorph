@@ -2875,9 +2875,13 @@ body.artifact-preview-scroll-lock {
   font-size: var(--font-size-meta);
 }
 
+/* A grid so the image can center with auto margins: one shorter than the stage sits in the middle
+   instead of leaving the space below it blank, while a taller one starts at the top and scrolls
+   (auto margins collapse to 0 on overflow, so its top is never cut off). */
 .chat-composer-file-preview-image-scroll {
   width: 100%;
   height: 100%;
+  display: grid;
   overflow: auto;
 }
 
@@ -2886,7 +2890,24 @@ body.artifact-preview-scroll-lock {
   width: auto;
   height: auto;
   max-width: 100%;
-  margin: 0 auto;
+  margin: auto;
+}
+
+/* The dialog takes the image's height (its own height is auto): the image fits the width and at
+   most the height other previews get, minus the header. */
+.chat-composer-file-preview.is-image-fit,
+.chat-composer-file-preview.is-image-fit .chat-composer-file-preview-stage,
+.chat-composer-file-preview.is-image-fit .chat-composer-file-preview-image-scroll {
+  height: auto;
+}
+
+/* Until the image is there, keep the dialog from collapsing around the loading line. */
+.chat-composer-file-preview.is-image-fit .chat-composer-file-preview-stage:not(:has(img)) {
+  min-height: 240px;
+}
+
+.chat-composer-file-preview.is-image-fit .chat-composer-file-preview-image {
+  max-height: calc(min(78vh, 760px) - 44px);
 }
 
 .chat-composer-file-preview-pdf {
