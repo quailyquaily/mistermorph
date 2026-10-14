@@ -29,6 +29,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/livesend"
 	"github.com/quailyquaily/mistermorph/internal/mixinapi"
 	"github.com/quailyquaily/mistermorph/internal/slackclient"
+	"github.com/quailyquaily/mistermorph/internal/telegramapi"
 )
 
 const defaultTelegramBaseURL = "https://api.telegram.org"
@@ -1096,7 +1097,7 @@ func (s *RoutingSender) sendTelegramTarget(ctx context.Context, target any, text
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := s.telegramClient.Do(req)
+	resp, err := telegramapi.Do(s.telegramClient, req)
 	if err != nil {
 		return err
 	}

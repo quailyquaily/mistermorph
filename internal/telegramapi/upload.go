@@ -101,7 +101,7 @@ func SendFile(ctx context.Context, httpClient *http.Client, baseURL, token strin
 	}
 	req.Header.Set("Content-Type", mw.FormDataContentType())
 
-	resp, err := httpClient.Do(req)
+	resp, err := Do(httpClient, req)
 	if err != nil {
 		return err
 	}

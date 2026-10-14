@@ -13,6 +13,7 @@ import (
 
 	refid "github.com/quailyquaily/mistermorph/internal/entryutil/refid"
 	"github.com/quailyquaily/mistermorph/internal/larkapi"
+	"github.com/quailyquaily/mistermorph/internal/telegramapi"
 )
 
 const (
@@ -340,7 +341,7 @@ func (f *Fetcher) doJSON(ctx context.Context, method string, reqURL string, auth
 	if auth = strings.TrimSpace(auth); auth != "" {
 		req.Header.Set("Authorization", auth)
 	}
-	resp, err := f.client.Do(req)
+	resp, err := telegramapi.Do(f.client, req)
 	if err != nil {
 		return err
 	}

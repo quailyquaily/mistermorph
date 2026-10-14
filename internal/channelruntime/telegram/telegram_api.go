@@ -155,7 +155,7 @@ func (api *telegramAPI) getMe(ctx context.Context) (*telegramUser, error) {
 	if err != nil {
 		return nil, err
 	}
-	resp, err := api.http.Do(req)
+	resp, err := telegramapi.Do(api.http, req)
 	if err != nil {
 		return nil, telegramTransportError(err)
 	}
@@ -193,7 +193,7 @@ func (api *telegramAPI) getUpdates(ctx context.Context, offset int64, timeout ti
 	if err != nil {
 		return nil, offset, err
 	}
-	resp, err := api.http.Do(req)
+	resp, err := telegramapi.Do(api.http, req)
 	if err != nil {
 		return nil, offset, err
 	}
@@ -322,7 +322,7 @@ func (api *telegramAPI) getFile(ctx context.Context, fileID string) (*telegramFi
 	if err != nil {
 		return nil, err
 	}
-	resp, err := api.http.Do(req)
+	resp, err := telegramapi.Do(api.http, req)
 	if err != nil {
 		return nil, telegramTransportError(err)
 	}
@@ -353,7 +353,7 @@ func (api *telegramAPI) contactAvatar(ctx context.Context, userID int64) ([]byte
 	if err != nil {
 		return nil, false, err
 	}
-	resp, err := api.http.Do(req)
+	resp, err := telegramapi.Do(api.http, req)
 	if err != nil {
 		return nil, false, telegramTransportError(err)
 	}
@@ -411,7 +411,7 @@ func (api *telegramAPI) openFile(ctx context.Context, filePath string) (*http.Re
 	if err != nil {
 		return nil, err
 	}
-	resp, err := api.http.Do(req)
+	resp, err := telegramapi.Do(api.http, req)
 	if err != nil {
 		return nil, telegramTransportError(err)
 	}
@@ -657,7 +657,7 @@ func (api *telegramAPI) postSendMessage(ctx context.Context, reqBody any) (int64
 		return 0, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := api.http.Do(req)
+	resp, err := telegramapi.Do(api.http, req)
 	if err != nil {
 		return 0, err
 	}
@@ -710,7 +710,7 @@ func (api *telegramAPI) answerCallbackQuery(ctx context.Context, callbackQueryID
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := api.http.Do(req)
+	resp, err := telegramapi.Do(api.http, req)
 	if err != nil {
 		return err
 	}
@@ -744,7 +744,7 @@ func (api *telegramAPI) editMessageWithParseMode(ctx context.Context, chatID int
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := api.http.Do(req)
+	resp, err := telegramapi.Do(api.http, req)
 	if err != nil {
 		return err
 	}
@@ -815,7 +815,7 @@ func (api *telegramAPI) setMessageReaction(ctx context.Context, chatID int64, me
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := api.http.Do(req)
+	resp, err := telegramapi.Do(api.http, req)
 	if err != nil {
 		return err
 	}

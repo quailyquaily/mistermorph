@@ -16,6 +16,7 @@ import (
 	busruntime "github.com/quailyquaily/mistermorph/internal/bus"
 	"github.com/quailyquaily/mistermorph/internal/chathistory"
 	"github.com/quailyquaily/mistermorph/internal/idempotency"
+	"github.com/quailyquaily/mistermorph/internal/telegramapi"
 )
 
 const mentionUserSnapshotLimit = 12
@@ -641,7 +642,7 @@ func (api *telegramAPI) sendChatActionInThread(ctx context.Context, chatID int64
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := api.http.Do(req)
+	resp, err := telegramapi.Do(api.http, req)
 	if err != nil {
 		return err
 	}
