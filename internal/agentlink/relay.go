@@ -16,6 +16,9 @@ const (
 	deliverTimeout = 20 * time.Second
 )
 
+// errSendQueueFull ends a connection whose runtime reads frames slower than the relay sends them.
+var errSendQueueFull = errors.New("send queue full")
+
 // ErrDuplicateInstance is returned by Relay.Serve when a runtime with the same instance ID is
 // already connected.
 var ErrDuplicateInstance = errors.New("agentlink: instance id is already connected")
@@ -34,7 +37,7 @@ type relayMember struct {
 	peer   Peer
 	label  string
 	ctx    context.Context
-	cancel context.CancelFunc
+	cancel context.CancelCauseFunc
 	out    chan Frame
 }
 
@@ -50,7 +53,7 @@ func (m *relayMember) send(frame Frame) bool {
 	case <-m.ctx.Done():
 		return false
 	default:
-		m.cancel()
+		m.cancel(errSendQueueFull)
 		return false
 	}
 }
@@ -100,8 +103,8 @@ func (r *Relay) broadcastRosterLocked() {
 // Serve runs one runtime's connection until it closes or ctx ends. label names the endpoint in
 // logs.
 func (r *Relay) Serve(ctx context.Context, conn Conn, label string) error {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
+	ctx, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
 	go func() {
 		<-ctx.Done()
 		_ = conn.Close()
@@ -136,7 +139,10 @@ func (r *Relay) Serve(ctx context.Context, conn Conn, label string) error {
 	r.broadcastRosterLocked()
 	r.mu.Unlock()
 	r.logger.Info("agentlink_member_joined", "instance_id", member.peer.InstanceID, "agent_name", member.peer.AgentName, "endpoint", label)
-	defer r.removeMember(member)
+	// Why the connection ended, for the log: the runtime closed it, the network dropped it, or it
+	// went silent past idleTimeout. "closed" means this side ended it (ctx done).
+	reason := "closed"
+	defer func() { r.removeMember(member, reason) }()
 
 	go func() {
 		ticker := time.NewTicker(pingInterval)
@@ -147,12 +153,12 @@ func (r *Relay) Serve(ctx context.Context, conn Conn, label string) error {
 				return
 			case frame := <-member.out:
 				if err := conn.WriteFrame(ctx, frame); err != nil {
-					cancel()
+					cancel(fmt.Errorf("write: %w", err))
 					return
 				}
 			case <-ticker.C:
 				if err := conn.WriteFrame(ctx, Frame{Type: FramePing}); err != nil {
-					cancel()
+					cancel(fmt.Errorf("write ping: %w", err))
 					return
 				}
 			}
@@ -160,12 +166,16 @@ func (r *Relay) Serve(ctx context.Context, conn Conn, label string) error {
 	}()
 
 	for {
-		frame, err := conn.ReadFrame(ctx)
-		if err != nil {
+		frame, readErr := conn.ReadFrame(ctx)
+		if readErr != nil {
 			if ctx.Err() != nil {
+				if cause := context.Cause(ctx); cause != nil && !errors.Is(cause, context.Canceled) {
+					reason = cause.Error()
+				}
 				return nil
 			}
-			return err
+			reason = readErr.Error()
+			return readErr
 		}
 		switch frame.Type {
 		case FrameSend:
@@ -190,8 +200,8 @@ func (r *Relay) Serve(ctx context.Context, conn Conn, label string) error {
 	}
 }
 
-func (r *Relay) removeMember(member *relayMember) {
-	member.cancel()
+func (r *Relay) removeMember(member *relayMember, reason string) {
+	member.cancel(nil)
 	var unreachable []*pendingDelivery
 	var unreachableIDs []string
 	r.mu.Lock()
@@ -215,7 +225,7 @@ func (r *Relay) removeMember(member *relayMember) {
 	for i, p := range unreachable {
 		p.source.send(Frame{Type: FrameSendResult, LeaseID: p.leaseID, MessageID: unreachableIDs[i], Status: StatusUnreachable})
 	}
-	r.logger.Info("agentlink_member_left", "instance_id", member.peer.InstanceID, "endpoint", member.label)
+	r.logger.Info("agentlink_member_left", "instance_id", member.peer.InstanceID, "endpoint", member.label, "reason", reason)
 }
 
 func (r *Relay) route(source *relayMember, frame Frame) {
