@@ -63,6 +63,24 @@ Integration uses its configured logger without changing the host process's defau
 
 Set `workspace_dir` to an existing project directory when direct integration runs need a default workspace. `NewChecked` validates it, and `RunTask`, `NewRunEngine`, and registries returned by `NewRegistry` use the same directory. An empty value preserves the existing file-cache fallback.
 
+## Tool search and codemode for embedder tools
+
+`RunTask`, `RunTaskWithOptions`, `NewRunEngine` and the bots honor `tools.tool_search` and `tools.codemode` like the CLI does; both are on by default. `BuiltinToolNames` does not select them: turn them off with `cfg.Set("tools.tool_search.enabled", false)` or `cfg.Set("tools.codemode.enabled", false)`.
+
+Tools in the registry you pass can opt in to two optional interfaces from the `tools` package. A tool that wraps another must forward them.
+
+```go
+// Deferred: tool_search keeps the tool out of requests until the model finds it, like MCP tools.
+// Use it when you bring many tools, for example from an MCP client you run yourself.
+func (t *myTool) Deferred() bool { return true }
+
+// CodeModeExcluded: codemode scripts cannot call the tool, so the model calls it directly.
+// Use it for a tool that asks the user before it acts.
+func (t *myTool) CodeModeExcluded() bool { return true }
+```
+
+With a `TopicID`, `RunTaskWithOptions` treats the topic as one conversation: tools found by `tool_search` stay visible on its later turns.
+
 ## Prompt blocks
 
 `integration.Config.AddPromptBlock(...)` appends static prompt content into the system prompt's `Additional Policies` section.

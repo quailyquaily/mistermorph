@@ -239,3 +239,26 @@ func TestToolSearchDefaultsOnAndStaysOutWithoutMCP(t *testing.T) {
 		t.Fatal("no MCP configured, but the prompt has the tool search block")
 	}
 }
+
+// deferredTool is an embedder tool that asks tool search to hide it.
+type deferredTool struct{ namedTool }
+
+func (deferredTool) Deferred() bool { return true }
+
+func TestToolSearchOptionHidesDeferredTools(t *testing.T) {
+	cfg := toolsutil.ToolSearchConfig{Enabled: true}
+	reg := tools.NewRegistry()
+	_ = reg.Register(namedTool{name: "read_file"})
+	_ = reg.Register(deferredTool{namedTool{name: "inua_window_list"}})
+	opt, closeSearch, err := ToolSearchOption(reg, nil, cfg, nil, nil)
+	if opt == nil || err != nil {
+		t.Fatalf("deferred tool: option = %v, err = %v; want tool search on", opt != nil, err)
+	}
+	_ = closeSearch()
+	if opt, _, _ := ToolSearchOption(reg, nil, cfg, []string{"inua_window_list"}, nil); opt != nil {
+		t.Fatal("deferred tool already visible: want no option")
+	}
+	if !searchHidden(deferredTool{namedTool{name: "x"}}) || searchHidden(namedTool{name: "x"}) {
+		t.Fatal("searchHidden must hide deferred tools only")
+	}
+}

@@ -14,6 +14,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/pathroots"
 	"github.com/quailyquaily/mistermorph/internal/taskdomain"
 	"github.com/quailyquaily/mistermorph/internal/textutil"
+	"github.com/quailyquaily/mistermorph/internal/topiccontext"
 	"github.com/quailyquaily/mistermorph/tools"
 )
 
@@ -73,6 +74,11 @@ func (rt *Runtime) RunTaskWithOptions(ctx context.Context, task string, opts Run
 
 	runOpts.Meta = integrationRunMeta(runOpts.Meta, taskID, runID, topicID, traceID)
 	ctx = llmstats.WithRunID(ctx, runID)
+	// A topic is one conversation: tool search keeps the tools found in it visible on later turns,
+	// and the topic's context size is tracked, as in the channel runtimes.
+	if _, scoped := topiccontext.ScopeFromContext(ctx); !scoped && topicID != "" {
+		ctx = topiccontext.WithScope(ctx, topiccontext.Scope{Runtime: defaultIntegrationTaskTarget, ConversationKey: runOpts.SessionID, TopicID: topicID})
+	}
 	ctx = pathroots.WithWorkspaceDir(ctx, rt.snapshot().DefaultWorkspaceDir)
 	profile := strings.TrimSpace(opts.LLMProfile)
 	if profile != "" || strings.TrimSpace(runOpts.Model) == "" {

@@ -28,8 +28,8 @@ type CodeModeConfig struct {
 	MaxParallelCalls int
 }
 
-// ToolSearchConfig is tools.tool_search: when enabled, MCP tools stay hidden until the model
-// finds them with tool_search.
+// ToolSearchConfig is tools.tool_search: when enabled, MCP tools and tools.Deferred tools stay
+// hidden until the model finds them with tool_search.
 type ToolSearchConfig struct {
 	Enabled bool
 }

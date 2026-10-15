@@ -47,6 +47,7 @@ func loadRuntimeSnapshotFromReader(v *viper.Viper) runtimeSnapshot {
 	logOpts := cloneLogOptions(logutil.LogOptionsFromConfig(logutil.LogOptionsConfigFromReader(v)))
 	llmValues, llmErr := llmutil.RuntimeValuesFromReader(v)
 	staticRegistry, registryErr := toolsutil.StaticRegistryConfigFromReader(v)
+	runtimeTools := toolsutil.LoadRuntimeToolsRegisterConfigFromReader(v)
 	guardConfig, guardErr := guard.SnapshotFromReader(v)
 	defaultWorkspaceDir, workspaceErr := workspace.ValidateDefaultDir(v.GetString("workspace_dir"))
 
@@ -79,6 +80,8 @@ func loadRuntimeSnapshotFromReader(v *viper.Viper) runtimeSnapshot {
 			ToolsImageEditEnabled:     v.GetBool("tools.image_edit.enabled"),
 			TaskPersistenceTargets:    append([]string(nil), v.GetStringSlice("tasks.persistence_targets")...),
 			TasksRotateMaxBytes:       v.GetInt64("tasks.rotate_max_bytes"),
+			ToolSearch:                runtimeTools.ToolSearch,
+			CodeMode:                  runtimeTools.CodeMode,
 		},
 		Guard:               guardConfig,
 		Telegram:            channelopts.TelegramConfigFromReader(v),

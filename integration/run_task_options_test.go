@@ -293,3 +293,52 @@ func decodeTaskJournalPayload(t *testing.T, raw json.RawMessage) taskdomain.Jour
 	}
 	return payload
 }
+
+// embedderTool stands for a tool an embedder brings, such as one from its own MCP client.
+type embedderTool struct {
+	name     string
+	deferred bool
+}
+
+func (t embedderTool) Name() string          { return t.name }
+func (embedderTool) Description() string     { return "Embedder tool." }
+func (embedderTool) ParameterSchema() string { return `{"type":"object","properties":{}}` }
+func (embedderTool) Execute(context.Context, map[string]any) (string, error) {
+	return "ok", nil
+}
+func (t embedderTool) Deferred() bool { return t.deferred }
+
+func TestRunTaskWithOptionsOffersToolSearchAndCodeModeForEmbedderTools(t *testing.T) {
+	var names []string
+	chat := func(ctx context.Context, req llm.Request) (llm.Result, error) {
+		if names == nil {
+			for _, tool := range req.Tools {
+				names = append(names, tool.Name)
+			}
+		}
+		return llm.Result{Text: `{"type":"final","output":"ok"}`}, nil
+	}
+
+	cfg := DefaultConfig()
+	cfg.Features.Skills = false
+	cfg.Set("file_state_dir", t.TempDir())
+	cfg.Set("llm.provider", "openai")
+	cfg.Set("llm.model", "gpt-5.2")
+	rt := newRuntimeWithStubIntegrationClient(cfg, chat)
+
+	reg := rt.NewRegistry()
+	_ = reg.Register(embedderTool{name: "inua_window_list"})
+	_ = reg.Register(embedderTool{name: "inua_mail_search", deferred: true})
+	if _, err := rt.RunTaskWithOptions(context.Background(), "ping", RunTaskOptions{Registry: reg, TopicID: "topic_tools"}); err != nil {
+		t.Fatalf("RunTaskWithOptions() error = %v", err)
+	}
+	offered := "," + strings.Join(names, ",") + ","
+	for _, want := range []string{"tool_search", "codemode", "inua_window_list"} {
+		if !strings.Contains(offered, ","+want+",") {
+			t.Fatalf("request tools = %v, want %s", names, want)
+		}
+	}
+	if strings.Contains(offered, ",inua_mail_search,") {
+		t.Fatalf("request tools = %v, want the deferred tool hidden until found", names)
+	}
+}

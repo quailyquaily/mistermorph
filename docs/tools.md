@@ -492,7 +492,7 @@ Result (the tool's observation):
 Rules:
 
 - Every call goes through the same checks as a direct call: visibility, `tool_repeat_limit`, guard pre-check and output redaction, hooks, events and audit. A guard deny rejects the call's promise; a call that needs approval stops the script with `requires_direct_call`. The script is never rerun automatically.
-- Scripts cannot call `codemode`, `tool_search`, `plan_create`, `message_react`, `bash`, `powershell`, `skill_install` or tools that end the run.
+- Scripts cannot call `codemode`, `tool_search`, `plan_create`, `message_react`, `bash`, `powershell`, `skill_install`, tools that end the run, or tools that implement `tools.CodeModeExcluded` and return true (for example an embedder's tool that asks the user before it acts).
 - With tool search, a script can call MCP tools the model already sees, and tools its own `searchTools` found (a `server` search connects that server). Those stay invisible to the model and are not remembered by the conversation.
 - Read-only (parallel-safe) calls run concurrently up to `max_parallel_calls`; any other call runs alone, in issue order.
 - When the script ends, calls it issued but that have not started are dropped (`not_started`); started calls finish within the deadline. A timeout or cancellation cancels them.

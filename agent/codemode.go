@@ -182,7 +182,8 @@ type codeModeOp struct {
 }
 
 // codeModeExcluded reports tools a script may not call: they change the run's state when they
-// finish (plan, reaction, ending the run), run commands, or need approval.
+// finish (plan, reaction, ending the run), run commands, need approval, or say so themselves
+// (tools.CodeModeExcluded, e.g. a tool that asks the user before it acts).
 func codeModeExcluded(name string, tool tools.Tool) bool {
 	switch normalizedToolName(name) {
 	case codeModeToolName, toolSearchToolName, "plan_create", reactionToolName, "bash", "powershell":
@@ -194,7 +195,7 @@ func codeModeExcluded(name string, tool tools.Tool) bool {
 	if stopper, ok := tool.(interface{ StopAfterSuccess() bool }); ok && stopper.StopAfterSuccess() {
 		return true
 	}
-	return false
+	return tools.IsCodeModeExcluded(tool)
 }
 
 // eligible finds a tool the script may call: visible to the model, or selected by a search in

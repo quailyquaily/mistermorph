@@ -32,8 +32,14 @@ func CodeModeOption(reg *tools.Registry, cfg toolsutil.CodeModeConfig) (agent.Op
 	}), nil
 }
 
-// ToolSearchOption prepares tool search for one run: MCP tools stay hidden until the model finds
-// them, except visible (tools found earlier in the conversation, and tools of servers the task
+// searchHidden reports the tools tool search keeps out of requests until the model finds them: the
+// runtime's MCP tools, and tools that ask for it (tools.Deferred), such as an embedder's own.
+func searchHidden(tool tools.Tool) bool {
+	return mcphost.IsTool(tool) || tools.IsDeferred(tool)
+}
+
+// ToolSearchOption prepares tool search for one run: MCP and deferred tools stay hidden until the
+// model finds them, except visible (tools found earlier in the conversation, and tools of servers the task
 // referenced). It returns a nil option when tool search is off or nothing would
 // be hidden. The returned close function releases servers the run connected; it is never nil.
 func ToolSearchOption(reg *tools.Registry, servers []mcphost.ServerStatus, cfg toolsutil.ToolSearchConfig, visible []string, logger *slog.Logger) (agent.Option, func() error, error) {
@@ -51,12 +57,12 @@ func ToolSearchOption(reg *tools.Registry, servers []mcphost.ServerStatus, cfg t
 	}
 	return agent.WithToolSearch(agent.ToolSearchOptions{
 		Catalog: catalog,
-		Hidden:  mcphost.IsTool,
+		Hidden:  searchHidden,
 		Visible: initial,
 	}), catalog.Close, nil
 }
 
-// runToolCatalog is what tool_search reaches for one run: the run registry's MCP tools, and the
+// runToolCatalog is what tool_search reaches for one run: the run registry's hidden tools, and the
 // configured servers, which it connects at most once per run and closes with the run.
 type runToolCatalog struct {
 	reg     *tools.Registry
@@ -121,7 +127,7 @@ func (c *runToolCatalog) hidesSomething(visible []string) bool {
 		shown[name] = true
 	}
 	for _, tool := range c.reg.All() {
-		if mcphost.IsTool(tool) && !shown[tool.Name()] {
+		if searchHidden(tool) && !shown[tool.Name()] {
 			return true
 		}
 	}

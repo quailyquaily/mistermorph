@@ -239,3 +239,17 @@ func TestCodeModeFailureKeepsObservation(t *testing.T) {
 		t.Fatalf("observation = %+v", out)
 	}
 }
+
+// askingTool asks the user inside Execute, so scripts must not call it.
+type askingTool struct{ codeTestTool }
+
+func (askingTool) CodeModeExcluded() bool { return true }
+
+func TestCodeModeExcludesToolsThatSaySo(t *testing.T) {
+	if !codeModeExcluded("window_close", askingTool{codeTestTool{name: "window_close"}}) {
+		t.Fatal("a CodeModeExcluded tool must be excluded")
+	}
+	if codeModeExcluded("window_list", codeTestTool{name: "window_list"}) {
+		t.Fatal("a plain tool must stay callable from scripts")
+	}
+}

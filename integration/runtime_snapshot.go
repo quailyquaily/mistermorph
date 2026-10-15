@@ -58,6 +58,10 @@ type registrySnapshot struct {
 	ToolsImageEditEnabled     bool
 	TaskPersistenceTargets    []string
 	TasksRotateMaxBytes       int64
+	// ToolSearch and CodeMode are run options rather than registered tools, so BuiltinToolNames
+	// does not select them; tools.tool_search.enabled and tools.codemode.enabled turn them off.
+	ToolSearch toolsutil.ToolSearchConfig
+	CodeMode   toolsutil.CodeModeConfig
 }
 
 func cloneLogOptions(in agent.LogOptions) agent.LogOptions {

@@ -236,3 +236,26 @@ func TestConfigAddPromptBlockAppliesTrimmedBlocks(t *testing.T) {
 		t.Fatalf("second injected prompt block = %q, want %q", spec.Blocks[baseBlocks+1].Content, "custom block two")
 	}
 }
+
+func TestRuntimeSnapshotPassesToolSearchAndCodeMode(t *testing.T) {
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+
+	defaults := New(DefaultConfig())
+	tools := defaults.sharedDependencies(defaults.snapshot()).RuntimeToolsConfig
+	if !tools.ToolSearch.Enabled || !tools.CodeMode.Enabled {
+		t.Fatalf("defaults: tool_search = %v, codemode = %v; want both on", tools.ToolSearch.Enabled, tools.CodeMode.Enabled)
+	}
+	if tools.CodeMode.Timeout <= 0 || tools.CodeMode.MaxToolCalls <= 0 {
+		t.Fatalf("codemode limits = %+v, want the configured defaults", tools.CodeMode)
+	}
+
+	cfg := DefaultConfig()
+	cfg.Set("tools.tool_search.enabled", false)
+	cfg.Set("tools.codemode.enabled", false)
+	rt := New(cfg)
+	tools = rt.sharedDependencies(rt.snapshot()).RuntimeToolsConfig
+	if tools.ToolSearch.Enabled || tools.CodeMode.Enabled {
+		t.Fatalf("overrides: tool_search = %v, codemode = %v; want both off", tools.ToolSearch.Enabled, tools.CodeMode.Enabled)
+	}
+}
