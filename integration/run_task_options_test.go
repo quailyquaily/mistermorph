@@ -342,3 +342,61 @@ func TestRunTaskWithOptionsOffersToolSearchAndCodeModeForEmbedderTools(t *testin
 		t.Fatalf("request tools = %v, want the deferred tool hidden until found", names)
 	}
 }
+
+func TestRunTaskWithOptionsKeepsFoundToolsForTheTopic(t *testing.T) {
+	script := []llm.Result{
+		{ToolCalls: []llm.ToolCall{{ID: "1", Name: "tool_search", Arguments: map[string]any{"query": "mail"}}}},
+		{ToolCalls: []llm.ToolCall{{ID: "2", Name: "inua_mail_search", Arguments: map[string]any{}}}},
+		{Text: `{"type":"final","output":"found it"}`},
+	}
+	var requests [][]string
+	chat := func(ctx context.Context, req llm.Request) (llm.Result, error) {
+		var names []string
+		for _, tool := range req.Tools {
+			names = append(names, tool.Name)
+		}
+		requests = append(requests, names)
+		if len(script) == 0 {
+			return llm.Result{Text: `{"type":"final","output":"ok"}`}, nil
+		}
+		next := script[0]
+		script = script[1:]
+		return next, nil
+	}
+
+	cfg := DefaultConfig()
+	cfg.Features.Skills = false
+	cfg.Set("file_state_dir", t.TempDir())
+	cfg.Set("llm.provider", "openai")
+	cfg.Set("llm.model", "gpt-5.2")
+	rt := newRuntimeWithStubIntegrationClient(cfg, chat)
+
+	reg := rt.NewRegistry()
+	_ = reg.Register(embedderTool{name: "inua_mail_search", deferred: true})
+	offers := func(names []string, tool string) bool {
+		return strings.Contains(","+strings.Join(names, ",")+",", ","+tool+",")
+	}
+
+	if _, err := rt.RunTaskWithOptions(context.Background(), "Any mail?", RunTaskOptions{Registry: reg, TopicID: "topic_found"}); err != nil {
+		t.Fatalf("first RunTaskWithOptions() error = %v", err)
+	}
+	if offers(requests[0], "inua_mail_search") {
+		t.Fatalf("first request tools = %v, want the deferred tool hidden until found", requests[0])
+	}
+
+	first := len(requests)
+	if _, err := rt.RunTaskWithOptions(context.Background(), "And now?", RunTaskOptions{Registry: reg, TopicID: "topic_found"}); err != nil {
+		t.Fatalf("second RunTaskWithOptions() error = %v", err)
+	}
+	if !offers(requests[first], "inua_mail_search") {
+		t.Fatalf("second turn's request tools = %v, want the tool found on the first turn", requests[first])
+	}
+
+	other := len(requests)
+	if _, err := rt.RunTaskWithOptions(context.Background(), "Any mail?", RunTaskOptions{Registry: reg, TopicID: "topic_other"}); err != nil {
+		t.Fatalf("other topic RunTaskWithOptions() error = %v", err)
+	}
+	if offers(requests[other], "inua_mail_search") {
+		t.Fatalf("other topic's request tools = %v, want found tools kept per topic", requests[other])
+	}
+}

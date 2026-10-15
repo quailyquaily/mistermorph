@@ -39,6 +39,9 @@ type PreparedRun struct {
 	Model               string
 	ContextWindowTokens int64
 	Cleanup             func() error
+	// SaveFoundTools keeps the tools a run found through tool search for the topic's next runs.
+	// Call it after Engine.Run, also when the run fails. It does nothing without a topic scope.
+	SaveFoundTools func(*agent.Context)
 }
 
 // New constructs a Runtime while preserving the legacy no-error signature.
@@ -311,6 +314,7 @@ func (rt *Runtime) newRunEngineWithRegistry(ctx context.Context, task string, ba
 		Model:               taskPrepared.Model,
 		ContextWindowTokens: taskPrepared.ContextWindowTokens,
 		Cleanup:             cleanup,
+		SaveFoundTools:      taskPrepared.SaveFoundTools,
 	}
 	success = true
 	return prepared, nil
@@ -348,7 +352,9 @@ func (rt *Runtime) RunTask(ctx context.Context, task string, opts agent.RunOptio
 	if opts.ContextWindowTokens <= 0 {
 		opts.ContextWindowTokens = prepared.ContextWindowTokens
 	}
-	return prepared.Engine.Run(ctx, task, opts)
+	final, agentCtx, err := prepared.Engine.Run(ctx, task, opts)
+	prepared.SaveFoundTools(agentCtx)
+	return final, agentCtx, err
 }
 
 func ensureIntegrationRunContext(ctx context.Context) context.Context {

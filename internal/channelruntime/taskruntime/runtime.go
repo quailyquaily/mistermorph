@@ -376,6 +376,7 @@ type PreparedEngine struct {
 	Model               string
 	LoadedSkills        []string
 	ContextWindowTokens int64
+	rt                  *Runtime
 	prepared            *preparedRuntimeRun
 }
 
@@ -390,8 +391,20 @@ func (rt *Runtime) PrepareEngine(ctx context.Context, req RunRequest) (*Prepared
 		Model:               prepared.model,
 		LoadedSkills:        append([]string(nil), prepared.loadedSkills...),
 		ContextWindowTokens: prepared.contextWindowTokens,
+		rt:                  rt,
 		prepared:            &prepared,
 	}, nil
+}
+
+// SaveFoundTools keeps the tools a run of this Engine found through tool search for the
+// conversation's next runs, as Run and Resume do. Callers that run Engine themselves call it
+// after each run or resume, also when it returns an error. It does nothing without tool search
+// or a conversation scope.
+func (p *PreparedEngine) SaveFoundTools(runCtx *agent.Context) {
+	if p == nil || p.rt == nil || p.prepared == nil {
+		return
+	}
+	p.rt.saveFoundTools(*p.prepared, runCtx)
 }
 
 func (p *PreparedEngine) Cleanup() error {

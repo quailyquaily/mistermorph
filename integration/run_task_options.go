@@ -147,6 +147,7 @@ func (rt *Runtime) RunTaskWithOptions(ctx context.Context, task string, opts Run
 	}
 
 	final, agentCtx, runErr := prepared.Engine.Run(ctx, task, runOpts)
+	prepared.SaveFoundTools(agentCtx)
 	result.Final = final
 	result.Context = agentCtx
 	if runErr != nil {

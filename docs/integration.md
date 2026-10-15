@@ -79,7 +79,7 @@ func (t *myTool) Deferred() bool { return true }
 func (t *myTool) CodeModeExcluded() bool { return true }
 ```
 
-With a `TopicID`, `RunTaskWithOptions` treats the topic as one conversation: tools found by `tool_search` stay visible on its later turns.
+With a `TopicID`, `RunTaskWithOptions` treats the topic as one conversation: the tools a turn finds through `tool_search` are saved under the context checkpoint root and stay visible on the topic's later turns. Other topics start from the default tool list.
 
 ## Prompt blocks
 
