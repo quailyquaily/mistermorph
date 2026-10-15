@@ -1,4 +1,4 @@
-import { createApp } from "vue";
+import { createApp, watch } from "vue";
 import { applyTheme, closePopupMenu } from "quail-ui";
 import "quail-ui/dist/index.css";
 import "./styles/base.css";
@@ -9,6 +9,7 @@ import * as quailComponents from "./components/quail";
 import AppNotice from "./components/AppNotice";
 import AppSection from "./components/AppSection";
 import { authState, endpointState, localeState } from "./core/context";
+import { currentLocale } from "./i18n";
 import { installDesktopRuntimeMode, reportDesktopFrontendReady } from "./core/desktop-runtime";
 import { installExternalLinkHandler } from "./core/external-links";
 import { installConsolePerformanceObservers } from "./core/performance";
@@ -20,6 +21,14 @@ import { router } from "./router";
 import { pinia } from "./stores/pinia";
 
 localeState.hydrateLanguage();
+// Screen readers, hyphenation and the browser's translate offer read the page language.
+watch(
+  () => localeState.lang,
+  () => {
+    document.documentElement.lang = currentLocale();
+  },
+  { immediate: true }
+);
 authState.hydrate();
 endpointState.hydrateEndpointSelection();
 installDesktopRuntimeMode();

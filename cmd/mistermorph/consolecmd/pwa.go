@@ -24,8 +24,11 @@ import (
 // bearer token, so these routes are public; they show only the agent's name and avatar.
 
 const (
-	pwaThemeColor      = "#0f1711"
-	pwaBackgroundColor = "#f7f2ea"
+	// The morph theme's page background (--q-bg-light), which the page bar shows through: the
+	// installed app's title bar and launch splash match the page. The console has no dark theme.
+	pwaThemeColor      = "#edf3f8"
+	pwaBackgroundColor = "#edf3f8"
+	pwaDescription     = "Chat with your Mister Morph agent."
 	pwaDefaultName     = "Mister Morph"
 	// Maskable icons keep the avatar inside the safe zone, the inner 80% circle.
 	pwaMaskableInset = 0.1
@@ -114,6 +117,7 @@ func (s *server) handlePWAManifest(w http.ResponseWriter, r *http.Request) {
 		"short_name":       agent.Name,
 		"start_url":        startPath,
 		"scope":            pwaScope(s.cfg.basePath, agent.Ref),
+		"description":      pwaDescription,
 		"display":          "standalone",
 		"theme_color":      pwaThemeColor,
 		"background_color": pwaBackgroundColor,
