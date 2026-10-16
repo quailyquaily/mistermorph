@@ -945,7 +945,7 @@ func TestBuildChatOptionsMapsPromptCacheOptionsForOpenAIResp(t *testing.T) {
 	}
 }
 
-func TestBuildChatOptionsCombinesGPT56BreakpointsWithImplicitCaching(t *testing.T) {
+func TestBuildChatOptionsCombinesOpenAIBreakpointsWithImplicitCaching(t *testing.T) {
 	tests := []struct {
 		name              string
 		provider          string
@@ -954,6 +954,10 @@ func TestBuildChatOptionsCombinesGPT56BreakpointsWithImplicitCaching(t *testing.
 	}{
 		{name: "openai", provider: "openai", inferenceProvider: "openai", model: "gpt-5.6"},
 		{name: "response compatible", provider: "openai_resp", inferenceProvider: "openai_response_compatible", model: "gpt-5.6-sol"},
+		{name: "gpt-6-astra", provider: "openai_resp", model: "gpt-6-astra"},
+		{name: "gpt-6-sol", provider: "openai_resp", model: "gpt-6-sol"},
+		{name: "gpt-6-luna", provider: "openai_resp", model: "gpt-6-luna"},
+		{name: "gpt-6.1-sol", provider: "openai_resp", model: "gpt-6.1-sol"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -998,7 +1002,7 @@ func TestBuildChatOptionsCombinesGPT56BreakpointsWithImplicitCaching(t *testing.
 				t.Fatalf("prompt_cache_options should be omitted for implicit caching: %#v", built.Options.OpenAI)
 			}
 			if _, ok := built.Options.OpenAI["prompt_cache_retention"]; ok {
-				t.Fatalf("prompt_cache_retention should not be sent for GPT-5.6: %#v", built.Options.OpenAI)
+				t.Fatalf("prompt_cache_retention should not be sent for %s: %#v", tt.model, built.Options.OpenAI)
 			}
 			if got := built.Messages[0].Parts[0].CacheControl; got == nil || got.TTL != "" {
 				t.Fatalf("system cache control = %#v, want breakpoint marker without part TTL", got)

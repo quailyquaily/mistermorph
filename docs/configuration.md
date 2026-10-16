@@ -368,7 +368,7 @@ uniai `v0.1.67` sends the key in the request body and in the `session-id` and
 can share a client. This does not add WebSocket continuation or guarantee a server-side
 cache hit.
 
-- For GPT-5.6-family OpenAI and Responses-compatible requests, the runtime generates `prompt_cache_key` and marks the fixed system prompt as an explicit cache breakpoint when caching is enabled. It leaves `prompt_cache_options` unset so the provider's default implicit breakpoint remains active.
+- For GPT-5.6 variants, GPT-6 Astra/Sol/Luna, and GPT-6.1 Sol on `openai` and `openai_resp`, the runtime generates `prompt_cache_key` and preserves system and history text cache breakpoints when caching is enabled. It omits `prompt_cache_retention` and leaves `prompt_cache_options` unset, using the provider's default implicit caching and `30m` TTL. All non-off `cache_ttl` values use this behavior. `off` skips the automatic key and breakpoints; it does not disable the provider's implicit caching. Model names with namespaces or dated suffixes follow the same rules. See the [uniai cache compatibility table](https://github.com/quailyquaily/uniai/blob/v0.1.69/docs/cache.md#model-compatibility-rules).
 - `llm.tools_emulation_mode` controls tool-call emulation for models without native tool calling.
 - `llm.profiles` defines independent named LLM configurations; blank fields do not fall back to top-level `llm` values.
 - `llm.description` and `llm.profiles.<name>.description` are optional notes on what a profile is good for. `list_model_profiles` shows them to the agent when it picks a profile for a `spawn` subtask (`model_profile`). They are hints, not instructions, and do not change routing.

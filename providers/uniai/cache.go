@@ -21,7 +21,7 @@ func toLLMCacheControl(ctrl *uniaiapi.CacheControl) *llm.CacheControl {
 
 func toUniaiCacheControlForProvider(provider, model string, ctrl llm.CacheControl) (uniaiapi.CacheControl, bool) {
 	provider = strings.ToLower(strings.TrimSpace(provider))
-	if (provider == "openai" || provider == "openai_resp") && openAIModelMatchesFamily(model, "gpt-5-6") {
+	if (provider == "openai" || provider == "openai_resp") && openAIModelUsesPromptCacheOptions(model) {
 		return uniaiapi.CacheControl{}, true
 	}
 	ttl := explicitCacheTTLForProvider(provider, ctrl.TTL)
@@ -40,7 +40,7 @@ func adaptRequestForProvider(req llm.Request, provider, model, cacheTTL string) 
 		// Claude model ARNs; any other ARN rejects the whole request.
 		return stripExplicitCacheControl(req, true, !bedrockModelSupportsCachePoints(model), true)
 	case "openai", "openai_resp":
-		if openAIModelMatchesFamily(model, "gpt-5-6") && !strings.EqualFold(strings.TrimSpace(cacheTTL), "off") {
+		if openAIModelUsesPromptCacheOptions(model) && !strings.EqualFold(strings.TrimSpace(cacheTTL), "off") {
 			return stripExplicitCacheControl(req, false, false, true)
 		}
 		return stripExplicitCacheControl(req, true, true, true)
@@ -132,7 +132,7 @@ func applyPromptCacheOptions(provider, model, cacheTTL, cacheKeyPrefix string, r
 	if key != "" {
 		target["prompt_cache_key"] = key
 	}
-	if (normalizedProvider == "openai" || normalizedProvider == "openai_resp") && openAIModelMatchesFamily(model, "gpt-5-6") {
+	if (normalizedProvider == "openai" || normalizedProvider == "openai_resp") && openAIModelUsesPromptCacheOptions(model) {
 		return
 	}
 	retention := promptCacheRetentionForProvider(provider, cacheTTL)
@@ -142,6 +142,15 @@ func applyPromptCacheOptions(provider, model, cacheTTL, cacheKeyPrefix string, r
 	if retention != "" {
 		target["prompt_cache_retention"] = retention
 	}
+}
+
+// Keep this set aligned with uniai's docs/cache.md model compatibility table.
+func openAIModelUsesPromptCacheOptions(model string) bool {
+	return openAIModelMatchesFamily(model, "gpt-5-6") ||
+		openAIModelMatchesFamily(model, "gpt-6-astra") ||
+		openAIModelMatchesFamily(model, "gpt-6-sol") ||
+		openAIModelMatchesFamily(model, "gpt-6-luna") ||
+		openAIModelMatchesFamily(model, "gpt-6-1-sol")
 }
 
 func openAIModelMatchesFamily(model, family string) bool {

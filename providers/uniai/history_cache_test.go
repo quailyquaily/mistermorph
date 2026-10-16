@@ -21,11 +21,27 @@ func TestHistoryCacheBreakpointsReachHTTP(t *testing.T) {
 	}{
 		{"openai", "gpt-5.6", "short", "prompt_cache_breakpoint", 2},
 		{"openai_resp", "gpt-5.6-sol", "short", "prompt_cache_breakpoint", 2},
+		{"openai", "gpt-6-astra", "short", "prompt_cache_breakpoint", 2},
+		{"openai_resp", "gpt-6-astra", "short", "prompt_cache_breakpoint", 2},
+		{"openai", "gpt-6-sol", "short", "prompt_cache_breakpoint", 2},
+		{"openai_resp", "gpt-6-sol", "short", "prompt_cache_breakpoint", 2},
+		{"openai", "gpt-6-luna", "short", "prompt_cache_breakpoint", 2},
+		{"openai_resp", "gpt-6-luna", "short", "prompt_cache_breakpoint", 2},
+		{"openai", "gpt-6.1-sol", "short", "prompt_cache_breakpoint", 2},
+		{"openai_resp", "gpt-6.1-sol", "short", "prompt_cache_breakpoint", 2},
+		{"openai", "gpt-6.1-sol", "long", "prompt_cache_breakpoint", 2},
+		{"openai_resp", "gpt-6.1-sol", "long", "prompt_cache_breakpoint", 2},
+		{"openai_resp", "openai/gpt-6.1-sol", "short", "prompt_cache_breakpoint", 2},
+		{"openai_resp", "models/GPT-6.1-SOL-2026-10-01", "short", "prompt_cache_breakpoint", 2},
 		{"anthropic", "claude-sonnet-4-6", "short", "cache_control", 2},
 		{"openai", "gpt-5.5", "short", "", 0},
 		{"openai_resp", "gpt-5.5", "short", "", 0},
 		{"openai", "gpt-5.6", "off", "", 0},
 		{"openai_resp", "gpt-5.6-sol", "off", "", 0},
+		{"openai", "gpt-6.1-sol", "off", "", 0},
+		{"openai_resp", "gpt-6.1-sol", "off", "", 0},
+		{"openai", "gpt-6.1-solar", "short", "", 0},
+		{"openai_resp", "gpt-6-unknown", "short", "", 0},
 	} {
 		t.Run(tc.provider+"/"+tc.model+"/"+tc.cacheTTL, func(t *testing.T) {
 			requests := make(chan string, 4)
@@ -70,6 +86,17 @@ func TestHistoryCacheBreakpointsReachHTTP(t *testing.T) {
 				var payload map[string]json.RawMessage
 				if err := json.Unmarshal([]byte(raw), &payload); err != nil {
 					t.Fatal(err)
+				}
+				if tc.marker == "prompt_cache_breakpoint" || tc.cacheTTL == "off" {
+					for _, key := range []string{"prompt_cache_retention", "prompt_cache_options"} {
+						if _, ok := payload[key]; ok {
+							t.Fatalf("unexpected %s override: %s", key, raw)
+						}
+					}
+					_, hasKey := payload["prompt_cache_key"]
+					if hasKey != (tc.cacheTTL != "off") {
+						t.Fatalf("unexpected cache key for cache_ttl=%s: %s", tc.cacheTTL, raw)
+					}
 				}
 				field := "messages"
 				want := 5

@@ -143,8 +143,8 @@ when `llm.cache_ttl` is on.
   - `anthropic`: both markers kept.
   - `bedrock`: system marker stripped. The history marker is kept only for Claude model ARNs;
     any other ARN would reject the request.
-  - `openai` / `openai_resp` on GPT-5.6: both markers kept. Other OpenAI models: markers
-    stripped, and automatic prefix caching applies.
+  - `openai` / `openai_resp` on GPT-5.6 variants, GPT-6 Astra/Sol/Luna, and GPT-6.1 Sol:
+    both markers kept. Other OpenAI models: markers stripped, and automatic prefix caching applies.
   - Other providers: markers stripped.
   - The engine sets no marker on tool definitions; they are covered by the system marker
     that follows them.
@@ -198,7 +198,7 @@ summarised, so a later compaction can cross it again:
 
 When prompt caching is configured, the engine adds a cache marker to the last text part before runtime metadata (history or checkpoint), using a request copy. It does not write cache markers back into stored history. The system marker remains separate.
 
-HTTP serialization tests confirm that Anthropic and OpenAI GPT-5.6 (Chat Completions and Responses) preserve both markers. OpenAI history markers use the fix in uniai v0.1.63 for [uniai #19](https://github.com/quailyquaily/uniai/issues/19). Unsupported markers are stripped so requests remain valid. Other providers retain their existing cache adaptation rules.
+HTTP serialization tests confirm that Anthropic and OpenAI GPT-5.6, GPT-6 Astra/Sol/Luna, and GPT-6.1 Sol (Chat Completions and Responses) preserve both markers. OpenAI history markers use the fix in uniai v0.1.63 for [uniai #19](https://github.com/quailyquaily/uniai/issues/19); GPT-6.1 Sol cache support requires v0.1.69 ([uniai #20](https://github.com/quailyquaily/uniai/issues/20)). Unsupported markers are stripped so requests remain valid. Other providers retain their existing cache adaptation rules.
 
 History window changes, checkpoint replacement, dynamic system blocks and tool changes can still shorten the common prefix. Local tests verify request structure, not actual provider cache hits or cost savings.
 

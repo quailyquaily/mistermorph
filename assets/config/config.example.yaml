@@ -73,6 +73,8 @@ llm:
   #   - long
   #   - Go duration strings such as "5m", "1h", "24h"
   # The runtime maps this to provider-supported cache buckets automatically.
+  # OpenAI GPT-5.6, GPT-6 Astra/Sol/Luna, and GPT-6.1 Sol use the default 30m TTL.
+  # For these models, non-off values keep implicit caching and explicit breakpoints.
   # Codex: off skips the automatic session cache key; other values do not set a TTL.
   # Codex uses the session cache key for its session routing headers as well.
   cache_ttl: "short"
