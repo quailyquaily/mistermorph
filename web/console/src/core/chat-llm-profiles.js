@@ -24,8 +24,8 @@ export function normalizeChatLLMProfiles(rawItems) {
     }
     seen.add(name);
     const metadata = normalizeChatLLMProfileMetadata(raw);
-    // Evaluate-only profiles serve the decision route and cannot run a chat.
-    if (EVALUATE_ONLY_PROVIDERS.has(metadata.inferenceProvider.toLowerCase())) {
+    // Evaluate-only profiles (TypeSafe, decision models) serve the decision route and cannot run a chat.
+    if (raw?.evaluate_only === true || EVALUATE_ONLY_PROVIDERS.has(metadata.inferenceProvider.toLowerCase())) {
       continue;
     }
     profiles.push({

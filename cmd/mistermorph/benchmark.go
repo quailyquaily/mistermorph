@@ -115,11 +115,11 @@ func defaultRunBenchmarkCommand(
 	totalProfiles := len(names)
 	totalBenchmarks := 0
 	for _, name := range names {
-		provider := ""
+		evaluateOnly := false
 		if resolved, err := llmutil.ResolveProfile(values, name); err == nil {
-			provider = resolved.ClientConfig.Provider
+			evaluateOnly = resolved.ClientConfig.EvaluateOnly
 		}
-		totalBenchmarks += llmbench.BenchmarkCount(provider)
+		totalBenchmarks += llmbench.BenchmarkCount(evaluateOnly)
 	}
 	completedBenchmarks := 0
 
@@ -208,10 +208,11 @@ func benchmarkProfile(
 	}
 
 	meta := llmbench.ProfileMetadata{
-		Profile:  resolved.Name,
-		Provider: resolved.ClientConfig.Provider,
-		APIBase:  strings.TrimSpace(resolved.ClientConfig.Endpoint),
-		Model:    resolved.ClientConfig.Model,
+		Profile:      resolved.Name,
+		Provider:     resolved.ClientConfig.Provider,
+		APIBase:      strings.TrimSpace(resolved.ClientConfig.Endpoint),
+		Model:        resolved.ClientConfig.Model,
+		EvaluateOnly: resolved.ClientConfig.EvaluateOnly,
 	}
 
 	client, err := buildBenchmarkClient(resolved, logger)

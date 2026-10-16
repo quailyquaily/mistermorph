@@ -46,6 +46,7 @@ const SetupConnectionTestDialog = {
         :error="error"
         :benchmarks="benchmarks"
         :provider="provider"
+        :evaluateOnly="evaluateOnly"
         :apiBase="apiBase"
         :model="model"
         :showIntro="showIntro"

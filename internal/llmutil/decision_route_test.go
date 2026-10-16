@@ -84,3 +84,93 @@ func TestDecisionRoute(t *testing.T) {
 		})
 	}
 }
+
+func decisionModelTestValues(t *testing.T, judge map[string]any) RuntimeValues {
+	t.Helper()
+	v := viper.New()
+	v.Set("llm.provider", "openai")
+	v.Set("llm.model", "chat")
+	v.Set("llm.api_key", "chat-key")
+	v.Set("llm.profiles", map[string]any{"judge": judge, "fast": map[string]any{"provider": "openai", "model": "fast", "api_key": "fast-key"}})
+	v.Set("llm.routes", map[string]any{"decision": "judge"})
+	values, err := RuntimeValuesFromReader(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return values
+}
+
+func TestDecisionModelProfile(t *testing.T) {
+	values := decisionModelTestValues(t, map[string]any{"inference_provider": "openai", "model": "gpt-6-luna", "api_key": "judge-key", "decision_model": true})
+
+	profile, err := ResolveProfile(values, "judge")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !profile.ClientConfig.EvaluateOnly || !profile.Values.DecisionModel {
+		t.Fatalf("judge = %+v, want an Evaluate-only decision model", profile.ClientConfig)
+	}
+	if fast, err := ResolveProfile(values, "fast"); err != nil || fast.ClientConfig.EvaluateOnly {
+		t.Fatalf("fast = %+v, %v; want a chat profile", fast.ClientConfig, err)
+	}
+
+	route, err := ResolveRoute(values, RoutePurposeDecision)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var built []RuntimeValues
+	build := func(_ llmconfig.ClientConfig, values RuntimeValues) (llm.Client, error) {
+		built = append(built, values)
+		return nil, nil
+	}
+	if _, err := BuildRouteClient(route, nil, build, nil, nil); err != nil {
+		t.Fatalf("decision route: %v", err)
+	}
+	if len(built) != 1 || !built[0].DecisionModel {
+		t.Fatalf("built = %+v, want the decision model's values", built)
+	}
+
+	main, err := ResolveRouteWithProfileOverride(values, RoutePurposeMainLoop, "judge")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := BuildRouteClient(main, nil, build, nil, nil); err == nil {
+		t.Fatal("main_loop accepted a decision model")
+	}
+	if err := CheckSubagentProfile(profile); err == nil {
+		t.Fatal("a decision model was accepted for subtasks")
+	}
+	subagents, err := ListSubagentProfiles(values)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range subagents {
+		if item.Name == "judge" {
+			t.Fatal("ListSubagentProfiles listed the decision model")
+		}
+	}
+}
+
+func TestDecisionModelNeedsANativeDecisionAPI(t *testing.T) {
+	for _, tc := range []struct {
+		provider string
+		ok       bool
+	}{
+		{"openai", true},
+		{"openai_chat_compatible", true},
+		{"openai_response_compatible", true},
+		{"anthropic", false},
+		{"openrouter", false},
+	} {
+		t.Run(tc.provider, func(t *testing.T) {
+			judge := map[string]any{"inference_provider": tc.provider, "model": "m", "api_key": "k", "decision_model": true}
+			if tc.provider != "openai" && tc.provider != "anthropic" && tc.provider != "openrouter" {
+				judge["endpoint"] = "https://gateway.example.com/v1"
+			}
+			_, err := ResolveProfile(decisionModelTestValues(t, judge), "judge")
+			if (err == nil) != tc.ok {
+				t.Fatalf("ResolveProfile() error = %v, want ok=%v", err, tc.ok)
+			}
+		})
+	}
+}

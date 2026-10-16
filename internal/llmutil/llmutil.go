@@ -28,14 +28,17 @@ type ConfigReader interface {
 }
 
 type RuntimeValues struct {
-	UserAgent          string   `config:"user_agent"`
-	Description        string   `config:"llm.description"`
-	Abilities          []string `config:"llm.abilities"`
-	InferenceProvider  string   `config:"llm.inference_provider"`
-	Provider           string   `config:"llm.provider"`
-	Endpoint           string   `config:"llm.endpoint"`
-	APIKey             string   `config:"llm.api_key"`
-	Model              string   `config:"llm.model"`
+	UserAgent   string   `config:"user_agent"`
+	Description string   `config:"llm.description"`
+	Abilities   []string `config:"llm.abilities"`
+	// DecisionModel comes only from a named profile (llm.profiles.<name>.decision_model): the
+	// profile answers Evaluate requests through the provider's native decision API, never Chat.
+	DecisionModel      bool
+	InferenceProvider  string `config:"llm.inference_provider"`
+	Provider           string `config:"llm.provider"`
+	Endpoint           string `config:"llm.endpoint"`
+	APIKey             string `config:"llm.api_key"`
+	Model              string `config:"llm.model"`
 	SupportsImageParts *bool
 	ContextWindowRaw   string `config:"llm.context_window_tokens"`
 	Headers            map[string]string
@@ -409,6 +412,7 @@ func ClientFromConfigWithValues(cfg llmconfig.ClientConfig, values RuntimeValues
 		c, err := uniaiProvider.New(uniaiProvider.Config{
 			Provider:           uniaiProviderName,
 			InferenceProvider:  strings.TrimSpace(values.InferenceProvider),
+			DecisionModel:      values.DecisionModel,
 			Endpoint:           strings.TrimSpace(cfg.Endpoint),
 			APIKey:             strings.TrimSpace(cfg.APIKey),
 			Model:              strings.TrimSpace(cfg.Model),
@@ -474,8 +478,8 @@ func BuildRouteClient(route ResolvedRoute, primaryOverride *llmconfig.ClientConf
 			configs = append(configs, fallback.ClientConfig)
 		}
 		for _, cfg := range configs {
-			if cfg.Provider == "typesafe" {
-				return nil, fmt.Errorf("typesafe supports only the decision route, not %q", route.Purpose)
+			if cfg.EvaluateOnly {
+				return nil, fmt.Errorf("an Evaluate-only profile (TypeSafe or decision_model) serves only the decision route, not %q", route.Purpose)
 			}
 		}
 	}

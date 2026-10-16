@@ -10,12 +10,10 @@ import (
 	"github.com/quailyquaily/mistermorph/llm"
 )
 
-// EvaluateProvider supports only Evaluate, so its profiles run just the Evaluate benchmark.
-const EvaluateProvider = "typesafe"
-
-// BenchmarkCount is how many benchmarks a profile with this provider runs.
-func BenchmarkCount(provider string) int {
-	if strings.EqualFold(strings.TrimSpace(provider), EvaluateProvider) {
+// BenchmarkCount is how many benchmarks a profile runs. An Evaluate-only profile (TypeSafe, or
+// one with decision_model) runs just the Evaluate benchmark.
+func BenchmarkCount(evaluateOnly bool) int {
+	if evaluateOnly {
 		return 1
 	}
 	return BenchmarksPerRun

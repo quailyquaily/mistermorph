@@ -18,6 +18,7 @@ import {
   SETUP_PROVIDER_OPENAI_CODEX,
   SETUP_PROVIDER_XAI_OAUTH,
   setupProviderEvaluateOnly,
+  setupProviderSupportsDecisionModel,
   setupProviderRequiresAPIBase,
   setupProviderRequiresAPIKey,
   setupProviderSupportsCustomAPIBase,
@@ -77,6 +78,8 @@ const LLMConfigForm = {
       default: () => [],
     },
     enableAPIBasePicker: Boolean,
+    // Named profiles may be decision models; the default LLM runs the main loop, so it cannot.
+    allowDecisionModel: Boolean,
     enableModelPicker: Boolean,
     showAdvanced: Boolean,
     advancedOnly: Boolean,
@@ -176,8 +179,16 @@ const LLMConfigForm = {
     const showProOAuthFields = computed(() => effectiveProviderChoice.value === SETUP_PROVIDER_MISTERMORPH_PRO);
     const showBedrockFields = computed(() => effectiveProviderChoice.value === SETUP_PROVIDER_BEDROCK);
     const showAzureFields = computed(() => effectiveProviderChoice.value === "azure");
-    // Evaluate-only providers (TypeSafe) take no chat settings: no reasoning, tools, cache or headers.
-    const evaluateOnly = computed(() => setupProviderEvaluateOnly(effectiveProviderChoice.value));
+    const showDecisionModelField = computed(
+      () => props.allowDecisionModel && setupProviderSupportsDecisionModel(effectiveProviderChoice.value),
+    );
+    // Evaluate-only profiles (TypeSafe, or a decision model) take no chat settings: no reasoning,
+    // tools, cache or headers.
+    const evaluateOnly = computed(
+      () =>
+        setupProviderEvaluateOnly(effectiveProviderChoice.value) ||
+        (showDecisionModelField.value && configValue("decision_model") === "true"),
+    );
     const showEndpointField = computed(() => setupProviderSupportsCustomAPIBase(effectiveProviderChoice.value));
     const showCredentialFields = computed(
       () =>
@@ -412,6 +423,7 @@ const LLMConfigForm = {
       proAuthActionClass,
       modelLookupDisabled,
       evaluateOnly,
+      showDecisionModelField,
       credentialHelp,
       credentialHelpParts,
       fieldEnvName,
@@ -655,6 +667,20 @@ const LLMConfigForm = {
           >
             <PhMagnifyingGlass class="icon" />
           </QButton>
+        </div>
+      </div>
+      <div v-if="showDecisionModelField" class="settings-field is-wide">
+        <div class="settings-toggle-row">
+          <div class="settings-toggle-copy">
+            <strong class="settings-toggle-title">{{ t("settings_llm_decision_model_title") }}</strong>
+            <span class="settings-toggle-note">{{ t("settings_llm_decision_model_note") }}</span>
+          </div>
+          <QSwitch
+            :modelValue="config.decision_model === 'true'"
+            :disabled="busy || readOnly"
+            :aria-label="t('settings_llm_decision_model_title')"
+            @update:modelValue="updateField('decision_model', $event ? 'true' : '')"
+          />
         </div>
       </div>
       <div class="settings-field is-wide">

@@ -104,6 +104,7 @@ func ResolveConnectionTestValues(
 	if err != nil {
 		return llmutil.RuntimeValues{}, err
 	}
+	profileValues.DecisionModel = profile.DecisionModel
 	if saved, ok := base.Profiles[targetProfile]; ok && strings.TrimSpace(profileValues.APIKey) == "" {
 		profileValues.APIKey = savedAPIKeyForConnection(profileValues, ProfileSettingsPayloadFromConfig(targetProfile, saved).LLMConfigFieldsPayload)
 		profileValues.APIKey, err = ResolveConnectionTestFieldValue(profileValues.APIKey, source)
@@ -169,11 +170,14 @@ func runtimeValuesFromSettings(base llmutil.RuntimeValues, fields LLMConfigField
 	base.BedrockModelARN = resolved[11]
 	base.ReasoningEffortRaw = resolved[12]
 	base.ToolsEmulationMode = resolved[13]
+	// Only a named profile sets decision_model; a profile under test arrives here as the default.
+	base.DecisionModel = fields.DecisionModel
 	return base, nil
 }
 
 func profileConfigFromValues(values llmutil.RuntimeValues) llmutil.ProfileConfig {
 	return llmutil.ProfileConfig{
+		DecisionModel:      values.DecisionModel,
 		InferenceProvider:  values.InferenceProvider,
 		Provider:           values.Provider,
 		Endpoint:           values.Endpoint,

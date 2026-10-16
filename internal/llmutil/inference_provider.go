@@ -55,11 +55,16 @@ type InferenceProviderInfo struct {
 	Endpoint              string
 	SupportsCustomAPIBase bool
 	RequiresAPIBase       bool
+	// EvaluateOnly providers answer only Evaluate requests, never Chat.
+	EvaluateOnly bool
+	// NativeEvaluate providers have a native decision API, so their profiles may set
+	// decision_model.
+	NativeEvaluate bool
 }
 
 var inferenceProviderRegistry = []InferenceProviderInfo{
-	{Label: "TypeSafe (Evaluate only)", Value: "typesafe", Provider: "typesafe", SupportsCustomAPIBase: true},
-	{Label: "OpenAI", Value: InferenceProviderOpenAI, Provider: "openai_resp", Endpoint: DefaultOpenAIEndpoint},
+	{Label: "TypeSafe (Evaluate only)", Value: "typesafe", Provider: "typesafe", SupportsCustomAPIBase: true, EvaluateOnly: true, NativeEvaluate: true},
+	{Label: "OpenAI", Value: InferenceProviderOpenAI, Provider: "openai_resp", Endpoint: DefaultOpenAIEndpoint, NativeEvaluate: true},
 	{Label: "Magpie", Value: InferenceProviderMagpie, Provider: "openai_resp", Endpoint: DefaultMagpieEndpoint, SupportsCustomAPIBase: true},
 	{Label: "CC Switch", Value: InferenceProviderCCSwitch, Provider: "openai_resp", Endpoint: DefaultCCSwitchEndpoint, SupportsCustomAPIBase: true},
 	{Label: "OpenAI Codex", Value: InferenceProviderOpenAICodex, Provider: "openai_codex", SupportsCustomAPIBase: true},
@@ -76,8 +81,8 @@ var inferenceProviderRegistry = []InferenceProviderInfo{
 	{Label: "OpenRouter", Value: InferenceProviderOpenRouter, Provider: "openai", Endpoint: DefaultOpenRouterEndpoint},
 	{Label: "Groq", Value: InferenceProviderGroq, Provider: "openai", Endpoint: DefaultGroqEndpoint},
 	{Label: "Sakana AI", Value: InferenceProviderSakana, Provider: "sakana", Endpoint: DefaultSakanaEndpoint},
-	{Label: "OpenAI Chat Compatible", Value: InferenceProviderOpenAIChatCompatible, Provider: "openai", SupportsCustomAPIBase: true, RequiresAPIBase: true},
-	{Label: "OpenAI Response Compatible", Value: InferenceProviderOpenAIResponseCompatible, Provider: "openai_resp", SupportsCustomAPIBase: true, RequiresAPIBase: true},
+	{Label: "OpenAI Chat Compatible", Value: InferenceProviderOpenAIChatCompatible, Provider: "openai", SupportsCustomAPIBase: true, RequiresAPIBase: true, NativeEvaluate: true},
+	{Label: "OpenAI Response Compatible", Value: InferenceProviderOpenAIResponseCompatible, Provider: "openai_resp", SupportsCustomAPIBase: true, RequiresAPIBase: true, NativeEvaluate: true},
 	{Label: "Claude AI Compatible", Value: InferenceProviderAnthropicCompatible, Provider: "anthropic", SupportsCustomAPIBase: true, RequiresAPIBase: true},
 }
 
@@ -89,6 +94,16 @@ func InferenceProviderInfoByValue(value string) (InferenceProviderInfo, bool) {
 		}
 	}
 	return InferenceProviderInfo{}, false
+}
+
+// IsEvaluateOnly reports whether resolved values answer only Evaluate requests: an Evaluate-only
+// provider such as TypeSafe, or a profile with decision_model.
+func IsEvaluateOnly(values RuntimeValues) bool {
+	if values.DecisionModel || normalizeProvider(values.Provider) == "typesafe" {
+		return true
+	}
+	info, ok := InferenceProviderInfoByValue(values.InferenceProvider)
+	return ok && info.EvaluateOnly
 }
 
 func ResolveRuntimeValuesInferenceProvider(values RuntimeValues) (RuntimeValues, error) {
@@ -105,6 +120,9 @@ func ResolveRuntimeValuesInferenceProvider(values RuntimeValues) (RuntimeValues,
 	info, ok := InferenceProviderInfoByValue(inferenceProvider)
 	if !ok {
 		return RuntimeValues{}, invalidInferenceProviderError(inferenceProvider)
+	}
+	if values.DecisionModel && !info.NativeEvaluate {
+		return RuntimeValues{}, fmt.Errorf("decision_model needs a provider with a native decision API (OpenAI, an OpenAI-compatible endpoint, or TypeSafe), not %q", info.Value)
 	}
 	values.InferenceProvider = info.Value
 	values.Provider = info.Provider

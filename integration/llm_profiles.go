@@ -18,6 +18,8 @@ type LLMProfile struct {
 	APIBase           string   `json:"api_base,omitempty"`
 	Description       string   `json:"description,omitempty"`
 	Abilities         []string `json:"abilities,omitempty"`
+	// EvaluateOnly profiles serve only the decision route (see Runtime.Evaluate).
+	EvaluateOnly bool `json:"evaluate_only,omitempty"`
 }
 
 type LLMProfileCandidate struct {
@@ -124,5 +126,6 @@ func profileFromInfo(info llmselect.ProfileInfo) LLMProfile {
 		APIBase:           strings.TrimSpace(info.APIBase),
 		Description:       strings.TrimSpace(info.Description),
 		Abilities:         append([]string(nil), info.Abilities...),
+		EvaluateOnly:      info.EvaluateOnly,
 	}
 }

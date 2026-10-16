@@ -127,7 +127,7 @@ func TestPreparedEngineSpawnRejectsUnusableProfiles(t *testing.T) {
 	}{
 		{name: "unknown", profile: "missing", values: true, wantErr: `missing profile \"missing\"`},
 		{name: "image only", profile: "painter", values: true, wantErr: "text ability"},
-		{name: "typesafe", profile: "judge", values: true, wantErr: "typesafe"},
+		{name: "typesafe", profile: "judge", values: true, wantErr: "only Evaluate"},
 		{name: "no profile resolver", profile: "fast", values: false, wantErr: "not supported"},
 	}
 	for _, tc := range cases {

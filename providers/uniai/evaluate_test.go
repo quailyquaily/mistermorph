@@ -83,3 +83,44 @@ func TestEvaluateNativeAndEmulated(t *testing.T) {
 		}
 	}
 }
+
+func TestEvaluateDecisionModelUsesTheNativeDecisionAPI(t *testing.T) {
+	// The OpenAI inference provider runs on openai_resp; a decision model still calls Decisions.
+	for _, provider := range []string{"openai_resp", "openai"} {
+		t.Run(provider, func(t *testing.T) {
+			var paths []string
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				paths = append(paths, r.URL.Path)
+				if r.Header.Get("Authorization") != "Bearer test-key" {
+					t.Error("missing credentials")
+				}
+				w.Header().Set("Content-Type", "application/json")
+				fmt.Fprint(w, `{"model":"gpt-6-luna","answers":[{"name":"addressed","type":"predicate","probability":0.8}],"usage":{"input_tokens":10,"output_tokens":0}}`)
+			}))
+			defer server.Close()
+			client, err := New(Config{Provider: provider, DecisionModel: true, Endpoint: server.URL, APIKey: "test-key", Model: "gpt-6-luna"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			result, err := client.Evaluate(context.Background(), llm.EvaluateRequest{State: "Hi", Questions: map[string]llm.Question{"addressed": {Kind: llm.Boolean, Instructions: "Is this addressed to the bot?"}}})
+			if err != nil {
+				t.Fatalf("Evaluate() error = %v", err)
+			}
+			if len(paths) != 1 || paths[0] != "/v1/decisions" {
+				t.Fatalf("paths = %v, want one call to /v1/decisions", paths)
+			}
+			if result.Emulated {
+				t.Fatal("decision model answered through Chat emulation")
+			}
+			if p := result.Answers["addressed"].ProbabilityTrue; p == nil || *p != 0.8 {
+				t.Fatalf("answer = %+v", result.Answers["addressed"])
+			}
+			if _, err := client.Chat(context.Background(), llm.Request{Messages: []llm.Message{{Role: "user", Content: "Hi"}}}); err == nil {
+				t.Fatal("Chat() on a decision model: want an error")
+			}
+			if len(paths) != 1 {
+				t.Fatalf("Chat() reached the server: %v", paths)
+			}
+		})
+	}
+}

@@ -1254,6 +1254,8 @@ type runtimeLLMProfileOption struct {
 	Name              string `json:"name"`
 	InferenceProvider string `json:"inference_provider,omitempty"`
 	Model             string `json:"model,omitempty"`
+	// EvaluateOnly profiles serve only the decision route, so chats cannot pick them.
+	EvaluateOnly bool `json:"evaluate_only,omitempty"`
 }
 
 type runtimeLLMProfileCatalog struct {
@@ -1301,6 +1303,7 @@ func runtimeLLMProfiles(reader agentsettings.Reader) (runtimeLLMProfileCatalog, 
 				option.InferenceProvider = strings.TrimSpace(profile.ClientConfig.Provider)
 			}
 			option.Model = strings.TrimSpace(profile.ClientConfig.Model)
+			option.EvaluateOnly = profile.ClientConfig.EvaluateOnly
 		} else {
 			config := profileConfigs[name]
 			option.InferenceProvider = strings.TrimSpace(config.InferenceProvider)

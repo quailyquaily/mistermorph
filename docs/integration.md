@@ -142,7 +142,7 @@ When a route uses `candidates`, one primary profile is selected once for the cur
 
 ## Closed questions on the decision route
 
-`rt.Evaluate` asks the model to choose rather than write: a yes/no answer, one of a fixed set of options, or a score. It uses `llm.routes.decision` (the route Mister Morph uses for its group reply check, so the `typesafe` provider works there), with the route's `candidates` and `fallback_profiles`. Without that route it uses the default profile. It does not build a system prompt or run the agent loop, so it is much faster than `RunTaskWithOptions` for a choice from a known list.
+`rt.Evaluate` asks the model to choose rather than write: a yes/no answer, one of a fixed set of options, or a score. It uses `llm.routes.decision` (the route Mister Morph uses for its group reply check, so the `typesafe` provider and `decision_model` profiles such as OpenAI Decisions work there), with the route's `candidates` and `fallback_profiles`. Without that route it uses the default profile. It does not build a system prompt or run the agent loop, so it is much faster than `RunTaskWithOptions` for a choice from a known list.
 
 ```go
 res, err := rt.Evaluate(ctx, llm.EvaluateRequest{

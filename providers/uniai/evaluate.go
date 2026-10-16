@@ -25,8 +25,19 @@ func (c *Client) Evaluate(ctx context.Context, req llm.EvaluateRequest) (*llm.Ev
 	for name, q := range req.Questions {
 		questions[name] = evaluate.Question{Kind: evaluate.Kind(q.Kind), Instructions: q.Instructions, Options: q.Options, Levels: q.Levels}
 	}
-	r := evaluate.Request{Provider: c.provider, Model: firstNonEmpty(strings.TrimSpace(req.Model), c.model), EmulationMode: evaluate.EmulationFallback, State: req.State, Questions: questions}
-	if c.provider != "typesafe" {
+	r := evaluate.Request{Provider: c.provider, Model: firstNonEmpty(strings.TrimSpace(req.Model), c.model), State: req.State, Questions: questions}
+	switch {
+	case c.provider == "typesafe":
+		r.EmulationMode = evaluate.EmulationOff
+	case c.decisionModel:
+		// OpenAI's native decision API; uniai serves it under the openai provider for both the
+		// Chat Completions and Responses profiles.
+		r.Provider = "openai"
+		r.EmulationMode = evaluate.EmulationOff
+	default:
+		// Other profiles answer through Chat. uniai's fallback mode would call the native decision
+		// API for the openai provider, which OpenAI-compatible servers do not have.
+		r.EmulationMode = evaluate.EmulationForce
 		r.InferenceProvider = c.inferenceProvider
 		if c.reasoningEffort != "" {
 			effort := chat.ReasoningEffort(c.reasoningEffort)

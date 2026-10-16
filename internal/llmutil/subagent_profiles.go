@@ -65,8 +65,8 @@ func CheckSubagentProfile(profile ResolvedProfile) error {
 	if !HasAbility(profile.Values.Abilities, AbilityText) {
 		return fmt.Errorf("profile %q does not have the text ability (abilities: %s)", profile.Name, strings.Join(profile.Values.Abilities, ", "))
 	}
-	if strings.EqualFold(strings.TrimSpace(profile.ClientConfig.Provider), "typesafe") {
-		return fmt.Errorf("profile %q uses typesafe, which supports only Evaluate, not agent chat", profile.Name)
+	if profile.ClientConfig.EvaluateOnly {
+		return fmt.Errorf("profile %q answers only Evaluate requests (TypeSafe or decision_model), not agent chat", profile.Name)
 	}
 	return nil
 }
@@ -121,6 +121,9 @@ func unresolvedProfileMayRunSubagent(values RuntimeValues, name string) bool {
 		return true
 	}
 	if abilities, err := NormalizeAbilities(raw.Abilities); err == nil && !HasAbility(abilities, AbilityText) {
+		return false
+	}
+	if raw.DecisionModel {
 		return false
 	}
 	for _, provider := range []string{raw.Provider, raw.InferenceProvider} {

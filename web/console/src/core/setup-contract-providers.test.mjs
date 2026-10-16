@@ -55,3 +55,14 @@ test("setup contract keeps TypeSafe as an Evaluate-only provider", async () => {
   assert.match(source, /function setupProviderEvaluateOnly\(choice\)/);
   assert.match(source, /setupProviderEvaluateOnly,/);
 });
+
+test("setup contract offers decision models on providers with a native decision API", async () => {
+  const source = await readSetupContract();
+
+  assert.match(source, /\[SETUP_PROVIDER_OPENAI\]: \{ supportsModelLookup: true, nativeEvaluate: true \}/);
+  assert.match(source, /\[SETUP_PROVIDER_OPENAI_CHAT_COMPATIBLE\]: \{[^}]*nativeEvaluate: true/);
+  assert.match(source, /\[SETUP_PROVIDER_OPENAI_RESPONSE_COMPATIBLE\]: \{[^}]*nativeEvaluate: true/);
+  assert.doesNotMatch(source, /\[SETUP_PROVIDER_ANTHROPIC\]: \{[^}]*nativeEvaluate/);
+  assert.match(source, /function setupProviderSupportsDecisionModel\(choice\)/);
+  assert.match(source, /setupProviderSupportsDecisionModel,/);
+});

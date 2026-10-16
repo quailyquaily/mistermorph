@@ -22,6 +22,8 @@ type ProfileInfo struct {
 	APIBase           string
 	Description       string
 	Abilities         []string
+	// EvaluateOnly profiles (TypeSafe, decision_model) serve only the decision route.
+	EvaluateOnly bool
 }
 
 type CandidateInfo struct {
@@ -90,6 +92,9 @@ func ValidateProfile(values llmutil.RuntimeValues, profileName string) (ProfileI
 	profile, err := llmutil.ResolveProfile(values, profileName)
 	if err != nil {
 		return ProfileInfo{}, err
+	}
+	if profile.ClientConfig.EvaluateOnly {
+		return ProfileInfo{}, fmt.Errorf("profile %q answers only Evaluate requests (TypeSafe or decision_model) and cannot run the main loop", profile.Name)
 	}
 	return profileInfoFromResolved(profile.Name, profile.Source, profile.Values, profile.ClientConfig), nil
 }
@@ -161,6 +166,7 @@ func profileInfoFromResolved(name string, source string, values llmutil.RuntimeV
 		APIBase:           strings.TrimSpace(cfg.Endpoint),
 		Description:       strings.TrimSpace(values.Description),
 		Abilities:         append([]string(nil), values.Abilities...),
+		EvaluateOnly:      cfg.EvaluateOnly,
 	}
 }
 

@@ -51,8 +51,10 @@ const SETUP_PROVIDER_OPTIONS = [
   { title: "TypeSafe (Evaluate only)", value: SETUP_PROVIDER_TYPESAFE, group: "api" },
 ];
 
+// nativeEvaluate: the provider has a native decision API, so a named profile may be a decision
+// model (decision_model) that answers only Evaluate requests through it.
 const SETUP_PROVIDER_UI_META = {
-  [SETUP_PROVIDER_OPENAI]: { supportsModelLookup: true },
+  [SETUP_PROVIDER_OPENAI]: { supportsModelLookup: true, nativeEvaluate: true },
   [SETUP_PROVIDER_MAGPIE]: { supportsCustomAPIBase: true, supportsAPIKey: true, supportsModelLookup: true },
   [SETUP_PROVIDER_CC_SWITCH]: { supportsCustomAPIBase: true, supportsAPIKey: true, supportsModelLookup: true },
   [SETUP_PROVIDER_OPENAI_CODEX]: { supportsCustomAPIBase: true, supportsAPIKey: true },
@@ -69,8 +71,8 @@ const SETUP_PROVIDER_UI_META = {
   [SETUP_PROVIDER_OPENROUTER]: { supportsModelLookup: true },
   [SETUP_PROVIDER_GROQ]: { supportsModelLookup: true },
   [SETUP_PROVIDER_SAKANA]: { supportsModelLookup: true },
-  [SETUP_PROVIDER_OPENAI_CHAT_COMPATIBLE]: { requiresAPIBase: true, supportsModelLookup: true },
-  [SETUP_PROVIDER_OPENAI_RESPONSE_COMPATIBLE]: { requiresAPIBase: true, supportsModelLookup: true },
+  [SETUP_PROVIDER_OPENAI_CHAT_COMPATIBLE]: { requiresAPIBase: true, supportsModelLookup: true, nativeEvaluate: true },
+  [SETUP_PROVIDER_OPENAI_RESPONSE_COMPATIBLE]: { requiresAPIBase: true, supportsModelLookup: true, nativeEvaluate: true },
   [SETUP_PROVIDER_ANTHROPIC_COMPATIBLE]: { requiresAPIBase: true, supportsModelLookup: true },
   // Evaluate only: a profile for the decision route, which cannot chat.
   [SETUP_PROVIDER_TYPESAFE]: { supportsCustomAPIBase: true, evaluateOnly: true },
@@ -277,6 +279,12 @@ function setupProviderEvaluateOnly(choice) {
   return SETUP_PROVIDER_UI_META[provider]?.evaluateOnly === true;
 }
 
+// A named profile on one of these providers can be a decision model.
+function setupProviderSupportsDecisionModel(choice) {
+  const provider = normalizeSetupProviderChoice(choice, { allowEmpty: true });
+  return SETUP_PROVIDER_UI_META[provider]?.nativeEvaluate === true;
+}
+
 function setupProviderRequiresAPIKey(choice) {
   const provider = normalizeSetupProviderChoice(choice, { allowEmpty: true });
   return ![
@@ -334,6 +342,7 @@ export {
   normalizeSetupProviderChoice,
   resolveSetupAPIKeyHelp,
   setupProviderEvaluateOnly,
+  setupProviderSupportsDecisionModel,
   setupProviderRequiresAPIBase,
   setupProviderRequiresAPIKey,
   setupProviderSupportsCustomAPIBase,

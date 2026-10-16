@@ -68,6 +68,7 @@ test("normalizeChatLLMProfiles leaves out Evaluate-only profiles", () => {
   assert.deepEqual(
     normalizeChatLLMProfiles([
       { name: "judge", inference_provider: "typesafe", model: "jev-1.13.0" },
+      { name: "luna", inference_provider: "openai", model: "gpt-6-luna", evaluate_only: true },
       { name: "cheap", inference_provider: "openai", model: "gpt-4.1-mini" },
     ]),
     [{ name: "cheap", inferenceProvider: "openai", modelName: "gpt-4.1-mini" }]

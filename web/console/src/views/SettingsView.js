@@ -94,6 +94,7 @@ import {
   SETUP_PROVIDER_XAI_OAUTH,
   SETUP_PROVIDER_OPTIONS,
   setupProviderEvaluateOnly,
+  setupProviderSupportsDecisionModel,
   setupProviderRequiresAPIKey,
   setupProviderSupportsCustomAPIBase,
   setupOpenAICodexUsesAPIKey,
@@ -258,6 +259,7 @@ function buildEmptyLLMForm() {
   return {
     description: "",
     abilities: "",
+    decision_model: "",
     inference_provider: "",
     provider: "",
     endpoint: "",
@@ -505,6 +507,7 @@ function serializeLLMProfile(profile) {
     name: trimText(profile?.name),
     description: trimText(profile?.description),
     abilities: trimText(profile?.abilities),
+    decision_model: trimText(profile?.decision_model),
     inference_provider: trimText(profile?.inference_provider),
     provider: trimText(profile?.provider),
     endpoint: trimText(profile?.endpoint),
@@ -959,6 +962,7 @@ const SettingsView = {
     const testConnectionBenchmarks = ref([]);
     const testConnectionMeta = reactive({
       provider: "",
+      evaluateOnly: false,
       apiBase: "",
       model: "",
     });
@@ -2469,6 +2473,7 @@ const SettingsView = {
               : {},
           description: typeof profile?.description === "string" ? profile.description : "",
           abilities: Array.isArray(profile?.abilities) ? profile.abilities.join(",") : "",
+          decision_model: profile?.decision_model === true ? "true" : "",
           inference_provider: normalizeSetupProviderChoice(profile?.inference_provider || profile?.provider, { allowEmpty: true }),
           provider: typeof profile?.provider === "string" ? profile.provider : "",
           endpoint: typeof profile?.endpoint === "string" ? profile.endpoint : "",
@@ -2799,6 +2804,7 @@ const SettingsView = {
         name: trimText(profile.name),
         description: trimText(profile.description),
         abilities: splitAbilities(profile.abilities),
+        decision_model: setupProviderSupportsDecisionModel(provider) && trimText(profile.decision_model) === "true",
         inference_provider: providerRaw === "" ? inferenceProviderRaw || trimText(profile.inference_provider) : inferenceProviderRaw,
         provider: providerRaw,
         endpoint:
@@ -4127,6 +4133,9 @@ const SettingsView = {
       testConnectionError.value = "";
       testConnectionBenchmarks.value = [];
       testConnectionMeta.provider = targetProviderChoice;
+      testConnectionMeta.evaluateOnly =
+        setupProviderEvaluateOnly(targetProviderChoice) ||
+        Boolean(targetProfile && setupProviderSupportsDecisionModel(targetProviderChoice) && trimText(targetProfile.decision_model) === "true");
       testConnectionMeta.apiBase = trimText(targetEndpoint);
       testConnectionMeta.model = trimText(targetModel) || String(payload.model || "").trim();
       return payload;
@@ -5275,6 +5284,7 @@ const SettingsView = {
       testConnectionBenchmarks.value = [];
       testConnectionTargetProfileKey.value = "";
       testConnectionMeta.provider = "";
+      testConnectionMeta.evaluateOnly = false;
       testConnectionMeta.apiBase = "";
       testConnectionMeta.model = "";
       closeDeleteProfileDialog();
@@ -6655,6 +6665,7 @@ const SettingsView = {
                         :reasoningEffortItems="reasoningEffortItems"
                         :toolsEmulationItems="toolsEmulationItems"
                         :enableModelPicker="true"
+                        :allowDecisionModel="true"
                         :modelLookupCredentialsReady="profileModelLookupCredentialsReady(openedProfile)"
                         :showCodexAuthAction="profileUsesCodexProvider(openedProfile)"
                         :codexAuthDisabled="profileCodexAuthDisabled(openedProfile)"
@@ -6691,6 +6702,7 @@ const SettingsView = {
                             :providerItems="providerItems"
                             :reasoningEffortItems="reasoningEffortItems"
                             :toolsEmulationItems="toolsEmulationItems"
+                            :allowDecisionModel="true"
                             :showAdvanced="true"
                             :advancedOnly="true"
                             @update-field="updateProfileField(openedProfile._key, $event)"
@@ -7456,6 +7468,7 @@ const SettingsView = {
             :reasoningEffortItems="reasoningEffortItems"
             :toolsEmulationItems="toolsEmulationItems"
             :enableModelPicker="true"
+            :allowDecisionModel="true"
             :modelLookupCredentialsReady="profileModelLookupCredentialsReady(addProfileDraft)"
             :showCodexAuthAction="profileUsesCodexProvider(addProfileDraft)"
             :codexAuthDisabled="profileCodexAuthDisabled(addProfileDraft)"
@@ -7539,6 +7552,7 @@ const SettingsView = {
         :error="testConnectionError"
         :benchmarks="testConnectionBenchmarks"
         :provider="testConnectionMeta.provider"
+        :evaluateOnly="testConnectionMeta.evaluateOnly"
         :apiBase="testConnectionMeta.apiBase"
         :model="testConnectionMeta.model"
         :showIntro="false"

@@ -103,9 +103,10 @@ func RunConnectionTest(ctx context.Context, values llmutil.RuntimeValues, opts C
 		Model:            strings.TrimSpace(route.ClientConfig.Model),
 	})
 	metadata := llmbench.ProfileMetadata{
-		Provider: route.ClientConfig.Provider,
-		APIBase:  strings.TrimSpace(route.ClientConfig.Endpoint),
-		Model:    route.ClientConfig.Model,
+		Provider:     route.ClientConfig.Provider,
+		APIBase:      strings.TrimSpace(route.ClientConfig.Endpoint),
+		Model:        route.ClientConfig.Model,
+		EvaluateOnly: route.ClientConfig.EvaluateOnly,
 	}
 	return ConnectionTestResult{
 		Provider:   metadata.Provider,

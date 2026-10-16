@@ -231,7 +231,7 @@ func TestResolveSubagentRoute(t *testing.T) {
 	}{
 		{profile: "missing", wantErr: `missing profile "missing"`},
 		{profile: "painter", wantErr: "text ability"},
-		{profile: "judge", wantErr: "typesafe"},
+		{profile: "judge", wantErr: "only Evaluate"},
 		{profile: "broken", wantErr: "request_timeout"},
 	}
 	for _, tc := range cases {

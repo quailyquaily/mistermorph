@@ -31,6 +31,8 @@ type ProfileMetadata struct {
 	Provider string
 	APIBase  string
 	Model    string
+	// EvaluateOnly profiles cannot chat, so they run only the Evaluate benchmark.
+	EvaluateOnly bool
 }
 
 type ProfileResult struct {
@@ -65,7 +67,7 @@ func RunWithProgress(
 	onBenchmark func(BenchmarkResult),
 ) ProfileResult {
 	model := strings.TrimSpace(meta.Model)
-	if BenchmarkCount(meta.Provider) == 1 {
+	if BenchmarkCount(meta.EvaluateOnly) == 1 {
 		evaluateResult := RunEvaluateBenchmark(ctx, client, model)
 		if onBenchmark != nil {
 			onBenchmark(evaluateResult)

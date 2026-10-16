@@ -151,6 +151,11 @@ llm:
   #     model: "jev-1.13.0"
   #     api_key: "${TYPESAFE_API_KEY}"
   #     request_timeout: "15s"
+  #   luna:
+  #     inference_provider: openai # or openai_chat_compatible / openai_response_compatible
+  #     model: "gpt-6-luna"
+  #     api_key: "${OPENAI_API_KEY}"
+  #     decision_model: true # Evaluate only, through OpenAI Decisions (POST /v1/decisions); decision route only
   #   grok_subscription:
   #     inference_provider: xai_oauth
   #     model: "grok-4.5"
