@@ -29,6 +29,7 @@ import {
 import InferenceProviderPicker from "./InferenceProviderPicker";
 import SettingSelect from "./SettingSelect";
 import SettingChoices from "./SettingChoices";
+import { profileAbilitySummaryKeys } from "../core/profile-abilities";
 import EnvManagedField from "./EnvManagedField";
 import SecretInput from "./SecretInput";
 import { llmSecretConfigPath } from "../core/secret-storage";
@@ -82,6 +83,7 @@ const LLMConfigForm = {
     enableModelPicker: Boolean,
     showAdvanced: Boolean,
     advancedOnly: Boolean,
+    showAbilities: Boolean,
     modelLookupCredentialsReady: {
       default: null,
       validator: (value) => value === null || typeof value === "boolean",
@@ -324,6 +326,7 @@ const LLMConfigForm = {
     // Abilities are kept in the form as a comma-separated string, like the other fields. None
     // means text, so text shows checked.
     const abilityValues = computed(() => setupProfileAbilities(effectiveProviderChoice.value, props.config?.abilities));
+    const abilitySummary = computed(() => profileAbilitySummaryKeys(abilityValues.value).map((key) => t(key)).join(" "));
 
     function updateField(field, value) {
       if (props.readOnly) {
@@ -389,6 +392,7 @@ const LLMConfigForm = {
       IMAGE_PARTS_OPTIONS,
       PROFILE_ABILITY_OPTIONS,
       abilityValues,
+      abilitySummary,
       providerItem,
       providerManagedField,
       effectiveProviderChoice,
@@ -672,6 +676,18 @@ const LLMConfigForm = {
         />
         <p class="settings-field-note">Shown to the agent when it picks a profile for a subtask.</p>
       </div>
+      <div v-if="showAbilities" class="settings-field is-wide">
+        <span class="settings-field-label">Abilities</span>
+        <SettingChoices
+          :modelValue="abilityValues"
+          :options="PROFILE_ABILITY_OPTIONS"
+          :disabledOptions="abilitiesLocked ? PROFILE_ABILITY_OPTIONS : []"
+          label="Abilities"
+          :disabled="busy || readOnly"
+          @update:modelValue="updateField('abilities', $event.join(','))"
+        />
+        <p v-if="abilitySummary" class="settings-field-note">{{ abilitySummary }}</p>
+      </div>
       </template>
 
       <div v-if="showAdvanced && !evaluateOnly" class="settings-field-row is-wide is-three">
@@ -745,18 +761,6 @@ const LLMConfigForm = {
             :disabled="busy || readOnly"
             @update:modelValue="updateField('azure_deployment', $event)"
           />
-        </div>
-        <div class="settings-field is-wide">
-          <span class="settings-field-label">Abilities</span>
-          <SettingChoices
-            :modelValue="abilityValues"
-            :options="PROFILE_ABILITY_OPTIONS"
-            :disabledOptions="abilitiesLocked ? PROFILE_ABILITY_OPTIONS : []"
-            label="Abilities"
-            :disabled="busy || readOnly"
-            @update:modelValue="updateField('abilities', $event.join(','))"
-          />
-          <p class="settings-field-note">Only profiles with text can run subtasks. Decision without text serves only the decision route.</p>
         </div>
         <template v-if="!evaluateOnly">
         <div class="settings-field">

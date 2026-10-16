@@ -542,6 +542,7 @@ function buildLLMSnapshot(state) {
       endpoint: trimText(state.llm.endpoint),
       model: trimText(state.llm.model),
       description: trimText(state.llm.description),
+      abilities: trimText(state.llm.abilities),
       api_key: trimText(state.llm.api_key),
       bedrock_aws_key: trimText(state.llm.bedrock_aws_key),
       bedrock_aws_secret: trimText(state.llm.bedrock_aws_secret),
@@ -2434,6 +2435,7 @@ const SettingsView = {
       state.llm.endpoint = typeof llm.endpoint === "string" ? llm.endpoint : "";
       state.llm.model = typeof llm.model === "string" ? llm.model : "";
       state.llm.description = typeof llm.description === "string" ? llm.description : "";
+      state.llm.abilities = Array.isArray(llm.abilities) ? llm.abilities.join(",") : "";
       state.llm.context_window_tokens = typeof llm.context_window_tokens === "string" ? llm.context_window_tokens : "";
       state.llm.supports_image_parts = typeof llm.supports_image_parts === "string" ? llm.supports_image_parts : "";
       agentConfigValues.value["llm.supports_image_parts"] = state.llm.supports_image_parts;
@@ -3841,6 +3843,7 @@ const SettingsView = {
         payload.model = trimText(state.llm.model);
       }
       payload.description = trimText(state.llm.description);
+      payload.abilities = splitAbilities(state.llm.abilities);
       if (provider === SETUP_PROVIDER_BEDROCK) {
         if (!isLLMFieldEnvManaged(llmEnvManaged.value, "bedrock_aws_key")) {
           payload.bedrock_aws_key = includeSecretValue(
@@ -5857,6 +5860,7 @@ const SettingsView = {
                   <section class="settings-agent-section">
                     <LLMConfigForm
                       :config="state.llm"
+                      :showAbilities="true"
                       :busy="agentLoading || agentSaving"
                       :disabledReason="agentFormDisabledReason"
                       :readOnly="agentSettingsReadOnly"
@@ -6652,6 +6656,7 @@ const SettingsView = {
                       </div>
                       <LLMConfigForm
                         :config="openedProfile"
+                        :showAbilities="true"
                         :busy="agentLoading || agentSaving"
                         :disabledReason="agentFormDisabledReason"
                         :readOnly="agentSettingsReadOnly"
@@ -7454,6 +7459,7 @@ const SettingsView = {
           </div>
           <LLMConfigForm
             :config="addProfileDraft"
+            :showAbilities="true"
             :busy="agentLoading || agentSaving"
             :disabledReason="agentFormDisabledReason"
             :readOnly="agentSettingsReadOnly"
