@@ -11,6 +11,7 @@ import metaLogo from "../assets/model-vendors/meta.svg";
 import openAILogo from "../assets/model-vendors/openai.svg";
 import openRouterLogo from "../assets/model-vendors/openrouter.svg";
 import sakanaLogo from "../assets/model-vendors/sakana.svg";
+import typeSafeLogo from "../assets/model-vendors/typesafe.png";
 import xAILogo from "../assets/model-vendors/xai.svg";
 import misterMorphLogo from "../assets/images/app_logo_current.svg";
 
@@ -35,6 +36,7 @@ const INFERENCE_PROVIDER_LOGOS = {
   openai_chat_compatible: { src: openAILogo, className: "is-openai" },
   openai_response_compatible: { src: openAILogo, className: "is-openai" },
   anthropic_compatible: { src: claudeLogo, className: "is-claude" },
+  typesafe: { src: typeSafeLogo, className: "is-typesafe" },
 };
 
 export function inferenceProviderLogo(value) {

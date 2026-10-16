@@ -22,7 +22,7 @@ export const DEFAULT_MODEL_ADVANCED_CONFIG_GROUPS = [
         type: "string_list",
         options: PROFILE_ABILITY_OPTIONS,
         wide: true,
-        note: "None selected means all. Only profiles with text can run subtasks.",
+        note: "None selected means text. The default model needs text to run the main loop.",
       },
       { path: "llm.context_window_tokens", label: "Context window", type: "int" },
       { path: "llm.supports_image_parts", label: "Supports image parts", type: "select", options: IMAGE_PARTS_OPTIONS },

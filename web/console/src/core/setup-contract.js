@@ -48,13 +48,11 @@ const SETUP_PROVIDER_OPTIONS = [
   { title: "OpenAI Chat Compatible", value: SETUP_PROVIDER_OPENAI_CHAT_COMPATIBLE, group: "compatible" },
   { title: "OpenAI Response Compatible", value: SETUP_PROVIDER_OPENAI_RESPONSE_COMPATIBLE, group: "compatible" },
   { title: "Claude AI Compatible", value: SETUP_PROVIDER_ANTHROPIC_COMPATIBLE, group: "compatible" },
-  { title: "TypeSafe (Evaluate only)", value: SETUP_PROVIDER_TYPESAFE, group: "api" },
+  { title: "TypeSafe", value: SETUP_PROVIDER_TYPESAFE, group: "api" },
 ];
 
-// nativeEvaluate: the provider has a native decision API, so a named profile may be a decision
-// model (decision_model) that answers only Evaluate requests through it.
 const SETUP_PROVIDER_UI_META = {
-  [SETUP_PROVIDER_OPENAI]: { supportsModelLookup: true, nativeEvaluate: true },
+  [SETUP_PROVIDER_OPENAI]: { supportsModelLookup: true },
   [SETUP_PROVIDER_MAGPIE]: { supportsCustomAPIBase: true, supportsAPIKey: true, supportsModelLookup: true },
   [SETUP_PROVIDER_CC_SWITCH]: { supportsCustomAPIBase: true, supportsAPIKey: true, supportsModelLookup: true },
   [SETUP_PROVIDER_OPENAI_CODEX]: { supportsCustomAPIBase: true, supportsAPIKey: true },
@@ -71,8 +69,8 @@ const SETUP_PROVIDER_UI_META = {
   [SETUP_PROVIDER_OPENROUTER]: { supportsModelLookup: true },
   [SETUP_PROVIDER_GROQ]: { supportsModelLookup: true },
   [SETUP_PROVIDER_SAKANA]: { supportsModelLookup: true },
-  [SETUP_PROVIDER_OPENAI_CHAT_COMPATIBLE]: { requiresAPIBase: true, supportsModelLookup: true, nativeEvaluate: true },
-  [SETUP_PROVIDER_OPENAI_RESPONSE_COMPATIBLE]: { requiresAPIBase: true, supportsModelLookup: true, nativeEvaluate: true },
+  [SETUP_PROVIDER_OPENAI_CHAT_COMPATIBLE]: { requiresAPIBase: true, supportsModelLookup: true },
+  [SETUP_PROVIDER_OPENAI_RESPONSE_COMPATIBLE]: { requiresAPIBase: true, supportsModelLookup: true },
   [SETUP_PROVIDER_ANTHROPIC_COMPATIBLE]: { requiresAPIBase: true, supportsModelLookup: true },
   // Evaluate only: a profile for the decision route, which cannot chat.
   [SETUP_PROVIDER_TYPESAFE]: { supportsCustomAPIBase: true, evaluateOnly: true },
@@ -279,10 +277,23 @@ function setupProviderEvaluateOnly(choice) {
   return SETUP_PROVIDER_UI_META[provider]?.evaluateOnly === true;
 }
 
-// A named profile on one of these providers can be a decision model.
-function setupProviderSupportsDecisionModel(choice) {
-  const provider = normalizeSetupProviderChoice(choice, { allowEmpty: true });
-  return SETUP_PROVIDER_UI_META[provider]?.nativeEvaluate === true;
+// A profile's abilities as the form shows them: none means text, and Evaluate-only providers
+// (TypeSafe) have only decision. raw is a list or a comma-separated string.
+function setupProfileAbilities(choice, raw) {
+  if (setupProviderEvaluateOnly(choice)) {
+    return ["decision"];
+  }
+  const list = (Array.isArray(raw) ? raw : String(raw || "").split(","))
+    .map((item) => String(item || "").trim().toLowerCase())
+    .filter(Boolean);
+  return list.length > 0 ? [...new Set(list)] : ["text"];
+}
+
+// A decision-only profile (decision without text, or TypeSafe) answers only Evaluate requests and
+// serves only the decision route.
+function setupProfileDecisionOnly(choice, raw) {
+  const abilities = setupProfileAbilities(choice, raw);
+  return abilities.includes("decision") && !abilities.includes("text");
 }
 
 function setupProviderRequiresAPIKey(choice) {
@@ -342,7 +353,8 @@ export {
   normalizeSetupProviderChoice,
   resolveSetupAPIKeyHelp,
   setupProviderEvaluateOnly,
-  setupProviderSupportsDecisionModel,
+  setupProfileAbilities,
+  setupProfileDecisionOnly,
   setupProviderRequiresAPIBase,
   setupProviderRequiresAPIKey,
   setupProviderSupportsCustomAPIBase,

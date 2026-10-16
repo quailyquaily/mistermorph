@@ -8,13 +8,15 @@ export default {
     modelValue: { type: Array, default: () => [] },
     options: { type: Array, default: () => [] },
     disabled: Boolean,
+    // Values whose toggle is locked in its current state.
+    disabledOptions: { type: Array, default: () => [] },
     label: { type: String, default: "" },
   },
   emits: ["update:modelValue"],
   setup(props, { emit }) {
     const items = computed(() => [...new Set([...props.options, ...props.modelValue])]);
     function toggle(value) {
-      if (props.disabled) return;
+      if (props.disabled || props.disabledOptions.includes(value)) return;
       const on = !props.modelValue.includes(value);
       emit("update:modelValue", on
         ? [...new Set([...props.modelValue, value])]
@@ -31,7 +33,7 @@ export default {
         class="sf-chip"
         role="checkbox"
         :aria-checked="modelValue.includes(item) ? 'true' : 'false'"
-        :disabled="disabled"
+        :disabled="disabled || disabledOptions.includes(item)"
         @click="toggle(item)"
       >
         <PhCheck v-if="modelValue.includes(item)" class="sf-icon" />

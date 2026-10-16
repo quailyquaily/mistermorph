@@ -864,10 +864,7 @@ func applyAgentSettingsUpdateDocument(doc *yaml.Node, current FileSettings, valu
 	}
 
 	llmNode := configbootstrap.EnsureMappingValue(root, llmSettingsKey)
-	// decision_model belongs to named profiles; the default LLM runs the main loop.
-	topLevelFields := values.LLM.LLMConfigFieldsUpdate
-	topLevelFields.DecisionModel = nil
-	applyLLMConfigFieldsUpdate(llmNode, nextLLM.LLMConfigFieldsPayload, topLevelFields)
+	applyLLMConfigFieldsUpdate(llmNode, nextLLM.LLMConfigFieldsPayload, values.LLM.LLMConfigFieldsUpdate)
 	if values.LLM.Profiles != nil {
 		profiles, err := normalizeLLMProfileSettings(*values.LLM.Profiles)
 		if err != nil {
@@ -1451,7 +1448,6 @@ func normalizeLLMProfileSettings(profiles []LLMProfileSettingsPayload) ([]LLMPro
 			Name: name,
 			LLMConfigFieldsPayload: LLMConfigFieldsPayload{
 				Description:            strings.TrimSpace(profile.Description),
-				DecisionModel:          profile.DecisionModel,
 				InferenceProvider:      strings.TrimSpace(profile.InferenceProvider),
 				Provider:               strings.TrimSpace(profile.Provider),
 				Endpoint:               strings.TrimSpace(profile.Endpoint),
@@ -1592,7 +1588,6 @@ func llmProfileSettingsAsUpdate(profile LLMProfileSettingsPayload) LLMConfigFiel
 	return LLMConfigFieldsUpdate{
 		Description:            stringPointer(profile.Description),
 		Abilities:              &abilities,
-		DecisionModel:          &profile.DecisionModel,
 		InferenceProvider:      stringPointer(profile.InferenceProvider),
 		Provider:               stringPointer(profile.Provider),
 		Endpoint:               stringPointer(profile.Endpoint),
@@ -1629,13 +1624,6 @@ func applyLLMConfigFieldsUpdate(node *yaml.Node, effective LLMConfigFieldsPayloa
 	}
 	if update.Abilities != nil {
 		setAbilitiesNode(node, *update.Abilities)
-	}
-	if update.DecisionModel != nil {
-		if *update.DecisionModel {
-			configbootstrap.SetMappingBoolValue(node, "decision_model", true)
-		} else {
-			configbootstrap.DeleteMappingKey(node, "decision_model")
-		}
 	}
 	if update.InferenceProvider != nil {
 		configbootstrap.SetOrDeleteMappingScalar(node, "inference_provider", *update.InferenceProvider)

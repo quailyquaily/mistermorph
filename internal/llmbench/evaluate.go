@@ -11,7 +11,7 @@ import (
 )
 
 // BenchmarkCount is how many benchmarks a profile runs. An Evaluate-only profile (TypeSafe, or
-// one with decision_model) runs just the Evaluate benchmark.
+// one with decision but not text) runs just the Evaluate benchmark.
 func BenchmarkCount(evaluateOnly bool) int {
 	if evaluateOnly {
 		return 1

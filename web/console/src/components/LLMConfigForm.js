@@ -18,7 +18,8 @@ import {
   SETUP_PROVIDER_OPENAI_CODEX,
   SETUP_PROVIDER_XAI_OAUTH,
   setupProviderEvaluateOnly,
-  setupProviderSupportsDecisionModel,
+  setupProfileAbilities,
+  setupProfileDecisionOnly,
   setupProviderRequiresAPIBase,
   setupProviderRequiresAPIKey,
   setupProviderSupportsCustomAPIBase,
@@ -78,8 +79,6 @@ const LLMConfigForm = {
       default: () => [],
     },
     enableAPIBasePicker: Boolean,
-    // Named profiles may be decision models; the default LLM runs the main loop, so it cannot.
-    allowDecisionModel: Boolean,
     enableModelPicker: Boolean,
     showAdvanced: Boolean,
     advancedOnly: Boolean,
@@ -179,15 +178,13 @@ const LLMConfigForm = {
     const showProOAuthFields = computed(() => effectiveProviderChoice.value === SETUP_PROVIDER_MISTERMORPH_PRO);
     const showBedrockFields = computed(() => effectiveProviderChoice.value === SETUP_PROVIDER_BEDROCK);
     const showAzureFields = computed(() => effectiveProviderChoice.value === "azure");
-    const showDecisionModelField = computed(
-      () => props.allowDecisionModel && setupProviderSupportsDecisionModel(effectiveProviderChoice.value),
-    );
+    // Evaluate-only providers (TypeSafe) have only the decision ability, locked.
+    const abilitiesLocked = computed(() => setupProviderEvaluateOnly(effectiveProviderChoice.value));
     // Evaluate-only profiles (TypeSafe, or a decision model) take no chat settings: no reasoning,
     // tools, cache or headers.
     const evaluateOnly = computed(
       () =>
-        setupProviderEvaluateOnly(effectiveProviderChoice.value) ||
-        (showDecisionModelField.value && configValue("decision_model") === "true"),
+        setupProfileDecisionOnly(effectiveProviderChoice.value, props.config?.abilities),
     );
     const showEndpointField = computed(() => setupProviderSupportsCustomAPIBase(effectiveProviderChoice.value));
     const showCredentialFields = computed(
@@ -324,13 +321,9 @@ const LLMConfigForm = {
       };
     });
 
-    // Abilities are kept in the form as a comma-separated string, like the other fields.
-    const abilityValues = computed(() =>
-      String(props.config?.abilities || "")
-        .split(",")
-        .map((item) => item.trim())
-        .filter(Boolean),
-    );
+    // Abilities are kept in the form as a comma-separated string, like the other fields. None
+    // means text, so text shows checked.
+    const abilityValues = computed(() => setupProfileAbilities(effectiveProviderChoice.value, props.config?.abilities));
 
     function updateField(field, value) {
       if (props.readOnly) {
@@ -423,7 +416,7 @@ const LLMConfigForm = {
       proAuthActionClass,
       modelLookupDisabled,
       evaluateOnly,
-      showDecisionModelField,
+      abilitiesLocked,
       credentialHelp,
       credentialHelpParts,
       fieldEnvName,
@@ -669,20 +662,6 @@ const LLMConfigForm = {
           </QButton>
         </div>
       </div>
-      <div v-if="showDecisionModelField" class="settings-field is-wide">
-        <div class="settings-toggle-row">
-          <div class="settings-toggle-copy">
-            <strong class="settings-toggle-title">{{ t("settings_llm_decision_model_title") }}</strong>
-            <span class="settings-toggle-note">{{ t("settings_llm_decision_model_note") }}</span>
-          </div>
-          <QSwitch
-            :modelValue="config.decision_model === 'true'"
-            :disabled="busy || readOnly"
-            :aria-label="t('settings_llm_decision_model_title')"
-            @update:modelValue="updateField('decision_model', $event ? 'true' : '')"
-          />
-        </div>
-      </div>
       <div class="settings-field is-wide">
         <span class="settings-field-label">Description</span>
         <QInput
@@ -772,11 +751,12 @@ const LLMConfigForm = {
           <SettingChoices
             :modelValue="abilityValues"
             :options="PROFILE_ABILITY_OPTIONS"
+            :disabledOptions="abilitiesLocked ? PROFILE_ABILITY_OPTIONS : []"
             label="Abilities"
             :disabled="busy || readOnly"
             @update:modelValue="updateField('abilities', $event.join(','))"
           />
-          <p class="settings-field-note">None selected means all. Only profiles with text can run subtasks.</p>
+          <p class="settings-field-note">Only profiles with text can run subtasks. Decision without text serves only the decision route.</p>
         </div>
         <template v-if="!evaluateOnly">
         <div class="settings-field">

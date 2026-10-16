@@ -9,10 +9,8 @@ import (
 )
 
 type LLMConfigFieldsPayload struct {
-	Description string   `json:"description"`
-	Abilities   []string `json:"abilities"`
-	// DecisionModel is set only on named profiles: Evaluate through the native decision API.
-	DecisionModel          bool              `json:"decision_model,omitempty"`
+	Description            string            `json:"description"`
+	Abilities              []string          `json:"abilities"`
 	InferenceProvider      string            `json:"inference_provider"`
 	Provider               string            `json:"provider"`
 	Endpoint               string            `json:"endpoint"`
@@ -78,7 +76,6 @@ func SettingsPayloadFromRuntimeValues(values llmutil.RuntimeValues) LLMSettingsP
 		LLMConfigFieldsPayload: LLMConfigFieldsPayload{
 			Description:            strings.TrimSpace(displayValues.Description),
 			Abilities:              normalizedAbilitiesForDisplay(displayValues.Abilities),
-			DecisionModel:          displayValues.DecisionModel,
 			InferenceProvider:      strings.TrimSpace(displayValues.InferenceProvider),
 			Provider:               provider,
 			Endpoint:               llmutil.EndpointForProviderWithValues(provider, displayValues),
@@ -150,7 +147,6 @@ func ProfileSettingsPayloadFromConfig(
 		LLMConfigFieldsPayload: LLMConfigFieldsPayload{
 			Description:            strings.TrimSpace(cfg.Description),
 			Abilities:              normalizedAbilitiesForDisplay(cfg.Abilities),
-			DecisionModel:          cfg.DecisionModel,
 			InferenceProvider:      strings.TrimSpace(cfg.InferenceProvider),
 			Provider:               strings.TrimSpace(cfg.Provider),
 			Endpoint:               strings.TrimSpace(cfg.Endpoint),

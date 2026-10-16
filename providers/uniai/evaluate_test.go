@@ -98,7 +98,7 @@ func TestEvaluateDecisionModelUsesTheNativeDecisionAPI(t *testing.T) {
 				fmt.Fprint(w, `{"model":"gpt-6-luna","answers":[{"name":"addressed","type":"predicate","probability":0.8}],"usage":{"input_tokens":10,"output_tokens":0}}`)
 			}))
 			defer server.Close()
-			client, err := New(Config{Provider: provider, DecisionModel: true, Endpoint: server.URL, APIKey: "test-key", Model: "gpt-6-luna"})
+			client, err := New(Config{Provider: provider, EvaluateOnly: true, NativeDecision: true, Endpoint: server.URL, APIKey: "test-key", Model: "gpt-6-luna"})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -122,5 +122,32 @@ func TestEvaluateDecisionModelUsesTheNativeDecisionAPI(t *testing.T) {
 				t.Fatalf("Chat() reached the server: %v", paths)
 			}
 		})
+	}
+}
+
+func TestEvaluateDecisionModelWithoutANativeAPIEmulates(t *testing.T) {
+	var paths []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{"model": "kimi", "choices": []any{map[string]any{"index": 0, "finish_reason": "stop", "message": map[string]any{"role": "assistant", "content": `{"addressed":true}`}}}, "usage": map[string]any{"prompt_tokens": 10, "completion_tokens": 1, "total_tokens": 11}})
+	}))
+	defer server.Close()
+	client, err := New(Config{Provider: "openai", EvaluateOnly: true, Endpoint: server.URL + "/v1", APIKey: "test-key", Model: "kimi"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := client.Evaluate(context.Background(), llm.EvaluateRequest{State: "Hi", Questions: map[string]llm.Question{"addressed": {Kind: llm.Boolean, Instructions: "Is this addressed to the bot?"}}})
+	if err != nil {
+		t.Fatalf("Evaluate() error = %v", err)
+	}
+	if len(paths) != 1 || paths[0] != "/v1/chat/completions" || !result.Emulated {
+		t.Fatalf("paths = %v, emulated = %v; want one emulated Chat call", paths, result.Emulated)
+	}
+	if _, err := client.Chat(context.Background(), llm.Request{Messages: []llm.Message{{Role: "user", Content: "Hi"}}}); err == nil {
+		t.Fatal("Chat() on a decision model: want an error")
+	}
+	if len(paths) != 1 {
+		t.Fatalf("Chat() reached the server: %v", paths)
 	}
 }

@@ -12,12 +12,13 @@ const (
 	AbilityText = "text"
 	// AbilityImage is image generation and editing.
 	AbilityImage = "image"
-	// AbilityDecision is Evaluate requests.
+	// AbilityDecision is Evaluate requests. A profile with decision but not text answers only
+	// Evaluate requests and serves only the decision route.
 	AbilityDecision = "decision"
 )
 
 // NormalizeAbilities trims, lowercases and deduplicates a profile's abilities, keeping their
-// order. An empty result means the profile has every ability. An unknown value is an error.
+// order. An empty result means text only. An unknown value is an error.
 func NormalizeAbilities(raw []string) ([]string, error) {
 	var out []string
 	seen := make(map[string]bool, len(raw))
@@ -37,10 +38,10 @@ func NormalizeAbilities(raw []string) ([]string, error) {
 	return out, nil
 }
 
-// HasAbility reports whether normalized abilities include ability. Empty abilities include all.
+// HasAbility reports whether normalized abilities include ability. Empty abilities mean text.
 func HasAbility(abilities []string, ability string) bool {
 	if len(abilities) == 0 {
-		return true
+		return ability == AbilityText
 	}
 	for _, value := range abilities {
 		if value == ability {
@@ -66,7 +67,7 @@ func CheckSubagentProfile(profile ResolvedProfile) error {
 		return fmt.Errorf("profile %q does not have the text ability (abilities: %s)", profile.Name, strings.Join(profile.Values.Abilities, ", "))
 	}
 	if profile.ClientConfig.EvaluateOnly {
-		return fmt.Errorf("profile %q answers only Evaluate requests (TypeSafe or decision_model), not agent chat", profile.Name)
+		return fmt.Errorf("profile %q answers only Evaluate requests (TypeSafe, or decision without text), not agent chat", profile.Name)
 	}
 	return nil
 }
@@ -121,9 +122,6 @@ func unresolvedProfileMayRunSubagent(values RuntimeValues, name string) bool {
 		return true
 	}
 	if abilities, err := NormalizeAbilities(raw.Abilities); err == nil && !HasAbility(abilities, AbilityText) {
-		return false
-	}
-	if raw.DecisionModel {
 		return false
 	}
 	for _, provider := range []string{raw.Provider, raw.InferenceProvider} {

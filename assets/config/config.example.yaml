@@ -44,7 +44,8 @@ llm:
   # Optional abilities of this profile: text | image | decision.
   # text = chat with tool calls (can run the agent loop and spawn subtasks),
   # image = image generation/editing, decision = Evaluate requests.
-  # Empty or unset means every ability. Only profiles with text can run spawn subtasks.
+  # Empty or unset means text only. Only profiles with text can run spawn subtasks.
+  # A profile with decision but not text is decision-only: it serves only the decision route.
   # abilities: ["text"]
   # Optional model context window, in tokens. Empty or 0 uses the built-in catalog when known.
   # context_window_tokens: 100000
@@ -152,10 +153,10 @@ llm:
   #     api_key: "${TYPESAFE_API_KEY}"
   #     request_timeout: "15s"
   #   luna:
-  #     inference_provider: openai # or openai_chat_compatible / openai_response_compatible
+  #     inference_provider: openai # or openai_response_compatible
   #     model: "gpt-6-luna"
   #     api_key: "${OPENAI_API_KEY}"
-  #     decision_model: true # Evaluate only, through OpenAI Decisions (POST /v1/decisions); decision route only
+  #     abilities: ["decision"] # decision-only: calls OpenAI Decisions (POST /v1/decisions); other providers emulate through chat
   #   grok_subscription:
   #     inference_provider: xai_oauth
   #     model: "grok-4.5"

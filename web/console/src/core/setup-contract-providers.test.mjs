@@ -48,7 +48,7 @@ test("setup contract keeps TypeSafe as an Evaluate-only provider", async () => {
   const source = await readSetupContract();
 
   assert.match(source, /const SETUP_PROVIDER_TYPESAFE = "typesafe"/);
-  assert.match(source, /\{ title: "TypeSafe \(Evaluate only\)", value: SETUP_PROVIDER_TYPESAFE, group: "api" \}/);
+  assert.match(source, /\{ title: "TypeSafe", value: SETUP_PROVIDER_TYPESAFE, group: "api" \}/);
   assert.match(source, /\[SETUP_PROVIDER_TYPESAFE\]: \{ supportsCustomAPIBase: true, evaluateOnly: true \}/);
   // Without its own case, a saved typesafe profile became OpenAI Chat Compatible.
   assert.match(source, /case SETUP_PROVIDER_TYPESAFE:\s+return SETUP_PROVIDER_TYPESAFE;/);
@@ -56,13 +56,12 @@ test("setup contract keeps TypeSafe as an Evaluate-only provider", async () => {
   assert.match(source, /setupProviderEvaluateOnly,/);
 });
 
-test("setup contract offers decision models on providers with a native decision API", async () => {
+test("setup contract reads decision-only profiles from abilities", async () => {
   const source = await readSetupContract();
 
-  assert.match(source, /\[SETUP_PROVIDER_OPENAI\]: \{ supportsModelLookup: true, nativeEvaluate: true \}/);
-  assert.match(source, /\[SETUP_PROVIDER_OPENAI_CHAT_COMPATIBLE\]: \{[^}]*nativeEvaluate: true/);
-  assert.match(source, /\[SETUP_PROVIDER_OPENAI_RESPONSE_COMPATIBLE\]: \{[^}]*nativeEvaluate: true/);
-  assert.doesNotMatch(source, /\[SETUP_PROVIDER_ANTHROPIC\]: \{[^}]*nativeEvaluate/);
-  assert.match(source, /function setupProviderSupportsDecisionModel\(choice\)/);
-  assert.match(source, /setupProviderSupportsDecisionModel,/);
+  assert.match(source, /if \(setupProviderEvaluateOnly\(choice\)\) \{\n    return \["decision"\];/);
+  assert.match(source, /return list\.length > 0 \? \[\.\.\.new Set\(list\)\] : \["text"\];/);
+  assert.match(source, /return abilities\.includes\("decision"\) && !abilities\.includes\("text"\);/);
+  assert.match(source, /setupProfileAbilities,/);
+  assert.match(source, /setupProfileDecisionOnly,/);
 });

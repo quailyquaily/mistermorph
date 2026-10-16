@@ -1,6 +1,8 @@
 package llmutil
 
 import (
+	"strings"
+
 	"github.com/quailyquaily/mistermorph/internal/llmconfig"
 	"github.com/quailyquaily/mistermorph/llm"
 	"github.com/spf13/viper"
@@ -101,14 +103,14 @@ func decisionModelTestValues(t *testing.T, judge map[string]any) RuntimeValues {
 }
 
 func TestDecisionModelProfile(t *testing.T) {
-	values := decisionModelTestValues(t, map[string]any{"inference_provider": "openai", "model": "gpt-6-luna", "api_key": "judge-key", "decision_model": true})
+	values := decisionModelTestValues(t, map[string]any{"inference_provider": "openai", "model": "gpt-6-luna", "api_key": "judge-key", "abilities": []string{"decision"}})
 
 	profile, err := ResolveProfile(values, "judge")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !profile.ClientConfig.EvaluateOnly || !profile.Values.DecisionModel {
-		t.Fatalf("judge = %+v, want an Evaluate-only decision model", profile.ClientConfig)
+	if !profile.ClientConfig.EvaluateOnly || !usesNativeDecisionAPI(profile.Values) {
+		t.Fatalf("judge = %+v, want an Evaluate-only profile on OpenAI Decisions", profile.ClientConfig)
 	}
 	if fast, err := ResolveProfile(values, "fast"); err != nil || fast.ClientConfig.EvaluateOnly {
 		t.Fatalf("fast = %+v, %v; want a chat profile", fast.ClientConfig, err)
@@ -126,8 +128,8 @@ func TestDecisionModelProfile(t *testing.T) {
 	if _, err := BuildRouteClient(route, nil, build, nil, nil); err != nil {
 		t.Fatalf("decision route: %v", err)
 	}
-	if len(built) != 1 || !built[0].DecisionModel {
-		t.Fatalf("built = %+v, want the decision model's values", built)
+	if len(built) != 1 || !IsEvaluateOnly(built[0]) {
+		t.Fatalf("built = %+v, want the decision-only profile's values", built)
 	}
 
 	main, err := ResolveRouteWithProfileOverride(values, RoutePurposeMainLoop, "judge")
@@ -151,26 +153,60 @@ func TestDecisionModelProfile(t *testing.T) {
 	}
 }
 
-func TestDecisionModelNeedsANativeDecisionAPI(t *testing.T) {
+func TestDecisionOnlyOnAnyProvider(t *testing.T) {
 	for _, tc := range []struct {
 		provider string
-		ok       bool
+		native   bool
 	}{
 		{"openai", true},
-		{"openai_chat_compatible", true},
+		{"openai_chat_compatible", false},
 		{"openai_response_compatible", true},
 		{"anthropic", false},
 		{"openrouter", false},
 	} {
 		t.Run(tc.provider, func(t *testing.T) {
-			judge := map[string]any{"inference_provider": tc.provider, "model": "m", "api_key": "k", "decision_model": true}
-			if tc.provider != "openai" && tc.provider != "anthropic" && tc.provider != "openrouter" {
+			judge := map[string]any{"inference_provider": tc.provider, "model": "m", "api_key": "k", "abilities": []string{"decision"}}
+			if strings.HasSuffix(tc.provider, "_compatible") {
 				judge["endpoint"] = "https://gateway.example.com/v1"
 			}
-			_, err := ResolveProfile(decisionModelTestValues(t, judge), "judge")
-			if (err == nil) != tc.ok {
-				t.Fatalf("ResolveProfile() error = %v, want ok=%v", err, tc.ok)
+			profile, err := ResolveProfile(decisionModelTestValues(t, judge), "judge")
+			if err != nil {
+				t.Fatalf("ResolveProfile() error = %v", err)
+			}
+			if !profile.ClientConfig.EvaluateOnly {
+				t.Fatal("decision-only profile is not Evaluate-only")
+			}
+			if got := usesNativeDecisionAPI(profile.Values); got != tc.native {
+				t.Fatalf("usesNativeDecisionAPI() = %v, want %v", got, tc.native)
 			}
 		})
+	}
+}
+
+func TestOnlyDecisionWithoutTextIsEvaluateOnly(t *testing.T) {
+	for _, tc := range []struct {
+		abilities    []string
+		evaluateOnly bool
+	}{
+		{nil, false},
+		{[]string{"text"}, false},
+		{[]string{"text", "decision"}, false},
+		{[]string{"image"}, false},
+		{[]string{"decision"}, true},
+		{[]string{"image", "decision"}, true},
+	} {
+		t.Run(strings.Join(tc.abilities, "+"), func(t *testing.T) {
+			judge := map[string]any{"inference_provider": "openai", "model": "m", "api_key": "k", "abilities": tc.abilities}
+			profile, err := ResolveProfile(decisionModelTestValues(t, judge), "judge")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if profile.ClientConfig.EvaluateOnly != tc.evaluateOnly || usesNativeDecisionAPI(profile.Values) != tc.evaluateOnly {
+				t.Fatalf("EvaluateOnly = %v, native = %v; want %v", profile.ClientConfig.EvaluateOnly, usesNativeDecisionAPI(profile.Values), tc.evaluateOnly)
+			}
+		})
+	}
+	if !HasAbility(nil, AbilityText) || HasAbility(nil, AbilityImage) || HasAbility(nil, AbilityDecision) {
+		t.Fatal("empty abilities must mean text only")
 	}
 }

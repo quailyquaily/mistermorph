@@ -37,11 +37,8 @@ func (e *MissingProfileError) Error() string {
 type ProfileConfig struct {
 	// Description tells the model what the profile is good for when it picks one for a subtask.
 	Description string `mapstructure:"description" yaml:"description"`
-	// Abilities lists what the profile can be used for (see NormalizeAbilities); empty means all.
-	Abilities []string `mapstructure:"abilities" yaml:"abilities"`
-	// DecisionModel limits the profile to Evaluate requests through the provider's native
-	// decision API (OpenAI Decisions); it then serves only the decision route.
-	DecisionModel      bool              `mapstructure:"decision_model" yaml:"decision_model"`
+	// Abilities lists what the profile can be used for (see NormalizeAbilities); empty means text.
+	Abilities          []string          `mapstructure:"abilities" yaml:"abilities"`
 	InferenceProvider  string            `mapstructure:"inference_provider" yaml:"inference_provider"`
 	Provider           string            `mapstructure:"provider" yaml:"provider"`
 	Endpoint           string            `mapstructure:"endpoint" yaml:"endpoint"`
@@ -486,7 +483,6 @@ func runtimeValuesForNamedProfile(shared RuntimeValues, profile ProfileConfig) R
 		UserAgent:              shared.UserAgent,
 		Description:            profile.Description,
 		Abilities:              append([]string(nil), profile.Abilities...),
-		DecisionModel:          profile.DecisionModel,
 		InferenceProvider:      profile.InferenceProvider,
 		Provider:               profile.Provider,
 		Endpoint:               profile.Endpoint,

@@ -417,7 +417,7 @@ The `model` parameter was replaced by `model_profile`; passing `model` returns a
 
 - The sub-agent uses the profile's own provider, connection, credentials, model and inference settings, including reasoning effort; the parent's reasoning effort override is not passed on. `default` means the top-level `llm.*` config, not "same as the parent".
 - If the profile fails at request time, the sub-agent falls back to `llm.routes.main_loop.fallback_profiles` (which can include the parent's model).
-- The profile must have the `text` ability (`abilities` empty or containing `text`) and must not be Evaluate-only (`typesafe`, or `decision_model: true`). An unknown profile, a profile that fails to resolve or cannot run a subtask, or a runtime without profile support returns a failed envelope without starting the sub-agent; its `error` says why and suggests another profile or omitting `model_profile`.
+- The profile must have the `text` ability (`abilities` empty or containing `text`) and must not be Evaluate-only (`typesafe`). An unknown profile, a profile that fails to resolve or cannot run a subtask, or a runtime without profile support returns a failed envelope without starting the sub-agent; its `error` says why and suggests another profile or omitting `model_profile`.
 - Selecting a profile affects only that subtask, not the session's main profile.
 
 Result: a JSON envelope with `task_id`, `status` (`done` or `failed`), `summary`, `output_kind` (`text` or `json`), `output_schema`, `output` and `error`.
@@ -426,7 +426,7 @@ Result: a JSON envelope with `task_id`, `status` (`done` or `failed`), `summary`
 
 Purpose: list the model profiles a `spawn` subtask can select. No parameters; read-only; makes no model requests.
 
-Registered next to `spawn` only when more than one profile can run a subtask: `default` plus every named profile whose `abilities` include `text` (empty means all), excluding Evaluate-only profiles (`typesafe`, or `decision_model: true`). The prompt tells the model to call it when it wants a different configuration for a subtask and to reuse an earlier result.
+Registered next to `spawn` only when more than one profile can run a subtask: `default` plus every named profile whose `abilities` include `text` (empty means `text`), excluding Evaluate-only `typesafe` profiles. The prompt tells the model to call it when it wants a different configuration for a subtask and to reuse an earlier result.
 
 ```json
 {

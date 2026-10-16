@@ -29,7 +29,7 @@ func (c *Client) Evaluate(ctx context.Context, req llm.EvaluateRequest) (*llm.Ev
 	switch {
 	case c.provider == "typesafe":
 		r.EmulationMode = evaluate.EmulationOff
-	case c.decisionModel:
+	case c.nativeDecision:
 		// OpenAI's native decision API; uniai serves it under the openai provider for both the
 		// Chat Completions and Responses profiles.
 		r.Provider = "openai"

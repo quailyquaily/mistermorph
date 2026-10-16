@@ -192,6 +192,12 @@
   border-color: color-mix(in srgb, var(--q-c-red-light) 38%, var(--line-soft));
 }
 
+.inference-provider-logo.is-typesafe {
+  --provider-logo-size: 100%;
+  --provider-logo-bg: #e551ba;
+  border-color: color-mix(in srgb, #e551ba 62%, var(--line-soft));
+}
+
 .inference-provider-logo.is-mistermorph {
   --provider-logo-size: 86%;
   --provider-logo-bg: color-mix(in srgb, var(--bg-2) 88%, var(--q-c-accent) 12%);

@@ -18,8 +18,10 @@ import (
 type Config struct {
 	Provider          string
 	InferenceProvider string
-	// DecisionModel limits the client to Evaluate through the native decision API.
-	DecisionModel     bool
+	// EvaluateOnly limits the client to Evaluate requests; Chat is refused.
+	EvaluateOnly bool
+	// NativeDecision answers Evaluate through OpenAI's native decision API instead of Chat.
+	NativeDecision    bool
 	Endpoint          string
 	APIKey            string
 	Model             string
@@ -55,7 +57,8 @@ type Config struct {
 type Client struct {
 	provider           string
 	inferenceProvider  string
-	decisionModel      bool
+	evaluateOnly       bool
+	nativeDecision     bool
 	model              string
 	pricing            *uniaiapi.PricingCatalog
 	requestTimeout     time.Duration
@@ -129,7 +132,8 @@ func New(cfg Config) (*Client, error) {
 	return &Client{
 		provider:           provider,
 		inferenceProvider:  strings.TrimSpace(cfg.InferenceProvider),
-		decisionModel:      cfg.DecisionModel,
+		evaluateOnly:       cfg.EvaluateOnly,
+		nativeDecision:     cfg.NativeDecision,
 		model:              strings.TrimSpace(cfg.Model),
 		pricing:            pricing,
 		requestTimeout:     cfg.RequestTimeout,
@@ -148,8 +152,8 @@ func (c *Client) Chat(ctx context.Context, req llm.Request) (llm.Result, error) 
 	if c.provider == "typesafe" {
 		return llm.Result{}, fmt.Errorf("typesafe supports Evaluate, not Chat")
 	}
-	if c.decisionModel {
-		return llm.Result{}, fmt.Errorf("a decision_model profile supports Evaluate, not Chat")
+	if c.evaluateOnly {
+		return llm.Result{}, fmt.Errorf("a decision-only profile supports Evaluate, not Chat")
 	}
 	start := time.Now()
 	if c.requestTimeout > 0 {
