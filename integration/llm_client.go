@@ -151,6 +151,11 @@ type onceCloseClient struct {
 	err     error
 }
 
+// Evaluate passes judgments through; the embedded llm.Client alone would hide them.
+func (c *onceCloseClient) Evaluate(ctx context.Context, req llm.EvaluateRequest) (*llm.EvaluateResult, error) {
+	return llm.Evaluate(ctx, c.Client, req)
+}
+
 func (c *onceCloseClient) Close() error {
 	if c == nil || c.closer == nil {
 		return nil

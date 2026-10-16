@@ -140,6 +140,30 @@ When a route uses `candidates`, one primary profile is selected once for the cur
 
 `/think <task>` resolves `llm.routes.think` when present, otherwise it uses the default profile. The run then temporarily sets `reasoning_effort` to `xhigh`.
 
+## Closed questions on the decision route
+
+`rt.Evaluate` asks the model to choose rather than write: a yes/no answer, one of a fixed set of options, or a score. It uses `llm.routes.decision` (the route Mister Morph uses for its group reply check, so the `typesafe` provider works there), with the route's `candidates` and `fallback_profiles`. Without that route it uses the default profile. It does not build a system prompt or run the agent loop, so it is much faster than `RunTaskWithOptions` for a choice from a known list.
+
+```go
+res, err := rt.Evaluate(ctx, llm.EvaluateRequest{
+	Scene: "game.move", // optional; defaults to "integration.evaluate"
+	State: map[string]any{"board": board, "to_move": "white"},
+	Questions: map[string]llm.Question{
+		"move": {
+			Kind:         llm.Choice,
+			Instructions: "Pick the strongest legal move.",
+			Options:      map[string]any{"a": "e2e4", "b": "d2d4", "c": "g1f3"},
+		},
+	},
+}, integration.EvaluateOptions{})
+if errors.Is(err, llm.ErrEvaluateUnsupported) {
+	// This profile can't evaluate; ask with RunTaskWithOptions instead.
+}
+move := res.Answers["move"].Selected // "a", "b" or "c"
+```
+
+`EvaluateOptions.Profile` asks a named profile instead of the route. An empty `Model` in the request uses the route's model. Usage is recorded in the LLM usage journal like other calls.
+
 ## Runtime LLM Profile Selection
 
 `integration.Runtime` also exposes runtime-level helpers for reading and overriding the current `main_loop` LLM profile selection:
