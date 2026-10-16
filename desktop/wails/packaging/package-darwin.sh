@@ -23,14 +23,18 @@ TARBALL_PATH="${TARBALL_PATH:-${OUT_DIR}/MrMorph-darwin-${ARCH}.tar.gz}"
 WORK_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/mistermorph-darwin-package.XXXXXX")"
 ICONSET_DIR="${WORK_ROOT}/mistermorph.iconset"
 DMG_STAGING_DIR="${WORK_ROOT}/dmg"
-DMG_MOUNT_DIR="/Volumes/${DMG_VOLUME_NAME}"
 RW_DMG_PATH="${WORK_ROOT}/mistermorph-rw.dmg"
+DMG_ATTACH_LOG="${WORK_ROOT}/attach.log"
 ICNS_PATH="${OUT_DIR}/mistermorph.icns"
 DMG_ATTACHED=false
+DMG_DEVICE=""
 
 cleanup() {
 	if [[ "${DMG_ATTACHED}" == "true" ]]; then
-		hdiutil detach "${DMG_MOUNT_DIR}" -quiet >/dev/null 2>&1 || true
+		if [[ -z "${DMG_DEVICE}" ]] || ! hdiutil detach "${DMG_DEVICE}" -force; then
+			echo "DMG is still attached; preserving staging files at ${WORK_ROOT}" >&2
+			return
+		fi
 	fi
 	rm -rf "${WORK_ROOT}"
 }
@@ -153,8 +157,16 @@ hdiutil attach \
 	-readwrite \
 	-noverify \
 	-noautoopen \
-	"${RW_DMG_PATH}" >/dev/null
+	"${RW_DMG_PATH}" >"${DMG_ATTACH_LOG}"
 DMG_ATTACHED=true
+# hdiutil's tab-separated output includes the image device before its partitions.
+# Detach that device rather than guessing a mount path from the volume name.
+cat "${DMG_ATTACH_LOG}"
+DMG_DEVICE="$(awk '/^\/dev\/disk/ { print $1; exit }' "${DMG_ATTACH_LOG}")"
+if [[ -z "${DMG_DEVICE}" ]]; then
+	echo "failed to identify attached DMG device" >&2
+	exit 1
+fi
 
 osascript - "${DMG_VOLUME_NAME}" "${APP_BUNDLE_NAME}.app" <<'APPLESCRIPT'
 on run arguments
@@ -197,14 +209,25 @@ APPLESCRIPT
 
 sync
 for attempt in 1 2 3 4 5; do
-	if hdiutil detach "${DMG_MOUNT_DIR}" -quiet; then
+	echo "detaching DMG device ${DMG_DEVICE} (attempt ${attempt}/5)..."
+	if hdiutil detach "${DMG_DEVICE}"; then
 		DMG_ATTACHED=false
 		break
 	fi
-	sleep 1
+	if [[ "${attempt}" -lt 5 ]]; then
+		sleep "$((attempt * 2))"
+	fi
 done
 if [[ "${DMG_ATTACHED}" == "true" ]]; then
-	echo "failed to detach DMG staging volume" >&2
+	# All packaging writes are complete and synced. Finder or an indexer may
+	# still hold files open on this disposable staging volume.
+	echo "normal detach failed; forcing detach of ${DMG_DEVICE}..." >&2
+	if hdiutil detach "${DMG_DEVICE}" -force; then
+		DMG_ATTACHED=false
+	fi
+fi
+if [[ "${DMG_ATTACHED}" == "true" ]]; then
+	echo "failed to detach DMG staging volume (${DMG_DEVICE})" >&2
 	exit 1
 fi
 

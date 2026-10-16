@@ -223,7 +223,7 @@ func TestDarwinPackageBuildsStyledDMG(t *testing.T) {
 	for _, token := range []string{
 		"DMG_BACKGROUND_SOURCE",
 		"DMG_STAGING_DIR",
-		`DMG_MOUNT_DIR="/Volumes/${DMG_VOLUME_NAME}"`,
+		"DMG_DEVICE",
 		".background",
 		`ln -s "/Applications"`,
 		"osascript",

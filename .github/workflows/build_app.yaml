@@ -11,8 +11,16 @@ permissions:
 
 jobs:
   build-app:
-    name: Build Wails App (Linux)
-    runs-on: ubuntu-latest
+    name: Build Wails App (${{ matrix.label }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: linux-amd64
+            os: ubuntu-latest
+          - label: macos-arm64
+            os: macos-14
 
     steps:
       - name: Checkout
@@ -42,6 +50,7 @@ jobs:
         run: pnpm --dir web/console build
 
       - name: Install Linux desktop build deps
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev
@@ -54,17 +63,26 @@ jobs:
           ./scripts/build-desktop.sh --release --no-frontend \
             --desktop-output ./dist/MrMorph \
             --backend-output ./dist/morph
-          sha256sum dist/MrMorph > dist/MrMorph.sha256
-          sha256sum dist/morph > dist/morph.sha256
+          shasum -a 256 dist/MrMorph > dist/MrMorph.sha256
+          shasum -a 256 dist/morph > dist/morph.sha256
+
+      - name: Package macOS DMG
+        if: runner.os == 'macOS'
+        env:
+          VERSION: "0.0.0"
+          ARCH: arm64
+        run: ./desktop/wails/packaging/package-darwin.sh
 
       - name: Upload desktop artifact
         uses: actions/upload-artifact@v4
         with:
-          name: MrMorph-linux-amd64
+          name: MrMorph-${{ matrix.label }}
           path: |
             dist/MrMorph
             dist/MrMorph.sha256
             dist/morph
             dist/morph.sha256
+            dist/*.dmg
+            dist/*.tar.gz
           if-no-files-found: error
           retention-days: 3
