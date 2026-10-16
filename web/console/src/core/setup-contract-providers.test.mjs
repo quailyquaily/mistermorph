@@ -43,3 +43,15 @@ test("OpenAI Codex uses API key auth when endpoint and API key are both present"
 	assert.match(source, /setupOpenAICodexUsesAPIKey,/);
 	assert.doesNotMatch(source, /\[SETUP_PROVIDER_OPENAI_CODEX\]: \{[^}]*requiresAPIBase: true/);
 });
+
+test("setup contract keeps TypeSafe as an Evaluate-only provider", async () => {
+  const source = await readSetupContract();
+
+  assert.match(source, /const SETUP_PROVIDER_TYPESAFE = "typesafe"/);
+  assert.match(source, /\{ title: "TypeSafe \(Evaluate only\)", value: SETUP_PROVIDER_TYPESAFE, group: "api" \}/);
+  assert.match(source, /\[SETUP_PROVIDER_TYPESAFE\]: \{ supportsCustomAPIBase: true, evaluateOnly: true \}/);
+  // Without its own case, a saved typesafe profile became OpenAI Chat Compatible.
+  assert.match(source, /case SETUP_PROVIDER_TYPESAFE:\s+return SETUP_PROVIDER_TYPESAFE;/);
+  assert.match(source, /function setupProviderEvaluateOnly\(choice\)/);
+  assert.match(source, /setupProviderEvaluateOnly,/);
+});

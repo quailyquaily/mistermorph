@@ -64,6 +64,7 @@ import {
   SETUP_PROVIDER_OPENAI_CODEX,
   SETUP_PROVIDER_XAI_OAUTH,
   SETUP_PROVIDER_OPTIONS,
+  setupProviderEvaluateOnly,
   setupProviderRequiresAPIBase,
   setupProviderRequiresAPIKey,
   setupProviderSupportsCustomAPIBase,
@@ -411,7 +412,8 @@ const SetupView = {
         })
       ).trim()
     );
-    const providerItems = computed(() => SETUP_PROVIDER_OPTIONS);
+    // Setup configures the main model, which cannot be an Evaluate-only provider.
+    const providerItems = computed(() => SETUP_PROVIDER_OPTIONS.filter((item) => !setupProviderEvaluateOnly(item.value)));
     const providerItem = computed(
       () => providerItems.value.find((item) => item.value === llmForm.provider) || null
     );

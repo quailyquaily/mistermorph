@@ -25,6 +25,7 @@ const SETUP_PROVIDER_KIMI = "kimi";
 const SETUP_PROVIDER_OPENROUTER = "openrouter";
 const SETUP_PROVIDER_GROQ = "groq";
 const SETUP_PROVIDER_SAKANA = "sakana";
+const SETUP_PROVIDER_TYPESAFE = "typesafe";
 
 const SETUP_PROVIDER_OPTIONS = [
   { title: "OpenAI", value: SETUP_PROVIDER_OPENAI, group: "api" },
@@ -47,6 +48,7 @@ const SETUP_PROVIDER_OPTIONS = [
   { title: "OpenAI Chat Compatible", value: SETUP_PROVIDER_OPENAI_CHAT_COMPATIBLE, group: "compatible" },
   { title: "OpenAI Response Compatible", value: SETUP_PROVIDER_OPENAI_RESPONSE_COMPATIBLE, group: "compatible" },
   { title: "Claude AI Compatible", value: SETUP_PROVIDER_ANTHROPIC_COMPATIBLE, group: "compatible" },
+  { title: "TypeSafe (Evaluate only)", value: SETUP_PROVIDER_TYPESAFE, group: "api" },
 ];
 
 const SETUP_PROVIDER_UI_META = {
@@ -70,6 +72,8 @@ const SETUP_PROVIDER_UI_META = {
   [SETUP_PROVIDER_OPENAI_CHAT_COMPATIBLE]: { requiresAPIBase: true, supportsModelLookup: true },
   [SETUP_PROVIDER_OPENAI_RESPONSE_COMPATIBLE]: { requiresAPIBase: true, supportsModelLookup: true },
   [SETUP_PROVIDER_ANTHROPIC_COMPATIBLE]: { requiresAPIBase: true, supportsModelLookup: true },
+  // Evaluate only: a profile for the decision route, which cannot chat.
+  [SETUP_PROVIDER_TYPESAFE]: { supportsCustomAPIBase: true, evaluateOnly: true },
 };
 
 const OPENAI_COMPATIBLE_API_BASE_OPTIONS = [
@@ -231,6 +235,8 @@ function normalizeSetupProviderChoice(provider, options = {}) {
       return SETUP_PROVIDER_GROQ;
     case SETUP_PROVIDER_SAKANA:
       return SETUP_PROVIDER_SAKANA;
+    case SETUP_PROVIDER_TYPESAFE:
+      return SETUP_PROVIDER_TYPESAFE;
     case "claude_compatible":
     case "claude_ai_compatible":
     case SETUP_PROVIDER_ANTHROPIC_COMPATIBLE:
@@ -263,6 +269,12 @@ function setupOpenAICodexUsesAPIKey(endpoint, hasAPIKey) {
 function setupProviderSupportsModelLookup(choice) {
   const provider = normalizeSetupProviderChoice(choice, { allowEmpty: true });
   return SETUP_PROVIDER_UI_META[provider]?.supportsModelLookup === true;
+}
+
+// Evaluate-only providers serve the decision route; they cannot run chats or the main loop.
+function setupProviderEvaluateOnly(choice) {
+  const provider = normalizeSetupProviderChoice(choice, { allowEmpty: true });
+  return SETUP_PROVIDER_UI_META[provider]?.evaluateOnly === true;
 }
 
 function setupProviderRequiresAPIKey(choice) {
@@ -316,10 +328,12 @@ export {
   SETUP_PROVIDER_OPENROUTER,
   SETUP_PROVIDER_OPTIONS,
   SETUP_PROVIDER_SAKANA,
+  SETUP_PROVIDER_TYPESAFE,
   SETUP_PROVIDER_XAI,
   SETUP_REQUIRED_MARKDOWN_FILES,
   normalizeSetupProviderChoice,
   resolveSetupAPIKeyHelp,
+  setupProviderEvaluateOnly,
   setupProviderRequiresAPIBase,
   setupProviderRequiresAPIKey,
   setupProviderSupportsCustomAPIBase,

@@ -93,6 +93,7 @@ import {
   SETUP_PROVIDER_OPENAI_CODEX,
   SETUP_PROVIDER_XAI_OAUTH,
   SETUP_PROVIDER_OPTIONS,
+  setupProviderEvaluateOnly,
   setupProviderRequiresAPIKey,
   setupProviderSupportsCustomAPIBase,
   setupOpenAICodexUsesAPIKey,
@@ -1309,6 +1310,8 @@ const SettingsView = {
     }
 
     const providerItems = SETUP_PROVIDER_OPTIONS;
+    // The default LLM runs the main loop, so it cannot be an Evaluate-only provider.
+    const defaultLLMProviderItems = SETUP_PROVIDER_OPTIONS.filter((item) => !setupProviderEvaluateOnly(item.value));
     const apiBasePickerItems = computed(() =>
       OPENAI_COMPATIBLE_API_BASE_OPTIONS.map((item) => ({
         id: item.id,
@@ -5501,6 +5504,7 @@ const SettingsView = {
       llmEnvManaged,
       llmSecretFields,
       providerItems,
+      defaultLLMProviderItems,
       reasoningEffortItems,
       toolsEmulationItems,
       profileOptions,
@@ -5852,7 +5856,7 @@ const SettingsView = {
                       :envManaged="llmEnvManaged"
                       :secretFields="llmSecretFields"
                       :revealPrefix="llmRevealPrefix()"
-                      :providerItems="providerItems"
+                      :providerItems="defaultLLMProviderItems"
                       :reasoningEffortItems="reasoningEffortItems"
                       :toolsEmulationItems="toolsEmulationItems"
                       :enableAPIBasePicker="true"

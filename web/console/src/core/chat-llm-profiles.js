@@ -1,3 +1,5 @@
+const EVALUATE_ONLY_PROVIDERS = new Set(["typesafe"]);
+
 function text(value) {
   return String(value || "").trim();
 }
@@ -22,6 +24,10 @@ export function normalizeChatLLMProfiles(rawItems) {
     }
     seen.add(name);
     const metadata = normalizeChatLLMProfileMetadata(raw);
+    // Evaluate-only profiles serve the decision route and cannot run a chat.
+    if (EVALUATE_ONLY_PROVIDERS.has(metadata.inferenceProvider.toLowerCase())) {
+      continue;
+    }
     profiles.push({
       name,
       ...metadata,

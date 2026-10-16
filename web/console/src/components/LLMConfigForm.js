@@ -17,6 +17,7 @@ import {
   SETUP_PROVIDER_MISTERMORPH_PRO,
   SETUP_PROVIDER_OPENAI_CODEX,
   SETUP_PROVIDER_XAI_OAUTH,
+  setupProviderEvaluateOnly,
   setupProviderRequiresAPIBase,
   setupProviderRequiresAPIKey,
   setupProviderSupportsCustomAPIBase,
@@ -175,6 +176,8 @@ const LLMConfigForm = {
     const showProOAuthFields = computed(() => effectiveProviderChoice.value === SETUP_PROVIDER_MISTERMORPH_PRO);
     const showBedrockFields = computed(() => effectiveProviderChoice.value === SETUP_PROVIDER_BEDROCK);
     const showAzureFields = computed(() => effectiveProviderChoice.value === "azure");
+    // Evaluate-only providers (TypeSafe) take no chat settings: no reasoning, tools, cache or headers.
+    const evaluateOnly = computed(() => setupProviderEvaluateOnly(effectiveProviderChoice.value));
     const showEndpointField = computed(() => setupProviderSupportsCustomAPIBase(effectiveProviderChoice.value));
     const showCredentialFields = computed(
       () =>
@@ -408,6 +411,7 @@ const LLMConfigForm = {
       xaiAuthActionClass,
       proAuthActionClass,
       modelLookupDisabled,
+      evaluateOnly,
       credentialHelp,
       credentialHelpParts,
       fieldEnvName,
@@ -665,7 +669,7 @@ const LLMConfigForm = {
       </div>
       </template>
 
-      <div v-if="showAdvanced" class="settings-field-row is-wide is-three">
+      <div v-if="showAdvanced && !evaluateOnly" class="settings-field-row is-wide is-three">
         <div class="settings-field">
           <span class="settings-field-label">{{ t("settings_llm_reasoning_label") }}</span>
           <EnvManagedField v-if="isFieldEnvManaged('reasoning_effort')" :name="fieldManagedHeadline('reasoning_effort')" />
@@ -748,6 +752,7 @@ const LLMConfigForm = {
           />
           <p class="settings-field-note">None selected means all. Only profiles with text can run subtasks.</p>
         </div>
+        <template v-if="!evaluateOnly">
         <div class="settings-field">
           <span class="settings-field-label">Supports image parts</span>
           <SettingSelect
@@ -777,6 +782,7 @@ const LLMConfigForm = {
             @update:modelValue="updateField('cache_key_prefix', $event)"
           />
         </div>
+        </template>
         <div class="settings-field">
           <span class="settings-field-label">Request timeout</span>
           <QInput
@@ -786,6 +792,7 @@ const LLMConfigForm = {
             @update:modelValue="updateField('request_timeout', $event)"
           />
         </div>
+        <template v-if="!evaluateOnly">
         <div class="settings-field">
           <span class="settings-field-label">Temperature</span>
           <QInput
@@ -816,6 +823,7 @@ const LLMConfigForm = {
             @update:modelValue="updateField('headers_text', $event)"
           />
         </div>
+        </template>
       </template>
     </div>
   `,
