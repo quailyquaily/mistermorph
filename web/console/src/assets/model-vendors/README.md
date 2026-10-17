@@ -71,7 +71,6 @@
   - 来源：`https://about.meta.com/brand/resources/meta/company-brand/`
   - 实际下载：`https://upload.wikimedia.org/wikipedia/commons/d/d0/Meta_Platforms_logo.svg`
   - 说明：Meta 官方品牌资源中的 symbol，由 Wikimedia Commons 保存；文件移除了 viewBox 外的 wordmark 路径。
-- `typesafe.png`
+- `typesafe.svg`
   - 来源：`https://typesafe.ai/`
-  - 实际下载：`https://framerusercontent.com/images/kcuF2BEp5XaVfkmFB634IPRKQH0.png`
-  - 说明：TypeSafe 官网的 400x400 apple-touch-icon，粉色方底 mark。
+  - 说明：提取官网内联 SVG 的独立标志路径，移除文字并调整 viewBox；使用透明背景，不使用粉底 Apple Touch 图标。

@@ -11,7 +11,7 @@ import metaLogo from "../assets/model-vendors/meta.svg";
 import openAILogo from "../assets/model-vendors/openai.svg";
 import openRouterLogo from "../assets/model-vendors/openrouter.svg";
 import sakanaLogo from "../assets/model-vendors/sakana.svg";
-import typeSafeLogo from "../assets/model-vendors/typesafe.png";
+import typeSafeLogo from "../assets/model-vendors/typesafe.svg";
 import xAILogo from "../assets/model-vendors/xai.svg";
 import misterMorphLogo from "../assets/images/app_logo_current.svg";
 
