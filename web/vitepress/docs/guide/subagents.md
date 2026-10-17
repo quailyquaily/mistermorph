@@ -74,7 +74,7 @@ Parameters:
 Current behavior:
 
 - `codex` runs `codex exec --dangerously-bypass-approvals-and-sandbox --json -C <cwd> -` and sends the task through stdin
-- `claude` runs `claude -p <task> --output-format stream-json --verbose --include-partial-messages --no-session-persistence --dangerously-skip-permissions`
+- `claude` runs `claude -p --output-format stream-json --verbose --include-partial-messages --no-session-persistence --dangerously-skip-permissions` and sends the task through stdin
 - stdout is parsed as streaming JSON/JSONL and text deltas are emitted as tool-output events
 - the final result is normalized into the same `SubtaskResult` envelope used by `spawn`
 - `coder` is never re-exposed inside isolated child runs

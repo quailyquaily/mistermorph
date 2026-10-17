@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -296,11 +297,11 @@ func TestCoderBuildCLICommand(t *testing.T) {
 	if claude.Command != "claude" {
 		t.Fatalf("claude.Command = %q, want claude", claude.Command)
 	}
-	if want := []string{"-p", "review", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--no-session-persistence", "--dangerously-skip-permissions"}; !reflect.DeepEqual(claude.Args, want) {
+	if want := []string{"-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--no-session-persistence", "--dangerously-skip-permissions"}; !reflect.DeepEqual(claude.Args, want) {
 		t.Fatalf("claude.Args = %#v, want %#v", claude.Args, want)
 	}
-	if claude.Stdin != "" {
-		t.Fatalf("claude.Stdin = %q, want empty", claude.Stdin)
+	if claude.Stdin != "review" {
+		t.Fatalf("claude.Stdin = %q, want review", claude.Stdin)
 	}
 }
 
@@ -385,6 +386,183 @@ func writeFakeCoderExecutable(t *testing.T, dir, name, body string) {
 	path := filepath.Join(dir, name)
 	if err := os.WriteFile(path, []byte("#!/bin/sh\n"+body), 0o755); err != nil {
 		t.Fatalf("WriteFile(%s) error = %v", name, err)
+	}
+}
+
+func TestRunCoderCLIReturnsWhileBackgroundProcessHoldsOutput(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake shell executable uses /bin/sh")
+	}
+
+	binDir := t.TempDir()
+	writeFakeCoderExecutable(t, binDir, "codex", "sleep 30 &\nprintf '%s\\n' '{\"type\":\"item.completed\",\"item\":{\"type\":\"agent_message\",\"text\":\"done\"}}'\n")
+	var progress []string
+	started := time.Now()
+	output, err := runCoderCLI(context.Background(), coderCLIRequest{
+		Backend:   coderBackendCodex,
+		Task:      "x",
+		CWD:       t.TempDir(),
+		LogRoot:   t.TempDir(),
+		PathExtra: []string{binDir},
+	}, func(text string) { progress = append(progress, text) })
+	if err != nil {
+		t.Fatalf("runCoderCLI() error = %v", err)
+	}
+	if output != "done" {
+		t.Fatalf("output = %q, want done", output)
+	}
+	if elapsed := time.Since(started); elapsed > 10*time.Second {
+		t.Fatalf("runCoderCLI() took %v; it waited for the background process", elapsed)
+	}
+	if got := strings.Join(progress, ""); !strings.Contains(got, "background process") {
+		t.Fatalf("progress %q does not mention the background process", got)
+	}
+}
+
+func TestRunCoderCLISendsClaudeTaskOnStdin(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake shell executable uses /bin/sh")
+	}
+
+	binDir := t.TempDir()
+	writeFakeCoderExecutable(t, binDir, "claude", "for arg in \"$@\"; do case \"$arg\" in -*fix*) printf 'task in argv\\n' >&2; exit 9 ;; esac; done\nIFS= read -r task\nprintf '{\"type\":\"result\",\"result\":\"got %s\"}\\n' \"$task\"\n")
+	output, err := runCoderCLI(context.Background(), coderCLIRequest{
+		Backend:   coderBackendClaude,
+		Task:      "- fix the bug",
+		CWD:       t.TempDir(),
+		LogRoot:   t.TempDir(),
+		PathExtra: []string{binDir},
+	}, nil)
+	if err != nil {
+		t.Fatalf("runCoderCLI() error = %v", err)
+	}
+	if output != "got - fix the bug" {
+		t.Fatalf("output = %q, want got - fix the bug", output)
+	}
+}
+
+func TestRunCoderCLICapsOutput(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake shell executable uses /bin/sh")
+	}
+
+	binDir := t.TempDir()
+	writeFakeCoderExecutable(t, binDir, "codex", "i=0\nwhile [ $i -lt 2000 ]; do printf 'line %04d of plain output padding padding padding\\n' $i; i=$((i+1)); done\n")
+	output, err := runCoderCLI(context.Background(), coderCLIRequest{
+		Backend:   coderBackendCodex,
+		Task:      "x",
+		CWD:       t.TempDir(),
+		LogRoot:   t.TempDir(),
+		PathExtra: []string{binDir},
+	}, nil)
+	if err != nil {
+		t.Fatalf("runCoderCLI() error = %v", err)
+	}
+	if len(output) > coderOutputMaxBytes+512 {
+		t.Fatalf("len(output) = %d, want at most about %d", len(output), coderOutputMaxBytes)
+	}
+	if !strings.Contains(output, "bytes omitted") || !strings.Contains(output, "stdout.jsonl") || !strings.HasSuffix(output, "line 1999 of plain output padding padding padding") {
+		t.Fatalf("output head %q / tail %q, want omission note and the last line", output[:120], output[len(output)-80:])
+	}
+}
+
+func TestRunCoderCLIPrunesOldDiagnostics(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake shell executable uses /bin/sh")
+	}
+
+	binDir, logRoot := t.TempDir(), t.TempDir()
+	writeFakeCoderExecutable(t, binDir, "codex", "printf 'ok\\n'\n")
+	root := filepath.Join(logRoot, "coder")
+	old := time.Now().Add(-time.Hour)
+	for i := 0; i < coderDiagnosticsKeep+5; i++ {
+		dir := filepath.Join(root, "codex-old"+strconv.Itoa(i))
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(dir, old, old.Add(time.Duration(i)*time.Second)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	unrelated := filepath.Join(root, "notes")
+	if err := os.MkdirAll(unrelated, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := runCoderCLI(context.Background(), coderCLIRequest{Backend: coderBackendCodex, Task: "x", CWD: t.TempDir(), LogRoot: logRoot, PathExtra: []string{binDir}}, nil); err != nil {
+		t.Fatalf("runCoderCLI() error = %v", err)
+	}
+	dirs, err := filepath.Glob(filepath.Join(root, "codex-*"))
+	if err != nil || len(dirs) != coderDiagnosticsKeep {
+		t.Fatalf("diagnostics = %d dirs, err=%v, want %d", len(dirs), err, coderDiagnosticsKeep)
+	}
+	if _, err := os.Stat(filepath.Join(root, "codex-old0")); !os.IsNotExist(err) {
+		t.Fatalf("oldest diagnostics dir kept, stat err=%v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "codex-old"+strconv.Itoa(coderDiagnosticsKeep+4))); err != nil {
+		t.Fatalf("newest old diagnostics dir removed: %v", err)
+	}
+	if _, err := os.Stat(unrelated); err != nil {
+		t.Fatalf("unrelated dir removed: %v", err)
+	}
+}
+
+func TestLookupCoderCommandSkipsRelativePathEntries(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake shell executable uses /bin/sh")
+	}
+
+	cwd := t.TempDir()
+	writeFakeCoderExecutable(t, cwd, "codex", "exit 0\n")
+	t.Chdir(cwd)
+
+	pathValue := strings.Join([]string{"", ".", "bin"}, string(os.PathListSeparator))
+	if got, err := lookupCoderCommand("codex", pathValue); err == nil {
+		t.Fatalf("lookupCoderCommand() = %q, want not found", got)
+	}
+	binDir := t.TempDir()
+	writeFakeCoderExecutable(t, binDir, "codex", "exit 0\n")
+	got, err := lookupCoderCommand("codex", "."+string(os.PathListSeparator)+binDir)
+	if err != nil || got != filepath.Join(binDir, "codex") {
+		t.Fatalf("lookupCoderCommand() = %q, %v, want %s", got, err, filepath.Join(binDir, "codex"))
+	}
+}
+
+func TestCoderLineWriter(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name      string
+		writes    []string
+		want      []string
+		overflows int
+	}{
+		{name: "lines split across writes", writes: []string{"ab", "c\nd", "e\n"}, want: []string{"abc", "de"}},
+		{name: "unterminated last line", writes: []string{"a\nb"}, want: []string{"a", "b"}},
+		{name: "overlong line dropped", writes: []string{strings.Repeat("x", coderLineMaxBytes), "x", "x\nnext\n"}, want: []string{"next"}, overflows: 1},
+		{name: "overlong line in one write", writes: []string{strings.Repeat("y", coderLineMaxBytes+1) + "\nok\n"}, want: []string{"ok"}, overflows: 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var got []string
+			overflows := 0
+			w := &coderLineWriter{
+				handle:   func(line []byte) { got = append(got, string(line)) },
+				overflow: func() { overflows++ },
+			}
+			for _, chunk := range tc.writes {
+				if n, err := w.Write([]byte(chunk)); err != nil || n != len(chunk) {
+					t.Fatalf("Write() = %d, %v, want %d, nil", n, err, len(chunk))
+				}
+			}
+			w.Flush()
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("lines = %q, want %q", got, tc.want)
+			}
+			if overflows != tc.overflows {
+				t.Fatalf("overflows = %d, want %d", overflows, tc.overflows)
+			}
+		})
 	}
 }
 
@@ -480,7 +658,6 @@ func TestCoderStreamCollectorCodex(t *testing.T) {
 		chunks = append(chunks, text)
 	})
 	for _, line := range []string{
-		`{"method":"item/agentMessage/delta","params":{"delta":"Hi "}}`,
 		`{"type":"item.completed","item":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Hi final"}]}}`,
 	} {
 		if err := collector.ConsumeLine([]byte(line)); err != nil {

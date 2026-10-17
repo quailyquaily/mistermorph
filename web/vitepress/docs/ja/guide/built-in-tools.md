@@ -96,7 +96,9 @@ Web 検索を行い、構造化された検索結果を返します。手がか�
 
 - 主な制約: デフォルトでは `tools.coder.enabled=false` で無効ですが、`$coder` でそのタスクだけに公開できます。`coder=codex` または `coder=claude` だけを受け付けます。ローカル CLI は approval / permission をバイパスして実行されます。CLI がサービスの PATH 外にある場合は `tools.coder.path_extra` を設定します。
 - Codex の既定: `codex exec --dangerously-bypass-approvals-and-sandbox --json -C <cwd> -`
-- Claude の既定: `claude -p <task> --output-format stream-json --verbose --include-partial-messages --no-session-persistence --dangerously-skip-permissions`
+- Claude の既定: `claude -p --output-format stream-json --verbose --include-partial-messages --no-session-persistence --dangerously-skip-permissions`（task は stdin で渡します）
+
+CLI は独自のプロセスグループで実行されるため、キャンセル時には CLI が起動したコマンドも停止します。CLI の終了後もバックグラウンドに残したプロセス（dev server など）が出力を保持している場合、`coder` は 1 秒後に読み取りをやめて結果を返します。64 KiB を超える出力は末尾 64 KiB に切り詰め、`stdout.jsonl` の場所を添えます。`file_cache_dir/coder` の診断ディレクトリは新しい 20 件だけを残します。
 
 Codex / Claude Code への委譲にはこちらを使います。
 

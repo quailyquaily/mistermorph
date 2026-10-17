@@ -63,7 +63,7 @@ Subagent 解决隔离、收敛和结果回传的问题，不是完整的后台�
 当前行为：
 
 - `codex` 会运行 `codex exec --dangerously-bypass-approvals-and-sandbox --json -C <cwd> -`，并通过 stdin 传入 task
-- `claude` 会运行 `claude -p <task> --output-format stream-json --verbose --include-partial-messages --no-session-persistence --dangerously-skip-permissions`
+- `claude` 会运行 `claude -p --output-format stream-json --verbose --include-partial-messages --no-session-persistence --dangerously-skip-permissions`，并通过 stdin 传入 task
 - stdout 按 streaming JSON/JSONL 解析，文本增量会发成 tool-output event
 - 最终结果会归一化成和 `spawn` 相同的 `SubtaskResult` envelope
 - 隔离子任务内部不会再暴露 `coder`

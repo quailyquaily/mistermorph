@@ -98,7 +98,9 @@ Shell 的默认启用状态按平台区分：
 关键限制：默认通过 `tools.coder.enabled=false` 关闭，但 `$coder` 可以只为当前任务暴露它；只支持 `coder=codex` 或 `coder=claude`；本地 CLI 会以 bypass approval / permission 的方式运行。如果 CLI 不在服务进程 PATH 里，设置 `tools.coder.path_extra`。
 
 - Codex 默认路径：`codex exec --dangerously-bypass-approvals-and-sandbox --json -C <cwd> -`
-- Claude 默认路径：`claude -p <task> --output-format stream-json --verbose --include-partial-messages --no-session-persistence --dangerously-skip-permissions`
+- Claude 默认路径：`claude -p --output-format stream-json --verbose --include-partial-messages --no-session-persistence --dangerously-skip-permissions`，task 通过 stdin 传入
+
+CLI 在独立的进程组中运行，取消时它启动的命令也会一并停止。如果 CLI 退出后，它留在后台的进程（例如 dev server）仍占用输出，`coder` 会在 1 秒后停止读取并返回结果。超过 64 KiB 的输出只保留最后 64 KiB，并注明 `stdout.jsonl` 的位置。`file_cache_dir/coder` 下只保留最近 20 个诊断目录。
 
 Codex / Claude Code 委托优先用它。
 

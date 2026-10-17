@@ -1,7 +1,6 @@
 package agent
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -12,9 +11,11 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/quailyquaily/mistermorph/internal/pathroots"
 	"github.com/quailyquaily/mistermorph/internal/pathutil"
@@ -25,8 +26,13 @@ const (
 	coderBackendCodex  = "codex"
 	coderBackendClaude = "claude"
 
-	coderStderrTailBytes = 64 * 1024
-	coderScannerMaxBytes = 4 * 1024 * 1024
+	coderStderrTailBytes = 4 * 1024
+	coderLineMaxBytes    = 4 * 1024 * 1024
+	coderOutputMaxBytes  = 64 * 1024
+	// After the CLI exits, a process it left in the background can keep its output open.
+	coderWaitDelay = time.Second
+	// Diagnostics directories kept under file_cache_dir/coder, including the new one.
+	coderDiagnosticsKeep = 20
 )
 
 type coderTool struct {
@@ -286,9 +292,9 @@ func buildCoderCLICommand(req coderCLIRequest) coderCLICommand {
 	case coderBackendClaude:
 		return coderCLICommand{
 			Command: "claude",
+			// The task goes on stdin: as an argument, a task starting with "-" reads as an option.
 			Args: []string{
 				"-p",
-				req.Task,
 				"--output-format",
 				"stream-json",
 				"--verbose",
@@ -296,7 +302,8 @@ func buildCoderCLICommand(req coderCLIRequest) coderCLICommand {
 				"--no-session-persistence",
 				"--dangerously-skip-permissions",
 			},
-			Dir: strings.TrimSpace(req.CWD),
+			Stdin: req.Task,
+			Dir:   strings.TrimSpace(req.CWD),
 		}
 	default:
 		return coderCLICommand{}
@@ -340,6 +347,8 @@ func runCoderCLI(ctx context.Context, req coderCLIRequest, emit func(string)) (o
 		if err := os.MkdirAll(root, 0o700); err != nil {
 			return "", fmt.Errorf("create coder diagnostics directory: %w", err)
 		}
+		// The system temporary directory has its own cleanup; file_cache_dir does not.
+		pruneCoderDiagnostics(root, coderDiagnosticsKeep-1)
 	}
 	diagnosticDir, err := os.MkdirTemp(root, req.Backend+"-")
 	if err != nil {
@@ -381,6 +390,7 @@ func runCoderCLI(ctx context.Context, req coderCLIRequest, emit func(string)) (o
 		runErr = fmt.Errorf("%s: %w", detail, runErr)
 	}()
 	cmd := exec.CommandContext(ctx, commandPath, spec.Args...)
+	configureCoderProcess(cmd)
 	if env != nil {
 		cmd.Env = env
 	}
@@ -390,15 +400,21 @@ func runCoderCLI(ctx context.Context, req coderCLIRequest, emit func(string)) (o
 	if spec.Stdin != "" {
 		cmd.Stdin = strings.NewReader(spec.Stdin)
 	}
+	// exec copies the output, so Wait returns once the CLI exits and WaitDelay passes,
+	// even when a process the CLI left in the background still holds the pipes.
+	stdoutLines := &coderLineWriter{handle: func(line []byte) { _ = collector.ConsumeLine(line) }}
+	stderrLines := &coderLineWriter{handle: func(line []byte) {
+		progress(fmt.Sprintf("[%s] stderr received\n", req.Backend), fmt.Sprintf("[%s stderr] %s\n", req.Backend, line))
+	}}
+	stdoutLines.overflow = func() {
+		line := fmt.Sprintf("[%s] skipped an output line over %d bytes\n", req.Backend, coderLineMaxBytes)
+		progress(line, line)
+	}
+	stderrLines.overflow = stdoutLines.overflow
+	cmd.Stdout = io.MultiWriter(stdoutLog, stdoutLines)
+	cmd.Stderr = io.MultiWriter(stderrLog, &stderrTail, stderrLines)
+	cmd.WaitDelay = coderWaitDelay
 
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return "", err
-	}
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		return "", err
-	}
 	if err := cmd.Start(); err != nil {
 		return "", err
 	}
@@ -409,36 +425,18 @@ func runCoderCLI(ctx context.Context, req coderCLIRequest, emit func(string)) (o
 	}
 	line = fmt.Sprintf("[%s] started pid=%d%s\n", req.Backend, cmd.Process.Pid, remaining)
 	progress(line, line)
-	var wg sync.WaitGroup
-	var stdoutErr error
-	var stderrErr error
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		stdoutErr = readCoderStdout(io.TeeReader(stdout, stdoutLog), collector)
-	}()
-	go func() {
-		defer wg.Done()
-		reader := io.TeeReader(stderr, io.MultiWriter(stderrLog, &stderrTail))
-		scanner := bufio.NewScanner(reader)
-		scanner.Buffer(make([]byte, 0, 64*1024), coderScannerMaxBytes)
-		for scanner.Scan() {
-			progress(fmt.Sprintf("[%s] stderr received\n", req.Backend), fmt.Sprintf("[%s stderr] %s\n", req.Backend, scanner.Text()))
-		}
-		stderrErr = scanner.Err()
-	}()
 
-	wg.Wait()
 	waitErr := cmd.Wait()
-	output = collector.Output()
-	if stdoutErr != nil {
-		return output, stdoutErr
-	}
-	if stderrErr != nil {
-		return output, stderrErr
+	stdoutLines.Flush()
+	stderrLines.Flush()
+	output = capCoderOutput(collector.Output(), diagnosticDir)
+	if errors.Is(waitErr, exec.ErrWaitDelay) && ctx.Err() == nil {
+		line := fmt.Sprintf("[%s] exited; stopped reading output still held by a background process\n", req.Backend)
+		progress(line, line)
+		waitErr = nil
 	}
 	if waitErr != nil {
-		if ctx != nil && ctx.Err() != nil {
+		if ctx.Err() != nil {
 			return output, ctx.Err()
 		}
 		return output, coderExitError(req.Backend, waitErr)
@@ -481,8 +479,9 @@ func coderPathWithExtra(parentPath string, extra []string) string {
 
 func lookupCoderCommand(command string, pathValue string) (string, error) {
 	for _, dir := range filepath.SplitList(pathValue) {
-		if strings.TrimSpace(dir) == "" {
-			dir = "."
+		// Like exec.LookPath, never resolve to a binary in the current directory.
+		if !filepath.IsAbs(strings.TrimSpace(dir)) {
+			continue
 		}
 		for _, name := range coderExecutableNames(command) {
 			candidate := filepath.Join(dir, name)
@@ -562,24 +561,107 @@ func cleanCoderPathExtra(in []string) []string {
 	return out
 }
 
-func readCoderStdout(r io.Reader, collector *coderStreamCollector) error {
-	scanner := bufio.NewScanner(r)
-	scanner.Buffer(make([]byte, 0, 64*1024), coderScannerMaxBytes)
-	for scanner.Scan() {
-		if err := collector.ConsumeLine(scanner.Bytes()); err != nil {
-			return err
+// coderLineWriter hands each complete line to handle. A line longer than coderLineMaxBytes
+// is dropped, and overflow is called once for it.
+type coderLineWriter struct {
+	handle   func(line []byte)
+	overflow func()
+
+	buf      []byte
+	skipping bool
+}
+
+func (w *coderLineWriter) Write(p []byte) (int, error) {
+	n := len(p)
+	for len(p) > 0 {
+		i := bytes.IndexByte(p, '\n')
+		if i < 0 {
+			if !w.skipping {
+				w.buf = append(w.buf, p...)
+				if len(w.buf) > coderLineMaxBytes {
+					w.buf = nil
+					w.skipping = true
+					if w.overflow != nil {
+						w.overflow()
+					}
+				}
+			}
+			break
 		}
+		if !w.skipping {
+			w.buf = append(w.buf, p[:i]...)
+			if len(w.buf) <= coderLineMaxBytes {
+				w.handle(w.buf)
+			} else if w.overflow != nil {
+				w.overflow()
+			}
+		}
+		w.buf = w.buf[:0]
+		w.skipping = false
+		p = p[i+1:]
 	}
-	return scanner.Err()
+	return n, nil
+}
+
+// Flush hands over a final line that has no trailing newline.
+func (w *coderLineWriter) Flush() {
+	if len(w.buf) > 0 && !w.skipping {
+		w.handle(w.buf)
+	}
+	w.buf = nil
+	w.skipping = false
+}
+
+// capCoderOutput keeps the end of an oversized result, where the CLI's conclusion usually is.
+func capCoderOutput(output string, diagnosticDir string) string {
+	if len(output) <= coderOutputMaxBytes {
+		return output
+	}
+	start := len(output) - coderOutputMaxBytes
+	for start < len(output) && !utf8.RuneStart(output[start]) {
+		start++
+	}
+	return fmt.Sprintf("[%d bytes omitted; the full stream is in %s]\n", start, filepath.Join(diagnosticDir, "stdout.jsonl")) + output[start:]
+}
+
+// pruneCoderDiagnostics removes the oldest codex-* and claude-* directories under root
+// until at most keep remain.
+func pruneCoderDiagnostics(root string, keep int) {
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return
+	}
+	type diagDir struct {
+		path    string
+		modTime time.Time
+	}
+	var dirs []diagDir
+	for _, entry := range entries {
+		name := entry.Name()
+		if !entry.IsDir() || !(strings.HasPrefix(name, coderBackendCodex+"-") || strings.HasPrefix(name, coderBackendClaude+"-")) {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		dirs = append(dirs, diagDir{path: filepath.Join(root, name), modTime: info.ModTime()})
+	}
+	if len(dirs) <= keep {
+		return
+	}
+	sort.Slice(dirs, func(i, j int) bool { return dirs[i].modTime.Before(dirs[j].modTime) })
+	for _, dir := range dirs[:len(dirs)-keep] {
+		_ = os.RemoveAll(dir.path)
+	}
 }
 
 func coderExitError(backend string, err error) error {
-	code := -1
 	var exitErr *exec.ExitError
-	if errors.As(err, &exitErr) {
-		code = exitErr.ExitCode()
+	if !errors.As(err, &exitErr) {
+		return fmt.Errorf("%s: %w", backend, err)
 	}
-	return fmt.Errorf("%s exited with code %d", backend, code)
+	return fmt.Errorf("%s exited with code %d", backend, exitErr.ExitCode())
 }
 
 type coderStreamCollector struct {
@@ -747,15 +829,6 @@ func (c *coderStreamCollector) emitActivity(summary string, details ...string) {
 }
 
 func (c *coderStreamCollector) consumeCodex(payload map[string]any) {
-	method := stringField(payload, "method")
-	if method == "item/agentMessage/delta" {
-		if params, ok := mapField(payload, "params"); ok {
-			if text := stringField(params, "delta"); text != "" {
-				c.addDelta(text)
-				return
-			}
-		}
-	}
 	typ := stringField(payload, "type")
 	switch typ {
 	case "thread.started", "turn.started", "turn.completed":

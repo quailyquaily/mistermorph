@@ -74,7 +74,7 @@ Mistermorph には現在、三つの隔離タスク入口があります。
 現在の挙動:
 
 - `codex` は `codex exec --dangerously-bypass-approvals-and-sandbox --json -C <cwd> -` を実行し、task を stdin で渡します
-- `claude` は `claude -p <task> --output-format stream-json --verbose --include-partial-messages --no-session-persistence --dangerously-skip-permissions` を実行します
+- `claude` は `claude -p --output-format stream-json --verbose --include-partial-messages --no-session-persistence --dangerously-skip-permissions` を実行し、task を stdin で渡します
 - stdout は streaming JSON/JSONL として解析され、テキスト差分は tool-output event として送られます
 - 最終結果は `spawn` と同じ `SubtaskResult` envelope に正規化されます
 - 分離した子 run の中では `coder` は再公開されません
