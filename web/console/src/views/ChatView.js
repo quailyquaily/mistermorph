@@ -35,9 +35,11 @@ import {
   historyTimeLabel as formatChatHistoryTime,
   isContextCompactCommand,
   isTerminalStatus,
+  keepLiveTaskState,
   mergeRefreshedHistoryItems,
   normalizeActivity,
   normalizeHistoryFileReferences,
+  normalizeInsights,
   normalizePlan,
   normalizeReasoning,
   normalizeTaskStatus,
@@ -45,6 +47,7 @@ import {
   taskActivity,
   taskAgentText,
   taskDurationLabel,
+  taskInsights,
   taskListHistoryItems,
   taskPlan,
   taskRawJSON,
@@ -3202,13 +3205,20 @@ const ChatView = {
         if (frame.plan && typeof frame.plan === "object") {
           patch.plan = nextPlan;
         }
+        if (Array.isArray(frame.insights) && frame.insights.length > 0) {
+          patch.insights = normalizeInsights(frame.insights);
+        }
         if (frame.activity && typeof frame.activity === "object") {
           patch.activity = nextActivity;
         }
         if (typeof frame.reasoning === "string" && frame.reasoning.trim() !== "") {
           patch.reasoning = normalizeReasoning(frame.reasoning);
         }
-        if (!isPreview && typeof frame.text === "string" && frame.text !== "") {
+        if (frame.clear_text === true) {
+          // The text shown so far came from a response that called tools, not the reply.
+          patch.text = buildPollingHint(activeAgentName.value, t, historyPendingSeed(existingItem, key));
+          patch.awaiting = true;
+        } else if (!isPreview && typeof frame.text === "string" && frame.text !== "") {
           patch.text = frame.text;
           patch.awaiting = false;
         } else if (!isPreview && typeof frame.error === "string" && frame.error !== "") {
@@ -3310,6 +3320,7 @@ const ChatView = {
         endpointRef: String(partial?.endpointRef || "").trim(),
         topicID: normalizeTopicID(partial?.topicID),
         plan: normalizePlan(partial?.plan),
+        insights: normalizeInsights(partial?.insights),
         activity: normalizeActivity(partial?.activity),
         reasoning: normalizeReasoning(partial?.reasoning),
         approval: partial?.approval || null,
@@ -3528,6 +3539,7 @@ const ChatView = {
         const resolvedHistoryID = resolveAgentHistoryID(taskID, historyID);
         const existingItem = chatHistoryItems.value.find((item) => item.id === resolvedHistoryID) || null;
         const plan = taskPlan(detail) || normalizePlan(existingItem?.plan);
+        const insights = taskInsights(detail) || normalizeInsights(existingItem?.insights);
         const activity = taskActivity(detail) || normalizeActivity(existingItem?.activity);
         const pendingSeed = historyPendingSeed(existingItem, taskID);
         const preservePendingText =
@@ -3540,6 +3552,7 @@ const ChatView = {
             : polledApproval;
         patchAgentHistoryItem(taskID, historyID, {
           plan,
+          insights,
           activity,
           reasoning: taskReasoning(detail) || normalizeReasoning(existingItem?.reasoning),
           approval: nextApproval,
@@ -3785,11 +3798,14 @@ const ChatView = {
         if (consoleTopicsEnabled.value) {
           applyComposerTopicLLMProfile(lastUsedChatLLMProfile(tasks));
         }
-        const nextItems = taskListHistoryItems(tasks, t, {
-          agentName: activeAgentName.value,
-          endpointRef,
-          locale: currentLocale(),
-        });
+        const nextItems = keepLiveTaskState(
+          chatHistoryItems.value,
+          taskListHistoryItems(tasks, t, {
+            agentName: activeAgentName.value,
+            endpointRef,
+            locale: currentLocale(),
+          })
+        );
         replaceHistoryItems(nextItems.length > 0 ? nextItems : [emptyHistoryItem()]);
         scrollHistoryToBottom({ force: true });
         void loadApprovalDetails(endpointRef, currentHistoryLoadVersion);
@@ -3860,11 +3876,14 @@ const ChatView = {
       if (tasks.length === 0) {
         return;
       }
-      const freshItems = taskListHistoryItems(tasks, t, {
-        agentName: activeAgentName.value,
-        endpointRef,
-        locale: currentLocale(),
-      });
+      const freshItems = keepLiveTaskState(
+        chatHistoryItems.value,
+        taskListHistoryItems(tasks, t, {
+          agentName: activeAgentName.value,
+          endpointRef,
+          locale: currentLocale(),
+        })
+      );
       const merged = mergeRefreshedHistoryItems(chatHistoryItems.value, freshItems);
       if (!merged.overlap) {
         historyNextCursor.value = String(data?.next_cursor || "").trim();

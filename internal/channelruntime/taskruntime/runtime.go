@@ -712,6 +712,12 @@ func (rt *Runtime) prepareRun(ctx context.Context, req RunRequest) (preparedRunt
 	promptSpec.LightweightDecided = req.LightweightDecided
 	promptprofile.ApplyPersonaIdentity(&promptSpec, logger, rt.commonDeps.RuntimePaths.PersonaDir)
 	promptprofile.AppendPlanCreateGuidanceBlock(&promptSpec, reg)
+	// Only the task's own run talks to the person; subtasks report to the agent that started them.
+	insightLimit := 0
+	if !req.DisableRuntimeTools && agent.SubtaskDepthFromContext(ctx) == 0 {
+		insightLimit = insightLimitFromContext(ctx)
+	}
+	promptprofile.AppendInsightBlock(&promptSpec, insightLimit)
 	if !req.DisableTodoWorkflow {
 		promptprofile.AppendTodoWorkflowBlock(&promptSpec, reg)
 	}
@@ -756,6 +762,9 @@ func (rt *Runtime) prepareRun(ctx context.Context, req RunRequest) (preparedRunt
 	}
 	if req.PlanStepUpdate != nil {
 		engineOpts = append(engineOpts, agent.WithPlanStepUpdate(req.PlanStepUpdate))
+	}
+	if insightLimit > 0 {
+		engineOpts = append(engineOpts, agent.WithInsights(insightLimit))
 	}
 	if req.OnToolStart != nil {
 		engineOpts = append(engineOpts, agent.WithOnToolStart(req.OnToolStart))

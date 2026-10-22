@@ -343,7 +343,11 @@ func runLineLoop(ctx context.Context, d Dependencies, opts RunOptions) error {
 				_, notifyErr := publishLineBusOutbound(notifyCtx, inprocBus, job.ChatID, text, "", fmt.Sprintf("line:coder-progress:%s:%d", job.TaskID, seq))
 				return notifyErr
 			})
-			final, _, loadedSkills, runErr := runLineTask(
+			runCtx = taskruntime.WithInsightNotification(runCtx, logger, taskruntime.InsightLimitFor(isLineGroupChat(job.ChatType)), func(notifyCtx context.Context, seq int, text string) error {
+				_, notifyErr := publishLineBusOutbound(notifyCtx, inprocBus, job.ChatID, text, "", fmt.Sprintf("line:insight:%s:%d", job.TaskID, seq))
+				return notifyErr
+			})
+			final, agentCtx, loadedSkills, runErr := runLineTask(
 				runCtx,
 				runtimeBundle.TaskRuntime,
 				job,
@@ -423,6 +427,12 @@ func runLineLoop(ctx context.Context, d Dependencies, opts RunOptions) error {
 					inboundHistory.Images = imagehistory.WithDescription(inboundHistory.Images, outText, "agent_final")
 				}
 				cur = append(cur, inboundHistory)
+				// Insights were sent while the task ran, before the reply.
+				if agentCtx != nil {
+					for _, text := range agentCtx.Insights {
+						cur = append(cur, newLineOutboundAgentHistoryItem(job, text, time.Now().UTC()))
+					}
+				}
 				if outText != "" {
 					cur = append(cur, newLineOutboundAgentHistoryItem(job, outText, time.Now().UTC()))
 				}

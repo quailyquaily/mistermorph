@@ -165,6 +165,9 @@ func runLoop(ctx context.Context, d Dependencies, opts Options) error {
 		runCtx = taskruntime.WithCoderProgressNotification(runCtx, logger, func(notifyCtx context.Context, seq int, text string) error {
 			return reply(notifyCtx, j.AccountID, j.PeerID, text, "", fmt.Sprintf("coder-progress:%s:%d", j.TaskID, seq))
 		})
+		runCtx = taskruntime.WithInsightNotification(runCtx, logger, taskruntime.InsightLimit, func(notifyCtx context.Context, seq int, text string) error {
+			return reply(notifyCtx, j.AccountID, j.PeerID, text, "", fmt.Sprintf("insight:%s:%d", j.TaskID, seq))
+		})
 		stopTyping := transport.Typing(runCtx, j.AccountID, j.PeerID)
 		result, runErr := runTask(runCtx, bundle.TaskRuntime, env, j, prior, skills, lease.SteerQueue)
 		stopTyping()

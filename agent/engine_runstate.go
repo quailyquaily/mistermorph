@@ -57,6 +57,7 @@ type contextSnapshot struct {
 	Plan     *Plan          `json:"plan,omitempty"`
 	Metrics  *Metrics       `json:"metrics,omitempty"`
 	Steps    []stepSnapshot `json:"steps,omitempty"`
+	Insights []string       `json:"insights,omitempty"`
 }
 
 type stepSnapshot struct {
@@ -78,6 +79,7 @@ func snapshotFromContext(c *Context) contextSnapshot {
 		MaxSteps: c.MaxSteps,
 		Plan:     c.Plan,
 		Metrics:  c.Metrics,
+		Insights: append([]string(nil), c.Insights...),
 	}
 	if len(c.Steps) == 0 {
 		return out
@@ -105,6 +107,7 @@ func snapshotFromContext(c *Context) contextSnapshot {
 func contextFromSnapshot(s contextSnapshot) *Context {
 	c := NewContext(s.Task, s.MaxSteps)
 	c.Plan = s.Plan
+	c.Insights = append([]string(nil), s.Insights...)
 	if s.Metrics != nil {
 		c.Metrics = s.Metrics
 	}

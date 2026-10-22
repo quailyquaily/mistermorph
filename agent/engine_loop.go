@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"math/rand/v2"
 	"net"
+	"sort"
 	"strings"
 	"time"
 
@@ -47,6 +48,11 @@ type engineLoopState struct {
 
 	nextStep           int
 	deadlineConclusion bool
+
+	// insightSilentSteps counts the responses with tool calls since the run started or last sent an
+	// insight; insightReminded is set once the run has been reminded that it can send one.
+	insightSilentSteps int
+	insightReminded    bool
 
 	// Run-local tool tracking caches. They are rebuilt from successful historical
 	// steps when a run starts/resumes, and never persisted in resume state.
@@ -166,6 +172,7 @@ func (e *Engine) runLoop(ctx context.Context, st *engineLoopState) (final *Final
 		}
 		if st.pendingTool == nil {
 			e.applyQueuedSteer(ctx, st, "")
+			e.remindOfInsights(ctx, st, step)
 		}
 
 		for _, hook := range e.hooks {
@@ -442,6 +449,11 @@ func (e *Engine) runLoop(ctx context.Context, st *engineLoopState) (final *Final
 				}
 				assistantTextAdded = true
 				e.closePlanStepWithText(ctx, st, step, result.Text)
+				if e.sendInsight(ctx, st, step, result.Text) {
+					st.insightSilentSteps = 0
+				} else {
+					st.insightSilentSteps++
+				}
 			}
 
 			// --- Phase 1: serial pre-check (repeat limit, guard) ---
@@ -1281,10 +1293,100 @@ func (e *Engine) closePlanStepWithText(ctx context.Context, st *engineLoopState,
 	}
 }
 
+// insightReminderAfter is how many responses with tool calls a run makes without sending an insight
+// before it is reminded, once, that it can.
+const insightReminderAfter = 5
+
+// insightsApply reports whether the run sends insights: they are on, the run is the task's own (not
+// a subtask), and it has no plan (with a plan, step notes take their place).
+func (e *Engine) insightsApply(ctx context.Context, st *engineLoopState) bool {
+	return e.insightMax > 0 && st.agentCtx.Plan == nil && SubtaskDepthFromContext(ctx) == 0
+}
+
+// remindOfInsights adds a one-time note to the conversation when the run has worked through several
+// responses with tool calls without telling the user anything, so a long task does not stay silent
+// only because the model did not think of it.
+func (e *Engine) remindOfInsights(ctx context.Context, st *engineLoopState, step int) {
+	if st.insightReminded || st.insightSilentSteps < insightReminderAfter || !e.insightsApply(ctx, st) {
+		return
+	}
+	if len(st.agentCtx.Insights) >= e.insightMax {
+		return
+	}
+	st.insightReminded = true
+	st.messages = append(st.messages, llm.Message{Role: "user", Content: insightReminderText})
+	st.log.Info("insight_reminder", "step", step, "silent_steps", st.insightSilentSteps)
+}
+
+const insightReminderText = "[[ Runtime Note ]]\nYou have been working for several steps without telling the user anything. If you have confirmed something they would want to know now, write one or two sentences as plain text with your next tool calls; they are sent right away. If not, carry on without text."
+
+// sendInsight sends the text a model writes with its tool calls to the user as a message of its own,
+// when the run has no plan (with a plan, the text closes a step instead). Only the top-level run
+// sends, and only after its first tool call, so a model announcing what it is about to do stays
+// silent. Past the limit, the text stays in the conversation but is not sent.
+func (e *Engine) sendInsight(ctx context.Context, st *engineLoopState, step int, text string) bool {
+	if !e.insightsApply(ctx, st) {
+		return false
+	}
+	if st.agentCtx.Metrics == nil || st.agentCtx.Metrics.ToolCalls == 0 {
+		return false
+	}
+	note := planStepNoteFromText(text)
+	if note == "" {
+		if strings.TrimSpace(text) != "" {
+			// The keys show which shape a model used, without logging what it wrote.
+			st.log.Info("insight_skipped", "step", step, "reason", "not_a_message", "text_len", len(text), "json_keys", jsonObjectKeys(text))
+		}
+		return false
+	}
+	if len(st.agentCtx.Insights) >= e.insightMax {
+		st.log.Info("insight_limit_reached", "step", step, "limit", e.insightMax)
+		return false
+	}
+	guarded, err := e.guardOutputValue(ctx, st, step, map[string]any{"note": note})
+	if err != nil {
+		st.log.Warn("insight_blocked", "step", step, "error", err.Error())
+		return false
+	}
+	if m, ok := guarded.(map[string]any); ok {
+		note, _ = m["note"].(string)
+		note = strings.TrimSpace(note)
+	}
+	if note == "" {
+		return false
+	}
+	st.agentCtx.Insights = append(st.agentCtx.Insights, note)
+	st.log.Info("insight_sent", "step", step, "seq", len(st.agentCtx.Insights), "len", len(note))
+	EmitEvent(ctx, nil, Event{Kind: EventKindInsight, Step: step, Text: note})
+	return true
+}
+
+// jsonObjectKeys lists the top-level keys of text that is a JSON object (in a code fence or not),
+// sorted; empty for anything else.
+func jsonObjectKeys(text string) []string {
+	body := strings.TrimSpace(text)
+	if strings.HasPrefix(body, "```") {
+		body = strings.TrimPrefix(body, "```json")
+		body = strings.TrimPrefix(body, "```")
+		body = strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(body), "```"))
+	}
+	var object map[string]json.RawMessage
+	if json.Unmarshal([]byte(body), &object) != nil {
+		return nil
+	}
+	keys := make([]string, 0, len(object))
+	for key := range object {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
 // planStepNoteFromText is the message in the text a model sends with its tool calls. Models that
 // answer in the response format sometimes wrap it as a plan or final response ({"type":"plan",
-// "reasoning":…}); then the message is its reasoning or output, never the JSON. Other JSON is not a
-// message. The step still closes either way.
+// "reasoning":…}), or in a type of their own with a text output ({"type":"progress","output":…});
+// then the message is its reasoning or output, never the JSON. Other JSON is not a message. The step
+// still closes either way.
 func planStepNoteFromText(text string) string {
 	trimmed := strings.TrimSpace(text)
 	body := trimmed
@@ -1309,9 +1411,16 @@ func planStepNoteFromText(text string) string {
 				}
 			}
 		}
-		return ""
 	}
 	if json.Valid([]byte(body)) {
+		var wrapped struct {
+			Output any `json:"output"`
+		}
+		if json.Unmarshal([]byte(body), &wrapped) == nil {
+			if output, ok := wrapped.Output.(string); ok {
+				return strings.TrimSpace(output)
+			}
+		}
 		return ""
 	}
 	return trimmed

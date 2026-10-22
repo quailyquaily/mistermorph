@@ -224,7 +224,11 @@ func runMixinLoop(ctx context.Context, d Dependencies, opts RunOptions) error {
 			_, notifyErr := publishMixinBusOutbound(notifyCtx, bus, job.ConversationID, mixinReplyRecipient(job.ChatType, job.FromUserID), text, job.MessageID, fmt.Sprintf("mixin:coder-progress:%s:%d", job.TaskID, seq))
 			return notifyErr
 		})
-		final, _, loadedSkills, runErr := runMixinTask(runCtx, bundle.TaskRuntime, messageSender, job, prior, skills, lease.SteerQueue)
+		runCtx = taskruntime.WithInsightNotification(runCtx, logger, taskruntime.InsightLimitFor(isMixinGroup(job.ChatType)), func(notifyCtx context.Context, seq int, text string) error {
+			_, notifyErr := publishMixinBusOutbound(notifyCtx, bus, job.ConversationID, mixinReplyRecipient(job.ChatType, job.FromUserID), text, job.MessageID, fmt.Sprintf("mixin:insight:%s:%d", job.TaskID, seq))
+			return notifyErr
+		})
+		final, agentCtx, loadedSkills, runErr := runMixinTask(runCtx, bundle.TaskRuntime, messageSender, job, prior, skills, lease.SteerQueue)
 		userStopped := lease.UserStopped()
 		lease.Finish()
 		if runErr != nil {
@@ -290,6 +294,12 @@ func runMixinLoop(ctx context.Context, d Dependencies, opts RunOptions) error {
 				stickySkills[conversationKey] = capMixinSkills(loadedSkills)
 			}
 			items := append(history[conversationKey], newMixinInboundHistoryItem(job))
+			// Insights were sent while the task ran, before the reply.
+			if agentCtx != nil {
+				for _, text := range agentCtx.Insights {
+					items = append(items, newMixinOutboundHistoryItem(job, text, time.Now().UTC()))
+				}
+			}
 			if output != "" {
 				items = append(items, newMixinOutboundHistoryItem(job, output, time.Now().UTC()))
 			}

@@ -2,7 +2,7 @@ import { computed, onBeforeUpdate, onUpdated } from "vue";
 
 import { translate } from "../core/context";
 import { approvalParameterEntries, skillInstallApproval } from "../core/chat-approvals";
-import { agentLinkMessages, planStepMessages, pollingActionWord } from "../core/chat-task-history";
+import { agentLinkMessages, insightMessages, planStepMessages, pollingActionWord } from "../core/chat-task-history";
 import { recordComponentUpdate } from "../core/performance";
 import ChatAgentLinkExchange from "./ChatAgentLinkExchange";
 import ChatRichContent from "./ChatRichContent";
@@ -123,8 +123,11 @@ const ChatHistoryItem = {
       return "chat-history-item chat-history-system" + arriving;
     });
     const surfaceClass = computed(() => (role.value === "agent" ? "chat-history-copy" : "chat-history-bubble"));
-    // What the finished plan steps produced, each a message of its own before the reply.
-    const stepMessages = computed(() => (role.value === "agent" ? planStepMessages(props.item?.plan) : []));
+    // What the agent said while working (insights, then what the finished plan steps produced), each
+    // a message of its own before the reply.
+    const stepMessages = computed(() =>
+      role.value === "agent" ? [...insightMessages(props.item?.insights), ...planStepMessages(props.item?.plan)] : []
+    );
     const reasoningVisible = computed(() => String(props.item?.reasoning || "").trim() !== "");
     const activityEntries = computed(() => {
       const activity = props.item?.activity;

@@ -230,6 +230,19 @@ func TestTurnHistoryPutsStepMessagesBeforeTheReply(t *testing.T) {
 	}
 }
 
+func TestTurnHistoryPutsInsightsBeforeTheReply(t *testing.T) {
+	job := discordJob{ChannelID: "200", ChatType: discordbus.ChatTypePrivate, MessageID: "300", UserID: "5", Text: "do it"}
+	result := discordTaskResult{Context: &agent.Context{Insights: []string{"The timeout is 0.", "Trying a retry."}}}
+	items := discordTurnHistory(job, "Morph", result, "Done.", time.Unix(20, 0))
+	var texts []string
+	for _, item := range items {
+		texts = append(texts, item.Text)
+	}
+	if strings.Join(texts, "|") != "do it|The timeout is 0.|Trying a retry.|Done." {
+		t.Fatalf("history = %q", texts)
+	}
+}
+
 func TestSendDiscordTextSplitsAndRepliesOnce(t *testing.T) {
 	api := &fakeDiscordAPI{}
 	text := strings.Repeat("a", 1500) + "\n\n" + strings.Repeat("b", 1500)

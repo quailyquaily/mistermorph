@@ -414,7 +414,7 @@ func discordSenderFromJob(job discordJob) chathistory.ChatHistorySender {
 }
 
 // discordTurnHistory is what one finished turn adds to the history: the message, a reaction, the
-// step messages (sent before the reply, so they come first), then the reply.
+// insights and step messages (sent before the reply, so they come first), then the reply.
 func discordTurnHistory(job discordJob, botName string, result discordTaskResult, output string, now time.Time) []chathistory.ChatHistoryItem {
 	items := []chathistory.ChatHistoryItem{newDiscordInboundHistoryItem(job)}
 	if result.Reaction != nil {
@@ -425,6 +425,11 @@ func discordTurnHistory(job discordJob, botName string, result discordTaskResult
 		plan = result.Context.Plan
 	} else if result.Final != nil {
 		plan = result.Final.Plan
+	}
+	if result.Context != nil {
+		for _, text := range result.Context.Insights {
+			items = append(items, newDiscordOutboundHistoryItem(job, botName, text, now))
+		}
 	}
 	for _, note := range agent.PlanNotes(plan) {
 		items = append(items, newDiscordOutboundHistoryItem(job, botName, note, now))

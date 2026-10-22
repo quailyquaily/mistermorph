@@ -122,6 +122,21 @@ test("finished plan steps with a note become the agent's messages", () => {
   assert.deepEqual(planStepMessages(null), []);
 });
 
+test("insights become the agent's messages, from the task result or a stream frame", async () => {
+  const { insightMessages, normalizeInsights, taskInsights } = await import("./chat-task-history.js");
+  const task = { id: "t", status: "done", result: { insights: [" The timeout is 0. ", "", "Retrying."] } };
+  assert.deepEqual(taskInsights(task), ["The timeout is 0.", "Retrying."]);
+  assert.deepEqual(insightMessages(taskInsights(task)), [
+    { key: "insight:0", text: "The timeout is 0." },
+    { key: "insight:1", text: "Retrying." },
+  ]);
+  assert.equal(taskInsights({ id: "t", result: {} }), null);
+  assert.equal(normalizeInsights([" "]), null);
+  assert.deepEqual(insightMessages(null), []);
+  const [, agent] = taskListHistoryItems([{ ...task, task: "check", created_at: "2026-10-22T00:00:00Z" }], (key) => key);
+  assert.deepEqual(agent.insights, ["The timeout is 0.", "Retrying."]);
+});
+
 test("a reply awaits until it has words, an error, an approval, or an end", async () => {
   const { taskAwaitingReply, pollingActionWord } = await import("./chat-task-history.js");
   assert.equal(taskAwaitingReply({ id: "t", status: "running" }), true);
@@ -185,4 +200,28 @@ test("agentLinkMessages lists the Agent Link exchange and drops a pending note o
   ] });
   const got = agentLinkMessages(activity).map((m) => `${m.direction}:${m.peer}`);
   assert.deepEqual(got, ["sent:墨墨", "reply:墨墨", "sent:Emma", "pending:Emma"]);
+});
+
+test("a reload keeps what the page shows for a running task until the task stores it", async () => {
+  const { keepLiveTaskState } = await import("./chat-task-history.js");
+  const current = [
+    { id: "a", role: "agent", taskId: "run", status: "running", awaiting: false, text: "Streaming…", insights: ["Found a bug."] },
+    { id: "b", role: "agent", taskId: "old", status: "done", text: "Old reply", insights: ["Old insight."] },
+  ];
+  const fresh = [
+    { id: "run:agent", role: "agent", taskId: "run", status: "running", awaiting: true, text: "Thinking", insights: null },
+    { id: "old:agent", role: "agent", taskId: "old", status: "done", text: "Old reply", insights: null },
+    { id: "new:agent", role: "agent", taskId: "new", status: "running", awaiting: true, text: "Thinking", insights: null },
+  ];
+  const [running, finished, other] = keepLiveTaskState(current, fresh);
+  assert.deepEqual(running.insights, ["Found a bug."]);
+  assert.equal(running.text, "Streaming…");
+  assert.equal(running.awaiting, false);
+  assert.equal(running.id, "run:agent");
+  assert.equal(finished.insights, null);
+  assert.equal(other.text, "Thinking");
+
+  // What the task list has wins.
+  const [stored] = keepLiveTaskState(current, [{ ...fresh[0], insights: ["Stored."] }]);
+  assert.deepEqual(stored.insights, ["Stored."]);
 });

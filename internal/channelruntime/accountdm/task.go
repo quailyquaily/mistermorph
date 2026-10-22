@@ -253,7 +253,8 @@ func outboundHistoryItem(j dmJob, text string, sentAt time.Time) chathistory.Cha
 	}
 }
 
-// turnHistory is what a finished turn adds: the message, the step messages (sent first), the reply.
+// turnHistory is what a finished turn adds: the message, the insights and step messages (sent
+// first), the reply.
 func turnHistory(j dmJob, result taskResult, output string, now time.Time) []chathistory.ChatHistoryItem {
 	items := []chathistory.ChatHistoryItem{inboundHistoryItem(j)}
 	var plan *agent.Plan
@@ -261,6 +262,11 @@ func turnHistory(j dmJob, result taskResult, output string, now time.Time) []cha
 		plan = result.Context.Plan
 	} else if result.Final != nil {
 		plan = result.Final.Plan
+	}
+	if result.Context != nil {
+		for _, text := range result.Context.Insights {
+			items = append(items, outboundHistoryItem(j, text, now))
+		}
 	}
 	for _, note := range agent.PlanNotes(plan) {
 		items = append(items, outboundHistoryItem(j, note, now))

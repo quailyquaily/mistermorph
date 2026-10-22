@@ -1,6 +1,9 @@
 package agent
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
 
 func TestNormalizePlanStepsDropsEmptySteps(t *testing.T) {
 	plan := &Plan{
@@ -82,13 +85,34 @@ func TestPlanStepNoteFromText(t *testing.T) {
 		{"plan response", `{"type":"plan","reasoning":"官网可正常访问，主体为 ARCH株式会社。","steps":[{"step":"查看官网","status":"completed"},{"step":"查询登记","status":"in_progress"}]}`, "官网可正常访问，主体为 ARCH株式会社。"},
 		{"fenced final response", "```json\n{\"type\":\"final\",\"output\":\"Read 6 sections.\"}\n```", "Read 6 sections."},
 		{"plan response without reasoning", `{"type":"plan","steps":[{"step":"a","status":"completed"}]}`, ""},
+		{"own response type with an output", `{"type":"progress","output":"2/6 — 0f568a11: Found a retention bug.","is_lightweight":false}`, "2/6 — 0f568a11: Found a retention bug."},
 		{"other JSON", `{"status":"ok"}`, ""},
+		{"non-text output", `{"type":"final","output":{"files":2}}`, ""},
 		{"text that only starts with a brace", "{draft} is saved as draft.md.", "{draft} is saved as draft.md."},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := planStepNoteFromText(tc.text); got != tc.want {
 				t.Fatalf("planStepNoteFromText(%q) = %q, want %q", tc.text, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestJSONObjectKeys(t *testing.T) {
+	cases := []struct {
+		name, text string
+		want       []string
+	}{
+		{"object", `{"type":"progress","message":"secret words","is_lightweight":false}`, []string{"is_lightweight", "message", "type"}},
+		{"fenced object", "```json\n{\"status\":\"ok\"}\n```", []string{"status"}},
+		{"array", `["a"]`, nil},
+		{"plain text", "Found it.", nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := jsonObjectKeys(tc.text); fmt.Sprint(got) != fmt.Sprint(tc.want) {
+				t.Fatalf("jsonObjectKeys(%q) = %q, want %q", tc.text, got, tc.want)
 			}
 		})
 	}

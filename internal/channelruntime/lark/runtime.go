@@ -286,7 +286,11 @@ func runLarkLoop(ctx context.Context, d Dependencies, opts RunOptions) error {
 				_, notifyErr := publishLarkBusOutbound(notifyCtx, inprocBus, job.ChatID, text, job.MessageID, fmt.Sprintf("lark:coder-progress:%s:%d", job.TaskID, seq))
 				return notifyErr
 			})
-			final, _, loadedSkills, runErr := runLarkTask(
+			runCtx = taskruntime.WithInsightNotification(runCtx, logger, taskruntime.InsightLimitFor(isLarkGroupChat(job.ChatType)), func(notifyCtx context.Context, seq int, text string) error {
+				_, notifyErr := publishLarkBusOutbound(notifyCtx, inprocBus, job.ChatID, text, job.MessageID, fmt.Sprintf("lark:insight:%s:%d", job.TaskID, seq))
+				return notifyErr
+			})
+			final, agentCtx, loadedSkills, runErr := runLarkTask(
 				runCtx,
 				runtimeBundle.TaskRuntime,
 				job,
@@ -366,6 +370,12 @@ func runLarkLoop(ctx context.Context, d Dependencies, opts RunOptions) error {
 					inboundHistory.Images = imagehistory.WithDescription(inboundHistory.Images, outText, "agent_final")
 				}
 				cur = append(cur, inboundHistory)
+				// Insights were sent while the task ran, before the reply.
+				if agentCtx != nil {
+					for _, text := range agentCtx.Insights {
+						cur = append(cur, newLarkOutboundAgentHistoryItem(job, text, time.Now().UTC()))
+					}
+				}
 				if outText != "" {
 					cur = append(cur, newLarkOutboundAgentHistoryItem(job, outText, time.Now().UTC()))
 				}

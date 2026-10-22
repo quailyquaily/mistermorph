@@ -110,6 +110,10 @@ func (s *slackRuntimeState) runJob(workerCtx context.Context, conversationKey st
 		_, notifyErr := publishSlackBusOutbound(notifyCtx, s.inprocBus, job.TeamID, job.ChannelID, text, job.ThreadTS, fmt.Sprintf("slack:coder-progress:%s:%d", job.TaskID, seq))
 		return notifyErr
 	})
+	runCtx = taskruntime.WithInsightNotification(runCtx, s.logger, taskruntime.InsightLimitFor(isSlackGroupChat(job.ChatType)), func(notifyCtx context.Context, seq int, text string) error {
+		_, notifyErr := publishSlackBusOutbound(notifyCtx, s.inprocBus, job.TeamID, job.ChannelID, text, job.ThreadTS, fmt.Sprintf("slack:insight:%s:%d", job.TaskID, seq))
+		return notifyErr
+	})
 	runtimeOpts := runtimeTaskOptions{
 		FileCacheDir: s.options.FileCacheDir,
 	}
@@ -313,6 +317,12 @@ func (s *slackRuntimeState) runJob(workerCtx context.Context, conversationKey st
 				note = "[reacted: :" + emoji + ":]"
 			}
 			currentHistory = append(currentHistory, newSlackOutboundReactionHistoryItem(job, note, reaction.Emoji, time.Now().UTC(), s.botUserID))
+		}
+		// Insights were sent while the task ran, before the reply.
+		if agentCtx != nil {
+			for _, text := range agentCtx.Insights {
+				currentHistory = append(currentHistory, newSlackOutboundAgentHistoryItem(job, text, time.Now().UTC(), s.botUserID))
+			}
 		}
 		if outText != "" {
 			currentHistory = append(currentHistory, newSlackOutboundAgentHistoryItem(job, outText, time.Now().UTC(), s.botUserID))

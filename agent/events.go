@@ -26,6 +26,8 @@ const (
 	EventKindContextCompactionStart  = "context_compaction_start"
 	EventKindContextCompactionDone   = "context_compaction_done"
 	EventKindContextCompactionFailed = "context_compaction_failed"
+	// EventKindInsight carries, in Text, a message the agent sends the user before its final answer.
+	EventKindInsight = "insight"
 )
 
 type Event struct {

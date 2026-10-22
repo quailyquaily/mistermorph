@@ -47,7 +47,7 @@ func BuildTaskHistory(tasks []taskdomain.TaskInfo, job taskdomain.TaskInfo, limi
 			history = append(history, inbound)
 		}
 		if strings.TrimSpace(task.SteerTargetTaskID) == "" {
-			// What the finished plan steps told the user comes before the reply; items with the same
+			// What the agent told the user while working comes before the reply; items with the same
 			// time keep this order when sorted below.
 			history = append(history, TaskStepMessages(task)...)
 			if outbound, ok := TaskOutbound(task); ok {
@@ -132,8 +132,8 @@ func taskOutboundItem(task taskdomain.TaskInfo, text string) ChatHistoryItem {
 	}
 }
 
-// TaskStepMessages are the messages the agent sent as it finished plan steps: each completed
-// step's note, in order.
+// TaskStepMessages are the messages the agent sent before its reply: its insights, then each
+// completed plan step's note, in order.
 func TaskStepMessages(task taskdomain.TaskInfo) []ChatHistoryItem {
 	notes := taskStepNotes(task.Result)
 	if len(notes) == 0 {
@@ -155,8 +155,9 @@ func taskStepNotes(result any) []string {
 		return nil
 	}
 	var decoded struct {
-		Plan  *agent.Plan `json:"plan"`
-		Final *struct {
+		Insights []string    `json:"insights"`
+		Plan     *agent.Plan `json:"plan"`
+		Final    *struct {
 			Plan *agent.Plan `json:"plan"`
 		} `json:"final"`
 	}
@@ -167,7 +168,13 @@ func taskStepNotes(result any) []string {
 	if plan == nil && decoded.Final != nil {
 		plan = decoded.Final.Plan
 	}
-	return agent.PlanNotes(plan)
+	var notes []string
+	for _, text := range decoded.Insights {
+		if text = strings.TrimSpace(text); text != "" {
+			notes = append(notes, text)
+		}
+	}
+	return append(notes, agent.PlanNotes(plan)...)
 }
 
 func taskInboundSentAt(task taskdomain.TaskInfo) time.Time {

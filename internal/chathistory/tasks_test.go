@@ -1,6 +1,7 @@
 package chathistory
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -43,6 +44,21 @@ func TestBuildTaskHistoryIncludesPlanStepMessagesBeforeTheReply(t *testing.T) {
 		if texts[i] != want[i] {
 			t.Fatalf("history = %q, want %q", texts, want)
 		}
+	}
+}
+
+func TestTaskStepMessagesPutInsightsBeforeStepNotes(t *testing.T) {
+	task := taskdomain.TaskInfo{ID: "t", Result: map[string]any{
+		"insights": []any{"The timeout is 0.", " "},
+		"plan":     map[string]any{"steps": []any{map[string]any{"step": "read", "status": "completed", "note": "6 sections."}}},
+		"final":    map[string]any{"output": "done"},
+	}}
+	var texts []string
+	for _, item := range TaskStepMessages(task) {
+		texts = append(texts, item.Text)
+	}
+	if strings.Join(texts, "|") != "The timeout is 0.|6 sections." {
+		t.Fatalf("step messages = %q", texts)
 	}
 }
 

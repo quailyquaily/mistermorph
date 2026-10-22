@@ -16,6 +16,9 @@ import (
 //go:embed prompts/block_plan_create.md
 var planCreateBlockTemplateSource string
 
+//go:embed prompts/block_insight.md
+var insightBlockTemplateSource string
+
 //go:embed prompts/block_todo_workflow.md
 var todoWorkflowBlockTemplateSource string
 
@@ -164,6 +167,21 @@ func AppendPlanCreateGuidanceBlock(spec *agent.PromptSpec, registry *tools.Regis
 		return
 	}
 	content := strings.TrimSpace(planCreateBlockTemplateSource)
+	if content == "" {
+		return
+	}
+	spec.Blocks = append(spec.Blocks, agent.PromptBlock{
+		Content: content,
+	})
+}
+
+// AppendInsightBlock tells the agent it can send the user up to limit messages before its final
+// answer; with no limit, it adds nothing.
+func AppendInsightBlock(spec *agent.PromptSpec, limit int) {
+	if spec == nil || spec.FinalOnlyResponse || limit <= 0 {
+		return
+	}
+	content := strings.TrimSpace(strings.ReplaceAll(insightBlockTemplateSource, "{{LIMIT}}", strconv.Itoa(limit)))
 	if content == "" {
 		return
 	}

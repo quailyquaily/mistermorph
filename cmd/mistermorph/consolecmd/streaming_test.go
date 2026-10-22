@@ -56,23 +56,37 @@ func TestConsoleStreamHubReplaysCompleteProgress(t *testing.T) {
 	hub.PublishPreview("task", "working")
 	hub.PublishPlan("task", &consolePlanProgress{Steps: []consolePlanStep{{Step: "inspect", Status: agent.PlanStatusInProgress}}})
 	hub.PublishReasoning("task", "checking the code")
+	hub.PublishInsights("task", []string{"The timeout is 0."})
 	hub.PublishActivity("task", &consoleActivityProgress{Current: &consoleActivityEntry{ID: "coder", Kind: "tool", Name: "coder", Output: "Read source.go"}})
 	hub.PublishStatus("task", "running")
 	frames, unsubscribe := hub.Subscribe("task")
 	defer unsubscribe()
 	frame := <-frames
-	if frame.Plan == nil || frame.Activity == nil || frame.Reasoning != "checking the code" || frame.Text != "working" || !frame.Preview {
+	if frame.Plan == nil || frame.Activity == nil || frame.Reasoning != "checking the code" || frame.Text != "working" || !frame.Preview || len(frame.Insights) != 1 {
 		t.Fatalf("reconnect snapshot lost progress: %#v", frame)
 	}
 	hub.PublishFinal("task", "finished")
 	frame = <-frames
-	if !frame.Done || frame.Preview || frame.Text != "finished" || frame.Plan == nil || frame.Activity == nil || frame.Reasoning == "" {
+	if !frame.Done || frame.Preview || frame.Text != "finished" || frame.Plan == nil || frame.Activity == nil || frame.Reasoning == "" || len(frame.Insights) != 1 {
 		t.Fatalf("final snapshot lost progress or retained preview: %#v", frame)
 	}
 }
 
 func (s stubConsoleSemanticObserver) Summarize(_ context.Context, _ consoleObserveRequest) (string, error) {
 	return s.summary, nil
+}
+
+func TestConsoleStreamHubClearTextDropsTheShownReply(t *testing.T) {
+	hub := newConsoleStreamHub()
+	hub.PublishSnapshot("task", "I found a bug")
+	hub.PublishClearText("task")
+	hub.PublishInsights("task", []string{"I found a bug"})
+	frames, unsubscribe := hub.Subscribe("task")
+	defer unsubscribe()
+	frame := <-frames
+	if frame.Text != "" || len(frame.Insights) != 1 {
+		t.Fatalf("frame after clear = %#v, want no reply text and the insight", frame)
+	}
 }
 
 func TestConsoleStreamHubEvictsDoneFrameWithoutSubscribers(t *testing.T) {

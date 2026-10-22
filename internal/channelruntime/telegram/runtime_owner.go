@@ -369,6 +369,9 @@ func (s *telegramRuntimeState) runJob(workerCtx context.Context, conversationKey
 	runCtx = taskruntime.WithCoderProgressNotification(runCtx, s.logger, func(notifyCtx context.Context, seq int, text string) error {
 		return s.publishText(notifyCtx, chatID, job.MessageThreadID, text, fmt.Sprintf("telegram:coder-progress:%s:%d", job.TaskID, seq))
 	})
+	runCtx = taskruntime.WithInsightNotification(runCtx, s.logger, taskruntime.InsightLimitFor(isGroupChat(job.ChatType)), func(notifyCtx context.Context, seq int, text string) error {
+		return s.publishText(notifyCtx, chatID, job.MessageThreadID, text, fmt.Sprintf("telegram:insight:%s:%d", job.TaskID, seq))
+	})
 	runtimeOpts := runtimeTaskOptions{
 		FileCacheDir: s.options.FileCacheDir,
 	}
@@ -503,7 +506,13 @@ func (s *telegramRuntimeState) runJob(workerCtx context.Context, conversationKey
 			}
 			current = append(current, newTelegramOutboundReactionHistoryItem(chatID, job.ChatType, note, reaction.Emoji, time.Now().UTC(), s.botUser))
 		}
-		// The messages sent as plan steps finished come before the reply, as in the chat.
+		// The messages sent while the task ran (insights, then plan step notes) come before the
+		// reply, as in the chat.
+		if agentCtx != nil {
+			for _, text := range agentCtx.Insights {
+				current = append(current, newTelegramOutboundAgentHistoryItem(chatID, job.ChatType, text, time.Now().UTC(), s.botUser))
+			}
+		}
 		for _, note := range telegramPlanStepNotes(final, agentCtx) {
 			current = append(current, newTelegramOutboundAgentHistoryItem(chatID, job.ChatType, note, time.Now().UTC(), s.botUser))
 		}

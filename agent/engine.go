@@ -105,6 +105,17 @@ func WithPlanStepUpdate(fn func(*Context, PlanStepUpdate)) Option {
 	}
 }
 
+// WithInsights lets the run send the user up to max messages before its final answer: the text a
+// model writes with its tool calls when the run has no plan. Each is recorded on Context.Insights and
+// emitted as an EventKindInsight event; delivering it is up to the event sink.
+func WithInsights(max int) Option {
+	return func(e *Engine) {
+		if max > 0 {
+			e.insightMax = max
+		}
+	}
+}
+
 func WithFallbackFinal(fn func() *Final) Option {
 	return func(e *Engine) {
 		if fn != nil {
@@ -191,6 +202,7 @@ type Engine struct {
 	onToolCallDone   func(ctx *Context, tc ToolCall, observation string, err error)
 	onPlanStepUpdate func(ctx *Context, update PlanStepUpdate)
 	fallbackFinal    func() *Final
+	insightMax       int
 
 	subtaskRunner          SubtaskRunner
 	subtaskProfileResolver SubtaskProfileResolver

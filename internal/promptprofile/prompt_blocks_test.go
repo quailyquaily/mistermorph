@@ -306,3 +306,26 @@ func TestRuntimeBlocksOmitLightweightRulesWhenDecided(t *testing.T) {
 		t.Fatalf("decided Console block = %q, want none", console)
 	}
 }
+
+func TestAppendInsightBlock(t *testing.T) {
+	t.Run("states the limit", func(t *testing.T) {
+		spec := agent.PromptSpec{}
+		AppendInsightBlock(&spec, 4)
+		if len(spec.Blocks) != 1 {
+			t.Fatalf("blocks len = %d, want 1", len(spec.Blocks))
+		}
+		content := spec.Blocks[0].Content
+		if !strings.Contains(content, "[[ Insights ]]") || !strings.Contains(content, "At most 4 such messages") || !strings.Contains(content, "not a JSON object such as") {
+			t.Fatalf("insight block = %q", content)
+		}
+	})
+	t.Run("nothing without a limit or for final-only responses", func(t *testing.T) {
+		spec := agent.PromptSpec{}
+		AppendInsightBlock(&spec, 0)
+		finalOnly := agent.PromptSpec{FinalOnlyResponse: true}
+		AppendInsightBlock(&finalOnly, 4)
+		if len(spec.Blocks) != 0 || len(finalOnly.Blocks) != 0 {
+			t.Fatalf("blocks = %d, %d, want none", len(spec.Blocks), len(finalOnly.Blocks))
+		}
+	})
+}

@@ -15,6 +15,13 @@ type ReplySink interface {
 	Abort(ctx context.Context, err error) error
 }
 
+// ReplyRetractor is a ReplySink that can take back the text it was given for a response that turned
+// out to call tools: a model can write its final-answer shape next to a tool call, and that text is
+// not the reply.
+type ReplyRetractor interface {
+	Retract(ctx context.Context) error
+}
+
 type PartialFinalOutput struct {
 	ResponseType   string
 	Output         string
@@ -40,6 +47,9 @@ type FinalOutputStreamer struct {
 	lastText    string
 	lastEmitAt  time.Time
 	pendingText string
+	// toolCall marks a response that streams a tool call, and shown one whose text reached the sink.
+	toolCall bool
+	shown    bool
 }
 
 func NewFinalOutputStreamer(opts FinalOutputStreamerOptions) *FinalOutputStreamer {
@@ -82,15 +92,38 @@ func (s *FinalOutputStreamer) handleSinkEvent(event llm.StreamEvent) error {
 	if event.Delta != "" {
 		_, _ = s.buffer.WriteString(event.Delta)
 	}
-	snapshot := ExtractPartialFinalOutput(s.buffer.String())
-	emitText, shouldEmit := s.nextEmissionLocked(snapshot, event.Done)
-	reset := event.Done
-	if reset {
+	if event.ToolCallDelta != nil {
+		s.toolCall = true
+	}
+	var emitText string
+	var shouldEmit bool
+	if !s.toolCall {
+		snapshot := ExtractPartialFinalOutput(s.buffer.String())
+		emitText, shouldEmit = s.nextEmissionLocked(snapshot, event.Done)
+		if shouldEmit && strings.TrimSpace(emitText) != "" {
+			s.shown = true
+		}
+	}
+	retract := false
+	if event.Done {
+		retract = s.toolCall && s.shown
+		if s.toolCall {
+			s.lastText = ""
+			s.lastEmitAt = time.Time{}
+		}
 		s.buffer.Reset()
 		s.pendingText = ""
+		s.toolCall = false
+		s.shown = false
 	}
 	s.mu.Unlock()
 
+	if retract {
+		if retractor, ok := s.sink.(ReplyRetractor); ok {
+			return retractor.Retract(context.Background())
+		}
+		return nil
+	}
 	if !shouldEmit || strings.TrimSpace(emitText) == "" {
 		return nil
 	}

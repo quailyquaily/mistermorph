@@ -26,6 +26,8 @@ type Context struct {
 	RawFinalAnswer json.RawMessage
 	// FoundTools are the hidden tools the run found or used through tool search, most recent first.
 	FoundTools []string
+	// Insights are the messages the run sent the user before its final answer, in order.
+	Insights []string
 }
 
 func NewContext(task string, maxSteps int) *Context {

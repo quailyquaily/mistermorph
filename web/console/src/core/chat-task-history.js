@@ -219,6 +219,16 @@ function taskPlan(task) {
   return normalizePlan(task?.result?.plan || task?.result?.final?.plan);
 }
 
+// The messages the agent sent before its reply (insights), in order; null when there are none.
+function normalizeInsights(raw) {
+  const insights = Array.isArray(raw) ? raw.map((text) => String(text || "").trim()).filter(Boolean) : [];
+  return insights.length > 0 ? insights : null;
+}
+
+function taskInsights(task) {
+  return normalizeInsights(task?.result?.insights);
+}
+
 function normalizeActivityKind(raw) {
   const value = String(raw || "").trim().toLowerCase();
   return value === "tool" || value === "subtask" || value === "retry" ? value : "";
@@ -447,6 +457,7 @@ function taskHistoryItems(task, t, options = {}) {
       }),
       awaiting: taskAwaitingReply(task),
       plan: taskPlan(task),
+      insights: taskInsights(task),
       activity: taskActivity(task),
       reasoning: taskReasoning(task),
       approval: taskApprovalState(task),
@@ -480,6 +491,11 @@ function planStepMessages(plan) {
   return out;
 }
 
+// The agent's insights, each a message of its own before the plan step messages and the reply.
+function insightMessages(insights) {
+  return (normalizeInsights(insights) || []).map((text, index) => ({ key: `insight:${index}`, text }));
+}
+
 function taskListHistoryItems(tasks, t, options = {}) {
   const sortedTasks = Array.isArray(tasks) ? [...tasks] : [];
   sortedTasks.sort((left, right) => {
@@ -505,6 +521,41 @@ function taskListHistoryItems(tasks, t, options = {}) {
 // the ones on screen for the same tasks, and older items loaded beyond that page stay before them.
 // overlap is false when no task on screen is in the fresh page; the older items are then dropped,
 // since tasks may be missing between them and the page.
+// A running task's live state (the reply streamed so far, insights, plan, activity, reasoning) comes
+// over its stream and is stored only when the task ends, so the task list does not have it yet. A
+// reload keeps what the page already shows for each running task, instead of blanking it until the
+// stream replays it.
+function keepLiveTaskState(currentItems, nextItems) {
+  const live = new Map();
+  for (const item of Array.isArray(currentItems) ? currentItems : []) {
+    const taskID = String(item?.taskId || "").trim();
+    if (item?.role === "agent" && taskID && !isTerminalStatus(item.status)) {
+      live.set(taskID, item);
+    }
+  }
+  const next = Array.isArray(nextItems) ? nextItems : [];
+  if (live.size === 0) {
+    return next;
+  }
+  return next.map((item) => {
+    const current = item?.role === "agent" && !isTerminalStatus(item.status) ? live.get(String(item?.taskId || "").trim()) : null;
+    if (!current) {
+      return item;
+    }
+    const out = { ...item };
+    for (const key of ["insights", "plan", "activity", "reasoning"]) {
+      if (!out[key] && current[key]) {
+        out[key] = current[key];
+      }
+    }
+    if (current.awaiting === false && out.awaiting !== false && current.text) {
+      out.text = current.text;
+      out.awaiting = false;
+    }
+    return out;
+  });
+}
+
 function mergeRefreshedHistoryItems(currentItems, freshItems) {
   const current = Array.isArray(currentItems) ? currentItems : [];
   const fresh = Array.isArray(freshItems) ? freshItems : [];
@@ -529,9 +580,11 @@ export {
   historyTimeLabel,
   isContextCompactCommand,
   isTerminalStatus,
+  keepLiveTaskState,
   mergeRefreshedHistoryItems,
   normalizeActivity,
   normalizeHistoryFileReferences,
+  normalizeInsights,
   normalizePlan,
   normalizeReasoning,
   normalizeTaskStatus,
@@ -539,10 +592,12 @@ export {
   taskActivity,
   taskAgentText,
   taskDurationLabel,
+  taskInsights,
   taskListHistoryItems,
   taskPlan,
   taskRawJSON,
   taskReasoning,
   planStepMessages,
+  insightMessages,
   agentLinkMessages,
 };

@@ -2376,6 +2376,18 @@ func (r *consoleLocalRuntime) handleTaskJob(workerCtx context.Context, conversat
 		runCtx = workerCtx
 	}
 	runCtx = agent.WithEventSinkContext(runCtx, eventSink)
+	// Insights appear as messages of their own before the reply; each frame carries all of them.
+	var insights []string
+	runCtx = taskruntime.WithInsightNotification(runCtx, logger, taskruntime.InsightLimit, func(_ context.Context, _ int, text string) error {
+		progressMu.Lock()
+		insights = append(insights, text)
+		sent := append([]string(nil), insights...)
+		progressMu.Unlock()
+		if r.streamHub != nil {
+			r.streamHub.PublishInsights(job.TaskID, sent)
+		}
+		return nil
+	})
 	runCtx = llmutil.WithRetryNotification(runCtx, func(ctx context.Context, event llmutil.RetryEvent) {
 		trace.HandleEvent(ctx, agent.Event{Kind: agent.EventKindLLMRetry, RunID: llmstats.RunIDFromContext(ctx), Text: event.StatusText()})
 		previewSink.HandleRetry(ctx, event)
@@ -2806,6 +2818,9 @@ func buildConsoleTaskResult(final *agent.Final, runCtx *agent.Context, activity 
 	}
 	if activity != nil {
 		out["activity"] = cloneConsoleActivityProgress(activity)
+	}
+	if runCtx != nil && len(runCtx.Insights) > 0 {
+		out["insights"] = append([]string(nil), runCtx.Insights...)
 	}
 	if reasoning = strings.TrimSpace(reasoning); reasoning != "" {
 		out["reasoning"] = reasoning

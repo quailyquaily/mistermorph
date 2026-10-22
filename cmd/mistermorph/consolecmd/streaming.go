@@ -23,17 +23,21 @@ type runtimeEndpointStreamClient interface {
 }
 
 type consoleStreamFrame struct {
-	Trace     *chattrace.Snapshot      `json:"trace,omitempty"`
-	TaskID    string                   `json:"task_id"`
-	Seq       uint64                   `json:"seq"`
-	Status    string                   `json:"status,omitempty"`
-	Text      string                   `json:"text,omitempty"`
-	Reasoning string                   `json:"reasoning,omitempty"`
-	Error     string                   `json:"error,omitempty"`
-	Plan      *consolePlanProgress     `json:"plan,omitempty"`
-	Activity  *consoleActivityProgress `json:"activity,omitempty"`
-	Preview   bool                     `json:"preview,omitempty"`
-	Done      bool                     `json:"done,omitempty"`
+	Trace     *chattrace.Snapshot  `json:"trace,omitempty"`
+	TaskID    string               `json:"task_id"`
+	Seq       uint64               `json:"seq"`
+	Status    string               `json:"status,omitempty"`
+	Text      string               `json:"text,omitempty"`
+	Reasoning string               `json:"reasoning,omitempty"`
+	Error     string               `json:"error,omitempty"`
+	Plan      *consolePlanProgress `json:"plan,omitempty"`
+	// Insights are the messages the agent has sent so far before its reply, in order.
+	Insights []string                 `json:"insights,omitempty"`
+	Activity *consoleActivityProgress `json:"activity,omitempty"`
+	Preview  bool                     `json:"preview,omitempty"`
+	// ClearText takes back the reply text shown so far: it came from a response that called tools.
+	ClearText bool `json:"clear_text,omitempty"`
+	Done      bool `json:"done,omitempty"`
 }
 
 type consoleStreamHub struct {
@@ -64,6 +68,14 @@ func (h *consoleStreamHub) PublishPreview(taskID, text string) {
 		Status:  "running",
 		Text:    text,
 		Preview: true,
+	})
+}
+
+func (h *consoleStreamHub) PublishClearText(taskID string) {
+	h.publish(consoleStreamFrame{
+		TaskID:    strings.TrimSpace(taskID),
+		Status:    "running",
+		ClearText: true,
 	})
 }
 
@@ -101,6 +113,17 @@ func (h *consoleStreamHub) PublishPlan(taskID string, plan *consolePlanProgress)
 		TaskID: strings.TrimSpace(taskID),
 		Status: "running",
 		Plan:   plan,
+	})
+}
+
+func (h *consoleStreamHub) PublishInsights(taskID string, insights []string) {
+	if len(insights) == 0 {
+		return
+	}
+	h.publish(consoleStreamFrame{
+		TaskID:   strings.TrimSpace(taskID),
+		Status:   "running",
+		Insights: append([]string(nil), insights...),
 	})
 }
 
@@ -190,13 +213,16 @@ func (h *consoleStreamHub) publish(frame consoleStreamFrame) {
 	if frame.Plan == nil {
 		frame.Plan = previous.Plan
 	}
+	if frame.Insights == nil {
+		frame.Insights = previous.Insights
+	}
 	if frame.Activity == nil {
 		frame.Activity = previous.Activity
 	}
 	if frame.Reasoning == "" {
 		frame.Reasoning = previous.Reasoning
 	}
-	if frame.Text == "" && !frame.Done {
+	if frame.Text == "" && !frame.Done && !frame.ClearText {
 		frame.Text = previous.Text
 		frame.Preview = previous.Preview
 	}
@@ -369,6 +395,17 @@ func (s *consoleReplySink) Update(_ context.Context, text string) error {
 		}
 	}
 	s.hub.PublishSnapshot(s.taskID, text)
+	return nil
+}
+
+func (s *consoleReplySink) Retract(_ context.Context) error {
+	if s == nil || s.hub == nil || s.deferSnapshots {
+		return nil
+	}
+	if s.logger != nil {
+		s.logger.Info("console_stream_retract", "task_id", s.taskID)
+	}
+	s.hub.PublishClearText(s.taskID)
 	return nil
 }
 

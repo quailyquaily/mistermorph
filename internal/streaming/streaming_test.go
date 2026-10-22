@@ -103,6 +103,7 @@ type recordingReplySink struct {
 	finals    []string
 	aborts    []error
 	updateErr error
+	retracts  int
 }
 
 func (s *recordingReplySink) Update(_ context.Context, text string) error {
@@ -121,4 +122,49 @@ func (s *recordingReplySink) Finalize(_ context.Context, text string) error {
 func (s *recordingReplySink) Abort(_ context.Context, err error) error {
 	s.aborts = append(s.aborts, err)
 	return nil
+}
+
+func (s *recordingReplySink) Retract(context.Context) error {
+	s.retracts++
+	return nil
+}
+
+// A model can write its final-answer shape next to a tool call; that text is not the reply.
+func TestFinalOutputStreamerRetractsTextOfAToolCallResponse(t *testing.T) {
+	sink := &recordingReplySink{}
+	streamer := NewFinalOutputStreamer(FinalOutputStreamerOptions{Sink: sink})
+	events := []llm.StreamEvent{
+		{Delta: `{"type":"final","output":"I found a bug`},
+		{ToolCallDelta: &llm.StreamToolCallDelta{}},
+		{Delta: ` and keep going"}`},
+		{Done: true},
+	}
+	for _, event := range events {
+		if err := streamer.Handle(event); err != nil {
+			t.Fatalf("Handle: %v", err)
+		}
+	}
+	if len(sink.updates) != 1 || sink.retracts != 1 {
+		t.Fatalf("updates = %#v, retracts = %d, want the first update taken back", sink.updates, sink.retracts)
+	}
+
+	// The next response is the reply and streams as usual.
+	for _, event := range []llm.StreamEvent{{Delta: `{"type":"final","output":"done"}`}, {Done: true}} {
+		if err := streamer.Handle(event); err != nil {
+			t.Fatalf("Handle: %v", err)
+		}
+	}
+	if got := sink.updates[len(sink.updates)-1]; got != "done" || sink.retracts != 1 {
+		t.Fatalf("updates = %#v, retracts = %d", sink.updates, sink.retracts)
+	}
+
+	// A tool call response that showed nothing has nothing to take back.
+	for _, event := range []llm.StreamEvent{{ToolCallDelta: &llm.StreamToolCallDelta{}}, {Delta: `{"type":"final","output":"x"}`}, {Done: true}} {
+		if err := streamer.Handle(event); err != nil {
+			t.Fatalf("Handle: %v", err)
+		}
+	}
+	if sink.retracts != 1 {
+		t.Fatalf("retracts = %d, want 1", sink.retracts)
+	}
 }

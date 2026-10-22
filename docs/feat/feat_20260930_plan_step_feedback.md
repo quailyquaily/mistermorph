@@ -125,4 +125,4 @@ at the final answer and no step messages are sent.
    answer. Options: accept it (the final answer completes the plan); or after several tool calls on one step, add a
    one-time reminder to the conversation.
 3. **Text without a plan.** A long task without a plan could also send its text alongside tool calls as messages. Not
-   in this change; it would need its own rule for what counts.
+   in this change; it would need its own rule for what counts. Done in `feat_20261022_insights.md`.
