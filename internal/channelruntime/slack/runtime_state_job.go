@@ -106,6 +106,10 @@ func (s *slackRuntimeState) runJob(workerCtx context.Context, conversationKey st
 		_, notifyErr := publishSlackBusOutbound(notifyCtx, s.inprocBus, job.TeamID, job.ChannelID, text, job.ThreadTS, correlationID)
 		return notifyErr
 	})
+	runCtx = taskruntime.WithCoderProgressNotification(runCtx, s.logger, func(notifyCtx context.Context, seq int, text string) error {
+		_, notifyErr := publishSlackBusOutbound(notifyCtx, s.inprocBus, job.TeamID, job.ChannelID, text, job.ThreadTS, fmt.Sprintf("slack:coder-progress:%s:%d", job.TaskID, seq))
+		return notifyErr
+	})
 	runtimeOpts := runtimeTaskOptions{
 		FileCacheDir: s.options.FileCacheDir,
 	}

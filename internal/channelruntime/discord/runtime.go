@@ -238,6 +238,9 @@ func runDiscordLoop(ctx context.Context, d Dependencies, opts RunOptions) error 
 		runCtx := taskruntime.WithContextCompactionNotification(lease.Context, logger, func(notifyCtx context.Context, event agent.Event, text string) error {
 			return publishDiscordBusOutbound(notifyCtx, bus, job.ChannelID, text, job.replyTarget(), fmt.Sprintf("discord:context-compaction:%s:%d", job.TaskID, event.Step))
 		})
+		runCtx = taskruntime.WithCoderProgressNotification(runCtx, logger, func(notifyCtx context.Context, seq int, text string) error {
+			return publishDiscordBusOutbound(notifyCtx, bus, job.ChannelID, text, job.replyTarget(), fmt.Sprintf("discord:coder-progress:%s:%d", job.TaskID, seq))
+		})
 		stopTyping := keepTyping(runCtx, api, job.ChannelID)
 		result, runErr := runDiscordTask(runCtx, bundle.TaskRuntime, taskEnv, job, prior, skills, lease.SteerQueue)
 		stopTyping()

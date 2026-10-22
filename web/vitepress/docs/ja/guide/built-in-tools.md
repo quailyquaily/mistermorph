@@ -100,6 +100,8 @@ Web 検索を行い、構造化された検索結果を返します。手がか�
 
 CLI は独自のプロセスグループで実行されるため、キャンセル時には CLI が起動したコマンドも停止します。CLI の終了後もバックグラウンドに残したプロセス（dev server など）が出力を保持している場合、`coder` は 1 秒後に読み取りをやめて結果を返します。64 KiB を超える出力は末尾 64 KiB に切り詰め、`stdout.jsonl` の場所を添えます。`file_cache_dir/coder` の診断ディレクトリは新しい 20 件だけを残します。
 
+チャットチャネル（Telegram、Slack、Discord、LINE、Lark、Mixin、各種 DM チャネル）ではこのライブ進捗を表示できないため、`coder` の実行が 2 分を超えると会話に短い状況メッセージを送り、終わるまで 5 分ごとに続けます（例: "Claude Code is still working (12 min so far). Now: running a command."）。メッセージに含まれるのはステップの種類だけで、コマンド、ファイルパス、出力は含みません。
+
 Codex / Claude Code への委譲にはこちらを使います。
 
 ## ランタイムツール

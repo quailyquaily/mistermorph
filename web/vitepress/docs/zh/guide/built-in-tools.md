@@ -102,6 +102,8 @@ Shell 的默认启用状态按平台区分：
 
 CLI 在独立的进程组中运行，取消时它启动的命令也会一并停止。如果 CLI 退出后，它留在后台的进程（例如 dev server）仍占用输出，`coder` 会在 1 秒后停止读取并返回结果。超过 64 KiB 的输出只保留最后 64 KiB，并注明 `stdout.jsonl` 的位置。`file_cache_dir/coder` 下只保留最近 20 个诊断目录。
 
+聊天渠道（Telegram、Slack、Discord、LINE、Lark、Mixin 以及各类私信渠道）无法显示这些实时进度，因此 `coder` 运行超过 2 分钟时，会向对话发送一条简短的状态消息，之后每 5 分钟一条，直到结束，例如 "Claude Code is still working (12 min so far). Now: running a command."。消息只说明步骤类型，不包含命令、文件路径或输出。
+
 Codex / Claude Code 委托优先用它。
 
 ## 运行时工具

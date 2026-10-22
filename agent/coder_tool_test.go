@@ -739,7 +739,11 @@ func TestRunCodexTimeoutPreservesDiagnostics(t *testing.T) {
 func TestCoderStreamCollectorCodexStatusAndFailure(t *testing.T) {
 	var summaries []string
 	collector := newCoderStreamCollector(coderBackendCodex, nil)
-	collector.progress = func(summary, _ string) { summaries = append(summaries, summary) }
+	var steps []string
+	collector.progress = func(summary, _, step string) {
+		summaries = append(summaries, summary)
+		steps = append(steps, step)
+	}
 	for _, line := range []string{
 		`{"type":"item.started","item":{"id":"cmd","type":"command_execution","status":"in_progress","command":"echo private-command"}}`,
 		`{"type":"item.completed","item":{"id":"cmd","type":"command_execution","status":"completed","aggregated_output":"private-output","exit_code":0}}`,
@@ -759,6 +763,9 @@ func TestCoderStreamCollectorCodexStatusAndFailure(t *testing.T) {
 	}
 	if strings.Contains(got, "private") {
 		t.Fatalf("summary leaked raw details: %q", got)
+	}
+	if want := []string{coderStepCommand, coderStepThinking, coderStepThinking, coderStepTool, coderStepTool}; !reflect.DeepEqual(steps, want) {
+		t.Fatalf("steps = %q, want %q", steps, want)
 	}
 	if collector.Error() != "upstream disconnected" {
 		t.Fatalf("error = %q", collector.Error())
@@ -794,4 +801,29 @@ func (r *execDirectSubtaskRunner) RunSubtask(ctx context.Context, req SubtaskReq
 		return nil, nil
 	}
 	return req.RunFunc(ctx)
+}
+
+func TestCoderStreamCollectorClaudeSteps(t *testing.T) {
+	t.Parallel()
+
+	var steps []string
+	collector := newCoderStreamCollector(coderBackendClaude, nil)
+	collector.progress = func(_, _, step string) { steps = append(steps, step) }
+	for _, line := range []string{
+		`{"type":"system","subtype":"init"}`,
+		`{"type":"stream_event","event":{"type":"content_block_start","content_block":{"type":"thinking"}}}`,
+		`{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1","name":"Edit","input":{"file_path":"private.go"}}]}}`,
+		`{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":"ok"}]}}`,
+		`{"type":"tool_progress","tool_name":"Bash","tool_use_id":"t2","elapsed_time_seconds":30}`,
+		`{"type":"tool_progress","tool_name":"mcp__github__create_issue","tool_use_id":"t3","elapsed_time_seconds":1}`,
+		`{"type":"tool_progress","tool_name":"Skill","tool_use_id":"t4","elapsed_time_seconds":1}`,
+	} {
+		if err := collector.ConsumeLine([]byte(line)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want := []string{coderStepStarting, coderStepThinking, coderStepEdit, coderStepThinking, coderStepCommand, coderStepTool, "using Skill"}
+	if !reflect.DeepEqual(steps, want) {
+		t.Fatalf("steps = %q, want %q", steps, want)
+	}
 }

@@ -339,6 +339,10 @@ func runLineLoop(ctx context.Context, d Dependencies, opts RunOptions) error {
 				_, notifyErr := publishLineBusOutbound(notifyCtx, inprocBus, job.ChatID, text, "", correlationID)
 				return notifyErr
 			})
+			runCtx = taskruntime.WithCoderProgressNotification(runCtx, logger, func(notifyCtx context.Context, seq int, text string) error {
+				_, notifyErr := publishLineBusOutbound(notifyCtx, inprocBus, job.ChatID, text, "", fmt.Sprintf("line:coder-progress:%s:%d", job.TaskID, seq))
+				return notifyErr
+			})
 			final, _, loadedSkills, runErr := runLineTask(
 				runCtx,
 				runtimeBundle.TaskRuntime,

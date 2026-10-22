@@ -220,6 +220,10 @@ func runMixinLoop(ctx context.Context, d Dependencies, opts RunOptions) error {
 			_, notifyErr := publishMixinBusOutbound(notifyCtx, bus, job.ConversationID, mixinReplyRecipient(job.ChatType, job.FromUserID), text, job.MessageID, fmt.Sprintf("mixin:context-compaction:%s:%d", job.TaskID, event.Step))
 			return notifyErr
 		})
+		runCtx = taskruntime.WithCoderProgressNotification(runCtx, logger, func(notifyCtx context.Context, seq int, text string) error {
+			_, notifyErr := publishMixinBusOutbound(notifyCtx, bus, job.ConversationID, mixinReplyRecipient(job.ChatType, job.FromUserID), text, job.MessageID, fmt.Sprintf("mixin:coder-progress:%s:%d", job.TaskID, seq))
+			return notifyErr
+		})
 		final, _, loadedSkills, runErr := runMixinTask(runCtx, bundle.TaskRuntime, messageSender, job, prior, skills, lease.SteerQueue)
 		userStopped := lease.UserStopped()
 		lease.Finish()

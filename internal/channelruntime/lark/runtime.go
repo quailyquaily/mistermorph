@@ -282,6 +282,10 @@ func runLarkLoop(ctx context.Context, d Dependencies, opts RunOptions) error {
 				_, notifyErr := publishLarkBusOutbound(notifyCtx, inprocBus, job.ChatID, text, job.MessageID, correlationID)
 				return notifyErr
 			})
+			runCtx = taskruntime.WithCoderProgressNotification(runCtx, logger, func(notifyCtx context.Context, seq int, text string) error {
+				_, notifyErr := publishLarkBusOutbound(notifyCtx, inprocBus, job.ChatID, text, job.MessageID, fmt.Sprintf("lark:coder-progress:%s:%d", job.TaskID, seq))
+				return notifyErr
+			})
 			final, _, loadedSkills, runErr := runLarkTask(
 				runCtx,
 				runtimeBundle.TaskRuntime,

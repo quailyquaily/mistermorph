@@ -366,6 +366,9 @@ func (s *telegramRuntimeState) runJob(workerCtx context.Context, conversationKey
 		correlationID := fmt.Sprintf("telegram:context-compaction:%s:%d", job.TaskID, event.Step)
 		return s.publishText(notifyCtx, chatID, job.MessageThreadID, text, correlationID)
 	})
+	runCtx = taskruntime.WithCoderProgressNotification(runCtx, s.logger, func(notifyCtx context.Context, seq int, text string) error {
+		return s.publishText(notifyCtx, chatID, job.MessageThreadID, text, fmt.Sprintf("telegram:coder-progress:%s:%d", job.TaskID, seq))
+	})
 	runtimeOpts := runtimeTaskOptions{
 		FileCacheDir: s.options.FileCacheDir,
 	}

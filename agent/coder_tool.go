@@ -45,7 +45,9 @@ type coderCLIRequest struct {
 	CWD       string
 	PathExtra []string
 	LogRoot   string
-	Progress  func(summary, text string)
+	// Progress reports status lines. step is a short, content-free label for what the CLI
+	// is doing now, such as "running a command", or "" when it has not changed.
+	Progress func(summary, text, step string)
 }
 
 type coderCLICommand struct {
@@ -112,10 +114,10 @@ func (t *coderTool) Execute(ctx context.Context, params map[string]any) (string,
 
 	result, err := runner.RunSubtask(ctx, SubtaskRequest{
 		RunFunc: func(runCtx context.Context) (*SubtaskResult, error) {
-			req.Progress = func(summary, text string) {
+			req.Progress = func(summary, text, step string) {
 				EmitEvent(runCtx, nil, Event{
 					Kind: EventKindToolOutput, ToolName: coderToolName, Stream: req.Backend,
-					Text: text, Summary: summary, Status: "running",
+					Text: text, Summary: summary, Progress: step, Status: "running",
 				})
 			}
 			output, runErr := runCLI(runCtx, req, func(text string) {
@@ -321,11 +323,11 @@ func runCoderCLI(ctx context.Context, req coderCLIRequest, emit func(string)) (o
 			emit(text)
 		}
 	}
-	progress := func(summary, text string) {
+	progress := func(summary, text, step string) {
 		emitMu.Lock()
 		defer emitMu.Unlock()
 		if req.Progress != nil {
-			req.Progress(summary, text)
+			req.Progress(summary, text, step)
 		} else if emit != nil {
 			emit(text)
 		}
@@ -368,14 +370,14 @@ func runCoderCLI(ctx context.Context, req coderCLIRequest, emit func(string)) (o
 		spec.Args = append(spec.Args, "--debug-file", filepath.Join(diagnosticDir, "debug.log"))
 	}
 	line := fmt.Sprintf("[%s] diagnostics: %s\n", req.Backend, diagnosticDir)
-	progress(line, line)
+	progress(line, line, "")
 	collector := newCoderStreamCollector(req.Backend, publish)
 	collector.progress = progress
 	var stderrTail coderTailBuffer
 	stderrTail.Limit = coderStderrTailBytes
 	defer func() {
 		line := fmt.Sprintf("[%s] process ended after %s; diagnostics: %s\n", req.Backend, time.Since(started).Round(time.Millisecond), diagnosticDir)
-		progress(line, line)
+		progress(line, line, "")
 		if runErr == nil {
 			return
 		}
@@ -404,11 +406,11 @@ func runCoderCLI(ctx context.Context, req coderCLIRequest, emit func(string)) (o
 	// even when a process the CLI left in the background still holds the pipes.
 	stdoutLines := &coderLineWriter{handle: func(line []byte) { _ = collector.ConsumeLine(line) }}
 	stderrLines := &coderLineWriter{handle: func(line []byte) {
-		progress(fmt.Sprintf("[%s] stderr received\n", req.Backend), fmt.Sprintf("[%s stderr] %s\n", req.Backend, line))
+		progress(fmt.Sprintf("[%s] stderr received\n", req.Backend), fmt.Sprintf("[%s stderr] %s\n", req.Backend, line), "")
 	}}
 	stdoutLines.overflow = func() {
 		line := fmt.Sprintf("[%s] skipped an output line over %d bytes\n", req.Backend, coderLineMaxBytes)
-		progress(line, line)
+		progress(line, line, "")
 	}
 	stderrLines.overflow = stdoutLines.overflow
 	cmd.Stdout = io.MultiWriter(stdoutLog, stdoutLines)
@@ -424,7 +426,7 @@ func runCoderCLI(ctx context.Context, req coderCLIRequest, emit func(string)) (o
 		remaining = fmt.Sprintf("; remaining task time: %s", time.Until(deadline).Round(time.Second))
 	}
 	line = fmt.Sprintf("[%s] started pid=%d%s\n", req.Backend, cmd.Process.Pid, remaining)
-	progress(line, line)
+	progress(line, line, "")
 
 	waitErr := cmd.Wait()
 	stdoutLines.Flush()
@@ -432,7 +434,7 @@ func runCoderCLI(ctx context.Context, req coderCLIRequest, emit func(string)) (o
 	output = capCoderOutput(collector.Output(), diagnosticDir)
 	if errors.Is(waitErr, exec.ErrWaitDelay) && ctx.Err() == nil {
 		line := fmt.Sprintf("[%s] exited; stopped reading output still held by a background process\n", req.Backend)
-		progress(line, line)
+		progress(line, line, "")
 		waitErr = nil
 	}
 	if waitErr != nil {
@@ -667,12 +669,13 @@ func coderExitError(backend string, err error) error {
 type coderStreamCollector struct {
 	backend  string
 	emit     func(string)
-	progress func(summary, text string)
+	progress func(summary, text, step string)
 
 	emitted       strings.Builder
 	final         string
 	errText       string
 	lastActivity  string
+	step          string
 	itemOutputLen map[string]int
 }
 
@@ -755,16 +758,24 @@ func (c *coderStreamCollector) consumeClaude(payload map[string]any) {
 		if stringField(payload, "subtype") == "thinking_tokens" {
 			return
 		}
+		if stringField(payload, "subtype") == "init" {
+			c.step = coderStepStarting
+		} else if stringField(payload, "status") == "requesting" {
+			c.step = coderStepThinking
+		}
 		c.emitActivity("[claude] " + stringField(payload, "subtype") + " " + stringField(payload, "status"))
 	case "tool_progress":
+		c.step = claudeToolStep(stringField(payload, "tool_name"))
 		c.emitActivity(fmt.Sprintf("[claude] %s (%s), elapsed %vs", stringField(payload, "tool_name"), stringField(payload, "tool_use_id"), payload["elapsed_time_seconds"]))
 	case "stream_event":
 		if event, ok := mapField(payload, "event"); ok {
 			if block, ok := mapField(event, "content_block"); ok {
 				switch stringField(block, "type") {
 				case "tool_use":
+					c.step = claudeToolStep(stringField(block, "name"))
 					c.emitActivity("[claude] starting " + stringField(block, "name") + " (" + stringField(block, "id") + ")")
 				case "thinking":
+					c.step = coderStepThinking
 					c.emitActivity("[claude] thinking")
 				}
 			}
@@ -782,6 +793,7 @@ func (c *coderStreamCollector) consumeClaude(payload map[string]any) {
 				}
 				switch stringField(block, "type") {
 				case "tool_use":
+					c.step = claudeToolStep(stringField(block, "name"))
 					input, _ := json.Marshal(block["input"])
 					c.emitActivity(fmt.Sprintf("[claude] %s (%s)", stringField(block, "name"), stringField(block, "id")), string(input))
 				case "tool_result":
@@ -789,6 +801,7 @@ func (c *coderStreamCollector) consumeClaude(payload map[string]any) {
 					if boolField(block, "is_error") {
 						status = "failed"
 					}
+					c.step = coderStepThinking
 					c.emitActivity(fmt.Sprintf("[claude] %s %s", stringField(block, "tool_use_id"), status), textFromValue(block["content"]))
 				}
 			}
@@ -822,7 +835,7 @@ func (c *coderStreamCollector) emitActivity(summary string, details ...string) {
 	}
 	c.lastActivity = strings.TrimSpace(summary)
 	if c.progress != nil {
-		c.progress("\n"+c.lastActivity+"\n", "\n"+string(runes)+"\n")
+		c.progress("\n"+c.lastActivity+"\n", "\n"+string(runes)+"\n", c.step)
 	} else if c.emit != nil {
 		c.emit("\n" + string(runes) + "\n")
 	}
@@ -832,7 +845,12 @@ func (c *coderStreamCollector) consumeCodex(payload map[string]any) {
 	typ := stringField(payload, "type")
 	switch typ {
 	case "thread.started", "turn.started", "turn.completed":
-		if typ == "turn.completed" {
+		switch typ {
+		case "thread.started":
+			c.step = coderStepStarting
+		case "turn.started":
+			c.step = coderStepThinking
+		case "turn.completed":
 			c.errText = ""
 		}
 		c.emitActivity("[codex] " + typ)
@@ -862,6 +880,14 @@ func (c *coderStreamCollector) consumeCodex(payload map[string]any) {
 			return
 		}
 	}
+	if item, ok := mapField(payload, "item"); ok && strings.HasPrefix(typ, "item.") {
+		// An item that finishes hands control back to the model.
+		if typ == "item.completed" {
+			c.step = coderStepThinking
+		} else if step := codexItemStep(stringField(item, "type")); step != "" {
+			c.step = step
+		}
+	}
 	if item, ok := mapField(payload, "item"); ok && strings.TrimSpace(stringField(item, "type")) == "command_execution" {
 		c.consumeCodexCommandItem(item)
 		return
@@ -888,6 +914,61 @@ func claudeStreamDelta(value any) string {
 		if text := stringField(delta, "text"); text != "" {
 			return text
 		}
+	}
+	return ""
+}
+
+const (
+	coderStepStarting = "starting up"
+	coderStepThinking = "thinking"
+	coderStepCommand  = "running a command"
+	coderStepEdit     = "editing files"
+	coderStepRead     = "reading code"
+	coderStepWeb      = "searching the web"
+	coderStepTool     = "calling a tool"
+	coderStepPlan     = "planning"
+	coderStepSubagent = "running a subagent"
+)
+
+// claudeToolStep names a Claude Code tool by what it does. Unknown tools keep their name.
+func claudeToolStep(name string) string {
+	switch name {
+	case "":
+		return ""
+	case "Bash", "BashOutput", "KillShell":
+		return coderStepCommand
+	case "Edit", "MultiEdit", "Write", "NotebookEdit":
+		return coderStepEdit
+	case "Read", "Glob", "Grep", "LS":
+		return coderStepRead
+	case "WebFetch", "WebSearch":
+		return coderStepWeb
+	case "TodoWrite":
+		return coderStepPlan
+	case "Task", "Agent":
+		return coderStepSubagent
+	}
+	if strings.HasPrefix(name, "mcp__") {
+		return coderStepTool
+	}
+	return "using " + name
+}
+
+// codexItemStep names a Codex item type by what it does, or returns "" for items that are not steps.
+func codexItemStep(kind string) string {
+	switch kind {
+	case "command_execution":
+		return coderStepCommand
+	case "file_change":
+		return coderStepEdit
+	case "mcp_tool_call":
+		return coderStepTool
+	case "web_search":
+		return coderStepWeb
+	case "todo_list":
+		return coderStepPlan
+	case "reasoning":
+		return coderStepThinking
 	}
 	return ""
 }

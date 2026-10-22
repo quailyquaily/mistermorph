@@ -50,6 +50,9 @@ type Event struct {
 	OutputKind       string         `json:"output_kind,omitempty"`
 	Error            string         `json:"error,omitempty"`
 	Args             map[string]any `json:"args,omitempty"`
+	// Progress is a short, content-free label for what a long-running tool is doing now,
+	// such as "running a command". Tools that report it set it on tool_output events.
+	Progress string `json:"progress,omitempty"`
 }
 
 type EventSink interface {
