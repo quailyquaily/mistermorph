@@ -445,7 +445,7 @@ event 不包含 checkpoint 全文或用户原始消息。
 channel runtime 监听 `context_compaction_done`，在 checkpoint 已验证、持久化且完成 message 替换后，向当前 conversation/thread 发送：
 
 ```text
-上下文已压缩，正在继续处理当前任务。
+Context compacted. Continuing with the current task.
 ```
 
 每次成功压缩发送一次。通知不进入 agent transcript，也不参与后续压缩。通知发送失败只记录 warning，不回滚 checkpoint，不中止当前任务。主动压缩失败但主请求继续时不发送通知；终止性的压缩错误沿用正常错误消息。CLI/console 显示等价的状态行。

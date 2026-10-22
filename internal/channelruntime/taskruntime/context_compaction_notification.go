@@ -8,7 +8,7 @@ import (
 	"github.com/quailyquaily/mistermorph/agent"
 )
 
-const ContextCompactionDoneText = "上下文已压缩，正在继续处理当前任务。"
+const ContextCompactionDoneText = "Context compacted. Continuing with the current task."
 
 type ContextCompactionNotifyFunc func(context.Context, agent.Event, string) error
 

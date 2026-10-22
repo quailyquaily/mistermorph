@@ -26,7 +26,7 @@ func TestFormatConsoleToolDoneSuppressesPlanCreateSuccess(t *testing.T) {
 
 func TestFormatConsoleRuntimeStatusShowsContextCompaction(t *testing.T) {
 	got := formatConsoleRuntimeStatus(agent.Event{Kind: agent.EventKindContextCompactionDone})
-	if got != "上下文已压缩，正在继续处理当前任务。" {
+	if got != "Context compacted. Continuing with the current task." {
 		t.Fatalf("formatConsoleRuntimeStatus() = %q", got)
 	}
 	if got := formatConsoleRuntimeStatus(agent.Event{Kind: agent.EventKindContextCompactionFailed}); got != "" {
