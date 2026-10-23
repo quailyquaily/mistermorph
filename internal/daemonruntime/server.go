@@ -43,6 +43,7 @@ import (
 
 type SubmitFunc func(ctx context.Context, req SubmitTaskRequest) (SubmitTaskResponse, error)
 type StopFunc func(ctx context.Context, req StopTaskRequest) (StopTaskResponse, error)
+type AnswerQuestionFunc func(ctx context.Context, req AnswerQuestionRequest) (AnswerQuestionResponse, error)
 type OverviewFunc func(ctx context.Context) (map[string]any, error)
 type PokeFunc func(ctx context.Context, input awarenessdomain.PokeInput) error
 type CronRunFunc func(ctx context.Context, task cronstore.Task) error
@@ -134,9 +135,12 @@ type TaskTopicRoutes struct {
 	TopicDeleter TopicDeleter
 	// CreateTopic creates an empty topic, so a client can hold its ID before the first task;
 	// nil when the runtime creates topics only through task submission.
-	CreateTopic          func(title string) (TopicInfo, error)
-	Submit               SubmitFunc
-	Stop                 StopFunc
+	CreateTopic func(title string) (TopicInfo, error)
+	Submit      SubmitFunc
+	Stop        StopFunc
+	// AnswerQuestion answers the question a running task waits on; nil when the runtime's tasks
+	// ask no questions.
+	AnswerQuestion       AnswerQuestionFunc
 	TopicMetadata        TopicMetadataFunc
 	TopicContext         TopicContextFunc
 	RegenerateTopicTitle func(context.Context, string) (TopicInfo, error)

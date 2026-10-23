@@ -1,0 +1,200 @@
+/* A question the agent asked (ask_user), as a record in the agent's message: mono labels on the
+   message's left edge (where the status row and the reply start), texts at one indent. Open, it
+   lists the choices under the question, keyed [1] to [4], and a reply field; once closed, the same
+   grid keeps the question and the answer.
+   The labels are mono and smaller than the texts. Every cell keeps the text's font and line box,
+   and a label is an inline span inside it with no line height of its own, so the cells of a row
+   share one baseline and one height whatever fonts the system has, and a wrapped text keeps its
+   label on its first line. One grid holds all rows, so the label column fits the widest label in
+   any language. */
+.chat-question {
+  min-width: 0;
+  margin-bottom: 8px;
+}
+
+/* In an agent message it keeps to the reading measure, as replies and approvals do. */
+.chat-history-agent .chat-history-stack > .chat-question {
+  justify-self: start;
+  width: min(100%, var(--chat-measure));
+}
+
+.chat-question-grid {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: start;
+  column-gap: 14px;
+  row-gap: 2px;
+  margin: 0;
+  font-size: var(--font-size-ui);
+  line-height: 1.5;
+}
+
+.chat-question-row {
+  display: contents;
+}
+
+.chat-question-key,
+.chat-question-value {
+  margin: 0;
+  min-width: 0;
+  font: inherit;
+}
+
+.chat-question-value {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.chat-question-label {
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  /* The status row's spacing, so both read as one label system. */
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.chat-question-label.is-none {
+  font-weight: 400;
+  text-transform: none;
+}
+
+.chat-question-text {
+  color: var(--text-1);
+}
+
+.chat-question-answer {
+  color: var(--text-0);
+  font-weight: 600;
+}
+
+/* Open: the question waits on the person, so its label takes the accent and it reads darker. */
+.chat-question.is-open .chat-question-grid {
+  row-gap: 4px;
+}
+
+.chat-question.is-open > .chat-question-grid > .chat-question-key:first-child .chat-question-label {
+  color: var(--accent-1);
+}
+
+.chat-question.is-open .chat-question-text {
+  margin-bottom: 4px;
+  color: var(--text-0);
+  font-weight: 600;
+}
+
+/* A choice is a row of the grid: its key in the label column, its label in the text column. Its
+   hover tint is drawn past the row, so the text does not move. */
+.chat-question-option {
+  position: relative;
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
+  align-items: start;
+  margin: 0;
+  padding: 2px 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  outline: none;
+}
+
+.chat-question-option::before {
+  content: "";
+  position: absolute;
+  inset: 0 -8px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--accent-1) 7%, transparent);
+  opacity: 0;
+  transition: opacity 120ms var(--motion-ease);
+  pointer-events: none;
+}
+
+.chat-question-option > * {
+  position: relative;
+}
+
+.chat-question-option:hover:not(:disabled)::before,
+.chat-question-option:focus-visible::before {
+  opacity: 1;
+}
+
+.chat-question-option:focus-visible::before {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-1) 40%, transparent);
+}
+
+.chat-question-option:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.chat-question-option .chat-question-value {
+  display: grid;
+}
+
+.chat-question-option-label {
+  color: var(--accent-1);
+  font-weight: 600;
+}
+
+.chat-question-option-detail {
+  color: var(--text-2);
+}
+
+/* The reply row: its label centers on the field, which is taller than a line. */
+.chat-question-key.is-reply {
+  align-self: center;
+}
+
+.chat-question-reply {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+  white-space: normal;
+}
+
+.chat-question-key.is-reply {
+  margin-top: 4px;
+}
+
+.chat-question-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 2px;
+  background: var(--q-bg-white);
+  color: var(--text-0);
+  font: inherit;
+  outline: none;
+  transition: border-color 120ms var(--motion-ease);
+}
+
+.chat-question-input:focus {
+  border-color: var(--accent-1);
+}
+
+.chat-question-input::placeholder {
+  color: var(--text-2);
+}
+
+.chat-question-input:disabled {
+  opacity: 0.6;
+}
+
+.chat-question-reply .q-button {
+  flex: 0 0 auto;
+}
+
+.chat-question-error {
+  grid-column: 2;
+  color: var(--danger);
+}

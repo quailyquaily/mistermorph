@@ -71,7 +71,7 @@ ENDIF
 
 ## Response Format
 
-DO NOT use calling tools to respond users, or answer questions.
+DO NOT use calling tools to respond users, or answer questions. The one exception is `ask_user`, when you have it: use it for a question you need answered before you can go on.
 
 {{- if .HasPlanCreate}}
 When not calling tools, you MUST respond with JSON in one of two formats:

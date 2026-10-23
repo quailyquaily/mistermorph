@@ -5,6 +5,7 @@ import { approvalParameterEntries, skillInstallApproval } from "../core/chat-app
 import { agentLinkMessages, insightMessages, planStepMessages, pollingActionWord } from "../core/chat-task-history";
 import { recordComponentUpdate } from "../core/performance";
 import ChatAgentLinkExchange from "./ChatAgentLinkExchange";
+import ChatQuestionCard from "./ChatQuestionCard";
 import ChatRichContent from "./ChatRichContent";
 import ChatSkillInstallPreview from "./ChatSkillInstallPreview";
 import ChatStatusCard from "./ChatStatusCard";
@@ -39,13 +40,23 @@ const RECORD_COMPONENT_PERF = import.meta.env.DEV === true;
 const ChatHistoryItem = {
   components: {
     ChatAgentLinkExchange,
+    ChatQuestionCard,
     ChatRichContent,
     ChatSkillInstallPreview,
     ChatStatusCard,
     ChatSystemMessage,
     MosaicText,
   },
-  emits: ["approval-approve", "approval-deny", "copy", "preview-file", "rendered", "time-click", "toggle-status"],
+  emits: [
+    "approval-approve",
+    "approval-deny",
+    "copy",
+    "preview-file",
+    "question-answer",
+    "rendered",
+    "time-click",
+    "toggle-status",
+  ],
   props: {
     item: {
       type: Object,
@@ -128,6 +139,11 @@ const ChatHistoryItem = {
     const stepMessages = computed(() =>
       role.value === "agent" ? [...insightMessages(props.item?.insights), ...planStepMessages(props.item?.plan)] : []
     );
+    // The questions the agent asked while working (ask_user), after its insights.
+    const questions = computed(() =>
+      role.value === "agent" && Array.isArray(props.item?.questions) ? props.item.questions : []
+    );
+    const questionOpen = computed(() => questions.value.some((question) => question.status === "open"));
     const reasoningVisible = computed(() => String(props.item?.reasoning || "").trim() !== "");
     const activityEntries = computed(() => {
       const activity = props.item?.activity;
@@ -202,9 +218,11 @@ const ChatHistoryItem = {
     );
     // A reply with nothing to show yet: its words assemble from mosaic pieces in place of the hint
     // ("Morph is thinking..."), which stays for screen readers.
+    // While a question waits on the person, the agent is not thinking.
     const awaitingWord = computed(() =>
       role.value === "agent" &&
       props.item?.awaiting === true &&
+      !questionOpen.value &&
       !isTerminalStatus(normalizeTaskStatus(props.item?.status))
         ? pollingActionWord(props.item?.pendingSeed || props.item?.taskId || props.item?.id)
         : ""
@@ -215,7 +233,8 @@ const ChatHistoryItem = {
         !approvalVisible.value &&
         (role.value === "agent" || role.value === "user") &&
         String(props.item?.text || "").trim() !== "" &&
-        !awaitingWord.value
+        !awaitingWord.value &&
+        !(questionOpen.value && props.item?.awaiting === true)
     );
     const streaming = computed(
       () =>
@@ -273,6 +292,10 @@ const ChatHistoryItem = {
       emit("toggle-status", props.item?.id || "", panel);
     }
 
+    function emitQuestionAnswer(answer) {
+      emit("question-answer", props.item, answer);
+    }
+
     function emitApprovalApprove() {
       emit("approval-approve", props.item);
     }
@@ -322,10 +345,13 @@ const ChatHistoryItem = {
       emitApprovalDeny,
       emitCopy,
       emitPreviewFile,
+      emitQuestionAnswer,
       emitRendered,
       emitTimeClick,
       emitToggle,
       itemClass,
+      questionOpen,
+      questions,
       role,
       reasoningVisible,
       retryNotices,
@@ -445,6 +471,13 @@ const ChatHistoryItem = {
               @rendered="emitRendered"
             />
           </div>
+          <ChatQuestionCard
+            v-for="question in questions"
+            :key="question.id"
+            :question="question"
+            :live="streaming"
+            @answer="emitQuestionAnswer"
+          />
           <ChatAgentLinkExchange
             :messages="agentLinkExchange"
             :endpoint-ref="submitEndpointRef"
@@ -455,7 +488,7 @@ const ChatHistoryItem = {
           <div v-if="agentBubbleVisible && awaitingWord" :class="surfaceClass" class="chat-history-awaiting">
             <MosaicText :text="awaitingWord" :label="item.text" />
           </div>
-          <div v-else-if="agentBubbleVisible" :class="surfaceClass">
+          <div v-else-if="agentBubbleVisible && !(questionOpen && item.awaiting)" :class="surfaceClass">
             <ChatRichContent
               class="chat-history-markdown"
               :source="item.text"

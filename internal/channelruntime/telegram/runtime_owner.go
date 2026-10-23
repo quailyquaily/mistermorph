@@ -372,6 +372,9 @@ func (s *telegramRuntimeState) runJob(workerCtx context.Context, conversationKey
 	runCtx = taskruntime.WithInsightNotification(runCtx, s.logger, taskruntime.InsightLimitFor(isGroupChat(job.ChatType)), func(notifyCtx context.Context, seq int, text string) error {
 		return s.publishText(notifyCtx, chatID, job.MessageThreadID, text, fmt.Sprintf("telegram:insight:%s:%d", job.TaskID, seq))
 	})
+	if telegramAsksUser(job) {
+		runCtx = taskruntime.WithUserQuestions(runCtx, taskruntime.LeaseUserQuestions(lease, s.logger, s.showTelegramQuestion(job)))
+	}
 	runtimeOpts := runtimeTaskOptions{
 		FileCacheDir: s.options.FileCacheDir,
 	}
@@ -762,6 +765,9 @@ func (s *telegramRuntimeState) poll() error {
 
 func (s *telegramRuntimeState) handleUpdate(update telegramUpdate) {
 	if s.handleApprovalCallback(context.Background(), update.CallbackQuery) {
+		return
+	}
+	if s.handleQuestionCallback(context.Background(), update.CallbackQuery) {
 		return
 	}
 	message := update.Message

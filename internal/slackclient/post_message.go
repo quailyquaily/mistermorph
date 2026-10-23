@@ -52,6 +52,11 @@ func (c *Client) PostMessageWithBlocks(ctx context.Context, channelID, text, thr
 	return err
 }
 
+// PostMessageWithBlocksResult posts a message with blocks and returns where it was posted.
+func (c *Client) PostMessageWithBlocksResult(ctx context.Context, channelID, text, threadTS string, blocks []Block) (MessageRef, error) {
+	return c.postMessage(ctx, channelID, text, threadTS, blocks, true)
+}
+
 func (c *Client) PostMessageWithResult(ctx context.Context, channelID, text, threadTS string) (MessageRef, error) {
 	return c.postMessage(ctx, channelID, text, threadTS, nil, true)
 }

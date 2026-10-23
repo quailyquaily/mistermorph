@@ -674,6 +674,12 @@ func (rt *Runtime) prepareRun(ctx context.Context, req RunRequest) (preparedRunt
 			ToolTriggers:     toolTriggers,
 			PersonaDir:       rt.commonDeps.RuntimePaths.PersonaDir,
 		})
+		// Only the task's own run talks to the person; subtasks report to the agent that started them.
+		if ask := userQuestionsFromContext(ctx); ask != nil && agent.SubtaskDepthFromContext(ctx) == 0 {
+			if err := reg.Replace(newAskUserTool(ask)); err != nil {
+				return preparedRuntimeRun{}, err
+			}
+		}
 		// $mcp_<name> servers are connected for this run only, before the prompt and tool schemas
 		// are built, and closed with the run. Resume prepares the run again and reconnects them.
 		registeredBefore := toolNameSet(reg)
@@ -718,6 +724,7 @@ func (rt *Runtime) prepareRun(ctx context.Context, req RunRequest) (preparedRunt
 		insightLimit = insightLimitFromContext(ctx)
 	}
 	promptprofile.AppendInsightBlock(&promptSpec, insightLimit)
+	promptprofile.AppendAskUserBlock(&promptSpec, reg)
 	if !req.DisableTodoWorkflow {
 		promptprofile.AppendTodoWorkflowBlock(&promptSpec, reg)
 	}

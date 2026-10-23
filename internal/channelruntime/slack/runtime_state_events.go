@@ -377,6 +377,17 @@ func (s *slackRuntimeState) handleSocketEnvelope(ctx context.Context, envelope s
 		s.handleApprovalAction(ctx, approvalAction)
 		return nil
 	}
+	questionID, option, questionOK, err := parseSlackQuestionAction(envelope)
+	if err != nil {
+		return err
+	}
+	if questionOK {
+		// The settled question shows the answer; a stale button does nothing.
+		if _, chosen := s.runControl.Choose("slack", questionID, option); !chosen {
+			s.logger.Info("slack_question_closed", "question_id", questionID)
+		}
+		return nil
+	}
 	event, ok, err := parseSlackInboundEvent(envelope, s.botUserID)
 	if err != nil || !ok {
 		return err

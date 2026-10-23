@@ -23,6 +23,7 @@ func (routes *routeRegistration) registerTaskRoutes() {
 	createTopic := opts.CreateTopic
 	submit := opts.Submit
 	stop := opts.Stop
+	answerQuestion := opts.AnswerQuestion
 
 	mux.HandleFunc("/tasks", func(w http.ResponseWriter, r *http.Request) {
 		if !checkAuth(r, authToken) {
@@ -195,6 +196,45 @@ func (routes *routeRegistration) registerTaskRoutes() {
 				TaskID: taskID,
 				Reason: "/stop",
 			})
+			if err != nil {
+				if msg, ok := badRequestMessage(err); ok {
+					http.Error(w, msg, http.StatusBadRequest)
+					return
+				}
+				http.Error(w, strings.TrimSpace(err.Error()), http.StatusServiceUnavailable)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		if strings.HasSuffix(suffix, "/answer") {
+			if answerQuestion == nil {
+				http.NotFound(w, r)
+				return
+			}
+			if r.Method != http.MethodPost {
+				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+			taskID := strings.TrimSpace(strings.TrimSuffix(suffix, "/answer"))
+			if taskID == "" || strings.Contains(taskID, "/") {
+				http.Error(w, "missing task_id", http.StatusBadRequest)
+				return
+			}
+			var req AnswerQuestionRequest
+			if err := json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(&req); err != nil {
+				http.Error(w, "invalid json", http.StatusBadRequest)
+				return
+			}
+			req.TaskID = taskID
+			req.QuestionID = strings.TrimSpace(req.QuestionID)
+			if req.QuestionID == "" {
+				http.Error(w, "missing question_id", http.StatusBadRequest)
+				return
+			}
+			resp, err := answerQuestion(r.Context(), req)
 			if err != nil {
 				if msg, ok := badRequestMessage(err); ok {
 					http.Error(w, msg, http.StatusBadRequest)

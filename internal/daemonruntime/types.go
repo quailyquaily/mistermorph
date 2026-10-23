@@ -50,6 +50,21 @@ type StopTaskRequest struct {
 	Reason  string `json:"reason,omitempty"`
 }
 
+// AnswerQuestionRequest answers question QuestionID of task TaskID: with typed Text when set,
+// otherwise with its choice at Option.
+type AnswerQuestionRequest struct {
+	TaskID     string `json:"-"`
+	QuestionID string `json:"question_id"`
+	Option     int    `json:"option"`
+	Text       string `json:"text,omitempty"`
+}
+
+type AnswerQuestionResponse struct {
+	// Answered is false when the question is no longer open: answered, expired, or its task ended.
+	Answered bool   `json:"answered"`
+	Answer   string `json:"answer,omitempty"`
+}
+
 type StopTaskResponse struct {
 	Status   string `json:"status"`
 	Found    bool   `json:"found"`

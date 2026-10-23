@@ -114,6 +114,9 @@ func (s *slackRuntimeState) runJob(workerCtx context.Context, conversationKey st
 		_, notifyErr := publishSlackBusOutbound(notifyCtx, s.inprocBus, job.TeamID, job.ChannelID, text, job.ThreadTS, fmt.Sprintf("slack:insight:%s:%d", job.TaskID, seq))
 		return notifyErr
 	})
+	if slackAsksUser(job) {
+		runCtx = taskruntime.WithUserQuestions(runCtx, taskruntime.LeaseUserQuestions(lease, s.logger, s.showSlackQuestion(job)))
+	}
 	runtimeOpts := runtimeTaskOptions{
 		FileCacheDir: s.options.FileCacheDir,
 	}

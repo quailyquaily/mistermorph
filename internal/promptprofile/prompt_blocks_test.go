@@ -329,3 +329,32 @@ func TestAppendInsightBlock(t *testing.T) {
 		}
 	})
 }
+
+func TestAppendAskUserBlock(t *testing.T) {
+	tests := []struct {
+		name      string
+		tool      string
+		finalOnly bool
+		want      bool
+	}{
+		{name: "with ask_user", tool: "ask_user", want: true},
+		{name: "without ask_user", tool: "bash", want: false},
+		{name: "final-only response", tool: "ask_user", finalOnly: true, want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			spec := agent.PromptSpec{FinalOnlyResponse: tt.finalOnly}
+			reg := tools.NewRegistry()
+			reg.Register(&testTool{name: tt.tool})
+
+			AppendAskUserBlock(&spec, reg)
+
+			if got := len(spec.Blocks) == 1; got != tt.want {
+				t.Fatalf("block added = %v, want %v (%d blocks)", got, tt.want, len(spec.Blocks))
+			}
+			if tt.want && !strings.Contains(spec.Blocks[0].Content, "call `ask_user` instead of ending your turn with a question") {
+				t.Fatalf("ask_user guidance missing: %q", spec.Blocks[0].Content)
+			}
+		})
+	}
+}

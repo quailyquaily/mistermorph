@@ -7,6 +7,8 @@ import {
   normalizeTaskStatus,
   normalizeActivity,
   normalizePlan,
+  normalizeQuestions,
+  keepLiveTaskState,
   taskAgentText,
   taskListHistoryItems,
   planStepMessages,
@@ -224,4 +226,44 @@ test("a reload keeps what the page shows for a running task until the task store
   // What the task list has wins.
   const [stored] = keepLiveTaskState(current, [{ ...fresh[0], insights: ["Stored."] }]);
   assert.deepEqual(stored.insights, ["Stored."]);
+});
+
+test("questions from the task result or a stream frame keep their choices and answer", () => {
+  assert.equal(normalizeQuestions(undefined), null);
+  assert.equal(normalizeQuestions([{ id: "", text: "x" }, { id: "q", text: " " }]), null);
+  const questions = normalizeQuestions([
+    {
+      id: "q1",
+      text: " Which account? ",
+      options: [{ label: "Personal", description: "lyric@example.com" }, { label: " " }, { label: "Company" }],
+      status: "answered",
+      answer: "Company",
+      option: 1,
+    },
+    { id: "q2", text: "Why?", status: "weird" },
+  ]);
+  assert.deepEqual(questions, [
+    {
+      id: "q1",
+      text: "Which account?",
+      options: [
+        { label: "Personal", description: "lyric@example.com" },
+        { label: "Company", description: "" },
+      ],
+      status: "answered",
+      answer: "Company",
+      option: 1,
+    },
+    { id: "q2", text: "Why?", options: [], status: "expired", answer: "", option: null },
+  ]);
+
+  const item = taskListHistoryItems(
+    [{ id: "t1", status: "done", task: "send it", result: { final: { output: "sent" }, questions: [{ id: "q1", text: "Which?", status: "expired" }] } }],
+    (key) => key
+  ).find((entry) => entry.role === "agent");
+  assert.equal(item.questions[0].status, "expired");
+
+  const live = { id: "t2:agent", role: "agent", taskId: "t2", status: "running", questions: [{ id: "q3", text: "Now?", status: "open" }] };
+  const [kept] = keepLiveTaskState([live], [{ ...live, questions: null }]);
+  assert.equal(kept.questions[0].id, "q3");
 });

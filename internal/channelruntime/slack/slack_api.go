@@ -513,6 +513,14 @@ func (api *slackAPI) postMessageWithBlocks(ctx context.Context, channelID, text,
 	return client.PostMessageWithBlocks(ctx, channelID, text, threadTS, blocks)
 }
 
+func (api *slackAPI) postMessageWithBlocksResult(ctx context.Context, channelID, text, threadTS string, blocks []slackclient.Block) (slackMessageRef, error) {
+	if api == nil {
+		return slackMessageRef{}, fmt.Errorf("slack api is not initialized")
+	}
+	client := slackclient.New(api.http, api.baseURL, api.botToken)
+	return client.PostMessageWithBlocksResult(ctx, channelID, text, threadTS, blocks)
+}
+
 func (api *slackAPI) postMessageWithResult(ctx context.Context, channelID, text, threadTS string) (slackMessageRef, error) {
 	if api == nil {
 		return slackMessageRef{}, fmt.Errorf("slack api is not initialized")

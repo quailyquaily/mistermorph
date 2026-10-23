@@ -41,6 +41,7 @@ import {
   normalizeHistoryFileReferences,
   normalizeInsights,
   normalizePlan,
+  normalizeQuestions,
   normalizeReasoning,
   normalizeTaskStatus,
   normalizeTopicID,
@@ -50,6 +51,7 @@ import {
   taskInsights,
   taskListHistoryItems,
   taskPlan,
+  taskQuestions,
   taskRawJSON,
   taskReasoning,
 } from "../core/chat-task-history";
@@ -103,6 +105,8 @@ const CHAT_COMPOSER_MIN_HEIGHT = 80;
 const DEFAULT_TOPIC_ID = "default";
 const AWARENESS_TOPIC_ID = "_awareness";
 const LOCAL_CONSOLE_ENDPOINT_REF = "ep_console_local";
+// The trigger of a task sent from this chat. The runtime lets only such tasks ask questions.
+const CONSOLE_CHAT_TRIGGER = Object.freeze({ source: "ui", event: "chat_submit", ref: "web/console/chat" });
 const RECENT_WORKSPACE_DIRS_STORAGE_KEY = "mistermorph_console_recent_workspaces_v1";
 const WORKSPACE_SIDEBAR_OPEN_STORAGE_KEY = "mistermorph_console_workspace_sidebar_open_v1";
 const RECENT_WORKSPACE_DIRS_LIMIT = 32;
@@ -3208,6 +3212,9 @@ const ChatView = {
         if (Array.isArray(frame.insights) && frame.insights.length > 0) {
           patch.insights = normalizeInsights(frame.insights);
         }
+        if (Array.isArray(frame.questions) && frame.questions.length > 0) {
+          patch.questions = normalizeQuestions(frame.questions);
+        }
         if (frame.activity && typeof frame.activity === "object") {
           patch.activity = nextActivity;
         }
@@ -3321,6 +3328,7 @@ const ChatView = {
         topicID: normalizeTopicID(partial?.topicID),
         plan: normalizePlan(partial?.plan),
         insights: normalizeInsights(partial?.insights),
+        questions: normalizeQuestions(partial?.questions),
         activity: normalizeActivity(partial?.activity),
         reasoning: normalizeReasoning(partial?.reasoning),
         approval: partial?.approval || null,
@@ -3540,6 +3548,7 @@ const ChatView = {
         const existingItem = chatHistoryItems.value.find((item) => item.id === resolvedHistoryID) || null;
         const plan = taskPlan(detail) || normalizePlan(existingItem?.plan);
         const insights = taskInsights(detail) || normalizeInsights(existingItem?.insights);
+        const questions = taskQuestions(detail) || normalizeQuestions(existingItem?.questions);
         const activity = taskActivity(detail) || normalizeActivity(existingItem?.activity);
         const pendingSeed = historyPendingSeed(existingItem, taskID);
         const preservePendingText =
@@ -3553,6 +3562,7 @@ const ChatView = {
         patchAgentHistoryItem(taskID, historyID, {
           plan,
           insights,
+          questions,
           activity,
           reasoning: taskReasoning(detail) || normalizeReasoning(existingItem?.reasoning),
           approval: nextApproval,
@@ -4172,6 +4182,34 @@ const ChatView = {
       }
     }
 
+    // Answers a question a running task asked, with a choice or typed text. answer.done reports
+    // back to the card whether the answer was taken; the task's stream then shows it answered.
+    async function answerHistoryQuestion(item, answer) {
+      const taskID = String(item?.taskId || "").trim();
+      const questionID = String(answer?.questionID || "").trim();
+      const done = typeof answer?.done === "function" ? answer.done : () => {};
+      if (!taskID || !questionID) {
+        done(false);
+        return;
+      }
+      const body = { question_id: questionID };
+      if (typeof answer.text === "string" && answer.text.trim()) {
+        body.text = answer.text.trim();
+      } else {
+        body.option = Number(answer.option);
+      }
+      try {
+        const result = await runtimeApiFetchForEndpoint(
+          item?.endpointRef || submitEndpointRef.value,
+          `/tasks/${encodeURIComponent(taskID)}/answer`,
+          { method: "POST", body }
+        );
+        done(result?.answered === true);
+      } catch (e) {
+        done(false, e?.message || t("msg_load_failed"));
+      }
+    }
+
     async function decideHistoryApproval(item, decision) {
       const approvalRequestID = String(item?.approval?.approvalRequestID || "").trim();
       const taskID = String(item?.taskId || "").trim();
@@ -4331,6 +4369,8 @@ const ChatView = {
             : "",
         workspaceDir: consoleTopicsEnabled.value ? pendingWorkspace : "",
       });
+      // Marks a task the chat watches, so the agent may ask its questions here.
+      requestBody.trigger = CONSOLE_CHAT_TRIGGER;
 
       sending.value = true;
       err.value = "";
@@ -4860,6 +4900,7 @@ const ChatView = {
       copyHistoryItem,
       toggleChatStatus,
       clickHistoryTime,
+      answerHistoryQuestion,
       approveHistoryApproval,
       denyHistoryApproval,
       openRawDialog,
@@ -5124,6 +5165,7 @@ const ChatView = {
                   @time-click="clickHistoryTime"
                   @approval-approve="approveHistoryApproval"
                   @approval-deny="denyHistoryApproval"
+                  @question-answer="answerHistoryQuestion"
                 />
               </div>
             </template>

@@ -1308,7 +1308,8 @@ func (r *consoleLocalRuntime) routesOptions(authToken string) daemonruntime.Rout
 				generation.acquire()
 				return r.submitTaskWithGeneration(ctx, generation, req)
 			},
-			Stop: r.stopTask,
+			Stop:           r.stopTask,
+			AnswerQuestion: r.answerQuestion,
 			TopicMetadata: func(ctx context.Context, topicID string) (daemonruntime.TopicMetadata, error) {
 				return r.topicMetadataForTopic(ctx, topicID, paths.TopicContextPath, defaultWorkspaceDir)
 			},
@@ -2388,6 +2389,12 @@ func (r *consoleLocalRuntime) handleTaskJob(workerCtx context.Context, conversat
 		}
 		return nil
 	})
+	// Questions show as cards in the chat; the run waits on the lease for the answer.
+	var questions *consoleTaskQuestions
+	if lease != nil && consoleAsksUser(job.Trigger) {
+		questions = &consoleTaskQuestions{taskID: job.TaskID, hub: r.streamHub}
+		runCtx = taskruntime.WithUserQuestions(runCtx, taskruntime.LeaseUserQuestions(lease, logger, questions.show))
+	}
 	runCtx = llmutil.WithRetryNotification(runCtx, func(ctx context.Context, event llmutil.RetryEvent) {
 		trace.HandleEvent(ctx, agent.Event{Kind: agent.EventKindLLMRetry, RunID: llmstats.RunIDFromContext(ctx), Text: event.StatusText()})
 		previewSink.HandleRetry(ctx, event)
@@ -2406,6 +2413,11 @@ func (r *consoleLocalRuntime) handleTaskJob(workerCtx context.Context, conversat
 	progressMu.Unlock()
 	result := buildConsoleTaskResult(final, agentCtx, activity, reasoningSink.Snapshot())
 	result["trace"] = trace.Snapshot()
+	if questions != nil {
+		if asked := questions.snapshot(); len(asked) > 0 {
+			result["questions"] = asked
+		}
+	}
 
 	if runErr != nil {
 		displayErr := strings.TrimSpace(outputfmt.FormatErrorForDisplay(runErr))

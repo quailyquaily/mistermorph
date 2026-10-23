@@ -17,7 +17,16 @@ const ChatHistoryList = {
   components: {
     ChatHistoryItem,
   },
-  emits: ["approval-approve", "approval-deny", "copy", "preview-file", "rendered", "time-click", "toggle-status"],
+  emits: [
+    "approval-approve",
+    "approval-deny",
+    "copy",
+    "preview-file",
+    "question-answer",
+    "rendered",
+    "time-click",
+    "toggle-status",
+  ],
   props: {
     items: {
       type: Array,
@@ -160,6 +169,10 @@ const ChatHistoryList = {
       emit("approval-deny", item);
     }
 
+    function emitQuestionAnswer(item, answer) {
+      emit("question-answer", item, answer);
+    }
+
     onBeforeUpdate(() => {
       if (RECORD_COMPONENT_PERF) {
         updateStartedAt = performance.now();
@@ -184,6 +197,7 @@ const ChatHistoryList = {
       emitApprovalDeny,
       emitCopy,
       emitPreviewFile,
+      emitQuestionAnswer,
       skeletonTurns,
       emitRendered,
       emitTimeClick,
@@ -227,6 +241,7 @@ const ChatHistoryList = {
       @time-click="emitTimeClick"
       @approval-approve="emitApprovalApprove"
       @approval-deny="emitApprovalDeny"
+      @question-answer="emitQuestionAnswer"
     />
     </template>
     <p v-if="items.length === 0 && !loading" class="muted">{{ emptyText }}</p>

@@ -16,6 +16,9 @@ import (
 //go:embed prompts/block_plan_create.md
 var planCreateBlockTemplateSource string
 
+//go:embed prompts/block_ask_user.md
+var askUserBlockTemplateSource string
+
 //go:embed prompts/block_insight.md
 var insightBlockTemplateSource string
 
@@ -167,6 +170,24 @@ func AppendPlanCreateGuidanceBlock(spec *agent.PromptSpec, registry *tools.Regis
 		return
 	}
 	content := strings.TrimSpace(planCreateBlockTemplateSource)
+	if content == "" {
+		return
+	}
+	spec.Blocks = append(spec.Blocks, agent.PromptBlock{
+		Content: content,
+	})
+}
+
+// AppendAskUserBlock tells the agent to put a question it needs answered through ask_user, when
+// the run has that tool, instead of ending the task with the question.
+func AppendAskUserBlock(spec *agent.PromptSpec, registry *tools.Registry) {
+	if spec == nil || spec.FinalOnlyResponse {
+		return
+	}
+	if _, ok := registry.Get("ask_user"); !ok {
+		return
+	}
+	content := strings.TrimSpace(askUserBlockTemplateSource)
 	if content == "" {
 		return
 	}

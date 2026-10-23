@@ -229,6 +229,39 @@ function taskInsights(task) {
   return normalizeInsights(task?.result?.insights);
 }
 
+// The questions the agent asked while working (ask_user), in order; null when there are none.
+function normalizeQuestions(raw) {
+  const questions = (Array.isArray(raw) ? raw : [])
+    .map((question) => {
+      const id = String(question?.id || "").trim();
+      const text = String(question?.text || "").trim();
+      if (!id || !text) {
+        return null;
+      }
+      const options = (Array.isArray(question?.options) ? question.options : [])
+        .map((option) => ({
+          label: String(option?.label || "").trim(),
+          description: String(option?.description || "").trim(),
+        }))
+        .filter((option) => option.label);
+      const status = ["open", "answered", "expired"].includes(question?.status) ? question.status : "expired";
+      return {
+        id,
+        text,
+        options,
+        status,
+        answer: String(question?.answer || "").trim(),
+        option: Number.isInteger(question?.option) ? question.option : null,
+      };
+    })
+    .filter(Boolean);
+  return questions.length > 0 ? questions : null;
+}
+
+function taskQuestions(task) {
+  return normalizeQuestions(task?.result?.questions);
+}
+
 function normalizeActivityKind(raw) {
   const value = String(raw || "").trim().toLowerCase();
   return value === "tool" || value === "subtask" || value === "retry" ? value : "";
@@ -458,6 +491,7 @@ function taskHistoryItems(task, t, options = {}) {
       awaiting: taskAwaitingReply(task),
       plan: taskPlan(task),
       insights: taskInsights(task),
+      questions: taskQuestions(task),
       activity: taskActivity(task),
       reasoning: taskReasoning(task),
       approval: taskApprovalState(task),
@@ -521,10 +555,10 @@ function taskListHistoryItems(tasks, t, options = {}) {
 // the ones on screen for the same tasks, and older items loaded beyond that page stay before them.
 // overlap is false when no task on screen is in the fresh page; the older items are then dropped,
 // since tasks may be missing between them and the page.
-// A running task's live state (the reply streamed so far, insights, plan, activity, reasoning) comes
-// over its stream and is stored only when the task ends, so the task list does not have it yet. A
-// reload keeps what the page already shows for each running task, instead of blanking it until the
-// stream replays it.
+// A running task's live state (the reply streamed so far, insights, questions, plan, activity,
+// reasoning) comes over its stream and is stored only when the task ends, so the task list does not
+// have it yet. A reload keeps what the page already shows for each running task, instead of
+// blanking it until the stream replays it.
 function keepLiveTaskState(currentItems, nextItems) {
   const live = new Map();
   for (const item of Array.isArray(currentItems) ? currentItems : []) {
@@ -543,7 +577,7 @@ function keepLiveTaskState(currentItems, nextItems) {
       return item;
     }
     const out = { ...item };
-    for (const key of ["insights", "plan", "activity", "reasoning"]) {
+    for (const key of ["insights", "questions", "plan", "activity", "reasoning"]) {
       if (!out[key] && current[key]) {
         out[key] = current[key];
       }
@@ -586,6 +620,7 @@ export {
   normalizeHistoryFileReferences,
   normalizeInsights,
   normalizePlan,
+  normalizeQuestions,
   normalizeReasoning,
   normalizeTaskStatus,
   normalizeTopicID,
@@ -595,6 +630,7 @@ export {
   taskInsights,
   taskListHistoryItems,
   taskPlan,
+  taskQuestions,
   taskRawJSON,
   taskReasoning,
   planStepMessages,

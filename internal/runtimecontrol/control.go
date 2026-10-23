@@ -38,9 +38,12 @@ type StopResult struct {
 }
 
 type SteerResult struct {
-	Found  bool   `json:"found"`
-	Queued bool   `json:"queued"`
-	TaskID string `json:"task_id,omitempty"`
+	Found  bool `json:"found"`
+	Queued bool `json:"queued"`
+	// Answered is set when the input answered the question the run was waiting on instead of
+	// steering it; Queued is set too.
+	Answered bool   `json:"answered,omitempty"`
+	TaskID   string `json:"task_id,omitempty"`
 }
 
 type RunControl struct {
@@ -66,6 +69,8 @@ type activeRun struct {
 
 	stopRequested bool
 	stopReason    string
+	// question is the question the run waits on an answer to, if any.
+	question *openQuestion
 }
 
 type RunLease struct {
@@ -248,6 +253,11 @@ func (c *RunControl) Steer(runtime string, conversationKey string, input string)
 		return SteerResult{}
 	}
 	taskID := strings.TrimSpace(entry.TaskID)
+	if entry.question != nil && !entry.stopRequested {
+		answerLocked(entry, Answer{Text: input, Option: -1})
+		c.mu.Unlock()
+		return SteerResult{Found: true, Queued: true, Answered: true, TaskID: taskID}
+	}
 	if _, pushErr := entry.SteerQueue.Push(input); pushErr != nil {
 		c.mu.Unlock()
 		return SteerResult{Found: true, TaskID: taskID}

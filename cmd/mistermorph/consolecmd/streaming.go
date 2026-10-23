@@ -34,7 +34,10 @@ type consoleStreamFrame struct {
 	// Insights are the messages the agent has sent so far before its reply, in order.
 	Insights []string                 `json:"insights,omitempty"`
 	Activity *consoleActivityProgress `json:"activity,omitempty"`
-	Preview  bool                     `json:"preview,omitempty"`
+	// Questions are the questions the agent has asked so far (ask_user), in order; the last may be
+	// open.
+	Questions []consoleQuestion `json:"questions,omitempty"`
+	Preview   bool              `json:"preview,omitempty"`
 	// ClearText takes back the reply text shown so far: it came from a response that called tools.
 	ClearText bool `json:"clear_text,omitempty"`
 	Done      bool `json:"done,omitempty"`
@@ -127,6 +130,17 @@ func (h *consoleStreamHub) PublishInsights(taskID string, insights []string) {
 	})
 }
 
+func (h *consoleStreamHub) PublishQuestions(taskID string, questions []consoleQuestion) {
+	if len(questions) == 0 {
+		return
+	}
+	h.publish(consoleStreamFrame{
+		TaskID:    strings.TrimSpace(taskID),
+		Status:    "running",
+		Questions: cloneConsoleQuestions(questions),
+	})
+}
+
 func (h *consoleStreamHub) PublishActivity(taskID string, activity *consoleActivityProgress) {
 	if activity == nil {
 		return
@@ -215,6 +229,9 @@ func (h *consoleStreamHub) publish(frame consoleStreamFrame) {
 	}
 	if frame.Insights == nil {
 		frame.Insights = previous.Insights
+	}
+	if frame.Questions == nil {
+		frame.Questions = previous.Questions
 	}
 	if frame.Activity == nil {
 		frame.Activity = previous.Activity

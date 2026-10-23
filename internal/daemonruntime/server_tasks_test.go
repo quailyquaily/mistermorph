@@ -499,3 +499,51 @@ func TestStopRoutesCallStopHandler(t *testing.T) {
 		t.Fatalf("topic stop call = %+v", calls[1])
 	}
 }
+
+func TestAnswerQuestionRoute(t *testing.T) {
+	var calls []AnswerQuestionRequest
+	routes := func(answer AnswerQuestionFunc) *http.ServeMux {
+		mux := http.NewServeMux()
+		RegisterRoutes(mux, RoutesOptions{Mode: "console", AuthToken: "token", TaskTopic: TaskTopicRoutes{AnswerQuestion: answer}})
+		return mux
+	}
+	mux := routes(func(_ context.Context, req AnswerQuestionRequest) (AnswerQuestionResponse, error) {
+		calls = append(calls, req)
+		return AnswerQuestionResponse{Answered: true, Answer: "B"}, nil
+	})
+	tests := []struct {
+		name     string
+		mux      *http.ServeMux
+		method   string
+		path     string
+		body     string
+		wantCode int
+	}{
+		{"choice", mux, http.MethodPost, "/tasks/task_1/answer", `{"question_id":"q1","option":1}`, http.StatusOK},
+		{"typed", mux, http.MethodPost, "/tasks/task_1/answer", `{"question_id":"q1","text":"later"}`, http.StatusOK},
+		{"missing question", mux, http.MethodPost, "/tasks/task_1/answer", `{"option":1}`, http.StatusBadRequest},
+		{"bad json", mux, http.MethodPost, "/tasks/task_1/answer", `{`, http.StatusBadRequest},
+		{"get", mux, http.MethodGet, "/tasks/task_1/answer", ``, http.StatusMethodNotAllowed},
+		{"no handler", routes(nil), http.MethodPost, "/tasks/task_1/answer", `{"question_id":"q1"}`, http.StatusNotFound},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(tt.method, tt.path, strings.NewReader(tt.body))
+			req.Header.Set("Authorization", "Bearer token")
+			rec := httptest.NewRecorder()
+			tt.mux.ServeHTTP(rec, req)
+			if rec.Code != tt.wantCode {
+				t.Fatalf("status = %d, want %d (%s)", rec.Code, tt.wantCode, rec.Body.String())
+			}
+		})
+	}
+	if len(calls) != 2 {
+		t.Fatalf("calls = %+v, want 2", calls)
+	}
+	if calls[0].TaskID != "task_1" || calls[0].QuestionID != "q1" || calls[0].Option != 1 || calls[0].Text != "" {
+		t.Fatalf("choice call = %+v", calls[0])
+	}
+	if calls[1].Text != "later" {
+		t.Fatalf("typed call = %+v", calls[1])
+	}
+}
