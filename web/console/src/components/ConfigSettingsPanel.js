@@ -298,6 +298,7 @@ export default {
           <div
             v-for="field in visibleFields(group)"
             :key="field.path"
+            :data-setting-path="field.path"
             :class="['settings-field', {
               'is-wide': field.wide || field.type === 'json' || field.type === 'string_list' || field.type === 'bool',
               'is-toggle': field.type === 'bool' && !environmentManaged(field),

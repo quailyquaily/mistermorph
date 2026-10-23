@@ -45,7 +45,7 @@
   position: sticky;
   top: 0;
   display: grid;
-  grid-template-rows: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
   min-width: 0;
   min-height: 100%;
   height: 100%;
@@ -1323,19 +1323,34 @@ body:has(.settings-page) .q-dialog .q-menu-item.danger .q-menu-title {
   translate: 0 12px;
 }
 
+/* The save bar floats at the bottom of the window, over the section and its side pane alike.
+   It stays under dialogs (z-index 100) except on phones, where it rides over the side sheet. */
 .settings-save-bar {
-  position: sticky;
-  bottom: 12px;
-  z-index: 5;
+  position: fixed;
+  right: 0;
+  bottom: 16px;
+  left: 0;
+  z-index: 90;
   display: flex;
   align-items: center;
   gap: 12px;
-  /* Same right margin as .settings-panel-body-plain so the bar lines up with the section cards. */
-  margin: 0 16px 12px 0;
+  width: min(640px, calc(100vw - 32px));
+  margin: 0 auto;
   padding: 10px 14px;
   border: 1px solid var(--line);
   border-radius: 2px;
   background: var(--q-bg-white);
+  box-shadow: 0 6px 24px rgb(0 0 0 / 10%);
+}
+
+.settings-save-bar.is-over-sheet {
+  z-index: 1001;
+}
+
+/* Room under the last field, so the bar never covers it. */
+.settings-workbench.has-save-bar .settings-panel-scroll,
+.settings-workbench.has-save-bar .app-side-pane-scroll {
+  padding-bottom: 88px;
 }
 
 .settings-save-bar-mark {
@@ -1380,12 +1395,6 @@ body:has(.settings-page) .q-dialog .q-menu-item.danger .q-menu-title {
   flex: 0 0 auto;
 }
 
-@media (max-width: 920px) {
-  .settings-save-bar {
-    margin-right: var(--content-gutter-x);
-    margin-left: var(--content-gutter-x);
-  }
-}
 
 /* Example values in empty lists read as examples, not as saved data. */
 .settings-panel-body textarea::placeholder {
@@ -1645,4 +1654,72 @@ body:has(.settings-page) .q-dialog .q-menu-item.danger .q-menu-title {
   line-height: 1.5;
   color: var(--text-2);
   text-wrap: pretty;
+}
+
+/* Settings search: the box sits above the section list; results replace the list while it has text. */
+.settings-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  margin: calc(var(--workspace-head-height) + var(--workspace-sidebar-list-gutter)) var(--workspace-sidebar-list-gutter) 8px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: var(--q-bg-white);
+  color: var(--text-2);
+}
+
+.settings-search:focus-within {
+  border-color: var(--text-1);
+}
+
+.settings-search .icon {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+}
+
+.settings-search input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text-0);
+  font: inherit;
+  font-size: var(--font-size-meta);
+}
+
+/* The box already clears the page bar, so the list under it does not. */
+.settings-search + .settings-index-items.workspace-sidebar-list {
+  padding-top: 0;
+}
+
+.settings-search-empty {
+  margin: 4px var(--workspace-sidebar-list-gutter);
+  color: var(--text-2);
+  font-size: var(--font-size-meta);
+}
+
+.settings-search-result .settings-search-result-where {
+  overflow-wrap: anywhere;
+}
+
+/* The row a search result points at, marked for a moment after the jump. */
+.settings-search-hit {
+  border-radius: 2px;
+  animation: settings-search-hit 2s ease-out;
+}
+
+@keyframes settings-search-hit {
+  0%,
+  40% {
+    box-shadow: 0 0 0 2px var(--q-c-blue);
+    background-color: color-mix(in srgb, var(--q-c-blue) 10%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 2px transparent;
+    background-color: transparent;
+  }
 }

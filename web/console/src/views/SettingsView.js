@@ -116,6 +116,7 @@ import {
   SYSTEM_CONFIG_GROUPS,
   TOOL_ADVANCED_CONFIG_GROUPS,
 } from "../core/config-field-groups";
+import { buildSettingsSearchIndex, searchSettings } from "../core/settings-search";
 import {
   buildEmptyPersonaIdentityState,
   buildIdentityYAML,
@@ -1886,9 +1887,13 @@ const SettingsView = {
       if (id === "channels") return !!openChannel.value;
       return (id === "mcp" || id === "console") && childPaneOpen.value;
     });
+    const saveBarVisible = computed(() => sectionSaveUnits.value.length > 0 || Boolean(sectionSaveFailed.value));
+    // A phone's side pane is a sheet over the page; the bar then sits on top of it.
+    const saveBarOverSheet = computed(() => isMobile.value && Boolean(openChannel.value || openedProfile.value));
     const workbenchClass = computed(() => ({
       "side-pane-host": !isMobile.value && sidePaneSection.value,
       "is-side-pane-open": !isMobile.value && sidePaneOpen.value,
+      "has-save-bar": saveBarVisible.value,
     }));
     const mobileShowBack = computed(() => isMobile.value && mobilePanelVisible.value);
     const mobileBarTitle = computed(() =>
@@ -5198,15 +5203,133 @@ const SettingsView = {
         if (isMobile.value) {
           mobilePanelVisible.value = true;
         }
-        return;
+        return Promise.resolve();
       }
       // The route watcher selects the section once navigation succeeds; the unsaved-changes guard
       // may cancel it, in which case the current section stays on screen.
-      void router.push(nextPath).then((failure) => {
+      return router.push(nextPath).then((failure) => {
         if (!failure && isMobile.value) {
           mobilePanelVisible.value = true;
         }
       });
+    }
+
+    // Settings search: the sidebar's box lists matching settings in place of the sections.
+    // Choosing one opens its section (and its channel pane or Advanced dialog), then scrolls to
+    // the row and marks it for a moment.
+    const settingsQuery = ref("");
+    const settingsSearchIndex = computed(() =>
+      buildSettingsSearchIndex(t, { sections: settingsSections.value, channels: CHANNEL_ITEMS, tools: TOOL_ITEMS })
+    );
+    const settingsSearchResults = computed(() => searchSettings(settingsSearchIndex.value, settingsQuery.value));
+    const settingsSearching = computed(() => settingsQuery.value.trim() !== "");
+    const settingsSearchActiveID = ref("");
+    let settingsRevealSeq = 0;
+
+    function openSettingsSearchDialog(dialog) {
+      if (dialog === "llm-advanced") {
+        openDefaultLLMAdvancedSettings();
+      } else if (dialog === "llm-context") {
+        openConfigAdvancedSettings("Context compaction", "agent", LLM_CONTEXT_CONFIG_GROUPS);
+      } else if (dialog.startsWith("tool:")) {
+        openToolAdvancedSettings(TOOL_ITEMS.find((item) => item.id === dialog.slice(5)));
+      } else if (dialog.startsWith("channel:")) {
+        openChannelAdvancedSettings(dialog.slice(8));
+      }
+    }
+
+    // A config field carries its path; a hand-written row is found by the label it shows.
+    function findSettingElement(target) {
+      const visible = (el) => el && el.getClientRects().length > 0;
+      if (target.path) {
+        const el = [...document.querySelectorAll(`[data-setting-path="${CSS.escape(target.path)}"]`)].find(visible);
+        if (el) {
+          return el;
+        }
+      }
+      if (!target.text) {
+        return null;
+      }
+      const labels = document.querySelectorAll(
+        ".settings-field-label, .settings-toggle-title, .settings-card-title, .app-section-label-text"
+      );
+      for (const label of labels) {
+        if (label.textContent.trim() === target.text && visible(label)) {
+          return label.closest(".settings-field, .settings-toggle-row, .settings-console-row, .app-section") || label;
+        }
+      }
+      return null;
+    }
+
+    async function revealSetting(target) {
+      const seq = ++settingsRevealSeq;
+      // A section's data loads after it opens, so its rows can appear a moment later.
+      for (let attempt = 0; attempt < 40 && seq === settingsRevealSeq; attempt += 1) {
+        await nextTick();
+        let el = findSettingElement(target);
+        if (!el) {
+          // A row inside a closed "Advanced" block has no box until the block opens.
+          const hidden = target.path ? document.querySelector(`[data-setting-path="${CSS.escape(target.path)}"]`) : null;
+          const details = hidden?.closest("details");
+          if (details && !details.open) {
+            details.open = true;
+            continue;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 50));
+          continue;
+        }
+        el.scrollIntoView({ block: "center", behavior: "smooth" });
+        el.classList.remove("settings-search-hit");
+        void el.offsetWidth;
+        el.classList.add("settings-search-hit");
+        setTimeout(() => el.classList.remove("settings-search-hit"), 2000);
+        return;
+      }
+    }
+
+    async function goToSetting(entry) {
+      const target = entry?.target;
+      if (!target) {
+        return;
+      }
+      settingsSearchActiveID.value = entry.id;
+      if (selectedSectionID.value !== target.section || (isMobile.value && !mobilePanelVisible.value)) {
+        await selectSection(target.section);
+        await nextTick();
+      }
+      // The unsaved-changes guard may have kept the current section.
+      if (selectedSectionID.value !== normalizeSettingsSectionID(target.section)) {
+        return;
+      }
+      if (target.channel && openChannel.value !== target.channel) {
+        openChannel.value = target.channel;
+        await nextTick();
+      }
+      if (target.dialog) {
+        openSettingsSearchDialog(target.dialog);
+      }
+      if (target.path || target.text) {
+        await revealSetting(target);
+      }
+    }
+
+    function onSettingsSearchKeydown(event) {
+      if (event.key === "Enter" && settingsSearchResults.value.length) {
+        event.preventDefault();
+        void goToSetting(settingsSearchResults.value[0]);
+      } else if (event.key === "Escape" && settingsQuery.value) {
+        event.preventDefault();
+        event.stopPropagation();
+        settingsQuery.value = "";
+      }
+    }
+
+    function settingsSearchWhere(entry) {
+      const parts = [...entry.where];
+      if (entry.path) {
+        parts.push(entry.path);
+      }
+      return parts.join(" › ");
     }
 
     function isSelectedSection(item) {
@@ -5434,6 +5557,13 @@ const SettingsView = {
     );
 
     return {
+      settingsQuery,
+      settingsSearchResults,
+      settingsSearching,
+      settingsSearchActiveID,
+      goToSetting,
+      onSettingsSearchKeydown,
+      settingsSearchWhere,
       addProfileDraft,
       addProfileOpen,
       addProfileError,
@@ -5539,6 +5669,8 @@ const SettingsView = {
       settingsSections,
       selectedSection,
       sectionSaveUnits,
+      saveBarVisible,
+      saveBarOverSheet,
       sectionSaving,
       sectionSaveFailed,
       sectionSaveBusy,
@@ -5776,7 +5908,35 @@ const SettingsView = {
       </template>
       <div class="settings-workbench" :class="workbenchClass">
         <aside v-if="showIndexPane" class="settings-index workspace-sidebar-section">
-          <div class="settings-index-items workspace-sidebar-list">
+          <label class="settings-search">
+            <PhMagnifyingGlass class="icon" aria-hidden="true" />
+            <input
+              v-model="settingsQuery"
+              type="search"
+              :placeholder="t('settings_search_placeholder')"
+              :aria-label="t('settings_search_placeholder')"
+              @keydown="onSettingsSearchKeydown"
+            />
+          </label>
+          <div v-if="settingsSearching" class="settings-index-items settings-search-results workspace-sidebar-list" role="listbox" :aria-label="t('settings_search_placeholder')">
+            <p v-if="!settingsSearchResults.length" class="settings-search-empty">{{ t('settings_search_empty') }}</p>
+            <button
+              v-for="entry in settingsSearchResults"
+              :key="entry.id"
+              type="button"
+              role="option"
+              class="settings-search-result workspace-sidebar-item"
+              :class="{ 'is-active': settingsSearchActiveID === entry.id }"
+              :aria-selected="settingsSearchActiveID === entry.id"
+              @click="goToSetting(entry)"
+            >
+              <span class="workspace-sidebar-item-copy">
+                <span class="workspace-sidebar-item-title">{{ entry.title }}</span>
+                <span v-if="settingsSearchWhere(entry)" class="workspace-sidebar-item-meta settings-search-result-where">{{ settingsSearchWhere(entry) }}</span>
+              </span>
+            </button>
+          </div>
+          <div v-else class="settings-index-items workspace-sidebar-list">
             <button
               v-for="item in settingsSections"
               :key="item.id"
@@ -6604,21 +6764,6 @@ const SettingsView = {
               </div>
             </AppSection>
           </div>
-          <Transition name="settings-save-bar">
-          <div v-if="sectionSaveUnits.length || sectionSaveFailed" class="settings-save-bar" role="region" :aria-label="t('settings_save_bar_label')">
-            <span class="settings-save-bar-mark" :class="{ 'is-error': sectionSaveFailed }" aria-hidden="true"></span>
-            <p class="settings-save-bar-text" role="status">
-              <template v-if="sectionSaveFailed">{{ t('settings_save_bar_failed', { items: sectionSaveFailed }) }}</template>
-              <template v-else>
-                <strong>{{ t('settings_save_bar_count', { count: sectionSaveUnits.length }) }}</strong>
-                <span class="settings-save-bar-items">{{ sectionSaveUnits.map((unit) => unit.label).join(' · ') }}</span>
-              </template>
-            </p>
-            <QButton class="primary settings-save-bar-button" :loading="sectionSaving" :disabled="sectionSaveBusy || !sectionSaveUnits.length" @click="saveSection">
-              {{ t('action_save') }}
-            </QButton>
-          </div>
-          </Transition>
         </div>
 
         <!-- MCP and Remote agents move their pane here. -->
@@ -6730,14 +6875,6 @@ const SettingsView = {
                       </div>
                     </div>
                   </AppSection>
-                <template v-if="sectionSaveUnits.length || sectionSaveFailed" #foot>
-                  <p class="app-side-pane-foot-text" :class="{ 'is-error': sectionSaveFailed }" role="status">
-                    {{ sectionSaveFailed ? t('settings_save_bar_failed', { items: sectionSaveFailed }) : t('settings_channel_unsaved_note') }}
-                  </p>
-                  <QButton class="primary" :loading="sectionSaving" :disabled="sectionSaveBusy || !sectionSaveUnits.length" @click="saveSection">
-                    {{ t('action_save') }}
-                  </QButton>
-                </template>
           </AppSidePane>
         </template>
         <template v-if="showPanelPane && selectedSection?.id === 'channels'">
@@ -7426,14 +7563,6 @@ const SettingsView = {
                     />
                   </div>
                 </div>
-                  <template v-if="sectionSaveUnits.length || sectionSaveFailed" #foot>
-                    <p class="app-side-pane-foot-text" :class="{ 'is-error': sectionSaveFailed }" role="status">
-                      {{ sectionSaveFailed ? t('settings_save_bar_failed', { items: sectionSaveFailed }) : t('settings_channel_unsaved_note') }}
-                    </p>
-                    <QButton class="primary" :loading="sectionSaving" :disabled="sectionSaveBusy || !sectionSaveUnits.length" @click="saveSection">
-                      {{ t('action_save') }}
-                    </QButton>
-                  </template>
           </AppSidePane>
         </template>
       </div>
@@ -7622,6 +7751,24 @@ const SettingsView = {
         :text="deleteProfileDialogText"
         :actions="deleteProfileDialogActions"
       />
+      <!-- One save bar for the whole page: a section and its side pane both save here. -->
+      <Teleport to="body">
+        <Transition name="settings-save-bar">
+        <div v-if="saveBarVisible" class="settings-save-bar" :class="{ 'is-over-sheet': saveBarOverSheet }" role="region" :aria-label="t('settings_save_bar_label')">
+          <span class="settings-save-bar-mark" :class="{ 'is-error': sectionSaveFailed }" aria-hidden="true"></span>
+          <p class="settings-save-bar-text" role="status">
+            <template v-if="sectionSaveFailed">{{ t('settings_save_bar_failed', { items: sectionSaveFailed }) }}</template>
+            <template v-else>
+              <strong>{{ t('settings_save_bar_count', { count: sectionSaveUnits.length }) }}</strong>
+              <span class="settings-save-bar-items">{{ sectionSaveUnits.map((unit) => unit.label).join(' · ') }}</span>
+            </template>
+          </p>
+          <QButton class="primary settings-save-bar-button" :loading="sectionSaving" :disabled="sectionSaveBusy || !sectionSaveUnits.length" @click="saveSection">
+            {{ t('action_save') }}
+          </QButton>
+        </div>
+        </Transition>
+      </Teleport>
     </AppPage>
   `,
 };
