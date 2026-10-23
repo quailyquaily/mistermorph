@@ -151,3 +151,134 @@ func TestHandlerSkillsRoutes(t *testing.T) {
 		t.Fatalf("POST status = %d, want 405", post.Code)
 	}
 }
+
+func TestWriteSkillContent(t *testing.T) {
+	t.Run("replaces SKILL.md when the revision matches", func(t *testing.T) {
+		_, roots, settings := newSkillsFixture(t)
+		before, err := ReadSkillDetail(settings, roots, "notes")
+		if err != nil {
+			t.Fatal(err)
+		}
+		path := filepath.Join(roots[0], "notes", "SKILL.md")
+		if err := os.Chmod(path, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		content := "---\nname: Notes\ndescription: Keep notes.\n---\nNew body\n"
+		after, err := WriteSkillContent(settings, roots, "NOTES", content, before.Revision)
+		if err != nil {
+			t.Fatalf("WriteSkillContent() error = %v", err)
+		}
+		if after.Content != content || after.Revision == before.Revision {
+			t.Fatalf("after = %+v", after)
+		}
+		info, err := os.Stat(path)
+		if err != nil || info.Mode().Perm() != 0o600 {
+			t.Fatalf("mode = %v, %v", info.Mode().Perm(), err)
+		}
+		leftovers, _ := filepath.Glob(filepath.Join(roots[0], "notes", ".SKILL.md.*"))
+		if len(leftovers) != 0 {
+			t.Fatalf("temp files left: %v", leftovers)
+		}
+	})
+	t.Run("rejects a stale revision", func(t *testing.T) {
+		_, roots, settings := newSkillsFixture(t)
+		before, _ := ReadSkillDetail(settings, roots, "notes")
+		writeSkillFile(t, filepath.Join(roots[0], "notes", "SKILL.md"), "---\nname: Notes\n---\nChanged elsewhere\n")
+		if _, err := WriteSkillContent(settings, roots, "notes", "mine", before.Revision); err != errSkillChanged {
+			t.Fatalf("error = %v, want changed", err)
+		}
+		data, _ := os.ReadFile(filepath.Join(roots[0], "notes", "SKILL.md"))
+		if !strings.Contains(string(data), "Changed elsewhere") {
+			t.Fatal("newer change was overwritten")
+		}
+	})
+	t.Run("writes a linked SKILL.md at its target", func(t *testing.T) {
+		root, target := filepath.Join(t.TempDir(), "skills"), t.TempDir()
+		writeSkillFile(t, filepath.Join(target, "SKILL.md"), "---\nname: linked\n---\nOld\n")
+		if err := os.MkdirAll(filepath.Join(root, "linked"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		link := filepath.Join(root, "linked", "SKILL.md")
+		if err := os.Symlink(filepath.Join(target, "SKILL.md"), link); err != nil {
+			t.Fatal(err)
+		}
+		before, err := ReadSkillDetail(SkillsSettingsPayload{}, []string{root}, "linked")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := WriteSkillContent(SkillsSettingsPayload{}, []string{root}, "linked", "---\nname: linked\n---\nNew\n", before.Revision); err != nil {
+			t.Fatal(err)
+		}
+		if info, err := os.Lstat(link); err != nil || info.Mode()&os.ModeSymlink == 0 {
+			t.Fatalf("link was replaced: %v", err)
+		}
+		data, _ := os.ReadFile(filepath.Join(target, "SKILL.md"))
+		if !strings.Contains(string(data), "New") {
+			t.Fatalf("target = %q", data)
+		}
+	})
+	t.Run("rejects unknown ids, oversized and invalid content", func(t *testing.T) {
+		_, roots, settings := newSkillsFixture(t)
+		before, _ := ReadSkillDetail(settings, roots, "notes")
+		cases := []struct {
+			name, id, content string
+			want              error
+		}{
+			{"unknown id", "../notes", "x", errSkillNotFound},
+			{"too large", "notes", strings.Repeat("a", maxSkillDetailBytes+1), errSkillTooLarge},
+			{"invalid utf-8", "notes", "\xff", errSkillInvalidText},
+		}
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				if _, err := WriteSkillContent(settings, roots, tc.id, tc.content, before.Revision); err != tc.want {
+					t.Fatalf("error = %v, want %v", err, tc.want)
+				}
+			})
+		}
+	})
+}
+
+func TestHandlerUpdateSkillRoute(t *testing.T) {
+	newHandler := func(t *testing.T, readOnly bool) (*Handler, []string, SkillsSettingsPayload) {
+		state, roots, settings := newSkillsFixture(t)
+		reader := viper.New()
+		reader.Set("file_state_dir", state)
+		reader.Set("skills.dir_name", "skills")
+		owner := &handlerTestOwner{view: AgentSettingsView{Skills: settings, ReadOnly: readOnly, ReadOnlyReason: "managed"}, reader: reader}
+		return NewHandler(HandlerOptions{Owner: owner}), roots, settings
+	}
+	post := func(handler *Handler, body any) *httptest.ResponseRecorder {
+		data, _ := json.Marshal(body)
+		rec := httptest.NewRecorder()
+		handler.UpdateSkillRoute(rec, httptest.NewRequest(http.MethodPost, "/settings/agent/skills/update", strings.NewReader(string(data))))
+		return rec
+	}
+
+	handler, roots, settings := newHandler(t, false)
+	before, _ := ReadSkillDetail(settings, roots, "notes")
+	ok := post(handler, map[string]string{"id": "notes", "content": "---\nname: Notes\n---\nEdited\n", "revision": before.Revision})
+	if ok.Code != http.StatusOK || !strings.Contains(ok.Body.String(), "Edited") {
+		t.Fatalf("update status = %d (%s)", ok.Code, ok.Body.String())
+	}
+	stale := post(handler, map[string]string{"id": "notes", "content": "again", "revision": before.Revision})
+	if stale.Code != http.StatusConflict {
+		t.Fatalf("stale status = %d, want 409", stale.Code)
+	}
+	missing := post(handler, map[string]string{"id": "nope", "content": "x"})
+	if missing.Code != http.StatusNotFound {
+		t.Fatalf("missing status = %d, want 404", missing.Code)
+	}
+
+	readOnly, roots, settings := newHandler(t, true)
+	before, _ = ReadSkillDetail(settings, roots, "notes")
+	locked := post(readOnly, map[string]string{"id": "notes", "content": "x", "revision": before.Revision})
+	if locked.Code != http.StatusConflict || !strings.Contains(locked.Body.String(), "managed") {
+		t.Fatalf("read-only status = %d (%s)", locked.Code, locked.Body.String())
+	}
+
+	get := httptest.NewRecorder()
+	handler.UpdateSkillRoute(get, httptest.NewRequest(http.MethodGet, "/settings/agent/skills/update", nil))
+	if get.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("get status = %d, want 405", get.Code)
+	}
+}

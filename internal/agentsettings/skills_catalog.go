@@ -2,6 +2,8 @@ package agentsettings
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -71,11 +73,16 @@ type SkillDetail struct {
 	SkillCatalogEntry
 	Content          string `json:"content"`
 	ContentTruncated bool   `json:"content_truncated,omitempty"`
+	// Revision is a hash of the whole SKILL.md; saving an edit must send it back.
+	Revision string `json:"revision"`
 }
 
 var (
 	errSkillNotFound     = errors.New("skill not found")
 	errSkillNotRemovable = errors.New("only skills directly inside the skills folder can be removed here")
+	errSkillChanged      = errors.New("SKILL.md changed since it was opened; reload it and try again")
+	errSkillTooLarge     = fmt.Errorf("SKILL.md must be at most %d KB", maxSkillDetailBytes/1024)
+	errSkillInvalidText  = errors.New("SKILL.md must be UTF-8 text")
 )
 
 // BuildSkillCatalog lists the skills under roots. Loaded state comes from the settings view,
@@ -125,7 +132,7 @@ func ReadSkillDetail(settings SkillsSettingsPayload, roots []string, id string) 
 		if err != nil {
 			return SkillDetail{}, err
 		}
-		detail := SkillDetail{SkillCatalogEntry: entry}
+		detail := SkillDetail{SkillCatalogEntry: entry, Revision: skillRevision(data)}
 		if len(data) > maxSkillDetailBytes {
 			data = data[:maxSkillDetailBytes]
 			for len(data) > 0 && !utf8.Valid(data) {
@@ -137,6 +144,58 @@ func ReadSkillDetail(settings SkillsSettingsPayload, roots []string, id string) 
 		return detail, nil
 	}
 	return SkillDetail{}, errSkillNotFound
+}
+
+// WriteSkillContent replaces a discovered skill's SKILL.md. revision must match the file as it
+// is now, so an edit cannot overwrite a newer change. The file is replaced in one rename and
+// keeps its mode; a linked SKILL.md is written at its target.
+func WriteSkillContent(settings SkillsSettingsPayload, roots []string, id, content, revision string) (SkillDetail, error) {
+	if len(content) > maxSkillDetailBytes {
+		return SkillDetail{}, errSkillTooLarge
+	}
+	if !utf8.ValidString(content) {
+		return SkillDetail{}, errSkillInvalidText
+	}
+	current, err := ReadSkillDetail(settings, roots, id)
+	if err != nil {
+		return SkillDetail{}, err
+	}
+	if strings.TrimSpace(revision) != current.Revision {
+		return SkillDetail{}, errSkillChanged
+	}
+	path, err := filepath.EvalSymlinks(current.SkillMD)
+	if err != nil {
+		return SkillDetail{}, err
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return SkillDetail{}, err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".SKILL.md.*.tmp")
+	if err != nil {
+		return SkillDetail{}, err
+	}
+	defer os.Remove(tmp.Name())
+	if _, err := tmp.WriteString(content); err != nil {
+		_ = tmp.Close()
+		return SkillDetail{}, err
+	}
+	if err := tmp.Chmod(info.Mode().Perm()); err != nil {
+		_ = tmp.Close()
+		return SkillDetail{}, err
+	}
+	if err := tmp.Close(); err != nil {
+		return SkillDetail{}, err
+	}
+	if err := os.Rename(tmp.Name(), path); err != nil {
+		return SkillDetail{}, err
+	}
+	return ReadSkillDetail(settings, roots, current.ID)
+}
+
+func skillRevision(data []byte) string {
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:])
 }
 
 func discoverSkillsWithFrontmatter(roots []string) ([]skills.Skill, error) {
@@ -506,6 +565,55 @@ func (h *Handler) RemoveSkillRoute(w http.ResponseWriter, r *http.Request) {
 		writeSettingsError(w, http.StatusInternalServerError, err.Error())
 	default:
 		writeSettingsJSON(w, http.StatusOK, removed)
+	}
+}
+
+// UpdateSkillRoute serves POST /settings/agent/skills/update with
+// {"id": "<skill id>", "content": "<SKILL.md>", "revision": "<revision from detail>"}.
+func (h *Handler) UpdateSkillRoute(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeSettingsError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	if h == nil || h.owner == nil {
+		writeSettingsError(w, http.StatusServiceUnavailable, "agent settings are unavailable")
+		return
+	}
+	var req struct {
+		ID       string `json:"id"`
+		Content  string `json:"content"`
+		Revision string `json:"revision"`
+	}
+	// JSON escaping can grow the text several times over, so the body limit leaves room for it.
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8*maxSkillDetailBytes)).Decode(&req); err != nil {
+		writeSettingsError(w, http.StatusBadRequest, "invalid json")
+		return
+	}
+	view, err := h.owner.View(r.Context())
+	if err != nil {
+		writeSettingsError(w, settingsErrorStatus(err), err.Error())
+		return
+	}
+	if view.ReadOnly {
+		writeSettingsError(w, http.StatusConflict, firstNonEmptyString(view.ReadOnlyReason, "agent settings are read-only"))
+		return
+	}
+	reader, ok := h.currentReader(w)
+	if !ok {
+		return
+	}
+	detail, err := WriteSkillContent(view.Skills, skillsutil.SkillsConfigFromReader(reader).Roots, req.ID, req.Content, req.Revision)
+	switch {
+	case errors.Is(err, errSkillNotFound):
+		writeSettingsError(w, http.StatusNotFound, err.Error())
+	case errors.Is(err, errSkillChanged):
+		writeSettingsError(w, http.StatusConflict, err.Error())
+	case errors.Is(err, errSkillTooLarge), errors.Is(err, errSkillInvalidText):
+		writeSettingsError(w, http.StatusBadRequest, err.Error())
+	case err != nil:
+		writeSettingsError(w, http.StatusInternalServerError, err.Error())
+	default:
+		writeSettingsJSON(w, http.StatusOK, detail)
 	}
 }
 

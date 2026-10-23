@@ -96,7 +96,8 @@ is loaded (`internal/agentsettings/skills_catalog.go`).
 | Route | Purpose |
 | --- | --- |
 | `GET /settings/agent/skills` | Enabled flag, load list, skills roots, read-only state, config revision, and every discovered skill with id, name, description, dir, requirements, auth profiles, loaded flag, file list (dot-folders and the provenance file skipped, capped at 200 files), `source` (from provenance, with `installed_at`) and `modified` (files whose checksum changed since install). |
-| `GET /settings/agent/skills/detail?id=<id>` | The same fields plus `SKILL.md` content, capped at 256 KiB. Only discovered skills are readable, so an id cannot reach outside the skills roots. |
+| `GET /settings/agent/skills/detail?id=<id>` | The same fields plus `SKILL.md` content, capped at 256 KiB, and `revision` (SHA-256 of the whole file). Only discovered skills are readable, so an id cannot reach outside the skills roots. |
+| `POST /settings/agent/skills/update` `{id, content, revision}` | Replaces `SKILL.md` (a linked file is written at its target, keeping its mode) and returns the new detail. `revision` must match the file as it is now, so an edit cannot overwrite a newer change: 409 when it differs or settings are read-only, 400 for content over 256 KiB or not UTF-8, 404 for unknown ids. |
 | `POST /settings/agent/skills/remove` `{id}` | Deletes the skill's folder (only a direct child of a skills root; a linked folder loses its link, not its target) and drops the id from `skills.load` unless it was the only entry. 404 for unknown ids, 409 for nested skills. |
 | `GET /settings/agent/skills/store` | The store index (`skills.store.index_url`, cached for 10 minutes) with `installed`, `installed_version` and `update_available` per entry, matched through provenance `store_id`. 502 when the store cannot be reached. |
 | (existing) agent settings update | Switches use the agent settings API's `skills: {enabled, load}` update. |

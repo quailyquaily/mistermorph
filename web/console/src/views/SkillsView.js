@@ -4,6 +4,7 @@ import "./SkillsView.css";
 
 import AppDialogShell from "../components/AppDialogShell";
 import AppFab from "../components/AppFab";
+import AppMarkdownEditor from "../components/AppMarkdownEditor";
 import AppPage from "../components/AppPage";
 import AppSkeleton from "../components/AppSkeleton";
 import MarkdownContent from "../components/MarkdownContent";
@@ -38,6 +39,14 @@ function normalizeSkill(item) {
   };
 }
 
+function normalizeDetail(data) {
+  return {
+    content: String(data?.content || ""),
+    truncated: data?.content_truncated === true,
+    revision: String(data?.revision || ""),
+  };
+}
+
 // Only skills added from a link have a source worth showing.
 function skillSourceText(skill) {
   const source = skill?.source || {};
@@ -58,6 +67,7 @@ const SkillsView = {
   components: {
     AppDialogShell,
     AppFab,
+    AppMarkdownEditor,
     AppPage,
     AppSkeleton,
     MarkdownContent,
@@ -91,6 +101,12 @@ const SkillsView = {
     const addBusy = ref(false);
     const addErr = ref("");
 
+    // Editing replaces the whole SKILL.md, frontmatter included.
+    const editing = ref(false);
+    const draft = ref("");
+    const editSaving = ref(false);
+    const editErr = ref("");
+
     // The store, read in the background so skills installed from it can show updates.
     const storeSkills = ref([]);
     const installBusy = ref(false);
@@ -110,6 +126,9 @@ const SkillsView = {
     const selectedUpdate = computed(() => updateFor(selected.value));
     const locked = computed(() => saving.value || catalog.value.readOnly);
     const documentSource = computed(() => stripFrontmatter(detail.value?.content));
+    // A cut-off SKILL.md cannot be edited here: saving would drop its tail.
+    const canEdit = computed(() => Boolean(detail.value && !detail.value.truncated && detail.value.revision && !locked.value));
+    const draftChanged = computed(() => editing.value && draft.value !== (detail.value?.content || ""));
     const skillsRoot = computed(() => catalog.value.roots[0] || "~/.morph/skills");
     const addLinkValid = computed(() => Boolean(normalizeInstallLink(addLink.value)));
     // Phones show the list or one skill; desktop shows both, as on TODO.
@@ -215,7 +234,7 @@ const SkillsView = {
       try {
         const data = await endpointApiFetch(endpointState.selectedRef, `/settings/agent/skills/detail?id=${encodeURIComponent(id)}`);
         if (seq === detailSeq) {
-          detail.value = { content: String(data?.content || ""), truncated: data?.content_truncated === true };
+          detail.value = normalizeDetail(data);
         }
       } catch (e) {
         if (seq === detailSeq) {
@@ -226,6 +245,45 @@ const SkillsView = {
         if (seq === detailSeq) {
           detailLoading.value = false;
         }
+      }
+    }
+
+    function startEdit() {
+      if (!canEdit.value) {
+        return;
+      }
+      draft.value = detail.value.content;
+      editErr.value = "";
+      editing.value = true;
+    }
+
+    function cancelEdit() {
+      if (!editSaving.value) {
+        editing.value = false;
+        editErr.value = "";
+      }
+    }
+
+    async function saveEdit() {
+      const skill = selected.value;
+      if (!skill || !editing.value || editSaving.value) {
+        return;
+      }
+      editSaving.value = true;
+      editErr.value = "";
+      try {
+        const data = await endpointApiFetch(endpointState.selectedRef, "/settings/agent/skills/update", {
+          method: "POST",
+          body: { id: skill.id, content: draft.value, revision: detail.value?.revision || "" },
+        });
+        detail.value = normalizeDetail(data);
+        editing.value = false;
+        // The name, description and file size may have changed.
+        await load();
+      } catch (e) {
+        editErr.value = e?.status === 404 ? t("skills_edit_unsupported") : e.message || t("msg_save_failed");
+      } finally {
+        editSaving.value = false;
       }
     }
 
@@ -405,6 +463,9 @@ const SkillsView = {
       }
       if (menuOpen.value) {
         menuOpen.value = false;
+      } else if (editing.value) {
+        // The editor's own Escape (closing a mention list) should not also discard the draft.
+        return;
       } else if (removeTarget.value) {
         cancelRemove();
       } else if (isMobile.value && selected.value && !addOpen.value) {
@@ -416,6 +477,8 @@ const SkillsView = {
       () => selected.value?.id || "",
       (id) => {
         filesExpanded.value = false;
+        editing.value = false;
+        editErr.value = "";
         // Another skill opens at its top, not at the last one's scroll position.
         if (detailPane.value) {
           detailPane.value.scrollTop = 0;
@@ -426,6 +489,7 @@ const SkillsView = {
     watch(
       () => endpointState.selectedRef,
       () => {
+        editing.value = false;
         detail.value = null;
         storeSkills.value = [];
         closeSkill();
@@ -474,6 +538,15 @@ const SkillsView = {
       formatBytes,
       sourceText: skillSourceText,
       documentSource,
+      editing,
+      draft,
+      editSaving,
+      editErr,
+      canEdit,
+      draftChanged,
+      startEdit,
+      cancelEdit,
+      saveEdit,
       skillsRoot,
       removeTarget,
       removeBusy,
@@ -691,11 +764,36 @@ const SkillsView = {
                 <header class="skills-doc-head">
                   <span class="skills-doc-label">SKILL.md</span>
                   <span v-if="documentSize" class="skills-doc-size">{{ documentSize }}</span>
+                  <div class="skills-doc-actions">
+                    <template v-if="editing">
+                      <QButton class="plain xs" :disabled="editSaving" @click="cancelEdit">{{ t('action_cancel') }}</QButton>
+                      <QButton class="primary xs" :loading="editSaving" :disabled="!draftChanged" @click="saveEdit">{{ t('action_save') }}</QButton>
+                    </template>
+                    <QButton
+                      v-else-if="detail"
+                      class="plain xs"
+                      :disabled="!canEdit"
+                      :title="detail.truncated ? t('skills_edit_truncated') : ''"
+                      @click="startEdit"
+                    >
+                      <PhPencilSimple class="icon" />
+                      <span>{{ t('action_edit') }}</span>
+                    </QButton>
+                  </div>
                 </header>
                 <AppNotice v-if="detail && detail.truncated" type="warning" :text="t('skills_content_truncated')" />
+                <AppNotice v-if="editErr" type="error" :text="editErr" />
                 <div v-if="detailLoading && !detail" class="skills-index-loading" aria-hidden="true">
                   <AppSkeleton variant="card" height="120px" :count="1" />
                 </div>
+                <AppMarkdownEditor
+                  v-else-if="editing"
+                  v-model="draft"
+                  class="skills-doc-editor"
+                  height="clamp(320px, 60vh, 760px)"
+                  :disabled="editSaving"
+                  aria-label="SKILL.md"
+                />
                 <MarkdownContent v-else-if="documentSource" class="skills-doc-body" :source="documentSource" />
               </section>
             </div>

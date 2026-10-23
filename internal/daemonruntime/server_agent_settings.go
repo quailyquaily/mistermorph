@@ -33,6 +33,7 @@ func registerRuntimeAgentSettingsRoutes(
 	register("/settings/agent/skills/detail", handler.SkillDetail)
 	register("/settings/agent/skills/store", handler.SkillStore)
 	register("/settings/agent/skills/remove", handler.RemoveSkillRoute)
+	register("/settings/agent/skills/update", handler.UpdateSkillRoute)
 }
 
 func writeRuntimeAuthError(w http.ResponseWriter) {

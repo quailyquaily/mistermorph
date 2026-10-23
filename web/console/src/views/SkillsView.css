@@ -447,6 +447,13 @@
   font-size: var(--font-size-meta);
 }
 
+.skills-doc-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
 .skills-doc .mmr-document h1 {
   font-size: 1.35em;
 }

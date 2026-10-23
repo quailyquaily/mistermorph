@@ -574,6 +574,7 @@ func (s *server) handler() http.Handler {
 		register("/settings/agent/skills/detail", s.handleAgentSkillDetail)
 		register("/settings/agent/skills/store", s.handleAgentSkillStore)
 		register("/settings/agent/skills/remove", s.handleAgentSkillRemove)
+		register("/settings/agent/skills/update", s.handleAgentSkillUpdate)
 		register("/settings/console", s.handleConsoleSettings)
 		register("/settings/wechat/login/start", s.handleWeChatLoginStart)
 		register("/settings/wechat/login/poll", s.handleWeChatLoginPoll)
