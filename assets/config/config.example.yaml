@@ -363,8 +363,9 @@ tools:
     # Most read-only tool calls one script may run at the same time.
     max_parallel_calls: 4
   plan_create:
-    # Enable planning tool (plan_create) in run/serve/telegram runtimes.
-    enabled: true
+    # Enable planning tool (plan_create) in run/serve/telegram runtimes. Off by default; a task that
+    # names $plan_create still gets it.
+    enabled: false
     # Default max steps
     max_steps: 6
   image_generate:

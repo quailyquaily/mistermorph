@@ -29,9 +29,9 @@ func BuildPlanCreateRegisterConfig(enabled bool, maxSteps int) PlanCreateRegiste
 
 func LoadPlanCreateRegisterConfigFromReader(r planRegisterConfigReader) PlanCreateRegisterConfig {
 	if r == nil {
-		return BuildPlanCreateRegisterConfig(true, 6)
+		return BuildPlanCreateRegisterConfig(false, 6)
 	}
-	enabled := true
+	enabled := false
 	if r.IsSet("tools.plan_create.enabled") {
 		enabled = r.GetBool("tools.plan_create.enabled")
 	}

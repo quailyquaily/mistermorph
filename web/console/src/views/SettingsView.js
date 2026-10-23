@@ -1005,7 +1005,7 @@ const SettingsView = {
         coder: false,
         contacts_send: true,
         todo_update: true,
-        plan_create: true,
+        plan_create: false,
         codemode: true,
         tool_search: true,
         url_fetch: true,
@@ -2356,7 +2356,7 @@ const SettingsView = {
       state.tools.coder = false;
       state.tools.contacts_send = true;
       state.tools.todo_update = true;
-      state.tools.plan_create = true;
+      state.tools.plan_create = false;
       state.tools.codemode = true;
       state.tools.tool_search = true;
       state.tools.url_fetch = true;

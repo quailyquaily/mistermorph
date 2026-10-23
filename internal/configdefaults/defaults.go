@@ -72,7 +72,7 @@ func Apply(v *viper.Viper) {
 	v.SetDefault("context_compaction.enabled", true)
 	v.SetDefault("context_compaction.trigger_ratio", 0.80)
 	v.SetDefault("timeout", DefaultTaskTimeout)
-	v.SetDefault("tools.plan_create.enabled", true)
+	v.SetDefault("tools.plan_create.enabled", false)
 	v.SetDefault("tools.plan_create.max_steps", 6)
 	v.SetDefault("tools.image_generate.enabled", true)
 	v.SetDefault("tools.image_edit.enabled", true)

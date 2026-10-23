@@ -180,7 +180,7 @@ function buildDefaultPayload() {
       spawn: { enabled: true },
       contacts_send: { enabled: true },
       todo_update: { enabled: true },
-      plan_create: { enabled: true },
+      plan_create: { enabled: false },
       url_fetch: { enabled: true },
       web_search: { enabled: true },
       bash: { enabled: true },

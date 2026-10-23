@@ -31,7 +31,6 @@ func TestToolsCommand_IncludesRuntimeTools(t *testing.T) {
 		"Telegram tools (",
 		"read_file",
 		"spawn",
-		"plan_create",
 		"send_file",
 		"send_photo",
 		"send_voice",
@@ -41,5 +40,9 @@ func TestToolsCommand_IncludesRuntimeTools(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Fatalf("tools output missing %q\noutput:\n%s", want, got)
 		}
+	}
+	// plan_create is off by default (tools.plan_create.enabled).
+	if strings.Contains(got, "plan_create") {
+		t.Fatalf("tools output lists plan_create, which is off by default\noutput:\n%s", got)
 	}
 }

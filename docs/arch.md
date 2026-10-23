@@ -242,7 +242,7 @@ runtime setup
 ```
 
 - `plan_create` registration happens during runtime assembly when the runtime enables plan tooling (`PlanTool` feature) and calls `RegisterPlanTool(...)`.
-- `RegisterPlanTool(...)` is effective only when registry is non-nil and `tools.plan_create.enabled=true` (default true).
+- `RegisterPlanTool(...)` is effective only when registry is non-nil and `tools.plan_create.enabled=true` (default false; a task that names `$plan_create` still gets it).
 - `tools.plan_create.max_steps` controls default plan step cap (fallback default is 6).
 - Prompt guidance is injected only if `plan_create` exists in registry.
 - Primary creation path is `plan_create`; direct `type="plan"` remains compatibility path.

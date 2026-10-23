@@ -173,7 +173,7 @@ func TestReadAgentSettings(t *testing.T) {
 		t.Fatalf("got.LLM.FallbackProfiles = %+v", got.LLM.FallbackProfiles)
 	}
 	if !got.Tools.WriteFile.Enabled || !got.Tools.ContactsSend.Enabled || !got.Tools.TodoUpdate.Enabled ||
-		!got.Tools.PlanCreate.Enabled || !got.Tools.URLFetch.Enabled || !got.Tools.WebSearch.Enabled {
+		got.Tools.PlanCreate.Enabled || !got.Tools.URLFetch.Enabled || !got.Tools.WebSearch.Enabled {
 		t.Fatalf("got.Tools defaults not applied: %+v", got.Tools)
 	}
 	if !got.Tools.Spawn.Enabled {
