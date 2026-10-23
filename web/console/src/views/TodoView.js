@@ -2614,10 +2614,21 @@ const TodoView = {
           v-else-if="showEditorPane && selectedTask"
           variant="boxed"
           class="todo-editor-card todo-task-editor-card"
-          :title="t('todo_detail_title')"
+          :aria-label="t('todo_detail_title')"
         >
+          <!-- The switch is the head: whether the TODO runs is the first thing the panel says. -->
+          <template #lead>
+            <QSwitch
+              class="todo-enabled-switch"
+              :modelValue="selectedTask.enabled !== false"
+              :disabled="saving || loading"
+              :title="t('todo_field_enabled')"
+              :aria-label="t('todo_field_enabled')"
+              @update:modelValue="updateTaskEnabled(selectedTask, $event)"
+            />
+          </template>
           <template #actions>
-            <QButton class="plain xs" :disabled="!canSave" :loading="saving" @click="save">
+            <QButton class="primary xs" :disabled="!canSave" :loading="saving" @click="save">
               {{ t("action_save") }}
             </QButton>
             <QDropdownMenu
@@ -2644,16 +2655,6 @@ const TodoView = {
                 @update:modelValue="updateTodoTitle(selectedTask, $event)"
               />
             </label>
-            <div class="todo-enabled-control">
-              <span class="todo-enabled-label" aria-hidden="true">{{ t('todo_field_enabled') }}</span>
-              <QSwitch
-                :modelValue="selectedTask.enabled !== false"
-                :disabled="saving || loading"
-                :title="t('todo_field_enabled')"
-                :aria-label="t('todo_field_enabled')"
-                @update:modelValue="updateTaskEnabled(selectedTask, $event)"
-              />
-            </div>
           </div>
 
           <div class="todo-form">
