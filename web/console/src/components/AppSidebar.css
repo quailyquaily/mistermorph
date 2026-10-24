@@ -1,6 +1,4 @@
 .sidebar {
-  --sidebar-frame-top: 6px;
-
   position: relative;
   display: flex;
   flex-direction: column;

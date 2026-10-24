@@ -1,7 +1,8 @@
+/* As tall as the page bar beside it, so the two bottom lines are one line across the window. */
 .sidebar-controls {
   position: relative;
   z-index: 12;
-  height: 50px;
+  height: var(--chrome-bar-height, 57px);
   padding: 0;
   border-bottom: 1px solid var(--line-soft);
 }
