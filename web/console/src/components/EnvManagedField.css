@@ -58,3 +58,31 @@
 .env-managed-field.is-copied .env-managed-field-tag {
   color: var(--status-on);
 }
+
+/* With buttons at its end: the name copies, the buttons do their own thing. */
+.env-managed-field.has-actions {
+  gap: 2px;
+  padding-right: 5px;
+  cursor: default;
+}
+
+.env-managed-field-copy {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 100%;
+  padding: 0 8px 0 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: copy;
+}
+
+.env-managed-field-copy:focus-visible {
+  outline: 2px solid var(--q-c-blue);
+  outline-offset: 2px;
+}

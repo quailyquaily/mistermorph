@@ -70,6 +70,7 @@ import {
   llmFieldEnvRawValue,
   llmFieldValue,
 } from "../core/llm-env-managed";
+import { isSecretReference, pickedReference } from "../core/secret-keys";
 import {
   canOpenExternalURLInDesktop,
   openExternalPlaceholder,
@@ -2836,7 +2837,7 @@ const SettingsView = {
       };
       if (provider === SETUP_PROVIDER_CLOUDFLARE) {
         const rawToken = llmFieldEnvRawValue(envManaged, "cloudflare_api_token");
-        payload.cloudflare_api_token = rawToken || includeSecretValue(
+        payload.cloudflare_api_token = pickedReference(rawToken, profile.cloudflare_api_token) || includeSecretValue(
           profile.cloudflare_api_token,
           llmProfileSecretFields(profile),
           profile._secretDirty,
@@ -2855,19 +2856,19 @@ const SettingsView = {
         const rawAWSKey = llmFieldEnvRawValue(envManaged, "bedrock_aws_key");
         const rawAWSSecret = llmFieldEnvRawValue(envManaged, "bedrock_aws_secret");
         const rawAWSSessionToken = llmFieldEnvRawValue(envManaged, "bedrock_aws_session_token");
-        payload.bedrock_aws_key = rawAWSKey || includeSecretValue(
+        payload.bedrock_aws_key = pickedReference(rawAWSKey, profile.bedrock_aws_key) || includeSecretValue(
           profile.bedrock_aws_key,
           llmProfileSecretFields(profile),
           profile._secretDirty,
           "bedrock_aws_key",
         );
-        payload.bedrock_aws_secret = rawAWSSecret || includeSecretValue(
+        payload.bedrock_aws_secret = pickedReference(rawAWSSecret, profile.bedrock_aws_secret) || includeSecretValue(
           profile.bedrock_aws_secret,
           llmProfileSecretFields(profile),
           profile._secretDirty,
           "bedrock_aws_secret",
         );
-        payload.bedrock_aws_session_token = rawAWSSessionToken || includeSecretValue(
+        payload.bedrock_aws_session_token = pickedReference(rawAWSSessionToken, profile.bedrock_aws_session_token) || includeSecretValue(
           profile.bedrock_aws_session_token,
           llmProfileSecretFields(profile),
           profile._secretDirty,
@@ -2883,7 +2884,7 @@ const SettingsView = {
         payload.cloudflare_account_id = "";
       } else if (provider === SETUP_PROVIDER_OPENAI_CODEX) {
         const rawAPIKey = llmFieldEnvRawValue(envManaged, "api_key");
-        payload.api_key = rawAPIKey || includeSecretValue(
+        payload.api_key = pickedReference(rawAPIKey, profile.api_key) || includeSecretValue(
           profile.api_key,
           llmProfileSecretFields(profile),
           profile._secretDirty,
@@ -2912,7 +2913,7 @@ const SettingsView = {
         payload.bedrock_model_arn = "";
       } else {
         const rawAPIKey = llmFieldEnvRawValue(envManaged, "api_key");
-        payload.api_key = rawAPIKey || includeSecretValue(
+        payload.api_key = pickedReference(rawAPIKey, profile.api_key) || includeSecretValue(
           profile.api_key,
           llmProfileSecretFields(profile),
           profile._secretDirty,
@@ -2993,7 +2994,7 @@ const SettingsView = {
         }
       }
       if (provider === SETUP_PROVIDER_BEDROCK) {
-        const awsKeyRaw = llmFieldEnvRawValue(llmEnvManaged.value, "bedrock_aws_key");
+        const awsKeyRaw = pickedReference(llmFieldEnvRawValue(llmEnvManaged.value, "bedrock_aws_key"), state.llm.bedrock_aws_key);
         if (awsKeyRaw !== "") {
           payload.bedrock_aws_key = awsKeyRaw;
         } else if (!isLLMFieldEnvManaged(llmEnvManaged.value, "bedrock_aws_key")) {
@@ -3002,7 +3003,7 @@ const SettingsView = {
             payload.bedrock_aws_key = value;
           }
         }
-        const awsSecretRaw = llmFieldEnvRawValue(llmEnvManaged.value, "bedrock_aws_secret");
+        const awsSecretRaw = pickedReference(llmFieldEnvRawValue(llmEnvManaged.value, "bedrock_aws_secret"), state.llm.bedrock_aws_secret);
         if (awsSecretRaw !== "") {
           payload.bedrock_aws_secret = awsSecretRaw;
         } else if (!isLLMFieldEnvManaged(llmEnvManaged.value, "bedrock_aws_secret")) {
@@ -3030,7 +3031,7 @@ const SettingsView = {
           }
         }
       } else if (provider === SETUP_PROVIDER_CLOUDFLARE) {
-        const tokenRaw = llmFieldEnvRawValue(llmEnvManaged.value, "cloudflare_api_token");
+        const tokenRaw = pickedReference(llmFieldEnvRawValue(llmEnvManaged.value, "cloudflare_api_token"), state.llm.cloudflare_api_token);
         if (tokenRaw !== "") {
           payload.cloudflare_api_token = tokenRaw;
         } else if (!isLLMFieldEnvManaged(llmEnvManaged.value, "cloudflare_api_token")) {
@@ -3049,7 +3050,7 @@ const SettingsView = {
           }
         }
       } else if (provider === SETUP_PROVIDER_OPENAI_CODEX) {
-        const apiKeyRaw = llmFieldEnvRawValue(llmEnvManaged.value, "api_key");
+        const apiKeyRaw = pickedReference(llmFieldEnvRawValue(llmEnvManaged.value, "api_key"), state.llm.api_key);
         if (apiKeyRaw !== "") {
           payload.api_key = apiKeyRaw;
         } else if (!isLLMFieldEnvManaged(llmEnvManaged.value, "api_key")) {
@@ -3076,7 +3077,7 @@ const SettingsView = {
         payload.bedrock_region = "";
         payload.bedrock_model_arn = "";
       } else {
-        const apiKeyRaw = llmFieldEnvRawValue(llmEnvManaged.value, "api_key");
+        const apiKeyRaw = pickedReference(llmFieldEnvRawValue(llmEnvManaged.value, "api_key"), state.llm.api_key);
         if (apiKeyRaw !== "") {
           payload.api_key = apiKeyRaw;
         } else if (!isLLMFieldEnvManaged(llmEnvManaged.value, "api_key")) {
@@ -3853,7 +3854,7 @@ const SettingsView = {
       payload.description = trimText(state.llm.description);
       payload.abilities = splitAbilities(state.llm.abilities);
       if (provider === SETUP_PROVIDER_BEDROCK) {
-        if (!isLLMFieldEnvManaged(llmEnvManaged.value, "bedrock_aws_key")) {
+        if (!isLLMFieldEnvManaged(llmEnvManaged.value, "bedrock_aws_key") || isSecretReference(state.llm.bedrock_aws_key)) {
           payload.bedrock_aws_key = includeSecretValue(
             state.llm.bedrock_aws_key,
             llmSecretFields.value,
@@ -3861,7 +3862,7 @@ const SettingsView = {
             "bedrock_aws_key",
           );
         }
-        if (!isLLMFieldEnvManaged(llmEnvManaged.value, "bedrock_aws_secret")) {
+        if (!isLLMFieldEnvManaged(llmEnvManaged.value, "bedrock_aws_secret") || isSecretReference(state.llm.bedrock_aws_secret)) {
           payload.bedrock_aws_secret = includeSecretValue(
             state.llm.bedrock_aws_secret,
             llmSecretFields.value,
@@ -3876,7 +3877,7 @@ const SettingsView = {
           payload.bedrock_model_arn = trimText(state.llm.bedrock_model_arn);
         }
       } else if (provider === SETUP_PROVIDER_CLOUDFLARE) {
-        if (!isLLMFieldEnvManaged(llmEnvManaged.value, "cloudflare_api_token")) {
+        if (!isLLMFieldEnvManaged(llmEnvManaged.value, "cloudflare_api_token") || isSecretReference(state.llm.cloudflare_api_token)) {
           payload.cloudflare_api_token = includeSecretValue(
             state.llm.cloudflare_api_token,
             llmSecretFields.value,
@@ -3888,7 +3889,7 @@ const SettingsView = {
           payload.cloudflare_account_id = trimText(state.llm.cloudflare_account_id);
         }
       } else if (provider === SETUP_PROVIDER_OPENAI_CODEX) {
-        if (!isLLMFieldEnvManaged(llmEnvManaged.value, "api_key")) {
+        if (!isLLMFieldEnvManaged(llmEnvManaged.value, "api_key") || isSecretReference(state.llm.api_key)) {
           payload.api_key = includeSecretValue(state.llm.api_key, llmSecretFields.value, llmSecretDirty, "api_key");
         }
         payload.cloudflare_api_token = "";
@@ -3908,7 +3909,7 @@ const SettingsView = {
         payload.bedrock_aws_secret = "";
         payload.bedrock_region = "";
         payload.bedrock_model_arn = "";
-      } else if (!isLLMFieldEnvManaged(llmEnvManaged.value, "api_key")) {
+      } else if (!isLLMFieldEnvManaged(llmEnvManaged.value, "api_key") || isSecretReference(state.llm.api_key)) {
         payload.api_key = includeSecretValue(state.llm.api_key, llmSecretFields.value, llmSecretDirty, "api_key");
       }
       payload.fallback_profiles = normalizeNamedList(state.llm.fallback_profiles);
@@ -4191,7 +4192,7 @@ const SettingsView = {
         allowed_chat_ids: parseConfigListText(state.telegram.allowed_chat_ids_text),
         group_trigger_mode: normalizeConsoleGroupTriggerMode(state.telegram.group_trigger_mode),
       };
-      telegram.bot_token = consoleFieldRawValue(telegramEnv, "bot_token") || includeConsoleSecretValue(
+      telegram.bot_token = pickedReference(consoleFieldRawValue(telegramEnv, "bot_token"), state.telegram.bot_token) || includeConsoleSecretValue(
         "telegram",
         "bot_token",
         state.telegram.bot_token,
@@ -4201,12 +4202,12 @@ const SettingsView = {
         allowed_channel_ids: parseConfigListText(state.slack.allowed_channel_ids_text),
         group_trigger_mode: normalizeConsoleGroupTriggerMode(state.slack.group_trigger_mode),
       };
-      slack.bot_token = consoleFieldRawValue(slackEnv, "bot_token") || includeConsoleSecretValue(
+      slack.bot_token = pickedReference(consoleFieldRawValue(slackEnv, "bot_token"), state.slack.bot_token) || includeConsoleSecretValue(
         "slack",
         "bot_token",
         state.slack.bot_token,
       );
-      slack.app_token = consoleFieldRawValue(slackEnv, "app_token") || includeConsoleSecretValue(
+      slack.app_token = pickedReference(consoleFieldRawValue(slackEnv, "app_token"), state.slack.app_token) || includeConsoleSecretValue(
         "slack",
         "app_token",
         state.slack.app_token,
@@ -4215,12 +4216,12 @@ const SettingsView = {
         allowed_group_ids: parseConfigListText(state.line.allowed_group_ids_text),
         group_trigger_mode: normalizeConsoleGroupTriggerMode(state.line.group_trigger_mode),
       };
-      line.channel_access_token = consoleFieldRawValue(lineEnv, "channel_access_token") || includeConsoleSecretValue(
+      line.channel_access_token = pickedReference(consoleFieldRawValue(lineEnv, "channel_access_token"), state.line.channel_access_token) || includeConsoleSecretValue(
         "line",
         "channel_access_token",
         state.line.channel_access_token,
       );
-      line.channel_secret = consoleFieldRawValue(lineEnv, "channel_secret") || includeConsoleSecretValue(
+      line.channel_secret = pickedReference(consoleFieldRawValue(lineEnv, "channel_secret"), state.line.channel_secret) || includeConsoleSecretValue(
         "line",
         "channel_secret",
         state.line.channel_secret,
@@ -4230,7 +4231,7 @@ const SettingsView = {
         allowed_chat_ids: parseConfigListText(state.lark.allowed_chat_ids_text),
         group_trigger_mode: normalizeConsoleGroupTriggerMode(state.lark.group_trigger_mode),
       };
-      lark.app_secret = consoleFieldRawValue(larkEnv, "app_secret") || includeConsoleSecretValue(
+      lark.app_secret = pickedReference(consoleFieldRawValue(larkEnv, "app_secret"), state.lark.app_secret) || includeConsoleSecretValue(
         "lark",
         "app_secret",
         state.lark.app_secret,
@@ -4245,13 +4246,13 @@ const SettingsView = {
         allowed_user_ids: parseConfigListText(state.discord.allowed_user_ids_text),
         group_trigger_mode: normalizeDiscordGroupTriggerMode(state.discord.group_trigger_mode),
       };
-      discord.bot_token = consoleFieldRawValue(discordEnv, "bot_token") || includeConsoleSecretValue(
+      discord.bot_token = pickedReference(consoleFieldRawValue(discordEnv, "bot_token"), state.discord.bot_token) || includeConsoleSecretValue(
         "discord",
         "bot_token",
         state.discord.bot_token,
       );
       const whatsapp = {};
-      whatsapp.api_token = consoleFieldRawValue(whatsappEnv, "api_token") || includeConsoleSecretValue(
+      whatsapp.api_token = pickedReference(consoleFieldRawValue(whatsappEnv, "api_token"), state.whatsapp.api_token) || includeConsoleSecretValue(
         "whatsapp",
         "api_token",
         state.whatsapp.api_token,
@@ -4260,7 +4261,7 @@ const SettingsView = {
         service_url: trimText(state.bluesky.service_url),
         identifier: trimText(state.bluesky.identifier),
       };
-      bluesky.app_password = consoleFieldRawValue(blueskyEnv, "app_password") || includeConsoleSecretValue(
+      bluesky.app_password = pickedReference(consoleFieldRawValue(blueskyEnv, "app_password"), state.bluesky.app_password) || includeConsoleSecretValue(
         "bluesky",
         "app_password",
         state.bluesky.app_password,
@@ -4268,12 +4269,12 @@ const SettingsView = {
       const x = {
         client_id: trimText(state.x.client_id),
       };
-      x.client_secret = consoleFieldRawValue(xEnv, "client_secret") || includeConsoleSecretValue(
+      x.client_secret = pickedReference(consoleFieldRawValue(xEnv, "client_secret"), state.x.client_secret) || includeConsoleSecretValue(
         "x",
         "client_secret",
         state.x.client_secret,
       );
-      x.refresh_token = consoleFieldRawValue(xEnv, "refresh_token") || includeConsoleSecretValue(
+      x.refresh_token = pickedReference(consoleFieldRawValue(xEnv, "refresh_token"), state.x.refresh_token) || includeConsoleSecretValue(
         "x",
         "refresh_token",
         state.x.refresh_token,
@@ -6906,14 +6907,13 @@ const SettingsView = {
               <div class="settings-form-grid">
                 <div class="settings-field is-wide">
                   <span class="settings-field-label">{{ t("settings_console_telegram_bot_token_label") }}</span>
-                  <EnvManagedField v-if="consoleFieldEnvManaged('telegram', 'bot_token')" :name="consoleFieldManagedHeadline('telegram', 'bot_token')" />
                   <SecretInput
-                    v-else
+                    :envName="consoleFieldManagedHeadline('telegram', 'bot_token')"
                     :modelValue="state.telegram.bot_token"
                     :status="consoleSecretField('telegram', 'bot_token')"
                     :revealPath="consoleSecretRevealPath('telegram', 'bot_token')"
                     :placeholder="t('settings_console_telegram_bot_token_placeholder')"
-                    :disabled="consoleLoading || consoleSaving || !consoleSecretEditable('telegram', 'bot_token')"
+                    :disabled="consoleLoading || consoleSaving"
                     @update:modelValue="updateTelegramField('bot_token', $event)"
                   />
                 </div>
@@ -6969,28 +6969,26 @@ const SettingsView = {
               <div class="settings-form-grid">
                 <div class="settings-field is-wide">
                   <span class="settings-field-label">{{ t("settings_console_slack_bot_token_label") }}</span>
-                  <EnvManagedField v-if="consoleFieldEnvManaged('slack', 'bot_token')" :name="consoleFieldManagedHeadline('slack', 'bot_token')" />
                   <SecretInput
-                    v-else
+                    :envName="consoleFieldManagedHeadline('slack', 'bot_token')"
                     :modelValue="state.slack.bot_token"
                     :status="consoleSecretField('slack', 'bot_token')"
                     :revealPath="consoleSecretRevealPath('slack', 'bot_token')"
                     :placeholder="t('settings_console_slack_bot_token_placeholder')"
-                    :disabled="consoleLoading || consoleSaving || !consoleSecretEditable('slack', 'bot_token')"
+                    :disabled="consoleLoading || consoleSaving"
                     @update:modelValue="updateSlackField('bot_token', $event)"
                   />
                 </div>
 
                 <div class="settings-field is-wide">
                   <span class="settings-field-label">{{ t("settings_console_slack_app_token_label") }}</span>
-                  <EnvManagedField v-if="consoleFieldEnvManaged('slack', 'app_token')" :name="consoleFieldManagedHeadline('slack', 'app_token')" />
                   <SecretInput
-                    v-else
+                    :envName="consoleFieldManagedHeadline('slack', 'app_token')"
                     :modelValue="state.slack.app_token"
                     :status="consoleSecretField('slack', 'app_token')"
                     :revealPath="consoleSecretRevealPath('slack', 'app_token')"
                     :placeholder="t('settings_console_slack_app_token_placeholder')"
-                    :disabled="consoleLoading || consoleSaving || !consoleSecretEditable('slack', 'app_token')"
+                    :disabled="consoleLoading || consoleSaving"
                     @update:modelValue="updateSlackField('app_token', $event)"
                   />
                 </div>
@@ -7058,28 +7056,26 @@ const SettingsView = {
               <div class="settings-form-grid">
                 <div class="settings-field is-wide">
                   <span class="settings-field-label">{{ t("settings_console_line_channel_access_token_label") }}</span>
-                  <EnvManagedField v-if="consoleFieldEnvManaged('line', 'channel_access_token')" :name="consoleFieldManagedHeadline('line', 'channel_access_token')" />
                   <SecretInput
-                    v-else
+                    :envName="consoleFieldManagedHeadline('line', 'channel_access_token')"
                     :modelValue="state.line.channel_access_token"
                     :status="consoleSecretField('line', 'channel_access_token')"
                     :revealPath="consoleSecretRevealPath('line', 'channel_access_token')"
                     :placeholder="t('settings_console_line_channel_access_token_placeholder')"
-                    :disabled="consoleLoading || consoleSaving || !consoleSecretEditable('line', 'channel_access_token')"
+                    :disabled="consoleLoading || consoleSaving"
                     @update:modelValue="updateLineField('channel_access_token', $event)"
                   />
                 </div>
 
                 <div class="settings-field is-wide">
                   <span class="settings-field-label">{{ t("settings_console_line_channel_secret_label") }}</span>
-                  <EnvManagedField v-if="consoleFieldEnvManaged('line', 'channel_secret')" :name="consoleFieldManagedHeadline('line', 'channel_secret')" />
                   <SecretInput
-                    v-else
+                    :envName="consoleFieldManagedHeadline('line', 'channel_secret')"
                     :modelValue="state.line.channel_secret"
                     :status="consoleSecretField('line', 'channel_secret')"
                     :revealPath="consoleSecretRevealPath('line', 'channel_secret')"
                     :placeholder="t('settings_console_line_channel_secret_placeholder')"
-                    :disabled="consoleLoading || consoleSaving || !consoleSecretEditable('line', 'channel_secret')"
+                    :disabled="consoleLoading || consoleSaving"
                     @update:modelValue="updateLineField('channel_secret', $event)"
                   />
                 </div>
@@ -7147,14 +7143,13 @@ const SettingsView = {
 
                 <div class="settings-field is-wide">
                   <span class="settings-field-label">{{ t("settings_console_lark_app_secret_label") }}</span>
-                  <EnvManagedField v-if="consoleFieldEnvManaged('lark', 'app_secret')" :name="consoleFieldManagedHeadline('lark', 'app_secret')" />
                   <SecretInput
-                    v-else
+                    :envName="consoleFieldManagedHeadline('lark', 'app_secret')"
                     :modelValue="state.lark.app_secret"
                     :status="consoleSecretField('lark', 'app_secret')"
                     :revealPath="consoleSecretRevealPath('lark', 'app_secret')"
                     :placeholder="t('settings_console_lark_app_secret_placeholder')"
-                    :disabled="consoleLoading || consoleSaving || !consoleSecretEditable('lark', 'app_secret')"
+                    :disabled="consoleLoading || consoleSaving"
                     @update:modelValue="updateLarkField('app_secret', $event)"
                   />
                 </div>
@@ -7262,14 +7257,13 @@ const SettingsView = {
               <div class="settings-form-grid">
                 <div class="settings-field is-wide">
                   <span class="settings-field-label">{{ t("settings_console_discord_bot_token_label") }}</span>
-                  <EnvManagedField v-if="consoleFieldEnvManaged('discord', 'bot_token')" :name="consoleFieldManagedHeadline('discord', 'bot_token')" />
                   <SecretInput
-                    v-else
+                    :envName="consoleFieldManagedHeadline('discord', 'bot_token')"
                     :modelValue="state.discord.bot_token"
                     :status="consoleSecretField('discord', 'bot_token')"
                     :revealPath="consoleSecretRevealPath('discord', 'bot_token')"
                     :placeholder="t('settings_console_discord_bot_token_placeholder')"
-                    :disabled="consoleLoading || consoleSaving || !consoleSecretEditable('discord', 'bot_token')"
+                    :disabled="consoleLoading || consoleSaving"
                     @update:modelValue="updateDiscordField('bot_token', $event)"
                   />
                 </div>
@@ -7388,14 +7382,13 @@ const SettingsView = {
               <div class="settings-form-grid">
                 <div class="settings-field is-wide">
                   <span class="settings-field-label">{{ t("settings_console_whatsapp_api_token_label") }}</span>
-                  <EnvManagedField v-if="consoleFieldEnvManaged('whatsapp', 'api_token')" :name="consoleFieldManagedHeadline('whatsapp', 'api_token')" />
                   <SecretInput
-                    v-else
+                    :envName="consoleFieldManagedHeadline('whatsapp', 'api_token')"
                     :modelValue="state.whatsapp.api_token"
                     :status="consoleSecretField('whatsapp', 'api_token')"
                     :revealPath="consoleSecretRevealPath('whatsapp', 'api_token')"
                     :placeholder="t('settings_console_whatsapp_api_token_placeholder')"
-                    :disabled="consoleLoading || consoleSaving || !consoleSecretEditable('whatsapp', 'api_token')"
+                    :disabled="consoleLoading || consoleSaving"
                     @update:modelValue="updateWhatsAppField('api_token', $event)"
                   />
                   <p class="settings-field-note">{{ t("settings_console_whatsapp_api_token_note") }}</p>
@@ -7439,14 +7432,13 @@ const SettingsView = {
 
                 <div class="settings-field is-wide">
                   <span class="settings-field-label">{{ t("settings_console_bluesky_app_password_label") }}</span>
-                  <EnvManagedField v-if="consoleFieldEnvManaged('bluesky', 'app_password')" :name="consoleFieldManagedHeadline('bluesky', 'app_password')" />
                   <SecretInput
-                    v-else
+                    :envName="consoleFieldManagedHeadline('bluesky', 'app_password')"
                     :modelValue="state.bluesky.app_password"
                     :status="consoleSecretField('bluesky', 'app_password')"
                     :revealPath="consoleSecretRevealPath('bluesky', 'app_password')"
                     :placeholder="t('settings_console_bluesky_app_password_placeholder')"
-                    :disabled="consoleLoading || consoleSaving || !consoleSecretEditable('bluesky', 'app_password')"
+                    :disabled="consoleLoading || consoleSaving"
                     @update:modelValue="updateBlueskyField('app_password', $event)"
                   />
                   <p class="settings-field-note">{{ t("settings_console_bluesky_app_password_note") }}</p>
@@ -7501,14 +7493,13 @@ const SettingsView = {
 
                 <div class="settings-field is-wide">
                   <span class="settings-field-label">{{ t("settings_console_x_client_secret_label") }}</span>
-                  <EnvManagedField v-if="consoleFieldEnvManaged('x', 'client_secret')" :name="consoleFieldManagedHeadline('x', 'client_secret')" />
                   <SecretInput
-                    v-else
+                    :envName="consoleFieldManagedHeadline('x', 'client_secret')"
                     :modelValue="state.x.client_secret"
                     :status="consoleSecretField('x', 'client_secret')"
                     :revealPath="consoleSecretRevealPath('x', 'client_secret')"
                     :placeholder="t('settings_console_x_client_secret_placeholder')"
-                    :disabled="consoleLoading || consoleSaving || !consoleSecretEditable('x', 'client_secret')"
+                    :disabled="consoleLoading || consoleSaving"
                     @update:modelValue="updateXField('client_secret', $event)"
                   />
                   <p class="settings-field-note">{{ t("settings_console_x_client_secret_note") }}</p>

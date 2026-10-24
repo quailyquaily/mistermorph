@@ -29,8 +29,8 @@ test("console channel settings expose line, lark, mixin, and discord alongside t
   assert.match(source, /\["mixin", consoleMixinDirty, "settings_console_mixin_title"\]/);
   assert.match(source, /const known = \["runtimes", "telegram", "slack", "line", "lark", "mixin", "discord", "whatsapp", "bluesky", "x", "guard"\];/);
   assert.match(source, /mixin: mixinSaveDisabled,/);
-  assert.match(source, /consoleFieldEnvManaged\('line', 'channel_access_token'\)/);
-  assert.match(source, /consoleFieldEnvManaged\('lark', 'app_secret'\)/);
+  assert.match(source, /consoleFieldManagedHeadline\('line', 'channel_access_token'\)/);
+  assert.match(source, /consoleFieldManagedHeadline\('lark', 'app_secret'\)/);
   assert.match(source, /consoleFieldEnvManaged\('mixin', 'keystore_file'\)/);
 
   assert.match(i18n, /settings_console_line_title:/);
@@ -47,7 +47,7 @@ test("console channel settings expose line, lark, mixin, and discord alongside t
   assert.match(source, /if \(target === "discord"\)/);
   assert.match(source, /\["discord", consoleDiscordDirty, "settings_console_discord_title"\]/);
   assert.match(source, /discord: discordSaveDisabled,/);
-  assert.match(source, /consoleFieldEnvManaged\('discord', 'bot_token'\)/);
+  assert.match(source, /consoleFieldManagedHeadline\('discord', 'bot_token'\)/);
   assert.match(i18n, /settings_console_discord_bot_token_label:/);
   assert.match(i18n, /settings_console_runtime_discord:/);
 
@@ -59,7 +59,7 @@ test("console channel settings expose line, lark, mixin, and discord alongside t
   assert.match(source, /\["whatsapp", consoleWhatsAppDirty, "settings_console_whatsapp_title"\]/);
   assert.match(source, /<WeChatLoginPanel/);
   assert.match(source, /consoleFieldEnvManaged\('wechat', 'bot_token'\)/);
-  assert.match(source, /consoleFieldEnvManaged\('whatsapp', 'api_token'\)/);
+  assert.match(source, /consoleFieldManagedHeadline\('whatsapp', 'api_token'\)/);
   assert.doesNotMatch(source, /state\.wechat\.bot_token/);
   assert.match(i18n, /settings_wechat_login_connect:/);
   assert.match(i18n, /settings_console_whatsapp_api_token_label:/);

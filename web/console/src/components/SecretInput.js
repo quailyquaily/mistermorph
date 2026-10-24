@@ -1,8 +1,10 @@
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, unref, watch } from "vue";
 
 import { translate } from "../core/context";
-import { loadSecretInfo, revealSecret } from "../core/secret-reveal";
+import { canSwapReference, referenceEnvName } from "../core/secret-keys";
+import { loadSecretInfo, loadSecretKeysShared, revealSecret } from "../core/secret-reveal";
 import { secretStorageKind } from "../core/secret-storage";
+import EnvManagedField from "./EnvManagedField";
 import SecretKeyPicker from "./SecretKeyPicker";
 import "./SecretInput.css";
 
@@ -13,6 +15,10 @@ const KIND_ICONS = {
   aws: "PhCloud",
   stored: "PhLockSimple",
 };
+
+// Where a field points at a key kept elsewhere; it can be pointed at another key only while
+// another field still uses the one it has.
+const REFERENCE_KINDS = new Set(["os", "env", "aws"]);
 
 // A shown secret hides itself again after this long.
 const REVEAL_MS = 30000;
@@ -25,21 +31,27 @@ const REVEAL_MS = 30000;
 // the eye shows what is typed.
 //
 // Where a settings page provides "secretPicker" ({ enabled }), the key button opens the secret
-// picker to use a key another field already has instead of pasting it again. The picked key then
-// shows as its hint and the field it came from, with the undo arrow to drop it.
+// picker to use a key another field already has instead of pasting it again. A field that points
+// at a variable, a stored secret or an AWS secret offers it only while another field uses the same
+// one. A picked key shows the way a key kept like it is shown (a variable by name, a stored secret
+// masked with where it is kept); one kept as plain text by its hint and the field it came from. The
+// undo arrow drops it.
 //
 // status: { configured, source, editable }, as the runtime reports a secret field.
 // revealPath: the secret's config path (e.g. "llm.api_key"); empty when it cannot be revealed,
 // such as a remote runtime's settings.
+// envName: for a field taken from an environment variable, "NAME" (or "NAME=value"); it then shows
+// locked, by the variable's name.
 const SecretInput = {
   name: "SecretInput",
-  components: { SecretKeyPicker },
+  components: { EnvManagedField, SecretKeyPicker },
   props: {
     modelValue: { type: String, default: "" },
     status: { type: Object, default: null },
     placeholder: { type: String, default: "" },
     disabled: { type: Boolean, default: false },
     revealPath: { type: String, default: "" },
+    envName: { type: String, default: "" },
   },
   emits: ["update:modelValue"],
   setup(props, { emit }) {
@@ -58,18 +70,35 @@ const SecretInput = {
     const pickerOpen = ref(false);
     // The key picked from another field: { value, kind, hint, from }, while it is the field's value.
     const picked = ref(null);
+    // How each secret field holds its key (GET /secrets/keys fields), to know whether this one may
+    // swap its reference.
+    const keyFields = ref(null);
 
     const configured = computed(() => props.status?.configured === true);
     const kind = computed(() => secretStorageKind(props.status?.source));
-    const replaceable = computed(() => props.status?.editable !== false && !props.disabled);
+    const replaceable = computed(() => !props.envName && props.status?.editable !== false && !props.disabled);
+    const showEnvLocked = computed(() => Boolean(props.envName) && !String(props.modelValue || ""));
     const showStored = computed(() => configured.value && !replacing.value && !String(props.modelValue || ""));
     const icon = computed(() => KIND_ICONS[kind.value]);
-    const canPick = computed(() => Boolean(unref(secretPicker?.enabled)) && replaceable.value);
+    const pickerOn = computed(() => Boolean(unref(secretPicker?.enabled)) && !props.disabled);
+    const holdsReference = computed(() => Boolean(props.envName) || REFERENCE_KINDS.has(kind.value));
+    // The key button on a stored key: a reference is swapped only while another field keeps it.
+    const canPickStored = computed(
+      () =>
+        pickerOn.value &&
+        (holdsReference.value ? canSwapReference(keyFields.value, props.revealPath, props.envName) : replaceable.value)
+    );
+    const canPickTyping = computed(() => pickerOn.value && replaceable.value);
     const showPicked = computed(() => picked.value !== null && String(props.modelValue || "") === picked.value.value);
+    const pickedEnvName = computed(() => (picked.value ? referenceEnvName(picked.value.value) : ""));
+    const pickedTitle = computed(() => (picked.value ? t("secret_picker_from", { field: picked.value.from }) : ""));
     const canReveal = computed(() => Boolean(props.revealPath) && info.value?.reveal === true);
     // The system store by name (macOS Keychain, ...) once the console has said which it uses.
     const storeName = computed(() => (kind.value === "os" && info.value?.store ? t("secret_store_" + info.value.store) : ""));
     const tagLabel = computed(() => storeName.value || t("secret_tag_" + kind.value));
+    function kindTag(name) {
+      return name === "os" && info.value?.store ? t("secret_store_" + info.value.store) : t("secret_tag_" + name);
+    }
     const tooltip = computed(
       () =>
         t("secret_stored_" + kind.value) +
@@ -81,6 +110,19 @@ const SecretInput = {
     onMounted(async () => {
       info.value = await loadSecretInfo();
     });
+
+    // Whether this field's reference is shared, for a field holding one (reloaded after a save).
+    watch(
+      () => [pickerOn.value, holdsReference.value, props.revealPath, props.status?.source, props.envName],
+      async ([on, reference, path]) => {
+        if (!on || !reference || !path) {
+          return;
+        }
+        const data = await loadSecretKeysShared();
+        keyFields.value = data?.fields && typeof data.fields === "object" ? data.fields : null;
+      },
+      { immediate: true }
+    );
 
     function hide() {
       window.clearTimeout(hideTimer);
@@ -181,16 +223,30 @@ const SecretInput = {
     return {
       t, root, configured, kind, replaceable, showStored, icon, replacing, typedVisible, canReveal, tagLabel, tooltip,
       revealed, asking, password, revealing, revealError, toggleReveal, doReveal, cancelAsk, replace, keepCurrent,
-      canPick, pickerOpen, picked, showPicked, openPicker, pick,
+      canPickStored, canPickTyping, pickerOpen, picked, showPicked, pickedEnvName, pickedTitle, showEnvLocked, openPicker,
+      pick, kindTag, KIND_ICONS,
     };
   },
   template: `
     <div ref="root" class="secret-input">
-      <div v-if="showPicked" :class="['secret-input-stored', 'is-picked', 'is-' + picked.kind]">
-        <span class="secret-input-hint">{{ picked.hint || "…" }}</span>
-        <span class="secret-input-tag" :title="t('secret_picker_from', { field: picked.from })">
-          <PhKey class="secret-input-icon" aria-hidden="true" />
-          <span>{{ t("secret_picker_from", { field: picked.from }) }}</span>
+      <EnvManagedField v-if="showPicked && pickedEnvName" :name="pickedEnvName" :title="pickedTitle">
+        <QButton
+          class="plain sm icon secret-input-action"
+          :title="t('secret_picker_undo')"
+          :aria-label="t('secret_picker_undo')"
+          :disabled="disabled"
+          @click="keepCurrent"
+        >
+          <PhArrowCounterClockwise class="icon" />
+        </QButton>
+      </EnvManagedField>
+      <div v-else-if="showPicked" :class="['secret-input-stored', 'is-picked', 'is-' + picked.kind]" :title="pickedTitle">
+        <span v-if="picked.kind === 'file'" class="secret-input-hint">{{ picked.hint || "…" }}</span>
+        <span v-else class="secret-input-mask" aria-hidden="true">••••••••••••</span>
+        <span class="secret-input-tag">
+          <PhKey v-if="picked.kind === 'file'" class="secret-input-icon" aria-hidden="true" />
+          <component v-else :is="KIND_ICONS[picked.kind] || KIND_ICONS.stored" class="secret-input-icon" aria-hidden="true" />
+          <span>{{ picked.kind === "file" ? pickedTitle : kindTag(picked.kind) }}</span>
         </span>
         <QButton
           class="plain sm icon secret-input-action"
@@ -202,6 +258,17 @@ const SecretInput = {
           <PhArrowCounterClockwise class="icon" />
         </QButton>
       </div>
+      <EnvManagedField v-else-if="showEnvLocked" :name="envName">
+        <QButton
+          v-if="canPickStored"
+          class="plain sm icon secret-input-action"
+          :title="t('secret_picker_open')"
+          :aria-label="t('secret_picker_open')"
+          @click="openPicker"
+        >
+          <PhKey class="icon" />
+        </QButton>
+      </EnvManagedField>
       <div v-else-if="showStored && asking" class="secret-input-ask">
         <QInput
           v-model="password"
@@ -235,7 +302,7 @@ const SecretInput = {
           <PhEye v-else class="icon" />
         </QButton>
         <QButton
-          v-if="canPick"
+          v-if="canPickStored"
           class="plain sm icon secret-input-action"
           :title="t('secret_picker_open')"
           :aria-label="t('secret_picker_open')"
@@ -274,7 +341,7 @@ const SecretInput = {
               <PhEye v-else class="icon" />
             </QButton>
             <QButton
-              v-if="canPick"
+              v-if="canPickTyping"
               class="plain sm icon secret-input-action"
               :title="t('secret_picker_open')"
               :aria-label="t('secret_picker_open')"
@@ -297,7 +364,10 @@ const SecretInput = {
         </QInput>
       </template>
       <p v-if="revealError" class="secret-input-error" role="alert">{{ revealError }}</p>
-      <SecretKeyPicker v-if="pickerOpen" v-model="pickerOpen" :currentPath="revealPath" @pick="pick" />
+      <!-- On the body: inside a settings pane, the panes beside it would cover the dialog. -->
+      <Teleport to="body">
+        <SecretKeyPicker v-if="pickerOpen" v-model="pickerOpen" :currentPath="revealPath" @pick="pick" />
+      </Teleport>
     </div>
   `,
 };

@@ -5,6 +5,7 @@ import "./EnvManagedField.css";
 
 // A field whose value comes from an environment variable: shown as a locked, read-only input with
 // the variable's name (and value, for a field that is not secret). Clicking it copies the name.
+// Buttons in the default slot sit at its end, such as the secret picker's.
 const EnvManagedField = {
   props: {
     // "NAME" or "NAME=value".
@@ -43,7 +44,15 @@ const EnvManagedField = {
     return { t, copied, label, title, copy };
   },
   template: `
-    <button type="button" class="env-managed-field" :class="{ 'is-copied': copied }" :title="title" :aria-label="title" @click="copy">
+    <div v-if="$slots.default" class="env-managed-field has-actions" :class="{ 'is-copied': copied }">
+      <button type="button" class="env-managed-field-copy" :title="title" :aria-label="title" @click="copy">
+        <PhLockSimple class="env-managed-field-icon" aria-hidden="true" />
+        <code class="env-managed-field-name">{{ label }}</code>
+        <span class="env-managed-field-tag">{{ copied ? t("settings_env_managed_copied") : t("settings_env_managed_tag") }}</span>
+      </button>
+      <slot />
+    </div>
+    <button v-else type="button" class="env-managed-field" :class="{ 'is-copied': copied }" :title="title" :aria-label="title" @click="copy">
       <PhLockSimple class="env-managed-field-icon" aria-hidden="true" />
       <code class="env-managed-field-name">{{ label }}</code>
       <span class="env-managed-field-tag">{{ copied ? t("settings_env_managed_copied") : t("settings_env_managed_tag") }}</span>

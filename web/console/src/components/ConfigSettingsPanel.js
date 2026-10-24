@@ -325,7 +325,7 @@ export default {
               <span v-if="restartRequired(field)" class="config-settings-restart">Restart required</span>
             </div>
 
-            <EnvManagedField v-if="environmentManaged(field)" :name="environmentManagedName(field)" />
+            <EnvManagedField v-if="environmentManaged(field) && !field.secret" :name="environmentManagedName(field)" />
             <SettingBytes
               v-else-if="field.editor === 'bytes'"
               :modelValue="draft[field.path]"
@@ -416,6 +416,7 @@ export default {
             />
             <SecretInput
               v-else-if="field.secret"
+              :envName="environmentManaged(field) ? environmentManagedName(field) : ''"
               :modelValue="draft[field.path]"
               :status="stateFor(field)"
               :revealPath="field.path"

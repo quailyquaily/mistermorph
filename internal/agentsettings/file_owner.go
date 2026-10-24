@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -601,10 +602,16 @@ func protectManagedFields(configPath string, reader Reader, source secref.Source
 		}
 	}
 	managed := CurrentEnvManaged(current.LLM.Provider).LLM
+	// A field set by the environment itself stays as it is; one that config.yaml points at a
+	// variable or AWS secret may be pointed at another key instead.
+	fromEnvironment := make(map[string]bool, len(managed))
+	for name := range managed {
+		fromEnvironment[name] = true
+	}
 	fields := current.LLM.LLMConfigFieldsPayload
 	llmNode := agentSettingsYAMLLLMNode(doc)
 	managed = applyAgentSettingsYAMLEnvManaged(&fields, managed, llmNode, current.LLM.Provider)
-	if err := protectManagedLLMConfigUpdate(&update.LLM.LLMConfigFieldsUpdate, managed, "llm"); err != nil {
+	if err := protectManagedLLMConfigUpdate(&update.LLM.LLMConfigFieldsUpdate, managed, "llm", fromEnvironment); err != nil {
 		return err
 	}
 	profiles, managedProfiles := buildAgentSettingsProfileResponseView(current.LLM.Profiles, llmNode)
@@ -620,7 +627,7 @@ func protectManagedFields(configPath string, reader Reader, source secref.Source
 		managedFields := managedProfileFields(managedProfiles, name)
 		if len(managedFields) > 0 {
 			profileUpdate := llmProfileSettingsAsUpdate(update.LLM.Profile.LLMProfileSettingsPayload)
-			if err := protectManagedLLMConfigUpdate(&profileUpdate, managedFields, "llm.profiles."+strings.TrimSpace(name)); err != nil {
+			if err := protectManagedLLMConfigUpdate(&profileUpdate, managedFields, "llm.profiles."+strings.TrimSpace(name), nil); err != nil {
 				return err
 			}
 		}
@@ -646,7 +653,7 @@ func protectManagedFields(configPath string, reader Reader, source secref.Source
 				return managedFieldDeletionError("llm.profiles."+currentProfile.Name, managedFields)
 			}
 			profileUpdate := llmProfileSettingsAsUpdate(next)
-			if err := protectManagedLLMConfigUpdate(&profileUpdate, managedFields, "llm.profiles."+currentProfile.Name); err != nil {
+			if err := protectManagedLLMConfigUpdate(&profileUpdate, managedFields, "llm.profiles."+currentProfile.Name, nil); err != nil {
 				return err
 			}
 		}
@@ -677,7 +684,10 @@ func managedFieldDeletionError(prefix string, managed map[string]EnvManagedField
 	return managedFieldConflictError(prefix, fields[0], field)
 }
 
-func protectManagedLLMConfigUpdate(update *LLMConfigFieldsUpdate, managed map[string]EnvManagedField, prefix string) error {
+// protectManagedLLMConfigUpdate rejects changing a field config.yaml takes from the environment or
+// AWS Secrets Manager. A secret field may still be pointed at another key's reference (the secret
+// picker), unless fromEnvironment names it: the environment then sets it whatever config.yaml says.
+func protectManagedLLMConfigUpdate(update *LLMConfigFieldsUpdate, managed map[string]EnvManagedField, prefix string, fromEnvironment map[string]bool) error {
 	if update == nil || len(managed) == 0 {
 		return nil
 	}
@@ -710,6 +720,9 @@ func protectManagedLLMConfigUpdate(update *LLMConfigFieldsUpdate, managed map[st
 		}
 		if strings.TrimSpace(**item.value) == strings.TrimSpace(field.RawValue) {
 			*item.value = nil
+			continue
+		}
+		if !fromEnvironment[item.name] && slices.Contains(llmSecretFieldNames, item.name) && isSecretReference(strings.TrimSpace(**item.value)) {
 			continue
 		}
 		return managedFieldConflictError(prefix, item.name, field)

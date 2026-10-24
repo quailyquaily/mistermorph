@@ -24,3 +24,16 @@ export function revealSecret(path, password = "") {
 export function loadSecretKeys() {
   return apiFetch("/secrets/keys");
 }
+
+let sharedKeys = null;
+let sharedKeysAt = 0;
+
+// loadSecretKeys for the many secret fields of one settings page: they share one request made
+// within a couple of seconds. Resolves to null when the keys cannot be loaded.
+export function loadSecretKeysShared() {
+  if (!sharedKeys || Date.now() - sharedKeysAt > 2000) {
+    sharedKeysAt = Date.now();
+    sharedKeys = loadSecretKeys().catch(() => null);
+  }
+  return sharedKeys;
+}

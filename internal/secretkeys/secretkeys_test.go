@@ -60,7 +60,9 @@ func TestHint(t *testing.T) {
 	}{
 		{"sk-proj-abcdefghijklmnopqrstuvwxyz1234", "sk-proj-…1234"},
 		{"xoxb-1234567890-abcdefghijkl", "xoxb-…ijkl"},
-		{"123456789:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw", "…Dsaw"},
+		{"123456789:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw", "1234…Dsaw"},
+		{"AKIAIOSFODNN7EXAMPLE", "AKIA…MPLE"},
+		{"wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", "wJal…EKEY"},
 		{"short-password", "…"},
 		{"  sk-abcdefghijklmnopqrstu  ", "sk-…rstu"},
 	}

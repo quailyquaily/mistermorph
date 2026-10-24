@@ -20,6 +20,8 @@ func TestSecretKeysListsEachKeyOnce(t *testing.T) {
       api_key: "sk-proj-abcdefghijklmnopqrstuvwxyz1234"
     backup:
       api_key: "${SECRET_KEYS_TEST_KEY}"
+    spare:
+      api_key: "${SECRET_KEYS_TEST_KEY}"
 telegram:
   bot_token: "${SECRET_KEYS_TEST_MISSING}"
 console:
@@ -42,11 +44,27 @@ console:
 		}
 	}
 	var payload struct {
-		Available bool               `json:"available"`
-		Keys      []secretKeyPayload `json:"keys"`
+		Available bool                          `json:"available"`
+		Keys      []secretKeyPayload            `json:"keys"`
+		Fields    map[string]secretFieldPayload `json:"fields"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
 		t.Fatal(err)
+	}
+	wantFields := map[string]secretFieldPayload{
+		"llm.api_key":                 {Kind: "file"},
+		"llm.profiles.ears.api_key":   {Kind: "file"},
+		"llm.profiles.backup.api_key": {Kind: "env", EnvName: "SECRET_KEYS_TEST_KEY", Shared: true},
+		"llm.profiles.spare.api_key":  {Kind: "env", EnvName: "SECRET_KEYS_TEST_KEY", Shared: true},
+		"telegram.bot_token":          {Kind: "env", EnvName: "SECRET_KEYS_TEST_MISSING"},
+	}
+	if len(payload.Fields) != len(wantFields) {
+		t.Fatalf("fields = %+v", payload.Fields)
+	}
+	for path, want := range wantFields {
+		if got := payload.Fields[path]; got != want {
+			t.Errorf("fields[%s] = %+v, want %+v", path, got, want)
+		}
 	}
 	if !payload.Available || len(payload.Keys) != 3 {
 		t.Fatalf("keys = %+v, want 3", payload.Keys)

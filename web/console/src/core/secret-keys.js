@@ -63,3 +63,33 @@ export function pickerKeys(keys, currentPath = "") {
   const sameKind = (key) => (key?.used_by || []).some((path) => leaf(path) === wanted);
   return [...offered.filter(sameKind), ...offered.filter((key) => !sameKind(key))];
 }
+
+// Whether a field's value points at a key kept elsewhere: ${secret:...}, ${ENV} or ${aws-sm:...}.
+export function isSecretReference(value) {
+  return /^\$\{[^{}\s]+\}$/.test(String(value || "").trim());
+}
+
+// What to save for a field config.yaml points at a variable or AWS secret: a key picked for it
+// (a reference) over the reference it has.
+export function pickedReference(configRef, value) {
+  return isSecretReference(value) ? String(value).trim() : configRef;
+}
+
+// The variable a ${NAME} reference names; "" for anything else.
+export function referenceEnvName(value) {
+  const match = /^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$/.exec(String(value || "").trim());
+  return match ? match[1] : "";
+}
+
+// Whether the field at path may point at another key instead of its reference (GET /secrets/keys
+// fields): only while another field still uses that reference, so its last use is not dropped.
+// envName is the variable the field shows ("NAME" or "NAME=value"); one config.yaml does not name
+// is set by the environment itself, which config.yaml cannot change.
+export function canSwapReference(fields, path, envName = "") {
+  const entry = fields && path ? fields[path] : null;
+  if (!entry || entry.kind === "file" || entry.shared !== true) {
+    return false;
+  }
+  const variable = String(envName || "").split("=")[0].trim();
+  return variable === "" || entry.env_name === variable;
+}

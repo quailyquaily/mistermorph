@@ -37,6 +37,15 @@ type secretKeyPayload struct {
 	SavedIn     string   `json:"saved_in,omitempty"`
 }
 
+// secretFieldPayload is how one secret field holds its key, so the console can tell whether the
+// field may swap its reference for another key: only while another field still uses the same
+// reference, so the last use of a variable or a stored secret is not dropped from config.yaml.
+type secretFieldPayload struct {
+	Kind    string `json:"kind"`
+	EnvName string `json:"env_name,omitempty"`
+	Shared  bool   `json:"shared,omitempty"`
+}
+
 // Preference among the kinds when a key is kept more than one way: a reference beats plain text.
 var secretKindRank = map[string]int{"os": 0, "env": 1, "aws": 2, "file": 3}
 
@@ -48,7 +57,7 @@ func (s *server) handleSecretKeys(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	configPath := strings.TrimSpace(s.cfg.configPath)
 	if configPath == "" {
-		writeJSON(w, http.StatusOK, map[string]any{"available": false, "keys": []secretKeyPayload{}})
+		writeJSON(w, http.StatusOK, map[string]any{"available": false, "keys": []secretKeyPayload{}, "fields": map[string]secretFieldPayload{}})
 		return
 	}
 	raw, err := os.ReadFile(configPath)
@@ -75,7 +84,7 @@ func (s *server) handleSecretKeys(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 	keys := listSecretKeys(ctx, fields, secref.NewResolver(configutil.SecretRefSourceFromReader(reader)), saved)
-	writeJSON(w, http.StatusOK, map[string]any{"available": true, "keys": keys})
+	writeJSON(w, http.StatusOK, map[string]any{"available": true, "keys": keys, "fields": listSecretFields(fields)})
 }
 
 // syncSecretKeyLedger records the keys a settings save added, so the picker can say when each was
@@ -89,6 +98,27 @@ func (s *server) syncSecretKeyLedger(previous, next []byte) {
 // secretKeyLedgerPath is the ledger in the local runtime's state directory; none without one.
 func (s *server) secretKeyLedgerPath() string {
 	return secretkeys.LedgerPath(s.currentRuntimeConfigReader().GetString("file_state_dir"))
+}
+
+// listSecretFields says, for each secret field by path, where its key is kept and whether another
+// field uses the same reference.
+func listSecretFields(fields []secretkeys.Field) map[string]secretFieldPayload {
+	uses := map[string]int{}
+	for _, field := range fields {
+		uses[secretkeys.Identity(field.Raw)]++
+	}
+	out := make(map[string]secretFieldPayload, len(fields))
+	for _, field := range fields {
+		entry := secretFieldPayload{Kind: secretkeys.Kind(field.Raw)}
+		if entry.Kind != "file" {
+			entry.Shared = uses[secretkeys.Identity(field.Raw)] > 1
+		}
+		if ref, ok := secref.ParseSingleRef(strings.TrimSpace(field.Raw)); ok && ref.Kind == secref.RefKindEnv {
+			entry.EnvName = ref.EnvName
+		}
+		out[field.Path] = entry
+	}
+	return out
 }
 
 // listSecretKeys groups fields by the key they hold, newest first. Fields holding the same key

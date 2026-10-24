@@ -1,6 +1,6 @@
 import { computed, ref, watch } from "vue";
 
-import { currentLocale, translate } from "../core/context";
+import { translate } from "../core/context";
 import { pickerKeys, secretFieldLabel } from "../core/secret-keys";
 import { loadSecretInfo, loadSecretKeys, revealSecret } from "../core/secret-reveal";
 import "./SettingDialog.css";
@@ -15,7 +15,7 @@ const KIND_ICONS = {
 
 // The secret picker: a dialog listing the keys already in config.yaml, so a field can use one of
 // them instead of having the key pasted again. Each key shows a masked hint ("sk-proj-…a1b2"),
-// where it is kept, the fields that use it and when it was first saved. Picking a key emits its
+// where it is kept and the fields that use it. Picking a key emits its
 // reference (${secret:...}, ${ENV}, ...) to put in the field; a key kept in config.yaml as plain
 // text has no reference, so it is revealed (asking for the console password when there is one)
 // and its value is emitted instead.
@@ -41,13 +41,6 @@ const SecretKeyPicker = {
     const revealError = ref("");
 
     const offered = computed(() => pickerKeys(keys.value, props.currentPath));
-    const dateFormat = computed(() => {
-      try {
-        return new Intl.DateTimeFormat(currentLocale(), { dateStyle: "medium" });
-      } catch {
-        return null;
-      }
-    });
 
     async function load() {
       loading.value = true;
@@ -88,21 +81,21 @@ const SecretKeyPicker = {
       return t("secret_tag_" + key.kind);
     }
 
+    // What to recognize a key by: its masked hint, or for a plain-text key too short to show any of
+    // it, that it is kept as plain text.
+    function hintText(key) {
+      if (key.unavailable) {
+        return t("secret_picker_unavailable");
+      }
+      if (key.kind === "file" && (!key.hint || key.hint === "…")) {
+        return t("secret_picker_plain_hint");
+      }
+      return key.hint || "…";
+    }
+
     function usedByText(key) {
       const fields = (key.used_by || []).map((path) => secretFieldLabel(path, t));
       return t("secret_picker_used_by", { fields: fields.join(", ") });
-    }
-
-    function savedText(key) {
-      if (!key.saved_at) {
-        return "";
-      }
-      const date = new Date(key.saved_at);
-      if (Number.isNaN(date.getTime())) {
-        return "";
-      }
-      const when = dateFormat.value ? dateFormat.value.format(date) : date.toLocaleDateString();
-      return t("secret_picker_saved", { date: when, field: secretFieldLabel(key.saved_in, t) });
     }
 
     function pickedPayload(key, value) {
@@ -161,7 +154,7 @@ const SecretKeyPicker = {
 
     return {
       t, loading, loadError, offered, asking, password, revealing, revealError,
-      KIND_ICONS, kindLabel, usedByText, savedText, choose, reveal, cancelAsk, close, load,
+      KIND_ICONS, kindLabel, hintText, usedByText, choose, reveal, cancelAsk, close, load,
     };
   },
   template: `
@@ -184,15 +177,13 @@ const SecretKeyPicker = {
               @click="choose(key)"
             >
               <span class="secret-key-picker-row">
-                <span class="secret-key-picker-hint">{{ key.unavailable ? t("secret_picker_unavailable") : key.hint }}</span>
+                <span class="secret-key-picker-hint">{{ hintText(key) }}</span>
                 <span class="secret-key-picker-kind">
                   <component :is="KIND_ICONS[key.kind] || 'PhLockSimple'" class="secret-key-picker-icon" aria-hidden="true" />
                   <span>{{ kindLabel(key) }}</span>
                 </span>
               </span>
               <span class="secret-key-picker-meta">{{ usedByText(key) }}</span>
-              <span v-if="savedText(key)" class="secret-key-picker-meta">{{ savedText(key) }}</span>
-              <span v-if="key.kind === 'file' && !key.unavailable" class="secret-key-picker-meta is-file">{{ t("secret_picker_plain_note") }}</span>
             </button>
             <div v-if="asking === key.id" class="secret-key-picker-ask">
               <QInput

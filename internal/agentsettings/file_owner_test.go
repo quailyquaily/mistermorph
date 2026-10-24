@@ -1443,3 +1443,61 @@ func TestFileOwnerReusesAPickedSecretReference(t *testing.T) {
 		t.Fatalf("ledger contains a key:\n%s", ledger)
 	}
 }
+
+func TestFileOwnerSwapsAManagedReferenceForAPickedOne(t *testing.T) {
+	t.Setenv("SWAP_TEST_OLD_KEY", "old-secret")
+	t.Setenv("SWAP_TEST_NEW_KEY", "new-secret")
+	const config = `llm:
+  provider: openai
+  model: gpt-main
+  api_key: ${SWAP_TEST_OLD_KEY}
+  profiles:
+    chat:
+      provider: openai
+      model: gpt-chat
+      api_key: ${SWAP_TEST_OLD_KEY}
+`
+	cases := []struct {
+		name     string
+		override bool
+		update   string
+		wantErr  bool
+		want     string
+	}{
+		{name: "main model", update: `{"llm":{"api_key":"${SWAP_TEST_NEW_KEY}"}}`, want: "  api_key: ${SWAP_TEST_NEW_KEY}\n  profiles:"},
+		{name: "profile", update: `{"llm":{"profile":{"original_name":"chat","name":"chat","provider":"openai","model":"gpt-chat","api_key":"${SWAP_TEST_NEW_KEY}"}}}`, want: "      api_key: ${SWAP_TEST_NEW_KEY}"},
+		{name: "plain value", update: `{"llm":{"api_key":"literal-secret"}}`, wantErr: true},
+		{name: "set by the environment", override: true, update: `{"llm":{"api_key":"${SWAP_TEST_NEW_KEY}"}}`, wantErr: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.override {
+				t.Setenv("MISTER_MORPH_LLM_API_KEY", "from-environment")
+			}
+			configPath := filepath.Join(t.TempDir(), "config.yaml")
+			if err := os.WriteFile(configPath, []byte(config), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			owner := NewFileOwner(FileOwnerOptions{ConfigPath: configPath, Reader: readFileOwnerTestConfig(t, configPath)})
+			var update AgentSettingsUpdate
+			if err := json.Unmarshal([]byte(tc.update), &update); err != nil {
+				t.Fatal(err)
+			}
+			_, err := owner.Update(context.Background(), update)
+			if tc.wantErr {
+				var statusErr *StatusError
+				if !errors.As(err, &statusErr) || statusErr.Status != http.StatusConflict {
+					t.Fatalf("Update() error = %v, want 409 conflict", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Update() error = %v", err)
+			}
+			written, _ := os.ReadFile(configPath)
+			if !strings.Contains(string(written), tc.want) || strings.Count(string(written), "${SWAP_TEST_OLD_KEY}") != 1 {
+				t.Fatalf("written config:\n%s", written)
+			}
+		})
+	}
+}

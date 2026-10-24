@@ -151,16 +151,20 @@ var hintPrefix = regexp.MustCompile(`^[A-Za-z]{2,8}(?:[-_][A-Za-z]{2,8})*[-_]`)
 // password, shows none.
 const hintMinLength = 16
 
-// Hint masks a secret value into something to recognize it by: its readable prefix and last four
-// characters ("sk-proj-…a1b2"), or only "…" for a short value.
+// hintLeadLength is how many leading characters stand in for a key with no readable prefix.
+const hintLeadLength = 4
+
+// Hint masks a secret value into something to recognize it by: its readable prefix, or its first
+// four characters when it has none, and its last four ("sk-proj-…a1b2", "1234…Dsaw"); only "…"
+// for a short value.
 func Hint(value string) string {
 	runes := []rune(strings.TrimSpace(value))
 	if len(runes) < hintMinLength {
 		return "…"
 	}
 	prefix := hintPrefix.FindString(string(runes))
-	if len(prefix) > len(runes)-8 {
-		prefix = ""
+	if prefix == "" || len([]rune(prefix)) > len(runes)-8 {
+		prefix = string(runes[:hintLeadLength])
 	}
 	return prefix + "…" + string(runes[len(runes)-4:])
 }

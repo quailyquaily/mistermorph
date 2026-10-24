@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { pickerKeys, secretFieldLabel } from "./secret-keys.js";
+import {
+  canSwapReference,
+  isSecretReference,
+  pickedReference,
+  pickerKeys,
+  referenceEnvName,
+  secretFieldLabel,
+} from "./secret-keys.js";
 
 const MESSAGES = {
   secret_picker_main_model: "Main model",
@@ -45,4 +52,46 @@ test("pickerKeys leaves out the field's own key and offers the same kind of fiel
   // A new profile has no path yet: every key is offered, newest first.
   assert.deepEqual(pickerKeys(keys, "").map((key) => key.id), ["bot", "chat", "own", "backup"]);
   assert.deepEqual(pickerKeys(null, "llm.api_key"), []);
+});
+
+test("references are told apart from keys", () => {
+  const cases = [
+    { value: "${secret:b_LsX7HLzAR3OShG7YjRcw}", ref: true, env: "" },
+    { value: " ${OPENAI_API_KEY} ", ref: true, env: "OPENAI_API_KEY" },
+    { value: "${aws-sm:prod/llm#api_key}", ref: true, env: "" },
+    { value: "sk-proj-abc", ref: false, env: "" },
+    { value: "prefix-${OPENAI_API_KEY}", ref: false, env: "" },
+    { value: "", ref: false, env: "" },
+  ];
+  for (const { value, ref, env } of cases) {
+    assert.equal(isSecretReference(value), ref, value);
+    assert.equal(referenceEnvName(value), env, value);
+  }
+  assert.equal(pickedReference("${OLD}", "${secret:abc}"), "${secret:abc}");
+  assert.equal(pickedReference("${OLD}", ""), "${OLD}");
+  assert.equal(pickedReference("${OLD}", "typed-key"), "${OLD}");
+});
+
+test("canSwapReference lets a field leave a reference only while another field keeps it", () => {
+  const fields = {
+    "llm.api_key": { kind: "env", env_name: "OPENAI_API_KEY", shared: true },
+    "llm.profiles.chat.api_key": { kind: "env", env_name: "OPENAI_API_KEY", shared: true },
+    "llm.profiles.solo.api_key": { kind: "env", env_name: "SOLO_KEY" },
+    "llm.profiles.ears.api_key": { kind: "os", shared: true },
+    "llm.profiles.groq.api_key": { kind: "file" },
+  };
+  const cases = [
+    { path: "llm.api_key", envName: "OPENAI_API_KEY", want: true },
+    { path: "llm.profiles.chat.api_key", envName: "", want: true },
+    { path: "llm.profiles.solo.api_key", envName: "SOLO_KEY", want: false },
+    { path: "llm.profiles.ears.api_key", envName: "", want: true },
+    { path: "llm.profiles.groq.api_key", envName: "", want: false },
+    // Set by the environment (MISTER_MORPH_LLM_API_KEY), not by what config.yaml says.
+    { path: "llm.api_key", envName: "MISTER_MORPH_LLM_API_KEY", want: false },
+    { path: "llm.profiles.none.api_key", envName: "", want: false },
+  ];
+  for (const { path, envName, want } of cases) {
+    assert.equal(canSwapReference(fields, path, envName), want, `${path} ${envName}`);
+  }
+  assert.equal(canSwapReference(null, "llm.api_key"), false);
 });
