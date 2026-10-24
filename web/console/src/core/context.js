@@ -238,6 +238,7 @@ async function fetchEndpoints() {
         submit_endpoint_ref:
           item && typeof item.submit_endpoint_ref === "string" ? item.submit_endpoint_ref : "",
         avatar_url: item && typeof item.avatar_url === "string" ? item.avatar_url : "",
+        instance_id: item && typeof item.instance_id === "string" ? item.instance_id : "",
       }))
     : [];
   endpointState.items = items.filter((item) => item.endpoint_ref);

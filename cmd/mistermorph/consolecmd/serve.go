@@ -947,6 +947,7 @@ func (s *server) handleEndpoints(w http.ResponseWriter, r *http.Request) {
 		CanSubmit         bool
 		SubmitEndpointRef string
 		AvatarURL         string
+		InstanceID        string
 		HealthPending     bool
 	}
 
@@ -964,6 +965,7 @@ func (s *server) handleEndpoints(w http.ResponseWriter, r *http.Request) {
 			Mode:          state.Health.Mode,
 			CanSubmit:     state.Health.CanSubmit,
 			AvatarURL:     state.AvatarURL,
+			InstanceID:    state.Health.InstanceID,
 			HealthPending: !state.HealthReady,
 		}
 	}
@@ -981,6 +983,7 @@ func (s *server) handleEndpoints(w http.ResponseWriter, r *http.Request) {
 			"can_submit":          item.CanSubmit,
 			"submit_endpoint_ref": item.SubmitEndpointRef,
 			"avatar_url":          item.AvatarURL,
+			"instance_id":         item.InstanceID,
 			"health_pending":      item.HealthPending,
 		})
 	}

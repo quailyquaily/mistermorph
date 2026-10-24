@@ -163,7 +163,7 @@ func TestEndpointHealthAvatarSkipsPersonaDownload(t *testing.T) {
 	}
 }
 
-func TestHandleEndpointsIncludesPerEndpointAvatarURL(t *testing.T) {
+func TestHandleEndpointsIncludesPerEndpointAvatarAndInstanceID(t *testing.T) {
 	s := &server{
 		endpoints: []runtimeEndpoint{
 			{
@@ -171,7 +171,7 @@ func TestHandleEndpointsIncludesPerEndpointAvatarURL(t *testing.T) {
 				Name: "A",
 				URL:  "http://127.0.0.1:8787",
 				Client: &stubRuntimeEndpointClient{
-					health:         runtimeEndpointHealth{Mode: "telegram", AgentName: "A", CanSubmit: true},
+					health:         runtimeEndpointHealth{Mode: "telegram", AgentName: "A", CanSubmit: true, InstanceID: "inst_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
 					downloadStatus: http.StatusOK,
 					downloadHeader: http.Header{"Content-Type": []string{"image/webp"}},
 					downloadRaw:    []byte("avatar-a"),
@@ -202,8 +202,9 @@ func TestHandleEndpointsIncludesPerEndpointAvatarURL(t *testing.T) {
 	}
 	var payload struct {
 		Items []struct {
-			Ref       string `json:"endpoint_ref"`
-			AvatarURL string `json:"avatar_url"`
+			Ref        string `json:"endpoint_ref"`
+			AvatarURL  string `json:"avatar_url"`
+			InstanceID string `json:"instance_id"`
 		} `json:"items"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
@@ -217,6 +218,13 @@ func TestHandleEndpointsIncludesPerEndpointAvatarURL(t *testing.T) {
 	}
 	if payload.Items[1].Ref != "ep_b" || payload.Items[1].AvatarURL != "data:image/webp;base64,YXZhdGFyLWI=" {
 		t.Fatalf("item[1] = %+v", payload.Items[1])
+	}
+	// The Contacts page matches Agent Link contacts to endpoints by instance ID.
+	if got, want := payload.Items[0].InstanceID, "inst_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"; got != want {
+		t.Fatalf("item[0].instance_id = %q, want %q", got, want)
+	}
+	if got := payload.Items[1].InstanceID; got != "" {
+		t.Fatalf("item[1].instance_id = %q, want empty", got)
 	}
 }
 
