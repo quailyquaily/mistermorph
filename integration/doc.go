@@ -15,4 +15,10 @@
 //
 // Note: this package snapshots config from explicit Config overrides plus
 // integration defaults once during Runtime construction.
+//
+// Elevated commands (bash or powershell run as administrator after the user
+// approves a system dialog) are off by default. To allow them, call
+// RunAskpassIfRequested first thing in main and set
+// tools.bash.elevation.enabled (Linux, macOS) or
+// tools.powershell.elevation.enabled (Windows); see docs/integration.md.
 package integration

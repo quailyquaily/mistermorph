@@ -54,6 +54,7 @@ check `rt.Err()` before creating registries, engines, or bots.
 | Configured `image_generate` and `image_edit` tools | Yes | Yes | Yes |
 | MCP tools from `mcp.servers` | Yes | Yes | Yes |
 | Skills, Guard, prompt blocks, and LLM routes | Yes | Yes | Yes |
+| Elevated commands (`elevated` on `bash`/`powershell`; off by default, see [Elevated commands](#elevated-commands)) | Yes | Yes (the dialog shows on the bot's machine) | Yes (the dialog shows on the bot's machine) |
 
 The Integration package does not currently expose LINE or Lark bot constructors. Use the CLI for those channel runtimes.
 
@@ -83,27 +84,74 @@ With a `TopicID`, `RunTaskWithOptions` treats the topic as one conversation: the
 
 ## Elevated commands
 
-The `bash` and `powershell` tools can run a command as administrator after the user approves it in
-a system dialog on the machine (see [Elevated commands](tools.md#elevated-commands)). Embedded
-programs have it off by default. To turn it on:
+The `bash` tool (Linux, macOS) and the `powershell` tool (Windows) can run a command as root or
+administrator after the user approves it in a system dialog that shows the command. The model asks
+for it with `elevated: true`; it never writes `sudo` itself. How it works and why it is safe:
+[Elevated commands](tools.md#elevated-commands) and
+`docs/feat/feat_20261024_elevated_commands.md`.
+
+Embedded programs have it off by default. To turn it on:
 
 ```go
 func main() {
-	// First thing in main, before flags or anything else.
+	// First thing in main: before flags, logging, or anything that writes to stdout.
 	integration.RunAskpassIfRequested()
 
 	cfg := integration.DefaultConfig()
 	cfg.Set("tools.bash.elevation.enabled", true)       // Linux, macOS
 	cfg.Set("tools.powershell.elevation.enabled", true) // Windows
+	rt := integration.New(cfg)
 	// ...
 }
 ```
 
-On Linux and macOS an elevated command runs under `sudo -A`, and sudo starts the running
-executable, your program, as its askpass helper. `RunAskpassIfRequested` notices that, shows the
-approval dialog, prints the password for sudo and exits; in any other case it returns at once.
-Until it has run, elevated commands stay unavailable there and the tool says why, even with
-`tools.bash.elevation.enabled` set. Windows elevates through UAC and does not need it.
+### Why the call in `main`
+
+On Linux and macOS an elevated command runs under `sudo -k -A`. sudo reads the password from an
+askpass program, and the program it starts is the running executable: yours. When your program is
+started that way (`MISTERMORPH_ASKPASS=1`), `RunAskpassIfRequested` shows the approval dialog,
+writes the password to stdout for sudo, and exits with `os.Exit`. In any other start it returns at
+once. So:
+
+- Call it before anything writes to stdout: in askpass mode stdout carries the password to sudo.
+- Call it before setting anything up: in askpass mode it exits without running deferred functions.
+- Until it has run, elevated commands are unavailable on Linux and macOS, even with
+  `tools.bash.elevation.enabled` set: `bash` does not offer `elevated`, and a call that uses it gets
+  "this program does not show the approval dialog". Without the check, sudo would start a second
+  copy of your program instead of a dialog.
+
+Windows elevates through UAC, which does not use an askpass program, so it needs only the setting.
+
+### What the machine needs
+
+The dialog appears on the machine your program runs on, so someone has to be at it.
+
+| OS | Needs |
+| --- | --- |
+| Linux | `sudo`, a desktop session (`DISPLAY` or `WAYLAND_DISPLAY` in your program's environment), and a graphical pinentry, `zenity` or `kdialog` |
+| macOS | `sudo` and `osascript` (both standard) |
+| Windows | an interactive session (not a service) |
+
+Where these are missing, `elevated` is not offered and the tool says why. A Telegram or Slack bot can
+use elevated commands too, but the dialog shows on the bot's machine, not in the chat; nobody
+answering means it times out. Keep it off for headless services.
+
+### Settings
+
+| Key | Default | |
+| --- | --- | --- |
+| `tools.bash.elevation.enabled` | `false` (`true` in the CLI) | Linux, macOS |
+| `tools.bash.elevation.approval_timeout` | `2m` | how long the dialog waits, on top of the command's timeout |
+| `tools.bash.elevation.dialog` | automatic | a pinentry, `zenity` or `kdialog` binary; automatic is the system's pinentry, then pinentry-gnome3/qt/gtk, `zenity`, `kdialog` |
+| `tools.powershell.elevation.enabled` | `false` (`true` in the CLI) | Windows |
+| `tools.powershell.elevation.approval_timeout` | `2m` | |
+
+When the user declines, or nobody answers in time, the command does not run and the tool returns an
+error saying so; the model is told not to retry unless the user asks. Each elevated command is
+logged as `elevated_command_started` and `elevated_command_finished`, with the command and the
+outcome, through the process's default `slog` logger (`slog.Default()`), as other built-in tools
+log; set it in your program to collect them. The password never passes through your program's agent process, the model
+or the logs: it goes from the dialog to sudo.
 
 ## Prompt blocks
 
