@@ -1,5 +1,6 @@
 import { watch } from "vue";
 import { START_LOCATION, createRouter, createWebHistory } from "vue-router";
+import { installPageTransitions } from "../core/page-transitions";
 
 import {
   BASE_PATH,
@@ -382,6 +383,8 @@ router.beforeEach(async (to) => {
 router.afterEach((to) => {
   markRouteInteractive(to);
 });
+
+installPageTransitions(router, pagePath);
 
 // When the session ends, by its expiry time or by the console rejecting the token, go to the login
 // page and come back here after logging in. Without a password the login page logs in by itself.

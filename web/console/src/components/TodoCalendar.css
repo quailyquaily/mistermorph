@@ -65,8 +65,8 @@
   margin: 0;
   overflow: hidden;
   color: var(--text-0);
-  font-size: 1.125rem;
-  font-weight: 680;
+  font-size: var(--font-size-heading);
+  font-weight: 600;
   line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -140,7 +140,7 @@
   border-left: 1px solid var(--line-soft);
   color: var(--text-2);
   font-size: var(--font-size-meta);
-  font-weight: 650;
+  font-weight: 600;
   letter-spacing: 0.025em;
   text-transform: uppercase;
 }
@@ -214,7 +214,7 @@
   color: var(--text-1);
   font: inherit;
   font-size: var(--font-size-meta);
-  font-weight: 650;
+  font-weight: 600;
   cursor: pointer;
 }
 
@@ -327,7 +327,7 @@
 
 .todo-calendar-day .todo-calendar-entry-meta {
   overflow: visible;
-  font-size: 10.5px;
+  font-size: var(--font-size-label);
 }
 
 @container (max-width: 132px) {
@@ -342,7 +342,7 @@
 
 .todo-calendar-entry-title {
   color: inherit;
-  font-weight: 570;
+  font-weight: 500;
 }
 
 .todo-calendar-more {
@@ -475,7 +475,7 @@
   .todo-calendar-date {
     min-width: 23px;
     min-height: 23px;
-    font-size: 11px;
+    font-size: var(--font-size-label);
   }
 
   .todo-calendar-entry,
@@ -505,7 +505,7 @@
   .todo-calendar-mobile-total {
     margin-left: 2px;
     color: var(--text-2);
-    font-size: 9px;
+    font-size: var(--font-size-label);
     line-height: 1;
   }
 
@@ -531,7 +531,7 @@
   .todo-calendar-agenda-head strong {
     color: var(--text-0);
     font-size: var(--font-size-ui);
-    font-weight: 650;
+    font-weight: 600;
   }
 
   .todo-calendar-agenda > p {

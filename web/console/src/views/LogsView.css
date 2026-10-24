@@ -137,7 +137,7 @@
 
 .logs-filters-count {
   color: var(--logs-accent);
-  font: 600 11px/1 var(--font-mono);
+  font: 600 var(--font-size-label)/1 var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
 
@@ -330,7 +330,7 @@
   display: inline-flex;
   gap: 0.45em;
   color: var(--logs-muted);
-  font: 500 11px/1.5 var(--font-mono);
+  font: 500 var(--font-size-label)/1.5 var(--font-mono);
   letter-spacing: 0.06em;
 }
 
@@ -360,7 +360,7 @@
 
 .logs-entry.is-error .logs-level {
   color: var(--logs-error);
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .logs-entry.is-warn .logs-level::before,

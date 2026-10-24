@@ -139,7 +139,7 @@
   display: grid;
   place-items: center;
   color: var(--text-0);
-  font-size: 1.1rem;
+  font-size: var(--font-size-heading);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.01em;
@@ -155,7 +155,7 @@
 
 .context-view-big {
   color: var(--text-0);
-  font-size: 1.75rem;
+  font-size: var(--font-size-display);
   font-weight: 600;
   line-height: 1.1;
   font-variant-numeric: tabular-nums;
@@ -184,7 +184,7 @@
   border: 1px solid var(--context-pane-line);
   border-radius: 999px;
   color: var(--text-1);
-  font-size: 11px;
+  font-size: var(--font-size-label);
   line-height: 18px;
   white-space: nowrap;
 }
@@ -256,7 +256,7 @@
   border: 1px solid var(--context-pane-line);
   border-radius: 3px;
   color: var(--text-2);
-  font-size: 11px;
+  font-size: var(--font-size-label);
   font-weight: 400;
   line-height: 16px;
   white-space: nowrap;
@@ -544,7 +544,7 @@
 
 .is-phone .context-view-text pre {
   padding: 12px;
-  font-size: 12px;
+  font-size: var(--font-size-meta);
 }
 
 .context-view-chevron {

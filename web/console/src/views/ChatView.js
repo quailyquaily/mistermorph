@@ -1827,7 +1827,7 @@ const ChatView = {
       syncMobileTopicView({
         preferChat: Boolean(creatingTopic.value || normalizeTopicID(selectedTopicID.value)),
       });
-      focusComposerOnEnter();
+      focusComposerOnDesktop();
     }
 
     async function ensureComposerSkillsLoaded() {
@@ -2013,9 +2013,10 @@ const ChatView = {
       });
     }
 
-    // Entering a conversation focuses the composer on desktop only: on a phone, focus opens the
-    // keyboard over the conversation the user came to read.
-    function focusComposerOnEnter() {
+    // Entering a conversation, sending a message or stopping a reply focuses the composer on
+    // desktop only: on a phone, focus raises the keyboard over the conversation and the reply the
+    // user is about to read.
+    function focusComposerOnDesktop() {
       if (mobileMode.value) {
         return;
       }
@@ -3045,8 +3046,11 @@ const ChatView = {
       }
     }
 
+    // smooth: glide down to a message that just arrived (one sent), when it is near; a streaming
+    // reply, a load and a long way down still jump, so the view never lags the text.
     function scrollHistoryToBottom(options = {}) {
       const force = Boolean(options.force);
+      const smooth = Boolean(options.smooth);
       void nextTick(() => {
         const viewport = historyViewportElement();
         if (!viewport) {
@@ -3060,7 +3064,13 @@ const ChatView = {
           if (!node) {
             return;
           }
-          node.scrollTop = node.scrollHeight;
+          const distance = node.scrollHeight - node.clientHeight - node.scrollTop;
+          const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+          if (smooth && !reduced && distance > 0 && distance < node.clientHeight * 1.5) {
+            node.scrollTo({ top: node.scrollHeight, behavior: "smooth" });
+          } else {
+            node.scrollTop = node.scrollHeight;
+          }
           historyAutoStick.value = true;
         });
       });
@@ -4333,7 +4343,7 @@ const ChatView = {
       rememberTopicSelection(submitEndpointRef.value, normalized);
       syncMobileTopicView({ preferChat: true });
       void loadHistory().finally(() => {
-        focusComposerOnEnter();
+        focusComposerOnDesktop();
       });
       void syncChatRoute(normalized);
     }
@@ -4376,7 +4386,7 @@ const ChatView = {
         err.value = e?.message || t("msg_load_failed");
       } finally {
         sending.value = false;
-        focusComposer();
+        focusComposerOnDesktop();
       }
     }
 
@@ -4432,7 +4442,7 @@ const ChatView = {
         pendingSeed,
         presentation: isContextCompactCommand(task) ? "context-compact" : "",
       });
-      scrollHistoryToBottom();
+      scrollHistoryToBottom({ smooth: true });
 
       try {
         const submitted = await runtimeApiFetchForEndpoint(endpointRef, "/tasks", {
@@ -4543,7 +4553,7 @@ const ChatView = {
         suppressDraftPersistence.value = false;
         sending.value = false;
         syncComposer();
-        focusComposer();
+        focusComposerOnDesktop();
       }
     }
 
@@ -4574,7 +4584,7 @@ const ChatView = {
         preferredTopicID: routeTopicID.value,
         preserveSelection: Boolean(routeTopicID.value),
       }).finally(() => {
-        focusComposerOnEnter();
+        focusComposerOnDesktop();
       });
       void loadComposerLLMProfiles();
       syncComposer();
@@ -4628,7 +4638,7 @@ const ChatView = {
           preferredTopicID: routeTopicID.value,
           preserveSelection: Boolean(routeTopicID.value),
         }).finally(() => {
-          focusComposerOnEnter();
+          focusComposerOnDesktop();
         });
         void loadComposerLLMProfiles();
         syncComposer();
@@ -4679,7 +4689,7 @@ const ChatView = {
       () => routeTopicID.value,
       () => {
         void syncTopicFromRoute().finally(() => {
-          focusComposerOnEnter();
+          focusComposerOnDesktop();
         });
       }
     );
@@ -4687,7 +4697,7 @@ const ChatView = {
       () => showChatPane.value,
       (visible) => {
         if (visible) {
-          focusComposerOnEnter();
+          focusComposerOnDesktop();
         }
       }
     );
@@ -5020,7 +5030,7 @@ const ChatView = {
                 <PhPlus class="icon" />
               </QButton>
             </header>
-            <div :class="topicsLoading ? 'chat-topic-list workspace-sidebar-list is-busy' : 'chat-topic-list workspace-sidebar-list'">
+            <div v-sliding-selection v-scroll-edges :class="topicsLoading ? 'chat-topic-list workspace-sidebar-list is-busy' : 'chat-topic-list workspace-sidebar-list'">
               <p
                 v-if="topicSidebarView === 'tags' && knownTags.length === 0 && topicSidebarGroups.length > 0"
                 class="chat-topic-tags-hint"
@@ -5080,7 +5090,7 @@ const ChatView = {
                     aria-hidden="true"
                   ></span>
                   <span class="chat-topic-item-copy workspace-sidebar-item-copy">
-                    <span class="chat-topic-item-title workspace-sidebar-item-title">{{ topicTitle(topic) }}</span>
+                    <span v-fade-truncate class="chat-topic-item-title workspace-sidebar-item-title">{{ topicTitle(topic) }}</span>
                   </span>
                 </button>
                 </template>
@@ -5176,6 +5186,7 @@ const ChatView = {
             <template v-else>
               <div
                 ref="historyViewport"
+                v-scroll-edges
                 class="chat-history"
                 @pointerdown.passive="markHistoryPointerScrollIntent"
                 @scroll.passive="handleHistoryScroll"

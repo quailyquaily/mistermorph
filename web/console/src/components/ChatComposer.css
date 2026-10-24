@@ -517,14 +517,61 @@
   box-shadow: none !important;
 }
 
-.chat-composer-send:disabled {
+/* One button through three states, changing shape rather than swapping parts: nothing to send,
+   a hairline outline with a muted plane; ready, filled ink with the plane settling into place;
+   running, the same fill with the plane crossfading into the stop square. */
+.chat-composer-send {
+  transition:
+    background-color var(--motion-normal) var(--motion-ease),
+    border-color var(--motion-normal) var(--motion-ease),
+    color var(--motion-normal) var(--motion-ease) !important;
+}
+
+html body .q-button.chat-composer-send.is-empty,
+html body .q-button.chat-composer-send.is-empty:hover,
+html body .q-button.chat-composer-send.is-empty:disabled {
+  border: 1px solid var(--line-soft) !important;
+  background: transparent !important;
+  color: var(--text-2) !important;
+  opacity: 1;
+}
+
+.chat-composer-send:disabled:not(.is-empty) {
   opacity: 0.46;
 }
 
-.chat-composer-send .icon {
+.chat-composer-send-icons {
+  display: grid;
+  place-items: center;
+}
+
+.chat-composer-send-icons > .icon {
+  grid-area: 1 / 1;
   width: 14px;
   min-width: 14px;
   height: 14px;
+  transition:
+    opacity var(--motion-normal) var(--motion-ease),
+    transform var(--motion-slow) var(--motion-ease);
+}
+
+.chat-composer-send.is-empty .chat-composer-send-icon {
+  transform: translate(-1.5px, 1.5px);
+}
+
+.chat-composer-stop-icon {
+  opacity: 0;
+  transform: scale(0.6);
+}
+
+.chat-composer-send.is-stop .chat-composer-send-icon {
+  opacity: 0;
+  transform: scale(0.6);
+}
+
+.chat-composer-send.is-stop .chat-composer-stop-icon {
+  opacity: 1;
+  transform: none;
 }
 
 @keyframes chat-composer-bottom-sheet-in {
@@ -571,7 +618,7 @@
   margin: 0;
   padding-inline: 12px;
   color: var(--q-c-dark-3);
-  font: 400 11px/1.4 var(--font-mono);
+  font: 400 var(--font-size-label)/1.4 var(--font-mono);
   letter-spacing: 0.02em;
   text-align: center;
 }

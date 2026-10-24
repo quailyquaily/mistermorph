@@ -78,7 +78,7 @@ const AppNavList = {
     },
   },
   template: `
-    <div :class="['sidebar-nav', { 'mobile-nav-list': mobile, 'is-collapsed': collapsed }]">
+    <div v-sliding-selection="'.nav-link.is-active'" v-scroll-edges :class="['sidebar-nav', { 'mobile-nav-list': mobile, 'is-collapsed': collapsed }]">
       <template v-for="item in navItems" :key="keyPrefix + item.id">
         <QDivider v-if="item.separator" class="nav-divider" aria-hidden="true" />
         <template v-else>

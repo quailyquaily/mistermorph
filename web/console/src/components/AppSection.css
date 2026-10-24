@@ -1,11 +1,10 @@
-/* A titled block of a page. The head reads like an AppNotice: a square mark and a mono bracket
-   label in the section's tone, then the meta, actions at the far end, on a hairline rule.
+/* A titled block of a page. The head is a mono caps label, then the meta, actions at the far end,
+   on a hairline rule.
    Frames are hairlines only; no fills beyond the paper, no shadow, no rounding past 2px.
    The head is one row of a fixed height, whatever it holds. The meta keeps to one line; the right
    end is the action area, for plain buttons (plain xs, with or without an icon) and dropdown
    menus only, one control high. Filled or outlined buttons, tabs and filters belong in the body. */
 .app-section {
-  --app-section-tone: color-mix(in srgb, var(--accent-1) 68%, var(--text-0) 32%);
   --app-section-line: var(--line-soft);
   --app-section-gap: 16px;
   --app-section-padding: 16px;
@@ -39,27 +38,19 @@
   min-width: 0;
 }
 
-.app-section-mark {
-  flex: 0 0 auto;
-  width: var(--status-mark-size, 7px);
-  height: var(--status-mark-size, 7px);
-  border-radius: 1px;
-  background: var(--app-section-tone);
-}
-
 .app-section-label {
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
   min-width: 0;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--font-size-label);
   font-weight: 600;
   line-height: 1.4;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   white-space: nowrap;
-  color: var(--text-0);
+  color: var(--text-1);
 }
 
 /* A title that is a name the user gave (a profile, a server) keeps its own case. */
@@ -72,12 +63,6 @@
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.app-section-bracket {
-  font-weight: 400;
-  color: var(--app-section-tone);
-  opacity: 0.55;
 }
 
 /* The meta takes the rest of the row, on one line; what does not fit is cut, and the full text
@@ -93,7 +78,7 @@
   color: var(--text-2);
 }
 
-/* The lead: a back button before the mark, on the head's left edge. */
+/* The lead: a back button before the label, on the head's left edge. */
 .app-section-lead {
   flex: 0 0 auto;
   display: flex;

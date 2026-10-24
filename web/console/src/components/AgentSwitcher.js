@@ -56,7 +56,7 @@ const AgentOptionGroups = {
         @click="$emit('select', item)"
       >
         <img class="agent-switcher-avatar" :src="item.image" alt="" />
-        <span class="agent-switcher-name">{{ item.title }}</span>
+        <span v-fade-truncate class="agent-switcher-name">{{ item.title }}</span>
         <span class="agent-switcher-status-dot is-online" aria-hidden="true"></span>
       </button>
     </section>
@@ -78,7 +78,7 @@ const AgentOptionGroups = {
         disabled
       >
         <img class="agent-switcher-avatar" :src="item.image" alt="" />
-        <span class="agent-switcher-name">{{ item.title }}</span>
+        <span v-fade-truncate class="agent-switcher-name">{{ item.title }}</span>
         <span class="agent-switcher-status-dot is-offline" aria-hidden="true"></span>
       </button>
     </section>
@@ -325,7 +325,7 @@ const AgentSwitcher = {
       >
         <img v-if="triggerAvatar" class="agent-switcher-avatar" :src="triggerAvatar" alt="" />
         <span v-else class="agent-switcher-avatar is-empty" aria-hidden="true"></span>
-        <span class="agent-switcher-name">{{ triggerName }}</span>
+        <span v-fade-truncate class="agent-switcher-name">{{ triggerName }}</span>
         <PhCaretDown class="agent-switcher-chevron" />
       </button>
 
@@ -356,7 +356,7 @@ const AgentSwitcher = {
           @click="openOverview"
         >
           <PhNetwork class="agent-switcher-route-icon" />
-          <span class="agent-switcher-name">{{ t('nav_overview') }}</span>
+          <span v-fade-truncate class="agent-switcher-name">{{ t('nav_overview') }}</span>
           <PhCaretRight class="agent-switcher-route-arrow" />
         </button>
       </div>
@@ -394,7 +394,7 @@ const AgentSwitcher = {
             </div>
             <button type="button" class="agent-switcher-route" @click="openOverview">
               <PhNetwork class="agent-switcher-route-icon" />
-              <span class="agent-switcher-name">{{ t('nav_overview') }}</span>
+              <span v-fade-truncate class="agent-switcher-name">{{ t('nav_overview') }}</span>
               <PhCaretRight class="agent-switcher-route-arrow" />
             </button>
           </div>

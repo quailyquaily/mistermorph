@@ -10,11 +10,12 @@
     "test": "node --test src/core/*.test.mjs"
   },
   "dependencies": {
+    "@fontsource/ibm-plex-mono": "^5.3.0",
+    "@fontsource/ibm-plex-sans": "^5.3.0",
     "@phosphor-icons/vue": "^2.2.1",
     "overtype": "^2.3.5",
     "pinia": "^3.0.4",
     "qrcode": "^1.5.4",
-    "quail-ui": "0.9.10",
     "vue": "3.5.30",
     "vue-router": "4.5.1",
     "yaml": "^2.9.0"

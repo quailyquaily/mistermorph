@@ -162,17 +162,36 @@
 
 .contacts-kind-badge {
   position: absolute;
-  right: -2px;
-  bottom: -2px;
-  width: 16px;
-  height: 16px;
+  right: -1px;
+  bottom: -1px;
+  width: 14px;
+  height: 14px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 2px solid var(--surface-1);
   border-radius: 50%;
   background: var(--q-c-white);
   color: var(--q-c-blue);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--q-c-dark) 9%, transparent);
+}
+
+/* The avatar is cut away around the badge, 2px clear of it, instead of the badge wearing a ring:
+   the row behind (its hover or selection tint) shows through the gap. The badge's centre is
+   34px into the 40px avatar; its radius 7px, the cut 9px. A faint inner hairline keeps a pale
+   avatar from melting into the row. */
+.contacts-index-kind .contact-avatar {
+  position: relative;
+  -webkit-mask: radial-gradient(circle at 34px 34px, transparent 8.6px, #000 9.2px);
+  mask: radial-gradient(circle at 34px 34px, transparent 8.6px, #000 9.2px);
+}
+
+.contacts-index-kind .contact-avatar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--q-c-dark) 9%, transparent);
+  pointer-events: none;
 }
 
 .contacts-kind-badge.is-agent {
@@ -180,9 +199,9 @@
 }
 
 .contacts-kind-badge .icon {
-  width: 12px;
-  min-width: 12px;
-  height: 12px;
+  width: 10px;
+  min-width: 10px;
+  height: 10px;
 }
 
 .contacts-detail-meta {

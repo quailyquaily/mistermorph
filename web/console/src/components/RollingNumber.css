@@ -1,0 +1,54 @@
+/* A digit is a window onto a strip of 0 to 9. The window holds an invisible copy of its digit, so
+   it has the font's own width, line height and baseline and sits on the line like any other glyph;
+   the strip rides over it, and the window clips it with clip-path, which (unlike overflow) leaves
+   the baseline alone. The number's digits share one width (tabular figures), so wheels never
+   change width as they turn. */
+.rolling-number {
+  position: relative;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* The plain value: read by screen readers and copied with a selection, never seen. */
+.rolling-number-text {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  color: transparent;
+  user-select: text;
+}
+
+.rolling-number-glyphs {
+  pointer-events: none;
+  user-select: none;
+}
+
+.rolling-digit {
+  position: relative;
+  display: inline-block;
+  clip-path: inset(0 -0.2em);
+}
+
+.rolling-digit-ghost {
+  visibility: hidden;
+}
+
+.rolling-digit-strip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  transition: transform var(--motion-slow) cubic-bezier(0.2, 0.7, 0.1, 1);
+}
+
+.rolling-digit-strip > span {
+  display: block;
+  text-align: center;
+}
+
+/* Re-centring on the middle run after a turn: no motion, the same digit shows. */
+.rolling-digit-strip.is-still {
+  transition: none;
+}

@@ -3,9 +3,13 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { runtimeApiDownloadForEndpoint } from "../core/context";
 import "./ContactAvatar.css";
 
+// ContactAvatar shows a contact's avatar, or its initial. The avatar is the contact's own, stored by
+// its runtime and downloaded when the avatar scrolls into view, or imageURL, an image the Console
+// already holds (an Agent Link contact's agent avatar), which takes precedence.
 const ContactAvatar = {
   props: {
     item: { type: Object, required: true },
+    imageURL: { type: String, default: "" },
     name: { type: String, default: "" },
     endpointRef: { type: String, required: true },
     size: { type: String, default: "list" },
@@ -14,7 +18,9 @@ const ContactAvatar = {
     const root = ref(null);
     const source = ref("");
     const failed = ref(false);
-    const avatarPath = computed(() => String(props.item?.avatar_url || "").trim());
+    const directURL = computed(() => String(props.imageURL || "").trim());
+    const avatarPath = computed(() => (directURL.value ? "" : String(props.item?.avatar_url || "").trim()));
+    const shown = computed(() => (directURL.value ? (failed.value ? "" : directURL.value) : source.value));
     const initial = computed(() => Array.from(String(props.name || "").trim())[0]?.toUpperCase() || "?");
     const avatarClass = computed(() => `contact-avatar is-${props.size === "detail" ? "detail" : "list"}`);
 
@@ -93,7 +99,7 @@ const ContactAvatar = {
       reset();
     });
     watch(
-      () => [props.endpointRef, avatarPath.value],
+      () => [props.endpointRef, avatarPath.value, directURL.value],
       () => {
         reset();
         queueMicrotask(observe);
@@ -101,14 +107,14 @@ const ContactAvatar = {
       { flush: "post" }
     );
 
-    return { root, source, initial, avatarClass, handleImageError };
+    return { root, shown, initial, avatarClass, handleImageError };
   },
   template: `
     <span ref="root" :class="avatarClass" aria-hidden="true">
       <img
-        v-if="source"
+        v-if="shown"
         class="contact-avatar-image"
-        :src="source"
+        :src="shown"
         alt=""
         loading="lazy"
         decoding="async"

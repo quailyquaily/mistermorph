@@ -39,7 +39,7 @@
   align-items: center;
   gap: 8px;
   color: var(--text-2);
-  font: 500 10px/1 var(--font-mono);
+  font: 500 var(--font-size-label)/1 var(--font-mono);
   letter-spacing: 0.14em;
   text-transform: uppercase;
 }

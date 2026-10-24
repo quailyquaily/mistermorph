@@ -4,6 +4,7 @@ import { PhEye, PhEyeSlash, PhPlus } from "@phosphor-icons/vue";
 import "./OverviewView.css";
 import logoURL from "../assets/images/app_logo_current.svg";
 
+import RollingNumber from "../components/RollingNumber";
 import AppPage from "../components/AppPage";
 import { avatarAccentColor } from "../core/avatar-color";
 import { endpointDisplayItem, isConsoleLocalEndpoint, visibleEndpoints } from "../core/endpoints";
@@ -28,6 +29,7 @@ const CHANNEL_LOGOS = { telegram: telegramLogo, slack: slackLogo, line: lineLogo
 const OverviewView = {
   components: {
     AppPage,
+    RollingNumber,
     RouterLink,
     PhEye,
     PhEyeSlash,
@@ -378,22 +380,22 @@ const OverviewView = {
                     <span class="readout-row">
                       <span class="readout-key">{{ t('overview_readout_cost') }}</span>
                       <span class="readout-dots" aria-hidden="true"></span>
-                      <span class="readout-value" :title="readout.costExact">{{ readout.cost }}</span>
+                      <span class="readout-value" :title="readout.costExact"><RollingNumber :value="readout.cost" /></span>
                     </span>
                     <span class="readout-row">
                       <span class="readout-key">{{ t('overview_readout_requests') }}</span>
                       <span class="readout-dots" aria-hidden="true"></span>
-                      <span class="readout-value">{{ readout.requests }}</span>
+                      <span class="readout-value"><RollingNumber :value="readout.requests" /></span>
                     </span>
                     <span class="readout-row">
                       <span class="readout-key">{{ t('overview_readout_tokens') }}</span>
                       <span class="readout-dots" aria-hidden="true"></span>
-                      <span class="readout-value" :title="readout.tokensExact">{{ readout.tokens }}</span>
+                      <span class="readout-value" :title="readout.tokensExact"><RollingNumber :value="readout.tokens" /></span>
                     </span>
                     <span class="readout-row">
                       <span class="readout-key">{{ t('overview_readout_uptime_label') }}</span>
                       <span class="readout-dots" aria-hidden="true"></span>
-                      <span class="readout-value">{{ readout.uptime }}</span>
+                      <span class="readout-value"><RollingNumber :value="readout.uptime" /></span>
                     </span>
                   </span>
                   <span
@@ -410,7 +412,7 @@ const OverviewView = {
                     <span class="readout-segments" aria-hidden="true">
                       <i v-for="segment in meterSegments" :key="segment" :class="{ 'is-lit': segment <= readout.cache.lit }"></i>
                     </span>
-                    <span class="readout-value">{{ readout.cache.percent }}</span>
+                    <span class="readout-value"><RollingNumber :value="readout.cache.percent" /></span>
                   </span>
                 </span>
               </template>

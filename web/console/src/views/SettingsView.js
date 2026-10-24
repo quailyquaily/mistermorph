@@ -5945,7 +5945,7 @@ const SettingsView = {
               </span>
             </button>
           </div>
-          <div v-else class="settings-index-items workspace-sidebar-list">
+          <div v-else v-sliding-selection v-scroll-edges class="settings-index-items workspace-sidebar-list">
             <button
               v-for="item in settingsSections"
               :key="item.id"
@@ -5965,7 +5965,7 @@ const SettingsView = {
           </div>
         </aside>
 
-        <div v-if="showPanelPane && selectedSection" class="settings-panel-scroll">
+        <div v-if="showPanelPane && selectedSection" v-scroll-edges class="settings-panel-scroll">
           <div v-if="restartState.pending" class="settings-restart-banner" role="status">
             <PhArrowClockwise class="icon settings-restart-icon" :class="{ 'is-spinning': restartState.restarting }" />
             <p class="settings-restart-text">

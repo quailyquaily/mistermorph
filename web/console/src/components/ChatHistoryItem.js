@@ -560,7 +560,10 @@ const ChatHistoryItem = {
             :aria-label="copyLabel"
             @click.stop="emitCopy"
           >
-            <PhCopy class="icon" />
+            <PhCopy class="icon chat-history-copy-icon" />
+            <svg class="icon chat-history-copied-icon" viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M3.4 8.6 6.5 11.6 12.6 4.6" pathLength="1" />
+            </svg>
           </button>
         </div>
       </template>
@@ -593,7 +596,10 @@ const ChatHistoryItem = {
           :aria-label="copyLabel"
           @click.stop="emitCopy"
         >
-          <PhCopy class="icon" />
+          <PhCopy class="icon chat-history-copy-icon" />
+          <svg class="icon chat-history-copied-icon" viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M3.4 8.6 6.5 11.6 12.6 4.6" pathLength="1" />
+          </svg>
         </button>
       </template>
     </article>

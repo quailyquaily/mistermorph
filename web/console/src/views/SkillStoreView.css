@@ -409,7 +409,7 @@ html[data-macos26="true"] .store-panel-shell {
 
 /* SKILL.md as on the Skills page: fits the sheet, long lines wrap; code blocks are MarkdownContent's. */
 .store-doc .mmr-document h1 {
-  font-size: 1.35em;
+  font-size: var(--font-size-title);
 }
 
 .store-doc .mmr-root {

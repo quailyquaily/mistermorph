@@ -22,7 +22,7 @@
   margin: 0;
   color: var(--text-2);
 	font-size: var(--font-size-meta);
-	font-weight: 700;
+	font-weight: 600;
 	letter-spacing: 0.08em;
 	text-transform: uppercase;
 }

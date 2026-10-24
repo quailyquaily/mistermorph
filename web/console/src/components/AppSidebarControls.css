@@ -7,7 +7,7 @@
 }
 
 .sidebar .sidebar-controls {
-  border-bottom-color: color-mix(in srgb, var(--q-c-light-4) 42%, transparent);
+  border-bottom-color: var(--line-soft);
 }
 
 .agent-switcher.sidebar-controls {

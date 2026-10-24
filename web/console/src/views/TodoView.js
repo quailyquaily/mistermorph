@@ -2506,13 +2506,13 @@ const TodoView = {
             </QButton>
           </div>
 
-          <div class="todo-index-body">
+          <div v-scroll-edges class="todo-index-body">
             <div v-if="loading || heartbeatLoading" class="todo-index-loading" aria-hidden="true">
               <AppSkeleton variant="card" height="60px" :count="3" />
             </div>
 
             <section class="todo-index-group todo-heartbeat-group">
-              <div class="todo-index-items workspace-sidebar-list">
+              <div v-sliding-selection class="todo-index-items workspace-sidebar-list">
                 <button
                   type="button"
                   :class="heartbeatClass()"
@@ -2535,6 +2535,7 @@ const TodoView = {
             <section class="todo-index-group todo-task-group">
               <div
                 v-if="tasks.length > 0"
+                v-sliding-selection
                 class="todo-index-items workspace-sidebar-list"
                 :role="isMobile ? undefined : 'listbox'"
               >

@@ -179,15 +179,18 @@
 
 .workspace-sidebar-item:hover,
 .workspace-sidebar-item:focus-visible {
-  border-color: color-mix(in srgb, var(--q-c-blue) 20%, transparent);
-  background: var(--q-button-plain-hover-bg);
-  color: var(--q-button-plain-hover-text);
+  background: color-mix(in srgb, var(--accent-1) 6%, transparent);
+  color: var(--text-0);
   outline: none;
 }
 
+/* The selected item: a soft fill, one cue. The blue dot some lists add for it says the same. */
 .workspace-sidebar-item.is-active {
-  border-color: color-mix(in srgb, var(--q-c-blue) 30%, transparent);
-  background: color-mix(in srgb, var(--q-bg-paper) 90%, var(--q-button-primary-border) 10%);
+  background: color-mix(in srgb, var(--accent-1) 10%, transparent);
+}
+
+.workspace-sidebar-item.is-active .workspace-sidebar-item-marker .q-badge-primary {
+  display: none;
 }
 
 .workspace-sidebar-item-copy {

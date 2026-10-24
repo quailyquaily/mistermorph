@@ -1125,7 +1125,7 @@ const AuditView = {
           <div class="audit-load-progress" :aria-label="t('runtime_loading')" v-if="isTasksStreamSelected ? taskLoading : loading">
             <QProgress :infinite="true" />
           </div>
-          <div class="audit-ledger-content" :aria-busy="isTasksStreamSelected ? taskLoading : loading">
+          <div v-scroll-edges class="audit-ledger-content" :aria-busy="isTasksStreamSelected ? taskLoading : loading">
             <template v-if="!isTasksStreamSelected">
               <AppNotice v-if="err" type="error" :text="err" />
               <div v-if="updatedAt" class="audit-feed-meta">

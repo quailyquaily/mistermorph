@@ -4,12 +4,12 @@ import "./AppSection.css";
 
 const VARIANTS = new Set(["plain", "boxed", "pane"]);
 
-// A titled block of a page, in the console's own terms, in place of Quail's QCard. The head reads
-// like an AppNotice: a square mark and a mono bracket label, then the meta, actions at the far end,
-// all on a hairline rule, one fixed-height row. The body is the default slot. The actions slot is
+// A titled block of a page, in the console's own terms, in place of Quail's QCard. The head is a
+// mono caps label, then the meta, actions at the far end, all on a hairline rule, one fixed-height
+// row. The body is the default slot. The actions slot is
 // the head's right end, for plain buttons ("plain xs") and plain dropdown menus (variant="plain")
 // only; anything else (filled or outlined buttons, tabs, filters) goes in the body. The lead slot,
-// before the mark, holds one plain back button for a pane that replaces its list on a phone. In
+// before the label, holds one plain back button for a pane that replaces its list on a phone. In
 // development a stray control in either is reported on the console.
 // - plain: no frame; the head's rule is the only line. For settings groups.
 // - boxed: a hairline frame; the head is its top strip. For things that stand on their own.
@@ -57,9 +57,8 @@ const AppSection = {
           <slot name="lead" />
         </div>
         <component :is="headingTag" v-if="title" class="app-section-title" :title="title">
-          <span class="app-section-mark" aria-hidden="true"></span>
           <span class="app-section-label">
-            <span class="app-section-bracket" aria-hidden="true">[</span><span class="app-section-label-text">{{ title }}</span><span class="app-section-bracket" aria-hidden="true">]</span>
+            <span class="app-section-label-text">{{ title }}</span>
           </span>
         </component>
         <div v-if="hasMeta()" class="app-section-meta" :title="meta || undefined">

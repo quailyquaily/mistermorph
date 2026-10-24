@@ -884,8 +884,15 @@ export default {
       const minHeight = lineHeight + paddingTop + paddingBottom + borderTop + borderBottom;
       const maxHeight = lineHeight * maxRows + paddingTop + paddingBottom + borderTop + borderBottom;
 
+      // Measured at no height with motion off, then put back, so the field eases from the height it
+      // had to the new one instead of from nothing.
+      const previousHeight = field.style.height;
+      field.style.transition = "none";
       field.style.height = "0px";
       const scrollHeight = field.scrollHeight;
+      field.style.height = previousHeight;
+      void field.offsetHeight;
+      field.style.transition = "";
       const contentHeight = Math.max(0, scrollHeight - paddingTop - paddingBottom);
       const visualRows = Math.max(1, Math.round(contentHeight / lineHeight));
       return {
@@ -1187,7 +1194,6 @@ export default {
               :title="addLabel"
               hideSelected
               hideActionLabel
-              :useFilter="true"
               useDialog="never"
               scrollHeight="min(42dvh, 320px)"
               variant="plain"
@@ -1286,7 +1292,6 @@ export default {
               </div>
             </template>
             <QButton
-            <QButton
               v-if="voiceAvailable"
               :class="['plain sm icon chat-composer-voice', { 'is-recording': voiceState === 'recording' }]"
               :loading="voiceState === 'transcribing'"
@@ -1299,15 +1304,18 @@ export default {
               <PhStop v-if="voiceState === 'recording'" class="icon" />
               <PhMicrophone v-else class="icon" />
             </QButton>
-              class="primary sm icon chat-composer-send"
+            <QButton
+              :class="['primary sm icon chat-composer-send', { 'is-empty': sendDisabled && !stopMode && !sending, 'is-stop': stopMode }]"
               :loading="sending"
               :disabled="sendDisabled"
               :title="sendLabel"
               :aria-label="sendLabel"
               @click="stopMode ? $emit('stop') : $emit('submit')"
             >
-              <PhStop v-if="stopMode" class="icon chat-composer-stop-icon" />
-              <PhPaperPlaneTilt v-else class="icon" />
+              <span class="chat-composer-send-icons" aria-hidden="true">
+                <PhPaperPlaneTilt class="icon chat-composer-send-icon" />
+                <PhStop class="icon chat-composer-stop-icon" />
+              </span>
             </QButton>
           </div>
         </div>
@@ -1317,7 +1325,6 @@ export default {
         v-if="showAddActions && addUsesDialog"
         v-model="addDialogOpen"
         :items="addActionItems"
-        :useFilter="true"
         scrollHeight="min(42dvh, 320px)"
         @change="selectAddAction"
       />

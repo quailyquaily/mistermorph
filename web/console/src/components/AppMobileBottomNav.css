@@ -210,8 +210,10 @@
   background: transparent;
 }
 
+/* The Overview row keeps the agents' columns: its icon centred where their avatars are, its label
+   starting where their names do. */
 .mobile-agent-switcher-route {
-  grid-template-columns: 16px minmax(0, 1fr) 14px;
+  grid-template-columns: 24px minmax(0, 1fr) 14px;
   border: 0;
   border-top: 1px solid color-mix(in srgb, var(--line-soft) 72%, transparent);
 }
@@ -229,6 +231,12 @@
   display: block;
   width: 14px;
   height: 14px;
+}
+
+.mobile-agent-switcher-route-icon {
+  justify-self: center;
+  width: 16px;
+  height: 16px;
 }
 
 .mobile-agent-switcher-empty {

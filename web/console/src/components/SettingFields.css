@@ -78,7 +78,7 @@
 
 .sf-input.is-mono {
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: var(--font-size-ui);
 }
 
 .sf-input.is-number {
@@ -234,7 +234,7 @@
 .sf-option-hint {
   color: var(--text-2);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--font-size-meta);
   font-weight: 400;
 }
 
@@ -343,7 +343,7 @@
   min-width: 3.5em;
   color: var(--text-0);
   font-family: var(--font-mono);
-  font-size: 15px;
+  font-size: var(--font-size-body);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   text-align: right;
@@ -352,7 +352,7 @@
 .sf-ratio-value small {
   margin-left: 1px;
   color: var(--text-2);
-  font-size: 12px;
+  font-size: var(--font-size-meta);
   font-weight: 400;
 }
 

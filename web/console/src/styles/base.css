@@ -13,13 +13,22 @@
   --accent-1: var(--q-c-blue);
   --ok: var(--q-c-green);
   --danger: var(--q-c-red);
-  --font-ui: var(--q-font-ui);
-  /* Titles and figures: IBM Plex Sans (loaded in index.html), over the UI font for scripts it lacks. */
-  --font-title: "IBM Plex Sans", var(--font-ui);
-  --font-mono: var(--q-font-mono);
+  /* Two families only, bundled with the app (main.js imports them): IBM Plex Sans for all text and
+     IBM Plex Mono for all mono. Plex has no CJK, so Chinese and Japanese fall back to the system's
+     own faces, Japanese ones first on a Japanese page and Chinese ones first otherwise, since the
+     same characters are drawn differently in each. --font-title is the same face, kept as a name. */
+  --font-cjk: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", "Noto Sans CJK SC",
+    "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Noto Sans JP", "Noto Sans CJK JP";
+  --font-ui: "IBM Plex Sans", var(--font-cjk), system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-title: var(--font-ui);
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, var(--font-cjk), monospace;
+  /* One type scale: mono caps labels, meta, UI, body, a heading step, titles, display figures and
+     the Usage hero. Weights are 400, 500 and 600 only. */
+  --font-size-label: 0.6875rem;
   --font-size-meta: 0.75rem;
   --font-size-ui: 0.875rem;
   --font-size-body: 1rem;
+  --font-size-heading: 1.125rem;
   --font-size-title: 1.25rem;
   --font-size-display: 2rem;
   --font-size-hero: clamp(2.5rem, 2rem + 2vw, 4rem);
@@ -85,6 +94,12 @@ body {
   --accent-1: var(--q-c-blue);
   --ok: var(--q-c-green);
   --danger: var(--q-c-red);
+  /* The ui-kit components read their own font tokens; they take ours. */
+  --q-font-ui: var(--font-ui);
+  --q-font-sans: var(--font-ui);
+  --q-font-mono: var(--font-mono);
+  --q-font-serif: var(--font-ui);
+  --q-card-title-font-family: var(--font-ui);
 
   /* Status marks: square, filled when on, hollow when off. Blue is reserved for selection. */
   --status-mark-size: 7px;
@@ -121,6 +136,65 @@ body {
   font-family: var(--font-ui);
   font-size: var(--font-size-body);
   line-height: 1.5;
+  /* Interface digits share one width, so columns line up and live numbers do not twitch as they
+     change. Prose (replies, documents) keeps its own proportional digits, below. */
+  font-variant-numeric: tabular-nums;
+  /* CJK: no line starts with closing punctuation or a small kana. */
+  line-break: strict;
+}
+
+.mmr-document,
+.chat-markdown-content {
+  font-variant-numeric: proportional-nums;
+}
+
+/* The Markdown renderer sets its own font tokens inline; replies use the console's, with its CJK
+   fallbacks. */
+.mmr-document {
+  --mmr-font-body: var(--font-ui) !important;
+  --mmr-font-mono: var(--font-mono) !important;
+}
+
+/* Replies on the same scale: headings step down from the title, inline code sits a size below its
+   text, and bold is the scale's semibold. Scoped to the host, as the renderer's stylesheet loads
+   after this one. */
+.chat-markdown-content .mmr-document h1 {
+  font-size: var(--font-size-title);
+}
+
+.chat-markdown-content .mmr-document h2 {
+  font-size: var(--font-size-heading);
+}
+
+.chat-markdown-content .mmr-document :is(h3, h4, h5, h6) {
+  font-size: var(--font-size-body);
+}
+
+.chat-markdown-content .mmr-document :is(h1, h2, h3, h4, h5, h6, strong, b, th) {
+  font-weight: 600;
+}
+
+.chat-markdown-content .mmr-document :not(pre) > code {
+  font-size: 0.875em;
+}
+
+:lang(ja) {
+  --font-cjk: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Noto Sans JP", "Noto Sans CJK JP",
+    "PingFang SC", "Microsoft YaHei", "Noto Sans SC";
+}
+
+/* Line breaks: paragraphs avoid a last line of one word; titles and empty states break into even
+   lines. Japanese titles break between phrases, not inside words. */
+:where(p, li, dd, blockquote) {
+  text-wrap: pretty;
+}
+
+:where(h1, h2, h3, h4, .app-dialog-title, [class*="empty-title"], [class*="empty-copy"], [class*="placeholder-title"]) {
+  text-wrap: balance;
+}
+
+:lang(ja) :where(h1, h2, h3, h4, [class*="title"]) {
+  word-break: auto-phrase;
 }
 
 :where(button, input, textarea, select, label) {
@@ -176,6 +250,10 @@ body[data-theme] .q-badge.q-badge-dot.q-badge-default {
 body[data-theme="morph"],
 body[data-theme="warm"] {
   --q-divider-label-font-size: var(--font-size-meta);
+  /* The paper keeps its 100px grid, fainter, without the 20px minor lines: it is texture, not a
+     layer that competes with the content. */
+  --morph-bg-grid-major-line: rgba(26, 75, 140, 0.028);
+  --morph-bg-grid-minor-line: transparent;
 }
 
 body[data-theme] .q-dialog-header .q-dialog-title {
@@ -208,9 +286,37 @@ html :is(
   cursor: default !important;
 }
 
-html[data-runtime="desktop"] :focus-visible {
-  outline: 1px solid color-mix(in srgb, var(--accent-1) 42%, transparent);
+/* Focus: one ring everywhere, the same weight and gap, following each element's corners. Rows in
+   scrolling lists draw it inside their edge, where a list cannot clip it. Text fields keep their
+   own focused border instead. */
+:focus-visible {
+  outline: 1.5px solid color-mix(in srgb, var(--accent-1) 55%, transparent);
   outline-offset: 2px;
+}
+
+html :is(.workspace-sidebar-item, .nav-link, .agent-switcher-option, .chat-history-file, .chat-question-option):focus-visible {
+  outline-offset: -1.5px;
+}
+
+html :is(input, textarea, select, [contenteditable="true"]):focus-visible {
+  outline: none;
+}
+
+/* Hover: a row lights up after a short pause and goes out at once, so sweeping the pointer across
+   a list does not flash every row it passes. A touch screen has no hover; a tap shows the press
+   state only. */
+html :is(.workspace-sidebar-item, .nav-link, .agent-switcher-option, .chat-history-file):hover {
+  transition-delay: 60ms;
+}
+
+html .chat-question-option:hover::before {
+  transition-delay: 60ms;
+}
+
+@media (hover: none) {
+  html :is(.workspace-sidebar-item, .nav-link, .agent-switcher-option, .chat-history-file):hover:not(.is-active) {
+    background-color: transparent !important;
+  }
 }
 
 #app {
@@ -360,6 +466,13 @@ body .q-dialog-mask.v-leave-to .q-dialog {
   scale: 0.98;
 }
 
+/* Opened from a control (core/dialog-origin.js): it grows out of the control and shrinks back
+   into it, from further away. */
+body .q-dialog-mask.v-enter-from .q-dialog.is-from-source,
+body .q-dialog-mask.v-leave-to .q-dialog.is-from-source {
+  scale: 0.9;
+}
+
 /* Dropdown menus drop in from their trigger. */
 body .q-menu {
   transform-origin: top center;
@@ -372,3 +485,236 @@ body .q-menu {
     translate: 0 -4px;
   }
 }
+
+/* v-sliding-selection (core/sliding-selection.js): the list's one selection highlight, at the back
+   of the list, gliding between items. The items' own selected fill gives way to it. */
+.has-sliding-selection {
+  position: relative;
+  isolation: isolate;
+}
+
+/* It glides by its transform alone (a FLIP run by the directive), which the compositor animates;
+   its box is set at once. */
+.sliding-selection {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: -1;
+  background: color-mix(in srgb, var(--accent-1) 10%, transparent);
+  opacity: 0;
+  pointer-events: none;
+  transform-origin: 0 0;
+  will-change: transform;
+  transition: opacity var(--motion-fast) var(--motion-ease);
+}
+
+.sliding-selection.is-shown {
+  opacity: 1;
+}
+
+html .has-sliding-selection :is(.workspace-sidebar-item, .nav-link).is-active {
+  background: transparent !important;
+}
+
+/* Hovering the selected item deepens the highlight, as hovering it did before. */
+html .has-sliding-selection:has(:is(.workspace-sidebar-item, .nav-link).is-active:hover) > .sliding-selection {
+  background: color-mix(in srgb, var(--accent-1) 13%, transparent);
+}
+
+/* v-scroll-edges (core/scroll-edges.js): an edge that hides content fades it out, so the list
+   reads as going on rather than cut off; an edge with nothing past it stays sharp. The content
+   itself fades (a mask), so whatever lies behind it, paper or a tint, shows through. The fade
+   comes and goes at once: animating a mask repaints the content on every frame, and text renders
+   a touch heavier while it does, a flicker as scrolling starts. */
+.has-scroll-edges {
+  --scroll-fade-start: 0px;
+  --scroll-fade-end: 0px;
+  --scroll-fade: 22px;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 var(--scroll-fade-start),
+    #000 calc(100% - var(--scroll-fade-end)),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 var(--scroll-fade-start),
+    #000 calc(100% - var(--scroll-fade-end)),
+    transparent 100%
+  );
+}
+
+.has-scroll-edges.is-scrolled {
+  --scroll-fade-start: var(--scroll-fade);
+}
+
+.has-scroll-edges.has-more-end {
+  --scroll-fade-end: var(--scroll-fade);
+}
+
+/* A list under a pinned head scrolls beneath it: the head's hairline marks the edge, and only
+   once something has gone under it; at rest the head sits flush with the list. */
+.workspace-sidebar-head + .has-scroll-edges.is-scrolled {
+  --scroll-fade-start: 0px;
+}
+
+html .workspace-sidebar-head {
+  transition: box-shadow var(--motion-normal) var(--motion-ease);
+}
+
+html .workspace-sidebar-head:has(+ .has-scroll-edges:not(.is-scrolled)) {
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+/* v-fade-truncate (core/fade-truncate.js): a one-line text that does not fit fades out over its
+   last letters, instead of ending in "…". The text itself fades, so a row's hover or selection
+   tint shows through it unchanged. */
+html .fade-truncate.is-truncated {
+  text-overflow: clip;
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 2.4em), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 2.4em), transparent);
+}
+
+/* Selection and caret: selected text takes a soft ink blue, and the caret in fields the accent,
+   in place of the browser's own. */
+::selection {
+  background: color-mix(in srgb, var(--accent-1) 22%, transparent);
+  color: inherit;
+}
+
+:where(input, textarea, [contenteditable="true"]) {
+  caret-color: var(--accent-1);
+}
+
+/* Scrollbars: thin hairline thumbs that show while the pointer is over the area or the area holds
+   focus, and rest invisible otherwise. The gutter keeps its width, so nothing shifts when the
+   thumb appears. */
+html * {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+html *:hover,
+html *:focus-within {
+  scrollbar-color: color-mix(in srgb, var(--q-c-dark-4) 70%, transparent) transparent;
+}
+
+@media (hover: none) {
+  html * {
+    scrollbar-color: auto;
+  }
+}
+
+/* Switches: the paper's own control, not a bevelled block. A small hairline track, empty when off
+   and ink when on; a square knob on a hairline that slides across and settles with a slight give.
+   Quail's default theme sets its look with !important, so these rules do too, under body. */
+body[data-theme] .q-switch:not(.theme-clear-sky):not(.theme-plastic) {
+  --switch-w: 34px;
+  --switch-h: 20px;
+}
+
+body[data-theme] .q-switch:not(.theme-clear-sky):not(.theme-plastic) .q-switch-inner {
+  border-radius: 2px !important;
+  background: transparent !important;
+  box-shadow: inset 0 0 0 1px var(--line) !important;
+  transition:
+    background-color var(--motion-normal) var(--motion-ease),
+    box-shadow var(--motion-normal) var(--motion-ease) !important;
+}
+
+body[data-theme] .q-switch:not(.theme-clear-sky):not(.theme-plastic) .q-switch-inner .q-switch-handle {
+  top: 3px;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 1px !important;
+  background: var(--q-bg-white) !important;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--q-c-dark) 22%, transparent),
+    0 1px 1px color-mix(in srgb, var(--q-c-dark) 10%, transparent) !important;
+  transition: transform var(--motion-slow) cubic-bezier(0.3, 1.35, 0.5, 1) !important;
+}
+
+body[data-theme] .q-switch:not(.theme-clear-sky):not(.theme-plastic) .q-switch-checkbox:checked + .q-switch-inner {
+  background: var(--q-c-secondary) !important;
+  box-shadow: inset 0 0 0 1px var(--q-c-secondary) !important;
+}
+
+body[data-theme] .q-switch:not(.theme-clear-sky):not(.theme-plastic) .q-switch-checkbox:checked + .q-switch-inner .q-switch-handle {
+  transform: translate(14px) !important;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--q-c-secondary) 60%, transparent) !important;
+}
+
+body[data-theme] .q-switch:not(.theme-clear-sky):not(.theme-plastic):hover .q-switch-inner {
+  box-shadow: inset 0 0 0 1px var(--text-2) !important;
+}
+
+body[data-theme] .q-switch:not(.theme-clear-sky):not(.theme-plastic):hover .q-switch-checkbox:checked + .q-switch-inner {
+  box-shadow: inset 0 0 0 1px var(--q-c-secondary) !important;
+}
+
+body[data-theme] .q-switch:focus-within .q-switch-inner {
+  outline: 1.5px solid color-mix(in srgb, var(--accent-1) 55%, transparent) !important;
+  outline-offset: 2px !important;
+}
+
+/* Tooltips (core/tooltips.js): a small paper card in place of the browser's grey box, rising into
+   place after a short pause; a shortcut at its end is set in key caps. */
+.app-tooltip {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 2000;
+  display: none;
+  max-width: min(300px, calc(100vw - 16px));
+  padding: 4px 8px 5px;
+  border: 1px solid var(--line-soft);
+  border-radius: 2px;
+  background: var(--q-bg-white);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--q-c-dark) 10%, transparent);
+  color: var(--text-0);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-meta);
+  line-height: 1.45;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+  opacity: 0;
+  translate: 0 3px;
+  transition:
+    opacity var(--motion-fast) var(--motion-ease),
+    translate var(--motion-normal) var(--motion-ease);
+}
+
+.app-tooltip.is-below {
+  translate: 0 -3px;
+}
+
+.app-tooltip.is-shown {
+  opacity: 1;
+  translate: 0 0;
+}
+
+.app-tooltip-keys {
+  display: inline-flex;
+  gap: 3px;
+  margin-left: 8px;
+  vertical-align: 1px;
+}
+
+.app-tooltip-keys kbd {
+  min-width: 16px;
+  padding: 0 4px;
+  border: 1px solid var(--line-soft);
+  border-bottom-width: 2px;
+  border-radius: 2px;
+  background: var(--bg-1);
+  color: var(--text-1);
+  font: 500 var(--font-size-label)/14px var(--font-mono);
+  text-align: center;
+}
+

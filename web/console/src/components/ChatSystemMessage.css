@@ -18,7 +18,7 @@
 }
 
 .chat-system-message-marker {
-  font-size: 16px;
+  font-size: var(--font-size-body);
   line-height: 1.25;
 }
 

@@ -284,7 +284,7 @@
   border-radius: 2px;
   background: color-mix(in srgb, var(--q-c-blue) 12%, transparent);
   color: var(--q-c-blue);
-  font: 500 10px/1.6 var(--font-mono);
+  font: 500 var(--font-size-label)/1.6 var(--font-mono);
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -340,7 +340,7 @@
   border-radius: 2px;
   background: var(--q-bg-white, var(--bg-1));
   color: var(--text-1);
-  font: 500 11px/1.6 var(--font-mono);
+  font: 500 var(--font-size-label)/1.6 var(--font-mono);
 }
 
 .model-routes-order {
@@ -352,7 +352,7 @@
   border-radius: 50%;
   background: var(--q-bg-white, var(--bg-1));
   color: var(--text-1);
-  font: 600 10px/1 var(--font-mono);
+  font: 600 var(--font-size-label)/1 var(--font-mono);
 }
 
 .model-routes-order.is-active {
@@ -374,7 +374,7 @@
   border-radius: 2px;
   background: var(--q-bg-white, var(--bg-1));
   color: var(--q-c-blue);
-  font: 600 11px/1 var(--font-mono);
+  font: 600 var(--font-size-label)/1 var(--font-mono);
 }
 
 /* The in-node stepper is for phones, where the gap between the columns is too narrow. */
@@ -443,7 +443,7 @@
 
 .model-routes-inspector-title {
   font-size: var(--font-size-ui);
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .model-routes-inspector .model-route-problems,
@@ -456,7 +456,7 @@
   border: 1px solid var(--line);
   border-radius: 2px;
   color: var(--text-2);
-  font: 500 10px/1.5 var(--font-mono);
+  font: 500 var(--font-size-label)/1.5 var(--font-mono);
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }

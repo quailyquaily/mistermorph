@@ -50,7 +50,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: var(--font-size-ui);
-  font-weight: 520;
+  font-weight: 500;
   line-height: 1.2;
   text-align: left;
 }
@@ -64,32 +64,37 @@
 }
 
 .sidebar .nav-divider {
-  margin: 12px 12px;
-  --q-divider-border-color: color-mix(in srgb, var(--q-c-light-4) 42%, transparent);
+  margin: 12px 14px;
+  --q-divider-border-color: var(--line-soft);
 }
 
 .sidebar .nav-link {
-  color: color-mix(in srgb, var(--q-c-light) 88%, transparent) !important;
+  color: var(--text-1) !important;
+}
+
+.sidebar .nav-link .nav-icon {
+  color: var(--text-2);
 }
 
 .sidebar .nav-link:hover,
 .sidebar .nav-link:focus-visible {
-  color: var(--q-c-light) !important;
-  background: color-mix(in srgb, var(--q-c-light) 8%, transparent) !important;
+  color: var(--text-0) !important;
+  background: color-mix(in srgb, var(--accent-1) 6%, transparent) !important;
 }
 
-.sidebar .nav-link .nav-icon {
-  color: currentColor;
-}
-
+/* The page you are on: ink text on a soft fill, one cue. */
 .sidebar .nav-link.is-active {
-  color: var(--q-c-light) !important;
-  background: color-mix(in srgb, var(--q-c-light) 16%, transparent) !important;
+  color: var(--text-0) !important;
+  background: color-mix(in srgb, var(--accent-1) 10%, transparent) !important;
+}
+
+.sidebar .nav-link.is-active .nav-icon {
+  color: var(--text-0);
 }
 
 .sidebar .nav-link.is-active:hover,
 .sidebar .nav-link.is-active:focus-visible {
-  background: color-mix(in srgb, var(--q-c-light) 20%, transparent) !important;
+  background: color-mix(in srgb, var(--accent-1) 12%, transparent) !important;
 }
 
 .mobile-nav-list {

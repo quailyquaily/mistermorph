@@ -369,16 +369,17 @@
   margin: 0;
   padding: 10px 14px 4px;
   color: var(--q-c-dark-3);
-  font: 500 11px/1.4 var(--font-mono);
+  font: 500 var(--font-size-label)/1.4 var(--font-mono);
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 
+/* The rule after the date runs out into the list's edge, fading, rather than stopping dead. */
 .chat-topic-day-label::after {
   content: "";
   flex: 1 1 auto;
   height: 1px;
-  background: var(--line-soft);
+  background: linear-gradient(to right, var(--line-soft), color-mix(in srgb, var(--line-soft) 0%, transparent));
 }
 
 .chat-topic-item {
@@ -393,6 +394,14 @@
   width: 16px;
   height: 16px;
   color: var(--q-c-dark-2);
+}
+
+/* Centred on its box, the icon sits 0.6px below the title's capitals. Lifted by half a pixel where
+   that is a whole device pixel; at 1x the shift would blur its lines, which reads worse. */
+@media (min-resolution: 2dppx) {
+  .chat-topic-item-icon {
+    translate: 0 -0.5px;
+  }
 }
 
 .chat-topic-item-title.workspace-sidebar-item-title {
@@ -617,7 +626,7 @@ body[data-theme] .chat-workspace-dock .chat-workspace-toggle.q-button[aria-expan
 
 .chat-workspace-pane .chat-topic-property-label {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--font-size-label);
   letter-spacing: 0.1em;
   line-height: 1.2;
 }
@@ -1756,7 +1765,7 @@ body[data-theme] .chat-workspace-dock .chat-workspace-toggle.q-button[aria-expan
 .chat-history-copy.chat-history-reasoning .mmr-document {
   --mmr-text: var(--q-c-dark-3);
   color: var(--q-c-dark-3);
-  font-size: 13px;
+  font-size: var(--font-size-ui);
   line-height: 1.65;
 }
 
@@ -1836,7 +1845,7 @@ body[data-theme] .chat-workspace-dock .chat-workspace-toggle.q-button[aria-expan
 .chat-approval-title {
   font-size: var(--font-size-ui);
   line-height: 1.4;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-0);
 }
 
@@ -2015,7 +2024,7 @@ body[data-theme] .chat-workspace-dock .chat-workspace-toggle.q-button[aria-expan
 .chat-skill-preview-label {
   margin: 0;
   color: var(--text-2);
-  font: 500 11px/1.3 var(--font-mono);
+  font: 500 var(--font-size-label)/1.3 var(--font-mono);
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
@@ -2099,7 +2108,7 @@ body[data-theme] .chat-workspace-dock .chat-workspace-toggle.q-button[aria-expan
 .chat-skill-assessment-title {
   font-size: var(--font-size-body);
   line-height: 1.35;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .chat-skill-assessment-score,
@@ -2216,7 +2225,7 @@ body[data-theme] .chat-workspace-dock .chat-workspace-toggle.q-button[aria-expan
   background: var(--bg);
   color: var(--fg);
   font-size: var(--font-size-meta);
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1.5;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -2336,6 +2345,59 @@ body[data-theme] .chat-workspace-dock .chat-workspace-toggle.q-button[aria-expan
   height: 14px;
 }
 
+/* Copied: the copy mark gives way to a check drawn in one stroke, then back. */
+.chat-history-copy-action {
+  display: inline-grid;
+  place-items: center;
+}
+
+.chat-history-copy-action > .icon {
+  grid-area: 1 / 1;
+  transition:
+    opacity var(--motion-fast) var(--motion-ease),
+    transform var(--motion-normal) var(--motion-ease);
+}
+
+.chat-history-copied-icon {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0;
+}
+
+.chat-history-copied-icon path {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+}
+
+.chat-history-copy-action.is-copied .chat-history-copy-icon {
+  opacity: 0;
+  transform: scale(0.7);
+}
+
+.chat-history-copy-action.is-copied .chat-history-copied-icon {
+  opacity: 1;
+}
+
+.chat-history-copy-action.is-copied .chat-history-copied-icon path {
+  animation: chat-history-check-draw var(--motion-slow) var(--motion-ease) 60ms both;
+}
+
+@keyframes chat-history-check-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-history-copy-action.is-copied .chat-history-copied-icon path {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+}
+
 .chat-history-copy-action:hover,
 .chat-history-copy-action:focus-visible {
   background: color-mix(in srgb, var(--q-c-dark) 6%, transparent);
@@ -2373,7 +2435,7 @@ body[data-theme] .chat-workspace-dock .chat-workspace-toggle.q-button[aria-expan
   padding: 0;
   font-family: var(--font-mono);
   line-height: 1.4;
-  font-size: 11px;
+  font-size: var(--font-size-label);
   letter-spacing: 0.04em;
   color: var(--q-c-dark-3);
   user-select: none;
@@ -2559,7 +2621,7 @@ body.artifact-preview-scroll-lock {
   padding: 0.04em 0.3em;
   border-radius: 2px;
   background: color-mix(in srgb, var(--q-c-blue) 8%, transparent);
-  font-size: 0.88em;
+  font-size: 0.875em;
 }
 
 .chat-history-copy .mmr-document pre,
@@ -2605,29 +2667,42 @@ body.artifact-preview-scroll-lock {
   background: var(--chat-user-bg);
 }
 
-/* Tail: an outer triangle in the edge colour with an inner one in the fill, so the outline stays 1px. */
+/* Tail: one continuous outline with the bubble's edge. Where the slope meets the right edge it
+   flows in through a concave fillet, and the tip is softened, so the tail grows out of the bubble
+   instead of sitting on its corner. Two masks of the same outline paint it: the fill covers the
+   bubble's own borders under the tail, the stroke draws the new edge. core/chat-bubble-tail.js
+   builds them for the screen's pixel density, so the line has the border's width in device
+   pixels; the box starts where the border does (its first row the top border, its first column
+   the right border), so the straight parts land on the border's own pixels. */
+.chat-history-user .chat-history-bubble {
+  border-top-right-radius: 0;
+}
+
 .chat-history-user .chat-history-bubble::before,
 .chat-history-user .chat-history-bubble::after {
   content: "";
   position: absolute;
-  clip-path: polygon(0 0, 100% 0, 0 100%);
+  top: calc(-1 * var(--chat-tail-line, 1px));
+  left: 100%;
+  width: var(--chat-tail-width, 11px);
+  height: var(--chat-tail-height, 17px);
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
   pointer-events: none;
 }
 
 .chat-history-user .chat-history-bubble::before {
-  top: -1px;
-  right: calc(-1 * var(--chat-user-tail) - 1px);
-  width: calc(var(--chat-user-tail) + 1px);
-  height: 12px;
-  background: var(--chat-user-edge);
+  background: var(--chat-user-bg);
+  -webkit-mask-image: var(--chat-tail-fill);
+  mask-image: var(--chat-tail-fill);
 }
 
 .chat-history-user .chat-history-bubble::after {
-  top: 0;
-  right: calc(-1 * var(--chat-user-tail) + 0.6px);
-  width: calc(var(--chat-user-tail) + 0.4px);
-  height: 10.4px;
-  background: var(--chat-user-bg);
+  background: var(--chat-user-edge);
+  -webkit-mask-image: var(--chat-tail-stroke);
+  mask-image: var(--chat-tail-stroke);
 }
 
 /* A user message is its text plus, when files were sent, a stub hung beneath it: same width,
@@ -2709,7 +2784,7 @@ body.artifact-preview-scroll-lock {
 
 .chat-history-file-kind {
   color: var(--text-2);
-  font: 500 10px/1 var(--font-mono);
+  font: 500 var(--font-size-label)/1 var(--font-mono);
   letter-spacing: 0.1em;
 }
 
@@ -2830,6 +2905,24 @@ body.artifact-preview-scroll-lock {
     height: 100%;
     padding-top: 20px;
     padding-bottom: calc(var(--chat-overlay-compose-h) + 16px);
+    /* The composer floats over the history's foot. History scrolled down under it fades out as
+       it reaches the composer's top edge and is gone beneath it, instead of showing through. At
+       the bottom of the conversation the last message stays above that edge. */
+    --chat-history-foot: calc(var(--chat-overlay-compose-h) - 8px);
+    -webkit-mask-image: linear-gradient(
+      to bottom,
+      transparent 0,
+      #000 var(--scroll-fade-start),
+      #000 calc(100% - var(--chat-history-foot) - var(--scroll-fade-end)),
+      transparent calc(100% - var(--chat-history-foot))
+    );
+    mask-image: linear-gradient(
+      to bottom,
+      transparent 0,
+      #000 var(--scroll-fade-start),
+      #000 calc(100% - var(--chat-history-foot) - var(--scroll-fade-end)),
+      transparent calc(100% - var(--chat-history-foot))
+    );
   }
 
   .chat-main:not(.is-readonly):not(.is-placeholder-mode) > .chat-composer {

@@ -5,11 +5,12 @@
   display: flex;
   flex-direction: column;
   gap: 0;
-  border-right: 1px solid color-mix(in srgb, var(--q-c-light-4) 34%, transparent);
-  background: var(--q-c-dark);
-  color: var(--q-c-light);
-  margin: var(--sidebar-frame-top) 0 4px 4px;
-  border-radius: 8px;
+  /* Paper like the page, without the grid, on a hairline: navigation recedes so the content leads. */
+  border-right: 1px solid var(--line-soft);
+  background: var(--q-bg-light);
+  color: var(--text-1);
+  margin: 0;
+  border-radius: 0;
   min-height: 0;
   min-width: 0;
   overflow: hidden;
@@ -39,7 +40,7 @@
 }
 
 html[data-macos26="true"] .sidebar {
-  border-radius: 16px;
+  border-radius: 0;
 }
 
 /* The sidebar's right edge: drag it to fold the sidebar to its icons, or to unfold it. */

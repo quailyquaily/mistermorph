@@ -283,6 +283,31 @@ a.endpoint-overview-item:focus-visible {
   background: var(--bg-2);
 }
 
+/* The status mark sits in a notch cut out of the avatar, 2px clear of it, rather than on a plate
+   painted over it: what lies behind (paper, grid) shows through the gap. The notch is the mark's
+   13px box, subtracted from the avatar where the mark sits, so it fits any portrait size. A faint
+   inner hairline keeps a pale avatar from melting into the paper; the notch cuts it too. */
+.endpoint-overview-portrait:has(> .endpoint-overview-status) > .endpoint-overview-avatar,
+.endpoint-overview-portrait:has(> .endpoint-overview-status)::after {
+  -webkit-mask:
+    linear-gradient(#000 0 0),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='13' height='13' viewBox='0 0 13 13'%3E%3Crect width='13' height='13' rx='3' fill='black'/%3E%3C/svg%3E") right 0 bottom 2px / 13px 13px no-repeat;
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='13' height='13' viewBox='0 0 13 13'%3E%3Crect width='13' height='13' rx='3' fill='black'/%3E%3C/svg%3E") right 0 bottom 2px / 13px 13px no-repeat;
+  mask-composite: exclude;
+}
+
+.endpoint-overview-portrait:has(> .endpoint-overview-avatar)::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--q-c-dark) 9%, transparent);
+  pointer-events: none;
+}
+
 .endpoint-overview-add .endpoint-overview-portrait {
   display: grid;
   place-items: center;
@@ -345,11 +370,9 @@ a.endpoint-overview-item:focus-visible {
   bottom: 2px;
   display: grid;
   place-items: center;
-  /* A square plate, 2px around the mark, cuts it out of the avatar like the other status marks. */
+  /* The mark, in the notch cut out of the avatar (above). */
   width: 13px;
   height: 13px;
-  border-radius: 2px;
-  background: var(--bg-0);
 }
 
 .endpoint-overview-status::after {
@@ -365,9 +388,29 @@ a.endpoint-overview-item:focus-visible {
   border-color: var(--status-on);
 }
 
+/* Pending: the mark's dashes crawl slowly round the square, like marching ants: the connection is
+   being made. A dashed border cannot move, so each edge is its own dashed gradient. */
 .endpoint-overview-status.is-pending::after {
-  border-color: var(--status-pending);
-  border-style: dashed;
+  --ants: var(--status-pending);
+  border: 0;
+  background:
+    linear-gradient(90deg, var(--ants) 50%, transparent 0) 0 0 / 4px 1px repeat-x,
+    linear-gradient(90deg, var(--ants) 50%, transparent 0) 0 100% / 4px 1px repeat-x,
+    linear-gradient(0deg, var(--ants) 50%, transparent 0) 0 0 / 1px 4px repeat-y,
+    linear-gradient(0deg, var(--ants) 50%, transparent 0) 100% 0 / 1px 4px repeat-y;
+  animation: endpoint-overview-ants 1.6s linear infinite;
+}
+
+@keyframes endpoint-overview-ants {
+  to {
+    background-position: 4px 0, -4px 100%, 0 -4px, 100% 4px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .endpoint-overview-status.is-pending::after {
+    animation: none;
+  }
 }
 
 .endpoint-overview-item.is-offline .endpoint-overview-name {
@@ -458,7 +501,7 @@ a.endpoint-overview-item:active .endpoint-overview-portrait {
   gap: 0.35em;
   min-width: 0;
   color: var(--text-0);
-  font-size: 10.5px;
+  font-size: var(--font-size-label);
   font-weight: 400;
   line-height: 1.3;
   white-space: nowrap;
@@ -512,10 +555,29 @@ a.endpoint-overview-item:active .endpoint-overview-portrait {
   min-width: 0;
 }
 
+/* The leader's dots belong to the row, not to the gap between label and value: every row starts
+   them at its own left edge on one 3px pitch, so they stand in exact columns down the card, like a
+   datasheet's. The label and the value sit on the card's paper and clear the dots around them. */
+.readout-row {
+  gap: 0;
+  background: linear-gradient(to right, color-mix(in srgb, var(--text-2) 55%, transparent) 1px, transparent 1px)
+    0 calc(100% - 4px) / 3px 1px repeat-x;
+}
+
+.readout-row > .readout-key {
+  padding-right: 5px;
+  background: var(--bg-2);
+}
+
+.readout-row > .readout-value {
+  padding-left: 5px;
+  background: var(--bg-2);
+}
+
 .readout-key {
   flex: 0 0 auto;
   color: var(--text-2);
-  font-size: 9.5px;
+  font-size: var(--font-size-label);
   font-weight: 400;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -524,15 +586,13 @@ a.endpoint-overview-item:active .endpoint-overview-portrait {
 .readout-dots {
   flex: 1 1 auto;
   min-width: 8px;
-  border-bottom: 1px dotted color-mix(in srgb, var(--text-2) 55%, transparent);
-  transform: translateY(-3px);
 }
 
 /* Every number on the card, cache percent included, shares one face, size and colour. */
 .readout-value {
   flex: 0 0 auto;
   color: var(--text-0);
-  font: 400 11px/1.4 var(--font-mono);
+  font: 400 var(--font-size-label)/1.4 var(--font-mono);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }

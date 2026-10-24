@@ -53,7 +53,19 @@ function useAppShell() {
   });
   const inStandalone = computed(() => inOverview.value || inSetup.value);
   const inWorkspacePage = computed(() => !inShellless.value && !inStandalone.value);
-  const currentPath = computed(() => route.path);
+  // The navigation selects the page being opened as soon as it is chosen, so its selection moves
+  // with the click while the page's code and data load, rather than after.
+  const pendingPath = ref("");
+  const stopPendingStart = router.beforeEach((to) => {
+    pendingPath.value = to.path;
+  });
+  const stopPendingEnd = router.afterEach(() => {
+    pendingPath.value = "";
+  });
+  const stopPendingError = router.onError(() => {
+    pendingPath.value = "";
+  });
+  const currentPath = computed(() => pendingPath.value || route.path);
   const endpointViewKey = computed(() =>
     route.meta?.endpointScoped
       ? endpointRefFromRouteParam(route.params.endpoint_ref)
@@ -189,6 +201,9 @@ function useAppShell() {
     void refreshEndpointsAndPreload();
   });
   onUnmounted(() => {
+    stopPendingStart();
+    stopPendingEnd();
+    stopPendingError();
     window.removeEventListener("resize", syncViewport);
     window.visualViewport?.removeEventListener("resize", syncViewport);
     for (const cancel of navPreloadCancels.values()) {

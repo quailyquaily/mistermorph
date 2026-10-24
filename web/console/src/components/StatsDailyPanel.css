@@ -33,7 +33,7 @@
 .stats-daily-zone {
   overflow: hidden;
   color: var(--stats-muted);
-  font: 400 10px/1.4 var(--font-mono);
+  font: 400 var(--font-size-label)/1.4 var(--font-mono);
   letter-spacing: 0.06em;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -41,7 +41,7 @@
 
 .stats-daily-key {
   color: var(--stats-muted);
-  font: 400 9.5px/1.4 var(--font-mono);
+  font: 400 var(--font-size-label)/1.4 var(--font-mono);
   letter-spacing: 0.12em;
   text-transform: uppercase;
   white-space: nowrap;
@@ -50,7 +50,7 @@
 .stats-daily-value {
   margin: 0;
   color: var(--stats-ink);
-  font: 400 11px/1.4 var(--font-mono);
+  font: 400 var(--font-size-label)/1.4 var(--font-mono);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -58,7 +58,7 @@
 .stats-daily-note {
   margin-left: 6px;
   color: var(--stats-muted);
-  font-size: 10px;
+  font-size: var(--font-size-label);
 }
 
 .stats-daily-error {
@@ -81,7 +81,7 @@
 
 .stats-daily-readout-date {
   color: var(--stats-ink);
-  font: 400 11px/1.4 var(--font-mono);
+  font: 400 var(--font-size-label)/1.4 var(--font-mono);
   letter-spacing: 0.04em;
 }
 
@@ -109,7 +109,7 @@
   position: absolute;
   right: 0;
   color: var(--stats-muted);
-  font: 400 10px/1 var(--font-mono);
+  font: 400 var(--font-size-label)/1 var(--font-mono);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   transform: translateY(50%);
@@ -234,7 +234,7 @@
   place-items: center;
   margin: 0;
   color: var(--stats-muted);
-  font: 400 10.5px/1.4 var(--font-mono);
+  font: 400 var(--font-size-label)/1.4 var(--font-mono);
   letter-spacing: 0.12em;
   text-transform: uppercase;
   pointer-events: none;
@@ -272,7 +272,7 @@
   padding-bottom: 5px;
   border-bottom: 1px dashed var(--stats-line-soft);
   color: var(--stats-ink);
-  font: 400 11px/1.4 var(--font-mono);
+  font: 400 var(--font-size-label)/1.4 var(--font-mono);
 }
 
 .stats-daily-tooltip-row {
@@ -286,7 +286,7 @@
 .stats-daily-legend-name {
   overflow: hidden;
   color: var(--stats-copy);
-  font: 400 10.5px/1.4 var(--font-mono);
+  font: 400 var(--font-size-label)/1.4 var(--font-mono);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -374,7 +374,7 @@ button.stats-daily-legend-item:hover {
   justify-content: center;
   min-width: 0;
   color: var(--stats-muted);
-  font: 400 10px/1.2 var(--font-mono);
+  font: 400 var(--font-size-label)/1.2 var(--font-mono);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }

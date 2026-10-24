@@ -640,7 +640,7 @@ const SkillsView = {
             </div>
           </header>
 
-          <div class="skills-index-body">
+          <div v-scroll-edges class="skills-index-body">
             <label v-if="showSearch" class="skills-search">
               <PhMagnifyingGlass class="icon" aria-hidden="true" />
               <input v-model="query" type="search" :placeholder="t('skills_search')" :aria-label="t('skills_search')" />
@@ -651,7 +651,7 @@ const SkillsView = {
             <p v-else-if="unsupported" class="skills-index-note">{{ t('skills_unsupported') }}</p>
             <p v-else-if="!skills.length" class="skills-index-note">{{ t('skills_empty_add_note', { path: skillsRoot }) }}</p>
             <p v-else-if="!visibleSkills.length" class="skills-index-note">{{ t('skills_no_match') }}</p>
-            <div v-else class="workspace-sidebar-list" :role="isMobile ? undefined : 'listbox'" :aria-label="t('skills_title')">
+            <div v-else v-sliding-selection class="workspace-sidebar-list" :role="isMobile ? undefined : 'listbox'" :aria-label="t('skills_title')">
               <button
                 v-for="skill in visibleSkills"
                 :key="skill.id"

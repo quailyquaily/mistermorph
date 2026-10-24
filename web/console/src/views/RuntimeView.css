@@ -106,7 +106,7 @@
   overflow-wrap: anywhere;
   font-variant-numeric: tabular-nums;
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: var(--font-size-ui);
 }
 
 .runtime-context-grid {

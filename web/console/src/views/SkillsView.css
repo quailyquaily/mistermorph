@@ -437,7 +437,7 @@
 
 .skills-doc-label {
   color: var(--text-2);
-  font: 500 11px/1 var(--font-mono);
+  font: 500 var(--font-size-label)/1 var(--font-mono);
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
@@ -455,7 +455,7 @@
 }
 
 .skills-doc .mmr-document h1 {
-  font-size: 1.35em;
+  font-size: var(--font-size-title);
 }
 
 .skills-doc .mmr-root {

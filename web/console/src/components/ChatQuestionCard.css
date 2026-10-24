@@ -48,7 +48,7 @@
 .chat-question-label {
   color: var(--text-2);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--font-size-label);
   font-weight: 500;
   line-height: 1;
   /* The status row's spacing, so both read as one label system. */

@@ -15,6 +15,7 @@ import channelSlackLogoURL from "../assets/images/channels/slack.svg";
 import channelTelegramLogoURL from "../assets/images/channels/telegram.svg";
 import AppPage from "../components/AppPage";
 import ContactAvatar from "../components/ContactAvatar";
+import { agentLinkAvatarURL } from "../core/agent-link-avatar";
 import { currentLocale, endpointState, formatShortTime, formatTime, runtimeApiFetch, translate } from "../core/context";
 import { useContactsStore } from "../stores/contactsStore";
 import AppSkeleton from "../components/AppSkeleton";
@@ -261,6 +262,11 @@ const ContactsView = {
 
     function isAgent(item) {
       return normalizeKind(item?.kind) === "agent";
+    }
+
+    // An Agent Link contact shows its agent's avatar when the agent is one of this Console's.
+    function agentAvatar(item) {
+      return agentLinkAvatarURL(item, endpointState.items);
     }
 
     function isActive(item) {
@@ -626,6 +632,7 @@ const ContactsView = {
       pageClass,
       displayName,
       isAgent,
+      agentAvatar,
       isActive,
       statusText,
       kindText,
@@ -680,7 +687,7 @@ const ContactsView = {
             <h3 class="contacts-index-title workspace-section-title">{{ t("contacts_title") }}</h3>
           </div>
 
-          <div class="contacts-index-body">
+          <div v-scroll-edges class="contacts-index-body">
             <div class="contacts-index-filter">
               <QInput
                 v-model="filterText"
@@ -697,6 +704,7 @@ const ContactsView = {
 
             <div
               v-if="!loading && filteredItems.length > 0"
+              v-sliding-selection
               class="contacts-index-list workspace-sidebar-list"
               :role="isMobile ? undefined : 'listbox'"
             >
@@ -713,6 +721,7 @@ const ContactsView = {
                 <span class="contacts-index-kind" :title="kindText(item)" aria-hidden="true">
                   <ContactAvatar
                     :item="item"
+                    :imageURL="agentAvatar(item)"
                     :name="displayName(item)"
                     :endpointRef="endpointState.selectedRef"
                   />
@@ -723,7 +732,7 @@ const ContactsView = {
                 </span>
                 <span class="workspace-sidebar-item-copy">
                   <span class="workspace-sidebar-item-title">{{ displayName(item) }}</span>
-                  <span class="contacts-index-item-meta workspace-sidebar-item-meta">{{ primaryContactMeta(item) }}</span>
+                  <span v-fade-truncate class="contacts-index-item-meta workspace-sidebar-item-meta">{{ primaryContactMeta(item) }}</span>
                 </span>
               </button>
             </div>
@@ -773,6 +782,7 @@ const ContactsView = {
             <span class="contacts-detail-kind" :title="kindText(selectedContact)" aria-hidden="true">
               <ContactAvatar
                 :item="selectedContact"
+                :imageURL="agentAvatar(selectedContact)"
                 :name="displayName(selectedContact)"
                 :endpointRef="endpointState.selectedRef"
                 size="detail"
