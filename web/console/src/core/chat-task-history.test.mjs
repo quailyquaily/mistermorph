@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   isTerminalStatus,
+  keepHistoryItemIDs,
   mergeRefreshedHistoryItems,
   normalizeTaskStatus,
   normalizeActivity,
@@ -266,4 +267,35 @@ test("questions from the task result or a stream frame keep their choices and an
   const live = { id: "t2:agent", role: "agent", taskId: "t2", status: "running", questions: [{ id: "q3", text: "Now?", status: "open" }] };
   const [kept] = keepLiveTaskState([live], [{ ...live, questions: null }]);
   assert.equal(kept.questions[0].id, "q3");
+});
+
+test("keepHistoryItemIDs keeps the ids of messages sent from the page when their task loads", () => {
+  const onScreen = [
+    { id: "t0:user", role: "user", taskId: "", text: "earlier" },
+    { id: "t0:agent", role: "agent", taskId: "t0", text: "earlier reply" },
+    { id: "h-17", role: "user", taskId: "t1", text: "sent here" },
+    { id: "h-18", role: "agent", taskId: "t1", text: "the reply", status: "done" },
+    { id: "h-19", role: "user", taskId: "", text: "not created yet" },
+  ];
+  const loaded = [
+    { id: "t0:user", role: "user", taskId: "", text: "earlier" },
+    { id: "t0:agent", role: "agent", taskId: "t0", text: "earlier reply" },
+    { id: "t1:user", role: "user", taskId: "", text: "sent here" },
+    { id: "t1:agent", role: "agent", taskId: "t1", text: "the reply", status: "done" },
+    { id: "t2:agent", role: "agent", taskId: "t2", text: "from another device" },
+  ];
+  const cases = [
+    { name: "sent here and loaded", current: onScreen, want: ["t0:user", "t0:agent", "h-17", "h-18", "t2:agent"] },
+    { name: "nothing on screen", current: [], want: ["t0:user", "t0:agent", "t1:user", "t1:agent", "t2:agent"] },
+    { name: "not an array", current: null, want: ["t0:user", "t0:agent", "t1:user", "t1:agent", "t2:agent"] },
+  ];
+  for (const { name, current, want } of cases) {
+    const got = keepHistoryItemIDs(current, loaded);
+    assert.deepEqual(got.map((item) => item.id), want, name);
+    assert.equal(got[3].text, "the reply", `${name}: the loaded item's content is kept`);
+  }
+  // An id already used by another loaded item is not taken twice.
+  const clash = keepHistoryItemIDs([{ id: "t9:agent", role: "agent", taskId: "t1" }], loaded.concat([{ id: "t9:agent", role: "agent", taskId: "t9" }]));
+  assert.deepEqual(clash.map((item) => item.id), ["t0:user", "t0:agent", "t1:user", "t1:agent", "t2:agent", "t9:agent"]);
+  assert.deepEqual(keepHistoryItemIDs(onScreen, null), []);
 });

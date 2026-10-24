@@ -35242,6 +35242,40 @@ function renderShikiTokens(codeNode, tokens) {
   codeNode.replaceChildren(fragment2);
   codeNode.classList.add("mmr-code-content");
 }
+// takeStreamedCodeHighlight finds, among the highlight entries of a reply's streamed code blocks,
+// the one to continue for a block of the finished reply: the same source, or else the longest one
+// it starts with, whose tokens then only need the rest added. An entry is taken out of the list, so
+// no two blocks share a tokenizer. highlightCodeWithShiki checks the language and theme still match.
+function takeStreamedCodeHighlight(entries, source) {
+  if (!Array.isArray(entries) || entries.length === 0) {
+    return null;
+  }
+  const normalizedSource = stringValue2(source);
+  let best = -1;
+  let bestLength = -1;
+  for (const [index2, entry] of entries.entries()) {
+    const entrySource = stringValue2(entry?.source);
+    if (!entry?.tokenizer || !entrySource || !normalizedSource.startsWith(entrySource)) {
+      continue;
+    }
+    if (entrySource.length > bestLength) {
+      best = index2;
+      bestLength = entrySource.length;
+      if (bestLength === normalizedSource.length) {
+        break;
+      }
+    }
+  }
+  return best < 0 ? null : entries.splice(best, 1)[0];
+}
+// yieldToBrowser lets the browser paint and handle input before the next piece of work.
+function yieldToBrowser(doc) {
+  const view = documentView(doc);
+  if (typeof view.scheduler?.yield === "function") {
+    return view.scheduler.yield();
+  }
+  return new Promise((resolve) => view.setTimeout(resolve, 0));
+}
 function codeHighlightStillCurrent(codeNode, source, isCurrent) {
   return isCurrent() && codeNode.__mmrCodeSource === stringValue2(source);
 }
@@ -35516,15 +35550,54 @@ var MarkdownRenderer = class {
     this.stopStreaming();
     await this.renderFullMarkdown(normalizedSource, token2, theme);
   }
-  async renderFullMarkdown(normalizedSource, token2, theme) {
+  async renderFullMarkdown(normalizedSource, token2, theme, options = {}) {
     this.cleanup();
-    this.root.replaceChildren();
     this.codeBlockHighlightState.clear();
     const documentNode = this.root.ownerDocument.createElement("article");
     documentNode.className = "mmr-document";
     documentNode.innerHTML = markdownToHtml(normalizedSource, this.root.ownerDocument);
+    // The code is highlighted before the document is shown, a block per task: a long reply then
+    // neither holds the page in one long task as it lands nor shows its code uncoloured first.
+    // What was on screen stays until the document replaces it.
+    await this.highlightCodeBlocksAhead(documentNode, token2, options.streamedCode);
+    if (token2 !== this.renderToken) {
+      return;
+    }
     this.root.replaceChildren(documentNode);
-    await this.enhanceMarkdown(documentNode, token2, theme);
+    await this.enhanceMarkdown(documentNode, token2, theme, { streamedCode: options.streamedCode });
+  }
+  // highlightCodeBlocksAhead highlights a document's plain code blocks (not diagrams or math, which
+  // enhanceMarkdown renders once the document is shown), yielding to the browser between blocks. The
+  // entries go where enhanceMarkdown looks for them, under each block's index.
+  async highlightCodeBlocksAhead(container, token2, streamedCode) {
+    const codeBlocks = Array.from(container.querySelectorAll("pre > code"));
+    for (const [index2, code4] of codeBlocks.entries()) {
+      if (token2 !== this.renderToken) {
+        return;
+      }
+      const language = detectCodeLanguage(code4);
+      const source = code4.textContent || "";
+      const pre = code4.parentElement;
+      if (!pre?.parentElement || fenceMathSource(language, source) || DIAGRAM_LANGUAGES2.has(language)) {
+        continue;
+      }
+      const cacheKey = `${index2}`;
+      const entry = await renderCodeBlock(
+        pre,
+        source,
+        language,
+        this.codeBlockHighlightState.get(cacheKey) || takeStreamedCodeHighlight(streamedCode, source)
+      );
+      if (token2 !== this.renderToken) {
+        return;
+      }
+      if (entry) {
+        this.codeBlockHighlightState.set(cacheKey, entry);
+      }
+      if (index2 < codeBlocks.length - 1) {
+        await yieldToBrowser(this.root.ownerDocument);
+      }
+    }
   }
   cleanup() {
     while (this.cleanupFns.length > 0) {
@@ -35808,8 +35881,11 @@ var MarkdownRenderer = class {
     if (token2 !== this.renderToken || !this.streaming.documentNode) {
       return;
     }
+    // The streamed code blocks are highlighted already: hand their tokens to the full render,
+    // which otherwise highlights every block again in one task as the reply ends.
+    const streamedCode = Array.from(this.codeBlockHighlightState.values());
     this.resetStreamingState(normalizedSource);
-    await this.renderFullMarkdown(normalizedSource, token2, theme);
+    await this.renderFullMarkdown(normalizedSource, token2, theme, { streamedCode });
   }
   async drainStreamingMarkdown(token2, theme) {
     if (this.streaming.smooth.displayedCount >= this.streaming.smooth.targetCount) {
@@ -35947,7 +36023,7 @@ var MarkdownRenderer = class {
           pre,
           source,
           language,
-          this.codeBlockHighlightState.get(cacheKey) || null,
+          this.codeBlockHighlightState.get(cacheKey) || takeStreamedCodeHighlight(options.streamedCode, source),
           { isCurrent }
         );
         if (token2 !== this.renderToken || !isCurrent()) {

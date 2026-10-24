@@ -1,5 +1,6 @@
 import { taskApprovalState } from "./chat-approvals.js";
 import { placeSteeredAgentsAfterUsers } from "./chat-history-steering.js";
+import { formatDate } from "./intl-format.js";
 
 const AWARENESS_TOPIC_ID = "_awareness";
 const LEGACY_HEARTBEAT_TOPIC_ID = "_heartbeat";
@@ -90,14 +91,14 @@ function historyTimeLabel(raw, locale = "en-US", now = new Date()) {
     current.getFullYear() === date.getFullYear() &&
     current.getMonth() === date.getMonth() &&
     current.getDate() === date.getDate();
-  const timeLabel = date.toLocaleTimeString(locale, {
+  const timeLabel = formatDate(date, locale, {
     hour: "2-digit",
     minute: "2-digit",
   });
   if (sameDay) {
     return timeLabel;
   }
-  const dayLabel = date.toLocaleDateString(locale, {
+  const dayLabel = formatDate(date, locale, {
     month: "short",
     day: "numeric",
   });
@@ -590,6 +591,48 @@ function keepLiveTaskState(currentItems, nextItems) {
   });
 }
 
+// The task and role a history item shows: a message sent from this page carries its task in taskId
+// (set once the task is created), a loaded one in its id ("<task>:user", "<task>:agent").
+function historyItemTaskKey(item) {
+  const role = String(item?.role || "");
+  if (role !== "user" && role !== "agent") {
+    return "";
+  }
+  let taskID = String(item?.taskId || "").trim();
+  const id = String(item?.id || "");
+  if (!taskID && id.endsWith(`:${role}`)) {
+    taskID = id.slice(0, -(role.length + 1));
+  }
+  return taskID ? `${taskID}\0${role}` : "";
+}
+
+// A message sent from this page is shown before its task exists, under an id of its own; once the
+// task is loaded it comes back as "<task>:user" and "<task>:agent". Those keep the ids already on
+// screen, so the list updates the items in place: a new id would rebuild them, rendering the reply
+// (Markdown, highlighting) a second time just as it lands, and drop state kept by id.
+function keepHistoryItemIDs(currentItems, nextItems) {
+  const next = Array.isArray(nextItems) ? nextItems : [];
+  const onScreen = new Map();
+  for (const item of Array.isArray(currentItems) ? currentItems : []) {
+    const key = historyItemTaskKey(item);
+    if (key && item?.id && !onScreen.has(key)) {
+      onScreen.set(key, item.id);
+    }
+  }
+  if (onScreen.size === 0) {
+    return next;
+  }
+  const taken = new Set(next.map((item) => item?.id));
+  return next.map((item) => {
+    const id = onScreen.get(historyItemTaskKey(item));
+    if (!id || id === item.id || taken.has(id)) {
+      return item;
+    }
+    taken.add(id);
+    return { ...item, id };
+  });
+}
+
 function mergeRefreshedHistoryItems(currentItems, freshItems) {
   const current = Array.isArray(currentItems) ? currentItems : [];
   const fresh = Array.isArray(freshItems) ? freshItems : [];
@@ -614,6 +657,7 @@ export {
   historyTimeLabel,
   isContextCompactCommand,
   isTerminalStatus,
+  keepHistoryItemIDs,
   keepLiveTaskState,
   mergeRefreshedHistoryItems,
   normalizeActivity,

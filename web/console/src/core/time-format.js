@@ -1,3 +1,5 @@
+import { formatDate } from "./intl-format.js";
+
 function sameDay(left, right) {
   return left.getFullYear() === right.getFullYear() && left.getMonth() === right.getMonth() && left.getDate() === right.getDate();
 }
@@ -13,10 +15,10 @@ export function formatShortTimestamp(ts, locale, now = new Date()) {
     return String(ts);
   }
   if (sameDay(d, now)) {
-    return d.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" });
+    return formatDate(d, locale, { hour: "2-digit", minute: "2-digit" });
   }
   if (d.getFullYear() === now.getFullYear()) {
-    return d.toLocaleString(locale, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+    return formatDate(d, locale, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
   }
-  return d.toLocaleDateString(locale, { year: "numeric", month: "short", day: "numeric" });
+  return formatDate(d, locale, { year: "numeric", month: "short", day: "numeric" });
 }

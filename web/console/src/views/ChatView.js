@@ -12,6 +12,7 @@ import AppFab from "../components/AppFab";
 import ChatHistoryList from "../components/ChatHistoryList";
 import TopicTagsEditor from "../components/TopicTagsEditor";
 import { approvalDetailsByID, taskApprovalState } from "../core/chat-approvals";
+import { formatDate, formatNumber } from "../core/intl-format";
 import {
   buildComposerSubmission,
   composerFileDraftKey,
@@ -36,6 +37,7 @@ import {
   historyTimeLabel as formatChatHistoryTime,
   isContextCompactCommand,
   isTerminalStatus,
+  keepHistoryItemIDs,
   keepLiveTaskState,
   mergeRefreshedHistoryItems,
   normalizeActivity,
@@ -492,11 +494,11 @@ function topicDayLabel(topic, translate) {
   if (sameDay(date, yesterday)) {
     return translate("chat_topics_yesterday");
   }
-  return date.toLocaleDateString(currentLocale(), {
-    year: date.getFullYear() === today.getFullYear() ? undefined : "numeric",
-    month: "short",
-    day: "numeric",
-  });
+  return formatDate(
+    date,
+    currentLocale(),
+    date.getFullYear() === today.getFullYear() ? { month: "short", day: "numeric" } : { year: "numeric", month: "short", day: "numeric" },
+  );
 }
 
 function topicTimeLabel(topic) {
@@ -514,12 +516,12 @@ function topicTimeLabel(topic) {
     now.getMonth() === date.getMonth() &&
     now.getDate() === date.getDate();
   if (sameDay) {
-    return date.toLocaleTimeString(currentLocale(), {
+    return formatDate(date, currentLocale(), {
       hour: "2-digit",
       minute: "2-digit",
     });
   }
-  return date.toLocaleDateString(currentLocale(), {
+  return formatDate(date, currentLocale(), {
     month: "short",
     day: "numeric",
   });
@@ -530,7 +532,7 @@ function formatTokenCount(value) {
   if (!Number.isFinite(n) || n <= 0) {
     return "-";
   }
-  return Math.round(n).toLocaleString(currentLocale());
+  return formatNumber(Math.round(n), currentLocale());
 }
 
 function formatUsageRatio(value) {
@@ -3852,13 +3854,16 @@ const ChatView = {
         if (consoleTopicsEnabled.value) {
           applyComposerTopicLLMProfile(lastUsedChatLLMProfile(tasks));
         }
-        const nextItems = keepLiveTaskState(
+        const nextItems = keepHistoryItemIDs(
           chatHistoryItems.value,
-          taskListHistoryItems(tasks, t, {
-            agentName: activeAgentName.value,
-            endpointRef,
-            locale: currentLocale(),
-          })
+          keepLiveTaskState(
+            chatHistoryItems.value,
+            taskListHistoryItems(tasks, t, {
+              agentName: activeAgentName.value,
+              endpointRef,
+              locale: currentLocale(),
+            })
+          )
         );
         replaceHistoryItems(nextItems.length > 0 ? nextItems : [emptyHistoryItem()]);
         scrollHistoryToBottom({ force: true });
@@ -3930,13 +3935,16 @@ const ChatView = {
       if (tasks.length === 0) {
         return;
       }
-      const freshItems = keepLiveTaskState(
+      const freshItems = keepHistoryItemIDs(
         chatHistoryItems.value,
-        taskListHistoryItems(tasks, t, {
-          agentName: activeAgentName.value,
-          endpointRef,
-          locale: currentLocale(),
-        })
+        keepLiveTaskState(
+          chatHistoryItems.value,
+          taskListHistoryItems(tasks, t, {
+            agentName: activeAgentName.value,
+            endpointRef,
+            locale: currentLocale(),
+          })
+        )
       );
       const merged = mergeRefreshedHistoryItems(chatHistoryItems.value, freshItems);
       if (!merged.overlap) {
