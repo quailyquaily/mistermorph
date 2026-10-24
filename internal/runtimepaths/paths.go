@@ -25,7 +25,7 @@ type Paths struct {
 	LLMUsageJournalDir       string
 	LLMUsageProjectionPath   string
 	TopicContextPath         string
-	TopicsProjectionPath       string
+	TopicsProjectionPath     string
 }
 
 type Reader interface {

@@ -20,9 +20,9 @@ const (
 )
 
 type Projection struct {
-	Version   int                      `json:"version"`
-	UpdatedAt time.Time                `json:"updated_at,omitempty"`
-	Items     []taskdomain.TopicInfo   `json:"items"`
+	Version   int                    `json:"version"`
+	UpdatedAt time.Time              `json:"updated_at,omitempty"`
+	Items     []taskdomain.TopicInfo `json:"items"`
 }
 
 // Save writes the projection atomically. Items must be pre-ordered.
