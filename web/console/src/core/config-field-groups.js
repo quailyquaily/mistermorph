@@ -93,6 +93,34 @@ export const LLM_CONTEXT_CONFIG_GROUPS = [{
   ],
 }];
 
+// A shell tool's administrator-rights settings (tools.<tool>.elevation): bash elevates through sudo
+// on Linux and macOS and names its dialog; powershell elevates through UAC on Windows.
+function elevationGroup(tool, note, options = {}) {
+  const key = `tools.${tool}.elevation`;
+  const fields = [
+    { path: `${key}.enabled`, label: "Allow elevated commands", type: "bool", note },
+    {
+      path: `${key}.approval_timeout`,
+      label: "Approval timeout",
+      type: "string",
+      duration: true,
+      editor: "duration",
+      dependsOn: `${key}.enabled`,
+    },
+  ];
+  if (options.dialog) {
+    fields.push({
+      path: `${key}.dialog`,
+      label: "Dialog program",
+      type: "string",
+      placeholder: "automatic",
+      dependsOn: `${key}.enabled`,
+      note: "A pinentry, zenity or kdialog binary to use instead of the system's pinentry.",
+    });
+  }
+  return { id: `${tool}-elevation`, title: "Administrator rights", fields };
+}
+
 export const TOOL_ADVANCED_CONFIG_GROUPS = {
   read_file: [{
     id: "read-file",
@@ -162,7 +190,7 @@ export const TOOL_ADVANCED_CONFIG_GROUPS = {
       { path: "tools.bash.rewrite.enabled", label: "Bash command rewrite", type: "bool" },
       { path: "tools.bash.rewrite.binary", label: "Rewrite binary", type: "string", placeholder: "rtk", dependsOn: "tools.bash.rewrite.enabled" },
     ],
-  }],
+  }, elevationGroup("bash", "Linux and macOS: a command the agent marks elevated runs as root after you approve it in a system dialog on this machine.", { dialog: true })],
   powershell: [{
     id: "powershell",
     title: "powershell",
@@ -172,7 +200,7 @@ export const TOOL_ADVANCED_CONFIG_GROUPS = {
       { path: "tools.powershell.deny_paths", label: "PowerShell denied paths", type: "string_list", wide: true, editor: "rows", placeholder: "C:\\Users\\me\\.ssh", addLabel: "Add path" },
       { path: "tools.powershell.injected_env_vars", label: "PowerShell injected environment", type: "json", wide: true, editor: "rows", rows: "env", addLabel: "Add variable" },
     ],
-  }],
+  }, elevationGroup("powershell", "Windows: a command the agent marks elevated runs as administrator after you approve the UAC prompt on this machine.")],
 };
 
 function channelFields(channel, options = {}) {

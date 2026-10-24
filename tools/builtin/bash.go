@@ -7,11 +7,13 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/quailyquaily/mistermorph/agent"
+	"github.com/quailyquaily/mistermorph/internal/elevate"
 	"github.com/quailyquaily/mistermorph/internal/pathroots"
 	"github.com/quailyquaily/mistermorph/internal/shellenv"
 	"github.com/quailyquaily/mistermorph/tools"
@@ -27,6 +29,9 @@ type BashTool struct {
 	PathExtra       []string
 	InjectedEnvVars []shellenv.InjectedEnvVar
 	Rewrite         BashRewriteConfig
+	// Elevation lets a command run as root after the user approves it in a system dialog
+	// (tools.bash.elevation).
+	Elevation elevate.Config
 }
 
 type bashExecutionPayload = shellExecutionPayload
@@ -81,6 +86,12 @@ func (t *BashTool) ParameterSchema() string {
 		},
 		"required": []string{"cmd"},
 	}
+	if t.elevationOffered() {
+		s["properties"].(map[string]any)["elevated"] = map[string]any{
+			"type":        "boolean",
+			"description": elevatedParamDescription,
+		}
+	}
 	b, _ := json.MarshalIndent(s, "", "  ")
 	return string(b)
 }
@@ -94,6 +105,9 @@ func (t *BashTool) Execute(ctx context.Context, params map[string]any) (string, 
 	if err != nil {
 		return "", err
 	}
+	if elevated, _ := asBool(params["elevated"]); elevated {
+		return t.executeElevated(ctx, inv)
+	}
 	inv, err = t.rewriteInvocation(inv)
 	if err != nil {
 		return "", err
@@ -106,9 +120,51 @@ func (t *BashTool) Execute(ctx context.Context, params map[string]any) (string, 
 	payload, err := t.runCommand(ctx, inv.Command, inv.CWD, inv.Timeout)
 	observation := formatShellObservation(payload)
 	if err != nil {
+		if t.elevationOffered() && sudoWantsTerminal(payload.Stderr+"\n"+payload.Stdout) {
+			observation += "\n\n" + sudoElevationHint
+		}
 		return observation, err
 	}
 	return observation, nil
+}
+
+// elevatedParamDescription tells the model when and how to ask for administrator rights.
+const elevatedParamDescription = "Optional. Run the command as root (administrator). The user approves each such command in a " +
+	"system dialog on this machine, showing the command, before it runs. Use it only for a command that needs " +
+	"administrator rights (installing system packages, editing system files, managing system services); do not " +
+	"prefix the command with sudo, and keep it to the part that needs the rights. If the user declines, do not " +
+	"run it again unless they ask."
+
+// sudoElevationHint follows the output of a command whose sudo could not ask for a password.
+const sudoElevationHint = "note: commands here have no terminal, so sudo cannot ask for a password. Run the command " +
+	"again without sudo and with elevated: true; the user approves it in a system dialog."
+
+// elevationOffered reports whether bash offers elevated commands here: on Linux and macOS, when
+// tools.bash.elevation allows it and a dialog can be shown.
+func (t *BashTool) elevationOffered() bool {
+	return runtime.GOOS != "windows" && elevate.Check(t.Elevation) == nil
+}
+
+// executeElevated runs a command as root under sudo, with this binary as sudo's askpass helper: the
+// user approves it in a system dialog, whose password goes to sudo only.
+func (t *BashTool) executeElevated(ctx context.Context, inv shellInvocation) (string, error) {
+	if runtime.GOOS == "windows" {
+		return "", fmt.Errorf("bash cannot run elevated commands on Windows; use the powershell tool with elevated: true")
+	}
+	if err := elevate.Check(t.Elevation); err != nil {
+		return "", fmt.Errorf("cannot ask for administrator rights here: %v. Ask the user to run the command themselves: %s", err, inv.Command)
+	}
+	spec := t.runnerSpec()
+	env, err := elevate.SudoEnv(t.Elevation, spec.BuildEnv(t.InjectedEnvVars), inv.Command, time.Now())
+	if err != nil {
+		return "", err
+	}
+	spec.Program = "sudo"
+	spec.ArgsPrefix = elevate.SudoArgs([]string{"bash", "-c"})
+	spec.BuildEnv = func([]shellenv.InjectedEnvVar) []string { return env }
+	// The user has this long to answer the dialog, on top of the command's own time.
+	inv.Timeout += t.Elevation.Approval()
+	return runElevated(ctx, t.Name(), inv.Command, t.commonConfig(), spec, inv)
 }
 
 func (t *BashTool) commonConfig() shellToolCommon {

@@ -81,6 +81,30 @@ func (t *myTool) CodeModeExcluded() bool { return true }
 
 With a `TopicID`, `RunTaskWithOptions` treats the topic as one conversation: the tools a turn finds through `tool_search` are saved under the context checkpoint root and stay visible on the topic's later turns. Other topics start from the default tool list.
 
+## Elevated commands
+
+The `bash` and `powershell` tools can run a command as administrator after the user approves it in
+a system dialog on the machine (see [Elevated commands](tools.md#elevated-commands)). Embedded
+programs have it off by default. To turn it on:
+
+```go
+func main() {
+	// First thing in main, before flags or anything else.
+	integration.RunAskpassIfRequested()
+
+	cfg := integration.DefaultConfig()
+	cfg.Set("tools.bash.elevation.enabled", true)       // Linux, macOS
+	cfg.Set("tools.powershell.elevation.enabled", true) // Windows
+	// ...
+}
+```
+
+On Linux and macOS an elevated command runs under `sudo -A`, and sudo starts the running
+executable, your program, as its askpass helper. `RunAskpassIfRequested` notices that, shows the
+approval dialog, prints the password for sudo and exits; in any other case it returns at once.
+Until it has run, elevated commands stay unavailable there and the tool says why, even with
+`tools.bash.elevation.enabled` set. Windows elevates through UAC and does not need it.
+
 ## Prompt blocks
 
 `integration.Config.AddPromptBlock(...)` appends static prompt content into the system prompt's `Additional Policies` section.

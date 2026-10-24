@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/quailyquaily/mistermorph/contacts"
+	"github.com/quailyquaily/mistermorph/internal/configdefaults"
+	"github.com/quailyquaily/mistermorph/internal/elevate"
 	"github.com/quailyquaily/mistermorph/tools"
 	"github.com/spf13/viper"
 )
@@ -251,5 +253,49 @@ func TestRegisterStaticToolsAgentSendRequiresActiveAgent(t *testing.T) {
 	}
 	if _, ok := reg.Get(BuiltinContactsSend); ok {
 		t.Fatal("agent_send availability changed contacts_send registration")
+	}
+}
+
+func TestStaticRegistryConfigReadsEachShellToolsElevation(t *testing.T) {
+	cases := []struct {
+		name           string
+		set            map[string]any
+		wantBash       elevate.Config
+		wantPowerShell elevate.Config
+	}{
+		{
+			name:           "defaults",
+			wantBash:       elevate.Config{Key: "tools.bash.elevation", Enabled: true, ApprovalTimeout: 2 * time.Minute},
+			wantPowerShell: elevate.Config{Key: "tools.powershell.elevation", Enabled: true, ApprovalTimeout: 2 * time.Minute},
+		},
+		{
+			name: "set per tool",
+			set: map[string]any{
+				"tools.bash.elevation.enabled":                false,
+				"tools.bash.elevation.dialog":                 " /usr/local/bin/inua-pinentry ",
+				"tools.powershell.elevation.approval_timeout": "45s",
+			},
+			wantBash:       elevate.Config{Key: "tools.bash.elevation", Enabled: false, ApprovalTimeout: 2 * time.Minute, Dialog: "/usr/local/bin/inua-pinentry"},
+			wantPowerShell: elevate.Config{Key: "tools.powershell.elevation", Enabled: true, ApprovalTimeout: 45 * time.Second},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			reader := viper.New()
+			configdefaults.Apply(reader)
+			for key, value := range tc.set {
+				reader.Set(key, value)
+			}
+			cfg, err := StaticRegistryConfigFromReader(reader)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cfg.Bash.Elevation != tc.wantBash {
+				t.Errorf("bash elevation = %+v, want %+v", cfg.Bash.Elevation, tc.wantBash)
+			}
+			if cfg.PowerShell.Elevation != tc.wantPowerShell {
+				t.Errorf("powershell elevation = %+v, want %+v", cfg.PowerShell.Elevation, tc.wantPowerShell)
+			}
+		})
 	}
 }

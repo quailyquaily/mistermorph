@@ -5,11 +5,16 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/quailyquaily/mistermorph/internal/elevate"
 	"github.com/quailyquaily/mistermorph/internal/processrestart"
 	"github.com/quailyquaily/mistermorph/internal/processsignal"
 )
 
 func main() {
+	// Started by sudo as the askpass helper for an elevated command: show the approval dialog and
+	// print the password for sudo, nothing else. Otherwise this binary is marked as the helper
+	// elevated commands may use.
+	elevate.HandleAskpass()
 	ctx, stop := processsignal.NotifyContext(context.Background())
 	err := ExecuteContext(ctx)
 	stop()

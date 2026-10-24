@@ -271,6 +271,13 @@ MISTER_MORPH_SERVER_AUTH_TOKEN="..."
 - When at least one allowlisted auth profile is configured, `bash` can still be enabled for local automation, but `curl` is rejected by default to avoid “bash + curl” carrying authenticated HTTP requests.
 - `bash` does not inherit the full parent environment. It runs with a small built-in allowlist (`PATH`, locale, shell/home, temp, XDG, and SSL cert vars) so `MISTER_MORPH_*` secrets are not exposed to subprocesses by default.
 - If a local workflow needs extra variables, inject them explicitly with `tools.bash.injected_env_vars`.
+- A command marked `elevated` runs as root or administrator only after the user approves it in a
+  system dialog that names the command (`sudo -k -A` with mistermorph as the askpass helper on Linux
+  and macOS, UAC on Windows). Each command needs its own approval, the password goes to sudo and
+  never through the agent, and each elevated command is logged (`elevated_command_started`,
+  `elevated_command_finished`). Turn it off with `tools.bash.elevation.enabled: false` (or the
+  `powershell` one); keep it off for
+  services nobody watches. See [Elevated commands](tools.md#elevated-commands).
 
 ### Filesystem sandboxing
 

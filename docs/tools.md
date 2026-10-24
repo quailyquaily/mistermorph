@@ -155,6 +155,7 @@ Parameters:
 | `cwd` | `string` | No | Current directory | Working directory for command execution. Supports `file_cache_dir/...` and `file_state_dir/...` aliases. |
 | `timeout_seconds` | `number` | No | `tools.bash.timeout` | Timeout override in seconds. |
 | `run_in_subtask` | `boolean` | No | `false` | If `true`, run the command inside the direct bash subtask boundary and return the structured subtask envelope JSON. |
+| `elevated` | `boolean` | No | `false` | Linux and macOS: run the command as root after the user approves it in a system dialog (see [Elevated commands](#elevated-commands)). Offered only when elevation is available. |
 
 Constraints:
 
@@ -177,6 +178,7 @@ Parameters:
 | `cmd` | `string` | Yes | None | PowerShell command to execute. Supports `file_cache_dir/...`, `file_state_dir/...`, and backslash variants such as `file_cache_dir\...`. |
 | `cwd` | `string` | No | Current directory | Working directory for command execution. Supports `file_cache_dir/...` and `file_state_dir/...` aliases. |
 | `timeout_seconds` | `number` | No | `tools.powershell.timeout` | Timeout override in seconds. |
+| `elevated` | `boolean` | No | `false` | Windows: run the command as administrator after the user approves the UAC prompt (see [Elevated commands](#elevated-commands)). Its output arrives when it ends. |
 
 Constraints:
 
@@ -185,6 +187,36 @@ Constraints:
 - Runs with an allowlisted environment instead of inheriting the full parent process environment.
 - Extra environment variables can be injected via `tools.powershell.injected_env_vars`, using the same string or `{name, value}` object forms as `tools.bash.injected_env_vars`.
 - Unlike `bash`, it does not currently support `run_in_subtask`.
+
+### Elevated commands
+
+Commands run without a terminal, so `sudo` cannot ask for a password in them. Instead the model
+sets `elevated: true` (on `bash` on Linux and macOS, on `powershell` on Windows), and the user
+approves the command in a system dialog on the agent's machine that shows it:
+
+| OS | Runs as | Dialog |
+|---|---|---|
+| Linux | `sudo -k -A -- bash -c <cmd>` | the system's `pinentry` (unless it is a terminal variant), else `pinentry-gnome3`, `pinentry-qt`, `pinentry-gtk-2`, `zenity` or `kdialog` |
+| macOS | `sudo -k -A -- bash -c <cmd>` | the native AppleScript dialog, password hidden |
+| Windows | `Start-Process powershell -Verb RunAs` | the UAC prompt |
+
+- On Linux and macOS, mistermorph is sudo's askpass helper: sudo starts the binary in askpass mode,
+  which shows the dialog and hands what the user typed to sudo. The agent process, the model, the
+  tool output and the logs never see the password.
+- Every elevated command needs its own approval: `-k` makes sudo ignore cached credentials, and each
+  command runs in a new session.
+- Declined or unanswered, the command does not run and the tool says so.
+- Offered when the tool's `elevation.enabled` is true (`tools.bash.elevation.enabled`,
+  `tools.powershell.elevation.enabled`; the default; off for embedded programs, which also
+  call `integration.RunAskpassIfRequested()` at the start of `main`, see `docs/integration.md`) and the OS
+  can show the dialog: on Linux that needs `sudo`, a desktop session (`DISPLAY` or `WAYLAND_DISPLAY`)
+  and one of the dialog programs; on macOS `sudo` and `osascript`.
+- A non-elevated command whose `sudo` fails for want of a terminal gets a note suggesting
+  `elevated: true`.
+- Settings, under `tools.bash.elevation` and `tools.powershell.elevation`: `enabled`,
+  `approval_timeout` (how long the dialog waits, on top of the command's timeout; default `2m`), and
+  for bash `dialog` (a dialog program instead of the automatic choice).
+- Design: `docs/feat/feat_20261024_elevated_commands.md`.
 
 ## `url_fetch`
 

@@ -439,6 +439,20 @@ tools:
     rewrite:
       enabled: false
       binary: ""
+    # Linux and macOS: a command the agent marks `elevated: true` runs as root through
+    # `sudo -k -A`, after the user approves it in a system dialog on this machine that shows the
+    # command. Every command needs its own approval, and the password goes to sudo only.
+    # See docs/feat/feat_20261024_elevated_commands.md.
+    elevation:
+      # Default: true. Embedded programs default to false and also call
+      # integration.RunAskpassIfRequested() at the start of main.
+      enabled: true
+      # How long the dialog waits for the user, on top of the command's own timeout.
+      approval_timeout: "2m"
+      # The dialog program to use instead of the automatic choice. On Linux that is the system's
+      # pinentry (the update-alternatives choice on Debian/Ubuntu) unless it is a terminal variant,
+      # then pinentry-gnome3, pinentry-qt, pinentry-gtk-2, zenity or kdialog; on macOS osascript.
+      dialog: ""
   # Dangerous: enables local PowerShell execution (Windows).
   powershell:
     # Enable the powershell tool.
@@ -454,7 +468,13 @@ tools:
     # Extra environment variables to inject into powershell execution.
     # Each entry can be either a variable name or an object with name/value.
     injected_env_vars: []
-
+    # Windows: a command the agent marks `elevated: true` runs as administrator through UAC, after
+    # the user approves the UAC prompt on this machine.
+    elevation:
+      # Default: true (false in embedded programs).
+      enabled: true
+      # How long the UAC prompt may wait, on top of the command's own timeout.
+      approval_timeout: "2m"
 # MCP (Model Context Protocol) servers.
 # Connect to external MCP tool servers. Tools are namespaced as mcp_<name>__<tool>.
 mcp:

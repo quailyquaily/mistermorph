@@ -295,10 +295,19 @@ func Apply(v *viper.Viper) {
 	v.SetDefault("tools.bash.rewrite.enabled", false)
 	v.SetDefault("tools.bash.rewrite.binary", "")
 
+	// A bash command may run as root after the user approves it in a system dialog
+	// (docs/feat/feat_20261024_elevated_commands.md); Linux and macOS.
+	v.SetDefault("tools.bash.elevation.enabled", true)
+	v.SetDefault("tools.bash.elevation.approval_timeout", 2*time.Minute)
+	v.SetDefault("tools.bash.elevation.dialog", "")
+
 	v.SetDefault("tools.powershell.timeout", time.Minute)
 	v.SetDefault("tools.powershell.max_output_bytes", 256*1024)
 	v.SetDefault("tools.powershell.deny_paths", []string{"config.yaml"})
 	v.SetDefault("tools.powershell.injected_env_vars", []string{})
+	// A powershell command may run as administrator after the user approves the UAC prompt; Windows.
+	v.SetDefault("tools.powershell.elevation.enabled", true)
+	v.SetDefault("tools.powershell.elevation.approval_timeout", 2*time.Minute)
 
 	v.SetDefault("tools.url_fetch.enabled", true)
 	v.SetDefault("tools.url_fetch.timeout", 30*time.Second)

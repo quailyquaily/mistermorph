@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/quailyquaily/mistermorph/internal/caprefs"
+	"github.com/quailyquaily/mistermorph/internal/elevate"
 	"github.com/quailyquaily/mistermorph/internal/pathroots"
 	"github.com/quailyquaily/mistermorph/internal/pathutil"
 	"github.com/quailyquaily/mistermorph/internal/runtimepaths"
@@ -87,6 +88,7 @@ type StaticBashConfig struct {
 	PathExtra       []string
 	InjectedEnvVars []shellenv.InjectedEnvVar
 	Rewrite         builtin.BashRewriteConfig
+	Elevation       elevate.Config
 }
 
 type StaticPowerShellConfig struct {
@@ -95,6 +97,7 @@ type StaticPowerShellConfig struct {
 	MaxOutputBytes  int
 	DenyPaths       []string
 	InjectedEnvVars []shellenv.InjectedEnvVar
+	Elevation       elevate.Config
 }
 
 type StaticURLFetchConfig struct {
@@ -217,6 +220,12 @@ func StaticRegistryConfigFromReader(reader StaticRegistryConfigReader) (StaticRe
 				Enabled: reader.GetBool("tools.bash.rewrite.enabled"),
 				Binary:  strings.TrimSpace(reader.GetString("tools.bash.rewrite.binary")),
 			},
+			Elevation: elevate.Config{
+				Key:             "tools.bash.elevation",
+				Enabled:         reader.GetBool("tools.bash.elevation.enabled"),
+				ApprovalTimeout: reader.GetDuration("tools.bash.elevation.approval_timeout"),
+				Dialog:          strings.TrimSpace(reader.GetString("tools.bash.elevation.dialog")),
+			},
 		},
 		PowerShell: StaticPowerShellConfig{
 			Enabled:         reader.GetBool("tools.powershell.enabled"),
@@ -224,6 +233,11 @@ func StaticRegistryConfigFromReader(reader StaticRegistryConfigReader) (StaticRe
 			MaxOutputBytes:  reader.GetInt("tools.powershell.max_output_bytes"),
 			DenyPaths:       append([]string(nil), reader.GetStringSlice("tools.powershell.deny_paths")...),
 			InjectedEnvVars: shellenv.InjectedEnvVarsFromConfig(reader.Get("tools.powershell.injected_env_vars")),
+			Elevation: elevate.Config{
+				Key:             "tools.powershell.elevation",
+				Enabled:         reader.GetBool("tools.powershell.elevation.enabled"),
+				ApprovalTimeout: reader.GetDuration("tools.powershell.elevation.approval_timeout"),
+			},
 		},
 		URLFetch: StaticURLFetchConfig{
 			Enabled:          reader.GetBool("tools.url_fetch.enabled"),
@@ -352,6 +366,7 @@ func RegisterStaticTools(reg *tools.Registry, cfg StaticRegistryConfig, selected
 		bt.PathExtra = append([]string(nil), cfg.Bash.PathExtra...)
 		bt.InjectedEnvVars = shellenv.CloneInjectedEnvVars(cfg.Bash.InjectedEnvVars)
 		bt.Rewrite = cfg.Bash.Rewrite
+		bt.Elevation = cfg.Bash.Elevation
 		if cfg.Common.AuthenticatedHTTPConfigured {
 			// Safety default: allow bash for local automation, but deny curl when authenticated HTTP is configured.
 			bt.DenyTokens = append(bt.DenyTokens, "curl")
@@ -368,6 +383,7 @@ func RegisterStaticTools(reg *tools.Registry, cfg StaticRegistryConfig, selected
 		)
 		pt.DenyPaths = append([]string(nil), cfg.PowerShell.DenyPaths...)
 		pt.InjectedEnvVars = shellenv.CloneInjectedEnvVars(cfg.PowerShell.InjectedEnvVars)
+		pt.Elevation = cfg.PowerShell.Elevation
 		if cfg.Common.AuthenticatedHTTPConfigured {
 			pt.DenyTokens = append(pt.DenyTokens, "curl")
 		}

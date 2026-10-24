@@ -2,13 +2,18 @@ package builtin
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
+	"github.com/quailyquaily/mistermorph/internal/elevate"
 	"github.com/quailyquaily/mistermorph/internal/pathroots"
 	"github.com/quailyquaily/mistermorph/internal/shellenv"
 )
@@ -21,6 +26,9 @@ type PowerShellTool struct {
 	DenyPaths       []string
 	DenyTokens      []string
 	InjectedEnvVars []shellenv.InjectedEnvVar
+	// Elevation lets a command run as administrator after the user approves the UAC prompt
+	// (tools.powershell.elevation).
+	Elevation elevate.Config
 }
 
 func NewPowerShellTool(enabled bool, defaultTimeout time.Duration, maxOutputBytes int, roots pathroots.PathRoots) *PowerShellTool {
@@ -64,6 +72,12 @@ func (t *PowerShellTool) ParameterSchema() string {
 		},
 		"required": []string{"cmd"},
 	}
+	if t.elevationOffered() {
+		s["properties"].(map[string]any)["elevated"] = map[string]any{
+			"type":        "boolean",
+			"description": elevatedParamDescription + " Output arrives when the command ends.",
+		}
+	}
 	b, _ := json.MarshalIndent(s, "", "  ")
 	return string(b)
 }
@@ -72,7 +86,42 @@ func (t *PowerShellTool) Execute(ctx context.Context, params map[string]any) (st
 	if !t.Enabled {
 		return "", fmt.Errorf("powershell tool is disabled (enable via config: tools.powershell.enabled=true)")
 	}
+	if elevated, _ := asBool(params["elevated"]); elevated {
+		inv, err := prepareShellInvocation(ctx, params, t.commonConfig(), t.runnerSpec())
+		if err != nil {
+			return "", err
+		}
+		return t.executeElevated(ctx, inv)
+	}
 	return executeShellCommand(ctx, params, t.commonConfig(), t.runnerSpec())
+}
+
+// elevationOffered reports whether powershell offers elevated commands: on Windows, through UAC,
+// when tools.powershell.elevation allows it. Linux and macOS elevate through the bash tool.
+func (t *PowerShellTool) elevationOffered() bool {
+	return runtime.GOOS == "windows" && elevate.Check(t.Elevation) == nil
+}
+
+// executeElevated runs a command in a powershell started with -Verb RunAs, which shows the UAC
+// prompt; the elevated process writes its output to a file this one reads back (elevate.RunAsScript).
+func (t *PowerShellTool) executeElevated(ctx context.Context, inv shellInvocation) (string, error) {
+	if runtime.GOOS != "windows" {
+		return "", fmt.Errorf("powershell runs elevated commands on Windows only; use the bash tool with elevated: true")
+	}
+	if err := elevate.Check(t.Elevation); err != nil {
+		return "", fmt.Errorf("cannot ask for administrator rights here: %v. Ask the user to run the command themselves: %s", err, inv.Command)
+	}
+	var nonce [8]byte
+	if _, err := rand.Read(nonce[:]); err != nil {
+		return "", err
+	}
+	outPath := filepath.Join(os.TempDir(), "mistermorph-elevated-"+hex.EncodeToString(nonce[:])+".log")
+	defer os.Remove(outPath)
+	command := inv.Command
+	inv.Command = elevate.RunAsScript(command, inv.CWD, outPath)
+	// The user has this long to answer the UAC prompt, on top of the command's own time.
+	inv.Timeout += t.Elevation.Approval()
+	return runElevated(ctx, t.Name(), command, t.commonConfig(), t.runnerSpec(), inv)
 }
 
 func (t *PowerShellTool) commonConfig() shellToolCommon {
