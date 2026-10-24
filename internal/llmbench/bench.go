@@ -23,8 +23,17 @@ type BenchmarkResult struct {
 }
 
 // BenchmarksPerRun is how many benchmarks a Chat profile runs: text, JSON, tool calling and
-// Evaluate. See BenchmarkCount for Evaluate-only profiles.
+// Evaluate. See BenchmarkIDs for the other kinds of profile.
 const BenchmarksPerRun = 4
+
+// Benchmark IDs, as results and the Console name them.
+const (
+	BenchmarkTextReply     = "text_reply"
+	BenchmarkJSONResponse  = "json_response"
+	BenchmarkToolCalling   = "tool_calling"
+	BenchmarkEvaluate      = "evaluate"
+	BenchmarkTranscription = "transcription"
+)
 
 type ProfileMetadata struct {
 	Profile  string
@@ -33,6 +42,66 @@ type ProfileMetadata struct {
 	Model    string
 	// EvaluateOnly profiles cannot chat, so they run only the Evaluate benchmark.
 	EvaluateOnly bool
+	// Abilities are the profile's normalized abilities; none means text. A profile with
+	// transcription runs the transcription benchmark, and one without text runs no chat benchmark.
+	Abilities []string
+}
+
+// Clients are what a profile is benchmarked through: Chat for the chat and Evaluate benchmarks,
+// Transcription for the transcription one. TranscriptionErr is why the transcription client
+// could not be made.
+type Clients struct {
+	Chat             llm.Client
+	Transcription    llm.TranscriptionClient
+	TranscriptionErr error
+}
+
+// BenchmarkIDs lists the benchmarks a profile runs, in order. A profile that chats runs text,
+// JSON, tool calling and Evaluate; an Evaluate-only one runs Evaluate; one with transcription
+// adds the transcription benchmark, and a transcription-only one runs just that.
+func BenchmarkIDs(meta ProfileMetadata) []string {
+	var ids []string
+	switch {
+	case meta.EvaluateOnly:
+		ids = []string{BenchmarkEvaluate}
+	case hasAbility(meta.Abilities, "text"):
+		ids = []string{BenchmarkTextReply, BenchmarkJSONResponse, BenchmarkToolCalling, BenchmarkEvaluate}
+	}
+	if hasAbility(meta.Abilities, "transcription") {
+		ids = append(ids, BenchmarkTranscription)
+	}
+	if len(ids) == 0 {
+		// An image-only profile still answers chat requests; it has nothing better to test.
+		ids = []string{BenchmarkTextReply, BenchmarkJSONResponse, BenchmarkToolCalling, BenchmarkEvaluate}
+	}
+	return ids
+}
+
+// NeedsChat reports whether any of the profile's benchmarks go through a chat client.
+func NeedsChat(meta ProfileMetadata) bool {
+	for _, id := range BenchmarkIDs(meta) {
+		if id != BenchmarkTranscription {
+			return true
+		}
+	}
+	return false
+}
+
+// NeedsTranscription reports whether the profile runs the transcription benchmark.
+func NeedsTranscription(meta ProfileMetadata) bool {
+	return hasAbility(meta.Abilities, "transcription")
+}
+
+func hasAbility(abilities []string, ability string) bool {
+	if len(abilities) == 0 {
+		return ability == "text"
+	}
+	for _, value := range abilities {
+		if strings.EqualFold(strings.TrimSpace(value), ability) {
+			return true
+		}
+	}
+	return false
 }
 
 type ProfileResult struct {
@@ -56,52 +125,46 @@ func (r ProfileResult) OK() bool {
 	return true
 }
 
-func Run(ctx context.Context, client llm.Client, meta ProfileMetadata) ProfileResult {
-	return RunWithProgress(ctx, client, meta, nil)
+func Run(ctx context.Context, clients Clients, meta ProfileMetadata) ProfileResult {
+	return RunWithProgress(ctx, clients, meta, nil)
 }
 
+// RunWithProgress runs the profile's benchmarks (BenchmarkIDs) in order, reporting each as it
+// finishes.
 func RunWithProgress(
 	ctx context.Context,
-	client llm.Client,
+	clients Clients,
 	meta ProfileMetadata,
 	onBenchmark func(BenchmarkResult),
 ) ProfileResult {
 	model := strings.TrimSpace(meta.Model)
-	if BenchmarkCount(meta.EvaluateOnly) == 1 {
-		evaluateResult := RunEvaluateBenchmark(ctx, client, model)
+	ids := BenchmarkIDs(meta)
+	results := make([]BenchmarkResult, 0, len(ids))
+	for _, id := range ids {
+		var result BenchmarkResult
+		switch id {
+		case BenchmarkTextReply:
+			result = RunTextBenchmark(ctx, clients.Chat, model)
+		case BenchmarkJSONResponse:
+			result = RunJSONBenchmark(ctx, clients.Chat, model)
+		case BenchmarkToolCalling:
+			result = RunToolCallingBenchmark(ctx, clients.Chat, model)
+		case BenchmarkEvaluate:
+			result = RunEvaluateBenchmark(ctx, clients.Chat, model)
+		case BenchmarkTranscription:
+			result = RunTranscriptionBenchmark(ctx, clients.Transcription, clients.TranscriptionErr, model)
+		}
 		if onBenchmark != nil {
-			onBenchmark(evaluateResult)
+			onBenchmark(result)
 		}
-		return ProfileResult{
-			Profile:    strings.TrimSpace(meta.Profile),
-			Provider:   strings.TrimSpace(meta.Provider),
-			APIBase:    strings.TrimSpace(meta.APIBase),
-			Model:      model,
-			Benchmarks: []BenchmarkResult{evaluateResult},
-		}
-	}
-	textResult := RunTextBenchmark(ctx, client, model)
-	if onBenchmark != nil {
-		onBenchmark(textResult)
-	}
-	jsonResult := RunJSONBenchmark(ctx, client, model)
-	if onBenchmark != nil {
-		onBenchmark(jsonResult)
-	}
-	toolResult := RunToolCallingBenchmark(ctx, client, model)
-	if onBenchmark != nil {
-		onBenchmark(toolResult)
-	}
-	evaluateResult := RunEvaluateBenchmark(ctx, client, model)
-	if onBenchmark != nil {
-		onBenchmark(evaluateResult)
+		results = append(results, result)
 	}
 	return ProfileResult{
 		Profile:    strings.TrimSpace(meta.Profile),
 		Provider:   strings.TrimSpace(meta.Provider),
 		APIBase:    strings.TrimSpace(meta.APIBase),
 		Model:      model,
-		Benchmarks: []BenchmarkResult{textResult, jsonResult, toolResult, evaluateResult},
+		Benchmarks: results,
 	}
 }
 
@@ -121,7 +184,7 @@ func RunTextBenchmark(ctx context.Context, client llm.Client, model string) Benc
 	durationMS := time.Since(start).Milliseconds()
 	if err != nil {
 		return BenchmarkResult{
-			ID:          "text_reply",
+			ID:          BenchmarkTextReply,
 			OK:          false,
 			DurationMS:  durationMS,
 			Error:       strings.TrimSpace(err.Error()),
@@ -132,7 +195,7 @@ func RunTextBenchmark(ctx context.Context, client llm.Client, model string) Benc
 	text := strings.TrimSpace(result.Text)
 	if text == "" {
 		return BenchmarkResult{
-			ID:          "text_reply",
+			ID:          BenchmarkTextReply,
 			OK:          false,
 			DurationMS:  durationMS,
 			Error:       "received an empty text reply",
@@ -141,7 +204,7 @@ func RunTextBenchmark(ctx context.Context, client llm.Client, model string) Benc
 	}
 
 	return BenchmarkResult{
-		ID:          "text_reply",
+		ID:          BenchmarkTextReply,
 		OK:          true,
 		DurationMS:  durationMS,
 		Detail:      SummarizeBenchmarkDetail(text),
@@ -166,7 +229,7 @@ func RunJSONBenchmark(ctx context.Context, client llm.Client, model string) Benc
 	durationMS := time.Since(start).Milliseconds()
 	if err != nil {
 		return BenchmarkResult{
-			ID:          "json_response",
+			ID:          BenchmarkJSONResponse,
 			OK:          false,
 			DurationMS:  durationMS,
 			Error:       strings.TrimSpace(err.Error()),
@@ -179,7 +242,7 @@ func RunJSONBenchmark(ctx context.Context, client llm.Client, model string) Benc
 	}
 	if err := jsonutil.DecodeWithFallback(result.Text, &payload); err != nil {
 		return BenchmarkResult{
-			ID:          "json_response",
+			ID:          BenchmarkJSONResponse,
 			OK:          false,
 			DurationMS:  durationMS,
 			Error:       "response was not valid json",
@@ -188,7 +251,7 @@ func RunJSONBenchmark(ctx context.Context, client llm.Client, model string) Benc
 	}
 	if strings.TrimSpace(payload.Message) != "Hello" {
 		return BenchmarkResult{
-			ID:          "json_response",
+			ID:          BenchmarkJSONResponse,
 			OK:          false,
 			DurationMS:  durationMS,
 			Error:       "json response is not so correct",
@@ -197,7 +260,7 @@ func RunJSONBenchmark(ctx context.Context, client llm.Client, model string) Benc
 	}
 
 	return BenchmarkResult{
-		ID:          "json_response",
+		ID:          BenchmarkJSONResponse,
 		OK:          true,
 		DurationMS:  durationMS,
 		Detail:      "Hello",
@@ -228,7 +291,7 @@ func RunToolCallingBenchmark(ctx context.Context, client llm.Client, model strin
 	durationMS := time.Since(start).Milliseconds()
 	if err != nil {
 		return BenchmarkResult{
-			ID:          "tool_calling",
+			ID:          BenchmarkToolCalling,
 			OK:          false,
 			DurationMS:  durationMS,
 			Error:       strings.TrimSpace(err.Error()),
@@ -239,7 +302,7 @@ func RunToolCallingBenchmark(ctx context.Context, client llm.Client, model strin
 	for _, call := range result.ToolCalls {
 		if strings.EqualFold(strings.TrimSpace(call.Name), "ping") {
 			return BenchmarkResult{
-				ID:          "tool_calling",
+				ID:          BenchmarkToolCalling,
 				OK:          true,
 				DurationMS:  durationMS,
 				Detail:      "called ping",
@@ -255,7 +318,7 @@ func RunToolCallingBenchmark(ctx context.Context, client llm.Client, model strin
 		detail = "model replied without calling the tool: " + detail
 	}
 	return BenchmarkResult{
-		ID:          "tool_calling",
+		ID:          BenchmarkToolCalling,
 		OK:          false,
 		DurationMS:  durationMS,
 		Error:       detail,

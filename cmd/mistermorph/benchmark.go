@@ -115,11 +115,11 @@ func defaultRunBenchmarkCommand(
 	totalProfiles := len(names)
 	totalBenchmarks := 0
 	for _, name := range names {
-		evaluateOnly := false
+		meta := llmbench.ProfileMetadata{}
 		if resolved, err := llmutil.ResolveProfile(values, name); err == nil {
-			evaluateOnly = resolved.ClientConfig.EvaluateOnly
+			meta = benchmarkProfileMetadata(resolved)
 		}
-		totalBenchmarks += llmbench.BenchmarkCount(evaluateOnly)
+		totalBenchmarks += llmbench.BenchmarkCount(meta)
 	}
 	completedBenchmarks := 0
 
@@ -207,25 +207,39 @@ func benchmarkProfile(
 		return llmbench.ProfileResult{Profile: profileName}, err
 	}
 
-	meta := llmbench.ProfileMetadata{
+	meta := benchmarkProfileMetadata(resolved)
+	var clients llmbench.Clients
+	if llmbench.NeedsChat(meta) {
+		client, err := buildBenchmarkClient(resolved, logger)
+		if err != nil {
+			return llmbench.ProfileResult{
+				Profile:  meta.Profile,
+				Provider: meta.Provider,
+				APIBase:  meta.APIBase,
+				Model:    meta.Model,
+			}, err
+		}
+		clients.Chat = client
+	}
+	if llmbench.NeedsTranscription(meta) {
+		// A provider without transcription fails the transcription benchmark, not the profile.
+		clients.Transcription, clients.TranscriptionErr = llmutil.TranscriptionClientFromValuesWithStats(resolved.Values, logger)
+	}
+
+	return llmbench.RunWithProgress(ctx, clients, meta, onBenchmark), nil
+}
+
+// benchmarkProfileMetadata describes a profile for the benchmarks; its abilities pick which run.
+func benchmarkProfileMetadata(resolved llmutil.ResolvedProfile) llmbench.ProfileMetadata {
+	abilities, _ := llmutil.NormalizeAbilities(resolved.Values.Abilities)
+	return llmbench.ProfileMetadata{
 		Profile:      resolved.Name,
 		Provider:     resolved.ClientConfig.Provider,
 		APIBase:      strings.TrimSpace(resolved.ClientConfig.Endpoint),
 		Model:        resolved.ClientConfig.Model,
 		EvaluateOnly: resolved.ClientConfig.EvaluateOnly,
+		Abilities:    abilities,
 	}
-
-	client, err := buildBenchmarkClient(resolved, logger)
-	if err != nil {
-		return llmbench.ProfileResult{
-			Profile:  meta.Profile,
-			Provider: meta.Provider,
-			APIBase:  meta.APIBase,
-			Model:    meta.Model,
-		}, err
-	}
-
-	return llmbench.RunWithProgress(ctx, client, meta, onBenchmark), nil
 }
 
 func buildBenchmarkClient(profile llmutil.ResolvedProfile, logger *slog.Logger) (llm.Client, error) {

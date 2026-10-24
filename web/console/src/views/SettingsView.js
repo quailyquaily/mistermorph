@@ -95,6 +95,7 @@ import {
   SETUP_PROVIDER_XAI_OAUTH,
   SETUP_PROVIDER_OPTIONS,
   setupProviderEvaluateOnly,
+  setupProfileBenchmarkIds,
   setupProfileDecisionOnly,
   setupProviderRequiresAPIKey,
   setupProviderSupportsCustomAPIBase,
@@ -964,6 +965,7 @@ const SettingsView = {
     const testConnectionMeta = reactive({
       provider: "",
       evaluateOnly: false,
+      benchmarkIds: [],
       apiBase: "",
       model: "",
     });
@@ -4145,6 +4147,8 @@ const SettingsView = {
       testConnectionMeta.evaluateOnly = targetProfile
         ? setupProfileDecisionOnly(targetProviderChoice, targetProfile.abilities)
         : setupProviderEvaluateOnly(targetProviderChoice);
+      // The main model's test sends no abilities, so it runs as a chat model.
+      testConnectionMeta.benchmarkIds = setupProfileBenchmarkIds(targetProviderChoice, targetProfile ? targetProfile.abilities : "");
       testConnectionMeta.apiBase = trimText(targetEndpoint);
       testConnectionMeta.model = trimText(targetModel) || String(payload.model || "").trim();
       return payload;
@@ -5412,6 +5416,7 @@ const SettingsView = {
       testConnectionTargetProfileKey.value = "";
       testConnectionMeta.provider = "";
       testConnectionMeta.evaluateOnly = false;
+      testConnectionMeta.benchmarkIds = [];
       testConnectionMeta.apiBase = "";
       testConnectionMeta.model = "";
       closeDeleteProfileDialog();
@@ -7676,6 +7681,7 @@ const SettingsView = {
         :benchmarks="testConnectionBenchmarks"
         :provider="testConnectionMeta.provider"
         :evaluateOnly="testConnectionMeta.evaluateOnly"
+        :benchmarkIds="testConnectionMeta.benchmarkIds"
         :apiBase="testConnectionMeta.apiBase"
         :model="testConnectionMeta.model"
         :showIntro="false"

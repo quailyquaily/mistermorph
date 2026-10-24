@@ -2,6 +2,7 @@ import heartbeatTemplate from "../../../../assets/config/HEARTBEAT.md?raw";
 import identityTemplate from "../../../../assets/config/persona/identity.yaml?raw";
 import cronTemplate from "../../../../assets/config/cron.yaml?raw";
 import soulTemplate from "../../../../assets/config/persona/soul.md?raw";
+import { profileBenchmarkIds } from "./setup-benchmarks.js";
 
 const SETUP_PROVIDER_NONE = "";
 const SETUP_PROVIDER_OPENAI = "openai";
@@ -296,6 +297,11 @@ function setupProfileDecisionOnly(choice, raw) {
   return abilities.includes("decision") && !abilities.includes("text");
 }
 
+// The benchmarks a profile runs (see profileBenchmarkIds).
+function setupProfileBenchmarkIds(choice, raw) {
+  return profileBenchmarkIds(setupProfileAbilities(choice, raw), setupProfileDecisionOnly(choice, raw));
+}
+
 function setupProviderRequiresAPIKey(choice) {
   const provider = normalizeSetupProviderChoice(choice, { allowEmpty: true });
   return ![
@@ -354,6 +360,7 @@ export {
   resolveSetupAPIKeyHelp,
   setupProviderEvaluateOnly,
   setupProfileAbilities,
+  setupProfileBenchmarkIds,
   setupProfileDecisionOnly,
   setupProviderRequiresAPIBase,
   setupProviderRequiresAPIKey,

@@ -10,19 +10,15 @@ import (
 	"github.com/quailyquaily/mistermorph/llm"
 )
 
-// BenchmarkCount is how many benchmarks a profile runs. An Evaluate-only profile (TypeSafe, or
-// one with decision but not text) runs just the Evaluate benchmark.
-func BenchmarkCount(evaluateOnly bool) int {
-	if evaluateOnly {
-		return 1
-	}
-	return BenchmarksPerRun
+// BenchmarkCount is how many benchmarks a profile runs (see BenchmarkIDs).
+func BenchmarkCount(meta ProfileMetadata) int {
+	return len(BenchmarkIDs(meta))
 }
 
 // RunEvaluateBenchmark checks that the client answers structured judgments the way the
 // decision route asks them: a yes/no and a choice, both with obvious answers.
 func RunEvaluateBenchmark(ctx context.Context, client llm.Client, model string) BenchmarkResult {
-	const id = "evaluate"
+	const id = BenchmarkEvaluate
 	start := time.Now()
 	res, err := llm.Evaluate(ctx, client, llm.EvaluateRequest{
 		Model: strings.TrimSpace(model),

@@ -47,6 +47,7 @@ const SetupConnectionTestDialog = {
         :benchmarks="benchmarks"
         :provider="provider"
         :evaluateOnly="evaluateOnly"
+        :benchmarkIds="benchmarkIds"
         :apiBase="apiBase"
         :model="model"
         :showIntro="showIntro"

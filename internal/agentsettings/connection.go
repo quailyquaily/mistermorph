@@ -17,6 +17,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/llminspect"
 	"github.com/quailyquaily/mistermorph/internal/llmutil"
 	"github.com/quailyquaily/mistermorph/internal/secref"
+	"github.com/quailyquaily/mistermorph/llm"
 	uniaiapi "github.com/quailyquaily/uniai"
 )
 
@@ -51,13 +52,53 @@ func ResolveConnectionTestFieldValue(value string, source secref.Source) (string
 }
 
 func RunConnectionTest(ctx context.Context, values llmutil.RuntimeValues, opts ConnectionTestOptions) (ConnectionTestResult, error) {
+	// The model under test, as the main loop would reach it.
 	route, err := llmutil.ResolveRoute(values, llmutil.RoutePurposeMainLoop)
 	if err != nil {
 		return ConnectionTestResult{}, err
 	}
-	client, err := llmutil.ClientFromConfigWithValues(route.ClientConfig, route.Values)
+	abilities, err := llmutil.NormalizeAbilities(values.Abilities)
 	if err != nil {
 		return ConnectionTestResult{}, err
+	}
+	metadata := llmbench.ProfileMetadata{
+		Model:        strings.TrimSpace(values.Model),
+		EvaluateOnly: llmutil.IsEvaluateOnly(values),
+		Abilities:    abilities,
+	}
+	var clients llmbench.Clients
+	if llmbench.NeedsTranscription(metadata) {
+		// A provider without transcription fails the transcription benchmark, not the test.
+		clients.Transcription, clients.TranscriptionErr = llmutil.TranscriptionClientFromValues(route.Values)
+		if closer, ok := clients.Transcription.(io.Closer); ok {
+			defer closer.Close()
+		}
+		if meta, err := llmutil.ResolveTranscriptionClientMetadata(route.Values); err == nil {
+			metadata.Provider, metadata.APIBase, metadata.Model = meta.Provider, strings.TrimSpace(meta.Endpoint), meta.Model
+		}
+	}
+	if llmbench.NeedsChat(metadata) {
+		client, cleanup, err := connectionTestChatClient(route, opts, &metadata)
+		if err != nil {
+			return ConnectionTestResult{}, err
+		}
+		defer cleanup()
+		clients.Chat = client
+	}
+	return ConnectionTestResult{
+		Provider:   metadata.Provider,
+		APIBase:    metadata.APIBase,
+		Model:      metadata.Model,
+		Benchmarks: llmbench.Run(ctx, clients, metadata).Benchmarks,
+	}, nil
+}
+
+// connectionTestChatClient builds the chat client the chat benchmarks run through, with the
+// requested inspectors, and fills in metadata from its route.
+func connectionTestChatClient(route llmutil.ResolvedRoute, opts ConnectionTestOptions, metadata *llmbench.ProfileMetadata) (llm.Client, func() error, error) {
+	client, err := llmutil.ClientFromConfigWithValues(route.ClientConfig, route.Values)
+	if err != nil {
+		return nil, nil, err
 	}
 	closeClient := func() error {
 		if closer, ok := client.(io.Closer); ok {
@@ -77,7 +118,6 @@ func RunConnectionTest(ctx context.Context, values llmutil.RuntimeValues, opts C
 		}
 		return errors.Join(closeClient(), requestErr, promptErr)
 	}
-	defer cleanup()
 	inspectOptions := llminspect.Options{
 		Mode:            "console_settings_test",
 		Task:            "settings_test",
@@ -87,13 +127,15 @@ func RunConnectionTest(ctx context.Context, values llmutil.RuntimeValues, opts C
 	if opts.InspectRequest {
 		requestInspector, err = llminspect.NewRequestInspector(inspectOptions)
 		if err != nil {
-			return ConnectionTestResult{}, err
+			_ = cleanup()
+			return nil, nil, err
 		}
 	}
 	if opts.InspectPrompt {
 		promptInspector, err = llminspect.NewPromptInspector(inspectOptions)
 		if err != nil {
-			return ConnectionTestResult{}, err
+			_ = cleanup()
+			return nil, nil, err
 		}
 	}
 	client = llminspect.WrapClient(client, llminspect.ClientOptions{
@@ -102,18 +144,11 @@ func RunConnectionTest(ctx context.Context, values llmutil.RuntimeValues, opts C
 		APIBase:          route.ClientConfig.Endpoint,
 		Model:            strings.TrimSpace(route.ClientConfig.Model),
 	})
-	metadata := llmbench.ProfileMetadata{
-		Provider:     route.ClientConfig.Provider,
-		APIBase:      strings.TrimSpace(route.ClientConfig.Endpoint),
-		Model:        route.ClientConfig.Model,
-		EvaluateOnly: route.ClientConfig.EvaluateOnly,
-	}
-	return ConnectionTestResult{
-		Provider:   metadata.Provider,
-		APIBase:    metadata.APIBase,
-		Model:      metadata.Model,
-		Benchmarks: llmbench.Run(ctx, client, metadata).Benchmarks,
-	}, nil
+	metadata.Provider = route.ClientConfig.Provider
+	metadata.APIBase = strings.TrimSpace(route.ClientConfig.Endpoint)
+	metadata.Model = route.ClientConfig.Model
+	metadata.EvaluateOnly = route.ClientConfig.EvaluateOnly
+	return client, cleanup, nil
 }
 
 // ModelInfo is one model a provider lists. Created is when the provider published it (Unix

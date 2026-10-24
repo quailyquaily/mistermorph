@@ -70,14 +70,14 @@ func TestRunEvaluateBenchmark(t *testing.T) {
 
 func TestRunWithProgressEvaluateOnlyProvider(t *testing.T) {
 	client := &evaluateStub{result: judgment(false, true, "text")}
-	result := Run(context.Background(), client, ProfileMetadata{Provider: "typesafe", Model: "jev", EvaluateOnly: true})
+	result := Run(context.Background(), Clients{Chat: client}, ProfileMetadata{Provider: "typesafe", Model: "jev", EvaluateOnly: true})
 	if len(result.Benchmarks) != 1 || result.Benchmarks[0].ID != "evaluate" || !result.OK() || client.chats != 0 {
 		t.Fatalf("result = %+v, chats = %d; want only the Evaluate benchmark", result, client.chats)
 	}
-	if BenchmarkCount(true) != 1 || BenchmarkCount(false) != BenchmarksPerRun {
+	if BenchmarkCount(ProfileMetadata{EvaluateOnly: true}) != 1 || BenchmarkCount(ProfileMetadata{}) != BenchmarksPerRun {
 		t.Fatal("benchmark counts do not match what Run runs")
 	}
-	chat := Run(context.Background(), &evaluateStub{result: judgment(true, true, "text")}, ProfileMetadata{Provider: "openai"})
+	chat := Run(context.Background(), Clients{Chat: &evaluateStub{result: judgment(true, true, "text")}}, ProfileMetadata{Provider: "openai"})
 	if len(chat.Benchmarks) != BenchmarksPerRun || chat.Benchmarks[BenchmarksPerRun-1].ID != "evaluate" {
 		t.Fatalf("chat profile benchmarks = %d, want %d ending with evaluate", len(chat.Benchmarks), BenchmarksPerRun)
 	}

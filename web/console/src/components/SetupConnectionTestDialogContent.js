@@ -22,6 +22,12 @@ export const setupConnectionTestDialogContentProps = {
   },
   // An Evaluate-only profile (TypeSafe, or a decision model) runs only the Evaluate benchmark.
   evaluateOnly: Boolean,
+  // The benchmarks the profile runs (setupProfileBenchmarkIds), shown while they run; empty to
+  // go by provider and evaluateOnly.
+  benchmarkIds: {
+    type: Array,
+    default: () => [],
+  },
   apiBase: {
     type: String,
     default: "",
@@ -60,7 +66,12 @@ const SetupConnectionTestDialogContent = {
     const visibleBenchmarks = computed(() => {
       if (props.loading && !hasBenchmarks.value) {
         const provider = String(props.provider || "").trim().toLowerCase();
-        const ids = props.evaluateOnly || EVALUATE_ONLY_PROVIDERS.has(provider) ? ["evaluate"] : TEST_CONNECTION_BENCHMARK_IDS;
+        const ids =
+          props.benchmarkIds.length > 0
+            ? props.benchmarkIds
+            : props.evaluateOnly || EVALUATE_ONLY_PROVIDERS.has(provider)
+              ? ["evaluate"]
+              : TEST_CONNECTION_BENCHMARK_IDS;
         return ids.map((id) => ({
           id,
           ok: false,
