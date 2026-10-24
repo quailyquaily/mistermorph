@@ -236,6 +236,91 @@ func (c *ImageUsageClient) EditImage(ctx context.Context, req llm.ImageEditReque
 	return res, nil
 }
 
+// TranscriptionUsageClient records the usage of transcription requests.
+type TranscriptionUsageClient struct {
+	Base         llm.TranscriptionClient
+	Journal      *Journal
+	Provider     string
+	APIBase      string
+	DefaultModel string
+	Logger       *slog.Logger
+	now          func() time.Time
+}
+
+func WrapTranscriptionClient(base llm.TranscriptionClient, opts ClientOptions) llm.TranscriptionClient {
+	if base == nil {
+		return nil
+	}
+	journalDir := strings.TrimSpace(opts.JournalDir)
+	if journalDir == "" {
+		return base
+	}
+	return &TranscriptionUsageClient{
+		Base:         base,
+		Journal:      NewJournal(journalDir, JournalOptions{MaxFileBytes: opts.RotateMaxFileBytes}),
+		Provider:     normalizeProvider(opts.Provider),
+		APIBase:      normalizeAPIBase(opts.APIBase),
+		DefaultModel: normalizeModel(opts.DefaultModel),
+		Logger:       opts.Logger,
+		now:          time.Now,
+	}
+}
+
+func WrapRuntimeTranscriptionClient(base llm.TranscriptionClient, provider, apiBase, defaultModel string, logger *slog.Logger) llm.TranscriptionClient {
+	return WrapTranscriptionClient(base, ClientOptions{
+		Provider:     provider,
+		APIBase:      apiBase,
+		DefaultModel: defaultModel,
+		JournalDir:   statepaths.LLMUsageJournalDir(),
+		Logger:       logger,
+	})
+}
+
+func (c *TranscriptionUsageClient) Transcribe(ctx context.Context, req llm.TranscriptionRequest) (llm.TranscriptionResult, error) {
+	if c == nil || c.Base == nil {
+		return llm.TranscriptionResult{}, fmt.Errorf("transcription usage client is not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	start := c.now()
+	res, err := c.Base.Transcribe(ctx, req)
+	if err != nil {
+		return res, err
+	}
+	finished := c.now()
+	rec := requestRecordFromUsage(ctx, requestRecordInput{
+		TS:         finished,
+		Provider:   c.Provider,
+		APIBase:    c.APIBase,
+		Model:      firstNonEmpty(strings.TrimSpace(req.Model), c.DefaultModel),
+		Operation:  operationTranscribe,
+		Scene:      firstNonEmpty(req.Scene, "transcription"),
+		Usage:      res.Usage,
+		DurationMs: durationMillis(res.Duration, finished.Sub(start)),
+	})
+	appendUsageRecord(c.Journal, c.Logger, rec)
+	return res, nil
+}
+
+func (c *TranscriptionUsageClient) Close() error {
+	if c == nil {
+		return nil
+	}
+	var firstErr error
+	if c.Journal != nil {
+		if err := c.Journal.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	if closer, ok := c.Base.(io.Closer); ok {
+		if err := closer.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
+}
+
 type requestRecordInput struct {
 	TS         time.Time
 	Provider   string

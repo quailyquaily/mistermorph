@@ -674,12 +674,12 @@ func consoleBodyReadTimeout(r *http.Request, apiPrefix string) time.Duration {
 		return 0
 	}
 	if r.URL != nil && r.URL.Path == apiPrefix+"/proxy" {
-		if target, err := url.Parse(strings.TrimSpace(r.URL.Query().Get("uri"))); err == nil && target.Path == "/files/upload" {
+		if target, err := url.Parse(strings.TrimSpace(r.URL.Query().Get("uri"))); err == nil && (target.Path == "/files/upload" || target.Path == "/voice/transcribe") {
 			return serverpolicy.UploadBodyReadTimeout
 		}
 	}
 	basePath := strings.TrimSuffix(apiPrefix, "/api")
-	if r.URL != nil && r.URL.Path == basePath+consoleRuntimeAPIPath+"/files/upload" {
+	if r.URL != nil && (r.URL.Path == basePath+consoleRuntimeAPIPath+"/files/upload" || r.URL.Path == basePath+consoleRuntimeAPIPath+"/voice/transcribe") {
 		return serverpolicy.UploadBodyReadTimeout
 	}
 	return serverpolicy.BodyReadTimeout
@@ -1225,8 +1225,11 @@ func (s *server) handleProxy(w http.ResponseWriter, r *http.Request) {
 	var body []byte
 	if r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodPatch || r.Method == http.MethodDelete {
 		maxBodyBytes := int64(4 << 20)
-		if parsedURI.Path == "/files/upload" {
+		switch parsedURI.Path {
+		case "/files/upload":
 			maxBodyBytes = 64 << 20
+		case "/voice/transcribe":
+			maxBodyBytes = 26 << 20
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)
 		body, err = io.ReadAll(r.Body)

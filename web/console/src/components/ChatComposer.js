@@ -16,6 +16,13 @@ const DEFAULT_SUGGESTION_LABELS = {
   loading: "Loading...",
   empty: "No matches",
 };
+const DEFAULT_VOICE_LABELS = {
+  recording: "Listening...",
+  transcribing: "Transcribing...",
+  discard: "Discard recording",
+  previewOn: "Show live text",
+  previewOff: "Hide live text",
+};
 const DEFAULT_FILE_LABELS = {
   files: "Attached files",
   preview: "Preview file",
@@ -275,6 +282,39 @@ export default {
       type: Boolean,
       default: true,
     },
+    // Voice input: the mic button shows only when voiceAvailable. voiceState is "idle",
+    // "recording" or "transcribing".
+    voiceAvailable: {
+      type: Boolean,
+      default: false,
+    },
+    voiceState: {
+      type: String,
+      default: "idle",
+    },
+    voiceLabel: {
+      type: String,
+      default: "",
+    },
+    // While recording or transcribing, a strip above the input shows the elapsed seconds, the
+    // live preview text and buttons to turn the preview off or discard the recording.
+    // voicePreviewEnabled is null when the browser has no live preview.
+    voiceElapsed: {
+      type: Number,
+      default: 0,
+    },
+    voicePreview: {
+      type: String,
+      default: "",
+    },
+    voicePreviewEnabled: {
+      type: Boolean,
+      default: null,
+    },
+    voiceLabels: {
+      type: Object,
+      default: () => ({}),
+    },
   },
   emits: [
     "update:modelValue",
@@ -283,6 +323,9 @@ export default {
     "stop",
     "attach",
     "upload",
+    "voice",
+    "voiceCancel",
+    "voicePreviewToggle",
     "previewFile",
     "removeFile",
     "requestCommands",
@@ -317,6 +360,21 @@ export default {
       ...DEFAULT_FILE_LABELS,
       ...(props.fileLabels || {}),
     }));
+    const resolvedVoiceLabels = computed(() => ({
+      ...DEFAULT_VOICE_LABELS,
+      ...(props.voiceLabels || {}),
+    }));
+    const voiceActive = computed(() => props.voiceState === "recording" || props.voiceState === "transcribing");
+    const voiceElapsedText = computed(() => {
+      const total = Math.max(0, Math.floor(Number(props.voiceElapsed) || 0));
+      return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
+    });
+    const voiceStatusText = computed(() => {
+      if (props.voicePreview) {
+        return props.voicePreview;
+      }
+      return props.voiceState === "transcribing" ? resolvedVoiceLabels.value.transcribing : resolvedVoiceLabels.value.recording;
+    });
     const inputValue = computed(() => normalizedText(props.modelValue));
     const highlightSegments = computed(() =>
       composerHighlightSegments({
@@ -1005,6 +1063,10 @@ export default {
       llmProfileDialogOpen,
       llmProfileUsesDialog,
       resolvedFileLabels,
+      resolvedVoiceLabels,
+      voiceActive,
+      voiceElapsedText,
+      voiceStatusText,
       fileItemClass,
       fileItemMeta,
       previewFile,
@@ -1081,6 +1143,40 @@ export default {
               <PhXCircle class="icon" />
             </button>
           </article>
+        </div>
+        <div
+          v-if="voiceActive"
+          :class="['chat-composer-voice-strip', 'is-' + voiceState]"
+          role="status"
+          aria-live="polite"
+        >
+          <span class="chat-composer-voice-dot" aria-hidden="true"></span>
+          <span class="chat-composer-voice-time">{{ voiceElapsedText }}</span>
+          <span :class="['chat-composer-voice-text', { 'is-placeholder': !voicePreview }]">
+            <bdi>{{ voiceStatusText }}</bdi>
+          </span>
+          <button
+            v-if="voicePreviewEnabled !== null && voiceState === 'recording'"
+            type="button"
+            class="chat-composer-voice-strip-action"
+            :title="voicePreviewEnabled ? resolvedVoiceLabels.previewOff : resolvedVoiceLabels.previewOn"
+            :aria-label="voicePreviewEnabled ? resolvedVoiceLabels.previewOff : resolvedVoiceLabels.previewOn"
+            :aria-pressed="voicePreviewEnabled ? 'true' : 'false'"
+            @click="$emit('voicePreviewToggle')"
+          >
+            <PhEye v-if="voicePreviewEnabled" class="icon" />
+            <PhEyeSlash v-else class="icon" />
+          </button>
+          <button
+            v-if="voiceState === 'recording'"
+            type="button"
+            class="chat-composer-voice-strip-action"
+            :title="resolvedVoiceLabels.discard"
+            :aria-label="resolvedVoiceLabels.discard"
+            @click="$emit('voiceCancel')"
+          >
+            <PhX class="icon" />
+          </button>
         </div>
         <div class="chat-composer-grid">
           <div v-if="showAddActions" class="chat-composer-toolbar-start">
@@ -1190,6 +1286,19 @@ export default {
               </div>
             </template>
             <QButton
+            <QButton
+              v-if="voiceAvailable"
+              :class="['plain sm icon chat-composer-voice', { 'is-recording': voiceState === 'recording' }]"
+              :loading="voiceState === 'transcribing'"
+              :disabled="disabled || voiceState === 'transcribing'"
+              :title="voiceLabel"
+              :aria-label="voiceLabel"
+              :aria-pressed="voiceState === 'recording' ? 'true' : 'false'"
+              @click="$emit('voice')"
+            >
+              <PhStop v-if="voiceState === 'recording'" class="icon" />
+              <PhMicrophone v-else class="icon" />
+            </QButton>
               class="primary sm icon chat-composer-send"
               :loading="sending"
               :disabled="sendDisabled"

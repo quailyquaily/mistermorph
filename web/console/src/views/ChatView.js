@@ -1,6 +1,7 @@
 import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useNotice } from "../core/notices";
+import { useVoiceInput } from "../composables/useVoiceInput";
 import "./ChatView.css";
 
 import AppKicker from "../components/AppKicker";
@@ -810,6 +811,39 @@ const ChatView = {
       return selected.can_submit ? String(selected.endpoint_ref || "").trim() : "";
     });
     const submitEndpoint = computed(() => runtimeEndpointByRef(submitEndpointRef.value));
+    // Voice input transcribes with the agent's llm.routes.transcription model and puts the text
+    // in the draft at the cursor, to read and edit before sending.
+    const voiceInput = useVoiceInput({
+      endpointRef: submitEndpointRef,
+      onText(text) {
+        if (composerRef.value?.insertText) {
+          composerRef.value.insertText(text);
+          return;
+        }
+        const current = String(taskInput.value || "").replace(/\s+$/, "");
+        taskInput.value = current ? `${current} ${text}` : text;
+      },
+      onError(e) {
+        if (e?.name === "NotAllowedError" || e?.name === "SecurityError") {
+          notice.error(t("chat_composer_voice_denied"));
+          return;
+        }
+        notice.error(e?.message || t("chat_composer_voice_failed"));
+      },
+    });
+    const composerVoiceLabel = computed(() =>
+      voiceInput.state.value === "recording" ? t("chat_composer_voice_stop") : t("chat_composer_voice")
+    );
+    const composerVoiceLabels = computed(() => ({
+      recording: t("chat_composer_voice_recording"),
+      transcribing: t("chat_composer_voice_transcribing"),
+      discard: t("chat_composer_voice_discard"),
+      previewOn: t("chat_composer_voice_preview_on"),
+      previewOff: t("chat_composer_voice_preview_off"),
+    }));
+    const composerVoicePreviewEnabled = computed(() =>
+      voiceInput.previewSupported ? voiceInput.previewEnabled.value : null
+    );
     const composerDraftScope = computed(() => ({
       endpointRef: String(submitEndpointRef.value || "").trim(),
       topicID: composerDraftTopicID(
@@ -4704,6 +4738,10 @@ const ChatView = {
       workspaceOpening,
       workspaceDownloading,
       composerUploading,
+      voiceInput,
+      composerVoiceLabel,
+      composerVoiceLabels,
+      composerVoicePreviewEnabled,
       composerFileInput,
       composerFiles,
       composerFileLabels,
@@ -5115,7 +5153,17 @@ const ChatView = {
                 :skills-error="composerSkillsError"
                 :suggestion-labels="composerSuggestionLabels"
                 @attach="openComposerWorkspaceBrowser"
+                :voice-available="voiceInput.available.value"
+                :voice-state="voiceInput.state.value"
+                :voice-label="composerVoiceLabel"
+                :voice-elapsed="voiceInput.elapsed.value"
+                :voice-preview="voiceInput.preview.value"
+                :voice-preview-enabled="composerVoicePreviewEnabled"
+                :voice-labels="composerVoiceLabels"
                 @upload="openComposerFilePicker"
+                @voice="voiceInput.toggle"
+                @voice-cancel="voiceInput.cancel"
+                @voice-preview-toggle="voiceInput.togglePreview"
                 @preview-file="previewComposerFile"
                 @remove-file="removeComposerFile"
                 @submit="submitTask"
@@ -5198,7 +5246,17 @@ const ChatView = {
               :skills-error="composerSkillsError"
               :suggestion-labels="composerSuggestionLabels"
               @attach="openComposerWorkspaceBrowser"
+              :voice-available="voiceInput.available.value"
+              :voice-state="voiceInput.state.value"
+              :voice-label="composerVoiceLabel"
+              :voice-elapsed="voiceInput.elapsed.value"
+              :voice-preview="voiceInput.preview.value"
+              :voice-preview-enabled="composerVoicePreviewEnabled"
+              :voice-labels="composerVoiceLabels"
               @upload="openComposerFilePicker"
+              @voice="voiceInput.toggle"
+              @voice-cancel="voiceInput.cancel"
+              @voice-preview-toggle="voiceInput.togglePreview"
               @preview-file="previewComposerFile"
               @remove-file="removeComposerFile"
               @submit="submitTask"

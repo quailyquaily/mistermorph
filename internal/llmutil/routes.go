@@ -18,9 +18,11 @@ const (
 	RoutePurposeThink      = "think"
 	RoutePurposePlanCreate = "plan_create"
 	RoutePurposeImage      = "image"
-	RouteProfileDefault    = "default"
-	ProfileSourceConfig    = "config"
-	ReasoningEffortXHigh   = "xhigh"
+	// RoutePurposeTranscription picks the speech-to-text model for voice input.
+	RoutePurposeTranscription = "transcription"
+	RouteProfileDefault       = "default"
+	ProfileSourceConfig       = "config"
+	ReasoningEffortXHigh      = "xhigh"
 )
 
 type MissingProfileError struct {
@@ -94,6 +96,9 @@ type PurposeRoutes struct {
 	// Image picks the profile for image_generate and image_edit. It takes one profile:
 	// image requests have no candidates or fallbacks.
 	Image RoutePolicyConfig `mapstructure:"image"`
+	// Transcription picks the profile that turns voice input into text. It takes one profile;
+	// unset, voice input is not transcribed.
+	Transcription RoutePolicyConfig `mapstructure:"transcription"`
 }
 
 type RoutesConfig struct {
@@ -404,6 +409,7 @@ func normalizePurposeRoutes(cfg PurposeRoutes) PurposeRoutes {
 	cfg.Think = normalizeRoutePolicy(cfg.Think)
 	cfg.PlanCreate = normalizeRoutePolicy(cfg.PlanCreate)
 	cfg.Image = normalizeRoutePolicy(cfg.Image)
+	cfg.Transcription = normalizeRoutePolicy(cfg.Transcription)
 	return cfg
 }
 
@@ -445,6 +451,8 @@ func routeTargetForPurpose(routes PurposeRoutes, purpose string) RoutePolicyConf
 		return routes.PlanCreate
 	case RoutePurposeImage:
 		return routes.Image
+	case RoutePurposeTranscription:
+		return routes.Transcription
 	default:
 		return RoutePolicyConfig{}
 	}
@@ -480,37 +488,38 @@ func runtimeValuesForDefaultProfile(values RuntimeValues) RuntimeValues {
 
 func runtimeValuesForNamedProfile(shared RuntimeValues, profile ProfileConfig) RuntimeValues {
 	out := RuntimeValues{
-		UserAgent:              shared.UserAgent,
-		Description:            profile.Description,
-		Abilities:              append([]string(nil), profile.Abilities...),
-		InferenceProvider:      profile.InferenceProvider,
-		Provider:               profile.Provider,
-		Endpoint:               profile.Endpoint,
-		APIKey:                 profile.APIKey,
-		Model:                  profile.Model,
-		ContextWindowRaw:       profile.ContextWindowRaw,
-		Headers:                cloneStringMap(profile.Headers),
-		CacheTTL:               profile.CacheTTL,
-		CacheKeyPrefix:         profile.CacheKeyPrefix,
-		AzureDeployment:        profile.Azure.Deployment,
-		RequestTimeoutRaw:      profile.RequestTimeoutRaw,
-		ToolsEmulationMode:     profile.ToolsEmulationMode,
-		TemperatureRaw:         profile.TemperatureRaw,
-		ReasoningEffortRaw:     profile.ReasoningEffortRaw,
-		ReasoningBudgetRaw:     profile.ReasoningBudgetRaw,
-		PricingFile:            shared.PricingFile,
-		ConfigPath:             shared.ConfigPath,
-		FileStateDir:           shared.FileStateDir,
-		ImageTimeoutRaw:        shared.ImageTimeoutRaw,
-		ImageOptions:           shared.ImageOptions,
-		BedrockAWSKey:          profile.Bedrock.AWSKey,
-		BedrockAWSSecret:       profile.Bedrock.AWSSecret,
-		BedrockAWSSessionToken: profile.Bedrock.AWSSessionToken,
-		BedrockAWSProfile:      profile.Bedrock.AWSProfile,
-		BedrockAWSRegion:       profile.Bedrock.Region,
-		BedrockModelARN:        profile.Bedrock.ModelARN,
-		CloudflareAccountID:    profile.Cloudflare.AccountID,
-		CloudflareAPIToken:     profile.Cloudflare.APIToken,
+		UserAgent:               shared.UserAgent,
+		Description:             profile.Description,
+		Abilities:               append([]string(nil), profile.Abilities...),
+		InferenceProvider:       profile.InferenceProvider,
+		Provider:                profile.Provider,
+		Endpoint:                profile.Endpoint,
+		APIKey:                  profile.APIKey,
+		Model:                   profile.Model,
+		ContextWindowRaw:        profile.ContextWindowRaw,
+		Headers:                 cloneStringMap(profile.Headers),
+		CacheTTL:                profile.CacheTTL,
+		CacheKeyPrefix:          profile.CacheKeyPrefix,
+		AzureDeployment:         profile.Azure.Deployment,
+		RequestTimeoutRaw:       profile.RequestTimeoutRaw,
+		ToolsEmulationMode:      profile.ToolsEmulationMode,
+		TemperatureRaw:          profile.TemperatureRaw,
+		ReasoningEffortRaw:      profile.ReasoningEffortRaw,
+		ReasoningBudgetRaw:      profile.ReasoningBudgetRaw,
+		PricingFile:             shared.PricingFile,
+		ConfigPath:              shared.ConfigPath,
+		FileStateDir:            shared.FileStateDir,
+		ImageTimeoutRaw:         shared.ImageTimeoutRaw,
+		ImageOptions:            shared.ImageOptions,
+		TranscriptionTimeoutRaw: shared.TranscriptionTimeoutRaw,
+		BedrockAWSKey:           profile.Bedrock.AWSKey,
+		BedrockAWSSecret:        profile.Bedrock.AWSSecret,
+		BedrockAWSSessionToken:  profile.Bedrock.AWSSessionToken,
+		BedrockAWSProfile:       profile.Bedrock.AWSProfile,
+		BedrockAWSRegion:        profile.Bedrock.Region,
+		BedrockModelARN:         profile.Bedrock.ModelARN,
+		CloudflareAccountID:     profile.Cloudflare.AccountID,
+		CloudflareAPIToken:      profile.Cloudflare.APIToken,
 	}
 	if profile.SupportsImageParts != nil {
 		value := *profile.SupportsImageParts
@@ -687,7 +696,7 @@ func validateRoutePolicy(policy RoutePolicyConfig, purpose string) error {
 	if strings.TrimSpace(policy.Profile) != "" && len(policy.Candidates) > 0 {
 		return fmt.Errorf("llm.routes.%s cannot set both profile and candidates", purpose)
 	}
-	if purpose == RoutePurposeImage && (len(policy.Candidates) > 0 || len(policy.FallbackProfiles) > 0) {
+	if (purpose == RoutePurposeImage || purpose == RoutePurposeTranscription) && (len(policy.Candidates) > 0 || len(policy.FallbackProfiles) > 0) {
 		return fmt.Errorf("llm.routes.%s takes one profile; candidates and fallback_profiles are not supported", purpose)
 	}
 	return nil
@@ -764,16 +773,21 @@ func parseRoutesConfig(raw map[string]any) (RoutesConfig, error) {
 	if err != nil {
 		return RoutesConfig{}, err
 	}
+	transcription, err := parseRoutePolicyValue(raw[RoutePurposeTranscription], "llm.routes."+RoutePurposeTranscription)
+	if err != nil {
+		return RoutesConfig{}, err
+	}
 	return RoutesConfig{
 		PurposeRoutes: PurposeRoutes{
-			MainLoop:   mainLoop,
-			Addressing: addressing,
-			Decision:   decision,
-			Awareness:  awareness,
-			Heartbeat:  heartbeat,
-			Think:      think,
-			PlanCreate: planCreate,
-			Image:      image,
+			MainLoop:      mainLoop,
+			Addressing:    addressing,
+			Decision:      decision,
+			Awareness:     awareness,
+			Heartbeat:     heartbeat,
+			Think:         think,
+			PlanCreate:    planCreate,
+			Image:         image,
+			Transcription: transcription,
 		},
 	}, nil
 }

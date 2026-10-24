@@ -147,7 +147,8 @@
   height: 13px;
 }
 
-.chat-composer-files + .chat-composer-grid {
+.chat-composer-files + .chat-composer-grid,
+.chat-composer-voice-strip + .chat-composer-grid {
   padding-top: 6px;
 }
 
@@ -573,4 +574,143 @@
   font: 400 11px/1.4 var(--font-mono);
   letter-spacing: 0.02em;
   text-align: center;
+}
+
+/* The field eases to its new height as lines are added or removed, instead of snapping; the
+   composer's height follows it, and so does the history's room for it. */
+.chat-composer-input {
+  transition: height var(--motion-normal) var(--motion-ease);
+}
+
+/* Voice input: a quiet mic beside send. Recording turns it red with a slow pulse; the click
+   that stops it sends the audio for transcription. */
+.chat-composer-voice {
+  display: inline-flex;
+  flex: 0 0 var(--chat-composer-control-size);
+  align-items: center;
+  justify-content: center;
+  width: var(--chat-composer-control-size);
+  min-width: var(--chat-composer-control-size);
+  height: var(--chat-composer-control-size);
+  min-height: var(--chat-composer-control-size);
+  padding: 0 !important;
+  color: var(--text-2);
+  box-shadow: none !important;
+}
+
+html body .q-button.chat-composer-voice.is-recording,
+html body .q-button.chat-composer-voice.is-recording:hover {
+  color: var(--danger) !important;
+  background: color-mix(in srgb, var(--danger) 12%, transparent) !important;
+  outline: 2px solid transparent;
+  outline-offset: 1px;
+  animation: chat-composer-voice-pulse 1.6s var(--motion-ease) infinite;
+}
+
+.chat-composer-voice-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin: 8px 10px 0;
+  padding: 4px 4px 4px 10px;
+  border: 1px solid color-mix(in srgb, var(--danger) 28%, var(--line));
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--danger) 6%, var(--q-bg-paper));
+  color: var(--text-1);
+  font-size: var(--font-size-meta);
+  line-height: 1.4;
+}
+
+.chat-composer-voice-strip.is-transcribing {
+  border-color: color-mix(in srgb, var(--line) 88%, transparent);
+  background: color-mix(in srgb, var(--line-soft) 52%, var(--q-bg-paper));
+}
+
+.chat-composer-voice-dot {
+  flex: 0 0 8px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--danger);
+  animation: chat-composer-voice-blink 1.6s var(--motion-ease) infinite;
+}
+
+.chat-composer-voice-strip.is-transcribing .chat-composer-voice-dot {
+  background: var(--text-2);
+}
+
+.chat-composer-voice-time {
+  flex: 0 0 auto;
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Two lines at most; column-reverse keeps the newest words in view. */
+.chat-composer-voice-text {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column-reverse;
+  min-width: 0;
+  max-height: 2.8em;
+  overflow: hidden;
+  color: var(--text-2);
+  overflow-wrap: anywhere;
+}
+
+.chat-composer-voice-text > bdi {
+  display: block;
+}
+
+.chat-composer-voice-text.is-placeholder {
+  font-style: italic;
+}
+
+.chat-composer-voice-strip-action {
+  display: inline-flex;
+  flex: 0 0 28px;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.chat-composer-voice-strip-action:hover,
+.chat-composer-voice-strip-action:focus-visible {
+  background: color-mix(in srgb, var(--line-soft) 72%, transparent);
+  color: var(--text-0);
+}
+
+.chat-composer-voice-strip-action .icon {
+  width: 16px;
+  height: 16px;
+}
+
+@keyframes chat-composer-voice-blink {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@keyframes chat-composer-voice-pulse {
+  50% {
+    outline-color: color-mix(in srgb, var(--danger) 36%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html body .q-button.chat-composer-voice.is-recording {
+    animation: none;
+  }
+
+  .chat-composer-voice-dot {
+    animation: none;
+  }
 }

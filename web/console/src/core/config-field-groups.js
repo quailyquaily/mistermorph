@@ -57,6 +57,14 @@ export const LLM_SYSTEM_CONFIG_GROUPS = [
     ],
   },
   {
+    id: "transcription-model",
+    title: "Voice transcription",
+    note: "Settings for transcribing voice messages and Console voice input. Which model transcribes is the Transcription route in Model Routes.",
+    fields: [
+      { path: "llm.transcription.request_timeout", label: "Request timeout", type: "string", duration: true, editor: "duration" },
+    ],
+  },
+  {
     id: "execution-limits",
     title: "Execution limits",
     fields: [

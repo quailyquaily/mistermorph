@@ -95,6 +95,8 @@ export default {
           route.candidates.forEach((item, index) => {
             out.push({ id: `${purpose.key}:s:${index}`, purpose: purpose.key, profile: item.profile || "?", share: shares[index], index, kind: "split" });
           });
+        } else if (purpose.unsetOff && routeIsUnset(route)) {
+          // An unset route that means "off" has no line to the default profile.
         } else {
           out.push({ id: `${purpose.key}:r`, purpose: purpose.key, profile: routeSingleProfile(route) || "default", share: 100, kind: "route", implicit: routeIsUnset(route) || route.mode !== "profile" });
         }
@@ -134,7 +136,7 @@ export default {
         if (index >= 0) {
           return { role: "split", share: percentWeights(route.candidates)[index] };
         }
-      } else if (routeSingleProfile(route) === name) {
+      } else if (routeSingleProfile(route) === name && !(purpose.unsetOff && routeIsUnset(route))) {
         return { role: "use", implicit: route.mode !== "profile" };
       }
       return fallback >= 0 ? { role: "fallback", order: fallback + 1 } : { role: "" };
@@ -346,7 +348,7 @@ export default {
         <span v-else-if="locked(selectedPurpose)" class="model-routes-node-note">This route is managed outside the settings file.</span>
         <span v-else-if="selectedPurpose.single" class="model-routes-node-note">Use picks the one profile for these requests; this route has no split or fallbacks.</span>
         <span v-else class="model-routes-node-note">Use sends everything to one profile; Split shares requests; Fallback is tried, in order, when a request fails.</span>
-        <QButton class="plain xs" :disabled="locked(selectedPurpose)" @click="actions.reset()">Reset to default</QButton>
+        <QButton class="plain xs" :disabled="locked(selectedPurpose)" @click="actions.reset()">{{ selectedPurpose.unsetOff ? 'Turn off' : 'Reset to default' }}</QButton>
         <QButton class="plain xs" @click="selected = ''">Done</QButton>
       </div>
 

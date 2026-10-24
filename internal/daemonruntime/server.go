@@ -755,10 +755,16 @@ func daemonBodyReadTimeout(r *http.Request) time.Duration {
 	case http.MethodGet, http.MethodHead, http.MethodOptions:
 		return 0
 	}
-	if r.URL != nil && (r.URL.Path == "/files/upload" || r.URL.Path == runtimeAPIPath+"/files/upload") {
+	if r.URL != nil && isUploadPath(r.URL.Path) {
 		return serverpolicy.UploadBodyReadTimeout
 	}
 	return serverpolicy.BodyReadTimeout
+}
+
+// isUploadPath reports whether a request uploads a file and so gets the longer body read timeout.
+func isUploadPath(path string) bool {
+	path = strings.TrimPrefix(path, runtimeAPIPath)
+	return path == "/files/upload" || path == "/voice/transcribe"
 }
 
 func newDaemonHTTPServer(opts ServerOptions) *http.Server {

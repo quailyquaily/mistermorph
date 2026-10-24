@@ -22,6 +22,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/personautil"
 	"github.com/quailyquaily/mistermorph/internal/runtimecontrol"
 	"github.com/quailyquaily/mistermorph/internal/workspace"
+	"github.com/quailyquaily/mistermorph/llm"
 )
 
 type telegramRuntimeStateConfig struct {
@@ -60,11 +61,14 @@ type telegramDaemonServer interface {
 // It is deliberately platform-specific because those lifecycles are coupled to
 // Telegram delivery semantics.
 type telegramRuntimeState struct {
-	ctx                 context.Context
-	workersCtx          context.Context
-	stopWorkers         context.CancelFunc
-	logger              *slog.Logger
-	dependencies        Dependencies
+	ctx          context.Context
+	workersCtx   context.Context
+	stopWorkers  context.CancelFunc
+	logger       *slog.Logger
+	dependencies Dependencies
+	// transcriber turns voice notes into text; nil leaves them as files (see voiceTranscriber).
+	transcriberOnce     sync.Once
+	transcriber         llm.TranscriptionClient
 	options             RunOptions
 	taskStore           daemonruntime.TaskView
 	guard               *guard.Guard

@@ -122,6 +122,15 @@ export const ROUTE_PURPOSES = [
     note: "image_generate and image_edit. One profile; unset uses the task's model.",
     single: true,
   },
+  // Chat models cannot transcribe, so an unset transcription route is off rather than default.
+  {
+    key: "transcription",
+    path: "llm.routes.transcription",
+    label: "Transcription",
+    note: "Voice messages and Console voice input, to text. One profile; unset is off.",
+    single: true,
+    unsetOff: true,
+  },
 ];
 
 export function routeIsUnset(route) {

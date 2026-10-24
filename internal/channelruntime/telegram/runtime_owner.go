@@ -1226,6 +1226,12 @@ func (s *telegramRuntimeState) handleUpdate(update telegramUpdate) {
 			return
 		}
 	}
+	if notes := s.transcribeVoiceFiles(context.Background(), message.MessageID, downloaded); len(notes) > 0 {
+		if text == "" {
+			text = "User sent a voice message."
+		}
+		text += "\n\n" + strings.Join(notes, "\n\n")
+	}
 	if text == "" && len(downloaded) > 0 {
 		text = "Please process the uploaded file(s)."
 	}

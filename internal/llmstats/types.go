@@ -19,6 +19,7 @@ const (
 	operationEvaluate      = "evaluate"
 	operationImageGenerate = "image_generate"
 	operationImageEdit     = "image_edit"
+	operationTranscribe    = "transcribe"
 )
 
 type Offset struct {

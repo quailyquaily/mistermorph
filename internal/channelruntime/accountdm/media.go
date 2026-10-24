@@ -14,6 +14,8 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/imagehistory"
 	"github.com/quailyquaily/mistermorph/internal/filecache"
 	"github.com/quailyquaily/mistermorph/internal/imagemime"
+	"github.com/quailyquaily/mistermorph/internal/voiceinput"
+	"github.com/quailyquaily/mistermorph/llm"
 )
 
 const (
@@ -23,15 +25,17 @@ const (
 	llmImageMaxBytes = int64(5 << 20)
 )
 
-// savedMedia is what an inbound message's media became: images for the model, and a note naming
-// every saved or failed attachment, added to the message text.
+// savedMedia is what an inbound message's media became: images for the model, transcripts of
+// voice messages, and a note naming every saved or failed attachment, added to the message text.
 type savedMedia struct {
-	Images []busruntime.ImageAttachment
-	Note   string
+	Images      []busruntime.ImageAttachment
+	Transcripts []string
+	Note        string
 }
 
-// saveInboundMedia downloads a message's media into file_cache_dir/<channel>/.
-func saveInboundMedia(ctx context.Context, channel busruntime.Channel, cacheDir string, in Inbound, logger *slog.Logger) savedMedia {
+// saveInboundMedia downloads a message's media into file_cache_dir/<channel>/. With a
+// transcriber, voice messages are also transcribed.
+func saveInboundMedia(ctx context.Context, channel busruntime.Channel, cacheDir string, in Inbound, transcriber llm.TranscriptionClient, logger *slog.Logger) savedMedia {
 	var out savedMedia
 	dir, err := imagehistory.DownloadDir(cacheDir, "", string(channel))
 	if err != nil {
@@ -68,6 +72,15 @@ func saveInboundMedia(ctx context.Context, channel busruntime.Channel, cacheDir 
 			out.Images = append(out.Images, busruntime.ImageAttachment{Path: path, SourceMessageID: in.MessageID, SourceAttachmentID: fmt.Sprint(i), MIMEType: mimeType})
 			continue
 		}
+		if media.Kind == "audio" && transcriber != nil && voiceinput.Transcribable(mimeType, path) {
+			transcript, err := voiceinput.Transcribe(ctx, transcriber, llm.AudioInput{Filename: filepath.Base(path), MIMEType: mimeType, Data: data}, voiceinput.SceneChannel)
+			if err != nil {
+				logger.Warn("voice_transcription_failed", "message_id", in.MessageID, "error", err.Error())
+				label += " (could not be transcribed: " + err.Error() + ")"
+			} else {
+				out.Transcripts = append(out.Transcripts, transcript)
+			}
+		}
 		lines = append(lines, fmt.Sprintf("- %s (%s, %s): %s", label, baseMIME(mimeType), humanSize(int64(len(data))), rel))
 	}
 	if len(lines) > 0 {
@@ -85,11 +98,16 @@ func mediaText(text string, saved savedMedia, in Inbound) string {
 			text = "User sent an image."
 		case len(saved.Images) == len(in.Media):
 			text = fmt.Sprintf("User sent %d images.", len(saved.Images))
+		case len(in.Media) == 1 && len(saved.Transcripts) == 1:
+			text = "User sent a voice message."
 		case len(in.Media) == 1:
 			text = "User sent " + article(mediaLabel(in.Media[0])) + "."
 		default:
 			text = fmt.Sprintf("User sent %d attachments.", len(in.Media))
 		}
+	}
+	for _, transcript := range saved.Transcripts {
+		text += "\n\n" + voiceinput.Note(transcript)
 	}
 	if saved.Note != "" {
 		text += "\n\n" + saved.Note

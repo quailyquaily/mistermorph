@@ -377,6 +377,11 @@ func runMixinLoop(ctx context.Context, d Dependencies, opts RunOptions) error {
 	generations.Start(ctx)
 
 	ingress := newMixinIngress(api, bot, opts.FileCacheDir, logger)
+	if transcriber, transcriberErr := d.TranscriptionClient(); transcriberErr != nil {
+		logger.Warn("mixin_transcription_unavailable", "error", transcriberErr.Error())
+	} else {
+		ingress.transcriber = transcriber
+	}
 	ingress.authorize = func(messageCtx context.Context, inbound mixinbus.InboundMessage) (bool, error) {
 		isGroup := isMixinGroup(inbound.ChatType)
 		if mixinBypassesAllowlist(inbound.Text) {

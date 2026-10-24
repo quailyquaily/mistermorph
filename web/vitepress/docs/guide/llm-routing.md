@@ -56,6 +56,20 @@ Besides `main_loop`, which is responsible for running the agent itself, the othe
 - `heartbeat`: legacy alias for `awareness`.
 - `think`: only used by the `/think <task>` command prefix. It also temporarily applies `reasoning_effort=xhigh`.
 - `plan_create`: only used for planning requests inside the `plan_create` tool.
+- `transcription`: speech-to-text for voice input: inbound voice messages (Telegram, WhatsApp, Mixin) and the Console mic button. It takes one profile, with no split or fallbacks. Unset, transcription is off: voice messages reach the agent as audio files and the Console hides its mic. The profile must use OpenAI, an OpenAI-compatible API (such as Groq), or Cloudflare Workers AI; give it `abilities: ["transcription"]` so it is not offered for subtasks.
+  While you record in the Console, browsers with speech recognition (Chrome, Edge, Safari) show the words live above the input. That preview comes from the browser's own speech service (Chrome sends the audio to Google) and can be turned off with the eye button; the text put in the draft always comes from this profile.
+
+```yaml
+llm:
+  profiles:
+    ears:
+      abilities: ["transcription"]
+      inference_provider: openai
+      model: gpt-4o-mini-transcribe
+      api_key: "${OPENAI_API_KEY}"
+  routes:
+    transcription: ears
+```
 
 In the example below, plan creation and `/think` use the `reasoning` profile, which means `claude-opus-4-6`; group-chat addressing uses the cheaper `gpt-4o-mini` through `cheap`:
 

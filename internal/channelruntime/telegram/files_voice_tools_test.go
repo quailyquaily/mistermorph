@@ -47,3 +47,24 @@ func TestAppendDownloadedFilesToTaskUsesAliasPath(t *testing.T) {
 		t.Fatalf("local cache path leaked: %q", got)
 	}
 }
+
+func TestTelegramFileAttachmentsIncludesVoiceAndAudio(t *testing.T) {
+	msg := &telegramMessage{
+		Document: &telegramDocument{FileID: "doc"},
+		Voice:    &telegramDocument{FileID: "voice", MimeType: "audio/ogg"},
+		Audio:    &telegramDocument{FileID: "song", FileName: "song.mp3"},
+	}
+	got := telegramFileAttachments(msg)
+	if len(got) != 3 {
+		t.Fatalf("telegramFileAttachments() len = %d, want 3", len(got))
+	}
+	if got[1].kind != "voice" || got[1].doc.FileName != "voice.ogg" {
+		t.Fatalf("voice attachment = %#v, want kind voice named voice.ogg", got[1])
+	}
+	if got[2].kind != "audio" || got[2].doc.FileName != "song.mp3" {
+		t.Fatalf("audio attachment = %#v", got[2])
+	}
+	if !messageHasDownloadableFile(&telegramMessage{Voice: &telegramDocument{FileID: "v"}}) {
+		t.Fatal("a voice-only message must be downloadable")
+	}
+}

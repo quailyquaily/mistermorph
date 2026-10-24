@@ -41,9 +41,9 @@ llm:
   # and whether it favors speed or cost. list_model_profiles shows it to the agent
   # when it picks a profile for a spawn subtask. It is a hint, not an instruction.
   # description: "Complex analysis and reviewing results."
-  # Optional abilities of this profile: text | image | decision.
+  # Optional abilities of this profile: text | image | decision | transcription.
   # text = chat with tool calls (can run the agent loop and spawn subtasks),
-  # image = image generation/editing, decision = Evaluate requests.
+  # image = image generation/editing, decision = Evaluate requests, transcription = speech-to-text for voice input.
   # Empty or unset means text only. Only profiles with text can run spawn subtasks.
   # A profile with decision but not text is decision-only: it serves only the decision route.
   # abilities: ["text"]
@@ -129,6 +129,11 @@ llm:
       openai: {}
       gemini: {}
       cloudflare: {}
+  # Shared settings for voice-input transcription. The speech-to-text model is a profile chosen
+  # by routes.transcription (below); without that route, voice messages reach the agent as audio
+  # files and the Console hides its mic button.
+  transcription:
+    request_timeout: "60s"
   # Optional named LLM profiles. Each profile is independent and does not inherit
   # provider, endpoint, credentials, model, or other LLM fields from top-level llm.*
   # (including description and abilities).
@@ -169,8 +174,14 @@ llm:
   #     inference_provider: openai
   #     model: "gpt-image-2"
   #     api_key: "${OPENAI_API_KEY}"
+  #   ears:
+  #     description: "Speech-to-text for voice input."
+  #     abilities: ["transcription"] # not offered for spawn subtasks
+  #     inference_provider: openai # also groq, openai_chat_compatible, or cloudflare (@cf/openai/whisper-large-v3-turbo)
+  #     model: "gpt-4o-mini-transcribe"
+  #     api_key: "${OPENAI_API_KEY}"
   # Optional route map. Supported purposes:
-  #   main_loop | decision | awareness | heartbeat | think | plan_create
+  #   main_loop | decision | awareness | heartbeat | think | plan_create | image | transcription
   # `decision` selects the group-response evaluator. Unset uses `default`.
   # When `decision` uses a different profile from the main loop, it also pre-checks
   # messages addressed to the agent (private chats, mentions, Console chat): an
@@ -201,6 +212,7 @@ llm:
   #   think: reasoning
   #   plan_create: reasoning
   #   image: painter # a profile with an image model, e.g. inference_provider: openai, model: gpt-image-2
+  #   transcription: ears # one profile; transcribes channel voice messages and Console voice input
 logging:
   # debug|info|warn|error
   # - info: emits high-level progress (run_start, tool_call, tool_done, final)

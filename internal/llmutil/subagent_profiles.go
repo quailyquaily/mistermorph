@@ -15,6 +15,8 @@ const (
 	// AbilityDecision is Evaluate requests. A profile with decision but not text answers only
 	// Evaluate requests and serves only the decision route.
 	AbilityDecision = "decision"
+	// AbilityTranscription is speech-to-text for voice input.
+	AbilityTranscription = "transcription"
 )
 
 // NormalizeAbilities trims, lowercases and deduplicates a profile's abilities, keeping their
@@ -28,9 +30,9 @@ func NormalizeAbilities(raw []string) ([]string, error) {
 			continue
 		}
 		switch value {
-		case AbilityText, AbilityImage, AbilityDecision:
+		case AbilityText, AbilityImage, AbilityDecision, AbilityTranscription:
 		default:
-			return nil, fmt.Errorf("unknown ability %q (use %s, %s or %s)", value, AbilityText, AbilityImage, AbilityDecision)
+			return nil, fmt.Errorf("unknown ability %q (use %s, %s, %s or %s)", value, AbilityText, AbilityImage, AbilityDecision, AbilityTranscription)
 		}
 		seen[value] = true
 		out = append(out, value)

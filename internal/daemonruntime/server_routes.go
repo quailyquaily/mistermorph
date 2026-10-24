@@ -31,4 +31,5 @@ func (routes *routeRegistration) register() {
 	routes.registerTaskRoutes()
 	routes.registerWorkspaceRoutes()
 	routes.registerAgentLinkRoutes()
+	routes.registerVoiceRoutes()
 }

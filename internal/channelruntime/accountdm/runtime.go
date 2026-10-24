@@ -50,6 +50,12 @@ func runLoop(ctx context.Context, d Dependencies, opts Options) error {
 	name := string(channel)
 	logger = logger.With("channel", name)
 	transport := opts.Transport
+	transcriber, err := d.TranscriptionClient()
+	if err != nil {
+		// Voice messages still reach the agent as audio files.
+		logger.Warn("transcription_unavailable", "error", err.Error())
+		transcriber = nil
+	}
 
 	daemonStore := opts.TaskStore
 	if daemonStore == nil {
@@ -509,7 +515,7 @@ func runLoop(ctx context.Context, d Dependencies, opts Options) error {
 				logger.Debug("message_deduped", "message_id", in.MessageID)
 				return nil
 			}
-			saved := saveInboundMedia(messageCtx, channel, opts.FileCacheDir, in, logger)
+			saved := saveInboundMedia(messageCtx, channel, opts.FileCacheDir, in, transcriber, logger)
 			in.Text = mediaText(in.Text, saved, in)
 			images = saved.Images
 		}

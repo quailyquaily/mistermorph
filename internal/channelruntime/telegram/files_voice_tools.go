@@ -15,6 +15,8 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/filecache"
 	"github.com/quailyquaily/mistermorph/internal/pathroots"
 	"github.com/quailyquaily/mistermorph/internal/telegramutil"
+	"github.com/quailyquaily/mistermorph/internal/voiceinput"
+	"github.com/quailyquaily/mistermorph/llm"
 )
 
 func messageTextOrCaption(msg *telegramMessage) string {
@@ -38,7 +40,7 @@ func messageHasDownloadableFile(msg *telegramMessage) bool {
 	if msg == nil {
 		return false
 	}
-	if msg.Document != nil && strings.TrimSpace(msg.Document.FileID) != "" {
+	if len(telegramFileAttachments(msg)) > 0 {
 		return true
 	}
 	if len(msg.Photo) > 0 {
@@ -49,6 +51,74 @@ func messageHasDownloadableFile(msg *telegramMessage) bool {
 		}
 	}
 	return false
+}
+
+// voiceTranscriber returns the llm.routes.transcription client, or nil when the route is unset.
+func (s *telegramRuntimeState) voiceTranscriber() llm.TranscriptionClient {
+	s.transcriberOnce.Do(func() {
+		client, err := s.dependencies.TranscriptionClient()
+		if err != nil {
+			s.logger.Warn("telegram_transcription_unavailable", "error", err.Error())
+			return
+		}
+		s.transcriber = client
+	})
+	return s.transcriber
+}
+
+// transcribeVoiceFiles transcribes the voice notes and audio files of the message itself (not of
+// a quoted message) and returns the notes to add to its text.
+func (s *telegramRuntimeState) transcribeVoiceFiles(ctx context.Context, messageID int64, files []telegramDownloadedFile) []string {
+	var notes []string
+	sourceID := fmt.Sprintf("%d", messageID)
+	for _, f := range files {
+		if (f.Kind != "voice" && f.Kind != "audio") || f.SourceMessageID != sourceID {
+			continue
+		}
+		mimeType := firstNonEmptyString(f.MimeType, "audio/ogg")
+		if !voiceinput.Transcribable(mimeType, f.Path) {
+			continue
+		}
+		client := s.voiceTranscriber()
+		if client == nil {
+			return nil
+		}
+		transcript, err := voiceinput.TranscribeFile(ctx, client, f.Path, mimeType, voiceinput.SceneChannel)
+		if err != nil {
+			s.logger.Warn("telegram_voice_transcription_failed", "message_id", messageID, "error", err.Error())
+			continue
+		}
+		notes = append(notes, voiceinput.Note(transcript))
+	}
+	return notes
+}
+
+type telegramFileAttachment struct {
+	kind string
+	doc  telegramDocument
+}
+
+// telegramFileAttachments lists a message's document, voice note and audio file: the
+// attachments downloaded as files. A voice note has no file name, so it is named voice.ogg.
+func telegramFileAttachments(msg *telegramMessage) []telegramFileAttachment {
+	if msg == nil {
+		return nil
+	}
+	var out []telegramFileAttachment
+	if msg.Document != nil && strings.TrimSpace(msg.Document.FileID) != "" {
+		out = append(out, telegramFileAttachment{kind: "document", doc: *msg.Document})
+	}
+	if msg.Voice != nil && strings.TrimSpace(msg.Voice.FileID) != "" {
+		doc := *msg.Voice
+		if strings.TrimSpace(doc.FileName) == "" {
+			doc.FileName = "voice.ogg"
+		}
+		out = append(out, telegramFileAttachment{kind: "voice", doc: doc})
+	}
+	if msg.Audio != nil && strings.TrimSpace(msg.Audio.FileID) != "" {
+		out = append(out, telegramFileAttachment{kind: "audio", doc: *msg.Audio})
+	}
+	return out
 }
 
 func ensureSecureChildDir(parentDir, childDir string) error {
@@ -216,11 +286,11 @@ func downloadTelegramMessageFiles(ctx context.Context, api *telegramAPI, cacheDi
 			return nil
 		}
 
-		// document
-		if m.Document != nil {
-			fileID := strings.TrimSpace(m.Document.FileID)
+		// documents, voice notes and audio files
+		for _, att := range telegramFileAttachments(m) {
+			fileID := strings.TrimSpace(att.doc.FileID)
 			if fileID != "" {
-				key := "doc:" + fileID
+				key := att.kind + ":" + fileID
 				if !seen[key] {
 					seen[key] = true
 					f, err := api.getFile(ctx, fileID)
@@ -229,19 +299,19 @@ func downloadTelegramMessageFiles(ctx context.Context, api *telegramAPI, cacheDi
 					}
 					sourceMessageID := fmt.Sprintf("%d", m.MessageID)
 					sourceAttachmentID := firstNonEmptyString(f.FileUniqueID, fileID)
-					orig := strings.TrimSpace(m.Document.FileName)
+					orig := strings.TrimSpace(att.doc.FileName)
 					if orig == "" {
-						orig = "document" + filepath.Ext(f.FilePath)
+						orig = att.kind + filepath.Ext(f.FilePath)
 					}
 					name := filecache.SanitizeFilename(orig)
 					base := fmt.Sprintf("tg_%d_%s_%s", m.MessageID, shortHash(fileID), name)
 					dst := filepath.Join(chatDir, base)
 					if _, err := os.Stat(dst); err == nil {
 						out = append(out, telegramDownloadedFile{
-							Kind:               "document",
+							Kind:               att.kind,
 							OriginalName:       orig,
-							MimeType:           m.Document.MimeType,
-							SizeBytes:          m.Document.FileSize,
+							MimeType:           att.doc.MimeType,
+							SizeBytes:          att.doc.FileSize,
 							Path:               dst,
 							SourceMessageID:    sourceMessageID,
 							SourceAttachmentID: sourceAttachmentID,
@@ -268,10 +338,10 @@ func downloadTelegramMessageFiles(ctx context.Context, api *telegramAPI, cacheDi
 						}
 						_ = os.Chmod(dst, 0o600)
 						out = append(out, telegramDownloadedFile{
-							Kind:               "document",
+							Kind:               att.kind,
 							OriginalName:       orig,
-							MimeType:           m.Document.MimeType,
-							SizeBytes:          m.Document.FileSize,
+							MimeType:           att.doc.MimeType,
+							SizeBytes:          att.doc.FileSize,
 							Path:               dst,
 							SourceMessageID:    sourceMessageID,
 							SourceAttachmentID: sourceAttachmentID,

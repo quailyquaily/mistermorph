@@ -20,6 +20,8 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/filecache"
 	"github.com/quailyquaily/mistermorph/internal/imagemime"
 	"github.com/quailyquaily/mistermorph/internal/mixinapi"
+	"github.com/quailyquaily/mistermorph/internal/voiceinput"
+	"github.com/quailyquaily/mistermorph/llm"
 )
 
 const (
@@ -53,6 +55,8 @@ type mixinIngress struct {
 	cacheDir  string
 	authorize func(context.Context, mixinbus.InboundMessage) (bool, error)
 	now       func() time.Time
+	// transcriber turns audio messages into text; nil leaves them as files.
+	transcriber llm.TranscriptionClient
 
 	mu                        sync.Mutex
 	users                     map[string]mixinUserCacheEntry
@@ -158,6 +162,15 @@ func (i *mixinIngress) Normalize(ctx context.Context, message mixinapi.MessageVi
 			}}
 		case mixinapi.MessageCategoryEncryptedAudio:
 			inbound.Text = fmt.Sprintf("User sent an audio file: %s\nLocal path: %s", attachmentDisplayName(*attachmentPayload, "audio"), alias)
+			if i.transcriber != nil && voiceinput.Transcribable(mimeType, path) {
+				if transcript, err := voiceinput.TranscribeFile(ctx, i.transcriber, path, mimeType, voiceinput.SceneChannel); err != nil {
+					if i.logger != nil {
+						i.logger.Warn("mixin_voice_transcription_failed", "message_id", message.MessageID, "error", err.Error())
+					}
+				} else {
+					inbound.Text = "User sent a voice message.\n\n" + voiceinput.Note(transcript) + "\n\nAudio file: " + alias
+				}
+			}
 		default:
 			inbound.Text = fmt.Sprintf("User sent a file: %s\nLocal path: %s", attachmentDisplayName(*attachmentPayload, "file"), alias)
 		}

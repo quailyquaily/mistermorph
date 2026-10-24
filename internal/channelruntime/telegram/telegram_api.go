@@ -72,6 +72,9 @@ type telegramMessage struct {
 	// Attachments (subset).
 	Document *telegramDocument   `json:"document,omitempty"`
 	Photo    []telegramPhotoSize `json:"photo,omitempty"`
+	// Voice is a voice note (OGG/Opus); Audio is a music or audio file.
+	Voice *telegramDocument `json:"voice,omitempty"`
+	Audio *telegramDocument `json:"audio,omitempty"`
 
 	// Telegram uses the forum topic creation service message as the topic root.
 	ForumTopicCreated json.RawMessage `json:"forum_topic_created,omitempty"`

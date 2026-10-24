@@ -64,6 +64,7 @@ func Apply(v *viper.Viper) {
 	v.SetDefault("llm.image.options.openai", map[string]any{})
 	v.SetDefault("llm.image.options.gemini", map[string]any{})
 	v.SetDefault("llm.image.options.cloudflare", map[string]any{})
+	v.SetDefault("llm.transcription.request_timeout", 60*time.Second)
 
 	v.SetDefault("max_steps", DefaultMaxSteps)
 	v.SetDefault("parse_retries", DefaultParseRetries)

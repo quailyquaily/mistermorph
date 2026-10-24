@@ -55,6 +55,8 @@ type RuntimeValues struct {
 	// The image model is chosen by llm.routes.image; only these image settings are shared.
 	ImageTimeoutRaw string
 	ImageOptions    llm.ImageProviderOptions
+	// The transcription model is chosen by llm.routes.transcription.
+	TranscriptionTimeoutRaw string
 
 	BedrockAWSKey          string `config:"llm.bedrock.aws_key"`
 	BedrockAWSSecret       string `config:"llm.bedrock.aws_secret"`
@@ -105,30 +107,31 @@ func RuntimeValuesFromReader(r ConfigReader) (RuntimeValues, error) {
 		return RuntimeValues{}, err
 	}
 	return RuntimeValues{
-		UserAgent:          strings.TrimSpace(r.GetString("user_agent")),
-		Description:        strings.TrimSpace(r.GetString("llm.description")),
-		Abilities:          abilities,
-		InferenceProvider:  strings.TrimSpace(r.GetString("llm.inference_provider")),
-		Provider:           strings.TrimSpace(r.GetString("llm.provider")),
-		Endpoint:           strings.TrimSpace(r.GetString("llm.endpoint")),
-		APIKey:             strings.TrimSpace(r.GetString("llm.api_key")),
-		Model:              strings.TrimSpace(r.GetString("llm.model")),
-		ContextWindowRaw:   strings.TrimSpace(r.GetString("llm.context_window_tokens")),
-		Headers:            headers,
-		CacheTTL:           strings.TrimSpace(r.GetString("llm.cache_ttl")),
-		CacheKeyPrefix:     strings.TrimSpace(r.GetString("llm.cache_key_prefix")),
-		AzureDeployment:    strings.TrimSpace(r.GetString("llm.azure.deployment")),
-		RequestTimeoutRaw:  strings.TrimSpace(r.GetString("llm.request_timeout")),
-		ToolsEmulationMode: strings.TrimSpace(r.GetString("llm.tools_emulation_mode")),
-		TemperatureRaw:     strings.TrimSpace(r.GetString("llm.temperature")),
-		ReasoningEffortRaw: strings.TrimSpace(r.GetString("llm.reasoning_effort")),
-		ReasoningBudgetRaw: strings.TrimSpace(r.GetString("llm.reasoning_budget_tokens")),
-		PricingFile:        strings.TrimSpace(r.GetString("llm.pricing_file")),
-		ConfigPath:         strings.TrimSpace(r.GetString("config")),
-		FileStateDir:       strings.TrimSpace(r.GetString("file_state_dir")),
-		Profiles:           profiles,
-		Routes:             routes,
-		ImageTimeoutRaw:    strings.TrimSpace(r.GetString("llm.image.request_timeout")),
+		UserAgent:               strings.TrimSpace(r.GetString("user_agent")),
+		Description:             strings.TrimSpace(r.GetString("llm.description")),
+		Abilities:               abilities,
+		InferenceProvider:       strings.TrimSpace(r.GetString("llm.inference_provider")),
+		Provider:                strings.TrimSpace(r.GetString("llm.provider")),
+		Endpoint:                strings.TrimSpace(r.GetString("llm.endpoint")),
+		APIKey:                  strings.TrimSpace(r.GetString("llm.api_key")),
+		Model:                   strings.TrimSpace(r.GetString("llm.model")),
+		ContextWindowRaw:        strings.TrimSpace(r.GetString("llm.context_window_tokens")),
+		Headers:                 headers,
+		CacheTTL:                strings.TrimSpace(r.GetString("llm.cache_ttl")),
+		CacheKeyPrefix:          strings.TrimSpace(r.GetString("llm.cache_key_prefix")),
+		AzureDeployment:         strings.TrimSpace(r.GetString("llm.azure.deployment")),
+		RequestTimeoutRaw:       strings.TrimSpace(r.GetString("llm.request_timeout")),
+		ToolsEmulationMode:      strings.TrimSpace(r.GetString("llm.tools_emulation_mode")),
+		TemperatureRaw:          strings.TrimSpace(r.GetString("llm.temperature")),
+		ReasoningEffortRaw:      strings.TrimSpace(r.GetString("llm.reasoning_effort")),
+		ReasoningBudgetRaw:      strings.TrimSpace(r.GetString("llm.reasoning_budget_tokens")),
+		PricingFile:             strings.TrimSpace(r.GetString("llm.pricing_file")),
+		ConfigPath:              strings.TrimSpace(r.GetString("config")),
+		FileStateDir:            strings.TrimSpace(r.GetString("file_state_dir")),
+		Profiles:                profiles,
+		Routes:                  routes,
+		ImageTimeoutRaw:         strings.TrimSpace(r.GetString("llm.image.request_timeout")),
+		TranscriptionTimeoutRaw: strings.TrimSpace(r.GetString("llm.transcription.request_timeout")),
 		ImageOptions: llm.ImageProviderOptions{
 			OpenAI:     openAIImageOptions,
 			Gemini:     geminiImageOptions,
@@ -250,6 +253,95 @@ func imageEndpointForValues(sourceProvider string, imageProvider string, values 
 		return ""
 	}
 	return EndpointForProviderWithValues(imageProvider, values)
+}
+
+// ErrTranscriptionRouteUnset is returned when llm.routes.transcription is not set, so voice input
+// stays as audio.
+var ErrTranscriptionRouteUnset = errors.New("no transcription model: set llm.routes.transcription to a profile with a speech-to-text model")
+
+// TranscriptionRouteValues returns the settings of the model that transcribes voice input: the
+// profile llm.routes.transcription points at. Unlike images, chat models cannot transcribe, so
+// an unset route returns ErrTranscriptionRouteUnset instead of falling back to the chat model.
+func TranscriptionRouteValues(values RuntimeValues) (RuntimeValues, error) {
+	if values.Routes.ParseErr != nil {
+		return RuntimeValues{}, values.Routes.ParseErr
+	}
+	policy := values.Routes.Transcription
+	if err := validateRoutePolicy(policy, RoutePurposeTranscription); err != nil {
+		return RuntimeValues{}, err
+	}
+	if strings.TrimSpace(policy.Profile) == "" {
+		return RuntimeValues{}, ErrTranscriptionRouteUnset
+	}
+	profile, err := ResolveProfile(values, policy.Profile)
+	if err != nil {
+		return RuntimeValues{}, err
+	}
+	if strings.TrimSpace(profile.Values.Model) == "" {
+		return RuntimeValues{}, fmt.Errorf("llm.routes.transcription: profile %q has no model", profile.Name)
+	}
+	return profile.Values, nil
+}
+
+// TranscriptionClientFromValues builds the speech-to-text client from a transcription route's
+// values (see TranscriptionRouteValues).
+func TranscriptionClientFromValues(values RuntimeValues) (llm.TranscriptionClient, error) {
+	meta, err := ResolveTranscriptionClientMetadata(values)
+	if err != nil {
+		return nil, err
+	}
+	apiKey := APIKeyForProviderWithValues(meta.Provider, values)
+	requestTimeout, err := requestTimeoutFromValue(values.TranscriptionTimeoutRaw, "llm.transcription.request_timeout")
+	if err != nil {
+		return nil, err
+	}
+	c, err := uniaiProvider.New(uniaiProvider.Config{
+		Provider:            meta.Provider,
+		Endpoint:            strings.TrimSpace(meta.Endpoint),
+		APIKey:              strings.TrimSpace(apiKey),
+		Model:               strings.TrimSpace(meta.Model),
+		RequestTimeout:      requestTimeout,
+		CloudflareAccountID: firstNonEmpty(values.CloudflareAccountID),
+		CloudflareAPIToken:  firstNonEmpty(values.CloudflareAPIToken, apiKey),
+		CloudflareAPIBase:   strings.TrimSpace(meta.Endpoint),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return c, nil
+}
+
+func TranscriptionClientFromValuesWithStats(values RuntimeValues, logger *slog.Logger) (llm.TranscriptionClient, error) {
+	client, err := TranscriptionClientFromValues(values)
+	if err != nil {
+		return nil, err
+	}
+	meta, _ := ResolveTranscriptionClientMetadata(values)
+	return llmstats.WrapRuntimeTranscriptionClient(client, meta.Provider, meta.Endpoint, meta.Model, logger), nil
+}
+
+// ResolveTranscriptionClientMetadata maps a profile's provider to the uniai audio provider.
+// uniai transcribes through OpenAI's /audio/transcriptions (OpenAI and OpenAI-compatible APIs
+// such as Groq) and Cloudflare Workers AI.
+func ResolveTranscriptionClientMetadata(values RuntimeValues) (ImageClientMetadata, error) {
+	if resolved, err := ResolveRuntimeValuesInferenceProvider(values); err == nil {
+		values = resolved
+	}
+	sourceProvider := normalizeProvider(values.Provider)
+	var provider string
+	switch sourceProvider {
+	case "openai", "openai_resp":
+		provider = "openai"
+	case "cloudflare":
+		provider = "cloudflare"
+	default:
+		return ImageClientMetadata{}, fmt.Errorf("provider %q does not support transcription (use OpenAI, an OpenAI-compatible API such as Groq, or Cloudflare)", firstNonEmpty(values.InferenceProvider, sourceProvider))
+	}
+	return ImageClientMetadata{
+		Provider: provider,
+		Endpoint: EndpointForProviderWithValues(provider, values),
+		Model:    strings.TrimSpace(values.Model),
+	}, nil
 }
 
 func RuntimeValuesFromViper() (RuntimeValues, error) {

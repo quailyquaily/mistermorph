@@ -15,6 +15,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/runtimepaths"
 	"github.com/quailyquaily/mistermorph/internal/secref"
 	"github.com/quailyquaily/mistermorph/internal/toolsutil"
+	"github.com/quailyquaily/mistermorph/internal/voiceinput"
 	"github.com/quailyquaily/mistermorph/llm"
 	"github.com/quailyquaily/mistermorph/tools"
 )
@@ -31,9 +32,12 @@ type CommonDependencies struct {
 	LLMValues         func() (llmutil.RuntimeValues, error)
 	CreateLLMClient   func(route llmutil.ResolvedRoute) (llm.Client, error)
 	CreateImageClient func() (llm.ImageClient, error)
-	Registry          func() *tools.Registry
-	AwarenessRegistry func() *tools.Registry
-	ToolTriggers      func(task string) map[string]bool
+	// CreateTranscriptionClient builds the llm.routes.transcription client, or returns (nil, nil)
+	// when the route is unset. Nil falls back to LLMValues (see TranscriptionClient).
+	CreateTranscriptionClient func() (llm.TranscriptionClient, error)
+	Registry                  func() *tools.Registry
+	AwarenessRegistry         func() *tools.Registry
+	ToolTriggers              func(task string) map[string]bool
 	// LoadReferencedMCP connects the MCP servers a task references with $mcp_<name> that are not
 	// already loaded, and registers their tools in the task's registry. The returned function
 	// closes them when the task's run ends; it is never nil. A nil LoadReferencedMCP loads nothing.
@@ -66,6 +70,26 @@ func ApplyRuntimeConfig(d CommonDependencies, toolsConfig toolsutil.RuntimeTools
 	d.TaskPersistenceTargets = append([]string(nil), reader.GetStringSlice("tasks.persistence_targets")...)
 	d.TaskRotateMaxBytes = reader.GetInt64("tasks.rotate_max_bytes")
 	return d
+}
+
+// TranscriptionClient returns the voice-input transcription client: (nil, nil) when
+// llm.routes.transcription is unset or the runtime has no LLM config.
+func (d CommonDependencies) TranscriptionClient() (llm.TranscriptionClient, error) {
+	if d.CreateTranscriptionClient != nil {
+		return d.CreateTranscriptionClient()
+	}
+	if d.LLMValues == nil {
+		return nil, nil
+	}
+	values, err := d.LLMValues()
+	if err != nil {
+		return nil, err
+	}
+	var logger *slog.Logger
+	if d.Logger != nil {
+		logger, _ = d.Logger()
+	}
+	return voiceinput.NewClient(values, d.RuntimePaths.LLMUsageJournalDir, logger)
 }
 
 func (d CommonDependencies) Validate() error {

@@ -56,6 +56,20 @@ llm:
 - `heartbeat`: `awareness` の旧 alias。
 - `think`: `/think <task>` コマンド prefix にのみ使う。この task だけ `reasoning_effort=xhigh` も適用します。
 - `plan_create`: `plan_create` ツール内部の計画リクエストにのみ使う。
+- `transcription`: 音声入力の文字起こし。受信したボイスメッセージ（Telegram、WhatsApp、Mixin）と Console のマイクボタンで使う。プロファイルは 1 つだけで、分割やフォールバックはない。未設定なら文字起こしはオフで、ボイスメッセージは音声ファイルのままエージェントに渡り、Console のマイクも表示されない。プロファイルは OpenAI、OpenAI 互換 API（Groq など）、Cloudflare Workers AI のいずれかを使う。`abilities: ["transcription"]` を付けると、サブタスクの候補に出なくなる。
+  Console で録音している間、音声認識に対応したブラウザ（Chrome、Edge、Safari）では入力欄の上に話した言葉がリアルタイムで表示される。このプレビューはブラウザ自身の音声サービスによるもので（Chrome は音声を Google に送る）、目のボタンでオフにできる。下書きに入るテキストは常にこのプロファイルの文字起こし結果。
+
+```yaml
+llm:
+  profiles:
+    ears:
+      abilities: ["transcription"]
+      inference_provider: openai
+      model: gpt-4o-mini-transcribe
+      api_key: "${OPENAI_API_KEY}"
+  routes:
+    transcription: ears
+```
 
 下の例では、計画作成と `/think` では reasoning profile、つまり `claude-opus-4-6` を使い、グループチャットの addressing 判定では安い `gpt-4o-mini` を使います:
 
