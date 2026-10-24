@@ -582,6 +582,7 @@ func (s *server) handleConsoleSettingsPut(w http.ResponseWriter, r *http.Request
 		return
 	}
 	committed = true
+	s.syncSecretKeyLedger(snapshot.Data, serialized)
 	if req.Endpoints != nil {
 		s.replaceRuntimeEndpoints(endpoints)
 	}

@@ -18,3 +18,9 @@ export function loadSecretInfo() {
 export function revealSecret(path, password = "") {
   return apiFetch("/secrets/reveal", { method: "POST", body: { path, password } });
 }
+
+// The keys already in the console's config.yaml, for the secret picker: each listed once with a
+// masked hint, the fields using it and when it was first saved. No key value is included.
+export function loadSecretKeys() {
+  return apiFetch("/secrets/keys");
+}

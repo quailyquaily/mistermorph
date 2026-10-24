@@ -7,14 +7,13 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/quailyquaily/mistermorph/internal/configsettings"
 	"github.com/quailyquaily/mistermorph/internal/configutil"
 	"github.com/quailyquaily/mistermorph/internal/secref"
+	"github.com/quailyquaily/mistermorph/internal/secretkeys"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 )
@@ -23,33 +22,10 @@ import (
 // wants to see one asks for it here, one field at a time. When the console has a password it is
 // asked for again, failures count toward the login lockout, and every reveal is logged.
 
-// Secrets that are never revealed: the console's own credentials and the runtime's token.
-var unrevealableSecretPaths = map[string]bool{
-	"console.password":      true,
-	"console.password_hash": true,
-	"server.auth_token":     true,
-}
-
-// The secret fields of an LLM profile, under llm.profiles.<name>.
-var revealableProfileSecretPath = regexp.MustCompile(`^llm\.profiles\.[A-Za-z0-9_-]+\.(api_key|bedrock\.aws_key|bedrock\.aws_secret|bedrock\.aws_session_token|cloudflare\.api_token)$`)
-
 // revealableSecretPath reports whether path is a secret field that may be revealed: one the
 // settings mark sensitive, or an LLM profile's credential.
 func revealableSecretPath(path string) bool {
-	if path == "" || unrevealableSecretPaths[path] {
-		return false
-	}
-	if revealableProfileSecretPath.MatchString(path) {
-		return true
-	}
-	for _, fields := range [][]configsettings.Field{configsettings.AgentFields(), configsettings.ConsoleFields(), configsettings.SystemFields()} {
-		for _, field := range fields {
-			if field.Sensitive && field.Path == path {
-				return true
-			}
-		}
-	}
-	return false
+	return secretkeys.IsSecretPath(path)
 }
 
 // yamlScalarAtPath returns the scalar value at a dotted path in a YAML document.

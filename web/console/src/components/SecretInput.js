@@ -1,8 +1,9 @@
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, unref, watch } from "vue";
 
 import { translate } from "../core/context";
 import { loadSecretInfo, revealSecret } from "../core/secret-reveal";
 import { secretStorageKind } from "../core/secret-storage";
+import SecretKeyPicker from "./SecretKeyPicker";
 import "./SecretInput.css";
 
 const KIND_ICONS = {
@@ -23,11 +24,16 @@ const REVEAL_MS = 30000;
 // the pencil opens an empty field for a new value, and the undo arrow beside it keeps the current one. While typing,
 // the eye shows what is typed.
 //
+// Where a settings page provides "secretPicker" ({ enabled }), the key button opens the secret
+// picker to use a key another field already has instead of pasting it again. The picked key then
+// shows as its hint and the field it came from, with the undo arrow to drop it.
+//
 // status: { configured, source, editable }, as the runtime reports a secret field.
 // revealPath: the secret's config path (e.g. "llm.api_key"); empty when it cannot be revealed,
 // such as a remote runtime's settings.
 const SecretInput = {
   name: "SecretInput",
+  components: { SecretKeyPicker },
   props: {
     modelValue: { type: String, default: "" },
     status: { type: Object, default: null },
@@ -48,12 +54,18 @@ const SecretInput = {
     const revealing = ref(false);
     const revealError = ref("");
     let hideTimer = 0;
+    const secretPicker = inject("secretPicker", null);
+    const pickerOpen = ref(false);
+    // The key picked from another field: { value, kind, hint, from }, while it is the field's value.
+    const picked = ref(null);
 
     const configured = computed(() => props.status?.configured === true);
     const kind = computed(() => secretStorageKind(props.status?.source));
     const replaceable = computed(() => props.status?.editable !== false && !props.disabled);
     const showStored = computed(() => configured.value && !replacing.value && !String(props.modelValue || ""));
     const icon = computed(() => KIND_ICONS[kind.value]);
+    const canPick = computed(() => Boolean(unref(secretPicker?.enabled)) && replaceable.value);
+    const showPicked = computed(() => picked.value !== null && String(props.modelValue || "") === picked.value.value);
     const canReveal = computed(() => Boolean(props.revealPath) && info.value?.reveal === true);
     // The system store by name (macOS Keychain, ...) once the console has said which it uses.
     const storeName = computed(() => (kind.value === "os" && info.value?.store ? t("secret_store_" + info.value.store) : ""));
@@ -91,6 +103,14 @@ const SecretInput = {
       }
     );
     onBeforeUnmount(hide);
+    watch(
+      () => props.modelValue,
+      (value) => {
+        if (picked.value && String(value || "") !== picked.value.value) {
+          picked.value = null;
+        }
+      }
+    );
 
     // Enter can come before the last key's keyup, which is when QInput updates its model; read the
     // field itself then.
@@ -140,6 +160,18 @@ const SecretInput = {
       nextTick(() => root.value?.querySelector("input")?.focus());
     }
 
+    function openPicker() {
+      resetReveal();
+      pickerOpen.value = true;
+    }
+
+    function pick(payload) {
+      picked.value = payload;
+      replacing.value = false;
+      typedVisible.value = false;
+      emit("update:modelValue", payload.value);
+    }
+
     function keepCurrent() {
       replacing.value = false;
       typedVisible.value = false;
@@ -149,11 +181,28 @@ const SecretInput = {
     return {
       t, root, configured, kind, replaceable, showStored, icon, replacing, typedVisible, canReveal, tagLabel, tooltip,
       revealed, asking, password, revealing, revealError, toggleReveal, doReveal, cancelAsk, replace, keepCurrent,
+      canPick, pickerOpen, picked, showPicked, openPicker, pick,
     };
   },
   template: `
     <div ref="root" class="secret-input">
-      <div v-if="showStored && asking" class="secret-input-ask">
+      <div v-if="showPicked" :class="['secret-input-stored', 'is-picked', 'is-' + picked.kind]">
+        <span class="secret-input-hint">{{ picked.hint || "…" }}</span>
+        <span class="secret-input-tag" :title="t('secret_picker_from', { field: picked.from })">
+          <PhKey class="secret-input-icon" aria-hidden="true" />
+          <span>{{ t("secret_picker_from", { field: picked.from }) }}</span>
+        </span>
+        <QButton
+          class="plain sm icon secret-input-action"
+          :title="t('secret_picker_undo')"
+          :aria-label="t('secret_picker_undo')"
+          :disabled="disabled"
+          @click="keepCurrent"
+        >
+          <PhArrowCounterClockwise class="icon" />
+        </QButton>
+      </div>
+      <div v-else-if="showStored && asking" class="secret-input-ask">
         <QInput
           v-model="password"
           inputType="password"
@@ -186,6 +235,15 @@ const SecretInput = {
           <PhEye v-else class="icon" />
         </QButton>
         <QButton
+          v-if="canPick"
+          class="plain sm icon secret-input-action"
+          :title="t('secret_picker_open')"
+          :aria-label="t('secret_picker_open')"
+          @click="openPicker"
+        >
+          <PhKey class="icon" />
+        </QButton>
+        <QButton
           v-if="replaceable"
           class="plain sm icon secret-input-action"
           :title="t('secret_replace')"
@@ -216,6 +274,16 @@ const SecretInput = {
               <PhEye v-else class="icon" />
             </QButton>
             <QButton
+              v-if="canPick"
+              class="plain sm icon secret-input-action"
+              :title="t('secret_picker_open')"
+              :aria-label="t('secret_picker_open')"
+              :disabled="disabled"
+              @click="openPicker"
+            >
+              <PhKey class="icon" />
+            </QButton>
+            <QButton
               v-if="configured && replacing"
               class="plain sm icon secret-input-action"
               :title="t('secret_keep_current')"
@@ -229,6 +297,7 @@ const SecretInput = {
         </QInput>
       </template>
       <p v-if="revealError" class="secret-input-error" role="alert">{{ revealError }}</p>
+      <SecretKeyPicker v-if="pickerOpen" v-model="pickerOpen" :currentPath="revealPath" @pick="pick" />
     </div>
   `,
 };

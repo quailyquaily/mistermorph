@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/quailyquaily/mistermorph/internal/configbootstrap"
 	"github.com/quailyquaily/mistermorph/internal/configdefaults"
@@ -23,6 +24,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/mcphost"
 	"github.com/quailyquaily/mistermorph/internal/pathutil"
 	"github.com/quailyquaily/mistermorph/internal/secref"
+	"github.com/quailyquaily/mistermorph/internal/secretkeys"
 	"github.com/quailyquaily/mistermorph/internal/skillsutil"
 	"github.com/quailyquaily/mistermorph/skills"
 	"github.com/spf13/viper"
@@ -332,6 +334,12 @@ func (o *FileOwner) Update(ctx context.Context, update AgentSettingsUpdate) (Age
 	doc, err := configbootstrap.LoadDocumentBytes(serialized)
 	if err != nil {
 		return AgentSettingsView{}, err
+	}
+	if reader := o.CurrentReader(); reader != nil {
+		ledger := secretkeys.LedgerPath(reader.GetString("file_state_dir"))
+		if _, err := secretkeys.Sync(ledger, secretkeys.Collect(previousDoc), secretkeys.Collect(doc), time.Now()); err != nil {
+			slog.Warn("secret_keys_ledger_failed", "scope", "agent_settings", "error", err)
+		}
 	}
 	currentSecretIDs := secref.OSSecretIDsInYAML(doc)
 	if o.osStore != nil {

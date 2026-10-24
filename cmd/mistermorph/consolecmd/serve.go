@@ -599,6 +599,7 @@ func (s *server) handler() http.Handler {
 	registerConsoleOwnedSettings(mux, apiPrefix, s.withAuth)
 	mux.HandleFunc(apiPrefix+"/secrets/info", s.withAuth(s.handleSecretsInfo))
 	mux.HandleFunc(apiPrefix+"/secrets/reveal", s.withAuth(s.handleSecretReveal))
+	mux.HandleFunc(apiPrefix+"/secrets/keys", s.withAuth(s.handleSecretKeys))
 	mux.HandleFunc(apiPrefix+"/endpoints", s.withAuth(s.handleEndpoints))
 	mux.HandleFunc(apiPrefix+"/commands", s.withAuth(s.handleRuntimeCommands))
 	mux.HandleFunc(apiPrefix+"/settings/credits", s.withAuth(s.handleCredits))

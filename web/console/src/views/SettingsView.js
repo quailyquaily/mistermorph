@@ -1398,6 +1398,9 @@ const SettingsView = {
     // Stored secrets can be revealed for this console's own config only: a remote runtime's
     // secrets are in its own config.
     const secretRevealLocal = computed(() => settingsEndpointRef.value === LOCAL_CONSOLE_ENDPOINT_REF);
+    // The secret picker lists the keys in the console's own config.yaml, so it is offered only while
+    // these settings are that config's (as revealing is).
+    provide("secretPicker", { enabled: secretRevealLocal });
 
     // The config path an LLM form's secrets sit under: llm, or a saved profile's llm.profiles.<name>.
     function llmRevealPrefix(profile) {

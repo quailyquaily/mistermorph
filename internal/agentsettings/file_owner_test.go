@@ -15,6 +15,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/configsettings"
 	"github.com/quailyquaily/mistermorph/internal/configutil"
 	"github.com/quailyquaily/mistermorph/internal/secref"
+	"github.com/quailyquaily/mistermorph/internal/secretkeys"
 	"github.com/spf13/viper"
 )
 
@@ -1368,5 +1369,77 @@ func TestFileOwnerRejectsUnknownAbility(t *testing.T) {
 		LLMConfigFieldsUpdate: LLMConfigFieldsUpdate{Abilities: &abilities},
 	}}); err == nil || !strings.Contains(err.Error(), "llm.abilities") {
 		t.Fatalf("Update(top-level) error = %v, want llm.abilities error", err)
+	}
+}
+
+func TestFileOwnerReusesAPickedSecretReference(t *testing.T) {
+	const sharedID = "b_LsX7HLzAR3OShG7YjRcw"
+	t.Setenv("PICKED_TEST_KEY", "env-secret")
+	stateDir := t.TempDir()
+	configPath := filepath.Join(t.TempDir(), "config.yaml")
+	config := "file_state_dir: " + stateDir + "\nllm:\n  provider: openai\n  model: gpt-main\n  profiles:\n    chat:\n      provider: openai\n      model: gpt-chat\n      api_key: " + secref.OSSecretRef(sharedID) + "\n"
+	if err := os.WriteFile(configPath, []byte(config), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	backend := &fakeFileOwnerSecretBackend{values: map[string]string{sharedID: "shared-secret"}}
+	owner := NewFileOwner(FileOwnerOptions{
+		ConfigPath:   configPath,
+		Reader:       readFileOwnerTestConfigWithSource(t, configPath, backend),
+		SecretSource: backend,
+		OSStore:      backend,
+	})
+	saveProfile := func(originalName, name, apiKey string) {
+		t.Helper()
+		var update AgentSettingsUpdate
+		body := fmt.Sprintf(`{"llm":{"profile":{"original_name":%q,"name":%q,"provider":"openai","model":%q,"api_key":%q}}}`, originalName, name, "gpt-"+name, apiKey)
+		if err := json.Unmarshal([]byte(body), &update); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := owner.Update(context.Background(), update); err != nil {
+			t.Fatalf("save profile %q: %v", name, err)
+		}
+	}
+
+	// A new profile picks the chat profile's key and an environment variable's key.
+	saveProfile("", "ears", secref.OSSecretRef(sharedID))
+	saveProfile("", "backup", "${PICKED_TEST_KEY}")
+	if len(backend.puts) != 0 {
+		t.Fatalf("picking a key stored it again: puts=%v", backend.puts)
+	}
+	raw, _ := os.ReadFile(configPath)
+	if strings.Count(string(raw), secref.OSSecretRef(sharedID)) != 2 || !strings.Contains(string(raw), "api_key: ${PICKED_TEST_KEY}") {
+		t.Fatalf("picked references were not kept:\n%s", raw)
+	}
+
+	// Replacing the key in one profile leaves the other on the shared key.
+	saveProfile("chat", "chat", "new-chat-secret")
+	if len(backend.puts) != 1 || len(backend.deletes) != 0 || backend.values[sharedID] != "shared-secret" {
+		t.Fatalf("replacing chat's key: puts=%v deletes=%v", backend.puts, backend.deletes)
+	}
+	raw, _ = os.ReadFile(configPath)
+	if strings.Count(string(raw), secref.OSSecretRef(sharedID)) != 1 || !strings.Contains(string(raw), secref.OSSecretRef(backend.puts[0])) {
+		t.Fatalf("after replacing chat's key:\n%s", raw)
+	}
+
+	// The ledger knows when the new key was saved, and in which field.
+	ledger, err := os.ReadFile(filepath.Join(stateDir, secretkeys.LedgerFileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var file struct {
+		Keys map[string]secretkeys.Saved `json:"keys"`
+	}
+	if err := json.Unmarshal(ledger, &file); err != nil {
+		t.Fatal(err)
+	}
+	newKey := file.Keys["os:"+backend.puts[0]]
+	if newKey.At.IsZero() || newKey.Path != "llm.profiles.chat.api_key" {
+		t.Fatalf("ledger entry for the new key = %#v", newKey)
+	}
+	if shared := file.Keys["os:"+sharedID]; !shared.At.IsZero() || shared.Path != "llm.profiles.chat.api_key" {
+		t.Fatalf("ledger entry for the key saved before the ledger = %#v", shared)
+	}
+	if strings.Contains(string(ledger), "secret\"") || strings.Contains(string(ledger), "new-chat-secret") {
+		t.Fatalf("ledger contains a key:\n%s", ledger)
 	}
 }
