@@ -11,6 +11,7 @@ import (
 	"github.com/quailyquaily/mistermorph/guard"
 	"github.com/quailyquaily/mistermorph/internal/llmutil"
 	"github.com/quailyquaily/mistermorph/llm"
+	"github.com/quailyquaily/mistermorph/tools/builtin"
 )
 
 func TestConsoleRetryNotificationsPublishAndRetainEachAttempt(t *testing.T) {
@@ -387,6 +388,45 @@ func TestConsoleEventPreviewSinkKeepsCoderStatusWhenGuardEnabled(t *testing.T) {
 			frame, _ := hub.Latest("task")
 			if frame.Activity == nil || frame.Activity.Current == nil || !strings.Contains(frame.Activity.Current.Output, summary) || strings.Contains(frame.Activity.Current.Output, "private") {
 				t.Fatalf("guarded progress = %#v", frame.Activity)
+			}
+		})
+	}
+}
+
+func TestConsoleEventPreviewSinkShowsAgentLinkMessages(t *testing.T) {
+	redacting := guard.New(guard.Config{Enabled: true, Redaction: guard.RedactionConfig{Enabled: true,
+		Patterns: []guard.RegexPattern{{Name: "token", Re: `tok-[a-z0-9]+`}}}}, nil, nil)
+	cases := []struct {
+		name  string
+		guard *guard.Guard
+		want  []string
+	}{
+		{name: "guard off", want: []string{"sent:Isla:how are you? tok-abc123", "reply:Isla:fine, thanks"}},
+		{name: "guard on", guard: redacting, want: []string{"sent:Isla:how are you? [redacted]", "reply:Isla:fine, thanks"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			hub := newConsoleStreamHub()
+			sink := newConsoleEventPreviewSink(hub, "task", nil, tc.guard)
+			defer sink.Close()
+			sink.HandleEvent(context.Background(), agent.Event{Kind: agent.EventKindToolStart, ActivityID: "send", ToolName: "agent_send", Status: "running"})
+			for _, event := range []agent.Event{
+				{Stream: builtin.AgentLinkStreamSent, Text: "how are you? tok-abc123"},
+				{Stream: builtin.AgentLinkStreamReply, Text: "fine, thanks"},
+			} {
+				event.Kind, event.ActivityID, event.ToolName, event.Summary, event.Status = agent.EventKindToolOutput, "send", "agent_send", "Isla", "running"
+				sink.HandleEvent(context.Background(), event)
+			}
+			frame, _ := hub.Latest("task")
+			if frame.Activity == nil || len(frame.Activity.History) != 1 {
+				t.Fatalf("activity = %#v", frame.Activity)
+			}
+			var got []string
+			for _, m := range frame.Activity.History[0].Messages {
+				got = append(got, m.Direction+":"+m.Peer+":"+m.Text)
+			}
+			if strings.Join(got, "|") != strings.Join(tc.want, "|") {
+				t.Fatalf("messages = %q, want %q", got, tc.want)
 			}
 		})
 	}

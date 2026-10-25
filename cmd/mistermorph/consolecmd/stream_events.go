@@ -102,6 +102,12 @@ func (s *consoleEventPreviewSink) HandleEvent(_ context.Context, event agent.Eve
 		// through Guard. Keep status metadata, but do not expose raw content.
 		switch strings.TrimSpace(event.Kind) {
 		case agent.EventKindToolOutput:
+			if _, ok := consoleAgentLinkDirection(event.Stream); ok {
+				// An Agent Link message is complete, the whole text sent or answered, so it can
+				// pass through Guard instead of being dropped.
+				event.Text, _ = s.outputGuard.RedactString(event.Text)
+				break
+			}
 			event.Text = ""
 			if event.ToolName == "coder" && event.Summary != "" {
 				// Coder emits complete status summaries separately from raw CLI output.
