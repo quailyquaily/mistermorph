@@ -2,9 +2,11 @@ package contextcheckpoint
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
+	"github.com/quailyquaily/mistermorph/agent"
 	"github.com/quailyquaily/mistermorph/internal/chathistory"
 	"github.com/quailyquaily/mistermorph/llm"
 )
@@ -29,6 +31,15 @@ func PrepareHistory(ctx context.Context, root string, conversationKey string, hi
 	if found {
 		coveredThrough = checkpoint.CoveredThrough
 	}
+	if found && checkpointOutlived(history, coveredThrough) {
+		// The history window has moved past everything the checkpoint summarizes, so those turns
+		// would have dropped out of the prompt without compaction too. Keeping the checkpoint would
+		// carry an old topic (and its unfinished work) into the conversation for good.
+		if err := store.Delete(ctx, checkpoint.Revision); err != nil && !errors.Is(err, agent.ErrContextCheckpointRevisionConflict) {
+			return PreparedHistory{}, fmt.Errorf("expire context checkpoint: %w", err)
+		}
+		coveredThrough = ""
+	}
 	filtered := chathistory.FilterAfterBoundary(history, coveredThrough)
 	prepared := PreparedHistory{
 		Store:                  store,
@@ -39,6 +50,21 @@ func PrepareHistory(ctx context.Context, root string, conversationKey string, hi
 		prepared.HistoryBoundaries = append(prepared.HistoryBoundaries, chathistory.BoundaryForItem(item))
 	}
 	return prepared, nil
+}
+
+// checkpointOutlived reports whether the item a checkpoint covers through is no longer in the
+// history window. A checkpoint without a boundary can't be placed, so it is kept.
+func checkpointOutlived(history []chathistory.ChatHistoryItem, coveredThrough string) bool {
+	coveredThrough = strings.TrimSpace(coveredThrough)
+	if coveredThrough == "" {
+		return false
+	}
+	for _, item := range history {
+		if chathistory.BoundaryForItem(item) == coveredThrough {
+			return false
+		}
+	}
+	return true
 }
 
 func Reset(ctx context.Context, root string, conversationKey string) error {

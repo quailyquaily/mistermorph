@@ -270,6 +270,53 @@ func TestPrepareHistoryFiltersCoveredItemsAndBuildsBoundaries(t *testing.T) {
 	}
 }
 
+func TestPrepareHistoryExpiresCheckpointOutlivedByHistory(t *testing.T) {
+	item := func(id string) chathistory.ChatHistoryItem {
+		return chathistory.ChatHistoryItem{Channel: chathistory.ChannelTelegram, Kind: chathistory.KindInboundUser, MessageID: id, Text: id}
+	}
+	current := item("current")
+	cases := []struct {
+		name           string
+		coveredThrough string
+		history        []chathistory.ChatHistoryItem
+		wantKept       bool
+		wantHistory    int
+	}{
+		{name: "covered item still in the window", coveredThrough: chathistory.BoundaryForItem(item("a")), history: []chathistory.ChatHistoryItem{item("a"), item("b")}, wantKept: true, wantHistory: 1},
+		{name: "covered item dropped out of the window", coveredThrough: chathistory.BoundaryForItem(item("a")), history: []chathistory.ChatHistoryItem{item("b"), item("c")}, wantHistory: 2},
+		{name: "history empty", coveredThrough: chathistory.BoundaryForItem(item("a")), wantHistory: 0},
+		{name: "checkpoint without a boundary", history: []chathistory.ChatHistoryItem{item("b")}, wantKept: true, wantHistory: 1},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			conversationKey := "telegram:chat:expire"
+			store, err := NewFileStore(root, conversationKey)
+			if err != nil {
+				t.Fatalf("new store: %v", err)
+			}
+			if err := store.Save(context.Background(), 0, agent.ContextCheckpoint{
+				Version:        1,
+				Revision:       1,
+				Message:        llm.Message{Role: "user", Content: "checkpoint"},
+				CoveredThrough: tc.coveredThrough,
+			}); err != nil {
+				t.Fatalf("save checkpoint: %v", err)
+			}
+			prepared, err := PrepareHistory(context.Background(), root, conversationKey, tc.history, current)
+			if err != nil {
+				t.Fatalf("prepare history: %v", err)
+			}
+			if len(prepared.History) != tc.wantHistory || len(prepared.HistoryBoundaries) != tc.wantHistory {
+				t.Fatalf("history = %+v, boundaries = %q, want %d items", prepared.History, prepared.HistoryBoundaries, tc.wantHistory)
+			}
+			if _, kept, err := prepared.Store.Load(context.Background()); err != nil || kept != tc.wantKept {
+				t.Fatalf("checkpoint kept = %v (err %v), want %v", kept, err, tc.wantKept)
+			}
+		})
+	}
+}
+
 func TestFilterMessageHistoryKeepsOnlyMessagesAfterCoveredBoundary(t *testing.T) {
 	messages := []llm.Message{
 		{Role: "user", Content: "old question"},
