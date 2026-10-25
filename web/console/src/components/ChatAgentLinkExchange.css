@@ -150,7 +150,11 @@
   white-space: nowrap;
 }
 
+/* Another ink than the reply's, so the exchange never reads as the agent's answer; a step darker
+   than reasoning's. */
 .chat-agentlink-text .mmr-document {
+  --mmr-text: var(--text-1);
+  color: var(--text-1);
   font-size: var(--font-size-ui);
   line-height: 1.65;
 }

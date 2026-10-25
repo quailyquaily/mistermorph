@@ -1282,7 +1282,7 @@ export default {
                     @click.stop="openLLMProfileDialog"
                   >
                     <div class="q-dropdown-selected">
-                      <div class="menu-title q-text-body-text">
+                      <div class="menu-title">
                         {{ selectedLLMProfileItem?.title || llmProfileLabel }}
                       </div>
                     </div>

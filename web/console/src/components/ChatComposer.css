@@ -1,4 +1,7 @@
+/* The field and the profile beside it share one size. iOS zooms the page into a field set
+   smaller than 16px when it takes focus, so there it stays 16px. */
 .chat-composer {
+  --chat-composer-font-size: var(--font-size-ui);
   position: relative;
   isolation: isolate;
   display: grid;
@@ -218,7 +221,6 @@
   background: transparent;
   color: var(--text-1);
   font-family: var(--font-mono);
-  font-size: var(--font-size-meta);
 }
 
 .chat-composer-profile .q-dropdown-selected {
@@ -239,8 +241,17 @@
   white-space: nowrap;
 }
 
+/* Set like the field beside it: its size and weight, not the button's. */
 .chat-composer-profile .q-dropdown-menu-action .menu-title {
   margin-left: 0;
+  font-size: var(--chat-composer-font-size);
+  font-weight: 400;
+}
+
+@supports (-webkit-touch-callout: none) {
+  .chat-composer {
+    --chat-composer-font-size: var(--font-size-body);
+  }
 }
 
 .chat-composer-profile .chevron-icon {
@@ -312,7 +323,7 @@
   resize: none;
   overflow-y: hidden;
   font-family: var(--font-mono);
-  font-size: var(--font-size-body);
+  font-size: var(--chat-composer-font-size);
   line-height: 1.58;
   white-space: pre-wrap;
   overflow-wrap: break-word;
