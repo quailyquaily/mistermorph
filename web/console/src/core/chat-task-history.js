@@ -318,17 +318,19 @@ function normalizeActivityMessages(raw) {
     .filter((message) => ["sent", "reply", "pending"].includes(message.direction));
 }
 
-// What the task exchanged with other agents over Agent Link, in order. A pending note is dropped
-// once that agent's answer is in.
+// What the task exchanged with other agents over Agent Link, in order, including the sends a
+// codemode script made. A pending note is dropped once that agent's answer is in.
 function agentLinkMessages(activity) {
   const history = Array.isArray(activity?.history) ? activity.history : [];
   const out = [];
-  history.forEach((entry) => {
+  const collect = (entry) => {
     const messages = Array.isArray(entry?.messages) ? entry.messages : [];
     messages.forEach((message, index) => {
       out.push({ ...message, key: `${entry.id}:agentlink:${index}` });
     });
-  });
+    (Array.isArray(entry?.children) ? entry.children : []).forEach(collect);
+  };
+  history.forEach(collect);
   return out.filter(
     (message, index) =>
       message.direction !== "pending" ||

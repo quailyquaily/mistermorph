@@ -89,6 +89,20 @@ func EventSinkFromContext(ctx context.Context) (EventSink, bool) {
 	return sink, ok && sink != nil
 }
 
+type toolActivityContextKey struct{}
+
+// toolActivity identifies the tool call a tool's context belongs to.
+type toolActivity struct {
+	id       string
+	parentID string
+}
+
+// withToolActivity marks ctx as the context of the tool call with activity ID id (and, for a call a
+// codemode script made, its parent's), so the tool_output events the tool emits name their call.
+func withToolActivity(ctx context.Context, id, parentID string) context.Context {
+	return context.WithValue(ctx, toolActivityContextKey{}, toolActivity{id: id, parentID: parentID})
+}
+
 func EmitEvent(ctx context.Context, sink EventSink, event Event) {
 	emitEvent(ctx, sink, event, ctx)
 }
@@ -107,6 +121,12 @@ func emitEvent(ctx context.Context, sink EventSink, event Event, deliveryCtx con
 	}
 	if strings.TrimSpace(event.RunID) == "" {
 		event.RunID = strings.TrimSpace(llmstats.RunIDFromContext(ctx))
+	}
+	if event.Kind == EventKindToolOutput && strings.TrimSpace(event.ActivityID) == "" {
+		if call, ok := ctx.Value(toolActivityContextKey{}).(toolActivity); ok {
+			event.ActivityID = call.id
+			event.ParentActivityID = call.parentID
+		}
 	}
 	if deliveryCtx == nil {
 		deliveryCtx = context.Background()

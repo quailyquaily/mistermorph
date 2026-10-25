@@ -164,12 +164,12 @@ func updateConsoleActivityOutput(progress *consoleActivityProgress, event agent.
 	if progress == nil || event.Text == "" || strings.TrimSpace(event.ToolName) != "coder" {
 		return cloneConsoleActivityProgress(progress), false
 	}
-	index := consoleActivityOutputIndex(progress, event)
-	if index < 0 {
+	target, ok := consoleActivityOutputTarget(progress, event)
+	if !ok {
 		return cloneConsoleActivityProgress(progress), false
 	}
 
-	entry := progress.History[index]
+	entry := progress.entryAt(target)
 	if stream := strings.TrimSpace(event.Stream); stream != "" {
 		entry.Stream = stream
 	}
@@ -178,8 +178,7 @@ func updateConsoleActivityOutput(progress *consoleActivityProgress, event agent.
 	}
 	entry.At = time.Now().Format(time.RFC3339Nano)
 	entry.Output = appendConsoleTail(entry.Output, event.Text, consoleActivityOutputMaxChars)
-	progress.History[index] = entry
-	progress.Current = cloneConsoleActivityEntry(&entry)
+	progress.Current = cloneConsoleActivityEntry(&progress.History[target.index])
 	return cloneConsoleActivityProgress(progress), true
 }
 
@@ -198,11 +197,11 @@ func consoleAgentLinkDirection(stream string) (string, bool) {
 
 // appendConsoleActivityMessage adds a message agent_send exchanged over Agent Link to its call.
 func appendConsoleActivityMessage(progress *consoleActivityProgress, event agent.Event, direction string) (*consoleActivityProgress, bool) {
-	index := consoleActivityOutputIndex(progress, event)
-	if index < 0 {
+	target, ok := consoleActivityOutputTarget(progress, event)
+	if !ok {
 		return cloneConsoleActivityProgress(progress), false
 	}
-	entry := progress.History[index]
+	entry := progress.entryAt(target)
 	now := time.Now().Format(time.RFC3339Nano)
 	if len(entry.Messages) >= consoleActivityMessageLimit {
 		entry.Messages = entry.Messages[len(entry.Messages)-consoleActivityMessageLimit+1:]
@@ -214,8 +213,7 @@ func appendConsoleActivityMessage(progress *consoleActivityProgress, event agent
 		At:        now,
 	})
 	entry.At = now
-	progress.History[index] = entry
-	progress.Current = cloneConsoleActivityEntry(&entry)
+	progress.Current = cloneConsoleActivityEntry(&progress.History[target.index])
 	return cloneConsoleActivityProgress(progress), true
 }
 
@@ -227,35 +225,66 @@ func truncateConsoleActivityMessage(text string) string {
 	return text
 }
 
-func consoleActivityOutputIndex(progress *consoleActivityProgress, event agent.Event) int {
+// consoleActivityTarget is where a tool call sits in the history: History[index], or, for a call a
+// codemode script made, History[index].Children[child].
+type consoleActivityTarget struct {
+	index int
+	child int
+}
+
+func (p *consoleActivityProgress) entryAt(target consoleActivityTarget) *consoleActivityEntry {
+	if target.child >= 0 {
+		return &p.History[target.index].Children[target.child]
+	}
+	return &p.History[target.index]
+}
+
+// consoleActivityOutputTarget finds the call a tool_output event belongs to: the one with its
+// activity ID, else the latest running call of its tool, looking into the calls codemode scripts
+// made as well.
+func consoleActivityOutputTarget(progress *consoleActivityProgress, event agent.Event) (consoleActivityTarget, bool) {
 	if progress == nil {
-		return -1
+		return consoleActivityTarget{}, false
 	}
 	if id := strings.TrimSpace(event.ActivityID); id != "" {
 		for i := range progress.History {
 			if progress.History[i].ID == id {
-				return i
+				return consoleActivityTarget{index: i, child: -1}, true
+			}
+			for j := range progress.History[i].Children {
+				if progress.History[i].Children[j].ID == id {
+					return consoleActivityTarget{index: i, child: j}, true
+				}
 			}
 		}
 	}
 
 	toolName := strings.TrimSpace(event.ToolName)
-	for i := len(progress.History) - 1; i >= 0; i-- {
-		entry := progress.History[i]
+	running := func(entry consoleActivityEntry) bool {
 		if strings.TrimSpace(entry.Kind) != "tool" {
-			continue
+			return false
 		}
 		if toolName != "" && strings.TrimSpace(entry.Name) != toolName {
-			continue
+			return false
 		}
 		switch strings.TrimSpace(entry.Status) {
 		case "done", "failed", "canceled":
-			continue
-		default:
-			return i
+			return false
+		}
+		return true
+	}
+	for i := len(progress.History) - 1; i >= 0; i-- {
+		children := progress.History[i].Children
+		for j := len(children) - 1; j >= 0; j-- {
+			if running(children[j]) {
+				return consoleActivityTarget{index: i, child: j}, true
+			}
+		}
+		if running(progress.History[i]) {
+			return consoleActivityTarget{index: i, child: -1}, true
 		}
 	}
-	return -1
+	return consoleActivityTarget{}, false
 }
 
 func buildConsoleActivityEntry(event agent.Event) *consoleActivityEntry {

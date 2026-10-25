@@ -1,6 +1,7 @@
 package consolecmd
 
 import (
+	"reflect"
 	"testing"
 	"time"
 
@@ -130,32 +131,100 @@ func TestUpdateConsoleActivityProgressAppendsCoderOutput(t *testing.T) {
 }
 
 func TestUpdateConsoleActivityProgressRecordsAgentLinkExchange(t *testing.T) {
-	progress, _ := updateConsoleActivityProgress(nil, agent.Event{
-		Kind: agent.EventKindToolStart, ActivityID: "call_1", ToolName: "agent_send", Status: "running",
-	})
-	for _, event := range []agent.Event{
-		{Stream: builtin.AgentLinkStreamSent, Summary: "墨墨", Text: "what is your name?"},
-		{Stream: builtin.AgentLinkStreamReply, Summary: "墨墨", Text: "I am 墨墨."},
-	} {
-		event.Kind = agent.EventKindToolOutput
-		event.ToolName = "agent_send"
-		event.Status = "running"
-		var changed bool
-		if progress, changed = updateConsoleActivityProgress(progress, event); !changed {
-			t.Fatalf("event %s did not change the activity", event.Stream)
-		}
+	start := func(id, parent string) agent.Event {
+		return agent.Event{Kind: agent.EventKindToolStart, ActivityID: id, ParentActivityID: parent, ToolName: "agent_send", Status: "running"}
 	}
-	progress, _ = updateConsoleActivityProgress(progress, agent.Event{
-		Kind: agent.EventKindToolDone, ActivityID: "call_1", ToolName: "agent_send", Status: "done",
-	})
+	done := func(id, parent string) agent.Event {
+		return agent.Event{Kind: agent.EventKindToolDone, ActivityID: id, ParentActivityID: parent, ToolName: "agent_send", Status: "done"}
+	}
+	output := func(id, stream, peer, text string) agent.Event {
+		return agent.Event{Kind: agent.EventKindToolOutput, ActivityID: id, ToolName: "agent_send", Stream: stream, Summary: peer, Text: text, Status: "running"}
+	}
+	codemode := agent.Event{Kind: agent.EventKindToolStart, ActivityID: "cm", ToolName: "codemode", Status: "running"}
 
-	got := progress.History[0].Messages
-	if len(got) != 2 ||
-		got[0].Direction != "sent" || got[0].Peer != "墨墨" || got[0].Text != "what is your name?" ||
-		got[1].Direction != "reply" || got[1].Text != "I am 墨墨." {
-		t.Fatalf("messages = %+v", got)
+	cases := []struct {
+		name   string
+		events []agent.Event
+		// want lists, for each call ID, the messages it holds as direction:peer:text.
+		want map[string][]string
+	}{
+		{
+			name: "direct call, output without an activity ID",
+			events: []agent.Event{
+				start("call_1", ""),
+				output("", builtin.AgentLinkStreamSent, "墨墨", "what is your name?"),
+				output("", builtin.AgentLinkStreamReply, "墨墨", "I am 墨墨."),
+				done("call_1", ""),
+			},
+			want: map[string][]string{"call_1": {"sent:墨墨:what is your name?", "reply:墨墨:I am 墨墨."}},
+		},
+		{
+			name: "codemode script call, output with its activity ID",
+			events: []agent.Event{
+				codemode,
+				start("send_1", "cm"),
+				output("send_1", builtin.AgentLinkStreamSent, "墨墨", "hi"),
+				output("send_1", builtin.AgentLinkStreamReply, "墨墨", "hello"),
+				done("send_1", "cm"),
+			},
+			want: map[string][]string{"send_1": {"sent:墨墨:hi", "reply:墨墨:hello"}},
+		},
+		{
+			name: "codemode script call, output without an activity ID",
+			events: []agent.Event{
+				codemode,
+				start("send_1", "cm"),
+				output("", builtin.AgentLinkStreamSent, "墨墨", "hi"),
+				output("", builtin.AgentLinkStreamPending, "墨墨", ""),
+				done("send_1", "cm"),
+			},
+			want: map[string][]string{"send_1": {"sent:墨墨:hi", "pending:墨墨:"}},
+		},
+		{
+			name: "two sends from one script, each keeps its own exchange",
+			events: []agent.Event{
+				codemode,
+				start("send_1", "cm"),
+				start("send_2", "cm"),
+				output("send_1", builtin.AgentLinkStreamSent, "墨墨", "hi 墨墨"),
+				output("send_2", builtin.AgentLinkStreamSent, "Emma", "hi Emma"),
+				output("send_2", builtin.AgentLinkStreamReply, "Emma", "hello from Emma"),
+				output("send_1", builtin.AgentLinkStreamReply, "墨墨", "hello from 墨墨"),
+				done("send_1", "cm"),
+				done("send_2", "cm"),
+			},
+			want: map[string][]string{
+				"send_1": {"sent:墨墨:hi 墨墨", "reply:墨墨:hello from 墨墨"},
+				"send_2": {"sent:Emma:hi Emma", "reply:Emma:hello from Emma"},
+			},
+		},
 	}
-	if progress.History[0].Status != "done" {
-		t.Fatalf("status = %q, want done", progress.History[0].Status)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var progress *consoleActivityProgress
+			for _, event := range tc.events {
+				var changed bool
+				if progress, changed = updateConsoleActivityProgress(progress, event); !changed {
+					t.Fatalf("%s %s did not change the activity", event.Kind, event.Stream)
+				}
+			}
+			got := map[string][]string{}
+			var collect func(entries []consoleActivityEntry)
+			collect = func(entries []consoleActivityEntry) {
+				for _, entry := range entries {
+					for _, m := range entry.Messages {
+						got[entry.ID] = append(got[entry.ID], m.Direction+":"+m.Peer+":"+m.Text)
+					}
+					if entry.Name == "agent_send" && entry.Status != "done" {
+						t.Errorf("%s status = %q, want done", entry.ID, entry.Status)
+					}
+					collect(entry.Children)
+				}
+			}
+			collect(progress.History)
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("messages = %v, want %v", got, tc.want)
+			}
+		})
 	}
 }

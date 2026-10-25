@@ -1058,11 +1058,12 @@ func (e *Engine) executeTool(ctx context.Context, st *engineLoopState, step int,
 
 // executeFoundTool runs a tool already found for the call, with the run's context values.
 func (e *Engine) executeFoundTool(ctx context.Context, st *engineLoopState, step int, tc *ToolCall, tool tools.Tool) (string, error) {
-	toolCtx := ctx
+	activityID := toolActivityID(step, tc)
+	toolCtx := withToolActivity(ctx, activityID, tc.ParentID)
 	EmitEvent(ctx, nil, Event{
 		Kind:             EventKindToolStart,
 		Step:             step,
-		ActivityID:       toolActivityID(step, tc),
+		ActivityID:       activityID,
 		ParentActivityID: tc.ParentID,
 		ToolName:         strings.TrimSpace(tc.Name),
 		Status:           "running",

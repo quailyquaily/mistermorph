@@ -205,6 +205,22 @@ test("agentLinkMessages lists the Agent Link exchange and drops a pending note o
   assert.deepEqual(got, ["sent:墨墨", "reply:墨墨", "sent:Emma", "pending:Emma"]);
 });
 
+test("agentLinkMessages includes the sends a codemode script made", () => {
+  const activity = normalizeActivity({ history: [
+    { id: "cm", kind: "tool", name: "codemode", status: "done", children: [
+      { id: "cm.0", kind: "tool", name: "agent_send", status: "done", messages: [
+        { direction: "sent", peer: "墨墨", text: "hi" },
+        { direction: "reply", peer: "墨墨", text: "hello" },
+      ] },
+      { id: "cm.1", kind: "tool", name: "agent_send", status: "done", messages: [
+        { direction: "sent", peer: "Emma", text: "hi" },
+      ] },
+    ] },
+  ] });
+  const got = agentLinkMessages(activity).map((m) => `${m.key}:${m.direction}:${m.peer}`);
+  assert.deepEqual(got, ["cm.0:agentlink:0:sent:墨墨", "cm.0:agentlink:1:reply:墨墨", "cm.1:agentlink:0:sent:Emma"]);
+});
+
 test("a reload keeps what the page shows for a running task until the task stores it", async () => {
   const { keepLiveTaskState } = await import("./chat-task-history.js");
   const current = [

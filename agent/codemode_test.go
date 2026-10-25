@@ -253,3 +253,55 @@ func TestCodeModeExcludesToolsThatSaySo(t *testing.T) {
 		t.Fatal("a plain tool must stay callable from scripts")
 	}
 }
+
+// talkingTool emits a tool_output event without naming its call, the way agent_send and bash do.
+type talkingTool struct{ codeTestTool }
+
+func (t talkingTool) Execute(ctx context.Context, params map[string]any) (string, error) {
+	EmitEvent(ctx, nil, Event{Kind: EventKindToolOutput, ToolName: t.name, Stream: "talk", Text: "hi", Status: "running"})
+	return "said hi", nil
+}
+
+func TestToolOutputNamesItsCall(t *testing.T) {
+	cases := []struct {
+		name       string
+		response   llm.Result
+		wantParent bool
+	}{
+		{name: "direct call", response: toolCallResponse("talk")},
+		{name: "codemode script call", response: codeCall(`return await tools.talk({})`), wantParent: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			reg := tools.NewRegistry()
+			_ = reg.Register(talkingTool{codeTestTool{name: "talk"}})
+			sink := &recordingSink{}
+			engine := New(newMockClient(tc.response, finalResponse("done")), reg, Config{MaxSteps: 4}, DefaultPromptSpec(), WithCodeMode(CodeModeOptions{}))
+			if _, _, err := engine.Run(WithEventSinkContext(context.Background(), sink), "x", RunOptions{}); err != nil {
+				t.Fatal(err)
+			}
+			var start, output *Event
+			for i := range sink.events {
+				ev := &sink.events[i]
+				if ev.ToolName != "talk" {
+					continue
+				}
+				switch ev.Kind {
+				case EventKindToolStart:
+					start = ev
+				case EventKindToolOutput:
+					output = ev
+				}
+			}
+			if start == nil || output == nil {
+				t.Fatalf("start = %v, output = %v", start, output)
+			}
+			if output.ActivityID == "" || output.ActivityID != start.ActivityID || output.ParentActivityID != start.ParentActivityID {
+				t.Fatalf("output names %q (parent %q), want the call %q (parent %q)", output.ActivityID, output.ParentActivityID, start.ActivityID, start.ParentActivityID)
+			}
+			if (output.ParentActivityID != "") != tc.wantParent {
+				t.Fatalf("output parent = %q, want a parent: %v", output.ParentActivityID, tc.wantParent)
+			}
+		})
+	}
+}
