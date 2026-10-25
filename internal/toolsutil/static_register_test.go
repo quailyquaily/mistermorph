@@ -278,6 +278,12 @@ func TestStaticRegistryConfigReadsEachShellToolsElevation(t *testing.T) {
 			wantBash:       elevate.Config{Key: "tools.bash.elevation", Enabled: false, ApprovalTimeout: 2 * time.Minute, Dialog: "/usr/local/bin/inua-pinentry"},
 			wantPowerShell: elevate.Config{Key: "tools.powershell.elevation", Enabled: true, ApprovalTimeout: 45 * time.Second},
 		},
+		{
+			name:           "askpass program",
+			set:            map[string]any{"tools.bash.elevation.askpass": " /usr/local/bin/inua-askpass "},
+			wantBash:       elevate.Config{Key: "tools.bash.elevation", Enabled: true, ApprovalTimeout: 2 * time.Minute, Askpass: "/usr/local/bin/inua-askpass"},
+			wantPowerShell: elevate.Config{Key: "tools.powershell.elevation", Enabled: true, ApprovalTimeout: 2 * time.Minute},
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

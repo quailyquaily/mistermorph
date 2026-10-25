@@ -453,6 +453,14 @@ tools:
       # pinentry (the update-alternatives choice on Debian/Ubuntu) unless it is a terminal variant,
       # then pinentry-gnome3, pinentry-qt, pinentry-gtk-2, zenity or kdialog; on macOS osascript.
       dialog: ""
+      # An askpass program of your own for sudo (SUDO_ASKPASS), used instead of mistermorph's
+      # helper and dialog: it gets the prompt as its argument, prints the password and exits 0, or
+      # exits non-zero on cancel. It also gets MISTERMORPH_ELEVATE_COMMAND (the command) and
+      # MISTERMORPH_ELEVATE_DEADLINE (when to give up, Unix seconds). On cancel or timeout it
+      # writes "mistermorph: administrator approval was declined" or
+      # "mistermorph: administrator approval timed out" to stderr, or the command reads as failed.
+      # See docs/integration.md.
+      askpass: ""
   # Dangerous: enables local PowerShell execution (Windows).
   powershell:
     # Enable the powershell tool.

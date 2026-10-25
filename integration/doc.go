@@ -21,4 +21,7 @@
 // RunAskpassIfRequested first thing in main and set
 // tools.bash.elevation.enabled (Linux, macOS) or
 // tools.powershell.elevation.enabled (Windows); see docs/integration.md.
+// A program with an askpass program of its own names it in
+// tools.bash.elevation.askpass instead of calling RunAskpassIfRequested;
+// ElevateCommandEnv and the other Elevate constants are its contract.
 package integration

@@ -77,6 +77,25 @@ unavailable on Linux and macOS, since sudo would otherwise start the host progra
   may reuse an earlier authorization for a few minutes, so one approval could cover later commands.
   sudo with `-k` asks every time on both.
 
+### 3.1.1 An askpass program of the user's own
+
+An embedding program may already have a password dialog, the one ssh and git use there, behind a
+standard askpass program (issue #87). `tools.bash.elevation.askpass` names it, and the tool then
+sets `SUDO_ASKPASS` to that program instead of the mistermorph binary:
+
+- `Check` needs only `sudo` and the program, looked up on `PATH` when it is a bare name and passed
+  to sudo as an absolute path. It does not need `HandleAskpass`, a desktop session or one of the
+  dialogs: the program shows its own dialog and knows where it can.
+- The program still gets `MISTERMORPH_ELEVATE_COMMAND`, `MISTERMORPH_ELEVATE_DEADLINE` and the
+  display variables. `MISTERMORPH_ASKPASS` and `MISTERMORPH_ELEVATE_DIALOG` mean something only to
+  the built-in helper and are left out.
+- It tells a declined or unanswered approval from a failure the way the built-in helper does: it
+  writes `DeclinedMarker` or `TimedOutMarker` to stderr. These two lines and the two variables are a
+  stable contract, exported as `integration.ElevateCommandEnv`, `ElevateDeadlineEnv`,
+  `ElevateDeclinedMarker` and `ElevateTimedOutMarker`. Reading sudo's own failure messages instead
+  was ruled out: sudo and sudo-rs word them differently, and they follow the system's language.
+  Without a marker, a non-zero exit reads as the command failing.
+
 ### 3.2 No credential cache
 
 After a successful `sudo`, sudo normally skips the password for a few minutes. Two things keep that
@@ -108,8 +127,8 @@ true) and the OS has a way to do it:
 
 | OS | Available when |
 | --- | --- |
-| Linux | the executable handles askpass (section 3.1), `sudo` is installed, a display is set (`DISPLAY` or `WAYLAND_DISPLAY`), and a dialog program is found (or one is configured) |
-| macOS | the executable handles askpass, `sudo` and `osascript` are installed |
+| Linux | the executable handles askpass (section 3.1), `sudo` is installed, a display is set (`DISPLAY` or `WAYLAND_DISPLAY`), and a dialog program is found (or one is configured); with an askpass program set (3.1.1), `sudo` and that program |
+| macOS | the executable handles askpass, `sudo` and `osascript` are installed; with an askpass program set, `sudo` and that program |
 | Windows | always (UAC needs an interactive session; a service gets an error from `Start-Process`) |
 
 The dialog appears on the agent's machine. A run started from Telegram or another chat channel can
@@ -149,6 +168,8 @@ tools:
       # The dialog program to use instead of the automatic choice
       # (a pinentry, zenity or kdialog binary).
       dialog: ""
+      # An askpass program of the user's own, used instead of the helper and its dialog (3.1.1).
+      askpass: ""
   powershell:
     elevation:
       # Let powershell commands ask for administrator rights through UAC (Windows).
@@ -181,6 +202,8 @@ tool, the command, the exit code and whether the user declined. The password is 
   `RunAsScript`. `cmd/mistermorph/main.go` starts the helper when `MISTERMORPH_ASKPASS=1`.
 - `tools/builtin`: `elevated` on `bash` (Linux, macOS) and `powershell` (Windows), `runElevated`
   (logging, declined and timed-out approvals), and the sudo hint.
+- `integration`: the askpass contract for an external program (`ElevateCommandEnv`,
+  `ElevateDeadlineEnv`, `ElevateDeclinedMarker`, `ElevateTimedOutMarker`), pinned by a test.
 - `tools.bash.elevation` and `tools.powershell.elevation` in config defaults, the Settings field
   registry and the Console's `bash` and
   `powershell` settings. Embedded programs (`integration`) default it to off and turn it on with
@@ -191,6 +214,8 @@ Verified:
 - Linux: the bash tool against a fake `sudo` that calls the real askpass helper (approved, declined,
   wrong password), with fake dialogs; and the real `pinentry-gnome3` showing the dialog and timing
   out. A real `sudo` run needs a person to type the password.
+- Linux: the bash tool against a fake `sudo` with an external askpass program, without a display or
+  `HandleAskpass` (approved, declined and timed out through the markers, cancelled without one).
 - macOS and Windows: builds, and unit tests of the osascript arguments and the UAC script (decoded
   and checked; parsed by PowerShell when `pwsh` is installed). Not yet run on those systems.
 

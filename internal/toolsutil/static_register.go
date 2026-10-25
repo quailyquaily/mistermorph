@@ -225,6 +225,7 @@ func StaticRegistryConfigFromReader(reader StaticRegistryConfigReader) (StaticRe
 				Enabled:         reader.GetBool("tools.bash.elevation.enabled"),
 				ApprovalTimeout: reader.GetDuration("tools.bash.elevation.approval_timeout"),
 				Dialog:          strings.TrimSpace(reader.GetString("tools.bash.elevation.dialog")),
+				Askpass:         strings.TrimSpace(reader.GetString("tools.bash.elevation.askpass")),
 			},
 		},
 		PowerShell: StaticPowerShellConfig{

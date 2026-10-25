@@ -95,3 +95,21 @@ func TestEmbeddedBashOffersElevationWhenTurnedOn(t *testing.T) {
 }
 
 func boolPtr(v bool) *bool { return &v }
+
+// The askpass contract is part of the API: an embedding program's askpass program depends on these
+// exact names and lines, so changing one is a breaking change.
+func TestElevateAskpassContractIsStable(t *testing.T) {
+	cases := []struct{ name, got, want string }{
+		{"command variable", ElevateCommandEnv, "MISTERMORPH_ELEVATE_COMMAND"},
+		{"deadline variable", ElevateDeadlineEnv, "MISTERMORPH_ELEVATE_DEADLINE"},
+		{"declined line", ElevateDeclinedMarker, "mistermorph: administrator approval was declined"},
+		{"timed out line", ElevateTimedOutMarker, "mistermorph: administrator approval timed out"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.got != tc.want {
+				t.Fatalf("%s = %q, want %q", tc.name, tc.got, tc.want)
+			}
+		})
+	}
+}

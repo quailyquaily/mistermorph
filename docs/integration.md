@@ -121,6 +121,40 @@ once. So:
   copy of your program instead of a dialog.
 
 Windows elevates through UAC, which does not use an askpass program, so it needs only the setting.
+A program that brings its own askpass program does not need the call either (next section).
+
+### Your own askpass program
+
+If your program already has a password dialog of its own, for example one ssh and git use too, set
+`tools.bash.elevation.askpass` to an askpass program that shows it. sudo then runs that program
+instead of yours, and mistermorph's helper and dialogs are not used: `RunAskpassIfRequested`, a
+desktop session and `tools.bash.elevation.dialog` are not needed. Only `sudo` and the program have to
+exist. A bare name is looked up on `PATH`.
+
+```go
+cfg.Set("tools.bash.elevation.enabled", true)
+cfg.Set("tools.bash.elevation.askpass", "/usr/lib/inua/inua-askpass")
+```
+
+The program is a standard askpass program, plus two variables and two lines for mistermorph. These
+are stable, and exported as constants so your code need not copy them:
+
+| | What it is |
+| --- | --- |
+| argument 1 | sudo's prompt (mistermorph passes an empty one: `-p ""`) |
+| stdout, exit 0 | the password, when the user approves |
+| exit non-zero | the user did not approve; sudo does not run the command |
+| `MISTERMORPH_ELEVATE_COMMAND` (`integration.ElevateCommandEnv`) | the command to show the user |
+| `MISTERMORPH_ELEVATE_DEADLINE` (`integration.ElevateDeadlineEnv`) | when to give up, in Unix seconds |
+| `mistermorph: administrator approval was declined` (`integration.ElevateDeclinedMarker`) | the line to write to stderr when the user cancels |
+| `mistermorph: administrator approval timed out` (`integration.ElevateTimedOutMarker`) | the line to write to stderr when nobody answered by the deadline |
+
+The program also gets the desktop session's variables (`DISPLAY`, `WAYLAND_DISPLAY`,
+`DBUS_SESSION_BUS_ADDRESS`, `XDG_RUNTIME_DIR` and others), through sudo.
+
+The two lines tell the model that the user declined, or did not answer, rather than that the command
+failed: told it was declined, the model does not try again unless the user asks. Without either
+line, a non-zero exit reads as the command failing with sudo's own error.
 
 ### What the machine needs
 
@@ -128,8 +162,8 @@ The dialog appears on the machine your program runs on, so someone has to be at 
 
 | OS | Needs |
 | --- | --- |
-| Linux | `sudo`, a desktop session (`DISPLAY` or `WAYLAND_DISPLAY` in your program's environment), and a graphical pinentry, `zenity` or `kdialog` |
-| macOS | `sudo` and `osascript` (both standard) |
+| Linux | `sudo`, a desktop session (`DISPLAY` or `WAYLAND_DISPLAY` in your program's environment), and a graphical pinentry, `zenity` or `kdialog`; or `sudo` and your own askpass program |
+| macOS | `sudo` and `osascript` (both standard), or `sudo` and your own askpass program |
 | Windows | an interactive session (not a service) |
 
 Where these are missing, `elevated` is not offered and the tool says why. A Telegram or Slack bot can
@@ -143,6 +177,7 @@ answering means it times out. Keep it off for headless services.
 | `tools.bash.elevation.enabled` | `false` (`true` in the CLI) | Linux, macOS |
 | `tools.bash.elevation.approval_timeout` | `2m` | how long the dialog waits, on top of the command's timeout |
 | `tools.bash.elevation.dialog` | automatic | a pinentry, `zenity` or `kdialog` binary; automatic is the system's pinentry, then pinentry-gnome3/qt/gtk, `zenity`, `kdialog` |
+| `tools.bash.elevation.askpass` | none | your own askpass program, used instead of mistermorph's helper and `dialog` (see [Your own askpass program](#your-own-askpass-program)) |
 | `tools.powershell.elevation.enabled` | `false` (`true` in the CLI) | Windows |
 | `tools.powershell.elevation.approval_timeout` | `2m` | |
 
@@ -151,7 +186,7 @@ error saying so; the model is told not to retry unless the user asks. Each eleva
 logged as `elevated_command_started` and `elevated_command_finished`, with the command and the
 outcome, through the process's default `slog` logger (`slog.Default()`), as other built-in tools
 log; set it in your program to collect them. The password never passes through your program's agent process, the model
-or the logs: it goes from the dialog to sudo.
+or the logs: it goes from the dialog (or your askpass program) to sudo.
 
 ## Prompt blocks
 

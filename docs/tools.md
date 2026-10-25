@@ -202,7 +202,9 @@ approves the command in a system dialog on the agent's machine that shows it:
 
 - On Linux and macOS, mistermorph is sudo's askpass helper: sudo starts the binary in askpass mode,
   which shows the dialog and hands what the user typed to sudo. The agent process, the model, the
-  tool output and the logs never see the password.
+  tool output and the logs never see the password. `tools.bash.elevation.askpass` names another
+  askpass program to use instead, such as an embedding program's own (see
+  [Your own askpass program](integration.md#your-own-askpass-program)).
 - Every elevated command needs its own approval: `-k` makes sudo ignore cached credentials, and each
   command runs in a new session.
 - Declined or unanswered, the command does not run and the tool says so.
@@ -210,12 +212,14 @@ approves the command in a system dialog on the agent's machine that shows it:
   `tools.powershell.elevation.enabled`; the default; off for embedded programs, which also
   call `integration.RunAskpassIfRequested()` at the start of `main`, see `docs/integration.md`) and the OS
   can show the dialog: on Linux that needs `sudo`, a desktop session (`DISPLAY` or `WAYLAND_DISPLAY`)
-  and one of the dialog programs; on macOS `sudo` and `osascript`.
+  and one of the dialog programs; on macOS `sudo` and `osascript`. With an askpass program set, only
+  `sudo` and that program.
 - A non-elevated command whose `sudo` fails for want of a terminal gets a note suggesting
   `elevated: true`.
 - Settings, under `tools.bash.elevation` and `tools.powershell.elevation`: `enabled`,
   `approval_timeout` (how long the dialog waits, on top of the command's timeout; default `2m`), and
-  for bash `dialog` (a dialog program instead of the automatic choice).
+  for bash `dialog` (a dialog program instead of the automatic choice) and `askpass` (an askpass
+  program instead of mistermorph's helper).
 - Design: `docs/feat/feat_20261024_elevated_commands.md`.
 
 ## `url_fetch`

@@ -2,9 +2,11 @@
 // system dialog (docs/feat/feat_20261024_elevated_commands.md).
 //
 // On Linux and macOS the command runs under `sudo -k -A`. sudo reads the password from an askpass
-// program, and the running mistermorph binary is that program: started with MISTERMORPH_ASKPASS=1
-// it shows a dialog (pinentry, zenity or kdialog on Linux, osascript on macOS), prints what the user
-// typed for sudo and exits. The password goes from the dialog to sudo only; the agent process never
+// program. By default the running mistermorph binary is that program: started with
+// MISTERMORPH_ASKPASS=1 it shows a dialog (pinentry, zenity or kdialog on Linux, osascript on
+// macOS), prints what the user typed for sudo and exits. A program of the user's own can take its
+// place (Config.Askpass); it gets the command and deadline from EnvCommand and EnvDeadline, and
+// reports a declined or unanswered approval with DeclinedMarker or TimedOutMarker. The password goes from the dialog to sudo only; the agent process never
 // reads it. On Windows the command runs in a powershell started with `-Verb RunAs`, which shows the
 // UAC prompt (RunAsScript).
 package elevate
@@ -25,11 +27,12 @@ import (
 const (
 	// EnvAskpass set to "1" starts the binary as sudo's askpass helper instead of the CLI.
 	EnvAskpass = "MISTERMORPH_ASKPASS"
-	// EnvCommand is the command the dialog names.
+	// EnvCommand is the command the dialog names. An external askpass program gets it too.
 	EnvCommand = "MISTERMORPH_ELEVATE_COMMAND"
 	// EnvDialog is the dialog program chosen in config (tools.bash.elevation.dialog), if any.
 	EnvDialog = "MISTERMORPH_ELEVATE_DIALOG"
-	// EnvDeadline is when the dialog gives up, in Unix seconds.
+	// EnvDeadline is when the dialog gives up, in Unix seconds. An external askpass program gets it
+	// too, and should give up then, writing TimedOutMarker.
 	EnvDeadline = "MISTERMORPH_ELEVATE_DEADLINE"
 )
 
@@ -46,6 +49,10 @@ type Config struct {
 	// Dialog names the dialog program on Linux and macOS (a pinentry, zenity or kdialog binary)
 	// instead of the automatic choice.
 	Dialog string
+	// Askpass names an askpass program of the user's own to use instead of mistermorph's helper and
+	// its dialogs (Linux, macOS): sudo runs it with the prompt as its argument, it prints the
+	// password and exits 0, or exits non-zero on cancel. Dialog does not apply then.
+	Askpass string
 }
 
 func (c Config) key() string {
@@ -119,33 +126,50 @@ func Check(cfg Config) error {
 	switch goos {
 	case "windows":
 		return nil
-	case "darwin":
-		if !askpassHandled.Load() {
-			return errAskpassUnhandled
-		}
-		if _, err := lookPath("sudo"); err != nil {
-			return fmt.Errorf("sudo is not installed")
-		}
+	case "darwin", "linux":
+		return checkSudo(cfg)
+	}
+	return fmt.Errorf("elevated commands are not supported on %s", goos)
+}
+
+// checkSudo is Check on Linux and macOS: sudo, and an askpass program that can ask the user.
+func checkSudo(cfg Config) error {
+	if _, err := lookPath("sudo"); err != nil {
+		return fmt.Errorf("sudo is not installed")
+	}
+	if strings.TrimSpace(cfg.Askpass) != "" {
+		// The program shows its own dialog and knows where it can: it only has to exist.
+		_, err := askpassProgram(cfg)
+		return err
+	}
+	if !askpassHandled.Load() {
+		return errAskpassUnhandled
+	}
+	if goos == "darwin" {
 		if _, err := lookPath("osascript"); err != nil {
 			return fmt.Errorf("osascript is not available to show the approval dialog")
 		}
 		return nil
-	case "linux":
-		if !askpassHandled.Load() {
-			return errAskpassUnhandled
-		}
-		if _, err := lookPath("sudo"); err != nil {
-			return fmt.Errorf("sudo is not installed")
-		}
-		if strings.TrimSpace(getenv("DISPLAY")) == "" && strings.TrimSpace(getenv("WAYLAND_DISPLAY")) == "" {
-			return fmt.Errorf("there is no desktop session to show an approval dialog on")
-		}
-		if _, err := chooseDialog(goos, cfg.Dialog); err != nil {
-			return err
-		}
-		return nil
 	}
-	return fmt.Errorf("elevated commands are not supported on %s", goos)
+	if strings.TrimSpace(getenv("DISPLAY")) == "" && strings.TrimSpace(getenv("WAYLAND_DISPLAY")) == "" {
+		return fmt.Errorf("there is no desktop session to show an approval dialog on")
+	}
+	_, err := chooseDialog(goos, cfg.Dialog)
+	return err
+}
+
+// askpassProgram is the absolute path of cfg.Askpass, looked up on PATH when it is a bare name: sudo
+// runs SUDO_ASKPASS as given, so it must not depend on the command's working directory.
+func askpassProgram(cfg Config) (string, error) {
+	name := strings.TrimSpace(cfg.Askpass)
+	path, err := lookPath(name)
+	if err != nil {
+		return "", fmt.Errorf("the askpass program %q (%s.askpass) is not an executable file", name, cfg.key())
+	}
+	if abs, err := filepath.Abs(path); err == nil {
+		path = abs
+	}
+	return path, nil
 }
 
 var errAskpassUnhandled = fmt.Errorf("this program does not show the approval dialog (an embedding program calls integration.RunAskpassIfRequested at the start of main)")
@@ -159,15 +183,27 @@ func SudoArgs(argv []string) []string {
 }
 
 // SudoEnv is the environment for sudo: base (the shell tool's environment), the desktop session's
-// display variables, and what the askpass helper needs: this binary as SUDO_ASKPASS, the command to
-// show, the dialog choice and its deadline.
+// display variables, and what the askpass program needs: the program as SUDO_ASKPASS (this binary,
+// unless cfg.Askpass names another), the command to show and the deadline, and for this binary's
+// helper the askpass switch and the dialog choice.
 func SudoEnv(cfg Config, base []string, command string, now time.Time) ([]string, error) {
-	exe, err := executable()
-	if err != nil {
-		return nil, fmt.Errorf("find the mistermorph binary for the approval dialog: %w", err)
-	}
-	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
-		exe = resolved
+	external := strings.TrimSpace(cfg.Askpass) != ""
+	var askpass string
+	if external {
+		program, err := askpassProgram(cfg)
+		if err != nil {
+			return nil, err
+		}
+		askpass = program
+	} else {
+		exe, err := executable()
+		if err != nil {
+			return nil, fmt.Errorf("find the mistermorph binary for the approval dialog: %w", err)
+		}
+		if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+			exe = resolved
+		}
+		askpass = exe
 	}
 	env := append([]string(nil), base...)
 	present := make(map[string]bool, len(env))
@@ -185,11 +221,14 @@ func SudoEnv(cfg Config, base []string, command string, now time.Time) ([]string
 		}
 	}
 	env = append(env,
-		"SUDO_ASKPASS="+exe,
-		EnvAskpass+"=1",
+		"SUDO_ASKPASS="+askpass,
 		EnvCommand+"="+command,
 		EnvDeadline+"="+strconv.FormatInt(now.Add(cfg.Approval()).Unix(), 10),
 	)
+	if external {
+		return env, nil
+	}
+	env = append(env, EnvAskpass+"=1")
 	if dialog := strings.TrimSpace(cfg.Dialog); dialog != "" {
 		env = append(env, EnvDialog+"="+dialog)
 	}
@@ -197,7 +236,8 @@ func SudoEnv(cfg Config, base []string, command string, now time.Time) ([]string
 }
 
 // DeclinedMarker is what the askpass helper writes to stderr when the user cancels the dialog, so
-// the shell tool can tell a declined approval from a failed command.
+// the shell tool can tell a declined approval from a failed command. An external askpass program
+// writes it as a line of its own; without it, a cancel reads as the command failing.
 const DeclinedMarker = "mistermorph: administrator approval was declined"
 
 // TimedOutMarker is what the askpass helper writes when nobody answered the dialog in time.

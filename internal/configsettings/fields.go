@@ -87,6 +87,7 @@ func AgentFields() []Field {
 		{Path: "tools.bash.elevation.enabled", Kind: KindBool, ApplyMode: ApplyNextGeneration},
 		{Path: "tools.bash.elevation.approval_timeout", Kind: KindDuration, ApplyMode: ApplyNextGeneration},
 		{Path: "tools.bash.elevation.dialog", Kind: KindString, ApplyMode: ApplyNextGeneration},
+		{Path: "tools.bash.elevation.askpass", Kind: KindString, ApplyMode: ApplyNextGeneration},
 		{Path: "tools.powershell.enabled", Kind: KindBool, ApplyMode: ApplyNextGeneration},
 		{Path: "tools.powershell.timeout", Kind: KindDuration, ApplyMode: ApplyNextGeneration},
 		{Path: "tools.powershell.max_output_bytes", Kind: KindInt, ApplyMode: ApplyNextGeneration, Min: &zero},

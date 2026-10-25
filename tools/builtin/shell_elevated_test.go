@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"testing"
@@ -188,5 +189,58 @@ func TestPowerShellOffersElevationOnWindowsOnly(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), "use the bash tool") {
 			t.Fatalf("Execute() error = %v", err)
 		}
+	}
+}
+
+// An askpass program of the user's own: sudo runs it directly. It sees the command and the
+// deadline, and reports a declined or unanswered approval with the documented markers.
+func TestBashElevatedCommandWithAnAskpassProgram(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("bash elevates through sudo on Linux and macOS")
+	}
+	cases := []struct {
+		name       string
+		script     string
+		wantErr    string
+		wantOutput string
+	}{
+		{name: "approved", script: `printf 'hunter2\n'`, wantOutput: "installed jq"},
+		{name: "declined", script: `echo '` + elevate.DeclinedMarker + `' >&2; exit 1`, wantErr: "declined administrator approval"},
+		{name: "timed out", script: `echo '` + elevate.TimedOutMarker + `' >&2; exit 1`, wantErr: "nobody answered"},
+		{name: "cancelled without a marker", script: `exit 1`, wantErr: "exited with code 1"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			// No desktop session: the program shows its own dialog wherever it can.
+			t.Setenv("WAYLAND_DISPLAY", "")
+			t.Setenv("DISPLAY", "")
+			fakeSudo(t)
+			dir := t.TempDir()
+			seen := filepath.Join(dir, "seen")
+			askpass := filepath.Join(dir, "inua-askpass")
+			body := "#!/bin/sh\nprintf 'prompt=%s command=%s deadline=%s helper=%s\\n' \"$1\" \"$" + elevate.EnvCommand + "\" \"$" + elevate.EnvDeadline + "\" \"$" + elevate.EnvAskpass + "\" > " + seen + "\n" + tc.script + "\n"
+			if err := os.WriteFile(askpass, []byte(body), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			tool := NewBashTool(true, 0, 0, pathroots.PathRoots{})
+			tool.Elevation = elevate.Config{Enabled: true, Askpass: askpass}
+			if !strings.Contains(tool.ParameterSchema(), `"elevated"`) {
+				t.Fatal("the schema does not offer elevated")
+			}
+			out, err := tool.Execute(context.Background(), map[string]any{"cmd": "echo installed jq", "elevated": true})
+			if tc.wantErr == "" && err != nil {
+				t.Fatalf("Execute() error = %v\n%s", err, out)
+			}
+			if tc.wantErr != "" && (err == nil || !strings.Contains(err.Error(), tc.wantErr)) {
+				t.Fatalf("Execute() error = %v, want %q\n%s", err, tc.wantErr, out)
+			}
+			if !strings.Contains(out, tc.wantOutput) {
+				t.Fatalf("output lacks %q:\n%s", tc.wantOutput, out)
+			}
+			got, _ := os.ReadFile(seen)
+			if !regexp.MustCompile(`^prompt=\[sudo\] password: command=echo installed jq deadline=\d+ helper=\n$`).Match(got) {
+				t.Fatalf("the askpass program saw %q", got)
+			}
+		})
 	}
 }

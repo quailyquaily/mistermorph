@@ -415,7 +415,7 @@ Tools:
 - `tools.web_search.timeout`, `tools.bash.timeout`, and `tools.powershell.timeout` default to `60s` each.
 - `tools.bash.elevation.*` and `tools.powershell.elevation.*` let shell commands run as
   administrator after the user approves each one in a system dialog (`enabled`, default true;
-  `approval_timeout`, default `2m`; bash also `dialog`). See
+  `approval_timeout`, default `2m`; bash also `dialog` and `askpass`). See
   [Elevated commands](tools.md#elevated-commands).
 
 Console:

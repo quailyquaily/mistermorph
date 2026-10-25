@@ -117,6 +117,14 @@ function elevationGroup(tool, note, options = {}) {
       dependsOn: `${key}.enabled`,
       note: "A pinentry, zenity or kdialog binary to use instead of the system's pinentry.",
     });
+    fields.push({
+      path: `${key}.askpass`,
+      label: "Askpass program",
+      type: "string",
+      placeholder: "built in",
+      dependsOn: `${key}.enabled`,
+      note: "An askpass program of your own for sudo, used instead of the dialog program.",
+    });
   }
   return { id: `${tool}-elevation`, title: "Administrator rights", fields };
 }

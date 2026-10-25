@@ -70,6 +70,13 @@ func TestCheck(t *testing.T) {
 		{name: "linux host without the askpass hook", os: "linux", cfg: Config{Enabled: true}, env: desktop, installed: []string{"sudo", "zenity"}, unhandled: true, wantErr: "integration.RunAskpassIfRequested"},
 		{name: "macos host without the askpass hook", os: "darwin", cfg: Config{Enabled: true}, installed: []string{"sudo", "osascript"}, unhandled: true, wantErr: "does not show the approval dialog"},
 		{name: "windows host without the askpass hook", os: "windows", cfg: Config{Enabled: true}, unhandled: true},
+		// An askpass program of the user's own shows its own dialog: it needs no hook, no display
+		// and none of the dialogs the helper knows.
+		{name: "linux askpass program", os: "linux", cfg: Config{Enabled: true, Askpass: "inua-askpass"}, env: map[string]string{}, installed: []string{"sudo", "inua-askpass"}, unhandled: true},
+		{name: "linux askpass program by path", os: "linux", cfg: Config{Enabled: true, Askpass: "/opt/inua/bin/inua-askpass"}, installed: []string{"sudo", "inua-askpass"}},
+		{name: "macos askpass program", os: "darwin", cfg: Config{Enabled: true, Askpass: "inua-askpass"}, installed: []string{"sudo", "inua-askpass"}, unhandled: true},
+		{name: "askpass program missing", os: "linux", cfg: Config{Enabled: true, Askpass: "inua-askpass", Key: "tools.bash.elevation"}, env: desktop, installed: []string{"sudo", "zenity"}, wantErr: "tools.bash.elevation.askpass"},
+		{name: "askpass program without sudo", os: "linux", cfg: Config{Enabled: true, Askpass: "inua-askpass"}, installed: []string{"inua-askpass"}, wantErr: "sudo is not installed"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -197,6 +204,65 @@ func TestSudoArgsAndEnv(t *testing.T) {
 	}
 	if _, ok := values["OPENAI_API_KEY"]; ok {
 		t.Error("an unrelated variable of the agent process reached sudo")
+	}
+}
+
+func TestSudoEnvWithAnAskpassProgram(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0)
+	cases := []struct {
+		name    string
+		cfg     Config
+		want    map[string]string
+		absent  []string
+		wantErr string
+	}{
+		{
+			name: "built-in helper",
+			cfg:  Config{Enabled: true, Dialog: "zenity"},
+			want: map[string]string{"SUDO_ASKPASS": "/opt/morph/mistermorph", EnvAskpass: "1", EnvDialog: "zenity", EnvCommand: "systemctl restart nginx", EnvDeadline: "1800000120"},
+		},
+		{
+			// The helper's switch and dialog choice mean nothing to another program.
+			name:   "askpass program",
+			cfg:    Config{Enabled: true, Dialog: "zenity", Askpass: "inua-askpass"},
+			want:   map[string]string{"SUDO_ASKPASS": "/usr/bin/inua-askpass", EnvCommand: "systemctl restart nginx", EnvDeadline: "1800000120", "WAYLAND_DISPLAY": "wayland-1"},
+			absent: []string{EnvAskpass, EnvDialog},
+		},
+		{
+			name:    "askpass program missing",
+			cfg:     Config{Enabled: true, Askpass: "nowhere-askpass"},
+			wantErr: "not an executable file",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fakeEnv(t, "linux", map[string]string{"WAYLAND_DISPLAY": "wayland-1"}, "inua-askpass")
+			env, err := SudoEnv(tc.cfg, []string{"PATH=/usr/bin:/bin"}, "systemctl restart nginx", now)
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("SudoEnv() error = %v, want %q", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			values := map[string]string{}
+			for _, entry := range env {
+				key, value, _ := strings.Cut(entry, "=")
+				values[key] = value
+			}
+			for key, value := range tc.want {
+				if values[key] != value {
+					t.Errorf("env %s = %q, want %q", key, values[key], value)
+				}
+			}
+			for _, key := range tc.absent {
+				if _, ok := values[key]; ok {
+					t.Errorf("env has %s, which only the built-in helper reads", key)
+				}
+			}
+		})
 	}
 }
 
