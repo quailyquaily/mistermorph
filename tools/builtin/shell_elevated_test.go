@@ -21,8 +21,8 @@ func TestMain(m *testing.M) {
 }
 
 // fakeSudo puts a sudo on PATH that asks the askpass helper for the password the way sudo -A does,
-// and runs the command after "--" when it is right. It records its arguments and the environment
-// the helper got.
+// up to three tries, and runs the command after "--" when it is right. It records its arguments and
+// the environment the helper got.
 func fakeSudo(t *testing.T) (logPath string) {
 	t.Helper()
 	dir := t.TempDir()
@@ -33,9 +33,13 @@ for a in "$@"; do printf ' [%s]' "$a" >> ` + logPath + `; done
 printf '\nshown: %s\ndisplay: %s\n' "$MISTERMORPH_ELEVATE_COMMAND" "$WAYLAND_DISPLAY" >> ` + logPath + `
 while [ "$1" != "--" ]; do shift; done
 shift
-password=$("$SUDO_ASKPASS" "[sudo] password:") || { echo "sudo: no password was provided" >&2; exit 1; }
-[ "$password" = "hunter2" ] || { echo "sudo: 1 incorrect password attempt" >&2; exit 1; }
-exec "$@"
+for try in 1 2 3; do
+  password=$("$SUDO_ASKPASS" "[sudo] password:") || { echo "sudo: no password was provided" >&2; exit 1; }
+  [ "$password" = "hunter2" ] && exec "$@"
+  echo "Sorry, try again." >&2
+done
+echo "sudo: 3 incorrect password attempts" >&2
+exit 1
 `
 	if err := os.WriteFile(filepath.Join(dir, "sudo"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
@@ -102,12 +106,44 @@ func TestBashElevatedCommand(t *testing.T) {
 				t.Fatal("the password reached the tool output")
 			}
 			log, _ := os.ReadFile(logPath)
-			for _, want := range []string{"args: [-k] [-A] [-p] [] [--] [bash] [-c] [echo installed jq]", "shown: echo installed jq", "display: wayland-test"} {
+			// The dialog runs in the agent process: the helper sudo starts needs no display.
+			for _, want := range []string{"args: [-k] [-A] [-p] [] [--] [bash] [-c] [echo installed jq]", "shown: echo installed jq", "display: \n"} {
 				if !strings.Contains(string(log), want) {
 					t.Errorf("sudo log lacks %q:\n%s", want, log)
 				}
 			}
 		})
+	}
+}
+
+// A run's own approver (elevate.WithApprover) asks instead of the dialog: it is asked again after a
+// wrong password, with the command and its directory, and the password never reaches the output.
+func TestBashElevatedCommandAsksTheRunsApprover(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("bash elevates through sudo on Linux and macOS")
+	}
+	t.Setenv("WAYLAND_DISPLAY", "wayland-test")
+	t.Setenv("DISPLAY", "")
+	fakeSudo(t)
+	var seen []elevate.Request
+	approver := elevate.ApproverFunc(func(ctx context.Context, req elevate.Request) (string, error) {
+		seen = append(seen, req)
+		if req.Attempt == 1 {
+			return "letmein", nil
+		}
+		return "hunter2", nil
+	})
+	dir := t.TempDir()
+	tool := newElevatingBashTool(t, fakeZenity(t, ""))
+	out, err := tool.Execute(elevate.WithApprover(context.Background(), approver), map[string]any{"cmd": "echo installed jq", "cwd": dir, "elevated": true})
+	if err != nil {
+		t.Fatalf("Execute() error = %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "installed jq") || strings.Contains(out, "hunter2") || strings.Contains(out, "letmein") {
+		t.Fatalf("output:\n%s", out)
+	}
+	if len(seen) != 2 || seen[0].Attempt != 1 || seen[1].Attempt != 2 || seen[0].Command != "echo installed jq" || seen[0].Dir != dir {
+		t.Fatalf("requests = %+v", seen)
 	}
 }
 

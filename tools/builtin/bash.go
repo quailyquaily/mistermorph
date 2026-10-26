@@ -146,7 +146,8 @@ func (t *BashTool) elevationOffered() bool {
 }
 
 // executeElevated runs a command as root under sudo, with this binary as sudo's askpass helper: the
-// user approves it in a system dialog, whose password goes to sudo only.
+// helper gets the password from the command's approval session, which asks the user (the run's
+// approver, else a system dialog), and hands it to sudo only.
 func (t *BashTool) executeElevated(ctx context.Context, inv shellInvocation) (string, error) {
 	if runtime.GOOS == "windows" {
 		return "", fmt.Errorf("bash cannot run elevated commands on Windows; use the powershell tool with elevated: true")
@@ -155,7 +156,16 @@ func (t *BashTool) executeElevated(ctx context.Context, inv shellInvocation) (st
 		return "", fmt.Errorf("cannot ask for administrator rights here: %v. Ask the user to run the command themselves: %s", err, inv.Command)
 	}
 	spec := t.runnerSpec()
-	env, err := elevate.SudoEnv(t.Elevation, spec.BuildEnv(t.InjectedEnvVars), inv.Command, time.Now())
+	deadline := time.Now().Add(t.Elevation.Approval())
+	var session *elevate.Session
+	if !t.Elevation.UsesAskpassProgram() {
+		var err error
+		if session, err = elevate.Begin(ctx, t.Elevation, inv.Command, inv.CWD, deadline); err != nil {
+			return "", err
+		}
+		defer session.End()
+	}
+	env, err := elevate.SudoEnv(t.Elevation, spec.BuildEnv(t.InjectedEnvVars), inv.Command, deadline, session)
 	if err != nil {
 		return "", err
 	}

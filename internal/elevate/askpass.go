@@ -21,36 +21,21 @@ func IsAskpassInvocation() bool {
 	return getenv(EnvAskpass) == "1"
 }
 
-var (
-	errDeclined = errors.New("declined")
-	errTimedOut = errors.New("timed out")
-)
-
-// RunAskpass is the askpass helper: it shows the approval dialog and prints the password for sudo.
-// It returns the process exit code: 0 with the password on stdout, 1 when the user declined, the
-// dialog timed out or could not be shown (the reason goes to stderr, which sudo passes on).
+// RunAskpass is the askpass helper: it asks the approval session that started the elevated command
+// for the password and prints it for sudo. It returns the process exit code: 0 with the password on
+// stdout, 1 when the user declined, nobody answered in time or the session could not be reached
+// (the reason goes to stderr, which sudo passes on).
 func RunAskpass(stdout, stderr io.Writer) int {
-	ctx := context.Background()
-	if deadline, err := strconv.ParseInt(strings.TrimSpace(getenv(EnvDeadline)), 10, 64); err == nil && deadline > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithDeadline(ctx, time.Unix(deadline, 0))
-		defer cancel()
-	}
-	dialog, err := chooseDialog(goos, getenv(EnvDialog))
-	if err != nil {
-		fmt.Fprintf(stderr, "mistermorph: %v\n", err)
-		return 1
-	}
-	password, err := dialog.ask(ctx, approvalText(getenv(EnvCommand)))
+	password, err := askSession()
 	switch {
-	case errors.Is(err, errDeclined):
+	case errors.Is(err, ErrDeclined):
 		fmt.Fprintln(stderr, DeclinedMarker)
 		return 1
-	case errors.Is(err, errTimedOut) || ctx.Err() != nil:
+	case errors.Is(err, ErrTimedOut):
 		fmt.Fprintln(stderr, TimedOutMarker)
 		return 1
 	case err != nil:
-		fmt.Fprintf(stderr, "mistermorph: the approval dialog failed: %v\n", err)
+		fmt.Fprintf(stderr, "mistermorph: the approval failed: %v\n", err)
 		return 1
 	}
 	fmt.Fprintln(stdout, password)
@@ -211,16 +196,16 @@ func askByOutput(ctx context.Context, path string, args []string) (string, error
 	cmd.Stderr = io.Discard
 	out, err := cmd.Output()
 	if ctx.Err() != nil {
-		return "", errTimedOut
+		return "", ErrTimedOut
 	}
 	if err != nil {
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
 			// zenity exits 5 when its --timeout passes; any other refusal is a cancel.
 			if filepath.Base(path) == "zenity" && exitErr.ExitCode() == 5 {
-				return "", errTimedOut
+				return "", ErrTimedOut
 			}
-			return "", errDeclined
+			return "", ErrDeclined
 		}
 		return "", err
 	}
@@ -283,9 +268,9 @@ func askPinentry(ctx context.Context, path string, text string) (string, error) 
 		if errors.Is(err, errAssuanRefused) {
 			// pinentry answers ERR when the user cancels, and on its own timeout.
 			if ctx.Err() != nil || strings.Contains(err.Error(), "Timeout") {
-				return "", errTimedOut
+				return "", ErrTimedOut
 			}
-			return "", errDeclined
+			return "", ErrDeclined
 		}
 		return "", pinentryErr(ctx, err)
 	}
@@ -295,7 +280,7 @@ func askPinentry(ctx context.Context, path string, text string) (string, error) 
 
 func pinentryErr(ctx context.Context, err error) error {
 	if ctx.Err() != nil {
-		return errTimedOut
+		return ErrTimedOut
 	}
 	return err
 }

@@ -201,8 +201,9 @@ approves the command in a system dialog on the agent's machine that shows it:
 | Windows | `Start-Process powershell -Verb RunAs` | the UAC prompt |
 
 - On Linux and macOS, mistermorph is sudo's askpass helper: sudo starts the binary in askpass mode,
-  which shows the dialog and hands what the user typed to sudo. The agent process, the model, the
-  tool output and the logs never see the password. `tools.bash.elevation.askpass` names another
+  which gets what the user typed in the dialog from the agent process and hands it to sudo. The
+  agent process holds the password in memory only to pass it on; the model, the tool output and
+  the logs never see it. `tools.bash.elevation.askpass` names another
   askpass program to use instead, such as an embedding program's own (see
   [Your own askpass program](integration.md#your-own-askpass-program)).
 - Every elevated command needs its own approval: `-k` makes sudo ignore cached credentials, and each

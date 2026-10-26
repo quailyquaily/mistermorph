@@ -5,10 +5,12 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -171,9 +173,10 @@ func TestSudoArgsAndEnv(t *testing.T) {
 		t.Fatalf("SudoArgs = %q, want %q", args, want)
 	}
 
-	now := time.Unix(1_800_000_000, 0)
+	deadline := time.Unix(1_800_000_120, 0)
 	base := []string{"PATH=/usr/bin:/bin", "HOME=/home/lyric", "XDG_RUNTIME_DIR=/run/user/1000"}
-	env, err := SudoEnv(Config{Enabled: true, Dialog: "zenity"}, base, "apt-get install -y jq", now)
+	session := beginTestSession(t, nil)
+	env, err := SudoEnv(Config{Enabled: true, Dialog: "zenity"}, base, "apt-get install -y jq", deadline, session)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -185,14 +188,13 @@ func TestSudoArgsAndEnv(t *testing.T) {
 		values[key] = value
 	}
 	wantValues := map[string]string{
-		"PATH":                     "/usr/bin:/bin",
-		"WAYLAND_DISPLAY":          "wayland-1",
-		"DBUS_SESSION_BUS_ADDRESS": "unix:path=/run/user/1000/bus",
-		"SUDO_ASKPASS":             "/opt/morph/mistermorph",
-		EnvAskpass:                 "1",
-		EnvCommand:                 "apt-get install -y jq",
-		EnvDialog:                  "zenity",
-		EnvDeadline:                "1800000120",
+		"PATH":         "/usr/bin:/bin",
+		"SUDO_ASKPASS": "/opt/morph/mistermorph",
+		EnvAskpass:     "1",
+		EnvCommand:     "apt-get install -y jq",
+		EnvDeadline:    "1800000120",
+		EnvSocket:      session.listener.Addr().String(),
+		EnvToken:       session.token,
 	}
 	for key, value := range wantValues {
 		if values[key] != value {
@@ -202,13 +204,19 @@ func TestSudoArgsAndEnv(t *testing.T) {
 	if got["XDG_RUNTIME_DIR"] != 1 {
 		t.Errorf("XDG_RUNTIME_DIR appears %d times, want once", got["XDG_RUNTIME_DIR"])
 	}
-	if _, ok := values["OPENAI_API_KEY"]; ok {
-		t.Error("an unrelated variable of the agent process reached sudo")
+	// The dialog runs in this process: the helper needs no display, and nothing else of ours.
+	for _, key := range []string{"WAYLAND_DISPLAY", "DBUS_SESSION_BUS_ADDRESS", "OPENAI_API_KEY"} {
+		if _, ok := values[key]; ok {
+			t.Errorf("%s of the agent process reached sudo", key)
+		}
+	}
+	if _, err := SudoEnv(Config{Enabled: true}, base, "apt-get install -y jq", deadline, nil); err == nil {
+		t.Error("SudoEnv without a session or an askpass program: err = nil")
 	}
 }
 
 func TestSudoEnvWithAnAskpassProgram(t *testing.T) {
-	now := time.Unix(1_800_000_000, 0)
+	deadline := time.Unix(1_800_000_120, 0)
 	cases := []struct {
 		name    string
 		cfg     Config
@@ -217,16 +225,18 @@ func TestSudoEnvWithAnAskpassProgram(t *testing.T) {
 		wantErr string
 	}{
 		{
-			name: "built-in helper",
-			cfg:  Config{Enabled: true, Dialog: "zenity"},
-			want: map[string]string{"SUDO_ASKPASS": "/opt/morph/mistermorph", EnvAskpass: "1", EnvDialog: "zenity", EnvCommand: "systemctl restart nginx", EnvDeadline: "1800000120"},
+			name:   "built-in helper",
+			cfg:    Config{Enabled: true, Dialog: "zenity"},
+			want:   map[string]string{"SUDO_ASKPASS": "/opt/morph/mistermorph", EnvAskpass: "1", EnvCommand: "systemctl restart nginx", EnvDeadline: "1800000120"},
+			absent: []string{"WAYLAND_DISPLAY"},
 		},
 		{
-			// The helper's switch and dialog choice mean nothing to another program.
+			// The helper's switch and session mean nothing to another program, which shows its own
+			// dialog and so gets the display.
 			name:   "askpass program",
 			cfg:    Config{Enabled: true, Dialog: "zenity", Askpass: "inua-askpass"},
 			want:   map[string]string{"SUDO_ASKPASS": "/usr/bin/inua-askpass", EnvCommand: "systemctl restart nginx", EnvDeadline: "1800000120", "WAYLAND_DISPLAY": "wayland-1"},
-			absent: []string{EnvAskpass, EnvDialog},
+			absent: []string{EnvAskpass, EnvSocket, EnvToken},
 		},
 		{
 			name:    "askpass program missing",
@@ -237,7 +247,11 @@ func TestSudoEnvWithAnAskpassProgram(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			fakeEnv(t, "linux", map[string]string{"WAYLAND_DISPLAY": "wayland-1"}, "inua-askpass")
-			env, err := SudoEnv(tc.cfg, []string{"PATH=/usr/bin:/bin"}, "systemctl restart nginx", now)
+			var session *Session
+			if !tc.cfg.UsesAskpassProgram() {
+				session = beginTestSession(t, nil)
+			}
+			env, err := SudoEnv(tc.cfg, []string{"PATH=/usr/bin:/bin"}, "systemctl restart nginx", deadline, session)
 			if tc.wantErr != "" {
 				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
 					t.Fatalf("SudoEnv() error = %v, want %q", err, tc.wantErr)
@@ -259,7 +273,7 @@ func TestSudoEnvWithAnAskpassProgram(t *testing.T) {
 			}
 			for _, key := range tc.absent {
 				if _, ok := values[key]; ok {
-					t.Errorf("env has %s, which only the built-in helper reads", key)
+					t.Errorf("env has %s", key)
 				}
 			}
 		})
@@ -302,8 +316,8 @@ func TestPinentryDialog(t *testing.T) {
 		wantErr error
 	}{
 		{name: "allowed", reply: `D p%25ss word%0A\nOK`, want: "p%ss word\n"},
-		{name: "cancelled", reply: "ERR 83886179 Operation cancelled <Pinentry>", wantErr: errDeclined},
-		{name: "pinentry timeout", reply: "ERR 83886142 Timeout <Pinentry>", wantErr: errTimedOut},
+		{name: "cancelled", reply: "ERR 83886179 Operation cancelled <Pinentry>", wantErr: ErrDeclined},
+		{name: "pinentry timeout", reply: "ERR 83886142 Timeout <Pinentry>", wantErr: ErrTimedOut},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -334,10 +348,10 @@ func TestOutputDialogs(t *testing.T) {
 		wantErr error
 	}{
 		{name: "zenity allowed", kind: dialogZenity, program: "zenity", body: `printf 'hunter2\n'`, want: "hunter2"},
-		{name: "zenity cancelled", kind: dialogZenity, program: "zenity", body: "exit 1", wantErr: errDeclined},
-		{name: "zenity timed out", kind: dialogZenity, program: "zenity", body: "exit 5", wantErr: errTimedOut},
+		{name: "zenity cancelled", kind: dialogZenity, program: "zenity", body: "exit 1", wantErr: ErrDeclined},
+		{name: "zenity timed out", kind: dialogZenity, program: "zenity", body: "exit 5", wantErr: ErrTimedOut},
 		{name: "kdialog allowed", kind: dialogKdialog, program: "kdialog", body: `printf 'hunter2\n'`, want: "hunter2"},
-		{name: "osascript cancelled", kind: dialogOsascript, program: "osascript", body: "exit 1", wantErr: errDeclined},
+		{name: "osascript cancelled", kind: dialogOsascript, program: "osascript", body: "exit 1", wantErr: ErrDeclined},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -369,29 +383,22 @@ func TestZenityGetsEscapedTextAndTimeout(t *testing.T) {
 func TestRunAskpass(t *testing.T) {
 	cases := []struct {
 		name       string
-		body       string
+		approver   Approver
+		token      string
 		wantCode   int
 		wantStdout string
 		wantStderr string
 	}{
-		{name: "allowed", body: `printf 'hunter2\n'`, wantCode: 0, wantStdout: "hunter2\n"},
-		{name: "declined", body: "exit 1", wantCode: 1, wantStderr: DeclinedMarker},
+		{name: "allowed", approver: answer("hunter2", nil), wantCode: 0, wantStdout: "hunter2\n"},
+		{name: "declined", approver: answer("", ErrDeclined), wantCode: 1, wantStderr: DeclinedMarker},
+		{name: "timed out", approver: answer("", ErrTimedOut), wantCode: 1, wantStderr: TimedOutMarker},
+		{name: "approver failed", approver: answer("", errors.New("no dialog")), wantCode: 1, wantStderr: "the approval failed: no dialog"},
+		{name: "wrong token", approver: answer("hunter2", nil), token: "not-the-token", wantCode: 1, wantStderr: "this approval is not open"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			path := writeScript(t, "zenity", tc.body+"\n")
-			oldLook, oldEnv, oldOS := lookPath, getenv, goos
-			t.Cleanup(func() { lookPath, getenv, goos = oldLook, oldEnv, oldOS })
-			lookPath = func(name string) (string, error) {
-				if name == "zenity" || name == path {
-					return path, nil
-				}
-				return "", exec.ErrNotFound
-			}
-			getenv = func(key string) string {
-				return map[string]string{EnvAskpass: "1", EnvCommand: "systemctl restart nginx", EnvDialog: "zenity"}[key]
-			}
-			goos = "linux"
+			session := beginTestSession(t, tc.approver)
+			helperEnv(t, session, tc.token)
 			if !IsAskpassInvocation() {
 				t.Fatal("IsAskpassInvocation() = false")
 			}
@@ -402,6 +409,133 @@ func TestRunAskpass(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRunAskpassWithoutASession(t *testing.T) {
+	oldEnv := getenv
+	t.Cleanup(func() { getenv = oldEnv })
+	getenv = func(key string) string { return map[string]string{EnvAskpass: "1"}[key] }
+	var stdout, stderr bytes.Buffer
+	if code := RunAskpass(&stdout, &stderr); code != 1 || stdout.Len() != 0 || !strings.Contains(stderr.String(), "without an approval session") {
+		t.Fatalf("RunAskpass = %d, stdout %q, stderr %q", code, stdout.String(), stderr.String())
+	}
+}
+
+// A session asks its approver once per helper start, telling it which try this is, and gives the
+// approver the command, its directory and the deadline.
+func TestSessionAsksTheApproverForEachTry(t *testing.T) {
+	var seen []Request
+	approver := ApproverFunc(func(ctx context.Context, req Request) (string, error) {
+		if _, ok := ctx.Deadline(); !ok {
+			t.Error("the approver's context has no deadline")
+		}
+		seen = append(seen, req)
+		return []string{"letmein", "hunter2"}[req.Attempt-1], nil
+	})
+	session := beginTestSession(t, approver)
+	helperEnv(t, session, "")
+	var got []string
+	for range 2 {
+		var stdout, stderr bytes.Buffer
+		if code := RunAskpass(&stdout, &stderr); code != 0 {
+			t.Fatalf("RunAskpass = %d, stderr %q", code, stderr.String())
+		}
+		got = append(got, strings.TrimSpace(stdout.String()))
+	}
+	if strings.Join(got, ",") != "letmein,hunter2" {
+		t.Fatalf("passwords = %q", got)
+	}
+	if len(seen) != 2 || seen[0].Attempt != 1 || seen[1].Attempt != 2 ||
+		seen[0].Command != "apt-get install -y jq" || seen[0].Dir != "/srv/app" || seen[0].Deadline.IsZero() {
+		t.Fatalf("requests = %+v", seen)
+	}
+}
+
+// Ending the session (the command gave up) ends an ask in progress, and the helper reports it as
+// unanswered.
+func TestSessionEndStopsTheAsk(t *testing.T) {
+	asking := make(chan struct{})
+	approver := ApproverFunc(func(ctx context.Context, req Request) (string, error) {
+		close(asking)
+		<-ctx.Done()
+		return "", ctx.Err()
+	})
+	session, err := Begin(context.Background(), Config{}, "apt-get install -y jq", "/srv/app", time.Now().Add(time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	session.approver = approver
+	helperEnv(t, session, "")
+	done := make(chan int)
+	var stderr bytes.Buffer
+	go func() { done <- RunAskpass(io.Discard, &stderr) }()
+	<-asking
+	go session.End()
+	select {
+	case code := <-done:
+		if code != 1 || !strings.Contains(stderr.String(), TimedOutMarker) {
+			t.Fatalf("RunAskpass = %d, stderr %q", code, stderr.String())
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the helper still waits after the session ended")
+	}
+	if _, err := os.Stat(session.dir); !os.IsNotExist(err) {
+		t.Fatalf("the socket's directory is still there: %v", err)
+	}
+}
+
+// Without an approver on the context, the session asks in the desktop dialog.
+func TestSessionFallsBackToTheDialog(t *testing.T) {
+	path := writeScript(t, "zenity", "printf 'hunter2\\n'\n")
+	session, err := Begin(context.Background(), Config{Dialog: path}, "systemctl restart nginx", "/", time.Now().Add(time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(session.End)
+	helperEnv(t, session, "")
+	var stdout, stderr bytes.Buffer
+	if code := RunAskpass(&stdout, &stderr); code != 0 || stdout.String() != "hunter2\n" {
+		t.Fatalf("RunAskpass = %d, stdout %q, stderr %q", code, stdout.String(), stderr.String())
+	}
+}
+
+func answer(password string, err error) Approver {
+	return ApproverFunc(func(context.Context, Request) (string, error) { return password, err })
+}
+
+// beginTestSession opens a session for "apt-get install -y jq" in /srv/app, asking approver.
+func beginTestSession(t *testing.T, approver Approver) *Session {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("approval sessions serve sudo on Linux and macOS")
+	}
+	ctx := context.Background()
+	if approver != nil {
+		ctx = WithApprover(ctx, approver)
+	}
+	session, err := Begin(ctx, Config{}, "apt-get install -y jq", "/srv/app", time.Now().Add(time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(session.End)
+	return session
+}
+
+// helperEnv makes this process see the environment sudo gives the helper for session, with token
+// in place of the session's when it is set.
+func helperEnv(t *testing.T, session *Session, token string) {
+	t.Helper()
+	env := map[string]string{EnvAskpass: "1", EnvDeadline: strconv.FormatInt(session.req.Deadline.Unix(), 10)}
+	for _, entry := range session.Env() {
+		key, value, _ := strings.Cut(entry, "=")
+		env[key] = value
+	}
+	if token != "" {
+		env[EnvToken] = token
+	}
+	oldEnv := getenv
+	t.Cleanup(func() { getenv = oldEnv })
+	getenv = func(key string) string { return env[key] }
 }
 
 func TestApprovalTextShowsTheCommandAndCutsALongOne(t *testing.T) {

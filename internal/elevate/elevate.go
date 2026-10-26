@@ -3,11 +3,12 @@
 //
 // On Linux and macOS the command runs under `sudo -k -A`. sudo reads the password from an askpass
 // program. By default the running mistermorph binary is that program: started with
-// MISTERMORPH_ASKPASS=1 it shows a dialog (pinentry, zenity or kdialog on Linux, osascript on
-// macOS), prints what the user typed for sudo and exits. A program of the user's own can take its
-// place (Config.Askpass); it gets the command and deadline from EnvCommand and EnvDeadline, and
-// reports a declined or unanswered approval with DeclinedMarker or TimedOutMarker. The password goes from the dialog to sudo only; the agent process never
-// reads it. On Windows the command runs in a powershell started with `-Verb RunAs`, which shows the
+// MISTERMORPH_ASKPASS=1 it asks the command's approval Session, prints the password for sudo and
+// exits. The session asks the user through the run's Approver, or a dialog (pinentry, zenity or
+// kdialog on Linux, osascript on macOS). A program of the user's own can take the helper's place
+// (Config.Askpass); it gets the command and deadline from EnvCommand and EnvDeadline, and reports a
+// declined or unanswered approval with DeclinedMarker or TimedOutMarker. The password is held in
+// memory only to hand it to sudo: it is never logged, kept, or given to the model. On Windows the command runs in a powershell started with `-Verb RunAs`, which shows the
 // UAC prompt (RunAsScript).
 package elevate
 
@@ -27,13 +28,14 @@ import (
 const (
 	// EnvAskpass set to "1" starts the binary as sudo's askpass helper instead of the CLI.
 	EnvAskpass = "MISTERMORPH_ASKPASS"
-	// EnvCommand is the command the dialog names. An external askpass program gets it too.
+	// EnvCommand is the command the user is asked to approve. An external askpass program gets it too.
 	EnvCommand = "MISTERMORPH_ELEVATE_COMMAND"
-	// EnvDialog is the dialog program chosen in config (tools.bash.elevation.dialog), if any.
-	EnvDialog = "MISTERMORPH_ELEVATE_DIALOG"
-	// EnvDeadline is when the dialog gives up, in Unix seconds. An external askpass program gets it
+	// EnvDeadline is when the ask gives up, in Unix seconds. An external askpass program gets it
 	// too, and should give up then, writing TimedOutMarker.
 	EnvDeadline = "MISTERMORPH_ELEVATE_DEADLINE"
+	// EnvSocket and EnvToken lead the built-in helper to the command's approval Session.
+	EnvSocket = "MISTERMORPH_ELEVATE_SOCKET"
+	EnvToken  = "MISTERMORPH_ELEVATE_TOKEN"
 )
 
 // DefaultApprovalTimeout is how long the dialog waits for the user, on top of the command's timeout.
@@ -70,8 +72,15 @@ func (c Config) Approval() time.Duration {
 	return DefaultApprovalTimeout
 }
 
+// UsesAskpassProgram reports whether an askpass program of the user's own (Askpass) asks for the
+// password, instead of an approval Session.
+func (c Config) UsesAskpassProgram() bool {
+	return strings.TrimSpace(c.Askpass) != ""
+}
+
 // The session variables a dialog needs to appear on the user's desktop. Ordinary shell commands do
-// not get them; elevated ones pass them to sudo, which hands them to the askpass helper.
+// not get them; with an askpass program of the user's own, elevated ones pass them to sudo, which
+// hands them to that program. The built-in dialog runs in this process, which has them.
 var displayEnvKeys = []string{
 	"DISPLAY",
 	"WAYLAND_DISPLAY",
@@ -98,8 +107,8 @@ var (
 var askpassHandled atomic.Bool
 
 // HandleAskpass belongs at the start of main, before anything else. When sudo started this process
-// as an elevated command's askpass helper, it shows the approval dialog, prints the password for
-// sudo and exits. Otherwise it returns at once, and from then on elevated commands may use this
+// as an elevated command's askpass helper, it gets the password from the command's approval
+// session, prints it for sudo and exits. Otherwise it returns at once, and from then on elevated commands may use this
 // executable as their helper: Check refuses them on Linux and macOS until it has run.
 func HandleAskpass() {
 	if IsAskpassInvocation() {
@@ -176,18 +185,22 @@ var errAskpassUnhandled = fmt.Errorf("this program does not show the approval di
 
 // SudoArgs is the sudo command line that runs argv (a shell and its arguments, ending with the
 // command): -k ignores sudo's cached credentials, so every command asks; -A reads the password
-// from the askpass helper; the empty -p leaves the wording to the helper's dialog.
+// from the askpass helper; the empty -p leaves the wording to the approval.
 func SudoArgs(argv []string) []string {
 	args := []string{"-k", "-A", "-p", "", "--"}
 	return append(args, argv...)
 }
 
-// SudoEnv is the environment for sudo: base (the shell tool's environment), the desktop session's
-// display variables, and what the askpass program needs: the program as SUDO_ASKPASS (this binary,
-// unless cfg.Askpass names another), the command to show and the deadline, and for this binary's
-// helper the askpass switch and the dialog choice.
-func SudoEnv(cfg Config, base []string, command string, now time.Time) ([]string, error) {
-	external := strings.TrimSpace(cfg.Askpass) != ""
+// SudoEnv is the environment for sudo: base (the shell tool's environment) and what the askpass
+// program needs: the program as SUDO_ASKPASS, the command and the deadline (Request.Deadline).
+// For this binary's helper that is also the askpass switch and session's address (Session.Env);
+// session is nil only with an askpass program of the user's own (cfg.Askpass), which also gets the
+// desktop session's display variables, to show its own dialog.
+func SudoEnv(cfg Config, base []string, command string, deadline time.Time, session *Session) ([]string, error) {
+	external := cfg.UsesAskpassProgram()
+	if !external && session == nil {
+		return nil, fmt.Errorf("an elevated command needs an approval session")
+	}
 	var askpass string
 	if external {
 		program, err := askpassProgram(cfg)
@@ -206,33 +219,32 @@ func SudoEnv(cfg Config, base []string, command string, now time.Time) ([]string
 		askpass = exe
 	}
 	env := append([]string(nil), base...)
-	present := make(map[string]bool, len(env))
-	for _, entry := range env {
-		if i := strings.IndexByte(entry, '='); i > 0 {
-			present[entry[:i]] = true
+	if external {
+		present := make(map[string]bool, len(env))
+		for _, entry := range env {
+			if i := strings.IndexByte(entry, '='); i > 0 {
+				present[entry[:i]] = true
+			}
 		}
-	}
-	for _, key := range displayEnvKeys {
-		if present[key] {
-			continue
-		}
-		if value := getenv(key); strings.TrimSpace(value) != "" {
-			env = append(env, key+"="+value)
+		for _, key := range displayEnvKeys {
+			if present[key] {
+				continue
+			}
+			if value := getenv(key); strings.TrimSpace(value) != "" {
+				env = append(env, key+"="+value)
+			}
 		}
 	}
 	env = append(env,
 		"SUDO_ASKPASS="+askpass,
 		EnvCommand+"="+command,
-		EnvDeadline+"="+strconv.FormatInt(now.Add(cfg.Approval()).Unix(), 10),
+		EnvDeadline+"="+strconv.FormatInt(deadline.Unix(), 10),
 	)
 	if external {
 		return env, nil
 	}
 	env = append(env, EnvAskpass+"=1")
-	if dialog := strings.TrimSpace(cfg.Dialog); dialog != "" {
-		env = append(env, EnvDialog+"="+dialog)
-	}
-	return env, nil
+	return append(env, session.Env()...), nil
 }
 
 // DeclinedMarker is what the askpass helper writes to stderr when the user cancels the dialog, so
