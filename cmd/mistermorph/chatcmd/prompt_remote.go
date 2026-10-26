@@ -170,7 +170,7 @@ func (m *chatModel) remoteTrust(offer *seal.Offer) promptTrust {
 		}
 		if !bytes.Equal(pinned, identity) {
 			return promptTrust{refusal: fmt.Sprintf(
-				"The runtime's identity key changed. Pinned: %s. Now: %s. Someone may be intercepting the connection, or the Console's state was reset. Check the fingerprint `mistermorph console` logged at start (elevation_identity fingerprint=…); if it shows the new one, run: mistermorph chat --forget-runtime %s",
+				"The runtime's identity key changed. Pinned: %s. Now: %s. Someone may be intercepting the connection, or the Console's state was reset. Check the fingerprint `mistermorph console fingerprint` prints on the runtime's machine; if it shows the new one, run: mistermorph chat --forget-runtime %s",
 				seal.Fingerprint(pinned), seal.Fingerprint(identity), key)}
 		}
 		return promptTrust{pinned: pinned}

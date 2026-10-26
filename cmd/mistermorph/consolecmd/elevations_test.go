@@ -3,6 +3,8 @@ package consolecmd
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -188,5 +190,23 @@ func TestConsoleAsksUserFromBothChats(t *testing.T) {
 	}
 	if consoleAsksUser(daemonruntime.TaskTrigger{Source: "cron", Ref: "cli/chat"}) {
 		t.Error("a cron task asks its person")
+	}
+}
+
+func TestIdentityFingerprintReadsTheKeptKey(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := identityFingerprint(dir); err == nil || !strings.Contains(err.Error(), "start the Console once") {
+		t.Fatalf("fingerprint without a key = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, elevationIdentityFile)); !os.IsNotExist(err) {
+		t.Fatalf("reading the fingerprint made a key: %v", err)
+	}
+	info, err := newConsoleElevations(nil).identityInfo(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := identityFingerprint(dir)
+	if err != nil || got != info.Fingerprint {
+		t.Fatalf("fingerprint = %q, %v, want %q", got, err, info.Fingerprint)
 	}
 }

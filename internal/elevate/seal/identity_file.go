@@ -13,16 +13,9 @@ import (
 // LoadIdentity reads the identity kept at path (its seed, base64url), or makes one and keeps it
 // there, readable by this user only, when there is none.
 func LoadIdentity(path string) (*Identity, error) {
-	raw, err := os.ReadFile(path)
-	if err == nil {
-		seed, decodeErr := b64.DecodeString(strings.TrimSpace(string(raw)))
-		if decodeErr != nil {
-			return nil, fmt.Errorf("read the elevation identity %s: %w", path, decodeErr)
-		}
-		return NewIdentity(seed)
-	}
+	identity, err := ReadIdentity(path)
 	if !errors.Is(err, os.ErrNotExist) {
-		return nil, fmt.Errorf("read the elevation identity: %w", err)
+		return identity, err
 	}
 	seed := make([]byte, ed25519.SeedSize)
 	if _, err := rand.Read(seed); err != nil {
@@ -44,6 +37,23 @@ func LoadIdentity(path string) (*Identity, error) {
 	if writeErr != nil || closeErr != nil {
 		_ = os.Remove(path)
 		return nil, fmt.Errorf("keep the elevation identity: %w", errors.Join(writeErr, closeErr))
+	}
+	return NewIdentity(seed)
+}
+
+// ReadIdentity reads the identity kept at path, without making one. A missing file is
+// os.ErrNotExist.
+func ReadIdentity(path string) (*Identity, error) {
+	raw, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read the elevation identity: %w", err)
+	}
+	seed, err := b64.DecodeString(strings.TrimSpace(string(raw)))
+	if err != nil {
+		return nil, fmt.Errorf("read the elevation identity %s: %w", path, err)
 	}
 	return NewIdentity(seed)
 }

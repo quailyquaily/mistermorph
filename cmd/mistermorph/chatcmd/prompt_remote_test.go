@@ -251,7 +251,7 @@ func TestRemoteElevationTrust(t *testing.T) {
 			name:       "first time on a remote runtime: confirm the fingerprint, then send",
 			runtimeKey: remoteKey,
 			keys:       append(append(promptKeys("y"), promptKeys("pw")...), promptKey(tea.KeyEnter)),
-			wantView:   []string{seal.Fingerprint(identity.PublicKey()), "elevation_identity fingerprint=", "y trust"},
+			wantView:   []string{seal.Fingerprint(identity.PublicKey()), "mistermorph console fingerprint", "y trust"},
 			wantSent:   true,
 			wantPinned: true,
 		},

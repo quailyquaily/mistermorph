@@ -232,6 +232,10 @@ func newConsoleLocalRuntime(cfg serveConfig, reader *viper.Viper) (*consoleLocal
 	out.bus = inprocBus
 	out.streamHub = newConsoleStreamHub()
 	out.elevations = newConsoleElevations(gen.logger)
+	// Load the identity now so its fingerprint is in the log before anyone is asked to compare it.
+	if _, err := out.elevations.loadIdentity(gen.paths.StateDir); err != nil {
+		gen.logger.Warn("elevation_identity_unavailable", "error", err.Error())
+	}
 	// Chat tasks ask their elevated commands on approval cards, so they need no desktop dialog.
 	elevate.OfferClientApprovals()
 	out.notificationHub = newConsoleNotificationHub()

@@ -27,6 +27,7 @@ func runRemoteChat(cmd *cobra.Command, c *remoteClient, id, version string) erro
 	if err := c.connect(ctx); err != nil {
 		return fmt.Errorf("connect to Console: %w", err)
 	}
+	checkRuntimeIdentity(ctx, c, knownRuntimesPath(), cmd.InOrStdin(), cmd.ErrOrStderr())
 	m := newSharedChatModel(ctx, c)
 	m.version = version
 	m.knownRuntimesPath = knownRuntimesPath()

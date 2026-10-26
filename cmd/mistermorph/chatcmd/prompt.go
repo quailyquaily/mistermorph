@@ -533,7 +533,7 @@ func (m *chatModel) renderElevationPrompt(p *chatPrompt, width int) (body, input
 		input = append(input, fitChatLine("  "+chatErrorStyle.Render("Not sending the password."), width))
 		footer = "  Esc decline"
 	case trust.fingerprint != "":
-		body = append(body, wrapPromptParagraph("This runtime has not been approved from chat before. Check that its fingerprint matches the one `mistermorph console` logged at start (elevation_identity fingerprint=…):", width)...)
+		body = append(body, wrapPromptParagraph("This runtime has not been approved from chat before. Check that its fingerprint matches what `mistermorph console fingerprint` prints on the runtime's machine:", width)...)
 		body = append(body, "    "+chatAccentStyle.Render(trust.fingerprint))
 		input = append(input, fitChatLine("  Does it match? "+chatAccentStyle.Render("y")+" yes · "+chatAccentStyle.Render("n")+" no", width))
 		footer = "  y trust and continue · n/Esc decline"

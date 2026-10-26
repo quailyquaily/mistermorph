@@ -27,6 +27,7 @@ func New(version ...string) *cobra.Command {
 			return localconsole.Stop(cmd.Context(), runtimepaths.FromReader(viper.GetViper()).StateDir)
 		},
 	})
+	cmd.AddCommand(newFingerprintCmd())
 	cmd.RunE = serve.RunE
 	cmd.Flags().AddFlagSet(serve.Flags())
 	return cmd
