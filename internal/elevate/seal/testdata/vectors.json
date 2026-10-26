@@ -1,0 +1,26 @@
+{
+  "identity_seed_hex": "0707070707070707070707070707070707070707070707070707070707070707",
+  "server_private_hex": "1111111111111111111111111111111111111111111111111111111111111111",
+  "client_private_hex": "2222222222222222222222222222222222222222222222222222222222222222",
+  "nonce_hex": "333333333333333333333333333333333333333333333333",
+  "binding": {
+    "elevation_id": "el_4f2a9c",
+    "task_id": "task_01",
+    "command": "apt-get install -y jq",
+    "cwd": "/srv/app",
+    "deadline": 1800000120
+  },
+  "password": "hunter2 ü",
+  "fingerprint": "fe81 2c12 f3ab 4ce6 ac5d b69a c352 f906",
+  "offer": {
+    "v": 1,
+    "server_pub": "e06Qm75__kTEZaIgA31gjuNYl9Me-XLwf3SJLLD3PxM",
+    "identity": "6kpsY-KcUgq-9VB7Ey7F-ZVHdq6-vnuSQh7qaRRG0iw",
+    "signature": "484MzhwgJmfh4XTMR9sKXH1znFjcBjusP9RCJE-Q7VxarBvYoN3HbcEL6uYDXebuLuElIWx65HkWEpDiSwZsAQ"
+  },
+  "answer": {
+    "client_pub": "D6poTtKIZ7l_Smot7l34zpdOdrcBjj8iocTPJnhXDyA",
+    "nonce": "MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMz",
+    "ciphertext": "KwXzW658XRda1Eo0qANBgvLjaV2onIZonkg"
+  }
+}

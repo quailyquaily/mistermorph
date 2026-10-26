@@ -13,6 +13,7 @@
 package elevate
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -55,6 +56,36 @@ type Config struct {
 	// its dialogs (Linux, macOS): sudo runs it with the prompt as its argument, it prints the
 	// password and exits 0, or exits non-zero on cancel. Dialog does not apply then.
 	Askpass string
+	// Approver is where the approval is asked: ApproverAuto (the run's approver, set by the Console
+	// or chat that started it, else the dialog), ApproverClient (only the run's approver) or
+	// ApproverDialog (only the dialog). Empty means ApproverAuto.
+	Approver string
+}
+
+// The values of Config.Approver.
+const (
+	ApproverAuto   = "auto"
+	ApproverClient = "client"
+	ApproverDialog = "dialog"
+)
+
+func (c Config) approverMode() string {
+	switch mode := strings.ToLower(strings.TrimSpace(c.Approver)); mode {
+	case ApproverClient, ApproverDialog:
+		return mode
+	}
+	return ApproverAuto
+}
+
+// clientApprovals records that this process can ask the person who started a task to approve its
+// elevated commands (the Console, chat), so they are offered without a desktop dialog.
+var clientApprovals atomic.Bool
+
+// OfferClientApprovals marks this process as one whose tasks may carry an approver (WithApprover):
+// from then on, shell tools offer elevated commands where sudo is, even with no desktop dialog. A
+// task without an approver then gets the reason when it tries one (CheckContext).
+func OfferClientApprovals() {
+	clientApprovals.Store(true)
 }
 
 func (c Config) key() string {
@@ -139,6 +170,55 @@ func Check(cfg Config) error {
 		return checkSudo(cfg)
 	}
 	return fmt.Errorf("elevated commands are not supported on %s", goos)
+}
+
+// Offered reports whether a shell tool should offer elevated commands at all: Check passes, or this
+// process asks clients to approve (OfferClientApprovals) and sudo can use its helper.
+func Offered(cfg Config) bool {
+	if Check(cfg) == nil {
+		return true
+	}
+	return checkClientApprovals(cfg) == nil
+}
+
+// CheckContext is Check for a command run with ctx: with an approver on ctx (WithApprover), the
+// desktop dialog is not needed.
+func CheckContext(ctx context.Context, cfg Config) error {
+	if !cfg.Enabled || goos == "windows" || cfg.UsesAskpassProgram() {
+		return Check(cfg)
+	}
+	if _, ok := ApproverFromContext(ctx); ok && cfg.approverMode() != ApproverDialog {
+		return checkHelper()
+	}
+	if cfg.approverMode() == ApproverClient {
+		return fmt.Errorf("approval is asked only in the Console chat or chat that started the task (%s.approver: client), and this task was not started there", cfg.key())
+	}
+	return Check(cfg)
+}
+
+func checkClientApprovals(cfg Config) error {
+	switch {
+	case !cfg.Enabled:
+		return fmt.Errorf("elevated commands are turned off (%s.enabled)", cfg.key())
+	case goos != "linux" && goos != "darwin":
+		return fmt.Errorf("elevated commands are not approved by clients on %s", goos)
+	case cfg.UsesAskpassProgram() || cfg.approverMode() == ApproverDialog:
+		return fmt.Errorf("elevated commands are approved in a dialog here")
+	case !clientApprovals.Load():
+		return fmt.Errorf("this program does not ask clients to approve elevated commands")
+	}
+	return checkHelper()
+}
+
+// checkHelper is what sudo with this binary as its helper needs, whoever asks the user.
+func checkHelper() error {
+	if _, err := lookPath("sudo"); err != nil {
+		return fmt.Errorf("sudo is not installed")
+	}
+	if !askpassHandled.Load() {
+		return errAskpassUnhandled
+	}
+	return nil
 }
 
 // checkSudo is Check on Linux and macOS: sudo, and an askpass program that can ask the user.

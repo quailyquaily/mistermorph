@@ -610,3 +610,44 @@ func TestRunAsScriptParsesInPowerShell(t *testing.T) {
 		t.Fatalf("the script does not parse: %v\n%s", err, out)
 	}
 }
+
+// With an approver on the run (the Console, chat), elevated commands need sudo and the helper, not
+// a desktop; approver "client" refuses runs without one, and "dialog" ignores it.
+func TestCheckContextAndOffered(t *testing.T) {
+	withApprover := WithApprover(context.Background(), answer("hunter2", nil))
+	cases := []struct {
+		name        string
+		cfg         Config
+		ctx         context.Context
+		clients     bool
+		installed   []string
+		wantErr     string
+		wantOffered bool
+	}{
+		{name: "approver, no desktop", cfg: Config{Enabled: true}, ctx: withApprover, clients: true, installed: []string{"sudo"}, wantOffered: true},
+		{name: "no approver, no desktop", cfg: Config{Enabled: true}, ctx: context.Background(), clients: true, installed: []string{"sudo"}, wantErr: "no desktop session", wantOffered: true},
+		{name: "approver client, none on the run", cfg: Config{Enabled: true, Approver: "client"}, ctx: context.Background(), clients: true, installed: []string{"sudo"}, wantErr: "only in the Console chat or chat", wantOffered: true},
+		{name: "approver dialog ignores the run's", cfg: Config{Enabled: true, Approver: "dialog"}, ctx: withApprover, clients: true, installed: []string{"sudo"}, wantErr: "no desktop session", wantOffered: false},
+		{name: "program without client approvals", cfg: Config{Enabled: true}, ctx: withApprover, clients: false, installed: []string{"sudo"}, wantOffered: false},
+		{name: "no sudo", cfg: Config{Enabled: true}, ctx: withApprover, clients: true, wantErr: "sudo is not installed", wantOffered: false},
+		{name: "turned off", cfg: Config{}, ctx: withApprover, clients: true, installed: []string{"sudo"}, wantErr: "turned off", wantOffered: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fakeEnv(t, "linux", nil, tc.installed...)
+			old := clientApprovals.Load()
+			clientApprovals.Store(tc.clients)
+			t.Cleanup(func() { clientApprovals.Store(old) })
+			err := CheckContext(tc.ctx, tc.cfg)
+			if tc.wantErr == "" && err != nil {
+				t.Fatalf("CheckContext() = %v", err)
+			}
+			if tc.wantErr != "" && (err == nil || !strings.Contains(err.Error(), tc.wantErr)) {
+				t.Fatalf("CheckContext() = %v, want %q", err, tc.wantErr)
+			}
+			if got := Offered(tc.cfg); got != tc.wantOffered {
+				t.Fatalf("Offered() = %v, want %v", got, tc.wantOffered)
+			}
+		})
+	}
+}

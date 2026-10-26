@@ -43,11 +43,12 @@ const maxAttempts = 5
 const helperHandshakeTimeout = 10 * time.Second
 
 // Begin opens the session for an elevated command that runs in dir until deadline. The approver set
-// with WithApprover on ctx asks the user, or else the desktop dialog (cfg.Dialog). Ending ctx gives
-// up any ask in progress. The caller ends the session with End once sudo has returned.
+// with WithApprover on ctx asks the user, or else (and always with cfg.Approver "dialog") the
+// desktop dialog (cfg.Dialog). Ending ctx gives up any ask in progress. The caller ends the session
+// with End once sudo has returned.
 func Begin(ctx context.Context, cfg Config, command, dir string, deadline time.Time) (*Session, error) {
 	approver, ok := ApproverFromContext(ctx)
-	if !ok {
+	if !ok || cfg.approverMode() == ApproverDialog {
 		approver = dialogApprover{configured: strings.TrimSpace(cfg.Dialog)}
 	}
 	tempDir, err := os.MkdirTemp("", "mm-elevate-")

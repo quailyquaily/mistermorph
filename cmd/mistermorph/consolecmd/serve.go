@@ -30,6 +30,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/agentlink"
 	"github.com/quailyquaily/mistermorph/internal/codexauth"
 	"github.com/quailyquaily/mistermorph/internal/configutil"
+	"github.com/quailyquaily/mistermorph/internal/daemonruntime"
 	"github.com/quailyquaily/mistermorph/internal/fsstore"
 	serverpolicy "github.com/quailyquaily/mistermorph/internal/httpserver"
 	"github.com/quailyquaily/mistermorph/internal/localconsole"
@@ -1248,7 +1249,10 @@ func (s *server) handleProxy(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	status, raw, err := endpoint.Client.Proxy(r.Context(), r.Method, parsedURI.RequestURI(), body, r.Header.Get("Content-Type"))
+	// The runtime sees this hop; tell it how the browser's own connection was made.
+	transport, remote := daemonruntime.DirectTransport(r)
+	proxyCtx := daemonruntime.WithClientTransport(r.Context(), transport, remote)
+	status, raw, err := endpoint.Client.Proxy(proxyCtx, r.Method, parsedURI.RequestURI(), body, r.Header.Get("Content-Type"))
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, err.Error())
 		return
