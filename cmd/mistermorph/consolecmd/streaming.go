@@ -37,7 +37,10 @@ type consoleStreamFrame struct {
 	// Questions are the questions the agent has asked so far (ask_user), in order; the last may be
 	// open.
 	Questions []consoleQuestion `json:"questions,omitempty"`
-	Preview   bool              `json:"preview,omitempty"`
+	// Elevations are the task's approval cards for elevated commands, in order; an open one carries
+	// the signed offer its sealed password answers.
+	Elevations []consoleElevation `json:"elevations,omitempty"`
+	Preview    bool               `json:"preview,omitempty"`
 	// ClearText takes back the reply text shown so far: it came from a response that called tools.
 	ClearText bool `json:"clear_text,omitempty"`
 	Done      bool `json:"done,omitempty"`
@@ -141,6 +144,17 @@ func (h *consoleStreamHub) PublishQuestions(taskID string, questions []consoleQu
 	})
 }
 
+func (h *consoleStreamHub) PublishElevations(taskID string, elevations []consoleElevation) {
+	if len(elevations) == 0 {
+		return
+	}
+	h.publish(consoleStreamFrame{
+		TaskID:     strings.TrimSpace(taskID),
+		Status:     "running",
+		Elevations: cloneConsoleElevations(elevations),
+	})
+}
+
 func (h *consoleStreamHub) PublishActivity(taskID string, activity *consoleActivityProgress) {
 	if activity == nil {
 		return
@@ -232,6 +246,9 @@ func (h *consoleStreamHub) publish(frame consoleStreamFrame) {
 	}
 	if frame.Questions == nil {
 		frame.Questions = previous.Questions
+	}
+	if frame.Elevations == nil {
+		frame.Elevations = previous.Elevations
 	}
 	if frame.Activity == nil {
 		frame.Activity = previous.Activity

@@ -109,8 +109,9 @@ func main() {
 
 On Linux and macOS an elevated command runs under `sudo -k -A`. sudo reads the password from an
 askpass program, and the program it starts is the running executable: yours. When your program is
-started that way (`MISTERMORPH_ASKPASS=1`), `RunAskpassIfRequested` shows the approval dialog,
-writes the password to stdout for sudo, and exits with `os.Exit`. In any other start it returns at
+started that way (`MISTERMORPH_ASKPASS=1`), `RunAskpassIfRequested` gets the password from the
+agent that started the command (which asked the user in a dialog), writes it to stdout for sudo,
+and exits with `os.Exit`. In any other start it returns at
 once. So:
 
 - Call it before anything writes to stdout: in askpass mode stdout carries the password to sudo.

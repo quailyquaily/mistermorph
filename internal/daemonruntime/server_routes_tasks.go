@@ -24,6 +24,30 @@ func (routes *routeRegistration) registerTaskRoutes() {
 	submit := opts.Submit
 	stop := opts.Stop
 	answerQuestion := opts.AnswerQuestion
+	answerElevation := opts.AnswerElevation
+	elevationIdentity := opts.ElevationIdentity
+
+	mux.HandleFunc("/elevation/identity", func(w http.ResponseWriter, r *http.Request) {
+		if !checkAuth(r, authToken) {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		if elevationIdentity == nil {
+			http.NotFound(w, r)
+			return
+		}
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		info, err := elevationIdentity(r.Context())
+		if err != nil {
+			http.Error(w, strings.TrimSpace(err.Error()), http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(info)
+	})
 
 	mux.HandleFunc("/tasks", func(w http.ResponseWriter, r *http.Request) {
 		if !checkAuth(r, authToken) {
@@ -196,6 +220,47 @@ func (routes *routeRegistration) registerTaskRoutes() {
 				TaskID: taskID,
 				Reason: "/stop",
 			})
+			if err != nil {
+				if msg, ok := badRequestMessage(err); ok {
+					http.Error(w, msg, http.StatusBadRequest)
+					return
+				}
+				http.Error(w, strings.TrimSpace(err.Error()), http.StatusServiceUnavailable)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		if strings.HasSuffix(suffix, "/elevation") {
+			if answerElevation == nil {
+				http.NotFound(w, r)
+				return
+			}
+			if r.Method != http.MethodPost {
+				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+			taskID := strings.TrimSpace(strings.TrimSuffix(suffix, "/elevation"))
+			if taskID == "" || strings.Contains(taskID, "/") {
+				http.Error(w, "missing task_id", http.StatusBadRequest)
+				return
+			}
+			// The body carries a sealed password: it is never logged.
+			var req AnswerElevationRequest
+			if err := json.NewDecoder(io.LimitReader(r.Body, 16<<10)).Decode(&req); err != nil {
+				http.Error(w, "invalid json", http.StatusBadRequest)
+				return
+			}
+			req.TaskID = taskID
+			req.ElevationID = strings.TrimSpace(req.ElevationID)
+			if req.ElevationID == "" {
+				http.Error(w, "missing elevation_id", http.StatusBadRequest)
+				return
+			}
+			req.Transport, req.Remote = RequestTransport(r)
+			resp, err := answerElevation(r.Context(), req)
 			if err != nil {
 				if msg, ok := badRequestMessage(err); ok {
 					http.Error(w, msg, http.StatusBadRequest)

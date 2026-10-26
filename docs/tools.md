@@ -192,7 +192,21 @@ Constraints:
 
 Commands run without a terminal, so `sudo` cannot ask for a password in them. Instead the model
 sets `elevated: true` (on `bash` on Linux and macOS, on `powershell` on Windows), and the user
-approves the command in a system dialog on the agent's machine that shows it:
+approves the command, which is shown to them:
+
+- **In the chat that started the task** (Linux, macOS): a task sent from the web Console's chat or
+  from `mistermorph chat` shows an approval card with the command and a password field. In the web
+  Console and in chat attached with `--runtime-url`, the password is encrypted in the client and
+  opened only by the runtime, so it stays secret without HTTPS; the client pins the runtime's
+  identity key. On plain HTTP the web card warns that the page itself could be tampered with
+  (`tools.bash.elevation.web_insecure: deny` refuses instead). Local chat runs the agent in its
+  own process and asks directly. `mistermorph console fingerprint` prints the key's fingerprint on
+  the runtime's machine; compare it the first time a client asks. Chat asks when it
+  connects to a runtime on another machine; the web card asks on its first request, and
+  Settings › System › Elevation key shows the fingerprint. Chat keeps the identities it trusts in
+  `file_state_dir/known_runtimes`; when a runtime's key changes it refuses, until
+  `mistermorph chat --forget-runtime <url>`.
+- **Otherwise, in a system dialog on the agent's machine:**
 
 | OS | Runs as | Dialog |
 |---|---|---|
@@ -201,8 +215,9 @@ approves the command in a system dialog on the agent's machine that shows it:
 | Windows | `Start-Process powershell -Verb RunAs` | the UAC prompt |
 
 - On Linux and macOS, mistermorph is sudo's askpass helper: sudo starts the binary in askpass mode,
-  which shows the dialog and hands what the user typed to sudo. The agent process, the model, the
-  tool output and the logs never see the password. `tools.bash.elevation.askpass` names another
+  which gets what the user typed in the dialog from the agent process and hands it to sudo. The
+  agent process holds the password in memory only to pass it on; the model, the tool output and
+  the logs never see it. `tools.bash.elevation.askpass` names another
   askpass program to use instead, such as an embedding program's own (see
   [Your own askpass program](integration.md#your-own-askpass-program)).
 - Every elevated command needs its own approval: `-k` makes sudo ignore cached credentials, and each
@@ -210,17 +225,20 @@ approves the command in a system dialog on the agent's machine that shows it:
 - Declined or unanswered, the command does not run and the tool says so.
 - Offered when the tool's `elevation.enabled` is true (`tools.bash.elevation.enabled`,
   `tools.powershell.elevation.enabled`; the default; off for embedded programs, which also
-  call `integration.RunAskpassIfRequested()` at the start of `main`, see `docs/integration.md`) and the OS
-  can show the dialog: on Linux that needs `sudo`, a desktop session (`DISPLAY` or `WAYLAND_DISPLAY`)
-  and one of the dialog programs; on macOS `sudo` and `osascript`. With an askpass program set, only
-  `sudo` and that program.
+  call `integration.RunAskpassIfRequested()` at the start of `main`, see `docs/integration.md`) and
+  someone can be asked. In the Console and in chat that needs only `sudo`. For the dialog, on Linux
+  `sudo`, a desktop session (`DISPLAY` or `WAYLAND_DISPLAY`) and one of the dialog programs; on
+  macOS `sudo` and `osascript`. With an askpass program set, only `sudo` and that program.
+- `tools.bash.elevation.approver` picks where to ask: `auto` (the chat that started the task, else
+  the dialog; the default), `client` (only there) or `dialog` (only the dialog).
 - A non-elevated command whose `sudo` fails for want of a terminal gets a note suggesting
   `elevated: true`.
 - Settings, under `tools.bash.elevation` and `tools.powershell.elevation`: `enabled`,
   `approval_timeout` (how long the dialog waits, on top of the command's timeout; default `2m`), and
-  for bash `dialog` (a dialog program instead of the automatic choice) and `askpass` (an askpass
-  program instead of mistermorph's helper).
-- Design: `docs/feat/feat_20261024_elevated_commands.md`.
+  for bash `dialog` (a dialog program instead of the automatic choice), `askpass` (an askpass
+  program instead of mistermorph's helper), `approver` and `web_insecure` (`warn` or `deny`).
+- Design: `docs/feat/feat_20261024_elevated_commands.md`, and for approval in the chat,
+  `docs/feat/feat_20261026_elevation_client_approval.md`.
 
 ## `url_fetch`
 

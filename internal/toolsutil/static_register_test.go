@@ -265,7 +265,7 @@ func TestStaticRegistryConfigReadsEachShellToolsElevation(t *testing.T) {
 	}{
 		{
 			name:           "defaults",
-			wantBash:       elevate.Config{Key: "tools.bash.elevation", Enabled: true, ApprovalTimeout: 2 * time.Minute},
+			wantBash:       elevate.Config{Key: "tools.bash.elevation", Enabled: true, ApprovalTimeout: 2 * time.Minute, Approver: "auto"},
 			wantPowerShell: elevate.Config{Key: "tools.powershell.elevation", Enabled: true, ApprovalTimeout: 2 * time.Minute},
 		},
 		{
@@ -273,15 +273,16 @@ func TestStaticRegistryConfigReadsEachShellToolsElevation(t *testing.T) {
 			set: map[string]any{
 				"tools.bash.elevation.enabled":                false,
 				"tools.bash.elevation.dialog":                 " /usr/local/bin/inua-pinentry ",
+				"tools.bash.elevation.approver":               " client ",
 				"tools.powershell.elevation.approval_timeout": "45s",
 			},
-			wantBash:       elevate.Config{Key: "tools.bash.elevation", Enabled: false, ApprovalTimeout: 2 * time.Minute, Dialog: "/usr/local/bin/inua-pinentry"},
+			wantBash:       elevate.Config{Key: "tools.bash.elevation", Enabled: false, ApprovalTimeout: 2 * time.Minute, Dialog: "/usr/local/bin/inua-pinentry", Approver: "client"},
 			wantPowerShell: elevate.Config{Key: "tools.powershell.elevation", Enabled: true, ApprovalTimeout: 45 * time.Second},
 		},
 		{
 			name:           "askpass program",
 			set:            map[string]any{"tools.bash.elevation.askpass": " /usr/local/bin/inua-askpass "},
-			wantBash:       elevate.Config{Key: "tools.bash.elevation", Enabled: true, ApprovalTimeout: 2 * time.Minute, Askpass: "/usr/local/bin/inua-askpass"},
+			wantBash:       elevate.Config{Key: "tools.bash.elevation", Enabled: true, ApprovalTimeout: 2 * time.Minute, Askpass: "/usr/local/bin/inua-askpass", Approver: "auto"},
 			wantPowerShell: elevate.Config{Key: "tools.powershell.elevation", Enabled: true, ApprovalTimeout: 2 * time.Minute},
 		},
 	}

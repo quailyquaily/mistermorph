@@ -44,6 +44,7 @@ import (
 type SubmitFunc func(ctx context.Context, req SubmitTaskRequest) (SubmitTaskResponse, error)
 type StopFunc func(ctx context.Context, req StopTaskRequest) (StopTaskResponse, error)
 type AnswerQuestionFunc func(ctx context.Context, req AnswerQuestionRequest) (AnswerQuestionResponse, error)
+type AnswerElevationFunc func(ctx context.Context, req AnswerElevationRequest) (AnswerElevationResponse, error)
 type OverviewFunc func(ctx context.Context) (map[string]any, error)
 type PokeFunc func(ctx context.Context, input awarenessdomain.PokeInput) error
 type CronRunFunc func(ctx context.Context, task cronstore.Task) error
@@ -140,7 +141,11 @@ type TaskTopicRoutes struct {
 	Stop        StopFunc
 	// AnswerQuestion answers the question a running task waits on; nil when the runtime's tasks
 	// ask no questions.
-	AnswerQuestion       AnswerQuestionFunc
+	AnswerQuestion AnswerQuestionFunc
+	// AnswerElevation answers an approval card of a running task, and ElevationIdentity is the
+	// identity those cards are signed with; nil when the runtime asks no client to approve.
+	AnswerElevation      AnswerElevationFunc
+	ElevationIdentity    func(context.Context) (ElevationIdentity, error)
 	TopicMetadata        TopicMetadataFunc
 	TopicContext         TopicContextFunc
 	RegenerateTopicTitle func(context.Context, string) (TopicInfo, error)

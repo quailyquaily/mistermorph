@@ -100,6 +100,13 @@ type chatModel struct {
 	approvalResolving bool
 	approvalScroll    int
 
+	// prompts are the open cards (questions, elevated-command approvals), the first one shown.
+	prompts       []*chatPrompt
+	promptScroll  int
+	promptTicking bool
+	promptNow     time.Time
+	closedPrompts map[string]bool
+
 	commandRegistry *chatcommands.Registry
 	pickerIndex     int
 	pickerClosed    bool
@@ -225,6 +232,11 @@ func (m *chatModel) Update(msg tea.Msg) (model tea.Model, command tea.Cmd) {
 				command = tea.Batch(command, tick)
 			}
 		}()
+	}
+	if cmd, handled := m.updatePrompt(msg); handled {
+		return m, cmd
+	}
+	if m.sharedChat != nil {
 		if cmd, handled := m.updateShared(msg); handled {
 			return m, cmd
 		}
@@ -539,6 +551,9 @@ func (m *chatModel) View() tea.View {
 	}
 	if m.agentBrowser != nil {
 		return m.viewAgentBrowser()
+	}
+	if m.activePrompt() != nil {
+		return m.fitView(append([]string{""}, m.renderPrompt()...))
 	}
 	if m.approval != nil {
 		lines := []string{""}

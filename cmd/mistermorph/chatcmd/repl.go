@@ -235,6 +235,7 @@ func runREPL(sess *chatSession, model *chatModel, options ...tea.ProgramOption) 
 	printChatSessionHeader(sess.cmd.OutOrStdout(), strings.TrimSpace(sess.mainCfg.Provider), strings.TrimSpace(sess.mainCfg.Model), sess.workspaceDir, sess.version)
 
 	sess.sendMsg = func(msg any) { safeSend(p, msg) }
+	prompter := newLocalPrompter(sess.sendMsg)
 	sess.setWriter(&programWriter{p: p})
 	if sess.logWriter != nil {
 		sess.logWriter.setProgram(p)
@@ -542,6 +543,7 @@ func runREPL(sess *chatSession, model *chatModel, options ...tea.ProgramOption) 
 						ConversationKey: sess.conversationKey(),
 						TopicID:         sess.topicID,
 					})
+					resumeCtx = withLocalPrompts(resumeCtx, prompter)
 					resumeCtx = taskruntime.WithContextCompactionNotification(resumeCtx, sess.logger, func(_ context.Context, _ agent.Event, text string) error {
 						safeSend(p, agentResultMsg{output: text, keepThinking: true})
 						return nil
@@ -675,6 +677,8 @@ func runREPL(sess *chatSession, model *chatModel, options ...tea.ProgramOption) 
 					ConversationKey: sess.conversationKey(),
 					TopicID:         sess.topicID,
 				})
+				// Before the engine is prepared: ask_user is registered from this context.
+				turnCtx = withLocalPrompts(turnCtx, prompter)
 				turnCtx = taskruntime.WithContextCompactionNotification(turnCtx, sess.logger, func(_ context.Context, _ agent.Event, text string) error {
 					safeSend(p, agentResultMsg{output: text, keepThinking: true})
 					return nil

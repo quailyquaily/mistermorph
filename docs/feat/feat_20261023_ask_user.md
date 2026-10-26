@@ -42,6 +42,7 @@ Only where one person is there to answer, through a surface with buttons:
 | Surface | ask_user |
 | --- | --- |
 | Console chat, a task the user sent (trigger ref `web/console/chat`) | yes |
+| `mistermorph chat`, local or attached with `--runtime-url` (trigger ref `cli/chat`) | yes |
 | Console heartbeat, cron, TODO and other background tasks | no |
 | Telegram private chat | yes |
 | Slack DM | yes |
@@ -52,8 +53,11 @@ Only where one person is there to answer, through a surface with buttons:
 
 A runtime turns the tool on for a task with `taskruntime.WithUserQuestions(ctx, ask)`; without it
 the tool is not registered. Console tells its chat tasks apart by their trigger: the chat sends
-`{source: "ui", event: "chat_submit", ref: "web/console/chat"}`, while other submitters (the Skills
-page, the CLI, older pages) get the default ref `web/console`.
+`{source: "ui", event: "chat_submit", ref: "web/console/chat"}`, chat attached with `--runtime-url`
+sends `ref: "cli/chat"`, while other submitters (the Skills page, older pages) get the default ref
+`web/console`. Local chat sets the tool on its own turns. In chat the question is a card in the TUI:
+number keys pick a choice, or type an answer; Esc closes it without one (locally the tool gets "the
+user closed the question"; attached to a runtime, the runtime waits until its timeout).
 
 ## 4) Design
 

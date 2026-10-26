@@ -7,9 +7,10 @@ import "github.com/quailyquaily/mistermorph/internal/elevate"
 // parsing flags or starting anything.
 //
 // An elevated command runs under `sudo -A`, and sudo starts the running executable, your program,
-// as its askpass helper. When this process is that helper, RunAskpassIfRequested shows the approval
-// dialog, prints the password for sudo and exits. Otherwise it returns at once. Until it has run,
-// elevated commands are unavailable on Linux and macOS even with tools.bash.elevation.enabled set.
+// as its askpass helper. When this process is that helper, RunAskpassIfRequested gets the password
+// from the agent that started the command (which asked the user in a dialog), prints it for sudo
+// and exits. Otherwise it returns at once. Until it has run, elevated commands are unavailable on
+// Linux and macOS even with tools.bash.elevation.enabled set.
 // Windows elevates through UAC and does not need it, and neither does a program that names its own
 // askpass program in tools.bash.elevation.askpass: sudo starts that program instead.
 func RunAskpassIfRequested() {

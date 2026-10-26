@@ -1,0 +1,407 @@
+/* An elevated command asking for the sudo password. It is built on the question card's grid and
+   labels (ChatQuestionCard.css): mono labels on the left, values at one indent. The command is
+   mono and wraps whole, since it is what the person approves; notes under the field are small. */
+.chat-elevation-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.chat-elevation-countdown {
+  flex: 0 0 auto;
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-meta);
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+}
+
+.chat-elevation-command {
+  color: var(--text-0);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-meta);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.chat-elevation-path {
+  color: var(--text-1);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-meta);
+}
+
+.chat-elevation-note {
+  grid-column: 2;
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--font-size-meta);
+  line-height: 1.45;
+  white-space: normal;
+}
+
+.chat-elevation-note.is-alert {
+  color: var(--danger);
+}
+
+.chat-question-reply > .chat-elevation-note {
+  flex: 1 1 auto;
+}
+
+.chat-elevation-fingerprint,
+.chat-elevation-fingerprints dd {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.chat-elevation-first .chat-elevation-fingerprint {
+  color: var(--text-1);
+}
+
+.chat-elevation-key {
+  display: grid;
+  gap: 6px;
+  margin-top: 4px;
+  white-space: normal;
+}
+
+.chat-elevation-fingerprints {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  column-gap: 10px;
+  row-gap: 2px;
+  margin: 0;
+  font-size: var(--font-size-meta);
+}
+
+.chat-elevation-fingerprints dt {
+  color: var(--text-2);
+}
+
+.chat-elevation-fingerprints dd {
+  margin: 0;
+  color: var(--text-0);
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+/* The key row reads like the host row: the fingerprint's first groups in mono, whether it is
+   trusted in the meta tone. Opened, the other groups unroll to the right of the first ones: the
+   space opens left to right while each group slides in after the one before it, the ellipsis
+   folds away, and a small copy button comes in at the end. Motion tokens are 0ms under reduced
+   motion. */
+.chat-elevation-keyrow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 10px;
+  row-gap: 2px;
+  min-width: 0;
+}
+
+.chat-elevation-keytoggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-1);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.chat-elevation-keytoggle:hover .chat-elevation-keyprint {
+  color: var(--text-0);
+}
+
+.chat-elevation-keytoggle:focus-visible {
+  outline: 1px solid color-mix(in srgb, var(--q-c-accent) 55%, transparent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.chat-elevation-keyprint {
+  display: inline-flex;
+  align-items: baseline;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-meta);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  transition: color var(--motion-fast) var(--motion-ease);
+}
+
+/* The space for the hidden groups: a one-column grid whose column grows from 0fr to 1fr. */
+.chat-elevation-keyrest {
+  display: inline-grid;
+  grid-template-columns: 0fr;
+  min-width: 0;
+  transition: grid-template-columns var(--motion-slow) var(--motion-ease);
+}
+
+.chat-elevation-keyrest-inner {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.chat-elevation-keygroup {
+  display: inline-block;
+  margin-left: 1ch;
+  opacity: 0;
+  transform: translateX(-0.75ch);
+  filter: blur(2px);
+  transition:
+    opacity var(--motion-fast) var(--motion-ease),
+    transform var(--motion-fast) var(--motion-ease),
+    filter var(--motion-fast) var(--motion-ease);
+}
+
+.chat-elevation-keymore {
+  display: inline-block;
+  max-width: 2ch;
+  margin-left: 0.5ch;
+  overflow: hidden;
+  color: var(--text-2);
+  transition:
+    opacity var(--motion-fast) var(--motion-ease),
+    max-width var(--motion-normal) var(--motion-ease),
+    margin var(--motion-normal) var(--motion-ease);
+}
+
+.chat-elevation-keycaret {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  color: var(--text-2);
+  /* Points the way the fingerprint opens: right while folded, left (to fold it back) when open. */
+  transform: rotate(-90deg);
+  transition: transform var(--motion-normal) var(--motion-ease);
+}
+
+.chat-elevation-keyrow.is-open .chat-elevation-keyrest {
+  grid-template-columns: 1fr;
+}
+
+.chat-elevation-keyrow.is-open .chat-elevation-keygroup {
+  opacity: 1;
+  transform: none;
+  filter: none;
+  transition-duration: var(--motion-normal);
+  /* One after another, left to right, while the space opens. */
+  transition-delay: calc(var(--i) * 40ms);
+}
+
+.chat-elevation-keyrow.is-open .chat-elevation-keymore {
+  max-width: 0;
+  margin-left: 0;
+  opacity: 0;
+}
+
+.chat-elevation-keyrow.is-open .chat-elevation-keycaret {
+  transform: rotate(90deg);
+}
+
+.chat-elevation-keystate {
+  color: var(--text-2);
+  font-size: var(--font-size-meta);
+}
+
+/* The small copy button, as on a chat reply: the copy mark gives way to a check drawn in one
+   stroke. Hidden until the fingerprint is open. */
+.chat-elevation-keyaction {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  margin: -2px 0;
+  padding: 0;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--q-c-dark-3);
+  cursor: default;
+  opacity: 0;
+  visibility: hidden;
+  transform: scale(0.8);
+  transition:
+    opacity var(--motion-fast) var(--motion-ease),
+    transform var(--motion-normal) var(--motion-ease),
+    visibility 0s linear var(--motion-fast),
+    background-color var(--motion-fast) var(--motion-ease),
+    color var(--motion-fast) var(--motion-ease);
+}
+
+/* It comes in once the groups have unrolled. */
+.chat-elevation-keyrow.is-open .chat-elevation-keyaction {
+  opacity: 0.72;
+  visibility: visible;
+  transform: none;
+  transition:
+    opacity var(--motion-normal) var(--motion-ease) var(--motion-normal),
+    transform var(--motion-normal) var(--motion-ease) var(--motion-normal),
+    visibility 0s,
+    background-color var(--motion-fast) var(--motion-ease),
+    color var(--motion-fast) var(--motion-ease);
+}
+
+.chat-elevation-keyaction:hover,
+.chat-elevation-keyaction:focus-visible {
+  background: color-mix(in srgb, var(--q-c-dark) 6%, transparent);
+  color: var(--text-0);
+}
+
+.chat-elevation-keyrow.is-open .chat-elevation-keyaction:hover,
+.chat-elevation-keyrow.is-open .chat-elevation-keyaction:focus-visible {
+  opacity: 1;
+  transition-delay: 0s;
+}
+
+.chat-elevation-keyaction:focus-visible {
+  outline: 1px solid color-mix(in srgb, var(--q-c-accent) 55%, transparent);
+  outline-offset: 2px;
+}
+
+.chat-elevation-keyaction > .icon {
+  grid-area: 1 / 1;
+  width: 12px;
+  height: 12px;
+  transition:
+    opacity var(--motion-fast) var(--motion-ease),
+    transform var(--motion-normal) var(--motion-ease);
+}
+
+.chat-elevation-keycopied-icon {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0;
+}
+
+.chat-elevation-keycopied-icon path {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+}
+
+.chat-elevation-keyaction.is-copied {
+  color: var(--q-c-accent);
+}
+
+.chat-elevation-keyaction.is-copied .chat-elevation-keycopy-icon {
+  opacity: 0;
+  transform: scale(0.7);
+}
+
+.chat-elevation-keyaction.is-copied .chat-elevation-keycopied-icon {
+  opacity: 1;
+}
+
+.chat-elevation-keyaction.is-copied .chat-elevation-keycopied-icon path {
+  animation: chat-elevation-check-draw var(--motion-slow) var(--motion-ease) 60ms both;
+}
+
+@keyframes chat-elevation-check-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-elevation-keyaction.is-copied .chat-elevation-keycopied-icon path {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+}
+
+/* How to check the key, in a dialog: the whole fingerprint as a 4 x 2 grid of groups, large
+   enough to read against a log line, then the steps. */
+.chat-elevation-verify {
+  display: grid;
+  gap: 16px;
+  padding-top: 14px;
+  font-size: var(--font-size-ui);
+}
+
+/* One size throughout; mono only for what is compared or typed: the fingerprint and the command. */
+.chat-elevation-verify-print {
+  display: grid;
+  grid-template-columns: repeat(4, max-content);
+  justify-content: center;
+  column-gap: 2ch;
+  row-gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 2px;
+  color: var(--text-0);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.chat-elevation-verify-steps {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 2.4ch;
+  color: var(--text-1);
+  line-height: 1.5;
+}
+
+.chat-elevation-verify-steps code {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-0);
+  font-family: var(--font-mono);
+  font-size: inherit;
+  overflow-wrap: anywhere;
+}
+
+.chat-elevation-verify-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* Narrow screens: the open fingerprint may wrap after any group. */
+@media (max-width: 520px) {
+  .chat-elevation-keyrow.is-open .chat-elevation-keyprint {
+    flex-wrap: wrap;
+    white-space: normal;
+  }
+
+  .chat-elevation-keyrow.is-open .chat-elevation-keyrest-inner {
+    white-space: normal;
+  }
+}
+
+.chat-elevation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.chat-elevation-outcome {
+  color: var(--text-1);
+}
+
+.chat-elevation.is-allowed .chat-elevation-outcome {
+  color: var(--text-0);
+  font-weight: 600;
+}
+
+/* Narrow screens: the buttons go under the field. */
+@media (max-width: 520px) {
+  .chat-elevation .chat-question-reply {
+    flex-wrap: wrap;
+  }
+
+  .chat-elevation .chat-elevation-input {
+    flex-basis: 100%;
+  }
+}

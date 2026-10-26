@@ -27,8 +27,10 @@ func runRemoteChat(cmd *cobra.Command, c *remoteClient, id, version string) erro
 	if err := c.connect(ctx); err != nil {
 		return fmt.Errorf("connect to Console: %w", err)
 	}
+	checkRuntimeIdentity(ctx, c, knownRuntimesPath(), cmd.InOrStdin(), cmd.ErrOrStderr())
 	m := newSharedChatModel(ctx, c)
 	m.version = version
+	m.knownRuntimesPath = knownRuntimesPath()
 	m.applySharedSettings(m.loadSharedSettings()().(sharedSettings))
 	defer m.closeStreams()
 	if home, err := os.UserHomeDir(); err == nil {
@@ -115,12 +117,19 @@ type sharedChat struct {
 	metadataLoading                               bool
 	approvalLoading                               bool
 	resolvedApprovals                             map[string]bool
+	// runtimeKey names this runtime in known_runtimes; knownRuntimes is that file, read once.
+	runtimeKey        string
+	knownRuntimesPath string
+	knownRuntimes     map[string]string
 }
 
 func newSharedChatModel(ctx context.Context, c *remoteClient) *chatModel {
 	m := newChatModel(nil)
 	m.textarea.CharLimit = 0
 	m.sharedChat = &sharedChat{ctx: ctx, client: c, drafts: map[string]*remoteDraft{"": {}}, operations: map[uint64]bool{}, delay: 3 * time.Second}
+	if c != nil {
+		m.runtimeKey = c.base
+	}
 	m.commandRegistry = chatcommands.NewRegistry()
 	for _, command := range runtimecommands.Suggestions() {
 		if !strings.Contains(command.Value, " ") {
@@ -408,7 +417,7 @@ func (m *chatModel) submit(text string) tea.Cmd {
 	if m.id == "" {
 		workspace = d.workspace
 	}
-	return m.write("submit", "POST", "/tasks", daemonruntime.SubmitTaskRequest{Task: text, TopicID: m.id, WorkspaceDir: workspace})
+	return m.write("submit", "POST", "/tasks", daemonruntime.SubmitTaskRequest{Task: text, TopicID: m.id, WorkspaceDir: workspace, Trigger: chatTaskTrigger()})
 }
 
 func isSharedTaskCommand(name string) bool {

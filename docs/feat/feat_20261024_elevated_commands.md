@@ -30,8 +30,9 @@ shell tool (`bash` on Linux and macOS, `powershell` on Windows). It never writes
 
 Every elevated command needs its own approval. One approval never covers a later command.
 
-The password goes from the dialog to the system's elevation program and nowhere else: mistermorph's
-agent process, the model, the tool output and the logs never see it.
+The password goes from the dialog to the system's elevation program and nowhere else. On Linux and
+macOS mistermorph's agent process holds it in memory only to hand it to sudo (section 3.1); the
+model, the tool output and the logs never see it.
 
 ## 3) Mechanisms
 
@@ -44,18 +45,21 @@ agent process, the model, the tool output and the logs never see it.
 ### 3.1 Linux and macOS: sudo with an askpass helper
 
 `sudo -A` runs the program named by `SUDO_ASKPASS` to read the password: the program prints it on
-stdout. mistermorph is its own askpass program. The tool sets:
+stdout. mistermorph is its own askpass program. Before starting sudo, the tool opens an approval
+session for the command (`elevate.Begin`): a Unix socket in a new `0700` temporary directory and a
+one-time token. It sets:
 
 - `SUDO_ASKPASS` to the running mistermorph binary (`os.Executable()`);
 - `MISTERMORPH_ASKPASS=1`, which makes that binary start in askpass mode instead of the CLI;
-- `MISTERMORPH_ELEVATE_COMMAND`, the command shown in the dialog;
-- `MISTERMORPH_ELEVATE_DIALOG`, a dialog program chosen in config, when there is one;
-- the desktop session's display variables (`DISPLAY`, `WAYLAND_DISPLAY`, `XAUTHORITY`,
-  `DBUS_SESSION_BUS_ADDRESS`, `XDG_SESSION_TYPE`, `XDG_CURRENT_DESKTOP`), so the dialog can show.
-  These are passed only to elevated runs; ordinary commands keep their short environment.
+- `MISTERMORPH_ELEVATE_SOCKET` and `MISTERMORPH_ELEVATE_TOKEN`, the session's address and token;
+- `MISTERMORPH_ELEVATE_COMMAND`, the command, and `MISTERMORPH_ELEVATE_DEADLINE`.
 
-In askpass mode the binary shows the dialog, prints what the user typed, and exits 0; it exits 1
-when the user cancels. sudo reads the password from the pipe and checks it as usual.
+In askpass mode the binary connects to the session and waits. The session asks the user, in the
+dialog below (shown by the agent process, which has the desktop session's display variables), or
+through the run's own approver (`feat_20261026_elevation_client_approval.md`). The helper prints the
+password and exits 0, or exits 1 when the user cancels or nobody answers. sudo reads the password
+from the pipe and checks it as usual; after a wrong one it starts the helper again, and the user is
+asked again.
 
 The executable has to know it may be started that way: `elevate.HandleAskpass` at the start of
 `main` runs the helper when `MISTERMORPH_ASKPASS=1` and otherwise marks the executable as able to
@@ -86,9 +90,11 @@ sets `SUDO_ASKPASS` to that program instead of the mistermorph binary:
 - `Check` needs only `sudo` and the program, looked up on `PATH` when it is a bare name and passed
   to sudo as an absolute path. It does not need `HandleAskpass`, a desktop session or one of the
   dialogs: the program shows its own dialog and knows where it can.
-- The program still gets `MISTERMORPH_ELEVATE_COMMAND`, `MISTERMORPH_ELEVATE_DEADLINE` and the
-  display variables. `MISTERMORPH_ASKPASS` and `MISTERMORPH_ELEVATE_DIALOG` mean something only to
-  the built-in helper and are left out.
+- The program gets `MISTERMORPH_ELEVATE_COMMAND`, `MISTERMORPH_ELEVATE_DEADLINE` and the desktop
+  session's display variables (`DISPLAY`, `WAYLAND_DISPLAY`, `XAUTHORITY`,
+  `DBUS_SESSION_BUS_ADDRESS`, `XDG_SESSION_TYPE`, `XDG_CURRENT_DESKTOP`), to show its own dialog.
+  `MISTERMORPH_ASKPASS` and the session variables mean something only to the built-in helper and
+  are left out.
 - It tells a declined or unanswered approval from a failure the way the built-in helper does: it
   writes `DeclinedMarker` or `TimedOutMarker` to stderr. These two lines and the two variables are a
   stable contract, exported as `integration.ElevateCommandEnv`, `ElevateDeadlineEnv`,
@@ -186,6 +192,8 @@ tool, the command, the exit code and whether the user declined. The password is 
 
 - Approval happens at the agent's machine only. From a Console opened on another computer, or a
   chat channel, nobody can answer the dialog; it times out and the command does not run.
+  `feat_20261026_elevation_client_approval.md` moves the approval to the Console or chat that
+  started the task.
 - A user without administrator rights cannot approve anything; sudo or UAC refuses.
 - A sudoers rule with `NOPASSWD` skips the password, and then the dialog does not appear: that is
   the administrator's choice.
@@ -197,8 +205,8 @@ tool, the command, the exit code and whether the user declined. The password is 
 
 ## 10) Code and tests
 
-- `internal/elevate`: the availability check, the sudo command line and environment, the askpass
-  helper and its dialogs (pinentry over Assuan, zenity, kdialog, osascript), and the Windows
+- `internal/elevate`: the availability check, the sudo command line and environment, the approval
+  session and the askpass helper that reaches it, the dialogs (pinentry over Assuan, zenity, kdialog, osascript), and the Windows
   `RunAsScript`. `cmd/mistermorph/main.go` starts the helper when `MISTERMORPH_ASKPASS=1`.
 - `tools/builtin`: `elevated` on `bash` (Linux, macOS) and `powershell` (Windows), `runElevated`
   (logging, declined and timed-out approvals), and the sudo hint.

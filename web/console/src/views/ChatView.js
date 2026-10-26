@@ -41,6 +41,7 @@ import {
   keepLiveTaskState,
   mergeRefreshedHistoryItems,
   normalizeActivity,
+  normalizeElevations,
   normalizeHistoryFileReferences,
   normalizeInsights,
   normalizePlan,
@@ -51,6 +52,7 @@ import {
   taskActivity,
   taskAgentText,
   taskDurationLabel,
+  taskElevations,
   taskInsights,
   taskListHistoryItems,
   taskPlan,
@@ -58,6 +60,7 @@ import {
   taskRawJSON,
   taskReasoning,
 } from "../core/chat-task-history";
+import { isDesktopRuntime } from "../core/desktop-runtime";
 import { endpointChannelLabel } from "../core/endpoints";
 import { endpointRoutePath } from "../core/endpoint-routes";
 import { modelVendorMeta } from "../core/model-vendor";
@@ -3261,6 +3264,9 @@ const ChatView = {
         if (Array.isArray(frame.questions) && frame.questions.length > 0) {
           patch.questions = normalizeQuestions(frame.questions);
         }
+        if (Array.isArray(frame.elevations) && frame.elevations.length > 0) {
+          patch.elevations = normalizeElevations(frame.elevations);
+        }
         if (frame.activity && typeof frame.activity === "object") {
           patch.activity = nextActivity;
         }
@@ -3375,6 +3381,7 @@ const ChatView = {
         plan: normalizePlan(partial?.plan),
         insights: normalizeInsights(partial?.insights),
         questions: normalizeQuestions(partial?.questions),
+        elevations: normalizeElevations(partial?.elevations),
         activity: normalizeActivity(partial?.activity),
         reasoning: normalizeReasoning(partial?.reasoning),
         approval: partial?.approval || null,
@@ -3595,6 +3602,7 @@ const ChatView = {
         const plan = taskPlan(detail) || normalizePlan(existingItem?.plan);
         const insights = taskInsights(detail) || normalizeInsights(existingItem?.insights);
         const questions = taskQuestions(detail) || normalizeQuestions(existingItem?.questions);
+        const elevations = taskElevations(detail) || normalizeElevations(existingItem?.elevations);
         const activity = taskActivity(detail) || normalizeActivity(existingItem?.activity);
         const pendingSeed = historyPendingSeed(existingItem, taskID);
         const preservePendingText =
@@ -3609,6 +3617,7 @@ const ChatView = {
           plan,
           insights,
           questions,
+          elevations,
           activity,
           reasoning: taskReasoning(detail) || normalizeReasoning(existingItem?.reasoning),
           approval: nextApproval,
@@ -4257,6 +4266,35 @@ const ChatView = {
           { method: "POST", body }
         );
         done(result?.answered === true);
+      } catch (e) {
+        done(false, e?.message || t("msg_load_failed"));
+      }
+    }
+
+    // Answers an elevated command's request for the sudo password: a decline, or the password the
+    // card sealed for the runtime. answer.done reports back whether the request was still open;
+    // the task's stream then shows how it ended.
+    async function answerHistoryElevation(item, answer) {
+      const taskID = String(item?.taskId || "").trim();
+      const elevationID = String(answer?.elevationID || "").trim();
+      const done = typeof answer?.done === "function" ? answer.done : () => {};
+      if (!taskID || !elevationID || (answer.decline !== true && !answer.answer)) {
+        done(false);
+        return;
+      }
+      const body = { elevation_id: elevationID, client: isDesktopRuntime() ? "desktop" : "web" };
+      if (answer.decline === true) {
+        body.decline = true;
+      } else {
+        body.answer = answer.answer;
+      }
+      try {
+        const result = await runtimeApiFetchForEndpoint(
+          item?.endpointRef || submitEndpointRef.value,
+          `/tasks/${encodeURIComponent(taskID)}/elevation`,
+          { method: "POST", body }
+        );
+        done(result?.accepted === true);
       } catch (e) {
         done(false, e?.message || t("msg_load_failed"));
       }
@@ -4956,6 +4994,7 @@ const ChatView = {
       copyHistoryItem,
       toggleChatStatus,
       clickHistoryTime,
+      answerHistoryElevation,
       answerHistoryQuestion,
       approveHistoryApproval,
       denyHistoryApproval,
@@ -5233,6 +5272,7 @@ const ChatView = {
                   @approval-approve="approveHistoryApproval"
                   @approval-deny="denyHistoryApproval"
                   @question-answer="answerHistoryQuestion"
+                  @elevation-answer="answerHistoryElevation"
                 />
               </div>
             </template>

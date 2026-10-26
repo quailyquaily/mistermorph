@@ -8,6 +8,7 @@ import {
   normalizeTaskStatus,
   normalizeActivity,
   normalizePlan,
+  normalizeElevations,
   normalizeQuestions,
   keepLiveTaskState,
   taskAgentText,
@@ -283,6 +284,54 @@ test("questions from the task result or a stream frame keep their choices and an
   const live = { id: "t2:agent", role: "agent", taskId: "t2", status: "running", questions: [{ id: "q3", text: "Now?", status: "open" }] };
   const [kept] = keepLiveTaskState([live], [{ ...live, questions: null }]);
   assert.equal(kept.questions[0].id, "q3");
+});
+
+test("elevations from the task result or a stream frame keep their exact command and offer", () => {
+  assert.equal(normalizeElevations(undefined), null);
+  assert.equal(normalizeElevations([{ id: "", command: "ls" }, { id: "e", command: " " }]), null);
+  const offer = { v: 1, server_pub: "c3B1Yg", identity: "aWQ", signature: "c2ln" };
+  const elevations = normalizeElevations([
+    {
+      id: "el_1",
+      command: " apt-get install -y jq ",
+      cwd: "/srv/app",
+      host: "box",
+      deadline: 1800000120,
+      attempt: 2,
+      status: "open",
+      web_insecure: "deny",
+      offer,
+    },
+    { id: "el_2", command: "reboot", deadline: 1800000200, status: "allowed", offer },
+    { id: "el_3", command: "ls", status: "weird" },
+  ]);
+  assert.deepEqual(elevations, [
+    {
+      id: "el_1",
+      // The offer's signature covers the command and directory byte for byte, so neither is trimmed.
+      command: " apt-get install -y jq ",
+      cwd: "/srv/app",
+      host: "box",
+      deadline: 1800000120,
+      attempt: 2,
+      status: "open",
+      webInsecure: "deny",
+      offer,
+    },
+    // Only an open request carries an offer.
+    { id: "el_2", command: "reboot", cwd: "", host: "", deadline: 1800000200, attempt: 0, status: "allowed", webInsecure: "warn", offer: null },
+    { id: "el_3", command: "ls", cwd: "", host: "", deadline: 0, attempt: 0, status: "expired", webInsecure: "warn", offer: null },
+  ]);
+
+  const item = taskListHistoryItems(
+    [{ id: "t1", status: "done", task: "install jq", result: { final: { output: "done" }, elevations: [{ id: "el_1", command: "apt-get install -y jq", status: "declined" }] } }],
+    (key) => key
+  ).find((entry) => entry.role === "agent");
+  assert.equal(item.elevations[0].status, "declined");
+
+  const live = { id: "t2:agent", role: "agent", taskId: "t2", status: "running", elevations: [{ id: "el_4", command: "ls", status: "open" }] };
+  const [kept] = keepLiveTaskState([live], [{ ...live, elevations: null }]);
+  assert.equal(kept.elevations[0].id, "el_4");
 });
 
 test("keepHistoryItemIDs keeps the ids of messages sent from the page when their task loads", () => {

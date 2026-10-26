@@ -1,12 +1,15 @@
 package integration
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/quailyquaily/mistermorph/internal/elevate"
 )
@@ -25,23 +28,27 @@ func TestRunAskpassIfRequested(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("the askpass helper serves sudo on Linux and macOS")
 	}
-	dialog := filepath.Join(t.TempDir(), "zenity")
-	if err := os.WriteFile(dialog, []byte("#!/bin/sh\nprintf 'hunter2\\n'\n"), 0o755); err != nil {
+	approver := elevate.ApproverFunc(func(context.Context, elevate.Request) (string, error) { return "hunter2", nil })
+	deadline := time.Now().Add(time.Minute)
+	session, err := elevate.Begin(elevate.WithApprover(context.Background(), approver), elevate.Config{}, "apt-get install -y jq", "/", deadline)
+	if err != nil {
 		t.Fatal(err)
 	}
+	defer session.End()
 	cmd := exec.Command(os.Args[0], "-test.run=^TestRunAskpassIfRequestedHelperProcess$")
 	cmd.Env = append(os.Environ(),
 		"INTEGRATION_ASKPASS_HELPER=1",
 		elevate.EnvAskpass+"=1",
 		elevate.EnvCommand+"=apt-get install -y jq",
-		elevate.EnvDialog+"="+dialog,
+		elevate.EnvDeadline+"="+strconv.FormatInt(deadline.Unix(), 10),
 	)
+	cmd.Env = append(cmd.Env, session.Env()...)
 	out, err := cmd.Output()
 	if err != nil {
 		t.Fatalf("helper process: %v", err)
 	}
 	if got := strings.TrimSpace(string(out)); got != "hunter2" {
-		t.Fatalf("helper printed %q, want the password the dialog returned", got)
+		t.Fatalf("helper printed %q, want the password the approver returned", got)
 	}
 
 	// Not started by sudo: it returns, and elevated commands may use this executable from now on.

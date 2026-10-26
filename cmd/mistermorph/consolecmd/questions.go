@@ -10,9 +10,13 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/runtimecontrol"
 )
 
-// consoleChatTriggerRef marks a task sent from the Console chat, the one place in Console where a
-// person watches the task and can answer its questions.
-const consoleChatTriggerRef = "web/console/chat"
+// consoleChatTriggerRef marks a task sent from the Console chat, and consoleCLIChatTriggerRef one
+// sent from chat attached to this runtime (--runtime-url): the places where a person watches the
+// task and can answer its questions and approval cards.
+const (
+	consoleChatTriggerRef    = "web/console/chat"
+	consoleCLIChatTriggerRef = "cli/chat"
+)
 
 const (
 	consoleQuestionOpen     = "open"
@@ -47,9 +51,17 @@ func cloneConsoleQuestions(in []consoleQuestion) []consoleQuestion {
 	return out
 }
 
-// consoleAsksUser reports whether a task may use ask_user: one sent from the Console chat.
+// consoleAsksUser reports whether a task may ask its person: questions (ask_user) and approval
+// cards for elevated commands. That is one sent from the Console chat or from chat.
 func consoleAsksUser(trigger daemonruntime.TaskTrigger) bool {
-	return strings.TrimSpace(trigger.Source) == "ui" && strings.TrimSpace(trigger.Ref) == consoleChatTriggerRef
+	if strings.TrimSpace(trigger.Source) != "ui" {
+		return false
+	}
+	switch strings.TrimSpace(trigger.Ref) {
+	case consoleChatTriggerRef, consoleCLIChatTriggerRef:
+		return true
+	}
+	return false
 }
 
 // consoleTaskQuestions keeps a task's questions and publishes each change to the chat.

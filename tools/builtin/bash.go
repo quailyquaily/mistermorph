@@ -129,33 +129,43 @@ func (t *BashTool) Execute(ctx context.Context, params map[string]any) (string, 
 }
 
 // elevatedParamDescription tells the model when and how to ask for administrator rights.
-const elevatedParamDescription = "Optional. Run the command as root (administrator). The user approves each such command in a " +
-	"system dialog on this machine, showing the command, before it runs. Use it only for a command that needs " +
+const elevatedParamDescription = "Optional. Run the command as root (administrator). The user approves each such command, which is " +
+	"shown to them, with their password before it runs. Use it only for a command that needs " +
 	"administrator rights (installing system packages, editing system files, managing system services); do not " +
 	"prefix the command with sudo, and keep it to the part that needs the rights. If the user declines, do not " +
 	"run it again unless they ask."
 
 // sudoElevationHint follows the output of a command whose sudo could not ask for a password.
 const sudoElevationHint = "note: commands here have no terminal, so sudo cannot ask for a password. Run the command " +
-	"again without sudo and with elevated: true; the user approves it in a system dialog."
+	"again without sudo and with elevated: true; the user approves it with their password."
 
 // elevationOffered reports whether bash offers elevated commands here: on Linux and macOS, when
-// tools.bash.elevation allows it and a dialog can be shown.
+// tools.bash.elevation allows it and someone can be asked, in a dialog or a client.
 func (t *BashTool) elevationOffered() bool {
-	return runtime.GOOS != "windows" && elevate.Check(t.Elevation) == nil
+	return runtime.GOOS != "windows" && elevate.Offered(t.Elevation)
 }
 
 // executeElevated runs a command as root under sudo, with this binary as sudo's askpass helper: the
-// user approves it in a system dialog, whose password goes to sudo only.
+// helper gets the password from the command's approval session, which asks the user (the run's
+// approver, else a system dialog), and hands it to sudo only.
 func (t *BashTool) executeElevated(ctx context.Context, inv shellInvocation) (string, error) {
 	if runtime.GOOS == "windows" {
 		return "", fmt.Errorf("bash cannot run elevated commands on Windows; use the powershell tool with elevated: true")
 	}
-	if err := elevate.Check(t.Elevation); err != nil {
+	if err := elevate.CheckContext(ctx, t.Elevation); err != nil {
 		return "", fmt.Errorf("cannot ask for administrator rights here: %v. Ask the user to run the command themselves: %s", err, inv.Command)
 	}
 	spec := t.runnerSpec()
-	env, err := elevate.SudoEnv(t.Elevation, spec.BuildEnv(t.InjectedEnvVars), inv.Command, time.Now())
+	deadline := time.Now().Add(t.Elevation.Approval())
+	var session *elevate.Session
+	if !t.Elevation.UsesAskpassProgram() {
+		var err error
+		if session, err = elevate.Begin(ctx, t.Elevation, inv.Command, inv.CWD, deadline); err != nil {
+			return "", err
+		}
+		defer session.End()
+	}
+	env, err := elevate.SudoEnv(t.Elevation, spec.BuildEnv(t.InjectedEnvVars), inv.Command, deadline, session)
 	if err != nil {
 		return "", err
 	}

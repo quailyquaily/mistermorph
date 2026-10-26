@@ -25,7 +25,12 @@ type remoteClient struct {
 	base, token, defaultLookup string
 	http                       *http.Client
 }
-type remoteHTTPError struct{ status int }
+type remoteHTTPError struct {
+	status int
+	// detail is the runtime's message for a refused request (HTTP 400), shown where the person
+	// can act on it.
+	detail string
+}
 
 func (e *remoteHTTPError) Error() string {
 	switch e.status {
@@ -81,7 +86,12 @@ func (c *remoteClient) request(ctx context.Context, method, path string, body, o
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return &remoteHTTPError{resp.StatusCode}
+		herr := &remoteHTTPError{status: resp.StatusCode}
+		if resp.StatusCode == http.StatusBadRequest {
+			body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+			herr.detail = remoteLine(string(body))
+		}
+		return herr
 	}
 	if out == nil || resp.StatusCode == 204 {
 		return nil

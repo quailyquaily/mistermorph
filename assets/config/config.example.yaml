@@ -461,6 +461,14 @@ tools:
       # "mistermorph: administrator approval timed out" to stderr, or the command reads as failed.
       # See docs/integration.md.
       askpass: ""
+      # Where the approval is asked. auto: in the Console chat or chat that started the task (the
+      # password is encrypted end to end), else in the desktop dialog. client: only there.
+      # dialog: only in the desktop dialog. See docs/feat/feat_20261026_elevation_client_approval.md.
+      approver: "auto"
+      # The web Console on plain HTTP (not HTTPS, not localhost): warn shows the approval card with
+      # a warning that the page could be tampered with on the way; deny refuses and points to HTTPS,
+      # an SSH tunnel or chat.
+      web_insecure: "warn"
   # Dangerous: enables local PowerShell execution (Windows).
   powershell:
     # Enable the powershell tool.

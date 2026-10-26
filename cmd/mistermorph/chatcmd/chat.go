@@ -7,6 +7,7 @@ import (
 
 	"github.com/quailyquaily/mistermorph/guard"
 	"github.com/quailyquaily/mistermorph/internal/configdefaults"
+	"github.com/quailyquaily/mistermorph/internal/elevate"
 	"github.com/quailyquaily/mistermorph/internal/mcphost"
 	"github.com/quailyquaily/mistermorph/tools"
 	"github.com/spf13/cobra"
@@ -25,6 +26,10 @@ func New(deps Dependencies) *cobra.Command {
 		Use:   "chat",
 		Short: "Chat locally with topics and history shared with Web Console",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if cmd.Flags().Changed("forget-runtime") {
+				raw, _ := cmd.Flags().GetString("forget-runtime")
+				return runForgetRuntime(cmd, raw, knownRuntimesPath())
+			}
 			client, err := chatRuntimeClient(cmd)
 			if err != nil {
 				return err
@@ -33,6 +38,9 @@ func New(deps Dependencies) *cobra.Command {
 				topic, _ := cmd.Flags().GetString("topic")
 				return runRemoteChat(cmd, client, strings.TrimSpace(topic), deps.Version)
 			}
+			// Local turns ask for elevated commands' passwords in the TUI (withLocalPrompts), so
+			// the shell tools offer them even without a desktop dialog.
+			elevate.OfferClientApprovals()
 			sess, err := buildChatSession(cmd, deps)
 			if err != nil {
 				return fmt.Errorf("build chat session: %w", err)
@@ -67,6 +75,7 @@ func New(deps Dependencies) *cobra.Command {
 	cmd.Flags().Bool("verbose", false, "Show info-level logs (default: only errors).")
 	cmd.Flags().String("workspace", "", "Attach a workspace directory for this chat session.")
 	cmd.Flags().Bool("no-workspace", false, "Start chat without a workspace attachment.")
+	cmd.Flags().String("forget-runtime", "", "Remove the identity pinned for a runtime URL (after its key changed), then exit.")
 
 	return cmd
 }
