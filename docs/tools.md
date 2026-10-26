@@ -200,7 +200,10 @@ approves the command, which is shown to them:
   opened only by the runtime, so it stays secret without HTTPS; the client pins the runtime's
   identity key. On plain HTTP the web card warns that the page itself could be tampered with
   (`tools.bash.elevation.web_insecure: deny` refuses instead). Local chat runs the agent in its
-  own process and asks directly. Chat keeps the identities it trusts in
+  own process and asks directly. `mistermorph console fingerprint` prints the key's fingerprint on
+  the runtime's machine; compare it the first time a client asks. Chat asks when it
+  connects to a runtime on another machine; the web card asks on its first request, and
+  Settings › System › Elevation key shows the fingerprint. Chat keeps the identities it trusts in
   `file_state_dir/known_runtimes`; when a runtime's key changes it refuses, until
   `mistermorph chat --forget-runtime <url>`.
 - **Otherwise, in a system dialog on the agent's machine:**

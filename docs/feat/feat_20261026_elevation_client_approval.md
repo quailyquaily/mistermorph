@@ -128,10 +128,13 @@ Each request uses fresh keys, so the runtime's ephemeral secret key exists only 
 open.
 
 **Runtime identity.** Each runtime creates one long-term Ed25519 key, the *identity key*. It is
-kept in `file_state_dir/elevation_identity` (`0600`) and created on first use. Its fingerprint is
-the first 16 bytes of `SHA-256(public key)`, as 8 groups of 4 hex digits. The runtime logs it
-(`elevation_identity fingerprint=…`) when it first loads the key, and `GET /elevation/identity`
-returns it.
+kept in `file_state_dir/elevation_identity` (`0600`) and created the first time the Console
+starts. Its fingerprint is the first 16 bytes of `SHA-256(public key)`, as 8 groups of 4 hex
+digits. The Console loads the key when it starts and logs the fingerprint then
+(`elevation_identity fingerprint=…`), so it is in the log before any client asks the user to compare
+it. `mistermorph console fingerprint` prints it on the runtime's machine: it reads the key and never
+makes one. This is what clients tell the user to compare against. `GET /elevation/identity` returns
+the key; clients compute the fingerprint themselves.
 
 **Request (runtime → client), in the stream frame:**
 
@@ -186,14 +189,24 @@ the client must know the runtime's real identity key, or the attacker could subs
 
 - **chat**: stores the identity per Console address in `known_runtimes` (like SSH's
   `known_hosts`), in its state directory.
-  - First connection: chat shows the fingerprint and asks the user to confirm it against what
-    `mistermorph console` printed. Local chat over loopback pins it without asking.
-  - Changed key: chat refuses to send a password and says so, until the user removes the old entry
-    (`mistermorph chat --forget-runtime <address>`).
+  - First connection: when chat connects, before the chat opens, it fetches
+    `GET /elevation/identity`, shows the fingerprint and asks the user to confirm it (`[y/N]`)
+    against what `mistermorph console fingerprint` prints on the runtime's machine. A runtime on
+    loopback is pinned without asking. If the user says no, nothing is pinned and the first
+    approval card asks again; chat itself still works. A runtime without the endpoint is checked on
+    its first card.
+  - Changed key: chat warns when it connects, and refuses to send a password until the user removes
+    the old entry (`mistermorph chat --forget-runtime <address>`).
 - **Desktop app** (`desktop/wails`): pins like chat. Its pages are loaded from the app, not the
   network.
-- **Web Console**: pins the identity in browser storage per origin and refuses on a change. It
-  cannot defend against an attacker who changes the traffic, though: on plain HTTP that attacker can
+- **Web Console**: pins the identity in browser storage per endpoint and refuses on a change.
+  - First request: the card shows the fingerprint and asks the user to confirm it before the
+    password field appears. The Console's own runtime, opened from the desktop app or from a page
+    on a loopback address, is pinned without asking.
+  - **Settings › System › Elevation key** shows the fingerprint of the runtime chat tasks go to and
+    whether this browser trusts it, with **Trust** and **Forget**.
+
+  It cannot defend against an attacker who changes the traffic, though: on plain HTTP that attacker can
   rewrite the page's own JavaScript. The card states this:
   - **HTTPS or localhost:** no note.
   - **Plain HTTP:** "Not on HTTPS: the password is encrypted against eavesdropping, but this page
@@ -297,11 +310,12 @@ tools:
   Tests seal real answers against the cards: allowed, declined, unreadable, refused by `deny`,
   expired, another task's answer, and the identity kept across restarts.
 - `web/console`: `core/elevation-seal.js` (tested against the Go vectors), `core/elevation-pins.js`
-  (pins per runtime endpoint), `components/ChatElevationCard.js`, and the Settings fields.
+  (pins per runtime endpoint, and when the first key needs confirming), `components/ChatElevationCard.js`,
+  `components/SettingsElevationKey.js` (the fingerprint in Settings), and the Settings fields.
 - `cmd/mistermorph/chatcmd`: `prompt.go` (the card, shared by questions and approvals),
   `prompt_local.go` (the local approver and `ask_user`), `prompt_remote.go` and
   `known_runtimes.go` (frames, sealing, pinning in `file_state_dir/known_runtimes`,
-  `--forget-runtime`). Tests drive the TUI, and an httptest runtime with a real identity checks the
+  `--forget-runtime`), and `runtime_identity.go` (the fingerprint check when chat connects). Tests drive the TUI, and an httptest runtime with a real identity checks the
   sealed password arrives and the pinning rules.
 
 Chat attached with `--runtime-url` already requires HTTPS for a runtime on another machine, so the
