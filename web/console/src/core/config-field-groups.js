@@ -94,7 +94,8 @@ export const LLM_CONTEXT_CONFIG_GROUPS = [{
 }];
 
 // A shell tool's administrator-rights settings (tools.<tool>.elevation): bash elevates through sudo
-// on Linux and macOS and names its dialog; powershell elevates through UAC on Windows.
+// on Linux and macOS, asks in the chat that started the task or in a dialog, and names its dialog;
+// powershell elevates through UAC on Windows.
 function elevationGroup(tool, note, options = {}) {
   const key = `tools.${tool}.elevation`;
   const fields = [
@@ -108,6 +109,24 @@ function elevationGroup(tool, note, options = {}) {
       dependsOn: `${key}.enabled`,
     },
   ];
+  if (options.client) {
+    fields.push({
+      path: `${key}.approver`,
+      label: "Approve in",
+      type: "select",
+      options: ["auto", "client", "dialog"],
+      dependsOn: `${key}.enabled`,
+      note: "auto: the chat that started the task, else a system dialog. client: the chat only. dialog: a system dialog only.",
+    });
+    fields.push({
+      path: `${key}.web_insecure`,
+      label: "Console on plain HTTP",
+      type: "select",
+      options: ["warn", "deny"],
+      dependsOn: `${key}.enabled`,
+      note: "warn: take the password with a warning that the page could be tampered with. deny: point to HTTPS, an SSH tunnel or chat.",
+    });
+  }
   if (options.dialog) {
     fields.push({
       path: `${key}.dialog`,
@@ -198,7 +217,7 @@ export const TOOL_ADVANCED_CONFIG_GROUPS = {
       { path: "tools.bash.rewrite.enabled", label: "Bash command rewrite", type: "bool" },
       { path: "tools.bash.rewrite.binary", label: "Rewrite binary", type: "string", placeholder: "rtk", dependsOn: "tools.bash.rewrite.enabled" },
     ],
-  }, elevationGroup("bash", "Linux and macOS: a command the agent marks elevated runs as root after you approve it in a system dialog on this machine.", { dialog: true })],
+  }, elevationGroup("bash", "Linux and macOS: a command the agent marks elevated runs as root after you enter your password, in the chat that started the task or else in a system dialog on this machine.", { client: true, dialog: true })],
   powershell: [{
     id: "powershell",
     title: "powershell",

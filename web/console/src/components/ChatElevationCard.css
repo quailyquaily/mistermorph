@@ -1,0 +1,115 @@
+/* An elevated command asking for the sudo password. It is built on the question card's grid and
+   labels (ChatQuestionCard.css): mono labels on the left, values at one indent. The command is
+   mono and wraps whole, since it is what the person approves; notes under the field are small. */
+.chat-elevation-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.chat-elevation-countdown {
+  flex: 0 0 auto;
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-meta);
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+}
+
+.chat-elevation-command {
+  color: var(--text-0);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-meta);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.chat-elevation-path {
+  color: var(--text-1);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-meta);
+}
+
+.chat-elevation-note {
+  grid-column: 2;
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--font-size-meta);
+  line-height: 1.45;
+  white-space: normal;
+}
+
+.chat-elevation-note.is-alert {
+  color: var(--danger);
+}
+
+.chat-question-reply > .chat-elevation-note {
+  flex: 1 1 auto;
+}
+
+.chat-elevation-fingerprint,
+.chat-elevation-fingerprints dd {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.chat-elevation-first .chat-elevation-fingerprint {
+  color: var(--text-1);
+}
+
+.chat-elevation-key {
+  display: grid;
+  gap: 6px;
+  margin-top: 4px;
+  white-space: normal;
+}
+
+.chat-elevation-fingerprints {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  column-gap: 10px;
+  row-gap: 2px;
+  margin: 0;
+  font-size: var(--font-size-meta);
+}
+
+.chat-elevation-fingerprints dt {
+  color: var(--text-2);
+}
+
+.chat-elevation-fingerprints dd {
+  margin: 0;
+  color: var(--text-0);
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.chat-elevation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.chat-elevation-outcome {
+  color: var(--text-1);
+}
+
+.chat-elevation.is-allowed .chat-elevation-outcome {
+  color: var(--text-0);
+  font-weight: 600;
+}
+
+/* Narrow screens: the buttons go under the field. */
+@media (max-width: 520px) {
+  .chat-elevation .chat-question-reply {
+    flex-wrap: wrap;
+  }
+
+  .chat-elevation .chat-elevation-input {
+    flex-basis: 100%;
+  }
+}

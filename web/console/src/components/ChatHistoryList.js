@@ -21,6 +21,7 @@ const ChatHistoryList = {
     "approval-approve",
     "approval-deny",
     "copy",
+    "elevation-answer",
     "preview-file",
     "question-answer",
     "rendered",
@@ -173,6 +174,10 @@ const ChatHistoryList = {
       emit("question-answer", item, answer);
     }
 
+    function emitElevationAnswer(item, answer) {
+      emit("elevation-answer", item, answer);
+    }
+
     onBeforeUpdate(() => {
       if (RECORD_COMPONENT_PERF) {
         updateStartedAt = performance.now();
@@ -196,6 +201,7 @@ const ChatHistoryList = {
       emitApprovalApprove,
       emitApprovalDeny,
       emitCopy,
+      emitElevationAnswer,
       emitPreviewFile,
       emitQuestionAnswer,
       skeletonTurns,
@@ -242,6 +248,7 @@ const ChatHistoryList = {
       @approval-approve="emitApprovalApprove"
       @approval-deny="emitApprovalDeny"
       @question-answer="emitQuestionAnswer"
+      @elevation-answer="emitElevationAnswer"
     />
     </template>
     <p v-if="items.length === 0 && !loading" class="muted">{{ emptyText }}</p>

@@ -263,6 +263,49 @@ function taskQuestions(task) {
   return normalizeQuestions(task?.result?.questions);
 }
 
+const ELEVATION_STATUSES = ["open", "allowed", "declined", "expired", "rejected"];
+
+// The elevated commands that asked for the sudo password here, in order; null when there are none.
+// An open one carries the runtime's signed offer, which its answer is sealed for.
+function normalizeElevations(raw) {
+  const elevations = (Array.isArray(raw) ? raw : [])
+    .map((elevation) => {
+      const id = String(elevation?.id || "").trim();
+      const command = String(elevation?.command || "");
+      if (!id || !command.trim()) {
+        return null;
+      }
+      const status = ELEVATION_STATUSES.includes(elevation?.status) ? elevation.status : "expired";
+      const offer = elevation?.offer;
+      // The command and directory stay as sent: the offer's signature covers their exact bytes.
+      return {
+        id,
+        command,
+        cwd: String(elevation?.cwd || ""),
+        host: String(elevation?.host || "").trim(),
+        deadline: Number.isFinite(Number(elevation?.deadline)) ? Math.trunc(Number(elevation.deadline)) : 0,
+        attempt: Number.isInteger(elevation?.attempt) ? elevation.attempt : 0,
+        status,
+        webInsecure: elevation?.web_insecure === "deny" ? "deny" : "warn",
+        offer:
+          status === "open" && offer && typeof offer === "object"
+            ? {
+                v: offer.v,
+                server_pub: String(offer.server_pub || ""),
+                identity: String(offer.identity || ""),
+                signature: String(offer.signature || ""),
+              }
+            : null,
+      };
+    })
+    .filter(Boolean);
+  return elevations.length > 0 ? elevations : null;
+}
+
+function taskElevations(task) {
+  return normalizeElevations(task?.result?.elevations);
+}
+
 function normalizeActivityKind(raw) {
   const value = String(raw || "").trim().toLowerCase();
   return value === "tool" || value === "subtask" || value === "retry" ? value : "";
@@ -495,6 +538,7 @@ function taskHistoryItems(task, t, options = {}) {
       plan: taskPlan(task),
       insights: taskInsights(task),
       questions: taskQuestions(task),
+      elevations: taskElevations(task),
       activity: taskActivity(task),
       reasoning: taskReasoning(task),
       approval: taskApprovalState(task),
@@ -558,9 +602,9 @@ function taskListHistoryItems(tasks, t, options = {}) {
 // the ones on screen for the same tasks, and older items loaded beyond that page stay before them.
 // overlap is false when no task on screen is in the fresh page; the older items are then dropped,
 // since tasks may be missing between them and the page.
-// A running task's live state (the reply streamed so far, insights, questions, plan, activity,
-// reasoning) comes over its stream and is stored only when the task ends, so the task list does not
-// have it yet. A reload keeps what the page already shows for each running task, instead of
+// A running task's live state (the reply streamed so far, insights, questions, elevations, plan,
+// activity, reasoning) comes over its stream and is stored only when the task ends, so the task
+// list does not have it yet. A reload keeps what the page already shows for each running task, instead of
 // blanking it until the stream replays it.
 function keepLiveTaskState(currentItems, nextItems) {
   const live = new Map();
@@ -580,7 +624,7 @@ function keepLiveTaskState(currentItems, nextItems) {
       return item;
     }
     const out = { ...item };
-    for (const key of ["insights", "questions", "plan", "activity", "reasoning"]) {
+    for (const key of ["insights", "questions", "elevations", "plan", "activity", "reasoning"]) {
       if (!out[key] && current[key]) {
         out[key] = current[key];
       }
@@ -663,6 +707,7 @@ export {
   keepLiveTaskState,
   mergeRefreshedHistoryItems,
   normalizeActivity,
+  normalizeElevations,
   normalizeHistoryFileReferences,
   normalizeInsights,
   normalizePlan,
@@ -673,6 +718,7 @@ export {
   taskActivity,
   taskAgentText,
   taskDurationLabel,
+  taskElevations,
   taskInsights,
   taskListHistoryItems,
   taskPlan,

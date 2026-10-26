@@ -5,6 +5,7 @@ import { approvalParameterEntries, skillInstallApproval } from "../core/chat-app
 import { agentLinkMessages, insightMessages, planStepMessages, pollingActionWord } from "../core/chat-task-history";
 import { recordComponentUpdate } from "../core/performance";
 import ChatAgentLinkExchange from "./ChatAgentLinkExchange";
+import ChatElevationCard from "./ChatElevationCard";
 import ChatQuestionCard from "./ChatQuestionCard";
 import ChatRichContent from "./ChatRichContent";
 import ChatSkillInstallPreview from "./ChatSkillInstallPreview";
@@ -40,6 +41,7 @@ const RECORD_COMPONENT_PERF = import.meta.env.DEV === true;
 const ChatHistoryItem = {
   components: {
     ChatAgentLinkExchange,
+    ChatElevationCard,
     ChatQuestionCard,
     ChatRichContent,
     ChatSkillInstallPreview,
@@ -51,6 +53,7 @@ const ChatHistoryItem = {
     "approval-approve",
     "approval-deny",
     "copy",
+    "elevation-answer",
     "preview-file",
     "question-answer",
     "rendered",
@@ -143,7 +146,17 @@ const ChatHistoryItem = {
     const questions = computed(() =>
       role.value === "agent" && Array.isArray(props.item?.questions) ? props.item.questions : []
     );
-    const questionOpen = computed(() => questions.value.some((question) => question.status === "open"));
+    // The elevated commands that asked for the sudo password here, after its questions.
+    const elevations = computed(() =>
+      role.value === "agent" && Array.isArray(props.item?.elevations) ? props.item.elevations : []
+    );
+    // An open question or password request: the agent waits on the person.
+    const questionOpen = computed(
+      () =>
+        questions.value.some((question) => question.status === "open") ||
+        elevations.value.some((elevation) => elevation.status === "open")
+    );
+    const elevationEndpointRef = computed(() => String(props.item?.endpointRef || props.submitEndpointRef || "").trim());
     const reasoningVisible = computed(() => String(props.item?.reasoning || "").trim() !== "");
     const activityEntries = computed(() => {
       const activity = props.item?.activity;
@@ -218,7 +231,7 @@ const ChatHistoryItem = {
     );
     // A reply with nothing to show yet: its words assemble from mosaic pieces in place of the hint
     // ("Morph is thinking..."), which stays for screen readers.
-    // While a question waits on the person, the agent is not thinking.
+    // While a question or a password request waits on the person, the agent is not thinking.
     const awaitingWord = computed(() =>
       role.value === "agent" &&
       props.item?.awaiting === true &&
@@ -296,6 +309,10 @@ const ChatHistoryItem = {
       emit("question-answer", props.item, answer);
     }
 
+    function emitElevationAnswer(answer) {
+      emit("elevation-answer", props.item, answer);
+    }
+
     function emitApprovalApprove() {
       emit("approval-approve", props.item);
     }
@@ -344,12 +361,15 @@ const ChatHistoryItem = {
       emitApprovalApprove,
       emitApprovalDeny,
       emitCopy,
+      emitElevationAnswer,
       emitPreviewFile,
       emitQuestionAnswer,
       emitRendered,
       emitTimeClick,
       emitToggle,
       itemClass,
+      elevationEndpointRef,
+      elevations,
       questionOpen,
       questions,
       role,
@@ -477,6 +497,15 @@ const ChatHistoryItem = {
             :question="question"
             :live="streaming"
             @answer="emitQuestionAnswer"
+          />
+          <ChatElevationCard
+            v-for="elevation in elevations"
+            :key="elevation.id"
+            :elevation="elevation"
+            :task-id="item.taskId"
+            :endpoint-ref="elevationEndpointRef"
+            :live="streaming"
+            @answer="emitElevationAnswer"
           />
           <ChatAgentLinkExchange
             :messages="agentLinkExchange"
