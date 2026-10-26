@@ -331,7 +331,7 @@ func TestRemoteListFailureDoesNotBecomeEmpty(t *testing.T) {
 	m.listing = true
 	m.topics = []taskdomain.TopicInfo{{ID: "keep"}}
 	m.scope = "/repo"
-	m.Update(remoteListed{gen: m.gen, err: &remoteHTTPError{500}})
+	m.Update(remoteListed{gen: m.gen, err: &remoteHTTPError{status: 500}})
 	if len(m.topics) != 1 || !strings.Contains(m.notice, "500") {
 		t.Fatal("failure hidden as empty")
 	}
@@ -366,7 +366,7 @@ func TestRemotePollingSurvivesBusyHistoryAndFailure(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("busy history lost polling wakeup")
 	}
-	_, cmd = m.Update(remoteOlder{gen: m.gen, err: &remoteHTTPError{503}})
+	_, cmd = m.Update(remoteOlder{gen: m.gen, err: &remoteHTTPError{status: 503}})
 	if cmd == nil || m.loading {
 		t.Fatal("failed history page lost polling")
 	}
@@ -376,11 +376,11 @@ func TestRemoteExternalDeletionRetainsDraftAndNetworkIsNotDeletion(t *testing.T)
 	m := remoteTestModel(t, func(w http.ResponseWriter, r *http.Request) {})
 	m.id = "a"
 	m.textarea.SetValue("keep")
-	m.Update(remoteLoaded{gen: m.gen, id: "a", refresh: true, err: &remoteHTTPError{503}})
+	m.Update(remoteLoaded{gen: m.gen, id: "a", refresh: true, err: &remoteHTTPError{status: 503}})
 	if m.deleted {
 		t.Fatal("network failure treated as deletion")
 	}
-	m.Update(remoteLoaded{gen: m.gen, id: "a", refresh: true, deleted: true, err: &remoteHTTPError{404}})
+	m.Update(remoteLoaded{gen: m.gen, id: "a", refresh: true, deleted: true, err: &remoteHTTPError{status: 404}})
 	if !m.deleted || m.textarea.Value() != "keep" || m.submit("no") != nil {
 		t.Fatal("deleted topic accepts send or lost draft")
 	}

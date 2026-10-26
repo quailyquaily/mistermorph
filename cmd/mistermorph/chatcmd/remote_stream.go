@@ -41,6 +41,9 @@ type remoteStreamFrame struct {
 		Current *remoteStreamActivity  `json:"current"`
 		History []remoteStreamActivity `json:"history"`
 	} `json:"activity"`
+	// Questions (ask_user) and Elevations (approval cards) are every one of the task's so far.
+	Questions  []remoteQuestion  `json:"questions,omitempty"`
+	Elevations []remoteElevation `json:"elevations,omitempty"`
 }
 
 // Args are deliberately not displayed: raw tool arguments are noisy and may
@@ -72,7 +75,7 @@ func (c *remoteClient) openStream(ctx context.Context, id string) (*websocket.Co
 	if err != nil {
 		if resp != nil {
 			resp.Body.Close()
-			return nil, &remoteHTTPError{resp.StatusCode}
+			return nil, &remoteHTTPError{status: resp.StatusCode}
 		}
 		return nil, errors.New("runtime stream unavailable; HTTP polling continues")
 	}
@@ -114,6 +117,7 @@ func remoteStreamActive(t taskdomain.TaskInfo) bool {
 	return t.Status == taskdomain.TaskQueued || t.Status == taskdomain.TaskRunning || t.Status == taskdomain.TaskPending
 }
 func (m *chatModel) syncStreams() tea.Cmd {
+	m.pruneRemotePrompts()
 	if m.listing || m.deleted || m.id == "" {
 		m.closeStreams()
 		return nil
@@ -234,10 +238,10 @@ func (m *chatModel) streamUpdate(e remoteStreamEvent) tea.Cmd {
 		return remoteStreamWait(s)
 	}
 	s.seq = f.Seq
-	var transcript tea.Cmd
+	transcript := m.syncRemotePrompts(e.id, f)
 	if f.Trace != nil {
 		s.hasTrace = true
-		transcript = m.enqueueTranscript(strings.TrimSuffix(m.renderSharedTrace(e.id, *f.Trace, false), "\n"))
+		transcript = tea.Batch(transcript, m.enqueueTranscript(strings.TrimSuffix(m.renderSharedTrace(e.id, *f.Trace, false), "\n")))
 	}
 	s.text = remoteStreamText(f.Text, 1200)
 	s.reasoning = remoteStreamText(f.Reasoning, 1600)
