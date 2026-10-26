@@ -326,22 +326,22 @@
   display: grid;
   gap: 16px;
   padding-top: 14px;
+  font-size: var(--font-size-ui);
 }
 
+/* One size throughout; mono only for what is compared or typed: the fingerprint and the command. */
 .chat-elevation-verify-print {
   display: grid;
   grid-template-columns: repeat(4, max-content);
   justify-content: center;
   column-gap: 2ch;
-  row-gap: 6px;
-  padding: 14px 12px;
+  row-gap: 4px;
+  padding: 12px;
   border: 1px solid var(--line-soft);
   border-radius: 2px;
   color: var(--text-0);
   font-family: var(--font-mono);
-  font-size: var(--font-size-ui);
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0.04em;
 }
 
 .chat-elevation-verify-steps {
@@ -350,24 +350,16 @@
   margin: 0;
   padding-left: 2.4ch;
   color: var(--text-1);
-  font-size: var(--font-size-ui);
   line-height: 1.5;
 }
 
 .chat-elevation-verify-steps code {
   display: block;
-  margin-top: 4px;
+  margin-top: 2px;
   color: var(--text-0);
   font-family: var(--font-mono);
-  font-size: var(--font-size-meta);
+  font-size: inherit;
   overflow-wrap: anywhere;
-}
-
-.chat-elevation-verify-hint {
-  display: block;
-  margin-top: 4px;
-  color: var(--text-2);
-  font-size: var(--font-size-meta);
 }
 
 .chat-elevation-verify-actions {

@@ -390,25 +390,27 @@ const ChatElevationCard = {
               >
                 <PhQuestion class="icon" />
               </button>
-              <AppDialogShell v-model="keyHelp" :title="t('chat_elevation_key_verify')" width="460px">
-                <div class="chat-elevation-verify">
-                  <div class="chat-elevation-verify-print" :aria-label="t('chat_elevation_key')">
-                    <span v-for="(group, i) in fingerprintGroups" :key="i">{{ group }}</span>
+              <!-- On <body>, so its backdrop covers the whole window, not just the chat. -->
+              <Teleport to="body">
+                <AppDialogShell v-model="keyHelp" :title="t('chat_elevation_key_verify')" width="460px">
+                  <div class="chat-elevation-verify">
+                    <div class="chat-elevation-verify-print" :aria-label="t('chat_elevation_key')">
+                      <span v-for="(group, i) in fingerprintGroups" :key="i">{{ group }}</span>
+                    </div>
+                    <ol class="chat-elevation-verify-steps">
+                      <li>
+                        {{ t('chat_elevation_key_verify_step_log') }}
+                        <code>mistermorph console fingerprint</code>
+                      </li>
+                      <li>{{ t('chat_elevation_key_verify_step_settings') }}</li>
+                      <li>{{ t('chat_elevation_key_verify_step_match') }}</li>
+                    </ol>
+                    <div class="chat-elevation-verify-actions">
+                      <QButton type="button" class="primary" @click="keyHelp = false">{{ t('action_close') }}</QButton>
+                    </div>
                   </div>
-                  <ol class="chat-elevation-verify-steps">
-                    <li>
-                      {{ t('chat_elevation_key_verify_step_log') }}
-                      <code>mistermorph console fingerprint</code>
-                      <span class="chat-elevation-verify-hint">{{ t('chat_elevation_key_verify_step_log_hint') }}</span>
-                    </li>
-                    <li>{{ t('chat_elevation_key_verify_step_settings') }}</li>
-                    <li>{{ t('chat_elevation_key_verify_step_match') }}</li>
-                  </ol>
-                  <div class="chat-elevation-verify-actions">
-                    <QButton type="button" class="primary" @click="keyHelp = false">{{ t('action_close') }}</QButton>
-                  </div>
-                </div>
-              </AppDialogShell>
+                </AppDialogShell>
+              </Teleport>
             </div>
           </template>
           <span class="chat-question-key is-reply"><span class="chat-question-label">{{ t('chat_elevation_password') }}</span></span>

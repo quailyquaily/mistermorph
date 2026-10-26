@@ -550,9 +550,7 @@ const I18N = {
     chat_elevation_key_copied: "Copied",
     chat_elevation_key_verify: "How to check this key",
     chat_elevation_key_verify_step_log:
-      "On the machine running mistermorph console, run:",
-    chat_elevation_key_verify_step_log_hint:
-      "It prints the fingerprint of the runtime's key, in the same groups as above.",
+      "On the machine running mistermorph console, run this; it prints the fingerprint of the runtime's key:",
     chat_elevation_key_verify_step_settings: "Or open Settings › System › Elevation key in a Console you already trust.",
     chat_elevation_key_verify_step_match: "All 8 groups must match exactly. If any differ, decline: the connection may be intercepted.",
     chat_elevation_first_confirm:
@@ -2217,9 +2215,7 @@ const I18N = {
     chat_elevation_key_copied: "已复制",
     chat_elevation_key_verify: "如何核对这个密钥",
     chat_elevation_key_verify_step_log:
-      "在运行 mistermorph console 的机器上执行：",
-    chat_elevation_key_verify_step_log_hint:
-      "它会打印运行时密钥的指纹，分组方式与上面相同。",
+      "在运行 mistermorph console 的机器上执行下面的命令，它会打印运行时密钥的指纹：",
     chat_elevation_key_verify_step_settings: "或在你已信任的 Console 中打开「设置 › 系统 › 提权密钥」。",
     chat_elevation_key_verify_step_match: "8 组必须完全一致。只要有一组不同，就拒绝：连接可能被拦截。",
     chat_elevation_first_confirm:
@@ -3884,9 +3880,7 @@ const I18N = {
     chat_elevation_key_copied: "コピーしました",
     chat_elevation_key_verify: "この鍵の確認方法",
     chat_elevation_key_verify_step_log:
-      "mistermorph console を実行しているマシンで、次を実行します：",
-    chat_elevation_key_verify_step_log_hint:
-      "ランタイムの鍵のフィンガープリントが、上と同じグループで表示されます。",
+      "mistermorph console を実行しているマシンで次を実行すると、ランタイムの鍵のフィンガープリントが表示されます：",
     chat_elevation_key_verify_step_settings: "または、すでに信頼している Console で「設定 › システム › 昇格用の鍵」を開きます。",
     chat_elevation_key_verify_step_match: "8 つのグループがすべて一致する必要があります。1 つでも違えば拒否してください。接続が傍受されている可能性があります。",
     chat_elevation_first_confirm:
