@@ -192,8 +192,8 @@ tool, the command, the exit code and whether the user declined. The password is 
 
 - Approval happens at the agent's machine only. From a Console opened on another computer, or a
   chat channel, nobody can answer the dialog; it times out and the command does not run.
-  `feat_20261026_elevation_client_approval.md` (draft) moves the approval to the Console or chat
-  that started the task.
+  `feat_20261026_elevation_client_approval.md` moves the approval to the Console or chat that
+  started the task.
 - A user without administrator rights cannot approve anything; sudo or UAC refuses.
 - A sudoers rule with `NOPASSWD` skips the password, and then the dialog does not appear: that is
   the administrator's choice.

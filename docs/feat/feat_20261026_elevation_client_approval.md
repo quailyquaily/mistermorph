@@ -1,7 +1,7 @@
 ---
 date: 2026-10-26
 title: Elevated commands, approved from the Console or chat, with the password encrypted end to end
-status: draft
+status: implemented
 ---
 
 # Elevated commands approved from a client
@@ -46,8 +46,15 @@ Console or chat:
 Every elevated command still needs its own approval (`sudo -k`, one session per command).
 
 **In chat**, the card is a modal in the TUI: the command, a masked input, Enter to allow, Esc to
-decline. It works the same in local chat and in chat attached to a remote Console, because both
-read the Console's task stream. `mistermorph run` is out of scope: it keeps the desktop dialog.
+decline. Chat has two modes, and the modal looks the same in both:
+
+- **Local** (the default): the agent runs inside the chat process. The modal is the run's approver
+  directly, so the password never leaves the process and needs no encryption.
+- **Attached to a runtime** (`--runtime-url`): chat reads the Console runtime's task stream like the
+  web Console does, and seals the password the same way (§3.4), pinning the runtime's identity
+  (§3.5).
+
+`mistermorph run` is out of scope: it keeps the desktop dialog.
 
 ## 3) Design
 
@@ -56,8 +63,8 @@ read the Console's task stream. `mistermorph run` is out of scope: it keeps the 
 ```
  bash tool ──sudo -k -A──▶ sudo ──SUDO_ASKPASS──▶ mistermorph (askpass mode)
      │                                                │ unix socket + token
-     │ registers the command                          ▼
-     └──────────────────────────────────────▶ elevation broker (runtime process)
+     │ opens a session for the command                ▼
+     └──────────────────────────────────────▶ approval session (runtime process)
                                                        │ approver chosen for this run
                               ┌────────────────────────┼─────────────────────┐
                               ▼                        ▼                     ▼
@@ -65,7 +72,7 @@ read the Console's task stream. `mistermorph run` is out of scope: it keeps the 
                     (Console / chat card)     (base design's dialogs)
 ```
 
-### 3.2 Broker and askpass helper
+### 3.2 Approval session and askpass helper
 
 The askpass helper stops opening dialogs itself. It becomes a thin client of an approval
 **session** in the runtime process, one per elevated command (implemented: `internal/elevate/session.go`):
@@ -95,22 +102,25 @@ which has the display variables, so sudo's environment no longer carries them (n
 
 ### 3.3 Client approver: request and answer
 
-This reuses the `ask_user` machinery (`docs/feat/feat_20261023_ask_user.md` §4.2–4.3): the request
-is opened on the run's lease and shown in the task's stream frame, and the run waits for the answer.
-It is a separate kind, because its answer is a secret:
+It follows the `ask_user` cards (`docs/feat/feat_20261023_ask_user.md` §4.3): the request is shown
+in the task's stream frame, and the approver waits for the answer. It does not go through the run
+lease: the approval session already waits inside the tool call, and a message typed in the composer
+must never answer it, unlike a question. The Console keeps its open approvals in one registry
+across tasks (`cmd/mistermorph/consolecmd/elevations.go`):
 
-- **Run control:** `RunLease.OpenElevation(id)`, answered by `RunControl.AnswerElevation(runtime,
-  id, answer)`. The ID is random, so a stale card does nothing. A message typed in the composer
-  never answers an elevation, unlike a question.
-- **Stream frame:** `elevations`, each with `id`, `command`, `cwd`, `host`, `deadline`, `status`
-  (`open`, `allowed`, `declined`, `expired`, `rejected`), and the key material in §3.4. The task
-  result keeps `result.elevations` with the status only.
-- **Answer:** `POST /tasks/{id}/elevation` with `{elevation_id, decline: true}` or
-  `{elevation_id, client_pub, nonce, ciphertext}`. The response says whether the request was still
-  open. The handler never logs the body.
-- **Audit:** `elevated_command_approved` / `_declined` / `_expired` record the task, the command,
-  the client kind (web, desktop, chat), the remote address, whether the transport was secure, and
-  the client's pinned identity check. They never record the password.
+- **Stream frame:** `elevations`, each with `id` (random), `command`, `cwd`, `host`, `deadline`
+  (Unix seconds), `attempt` (2 and up after a wrong password), `status` (`open`, `allowed`,
+  `declined`, `expired`, `rejected`), `web_insecure` (the policy, for the web card) and, only while
+  open, `offer` (§3.4). The task result keeps `result.elevations` without offers.
+- **Answer:** `POST /tasks/{id}/elevation` with `{elevation_id, decline: true, client}` or
+  `{elevation_id, answer: {client_pub, nonce, ciphertext}, client}`, where `client` is `web`,
+  `desktop` or `chat`. The response is `{accepted}`, false when the request is no longer open; a
+  refused answer is a 400 with the reason. Any answer closes the request: one that does not decrypt
+  closes it as `rejected`, and the command fails. The handler never logs the body.
+- **Identity:** `GET /elevation/identity` returns `{identity, fingerprint}`.
+- **Audit:** `elevated_command_approved`, `elevated_command_declined` and
+  `elevated_command_answer_rejected` record the task, the elevation, the command, the client, the
+  transport (`secure` or `insecure`) and the remote address. They never record the password.
 
 ### 3.4 Encryption
 
@@ -118,35 +128,41 @@ Each request uses fresh keys, so the runtime's ephemeral secret key exists only 
 open.
 
 **Runtime identity.** Each runtime creates one long-term Ed25519 key, the *identity key*. It is
-stored in the runtime's state directory (`0600`) and created on first use. Its fingerprint is
-`SHA-256(public key)`, shown as 8 groups of 4 hex characters. It is printed when `mistermorph console`
-starts and shown in the Console's Settings.
+kept in `file_state_dir/elevation_identity` (`0600`) and created on first use. Its fingerprint is
+the first 16 bytes of `SHA-256(public key)`, as 8 groups of 4 hex digits. The runtime logs it
+(`elevation_identity fingerprint=…`) when it first loads the key, and `GET /elevation/identity`
+returns it.
 
 **Request (runtime → client), in the stream frame:**
 
 | Field | Value |
 | --- | --- |
-| `version` | `1` |
+| `v` | `1` |
 | `server_pub` | a new X25519 public key for this request |
 | `identity` | the identity public key |
 | `signature` | Ed25519 over `context(server_pub)`, by the identity key |
 
-`context(x)` is the byte string `"mistermorph-elevation-v1" ‖ len‖elevation_id ‖ len‖task_id ‖
-SHA-256(command) ‖ SHA-256(cwd) ‖ deadline (unix, 8 bytes) ‖ x`, with each variable-length field
-prefixed by its length, so fields cannot run into each other.
+`context(purpose, x)` is the byte string `"mistermorph-elevation-v1" ‖ len‖purpose ‖
+len‖elevation_id ‖ len‖task_id ‖ SHA-256(command) ‖ SHA-256(cwd) ‖ deadline (Unix seconds, 8 bytes,
+big-endian) ‖ x`, with each variable-length field prefixed by its 4-byte big-endian length, so
+fields cannot run into each other. The purpose (`offer`, `key`, `answer`) keeps the signature, the
+key derivation and the associated data apart. The signature is over `context("offer", server_pub)`.
 
 **Answer (client → runtime):**
 
 1. Check `signature` against the **pinned** identity (§3.5). If the check fails, refuse to send.
 2. Make a new X25519 key pair, `client_pub` and `client_secret`.
 3. `shared = X25519(client_secret, server_pub)`.
-4. `key = HKDF-SHA256(ikm = shared, salt = server_pub ‖ client_pub, info = context(""))`.
+4. `key = HKDF-SHA256(ikm = shared, salt = server_pub ‖ client_pub, info = context("key", ""))`.
 5. `ciphertext = XChaCha20-Poly1305(key, nonce = 24 random bytes, plaintext = password,
-   aad = context(client_pub))`.
-6. Send `client_pub`, `nonce` and `ciphertext`, base64url-encoded.
+   aad = context("answer", client_pub))`.
+6. Send `client_pub`, `nonce` and `ciphertext`, base64url without padding.
 
-**Runtime:** decrypt once. If decryption fails, or the request is closed or past its deadline, the
-answer is rejected (`rejected`), and the helper reports a timeout. The ephemeral secret key, the
+`internal/elevate/seal/testdata/vectors.json` pins the wire format with fixed keys; the Go and
+JavaScript implementations are both tested against it.
+
+**Runtime:** decrypt once. If decryption fails, the request closes as `rejected`; one that is
+closed or past its deadline finds nothing open. The ephemeral secret key, the
 derived key and the plaintext buffer are zeroed after use. The password goes from there to the
 helper over the Unix socket, and from the helper to sudo, and nowhere else.
 
@@ -157,7 +173,7 @@ different command.
 The bearer token and the Console login password are never used as key material: on plain HTTP they
 cross the network in the clear.
 
-**Libraries:** Go uses `crypto/ed25519`, `crypto/ecdh`, `golang.org/x/crypto/hkdf` and
+**Libraries:** Go uses `crypto/ed25519`, `crypto/ecdh`, `crypto/hkdf` and
 `golang.org/x/crypto/chacha20poly1305` (already a dependency). The web Console uses
 `@noble/curves`, `@noble/ciphers` and `@noble/hashes`. Browsers disable `crypto.subtle` outside
 secure contexts (HTTPS or localhost), so WebCrypto cannot be relied on.
@@ -185,6 +201,16 @@ the client must know the runtime's real identity key, or the attacker could subs
   - `tools.bash.elevation.web_insecure: deny` hides the field on plain HTTP and tells the user to
     use HTTPS, a tunnel or chat instead. The default is `warn`.
 
+**How the runtime knows the transport.** The browser talks to the Console server, which proxies to
+the runtime, so the runtime sees only the proxy's hop. The proxy passes on how the browser's own
+connection was made: on the request context when the runtime is in the same process, or in the
+`X-MisterMorph-Client-Transport` and `X-MisterMorph-Client-Remote` headers when it is reached over
+the network (`internal/daemonruntime/transport.go`). A connection is `secure` over TLS, from this
+machine, or through a TLS-terminating proxy on this machine (`X-Forwarded-Proto: https` from a
+loopback peer); everything else is `insecure`. A TLS proxy on another machine reads as `insecure`,
+so with `deny` it is refused. The runtime enforces `deny` for answers marked `client: web`; the card
+also hides its field on its own.
+
 ### 3.6 Which approver
 
 `tools.bash.elevation.approver: auto | client | dialog`, default `auto`:
@@ -195,10 +221,12 @@ the client must know the runtime's real identity key, or the attacker could subs
 | `client` | client card | unavailable |
 | `dialog` | desktop dialog | desktop dialog |
 
-"Started from the Console chat or chat" is the same test `ask_user` uses: the trigger ref
-`web/console/chat`, or a chat session. The `elevated` parameter is offered when the runtime can
-approve at all: it has a client approver, or a dialog is available. A run with no approver gets the
-base design's "unavailable" error, with the reason.
+"Started from the Console chat or chat" is the same test `ask_user` uses: the trigger
+`{source: "ui", ref: "web/console/chat"}`, or `ref: "cli/chat"` from chat attached with
+`--runtime-url`; a local chat session sets its approver itself. The `elevated` parameter is offered
+when the process can approve at all: it asks clients (`elevate.OfferClientApprovals`, called by the
+Console runtime and local chat) and sudo is there, or a dialog is available. A run with no approver
+then gets the base design's "unavailable" error, with the reason (`elevate.CheckContext`).
 
 Telegram, Slack and the other channels never take a password in a message. With `auto`, they keep
 the desktop dialog. The tool's error can point the user to the Console.
@@ -239,6 +267,8 @@ tools:
 - Whoever can use the Console can see approval cards. They still need the sudo password.
 - Powershell's UAC prompt cannot be answered remotely. Windows keeps the base design.
 - `mistermorph run` keeps the desktop dialog.
+- The identity lives in `file_state_dir`. A new state directory means a new identity, and clients
+  that pinned the old one refuse until the user checks the new fingerprint and trusts it.
 
 ## 7) Alternatives considered
 
@@ -253,24 +283,28 @@ tools:
   it needs a root install and changes "sudo asks every time" into a standing grant to the helper.
   It remains the path if the web Console on plain HTTP must resist tampering.
 
-## 8) Plan and tests
+## 8) Code and tests
 
-1. **`internal/elevate`** (done): the session, the `Approver` interface, the thin-client helper and
-   the `dialog` approver. Test: the bash tool against a fake `sudo` that calls the real helper, with a
-   fake approver (allowed, declined, expired, wrong password then right, token reuse refused).
-2. **`internal/elevate/seal`:** identity key, request signing and answer sealing and opening.
-   Test vectors are shared with the web client. Tampering is rejected: each AAD field, `server_pub`,
-   the signature, a replayed answer and a late answer.
-3. **Runtime and Console API:** `OpenElevation` on the run lease, the `elevations` frame, the
-   `POST /tasks/{id}/elevation` endpoint, audit entries, `approver` and `web_insecure` settings.
-4. **Web Console:** the card, `@noble/*` sealing (checked against the Go test vectors), origin
-   pinning, and the HTTP warning.
-5. **chat:** the TUI modal, `known_runtimes` pinning, and `--forget-runtime`. Local and remote mode
-   share it. The same card component also shows `ask_user` questions (numbered choices and a typed
-   answer), which chat does not show yet.
-6. **Docs:** `docs/tools.md`, `docs/security.md`, the config example, and a pointer from the base
-   design.
+- `internal/elevate`: the approval session, `Approver`, the thin-client helper, the `dialog`
+  approver, `Offered` and `CheckContext`. Tests run the bash tool against a fake `sudo` (with sudo's
+  three tries) that calls the real helper: allowed, declined, expired, wrong password then right,
+  a wrong token, the session ending mid-ask, and the availability rules per approver mode.
+- `internal/elevate/seal`: the identity and the protocol. Tests: round trip, single use, every
+  bound field and the signature tampered with, and `testdata/vectors.json`.
+- `internal/daemonruntime`: the routes and `RequestTransport`, tested for TLS, loopback, local
+  proxies and relayed transports.
+- `cmd/mistermorph/consolecmd/elevations.go`: cards, the registry, answers and the audit lines.
+  Tests seal real answers against the cards: allowed, declined, unreadable, refused by `deny`,
+  expired, another task's answer, and the identity kept across restarts.
+- `web/console`: `core/elevation-seal.js` (tested against the Go vectors), `core/elevation-pins.js`
+  (pins per runtime endpoint), `components/ChatElevationCard.js`, and the Settings fields.
+- `cmd/mistermorph/chatcmd`: `prompt.go` (the card, shared by questions and approvals),
+  `prompt_local.go` (the local approver and `ask_user`), `prompt_remote.go` and
+  `known_runtimes.go` (frames, sealing, pinning in `file_state_dir/known_runtimes`,
+  `--forget-runtime`). Tests drive the TUI, and an httptest runtime with a real identity checks the
+  sealed password arrives and the pinning rules.
 
-Code paths to touch: `internal/elevate`, `tools/builtin/bash.go`, `internal/runtimecontrol`,
-`internal/channelruntime/taskruntime`, `cmd/mistermorph/consolecmd`, `cmd/mistermorph/chatcmd`,
-`web/console`, `desktop/wails`.
+Chat attached with `--runtime-url` already requires HTTPS for a runtime on another machine, so the
+fingerprint check there is on top of TLS; on loopback (or through an SSH tunnel) it pins silently.
+
+Not verified: a real `sudo` with a person typing the password into the web card or the chat modal.

@@ -271,11 +271,17 @@ MISTER_MORPH_SERVER_AUTH_TOKEN="..."
 - When at least one allowlisted auth profile is configured, `bash` can still be enabled for local automation, but `curl` is rejected by default to avoid “bash + curl” carrying authenticated HTTP requests.
 - `bash` does not inherit the full parent environment. It runs with a small built-in allowlist (`PATH`, locale, shell/home, temp, XDG, and SSL cert vars) so `MISTER_MORPH_*` secrets are not exposed to subprocesses by default.
 - If a local workflow needs extra variables, inject them explicitly with `tools.bash.injected_env_vars`.
-- A command marked `elevated` runs as root or administrator only after the user approves it in a
-  system dialog that names the command (`sudo -k -A` with mistermorph as the askpass helper on Linux
-  and macOS, UAC on Windows). Each command needs its own approval, the password goes to sudo and
-  never through the agent, and each elevated command is logged (`elevated_command_started`,
-  `elevated_command_finished`). Turn it off with `tools.bash.elevation.enabled: false` (or the
+- A command marked `elevated` runs as root or administrator only after the user approves it, with
+  the command shown: on an approval card in the chat that started the task, or in a system dialog
+  (`sudo -k -A` with mistermorph as the askpass helper on Linux and macOS, UAC on Windows). Each
+  command needs its own approval. The password goes to sudo; the agent process holds it only to
+  pass it on, and the model, tool output and logs never see it. From the web Console and remote
+  chat it travels encrypted end to end (X25519, XChaCha20-Poly1305), signed by the runtime's
+  identity key (`file_state_dir/elevation_identity`), which clients pin. On plain HTTP that
+  protects against eavesdropping, not against a tampered page; use HTTPS, an SSH tunnel or chat, or
+  set `tools.bash.elevation.web_insecure: deny`. Each elevated command and each answer is logged
+  (`elevated_command_started`, `elevated_command_finished`, `elevated_command_approved`,
+  `elevated_command_declined`, `elevated_command_answer_rejected`). Turn it off with `tools.bash.elevation.enabled: false` (or the
   `powershell` one); keep it off for
   services nobody watches. See [Elevated commands](tools.md#elevated-commands).
 
