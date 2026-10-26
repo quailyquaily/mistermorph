@@ -1,8 +1,10 @@
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 
+import AppDialogShell from "./AppDialogShell";
 import { translate } from "../core/context";
 import { isDesktopRuntime } from "../core/desktop-runtime";
-import { pinElevationIdentity, pinnedElevationIdentity } from "../core/elevation-pins";
+import { elevationPinNeedsConfirm, pinElevationIdentity, pinnedElevationIdentity } from "../core/elevation-pins";
+import { CONSOLE_LOCAL_ENDPOINT_REF } from "../core/endpoints";
 import { elevationFingerprint, sealElevationPassword, verifyElevationOffer } from "../core/elevation-seal";
 import "./ChatQuestionCard.css";
 import "./ChatElevationCard.css";
@@ -13,6 +15,7 @@ import "./ChatElevationCard.css";
 // password lives in the field alone, never in component state, and the field is cleared once sent.
 // Once closed, the card keeps the command and how it ended.
 const ChatElevationCard = {
+  components: { AppDialogShell },
   props: {
     elevation: { type: Object, required: true },
     taskId: { type: String, default: "" },
@@ -26,10 +29,22 @@ const ChatElevationCard = {
     const busy = ref(false);
     const error = ref("");
     const trustConfirm = ref(false);
+    // The key row, folded to a short fingerprint until opened.
+    const keyOpen = ref(false);
+    const keyCopied = ref(false);
+    // How to check the fingerprint, in a dialog opened from the button beside it.
+    const keyHelp = ref(false);
+    const canCopy = typeof navigator !== "undefined" && typeof navigator.clipboard?.writeText === "function";
     // The pin as this card last read it; bumped by trusting a new key.
     const pinned = ref(pinnedElevationIdentity(props.endpointRef));
     // The pin was empty when the card opened: show the fingerprint the request pins.
     const firstUse = ref(pinned.value === "");
+    // A runtime on another machine is trusted only after the person compared its fingerprint.
+    const confirmFirst = elevationPinNeedsConfirm(props.endpointRef, {
+      localEndpointRef: CONSOLE_LOCAL_ENDPOINT_REF,
+      desktop: isDesktopRuntime(),
+      hostname: typeof window !== "undefined" ? window.location?.hostname : "",
+    });
     const now = ref(Date.now());
     let timer = 0;
 
@@ -51,13 +66,17 @@ const ChatElevationCard = {
       cwd: props.elevation?.cwd,
       deadline: props.elevation?.deadline,
     }));
-    // The offer checked against the pin: ok, changed (another identity than the pinned one) or bad.
+    // The offer checked against the pin: ok, first (no pin yet, to be confirmed), changed (another
+    // identity than the pinned one) or bad.
     const offerCheck = computed(() => {
       if (!open.value) return { state: "closed" };
       const offer = props.elevation?.offer;
       const offered = elevationFingerprint(String(offer?.identity || ""));
       try {
         verifyElevationOffer(binding.value, offer, pinned.value);
+        if (!pinned.value && confirmFirst) {
+          return { state: "first", fingerprint: offered };
+        }
         return { state: "ok", fingerprint: offered };
       } catch (e) {
         if (e?.code === "identity_changed") {
@@ -73,6 +92,10 @@ const ChatElevationCard = {
     const denied = computed(() => insecure.value && props.elevation?.webInsecure === "deny");
     const fieldVisible = computed(() => open.value && offerCheck.value.state === "ok" && !denied.value);
     const retry = computed(() => Number(props.elevation?.attempt || 0) >= 2);
+    // The fingerprint folded to its first groups, enough to recognise the key at a glance.
+    const fingerprintGroups = computed(() => String(offerCheck.value.fingerprint || "").split(" ").filter(Boolean));
+    const fingerprintHead = computed(() => fingerprintGroups.value.slice(0, 2).join(" "));
+    const fingerprintRest = computed(() => fingerprintGroups.value.slice(2));
     const outcomeText = computed(() => translate(`chat_elevation_${status.value}`));
 
     function stopTimer() {
@@ -104,6 +127,9 @@ const ChatElevationCard = {
         busy.value = false;
         error.value = "";
         trustConfirm.value = false;
+        keyOpen.value = false;
+        keyCopied.value = false;
+        keyHelp.value = false;
         clearPassword();
       }
     );
@@ -159,9 +185,36 @@ const ChatElevationCard = {
       send({ answer });
     }
 
+    function toggleKey() {
+      keyOpen.value = !keyOpen.value;
+      if (!keyOpen.value) keyHelp.value = false;
+    }
+
+    async function copyFingerprint() {
+      if (!canCopy || !offerCheck.value.fingerprint) return;
+      try {
+        await navigator.clipboard.writeText(offerCheck.value.fingerprint);
+        keyCopied.value = true;
+        window.setTimeout(() => {
+          keyCopied.value = false;
+        }, 1600);
+      } catch {
+        keyCopied.value = false;
+      }
+    }
+
     function decline() {
       clearPassword();
       send({ decline: true });
+    }
+
+    // trustFirstKey pins the key of a runtime seen the first time, once the person compared it.
+    function trustFirstKey() {
+      if (offerCheck.value.state !== "first") return;
+      pinElevationIdentity(props.endpointRef, props.elevation?.offer?.identity);
+      // Without storage the pin lasts as long as this card.
+      pinned.value = pinnedElevationIdentity(props.endpointRef) || String(props.elevation?.offer?.identity || "");
+      firstUse.value = false;
     }
 
     function trustNewKey() {
@@ -172,12 +225,21 @@ const ChatElevationCard = {
       trustConfirm.value = false;
       pinElevationIdentity(props.endpointRef, props.elevation?.offer?.identity);
       pinned.value = pinnedElevationIdentity(props.endpointRef) || String(props.elevation?.offer?.identity || "");
-      firstUse.value = true;
+      firstUse.value = false;
     }
 
     return {
       allow,
       busy,
+      canCopy,
+      copyFingerprint,
+      keyCopied,
+      fingerprintGroups,
+      keyHelp,
+      keyOpen,
+      toggleKey,
+      fingerprintHead,
+      fingerprintRest,
       decline,
       denied,
       error,
@@ -194,6 +256,7 @@ const ChatElevationCard = {
       status,
       t: translate,
       trustConfirm,
+      trustFirstKey,
       trustNewKey,
     };
   },
@@ -250,6 +313,22 @@ const ChatElevationCard = {
           </div>
         </template>
 
+        <template v-else-if="offerCheck.state === 'first' && !denied">
+          <span class="chat-question-key is-reply"><span class="chat-question-label">{{ t('chat_elevation_key') }}</span></span>
+          <div class="chat-question-value chat-elevation-key">
+            <p class="chat-elevation-note">{{ t('chat_elevation_first_confirm') }}</p>
+            <p class="chat-elevation-first"><span class="chat-elevation-fingerprint">{{ offerCheck.fingerprint }}</span></p>
+            <div class="chat-elevation-actions">
+              <QButton type="button" class="outlined xs" :disabled="busy" @click="trustFirstKey">
+                {{ t('chat_elevation_trust_first') }}
+              </QButton>
+              <QButton type="button" class="plain xs" :disabled="busy" @click="decline">
+                {{ t('chat_elevation_decline') }}
+              </QButton>
+            </div>
+          </div>
+        </template>
+
         <template v-else-if="offerCheck.state === 'bad' || denied">
           <span class="chat-question-key is-reply"><span class="chat-question-label">{{ t('chat_elevation_password') }}</span></span>
           <div class="chat-question-value chat-question-reply">
@@ -263,6 +342,75 @@ const ChatElevationCard = {
         </template>
 
         <template v-else>
+          <template v-if="offerCheck.fingerprint">
+            <span class="chat-question-key"><span class="chat-question-label">{{ t('chat_elevation_key') }}</span></span>
+            <div :class="['chat-question-value', 'chat-elevation-keyrow', { 'is-open': keyOpen }]">
+              <button
+                type="button"
+                class="chat-elevation-keytoggle"
+                :aria-expanded="keyOpen ? 'true' : 'false'"
+                @click="toggleKey"
+              >
+                <span class="chat-elevation-keyprint">
+                  <span>{{ fingerprintHead }}</span>
+                  <span class="chat-elevation-keyrest" :aria-hidden="keyOpen ? null : 'true'">
+                    <span class="chat-elevation-keyrest-inner">
+                      <span v-for="(group, i) in fingerprintRest" :key="i" class="chat-elevation-keygroup" :style="{ '--i': i }">{{ group }}</span>
+                    </span>
+                  </span>
+                  <span class="chat-elevation-keymore" aria-hidden="true">…</span>
+                </span>
+                <PhCaretDown class="chat-elevation-keycaret" aria-hidden="true" />
+              </button>
+              <span class="chat-elevation-keystate">{{ firstUse ? t('chat_elevation_key_status_new') : t('chat_elevation_key_status_trusted') }}</span>
+              <button
+                v-if="canCopy"
+                type="button"
+                :class="['chat-elevation-keyaction', { 'is-copied': keyCopied }]"
+                :tabindex="keyOpen ? null : -1"
+                :aria-hidden="keyOpen ? null : 'true'"
+                :title="keyCopied ? t('chat_elevation_key_copied') : t('chat_elevation_key_copy')"
+                :aria-label="keyCopied ? t('chat_elevation_key_copied') : t('chat_elevation_key_copy')"
+                @click="copyFingerprint"
+              >
+                <PhCopy class="icon chat-elevation-keycopy-icon" />
+                <svg class="icon chat-elevation-keycopied-icon" viewBox="0 0 16 16" aria-hidden="true">
+                  <path d="M3.4 8.6 6.5 11.6 12.6 4.6" pathLength="1" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                class="chat-elevation-keyaction"
+                :tabindex="keyOpen ? null : -1"
+                :aria-hidden="keyOpen ? null : 'true'"
+                aria-haspopup="dialog"
+                :title="t('chat_elevation_key_verify')"
+                :aria-label="t('chat_elevation_key_verify')"
+                @click="keyHelp = true"
+              >
+                <PhQuestion class="icon" />
+              </button>
+              <AppDialogShell v-model="keyHelp" :title="t('chat_elevation_key_verify')" width="460px">
+                <div class="chat-elevation-verify">
+                  <div class="chat-elevation-verify-print" :aria-label="t('chat_elevation_key')">
+                    <span v-for="(group, i) in fingerprintGroups" :key="i">{{ group }}</span>
+                  </div>
+                  <ol class="chat-elevation-verify-steps">
+                    <li>
+                      {{ t('chat_elevation_key_verify_step_log') }}
+                      <code>mistermorph console fingerprint</code>
+                      <span class="chat-elevation-verify-hint">{{ t('chat_elevation_key_verify_step_log_hint') }}</span>
+                    </li>
+                    <li>{{ t('chat_elevation_key_verify_step_settings') }}</li>
+                    <li>{{ t('chat_elevation_key_verify_step_match') }}</li>
+                  </ol>
+                  <div class="chat-elevation-verify-actions">
+                    <QButton type="button" class="primary" @click="keyHelp = false">{{ t('action_close') }}</QButton>
+                  </div>
+                </div>
+              </AppDialogShell>
+            </div>
+          </template>
           <span class="chat-question-key is-reply"><span class="chat-question-label">{{ t('chat_elevation_password') }}</span></span>
           <form class="chat-question-value chat-question-reply" @submit.prevent="allow">
             <input
@@ -286,10 +434,6 @@ const ChatElevationCard = {
             </QButton>
           </form>
           <p v-if="insecure" class="chat-question-value chat-elevation-note">{{ t('chat_elevation_insecure_warn') }}</p>
-          <p v-if="firstUse && offerCheck.fingerprint" class="chat-question-value chat-elevation-note chat-elevation-first">
-            {{ t('chat_elevation_first_key') }}
-            <span class="chat-elevation-fingerprint">{{ offerCheck.fingerprint }}</span>
-          </p>
         </template>
         <p v-if="error" class="chat-question-value chat-question-error" role="alert">{{ error }}</p>
       </div>

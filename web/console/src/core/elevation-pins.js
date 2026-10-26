@@ -45,4 +45,47 @@ function pinElevationIdentity(endpointRef, identity, storage = defaultStorage())
   }
 }
 
-export { ELEVATION_PINS_STORAGE_KEY, pinElevationIdentity, pinnedElevationIdentity };
+// forgetElevationIdentity drops the pin for endpointRef, so the next request asks again. It reports
+// whether there was one.
+function forgetElevationIdentity(endpointRef, storage = defaultStorage()) {
+  const ref = String(endpointRef || "").trim();
+  if (!ref) {
+    return false;
+  }
+  try {
+    const pins = readPins(storage);
+    if (!(ref in pins)) {
+      return false;
+    }
+    delete pins[ref];
+    storage.setItem(ELEVATION_PINS_STORAGE_KEY, JSON.stringify(pins));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function isLoopbackHostname(hostname) {
+  const host = String(hostname || "").trim().toLowerCase().replace(/^\[|\]$/g, "");
+  return host === "localhost" || host === "::1" || /^127\.\d+\.\d+\.\d+$/.test(host);
+}
+
+// elevationPinNeedsConfirm reports whether the first key of endpointRef must be confirmed by the
+// person before it is pinned. Like chat, a runtime on this machine is pinned silently: the Console's
+// own runtime, reached from the desktop app or a page on a loopback address. Any other is confirmed
+// against the fingerprint mistermorph console logs at start.
+function elevationPinNeedsConfirm(endpointRef, { localEndpointRef = "", desktop = false, hostname = "" } = {}) {
+  const ref = String(endpointRef || "").trim();
+  if (!ref || ref !== String(localEndpointRef || "").trim()) {
+    return true;
+  }
+  return !(desktop || isLoopbackHostname(hostname));
+}
+
+export {
+  ELEVATION_PINS_STORAGE_KEY,
+  elevationPinNeedsConfirm,
+  forgetElevationIdentity,
+  pinElevationIdentity,
+  pinnedElevationIdentity,
+};

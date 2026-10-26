@@ -534,8 +534,6 @@ const I18N = {
       "Not on HTTPS: the password is encrypted against eavesdropping, but this page could be tampered with on the way. Use HTTPS, an SSH tunnel or chat for full protection.",
     chat_elevation_insecure_deny:
       "This Console is not on HTTPS, so it does not take the password here. Open it over HTTPS or an SSH tunnel, or approve from chat.",
-    chat_elevation_first_key:
-      "First request from this runtime; its key is trusted from now on. It should match the elevation_identity fingerprint mistermorph console logged:",
     chat_elevation_key: "Key",
     chat_elevation_key_changed:
       "This runtime's identity key changed, so the password was not sent. Someone may be intercepting the connection.",
@@ -543,9 +541,23 @@ const I18N = {
     chat_elevation_key_new: "Now",
     chat_elevation_trust_new: "Trust new key",
     chat_elevation_trust_confirm:
-      "Trust the new key only if you know why it changed (the runtime's state was reset, say) and its fingerprint matches the one mistermorph console logged.",
+      "Trust the new key only if you know why it changed (the runtime's state was reset, say) and it matches what mistermorph console fingerprint prints on the runtime's machine.",
     chat_elevation_trust_confirm_action: "Trust it",
     chat_elevation_cancel: "Cancel",
+    chat_elevation_key_status_trusted: "Trusted",
+    chat_elevation_key_status_new: "New, saved when you allow",
+    chat_elevation_key_copy: "Copy",
+    chat_elevation_key_copied: "Copied",
+    chat_elevation_key_verify: "How to check this key",
+    chat_elevation_key_verify_step_log:
+      "On the machine running mistermorph console, run:",
+    chat_elevation_key_verify_step_log_hint:
+      "It prints the fingerprint of the runtime's key, in the same groups as above.",
+    chat_elevation_key_verify_step_settings: "Or open Settings › System › Elevation key in a Console you already trust.",
+    chat_elevation_key_verify_step_match: "All 8 groups must match exactly. If any differ, decline: the connection may be intercepted.",
+    chat_elevation_first_confirm:
+      "This browser has not approved a command from this runtime before. Check that its fingerprint matches what mistermorph console fingerprint prints on the runtime's machine:",
+    chat_elevation_trust_first: "It matches, trust it",
     chat_elevation_bad_offer: "This request is not signed by the runtime, so the password cannot be sent.",
     chat_elevation_closed: "This request is closed.",
     chat_elevation_outcome: "Result",
@@ -1481,6 +1493,15 @@ const I18N = {
     settings_logs_open: "Open Logs",
     settings_session_title: "Session",
     settings_session_hint: "Sign out of this console session.",
+    settings_elevation_key_title: "Elevation key",
+    settings_elevation_key_hint:
+      "The runtime's identity key; sudo passwords from the chat are encrypted to it. On the runtime's machine, mistermorph console fingerprint prints the same fingerprint.",
+    settings_elevation_key_trusted: "Trusted in this browser.",
+    settings_elevation_key_untrusted: "Not trusted in this browser yet; the first approval card asks.",
+    settings_elevation_key_changed: "Differs from the key this browser trusts. Approval cards refuse it until you trust it again.",
+    settings_elevation_key_unavailable: "This runtime has no elevation key.",
+    settings_elevation_key_trust: "Trust",
+    settings_elevation_key_forget: "Forget",
     placeholder_select_file: "Select file",
     placeholder_audit_file: "Audit file",
 
@@ -2181,15 +2202,29 @@ const I18N = {
     chat_elevation_insecure_warn:
       "未使用 HTTPS：密码已加密，可防窃听，但这个页面可能在传输途中被篡改。如需完整保护，请使用 HTTPS、SSH 隧道或 chat。",
     chat_elevation_insecure_deny: "这个 Console 未使用 HTTPS，因此不在这里接收密码。请通过 HTTPS 或 SSH 隧道打开，或在 chat 中批准。",
-    chat_elevation_first_key: "这是该运行时的第一个请求，此后将信任它的密钥。它应与 mistermorph console 日志中 elevation_identity 的指纹一致：",
     chat_elevation_key: "密钥",
     chat_elevation_key_changed: "该运行时的身份密钥已变化，因此没有发送密码。连接可能被拦截。",
     chat_elevation_key_trusted: "已信任",
     chat_elevation_key_new: "当前",
     chat_elevation_trust_new: "信任新密钥",
-    chat_elevation_trust_confirm: "只有在你知道它为何变化（例如运行时的状态被重置），且指纹与 mistermorph console 日志中的一致时，才信任新密钥。",
+    chat_elevation_trust_confirm:
+      "只有在你知道它为何变化（例如运行时的状态被重置），且它与在运行时所在机器上执行 mistermorph console fingerprint 的输出一致时，才信任新密钥。",
     chat_elevation_trust_confirm_action: "信任",
     chat_elevation_cancel: "取消",
+    chat_elevation_key_status_trusted: "已信任",
+    chat_elevation_key_status_new: "新密钥，允许后保存",
+    chat_elevation_key_copy: "复制",
+    chat_elevation_key_copied: "已复制",
+    chat_elevation_key_verify: "如何核对这个密钥",
+    chat_elevation_key_verify_step_log:
+      "在运行 mistermorph console 的机器上执行：",
+    chat_elevation_key_verify_step_log_hint:
+      "它会打印运行时密钥的指纹，分组方式与上面相同。",
+    chat_elevation_key_verify_step_settings: "或在你已信任的 Console 中打开「设置 › 系统 › 提权密钥」。",
+    chat_elevation_key_verify_step_match: "8 组必须完全一致。只要有一组不同，就拒绝：连接可能被拦截。",
+    chat_elevation_first_confirm:
+      "此浏览器以前没有批准过这个运行时的命令。请确认它的指纹与在运行时所在机器上执行 mistermorph console fingerprint 的输出一致：",
+    chat_elevation_trust_first: "一致，信任它",
     chat_elevation_bad_offer: "这个请求没有运行时的签名，因此无法发送密码。",
     chat_elevation_closed: "这个请求已关闭。",
     chat_elevation_outcome: "结果",
@@ -3120,6 +3155,15 @@ const I18N = {
     settings_logs_open: "打开日志",
     settings_session_title: "会话",
     settings_session_hint: "退出当前 Console 会话。",
+    settings_elevation_key_title: "提权密钥",
+    settings_elevation_key_hint:
+      "运行时的身份密钥，chat 中输入的 sudo 密码会用它加密。在运行时所在机器上执行 mistermorph console fingerprint 会打印同一个指纹。",
+    settings_elevation_key_trusted: "此浏览器已信任。",
+    settings_elevation_key_untrusted: "此浏览器尚未信任，第一个批准卡片会询问。",
+    settings_elevation_key_changed: "与此浏览器信任的密钥不同。在你再次信任之前，批准卡片会拒绝它。",
+    settings_elevation_key_unavailable: "这个运行时没有提权密钥。",
+    settings_elevation_key_trust: "信任",
+    settings_elevation_key_forget: "忘记",
     placeholder_select_file: "选择文件",
     placeholder_audit_file: "选择审计文件",
 
@@ -3825,17 +3869,29 @@ const I18N = {
       "HTTPS ではありません。パスワードは盗聴から守るため暗号化されますが、このページ自体が途中で改ざんされるおそれがあります。完全に保護するには HTTPS、SSH トンネル、または chat を使ってください。",
     chat_elevation_insecure_deny:
       "この Console は HTTPS ではないため、ここではパスワードを受け付けません。HTTPS か SSH トンネルで開くか、chat から承認してください。",
-    chat_elevation_first_key:
-      "このランタイムからの最初のリクエストです。以後この鍵を信頼します。mistermorph console のログにある elevation_identity のフィンガープリントと一致するはずです：",
     chat_elevation_key: "鍵",
     chat_elevation_key_changed: "このランタイムの ID 鍵が変わったため、パスワードは送信しませんでした。接続が傍受されている可能性があります。",
     chat_elevation_key_trusted: "信頼済み",
     chat_elevation_key_new: "現在",
     chat_elevation_trust_new: "新しい鍵を信頼",
     chat_elevation_trust_confirm:
-      "変わった理由（ランタイムの状態をリセットしたなど）が分かっていて、フィンガープリントが mistermorph console のログと一致する場合にだけ、新しい鍵を信頼してください。",
+      "変わった理由（ランタイムの状態をリセットしたなど）が分かっていて、ランタイムのマシンで mistermorph console fingerprint を実行した結果と一致する場合にだけ、新しい鍵を信頼してください。",
     chat_elevation_trust_confirm_action: "信頼する",
     chat_elevation_cancel: "キャンセル",
+    chat_elevation_key_status_trusted: "信頼済み",
+    chat_elevation_key_status_new: "新しい鍵。許可すると保存",
+    chat_elevation_key_copy: "コピー",
+    chat_elevation_key_copied: "コピーしました",
+    chat_elevation_key_verify: "この鍵の確認方法",
+    chat_elevation_key_verify_step_log:
+      "mistermorph console を実行しているマシンで、次を実行します：",
+    chat_elevation_key_verify_step_log_hint:
+      "ランタイムの鍵のフィンガープリントが、上と同じグループで表示されます。",
+    chat_elevation_key_verify_step_settings: "または、すでに信頼している Console で「設定 › システム › 昇格用の鍵」を開きます。",
+    chat_elevation_key_verify_step_match: "8 つのグループがすべて一致する必要があります。1 つでも違えば拒否してください。接続が傍受されている可能性があります。",
+    chat_elevation_first_confirm:
+      "このブラウザはまだこのランタイムのコマンドを承認したことがありません。フィンガープリントが、ランタイムのマシンで mistermorph console fingerprint を実行した結果と一致するか確認してください：",
+    chat_elevation_trust_first: "一致したので信頼する",
     chat_elevation_bad_offer: "このリクエストにはランタイムの署名がないため、パスワードを送信できません。",
     chat_elevation_closed: "このリクエストは締め切られました。",
     chat_elevation_outcome: "結果",
@@ -4771,6 +4827,15 @@ const I18N = {
     settings_logs_open: "ログを開く",
     settings_session_title: "セッション",
     settings_session_hint: "現在の Console セッションからログアウトします。",
+    settings_elevation_key_title: "昇格用の鍵",
+    settings_elevation_key_hint:
+      "ランタイムの ID 鍵です。chat で入力した sudo パスワードはこの鍵に向けて暗号化されます。ランタイムのマシンで mistermorph console fingerprint を実行すると同じフィンガープリントが表示されます。",
+    settings_elevation_key_trusted: "このブラウザで信頼済みです。",
+    settings_elevation_key_untrusted: "このブラウザではまだ信頼していません。最初の承認カードで確認します。",
+    settings_elevation_key_changed: "このブラウザが信頼している鍵と異なります。再び信頼するまで承認カードは拒否します。",
+    settings_elevation_key_unavailable: "このランタイムには昇格用の鍵がありません。",
+    settings_elevation_key_trust: "信頼する",
+    settings_elevation_key_forget: "削除",
     placeholder_select_file: "ファイルを選択",
     placeholder_audit_file: "監査ファイルを選択",
 

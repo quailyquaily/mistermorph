@@ -32,6 +32,7 @@ import toolChannelWhatsAppLogoURL from "../assets/images/channels/whatsapp.svg";
 import AppMarkdownEditor from "../components/AppMarkdownEditor";
 import SettingsAppPanel from "../components/SettingsAppPanel";
 import SettingsCreditsPanel from "../components/SettingsCreditsPanel";
+import SettingsElevationKey from "../components/SettingsElevationKey";
 import SettingDialog from "../components/SettingDialog";
 import SetupConnectionTestDialog from "../components/SetupConnectionTestDialog";
 import RawJsonDialog from "../components/RawJsonDialog";
@@ -800,6 +801,7 @@ const SettingsView = {
     AppMarkdownEditor,
     SettingsAppPanel,
     SettingsCreditsPanel,
+    SettingsElevationKey,
     SettingDialog,
     SetupConnectionTestDialog,
     SetupPickerDialog,
@@ -6530,6 +6532,7 @@ const SettingsView = {
                       {{ t("settings_logs_open") }}
                     </QButton>
                   </div>
+                  <SettingsElevationKey />
                   <div class="settings-console-row settings-console-row-end">
                     <div class="settings-card-copy">
                       <h4 class="settings-card-title">{{ t("settings_session_title") }}</h4>

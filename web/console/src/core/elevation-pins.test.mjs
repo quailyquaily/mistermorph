@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { ELEVATION_PINS_STORAGE_KEY, pinElevationIdentity, pinnedElevationIdentity } from "./elevation-pins.js";
+import {
+  ELEVATION_PINS_STORAGE_KEY,
+  elevationPinNeedsConfirm,
+  forgetElevationIdentity,
+  pinElevationIdentity,
+  pinnedElevationIdentity,
+} from "./elevation-pins.js";
 
 function memoryStorage() {
   const data = new Map();
@@ -38,4 +44,29 @@ test("pins survive broken or missing storage", () => {
   garbled.setItem(ELEVATION_PINS_STORAGE_KEY, "[1,2");
   assert.equal(pinnedElevationIdentity("local", garbled), "");
   assert.equal(pinElevationIdentity("", "key-a", garbled), false);
+});
+
+test("a pin can be forgotten", () => {
+  const storage = memoryStorage();
+  pinElevationIdentity("remote", "key-b", storage);
+  assert.equal(forgetElevationIdentity("remote", storage), true);
+  assert.equal(pinnedElevationIdentity("remote", storage), "");
+  assert.equal(forgetElevationIdentity("remote", storage), false);
+});
+
+test("only the Console's own runtime, reached locally, is pinned without asking", () => {
+  const local = "ep_console_local";
+  const cases = [
+    [{ hostname: "localhost" }, local, false],
+    [{ hostname: "127.0.0.1" }, local, false],
+    [{ hostname: "[::1]" }, local, false],
+    [{ desktop: true, hostname: "" }, local, false],
+    [{ hostname: "console.example" }, local, true],
+    [{ hostname: "192.168.1.5" }, local, true],
+    [{ hostname: "localhost" }, "ep_remote", true],
+    [{ hostname: "localhost" }, "", true],
+  ];
+  for (const [env, ref, want] of cases) {
+    assert.equal(elevationPinNeedsConfirm(ref, { localEndpointRef: local, ...env }), want, `${ref} ${JSON.stringify(env)}`);
+  }
 });
