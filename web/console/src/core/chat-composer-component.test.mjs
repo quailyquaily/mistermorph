@@ -13,7 +13,7 @@ test("ChatView uses the shared ChatComposer for both placeholder and chat input"
   assert.match(view, /components:\s*\{[^}]*ChatComposer/us);
   assert.equal((view.match(/<ChatComposer\b/gu) || []).length, 2);
   assert.equal(view.includes('ref="composerField"'), false);
-  assert.equal(view.includes("<QTextarea"), false);
+  assert.equal(view.includes("<AppTextarea"), false);
 });
 
 test("ChatComposer owns textarea behavior and exposes imperative hooks", async () => {
@@ -34,7 +34,7 @@ test("ChatComposer owns textarea behavior and exposes imperative hooks", async (
   assert.match(component, /@input="handleInput"/u);
   assert.match(component, /@scroll="handleInputScroll"/u);
   assert.match(component, /:value="inputValue"/u);
-  assert.equal(component.includes("<QTextarea"), false);
+  assert.equal(component.includes("<AppTextarea"), false);
   assert.equal(component.includes("chat-composer-suggestions-head"), false);
   assert.equal(styles.includes("q-textarea"), false);
   assert.equal(styles.includes("chat-composer-suggestions-head"), false);
@@ -115,7 +115,7 @@ test("Chat composer exposes a per-task LLM profile picker only when named profil
   assert.match(component, /llmProfileItems:\s*\{/u);
   assert.match(component, /llmProfileValue:\s*\{/u);
   assert.match(component, /"update:llmProfileValue"/u);
-  assert.match(component, /<QDropdownMenu/u);
+  assert.match(component, /<AppDropdownMenu/u);
   assert.match(component, /v-if="llmProfileItems\.length > 1"/u);
   assert.match(component, /emit\("update:llmProfileValue"/u);
 

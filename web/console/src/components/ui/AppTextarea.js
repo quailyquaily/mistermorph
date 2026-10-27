@@ -2,13 +2,13 @@ import { computed, onMounted, ref, watch } from "vue";
 
 import { fieldAttrs, hasSlotContent } from "./fieldAttrs";
 
-// QTextarea: a multi-line text field bound with v-model, with prepend/append slots, an optional hint
+// AppTextarea: a multi-line text field bound with v-model, with prepend/append slots, an optional hint
 // and counter (max). The model follows every input. Its root keeps class, style and data-*; other
 // attributes and listeners go to the <textarea>.
 //
 // Derived from quail-ui 0.9.10 (Apache License 2.0).
-const QTextarea = {
-  name: "QTextarea",
+const AppTextarea = {
+  name: "AppTextarea",
   inheritAttrs: false,
   props: {
     modelValue: { type: String, default: "" },
@@ -91,4 +91,4 @@ const QTextarea = {
   `,
 };
 
-export default QTextarea;
+export default AppTextarea;

@@ -2,7 +2,7 @@
 
 This document describes the desktop child-window runtime used by the Console SPA in Wails desktop mode.
 
-The browser Console and the desktop app share the same Vue frontend. Desktop mode only changes the host behavior: selected dialog content can be opened in a separate WebView route instead of a `QDialog`.
+The browser Console and the desktop app share the same Vue frontend. Desktop mode only changes the host behavior: selected dialog content can be opened in a separate WebView route instead of an `AppDialog`.
 
 ## Architecture
 
@@ -216,7 +216,7 @@ User                 Child WebView         Wails host          Parent wrapper
 ## Adding a Payload Dialog
 
 1. Extract the dialog body into a content component.
-2. Keep the web wrapper as the fallback `QDialog`.
+2. Keep the web wrapper as the fallback `AppDialog`.
 3. Add a stable `window_id` constant.
 4. Add an open helper that stores the initial payload and opens `/window/<window_id>`.
 5. Add one entry to the `DesktopWindowView` dialog registry.

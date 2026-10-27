@@ -561,20 +561,20 @@ const ChatHistoryItem = {
                 <span>{{ item.approvalError }}</span>
               </div>
               <div v-if="approvalPending" class="chat-approval-actions">
-                <QButton
+                <AppButton
                   class="plain xs"
                   :disabled="item.approvalBusy"
                   @click.stop="emitApprovalDeny"
                 >
                   {{ approvalDenyLabel }}
-                </QButton>
-                <QButton
+                </AppButton>
+                <AppButton
                   class="primary xs"
                   :disabled="approvalApproveDisabled"
                   @click.stop="emitApprovalApprove"
                 >
                   {{ approvalApproveLabel }}
-                </QButton>
+                </AppButton>
               </div>
             </section>
           </div>

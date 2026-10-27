@@ -146,7 +146,7 @@ const AppMobileAgentSwitcher = {
         class="mobile-agent-switcher-content"
         :class="{ 'has-filter': showFilter }"
       >
-        <QInput
+        <AppInput
           v-if="showFilter"
           class="mobile-agent-switcher-filter"
           :modelValue="filter"

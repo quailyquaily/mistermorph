@@ -201,15 +201,15 @@ const ContextView = {
     <AppPage :title="t('context_inspector_title')" class="context-page">
       <template #leading>
         <div class="context-page-bar">
-          <QButton class="plain xs icon" :title="t('context_inspector_back')" :aria-label="t('context_inspector_back')" @click="back">
+          <AppButton class="plain xs icon" :title="t('context_inspector_back')" :aria-label="t('context_inspector_back')" @click="back">
             <PhArrowLeft class="icon" />
-          </QButton>
+          </AppButton>
           <h2 class="page-title page-bar-title workspace-section-title">{{ barTitle }}</h2>
         </div>
       </template>
 
       <section ref="viewEl" :class="['context-view', { 'is-phone': isPhone }]">
-        <QProgress v-if="loading && !grid" :infinite="true" />
+        <AppProgress v-if="loading && !grid" :infinite="true" />
         <AppNotice v-else-if="error" type="error" :text="error" />
         <p v-else-if="snapshot && !snapshot.available" class="context-view-empty">{{ t("context_inspector_empty") }}</p>
 

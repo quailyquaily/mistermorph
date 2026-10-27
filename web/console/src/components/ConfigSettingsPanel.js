@@ -271,7 +271,7 @@ export default {
   },
   template: `
     <div class="config-settings-panel">
-      <QProgress v-if="loading" :infinite="true" />
+      <AppProgress v-if="loading" :infinite="true" />
       <div v-if="validationError" class="config-settings-error" role="alert">{{ validationError }}</div>
 
       <AppSection
@@ -283,14 +283,14 @@ export default {
         :class="['config-settings-group', { 'is-embedded': embedded, 'is-inactive': groupInactiveNote(group) }]"
       >
         <template v-if="!registered && savePlacement === 'header' && group === groups[0]" #actions>
-          <QButton
+          <AppButton
             class="plain xs"
             :loading="saving"
             :disabled="loading || saving || !dirty"
             @click="save"
           >
             Save
-          </QButton>
+          </AppButton>
         </template>
 
         <p v-if="groupInactiveNote(group)" class="config-settings-inactive-note">{{ groupInactiveNote(group) }}</p>
@@ -313,7 +313,7 @@ export default {
                 <span v-if="fieldInactive(field)" class="settings-toggle-note config-settings-dependency-note">{{ dependencyNote(field) }}</span>
                 <span v-if="restartRequired(field)" class="config-settings-restart">Restart required</span>
               </div>
-              <QSwitch
+              <AppSwitch
                 :modelValue="draft[field.path]"
                 :disabled="fieldDisabled(field, group)"
                 @update:modelValue="updateField(field, $event)"
@@ -376,7 +376,7 @@ export default {
               @update:modelValue="updateField(field, $event)"
             >
               <template #fallback>
-                <QTextarea
+                <AppTextarea
                   :modelValue="draft[field.path]"
                   :rows="7"
                   class="config-settings-json"
@@ -405,7 +405,7 @@ export default {
               :disabled="fieldDisabled(field, group)"
               @update:modelValue="updateField(field, $event.join('\\n'))"
             />
-            <QTextarea
+            <AppTextarea
               v-else-if="field.type === 'string_list' || field.type === 'json'"
               :modelValue="draft[field.path]"
               :rows="field.type === 'json' ? 7 : 4"
@@ -424,7 +424,7 @@ export default {
               :disabled="fieldDisabled(field, group)"
               @update:modelValue="updateField(field, $event)"
             />
-            <QInput
+            <AppInput
               v-else
               :modelValue="draft[field.path]"
               :inputType="inputType(field)"
@@ -438,12 +438,12 @@ export default {
             <div v-if="sourceLabel(field) || showClear(field)" class="config-settings-field-meta">
               <span v-if="sourceLabel(field)">{{ sourceLabel(field) }}</span>
               <span v-else></span>
-              <QButton
+              <AppButton
                 v-if="showClear(field)"
                 class="plain xs"
                 :disabled="loading || saving"
                 @click="resetField(field)"
-              >Clear</QButton>
+              >Clear</AppButton>
             </div>
             </template>
           </div>
@@ -451,9 +451,9 @@ export default {
       </AppSection>
 
       <div v-if="!registered && savePlacement === 'footer'" class="config-settings-actions">
-        <QButton class="primary" :loading="saving" :disabled="loading || saving || !dirty" @click="save">
+        <AppButton class="primary" :loading="saving" :disabled="loading || saving || !dirty" @click="save">
           Save
-        </QButton>
+        </AppButton>
       </div>
     </div>
   `,

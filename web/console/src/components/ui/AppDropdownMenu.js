@@ -1,22 +1,22 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 
 import { hasSlotContent } from "./fieldAttrs";
-import { QIconChevronDown } from "./icons";
-import QDialog from "./QDialog";
-import QInput from "./QInput";
-import QMenu from "./QMenu";
+import { AppIconChevronDown } from "./icons";
+import AppDialog from "./AppDialog";
+import AppInput from "./AppInput";
+import AppMenu from "./AppMenu";
 import { closePopupMenu, onPopupClose, opensKeyboard } from "./popup";
 
-// QDropdownMenu: a button showing the chosen item that opens a QMenu of items below it. On a
+// AppDropdownMenu: a button showing the chosen item that opens a AppMenu of items below it. On a
 // narrow window (under 768px when it is set up, or with useDialog "always") the menu opens in a
 // frameless dialog instead, optionally with a filter field. Arrow keys move through the items,
 // Enter chooses, Escape closes; opening one menu closes the others, and so does a click elsewhere.
 // Choosing an item emits "change". The default slot replaces the chosen item's label.
 //
 // Derived from quail-ui 0.9.10 (Apache License 2.0).
-const QDropdownMenu = {
-  name: "QDropdownMenu",
-  components: { QDialog, QIconChevronDown, QInput, QMenu },
+const AppDropdownMenu = {
+  name: "AppDropdownMenu",
+  components: { AppDialog, AppIconChevronDown, AppInput, AppMenu },
   props: {
     items: { type: Array, required: true },
     initialItem: { type: Object, default: null },
@@ -232,29 +232,29 @@ const QDropdownMenu = {
           </div>
           <slot />
           <div v-if="hideSelected || hasSlot" class="empty-block"></div>
-          <QIconChevronDown class="icon chevron-icon" />
+          <AppIconChevronDown class="icon chevron-icon" />
         </button>
         <!-- A click on an item cancels its default action: inside a <label>, that action clicks the
              label's control, this menu's own button, and the menu would open again. -->
         <div v-if="!useDialogFlag" ref="menuWrapper" @click.prevent>
           <Transition>
-            <QMenu v-if="expanded" :items="items" :focused-index="focusedIndex" @action="select" />
+            <AppMenu v-if="expanded" :items="items" :focused-index="focusedIndex" @action="select" />
           </Transition>
         </div>
-        <QDialog v-if="useDialogFlag" v-model="expanded" no-frame>
+        <AppDialog v-if="useDialogFlag" v-model="expanded" no-frame>
           <div class="q-menu-popup-body" @click.prevent>
             <div v-if="useFilter" class="filter-area">
-              <QInput ref="filterInput" v-model="filterText" class="filter-input" placeholder="Filter" />
+              <AppInput ref="filterInput" v-model="filterText" class="filter-input" placeholder="Filter" />
             </div>
             <div class="scroll-area" :style="{ height: scrollHeight, maxHeight: scrollHeight }">
-              <QMenu v-if="filteredItems.length > 0" :items="filteredItems" :focused-index="focusedIndex" persistent no-frame no-shadow @action="select" />
+              <AppMenu v-if="filteredItems.length > 0" :items="filteredItems" :focused-index="focusedIndex" persistent no-frame no-shadow @action="select" />
               <div v-else class="empty-hint flow place-center" v-text="emptyHit"></div>
             </div>
           </div>
-        </QDialog>
+        </AppDialog>
       </div>
     </div>
   `,
 };
 
-export default QDropdownMenu;
+export default AppDropdownMenu;

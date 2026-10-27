@@ -2,7 +2,7 @@ import { computed, onMounted, ref, watch } from "vue";
 
 import { hasSlotContent } from "./fieldAttrs";
 
-// QDatetimePicker: the browser's date and time fields side by side (accept: date, time or
+// AppDatetimePicker: the browser's date and time fields side by side (accept: date, time or
 // datetime), bound with v-model to a local "yyyy-mm-ddThh:mm:00" string. An empty or unreadable
 // value shows now. A prepend slot labels it.
 //
@@ -20,8 +20,8 @@ function splitDatetime(value) {
   };
 }
 
-const QDatetimePicker = {
-  name: "QDatetimePicker",
+const AppDatetimePicker = {
+  name: "AppDatetimePicker",
   props: {
     modelValue: { type: String, required: true },
     accept: { type: String, default: "datetime" },
@@ -58,4 +58,4 @@ const QDatetimePicker = {
   `,
 };
 
-export default QDatetimePicker;
+export default AppDatetimePicker;

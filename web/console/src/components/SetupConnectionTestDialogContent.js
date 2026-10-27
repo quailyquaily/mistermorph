@@ -253,10 +253,10 @@ const SetupConnectionTestDialogContent = {
       </div>
 
       <div class="connection-test-actions">
-        <QButton class="primary" :loading="loading" @click="retry">
+        <AppButton class="primary" :loading="loading" @click="retry">
           {{ loading ? t("setup_llm_test_running") : t("setup_llm_test_retry") }}
-        </QButton>
-        <QButton class="outlined" @click="close">{{ t("action_close") }}</QButton>
+        </AppButton>
+        <AppButton class="outlined" @click="close">{{ t("action_close") }}</AppButton>
       </div>
     </section>
   `,

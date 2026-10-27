@@ -125,10 +125,10 @@ export default {
           <span class="console-endpoint-count">{{ endpoints.length }}</span>{{ t('remote_agents_note') }}
         </template>
         <template #actions>
-          <QButton class="plain xs" :disabled="loading || saving" @click="edit()"><PhPlus class="icon" />{{ t('overview_add_console') }}</QButton>
+          <AppButton class="plain xs" :disabled="loading || saving" @click="edit()"><PhPlus class="icon" />{{ t('overview_add_console') }}</AppButton>
         </template>
         <div class="console-endpoint-list" :aria-busy="loading || saving">
-          <QProgress v-if="loading" :infinite="true" />
+          <AppProgress v-if="loading" :infinite="true" />
           <p v-else-if="!rows.length" class="console-endpoint-empty">{{ t('remote_agents_empty') }}</p>
           <div
             v-for="endpoint in rows"
@@ -145,7 +145,7 @@ export default {
               @click="edit(endpoint)"
             >
               <span class="console-endpoint-heading"><strong>{{ endpoint.name }}</strong>
-                <span class="console-endpoint-status"><QBadge dot :type="endpoint.status === 'online' ? 'success' : endpoint.status === 'offline' ? 'danger' : 'default'" size="sm" />{{ t('remote_status_' + endpoint.status) }}</span>
+                <span class="console-endpoint-status"><AppBadge dot :type="endpoint.status === 'online' ? 'success' : endpoint.status === 'offline' ? 'danger' : 'default'" size="sm" />{{ t('remote_status_' + endpoint.status) }}</span>
               </span>
               <code class="console-endpoint-url">{{ endpoint.url }}</code>
             </button>
@@ -163,14 +163,14 @@ export default {
         >
           <AppSection class="is-literal" :title="editingName === null ? t('overview_add_console') : editingName">
             <template #actions>
-              <QButton class="plain xs icon" :title="t('settings_channel_close')" :aria-label="t('settings_channel_close')" @click="editorOpen = false">
+              <AppButton class="plain xs icon" :title="t('settings_channel_close')" :aria-label="t('settings_channel_close')" @click="editorOpen = false">
                 <PhX class="icon" />
-              </QButton>
+              </AppButton>
             </template>
             <div class="settings-panel-body">
               <div class="settings-form-grid console-endpoint-form" @keyup.enter="save">
-                <label class="settings-field is-wide"><span class="settings-field-label">{{ t('remote_agent_name') }}</span><QInput v-model="draft.name" :disabled="saving" /></label>
-                <label class="settings-field is-wide"><span class="settings-field-label">Runtime API URL</span><QInput v-model="draft.url" placeholder="https://agent.example.com/runtime" :disabled="saving" /></label>
+                <label class="settings-field is-wide"><span class="settings-field-label">{{ t('remote_agent_name') }}</span><AppInput v-model="draft.name" :disabled="saving" /></label>
+                <label class="settings-field is-wide"><span class="settings-field-label">Runtime API URL</span><AppInput v-model="draft.url" placeholder="https://agent.example.com/runtime" :disabled="saving" /></label>
                 <label class="settings-field is-wide">
                   <span class="settings-field-label">{{ t('remote_access_token') }}</span>
                   <SecretInput v-model="draft.auth_token" :status="{ configured: draft.configured }" :placeholder="t('remote_token_required')" :disabled="saving" />
@@ -178,10 +178,10 @@ export default {
                 </label>
               </div>
               <div v-if="editingName !== null" class="console-endpoint-pane-actions">
-                <QButton class="outlined danger" :disabled="loading || saving" @click="confirmRemove(endpoints.find((item) => item.name === editingName))">
+                <AppButton class="outlined danger" :disabled="loading || saving" @click="confirmRemove(endpoints.find((item) => item.name === editingName))">
                   <PhTrash class="icon" />
                   {{ t('remote_remove_agent') }}
-                </QButton>
+                </AppButton>
               </div>
             </div>
           </AppSection>
@@ -189,14 +189,14 @@ export default {
             <p class="app-side-pane-foot-text" :class="{ 'is-error': editorError }" role="status">
               {{ editorError || (dirty ? t('settings_channel_unsaved_note') : '') }}
             </p>
-            <QButton class="primary" :loading="saving" :disabled="loading || saving || !valid || (!dirty && editingName !== null)" @click="save">
+            <AppButton class="primary" :loading="saving" :disabled="loading || saving || !valid || (!dirty && editingName !== null)" @click="save">
               {{ t('action_save') }}
-            </QButton>
+            </AppButton>
           </template>
         </AppSidePane>
       </Teleport>
 
-      <QDialog :modelValue="!!removeTarget" :persistent="saving" width="460px" @update:modelValue="!$event && !saving && (removeTarget = null)">
+      <AppDialog :modelValue="!!removeTarget" :persistent="saving" width="460px" @update:modelValue="!$event && !saving && (removeTarget = null)">
         <template #header><header class="setting-dialog-header"><h3 class="setting-dialog-title">{{ t('remote_remove_agent') }}</h3></header></template>
         <section class="setting-dialog">
           <div class="setting-dialog-scroll console-endpoint-remove-copy">
@@ -204,11 +204,11 @@ export default {
             <p v-if="removeError" class="console-endpoint-error" role="alert">{{ removeError }}</p>
           </div>
           <footer class="setting-dialog-actions">
-            <QButton class="outlined" :disabled="saving" @click="removeTarget = null">{{ t('action_cancel') }}</QButton>
-            <QButton class="danger" :loading="saving" :disabled="saving" @click="remove">{{ t('remote_remove_agent') }}</QButton>
+            <AppButton class="outlined" :disabled="saving" @click="removeTarget = null">{{ t('action_cancel') }}</AppButton>
+            <AppButton class="danger" :loading="saving" :disabled="saving" @click="remove">{{ t('remote_remove_agent') }}</AppButton>
           </footer>
         </section>
-      </QDialog>
+      </AppDialog>
     </div>
   `,
 };

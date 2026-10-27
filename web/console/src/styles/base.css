@@ -406,7 +406,7 @@ pre {
   color: var(--q-c-red) !important;
 }
 
-/* Indeterminate loading (QProgress :infinite): a hairline with a short segment sweeping across,
+/* Indeterminate loading (AppProgress :infinite): a hairline with a short segment sweeping across,
    in place of Quail's striped bar. Value progress bars keep their own look. `body` outranks
    Quail's equally specific rules, which load later. */
 body .q-progress:has(.q-progress-bar.animated) .q-progress-slot {

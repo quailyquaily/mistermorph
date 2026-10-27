@@ -158,7 +158,7 @@ const SecretKeyPicker = {
     };
   },
   template: `
-    <QDialog :modelValue="modelValue" width="480px" @update:modelValue="$emit('update:modelValue', $event)">
+    <AppDialog :modelValue="modelValue" width="480px" @update:modelValue="$emit('update:modelValue', $event)">
       <template #header>
         <header class="setting-dialog-header">
           <h3 class="setting-dialog-title">{{ t("secret_picker_title") }}</h3>
@@ -186,7 +186,7 @@ const SecretKeyPicker = {
               <span class="secret-key-picker-meta">{{ usedByText(key) }}</span>
             </button>
             <div v-if="asking === key.id" class="secret-key-picker-ask">
-              <QInput
+              <AppInput
                 v-model="password"
                 inputType="password"
                 :placeholder="t('secret_reveal_password')"
@@ -194,15 +194,15 @@ const SecretKeyPicker = {
                 @keydown.enter.prevent="reveal(key, $event)"
                 @keydown.esc.prevent.stop="cancelAsk"
               />
-              <QButton class="outlined sm" :loading="revealing" @click="reveal(key)">{{ t("secret_picker_use") }}</QButton>
-              <QButton class="plain sm" :disabled="revealing" @click="cancelAsk">{{ t("secret_reveal_cancel") }}</QButton>
+              <AppButton class="outlined sm" :loading="revealing" @click="reveal(key)">{{ t("secret_picker_use") }}</AppButton>
+              <AppButton class="plain sm" :disabled="revealing" @click="cancelAsk">{{ t("secret_reveal_cancel") }}</AppButton>
             </div>
             <p v-if="asking === key.id && revealError" class="secret-key-picker-error" role="alert">{{ revealError }}</p>
           </li>
         </ul>
         <p v-if="revealError && !asking" class="secret-key-picker-error" role="alert">{{ revealError }}</p>
       </section>
-    </QDialog>
+    </AppDialog>
   `,
 };
 

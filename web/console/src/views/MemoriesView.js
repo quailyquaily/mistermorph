@@ -263,10 +263,10 @@ export default {
           <input v-model="query" type="search" class="memories-query" :placeholder="t('memories_search')" :aria-label="t('memories_search')" />
         </div>
         <div class="memories-subject-filter">
-          <QDropdownMenu class="sm" :key="subject" :items="subjectOptions" :initialItem="selectedSubjectOption"
+          <AppDropdownMenu class="sm" :key="subject" :items="subjectOptions" :initialItem="selectedSubjectOption"
             @change="(item) => { subject = item.value }">
             <span class="memories-filter-value">{{ selectedSubjectOption.title }}</span>
-          </QDropdownMenu>
+          </AppDropdownMenu>
         </div>
       </div>
       <p class="memories-note">{{ t("memories_owner_note") }}</p>
@@ -275,7 +275,7 @@ export default {
       <div v-else-if="!groups.length" class="memories-empty">
         <PhBrain class="icon memories-empty-icon" aria-hidden="true" />
         <p>{{ t(items.length ? "memories_no_match" : "memories_empty") }}</p>
-        <QButton v-if="items.length && filterActive" class="outlined sm" @click="clearFilters">{{ t("logs_clear_filters") }}</QButton>
+        <AppButton v-if="items.length && filterActive" class="outlined sm" @click="clearFilters">{{ t("logs_clear_filters") }}</AppButton>
       </div>
       <AppSection v-for="group in groups" :key="group.key" variant="boxed" class="memories-group" :title="group.title" :meta="group.meta" :level="2">
         <ul class="memory-list">
@@ -292,10 +292,10 @@ export default {
                 <time :datetime="item.updated_at">{{ formatShortTime(item.updated_at) }}</time>
               </p>
             </div>
-            <QDropdownMenu class="memory-actions-menu" variant="plain" :items="actionItems(item)" hideSelected hideActionLabel>
+            <AppDropdownMenu class="memory-actions-menu" variant="plain" :items="actionItems(item)" hideSelected hideActionLabel>
               <PhDotsThree class="memory-actions-menu-icon" />
               <span class="memories-sr-only">{{ t("memories_actions", { value: item.name }) }}</span>
-            </QDropdownMenu>
+            </AppDropdownMenu>
           </li>
         </ul>
       </AppSection>
@@ -307,7 +307,7 @@ export default {
             <input v-model="journalQuery" type="search" class="memories-query" :placeholder="t('memories_journal_search')" :aria-label="t('memories_journal_search')" />
           </div>
           <input v-model="journalSince" type="date" class="memories-query memories-since" :aria-label="t('memories_journal_since')" :title="t('memories_journal_since')" />
-          <QButton class="outlined" type="submit" :loading="journalLoading">{{ t("memories_journal_go") }}</QButton>
+          <AppButton class="outlined" type="submit" :loading="journalLoading">{{ t("memories_journal_go") }}</AppButton>
         </form>
         <p v-if="journalSearched && !journalEvents.length" class="memories-journal-empty">{{ t("memories_journal_empty") }}</p>
         <ol v-else-if="journalEvents.length" class="memory-list">
@@ -338,36 +338,36 @@ export default {
           <div class="memory-edit-row">
             <label class="memory-edit-field">
               <span>{{ t("memories_field_type") }}</span>
-              <QDropdownMenu class="sm" :key="'type-' + draft.type" :items="typeOptions" :initialItem="typeOptions.find(item => item.value === draft.type)"
+              <AppDropdownMenu class="sm" :key="'type-' + draft.type" :items="typeOptions" :initialItem="typeOptions.find(item => item.value === draft.type)"
                 @change="(item) => { draft.type = item.value }">
                 <span class="memories-filter-value">{{ t("memories_type_" + draft.type) }}</span>
-              </QDropdownMenu>
+              </AppDropdownMenu>
             </label>
             <label class="memory-edit-field">
               <span>{{ t("memories_field_visibility") }}</span>
-              <QDropdownMenu class="sm" :key="'vis-' + draft.visibility" :items="visibilityOptions" :initialItem="visibilityOptions.find(item => item.value === draft.visibility)"
+              <AppDropdownMenu class="sm" :key="'vis-' + draft.visibility" :items="visibilityOptions" :initialItem="visibilityOptions.find(item => item.value === draft.visibility)"
                 @change="(item) => { draft.visibility = item.value }">
                 <span class="memories-filter-value">{{ t("memories_visibility_" + draft.visibility) }}</span>
-              </QDropdownMenu>
+              </AppDropdownMenu>
             </label>
           </div>
           <p class="memory-edit-hint">{{ t("memories_visibility_hint_" + draft.visibility) }}</p>
           <label class="memory-edit-field">
             <span>{{ t("memories_field_description") }}</span>
-            <QInput v-model="draft.description" :placeholder="''" :max="200" :disabled="saving" />
+            <AppInput v-model="draft.description" :placeholder="''" :max="200" :disabled="saving" />
           </label>
           <label class="memory-edit-field">
             <span>{{ t("memories_field_body") }}</span>
-            <QTextarea v-model="draft.body" :rows="6" :disabled="saving" />
+            <AppTextarea v-model="draft.body" :rows="6" :disabled="saving" />
           </label>
           <AppNotice v-if="editErr" type="error" :text="editErr" />
           <div class="memory-edit-actions">
-            <QButton type="button" class="outlined" :disabled="saving" @click="closeEdit">{{ t("action_cancel") }}</QButton>
-            <QButton type="submit" class="primary" :loading="saving" :disabled="!editValid">{{ t("action_save") }}</QButton>
+            <AppButton type="button" class="outlined" :disabled="saving" @click="closeEdit">{{ t("action_cancel") }}</AppButton>
+            <AppButton type="submit" class="primary" :loading="saving" :disabled="!editValid">{{ t("action_save") }}</AppButton>
           </div>
         </form>
       </AppDialogShell>
-      <QMessageDialog
+      <AppMessageDialog
         v-model="deleteDialogOpen"
         icon="PhTrash"
         iconColor="red"

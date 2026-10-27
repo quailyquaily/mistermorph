@@ -5903,7 +5903,7 @@ const SettingsView = {
     <AppPage :title="t('settings_title')" :class="pageClass" :overlayBar="true">
       <template #leading>
         <div class="settings-page-bar">
-          <QButton
+          <AppButton
             v-if="mobileShowBack"
             class="plain xs icon settings-page-bar-back"
             :title="t('settings_title')"
@@ -5911,7 +5911,7 @@ const SettingsView = {
             @click="showIndexView"
           >
             <PhArrowLeft class="icon" />
-          </QButton>
+          </AppButton>
           <h2 class="page-title page-bar-title workspace-section-title">{{ mobileBarTitle }}</h2>
         </div>
       </template>
@@ -5959,7 +5959,7 @@ const SettingsView = {
                 <span class="workspace-sidebar-item-title">{{ item.title }}</span>
               </span>
               <span class="workspace-sidebar-item-marker">
-                <QBadge v-if="isSelectedSection(item)" dot type="primary" size="sm" />
+                <AppBadge v-if="isSelectedSection(item)" dot type="primary" size="sm" />
               </span>
             </button>
           </div>
@@ -5976,10 +5976,10 @@ const SettingsView = {
             </p>
             <div v-if="!restartState.restarting" class="settings-restart-actions">
               <template v-if="restartState.tasksRunning">
-                <QButton class="plain xs" :disabled="restartState.busy" @click="restartState.tasksRunning = false">{{ t("action_cancel") }}</QButton>
-                <QButton class="primary xs" :loading="restartState.busy" @click="restartProcess(true)">{{ t("settings_restart_anyway") }}</QButton>
+                <AppButton class="plain xs" :disabled="restartState.busy" @click="restartState.tasksRunning = false">{{ t("action_cancel") }}</AppButton>
+                <AppButton class="primary xs" :loading="restartState.busy" @click="restartProcess(true)">{{ t("settings_restart_anyway") }}</AppButton>
               </template>
-              <QButton v-else class="primary xs" :loading="restartState.busy" @click="restartProcess(false)">{{ t("settings_restart_now") }}</QButton>
+              <AppButton v-else class="primary xs" :loading="restartState.busy" @click="restartProcess(false)">{{ t("settings_restart_now") }}</AppButton>
             </div>
           </div>
           <div
@@ -5999,7 +5999,7 @@ const SettingsView = {
             <AppSection variant="boxed" :title="t('settings_agent_block_title')" :meta="selectedSection.meta">
               <template #actions>
                 <div class="settings-profile-actions settings-default-llm-actions">
-                  <QDropdownMenu
+                  <AppDropdownMenu
                     class="settings-llm-actions-menu"
                     variant="plain"
                     :items="llmActionMenuItems()"
@@ -6009,7 +6009,7 @@ const SettingsView = {
                   >
                     <PhDotsThree class="settings-llm-actions-menu-icon" />
                     <span class="settings-llm-actions-menu-accessible">{{ t("todo_action_more") }}</span>
-                  </QDropdownMenu>
+                  </AppDropdownMenu>
                 </div>
               </template>
               <AppNotice
@@ -6100,7 +6100,7 @@ const SettingsView = {
                         </button>
                       </div>
 
-                      <QButton
+                      <AppButton
                         type="button"
                         class="placeholder settings-profile-placeholder"
                         :disabled="agentLoading || agentSaving || agentSettingsReadOnly"
@@ -6108,7 +6108,7 @@ const SettingsView = {
                       >
                         <PhPlus class="icon" />
                         {{ t("settings_agent_profile_add") }}
-                      </QButton>
+                      </AppButton>
                     </div>
                   </section>
 
@@ -6125,7 +6125,7 @@ const SettingsView = {
                     <div v-else class="settings-fallback-list">
                       <div v-for="(fallbackName, index) in state.llm.fallback_profiles" :key="index" class="settings-fallback-row">
                         <span class="settings-fallback-index">{{ index + 1 }}</span>
-                        <QDropdownMenu
+                        <AppDropdownMenu
                           :key="fallbackName + '-' + index"
                           class="settings-fallback-picker"
                           :items="profileOptions"
@@ -6135,7 +6135,7 @@ const SettingsView = {
                           @change="updateFallbackProfile(index, $event)"
                         />
                         <div class="settings-fallback-actions">
-                          <QButton
+                          <AppButton
                             type="button"
                             class="outlined icon settings-fallback-action"
                             :title="t('settings_agent_order_up')"
@@ -6144,8 +6144,8 @@ const SettingsView = {
                             @click="moveFallbackProfile(index, -1)"
                           >
                             <PhCaretUp class="icon" />
-                          </QButton>
-                          <QButton
+                          </AppButton>
+                          <AppButton
                             type="button"
                             class="outlined icon settings-fallback-action"
                             :title="t('settings_agent_order_down')"
@@ -6154,8 +6154,8 @@ const SettingsView = {
                             @click="moveFallbackProfile(index, 1)"
                           >
                             <PhCaretDown class="icon" />
-                          </QButton>
-                          <QButton
+                          </AppButton>
+                          <AppButton
                             type="button"
                             class="danger plain icon settings-fallback-action"
                             :title="t('action_delete')"
@@ -6164,11 +6164,11 @@ const SettingsView = {
                             @click="removeFallbackProfile(index)"
                           >
                             <PhTrash class="icon" />
-                          </QButton>
+                          </AppButton>
                         </div>
                       </div>
 
-                      <QButton
+                      <AppButton
                         type="button"
                         class="placeholder settings-profile-placeholder"
                         :disabled="agentLoading || agentSaving || agentSettingsReadOnly || !profileOptions.length"
@@ -6176,7 +6176,7 @@ const SettingsView = {
                       >
                         <PhPlus class="icon" />
                         {{ t("settings_agent_fallback_add") }}
-                      </QButton>
+                      </AppButton>
                     </div>
                   </section>
                 </div>
@@ -6240,7 +6240,7 @@ const SettingsView = {
                 <div class="settings-form-grid">
                   <div class="settings-field is-wide">
                     <span class="settings-field-label">{{ t("settings_console_guard_allowed_url_prefixes_label") }}</span>
-                    <QTextarea
+                    <AppTextarea
                       :modelValue="state.guard.url_fetch_allowed_url_prefixes_text"
                       :rows="4"
                       :placeholder="t('settings_console_guard_allowed_url_prefixes_placeholder')"
@@ -6257,7 +6257,7 @@ const SettingsView = {
                       <strong class="settings-toggle-title">{{ t("settings_console_guard_enabled_title") }}</strong>
                       <span class="settings-toggle-note">{{ t("settings_console_guard_enabled_note") }}</span>
                     </div>
-                    <QSwitch
+                    <AppSwitch
                       :modelValue="state.guard.enabled"
                       :disabled="consoleLoading || consoleSaving"
                       @update:modelValue="updateGuardField('enabled', $event)"
@@ -6269,7 +6269,7 @@ const SettingsView = {
                       <strong class="settings-toggle-title">{{ t("settings_console_guard_deny_private_ips_title") }}</strong>
                       <span class="settings-toggle-note">{{ t("settings_console_guard_deny_private_ips_note") }}</span>
                     </div>
-                    <QSwitch
+                    <AppSwitch
                       :modelValue="state.guard.deny_private_ips"
                       :disabled="consoleLoading || consoleSaving"
                       @update:modelValue="updateGuardField('deny_private_ips', $event)"
@@ -6281,7 +6281,7 @@ const SettingsView = {
                       <strong class="settings-toggle-title">{{ t("settings_console_guard_follow_redirects_title") }}</strong>
                       <span class="settings-toggle-note">{{ t("settings_console_guard_follow_redirects_note") }}</span>
                     </div>
-                    <QSwitch
+                    <AppSwitch
                       :modelValue="state.guard.follow_redirects"
                       :disabled="consoleLoading || consoleSaving"
                       @update:modelValue="updateGuardField('follow_redirects', $event)"
@@ -6293,7 +6293,7 @@ const SettingsView = {
                       <strong class="settings-toggle-title">{{ t("settings_console_guard_allow_proxy_title") }}</strong>
                       <span class="settings-toggle-note">{{ t("settings_console_guard_allow_proxy_note") }}</span>
                     </div>
-                    <QSwitch
+                    <AppSwitch
                       :modelValue="state.guard.allow_proxy"
                       :disabled="consoleLoading || consoleSaving"
                       @update:modelValue="updateGuardField('allow_proxy', $event)"
@@ -6305,7 +6305,7 @@ const SettingsView = {
                       <strong class="settings-toggle-title">{{ t("settings_console_guard_redaction_title") }}</strong>
                       <span class="settings-toggle-note">{{ t("settings_console_guard_redaction_note") }}</span>
                     </div>
-                    <QSwitch
+                    <AppSwitch
                       :modelValue="state.guard.redaction_enabled"
                       :disabled="consoleLoading || consoleSaving"
                       @update:modelValue="updateGuardField('redaction_enabled', $event)"
@@ -6317,7 +6317,7 @@ const SettingsView = {
                       <strong class="settings-toggle-title">{{ t("settings_console_guard_approvals_title") }}</strong>
                       <span class="settings-toggle-note">{{ t("settings_console_guard_approvals_note") }}</span>
                     </div>
-                    <QSwitch
+                    <AppSwitch
                       :modelValue="state.guard.approvals_enabled"
                       :disabled="consoleLoading || consoleSaving"
                       @update:modelValue="updateGuardField('approvals_enabled', $event)"
@@ -6420,7 +6420,7 @@ const SettingsView = {
           </div>
 
           <div v-else-if="selectedSection.id === 'persona'" class="settings-panel-body settings-panel-body-plain">
-            <QProgress v-if="personaLoading" :infinite="true" />
+            <AppProgress v-if="personaLoading" :infinite="true" />
 
             <AppSection variant="boxed" class="settings-persona-card" :title="t('settings_persona_title')" :meta="selectedSection.meta">
               <div class="settings-panel-body">
@@ -6447,7 +6447,7 @@ const SettingsView = {
 
                   <div class="settings-field is-wide">
                     <span class="settings-field-label">{{ t("settings_persona_identity_name_label") }}</span>
-                    <QInput
+                    <AppInput
                       v-model="state.persona.name"
                       :placeholder="t('settings_persona_identity_name_placeholder')"
                       :disabled="personaLoading || personaSaving"
@@ -6456,7 +6456,7 @@ const SettingsView = {
 
                   <div class="settings-field">
                     <span class="settings-field-label">{{ t("settings_persona_identity_emoji_label") }}</span>
-                    <QInput
+                    <AppInput
                       v-model="state.persona.emoji"
                       :placeholder="t('settings_persona_identity_emoji_placeholder')"
                       :disabled="personaLoading || personaSaving"
@@ -6465,7 +6465,7 @@ const SettingsView = {
 
                   <div class="settings-field">
                     <span class="settings-field-label">{{ t("settings_persona_identity_creature_label") }}</span>
-                    <QInput
+                    <AppInput
                       v-model="state.persona.creature"
                       :placeholder="t('settings_persona_identity_creature_placeholder')"
                       :disabled="personaLoading || personaSaving"
@@ -6474,7 +6474,7 @@ const SettingsView = {
 
                   <div class="settings-field is-wide">
                     <span class="settings-field-label">{{ t("settings_persona_identity_vibe_label") }}</span>
-                    <QTextarea
+                    <AppTextarea
                       v-model="state.persona.vibe"
                       :rows="4"
                       :placeholder="t('settings_persona_identity_vibe_placeholder')"
@@ -6518,26 +6518,26 @@ const SettingsView = {
                       <h4 class="settings-card-title">{{ t("settings_language_title") }}</h4>
                       <p class="settings-card-note">{{ t("settings_language_hint") }}</p>
                     </div>
-                    <QLanguageSelector class="settings-console-control" :lang="lang" :presist="true" @change="onLanguageChange" />
+                    <AppLanguageSelector class="settings-console-control" :lang="lang" :presist="true" @change="onLanguageChange" />
                   </div>
                   <div class="settings-console-row">
                     <div class="settings-card-copy">
                       <h4 class="settings-card-title">{{ t("settings_logs_title") }}</h4>
                       <p class="settings-card-note">{{ t("settings_logs_hint") }}</p>
                     </div>
-                    <QButton class="outlined settings-console-control settings-console-action" @click="openLogsPage">
+                    <AppButton class="outlined settings-console-control settings-console-action" @click="openLogsPage">
                       <PhCode class="icon settings-console-action-icon" />
                       {{ t("settings_logs_open") }}
-                    </QButton>
+                    </AppButton>
                   </div>
                   <div class="settings-console-row settings-console-row-end">
                     <div class="settings-card-copy">
                       <h4 class="settings-card-title">{{ t("settings_session_title") }}</h4>
                       <p class="settings-card-note">{{ t("settings_session_hint") }}</p>
                     </div>
-                    <QButton class="outlined danger settings-console-control" :loading="loggingOut" @click="logout">
+                    <AppButton class="outlined danger settings-console-control" :loading="loggingOut" @click="logout">
                       {{ t("action_logout") }}
-                    </QButton>
+                    </AppButton>
                   </div>
                 </div>
               </div>
@@ -6565,7 +6565,7 @@ const SettingsView = {
                       <h4 class="settings-card-title">{{ t("settings_update_auto_title") }}</h4>
                       <p class="settings-card-note">{{ t("settings_update_auto_hint") }}</p>
                     </div>
-                    <QSwitch
+                    <AppSwitch
                       :modelValue="autoUpdateEnabled"
                       :disabled="desktopLoading || autoUpdateSaving"
                       @update:modelValue="setAutoUpdateEnabled"
@@ -6579,7 +6579,7 @@ const SettingsView = {
                         {{ desktopUpdateStateText }}
                       </p>
                     </div>
-                    <QButton
+                    <AppButton
                       class="outlined settings-console-control settings-console-action"
                       :loading="desktopChecking"
                       :disabled="desktopCheckDisabled"
@@ -6587,7 +6587,7 @@ const SettingsView = {
                     >
                       <PhArrowClockwise class="icon settings-console-action-icon" />
                       {{ t("settings_update_check_action") }}
-                    </QButton>
+                    </AppButton>
                   </div>
 
                   <div v-if="desktopUpdateHasRelease" class="settings-console-row settings-console-row-end settings-update-release">
@@ -6615,14 +6615,14 @@ const SettingsView = {
                         <PhCopy v-else class="icon settings-field-link-icon" />
                       </button>
                     </div>
-                    <QButton
+                    <AppButton
                       class="outlined settings-console-control settings-console-action"
                       :disabled="desktopUpdateDownloadDisabled"
                       @click="openDesktopUpdateDownload"
                     >
                       <PhCloudArrowDown class="icon settings-console-action-icon" />
                       {{ t("settings_desktop_update_download_action") }}
-                    </QButton>
+                    </AppButton>
                   </div>
                 </div>
               </div>
@@ -6692,7 +6692,7 @@ const SettingsView = {
                           </div>
                         </div>
                         <div class="settings-toggle-actions">
-                          <QButton
+                          <AppButton
                             v-if="TOOL_ADVANCED_CONFIG_GROUPS[item.id]"
                             type="button"
                             class="plain xs icon"
@@ -6702,8 +6702,8 @@ const SettingsView = {
                             @click="openToolAdvancedSettings(item)"
                           >
                             <PhGearSix class="icon" />
-                          </QButton>
-                          <QButton
+                          </AppButton>
+                          <AppButton
                             type="button"
                             class="plain xs icon"
                             :title="t('settings_tool_schema_preview')"
@@ -6711,9 +6711,9 @@ const SettingsView = {
                             @click="previewToolSchema(item)"
                           >
                             <PhBracketsCurly class="icon" />
-                          </QButton>
+                          </AppButton>
                           <span v-if="item.automatic" class="settings-tool-automatic">{{ t("settings_tool_automatic") }}</span>
-                          <QSwitch
+                          <AppSwitch
                             v-else
                             :modelValue="item.toggle === false ? true : state.tools[item.id]"
                             :disabled="item.toggle === false || agentLoading || agentSaving || agentSettingsReadOnly"
@@ -6793,15 +6793,15 @@ const SettingsView = {
                     </template>
                     <template #actions>
                       <div class="settings-profile-actions settings-default-llm-actions">
-                        <QButton class="plain xs icon" :title="t('settings_channel_close')" :aria-label="t('settings_channel_close')" @click="closeProfilePane">
+                        <AppButton class="plain xs icon" :title="t('settings_channel_close')" :aria-label="t('settings_channel_close')" @click="closeProfilePane">
                           <PhX class="icon" />
-                        </QButton>
+                        </AppButton>
                       </div>
                     </template>
                     <div class="settings-panel-body settings-profile-pane-body">
                       <div class="settings-field settings-profile-name">
                         <span class="settings-field-label">{{ t("settings_agent_profile_name_label") }}</span>
-                        <QInput
+                        <AppInput
                           :modelValue="openedProfile.name"
                           :placeholder="t('settings_agent_profile_name_placeholder')"
                           :disabled="agentLoading || agentSaving || agentSettingsReadOnly"
@@ -6865,22 +6865,22 @@ const SettingsView = {
                       </details>
 
                       <div class="settings-profile-pane-actions">
-                        <QButton
+                        <AppButton
                           class="outlined"
                           :disabled="testConnectionDisabledForProfile(openedProfile)"
                           @click="openTestConnection(openedProfile._key)"
                         >
                           <PhGauge class="icon" />
                           {{ t("setup_llm_test_button") }}
-                        </QButton>
-                        <QButton
+                        </AppButton>
+                        <AppButton
                           class="outlined danger"
                           :disabled="agentLoading || agentSaving || agentSettingsReadOnly"
                           @click="confirmRemoveLLMProfile(openedProfile._key)"
                         >
                           <PhTrash class="icon" />
                           {{ t("settings_agent_profile_delete") }}
-                        </QButton>
+                        </AppButton>
                       </div>
                     </div>
                   </AppSection>
@@ -6892,7 +6892,7 @@ const SettingsView = {
           <AppSection :title="t('settings_console_telegram_title')" :meta="t('settings_console_telegram_token_note')">
             <template #actions>
               <div class="settings-profile-actions settings-default-llm-actions">
-                <QDropdownMenu
+                <AppDropdownMenu
                   class="settings-llm-actions-menu"
                   variant="plain"
                   :items="channelActionMenuItems('telegram')"
@@ -6902,10 +6902,10 @@ const SettingsView = {
                 >
                   <PhDotsThree class="settings-llm-actions-menu-icon" />
                   <span class="settings-llm-actions-menu-accessible">{{ t("todo_action_more") }}</span>
-                </QDropdownMenu>
-                <QButton class="plain xs icon" :title="t('settings_channel_close')" :aria-label="t('settings_channel_close')" @click="closeChannelPane">
+                </AppDropdownMenu>
+                <AppButton class="plain xs icon" :title="t('settings_channel_close')" :aria-label="t('settings_channel_close')" @click="closeChannelPane">
                   <PhX class="icon" />
-                </QButton>
+                </AppButton>
               </div>
             </template>
             <div class="settings-panel-body">
@@ -6925,7 +6925,7 @@ const SettingsView = {
 
                 <div class="settings-field is-wide">
                   <span class="settings-field-label">{{ t("settings_console_telegram_allowed_chat_ids_label") }}</span>
-                  <QTextarea
+                  <AppTextarea
                     :modelValue="state.telegram.allowed_chat_ids_text"
                     :rows="4"
                     :placeholder="t('settings_console_telegram_allowed_chat_ids_placeholder')"
@@ -6937,7 +6937,7 @@ const SettingsView = {
 
                 <div class="settings-field is-wide">
                   <span class="settings-field-label">{{ t("settings_console_group_trigger_label") }}</span>
-                  <QDropdownMenu
+                  <AppDropdownMenu
                     :key="state.telegram.group_trigger_mode || 'telegram-group-trigger'"
                     :items="groupTriggerItems"
                     :initialItem="groupTriggerItems.find((item) => item.value === state.telegram.group_trigger_mode) || groupTriggerItems[2]"
@@ -6954,7 +6954,7 @@ const SettingsView = {
           <AppSection :title="t('settings_console_slack_title')" :meta="t('settings_console_slack_token_note')">
             <template #actions>
               <div class="settings-profile-actions settings-default-llm-actions">
-                <QDropdownMenu
+                <AppDropdownMenu
                   class="settings-llm-actions-menu"
                   variant="plain"
                   :items="channelActionMenuItems('slack')"
@@ -6964,10 +6964,10 @@ const SettingsView = {
                 >
                   <PhDotsThree class="settings-llm-actions-menu-icon" />
                   <span class="settings-llm-actions-menu-accessible">{{ t("todo_action_more") }}</span>
-                </QDropdownMenu>
-                <QButton class="plain xs icon" :title="t('settings_channel_close')" :aria-label="t('settings_channel_close')" @click="closeChannelPane">
+                </AppDropdownMenu>
+                <AppButton class="plain xs icon" :title="t('settings_channel_close')" :aria-label="t('settings_channel_close')" @click="closeChannelPane">
                   <PhX class="icon" />
-                </QButton>
+                </AppButton>
               </div>
             </template>
             <div class="settings-panel-body">
@@ -7000,7 +7000,7 @@ const SettingsView = {
 
                 <div class="settings-field is-wide">
                   <span class="settings-field-label">{{ t("settings_console_slack_allowed_team_ids_label") }}</span>
-                  <QTextarea
+                  <AppTextarea
                     :modelValue="state.slack.allowed_team_ids_text"
                     :rows="3"
                     :placeholder="t('settings_console_slack_allowed_team_ids_placeholder')"
@@ -7012,7 +7012,7 @@ const SettingsView = {
 
                 <div class="settings-field is-wide">
                   <span class="settings-field-label">{{ t("settings_console_slack_allowed_channel_ids_label") }}</span>
-                  <QTextarea
+                  <AppTextarea
                     :modelValue="state.slack.allowed_channel_ids_text"
                     :rows="4"
                     :placeholder="t('settings_console_slack_allowed_channel_ids_placeholder')"
@@ -7024,7 +7024,7 @@ const SettingsView = {
 
                 <div class="settings-field is-wide">
                   <span class="settings-field-label">{{ t("settings_console_group_trigger_label") }}</span>
-                  <QDropdownMenu
+                  <AppDropdownMenu
                     :key="state.slack.group_trigger_mode || 'slack-group-trigger'"
                     :items="groupTriggerItems"
                     :initialItem="groupTriggerItems.find((item) => item.value === state.slack.group_trigger_mode) || groupTriggerItems[2]"
@@ -7041,7 +7041,7 @@ const SettingsView = {
           <AppSection :title="t('settings_console_line_title')" :meta="t('settings_console_line_token_note')">
             <template #actions>
               <div class="settings-profile-actions settings-default-llm-actions">
-                <QDropdownMenu
+                <AppDropdownMenu
                   class="settings-llm-actions-menu"
                   variant="plain"
                   :items="channelActionMenuItems('line')"
@@ -7051,10 +7051,10 @@ const SettingsView = {
                 >
                   <PhDotsThree class="settings-llm-actions-menu-icon" />
                   <span class="settings-llm-actions-menu-accessible">{{ t("todo_action_more") }}</span>
-                </QDropdownMenu>
-                <QButton class="plain xs icon" :title="t('settings_channel_close')" :aria-label="t('settings_channel_close')" @click="closeChannelPane">
+                </AppDropdownMenu>
+                <AppButton class="plain xs icon" :title="t('settings_channel_close')" :aria-label="t('settings_channel_close')" @click="closeChannelPane">
                   <PhX class="icon" />
-                </QButton>
+                </AppButton>
               </div>
             </template>
             <div class="settings-panel-body">
@@ -7087,7 +7087,7 @@ const SettingsView = {
 
                 <div class="settings-field is-wide">
                   <span class="settings-field-label">{{ t("settings_console_line_allowed_group_ids_label") }}</span>
-                  <QTextarea
+                  <AppTextarea
                     :modelValue="state.line.allowed_group_ids_text"
                     :rows="4"
                     :placeholder="t('settings_console_line_allowed_group_ids_placeholder')"
@@ -7099,7 +7099,7 @@ const SettingsView = {
 
                 <div class="settings-field is-wide">
                   <span class="settings-field-label">{{ t("settings_console_group_trigger_label") }}</span>
-                  <QDropdownMenu
+                  <AppDropdownMenu
                     :key="state.line.group_trigger_mode || 'line-group-trigger'"
                     :items="groupTriggerItems"
                     :initialItem="groupTriggerItems.find((item) => item.value === state.line.group_trigger_mode) || groupTriggerItems[2]"
@@ -7116,7 +7116,7 @@ const SettingsView = {
           <AppSection :title="t('settings_console_lark_title')" :meta="t('settings_console_lark_token_note')">
             <template #actions>
               <div class="settings-profile-actions settings-default-llm-actions">
-                <QDropdownMenu
+                <AppDropdownMenu
                   class="settings-llm-actions-menu"
                   variant="plain"
                   :items="channelActionMenuItems('lark')"
@@ -7126,10 +7126,10 @@ const SettingsView = {
                 >
                   <PhDotsThree class="settings-llm-actions-menu-icon" />
                   <span class="settings-llm-actions-menu-accessible">{{ t("todo_action_more") }}</span>
-                </QDropdownMenu>
-                <QButton class="plain xs icon" :title="t('settings_channel_close')" :aria-label="t('settings_channel_close')" @click="closeChannelPane">
+                </AppDropdownMenu>
+                <AppButton class="plain xs icon" :title="t('settings_channel_close')" :aria-label="t('settings_channel_close')" @click="closeChannelPane">
                   <PhX class="icon" />
-                </QButton>
+                </AppButton>
               </div>
             </template>
             <div class="settings-panel-body">
@@ -7137,7 +7137,7 @@ const SettingsView = {
                 <div class="settings-field is-wide">
                   <span class="settings-field-label">{{ t("settings_console_lark_app_id_label") }}</span>
                   <EnvManagedField v-if="consoleFieldEnvManaged('lark', 'app_id')" :name="consoleFieldManagedHeadline('lark', 'app_id')" />
-                  <QInput
+                  <AppInput
                     v-else
                     :modelValue="state.lark.app_id"
                     :placeholder="t('settings_console_lark_app_id_placeholder')"
@@ -7161,7 +7161,7 @@ const SettingsView = {
 
                 <div class="settings-field is-wide">
                   <span class="settings-field-label">{{ t("settings_console_lark_allowed_chat_ids_label") }}</span>
-                  <QTextarea
+                  <AppTextarea
                     :modelValue="state.lark.allowed_chat_ids_text"
                     :rows="4"
                     :placeholder="t('settings_console_lark_allowed_chat_ids_placeholder')"
@@ -7173,7 +7173,7 @@ const SettingsView = {
 
                 <div class="settings-field is-wide">
                   <span class="settings-field-label">{{ t("settings_console_group_trigger_label") }}</span>
-                  <QDropdownMenu
+                  <AppDropdownMenu
                     :key="state.lark.group_trigger_mode || 'lark-group-trigger'"
                     :items="groupTriggerItems"
                     :initialItem="groupTriggerItems.find((item) => item.value === state.lark.group_trigger_mode) || groupTriggerItems[2]"
@@ -7190,7 +7190,7 @@ const SettingsView = {
           <AppSection :title="t('settings_console_mixin_title')" :meta="t('settings_console_mixin_note')">
             <template #actions>
               <div class="settings-profile-actions settings-default-llm-actions">
-                <QDropdownMenu
+                <AppDropdownMenu
                   class="settings-llm-actions-menu"
                   variant="plain"
                   :items="channelActionMenuItems('mixin')"
@@ -7200,10 +7200,10 @@ const SettingsView = {
                 >
                   <PhDotsThree class="settings-llm-actions-menu-icon" />
                   <span class="settings-llm-actions-menu-accessible">{{ t("todo_action_more") }}</span>
-                </QDropdownMenu>
-                <QButton class="plain xs icon" :title="t('settings_channel_close')" :aria-label="t('settings_channel_close')" @click="closeChannelPane">
+                </AppDropdownMenu>
+                <AppButton class="plain xs icon" :title="t('settings_channel_close')" :aria-label="t('settings_channel_close')" @click="closeChannelPane">
                   <PhX class="icon" />
-                </QButton>
+                </AppButton>
               </div>
             </template>
             <div class="settings-panel-body">
@@ -7211,7 +7211,7 @@ const SettingsView = {
                 <div class="settings-field is-wide">
                   <span class="settings-field-label">{{ t("settings_console_mixin_keystore_file_label") }}</span>
                   <EnvManagedField v-if="consoleFieldEnvManaged('mixin', 'keystore_file')" :name="consoleFieldManagedHeadline('mixin', 'keystore_file')" />
-                  <QInput
+                  <AppInput
                     v-else
                     :modelValue="state.mixin.keystore_file"
                     :placeholder="t('settings_console_mixin_keystore_file_placeholder')"
@@ -7223,7 +7223,7 @@ const SettingsView = {
 
                 <div class="settings-field is-wide">
                   <span class="settings-field-label">{{ t("settings_console_mixin_allowed_conversation_ids_label") }}</span>
-                  <QTextarea
+                  <AppTextarea
                     :modelValue="state.mixin.allowed_conversation_ids_text"
                     :rows="4"
                     :placeholder="t('settings_console_mixin_allowed_conversation_ids_placeholder')"
@@ -7242,7 +7242,7 @@ const SettingsView = {
           <AppSection :title="t('settings_console_discord_title')" :meta="t('settings_console_discord_token_note')">
             <template #actions>
               <div class="settings-profile-actions settings-default-llm-actions">
-                <QDropdownMenu
+                <AppDropdownMenu
                   class="settings-llm-actions-menu"
                   variant="plain"
                   :items="channelActionMenuItems('discord')"
@@ -7252,10 +7252,10 @@ const SettingsView = {
                 >
                   <PhDotsThree class="settings-llm-actions-menu-icon" />
                   <span class="settings-llm-actions-menu-accessible">{{ t("todo_action_more") }}</span>
-                </QDropdownMenu>
-                <QButton class="plain xs icon" :title="t('settings_channel_close')" :aria-label="t('settings_channel_close')" @click="closeChannelPane">
+                </AppDropdownMenu>
+                <AppButton class="plain xs icon" :title="t('settings_channel_close')" :aria-label="t('settings_channel_close')" @click="closeChannelPane">
                   <PhX class="icon" />
-                </QButton>
+                </AppButton>
               </div>
             </template>
             <div class="settings-panel-body">
@@ -7275,7 +7275,7 @@ const SettingsView = {
 
                 <div class="settings-field is-wide">
                   <span class="settings-field-label">{{ t("settings_console_discord_allowed_guild_ids_label") }}</span>
-                  <QTextarea
+                  <AppTextarea
                     :modelValue="state.discord.allowed_guild_ids_text"
                     :rows="3"
                     :placeholder="t('settings_console_discord_allowed_ids_placeholder')"
@@ -7287,7 +7287,7 @@ const SettingsView = {
 
                 <div class="settings-field is-wide">
                   <span class="settings-field-label">{{ t("settings_console_discord_allowed_channel_ids_label") }}</span>
-                  <QTextarea
+                  <AppTextarea
                     :modelValue="state.discord.allowed_channel_ids_text"
                     :rows="3"
                     :placeholder="t('settings_console_discord_allowed_ids_placeholder')"
@@ -7299,7 +7299,7 @@ const SettingsView = {
 
                 <div class="settings-field is-wide">
                   <span class="settings-field-label">{{ t("settings_console_discord_allowed_user_ids_label") }}</span>
-                  <QTextarea
+                  <AppTextarea
                     :modelValue="state.discord.allowed_user_ids_text"
                     :rows="3"
                     :placeholder="t('settings_console_discord_allowed_ids_placeholder')"
@@ -7311,7 +7311,7 @@ const SettingsView = {
 
                 <div class="settings-field is-wide">
                   <span class="settings-field-label">{{ t("settings_console_group_trigger_label") }}</span>
-                  <QDropdownMenu
+                  <AppDropdownMenu
                     :key="state.discord.group_trigger_mode || 'discord-group-trigger'"
                     :items="groupTriggerItems"
                     :initialItem="groupTriggerItems.find((item) => item.value === state.discord.group_trigger_mode) || groupTriggerItems[1]"
@@ -7327,7 +7327,7 @@ const SettingsView = {
           <AppSection :title="t('settings_console_wechat_title')" :meta="t('settings_console_wechat_note')">
             <template #actions>
               <div class="settings-profile-actions settings-default-llm-actions">
-                <QDropdownMenu
+                <AppDropdownMenu
                   class="settings-llm-actions-menu"
                   variant="plain"
                   :items="channelActionMenuItems('wechat')"
@@ -7337,10 +7337,10 @@ const SettingsView = {
                 >
                   <PhDotsThree class="settings-llm-actions-menu-icon" />
                   <span class="settings-llm-actions-menu-accessible">{{ t("todo_action_more") }}</span>
-                </QDropdownMenu>
-                <QButton class="plain xs icon" :title="t('settings_channel_close')" :aria-label="t('settings_channel_close')" @click="closeChannelPane">
+                </AppDropdownMenu>
+                <AppButton class="plain xs icon" :title="t('settings_channel_close')" :aria-label="t('settings_channel_close')" @click="closeChannelPane">
                   <PhX class="icon" />
-                </QButton>
+                </AppButton>
               </div>
             </template>
             <div class="settings-panel-body">
@@ -7367,7 +7367,7 @@ const SettingsView = {
           <AppSection :title="t('settings_console_whatsapp_title')" :meta="t('settings_console_whatsapp_note')">
             <template #actions>
               <div class="settings-profile-actions settings-default-llm-actions">
-                <QDropdownMenu
+                <AppDropdownMenu
                   class="settings-llm-actions-menu"
                   variant="plain"
                   :items="channelActionMenuItems('whatsapp')"
@@ -7377,10 +7377,10 @@ const SettingsView = {
                 >
                   <PhDotsThree class="settings-llm-actions-menu-icon" />
                   <span class="settings-llm-actions-menu-accessible">{{ t("todo_action_more") }}</span>
-                </QDropdownMenu>
-                <QButton class="plain xs icon" :title="t('settings_channel_close')" :aria-label="t('settings_channel_close')" @click="closeChannelPane">
+                </AppDropdownMenu>
+                <AppButton class="plain xs icon" :title="t('settings_channel_close')" :aria-label="t('settings_channel_close')" @click="closeChannelPane">
                   <PhX class="icon" />
-                </QButton>
+                </AppButton>
               </div>
             </template>
             <div class="settings-panel-body">
@@ -7406,7 +7406,7 @@ const SettingsView = {
           <AppSection :title="t('settings_console_bluesky_title')" :meta="t('settings_console_bluesky_note')">
             <template #actions>
               <div class="settings-profile-actions settings-default-llm-actions">
-                <QDropdownMenu
+                <AppDropdownMenu
                   class="settings-llm-actions-menu"
                   variant="plain"
                   :items="channelActionMenuItems('bluesky')"
@@ -7416,17 +7416,17 @@ const SettingsView = {
                 >
                   <PhDotsThree class="settings-llm-actions-menu-icon" />
                   <span class="settings-llm-actions-menu-accessible">{{ t("todo_action_more") }}</span>
-                </QDropdownMenu>
-                <QButton class="plain xs icon" :title="t('settings_channel_close')" :aria-label="t('settings_channel_close')" @click="closeChannelPane">
+                </AppDropdownMenu>
+                <AppButton class="plain xs icon" :title="t('settings_channel_close')" :aria-label="t('settings_channel_close')" @click="closeChannelPane">
                   <PhX class="icon" />
-                </QButton>
+                </AppButton>
               </div>
             </template>
             <div class="settings-panel-body">
               <div class="settings-form-grid">
                 <div class="settings-field is-wide">
                   <span class="settings-field-label">{{ t("settings_console_bluesky_identifier_label") }}</span>
-                  <QInput
+                  <AppInput
                     :modelValue="state.bluesky.identifier"
                     :placeholder="t('settings_console_bluesky_identifier_placeholder')"
                     :disabled="consoleLoading || consoleSaving"
@@ -7451,7 +7451,7 @@ const SettingsView = {
 
                 <div class="settings-field is-wide">
                   <span class="settings-field-label">{{ t("settings_console_bluesky_service_url_label") }}</span>
-                  <QInput
+                  <AppInput
                     :modelValue="state.bluesky.service_url"
                     :placeholder="t('settings_console_bluesky_service_url_placeholder')"
                     :disabled="consoleLoading || consoleSaving"
@@ -7467,7 +7467,7 @@ const SettingsView = {
           <AppSection :title="t('settings_console_x_title')" :meta="t('settings_console_x_note')">
             <template #actions>
               <div class="settings-profile-actions settings-default-llm-actions">
-                <QDropdownMenu
+                <AppDropdownMenu
                   class="settings-llm-actions-menu"
                   variant="plain"
                   :items="channelActionMenuItems('x')"
@@ -7477,17 +7477,17 @@ const SettingsView = {
                 >
                   <PhDotsThree class="settings-llm-actions-menu-icon" />
                   <span class="settings-llm-actions-menu-accessible">{{ t("todo_action_more") }}</span>
-                </QDropdownMenu>
-                <QButton class="plain xs icon" :title="t('settings_channel_close')" :aria-label="t('settings_channel_close')" @click="closeChannelPane">
+                </AppDropdownMenu>
+                <AppButton class="plain xs icon" :title="t('settings_channel_close')" :aria-label="t('settings_channel_close')" @click="closeChannelPane">
                   <PhX class="icon" />
-                </QButton>
+                </AppButton>
               </div>
             </template>
             <div class="settings-panel-body">
               <div class="settings-form-grid">
                 <div class="settings-field is-wide">
                   <span class="settings-field-label">{{ t("settings_console_x_client_id_label") }}</span>
-                  <QInput
+                  <AppInput
                     :modelValue="state.x.client_id"
                     :placeholder="t('settings_console_x_client_id_placeholder')"
                     :disabled="consoleLoading || consoleSaving"
@@ -7555,7 +7555,7 @@ const SettingsView = {
                       <strong class="settings-toggle-title">{{ t("settings_channel_run_in_console") }}</strong>
                       <span class="settings-toggle-note">{{ t(channelManagedItem(openChannel).noteKey) }}</span>
                     </div>
-                    <QSwitch
+                    <AppSwitch
                       :modelValue="state.managedRuntimes[openChannel]"
                       :disabled="consoleLoading || consoleSaving"
                       @update:modelValue="setManagedRuntimeEnabled(openChannel, $event)"
@@ -7577,7 +7577,7 @@ const SettingsView = {
         <template v-if="addProfileDraft">
           <div class="settings-field settings-profile-name">
             <span class="settings-field-label">{{ t("settings_agent_profile_name_label") }}</span>
-            <QInput
+            <AppInput
               :modelValue="addProfileDraft.name"
               :placeholder="t('settings_agent_profile_name_placeholder')"
               :disabled="agentSaving || agentSettingsReadOnly"
@@ -7728,7 +7728,7 @@ const SettingsView = {
         :loginExpiresLabel="proLoginExpiresLabel"
         @logout="logoutProAuth"
       />
-      <QMessageDialog
+      <AppMessageDialog
         v-model="consoleEndpointErrorOpen"
         icon="PhXCircle"
         iconColor="red"
@@ -7736,14 +7736,14 @@ const SettingsView = {
         :text="consoleEndpointError"
         :actions="consoleEndpointErrorActions"
       />
-      <QMessageDialog
+      <AppMessageDialog
         v-model="leaveDialogOpen"
         icon="PhInfo"
         :title="t('settings_unsaved_title')"
         :text="leaveDialogText"
         :actions="leaveDialogActions"
       />
-      <QMessageDialog
+      <AppMessageDialog
         v-model="deleteProfileDialogOpen"
         icon="PhTrash"
         iconColor="red"
@@ -7763,9 +7763,9 @@ const SettingsView = {
               <span class="settings-save-bar-items">{{ sectionSaveUnits.map((unit) => unit.label).join(' · ') }}</span>
             </template>
           </p>
-          <QButton class="primary settings-save-bar-button" :loading="sectionSaving" :disabled="sectionSaveBusy || !sectionSaveUnits.length" @click="saveSection">
+          <AppButton class="primary settings-save-bar-button" :loading="sectionSaving" :disabled="sectionSaveBusy || !sectionSaveUnits.length" @click="saveSection">
             {{ t('action_save') }}
-          </QButton>
+          </AppButton>
         </div>
         </Transition>
       </Teleport>

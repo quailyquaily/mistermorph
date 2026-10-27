@@ -192,16 +192,16 @@ const WeChatLoginPanel = {
         </div>
         <p class="wechat-login-status" role="status">{{ statusText }}</p>
         <form v-if="needsCode" class="wechat-login-code" @submit.prevent="submitCode">
-          <QInput
+          <AppInput
             :modelValue="verifyCode"
             :placeholder="t('settings_wechat_login_code_placeholder')"
             @update:modelValue="verifyCode = $event"
           />
-          <QButton class="primary" type="submit" :disabled="!verifyCode.trim()">{{ t("settings_wechat_login_code_submit") }}</QButton>
+          <AppButton class="primary" type="submit" :disabled="!verifyCode.trim()">{{ t("settings_wechat_login_code_submit") }}</AppButton>
         </form>
         <div class="wechat-login-actions">
-          <QButton v-if="qrURL" class="plain xs" @click="openLink">{{ t("settings_wechat_login_open_link") }}</QButton>
-          <QButton class="plain xs" @click="cancel">{{ t("action_cancel") }}</QButton>
+          <AppButton v-if="qrURL" class="plain xs" @click="openLink">{{ t("settings_wechat_login_open_link") }}</AppButton>
+          <AppButton class="plain xs" @click="cancel">{{ t("action_cancel") }}</AppButton>
         </div>
       </div>
 
@@ -211,16 +211,16 @@ const WeChatLoginPanel = {
           <code v-if="botId" class="wechat-login-bound-id">{{ botId }}</code>
         </div>
         <div class="wechat-login-actions">
-          <QButton class="plain xs" :loading="busy" :disabled="disabled || busy" @click="start">{{ t("settings_wechat_login_reconnect") }}</QButton>
-          <QButton class="danger plain xs" :disabled="disabled || busy" @click="unbind">
+          <AppButton class="plain xs" :loading="busy" :disabled="disabled || busy" @click="start">{{ t("settings_wechat_login_reconnect") }}</AppButton>
+          <AppButton class="danger plain xs" :disabled="disabled || busy" @click="unbind">
             {{ confirmingUnbind ? t("settings_wechat_login_unbind_confirm") : t("settings_wechat_login_unbind") }}
-          </QButton>
+          </AppButton>
         </div>
       </div>
 
-      <QButton v-else class="primary wechat-login-start" :loading="busy" :disabled="disabled || busy" @click="start">
+      <AppButton v-else class="primary wechat-login-start" :loading="busy" :disabled="disabled || busy" @click="start">
         {{ t("settings_wechat_login_connect") }}
-      </QButton>
+      </AppButton>
 
       <p v-if="notice" class="wechat-login-notice" role="status">{{ notice }}</p>
       <p v-if="error" class="wechat-login-error" role="alert">{{ error }}</p>

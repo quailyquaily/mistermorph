@@ -2457,7 +2457,7 @@ const TodoView = {
     >
       <template #leading>
         <div class="todo-page-bar">
-          <QButton
+          <AppButton
             v-if="mobileShowBack"
             class="plain xs icon todo-page-bar-back"
             :title="t('todo_nav_title')"
@@ -2465,7 +2465,7 @@ const TodoView = {
             @click="showIndexView"
           >
             <PhArrowLeft class="icon" />
-          </QButton>
+          </AppButton>
           <h2 class="page-title page-bar-title workspace-section-title">{{ mobileBarTitle }}</h2>
         </div>
       </template>
@@ -2486,7 +2486,7 @@ const TodoView = {
         <aside v-if="!calendarView && showIndexPane" class="todo-index workspace-sidebar-section" :aria-label="t('todo_nav_title')">
           <div class="todo-index-head workspace-sidebar-head">
             <h3 class="workspace-section-title todo-section-title">{{ t('todo_title') }}</h3>
-            <QButton
+            <AppButton
               class="plain sm icon todo-view-toggle"
               :title="t('todo_view_calendar')"
               :aria-label="t('todo_view_calendar')"
@@ -2494,8 +2494,8 @@ const TodoView = {
               @click="toggleTodoView"
             >
               <PhCalendarBlank class="icon" />
-            </QButton>
-            <QButton
+            </AppButton>
+            <AppButton
               v-if="!isMobile"
               class="plain sm icon todo-index-new"
               :title="t('todo_action_add')"
@@ -2503,7 +2503,7 @@ const TodoView = {
               @click="addTask"
             >
               <PhPlus class="icon" />
-            </QButton>
+            </AppButton>
           </div>
 
           <div v-scroll-edges class="todo-index-body">
@@ -2526,7 +2526,7 @@ const TodoView = {
                     </span>
                   </span>
                   <span class="todo-index-item-marker workspace-sidebar-item-marker" aria-hidden="true">
-                    <QBadge dot :type="heartbeatDisabled ? 'default' : 'success'" size="sm" />
+                    <AppBadge dot :type="heartbeatDisabled ? 'default' : 'success'" size="sm" />
                   </span>
                 </button>
               </div>
@@ -2557,7 +2557,7 @@ const TodoView = {
                     </span>
                   </span>
                   <span class="todo-index-item-marker workspace-sidebar-item-marker" aria-hidden="true">
-                    <QBadge dot :type="taskListDisplayTask(task).enabled === false ? 'default' : 'success'" size="sm" />
+                    <AppBadge dot :type="taskListDisplayTask(task).enabled === false ? 'default' : 'success'" size="sm" />
                   </span>
                 </div>
               </div>
@@ -2585,13 +2585,13 @@ const TodoView = {
           :meta="heartbeatEditorMeta"
         >
           <template #actions>
-            <QButton class="plain xs" :disabled="!canSave" :loading="heartbeatSaving" @click="save">
+            <AppButton class="plain xs" :disabled="!canSave" :loading="heartbeatSaving" @click="save">
               {{ t("action_save") }}
-            </QButton>
+            </AppButton>
           </template>
           <div class="todo-heartbeat-editor-body">
             <div v-if="heartbeatLoading || heartbeatDisabled" class="todo-heartbeat-editor-notices">
-              <QProgress v-if="heartbeatLoading" :infinite="true" />
+              <AppProgress v-if="heartbeatLoading" :infinite="true" />
               <AppNotice
                 v-if="heartbeatDisabled"
                 type="warning"
@@ -2619,7 +2619,7 @@ const TodoView = {
         >
           <!-- The switch is the head: whether the TODO runs is the first thing the panel says. -->
           <template #lead>
-            <QSwitch
+            <AppSwitch
               class="todo-enabled-switch"
               :modelValue="selectedTask.enabled !== false"
               :disabled="saving || loading"
@@ -2629,10 +2629,10 @@ const TodoView = {
             />
           </template>
           <template #actions>
-            <QButton class="primary xs" :disabled="!canSave" :loading="saving" @click="save">
+            <AppButton class="primary xs" :disabled="!canSave" :loading="saving" @click="save">
               {{ t("action_save") }}
-            </QButton>
-            <QDropdownMenu
+            </AppButton>
+            <AppDropdownMenu
               class="todo-task-actions-menu"
               variant="plain"
               :items="taskActionMenuItems"
@@ -2643,11 +2643,11 @@ const TodoView = {
             >
               <PhDotsThree class="todo-task-actions-menu-icon" />
               <span class="todo-task-actions-menu-accessible">{{ t("todo_action_more") }}</span>
-            </QDropdownMenu>
+            </AppDropdownMenu>
           </template>
           <div class="todo-task-editor-head">
             <label class="todo-editor-title-field">
-              <QInput
+              <AppInput
                 class="todo-title-input"
                 :modelValue="selectedTask.title"
                 :placeholder="t('todo_untitled')"
@@ -2673,7 +2673,7 @@ const TodoView = {
 
             <div class="todo-compact-fields">
               <div class="todo-field">
-                <QDropdownMenu
+                <AppDropdownMenu
                   :key="'timezone-' + selectedTask._key + '-' + selectedTask.tz"
                   class="todo-dropdown"
                   :items="timezoneBaseItems"
@@ -2688,11 +2688,11 @@ const TodoView = {
                   <template #prepend>
                     <span class="todo-control-prepend">{{ t("todo_field_timezone") }}</span>
                   </template>
-                </QDropdownMenu>
+                </AppDropdownMenu>
               </div>
 
               <div class="todo-field">
-                <QDropdownMenu
+                <AppDropdownMenu
                   :key="'schedule-' + selectedTask._key + '-' + taskMode(selectedTask)"
                   class="todo-dropdown"
                   :items="scheduleModeItems"
@@ -2704,11 +2704,11 @@ const TodoView = {
                   <template #prepend>
                     <span class="todo-control-prepend">{{ t("todo_field_schedule") }}</span>
                   </template>
-                </QDropdownMenu>
+                </AppDropdownMenu>
               </div>
 
               <div class="todo-field">
-                <QDropdownMenu
+                <AppDropdownMenu
                   :key="'llm-profile-' + selectedTask._key + '-' + selectedTask.llm_profile"
                   class="todo-dropdown todo-dropdown-hide-selected-media llm-profile-dropdown"
                   :items="llmProfileMenuItems"
@@ -2722,11 +2722,11 @@ const TodoView = {
                   <template #prepend>
                     <span class="todo-control-prepend">{{ t("todo_field_llm_profile") }}</span>
                   </template>
-                </QDropdownMenu>
+                </AppDropdownMenu>
               </div>
 
               <div class="todo-field">
-                <QDropdownMenu
+                <AppDropdownMenu
                   :key="'chat-' + selectedTask._key + '-' + selectedTask.chat_id + '-' + chatDropdownRevision"
                   class="todo-dropdown todo-dropdown-hide-selected-media"
                   :items="chatMenuItems"
@@ -2740,12 +2740,12 @@ const TodoView = {
                   <template #prepend>
                     <span class="todo-control-prepend">{{ t("todo_field_chat") }}</span>
                   </template>
-                </QDropdownMenu>
+                </AppDropdownMenu>
               </div>
             </div>
 
             <label v-if="taskMode(selectedTask) === 'once'" class="todo-field is-wide">
-              <QDatetimePicker
+              <AppDatetimePicker
                 class="todo-datetime-picker"
                 :modelValue="atInputValue(selectedTask)"
                 accept="datetime"
@@ -2755,7 +2755,7 @@ const TodoView = {
                 <template #prepend>
                   <span class="todo-control-prepend todo-datetime-prepend">{{ t("todo_field_at") }}</span>
                 </template>
-              </QDatetimePicker>
+              </AppDatetimePicker>
             </label>
 
             <div v-else class="todo-field is-wide todo-repeat-field">
@@ -2773,7 +2773,7 @@ const TodoView = {
                 :class="repeatKind(selectedTask) === 'weekly' ? 'todo-repeat-controls is-weekly' : 'todo-repeat-controls'"
               >
                 <label v-if="repeatKind(selectedTask) === 'hourly'" class="todo-field todo-repeat-minute">
-                  <QInput
+                  <AppInput
                     :key="repeatMinuteInputKey(selectedTask)"
                     class="todo-minute-input"
                     :modelValue="repeatMinuteValue(selectedTask)"
@@ -2787,11 +2787,11 @@ const TodoView = {
                     <template #prepend>
                       <span class="todo-control-prepend todo-input-prepend">{{ t("todo_field_minute") }}</span>
                     </template>
-                  </QInput>
+                  </AppInput>
                 </label>
 
                 <label v-else class="todo-field todo-repeat-time">
-                  <QInput
+                  <AppInput
                     :modelValue="selectedTask.repeat_time"
                     inputType="time"
                     :aria-label="t('todo_field_time')"
@@ -2801,12 +2801,12 @@ const TodoView = {
                     <template #prepend>
                       <span class="todo-control-prepend todo-input-prepend">{{ t("todo_field_time") }}</span>
                     </template>
-                  </QInput>
+                  </AppInput>
                 </label>
 
                 <div v-if="repeatKind(selectedTask) === 'weekly'" class="todo-field todo-weekday-field">
                   <div class="todo-weekday-picker" role="group" :aria-label="t('todo_field_weekdays')">
-                    <QButton
+                    <AppButton
                       v-for="day in WEEKDAYS"
                       :key="day.value"
                       type="button"
@@ -2816,12 +2816,12 @@ const TodoView = {
                       @click="toggleRepeatWeekday(selectedTask, day.value)"
                     >
                       {{ weekdayLabel(day.value) }}
-                    </QButton>
+                    </AppButton>
                   </div>
                 </div>
 
                 <label v-if="repeatKind(selectedTask) === 'monthly'" class="todo-field todo-month-day-field">
-                  <QInput
+                  <AppInput
                     :key="repeatMonthDayInputKey(selectedTask)"
                     class="todo-month-day-input"
                     :modelValue="selectedTask.repeat_month_day"
@@ -2835,12 +2835,12 @@ const TodoView = {
                     <template #prepend>
                       <span class="todo-control-prepend todo-input-prepend">{{ t("todo_field_day") }}</span>
                     </template>
-                  </QInput>
+                  </AppInput>
                 </label>
               </div>
 
               <label v-else class="todo-field is-wide todo-custom-cron">
-                <QInput
+                <AppInput
                   :modelValue="selectedTask.custom_cron"
                   :placeholder="t('todo_custom_cron_placeholder')"
                   :aria-label="t('todo_field_cron')"
@@ -2875,7 +2875,7 @@ const TodoView = {
                   class="todo-bash-env-row"
                 >
                   <label class="todo-field todo-bash-env-name">
-                    <QInput
+                    <AppInput
                       :modelValue="row.name"
                       :placeholder="t('todo_bash_env_name')"
                       :aria-label="t('todo_bash_env_name')"
@@ -2884,7 +2884,7 @@ const TodoView = {
                     />
                   </label>
                   <label class="todo-field todo-bash-env-value">
-                    <QInput
+                    <AppInput
                       :modelValue="row.value"
                       :placeholder="t('todo_bash_env_value')"
                       :aria-label="t('todo_bash_env_value')"
@@ -2892,7 +2892,7 @@ const TodoView = {
                       @update:modelValue="updateBashEnvField(selectedTask, index, 'value', $event)"
                     />
                   </label>
-                  <QButton
+                  <AppButton
                     type="button"
                     class="plain icon todo-bash-env-remove"
                     :title="t('action_delete')"
@@ -2901,10 +2901,10 @@ const TodoView = {
                     @click="removeBashEnvRow(selectedTask, index)"
                   >
                     <PhTrash class="icon" />
-                  </QButton>
+                  </AppButton>
                 </div>
               </div>
-              <QButton
+              <AppButton
                 type="button"
                 class="placeholder sm todo-bash-env-add"
                 :disabled="saving || loading"
@@ -2912,7 +2912,7 @@ const TodoView = {
               >
                 <PhPlus class="icon" />
                 {{ t("todo_bash_env_add") }}
-              </QButton>
+              </AppButton>
             </div>
           </div>
         </AppSection>
@@ -2948,14 +2948,14 @@ const TodoView = {
             <p class="todo-placeholder-note">{{ t("todo_detail_empty_hint") }}</p>
           </div>
           <div class="todo-placeholder-actions">
-            <QButton
+            <AppButton
               class="primary todo-placeholder-add"
               :disabled="loading || saving"
               @click="addTask"
             >
               <PhPlus class="icon" />
               {{ t("todo_action_add") }}
-            </QButton>
+            </AppButton>
           </div>
         </section>
       </div>
@@ -2965,7 +2965,7 @@ const TodoView = {
         :disabled="loading || saving"
         @click="addTask"
       />
-      <QMessageDialog
+      <AppMessageDialog
         v-model="deleteDialogOpen"
         icon="PhTrash"
         iconColor="red"

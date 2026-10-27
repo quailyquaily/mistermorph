@@ -179,12 +179,12 @@ const LoginView = {
               <p v-if="err" id="login-error" class="login-message is-error" role="alert">{{ err }}</p>
               <p v-else-if="capsLock" id="login-caps" class="login-message" role="status">{{ t("login_caps_lock") }}</p>
             </div>
-            <QButton type="submit" class="primary login-submit" :loading="busy">{{ t("login_button") }}</QButton>
+            <AppButton type="submit" class="primary login-submit" :loading="busy">{{ t("login_button") }}</AppButton>
           </form>
         </AppSection>
 
         <footer class="login-foot">
-          <QLanguageSelector class="login-language" :lang="lang" :presist="true" @change="onLanguageChange" />
+          <AppLanguageSelector class="login-language" :lang="lang" :presist="true" @change="onLanguageChange" />
         </footer>
       </div>
     </main>

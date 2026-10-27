@@ -1946,7 +1946,7 @@ const SetupView = {
                 :disabled="loading || saving"
                 @change="onProviderChange"
               />
-              <QButton
+              <AppButton
                 v-if="showCodexOAuthFields"
                 type="button"
                 :class="codexAuthActionClass"
@@ -1959,8 +1959,8 @@ const SetupView = {
                 <PhCheckCircle v-else-if="codexAuthButtonState === 'signed-in'" class="icon" />
                 <template v-else-if="codexAuthNeedsLogin">{{ t("settings_codex_auth_login_codex") }}</template>
                 <PhXCircle v-else class="icon" />
-              </QButton>
-              <QButton
+              </AppButton>
+              <AppButton
                 v-if="showXAIOAuthFields"
                 type="button"
                 :class="xaiAuthActionClass"
@@ -1974,8 +1974,8 @@ const SetupView = {
                 <PhArrowClockwise v-else-if="xaiAuthButtonState === 'refreshable'" class="icon" />
                 <template v-else-if="xaiAuthNeedsLogin">{{ t("settings_xai_auth_login") }}</template>
                 <PhXCircle v-else class="icon" />
-              </QButton>
-              <QButton
+              </AppButton>
+              <AppButton
                 v-if="showProOAuthFields"
                 type="button"
                 :class="proAuthActionClass"
@@ -1989,7 +1989,7 @@ const SetupView = {
                 <PhArrowClockwise v-else-if="proAuthButtonState === 'refreshable'" class="icon" />
                 <template v-else-if="proAuthNeedsLogin">{{ t("settings_pro_auth_login_pro") }}</template>
                 <PhXCircle v-else class="icon" />
-              </QButton>
+              </AppButton>
             </div>
             <EnvManagedField v-else-if="providerManagedField" :name="llmFieldManagedHeadline(providerManagedField)" />
             <InferenceProviderPicker
@@ -2006,12 +2006,12 @@ const SetupView = {
             <span class="setup-field-label">{{ t("settings_agent_endpoint_label") }}</span>
             <EnvManagedField v-if="isLLMFieldEnvManaged('endpoint')" :name="llmFieldManagedHeadline('endpoint')" />
             <div v-else class="setup-field-control">
-              <QInput
+              <AppInput
                 v-model="llmForm.endpoint"
                 :placeholder="t('settings_agent_endpoint_placeholder')"
                 :disabled="loading || saving"
               />
-              <QButton
+              <AppButton
                 type="button"
                 class="outlined icon setup-field-action"
                 :title="t('setup_llm_api_base_picker_title')"
@@ -2020,14 +2020,14 @@ const SetupView = {
                 @click.prevent="openAPIBasePicker"
               >
                 <PhLink class="icon" />
-              </QButton>
+              </AppButton>
             </div>
           </label>
 
           <label v-if="showCloudflareAccountField" class="setup-field is-wide">
             <span class="setup-field-label">{{ t("settings_agent_cloudflare_account_label") }}</span>
             <EnvManagedField v-if="isLLMFieldEnvManaged('cloudflare_account_id')" :name="llmFieldManagedHeadline('cloudflare_account_id')" />
-            <QInput
+            <AppInput
               v-else
               v-model="llmForm.cloudflare_account_id"
               :placeholder="t('settings_agent_cloudflare_account_placeholder')"
@@ -2064,7 +2064,7 @@ const SetupView = {
           <label v-if="showBedrockFields" class="setup-field">
             <span class="setup-field-label">{{ t("settings_agent_bedrock_region_label") }}</span>
             <EnvManagedField v-if="isLLMFieldEnvManaged('bedrock_region')" :name="llmFieldManagedHeadline('bedrock_region')" />
-            <QInput
+            <AppInput
               v-else
               v-model="llmForm.bedrock_region"
               :placeholder="t('settings_agent_bedrock_region_placeholder')"
@@ -2075,7 +2075,7 @@ const SetupView = {
           <label v-if="showBedrockFields" class="setup-field">
             <span class="setup-field-label">{{ t("settings_agent_bedrock_model_arn_label") }}</span>
             <EnvManagedField v-if="isLLMFieldEnvManaged('bedrock_model_arn')" :name="llmFieldManagedHeadline('bedrock_model_arn')" />
-            <QInput
+            <AppInput
               v-else
               v-model="llmForm.bedrock_model_arn"
               :placeholder="t('settings_agent_bedrock_model_arn_placeholder')"
@@ -2119,12 +2119,12 @@ const SetupView = {
             <span class="setup-field-label">{{ t("settings_agent_model_label") }}</span>
             <EnvManagedField v-if="isLLMFieldEnvManaged('model')" :name="llmFieldManagedHeadline('model')" />
             <div v-else class="setup-field-control">
-              <QInput
+              <AppInput
                 v-model="llmForm.model"
                 :placeholder="t('settings_agent_model_placeholder')"
                 :disabled="loading || saving"
               />
-              <QButton
+              <AppButton
                 type="button"
                 class="outlined icon setup-field-action"
                 :title="t('setup_llm_model_picker_title')"
@@ -2133,7 +2133,7 @@ const SetupView = {
                 @click.prevent="openModelPicker"
               >
                 <PhMagnifyingGlass class="icon" />
-              </QButton>
+              </AppButton>
             </div>
           </label>
 
@@ -2141,14 +2141,14 @@ const SetupView = {
 
           <div class="setup-footer is-wide">
             <div class="setup-footer-side">
-              <QButton type="button" class="outlined setup-aux-action" :disabled="testConnectionDisabled" @click="openTestConnection">
+              <AppButton type="button" class="outlined setup-aux-action" :disabled="testConnectionDisabled" @click="openTestConnection">
                 {{ t("setup_llm_test_button") }}
-              </QButton>
+              </AppButton>
             </div>
             <div class="setup-footer-side is-end">
-              <QButton class="primary setup-submit" :loading="saving" :disabled="llmSaveDisabled" @click="saveLLM">
+              <AppButton class="primary setup-submit" :loading="saving" :disabled="llmSaveDisabled" @click="saveLLM">
                 {{ t(stageMeta.submitKey) }}
-              </QButton>
+              </AppButton>
             </div>
           </div>
         </form>
@@ -2180,7 +2180,7 @@ const SetupView = {
 
           <label class="setup-field is-wide">
             <span class="setup-field-label">{{ t("setup_identity_name_label") }}</span>
-            <QInput
+            <AppInput
               ref="personaNameInput"
               v-model="personaForm.name"
               :placeholder="t('setup_identity_name_placeholder')"
@@ -2190,7 +2190,7 @@ const SetupView = {
 
           <label class="setup-field">
             <span class="setup-field-label">{{ t("setup_identity_emoji_label") }}</span>
-            <QInput
+            <AppInput
               v-model="personaForm.emoji"
               :placeholder="t('setup_identity_emoji_placeholder')"
               :disabled="saving"
@@ -2199,7 +2199,7 @@ const SetupView = {
 
           <label class="setup-field">
             <span class="setup-field-label">{{ t("setup_identity_creature_label") }}</span>
-            <QInput
+            <AppInput
               v-model="personaForm.creature"
               :placeholder="t('setup_identity_creature_placeholder')"
               :disabled="saving"
@@ -2208,7 +2208,7 @@ const SetupView = {
 
           <label class="setup-field is-wide">
             <span class="setup-field-label">{{ t("setup_identity_vibe_label") }}</span>
-            <QTextarea
+            <AppTextarea
               v-model="personaForm.vibe"
               :rows="3"
               :placeholder="t('setup_identity_vibe_placeholder')"
@@ -2220,10 +2220,10 @@ const SetupView = {
 
           <div class="setup-footer setup-footer-persona is-wide">
             <div class="setup-footer-side">
-              <QButton v-if="showPrevious" type="button" class="outlined" @click="goPrevious">{{ t("setup_action_previous") }}</QButton>
+              <AppButton v-if="showPrevious" type="button" class="outlined" @click="goPrevious">{{ t("setup_action_previous") }}</AppButton>
             </div>
             <div class="setup-footer-side setup-footer-center">
-              <QButton
+              <AppButton
                 type="button"
                 class="outlined icon setup-persona-random-button"
                 :title="t('setup_persona_randomize')"
@@ -2232,12 +2232,12 @@ const SetupView = {
                 @click="fillRandomPersona"
               >
                 <PhDiceFive class="icon" />
-              </QButton>
+              </AppButton>
             </div>
             <div class="setup-footer-side is-end">
-              <QButton class="primary setup-submit" :loading="saving" :disabled="personaSaveDisabled" @click="savePersona">
+              <AppButton class="primary setup-submit" :loading="saving" :disabled="personaSaveDisabled" @click="savePersona">
                 {{ t(stageMeta.submitKey) }}
-              </QButton>
+              </AppButton>
             </div>
           </div>
         </form>
@@ -2258,9 +2258,9 @@ const SetupView = {
                 </span>
                 <h3 v-if="selectedSoulCard" class="setup-soul-spotlight-title">{{ selectedSoulCard.title }}</h3>
                 <p v-if="selectedSoulCard && selectedSoulCard.note" class="setup-soul-spotlight-note">{{ selectedSoulCard.note }}</p>
-                <QButton v-if="isCustomSoulSelected" type="button" class="outlined xs" @click="openSoulEditor">
+                <AppButton v-if="isCustomSoulSelected" type="button" class="outlined xs" @click="openSoulEditor">
                   {{ t("setup_action_edit_soul") }}
-                </QButton>
+                </AppButton>
               </section>
             </section>
             <div class="setup-soul-card-stack" :class="{ 'is-custom-active': isCustomSoulSelected }">
@@ -2299,7 +2299,7 @@ const SetupView = {
           <section v-else class="setup-soul-editor is-wide">
             <div class="setup-soul-editor-head">
               <p class="setup-field-label">{{ t("setup_soul_editor_label") }}</p>
-              <QButton type="button" class="plain" @click="cancelSoulEditor">{{ t("action_cancel") }}</QButton>
+              <AppButton type="button" class="plain" @click="cancelSoulEditor">{{ t("action_cancel") }}</AppButton>
             </div>
             <AppMarkdownEditor
               v-model="soulEditorDraft"
@@ -2314,12 +2314,12 @@ const SetupView = {
 
           <div class="setup-footer is-wide">
             <div class="setup-footer-side">
-              <QButton v-if="showPrevious" type="button" class="outlined" @click="goPrevious">{{ t("setup_action_previous") }}</QButton>
+              <AppButton v-if="showPrevious" type="button" class="outlined" @click="goPrevious">{{ t("setup_action_previous") }}</AppButton>
             </div>
             <div class="setup-footer-side is-end">
-              <QButton v-if="soulSaveVisible" class="primary setup-submit" :loading="saving" :disabled="soulSaveDisabled" @click="saveSoul">
+              <AppButton v-if="soulSaveVisible" class="primary setup-submit" :loading="saving" :disabled="soulSaveDisabled" @click="saveSoul">
                 {{ t(stageMeta.submitKey) }}
-              </QButton>
+              </AppButton>
             </div>
           </div>
         </form>
@@ -2335,18 +2335,18 @@ const SetupView = {
                 </div>
                 <div class="setup-done-status-actions">
                   <strong class="setup-done-status-value">{{ item.value }}</strong>
-                  <QButton class="plain xs icon setup-done-edit-button" :title="item.action" :aria-label="item.action" @click="goToStage(item.stage)">
+                  <AppButton class="plain xs icon setup-done-edit-button" :title="item.action" :aria-label="item.action" @click="goToStage(item.stage)">
                     <PhPencilSimple class="icon" />
-                  </QButton>
+                  </AppButton>
                 </div>
               </div>
             </div>
           </section>
 
           <div class="setup-footer setup-footer-center is-wide">
-            <QButton class="primary setup-submit" @click="enterChat">
+            <AppButton class="primary setup-submit" @click="enterChat">
               {{ t("setup_action_enter_chat") }}
-            </QButton>
+            </AppButton>
           </div>
         </section>
 

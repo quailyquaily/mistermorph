@@ -1,6 +1,6 @@
 import { computed } from "vue";
 
-// QButton: the console's button. Its look comes from classes: a variant (primary, the default when
+// AppButton: the console's button. Its look comes from classes: a variant (primary, the default when
 // no class is given; outlined, plain, danger, placeholder), a size (sm, xs, xxs), icon for a square
 // icon button, block for full width. loading shows a moving stripe and disables it. Attributes and
 // listeners land on the <button>; title is rendered (the console's tooltips read it) and is the
@@ -25,8 +25,8 @@ function slotIconName(nodes) {
   return "";
 }
 
-const QButton = {
-  name: "QButton",
+const AppButton = {
+  name: "AppButton",
   inheritAttrs: false,
   props: {
     class: { type: String, default: "primary" },
@@ -73,4 +73,4 @@ const QButton = {
   `,
 };
 
-export default QButton;
+export default AppButton;

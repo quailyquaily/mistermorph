@@ -334,7 +334,7 @@ const ArtifactPreviewCard = {
           <span class="artifact-preview-name" :title="displayPath">{{ artifactName }}</span>
         </template>
         <template v-if="!previewFullscreen" #actions>
-          <QButton
+          <AppButton
             class="plain xs icon"
             :title="expanded ? t('artifact_preview_action_collapse') : t('artifact_preview_action_expand')"
             :aria-label="expanded ? t('artifact_preview_action_collapse') : t('artifact_preview_action_expand')"
@@ -344,8 +344,8 @@ const ArtifactPreviewCard = {
           >
             <PhCaretUp v-if="expanded" class="icon" />
             <PhCaretDown v-else class="icon" />
-          </QButton>
-          <QButton
+          </AppButton>
+          <AppButton
             class="plain xs icon"
             :title="t('chat_workspace_action_download')"
             :aria-label="t('chat_workspace_action_download')"
@@ -354,8 +354,8 @@ const ArtifactPreviewCard = {
             @click="downloadArtifact"
           >
             <PhCloudArrowDown class="icon" />
-          </QButton>
-          <QButton
+          </AppButton>
+          <AppButton
             class="plain xs icon"
             :title="fullscreenActionLabel"
             :aria-label="fullscreenActionLabel"
@@ -363,18 +363,18 @@ const ArtifactPreviewCard = {
             @click="toggleFullscreenPreview"
           >
             <PhCornersOut class="icon" />
-          </QButton>
+          </AppButton>
         </template>
 
         <div v-if="previewFullscreen" class="artifact-preview-corner">
-          <QButton
+          <AppButton
             class="outlined xs icon artifact-preview-exit"
             :title="fullscreenActionLabel"
             :aria-label="fullscreenActionLabel"
             @click="toggleFullscreenPreview"
           >
             <PhXCircle class="icon" />
-          </QButton>
+          </AppButton>
         </div>
 
         <AppNotice v-if="error" type="error" :text="error" />

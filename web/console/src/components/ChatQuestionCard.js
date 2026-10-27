@@ -113,9 +113,9 @@ const ChatQuestionCard = {
             :disabled="busy"
             enterkeyhint="send"
           />
-          <QButton type="submit" class="primary xs" :disabled="busy || !draft.trim()">
+          <AppButton type="submit" class="primary xs" :disabled="busy || !draft.trim()">
             {{ t('chat_question_send') }}
-          </QButton>
+          </AppButton>
         </form>
         <p v-if="error" class="chat-question-value chat-question-error" role="alert">{{ error }}</p>
       </div>

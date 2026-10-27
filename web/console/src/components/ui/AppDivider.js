@@ -1,10 +1,10 @@
 import { computed } from "vue";
 
-// QDivider: a horizontal rule, optionally labelled, emphasised (focus) or doubled.
+// AppDivider: a horizontal rule, optionally labelled, emphasised (focus) or doubled.
 //
 // Derived from quail-ui 0.9.10 (Apache License 2.0).
-const QDivider = {
-  name: "QDivider",
+const AppDivider = {
+  name: "AppDivider",
   props: {
     label: { type: String, default: "" },
     focus: { type: Boolean, default: false },
@@ -25,4 +25,4 @@ const QDivider = {
   `,
 };
 
-export default QDivider;
+export default AppDivider;

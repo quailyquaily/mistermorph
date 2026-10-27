@@ -1,12 +1,12 @@
 import { computed } from "vue";
 
-// QProgress: a progress bar for value out of max, or, with infinite, an indefinite one (the console
+// AppProgress: a progress bar for value out of max, or, with infinite, an indefinite one (the console
 // draws that as a scanning hairline, styles/base.css). color picks the fill (blue, green, red,
 // orange).
 //
 // Derived from quail-ui 0.9.10 (Apache License 2.0).
-const QProgress = {
-  name: "QProgress",
+const AppProgress = {
+  name: "AppProgress",
   props: {
     infinite: { type: Boolean, default: false },
     color: { type: String, default: "blue" },
@@ -29,4 +29,4 @@ const QProgress = {
   `,
 };
 
-export default QProgress;
+export default AppProgress;

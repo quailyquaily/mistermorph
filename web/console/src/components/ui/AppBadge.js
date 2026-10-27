@@ -1,12 +1,12 @@
 import { computed } from "vue";
 
-// QBadge: a small label or, with dot, a status mark. type sets its colour (default, primary,
+// AppBadge: a small label or, with dot, a status mark. type sets its colour (default, primary,
 // success, warning, danger, info), size (sm, md, lg) and variant (filled, outlined, light) its
 // form; closable adds a close button that emits close.
 //
 // Derived from quail-ui 0.9.10 (Apache License 2.0).
-const QBadge = {
-  name: "QBadge",
+const AppBadge = {
+  name: "AppBadge",
   props: {
     type: { type: String, default: "default" },
     size: { type: String, default: "md" },
@@ -44,4 +44,4 @@ const QBadge = {
   `,
 };
 
-export default QBadge;
+export default AppBadge;

@@ -1,18 +1,18 @@
 import { computed, onMounted, ref, watch } from "vue";
 
 import { fieldAttrs, hasSlotContent } from "./fieldAttrs";
-import QButton from "./QButton";
-import { QIconEditorDelete } from "./icons";
+import AppButton from "./AppButton";
+import { AppIconEditorDelete } from "./icons";
 
-// QInput: a one-line text field bound with v-model, with prepend/append slots inside the field and
+// AppInput: a one-line text field bound with v-model, with prepend/append slots inside the field and
 // prepend-out/append-out outside it, an optional hint and counter (max), and a clear button. The model
 // follows every input. Its root keeps class, style and data-*; other attributes and listeners go to
 // the <input>.
 //
 // Derived from quail-ui 0.9.10 (Apache License 2.0).
-const QInput = {
-  name: "QInput",
-  components: { QButton, QIconEditorDelete },
+const AppInput = {
+  name: "AppInput",
+  components: { AppButton, AppIconEditorDelete },
   inheritAttrs: false,
   props: {
     modelValue: { type: String, default: "" },
@@ -93,9 +93,9 @@ const QInput = {
             @focus="$emit('focus')"
             @blur="$emit('blur')"
           />
-          <QButton v-if="!disabled" type="button" class="clear-btn plain sm icon" @click="clear">
-            <QIconEditorDelete class="icon" />
-          </QButton>
+          <AppButton v-if="!disabled" type="button" class="clear-btn plain sm icon" @click="clear">
+            <AppIconEditorDelete class="icon" />
+          </AppButton>
           <div class="q-input-append" :class="{ 'is-empty': !has('append') }"><slot name="append" /></div>
         </div>
         <div v-if="hasHint" class="q-text-field-hint q-text-caption">
@@ -111,4 +111,4 @@ const QInput = {
   `,
 };
 
-export default QInput;
+export default AppInput;

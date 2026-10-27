@@ -178,14 +178,14 @@ const SetupPickerDialogContent = {
   },
   template: `
     <section ref="root" class="setup-picker-dialog" @keydown="onKeydown">
-      <QInput
+      <AppInput
         v-model="query"
         class="setup-picker-filter"
         :placeholder="filterPlaceholder"
         :disabled="loading"
       />
 
-      <QProgress v-if="loading" :infinite="true" />
+      <AppProgress v-if="loading" :infinite="true" />
       <AppNotice v-if="error" type="error" :text="error" />
 
       <div v-if="!loading" class="setup-picker-list" role="listbox">

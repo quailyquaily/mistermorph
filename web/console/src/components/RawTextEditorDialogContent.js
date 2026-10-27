@@ -46,8 +46,8 @@ const RawTextEditorDialogContent = {
   template: `
     <section class="raw-text-dialog">
       <code v-if="path" class="raw-text-path">{{ path }}</code>
-      <QProgress v-if="loading" :infinite="true" />
-      <QTextarea
+      <AppProgress v-if="loading" :infinite="true" />
+      <AppTextarea
         v-else
         class="raw-text-body"
         :modelValue="modelValue"
@@ -56,7 +56,7 @@ const RawTextEditorDialogContent = {
         @update:modelValue="onInput"
       />
       <div class="raw-text-actions">
-        <QButton class="primary sm" :loading="saving" :disabled="saveDisabled" @click="save">{{ t("action_save") }}</QButton>
+        <AppButton class="primary sm" :loading="saving" :disabled="saveDisabled" @click="save">{{ t("action_save") }}</AppButton>
       </div>
     </section>
   `,

@@ -5,7 +5,7 @@ const AppDialogShell = {
   directives: {
     dialogTitle: {
       mounted(el) {
-        // QDialog's custom header slot does not name the dialog automatically.
+        // AppDialog's custom header slot does not name the dialog automatically.
         el.closest('[role="dialog"]')?.setAttribute("aria-labelledby", el.id);
       },
     },
@@ -71,7 +71,7 @@ const AppDialogShell = {
     };
   },
   template: `
-    <QDialog
+    <AppDialog
       :modelValue="modelValue"
       :width="width"
       :height="height"
@@ -85,7 +85,7 @@ const AppDialogShell = {
           <div class="app-dialog-copy">
             <h3 :id="titleId" v-dialog-title class="app-dialog-title">{{ title }}</h3>
           </div>
-          <QButton
+          <AppButton
             type="button"
             class="icon border-radius-none app-dialog-close"
             :title="t('action_close')"
@@ -94,12 +94,12 @@ const AppDialogShell = {
             @click="requestClose"
           >
             <PhX class="icon" />
-          </QButton>
+          </AppButton>
         </header>
       </template>
 
       <slot />
-    </QDialog>
+    </AppDialog>
   `,
 };
 

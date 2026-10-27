@@ -5016,7 +5016,7 @@ const ChatView = {
     >
       <template v-if="consoleTopicsEnabled" #leading>
         <div :class="mobileTopicSplitEnabled ? 'chat-page-bar-mobile' : 'chat-page-bar-desktop'">
-          <QButton
+          <AppButton
             v-if="mobileShowBack"
             class="plain xs icon chat-page-bar-back"
             :title="t('chat_topics_title')"
@@ -5024,9 +5024,9 @@ const ChatView = {
             @click="showTopicsView"
           >
             <PhArrowLeft class="icon" />
-          </QButton>
+          </AppButton>
           <h2 class="page-title page-bar-title workspace-section-title">{{ mobileTopicSplitEnabled ? mobileBarTitle : t("chat_title") }}</h2>
-          <QButton
+          <AppButton
             v-if="mobileTopicSplitEnabled && showChatPane && workspaceSidebarAvailable"
             :class="workspaceSidebarOpen ? 'plain sm icon chat-workspace-toggle is-active' : 'plain sm icon chat-workspace-toggle'"
             :title="workspaceSidebarToggleLabel"
@@ -5034,7 +5034,7 @@ const ChatView = {
             @click="toggleWorkspaceSidebar"
           >
             <PhSidebarSimple class="icon" />
-          </QButton>
+          </AppButton>
         </div>
       </template>
       <input
@@ -5059,7 +5059,7 @@ const ChatView = {
                   <h3 class="chat-topic-sidebar-title workspace-section-title">{{ t("chat_topics_title") }}</h3>
                 </div>
               </div>
-              <QButton
+              <AppButton
                 :class="['plain sm icon chat-topic-view-toggle', { 'is-active': topicSidebarView === 'tags' }]"
                 :title="topicSidebarView === 'tags' ? t('chat_topics_view_date') : t('chat_topics_view_tags')"
                 :aria-label="t('chat_topics_view_tags')"
@@ -5067,8 +5067,8 @@ const ChatView = {
                 @click="setTopicSidebarView(topicSidebarView === 'tags' ? 'date' : 'tags')"
               >
                 <PhTag class="icon" />
-              </QButton>
-              <QButton
+              </AppButton>
+              <AppButton
                 v-if="!mobileTopicSplitEnabled"
                 class="plain sm icon chat-topic-sidebar-new"
                 :title="t('chat_topic_new')"
@@ -5076,7 +5076,7 @@ const ChatView = {
                 @click="startNewTopic"
               >
                 <PhPlus class="icon" />
-              </QButton>
+              </AppButton>
             </header>
             <div v-sliding-selection v-scroll-edges :class="topicsLoading ? 'chat-topic-list workspace-sidebar-list is-busy' : 'chat-topic-list workspace-sidebar-list'">
               <p
@@ -5143,14 +5143,14 @@ const ChatView = {
                 </button>
                 </template>
               </section>
-              <QButton
+              <AppButton
                 v-if="topicsNextCursor"
                 class="plain sm chat-topic-load-older"
                 :loading="topicsLoadingOlder"
                 @click="loadOlderTopics"
               >
                 {{ t('chat_topics_load_older') }}
-              </QButton>
+              </AppButton>
             </div>
           </aside>
           <AppFab
@@ -5241,14 +5241,14 @@ const ChatView = {
                 @touchmove.passive="markHistoryScrollIntent"
                 @wheel.passive="markHistoryScrollIntent"
               >
-                <QButton
+                <AppButton
                   v-if="historyNextCursor"
                   class="plain sm chat-history-load-older"
                   :loading="historyLoadingOlder"
                   @click="loadOlderHistory"
                 >
                   {{ t('chat_history_load_older') }}
-                </QButton>
+                </AppButton>
                 <ChatHistoryList
                   :items="chatHistoryItems"
                   :loading="historySwitching"
@@ -5372,7 +5372,7 @@ const ChatView = {
                       </div>
 
                       <div class="chat-workspace-toolbar-actions">
-                        <QButton
+                        <AppButton
                           class="plain xs icon"
                           :title="t('chat_workspace_action_attach')"
                           :aria-label="t('chat_workspace_action_attach')"
@@ -5380,8 +5380,8 @@ const ChatView = {
                           @click="openWorkspaceBrowser"
                         >
                           <PhPlus class="icon" />
-                        </QButton>
-                        <QButton
+                        </AppButton>
+                        <AppButton
                           v-if="workspaceSource === 'attachment'"
                           class="plain xs icon"
                           :title="t('chat_workspace_action_detach')"
@@ -5391,7 +5391,7 @@ const ChatView = {
                           @click="detachWorkspace"
                         >
                           <PhTrash class="icon" />
-                        </QButton>
+                        </AppButton>
                       </div>
                     </header>
 
@@ -5461,7 +5461,7 @@ const ChatView = {
                         <div class="chat-workspace-status-row">
                           <dt class="chat-workspace-status-term">{{ t("audit_action") }}</dt>
                           <dd class="chat-workspace-status-actions">
-                            <QButton
+                            <AppButton
                               class="plain xs icon"
                               :title="t('chat_workspace_action_insert')"
                               :aria-label="t('chat_workspace_action_insert')"
@@ -5469,8 +5469,8 @@ const ChatView = {
                               @click="addWorkspaceSelectionToComposer"
                             >
                               <PhPlus class="icon" />
-                            </QButton>
-                            <QButton
+                            </AppButton>
+                            <AppButton
                               class="plain xs icon"
                               :title="t('chat_workspace_action_open')"
                               :aria-label="t('chat_workspace_action_open')"
@@ -5478,8 +5478,8 @@ const ChatView = {
                               @click="openWorkspaceSelection"
                             >
                               <PhArrowSquareOut class="icon" />
-                            </QButton>
-                            <QButton
+                            </AppButton>
+                            <AppButton
                               class="plain xs icon"
                               :title="t('chat_workspace_action_download')"
                               :aria-label="t('chat_workspace_action_download')"
@@ -5488,7 +5488,7 @@ const ChatView = {
                               @click="downloadWorkspaceSelection"
                             >
                               <PhCloudArrowDown class="icon" />
-                            </QButton>
+                            </AppButton>
                           </dd>
                         </div>
                       </dl>
@@ -5508,13 +5508,13 @@ const ChatView = {
                         <p class="chat-workspace-empty-title">{{ t("chat_workspace_empty_title") }}</p>
                       </div>
                       <div class="chat-workspace-empty-actions">
-                        <QButton
+                        <AppButton
                           class="primary sm"
                           :disabled="workspaceAttachDisabled"
                           @click="openWorkspaceBrowser"
                         >
                           {{ t("chat_workspace_action_attach") }}
-                        </QButton>
+                        </AppButton>
                       </div>
                     </div>
                   </template>
@@ -5540,7 +5540,7 @@ const ChatView = {
                     <header class="chat-topic-panel-head">
                       <h4 class="chat-topic-panel-title" :title="deskTitle">{{ deskTitle }}</h4>
                       <div v-if="topicDeleteAvailable" class="chat-topic-actions">
-                        <QButton
+                        <AppButton
                           class="plain sm icon chat-topic-regenerate-action"
                           :title="t('chat_topic_regenerate_action')"
                           :aria-label="t('chat_topic_regenerate_action')"
@@ -5549,8 +5549,8 @@ const ChatView = {
                           @click="regenerateTopicName"
                         >
                           <PhMagicWand class="icon" />
-                        </QButton>
-                        <QButton
+                        </AppButton>
+                        <AppButton
                           class="danger plain sm icon chat-topic-danger-action"
                           :title="t('chat_topic_delete_action')"
                           :aria-label="t('chat_topic_delete_action')"
@@ -5559,7 +5559,7 @@ const ChatView = {
                           @click="confirmDeleteTopic"
                         >
                           <PhTrash class="icon" />
-                        </QButton>
+                        </AppButton>
                       </div>
                     </header>
 
@@ -5568,7 +5568,7 @@ const ChatView = {
                         <div class="chat-topic-property-row chat-topic-pin-row">
                           <dt class="chat-topic-property-label">{{ t("chat_topic_pin_label") }}</dt>
                           <dd class="chat-topic-property-value chat-topic-pin-value">
-                            <QSwitch
+                            <AppSwitch
                               :modelValue="selectedTopicPinned"
                               :disabled="topicTagsSaving"
                               :aria-label="t('chat_topic_pin_label')"
@@ -5599,14 +5599,14 @@ const ChatView = {
                         <dd class="chat-topic-property-value chat-topic-context-value">
                           <div class="chat-topic-context-line">
                             <strong class="chat-topic-context-ratio">{{ topicContextProgress.label }}</strong>
-                            <QButton
+                            <AppButton
                               class="plain xs icon chat-topic-context-inspect"
                               :title="t('context_inspector_open')"
                               :aria-label="t('context_inspector_open')"
                               @click="openContextInspector"
                             >
                               <PhMagnifyingGlass class="icon" />
-                            </QButton>
+                            </AppButton>
                           </div>
                           <div
                             v-if="!topicContextProgress.unknownWindow"
@@ -5656,7 +5656,7 @@ const ChatView = {
             v-if="consoleTopicsEnabled && !showChatPlaceholder && workspaceSidebarAvailable && !mobileMode && showChatPane"
             :class="['chat-workspace-dock', { 'is-open': desktopWorkspaceSidebarVisible }]"
           >
-            <QButton
+            <AppButton
               class="plain sm icon chat-workspace-toggle"
               :title="workspaceSidebarToggleLabel"
               :aria-label="workspaceSidebarToggleLabel"
@@ -5664,7 +5664,7 @@ const ChatView = {
               @click="toggleWorkspaceSidebar"
             >
               <PhSidebarSimple class="icon chat-workspace-toggle-icon" />
-            </QButton>
+            </AppButton>
           </div>
         </section>
         <Teleport to="body">
@@ -5720,7 +5720,7 @@ const ChatView = {
                     </div>
 
                     <div class="chat-workspace-toolbar-actions">
-                      <QButton
+                      <AppButton
                         class="plain xs icon"
                         :title="t('chat_workspace_action_attach')"
                         :aria-label="t('chat_workspace_action_attach')"
@@ -5728,8 +5728,8 @@ const ChatView = {
                         @click="openWorkspaceBrowser"
                       >
                         <PhPlus class="icon" />
-                      </QButton>
-                      <QButton
+                      </AppButton>
+                      <AppButton
                         v-if="workspaceSource === 'attachment'"
                         class="plain xs icon"
                         :title="t('chat_workspace_action_detach')"
@@ -5739,7 +5739,7 @@ const ChatView = {
                         @click="detachWorkspace"
                       >
                         <PhTrash class="icon" />
-                      </QButton>
+                      </AppButton>
                     </div>
                   </header>
 
@@ -5809,7 +5809,7 @@ const ChatView = {
                       <div class="chat-workspace-status-row">
                         <dt class="chat-workspace-status-term">{{ t("audit_action") }}</dt>
                         <dd class="chat-workspace-status-actions">
-                          <QButton
+                          <AppButton
                             class="plain xs icon"
                             :title="t('chat_workspace_action_insert')"
                             :aria-label="t('chat_workspace_action_insert')"
@@ -5817,8 +5817,8 @@ const ChatView = {
                             @click="addWorkspaceSelectionToComposer"
                           >
                             <PhPlus class="icon" />
-                          </QButton>
-                          <QButton
+                          </AppButton>
+                          <AppButton
                             class="plain xs icon"
                             :title="t('chat_workspace_action_open')"
                             :aria-label="t('chat_workspace_action_open')"
@@ -5826,8 +5826,8 @@ const ChatView = {
                             @click="openWorkspaceSelection"
                           >
                             <PhArrowSquareOut class="icon" />
-                          </QButton>
-                          <QButton
+                          </AppButton>
+                          <AppButton
                             class="plain xs icon"
                             :title="t('chat_workspace_action_download')"
                             :aria-label="t('chat_workspace_action_download')"
@@ -5836,7 +5836,7 @@ const ChatView = {
                             @click="downloadWorkspaceSelection"
                           >
                             <PhCloudArrowDown class="icon" />
-                          </QButton>
+                          </AppButton>
                         </dd>
                       </div>
                     </dl>
@@ -5856,13 +5856,13 @@ const ChatView = {
                       <p class="chat-workspace-empty-title">{{ t("chat_workspace_empty_title") }}</p>
                     </div>
                     <div class="chat-workspace-empty-actions">
-                      <QButton
+                      <AppButton
                         class="primary sm"
                         :disabled="workspaceAttachDisabled"
                         @click="openWorkspaceBrowser"
                       >
                         {{ t("chat_workspace_action_attach") }}
-                      </QButton>
+                      </AppButton>
                     </div>
                   </div>
                 </template>
@@ -5888,7 +5888,7 @@ const ChatView = {
                   <header class="chat-topic-panel-head">
                     <h4 class="chat-topic-panel-title" :title="deskTitle">{{ deskTitle }}</h4>
                     <div v-if="topicDeleteAvailable" class="chat-topic-actions">
-                      <QButton
+                      <AppButton
                         class="plain sm icon chat-topic-regenerate-action"
                         :title="t('chat_topic_regenerate_action')"
                         :aria-label="t('chat_topic_regenerate_action')"
@@ -5897,8 +5897,8 @@ const ChatView = {
                         @click="regenerateTopicName"
                       >
                         <PhMagicWand class="icon" />
-                      </QButton>
-                      <QButton
+                      </AppButton>
+                      <AppButton
                         class="danger plain sm icon chat-topic-danger-action"
                         :title="t('chat_topic_delete_action')"
                         :aria-label="t('chat_topic_delete_action')"
@@ -5907,7 +5907,7 @@ const ChatView = {
                         @click="confirmDeleteTopic"
                       >
                         <PhTrash class="icon" />
-                      </QButton>
+                      </AppButton>
                     </div>
                   </header>
 
@@ -5916,7 +5916,7 @@ const ChatView = {
                       <div class="chat-topic-property-row chat-topic-pin-row">
                         <dt class="chat-topic-property-label">{{ t("chat_topic_pin_label") }}</dt>
                         <dd class="chat-topic-property-value chat-topic-pin-value">
-                          <QSwitch
+                          <AppSwitch
                             :modelValue="selectedTopicPinned"
                             :disabled="topicTagsSaving"
                             :aria-label="t('chat_topic_pin_label')"
@@ -5947,14 +5947,14 @@ const ChatView = {
                       <dd class="chat-topic-property-value chat-topic-context-value">
                         <div class="chat-topic-context-line">
                           <strong class="chat-topic-context-ratio">{{ topicContextProgress.label }}</strong>
-                          <QButton
+                          <AppButton
                             class="plain xs icon chat-topic-context-inspect"
                             :title="t('context_inspector_open')"
                             :aria-label="t('context_inspector_open')"
                             @click="openContextInspector"
                           >
                             <PhMagnifyingGlass class="icon" />
-                          </QButton>
+                          </AppButton>
                         </div>
                         <div
                           v-if="!topicContextProgress.unknownWindow"
@@ -6079,19 +6079,19 @@ const ChatView = {
                       :title="workspaceBrowserCreateParent"
                     >{{ workspaceBrowserCreateParent || t("chat_workspace_dialog_selection_empty") }}</code>
                   </span>
-                  <QButton
+                  <AppButton
                     class="plain xs chat-workspace-browser-create-button"
                     :disabled="workspaceBrowserCreateDisabled || workspaceBrowserCreateOpen"
                     @click="openWorkspaceBrowserCreate"
                   >
                     <PhPlus class="icon" />
                     <span>{{ t("chat_workspace_dialog_new_directory") }}</span>
-                  </QButton>
+                  </AppButton>
                 </div>
 
                 <div v-if="workspaceBrowserCreateOpen" class="chat-workspace-browser-create">
                   <div ref="workspaceBrowserCreateField" class="chat-workspace-browser-create-field">
-                    <QInput
+                    <AppInput
                       v-model="workspaceBrowserCreateName"
                       :placeholder="t('chat_workspace_dialog_directory_name')"
                       :aria-label="t('chat_workspace_dialog_directory_name')"
@@ -6100,21 +6100,21 @@ const ChatView = {
                     />
                   </div>
                   <div class="chat-workspace-browser-create-actions">
-                    <QButton
+                    <AppButton
                       class="plain sm"
                       :disabled="workspaceBrowserCreating"
                       @click="cancelWorkspaceBrowserCreate"
                     >
                       {{ t("action_cancel") }}
-                    </QButton>
-                    <QButton
+                    </AppButton>
+                    <AppButton
                       class="primary sm"
                       :loading="workspaceBrowserCreating"
                       :disabled="workspaceBrowserCreateSubmitDisabled"
                       @click="createWorkspaceBrowserDir"
                     >
                       {{ t("chat_workspace_dialog_create_directory") }}
-                    </QButton>
+                    </AppButton>
                   </div>
                 </div>
 
@@ -6157,7 +6157,7 @@ const ChatView = {
 
               <div class="chat-workspace-dialog-actions">
                 <div class="chat-workspace-dialog-options">
-                  <QSwitch
+                  <AppSwitch
                     :modelValue="workspaceBrowserShowHidden"
                     :disabled="workspaceBrowserLoading || workspaceBrowserCreating"
                     :aria-label="t('chat_workspace_dialog_show_hidden')"
@@ -6166,21 +6166,21 @@ const ChatView = {
                   <span class="chat-workspace-dialog-option-label">{{ t("chat_workspace_dialog_show_hidden") }}</span>
                 </div>
                 <div class="chat-workspace-dialog-action-buttons">
-                  <QButton
+                  <AppButton
                     class="plain sm"
                     :disabled="workspaceSaving || workspaceBrowserCreating"
                     @click="closeWorkspaceBrowser"
                   >
                     {{ t("action_cancel") }}
-                  </QButton>
-                  <QButton
+                  </AppButton>
+                  <AppButton
                     class="primary sm"
                     :loading="workspaceSaving"
                     :disabled="workspaceBrowserConfirmDisabled"
                     @click="attachWorkspace"
                   >
                     {{ t("chat_workspace_action_attach") }}
-                  </QButton>
+                  </AppButton>
                 </div>
               </div>
             </div>
@@ -6232,7 +6232,7 @@ const ChatView = {
                 class="chat-composer-file-preview-navigation"
                 :aria-label="t('chat_composer_file_preview_navigation')"
               >
-                <QButton
+                <AppButton
                   class="plain sm icon chat-composer-file-preview-nav-button is-previous"
                   :disabled="!composerFilePreviewHasPrevious"
                   :title="t('chat_composer_file_preview_previous')"
@@ -6240,8 +6240,8 @@ const ChatView = {
                   @click="navigateComposerFilePreview(-1)"
                 >
                   <PhArrowLeft class="icon" />
-                </QButton>
-                <QButton
+                </AppButton>
+                <AppButton
                   class="plain sm icon chat-composer-file-preview-nav-button is-next"
                   :disabled="!composerFilePreviewHasNext"
                   :title="t('chat_composer_file_preview_next')"
@@ -6249,7 +6249,7 @@ const ChatView = {
                   @click="navigateComposerFilePreview(1)"
                 >
                   <PhArrowRight class="icon" />
-                </QButton>
+                </AppButton>
               </nav>
             </div>
           </section>
@@ -6262,7 +6262,7 @@ const ChatView = {
         />
         <Teleport to="body">
           <div class="chat-topic-delete-dialog-host">
-            <QMessageDialog
+            <AppMessageDialog
               v-model="topicDeleteDialogOpen"
               icon="PhTrash"
               iconColor="red"

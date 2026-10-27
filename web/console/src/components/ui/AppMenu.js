@@ -1,13 +1,13 @@
 import { computed } from "vue";
 
-// QMenu: a list of actions. Each item has a title (and maybe a subtitle, an icon component or an
+// AppMenu: a list of actions. Each item has a title (and maybe a subtitle, an icon component or an
 // image) or is a divider; disabled and danger items are marked. Choosing one, by click, Enter or
 // Space, runs its action and emits "action". focusedIndex counts actionable items only and marks
 // that one focused; persistent keeps every item in the tab order.
 //
 // Derived from quail-ui 0.9.10 (Apache License 2.0).
-const QMenu = {
-  name: "QMenu",
+const AppMenu = {
+  name: "AppMenu",
   props: {
     items: { type: Array, required: true },
     persistent: { type: Boolean, default: false },
@@ -89,4 +89,4 @@ const QMenu = {
   `,
 };
 
-export default QMenu;
+export default AppMenu;

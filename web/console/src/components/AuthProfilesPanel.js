@@ -109,7 +109,7 @@ export default {
   template: `
     <AppSection variant="boxed" class="config-settings-group" title="Auth profiles" meta="Credentials and request limits used by authenticated HTTP tools.">
       <template #actions>
-        <QButton class="plain xs" :loading="saving" :disabled="loading || saving || !complete" @click="save">Save</QButton>
+        <AppButton class="plain xs" :loading="saving" :disabled="loading || saving || !complete" @click="save">Save</AppButton>
       </template>
       <div class="settings-panel-body settings-collection-list">
         <div v-if="error" class="config-settings-error" role="alert">{{ error }}</div>
@@ -117,15 +117,15 @@ export default {
           <div class="settings-form-grid">
             <div class="settings-field">
               <span class="settings-field-label">Name</span>
-              <QInput v-model="profile.name" :disabled="loading || saving" />
+              <AppInput v-model="profile.name" :disabled="loading || saving" />
             </div>
             <div class="settings-field">
               <span class="settings-field-label">Credential kind</span>
-              <QInput v-model="profile.credential_kind" :disabled="loading || saving" />
+              <AppInput v-model="profile.credential_kind" :disabled="loading || saving" />
             </div>
             <div class="settings-field is-wide">
               <span class="settings-field-label">Credential secret</span>
-              <QInput
+              <AppInput
                 v-model="profile.credential_secret"
                 inputType="password"
                 :placeholder="profile._configured ? 'Configured — enter a new value to replace' : 'Required'"
@@ -134,7 +134,7 @@ export default {
             </div>
             <div class="settings-field">
               <span class="settings-field-label">Allowed URL prefixes</span>
-              <QTextarea v-model="profile.url_prefixes_text" :rows="4" :disabled="loading || saving" />
+              <AppTextarea v-model="profile.url_prefixes_text" :rows="4" :disabled="loading || saving" />
             </div>
             <div class="settings-field">
               <span class="settings-field-label">Allowed methods</span>
@@ -174,7 +174,7 @@ export default {
                   </div>
                   <div class="settings-field is-wide">
                     <span class="settings-field-label">Header name</span>
-                    <QInput
+                    <AppInput
                       :modelValue="binding?.inject?.name || ''"
                       :disabled="loading || saving"
                       @update:modelValue="updateInjection(profile, tool, 'name', $event)"
@@ -184,18 +184,18 @@ export default {
               </div>
               <details class="settings-bindings-advanced">
                 <summary>Advanced bindings (JSON)</summary>
-                <QTextarea v-model="profile.bindings_text" :rows="8" class="config-settings-json" :disabled="loading || saving" />
+                <AppTextarea v-model="profile.bindings_text" :rows="8" class="config-settings-json" :disabled="loading || saving" />
               </details>
             </div>
             <div class="settings-field-row is-wide is-three">
-              <QSwitch v-model="profile.deny_private_ips" label="Deny private IPs" :disabled="loading || saving" />
-              <QSwitch v-model="profile.follow_redirects" label="Follow redirects" :disabled="loading || saving" />
-              <QSwitch v-model="profile.allow_proxy" label="Allow proxy" :disabled="loading || saving" />
+              <AppSwitch v-model="profile.deny_private_ips" label="Deny private IPs" :disabled="loading || saving" />
+              <AppSwitch v-model="profile.follow_redirects" label="Follow redirects" :disabled="loading || saving" />
+              <AppSwitch v-model="profile.allow_proxy" label="Allow proxy" :disabled="loading || saving" />
             </div>
           </div>
-          <QButton class="plain xs danger" :disabled="loading || saving" @click="remove(index)">Remove</QButton>
+          <AppButton class="plain xs danger" :disabled="loading || saving" @click="remove(index)">Remove</AppButton>
         </div>
-        <QButton class="placeholder" :disabled="loading || saving" @click="add">Add auth profile</QButton>
+        <AppButton class="placeholder" :disabled="loading || saving" @click="add">Add auth profile</AppButton>
       </div>
     </AppSection>
   `,

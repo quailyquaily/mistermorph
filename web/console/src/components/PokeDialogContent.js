@@ -3,7 +3,7 @@ import { computed } from "vue";
 import "./PokeDialogContent.css";
 
 function bindTextareaAccessibility(el, { value }) {
-  // QTextarea places fallthrough attributes on its wrapper, not its textarea.
+  // AppTextarea places fallthrough attributes on its wrapper, not its textarea.
   const input = el.querySelector("textarea");
   if (!input) return;
   input.id = value.id;
@@ -72,7 +72,7 @@ const PokeDialogContent = {
   template: `
     <section class="runtime-poke-dialog">
       <label class="runtime-poke-label" :for="inputId">{{ t("runtime_poke_body_label") }}</label>
-      <QTextarea
+      <AppTextarea
         v-textarea-accessibility="{ id: inputId, invalid: !!error || bodyTooLarge }"
         class="runtime-poke-textarea"
         :modelValue="body"
@@ -83,9 +83,9 @@ const PokeDialogContent = {
       />
       <p v-if="message" :id="inputId + '-help'" class="runtime-poke-error" role="alert">{{ message }}</p>
       <div class="runtime-poke-actions">
-        <QButton class="primary sm" :loading="submitting" :disabled="submitDisabled" @click="submit">
+        <AppButton class="primary sm" :loading="submitting" :disabled="submitDisabled" @click="submit">
           {{ t("runtime_poke_submit") }}
-        </QButton>
+        </AppButton>
       </div>
     </section>
   `,

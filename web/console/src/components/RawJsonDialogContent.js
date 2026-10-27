@@ -47,7 +47,7 @@ const RawJsonDialogContent = {
   template: `
     <section class="raw-json-dialog">
       <div class="raw-json-tools">
-        <QButton class="outlined xs" @click="copy">{{ t("action_copy") }}</QButton>
+        <AppButton class="outlined xs" @click="copy">{{ t("action_copy") }}</AppButton>
       </div>
       <pre class="raw-json-body">{{ json }}</pre>
     </section>

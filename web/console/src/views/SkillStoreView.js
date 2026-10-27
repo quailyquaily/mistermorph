@@ -42,17 +42,17 @@ const StoreSkillDetail = {
         <h3 class="workspace-document-title store-panel-title">{{ skill.name }}</h3>
         <p v-if="skill.description" class="store-panel-meta">{{ skill.description }}</p>
       </div>
-      <QButton class="plain sm icon" :title="t('action_close')" :aria-label="t('action_close')" @click="$emit('close')">
+      <AppButton class="plain sm icon" :title="t('action_close')" :aria-label="t('action_close')" @click="$emit('close')">
         <PhX class="icon" />
-      </QButton>
+      </AppButton>
     </header>
     <div class="store-panel-body">
       <div class="store-panel-action">
-        <QButton v-if="skill.updateAvailable" class="primary" :loading="installBusy" @click="$emit('install', true)">
+        <AppButton v-if="skill.updateAvailable" class="primary" :loading="installBusy" @click="$emit('install', true)">
           {{ t('skills_update_to', { version: skill.version }) }}
-        </QButton>
-        <QButton v-else-if="skill.installed" class="outlined" @click="$emit('open-installed')">{{ t('skills_store_open') }}</QButton>
-        <QButton v-else class="primary" :loading="installBusy" @click="$emit('install', false)">{{ t('skills_store_install') }}</QButton>
+        </AppButton>
+        <AppButton v-else-if="skill.installed" class="outlined" @click="$emit('open-installed')">{{ t('skills_store_open') }}</AppButton>
+        <AppButton v-else class="primary" :loading="installBusy" @click="$emit('install', false)">{{ t('skills_store_install') }}</AppButton>
         <p v-if="!skill.installed || skill.updateAvailable" class="store-panel-note">{{ t('skills_store_install_note') }}</p>
       </div>
       <AppNotice v-if="installErr" type="error" :text="installErr" />
@@ -329,9 +329,9 @@ const SkillStoreView = {
     <AppPage :title="t('skills_store_title')" class="store-page">
       <template #leading>
         <div class="store-page-bar">
-          <QButton class="plain xs icon" :title="t('skills_title')" :aria-label="t('skills_title')" @click="backToSkills">
+          <AppButton class="plain xs icon" :title="t('skills_title')" :aria-label="t('skills_title')" @click="backToSkills">
             <PhArrowLeft class="icon" />
-          </QButton>
+          </AppButton>
           <h2 class="page-title page-bar-title workspace-section-title">{{ t('skills_store_title') }}</h2>
         </div>
       </template>
@@ -365,7 +365,7 @@ const SkillStoreView = {
         <p v-else-if="unsupported" class="store-note">{{ t('skills_store_unsupported') }}</p>
         <div v-else-if="error" class="store-note store-error">
           <span>{{ error }}</span>
-          <QButton class="plain xs" @click="load">{{ t('skills_store_retry') }}</QButton>
+          <AppButton class="plain xs" @click="load">{{ t('skills_store_retry') }}</AppButton>
         </div>
         <p v-else-if="loaded && !skills.length" class="store-note">{{ t('skills_store_empty') }}</p>
         <p v-else-if="loaded && !visible.length" class="store-note">{{ t('skills_no_match') }}</p>

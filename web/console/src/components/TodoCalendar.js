@@ -270,7 +270,7 @@ const TodoCalendar = {
       <header class="todo-calendar-toolbar">
         <div class="todo-calendar-toolbar-primary">
           <h3 class="workspace-section-title todo-section-title">{{ t('todo_title') }}</h3>
-          <QButton
+          <AppButton
             class="plain sm icon todo-view-toggle is-active"
             :title="t('todo_view_list')"
             :aria-label="t('todo_view_calendar')"
@@ -278,34 +278,34 @@ const TodoCalendar = {
             @click="$emit('show-list')"
           >
             <PhCalendarBlank class="icon" />
-          </QButton>
-          <QButton
+          </AppButton>
+          <AppButton
             class="plain sm icon todo-calendar-add"
             :title="t('todo_action_add')"
             :aria-label="t('todo_action_add')"
             @click="$emit('add-task')"
           >
             <PhPlus class="icon" />
-          </QButton>
+          </AppButton>
         </div>
 
         <div class="todo-calendar-month-nav">
           <h3 class="todo-calendar-month-title">{{ monthTitle }}</h3>
           <div class="todo-calendar-month-steps">
-            <QButton
+            <AppButton
               class="plain sm icon todo-calendar-today"
               :title="t('todo_calendar_today')"
               :aria-label="t('todo_calendar_today')"
               @click="showToday"
             >
               <PhCalendarDot class="icon" />
-            </QButton>
-            <QButton class="plain sm icon" :title="t('todo_calendar_previous')" :aria-label="t('todo_calendar_previous')" @click="setMonth(-1)">
+            </AppButton>
+            <AppButton class="plain sm icon" :title="t('todo_calendar_previous')" :aria-label="t('todo_calendar_previous')" @click="setMonth(-1)">
               <PhCaretLeft class="icon" />
-            </QButton>
-            <QButton class="plain sm icon" :title="t('todo_calendar_next')" :aria-label="t('todo_calendar_next')" @click="setMonth(1)">
+            </AppButton>
+            <AppButton class="plain sm icon" :title="t('todo_calendar_next')" :aria-label="t('todo_calendar_next')" @click="setMonth(1)">
               <PhCaretRight class="icon" />
-            </QButton>
+            </AppButton>
           </div>
         </div>
       </header>

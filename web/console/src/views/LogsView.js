@@ -263,47 +263,47 @@ export default {
             <PhMagnifyingGlass class="icon logs-search-icon" aria-hidden="true" />
             <input id="logs-query" v-model="query" type="search" class="q-text-field logs-query" :placeholder="t('logs_search')" :aria-label="t('logs_keyword')" />
           </div>
-          <QButton class="outlined sm logs-filters-toggle" :class="{ 'is-active': activeFilterCount }" :aria-expanded="filtersOpen"
+          <AppButton class="outlined sm logs-filters-toggle" :class="{ 'is-active': activeFilterCount }" :aria-expanded="filtersOpen"
             aria-controls="logs-filter-group" @click="filtersOpen = !filtersOpen">
             <PhFunnelSimple class="icon" />
             <span class="logs-sr-only">{{ t('logs_filters') }}</span>
             <span v-if="activeFilterCount" class="logs-filters-count">{{ activeFilterCount }}</span>
-          </QButton>
-          <QButton class="outlined sm logs-follow-button" :class="{ 'is-following': following }" :disabled="loading || loadingOlder || unsupported"
+          </AppButton>
+          <AppButton class="outlined sm logs-follow-button" :class="{ 'is-following': following }" :disabled="loading || loadingOlder || unsupported"
             :aria-pressed="following" :title="t(following ? 'logs_pause_follow' : 'logs_resume_follow')"
             @click="following ? following = false : resumeFollowing()">
             <span class="logs-follow-mark" aria-hidden="true"></span>
             <span class="logs-follow-label">{{ t(following ? 'logs_pause_follow' : 'logs_resume_follow') }}</span>
-          </QButton>
+          </AppButton>
           <div id="logs-filter-group" class="logs-filter-group" :class="{ 'is-open': filtersOpen }">
             <div class="logs-filter logs-level-filter">
-              <QDropdownMenu class="sm" :key="level" :items="levelOptions" :initialItem="levelOptions.find(item => item.value === level)"
+              <AppDropdownMenu class="sm" :key="level" :items="levelOptions" :initialItem="levelOptions.find(item => item.value === level)"
                 @change="level = $event.value">
                 <span class="logs-sr-only">{{ t('logs_level') }}: </span>
                 <span class="logs-filter-value">{{ levelOptions.find(item => item.value === level).title }}</span>
-              </QDropdownMenu>
+              </AppDropdownMenu>
             </div>
             <div class="logs-filter logs-event-filter">
-              <QDropdownMenu class="sm" :key="event" :items="eventOptions" :initialItem="eventOptions.find(item => item.value === event)"
+              <AppDropdownMenu class="sm" :key="event" :items="eventOptions" :initialItem="eventOptions.find(item => item.value === event)"
                 use-filter use-dialog="always" scroll-height="min(400px, 60dvh)" @change="event = $event.value">
                 <span class="logs-sr-only">{{ t('logs_event') }}: </span>
                 <span class="logs-filter-value">{{ event || t('logs_all_events') }}</span>
-              </QDropdownMenu>
+              </AppDropdownMenu>
             </div>
             <div class="logs-filter logs-time-filter">
-              <QDropdownMenu class="sm" :key="timeRange" :items="timeOptions" :initialItem="timeOptions.find(item => item.value === timeRange)"
+              <AppDropdownMenu class="sm" :key="timeRange" :items="timeOptions" :initialItem="timeOptions.find(item => item.value === timeRange)"
                 @change="timeRange = $event.value">
                 <span class="logs-sr-only">{{ t('logs_time_range') }}: </span>
                 <span class="logs-filter-value">{{ timeOptions.find(item => item.value === timeRange).title }}</span>
-              </QDropdownMenu>
+              </AppDropdownMenu>
             </div>
           </div>
         </div>
 
-        <QProgress v-if="loading && !entries.length" :infinite="true" />
+        <AppProgress v-if="loading && !entries.length" :infinite="true" />
         <div v-if="hasNewer" class="logs-newer-note" role="status">
           <span>{{ t('logs_new_available') }}</span>
-          <QButton class="outlined sm" :disabled="loading || loadingOlder" @click="resumeFollowing">{{ t('logs_latest') }}</QButton>
+          <AppButton class="outlined sm" :disabled="loading || loadingOlder" @click="resumeFollowing">{{ t('logs_latest') }}</AppButton>
         </div>
 
         <AppSection variant="boxed" class="logs-table" :title="t('logs_stream')" :meta="metaText || t('logs_meta_empty')" :level="2">
@@ -321,7 +321,7 @@ export default {
             <div v-if="!filteredEntries.length && !loading" class="logs-empty">
               <PhTerminalWindow class="icon logs-empty-icon" aria-hidden="true" />
               <p>{{ filterActive && entries.length ? t('logs_no_matches') : emptyText }}</p>
-              <QButton v-if="filterActive" class="outlined sm" @click="clearFilters">{{ t('logs_clear_filters') }}</QButton>
+              <AppButton v-if="filterActive" class="outlined sm" @click="clearFilters">{{ t('logs_clear_filters') }}</AppButton>
             </div>
             <section v-for="group in dayGroups" :key="group.key" class="logs-day">
               <div v-if="group.label" class="logs-marker logs-day-marker">{{ group.label }}</div>
@@ -359,7 +359,7 @@ export default {
           <div class="logs-result-info" role="status">
             <span class="logs-result-count">{{ t('logs_visible_count', { count: filteredEntries.length, total: entries.length }) }}</span>
             <span v-if="filterActive" class="logs-filter-scope" :title="t('logs_time_hint')">{{ t('logs_filter_scope') }}</span>
-            <QButton v-if="filterActive" class="plain xs logs-clear" @click="clearFilters"><PhX class="icon" />{{ t('logs_clear_filters') }}</QButton>
+            <AppButton v-if="filterActive" class="plain xs logs-clear" @click="clearFilters"><PhX class="icon" />{{ t('logs_clear_filters') }}</AppButton>
           </div>
           <div class="logs-limit-group" role="group" :aria-label="t('logs_line_count')">
             <span class="logs-limit-label">{{ t('logs_line_count') }}</span>

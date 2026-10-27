@@ -687,7 +687,7 @@ const ContactsView = {
     >
       <template #leading>
         <div class="contacts-page-bar">
-          <QButton
+          <AppButton
             v-if="mobileShowBack"
             class="plain xs icon contacts-page-bar-back"
             :title="t('contacts_title')"
@@ -695,7 +695,7 @@ const ContactsView = {
             @click="showIndexView"
           >
             <PhArrowLeft class="icon" />
-          </QButton>
+          </AppButton>
           <h2 class="page-title page-bar-title workspace-section-title">{{ mobileBarTitle }}</h2>
         </div>
       </template>
@@ -708,7 +708,7 @@ const ContactsView = {
 
           <div v-scroll-edges class="contacts-index-body">
             <div class="contacts-index-filter">
-              <QInput
+              <AppInput
                 v-model="filterText"
                 class="xs contacts-filter-input"
                 :placeholder="t('contacts_filter_placeholder')"
@@ -776,15 +776,15 @@ const ContactsView = {
             </span>
           </template>
           <template v-if="!editing" #actions>
-            <QButton
+            <AppButton
               class="plain xs icon"
               :title="t('contacts_action_edit_yaml')"
               :aria-label="t('contacts_action_edit_yaml')"
               @click="startEdit"
             >
               <PhPencilSimple class="icon contacts-detail-action-icon" />
-            </QButton>
-            <QDropdownMenu
+            </AppButton>
+            <AppDropdownMenu
               class="contacts-actions-menu"
               variant="plain"
               :items="contactActionMenuItems"
@@ -794,7 +794,7 @@ const ContactsView = {
             >
               <PhDotsThree class="contacts-actions-menu-icon" />
               <span class="contacts-actions-menu-accessible">{{ t("todo_action_more") }}</span>
-            </QDropdownMenu>
+            </AppDropdownMenu>
           </template>
 
           <div class="contacts-detail-identity">
@@ -818,7 +818,7 @@ const ContactsView = {
             <AppSkeleton v-if="editorLoading" variant="card" height="360px" :count="1" />
             <template v-else>
               <AppNotice v-if="editorErr" type="error" :text="editorErr" />
-              <QTextarea
+              <AppTextarea
                 v-model="editorYAML"
                 class="contacts-editor-textarea"
                 :rows="26"
@@ -827,10 +827,10 @@ const ContactsView = {
               />
               <p class="contacts-editor-note">{{ t("contacts_editor_hint") }}</p>
               <div class="contacts-editor-actions">
-                <QButton class="outlined sm" :disabled="editorSaving" @click="stopEdit">{{ t("action_cancel") }}</QButton>
-                <QButton class="primary sm" :loading="editorSaving" :disabled="saveDisabled" @click="saveEdit">
+                <AppButton class="outlined sm" :disabled="editorSaving" @click="stopEdit">{{ t("action_cancel") }}</AppButton>
+                <AppButton class="primary sm" :loading="editorSaving" :disabled="saveDisabled" @click="saveEdit">
                   {{ t("action_save") }}
-                </QButton>
+                </AppButton>
               </div>
             </template>
           </div>
@@ -857,7 +857,7 @@ const ContactsView = {
                       <strong>{{ connection.channel }}</strong>
                       <code :title="connection.full">{{ connection.full }}</code>
                     </div>
-                    <QButton
+                    <AppButton
                       v-if="connection.copyable !== false"
                       class="plain icon contacts-copy-action"
                       :title="t('action_copy')"
@@ -865,7 +865,7 @@ const ContactsView = {
                       @click="copyContactValue(connection.full)"
                     >
                       <PhCopy class="icon" />
-                    </QButton>
+                    </AppButton>
                   </div>
                 </div>
                 <div class="contacts-internal-id">
@@ -874,14 +874,14 @@ const ContactsView = {
                     <span>{{ t("contacts_field_contact_id") }}</span>
                     <code>{{ selectedContact.contact_id }}</code>
                   </div>
-                  <QButton
+                  <AppButton
                     class="plain icon contacts-copy-action"
                     :title="t('action_copy')"
                     :aria-label="t('action_copy')"
                     @click="copyContactValue(selectedContact.contact_id)"
                   >
                     <PhCopy class="icon" />
-                  </QButton>
+                  </AppButton>
                 </div>
               </section>
 
@@ -895,7 +895,7 @@ const ContactsView = {
                     <span>{{ memory.body }}</span>
                   </li>
                 </ul>
-                <QButton class="plain sm contacts-memories-open" @click="openMemories">{{ t("contacts_memories_open") }}</QButton>
+                <AppButton class="plain sm contacts-memories-open" @click="openMemories">{{ t("contacts_memories_open") }}</AppButton>
               </section>
             </div>
 
@@ -936,7 +936,7 @@ const ContactsView = {
         </section>
       </div>
 
-      <QMessageDialog
+      <AppMessageDialog
         v-model="deleteDialogOpen"
         icon="PhTrash"
         iconColor="red"

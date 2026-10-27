@@ -503,9 +503,9 @@ const RuntimePanel = {
           </span>
         </template>
         <template v-if="canPoke" #actions>
-          <QButton class="plain xs" :loading="poking" :disabled="pokeDisabled" :aria-describedby="awarenessRunning ? 'runtime-poke-busy' : undefined" @click="openPokeDialog">
+          <AppButton class="plain xs" :loading="poking" :disabled="pokeDisabled" :aria-describedby="awarenessRunning ? 'runtime-poke-busy' : undefined" @click="openPokeDialog">
             {{ t("runtime_action_poke") }}
-          </QButton>
+          </AppButton>
         </template>
         <p v-if="canPoke && awarenessRunning" id="runtime-poke-busy" class="runtime-note">{{ t("runtime_poke_busy") }}</p>
         <p class="runtime-update" role="status">
@@ -565,14 +565,14 @@ const RuntimePanel = {
 
         <AppSection variant="boxed" class="runtime-technical is-list" :class="{ 'is-open': technicalOpen }" :title="t('runtime_technical_details')">
           <template #actions>
-            <QButton
+            <AppButton
               class="plain xs icon runtime-technical-toggle"
               :aria-expanded="technicalOpen ? 'true' : 'false'"
               :aria-label="t('runtime_technical_details')"
               @click="technicalOpen = !technicalOpen"
             >
               <PhCaretDown class="icon" />
-            </QButton>
+            </AppButton>
           </template>
           <dl v-if="technicalOpen" class="runtime-ledger">
             <div v-for="item in technicalRows" :key="item.key" class="runtime-ledger-row">

@@ -1045,7 +1045,7 @@ const AuditView = {
             <h3 class="workspace-section-title">{{ t('audit_title') }}</h3>
           </div>
           <div class="audit-index-scroll">
-            <QProgress v-if="loading && fileItems.length === 0" :infinite="true" />
+            <AppProgress v-if="loading && fileItems.length === 0" :infinite="true" />
             <AppNotice v-if="err && isMobile && !showLedgerPane" class="audit-index-error" type="error" :text="err" />
             <div class="workspace-sidebar-list">
               <button v-for="item in currentFiles" :key="item.key" type="button" :class="auditFileClass(item)"
@@ -1054,7 +1054,7 @@ const AuditView = {
                   <span class="workspace-sidebar-item-title">{{ item.title }}</span>
                 </span>
                 <span class="workspace-sidebar-item-marker" aria-hidden="true">
-                  <QBadge v-if="isSelectedFileItem(item)" dot type="primary" size="sm" />
+                  <AppBadge v-if="isSelectedFileItem(item)" dot type="primary" size="sm" />
                 </span>
               </button>
               <p v-if="!loading && !err && fileItems.length === 0" class="audit-index-note">{{ t('audit_no_file') }}</p>
@@ -1073,7 +1073,7 @@ const AuditView = {
                     <span class="workspace-sidebar-item-meta">{{ item.subtitle }}</span>
                   </span>
                   <span class="workspace-sidebar-item-marker" aria-hidden="true">
-                    <QBadge v-if="isSelectedFileItem(item)" dot type="primary" size="sm" />
+                    <AppBadge v-if="isSelectedFileItem(item)" dot type="primary" size="sm" />
                   </span>
                 </button>
               </div>
@@ -1082,7 +1082,7 @@ const AuditView = {
               <button type="button" :class="taskStreamClass()" :aria-pressed="isTasksStreamSelected" @click="selectTaskStream">
                 <span class="workspace-sidebar-item-copy"><span class="workspace-sidebar-item-title">{{ t('tasks_title') }}</span></span>
                 <span class="workspace-sidebar-item-marker" aria-hidden="true">
-                  <QBadge v-if="isTasksStreamSelected" dot type="primary" size="sm" />
+                  <AppBadge v-if="isTasksStreamSelected" dot type="primary" size="sm" />
                 </span>
               </button>
             </div>
@@ -1097,33 +1097,33 @@ const AuditView = {
           :meta="!isTasksStreamSelected ? selectedFileItem?.subtitle || '' : ''"
         >
           <template v-if="mobileShowBack" #lead>
-            <QButton class="plain xs icon audit-ledger-back" :aria-label="t('audit_title')" @click="showIndexView">
+            <AppButton class="plain xs icon audit-ledger-back" :aria-label="t('audit_title')" @click="showIndexView">
               <PhArrowLeft class="icon" />
-            </QButton>
+            </AppButton>
           </template>
           <template v-if="!isTasksStreamSelected && pageValue > 1" #actions>
-            <QButton class="plain xs" :disabled="loading" @click="refreshAudit({ latest: true })">{{ t('audit_latest') }}</QButton>
+            <AppButton class="plain xs" :disabled="loading" @click="refreshAudit({ latest: true })">{{ t('audit_latest') }}</AppButton>
           </template>
           <div class="audit-toolbar">
             <div v-if="!isTasksStreamSelected" class="audit-filter">
-              <QInput v-model="filterText" class="xs audit-filter-input" :placeholder="t('audit_filter_placeholder')" :aria-label="t('audit_filter_placeholder')" />
+              <AppInput v-model="filterText" class="xs audit-filter-input" :placeholder="t('audit_filter_placeholder')" :aria-label="t('audit_filter_placeholder')" />
               <span class="audit-filter-scope">{{ t('audit_filter_scope') }}</span>
             </div>
             <span v-else class="audit-page-count">{{ t('audit_page_count', { count: taskItems.length }) }}</span>
             <nav class="audit-pagination" :aria-label="t('audit_pagination')">
-              <QButton class="plain sm icon" :disabled="isTasksStreamSelected ? taskLoading || !hasPrevTaskPage : loading || pageValue <= 1"
+              <AppButton class="plain sm icon" :disabled="isTasksStreamSelected ? taskLoading || !hasPrevTaskPage : loading || pageValue <= 1"
                 :title="t('audit_newer')" :aria-label="t('audit_newer')" @click="isTasksStreamSelected ? prevTaskPage() : goPrev()">
                 <PhArrowLeft class="icon" />
-              </QButton>
+              </AppButton>
               <span class="audit-page-indicator">{{ t('audit_page_number', { page: isTasksStreamSelected ? tasksPageText : pageText }) }}</span>
-              <QButton class="plain sm icon" :disabled="isTasksStreamSelected ? taskLoading || !hasNextTaskPage : loading || !meta.has_next || !meta.next_cursor"
+              <AppButton class="plain sm icon" :disabled="isTasksStreamSelected ? taskLoading || !hasNextTaskPage : loading || !meta.has_next || !meta.next_cursor"
                 :title="t('audit_older')" :aria-label="t('audit_older')" @click="isTasksStreamSelected ? nextTaskPage() : goNext()">
                 <PhArrowRight class="icon" />
-              </QButton>
+              </AppButton>
             </nav>
           </div>
           <div class="audit-load-progress" :aria-label="t('runtime_loading')" v-if="isTasksStreamSelected ? taskLoading : loading">
-            <QProgress :infinite="true" />
+            <AppProgress :infinite="true" />
           </div>
           <div v-scroll-edges class="audit-ledger-content" :aria-busy="isTasksStreamSelected ? taskLoading : loading">
             <template v-if="!isTasksStreamSelected">
@@ -1145,8 +1145,8 @@ const AuditView = {
                         <span class="audit-event-heading">
                           <strong>{{ item.parsed ? item.primaryTitle : t('audit_raw') }}</strong>
                           <template v-if="item.parsed">
-                            <QBadge v-if="item.approvalLabel !== '-'" v-bind="item.approvalBadge" size="sm">{{ item.approvalLabel }}</QBadge>
-                            <QBadge v-else-if="item.decisionLabel !== '-'" v-bind="item.decisionBadge" size="sm">{{ item.decisionLabel }}</QBadge>
+                            <AppBadge v-if="item.approvalLabel !== '-'" v-bind="item.approvalBadge" size="sm">{{ item.approvalLabel }}</AppBadge>
+                            <AppBadge v-else-if="item.decisionLabel !== '-'" v-bind="item.decisionBadge" size="sm">{{ item.decisionLabel }}</AppBadge>
                             <span v-if="item.riskLabel !== '-'" class="audit-event-risk" :class="'is-' + item.riskType">{{ t('audit_risk') }} · {{ item.riskLabel }}</span>
                           </template>
                         </span>
@@ -1165,7 +1165,7 @@ const AuditView = {
                 <div v-if="!loading && !err && auditGroups.length === 0" class="audit-empty">
                   <h3>{{ filterText ? t('audit_filter_empty') : t('audit_empty_title') }}</h3>
                   <p>{{ filterText ? t('audit_filter_empty_hint') : t('audit_empty') }}</p>
-                  <QButton v-if="filterText" class="plain sm" @click="filterText = ''">{{ t('audit_clear_filter') }}</QButton>
+                  <AppButton v-if="filterText" class="plain sm" @click="filterText = ''">{{ t('audit_clear_filter') }}</AppButton>
                 </div>
               </div>
               <div v-else-if="!loading && !err" class="audit-empty">
@@ -1180,7 +1180,7 @@ const AuditView = {
                     <span class="audit-event-copy">
                       <span class="audit-event-heading"><strong class="audit-task-title">{{ taskTitle(item) }}</strong></span>
                       <span class="audit-event-meta">
-                        <QBadge v-bind="taskStatusBadge(item)" size="sm">{{ taskStatusLabel(item) }}</QBadge>
+                        <AppBadge v-bind="taskStatusBadge(item)" size="sm">{{ taskStatusLabel(item) }}</AppBadge>
                         <span>{{ taskSourceLabel(item) }}</span>
                         <time class="audit-time" :datetime="item.created_at" :title="formatTime(item.created_at)">{{ formatShortTime(item.created_at) }}</time>
                       </span>
@@ -1190,7 +1190,7 @@ const AuditView = {
                 </div>
                 <div v-if="taskItems.length === 0 && !taskLoading && !taskErr" class="audit-empty">
                   <h3>{{ t('tasks_empty_title') }}</h3><p>{{ t('tasks_empty_hint') }}</p>
-                  <QButton class="plain sm" @click="goChat">{{ t('tasks_empty_action') }}</QButton>
+                  <AppButton class="plain sm" @click="goChat">{{ t('tasks_empty_action') }}</AppButton>
                 </div>
               </div>
             </template>
@@ -1211,13 +1211,13 @@ const AuditView = {
             :meta="paneEntry.item.parsed && paneEntry.item.tsText !== '-' ? paneEntry.item.tsFull || paneEntry.item.tsText : ''"
           >
             <template #actions>
-              <QButton class="plain xs icon" :title="t('action_close')" :aria-label="t('action_close')" @click="closePane"><PhX class="icon" /></QButton>
+              <AppButton class="plain xs icon" :title="t('action_close')" :aria-label="t('action_close')" @click="closePane"><PhX class="icon" /></AppButton>
             </template>
             <div class="app-side-pane-body audit-pane-body">
               <template v-if="paneEntry.item.parsed">
                 <div v-if="paneEntry.item.approvalLabel !== '-' || paneEntry.item.decisionLabel !== '-' || paneEntry.item.riskLabel !== '-'" class="audit-event-heading">
-                  <QBadge v-if="paneEntry.item.approvalLabel !== '-'" v-bind="paneEntry.item.approvalBadge" size="sm">{{ paneEntry.item.approvalLabel }}</QBadge>
-                  <QBadge v-else-if="paneEntry.item.decisionLabel !== '-'" v-bind="paneEntry.item.decisionBadge" size="sm">{{ paneEntry.item.decisionLabel }}</QBadge>
+                  <AppBadge v-if="paneEntry.item.approvalLabel !== '-'" v-bind="paneEntry.item.approvalBadge" size="sm">{{ paneEntry.item.approvalLabel }}</AppBadge>
+                  <AppBadge v-else-if="paneEntry.item.decisionLabel !== '-'" v-bind="paneEntry.item.decisionBadge" size="sm">{{ paneEntry.item.decisionLabel }}</AppBadge>
                   <span v-if="paneEntry.item.riskLabel !== '-'" class="audit-event-risk" :class="'is-' + paneEntry.item.riskType">{{ t('audit_risk') }} · {{ paneEntry.item.riskLabel }}</span>
                 </div>
                 <dl class="audit-detail-grid">
@@ -1251,11 +1251,11 @@ const AuditView = {
             :meta="formatTime(paneEntry.item.created_at)"
           >
             <template #actions>
-              <QButton class="plain xs icon" :title="t('action_close')" :aria-label="t('action_close')" @click="closePane"><PhX class="icon" /></QButton>
+              <AppButton class="plain xs icon" :title="t('action_close')" :aria-label="t('action_close')" @click="closePane"><PhX class="icon" /></AppButton>
             </template>
             <div class="app-side-pane-body audit-pane-body">
               <div class="audit-event-meta">
-                <QBadge v-bind="taskStatusBadge(paneEntry.item)" size="sm">{{ taskStatusLabel(paneEntry.item) }}</QBadge>
+                <AppBadge v-bind="taskStatusBadge(paneEntry.item)" size="sm">{{ taskStatusLabel(paneEntry.item) }}</AppBadge>
                 <span>{{ taskSourceLabel(paneEntry.item) }}</span>
               </div>
               <p class="audit-task-text">{{ paneEntry.item.task }}</p>

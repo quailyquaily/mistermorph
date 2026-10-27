@@ -214,8 +214,8 @@ const ComponentsPreviewView = {
           <p class="components-preview-meta">Every component the console builds itself, in its usual states. Settings controls show the value they would save.</p>
         </div>
         <div class="components-preview-toggles">
-          <label class="components-preview-toggle"><QSwitch v-model="disabled" /> Disabled</label>
-          <label class="components-preview-toggle"><QSwitch v-model="showBrowse" /> Browse button</label>
+          <label class="components-preview-toggle"><AppSwitch v-model="disabled" /> Disabled</label>
+          <label class="components-preview-toggle"><AppSwitch v-model="showBrowse" /> Browse button</label>
         </div>
       </header>
 
@@ -229,7 +229,7 @@ const ComponentsPreviewView = {
         <h3 class="components-preview-subhead">Plain</h3>
         <div class="components-preview-stack">
           <AppSection title="Default model" meta="Used when a task does not name a model.">
-            <template #actions><QButton class="plain xs">Test</QButton></template>
+            <template #actions><AppButton class="plain xs">Test</AppButton></template>
             <SettingSelect v-model="v.selectPlain" :options="LOGGING_LEVEL_OPTIONS" label="Level" :disabled="disabled" />
           </AppSection>
           <AppSection title="Logging" meta="How much the agent writes to its log.">
@@ -240,13 +240,13 @@ const ComponentsPreviewView = {
         <h3 class="components-preview-subhead">Boxed</h3>
         <div class="components-preview-stack">
           <AppSection variant="boxed" title="Runtime" meta="Up for 3h 12m · 2 tasks running">
-            <template #actions><QButton class="plain xs">Restart</QButton></template>
+            <template #actions><AppButton class="plain xs">Restart</AppButton></template>
             <p class="components-preview-note">Body content sits under the head.</p>
           </AppSection>
           <AppSection variant="boxed" title="A command and a menu" meta="Save beside a plain dropdown, as in a TODO's head.">
             <template #actions>
-              <QButton class="plain xs">Save</QButton>
-              <QDropdownMenu
+              <AppButton class="plain xs">Save</AppButton>
+              <AppDropdownMenu
                 class="components-preview-menu"
                 variant="plain"
                 :items="[{ title: 'Duplicate', value: 'duplicate' }, { title: 'Delete', value: 'delete' }]"
@@ -254,7 +254,7 @@ const ComponentsPreviewView = {
                 hideActionLabel
               >
                 <PhDotsThree class="icon" />
-              </QDropdownMenu>
+              </AppDropdownMenu>
             </template>
             <p class="components-preview-note">The menu keeps to its trigger's width.</p>
           </AppSection>
@@ -266,7 +266,7 @@ const ComponentsPreviewView = {
         <div class="components-preview-pane-host">
           <div class="components-preview-pane-list">List</div>
           <AppSection variant="pane" title="Contact detail" meta="tg:@admin">
-            <template #actions><QButton class="plain xs">Close</QButton></template>
+            <template #actions><AppButton class="plain xs">Close</AppButton></template>
             <p v-for="n in 12" :key="n" class="components-preview-note">Line {{ n }} of a long pane; the head stays put while this scrolls.</p>
           </AppSection>
         </div>
@@ -288,13 +288,13 @@ const ComponentsPreviewView = {
         </div>
         <h3 class="components-preview-subhead">Floating stack</h3>
         <div class="components-preview-actions">
-          <QButton class="outlined sm" @click="notice.success('Saved.')">Success</QButton>
-          <QButton class="outlined sm" @click="notice.info('Changes apply to the next task.')">Info</QButton>
-          <QButton class="outlined sm" @click="notice.warning('The model list is cached; refresh to see new models.')">Warning</QButton>
-          <QButton class="outlined sm" @click="notice.error('Could not delete the topic.')">Error</QButton>
-          <QButton class="outlined sm" @click="notice.error('Failed to fetch')">Network error</QButton>
-          <QButton class="outlined sm" @click="pinNotice">Pinned</QButton>
-          <QButton class="plain sm" @click="clearPinnedNotice">Clear pinned</QButton>
+          <AppButton class="outlined sm" @click="notice.success('Saved.')">Success</AppButton>
+          <AppButton class="outlined sm" @click="notice.info('Changes apply to the next task.')">Info</AppButton>
+          <AppButton class="outlined sm" @click="notice.warning('The model list is cached; refresh to see new models.')">Warning</AppButton>
+          <AppButton class="outlined sm" @click="notice.error('Could not delete the topic.')">Error</AppButton>
+          <AppButton class="outlined sm" @click="notice.error('Failed to fetch')">Network error</AppButton>
+          <AppButton class="outlined sm" @click="pinNotice">Pinned</AppButton>
+          <AppButton class="plain sm" @click="clearPinnedNotice">Clear pinned</AppButton>
         </div>
       </section>
 
@@ -485,7 +485,7 @@ const ComponentsPreviewView = {
             <span class="settings-field-label">JSON the rows cannot show falls back to text</span>
             <SettingRows v-model="v.rowsUnreadable" mode="map" label="unreadable" :disabled="disabled">
               <template #fallback>
-                <QTextarea v-model="v.rowsUnreadable" :rows="3" class="config-settings-json" :disabled="disabled" />
+                <AppTextarea v-model="v.rowsUnreadable" :rows="3" class="config-settings-json" :disabled="disabled" />
               </template>
             </SettingRows>
             <code>{{ show(v.rowsUnreadable) }}</code>
