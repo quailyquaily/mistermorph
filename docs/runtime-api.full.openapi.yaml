@@ -5376,14 +5376,11 @@ components:
     RecordRef:
       type: object
       properties:
-        file:
-          type: string
-        line:
+        seq:
           type: integer
-        byte:
-          type: integer
+          description: The event's sequence number in the journal.
       required:
-      - file
+      - seq
       x-source: internal/domainjournal/journal.go:RecordRef
     JournalTrace:
       type: object
