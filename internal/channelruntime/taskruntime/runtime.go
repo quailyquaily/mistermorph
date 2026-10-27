@@ -21,7 +21,6 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/llmstats"
 	"github.com/quailyquaily/mistermorph/internal/llmutil"
 	"github.com/quailyquaily/mistermorph/internal/memories"
-	"github.com/quailyquaily/mistermorph/internal/memorytools"
 	"github.com/quailyquaily/mistermorph/internal/pathroots"
 	"github.com/quailyquaily/mistermorph/internal/promptprofile"
 	"github.com/quailyquaily/mistermorph/internal/toolsutil"
@@ -369,6 +368,10 @@ type preparedRuntimeRun struct {
 	conversationKey string
 	foundTools      []string
 	toolSearch      bool
+	// memories is open while the run has an audience; the run counts its turn there.
+	memories         *memories.Store
+	audience         audience.Audience
+	memoriesReadOnly bool
 }
 
 // PreparedEngine owns the Engine and all per-run clients created while
@@ -408,6 +411,15 @@ func (p *PreparedEngine) SaveFoundTools(runCtx *agent.Context) {
 		return
 	}
 	p.rt.saveFoundTools(*p.prepared, runCtx)
+}
+
+// CountMemoryTurn counts a finished run of this Engine toward the memory reminder, as Run and
+// Resume do. Callers that run Engine themselves call it once per run, with its result.
+func (p *PreparedEngine) CountMemoryTurn(final *agent.Final, err error) {
+	if p == nil || p.prepared == nil {
+		return
+	}
+	p.prepared.countMemoryTurn(final, err)
 }
 
 func (p *PreparedEngine) Cleanup() error {
@@ -456,6 +468,7 @@ func (rt *Runtime) Run(ctx context.Context, req RunRequest) (RunResult, error) {
 		ContextCompactionOnly:    contextCompactionOnly,
 	})
 	rt.saveFoundTools(prepared, runCtx)
+	prepared.countMemoryTurn(final, err)
 	if err != nil {
 		return RunResult{Final: final, Context: runCtx, LoadedSkills: prepared.loadedSkills}, err
 	}
@@ -484,6 +497,7 @@ func (rt *Runtime) Resume(ctx context.Context, approvalRequestID string, req Run
 		DisableContextCompaction: req.DisableContextCompaction,
 	})
 	rt.saveFoundTools(prepared, runCtx)
+	prepared.countMemoryTurn(final, err)
 	if err != nil {
 		return RunResult{Final: final, Context: runCtx, LoadedSkills: prepared.loadedSkills}, err
 	}
@@ -685,26 +699,12 @@ func (rt *Runtime) prepareRun(ctx context.Context, req RunRequest) (preparedRunt
 			}
 		}
 		// Only the task's own run remembers; subtasks report to the agent that started them.
-		if runtimeToolsConfig.Memories.Enabled && agent.SubtaskDepthFromContext(ctx) == 0 {
-			if who := audience.FromContext(ctx); !who.IsZero() {
-				store, memErr := memories.Open(ctx, rt.commonDeps.RuntimePaths.MemoryDBPath)
-				if memErr != nil {
-					// Memories are not worth failing the task over: the run goes on without them.
-					logger.Warn("memories_unavailable", "error", memErr.Error())
-				} else {
-					memoryStore = store
-					for _, tool := range memorytools.New(memorytools.Deps{
-						Store:      store,
-						JournalDir: rt.commonDeps.RuntimePaths.JournalDir,
-						Audience:   who,
-						ReadOnly:   memoriesReadOnlyFromContext(ctx),
-					}) {
-						if err := reg.Replace(tool); err != nil {
-							return preparedRuntimeRun{}, err
-						}
-					}
-				}
+		if agent.SubtaskDepthFromContext(ctx) == 0 {
+			store, memErr := AttachMemories(ctx, rt.commonDeps.RuntimePaths, runtimeToolsConfig.Memories, reg, audience.FromContext(ctx), memoriesReadOnlyFromContext(ctx))
+			if memErr != nil {
+				return preparedRuntimeRun{}, memErr
 			}
+			memoryStore = store
 		}
 		// $mcp_<name> servers are connected for this run only, before the prompt and tool schemas
 		// are built, and closed with the run. Resume prepares the run again and reconnects them.
@@ -750,6 +750,9 @@ func (rt *Runtime) prepareRun(ctx context.Context, req RunRequest) (preparedRunt
 		insightLimit = insightLimitFromContext(ctx)
 	}
 	promptprofile.AppendInsightBlock(&promptSpec, insightLimit)
+	memoryAudience := audience.FromContext(ctx)
+	memoriesReadOnly := memoriesReadOnlyFromContext(ctx)
+	AppendMemoriesPrompt(ctx, memoryStore, &promptSpec, memoryAudience, memoriesReadOnly, logger)
 	promptprofile.AppendAskUserBlock(&promptSpec, reg)
 	if !req.DisableTodoWorkflow {
 		promptprofile.AppendTodoWorkflowBlock(&promptSpec, reg)
@@ -792,6 +795,9 @@ func (rt *Runtime) prepareRun(ctx context.Context, req RunRequest) (preparedRunt
 	}
 	if req.Hook != nil {
 		engineOpts = append(engineOpts, agent.WithHook(req.Hook))
+	}
+	if memoryStore != nil && !memoriesReadOnly {
+		engineOpts = append(engineOpts, agent.WithHook(memoryReminderHook(memoryStore, memoryAudience, logger)))
 	}
 	if req.PlanStepUpdate != nil {
 		engineOpts = append(engineOpts, agent.WithPlanStepUpdate(req.PlanStepUpdate))
@@ -842,6 +848,9 @@ func (rt *Runtime) prepareRun(ctx context.Context, req RunRequest) (preparedRunt
 		conversationKey:     conversationKey,
 		foundTools:          foundTools,
 		toolSearch:          toolSearchOption != nil,
+		memories:            memoryStore,
+		audience:            memoryAudience,
+		memoriesReadOnly:    memoriesReadOnly,
 	}, nil
 }
 
