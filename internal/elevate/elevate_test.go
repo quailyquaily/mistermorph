@@ -411,6 +411,56 @@ func TestRunAskpass(t *testing.T) {
 	}
 }
 
+// The token is readable by any process of this user, so it is not enough: only a child of the
+// command's sudo process is answered, and nothing is before sudo started.
+func TestSessionAnswersOnlySudosHelper(t *testing.T) {
+	asked := false
+	approver := ApproverFunc(func(context.Context, Request) (string, error) {
+		asked = true
+		return "hunter2", nil
+	})
+	t.Run("another process with the token", func(t *testing.T) {
+		session := beginTestSession(t, approver)
+		// sudo is some other process: this one is not its child.
+		session.Started(os.Getpid())
+		helperEnv(t, session, "")
+		var stdout, stderr bytes.Buffer
+		if code := RunAskpass(&stdout, &stderr); code != 1 || stdout.Len() != 0 || !strings.Contains(stderr.String(), "only sudo's askpass helper") {
+			t.Fatalf("RunAskpass = %d, stdout %q, stderr %q", code, stdout.String(), stderr.String())
+		}
+	})
+	t.Run("before sudo started", func(t *testing.T) {
+		old := helperHandshakeTimeout
+		helperHandshakeTimeout = 200 * time.Millisecond
+		t.Cleanup(func() { helperHandshakeTimeout = old })
+		session := beginTestSession(t, approver)
+		env := map[string]string{EnvAskpass: "1"}
+		for _, entry := range session.Env() {
+			key, value, _ := strings.Cut(entry, "=")
+			env[key] = value
+		}
+		oldEnv := getenv
+		t.Cleanup(func() { getenv = oldEnv })
+		getenv = func(key string) string { return env[key] }
+		var stdout, stderr bytes.Buffer
+		if code := RunAskpass(&stdout, &stderr); code != 1 || stdout.Len() != 0 || !strings.Contains(stderr.String(), "this approval is not open") {
+			t.Fatalf("RunAskpass = %d, stdout %q, stderr %q", code, stdout.String(), stderr.String())
+		}
+	})
+	if asked {
+		t.Fatal("the approver was asked for a process that is not sudo's helper")
+	}
+}
+
+func TestParentProcess(t *testing.T) {
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+		t.Skip("Linux and macOS only")
+	}
+	if got, err := parentProcess(os.Getpid()); err != nil || got != os.Getppid() {
+		t.Fatalf("parentProcess = %d, %v, want %d", got, err, os.Getppid())
+	}
+}
+
 func TestRunAskpassWithoutASession(t *testing.T) {
 	oldEnv := getenv
 	t.Cleanup(func() { getenv = oldEnv })
@@ -522,9 +572,10 @@ func beginTestSession(t *testing.T, approver Approver) *Session {
 }
 
 // helperEnv makes this process see the environment sudo gives the helper for session, with token
-// in place of the session's when it is set.
+// in place of the session's when it is set. The helper is this process, so its parent plays sudo.
 func helperEnv(t *testing.T, session *Session, token string) {
 	t.Helper()
+	session.Started(os.Getppid())
 	env := map[string]string{EnvAskpass: "1", EnvDeadline: strconv.FormatInt(session.req.Deadline.Unix(), 10)}
 	for _, entry := range session.Env() {
 		key, value, _ := strings.Cut(entry, "=")

@@ -147,6 +147,46 @@ func TestBashElevatedCommandAsksTheRunsApprover(t *testing.T) {
 	}
 }
 
+// A process that is not sudo's own helper gets nothing, though it has the token: here sudo's
+// helper is the right one, and a grandchild of sudo, which another command of this user reading the
+// helper's environment would be, asks once more while sudo still runs.
+func TestBashElevatedCommandAnswersOnlySudosHelper(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("bash elevates through sudo on Linux and macOS")
+	}
+	dir := t.TempDir()
+	stolen := filepath.Join(dir, "stolen")
+	script := `#!/bin/sh
+while [ "$1" != "--" ]; do shift; done
+shift
+password=$("$SUDO_ASKPASS" "[sudo] password:") || exit 1
+[ "$password" = "hunter2" ] || exit 1
+# Not sudo's child: the extra command keeps sh from exec-ing the helper in its place.
+sh -c '"$SUDO_ASKPASS" "[sudo] password:" > ` + stolen + `; :'
+exec "$@"
+`
+	if err := os.WriteFile(filepath.Join(dir, "sudo"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	asks := 0
+	approver := elevate.ApproverFunc(func(context.Context, elevate.Request) (string, error) {
+		asks++
+		return "hunter2", nil
+	})
+	tool := newElevatingBashTool(t, fakeZenity(t, ""))
+	out, err := tool.Execute(elevate.WithApprover(context.Background(), approver), map[string]any{"cmd": "echo installed jq", "elevated": true})
+	if err != nil || !strings.Contains(out, "installed jq") {
+		t.Fatalf("Execute() = %v\n%s", err, out)
+	}
+	if got, _ := os.ReadFile(stolen); strings.TrimSpace(string(got)) != "" || asks != 1 {
+		t.Fatalf("the other process got %q; the approver was asked %d times", got, asks)
+	}
+	if !strings.Contains(out, "only sudo's askpass helper") {
+		t.Fatalf("the refusal is not in the output:\n%s", out)
+	}
+}
+
 func TestBashElevationUnavailable(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("bash elevates through sudo on Linux and macOS")

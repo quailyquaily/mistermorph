@@ -49,6 +49,8 @@ type shellRunnerSpec struct {
 	EmitChunk                  func(ctx context.Context, stream, text string)
 	TimeoutExitCode            int
 	ReturnObservationOnFailure bool
+	// OnStart, when set, gets the pid of the started program.
+	OnStart func(pid int)
 }
 
 type shellStreamWriter struct {
@@ -164,7 +166,13 @@ func runShellCommand(ctx context.Context, common shellToolCommon, spec shellRunn
 	cmd.Stdout = shellStreamWriter{stream: "stdout", dst: &stdout, emit: emit}
 	cmd.Stderr = shellStreamWriter{stream: "stderr", dst: &stderr, emit: emit}
 	cmd.WaitDelay = 100 * time.Millisecond
-	err := cmd.Run()
+	err := cmd.Start()
+	if err == nil {
+		if spec.OnStart != nil {
+			spec.OnStart(cmd.Process.Pid)
+		}
+		err = cmd.Wait()
+	}
 	if errors.Is(err, exec.ErrWaitDelay) {
 		err = nil
 	}

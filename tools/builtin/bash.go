@@ -172,6 +172,8 @@ func (t *BashTool) executeElevated(ctx context.Context, inv shellInvocation) (st
 	spec.Program = "sudo"
 	spec.ArgsPrefix = elevate.SudoArgs([]string{"bash", "-c"})
 	spec.BuildEnv = func([]shellenv.InjectedEnvVar) []string { return env }
+	// Only sudo's own askpass helper may ask the session for the password.
+	spec.OnStart = session.Started
 	// The user has this long to answer the dialog, on top of the command's own time.
 	inv.Timeout += t.Elevation.Approval()
 	return runElevated(ctx, t.Name(), inv.Command, t.commonConfig(), spec, inv)

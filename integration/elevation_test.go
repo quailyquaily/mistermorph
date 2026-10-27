@@ -43,6 +43,8 @@ func TestRunAskpassIfRequested(t *testing.T) {
 		elevate.EnvDeadline+"="+strconv.FormatInt(deadline.Unix(), 10),
 	)
 	cmd.Env = append(cmd.Env, session.Env()...)
+	// This process plays sudo: the helper is its child.
+	session.Started(os.Getpid())
 	out, err := cmd.Output()
 	if err != nil {
 		t.Fatalf("helper process: %v", err)
