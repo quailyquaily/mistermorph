@@ -77,6 +77,8 @@ const (
 	PartMessage = "message"
 	PartSummary = "summary"
 	PartMeta    = "meta"
+	// PartContext is one of the run's context messages, labeled by its "[[ Title ]]" opening line.
+	PartContext = "context"
 
 	MethodEstimate = "estimate"
 	MethodProvider = "provider"
@@ -223,6 +225,10 @@ func BuildSnapshot(request llm.Request, layout llm.RequestLayout, sample UsageSa
 			groups[PartHistory].Children = append(groups[PartHistory].Children, messagePart(PartSummary, message, toolNames))
 		case llm.MessageKindMeta:
 			groups[PartCurrent].Children = append(groups[PartCurrent].Children, messagePart(PartMeta, message, toolNames))
+		case llm.MessageKindContext:
+			part := messagePart(PartContext, message, toolNames)
+			part.Label = contextLabel(messageText(message))
+			groups[PartCurrent].Children = append(groups[PartCurrent].Children, part)
 		case llm.MessageKindCurrent:
 			groups[PartCurrent].Children = append(groups[PartCurrent].Children, messagePart(PartMessage, message, toolNames))
 		case llm.MessageKindStep:
@@ -259,6 +265,15 @@ var (
 	sectionHeading = regexp.MustCompile(`^##\s+(.+?)\s*$`)
 	blockHeading   = regexp.MustCompile(`^\[\[\s*(.+?)\s*\]\]\s*$`)
 )
+
+// contextLabel is the title of a context message's "[[ Title ]]" opening line, if it has one.
+func contextLabel(text string) string {
+	first, _, _ := strings.Cut(strings.TrimSpace(text), "\n")
+	if m := blockHeading.FindStringSubmatch(strings.TrimSpace(first)); m != nil {
+		return m[1]
+	}
+	return ""
+}
 
 // systemPromptParts splits the system prompt at its "## " headings, outside code fences. The
 // "Available Skills" section is returned apart, and policy blocks, which open with a "[[ Title ]]"

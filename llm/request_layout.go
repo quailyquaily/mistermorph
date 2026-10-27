@@ -9,6 +9,7 @@ const (
 	MessageKindSummary = "summary"
 	MessageKindHistory = "history"
 	MessageKindMeta    = "meta"
+	MessageKindContext = "context"
 	MessageKindCurrent = "current"
 	MessageKindStep    = "step"
 )

@@ -79,7 +79,7 @@ func countGroups(ctx context.Context, stored storedRequest, count CountFunc) (ma
 		kinds []string
 	}{
 		{PartHistory, []string{llm.MessageKindSummary, llm.MessageKindHistory}},
-		{PartCurrent, []string{llm.MessageKindMeta, llm.MessageKindCurrent}},
+		{PartCurrent, []string{llm.MessageKindMeta, llm.MessageKindContext, llm.MessageKindCurrent}},
 		{PartSteps, []string{llm.MessageKindStep}},
 	}
 	var system []llm.Message

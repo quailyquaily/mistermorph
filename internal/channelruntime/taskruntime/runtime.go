@@ -752,7 +752,7 @@ func (rt *Runtime) prepareRun(ctx context.Context, req RunRequest) (preparedRunt
 	promptprofile.AppendInsightBlock(&promptSpec, insightLimit)
 	memoryAudience := audience.FromContext(ctx)
 	memoriesReadOnly := memoriesReadOnlyFromContext(ctx)
-	AppendMemoriesPrompt(ctx, memoryStore, &promptSpec, memoryAudience, memoriesReadOnly, logger)
+	AppendMemoriesPrompt(memoryStore, &promptSpec, memoryAudience, memoriesReadOnly)
 	promptprofile.AppendAskUserBlock(&promptSpec, reg)
 	if !req.DisableTodoWorkflow {
 		promptprofile.AppendTodoWorkflowBlock(&promptSpec, reg)
@@ -795,6 +795,9 @@ func (rt *Runtime) prepareRun(ctx context.Context, req RunRequest) (preparedRunt
 	}
 	if req.Hook != nil {
 		engineOpts = append(engineOpts, agent.WithHook(req.Hook))
+	}
+	if memoryStore != nil {
+		engineOpts = append(engineOpts, agent.WithRunContext(MemoriesRunContext(memoryStore, memoryAudience, logger)))
 	}
 	if memoryStore != nil && !memoriesReadOnly {
 		engineOpts = append(engineOpts, agent.WithHook(memoryReminderHook(memoryStore, memoryAudience, logger)))

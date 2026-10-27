@@ -59,6 +59,7 @@ type engineLoopState struct {
 	toolRunCounts map[string]int
 
 	metaMessageIndex        *int
+	contextMessageCount     int // the messages right after the metadata that are this run's context
 	fixedMessageCount       int
 	messageBoundaries       map[int]string
 	checkpointStore         ContextCheckpointStore
@@ -1010,6 +1011,7 @@ func (e *Engine) requestToolApproval(ctx context.Context, st *engineLoopState, s
 		AgentCtx:                snapshotFromContext(st.agentCtx),
 		FixedMessageCount:       st.fixedMessageCount,
 		MetaMessageIndex:        st.metaMessageIndex,
+		ContextMessageCount:     st.contextMessageCount,
 		MessageBoundaries:       st.messageBoundaries,
 		Checkpoint:              st.checkpoint,
 		HasCheckpoint:           st.hasCheckpoint,

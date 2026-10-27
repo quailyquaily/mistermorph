@@ -233,8 +233,8 @@ func replaceMessagesWithCheckpoint(messages []llm.Message, fixedMessageCount int
 	out := make([]llm.Message, 0, len(messages)-(selection.End-selection.Start)+1)
 	out = append(out, messages[:selection.Start]...)
 	out = append(out, checkpoint)
-	if selection.MetaIndex != nil {
-		out = append(out, messages[*selection.MetaIndex])
+	for _, index := range selection.Kept {
+		out = append(out, messages[index])
 	}
 	out = append(out, messages[selection.End:]...)
 	if err := validateCompleteToolExchanges(out, fixedMessageCount); err != nil {

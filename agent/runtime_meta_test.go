@@ -181,3 +181,102 @@ func TestApprovalResumeKeepsNewAndLegacyMetaLayouts(t *testing.T) {
 		})
 	}
 }
+
+func TestRunContextGoesAfterMetaAndBeforeCurrent(t *testing.T) {
+	client := newMockClient(llm.Result{Text: `{"type":"final","output":"ok"}`})
+	runs := 0
+	e := New(client, tools.NewRegistry(), Config{}, DefaultPromptSpec(), WithRunContext(func(context.Context) []string {
+		runs++
+		return []string{"[[ Saved Memories ]]\nnote", " ", "second"}
+	}))
+	if _, _, err := e.Run(context.Background(), "task", RunOptions{History: []llm.Message{{Role: "user", Content: "old"}}}); err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	messages := client.allCalls()[0].Messages
+	var got []string
+	for _, m := range messages[1:] {
+		got = append(got, m.Content)
+	}
+	if runs != 1 || len(got) != 5 || got[0] != "old" || !strings.Contains(got[1], "mister_morph_meta") ||
+		got[2] != "[[ Saved Memories ]]\nnote" || got[3] != "second" || got[4] != "task" {
+		t.Fatalf("messages after the system prompt = %q (run context called %d times)", got, runs)
+	}
+}
+
+func TestRequestLayoutMarksContextMessages(t *testing.T) {
+	meta := 2
+	st := &engineLoopState{fixedMessageCount: 1, metaMessageIndex: &meta, contextMessageCount: 2, messages: []llm.Message{
+		{Role: "system", Content: "system"}, {Role: "user", Content: "old"}, {Role: "user", Content: "meta"},
+		{Role: "user", Content: "memories"}, {Role: "user", Content: "notes"}, {Role: "user", Content: "task"}, {Role: "assistant", Content: "step"},
+	}}
+	got := mainRequestLayout(st, llm.Request{Messages: st.messages}).MessageKinds
+	want := []string{llm.MessageKindSystem, llm.MessageKindHistory, llm.MessageKindMeta, llm.MessageKindContext,
+		llm.MessageKindContext, llm.MessageKindCurrent, llm.MessageKindStep}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("kinds = %q, want %q", got, want)
+	}
+}
+
+func TestCompactionKeepsContextMessagesWithMeta(t *testing.T) {
+	metaIndex := 2
+	meta := llm.Message{Role: "user", Content: `{"mister_morph_meta":{"run_id":"owned"}}`}
+	note := llm.Message{Role: "user", Content: "[[ Saved Memories ]]\nprivate note"}
+	client := &contextCompactionTestClient{handler: func(_ int, req llm.Request) (llm.Result, error) {
+		if strings.Contains(req.Messages[1].Content, "private note") {
+			t.Fatal("run context entered checkpoint request")
+		}
+		return contextCompactionResult(), nil
+	}}
+	e := newContextCompactionEngine(client, contextCompactionTestConfig())
+	st := &engineLoopState{
+		messages: []llm.Message{{Role: "system", Content: "system"}, {Role: "user", Content: "old"}, meta, note,
+			{Role: "user", Content: "task"}, {Role: "assistant", Content: "recent"}},
+		metaMessageIndex: &metaIndex, contextMessageCount: 1, fixedMessageCount: 1,
+		messageBoundaries:       map[int]string{1: "old", 4: "task", 5: "recent"},
+		protectedMessageIndexes: map[int]struct{}{5: {}},
+		checkpointStore:         newRunLocalCheckpointStore(), agentCtx: NewContext("task", 5),
+		log: slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+	for i := 0; i < 2; i++ {
+		if err := e.compactContext(context.Background(), st, i, contextCompactionDecision{CompactFullPrefix: true, OutputReserve: 4096}); err != nil {
+			t.Fatal(err)
+		}
+		if len(st.messages) != 5 || *st.metaMessageIndex != 2 || st.messages[2].Content != meta.Content || st.messages[3].Content != note.Content {
+			t.Fatalf("messages/meta = %#v / %v", st.messages, *st.metaMessageIndex)
+		}
+		if st.messageBoundaries[4] != "recent" || !messageIndexProtected(4, st.protectedMessageIndexes) {
+			t.Fatalf("tail indexes lost: %#v / %#v", st.messageBoundaries, st.protectedMessageIndexes)
+		}
+	}
+}
+
+func TestResumeStateValidatesContextMessages(t *testing.T) {
+	index := 1
+	messages := []llm.Message{{Role: "system", Content: "system"}, {Role: "user", Content: "meta"}, {Role: "user", Content: "note"}, {Role: "user", Content: "task"}}
+	for _, tc := range []struct {
+		name  string
+		count int
+		meta  *int
+		ok    bool
+	}{
+		{"none", 0, &index, true},
+		{"one", 1, &index, true},
+		{"past the end", 3, &index, false},
+		{"without meta", 1, nil, false},
+		{"negative", -1, &index, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			raw, err := marshalResumeState(resumeState{FixedMessageCount: 1, MetaMessageIndex: tc.meta, ContextMessageCount: tc.count, Messages: messages})
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := unmarshalResumeState(raw)
+			if (err == nil) != tc.ok {
+				t.Fatalf("unmarshalResumeState() error = %v, want ok %v", err, tc.ok)
+			}
+			if tc.ok && got.ContextMessageCount != tc.count {
+				t.Fatalf("count = %d, want %d", got.ContextMessageCount, tc.count)
+			}
+		})
+	}
+}

@@ -619,7 +619,7 @@ func runAwarenessTask(ctx context.Context, d Dependencies, opts awarenessTaskOpt
 	if d.PromptAugment != nil {
 		d.PromptAugment(&promptSpec, reg)
 	}
-	taskruntime.AppendMemoriesPrompt(runCtx, memoryStore, &promptSpec, audience.Owner(), true, opts.Logger)
+	taskruntime.AppendMemoriesPrompt(memoryStore, &promptSpec, audience.Owner(), true)
 	promptprofile.AppendAwarenessPromptPatch(&promptSpec)
 	promptprofile.AppendModelPromptPatches(&promptSpec, taskModel)
 	engineToolsConfig := opts.EngineToolsConfig
@@ -646,6 +646,7 @@ func runAwarenessTask(ctx context.Context, d Dependencies, opts awarenessTaskOpt
 		agent.WithGuard(opts.SharedGuard),
 		agent.WithSubtaskProfileResolver(taskruntime.SubtaskProfileResolver(d)),
 		agent.WithModelProfiles(taskruntime.ModelProfileLister(d, currentProfile)),
+		agent.WithRunContext(taskruntime.MemoriesRunContext(memoryStore, audience.Owner(), opts.Logger)),
 		toolSearchOption,
 		codeModeOption,
 	)

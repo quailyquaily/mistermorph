@@ -164,6 +164,7 @@ func (e *Engine) resume(ctx context.Context, approvalRequestID string, opts RunO
 		nextStep:                rs.Step,
 		fixedMessageCount:       fixedMessageCount,
 		metaMessageIndex:        rs.MetaMessageIndex,
+		contextMessageCount:     rs.ContextMessageCount,
 		messageBoundaries:       cloneMessageBoundaries(rs.MessageBoundaries),
 		checkpointStore:         checkpointStore,
 		checkpoint:              checkpoint,

@@ -47,6 +47,22 @@ func WithSystemPromptCacheControl(ctrl *llm.CacheControl) Option {
 	}
 }
 
+// RunContext returns notes for one run, such as the memories its audience may hear. Each non-empty
+// string becomes a user message of its own.
+type RunContext func(ctx context.Context) []string
+
+// WithRunContext adds notes to every fresh run: the engine calls fn when a run starts (a resumed
+// run keeps the notes it started with) and puts them right after the runtime metadata, before the
+// current message. There they change without moving the cached prefix of system prompt and history,
+// as they would in the system prompt. Like the metadata, they are kept through context compaction.
+func WithRunContext(fn RunContext) Option {
+	return func(e *Engine) {
+		if fn != nil {
+			e.runContext = append(e.runContext, fn)
+		}
+	}
+}
+
 // WithPromptBuilder replaces the default system prompt builder.
 // This hook is intended for tests in this repository.
 func WithPromptBuilder(fn func(*tools.Registry, string) string) Option {
@@ -193,6 +209,8 @@ type Engine struct {
 	engineToolsConfig EngineToolsConfig
 
 	systemPromptCacheControl *llm.CacheControl
+	// runContext adds notes to each fresh run, after the metadata (WithRunContext).
+	runContext []RunContext
 
 	promptBuilder    func(registry *tools.Registry, task string) string
 	paramsBuilder    func(opts RunOptions) map[string]any
@@ -371,6 +389,7 @@ func (e *Engine) Run(ctx context.Context, task string, opts RunOptions) (*Final,
 	}
 
 	var metaMessageIndex *int
+	contextMessageCount := 0
 	injectedMeta := runtimeclock.WithRuntimeClockMeta(opts.Meta, time.Now())
 	if modelName := llm.ShortModelName(model); modelName != "" {
 		injectedMeta["model"] = modelName
@@ -387,6 +406,15 @@ func (e *Engine) Run(ctx context.Context, task string, opts RunOptions) (*Final,
 		index := len(messages)
 		metaMessageIndex = &index
 		messages = append(messages, llm.Message{Role: "user", Content: metaMsg})
+		for _, fn := range e.runContext {
+			for _, note := range fn(ctx) {
+				if strings.TrimSpace(note) == "" {
+					continue
+				}
+				messages = append(messages, llm.Message{Role: "user", Content: note})
+				contextMessageCount++
+			}
+		}
 		log.Debug(
 			"run_meta_injected",
 			"meta_bytes", len(metaMsg),
@@ -443,6 +471,7 @@ func (e *Engine) Run(ctx context.Context, task string, opts RunOptions) (*Final,
 		nextStep:              0,
 		fixedMessageCount:     fixedMessageCount,
 		metaMessageIndex:      metaMessageIndex,
+		contextMessageCount:   contextMessageCount,
 		messageBoundaries:     messageBoundaries,
 		checkpointStore:       checkpointStore,
 		checkpoint:            loadedCheckpoint,
