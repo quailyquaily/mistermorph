@@ -12,6 +12,7 @@ import (
 
 	"github.com/quailyquaily/mistermorph/agent"
 	"github.com/quailyquaily/mistermorph/guard"
+	"github.com/quailyquaily/mistermorph/internal/audience"
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/depsutil"
 	"github.com/quailyquaily/mistermorph/internal/chatcommands"
 	"github.com/quailyquaily/mistermorph/internal/chathistory"
@@ -19,6 +20,8 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/imagesession"
 	"github.com/quailyquaily/mistermorph/internal/llmstats"
 	"github.com/quailyquaily/mistermorph/internal/llmutil"
+	"github.com/quailyquaily/mistermorph/internal/memories"
+	"github.com/quailyquaily/mistermorph/internal/memorytools"
 	"github.com/quailyquaily/mistermorph/internal/pathroots"
 	"github.com/quailyquaily/mistermorph/internal/promptprofile"
 	"github.com/quailyquaily/mistermorph/internal/toolsutil"
@@ -553,11 +556,12 @@ func (rt *Runtime) prepareRun(ctx context.Context, req RunRequest) (preparedRunt
 	var ownedImageClient llm.ImageClient
 	closeTaskMCP := func() error { return nil }
 	closeToolSearch := func() error { return nil }
+	var memoryStore *memories.Store
 	var cleanupOnce sync.Once
 	var cleanupErr error
 	cleanup := func() error {
 		cleanupOnce.Do(func() {
-			cleanupErr = errors.Join(closeToolSearch(), closeTaskMCP(), closeRuntimeClientScope(logger, runClientOwners, ownedImageClient))
+			cleanupErr = errors.Join(closeToolSearch(), closeTaskMCP(), memoryStore.Close(), closeRuntimeClientScope(logger, runClientOwners, ownedImageClient))
 		})
 		return cleanupErr
 	}
@@ -678,6 +682,28 @@ func (rt *Runtime) prepareRun(ctx context.Context, req RunRequest) (preparedRunt
 		if ask := userQuestionsFromContext(ctx); ask != nil && agent.SubtaskDepthFromContext(ctx) == 0 {
 			if err := reg.Replace(newAskUserTool(ask)); err != nil {
 				return preparedRuntimeRun{}, err
+			}
+		}
+		// Only the task's own run remembers; subtasks report to the agent that started them.
+		if runtimeToolsConfig.Memories.Enabled && agent.SubtaskDepthFromContext(ctx) == 0 {
+			if who := audience.FromContext(ctx); !who.IsZero() {
+				store, memErr := memories.Open(ctx, rt.commonDeps.RuntimePaths.MemoryDBPath)
+				if memErr != nil {
+					// Memories are not worth failing the task over: the run goes on without them.
+					logger.Warn("memories_unavailable", "error", memErr.Error())
+				} else {
+					memoryStore = store
+					for _, tool := range memorytools.New(memorytools.Deps{
+						Store:      store,
+						JournalDir: rt.commonDeps.RuntimePaths.JournalDir,
+						Audience:   who,
+						ReadOnly:   memoriesReadOnlyFromContext(ctx),
+					}) {
+						if err := reg.Replace(tool); err != nil {
+							return preparedRuntimeRun{}, err
+						}
+					}
+				}
 			}
 		}
 		// $mcp_<name> servers are connected for this run only, before the prompt and tool schemas

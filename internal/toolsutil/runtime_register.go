@@ -17,6 +17,13 @@ type RuntimeToolsRegisterConfig struct {
 	Image      ImageToolsRegisterConfig
 	ToolSearch ToolSearchConfig
 	CodeMode   CodeModeConfig
+	Memories   MemoriesConfig
+}
+
+// MemoriesConfig is memories: when enabled, a run that has an audience gets the memory and journal
+// tools and the memories it may hear in its prompt.
+type MemoriesConfig struct {
+	Enabled bool
 }
 
 // CodeModeConfig is tools.codemode: the codemode tool, which runs a model-written JavaScript
@@ -71,6 +78,9 @@ func LoadRuntimeToolsRegisterConfigFromReader(r runtimeRegisterConfigReader) Run
 		Image:      LoadImageToolsRegisterConfigFromReader(r),
 		ToolSearch: ToolSearchConfig{
 			Enabled: r.GetBool("tools.tool_search.enabled"),
+		},
+		Memories: MemoriesConfig{
+			Enabled: r.GetBool("memories.enabled"),
 		},
 		CodeMode: CodeModeConfig{
 			Enabled:          r.GetBool("tools.codemode.enabled"),

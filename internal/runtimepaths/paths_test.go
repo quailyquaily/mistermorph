@@ -28,6 +28,7 @@ func TestFromReaderResolvesRuntimeStatePathsOnce(t *testing.T) {
 		StateDir:                 stateDir,
 		CacheDir:                 cacheDir,
 		JournalDir:               filepath.Join(stateDir, "journal"),
+		MemoryDBPath:             filepath.Join(stateDir, "memory.db"),
 		ContactsDir:              filepath.Join(stateDir, "address-book"),
 		TasksDir:                 filepath.Join(stateDir, "task-state"),
 		WorkspaceAttachmentsPath: filepath.Join(stateDir, "workspace_attachments.json"),
