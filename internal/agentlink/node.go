@@ -236,6 +236,13 @@ func (n *Node) SetHandler(h Handler) (restore func()) {
 	}
 }
 
+// HasHandler reports whether a handler receives delivered messages now.
+func (n *Node) HasHandler() bool {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return n.handler != nil && n.handler.handle != nil
+}
+
 // Peers returns every agent a connected Console reaches, sorted by instance ID.
 func (n *Node) Peers() []Peer {
 	n.mu.Lock()

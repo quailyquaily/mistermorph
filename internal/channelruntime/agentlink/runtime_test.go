@@ -106,6 +106,8 @@ func TestRunnerAnswersAgentLinkMessages(t *testing.T) {
 	connect(ctx, runner, relay, "runner")
 	connect(ctx, sender, relay, "sender")
 	waitFor(t, "roster", func() bool { return sender.Reachable(runner.InstanceID()) })
+	// Start returns before the runtime sets its handler; until then deliveries are rejected.
+	waitFor(t, "handler", runner.HasHandler)
 
 	t.Run("answers with a reply one hop further", func(t *testing.T) {
 		env := busruntime.MessageEnvelope{Text: "ping", SessionID: "0194d8f0-0000-7000-8000-000000000001"}
@@ -180,6 +182,8 @@ func TestRunnerHandlesReplies(t *testing.T) {
 	connect(ctx, runner, relay, "runner")
 	connect(ctx, sender, relay, "sender")
 	waitFor(t, "roster", func() bool { return sender.Reachable(runner.InstanceID()) })
+	// Start returns before the runtime sets its handler; until then deliveries are rejected.
+	waitFor(t, "handler", runner.HasHandler)
 
 	t.Run("an answer that came late goes to the conversation that asked", func(t *testing.T) {
 		origin := link.Origin{Runtime: "console", ConversationKey: "console:topic-1", TopicID: "topic-1"}
