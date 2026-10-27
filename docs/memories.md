@@ -40,10 +40,10 @@ A memory one contact told about another keeps who said it (`told_by`), and the a
 
 The Console and the TUI are always the owner. To be recognized as the owner on a chat channel, mark your own contact there:
 
-1. Console > Contacts > select yourself > Edit YAML.
-2. Add `owner: true` and save.
+1. Console > Contacts > select yourself.
+2. Turn on **This is me**. (It writes `owner: true` into the contact's YAML, which you can also edit by hand.)
 
-Only an edit of the contact can set or clear this flag. Nothing a contact sends can, however it describes itself. Mark each channel's contact you use.
+Only the Console can set or clear this flag. Nothing a contact sends can, however it describes itself. Mark each channel's contact you use.
 
 ## Tools
 

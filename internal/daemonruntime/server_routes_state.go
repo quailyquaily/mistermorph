@@ -235,6 +235,45 @@ func (routes *routeRegistration) registerStateRoutes() {
 			})
 			return
 		case http.MethodPut:
+		case http.MethodPatch:
+			// Marks or unmarks the contact as the owner's, leaving the rest of its YAML alone.
+			var payload struct {
+				ContactID string `json:"contact_id"`
+				Owner     *bool  `json:"owner"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				http.Error(w, "invalid json body", http.StatusBadRequest)
+				return
+			}
+			payload.ContactID = strings.TrimSpace(payload.ContactID)
+			if payload.ContactID == "" || payload.Owner == nil {
+				http.Error(w, "contact_id and owner are required", http.StatusBadRequest)
+				return
+			}
+			block, ok, err := store.SetOwner(r.Context(), payload.ContactID, *payload.Owner)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			if !ok {
+				http.Error(w, "contact not found", http.StatusNotFound)
+				return
+			}
+			updated, ok, err := getConsoleContactByID(r.Context(), svc, payload.ContactID)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			if !ok {
+				http.Error(w, "contact not found", http.StatusNotFound)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"item": updated,
+				"yaml": block.YAML,
+			})
+			return
 		case http.MethodDelete:
 			contactID := strings.TrimSpace(r.URL.Query().Get("contact_id"))
 			if contactID == "" {
@@ -266,7 +305,7 @@ func (routes *routeRegistration) registerStateRoutes() {
 			})
 			return
 		default:
-			w.Header().Set("Allow", "GET, PUT, DELETE")
+			w.Header().Set("Allow", "GET, PUT, PATCH, DELETE")
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}

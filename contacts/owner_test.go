@@ -58,3 +58,45 @@ func TestOwnerIsSetOnlyByEditingTheContact(t *testing.T) {
 		t.Fatal("PutContact() without owner cleared the flag")
 	}
 }
+
+func TestSetOwnerKeepsTheRestOfTheYAML(t *testing.T) {
+	ctx := context.Background()
+	store := NewFileStore(filepath.Join(t.TempDir(), "contacts"))
+	if _, err := NewService(store).UpsertContact(ctx, Contact{
+		ContactID: "tg:1002", Kind: KindHuman, Channel: ChannelTelegram, TGUserID: 1002, ContactNickname: "Me",
+	}, time.Date(2026, 10, 27, 7, 0, 0, 0, time.UTC)); err != nil {
+		t.Fatalf("UpsertContact() error = %v", err)
+	}
+	before, _, _ := store.GetContactYAML(ctx, "tg:1002")
+
+	for _, tc := range []struct {
+		name  string
+		owner bool
+	}{
+		{"mark", true},
+		{"mark again", true},
+		{"unmark", false},
+		{"unmark again", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			block, ok, err := store.SetOwner(ctx, "tg:1002", tc.owner)
+			if err != nil || !ok {
+				t.Fatalf("SetOwner() = %v, %v", ok, err)
+			}
+			got, _, _ := store.GetContact(ctx, "tg:1002")
+			if got.Owner != tc.owner || got.ContactNickname != "Me" || got.TGUserID != 1002 {
+				t.Fatalf("contact = %#v, want owner %v and the rest kept", got, tc.owner)
+			}
+			if strings.Count(block.YAML, "owner:") > 1 {
+				t.Fatalf("yaml has owner twice:\n%s", block.YAML)
+			}
+		})
+	}
+	after, _, _ := store.GetContactYAML(ctx, "tg:1002")
+	if strings.TrimSpace(after.YAML) != strings.TrimSpace(before.YAML) {
+		t.Fatalf("yaml after mark and unmark =\n%s\nwant\n%s", after.YAML, before.YAML)
+	}
+	if _, ok, err := store.SetOwner(ctx, "tg:missing", true); ok || err != nil {
+		t.Fatalf("SetOwner(missing) = %v, %v, want not found", ok, err)
+	}
+}

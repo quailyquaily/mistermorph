@@ -1933,6 +1933,41 @@ paths:
           $ref: '#/components/responses/MethodNotAllowed'
         '500':
           $ref: '#/components/responses/InternalError'
+    patch:
+      operationId: setContactOwner
+      tags:
+      - Contacts
+      summary: Mark or unmark a contact as one of the owner's accounts
+      description: Sets owner true, or removes it, in the contact's YAML and keeps every other line.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                contact_id:
+                  type: string
+                owner:
+                  type: boolean
+              required:
+              - contact_id
+              - owner
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContactYAML'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
     delete:
       operationId: deleteContact
       tags:

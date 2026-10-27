@@ -74,7 +74,8 @@ type Contact struct {
 }
 ```
 
-- Only the owner can set it, by adding `owner: true` to the contact's YAML in the Console. Observed contacts are
+- Only the owner can set it, from the Console: the contact's **This is me** switch (`PATCH /contacts/item`), or
+  `owner: true` in the contact's YAML. Observed contacts are
   written through `PutContact`, which keeps the stored flag whatever its input says, so a contact can never set it
   from a chat.
 - One person can have one contact per channel. Each of the owner's contacts carries the flag, or contacts link

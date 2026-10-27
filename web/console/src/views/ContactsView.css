@@ -210,14 +210,34 @@
   gap: 7px;
 }
 
-.contacts-owner-badge {
-  justify-self: start;
-  padding: 2px 9px;
-  border: 1px solid var(--accent-1);
-  border-radius: var(--radius-sm);
-  color: var(--accent-1);
+/* The owner switch: one of the owner's own accounts, which the agent treats as the owner. */
+.contacts-owner-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.contacts-owner-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.contacts-owner-title {
+  color: var(--text-0);
+  font-size: var(--font-size-ui);
+  font-weight: 500;
+}
+
+.contacts-owner-hint {
+  max-width: 64ch;
+  color: var(--text-2);
   font-size: var(--font-size-meta);
-  line-height: 1.35;
+  line-height: 1.5;
+  text-wrap: pretty;
 }
 
 .contacts-detail-action-icon {

@@ -1920,3 +1920,60 @@ func ensureNotCanceled(ctx context.Context) error {
 		return nil
 	}
 }
+
+// SetOwner marks or unmarks a contact as the owner's, the way editing its YAML does, and keeps
+// every other line of the YAML as it is. The owner sets it from the Console.
+func (s *FileStore) SetOwner(ctx context.Context, contactID string, owner bool) (ContactYAMLBlock, bool, error) {
+	block, ok, err := s.GetContactYAML(ctx, contactID)
+	if err != nil || !ok {
+		return ContactYAMLBlock{}, ok, err
+	}
+	raw, err := setYAMLOwner(block.YAML, owner)
+	if err != nil {
+		return ContactYAMLBlock{}, true, err
+	}
+	updated, err := s.PutContactYAML(ctx, contactID, raw)
+	return updated, true, err
+}
+
+// setYAMLOwner sets owner: true in a contact's YAML, or removes the key for false.
+func setYAMLOwner(raw string, owner bool) (string, error) {
+	var doc yaml.Node
+	if err := yaml.Unmarshal([]byte(raw), &doc); err != nil {
+		return "", fmt.Errorf("parse contact yaml: %w", err)
+	}
+	if len(doc.Content) == 0 || doc.Content[0].Kind != yaml.MappingNode {
+		return "", fmt.Errorf("contact yaml is not a mapping")
+	}
+	m := doc.Content[0]
+	for i := 0; i+1 < len(m.Content); i += 2 {
+		if m.Content[i].Value != "owner" {
+			continue
+		}
+		if owner {
+			m.Content[i+1] = &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!bool", Value: "true"}
+		} else {
+			m.Content = append(m.Content[:i], m.Content[i+2:]...)
+		}
+		return encodeYAMLNode(&doc)
+	}
+	if owner {
+		m.Content = append(m.Content,
+			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "owner"},
+			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!bool", Value: "true"})
+	}
+	return encodeYAMLNode(&doc)
+}
+
+func encodeYAMLNode(doc *yaml.Node) (string, error) {
+	var out strings.Builder
+	enc := yaml.NewEncoder(&out)
+	enc.SetIndent(2)
+	if err := enc.Encode(doc); err != nil {
+		return "", fmt.Errorf("encode contact yaml: %w", err)
+	}
+	if err := enc.Close(); err != nil {
+		return "", fmt.Errorf("encode contact yaml: %w", err)
+	}
+	return out.String(), nil
+}

@@ -427,6 +427,48 @@ func TestContactsListRoute(t *testing.T) {
 		}
 	})
 
+	t.Run("mark and unmark the owner", func(t *testing.T) {
+		for _, tc := range []struct {
+			body      string
+			wantCode  int
+			wantOwner bool
+		}{
+			{`{"contact_id":"tg:@alice","owner":true}`, http.StatusOK, true},
+			{`{"contact_id":"tg:@alice","owner":false}`, http.StatusOK, false},
+			{`{"contact_id":"tg:@alice"}`, http.StatusBadRequest, false},
+			{`{"contact_id":"tg:@nobody","owner":true}`, http.StatusNotFound, false},
+		} {
+			req := httptest.NewRequest(http.MethodPatch, "/contacts/item", strings.NewReader(tc.body))
+			req.Header.Set("Authorization", "Bearer token")
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, req)
+			if rec.Code != tc.wantCode {
+				t.Fatalf("PATCH %s status = %d, want %d (%s)", tc.body, rec.Code, tc.wantCode, rec.Body.String())
+			}
+			if tc.wantCode != http.StatusOK {
+				continue
+			}
+			var payload struct {
+				Item struct {
+					Owner bool `json:"owner"`
+				} `json:"item"`
+			}
+			if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+				t.Fatalf("invalid json: %v", err)
+			}
+			if payload.Item.Owner != tc.wantOwner {
+				t.Fatalf("PATCH %s owner = %v, want %v", tc.body, payload.Item.Owner, tc.wantOwner)
+			}
+		}
+		activeRaw, err := os.ReadFile(filepath.Join(contactsDir, "ACTIVE.md"))
+		if err != nil {
+			t.Fatalf("read ACTIVE.md: %v", err)
+		}
+		if !strings.Contains(string(activeRaw), `x_note: keep-me`) || strings.Contains(string(activeRaw), "owner:") {
+			t.Fatalf("ACTIVE.md after unmarking = %s, want the other fields kept and no owner", string(activeRaw))
+		}
+	})
+
 	t.Run("edit inactive contact", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPut, "/contacts/item", strings.NewReader(`{
 			"contact_id":"slack:T001:U002",

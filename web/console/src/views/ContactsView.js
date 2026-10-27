@@ -229,6 +229,9 @@ const ContactsView = {
     const loadedEditorYAML = ref("");
     const editorLoading = ref(false);
     const editorSaving = ref(false);
+    const ownerSaving = ref(false);
+    // Remounts the switch after a failed save, so it shows the stored value again.
+    const ownerSwitchKey = ref(0);
     const editorErr = ref("");
 
     const deleteDialogOpen = ref(false);
@@ -535,6 +538,25 @@ const ContactsView = {
       }
     }
 
+    // setOwner marks the contact as one of the owner's own accounts, or unmarks it.
+    async function setOwner(owner) {
+      const contactID = String(selectedContact.value?.contact_id || "").trim();
+      if (!contactID || ownerSaving.value) {
+        return;
+      }
+      ownerSaving.value = true;
+      try {
+        await runtimeApiFetch("/contacts/item", { method: "PATCH", body: { contact_id: contactID, owner: Boolean(owner) } });
+        await load();
+        notice.success(t("msg_save_success"));
+      } catch (e) {
+        ownerSwitchKey.value += 1;
+        notice.error(e.message || t("msg_save_failed"));
+      } finally {
+        ownerSaving.value = false;
+      }
+    }
+
     async function copyContactValue(raw) {
       const value = String(raw || "").trim();
       if (!value) {
@@ -668,6 +690,9 @@ const ContactsView = {
       startEdit,
       stopEdit,
       saveEdit,
+      ownerSaving,
+      ownerSwitchKey,
+      setOwner,
       copyContactValue,
       confirmDelete,
       contactActionMenuItems,
@@ -811,7 +836,20 @@ const ContactsView = {
                 <PhUserCircle v-else class="icon" />
               </span>
             </span>
-            <span v-if="selectedContact.owner" class="contacts-owner-badge">{{ t("contacts_owner_badge") }}</span>
+          </div>
+
+          <div v-if="!editing && !isAgent(selectedContact)" class="contacts-owner-row">
+            <AppSwitch
+              :key="ownerSwitchKey"
+              :modelValue="Boolean(selectedContact.owner)"
+              :disabled="ownerSaving"
+              :aria-label="t('contacts_owner_label')"
+              @update:modelValue="setOwner"
+            />
+            <span class="contacts-owner-copy">
+              <span class="contacts-owner-title">{{ t("contacts_owner_label") }}</span>
+              <span class="contacts-owner-hint">{{ t("contacts_owner_hint") }}</span>
+            </span>
           </div>
 
           <div v-if="editing" class="contacts-editor-body">
