@@ -16,7 +16,8 @@ import (
 
 // registerMemoryRoutes serves memories and journal search to the Console. The Console is the
 // owner's, so these routes hear everything: every memory, whatever its visibility, and every
-// journal event.
+// journal event. GET /memories?hear_as=<audience> also names the memories that audience may hear,
+// with the same rule every run uses, so the owner can check what a DM or a group would be told.
 func (routes *routeRegistration) registerMemoryRoutes() {
 	mux := routes.mux
 	authToken := routes.authToken
@@ -41,6 +42,11 @@ func (routes *routeRegistration) registerMemoryRoutes() {
 		switch r.Method {
 		case http.MethodGet:
 			query := r.URL.Query()
+			hearAs, err := audience.Parse(query.Get("hear_as"))
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
 			subject := strings.TrimSpace(query.Get("subject"))
 			text := strings.TrimSpace(query.Get("q"))
 			var items []memories.Memory
@@ -56,7 +62,18 @@ func (routes *routeRegistration) registerMemoryRoutes() {
 			if items == nil {
 				items = []memories.Memory{}
 			}
-			writeJSON(w, map[string]any{"items": items})
+			out := map[string]any{"items": items}
+			if !hearAs.IsZero() {
+				heard := []string{}
+				for _, item := range items {
+					if memories.CanHear(hearAs, item) {
+						heard = append(heard, item.ID)
+					}
+				}
+				out["hear_as"] = hearAs.String()
+				out["heard"] = heard
+			}
+			writeJSON(w, out)
 		case http.MethodPut:
 			var payload struct {
 				ID string `json:"id"`
@@ -121,6 +138,11 @@ func (routes *routeRegistration) registerMemoryRoutes() {
 			return
 		}
 		limit, _ := strconv.Atoi(strings.TrimSpace(query.Get("limit")))
+		// ids lists the events to show, such as the ones a memory came from.
+		var ids []string
+		if raw := strings.TrimSpace(query.Get("ids")); raw != "" {
+			ids = strings.Split(raw, ",")
+		}
 		journal, err := domainjournal.New(domainjournal.JournalOptions{Dir: paths.JournalDir})
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -133,6 +155,7 @@ func (routes *routeRegistration) registerMemoryRoutes() {
 			Since:        since,
 			Until:        until,
 			Domain:       query.Get("domain"),
+			IDs:          ids,
 			Limit:        limit,
 		})
 		if err != nil {

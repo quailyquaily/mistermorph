@@ -51,6 +51,24 @@ func TestMemoryRoutes(t *testing.T) {
 	if rec.Code != http.StatusOK || len(out["items"].([]any)) != 1 {
 		t.Fatalf("GET /memories = %d %v", rec.Code, out)
 	}
+	for _, tc := range []struct {
+		hearAs string
+		heard  int
+	}{
+		{"owner", 1},
+		{"conversation:tg:-100", 1},
+		{"conversation:tg:-200", 0},
+		{"contact:alice", 0},
+	} {
+		rec, out := serve(t, mux, http.MethodGet, "/memories?hear_as="+tc.hearAs, "")
+		heard, _ := out["heard"].([]any)
+		if rec.Code != http.StatusOK || len(out["items"].([]any)) != 1 || len(heard) != tc.heard || out["hear_as"] != tc.hearAs {
+			t.Fatalf("GET /memories?hear_as=%s = %d %v, want %d heard of all items", tc.hearAs, rec.Code, out, tc.heard)
+		}
+	}
+	if rec, _ := serve(t, mux, http.MethodGet, "/memories?hear_as=somebody", ""); rec.Code != http.StatusBadRequest {
+		t.Fatalf("GET /memories with a bad hear_as = %d, want 400", rec.Code)
+	}
 	rec, out = serve(t, mux, http.MethodGet, "/memories?q=standup", "")
 	if rec.Code != http.StatusOK || len(out["items"].([]any)) != 1 {
 		t.Fatalf("GET /memories?q = %d %v", rec.Code, out)
@@ -89,6 +107,10 @@ func TestJournalSearchRoute(t *testing.T) {
 	events, _ := out["events"].([]any)
 	if rec.Code != http.StatusOK || len(events) != 1 || events[0].(map[string]any)["audience"] != "contact:tg:@alice" {
 		t.Fatalf("GET /journal/search = %d %v, want the contact's event for the owner", rec.Code, out)
+	}
+	rec, out = serve(t, mux, http.MethodGet, "/journal/search?ids=evt_1,evt_missing", "")
+	if events, _ := out["events"].([]any); rec.Code != http.StatusOK || len(events) != 1 {
+		t.Fatalf("GET /journal/search?ids = %d %v, want the one known event", rec.Code, out)
 	}
 	if rec, _ := serve(t, mux, http.MethodGet, "/journal/search?since=yesterday", ""); rec.Code != http.StatusBadRequest {
 		t.Fatalf("GET /journal/search with a bad time = %d, want 400", rec.Code)

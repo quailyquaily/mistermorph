@@ -2280,6 +2280,14 @@ paths:
         required: false
         schema:
           type: string
+      - name: hear_as
+        in: query
+        required: false
+        schema:
+          type: string
+        description: An audience (owner, contact:<contact id> or conversation:<key>). The response
+          still lists every memory, and heard names the ones that audience may hear, by the rule
+          every run uses.
       responses:
         '200':
           description: Success
@@ -2292,6 +2300,16 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/Memory'
+                  hear_as:
+                    type: string
+                    description: The audience, when hear_as was given.
+                  heard:
+                    type: array
+                    description: IDs of the items that audience may hear, when hear_as was given.
+                    items:
+                      type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '500':
@@ -2387,6 +2405,13 @@ paths:
         required: false
         schema:
           type: string
+      - name: ids
+        in: query
+        required: false
+        schema:
+          type: string
+        description: Comma-separated event IDs, such as a memory's source_events. Only those events
+          match, with or without text.
       - name: limit
         in: query
         required: false
