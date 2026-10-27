@@ -17,8 +17,9 @@ import (
 
 // An elevated command of a task started from the Console chat or chat asks there for the sudo
 // password (docs/feat/feat_20261026_elevation_client_approval.md). The password is protected by the
-// connection: HTTPS, loopback, an SSH tunnel or a VPN. tools.bash.elevation.insecure decides what
-// happens on any other connection.
+// connection: HTTPS, loopback, an SSH tunnel or a VPN. The runtime cannot tell whether that is the
+// case (a TLS proxy or a VPN looks like plain HTTP to it), so the web card warns from what the
+// browser knows.
 
 const (
 	consoleElevationOpen     = "open"
@@ -39,9 +40,6 @@ type consoleElevation struct {
 	// Attempt is 2 and up after sudo refused the password.
 	Attempt int    `json:"attempt,omitempty"`
 	Status  string `json:"status"`
-	// Insecure is tools.bash.elevation.insecure: what an answer on a connection that is not
-	// encrypted gets, "warn" or "deny".
-	Insecure string `json:"insecure,omitempty"`
 }
 
 func cloneConsoleElevations(in []consoleElevation) []consoleElevation {
@@ -118,7 +116,7 @@ func newConsoleElevations(logger *slog.Logger) *consoleElevations {
 }
 
 // approver asks for the task's elevated commands on its approval cards.
-func (e *consoleElevations) approver(insecure string, cards *consoleTaskElevations) elevate.Approver {
+func (e *consoleElevations) approver(cards *consoleTaskElevations) elevate.Approver {
 	host, _ := os.Hostname()
 	return elevate.ApproverFunc(func(ctx context.Context, req elevate.Request) (string, error) {
 		id, err := newElevationID()
@@ -153,7 +151,6 @@ func (e *consoleElevations) approver(insecure string, cards *consoleTaskElevatio
 			Deadline: deadline.Unix(),
 			Attempt:  attempt,
 			Status:   consoleElevationOpen,
-			Insecure: insecure,
 		})
 		var outcome elevationOutcome
 		select {
@@ -178,9 +175,8 @@ func (e *consoleElevations) approver(insecure string, cards *consoleTaskElevatio
 }
 
 // answer takes the answer to open approval req.ElevationID of task req.TaskID: a decline, or the
-// password. An answer the policy refuses (deny on a connection that is not encrypted) closes the
-// approval.
-func (e *consoleElevations) answer(req daemonruntime.AnswerElevationRequest, denyInsecure bool) (daemonruntime.AnswerElevationResponse, error) {
+// password. An answer without a password closes the approval.
+func (e *consoleElevations) answer(req daemonruntime.AnswerElevationRequest) (daemonruntime.AnswerElevationResponse, error) {
 	e.mu.Lock()
 	pending := e.open[req.ElevationID]
 	if pending != nil && pending.taskID == req.TaskID {
@@ -193,26 +189,17 @@ func (e *consoleElevations) answer(req daemonruntime.AnswerElevationRequest, den
 		return daemonruntime.AnswerElevationResponse{}, nil
 	}
 	audit := []any{"task_id", req.TaskID, "elevation_id", req.ElevationID, "command", pending.command,
-		"client", req.Client, "transport", req.Transport, "remote", req.Remote}
+		"client", req.Client, "remote", req.Remote}
 	if req.Decline {
 		pending.answered <- elevationOutcome{status: consoleElevationDeclined}
 		e.logger.Info("elevated_command_declined", audit...)
 		return daemonruntime.AnswerElevationResponse{Accepted: true}, nil
-	}
-	if denyInsecure && req.Transport != daemonruntime.TransportSecure {
-		err := errors.New("this connection is not encrypted, and tools.bash.elevation.insecure is deny: approve over HTTPS or an SSH tunnel")
-		pending.answered <- elevationOutcome{status: consoleElevationRejected, err: err}
-		e.logger.Warn("elevated_command_answer_rejected", append(audit, "reason", "insecure: deny")...)
-		return daemonruntime.AnswerElevationResponse{}, daemonruntime.BadRequest(err.Error())
 	}
 	if req.Password == "" {
 		err := errors.New("the answer carries no password")
 		pending.answered <- elevationOutcome{status: consoleElevationRejected, err: err}
 		e.logger.Warn("elevated_command_answer_rejected", append(audit, "reason", "no password")...)
 		return daemonruntime.AnswerElevationResponse{}, daemonruntime.BadRequest(err.Error())
-	}
-	if req.Transport != daemonruntime.TransportSecure {
-		e.logger.Warn("elevated_command_insecure_answer", audit...)
 	}
 	pending.answered <- elevationOutcome{status: consoleElevationAllowed, password: req.Password}
 	e.logger.Info("elevated_command_approved", audit...)
@@ -227,14 +214,6 @@ func newElevationID() (string, error) {
 	return "el_" + hex.EncodeToString(raw), nil
 }
 
-// consoleElevationInsecure is tools.bash.elevation.insecure, "warn" unless it says "deny".
-func consoleElevationInsecure(value string) string {
-	if strings.EqualFold(strings.TrimSpace(value), "deny") {
-		return "deny"
-	}
-	return "warn"
-}
-
 // answerElevation answers an approval card of a running Console task.
 func (r *consoleLocalRuntime) answerElevation(_ context.Context, req daemonruntime.AnswerElevationRequest) (daemonruntime.AnswerElevationResponse, error) {
 	if strings.TrimSpace(req.TaskID) == "" || strings.TrimSpace(req.ElevationID) == "" {
@@ -243,11 +222,5 @@ func (r *consoleLocalRuntime) answerElevation(_ context.Context, req daemonrunti
 	if r == nil || r.elevations == nil {
 		return daemonruntime.AnswerElevationResponse{}, nil
 	}
-	// The policy is read now, not when the card opened, and applies to every client: what a client
-	// says it is cannot be checked.
-	deny := false
-	if reader := r.currentConfigReader(); reader != nil {
-		deny = consoleElevationInsecure(reader.GetString("tools.bash.elevation.insecure")) == "deny"
-	}
-	return r.elevations.answer(req, deny)
+	return r.elevations.answer(req)
 }

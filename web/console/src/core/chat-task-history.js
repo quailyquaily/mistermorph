@@ -284,7 +284,6 @@ function normalizeElevations(raw) {
         deadline: Number.isFinite(Number(elevation?.deadline)) ? Math.trunc(Number(elevation.deadline)) : 0,
         attempt: Number.isInteger(elevation?.attempt) ? elevation.attempt : 0,
         status,
-        insecure: elevation?.insecure === "deny" ? "deny" : "warn",
       };
     })
     .filter(Boolean);

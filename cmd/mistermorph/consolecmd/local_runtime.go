@@ -2408,11 +2408,7 @@ func (r *consoleLocalRuntime) handleTaskJob(workerCtx context.Context, conversat
 	var elevations *consoleTaskElevations
 	if r.elevations != nil && consoleAsksUser(job.Trigger) {
 		elevations = &consoleTaskElevations{taskID: job.TaskID, hub: r.streamHub}
-		insecure := "warn"
-		if reader := r.currentConfigReader(); reader != nil {
-			insecure = consoleElevationInsecure(reader.GetString("tools.bash.elevation.insecure"))
-		}
-		runCtx = elevate.WithApprover(runCtx, r.elevations.approver(insecure, elevations))
+		runCtx = elevate.WithApprover(runCtx, r.elevations.approver(elevations))
 	}
 	runCtx = llmutil.WithRetryNotification(runCtx, func(ctx context.Context, event llmutil.RetryEvent) {
 		trace.HandleEvent(ctx, agent.Event{Kind: agent.EventKindLLMRetry, RunID: llmstats.RunIDFromContext(ctx), Text: event.StatusText()})

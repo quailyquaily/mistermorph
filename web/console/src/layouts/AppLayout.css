@@ -58,6 +58,20 @@ body.is-resizing-sidebar {
   min-height: 0;
 }
 
+/* The insecure-connection banner is the shell's first row; the workspace takes the height below. */
+.app-shell:has(> .app-insecure-banner) > .workspace {
+  flex: 1 1 0;
+  height: auto;
+  min-height: 0;
+}
+
+/* A screen without the shell keeps the banner in view while it scrolls. */
+.app-shellless > .app-insecure-banner {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+
 /* The mobile nav is the shell's last row, not an overlay: the workspace takes the height above
    it, so no page content sits behind the nav. */
 .app-shell.has-mobile-nav > .workspace {

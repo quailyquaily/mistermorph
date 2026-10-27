@@ -1,6 +1,7 @@
 import { computed, onBeforeUnmount, ref } from "vue";
 
 import { useAppShell } from "../composables/useAppShell";
+import AppInsecureBanner from "../components/AppInsecureBanner";
 import AppMobileBottomNav from "../components/AppMobileBottomNav";
 import AppNoticeHost from "../components/AppNoticeHost";
 import AppSidebar from "../components/AppSidebar";
@@ -21,6 +22,7 @@ function loadSidebarCollapsed() {
 
 const AppLayout = {
   components: {
+    AppInsecureBanner,
     AppNoticeHost,
     AppSidebar,
     AppMobileBottomNav,
@@ -93,7 +95,8 @@ const AppLayout = {
   },
   template: `
     <div>
-      <section v-if="inShellless">
+      <section v-if="inShellless" class="app-shellless">
+        <AppInsecureBanner />
         <RouterView :key="endpointViewKey" />
         <AppNoticeHost viewport />
       </section>
@@ -103,6 +106,7 @@ const AppLayout = {
         :class="{ 'has-mobile-nav': mobileBottomNavVisible }"
         :style="{ '--app-viewport-height': appViewportHeight }"
       >
+        <AppInsecureBanner />
         <div
           :class="[
             'workspace',

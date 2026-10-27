@@ -279,11 +279,11 @@ MISTER_MORPH_SERVER_AUTH_TOKEN="..."
   own askpass helper (a direct child of that sudo, checked through the socket's peer credentials),
   not to another process of the user that read the helper's token. From the web Console and remote
   chat it travels over the client's connection, protected by that alone: reach the Console over
-  HTTPS, an SSH tunnel or a VPN such as WireGuard. On plain HTTP to another machine the web card
-  warns first; `tools.bash.elevation.insecure: deny` makes the runtime refuse those answers. Each
+  HTTPS, an SSH tunnel or a VPN such as WireGuard. On plain HTTP to another machine the web Console
+  shows a warning across the top; the runtime cannot tell, as a TLS proxy or a VPN looks like plain HTTP to it. Each
   elevated command and each answer is logged (`elevated_command_started`,
   `elevated_command_finished`, `elevated_command_approved`, `elevated_command_declined`,
-  `elevated_command_answer_rejected`, `elevated_command_insecure_answer`). Turn it off with `tools.bash.elevation.enabled: false` (or the
+  `elevated_command_answer_rejected`). Turn it off with `tools.bash.elevation.enabled: false` (or the
   `powershell` one); keep it off for
   services nobody watches. See [Elevated commands](tools.md#elevated-commands).
 

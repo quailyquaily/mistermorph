@@ -465,11 +465,9 @@ tools:
       # in the desktop dialog. client: only there. dialog: only in the desktop dialog.
       # See docs/feat/feat_20261026_elevation_client_approval.md.
       approver: "auto"
-      # The password goes to the runtime over the client's connection, protected only by it. On a
-      # connection that is not encrypted (not HTTPS, not this machine; a VPN such as WireGuard
-      # cannot be told apart), warn takes the answer and warns the person; deny refuses it, VPN
-      # included, and points to HTTPS or an SSH tunnel.
-      insecure: "warn"
+      # The password goes to the runtime over the client's connection, protected only by it: reach
+      # the Console over HTTPS, an SSH tunnel or a VPN such as WireGuard. The web Console shows a
+      # warning across the top while the page or its link to the runtime is plain HTTP.
   # Dangerous: enables local PowerShell execution (Windows).
   powershell:
     # Enable the powershell tool.

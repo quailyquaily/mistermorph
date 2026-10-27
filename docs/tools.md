@@ -198,10 +198,9 @@ approves the command, which is shown to them:
 - **In the chat that started the task** (Linux, macOS): a task sent from the web Console's chat or
   from `mistermorph chat` shows an approval card with the command and a password field. The
   password goes to the runtime over the client's connection, which is all that protects it: use
-  HTTPS, an SSH tunnel or a VPN such as WireGuard. When the page or the Console's link to the
-  runtime is plain HTTP to another machine, the web card warns first;
-  `tools.bash.elevation.insecure: deny` makes the runtime refuse such answers (a VPN included, as
-  it cannot tell one apart). Chat attached with `--runtime-url` already requires HTTPS for a runtime
+  HTTPS, an SSH tunnel or a VPN such as WireGuard. While the page or the Console's link to the
+  runtime is plain HTTP to another machine, the web Console shows a warning across the top (the
+  runtime cannot tell: a TLS proxy or a VPN looks like plain HTTP to it). Chat attached with `--runtime-url` already requires HTTPS for a runtime
   on another machine. Local chat runs the agent in its own process and asks directly.
 - **Otherwise, in a system dialog on the agent's machine:**
 
@@ -233,7 +232,7 @@ approves the command, which is shown to them:
 - Settings, under `tools.bash.elevation` and `tools.powershell.elevation`: `enabled`,
   `approval_timeout` (how long the dialog waits, on top of the command's timeout; default `2m`), and
   for bash `dialog` (a dialog program instead of the automatic choice), `askpass` (an askpass
-  program instead of mistermorph's helper), `approver` and `insecure` (`warn` or `deny`).
+  program instead of mistermorph's helper) and `approver`.
 - Design: `docs/feat/feat_20261024_elevated_commands.md`, and for approval in the chat,
   `docs/feat/feat_20261026_elevation_client_approval.md`.
 

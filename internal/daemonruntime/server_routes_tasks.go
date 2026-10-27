@@ -236,7 +236,7 @@ func (routes *routeRegistration) registerTaskRoutes() {
 				http.Error(w, "missing elevation_id", http.StatusBadRequest)
 				return
 			}
-			req.Transport, req.Remote = RequestTransport(r)
+			req.Remote = RequestRemote(r)
 			resp, err := answerElevation(r.Context(), req)
 			if err != nil {
 				if msg, ok := badRequestMessage(err); ok {

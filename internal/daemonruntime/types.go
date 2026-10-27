@@ -69,10 +69,8 @@ type AnswerElevationRequest struct {
 	Password    string `json:"password,omitempty"`
 	// Client is "web", "desktop" or "chat", as the client says, for the audit log.
 	Client string `json:"client,omitempty"`
-	// Transport is "secure" (every hop HTTPS or loopback) or "insecure", from the connection the
-	// answer came on; Remote is the client's address. The server sets them, never the client.
-	Transport string `json:"-"`
-	Remote    string `json:"-"`
+	// Remote is the client's address, for the audit log. The server sets it, never the client.
+	Remote string `json:"-"`
 }
 
 type AnswerElevationResponse struct {

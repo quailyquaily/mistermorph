@@ -90,8 +90,7 @@ func (c *daemonTaskClient) Proxy(ctx context.Context, method, endpointPath strin
 		return 0, nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+c.authToken)
-	if transport, remote, ok := daemonruntime.ClientTransportFromContext(ctx); ok {
-		req.Header.Set(daemonruntime.TransportHeader, transport)
+	if remote, ok := daemonruntime.ClientRemoteFromContext(ctx); ok {
 		req.Header.Set(daemonruntime.RemoteHeader, remote)
 	}
 	if len(body) > 0 {

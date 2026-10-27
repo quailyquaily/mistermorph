@@ -302,7 +302,6 @@ func Apply(v *viper.Viper) {
 	v.SetDefault("tools.bash.elevation.dialog", "")
 	v.SetDefault("tools.bash.elevation.askpass", "")
 	v.SetDefault("tools.bash.elevation.approver", "auto")
-	v.SetDefault("tools.bash.elevation.insecure", "warn")
 
 	v.SetDefault("tools.powershell.timeout", time.Minute)
 	v.SetDefault("tools.powershell.max_output_bytes", 256*1024)

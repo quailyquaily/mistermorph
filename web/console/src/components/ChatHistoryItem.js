@@ -156,7 +156,6 @@ const ChatHistoryItem = {
         questions.value.some((question) => question.status === "open") ||
         elevations.value.some((elevation) => elevation.status === "open")
     );
-    const elevationEndpointRef = computed(() => String(props.item?.endpointRef || props.submitEndpointRef || "").trim());
     const reasoningVisible = computed(() => String(props.item?.reasoning || "").trim() !== "");
     const activityEntries = computed(() => {
       const activity = props.item?.activity;
@@ -368,7 +367,6 @@ const ChatHistoryItem = {
       emitTimeClick,
       emitToggle,
       itemClass,
-      elevationEndpointRef,
       elevations,
       questionOpen,
       questions,
@@ -503,7 +501,6 @@ const ChatHistoryItem = {
             :key="elevation.id"
             :elevation="elevation"
             :task-id="item.taskId"
-            :endpoint-ref="elevationEndpointRef"
             :live="streaming"
             @answer="emitElevationAnswer"
           />

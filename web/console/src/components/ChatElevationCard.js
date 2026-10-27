@@ -1,21 +1,17 @@
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 
-import { runtimeEndpointByRef, translate } from "../core/context";
-import { isDesktopRuntime } from "../core/desktop-runtime";
-import { endpointURLInsecure } from "../core/endpoints";
+import { translate } from "../core/context";
 import "./ChatQuestionCard.css";
 import "./ChatElevationCard.css";
 
 // An elevated command asking for the sudo password (docs/feat/feat_20261026_elevation_client_approval.md).
 // While it is open, the password goes to the runtime as typed, so it is only as safe as the
-// connection: the card warns when the page or the endpoint is reached without encryption. The
-// password lives in the field alone, never in component state, and the field is cleared once sent.
+// connection; the app shell warns when that is not encrypted (AppInsecureBanner). The password lives in the field alone, never in component state, and the field is cleared once sent.
 // Once closed, the card keeps the command and how it ended.
 const ChatElevationCard = {
   props: {
     elevation: { type: Object, required: true },
     taskId: { type: String, default: "" },
-    endpointRef: { type: String, default: "" },
     // The task still runs: an open request of an ended task got no answer.
     live: { type: Boolean, default: false },
   },
@@ -38,15 +34,6 @@ const ChatElevationCard = {
       const seconds = remaining.value;
       return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
     });
-    // Unencrypted on either hop: this page over plain HTTP (the desktop app talks to its own
-    // runtime), or the Console reaching the endpoint over plain HTTP to another machine. The
-    // runtime decides for itself; this only tells the person beforehand.
-    const insecure = computed(() => {
-      if (!isDesktopRuntime() && typeof window !== "undefined" && window.isSecureContext === false) return true;
-      return endpointURLInsecure(runtimeEndpointByRef(props.endpointRef)?.url);
-    });
-    const denied = computed(() => insecure.value && props.elevation?.insecure === "deny");
-    const fieldVisible = computed(() => open.value && !denied.value);
     const retry = computed(() => Number(props.elevation?.attempt || 0) >= 2);
     const outcomeText = computed(() => translate(`chat_elevation_${status.value}`));
 
@@ -106,7 +93,7 @@ const ChatElevationCard = {
     }
 
     function allow() {
-      if (!fieldVisible.value || busy.value || remaining.value <= 0) return;
+      if (!open.value || busy.value || remaining.value <= 0) return;
       const input = passwordInput.value;
       if (!input || input.value === "") {
         input?.focus();
@@ -126,9 +113,7 @@ const ChatElevationCard = {
       allow,
       busy,
       decline,
-      denied,
       error,
-      insecure,
       open,
       outcomeText,
       passwordInput,
@@ -164,41 +149,28 @@ const ChatElevationCard = {
         </template>
         <p v-if="retry" class="chat-question-value chat-elevation-note is-alert" role="alert">{{ t('chat_elevation_retry') }}</p>
 
-        <template v-if="denied">
-          <span class="chat-question-key is-reply"><span class="chat-question-label">{{ t('chat_elevation_password') }}</span></span>
-          <div class="chat-question-value chat-question-reply">
-            <p class="chat-elevation-note is-alert">{{ t('chat_elevation_insecure_deny') }}</p>
-            <QButton type="button" class="plain xs" :disabled="busy" @click="decline">
-              {{ t('chat_elevation_decline') }}
-            </QButton>
-          </div>
-        </template>
-
-        <template v-else>
-          <span class="chat-question-key is-reply"><span class="chat-question-label">{{ t('chat_elevation_password') }}</span></span>
-          <form class="chat-question-value chat-question-reply" @submit.prevent="allow">
-            <input
-              ref="passwordInput"
-              class="chat-question-input chat-elevation-input"
-              type="password"
-              name="elevation-password"
-              autocomplete="off"
-              autocapitalize="off"
-              spellcheck="false"
-              :placeholder="t('chat_elevation_password_placeholder')"
-              :aria-label="t('chat_elevation_password_placeholder')"
-              :disabled="busy || remaining <= 0"
-              enterkeyhint="send"
-            />
-            <QButton type="submit" class="primary xs" :disabled="busy || remaining <= 0">
-              {{ t('chat_elevation_allow') }}
-            </QButton>
-            <QButton type="button" class="plain xs" :disabled="busy" @click="decline">
-              {{ t('chat_elevation_decline') }}
-            </QButton>
-          </form>
-          <p v-if="insecure" class="chat-question-value chat-elevation-note">{{ t('chat_elevation_insecure_warn') }}</p>
-        </template>
+        <span class="chat-question-key is-reply"><span class="chat-question-label">{{ t('chat_elevation_password') }}</span></span>
+        <form class="chat-question-value chat-question-reply" @submit.prevent="allow">
+          <input
+            ref="passwordInput"
+            class="chat-question-input chat-elevation-input"
+            type="password"
+            name="elevation-password"
+            autocomplete="off"
+            autocapitalize="off"
+            spellcheck="false"
+            :placeholder="t('chat_elevation_password_placeholder')"
+            :aria-label="t('chat_elevation_password_placeholder')"
+            :disabled="busy || remaining <= 0"
+            enterkeyhint="send"
+          />
+          <QButton type="submit" class="primary xs" :disabled="busy || remaining <= 0">
+            {{ t('chat_elevation_allow') }}
+          </QButton>
+          <QButton type="button" class="plain xs" :disabled="busy" @click="decline">
+            {{ t('chat_elevation_decline') }}
+          </QButton>
+        </form>
         <p v-if="error" class="chat-question-value chat-question-error" role="alert">{{ error }}</p>
       </div>
       <dl v-else class="chat-question-grid">
