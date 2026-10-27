@@ -234,13 +234,15 @@ const QDropdownMenu = {
           <div v-if="hideSelected || hasSlot" class="empty-block"></div>
           <QIconChevronDown class="icon chevron-icon" />
         </button>
-        <div v-if="!useDialogFlag" ref="menuWrapper">
+        <!-- A click on an item cancels its default action: inside a <label>, that action clicks the
+             label's control, this menu's own button, and the menu would open again. -->
+        <div v-if="!useDialogFlag" ref="menuWrapper" @click.prevent>
           <Transition>
             <QMenu v-if="expanded" :items="items" :focused-index="focusedIndex" @action="select" />
           </Transition>
         </div>
         <QDialog v-if="useDialogFlag" v-model="expanded" no-frame>
-          <div class="q-menu-popup-body">
+          <div class="q-menu-popup-body" @click.prevent>
             <div v-if="useFilter" class="filter-area">
               <QInput ref="filterInput" v-model="filterText" class="filter-input" placeholder="Filter" />
             </div>
