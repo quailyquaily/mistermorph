@@ -154,12 +154,13 @@ selected endpoint, or the endpoint its chat submits to, over plain HTTP to anoth
 endpoint's `url`). It says which hop is unencrypted (`insecureHops` in `core/endpoints.js`):
 "This page is on plain HTTP, not HTTPS…", "The Console reaches the runtime at `<host>` over plain
 HTTP…", or both, each ending with who can read what is sent unless an SSH tunnel or a VPN such as
-WireGuard carries it. On a phone it drops the label and shows a shorter message. It is global
-rather than on the card because the same holds for everything sent, the Console password first. It
-does not block anything: on a VPN it does not apply, and only the person knows that. So it can be
-closed, until the page reloads; it comes back when another hop turns unencrypted, such as after
-switching to another endpoint. Chat needs no warning: it reaches a runtime on another
-machine only over HTTPS.
+WireGuard carries it. The line shows a short form ("This page is on plain HTTP. Others on the
+network can read what you send.") with the full message as its tooltip; on a phone it drops the
+label too. It is global rather than on the card because the same holds for everything sent, the
+Console password first. It does not block anything: on a VPN it does not apply, and only the
+person knows that. So it can be closed, until the page reloads; it comes back when another hop
+turns unencrypted, such as after switching to another endpoint. Chat needs no warning: it reaches a
+runtime on another machine only over HTTPS.
 
 **Why not encrypt in the client.** An earlier version sealed the password in the client to a
 runtime identity key the client pinned. On plain HTTP that stops someone who only reads the
