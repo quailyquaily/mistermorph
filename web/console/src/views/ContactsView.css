@@ -395,25 +395,33 @@
   line-height: 1.4;
 }
 
+/* Memories are rows divided by hairlines, like the connections above them. */
 .contacts-memory-list {
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 7px;
   list-style: none;
   color: var(--text-1);
 }
 
 .contacts-memory-list li {
   display: grid;
-  gap: 3px;
-  padding: 7px 9px;
-  border: 1px solid var(--line-soft);
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
+  gap: 2px;
+  padding: 9px 0;
+  border-top: 1px solid var(--line-soft);
   font-size: var(--font-size-meta);
   line-height: 1.45;
   overflow-wrap: anywhere;
+}
+
+.contacts-memory-list li:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.contacts-memory-list li strong {
+  color: var(--text-0);
+  font-weight: 600;
 }
 
 .contacts-memory-list li span {
@@ -428,6 +436,7 @@
 
 .contacts-memories-open {
   justify-self: start;
+  margin-left: -12px;
 }
 
 .contacts-activity-panel {
