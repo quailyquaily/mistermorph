@@ -1468,7 +1468,9 @@ func (r *consoleLocalRuntime) submitTaskWithGeneration(ctx context.Context, gene
 			generation.release()
 		}
 	}()
-	if topicID := strings.TrimSpace(req.TopicID); topicID != "" && topicID != daemonruntime.ConsoleDefaultTopicID {
+	if topicID := strings.TrimSpace(req.TopicID); daemonruntime.IsAgentLinkTopicID(topicID) {
+		return daemonruntime.SubmitTaskResponse{}, daemonruntime.BadRequest("an Agent Link agent's topic only holds what that agent sends")
+	} else if topicID != "" && topicID != daemonruntime.ConsoleDefaultTopicID {
 		if topic, ok := r.store.GetTopic(topicID); !ok || topic == nil || topic.DeletedAt != nil {
 			return daemonruntime.SubmitTaskResponse{}, daemonruntime.BadRequest("topic not found")
 		}
@@ -2886,7 +2888,7 @@ func (r *consoleLocalRuntime) maybeRefreshTopicTitle(job consoleLocalTaskJob) {
 		return
 	}
 	topicID := strings.TrimSpace(job.TopicID)
-	if topicID == "" || topicID == daemonruntime.ConsoleDefaultTopicID || topicID == daemonruntime.ConsoleAwarenessTopicID {
+	if topicID == "" || daemonruntime.IsReservedTopicID(topicID) {
 		return
 	}
 	taskText := strings.TrimSpace(job.Task)

@@ -103,6 +103,8 @@ import {
   supportsConsoleTaskStream,
   translate,
 } from "../core/context";
+import ContactAvatar from "../components/ContactAvatar";
+import { agentLinkAvatarURL, agentLinkInstanceID } from "../core/agent-link-avatar";
 
 const POLL_INTERVAL_MS = 1200;
 const CHAT_HISTORY_LIMIT = 100;
@@ -110,6 +112,18 @@ const TOPIC_PAGE_LIMIT = 100;
 const CHAT_COMPOSER_MIN_HEIGHT = 80;
 const DEFAULT_TOPIC_ID = "default";
 const AWARENESS_TOPIC_ID = "_awareness";
+// What another agent sends this one over Agent Link is kept in a topic per agent,
+// "_agentlink_<instance_id>", listed apart from the person's own topics.
+const AGENT_LINK_TOPIC_PREFIX = "_agentlink_";
+
+function agentLinkTopicContactID(topicID) {
+  const id = String(topicID || "").trim();
+  return id.startsWith(AGENT_LINK_TOPIC_PREFIX) ? `mm:${id.slice(AGENT_LINK_TOPIC_PREFIX.length)}` : "";
+}
+
+function isAgentLinkTopicID(topicID) {
+  return agentLinkTopicContactID(topicID) !== "";
+}
 const LOCAL_CONSOLE_ENDPOINT_REF = "ep_console_local";
 // The trigger of a task sent from this chat. The runtime lets only such tasks ask questions.
 const CONSOLE_CHAT_TRIGGER = Object.freeze({ source: "ui", event: "chat_submit", ref: "web/console/chat" });
@@ -142,7 +156,7 @@ function normalizeEndpointMode(raw) {
 
 function rememberTopicSelection(endpointRef, topicID) {
   const normalizedTopicID = normalizeTopicID(topicID);
-  if (!normalizedTopicID || normalizedTopicID === AWARENESS_TOPIC_ID) {
+  if (!normalizedTopicID || normalizedTopicID === AWARENESS_TOPIC_ID || isAgentLinkTopicID(normalizedTopicID)) {
     return;
   }
   rememberLastTopicID(endpointRef, normalizedTopicID);
@@ -237,7 +251,8 @@ function normalizeRecentWorkspaceDirs(raw) {
   return items;
 }
 
-// The topic sidebar lists topics by date or by tag. The choice is a per-browser convenience.
+// The topic sidebar lists topics by date or by tag, a per-browser convenience; or the agents'
+// topics, which is not remembered.
 const TOPIC_SIDEBAR_VIEW_STORAGE_KEY = "mistermorph.chat.topicSidebarView";
 const TOPIC_GROUPS_COLLAPSED_STORAGE_KEY = "mistermorph.chat.topicGroupsCollapsed";
 
@@ -650,6 +665,7 @@ const ChatView = {
   components: {
     AppFab,
     AppDialogShell,
+    ContactAvatar,
     AppKicker,
     AppPage,
     AppTabs,
@@ -1008,6 +1024,9 @@ const ChatView = {
           }
           continue;
         }
+        if (isAgentLinkTopicID(topicID)) {
+          continue;
+        }
         items.push(topic);
       }
       if (!awarenessTopic && awarenessVisible) {
@@ -1193,8 +1212,17 @@ const ChatView = {
           }
         : null;
     });
+    // The agents' topics, the one with the latest message first.
+    const agentTopics = computed(() =>
+      topics.value
+        .filter((topic) => isAgentLinkTopicID(normalizeTopicID(topic?.id)))
+        .sort((a, b) => String(b?.updated_at || "").localeCompare(String(a?.updated_at || ""))),
+    );
     // While a topic is dragged, a pinned group is always there to drop it on, even an empty one.
     const topicSidebarGroups = computed(() => {
+      if (topicSidebarView.value === "agents") {
+        return agentTopics.value.length > 0 ? [{ key: "agents", label: "", topics: agentTopics.value }] : [];
+      }
       const groups =
         topicSidebarView.value === "tags"
           ? topicTagGroups.value
@@ -1211,13 +1239,25 @@ const ChatView = {
     const topicTagsAvailable = computed(
       () =>
         Boolean(workspaceTopicID.value) &&
+        !isAgentLinkTopicID(workspaceTopicID.value) &&
         topics.value.some((topic) => normalizeTopicID(topic?.id) === normalizeTopicID(workspaceTopicID.value))
     );
     const topicTagsSaving = computed(() => topicTagSaves.value.has(normalizeTopicID(workspaceTopicID.value)));
 
     function setTopicSidebarView(view) {
-      topicSidebarView.value = view === "tags" ? "tags" : "date";
-      saveTopicSidebarView(topicSidebarView.value);
+      topicSidebarView.value = view === "tags" || view === "agents" ? view : "date";
+      if (view !== "agents") {
+        saveTopicSidebarView(topicSidebarView.value);
+      }
+    }
+
+    // An agent's topic shows the agent's avatar when the agent is one of this Console's endpoints.
+    function topicAgentContact(topic) {
+      return { contact_id: agentLinkTopicContactID(normalizeTopicID(topic?.id)) };
+    }
+
+    function topicAgentAvatar(topic) {
+      return agentLinkAvatarURL(topicAgentContact(topic), endpointState.items);
     }
 
     function findTopic(topicID) {
@@ -1512,9 +1552,10 @@ const ChatView = {
       }
       return topicID;
     });
+    const selectedTopicIsAgent = computed(() => isAgentLinkTopicID(normalizeTopicID(selectedTopicID.value)));
     const selectedTopicIsReserved = computed(() => {
       const topicID = normalizeTopicID(selectedTopicID.value);
-      return topicID === DEFAULT_TOPIC_ID || topicID === AWARENESS_TOPIC_ID;
+      return topicID === DEFAULT_TOPIC_ID || topicID === AWARENESS_TOPIC_ID || selectedTopicIsAgent.value;
     });
     const topicDeleteAvailable = computed(
       () => Boolean(workspaceTopicID.value) && !selectedTopicIsReserved.value
@@ -3343,6 +3384,11 @@ const ChatView = {
       if (topicID === AWARENESS_TOPIC_ID) {
         return t("chat_topic_awareness");
       }
+      if (isAgentLinkTopicID(topicID)) {
+        const instanceID = agentLinkInstanceID(agentLinkTopicContactID(topicID));
+        const endpoint = endpointState.items.find((item) => String(item?.instance_id || "").trim() === instanceID);
+        return String(endpoint?.agent_name || endpoint?.name || "").trim() || t("chat_topic_agent_untitled");
+      }
       return t("chat_topic_untitled");
     }
 
@@ -4958,6 +5004,10 @@ const ChatView = {
       topicDayGroups,
       topicSidebarGroups,
       topicSidebarView,
+      agentTopics,
+      topicAgentContact,
+      topicAgentAvatar,
+      selectedTopicIsAgent,
       setTopicSidebarView,
       knownTags,
       selectedTopicOrdinaryTags,
@@ -5060,6 +5110,16 @@ const ChatView = {
                 </div>
               </div>
               <AppButton
+                v-if="agentTopics.length > 0 || topicSidebarView === 'agents'"
+                :class="['plain sm icon chat-topic-view-toggle', { 'is-active': topicSidebarView === 'agents' }]"
+                :title="topicSidebarView === 'agents' ? t('chat_topics_view_date') : t('chat_topics_view_agents')"
+                :aria-label="t('chat_topics_view_agents')"
+                :aria-pressed="topicSidebarView === 'agents' ? 'true' : 'false'"
+                @click="setTopicSidebarView(topicSidebarView === 'agents' ? 'date' : 'agents')"
+              >
+                <PhRobot class="icon" />
+              </AppButton>
+              <AppButton
                 :class="['plain sm icon chat-topic-view-toggle', { 'is-active': topicSidebarView === 'tags' }]"
                 :title="topicSidebarView === 'tags' ? t('chat_topics_view_date') : t('chat_topics_view_tags')"
                 :aria-label="t('chat_topics_view_tags')"
@@ -5084,6 +5144,9 @@ const ChatView = {
                 class="chat-topic-tags-hint"
               >
                 {{ t("chat_topics_tags_hint") }}
+              </p>
+              <p v-if="topicSidebarView === 'agents' && agentTopics.length === 0" class="chat-topic-tags-hint">
+                {{ t("chat_topics_agents_empty") }}
               </p>
               <section
                 v-for="group in topicSidebarGroups"
@@ -5126,13 +5189,23 @@ const ChatView = {
                   :class="[topicItemClass(topic), topicDropMarkClass(group, topic)]"
                   :title="topicTime(topic) || undefined"
                   :aria-current="topicIsActive(topic) ? 'page' : undefined"
-                  :draggable="mobileMode ? 'false' : 'true'"
+                  :draggable="mobileMode || topicSidebarView === 'agents' ? 'false' : 'true'"
                   @click="selectTopic(topic.id)"
                   @dragstart="onTopicDragStart($event, topic)"
                   @dragend="onTopicDragEnd"
                   @dragover="onTopicItemDragOver($event, group, topic)"
                 >
+                  <ContactAvatar
+                    v-if="topicSidebarView === 'agents'"
+                    class="chat-topic-item-avatar"
+                    :item="topicAgentContact(topic)"
+                    :imageURL="topicAgentAvatar(topic)"
+                    :name="topicTitle(topic)"
+                    :endpointRef="submitEndpointRef"
+                    aria-hidden="true"
+                  />
                   <span
+                    v-else
                     class="topic-icon chat-topic-item-icon"
                     :style="{ '--topic-icon': 'url(' + JSON.stringify(topicIcon(topic)) + ')' }"
                     aria-hidden="true"
@@ -5277,8 +5350,11 @@ const ChatView = {
                 />
               </div>
             </template>
+            <p v-if="!showChatPlaceholder && selectedTopicIsAgent" class="chat-agent-topic-note">
+              {{ t("chat_topic_agent_readonly", { name: deskTitle }) }}
+            </p>
             <ChatComposer
-              v-if="!showChatPlaceholder"
+              v-else-if="!showChatPlaceholder"
               ref="composerRef"
               v-model="taskInput"
               :disabled="composerDisabled"

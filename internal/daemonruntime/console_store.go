@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -447,7 +448,7 @@ func (s *ConsoleFileStore) List(opts TaskListOptions) []TaskInfo {
 		if topicID != "" && strings.TrimSpace(item.TopicID) != topicID {
 			continue
 		}
-		if topicID == "" && strings.TrimSpace(item.TopicID) == ConsoleAwarenessTopicID {
+		if topicID == "" && (strings.TrimSpace(item.TopicID) == ConsoleAwarenessTopicID || IsAgentLinkTopicID(item.TopicID)) {
 			continue
 		}
 		if topicDeleted(s.topics[strings.TrimSpace(item.TopicID)]) {
@@ -529,7 +530,8 @@ func (s *ConsoleFileStore) DeleteTopic(id string) (bool, error) {
 		return false, fmt.Errorf("console task store is nil")
 	}
 	id = strings.TrimSpace(id)
-	if id == "" || id == ConsoleDefaultTopicID {
+	// An Agent Link agent's topic stays: its next message would land in a deleted topic.
+	if id == "" || id == ConsoleDefaultTopicID || IsAgentLinkTopicID(id) {
 		return false, nil
 	}
 	now := time.Now().UTC()
@@ -762,6 +764,7 @@ func (s *ConsoleFileStore) load() error {
 	if err := s.replayJournalLocked(start); err != nil {
 		return err
 	}
+	s.moveAgentLinkTasksLocked()
 	s.pruneUnusedDefaultTopicLocked()
 	now := time.Now().UTC()
 	if !s.skipRecovery {
@@ -1179,6 +1182,48 @@ func nextConsoleTopic(topic TopicInfo, exists bool, topicID string, title string
 		topic = normalizeTopicInfo(topic)
 	}
 	return topic
+}
+
+// moveAgentLinkTasksLocked moves the tasks Agent Link messages started before they had topics of
+// their own out of the default topic, into their agent's topic.
+func (s *ConsoleFileStore) moveAgentLinkTasksLocked() {
+	for id, item := range s.items {
+		if strings.TrimSpace(item.TopicID) != ConsoleDefaultTopicID {
+			continue
+		}
+		from := agentLinkTaskSender(item, s.triggers[id])
+		if from == "" {
+			continue
+		}
+		item.TopicID = AgentLinkTopicID(from)
+		s.items[id] = item
+		topic := s.ensureTopicLocked(item.TopicID, "", item.CreatedAt, false)
+		if item.CreatedAt.After(topic.UpdatedAt) {
+			topic.UpdatedAt = item.CreatedAt
+			s.topics[topic.ID] = topic
+		}
+	}
+}
+
+// agentLinkTaskOrigin matches the ID of a task an Agent Link message started:
+// al_<sender instance ID>_<message ID>.
+var agentLinkTaskOrigin = regexp.MustCompile(`^al_(inst_[0-9a-f]{32})_`)
+
+// agentLinkTaskSender returns the instance ID of the agent whose message started the task, or "".
+// A finished task keeps it only in its ID: its result replaces the one that named the sender.
+func agentLinkTaskSender(item TaskInfo, trigger TaskTrigger) string {
+	if result, ok := item.Result.(map[string]any); ok {
+		if from, _ := result["agentlink_from"].(string); strings.TrimSpace(from) != "" {
+			return strings.TrimSpace(from)
+		}
+	}
+	if trigger.Source != "agentlink" {
+		return ""
+	}
+	if m := agentLinkTaskOrigin.FindStringSubmatch(item.ID); m != nil {
+		return m[1]
+	}
+	return ""
 }
 
 func (s *ConsoleFileStore) pruneUnusedDefaultTopicLocked() {

@@ -112,6 +112,7 @@ Relaying one message, from A to B:
 - Each runtime type that serves `/agentlink/ws` runs such tasks: the Console's local runtime and the standalone channel runtimes. One runner runs per state dir in a process. A host built on the `integration` package serves the route but runs no runner, so messages to it are rejected with `no_handler`.
 - A failed task sends nothing back, so an error does not start another agent's task. A task that ends waiting for an approval fails, because no one can approve over Agent Link.
 - The task prompt says the message comes from another agent and is untrusted input. `contacts_send` cannot message the same agent during the task; the answer goes back as the reply.
+- Where the task store has topics (the Console's local runtime), the task goes in the sending agent's own topic, `_agentlink_<from_instance_id>`, named after the agent's contact (`daemonruntime.AgentLinkTopicID`). Before, these tasks had no topic and landed in the Console's `default` topic; the Console's store moves them on load, recognising them by `result.agentlink_from` or, once finished, by their task ID `al_<from>_<message_id>`. The runner names any agent topic that is still untitled from the contacts when it starts. The Console lists these topics apart from the person's own (see `docs/console.md`); a person cannot write in one, rename, tag or delete it.
 
 ### 6a. `agent_send` waits for the answer
 
