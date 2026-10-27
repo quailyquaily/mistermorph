@@ -187,7 +187,6 @@ func TestConsoleFileStoreSnapshotAdvancesPastForeignDomainEvents(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Append(conversation) error = %v", err)
 	}
-	want.Line = 1
 	if err := raw.Close(); err != nil {
 		t.Fatalf("raw.Close() error = %v", err)
 	}
@@ -871,11 +870,11 @@ func TestConsoleFileStoreApplyConfigSeedsNewJournal(t *testing.T) {
 	if !ok {
 		t.Fatal("next projection snapshot missing")
 	}
-	if snap.Cursor.File == "" {
+	if snap.Cursor.Seq == 0 {
 		t.Fatalf("next snapshot cursor = %#v, want cursor in new journal", snap.Cursor)
 	}
-	if _, err := os.Stat(filepath.Join(nextJournalDir, snap.Cursor.File)); err != nil {
-		t.Fatalf("new journal cursor file missing: %v", err)
+	if _, err := os.Stat(filepath.Join(nextJournalDir, domainjournal.DBFilename)); err != nil {
+		t.Fatalf("new journal database missing: %v", err)
 	}
 
 	reloaded, err := NewConsoleFileStore(ConsoleFileStoreOptions{
@@ -967,22 +966,22 @@ func TestConsoleFileStoreRequiresJournalDirWhenPersistent(t *testing.T) {
 func TestConsoleFileStoreLoadsSnapshotAndSkipsJournalBeforeCursor(t *testing.T) {
 	root := t.TempDir()
 	journalDir := filepath.Join(root, "journal")
-	if err := os.MkdirAll(journalDir, 0o700); err != nil {
-		t.Fatalf("MkdirAll(journalDir) error = %v", err)
-	}
-	badLine := []byte("{bad json}\n")
-	if err := os.WriteFile(filepath.Join(journalDir, "events.000000000000000001.jsonl"), badLine, 0o600); err != nil {
-		t.Fatalf("WriteFile(journal) error = %v", err)
+	journal, err := taskdomain.NewJournal(journalDir, 0)
+	if err != nil {
+		t.Fatalf("NewJournal() error = %v", err)
 	}
 	now := mustParseTime(t, "2026-03-15T10:00:00Z")
+	cursor, err := taskdomain.AppendJournalEvent(journal, "console", taskdomain.JournalTypeTaskUpsert, now, TaskTrigger{}, &TaskInfo{
+		ID: "task_before_cursor", Status: TaskDone, Task: "already in the snapshot", Model: "gpt-5.2", Timeout: "10m0s", CreatedAt: now,
+	}, nil)
+	if err != nil {
+		t.Fatalf("AppendJournalEvent() error = %v", err)
+	}
+	_ = journal.Close()
 	writeTaskProjectionSnapshotFixture(t, root, map[string]any{
 		"version":    1,
 		"updated_at": "2026-03-15T10:00:00Z",
-		"cursor": map[string]any{
-			"file": "events.000000000000000001.jsonl",
-			"line": 1,
-			"byte": len(badLine),
-		},
+		"cursor":     map[string]any{"seq": cursor.Seq},
 		"items": []TaskInfo{{
 			ID:        "task_snapshot",
 			Status:    TaskDone,
@@ -1025,8 +1024,10 @@ func TestConsoleFileStoreLoadsSnapshotAndSkipsJournalBeforeCursor(t *testing.T) 
 	if topic.Title != "Snapshot Topic" {
 		t.Fatalf("topic.Title = %q, want Snapshot Topic", topic.Title)
 	}
+	if _, ok := store.Get("task_before_cursor"); ok {
+		t.Fatal("task_before_cursor replayed, want the journal before the cursor skipped")
+	}
 }
-
 func mustParseTime(t *testing.T, raw string) time.Time {
 	t.Helper()
 	parsed, err := time.Parse(time.RFC3339, raw)

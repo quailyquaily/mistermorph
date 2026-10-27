@@ -136,6 +136,33 @@ func TestOpenRefusesNewerSchema(t *testing.T) {
 	}
 }
 
+func TestOpenDurable(t *testing.T) {
+	ctx := context.Background()
+	for _, tc := range []struct {
+		name string
+		opts Options
+		want int
+	}{
+		{name: "default", opts: Options{}, want: 1},
+		{name: "durable", opts: Options{Durable: true}, want: 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			db, err := OpenWithOptions(ctx, filepath.Join(t.TempDir(), "memory.db"), testMigrations, tc.opts)
+			if err != nil {
+				t.Fatalf("OpenWithOptions() error = %v", err)
+			}
+			defer db.Close()
+			var got int
+			if err := db.QueryRow("PRAGMA synchronous").Scan(&got); err != nil {
+				t.Fatalf("read synchronous: %v", err)
+			}
+			if got != tc.want {
+				t.Fatalf("synchronous = %d, want %d", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestOpenCreatesPrivateFile(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("file modes are not POSIX on windows")

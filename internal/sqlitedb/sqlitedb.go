@@ -33,11 +33,23 @@ type Migration struct {
 	Apply func(ctx context.Context, tx *sql.Tx) error
 }
 
+// Options change how Open configures the database.
+type Options struct {
+	// Durable makes every commit reach the disk before it returns (synchronous=FULL). Without it a
+	// commit survives a crash of the process but may be lost on power loss (synchronous=NORMAL).
+	Durable bool
+}
+
 // Open opens the database at path, creating it and its directory when missing, and applies the
 // migrations it has not run yet. The file is readable only by its owner, since it can hold private
 // messages. The database uses WAL, so readers do not block the writer, and every transaction
 // begins IMMEDIATE, so two writers wait for each other instead of failing on a lock upgrade.
 func Open(ctx context.Context, path string, migrations []Migration) (*sql.DB, error) {
+	return OpenWithOptions(ctx, path, migrations, Options{})
+}
+
+// OpenWithOptions is Open with Options.
+func OpenWithOptions(ctx context.Context, path string, migrations []Migration, opts Options) (*sql.DB, error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
 		return nil, fmt.Errorf("sqlite database path is required")
@@ -56,7 +68,7 @@ func Open(ctx context.Context, path string, migrations []Migration) (*sql.DB, er
 		return nil, fmt.Errorf("create sqlite database: %w", err)
 	}
 
-	db, err := sql.Open("sqlite", dsn(path))
+	db, err := sql.Open("sqlite", dsn(path, opts))
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite database: %w", err)
 	}
@@ -67,11 +79,15 @@ func Open(ctx context.Context, path string, migrations []Migration) (*sql.DB, er
 	return db, nil
 }
 
-func dsn(path string) string {
+func dsn(path string, opts Options) string {
+	synchronous := "NORMAL"
+	if opts.Durable {
+		synchronous = "FULL"
+	}
 	query := url.Values{}
 	query.Add("_pragma", fmt.Sprintf("busy_timeout(%d)", BusyTimeout.Milliseconds()))
 	query.Add("_pragma", "journal_mode(WAL)")
-	query.Add("_pragma", "synchronous(NORMAL)")
+	query.Add("_pragma", "synchronous("+synchronous+")")
 	query.Add("_pragma", "foreign_keys(1)")
 	query.Set("_txlock", "immediate")
 	return "file:" + filepath.ToSlash(path) + "?" + query.Encode()

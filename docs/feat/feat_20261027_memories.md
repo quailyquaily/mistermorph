@@ -319,30 +319,44 @@ are not facts, and by storing the rest well.
 | Part | Size | Share of the journal |
 |---|---|---|
 | `result.trace.entries` | 4.6 MB | 54% |
-| `result.activity` (live progress for the UI) | 1.3 MB | 16% |
+| `result.activity` | 1.3 MB | 16% |
 | `result.final.output`, the actual reply | 0.12 MB | 1.4% |
 | Every task's last snapshot without `activity` and `trace` | 0.61 MB | 7% |
 | All non-task events | 0.52 MB | 6% |
 
 The conversation itself (what was asked, what was answered, by whom, where) is under 10% of the journal. The rest
-is the execution trace and progress state, copied into each snapshot taken while the task runs.
+is the execution trace and the activity list.
+
+Both are kept:
+
+- **Activity.** The Console shows a finished task's activity from `result.activity`, including the Agent Link
+  messages it exchanged (`chat-task-history.js`).
+- **The trace.** Each trace is written about once per task: storing every task's trace once would still take 4.2 of
+  the 4.6 MB, so splitting it into its own table saves almost nothing.
 
 **The changes:**
 
-1. **Do not journal progress state.** `result.activity` is live UI state that the stream hub already serves, so it
-   is dropped from journal payloads. Snapshots taken while a task runs record its status changes, not its
-   progress.
-2. **Store the trace once, apart from the facts.** When a task ends, its trace is written once to
-   `task_traces(task_id, trace)`, compressed, and removed from the task snapshot. It is kept forever, like the rest
-   of the journal, and `journal_read` can return it. It is not full-text indexed, because it holds tool output
-   (web pages, files) whose text would make the index larger than the data.
-3. **Compress payloads.** Payloads are stored zstd-compressed (`klauspost/compress`, pure Go). On this journal, the
-   task facts compress from 0.61 MB to 0.16 MB and the traces from 4.8 MB to 0.9 MB.
-4. **Index only what people said.** FTS covers task text, final output and inbound message text, extracted when the
-   event is written. A trigram index runs about three times the size of the text it covers, so it is kept to the
-   conversation.
+1. **Compress each payload.** Payloads are stored DEFLATE-compressed with the standard library's `compress/flate`,
+   so no new dependency. Compressing event by event takes this journal's 9.4 MB of event JSON to 2.6 MB.
+2. **SQL indexes instead of index files.** The 3.5 MB of `index/` files become indexes on `task_id` and `topic_id`.
+3. **Index only what people said.** FTS covers:
+   - a task's text, once, from its `task_upsert`;
+   - its final output, once, from the update that ends it;
+   - the text of untriggered inbound messages.
 
-Together these would take this install from 12 MB to about 2 MB for four months, including the FTS index.
+   It never covers traces or tool output. A trigram index runs about three times the size of the text it covers,
+   so it is kept to the conversation. Repeated snapshots of the same task add nothing to it.
+
+Measured on a copy of this journal (M2): the 9 MB of JSONL plus 3.5 MB of index files import into a 4.6 MB
+`journal.db`, without dropping anything:
+
+| Part | Size |
+|---|---|
+| Compressed payloads | 2.4 MB, 3.4 MB with page overhead |
+| FTS index over 0.13 MB of text | 0.7 MB |
+| SQL indexes | 0.45 MB |
+
+The import takes 0.8 s, replaying all 2,040 events takes 60 ms, and a search takes under 1 ms.
 
 If one install still grows too large, for example a bot in many busy groups, there is one more step: closed months
 move to `journal/YYYY-MM.db`, which is attached read-only when a search reaches back that far. Nothing is deleted. It
@@ -437,49 +451,48 @@ behavior a user can see.
 
 ### M2. Journal on SQLite
 
-1. **Backend.** `domainjournal` keeps its exported API and opens `<Dir>/journal.db`.
-   - Table `journal_events`: `seq`, `id`, `time`, `domain`, `type`, `schema_version`, the trace columns, `audience`, and a
-     zstd payload (`klauspost/compress`, pure Go). Indexes on `task_id`, `topic_id`, `(domain, type)`, `audience`
-     and `time`.
+1. **Backend.** `domainjournal` keeps its exported API and opens `<Dir>/journal.db` with `synchronous=FULL`, since
+   the journal is the final truth.
+   - Table `journal_events`: `seq`, `id`, `time`, `domain`, `type`, `schema_version`, the trace columns,
+     `audience`, `text` (what FTS indexes) and a DEFLATE payload. Indexes on `id`, `task_id`, `topic_id`,
+     `(domain, type)`, `audience` and `time`.
    - `Append` is one insert. The cross-process file lock becomes SQLite's own locking.
-   - `ValidateEvent` stays as it is.
+   - `ValidateEvent` stays as it is. `Event` gains `Audience`, which M3 fills.
 2. **Cursor and refs.**
    - `Cursor` and `RecordRef` gain `Seq`. Replay is `WHERE seq > ?`.
-   - An old file-based cursor, still in `tasks/<target>/projection.json` or a Console snapshot, is translated
-     through the import map from step 3. A cursor the map does not know means a full replay, which projections
-     already handle.
-   - `IsSegmentFile` checks in snapshot validation accept a `Seq` cursor.
-3. **One-time import.** On open, under `BEGIN IMMEDIATE`, if `meta.jsonl_imported` is unset and
-   `events.*.jsonl` exist:
-   - the segments are imported in order;
-   - `(file, line) → seq` is recorded in `jsonl_import_refs` for the cursor translation;
-   - `meta.jsonl_imported` is set.
+   - An old file-based cursor, still in `tasks/<target>/projection.json` or a Console snapshot, fails snapshot
+     validation. The store then replays the whole journal, as it already does for any bad snapshot, and saves a new
+     snapshot with a `Seq` cursor. No translation table is needed.
+3. **One-time import**, as a migration step, so it runs once, inside the migration transaction, and a second process
+   opening at the same time waits for it:
+   - every `events.*.jsonl` segment is imported in order;
+   - a line that does not decode or validate is kept as-is in `journal_import_rejects(file, line, raw)` instead of
+     failing the open, because the runtime must still start and nothing may be lost.
 
    The JSONL files and `index/` stay on disk, untouched.
 4. **Indexes.** `ReadIndex` becomes a query. `RebuildIndexes` and `IndexError` stay for callers and become trivial.
    `RotateMaxBytes` is accepted and ignored.
-5. **Size changes from §9**, in `taskdomain.AppendJournalEvent`:
-   - `result.activity` is dropped from the payload.
-   - At a terminal status, `result.trace` moves to the `task_traces` table, and replay puts it back into the
-     snapshot. The Console therefore shows traces exactly as before.
-6. **Full-text index.**
-   - `journal_text` (FTS5, trigram, contentless) gets the text of what people said, extracted when the event is
-     written and during the import:
-     - task text and `result.final.output` for task events;
-     - `text` for untriggered messages.
+5. **Full-text index.**
+   - `journal_text` is FTS5 with the trigram tokenizer, over `journal_events.text` as external content. The text is
+     extracted when the event is written and during the import, using the rules in §9.
    - Extraction is a small table in `domainjournal`, keyed by domain and type.
-   - Search terms shorter than 3 characters, such as a two-character Japanese word, fall back to `LIKE` over the
-     same text.
+   - Search terms shorter than 3 characters, such as a two-character CJK word, fall back to `LIKE` over the same
+     column.
+   - `Search(SearchOptions)` takes the query, the audiences allowed to hear the result, a time range, a domain and a
+     limit. M5's tools use it.
 
 **Tests:**
 
-- every existing test in `domainjournal`, `taskdomain`, `daemonruntime` (console store, file store, observations,
-  projection snapshots), `agentpair` and `channelruntime/core`, unchanged;
+- the existing tests in `taskdomain`, `daemonruntime` (console store, file store, observations, projection
+  snapshots), `agentpair` and `channelruntime/core` pass. The exceptions are tests of JSONL behavior itself, such as
+  rotation, which change to test the same contract on the new storage;
+- `domainjournal`'s own tests move from segment files to the database;
 - import keeps the order and payloads, runs once, and stays correct when two processes open the journal at the
   same time;
-- an old cursor translates to the right `seq`;
-- a task snapshot carries no `activity` and no trace, and replay restores the trace;
-- a fixture modelled on the real journal shrinks roughly as §9 expects.
+- a bad JSONL line is kept in `journal_import_rejects` and does not stop the import;
+- a snapshot with an old file cursor leads to a full replay and a new `Seq` cursor;
+- FTS indexes a task's text once and its final output once, however many snapshots the task has; a short query
+  falls back to `LIKE`; search respects the allowed audiences.
 
 ### M3. Owner and audience
 
