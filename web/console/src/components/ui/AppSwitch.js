@@ -1,11 +1,11 @@
 import { computed, ref, watch } from "vue";
 
-// QSwitch: an on/off switch bound with v-model. A checkbox inside a label, so the label (and its
+// AppSwitch: an on/off switch bound with v-model. A checkbox inside a label, so the label (and its
 // aria-label) is the control's name; it emits update:modelValue and change with the new value.
 //
 // Derived from quail-ui 0.9.10 (Apache License 2.0).
-const QSwitch = {
-  name: "QSwitch",
+const AppSwitch = {
+  name: "AppSwitch",
   props: {
     modelValue: { type: Boolean, required: true },
     disabled: { type: Boolean, default: false },
@@ -35,4 +35,4 @@ const QSwitch = {
   `,
 };
 
-export default QSwitch;
+export default AppSwitch;

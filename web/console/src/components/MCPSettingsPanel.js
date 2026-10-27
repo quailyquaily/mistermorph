@@ -230,7 +230,7 @@ const MCPSettingsPanel = {
     <div class="mcp-settings-panel">
       <AppSection variant="boxed" class="is-list" :title="t('settings_mcp_title')" :meta="t('settings_section_mcp_meta')">
         <template #actions>
-          <QButton
+          <AppButton
             class="plain xs icon"
             :title="t('settings_mcp_add_server')"
             :aria-label="t('settings_mcp_add_server')"
@@ -238,7 +238,7 @@ const MCPSettingsPanel = {
             @click="openAdd"
           >
             <PhPlus class="icon" />
-          </QButton>
+          </AppButton>
         </template>
         <p v-if="readOnly" class="mcp-settings-message is-warning">{{ readOnlyMessage }}</p>
         <p v-else-if="validationError" class="mcp-settings-message is-error">{{ validationError }}</p>
@@ -273,7 +273,7 @@ const MCPSettingsPanel = {
                 <span v-if="server.on_demand" class="settings-toggle-note">{{ t("settings_mcp_on_demand_hint", { name: server.name }) }}</span>
               </button>
               <div class="settings-toggle-actions">
-                <QSwitch
+                <AppSwitch
                   :modelValue="server.enable !== false"
                   :disabled="busy"
                   :aria-label="server.name"
@@ -289,9 +289,9 @@ const MCPSettingsPanel = {
         <AppSidePane class="mcp-editor-pane" :open="paneOpen" :sheet="mobile" :paneKey="paneKey" :label="paneTitle" @close="closePane">
           <AppSection class="is-literal" :title="paneTitle" :meta="editor.type === 'http' ? t('settings_mcp_http') : t('settings_mcp_stdio')">
             <template #actions>
-              <QButton class="plain xs icon" :title="t('settings_channel_close')" :aria-label="t('settings_channel_close')" @click="closePane">
+              <AppButton class="plain xs icon" :title="t('settings_channel_close')" :aria-label="t('settings_channel_close')" @click="closePane">
                 <PhX class="icon" />
-              </QButton>
+              </AppButton>
             </template>
             <div class="settings-panel-body mcp-editor-body">
               <AppTabs
@@ -305,7 +305,7 @@ const MCPSettingsPanel = {
 
               <label class="settings-field is-wide">
                 <span class="settings-field-label">{{ t("settings_mcp_name") }}</span>
-                <QInput :modelValue="editor.name" :placeholder="t('settings_mcp_name_placeholder')" :disabled="busy" @update:modelValue="updateEditor('name', $event)" />
+                <AppInput :modelValue="editor.name" :placeholder="t('settings_mcp_name_placeholder')" :disabled="busy" @update:modelValue="updateEditor('name', $event)" />
               </label>
 
               <div class="settings-toggle-row mcp-on-demand-row">
@@ -313,29 +313,29 @@ const MCPSettingsPanel = {
                   <strong class="settings-toggle-title">{{ t("settings_mcp_on_demand") }}</strong>
                   <span class="settings-toggle-note">{{ t("settings_mcp_on_demand_note", { name: editor.name.trim() || "<name>" }) }}</span>
                 </div>
-                <QSwitch :modelValue="editor.on_demand" :disabled="busy" :aria-label="t('settings_mcp_on_demand')" @update:modelValue="updateOnDemand" />
+                <AppSwitch :modelValue="editor.on_demand" :disabled="busy" :aria-label="t('settings_mcp_on_demand')" @update:modelValue="updateOnDemand" />
               </div>
 
               <label class="settings-field is-wide">
                 <span class="settings-field-label">{{ t("settings_mcp_description") }}</span>
-                <QInput :modelValue="editor.description" :placeholder="t('settings_mcp_description_placeholder')" :disabled="busy" @update:modelValue="updateEditor('description', $event)" />
+                <AppInput :modelValue="editor.description" :placeholder="t('settings_mcp_description_placeholder')" :disabled="busy" @update:modelValue="updateEditor('description', $event)" />
                 <span class="settings-panel-meta">{{ t("settings_mcp_description_note") }}</span>
               </label>
 
               <template v-if="editor.type === 'http'">
                 <label class="settings-field is-wide">
                   <span class="settings-field-label">{{ t("settings_mcp_url") }}</span>
-                  <QInput :modelValue="editor.url" placeholder="https://mcp.example.com/mcp" :disabled="busy" @update:modelValue="updateEditor('url', $event)" />
+                  <AppInput :modelValue="editor.url" placeholder="https://mcp.example.com/mcp" :disabled="busy" @update:modelValue="updateEditor('url', $event)" />
                 </label>
                 <div class="settings-field is-wide mcp-pairs-field">
                   <div class="mcp-field-head">
                     <span class="settings-field-label">{{ t("settings_mcp_headers") }}</span>
-                    <QButton class="plain sm" :disabled="busy" @click="addPair('header_rows')"><PhPlus class="icon" />{{ t("settings_mcp_add_header") }}</QButton>
+                    <AppButton class="plain sm" :disabled="busy" @click="addPair('header_rows')"><PhPlus class="icon" />{{ t("settings_mcp_add_header") }}</AppButton>
                   </div>
                   <div v-for="(row, index) in editor.header_rows" :key="row._key" class="mcp-pair-row">
-                    <QInput :modelValue="row.key" :placeholder="t('settings_mcp_header_name')" :disabled="busy" @update:modelValue="updatePair('header_rows', index, 'key', $event)" />
-                    <QInput :modelValue="row.value" :placeholder="t('settings_mcp_header_value')" :disabled="busy" @update:modelValue="updatePair('header_rows', index, 'value', $event)" />
-                    <QButton class="plain sm icon" :title="t('action_delete')" :aria-label="t('action_delete')" :disabled="busy" @click="removePair('header_rows', index)"><PhTrash class="icon" /></QButton>
+                    <AppInput :modelValue="row.key" :placeholder="t('settings_mcp_header_name')" :disabled="busy" @update:modelValue="updatePair('header_rows', index, 'key', $event)" />
+                    <AppInput :modelValue="row.value" :placeholder="t('settings_mcp_header_value')" :disabled="busy" @update:modelValue="updatePair('header_rows', index, 'value', $event)" />
+                    <AppButton class="plain sm icon" :title="t('action_delete')" :aria-label="t('action_delete')" :disabled="busy" @click="removePair('header_rows', index)"><PhTrash class="icon" /></AppButton>
                   </div>
                 </div>
               </template>
@@ -343,37 +343,37 @@ const MCPSettingsPanel = {
               <template v-else>
                 <label class="settings-field is-wide">
                   <span class="settings-field-label">{{ t("settings_mcp_command") }}</span>
-                  <QInput :modelValue="editor.command" placeholder="node" :disabled="busy" @update:modelValue="updateEditor('command', $event)" />
+                  <AppInput :modelValue="editor.command" placeholder="node" :disabled="busy" @update:modelValue="updateEditor('command', $event)" />
                 </label>
                 <label class="settings-field is-wide">
                   <span class="settings-field-label">{{ t("settings_mcp_arguments") }}</span>
-                  <QTextarea :modelValue="editor.args_text" :rows="3" :placeholder="t('settings_mcp_arguments_placeholder')" :disabled="busy" @update:modelValue="updateEditor('args_text', $event)" />
+                  <AppTextarea :modelValue="editor.args_text" :rows="3" :placeholder="t('settings_mcp_arguments_placeholder')" :disabled="busy" @update:modelValue="updateEditor('args_text', $event)" />
                   <span class="settings-panel-meta">{{ t("settings_mcp_arguments_note") }}</span>
                 </label>
                 <div class="settings-field is-wide mcp-pairs-field">
                   <div class="mcp-field-head">
                     <span class="settings-field-label">{{ t("settings_mcp_environment") }}</span>
-                    <QButton class="plain sm" :disabled="busy" @click="addPair('env_rows')"><PhPlus class="icon" />{{ t("settings_mcp_add_variable") }}</QButton>
+                    <AppButton class="plain sm" :disabled="busy" @click="addPair('env_rows')"><PhPlus class="icon" />{{ t("settings_mcp_add_variable") }}</AppButton>
                   </div>
                   <div v-for="(row, index) in editor.env_rows" :key="row._key" class="mcp-pair-row">
-                    <QInput :modelValue="row.key" :placeholder="t('settings_mcp_variable_name')" :disabled="busy" @update:modelValue="updatePair('env_rows', index, 'key', $event)" />
-                    <QInput :modelValue="row.value" :placeholder="t('settings_mcp_variable_value')" :disabled="busy" @update:modelValue="updatePair('env_rows', index, 'value', $event)" />
-                    <QButton class="plain sm icon" :title="t('action_delete')" :aria-label="t('action_delete')" :disabled="busy" @click="removePair('env_rows', index)"><PhTrash class="icon" /></QButton>
+                    <AppInput :modelValue="row.key" :placeholder="t('settings_mcp_variable_name')" :disabled="busy" @update:modelValue="updatePair('env_rows', index, 'key', $event)" />
+                    <AppInput :modelValue="row.value" :placeholder="t('settings_mcp_variable_value')" :disabled="busy" @update:modelValue="updatePair('env_rows', index, 'value', $event)" />
+                    <AppButton class="plain sm icon" :title="t('action_delete')" :aria-label="t('action_delete')" :disabled="busy" @click="removePair('env_rows', index)"><PhTrash class="icon" /></AppButton>
                   </div>
                 </div>
               </template>
 
               <label class="settings-field is-wide">
                 <span class="settings-field-label">{{ t("settings_mcp_allowed_tools") }}</span>
-                <QTextarea :modelValue="editor.allowed_tools_text" :rows="3" :placeholder="t('settings_mcp_allowed_tools_placeholder')" :disabled="busy" @update:modelValue="updateEditor('allowed_tools_text', $event)" />
+                <AppTextarea :modelValue="editor.allowed_tools_text" :rows="3" :placeholder="t('settings_mcp_allowed_tools_placeholder')" :disabled="busy" @update:modelValue="updateEditor('allowed_tools_text', $event)" />
                 <span class="settings-panel-meta">{{ t("settings_mcp_allowed_tools_note") }}</span>
               </label>
 
               <div v-if="editingIndex >= 0" class="mcp-editor-actions">
-                <QButton class="outlined danger" :disabled="busy" @click="deleteEditor">
+                <AppButton class="outlined danger" :disabled="busy" @click="deleteEditor">
                   <PhTrash class="icon" />
                   {{ t("settings_mcp_delete_server") }}
-                </QButton>
+                </AppButton>
               </div>
             </div>
           </AppSection>
@@ -381,9 +381,9 @@ const MCPSettingsPanel = {
             <p class="app-side-pane-foot-text" :class="{ 'is-error': dialogError }" role="status">
               {{ dialogError || (dirty ? t("settings_channel_unsaved_note") : "") }}
             </p>
-            <QButton class="primary" :loading="saving" :disabled="busy || (!dirty && editingIndex >= 0)" @click="saveEditor">
+            <AppButton class="primary" :loading="saving" :disabled="busy || (!dirty && editingIndex >= 0)" @click="saveEditor">
               {{ t("action_save") }}
-            </QButton>
+            </AppButton>
           </template>
         </AppSidePane>
       </Teleport>

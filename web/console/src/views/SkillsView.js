@@ -583,9 +583,9 @@ const SkillsView = {
     <AppPage :title="t('skills_title')" class="skills-page" :hideDesktopBar="true" :hideMobileBar="showIndex" :overlayBar="true">
       <template #leading>
         <div class="skills-page-bar">
-          <QButton class="plain xs icon skills-page-bar-back" :title="t('action_back')" :aria-label="t('action_back')" @click="closeSkill">
+          <AppButton class="plain xs icon skills-page-bar-back" :title="t('action_back')" :aria-label="t('action_back')" @click="closeSkill">
             <PhArrowLeft class="icon" />
-          </QButton>
+          </AppButton>
           <h2 class="page-title page-bar-title workspace-section-title">{{ t('skills_title') }}</h2>
         </div>
       </template>
@@ -595,7 +595,7 @@ const SkillsView = {
           <header class="skills-index-head workspace-sidebar-head">
             <h3 class="workspace-section-title">{{ t('skills_title') }}</h3>
             <div class="skills-index-actions">
-              <QButton
+              <AppButton
                 class="plain sm icon skills-index-button"
                 :title="t('skills_store_browse')"
                 :aria-label="t('skills_store_browse')"
@@ -603,8 +603,8 @@ const SkillsView = {
                 @click="openStore"
               >
                 <PhStorefront class="icon" />
-              </QButton>
-              <QButton
+              </AppButton>
+              <AppButton
                 v-if="!isMobile"
                 class="plain sm icon skills-index-button"
                 :title="t('skills_add')"
@@ -613,9 +613,9 @@ const SkillsView = {
                 @click="openAdd"
               >
                 <PhPlus class="icon" />
-              </QButton>
+              </AppButton>
               <div ref="menuRoot" class="skills-menu">
-                <QButton
+                <AppButton
                   class="plain sm icon skills-index-button"
                   :title="t('skills_more')"
                   :aria-label="t('skills_more')"
@@ -624,7 +624,7 @@ const SkillsView = {
                   @click="menuOpen = !menuOpen"
                 >
                   <PhDotsThree class="icon" />
-                </QButton>
+                </AppButton>
                 <div v-if="menuOpen" class="q-menu skills-menu-popup" role="menu">
                   <label class="q-menu-item" role="menuitemcheckbox" :aria-checked="catalog.enabled ? 'true' : 'false'">
                     <div class="q-menu-item-inner skills-menu-item">
@@ -632,7 +632,7 @@ const SkillsView = {
                         <span class="q-menu-title">{{ t('skills_enabled') }}</span>
                         <span class="skills-menu-note">{{ t('skills_enabled_note') }}</span>
                       </span>
-                      <QSwitch :modelValue="catalog.enabled" :disabled="locked || unsupported" :aria-label="t('skills_enabled')" @update:modelValue="setEnabled" />
+                      <AppSwitch :modelValue="catalog.enabled" :disabled="locked || unsupported" :aria-label="t('skills_enabled')" @update:modelValue="setEnabled" />
                     </div>
                   </label>
                 </div>
@@ -668,7 +668,7 @@ const SkillsView = {
                 </span>
                 <span v-if="updateFor(skill)" class="skills-update-mark">{{ t('skills_update_available') }}</span>
                 <span class="workspace-sidebar-item-marker" :title="isOn(skill) ? t('skills_on') : t('skills_off')">
-                  <QBadge dot :type="isOn(skill) ? 'success' : 'default'" size="sm" />
+                  <AppBadge dot :type="isOn(skill) ? 'success' : 'default'" size="sm" />
                 </span>
               </button>
             </div>
@@ -678,7 +678,7 @@ const SkillsView = {
         <div v-if="showDetail || !isMobile" ref="detailPane" class="skills-detail-pane">
           <AppSection v-if="showDetail" variant="boxed" class="skills-detail-card is-literal" :title="selected.name">
             <template #actions>
-              <QDropdownMenu
+              <AppDropdownMenu
                 class="skills-actions-menu"
                 variant="plain"
                 :items="skillActionMenuItems"
@@ -688,7 +688,7 @@ const SkillsView = {
               >
                 <PhDotsThree class="skills-actions-menu-icon" />
                 <span class="skills-actions-menu-accessible">{{ t('skills_more') }}</span>
-              </QDropdownMenu>
+              </AppDropdownMenu>
             </template>
             <div class="skills-detail">
               <p v-if="selected.description" class="skills-detail-meta">{{ selected.description }}</p>
@@ -697,9 +697,9 @@ const SkillsView = {
               <AppNotice v-if="err" type="error" :text="err" />
               <div v-if="selectedUpdate" class="skills-update">
                 <span>{{ t('skills_update_note', { version: selectedUpdate.version }) }}</span>
-                <QButton class="outlined xs" :loading="installBusy" :disabled="locked" @click="updateFromStore(selectedUpdate)">
+                <AppButton class="outlined xs" :loading="installBusy" :disabled="locked" @click="updateFromStore(selectedUpdate)">
                   {{ t('skills_update_to', { version: selectedUpdate.version }) }}
-                </QButton>
+                </AppButton>
               </div>
               <p v-if="selected.modified.length" class="skills-detail-warning">
                 <PhWarning class="icon" aria-hidden="true" />
@@ -710,7 +710,7 @@ const SkillsView = {
                 <div class="ui-property-row skills-property-enabled">
                   <dt class="ui-property-label">{{ t('skills_field_enabled') }}</dt>
                   <dd class="ui-property-value skills-enabled-value">
-                    <QSwitch
+                    <AppSwitch
                       :modelValue="isOn(selected)"
                       :disabled="locked"
                       :aria-label="t('skills_load_toggle', { name: selected.name })"
@@ -766,10 +766,10 @@ const SkillsView = {
                   <span v-if="documentSize" class="skills-doc-size">{{ documentSize }}</span>
                   <div class="skills-doc-actions">
                     <template v-if="editing">
-                      <QButton class="plain xs" :disabled="editSaving" @click="cancelEdit">{{ t('action_cancel') }}</QButton>
-                      <QButton class="primary xs" :loading="editSaving" :disabled="!draftChanged" @click="saveEdit">{{ t('action_save') }}</QButton>
+                      <AppButton class="plain xs" :disabled="editSaving" @click="cancelEdit">{{ t('action_cancel') }}</AppButton>
+                      <AppButton class="primary xs" :loading="editSaving" :disabled="!draftChanged" @click="saveEdit">{{ t('action_save') }}</AppButton>
                     </template>
-                    <QButton
+                    <AppButton
                       v-else-if="detail"
                       class="plain xs"
                       :disabled="!canEdit"
@@ -778,7 +778,7 @@ const SkillsView = {
                     >
                       <PhPencilSimple class="icon" />
                       <span>{{ t('action_edit') }}</span>
-                    </QButton>
+                    </AppButton>
                   </div>
                 </header>
                 <AppNotice v-if="detail && detail.truncated" type="warning" :text="t('skills_content_truncated')" />
@@ -802,7 +802,7 @@ const SkillsView = {
           <div v-else-if="!isMobile && !loading" class="skills-detail-empty">
             <AppNotice v-if="err" type="error" :text="err" />
             <div class="skills-detail-empty-body">
-              <QButton
+              <AppButton
                 class="outlined icon skills-empty-add"
                 :title="t('skills_add')"
                 :aria-label="t('skills_add')"
@@ -810,12 +810,12 @@ const SkillsView = {
                 @click="openAdd"
               >
                 <PhPlus class="icon" />
-              </QButton>
+              </AppButton>
               <p v-if="!skills.length" class="skills-index-note">{{ t('skills_empty_title') }}</p>
-              <QButton v-if="!skills.length" class="plain sm" :disabled="unsupported" @click="openStore">
+              <AppButton v-if="!skills.length" class="plain sm" :disabled="unsupported" @click="openStore">
                 <PhStorefront class="icon" />
                 <span>{{ t('skills_store_browse') }}</span>
-              </QButton>
+              </AppButton>
             </div>
           </div>
         </div>
@@ -825,7 +825,7 @@ const SkillsView = {
 
       <Teleport to="body">
         <div class="ui-dialog-host">
-          <QMessageDialog
+          <AppMessageDialog
             v-model="removeDialogOpen"
             icon="PhTrash"
             iconColor="red"
@@ -842,12 +842,12 @@ const SkillsView = {
             @close="addOpen = false"
           >
             <form class="skills-add-form" @submit.prevent="submitAdd">
-              <QInput v-model="addLink" :placeholder="t('skills_install_link_placeholder')" :aria-label="t('skills_add_title')" :disabled="addBusy" />
+              <AppInput v-model="addLink" :placeholder="t('skills_install_link_placeholder')" :aria-label="t('skills_add_title')" :disabled="addBusy" />
               <p class="skills-index-note">{{ t('skills_add_note') }}</p>
               <AppNotice v-if="addErr" type="error" :text="addErr" />
               <div class="skills-add-actions">
-                <QButton type="button" class="outlined" :disabled="addBusy" @click="addOpen = false">{{ t('action_cancel') }}</QButton>
-                <QButton type="submit" class="primary" :loading="addBusy" :disabled="!addLinkValid">{{ t('skills_add_start') }}</QButton>
+                <AppButton type="button" class="outlined" :disabled="addBusy" @click="addOpen = false">{{ t('action_cancel') }}</AppButton>
+                <AppButton type="submit" class="primary" :loading="addBusy" :disabled="!addLinkValid">{{ t('skills_add_start') }}</AppButton>
               </div>
             </form>
           </AppDialogShell>

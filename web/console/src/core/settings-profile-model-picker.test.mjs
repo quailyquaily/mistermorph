@@ -73,7 +73,7 @@ test("single LLM controls avoid the settings field control wrapper", async () =>
   assert.match(formSource, /<div v-if="providerHasAuthAction" class="settings-field-control">[\s\S]*?<EnvManagedField v-if="providerManagedField"/);
   assert.match(formSource, /<InferenceProviderPicker\s+v-else/);
   assert.match(formSource, /<div v-else-if="endpointHasPickerAction" class="settings-field-control">/);
-  assert.match(formSource, /<QInput\s+v-else\s+:modelValue="config\.endpoint"/);
+  assert.match(formSource, /<AppInput\s+v-else\s+:modelValue="config\.endpoint"/);
 });
 
 test("environment-managed fields match the 44px input height", async () => {

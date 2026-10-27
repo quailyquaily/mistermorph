@@ -130,20 +130,20 @@ const ChatComposerDialogMenu = {
   },
   template: `
     <Teleport to="body">
-      <QDialog
+      <AppDialog
         :modelValue="modelValue"
         no-frame
         @update:modelValue="$emit('update:modelValue', $event)"
       >
         <div class="q-menu-popup-body chat-composer-dialog-menu" @keydown="handleKeydown">
           <div v-if="useFilter" class="filter-area">
-            <QInput v-model="filterText" class="filter-input" placeholder="Filter" />
+            <AppInput v-model="filterText" class="filter-input" placeholder="Filter" />
           </div>
           <div
             class="scroll-area"
             :style="{ height: scrollHeight, maxHeight: scrollHeight }"
           >
-            <QMenu
+            <AppMenu
               v-if="filteredItems.length > 0"
               :items="filteredItems"
               :focused-index="focusedIndex"
@@ -155,7 +155,7 @@ const ChatComposerDialogMenu = {
             <div v-else class="empty-hint flow place-center">No item</div>
           </div>
         </div>
-      </QDialog>
+      </AppDialog>
     </Teleport>
   `,
 };
@@ -1187,7 +1187,7 @@ export default {
         </div>
         <div class="chat-composer-grid">
           <div v-if="showAddActions" class="chat-composer-toolbar-start">
-            <QDropdownMenu
+            <AppDropdownMenu
               v-if="!addUsesDialog"
               :class="addMenuClass"
               :items="addActionItems"
@@ -1203,7 +1203,7 @@ export default {
             >
               <PhPlus class="chat-composer-add-icon" />
               <span class="chat-composer-add-label">{{ addLabel }}</span>
-            </QDropdownMenu>
+            </AppDropdownMenu>
             <div v-else :class="['q-dropdown-menu', addMenuClass]">
               <div class="q-dropdown-menu-inner">
                 <button
@@ -1250,7 +1250,7 @@ export default {
           </div>
           <div class="chat-composer-actions">
             <template v-if="llmProfileItems.length > 1">
-              <QDropdownMenu
+              <AppDropdownMenu
                 v-if="!llmProfileUsesDialog"
                 :key="'llm-profile-' + llmProfileValue + '-' + llmProfileItems.length"
                 class="chat-composer-profile llm-profile-dropdown"
@@ -1291,7 +1291,7 @@ export default {
                 </div>
               </div>
             </template>
-            <QButton
+            <AppButton
               v-if="voiceAvailable"
               :class="['plain sm icon chat-composer-voice', { 'is-recording': voiceState === 'recording' }]"
               :loading="voiceState === 'transcribing'"
@@ -1303,8 +1303,8 @@ export default {
             >
               <PhStop v-if="voiceState === 'recording'" class="icon" />
               <PhMicrophone v-else class="icon" />
-            </QButton>
-            <QButton
+            </AppButton>
+            <AppButton
               :class="['primary sm icon chat-composer-send', { 'is-empty': sendDisabled && !stopMode && !sending, 'is-stop': stopMode }]"
               :loading="sending"
               :disabled="sendDisabled"
@@ -1316,7 +1316,7 @@ export default {
                 <PhPaperPlaneTilt class="icon chat-composer-send-icon" />
                 <PhStop class="icon chat-composer-stop-icon" />
               </span>
-            </QButton>
+            </AppButton>
           </div>
         </div>
       </div>

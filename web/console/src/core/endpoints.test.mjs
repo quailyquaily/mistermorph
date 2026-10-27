@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { connectionInsecure, endpointURLInsecure, isEndpointSelectable, rootEntryEndpoint } from "./endpoints.js";
+import { endpointURLInsecure, insecureHops, isEndpointSelectable, rootEntryEndpoint } from "./endpoints.js";
 
 test("connected and health-pending endpoints are selectable", () => {
   assert.equal(isEndpointSelectable({ endpoint_ref: "ep_connected", connected: true }), true);
@@ -62,16 +62,17 @@ test("endpointURLInsecure flags plain HTTP to another machine only", () => {
   }
 });
 
-test("connectionInsecure checks the page and the Console's hop to the endpoint", () => {
-  for (const [name, input, insecure] of [
-    ["HTTPS page, local runtime", { secureContext: true, endpointURLs: ["in-process://console-local"] }, false],
-    ["plain HTTP page", { secureContext: false }, true],
-    ["plain HTTP page in the desktop app", { desktop: true, secureContext: false }, false],
-    ["HTTPS page, runtime over plain HTTP", { secureContext: true, endpointURLs: ["in-process://console-local", "http://10.0.0.5:8787"] }, true],
-    ["desktop app, runtime over plain HTTP", { desktop: true, endpointURLs: ["http://10.0.0.5:8787"] }, true],
-    ["HTTPS page, runtime over HTTPS", { secureContext: true, endpointURLs: ["https://runtime.example.com", undefined] }, false],
-    ["nothing known", undefined, false],
+test("insecureHops tells the page apart from the Console's hop to the endpoint", () => {
+  for (const [name, input, page, endpoint] of [
+    ["HTTPS page, local runtime", { secureContext: true, endpointURLs: ["in-process://console-local"] }, false, ""],
+    ["plain HTTP page", { secureContext: false }, true, ""],
+    ["plain HTTP page in the desktop app", { desktop: true, secureContext: false }, false, ""],
+    ["HTTPS page, runtime over plain HTTP", { secureContext: true, endpointURLs: ["in-process://console-local", "http://10.0.0.5:8787"] }, false, "10.0.0.5:8787"],
+    ["desktop app, runtime over plain HTTP", { desktop: true, endpointURLs: ["http://10.0.0.5:8787"] }, false, "10.0.0.5:8787"],
+    ["both hops", { secureContext: false, endpointURLs: [" http://box.lan/runtime "] }, true, "box.lan"],
+    ["HTTPS page, runtime over HTTPS", { secureContext: true, endpointURLs: ["https://runtime.example.com", undefined] }, false, ""],
+    ["nothing known", undefined, false, ""],
   ]) {
-    assert.equal(connectionInsecure(input), insecure, name);
+    assert.deepEqual(insecureHops(input), { page, endpoint }, name);
   }
 });

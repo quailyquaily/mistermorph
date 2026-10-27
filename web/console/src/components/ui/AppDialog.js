@@ -2,7 +2,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 
 import { onPopupClose, opensKeyboard } from "./popup";
 
-// QDialog: a modal dialog bound with v-model. It renders where it is used: a wrapper holding the
+// AppDialog: a modal dialog bound with v-model. It renders where it is used: a wrapper holding the
 // trigger slot, then the mask with the dialog over the page. Clicking the mask or pressing Escape
 // closes it, unless it is persistent, when the dialog shakes instead. While open it locks the
 // page's scroll, keeps Tab inside, focuses its first control and gives focus back on close.
@@ -18,8 +18,8 @@ const FOCUSABLE = `${FIELDS}, [tabindex]:not([tabindex="-1"])`;
 const FIRST_FOCUS = `${FIELDS}, a[href], [tabindex]:not([tabindex="-1"])`;
 let dialogSeq = 0;
 
-const QDialog = {
-  name: "QDialog",
+const AppDialog = {
+  name: "AppDialog",
   props: {
     modelValue: Boolean,
     desktopMode: { type: String, default: "dialog" },
@@ -239,4 +239,4 @@ const QDialog = {
   `,
 };
 
-export default QDialog;
+export default AppDialog;

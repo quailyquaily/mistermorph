@@ -322,7 +322,7 @@ const RepairView = {
 		  <p class="repair-copy">{{ t("repair_intro") }}</p>
         </header>
 
-        <QProgress v-if="loading" :infinite="true" />
+        <AppProgress v-if="loading" :infinite="true" />
         <AppNotice v-if="err" class="repair-error" type="error" :text="err" />
 
         <section v-if="!loading && items.length > 0" class="repair-list">
@@ -334,19 +334,19 @@ const RepairView = {
             <code class="repair-item-path" :title="item.path">{{ item.path }}</code>
             <p class="repair-item-problem">{{ item.error }}</p>
             <div class="repair-item-actions">
-              <QButton v-if="canRetry(item)" class="outlined sm" @click="load">{{ t("repair_action_retry") }}</QButton>
-              <QButton
+              <AppButton v-if="canRetry(item)" class="outlined sm" @click="load">{{ t("repair_action_retry") }}</AppButton>
+              <AppButton
                 v-if="hasRepairableSecretRef(item)"
                 class="primary sm"
                 @click="openReplaceDialog(item)"
               >
                 {{ t("repair_action_replace_secret") }}
-              </QButton>
-              <QButton v-if="hasRepairableSecretRef(item)" class="danger sm" @click="openRemoveDialog(item)">
+              </AppButton>
+              <AppButton v-if="hasRepairableSecretRef(item)" class="danger sm" @click="openRemoveDialog(item)">
                 {{ t("repair_action_remove_reference") }}
-              </QButton>
-              <QButton v-if="canEditSource(item)" class="outlined sm" @click="openEditor(item)">{{ t("repair_action_edit_source") }}</QButton>
-              <QButton v-if="canUseSetup(item)" class="primary sm" @click="goToSetup(item)">{{ t("repair_action_use_setup") }}</QButton>
+              </AppButton>
+              <AppButton v-if="canEditSource(item)" class="outlined sm" @click="openEditor(item)">{{ t("repair_action_edit_source") }}</AppButton>
+              <AppButton v-if="canUseSetup(item)" class="primary sm" @click="goToSetup(item)">{{ t("repair_action_use_setup") }}</AppButton>
             </div>
           </AppSection>
         </section>
@@ -378,7 +378,7 @@ const RepairView = {
 			<span class="repair-secret-dialog-label">{{ t("repair_secret_field_label") }}</span>
 			<code>{{ fieldLabel(replaceTarget) }}</code>
 		  </div>
-		  <QInput
+		  <AppInput
 			:modelValue="secretValue"
 			inputType="password"
 			:placeholder="t('repair_secret_placeholder')"
@@ -386,16 +386,16 @@ const RepairView = {
 			@update:modelValue="secretValue = $event"
 		  />
 		  <footer class="repair-secret-dialog-actions">
-			<QButton class="outlined" type="button" :disabled="secretSaving" @click="closeReplaceDialog">
+			<AppButton class="outlined" type="button" :disabled="secretSaving" @click="closeReplaceDialog">
 			  {{ t("action_cancel") }}
-			</QButton>
-			<QButton class="primary" type="submit" :disabled="secretSaving || secretValue === ''">
+			</AppButton>
+			<AppButton class="primary" type="submit" :disabled="secretSaving || secretValue === ''">
 			  {{ t("action_save") }}
-			</QButton>
+			</AppButton>
 		  </footer>
 		</form>
 	  </AppDialogShell>
-	  <QMessageDialog
+	  <AppMessageDialog
 		v-model="removeDialogOpen"
 		icon="PhTrash"
 		iconColor="red"

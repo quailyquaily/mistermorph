@@ -93,7 +93,7 @@ const SettingsCreditsPanel = {
   },
   template: `
     <div class="settings-panel-body settings-panel-body-plain settings-credits-panel">
-      <QProgress v-if="loading" :infinite="true" />
+      <AppProgress v-if="loading" :infinite="true" />
       <AppNotice v-if="error" type="error" :text="error" />
 
       <AppSection variant="boxed" :title="t('settings_credits_contributors_title')" :meta="t('settings_credits_contributors_meta')">
@@ -147,7 +147,7 @@ const SettingsCreditsPanel = {
                 </div>
                 <p class="settings-credits-project-summary">{{ item.summary }}</p>
               </div>
-              <QButton
+              <AppButton
                 v-if="item.link"
                 class="plain xs icon settings-credits-project-link"
                 :title="t('settings_credits_open_link')"
@@ -155,7 +155,7 @@ const SettingsCreditsPanel = {
                 @click="openExternal(item.link)"
               >
                 <PhArrowSquareOut class="settings-credits-external-icon icon" />
-              </QButton>
+              </AppButton>
             </article>
           </div>
           <p v-else class="settings-credits-empty">{{ t("settings_credits_empty_open_source") }}</p>

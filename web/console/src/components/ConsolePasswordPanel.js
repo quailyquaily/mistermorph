@@ -46,9 +46,9 @@ export default {
         Protects browser access to this Console. It is separate from the incoming Runtime API access token.
       </template>
       <template #actions>
-        <QButton class="plain xs" :disabled="saving" @click="open = true">
+        <AppButton class="plain xs" :disabled="saving" @click="open = true">
           {{ configured ? "Change password" : "Set password" }}
-        </QButton>
+        </AppButton>
       </template>
       <SettingDialog
         v-model="open"
@@ -61,11 +61,11 @@ export default {
           <div v-if="error" class="config-settings-error" role="alert">{{ error }}</div>
           <label class="settings-field">
             <span class="settings-field-label">New password</span>
-            <QInput v-model="password" inputType="password" :disabled="saving" />
+            <AppInput v-model="password" inputType="password" :disabled="saving" />
           </label>
           <label class="settings-field">
             <span class="settings-field-label">Confirm password</span>
-            <QInput v-model="confirmation" inputType="password" :disabled="saving" @keyup.enter="submit" />
+            <AppInput v-model="confirmation" inputType="password" :disabled="saving" @keyup.enter="submit" />
           </label>
         </div>
       </SettingDialog>

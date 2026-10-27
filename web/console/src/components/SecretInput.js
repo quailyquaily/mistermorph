@@ -154,7 +154,7 @@ const SecretInput = {
       }
     );
 
-    // Enter can come before the last key's keyup, which is when QInput updates its model; read the
+    // Enter can come before the last key's keyup, which is when AppInput updates its model; read the
     // field itself then.
     async function doReveal(event) {
       if (typeof event?.target?.value === "string") {
@@ -230,7 +230,7 @@ const SecretInput = {
   template: `
     <div ref="root" class="secret-input">
       <EnvManagedField v-if="showPicked && pickedEnvName" :name="pickedEnvName" :title="pickedTitle">
-        <QButton
+        <AppButton
           class="plain sm icon secret-input-action"
           :title="t('secret_picker_undo')"
           :aria-label="t('secret_picker_undo')"
@@ -238,7 +238,7 @@ const SecretInput = {
           @click="keepCurrent"
         >
           <PhArrowCounterClockwise class="icon" />
-        </QButton>
+        </AppButton>
       </EnvManagedField>
       <div v-else-if="showPicked" :class="['secret-input-stored', 'is-picked', 'is-' + picked.kind]" :title="pickedTitle">
         <span v-if="picked.kind === 'file'" class="secret-input-hint">{{ picked.hint || "…" }}</span>
@@ -248,7 +248,7 @@ const SecretInput = {
           <component v-else :is="KIND_ICONS[picked.kind] || KIND_ICONS.stored" class="secret-input-icon" aria-hidden="true" />
           <span>{{ picked.kind === "file" ? pickedTitle : kindTag(picked.kind) }}</span>
         </span>
-        <QButton
+        <AppButton
           class="plain sm icon secret-input-action"
           :title="t('secret_picker_undo')"
           :aria-label="t('secret_picker_undo')"
@@ -256,10 +256,10 @@ const SecretInput = {
           @click="keepCurrent"
         >
           <PhArrowCounterClockwise class="icon" />
-        </QButton>
+        </AppButton>
       </div>
       <EnvManagedField v-else-if="showEnvLocked" :name="envName">
-        <QButton
+        <AppButton
           v-if="canPickStored"
           class="plain sm icon secret-input-action"
           :title="t('secret_picker_open')"
@@ -267,10 +267,10 @@ const SecretInput = {
           @click="openPicker"
         >
           <PhKey class="icon" />
-        </QButton>
+        </AppButton>
       </EnvManagedField>
       <div v-else-if="showStored && asking" class="secret-input-ask">
-        <QInput
+        <AppInput
           v-model="password"
           inputType="password"
           :placeholder="t('secret_reveal_password')"
@@ -278,8 +278,8 @@ const SecretInput = {
           @keydown.enter.prevent="doReveal($event)"
           @keydown.esc.prevent="cancelAsk"
         />
-        <QButton class="outlined sm" :loading="revealing" @click="doReveal()">{{ t("secret_reveal") }}</QButton>
-        <QButton class="plain sm" :disabled="revealing" @click="cancelAsk">{{ t("secret_reveal_cancel") }}</QButton>
+        <AppButton class="outlined sm" :loading="revealing" @click="doReveal()">{{ t("secret_reveal") }}</AppButton>
+        <AppButton class="plain sm" :disabled="revealing" @click="cancelAsk">{{ t("secret_reveal_cancel") }}</AppButton>
       </div>
       <div v-else-if="showStored" :class="['secret-input-stored', 'is-' + kind]" :title="tooltip">
         <span v-if="revealed !== null" class="secret-input-value">{{ revealed }}</span>
@@ -289,7 +289,7 @@ const SecretInput = {
           <span>{{ tagLabel }}</span>
         </span>
         <span class="secret-input-sr">{{ t("secret_stored_" + kind) }}</span>
-        <QButton
+        <AppButton
           v-if="canReveal"
           class="plain sm icon secret-input-action"
           :title="revealed !== null ? t('secret_hide') : t('secret_reveal')"
@@ -300,8 +300,8 @@ const SecretInput = {
         >
           <PhEyeSlash v-if="revealed !== null" class="icon" />
           <PhEye v-else class="icon" />
-        </QButton>
-        <QButton
+        </AppButton>
+        <AppButton
           v-if="canPickStored"
           class="plain sm icon secret-input-action"
           :title="t('secret_picker_open')"
@@ -309,8 +309,8 @@ const SecretInput = {
           @click="openPicker"
         >
           <PhKey class="icon" />
-        </QButton>
-        <QButton
+        </AppButton>
+        <AppButton
           v-if="replaceable"
           class="plain sm icon secret-input-action"
           :title="t('secret_replace')"
@@ -318,10 +318,10 @@ const SecretInput = {
           @click="replace"
         >
           <PhPencilSimple class="icon" />
-        </QButton>
+        </AppButton>
       </div>
       <template v-else>
-        <QInput
+        <AppInput
           :modelValue="modelValue"
           :inputType="typedVisible ? 'text' : 'password'"
           :placeholder="placeholder"
@@ -329,7 +329,7 @@ const SecretInput = {
           @update:modelValue="$emit('update:modelValue', $event)"
         >
           <template #append>
-            <QButton
+            <AppButton
               class="plain sm icon secret-input-action"
               :title="typedVisible ? t('secret_hide') : t('secret_reveal')"
               :aria-label="typedVisible ? t('secret_hide') : t('secret_reveal')"
@@ -339,8 +339,8 @@ const SecretInput = {
             >
               <PhEyeSlash v-if="typedVisible" class="icon" />
               <PhEye v-else class="icon" />
-            </QButton>
-            <QButton
+            </AppButton>
+            <AppButton
               v-if="canPickTyping"
               class="plain sm icon secret-input-action"
               :title="t('secret_picker_open')"
@@ -349,8 +349,8 @@ const SecretInput = {
               @click="openPicker"
             >
               <PhKey class="icon" />
-            </QButton>
-            <QButton
+            </AppButton>
+            <AppButton
               v-if="configured && replacing"
               class="plain sm icon secret-input-action"
               :title="t('secret_keep_current')"
@@ -359,9 +359,9 @@ const SecretInput = {
               @click="keepCurrent"
             >
               <PhArrowCounterClockwise class="icon" />
-            </QButton>
+            </AppButton>
           </template>
-        </QInput>
+        </AppInput>
       </template>
       <p v-if="revealError" class="secret-input-error" role="alert">{{ revealError }}</p>
       <!-- On the body: inside a settings pane, the panes beside it would cover the dialog. -->

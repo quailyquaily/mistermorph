@@ -260,7 +260,7 @@ const OverviewView = {
   template: `
     <AppPage class="overview-view" :hideDesktopBar="true" :hideMobileBar="true" :error="err">
       <h1 class="overview-title">{{ t('nav_overview') }}</h1>
-      <QButton
+      <AppButton
         v-if="endpointRows.length"
         class="plain icon overview-address-toggle"
         :title="t(showAddresses ? 'overview_hide_addresses' : 'overview_show_addresses')"
@@ -271,8 +271,8 @@ const OverviewView = {
       >
         <PhEye v-if="showAddresses" :size="20" aria-hidden="true" />
         <PhEyeSlash v-else :size="20" aria-hidden="true" />
-      </QButton>
-      <QProgress v-if="loading && endpointRows.length === 0" :infinite="true" />
+      </AppButton>
+      <AppProgress v-if="loading && endpointRows.length === 0" :infinite="true" />
 
       <section class="overview-page">
         <div v-if="endpointRows.length" ref="connectionMap" class="overview-connection-map">

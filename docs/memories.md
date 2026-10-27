@@ -40,10 +40,10 @@ A memory one contact told about another keeps who said it (`told_by`), and the a
 
 The Console and the TUI are always the owner. To be recognized as the owner on a chat channel, mark your own contact there:
 
-1. Console > Contacts > select yourself > Edit YAML.
-2. Add `owner: true` and save.
+1. Console > Contacts > select yourself.
+2. Turn on **This is me**. (It writes `owner: true` into the contact's YAML, which you can also edit by hand.)
 
-Only an edit of the contact can set or clear this flag. Nothing a contact sends can, however it describes itself. Mark each channel's contact you use.
+Only the Console can set or clear this flag. Nothing a contact sends can, however it describes itself. Mark each channel's contact you use.
 
 ## Tools
 
@@ -65,7 +65,11 @@ After 8 finished turns without a save in a direct conversation (20 in a group), 
 
 ## Console
 
-Console > Memories lists every memory, grouped by subject, with its visibility, where it was learned and who said it. You can edit, widen or narrow, and delete memories, and search the journal. The page shows everything, including what contacts told the agent in private: it is your agent and your data.
+Console > Memories shows everything, including what contacts told the agent in private: it is your agent and your data. It has two tabs.
+
+- **Memories.** The subjects are listed on the left: you, general, each contact and each group. Each subject's rules (feedback, which changes how the agent behaves) come before its facts. Each memory starts with who may hear it (Private, Conversation or Public), and a contact's word about someone else reads as their claim ("Alice says: …"). Open a memory to change who may hear it, edit it, forget it, or see its sources in the journal. Making a memory Public asks first.
+- **Hear as.** Pick a DM or a group, and the memories it may not hear are dimmed. The runtime decides this with the same rule every run uses, so it is what the agent would be told there.
+- **Journal.** Search what was asked and answered. An event that led to a memory links to it, and an event from a Console chat links to that chat.
 
 A contact's detail shows the memories about them. Deleting a contact deletes the memories about them; what they told the agent about others, and their journal events, stay.
 

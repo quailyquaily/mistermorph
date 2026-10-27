@@ -77,7 +77,7 @@ const SettingsAppPanel = {
               <strong class="settings-app-name">{{ agent.name }}</strong>
               <p class="settings-app-hint">{{ hint }}</p>
             </div>
-            <QButton
+            <AppButton
               v-if="mode === 'prompt' || mode === 'waiting'"
               class="primary xs settings-app-install"
               :loading="installing"
@@ -86,7 +86,7 @@ const SettingsAppPanel = {
             >
               <PhDownloadSimple class="icon" />
               {{ t("settings_app_install") }}
-            </QButton>
+            </AppButton>
           </div>
           <p v-else class="settings-app-hint">{{ t("settings_app_no_agent") }}</p>
         </div>

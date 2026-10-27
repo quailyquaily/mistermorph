@@ -372,7 +372,7 @@ const StatsView = {
   },
   template: `
     <AppPage :title="t('stats_title')" :error="err">
-      <QProgress v-if="loading" :infinite="true" />
+      <AppProgress v-if="loading" :infinite="true" />
 
       <section class="stats-page">
         <AppSection variant="boxed" tag="header" class="stats-hero">

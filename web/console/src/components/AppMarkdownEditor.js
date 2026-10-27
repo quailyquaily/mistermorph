@@ -317,7 +317,7 @@ const AppMarkdownEditor = {
       @update:modelValue="$emit('update:modelValue', $event)"
     >
       <template #toolbar>
-        <QDropdownMenu
+        <AppDropdownMenu
           class="markdown-editor-toolbar-picker markdown-editor-mention-picker"
           :items="mentionItems"
           :placeholder="t('markdown_editor_mention_placeholder')"
@@ -337,8 +337,8 @@ const AppMarkdownEditor = {
           <span class="markdown-editor-toolbar-glyph" aria-hidden="true">
               <PhUserCircle class="markdown-editor-toolbar-icon" />
           </span>
-        </QDropdownMenu>
-        <QDropdownMenu
+        </AppDropdownMenu>
+        <AppDropdownMenu
           class="markdown-editor-toolbar-picker markdown-editor-conversation-picker"
           :items="conversationItems"
           :placeholder="t('markdown_editor_conversation_placeholder')"
@@ -359,7 +359,7 @@ const AppMarkdownEditor = {
           <span class="markdown-editor-toolbar-glyph" aria-hidden="true">
             <PhChat class="markdown-editor-toolbar-icon" />
           </span>
-        </QDropdownMenu>
+        </AppDropdownMenu>
         <slot name="toolbar"></slot>
       </template>
     </MarkdownEditor>

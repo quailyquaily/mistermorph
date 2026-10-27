@@ -229,7 +229,7 @@ const InferenceProviderPicker = {
         @close="closeDialog"
       >
         <section class="inference-provider-dialog">
-          <QInput
+          <AppInput
             class="inference-provider-filter"
             :modelValue="filter"
             :placeholder="t('settings_inference_provider_filter_placeholder')"

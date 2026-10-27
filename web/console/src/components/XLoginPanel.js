@@ -134,8 +134,8 @@ const XLoginPanel = {
       <div v-if="sessionID" class="wechat-login-session">
         <p class="wechat-login-status" role="status">{{ t("settings_x_login_waiting") }}</p>
         <div class="wechat-login-actions">
-          <QButton v-if="authorizeURL" class="plain xs" @click="openLink">{{ t("settings_x_login_open_again") }}</QButton>
-          <QButton class="plain xs" @click="cancel">{{ t("action_cancel") }}</QButton>
+          <AppButton v-if="authorizeURL" class="plain xs" @click="openLink">{{ t("settings_x_login_open_again") }}</AppButton>
+          <AppButton class="plain xs" @click="cancel">{{ t("action_cancel") }}</AppButton>
         </div>
       </div>
 
@@ -145,16 +145,16 @@ const XLoginPanel = {
           <code v-if="username" class="wechat-login-bound-id">@{{ username }}</code>
         </div>
         <div class="wechat-login-actions">
-          <QButton class="plain xs" :loading="busy" :disabled="disabled || busy || !ready" @click="start">{{ t("settings_x_login_again") }}</QButton>
-          <QButton class="danger plain xs" :disabled="disabled || busy" @click="logout">
+          <AppButton class="plain xs" :loading="busy" :disabled="disabled || busy || !ready" @click="start">{{ t("settings_x_login_again") }}</AppButton>
+          <AppButton class="danger plain xs" :disabled="disabled || busy" @click="logout">
             {{ confirmingLogout ? t("settings_x_logout_confirm") : t("settings_x_logout") }}
-          </QButton>
+          </AppButton>
         </div>
       </div>
 
-      <QButton v-else class="primary wechat-login-start" :loading="busy" :disabled="disabled || busy || !ready" @click="start">
+      <AppButton v-else class="primary wechat-login-start" :loading="busy" :disabled="disabled || busy || !ready" @click="start">
         {{ t("settings_x_login") }}
-      </QButton>
+      </AppButton>
 
       <p v-if="!ready && !sessionID" class="wechat-login-status">{{ t("settings_x_login_needs_client_id") }}</p>
       <p v-if="notice" class="wechat-login-notice" role="status">{{ notice }}</p>

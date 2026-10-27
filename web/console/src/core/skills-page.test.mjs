@@ -20,7 +20,7 @@ test("the Skills page switches skills with toggles, not a load-list text box", a
   assert.match(source, /body: \{ config_revision: catalog\.value\.revision, skills: \{ enabled: next\.enabled, load: next\.load \} \}/);
   assert.match(source, /@update:modelValue="setLoaded\(selected, \$event\)"/);
   assert.match(source, /@update:modelValue="setEnabled"/);
-  assert.doesNotMatch(source, /QTextarea/);
+  assert.doesNotMatch(source, /AppTextarea/);
 });
 
 test("Skills sits after TODO in the navigation", async () => {

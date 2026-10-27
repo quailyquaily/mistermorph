@@ -31,6 +31,9 @@ type SearchOptions struct {
 	Since        time.Time
 	Until        time.Time
 	Domain       string
+	// IDs, when set, keeps only those events, with or without text: the events a memory came
+	// from.
+	IDs []string
 	// Limit defaults to 20 and is at most 100. Results are newest first.
 	Limit int
 }
@@ -64,8 +67,16 @@ func (j *Journal) Search(opts SearchOptions) ([]SearchHit, bool, error) {
 		limit = maxSearchLimit
 	}
 
-	where := []string{`e.text != ''`}
+	var where []string
 	var args []any
+	if ids := nonEmpty(opts.IDs); len(ids) > 0 {
+		where = append(where, `e.id IN (`+strings.TrimSuffix(strings.Repeat("?, ", len(ids)), ", ")+`)`)
+		for _, id := range ids {
+			args = append(args, id)
+		}
+	} else {
+		where = append(where, `e.text != ''`)
+	}
 	var matchTerms []string
 	for _, term := range strings.Fields(opts.Query) {
 		if utf8.RuneCountInString(term) >= minTrigramRunes {
@@ -130,6 +141,16 @@ func (j *Journal) Search(opts SearchOptions) ([]SearchHit, bool, error) {
 		hits = hits[:limit]
 	}
 	return hits, more, nil
+}
+
+func nonEmpty(values []string) []string {
+	var out []string
+	for _, value := range values {
+		if value = strings.TrimSpace(value); value != "" {
+			out = append(out, value)
+		}
+	}
+	return out
 }
 
 func escapeLike(s string) string {

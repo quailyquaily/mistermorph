@@ -2,14 +2,15 @@
    square leads the message, not the label, and stays with it when the line wraps. */
 .app-notice.app-insecure-banner {
   flex: 0 0 auto;
-  padding: 6px var(--content-gutter-x, 16px);
+  flex-wrap: nowrap;
+  padding: 6px 4px 6px var(--content-gutter-x, 16px);
   border-width: 0 0 1px;
   border-radius: 0;
   background: color-mix(in srgb, var(--notice-tone) 8%, var(--q-bg-paper));
 }
 
 .app-insecure-banner-value {
-  flex: 1 1 14rem;
+  flex: 1 1 auto;
   display: flex;
   align-items: baseline;
   gap: 8px;
@@ -20,4 +21,30 @@
 .app-insecure-banner-value > .app-notice-mark {
   align-self: auto;
   transform: translateY(-0.1em);
+}
+
+.app-insecure-banner-short {
+  display: none;
+}
+
+/* On a phone: no label, the short message in at most two lines, a smaller type. */
+@media (max-width: 640px) {
+  .app-notice.app-insecure-banner {
+    padding-block: 3px;
+    padding-left: 12px;
+  }
+
+  .app-insecure-banner .app-notice-label,
+  .app-insecure-banner-full {
+    display: none;
+  }
+
+  .app-insecure-banner-short {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+    font-size: var(--font-size-label, 12px);
+    line-height: 1.35;
+  }
 }

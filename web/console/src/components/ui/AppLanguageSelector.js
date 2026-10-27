@@ -1,8 +1,8 @@
 import { computed, onMounted, ref, watch } from "vue";
 
-import QDropdownMenu from "./QDropdownMenu";
+import AppDropdownMenu from "./AppDropdownMenu";
 
-// QLanguageSelector: a dropdown of the interface languages, each with a small emblem. lang sets the
+// AppLanguageSelector: a dropdown of the interface languages, each with a small emblem. lang sets the
 // shown one; presist also remembers a choice in localStorage ("quail-language", kept so existing
 // choices survive) and starts from it. Choosing emits "change" with { title, value }.
 //
@@ -24,9 +24,9 @@ function storedLanguage() {
   }
 }
 
-const QLanguageSelector = {
-  name: "QLanguageSelector",
-  components: { QDropdownMenu },
+const AppLanguageSelector = {
+  name: "AppLanguageSelector",
+  components: { AppDropdownMenu },
   props: {
     lang: { type: String, default: "en" },
     noFlag: { type: Boolean, default: false },
@@ -66,7 +66,7 @@ const QLanguageSelector = {
     });
     return { items, selected };
   },
-  template: `<QDropdownMenu :items="items" :initial-item="selected" />`,
+  template: `<AppDropdownMenu :items="items" :initial-item="selected" />`,
 };
 
-export default QLanguageSelector;
+export default AppLanguageSelector;

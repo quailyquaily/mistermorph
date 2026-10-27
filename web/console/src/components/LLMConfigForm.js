@@ -454,7 +454,7 @@ const LLMConfigForm = {
             :readOnly="readOnly"
             @change="onProviderChange"
           />
-          <QButton
+          <AppButton
             v-if="showCodexAuthAction && showCodexOAuthFields"
             type="button"
             :class="codexAuthActionClass"
@@ -467,8 +467,8 @@ const LLMConfigForm = {
             <PhCheckCircle v-else-if="codexAuthState === 'signed-in'" class="icon" />
             <template v-else-if="codexAuthNeedsLogin">{{ t("settings_codex_auth_login_codex") }}</template>
             <PhXCircle v-else class="icon" />
-          </QButton>
-          <QButton
+          </AppButton>
+          <AppButton
             v-if="showXAIAuthAction && showXAIOAuthFields"
             type="button"
             :class="xaiAuthActionClass"
@@ -482,8 +482,8 @@ const LLMConfigForm = {
             <PhArrowClockwise v-else-if="xaiAuthState === 'refreshable'" class="icon" />
             <template v-else-if="xaiAuthNeedsLogin">{{ t("settings_xai_auth_login") }}</template>
             <PhXCircle v-else class="icon" />
-          </QButton>
-          <QButton
+          </AppButton>
+          <AppButton
             v-if="showProAuthAction && showProOAuthFields"
             type="button"
             :class="proAuthActionClass"
@@ -497,7 +497,7 @@ const LLMConfigForm = {
             <PhArrowClockwise v-else-if="proAuthState === 'refreshable'" class="icon" />
             <template v-else-if="proAuthNeedsLogin">{{ t("settings_pro_auth_login_pro") }}</template>
             <PhXCircle v-else class="icon" />
-          </QButton>
+          </AppButton>
         </div>
         <EnvManagedField v-else-if="providerManagedField" :name="fieldManagedHeadline(providerManagedField)" />
         <InferenceProviderPicker
@@ -516,13 +516,13 @@ const LLMConfigForm = {
         <span class="settings-field-label">{{ t("settings_agent_endpoint_label") }}</span>
         <EnvManagedField v-if="isFieldEnvManaged('endpoint')" :name="fieldManagedHeadline('endpoint')" />
         <div v-else-if="endpointHasPickerAction" class="settings-field-control">
-          <QInput
+          <AppInput
             :modelValue="config.endpoint"
             :placeholder="t('settings_agent_endpoint_placeholder')"
             :disabled="busy || readOnly"
             @update:modelValue="updateField('endpoint', $event)"
           />
-          <QButton
+          <AppButton
             type="button"
             class="outlined icon settings-field-action"
             :title="t('setup_llm_api_base_picker_title')"
@@ -531,9 +531,9 @@ const LLMConfigForm = {
             @click.prevent="$emit('open-api-base-picker')"
           >
             <PhLink class="icon" />
-          </QButton>
+          </AppButton>
         </div>
-        <QInput
+        <AppInput
           v-else
           :modelValue="config.endpoint"
           :placeholder="t('settings_agent_endpoint_placeholder')"
@@ -545,7 +545,7 @@ const LLMConfigForm = {
       <div v-if="showCloudflareAccountField" class="settings-field is-wide">
         <span class="settings-field-label">{{ t("settings_agent_cloudflare_account_label") }}</span>
         <EnvManagedField v-if="isFieldEnvManaged('cloudflare_account_id')" :name="fieldManagedHeadline('cloudflare_account_id')" />
-        <QInput
+        <AppInput
           v-else
           :modelValue="config.cloudflare_account_id"
           :placeholder="t('settings_agent_cloudflare_account_placeholder')"
@@ -583,7 +583,7 @@ const LLMConfigForm = {
       <div v-if="showBedrockFields" class="settings-field">
         <span class="settings-field-label">{{ t("settings_agent_bedrock_region_label") }}</span>
         <EnvManagedField v-if="isFieldEnvManaged('bedrock_region')" :name="fieldManagedHeadline('bedrock_region')" />
-        <QInput
+        <AppInput
           v-else
           :modelValue="config.bedrock_region"
           :placeholder="t('settings_agent_bedrock_region_placeholder')"
@@ -595,7 +595,7 @@ const LLMConfigForm = {
       <div v-if="showBedrockFields" class="settings-field">
         <span class="settings-field-label">{{ t("settings_agent_bedrock_model_arn_label") }}</span>
         <EnvManagedField v-if="isFieldEnvManaged('bedrock_model_arn')" :name="fieldManagedHeadline('bedrock_model_arn')" />
-        <QInput
+        <AppInput
           v-else
           :modelValue="config.bedrock_model_arn"
           :placeholder="t('settings_agent_bedrock_model_arn_placeholder')"
@@ -643,13 +643,13 @@ const LLMConfigForm = {
         <span class="settings-field-label">{{ t("settings_agent_model_label") }}</span>
         <EnvManagedField v-if="isFieldEnvManaged('model')" :name="fieldManagedHeadline('model')" />
         <div v-else class="settings-field-control">
-          <QInput
+          <AppInput
             :modelValue="config.model"
             :placeholder="t('settings_agent_model_placeholder')"
             :disabled="busy || readOnly"
             @update:modelValue="updateField('model', $event)"
           />
-          <QButton
+          <AppButton
             v-if="enableModelPicker"
             type="button"
             class="outlined icon settings-field-action"
@@ -659,12 +659,12 @@ const LLMConfigForm = {
             @click.prevent="$emit('open-model-picker')"
           >
             <PhMagnifyingGlass class="icon" />
-          </QButton>
+          </AppButton>
         </div>
       </div>
       <div class="settings-field is-wide">
         <span class="settings-field-label">Description</span>
-        <QInput
+        <AppInput
           :modelValue="config.description"
           placeholder="What this profile is good for"
           :disabled="busy || readOnly"
@@ -690,7 +690,7 @@ const LLMConfigForm = {
         <div class="settings-field">
           <span class="settings-field-label">{{ t("settings_llm_reasoning_label") }}</span>
           <EnvManagedField v-if="isFieldEnvManaged('reasoning_effort')" :name="fieldManagedHeadline('reasoning_effort')" />
-          <QDropdownMenu
+          <AppDropdownMenu
             v-else
             :key="String(config.reasoning_effort || '') || 'reasoning'"
             :items="reasoningEffortItems"
@@ -704,7 +704,7 @@ const LLMConfigForm = {
         <div class="settings-field">
           <span class="settings-field-label">{{ t("settings_llm_tools_emulation_label") }}</span>
           <EnvManagedField v-if="isFieldEnvManaged('tools_emulation_mode')" :name="fieldManagedHeadline('tools_emulation_mode')" />
-          <QDropdownMenu
+          <AppDropdownMenu
             v-else
             :key="String(config.tools_emulation_mode || '') || 'tools-emulation'"
             :items="toolsEmulationItems"
@@ -718,7 +718,7 @@ const LLMConfigForm = {
         <div class="settings-field">
           <span class="settings-field-label">{{ t("settings_agent_context_window_tokens_label") }}</span>
           <EnvManagedField v-if="isFieldEnvManaged('context_window_tokens')" :name="fieldManagedHeadline('context_window_tokens')" />
-          <QInput
+          <AppInput
             v-else
             :modelValue="config.context_window_tokens"
             inputType="number"
@@ -744,7 +744,7 @@ const LLMConfigForm = {
         </div>
         <div v-if="showBedrockFields" class="settings-field">
           <span class="settings-field-label">AWS profile</span>
-          <QInput
+          <AppInput
             :modelValue="config.bedrock_aws_profile"
             :disabled="busy || readOnly"
             @update:modelValue="updateField('bedrock_aws_profile', $event)"
@@ -752,7 +752,7 @@ const LLMConfigForm = {
         </div>
         <div v-if="showAzureFields" class="settings-field is-wide">
           <span class="settings-field-label">Azure deployment</span>
-          <QInput
+          <AppInput
             :modelValue="config.azure_deployment"
             :disabled="busy || readOnly"
             @update:modelValue="updateField('azure_deployment', $event)"
@@ -782,7 +782,7 @@ const LLMConfigForm = {
         </div>
         <div class="settings-field">
           <span class="settings-field-label">Cache key prefix</span>
-          <QInput
+          <AppInput
             :modelValue="config.cache_key_prefix"
             :disabled="busy || readOnly"
             @update:modelValue="updateField('cache_key_prefix', $event)"
@@ -791,7 +791,7 @@ const LLMConfigForm = {
         </template>
         <div class="settings-field">
           <span class="settings-field-label">Request timeout</span>
-          <QInput
+          <AppInput
             :modelValue="config.request_timeout"
             placeholder="90s"
             :disabled="busy || readOnly"
@@ -801,7 +801,7 @@ const LLMConfigForm = {
         <template v-if="!evaluateOnly">
         <div class="settings-field">
           <span class="settings-field-label">Temperature</span>
-          <QInput
+          <AppInput
             :modelValue="config.temperature"
             inputType="number"
             step="0.1"
@@ -811,7 +811,7 @@ const LLMConfigForm = {
         </div>
         <div class="settings-field">
           <span class="settings-field-label">Reasoning budget tokens</span>
-          <QInput
+          <AppInput
             :modelValue="config.reasoning_budget_tokens"
             inputType="number"
             min="0"
@@ -822,7 +822,7 @@ const LLMConfigForm = {
         </div>
         <div class="settings-field is-wide">
           <span class="settings-field-label">HTTP headers</span>
-          <QTextarea
+          <AppTextarea
             :modelValue="config.headers_text"
             placeholder="{}"
             :disabled="busy || readOnly"

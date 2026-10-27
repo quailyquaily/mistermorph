@@ -338,7 +338,7 @@ export default {
   template: `
     <AppSection variant="boxed" class="config-settings-group model-routes-panel" title="Model Routes" meta="Where each kind of work sends its requests. Pulses show traffic, more often for bigger shares; dashed lines are fallbacks, in order. Select a route to change it.">
       <template #actions>
-        <QButton v-if="!registered" class="plain xs" :loading="saving" :disabled="loading || saving || !dirty" @click="save">Save</QButton>
+        <AppButton v-if="!registered" class="plain xs" :loading="saving" :disabled="loading || saving || !dirty" @click="save">Save</AppButton>
       </template>
       <div v-if="validationError" class="config-settings-error" role="alert">{{ validationError }}</div>
 
@@ -348,8 +348,8 @@ export default {
         <span v-else-if="locked(selectedPurpose)" class="model-routes-node-note">This route is managed outside the settings file.</span>
         <span v-else-if="selectedPurpose.single" class="model-routes-node-note">Use picks the one profile for these requests; this route has no split or fallbacks.</span>
         <span v-else class="model-routes-node-note">Use sends everything to one profile; Split shares requests; Fallback is tried, in order, when a request fails.</span>
-        <QButton class="plain xs" :disabled="locked(selectedPurpose)" @click="actions.reset()">{{ selectedPurpose.unsetOff ? 'Turn off' : 'Reset to default' }}</QButton>
-        <QButton class="plain xs" @click="selected = ''">Done</QButton>
+        <AppButton class="plain xs" :disabled="locked(selectedPurpose)" @click="actions.reset()">{{ selectedPurpose.unsetOff ? 'Turn off' : 'Reset to default' }}</AppButton>
+        <AppButton class="plain xs" @click="selected = ''">Done</AppButton>
       </div>
 
       <div ref="canvas" class="model-routes-map" :class="{ 'has-selection': selected, 'is-drawn': drawn }">

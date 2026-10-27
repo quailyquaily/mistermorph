@@ -164,12 +164,12 @@ const ChatElevationCard = {
             :disabled="busy || remaining <= 0"
             enterkeyhint="send"
           />
-          <QButton type="submit" class="primary xs" :disabled="busy || remaining <= 0">
+          <AppButton type="submit" class="primary xs" :disabled="busy || remaining <= 0">
             {{ t('chat_elevation_allow') }}
-          </QButton>
-          <QButton type="button" class="plain xs" :disabled="busy" @click="decline">
+          </AppButton>
+          <AppButton type="button" class="plain xs" :disabled="busy" @click="decline">
             {{ t('chat_elevation_decline') }}
-          </QButton>
+          </AppButton>
         </form>
         <p v-if="error" class="chat-question-value chat-question-error" role="alert">{{ error }}</p>
       </div>

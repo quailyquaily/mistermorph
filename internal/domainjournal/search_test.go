@@ -150,6 +150,40 @@ func TestSearchTimeDomainAndLimit(t *testing.T) {
 	}
 }
 
+func TestSearchByIDs(t *testing.T) {
+	j := openTestJournal(t, t.TempDir())
+	at := "2026-10-01T10:00:00Z"
+	for _, id := range []string{"a", "b", "c"} {
+		if _, err := j.Append(taskEvent(id, "task_upsert", at, "contact:alice", map[string]any{"id": id, "task": "the plan for friday"})); err != nil {
+			t.Fatalf("Append() error = %v", err)
+		}
+	}
+	// An event with no text is still found by its ID.
+	if _, err := j.Append(taskEvent("quiet", "task_update", at, "", map[string]any{"id": "quiet"})); err != nil {
+		t.Fatalf("Append() error = %v", err)
+	}
+	for name, tc := range map[string]struct {
+		opts SearchOptions
+		want string
+	}{
+		"only those ids":            {SearchOptions{AllAudiences: true, IDs: []string{"a", "c", "quiet", " "}}, "quiet,c,a"},
+		"ids and a query":           {SearchOptions{AllAudiences: true, IDs: []string{"a", "quiet"}, Query: "friday"}, "a"},
+		"ids the audience hears":    {SearchOptions{Audiences: []string{"contact:alice"}, IDs: []string{"b", "quiet"}}, "b"},
+		"unknown ids match none":    {SearchOptions{AllAudiences: true, IDs: []string{"nope"}}, ""},
+		"blank ids search as usual": {SearchOptions{AllAudiences: true, IDs: []string{""}}, "c,b,a"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			hits, _, err := j.Search(tc.opts)
+			if err != nil {
+				t.Fatalf("Search() error = %v", err)
+			}
+			if got := hitIDs(hits); got != tc.want {
+				t.Fatalf("Search() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func hitIDs(hits []SearchHit) string {
 	ids := make([]string, 0, len(hits))
 	for _, hit := range hits {

@@ -74,7 +74,8 @@ type Contact struct {
 }
 ```
 
-- Only the owner can set it, by adding `owner: true` to the contact's YAML in the Console. Observed contacts are
+- Only the owner can set it, from the Console: the contact's **This is me** switch (`PATCH /contacts/item`), or
+  `owner: true` in the contact's YAML. Observed contacts are
   written through `PutContact`, which keeps the stored flag whatever its input says, so a contact can never set it
   from a chat.
 - One person can have one contact per channel. Each of the owner's contacts carries the flag, or contacts link
@@ -571,7 +572,7 @@ Tools live in `tools/builtin/memory_*.go` and `journal_*.go` and read the run's 
 Where the code differs from the plan above:
 
 - **Names.** A memory's name is unique per subject *and* the audience it was learned in, so saving never reveals that
-  another conversation has a memory with that name. The owner can merge duplicates from the Console.
+  another conversation has a memory with that name. Merging duplicates in the Console is not built yet.
 - **Audience on the context.** Runs carry their audience with `audience.NewContext`. A group audience also carries its
   speaker (for `told_by`) and whether the speaker is the owner (for group rules).
 - **Journal size.** Payloads are compressed, and only conversation text is indexed. `activity` and traces stay in the
@@ -579,6 +580,11 @@ Where the code differs from the plan above:
 - **Old cursors.** An old JSONL cursor fails snapshot validation, which makes the stores replay the journal once. No
   translation table was needed.
 - **Closed journals stay readable,** as they were: readers open the database for themselves.
+- **Console page.** Memories and Journal are two tabs. Subjects are listed beside the memories, rules before facts,
+  and each memory leads with its visibility. "Hear as" checks an audience with `GET /memories?hear_as=<audience>`,
+  which returns every memory and the IDs that audience may hear (`CanHear`). A memory's sources open in the Journal
+  tab through `GET /journal/search?ids=…`, and journal events link back to the memories they led to and, for
+  Console chats, to the chat. Group titles are not stored, so a group shows as its conversation key.
 
 
 ## Tests

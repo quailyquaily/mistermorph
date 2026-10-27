@@ -229,6 +229,9 @@ const ContactsView = {
     const loadedEditorYAML = ref("");
     const editorLoading = ref(false);
     const editorSaving = ref(false);
+    const ownerSaving = ref(false);
+    // Remounts the switch after a failed save, so it shows the stored value again.
+    const ownerSwitchKey = ref(0);
     const editorErr = ref("");
 
     const deleteDialogOpen = ref(false);
@@ -535,6 +538,25 @@ const ContactsView = {
       }
     }
 
+    // setOwner marks the contact as one of the owner's own accounts, or unmarks it.
+    async function setOwner(owner) {
+      const contactID = String(selectedContact.value?.contact_id || "").trim();
+      if (!contactID || ownerSaving.value) {
+        return;
+      }
+      ownerSaving.value = true;
+      try {
+        await runtimeApiFetch("/contacts/item", { method: "PATCH", body: { contact_id: contactID, owner: Boolean(owner) } });
+        await load();
+        notice.success(t("msg_save_success"));
+      } catch (e) {
+        ownerSwitchKey.value += 1;
+        notice.error(e.message || t("msg_save_failed"));
+      } finally {
+        ownerSaving.value = false;
+      }
+    }
+
     async function copyContactValue(raw) {
       const value = String(raw || "").trim();
       if (!value) {
@@ -668,6 +690,9 @@ const ContactsView = {
       startEdit,
       stopEdit,
       saveEdit,
+      ownerSaving,
+      ownerSwitchKey,
+      setOwner,
       copyContactValue,
       confirmDelete,
       contactActionMenuItems,
@@ -687,7 +712,7 @@ const ContactsView = {
     >
       <template #leading>
         <div class="contacts-page-bar">
-          <QButton
+          <AppButton
             v-if="mobileShowBack"
             class="plain xs icon contacts-page-bar-back"
             :title="t('contacts_title')"
@@ -695,7 +720,7 @@ const ContactsView = {
             @click="showIndexView"
           >
             <PhArrowLeft class="icon" />
-          </QButton>
+          </AppButton>
           <h2 class="page-title page-bar-title workspace-section-title">{{ mobileBarTitle }}</h2>
         </div>
       </template>
@@ -708,7 +733,7 @@ const ContactsView = {
 
           <div v-scroll-edges class="contacts-index-body">
             <div class="contacts-index-filter">
-              <QInput
+              <AppInput
                 v-model="filterText"
                 class="xs contacts-filter-input"
                 :placeholder="t('contacts_filter_placeholder')"
@@ -776,15 +801,15 @@ const ContactsView = {
             </span>
           </template>
           <template v-if="!editing" #actions>
-            <QButton
+            <AppButton
               class="plain xs icon"
               :title="t('contacts_action_edit_yaml')"
               :aria-label="t('contacts_action_edit_yaml')"
               @click="startEdit"
             >
               <PhPencilSimple class="icon contacts-detail-action-icon" />
-            </QButton>
-            <QDropdownMenu
+            </AppButton>
+            <AppDropdownMenu
               class="contacts-actions-menu"
               variant="plain"
               :items="contactActionMenuItems"
@@ -794,7 +819,7 @@ const ContactsView = {
             >
               <PhDotsThree class="contacts-actions-menu-icon" />
               <span class="contacts-actions-menu-accessible">{{ t("todo_action_more") }}</span>
-            </QDropdownMenu>
+            </AppDropdownMenu>
           </template>
 
           <div class="contacts-detail-identity">
@@ -811,14 +836,27 @@ const ContactsView = {
                 <PhUserCircle v-else class="icon" />
               </span>
             </span>
-            <span v-if="selectedContact.owner" class="contacts-owner-badge">{{ t("contacts_owner_badge") }}</span>
+          </div>
+
+          <div v-if="!editing && !isAgent(selectedContact)" class="contacts-owner-row">
+            <AppSwitch
+              :key="ownerSwitchKey"
+              :modelValue="Boolean(selectedContact.owner)"
+              :disabled="ownerSaving"
+              :aria-label="t('contacts_owner_label')"
+              @update:modelValue="setOwner"
+            />
+            <span class="contacts-owner-copy">
+              <span class="contacts-owner-title">{{ t("contacts_owner_label") }}</span>
+              <span class="contacts-owner-hint">{{ t("contacts_owner_hint") }}</span>
+            </span>
           </div>
 
           <div v-if="editing" class="contacts-editor-body">
             <AppSkeleton v-if="editorLoading" variant="card" height="360px" :count="1" />
             <template v-else>
               <AppNotice v-if="editorErr" type="error" :text="editorErr" />
-              <QTextarea
+              <AppTextarea
                 v-model="editorYAML"
                 class="contacts-editor-textarea"
                 :rows="26"
@@ -827,10 +865,10 @@ const ContactsView = {
               />
               <p class="contacts-editor-note">{{ t("contacts_editor_hint") }}</p>
               <div class="contacts-editor-actions">
-                <QButton class="outlined sm" :disabled="editorSaving" @click="stopEdit">{{ t("action_cancel") }}</QButton>
-                <QButton class="primary sm" :loading="editorSaving" :disabled="saveDisabled" @click="saveEdit">
+                <AppButton class="outlined sm" :disabled="editorSaving" @click="stopEdit">{{ t("action_cancel") }}</AppButton>
+                <AppButton class="primary sm" :loading="editorSaving" :disabled="saveDisabled" @click="saveEdit">
                   {{ t("action_save") }}
-                </QButton>
+                </AppButton>
               </div>
             </template>
           </div>
@@ -857,7 +895,7 @@ const ContactsView = {
                       <strong>{{ connection.channel }}</strong>
                       <code :title="connection.full">{{ connection.full }}</code>
                     </div>
-                    <QButton
+                    <AppButton
                       v-if="connection.copyable !== false"
                       class="plain icon contacts-copy-action"
                       :title="t('action_copy')"
@@ -865,7 +903,7 @@ const ContactsView = {
                       @click="copyContactValue(connection.full)"
                     >
                       <PhCopy class="icon" />
-                    </QButton>
+                    </AppButton>
                   </div>
                 </div>
                 <div class="contacts-internal-id">
@@ -874,14 +912,14 @@ const ContactsView = {
                     <span>{{ t("contacts_field_contact_id") }}</span>
                     <code>{{ selectedContact.contact_id }}</code>
                   </div>
-                  <QButton
+                  <AppButton
                     class="plain icon contacts-copy-action"
                     :title="t('action_copy')"
                     :aria-label="t('action_copy')"
                     @click="copyContactValue(selectedContact.contact_id)"
                   >
                     <PhCopy class="icon" />
-                  </QButton>
+                  </AppButton>
                 </div>
               </section>
 
@@ -895,7 +933,7 @@ const ContactsView = {
                     <span>{{ memory.body }}</span>
                   </li>
                 </ul>
-                <QButton class="plain sm contacts-memories-open" @click="openMemories">{{ t("contacts_memories_open") }}</QButton>
+                <AppButton class="plain sm contacts-memories-open" @click="openMemories">{{ t("contacts_memories_open") }}</AppButton>
               </section>
             </div>
 
@@ -936,7 +974,7 @@ const ContactsView = {
         </section>
       </div>
 
-      <QMessageDialog
+      <AppMessageDialog
         v-model="deleteDialogOpen"
         icon="PhTrash"
         iconColor="red"

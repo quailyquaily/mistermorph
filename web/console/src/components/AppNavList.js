@@ -80,7 +80,7 @@ const AppNavList = {
   template: `
     <div v-sliding-selection="'.nav-link.is-active'" v-scroll-edges :class="['sidebar-nav', { 'mobile-nav-list': mobile, 'is-collapsed': collapsed }]">
       <template v-for="item in navItems" :key="keyPrefix + item.id">
-        <QDivider v-if="item.separator" class="nav-divider" aria-hidden="true" />
+        <AppDivider v-if="item.separator" class="nav-divider" aria-hidden="true" />
         <template v-else>
           <div v-if="shouldRenderBeforeRuntimeSlot(item)" class="sidebar-slot sidebar-slot-before-runtime">
             <component

@@ -1933,6 +1933,41 @@ paths:
           $ref: '#/components/responses/MethodNotAllowed'
         '500':
           $ref: '#/components/responses/InternalError'
+    patch:
+      operationId: setContactOwner
+      tags:
+      - Contacts
+      summary: Mark or unmark a contact as one of the owner's accounts
+      description: Sets owner true, or removes it, in the contact's YAML and keeps every other line.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                contact_id:
+                  type: string
+                owner:
+                  type: boolean
+              required:
+              - contact_id
+              - owner
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContactYAML'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
     delete:
       operationId: deleteContact
       tags:
@@ -2280,6 +2315,14 @@ paths:
         required: false
         schema:
           type: string
+      - name: hear_as
+        in: query
+        required: false
+        schema:
+          type: string
+        description: An audience (owner, contact:<contact id> or conversation:<key>). The response
+          still lists every memory, and heard names the ones that audience may hear, by the rule
+          every run uses.
       responses:
         '200':
           description: Success
@@ -2292,6 +2335,16 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/Memory'
+                  hear_as:
+                    type: string
+                    description: The audience, when hear_as was given.
+                  heard:
+                    type: array
+                    description: IDs of the items that audience may hear, when hear_as was given.
+                    items:
+                      type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '500':
@@ -2387,6 +2440,13 @@ paths:
         required: false
         schema:
           type: string
+      - name: ids
+        in: query
+        required: false
+        schema:
+          type: string
+        description: Comma-separated event IDs, such as a memory's source_events. Only those events
+          match, with or without text.
       - name: limit
         in: query
         required: false

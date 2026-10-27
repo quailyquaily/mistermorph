@@ -211,22 +211,22 @@ const ImageUploadField = {
           </div>
 
           <div class="image-upload-preview-dialog-actions">
-            <QButton
+            <AppButton
               type="button"
               class="outlined danger"
               :disabled="disabled || busy || !previewUrl"
               @click="deleteImage"
             >
               {{ t("action_delete") }}
-            </QButton>
-            <QButton
+            </AppButton>
+            <AppButton
               type="button"
               class="outlined"
               :disabled="disabled || busy"
               @click="openFilePicker"
             >
               {{ t("image_upload_action_replace") }}
-            </QButton>
+            </AppButton>
           </div>
         </div>
       </AppDialogShell>

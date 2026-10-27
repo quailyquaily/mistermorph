@@ -11,7 +11,7 @@ import "./styles/base.css";
 
 import AppLayout from "./layouts/AppLayout";
 import { dismissBootSplash } from "./components/BootSplash";
-import * as quailComponents from "./components/quail";
+import * as uiComponents from "./components/ui";
 import AppNotice from "./components/AppNotice";
 import AppSection from "./components/AppSection";
 import { installChatBubbleTail } from "./core/chat-bubble-tail";
@@ -59,7 +59,7 @@ if (import.meta.env.DEV === true) {
 }
 app.use(pinia);
 app.use(router);
-for (const [name, component] of Object.entries({ ...quailComponents, ...phosphorIcons })) {
+for (const [name, component] of Object.entries({ ...uiComponents, ...phosphorIcons })) {
   app.component(name, component);
 }
 app.component("AppNotice", AppNotice);

@@ -211,7 +211,7 @@ const DeviceAuthDialogContent = {
           <span>{{ t(userCodeKey) }}</span>
           <div class="codex-auth-device-code-value">
             <strong>{{ userCode }}</strong>
-            <QButton
+            <AppButton
               type="button"
               class="plain xs icon codex-auth-device-copy"
               :title="t('action_copy')"
@@ -220,7 +220,7 @@ const DeviceAuthDialogContent = {
               @click="copyUserCode"
             >
               <PhCopy class="icon" />
-            </QButton>
+            </AppButton>
           </div>
         </div>
         <div class="codex-auth-device-main">
@@ -240,7 +240,7 @@ const DeviceAuthDialogContent = {
 
       <div v-if="loginSession && showSetDefaultToggle" class="codex-auth-default">
         <span>{{ t(setDefaultKey) }}</span>
-        <QSwitch
+        <AppSwitch
           :modelValue="setDefault"
           :disabled="busy"
           @update:modelValue="$emit('update:setDefault', $event)"
@@ -249,15 +249,15 @@ const DeviceAuthDialogContent = {
 
       <div class="codex-auth-actions">
         <div class="codex-auth-actions-left">
-          <QButton
+          <AppButton
             v-if="loggedIn && reloginKey"
             class="plain xs"
             :disabled="busy || loading || !!loginSession"
             @click="$emit('login')"
           >
             {{ t(reloginKey) }}
-          </QButton>
-          <QButton
+          </AppButton>
+          <AppButton
             v-if="loggedIn"
             class="danger plain xs"
             :loading="busy"
@@ -265,9 +265,9 @@ const DeviceAuthDialogContent = {
             @click="$emit('logout')"
           >
             {{ t("action_logout") }}
-          </QButton>
+          </AppButton>
         </div>
-        <QButton
+        <AppButton
           v-if="showExtraAction"
           type="button"
           class="plain xs codex-auth-usage"
@@ -276,7 +276,7 @@ const DeviceAuthDialogContent = {
           @click="openExtraAction"
         >
           {{ extraActionLabel }}
-        </QButton>
+        </AppButton>
       </div>
     </section>
   `,

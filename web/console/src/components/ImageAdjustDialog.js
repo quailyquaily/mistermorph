@@ -382,12 +382,12 @@ const ImageAdjustDialog = {
             @pointercancel="finishDrag"
             @pointerleave="finishDrag"
           ></canvas>
-          <QProgress v-if="loading" class="image-adjust-progress" :infinite="true" />
+          <AppProgress v-if="loading" class="image-adjust-progress" :infinite="true" />
         </div>
 
         <div class="image-adjust-controls">
           <div class="image-adjust-zoom-actions">
-            <QButton
+            <AppButton
               type="button"
               class="outlined icon"
               :title="t('image_adjust_zoom_out')"
@@ -396,9 +396,9 @@ const ImageAdjustDialog = {
               @click="zoomOut"
             >
               <span class="image-adjust-zoom-mark" aria-hidden="true">-</span>
-            </QButton>
+            </AppButton>
             <span class="image-adjust-zoom-value">{{ zoomPercent }}</span>
-            <QButton
+            <AppButton
               type="button"
               class="outlined icon"
               :title="t('image_adjust_zoom_in')"
@@ -407,7 +407,7 @@ const ImageAdjustDialog = {
               @click="zoomIn"
             >
               <PhPlus class="icon" />
-            </QButton>
+            </AppButton>
           </div>
 
         </div>

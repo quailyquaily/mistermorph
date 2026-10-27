@@ -31,7 +31,7 @@ const SettingDialog = {
     return { cancel, t, updateOpen };
   },
   template: `
-    <QDialog
+    <AppDialog
       :modelValue="modelValue"
       :width="width"
       :persistent="saving"
@@ -48,10 +48,10 @@ const SettingDialog = {
           <slot />
         </div>
         <footer class="setting-dialog-actions">
-          <QButton type="button" class="outlined" :disabled="saving" @click="cancel">
+          <AppButton type="button" class="outlined" :disabled="saving" @click="cancel">
             {{ t("action_cancel") }}
-          </QButton>
-          <QButton
+          </AppButton>
+          <AppButton
             type="button"
             class="primary"
             :loading="saving"
@@ -59,10 +59,10 @@ const SettingDialog = {
             @click="$emit('save')"
           >
             {{ t("action_save") }}
-          </QButton>
+          </AppButton>
         </footer>
       </section>
-    </QDialog>
+    </AppDialog>
   `,
 };
 

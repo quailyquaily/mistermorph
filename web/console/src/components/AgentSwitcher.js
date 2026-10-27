@@ -369,7 +369,7 @@ const AgentSwitcher = {
         @close="dialogOpen = false"
       >
         <section class="agent-switcher-dialog">
-          <QInput
+          <AppInput
             class="agent-switcher-filter"
             :modelValue="filter"
             :placeholder="t('endpoint_switcher_filter_placeholder')"
