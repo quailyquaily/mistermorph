@@ -1,0 +1,136 @@
+.memories-page {
+  --memories-muted: var(--text-2);
+  --memories-line: var(--line-soft);
+  --memories-paper: var(--bg-2);
+}
+
+.memories-note {
+  margin: 0;
+  color: var(--memories-muted);
+  font-size: var(--font-size-ui);
+  line-height: 1.5;
+}
+
+.memories-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.memories-search {
+  position: relative;
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.memories-search .q-text-field {
+  width: 100%;
+  padding-inline-start: 32px;
+}
+
+.memories-search-icon {
+  position: absolute;
+  inset-inline-start: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--memories-muted);
+  pointer-events: none;
+}
+
+.memories-since {
+  flex: 0 0 auto;
+}
+
+.memories-empty {
+  margin: 0;
+  color: var(--memories-muted);
+}
+
+.memory-card,
+.journal-hit {
+  display: grid;
+  gap: 6px;
+  padding: 12px 0;
+  border-top: 1px solid var(--memories-line);
+}
+
+.memory-card:first-child,
+.journal-hit:first-child {
+  border-top: 0;
+}
+
+.memory-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.memory-name {
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.memory-tag {
+  padding: 1px 8px;
+  border: 1px solid var(--memories-line);
+  border-radius: var(--radius-sm);
+  color: var(--memories-muted);
+  font-size: var(--font-size-meta);
+}
+
+.memory-tag.is-public {
+  border-color: var(--accent-1);
+  color: var(--accent-1);
+}
+
+.memory-description,
+.memory-body,
+.memory-meta {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.memory-body {
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+
+.memory-meta {
+  color: var(--memories-muted);
+  font-size: var(--font-size-meta);
+}
+
+.memory-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.memory-actions .danger {
+  color: var(--danger);
+}
+
+.memory-edit-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.memory-edit-row label {
+  display: grid;
+  gap: 4px;
+  color: var(--memories-muted);
+  font-size: var(--font-size-meta);
+}
+
+.memory-edit-description {
+  width: 100%;
+}
+
+.journal-hits {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}

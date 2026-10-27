@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/quailyquaily/mistermorph/agent"
+	"github.com/quailyquaily/mistermorph/contacts"
 	"github.com/quailyquaily/mistermorph/internal/audience"
 	"github.com/quailyquaily/mistermorph/internal/memories"
 	"github.com/quailyquaily/mistermorph/internal/memorytools"
@@ -37,6 +38,13 @@ func AttachMemories(ctx context.Context, paths runtimepaths.Paths, cfg toolsutil
 	if err != nil {
 		slog.Default().Warn("memories_unavailable", "error", err.Error())
 		return nil, nil
+	}
+	if dir := strings.TrimSpace(paths.ContactsDir); dir != "" {
+		if moved, moveErr := store.MoveContactProfiles(ctx, contacts.NewFileStore(dir)); moveErr != nil {
+			slog.Default().Warn("memories_contact_profiles_move_error", "error", moveErr.Error())
+		} else if moved > 0 {
+			slog.Default().Info("memories_contact_profiles_moved", "memories", moved)
+		}
 	}
 	for _, tool := range memorytools.New(memorytools.Deps{Store: store, JournalDir: paths.JournalDir, Audience: who, ReadOnly: readOnly}) {
 		if err := reg.Replace(tool); err != nil {

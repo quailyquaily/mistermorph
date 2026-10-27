@@ -25,18 +25,16 @@ func TestFileStoreContactsReadWrite(t *testing.T) {
 		SlackTeamID:      "T111",
 		SlackUserID:      "U222",
 		SlackDMChannelID: "D333",
-		TopicPreferences: []string{"ops", "alerts"},
 	}
 	inactive := Contact{
-		ContactID:        "tg:1001",
-		Kind:             KindHuman,
-		Channel:          ChannelTelegram,
-		ContactNickname:  "Inactive Human",
-		TGUsername:       "john",
-		TGUserID:         1001,
-		TGPrivateChatID:  1001,
-		TGGroupChatIDs:   []int64{-10001},
-		TopicPreferences: []string{"planning"},
+		ContactID:       "tg:1001",
+		Kind:            KindHuman,
+		Channel:         ChannelTelegram,
+		ContactNickname: "Inactive Human",
+		TGUsername:      "john",
+		TGUserID:        1001,
+		TGPrivateChatID: 1001,
+		TGGroupChatIDs:  []int64{-10001},
 	}
 	if err := store.PutContact(ctx, active); err != nil {
 		t.Fatalf("PutContact(active) error = %v", err)

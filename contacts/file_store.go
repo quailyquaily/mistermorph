@@ -338,8 +338,13 @@ func (s *FileStore) PutContact(ctx context.Context, contact Contact) error {
 			contact.Paired = true
 		}
 		// Owner is set only by editing the contact's YAML (PutContactYAML). PutContact records
-		// contacts observed in chats, so it keeps the stored flag whatever the input says.
-		contact.Owner = hasOwnerContactID(active, contact.ContactID) || hasOwnerContactID(inactive, contact.ContactID)
+		// contacts observed in chats, so it keeps the stored flag whatever the input says, and
+		// the legacy profile fields until TakeLegacyProfiles moves them.
+		contact.Owner = false
+		if stored, ok := findContactByID(active, inactive, contact.ContactID); ok {
+			contact.Owner = stored.Owner
+			contact.legacy = stored.legacy
+		}
 
 		targetStatus := StatusActive
 		if hasContactID(inactive, contact.ContactID) && !contact.Paired {
@@ -658,8 +663,8 @@ type contactProfileSection struct {
 	SlackUserID         string   `yaml:"slack_user_id"`
 	SlackDMChannelID    string   `yaml:"slack_dm_channel_id"`
 	SlackChannelIDs     []string `yaml:"slack_channel_ids"`
-	PersonaBrief        string   `yaml:"persona_brief"`
-	TopicPreferences    []string `yaml:"topic_preferences"`
+	PersonaBrief        string   `yaml:"persona_brief,omitempty"`
+	TopicPreferences    []string `yaml:"topic_preferences,omitempty"`
 	CooldownUntil       string   `yaml:"cooldown_until"`
 	LastInteractionAt   string   `yaml:"last_interaction_at"`
 }
@@ -987,8 +992,10 @@ func contactFromProfileSection(title string, profile contactProfileSection) (Con
 		SlackUserID:         strings.TrimSpace(profile.SlackUserID),
 		SlackDMChannelID:    strings.TrimSpace(profile.SlackDMChannelID),
 		SlackChannelIDs:     normalizeStringSlice(profile.SlackChannelIDs),
-		PersonaBrief:        strings.TrimSpace(profile.PersonaBrief),
-		TopicPreferences:    normalizeStringSlice(profile.TopicPreferences),
+		legacy: legacyProfile{
+			personaBrief:     strings.TrimSpace(profile.PersonaBrief),
+			topicPreferences: normalizeStringSlice(profile.TopicPreferences),
+		},
 	}
 	if contact.ContactNickname == "" && strings.TrimSpace(profile.ContactID) == "" {
 		contact.ContactNickname = strings.TrimSpace(title)
@@ -1092,8 +1099,8 @@ func profileSectionFromContact(contact Contact) (contactProfileSection, string) 
 		SlackUserID:         strings.TrimSpace(contact.SlackUserID),
 		SlackDMChannelID:    strings.TrimSpace(contact.SlackDMChannelID),
 		SlackChannelIDs:     normalizeStringSlice(contact.SlackChannelIDs),
-		PersonaBrief:        strings.TrimSpace(contact.PersonaBrief),
-		TopicPreferences:    normalizeStringSlice(contact.TopicPreferences),
+		PersonaBrief:        strings.TrimSpace(contact.legacy.personaBrief),
+		TopicPreferences:    normalizeStringSlice(contact.legacy.topicPreferences),
 	}
 
 	if profile.Channel == "" {
@@ -1342,14 +1349,16 @@ func hasContactID(items []Contact, contactID string) bool {
 	return false
 }
 
-func hasOwnerContactID(items []Contact, contactID string) bool {
+func findContactByID(active, inactive []Contact, contactID string) (Contact, bool) {
 	contactID = strings.TrimSpace(contactID)
-	for _, item := range items {
-		if strings.TrimSpace(item.ContactID) == contactID && item.Owner {
-			return true
+	for _, items := range [][]Contact{active, inactive} {
+		for _, item := range items {
+			if strings.TrimSpace(item.ContactID) == contactID {
+				return item, true
+			}
 		}
 	}
-	return false
+	return Contact{}, false
 }
 
 func hasPairedContactID(items []Contact, contactID string) bool {
@@ -1465,7 +1474,7 @@ func normalizeContact(c Contact, now time.Time) Contact {
 	}
 	c.ContactID = strings.TrimSpace(c.ContactID)
 	c.ContactNickname = strings.TrimSpace(c.ContactNickname)
-	c.PersonaBrief = strings.TrimSpace(c.PersonaBrief)
+	c.legacy.personaBrief = strings.TrimSpace(c.legacy.personaBrief)
 	c.TGUsername = normalizeTelegramUsername(c.TGUsername)
 	c.LineUserID = refid.NormalizeLineID(c.LineUserID)
 	c.LineChatIDs = normalizeStringSlice(c.LineChatIDs)
@@ -1524,9 +1533,9 @@ func normalizeContact(c Contact, now time.Time) Contact {
 	if c.TGUserID == 0 && c.TGPrivateChatID > 0 {
 		c.TGUserID = c.TGPrivateChatID
 	}
-	c.TopicPreferences = normalizeStringSlice(c.TopicPreferences)
-	if len(c.TopicPreferences) == 0 {
-		c.TopicPreferences = nil
+	c.legacy.topicPreferences = normalizeStringSlice(c.legacy.topicPreferences)
+	if len(c.legacy.topicPreferences) == 0 {
+		c.legacy.topicPreferences = nil
 	}
 
 	if c.CooldownUntil != nil {

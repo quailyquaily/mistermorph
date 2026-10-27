@@ -210,13 +210,14 @@
   gap: 7px;
 }
 
-.contacts-detail-persona {
-  max-width: 68ch;
-  margin: 0;
-  color: var(--text-1);
-  font-size: var(--font-size-ui);
-  line-height: 1.55;
-  white-space: pre-wrap;
+.contacts-owner-badge {
+  justify-self: start;
+  padding: 2px 9px;
+  border: 1px solid var(--accent-1);
+  border-radius: var(--radius-sm);
+  color: var(--accent-1);
+  font-size: var(--font-size-meta);
+  line-height: 1.35;
 }
 
 .contacts-detail-action-icon {
@@ -394,24 +395,39 @@
   line-height: 1.4;
 }
 
-.contacts-topic-list {
+.contacts-memory-list {
   margin: 0;
   padding: 0;
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
   gap: 7px;
   list-style: none;
   color: var(--text-1);
 }
 
-.contacts-topic-list li {
-  padding: 5px 9px;
+.contacts-memory-list li {
+  display: grid;
+  gap: 3px;
+  padding: 7px 9px;
   border: 1px solid var(--line-soft);
   border-radius: var(--radius-sm);
   background: var(--surface-2);
   font-size: var(--font-size-meta);
-  line-height: 1.35;
+  line-height: 1.45;
   overflow-wrap: anywhere;
+}
+
+.contacts-memory-list li span {
+  white-space: pre-wrap;
+}
+
+.contacts-memories-empty {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--font-size-meta);
+}
+
+.contacts-memories-open {
+  justify-self: start;
 }
 
 .contacts-activity-panel {
@@ -603,10 +619,6 @@
 
   .contacts-detail-card {
     margin: 12px;
-  }
-
-  .contacts-detail-persona {
-    font-size: var(--font-size-meta);
   }
 
   .contacts-connection-row,

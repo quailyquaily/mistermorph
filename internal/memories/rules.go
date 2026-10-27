@@ -67,21 +67,21 @@ func widthOf(v Visibility) int {
 
 // Memory is one saved fact.
 type Memory struct {
-	ID          string
-	Subject     string
-	Name        string
-	Type        Type
-	Description string
-	Body        string
-	Visibility  Visibility
+	ID          string     `json:"id"`
+	Subject     string     `json:"subject"`
+	Name        string     `json:"name"`
+	Type        Type       `json:"type"`
+	Description string     `json:"description"`
+	Body        string     `json:"body"`
+	Visibility  Visibility `json:"visibility"`
 	// LearnedIn is the audience the memory was saved from, in its stored form.
-	LearnedIn string
+	LearnedIn string `json:"learned_in"`
 	// ToldBy is the contact who said it; empty when the owner said it or the agent inferred it.
-	ToldBy        string
-	SourceEvents  []string
-	CreatedAt     string
-	UpdatedAt     string
-	UpdatedByTask string
+	ToldBy        string   `json:"told_by,omitempty"`
+	SourceEvents  []string `json:"source_events,omitempty"`
+	CreatedAt     string   `json:"created_at"`
+	UpdatedAt     string   `json:"updated_at"`
+	UpdatedByTask string   `json:"updated_by_task,omitempty"`
 }
 
 // CanHear reports whether a run with audience a may see m. Every read path checks it.

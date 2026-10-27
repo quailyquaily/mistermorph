@@ -24,7 +24,9 @@ const (
 
 	defaultSearchLimit = 10
 	maxSearchLimit     = 50
-	minTrigramRunes    = 3
+	// MaxConsoleResults is how many memories the Console lists at once.
+	MaxConsoleResults = 1000
+	minTrigramRunes   = 3
 )
 
 const schemaSQL = `
@@ -71,7 +73,10 @@ CREATE TABLE memory_review (
 `
 
 func migrations() []sqlitedb.Migration {
-	return []sqlitedb.Migration{{Name: "create memories", SQL: schemaSQL}}
+	return []sqlitedb.Migration{
+		{Name: "create memories", SQL: schemaSQL},
+		{Name: "create memory meta", SQL: `CREATE TABLE memory_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)`},
+	}
 }
 
 // Store is the memories in memory.db.
@@ -198,6 +203,58 @@ func (s *Store) Forget(ctx context.Context, a audience.Audience, id string) (boo
 	return n > 0, nil
 }
 
+// Edit is a change the owner makes to a memory from the Console. Empty fields stay as they are.
+type Edit struct {
+	Type        Type       `json:"type,omitempty"`
+	Description string     `json:"description,omitempty"`
+	Body        string     `json:"body,omitempty"`
+	Visibility  Visibility `json:"visibility,omitempty"`
+}
+
+// EditAsOwner changes a memory. Only the owner edits memories this way, so any visibility is
+// allowed, including widening one a conversation saved.
+func (s *Store) EditAsOwner(ctx context.Context, id string, e Edit) (Memory, bool, error) {
+	m, ok, err := s.Get(ctx, audience.Owner(), id)
+	if err != nil || !ok {
+		return Memory{}, ok, err
+	}
+	if t := strings.TrimSpace(string(e.Type)); t != "" {
+		m.Type = Type(t)
+	}
+	if d := strings.TrimSpace(e.Description); d != "" {
+		m.Description = d
+	}
+	if b := strings.TrimSpace(e.Body); b != "" {
+		m.Body = b
+	}
+	if v := strings.TrimSpace(string(e.Visibility)); v != "" {
+		if widthOf(Visibility(v)) < 0 {
+			return Memory{}, true, refuse("visibility must be private, conversation or public, not %q", v)
+		}
+		m.Visibility = Visibility(v)
+	}
+	if err := validateFields(&m, nil); err != nil {
+		return Memory{}, true, err
+	}
+	m.UpdatedAt = s.now().UTC().Format(time.RFC3339Nano)
+	if _, err := s.db.ExecContext(ctx, `UPDATE memories SET type = ?, description = ?, body = ?, visibility = ?, updated_at = ? WHERE id = ?`,
+		m.Type, m.Description, m.Body, m.Visibility, m.UpdatedAt, m.ID); err != nil {
+		return Memory{}, true, fmt.Errorf("edit memory: %w", err)
+	}
+	return m, true, nil
+}
+
+// SearchAsOwner is Search for the owner's Console, which hears every memory and lists up to
+// MaxConsoleResults instead of the model's limit.
+func (s *Store) SearchAsOwner(ctx context.Context, opts SearchOptions) ([]Memory, bool, error) {
+	return s.search(ctx, audience.Owner(), opts, MaxConsoleResults)
+}
+
+// ForgetAsOwner deletes a memory from the Console.
+func (s *Store) ForgetAsOwner(ctx context.Context, id string) (bool, error) {
+	return s.Forget(ctx, audience.Owner(), id)
+}
+
 // DeleteSubject deletes every memory about subject, for a contact that is deleted. Memories that
 // contact told about others stay.
 func (s *Store) DeleteSubject(ctx context.Context, subject string) (int64, error) {
@@ -220,6 +277,10 @@ type SearchOptions struct {
 
 // Search returns memories a may hear, and whether more matched than the limit.
 func (s *Store) Search(ctx context.Context, a audience.Audience, opts SearchOptions) ([]Memory, bool, error) {
+	return s.search(ctx, a, opts, maxSearchLimit)
+}
+
+func (s *Store) search(ctx context.Context, a audience.Audience, opts SearchOptions, maxLimit int) ([]Memory, bool, error) {
 	hear, hearArgs, ok := hearableSQL(a)
 	if !ok {
 		return nil, false, nil
@@ -228,8 +289,8 @@ func (s *Store) Search(ctx context.Context, a audience.Audience, opts SearchOpti
 	if limit <= 0 {
 		limit = defaultSearchLimit
 	}
-	if limit > maxSearchLimit {
-		limit = maxSearchLimit
+	if limit > maxLimit {
+		limit = maxLimit
 	}
 	where := []string{hear}
 	args := append([]any(nil), hearArgs...)

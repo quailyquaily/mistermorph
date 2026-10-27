@@ -250,11 +250,19 @@ func (routes *routeRegistration) registerStateRoutes() {
 				http.Error(w, "contact not found", http.StatusNotFound)
 				return
 			}
+			// Memories about the contact go with them; what they told about others, and the
+			// journal, stay.
+			memoriesDeleted, err := deleteContactMemories(r.Context(), capturedPaths.MemoryDBPath, block.ContactID)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(map[string]any{
-				"deleted":    true,
-				"contact_id": block.ContactID,
-				"status":     string(block.Status),
+				"deleted":          true,
+				"contact_id":       block.ContactID,
+				"status":           string(block.Status),
+				"memories_deleted": memoriesDeleted,
 			})
 			return
 		default:

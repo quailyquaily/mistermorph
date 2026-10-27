@@ -68,10 +68,20 @@ type Contact struct {
 	SlackUserID         string     `json:"slack_user_id,omitempty"`
 	SlackDMChannelID    string     `json:"slack_dm_channel_id,omitempty"`
 	SlackChannelIDs     []string   `json:"slack_channel_ids,omitempty"`
-	PersonaBrief        string     `json:"persona_brief,omitempty"`
-	TopicPreferences    []string   `json:"topic_preferences,omitempty"`
 	CooldownUntil       *time.Time `json:"cooldown_until,omitempty"`
 	LastInteractionAt   *time.Time `json:"last_interaction_at,omitempty"`
+	// legacy is persona_brief and topic_preferences from before they became memories. The store
+	// keeps them in the file until they are moved (TakeLegacyProfiles); nothing else reads them.
+	legacy legacyProfile
+}
+
+type legacyProfile struct {
+	personaBrief     string
+	topicPreferences []string
+}
+
+func (l legacyProfile) empty() bool {
+	return l.personaBrief == "" && len(l.topicPreferences) == 0
 }
 
 type ShareDecision struct {

@@ -12,6 +12,8 @@ import (
 	"testing"
 
 	"github.com/quailyquaily/mistermorph/contacts"
+	"github.com/quailyquaily/mistermorph/internal/audience"
+	"github.com/quailyquaily/mistermorph/internal/memories"
 )
 
 func TestRuntimeStateFileSpecsIncludesHeartbeat(t *testing.T) {
@@ -473,6 +475,19 @@ func TestContactsListRoute(t *testing.T) {
 	})
 
 	t.Run("delete active contact", func(t *testing.T) {
+		memoryStore, err := memories.Open(context.Background(), testRuntimePaths(stateDir).MemoryDBPath)
+		if err != nil {
+			t.Fatalf("memories.Open() error = %v", err)
+		}
+		for _, draft := range []memories.Draft{
+			{Subject: "contact:tg:@alice", Name: "role", Type: memories.TypePerson, Description: "Alice's role", Body: "Maintainer."},
+			{Subject: "contact:tg:@bob", Name: "alice-says", Type: memories.TypeContext, Description: "What Alice said about Bob", Body: "Bob is away."},
+		} {
+			if _, err := memoryStore.Save(context.Background(), audience.Contact("tg:@alice"), draft); err != nil {
+				t.Fatalf("Save() error = %v", err)
+			}
+		}
+		_ = memoryStore.Close()
 		req := httptest.NewRequest(http.MethodDelete, "/contacts/item?contact_id=tg%3A%40alice", nil)
 		req.Header.Set("Authorization", "Bearer token")
 		rec := httptest.NewRecorder()
@@ -490,6 +505,18 @@ func TestContactsListRoute(t *testing.T) {
 		}
 		if _, found, err := contactStore.ReadContactAvatar(context.Background(), "tg:@alice"); err != nil || found {
 			t.Fatalf("avatar after contact delete = (found=%v, err=%v), want false, nil", found, err)
+		}
+		if !strings.Contains(rec.Body.String(), `"memories_deleted":1`) {
+			t.Fatalf("delete response = %s, want one memory deleted", rec.Body.String())
+		}
+		memoryStore, err = memories.Open(context.Background(), testRuntimePaths(stateDir).MemoryDBPath)
+		if err != nil {
+			t.Fatalf("memories.Open() error = %v", err)
+		}
+		defer memoryStore.Close()
+		left, err := memoryStore.List(context.Background())
+		if err != nil || len(left) != 1 || left[0].Subject != "contact:tg:@bob" {
+			t.Fatalf("memories after delete = %#v, %v; want only Alice's claim about Bob", left, err)
 		}
 	})
 
