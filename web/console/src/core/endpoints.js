@@ -136,6 +136,28 @@ function endpointCompactLocationLabel(item, t) {
   }
 }
 
+// endpointURLInsecure reports whether the Console reaches an endpoint over plain HTTP to another
+// machine, where what it forwards, such as a sudo password, crosses the network unencrypted.
+// HTTPS, loopback and the in-process local runtime are fine.
+function endpointURLInsecure(rawURL) {
+  let parsed;
+  try {
+    parsed = new URL(String(rawURL || "").trim());
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== "http:") {
+    return false;
+  }
+  const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  const loopback =
+    host === "localhost" ||
+    host.endsWith(".localhost") ||
+    host === "::1" ||
+    /^127(\.\d{1,3}){3}$/.test(host);
+  return !loopback;
+}
+
 function endpointDisplayItem(item, t) {
   const channelBadges = endpointChannelBadges(item, t);
   const channelLabel = channelBadges.map((item) => item.label).join(" + ");
@@ -162,6 +184,7 @@ export {
   CONSOLE_LOCAL_ENDPOINT_REF,
   endpointChannelLabel,
   endpointDisplayItem,
+  endpointURLInsecure,
   isConsoleLocalEndpoint,
   isEndpointSelectable,
   rootEntryEndpoint,

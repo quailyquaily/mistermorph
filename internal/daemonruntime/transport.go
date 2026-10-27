@@ -40,13 +40,16 @@ func ClientTransportFromContext(ctx context.Context) (transport, remote string, 
 }
 
 // RequestTransport reports how the client behind r reached us: TransportSecure over TLS or from
-// this machine, otherwise TransportInsecure, and its address. A relayed request reports what its
-// proxy passed on.
+// this machine, otherwise TransportInsecure, and its address. A relayed request is secure only when
+// both hops are: the client's to its proxy, as the proxy passed it on, and the proxy's to us.
 func RequestTransport(r *http.Request) (transport string, remote string) {
 	if transport, remote, ok := ClientTransportFromContext(r.Context()); ok {
 		return transport, remote
 	}
 	if relayed := strings.TrimSpace(r.Header.Get(TransportHeader)); relayed == TransportSecure || relayed == TransportInsecure {
+		if hop, _ := DirectTransport(r); hop != TransportSecure {
+			relayed = TransportInsecure
+		}
 		return relayed, strings.TrimSpace(r.Header.Get(RemoteHeader))
 	}
 	return DirectTransport(r)

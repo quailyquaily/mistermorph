@@ -1,17 +1,19 @@
 package chatcmd
 
 import (
-	tea "charm.land/bubbletea/v2"
 	"context"
 	"encoding/json"
 
+	tea "charm.land/bubbletea/v2"
+
 	"fmt"
-	"github.com/charmbracelet/x/ansi"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/gorilla/websocket"
 	"github.com/quailyquaily/mistermorph/internal/taskdomain"

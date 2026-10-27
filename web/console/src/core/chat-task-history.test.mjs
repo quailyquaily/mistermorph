@@ -286,10 +286,9 @@ test("questions from the task result or a stream frame keep their choices and an
   assert.equal(kept.questions[0].id, "q3");
 });
 
-test("elevations from the task result or a stream frame keep their exact command and offer", () => {
+test("elevations from the task result or a stream frame keep their exact command", () => {
   assert.equal(normalizeElevations(undefined), null);
   assert.equal(normalizeElevations([{ id: "", command: "ls" }, { id: "e", command: " " }]), null);
-  const offer = { v: 1, server_pub: "c3B1Yg", identity: "aWQ", signature: "c2ln" };
   const elevations = normalizeElevations([
     {
       id: "el_1",
@@ -299,28 +298,25 @@ test("elevations from the task result or a stream frame keep their exact command
       deadline: 1800000120,
       attempt: 2,
       status: "open",
-      web_insecure: "deny",
-      offer,
+      insecure: "deny",
     },
-    { id: "el_2", command: "reboot", deadline: 1800000200, status: "allowed", offer },
+    { id: "el_2", command: "reboot", deadline: 1800000200, status: "allowed" },
     { id: "el_3", command: "ls", status: "weird" },
   ]);
   assert.deepEqual(elevations, [
     {
       id: "el_1",
-      // The offer's signature covers the command and directory byte for byte, so neither is trimmed.
+      // The command and directory are what the person approves, so neither is trimmed.
       command: " apt-get install -y jq ",
       cwd: "/srv/app",
       host: "box",
       deadline: 1800000120,
       attempt: 2,
       status: "open",
-      webInsecure: "deny",
-      offer,
+      insecure: "deny",
     },
-    // Only an open request carries an offer.
-    { id: "el_2", command: "reboot", cwd: "", host: "", deadline: 1800000200, attempt: 0, status: "allowed", webInsecure: "warn", offer: null },
-    { id: "el_3", command: "ls", cwd: "", host: "", deadline: 0, attempt: 0, status: "expired", webInsecure: "warn", offer: null },
+    { id: "el_2", command: "reboot", cwd: "", host: "", deadline: 1800000200, attempt: 0, status: "allowed", insecure: "warn" },
+    { id: "el_3", command: "ls", cwd: "", host: "", deadline: 0, attempt: 0, status: "expired", insecure: "warn" },
   ]);
 
   const item = taskListHistoryItems(

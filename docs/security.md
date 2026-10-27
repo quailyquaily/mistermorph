@@ -275,13 +275,15 @@ MISTER_MORPH_SERVER_AUTH_TOKEN="..."
   the command shown: on an approval card in the chat that started the task, or in a system dialog
   (`sudo -k -A` with mistermorph as the askpass helper on Linux and macOS, UAC on Windows). Each
   command needs its own approval. The password goes to sudo; the agent process holds it only to
-  pass it on, and the model, tool output and logs never see it. From the web Console and remote
-  chat it travels encrypted end to end (X25519, XChaCha20-Poly1305), signed by the runtime's
-  identity key (`file_state_dir/elevation_identity`), which clients pin. On plain HTTP that
-  protects against eavesdropping, not against a tampered page; use HTTPS, an SSH tunnel or chat, or
-  set `tools.bash.elevation.web_insecure: deny`. Each elevated command and each answer is logged
-  (`elevated_command_started`, `elevated_command_finished`, `elevated_command_approved`,
-  `elevated_command_declined`, `elevated_command_answer_rejected`). Turn it off with `tools.bash.elevation.enabled: false` (or the
+  pass it on, and the model, tool output and logs never see it. The agent hands it only to sudo's
+  own askpass helper (a direct child of that sudo, checked through the socket's peer credentials),
+  not to another process of the user that read the helper's token. From the web Console and remote
+  chat it travels over the client's connection, protected by that alone: reach the Console over
+  HTTPS, an SSH tunnel or a VPN such as WireGuard. On plain HTTP to another machine the web card
+  warns first; `tools.bash.elevation.insecure: deny` makes the runtime refuse those answers. Each
+  elevated command and each answer is logged (`elevated_command_started`,
+  `elevated_command_finished`, `elevated_command_approved`, `elevated_command_declined`,
+  `elevated_command_answer_rejected`, `elevated_command_insecure_answer`). Turn it off with `tools.bash.elevation.enabled: false` (or the
   `powershell` one); keep it off for
   services nobody watches. See [Elevated commands](tools.md#elevated-commands).
 

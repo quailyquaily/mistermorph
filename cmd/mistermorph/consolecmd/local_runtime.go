@@ -232,10 +232,6 @@ func newConsoleLocalRuntime(cfg serveConfig, reader *viper.Viper) (*consoleLocal
 	out.bus = inprocBus
 	out.streamHub = newConsoleStreamHub()
 	out.elevations = newConsoleElevations(gen.logger)
-	// Load the identity now so its fingerprint is in the log before anyone is asked to compare it.
-	if _, err := out.elevations.loadIdentity(gen.paths.StateDir); err != nil {
-		gen.logger.Warn("elevation_identity_unavailable", "error", err.Error())
-	}
 	// Chat tasks ask their elevated commands on approval cards, so they need no desktop dialog.
 	elevate.OfferClientApprovals()
 	out.notificationHub = newConsoleNotificationHub()
@@ -1318,10 +1314,9 @@ func (r *consoleLocalRuntime) routesOptions(authToken string) daemonruntime.Rout
 				generation.acquire()
 				return r.submitTaskWithGeneration(ctx, generation, req)
 			},
-			Stop:              r.stopTask,
-			AnswerQuestion:    r.answerQuestion,
-			AnswerElevation:   r.answerElevation,
-			ElevationIdentity: r.elevationIdentity,
+			Stop:            r.stopTask,
+			AnswerQuestion:  r.answerQuestion,
+			AnswerElevation: r.answerElevation,
 			TopicMetadata: func(ctx context.Context, topicID string) (daemonruntime.TopicMetadata, error) {
 				return r.topicMetadataForTopic(ctx, topicID, paths.TopicContextPath, defaultWorkspaceDir)
 			},
@@ -2411,11 +2406,11 @@ func (r *consoleLocalRuntime) handleTaskJob(workerCtx context.Context, conversat
 	var elevations *consoleTaskElevations
 	if r.elevations != nil && consoleAsksUser(job.Trigger) {
 		elevations = &consoleTaskElevations{taskID: job.TaskID, hub: r.streamHub}
-		webInsecure := "warn"
+		insecure := "warn"
 		if reader := r.currentConfigReader(); reader != nil {
-			webInsecure = consoleElevationWebInsecure(reader.GetString("tools.bash.elevation.web_insecure"))
+			insecure = consoleElevationInsecure(reader.GetString("tools.bash.elevation.insecure"))
 		}
-		runCtx = elevate.WithApprover(runCtx, r.elevations.approver(r.runtimePaths.StateDir, webInsecure, elevations))
+		runCtx = elevate.WithApprover(runCtx, r.elevations.approver(insecure, elevations))
 	}
 	runCtx = llmutil.WithRetryNotification(runCtx, func(ctx context.Context, event llmutil.RetryEvent) {
 		trace.HandleEvent(ctx, agent.Event{Kind: agent.EventKindLLMRetry, RunID: llmstats.RunIDFromContext(ctx), Text: event.StatusText()})

@@ -1067,18 +1067,6 @@ body:has(.settings-page) .q-dialog .q-menu-item.danger .q-menu-title {
   border-bottom: 1px solid color-mix(in srgb, var(--line-soft) 82%, transparent);
 }
 
-.settings-elevation-fingerprint {
-  margin: 6px 0 2px;
-  font-family: var(--font-mono);
-  color: var(--text-1);
-  font-variant-numeric: tabular-nums;
-  overflow-wrap: anywhere;
-}
-
-.settings-elevation-key .settings-card-note.is-alert {
-  color: var(--danger);
-}
-
 .settings-console-row-end,
 .settings-toggle-row:last-child {
   border-bottom: 0;
