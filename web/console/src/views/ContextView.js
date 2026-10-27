@@ -120,6 +120,7 @@ const ContextView = {
       if (part.kind === "tool") return part.tool || part.label;
       if (part.kind === "summary") return t("context_inspector_item_summary");
       if (part.kind === "meta") return t("context_inspector_item_meta");
+      if (part.kind === "context") return part.label || t("context_inspector_item_context");
       if (part.role === "tool") return t("context_inspector_item_tool_result", { tool: part.tool || "?" });
       if (part.role === "assistant" && part.tool) return t("context_inspector_item_tool_call", { tool: part.tool });
       if (part.role === "assistant") return t("context_inspector_item_agent");

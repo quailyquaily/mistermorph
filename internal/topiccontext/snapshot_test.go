@@ -41,6 +41,7 @@ func testRequest() (llm.Request, llm.RequestLayout) {
 			{Role: "user", Content: "earlier question"},
 			{Role: "assistant", Content: "earlier answer"},
 			{Role: "user", Content: `{"mister_morph_meta":{}}`},
+			{Role: "user", Content: "[[ Saved Memories ]]\n<memory id=\"mem_1\">\nReports go to the owner\n</memory>"},
 			{Role: "user", Content: "read the report"},
 			{Role: "assistant", ToolCalls: []llm.ToolCall{{ID: "c1", Name: "read_file", RawArguments: `{"path":"r.pdf"}`}}},
 			{Role: "tool", ToolCallID: "c1", Content: strings.Repeat("report text ", 200)},
@@ -49,7 +50,7 @@ func testRequest() (llm.Request, llm.RequestLayout) {
 	}
 	layout := llm.RequestLayout{MessageKinds: []string{
 		llm.MessageKindSystem, llm.MessageKindSummary, llm.MessageKindHistory, llm.MessageKindHistory,
-		llm.MessageKindMeta, llm.MessageKindCurrent, llm.MessageKindStep, llm.MessageKindStep,
+		llm.MessageKindMeta, llm.MessageKindContext, llm.MessageKindCurrent, llm.MessageKindStep, llm.MessageKindStep,
 	}}
 	return request, layout
 }
@@ -91,6 +92,11 @@ func TestBuildSnapshotSplitsTheRequestAndMatchesTheReportedTotal(t *testing.T) {
 	history := byKind[PartHistory].Children
 	if len(history) != 3 || history[0].Kind != PartSummary {
 		t.Fatalf("history = %+v", history)
+	}
+	current := byKind[PartCurrent].Children
+	if len(current) != 3 || current[0].Kind != PartMeta || current[1].Kind != PartContext || current[1].Label != "Saved Memories" ||
+		current[2].Kind != PartMessage || current[2].Content != "read the report" {
+		t.Fatalf("current = %+v", current)
 	}
 	steps := byKind[PartSteps].Children
 	if len(steps) != 2 || steps[0].Tool != "read_file" || steps[1].Role != "tool" || steps[1].Tool != "read_file" {

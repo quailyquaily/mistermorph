@@ -55,17 +55,27 @@ func AttachMemories(ctx context.Context, paths runtimepaths.Paths, cfg toolsutil
 	return store, nil
 }
 
-// AppendMemoriesPrompt adds the memories block for who: the rules and the memories it may hear
-// without searching. It does nothing without a store.
-func AppendMemoriesPrompt(ctx context.Context, store *memories.Store, spec *agent.PromptSpec, who audience.Audience, readOnly bool, logger *slog.Logger) {
-	if store == nil || spec == nil {
+// AppendMemoriesPrompt adds the memories rules to the system prompt. It does nothing without a store.
+func AppendMemoriesPrompt(store *memories.Store, spec *agent.PromptSpec, who audience.Audience, readOnly bool) {
+	if store == nil {
 		return
 	}
-	items, more, err := store.ForPrompt(ctx, who, promptParticipants(who), memories.MaxPerSubject)
-	if err != nil && logger != nil {
-		logger.Warn("memories_prompt_error", "audience", who.String(), "error", err.Error())
+	promptprofile.AppendMemoriesBlock(spec, who, readOnly)
+}
+
+// MemoriesRunContext gives each fresh run the [[ Saved Memories ]] note: the memories who may hear
+// without searching, read when the run starts. It is nil without a store.
+func MemoriesRunContext(store *memories.Store, who audience.Audience, logger *slog.Logger) agent.RunContext {
+	if store == nil {
+		return nil
 	}
-	promptprofile.AppendMemoriesBlock(spec, who, items, more, readOnly)
+	return func(ctx context.Context) []string {
+		items, more, err := store.ForPrompt(ctx, who, promptParticipants(who), memories.MaxPerSubject)
+		if err != nil && logger != nil {
+			logger.Warn("memories_prompt_error", "audience", who.String(), "error", err.Error())
+		}
+		return []string{promptprofile.MemoriesContext(who, items, more)}
+	}
 }
 
 const memoryReminderText = "[[ Runtime Note ]]\nNothing has been saved to memory for several turns in this conversation. If in recent messages the person corrected you, confirmed an approach, or told you something lasting about themselves or their work, save it with memory_save during this task. If not, ignore this note."

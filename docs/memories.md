@@ -57,7 +57,7 @@ Only the Console can set or clear this flag. Nothing a contact sends can, howeve
 
 With `tools.tool_search.enabled: false` all five are ordinary tools. A memory or journal event the audience may not hear reads as not found.
 
-The prompt lists the memories the run may use without searching (bodies up to 6 KiB in total, otherwise descriptions only) and the rules for saving: save corrections, confirmed approaches, what people say about themselves, and what you are asked to remember; never summaries of what was done, things that matter only in the task, or secrets.
+The system prompt holds the rules for saving: save corrections, confirmed approaches, what people say about themselves, and what you are asked to remember; never summaries of what was done, things that matter only in the task, or secrets. The memories the run may use without searching come in a `[[ Saved Memories ]]` message of their own, right before the person's message, read fresh when each run starts. Bodies fit in 6 KiB in total, feedback first; past that, a memory shows only its description. Keeping the memories out of the system prompt means a save does not cost the prompt cache of the conversation. The context window inspector (Chat > context meter) shows the note as its own row under Current message.
 
 ## The reminder
 

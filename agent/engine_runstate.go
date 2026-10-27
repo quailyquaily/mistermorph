@@ -26,6 +26,7 @@ type resumeState struct {
 	AgentCtx    contextSnapshot `json:"agent_ctx"`
 
 	MetaMessageIndex        *int              `json:"meta_message_index,omitempty"`
+	ContextMessageCount     int               `json:"context_message_count,omitempty"`
 	FixedMessageCount       int               `json:"fixed_message_count,omitempty"`
 	MessageBoundaries       map[int]string    `json:"message_boundaries,omitempty"`
 	Checkpoint              ContextCheckpoint `json:"checkpoint,omitempty"`
@@ -144,11 +145,15 @@ func unmarshalResumeState(b []byte) (resumeState, error) {
 	}
 	if st.Version < 2 {
 		st.MetaMessageIndex = nil
+		st.ContextMessageCount = 0
 	} else {
 		if st.FixedMessageCount < 0 || st.FixedMessageCount > len(st.Messages) {
 			return resumeState{}, fmt.Errorf("invalid fixed message count")
 		}
 		if err := validateMetaMessageIndex(st.Messages, st.FixedMessageCount, st.MetaMessageIndex); err != nil {
+			return resumeState{}, err
+		}
+		if err := validateContextMessages(st.Messages, st.MetaMessageIndex, st.ContextMessageCount); err != nil {
 			return resumeState{}, err
 		}
 		for index := range st.MessageBoundaries {
@@ -163,6 +168,24 @@ func unmarshalResumeState(b []byte) (resumeState, error) {
 		}
 	}
 	return st, nil
+}
+
+// validateContextMessages checks that the count messages after the metadata are context messages:
+// user messages with text and nothing else.
+func validateContextMessages(messages []llm.Message, meta *int, count int) error {
+	if count == 0 {
+		return nil
+	}
+	if count < 0 || meta == nil || *meta+count >= len(messages) {
+		return fmt.Errorf("invalid context message count %d", count)
+	}
+	for i := *meta + 1; i <= *meta+count; i++ {
+		m := messages[i]
+		if m.Role != "user" || m.Content == "" || len(m.Parts) != 0 || len(m.ToolCalls) != 0 || m.ToolCallID != "" {
+			return fmt.Errorf("invalid context message at %d", i)
+		}
+	}
+	return nil
 }
 
 func validateMetaMessageIndex(messages []llm.Message, fixed int, index *int) error {

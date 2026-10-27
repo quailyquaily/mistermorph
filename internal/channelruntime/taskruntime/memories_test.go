@@ -128,7 +128,7 @@ func TestMemoryReminder(t *testing.T) {
 	}
 }
 
-func TestPrepareRunAddsTheMemoriesBlock(t *testing.T) {
+func TestPrepareRunKeepsMemoriesOutOfTheSystemPrompt(t *testing.T) {
 	root := t.TempDir()
 	deps := lifecycleTaskRuntimeDeps(func(llmutil.ResolvedRoute) (llm.Client, error) {
 		return &lifecycleTaskRuntimeClient{}, nil
@@ -161,7 +161,32 @@ func TestPrepareRunAddsTheMemoriesBlock(t *testing.T) {
 		t.Fatalf("PrepareEngine() error = %v", err)
 	}
 	defer func() { _ = prepared.Cleanup() }()
-	if !strings.Contains(prompt, "[[ Memories ]]") || !strings.Contains(prompt, "DM release notes to the owner.") {
-		t.Fatalf("prompt blocks = %q, want the memories block with the owner's memory", prompt)
+	if !strings.Contains(prompt, "[[ Memories ]]") || strings.Contains(prompt, "DM release notes") {
+		t.Fatalf("system prompt blocks = %q, want the rules without the memories: a save would miss the prompt cache", prompt)
+	}
+}
+
+func TestMemoriesRunContext(t *testing.T) {
+	store, err := memories.Open(context.Background(), filepath.Join(t.TempDir(), "memory.db"))
+	if err != nil {
+		t.Fatalf("memories.Open() error = %v", err)
+	}
+	defer store.Close()
+	runContext := MemoriesRunContext(store, audience.Owner(), slog.Default())
+	if notes := runContext(context.Background()); len(notes) != 1 || !strings.Contains(notes[0], "No memories here yet.") {
+		t.Fatalf("notes = %q, want the empty note", notes)
+	}
+	// Each run reads the store when it starts, so a save shows in the next run's note.
+	if _, err := store.Save(context.Background(), audience.Owner(), memories.Draft{
+		Subject: "owner", Name: "release-notes", Type: memories.TypeFeedback, Description: "Release notes by DM", Body: "DM release notes to the owner.",
+	}); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+	notes := runContext(context.Background())
+	if len(notes) != 1 || !strings.HasPrefix(notes[0], "[[ Saved Memories ]]") || !strings.Contains(notes[0], "DM release notes to the owner.") {
+		t.Fatalf("notes = %q, want the saved memory", notes)
+	}
+	if MemoriesRunContext(nil, audience.Owner(), slog.Default()) != nil {
+		t.Fatal("run context without a store")
 	}
 }

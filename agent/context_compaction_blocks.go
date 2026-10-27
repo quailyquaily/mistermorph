@@ -16,6 +16,7 @@ const (
 
 type transcriptBlockOptions struct {
 	MetaMessageIndex            *int
+	ContextMessageCount         int
 	FixedMessageCount           int
 	PendingToolCallIDs          map[string]struct{}
 	ProtectedMessageIndexes     map[int]struct{}
@@ -36,8 +37,10 @@ type transcriptSelection struct {
 	End             int
 	BlockCount      int
 	EstimatedTokens int
-	MetaIndex       *int
-	ReachedTarget   bool
+	// Kept are the indexes, in order, of the runtime metadata and context messages inside the
+	// selection. They are not summarized: they stay, right after the summary.
+	Kept          []int
+	ReachedTarget bool
 }
 
 func buildTranscriptBlocks(messages []llm.Message, opts transcriptBlockOptions) []transcriptBlock {
@@ -66,7 +69,7 @@ func buildTranscriptBlocks(messages []llm.Message, opts transcriptBlockOptions) 
 			EstimatedTokens: estimateMessageTokens(message),
 			Compactable:     true,
 		}
-		if opts.MetaMessageIndex != nil && i == *opts.MetaMessageIndex {
+		if opts.MetaMessageIndex != nil && i >= *opts.MetaMessageIndex && i <= *opts.MetaMessageIndex+opts.ContextMessageCount {
 			block.Meta = true
 			block.EstimatedTokens = 0
 		}
@@ -167,8 +170,7 @@ func selectTranscriptPrefix(blocks []transcriptBlock, targetTokens int) (transcr
 		}
 		selection.End = block.End
 		if block.Meta {
-			index := block.Start
-			selection.MetaIndex = &index
+			selection.Kept = append(selection.Kept, block.Start)
 		} else {
 			selection.BlockCount++
 		}
