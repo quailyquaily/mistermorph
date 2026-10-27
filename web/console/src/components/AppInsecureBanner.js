@@ -15,8 +15,9 @@ const dismissedKey = ref("");
 // (docs/feat/feat_20261026_elevation_client_approval.md). It says which hop: the page itself, or the
 // Console's hop to the selected endpoint or the endpoint its chat submits to. The runtime does not
 // check, so this is the only warning: closing it lasts until the page reloads, and it comes back
-// when a different hop turns unencrypted, such as another endpoint. On a phone it shows a shorter
-// message without the label.
+// when a different hop turns unencrypted, such as another endpoint. It shows the short message,
+// with the full one, which names the SSH tunnel and VPN exceptions, as its tooltip; on a phone it
+// drops the label too.
 const AppInsecureBanner = {
   setup() {
     const t = translate;
@@ -49,8 +50,7 @@ const AppInsecureBanner = {
       </span>
       <span class="app-insecure-banner-value">
         <span class="app-notice-mark" aria-hidden="true"></span>
-        <span class="app-notice-text app-insecure-banner-full">{{ text }}</span>
-        <span class="app-notice-text app-insecure-banner-short" :title="text">{{ shortText }}</span>
+        <span class="app-notice-text app-insecure-banner-text" :title="text">{{ shortText }}</span>
       </span>
       <button
         type="button"
