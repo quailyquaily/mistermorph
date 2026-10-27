@@ -56,6 +56,36 @@ func TestResolve(t *testing.T) {
 	}
 }
 
+func TestResolveGroupSpeaker(t *testing.T) {
+	known := fakeLookup{contacts: map[string]contacts.Contact{
+		"tg:@owner": {ContactID: "tg:@owner", Owner: true},
+		"tg:@alice": {ContactID: "tg:@alice"},
+	}}
+	for _, tc := range []struct {
+		username    string
+		wantSpeaker string
+		wantOwner   bool
+	}{
+		{"owner", "tg:@owner", true},
+		{"alice", "tg:@alice", false},
+		{"stranger", "tg:@stranger", false},
+	} {
+		got := Resolve(context.Background(), known, Input{Group: true, ConversationKey: "tg:-100", Sender: contacts.InboundSender{Channel: "telegram", Username: tc.username}})
+		if got.String() != "conversation:tg:-100" || got.Speaker != tc.wantSpeaker || got.SpeakerIsOwner != tc.wantOwner {
+			t.Fatalf("Resolve(%s in group) = %#v, want speaker %q owner=%v", tc.username, got, tc.wantSpeaker, tc.wantOwner)
+		}
+		if got.SpeakerContactID() != tc.wantSpeaker {
+			t.Fatalf("SpeakerContactID() = %q", got.SpeakerContactID())
+		}
+	}
+	if got := Contact("tg:@alice").SpeakerContactID(); got != "tg:@alice" {
+		t.Fatalf("contact SpeakerContactID() = %q", got)
+	}
+	if got := Owner().SpeakerContactID(); got != "" {
+		t.Fatalf("owner SpeakerContactID() = %q", got)
+	}
+}
+
 func TestParseRoundTrip(t *testing.T) {
 	for _, a := range []Audience{{}, Owner(), Contact("tg:@alice"), Conversation("slack:T1:C1:1700000000.1")} {
 		got, err := Parse(a.String())

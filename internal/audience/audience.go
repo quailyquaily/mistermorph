@@ -31,6 +31,11 @@ type Audience struct {
 	// ID is the contact ID for KindContact and the runtime's conversation key for
 	// KindConversation. It is empty for KindOwner.
 	ID string
+	// Speaker is, in a conversation, the contact ID of who sent the message, and SpeakerIsOwner
+	// says whether that contact is marked as the owner. They are not part of the audience's
+	// identity: String and Parse leave them out.
+	Speaker        string
+	SpeakerIsOwner bool
 }
 
 func Owner() Audience { return Audience{Kind: KindOwner} }
@@ -52,6 +57,21 @@ func Conversation(conversationKey string) Audience {
 }
 
 func (a Audience) IsZero() bool { return a.Kind == "" }
+
+// Is reports whether a and b are the same audience, whoever spoke.
+func (a Audience) Is(b Audience) bool { return a.Kind == b.Kind && a.ID == b.ID }
+
+// SpeakerContactID is the contact who said what the run heard: the contact in a direct message,
+// the speaker in a conversation, and empty for the owner.
+func (a Audience) SpeakerContactID() string {
+	switch a.Kind {
+	case KindContact:
+		return a.ID
+	case KindConversation:
+		return a.Speaker
+	}
+	return ""
+}
 
 // String is the stored form: "owner", "contact:<id>" or "conversation:<key>". The zero value is "".
 func (a Audience) String() string {
@@ -102,7 +122,8 @@ type SenderLookup interface {
 }
 
 // Resolve is the audience of a run started by an inbound message:
-//   - a group is its conversation, even when the agent knows people in it;
+//   - a group is its conversation, even when the agent knows people in it, with the sender as its
+//     speaker;
 //   - a direct message from a contact marked as the owner is the owner;
 //   - any other direct message is that contact, or the contact the observer will record for an
 //     unknown sender;
@@ -111,7 +132,21 @@ type SenderLookup interface {
 // A lookup error makes a direct message its conversation, which hears the least.
 func Resolve(ctx context.Context, lookup SenderLookup, in Input) Audience {
 	if in.Group {
-		return Conversation(in.ConversationKey)
+		group := Conversation(in.ConversationKey)
+		if group.IsZero() {
+			return group
+		}
+		if lookup != nil {
+			if contact, ok, err := lookup.LookupSender(ctx, in.Sender); err == nil && ok {
+				group.Speaker = strings.TrimSpace(contact.ContactID)
+				group.SpeakerIsOwner = contact.Owner
+				return group
+			}
+		}
+		if ids := contacts.SenderContactIDs(in.Sender); len(ids) > 0 {
+			group.Speaker = ids[0]
+		}
+		return group
 	}
 	if lookup != nil {
 		contact, ok, err := lookup.LookupSender(ctx, in.Sender)
