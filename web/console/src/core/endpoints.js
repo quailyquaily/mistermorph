@@ -158,16 +158,18 @@ function endpointURLInsecure(rawURL) {
   return !loopback;
 }
 
-// connectionInsecure reports whether what the person sends, such as a password, crosses the network
-// unencrypted on either hop: the page itself on plain HTTP (a secure context covers HTTPS and
-// localhost, so an SSH tunnel; the desktop app talks to its own runtime), or the Console reaching
-// an endpoint over plain HTTP to another machine. Only the browser can tell: behind a TLS proxy or a
-// VPN the runtime sees plain HTTP either way. A VPN cannot be told apart here either.
-function connectionInsecure({ desktop = false, secureContext = true, endpointURLs = [] } = {}) {
-  if (!desktop && secureContext === false) {
-    return true;
-  }
-  return endpointURLs.some((url) => endpointURLInsecure(url));
+// insecureHops reports which hop carries what the person sends, such as a password, across the
+// network unencrypted: page, when the page itself is on plain HTTP (a secure context covers HTTPS
+// and localhost, so an SSH tunnel; the desktop app talks to its own runtime); endpoint, the host of
+// the first endpoint the Console reaches over plain HTTP on another machine. Only the browser can
+// tell: behind a TLS proxy or a VPN the runtime sees plain HTTP either way. A VPN cannot be told
+// apart here either.
+function insecureHops({ desktop = false, secureContext = true, endpointURLs = [] } = {}) {
+  const url = endpointURLs.find((item) => endpointURLInsecure(item));
+  return {
+    page: !desktop && secureContext === false,
+    endpoint: url ? new URL(String(url).trim()).host : "",
+  };
 }
 
 function endpointDisplayItem(item, t) {
@@ -194,10 +196,10 @@ function endpointDisplayItem(item, t) {
 
 export {
   CONSOLE_LOCAL_ENDPOINT_REF,
-  connectionInsecure,
   endpointChannelLabel,
   endpointDisplayItem,
   endpointURLInsecure,
+  insecureHops,
   isConsoleLocalEndpoint,
   isEndpointSelectable,
   rootEntryEndpoint,

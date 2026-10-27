@@ -530,8 +530,18 @@ const I18N = {
     chat_elevation_decline: "Decline",
     chat_elevation_time_left: "{time} left",
     chat_elevation_retry: "The password was not accepted. Try again.",
-    connection_insecure_warn:
-      "This connection does not use HTTPS. Unless it runs through an SSH tunnel or a VPN such as WireGuard, anyone on the network can read what you send, passwords included.",
+    connection_insecure_page:
+      "This page is on plain HTTP, not HTTPS. Unless you reach it through an SSH tunnel or a VPN such as WireGuard, anyone on the network can read what you send, passwords included.",
+    connection_insecure_page_short:
+      "This page is on plain HTTP. Others on the network can read what you send.",
+    connection_insecure_endpoint:
+      "The Console reaches the runtime at {host} over plain HTTP, not HTTPS. Unless that runs through a VPN such as WireGuard, anyone on that network can read what it passes on, passwords included.",
+    connection_insecure_endpoint_short:
+      "The runtime at {host} is on plain HTTP. Others on the network can read what you send.",
+    connection_insecure_both:
+      "This page and the Console's connection to the runtime at {host} are both on plain HTTP, not HTTPS. Unless they run through an SSH tunnel or a VPN such as WireGuard, anyone on the network can read what you send, passwords included.",
+    connection_insecure_both_short:
+      "This page and the runtime at {host} are on plain HTTP. Others on the network can read what you send.",
     chat_elevation_closed: "This request is closed.",
     chat_elevation_outcome: "Result",
     chat_elevation_allowed: "Allowed: the password was sent to sudo.",
@@ -2249,8 +2259,18 @@ const I18N = {
     chat_elevation_decline: "拒绝",
     chat_elevation_time_left: "剩余 {time}",
     chat_elevation_retry: "密码不正确，请重试。",
-    connection_insecure_warn:
-      "这个连接没有使用 HTTPS。除非它经过 SSH 隧道或 WireGuard 等 VPN，网络上的任何人都能读到你发送的内容，包括密码。",
+    connection_insecure_page:
+      "这个页面使用的是普通 HTTP，而不是 HTTPS。除非你通过 SSH 隧道或 WireGuard 等 VPN 访问，网络上的任何人都能读到你发送的内容，包括密码。",
+    connection_insecure_page_short:
+      "这个页面使用普通 HTTP，网络上的其他人能读到你发送的内容。",
+    connection_insecure_endpoint:
+      "Console 通过普通 HTTP（而不是 HTTPS）连接 {host} 上的运行时。除非这段连接经过 WireGuard 等 VPN，该网络上的任何人都能读到它转发的内容，包括密码。",
+    connection_insecure_endpoint_short:
+      "{host} 上的运行时使用普通 HTTP，网络上的其他人能读到你发送的内容。",
+    connection_insecure_both:
+      "这个页面和 Console 到 {host} 上运行时的连接都使用普通 HTTP，而不是 HTTPS。除非它们经过 SSH 隧道或 WireGuard 等 VPN，网络上的任何人都能读到你发送的内容，包括密码。",
+    connection_insecure_both_short:
+      "这个页面和 {host} 上的运行时都使用普通 HTTP，网络上的其他人能读到你发送的内容。",
     chat_elevation_closed: "这个请求已关闭。",
     chat_elevation_outcome: "结果",
     chat_elevation_allowed: "已允许：密码已交给 sudo。",
@@ -3967,8 +3987,18 @@ const I18N = {
     chat_elevation_decline: "拒否",
     chat_elevation_time_left: "残り {time}",
     chat_elevation_retry: "パスワードが受け付けられませんでした。もう一度入力してください。",
-    connection_insecure_warn:
-      "この接続は HTTPS を使っていません。SSH トンネルや WireGuard などの VPN を経由していない限り、ネットワーク上の誰でも送信内容（パスワードを含む）を読み取れます。",
+    connection_insecure_page:
+      "このページは HTTPS ではなく通常の HTTP で開かれています。SSH トンネルや WireGuard などの VPN を経由していない限り、ネットワーク上の誰でも送信内容（パスワードを含む）を読み取れます。",
+    connection_insecure_page_short:
+      "このページは通常の HTTP です。ネットワーク上の他人が送信内容を読み取れます。",
+    connection_insecure_endpoint:
+      "Console は {host} のランタイムに HTTPS ではなく通常の HTTP で接続しています。WireGuard などの VPN を経由していない限り、そのネットワーク上の誰でも転送内容（パスワードを含む）を読み取れます。",
+    connection_insecure_endpoint_short:
+      "{host} のランタイムは通常の HTTP です。ネットワーク上の他人が送信内容を読み取れます。",
+    connection_insecure_both:
+      "このページと、Console から {host} のランタイムへの接続は、どちらも HTTPS ではなく通常の HTTP です。SSH トンネルや WireGuard などの VPN を経由していない限り、ネットワーク上の誰でも送信内容（パスワードを含む）を読み取れます。",
+    connection_insecure_both_short:
+      "このページと {host} のランタイムは通常の HTTP です。ネットワーク上の他人が送信内容を読み取れます。",
     chat_elevation_closed: "このリクエストは締め切られました。",
     chat_elevation_outcome: "結果",
     chat_elevation_allowed: "許可しました。パスワードを sudo に渡しました。",
