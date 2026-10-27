@@ -359,7 +359,7 @@ func parseConsoleTaskTimeout(raw string, fallback time.Duration) time.Duration {
 
 func shouldAutoRenameConsoleTopic(topicID string, task string, currentTitle string) bool {
 	topicID = strings.TrimSpace(topicID)
-	if topicID == "" || topicID == daemonruntime.ConsoleDefaultTopicID || topicID == daemonruntime.ConsoleAwarenessTopicID {
+	if topicID == "" || daemonruntime.IsReservedTopicID(topicID) {
 		return false
 	}
 	task = strings.TrimSpace(task)

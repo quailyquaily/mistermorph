@@ -125,6 +125,7 @@ Settings that only apply after a restart (`process_restart` and `runtime_restart
   - regeneration excludes slash commands, reasoning, tool logs, and incomplete replies. Each user message is capped at 600 characters and each completed assistant reply at 400; the total naming input is capped at 8,000 characters
   - regeneration keeps the current name and icon until success, rejects duplicate requests for the same topic, and leaves them unchanged on failure. A title revision prevents late results from overwriting subsequent edits or deletion; starting regeneration also invalidates pending initial naming. Empty and system topics cannot be regenerated
   - topic-scoped `ChatHistoryItems` style list
+  - what other agents send the local agent over Agent Link is kept in one topic per agent (`_agentlink_<instance_id>`, named after the agent). The sidebar's agents button (shown once such a topic exists) lists them with each agent's avatar, the latest first; the date and tag views leave them out. An agent's topic is read-only: a note replaces the composer, and it cannot be renamed, tagged or deleted
   - receive task progress over WebSocket for local and remote Console endpoints, with `/tasks/{id}` polling as fallback
 - Tasks:
   - list + detail (read-only)

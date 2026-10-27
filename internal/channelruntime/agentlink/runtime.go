@@ -194,6 +194,7 @@ func Run(ctx context.Context, d depsutil.CommonDependencies, opts Options) error
 	generations.Start(ctx)
 
 	contactsStore := contacts.NewFileStore(d.RuntimePaths.ContactsDir)
+	nameAgentTopics(ctx, taskStore, contactsStore, logger)
 	workspaceStore := workspace.NewStore(d.RuntimePaths.WorkspaceAttachmentsPath)
 	runControl := runtimecontrol.New()
 	var limiter runtimecore.AgentInteractionLimiter
@@ -321,12 +322,12 @@ func Run(ctx context.Context, d depsutil.CommonDependencies, opts Options) error
 			return err
 		}
 		createdAt := time.Now().UTC()
-		if err := taskdomain.RecordTaskUpsert(taskStore, daemonruntime.TaskInfo{
+		if err := recordAgentTask(taskStore, daemonruntime.TaskInfo{
 			ID: taskID, Status: daemonruntime.TaskQueued, Task: textutil.TruncateRunes(msg.Envelope.Text, 2000),
-			Timeout: opts.TaskTimeout.String(), CreatedAt: createdAt,
+			Timeout: opts.TaskTimeout.String(), CreatedAt: createdAt, TopicID: daemonruntime.AgentLinkTopicID(msg.From),
 			Conversation: runtimecore.ConversationWithAudience(runtimecore.BuildTaskConversation(conversationKey, "private", j.contactID(), peerName, "", nil), audience.Contact(j.contactID())),
 			Result:       map[string]any{"source": mode, "agentlink_from": msg.From, "agentlink_message_id": msg.MessageID, "agentlink_hop": msg.Hop},
-		}, daemonruntime.TaskTrigger{Source: mode, Event: "message", Ref: msg.MessageID}); err != nil {
+		}, daemonruntime.TaskTrigger{Source: mode, Event: "message", Ref: msg.MessageID}, peerName); err != nil {
 			generation.Release()
 			return err
 		}
@@ -417,6 +418,56 @@ func peerPrompt(j job) string {
 }
 
 // conversationKey keeps each dialogue with each agent apart.
+// topicStore is a task store with topics, the Console's.
+type topicStore interface {
+	GetTopic(id string) (*daemonruntime.TopicInfo, bool)
+	UpsertWithTrigger(info daemonruntime.TaskInfo, trigger daemonruntime.TaskTrigger, topicTitle string) error
+}
+
+// recordAgentTask records a task for an agent's message, in the agent's own topic where the store
+// has topics, named after the agent while its name is known.
+func recordAgentTask(store daemonruntime.TaskView, info daemonruntime.TaskInfo, trigger daemonruntime.TaskTrigger, peerName string) error {
+	topics, ok := store.(topicStore)
+	if !ok {
+		return taskdomain.RecordTaskUpsert(store, info, trigger)
+	}
+	title := strings.TrimSpace(peerName)
+	if topic, found := topics.GetTopic(info.TopicID); found && topic != nil && topic.Title == title {
+		title = ""
+	}
+	return topics.UpsertWithTrigger(info, trigger, title)
+}
+
+// nameAgentTopics names the agents' topics that have no title, such as those made for tasks that
+// were moved out of the default topic, after the agents' contacts.
+func nameAgentTopics(ctx context.Context, store daemonruntime.TaskView, contactsStore *contacts.FileStore, logger *slog.Logger) {
+	topics, ok := store.(interface {
+		GetTopic(id string) (*daemonruntime.TopicInfo, bool)
+		SetTopicTitle(id string, title string) error
+	})
+	if !ok {
+		return
+	}
+	items, err := contactsStore.ListContacts(ctx, "")
+	if err != nil {
+		return
+	}
+	for _, contact := range items {
+		instanceID, isAgent := strings.CutPrefix(contact.ContactID, link.ContactPrefix)
+		name := strings.TrimSpace(contact.ContactNickname)
+		if !isAgent || name == "" {
+			continue
+		}
+		topicID := daemonruntime.AgentLinkTopicID(instanceID)
+		if topic, found := topics.GetTopic(topicID); !found || topic == nil || topic.Title != "" {
+			continue
+		}
+		if err := topics.SetTopicTitle(topicID, name); err != nil {
+			logger.Warn("agentlink_topic_title_error", "topic_id", topicID, "error", err.Error())
+		}
+	}
+}
+
 func conversationKey(msg link.Message) string {
 	session := strings.TrimSpace(msg.Envelope.SessionID)
 	if session == "" {

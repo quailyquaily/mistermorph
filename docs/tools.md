@@ -470,6 +470,7 @@ Agents that a Console connects to as endpoints reach each other over Agent Link,
 - `agent_send` waits for the answer, up to `contacts.agent_link.reply_timeout` (default `2m`), and returns it as `reply.text`; the agent can ask a follow-up or answer its user. With no answer by then, `reply.status` is `pending`, and the answer arrives later in the conversation that asked (a Console topic). `contacts_send` does not wait.
 - In the Console chat, the messages between the agents show before the task's reply.
 - An `agent_send` over Agent Link from a task a person started skips the `agent_send` cooldown; one from a task another agent started does not.
+- In the Console, what another agent sends the local agent, and the answers, are kept in a topic per agent. The topic sidebar's agents button lists them, with each agent's avatar; they stay out of the date and tag views.
 - Text only: a file to an `mm:` contact is rejected.
 - Sending needs a running runtime (Console or a channel runtime with its runtime API); a one-off `run` cannot send to `mm:` contacts.
 

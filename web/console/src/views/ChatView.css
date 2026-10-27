@@ -145,15 +145,19 @@
   }
 }
 
+/* The buttons sit flush against each other; only the title keeps a gap. */
 .chat-topic-sidebar-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 0;
 }
 
+/* The title takes the free room, so the buttons stay together at the end. */
 .chat-topic-sidebar-copy {
+  flex: 1 1 auto;
   min-width: 0;
+  margin-inline-end: 12px;
   display: grid;
   gap: 5px;
   pointer-events: auto;
@@ -184,7 +188,7 @@
   height: 13px;
 }
 
-/* One toggle arranges the topic list by tag; off, it is by date. */
+/* The view toggles: the agents' topics, and topics by tag; both off, by date. */
 .chat-topic-view-toggle {
   flex: 0 0 auto;
   min-width: 32px;
@@ -197,11 +201,6 @@
   width: 14px;
   min-width: 14px;
   height: 14px;
-}
-
-/* The toggle and the add button sit together, without the head's gap between them. */
-.chat-topic-view-toggle + .chat-topic-sidebar-new {
-  margin-left: -12px;
 }
 
 .chat-topic-view-toggle.is-active {
@@ -396,6 +395,19 @@
   color: var(--q-c-dark-2);
 }
 
+/* In the agents' list a row leads with the agent's avatar; the row keeps its height. */
+.chat-topic-item:has(.chat-topic-item-avatar) {
+  grid-template-columns: 24px minmax(0, 1fr);
+  padding-block: 5px;
+}
+
+.chat-topic-item-avatar.contact-avatar {
+  --contact-avatar-size: 24px;
+  align-self: center;
+  font-size: 11px;
+  box-shadow: inset 0 0 0 1px var(--line-soft);
+}
+
 /* Centred on its box, the icon sits 0.6px below the title's capitals. Lifted by half a pixel where
    that is a whole device pixel; at 1x the shift would blur its lines, which reads worse. */
 @media (min-resolution: 2dppx) {
@@ -495,6 +507,19 @@
   margin-left: var(--chat-column-side);
   margin-right: calc(var(--chat-column-side) + var(--chat-history-scrollbar-w, 0px));
   padding-bottom: max(10px, env(safe-area-inset-bottom, 0px));
+}
+
+/* An agent's topic holds what that agent sent and the answers; in place of the composer, a line
+   says so. */
+.chat-agent-topic-note {
+  margin: 0 calc(var(--chat-column-side) + var(--chat-history-scrollbar-w, 0px)) 0 var(--chat-column-side);
+  padding: 12px 14px max(12px, env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--line-soft);
+  color: var(--text-2);
+  font-size: var(--font-size-ui);
+  line-height: 1.45;
+  text-align: center;
+  text-wrap: pretty;
 }
 
 .chat-main.is-readonly {
@@ -2886,9 +2911,15 @@ body.artifact-preview-scroll-lock {
 
   .chat-main:not(.is-readonly):not(.is-placeholder-mode) > .chat-placeholder,
   .chat-main:not(.is-readonly):not(.is-placeholder-mode) > .chat-history,
-  .chat-main:not(.is-readonly):not(.is-placeholder-mode) > .chat-composer {
+  .chat-main:not(.is-readonly):not(.is-placeholder-mode) > .chat-composer,
+  .chat-main:not(.is-readonly):not(.is-placeholder-mode) > .chat-agent-topic-note {
     grid-column: 1;
     grid-row: 1;
+  }
+
+  .chat-main:not(.is-readonly):not(.is-placeholder-mode) > .chat-agent-topic-note {
+    align-self: end;
+    z-index: 3;
   }
 
   .chat-main:not(.is-readonly):not(.is-placeholder-mode) > .chat-placeholder {

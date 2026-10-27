@@ -15,7 +15,7 @@ func (r *consoleLocalRuntime) regenerateTopicTitle(ctx context.Context, generati
 		return daemonruntime.TopicInfo{}, fmt.Errorf("console runtime generation is not initialized")
 	}
 	topicID = strings.TrimSpace(topicID)
-	if topicID == "" || topicID == daemonruntime.ConsoleDefaultTopicID || topicID == daemonruntime.ConsoleAwarenessTopicID {
+	if topicID == "" || daemonruntime.IsReservedTopicID(topicID) {
 		return daemonruntime.TopicInfo{}, daemonruntime.BadRequest("topic cannot be renamed")
 	}
 	if _, busy := r.topicTitleRegenerations.LoadOrStore(topicID, struct{}{}); busy {

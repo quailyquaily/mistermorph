@@ -3,6 +3,7 @@ package daemonruntime
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"time"
 
 	"github.com/quailyquaily/mistermorph/internal/taskdomain"
@@ -152,4 +153,26 @@ const (
 	ConsoleDefaultTopicTitle   = "Default"
 	ConsoleAwarenessTopicID    = "_awareness"
 	ConsoleAwarenessTopicTitle = "Awareness"
+	// AgentLinkTopicPrefix starts the ID of the topic that holds what another agent sends this one
+	// over Agent Link: one topic per agent, named after it, kept apart from the person's own topics.
+	AgentLinkTopicPrefix = "_agentlink_"
 )
+
+// AgentLinkTopicID is the topic of the agent with this Agent Link instance ID.
+func AgentLinkTopicID(instanceID string) string {
+	return AgentLinkTopicPrefix + strings.TrimSpace(instanceID)
+}
+
+// IsAgentLinkTopicID reports whether id is an Agent Link agent's topic.
+func IsAgentLinkTopicID(id string) bool {
+	id = strings.TrimSpace(id)
+	return strings.HasPrefix(id, AgentLinkTopicPrefix) && len(id) > len(AgentLinkTopicPrefix)
+}
+
+// IsReservedTopicID reports whether id is a topic the runtime keeps for itself: the default topic,
+// Awareness and the Agent Link agents' topics. Their titles are fixed, and a person does not start
+// chats in the Agent Link ones.
+func IsReservedTopicID(id string) bool {
+	id = strings.TrimSpace(id)
+	return id == ConsoleDefaultTopicID || id == ConsoleAwarenessTopicID || IsAgentLinkTopicID(id)
+}

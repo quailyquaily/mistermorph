@@ -1104,3 +1104,104 @@ func TestConsoleFileStoreTargetsShareAJournalWithoutMixing(t *testing.T) {
 		t.Fatal("reopened integration store lost its task")
 	}
 }
+
+func TestConsoleFileStoreAgentLinkTopics(t *testing.T) {
+	root := t.TempDir()
+	open := func() *ConsoleFileStore {
+		store, err := NewConsoleFileStore(ConsoleFileStoreOptions{RootDir: root, Persist: true, JournalDir: filepath.Join(root, "journal")})
+		if err != nil {
+			t.Fatalf("NewConsoleFileStore() error = %v", err)
+		}
+		return store
+	}
+	const peer = "inst_0123456789abcdef0123456789abcdef"
+	topicID := AgentLinkTopicID(peer)
+	store := open()
+	if err := store.UpsertWithTrigger(TaskInfo{
+		ID: "al_" + peer + "_m1", Status: TaskDone, Task: "hello", CreatedAt: mustParseTime(t, "2026-10-27T10:00:00Z"), TopicID: topicID,
+	}, TaskTrigger{Source: "agentlink", Event: "message", Ref: "m1"}, "Morph-2"); err != nil {
+		t.Fatalf("UpsertWithTrigger() error = %v", err)
+	}
+
+	if got := store.List(TaskListOptions{Limit: 20}); len(got) != 0 {
+		t.Fatalf("unfiltered List() = %#v, want the agent's task left out", got)
+	}
+	if got := store.List(TaskListOptions{Limit: 20, TopicID: topicID}); len(got) != 1 {
+		t.Fatalf("List(agent topic) = %d tasks, want 1", len(got))
+	}
+	if topic, ok := store.GetTopic(topicID); !ok || topic.Title != "Morph-2" {
+		t.Fatalf("GetTopic() = %#v, %v, want titled Morph-2", topic, ok)
+	}
+	if deleted, err := store.DeleteTopic(topicID); deleted || err != nil {
+		t.Fatalf("DeleteTopic(agent topic) = %v, %v, want refused", deleted, err)
+	}
+}
+
+func TestConsoleFileStoreMovesAgentLinkTasksOutOfDefault(t *testing.T) {
+	root := t.TempDir()
+	open := func() *ConsoleFileStore {
+		store, err := NewConsoleFileStore(ConsoleFileStoreOptions{RootDir: root, Persist: true, JournalDir: filepath.Join(root, "journal")})
+		if err != nil {
+			t.Fatalf("NewConsoleFileStore() error = %v", err)
+		}
+		return store
+	}
+	const finished = "inst_0123456789abcdef0123456789abcdef"
+	const queued = "inst_fedcba9876543210fedcba9876543210"
+	store := open()
+	for _, tc := range []struct {
+		info    TaskInfo
+		trigger TaskTrigger
+	}{
+		// Finished: its result no longer names the sender, its ID does.
+		{TaskInfo{ID: "al_" + finished + "_m1", Status: TaskDone, Task: "hi", Result: map[string]any{"output": "hello"}}, TaskTrigger{Source: "agentlink", Event: "message", Ref: "m1"}},
+		{TaskInfo{ID: "al_x_m2", Status: TaskDone, Task: "hi", Result: map[string]any{"agentlink_from": queued}}, TaskTrigger{Source: "agentlink", Event: "message", Ref: "m2"}},
+		// A Console task whose ID only looks like one.
+		{TaskInfo{ID: "al_" + finished + "_m3", Status: TaskDone, Task: "mine"}, TaskTrigger{Source: "chat", Event: "chat_submit"}},
+	} {
+		tc.info.CreatedAt = mustParseTime(t, "2026-10-27T10:00:00Z")
+		if err := store.UpsertWithTrigger(tc.info, tc.trigger, ""); err != nil {
+			t.Fatalf("UpsertWithTrigger(%s) error = %v", tc.info.ID, err)
+		}
+	}
+
+	reloaded := open()
+	for id, want := range map[string]string{
+		"al_" + finished + "_m1": AgentLinkTopicID(finished),
+		"al_x_m2":                AgentLinkTopicID(queued),
+		"al_" + finished + "_m3": ConsoleDefaultTopicID,
+	} {
+		got, ok := reloaded.Get(id)
+		if !ok || got.TopicID != want {
+			t.Fatalf("task %s topic = %v, want %q", id, got, want)
+		}
+	}
+	for _, id := range []string{AgentLinkTopicID(finished), AgentLinkTopicID(queued)} {
+		if _, ok := reloaded.GetTopic(id); !ok {
+			t.Fatalf("topic %s missing after the move", id)
+		}
+	}
+}
+
+func TestReservedTopicIDs(t *testing.T) {
+	for _, tc := range []struct {
+		id        string
+		agentLink bool
+		reserved  bool
+	}{
+		{ConsoleDefaultTopicID, false, true},
+		{ConsoleAwarenessTopicID, false, true},
+		{AgentLinkTopicID("inst_0123456789abcdef0123456789abcdef"), true, true},
+		{AgentLinkTopicPrefix, false, false},
+		{"0199a7c2-topic", false, false},
+	} {
+		t.Run(tc.id, func(t *testing.T) {
+			if got := IsAgentLinkTopicID(tc.id); got != tc.agentLink {
+				t.Fatalf("IsAgentLinkTopicID() = %v, want %v", got, tc.agentLink)
+			}
+			if got := IsReservedTopicID(tc.id); got != tc.reserved {
+				t.Fatalf("IsReservedTopicID() = %v, want %v", got, tc.reserved)
+			}
+		})
+	}
+}
