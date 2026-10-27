@@ -2,214 +2,40 @@ package domainjournal
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
 
 func TestJournalAppendAndReplay(t *testing.T) {
-	root := t.TempDir()
-	j, err := New(JournalOptions{Dir: root})
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
-	t.Cleanup(func() { _ = j.Close() })
+	j := openTestJournal(t, t.TempDir())
 
 	if _, err := j.Append(baseEvent("evt_1", "audit", "record")); err != nil {
 		t.Fatalf("Append(evt_1) error = %v", err)
 	}
-	if _, err := j.Append(baseEvent("evt_2", "task", "task_upsert")); err != nil {
-		t.Fatalf("Append(evt_2) error = %v", err)
-	}
-
-	var got []string
-	err = j.Replay(func(rec Record) error {
-		got = append(got, rec.Event.ID+"@"+rec.Cursor.File+":"+itoa64(rec.Cursor.Line))
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("Replay() error = %v", err)
-	}
-	want := []string{"evt_1@events.000000000000000001.jsonl:1", "evt_2@events.000000000000000001.jsonl:2"}
-	if strings.Join(got, ",") != strings.Join(want, ",") {
-		t.Fatalf("Replay() = %#v, want %#v", got, want)
-	}
-}
-
-func TestJournalReplaySegmentFilesInOrder(t *testing.T) {
-	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "events.000000000000000001.jsonl"), []byte(mustJSONLine(t, baseEvent("evt_1", "task", "task_upsert"))), 0o600); err != nil {
-		t.Fatalf("WriteFile(segment 1) error = %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(root, "events.000000000000000002.jsonl"), []byte(mustJSONLine(t, baseEvent("evt_2", "task", "task_update"))), 0o600); err != nil {
-		t.Fatalf("WriteFile(segment 2) error = %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(root, "events.000000000000000003.jsonl"), []byte(mustJSONLine(t, baseEvent("evt_3", "task", "task_update"))), 0o600); err != nil {
-		t.Fatalf("WriteFile(segment 3) error = %v", err)
-	}
-
-	j, err := New(JournalOptions{Dir: root})
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
-	t.Cleanup(func() { _ = j.Close() })
-
-	var got []string
-	err = j.Replay(func(rec Record) error {
-		got = append(got, rec.Event.ID)
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("Replay() error = %v", err)
-	}
-	want := []string{"evt_1", "evt_2", "evt_3"}
-	if strings.Join(got, ",") != strings.Join(want, ",") {
-		t.Fatalf("Replay order = %#v, want %#v", got, want)
-	}
-}
-
-func TestJournalAppendRotatesToStableSegmentNames(t *testing.T) {
-	root := t.TempDir()
-	j, err := New(JournalOptions{Dir: root, RotateMaxBytes: 180})
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
-	t.Cleanup(func() { _ = j.Close() })
-
-	first, err := j.Append(baseEvent("evt_1", "task", "task_upsert"))
-	if err != nil {
-		t.Fatalf("Append(evt_1) error = %v", err)
-	}
-	second, err := j.Append(baseEvent("evt_2", "task", "task_update"))
+	cursor, err := j.Append(baseEvent("evt_2", "task", "task_upsert"))
 	if err != nil {
 		t.Fatalf("Append(evt_2) error = %v", err)
 	}
-	if first.File == "" || second.File == "" {
-		t.Fatalf("append cursors must include segment files: first=%#v second=%#v", first, second)
+	if cursor.Seq != 2 {
+		t.Fatalf("Append(evt_2) cursor = %#v, want seq 2", cursor)
 	}
-	if first.File == second.File {
-		t.Fatalf("cursor files = %q and %q, want rotation to a new stable segment", first.File, second.File)
-	}
-	if _, err := os.Stat(filepath.Join(root, first.File)); err != nil {
-		t.Fatalf("first segment %q missing after rotation: %v", first.File, err)
-	}
-	if _, err := os.Stat(filepath.Join(root, second.File)); err != nil {
-		t.Fatalf("second segment %q missing after rotation: %v", second.File, err)
+
+	if got, want := replayIDs(t, j, Cursor{}), "evt_1@1,evt_2@2"; got != want {
+		t.Fatalf("Replay() = %q, want %q", got, want)
 	}
 }
 
-func TestJournalReplayFromCursorSkipsEarlierSegmentContent(t *testing.T) {
-	root := t.TempDir()
-	firstName := "events.000000000000000001.jsonl"
-	secondName := "events.000000000000000002.jsonl"
-	badLine := []byte("{bad json}\n")
-	if err := os.WriteFile(filepath.Join(root, firstName), badLine, 0o600); err != nil {
-		t.Fatalf("WriteFile(first) error = %v", err)
+func TestJournalReplayKeepsEnvelope(t *testing.T) {
+	j := openTestJournal(t, t.TempDir())
+	event := baseEvent("evt_full", "task", "task_update")
+	event.Audience = "contact:tg:42"
+	if _, err := j.Append(event); err != nil {
+		t.Fatalf("Append() error = %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(root, secondName), []byte(mustJSONLine(t, baseEvent("evt_2", "task", "task_update"))), 0o600); err != nil {
-		t.Fatalf("WriteFile(second) error = %v", err)
-	}
-
-	j, err := New(JournalOptions{Dir: root})
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
-	t.Cleanup(func() { _ = j.Close() })
-
-	var got []string
-	err = j.ReplayFrom(Cursor{File: firstName, Byte: int64(len(badLine)), Line: 1}, func(rec Record) error {
-		got = append(got, rec.Event.ID)
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("ReplayFrom() error = %v", err)
-	}
-	if strings.Join(got, ",") != "evt_2" {
-		t.Fatalf("ReplayFrom() ids = %#v, want [evt_2]", got)
-	}
-}
-
-func TestJournalReplayReportsBadLine(t *testing.T) {
-	root := t.TempDir()
-	raw := mustJSONLine(t, baseEvent("evt_1", "audit", "record")) + "{bad json\n"
-	if err := os.WriteFile(filepath.Join(root, "events.000000000000000001.jsonl"), []byte(raw), 0o600); err != nil {
-		t.Fatalf("WriteFile() error = %v", err)
-	}
-
-	j, err := New(JournalOptions{Dir: root})
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
-	t.Cleanup(func() { _ = j.Close() })
-
-	err = j.Replay(func(rec Record) error { return nil })
-	if err == nil {
-		t.Fatal("Replay() error = nil, want bad line error")
-	}
-	if !strings.Contains(err.Error(), "events.000000000000000001.jsonl:2") {
-		t.Fatalf("Replay() error = %v, want file and line", err)
-	}
-}
-
-func TestJournalReplaySkipsBlankLines(t *testing.T) {
-	root := t.TempDir()
-	raw := " \t\n" + mustJSONLine(t, baseEvent("evt_1", "audit", "record")) + "\n"
-	if err := os.WriteFile(filepath.Join(root, "events.000000000000000001.jsonl"), []byte(raw), 0o600); err != nil {
-		t.Fatalf("WriteFile() error = %v", err)
-	}
-
-	j, err := New(JournalOptions{Dir: root})
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
-	var ids []string
-	if err := j.Replay(func(rec Record) error {
-		ids = append(ids, rec.Event.ID)
-		return nil
-	}); err != nil {
-		t.Fatalf("Replay() error = %v", err)
-	}
-	if strings.Join(ids, ",") != "evt_1" {
-		t.Fatalf("Replay() ids = %#v, want evt_1", ids)
-	}
-}
-
-func TestAppendRejectsInvalidEnvelope(t *testing.T) {
-	j, err := New(JournalOptions{Dir: t.TempDir()})
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
-	t.Cleanup(func() { _ = j.Close() })
-
-	_, err = j.Append(Event{
-		ID:            "evt_missing_domain",
-		Time:          "2026-06-15T01:02:03Z",
-		Type:          "record",
-		SchemaVersion: 1,
-		Payload:       json.RawMessage(`{}`),
-	})
-	if err == nil {
-		t.Fatal("Append(invalid) error = nil, want validation error")
-	}
-	if !strings.Contains(err.Error(), "domain is required") {
-		t.Fatalf("Append(invalid) error = %v, want domain error", err)
-	}
-}
-
-func TestReplayAllowsUnknownFutureFields(t *testing.T) {
-	root := t.TempDir()
-	raw := `{"id":"evt_1","time":"2026-06-15T01:02:03Z","domain":"task","type":"task_update","schema_version":1,"trace":{"trace_id":"tr_1","turn_id":"turn_1","history_item_id":"hist_1","parent_item_id":"hist_0","tool_call_id":"call_1","request_id":"req_1"},"payload":{},"future":"ok"}` + "\n"
-	if err := os.WriteFile(filepath.Join(root, "events.000000000000000001.jsonl"), []byte(raw), 0o600); err != nil {
-		t.Fatalf("WriteFile() error = %v", err)
-	}
-
-	j, err := New(JournalOptions{Dir: root})
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
-	t.Cleanup(func() { _ = j.Close() })
-
 	var got Event
 	if err := j.Replay(func(rec Record) error {
 		got = rec.Event
@@ -217,168 +43,313 @@ func TestReplayAllowsUnknownFutureFields(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("Replay() error = %v", err)
 	}
-	if got.Trace.TraceID != "tr_1" {
-		t.Fatalf("Replay() trace = %#v, want known trace fields and ignored future fields", got.Trace)
+	if got.ID != event.ID || got.Time != event.Time || got.Domain != event.Domain || got.Type != event.Type ||
+		got.SchemaVersion != event.SchemaVersion || got.Trace != event.Trace || got.Audience != event.Audience ||
+		string(got.Payload) != string(event.Payload) {
+		t.Fatalf("Replay() event = %#v, want %#v", got, event)
 	}
 }
 
-func TestJournalIndexStoresOnlyRecordRefs(t *testing.T) {
-	root := t.TempDir()
-	j, err := New(JournalOptions{Dir: root})
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
+func TestJournalReplayFromCursor(t *testing.T) {
+	j := openTestJournal(t, t.TempDir())
+	var middle Cursor
+	for i := 1; i <= 3; i++ {
+		cursor, err := j.Append(baseEvent(fmt.Sprintf("evt_%d", i), "audit", "record"))
+		if err != nil {
+			t.Fatalf("Append(%d) error = %v", i, err)
+		}
+		if i == 2 {
+			middle = cursor
+		}
 	}
-	t.Cleanup(func() { _ = j.Close() })
-
-	if _, err := j.Append(baseEvent("evt_indexed", "task", "task_update")); err != nil {
-		t.Fatalf("Append(indexed) error = %v", err)
-	}
-
-	if err := j.Close(); err != nil {
-		t.Fatalf("Close() error = %v", err)
-	}
-	reopened, err := New(JournalOptions{Dir: root})
-	if err != nil {
-		t.Fatalf("reopen New() error = %v", err)
-	}
-	t.Cleanup(func() { _ = reopened.Close() })
-
-	index, err := reopened.ReadIndex("task", "task_1", 10)
-	if err != nil {
-		t.Fatalf("ReadIndex() error = %v", err)
-	}
-	if len(index) != 1 {
-		t.Fatalf("len(index) = %d, want 1", len(index))
-	}
-	if index[0].Key != "task_1" || index[0].Ref.File == "" {
-		t.Fatalf("index[0] = %#v, want key and record ref", index[0])
-	}
-	record, err := reopened.ReadAt(index[0].Ref)
-	if err != nil {
-		t.Fatalf("ReadAt(index ref) error = %v", err)
-	}
-	if record.Event.ID != "evt_indexed" {
-		t.Fatalf("ReadAt(index ref) id = %q, want evt_indexed", record.Event.ID)
+	if got, want := replayIDs(t, j, middle), "evt_3@3"; got != want {
+		t.Fatalf("ReplayFrom(seq 2) = %q, want %q", got, want)
 	}
 }
 
-func TestJournalAppendCommitsWhenDerivedIndexWriteFails(t *testing.T) {
-	root := t.TempDir()
-	j, err := New(JournalOptions{Dir: root})
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
+func TestJournalReplayCrossesBatches(t *testing.T) {
+	j := openTestJournal(t, t.TempDir())
+	total := replayBatchSize + 7
+	for i := 1; i <= total; i++ {
+		if _, err := j.Append(baseEvent(fmt.Sprintf("evt_%d", i), "audit", "record")); err != nil {
+			t.Fatalf("Append(%d) error = %v", i, err)
+		}
 	}
-	t.Cleanup(func() { _ = j.Close() })
-
-	// A regular file at index/ makes every derived index write fail while the
-	// authoritative event segment remains writable.
-	if err := os.WriteFile(filepath.Join(root, "index"), []byte("blocked\n"), 0o600); err != nil {
-		t.Fatalf("WriteFile(index) error = %v", err)
-	}
-
-	cursor, err := j.Append(baseEvent("evt_committed_without_index", "task", "task_update"))
-	if err != nil {
-		t.Fatalf("Append() error = %v, want committed event to succeed", err)
-	}
-	if cursor.File == "" || cursor.Byte == 0 {
-		t.Fatalf("Append() cursor = %#v, want committed cursor", cursor)
-	}
-	if j.IndexError() == nil {
-		t.Fatal("IndexError() = nil, want explicit degraded index state")
-	}
-
-	var replayed []string
+	count := 0
+	var last int64
 	if err := j.Replay(func(rec Record) error {
-		replayed = append(replayed, rec.Event.ID)
+		count++
+		if rec.Ref.Seq != last+1 {
+			return fmt.Errorf("seq %d after %d", rec.Ref.Seq, last)
+		}
+		last = rec.Ref.Seq
 		return nil
 	}); err != nil {
 		t.Fatalf("Replay() error = %v", err)
 	}
-	if strings.Join(replayed, ",") != "evt_committed_without_index" {
-		t.Fatalf("Replay() ids = %#v, want committed event", replayed)
-	}
-
-	if err := j.Close(); err != nil {
-		t.Fatalf("Close() error = %v", err)
-	}
-	reopened, err := New(JournalOptions{Dir: root})
-	if err != nil {
-		t.Fatalf("reopen New() error = %v", err)
-	}
-	t.Cleanup(func() { _ = reopened.Close() })
-	if reopened.IndexError() == nil {
-		t.Fatal("reopened IndexError() = nil, want persisted degraded state")
-	}
-
-	index, err := reopened.ReadIndex("task", "task_1", 10)
-	if err != nil {
-		t.Fatalf("ReadIndex() error = %v, want journal fallback", err)
-	}
-	if len(index) != 1 {
-		t.Fatalf("len(ReadIndex()) = %d, want 1", len(index))
-	}
-	record, err := reopened.ReadAt(index[0].Ref)
-	if err != nil {
-		t.Fatalf("ReadAt(fallback ref) error = %v", err)
-	}
-	if record.Event.ID != "evt_committed_without_index" {
-		t.Fatalf("ReadAt(fallback ref).Event.ID = %q", record.Event.ID)
+	if count != total {
+		t.Fatalf("Replay() count = %d, want %d", count, total)
 	}
 }
 
-func TestJournalRebuildIndexesClearsDegradedStateAndRestoresHistory(t *testing.T) {
+func TestJournalReplayRejectsSegmentCursor(t *testing.T) {
+	j := openTestJournal(t, t.TempDir())
+	err := j.ReplayFrom(Cursor{File: "events.000000000000000001.jsonl", Line: 3}, func(Record) error { return nil })
+	if err == nil || !strings.Contains(err.Error(), "replay from the start") {
+		t.Fatalf("ReplayFrom(segment cursor) error = %v, want replay-from-start error", err)
+	}
+}
+
+func TestAppendRejectsInvalidEnvelope(t *testing.T) {
+	j := openTestJournal(t, t.TempDir())
+	for name, mutate := range map[string]func(*Event){
+		"missing id":      func(e *Event) { e.ID = "" },
+		"padded domain":   func(e *Event) { e.Domain = " task" },
+		"bad time":        func(e *Event) { e.Time = "yesterday" },
+		"schema version":  func(e *Event) { e.SchemaVersion = 0 },
+		"invalid payload": func(e *Event) { e.Payload = json.RawMessage(`{`) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			event := baseEvent("evt_bad", "task", "task_upsert")
+			mutate(&event)
+			if _, err := j.Append(event); err == nil {
+				t.Fatalf("Append() error = nil, want validation error")
+			}
+		})
+	}
+}
+
+func TestJournalIndexReturnsLastEventsOldestFirst(t *testing.T) {
 	root := t.TempDir()
-	j, err := New(JournalOptions{Dir: root})
+	j := openTestJournal(t, root)
+	for i := 1; i <= 4; i++ {
+		event := baseEvent(fmt.Sprintf("evt_%d", i), "task", "task_update")
+		if i == 3 {
+			event.Trace.TaskID = "task_other"
+			event.Trace.TopicID = ""
+		}
+		if _, err := j.Append(event); err != nil {
+			t.Fatalf("Append(%d) error = %v", i, err)
+		}
+	}
+	_ = j.Close()
+
+	index, err := ReadIndexDir(root, "task", "task_1", 2)
+	if err != nil {
+		t.Fatalf("ReadIndexDir() error = %v", err)
+	}
+	if len(index) != 2 || index[0].Ref.Seq != 2 || index[1].Ref.Seq != 4 || index[0].Key != "task_1" {
+		t.Fatalf("ReadIndexDir(task_1, 2) = %#v, want seqs 2 and 4", index)
+	}
+	topic, err := ReadIndexDir(root, "topic", "topic_1", 10)
+	if err != nil || len(topic) != 3 {
+		t.Fatalf("ReadIndexDir(topic_1) = %#v, %v; want 3 records", topic, err)
+	}
+	record, err := ReadAtDir(root, index[1].Ref)
+	if err != nil {
+		t.Fatalf("ReadAtDir() error = %v", err)
+	}
+	if record.Event.ID != "evt_4" {
+		t.Fatalf("ReadAtDir() id = %q, want evt_4", record.Event.ID)
+	}
+	if _, err := ReadAtDir(root, RecordRef{Seq: 99}); err == nil {
+		t.Fatal("ReadAtDir(missing) error = nil, want not found")
+	}
+	if _, err := ReadIndexDir(root, "nope", "x", 1); err == nil {
+		t.Fatal("ReadIndexDir(bad kind) error = nil, want error")
+	}
+}
+
+func TestDirReadersOnMissingDirCreateNothing(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "missing")
+	if err := ReplayDir(dir, func(Record) error { return fmt.Errorf("unexpected record") }); err != nil {
+		t.Fatalf("ReplayDir(missing) error = %v", err)
+	}
+	if index, err := ReadIndexDir(dir, "task", "task_1", 10); err != nil || len(index) != 0 {
+		t.Fatalf("ReadIndexDir(missing) = %#v, %v; want empty", index, err)
+	}
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
+		t.Fatalf("missing dir was created: %v", err)
+	}
+}
+
+func TestJournalSurvivesReopenAndClose(t *testing.T) {
+	root := t.TempDir()
+	j := openTestJournal(t, root)
+	if _, err := j.Append(baseEvent("evt_1", "audit", "record")); err != nil {
+		t.Fatalf("Append() error = %v", err)
+	}
+	if err := j.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+	if err := j.Close(); err != nil {
+		t.Fatalf("second Close() error = %v", err)
+	}
+	if _, err := j.Append(baseEvent("evt_2", "audit", "record")); err == nil {
+		t.Fatal("Append() after Close error = nil")
+	}
+	if got, want := replayIDs(t, j, Cursor{}), "evt_1@1"; got != want {
+		t.Fatalf("Replay() after Close = %q, want %q: a closed journal stays readable", got, want)
+	}
+	reopened := openTestJournal(t, root)
+	if got, want := replayIDs(t, reopened, Cursor{}), "evt_1@1"; got != want {
+		t.Fatalf("Replay() after reopen = %q, want %q", got, want)
+	}
+}
+
+func TestJournalImportsSegmentsOnce(t *testing.T) {
+	root := t.TempDir()
+	writeSegment(t, root, 2, eventLine(t, baseEvent("evt_3", "audit", "record")))
+	writeSegment(t, root, 1,
+		eventLine(t, baseEvent("evt_1", "audit", "record"))+
+			"\n"+
+			`{"id":"evt_2","time":"2026-06-15T01:02:03Z","domain":"task","type":"task_upsert","schema_version":1,"future_field":true,"payload":{"value":"evt_2"}}`+"\n"+
+			"{bad json}\n")
+
+	j := openTestJournal(t, root)
+	if got, want := replayIDs(t, j, Cursor{}), "evt_1@1,evt_2@2,evt_3@3"; got != want {
+		t.Fatalf("Replay() after import = %q, want %q", got, want)
+	}
+	var rejected int
+	var rejectedRaw string
+	if err := j.db.QueryRow(`SELECT count(*), max(raw) FROM journal_import_rejects WHERE file = 'events.000000000000000001.jsonl' AND line = 4`).Scan(&rejected, &rejectedRaw); err != nil {
+		t.Fatalf("read rejects: %v", err)
+	}
+	if rejected != 1 || rejectedRaw != "{bad json}" {
+		t.Fatalf("rejects = %d %q, want the bad line kept", rejected, rejectedRaw)
+	}
+	_ = j.Close()
+
+	// A segment written after the import, for example by an older binary, is not imported again.
+	writeSegment(t, root, 3, eventLine(t, baseEvent("evt_4", "audit", "record")))
+	reopened := openTestJournal(t, root)
+	if got, want := replayIDs(t, reopened, Cursor{}), "evt_1@1,evt_2@2,evt_3@3"; got != want {
+		t.Fatalf("Replay() after reopen = %q, want %q (import ran twice)", got, want)
+	}
+	if _, err := os.Stat(filepath.Join(root, segmentName(1))); err != nil {
+		t.Fatalf("segment removed after import: %v", err)
+	}
+}
+
+func TestJournalImportWithConcurrentOpens(t *testing.T) {
+	root := t.TempDir()
+	var lines strings.Builder
+	for i := 1; i <= 200; i++ {
+		lines.WriteString(eventLine(t, baseEvent(fmt.Sprintf("evt_%d", i), "audit", "record")))
+	}
+	writeSegment(t, root, 1, lines.String())
+
+	var wg sync.WaitGroup
+	errs := make(chan error, 4)
+	for i := 0; i < 4; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			j, err := New(JournalOptions{Dir: root})
+			if err != nil {
+				errs <- err
+				return
+			}
+			errs <- j.Close()
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("concurrent New() error = %v", err)
+		}
+	}
+	j := openTestJournal(t, root)
+	count := 0
+	if err := j.Replay(func(Record) error { count++; return nil }); err != nil {
+		t.Fatalf("Replay() error = %v", err)
+	}
+	if count != 200 {
+		t.Fatalf("events = %d, want 200 (import ran more than once or partly)", count)
+	}
+}
+
+func TestJournalCompressesPayload(t *testing.T) {
+	j := openTestJournal(t, t.TempDir())
+	event := baseEvent("evt_big", "task", "task_update")
+	event.Payload = json.RawMessage(`{"trace":"` + strings.Repeat("tool output ", 2000) + `"}`)
+	if _, err := j.Append(event); err != nil {
+		t.Fatalf("Append() error = %v", err)
+	}
+	var stored int
+	if err := j.db.QueryRow(`SELECT length(payload) FROM journal_events WHERE seq = 1`).Scan(&stored); err != nil {
+		t.Fatalf("read payload size: %v", err)
+	}
+	if stored >= len(event.Payload)/10 {
+		t.Fatalf("stored payload = %d bytes for %d bytes of JSON, want it compressed", stored, len(event.Payload))
+	}
+	record, err := j.ReadAt(RecordRef{Seq: 1})
+	if err != nil || string(record.Event.Payload) != string(event.Payload) {
+		t.Fatalf("ReadAt() payload round trip failed: %v", err)
+	}
+}
+
+func TestJournalDurableSetting(t *testing.T) {
+	for _, tc := range []struct {
+		sync bool
+		want int
+	}{{false, 1}, {true, 2}} {
+		j, err := New(JournalOptions{Dir: t.TempDir(), SyncEachWrite: tc.sync})
+		if err != nil {
+			t.Fatalf("New() error = %v", err)
+		}
+		var got int
+		if err := j.db.QueryRow(`PRAGMA synchronous`).Scan(&got); err != nil || got != tc.want {
+			t.Fatalf("SyncEachWrite=%v synchronous = %d, %v; want %d", tc.sync, got, err, tc.want)
+		}
+		_ = j.Close()
+	}
+}
+
+func openTestJournal(t *testing.T, dir string) *Journal {
+	t.Helper()
+	j, err := New(JournalOptions{Dir: dir})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
 	t.Cleanup(func() { _ = j.Close() })
+	return j
+}
 
-	indexPath := filepath.Join(root, "index")
-	if err := os.WriteFile(indexPath, []byte("blocked\n"), 0o600); err != nil {
-		t.Fatalf("WriteFile(index) error = %v", err)
+func replayIDs(t *testing.T, j *Journal, from Cursor) string {
+	t.Helper()
+	var got []string
+	if err := j.ReplayFrom(from, func(rec Record) error {
+		if rec.Cursor.Seq != rec.Ref.Seq {
+			return fmt.Errorf("cursor %d != ref %d", rec.Cursor.Seq, rec.Ref.Seq)
+		}
+		got = append(got, fmt.Sprintf("%s@%d", rec.Event.ID, rec.Ref.Seq))
+		return nil
+	}); err != nil {
+		t.Fatalf("ReplayFrom() error = %v", err)
 	}
-	if _, err := j.Append(baseEvent("evt_missing_index", "task", "task_update")); err != nil {
-		t.Fatalf("Append(first) error = %v", err)
-	}
-	if err := os.Remove(indexPath); err != nil {
-		t.Fatalf("Remove(index blocker) error = %v", err)
-	}
-	if _, err := j.Append(baseEvent("evt_index_after_failure", "task", "task_update")); err != nil {
-		t.Fatalf("Append(second) error = %v", err)
-	}
-	if j.IndexError() == nil {
-		t.Fatal("IndexError() = nil before rebuild")
-	}
+	return strings.Join(got, ",")
+}
 
-	if err := j.RebuildIndexes(); err != nil {
-		t.Fatalf("RebuildIndexes() error = %v", err)
-	}
-	if j.IndexError() != nil {
-		t.Fatalf("IndexError() after rebuild = %v", j.IndexError())
-	}
-	if _, err := os.Stat(filepath.Join(root, indexDirtyFile)); !os.IsNotExist(err) {
-		t.Fatalf("dirty marker stat error = %v, want not exist", err)
-	}
+func segmentName(index int64) string {
+	return fmt.Sprintf("%s%018d%s", segmentPrefix, index, segmentSuffix)
+}
 
-	index, err := j.ReadIndex("task", "task_1", 10)
+func writeSegment(t *testing.T, dir string, index int64, content string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(dir, segmentName(index)), []byte(content), 0o600); err != nil {
+		t.Fatalf("write segment: %v", err)
+	}
+}
+
+func eventLine(t *testing.T, event Event) string {
+	t.Helper()
+	raw, err := json.Marshal(event)
 	if err != nil {
-		t.Fatalf("ReadIndex() error = %v", err)
+		t.Fatalf("marshal event: %v", err)
 	}
-	if len(index) != 2 {
-		t.Fatalf("len(ReadIndex()) = %d, want 2 rebuilt records", len(index))
-	}
-	first, err := j.ReadAt(index[0].Ref)
-	if err != nil {
-		t.Fatalf("ReadAt(first) error = %v", err)
-	}
-	second, err := j.ReadAt(index[1].Ref)
-	if err != nil {
-		t.Fatalf("ReadAt(second) error = %v", err)
-	}
-	if first.Event.ID != "evt_missing_index" || second.Event.ID != "evt_index_after_failure" {
-		t.Fatalf("rebuilt event ids = %q, %q", first.Event.ID, second.Event.ID)
-	}
+	return string(raw) + "\n"
 }
 
 func baseEvent(id, domain, typ string) Event {
@@ -397,27 +368,4 @@ func baseEvent(id, domain, typ string) Event {
 		},
 		Payload: json.RawMessage(`{"value":"` + id + `"}`),
 	}
-}
-
-func mustJSONLine(t *testing.T, event Event) string {
-	t.Helper()
-	raw, err := json.Marshal(event)
-	if err != nil {
-		t.Fatalf("Marshal() error = %v", err)
-	}
-	return string(raw) + "\n"
-}
-
-func itoa64(v int64) string {
-	if v == 0 {
-		return "0"
-	}
-	var buf [20]byte
-	i := len(buf)
-	for v > 0 {
-		i--
-		buf[i] = byte('0' + v%10)
-		v /= 10
-	}
-	return string(buf[i:])
 }

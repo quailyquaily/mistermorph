@@ -1,4 +1,5 @@
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { useRouter } from "vue-router";
 import { storeToRefs } from "pinia";
 import { useNotice } from "../core/notices";
 import "./ContactsView.css";
@@ -17,6 +18,7 @@ import AppPage from "../components/AppPage";
 import ContactAvatar from "../components/ContactAvatar";
 import { agentLinkAvatarURL } from "../core/agent-link-avatar";
 import { currentLocale, endpointState, formatShortTime, formatTime, runtimeApiFetch, translate } from "../core/context";
+import { endpointRoutePath } from "../core/endpoint-routes";
 import { useContactsStore } from "../stores/contactsStore";
 import AppSkeleton from "../components/AppSkeleton";
 
@@ -39,15 +41,6 @@ function normalizeStatus(raw) {
 
 function normalizeKind(raw) {
   return String(raw || "").trim().toLowerCase() === "agent" ? "agent" : "human";
-}
-
-function compactStrings(items) {
-  if (!Array.isArray(items)) {
-    return [];
-  }
-  return items
-    .map((item) => String(item || "").trim())
-    .filter((item) => item !== "");
 }
 
 function shortenIdentifier(raw) {
@@ -220,6 +213,7 @@ const ContactsView = {
   },
   setup() {
     const t = translate;
+    const router = useRouter();
     const notice = useNotice();
     const contactsStore = useContactsStore();
     const { items, loading } = storeToRefs(contactsStore);
@@ -281,10 +275,6 @@ const ContactsView = {
       return isAgent(item) ? t("contacts_kind_agent") : t("contacts_kind_human");
     }
 
-    function topicList(item) {
-      return compactStrings(item?.topic_preferences);
-    }
-
     function primaryContactMeta(item) {
       if (!namedTitle(item)) {
         return `${channelLabel(t, item?.channel)} · ${t("contacts_unnamed")}`;
@@ -306,11 +296,9 @@ const ContactsView = {
       const haystack = [
         displayName(item),
         String(item?.contact_id || "").trim(),
-        String(item?.persona_brief || "").trim(),
         channelLabel(t, item?.channel),
         kindText(item),
         statusText(item),
-        ...topicList(item),
         ...channelHandles(t, item).map((handle) => `${handle.channel} ${handle.full}`),
       ]
         .join("\n")
@@ -346,7 +334,36 @@ const ContactsView = {
         },
       ];
     });
-    const selectedTopics = computed(() => topicList(selectedContact.value));
+    // The agent's memories about the selected contact, which replaced persona_brief and
+    // topic_preferences.
+    const selectedMemories = ref([]);
+    const memoriesLoading = ref(false);
+    async function loadSelectedMemories() {
+      const contactID = String(selectedContactID.value || "").trim();
+      selectedMemories.value = [];
+      if (!contactID || !endpointState.selectedRef) {
+        return;
+      }
+      memoriesLoading.value = true;
+      try {
+        const data = await runtimeApiFetch(`/memories?subject=${encodeURIComponent(`contact:${contactID}`)}`);
+        if (String(selectedContactID.value || "").trim() === contactID) {
+          selectedMemories.value = Array.isArray(data?.items) ? data.items : [];
+        }
+      } catch {
+        // A runtime without memories has none to show.
+      } finally {
+        memoriesLoading.value = false;
+      }
+    }
+    watch(selectedContactID, loadSelectedMemories);
+    function openMemories() {
+      const contactID = String(selectedContactID.value || "").trim();
+      router.push({
+        path: endpointRoutePath(endpointState.selectedRef, "/memories"),
+        query: { subject: `contact:${contactID}` },
+      });
+    }
     const editing = computed(
       () => Boolean(selectedContact.value) && editingContactID.value === selectedContactID.value
     );
@@ -617,7 +634,9 @@ const ContactsView = {
       filteredItems,
       selectedContact,
       selectedConnections,
-      selectedTopics,
+      selectedMemories,
+      memoriesLoading,
+      openMemories,
       editing,
       editorYAML,
       editorLoading,
@@ -792,9 +811,7 @@ const ContactsView = {
                 <PhUserCircle v-else class="icon" />
               </span>
             </span>
-            <p v-if="selectedContact.persona_brief" class="contacts-detail-persona">
-              {{ selectedContact.persona_brief }}
-            </p>
+            <span v-if="selectedContact.owner" class="contacts-owner-badge">{{ t("contacts_owner_badge") }}</span>
           </div>
 
           <div v-if="editing" class="contacts-editor-body">
@@ -868,11 +885,17 @@ const ContactsView = {
                 </div>
               </section>
 
-              <section v-if="selectedTopics.length > 0" class="contacts-detail-section">
-                <h4 class="contacts-detail-section-title">{{ t("contacts_field_topics") }}</h4>
-                <ul class="contacts-topic-list">
-                  <li v-for="topic in selectedTopics" :key="selectedContact.contact_id + '-' + topic">{{ topic }}</li>
+              <section class="contacts-detail-section contacts-memories-section">
+                <h4 class="contacts-detail-section-title">{{ t("contacts_section_memories") }}</h4>
+                <AppSkeleton v-if="memoriesLoading" variant="card" height="48px" :count="1" />
+                <p v-else-if="!selectedMemories.length" class="contacts-memories-empty">{{ t("contacts_memories_empty") }}</p>
+                <ul v-else class="contacts-memory-list">
+                  <li v-for="memory in selectedMemories" :key="memory.id">
+                    <strong>{{ memory.description }}</strong>
+                    <span>{{ memory.body }}</span>
+                  </li>
                 </ul>
+                <QButton class="plain sm contacts-memories-open" @click="openMemories">{{ t("contacts_memories_open") }}</QButton>
               </section>
             </div>
 

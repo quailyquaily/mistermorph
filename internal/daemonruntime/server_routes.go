@@ -27,6 +27,7 @@ type routeRegistration struct {
 func (routes *routeRegistration) register() {
 	routes.registerSystemRoutes()
 	routes.registerStateRoutes()
+	routes.registerMemoryRoutes()
 	routes.registerApprovalRoutes()
 	routes.registerTaskRoutes()
 	routes.registerWorkspaceRoutes()

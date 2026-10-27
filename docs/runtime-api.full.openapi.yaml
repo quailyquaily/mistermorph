@@ -2260,6 +2260,176 @@ paths:
           $ref: '#/components/responses/MethodNotAllowed'
         '500':
           $ref: '#/components/responses/InternalError'
+  /memories:
+    get:
+      operationId: listMemories
+      tags:
+      - Memories
+      summary: List or search memories
+      description: The Console is the owner and sees every memory, whatever its visibility. Without
+        subject or q, lists all.
+      parameters:
+      - name: subject
+        in: query
+        required: false
+        schema:
+          type: string
+        description: owner, general, contact:<contact id> or conversation:<key>.
+      - name: q
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Memory'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    put:
+      operationId: editMemory
+      tags:
+      - Memories
+      summary: Edit a memory as the owner
+      description: Empty fields stay as they are. Any visibility is allowed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - id
+              properties:
+                id:
+                  type: string
+                type:
+                  type: string
+                  enum: [person, feedback, context, reference]
+                description:
+                  type: string
+                body:
+                  type: string
+                visibility:
+                  type: string
+                  enum: [private, conversation, public]
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  item:
+                    $ref: '#/components/schemas/Memory'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Memory not found
+    delete:
+      operationId: deleteMemory
+      tags:
+      - Memories
+      summary: Delete a memory
+      parameters:
+      - name: id
+        in: query
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Success
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Memory not found
+  /journal/search:
+    get:
+      operationId: searchJournal
+      tags:
+      - Memories
+      summary: Search the journal for what people said
+      description: Full-text search over task text, final outputs and untriggered messages, newest
+        first. The Console is the owner and searches every event.
+      parameters:
+      - name: q
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: since
+        in: query
+        required: false
+        schema:
+          type: string
+        description: RFC 3339 or YYYY-MM-DD.
+      - name: until
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: domain
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  events:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        seq:
+                          type: integer
+                        id:
+                          type: string
+                        time:
+                          type: string
+                        domain:
+                          type: string
+                        type:
+                          type: string
+                        trace:
+                          $ref: '#/components/schemas/JournalTrace'
+                        audience:
+                          type: string
+                        text:
+                          type: string
+                  has_more:
+                    type: boolean
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
   /stats/llm/usage:
     get:
       operationId: getLLMUsage
@@ -5373,17 +5543,49 @@ components:
           items:
             $ref: '#/components/schemas/TodoChatOption'
           nullable: true
+    Memory:
+      type: object
+      properties:
+        id:
+          type: string
+        subject:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+          enum: [person, feedback, context, reference]
+        description:
+          type: string
+        body:
+          type: string
+        visibility:
+          type: string
+          enum: [private, conversation, public]
+        learned_in:
+          type: string
+          description: The audience it was saved from.
+        told_by:
+          type: string
+        source_events:
+          type: array
+          items:
+            type: string
+        created_at:
+          type: string
+        updated_at:
+          type: string
+        updated_by_task:
+          type: string
+      x-source: internal/memories/rules.go:Memory
     RecordRef:
       type: object
       properties:
-        file:
-          type: string
-        line:
+        seq:
           type: integer
-        byte:
-          type: integer
+          description: The event's sequence number in the journal.
       required:
-      - file
+      - seq
       x-source: internal/domainjournal/journal.go:RecordRef
     JournalTrace:
       type: object

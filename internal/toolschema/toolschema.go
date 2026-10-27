@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/quailyquaily/mistermorph/agent"
+	"github.com/quailyquaily/mistermorph/internal/memorytools"
 	"github.com/quailyquaily/mistermorph/internal/pathroots"
 	"github.com/quailyquaily/mistermorph/internal/skillinstall"
 	"github.com/quailyquaily/mistermorph/tools"
@@ -52,6 +53,7 @@ func Build() Catalog {
 		builtin.NewImageEditTool(builtin.ImageToolConfig{}),
 	}
 	general = append(general, agent.EngineTools()...)
+	general = append(general, memorytools.Catalog()...)
 
 	preview, install := skillinstall.NewTools(skillinstall.ToolDeps{})
 	channels := map[string][]tools.Tool{

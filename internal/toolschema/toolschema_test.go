@@ -11,6 +11,7 @@ func TestBuildListsEveryToolOnTheToolsPage(t *testing.T) {
 		"read_file", "write_file", "bash", "powershell", "url_fetch", "web_search",
 		"plan_create", "todo_update", "codemode", "tool_search", "spawn", "coder",
 		"contacts_send", "agent_send", "image_generate", "image_edit",
+		"memory_save", "memory_search", "memory_forget", "journal_search", "journal_read",
 	} {
 		tool, ok := catalog.Tools[name]
 		if !ok {

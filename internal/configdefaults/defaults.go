@@ -332,4 +332,7 @@ func Apply(v *viper.Viper) {
 	v.SetDefault("tools.codemode.max_tool_calls", 256)
 	v.SetDefault("tools.codemode.max_parallel_calls", 4)
 
+	// Memories the agent saves on purpose, scoped to who may hear them (docs/memories.md).
+	v.SetDefault("memories.enabled", true)
+
 }

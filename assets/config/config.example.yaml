@@ -554,6 +554,13 @@ contacts:
     # conversation that asked as a new message.
     reply_timeout: "2m"
 
+# Memories: facts the agent saves on purpose, such as a correction, who someone is, or a deadline
+# (docs/memories.md). They live in <file_state_dir>/memory.db. A run sees only the memories its
+# audience may hear: the owner, one contact in a direct message, or everyone in a group. Mark your
+# own contacts as the owner with `owner: true` in their entry (Console > Contacts > Edit YAML).
+memories:
+  enabled: true
+
 # Task projections and journal settings.
 tasks:
   # Directory name under file_state_dir for task projection snapshots.
@@ -562,7 +569,8 @@ tasks:
   # Accepted task and topic changes from every target are still written to the journal.
   # Supported values: console, telegram, slack, line, lark, mixin, discord, wechat, whatsapp
   persistence_targets: ["console"]
-  # Maximum size of each task journal segment.
+  # Size of each JSONL journal segment in older versions. The journal is now
+  # <file_state_dir>/journal/journal.db and this value is ignored.
   rotate_max_bytes: 67108864
 
 skills:

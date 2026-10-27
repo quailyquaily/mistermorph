@@ -14,6 +14,7 @@ import (
 	"github.com/quailyquaily/mistermorph/agent"
 	"github.com/quailyquaily/mistermorph/contacts"
 	"github.com/quailyquaily/mistermorph/internal/agentpair"
+	"github.com/quailyquaily/mistermorph/internal/audience"
 	busruntime "github.com/quailyquaily/mistermorph/internal/bus"
 	discordbus "github.com/quailyquaily/mistermorph/internal/bus/adapters/discord"
 	agentlinkruntime "github.com/quailyquaily/mistermorph/internal/channelruntime/agentlink"
@@ -241,6 +242,7 @@ func runDiscordLoop(ctx context.Context, d Dependencies, opts RunOptions) error 
 		runCtx = taskruntime.WithCoderProgressNotification(runCtx, logger, func(notifyCtx context.Context, seq int, text string) error {
 			return publishDiscordBusOutbound(notifyCtx, bus, job.ChannelID, text, job.replyTarget(), fmt.Sprintf("discord:coder-progress:%s:%d", job.TaskID, seq))
 		})
+		runCtx = audience.NewContext(runCtx, job.Audience)
 		runCtx = taskruntime.WithInsightNotification(runCtx, logger, taskruntime.InsightLimitFor(job.isGroup()), func(notifyCtx context.Context, seq int, text string) error {
 			return publishDiscordBusOutbound(notifyCtx, bus, job.ChannelID, text, job.replyTarget(), fmt.Sprintf("discord:insight:%s:%d", job.TaskID, seq))
 		})
@@ -623,9 +625,15 @@ func runDiscordLoop(ctx context.Context, d Dependencies, opts RunOptions) error 
 			return err
 		}
 		images := imagehistory.BuildFromAttachments(inbound.ImageAttachments, pathroots.New(resolution.WorkspaceDir, opts.FileCacheDir, d.RuntimePaths.StateDir))
+		taskAudience := audience.Resolve(handlerCtx, contactsService, audience.Input{
+			Group:           inbound.ChatType == discordbus.ChatTypeGroup,
+			ConversationKey: conversationKey,
+			Sender:          contacts.InboundSender{Channel: contacts.ChannelDiscord, UserID: inbound.UserID},
+		})
 		buildJob := func(version uint64) discordJob {
 			admittedRoute := route
 			job := discordJobFromInbound(inbound)
+			job.Audience = taskAudience
 			job.TaskID = taskID
 			job.ConversationKey = conversationKey
 			job.Text = text
@@ -645,7 +653,7 @@ func runDiscordLoop(ctx context.Context, d Dependencies, opts RunOptions) error 
 		}
 		if err := taskdomain.RecordTaskUpsert(daemonStore, daemonruntime.TaskInfo{
 			ID: taskID, Status: daemonruntime.TaskQueued, Task: textutil.TruncateRunes(text, 2000), Model: route.ClientConfig.Model,
-			Timeout: opts.TaskTimeout.String(), CreatedAt: createdAt, Conversation: discordTaskConversation(buildJob(0), botID),
+			Timeout: opts.TaskTimeout.String(), CreatedAt: createdAt, Conversation: runtimecore.ConversationWithAudience(discordTaskConversation(buildJob(0), botID), taskAudience),
 			Result: map[string]any{"source": "discord", "discord_channel_id": inbound.ChannelID, "discord_guild_id": inbound.GuildID, "discord_message_id": inbound.MessageID, "discord_chat_type": inbound.ChatType, "discord_user_id": inbound.UserID},
 		}, daemonruntime.TaskTrigger{Source: "discord", Event: "gateway_message", Ref: inbound.MessageID}); err != nil {
 			generation.Release()

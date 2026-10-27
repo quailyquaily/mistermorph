@@ -1,0 +1,315 @@
+.memories-page {
+  /* Page tokens, in the console's terms; the section lines are AppSection's. */
+  --memories-ink: var(--text-0);
+  --memories-text: var(--text-1);
+  --memories-muted: var(--text-2);
+  --memories-line: var(--line-soft);
+  --memories-accent: var(--accent-1);
+}
+
+.memories-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Toolbar: the same field as Logs' search, so the two pages read as one console. */
+
+.memories-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.memories-search {
+  position: relative;
+  flex: 2 1 220px;
+  min-width: 0;
+}
+
+.memories-subject-filter {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+
+.memories-subject-filter .q-dropdown-menu,
+.memories-subject-filter .q-dropdown-menu-action,
+.memory-edit-field .q-dropdown-menu,
+.memory-edit-field .q-dropdown-menu-action {
+  width: 100%;
+  min-width: 0;
+}
+
+.memories-search-icon {
+  position: absolute;
+  top: 50%;
+  left: 11px;
+  width: 15px;
+  height: 15px;
+  color: var(--memories-muted);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.memories-query {
+  width: 100%;
+  height: 38px;
+  margin: 0;
+  padding: 0 12px 0 33px;
+  border: 1px solid var(--q-field-border-color, var(--memories-line));
+  border-radius: var(--q-field-radius);
+  background: var(--q-field-bg);
+  color: var(--q-field-text-color);
+  box-shadow: var(--q-field-shadow, none);
+  font: inherit;
+  font-size: var(--font-size-ui);
+}
+
+.memories-query::placeholder {
+  color: var(--q-field-placeholder-color);
+}
+
+.memories-query:focus-visible {
+  outline: 2px solid var(--q-field-border-color-focus);
+  outline-offset: 1px;
+}
+
+.memories-since {
+  flex: 0 0 auto;
+  width: auto;
+  padding: 0 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.memories-filter-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memories-note {
+  max-width: 72ch;
+  margin: 0;
+  color: var(--memories-muted);
+  font-size: var(--font-size-meta);
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+
+/* Empty state, like Logs: an icon, one line, and a way out of a filter. */
+
+.memories-empty {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 56px 16px;
+  color: var(--memories-muted);
+  text-align: center;
+}
+
+.memories-empty p {
+  max-width: 44ch;
+  margin: 0;
+  font-size: var(--font-size-ui);
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+
+.memories-empty-icon {
+  width: 28px;
+  height: 28px;
+}
+
+/* Rows: one hairline between them and nothing around each, so a section reads as one list. */
+
+.memory-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.memory-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 32px;
+  align-items: start;
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 1px solid var(--memories-line);
+}
+
+.memory-row:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.memory-row:last-child {
+  padding-bottom: 0;
+}
+
+.memory-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.memory-title,
+.memory-body,
+.memory-meta {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.memory-title {
+  color: var(--memories-ink);
+  font-size: var(--font-size-ui);
+  font-weight: 600;
+  line-height: 1.45;
+  text-wrap: pretty;
+}
+
+.memory-body {
+  color: var(--memories-text);
+  font-size: var(--font-size-ui);
+  line-height: 1.55;
+  white-space: pre-wrap;
+  text-wrap: pretty;
+}
+
+/* Journal excerpts are previews; three lines is enough to tell them apart. */
+.memory-body.is-clamped {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+
+/* One meta line instead of chips: everything about a memory but its words, separated by dots. */
+.memory-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 0;
+  margin-top: 2px;
+  color: var(--memories-muted);
+  font-size: var(--font-size-meta);
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The dot ends an item rather than starting the next, so a wrapped line never begins with one. */
+.memory-meta > * {
+  min-width: 0;
+}
+
+.memory-meta > :not(:last-child)::after {
+  content: "·";
+  padding: 0 6px;
+  color: var(--memories-line);
+}
+
+.memory-meta .is-public {
+  color: var(--memories-accent);
+}
+
+.memory-name {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-label);
+}
+
+/* The ⋯ menu, sized like TODO's. */
+
+.memory-actions-menu .q-dropdown-menu-inner,
+.memory-actions-menu .q-dropdown-menu-action {
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  min-height: 32px;
+}
+
+.memory-actions-menu .q-dropdown-menu-action {
+  justify-content: center;
+  padding: 0;
+}
+
+.memory-actions-menu .q-menu {
+  right: 0;
+  left: auto;
+}
+
+.memory-actions-menu .chevron-icon,
+.memory-actions-menu .empty-block {
+  display: none;
+}
+
+.memory-actions-menu-icon {
+  width: 16px;
+  min-width: 16px;
+  height: 16px;
+  color: var(--memories-muted);
+}
+
+.memories-journal .memories-toolbar {
+  margin-bottom: 12px;
+}
+
+.memories-journal-empty {
+  margin: 0;
+  color: var(--memories-muted);
+  font-size: var(--font-size-meta);
+}
+
+/* Edit dialog */
+
+.memory-edit-form {
+  display: grid;
+  gap: 12px;
+  padding-top: 8px;
+}
+
+.memory-edit-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.memory-edit-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.memory-edit-field > span {
+  color: var(--memories-muted);
+  font: 500 var(--font-size-label)/1.4 var(--font-mono);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.memory-edit-hint {
+  margin: -4px 0 0;
+  color: var(--memories-muted);
+  font-size: var(--font-size-meta);
+  line-height: 1.5;
+}
+
+.memory-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+@media (max-width: 640px) {
+  .memory-edit-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .memories-since {
+    flex: 1 1 auto;
+  }
+}

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/quailyquaily/mistermorph/internal/audience"
 	busruntime "github.com/quailyquaily/mistermorph/internal/bus"
 	runtimecore "github.com/quailyquaily/mistermorph/internal/channelruntime/core"
 	"github.com/quailyquaily/mistermorph/internal/daemonruntime"
@@ -140,14 +141,15 @@ func (r *consoleLocalRuntime) acceptTask(generation *consoleLocalRuntimeGenerati
 		CreatedAt:      now,
 		TopicID:        topicID,
 		FileReferences: validatedFileReferences,
-		Conversation: runtimecore.BuildTaskConversation(
+		// The Console is local: whoever uses it is the owner.
+		Conversation: runtimecore.ConversationWithAudience(runtimecore.BuildTaskConversation(
 			conversationKey,
 			"private",
 			consoleParticipantKey,
 			consoleDisplayName,
 			"",
 			nil,
-		),
+		), audience.Owner()),
 	}, trigger, topicTitle); err != nil {
 		return consoleLocalTaskJob{}, daemonruntime.SubmitTaskResponse{}, err
 	}

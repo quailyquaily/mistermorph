@@ -20,6 +20,7 @@ import (
 	"github.com/quailyquaily/mistermorph/agent"
 	"github.com/quailyquaily/mistermorph/contacts"
 	"github.com/quailyquaily/mistermorph/guard"
+	"github.com/quailyquaily/mistermorph/internal/audience"
 	awarenessdomain "github.com/quailyquaily/mistermorph/internal/awareness"
 	busruntime "github.com/quailyquaily/mistermorph/internal/bus"
 	"github.com/quailyquaily/mistermorph/internal/channelopts"
@@ -2384,6 +2385,7 @@ func (r *consoleLocalRuntime) handleTaskJob(workerCtx context.Context, conversat
 		runCtx = workerCtx
 	}
 	runCtx = agent.WithEventSinkContext(runCtx, eventSink)
+	runCtx = audience.NewContext(runCtx, audience.Owner())
 	// Insights appear as messages of their own before the reply; each frame carries all of them.
 	var insights []string
 	runCtx = taskruntime.WithInsightNotification(runCtx, logger, taskruntime.InsightLimit, func(_ context.Context, _ int, text string) error {

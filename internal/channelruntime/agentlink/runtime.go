@@ -14,6 +14,7 @@ import (
 	"github.com/quailyquaily/mistermorph/agent"
 	"github.com/quailyquaily/mistermorph/contacts"
 	link "github.com/quailyquaily/mistermorph/internal/agentlink"
+	"github.com/quailyquaily/mistermorph/internal/audience"
 	busruntime "github.com/quailyquaily/mistermorph/internal/bus"
 	runtimecore "github.com/quailyquaily/mistermorph/internal/channelruntime/core"
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/depsutil"
@@ -223,7 +224,8 @@ func Run(ctx context.Context, d depsutil.CommonDependencies, opts Options) error
 			markTaskFailed(logger, taskStore, j.TaskID, err.Error())
 			return
 		}
-		result, runErr := runTask(lease.Context, bundle.TaskRuntime, logger, j, prior, lease.SteerQueue)
+		// A paired agent is a contact in a private conversation, never the owner.
+		result, runErr := runTask(audience.NewContext(lease.Context, audience.Contact(j.contactID())), bundle.TaskRuntime, logger, j, prior, lease.SteerQueue)
 		lease.Finish()
 		if runErr != nil {
 			displayErr := depsutil.FormatRuntimeError(runErr)
@@ -322,7 +324,7 @@ func Run(ctx context.Context, d depsutil.CommonDependencies, opts Options) error
 		if err := taskdomain.RecordTaskUpsert(taskStore, daemonruntime.TaskInfo{
 			ID: taskID, Status: daemonruntime.TaskQueued, Task: textutil.TruncateRunes(msg.Envelope.Text, 2000),
 			Timeout: opts.TaskTimeout.String(), CreatedAt: createdAt,
-			Conversation: runtimecore.BuildTaskConversation(conversationKey, "private", j.contactID(), peerName, "", nil),
+			Conversation: runtimecore.ConversationWithAudience(runtimecore.BuildTaskConversation(conversationKey, "private", j.contactID(), peerName, "", nil), audience.Contact(j.contactID())),
 			Result:       map[string]any{"source": mode, "agentlink_from": msg.From, "agentlink_message_id": msg.MessageID, "agentlink_hop": msg.Hop},
 		}, daemonruntime.TaskTrigger{Source: mode, Event: "message", Ref: msg.MessageID}); err != nil {
 			generation.Release()

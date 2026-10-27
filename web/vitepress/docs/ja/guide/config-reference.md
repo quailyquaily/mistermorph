@@ -166,6 +166,7 @@ Shell のデフォルト値はプラットフォームごとに分かれます�
 - `tasks.dir_name`
 - `tasks.persistence_targets`
 - `tasks.rotate_max_bytes`
+- `memories.enabled`
 - `skills.dir_name`
 - `skills.enabled`
 - `skills.load`

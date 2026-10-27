@@ -15,6 +15,7 @@
 - [Extension Points](./ext.md)
 - [Aqua Connection](./aqua.md)
 - [Tools](./tools.md)
+- [Memories](./memories.md)
 - [Skills](./skills.md)
 - [Security](./security.md)
 - [Integration](./integration.md)

@@ -12,6 +12,7 @@ import (
 
 	"github.com/quailyquaily/mistermorph/agent"
 	"github.com/quailyquaily/mistermorph/guard"
+	"github.com/quailyquaily/mistermorph/internal/audience"
 	awarenessdomain "github.com/quailyquaily/mistermorph/internal/awareness"
 	"github.com/quailyquaily/mistermorph/internal/awarenessutil"
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/depsutil"
@@ -23,6 +24,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/llminspect"
 	"github.com/quailyquaily/mistermorph/internal/llmstats"
 	"github.com/quailyquaily/mistermorph/internal/llmutil"
+	"github.com/quailyquaily/mistermorph/internal/memories"
 	"github.com/quailyquaily/mistermorph/internal/outputfmt"
 	"github.com/quailyquaily/mistermorph/internal/pathroots"
 	"github.com/quailyquaily/mistermorph/internal/promptprofile"
@@ -564,6 +566,18 @@ func runAwarenessTask(ctx context.Context, d Dependencies, opts awarenessTaskOpt
 		ToolTriggers:  toolTriggers,
 		PersonaDir:    d.RuntimePaths.PersonaDir,
 	})
+	// A heartbeat follows the owner's own checklist, so it reads the owner's memories, without
+	// saving any: no one asked it anything. A cron task may have been set up from a contact's
+	// conversation and may answer them, so it reads none.
+	var memoryStore *memories.Store
+	if opts.Behavior == awarenessutil.BehaviorHeartbeat {
+		store, memErr := taskruntime.AttachMemories(runCtx, d.RuntimePaths, d.RuntimeToolsConfig.Memories, reg, audience.Owner(), true)
+		if memErr != nil {
+			return "", memErr
+		}
+		memoryStore = store
+		defer func() { _ = memoryStore.Close() }()
+	}
 	// Heartbeat and cron tasks may load $mcp_<name> servers too, for this run only.
 	registeredBefore := make(map[string]bool)
 	for _, tool := range reg.All() {
@@ -605,6 +619,7 @@ func runAwarenessTask(ctx context.Context, d Dependencies, opts awarenessTaskOpt
 	if d.PromptAugment != nil {
 		d.PromptAugment(&promptSpec, reg)
 	}
+	taskruntime.AppendMemoriesPrompt(runCtx, memoryStore, &promptSpec, audience.Owner(), true, opts.Logger)
 	promptprofile.AppendAwarenessPromptPatch(&promptSpec)
 	promptprofile.AppendModelPromptPatches(&promptSpec, taskModel)
 	engineToolsConfig := opts.EngineToolsConfig

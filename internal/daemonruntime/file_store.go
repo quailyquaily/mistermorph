@@ -337,7 +337,7 @@ func (s *FileTaskStore) replayJournalLocked(cursor domainjournal.Cursor) error {
 		}
 		payload, err := taskdomain.DecodeJournalPayload(rec.Event.Payload)
 		if err != nil {
-			return fmt.Errorf("decode task journal payload %s:%d: %w", rec.Cursor.File, rec.Cursor.Line, err)
+			return fmt.Errorf("decode task journal payload at seq %d: %w", rec.Ref.Seq, err)
 		}
 		s.projectionCursor = rec.Cursor
 		if strings.TrimSpace(payload.Target) != "" && !strings.EqualFold(strings.TrimSpace(payload.Target), s.target) {

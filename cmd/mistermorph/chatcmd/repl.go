@@ -199,6 +199,7 @@ func startChatTurn(
 		final, runCtx, err := run(turnCtx)
 		if turn.prepared != nil {
 			turn.prepared.SaveFoundTools(runCtx)
+			turn.prepared.CountMemoryTurn(final, err)
 		}
 		if _, waiting := runtimecore.PendingApprovalID(final); err != nil || !waiting {
 			cleanupPreparedChatTurn(sess, turn)

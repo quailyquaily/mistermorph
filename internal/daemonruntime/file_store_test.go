@@ -237,12 +237,8 @@ func TestFileTaskStoreRotatesAndReplays(t *testing.T) {
 		})
 	}
 
-	entries, err := os.ReadDir(journalDir)
-	if err != nil {
-		t.Fatalf("ReadDir(journal) error = %v", err)
-	}
-	if len(entries) < 2 {
-		t.Fatalf("len(entries) = %d, want at least 2 rotated files", len(entries))
+	if _, err := os.Stat(filepath.Join(journalDir, domainjournal.DBFilename)); err != nil {
+		t.Fatalf("journal database missing: %v", err)
 	}
 
 	reloaded, err := NewFileTaskStore(FileTaskStoreOptions{
@@ -481,28 +477,29 @@ func TestFileTaskStoreWritesUpsertAndUpdateTypesForTerminalStatuses(t *testing.T
 func TestFileTaskStoreLoadsSnapshotAndSkipsJournalBeforeCursor(t *testing.T) {
 	root := t.TempDir()
 	journalDir := filepath.Join(root, "journal")
-	if err := os.MkdirAll(journalDir, 0o700); err != nil {
-		t.Fatalf("MkdirAll(journalDir) error = %v", err)
+	journal, err := taskdomain.NewJournal(journalDir, 0)
+	if err != nil {
+		t.Fatalf("NewJournal() error = %v", err)
 	}
-	badLine := []byte("{bad json}\n")
-	if err := os.WriteFile(filepath.Join(journalDir, "events.000000000000000001.jsonl"), badLine, 0o600); err != nil {
-		t.Fatalf("WriteFile(journal) error = %v", err)
+	now := mustParseTime(t, "2026-03-15T10:00:00Z")
+	cursor, err := taskdomain.AppendJournalEvent(journal, "slack", taskdomain.JournalTypeTaskUpsert, now, TaskTrigger{}, &TaskInfo{
+		ID: "task_before_cursor", Status: TaskDone, Task: "already in the snapshot", Model: "gpt-5.2", Timeout: "10m0s", CreatedAt: now,
+	}, nil)
+	if err != nil {
+		t.Fatalf("AppendJournalEvent() error = %v", err)
 	}
+	_ = journal.Close()
 	writeTaskProjectionSnapshotFixture(t, root, map[string]any{
 		"version":    1,
 		"updated_at": "2026-03-15T10:00:00Z",
-		"cursor": map[string]any{
-			"file": "events.000000000000000001.jsonl",
-			"line": 1,
-			"byte": len(badLine),
-		},
+		"cursor":     map[string]any{"seq": cursor.Seq},
 		"items": []TaskInfo{{
 			ID:        "task_snapshot",
 			Status:    TaskDone,
 			Task:      "from snapshot",
 			Model:     "gpt-5.2",
 			Timeout:   "10m0s",
-			CreatedAt: mustParseTime(t, "2026-03-15T10:00:00Z"),
+			CreatedAt: now,
 		}},
 		"triggers": map[string]TaskTrigger{
 			"task_snapshot": {Source: "ui", Event: "chat_submit"},
@@ -529,8 +526,53 @@ func TestFileTaskStoreLoadsSnapshotAndSkipsJournalBeforeCursor(t *testing.T) {
 	if !ok || trigger.Source != "ui" {
 		t.Fatalf("trigger = %#v, ok=%v, want snapshot trigger", trigger, ok)
 	}
+	if _, ok := store.Get("task_before_cursor"); ok {
+		t.Fatal("task_before_cursor replayed, want the journal before the cursor skipped")
+	}
 }
 
+func TestFileTaskStoreReplaysJournalForSegmentCursorSnapshot(t *testing.T) {
+	root := t.TempDir()
+	journalDir := filepath.Join(root, "journal")
+	journal, err := taskdomain.NewJournal(journalDir, 0)
+	if err != nil {
+		t.Fatalf("NewJournal() error = %v", err)
+	}
+	now := mustParseTime(t, "2026-03-15T10:00:00Z")
+	if _, err := taskdomain.AppendJournalEvent(journal, "slack", taskdomain.JournalTypeTaskUpsert, now, TaskTrigger{}, &TaskInfo{
+		ID: "task_in_journal", Status: TaskDone, Task: "from the journal", Model: "gpt-5.2", Timeout: "10m0s", CreatedAt: now,
+	}, nil); err != nil {
+		t.Fatalf("AppendJournalEvent() error = %v", err)
+	}
+	_ = journal.Close()
+	// A snapshot written before the journal moved to SQLite points into a JSONL segment.
+	writeTaskProjectionSnapshotFixture(t, root, map[string]any{
+		"version":    1,
+		"updated_at": "2026-03-15T10:00:00Z",
+		"cursor":     map[string]any{"file": "events.000000000000000001.jsonl", "line": 9, "byte": 4096},
+		"items":      []TaskInfo{{ID: "task_stale_snapshot", Status: TaskDone, Task: "stale", CreatedAt: now}},
+	})
+
+	store, err := NewFileTaskStore(FileTaskStoreOptions{
+		RootDir:    root,
+		Target:     "slack",
+		Persist:    true,
+		JournalDir: journalDir,
+	})
+	if err != nil {
+		t.Fatalf("NewFileTaskStore() error = %v", err)
+	}
+	if task, ok := store.Get("task_in_journal"); !ok || task.Task != "from the journal" {
+		t.Fatalf("task_in_journal = %#v, %v; want it replayed from the journal", task, ok)
+	}
+	snap, ok, err := loadTaskProjectionSnapshot(root)
+	if err != nil || !ok {
+		t.Fatalf("loadTaskProjectionSnapshot() = %v, %v; want the rewritten snapshot", ok, err)
+	}
+	if snap.Cursor != (domainjournal.Cursor{Seq: 1}) {
+		t.Fatalf("snapshot cursor = %#v, want seq 1", snap.Cursor)
+	}
+}
 func TestFileTaskStoreSnapshotAdvancesPastForeignDomainEvents(t *testing.T) {
 	root := t.TempDir()
 	journalDir := filepath.Join(root, "journal")
@@ -549,7 +591,6 @@ func TestFileTaskStoreSnapshotAdvancesPastForeignDomainEvents(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Append(conversation) error = %v", err)
 	}
-	want.Line = 1
 	if err := raw.Close(); err != nil {
 		t.Fatalf("raw.Close() error = %v", err)
 	}

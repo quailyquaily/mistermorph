@@ -2,6 +2,7 @@ package consolecmd
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -2806,9 +2807,7 @@ func TestConsoleLocalRuntimeSubmitTaskSteersRunningTask(t *testing.T) {
 
 func TestConsoleTaskDoesNotPublishRunningWhenLifecycleWriteFails(t *testing.T) {
 	runtime, store, client, job, journalDir := newConsoleLifecyclePersistenceTestRuntime(t)
-	if err := os.Mkdir(filepath.Join(journalDir, "events.000000000000000003.jsonl"), 0o700); err != nil {
-		t.Fatalf("Mkdir(blocked running segment) error = %v", err)
-	}
+	blockJournalAppendsFrom(t, journalDir, 3)
 	frames, unsubscribe := runtime.streamHub.Subscribe(job.TaskID)
 	defer unsubscribe()
 
@@ -2833,9 +2832,7 @@ func TestConsoleTaskDoesNotPublishRunningWhenLifecycleWriteFails(t *testing.T) {
 
 func TestConsoleTaskDoesNotPublishFinalWhenDoneWriteFails(t *testing.T) {
 	runtime, store, client, job, journalDir := newConsoleLifecyclePersistenceTestRuntime(t)
-	if err := os.Mkdir(filepath.Join(journalDir, "events.000000000000000004.jsonl"), 0o700); err != nil {
-		t.Fatalf("Mkdir(blocked done segment) error = %v", err)
-	}
+	blockJournalAppendsFrom(t, journalDir, 4)
 	frames, unsubscribe := runtime.streamHub.Subscribe(job.TaskID)
 	defer unsubscribe()
 
@@ -2888,6 +2885,21 @@ drained:
 	wantStatuses := []daemonruntime.TaskStatus{daemonruntime.TaskQueued, daemonruntime.TaskRunning}
 	if !reflect.DeepEqual(persistedStatuses, wantStatuses) {
 		t.Fatalf("persisted task statuses = %#v, want %#v", persistedStatuses, wantStatuses)
+	}
+}
+
+// blockJournalAppendsFrom makes the journal refuse its nth event and every one after it, so a test
+// can fail one write in a sequence.
+func blockJournalAppendsFrom(t *testing.T, journalDir string, n int) {
+	t.Helper()
+	db, err := sql.Open("sqlite", filepath.Join(journalDir, domainjournal.DBFilename))
+	if err != nil {
+		t.Fatalf("open journal database: %v", err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(fmt.Sprintf(`CREATE TRIGGER test_block_appends BEFORE INSERT ON journal_events
+		WHEN (SELECT count(*) FROM journal_events) >= %d BEGIN SELECT RAISE(ABORT, 'journal append blocked by test'); END`, n-1)); err != nil {
+		t.Fatalf("block journal appends: %v", err)
 	}
 }
 

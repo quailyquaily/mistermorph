@@ -107,8 +107,7 @@ func readObservationIndexRecords(journalDir string, taskID string, topicID strin
 			return err
 		}
 		for _, item := range items {
-			refKey := item.Ref.File + ":" + fmt.Sprint(item.Ref.Byte)
-			records = append(records, keyedRecord{key: refKey, rec: item})
+			records = append(records, keyedRecord{key: fmt.Sprint(item.Ref.Seq), rec: item})
 		}
 		return nil
 	}
@@ -121,12 +120,7 @@ func readObservationIndexRecords(journalDir string, taskID string, topicID strin
 	seen := map[string]bool{}
 	out := make([]domainjournal.IndexRecord, 0, len(records))
 	sort.SliceStable(records, func(i, j int) bool {
-		left := records[i].rec.Ref
-		right := records[j].rec.Ref
-		if left.File == right.File {
-			return left.Byte < right.Byte
-		}
-		return left.File < right.File
+		return records[i].rec.Ref.Seq < records[j].rec.Ref.Seq
 	})
 	for _, item := range records {
 		if seen[item.key] {

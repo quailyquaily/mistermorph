@@ -18,6 +18,7 @@ func testRuntimePaths(stateDir string) runtimepaths.Paths {
 		StateDir:                 stateDir,
 		CacheDir:                 cacheDir,
 		JournalDir:               journalDir,
+		MemoryDBPath:             filepath.Join(stateDir, statepaths.MemoryDBFilename),
 		ContactsDir:              contactsDir,
 		TasksDir:                 tasksDir,
 		WorkspaceAttachmentsPath: filepath.Join(stateDir, "workspace_attachments.json"),

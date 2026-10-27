@@ -175,6 +175,9 @@ func (s *Service) upsertContact(ctx context.Context, contact Contact, now time.T
 		return Contact{}, err
 	}
 
+	// The store keeps the owner flag on every put; matching it here makes the returned contact say
+	// what was stored.
+	contact.Owner = false
 	input := contact
 	contact = normalizeContact(contact, now)
 	if strings.TrimSpace(contact.ContactID) == "" {
@@ -189,6 +192,7 @@ func (s *Service) upsertContact(ctx context.Context, contact Contact, now time.T
 		return Contact{}, err
 	}
 	if ok {
+		contact.Owner = existing.Owner
 		if grantPaired {
 			contact.Paired = true
 		} else {
@@ -202,9 +206,6 @@ func (s *Service) upsertContact(ctx context.Context, contact Contact, now time.T
 		}
 		if strings.TrimSpace(contact.ContactNickname) == "" && strings.TrimSpace(existing.ContactNickname) != "" {
 			contact.ContactNickname = strings.TrimSpace(existing.ContactNickname)
-		}
-		if strings.TrimSpace(contact.PersonaBrief) == "" && strings.TrimSpace(existing.PersonaBrief) != "" {
-			contact.PersonaBrief = strings.TrimSpace(existing.PersonaBrief)
 		}
 		if strings.TrimSpace(contact.TGUsername) == "" && strings.TrimSpace(existing.TGUsername) != "" {
 			contact.TGUsername = strings.TrimSpace(existing.TGUsername)
@@ -271,9 +272,6 @@ func (s *Service) upsertContact(ctx context.Context, contact Contact, now time.T
 		}
 		if len(contact.SlackChannelIDs) == 0 && len(existing.SlackChannelIDs) > 0 {
 			contact.SlackChannelIDs = append([]string(nil), existing.SlackChannelIDs...)
-		}
-		if len(contact.TopicPreferences) == 0 && len(existing.TopicPreferences) > 0 {
-			contact.TopicPreferences = append([]string(nil), existing.TopicPreferences...)
 		}
 		if contact.CooldownUntil == nil && existing.CooldownUntil != nil {
 			ts := existing.CooldownUntil.UTC()

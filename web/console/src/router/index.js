@@ -44,6 +44,7 @@ const ROUTE_VIEW_LOADERS = {
   context: () => import("../views/ContextView"),
   login: () => import("../views/LoginView"),
   logs: () => import("../views/LogsView"),
+  memories: () => import("../views/MemoriesView"),
   overview: () => import("../views/OverviewView"),
   repair: () => import("../views/RepairView"),
   setup: () => import("../views/SetupView"),
@@ -63,6 +64,7 @@ const ContactsView = ROUTE_VIEW_LOADERS.contacts;
 const ContextView = ROUTE_VIEW_LOADERS.context;
 const LoginView = ROUTE_VIEW_LOADERS.login;
 const LogsView = ROUTE_VIEW_LOADERS.logs;
+const MemoriesView = ROUTE_VIEW_LOADERS.memories;
 const OverviewView = ROUTE_VIEW_LOADERS.overview;
 const RepairView = ROUTE_VIEW_LOADERS.repair;
 const SetupView = ROUTE_VIEW_LOADERS.setup;
@@ -100,6 +102,8 @@ function preloadKeyForPath(path) {
       return "contacts";
     case "/logs":
       return "logs";
+    case "/memories":
+      return "memories";
     case "/overview":
       return "overview";
     case "/runtime":
@@ -226,6 +230,7 @@ const routes = [
   { path: `${ENDPOINT_SCOPE_PATH}/audit`, component: AuditView, meta: { endpointScoped: true } },
   { path: `${ENDPOINT_SCOPE_PATH}/logs`, component: LogsView, meta: { endpointScoped: true } },
   { path: `${ENDPOINT_SCOPE_PATH}/todo`, component: TodoView, meta: { endpointScoped: true } },
+  { path: `${ENDPOINT_SCOPE_PATH}/memories`, component: MemoriesView, meta: { endpointScoped: true } },
   { path: `${ENDPOINT_SCOPE_PATH}/skills`, component: SkillsView, meta: { endpointScoped: true } },
   { path: `${ENDPOINT_SCOPE_PATH}/skills/store`, component: SkillStoreView, meta: { endpointScoped: true } },
   {
@@ -259,6 +264,7 @@ const routes = [
   { path: "/audit", redirect: legacyEndpointRedirect("/audit") },
   { path: "/logs", redirect: legacyEndpointRedirect("/logs") },
   { path: "/todo", redirect: legacyEndpointRedirect("/todo") },
+  { path: "/memories", redirect: legacyEndpointRedirect("/memories") },
   { path: "/skills", redirect: legacyEndpointRedirect("/skills") },
   { path: "/files", redirect: legacyEndpointRedirect("/todo") },
   { path: "/contacts", redirect: legacyEndpointRedirect("/contacts") },
@@ -277,6 +283,7 @@ const NAV_ITEMS_META = [
   { id: "/chat", titleKey: "nav_chat", icon: "PhChats" },
   { id: "/contacts", titleKey: "nav_contacts", icon: "PhUsers" },
   { id: "/todo", titleKey: "nav_todo", icon: "PhListChecks" },
+  { id: "/memories", titleKey: "nav_memories", icon: "PhBrain" },
   { id: "/skills", titleKey: "nav_skills", icon: "PhMagicWand" },
   { id: "__sep_primary", separator: true },
   { id: "/stats", titleKey: "nav_stats", icon: "PhChartBar" },

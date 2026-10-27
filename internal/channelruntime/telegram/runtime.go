@@ -12,6 +12,7 @@ import (
 
 	"github.com/quailyquaily/mistermorph/agent"
 	"github.com/quailyquaily/mistermorph/guard"
+	"github.com/quailyquaily/mistermorph/internal/audience"
 	busruntime "github.com/quailyquaily/mistermorph/internal/bus"
 	telegrambus "github.com/quailyquaily/mistermorph/internal/bus/adapters/telegram"
 	runtimecore "github.com/quailyquaily/mistermorph/internal/channelruntime/core"
@@ -51,6 +52,8 @@ type telegramJob struct {
 	LightweightDecided bool
 	// ReferenceText is the user's own text when Text includes a quoted message.
 	ReferenceText string
+	// Audience is who could hear the message: the run sees only memories and journal they may.
+	Audience audience.Audience
 }
 
 func (j telegramJob) runtimeBundle(fallback *runtimecore.ChannelRuntimeBundle) *runtimecore.ChannelRuntimeBundle {

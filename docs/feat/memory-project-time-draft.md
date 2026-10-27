@@ -1,5 +1,8 @@
 # Memory Project-Time Draft
 
+> Superseded. This describes the projector design removed in `804e2a20`
+> (`feat_20260819_remove_memory.md`). The current design is `feat_20261027_memories.md`.
+
 ## Goal
 
 Move memory drafting from channel task execution into the memory projection stage.

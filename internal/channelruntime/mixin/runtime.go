@@ -17,6 +17,7 @@ import (
 	"github.com/quailyquaily/mistermorph/agent"
 	"github.com/quailyquaily/mistermorph/contacts"
 	"github.com/quailyquaily/mistermorph/internal/agentpair"
+	"github.com/quailyquaily/mistermorph/internal/audience"
 	busruntime "github.com/quailyquaily/mistermorph/internal/bus"
 	mixinbus "github.com/quailyquaily/mistermorph/internal/bus/adapters/mixin"
 	agentlinkruntime "github.com/quailyquaily/mistermorph/internal/channelruntime/agentlink"
@@ -224,6 +225,7 @@ func runMixinLoop(ctx context.Context, d Dependencies, opts RunOptions) error {
 			_, notifyErr := publishMixinBusOutbound(notifyCtx, bus, job.ConversationID, mixinReplyRecipient(job.ChatType, job.FromUserID), text, job.MessageID, fmt.Sprintf("mixin:coder-progress:%s:%d", job.TaskID, seq))
 			return notifyErr
 		})
+		runCtx = audience.NewContext(runCtx, job.Audience)
 		runCtx = taskruntime.WithInsightNotification(runCtx, logger, taskruntime.InsightLimitFor(isMixinGroup(job.ChatType)), func(notifyCtx context.Context, seq int, text string) error {
 			_, notifyErr := publishMixinBusOutbound(notifyCtx, bus, job.ConversationID, mixinReplyRecipient(job.ChatType, job.FromUserID), text, job.MessageID, fmt.Sprintf("mixin:insight:%s:%d", job.TaskID, seq))
 			return notifyErr
@@ -518,10 +520,16 @@ func runMixinLoop(ctx context.Context, d Dependencies, opts RunOptions) error {
 			generation.Release()
 			return err
 		}
+		taskAudience := audience.Resolve(handlerCtx, contactsService, audience.Input{
+			Group:           isMixinGroup(inbound.ChatType),
+			ConversationKey: conversationKey,
+			Sender:          contacts.InboundSender{Channel: contacts.ChannelMixin, UserID: inbound.FromUserID},
+		})
 		buildJob := func(version uint64) mixinJob {
 			admittedRoute := route
 			return mixinJob{
-				TaskID: taskID, ConversationKey: conversationKey, ConversationID: inbound.ConversationID,
+				Audience: taskAudience,
+				TaskID:   taskID, ConversationKey: conversationKey, ConversationID: inbound.ConversationID,
 				ChatType: inbound.ChatType, MessageID: inbound.MessageID, QuoteMessageID: inbound.QuoteMessageID,
 				FromUserID: inbound.FromUserID, IdentityNumber: inbound.IdentityNumber, DisplayName: inbound.DisplayName, FromIsAgent: inbound.FromIsAgent,
 				Text: text, ImagePaths: imagePaths, Images: append([]chathistory.ChatHistoryImage(nil), images...),
@@ -536,7 +544,7 @@ func runMixinLoop(ctx context.Context, d Dependencies, opts RunOptions) error {
 		}
 		if err := taskdomain.RecordTaskUpsert(daemonStore, daemonruntime.TaskInfo{
 			ID: taskID, Status: daemonruntime.TaskQueued, Task: textutil.TruncateRunes(text, 2000), Model: route.ClientConfig.Model,
-			Timeout: opts.TaskTimeout.String(), CreatedAt: createdAt, Conversation: mixinTaskConversation(buildJob(0)),
+			Timeout: opts.TaskTimeout.String(), CreatedAt: createdAt, Conversation: runtimecore.ConversationWithAudience(mixinTaskConversation(buildJob(0)), taskAudience),
 			Result: map[string]any{"source": "mixin", "mixin_conversation_id": inbound.ConversationID, "mixin_message_id": inbound.MessageID, "mixin_chat_type": inbound.ChatType, "mixin_from_user_id": inbound.FromUserID},
 		}, daemonruntime.TaskTrigger{Source: "mixin", Event: "blaze_inbound", Ref: inbound.MessageID}); err != nil {
 			generation.Release()

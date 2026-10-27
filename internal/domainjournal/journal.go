@@ -1,29 +1,35 @@
+// Package domainjournal is the append-only record of what happened: tasks, topics, untriggered
+// messages, agent pairing. It is the final truth that projections, observations and journal search
+// read. Events live in <dir>/journal.db (SQLite); JSONL segments from older versions are imported
+// once and left on disk.
 package domainjournal
 
 import (
-	"bufio"
 	"bytes"
+	"compress/flate"
 	"context"
-	"encoding/base64"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/quailyquaily/mistermorph/internal/fsstore"
+	"github.com/quailyquaily/mistermorph/internal/sqlitedb"
 )
 
 const (
-	segmentPrefix  = "events."
-	segmentSuffix  = ".jsonl"
-	firstSegment   = int64(1)
-	indexDirtyFile = ".index-dirty"
+	// DBFilename is the journal database inside the journal directory.
+	DBFilename = "journal.db"
+
+	segmentPrefix = "events."
+	segmentSuffix = ".jsonl"
+
+	replayBatchSize = 500
 )
 
 type Trace struct {
@@ -35,41 +41,48 @@ type Trace struct {
 }
 
 type Event struct {
-	ID            string          `json:"id"`
-	Time          string          `json:"time"`
-	Domain        string          `json:"domain"`
-	Type          string          `json:"type"`
-	SchemaVersion int             `json:"schema_version"`
-	Trace         Trace           `json:"trace,omitempty"`
-	Payload       json.RawMessage `json:"payload"`
+	ID            string `json:"id"`
+	Time          string `json:"time"`
+	Domain        string `json:"domain"`
+	Type          string `json:"type"`
+	SchemaVersion int    `json:"schema_version"`
+	Trace         Trace  `json:"trace,omitempty"`
+	// Audience is who may hear this event through journal search: "owner", "contact:<id>" or
+	// "conversation:<key>". Empty means the owner only.
+	Audience string          `json:"audience,omitempty"`
+	Payload  json.RawMessage `json:"payload"`
 }
 
 type JournalOptions struct {
-	Dir            string
+	Dir string
+	// RotateMaxBytes applied to JSONL segments, which the journal no longer writes. It is accepted
+	// and ignored.
 	RotateMaxBytes int64
-	SyncEachWrite  bool
+	// SyncEachWrite makes every append reach the disk before Append returns.
+	SyncEachWrite bool
 }
 
 type Journal struct {
-	dir            string
-	rotateMaxBytes int64
-	syncEachWrite  bool
-	lockPath       string
-	mu             sync.Mutex
-	closed         bool
-	indexErr       error
+	dir    string
+	db     *sql.DB
+	mu     sync.Mutex
+	closed bool
 }
 
+// Cursor is a position in the journal: replay from it starts after the event it names. Seq is the
+// event's sequence number; zero is the start. File, Line and Byte were positions in JSONL segments
+// and are only read from projection snapshots written by older versions, which treat them as
+// invalid and replay from the start.
 type Cursor struct {
-	File string `json:"file"`
+	Seq  int64  `json:"seq,omitempty"`
+	File string `json:"file,omitempty"`
 	Line int64  `json:"line,omitempty"`
 	Byte int64  `json:"byte,omitempty"`
 }
 
+// RecordRef names one event, by its sequence number.
 type RecordRef struct {
-	File string `json:"file"`
-	Line int64  `json:"line,omitempty"`
-	Byte int64  `json:"byte,omitempty"`
+	Seq int64 `json:"seq"`
 }
 
 type Record struct {
@@ -89,27 +102,67 @@ func New(opts JournalOptions) (*Journal, error) {
 		return nil, fmt.Errorf("journal dir is required")
 	}
 	cleanDir := filepath.Clean(dir)
-	if err := fsstore.EnsureDir(cleanDir, 0o700); err != nil {
-		return nil, err
-	}
-	lockPath, err := fsstore.BuildLockPath(filepath.Join(cleanDir, ".locks"), "domainjournal")
+	db, err := sqlitedb.OpenWithOptions(context.Background(), filepath.Join(cleanDir, DBFilename), migrations(cleanDir), sqlitedb.Options{
+		Durable: opts.SyncEachWrite,
+	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("open journal: %w", err)
 	}
-	j := &Journal{
-		dir:            cleanDir,
-		rotateMaxBytes: opts.RotateMaxBytes,
-		syncEachWrite:  opts.SyncEachWrite,
-		lockPath:       lockPath,
+	return &Journal{dir: cleanDir, db: db}, nil
+}
+
+// openDir opens the journal in dir for a one-off read. A directory that does not exist holds no
+// events, and reading it creates nothing.
+func openDir(dir string) (*Journal, bool, error) {
+	dir = strings.TrimSpace(dir)
+	if dir == "" {
+		return nil, false, fmt.Errorf("journal dir is required")
 	}
-	dirty, err := j.indexDirty()
+	if _, err := os.Stat(dir); err != nil {
+		if os.IsNotExist(err) {
+			return nil, false, nil
+		}
+		return nil, false, err
+	}
+	j, err := New(JournalOptions{Dir: dir})
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	if dirty {
-		j.indexErr = fmt.Errorf("derived journal index requires rebuild")
+	return j, true, nil
+}
+
+// handle is the database for an append. A closed journal refuses appends.
+func (j *Journal) handle() (*sql.DB, error) {
+	if j == nil {
+		return nil, fmt.Errorf("journal is nil")
 	}
-	return j, nil
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	if j.closed {
+		return nil, fmt.Errorf("journal is closed")
+	}
+	return j.db, nil
+}
+
+// readHandle is the database for a read, and the function that releases it. A closed journal can
+// still be read, as the JSONL journal could: callers close their writer and keep their projection
+// readable. The read then opens the database for itself.
+func (j *Journal) readHandle() (*sql.DB, func(), error) {
+	if j == nil {
+		return nil, nil, fmt.Errorf("journal is nil")
+	}
+	j.mu.Lock()
+	closed := j.closed
+	db := j.db
+	j.mu.Unlock()
+	if !closed {
+		return db, func() {}, nil
+	}
+	reopened, err := sqlitedb.Open(context.Background(), filepath.Join(j.dir, DBFilename), migrations(j.dir))
+	if err != nil {
+		return nil, nil, fmt.Errorf("open journal: %w", err)
+	}
+	return reopened, func() { _ = reopened.Close() }, nil
 }
 
 func (j *Journal) Append(event Event) (Cursor, error) {
@@ -119,202 +172,175 @@ func (j *Journal) Append(event Event) (Cursor, error) {
 	if err := ValidateEvent(event); err != nil {
 		return Cursor{}, err
 	}
-	payload, err := json.Marshal(event)
-	if err != nil {
-		return Cursor{}, fmt.Errorf("encode journal event: %w", err)
-	}
-	payload = append(payload, '\n')
-
-	j.mu.Lock()
-	defer j.mu.Unlock()
-	if j.closed {
-		return Cursor{}, fmt.Errorf("journal is closed")
-	}
-
-	var cursor Cursor
-	err = fsstore.WithLock(context.Background(), j.lockPath, func() error {
-		hasIndexKeys := strings.TrimSpace(event.Trace.TaskID) != "" || strings.TrimSpace(event.Trace.TopicID) != ""
-		indexWasDirty := false
-		if hasIndexKeys {
-			var err error
-			indexWasDirty, err = j.indexDirty()
-			if err != nil {
-				return err
-			}
-			if err := fsstore.WriteTextAtomic(filepath.Join(j.dir, indexDirtyFile), event.ID+"\n", fsstore.FileOptions{}); err != nil {
-				return fmt.Errorf("mark derived journal index dirty: %w", err)
-			}
-		}
-		next, ref, err := j.appendLineLocked(payload)
-		if err != nil {
-			if hasIndexKeys && !indexWasDirty {
-				_ = os.Remove(filepath.Join(j.dir, indexDirtyFile))
-			}
-			return err
-		}
-		cursor = next
-		if !hasIndexKeys {
-			return nil
-		}
-		if err := appendIndexRecords(filepath.Join(j.dir, "index"), event, ref, j.syncEachWrite); err != nil {
-			// The event line is the only commit point. The index is derived and
-			// ReadIndex falls back to the journal, so an index failure must not
-			// make callers retry an event that is already durable.
-			j.indexErr = fmt.Errorf("update derived journal index: %w", err)
-			return nil
-		}
-		if !indexWasDirty {
-			if err := os.Remove(filepath.Join(j.dir, indexDirtyFile)); err != nil && !os.IsNotExist(err) {
-				j.indexErr = fmt.Errorf("clear derived journal index marker: %w", err)
-			}
-		}
-		return nil
-	})
+	db, err := j.handle()
 	if err != nil {
 		return Cursor{}, err
 	}
-	return cursor, nil
+	seq, err := insertEvent(context.Background(), db, event)
+	if err != nil {
+		return Cursor{}, err
+	}
+	return Cursor{Seq: seq}, nil
 }
 
-// IndexError reports whether this Journal has failed to update its derived
-// index since it was opened. Journal replay and ReadIndex remain authoritative.
+type execer interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+}
+
+func insertEvent(ctx context.Context, db execer, event Event) (int64, error) {
+	payload, err := compress(event.Payload)
+	if err != nil {
+		return 0, fmt.Errorf("compress journal payload: %w", err)
+	}
+	var atMS int64
+	if at, err := time.Parse(time.RFC3339Nano, event.Time); err == nil {
+		atMS = at.UnixMilli()
+	}
+	res, err := db.ExecContext(ctx, `INSERT INTO journal_events
+		(id, time, at_ms, domain, type, schema_version, trace_id, runtime, target, topic_id, task_id, audience, text, payload)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		event.ID, event.Time, atMS, event.Domain, event.Type, event.SchemaVersion,
+		strings.TrimSpace(event.Trace.TraceID), strings.TrimSpace(event.Trace.Runtime), strings.TrimSpace(event.Trace.Target),
+		strings.TrimSpace(event.Trace.TopicID), strings.TrimSpace(event.Trace.TaskID),
+		strings.TrimSpace(event.Audience), searchText(event), payload)
+	if err != nil {
+		return 0, fmt.Errorf("append journal event: %w", err)
+	}
+	return res.LastInsertId()
+}
+
+// IndexError reported failures of the derived JSONL index. Task and topic lookups are SQL indexes
+// now, which fail with the append itself, so it is always nil.
 func (j *Journal) IndexError() error {
-	if j == nil {
-		return nil
-	}
-	j.mu.Lock()
-	defer j.mu.Unlock()
-	return j.indexErr
+	return nil
 }
 
-// RebuildIndexes replaces the derived task and topic indexes from the
-// authoritative event segments. A failed rebuild leaves the dirty marker in
-// place, so ReadIndex continues to fall back to replay.
+// RebuildIndexes rebuilt the derived JSONL index. SQL indexes need no rebuild; it only checks that
+// the journal is open.
 func (j *Journal) RebuildIndexes() error {
-	if j == nil {
-		return fmt.Errorf("journal is nil")
-	}
-	j.mu.Lock()
-	defer j.mu.Unlock()
-	if j.closed {
-		return fmt.Errorf("journal is closed")
-	}
-
-	return fsstore.WithLock(context.Background(), j.lockPath, func() error {
-		markerPath := filepath.Join(j.dir, indexDirtyFile)
-		if err := fsstore.WriteTextAtomic(markerPath, "rebuild\n", fsstore.FileOptions{}); err != nil {
-			return fmt.Errorf("mark derived journal index dirty: %w", err)
-		}
-
-		tempRoot, err := os.MkdirTemp(j.dir, ".index-rebuild-")
-		if err != nil {
-			j.indexErr = fmt.Errorf("create derived journal index rebuild directory: %w", err)
-			return j.indexErr
-		}
-		cleanupTemp := true
-		defer func() {
-			if cleanupTemp {
-				_ = os.RemoveAll(tempRoot)
-			}
-		}()
-
-		if err := j.Replay(func(rec Record) error {
-			return appendIndexRecords(tempRoot, rec.Event, rec.Ref, j.syncEachWrite)
-		}); err != nil {
-			j.indexErr = fmt.Errorf("replay journal for index rebuild: %w", err)
-			return j.indexErr
-		}
-
-		indexRoot := filepath.Join(j.dir, "index")
-		if err := os.RemoveAll(indexRoot); err != nil {
-			j.indexErr = fmt.Errorf("remove derived journal index: %w", err)
-			return j.indexErr
-		}
-		if err := os.Rename(tempRoot, indexRoot); err != nil {
-			j.indexErr = fmt.Errorf("replace derived journal index: %w", err)
-			return j.indexErr
-		}
-		cleanupTemp = false
-		if err := os.Remove(markerPath); err != nil && !os.IsNotExist(err) {
-			j.indexErr = fmt.Errorf("clear derived journal index marker: %w", err)
-			return j.indexErr
-		}
-		j.indexErr = nil
-		return nil
-	})
+	_, err := j.handle()
+	return err
 }
 
 func (j *Journal) Replay(fn func(Record) error) error {
-	if j == nil {
-		return fmt.Errorf("journal is nil")
-	}
 	if fn == nil {
 		return fmt.Errorf("replay callback is required")
 	}
 	return j.ReplayFrom(Cursor{}, fn)
 }
 
+// ReplayFrom calls fn for every event after cursor, in order. Events are read in batches, so fn may
+// append to the journal; events it appends are replayed too.
 func (j *Journal) ReplayFrom(cursor Cursor, fn func(Record) error) error {
-	if j == nil {
-		return fmt.Errorf("journal is nil")
-	}
 	if fn == nil {
 		return fmt.Errorf("replay callback is required")
 	}
-	files, err := j.listEventFiles()
+	if strings.TrimSpace(cursor.File) != "" {
+		return fmt.Errorf("journal cursor names JSONL segment %q; the journal has moved to SQLite, replay from the start", cursor.File)
+	}
+	if cursor.Seq < 0 {
+		return fmt.Errorf("journal cursor seq must be >= 0")
+	}
+	db, release, err := j.readHandle()
 	if err != nil {
 		return err
 	}
-	start := 0
-	if strings.TrimSpace(cursor.File) != "" {
-		found := false
-		for i, name := range files {
-			if name == cursor.File {
-				start = i
-				found = true
-				break
-			}
-		}
-		if !found {
-			return fmt.Errorf("journal cursor file %q not found", cursor.File)
-		}
-	}
-	for i := start; i < len(files); i++ {
-		fileCursor := Cursor{}
-		if i == start && strings.TrimSpace(cursor.File) != "" {
-			fileCursor = cursor
-		}
-		if err := j.replayFile(files[i], fileCursor, fn); err != nil {
+	defer release()
+	after := cursor.Seq
+	for {
+		records, err := readEvents(db, `WHERE seq > ? ORDER BY seq LIMIT ?`, after, replayBatchSize)
+		if err != nil {
 			return err
 		}
+		for _, rec := range records {
+			if err := fn(rec); err != nil {
+				return err
+			}
+			after = rec.Ref.Seq
+		}
+		if len(records) < replayBatchSize {
+			return nil
+		}
 	}
-	return nil
+}
+
+const eventColumns = `seq, id, time, domain, type, schema_version, trace_id, runtime, target, topic_id, task_id, audience, payload`
+
+func readEvents(db *sql.DB, where string, args ...any) ([]Record, error) {
+	rows, err := db.Query(`SELECT `+eventColumns+` FROM journal_events `+where, args...)
+	if err != nil {
+		return nil, fmt.Errorf("read journal: %w", err)
+	}
+	defer rows.Close()
+	var out []Record
+	for rows.Next() {
+		rec, err := scanRecord(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, rec)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read journal: %w", err)
+	}
+	return out, nil
+}
+
+func scanRecord(rows *sql.Rows) (Record, error) {
+	var (
+		seq     int64
+		event   Event
+		payload []byte
+	)
+	if err := rows.Scan(&seq, &event.ID, &event.Time, &event.Domain, &event.Type, &event.SchemaVersion,
+		&event.Trace.TraceID, &event.Trace.Runtime, &event.Trace.Target, &event.Trace.TopicID, &event.Trace.TaskID,
+		&event.Audience, &payload); err != nil {
+		return Record{}, fmt.Errorf("read journal event: %w", err)
+	}
+	raw, err := decompress(payload)
+	if err != nil {
+		return Record{}, fmt.Errorf("journal event %d: decompress payload: %w", seq, err)
+	}
+	event.Payload = raw
+	return Record{Cursor: Cursor{Seq: seq}, Ref: RecordRef{Seq: seq}, Event: event}, nil
 }
 
 func ReplayDir(dir string, fn func(Record) error) error {
-	dir = strings.TrimSpace(dir)
-	if dir == "" {
-		return fmt.Errorf("journal dir is required")
+	if fn == nil {
+		return fmt.Errorf("replay callback is required")
 	}
-	j := &Journal{dir: filepath.Clean(dir)}
+	j, ok, err := openDir(dir)
+	if err != nil || !ok {
+		return err
+	}
+	defer func() { _ = j.Close() }()
 	return j.Replay(fn)
 }
 
 func ReadAtDir(dir string, ref RecordRef) (Record, error) {
-	dir = strings.TrimSpace(dir)
-	if dir == "" {
-		return Record{}, fmt.Errorf("journal dir is required")
+	j, ok, err := openDir(dir)
+	if err != nil {
+		return Record{}, err
 	}
-	j := &Journal{dir: filepath.Clean(dir)}
+	if !ok {
+		return Record{}, fmt.Errorf("journal event %d not found", ref.Seq)
+	}
+	defer func() { _ = j.Close() }()
 	return j.ReadAt(ref)
 }
 
 func ReadIndexDir(dir string, kind string, key string, limit int) ([]IndexRecord, error) {
-	dir = strings.TrimSpace(dir)
-	if dir == "" {
-		return nil, fmt.Errorf("journal dir is required")
+	j, ok, err := openDir(dir)
+	if err != nil {
+		return nil, err
 	}
-	j := &Journal{dir: filepath.Clean(dir)}
+	if !ok {
+		if err := validateIndexQuery(kind, key); err != nil {
+			return nil, err
+		}
+		return nil, nil
+	}
+	defer func() { _ = j.Close() }()
 	return j.ReadIndex(kind, key, limit)
 }
 
@@ -324,8 +350,11 @@ func (j *Journal) Close() error {
 	}
 	j.mu.Lock()
 	defer j.mu.Unlock()
+	if j.closed {
+		return nil
+	}
 	j.closed = true
-	return nil
+	return j.db.Close()
 }
 
 func ValidateEvent(event Event) error {
@@ -356,331 +385,96 @@ func ValidateEvent(event Event) error {
 	return nil
 }
 
-func (j *Journal) listEventFiles() ([]string, error) {
-	entries, err := os.ReadDir(j.dir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	files := make([]string, 0, len(entries))
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-		name := entry.Name()
-		if _, ok := segmentIndex(name); ok {
-			files = append(files, name)
-		}
-	}
-	sort.Slice(files, func(i, k int) bool {
-		left, _ := segmentIndex(files[i])
-		right, _ := segmentIndex(files[k])
-		return left < right
-	})
-	return files, nil
-}
-
-func (j *Journal) replayFile(name string, cursor Cursor, fn func(Record) error) error {
-	path := filepath.Join(j.dir, name)
-	file, err := os.Open(path)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = file.Close() }()
-
-	startByte := cursor.Byte
-	if startByte < 0 {
-		return fmt.Errorf("%s: cursor byte must be >= 0", name)
-	}
-	if startByte > 0 {
-		if _, err := file.Seek(startByte, io.SeekStart); err != nil {
-			return err
-		}
-	}
-
-	reader := bufio.NewReaderSize(file, 64*1024)
-	var line int64
-	if startByte > 0 {
-		line = cursor.Line
-	}
-	pos := startByte
-	for {
-		start := pos
-		raw, err := reader.ReadBytes('\n')
-		if len(raw) == 0 && err == io.EOF {
-			break
-		}
-		if err != nil && err != io.EOF {
-			return fmt.Errorf("%s:%d: scan event: %w", name, line+1, err)
-		}
-		line++
-		if startByte == 0 && cursor.Line > 0 && line <= cursor.Line {
-			pos += int64(len(raw))
-			if err == io.EOF {
-				break
-			}
-			continue
-		}
-		if len(bytes.TrimSpace(raw)) == 0 {
-			pos += int64(len(raw))
-			if err == io.EOF {
-				break
-			}
-			continue
-		}
-		var event Event
-		if err := json.Unmarshal(raw, &event); err != nil {
-			return fmt.Errorf("%s:%d: decode event: %w", name, line, err)
-		}
-		if err := ValidateEvent(event); err != nil {
-			return fmt.Errorf("%s:%d: invalid event: %w", name, line, err)
-		}
-		pos += int64(len(raw))
-		if err := fn(Record{
-			Cursor: Cursor{File: name, Line: line, Byte: pos},
-			Ref:    RecordRef{File: name, Line: line, Byte: start},
-			Event:  event,
-		}); err != nil {
-			return err
-		}
-		if err == io.EOF {
-			break
-		}
-	}
-	return nil
-}
-
 func (j *Journal) ReadAt(ref RecordRef) (Record, error) {
-	if j == nil {
-		return Record{}, fmt.Errorf("journal is nil")
+	if ref.Seq <= 0 {
+		return Record{}, fmt.Errorf("journal record ref seq must be >= 1")
 	}
-	if strings.TrimSpace(ref.File) == "" {
-		return Record{}, fmt.Errorf("journal record ref file is required")
-	}
-	if _, ok := segmentIndex(ref.File); !ok {
-		return Record{}, fmt.Errorf("journal record ref file %q is invalid", ref.File)
-	}
-	path := filepath.Join(j.dir, ref.File)
-	file, err := os.Open(path)
+	db, release, err := j.readHandle()
 	if err != nil {
 		return Record{}, err
 	}
-	defer func() { _ = file.Close() }()
-	if ref.Byte < 0 {
-		return Record{}, fmt.Errorf("%s: record ref byte must be >= 0", ref.File)
-	}
-	if _, err := file.Seek(ref.Byte, io.SeekStart); err != nil {
+	defer release()
+	records, err := readEvents(db, `WHERE seq = ?`, ref.Seq)
+	if err != nil {
 		return Record{}, err
 	}
-	reader := bufio.NewReaderSize(file, 64*1024)
-	raw, err := reader.ReadBytes('\n')
-	if err != nil && err != io.EOF {
-		return Record{}, err
+	if len(records) == 0 {
+		return Record{}, fmt.Errorf("journal event %d not found", ref.Seq)
 	}
-	if len(bytes.TrimSpace(raw)) == 0 {
-		return Record{}, fmt.Errorf("%s:%d: empty event at record ref", ref.File, ref.Line)
-	}
-	var event Event
-	if err := json.Unmarshal(raw, &event); err != nil {
-		return Record{}, fmt.Errorf("%s:%d: decode event: %w", ref.File, ref.Line, err)
-	}
-	if err := ValidateEvent(event); err != nil {
-		return Record{}, fmt.Errorf("%s:%d: invalid event: %w", ref.File, ref.Line, err)
-	}
-	cursor := Cursor{File: ref.File, Line: ref.Line, Byte: ref.Byte + int64(len(raw))}
-	return Record{Cursor: cursor, Ref: ref, Event: event}, nil
+	return records[0], nil
 }
 
+// ReadIndex returns the last limit events of a task or topic, oldest first.
 func (j *Journal) ReadIndex(kind string, key string, limit int) ([]IndexRecord, error) {
-	if j == nil {
-		return nil, fmt.Errorf("journal is nil")
-	}
 	kind = strings.TrimSpace(kind)
 	key = strings.TrimSpace(key)
-	if kind != "task" && kind != "topic" {
-		return nil, fmt.Errorf("journal index kind %q is invalid", kind)
-	}
-	if key == "" {
-		return nil, fmt.Errorf("journal index key is required")
+	if err := validateIndexQuery(kind, key); err != nil {
+		return nil, err
 	}
 	if limit <= 0 {
 		limit = 50
 	}
-	dirty, err := j.indexDirty()
+	db, release, err := j.readHandle()
 	if err != nil {
 		return nil, err
 	}
-	if dirty {
-		return j.scanIndex(kind, key, limit)
+	defer release()
+	column := "task_id"
+	if kind == "topic" {
+		column = "topic_id"
 	}
-	path := filepath.Join(j.dir, "index", kind, indexKeyFilename(key))
-	file, err := os.Open(path)
+	rows, err := db.Query(`SELECT seq FROM (SELECT seq FROM journal_events WHERE `+column+` = ? ORDER BY seq DESC LIMIT ?) ORDER BY seq`, key, limit)
 	if err != nil {
-		return j.scanIndex(kind, key, limit)
+		return nil, fmt.Errorf("read journal index: %w", err)
 	}
-	defer func() { _ = file.Close() }()
-
+	defer rows.Close()
 	out := make([]IndexRecord, 0, limit)
-	scanner := bufio.NewScanner(file)
-	scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
-	for scanner.Scan() {
-		raw := strings.TrimSpace(scanner.Text())
-		if raw == "" {
-			continue
+	for rows.Next() {
+		var seq int64
+		if err := rows.Scan(&seq); err != nil {
+			return nil, fmt.Errorf("read journal index: %w", err)
 		}
-		var rec IndexRecord
-		if err := json.Unmarshal([]byte(raw), &rec); err != nil {
-			return j.scanIndex(kind, key, limit)
-		}
-		if rec.Key != key {
-			continue
-		}
-		out = append(out, rec)
-		if len(out) > limit {
-			copy(out, out[len(out)-limit:])
-			out = out[:limit]
-		}
+		out = append(out, IndexRecord{Key: key, Ref: RecordRef{Seq: seq}})
 	}
-	if err := scanner.Err(); err != nil {
-		return j.scanIndex(kind, key, limit)
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read journal index: %w", err)
 	}
 	return out, nil
 }
 
-func (j *Journal) indexDirty() (bool, error) {
-	_, err := os.Stat(filepath.Join(j.dir, indexDirtyFile))
-	if err == nil {
-		return true, nil
+func validateIndexQuery(kind, key string) error {
+	kind = strings.TrimSpace(kind)
+	if kind != "task" && kind != "topic" {
+		return fmt.Errorf("journal index kind %q is invalid", kind)
 	}
-	if os.IsNotExist(err) {
-		return false, nil
-	}
-	return false, fmt.Errorf("read derived journal index state: %w", err)
-}
-
-func (j *Journal) scanIndex(kind string, key string, limit int) ([]IndexRecord, error) {
-	out := make([]IndexRecord, 0, limit)
-	err := j.Replay(func(rec Record) error {
-		indexedKey := strings.TrimSpace(rec.Event.Trace.TaskID)
-		if kind == "topic" {
-			indexedKey = strings.TrimSpace(rec.Event.Trace.TopicID)
-		}
-		if indexedKey != key {
-			return nil
-		}
-		out = append(out, IndexRecord{Key: key, Ref: rec.Ref})
-		if len(out) > limit {
-			copy(out, out[len(out)-limit:])
-			out = out[:limit]
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (j *Journal) appendLineLocked(payload []byte) (Cursor, RecordRef, error) {
-	if err := fsstore.EnsureDir(j.dir, 0o700); err != nil {
-		return Cursor{}, RecordRef{}, err
-	}
-	name, size, err := j.writableSegmentLocked(int64(len(payload)))
-	if err != nil {
-		return Cursor{}, RecordRef{}, err
-	}
-	path := filepath.Join(j.dir, name)
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
-	if err != nil {
-		return Cursor{}, RecordRef{}, err
-	}
-	defer func() { _ = file.Close() }()
-	n, err := file.Write(payload)
-	if err != nil {
-		return Cursor{}, RecordRef{}, err
-	}
-	if n != len(payload) {
-		return Cursor{}, RecordRef{}, fmt.Errorf("journal append: short write")
-	}
-	if j.syncEachWrite {
-		if err := file.Sync(); err != nil {
-			return Cursor{}, RecordRef{}, err
-		}
-	}
-	return Cursor{File: name, Byte: size + int64(n)}, RecordRef{File: name, Byte: size}, nil
-}
-
-func (j *Journal) writableSegmentLocked(incomingBytes int64) (string, int64, error) {
-	files, err := j.listEventFiles()
-	if err != nil {
-		return "", 0, err
-	}
-	if len(files) == 0 {
-		return segmentName(firstSegment), 0, nil
-	}
-	latestName := files[len(files)-1]
-	latestIndex, _ := segmentIndex(latestName)
-	info, err := os.Stat(filepath.Join(j.dir, latestName))
-	if err != nil {
-		return "", 0, err
-	}
-	size := info.Size()
-	if j.rotateMaxBytes > 0 && size > 0 && size+incomingBytes > j.rotateMaxBytes {
-		return segmentName(latestIndex + 1), 0, nil
-	}
-	return latestName, size, nil
-}
-
-func appendIndexRecords(indexRoot string, event Event, ref RecordRef, syncEachWrite bool) error {
-	keys := map[string]string{
-		"task":  strings.TrimSpace(event.Trace.TaskID),
-		"topic": strings.TrimSpace(event.Trace.TopicID),
-	}
-	for kind, key := range keys {
-		if key == "" {
-			continue
-		}
-		rec := IndexRecord{
-			Key: key,
-			Ref: ref,
-		}
-		raw, err := json.Marshal(rec)
-		if err != nil {
-			return err
-		}
-		raw = append(raw, '\n')
-		path := filepath.Join(indexRoot, kind, indexKeyFilename(key))
-		if err := fsstore.EnsureDir(filepath.Dir(path), 0o700); err != nil {
-			return err
-		}
-		file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
-		if err != nil {
-			return err
-		}
-		n, writeErr := file.Write(raw)
-		if writeErr == nil && n != len(raw) {
-			writeErr = fmt.Errorf("journal index append: short write")
-		}
-		if writeErr == nil && syncEachWrite {
-			writeErr = file.Sync()
-		}
-		closeErr := file.Close()
-		if writeErr != nil {
-			return writeErr
-		}
-		if closeErr != nil {
-			return closeErr
-		}
+	if strings.TrimSpace(key) == "" {
+		return fmt.Errorf("journal index key is required")
 	}
 	return nil
 }
 
-func segmentName(index int64) string {
-	return fmt.Sprintf("%s%018d%s", segmentPrefix, index, segmentSuffix)
+func compress(raw []byte) ([]byte, error) {
+	var buf bytes.Buffer
+	w, err := flate.NewWriter(&buf, flate.DefaultCompression)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := w.Write(raw); err != nil {
+		return nil, err
+	}
+	if err := w.Close(); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
+func decompress(data []byte) ([]byte, error) {
+	r := flate.NewReader(bytes.NewReader(data))
+	defer func() { _ = r.Close() }()
+	return io.ReadAll(r)
+}
+
+// IsSegmentFile reports whether name is a JSONL segment of the journal before it moved to SQLite.
 func IsSegmentFile(name string) bool {
 	_, ok := segmentIndex(name)
 	return ok
@@ -699,10 +493,6 @@ func segmentIndex(name string) (int64, bool) {
 		return 0, false
 	}
 	return idx, true
-}
-
-func indexKeyFilename(key string) string {
-	return base64.RawURLEncoding.EncodeToString([]byte(key)) + ".jsonl"
 }
 
 func validateRequiredCanonicalString(field, value string) error {

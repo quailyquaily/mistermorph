@@ -1,5 +1,6 @@
 import {
   PhArrowBendDownRight,
+  PhBrain,
   PhArrowClockwise,
   PhArrowCounterClockwise,
   PhArrowLeft,
@@ -121,6 +122,7 @@ function normalizeIcon(component, name) {
 
 const sources = {
   PhArrowBendDownRight,
+  PhBrain,
   PhArrowClockwise,
   PhArrowCounterClockwise,
   PhArrowLeft,

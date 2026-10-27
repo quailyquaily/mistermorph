@@ -21,6 +21,7 @@ This document describes the built-in and runtime-injected tool parameters curren
   - `image_generate`, `image_edit`: per-task runtime tools. They depend on usable image LLM config, `file_cache_dir`, and image intent/retention state.
   - `send_voice`, `send_photo`, `send_file`: runtime-injected, depend on active Telegram API context/chat metadata.
   - `message_react`: runtime-injected in Telegram and Slack runtimes; params/context differ by channel.
+  - `memory_save`, `memory_search`, `memory_forget`, `journal_search`, `journal_read`: registered for a top-level run that has an audience when `memories.enabled` (default on). `memory_save` is always visible; the others are deferred and found with `tool_search`. See [Memories](./memories.md#tools).
 
 ### 2) ASCII architecture
 
@@ -331,6 +332,32 @@ Errors (string matching):
 | `no matching cron task in cron.yaml` | Delete found no matching task. |
 | `ambiguous cron task match` | Delete without `id` matched multiple candidates. |
 | `invalid semantic_match response` | Delete semantic match LLM returned invalid JSON/schema. |
+
+## Memory and journal tools
+
+Purpose: keep facts across conversations, and check what was actually said. Each tool is bound to the run's audience: it reads and writes only what that audience may hear, and anything else reads as not found. See [Memories](./memories.md).
+
+`memory_save`:
+
+| Parameter | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `subject` | `string` | No | The person or group of the run | `owner`, `general`, `contact:<contact id>`, or `conversation:<key>`. |
+| `name` | `string` | Yes | None | Kebab-case slug, unique per subject; reusing it replaces that memory. |
+| `type` | `string` | Yes | None | `person`, `feedback`, `context`, or `reference`. |
+| `description` | `string` | Yes | None | One line, at most 200 characters. |
+| `body` | `string` | Yes | None | The fact, at most 4 KiB. Feedback and context end with `Why:` and `How to apply:` lines. |
+| `visibility` | `string` | No | Where it was learned | `private`, `conversation`, or `public`; narrowed to the widest the audience allows, and the result says so. |
+| `source_events` | `array<string>` | No | None | Journal event IDs the memory comes from. |
+
+Returns `status` (`created` or `replaced`), `id`, `subject`, `name`, `visibility` and `notes`. A save the rules refuse returns an error that says why.
+
+`memory_search`: `query`, `subject`, `type`, `limit` (1–50, default 10). Returns `memories` and `has_more`.
+
+`memory_forget`: `id`. Deletes a memory learned in the run's audience; the owner may delete any.
+
+`journal_search`: `query`, `since` and `until` (RFC 3339 or `YYYY-MM-DD`), `domain`, `limit` (1–100, default 20). Returns `events` (`seq`, `id`, `time`, `domain`, `type`, `task_id`, `text` excerpt) and `has_more`. The owner searches every event; anyone else only their own conversation's.
+
+`journal_read`: `seq`. Returns the event with its payload, cut at 8 KiB (`truncated`).
 
 ## `contacts_send`
 

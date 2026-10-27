@@ -153,7 +153,18 @@ There is no global fallback or CLI flag for this setting.
 
 ## Task Journal and Projections
 
-Accepted task and topic changes from every runtime are written to the unified journal under `<file_state_dir>/journal/`. `tasks.persistence_targets` only selects the runtimes whose task projections are saved and restored across process restarts. Removing a runtime from this list does not disable its journal records.
+Accepted task and topic changes from every runtime are written to the unified journal, `<file_state_dir>/journal/journal.db` (SQLite). `tasks.persistence_targets` only selects the runtimes whose task projections are saved and restored across process restarts. Removing a runtime from this list does not disable its journal records.
+
+The first start after upgrading imports the older `events.*.jsonl` segments into the database once and leaves them on disk; a line that cannot be read is kept in the database as it was. `tasks.rotate_max_bytes` applied to those segments and is ignored now.
+
+## Memories
+
+```yaml
+memories:
+  enabled: true
+```
+
+With memories on, a run that has an audience (the owner, a contact in a direct message, or a group) gets the memory tools and the memories that audience may hear, and can search the journal for what that audience could hear. Memories live in `<file_state_dir>/memory.db`. Set `enabled: false` to give runs neither. See [Memories](./memories.md).
 
 ## Console Update Path
 

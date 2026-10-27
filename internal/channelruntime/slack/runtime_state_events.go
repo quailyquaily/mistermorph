@@ -9,6 +9,7 @@ import (
 
 	"github.com/quailyquaily/mistermorph/contacts"
 	"github.com/quailyquaily/mistermorph/internal/agentpair"
+	"github.com/quailyquaily/mistermorph/internal/audience"
 	busruntime "github.com/quailyquaily/mistermorph/internal/bus"
 	slackbus "github.com/quailyquaily/mistermorph/internal/bus/adapters/slack"
 	runtimecore "github.com/quailyquaily/mistermorph/internal/channelruntime/core"
@@ -208,9 +209,15 @@ func (s *slackRuntimeState) enqueueInbound(ctx context.Context, msg busruntime.B
 	if err != nil {
 		return err
 	}
+	taskAudience := audience.Resolve(ctx, s.contactsService, audience.Input{
+		Group:           isSlackGroupChat(inbound.ChatType),
+		ConversationKey: msg.ConversationKey,
+		Sender:          contacts.InboundSender{Channel: contacts.ChannelSlack, UserID: inbound.UserID, TeamID: inbound.TeamID},
+	})
 	buildJob := func(version uint64) slackJob {
 		admittedRoute := taskRoute
 		return slackJob{
+			Audience:           taskAudience,
 			TaskID:             jobTaskID,
 			ConversationKey:    msg.ConversationKey,
 			TeamID:             inbound.TeamID,
@@ -248,7 +255,7 @@ func (s *slackRuntimeState) enqueueInbound(ctx context.Context, msg busruntime.B
 			Timeout:      s.taskTimeout.String(),
 			CreatedAt:    createdAt,
 			TopicID:      topicID,
-			Conversation: slackTaskConversation(buildJob(0), s.botUserID),
+			Conversation: runtimecore.ConversationWithAudience(slackTaskConversation(buildJob(0), s.botUserID), taskAudience),
 			Result: map[string]any{
 				"source":            "slack",
 				"slack_team_id":     inbound.TeamID,

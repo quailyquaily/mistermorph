@@ -14,6 +14,7 @@ import (
 	"github.com/quailyquaily/mistermorph/agent"
 	"github.com/quailyquaily/mistermorph/contacts"
 	"github.com/quailyquaily/mistermorph/internal/agentpair"
+	"github.com/quailyquaily/mistermorph/internal/audience"
 	busruntime "github.com/quailyquaily/mistermorph/internal/bus"
 	telegrambus "github.com/quailyquaily/mistermorph/internal/bus/adapters/telegram"
 	runtimecore "github.com/quailyquaily/mistermorph/internal/channelruntime/core"
@@ -369,6 +370,7 @@ func (s *telegramRuntimeState) runJob(workerCtx context.Context, conversationKey
 	runCtx = taskruntime.WithCoderProgressNotification(runCtx, s.logger, func(notifyCtx context.Context, seq int, text string) error {
 		return s.publishText(notifyCtx, chatID, job.MessageThreadID, text, fmt.Sprintf("telegram:coder-progress:%s:%d", job.TaskID, seq))
 	})
+	runCtx = audience.NewContext(runCtx, job.Audience)
 	runCtx = taskruntime.WithInsightNotification(runCtx, s.logger, taskruntime.InsightLimitFor(isGroupChat(job.ChatType)), func(notifyCtx context.Context, seq int, text string) error {
 		return s.publishText(notifyCtx, chatID, job.MessageThreadID, text, fmt.Sprintf("telegram:insight:%s:%d", job.TaskID, seq))
 	})
@@ -602,9 +604,19 @@ func (s *telegramRuntimeState) enqueueInbound(ctx context.Context, message busru
 	if err != nil {
 		return err
 	}
+	taskAudience := audience.Resolve(ctx, s.contactsService, audience.Input{
+		Group:           isGroupChat(inbound.ChatType),
+		ConversationKey: message.ConversationKey,
+		Sender: contacts.InboundSender{
+			Channel:  contacts.ChannelTelegram,
+			UserID:   strconv.FormatInt(inbound.FromUserID, 10),
+			Username: inbound.FromUsername,
+		},
+	})
 	buildJob := func(version uint64) telegramJob {
 		admittedRoute := taskRoute
 		return telegramJob{
+			Audience:           taskAudience,
 			TaskID:             jobTaskID,
 			ConversationKey:    message.ConversationKey,
 			ChatID:             inbound.ChatID,
@@ -645,7 +657,7 @@ func (s *telegramRuntimeState) enqueueInbound(ctx context.Context, message busru
 			Timeout:      s.options.TaskTimeout.String(),
 			CreatedAt:    createdAt,
 			TopicID:      topicID,
-			Conversation: telegramTaskConversation(message.ConversationKey, inbound, s.botUser, s.botID),
+			Conversation: runtimecore.ConversationWithAudience(telegramTaskConversation(message.ConversationKey, inbound, s.botUser, s.botID), taskAudience),
 			Result: map[string]any{
 				"source":                "telegram",
 				"telegram_chat_id":      inbound.ChatID,

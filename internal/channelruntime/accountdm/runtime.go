@@ -12,6 +12,7 @@ import (
 
 	"github.com/quailyquaily/mistermorph/agent"
 	"github.com/quailyquaily/mistermorph/contacts"
+	"github.com/quailyquaily/mistermorph/internal/audience"
 	busruntime "github.com/quailyquaily/mistermorph/internal/bus"
 	"github.com/quailyquaily/mistermorph/internal/bus/adapters/accountdm"
 	agentlinkruntime "github.com/quailyquaily/mistermorph/internal/channelruntime/agentlink"
@@ -171,6 +172,7 @@ func runLoop(ctx context.Context, d Dependencies, opts Options) error {
 		runCtx = taskruntime.WithCoderProgressNotification(runCtx, logger, func(notifyCtx context.Context, seq int, text string) error {
 			return reply(notifyCtx, j.AccountID, j.PeerID, text, "", fmt.Sprintf("coder-progress:%s:%d", j.TaskID, seq))
 		})
+		runCtx = audience.NewContext(runCtx, j.Audience)
 		runCtx = taskruntime.WithInsightNotification(runCtx, logger, taskruntime.InsightLimit, func(notifyCtx context.Context, seq int, text string) error {
 			return reply(notifyCtx, j.AccountID, j.PeerID, text, "", fmt.Sprintf("insight:%s:%d", j.TaskID, seq))
 		})
@@ -433,10 +435,16 @@ func runLoop(ctx context.Context, d Dependencies, opts Options) error {
 			generation.Release()
 			return err
 		}
+		// Account channels carry only private chats of the bound account.
+		taskAudience := audience.Resolve(handlerCtx, contactsService, audience.Input{
+			ConversationKey: conversationKey,
+			Sender:          contacts.InboundSender{Channel: string(channel), UserID: in.PeerID},
+		})
 		buildJob := func(version uint64) dmJob {
 			admittedRoute := route
 			return dmJob{
-				TaskID: taskID, Channel: channel, ConversationKey: conversationKey, AccountID: in.AccountID, PeerID: in.PeerID,
+				Audience: taskAudience,
+				TaskID:   taskID, Channel: channel, ConversationKey: conversationKey, AccountID: in.AccountID, PeerID: in.PeerID,
 				MessageID: in.MessageID, ReplyToMessageID: in.ReplyToMessageID, DisplayName: in.DisplayName, Text: text,
 				ImagePaths: imagePaths, FileCacheDir: opts.FileCacheDir,
 				WorkspaceDir: resolution.WorkspaceDir, Route: &admittedRoute, SentAt: in.SentAt, Version: version, Generation: generation,
@@ -449,7 +457,7 @@ func runLoop(ctx context.Context, d Dependencies, opts Options) error {
 		}
 		if err := taskdomain.RecordTaskUpsert(daemonStore, daemonruntime.TaskInfo{
 			ID: taskID, Status: daemonruntime.TaskQueued, Task: textutil.TruncateRunes(text, 2000), Model: route.ClientConfig.Model,
-			Timeout: opts.TaskTimeout.String(), CreatedAt: createdAt, Conversation: taskConversation(buildJob(0), in.AccountID),
+			Timeout: opts.TaskTimeout.String(), CreatedAt: createdAt, Conversation: runtimecore.ConversationWithAudience(taskConversation(buildJob(0), in.AccountID), taskAudience),
 			Result: map[string]any{"source": name, name + "_peer_id": in.PeerID, name + "_message_id": in.MessageID},
 		}, daemonruntime.TaskTrigger{Source: name, Event: "poll_message", Ref: in.MessageID}); err != nil {
 			generation.Release()

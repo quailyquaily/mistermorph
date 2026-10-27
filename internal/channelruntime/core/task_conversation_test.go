@@ -1,6 +1,10 @@
 package core
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/quailyquaily/mistermorph/internal/audience"
+)
 
 func TestBuildTaskConversationNormalizesAndDeduplicatesParticipants(t *testing.T) {
 	conversation := BuildTaskConversation(
@@ -31,5 +35,19 @@ func TestBuildTaskConversationNormalizesAndDeduplicatesParticipants(t *testing.T
 func TestBuildTaskConversationReturnsNilWhenEmpty(t *testing.T) {
 	if got := BuildTaskConversation("", "", "", "", "", nil); got != nil {
 		t.Fatalf("BuildTaskConversation() = %+v, want nil", got)
+	}
+}
+
+func TestConversationWithAudience(t *testing.T) {
+	if got := ConversationWithAudience(nil, audience.Audience{}); got != nil {
+		t.Fatalf("ConversationWithAudience(nil, zero) = %#v, want nil", got)
+	}
+	if got := ConversationWithAudience(nil, audience.Owner()); got == nil || got.Audience != "owner" {
+		t.Fatalf("ConversationWithAudience(nil, owner) = %#v, want a conversation for the owner", got)
+	}
+	conversation := BuildTaskConversation("tg:-100", "supergroup", "@alice", "Alice", "", nil)
+	got := ConversationWithAudience(conversation, audience.Conversation("tg:-100"))
+	if got.Audience != "conversation:tg:-100" || got.ConversationID != "tg:-100" || len(got.Participants) != 1 {
+		t.Fatalf("ConversationWithAudience() = %#v", got)
 	}
 }

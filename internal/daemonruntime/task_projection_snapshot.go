@@ -3,7 +3,6 @@ package daemonruntime
 import (
 	"fmt"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/quailyquaily/mistermorph/internal/domainjournal"
@@ -64,17 +63,13 @@ func taskProjectionSnapshotPath(rootDir string) string {
 }
 
 func validateTaskProjectionSnapshotCursor(cursor domainjournal.Cursor) error {
-	if strings.TrimSpace(cursor.File) != cursor.File {
-		return fmt.Errorf("task projection snapshot cursor.file must not contain leading/trailing spaces")
+	// A cursor into JSONL segments comes from before the journal moved to SQLite. Rejecting it
+	// makes the store replay the whole journal and save a snapshot with a seq cursor.
+	if cursor.File != "" || cursor.Line != 0 || cursor.Byte != 0 {
+		return fmt.Errorf("task projection snapshot cursor names a JSONL segment; replaying the journal")
 	}
-	if cursor.File != "" && !domainjournal.IsSegmentFile(cursor.File) {
-		return fmt.Errorf("task projection snapshot cursor.file is invalid")
-	}
-	if cursor.Line < 0 {
-		return fmt.Errorf("task projection snapshot cursor.line must be >= 0")
-	}
-	if cursor.Byte < 0 {
-		return fmt.Errorf("task projection snapshot cursor.byte must be >= 0")
+	if cursor.Seq < 0 {
+		return fmt.Errorf("task projection snapshot cursor.seq must be >= 0")
 	}
 	return nil
 }
