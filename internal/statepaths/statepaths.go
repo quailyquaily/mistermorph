@@ -11,6 +11,7 @@ const (
 	HeartbeatChecklistFilename = "HEARTBEAT.md"
 	CronFilename               = "cron.yaml"
 	JournalDirName             = "journal"
+	MemoryDBFilename           = "memory.db"
 	PersonaDirName             = "persona"
 	IdentityFilename           = "identity.yaml"
 	SoulFilename               = "soul.md"
@@ -43,6 +44,11 @@ func PersonaSoulPath() string {
 
 func JournalDir() string {
 	return filepath.Clean(filepath.Join(FileStateDir(), JournalDirName))
+}
+
+// MemoryDBPath is the SQLite database for memories and their reminder counts. The journal has its own.
+func MemoryDBPath() string {
+	return filepath.Clean(filepath.Join(FileStateDir(), MemoryDBFilename))
 }
 
 func LLMUsageJournalDir() string {

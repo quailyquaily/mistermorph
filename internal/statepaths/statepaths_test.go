@@ -25,6 +25,9 @@ func TestConfiguredPaths(t *testing.T) {
 	if got, want := JournalDir(), filepath.Join(root, "journal"); got != want {
 		t.Fatalf("JournalDir() = %q, want %q", got, want)
 	}
+	if got, want := MemoryDBPath(), filepath.Join(root, "memory.db"); got != want {
+		t.Fatalf("MemoryDBPath() = %q, want %q", got, want)
+	}
 	if got, want := DefaultSkillsRoots(), []string{filepath.Join(root, "skills")}; len(got) != 1 || got[0] != want[0] {
 		t.Fatalf("DefaultSkillsRoots() = %#v, want %#v", got, want)
 	}
