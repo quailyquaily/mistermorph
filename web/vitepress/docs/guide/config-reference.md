@@ -166,6 +166,7 @@ Shell defaults are platform-specific:
 - `tasks.dir_name`
 - `tasks.persistence_targets`
 - `tasks.rotate_max_bytes`
+- `memories.enabled`
 - `skills.dir_name`
 - `skills.enabled`
 - `skills.load`

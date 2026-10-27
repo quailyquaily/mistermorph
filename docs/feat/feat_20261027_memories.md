@@ -1,7 +1,7 @@
 ---
 date: 2026-10-27
 title: Memories, facts the agent keeps on purpose
-status: draft
+status: implemented-v1
 ---
 
 # Memories, facts the agent keeps on purpose
@@ -74,7 +74,9 @@ type Contact struct {
 }
 ```
 
-- Only the owner can set it, from the Console or the config. A contact can never set it from a chat.
+- Only the owner can set it, by adding `owner: true` to the contact's YAML in the Console. Observed contacts are
+  written through `PutContact`, which keeps the stored flag whatever its input says, so a contact can never set it
+  from a chat.
 - One person can have one contact per channel. Each of the owner's contacts carries the flag, or contacts link
   them.
 - Console and TUI (`chatcmd`) are always the owner, because they are local.
@@ -92,7 +94,8 @@ the conversation type and the contact lookup). The model never chooses it.
 | DM from a known contact | `contact:<contact_id>` |
 | DM, contact not resolved | `contact:<channel>:<peer_id>`, a provisional contact |
 | Group, channel, thread | `conversation:<channel>:<conversation_key>` |
-| Awareness task | `owner`, read only |
+| Heartbeat task | `owner`, read only |
+| Cron task | none: a contact may have set it up, and it may answer them |
 | `mistermorph run`, subagents | none: no memories, no journal tools |
 
 A group audience is public, even when the agent knows some of the people in it. The agent cannot know who reads a
@@ -104,7 +107,7 @@ group, now or later.
 memory
   id            mem_<uuid>
   subject       owner | contact:<id> | conversation:<key> | general
-  name          kebab-case slug, unique per subject
+  name          kebab-case slug, unique per subject and learned_in
   type          person | feedback | context | reference
   description   one line, used in the index and in search
   body          the fact, with Why / How to apply for feedback and context
@@ -211,7 +214,7 @@ CREATE TABLE memories (
   description TEXT NOT NULL, body TEXT NOT NULL, visibility TEXT NOT NULL,
   learned_in TEXT NOT NULL, told_by TEXT, source_events TEXT,
   created_at TEXT NOT NULL, updated_at TEXT NOT NULL, updated_by_task TEXT,
-  UNIQUE (subject, name)
+  UNIQUE (subject, learned_in, name)
 );
 CREATE VIRTUAL TABLE memory_text USING fts5(name, description, body, content='memories', tokenize='trigram');
 ```
@@ -505,7 +508,8 @@ behavior a user can see.
 - `taskdomain.TaskConversation.Audience`, set where each channel builds its conversation (Telegram, Slack, Discord,
   LINE, Lark, Mixin, account DM, Agent Link, Console). The journal's `audience` column is filled from it.
   Untriggered messages and agent pairing set it directly.
-- `taskruntime.RunRequest.Audience`. Subagents, `run` and social posting leave it empty.
+- The run's audience travels on the context (`audience.NewContext`), as insights do, not on `RunRequest`. Subagents,
+  `run` and social posting carry none.
 - Events from before M3 keep an empty audience, and empty means owner only.
 
 ### M4. Memory store
@@ -536,14 +540,17 @@ Tools live in `tools/builtin/memory_*.go` and `journal_*.go` and read the run's 
   pattern. The block is built once in `prepareRun`.
 - The reminder (§10): `taskruntime` reads and updates `memory_review`, and appends the note to the current message
   the way steers are added.
-- The Console, TUI and channel runtimes pass the audience. Awareness passes `owner` with writes off.
+- The Console, TUI and channel runtimes pass the audience. Heartbeat runs read the owner's memories with writes off;
+  cron runs get none.
 - **Tests:** the prompt cases from Tests, the reminder threshold and reset, and no block or tools without an
   audience.
 
 ### M7. Contacts migration
 
-- On first open of `memory.db` after M7, `persona_brief` and `topic_preferences` become memories (§8). The fields
-  are then removed from `Contact`, `file_store.go` and the Console contact form (`pnpm build`).
+- When a run attaches memories and the contacts files changed since the last check, `persona_brief` and
+  `topic_preferences` become memories (§8). Until then the contacts file store carries them as hidden legacy data, so a
+  contact write in between loses nothing; they leave the file only after the memories are saved. The fields are gone
+  from `Contact` and the Console contact view.
 - Deleting a contact calls `memories.DeleteSubject`.
 
 ### M8. Console
@@ -558,6 +565,21 @@ Tools live in `tools/builtin/memory_*.go` and `journal_*.go` and read the run's 
 - `docs/memories.md` (English), and the `docs/README.md` entry.
 - This document's status becomes `implemented`.
 - `docs/feat/memory-project-time-draft.md` is marked superseded.
+
+### As built
+
+Where the code differs from the plan above:
+
+- **Names.** A memory's name is unique per subject *and* the audience it was learned in, so saving never reveals that
+  another conversation has a memory with that name. The owner can merge duplicates from the Console.
+- **Audience on the context.** Runs carry their audience with `audience.NewContext`. A group audience also carries its
+  speaker (for `told_by`) and whether the speaker is the owner (for group rules).
+- **Journal size.** Payloads are compressed, and only conversation text is indexed. `activity` and traces stay in the
+  task snapshots (see §9).
+- **Old cursors.** An old JSONL cursor fails snapshot validation, which makes the stores replay the journal once. No
+  translation table was needed.
+- **Closed journals stay readable,** as they were: readers open the database for themselves.
+
 
 ## Tests
 
