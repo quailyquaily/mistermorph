@@ -11,6 +11,7 @@ import (
 
 	"github.com/quailyquaily/mistermorph/agent"
 	"github.com/quailyquaily/mistermorph/contacts"
+	"github.com/quailyquaily/mistermorph/internal/audience"
 	busruntime "github.com/quailyquaily/mistermorph/internal/bus"
 	linebus "github.com/quailyquaily/mistermorph/internal/bus/adapters/line"
 	agentlinkruntime "github.com/quailyquaily/mistermorph/internal/channelruntime/agentlink"
@@ -57,6 +58,8 @@ type lineJob struct {
 	Generation      *runtimecore.RuntimeGenerationLease
 	// LightweightDecided: the decision route already chose a text reply for this message.
 	LightweightDecided bool
+	// Audience is who could hear the message: the run sees only memories and journal they may.
+	Audience audience.Audience
 }
 
 func (j lineJob) runtimeBundle() *runtimecore.ChannelRuntimeBundle {
@@ -343,6 +346,7 @@ func runLineLoop(ctx context.Context, d Dependencies, opts RunOptions) error {
 				_, notifyErr := publishLineBusOutbound(notifyCtx, inprocBus, job.ChatID, text, "", fmt.Sprintf("line:coder-progress:%s:%d", job.TaskID, seq))
 				return notifyErr
 			})
+			runCtx = audience.NewContext(runCtx, job.Audience)
 			runCtx = taskruntime.WithInsightNotification(runCtx, logger, taskruntime.InsightLimitFor(isLineGroupChat(job.ChatType)), func(notifyCtx context.Context, seq int, text string) error {
 				_, notifyErr := publishLineBusOutbound(notifyCtx, inprocBus, job.ChatID, text, "", fmt.Sprintf("line:insight:%s:%d", job.TaskID, seq))
 				return notifyErr
@@ -696,9 +700,15 @@ func runLineLoop(ctx context.Context, d Dependencies, opts RunOptions) error {
 		if err != nil {
 			return err
 		}
+		taskAudience := audience.Resolve(ctx, contactsSvc, audience.Input{
+			Group:           isLineGroupChat(inbound.ChatType),
+			ConversationKey: msg.ConversationKey,
+			Sender:          contacts.InboundSender{Channel: contacts.ChannelLine, UserID: inbound.FromUserID},
+		})
 		buildJob := func(version uint64) lineJob {
 			admittedRoute := taskRoute
 			return lineJob{
+				Audience:           taskAudience,
 				TaskID:             jobTaskID,
 				ConversationKey:    msg.ConversationKey,
 				ChatID:             inbound.ChatID,
@@ -740,7 +750,7 @@ func runLineLoop(ctx context.Context, d Dependencies, opts RunOptions) error {
 				Model:        strings.TrimSpace(taskRoute.ClientConfig.Model),
 				Timeout:      taskTimeout.String(),
 				CreatedAt:    createdAt,
-				Conversation: lineTaskConversation(buildJob(0), botUserID),
+				Conversation: runtimecore.ConversationWithAudience(lineTaskConversation(buildJob(0), botUserID), taskAudience),
 				Result: map[string]any{
 					"source":            "line",
 					"line_chat_id":      inbound.ChatID,

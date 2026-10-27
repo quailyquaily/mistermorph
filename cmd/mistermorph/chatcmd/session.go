@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/quailyquaily/mistermorph/agent"
+	"github.com/quailyquaily/mistermorph/internal/audience"
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/depsutil"
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/taskruntime"
 	"github.com/quailyquaily/mistermorph/internal/configutil"
@@ -391,7 +392,8 @@ func buildChatSession(cmd *cobra.Command, deps Dependencies) (*chatSession, erro
 		}
 	}
 	runtimeToolsCfg := toolsutil.LoadRuntimeToolsRegisterConfigFromViper()
-	rootContext := processsignal.InteractiveParent(cmd.Context())
+	// The TUI runs on the owner's own machine: its runs are the owner's.
+	rootContext := audience.NewContext(processsignal.InteractiveParent(cmd.Context()), audience.Owner())
 
 	projectDir := strings.TrimSpace(workspaceDir)
 	if projectDir == "" {

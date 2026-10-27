@@ -25,6 +25,7 @@ func TestJournalCodecRoundTrip(t *testing.T) {
 		Conversation: &TaskConversation{
 			ConversationID:   " tg:42 ",
 			ConversationType: " SUPERGROUP ",
+			Audience:         " conversation:tg:42 ",
 			Participants: []TaskParticipant{
 				{ID: " @alice ", Nickname: " Alice "},
 				{ID: "", Nickname: "drop"},
@@ -57,6 +58,9 @@ func TestJournalCodecRoundTrip(t *testing.T) {
 	}
 	if record.Event.Trace.TraceID != "trace_1" || record.Event.Trace.TaskID != "task_1" || record.Event.Trace.TopicID != "topic_1" {
 		t.Fatalf("trace = %+v", record.Event.Trace)
+	}
+	if record.Event.Audience != "conversation:tg:42" {
+		t.Fatalf("event audience = %q, want the task conversation's", record.Event.Audience)
 	}
 	payload, err := DecodeJournalPayload(record.Event.Payload)
 	if err != nil {

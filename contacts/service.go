@@ -175,6 +175,9 @@ func (s *Service) upsertContact(ctx context.Context, contact Contact, now time.T
 		return Contact{}, err
 	}
 
+	// The store keeps the owner flag on every put; matching it here makes the returned contact say
+	// what was stored.
+	contact.Owner = false
 	input := contact
 	contact = normalizeContact(contact, now)
 	if strings.TrimSpace(contact.ContactID) == "" {
@@ -189,6 +192,7 @@ func (s *Service) upsertContact(ctx context.Context, contact Contact, now time.T
 		return Contact{}, err
 	}
 	if ok {
+		contact.Owner = existing.Owner
 		if grantPaired {
 			contact.Paired = true
 		} else {

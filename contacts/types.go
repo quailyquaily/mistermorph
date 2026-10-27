@@ -37,10 +37,13 @@ const (
 )
 
 type Contact struct {
-	ContactID           string     `json:"contact_id"`
-	Synthetic           bool       `json:"-" yaml:"-"`
-	Kind                Kind       `json:"kind"`
-	Paired              bool       `json:"paired,omitempty"`
+	ContactID string `json:"contact_id"`
+	Synthetic bool   `json:"-" yaml:"-"`
+	Kind      Kind   `json:"kind"`
+	Paired    bool   `json:"paired,omitempty"`
+	// Owner marks a contact of the person who runs this agent. Only the owner sets it, by editing
+	// the contact in the Console; nothing a contact sends can set or clear it.
+	Owner               bool       `json:"owner,omitempty"`
 	Channel             string     `json:"channel"`
 	ContactNickname     string     `json:"nickname,omitempty"`
 	TGUsername          string     `json:"tg_username,omitempty"`

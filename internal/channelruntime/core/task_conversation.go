@@ -3,6 +3,7 @@ package core
 import (
 	"strings"
 
+	"github.com/quailyquaily/mistermorph/internal/audience"
 	"github.com/quailyquaily/mistermorph/internal/taskdomain"
 )
 
@@ -25,4 +26,17 @@ func BuildTaskConversation(conversationID, conversationType, senderID, senderNam
 		ConversationType: conversationType,
 		Participants:     participants,
 	})
+}
+
+// ConversationWithAudience records who could hear the task on its conversation, creating the
+// conversation when the channel had nothing else to record.
+func ConversationWithAudience(conversation *taskdomain.TaskConversation, who audience.Audience) *taskdomain.TaskConversation {
+	if who.IsZero() {
+		return conversation
+	}
+	if conversation == nil {
+		conversation = &taskdomain.TaskConversation{}
+	}
+	conversation.Audience = who.String()
+	return conversation
 }

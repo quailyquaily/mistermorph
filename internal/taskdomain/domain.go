@@ -27,6 +27,9 @@ type TaskConversation struct {
 	ConversationID   string            `json:"conversation_id,omitempty"`
 	ConversationType string            `json:"conversation_type,omitempty"`
 	Participants     []TaskParticipant `json:"participants,omitempty"`
+	// Audience is who could hear the task, in audience.Audience's stored form. The journal records
+	// it, so journal search can show a task only to those who could hear it.
+	Audience string `json:"audience,omitempty"`
 }
 
 type TaskParticipant struct {
@@ -133,6 +136,7 @@ func NormalizeTaskConversation(conversation *TaskConversation) *TaskConversation
 	normalized := &TaskConversation{
 		ConversationID:   strings.TrimSpace(conversation.ConversationID),
 		ConversationType: strings.ToLower(strings.TrimSpace(conversation.ConversationType)),
+		Audience:         strings.TrimSpace(conversation.Audience),
 	}
 	seen := make(map[string]bool, len(conversation.Participants))
 	for _, participant := range conversation.Participants {
@@ -144,7 +148,7 @@ func NormalizeTaskConversation(conversation *TaskConversation) *TaskConversation
 		seen[participant.ID] = true
 		normalized.Participants = append(normalized.Participants, participant)
 	}
-	if normalized.ConversationID == "" && normalized.ConversationType == "" && len(normalized.Participants) == 0 {
+	if normalized.ConversationID == "" && normalized.ConversationType == "" && len(normalized.Participants) == 0 && normalized.Audience == "" {
 		return nil
 	}
 	return normalized

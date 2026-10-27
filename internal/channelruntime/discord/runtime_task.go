@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/quailyquaily/mistermorph/agent"
 	"github.com/quailyquaily/mistermorph/guard"
+	"github.com/quailyquaily/mistermorph/internal/audience"
 	busruntime "github.com/quailyquaily/mistermorph/internal/bus"
 	discordbus "github.com/quailyquaily/mistermorph/internal/bus/adapters/discord"
 	runtimecore "github.com/quailyquaily/mistermorph/internal/channelruntime/core"
@@ -68,6 +69,8 @@ type discordJob struct {
 	Generation      *runtimecore.RuntimeGenerationLease
 	// LightweightDecided: the decision route already chose a text reply for this message.
 	LightweightDecided bool
+	// Audience is who could hear the message: the run sees only memories and journal they may.
+	Audience audience.Audience
 }
 
 func (j discordJob) runtimeBundle() *runtimecore.ChannelRuntimeBundle {

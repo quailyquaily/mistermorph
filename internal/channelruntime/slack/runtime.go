@@ -13,6 +13,7 @@ import (
 	"github.com/quailyquaily/mistermorph/contacts"
 	"github.com/quailyquaily/mistermorph/guard"
 	"github.com/quailyquaily/mistermorph/internal/agentpair"
+	"github.com/quailyquaily/mistermorph/internal/audience"
 	busruntime "github.com/quailyquaily/mistermorph/internal/bus"
 	slackbus "github.com/quailyquaily/mistermorph/internal/bus/adapters/slack"
 	runtimecore "github.com/quailyquaily/mistermorph/internal/channelruntime/core"
@@ -80,6 +81,8 @@ type slackJob struct {
 	Generation       *runtimecore.RuntimeGenerationLease
 	// LightweightDecided: the decision route already chose a text reply for this message.
 	LightweightDecided bool
+	// Audience is who could hear the message: the run sees only memories and journal they may.
+	Audience audience.Audience
 }
 
 func (j slackJob) runtimeBundle(fallback *runtimecore.ChannelRuntimeBundle) *runtimecore.ChannelRuntimeBundle {

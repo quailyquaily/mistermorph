@@ -57,6 +57,9 @@ func TestUntriggeredRecorderWritesMinimalEvent(t *testing.T) {
 	if event.Trace.Runtime != channels.Telegram {
 		t.Fatalf("trace runtime = %q, want telegram", event.Trace.Runtime)
 	}
+	if event.Audience != "conversation:tg:-1001_8" {
+		t.Fatalf("audience = %q, want the conversation", event.Audience)
+	}
 
 	var payload map[string]any
 	if err := json.Unmarshal(event.Payload, &payload); err != nil {

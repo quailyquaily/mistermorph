@@ -79,6 +79,12 @@ func AppendJournalEvent(journal *domainjournal.Journal, target string, eventType
 	if trace.TopicID == "" && payload.Topic != nil {
 		trace.TopicID = payload.Topic.ID
 	}
+	// A task is heard by its conversation's audience. Topics, and tasks without one, are the
+	// owner's: the journal treats an empty audience as the owner.
+	audience := ""
+	if payload.Task != nil && payload.Task.Conversation != nil {
+		audience = payload.Task.Conversation.Audience
+	}
 	return journal.Append(domainjournal.Event{
 		ID:            "evt_" + uuid.NewString(),
 		Time:          now.UTC().Format(time.RFC3339Nano),
@@ -86,6 +92,7 @@ func AppendJournalEvent(journal *domainjournal.Journal, target string, eventType
 		Type:          strings.TrimSpace(eventType),
 		SchemaVersion: 1,
 		Trace:         trace,
+		Audience:      audience,
 		Payload:       payloadRaw,
 	})
 }

@@ -8,6 +8,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/google/uuid"
+	"github.com/quailyquaily/mistermorph/internal/audience"
 	"github.com/quailyquaily/mistermorph/internal/channels"
 	"github.com/quailyquaily/mistermorph/internal/domainjournal"
 )
@@ -102,7 +103,10 @@ func (r *UntriggeredRecorder) Record(message UntriggeredMessage) error {
 		Type:          "untriggered_inbound",
 		SchemaVersion: 1,
 		Trace:         domainjournal.Trace{Runtime: channel},
-		Payload:       payload,
+		// Untriggered messages are group messages that did not address the agent: whoever is in
+		// the conversation heard them.
+		Audience: audience.Conversation(message.ConversationKey).String(),
+		Payload:  payload,
 	})
 	return err
 }

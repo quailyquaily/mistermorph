@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/quailyquaily/mistermorph/agent"
+	"github.com/quailyquaily/mistermorph/internal/audience"
 	busruntime "github.com/quailyquaily/mistermorph/internal/bus"
 	runtimecore "github.com/quailyquaily/mistermorph/internal/channelruntime/core"
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/depsutil"
@@ -110,6 +111,7 @@ func (s *slackRuntimeState) runJob(workerCtx context.Context, conversationKey st
 		_, notifyErr := publishSlackBusOutbound(notifyCtx, s.inprocBus, job.TeamID, job.ChannelID, text, job.ThreadTS, fmt.Sprintf("slack:coder-progress:%s:%d", job.TaskID, seq))
 		return notifyErr
 	})
+	runCtx = audience.NewContext(runCtx, job.Audience)
 	runCtx = taskruntime.WithInsightNotification(runCtx, s.logger, taskruntime.InsightLimitFor(isSlackGroupChat(job.ChatType)), func(notifyCtx context.Context, seq int, text string) error {
 		_, notifyErr := publishSlackBusOutbound(notifyCtx, s.inprocBus, job.TeamID, job.ChannelID, text, job.ThreadTS, fmt.Sprintf("slack:insight:%s:%d", job.TaskID, seq))
 		return notifyErr

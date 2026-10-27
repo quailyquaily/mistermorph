@@ -337,6 +337,9 @@ func (s *FileStore) PutContact(ctx context.Context, contact Contact) error {
 		if !contact.Paired && (hasPairedContactID(active, contact.ContactID) || hasPairedContactID(inactive, contact.ContactID)) {
 			contact.Paired = true
 		}
+		// Owner is set only by editing the contact's YAML (PutContactYAML). PutContact records
+		// contacts observed in chats, so it keeps the stored flag whatever the input says.
+		contact.Owner = hasOwnerContactID(active, contact.ContactID) || hasOwnerContactID(inactive, contact.ContactID)
 
 		targetStatus := StatusActive
 		if hasContactID(inactive, contact.ContactID) && !contact.Paired {
@@ -631,6 +634,7 @@ type contactProfileSection struct {
 	Nickname            string   `yaml:"nickname"`
 	Kind                string   `yaml:"kind"`
 	Paired              bool     `yaml:"paired,omitempty"`
+	Owner               bool     `yaml:"owner,omitempty"`
 	Channel             string   `yaml:"channel"`
 	TGUsername          string   `yaml:"tg_username"`
 	TGUserID            string   `yaml:"tg_user_id"`
@@ -962,6 +966,7 @@ func contactFromProfileSection(title string, profile contactProfileSection) (Con
 		ContactID:           strings.TrimSpace(profile.ContactID),
 		ContactNickname:     strings.TrimSpace(profile.Nickname),
 		Paired:              profile.Paired,
+		Owner:               profile.Owner,
 		Channel:             strings.ToLower(strings.TrimSpace(profile.Channel)),
 		TGUsername:          normalizeTelegramUsername(profile.TGUsername),
 		LineUserID:          refid.NormalizeLineID(profile.LineUserID),
@@ -1066,6 +1071,7 @@ func profileSectionFromContact(contact Contact) (contactProfileSection, string) 
 		Nickname:            strings.TrimSpace(contact.ContactNickname),
 		Kind:                string(normalizeKind(contact.Kind)),
 		Paired:              contact.Paired,
+		Owner:               contact.Owner,
 		Channel:             strings.TrimSpace(contact.Channel),
 		TGUsername:          normalizeTelegramUsername(contact.TGUsername),
 		LineUserID:          refid.NormalizeLineID(contact.LineUserID),
@@ -1330,6 +1336,16 @@ func hasContactID(items []Contact, contactID string) bool {
 	}
 	for _, item := range items {
 		if strings.TrimSpace(item.ContactID) == contactID {
+			return true
+		}
+	}
+	return false
+}
+
+func hasOwnerContactID(items []Contact, contactID string) bool {
+	contactID = strings.TrimSpace(contactID)
+	for _, item := range items {
+		if strings.TrimSpace(item.ContactID) == contactID && item.Owner {
 			return true
 		}
 	}

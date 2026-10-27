@@ -11,6 +11,7 @@ import (
 
 	"github.com/quailyquaily/mistermorph/agent"
 	"github.com/quailyquaily/mistermorph/contacts"
+	"github.com/quailyquaily/mistermorph/internal/audience"
 	busruntime "github.com/quailyquaily/mistermorph/internal/bus"
 	larkbus "github.com/quailyquaily/mistermorph/internal/bus/adapters/lark"
 	agentlinkruntime "github.com/quailyquaily/mistermorph/internal/channelruntime/agentlink"
@@ -286,6 +287,7 @@ func runLarkLoop(ctx context.Context, d Dependencies, opts RunOptions) error {
 				_, notifyErr := publishLarkBusOutbound(notifyCtx, inprocBus, job.ChatID, text, job.MessageID, fmt.Sprintf("lark:coder-progress:%s:%d", job.TaskID, seq))
 				return notifyErr
 			})
+			runCtx = audience.NewContext(runCtx, job.Audience)
 			runCtx = taskruntime.WithInsightNotification(runCtx, logger, taskruntime.InsightLimitFor(isLarkGroupChat(job.ChatType)), func(notifyCtx context.Context, seq int, text string) error {
 				_, notifyErr := publishLarkBusOutbound(notifyCtx, inprocBus, job.ChatID, text, job.MessageID, fmt.Sprintf("lark:insight:%s:%d", job.TaskID, seq))
 				return notifyErr
@@ -580,9 +582,15 @@ func runLarkLoop(ctx context.Context, d Dependencies, opts RunOptions) error {
 		if err != nil {
 			return err
 		}
+		taskAudience := audience.Resolve(ctx, contactsSvc, audience.Input{
+			Group:           isLarkGroupChat(inbound.ChatType),
+			ConversationKey: msg.ConversationKey,
+			Sender:          contacts.InboundSender{Channel: contacts.ChannelLark, UserID: inbound.FromUserID},
+		})
 		buildJob := func(version uint64) larkJob {
 			admittedRoute := taskRoute
 			return larkJob{
+				Audience:           taskAudience,
 				TaskID:             jobTaskID,
 				ConversationKey:    msg.ConversationKey,
 				ChatID:             inbound.ChatID,
@@ -622,7 +630,7 @@ func runLarkLoop(ctx context.Context, d Dependencies, opts RunOptions) error {
 				Model:        strings.TrimSpace(taskRoute.ClientConfig.Model),
 				Timeout:      taskTimeout.String(),
 				CreatedAt:    createdAt,
-				Conversation: larkTaskConversation(buildJob(0)),
+				Conversation: runtimecore.ConversationWithAudience(larkTaskConversation(buildJob(0)), taskAudience),
 				Result: map[string]any{
 					"source":            "lark",
 					"lark_chat_id":      inbound.ChatID,

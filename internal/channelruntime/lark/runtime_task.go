@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/quailyquaily/mistermorph/agent"
+	"github.com/quailyquaily/mistermorph/internal/audience"
 	busruntime "github.com/quailyquaily/mistermorph/internal/bus"
 	larkbus "github.com/quailyquaily/mistermorph/internal/bus/adapters/lark"
 	runtimecore "github.com/quailyquaily/mistermorph/internal/channelruntime/core"
@@ -57,6 +58,8 @@ type larkJob struct {
 	Generation      *runtimecore.RuntimeGenerationLease
 	// LightweightDecided: the decision route already chose a text reply for this message.
 	LightweightDecided bool
+	// Audience is who could hear the message: the run sees only memories and journal they may.
+	Audience audience.Audience
 }
 
 func (j larkJob) runtimeBundle() *runtimecore.ChannelRuntimeBundle {
