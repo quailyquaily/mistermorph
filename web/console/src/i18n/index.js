@@ -530,10 +530,8 @@ const I18N = {
     chat_elevation_decline: "Decline",
     chat_elevation_time_left: "{time} left",
     chat_elevation_retry: "The password was not accepted. Try again.",
-    chat_elevation_insecure_warn:
-      "This connection is not encrypted. Anyone on the network can read the password. Use HTTPS, an SSH tunnel or a VPN such as WireGuard.",
-    chat_elevation_insecure_deny:
-      "Not on an encrypted connection, and tools.bash.elevation.insecure is deny: approve over HTTPS or an SSH tunnel.",
+    connection_insecure_warn:
+      "This connection does not use HTTPS. Unless it runs through an SSH tunnel or a VPN such as WireGuard, anyone on the network can read what you send, passwords included.",
     chat_elevation_closed: "This request is closed.",
     chat_elevation_outcome: "Result",
     chat_elevation_allowed: "Allowed: the password was sent to sudo.",
@@ -1479,6 +1477,7 @@ const I18N = {
     action_close: "Close",
     notice_error_label: "Error",
     notice_warning_label: "Warning",
+    connection_insecure_label: "Not encrypted",
     notice_info_label: "Note",
     notice_success_label: "Done",
     notice_network_label: "Network",
@@ -2210,10 +2209,8 @@ const I18N = {
     chat_elevation_decline: "拒绝",
     chat_elevation_time_left: "剩余 {time}",
     chat_elevation_retry: "密码不正确，请重试。",
-    chat_elevation_insecure_warn:
-      "这个连接未加密，网络上的任何人都能读到密码。请使用 HTTPS、SSH 隧道或 WireGuard 等 VPN。",
-    chat_elevation_insecure_deny:
-      "当前连接未加密，且 tools.bash.elevation.insecure 为 deny：请通过 HTTPS 或 SSH 隧道批准。",
+    connection_insecure_warn:
+      "这个连接没有使用 HTTPS。除非它经过 SSH 隧道或 WireGuard 等 VPN，网络上的任何人都能读到你发送的内容，包括密码。",
     chat_elevation_closed: "这个请求已关闭。",
     chat_elevation_outcome: "结果",
     chat_elevation_allowed: "已允许：密码已交给 sudo。",
@@ -3154,6 +3151,7 @@ const I18N = {
     action_close: "关闭",
     notice_error_label: "错误",
     notice_warning_label: "警告",
+    connection_insecure_label: "未加密",
     notice_info_label: "提示",
     notice_success_label: "完成",
     notice_network_label: "网络",
@@ -3889,10 +3887,8 @@ const I18N = {
     chat_elevation_decline: "拒否",
     chat_elevation_time_left: "残り {time}",
     chat_elevation_retry: "パスワードが受け付けられませんでした。もう一度入力してください。",
-    chat_elevation_insecure_warn:
-      "この接続は暗号化されていません。ネットワーク上の誰でもパスワードを読み取れます。HTTPS、SSH トンネル、または WireGuard などの VPN を使ってください。",
-    chat_elevation_insecure_deny:
-      "暗号化された接続ではなく、tools.bash.elevation.insecure が deny です。HTTPS か SSH トンネル経由で承認してください。",
+    connection_insecure_warn:
+      "この接続は HTTPS を使っていません。SSH トンネルや WireGuard などの VPN を経由していない限り、ネットワーク上の誰でも送信内容（パスワードを含む）を読み取れます。",
     chat_elevation_closed: "このリクエストは締め切られました。",
     chat_elevation_outcome: "結果",
     chat_elevation_allowed: "許可しました。パスワードを sudo に渡しました。",
@@ -4838,6 +4834,7 @@ const I18N = {
     action_close: "閉じる",
     notice_error_label: "エラー",
     notice_warning_label: "警告",
+    connection_insecure_label: "暗号化なし",
     notice_info_label: "お知らせ",
     notice_success_label: "完了",
     notice_network_label: "ネットワーク",

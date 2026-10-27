@@ -18,7 +18,7 @@ import (
 
 func TestRemoteStreamFrameParsesQuestionsAndElevations(t *testing.T) {
 	raw := `{"task_id":"t","seq":3,"questions":[{"id":"q1","text":"Which?","options":[{"label":"A","description":"first"},{"label":"B"}],"status":"answered","answer":"B","option":1}],
-	"elevations":[{"id":"el_1","command":"apt-get update","cwd":"/srv","host":"box","deadline":1793000000,"attempt":2,"status":"open","insecure":"deny"}]}`
+	"elevations":[{"id":"el_1","command":"apt-get update","cwd":"/srv","host":"box","deadline":1793000000,"attempt":2,"status":"open"}]}`
 	var f remoteStreamFrame
 	if err := json.Unmarshal([]byte(raw), &f); err != nil {
 		t.Fatal(err)
@@ -27,7 +27,7 @@ func TestRemoteStreamFrameParsesQuestionsAndElevations(t *testing.T) {
 	if q.ID != "q1" || q.Text != "Which?" || len(q.Options) != 2 || q.Options[0].Description != "first" || q.Status != "answered" || q.Answer != "B" || q.Option == nil || *q.Option != 1 {
 		t.Fatalf("question = %+v", q)
 	}
-	if e.ID != "el_1" || e.Command != "apt-get update" || e.Cwd != "/srv" || e.Host != "box" || e.Deadline != 1793000000 || e.Attempt != 2 || e.Status != "open" || e.Insecure != "deny" {
+	if e.ID != "el_1" || e.Command != "apt-get update" || e.Cwd != "/srv" || e.Host != "box" || e.Deadline != 1793000000 || e.Attempt != 2 || e.Status != "open" {
 		t.Fatalf("elevation = %+v", e)
 	}
 }

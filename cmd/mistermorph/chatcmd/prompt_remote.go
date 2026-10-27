@@ -36,7 +36,6 @@ type remoteElevation struct {
 	Deadline int64  `json:"deadline"`
 	Attempt  int    `json:"attempt,omitempty"`
 	Status   string `json:"status"`
-	Insecure string `json:"insecure,omitempty"`
 }
 
 // remotePromptResult is the runtime's reply to an answer sent from a card.

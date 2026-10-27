@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { endpointURLInsecure, isEndpointSelectable, rootEntryEndpoint } from "./endpoints.js";
+import { connectionInsecure, endpointURLInsecure, isEndpointSelectable, rootEntryEndpoint } from "./endpoints.js";
 
 test("connected and health-pending endpoints are selectable", () => {
   assert.equal(isEndpointSelectable({ endpoint_ref: "ep_connected", connected: true }), true);
@@ -59,5 +59,19 @@ test("endpointURLInsecure flags plain HTTP to another machine only", () => {
     ["not a url", false],
   ]) {
     assert.equal(endpointURLInsecure(url), insecure, url);
+  }
+});
+
+test("connectionInsecure checks the page and the Console's hop to the endpoint", () => {
+  for (const [name, input, insecure] of [
+    ["HTTPS page, local runtime", { secureContext: true, endpointURLs: ["in-process://console-local"] }, false],
+    ["plain HTTP page", { secureContext: false }, true],
+    ["plain HTTP page in the desktop app", { desktop: true, secureContext: false }, false],
+    ["HTTPS page, runtime over plain HTTP", { secureContext: true, endpointURLs: ["in-process://console-local", "http://10.0.0.5:8787"] }, true],
+    ["desktop app, runtime over plain HTTP", { desktop: true, endpointURLs: ["http://10.0.0.5:8787"] }, true],
+    ["HTTPS page, runtime over HTTPS", { secureContext: true, endpointURLs: ["https://runtime.example.com", undefined] }, false],
+    ["nothing known", undefined, false],
+  ]) {
+    assert.equal(connectionInsecure(input), insecure, name);
   }
 });

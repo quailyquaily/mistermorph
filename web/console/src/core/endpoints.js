@@ -158,6 +158,18 @@ function endpointURLInsecure(rawURL) {
   return !loopback;
 }
 
+// connectionInsecure reports whether what the person sends, such as a password, crosses the network
+// unencrypted on either hop: the page itself on plain HTTP (a secure context covers HTTPS and
+// localhost, so an SSH tunnel; the desktop app talks to its own runtime), or the Console reaching
+// an endpoint over plain HTTP to another machine. Only the browser can tell: behind a TLS proxy or a
+// VPN the runtime sees plain HTTP either way. A VPN cannot be told apart here either.
+function connectionInsecure({ desktop = false, secureContext = true, endpointURLs = [] } = {}) {
+  if (!desktop && secureContext === false) {
+    return true;
+  }
+  return endpointURLs.some((url) => endpointURLInsecure(url));
+}
+
 function endpointDisplayItem(item, t) {
   const channelBadges = endpointChannelBadges(item, t);
   const channelLabel = channelBadges.map((item) => item.label).join(" + ");
@@ -182,6 +194,7 @@ function endpointDisplayItem(item, t) {
 
 export {
   CONSOLE_LOCAL_ENDPOINT_REF,
+  connectionInsecure,
   endpointChannelLabel,
   endpointDisplayItem,
   endpointURLInsecure,

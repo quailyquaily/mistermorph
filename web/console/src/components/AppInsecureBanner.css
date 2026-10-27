@@ -1,0 +1,23 @@
+/* A full-width line above the workspace in the notice's terms, with only a bottom hairline. The
+   square leads the message, not the label, and stays with it when the line wraps. */
+.app-notice.app-insecure-banner {
+  flex: 0 0 auto;
+  padding: 6px var(--content-gutter-x, 16px);
+  border-width: 0 0 1px;
+  border-radius: 0;
+  background: color-mix(in srgb, var(--notice-tone) 8%, var(--q-bg-paper));
+}
+
+.app-insecure-banner-value {
+  flex: 1 1 14rem;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* The square sits on the first line of the message, centred on its x-height. */
+.app-insecure-banner-value > .app-notice-mark {
+  align-self: auto;
+  transform: translateY(-0.1em);
+}

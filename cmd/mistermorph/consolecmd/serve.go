@@ -1249,9 +1249,8 @@ func (s *server) handleProxy(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// The runtime sees this hop; tell it how the browser's own connection was made.
-	transport, remote := daemonruntime.DirectTransport(r)
-	proxyCtx := daemonruntime.WithClientTransport(r.Context(), transport, remote)
+	// The runtime sees this hop; tell it the browser's own address.
+	proxyCtx := daemonruntime.WithClientRemote(r.Context(), daemonruntime.DirectRemote(r))
 	status, raw, err := endpoint.Client.Proxy(proxyCtx, r.Method, parsedURI.RequestURI(), body, r.Header.Get("Content-Type"))
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, err.Error())

@@ -313,10 +313,9 @@ test("elevations from the task result or a stream frame keep their exact command
       deadline: 1800000120,
       attempt: 2,
       status: "open",
-      insecure: "deny",
     },
-    { id: "el_2", command: "reboot", cwd: "", host: "", deadline: 1800000200, attempt: 0, status: "allowed", insecure: "warn" },
-    { id: "el_3", command: "ls", cwd: "", host: "", deadline: 0, attempt: 0, status: "expired", insecure: "warn" },
+    { id: "el_2", command: "reboot", cwd: "", host: "", deadline: 1800000200, attempt: 0, status: "allowed" },
+    { id: "el_3", command: "ls", cwd: "", host: "", deadline: 0, attempt: 0, status: "expired" },
   ]);
 
   const item = taskListHistoryItems(

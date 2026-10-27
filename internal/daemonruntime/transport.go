@@ -7,73 +7,51 @@ import (
 	"strings"
 )
 
-// A Console proxies the browser's requests to its runtime, so the runtime sees the proxy's hop, not
-// the browser's. The proxy passes how the browser's own connection was made: on the context when the
-// runtime is in the same process, in these headers when it is reached over the network. Every route
-// that reads them requires the runtime's bearer token, which only the Console and chat hold.
-const (
-	TransportHeader = "X-MisterMorph-Client-Transport"
-	RemoteHeader    = "X-MisterMorph-Client-Remote"
-)
+// A Console proxies the browser's requests to its runtime, so the runtime sees the proxy's address,
+// not the browser's. The proxy passes the browser's address on: on the context when the runtime is
+// in the same process, in this header when it is reached over the network. Every route that reads
+// it requires the runtime's bearer token, which only the Console and chat hold.
+//
+// Whether that connection is encrypted is not judged here: behind a TLS proxy or a VPN the runtime
+// cannot tell. The client, which knows how it reached its server, warns instead.
+const RemoteHeader = "X-MisterMorph-Client-Remote"
 
-const (
-	TransportSecure   = "secure"
-	TransportInsecure = "insecure"
-)
+type clientRemoteKey struct{}
 
-type clientTransportKey struct{}
-
-type clientTransport struct {
-	transport string
-	remote    string
+// WithClientRemote records on ctx the address of the client a proxy relays.
+func WithClientRemote(ctx context.Context, remote string) context.Context {
+	return context.WithValue(ctx, clientRemoteKey{}, remote)
 }
 
-// WithClientTransport records on ctx how the client a proxy relays reached it.
-func WithClientTransport(ctx context.Context, transport, remote string) context.Context {
-	return context.WithValue(ctx, clientTransportKey{}, clientTransport{transport: transport, remote: remote})
+// ClientRemoteFromContext is what WithClientRemote recorded.
+func ClientRemoteFromContext(ctx context.Context) (string, bool) {
+	remote, ok := ctx.Value(clientRemoteKey{}).(string)
+	return remote, ok
 }
 
-// ClientTransportFromContext is what WithClientTransport recorded.
-func ClientTransportFromContext(ctx context.Context) (transport, remote string, ok bool) {
-	relayed, ok := ctx.Value(clientTransportKey{}).(clientTransport)
-	return relayed.transport, relayed.remote, ok
-}
-
-// RequestTransport reports how the client behind r reached us: TransportSecure over TLS or from
-// this machine, otherwise TransportInsecure, and its address. A relayed request is secure only when
-// both hops are: the client's to its proxy, as the proxy passed it on, and the proxy's to us.
-func RequestTransport(r *http.Request) (transport string, remote string) {
-	if transport, remote, ok := ClientTransportFromContext(r.Context()); ok {
-		return transport, remote
+// RequestRemote is the address of the client behind r, for the audit log: as a relaying Console
+// passed it on, else as DirectRemote sees it.
+func RequestRemote(r *http.Request) string {
+	if remote, ok := ClientRemoteFromContext(r.Context()); ok {
+		return remote
 	}
-	if relayed := strings.TrimSpace(r.Header.Get(TransportHeader)); relayed == TransportSecure || relayed == TransportInsecure {
-		if hop, _ := DirectTransport(r); hop != TransportSecure {
-			relayed = TransportInsecure
-		}
-		return relayed, strings.TrimSpace(r.Header.Get(RemoteHeader))
+	if relayed := strings.TrimSpace(r.Header.Get(RemoteHeader)); relayed != "" {
+		return relayed
 	}
-	return DirectTransport(r)
+	return DirectRemote(r)
 }
 
-// DirectTransport is how r's own connection was made: secure over TLS, from this machine, or through
-// a TLS-terminating proxy on this machine (X-Forwarded-Proto: https from a loopback peer).
-func DirectTransport(r *http.Request) (transport string, remote string) {
-	remote = strings.TrimSpace(r.RemoteAddr)
-	if r.TLS != nil {
-		return TransportSecure, remote
-	}
+// DirectRemote is the address of r's own peer, or the first X-Forwarded-For entry when that peer is
+// a proxy on this machine.
+func DirectRemote(r *http.Request) string {
+	remote := strings.TrimSpace(r.RemoteAddr)
 	if isLoopbackAddr(remote) {
 		if forwarded := strings.TrimSpace(r.Header.Get("X-Forwarded-For")); forwarded != "" {
-			// A proxy on this machine: secure only if the browser's hop was HTTPS.
 			first, _, _ := strings.Cut(forwarded, ",")
-			if strings.EqualFold(strings.TrimSpace(r.Header.Get("X-Forwarded-Proto")), "https") {
-				return TransportSecure, strings.TrimSpace(first)
-			}
-			return TransportInsecure, strings.TrimSpace(first)
+			return strings.TrimSpace(first)
 		}
-		return TransportSecure, remote
 	}
-	return TransportInsecure, remote
+	return remote
 }
 
 func isLoopbackAddr(addr string) bool {

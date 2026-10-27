@@ -23,9 +23,9 @@ The user is at the Console or chat that started the task. That is where the appr
 appear.
 
 The password goes from the client to the runtime over the client's own connection, and only that
-connection protects it: HTTPS, loopback, an SSH tunnel or a VPN such as WireGuard. On a connection
-that is not encrypted the client warns the person before they type, and the runtime can refuse the
-answer (`tools.bash.elevation.insecure: deny`).
+connection protects it: HTTPS, loopback, an SSH tunnel or a VPN such as WireGuard. Only the client
+can tell whether its connection is encrypted, so the web Console warns, across the top of every
+page, while it is not.
 
 ## 2) Behavior
 
@@ -119,56 +119,44 @@ across tasks (`cmd/mistermorph/consolecmd/elevations.go`):
 
 - **Stream frame:** `elevations`, each with `id` (random), `command`, `cwd`, `host`, `deadline`
   (Unix seconds), `attempt` (2 and up after a wrong password), `status` (`open`, `allowed`,
-  `declined`, `expired`, `rejected`) and `insecure` (the policy, §3.4). The task result keeps
-  `result.elevations`.
+  `declined`, `expired`, `rejected`). The task result keeps `result.elevations`.
 - **Answer:** `POST /tasks/{id}/elevation` with `{elevation_id, decline: true, client}` or
   `{elevation_id, password, client}`, where `client` is `web`, `desktop` or `chat`, for the audit
   log only. The response is `{accepted}`, false when the request is no longer open; a refused answer
-  is a 400 with the reason. Any answer closes the request: one the policy refuses, or one without a
-  password, closes it as `rejected`, and the command fails. An answer that arrives as the request
+  is a 400 with the reason. Any answer closes the request: one without a password closes it as
+  `rejected`, and the command fails. An answer that arrives as the request
   expires finds nothing open. The handler never logs the body.
 - **Audit:** `elevated_command_approved`, `elevated_command_declined` and
-  `elevated_command_answer_rejected` record the task, the elevation, the command, the client, the
-  transport (`secure` or `insecure`) and the remote address; a password taken on an insecure
-  connection also logs `elevated_command_insecure_answer`. They never record the password.
+  `elevated_command_answer_rejected` record the task, the elevation, the command, the client and
+  the client's address. They never record the password. The Console passes the browser's address
+  on to the runtime: on the request context when the runtime is in the same process, in the
+  `X-MisterMorph-Client-Remote` header when it is reached over the network
+  (`internal/daemonruntime/transport.go`).
 
 ### 3.4 Transport
 
 The password crosses the client's connection as typed, inside the JSON body. The runtime then hands
 it to the helper over the Unix socket, and the helper to sudo, and nowhere else.
 
-**How the runtime knows the transport.** The browser talks to the Console server, which proxies to
-the runtime, so the runtime sees only the proxy's hop. The proxy passes on how the browser's own
-connection was made: on the request context when the runtime is in the same process, or in the
-`X-MisterMorph-Client-Transport` and `X-MisterMorph-Client-Remote` headers when it is reached over
-the network (`internal/daemonruntime/transport.go`). A hop is `secure` over TLS, from this machine,
-or through a TLS-terminating proxy on this machine (`X-Forwarded-Proto: https` from a loopback
-peer); everything else is `insecure`. A relayed answer is `secure` only when both hops are: the
-browser's to the Console, and the Console's to the runtime. A TLS proxy on another machine, and a
-VPN, read as `insecure`: the runtime cannot tell them from plain HTTP.
+**The runtime does not judge the connection.** It sees only its own hop, and that says little: a
+TLS proxy in front of it, or a VPN such as WireGuard, arrives as plain HTTP, and a plain-HTTP proxy
+on the same machine arrives as loopback. An earlier version classified each answer as `secure` or
+`insecure` from that hop and could refuse insecure ones (`tools.bash.elevation.insecure: deny`).
+It refused answers over a VPN and took answers through a plain-HTTP proxy, so it was removed. The
+runtime takes any answer from a client that holds its bearer token.
 
-**Policy.** `tools.bash.elevation.insecure` decides what an answer on an `insecure` connection gets:
-
-- `warn` (the default): the runtime takes it and logs `elevated_command_insecure_answer`. This is
-  for a Console used over a VPN or a trusted LAN.
-- `deny`: the runtime refuses it, VPN included, and the request closes as `rejected`.
-
-The runtime decides from the connection alone and reads the policy when the answer arrives. What
-the client says it is (`client`) cannot be checked, so it plays no part.
-
-**What the clients show.** The web card warns before the person types when the connection is not
-encrypted on either hop: the page itself is on plain HTTP (`window.isSecureContext` false, outside
-the desktop app), or the Console reaches the task's endpoint over plain HTTP to another machine
-(the endpoint's `url`):
-
-- **Encrypted:** no note.
-- **Not encrypted, `warn`:** "This connection is not encrypted. Anyone on the network can read the
-  password. Use HTTPS, an SSH tunnel or a VPN such as WireGuard."
-- **Not encrypted, `deny`:** the field is hidden: "Not on an encrypted connection, and
-  tools.bash.elevation.insecure is deny: approve over HTTPS or an SSH tunnel."
-
-The card's check is only a notice in advance; the runtime's is the one that counts. Chat needs no
-notice: it reaches a runtime on another machine only over HTTPS.
+**What the clients show.** The client knows how it reached its server. The web Console shows a
+warning line across the top of every page, the login page included
+(`components/AppInsecureBanner.js`), while the connection is not encrypted on either hop: the page
+itself is on plain HTTP (`window.isSecureContext` false, outside the desktop app; a page on
+`localhost`, such as one through an SSH tunnel, counts as secure), or the Console reaches the
+selected endpoint, or the endpoint its chat submits to, over plain HTTP to another machine (the
+endpoint's `url`): "[Not encrypted] This connection does not use HTTPS. Unless it runs through an
+SSH tunnel or a VPN such as WireGuard, anyone on the network can read what you send, passwords
+included." It is global rather than on the card because the same holds for everything sent, the
+Console password first. It cannot be dismissed, and it does not block anything: on a VPN it does
+not apply, and only the person knows that. Chat needs no warning: it reaches a runtime on another
+machine only over HTTPS.
 
 **Why not encrypt in the client.** An earlier version sealed the password in the client to a
 runtime identity key the client pinned. On plain HTTP that stops someone who only reads the
@@ -202,7 +190,7 @@ the desktop dialog. The tool's error can point the user to the Console.
 
 | Threat | Chat, desktop app, web Console on HTTPS or localhost | Web Console over a VPN or SSH tunnel | Web Console on plain HTTP over an open network |
 | --- | --- | --- | --- |
-| Someone reads the traffic | protected (TLS or loopback) | protected by the VPN or tunnel | **not protected**: warned, or refused with `deny` |
+| Someone reads the traffic | protected (TLS or loopback) | protected by the VPN or tunnel | **not protected**: the Console warns |
 | Someone changes the traffic | protected | protected by the VPN or tunnel | **not protected** |
 | Approval used for another command | protected: each card is one command, answered once | protected | protected |
 | Password in logs, model, task history | never | never | never |
@@ -221,16 +209,13 @@ tools:
       # Where the approval is asked: auto (the Console or chat that started the task, else the
       # desktop dialog), client (only there), or dialog (only the desktop dialog).
       approver: "auto"
-      # An answer on a connection that is not encrypted (not HTTPS, not this machine; a VPN reads
-      # the same): warn (take it, and the card warns first) or deny (refuse it).
-      insecure: "warn"
 ```
 
 ## 6) Limits
 
 - An open approval is lost if the runtime restarts, like any running task. The command does not run.
-- The password is only as safe as the connection (§4). The runtime cannot recognise a VPN, so with
-  `deny` a VPN needs HTTPS on top, or an SSH tunnel.
+- The password is only as safe as the connection (§4). The runtime cannot enforce HTTPS: the Console
+  warns, and the person decides.
 - Whoever can use the Console can see approval cards. They still need the sudo password.
 - Powershell's UAC prompt cannot be answered remotely. Windows keeps the base design.
 - `mistermorph run` keeps the desktop dialog.
@@ -255,14 +240,14 @@ tools:
   three tries) that calls the real helper: allowed, declined, expired, wrong password then right,
   a wrong token, a process with the token that is not sudo's child, an ask before sudo started,
   the session ending mid-ask, and the availability rules per approver mode.
-- `internal/daemonruntime`: the routes and `RequestTransport`, tested for TLS, loopback, local
-  proxies and relayed transports, with either hop insecure.
+- `internal/daemonruntime`: the routes and `RequestRemote`, tested for direct, local-proxy and
+  relayed clients.
 - `cmd/mistermorph/consolecmd/elevations.go`: cards, the registry, answers and the audit lines.
-  Tests: allowed on a secure connection and on an insecure one with `warn`, declined, no password,
-  refused by `deny` whatever the client says, expired, an answer after expiry, and another task's
+  Tests: allowed, declined, no password, expired, an answer after expiry, and another task's
   answer.
-- `web/console`: `components/ChatElevationCard.js`, `core/endpoints.js` (`endpointURLInsecure`,
-  the endpoint check), and the Settings fields.
+- `web/console`: `components/ChatElevationCard.js`, `components/AppInsecureBanner.js` and
+  `core/endpoints.js` (`connectionInsecure` and `endpointURLInsecure`, tested), and the Settings
+  fields.
 - `cmd/mistermorph/chatcmd`: `prompt.go` (the card, shared by questions and approvals),
   `prompt_local.go` (the local approver and `ask_user`) and `prompt_remote.go` (frames and
   answers). Tests drive the TUI, and an httptest runtime checks that the password arrives.

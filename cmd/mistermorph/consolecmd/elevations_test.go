@@ -17,7 +17,7 @@ func openCard(t *testing.T, e *consoleElevations, ctx context.Context) (consoleE
 	t.Helper()
 	hub := newConsoleStreamHub()
 	cards := &consoleTaskElevations{taskID: "task_1", hub: hub}
-	approver := e.approver("warn", cards)
+	approver := e.approver(cards)
 	result := make(chan approverResult, 1)
 	go func() {
 		password, err := approver.Approve(ctx, elevate.Request{
@@ -48,45 +48,27 @@ func TestConsoleElevationCards(t *testing.T) {
 	cases := []struct {
 		name       string
 		req        daemonruntime.AnswerElevationRequest
-		deny       bool
 		wantErr    string // from the answer call
 		wantResult func(r approverResult) bool
 		wantStatus string
 	}{
 		{
-			name:       "allowed over a secure connection",
-			req:        daemonruntime.AnswerElevationRequest{Password: "hunter2", Transport: daemonruntime.TransportSecure},
-			deny:       true,
-			wantResult: func(r approverResult) bool { return r.err == nil && r.password == "hunter2" },
-			wantStatus: consoleElevationAllowed,
-		},
-		{
-			name:       "allowed on plain HTTP with insecure: warn",
-			req:        daemonruntime.AnswerElevationRequest{Password: "hunter2", Transport: daemonruntime.TransportInsecure},
+			name:       "allowed",
+			req:        daemonruntime.AnswerElevationRequest{Password: "hunter2", Client: "web", Remote: "203.0.113.9:1234"},
 			wantResult: func(r approverResult) bool { return r.err == nil && r.password == "hunter2" },
 			wantStatus: consoleElevationAllowed,
 		},
 		{
 			name:       "declined",
-			req:        daemonruntime.AnswerElevationRequest{Decline: true, Transport: daemonruntime.TransportInsecure},
-			deny:       true,
+			req:        daemonruntime.AnswerElevationRequest{Decline: true},
 			wantResult: func(r approverResult) bool { return errors.Is(r.err, elevate.ErrDeclined) },
 			wantStatus: consoleElevationDeclined,
 		},
 		{
 			name:       "no password",
-			req:        daemonruntime.AnswerElevationRequest{Transport: daemonruntime.TransportSecure},
+			req:        daemonruntime.AnswerElevationRequest{},
 			wantErr:    "no password",
 			wantResult: func(r approverResult) bool { return r.err != nil && r.password == "" },
-			wantStatus: consoleElevationRejected,
-		},
-		{
-			// Whatever the client says it is: only the connection counts.
-			name:       "plain HTTP with insecure: deny",
-			req:        daemonruntime.AnswerElevationRequest{Password: "hunter2", Client: "desktop", Transport: daemonruntime.TransportInsecure},
-			deny:       true,
-			wantErr:    "not encrypted",
-			wantResult: func(r approverResult) bool { return r.err != nil && strings.Contains(r.err.Error(), "not encrypted") },
 			wantStatus: consoleElevationRejected,
 		},
 	}
@@ -94,12 +76,12 @@ func TestConsoleElevationCards(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			e := newConsoleElevations(nil)
 			card, result, cards := openCard(t, e, context.Background())
-			if card.Status != consoleElevationOpen || card.Command != "apt-get install -y jq" || card.Cwd != "/srv/app" || card.Insecure != "warn" {
+			if card.Status != consoleElevationOpen || card.Command != "apt-get install -y jq" || card.Cwd != "/srv/app" {
 				t.Fatalf("card = %+v", card)
 			}
 			req := tc.req
 			req.TaskID, req.ElevationID = "task_1", card.ID
-			resp, err := e.answer(req, tc.deny)
+			resp, err := e.answer(req)
 			if tc.wantErr == "" && (err != nil || !resp.Accepted) {
 				t.Fatalf("answer = %+v, %v", resp, err)
 			}
@@ -119,7 +101,7 @@ func TestConsoleElevationCards(t *testing.T) {
 				t.Fatalf("settled card = %+v, want status %s", settled, tc.wantStatus)
 			}
 			// Answered once: the same answer again finds nothing open.
-			if resp, err := e.answer(req, tc.deny); err != nil || resp.Accepted {
+			if resp, err := e.answer(req); err != nil || resp.Accepted {
 				t.Fatalf("second answer = %+v, %v", resp, err)
 			}
 		})
@@ -131,7 +113,7 @@ func TestConsoleElevationCardExpiresAndIgnoresOtherTasks(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	card, result, cards := openCard(t, e, ctx)
 	// An answer naming another task does not reach this card.
-	if resp, err := e.answer(daemonruntime.AnswerElevationRequest{TaskID: "task_2", ElevationID: card.ID, Decline: true}, false); err != nil || resp.Accepted {
+	if resp, err := e.answer(daemonruntime.AnswerElevationRequest{TaskID: "task_2", ElevationID: card.ID, Decline: true}); err != nil || resp.Accepted {
 		t.Fatalf("answer for another task = %+v, %v", resp, err)
 	}
 	cancel()
@@ -143,8 +125,8 @@ func TestConsoleElevationCardExpiresAndIgnoresOtherTasks(t *testing.T) {
 		t.Fatalf("status = %q, want expired", got)
 	}
 	// An answer after it expired is not taken.
-	late := daemonruntime.AnswerElevationRequest{TaskID: "task_1", ElevationID: card.ID, Password: "hunter2", Transport: daemonruntime.TransportSecure}
-	if resp, err := e.answer(late, false); err != nil || resp.Accepted {
+	late := daemonruntime.AnswerElevationRequest{TaskID: "task_1", ElevationID: card.ID, Password: "hunter2"}
+	if resp, err := e.answer(late); err != nil || resp.Accepted {
 		t.Fatalf("late answer = %+v, %v", resp, err)
 	}
 }
