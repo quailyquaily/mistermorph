@@ -36,6 +36,21 @@ func TestRequestTransport(t *testing.T) {
 			headers:       map[string]string{TransportHeader: "insecure", RemoteHeader: "203.0.113.9:1234"},
 			wantTransport: "insecure", wantRemote: "203.0.113.9:1234",
 		},
+		{
+			name: "secure browser, Console relays over plain HTTP", remote: "10.0.0.5:7000",
+			headers:       map[string]string{TransportHeader: "secure", RemoteHeader: "127.0.0.1:1234"},
+			wantTransport: "insecure", wantRemote: "127.0.0.1:1234",
+		},
+		{
+			name: "secure browser, Console relays over TLS", remote: "10.0.0.5:7000", tls: true,
+			headers:       map[string]string{TransportHeader: "secure", RemoteHeader: "127.0.0.1:1234"},
+			wantTransport: "secure", wantRemote: "127.0.0.1:1234",
+		},
+		{
+			name: "secure browser, Console on this machine", remote: "127.0.0.1:7000",
+			headers:       map[string]string{TransportHeader: "secure", RemoteHeader: "127.0.0.1:1234"},
+			wantTransport: "secure", wantRemote: "127.0.0.1:1234",
+		},
 		{name: "relayed in process", remote: "", ctxTransport: "insecure", wantTransport: "insecure", wantRemote: "203.0.113.9:1234"},
 	}
 	for _, tc := range cases {

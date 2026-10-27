@@ -3,24 +3,21 @@ package consolecmd
 import (
 	"context"
 	"errors"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/quailyquaily/mistermorph/internal/daemonruntime"
 	"github.com/quailyquaily/mistermorph/internal/elevate"
-	"github.com/quailyquaily/mistermorph/internal/elevate/seal"
 )
 
 // openCard starts an approval on a task's cards and waits for its card to appear. It returns the
 // card, the approver's result channel and the task's cards.
-func openCard(t *testing.T, e *consoleElevations, stateDir string, ctx context.Context) (consoleElevation, chan approverResult, *consoleTaskElevations) {
+func openCard(t *testing.T, e *consoleElevations, ctx context.Context) (consoleElevation, chan approverResult, *consoleTaskElevations) {
 	t.Helper()
 	hub := newConsoleStreamHub()
 	cards := &consoleTaskElevations{taskID: "task_1", hub: hub}
-	approver := e.approver(stateDir, "warn", cards)
+	approver := e.approver("warn", cards)
 	result := make(chan approverResult, 1)
 	go func() {
 		password, err := approver.Approve(ctx, elevate.Request{
@@ -47,79 +44,62 @@ type approverResult struct {
 	err      error
 }
 
-func sealFor(t *testing.T, card consoleElevation, password string) seal.Answer {
-	t.Helper()
-	if card.Offer == nil {
-		t.Fatal("the open card has no offer")
-	}
-	answer, err := seal.Seal(seal.Binding{
-		ElevationID: card.ID,
-		TaskID:      "task_1",
-		Command:     card.Command,
-		Dir:         card.Cwd,
-		Deadline:    time.Unix(card.Deadline, 0),
-	}, *card.Offer, nil, []byte(password))
-	if err != nil {
-		t.Fatal(err)
-	}
-	return answer
-}
-
 func TestConsoleElevationCards(t *testing.T) {
 	cases := []struct {
 		name       string
-		answer     func(card consoleElevation) daemonruntime.AnswerElevationRequest
+		req        daemonruntime.AnswerElevationRequest
+		deny       bool
 		wantErr    string // from the answer call
 		wantResult func(r approverResult) bool
 		wantStatus string
 	}{
 		{
-			name: "allowed",
-			answer: func(card consoleElevation) daemonruntime.AnswerElevationRequest {
-				return daemonruntime.AnswerElevationRequest{Answer: sealFor(t, card, "hunter2")}
-			},
+			name:       "allowed over a secure connection",
+			req:        daemonruntime.AnswerElevationRequest{Password: "hunter2", Transport: daemonruntime.TransportSecure},
+			deny:       true,
 			wantResult: func(r approverResult) bool { return r.err == nil && r.password == "hunter2" },
 			wantStatus: consoleElevationAllowed,
 		},
 		{
-			name: "declined",
-			answer: func(consoleElevation) daemonruntime.AnswerElevationRequest {
-				return daemonruntime.AnswerElevationRequest{Decline: true}
-			},
+			name:       "allowed on plain HTTP with insecure: warn",
+			req:        daemonruntime.AnswerElevationRequest{Password: "hunter2", Transport: daemonruntime.TransportInsecure},
+			wantResult: func(r approverResult) bool { return r.err == nil && r.password == "hunter2" },
+			wantStatus: consoleElevationAllowed,
+		},
+		{
+			name:       "declined",
+			req:        daemonruntime.AnswerElevationRequest{Decline: true, Transport: daemonruntime.TransportInsecure},
+			deny:       true,
 			wantResult: func(r approverResult) bool { return errors.Is(r.err, elevate.ErrDeclined) },
 			wantStatus: consoleElevationDeclined,
 		},
 		{
-			name: "unreadable answer",
-			answer: func(card consoleElevation) daemonruntime.AnswerElevationRequest {
-				answer := sealFor(t, card, "hunter2")
-				answer.Ciphertext = answer.Ciphertext[:len(answer.Ciphertext)-2] + "AA"
-				return daemonruntime.AnswerElevationRequest{Answer: answer}
-			},
-			wantErr:    "could not be read",
-			wantResult: func(r approverResult) bool { return errors.Is(r.err, seal.ErrOpen) },
+			name:       "no password",
+			req:        daemonruntime.AnswerElevationRequest{Transport: daemonruntime.TransportSecure},
+			wantErr:    "no password",
+			wantResult: func(r approverResult) bool { return r.err != nil && r.password == "" },
 			wantStatus: consoleElevationRejected,
 		},
 		{
-			name: "web on plain HTTP with web_insecure: deny",
-			answer: func(card consoleElevation) daemonruntime.AnswerElevationRequest {
-				return daemonruntime.AnswerElevationRequest{Answer: sealFor(t, card, "hunter2"), WebDenied: true}
-			},
-			wantErr:    "not on HTTPS",
-			wantResult: func(r approverResult) bool { return r.err != nil && strings.Contains(r.err.Error(), "not on HTTPS") },
+			// Whatever the client says it is: only the connection counts.
+			name:       "plain HTTP with insecure: deny",
+			req:        daemonruntime.AnswerElevationRequest{Password: "hunter2", Client: "desktop", Transport: daemonruntime.TransportInsecure},
+			deny:       true,
+			wantErr:    "not encrypted",
+			wantResult: func(r approverResult) bool { return r.err != nil && strings.Contains(r.err.Error(), "not encrypted") },
 			wantStatus: consoleElevationRejected,
 		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			e := newConsoleElevations(nil)
-			card, result, cards := openCard(t, e, t.TempDir(), context.Background())
-			if card.Status != consoleElevationOpen || card.Command != "apt-get install -y jq" || card.Cwd != "/srv/app" || card.WebInsecure != "warn" {
+			card, result, cards := openCard(t, e, context.Background())
+			if card.Status != consoleElevationOpen || card.Command != "apt-get install -y jq" || card.Cwd != "/srv/app" || card.Insecure != "warn" {
 				t.Fatalf("card = %+v", card)
 			}
-			req := tc.answer(card)
+			req := tc.req
 			req.TaskID, req.ElevationID = "task_1", card.ID
-			resp, err := e.answer(req)
+			resp, err := e.answer(req, tc.deny)
 			if tc.wantErr == "" && (err != nil || !resp.Accepted) {
 				t.Fatalf("answer = %+v, %v", resp, err)
 			}
@@ -135,11 +115,11 @@ func TestConsoleElevationCards(t *testing.T) {
 				t.Fatal("the approver still waits")
 			}
 			settled := cards.snapshot()[0]
-			if settled.Status != tc.wantStatus || settled.Offer != nil {
-				t.Fatalf("settled card = %+v, want status %s and no offer", settled, tc.wantStatus)
+			if settled.Status != tc.wantStatus {
+				t.Fatalf("settled card = %+v, want status %s", settled, tc.wantStatus)
 			}
 			// Answered once: the same answer again finds nothing open.
-			if resp, err := e.answer(req); err != nil || resp.Accepted {
+			if resp, err := e.answer(req, tc.deny); err != nil || resp.Accepted {
 				t.Fatalf("second answer = %+v, %v", resp, err)
 			}
 		})
@@ -149,9 +129,9 @@ func TestConsoleElevationCards(t *testing.T) {
 func TestConsoleElevationCardExpiresAndIgnoresOtherTasks(t *testing.T) {
 	e := newConsoleElevations(nil)
 	ctx, cancel := context.WithCancel(context.Background())
-	card, result, cards := openCard(t, e, t.TempDir(), ctx)
+	card, result, cards := openCard(t, e, ctx)
 	// An answer naming another task does not reach this card.
-	if resp, err := e.answer(daemonruntime.AnswerElevationRequest{TaskID: "task_2", ElevationID: card.ID, Decline: true}); err != nil || resp.Accepted {
+	if resp, err := e.answer(daemonruntime.AnswerElevationRequest{TaskID: "task_2", ElevationID: card.ID, Decline: true}, false); err != nil || resp.Accepted {
 		t.Fatalf("answer for another task = %+v, %v", resp, err)
 	}
 	cancel()
@@ -162,24 +142,11 @@ func TestConsoleElevationCardExpiresAndIgnoresOtherTasks(t *testing.T) {
 	if got := cards.snapshot()[0].Status; got != consoleElevationExpired {
 		t.Fatalf("status = %q, want expired", got)
 	}
-}
-
-// The identity is made once and kept: clients pin it across restarts.
-func TestConsoleElevationIdentityIsKept(t *testing.T) {
-	dir := t.TempDir()
-	first, err := newConsoleElevations(nil).identityInfo(dir)
-	if err != nil {
-		t.Fatal(err)
+	// An answer after it expired is not taken.
+	late := daemonruntime.AnswerElevationRequest{TaskID: "task_1", ElevationID: card.ID, Password: "hunter2", Transport: daemonruntime.TransportSecure}
+	if resp, err := e.answer(late, false); err != nil || resp.Accepted {
+		t.Fatalf("late answer = %+v, %v", resp, err)
 	}
-	again, err := newConsoleElevations(nil).identityInfo(dir)
-	if err != nil || again != first || first.Fingerprint == "" {
-		t.Fatalf("identity = %+v then %+v, %v", first, again, err)
-	}
-	card, result, _ := openCard(t, newConsoleElevations(nil), dir, context.Background())
-	if card.Offer.Identity != first.Identity {
-		t.Fatalf("offer signed by %q, want the kept identity %q", card.Offer.Identity, first.Identity)
-	}
-	_ = result
 }
 
 func TestConsoleAsksUserFromBothChats(t *testing.T) {
@@ -190,23 +157,5 @@ func TestConsoleAsksUserFromBothChats(t *testing.T) {
 	}
 	if consoleAsksUser(daemonruntime.TaskTrigger{Source: "cron", Ref: "cli/chat"}) {
 		t.Error("a cron task asks its person")
-	}
-}
-
-func TestIdentityFingerprintReadsTheKeptKey(t *testing.T) {
-	dir := t.TempDir()
-	if _, err := identityFingerprint(dir); err == nil || !strings.Contains(err.Error(), "start the Console once") {
-		t.Fatalf("fingerprint without a key = %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(dir, elevationIdentityFile)); !os.IsNotExist(err) {
-		t.Fatalf("reading the fingerprint made a key: %v", err)
-	}
-	info, err := newConsoleElevations(nil).identityInfo(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	got, err := identityFingerprint(dir)
-	if err != nil || got != info.Fingerprint {
-		t.Fatalf("fingerprint = %q, %v, want %q", got, err, info.Fingerprint)
 	}
 }

@@ -416,8 +416,8 @@ Tools:
 - `tools.bash.elevation.*` and `tools.powershell.elevation.*` let shell commands run as
   administrator after the user approves each one, in the chat that started the task or a system
   dialog (`enabled`, default true; `approval_timeout`, default `2m`; bash also `dialog`, `askpass`,
-  `approver` (`auto`, `client`, `dialog`; default `auto`) and `web_insecure` (`warn`, `deny`;
-  default `warn`)). See [Elevated commands](tools.md#elevated-commands).
+  `approver` (`auto`, `client`, `dialog`; default `auto`) and `insecure` (`warn`, `deny`;
+  default `warn`: what an approval answered over a connection that is not encrypted gets)). See [Elevated commands](tools.md#elevated-commands).
 
 Console:
 

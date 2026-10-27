@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { isEndpointSelectable, rootEntryEndpoint } from "./endpoints.js";
+import { endpointURLInsecure, isEndpointSelectable, rootEntryEndpoint } from "./endpoints.js";
 
 test("connected and health-pending endpoints are selectable", () => {
   assert.equal(isEndpointSelectable({ endpoint_ref: "ep_connected", connected: true }), true);
@@ -43,4 +43,21 @@ test("root entry rejects disconnected and ambiguous endpoints", () => {
     ]),
     null
   );
+});
+
+test("endpointURLInsecure flags plain HTTP to another machine only", () => {
+  for (const [url, insecure] of [
+    ["http://10.0.0.5:8787", true],
+    ["http://runtime.lan/api", true],
+    ["https://runtime.example.com", false],
+    ["http://127.0.0.1:8787", false],
+    ["http://localhost:8787", false],
+    ["http://box.localhost", false],
+    ["http://[::1]:8787", false],
+    ["in-process://console-local", false],
+    ["", false],
+    ["not a url", false],
+  ]) {
+    assert.equal(endpointURLInsecure(url), insecure, url);
+  }
 });

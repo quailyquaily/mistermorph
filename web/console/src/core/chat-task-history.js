@@ -266,7 +266,6 @@ function taskQuestions(task) {
 const ELEVATION_STATUSES = ["open", "allowed", "declined", "expired", "rejected"];
 
 // The elevated commands that asked for the sudo password here, in order; null when there are none.
-// An open one carries the runtime's signed offer, which its answer is sealed for.
 function normalizeElevations(raw) {
   const elevations = (Array.isArray(raw) ? raw : [])
     .map((elevation) => {
@@ -276,8 +275,7 @@ function normalizeElevations(raw) {
         return null;
       }
       const status = ELEVATION_STATUSES.includes(elevation?.status) ? elevation.status : "expired";
-      const offer = elevation?.offer;
-      // The command and directory stay as sent: the offer's signature covers their exact bytes.
+      // The command and directory stay as sent: they are what the person approves.
       return {
         id,
         command,
@@ -286,16 +284,7 @@ function normalizeElevations(raw) {
         deadline: Number.isFinite(Number(elevation?.deadline)) ? Math.trunc(Number(elevation.deadline)) : 0,
         attempt: Number.isInteger(elevation?.attempt) ? elevation.attempt : 0,
         status,
-        webInsecure: elevation?.web_insecure === "deny" ? "deny" : "warn",
-        offer:
-          status === "open" && offer && typeof offer === "object"
-            ? {
-                v: offer.v,
-                server_pub: String(offer.server_pub || ""),
-                identity: String(offer.identity || ""),
-                signature: String(offer.signature || ""),
-              }
-            : null,
+        insecure: elevation?.insecure === "deny" ? "deny" : "warn",
       };
     })
     .filter(Boolean);

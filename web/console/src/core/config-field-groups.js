@@ -119,12 +119,12 @@ function elevationGroup(tool, note, options = {}) {
       note: "auto: the chat that started the task, else a system dialog. client: the chat only. dialog: a system dialog only.",
     });
     fields.push({
-      path: `${key}.web_insecure`,
-      label: "Console on plain HTTP",
+      path: `${key}.insecure`,
+      label: "Unencrypted connection",
       type: "select",
       options: ["warn", "deny"],
       dependsOn: `${key}.enabled`,
-      note: "warn: take the password with a warning that the page could be tampered with. deny: point to HTTPS, an SSH tunnel or chat.",
+      note: "When the chat reaches the runtime without HTTPS or loopback. warn: take the password with a warning. deny: refuse it and point to HTTPS or an SSH tunnel.",
     });
   }
   if (options.dialog) {

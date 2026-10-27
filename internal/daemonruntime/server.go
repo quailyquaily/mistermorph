@@ -142,10 +142,9 @@ type TaskTopicRoutes struct {
 	// AnswerQuestion answers the question a running task waits on; nil when the runtime's tasks
 	// ask no questions.
 	AnswerQuestion AnswerQuestionFunc
-	// AnswerElevation answers an approval card of a running task, and ElevationIdentity is the
-	// identity those cards are signed with; nil when the runtime asks no client to approve.
+	// AnswerElevation answers an approval card of a running task; nil when the runtime asks no
+	// client to approve.
 	AnswerElevation      AnswerElevationFunc
-	ElevationIdentity    func(context.Context) (ElevationIdentity, error)
 	TopicMetadata        TopicMetadataFunc
 	TopicContext         TopicContextFunc
 	RegenerateTopicTitle func(context.Context, string) (TopicInfo, error)

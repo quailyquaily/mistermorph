@@ -4271,14 +4271,15 @@ const ChatView = {
       }
     }
 
-    // Answers an elevated command's request for the sudo password: a decline, or the password the
-    // card sealed for the runtime. answer.done reports back whether the request was still open;
-    // the task's stream then shows how it ended.
+    // Answers an elevated command's request for the sudo password: a decline, or the password as
+    // typed, which only the connection protects (the runtime may refuse it on an insecure one).
+    // answer.done reports back whether the request was still open; the task's stream then shows
+    // how it ended.
     async function answerHistoryElevation(item, answer) {
       const taskID = String(item?.taskId || "").trim();
       const elevationID = String(answer?.elevationID || "").trim();
       const done = typeof answer?.done === "function" ? answer.done : () => {};
-      if (!taskID || !elevationID || (answer.decline !== true && !answer.answer)) {
+      if (!taskID || !elevationID || (answer.decline !== true && typeof answer.password !== "string")) {
         done(false);
         return;
       }
@@ -4286,7 +4287,7 @@ const ChatView = {
       if (answer.decline === true) {
         body.decline = true;
       } else {
-        body.answer = answer.answer;
+        body.password = answer.password;
       }
       try {
         const result = await runtimeApiFetchForEndpoint(

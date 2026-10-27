@@ -1,9 +1,7 @@
 package chatcmd
 
 import (
-	"bytes"
 	"errors"
-	"fmt"
 	"net/url"
 	"strings"
 	"time"
@@ -11,7 +9,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/taskruntime"
 	"github.com/quailyquaily/mistermorph/internal/daemonruntime"
-	"github.com/quailyquaily/mistermorph/internal/elevate/seal"
 )
 
 // chatTaskTrigger marks a task sent from chat, so the Console runtime puts the task's questions
@@ -30,17 +27,16 @@ type remoteQuestion struct {
 	Option  *int                             `json:"option,omitempty"`
 }
 
-// remoteElevation is an approval card in a Console stream frame. Offer is there only while open.
+// remoteElevation is an approval card in a Console stream frame.
 type remoteElevation struct {
-	ID          string      `json:"id"`
-	Command     string      `json:"command"`
-	Cwd         string      `json:"cwd,omitempty"`
-	Host        string      `json:"host,omitempty"`
-	Deadline    int64       `json:"deadline"`
-	Attempt     int         `json:"attempt,omitempty"`
-	Status      string      `json:"status"`
-	WebInsecure string      `json:"web_insecure,omitempty"`
-	Offer       *seal.Offer `json:"offer,omitempty"`
+	ID       string `json:"id"`
+	Command  string `json:"command"`
+	Cwd      string `json:"cwd,omitempty"`
+	Host     string `json:"host,omitempty"`
+	Deadline int64  `json:"deadline"`
+	Attempt  int    `json:"attempt,omitempty"`
+	Status   string `json:"status"`
+	Insecure string `json:"insecure,omitempty"`
 }
 
 // remotePromptResult is the runtime's reply to an answer sent from a card.
@@ -86,7 +82,7 @@ func (m *chatModel) syncRemotePrompts(taskID string, f remoteStreamFrame) tea.Cm
 			continue
 		}
 		key := remoteElevationKey(taskID, e.ID)
-		if e.Status == "open" && e.Offer != nil {
+		if e.Status == "open" {
 			if m.findPrompt(key) == nil && !m.closedPrompts[key] {
 				var deadline time.Time
 				if e.Deadline > 0 {
@@ -94,14 +90,10 @@ func (m *chatModel) syncRemotePrompts(taskID string, f remoteStreamFrame) tea.Cm
 				}
 				p := newElevationPrompt(key, e.Command, e.Cwd, e.Host, deadline, e.Attempt)
 				p.id, p.taskID = e.ID, taskID
-				offer := *e.Offer
-				p.offer = &offer
+				p.remote = true
 				p.respond = remoteElevationRespond
 				cmds = append(cmds, m.openPrompt(p))
 			}
-			continue
-		}
-		if e.Status == "open" {
 			continue
 		}
 		if p := m.findPrompt(key); p != nil {
@@ -137,70 +129,6 @@ func (m *chatModel) pruneRemotePrompts() {
 	}
 }
 
-// knownRuntimeEntries reads known_runtimes once per session.
-func (m *chatModel) knownRuntimeEntries() (map[string]string, error) {
-	if m.knownRuntimes != nil {
-		return m.knownRuntimes, nil
-	}
-	known, err := loadKnownRuntimes(m.knownRuntimesPath)
-	if err != nil {
-		return nil, err
-	}
-	m.knownRuntimes = known
-	return known, nil
-}
-
-// remoteTrust decides whether a password may be sealed for offer: for the identity pinned for this
-// runtime; for the offer's own identity on a loopback runtime seen the first time (pinned then);
-// after the person confirmed its fingerprint otherwise. A changed identity is refused.
-func (m *chatModel) remoteTrust(offer *seal.Offer) promptTrust {
-	identity, err := seal.DecodePublicKey(offer.Identity)
-	if err != nil {
-		return promptTrust{refusal: "The approval request names no valid runtime identity."}
-	}
-	known, err := m.knownRuntimeEntries()
-	if err != nil {
-		return promptTrust{refusal: "Cannot read the pinned runtime identities: " + err.Error()}
-	}
-	key := m.runtimeKey
-	if pinnedText, ok := known[key]; ok {
-		pinned, err := seal.DecodePublicKey(pinnedText)
-		if err != nil {
-			return promptTrust{refusal: fmt.Sprintf("The identity pinned for %s in %s is unreadable. Run: mistermorph chat --forget-runtime %s", key, m.knownRuntimesPath, key)}
-		}
-		if !bytes.Equal(pinned, identity) {
-			return promptTrust{refusal: fmt.Sprintf(
-				"The runtime's identity key changed. Pinned: %s. Now: %s. Someone may be intercepting the connection, or the Console's state was reset. Check the fingerprint `mistermorph console fingerprint` prints on the runtime's machine; if it shows the new one, run: mistermorph chat --forget-runtime %s",
-				seal.Fingerprint(pinned), seal.Fingerprint(identity), key)}
-		}
-		return promptTrust{pinned: pinned}
-	}
-	if runtimeIsLoopback(key) {
-		return promptTrust{}
-	}
-	return promptTrust{fingerprint: seal.Fingerprint(identity)}
-}
-
-// pinRuntime pins the identity p's offer names for this runtime: in this session, and in
-// known_runtimes when chat has a state directory.
-func (m *chatModel) pinRuntime(p *chatPrompt) error {
-	if m.sharedChat == nil || p == nil || p.offer == nil {
-		return errors.New("no runtime to pin")
-	}
-	if _, err := seal.DecodePublicKey(p.offer.Identity); err != nil {
-		return err
-	}
-	known, err := m.knownRuntimeEntries()
-	if err != nil {
-		return err
-	}
-	known[m.runtimeKey] = strings.TrimSpace(p.offer.Identity)
-	if m.knownRuntimesPath == "" {
-		return nil
-	}
-	return pinKnownRuntime(m.knownRuntimesPath, m.runtimeKey, strings.TrimSpace(p.offer.Identity))
-}
-
 // remoteQuestionRespond sends the answer to a question to the runtime.
 func remoteQuestionRespond(m *chatModel, p *chatPrompt, resp chatPromptResponse) tea.Cmd {
 	if resp.decline {
@@ -222,30 +150,18 @@ func remoteQuestionRespond(m *chatModel, p *chatPrompt, resp chatPromptResponse)
 	}
 }
 
-// remoteElevationRespond seals the password for the runtime that asked, and sends it, or sends a
-// decline. The password never leaves this function in the clear.
+// remoteElevationRespond sends the password to the runtime that asked, over chat's connection to
+// it, or sends a decline.
 func remoteElevationRespond(m *chatModel, p *chatPrompt, resp chatPromptResponse) tea.Cmd {
 	defer clear(resp.password)
 	req := daemonruntime.AnswerElevationRequest{ElevationID: p.id, Client: "chat"}
 	if resp.decline {
 		req.Decline = true
 	} else {
-		trust := m.promptTrust(p)
-		if trust.refusal != "" || trust.fingerprint != "" || p.offer == nil {
+		if m.promptRefusal(p) != "" {
 			return nil
 		}
-		binding := seal.Binding{ElevationID: p.id, TaskID: p.taskID, Command: p.command, Dir: p.dir, Deadline: p.deadline}
-		answer, err := seal.Seal(binding, *p.offer, trust.pinned, resp.password)
-		if err != nil {
-			p.errText = "Not sent: " + err.Error()
-			return nil
-		}
-		if trust.pinned == nil {
-			if err := m.pinRuntime(p); err != nil {
-				m.notice = "Cannot save the runtime's identity: " + err.Error()
-			}
-		}
-		req.Answer = answer
+		req.Password = string(resp.password)
 	}
 	p.resolving = true
 	ctx, c, key, task, decline := m.ctx, m.client, p.key, p.taskID, req.Decline

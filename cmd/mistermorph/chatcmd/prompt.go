@@ -1,7 +1,6 @@
 package chatcmd
 
 import (
-	"crypto/ed25519"
 	"fmt"
 	"strconv"
 	"strings"
@@ -13,7 +12,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/taskruntime"
-	"github.com/quailyquaily/mistermorph/internal/elevate/seal"
 )
 
 // A prompt is a card the running task puts to the person: a question (ask_user) or an approval for
@@ -49,8 +47,9 @@ type chatPrompt struct {
 	command, dir, host string
 	attempt            int
 	password           []rune
-	// offer is the runtime's signed key for a remote approval; nil for a local one.
-	offer *seal.Offer
+	// remote is set for an approval a Console runtime asks for. Chat reaches a runtime only over
+	// HTTPS or loopback (remote_client.go), so the password crosses no unencrypted network.
+	remote bool
 
 	// deadline is when the card closes by itself; zero when unknown.
 	deadline time.Time
@@ -72,17 +71,6 @@ type chatPromptResponse struct {
 	text   string
 	// password is the sudo password, for an allowed elevated command.
 	password []byte
-}
-
-// promptTrust is whether a remote approval may be sent to the runtime that asks for it.
-type promptTrust struct {
-	// pinned is the identity the answer is sealed for; nil means "the identity the offer names",
-	// which is then pinned (a loopback runtime seen the first time).
-	pinned ed25519.PublicKey
-	// fingerprint is set when the person must first confirm the runtime's fingerprint.
-	fingerprint string
-	// refusal is set when the password must not be sent at all.
-	refusal string
 }
 
 type (
@@ -263,7 +251,7 @@ func (m *chatModel) pastePrompt(p *chatPrompt, content string) {
 	content = strings.TrimRight(content, "\r\n")
 	switch p.kind {
 	case chatPromptElevation:
-		if m.promptTrust(p).fingerprint != "" || p.resolving {
+		if m.promptRefusal(p) != "" || p.resolving {
 			return
 		}
 		for _, r := range content {
@@ -334,25 +322,11 @@ func (m *chatModel) questionKey(p *chatPrompt, msg tea.KeyPressMsg) tea.Cmd {
 
 func (m *chatModel) elevationKey(p *chatPrompt, msg tea.KeyPressMsg) tea.Cmd {
 	keyName := msg.String()
-	trust := m.promptTrust(p)
 	if keyName == "esc" || keyName == "ctrl+c" {
 		p.clearPassword()
 		return p.respond(m, p, chatPromptResponse{decline: true})
 	}
-	if trust.refusal != "" {
-		return nil
-	}
-	if trust.fingerprint != "" {
-		switch strings.ToLower(msg.Key().Text) {
-		case "y":
-			if err := m.pinRuntime(p); err != nil {
-				p.errText = "Cannot save the runtime's identity: " + err.Error()
-			} else {
-				p.errText = ""
-			}
-		case "n":
-			return p.respond(m, p, chatPromptResponse{decline: true})
-		}
+	if m.promptRefusal(p) != "" {
 		return nil
 	}
 	switch keyName {
@@ -384,15 +358,16 @@ func (m *chatModel) elevationKey(p *chatPrompt, msg tea.KeyPressMsg) tea.Cmd {
 	return nil
 }
 
-// promptTrust is how far a remote approval may go; a local one is always trusted.
-func (m *chatModel) promptTrust(p *chatPrompt) promptTrust {
-	if p == nil || p.kind != chatPromptElevation || p.offer == nil {
-		return promptTrust{}
+// promptRefusal is why the password of a remote approval must not be sent; "" when it may be. A
+// local approval never leaves this process.
+func (m *chatModel) promptRefusal(p *chatPrompt) string {
+	if p == nil || p.kind != chatPromptElevation || !p.remote {
+		return ""
 	}
 	if m.sharedChat == nil {
-		return promptTrust{refusal: "This approval came from a runtime chat is not attached to."}
+		return "This approval came from a runtime chat is not attached to."
 	}
-	return m.remoteTrust(p.offer)
+	return ""
 }
 
 // promptOutcome is how a closed card shows in the transcript.
@@ -512,7 +487,7 @@ func (m *chatModel) renderQuestionPrompt(p *chatPrompt, width int) (body, input 
 }
 
 func (m *chatModel) renderElevationPrompt(p *chatPrompt, width int) (body, input []string, footer string) {
-	trust := m.promptTrust(p)
+	refusal := m.promptRefusal(p)
 	if p.attempt >= 2 {
 		body = append(body, "  "+chatErrorStyle.Render("The password was not accepted. Try again."))
 	}
@@ -528,15 +503,10 @@ func (m *chatModel) renderElevationPrompt(p *chatPrompt, width int) (body, input
 	}
 	body = append(body, "")
 	switch {
-	case trust.refusal != "":
-		body = append(body, wrapPromptParagraph(trust.refusal, width)...)
+	case refusal != "":
+		body = append(body, wrapPromptParagraph(refusal, width)...)
 		input = append(input, fitChatLine("  "+chatErrorStyle.Render("Not sending the password."), width))
 		footer = "  Esc decline"
-	case trust.fingerprint != "":
-		body = append(body, wrapPromptParagraph("This runtime has not been approved from chat before. Check that its fingerprint matches what `mistermorph console fingerprint` prints on the runtime's machine:", width)...)
-		body = append(body, "    "+chatAccentStyle.Render(trust.fingerprint))
-		input = append(input, fitChatLine("  Does it match? "+chatAccentStyle.Render("y")+" yes · "+chatAccentStyle.Render("n")+" no", width))
-		footer = "  y trust and continue · n/Esc decline"
 	default:
 		masked := strings.Repeat("•", min(len(p.password), max(1, width-14)))
 		input = append(input, fitChatLine("  Password  "+masked+chatAccentStyle.Render("▏"), width))

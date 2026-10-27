@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/quailyquaily/mistermorph/internal/elevate/seal"
 	"github.com/quailyquaily/mistermorph/internal/taskdomain"
 )
 
@@ -61,32 +60,24 @@ type AnswerQuestionRequest struct {
 }
 
 // AnswerElevationRequest answers approval ElevationID of task TaskID: a decline, or the sudo
-// password sealed for it (docs/feat/feat_20261026_elevation_client_approval.md).
+// password (docs/feat/feat_20261026_elevation_client_approval.md). The password is protected by
+// the connection alone: HTTPS, loopback, an SSH tunnel or a VPN.
 type AnswerElevationRequest struct {
-	TaskID      string      `json:"-"`
-	ElevationID string      `json:"elevation_id"`
-	Decline     bool        `json:"decline,omitempty"`
-	Answer      seal.Answer `json:"answer"`
+	TaskID      string `json:"-"`
+	ElevationID string `json:"elevation_id"`
+	Decline     bool   `json:"decline,omitempty"`
+	Password    string `json:"password,omitempty"`
 	// Client is "web", "desktop" or "chat", as the client says, for the audit log.
 	Client string `json:"client,omitempty"`
-	// Transport is "secure" (HTTPS or loopback) or "insecure", from the connection the answer came
-	// on; Remote is its address. The server sets them, never the client.
+	// Transport is "secure" (every hop HTTPS or loopback) or "insecure", from the connection the
+	// answer came on; Remote is the client's address. The server sets them, never the client.
 	Transport string `json:"-"`
 	Remote    string `json:"-"`
-	// WebDenied is set by the runtime when policy refuses a web answer on an insecure connection.
-	WebDenied bool `json:"-"`
 }
 
 type AnswerElevationResponse struct {
 	// Accepted is false when the approval is no longer open: answered, expired, or its task ended.
 	Accepted bool `json:"accepted"`
-}
-
-// ElevationIdentity is the runtime's identity key for approvals, which clients pin, and its
-// fingerprint, which a person compares.
-type ElevationIdentity struct {
-	Identity    string `json:"identity"`
-	Fingerprint string `json:"fingerprint"`
 }
 
 type AnswerQuestionResponse struct {
