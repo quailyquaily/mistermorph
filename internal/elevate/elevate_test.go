@@ -520,7 +520,11 @@ func TestSessionEndStopsTheAsk(t *testing.T) {
 	var stderr bytes.Buffer
 	go func() { done <- RunAskpass(io.Discard, &stderr) }()
 	<-asking
-	go session.End()
+	ended := make(chan struct{})
+	go func() {
+		session.End()
+		close(ended)
+	}()
 	select {
 	case code := <-done:
 		if code != 1 || !strings.Contains(stderr.String(), TimedOutMarker) {
@@ -528,6 +532,12 @@ func TestSessionEndStopsTheAsk(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("the helper still waits after the session ended")
+	}
+	// The helper hears that the ask ended before End removes the socket's directory.
+	select {
+	case <-ended:
+	case <-time.After(5 * time.Second):
+		t.Fatal("End did not return")
 	}
 	if _, err := os.Stat(session.dir); !os.IsNotExist(err) {
 		t.Fatalf("the socket's directory is still there: %v", err)
