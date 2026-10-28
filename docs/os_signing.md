@@ -33,7 +33,7 @@ Gatekeeper checks the Developer ID signature and the notarization ticket when us
 
 ### Required Apple Setup
 
-You need an Apple Developer Program membership. A Mac is not required: the steps below work on Linux with `openssl`, and the release runner does all the macOS-only work. Only the team's Account Holder can create a Developer ID certificate. An Admin can create the API key.
+You need an Apple Developer Program membership. A Mac is not required: the steps below work on Linux with `openssl`, and the release runner does all the macOS-only work. [Apple Signing Setup on Linux](apple_signing_linux.md) walks through every step, including what can go wrong on the first release. Only the team's Account Holder can create a Developer ID certificate. An Admin can create the API key.
 
 #### 1. Developer ID Application certificate
 
