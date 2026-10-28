@@ -12,16 +12,13 @@
   --memories-public: var(--q-c-orange-dark);
 }
 
-/* A mono caps label with brackets, as the notices and section heads have. */
+/* A field label in plain UI text: the page already has mono caps in its section heads, and a
+   second set of them on every control made the page shout. */
 .memories-label {
   display: inline-flex;
   align-items: center;
-  gap: 0.3rem;
-  font-family: var(--font-mono);
-  font-size: var(--font-size-label);
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  font-size: var(--font-size-meta);
+  font-weight: 500;
   white-space: nowrap;
   color: var(--memories-text);
 }
@@ -35,36 +32,10 @@
   opacity: 0.45;
 }
 
-/* Hear as: the audience picker and what it means. */
-
-.memories-hear {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 12px;
-}
-
-.memories-hear-menu {
-  flex: 0 1 240px;
-  min-width: 160px;
-}
-
-.memories-hear-menu .q-dropdown-menu,
-.memories-hear-menu .q-dropdown-menu-action,
 .memory-edit-field .q-dropdown-menu,
 .memory-edit-field .q-dropdown-menu-action {
   width: 100%;
   min-width: 0;
-}
-
-.memories-hear-summary {
-  flex: 1 1 300px;
-  min-width: 0;
-  margin: 0;
-  color: var(--memories-muted);
-  font-size: var(--font-size-meta);
-  line-height: 1.5;
-  text-wrap: pretty;
 }
 
 .memories-filter-value {
@@ -115,11 +86,6 @@
   font: inherit;
   font-size: var(--font-size-ui);
   box-sizing: border-box;
-}
-
-.memories-query.is-xs {
-  height: 32px;
-  font-size: var(--font-size-meta);
 }
 
 .memories-query::placeholder {
@@ -175,110 +141,131 @@
   height: 28px;
 }
 
-/* The workbench: subjects on the left, as Contacts lists its people, the memories beside them. */
+/* The workbench, as Contacts and TODO have it: the subjects in the second column under the page
+   title, scrolling on their own, and what is picked beside them, scrolling on its own. */
+
+.memories-page .page-body {
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.memories-page-bar {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.memories-page-bar-back {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0 6px !important;
+}
+
+.memories-page-bar-back .icon {
+  width: 13px;
+  min-width: 13px;
+  height: 13px;
+}
 
 .memories-workbench {
+  flex: 1 1 auto;
   display: grid;
-  grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
-  gap: 24px;
-  align-items: start;
+  grid-template-columns: minmax(220px, var(--workspace-sidebar-max-width, 310px)) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  gap: 4px;
+  align-items: stretch;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
 }
 
 .memories-index {
-  position: sticky;
-  top: 0;
+  --workspace-sidebar-head-pad: 0 var(--content-gutter-x);
+  --workspace-sidebar-list-gap: 2px;
   display: grid;
-  gap: 10px;
+  grid-template-rows: auto minmax(0, 1fr);
   min-width: 0;
+  min-height: 100%;
+  height: 100%;
+  overflow: hidden;
 }
 
-.memories-index-list {
+.memories-index-head {
+  display: flex;
+  align-items: center;
+}
+
+.memories-index-title {
+  margin: 0;
+}
+
+.memories-index-body {
+  min-height: 0;
   display: grid;
-  gap: 2px;
+  align-content: start;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-bottom: var(--content-gutter-y);
+  scrollbar-width: thin;
+  overscroll-behavior: contain;
+}
+
+.memories-index-filter {
+  padding: 14px var(--workspace-sidebar-list-gutter) 8px;
+}
+
+.memories-filter-input {
+  width: 100%;
+}
+
+.memories-index-loading {
+  margin: 8px var(--workspace-sidebar-list-gutter) 0;
+}
+
+.memories-index-list.workspace-sidebar-list {
+  padding-top: 8px;
 }
 
 .memories-index-divider {
-  padding: 14px 12px 6px;
+  padding: 14px 14px 6px;
   font-family: var(--font-mono);
   font-size: var(--font-size-label);
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--memories-muted);
 }
 
-.memories-index-item {
-  appearance: none;
-  display: grid;
-  grid-template-columns: 24px minmax(0, 1fr) auto;
-  align-items: center;
-  column-gap: 10px;
-  width: 100%;
-  margin: 0;
-  padding: 10px 13px 9px 12px;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: var(--memories-text);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  transition: background-color var(--motion-normal) var(--motion-ease);
-}
-
-.memories-index-item:hover {
-  background: var(--memories-tint);
-}
-
-.memories-index-item.is-active {
-  background: color-mix(in srgb, var(--accent-1) 12%, transparent);
-}
-
-.memories-index-item:focus-visible {
-  outline-offset: -1.5px;
+.memories-index-item.workspace-sidebar-item {
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  gap: 10px;
 }
 
 .memories-index-kind {
   display: grid;
   place-items: center;
-  width: 24px;
-  height: 24px;
-  border: 1px solid var(--memories-line);
-  border-radius: 2px;
-  background: var(--bg-2);
+  width: 20px;
+  height: 20px;
   color: var(--memories-muted);
 }
 
 .memories-index-kind .icon {
-  width: 14px;
-  height: 14px;
+  width: 15px;
+  height: 15px;
 }
 
-.memories-index-copy {
-  display: grid;
-  gap: 1px;
-  min-width: 0;
-}
-
-.memories-index-title,
-.memories-index-meta {
+.memories-index-item .workspace-sidebar-item-meta {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.memories-index-title {
-  color: var(--memories-ink);
-  font-size: var(--font-size-ui);
-}
-
-.memories-index-item.is-active .memories-index-title {
-  font-weight: 600;
-}
-
-.memories-index-meta {
-  color: var(--memories-muted);
-  font-size: var(--font-size-meta);
 }
 
 .memories-index-count {
@@ -291,8 +278,15 @@
 .memories-main {
   container-type: inline-size;
   display: grid;
+  align-content: start;
   gap: 20px;
   min-width: 0;
+  min-height: 0;
+  padding: 18px var(--content-gutter-x) var(--content-gutter-y) 20px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  overscroll-behavior: contain;
 }
 
 .memories-subject {
@@ -340,15 +334,11 @@
   border-top: 0;
 }
 
-/* A memory the chosen audience may not hear stays in place, faded. */
-.memory-row.is-unheard {
-  opacity: 0.42;
-}
 
 .memory-head {
   appearance: none;
   display: grid;
-  grid-template-columns: 132px minmax(0, 1fr) 16px;
+  grid-template-columns: 104px minmax(0, 1fr) 16px;
   align-items: start;
   column-gap: 16px;
   width: 100%;
@@ -389,18 +379,31 @@
   transform: rotate(180deg);
 }
 
-/* Who may hear it, up front: the status mark and a bracket label in the visibility's tone. */
+/* Who may hear it, up front. The mark carries the visibility's tone; the word beside it stays
+   muted, so a list of rows reads as titles with a quiet gutter, not a column of colored tags. */
 .memory-visibility {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding-top: 3px;
-  font-family: var(--font-mono);
-  font-size: var(--font-size-label);
-  font-weight: 500;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  padding-top: 2px;
+  font-size: var(--font-size-meta);
   white-space: nowrap;
+}
+
+.memory-head > .memory-visibility {
+  color: var(--memories-muted);
+}
+
+.memory-head > .memory-visibility .memory-visibility-mark {
+  color: var(--memories-private);
+}
+
+.memory-head > .memory-visibility.is-conversation .memory-visibility-mark {
+  color: var(--memories-conversation);
+}
+
+.memory-head > .memory-visibility.is-public .memory-visibility-mark {
+  color: var(--memories-public);
 }
 
 .memory-visibility-mark {
@@ -465,18 +468,14 @@
 .memory-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 2px 14px;
+  gap: 2px 12px;
   margin: 0;
   color: var(--memories-muted);
-  font-family: var(--font-mono);
-  font-size: var(--font-size-label);
+  font-size: var(--font-size-meta);
   line-height: 1.5;
   font-variant-numeric: tabular-nums;
 }
 
-.memory-unheard {
-  color: var(--memories-text);
-}
 
 .memory-name {
   margin-left: auto;
@@ -491,7 +490,7 @@
 .memory-more {
   display: grid;
   gap: 14px;
-  padding: 4px 16px 16px 164px;
+  padding: 4px 16px 16px 136px;
 }
 
 .memory-more-row {
@@ -784,70 +783,33 @@ a.journal-task:hover {
   }
 }
 
-/* Stacks by the room the page has (the content column is a size container), not the window's
-   width, so a narrow window with the sidebar open keeps both columns as long as they fit. */
-@container (max-width: 700px) {
+@media (max-width: 920px) {
+  .memories-page:not(.page-view-hide-mobile-bar) .memories-workbench {
+    padding-top: var(--workspace-head-height);
+  }
+
   .memories-workbench {
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: 1fr;
   }
 
   .memories-index {
-    position: static;
+    max-width: none;
   }
 
-  /* On a phone the subjects are one row of chips that scrolls sideways, so the memories start on
-     the first screen. */
-  .memories-index-list {
-    display: flex;
-    gap: 6px;
-    margin-inline: calc(-1 * var(--content-gutter-x));
-    padding: 2px var(--content-gutter-x);
-    overflow-x: auto;
-    scrollbar-width: none;
+  .memories-main {
+    padding: 16px var(--content-gutter-x) var(--content-gutter-y);
   }
 
-  .memories-index-divider,
-  .memories-index-kind,
-  .memories-index-meta {
+  /* The page bar names the subject already. */
+  .memories-subject-title {
     display: none;
-  }
-
-  .memories-index-item {
-    flex: 0 0 auto;
-    grid-template-columns: auto auto;
-    column-gap: 8px;
-    width: auto;
-    padding: 6px 10px;
-    border: 1px solid var(--memories-line);
-    border-radius: 2px;
-    background: var(--bg-2);
-  }
-
-  .memories-index-item.is-active {
-    border-color: color-mix(in srgb, var(--accent-1) 45%, var(--memories-line));
-  }
-
-  .memory-head {
-    grid-template-columns: minmax(0, 1fr) 16px;
-    row-gap: 4px;
-  }
-
-  .memory-head > .memory-visibility {
-    grid-column: 1 / -1;
-  }
-
-  .memory-more {
-    padding: 4px 16px 16px;
   }
 
   .journal-row {
     grid-template-columns: 72px minmax(0, 1fr);
   }
 
-  .journal-row > .journal-audience {
-    grid-column: 2;
-  }
-
+  .journal-row > .journal-audience,
   .journal-row > .journal-copy {
     grid-column: 2;
   }

@@ -629,11 +629,12 @@ Where the code differs from the plan above:
 - **Old cursors.** An old JSONL cursor fails snapshot validation, which makes the stores replay the journal once. No
   translation table was needed.
 - **Closed journals stay readable,** as they were: readers open the database for themselves.
-- **Console page.** Memories and Journal are two tabs. Subjects are listed beside the memories, rules before facts,
-  and each memory leads with its visibility. "Hear as" checks an audience with `GET /memories?hear_as=<audience>`,
-  which returns every memory and the IDs that audience may hear (`CanHear`). A memory's sources open in the Journal
-  tab through `GET /journal/search?ids=…`, and journal events link back to the memories they led to and, for
-  Console chats, to the chat. Group titles are not stored, so a group shows as its conversation key.
+- **Console page.** Laid out as Contacts: the second column lists all memories, the journal and each subject, and
+  the picked one shows beside it, rules before facts, each memory leading with its visibility. The page no longer
+  offers "Hear as"; `GET /memories?hear_as=<audience>` still returns the IDs that audience may hear (`CanHear`).
+  A memory's sources open in the journal through `GET /journal/search?ids=…`, and journal events link back to the
+  memories they led to and, for Console chats, to the chat. Group titles are not stored, so a group shows as its
+  conversation key.
 
 
 ## Tests

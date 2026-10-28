@@ -65,10 +65,9 @@ After 8 finished turns without a save in a direct conversation (20 in a group), 
 
 ## Console
 
-Console > Memories shows everything, including what contacts told the agent in private: it is your agent and your data. It has two tabs.
+Console > Memories shows everything, including what contacts told the agent in private: it is your agent and your data. Like Contacts, it lists what you can open in the second column: all memories, the journal, then each subject.
 
-- **Memories.** The subjects are listed on the left: you, general, each contact and each group. Each subject's rules (feedback, which changes how the agent behaves) come before its facts. Each memory starts with who may hear it (Private, Conversation or Public), and a contact's word about someone else reads as their claim ("Alice says: …"). Open a memory to change who may hear it, edit it, forget it, or see its sources in the journal. Making a memory Public asks first.
-- **Hear as.** Pick a DM or a group, and the memories it may not hear are dimmed. The runtime decides this with the same rule every run uses, so it is what the agent would be told there.
+- **Subjects.** You, general, each contact and each group. Each subject's rules (feedback, which changes how the agent behaves) come before its facts. Each memory starts with who may hear it (Private, Conversation or Public), and a contact's word about someone else reads as their claim ("Alice says: …"). Open a memory to change who may hear it, edit it, forget it, or see its sources in the journal. Making a memory Public asks first.
 - **Journal.** Search what was asked and answered. An event that led to a memory links to it, and an event from a Console chat links to that chat.
 
 A contact's detail shows the memories about them. Deleting a contact deletes the memories about them; what they told the agent about others, and their journal events, stay.

@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  hearAsOptions,
   isClaim,
   journalDays,
   matchesQuery,
@@ -48,11 +47,6 @@ test("subjectsOf can list subjects that have no memories yet", () => {
     ["owner:0", "general:0", "contact:alice:1"],
   );
   assert.deepEqual(subjectsOf([], ["owner"]).map((s) => s.subject), ["owner"]);
-});
-
-test("hearAsOptions lists the owner, then every DM and conversation involved", () => {
-  assert.deepEqual(hearAsOptions(items), ["owner", "contact:alice", "contact:bob", "conversation:tg:-100"]);
-  assert.deepEqual(hearAsOptions([]), ["owner"]);
 });
 
 test("a contact's word about someone else is a claim", () => {
