@@ -110,9 +110,14 @@ cat > "${APP_DIR}/Contents/Info.plist" <<EOF
 EOF
 
 CODESIGN_IDENTITY="${CODESIGN_IDENTITY:-}"
-APPLE_ID="${APPLE_ID:-}"
-APPLE_TEAM_ID="${APPLE_TEAM_ID:-}"
-APPLE_APP_PASSWORD="${APPLE_APP_PASSWORD:-}"
+# Notarization uses an App Store Connect API key (scripts/macos-notarize.sh).
+APPLE_API_KEY_PATH="${APPLE_API_KEY_PATH:-}"
+APPLE_API_KEY_ID="${APPLE_API_KEY_ID:-}"
+APPLE_API_ISSUER_ID="${APPLE_API_ISSUER_ID:-}"
+NOTARIZE=false
+if [[ -n "${CODESIGN_IDENTITY}" && -n "${APPLE_API_KEY_PATH}" && -n "${APPLE_API_KEY_ID}" && -n "${APPLE_API_ISSUER_ID}" ]]; then
+  NOTARIZE=true
+fi
 
 if [[ -n "${CODESIGN_IDENTITY}" ]]; then
   echo "signing with identity: ${CODESIGN_IDENTITY}"
@@ -138,8 +143,8 @@ fi
 echo "verifying app bundle signature..."
 codesign --verify --deep --strict --verbose=2 "${APP_DIR}"
 
-if [[ -n "${CODESIGN_IDENTITY}" && ( -z "${APPLE_ID}" || -z "${APPLE_TEAM_ID}" || -z "${APPLE_APP_PASSWORD}" ) ]]; then
-  echo "skipping notarization because Apple notarization credentials are incomplete"
+if [[ -n "${CODESIGN_IDENTITY}" && "${NOTARIZE}" != "true" ]]; then
+  echo "skipping notarization because the App Store Connect API key settings are incomplete"
 fi
 
 ditto "${APP_DIR}" "${DMG_STAGING_DIR}/${APP_BUNDLE_NAME}.app"
@@ -246,13 +251,8 @@ if [[ -n "${CODESIGN_IDENTITY}" ]]; then
   codesign --verify --verbose=2 "${DMG_PATH}"
 fi
 
-if [[ -n "${CODESIGN_IDENTITY}" && -n "${APPLE_ID}" && -n "${APPLE_TEAM_ID}" && -n "${APPLE_APP_PASSWORD}" ]]; then
-  echo "submitting DMG for notarization..."
-  xcrun notarytool submit "${DMG_PATH}" \
-    --apple-id "${APPLE_ID}" \
-    --team-id "${APPLE_TEAM_ID}" \
-    --password "${APPLE_APP_PASSWORD}" \
-    --wait
+if [[ "${NOTARIZE}" == "true" ]]; then
+  "${ROOT_DIR}/scripts/macos-notarize.sh" "${DMG_PATH}"
   echo "stapling notarization ticket..."
   xcrun stapler staple "${DMG_PATH}"
   xcrun stapler validate "${DMG_PATH}"

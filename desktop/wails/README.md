@@ -131,7 +131,7 @@ The Windows release bundle includes both `MrMorph.exe` and `morph.exe`; keep the
 The Windows release workflow also generates a `.ico` and Windows `.syso` resource on the runner so the published desktop executable carries the app icon.
 The macOS packaging script signs the `.app` bundle in two modes:
 
-- with `CODESIGN_IDENTITY`: Developer ID signing, plus DMG notarization if Apple notarization credentials are also present
+- with `CODESIGN_IDENTITY`: Developer ID signing, plus DMG notarization if `APPLE_API_KEY_PATH`, `APPLE_API_KEY_ID` and `APPLE_API_ISSUER_ID` are also set
 - without `CODESIGN_IDENTITY`: ad hoc signing for local builds or test-user distribution
 
 The DMG opens as a fixed Finder window with a MisterMorph background, the app on the left, and an Applications shortcut on the right. Users install it by dragging the app onto Applications.
@@ -141,11 +141,13 @@ The tag release workflow requires these GitHub Actions secrets for the macOS DMG
 - `APPLE_CERTIFICATE_BASE64`: base64-encoded `.p12` containing the Developer ID Application certificate and private key
 - `APPLE_CERTIFICATE_PASSWORD`: password for that `.p12`
 - `APPLE_CODESIGN_IDENTITY`: full codesign identity, for example `Developer ID Application: Example Inc (TEAMID1234)`
-- `APPLE_ID`: Apple ID used for notarization
-- `APPLE_TEAM_ID`: Apple Developer Team ID
-- `APPLE_APP_PASSWORD`: app-specific password for notarization
+- `APPLE_API_KEY_BASE64`: base64-encoded App Store Connect API key (`.p8`) for notarization
+- `APPLE_API_KEY_ID`: the API key's ID
+- `APPLE_API_ISSUER_ID`: the API key's issuer ID
 
-Create the `.p12` from Keychain Access after installing the Developer ID Application certificate, then base64-encode it before adding it to GitHub Secrets. A tag like `v0.2.42` triggers the release workflow. The macOS job imports the certificate into a temporary keychain, signs the bundled backend, signs the desktop app, creates and signs the DMG, submits the DMG with `notarytool`, staples the notarization ticket to the DMG and `.app`, and uploads the release assets.
+The CLI release job uses the same secrets to sign and notarize the darwin `morph` binaries. See `docs/os_signing.md`.
+
+Create the `.p12` from Keychain Access after installing the Developer ID Application certificate, then base64-encode it before adding it to GitHub Secrets. A tag like `v0.2.42` triggers the release workflow. The macOS job imports the certificate into a temporary keychain (`scripts/macos-signing-setup.sh`), signs the bundled backend, signs the desktop app, creates and signs the DMG, submits the DMG with `notarytool`, staples the notarization ticket to the DMG and `.app`, and uploads the release assets.
 
 The ad hoc path is still available for local test packages. Test users may need to manually bypass Gatekeeper on first launch.
 

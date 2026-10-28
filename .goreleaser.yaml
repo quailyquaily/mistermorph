@@ -20,6 +20,11 @@ builds:
       - arm64
     ldflags:
       - -s -w -X main.version={{ .Version }} -X main.commit={{ .Commit }} -X main.date={{ .Date }}
+    hooks:
+      post:
+        # Signs and notarizes darwin binaries before they are archived (macOS runner only).
+        - cmd: ./scripts/macos-sign-cli.sh "{{ .Path }}" "{{ .Target }}"
+          output: true
 
 archives:
   - id: default
