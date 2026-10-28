@@ -1,4 +1,4 @@
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { storeToRefs } from "pinia";
 import "./MemoriesView.css";
@@ -7,11 +7,9 @@ import AppNotice from "../components/AppNotice";
 import AppPage from "../components/AppPage";
 import AppSection from "../components/AppSection";
 import AppSkeleton from "../components/AppSkeleton";
-import AppTabs from "../components/AppTabs";
 import { currentLocale, endpointState, formatShortTime, runtimeApiFetch, translate } from "../core/context";
 import { endpointRoutePath } from "../core/endpoint-routes";
 import {
-  hearAsOptions,
   isClaim,
   isRule,
   journalDays,
@@ -26,11 +24,12 @@ import { useContactsStore } from "../stores/contactsStore";
 const VISIBILITIES = ["private", "conversation", "public"];
 const TYPES = ["person", "feedback", "context", "reference"];
 
-// The page has two tabs. Memories: subjects on the left, then each subject's rules and facts, with
-// who may hear each one up front; "Hear as" dims what a chosen DM or group may not hear, as the
-// runtime decides it. Journal: the raw record, searched, or the events a memory came from.
+// Laid out as Contacts and TODO are: the subjects in the second column, under the page title, and
+// what is picked beside them. A subject shows its rules and facts, with who may hear each one up
+// front; Journal, last in the list, is the raw record, searched, or the events a memory came from.
+// On a phone the list and the picked view take turns, with a back button.
 export default {
-  components: { AppDialogShell, AppNotice, AppPage, AppSection, AppSkeleton, AppTabs },
+  components: { AppDialogShell, AppNotice, AppPage, AppSection, AppSkeleton },
   setup() {
     const t = translate;
     const route = useRoute();
@@ -44,9 +43,6 @@ export default {
     const subject = ref(String(route.query.subject || ""));
     const expanded = ref("");
 
-    const hearAs = ref("owner");
-    const heard = ref(null);
-
     const editTarget = ref(null);
     const draft = ref({ type: "", description: "", body: "", visibility: "" });
     const saving = ref(false);
@@ -56,12 +52,40 @@ export default {
     const publicTarget = ref("");
     const visibilityBusy = ref("");
 
-    const tabs = computed(() => [
-      { id: "memories", title: t("memories_tab_memories") },
-      { id: "journal", title: t("memories_tab_journal") },
-    ]);
-    const tab = ref(tabs.value[0]);
-    const onJournal = computed(() => tab.value?.id === "journal");
+    const view = ref("memories");
+    const onJournal = computed(() => view.value === "journal");
+
+    const isMobile = ref(false);
+    const mobileDetailVisible = ref(false);
+    const showIndexPane = computed(() => !isMobile.value || !mobileDetailVisible.value);
+    const showMainPane = computed(() => !isMobile.value || mobileDetailVisible.value);
+    const mobileShowBack = computed(() => isMobile.value && mobileDetailVisible.value);
+    const mobileBarTitle = computed(() => {
+      if (!mobileShowBack.value) return t("memories_title");
+      if (onJournal.value) return t("memories_tab_journal");
+      return subject.value ? subjectTitle(subject.value) : t("memories_all_subjects");
+    });
+    const pageClass = computed(() => (isMobile.value ? "memories-page memories-page-mobile-split" : "memories-page"));
+
+    function refreshMobileMode() {
+      isMobile.value = typeof window !== "undefined" && window.innerWidth <= 920;
+      if (!isMobile.value) mobileDetailVisible.value = false;
+    }
+
+    function showIndexView() {
+      mobileDetailVisible.value = false;
+    }
+
+    function pickSubject(value) {
+      view.value = "memories";
+      subject.value = value;
+      mobileDetailVisible.value = true;
+    }
+
+    function pickJournal() {
+      view.value = "journal";
+      mobileDetailVisible.value = true;
+    }
 
     const journalQuery = ref("");
     const journalSince = ref("");
@@ -146,7 +170,6 @@ export default {
     const filtered = computed(() =>
       items.value.filter((item) => matchesQuery(item, query.value, [subjectTitle(item.subject), contactName(item.told_by || "")]))
     );
-    const isHeard = (item) => !heard.value || heard.value.has(item.id);
 
     const indexItems = computed(() => {
       const all = filtered.value;
@@ -163,7 +186,6 @@ export default {
         const group = row.kind === "owner" || row.kind === "general" ? "owner" : row.kind === "contact" ? "contacts" : row.kind === "conversation" ? "groups" : "";
         const divider = group && group !== lastGroup ? t(`memories_index_${group}`) : "";
         if (group) lastGroup = group;
-        const heardCount = row.list.filter(isHeard).length;
         return {
           key: row.subject || "all",
           subject: row.subject,
@@ -171,7 +193,7 @@ export default {
           divider,
           title: subjectTitle(row.subject),
           meta: subjectMeta(row.subject),
-          count: heard.value ? `${heardCount}/${row.list.length}` : String(row.list.length),
+          count: String(row.list.length),
           active: row.subject === subject.value,
         };
       });
@@ -191,23 +213,6 @@ export default {
     );
     const filterActive = computed(() => Boolean(query.value.trim() || subject.value));
 
-    const hearAsItems = computed(() =>
-      hearAsOptions(items.value).map((value) => ({
-        id: value,
-        value,
-        title: value === "owner" ? t("memories_subject_owner") : audienceLabel(value),
-      }))
-    );
-    const selectedHearAs = computed(() => hearAsItems.value.find((item) => item.value === hearAs.value) || hearAsItems.value[0]);
-    const hearSummary = computed(() => {
-      if (!heard.value) return t("memories_hear_summary_owner");
-      return t("memories_hear_summary", {
-        where: selectedHearAs.value?.title || hearAs.value,
-        heard: items.value.filter(isHeard).length,
-        total: items.value.length,
-      });
-    });
-
     const typeOptions = computed(() => TYPES.map((value) => ({ id: value, title: t(`memories_type_${value}`), value })));
     const visibilityOptions = computed(() => VISIBILITIES.map((value) => ({ id: value, title: t(`memories_visibility_${value}`), value })));
     const editValid = computed(() => draft.value.description.trim() !== "" && !/[\r\n]/.test(draft.value.description) && draft.value.body.trim() !== "");
@@ -220,10 +225,8 @@ export default {
       loading.value = true;
       err.value = "";
       try {
-        const params = hearAs.value && hearAs.value !== "owner" ? `?hear_as=${encodeURIComponent(hearAs.value)}` : "";
-        const data = await runtimeApiFetch(`/memories${params}`);
+        const data = await runtimeApiFetch("/memories");
         items.value = Array.isArray(data?.items) ? data.items : [];
-        heard.value = Array.isArray(data?.heard) ? new Set(data.heard) : null;
       } catch (e) {
         err.value = e.message || t("msg_load_failed");
       } finally {
@@ -232,11 +235,6 @@ export default {
       }
       // Names for contact subjects; the page works without them.
       contactsStore.load({ endpointRef: endpointState.selectedRef }).catch(() => {});
-    }
-
-    function pickHearAs(item) {
-      hearAs.value = item?.value || "owner";
-      load();
     }
 
     function toggle(item) {
@@ -261,8 +259,6 @@ export default {
       try {
         const data = await runtimeApiFetch("/memories", { method: "PUT", body: { id: item.id, visibility } });
         replaceItem(data?.item);
-        // What an audience hears changed with it.
-        if (heard.value) await load();
       } catch (e) {
         err.value = e.message || t("msg_save_failed");
       } finally {
@@ -292,7 +288,6 @@ export default {
         });
         replaceItem(data?.item);
         editTarget.value = null;
-        if (heard.value) await load();
       } catch (e) {
         editErr.value = e.message || t("msg_save_failed");
       } finally {
@@ -364,14 +359,14 @@ export default {
       const ids = Array.isArray(item.source_events) ? item.source_events : [];
       if (!ids.length) return;
       sourcesOf.value = item;
-      tab.value = tabs.value[1];
+      view.value = "journal";
       fetchJournal(new URLSearchParams({ ids: ids.join(",") }));
     }
 
     function backToMemory() {
       const item = sourcesOf.value;
       sourcesOf.value = null;
-      tab.value = tabs.value[0];
+      view.value = "memories";
       if (item) {
         subject.value = item.subject;
         expanded.value = item.id;
@@ -394,7 +389,7 @@ export default {
     });
 
     function openMemory(item) {
-      tab.value = tabs.value[0];
+      view.value = "memories";
       sourcesOf.value = null;
       subject.value = item.subject;
       expanded.value = item.id;
@@ -428,58 +423,77 @@ export default {
       subject.value = "";
     }
 
-    onMounted(load);
-    watch(() => endpointState.selectedRef, () => {
-      hearAs.value = "owner";
+    onMounted(() => {
+      refreshMobileMode();
+      // A link to one subject opens on it, on a phone too.
+      if (route.query.subject) mobileDetailVisible.value = true;
+      window.addEventListener("resize", refreshMobileMode);
       load();
     });
+    onUnmounted(() => window.removeEventListener("resize", refreshMobileMode));
+    watch(() => endpointState.selectedRef, load);
     watch(() => route.query.subject, (value) => {
-      subject.value = String(value || "");
+      if (value) pickSubject(String(value));
+      else subject.value = "";
     });
 
     return {
-      t, err, loading, loaded, items, query, subject, expanded, tabs, tab, onJournal,
-      indexItems, sections, filterActive, hearAsItems, selectedHearAs, hearSummary,
+      t, err, loading, loaded, items, query, subject, expanded, onJournal,
+      showIndexPane, showMainPane, mobileShowBack, mobileBarTitle, pageClass, showIndexView, pickSubject, pickJournal,
+      indexItems, sections, filterActive,
       editTarget, draft, saving, editErr, editValid, typeOptions, visibilityOptions, publicTarget, visibilityBusy,
       deleteDialogOpen, deleteDialogText, deleteDialogActions,
       journalQuery, journalSince, journalLoading, journalMore, journalSearched, sourcesOf, days,
-      VISIBILITIES, countText, subjectTitle, subjectLine, learnedText, contactName, isClaim, isHeard, sourceLabel, formatShortTime,
-      pickHearAs, toggle, setVisibility, startEdit, closeEdit, saveEdit, confirmDelete,
+      VISIBILITIES, countText, subjectTitle, subjectLine, learnedText, contactName, isClaim, sourceLabel, formatShortTime,
+      toggle, setVisibility, startEdit, closeEdit, saveEdit, confirmDelete,
       searchJournal, showSources, backToMemory, clearSources, openMemory, clearFilters,
     };
   },
   template: `
-    <AppPage :title="t('memories_title')" class="memories-page" :error="err">
-      <template #actions>
-        <AppTabs :tabs="tabs" v-model="tab" :ariaLabel="t('memories_title')" />
+    <AppPage
+      :title="t('memories_title')"
+      :class="pageClass"
+      :hideDesktopBar="true"
+      :hideMobileBar="showIndexPane"
+      :overlayBar="true"
+    >
+      <template #leading>
+        <div class="memories-page-bar">
+          <AppButton
+            v-if="mobileShowBack"
+            class="plain xs icon memories-page-bar-back"
+            :title="t('memories_title')"
+            :aria-label="t('memories_title')"
+            @click="showIndexView"
+          >
+            <PhArrowLeft class="icon" />
+          </AppButton>
+          <h2 class="page-title page-bar-title workspace-section-title">{{ mobileBarTitle }}</h2>
+        </div>
       </template>
 
-      <template v-if="!onJournal">
-        <div class="memories-hear">
-          <span class="memories-label"><span class="memories-bracket" aria-hidden="true">[</span>{{ t("memories_hear_as") }}<span class="memories-bracket" aria-hidden="true">]</span></span>
-          <div class="memories-hear-menu">
-            <AppDropdownMenu class="sm" :key="selectedHearAs?.value" :items="hearAsItems" :initialItem="selectedHearAs" @change="pickHearAs">
-              <span class="memories-filter-value">{{ selectedHearAs?.title }}</span>
-            </AppDropdownMenu>
+      <div class="memories-workbench">
+        <aside v-if="showIndexPane" class="memories-index workspace-sidebar-section" :aria-label="t('memories_index_label')">
+          <div class="memories-index-head workspace-sidebar-head">
+            <h3 class="memories-index-title workspace-section-title">{{ t("memories_title") }}</h3>
           </div>
-          <p class="memories-hear-summary">{{ hearSummary }}</p>
-        </div>
 
-        <AppSkeleton v-if="loading && !loaded" variant="card" height="96px" :count="3" />
-        <div v-else class="memories-workbench">
-          <aside class="memories-index" :aria-label="t('memories_index_label')">
-            <div class="memories-search">
-              <PhMagnifyingGlass class="icon memories-search-icon" aria-hidden="true" />
-              <input v-model="query" type="search" class="memories-query is-xs" :placeholder="t('memories_search')" :aria-label="t('memories_search')" />
+          <div v-scroll-edges class="memories-index-body">
+            <div class="memories-index-filter">
+              <AppInput v-model="query" class="xs memories-filter-input" :placeholder="t('memories_search')" :aria-label="t('memories_search')" />
             </div>
-            <div class="memories-index-list">
+
+            <div v-if="loading && !loaded" class="memories-index-loading" aria-hidden="true">
+              <AppSkeleton variant="card" height="52px" :count="4" />
+            </div>
+            <div v-else v-sliding-selection class="memories-index-list workspace-sidebar-list">
               <template v-for="row in indexItems" :key="row.key">
                 <span v-if="row.divider" class="memories-index-divider">{{ row.divider }}</span>
                 <button
                   type="button"
-                  :class="['memories-index-item', { 'is-active': row.active }]"
-                  :aria-current="row.active ? 'true' : undefined"
-                  @click="subject = row.subject"
+                  :class="['memories-index-item', 'workspace-sidebar-item', { 'is-active': !onJournal && row.active }]"
+                  :aria-current="!onJournal && row.active ? 'true' : undefined"
+                  @click="pickSubject(row.subject)"
                 >
                   <span class="memories-index-kind" aria-hidden="true">
                     <PhListBullets v-if="row.kind === 'all'" class="icon" />
@@ -487,158 +501,176 @@ export default {
                     <PhHash v-else-if="row.kind === 'conversation'" class="icon" />
                     <PhUserCircle v-else class="icon" />
                   </span>
-                  <span class="memories-index-copy">
-                    <span class="memories-index-title">{{ row.title }}</span>
-                    <span class="memories-index-meta">{{ row.meta }}</span>
+                  <span class="workspace-sidebar-item-copy">
+                    <span class="workspace-sidebar-item-title">{{ row.title }}</span>
+                    <span class="workspace-sidebar-item-meta">{{ row.meta }}</span>
                   </span>
                   <span class="memories-index-count">{{ row.count }}</span>
                 </button>
+                <button
+                  v-if="row.kind === 'all'"
+                  type="button"
+                  :class="['memories-index-item', 'workspace-sidebar-item', { 'is-active': onJournal }]"
+                  :aria-current="onJournal ? 'true' : undefined"
+                  @click="pickJournal"
+                >
+                  <span class="memories-index-kind" aria-hidden="true"><PhClockCounterClockwise class="icon" /></span>
+                  <span class="workspace-sidebar-item-copy">
+                    <span class="workspace-sidebar-item-title">{{ t("memories_tab_journal") }}</span>
+                    <span class="workspace-sidebar-item-meta">{{ t("memories_journal_item_meta") }}</span>
+                  </span>
+                </button>
               </template>
             </div>
-          </aside>
+          </div>
+        </aside>
 
-          <div class="memories-main">
-            <header class="memories-subject">
-              <h2 class="memories-subject-title">{{ subject ? subjectTitle(subject) : t("memories_all_subjects") }}</h2>
-              <p class="memories-subject-line">{{ subjectLine(subject) }}</p>
-            </header>
+        <div v-if="showMainPane" v-scroll-edges class="memories-main">
+          <AppNotice v-if="err" type="error" :text="err" />
+          <template v-if="!onJournal">
+            <AppSkeleton v-if="loading && !loaded" variant="card" height="96px" :count="3" />
+            <template v-else>
+              <header class="memories-subject">
+                <h2 class="memories-subject-title">{{ subject ? subjectTitle(subject) : t("memories_all_subjects") }}</h2>
+                <p class="memories-subject-line">{{ subjectLine(subject) }}</p>
+              </header>
 
-            <div v-if="!items.length" class="memories-empty">
-              <PhBrain class="icon memories-empty-icon" aria-hidden="true" />
-              <p>{{ t("memories_empty") }}</p>
-            </div>
-            <div v-else-if="!sections.length" class="memories-empty is-compact">
-              <p>{{ t("memories_no_match") }}</p>
-              <AppButton v-if="filterActive" class="outlined sm" @click="clearFilters">{{ t("logs_clear_filters") }}</AppButton>
-            </div>
+              <div v-if="!items.length" class="memories-empty">
+                <PhBrain class="icon memories-empty-icon" aria-hidden="true" />
+                <p>{{ t("memories_empty") }}</p>
+              </div>
+              <div v-else-if="!sections.length" class="memories-empty is-compact">
+                <p>{{ t("memories_no_match") }}</p>
+                <AppButton v-if="filterActive" class="outlined sm" @click="clearFilters">{{ t("logs_clear_filters") }}</AppButton>
+              </div>
 
-            <AppSection
-              v-for="section in sections"
-              :key="section.key"
-              variant="boxed"
-              :class="['memories-section', 'is-list', { 'is-literal': section.literal }]"
-              :title="section.title"
-              :meta="section.meta"
-              :level="3"
-            >
-              <ul class="memory-list">
-                <li
-                  v-for="item in section.items"
-                  :key="item.id"
-                  :class="['memory-row', { 'is-open': expanded === item.id, 'is-unheard': !isHeard(item) }]"
-                >
-                  <button type="button" class="memory-head" :aria-expanded="expanded === item.id" @click="toggle(item)">
-                    <span :class="['memory-visibility', 'is-' + item.visibility]">
-                      <span class="memory-visibility-mark" aria-hidden="true"></span>
-                      <span><span class="memories-bracket" aria-hidden="true">[</span>{{ t("memories_visibility_" + item.visibility) }}<span class="memories-bracket" aria-hidden="true">]</span></span>
-                    </span>
-                    <span class="memory-copy">
-                      <span class="memory-title">{{ item.description }}</span>
-                      <span :class="['memory-body', { 'is-clamped': expanded !== item.id }]"><span v-if="isClaim(item)" class="memory-claim">{{ t("memories_says", { value: contactName(item.told_by) }) }}</span>{{ item.body }}</span>
-                      <span class="memory-meta">
-                        <span>{{ t("memories_type_" + item.type) }}</span>
-                        <span>{{ learnedText(item) }}</span>
-                        <time :datetime="item.updated_at">{{ formatShortTime(item.updated_at) }}</time>
-                        <span v-if="!isHeard(item)" class="memory-unheard">{{ t("memories_not_heard") }}</span>
+              <AppSection
+                v-for="section in sections"
+                :key="section.key"
+                variant="boxed"
+                :class="['memories-section', 'is-list', { 'is-literal': section.literal }]"
+                :title="section.title"
+                :meta="section.meta"
+                :level="3"
+              >
+                <ul class="memory-list">
+                  <li
+                    v-for="item in section.items"
+                    :key="item.id"
+                    :class="['memory-row', { 'is-open': expanded === item.id }]"
+                  >
+                    <button type="button" class="memory-head" :aria-expanded="expanded === item.id" @click="toggle(item)">
+                      <span :class="['memory-visibility', 'is-' + item.visibility]">
+                        <span class="memory-visibility-mark" aria-hidden="true"></span>
+                        <span>{{ t("memories_visibility_" + item.visibility) }}</span>
                       </span>
-                    </span>
-                    <PhCaretDown class="icon memory-caret" aria-hidden="true" />
-                  </button>
+                      <span class="memory-copy">
+                        <span class="memory-title">{{ item.description }}</span>
+                        <span :class="['memory-body', { 'is-clamped': expanded !== item.id }]"><span v-if="isClaim(item)" class="memory-claim">{{ t("memories_says", { value: contactName(item.told_by) }) }}</span>{{ item.body }}</span>
+                        <span class="memory-meta">
+                          <span>{{ t("memories_type_" + item.type) }}</span>
+                          <span>{{ learnedText(item) }}</span>
+                          <time :datetime="item.updated_at">{{ formatShortTime(item.updated_at) }}</time>
+                        </span>
+                      </span>
+                      <PhCaretDown class="icon memory-caret" aria-hidden="true" />
+                    </button>
 
-                  <div v-if="expanded === item.id" class="memory-more">
-                    <div class="memory-more-row">
-                      <span class="memories-label is-quiet">{{ t("memories_who_may_hear") }}</span>
-                      <div class="memory-visibility-switch" role="group" :aria-label="t('memories_field_visibility')">
-                        <button
-                          v-for="value in VISIBILITIES"
-                          :key="value"
-                          type="button"
-                          :class="['is-' + value, { 'is-active': item.visibility === value }]"
-                          :aria-pressed="item.visibility === value"
-                          :disabled="visibilityBusy === item.id"
-                          @click="setVisibility(item, value)"
-                        >
-                          <span class="memory-visibility-mark" aria-hidden="true"></span>{{ t("memories_visibility_" + value) }}
-                        </button>
+                    <div v-if="expanded === item.id" class="memory-more">
+                      <div class="memory-more-row">
+                        <span class="memories-label is-quiet">{{ t("memories_who_may_hear") }}</span>
+                        <div class="memory-visibility-switch" role="group" :aria-label="t('memories_field_visibility')">
+                          <button
+                            v-for="value in VISIBILITIES"
+                            :key="value"
+                            type="button"
+                            :class="['is-' + value, { 'is-active': item.visibility === value }]"
+                            :aria-pressed="item.visibility === value"
+                            :disabled="visibilityBusy === item.id"
+                            @click="setVisibility(item, value)"
+                          >
+                            <span class="memory-visibility-mark" aria-hidden="true"></span>{{ t("memories_visibility_" + value) }}
+                          </button>
+                        </div>
+                        <span class="memory-more-hint">{{ t("memories_visibility_hint_" + item.visibility) }}</span>
                       </div>
-                      <span class="memory-more-hint">{{ t("memories_visibility_hint_" + item.visibility) }}</span>
-                    </div>
 
-                    <div v-if="publicTarget === item.id" class="memory-confirm" role="alertdialog" :aria-label="t('memories_make_public')">
-                      <span class="memory-confirm-mark" aria-hidden="true"></span>
-                      <span class="memory-confirm-label"><span class="memories-bracket" aria-hidden="true">[</span>{{ t("memories_visibility_public") }}<span class="memories-bracket" aria-hidden="true">]</span></span>
-                      <span class="memory-confirm-text">
-                        {{ t("memories_public_confirm") }}
-                        <template v-if="item.told_by">{{ t("memories_public_confirm_told", { value: contactName(item.told_by) }) }}</template>
-                      </span>
-                      <AppButton class="outlined sm" @click="publicTarget = ''">{{ t("action_cancel") }}</AppButton>
-                      <AppButton class="primary sm" @click="setVisibility(item, 'public')">{{ t("memories_make_public") }}</AppButton>
-                    </div>
+                      <div v-if="publicTarget === item.id" class="memory-confirm" role="alertdialog" :aria-label="t('memories_make_public')">
+                        <span class="memory-confirm-mark" aria-hidden="true"></span>
+                        <span class="memory-confirm-label"><span class="memories-bracket" aria-hidden="true">[</span>{{ t("memories_visibility_public") }}<span class="memories-bracket" aria-hidden="true">]</span></span>
+                        <span class="memory-confirm-text">
+                          {{ t("memories_public_confirm") }}
+                          <template v-if="item.told_by">{{ t("memories_public_confirm_told", { value: contactName(item.told_by) }) }}</template>
+                        </span>
+                        <AppButton class="outlined sm" @click="publicTarget = ''">{{ t("action_cancel") }}</AppButton>
+                        <AppButton class="primary sm" @click="setVisibility(item, 'public')">{{ t("memories_make_public") }}</AppButton>
+                      </div>
 
-                    <div class="memory-actions">
-                      <AppButton class="outlined sm" :disabled="!(item.source_events || []).length" @click="showSources(item)">
-                        <PhListMagnifyingGlass class="icon" aria-hidden="true" />{{ sourceLabel(item) }}
-                      </AppButton>
-                      <AppButton class="outlined sm" @click="startEdit(item)">{{ t("action_edit") }}</AppButton>
-                      <AppButton class="plain sm memory-forget" @click="confirmDelete(item)">{{ t("memories_forget") }}</AppButton>
-                      <code class="memory-name">{{ item.subject }}/{{ item.name }}</code>
+                      <div class="memory-actions">
+                        <AppButton class="outlined sm" :disabled="!(item.source_events || []).length" @click="showSources(item)">
+                          <PhListMagnifyingGlass class="icon" aria-hidden="true" />{{ sourceLabel(item) }}
+                        </AppButton>
+                        <AppButton class="outlined sm" @click="startEdit(item)">{{ t("action_edit") }}</AppButton>
+                        <AppButton class="plain sm memory-forget" @click="confirmDelete(item)">{{ t("memories_forget") }}</AppButton>
+                        <code class="memory-name">{{ item.subject }}/{{ item.name }}</code>
+                      </div>
+                    </div>
+                  </li>
+                </ul>
+              </AppSection>
+            </template>
+          </template>
+
+          <template v-else>
+            <form class="memories-toolbar" @submit.prevent="searchJournal">
+              <div class="memories-search is-wide">
+                <PhMagnifyingGlass class="icon memories-search-icon" aria-hidden="true" />
+                <input v-model="journalQuery" type="search" class="memories-query" :placeholder="t('memories_journal_search')" :aria-label="t('memories_journal_search')" />
+              </div>
+              <input v-model="journalSince" type="date" class="memories-query memories-since" :aria-label="t('memories_journal_since')" :title="t('memories_journal_since')" />
+              <AppButton class="outlined" type="submit" :loading="journalLoading">{{ t("memories_journal_go") }}</AppButton>
+            </form>
+
+            <div v-if="sourcesOf" class="memory-confirm is-sources">
+              <span class="memory-confirm-mark" aria-hidden="true"></span>
+              <span class="memory-confirm-label"><span class="memories-bracket" aria-hidden="true">[</span>{{ t("memories_sources_title") }}<span class="memories-bracket" aria-hidden="true">]</span></span>
+              <span class="memory-confirm-text">{{ t("memories_sources_for", { value: sourcesOf.description }) }}</span>
+              <AppButton class="outlined sm" @click="backToMemory">{{ t("memories_back_to_memory") }}</AppButton>
+              <AppButton class="plain sm" @click="clearSources">{{ t("memories_show_all") }}</AppButton>
+            </div>
+
+            <p v-if="!journalSearched" class="memories-note">{{ t("memories_journal_meta") }}</p>
+            <div v-else-if="!days.length" class="memories-empty is-compact"><p>{{ t("memories_journal_empty") }}</p></div>
+            <AppSection
+              v-for="day in days"
+              :key="day.label"
+              variant="boxed"
+              class="memories-section is-list"
+              :title="day.label"
+              :meta="countText('memories_count_event', day.events.length)"
+              :level="2"
+            >
+              <ol class="memory-list">
+                <li v-for="event in day.events" :key="event.seq" :class="['journal-row', { 'is-source': sourcesOf }]">
+                  <time class="journal-time" :datetime="event.time">{{ event.clock }}</time>
+                  <span :class="['journal-audience', 'is-' + (event.audienceKind || 'owner')]"><span class="journal-audience-mark" aria-hidden="true"></span>{{ event.audienceText }}</span>
+                  <div class="journal-copy">
+                    <p class="journal-text">{{ event.text || t("memories_journal_no_text") }}</p>
+                    <div class="journal-links">
+                      <RouterLink v-if="event.chatPath" :to="event.chatPath" class="journal-task">{{ event.trace?.task_id || t("memories_open_chat") }} ↗</RouterLink>
+                      <code v-else-if="event.trace?.task_id" class="journal-task">{{ event.trace.task_id }}</code>
+                      <button v-if="event.memory" type="button" class="journal-memory" @click="openMemory(event.memory)">
+                        {{ t("memories_remembered_as", { value: event.memory.description }) }}
+                      </button>
                     </div>
                   </div>
                 </li>
-              </ul>
+              </ol>
             </AppSection>
-          </div>
+            <p v-if="journalMore" class="memories-note">{{ t("memories_journal_more") }}</p>
+          </template>
         </div>
-      </template>
-
-      <template v-else>
-        <form class="memories-toolbar" @submit.prevent="searchJournal">
-          <div class="memories-search is-wide">
-            <PhMagnifyingGlass class="icon memories-search-icon" aria-hidden="true" />
-            <input v-model="journalQuery" type="search" class="memories-query" :placeholder="t('memories_journal_search')" :aria-label="t('memories_journal_search')" />
-          </div>
-          <input v-model="journalSince" type="date" class="memories-query memories-since" :aria-label="t('memories_journal_since')" :title="t('memories_journal_since')" />
-          <AppButton class="outlined" type="submit" :loading="journalLoading">{{ t("memories_journal_go") }}</AppButton>
-        </form>
-
-        <div v-if="sourcesOf" class="memory-confirm is-sources">
-          <span class="memory-confirm-mark" aria-hidden="true"></span>
-          <span class="memory-confirm-label"><span class="memories-bracket" aria-hidden="true">[</span>{{ t("memories_sources_title") }}<span class="memories-bracket" aria-hidden="true">]</span></span>
-          <span class="memory-confirm-text">{{ t("memories_sources_for", { value: sourcesOf.description }) }}</span>
-          <AppButton class="outlined sm" @click="backToMemory">{{ t("memories_back_to_memory") }}</AppButton>
-          <AppButton class="plain sm" @click="clearSources">{{ t("memories_show_all") }}</AppButton>
-        </div>
-
-        <p v-if="!journalSearched" class="memories-note">{{ t("memories_journal_meta") }}</p>
-        <div v-else-if="!days.length" class="memories-empty is-compact"><p>{{ t("memories_journal_empty") }}</p></div>
-        <AppSection
-          v-for="day in days"
-          :key="day.label"
-          variant="boxed"
-          class="memories-section is-list"
-          :title="day.label"
-          :meta="countText('memories_count_event', day.events.length)"
-          :level="2"
-        >
-          <ol class="memory-list">
-            <li v-for="event in day.events" :key="event.seq" :class="['journal-row', { 'is-source': sourcesOf }]">
-              <time class="journal-time" :datetime="event.time">{{ event.clock }}</time>
-              <span :class="['journal-audience', 'is-' + (event.audienceKind || 'owner')]"><span class="journal-audience-mark" aria-hidden="true"></span>{{ event.audienceText }}</span>
-              <div class="journal-copy">
-                <p class="journal-text">{{ event.text || t("memories_journal_no_text") }}</p>
-                <div class="journal-links">
-                  <RouterLink v-if="event.chatPath" :to="event.chatPath" class="journal-task">{{ event.trace?.task_id || t("memories_open_chat") }} ↗</RouterLink>
-                  <code v-else-if="event.trace?.task_id" class="journal-task">{{ event.trace.task_id }}</code>
-                  <button v-if="event.memory" type="button" class="journal-memory" @click="openMemory(event.memory)">
-                    {{ t("memories_remembered_as", { value: event.memory.description }) }}
-                  </button>
-                </div>
-              </div>
-            </li>
-          </ol>
-        </AppSection>
-        <p v-if="journalMore" class="memories-note">{{ t("memories_journal_more") }}</p>
-      </template>
+      </div>
 
       <AppDialogShell
         :modelValue="Boolean(editTarget)"

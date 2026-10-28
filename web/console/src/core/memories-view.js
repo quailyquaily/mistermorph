@@ -46,19 +46,6 @@ function subjectsOf(items, always = []) {
     .map((subject) => ({ subject, kind: subjectKind(subject), count: counts.get(subject) }));
 }
 
-// hearAsOptions lists the audiences worth checking: every DM and conversation the memories are
-// about, were learned in or were told in, after the owner.
-function hearAsOptions(items) {
-  const seen = new Set();
-  for (const item of items || []) {
-    for (const value of [item?.subject, item?.learned_in, item?.told_by ? `contact:${item.told_by}` : ""]) {
-      const kind = subjectKind(value);
-      if ((kind === "contact" || kind === "conversation") && subjectID(value)) seen.add(value);
-    }
-  }
-  return ["owner", ...Array.from(seen).sort(compareSubjects)];
-}
-
 // isClaim: a memory a contact told about someone else is that contact's claim, not a known fact.
 function isClaim(memory) {
   const toldBy = String(memory?.told_by || "");
@@ -111,7 +98,6 @@ function journalDays(events, dayOf) {
 }
 
 export {
-  hearAsOptions,
   isClaim,
   isRule,
   journalDays,
