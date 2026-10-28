@@ -151,12 +151,23 @@ ditto "${APP_DIR}" "${DMG_STAGING_DIR}/${APP_BUNDLE_NAME}.app"
 ln -s "/Applications" "${DMG_STAGING_DIR}/Applications"
 cp "${DMG_BACKGROUND_SOURCE}" "${DMG_STAGING_DIR}/.background/background.png"
 
-hdiutil create \
-	-volname "${DMG_VOLUME_NAME}" \
-	-srcfolder "${DMG_STAGING_DIR}" \
-	-ov \
-	-format UDRW \
-	"${RW_DMG_PATH}" >/dev/null
+# hdiutil create sometimes fails with "Resource busy" on CI runners; it passes on a retry.
+for attempt in 1 2 3 4 5; do
+	if hdiutil create \
+		-volname "${DMG_VOLUME_NAME}" \
+		-srcfolder "${DMG_STAGING_DIR}" \
+		-ov \
+		-format UDRW \
+		"${RW_DMG_PATH}" >/dev/null; then
+		break
+	fi
+	if (( attempt == 5 )); then
+		echo "hdiutil create failed after ${attempt} attempts" >&2
+		exit 1
+	fi
+	echo "hdiutil create failed (attempt ${attempt}); retrying in $(( attempt * 5 ))s..." >&2
+	sleep $(( attempt * 5 ))
+done
 
 hdiutil attach \
 	-readwrite \
