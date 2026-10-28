@@ -29,8 +29,48 @@ env:
   AWS_DEFAULT_REGION: auto
 
 jobs:
-  goreleaser:
+  test:
     runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 12.3.4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web/console/pnpm-lock.yaml
+
+      - name: Install frontend deps
+        run: pnpm --dir web/console install --frozen-lockfile
+
+      - name: Build frontend
+        run: pnpm --dir web/console exec vite build --config "${CONSOLE_VITE_CONFIG}"
+
+      - name: Stage console assets
+        shell: bash
+        run: ./scripts/stage-console-assets.sh
+
+      - name: Run tests
+        run: go test -tags "${GO_BUILD_TAGS}" ./...
+
+  goreleaser:
+    # macOS, so the darwin CLI binaries can be signed and notarized as they are built
+    # (scripts/macos-sign-cli.sh, a GoReleaser post-build hook).
+    needs: test
+    runs-on: macos-14
 
     steps:
       - name: Checkout
@@ -65,8 +105,17 @@ jobs:
         shell: bash
         run: ./scripts/stage-console-assets.sh
 
-      - name: Run tests
-        run: go test -tags "${GO_BUILD_TAGS}" ./...
+      - name: Set up macOS signing
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        env:
+          APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_CODESIGN_IDENTITY: ${{ secrets.APPLE_CODESIGN_IDENTITY }}
+          APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+        run: ./scripts/macos-signing-setup.sh
 
       - name: Validate R2 settings
         if: startsWith(github.ref, 'refs/tags/')
@@ -103,6 +152,7 @@ jobs:
           args: release --clean --config ${{ env.GORELEASER_CONFIG }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REQUIRE_MACOS_SIGNING: "true"
 
       - name: Upload CLI release files to R2
         if: startsWith(github.ref, 'refs/tags/')
@@ -223,57 +273,17 @@ jobs:
           CGO_ENABLED=0 GOOS="${{ matrix.goos }}" GOARCH="${{ matrix.goarch }}" \
             go build -trimpath -tags "${GO_BUILD_TAGS}" -ldflags "-s -w" -o "${{ matrix.bundled_backend_binary }}" ./cmd/mistermorph
 
-      - name: Validate macOS signing secrets
+      - name: Set up macOS signing
         if: matrix.package_kind == 'dmg'
         shell: bash
         env:
           APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_CODESIGN_IDENTITY: ${{ secrets.APPLE_CODESIGN_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
-        run: |
-          missing=()
-          for name in \
-            APPLE_CERTIFICATE_BASE64 \
-            APPLE_CERTIFICATE_PASSWORD \
-            APPLE_CODESIGN_IDENTITY \
-            APPLE_ID \
-            APPLE_TEAM_ID \
-            APPLE_APP_PASSWORD
-          do
-            if [[ -z "${!name}" ]]; then
-              missing+=("${name}")
-            fi
-          done
-          if (( ${#missing[@]} > 0 )); then
-            printf 'Missing required macOS release secrets:\n' >&2
-            printf '  %s\n' "${missing[@]}" >&2
-            exit 1
-          fi
-
-      - name: Import macOS signing certificate
-        if: matrix.package_kind == 'dmg'
-        shell: bash
-        env:
-          APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-        run: |
-          CERT_FILE="$(mktemp "${RUNNER_TEMP}/cert.XXXXXX").p12"
-          echo "${APPLE_CERTIFICATE_BASE64}" | base64 --decode > "${CERT_FILE}"
-          KEYCHAIN="${RUNNER_TEMP}/build.keychain-db"
-          KEYCHAIN_PW="$(uuidgen)"
-          security create-keychain -p "${KEYCHAIN_PW}" "${KEYCHAIN}"
-          security set-keychain-settings -lut 21600 "${KEYCHAIN}"
-          security unlock-keychain -p "${KEYCHAIN_PW}" "${KEYCHAIN}"
-          security import "${CERT_FILE}" -P "${APPLE_CERTIFICATE_PASSWORD}" \
-            -A -t cert -f pkcs12 -k "${KEYCHAIN}"
-          security set-key-partition-list -S apple-tool:,apple: \
-            -k "${KEYCHAIN_PW}" "${KEYCHAIN}"
-          security list-keychains -d user -s "${KEYCHAIN}" $(security list-keychains -d user | tr -d '"')
-          security find-identity -v -p codesigning "${KEYCHAIN}"
-          rm -f "${CERT_FILE}"
+          APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+        run: ./scripts/macos-signing-setup.sh
 
       - name: Package macOS DMG
         if: matrix.package_kind == 'dmg'
@@ -281,10 +291,6 @@ jobs:
         env:
           VERSION: ${{ github.ref_name }}
           ARCH: ${{ matrix.goarch }}
-          CODESIGN_IDENTITY: ${{ secrets.APPLE_CODESIGN_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
         run: |
           VERSION="${VERSION#v}" \
           ARCH="${ARCH}" \
@@ -293,10 +299,6 @@ jobs:
           OUT_DIR="dist" \
           BUNDLED_BACKEND_NAME="morph" \
           TARBALL_PATH="dist/${{ matrix.update_asset }}" \
-          CODESIGN_IDENTITY="${CODESIGN_IDENTITY}" \
-          APPLE_ID="${APPLE_ID}" \
-          APPLE_TEAM_ID="${APPLE_TEAM_ID}" \
-          APPLE_APP_PASSWORD="${APPLE_APP_PASSWORD}" \
           ./desktop/wails/packaging/package-darwin.sh
 
       - name: Package Linux AppImage
