@@ -3,6 +3,7 @@ package agent
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/quailyquaily/mistermorph/internal/jsonutil"
@@ -169,16 +170,25 @@ func validateMainResultAfterReaction(result llm.Result) error {
 	return checkMainResult(result, true)
 }
 
+// emptyFinalError is ErrInvalidFinal with why the response ended, so a retry notice can tell an
+// answer cut off at the output limit from one the model left empty.
+func emptyFinalError(result llm.Result) error {
+	return fmt.Errorf("%w: %w", ErrInvalidFinal, &llm.EmptyResponseError{
+		FinishReason: result.FinishReason,
+		OutputTokens: result.Usage.OutputTokens,
+	})
+}
+
 func checkMainResult(result llm.Result, allowEmptyFinal bool) error {
 	if len(result.ToolCalls) > 0 {
 		return nil
 	}
 	if text := strings.TrimSpace(result.Text); result.JSON == nil && (text == "" || text == "null") {
-		return ErrInvalidFinal
+		return emptyFinalError(result)
 	}
 	_, err := parseResponse(result, allowEmptyFinal)
 	if errors.Is(err, ErrInvalidFinal) {
-		return err
+		return emptyFinalError(result)
 	}
 	// Other format errors retain the engine's corrective-prompt retry flow.
 	return nil

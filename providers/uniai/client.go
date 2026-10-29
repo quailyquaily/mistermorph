@@ -206,12 +206,13 @@ func (c *Client) Chat(ctx context.Context, req llm.Request) (llm.Result, error) 
 	}
 
 	return llm.Result{
-		Text:      resp.Text,
-		Parts:     toLLMParts(resp.Parts),
-		Messages:  toLLMMessages(uniaiapi.AssistantReplayMessages(resp)),
-		ToolCalls: toolCalls,
-		Usage:     usage,
-		Duration:  time.Since(start),
+		Text:         resp.Text,
+		Parts:        toLLMParts(resp.Parts),
+		Messages:     toLLMMessages(uniaiapi.AssistantReplayMessages(resp)),
+		ToolCalls:    toolCalls,
+		Usage:        usage,
+		Duration:     time.Since(start),
+		FinishReason: resp.FinishReason,
 	}, nil
 }
 

@@ -169,49 +169,65 @@ models:
       - claude-sonnet-5.5
       - anthropic/claude-sonnet-5.5
     context_window_tokens: 1000000
+    max_output_tokens: 128000
     sources:
       - url: https://platform.claude.com/docs/en/about-claude/models/overview
-        checked_at: "2026-10-02"
+        checked_at: "2026-10-28"
   - provider: anthropic
     model: claude-fable-5-1
     aliases:
       - anthropic/claude-fable-5-1
     context_window_tokens: 1000000
+    max_output_tokens: 128000
     sources:
       - url: https://platform.claude.com/docs/en/models/fable-5-1/overview
         checked_at: "2026-09-06"
+      - url: https://platform.claude.com/docs/en/about-claude/models/overview
+        checked_at: "2026-10-28"
   - provider: anthropic
     model: claude-mythos-5-1
     aliases:
       - anthropic/claude-mythos-5-1
     context_window_tokens: 1000000
+    max_output_tokens: 128000
     sources:
       - url: https://platform.claude.com/docs/en/build-with-claude/context-windows
         checked_at: "2026-09-06"
+      - url: https://platform.claude.com/docs/en/models/mythos-5-1/overview
+        checked_at: "2026-10-28"
   - provider: anthropic
     model: claude-sonnet-5
     aliases:
       - anthropic/claude-sonnet-5
     context_window_tokens: 1000000
+    max_output_tokens: 128000
     sources:
       - url: https://platform.claude.com/docs/en/build-with-claude/context-windows
         checked_at: "2026-07-10"
+      - url: https://platform.claude.com/docs/en/models/sonnet-5/overview
+        checked_at: "2026-10-28"
   - provider: anthropic
     model: claude-fable-5
     aliases:
       - anthropic/claude-fable-5
     context_window_tokens: 1000000
+    max_output_tokens: 128000
     sources:
       - url: https://platform.claude.com/docs/en/about-claude/models/overview
         checked_at: "2026-06-10"
+      - url: https://platform.claude.com/docs/en/models/fable-5/overview
+        checked_at: "2026-10-28"
   - provider: anthropic
     model: claude-mythos-5
     aliases:
       - anthropic/claude-mythos-5
     context_window_tokens: 1000000
+    max_output_tokens: 128000
     sources:
       - url: https://platform.claude.com/docs/en/about-claude/models/overview
         checked_at: "2026-06-10"
+      - url: https://platform.claude.com/docs/en/models/mythos-5/overview
+        checked_at: "2026-10-28"
   - provider: anthropic
     model: claude-opus-5-5
     aliases:
@@ -219,64 +235,85 @@ models:
       - claude-opus-5.5
       - anthropic/claude-opus-5.5
     context_window_tokens: 1000000
+    max_output_tokens: 128000
     sources:
       - url: https://platform.claude.com/docs/en/models/opus-5-5/overview
         checked_at: "2026-09-23"
+      - url: https://platform.claude.com/docs/en/about-claude/models/overview
+        checked_at: "2026-10-28"
   - provider: anthropic
     model: claude-opus-5
     aliases:
       - anthropic/claude-opus-5
     context_window_tokens: 1000000
+    max_output_tokens: 128000
     sources:
       - url: https://platform.claude.com/docs/en/build-with-claude/context-windows
         checked_at: "2026-07-26"
+      - url: https://platform.claude.com/docs/en/models/opus-5/overview
+        checked_at: "2026-10-28"
   - provider: anthropic
     model: claude-opus-4-8
     aliases:
       - anthropic/claude-opus-4-8
       - claude-opus-4.8
     context_window_tokens: 1000000
+    max_output_tokens: 128000
     sources:
       - url: https://platform.claude.com/docs/en/about-claude/models/whats-new-claude-4-8
         checked_at: "2026-05-29"
+      - url: https://platform.claude.com/docs/en/models/opus-4-8/overview
+        checked_at: "2026-10-28"
   - provider: anthropic
     model: claude-opus-4-7
     aliases:
       - anthropic/claude-opus-4-7
       - claude-opus-4.7
     context_window_tokens: 1000000
+    max_output_tokens: 128000
     sources:
       - url: https://platform.claude.com/docs/en/about-claude/models/overview
         checked_at: "2026-05-24"
+      - url: https://platform.claude.com/docs/en/models/opus-4-7/overview
+        checked_at: "2026-10-28"
   - provider: anthropic
     model: claude-opus-4-5
     aliases:
       - anthropic/claude-opus-4-5
       - claude-opus-4.5
-      - claude-opus-4-5-20250929
-    context_window_tokens: 1000000
+      - claude-opus-4-5-20251101
+    context_window_tokens: 200000
+    max_output_tokens: 64000
     sources:
       - url: https://platform.claude.com/docs/en/about-claude/models/overview
         checked_at: "2026-05-24"
+      - url: https://platform.claude.com/docs/en/models/opus-4-5/overview
+        checked_at: "2026-10-28"
   - provider: anthropic
     model: claude-opus-4-6
     aliases:
       - anthropic/claude-opus-4-6
       - claude-opus-4.6
     context_window_tokens: 1000000
+    max_output_tokens: 128000
     sources:
       - url: https://platform.claude.com/docs/en/about-claude/models/whats-new-claude-4-7
         checked_at: "2026-05-24"
+      - url: https://platform.claude.com/docs/en/models/opus-4-6/overview
+        checked_at: "2026-10-28"
   - provider: anthropic
     model: claude-sonnet-4-5
     aliases:
       - anthropic/claude-sonnet-4-5
       - claude-sonnet-4.5
       - claude-sonnet-4-5-20250929
-    context_window_tokens: 1000000
+    context_window_tokens: 200000
+    max_output_tokens: 64000
     sources:
       - url: https://platform.claude.com/docs/en/about-claude/models/overview
         checked_at: "2026-05-24"
+      - url: https://platform.claude.com/docs/en/models/sonnet-4-5/overview
+        checked_at: "2026-10-28"
   - provider: anthropic
     model: claude-sonnet-4-6
     aliases:
@@ -284,9 +321,12 @@ models:
       - claude-sonnet-4.6
       - claude-sonnet-4-6-20260201
     context_window_tokens: 1000000
+    max_output_tokens: 128000
     sources:
       - url: https://platform.claude.com/docs/en/about-claude/models/overview
         checked_at: "2026-05-24"
+      - url: https://platform.claude.com/docs/en/models/sonnet-4-6/overview
+        checked_at: "2026-10-28"
   - provider: anthropic
     model: claude-haiku-4-5
     aliases:
@@ -294,9 +334,12 @@ models:
       - claude-haiku-4.5
       - claude-haiku-4-5-20251001
     context_window_tokens: 200000
+    max_output_tokens: 64000
     sources:
       - url: https://platform.claude.com/docs/en/about-claude/models/overview
         checked_at: "2026-05-24"
+      - url: https://platform.claude.com/docs/en/models/haiku-4-5/overview
+        checked_at: "2026-10-28"
 
   # Gemini
   - provider: gemini

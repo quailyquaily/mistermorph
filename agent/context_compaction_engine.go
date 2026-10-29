@@ -185,7 +185,7 @@ func (e *Engine) mainRequest(st *engineLoopState, reqTools []llm.Tool) llm.Reque
 		Messages:         messages,
 		Tools:            reqTools,
 		ForceJSON:        true,
-		Parameters:       st.extraParams,
+		Parameters:       mainRequestParameters(st),
 		ReasoningDetails: st.reasoningDetails,
 		OnStream:         st.onStream,
 		ValidateResult:   validateResult,
@@ -208,7 +208,7 @@ func (e *Engine) contextCompactionDecision(st *engineLoopState) contextCompactio
 	if st == nil || !st.contextCompaction.Enabled {
 		return decision
 	}
-	requestMaxTokens := requestMaxOutputTokens(st.extraParams)
+	requestMaxTokens := requestMaxOutputTokens(mainRequestParameters(st))
 	var trigger int
 	decision.InputLimit, trigger, decision.OutputReserve = contextInputLimits(st.contextWindowTokens, st.contextCompaction, requestMaxTokens)
 	if decision.InputLimit <= 0 {

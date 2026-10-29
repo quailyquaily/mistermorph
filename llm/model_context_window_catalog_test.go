@@ -86,7 +86,8 @@ func TestResolveModelContextWindowCatalogExamples(t *testing.T) {
 		"command-r-plus-08-2024":                 128000,
 		"gpt-5.4-pro-2026-03-05":                 1050000,
 		"gemini-3.1-pro-preview":                 1048576,
-		"claude-opus-4-5-20250929":               1000000,
+		"claude-opus-4-5-20251101":               200000,
+		"claude-sonnet-4-5":                      200000,
 		"gemini-2.5-flash-preview-09-2025":       1048576,
 		"@cf/deepseek-ai/deepseek-v4-flash-0731": 1310720,
 		"@cf/deepseek-ai/deepseek-v4-pro-0813":   1048576,
@@ -124,5 +125,40 @@ func TestModelContextWindowCatalogNewModels(t *testing.T) {
 		if !ok || entry.ContextWindowTokens != want {
 			t.Errorf("ResolveModelContextWindow(%q) = %d, %v; want %d", model, entry.ContextWindowTokens, ok, want)
 		}
+	}
+}
+
+func TestResolveModelMaxOutputTokens(t *testing.T) {
+	tests := map[string]int64{
+		"claude-opus-5-5":            128000,
+		"anthropic/claude-opus-5.5":  128000,
+		"claude-fable-5-1":           128000,
+		"claude-mythos-5-1":          128000,
+		"claude-sonnet-5-5":          128000,
+		"claude-sonnet-5":            128000,
+		"claude-fable-5":             128000,
+		"claude-mythos-5":            128000,
+		"claude-opus-5":              128000,
+		"claude-opus-4-8":            128000,
+		"claude-opus-4-7":            128000,
+		"claude-opus-4-6":            128000,
+		"claude-sonnet-4-6":          128000,
+		"claude-opus-4-5":            64000,
+		"claude-opus-4-5-20251101":   64000,
+		"claude-sonnet-4-5-20250929": 64000,
+		"claude-haiku-4-5":           64000,
+		// Models whose docs give no output limit to record keep none.
+		"gpt-6-astra": 0,
+	}
+	for model, want := range tests {
+		t.Run(model, func(t *testing.T) {
+			got, ok := ResolveModelContextWindow(model)
+			if !ok {
+				t.Fatalf("ResolveModelContextWindow(%q) found = false, want true", model)
+			}
+			if got.MaxOutputTokens != want {
+				t.Fatalf("max output = %d, want %d", got.MaxOutputTokens, want)
+			}
+		})
 	}
 }
