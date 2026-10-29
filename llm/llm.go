@@ -111,6 +111,8 @@ type Result struct {
 	ToolCalls []ToolCall
 	Usage     Usage
 	Duration  time.Duration
+	// FinishReason is one of the FinishReason constants, or empty when the provider did not say.
+	FinishReason string
 }
 
 type Request struct {

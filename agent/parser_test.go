@@ -200,3 +200,26 @@ func TestParseTextOnlyIgnoresLightweightClaim(t *testing.T) {
 		t.Fatalf("after reaction: resp = %+v, err = %v", resp, err)
 	}
 }
+
+func TestValidateMainResultNamesWhyTheAnswerIsEmpty(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		result llm.Result
+		reason string
+	}{
+		{"cut off while thinking", llm.Result{FinishReason: llm.FinishReasonLength, Usage: llm.Usage{OutputTokens: 8192}}, llm.FinishReasonLength},
+		{"empty final", llm.Result{Text: `{"type":"final","output":""}`, FinishReason: llm.FinishReasonStop}, llm.FinishReasonStop},
+		{"no finish reason", llm.Result{}, ""},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateMainResult(tt.result)
+			if !errors.Is(err, ErrInvalidFinal) {
+				t.Fatalf("error = %v, want ErrInvalidFinal", err)
+			}
+			var empty *llm.EmptyResponseError
+			if !errors.As(err, &empty) || empty.FinishReason != tt.reason || empty.OutputTokens != tt.result.Usage.OutputTokens {
+				t.Fatalf("error = %v, want EmptyResponseError with reason %q", err, tt.reason)
+			}
+		})
+	}
+}
