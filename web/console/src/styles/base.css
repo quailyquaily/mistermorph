@@ -101,9 +101,9 @@ body {
   --q-font-serif: var(--font-ui);
   --q-card-title-font-family: var(--font-ui);
 
-  /* Status marks: square, filled when on, hollow when off. Blue is reserved for selection. */
+  /* Status marks: square, filled when on, hollow when off. On is the console's blue. */
   --status-mark-size: 7px;
-  --status-on: var(--q-c-green);
+  --status-on: var(--q-c-blue);
   --status-off: color-mix(in srgb, var(--q-c-dark-3) 70%, transparent);
   --status-pending: var(--q-c-orange);
   --status-error: var(--q-c-red);
@@ -217,6 +217,35 @@ body[data-theme] .q-button.touchable.plain:not(:hover):not(:focus-visible):not(:
 body[data-theme] .q-badge.q-badge-dot.q-badge-default {
   background: transparent !important;
   box-shadow: inset 0 0 0 1px var(--status-off);
+}
+
+/* Quail's success badge is green; here "on" is blue, as the status marks are. */
+body[data-theme] .q-badge.q-badge-success {
+  --q-badge-bg-filled: var(--q-c-blue-dimm-2);
+  --q-badge-text-filled: var(--q-c-blue-dark);
+  --q-badge-border: var(--status-on);
+  --q-badge-text-outlined: var(--status-on);
+  --q-badge-bg-light: color-mix(in srgb, var(--q-c-blue-dimm-1) 72%, white);
+  --q-badge-text-light: var(--q-c-blue-dark);
+  --q-badge-frame-color: var(--status-on);
+  --q-badge-text-color: var(--q-c-blue-dark);
+  --q-badge-dot-color: var(--status-on);
+}
+
+body[data-theme] .q-badge.q-badge-warning {
+  --q-badge-dot-color: var(--status-pending);
+}
+
+body[data-theme] .q-badge.q-badge-danger {
+  --q-badge-dot-color: var(--status-error);
+}
+
+/* A badge dot is a status mark like any other: a small square, not Quail's 8px circle. */
+body[data-theme] .q-badge.q-badge-dot {
+  width: var(--status-mark-size);
+  height: var(--status-mark-size);
+  min-height: var(--status-mark-size);
+  border-radius: 1px;
 }
 
 .q-input:not(.xs) {
