@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/quailyquaily/mistermorph/agent"
 	"github.com/quailyquaily/mistermorph/contacts"
@@ -64,18 +65,57 @@ func AppendMemoriesPrompt(store *memories.Store, spec *agent.PromptSpec, who aud
 }
 
 // MemoriesRunContext gives each fresh run the [[ Saved Memories ]] note: the memories who may hear
-// without searching, read when the run starts. It is nil without a store.
+// without searching, read when the run starts. Those the run's messages are about come first
+// (memories.Store.ForRun), found from the current message and the turn before it, since a short
+// reply ("ok, do it") says little on its own. It is nil without a store.
 func MemoriesRunContext(store *memories.Store, who audience.Audience, logger *slog.Logger) agent.RunContext {
 	if store == nil {
 		return nil
 	}
-	return func(ctx context.Context) []string {
-		items, more, err := store.ForPrompt(ctx, who, promptParticipants(who), memories.MaxPerSubject)
+	return func(ctx context.Context, in agent.RunInput) []string {
+		query := memoryQuery(in)
+		picked, err := store.ForRun(ctx, who, promptParticipants(who), query, memories.MaxPerSubject)
 		if err != nil && logger != nil {
 			logger.Warn("memories_prompt_error", "audience", who.String(), "error", err.Error())
 		}
-		return []string{promptprofile.MemoriesContext(who, items, more)}
+		if logger != nil {
+			relevant := make([]string, 0, len(picked.Relevant))
+			for _, m := range picked.Items {
+				if picked.Relevant[m.ID] {
+					relevant = append(relevant, m.ID)
+				}
+			}
+			logger.Info("memories_context", "audience", who.String(), "shown", len(picked.Items), "more", picked.More,
+				"query_runes", utf8.RuneCountInString(query), "relevant", relevant)
+		}
+		return []string{promptprofile.MemoriesContext(who, picked.Items, picked.Relevant, picked.More)}
 	}
+}
+
+// memoryQuery is the text a run's memories are found with: the current message (or the task), then
+// the two messages before it.
+func memoryQuery(in agent.RunInput) string {
+	texts := []string{in.Task}
+	if in.Current != nil {
+		texts = []string{messageText(*in.Current)}
+	}
+	for i := len(in.History) - 1; i >= 0 && i >= len(in.History)-2; i-- {
+		texts = append(texts, messageText(in.History[i]))
+	}
+	return memories.QueryText(texts...)
+}
+
+func messageText(m llm.Message) string {
+	if len(m.Parts) == 0 {
+		return m.Content
+	}
+	var parts []string
+	for _, p := range m.Parts {
+		if p.Type == llm.PartTypeText {
+			parts = append(parts, p.Text)
+		}
+	}
+	return strings.Join(parts, "\n")
 }
 
 const memoryReminderText = "[[ Runtime Note ]]\nNothing has been saved to memory for several turns in this conversation. If in recent messages the person corrected you, confirmed an approach, or told you something lasting about themselves or their work, save it with memory_save during this task. If not, ignore this note."

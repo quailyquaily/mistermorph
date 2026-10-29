@@ -173,7 +173,7 @@ func TestMemoriesRunContext(t *testing.T) {
 	}
 	defer store.Close()
 	runContext := MemoriesRunContext(store, audience.Owner(), slog.Default())
-	if notes := runContext(context.Background()); len(notes) != 1 || !strings.Contains(notes[0], "No memories here yet.") {
+	if notes := runContext(context.Background(), agent.RunInput{Task: "how do release notes go out?"}); len(notes) != 1 || !strings.Contains(notes[0], "No memories here yet.") {
 		t.Fatalf("notes = %q, want the empty note", notes)
 	}
 	// Each run reads the store when it starts, so a save shows in the next run's note.
@@ -182,11 +182,38 @@ func TestMemoriesRunContext(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("Save() error = %v", err)
 	}
-	notes := runContext(context.Background())
-	if len(notes) != 1 || !strings.HasPrefix(notes[0], "[[ Saved Memories ]]") || !strings.Contains(notes[0], "DM release notes to the owner.") {
-		t.Fatalf("notes = %q, want the saved memory", notes)
+	notes := runContext(context.Background(), agent.RunInput{Task: "how do release notes go out?"})
+	if len(notes) != 1 || !strings.HasPrefix(notes[0], "[[ Saved Memories ]]") || !strings.Contains(notes[0], "DM release notes to the owner.") ||
+		!strings.Contains(notes[0], `relevant="true"`) {
+		t.Fatalf("notes = %q, want the saved memory, marked as what the task is about", notes)
 	}
 	if MemoriesRunContext(nil, audience.Owner(), slog.Default()) != nil {
 		t.Fatal("run context without a store")
+	}
+}
+
+func TestMemoryQuery(t *testing.T) {
+	current := llm.Message{Role: "user", Content: `{"current_message":{"sender":{"username":"alice"},"text":"ok, do it"},"instruction":"Respond now."}`}
+	history := []llm.Message{
+		{Role: "user", Content: "too old to count"},
+		{Role: "user", Content: `{"sender":{"username":"alice"},"text":"can you send the release notes?"}`},
+		{Role: "assistant", Content: `{"type":"final","output":"Shall I DM them?"}`},
+	}
+	for _, tc := range []struct {
+		name string
+		in   agent.RunInput
+		want string
+	}{
+		{"current message and the turn before it", agent.RunInput{Task: "ignored", Current: &current, History: history},
+			"ok, do it\nShall I DM them?\ncan you send the release notes?"},
+		{"task without a current message", agent.RunInput{Task: "plain task"}, "plain task"},
+		{"text parts", agent.RunInput{Current: &llm.Message{Parts: []llm.Part{{Type: llm.PartTypeText, Text: "look at this"}, {Type: llm.PartTypeImageURL, URL: "https://example.com/a.png"}}}},
+			"look at this"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := memoryQuery(tc.in); got != tc.want {
+				t.Fatalf("memoryQuery() = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }

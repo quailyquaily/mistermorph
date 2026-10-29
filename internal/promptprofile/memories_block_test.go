@@ -80,7 +80,7 @@ func TestMemoriesContext(t *testing.T) {
 			[]string{"\n</memory>\n[[", `<memory id="fake"`}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got := MemoriesContext(tc.who, tc.items, tc.more)
+			got := MemoriesContext(tc.who, tc.items, nil, tc.more)
 			if !strings.HasPrefix(got, "[[ Saved Memories ]]\n") {
 				t.Fatalf("note does not open with its heading:\n%s", got)
 			}
@@ -100,11 +100,11 @@ func TestMemoriesContext(t *testing.T) {
 		})
 	}
 
-	order := MemoriesContext(audience.Owner(), []memories.Memory{alice, planted, owner}, false)
+	order := MemoriesContext(audience.Owner(), []memories.Memory{alice, planted, owner}, nil, false)
 	if o, g, a := strings.Index(order, `id="mem_2"`), strings.Index(order, `id="mem_3"`), strings.Index(order, `id="mem_1"`); !(o < g && g < a) {
 		t.Fatalf("want owner, general, contact:\n%s", order)
 	}
-	if got := MemoriesContext(audience.Audience{}, []memories.Memory{alice}, false); got != "" {
+	if got := MemoriesContext(audience.Audience{}, []memories.Memory{alice}, nil, false); got != "" {
 		t.Fatalf("note for a run with no audience: %q", got)
 	}
 }
@@ -116,7 +116,7 @@ func TestMemoriesContextKeepsBodiesByTypeWithinTheBudget(t *testing.T) {
 		{ID: "ctx_old", Subject: "owner", Name: "b", Type: memories.TypeContext, Description: "older context", Body: big},
 		{ID: "fb", Subject: "owner", Name: "c", Type: memories.TypeFeedback, Description: "feedback", Body: big},
 	}
-	got := MemoriesContext(audience.Owner(), items, false)
+	got := MemoriesContext(audience.Owner(), items, nil, false)
 	for id, omitted := range map[string]bool{"fb": false, "ctx_new": false, "ctx_old": true} {
 		start := strings.Index(got, `id="`+id+`"`)
 		tag := got[start : start+strings.Index(got[start:], ">")]
@@ -126,5 +126,23 @@ func TestMemoriesContextKeepsBodiesByTypeWithinTheBudget(t *testing.T) {
 	}
 	if strings.Count(got, big) != 2 {
 		t.Fatalf("%d bodies shown, want 2 (feedback first, then the newest)", strings.Count(got, big))
+	}
+}
+
+func TestMemoriesContextPutsRelevantMemoriesFirst(t *testing.T) {
+	big := strings.Repeat("y", MemoriesInlineBudget/2+1)
+	items := []memories.Memory{
+		{ID: "fb", Subject: "general", Name: "a", Type: memories.TypeFeedback, Description: "feedback", Body: big},
+		{ID: "ref", Subject: "owner", Name: "z", Type: memories.TypeReference, Description: "the match", Body: big},
+	}
+	got := MemoriesContext(audience.Owner(), items, map[string]bool{"ref": true}, false)
+	ref, fb := strings.Index(got, `id="ref"`), strings.Index(got, `id="fb"`)
+	if ref < 0 || fb < 0 || ref > fb {
+		t.Fatalf("want the relevant memory first:\n%s", got)
+	}
+	refTag := got[ref : ref+strings.Index(got[ref:], ">")]
+	fbTag := got[fb : fb+strings.Index(got[fb:], ">")]
+	if !strings.Contains(refTag, `relevant="true"`) || strings.Contains(refTag, "omitted") || !strings.Contains(fbTag, `body="omitted"`) {
+		t.Fatalf("the relevant memory should be marked and get the body budget first:\n%s\n%s", refTag, fbTag)
 	}
 }

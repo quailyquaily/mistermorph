@@ -47,9 +47,17 @@ func WithSystemPromptCacheControl(ctrl *llm.CacheControl) Option {
 	}
 }
 
-// RunContext returns notes for one run, such as the memories its audience may hear. Each non-empty
-// string becomes a user message of its own.
-type RunContext func(ctx context.Context) []string
+// RunContext returns notes for one run, such as the memories its audience may hear, chosen from
+// what the run is about. Each non-empty string becomes a user message of its own.
+type RunContext func(ctx context.Context, in RunInput) []string
+
+// RunInput is what a run starts from: the task, the current message when the caller gives one, and
+// the history before it.
+type RunInput struct {
+	Task    string
+	Current *llm.Message
+	History []llm.Message
+}
 
 // WithRunContext adds notes to every fresh run: the engine calls fn when a run starts (a resumed
 // run keeps the notes it started with) and puts them right after the runtime metadata, before the
@@ -406,8 +414,9 @@ func (e *Engine) Run(ctx context.Context, task string, opts RunOptions) (*Final,
 		index := len(messages)
 		metaMessageIndex = &index
 		messages = append(messages, llm.Message{Role: "user", Content: metaMsg})
+		input := RunInput{Task: task, Current: opts.CurrentMessage, History: opts.History}
 		for _, fn := range e.runContext {
-			for _, note := range fn(ctx) {
+			for _, note := range fn(ctx, input) {
 				if strings.TrimSpace(note) == "" {
 					continue
 				}
