@@ -628,7 +628,7 @@ export default {
                 <input v-model="journalQuery" type="search" class="memories-query" :placeholder="t('memories_journal_search')" :aria-label="t('memories_journal_search')" />
               </div>
               <input v-model="journalSince" type="date" class="memories-query memories-since" :aria-label="t('memories_journal_since')" :title="t('memories_journal_since')" />
-              <AppButton class="outlined" type="submit" :loading="journalLoading">{{ t("memories_journal_go") }}</AppButton>
+              <AppButton class="outlined sm" type="submit" :loading="journalLoading">{{ t("memories_journal_go") }}</AppButton>
             </form>
 
             <div v-if="sourcesOf" class="memory-confirm is-sources">

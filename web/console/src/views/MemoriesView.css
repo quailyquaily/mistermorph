@@ -97,11 +97,19 @@
   outline-offset: 1px;
 }
 
-.memories-since {
+/* Two classes, to outrank ui-kit's `input[type=date]` (44px tall, its own border) and keep the
+   field the same height and edge as the search beside it. */
+.memories-query.memories-since {
   flex: 0 0 auto;
   width: auto;
+  height: 38px;
   padding: 0 10px;
+  border: 1px solid var(--q-field-border-color, var(--memories-line));
   font-variant-numeric: tabular-nums;
+}
+
+.memories-query.memories-since:focus {
+  border-color: var(--q-field-border-color, var(--memories-line));
 }
 
 .memories-note {
@@ -820,7 +828,7 @@ a.journal-task:hover {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .memories-since {
+  .memories-query.memories-since {
     flex: 1 1 auto;
   }
 }
