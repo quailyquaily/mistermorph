@@ -222,12 +222,6 @@
   text-transform: none;
 }
 
-.chat-topic-day-label-text {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .chat-topic-tag-label-icon {
   flex: 0 0 auto;
   width: 12px;
@@ -247,47 +241,9 @@
   outline-style: solid;
 }
 
-/* A foldable group's heading is a toggle; a tag group's heading can also be dragged to move it. */
-.chat-topic-group-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: inherit;
-  font: inherit;
-  letter-spacing: inherit;
-  text-transform: inherit;
-  cursor: pointer;
-}
-
-.chat-topic-group-toggle:hover {
-  color: var(--text-0);
-}
-
+/* A tag group's heading can also be dragged to move it. */
 .chat-topic-day-label[draggable="true"] {
   cursor: grab;
-}
-
-.chat-topic-group-caret {
-  flex: 0 0 auto;
-  width: 10px;
-  height: 10px;
-  margin-right: -4px;
-  transition: transform 120ms ease;
-}
-
-.chat-topic-group-caret.is-open {
-  transform: rotate(90deg);
-}
-
-.chat-topic-group-count {
-  flex: 0 0 auto;
-  color: var(--text-2);
-  font-variant-numeric: tabular-nums;
 }
 
 .chat-topic-day.is-collapsed {
@@ -359,26 +315,6 @@
 
 .chat-topic-item + .chat-topic-item {
   margin-top: 2px;
-}
-
-.chat-topic-day-label {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 0;
-  padding: 10px 14px 4px;
-  color: var(--q-c-dark-3);
-  font: 500 var(--font-size-label)/1.4 var(--font-mono);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-/* The rule after the date runs out into the list's edge, fading, rather than stopping dead. */
-.chat-topic-day-label::after {
-  content: "";
-  flex: 1 1 auto;
-  height: 1px;
-  background: linear-gradient(to right, var(--line-soft), color-mix(in srgb, var(--line-soft) 0%, transparent));
 }
 
 .chat-topic-item {

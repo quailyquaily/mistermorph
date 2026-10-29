@@ -246,6 +246,88 @@
   color: var(--q-c-dark);
 }
 
+/* A group heading in a sidebar list: a small mono label, then a rule that runs out into the
+   list's edge, fading, rather than stopping dead. Left empty, it is the rule alone. */
+.workspace-sidebar-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  margin: 0;
+  padding: 10px 14px 4px;
+  color: var(--q-c-dark-3);
+  font: 500 var(--font-size-label)/1.4 var(--font-mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.workspace-sidebar-divider::after {
+  content: "";
+  flex: 1 1 auto;
+  height: 1px;
+  background: linear-gradient(to right, var(--line-soft), color-mix(in srgb, var(--line-soft) 0%, transparent));
+}
+
+.workspace-sidebar-divider-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A foldable group's heading is a toggle: a caret, the label, and the count while folded. As a
+   <summary> the heading is the toggle itself. */
+.workspace-sidebar-divider-toggle,
+summary.workspace-sidebar-divider {
+  cursor: pointer;
+}
+
+.workspace-sidebar-divider-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+}
+
+summary.workspace-sidebar-divider {
+  list-style: none;
+}
+
+summary.workspace-sidebar-divider::-webkit-details-marker {
+  display: none;
+}
+
+.workspace-sidebar-divider-toggle:hover,
+summary.workspace-sidebar-divider:hover {
+  color: var(--text-0);
+}
+
+.workspace-sidebar-divider-caret {
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  margin-right: -4px;
+  transition: transform 120ms ease;
+}
+
+.workspace-sidebar-divider-caret.is-open,
+details[open] > summary > .workspace-sidebar-divider-caret {
+  transform: rotate(90deg);
+}
+
+.workspace-sidebar-divider-count {
+  flex: 0 0 auto;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+
 .row,
 .toolbar {
   display: flex;

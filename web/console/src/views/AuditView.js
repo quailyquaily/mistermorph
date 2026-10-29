@@ -1060,10 +1060,10 @@ const AuditView = {
               <p v-if="!loading && !err && fileItems.length === 0" class="audit-index-note">{{ t('audit_no_file') }}</p>
             </div>
             <details v-if="archivedFiles.length" class="audit-archives">
-              <summary class="audit-archives-heading">
-                <PhCaretRight class="icon" />
-                <span>{{ t('audit_archives') }}</span>
-                <span class="audit-archives-count">{{ archivedFiles.length }}</span>
+              <summary class="workspace-sidebar-divider">
+                <PhCaretRight class="workspace-sidebar-divider-caret" aria-hidden="true" />
+                <span class="workspace-sidebar-divider-label">{{ t('audit_archives') }}</span>
+                <span class="workspace-sidebar-divider-count">{{ archivedFiles.length }}</span>
               </summary>
               <div class="workspace-sidebar-list">
                 <button v-for="item in archivedFiles" :key="item.key" type="button" :class="auditFileClass(item)"
@@ -1078,6 +1078,7 @@ const AuditView = {
                 </button>
               </div>
             </details>
+            <div class="audit-task-divider workspace-sidebar-divider" aria-hidden="true"></div>
             <div class="audit-task-nav workspace-sidebar-list">
               <button type="button" :class="taskStreamClass()" :aria-pressed="isTasksStreamSelected" @click="selectTaskStream">
                 <span class="workspace-sidebar-item-copy"><span class="workspace-sidebar-item-title">{{ t('tasks_title') }}</span></span>
