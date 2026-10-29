@@ -5158,27 +5158,27 @@ const ChatView = {
               >
                 <h4
                   v-if="group.label && topicGroupCollapsible(group)"
-                  class="chat-topic-day-label is-foldable"
+                  class="chat-topic-day-label workspace-sidebar-divider is-foldable"
                   :draggable="topicGroupDraggable(group) ? 'true' : 'false'"
                   @dragstart="onTopicGroupHeadDragStart($event, group)"
                   @dragend="onTopicDragEnd"
                 >
                   <button
                     type="button"
-                    class="chat-topic-group-toggle"
+                    class="chat-topic-group-toggle workspace-sidebar-divider-toggle"
                     :aria-expanded="topicGroupCollapsed(group) ? 'false' : 'true'"
                     :title="topicGroupCollapsed(group) ? t('chat_topics_group_expand') : t('chat_topics_group_collapse')"
                     @click="toggleTopicGroup(group)"
                   >
-                    <PhCaretRight :class="['chat-topic-group-caret', { 'is-open': !topicGroupCollapsed(group) }]" aria-hidden="true" />
+                    <PhCaretRight :class="['chat-topic-group-caret', 'workspace-sidebar-divider-caret', { 'is-open': !topicGroupCollapsed(group) }]" aria-hidden="true" />
                     <PhPushPin v-if="group.pinned" class="chat-topic-tag-label-icon" aria-hidden="true" />
                     <PhTag v-else-if="!group.untagged" class="chat-topic-tag-label-icon" aria-hidden="true" />
-                    <span class="chat-topic-day-label-text">{{ group.label }}</span>
-                    <span v-if="topicGroupCollapsed(group)" class="chat-topic-group-count">{{ group.topics.length }}</span>
+                    <span class="chat-topic-day-label-text workspace-sidebar-divider-label">{{ group.label }}</span>
+                    <span v-if="topicGroupCollapsed(group)" class="chat-topic-group-count workspace-sidebar-divider-count">{{ group.topics.length }}</span>
                   </button>
                 </h4>
-                <h4 v-else-if="group.label" class="chat-topic-day-label">
-                  <span class="chat-topic-day-label-text">{{ group.label }}</span>
+                <h4 v-else-if="group.label" class="chat-topic-day-label workspace-sidebar-divider">
+                  <span class="chat-topic-day-label-text workspace-sidebar-divider-label">{{ group.label }}</span>
                 </h4>
                 <template v-if="!topicGroupCollapsed(group)">
                 <p v-if="group.topics.length === 0" class="chat-topic-drop-hint">{{ t("chat_topics_drop_to_pin") }}</p>

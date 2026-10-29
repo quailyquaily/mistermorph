@@ -97,11 +97,19 @@
   outline-offset: 1px;
 }
 
-.memories-since {
+/* Two classes, to outrank ui-kit's `input[type=date]` (44px tall, its own border) and keep the
+   field the same height and edge as the search beside it. */
+.memories-query.memories-since {
   flex: 0 0 auto;
   width: auto;
+  height: 38px;
   padding: 0 10px;
+  border: 1px solid var(--q-field-border-color, var(--memories-line));
   font-variant-numeric: tabular-nums;
+}
+
+.memories-query.memories-since:focus {
+  border-color: var(--q-field-border-color, var(--memories-line));
 }
 
 .memories-note {
@@ -234,14 +242,9 @@
   padding-top: 8px;
 }
 
+/* Subject rows carry a meta line, so a group heading takes a little more room above. */
 .memories-index-divider {
-  padding: 14px 14px 6px;
-  font-family: var(--font-mono);
-  font-size: var(--font-size-label);
-  font-weight: 500;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--memories-muted);
+  padding-top: 14px;
 }
 
 .memories-index-item.workspace-sidebar-item {
@@ -820,7 +823,7 @@ a.journal-task:hover {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .memories-since {
+  .memories-query.memories-since {
     flex: 1 1 auto;
   }
 }

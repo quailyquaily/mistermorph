@@ -2533,6 +2533,9 @@ const TodoView = {
             </section>
 
             <section class="todo-index-group todo-task-group">
+              <h4 v-if="tasks.length > 0 || !loading" class="todo-index-divider workspace-sidebar-divider">
+                <span class="workspace-sidebar-divider-label">{{ t("todo_index_scheduled") }}</span>
+              </h4>
               <div
                 v-if="tasks.length > 0"
                 v-sliding-selection

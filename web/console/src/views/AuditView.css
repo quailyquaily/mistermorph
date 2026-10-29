@@ -92,9 +92,14 @@
 }
 
 .audit-task-nav,
+.audit-task-divider,
 .audit-archives {
-  border-top: 1px solid var(--line-soft);
   margin-inline: 16px;
+}
+
+/* Between the logs and Tasks: the divider's rule alone, with the lists' own padding around it. */
+.audit-task-divider {
+  padding-block: 0;
 }
 
 .audit-task-nav.workspace-sidebar-list,
@@ -102,36 +107,14 @@
   padding-inline: 0;
 }
 
-.audit-archives-heading {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 44px;
-  padding: 10px 14px;
-  list-style: none;
-  color: var(--text-1);
-  font-size: var(--font-size-ui);
-}
-
-.audit-archives-count {
-  margin-left: auto;
-  color: var(--text-2);
-  font-variant-numeric: tabular-nums;
-}
-
 .audit-archives > .workspace-sidebar-list {
   padding-top: 0;
 }
 
-.audit-archives-heading .icon,
 .audit-event-chevron {
   width: 14px;
   min-width: 14px;
   height: 14px;
-}
-
-.audit-archives[open] > summary > .icon {
-  transform: rotate(90deg);
 }
 
 /* The open log: a boxed section the height of the workbench. Its body is the toolbar over the
@@ -314,12 +297,7 @@
   background: color-mix(in srgb, var(--accent-1) 9%, transparent);
 }
 
-.audit-archives-heading::-webkit-details-marker {
-  display: none;
-}
-
-.audit-event-summary:hover,
-.audit-archives-heading:hover {
+.audit-event-summary:hover {
   background: var(--q-button-plain-hover-bg);
 }
 

@@ -157,18 +157,17 @@
   min-width: 0;
 }
 
-.todo-index-group + .todo-index-group {
-  position: relative;
+/* The tasks' heading sits right on its list, as Chat's group headings do. */
+.todo-task-group {
+  gap: 0;
 }
 
-.todo-index-group + .todo-index-group::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  right: 16px;
-  left: 16px;
-  height: 1px;
-  background: var(--line-soft);
+.todo-index-divider {
+  margin-inline: var(--workspace-sidebar-list-gutter);
+}
+
+.todo-index-divider + .todo-index-items.workspace-sidebar-list {
+  padding-top: 0;
 }
 
 .todo-index-items.workspace-sidebar-list {

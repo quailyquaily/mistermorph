@@ -1017,7 +1017,7 @@ body:has(.settings-page) .q-dialog .q-menu-item.danger .q-menu-title {
   border: 1px solid transparent;
   border-radius: 2px;
   background: transparent;
-  color: var(--q-c-green-light);
+  color: var(--status-on);
   cursor: pointer;
 }
 

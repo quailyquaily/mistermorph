@@ -488,7 +488,7 @@ export default {
             </div>
             <div v-else v-sliding-selection class="memories-index-list workspace-sidebar-list">
               <template v-for="row in indexItems" :key="row.key">
-                <span v-if="row.divider" class="memories-index-divider">{{ row.divider }}</span>
+                <span v-if="row.divider" class="memories-index-divider workspace-sidebar-divider"><span class="workspace-sidebar-divider-label">{{ row.divider }}</span></span>
                 <button
                   type="button"
                   :class="['memories-index-item', 'workspace-sidebar-item', { 'is-active': !onJournal && row.active }]"
@@ -628,7 +628,7 @@ export default {
                 <input v-model="journalQuery" type="search" class="memories-query" :placeholder="t('memories_journal_search')" :aria-label="t('memories_journal_search')" />
               </div>
               <input v-model="journalSince" type="date" class="memories-query memories-since" :aria-label="t('memories_journal_since')" :title="t('memories_journal_since')" />
-              <AppButton class="outlined" type="submit" :loading="journalLoading">{{ t("memories_journal_go") }}</AppButton>
+              <AppButton class="outlined sm" type="submit" :loading="journalLoading">{{ t("memories_journal_go") }}</AppButton>
             </form>
 
             <div v-if="sourcesOf" class="memory-confirm is-sources">

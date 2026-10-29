@@ -120,7 +120,7 @@ Each step should be checked at 1440 and 390 widths, with screenshots of every pa
 
 ## 6. Open decisions
 
-- **D1. Colour for normal status. Resolved (2026-09-25):** green for every "on" status, blue only for selection. Blue had been doing both jobs: the same blue square meant "selected" in the Settings and Audit sidebars and "enabled" in the TODO list. Morph's green (`#3f6d6e`) is a muted teal that fits the palette. This supersedes "正常状态使用 Morph 蓝色" in `feat_20260909_runtime_page_design.md`. To revisit, change `--status-on` in `base.css`.
+- **D1. Colour for normal status. Resolved (2026-09-25):** green for every "on" status, blue only for selection. Blue had been doing both jobs: the same blue square meant "selected" in the Settings and Audit sidebars and "enabled" in the TODO list. Morph's green (`#3f6d6e`) is a muted teal that fits the palette. This supersedes "正常状态使用 Morph 蓝色" in `feat_20260909_runtime_page_design.md`. To revisit, change `--status-on` in `base.css`. **Revised (2026-10-29):** "on" is blue again (`--status-on: var(--q-c-blue)`), with Quail's `success` badge remapped to it; marks stay square, so shape and fill, not colour, tell "on" from the sidebar's selected fill.
 - **D2. Audit refresh buttons. Resolved (2026-09-25):** removed to match the Runtime design doc. Audit refreshes the latest page every 15 seconds (skipped while an entry is expanded or the tab is hidden) and retries a failed file list the same way. "Latest", which jumps back to page 1, stays.
 - **D3. Settings save model. Resolved (2026-09-25):** one save bar per section, no save-on-change. It keeps a single, predictable save behaviour and lets several "Restart required" changes go out together.
 
@@ -136,7 +136,7 @@ Each step should be checked at 1440 and 390 widths, with screenshots of every pa
 
 ### G2: status marks (2026-09-25)
 
-- `web/console/src/styles/base.css`: shared tokens in the `body` token block: `--status-mark-size` (7px), `--status-on` (green), `--status-off` (faded grey), `--status-pending` (orange), `--status-error` (red). Quail's default `QBadge dot` is drawn hollow, since "default" means off or unknown here.
+- `web/console/src/styles/base.css`: shared tokens in the `body` token block: `--status-mark-size` (7px), `--status-on` (blue), `--status-off` (faded grey), `--status-pending` (orange), `--status-error` (red). Quail's default `QBadge dot` is drawn hollow, since "default" means off or unknown here. Every `QBadge dot` is drawn as a 7px square, and `success` badges take the `--status-on` blue.
 - Square marks (1–2px radius) using those tokens in:
   - `RuntimeView.css`: health and channel status
   - `ContactsView.css`: "Active"
