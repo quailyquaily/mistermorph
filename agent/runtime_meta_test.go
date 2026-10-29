@@ -185,7 +185,10 @@ func TestApprovalResumeKeepsNewAndLegacyMetaLayouts(t *testing.T) {
 func TestRunContextGoesAfterMetaAndBeforeCurrent(t *testing.T) {
 	client := newMockClient(llm.Result{Text: `{"type":"final","output":"ok"}`})
 	runs := 0
-	e := New(client, tools.NewRegistry(), Config{}, DefaultPromptSpec(), WithRunContext(func(context.Context) []string {
+	e := New(client, tools.NewRegistry(), Config{}, DefaultPromptSpec(), WithRunContext(func(_ context.Context, in RunInput) []string {
+		if in.Task != "task" || len(in.History) != 1 {
+			t.Errorf("run input = %+v", in)
+		}
 		runs++
 		return []string{"[[ Saved Memories ]]\nnote", " ", "second"}
 	}))

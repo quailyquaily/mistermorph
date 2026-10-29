@@ -336,6 +336,80 @@ func (s *Store) ForPrompt(ctx context.Context, a audience.Audience, participants
 	if limit <= 0 {
 		limit = MaxPerSubject
 	}
+	items, err := s.promptCandidates(ctx, a, participants, limit+1)
+	if err != nil {
+		return nil, false, err
+	}
+	more := len(items) > limit
+	if more {
+		items = items[:limit]
+	}
+	return items, more, nil
+}
+
+// maxPromptCandidates bounds the memories ForRun scores. An audience hears at most a few hundred.
+const maxPromptCandidates = 1024
+
+// RunMemories is what ForRun picked for a run: the memories to show, the IDs of those the run's
+// messages are about, and whether more exist than are shown.
+type RunMemories struct {
+	Items    []Memory
+	Relevant map[string]bool
+	More     bool
+}
+
+// ForRun picks the memories a run sees without searching, from those ForPrompt would consider:
+// first the ones query is about (Rank, favoring the participants), then every feedback memory, since
+// it says how to work, then the newest of the rest, at most limit in all.
+func (s *Store) ForRun(ctx context.Context, a audience.Audience, participants []string, query string, limit int) (RunMemories, error) {
+	if limit <= 0 {
+		limit = MaxPerSubject
+	}
+	all, err := s.promptCandidates(ctx, a, participants, maxPromptCandidates)
+	if err != nil {
+		return RunMemories{}, err
+	}
+	var favored []string
+	for _, id := range participants {
+		if id = strings.TrimSpace(id); id != "" {
+			favored = append(favored, audience.Contact(id).String())
+		}
+	}
+	return pickRunMemories(all, Rank(all, query, RankOptions{Subjects: favored, Now: s.now()}), limit), nil
+}
+
+// pickRunMemories orders all (newest first) for a run: the ranked matches, then feedback, then the
+// rest, at most limit.
+func pickRunMemories(all []Memory, ranked []Ranked, limit int) RunMemories {
+	out := RunMemories{Relevant: map[string]bool{}}
+	taken := map[string]bool{}
+	take := func(m Memory) {
+		if len(out.Items) < limit && !taken[m.ID] {
+			taken[m.ID] = true
+			out.Items = append(out.Items, m)
+		}
+	}
+	for _, r := range ranked {
+		take(r.Memory)
+		if taken[r.Memory.ID] {
+			out.Relevant[r.Memory.ID] = true
+		}
+	}
+	for _, m := range all {
+		if m.Type == TypeFeedback {
+			take(m)
+		}
+	}
+	for _, m := range all {
+		take(m)
+	}
+	out.More = len(all) > len(out.Items)
+	return out
+}
+
+// promptCandidates are the memories a run with audience a may see without searching, newest first,
+// at most limit.
+func (s *Store) promptCandidates(ctx context.Context, a audience.Audience, participants []string, limit int) ([]Memory, error) {
 	var where string
 	var args []any
 	switch a.Kind {
@@ -359,21 +433,16 @@ func (s *Store) ForPrompt(ctx context.Context, a audience.Audience, participants
 		}
 		where += `)`
 	default:
-		return nil, false, nil
+		return nil, nil
 	}
 	hear, hearArgs, _ := hearableSQL(a)
 	args = append(args, hearArgs...)
-	args = append(args, limit+1)
+	args = append(args, limit)
 	items, err := s.query(ctx, `WHERE `+where+` AND `+hear+` ORDER BY updated_at DESC, id LIMIT ?`, args...)
 	if err != nil {
-		return nil, false, err
+		return nil, err
 	}
-	items = filterHearable(a, items)
-	more := len(items) > limit
-	if more {
-		items = items[:limit]
-	}
-	return items, more, nil
+	return filterHearable(a, items), nil
 }
 
 // List returns every memory, for the owner's Console.
