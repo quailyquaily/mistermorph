@@ -67,16 +67,17 @@ func contextInputLimits(contextWindowTokens int64, config resolvedContextCompact
 	return inputLimit, trigger, outputReserve
 }
 
-// ContextCompactionTriggerTokens is the input size, in tokens, at which a run compacts its context
-// for a model with this context window: the configured ratio of the window less the default output
-// reserve. A run that sets its own max output tokens reserves that instead, so its trigger differs.
-// It returns 0 when compaction is off or the window is unknown.
-func ContextCompactionTriggerTokens(contextWindowTokens int64, config ContextCompactionConfig) int64 {
+// ContextCompactionTriggerTokens is the input size, in tokens, at which a streamed run of model
+// compacts its context: the configured ratio of the window less the output the run reserves, which
+// is its default max output tokens or, for a model without one, the default output reserve. A run
+// that sets its own max output tokens reserves that instead, so its trigger differs. It returns 0
+// when compaction is off or the window is unknown.
+func ContextCompactionTriggerTokens(contextWindowTokens int64, model string, config ContextCompactionConfig) int64 {
 	resolved := resolveContextCompactionConfig(config, false)
 	if !resolved.Enabled {
 		return 0
 	}
-	inputLimit, trigger, _ := contextInputLimits(contextWindowTokens, resolved, 0)
+	inputLimit, trigger, _ := contextInputLimits(contextWindowTokens, resolved, mainMaxOutputTokens(model, true))
 	if inputLimit <= 0 {
 		return 0
 	}

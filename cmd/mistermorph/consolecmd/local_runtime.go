@@ -1031,7 +1031,7 @@ func (r *consoleLocalRuntime) topicMetadataForTopic(ctx context.Context, topicID
 			CachedInputTokens:        item.CachedInputTokens,
 			CacheCreationInputTokens: item.CacheCreationInputTokens,
 			UsageRatio:               item.UsageRatio,
-			CompactionTriggerTokens:  topicCompactionTriggerTokens(item.ContextWindowTokens, r.currentConfigReader()),
+			CompactionTriggerTokens:  topicCompactionTriggerTokens(item.ContextWindowTokens, item.Model, r.currentConfigReader()),
 			LastRunID:                item.LastRunID,
 			LastOriginEventID:        item.LastOriginEventID,
 			UpdatedAt:                item.UpdatedAt,
@@ -1061,7 +1061,7 @@ func (r *consoleLocalRuntime) topicContextForTopic(ctx context.Context, topicID,
 	return daemonruntime.TopicContext{
 		Available:               true,
 		Snapshot:                &snapshot,
-		CompactionTriggerTokens: topicCompactionTriggerTokens(snapshot.ContextWindowTokens, r.currentConfigReader()),
+		CompactionTriggerTokens: topicCompactionTriggerTokens(snapshot.ContextWindowTokens, snapshot.Model, r.currentConfigReader()),
 		CountNote:               countNote,
 	}, nil
 }
@@ -1113,11 +1113,11 @@ func sameModel(a, b string) bool {
 
 // topicCompactionTriggerTokens is where the topic's next run would compact its context, under the
 // current config.
-func topicCompactionTriggerTokens(contextWindowTokens int64, reader *viper.Viper) int64 {
+func topicCompactionTriggerTokens(contextWindowTokens int64, model string, reader *viper.Viper) int64 {
 	if reader == nil {
 		return 0
 	}
-	return agent.ContextCompactionTriggerTokens(contextWindowTokens, agent.NewContextCompactionConfig(
+	return agent.ContextCompactionTriggerTokens(contextWindowTokens, model, agent.NewContextCompactionConfig(
 		reader.GetBool("context_compaction.enabled"),
 		reader.GetFloat64("context_compaction.trigger_ratio"),
 	))

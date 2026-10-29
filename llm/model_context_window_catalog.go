@@ -16,7 +16,9 @@ type ModelContextWindow struct {
 	Model               string
 	NormalizedModel     string
 	ContextWindowTokens int64
-	Sources             []ModelContextWindowSource
+	// MaxOutputTokens is the most the model writes in one response; 0 when the catalog does not say.
+	MaxOutputTokens int64
+	Sources         []ModelContextWindowSource
 }
 
 type ModelContextWindowSource struct {
@@ -29,6 +31,7 @@ type modelContextWindowCatalogItem struct {
 	Model               string                     `yaml:"model"`
 	Aliases             []string                   `yaml:"aliases"`
 	ContextWindowTokens int64                      `yaml:"context_window_tokens"`
+	MaxOutputTokens     int64                      `yaml:"max_output_tokens"`
 	Sources             []ModelContextWindowSource `yaml:"sources"`
 }
 
@@ -74,6 +77,7 @@ func loadModelContextWindows() {
 			Model:               strings.TrimSpace(item.Model),
 			NormalizedModel:     model,
 			ContextWindowTokens: item.ContextWindowTokens,
+			MaxOutputTokens:     item.MaxOutputTokens,
 			Sources:             append([]ModelContextWindowSource(nil), item.Sources...),
 		}
 		modelContextWindowMap[model] = entry
