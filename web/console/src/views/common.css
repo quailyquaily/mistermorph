@@ -209,7 +209,6 @@
 
 .workspace-sidebar-item-title {
   min-width: 0;
-  min-height: 22px;
   display: -webkit-box;
   font-family: var(--font-title);
   font-size: var(--font-size-ui);
@@ -229,7 +228,6 @@
 }
 
 .workspace-sidebar-item:not(:has(.workspace-sidebar-item-meta)) .workspace-sidebar-item-title {
-  min-height: 0;
   line-height: 1.3;
 }
 
