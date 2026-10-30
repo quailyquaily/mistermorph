@@ -10,6 +10,14 @@ models:
       - url: https://developers.openai.com/api/docs/models
         checked_at: "2026-10-02"
   - provider: openai
+    model: gpt-6.1-terra
+    aliases:
+      - openai/gpt-6.1-terra
+    context_window_tokens: 1050000
+    sources:
+      - url: https://developers.openai.com/api/docs/models/gpt-6.1-terra
+        checked_at: "2026-10-30"
+  - provider: openai
     model: gpt-6-sol
     aliases:
       - openai/gpt-6-sol
@@ -327,6 +335,17 @@ models:
         checked_at: "2026-05-24"
       - url: https://platform.claude.com/docs/en/models/sonnet-4-6/overview
         checked_at: "2026-10-28"
+  - provider: anthropic
+    model: claude-haiku-5-5
+    aliases:
+      - anthropic/claude-haiku-5-5
+      - claude-haiku-5.5
+      - anthropic/claude-haiku-5.5
+    context_window_tokens: 1000000
+    max_output_tokens: 128000
+    sources:
+      - url: https://platform.claude.com/docs/en/models/haiku-5-5/overview
+        checked_at: "2026-10-30"
   - provider: anthropic
     model: claude-haiku-4-5
     aliases:
