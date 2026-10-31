@@ -195,9 +195,9 @@ func WithEngineToolsConfig(cfg EngineToolsConfig) Option {
 	}
 }
 
-// WithClaudeCoder uses a runtime-owned Claude session instead of a one-shot CLI process.
-func WithClaudeCoder(run func(context.Context, CoderRequest) (string, error)) Option {
-	return func(e *Engine) { e.claudeCoder = run }
+// WithCoderTerminal runs coder tasks in runtime-owned terminal sessions instead of one-shot CLI processes.
+func WithCoderTerminal(run func(context.Context, CoderRequest) (string, error)) Option {
+	return func(e *Engine) { e.coderTerminal = run }
 }
 
 type Config struct {
@@ -220,7 +220,7 @@ type Engine struct {
 	logOpts  LogOptions
 
 	engineToolsConfig EngineToolsConfig
-	claudeCoder       func(context.Context, CoderRequest) (string, error)
+	coderTerminal     func(context.Context, CoderRequest) (string, error)
 
 	systemPromptCacheControl *llm.CacheControl
 	// runContext adds notes to each fresh run, after the metadata (WithRunContext).
@@ -303,9 +303,9 @@ func New(client llm.Client, registry *tools.Registry, cfg Config, spec PromptSpe
 			Runner:     e.subtaskRunner,
 		},
 		coderToolDeps{
-			Runner:    e.subtaskRunner,
-			RunCLI:    runCoderCLI,
-			RunClaude: e.claudeCoder,
+			Runner:      e.subtaskRunner,
+			RunCLI:      runCoderCLI,
+			RunTerminal: e.coderTerminal,
 		},
 		e.modelProfiles,
 	)

@@ -1,4 +1,4 @@
-package claudeterm
+package coderterm
 
 import (
 	"bufio"
@@ -10,8 +10,8 @@ import (
 	"strings"
 )
 
-// transcriptReader only reads new user/assistant text. Tool output is deliberately ignored.
-type transcriptReader struct {
+// claudeTranscript only reads new user/assistant text. Tool output is deliberately ignored.
+type claudeTranscript struct {
 	path            string
 	offset          int64
 	user, assistant string
@@ -21,7 +21,7 @@ type transcriptReader struct {
 	failure         string
 }
 
-func (r *transcriptReader) read() error {
+func (r *claudeTranscript) read() error {
 	f, err := os.Open(r.path)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil

@@ -1,24 +1,14 @@
-package claudeterm
+package coderterm
 
 import (
-	"fmt"
 	"regexp"
-	"strconv"
 	"strings"
 )
 
 var numberedOption = regexp.MustCompile(`^([1-9][0-9]*)\. (?:\(selected\) )?(.*)$`)
 
-type screenView struct {
-	idle     bool
-	question *Question
-	keys     []string
-	problem  string
-	rule     string // Prefilled permission rule waiting for Enter.
-}
-
 // parseScreen recognizes screen-reader prompts, not the code and tool output above them.
-func parseScreen(screen string) screenView {
+func parseClaudeScreen(screen string) screenView {
 	lines := strings.Split(strings.TrimSpace(screen), "\n")
 	last := strings.TrimSpace(lines[len(lines)-1])
 	textLine := last
@@ -115,20 +105,4 @@ func parseScreen(screen string) screenView {
 		q.Text = strings.Join(relevant, "\n")
 	}
 	return v
-}
-
-func (v screenView) answer(a Answer) (string, error) {
-	if a.Option < 0 {
-		if v.question.ChoicesOnly {
-			return "", fmt.Errorf("this Claude prompt requires an option")
-		}
-		if err := checkText(a.Text); err != nil {
-			return "", err
-		}
-		return strings.NewReplacer("\n", " ", "\r", " ", "\t", " ").Replace(a.Text), nil
-	}
-	if a.Option >= len(v.keys) {
-		return "", fmt.Errorf("Claude option %s is not available", strconv.Itoa(a.Option+1))
-	}
-	return v.keys[a.Option], nil
 }

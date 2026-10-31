@@ -39,7 +39,7 @@ type coderTool struct {
 	deps coderToolDeps
 }
 
-// CoderRequest describes one coding task. Command and Env are resolved for an injected Claude runner.
+// CoderRequest describes one coding task. Command and Env are resolved for an injected terminal runner.
 type CoderRequest struct {
 	Backend   string
 	Task      string
@@ -69,10 +69,10 @@ func newCoderTool(deps coderToolDeps) *coderTool {
 func (t *coderTool) Name() string { return coderToolName }
 
 func (t *coderTool) Description() string {
-	if t.deps.RunClaude != nil {
+	if t.deps.RunTerminal != nil {
 		return "Delegate a repository coding task to local Codex or Claude Code (cc) when the user asks for them. " +
-			"Claude Code keeps a terminal session for this conversation and working directory, and asks the user when needed. " +
-			"Codex runs non-interactively with approvals bypassed. Returns a SubtaskResult envelope."
+			"Each keeps a terminal session for this conversation and working directory, and asks the user to approve actions when needed. " +
+			"Returns a SubtaskResult envelope."
 	}
 	return "Delegate a repository coding task to the local Codex or Claude Code CLI. " +
 		"Use this when the user explicitly asks for Codex, Claude Code, or cc to handle code edits, review fixes, tests, or file generation. " +
@@ -119,14 +119,15 @@ func (t *coderTool) Execute(ctx context.Context, params map[string]any) (string,
 	if runCLI == nil {
 		runCLI = runCoderCLI
 	}
-	if req.Backend == coderBackendClaude && t.deps.RunClaude != nil {
+	if t.deps.RunTerminal != nil {
 		runCLI = func(ctx context.Context, req CoderRequest, emit func(string)) (string, error) {
-			command, env, err := prepareCoderCommand("claude", req.PathExtra)
+			// The backend name is also the CLI's command name.
+			command, env, err := prepareCoderCommand(req.Backend, req.PathExtra)
 			if err != nil {
 				return "", err
 			}
 			req.Command, req.Env = command, env
-			output, err := t.deps.RunClaude(ctx, req)
+			output, err := t.deps.RunTerminal(ctx, req)
 			if output != "" {
 				emit(output)
 			}

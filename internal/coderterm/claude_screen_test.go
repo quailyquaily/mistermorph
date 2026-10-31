@@ -1,4 +1,4 @@
-package claudeterm
+package coderterm
 
 import (
 	"strings"
@@ -19,7 +19,7 @@ func TestScreenReaderPrompts(t *testing.T) {
 		{"trust", "Permission Required: Accessing workspace:\nworkspace\ny. Yes, I trust this folder\nn. No, exit\nEnter y/n:\nEnter to confirm · Esc to cancel", 2, false},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			v := parseScreen(tt.screen)
+			v := parseClaudeScreen(tt.screen)
 			if v.rule != "" {
 				t.Fatalf("unexpected rule %q", v.rule)
 			}
@@ -41,7 +41,7 @@ func TestScreenReaderPrompts(t *testing.T) {
 }
 
 func TestFilePermissionPreservesDecisionWithoutDiff(t *testing.T) {
-	v := parseScreen("Permission Required: Create file\nexample.txt\n 1 private edit contents\nDo you want to create example.txt?\n1. Yes\n2. Yes, and switch to accept edits (auto-approve file edits and common file\ncommands) for this session (shift+tab)\n3. No\nSelect with numbers [1-3]. Then Enter to submit or Escape to cancel:\nEsc to cancel")
+	v := parseClaudeScreen("Permission Required: Create file\nexample.txt\n 1 private edit contents\nDo you want to create example.txt?\n1. Yes\n2. Yes, and switch to accept edits (auto-approve file edits and common file\ncommands) for this session (shift+tab)\n3. No\nSelect with numbers [1-3]. Then Enter to submit or Escape to cancel:\nEsc to cancel")
 	if v.question == nil {
 		t.Fatalf("view=%+v", v)
 	}
@@ -62,8 +62,8 @@ func TestFilePermissionPreservesDecisionWithoutDiff(t *testing.T) {
 
 func TestTextEchoDoesNotOpenAnotherQuestion(t *testing.T) {
 	prompt := "Question: Format\n> Which format should we use?\nEnter text for option 3 (Other), or Escape for the list:"
-	before := parseScreen(prompt)
-	after := parseScreen(prompt + " plain 文本")
+	before := parseClaudeScreen(prompt)
+	after := parseClaudeScreen(prompt + " plain 文本")
 	if before.question.Text != after.question.Text {
 		t.Fatalf("input echo changed question: %q", after.question.Text)
 	}
@@ -73,14 +73,14 @@ func TestTextFieldsBeforeEscapeHint(t *testing.T) {
 	// Captured from Claude Code 2.1.316 after choosing "don't ask again" on a Bash prompt.
 	rule := "Permission Required: Bash command\n> go run hello.go | od -c && ls -la\nDo you want to proceed?\n1. Yes\n2. Yes, and don’t ask again for\n3. No\n" +
 		"Enter text for option 2 (Yes, and don’t ask again for), or Escape for the list: go run *\nEsc to cancel"
-	if v := parseScreen(rule); v.rule != "go run *" || v.question != nil || v.problem != "" {
+	if v := parseClaudeScreen(rule); v.rule != "go run *" || v.question != nil || v.problem != "" {
 		t.Fatalf("rule field: %+v", v)
 	}
-	if v := parseScreen(strings.TrimSuffix(rule, "go run *\nEsc to cancel") + "\nEsc to cancel"); v.problem == "" {
+	if v := parseClaudeScreen(strings.TrimSuffix(rule, "go run *\nEsc to cancel") + "\nEsc to cancel"); v.problem == "" {
 		t.Fatal("empty rule accepted")
 	}
 	other := "Question: Format\n> Which format?\n1. Markdown\n2. Other\nEnter text for option 2: draft\nEsc to cancel"
-	if v := parseScreen(other); v.question == nil || v.rule != "" || v.question.ChoicesOnly || !strings.HasSuffix(v.question.Text, "Enter text for option 2:") {
+	if v := parseClaudeScreen(other); v.question == nil || v.rule != "" || v.question.ChoicesOnly || !strings.HasSuffix(v.question.Text, "Enter text for option 2:") {
 		t.Fatalf("Other field: %+v", v)
 	}
 }

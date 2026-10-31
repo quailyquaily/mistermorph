@@ -339,7 +339,9 @@ tools:
     enabled: true
   coder:
     # Enable the coder tool.
-    # It runs local Codex / Claude Code CLI subtasks with approval and permission prompts bypassed.
+    # In Console, Codex and Claude Code run in persistent terminal sessions (one per conversation and
+    # working directory) and ask the user to approve actions. Elsewhere they run as one-shot CLI
+    # subtasks with approval and permission prompts bypassed.
     enabled: false
     # Extra directories prepended to PATH when launching codex / claude for the coder tool.
     # Use this when those CLIs are installed outside the service manager's PATH.

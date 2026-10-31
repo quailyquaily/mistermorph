@@ -1,6 +1,6 @@
 //go:build unix
 
-package claudeterm
+package coderterm
 
 import (
 	"context"
@@ -156,7 +156,7 @@ func TestInstalledClaude(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 	questions := 0
-	req := Request{Command: command, CWD: work, LogRoot: root,
+	req := Request{Backend: "claude", Command: command, CWD: work, LogRoot: root,
 		Env:      []string{"PATH=" + os.Getenv("PATH"), "CLAUDE_CONFIG_DIR=" + config, "ANTHROPIC_API_KEY=morph-probe", "ANTHROPIC_BASE_URL=" + server.URL, "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1", "DISABLE_AUTOUPDATER=1"},
 		Progress: func(s string) { t.Log(s) },
 		Ask: func(_ context.Context, q Question) (Answer, error) {
@@ -201,7 +201,7 @@ func TestInstalledClaude(t *testing.T) {
 			t.Fatal("returned a previous turn's Markdown")
 		}
 		outputs[out] = true
-		s := sessions.items["topic"]
+		s := sessions.items[sessionKey{"topic", "claude"}]
 		if first == nil {
 			first = s
 		} else if s != first {
@@ -225,7 +225,7 @@ func TestInstalledClaude(t *testing.T) {
 	if out, err := sessions.Run(ctx, "topic", req); err != nil || out != noTextReply {
 		t.Fatalf("thinking-only turn: %q %v", out, err)
 	}
-	if sessions.items["topic"] != first {
+	if sessions.items[sessionKey{"topic", "claude"}] != first {
 		t.Fatal("thinking-only turn replaced the Claude process")
 	}
 	req.Task = "probe-deny"
@@ -243,7 +243,7 @@ func TestInstalledClaude(t *testing.T) {
 	if _, err := sessions.Run(ctx, "topic", req); err != nil {
 		t.Fatalf("resume: %v", err)
 	}
-	resumed := sessions.items["topic"]
+	resumed := sessions.items[sessionKey{"topic", "claude"}]
 	if resumed == first || resumed.id != first.id || !strings.Contains(strings.Join(resumed.cmd.Args, " "), "--resume "+first.id) {
 		t.Fatalf("resume args: %v (first session %s)", resumed.cmd.Args, first.id)
 	}
@@ -254,7 +254,7 @@ func TestInstalledClaude(t *testing.T) {
 	if _, err := sessions.Run(ctx, "topic", req); err == nil || !strings.Contains(err.Error(), "probe API failure") {
 		t.Fatalf("API failure: %v", err)
 	}
-	if sessions.resume["topic"].id != first.id {
+	if sessions.resume[sessionKey{"topic", "claude"}].id != first.id {
 		t.Fatal("API failure did not keep the conversation for resume")
 	}
 	sessions.Reset("topic")

@@ -434,7 +434,7 @@ const ChatStatusCard = {
                       </span>
                     </div>
                     <MarkdownContent
-                      v-if="entry.name === 'coder' && entry.stream === 'claude' && entry.output && !entry.error && activityChildren(entry).length === 0"
+                      v-if="entry.name === 'coder' && (entry.stream === 'claude' || entry.stream === 'codex') && entry.output && !entry.error && activityChildren(entry).length === 0"
                       :source="entry.output"
                       class="chat-activity-markdown"
                     />

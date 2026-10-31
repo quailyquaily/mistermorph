@@ -27,11 +27,12 @@ type spawnToolDeps struct {
 }
 
 type coderToolDeps struct {
-	Runner    SubtaskRunner
-	RunCLI    coderCLIRunFunc
-	RunClaude func(context.Context, CoderRequest) (string, error)
-	Roots     pathroots.PathRoots
-	PathExtra []string
+	Runner SubtaskRunner
+	RunCLI coderCLIRunFunc
+	// RunTerminal runs Codex and Claude Code in persistent terminal sessions when set.
+	RunTerminal func(context.Context, CoderRequest) (string, error)
+	Roots       pathroots.PathRoots
+	PathExtra   []string
 }
 
 // registerEngineTools registers the enabled engine tools and returns the prompt blocks that go

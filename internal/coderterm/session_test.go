@@ -1,6 +1,6 @@
 //go:build unix
 
-package claudeterm
+package coderterm
 
 import (
 	"context"
@@ -24,7 +24,7 @@ func TestCancelWhileWaitingForAnswer(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	waiting := make(chan struct{})
-	req := Request{Command: command, CWD: dir, Task: "test", LogRoot: dir, Ask: func(ctx context.Context, _ Question) (Answer, error) {
+	req := Request{Backend: "claude", Command: command, CWD: dir, Task: "test", LogRoot: dir, Ask: func(ctx context.Context, _ Question) (Answer, error) {
 		close(waiting)
 		<-ctx.Done()
 		return Answer{}, ctx.Err()
@@ -62,7 +62,7 @@ func TestTranscriptIgnoresEditsAndWaitsForCompleteLine(t *testing.T) {
 	if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	r := transcriptReader{path: path}
+	r := claudeTranscript{path: path}
 	if err := r.read(); err != nil {
 		t.Fatal(err)
 	}
@@ -92,7 +92,7 @@ func TestTranscriptWaitsForThisTurnsFinalMessage(t *testing.T) {
 	if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	r := transcriptReader{path: path, expected: "task"}
+	r := claudeTranscript{path: path, expected: "task"}
 	if err := r.read(); err != nil {
 		t.Fatal(err)
 	}
@@ -132,7 +132,7 @@ func TestFailedSessionResumes(t *testing.T) {
 	}
 	var sessions Sessions
 	defer sessions.Close()
-	req := Request{Command: command, CWD: dir, Task: "test", LogRoot: dir, Env: []string{"HOME=" + dir, "PATH=" + os.Getenv("PATH")}}
+	req := Request{Backend: "claude", Command: command, CWD: dir, Task: "test", LogRoot: dir, Env: []string{"HOME=" + dir, "PATH=" + os.Getenv("PATH")}}
 	run := func() (flag, id string) {
 		t.Helper()
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -148,7 +148,7 @@ func TestFailedSessionResumes(t *testing.T) {
 		fields := strings.Fields(lines[len(lines)-1])
 		return fields[0], fields[1]
 	}
-	resumable := func() string { return sessions.resume["topic"].id }
+	resumable := func() string { return sessions.resume[sessionKey{"topic", "claude"}].id }
 
 	flag, first := run()
 	if flag != "--session-id" || resumable() != first {

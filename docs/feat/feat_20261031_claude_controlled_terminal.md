@@ -1,18 +1,18 @@
 ---
 date: 2026-10-31
-title: Coder Tool 的 Claude 持续终端会话
+title: Coder Tool 的持续终端会话（Claude Code 与 Codex）
 status: implemented-experimental
 ---
 
-# Coder Tool 的 Claude 持续终端会话
+# Coder Tool 的持续终端会话（Claude Code 与 Codex）
 
 ## 目标与范围
 
-Console local 的 `coder` 在受控 PTY 中运行交互式 Claude Code。同一对话、同一工作目录的后续调用复用进程。Claude 提问时，Console 展示现有问答卡片，回答再写入终端。
+Console local 的 `coder` 在受控 PTY 中运行交互式 Claude Code 或 Codex。同一对话、同一工作目录、同一 CLI 的后续调用复用进程。CLI 提问或请求审批时，Console 展示现有问答卡片，回答再写入终端。Claude Code 的细节见下文各节，Codex 的差异见[Codex](#codex)一节。
 
-**只允许 TUI 和 session JSONL 两个信息来源，不使用 Claude Code hooks。**
+**只允许 TUI 和 CLI 自身的 session JSONL 两个信息来源，不使用 hooks。**
 
-首版使用 Unix PTY，已在 Linux 上验证；macOS 尚未实测。Codex 和其他 runtime 保留原实现。Console 的终端路径失败时返回错误，不自动切换到 `claude -p`。
+首版使用 Unix PTY，已在 Linux 上验证；macOS 尚未实测。Console 以外的 runtime 保留原一次性实现。Console 的终端路径失败时返回错误，不自动切换到 `claude -p` 或 `codex exec`。
 
 Console 只接收以下内容：
 
@@ -50,15 +50,15 @@ flowchart LR
     S --> R[SubtaskResult]
 ```
 
-`internal/claudeterm` 管理进程、终端、状态识别和 JSONL 读取。`taskruntime.Runtime` 持有会话集合，把父任务的问答回调接入执行器。`agent.WithClaudeCoder` 注入执行函数，避免 agent 依赖 runtime。
+`internal/coderterm` 管理进程、终端、状态识别和 JSONL 读取。`taskruntime.Runtime` 持有会话集合，把父任务的问答回调接入执行器。`agent.WithCoderTerminal` 注入执行函数，避免 agent 依赖 runtime。
 
 使用 `creack/pty` 创建控制终端，`charmbracelet/x/vt` 处理终端转义与 Unicode。仓库的 ultraviolet replacement 缺少 `screen` 子包，已补入相同上游版本的原文件，没有另写屏幕模拟器。[PTY 源码](https://github.com/creack/pty/blob/master/start.go)、[VT 源码](https://github.com/charmbracelet/x/tree/main/vt)
 
-没有通用 backend 接口、终端服务、独立守护进程、ACP 或 Agent SDK。
+两个 CLI 共用 PTY、输入、问答与会话管理。差异集中在包内的 `backend` 接口：启动参数、会话 ID、会话文件定位、屏幕识别和本轮读取。没有终端服务、独立守护进程、ACP 或 Agent SDK。
 
 ## 会话与输入
 
-每个 runtime 内，一个 conversation 最多有一个 Claude 进程。同一 cwd 正常完成后保留进程；更换 cwd 时创建新会话。同一会话已有调用运行时，第二个调用直接报忙。
+每个 runtime 内，一个 conversation 每种 CLI 最多有一个进程。同一 cwd 正常完成后保留进程；更换 cwd 时创建新会话。同一会话已有调用运行时，第二个调用直接报忙。
 
 对话重置、删除或 runtime 关闭时释放进程，下次调用创建新会话。调用取消、超时、失败或用户拒绝权限时关闭进程组，但在内存中记住该会话的 UUID 和 cwd；同一对话、同一 cwd 的下次调用用 `--resume <uuid>` 重新打开，Claude 保留之前的对话上下文。空闲期间进程自行退出时同样处理。
 
@@ -78,6 +78,8 @@ claude --resume <uuid> --ax-screen-reader --permission-mode default    # 失败�
 任务通过 bracketed paste 输入，前面加 `Coding task:` 和换行，避免任务开头的 `/`、`!` 被当作终端命令。主任务允许多行和中文。实际内容通过本轮 JSONL 的用户消息核对。
 
 无障碍问答框与主输入框的行为不同：问答框只接收逐字输入，不能直接粘贴整段文字。执行器等待字符回显或光标移动，并留出 100 ms 让输入处理器更新，再发送下一个字符或回车。这个间隔处理已实测的终端输入时序，不是重试机制。单行问答里的换行、回车和制表符转换为空格。
+
+逐字输入期间如果出现开始输入时没有的提示框（例如启动后才弹出的目录信任），立即停止，不再发送剩余字符和回车，避免替用户回答尚未展示的问题。
 
 ## 状态与结果
 
@@ -112,9 +114,39 @@ claude --resume <uuid> --ax-screen-reader --permission-mode default    # 失败�
 
 提交回答前检查当前问题和选项是否一致。输入框回显不算新问题。拒绝权限会结束本次 coder 调用并关闭终端，不再等待正常完成的 assistant 消息。
 
+## Codex
+
+Codex 沿用相同的终端、问答、恢复和 Console 规则，差异如下：
+
+| 项目 | Claude Code | Codex |
+| --- | --- | --- |
+| 会话 ID | 启动时用 `--session-id` 指定 | 首次提交前输入 `/status`，读取屏幕上的 `Session:` 行 |
+| 会话文件 | `CLAUDE_CONFIG_DIR/projects/*/<id>.jsonl` | `CODEX_HOME/sessions/YYYY/MM/DD/rollout-*-<id>.jsonl` |
+| 本轮结束 | assistant `stop_reason` 为 `end_turn`，且 TUI 空闲 | 本轮 `task_complete`，且 TUI 空闲 |
+| 最终回答 | assistant 文本块 | `task_complete.last_agent_message` |
+| 失败 | `isApiErrorMessage` | `task_complete.error`、`turn_aborted` |
+| 回答选项 | 逐字输入后回车 | 审批框按数字即确认；目录信任框按数字移动高亮，确认高亮后回车 |
+| 拒绝权限 | 立即结束本次调用 | 等 JSONL 记录 `turn_aborted` 后结束 |
+| 重新打开 | `--resume <id>` | `codex resume <id>` |
+
+启动命令：
+
+```text
+codex --no-daemon -c check_for_update_on_startup=false --ask-for-approval on-request --sandbox workspace-write
+codex resume <id> --no-daemon -c check_for_update_on_startup=false --ask-for-approval on-request --sandbox workspace-write
+```
+
+`--no-daemon` 避免接入共享的 app-server。`on-request` 与 `workspace-write` 让超出沙箱的命令进入审批，而不是像一次性路径那样绕过审批；实测默认的 granular 配置会直接拒绝越权请求，所以显式传入。
+
+Codex 不提供指定会话 ID 的参数，会话文件也在首次提交后才创建。因此首次提交前在 TUI 中执行 `/status` 读取 ID，其输出只留在 TUI 历史里。启动时 Codex 可能先绘制空闲画面再弹出目录信任框，所以要求连续两次识别为空闲才输入 `/status`。
+
+Codex 会以用户角色加入环境、AGENTS.md 等上下文消息。本轮以文本与提交内容完全一致的用户消息为准，记下它所在 turn 的 `task_started` ID，之后只认同一 turn 的 `task_complete` 或 `turn_aborted`。
+
+`request_user_input` 只在 Plan 模式可用；默认模式下 Codex 在回答中直接提问，由 Morph 对话继续。实测 `codex resume <id>` 沿用同一个 rollout 文件，并带回之前各轮。
+
 ## 当前限制
 
-首次适配以 Claude Code `2.1.316` 的实际无障碍布局为准，初期参数研究使用了 `2.1.314`。CLI 升级后需要重新执行交互测试。
+首次适配以 Claude Code `2.1.316` 的实际无障碍布局为准，初期参数研究使用了 `2.1.314`。Codex 以 `0.166.0` 的 TUI 为准，空闲识别依赖底部输入框位置，用户自定义的底部状态栏可能影响识别。CLI 升级后需要重新执行交互测试。
 
 不支持多选、多题 tab、计划编辑器、登录和配置向导，也不恢复外部切换或替换的会话。启动前需要完成 Claude 的登录与配置。可识别但不完整的选项布局报错；其他未知画面等待调用取消或既有任务超时，不猜测按键。
 
@@ -124,16 +156,17 @@ claude --resume <uuid> --ax-screen-reader --permission-mode default    # 失败�
 
 普通单元测试覆盖屏幕识别、问题回显、JSONL 半行、本轮归属、分块 Markdown、编辑输出过滤、等待回答时取消、并发调用限制，以及失败后的恢复规则（恢复参数、恢复失败后改为新会话、重置与更换 cwd 清除记录、进程退出不被误报为取消）。runtime 测试覆盖纯选项问题不会被聊天文字回答。
 
-真实 CLI 测试使用已安装的 Claude，连接本地模拟 Anthropic API，在临时目录执行；不使用真实模型密钥，不访问模型服务。运行方式：
+真实 CLI 测试使用已安装的 Claude 与 Codex，分别连接本地模拟的 Anthropic API 和 Responses API，在临时目录与临时 `CODEX_HOME` 中执行；不使用真实模型密钥，不访问模型服务。运行方式：
 
 ```sh
-MISTERMORPH_TEST_CLAUDE=1 go test -race ./internal/claudeterm -run TestInstalledClaude -v
+MISTERMORPH_TEST_CLAUDE=1 go test -race ./internal/coderterm -run TestInstalledClaude -v
+MISTERMORPH_TEST_CODEX=1 go test -race ./internal/coderterm -run TestInstalledCodex -v
 ```
 
-测试覆盖同一进程连续多轮、中文多行和长任务、快捷前缀、单选、Other 文本、文件写入批准与拒绝、拒绝后的下一任务以 `--resume` 恢复并带上之前各轮、Windows 换行、只有 thinking 的回合，以及分块 Markdown 保留和 API 失败。测试同时检查启动参数不含额外 `--settings`。模拟 API 验证的是终端与协议行为，不代表真实模型编码质量。Console 前端另做构建和问答数据测试。
+测试覆盖同一进程连续多轮、中文多行和长任务、快捷前缀、单选、Other 文本、文件写入批准与拒绝、拒绝后的下一任务以 `--resume` 恢复并带上之前各轮、Windows 换行、只有 thinking 的回合，以及分块 Markdown 保留和 API 失败。测试同时检查启动参数不含额外 `--settings`。Codex 测试覆盖 git 目录的信任提示、同一进程连续多轮、中文多行和长任务、快捷前缀、Windows 换行、命令审批的批准与拒绝、无文本回合、拒绝后以 `codex resume` 恢复并带上之前各轮，以及 API 失败。Codex 屏幕识别的单元测试使用实际截取的画面（`internal/coderterm/testdata/codex`）。模拟 API 验证的是终端与协议行为，不代表真实模型编码质量。Console 前端另做构建和问答数据测试。
 
 ## 与旧设计的关系
 
-[直接 CLI 方案](feat_20260616_coder_tool_direct_cli.md) 描述一次性执行。此实现只替换 Console local 的 Claude 路径，保留原 coder 参数与启用方式，没有新增配置项。
+[直接 CLI 方案](feat_20260616_coder_tool_direct_cli.md) 描述一次性执行。此实现替换 Console local 的 Claude 与 Codex 路径，保留原 coder 参数与启用方式，没有新增配置项。
 
 资料核对日期：2026-10-31。

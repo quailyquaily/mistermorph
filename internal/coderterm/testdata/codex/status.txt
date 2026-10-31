@@ -1,0 +1,40 @@
+
+  >_ OpenAI Codex (v0.166.0)
+     ~/work
+
+  To get started, describe a task or try one of these commands:
+
+  /init - create an AGENTS.md file with instructions for Codex
+  /status - show current session configuration
+  /permissions - choose what Codex is allowed to do
+  /model - choose what model and reasoning effort to use
+  /review - review any changes and find issues
+
+/status
+
+  >_ OpenAI Codex (v0.166.0)
+
+  Model:               mock-model (reasoning none, summaries auto)
+  Model provider:      mock
+  Directory:           ~/work
+  Permissions:         Workspace (granular)
+  Agents.md:           <none>
+  Collaboration mode:  Default
+  Session:             01a191ef-c6db-7030-a621-99a29cf43de8
+
+  Token usage:         0 total  (0 input + 0 output)
+  Limits:              data not available yet
+
+
+
+
+
+
+
+
+
+
+› Ask Codex to do anything
+
+  mock-model default · ~/work
+  ? for shortcuts

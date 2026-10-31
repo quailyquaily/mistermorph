@@ -1,6 +1,6 @@
 //go:build !unix
 
-package claudeterm
+package coderterm
 
 import (
 	"context"
@@ -15,11 +15,11 @@ type session struct {
 	resumed, prompted bool
 }
 
-func start(Request, string) (*session, error) {
-	return nil, fmt.Errorf("Claude terminals require Unix")
+func start(backend, Request, string) (*session, error) {
+	return nil, fmt.Errorf("coder terminals require Unix")
 }
 func (*session) exited() bool { return true }
 func (*session) close()       {}
 func (*session) run(context.Context, Request) (string, error) {
-	return "", fmt.Errorf("Claude terminals require Unix")
+	return "", fmt.Errorf("coder terminals require Unix")
 }
