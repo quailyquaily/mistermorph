@@ -436,6 +436,7 @@ const ChatStatusCard = {
                     <MarkdownContent
                       v-if="entry.name === 'coder' && entry.stream === 'claude' && entry.output && !entry.error && activityChildren(entry).length === 0"
                       :source="entry.output"
+                      class="chat-activity-markdown"
                     />
                     <p v-else-if="activityEntryNote(entry) && activityChildren(entry).length === 0" class="chat-activity-note">{{ activityEntryNote(entry) }}</p>
                     <ol v-if="activityChildren(entry).length > 0" class="chat-activity-children">
