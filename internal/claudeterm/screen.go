@@ -14,13 +14,37 @@ type screenView struct {
 	question *Question
 	keys     []string
 	problem  string
+	rule     string // Prefilled permission rule waiting for Enter.
 }
 
 // parseScreen recognizes screen-reader prompts, not the code and tool output above them.
 func parseScreen(screen string) screenView {
 	lines := strings.Split(strings.TrimSpace(screen), "\n")
 	last := strings.TrimSpace(lines[len(lines)-1])
-	if strings.HasPrefix(last, "Enter text for option ") {
+	textLine := last
+	if last == "Esc to cancel" && len(lines) > 1 {
+		textLine = strings.TrimSpace(lines[len(lines)-2])
+	}
+	if strings.HasPrefix(textLine, "Enter text for option ") {
+		// The input echo or prefilled value follows the colon; it is not a new question.
+		prompt, value, _ := strings.Cut(textLine, ":")
+		permission, question := -1, -1
+		for i, line := range lines {
+			line = strings.TrimSpace(line)
+			if strings.HasPrefix(line, "Permission Required:") {
+				permission = i
+			}
+			if strings.HasPrefix(line, "Question:") {
+				question = i
+			}
+		}
+		if permission > question {
+			// "Don't ask again" opens the rule to save, prefilled with Claude's suggestion.
+			if value = strings.TrimSpace(value); value == "" {
+				return screenView{problem: "Claude asked for a permission rule without a suggestion"}
+			}
+			return screenView{rule: value}
+		}
 		var description []string
 		for _, line := range lines {
 			line = strings.TrimSpace(line)
@@ -31,8 +55,6 @@ func parseScreen(screen string) screenView {
 				description = append(description, strings.TrimPrefix(line, "> "))
 			}
 		}
-		// The input echo follows the colon; it is not a new question.
-		prompt, _, _ := strings.Cut(last, ":")
 		description = append(description, prompt+":")
 		return screenView{question: &Question{Text: strings.Join(description, "\n")}}
 	}

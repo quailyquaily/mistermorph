@@ -26,6 +26,8 @@ type session struct {
 	cwd, id, dir                string
 	projectsDir, transcriptPath string
 	busy                        bool // Guarded by Sessions.mu.
+	resumed                     bool // Started with --resume.
+	prompted                    bool // A task reached Claude; read after run returns.
 	cmd                         *exec.Cmd
 	tty                         *os.File
 	cancel                      context.CancelFunc
@@ -38,7 +40,8 @@ type session struct {
 	screen                      *vt.Emulator
 }
 
-func start(req Request) (*session, error) {
+// start launches Claude. A non-empty resumeID reopens that session's conversation.
+func start(req Request, resumeID string) (*session, error) {
 	root := ""
 	if req.LogRoot != "" {
 		root = filepath.Join(req.LogRoot, "coder")
@@ -60,7 +63,12 @@ func start(req Request) (*session, error) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	s := &session{cwd: req.CWD, id: uuid.NewString(), dir: dir, ctx: ctx, cancel: cancel, done: make(chan struct{}), inputDone: make(chan struct{}), screen: vt.NewEmulator(120, 40)}
-	s.cmd = exec.CommandContext(ctx, req.Command, "--session-id", s.id, "--ax-screen-reader", "--permission-mode", "default")
+	// --resume keeps the session ID and appends to the same JSONL.
+	idFlag := "--session-id"
+	if resumeID != "" {
+		s.id, s.resumed, idFlag = resumeID, true, "--resume"
+	}
+	s.cmd = exec.CommandContext(ctx, req.Command, idFlag, s.id, "--ax-screen-reader", "--permission-mode", "default")
 	s.cmd.Dir = req.CWD
 	env := req.Env
 	if env == nil {
@@ -189,8 +197,14 @@ func (s *session) findTranscript() error {
 	return nil
 }
 
-func (s *session) run(ctx context.Context, req Request) (string, error) {
-	ctx, cancel := context.WithCancel(ctx)
+func (s *session) run(parent context.Context, req Request) (output string, err error) {
+	// Process exit also cancels ctx; report it as an exit unless the caller stopped first.
+	defer func() {
+		if errors.Is(err, context.Canceled) && parent.Err() == nil && s.exited() {
+			err = fmt.Errorf("Claude terminal exited: %v (diagnostics: %s)", s.waitErr, s.dir)
+		}
+	}()
+	ctx, cancel := context.WithCancel(parent)
 	stopCancel := context.AfterFunc(s.ctx, cancel)
 	defer cancel()
 	defer stopCancel()
@@ -199,7 +213,11 @@ func (s *session) run(ctx context.Context, req Request) (string, error) {
 			req.Progress(text)
 		}
 	}
-	progress("Claude is starting")
+	if s.resumed && !s.prompted {
+		progress("Claude is resuming the previous session")
+	} else {
+		progress("Claude is starting")
+	}
 	var sent bool
 	var answered string
 	transcript := transcriptReader{expected: "Coding task:\n" + req.Task, path: s.transcriptPath}
@@ -217,6 +235,22 @@ func (s *session) run(ctx context.Context, req Request) (string, error) {
 		view := parseScreen(screen)
 		if view.problem != "" {
 			return "", fmt.Errorf("%s (diagnostics: %s)", view.problem, s.dir)
+		}
+		if view.rule != "" {
+			// The user already chose "don't ask again"; Enter keeps Claude's suggested scope, as in the TUI.
+			if answered != "rule:"+view.rule {
+				select {
+				case <-ctx.Done():
+					return "", ctx.Err()
+				case <-time.After(100 * time.Millisecond):
+				}
+				s.mu.Lock()
+				s.screen.SendText("\r")
+				s.mu.Unlock()
+				answered = "rule:" + view.rule
+				progress("Claude will stop asking for: " + view.rule)
+			}
+			continue
 		}
 		if view.question != nil {
 			fingerprint := view.question.Text + fmt.Sprint(view.question.Options)
@@ -255,6 +289,13 @@ func (s *session) run(ctx context.Context, req Request) (string, error) {
 		}
 		answered = ""
 		if !sent && view.idle {
+			// A resumed JSONL already holds earlier turns, so locate it before submitting.
+			if transcript.path == "" {
+				if err := s.findTranscript(); err != nil {
+					return "", err
+				}
+				transcript.path = s.transcriptPath
+			}
 			if transcript.path != "" {
 				info, err := os.Stat(transcript.path)
 				if err != nil {
@@ -262,6 +303,7 @@ func (s *session) run(ctx context.Context, req Request) (string, error) {
 				}
 				transcript.offset = info.Size()
 			}
+			s.prompted = true
 			// A natural-language prefix keeps / and ! from becoming TUI commands.
 			if err := s.submit(ctx, "Coding task:\n"+req.Task, true); err != nil {
 				return "", err

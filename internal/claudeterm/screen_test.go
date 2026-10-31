@@ -20,6 +20,9 @@ func TestScreenReaderPrompts(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			v := parseScreen(tt.screen)
+			if v.rule != "" {
+				t.Fatalf("unexpected rule %q", v.rule)
+			}
 			if v.problem != "" {
 				t.Fatal(v.problem)
 			}
@@ -63,5 +66,21 @@ func TestTextEchoDoesNotOpenAnotherQuestion(t *testing.T) {
 	after := parseScreen(prompt + " plain 文本")
 	if before.question.Text != after.question.Text {
 		t.Fatalf("input echo changed question: %q", after.question.Text)
+	}
+}
+
+func TestTextFieldsBeforeEscapeHint(t *testing.T) {
+	// Captured from Claude Code 2.1.316 after choosing "don't ask again" on a Bash prompt.
+	rule := "Permission Required: Bash command\n> go run hello.go | od -c && ls -la\nDo you want to proceed?\n1. Yes\n2. Yes, and don’t ask again for\n3. No\n" +
+		"Enter text for option 2 (Yes, and don’t ask again for), or Escape for the list: go run *\nEsc to cancel"
+	if v := parseScreen(rule); v.rule != "go run *" || v.question != nil || v.problem != "" {
+		t.Fatalf("rule field: %+v", v)
+	}
+	if v := parseScreen(strings.TrimSuffix(rule, "go run *\nEsc to cancel") + "\nEsc to cancel"); v.problem == "" {
+		t.Fatal("empty rule accepted")
+	}
+	other := "Question: Format\n> Which format?\n1. Markdown\n2. Other\nEnter text for option 2: draft\nEsc to cancel"
+	if v := parseScreen(other); v.question == nil || v.rule != "" || v.question.ChoicesOnly || !strings.HasSuffix(v.question.Text, "Enter text for option 2:") {
+		t.Fatalf("Other field: %+v", v)
 	}
 }

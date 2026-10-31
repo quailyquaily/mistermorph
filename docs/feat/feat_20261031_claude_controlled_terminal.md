@@ -60,12 +60,17 @@ flowchart LR
 
 每个 runtime 内，一个 conversation 最多有一个 Claude 进程。同一 cwd 正常完成后保留进程；更换 cwd 时创建新会话。同一会话已有调用运行时，第二个调用直接报忙。
 
-对话重置、删除或 runtime 关闭时释放进程。调用取消、超时、失败或用户拒绝权限时关闭进程组，下次调用创建新会话。没有自动 resume、任务重放或重试。跨调用不保存上一任务的 ctx、问答回调或事件 sink。
+对话重置、删除或 runtime 关闭时释放进程，下次调用创建新会话。调用取消、超时、失败或用户拒绝权限时关闭进程组，但在内存中记住该会话的 UUID 和 cwd；同一对话、同一 cwd 的下次调用用 `--resume <uuid>` 重新打开，Claude 保留之前的对话上下文。空闲期间进程自行退出时同样处理。
+
+只记住已经提交过任务的会话。重新打开的进程在任务送达前失败（调用方主动取消或超时除外），说明恢复本身不可用，下次调用改为创建新会话。更换 cwd、对话重置或删除都清除记录。记录不写入磁盘，Console 重启后从新会话开始。不重放失败的任务，也不自动重试；跨调用不保存上一任务的 ctx、问答回调或事件 sink。
+
+实测 `2.1.316` 的 `--resume` 沿用原 session UUID，向同一个 JSONL 追加记录，不再显示目录信任提示。由于恢复后的 JSONL 已包含之前各轮，提交任务前先定位文件并从当前末尾开始读取。
 
 启动命令：
 
 ```text
 claude --session-id <uuid> --ax-screen-reader --permission-mode default
+claude --resume <uuid> --ax-screen-reader --permission-mode default    # 失败后重新打开
 ```
 
 使用已安装的 Claude，沿用现有 `path_extra` 和命令查找。固定 `TERM=xterm-256color`、120×40，不跟随浏览器尺寸。使用普通权限模式，不传 `--dangerously-skip-permissions`。用户原有的 Claude 权限规则仍有效。
@@ -117,7 +122,7 @@ claude --session-id <uuid> --ax-screen-reader --permission-mode default
 
 ## 验证方式
 
-普通单元测试覆盖屏幕识别、问题回显、JSONL 半行、本轮归属、分块 Markdown、编辑输出过滤、等待回答时取消和并发调用限制。runtime 测试覆盖纯选项问题不会被聊天文字回答。
+普通单元测试覆盖屏幕识别、问题回显、JSONL 半行、本轮归属、分块 Markdown、编辑输出过滤、等待回答时取消、并发调用限制，以及失败后的恢复规则（恢复参数、恢复失败后改为新会话、重置与更换 cwd 清除记录、进程退出不被误报为取消）。runtime 测试覆盖纯选项问题不会被聊天文字回答。
 
 真实 CLI 测试使用已安装的 Claude，连接本地模拟 Anthropic API，在临时目录执行；不使用真实模型密钥，不访问模型服务。运行方式：
 
@@ -125,7 +130,7 @@ claude --session-id <uuid> --ax-screen-reader --permission-mode default
 MISTERMORPH_TEST_CLAUDE=1 go test -race ./internal/claudeterm -run TestInstalledClaude -v
 ```
 
-测试覆盖同一进程连续多轮、中文多行和长任务、快捷前缀、单选、Other 文本、文件写入批准与拒绝，以及分块 Markdown 保留和 API 失败。测试同时检查启动参数不含额外 `--settings`。模拟 API 验证的是终端与协议行为，不代表真实模型编码质量。Console 前端另做构建和问答数据测试。
+测试覆盖同一进程连续多轮、中文多行和长任务、快捷前缀、单选、Other 文本、文件写入批准与拒绝、拒绝后的下一任务以 `--resume` 恢复并带上之前各轮、Windows 换行、只有 thinking 的回合，以及分块 Markdown 保留和 API 失败。测试同时检查启动参数不含额外 `--settings`。模拟 API 验证的是终端与协议行为，不代表真实模型编码质量。Console 前端另做构建和问答数据测试。
 
 ## 与旧设计的关系
 

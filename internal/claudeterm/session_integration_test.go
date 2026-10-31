@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -28,6 +29,7 @@ func TestInstalledClaude(t *testing.T) {
 	}
 	var work string
 	var sequence atomic.Int64
+	var lastRequest atomic.Value
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			Model    string `json:"model"`
@@ -36,9 +38,17 @@ func TestInstalledClaude(t *testing.T) {
 				Content json.RawMessage `json:"content"`
 			} `json:"messages"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
 			t.Error(err)
 			return
+		}
+		if err := json.Unmarshal(body, &req); err != nil {
+			t.Error(err)
+			return
+		}
+		if !strings.Contains(r.URL.Path, "count_tokens") {
+			lastRequest.Store(string(body))
 		}
 		if strings.Contains(r.URL.Path, "count_tokens") {
 			_, _ = w.Write([]byte(`{"input_tokens":10}`))
@@ -228,12 +238,27 @@ func TestInstalledClaude(t *testing.T) {
 	if !first.exited() {
 		t.Fatal("decline retained the process")
 	}
+	// The next task reopens the declined conversation with its history.
+	req.Task = "after the decline"
+	if _, err := sessions.Run(ctx, "topic", req); err != nil {
+		t.Fatalf("resume: %v", err)
+	}
+	resumed := sessions.items["topic"]
+	if resumed == first || resumed.id != first.id || !strings.Contains(strings.Join(resumed.cmd.Args, " "), "--resume "+first.id) {
+		t.Fatalf("resume args: %v (first session %s)", resumed.cmd.Args, first.id)
+	}
+	if body, _ := lastRequest.Load().(string); !strings.Contains(body, "probe-deny") || !strings.Contains(body, "probe-choice") {
+		t.Fatal("resumed request lacks the earlier turns")
+	}
 	req.Task = "probe-error"
 	if _, err := sessions.Run(ctx, "topic", req); err == nil || !strings.Contains(err.Error(), "probe API failure") {
 		t.Fatalf("API failure: %v", err)
 	}
+	if sessions.resume["topic"].id != first.id {
+		t.Fatal("API failure did not keep the conversation for resume")
+	}
 	sessions.Reset("topic")
-	if len(sessions.items) != 0 {
+	if len(sessions.items) != 0 || len(sessions.resume) != 0 {
 		t.Fatal("reset retained session")
 	}
 }

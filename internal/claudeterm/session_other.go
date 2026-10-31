@@ -10,13 +10,16 @@ import (
 const Supported = false
 
 type session struct {
-	cwd  string
-	busy bool
+	cwd, id           string
+	busy              bool
+	resumed, prompted bool
 }
 
-func start(Request) (*session, error) { return nil, fmt.Errorf("Claude terminals require Unix") }
-func (*session) exited() bool         { return true }
-func (*session) close()               {}
+func start(Request, string) (*session, error) {
+	return nil, fmt.Errorf("Claude terminals require Unix")
+}
+func (*session) exited() bool { return true }
+func (*session) close()       {}
 func (*session) run(context.Context, Request) (string, error) {
 	return "", fmt.Errorf("Claude terminals require Unix")
 }
