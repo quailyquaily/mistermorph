@@ -1,0 +1,40 @@
+
+  >_ OpenAI Codex (v0.166.0)
+     ~/work
+
+  To get started, describe a task or try one of these commands:
+
+  /init - create an AGENTS.md file with instructions for Codex
+  /status - show current session configuration
+  /permissions - choose what Codex is allowed to do
+  /model - choose what model and reasoning effort to use
+  /review - review any changes and find issues
+
+
+› Coding task:
+  say hi
+
+
+• ## Done resp_1
+
+  Hello world.
+
+  Worked for <1s • 9:28 PM
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+› Ask Codex to do anything
+
+  mock-model default · ~/work
+  ? for shortcuts                                                                              ⚠ 1 warning · f2 to view

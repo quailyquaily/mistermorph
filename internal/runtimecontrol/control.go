@@ -253,7 +253,7 @@ func (c *RunControl) Steer(runtime string, conversationKey string, input string)
 		return SteerResult{}
 	}
 	taskID := strings.TrimSpace(entry.TaskID)
-	if entry.question != nil && !entry.stopRequested {
+	if entry.question != nil && !entry.question.choicesOnly && !entry.stopRequested {
 		answerLocked(entry, Answer{Text: input, Option: -1})
 		c.mu.Unlock()
 		return SteerResult{Found: true, Queued: true, Answered: true, TaskID: taskID}

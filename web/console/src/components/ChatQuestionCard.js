@@ -1,11 +1,13 @@
 import { computed, ref, watch } from "vue";
 
 import { translate } from "../core/context";
+import MarkdownContent from "./MarkdownContent";
 import "./ChatQuestionCard.css";
 
 // A question the agent asked while working (ask_user). While it is open, each choice is a button
 // (or its number key) and the field below takes a typed answer; once closed it shows the answer.
 const ChatQuestionCard = {
+  components: { MarkdownContent },
   props: {
     question: { type: Object, required: true },
     // The task still runs: an open question of an ended task got no answer.
@@ -87,7 +89,7 @@ const ChatQuestionCard = {
     >
       <div v-if="open" class="chat-question-grid">
         <span class="chat-question-key"><span class="chat-question-label">{{ t('chat_question_asked') }}</span></span>
-        <p class="chat-question-value chat-question-text">{{ question.text }}</p>
+        <MarkdownContent class="chat-question-value chat-question-text" :source="question.text" />
         <button
           v-for="(option, index) in options"
           :key="option.label"
@@ -102,8 +104,8 @@ const ChatQuestionCard = {
             <span v-if="option.description" class="chat-question-option-detail">{{ option.description }}</span>
           </span>
         </button>
-        <span class="chat-question-key is-reply"><span class="chat-question-label">{{ t('chat_question_you') }}</span></span>
-        <form class="chat-question-value chat-question-reply" @submit.prevent="sendDraft">
+        <span v-if="!question.choices_only" class="chat-question-key is-reply"><span class="chat-question-label">{{ t('chat_question_you') }}</span></span>
+        <form v-if="!question.choices_only" class="chat-question-value chat-question-reply" @submit.prevent="sendDraft">
           <input
             v-model="draft"
             class="chat-question-input"

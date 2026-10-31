@@ -250,6 +250,7 @@ function normalizeQuestions(raw) {
         id,
         text,
         options,
+        choices_only: question.choices_only === true,
         status,
         answer: String(question?.answer || "").trim(),
         option: Number.isInteger(question?.option) ? question.option : null,

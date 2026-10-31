@@ -22,6 +22,33 @@ func startQuestionLease(t *testing.T, control *RunControl) *RunLease {
 	return lease
 }
 
+func TestChoicesOnlyQuestionKeepsSteeringSeparate(t *testing.T) {
+	control := New()
+	lease := startQuestionLease(t, control)
+	question, err := lease.OpenQuestion("permission", []string{"Allow once", "Deny"}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer question.Close()
+	if control.AnswerText("telegram", "permission", "yes") {
+		t.Fatal("text answered a choice-only question")
+	}
+	result := control.Steer("telegram", "tg:1", "also check the docs")
+	if !result.Queued || result.Answered {
+		t.Fatalf("steer=%+v", result)
+	}
+	if _, ok := control.Choose("telegram", "permission", 1); !ok {
+		t.Fatal("choice was not accepted")
+	}
+	answer, err := question.Wait(context.Background())
+	if err != nil || answer.Option != 1 {
+		t.Fatalf("answer=%+v err=%v", answer, err)
+	}
+	if _, ok := control.Choose("telegram", "permission", 0); ok {
+		t.Fatal("stale answer was accepted")
+	}
+}
+
 // awaitOpen waits until the lease's run has question id open, so an answer cannot race the wait.
 func awaitOpen(t *testing.T, control *RunControl, id string) {
 	t.Helper()

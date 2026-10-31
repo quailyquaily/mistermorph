@@ -195,6 +195,11 @@ func WithEngineToolsConfig(cfg EngineToolsConfig) Option {
 	}
 }
 
+// WithCoderTerminal runs coder tasks in runtime-owned terminal sessions instead of one-shot CLI processes.
+func WithCoderTerminal(run func(context.Context, CoderRequest) (string, error)) Option {
+	return func(e *Engine) { e.coderTerminal = run }
+}
+
 type Config struct {
 	MaxSteps          int
 	MaxTokenBudget    int
@@ -215,6 +220,7 @@ type Engine struct {
 	logOpts  LogOptions
 
 	engineToolsConfig EngineToolsConfig
+	coderTerminal     func(context.Context, CoderRequest) (string, error)
 
 	systemPromptCacheControl *llm.CacheControl
 	// runContext adds notes to each fresh run, after the metadata (WithRunContext).
@@ -297,8 +303,9 @@ func New(client llm.Client, registry *tools.Registry, cfg Config, spec PromptSpe
 			Runner:     e.subtaskRunner,
 		},
 		coderToolDeps{
-			Runner: e.subtaskRunner,
-			RunCLI: runCoderCLI,
+			Runner:      e.subtaskRunner,
+			RunCLI:      runCoderCLI,
+			RunTerminal: e.coderTerminal,
 		},
 		e.modelProfiles,
 	)

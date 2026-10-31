@@ -39,9 +39,10 @@ type UserQuestionOption struct {
 
 // UserQuestion is a question ask_user puts to the person. ID is short and URL-safe, for button data.
 type UserQuestion struct {
-	ID      string               `json:"id"`
-	Text    string               `json:"text"`
-	Options []UserQuestionOption `json:"options,omitempty"`
+	ChoicesOnly bool                 `json:"choices_only,omitempty"`
+	ID          string               `json:"id"`
+	Text        string               `json:"text"`
+	Options     []UserQuestionOption `json:"options,omitempty"`
 }
 
 // AskUserFunc puts q to the person a task came from and waits for the answer until ctx ends.
@@ -89,7 +90,7 @@ func LeaseUserQuestions(lease *runtimecontrol.RunLease, logger *slog.Logger, sho
 			labels = append(labels, option.Label)
 		}
 		// Open before showing, so an answer that comes at once is not lost.
-		open, err := lease.OpenQuestion(q.ID, labels)
+		open, err := lease.OpenQuestion(q.ID, labels, q.ChoicesOnly)
 		if err != nil {
 			return runtimecontrol.Answer{}, err
 		}

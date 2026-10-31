@@ -22,11 +22,11 @@ func TestCoderTool_ExecuteCodexUsesSubtaskRunner(t *testing.T) {
 
 	dir := t.TempDir()
 	runner := &execDirectSubtaskRunner{}
-	var got coderCLIRequest
+	var got CoderRequest
 
 	tool := newCoderTool(coderToolDeps{
 		Runner: runner,
-		RunCLI: func(_ context.Context, req coderCLIRequest, emit func(string)) (string, error) {
+		RunCLI: func(_ context.Context, req CoderRequest, emit func(string)) (string, error) {
 			got = req
 			emit("working")
 			return "done output", nil
@@ -86,7 +86,7 @@ func TestCoderTool_ReturnsFailedEnvelopeOnCLIError(t *testing.T) {
 	runner := &execDirectSubtaskRunner{}
 	tool := newCoderTool(coderToolDeps{
 		Runner: runner,
-		RunCLI: func(context.Context, coderCLIRequest, func(string)) (string, error) {
+		RunCLI: func(context.Context, CoderRequest, func(string)) (string, error) {
 			return "partial output", errors.New("cli failed")
 		},
 	})
@@ -154,11 +154,11 @@ func TestCoderTool_ResolvesCWDPathAliases(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			runner := &execDirectSubtaskRunner{}
-			var got coderCLIRequest
+			var got CoderRequest
 			tool := newCoderTool(coderToolDeps{
 				Roots:  pathroots.New(workspaceDir, cacheDir, stateDir),
 				Runner: runner,
-				RunCLI: func(_ context.Context, req coderCLIRequest, _ func(string)) (string, error) {
+				RunCLI: func(_ context.Context, req CoderRequest, _ func(string)) (string, error) {
 					got = req
 					return "ok", nil
 				},
@@ -187,7 +187,7 @@ func TestCoderTool_RespectsSubtaskDepthLimit(t *testing.T) {
 	called := false
 	tool := newCoderTool(coderToolDeps{
 		Runner: runner,
-		RunCLI: func(context.Context, coderCLIRequest, func(string)) (string, error) {
+		RunCLI: func(context.Context, CoderRequest, func(string)) (string, error) {
 			called = true
 			return "", nil
 		},
@@ -274,7 +274,7 @@ func TestCoderTool_ValidateParams(t *testing.T) {
 func TestCoderBuildCLICommand(t *testing.T) {
 	t.Parallel()
 
-	codex := buildCoderCLICommand(coderCLIRequest{
+	codex := buildCoderCLICommand(CoderRequest{
 		Backend: coderBackendCodex,
 		Task:    "x",
 		CWD:     "/repo",
@@ -289,7 +289,7 @@ func TestCoderBuildCLICommand(t *testing.T) {
 		t.Fatalf("codex.Stdin = %q, want x", codex.Stdin)
 	}
 
-	claude := buildCoderCLICommand(coderCLIRequest{
+	claude := buildCoderCLICommand(CoderRequest{
 		Backend: coderBackendClaude,
 		Task:    "review",
 		CWD:     "/repo",
@@ -314,7 +314,7 @@ func TestRunCoderCLIIncludesStderrTail(t *testing.T) {
 	writeFakeCoderExecutable(t, binDir, "codex", "printf 'stderr tail' >&2\nexit 7\n")
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
-	output, err := runCoderCLI(context.Background(), coderCLIRequest{
+	output, err := runCoderCLI(context.Background(), CoderRequest{
 		Backend: coderBackendCodex,
 		Task:    "x",
 		CWD:     t.TempDir(),
@@ -342,7 +342,7 @@ func TestRunCoderCLIUsesPathExtraForCommandLookupAndChildEnv(t *testing.T) {
 	writeFakeCoderExecutable(t, binDir, "codex", "case \"$PATH\" in \""+binDir+"\":*) printf 'path-extra-ok\\n' ;; *) printf 'missing path_extra: %s' \"$PATH\" >&2; exit 8 ;; esac\n")
 	t.Setenv("PATH", "/path-that-does-not-exist")
 
-	output, err := runCoderCLI(context.Background(), coderCLIRequest{
+	output, err := runCoderCLI(context.Background(), CoderRequest{
 		Backend:   coderBackendCodex,
 		Task:      "x",
 		CWD:       t.TempDir(),
@@ -368,7 +368,7 @@ func TestRunCoderCLIContextCancelStopsProcess(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 	started := time.Now()
-	_, err := runCoderCLI(ctx, coderCLIRequest{
+	_, err := runCoderCLI(ctx, CoderRequest{
 		Backend: coderBackendCodex,
 		Task:    "x",
 		CWD:     t.TempDir(),
@@ -398,7 +398,7 @@ func TestRunCoderCLIReturnsWhileBackgroundProcessHoldsOutput(t *testing.T) {
 	writeFakeCoderExecutable(t, binDir, "codex", "sleep 30 &\nprintf '%s\\n' '{\"type\":\"item.completed\",\"item\":{\"type\":\"agent_message\",\"text\":\"done\"}}'\n")
 	var progress []string
 	started := time.Now()
-	output, err := runCoderCLI(context.Background(), coderCLIRequest{
+	output, err := runCoderCLI(context.Background(), CoderRequest{
 		Backend:   coderBackendCodex,
 		Task:      "x",
 		CWD:       t.TempDir(),
@@ -426,7 +426,7 @@ func TestRunCoderCLISendsClaudeTaskOnStdin(t *testing.T) {
 
 	binDir := t.TempDir()
 	writeFakeCoderExecutable(t, binDir, "claude", "for arg in \"$@\"; do case \"$arg\" in -*fix*) printf 'task in argv\\n' >&2; exit 9 ;; esac; done\nIFS= read -r task\nprintf '{\"type\":\"result\",\"result\":\"got %s\"}\\n' \"$task\"\n")
-	output, err := runCoderCLI(context.Background(), coderCLIRequest{
+	output, err := runCoderCLI(context.Background(), CoderRequest{
 		Backend:   coderBackendClaude,
 		Task:      "- fix the bug",
 		CWD:       t.TempDir(),
@@ -448,7 +448,7 @@ func TestRunCoderCLICapsOutput(t *testing.T) {
 
 	binDir := t.TempDir()
 	writeFakeCoderExecutable(t, binDir, "codex", "i=0\nwhile [ $i -lt 2000 ]; do printf 'line %04d of plain output padding padding padding\\n' $i; i=$((i+1)); done\n")
-	output, err := runCoderCLI(context.Background(), coderCLIRequest{
+	output, err := runCoderCLI(context.Background(), CoderRequest{
 		Backend:   coderBackendCodex,
 		Task:      "x",
 		CWD:       t.TempDir(),
@@ -489,7 +489,7 @@ func TestRunCoderCLIPrunesOldDiagnostics(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := runCoderCLI(context.Background(), coderCLIRequest{Backend: coderBackendCodex, Task: "x", CWD: t.TempDir(), LogRoot: logRoot, PathExtra: []string{binDir}}, nil); err != nil {
+	if _, err := runCoderCLI(context.Background(), CoderRequest{Backend: coderBackendCodex, Task: "x", CWD: t.TempDir(), LogRoot: logRoot, PathExtra: []string{binDir}}, nil); err != nil {
 		t.Fatalf("runCoderCLI() error = %v", err)
 	}
 	dirs, err := filepath.Glob(filepath.Join(root, "codex-*"))
@@ -625,7 +625,7 @@ func TestRunClaudeTimeoutPreservesDiagnostics(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
 	defer cancel()
 	var chunks []string
-	_, err := runCoderCLI(ctx, coderCLIRequest{Backend: coderBackendClaude, Task: "x", CWD: t.TempDir(), LogRoot: logRoot, PathExtra: []string{binDir}}, func(text string) { chunks = append(chunks, text) })
+	_, err := runCoderCLI(ctx, CoderRequest{Backend: coderBackendClaude, Task: "x", CWD: t.TempDir(), LogRoot: logRoot, PathExtra: []string{binDir}}, func(text string) { chunks = append(chunks, text) })
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("error = %v", err)
 	}
@@ -710,7 +710,7 @@ func TestRunCodexTimeoutPreservesDiagnostics(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
 	defer cancel()
 	var progress []string
-	_, err := runCoderCLI(ctx, coderCLIRequest{Backend: coderBackendCodex, Task: "x", CWD: t.TempDir(), LogRoot: logRoot, PathExtra: []string{binDir}}, func(text string) { progress = append(progress, text) })
+	_, err := runCoderCLI(ctx, CoderRequest{Backend: coderBackendCodex, Task: "x", CWD: t.TempDir(), LogRoot: logRoot, PathExtra: []string{binDir}}, func(text string) { progress = append(progress, text) })
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("error = %v", err)
 	}

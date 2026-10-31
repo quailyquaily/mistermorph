@@ -26,11 +26,12 @@ const (
 
 // consoleQuestion is a question a task asked (ask_user), as the chat shows it.
 type consoleQuestion struct {
-	ID      string                           `json:"id"`
-	Text    string                           `json:"text"`
-	Options []taskruntime.UserQuestionOption `json:"options,omitempty"`
-	Status  string                           `json:"status"`
-	Answer  string                           `json:"answer,omitempty"`
+	ChoicesOnly bool                             `json:"choices_only,omitempty"`
+	ID          string                           `json:"id"`
+	Text        string                           `json:"text"`
+	Options     []taskruntime.UserQuestionOption `json:"options,omitempty"`
+	Status      string                           `json:"status"`
+	Answer      string                           `json:"answer,omitempty"`
 	// Option is the index of the chosen option, or -1 for a typed answer; set when answered.
 	Option *int `json:"option,omitempty"`
 }
@@ -90,10 +91,11 @@ func (q *consoleTaskQuestions) show(_ context.Context, question taskruntime.User
 	q.mu.Lock()
 	index := len(q.questions)
 	q.questions = append(q.questions, consoleQuestion{
-		ID:      question.ID,
-		Text:    question.Text,
-		Options: append([]taskruntime.UserQuestionOption(nil), question.Options...),
-		Status:  consoleQuestionOpen,
+		ChoicesOnly: question.ChoicesOnly,
+		ID:          question.ID,
+		Text:        question.Text,
+		Options:     append([]taskruntime.UserQuestionOption(nil), question.Options...),
+		Status:      consoleQuestionOpen,
 	})
 	q.mu.Unlock()
 	q.publish()

@@ -39,12 +39,15 @@ type coderTool struct {
 	deps coderToolDeps
 }
 
-type coderCLIRequest struct {
+// CoderRequest describes one coding task. Command and Env are resolved for an injected terminal runner.
+type CoderRequest struct {
 	Backend   string
 	Task      string
 	CWD       string
 	PathExtra []string
 	LogRoot   string
+	Command   string
+	Env       []string
 	// Progress reports status lines. step is a short, content-free label for what the CLI
 	// is doing now, such as "running a command", or "" when it has not changed.
 	Progress func(summary, text, step string)
@@ -57,7 +60,7 @@ type coderCLICommand struct {
 	Dir     string
 }
 
-type coderCLIRunFunc func(ctx context.Context, req coderCLIRequest, emit func(string)) (string, error)
+type coderCLIRunFunc func(ctx context.Context, req CoderRequest, emit func(string)) (string, error)
 
 func newCoderTool(deps coderToolDeps) *coderTool {
 	return &coderTool{deps: deps}
@@ -66,6 +69,11 @@ func newCoderTool(deps coderToolDeps) *coderTool {
 func (t *coderTool) Name() string { return coderToolName }
 
 func (t *coderTool) Description() string {
+	if t.deps.RunTerminal != nil {
+		return "Delegate a repository coding task to local Codex or Claude Code (cc) when the user asks for them. " +
+			"Each keeps a terminal session for this conversation and working directory, and asks the user to approve actions when needed. " +
+			"Returns a SubtaskResult envelope."
+	}
 	return "Delegate a repository coding task to the local Codex or Claude Code CLI. " +
 		"Use this when the user explicitly asks for Codex, Claude Code, or cc to handle code edits, review fixes, tests, or file generation. " +
 		"The child coder runs non-interactively with approvals bypassed and returns a SubtaskResult envelope."
@@ -110,6 +118,21 @@ func (t *coderTool) Execute(ctx context.Context, params map[string]any) (string,
 	runCLI := t.deps.RunCLI
 	if runCLI == nil {
 		runCLI = runCoderCLI
+	}
+	if t.deps.RunTerminal != nil {
+		runCLI = func(ctx context.Context, req CoderRequest, emit func(string)) (string, error) {
+			// The backend name is also the CLI's command name.
+			command, env, err := prepareCoderCommand(req.Backend, req.PathExtra)
+			if err != nil {
+				return "", err
+			}
+			req.Command, req.Env = command, env
+			output, err := t.deps.RunTerminal(ctx, req)
+			if output != "" {
+				emit(output)
+			}
+			return output, err
+		}
 	}
 
 	result, err := runner.RunSubtask(ctx, SubtaskRequest{
@@ -162,26 +185,26 @@ func (t *coderTool) Execute(ctx context.Context, params map[string]any) (string,
 	return string(b), nil
 }
 
-func coderRequestFromParams(ctx context.Context, params map[string]any, roots pathroots.PathRoots) (coderCLIRequest, error) {
+func coderRequestFromParams(ctx context.Context, params map[string]any, roots pathroots.PathRoots) (CoderRequest, error) {
 	backend, _ := params["coder"].(string)
 	backend = strings.ToLower(strings.TrimSpace(backend))
 	if backend == "" {
-		return coderCLIRequest{}, fmt.Errorf("missing required param: coder")
+		return CoderRequest{}, fmt.Errorf("missing required param: coder")
 	}
 	if backend != coderBackendCodex && backend != coderBackendClaude {
-		return coderCLIRequest{}, fmt.Errorf("unsupported coder: %s", backend)
+		return CoderRequest{}, fmt.Errorf("unsupported coder: %s", backend)
 	}
 	task, _ := params["task"].(string)
 	task = strings.TrimSpace(task)
 	if task == "" {
-		return coderCLIRequest{}, fmt.Errorf("missing required param: task")
+		return CoderRequest{}, fmt.Errorf("missing required param: task")
 	}
 	cwd, _ := params["cwd"].(string)
 	resolvedCWD, err := resolveCoderCWD(ctx, roots, cwd)
 	if err != nil {
-		return coderCLIRequest{}, err
+		return CoderRequest{}, err
 	}
-	return coderCLIRequest{
+	return CoderRequest{
 		Backend: backend,
 		Task:    task,
 		CWD:     resolvedCWD,
@@ -275,7 +298,7 @@ func resolveCoderAliasedCWD(roots pathroots.PathRoots, alias string, rest string
 	return candAbs, nil
 }
 
-func buildCoderCLICommand(req coderCLIRequest) coderCLICommand {
+func buildCoderCLICommand(req CoderRequest) coderCLICommand {
 	switch strings.TrimSpace(req.Backend) {
 	case coderBackendCodex:
 		return coderCLICommand{
@@ -312,7 +335,7 @@ func buildCoderCLICommand(req coderCLIRequest) coderCLICommand {
 	}
 }
 
-func runCoderCLI(ctx context.Context, req coderCLIRequest, emit func(string)) (output string, runErr error) {
+func runCoderCLI(ctx context.Context, req CoderRequest, emit func(string)) (output string, runErr error) {
 	started := time.Now()
 	// stdout and stderr can both publish progress. Serialize the consumer.
 	var emitMu sync.Mutex

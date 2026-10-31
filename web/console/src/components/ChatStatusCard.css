@@ -427,6 +427,28 @@
   overflow-wrap: anywhere;
 }
 
+/* Coder replies render as Markdown on the terminal surface. The renderer writes its light theme
+   inline on the host, so the dark values go on the host's children, which inherit from them. */
+.chat-status-details .chat-activity-markdown {
+  --md-code-bg: color-mix(in srgb, var(--q-c-white) 5%, var(--chat-status-terminal-bg));
+  margin-top: 4px;
+}
+
+.chat-activity-markdown > * {
+  --mmr-bg: transparent;
+  --mmr-surface: color-mix(in srgb, var(--q-c-white) 6%, transparent);
+  --mmr-surface-strong: color-mix(in srgb, var(--q-c-white) 10%, transparent);
+  --mmr-line: var(--chat-status-terminal-line);
+  --mmr-line-strong: color-mix(in srgb, var(--q-c-blue-light) 40%, transparent);
+  --mmr-text: var(--chat-status-terminal-fg);
+  --mmr-text-muted: var(--chat-status-terminal-muted);
+  --mmr-accent: var(--q-c-blue-light);
+  --mmr-danger: var(--q-c-red-light);
+  --mmr-code-bg: color-mix(in srgb, var(--q-c-white) 12%, transparent);
+  --mmr-quote-bg-start: color-mix(in srgb, var(--q-c-white) 5%, transparent);
+  --mmr-quote-bg-end: color-mix(in srgb, var(--q-c-white) 3%, transparent);
+}
+
 .chat-activity-list {
   position: relative;
   margin: 0;
