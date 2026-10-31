@@ -1,6 +1,8 @@
 package agent
 
 import (
+	"context"
+
 	"github.com/quailyquaily/mistermorph/internal/pathroots"
 	"github.com/quailyquaily/mistermorph/tools"
 )
@@ -27,6 +29,7 @@ type spawnToolDeps struct {
 type coderToolDeps struct {
 	Runner    SubtaskRunner
 	RunCLI    coderCLIRunFunc
+	RunClaude func(context.Context, CoderRequest) (string, error)
 	Roots     pathroots.PathRoots
 	PathExtra []string
 }

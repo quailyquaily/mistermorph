@@ -16,6 +16,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/depsutil"
 	"github.com/quailyquaily/mistermorph/internal/chatcommands"
 	"github.com/quailyquaily/mistermorph/internal/chathistory"
+	"github.com/quailyquaily/mistermorph/internal/claudeterm"
 	"github.com/quailyquaily/mistermorph/internal/contextcheckpoint"
 	"github.com/quailyquaily/mistermorph/internal/imagesession"
 	"github.com/quailyquaily/mistermorph/internal/llmstats"
@@ -106,6 +107,7 @@ func (owners *runtimeClientOwners) resources() []any {
 }
 
 type Runtime struct {
+	ClaudeSessions        claudeterm.Sessions
 	commonDeps            depsutil.CommonDependencies
 	bootstrapClientOwners *runtimeClientOwners
 	closeOnce             sync.Once
@@ -137,6 +139,8 @@ type Runtime struct {
 type PromptAugmentFunc func(spec *agent.PromptSpec, reg *tools.Registry)
 
 type RunRequest struct {
+	// ClaudeConversation enables a persistent terminal for this Console conversation.
+	ClaudeConversation string
 	// SessionID overrides the conversation scope used for provider caching.
 	SessionID                string
 	Task                     string
@@ -332,6 +336,7 @@ func (rt *Runtime) Close() error {
 		return nil
 	}
 	rt.closeOnce.Do(func() {
+		rt.ClaudeSessions.Close()
 		clientErr := closeRuntimeClientScope(rt.Logger, rt.bootstrapClientOwners, rt.PlanClient, rt.BootstrapMainClient)
 		var guardErr error
 		if rt.SharedGuard != nil {
@@ -781,6 +786,31 @@ func (rt *Runtime) prepareRun(ctx context.Context, req RunRequest) (preparedRunt
 		agent.WithLogOptions(rt.LogOptions),
 		agent.WithSubtaskRunner(boundSubtaskRunner{runtime: rt, route: mainRoute}),
 		agent.WithEngineToolsConfig(engineToolsConfig),
+	}
+	if req.ClaudeConversation != "" && claudeterm.Supported {
+		ask := userQuestionsFromContext(ctx)
+		engineOpts = append(engineOpts, agent.WithClaudeCoder(func(runCtx context.Context, request agent.CoderRequest) (string, error) {
+			terminalRequest := claudeterm.Request{
+				Command: request.Command, Env: request.Env, CWD: request.CWD,
+				Task: request.Task, LogRoot: request.LogRoot,
+				Progress: func(status string) {
+					if request.Progress != nil {
+						request.Progress(status, status+"\n", status)
+					}
+				},
+			}
+			if ask != nil {
+				terminalRequest.Ask = func(ctx context.Context, question claudeterm.Question) (claudeterm.Answer, error) {
+					q := UserQuestion{ID: newUserQuestionID(), Text: question.Text, ChoicesOnly: question.ChoicesOnly}
+					for _, option := range question.Options {
+						q.Options = append(q.Options, UserQuestionOption{Label: option})
+					}
+					answer, err := ask(ctx, q)
+					return claudeterm.Answer{Option: answer.Option, Text: answer.Text}, err
+				}
+			}
+			return rt.ClaudeSessions.Run(runCtx, req.ClaudeConversation, terminalRequest)
+		}))
 	}
 	if engineToolsConfig.SpawnEnabled || engineToolsConfig.ToolTriggers["spawn"] {
 		if lister := ModelProfileLister(rt.commonDeps, mainRoute.Profile); lister != nil {

@@ -25,9 +25,10 @@ func (a Answer) Typed() bool {
 }
 
 type openQuestion struct {
-	id      string
-	options []string
-	answer  chan Answer
+	choicesOnly bool
+	id          string
+	options     []string
+	answer      chan Answer
 }
 
 // OpenQuestion is a question open on a run: the next message steered into the run, or a Choose or
@@ -40,7 +41,7 @@ type OpenQuestion struct {
 
 // OpenQuestion opens question id, with the labels of its choices, on the lease's run. Open it
 // before showing it, so no answer comes too early; Close it when done waiting.
-func (l *RunLease) OpenQuestion(id string, options []string) (*OpenQuestion, error) {
+func (l *RunLease) OpenQuestion(id string, options []string, choicesOnly bool) (*OpenQuestion, error) {
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return nil, ErrQuestionMissingID
@@ -53,7 +54,7 @@ func (l *RunLease) OpenQuestion(id string, options []string) (*OpenQuestion, err
 	if err != nil {
 		return nil, err
 	}
-	question := &openQuestion{id: id, options: append([]string(nil), options...), answer: make(chan Answer, 1)}
+	question := &openQuestion{id: id, options: append([]string(nil), options...), choicesOnly: choicesOnly, answer: make(chan Answer, 1)}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	entry := c.active[key]
@@ -88,7 +89,7 @@ func (q *OpenQuestion) Close() {
 
 // AwaitAnswer opens question id on the lease's run and waits for its answer, until ctx ends.
 func (l *RunLease) AwaitAnswer(ctx context.Context, id string, options []string) (Answer, error) {
-	question, err := l.OpenQuestion(id, options)
+	question, err := l.OpenQuestion(id, options, false)
 	if err != nil {
 		return Answer{}, err
 	}
@@ -133,7 +134,7 @@ func (c *RunControl) AnswerText(runtime string, id string, text string) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	for key, entry := range c.active {
-		if key.runtime == runtime && entry != nil && entry.question != nil && entry.question.id == id {
+		if key.runtime == runtime && entry != nil && entry.question != nil && entry.question.id == id && !entry.question.choicesOnly {
 			answerLocked(entry, Answer{Text: text, Option: -1})
 			return true
 		}

@@ -253,6 +253,7 @@ test("questions from the task result or a stream frame keep their choices and an
     {
       id: "q1",
       text: " Which account? ",
+      choices_only: true,
       options: [{ label: "Personal", description: "lyric@example.com" }, { label: " " }, { label: "Company" }],
       status: "answered",
       answer: "Company",
@@ -264,6 +265,7 @@ test("questions from the task result or a stream frame keep their choices and an
     {
       id: "q1",
       text: "Which account?",
+      choices_only: true,
       options: [
         { label: "Personal", description: "lyric@example.com" },
         { label: "Company", description: "" },
@@ -272,7 +274,7 @@ test("questions from the task result or a stream frame keep their choices and an
       answer: "Company",
       option: 1,
     },
-    { id: "q2", text: "Why?", options: [], status: "expired", answer: "", option: null },
+    { id: "q2", text: "Why?", options: [], choices_only: false, status: "expired", answer: "", option: null },
   ]);
 
   const item = taskListHistoryItems(

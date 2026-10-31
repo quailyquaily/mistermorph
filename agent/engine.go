@@ -195,6 +195,11 @@ func WithEngineToolsConfig(cfg EngineToolsConfig) Option {
 	}
 }
 
+// WithClaudeCoder uses a runtime-owned Claude session instead of a one-shot CLI process.
+func WithClaudeCoder(run func(context.Context, CoderRequest) (string, error)) Option {
+	return func(e *Engine) { e.claudeCoder = run }
+}
+
 type Config struct {
 	MaxSteps          int
 	MaxTokenBudget    int
@@ -215,6 +220,7 @@ type Engine struct {
 	logOpts  LogOptions
 
 	engineToolsConfig EngineToolsConfig
+	claudeCoder       func(context.Context, CoderRequest) (string, error)
 
 	systemPromptCacheControl *llm.CacheControl
 	// runContext adds notes to each fresh run, after the metadata (WithRunContext).
@@ -297,8 +303,9 @@ func New(client llm.Client, registry *tools.Registry, cfg Config, spec PromptSpe
 			Runner:     e.subtaskRunner,
 		},
 		coderToolDeps{
-			Runner: e.subtaskRunner,
-			RunCLI: runCoderCLI,
+			Runner:    e.subtaskRunner,
+			RunCLI:    runCoderCLI,
+			RunClaude: e.claudeCoder,
 		},
 		e.modelProfiles,
 	)
