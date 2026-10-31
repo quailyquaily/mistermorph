@@ -4,9 +4,12 @@ package claudeterm
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"unicode"
 )
+
+const noTextReply = "Claude finished this turn without a text reply."
 
 type Question struct {
 	Text        string
@@ -43,6 +46,8 @@ func (m *Sessions) Run(ctx context.Context, scope string, req Request) (string, 
 	if err := checkText(req.Task); err != nil {
 		return "", err
 	}
+	// Claude records a pasted CR as LF; match that so the transcript check holds.
+	req.Task = strings.NewReplacer("\r\n", "\n", "\r", "\n").Replace(req.Task)
 	m.mu.Lock()
 	if m.closed {
 		m.mu.Unlock()

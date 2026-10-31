@@ -97,6 +97,15 @@ func TestInstalledClaude(t *testing.T) {
 			w.(http.Flusher).Flush()
 		}
 		event(map[string]any{"type": "message_start", "message": map[string]any{"id": "msg_" + id, "type": "message", "role": "assistant", "model": req.Model, "content": []any{}, "stop_reason": nil, "stop_sequence": nil, "usage": map[string]int{"input_tokens": 10, "output_tokens": 0}}})
+		if strings.Contains(task, "probe-thinking") {
+			event(map[string]any{"type": "content_block_start", "index": 0, "content_block": map[string]any{"type": "thinking", "thinking": "", "signature": ""}})
+			event(map[string]any{"type": "content_block_delta", "index": 0, "delta": map[string]any{"type": "thinking_delta", "thinking": "nothing to say"}})
+			event(map[string]any{"type": "content_block_delta", "index": 0, "delta": map[string]any{"type": "signature_delta", "signature": "probe"}})
+			event(map[string]any{"type": "content_block_stop", "index": 0})
+			event(map[string]any{"type": "message_delta", "delta": map[string]any{"stop_reason": "end_turn", "stop_sequence": nil}, "usage": map[string]int{"output_tokens": 5}})
+			event(map[string]any{"type": "message_stop"})
+			return
+		}
 		initial := map[string]any{"type": "text", "text": ""}
 		delta := map[string]any{"type": "text_delta", "text": block["text"]}
 		if reason == "tool_use" {
@@ -163,7 +172,7 @@ func TestInstalledClaude(t *testing.T) {
 	}
 	var first *session
 	outputs := make(map[string]bool)
-	for _, task := range []string{"probe-choice\n请先询问格式。", "/this-is-task-text\n!not-a-shell-command", "probe-choice-other", "probe-write", strings.TrimSpace(strings.Repeat("长文本 input\n", 100))} {
+	for _, task := range []string{"probe-choice\n请先询问格式。", "/this-is-task-text\n!not-a-shell-command", "probe-choice-other", "probe-write", "windows\r\nline endings\rhere", strings.TrimSpace(strings.Repeat("长文本 input\n", 100))} {
 		req.Task = task
 		out, err := sessions.Run(ctx, "topic", req)
 		if err != nil {
@@ -201,6 +210,13 @@ func TestInstalledClaude(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join(work, "example.txt"))
 	if err != nil || string(data) != "probe contents\n" {
 		t.Fatalf("approved write: %q %v", data, err)
+	}
+	req.Task = "probe-thinking"
+	if out, err := sessions.Run(ctx, "topic", req); err != nil || out != noTextReply {
+		t.Fatalf("thinking-only turn: %q %v", out, err)
+	}
+	if sessions.items["topic"] != first {
+		t.Fatal("thinking-only turn replaced the Claude process")
 	}
 	req.Task = "probe-deny"
 	if _, err := sessions.Run(ctx, "topic", req); err == nil || !strings.Contains(err.Error(), "permission declined") {

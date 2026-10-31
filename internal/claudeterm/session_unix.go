@@ -289,6 +289,10 @@ func (s *session) run(ctx context.Context, req Request) (string, error) {
 		}
 		if transcript.complete && parseScreen(s.snapshot()).idle {
 			progress("Claude finished")
+			if strings.TrimSpace(transcript.assistant) == "" {
+				// A turn can end on thinking alone; an empty result reads as lost output.
+				return noTextReply, nil
+			}
 			return transcript.assistant, nil
 		}
 	}
