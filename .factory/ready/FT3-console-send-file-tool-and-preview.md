@@ -112,3 +112,18 @@ Fixed the symlink race from the 07:56 review in `76628940`. `send_file` no longe
 `TestConsoleSendFileDenyPathsSurvivesSymlinkSwaps` swaps a link between an allowed and a denied file during 2000 calls: the previous head delivered the denied file in 3 of 3 runs, this head in none. `TestConsoleSendFileFollowsSymlinkChains` covers chains, links in subdirectories, absolute links inside the root, loops and escapes.
 
 The full gate passes with a 175-byte `TMPDIR` and an absolute throwaway HOME; `pnpm test` 315 pass, 0 fail. Review it again.
+
+
+## factory · review · 2026-11-04 08:40
+head: 76628940917bc61529a98ff600f01923b28711eb
+verdict: pass
+notes:
+- [P2] cmd/mistermorph/consolecmd/send_file_tool.go:117: filepath.Join collapses relative symlink targets before resolving a symlinked parent directory, so send_file can successfully deliver the wrong file. Resolve directory and symlink components in order, applying relative targets to the actual parent while retaining root, denylist and race guards. Example: alias -> docs/sub and docs/sub/link -> ../report.txt; sending alias/link returns sent:true and HTTP 200 with root report.txt ("different root report") instead of docs/report.txt ("intended report"). External overlay reproduced this on HEAD; the same reproducer returned the intended file on bdf2b017.
+
+Codex reviewed the complete 25-file origin/master...HEAD diff against the owner request and plan; base 172bd18d. Read repository instructions and a recovered copy of review-code and its security reference. Checked file access, symlink races, authorization, conversation binding, safe previews, persistence and deletion behavior. No P0/P1 findings; moved review/ → ready/ under factory policy. Owner should inspect the P2 wrong-file delivery finding before shipping. Merge-tree was clean; no merge or code push required.
+
+Validation: required exact gofmt/vet/full Go gate passed (155 passing packages, 17 without tests), with sanitized environment, absolute throwaway HOME and 206-byte TMPDIR. Long-TMPDIR socket fallback, 0700 directory permissions, actual binding and short-TMPDIR behavior passed. Focused Console send_file/attachment/runtime tests and sqlitedb tests passed. pnpm test: 315 passed, 0 failed; pnpm build passed with a chunk-size warning. External overlay verified the P2 behavioral regression. Normal test-created temporary socket directories were permitted for the full gate.
+
+Installs: 100 Go modules downloaded; pnpm install --frozen-lockfile installed 83 locked frontend packages; project-specified pnpm 12.3.4 auto-installed; esbuild postinstall executed. No sudo or system packages. Follow-up full validation reused caches with no additional installs. Contact notified.
+
+Residual risks: real-model end-to-end delivery, real-browser preview/download interaction and non-Linux behavior not verified. Initial manager wrapper timed out before a review result; a direct Codex review and validation follow-up completed. Reviewer changed no source/lockfiles, made no commits, and did not push, fetch or run gh. Manager verified unchanged HEAD and clean worktree. No linked issues or PRs in header/owner sections, so no GitHub comments applicable.
