@@ -22,7 +22,9 @@ test("reasoning expands into the existing Markdown chat bubble", async () => {
 
   assert.match(statusCard, /hasReasoning/u);
   assert.equal(statusCard.includes("chat-reasoning-text"), false);
-  assert.equal(statusCard.includes("<MarkdownContent"), false);
+  // The status card renders Markdown only for the coder's reply, never for reasoning.
+  const markdownTags = statusCard.match(/<MarkdownContent\b[^>]*>/gu) || [];
+  assert.ok(markdownTags.every((tag) => tag.includes("entry.name === 'coder'")), markdownTags.join("\n"));
 
   await assert.rejects(source("../components/ChatReasoningBubble.js"), { code: "ENOENT" });
   await assert.rejects(source("../components/ChatReasoningBubble.css"), { code: "ENOENT" });
