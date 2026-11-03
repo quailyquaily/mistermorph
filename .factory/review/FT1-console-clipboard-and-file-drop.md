@@ -64,3 +64,18 @@ Required `test -z "$(gofmt -l .)" && go vet ./... && go test ./...` passed, inde
 `pnpm --dir web/console build` passed for coder and manager, with a chunk-size warning. UI changed; browser visual checks and real-agent end-to-end manual delivery were not performed. Review should inspect clipboard/drop behaviour and the two baseline failures.
 
 Implementation branch pushed. Moved `new/` → `review/`. Contact notified of start, installations and remaining baseline failures.
+
+## factory · review · 2026-11-03 22:42
+head: 3a50a38c784dad10e8558ff1170c457daacbe856
+verdict: fix
+fix:
+- [P1] web/console/src/core/chat-reasoning-bubble.test.mjs:25: baseline assertion rejects MarkdownContent throughout the status card although coder output uses it; reconcile the assertion with intended reasoning rendering. Example: ChatStatusCard.js contains MarkdownContent and both head and current base fail with `true !== false`.
+- [P1] web/console/src/core/skills-page.test.mjs:28: baseline navigation assertion requires Skills immediately after TODO despite Memories between them; reconcile intended navigation and test. Example: TODO → Memories → Skills fails the adjacency assertion on both head and current base.
+
+Codex reviewed all 6 changed files and complete diff in `origin/master...HEAD`, merge base `65345643`, current base `172bd18d`. No newly introduced actionable defect was confirmed. Both findings are pre-existing test failures, classified P1 by this run's test-failure rule, not attributed to FT1. Item stays in review/ for the owner to decide. Manager merge-tree check was conflict-free; no merge or implementation push was needed.
+
+Validation: required gofmt/vet/full Go gate passed (exit 0), without the previously observed journal SQLITE_BUSY failure. Full frontend suite: head 319 passed / 2 failed; current base archive 303 passed / the same 2 failed. All 16 added tests passed. Frontend production build passed with a chunk-size warning. Tests used isolated environment and an absolute throwaway HOME. Installs: none; reused existing factory dependencies matching the lockfile.
+
+Review traced paste, drop, removal, concurrent upload, retry, send and conversation switching; checked upload authentication, 64 MiB request limit, path/symlink validation, preview output and file references. Residual risks: real-browser clipboard, OS drag/drop, visual layout and actual agent receipt were not manually verified. Scripted tests do not replace those checks.
+
+Reviewer made no source or lockfile changes, commits, fetches, pushes or gh calls; manager confirmed clean worktree and unchanged head. No linked GitHub issues or PRs were present in the header or owner's sections, so no review comments were applicable.
