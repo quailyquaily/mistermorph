@@ -126,6 +126,10 @@ func TestLoadKeystoreRejectsGroupReadablePrivateKey(t *testing.T) {
 	if err := os.WriteFile(path, []byte(raw), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	// Set the insecure mode explicitly so a restrictive umask cannot mask it.
+	if err := os.Chmod(path, 0o644); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := LoadKeystore(path); err == nil {
 		t.Fatal("LoadKeystore() expected insecure permission error")
 	}
