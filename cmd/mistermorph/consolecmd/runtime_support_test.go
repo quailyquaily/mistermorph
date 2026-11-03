@@ -87,3 +87,15 @@ func TestManagedRuntimeDepsExposeConsoleAwarenessRegistry(t *testing.T) {
 		t.Fatal("Guard() returned one shared instance, want caller-owned instances")
 	}
 }
+
+func TestConsoleEngineToolsConfigReadsCoderBypassApprovals(t *testing.T) {
+	reader := viper.New()
+	if cfg := consoleEngineToolsConfigFromReader(reader); cfg.CoderBypassApprovals["codex"] || cfg.CoderBypassApprovals["claude"] {
+		t.Fatalf("bypass on by default: %v", cfg.CoderBypassApprovals)
+	}
+	reader.Set("tools.coder.bypass_approvals.codex", true)
+	cfg := consoleEngineToolsConfigFromReader(reader)
+	if !cfg.CoderBypassApprovals["codex"] || cfg.CoderBypassApprovals["claude"] {
+		t.Fatalf("bypass = %v, want codex only", cfg.CoderBypassApprovals)
+	}
+}

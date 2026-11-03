@@ -48,6 +48,10 @@ func consoleEngineToolsConfigFromReader(r interface {
 		SpawnEnabled:   r.GetBool("tools.spawn.enabled"),
 		CoderEnabled:   r.GetBool("tools.coder.enabled"),
 		CoderPathExtra: append([]string(nil), r.GetStringSlice("tools.coder.path_extra")...),
+		CoderBypassApprovals: map[string]bool{
+			"codex":  r.GetBool("tools.coder.bypass_approvals.codex"),
+			"claude": r.GetBool("tools.coder.bypass_approvals.claude"),
+		},
 	}
 }
 

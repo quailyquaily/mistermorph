@@ -13,6 +13,7 @@ type session struct {
 	cwd, id           string
 	busy              bool
 	resumed, prompted bool
+	bypass            bool
 }
 
 func start(backend, Request, string) (*session, error) {

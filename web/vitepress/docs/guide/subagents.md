@@ -181,6 +181,7 @@ Expected result: `SUBAGENT_BASH_OK`
 - `tools.spawn.enabled` controls only the explicit `spawn` tool entry.
 - `tools.coder.enabled` controls whether the explicit `coder` tool entry is exposed by default. It defaults to false because the child Codex / Claude Code process runs with approval and permission prompts bypassed. `$coder` can still expose it for one task.
 - `tools.coder.path_extra` prepends directories to PATH only when `coder` launches `codex` or `claude`.
+- `tools.coder.bypass_approvals.codex` and `tools.coder.bypass_approvals.claude` (default false) apply to the Console, where Codex and Claude Code run in terminal sessions that ask the user to approve actions. Set one to true to start that CLI without approval prompts or sandbox: Codex yolo mode (`--dangerously-bypass-approvals-and-sandbox`) or Claude Code `--dangerously-skip-permissions`. A running session is reopened with the new setting before its next task. Only turn this on where the CLI may run anything the service user can.
 - Direct isolated runs such as `bash.run_in_subtask=true` still work even if `tools.spawn.enabled=false`.
 - `integration.Config.BuiltinToolNames` can include or omit `spawn` and `coder`.
 - If you build an engine directly with `agent.New(...)`, `spawn` is enabled by default, while `coder` is disabled by default. Override them with `agent.WithSpawnToolEnabled(...)` and `agent.WithCoderToolEnabled(...)`.

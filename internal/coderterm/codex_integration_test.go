@@ -90,6 +90,10 @@ func TestInstalledCodex(t *testing.T) {
 			}
 			args, _ := json.Marshal(map[string]any{"cmd": "touch " + name, "sandbox_permissions": "require_escalated", "justification": "Create " + name})
 			event(map[string]any{"type": "response.output_item.done", "item": map[string]any{"type": "function_call", "id": "fc_" + id, "call_id": "call_" + id, "name": "exec_command", "arguments": string(args)}})
+		case strings.Contains(task, "probe-yolo") && !toolDone:
+			// Outside the workspace and without asking to escalate: only runs with no sandbox.
+			args, _ := json.Marshal(map[string]any{"cmd": "touch ../outside.txt"})
+			event(map[string]any{"type": "response.output_item.done", "item": map[string]any{"type": "function_call", "id": "fc_" + id, "call_id": "call_" + id, "name": "exec_command", "arguments": string(args)}})
 		case strings.Contains(task, "probe-silent"):
 			// No assistant message: the turn ends without text.
 		default:
@@ -203,6 +207,27 @@ func TestInstalledCodex(t *testing.T) {
 	if body, _ := lastTask.Load().(string); !strings.Contains(body, "probe-deny") || !strings.Contains(body, "say hello") {
 		t.Fatal("resumed request lacks the earlier turns")
 	}
+	// Turning on BypassApprovals reopens the running conversation in yolo mode, and a command
+	// that writes outside the workspace then runs without a question.
+	before := asked["approve"]
+	req.BypassApprovals = true
+	req.Task = "probe-yolo"
+	if _, err := sessions.Run(ctx, "topic", req); err != nil {
+		logTail()
+		t.Fatalf("bypass: %v", err)
+	}
+	bypassed := sessions.items[key]
+	args := strings.Join(bypassed.cmd.Args, " ")
+	if bypassed == resumed || !strings.Contains(args, "resume "+first.id) || !strings.Contains(args, "--dangerously-bypass-approvals-and-sandbox") || strings.Contains(args, "--ask-for-approval") {
+		t.Fatalf("bypass args: %v (first session %s)", bypassed.cmd.Args, first.id)
+	}
+	if asked["approve"] != before {
+		t.Fatalf("yolo mode asked for approval: %v", asked)
+	}
+	if _, err := os.Stat(filepath.Join(root, "outside.txt")); err != nil {
+		t.Fatalf("yolo command did not run: %v", err)
+	}
+	req.BypassApprovals = false
 	req.Task = "probe-error"
 	if _, err := sessions.Run(ctx, "topic", req); err == nil || !strings.Contains(err.Error(), "probe API failure") {
 		t.Fatalf("API failure: %v", err)

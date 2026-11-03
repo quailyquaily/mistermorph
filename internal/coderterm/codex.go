@@ -21,11 +21,16 @@ func (codexBackend) label() string { return "Codex" }
 // Codex picks its own session ID; it is read from /status before the first task.
 func (codexBackend) newID() string { return "" }
 
-func (codexBackend) args(id string, resume bool) []string {
+func (codexBackend) args(id string, resume, bypass bool) []string {
 	// --no-daemon keeps the session out of a shared app-server. Approvals reach the user;
-	// writes stay in the workspace sandbox unless the user approves more.
+	// writes stay in the workspace sandbox unless the user approves more. With bypass, Codex
+	// runs every command without asking and without a sandbox (yolo mode).
 	flags := []string{"--no-daemon", "-c", "check_for_update_on_startup=false",
 		"--ask-for-approval", "on-request", "--sandbox", "workspace-write"}
+	if bypass {
+		flags = []string{"--no-daemon", "-c", "check_for_update_on_startup=false",
+			"--dangerously-bypass-approvals-and-sandbox"}
+	}
 	if resume {
 		// codex resume reopens the thread and appends to the same rollout file.
 		return append([]string{"resume", id}, flags...)

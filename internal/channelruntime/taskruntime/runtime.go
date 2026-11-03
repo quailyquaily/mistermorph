@@ -792,7 +792,7 @@ func (rt *Runtime) prepareRun(ctx context.Context, req RunRequest) (preparedRunt
 		engineOpts = append(engineOpts, agent.WithCoderTerminal(func(runCtx context.Context, request agent.CoderRequest) (string, error) {
 			terminalRequest := coderterm.Request{
 				Backend: request.Backend, Command: request.Command, Env: request.Env, CWD: request.CWD,
-				Task: request.Task, LogRoot: request.LogRoot,
+				Task: request.Task, LogRoot: request.LogRoot, BypassApprovals: request.BypassApprovals,
 				Progress: func(status string) {
 					if request.Progress != nil {
 						request.Progress(status, status+"\n", status)

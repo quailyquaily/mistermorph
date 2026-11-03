@@ -25,14 +25,17 @@ type Answer struct {
 }
 
 type Request struct {
-	Backend  string // "claude" or "codex".
-	Command  string
-	Env      []string
-	CWD      string
-	Task     string
-	LogRoot  string
-	Ask      func(context.Context, Question) (Answer, error)
-	Progress func(string)
+	Backend string // "claude" or "codex".
+	Command string
+	Env     []string
+	CWD     string
+	Task    string
+	LogRoot string
+	// BypassApprovals starts the CLI without approval prompts or sandbox. A running session
+	// started with the other setting is reopened with this one before the task.
+	BypassApprovals bool
+	Ask             func(context.Context, Question) (Answer, error)
+	Progress        func(string)
 }
 
 // Sessions belongs to one runtime. Its zero value is ready to use.
@@ -74,9 +77,10 @@ func (m *Sessions) Run(ctx context.Context, scope string, req Request) (string, 
 		m.mu.Unlock()
 		return "", fmt.Errorf("%s is already handling a task in this conversation", name)
 	}
-	if s != nil && (s.cwd != req.CWD || s.exited()) {
+	if s != nil && (s.cwd != req.CWD || s.exited() || s.bypass != req.BypassApprovals) {
 		if s.cwd == req.CWD {
-			// The process ended between tasks; reopen its conversation.
+			// The process ended between tasks, or the approval setting changed; reopen its
+			// conversation.
 			m.remember(key, s, nil)
 		}
 		s.close()

@@ -348,6 +348,15 @@ tools:
     # path_extra:
     #   - "/opt/coder/bin"
     path_extra: []
+    # Console only: start the terminal sessions without approval prompts or sandbox, so the CLI
+    # runs every command and edit on its own. Dangerous: a task (or text it reads) can then run
+    # anything the service user can. A running session is reopened with the new setting before
+    # its next task.
+    bypass_approvals:
+      # Codex yolo mode (--dangerously-bypass-approvals-and-sandbox).
+      codex: false
+      # Claude Code --dangerously-skip-permissions.
+      claude: false
   contacts_send:
     # Enable contacts_send tool.
     enabled: true

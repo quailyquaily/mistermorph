@@ -276,6 +276,8 @@ func Apply(v *viper.Viper) {
 	v.SetDefault("tools.spawn.enabled", true)
 	v.SetDefault("tools.coder.enabled", false)
 	v.SetDefault("tools.coder.path_extra", []string{})
+	v.SetDefault("tools.coder.bypass_approvals.codex", false)
+	v.SetDefault("tools.coder.bypass_approvals.claude", false)
 
 	// Platform-specific shell tool defaults:
 	// - Windows: PowerShell enabled, Bash disabled

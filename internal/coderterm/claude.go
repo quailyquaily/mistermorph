@@ -18,11 +18,18 @@ func (claudeBackend) label() string { return "Claude" }
 // Claude takes the session ID on the command line, so the transcript can be found by name.
 func (claudeBackend) newID() string { return uuid.NewString() }
 
-func (claudeBackend) args(id string, resume bool) []string {
+func (claudeBackend) args(id string, resume, bypass bool) []string {
 	// --resume keeps the session ID and appends to the same JSONL.
 	flag := "--session-id"
 	if resume {
 		flag = "--resume"
+	}
+	if bypass {
+		// Every tool runs without a permission prompt. The user opted in through config, so
+		// skip Claude's one-time Bypass Permissions warning, which this screen reader does not
+		// answer; --settings applies to this process only and leaves the user's files alone.
+		return []string{flag, id, "--ax-screen-reader", "--dangerously-skip-permissions",
+			"--settings", `{"skipDangerousModePermissionPrompt":true}`}
 	}
 	return []string{flag, id, "--ax-screen-reader", "--permission-mode", "default"}
 }
