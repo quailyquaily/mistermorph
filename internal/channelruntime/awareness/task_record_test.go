@@ -290,3 +290,104 @@ func TestRunAwarenessTaskPreservesExecutionAndFinishRecordErrors(t *testing.T) {
 		t.Fatalf("record calls = upsert:%d update:%d, want upsert:1 update:1", store.upsertCalls, store.updateCalls)
 	}
 }
+
+type awarenessTestProgress struct {
+	contextCalls int
+	streamed     bool
+	closedOutput string
+	closedErr    error
+	closeCalls   int
+}
+
+func (p *awarenessTestProgress) Context(ctx context.Context) context.Context {
+	p.contextCalls++
+	return ctx
+}
+
+func (p *awarenessTestProgress) OnStream(llm.StreamEvent) error {
+	p.streamed = true
+	return nil
+}
+
+func (p *awarenessTestProgress) PlanStepUpdate(*agent.Context, agent.PlanStepUpdate) {}
+
+func (p *awarenessTestProgress) Result(*agent.Final, *agent.Context) map[string]any {
+	return map[string]any{"activity": "seen", "final": "ignored"}
+}
+
+func (p *awarenessTestProgress) Close(output string, runErr error) {
+	p.closeCalls++
+	p.closedOutput = output
+	p.closedErr = runErr
+}
+
+func TestRunAwarenessTaskKeepsProgressInResult(t *testing.T) {
+	deps := depsutil.CommonDependencies{
+		PromptSpec: func(context.Context, *slog.Logger, agent.LogOptions, string, llm.Client, string, []string) (agent.PromptSpec, []string, error) {
+			return agent.PromptSpec{Identity: "identity"}, nil, nil
+		},
+	}
+	run := func(t *testing.T, client llm.Client, taskID string) (*awarenessTestProgress, daemonruntime.TaskInfo, error) {
+		t.Helper()
+		store := daemonruntime.NewMemoryStore(10)
+		progress := &awarenessTestProgress{}
+		gotTaskID := ""
+		_, err := runAwarenessTask(context.Background(), deps, awarenessTaskOptions{
+			Behavior:     awarenessutil.BehaviorHeartbeat,
+			Client:       client,
+			Model:        "test-model",
+			Task:         "heartbeat task",
+			TaskRunID:    taskID,
+			BaseRegistry: tools.NewRegistry(),
+			Config:       agent.Config{MaxSteps: 1},
+			TaskStore:    store,
+			TaskProgress: func(id, _ string, _ *slog.Logger) TaskProgress {
+				gotTaskID = id
+				return progress
+			},
+		})
+		if gotTaskID != taskID {
+			t.Fatalf("progress task id = %q, want %q", gotTaskID, taskID)
+		}
+		item, ok := store.Get(taskID)
+		if !ok {
+			t.Fatalf("task %q not recorded", taskID)
+		}
+		return progress, *item, err
+	}
+
+	t.Run("done", func(t *testing.T) {
+		progress, item, err := run(t, &awarenessPromptCaptureClient{}, "heartbeat:progress-done")
+		if err != nil {
+			t.Fatalf("runAwarenessTask() error = %v", err)
+		}
+		if progress.contextCalls != 1 || progress.closeCalls != 1 || progress.closedOutput != "ok" || progress.closedErr != nil {
+			t.Fatalf("progress = %+v, want one context and one close with output ok", progress)
+		}
+		result, _ := item.Result.(map[string]any)
+		if result["activity"] != "seen" {
+			t.Fatalf("result activity = %#v, want seen", result["activity"])
+		}
+		final, _ := result["final"].(map[string]any)
+		if got := fmt.Sprint(final["output"]); got != "ok" {
+			t.Fatalf("final.output = %q, want ok", got)
+		}
+	})
+
+	t.Run("failed", func(t *testing.T) {
+		progress, item, err := run(t, &awarenessContextLengthClient{}, "heartbeat:progress-failed")
+		if err == nil {
+			t.Fatal("runAwarenessTask() error = nil, want failure")
+		}
+		if progress.closeCalls != 1 || progress.closedErr == nil {
+			t.Fatalf("progress = %+v, want one close with the error", progress)
+		}
+		if item.Status != daemonruntime.TaskFailed {
+			t.Fatalf("status = %q, want failed", item.Status)
+		}
+		result, _ := item.Result.(map[string]any)
+		if result["activity"] != "seen" {
+			t.Fatalf("result activity = %#v, want seen", result["activity"])
+		}
+	})
+}

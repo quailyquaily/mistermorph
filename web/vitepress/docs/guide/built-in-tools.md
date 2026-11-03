@@ -123,7 +123,7 @@ Generates structured execution-plan JSON, typically for complex task decompositi
 
 Maintains TODOs in `file_state_dir/cron.yaml`.
 
-- Key limits: use `action=add_once` with `content` and `at` to add a one-time TODO; use `action=add_recurring` with `content` and a five-field numeric `cron` expression to add a recurring TODO. `title` is optional for new TODOs. Use `action=delete` to delete a TODO. Deletion prefers `id`; without `id`, it uses semantic matching on `content` and errors on no-match or ambiguous match.
+- Key limits: use `action=add_once` with `content` and `at` to add a one-time TODO; use `action=add_recurring` with `content` and a five-field numeric `cron` expression to add a recurring TODO. `title` is optional for new TODOs. Use `action=delete` to delete a TODO. Deletion prefers `id`; without `id`, it uses semantic matching on `content` and errors on no-match or ambiguous match. Optional `workspace_dir` sets the workspace the TODO runs in: an existing absolute path, or `workspace_dir` for the workspace attached to the current conversation.
 
 For the runtime workflow around TODOs and `HEARTBEAT.md`, see [TODO and Heartbeat](/guide/todo-and-heartbeat).
 

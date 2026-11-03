@@ -60,6 +60,7 @@ Fields:
 - `tz`: IANA timezone or fixed UTC offset, such as `Asia/Tokyo` or `UTC+8`.
 - `content`: task content passed to the agent when the TODO is due.
 - `chat_id`: optional channel context, kept only as metadata and not used for routing.
+- `workspace_dir`: optional absolute directory (`~/...` allowed) attached as the workspace for that TODO's runs, instead of the default `workspace_dir`. File tools, `bash`, and `coder` then resolve `workspace_dir` against it. If the directory is missing when the TODO is due, that run fails.
 - `bash_env`: optional environment variables injected into the `bash` tool for that TODO run only. Each entry has `name` and `value`. Values support `${ENV}` interpolation (same `${NAME}` syntax as `config.yaml`), including embedded forms such as `"Bearer ${API_KEY}"`. Literal values are stored in `cron.yaml`; prefer `${ENV}` for secrets.
 
 Example:

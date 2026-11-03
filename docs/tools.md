@@ -292,6 +292,7 @@ Parameters:
 | `id` | `string` | No for add; preferred for delete | Generated for add | Stable task ID. |
 | `people` | `array<string>` | No | None | Mentioned people to resolve into explicit reference IDs in added content. |
 | `chat_id` | `string` | No | Empty | Task-context chat ID, for example `tg:-1001234567890`. |
+| `workspace_dir` | `string` | No | Runtime default workspace | Workspace directory for the task's runs: an absolute path or `~/...`, or the literal `workspace_dir` for the workspace attached to the current conversation. The directory must exist when the task is added. |
 
 Returns:
 
@@ -328,6 +329,7 @@ Errors (string matching):
 | `invalid reference id:` | Invalid `(...)` reference exists in text. |
 | `missing_reference_id` | Mentioned person cannot be uniquely resolved to a reference ID. |
 | `people must be an array of strings` | `people` is not a string array. |
+| `workspace_dir:` | `workspace_dir` does not exist, is not a directory, or names the current workspace when none is attached. |
 | `invalid reference_resolve response` | Reference insertion LLM returned invalid JSON. |
 | `no matching cron task in cron.yaml` | Delete found no matching task. |
 | `ambiguous cron task match` | Delete without `id` matched multiple candidates. |
@@ -389,9 +391,9 @@ Constraints:
 - Non-awareness runtimes, including Telegram private sessions, do not expose `contacts_send` by default.
 - Explicit `$contacts_send` opt-in can expose it for the current task even when `tools.contacts_send.enabled=false`; it does not bypass selected tool allowlists, guard rules, credentials, or runtime prerequisites.
 - `contacts_send` always uses topic `chat.message` (caller does not pass `topic`).
+- Telegram text messages render Markdown (bold, italic, code, links) as Telegram HTML, as Telegram channel replies do. If Telegram rejects the markup, the text is sent again as plain text. Write plain Markdown, not Telegram MarkdownV2 escapes. File captions stay plain text.
 - If cross-session forwarding is needed in group chat (for example, explicit "DM someone"), trigger it via explicit task/command, not by routing ordinary group replies to `contacts_send`.
 - If `chat_id` is provided:
-- Telegram text messages render Markdown (bold, italic, code, links) as Telegram HTML, as Telegram channel replies do. If Telegram rejects the markup, the text is sent again as plain text. Write plain Markdown, not Telegram MarkdownV2 escapes. File captions stay plain text.
   - Multiple contacts: the explicit chat must be a shared route for every contact; otherwise the tool returns an error instead of choosing another chat. Telegram, Slack, and Lark add mentions; LINE sends to the shared chat without mentions.
   - Single contact:
     - Telegram: used only when matching `tg_private_chat_id` or `tg_group_chat_ids`; otherwise falls back to `tg_private_chat_id`.

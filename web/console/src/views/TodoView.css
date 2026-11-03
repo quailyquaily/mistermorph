@@ -461,6 +461,21 @@ body:has(.todo-page) .q-dialog .q-menu-item.danger .q-menu-title {
   grid-column: 1 / -1;
 }
 
+.todo-workspace-action {
+  flex: 0 0 auto;
+}
+
+/* Clear and browse sit together, without the field's gap between them. */
+.todo-workspace-action + .todo-workspace-action {
+  margin-left: -10px;
+}
+
+.todo-workspace-action .icon {
+  width: 14px;
+  min-width: 14px;
+  height: 14px;
+}
+
 .todo-bash-env-field {
   gap: 10px;
 }

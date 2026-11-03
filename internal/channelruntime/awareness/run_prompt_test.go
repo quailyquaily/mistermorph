@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -360,6 +361,64 @@ func TestRunAwarenessTaskUsesDefaultWorkspaceInContextAndPrompt(t *testing.T) {
 	if !found {
 		t.Fatalf("request is missing default workspace prompt: %#v", client.requests[0].Messages)
 	}
+}
+
+func TestRunAwarenessTaskWorkspaceDirOverridesDefault(t *testing.T) {
+	defaultDir := t.TempDir()
+	taskDir := t.TempDir()
+	newDeps := func(captured *string) depsutil.CommonDependencies {
+		return depsutil.CommonDependencies{
+			DefaultWorkspaceDir: defaultDir,
+			PromptSpec: func(ctx context.Context, _ *slog.Logger, _ agent.LogOptions, _ string, _ llm.Client, _ string, _ []string) (agent.PromptSpec, []string, error) {
+				*captured, _ = pathroots.WorkspaceDirFromContext(ctx)
+				return agent.PromptSpec{Identity: "identity"}, nil, nil
+			},
+		}
+	}
+	newOpts := func(client llm.Client, workspaceDir string) awarenessTaskOptions {
+		return awarenessTaskOptions{
+			Behavior:     awarenessutil.BehaviorCron,
+			Client:       client,
+			Model:        "test-model",
+			Task:         "generate report",
+			BaseRegistry: tools.NewRegistry(),
+			Config:       agent.Config{MaxSteps: 1},
+			WorkspaceDir: workspaceDir,
+		}
+	}
+
+	t.Run("task dir", func(t *testing.T) {
+		client := &awarenessPromptCaptureClient{}
+		captured := ""
+		if _, err := runAwarenessTask(context.Background(), newDeps(&captured), newOpts(client, taskDir)); err != nil {
+			t.Fatalf("runAwarenessTask() error = %v", err)
+		}
+		if captured != taskDir {
+			t.Fatalf("prompt context workspace = %q, want %q", captured, taskDir)
+		}
+		found := false
+		for _, message := range client.requests[0].Messages {
+			if strings.Contains(message.Content, "workspace_dir: "+taskDir) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("request is missing task workspace prompt: %#v", client.requests[0].Messages)
+		}
+	})
+
+	t.Run("missing dir fails the run", func(t *testing.T) {
+		client := &awarenessPromptCaptureClient{}
+		captured := ""
+		_, err := runAwarenessTask(context.Background(), newDeps(&captured), newOpts(client, filepath.Join(taskDir, "gone")))
+		if err == nil || !strings.Contains(err.Error(), "workspace dir does not exist") {
+			t.Fatalf("runAwarenessTask() error = %v, want missing workspace error", err)
+		}
+		if len(client.requests) != 0 {
+			t.Fatalf("request count = %d, want 0", len(client.requests))
+		}
+	})
 }
 
 func TestRunAwarenessTaskRegistersBashFromBashEnvWithoutExplicitTrigger(t *testing.T) {

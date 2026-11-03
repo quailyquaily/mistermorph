@@ -3189,6 +3189,12 @@ func (r *consoleLocalRuntime) reloadAwarenessLoop() {
 			CronPath:          generation.paths.CronPath,
 			ChatInfoRefresher: chatinfo.NewFetcher(chatinfo.FetcherOptionsFromReader(reader)),
 			TaskStore:         r.store,
+			TaskProgress: newConsoleAwarenessProgressFunc(
+				r.streamHub,
+				approvalGuardForGeneration(generation),
+				consoleFileCacheDir(reader),
+				generation.paths.StateDir,
+			),
 			CronNotify: func(_ context.Context, notification awarenessloop.CronNotification) error {
 				r.notificationHub.Publish(notification)
 				return nil

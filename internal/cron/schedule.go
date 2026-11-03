@@ -2,10 +2,12 @@ package cron
 
 import (
 	"fmt"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/quailyquaily/mistermorph/internal/pathutil"
 	"github.com/quailyquaily/mistermorph/internal/todo"
 )
 
@@ -244,6 +246,23 @@ func ValidateTask(task Task) error {
 	}
 	if err := validateBashEnvRefs(task.BashEnv); err != nil {
 		return fmt.Errorf("task %s: %w", id, err)
+	}
+	if err := validateTaskWorkspaceDir(task.WorkspaceDir); err != nil {
+		return fmt.Errorf("task %s: %w", id, err)
+	}
+	return nil
+}
+
+// validateTaskWorkspaceDir checks only the path's form. Whether the directory exists is
+// checked when the task runs, so a missing directory fails that run instead of every
+// later write of cron.yaml.
+func validateTaskWorkspaceDir(raw string) error {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	if !filepath.IsAbs(pathutil.ExpandHomePath(raw)) {
+		return fmt.Errorf("workspace_dir must be an absolute path: %s", raw)
 	}
 	return nil
 }
