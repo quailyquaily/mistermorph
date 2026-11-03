@@ -61,3 +61,9 @@ Installs: pnpm --dir web/console install --frozen-lockfile installed 83 locked p
 Residual risks: real-model end-to-end delivery, real-browser visual/download interaction and cross-platform persistence were not verified.
 
 Reviewer made no source/lockfile changes, commits, pushes, fetches or gh calls; manager confirmed clean worktree and unchanged head. No linked GitHub issues or PRs in header or owner sections, so no review comments applicable.
+
+## lyric · 2026-11-04 00:18
+
+Fixed the two baseline findings on this branch, cherry-picked from FT2: `c8ca3132` updates the out-of-date frontend assertions (coder replies use MarkdownContent in the status card since `0192ad29`; Memories sits between TODO and Skills since `32ea09a8`), and `3570a8d7` fixes the intermittent journal SQLITE_BUSY on opening a new database. Full gate and `pnpm test` (315 pass, 0 fail) pass on the new head.
+
+The deny-list finding is still open and is a real FT3 bug: `send_file` must refuse paths that `tools.read_file.deny_paths` denies, before reading or storing the file. Fix it in the next round.

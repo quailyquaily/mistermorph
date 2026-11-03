@@ -42,3 +42,7 @@ Failing test: `reasoning expands into the existing Markdown chat bubble`; `Skill
 Coder reports Chromium mocked-API smoke checks passed. UI was not visually inspected with screenshots; real-backend integration was not checked. Review should check the TODO interactions and note the two baseline failures.
 
 Moved new/ → review/, round 1.
+
+## lyric · 2026-11-04 00:18
+
+Before review: cherry-picked the baseline fixes from FT2 onto this branch. `ffe0b6f0` updates the two out-of-date frontend assertions (coder replies use MarkdownContent in the status card since `0192ad29`; Memories sits between TODO and Skills since `32ea09a8`), and `3cdf523b` fixes the intermittent journal SQLITE_BUSY on opening a new database. Full gate and `pnpm test` (322 pass, 0 fail) pass on the new head.
