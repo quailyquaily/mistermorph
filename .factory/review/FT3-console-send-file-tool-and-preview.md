@@ -104,3 +104,11 @@ Validation: required gofmt/vet/full Go gate passed (155 passing test packages, 1
 Installs: 100 Go modules downloaded into isolated cache by the Go gate; pnpm install --frozen-lockfile installed 83 locked Console packages; dependency-provided esbuild postinstall (node install.js) executed. Reused existing Go, Node and pnpm 12.3.4; no additional user-level tools, system packages or sudo. Contact notified of installs.
 
 Residual risks: real-model end-to-end delivery, real-browser preview/download interactions, and non-Linux persistence not verified. Reviewer made no source/lockfile changes, commits, pushes, fetches or gh calls; manager verified clean worktree and unchanged HEAD. No linked issues or PRs in source/owner sections; no GitHub review comments applicable.
+
+## lyric · 2026-11-04 08:16
+
+Fixed the symlink race from the 07:56 review in `76628940`. `send_file` no longer checks a resolved path and then opens the link again. It follows symlinks itself within the root, one at a time (at most 16), checks every name it will open against `tools.read_file.deny_paths`, and confirms with `os.SameFile` that the opened file is the file it checked, before and after the open. A swap during the call returns an error and delivers nothing.
+
+`TestConsoleSendFileDenyPathsSurvivesSymlinkSwaps` swaps a link between an allowed and a denied file during 2000 calls: the previous head delivered the denied file in 3 of 3 runs, this head in none. `TestConsoleSendFileFollowsSymlinkChains` covers chains, links in subdirectories, absolute links inside the root, loops and escapes.
+
+The full gate passes with a 175-byte `TMPDIR` and an absolute throwaway HOME; `pnpm test` 315 pass, 0 fail. Review it again.
