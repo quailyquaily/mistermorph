@@ -90,3 +90,17 @@ Fixed both findings from the 00:57 review on this branch.
 - `bdf2b017`: the elevate askpass socket directory moves under `/tmp` when `TMPDIR` would make the socket path longer than `sun_path` allows. `TestSocketDirWithLongTMPDIR` covers it.
 
 The full gate passes with a 122-byte `TMPDIR` and an absolute throwaway HOME; `pnpm test` 315 pass, 0 fail. Review it again.
+
+## factory · review · 2026-11-04 07:56
+head: bdf2b0178ef4a2681b91d9dd8e416c712e5a7689
+verdict: fix
+fix:
+- [P1] cmd/mistermorph/consolecmd/send_file_tool.go:86: deny_paths validation and file opening race: a symlink can change from an allowed target to a denied file inside the permitted directory after validation, before root.Open. Bind policy validation to the actual opened object through a race-safe resolution/open flow, and add concurrent symlink-swap coverage. os.Root prevents directory escape, not this in-root denylist bypass. Codex's independent overlay reproducer delivered private.txt on its fourth call and authenticated download returned HTTP 200 with the denied content.
+
+Codex reviewed the full 25-file origin/master...HEAD diff against the request and plan; base 172bd18d. Read AGENTS.md, review-code and its security reference. Static denylist and symlink checks now pass; long TMPDIR socket fix passes. The concurrent bypass is an introduced security defect, not a baseline/environment failure. Item remains in review/ for the owner to decide. Manager merge-tree check was conflict-free; no code merge or push required.
+
+Validation: required gofmt/vet/full Go gate passed (155 passing test packages, 17 without tests), with absolute throwaway HOME and 128-byte TMPDIR. Focused checks: 8 top-level tests and 27 subtests passed. Independent concurrency overlay test failed, proving the P1 above. pnpm test passed 315/315; pnpm build passed with chunk-size warning.
+
+Installs: 100 Go modules downloaded into isolated cache by the Go gate; pnpm install --frozen-lockfile installed 83 locked Console packages; dependency-provided esbuild postinstall (node install.js) executed. Reused existing Go, Node and pnpm 12.3.4; no additional user-level tools, system packages or sudo. Contact notified of installs.
+
+Residual risks: real-model end-to-end delivery, real-browser preview/download interactions, and non-Linux persistence not verified. Reviewer made no source/lockfile changes, commits, pushes, fetches or gh calls; manager verified clean worktree and unchanged HEAD. No linked issues or PRs in source/owner sections; no GitHub review comments applicable.
