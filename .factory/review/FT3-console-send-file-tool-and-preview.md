@@ -67,3 +67,18 @@ Reviewer made no source/lockfile changes, commits, pushes, fetches or gh calls; 
 Fixed the two baseline findings on this branch, cherry-picked from FT2: `c8ca3132` updates the out-of-date frontend assertions (coder replies use MarkdownContent in the status card since `0192ad29`; Memories sits between TODO and Skills since `32ea09a8`), and `3570a8d7` fixes the intermittent journal SQLITE_BUSY on opening a new database. Full gate and `pnpm test` (315 pass, 0 fail) pass on the new head.
 
 The deny-list finding is still open and is a real FT3 bug: `send_file` must refuse paths that `tools.read_file.deny_paths` denies, before reading or storing the file. Fix it in the next round.
+
+## factory · review · 2026-11-04 00:57
+head: 3570a8d713c7be8a93d356372c29ffcf72840762
+verdict: fix
+fix:
+- [P1] cmd/mistermorph/consolecmd/send_file_tool.go:72: send_file still bypasses tools.read_file.deny_paths; pass and enforce the existing sensitive-file policy before reading or storing, retaining directory and symlink guards. Example: denying private.txt makes read_file refuse it, but actual Console runtime send_file delivers it and authenticated download returns HTTP 200 with all 28 bytes of synthetic content; reproduced for workspace and cache roots.
+- [P1] internal/elevate/session.go:67: pre-existing Unix socket path-length failure in tests with a long TMPDIR; select a sufficiently short private socket directory. Example: a 73-byte TMPDIR produces a 108-byte socket address and bind: invalid argument; baseline TestSudoArgsAndEnv also fails, and shortening TMPDIR passes. Included under the mandated test-failure-is-P1 rule, not an FT3 regression; the final gate passes with corrected test environment.
+
+Codex reviewed all 22 changed files in origin/master...HEAD against the request and plan, base 172bd18d7f8b42bac97760cdf5be0c6bd9b3e05d. Read AGENTS.md, review-code and its security reference. Merge-tree was conflict-free; no merge or code push required. Remains in review/ for the owner to decide.
+
+Validation: initial complete Go gate failed in integration, internal/elevate and tools/builtin because of the baseline TMPDIR socket limit. With shortened TMPDIR, required gofmt/vet/go test gate passed (155 packages with passing tests). pnpm test passed 315/315; pnpm build passed with a chunk-size warning. Previous frontend failures are resolved; no SQLITE_BUSY observed. Temporary Go overlay independently confirmed the deny_paths bypass. Scripted tests used env -i and an absolute throwaway HOME.
+
+Installs: pnpm install --frozen-lockfile installed 83 locked console packages; project-specified pnpm 12.3.4 installed automatically; dependency-provided esbuild node install.js executed. Existing Go tools/caches reused. No sudo or system packages. Contact notified of installs.
+
+Residual risks: real-model end-to-end delivery, real-browser visual/download interaction, and non-Linux persistence were not verified. Reviewer reports no source/lockfile/protected-path changes, commits, pushes, fetches or gh calls; manager independently confirmed clean worktree and unchanged head. No linked GitHub issues or PRs in source/owner sections, so no review comments applicable.
