@@ -59,3 +59,17 @@ Fixed the three baseline failures from the review on this branch. None were FT2 
 - `5f4dcebb`: the journal SQLITE_BUSY failure was a real race. While one connection switches a new database file to WAL, BEGIN can return SQLITE_BUSY at once instead of waiting out busy_timeout. `sqlitedb.Open` now retries the opening migration on SQLITE_BUSY for up to `BusyTimeout`. New test `TestConcurrentOpensOfNewFile` fails without the fix; the journal test passed 240/240 under parallel load.
 
 Full gate and `pnpm test` (308 pass, 0 fail) pass on the new head. Review it again.
+
+## factory · review · 2026-11-04 00:35
+head: 5f4dcebb9c9105f88462049b3d5c45a69ec35375
+verdict: pass
+
+No findings. Codex reviewed the complete 23-file diff in origin/master...HEAD against the owner request, plan and follow-up, including SQLite opening retry and the frontend assertion fixes. Merge base: 1dbf971d4cc2d50d1671bb12b0c2ad072882f89d; current base: 172bd18d7f8b42bac97760cdf5be0c6bd9b3e05d. Coverage included originating-message binding, conversation authorization, argument validation, persistence and idempotent replacement, realtime event scope, frontend encoding, failure handling, SQLite retry/rollback and concurrent initialization. The manager's merge-tree check was conflict-free; no merge or implementation push was needed. Moved review/ → ready/ for owner approval.
+
+Validation: configured gofmt/vet/full Go gate passed (155 passing packages, 17 without tests). Full pnpm test passed 308/308; pnpm build passed with the existing large-chunk warning. SQLite concurrent opening and journal concurrent import each passed 20 repeated runs; the former covered 1,000 new-file initialization rounds. git diff --check passed. Tests used isolated environment, absolute throwaway HOME and existing Go caches. Previous three baseline failures were not reproduced.
+
+Installs: pnpm install --frozen-lockfile --ignore-scripts installed 83 locked Console dependencies. Reused Node 24.14.1 and cached pnpm 12.3.4; no Corepack downloads, install scripts, additional tools or sudo. Contact notified.
+
+Residual risks: browser visual/mobile checks, real-model end-to-end reactions and remote disconnect/reconnect UX were not exercised. Some frontend regressions use source matching. Cancellation and lock-wait timeout boundaries were code-traced without dedicated fault injection; repeated concurrency tests do not prove races absent.
+
+Reviewer made no source/lockfile changes, commits, merges, pushes, fetches or gh calls; manager verified clean worktree and unchanged head. No linked GitHub issues or PRs in the header or owner sections, so no review comments applicable. Removed the prior clean FT1 review worktree during routine recovery; no stopped changes needed preservation.
