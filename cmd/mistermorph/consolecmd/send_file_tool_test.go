@@ -339,3 +339,95 @@ func TestConsoleRuntimeSendFileAppliesReadFileDenyPaths(t *testing.T) {
 		t.Fatalf("runtime delivered a denied file: %+v", task)
 	}
 }
+
+// A symlink swapped between an allowed and a denied file while send_file runs must never deliver
+// the denied file.
+func TestConsoleSendFileDenyPathsSurvivesSymlinkSwaps(t *testing.T) {
+	tool, _ := attachmentFixture(t)
+	tool.denyPaths = []string{"private.txt"}
+	dir := tool.workspaceDir
+	secret := []byte("denied secret content")
+	if err := os.WriteFile(filepath.Join(dir, "private.txt"), secret, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "allowed.txt"), []byte("ok"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "link")
+	if err := os.Symlink("allowed.txt", link); err != nil {
+		t.Fatal(err)
+	}
+	stop := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		targets := []string{"private.txt", "allowed.txt"}
+		for i := 0; ; i++ {
+			select {
+			case <-stop:
+				return
+			default:
+			}
+			// Replace the link atomically, as an attacker would.
+			tmp := filepath.Join(dir, "link.tmp")
+			_ = os.Remove(tmp)
+			if err := os.Symlink(targets[i%2], tmp); err == nil {
+				_ = os.Rename(tmp, link)
+			}
+		}
+	}()
+	for i := 0; i < 2000; i++ {
+		_, _ = tool.Execute(context.Background(), map[string]any{"dir_name": "workspace_dir", "path": "link"})
+	}
+	close(stop)
+	<-done
+	task, _ := tool.store.Get("task")
+	for _, attachment := range task.Attachments {
+		if attachment.SizeBytes == int64(len(secret)) {
+			t.Fatalf("delivered the denied file through a swapped symlink (%d deliveries)", len(task.Attachments))
+		}
+	}
+	if len(task.Attachments) == 0 {
+		t.Fatal("no delivery of the allowed file; the test did not exercise the race")
+	}
+}
+
+func TestConsoleSendFileFollowsSymlinkChains(t *testing.T) {
+	tool, _ := attachmentFixture(t)
+	tool.denyPaths = []string{"private.txt"}
+	dir := tool.workspaceDir
+	for name, data := range map[string]string{"private.txt": "secret", "docs/report.txt": "report"} {
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(dir, name)), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(data), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	links := map[string]string{
+		"hop2":       "private.txt",
+		"hop1":       "hop2",
+		"abs-report": filepath.Join(dir, "docs/report.txt"),
+		"rel-report": "docs/report.txt",
+		"docs/up":    "../hop1",
+		"loop-a":     "loop-b",
+		"loop-b":     "loop-a",
+		"escape":     "../outside.txt",
+		"abs-escape": filepath.Join(tool.cacheDir, "outside.txt"),
+	}
+	for name, target := range links {
+		if err := os.Symlink(target, filepath.Join(dir, name)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, path := range []string{"abs-report", "rel-report"} {
+		if _, err := tool.Execute(context.Background(), map[string]any{"dir_name": "workspace_dir", "path": path}); err != nil {
+			t.Fatalf("%s: %v", path, err)
+		}
+	}
+	for path, want := range map[string]string{"hop1": "deny_paths", "docs/up": "deny_paths", "loop-a": "too many symlinks", "escape": "outside", "abs-escape": "outside"} {
+		if _, err := tool.Execute(context.Background(), map[string]any{"dir_name": "workspace_dir", "path": path}); err == nil || !strings.Contains(err.Error(), want) {
+			t.Fatalf("%s: error = %v, want %q", path, err, want)
+		}
+	}
+}

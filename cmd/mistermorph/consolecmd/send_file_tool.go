@@ -3,6 +3,7 @@ package consolecmd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -56,39 +57,17 @@ func (t *consoleSendFileTool) Execute(ctx context.Context, params map[string]any
 	if path == "" || !filepath.IsLocal(path) {
 		return "", fmt.Errorf("path must be a relative file path within dir_name")
 	}
-	// Check the path as named and, for a symlink, the file it points to, as read_file would.
-	full := filepath.Join(dir, path)
-	candidates := []string{full}
-	if real, err := filepath.EvalSymlinks(full); err == nil && real != full {
-		candidates = append(candidates, real)
-	}
-	for _, candidate := range candidates {
-		if offending, denied := builtin.DeniedPath(candidate, t.denyPaths); denied {
-			return "", fmt.Errorf("send_file denied for path %q (matched %q in tools.read_file.deny_paths)", path, offending)
-		}
-	}
-	// Root.Open enforces the boundary during the open, including concurrent symlink changes.
 	root, err := os.OpenRoot(dir)
 	if err != nil {
 		return "", fmt.Errorf("cannot access requested file directory")
 	}
 	defer root.Close()
-	info, err := root.Stat(path)
+	file, err := openAllowedFile(root, dir, path, t.denyPaths)
 	if err != nil {
-		return "", fmt.Errorf("file is missing, unreadable or outside the allowed directory")
-	}
-	if !info.Mode().IsRegular() {
-		return "", fmt.Errorf("file must be a regular file")
-	}
-	if info.Mode().Perm()&0o444 == 0 {
-		return "", fmt.Errorf("file is unreadable")
-	}
-	file, err := root.Open(path)
-	if err != nil {
-		return "", fmt.Errorf("file is missing, unreadable or outside the allowed directory")
+		return "", err
 	}
 	defer file.Close()
-	info, err = file.Stat()
+	info, err := file.Stat()
 	if err != nil || !info.Mode().IsRegular() {
 		return "", fmt.Errorf("file must be a readable regular file")
 	}
@@ -103,6 +82,69 @@ func (t *consoleSendFileTool) Execute(ctx context.Context, params map[string]any
 	}
 	payload, err := json.Marshal(map[string]any{"sent": true, "attachment": attachment})
 	return string(payload), err
+}
+
+// maxSendFileSymlinks bounds the symlinks openAllowedFile follows for one file.
+const maxSendFileSymlinks = 16
+
+var errSendFileChanged = errors.New("file changed while it was being opened; try again")
+
+// openAllowedFile opens path under root unless tools.read_file.deny_paths denies it. It follows
+// symlinks itself, one at a time, so every name it checks is the name of the file it opens; then
+// it confirms the opened file is the one it checked. A symlink swapped between the check and the
+// open therefore cannot deliver a denied file. root keeps every step inside dir. Each deny_paths
+// entry also matches by its base name, so checking the final name covers links in parent
+// directories too.
+func openAllowedFile(root *os.Root, dir, path string, denyPaths []string) (*os.File, error) {
+	missing := fmt.Errorf("file is missing, unreadable or outside the allowed directory")
+	requested := path
+	for hops := 0; ; hops++ {
+		if offending, denied := builtin.DeniedPath(filepath.Join(dir, path), denyPaths); denied {
+			return nil, fmt.Errorf("send_file denied for path %q (matched %q in tools.read_file.deny_paths)", requested, offending)
+		}
+		before, err := root.Lstat(path)
+		if err != nil {
+			return nil, missing
+		}
+		if before.Mode()&os.ModeSymlink != 0 {
+			if hops >= maxSendFileSymlinks {
+				return nil, fmt.Errorf("too many symlinks for path %q", requested)
+			}
+			target, err := root.Readlink(path)
+			if err != nil {
+				return nil, missing
+			}
+			next := filepath.Join(filepath.Dir(path), target)
+			if filepath.IsAbs(target) {
+				if next, err = filepath.Rel(dir, target); err != nil {
+					return nil, missing
+				}
+			}
+			if !filepath.IsLocal(next) {
+				return nil, missing
+			}
+			path = next
+			continue
+		}
+		if !before.Mode().IsRegular() {
+			return nil, fmt.Errorf("file must be a regular file")
+		}
+		file, err := root.Open(path)
+		if err != nil {
+			return nil, missing
+		}
+		opened, err := file.Stat()
+		if err != nil {
+			_ = file.Close()
+			return nil, missing
+		}
+		after, err := root.Lstat(path)
+		if err != nil || !os.SameFile(opened, before) || !os.SameFile(opened, after) {
+			_ = file.Close()
+			return nil, errSendFileChanged
+		}
+		return file, nil
+	}
 }
 
 func (s *server) handleReceivedAttachment(w http.ResponseWriter, r *http.Request) {
