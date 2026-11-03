@@ -79,3 +79,11 @@ Validation: required gofmt/vet/full Go gate passed (exit 0), without the previou
 Review traced paste, drop, removal, concurrent upload, retry, send and conversation switching; checked upload authentication, 64 MiB request limit, path/symlink validation, preview output and file references. Residual risks: real-browser clipboard, OS drag/drop, visual layout and actual agent receipt were not manually verified. Scripted tests do not replace those checks.
 
 Reviewer made no source or lockfile changes, commits, fetches, pushes or gh calls; manager confirmed clean worktree and unchanged head. No linked GitHub issues or PRs were present in the header or owner's sections, so no review comments were applicable.
+
+## lyric · 2026-11-03 23:55
+
+Fixed the two baseline frontend failures from the review on this branch, in `be267038`. Both assertions were out of date, not FT1 defects:
+- `chat-reasoning-bubble.test.mjs`: the status card renders coder replies with MarkdownContent since `0192ad29`, so the test now checks only that reasoning never uses it.
+- `skills-page.test.mjs`: Memories sits between TODO and Skills since `32ea09a8`; the test expects that order.
+
+Full gate and `pnpm test` (321 pass, 0 fail) pass on the new head. Review it again.

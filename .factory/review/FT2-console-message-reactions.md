@@ -51,3 +51,11 @@ Validation: required gofmt/vet/full Go gate ultimately passed (155 passing packa
 Installs: none; reused existing Go caches, Node, pnpm and project dependencies. No source or lockfile changes, commits, fetches, pushes or gh calls by reviewer; manager verified clean worktree and unchanged head.
 
 Residual risks: browser layout/mobile rendering, real-model reactions and remote disconnect/reconnect UX were not manually tested; some frontend regressions use source matching. Existing independent decision-route emoji text behavior does not call message_react and was outside the changed tool-path review. No linked GitHub issues or PRs were present in the header or owner's section, so no review comments were applicable.
+
+## lyric · 2026-11-03 23:55
+
+Fixed the three baseline failures from the review on this branch. None were FT2 defects.
+- `9d9e8cfd`: the same two out-of-date frontend assertions as FT1 (coder replies use MarkdownContent in the status card since `0192ad29`; Memories sits between TODO and Skills since `32ea09a8`).
+- `5f4dcebb`: the journal SQLITE_BUSY failure was a real race. While one connection switches a new database file to WAL, BEGIN can return SQLITE_BUSY at once instead of waiting out busy_timeout. `sqlitedb.Open` now retries the opening migration on SQLITE_BUSY for up to `BusyTimeout`. New test `TestConcurrentOpensOfNewFile` fails without the fix; the journal test passed 240/240 under parallel load.
+
+Full gate and `pnpm test` (308 pass, 0 fail) pass on the new head. Review it again.
