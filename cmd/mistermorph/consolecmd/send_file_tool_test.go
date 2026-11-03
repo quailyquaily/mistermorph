@@ -275,3 +275,67 @@ func TestConsoleRuntimeRegistersSendFileAndRetainsItOnCompletion(t *testing.T) {
 		t.Fatalf("runtime attachment delivery: %+v", task)
 	}
 }
+
+func TestConsoleSendFileRefusesDeniedPaths(t *testing.T) {
+	for _, dirName := range []string{"workspace_dir", "file_cache_dir"} {
+		for _, test := range []struct{ name, path string }{
+			{"basename", "private.txt"},
+			{"nested", "sub/private.txt"},
+			{"full-path suffix", "keys/id_ed25519"},
+			{"symlink to denied", "innocent.txt"},
+		} {
+			t.Run(dirName+"/"+test.name, func(t *testing.T) {
+				tool, _ := attachmentFixture(t)
+				tool.denyPaths = []string{"private.txt", "keys/id_ed25519"}
+				dir := tool.workspaceDir
+				if dirName == "file_cache_dir" {
+					dir = tool.cacheDir
+				}
+				for _, name := range []string{"private.txt", "sub/private.txt", "keys/id_ed25519"} {
+					if err := os.MkdirAll(filepath.Dir(filepath.Join(dir, name)), 0o700); err != nil {
+						t.Fatal(err)
+					}
+					if err := os.WriteFile(filepath.Join(dir, name), []byte("secret"), 0o600); err != nil {
+						t.Fatal(err)
+					}
+				}
+				if err := os.Symlink("private.txt", filepath.Join(dir, "innocent.txt")); err != nil {
+					t.Fatal(err)
+				}
+				_, err := tool.Execute(context.Background(), map[string]any{"dir_name": dirName, "path": test.path})
+				if err == nil || !strings.Contains(err.Error(), "deny_paths") {
+					t.Fatalf("Execute(%q) error = %v, want a deny_paths refusal", test.path, err)
+				}
+				if task, _ := tool.store.Get("task"); len(task.Attachments) != 0 {
+					t.Fatalf("denied file was stored: %+v", task.Attachments)
+				}
+			})
+		}
+	}
+	tool, _ := attachmentFixture(t)
+	tool.denyPaths = []string{"private.txt"}
+	if err := os.WriteFile(filepath.Join(tool.workspaceDir, "report.txt"), []byte("report"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tool.Execute(context.Background(), map[string]any{"dir_name": "workspace_dir", "path": "report.txt"}); err != nil {
+		t.Fatalf("allowed file: %v", err)
+	}
+}
+
+func TestConsoleRuntimeSendFileAppliesReadFileDenyPaths(t *testing.T) {
+	rt, job, _ := newConsoleProgressPersistenceRuntime(t, []consoleProgressPersistenceLLMStep{
+		{result: llm.Result{ToolCalls: []llm.ToolCall{{ID: "send", Name: "send_file", Arguments: map[string]any{"dir_name": "workspace_dir", "path": "config.yaml"}}}}},
+		{result: llm.Result{Text: `{"type":"final","output":"refused"}`}},
+	}, "work", false)
+	job.WorkspaceDir = t.TempDir()
+	// The default deny list; the fixture's config does not load defaults.
+	job.Generation.reader.Set("tools.read_file.deny_paths", []string{"config.yaml"})
+	if err := os.WriteFile(filepath.Join(job.WorkspaceDir, "config.yaml"), []byte("api_key: secret"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	rt.handleTaskJob(context.Background(), job.ConversationKey, job)
+	task, ok := rt.store.Get(job.TaskID)
+	if !ok || len(task.Attachments) != 0 {
+		t.Fatalf("runtime delivered a denied file: %+v", task)
+	}
+}

@@ -10,12 +10,15 @@ import (
 	"strings"
 
 	"github.com/quailyquaily/mistermorph/internal/daemonruntime"
+	"github.com/quailyquaily/mistermorph/tools/builtin"
 )
 
 type consoleSendFileTool struct {
 	hub                                     *consoleStreamHub
 	store                                   *daemonruntime.ConsoleFileStore
 	taskID, topicID, workspaceDir, cacheDir string
+	// denyPaths is tools.read_file.deny_paths: files the agent may not read may not be sent either.
+	denyPaths []string
 }
 
 func (*consoleSendFileTool) Name() string   { return "send_file" }
@@ -52,6 +55,17 @@ func (t *consoleSendFileTool) Execute(ctx context.Context, params map[string]any
 	path = strings.TrimSpace(path)
 	if path == "" || !filepath.IsLocal(path) {
 		return "", fmt.Errorf("path must be a relative file path within dir_name")
+	}
+	// Check the path as named and, for a symlink, the file it points to, as read_file would.
+	full := filepath.Join(dir, path)
+	candidates := []string{full}
+	if real, err := filepath.EvalSymlinks(full); err == nil && real != full {
+		candidates = append(candidates, real)
+	}
+	for _, candidate := range candidates {
+		if offending, denied := builtin.DeniedPath(candidate, t.denyPaths); denied {
+			return "", fmt.Errorf("send_file denied for path %q (matched %q in tools.read_file.deny_paths)", path, offending)
+		}
 	}
 	// Root.Open enforces the boundary during the open, including concurrent symlink changes.
 	root, err := os.OpenRoot(dir)

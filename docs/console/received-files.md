@@ -14,7 +14,10 @@ Example parameters:
 `file_cache_dir`. `path` must be relative to that directory. Parent-directory
 escapes, absolute paths, and symlinks escaping the directory are rejected.
 Files must be readable, regular, non-empty, and no larger than 64 MiB, matching
-the Console upload limit. No new configuration or manual setup is required.
+the Console upload limit. Files that `read_file` may not read may not be sent
+either: `send_file` refuses paths matching `tools.read_file.deny_paths` (by
+default `config.yaml`), checking both the named path and, for a symlink, the
+file it points to. No new configuration or manual setup is required.
 
 Each received file shows its filename and a Download button. PNG, JPEG, GIF,
 and WebP files have inline image previews. The server identifies these types
