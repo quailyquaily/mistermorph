@@ -15,6 +15,9 @@ type ToolDeps struct {
 	Store         *Store
 	Options       func(ctx context.Context) (Options, error)
 	StoreIndexURL func() string
+	// Deferred makes both tools tools.Deferred: with tool search on, they stay out of requests
+	// until the model finds them with tool_search.
+	Deferred bool
 }
 
 // NewTools returns skill_install_preview and skill_install. Register them only where the user
@@ -23,7 +26,7 @@ func NewTools(deps ToolDeps) (*PreviewTool, *InstallTool) {
 	return &PreviewTool{deps: deps}, &InstallTool{deps: deps}
 }
 
-// The tools' names, which are also their config keys: tools.<name>.enabled.
+// The tools' names.
 const (
 	PreviewToolName = "skill_install_preview"
 	InstallToolName = "skill_install"
@@ -32,6 +35,9 @@ const (
 type PreviewTool struct{ deps ToolDeps }
 
 func (t *PreviewTool) Name() string { return PreviewToolName }
+
+// Deferred reports whether tool search hides the tool until the model finds it.
+func (t *PreviewTool) Deferred() bool { return t.deps.Deferred }
 
 func (t *PreviewTool) Description() string {
 	return "Preview a skill before installing it. Pass `link` (a GitHub repository, folder or SKILL.md link, or an https link to a SKILL.md) or `store_id` (a Morph Skill Store skill). " +
@@ -99,6 +105,9 @@ func replaceHint(p Preview) string {
 type InstallTool struct{ deps ToolDeps }
 
 func (t *InstallTool) Name() string { return InstallToolName }
+
+// Deferred reports whether tool search hides the tool until the model finds it.
+func (t *InstallTool) Deferred() bool { return t.deps.Deferred }
 
 func (t *InstallTool) Description() string {
 	return "Install a skill previewed with skill_install_preview. Always asks the user to approve first. Pass the preview's preview_id, name, source (its source url) and commit exactly as returned; " +

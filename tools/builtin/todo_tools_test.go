@@ -11,6 +11,7 @@ import (
 
 	"github.com/quailyquaily/mistermorph/contacts"
 	cronstore "github.com/quailyquaily/mistermorph/internal/cron"
+	"github.com/quailyquaily/mistermorph/internal/pathroots"
 	"github.com/quailyquaily/mistermorph/internal/todo"
 	"github.com/quailyquaily/mistermorph/llm"
 )
@@ -381,5 +382,56 @@ func seedTodoContacts(t *testing.T, contactsDir string) {
 	}, now)
 	if err != nil {
 		t.Fatalf("seed momo contact error = %v", err)
+	}
+}
+
+func TestTodoUpdateAddWorkspaceDir(t *testing.T) {
+	workspaceDir := t.TempDir()
+	tests := []struct {
+		name    string
+		ctx     context.Context
+		value   any
+		want    string
+		wantErr string
+	}{
+		{name: "omitted", ctx: context.Background(), value: nil, want: ""},
+		{name: "absolute path", ctx: context.Background(), value: workspaceDir, want: workspaceDir},
+		{name: "current workspace alias", ctx: pathroots.WithWorkspaceDir(context.Background(), workspaceDir), value: "workspace_dir", want: workspaceDir},
+		{name: "alias without workspace", ctx: context.Background(), value: "workspace_dir", wantErr: "no workspace is attached"},
+		{name: "missing dir", ctx: context.Background(), value: filepath.Join(workspaceDir, "gone"), wantErr: "workspace dir does not exist"},
+		{name: "not a string", ctx: context.Background(), value: 1, wantErr: "workspace_dir must be a string"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			cronPath := filepath.Join(root, "cron.yaml")
+			update := NewTodoUpdateToolWithLLM(true, cronPath, filepath.Join(root, "contacts"), &stubTodoToolLLMClient{}, "gpt-5.2")
+			params := map[string]any{
+				"action":  "add_recurring",
+				"id":      "build",
+				"content": "Run the build.",
+				"cron":    "0 9 * * *",
+			}
+			if tc.value != nil {
+				params["workspace_dir"] = tc.value
+			}
+			_, err := update.Execute(tc.ctx, params)
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("Execute() error = %v, want %q", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Execute() error = %v", err)
+			}
+			file, _, err := cronstore.NewStore(cronPath).Read()
+			if err != nil {
+				t.Fatalf("read cron file: %v", err)
+			}
+			if len(file.Tasks) != 1 || file.Tasks[0].WorkspaceDir != tc.want {
+				t.Fatalf("tasks = %#v, want workspace_dir %q", file.Tasks, tc.want)
+			}
+		})
 	}
 }

@@ -22,6 +22,7 @@ This document describes the built-in and runtime-injected tool parameters curren
   - `send_voice`, `send_photo`, `send_file`: runtime-injected, depend on active Telegram API context/chat metadata.
   - `message_react`: runtime-injected in Telegram and Slack runtimes; params/context differ by channel.
   - `memory_save`, `memory_search`, `memory_forget`, `journal_search`, `journal_read`: registered for a top-level run that has an audience when `memories.enabled` (default on). `memory_save` is always visible; the others are deferred and found with `tool_search`. See [Memories](./memories.md#tools).
+  - `skill_install_preview`, `skill_install`: Console only. A task that names one with `$` (the Skills page's Add skill does) gets it visible and runs with only the install tools. With `tools.tool_search.enabled` (default on), every other Console task gets both as deferred tools, found with `tool_search`. `skill_install` always asks for approval. See [Console skills page](./feat/feat_20260926_console_skills_page.md#41-installing-is-a-task).
 
 ### 2) ASCII architecture
 
@@ -80,7 +81,7 @@ Flow notes:
 - `$name` does not execute a tool directly. It only makes the matched tool schema available for the current task.
 - If `$name` does not match any skill or tool, it remains ordinary user text. The runtime does not report a missing capability.
 - Explicit opt-in does not bypass guard rules, sandbox limits, credentials, runtime prerequisites, or host tool allowlists.
-- `coder` follows the same explicit opt-in path: `tools.coder.enabled=true` exposes it by default, and `$coder` exposes it for the current task. When selected, it starts local Codex / Claude Code with approval and permission prompts bypassed. If those CLIs are outside the service PATH, set `tools.coder.path_extra`.
+- `coder` follows the same explicit opt-in path: `tools.coder.enabled=true` exposes it by default, and `$coder` exposes it for the current task. When selected, it starts local Codex / Claude Code with approval and permission prompts bypassed. If those CLIs are outside the service PATH, set `tools.coder.path_extra`. In the Console, Codex and Claude Code instead run in persistent terminal sessions that ask the user to approve actions; `tools.coder.bypass_approvals.codex` (Codex yolo mode, `--dangerously-bypass-approvals-and-sandbox`) and `tools.coder.bypass_approvals.claude` (`--dangerously-skip-permissions`, with Claude's one-time warning skipped through `--settings`) start them without approval prompts or sandbox. Both default to false; a running session is reopened with the new setting before its next task.
 - `$image_generate` / `$image_edit` and natural-language image intent use the same per-task tool trigger path.
 - Image tools are checked per task, not once at process startup.
 - Image tools are registered only when image config is usable. Full inheritance from top-level `llm.*` is allowed only for top-level `openai` or `gemini` with `llm.api_key`; `openai_codex` and `xai_oauth` do not provide image-tool credentials. Both OAuth providers may still accept image input in chat.
@@ -291,6 +292,7 @@ Parameters:
 | `id` | `string` | No for add; preferred for delete | Generated for add | Stable task ID. |
 | `people` | `array<string>` | No | None | Mentioned people to resolve into explicit reference IDs in added content. |
 | `chat_id` | `string` | No | Empty | Task-context chat ID, for example `tg:-1001234567890`. |
+| `workspace_dir` | `string` | No | Runtime default workspace | Workspace directory for the task's runs: an absolute path or `~/...`, or the literal `workspace_dir` for the workspace attached to the current conversation. The directory must exist when the task is added. |
 
 Returns:
 
@@ -327,6 +329,7 @@ Errors (string matching):
 | `invalid reference id:` | Invalid `(...)` reference exists in text. |
 | `missing_reference_id` | Mentioned person cannot be uniquely resolved to a reference ID. |
 | `people must be an array of strings` | `people` is not a string array. |
+| `workspace_dir:` | `workspace_dir` does not exist, is not a directory, or names the current workspace when none is attached. |
 | `invalid reference_resolve response` | Reference insertion LLM returned invalid JSON. |
 | `no matching cron task in cron.yaml` | Delete found no matching task. |
 | `ambiguous cron task match` | Delete without `id` matched multiple candidates. |
@@ -388,6 +391,7 @@ Constraints:
 - Non-awareness runtimes, including Telegram private sessions, do not expose `contacts_send` by default.
 - Explicit `$contacts_send` opt-in can expose it for the current task even when `tools.contacts_send.enabled=false`; it does not bypass selected tool allowlists, guard rules, credentials, or runtime prerequisites.
 - `contacts_send` always uses topic `chat.message` (caller does not pass `topic`).
+- Telegram text messages render Markdown (bold, italic, code, links) as Telegram HTML, as Telegram channel replies do. If Telegram rejects the markup, the text is sent again as plain text. Write plain Markdown, not Telegram MarkdownV2 escapes. File captions stay plain text.
 - If cross-session forwarding is needed in group chat (for example, explicit "DM someone"), trigger it via explicit task/command, not by routing ordinary group replies to `contacts_send`.
 - If `chat_id` is provided:
   - Multiple contacts: the explicit chat must be a shared route for every contact; otherwise the tool returns an error instead of choosing another chat. Telegram, Slack, and Lark add mentions; LINE sends to the shared chat without mentions.

@@ -76,6 +76,7 @@ Runs a web search and returns structured search results. Useful for discovering 
 Sends one outbound message to a single contact. Delivery is chosen from the contact profile, such as Telegram, Slack, or LINE.
 
 - Key limits: some group/supergroup contexts hide this tool by default.
+- Telegram text messages render Markdown (bold, italic, code, links), falling back to plain text if Telegram rejects the markup.
 
 ## Engine Tools
 
@@ -94,7 +95,7 @@ For parameter details, result envelope fields, test prompts, and the difference 
 
 Runs a coding subtask with the local Codex or Claude Code CLI. The CLI stdout is read as streaming JSON/JSONL and text deltas are forwarded as tool-output events before the final `SubtaskResult` envelope is returned.
 
-- Key limits: disabled by default via `tools.coder.enabled=false`, but `$coder` can expose it for one task; only supports `coder=codex` or `coder=claude`; runs local CLI processes with approval and permission prompts bypassed. If the CLIs are outside the service PATH, set `tools.coder.path_extra`.
+- Key limits: disabled by default via `tools.coder.enabled=false`, but `$coder` can expose it for one task; only supports `coder=codex` or `coder=claude`; runs local CLI processes with approval and permission prompts bypassed, except in the Console, where its terminal sessions ask the user unless `tools.coder.bypass_approvals.codex` / `tools.coder.bypass_approvals.claude` is true. If the CLIs are outside the service PATH, set `tools.coder.path_extra`.
 - Default Codex path: `codex exec --dangerously-bypass-approvals-and-sandbox --json -C <cwd> -`.
 - Default Claude path: `claude -p --output-format stream-json --verbose --include-partial-messages --no-session-persistence --dangerously-skip-permissions --debug-file <log-dir>/debug.log`, with the task sent through stdin.
 
@@ -122,7 +123,7 @@ Generates structured execution-plan JSON, typically for complex task decompositi
 
 Maintains TODOs in `file_state_dir/cron.yaml`.
 
-- Key limits: use `action=add_once` with `content` and `at` to add a one-time TODO; use `action=add_recurring` with `content` and a five-field numeric `cron` expression to add a recurring TODO. `title` is optional for new TODOs. Use `action=delete` to delete a TODO. Deletion prefers `id`; without `id`, it uses semantic matching on `content` and errors on no-match or ambiguous match.
+- Key limits: use `action=add_once` with `content` and `at` to add a one-time TODO; use `action=add_recurring` with `content` and a five-field numeric `cron` expression to add a recurring TODO. `title` is optional for new TODOs. Use `action=delete` to delete a TODO. Deletion prefers `id`; without `id`, it uses semantic matching on `content` and errors on no-match or ambiguous match. Optional `workspace_dir` sets the workspace the TODO runs in: an existing absolute path, or `workspace_dir` for the workspace attached to the current conversation.
 
 For the runtime workflow around TODOs and `HEARTBEAT.md`, see [TODO and Heartbeat](/guide/todo-and-heartbeat).
 

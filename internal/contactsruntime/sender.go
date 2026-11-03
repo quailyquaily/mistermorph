@@ -1074,6 +1074,13 @@ func (s *RoutingSender) sendTelegramTarget(ctx context.Context, target any, text
 		"text":                     text,
 		"disable_web_page_preview": true,
 	}
+	// The text is Markdown, as in the Telegram channel's replies; it goes as Telegram HTML, and
+	// again as plain text when Telegram rejects the markup.
+	rendered, renderErr := telegramapi.RenderHTMLFromMarkdown(text)
+	if renderErr == nil && rendered != "" {
+		body["text"] = rendered
+		body["parse_mode"] = "HTML"
+	}
 	if messageThreadID > 0 {
 		body["message_thread_id"] = messageThreadID
 	}
@@ -1085,6 +1092,16 @@ func (s *RoutingSender) sendTelegramTarget(ctx context.Context, target any, text
 		}
 		body["reply_to_message_id"] = replyToMessageID
 	}
+	err := s.postTelegramMessage(ctx, token, body)
+	if err != nil && body["parse_mode"] != nil && telegramapi.IsEntityParseError(err.Error()) {
+		body["text"] = text
+		delete(body, "parse_mode")
+		err = s.postTelegramMessage(ctx, token, body)
+	}
+	return err
+}
+
+func (s *RoutingSender) postTelegramMessage(ctx context.Context, token string, body map[string]any) error {
 	raw, err := json.Marshal(body)
 	if err != nil {
 		return fmt.Errorf("marshal telegram payload: %w", err)

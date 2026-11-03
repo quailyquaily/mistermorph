@@ -12,8 +12,10 @@ import (
 
 	cronstore "github.com/quailyquaily/mistermorph/internal/cron"
 	refid "github.com/quailyquaily/mistermorph/internal/entryutil/refid"
+	"github.com/quailyquaily/mistermorph/internal/pathroots"
 	"github.com/quailyquaily/mistermorph/internal/pathutil"
 	"github.com/quailyquaily/mistermorph/internal/todo"
+	"github.com/quailyquaily/mistermorph/internal/workspace"
 	"github.com/quailyquaily/mistermorph/llm"
 )
 
@@ -122,6 +124,10 @@ func (t *TodoUpdateTool) ParameterSchema() string {
 					"type": "string",
 				},
 			},
+			"workspace_dir": map[string]any{
+				"type":        "string",
+				"description": "Optional workspace directory for the task's runs (absolute path or ~/...). Pass `workspace_dir` to use the workspace attached to the current conversation. Omit to use the runtime default workspace.",
+			},
 			"chat_id": map[string]any{
 				"type":        "string",
 				"description": "Optional task notification chat id (for example tg:-1001234567890). Defaults to " + cronstore.ConsoleNotificationChatID + " in Console runtime.",
@@ -193,6 +199,10 @@ func (t *TodoUpdateTool) Execute(ctx context.Context, params map[string]any) (st
 		if peopleErr != nil {
 			return "", peopleErr
 		}
+		workspaceDir, workspaceErr := parseTodoUpdateWorkspaceDir(ctx, params)
+		if workspaceErr != nil {
+			return "", workspaceErr
+		}
 		slog.Default().Debug("todo_update_add_start",
 			"content_len", len(content),
 			"chat_id", chatID,
@@ -209,7 +219,7 @@ func (t *TodoUpdateTool) Execute(ctx context.Context, params map[string]any) (st
 		if resolveErr != nil {
 			return "", resolveErr
 		}
-		result, err = store.AddOnceWithChatID(title, rewritten, at, tz, id, chatID)
+		result, err = store.AddOnce(cronstore.Task{Title: title, Content: rewritten, At: at, TZ: tz, ID: id, ChatID: chatID, WorkspaceDir: workspaceDir})
 		if err == nil && len(warnings) > 0 {
 			addResult := result.(cronstore.AddResult)
 			addResult.Warnings = append(addResult.Warnings, warnings...)
@@ -249,11 +259,15 @@ func (t *TodoUpdateTool) Execute(ctx context.Context, params map[string]any) (st
 		if peopleErr != nil {
 			return "", peopleErr
 		}
+		workspaceDir, workspaceErr := parseTodoUpdateWorkspaceDir(ctx, params)
+		if workspaceErr != nil {
+			return "", workspaceErr
+		}
 		rewritten, warnings, resolveErr := t.resolveAddContent(ctx, content, people, contactsDir, false)
 		if resolveErr != nil {
 			return "", resolveErr
 		}
-		result, err = store.AddRecurringWithChatID(title, rewritten, cronExpr, tz, id, chatID)
+		result, err = store.AddRecurring(cronstore.Task{Title: title, Content: rewritten, Cron: cronExpr, TZ: tz, ID: id, ChatID: chatID, WorkspaceDir: workspaceDir})
 		if err == nil && len(warnings) > 0 {
 			recurringResult := result.(cronstore.AddResult)
 			recurringResult.Warnings = append(recurringResult.Warnings, warnings...)
@@ -565,6 +579,27 @@ func parseTodoUpdateOptionalString(params map[string]any, names ...string) (stri
 		return strings.TrimSpace(value), nil
 	}
 	return "", nil
+}
+
+// parseTodoUpdateWorkspaceDir returns the task's workspace directory, or "" when none is
+// given. The `workspace_dir` alias names the workspace attached to the current run.
+func parseTodoUpdateWorkspaceDir(ctx context.Context, params map[string]any) (string, error) {
+	raw, err := parseTodoUpdateOptionalString(params, "workspace_dir")
+	if err != nil || raw == "" {
+		return "", err
+	}
+	if strings.EqualFold(raw, "workspace_dir") {
+		current, ok := pathroots.WorkspaceDirFromContext(ctx)
+		if !ok {
+			return "", fmt.Errorf("workspace_dir: no workspace is attached to the current conversation")
+		}
+		raw = current
+	}
+	resolved, err := workspace.ValidateDir(raw, nil)
+	if err != nil {
+		return "", fmt.Errorf("workspace_dir: %w", err)
+	}
+	return resolved, nil
 }
 
 func parseTodoUpdateChatID(params map[string]any, addContext todo.AddResolveContext) (string, error) {

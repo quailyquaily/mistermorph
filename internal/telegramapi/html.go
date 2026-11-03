@@ -1,4 +1,4 @@
-package telegram
+package telegramapi
 
 import (
 	"bytes"
@@ -24,7 +24,10 @@ var telegramMarkdownRenderer = goldmark.New(
 	),
 )
 
-func renderTelegramHTMLFromMarkdown(text string) (string, error) {
+// RenderHTMLFromMarkdown converts Markdown to the HTML subset Telegram accepts
+// with parse_mode HTML. Tags Telegram does not support are dropped and their
+// text kept.
+func RenderHTMLFromMarkdown(text string) (string, error) {
 	var raw bytes.Buffer
 	if err := telegramMarkdownRenderer.Convert([]byte(text), &raw); err != nil {
 		return "", err
@@ -35,6 +38,14 @@ func renderTelegramHTMLFromMarkdown(text string) (string, error) {
 		return htmlstd.EscapeString(strings.TrimSpace(text)), nil
 	}
 	return out, nil
+}
+
+// IsEntityParseError reports whether a Telegram error description says the
+// message markup could not be parsed, so the text should be sent again as plain
+// text.
+func IsEntityParseError(description string) bool {
+	desc := strings.ToLower(description)
+	return strings.Contains(desc, "can't parse entities") || strings.Contains(desc, "can't parse entity")
 }
 
 func sanitizeTelegramHTML(input string) string {
@@ -83,7 +94,19 @@ func renderTelegramNode(dst *strings.Builder, node *xhtml.Node, state renderHTML
 			text = strings.ReplaceAll(text, "\r\n", "\n")
 			text = strings.ReplaceAll(text, "\r", "\n")
 			if strings.Contains(text, "\n") {
-				text = strings.Join(strings.Fields(text), " ")
+				// A line break inside a paragraph stays a line break, as Telegram shows one.
+				// Only the spaces around it go; the text's own leading and trailing spaces
+				// separate it from the elements beside it.
+				lines := strings.Split(text, "\n")
+				for i := range lines {
+					if i > 0 {
+						lines[i] = strings.TrimLeft(lines[i], " \t")
+					}
+					if i < len(lines)-1 {
+						lines[i] = strings.TrimRight(lines[i], " \t")
+					}
+				}
+				text = strings.Join(lines, "\n")
 			}
 		}
 		dst.WriteString(htmlstd.EscapeString(text))

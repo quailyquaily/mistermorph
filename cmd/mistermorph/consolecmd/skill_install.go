@@ -17,20 +17,23 @@ import (
 )
 
 // skillInstallTools are console-only: the web console is where the user reads the preview and
-// approves the install. Each is off by default (tools.<name>.enabled); like the built-in tools, a
-// task that names one as $skill_install_preview or $skill_install gets it for that run, which is
-// how the Skills page's Add skill works.
+// approves the install. They have no setting. A task that names one as $skill_install_preview or
+// $skill_install gets it for that run, visible from the first request, which is how the Skills
+// page's Add skill works. With tools.tool_search on, every other task gets both as deferred
+// tools: hidden until the model finds them with tool_search, as for a plain chat request to
+// install a skill.
 func (r *consoleLocalRuntime) skillInstallTools(generation *consoleLocalRuntimeGeneration, task string) []tools.Tool {
 	if generation == nil || generation.bundle == nil || generation.bundle.taskRuntime == nil {
 		return nil
 	}
 	reader := generation.reader
 	refs := skillInstallToolRefs(task, skillsutil.ResolveTaskSkillRefs(task, skillsutil.SkillsConfigFromReader(reader)))
-	// The install tools have no setting: only a task that names them, such as Add skill's, gets them.
-	wants := func(name string) bool { return refs[name] }
-	if !wants(skillinstall.PreviewToolName) && !wants(skillinstall.InstallToolName) {
+	named := len(refs) > 0
+	searchable := !named && reader != nil && reader.GetBool("tools.tool_search.enabled")
+	if !named && !searchable {
 		return nil
 	}
+	wants := func(name string) bool { return searchable || refs[name] }
 	stateDir := generation.paths.StateDir
 	client := generation.bundle.taskRuntime.BootstrapMainClient
 	model := generation.bundle.defaultModel
@@ -50,6 +53,7 @@ func (r *consoleLocalRuntime) skillInstallTools(generation *consoleLocalRuntimeG
 			}, nil
 		},
 		StoreIndexURL: func() string { return skillStoreIndexURL(reader) },
+		Deferred:      searchable,
 	})
 	var out []tools.Tool
 	if wants(preview.Name()) {

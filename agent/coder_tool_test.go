@@ -827,3 +827,36 @@ func TestCoderStreamCollectorClaudeSteps(t *testing.T) {
 		t.Fatalf("steps = %q, want %q", steps, want)
 	}
 }
+
+func TestCoderToolBypassApprovalsPerBackend(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake shell executable uses /bin/sh")
+	}
+	t.Parallel()
+
+	bin := t.TempDir()
+	for _, name := range []string{coderBackendCodex, coderBackendClaude} {
+		writeFakeCoderExecutable(t, bin, name, "exit 0\n")
+	}
+	var got []CoderRequest
+	tool := newCoderTool(coderToolDeps{
+		Runner:          &execDirectSubtaskRunner{},
+		PathExtra:       []string{bin},
+		BypassApprovals: map[string]bool{coderBackendClaude: true},
+		RunTerminal: func(_ context.Context, req CoderRequest) (string, error) {
+			got = append(got, req)
+			return "ok", nil
+		},
+	})
+	for _, backend := range []string{coderBackendCodex, coderBackendClaude} {
+		if _, err := tool.Execute(context.Background(), map[string]any{"coder": backend, "task": "t", "cwd": t.TempDir()}); err != nil {
+			t.Fatalf("%s: %v", backend, err)
+		}
+	}
+	if len(got) != 2 || got[0].BypassApprovals || !got[1].BypassApprovals {
+		t.Fatalf("requests = %+v, want only claude to bypass", got)
+	}
+	if desc := tool.Description(); !strings.Contains(desc, "Claude Code runs actions without asking") {
+		t.Fatalf("description = %q", desc)
+	}
+}

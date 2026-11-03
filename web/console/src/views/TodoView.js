@@ -8,6 +8,8 @@ import AppPage from "../components/AppPage";
 import AppMarkdownEditor from "../components/AppMarkdownEditor";
 import AppTabs from "../components/AppTabs";
 import TodoCalendar from "../components/TodoCalendar";
+import WorkspaceDirPickerDialog from "../components/WorkspaceDirPickerDialog";
+import { rememberRecentWorkspaceDir } from "../core/recent-workspace-dirs";
 import { createArrivalTracker, createHighlightWindow } from "../core/arrivals";
 import { currentLocale, endpointState, runtimeApiFetch, translate } from "../core/context";
 import { isValidCronExpression } from "../core/cron";
@@ -453,6 +455,7 @@ function normalizeTask(item = {}, fallbackTitle = DEFAULT_TODO_TITLE) {
     content: trimText(item.content),
     chat_id: trimText(item.chat_id),
     llm_profile: trimText(item.llm_profile),
+    workspace_dir: trimText(item.workspace_dir),
     bash_env: normalizeBashEnv(item.bash_env),
     mode: cron !== "" && at === "" ? "recurring" : "once",
     ...recurring,
@@ -659,6 +662,10 @@ function serializeTask(task, fallbackTitle = DEFAULT_TODO_TITLE) {
   if (llmProfile) {
     out.llm_profile = llmProfile;
   }
+  const workspaceDir = trimText(task?.workspace_dir);
+  if (workspaceDir) {
+    out.workspace_dir = workspaceDir;
+  }
   const bashEnv = compactBashEnv(task?.bash_env);
   if (bashEnv.length > 0) {
     out.bash_env = bashEnv;
@@ -693,6 +700,7 @@ const TodoView = {
     AppMarkdownEditor,
     AppTabs,
     TodoCalendar,
+    WorkspaceDirPickerDialog,
   },
   setup() {
     const t = translate;
@@ -1335,6 +1343,33 @@ const TodoView = {
       tasks.value = nextTasks;
       tasksDirty.value = true;
       openSelectedTaskDraft();
+    }
+
+    const workspacePickerOpen = ref(false);
+
+    function openWorkspacePicker() {
+      if (!selectedTask.value || saving.value || loading.value) {
+        return;
+      }
+      workspacePickerOpen.value = true;
+    }
+
+    function closeWorkspacePicker() {
+      workspacePickerOpen.value = false;
+    }
+
+    function pickWorkspaceDir(dir) {
+      const task = selectedTask.value;
+      workspacePickerOpen.value = false;
+      if (!task) {
+        return;
+      }
+      rememberRecentWorkspaceDir(dir);
+      updateTaskField(task, "workspace_dir", dir);
+    }
+
+    function clearWorkspaceDir(task) {
+      updateTaskField(task, "workspace_dir", "");
     }
 
     function updateTaskField(task, field, value) {
@@ -2389,6 +2424,11 @@ const TodoView = {
       confirmDeleteSelectedTask,
       moveSelectedTask,
       updateTaskField,
+      workspacePickerOpen,
+      openWorkspacePicker,
+      closeWorkspacePicker,
+      pickWorkspaceDir,
+      clearWorkspaceDir,
       updateTodoTitle,
       updateTaskEnabled,
       updateScheduleMode,
@@ -2866,6 +2906,42 @@ const TodoView = {
               </span>
             </div>
 
+            <div class="todo-field is-wide todo-workspace-field">
+              <AppInput
+                :modelValue="selectedTask.workspace_dir"
+                :placeholder="t('todo_workspace_dir_placeholder')"
+                :aria-label="t('todo_field_workspace_dir')"
+                :disabled="saving || loading"
+                @update:modelValue="updateTaskField(selectedTask, 'workspace_dir', $event)"
+              >
+                <template #prepend>
+                  <span class="todo-control-prepend todo-input-prepend">{{ t("todo_field_workspace_dir") }}</span>
+                </template>
+                <template #append>
+                  <AppButton
+                    v-if="selectedTask.workspace_dir"
+                    class="plain sm icon todo-workspace-action"
+                    :title="t('todo_workspace_dir_clear')"
+                    :aria-label="t('todo_workspace_dir_clear')"
+                    :disabled="saving || loading"
+                    @click.prevent="clearWorkspaceDir(selectedTask)"
+                  >
+                    <PhX class="icon" />
+                  </AppButton>
+                  <AppButton
+                    class="plain sm icon todo-workspace-action"
+                    :title="t('todo_workspace_dir_browse')"
+                    :aria-label="t('todo_workspace_dir_browse')"
+                    :disabled="saving || loading"
+                    @click.prevent="openWorkspacePicker"
+                  >
+                    <PhFolderOpen class="icon" />
+                  </AppButton>
+                </template>
+              </AppInput>
+              <span class="todo-field-note">{{ t("todo_workspace_dir_hint") }}</span>
+            </div>
+
             <div class="todo-field is-wide todo-bash-env-field">
               <div class="todo-bash-env-head">
                 <span class="todo-task-preview-label">{{ t("todo_field_bash_env") }}</span>
@@ -2967,6 +3043,14 @@ const TodoView = {
         :label="t('todo_action_add')"
         :disabled="loading || saving"
         @click="addTask"
+      />
+      <WorkspaceDirPickerDialog
+        :modelValue="workspacePickerOpen"
+        :initialDir="selectedTask ? selectedTask.workspace_dir : ''"
+        :title="t('todo_workspace_dir_dialog_title')"
+        :confirmLabel="t('todo_workspace_dir_choose')"
+        @close="closeWorkspacePicker"
+        @confirm="pickWorkspaceDir"
       />
       <AppMessageDialog
         v-model="deleteDialogOpen"

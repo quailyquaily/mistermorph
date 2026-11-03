@@ -43,8 +43,10 @@ type backend interface {
 	label() string
 	// newID returns the session ID to start with, or "" when the CLI picks its own.
 	newID() string
-	// args returns the command-line arguments. resume reopens id's conversation.
-	args(id string, resume bool) []string
+	// args returns the command-line arguments. resume reopens id's conversation; bypass runs
+	// without approval prompts or sandbox (Codex --dangerously-bypass-approvals-and-sandbox,
+	// Claude --dangerously-skip-permissions).
+	args(id string, resume, bypass bool) []string
 	// transcriptRoot returns the directory holding session files, from the child's environment.
 	transcriptRoot(getenv func(string) string, home, cwd string) string
 	// findTranscript returns the session file for id under root, or "" before it exists.

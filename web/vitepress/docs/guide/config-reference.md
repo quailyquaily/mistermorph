@@ -121,6 +121,8 @@ Shell defaults are platform-specific:
 - `tools.spawn.enabled`
 - `tools.coder.enabled`
 - `tools.coder.path_extra`
+- `tools.coder.bypass_approvals.codex`
+- `tools.coder.bypass_approvals.claude`
 - `tools.contacts_send.enabled`
 - `tools.todo_update.enabled`
 - `tools.plan_create.enabled`

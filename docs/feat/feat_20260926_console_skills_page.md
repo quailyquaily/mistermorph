@@ -143,10 +143,15 @@ The tools live in `internal/skillinstall` and are registered only in the console
 registry (`consolecmd/skill_install.go`); channels build their own registries and do not get
 them. The existing CLI `skills install` command is unchanged.
 
-Neither tool has a setting. A task that names one with `$` gets it for that run, so Add skill
-(and a chat message that writes `$skill_install_preview`) works; a plain chat request to install a
-skill (path 2 above) does not get the tools unless it names them. Settings → Tools lists them under
-the Console's channel tools. (Until 2026-10-07 they also had `tools.<name>.enabled` switches, off by
+Neither tool has a setting. A task that names one with `$` gets it for that run, visible from
+the first request, so Add skill (and a chat message that writes `$skill_install_preview`) works.
+With `tools.tool_search.enabled` (default on), every other Console task gets both tools as
+deferred tools (`tools.Deferred`): they stay out of requests until the model finds them with
+`tool_search`, so a plain chat request to install a skill (path 2 above) can find and use them.
+Such a task is not restricted to the install tools, since nothing named them when it started; the
+forced approval on `skill_install` (§4.3) still gates the install. With tool search off, a plain
+request does not get the tools unless it names them. Settings → Tools lists them under the
+Console's channel tools. (Until 2026-10-07 they also had `tools.<name>.enabled` switches, off by
 default, and `tools.skill_install.max_bytes`.)
 
 ### 4.2 Accepted links

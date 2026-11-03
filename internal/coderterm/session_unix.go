@@ -27,6 +27,7 @@ type session struct {
 	transcriptDir, transcriptAt string
 	busy                        bool // Guarded by Sessions.mu.
 	resumed                     bool // Reopened an earlier conversation.
+	bypass                      bool // Started without approval prompts or sandbox.
 	prompted                    bool // A task reached the CLI; read after run returns.
 	askedID                     bool // Codex: /status was requested to learn the session ID.
 	cmd                         *exec.Cmd
@@ -83,12 +84,12 @@ func start(b backend, req Request, resumeID string) (*session, error) {
 		return nil, err
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	s := &session{b: b, cwd: req.CWD, id: b.newID(), dir: dir, ctx: ctx, cancel: cancel, done: make(chan struct{}), inputDone: make(chan struct{}), screen: vt.NewEmulator(120, 40)}
+	s := &session{b: b, cwd: req.CWD, id: b.newID(), dir: dir, bypass: req.BypassApprovals, ctx: ctx, cancel: cancel, done: make(chan struct{}), inputDone: make(chan struct{}), screen: vt.NewEmulator(120, 40)}
 	if resumeID != "" {
 		s.id, s.resumed = resumeID, true
 	}
 	s.transcriptDir = b.transcriptRoot(func(key string) string { return values[key] }, home, req.CWD)
-	s.cmd = exec.CommandContext(ctx, req.Command, b.args(s.id, s.resumed)...)
+	s.cmd = exec.CommandContext(ctx, req.Command, b.args(s.id, s.resumed, s.bypass)...)
 	s.cmd.Dir = req.CWD
 	s.cmd.Env = append(childEnv, "TERM=xterm-256color")
 	s.cmd.Cancel = func() error {

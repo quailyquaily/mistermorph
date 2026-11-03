@@ -89,27 +89,37 @@ func (s *Store) writeLocked(file File) error {
 }
 
 func (s *Store) AddOnceWithChatID(title, content, at, tz, id, chatID string) (AddResult, error) {
-	task := Task{
-		ID:      normalizeTaskID(id),
-		Title:   normalizeTaskTitle(title),
-		At:      strings.TrimSpace(at),
-		TZ:      strings.TrimSpace(tz),
-		Content: strings.TrimSpace(content),
-		ChatID:  strings.TrimSpace(chatID),
-	}
-	return s.addTask("add_once", task)
+	return s.AddOnce(Task{Title: title, Content: content, At: at, TZ: tz, ID: id, ChatID: chatID})
 }
 
 func (s *Store) AddRecurringWithChatID(title, content, expr, tz, id, chatID string) (AddResult, error) {
-	task := Task{
-		ID:      normalizeTaskID(id),
-		Title:   normalizeTaskTitle(title),
-		Cron:    strings.TrimSpace(expr),
-		TZ:      strings.TrimSpace(tz),
-		Content: strings.TrimSpace(content),
-		ChatID:  strings.TrimSpace(chatID),
-	}
-	return s.addTask("add_recurring", task)
+	return s.AddRecurring(Task{Title: title, Content: content, Cron: expr, TZ: tz, ID: id, ChatID: chatID})
+}
+
+// AddOnce adds a one-time task. Only the one-time fields of task are kept.
+func (s *Store) AddOnce(task Task) (AddResult, error) {
+	return s.addTask("add_once", Task{
+		ID:           normalizeTaskID(task.ID),
+		Title:        normalizeTaskTitle(task.Title),
+		At:           strings.TrimSpace(task.At),
+		TZ:           strings.TrimSpace(task.TZ),
+		Content:      strings.TrimSpace(task.Content),
+		ChatID:       strings.TrimSpace(task.ChatID),
+		WorkspaceDir: strings.TrimSpace(task.WorkspaceDir),
+	})
+}
+
+// AddRecurring adds a recurring task. Only the recurring fields of task are kept.
+func (s *Store) AddRecurring(task Task) (AddResult, error) {
+	return s.addTask("add_recurring", Task{
+		ID:           normalizeTaskID(task.ID),
+		Title:        normalizeTaskTitle(task.Title),
+		Cron:         strings.TrimSpace(task.Cron),
+		TZ:           strings.TrimSpace(task.TZ),
+		Content:      strings.TrimSpace(task.Content),
+		ChatID:       strings.TrimSpace(task.ChatID),
+		WorkspaceDir: strings.TrimSpace(task.WorkspaceDir),
+	})
 }
 
 func (s *Store) addTask(action string, task Task) (AddResult, error) {

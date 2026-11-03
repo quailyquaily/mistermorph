@@ -56,7 +56,25 @@ type RunOptions struct {
 	ChatInfoStore       *chatinfo.Store
 	ChatInfoRefresher   chatinfo.Refresher
 	TaskStore           daemonruntime.TaskView
+	// TaskProgress, when set, follows each recorded run while it works.
+	TaskProgress TaskProgressFunc
 }
+
+// TaskProgress follows one awareness run while it works, for a runtime that can show its plan,
+// activity, reasoning and reply as they happen, such as the Console.
+type TaskProgress interface {
+	// Context attaches what the run reports through its context, such as agent events.
+	Context(ctx context.Context) context.Context
+	OnStream(event llm.StreamEvent) error
+	PlanStepUpdate(runCtx *agent.Context, update agent.PlanStepUpdate)
+	// Result returns the fields to keep in the task result beside "final".
+	Result(final *agent.Final, runCtx *agent.Context) map[string]any
+	// Close ends the live view once the task record holds the outcome.
+	Close(output string, runErr error)
+}
+
+// TaskProgressFunc starts following the run recorded as taskID.
+type TaskProgressFunc func(taskID, workspaceDir string, logger *slog.Logger) TaskProgress
 
 type Dependencies = depsutil.CommonDependencies
 
@@ -166,7 +184,7 @@ func runAwarenessLoop(ctx context.Context, d Dependencies, opts RunOptions) (run
 		refreshChatInfoOnStart(ctx, chatInfoStore, chatInfoRefresher, opts.ChatInfoContactsDir, logger)
 	}
 
-	runAwarenessTaskWithOpts := func(behavior awarenessutil.Behavior, task string, meta map[string]any, taskRunID, llmProfile string, bashEnv []cronstore.BashEnvRef) (string, error) {
+	runAwarenessTaskWithOpts := func(behavior awarenessutil.Behavior, task string, meta map[string]any, taskRunID, llmProfile, workspaceDir string, bashEnv []cronstore.BashEnvRef) (string, error) {
 		return runAwarenessTask(ctx, d, awarenessTaskOptions{
 			Behavior:                 behavior,
 			Logger:                   logger,
@@ -178,6 +196,7 @@ func runAwarenessLoop(ctx context.Context, d Dependencies, opts RunOptions) (run
 			Meta:                     meta,
 			TaskRunID:                taskRunID,
 			LLMProfile:               llmProfile,
+			WorkspaceDir:             workspaceDir,
 			BaseRegistry:             baseReg,
 			SharedGuard:              sharedGuard,
 			Config:                   cfg,
@@ -187,11 +206,12 @@ func runAwarenessLoop(ctx context.Context, d Dependencies, opts RunOptions) (run
 			ClientDecorator:          inspectors.Wrap,
 			ImageClient:              nil,
 			TaskStore:                opts.TaskStore,
+			TaskProgress:             opts.TaskProgress,
 			BashEnv:                  bashEnv,
 		})
 	}
 	runTask := func(behavior awarenessutil.Behavior, task string, meta map[string]any, taskRunID string) (string, error) {
-		return runAwarenessTaskWithOpts(behavior, task, meta, taskRunID, "", nil)
+		return runAwarenessTaskWithOpts(behavior, task, meta, taskRunID, "", "", nil)
 	}
 
 	runTaskAsync := func(behavior awarenessutil.Behavior, task string, taskEmpty bool, wakeSignal awarenessdomain.PokeInput) string {
@@ -314,13 +334,16 @@ func runAwarenessLoop(ctx context.Context, d Dependencies, opts RunOptions) (run
 					if profile := strings.TrimSpace(task.LLMProfile); profile != "" {
 						extra["llm_profile"] = profile
 					}
+					if dir := strings.TrimSpace(task.WorkspaceDir); dir != "" {
+						extra["workspace_dir"] = dir
+					}
 					if !cronstore.IsConsoleNotificationChatID(task.ChatID) {
 						if notifyTarget := buildCronNotifyTargetForTask(ctx, task, time.Now().UTC(), chatInfoStore, chatInfoRefresher, logger); notifyTarget != nil {
 							extra["notify_target"] = notifyTarget
 						}
 					}
 					meta := awarenessutil.BuildCronMeta("cron", strings.TrimSpace(task.ID), due.ScheduledAtUTC, cronstore.ScheduleForTask(task), strings.TrimSpace(task.TZ), strings.TrimSpace(task.ChatID), extra)
-					summary, err := runAwarenessTaskWithOpts(awarenessutil.BehaviorCron, strings.TrimSpace(task.Content), meta, taskRunID, task.LLMProfile, task.BashEnv)
+					summary, err := runAwarenessTaskWithOpts(awarenessutil.BehaviorCron, strings.TrimSpace(task.Content), meta, taskRunID, task.LLMProfile, task.WorkspaceDir, task.BashEnv)
 					if err != nil {
 						notifyCronResult(ctx, opts.CronNotify, logger, task, taskRunID, "", err)
 						return err
@@ -349,16 +372,18 @@ func runAwarenessLoop(ctx context.Context, d Dependencies, opts RunOptions) (run
 }
 
 type awarenessTaskOptions struct {
-	Behavior                 awarenessutil.Behavior
-	Logger                   *slog.Logger
-	LogOptions               agent.LogOptions
-	Client                   llm.Client
-	Route                    llmutil.ResolvedRoute
-	Model                    string
-	Task                     string
-	Meta                     map[string]any
-	TaskRunID                string
-	LLMProfile               string
+	Behavior   awarenessutil.Behavior
+	Logger     *slog.Logger
+	LogOptions agent.LogOptions
+	Client     llm.Client
+	Route      llmutil.ResolvedRoute
+	Model      string
+	Task       string
+	Meta       map[string]any
+	TaskRunID  string
+	LLMProfile string
+	// WorkspaceDir, when set, replaces the default workspace for this run.
+	WorkspaceDir             string
 	BaseRegistry             *tools.Registry
 	SharedGuard              *guard.Guard
 	Config                   agent.Config
@@ -368,6 +393,7 @@ type awarenessTaskOptions struct {
 	ClientDecorator          func(llm.Client, llmutil.ResolvedRoute) llm.Client
 	ImageClient              llm.ImageClient
 	TaskStore                daemonruntime.TaskView
+	TaskProgress             TaskProgressFunc
 	BashEnv                  []cronstore.BashEnvRef
 }
 
@@ -377,6 +403,13 @@ func runAwarenessTask(ctx context.Context, d Dependencies, opts awarenessTaskOpt
 		return "", fmt.Errorf("awareness task is empty")
 	}
 	workspaceDir := firstNonEmpty(opts.EngineToolsConfig.PathRoots.WorkspaceDir, d.DefaultWorkspaceDir)
+	if taskWorkspaceDir := strings.TrimSpace(opts.WorkspaceDir); taskWorkspaceDir != "" {
+		resolved, err := workspace.ValidateDir(taskWorkspaceDir, nil)
+		if err != nil {
+			return "", err
+		}
+		workspaceDir = resolved
+	}
 	ctx = pathroots.WithWorkspaceDir(ctx, workspaceDir)
 	routePurpose := ""
 	reasoningEffort := ""
@@ -455,14 +488,26 @@ func runAwarenessTask(ctx context.Context, d Dependencies, opts awarenessTaskOpt
 	if err := recordAwarenessTaskStart(recordOpts, task, time.Now().UTC()); err != nil {
 		return "", fmt.Errorf("record awareness task start: %w", err)
 	}
+	var progress TaskProgress
+	if opts.TaskProgress != nil && opts.TaskStore != nil && strings.TrimSpace(opts.TaskRunID) != "" {
+		progress = opts.TaskProgress(strings.TrimSpace(opts.TaskRunID), workspaceDir, opts.Logger)
+	}
+	var agentCtx *agent.Context
 	taskRecordFinished := false
 	defer func() {
 		if taskRecordFinished {
 			return
 		}
 		taskRecordFinished = true
-		if err := recordAwarenessTaskFinish(recordOpts, summary, runErr, time.Now().UTC()); err != nil {
+		var extra map[string]any
+		if progress != nil {
+			extra = progress.Result(nil, agentCtx)
+		}
+		if err := recordAwarenessTaskFinish(recordOpts, summary, extra, runErr, time.Now().UTC()); err != nil {
 			runErr = errors.Join(runErr, fmt.Errorf("record awareness task finish: %w", err))
+		}
+		if progress != nil {
+			progress.Close(summary, runErr)
 		}
 	}()
 
@@ -634,11 +679,7 @@ func runAwarenessTask(ctx context.Context, d Dependencies, opts awarenessTaskOpt
 	if useTaskRoute {
 		currentProfile = taskRoute.Profile
 	}
-	engine := agent.New(
-		taskClient,
-		reg,
-		opts.Config,
-		promptSpec,
+	engineOptions := []agent.Option{
 		agent.WithLogger(opts.Logger),
 		agent.WithLogOptions(opts.LogOptions),
 		agent.WithEngineToolsConfig(engineToolsConfig),
@@ -649,8 +690,12 @@ func runAwarenessTask(ctx context.Context, d Dependencies, opts awarenessTaskOpt
 		agent.WithRunContext(taskruntime.MemoriesRunContext(memoryStore, audience.Owner(), opts.Logger)),
 		toolSearchOption,
 		codeModeOption,
-	)
-	final, _, err := engine.Run(runCtx, task, agent.RunOptions{
+	}
+	if progress != nil {
+		engineOptions = append(engineOptions, agent.WithPlanStepUpdate(progress.PlanStepUpdate))
+	}
+	engine := agent.New(taskClient, reg, opts.Config, promptSpec, engineOptions...)
+	runOpts := agent.RunOptions{
 		Model: taskModel,
 		Scene: "awareness." + string(opts.Behavior),
 		Meta: taskruntime.ApplyObservationMeta(opts.Meta, taskruntime.ObservationMetaIDs{
@@ -658,15 +703,30 @@ func runAwarenessTask(ctx context.Context, d Dependencies, opts awarenessTaskOpt
 			TraceID: opts.TaskRunID,
 		}),
 		DisableContextCompaction: true,
-	})
+	}
+	if progress != nil {
+		runCtx = progress.Context(runCtx)
+		runOpts.OnStream = progress.OnStream
+		runOpts.ReasoningDetails = true
+	}
+	final, finalCtx, err := engine.Run(runCtx, task, runOpts)
+	agentCtx = finalCtx
 	if err != nil {
 		return "", err
 	}
 
 	summary = strings.TrimSpace(outputfmt.FormatFinalOutput(final))
 	taskRecordFinished = true
-	if err := recordAwarenessTaskFinish(recordOpts, summary, nil, time.Now().UTC()); err != nil {
-		return "", fmt.Errorf("record awareness task finish: %w", err)
+	var extra map[string]any
+	if progress != nil {
+		extra = progress.Result(final, agentCtx)
+	}
+	recordErr := recordAwarenessTaskFinish(recordOpts, summary, extra, nil, time.Now().UTC())
+	if progress != nil {
+		progress.Close(summary, recordErr)
+	}
+	if recordErr != nil {
+		return "", fmt.Errorf("record awareness task finish: %w", recordErr)
 	}
 	return summary, nil
 }
@@ -709,7 +769,9 @@ func recordAwarenessTaskStart(opts awarenessTaskOptions, task string, now time.T
 	return taskdomain.RecordTaskUpsert(opts.TaskStore, info, trigger)
 }
 
-func recordAwarenessTaskFinish(opts awarenessTaskOptions, summary string, runErr error, now time.Time) error {
+// extra holds more result fields, such as the plan and activity a live view kept; "final" is
+// always the summary.
+func recordAwarenessTaskFinish(opts awarenessTaskOptions, summary string, extra map[string]any, runErr error, now time.Time) error {
 	if opts.TaskStore == nil {
 		return nil
 	}
@@ -721,18 +783,24 @@ func recordAwarenessTaskFinish(opts awarenessTaskOptions, summary string, runErr
 	trigger := awarenessTaskTrigger(opts)
 	return taskdomain.RecordTaskUpdate(opts.TaskStore, taskID, trigger, func(info *daemonruntime.TaskInfo) {
 		info.FinishedAt = &finishedAt
+		result := make(map[string]any, len(extra)+1)
+		for key, value := range extra {
+			result[key] = value
+		}
 		if runErr != nil {
 			info.Status = daemonruntime.TaskFailed
 			info.Error = depsutil.FormatRuntimeError(runErr)
+			if len(result) > 0 {
+				info.Result = result
+			}
 			return
 		}
 		info.Status = daemonruntime.TaskDone
 		info.Error = ""
-		info.Result = map[string]any{
-			"final": map[string]any{
-				"output": strings.TrimSpace(summary),
-			},
+		result["final"] = map[string]any{
+			"output": strings.TrimSpace(summary),
 		}
+		info.Result = result
 	})
 }
 

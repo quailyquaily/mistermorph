@@ -234,3 +234,33 @@ func TestStoreConcurrentAddsAndDeletesAcrossInstancesDoNotLoseUpdates(t *testing
 		}
 	}
 }
+
+func TestStoreWorkspaceDir(t *testing.T) {
+	store := NewStore(filepath.Join(t.TempDir(), "cron.yaml"))
+	workspaceDir := filepath.Join(t.TempDir(), "project")
+	if _, err := store.AddRecurring(Task{ID: "build", Cron: "0 9 * * *", Content: "Run the build.", WorkspaceDir: " " + workspaceDir + " "}); err != nil {
+		t.Fatalf("AddRecurring() error = %v", err)
+	}
+	file, _, err := store.Read()
+	if err != nil {
+		t.Fatalf("Read() error = %v", err)
+	}
+	if len(file.Tasks) != 1 || file.Tasks[0].WorkspaceDir != workspaceDir {
+		t.Fatalf("tasks = %#v, want workspace_dir %q", file.Tasks, workspaceDir)
+	}
+
+	// Existence is checked when the task runs, not when cron.yaml is written.
+	missing := Task{ID: "missing", At: "2027-01-01 00:00", Content: "Run.", WorkspaceDir: filepath.Join(workspaceDir, "gone")}
+	if err := ValidateTask(missing); err != nil {
+		t.Fatalf("ValidateTask(missing dir) error = %v", err)
+	}
+	for _, dir := range []string{"~/project", "~"} {
+		if err := ValidateTask(Task{ID: "home", At: "2027-01-01 00:00", Content: "Run.", WorkspaceDir: dir}); err != nil {
+			t.Fatalf("ValidateTask(%q) error = %v", dir, err)
+		}
+	}
+	err = ValidateTask(Task{ID: "relative", At: "2027-01-01 00:00", Content: "Run.", WorkspaceDir: "project"})
+	if err == nil || !strings.Contains(err.Error(), "workspace_dir must be an absolute path") {
+		t.Fatalf("ValidateTask(relative) error = %v, want absolute path error", err)
+	}
+}

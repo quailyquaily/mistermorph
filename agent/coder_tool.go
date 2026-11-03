@@ -46,8 +46,10 @@ type CoderRequest struct {
 	CWD       string
 	PathExtra []string
 	LogRoot   string
-	Command   string
-	Env       []string
+	// BypassApprovals asks a terminal session to run without approval prompts or sandbox.
+	BypassApprovals bool
+	Command         string
+	Env             []string
 	// Progress reports status lines. step is a short, content-free label for what the CLI
 	// is doing now, such as "running a command", or "" when it has not changed.
 	Progress func(summary, text, step string)
@@ -70,8 +72,17 @@ func (t *coderTool) Name() string { return coderToolName }
 
 func (t *coderTool) Description() string {
 	if t.deps.RunTerminal != nil {
+		approvals := "asks the user to approve actions when needed"
+		switch codex, claude := t.deps.BypassApprovals[coderBackendCodex], t.deps.BypassApprovals[coderBackendClaude]; {
+		case codex && claude:
+			approvals = "runs actions without asking the user"
+		case codex:
+			approvals = "asks the user to approve actions when needed (Codex runs actions without asking)"
+		case claude:
+			approvals = "asks the user to approve actions when needed (Claude Code runs actions without asking)"
+		}
 		return "Delegate a repository coding task to local Codex or Claude Code (cc) when the user asks for them. " +
-			"Each keeps a terminal session for this conversation and working directory, and asks the user to approve actions when needed. " +
+			"Each keeps a terminal session for this conversation and working directory, and " + approvals + ". " +
 			"Returns a SubtaskResult envelope."
 	}
 	return "Delegate a repository coding task to the local Codex or Claude Code CLI. " +
@@ -109,6 +120,7 @@ func (t *coderTool) Execute(ctx context.Context, params map[string]any) (string,
 		return "", err
 	}
 	req.PathExtra = append([]string(nil), t.deps.PathExtra...)
+	req.BypassApprovals = t.deps.BypassApprovals[req.Backend]
 	req.LogRoot = pathroots.Resolve(ctx, t.deps.Roots).FileCacheDir
 
 	runner := t.deps.Runner

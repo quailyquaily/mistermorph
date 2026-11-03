@@ -13,6 +13,9 @@ type EngineToolsConfig struct {
 	ToolTriggers   map[string]bool
 	PathRoots      pathroots.PathRoots
 	CoderPathExtra []string
+	// CoderBypassApprovals names the backends ("codex", "claude") whose terminal sessions start
+	// without approval prompts or sandbox. One-shot CLI runs bypass them anyway.
+	CoderBypassApprovals map[string]bool
 }
 
 func DefaultEngineToolsConfig() EngineToolsConfig {
@@ -33,6 +36,8 @@ type coderToolDeps struct {
 	RunTerminal func(context.Context, CoderRequest) (string, error)
 	Roots       pathroots.PathRoots
 	PathExtra   []string
+	// BypassApprovals is EngineToolsConfig.CoderBypassApprovals.
+	BypassApprovals map[string]bool
 }
 
 // registerEngineTools registers the enabled engine tools and returns the prompt blocks that go
@@ -57,6 +62,7 @@ func registerEngineTools(reg *tools.Registry, cfg EngineToolsConfig, spawnDeps s
 	if cfg.CoderEnabled || cfg.ToolTriggers[coderToolName] {
 		coderDeps.Roots = cfg.PathRoots
 		coderDeps.PathExtra = append([]string(nil), cfg.CoderPathExtra...)
+		coderDeps.BypassApprovals = cfg.CoderBypassApprovals
 		if err := reg.Replace(newCoderTool(coderDeps)); err != nil {
 			panic(err)
 		}

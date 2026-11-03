@@ -57,6 +57,8 @@ func AgentFields() []Field {
 		{Path: "tools.spawn.enabled", Kind: KindBool, ApplyMode: ApplyNextGeneration},
 		{Path: "tools.coder.enabled", Kind: KindBool, ApplyMode: ApplyNextGeneration},
 		{Path: "tools.coder.path_extra", Kind: KindStringList, ApplyMode: ApplyNextGeneration},
+		{Path: "tools.coder.bypass_approvals.codex", Kind: KindBool, ApplyMode: ApplyNextGeneration},
+		{Path: "tools.coder.bypass_approvals.claude", Kind: KindBool, ApplyMode: ApplyNextGeneration},
 		{Path: "tools.contacts_send.enabled", Kind: KindBool, ApplyMode: ApplyNextGeneration},
 		{Path: "tools.todo_update.enabled", Kind: KindBool, ApplyMode: ApplyNextGeneration},
 		{Path: "tools.plan_create.enabled", Kind: KindBool, ApplyMode: ApplyNextGeneration},
