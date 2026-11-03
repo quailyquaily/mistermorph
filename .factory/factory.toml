@@ -30,7 +30,7 @@ rules = [
 prefix = "FT"
 
 # true when a review job reviews each build before it reaches ready/.
-review = false
+review = true
 
 max_rounds = 3
 
