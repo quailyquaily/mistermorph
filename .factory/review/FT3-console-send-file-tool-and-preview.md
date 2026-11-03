@@ -43,3 +43,21 @@ Failing tests: `reasoning expands into the existing Markdown chat bubble; Skills
 The first failure is chat-reasoning-bubble.test.mjs:25 (MarkdownContent assertion true !== false); the second is skills-page.test.mjs:28 (Memories between TODO and Skills). Initial Go test environment interference cleared with isolated environment.
 
 Coder reports desktop and 390px narrow-screen component screenshots checked. Real-model end-to-end delivery was not checked. Owner/reviewer should examine attachment authorization, retention and preview behavior and the two existing frontend failures. All contact notifications sent successfully.
+
+## factory · review · 2026-11-04 00:02
+head: 2eb98792f9a8e34f010752c2ee464d3a2394d2e5
+verdict: fix
+fix:
+- [P1] cmd/mistermorph/consolecmd/send_file_tool.go:72: send_file opens and delivers files without applying the existing sensitive-file denylist (tools.read_file.deny_paths); pass and enforce that policy before reading or persisting, retaining root/symlink boundaries. Example: Codex's temporary Go overlay configured private.txt as denied; read_file rejected it, but the actual Console runtime send_file delivered it and its download returned HTTP 200 with the full test content.
+- [P1] web/console/src/core/chat-reasoning-bubble.test.mjs:25: pre-existing assertion rejects MarkdownContent throughout the status card, including coder output; limit the assertion to reasoning. Example: both head and base fail with true !== false on identical status-card source.
+- [P1] web/console/src/core/skills-page.test.mjs:28: pre-existing navigation assertion requires Skills immediately after TODO; reconcile with intended navigation. Example: both head and base render TODO → Memories → Skills and fail the adjacency assertion.
+
+Codex reviewed the complete 18-file diff in origin/master...HEAD against the owner request and plan; base 172bd18d7f8b42bac97760cdf5be0c6bd9b3e05d. Read AGENTS.md, review-code and its security reference; traced discovery, delivery, persistence, authorization, path boundaries and preview rendering. The first finding is newly introduced; the other two are confirmed baseline failures classified P1 by the required test-failure rule. Remains in review/ for the owner to decide. Manager merge-tree check was conflict-free; no merge or implementation push needed.
+
+Validation: required gofmt/vet/full Go gate passed; no SQLITE_BUSY observed. Head pnpm test: 313 passed, 2 failed; independent base snapshot: 303 passed, the same 2 failures. pnpm build passed with a chunk-size warning. Temporary Go overlay reproduced the denylist bypass without modifying repository source. Scripted tests used an isolated environment and an absolute throwaway HOME.
+
+Installs: pnpm --dir web/console install --frozen-lockfile installed 83 locked packages; dependency-provided esbuild node install.js executed. Existing tools and Go caches reused; no additional tools or sudo. Contact notified of installations.
+
+Residual risks: real-model end-to-end delivery, real-browser visual/download interaction and cross-platform persistence were not verified.
+
+Reviewer made no source/lockfile changes, commits, pushes, fetches or gh calls; manager confirmed clean worktree and unchanged head. No linked GitHub issues or PRs in header or owner sections, so no review comments applicable.
