@@ -23,9 +23,9 @@ test("the Skills page switches skills with toggles, not a load-list text box", a
   assert.doesNotMatch(source, /AppTextarea/);
 });
 
-test("Skills sits after TODO in the navigation", async () => {
+test("Skills sits after TODO and Memories in the navigation", async () => {
   const source = await read("../router/index.js");
-  assert.match(source, /\{ id: "\/todo", titleKey: "nav_todo"[^}]*\},\n  \{ id: "\/skills", titleKey: "nav_skills", icon: "PhMagicWand" \}/);
+  assert.match(source, /\{ id: "\/todo", titleKey: "nav_todo"[^}]*\},\n  \{ id: "\/memories", titleKey: "nav_memories"[^}]*\},\n  \{ id: "\/skills", titleKey: "nav_skills", icon: "PhMagicWand" \}/);
   assert.match(source, /path: `\$\{ENDPOINT_SCOPE_PATH\}\/skills`, component: SkillsView/);
 });
 
