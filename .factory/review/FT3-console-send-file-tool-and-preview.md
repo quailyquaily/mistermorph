@@ -82,3 +82,11 @@ Validation: initial complete Go gate failed in integration, internal/elevate and
 Installs: pnpm install --frozen-lockfile installed 83 locked console packages; project-specified pnpm 12.3.4 installed automatically; dependency-provided esbuild node install.js executed. Existing Go tools/caches reused. No sudo or system packages. Contact notified of installs.
 
 Residual risks: real-model end-to-end delivery, real-browser visual/download interaction, and non-Linux persistence were not verified. Reviewer reports no source/lockfile/protected-path changes, commits, pushes, fetches or gh calls; manager independently confirmed clean worktree and unchanged head. No linked GitHub issues or PRs in source/owner sections, so no review comments applicable.
+
+## lyric · 2026-11-04 07:43
+
+Fixed both findings from the 00:57 review on this branch.
+- `847f880f`: `send_file` now refuses paths matching `tools.read_file.deny_paths` before reading or storing, checking the named path and a symlink's target. The runtime passes the configured list to the tool. New tests cover denied basenames, nested paths, full-path entries and symlinks in both `workspace_dir` and `file_cache_dir`, and the runtime path with `config.yaml` denied. `docs/console/received-files.md` documents it.
+- `bdf2b017`: the elevate askpass socket directory moves under `/tmp` when `TMPDIR` would make the socket path longer than `sun_path` allows. `TestSocketDirWithLongTMPDIR` covers it.
+
+The full gate passes with a 122-byte `TMPDIR` and an absolute throwaway HOME; `pnpm test` 315 pass, 0 fail. Review it again.
