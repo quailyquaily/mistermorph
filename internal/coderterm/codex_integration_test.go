@@ -239,4 +239,44 @@ func TestInstalledCodex(t *testing.T) {
 	if len(sessions.items) != 0 || len(sessions.resume) != 0 {
 		t.Fatal("reset retained session")
 	}
+
+	// A prompt that interrupts /status leaves the typed "/" in the input, with the command popup
+	// open. Typing "/status" over it picks the popup's first command (issue #88).
+	leftover := func(erase bool) (string, error) {
+		s, err := start(codexBackend{}, req, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer s.close()
+		for !s.b.parse(s.snapshot()).idle {
+			select {
+			case <-ctx.Done():
+				t.Fatal("Codex did not become idle")
+			case <-time.After(50 * time.Millisecond):
+			}
+		}
+		s.send("/")
+		for !strings.Contains(s.snapshot(), "/model") {
+			select {
+			case <-ctx.Done():
+				t.Fatal("Codex did not open the command popup")
+			case <-time.After(50 * time.Millisecond):
+			}
+		}
+		if erase {
+			s.unsent = 1
+		}
+		req.Task = "after a leftover slash"
+		return s.run(ctx, req)
+	}
+	saved := sessionIDTimeout
+	sessionIDTimeout = 3 * time.Second
+	defer func() { sessionIDTimeout = saved }()
+	if _, err := leftover(false); err == nil || !strings.Contains(err.Error(), "did not show its session ID") {
+		t.Fatalf("corrupted /status: %v", err)
+	}
+	if out, err := leftover(true); err != nil || !strings.HasPrefix(out, "## Complete resp_") {
+		logTail()
+		t.Fatalf("erased leftover: %q %v", out, err)
+	}
 }

@@ -14,6 +14,7 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	"unicode/utf8"
 
 	vt "github.com/charmbracelet/x/vt"
 	"github.com/creack/pty"
@@ -30,16 +31,21 @@ type session struct {
 	bypass                      bool // Started without approval prompts or sandbox.
 	prompted                    bool // A task reached the CLI; read after run returns.
 	askedID                     bool // Codex: /status was requested to learn the session ID.
-	cmd                         *exec.Cmd
-	tty                         *os.File
-	cancel                      context.CancelFunc
-	ctx                         context.Context
-	done                        chan struct{}
-	inputDone                   chan struct{}
-	waitErr                     error
-	closeOnce                   sync.Once
-	mu                          sync.Mutex // Serializes screen updates, snapshots, and input.
-	screen                      *vt.Emulator
+	askedAt                     time.Time
+	// unsent counts characters typed into the input whose submit a prompt interrupted. The next
+	// submit erases them first, or the leftover text corrupts it: a leftover "/" leaves Codex's
+	// command popup open, and typing "/status" over it picks the popup's first command instead.
+	unsent    int
+	cmd       *exec.Cmd
+	tty       *os.File
+	cancel    context.CancelFunc
+	ctx       context.Context
+	done      chan struct{}
+	inputDone chan struct{}
+	waitErr   error
+	closeOnce sync.Once
+	mu        sync.Mutex // Serializes screen updates, snapshots, and input.
+	screen    *vt.Emulator
 }
 
 // start launches the CLI. A non-empty resumeID reopens that session's conversation.
@@ -314,6 +320,9 @@ func (s *session) run(parent context.Context, req Request) (output string, err e
 			}
 			declined = declined || no
 			answered = fingerprint
+			if s.askedID {
+				s.askedAt = time.Now() // Time spent answering does not count.
+			}
 			progress(name + " is working")
 			continue
 		}
@@ -333,7 +342,10 @@ func (s *session) run(parent context.Context, req Request) (output string, err e
 				if err != nil {
 					return "", err
 				}
-				s.askedID = true
+				s.askedID, s.askedAt = true, time.Now()
+			} else if s.askedID && view.idle && time.Since(s.askedAt) > sessionIDTimeout {
+				// The task is never sent without an ID, so fail instead of waiting forever.
+				return "", fmt.Errorf("%s did not show its session ID after /status; the coding task was not sent (diagnostics: %s)", name, s.dir)
 			}
 			continue
 		}
@@ -386,6 +398,9 @@ func (s *session) run(parent context.Context, req Request) (output string, err e
 	}
 }
 
+// sessionIDTimeout bounds the wait for Codex's /status output once the TUI is idle.
+var sessionIDTimeout = 30 * time.Second
+
 // errPromptAppeared stops typing when a prompt replaces the input it was meant for, so the
 // remaining keys and Enter never answer a prompt the user has not seen.
 var errPromptAppeared = errors.New("a prompt appeared while typing")
@@ -403,8 +418,19 @@ func (s *session) submit(ctx context.Context, text string, paste bool) error {
 			inputs = append(inputs, string(r))
 		}
 	}
+	if s.unsent > 0 {
+		// Erase what an interrupted submit left in the input.
+		s.send(strings.Repeat("\x7f", s.unsent))
+		s.unsent = 0
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(150 * time.Millisecond):
+		}
+	}
 	tick := time.NewTicker(25 * time.Millisecond)
 	defer tick.Stop()
+	typed := 0
 	for _, input := range inputs {
 		s.mu.Lock()
 		before := s.screen.String()
@@ -415,6 +441,7 @@ func (s *session) submit(ctx context.Context, text string, paste bool) error {
 			s.screen.SendText(input)
 		}
 		s.mu.Unlock()
+		typed += utf8.RuneCountInString(input)
 		for {
 			select {
 			case <-ctx.Done():
@@ -426,6 +453,7 @@ func (s *session) submit(ctx context.Context, text string, paste bool) error {
 			changed := s.screen.String() != before || cursorNow != cursor
 			s.mu.Unlock()
 			if promptAppeared() {
+				s.unsent = typed
 				return errPromptAppeared
 			}
 			if changed {
@@ -440,6 +468,7 @@ func (s *session) submit(ctx context.Context, text string, paste bool) error {
 		}
 	}
 	if promptAppeared() {
+		s.unsent = typed
 		return errPromptAppeared
 	}
 	s.mu.Lock()
