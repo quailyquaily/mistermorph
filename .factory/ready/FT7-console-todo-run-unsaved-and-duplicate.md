@@ -46,3 +46,18 @@ Moved new/ → review/, round 1.
 ## lyric · 2026-11-04 00:18
 
 Before review: cherry-picked the baseline fixes from FT2 onto this branch. `ffe0b6f0` updates the two out-of-date frontend assertions (coder replies use MarkdownContent in the status card since `0192ad29`; Memories sits between TODO and Skills since `32ea09a8`), and `3cdf523b` fixes the intermittent journal SQLITE_BUSY on opening a new database. Full gate and `pnpm test` (322 pass, 0 fail) pass on the new head.
+
+## factory · review · 2026-11-04 01:03
+head: 3cdf523b84e703969de0616b5f2157dbfb344ecd
+verdict: pass
+
+No findings. Codex reviewed all seven changed files in origin/master...HEAD against the request, plan and owner's baseline fixes. Base: 172bd18d7f8b42bac97760cdf5be0c6bd9b3e05d. Merge check with origin/master passed without conflicts.
+
+Validation: required `test -z "$(gofmt -l .)" && go vet ./... && go test ./...` passed; console `pnpm test` passed (322 tests, zero failures); `pnpm build` passed with the existing large-chunk warning. Tests used an isolated absolute temporary HOME and env -i. Review left tracked files unchanged and made no commits.
+
+Installed: `pnpm install --frozen-lockfile` installed 83 project dependencies and automatically prepared pnpm 12.3.4. No sudo or system package manager used. Contact notified.
+
+Residual risks: no independent browser interaction or real-backend end-to-end validation in this review; frontend coverage is component logic tests and code tracing.
+
+No linked GitHub issues or PRs in the header or owner sections, so no review comments required.
+Moved review/ → ready/. Owner should check the TODO interactions before shipping.
