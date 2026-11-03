@@ -886,9 +886,10 @@ const TodoView = {
         !loading.value &&
         !saving.value &&
         !runningTaskKey.value &&
-        !selectedTaskHasLocalChanges.value &&
-        !selectedSaveValidationMessage.value &&
         trimText(selectedStoredTask.value?.id) !== ""
+    );
+    const canDuplicateSelectedTask = computed(
+      () => Boolean(selectedTask.value) && !heartbeatSelected.value && !loading.value && !saving.value
     );
     const showIndexPane = computed(() => !isMobile.value || !mobileEditorVisible.value);
     const showEditorPane = computed(() => !isMobile.value || mobileEditorVisible.value);
@@ -915,6 +916,12 @@ const TodoView = {
         title: t("todo_action_run_manually"),
         disabled: !canRunSelectedTask.value,
         action: runSelectedTaskNow,
+      },
+      {
+        id: "duplicate",
+        title: t("todo_action_duplicate"),
+        disabled: !canDuplicateSelectedTask.value,
+        action: duplicateSelectedTask,
       },
       {
         id: "move-up",
@@ -1270,6 +1277,23 @@ const TodoView = {
         content: "",
       });
       tasks.value = [...tasks.value, task];
+      tasksDirty.value = true;
+      selectTask(task);
+    }
+
+    function duplicateSelectedTask() {
+      if (!canDuplicateSelectedTask.value) {
+        return;
+      }
+      // Retain the source draft locally; both items use the existing Save workflow.
+      commitSelectedTaskDraft();
+      const task = cloneTaskForDraft(selectedTask.value);
+      task.id = nextID();
+      task._key = nextTaskKey();
+      task.title = t("todo_copy_title", { title: taskTitle(task) });
+      const nextTasks = [...tasks.value];
+      nextTasks.splice(selectedIndex.value + 1, 0, task);
+      tasks.value = nextTasks;
       tasksDirty.value = true;
       selectTask(task);
     }
@@ -2310,14 +2334,18 @@ const TodoView = {
     }
 
     async function saveTasks() {
-      if (!canSaveTasks.value) {
-        return;
+      if (loading.value || saving.value || !taskHasLocalChanges.value) {
+        return false;
+      }
+      if (selectedSaveValidationMessage.value) {
+        notice.error(selectedSaveValidationMessage.value);
+        return false;
       }
       commitSelectedTaskDraft();
       const validationMessages = tasks.value.map((task) => taskValidationMessage(task)).filter(Boolean);
       if (validationMessages.length > 0) {
         notice.error(validationMessages[0]);
-        return;
+        return false;
       }
       const nextTasks = tasks.value.map((task) => cloneTaskForDraft(task));
       nextTasks.forEach(normalizeTaskBeforeSave);
@@ -2339,9 +2367,11 @@ const TodoView = {
         selectedTaskDraft.value = cloneTaskForDraft(selectedStoredTask.value);
         draftDirty.value = false;
         notice.success(t("msg_save_success"));
+        return true;
       } catch (e) {
         const message = e.message || t("msg_save_failed");
         notice.error(message);
+        return false;
       } finally {
         saving.value = false;
       }
@@ -2353,11 +2383,28 @@ const TodoView = {
       }
       const task = selectedStoredTask.value;
       const id = trimText(task.id);
+      const key = task._key;
+      const endpointRef = endpointState.selectedRef;
       if (!id) {
         return;
       }
-      runningTaskKey.value = task._key;
+      if (selectedSaveValidationMessage.value) {
+        notice.error(selectedSaveValidationMessage.value);
+        return;
+      }
+      runningTaskKey.value = key;
       try {
+        if (selectedTaskHasLocalChanges.value && !(await saveTasks())) {
+          return;
+        }
+        if (
+          loading.value || saving.value ||
+          endpointState.selectedRef !== endpointRef ||
+          selectedStoredTask.value?._key !== key ||
+          trimText(selectedStoredTask.value?.id) !== id
+        ) {
+          return;
+        }
         await runtimeApiFetch(`/todo/tasks/${encodeURIComponent(id)}/run`, {
           method: "POST",
         });
