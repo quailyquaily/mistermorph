@@ -1,3 +1,7 @@
+---
+branch: factory/FT1-console-clipboard-and-file-drop
+round: 1
+---
 # Console Web: paste images and drag-and-drop files
 
 ## lyric · 2026-11-03 18:05
@@ -34,3 +38,29 @@ Factory verification: gofmt and go vet passed; go test failed. `TestLoadKeystore
 ## factory · 2026-11-03 21:57
 
 Migrated to the new factory workflow. The factory no longer waits for answers: the questions above are withdrawn. The coder installs missing project dependencies (Node packages via pnpm) itself, and failures that also occur on base are recorded, not fixed on this branch. The earlier local commit `68a9514b` was never pushed and is not reachable, so the next build starts fresh from base, following the plan above.
+
+## factory · plan · 2026-11-03 22:25
+
+**Behaviour:** Paste image data while preserving ordinary text paste; upload dropped files without navigation; show removable pending files, retry failed uploads, preserve drafts after failed sends, and send server file references. Empty inputs are no-ops; retain first-conversation support.
+
+**Scope:** Existing composer, chat view, attachment helpers, translations and regression tests only. Preserve existing drop handling; exclude FT2 and FT3.
+
+**Decisions:** Retain upload limits and access policy; capture endpoint/topic scope for asynchronous work. Failed attachments block sending until retried or removed.
+
+**Checking:** Image/text paste, multiple drops, removal, retry, send/error and file-reference regressions; full Go gate, pnpm test and build. Browser visual and live-agent checks not performed.
+
+## factory · 2026-11-03 22:25
+
+Built round 1 at `3a50a38c` from `origin/master` (`65345643`). Base merge was already up to date. Implemented clipboard images, retryable attachments, preserved failed-send drafts, and scoped asynchronous updates; added 16 passing regression tests. Manager verified the commit scope and protected paths were unchanged.
+
+Installed 83 frontend dependencies with `pnpm --dir web/console install --frozen-lockfile --store-dir "$PWD/.pnpm-store"`, using an absolute throwaway HOME and cache. Corepack also installed pnpm 12.3.4; Node and Go were already available. No sudo or system installs.
+
+Required `test -z "$(gofmt -l .)" && go vet ./... && go test ./...` passed, independently verified by manager with clean environment and absolute throwaway HOME. Initial inherited application environment interference cleared with environment isolation.
+
+`pnpm --dir web/console test`: 319 passed, 2 failed, reproduced by manager. The coder's isolated origin/master snapshot had 303 passed and the same 2 failures; unrelated baseline code was not changed:
+- `reasoning expands into the existing Markdown chat bubble`
+- `Skills sits after TODO in the navigation`
+
+`pnpm --dir web/console build` passed for coder and manager, with a chunk-size warning. UI changed; browser visual checks and real-agent end-to-end manual delivery were not performed. Review should inspect clipboard/drop behaviour and the two baseline failures.
+
+Implementation branch pushed. Moved `new/` → `review/`. Contact notified of start, installations and remaining baseline failures.
