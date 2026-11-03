@@ -2777,6 +2777,7 @@ const ChatView = {
         const nextStatus = normalizeTaskStatus(frame.status || existingItem?.status);
         const isPreview = frame.preview === true;
         const patch = {};
+        if (Array.isArray(frame.attachments)) patch.attachments = frame.attachments;
         if (frame.plan && typeof frame.plan === "object") {
           patch.plan = nextPlan;
         }
@@ -3147,6 +3148,8 @@ const ChatView = {
           elevations,
           activity,
           reasoning: taskReasoning(detail) || normalizeReasoning(existingItem?.reasoning),
+          attachments: Array.isArray(detail?.attachments) ? detail.attachments : [],
+          topicID: normalizeTopicID(detail?.topic_id),
           approval: nextApproval,
           approvalBusy: false,
           approvalError: "",

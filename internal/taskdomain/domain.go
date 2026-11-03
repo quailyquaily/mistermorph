@@ -51,7 +51,16 @@ func EndedByCancellation(ctx context.Context, err error) bool {
 	return strings.Contains(message, "context deadline exceeded") || strings.Contains(message, "context canceled")
 }
 
+// FileAttachment refers to durable received content without exposing its source path.
+type FileAttachment struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	SizeBytes   int64  `json:"size_bytes"`
+	ContentType string `json:"content_type"`
+}
+
 type TaskInfo struct {
+	Attachments       []FileAttachment  `json:"attachments,omitempty"`
 	ID                string            `json:"id"`
 	Status            TaskStatus        `json:"status"`
 	Task              string            `json:"task"`

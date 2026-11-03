@@ -2836,3 +2836,33 @@ body.artifact-preview-scroll-lock {
 .chat-shell.is-mobile-topics .chat-topic-list {
   padding-bottom: calc(52px + 32px);
 }
+
+.received-file {
+  min-width: 0;
+  max-width: 100%;
+  padding-block: 0.5rem;
+}
+.received-file-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.received-file-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.received-file-heading button {
+  flex-shrink: 0;
+  margin-left: auto;
+}
+.received-file-image {
+  display: block;
+  max-width: 100%;
+  max-height: 24rem;
+  object-fit: contain;
+  margin-top: 0.5rem;
+}
+.received-file-error {
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}

@@ -519,6 +519,8 @@ function taskHistoryItems(task, t, options = {}) {
     items.push({
       id: `${taskID}:agent`,
       role: "agent",
+      attachments: Array.isArray(task?.attachments) ? task.attachments : [],
+      topicID: normalizeTopicID(task?.topic_id),
       text: taskAgentText(task, t, {
         agentName: options.agentName,
         pendingSeed: taskID,

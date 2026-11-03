@@ -1310,6 +1310,7 @@ func normalizeLegacyConsoleTopicInfo(topic TopicInfo) TopicInfo {
 }
 
 func normalizeConsoleTaskInfo(info TaskInfo) TaskInfo {
+	info.Attachments = append([]taskdomain.FileAttachment(nil), info.Attachments...)
 	info.ID = strings.TrimSpace(info.ID)
 	info.Task = strings.TrimSpace(info.Task)
 	info.Model = strings.TrimSpace(info.Model)

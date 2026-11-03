@@ -608,6 +608,7 @@ func (s *server) handler() http.Handler {
 	mux.HandleFunc(apiPrefix+"/system/restart", s.withAuth(s.handleSystemRestart))
 	mux.HandleFunc(apiPrefix+"/proxy", s.withAuth(s.handleProxy))
 	mux.HandleFunc(apiPrefix+"/proxy/download", s.withAuth(s.handleProxyDownload))
+	mux.HandleFunc(apiPrefix+"/attachments", s.withAuth(s.handleReceivedAttachment))
 	mux.HandleFunc(apiPrefix+"/artifacts/preview-ticket", s.withAuth(s.handleArtifactPreviewTicket))
 	mux.HandleFunc(apiPrefix+"/artifacts/preview-ticket/renew", s.withAuth(s.handleArtifactPreviewTicketRenew))
 	mux.HandleFunc(apiPrefix+"/artifacts/preview/", s.handleArtifactPreview)
