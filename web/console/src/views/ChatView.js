@@ -544,9 +544,10 @@ const ChatView = {
     const workspaceSaving = ref(false);
     const workspaceOpening = ref(false);
     const workspaceDownloading = ref(false);
-    const composerUploading = ref(false);
     const composerFileInput = ref(null);
     const composerFiles = shallowRef([]);
+    const composerUploading = computed(() => composerFiles.value.some((item) => item.status === "uploading"));
+    const composerFilesPending = computed(() => composerFiles.value.some((item) => item.status !== "ready"));
     const composerFilePreviewOpen = ref(false);
     const composerFilePreviewLoading = ref(false);
     const composerFilePreviewID = ref("");
@@ -748,7 +749,7 @@ const ChatView = {
     const sendDisabled = computed(
       () =>
         composerDisabled.value ||
-        (!composerStopMode.value && (composerUploading.value || !composerHasInput.value))
+        (!composerStopMode.value && (composerFilesPending.value || !composerHasInput.value))
     );
     const composerActionLabel = computed(() => {
       if (composerStopMode.value) {
@@ -777,6 +778,7 @@ const ChatView = {
       remove: t("chat_composer_file_remove"),
       uploading: t("chat_composer_file_uploading"),
       failed: t("chat_composer_upload_failed"),
+      retry: t("chat_composer_file_retry"),
     }));
     const composerLLMProfileItems = computed(() => {
       const defaultProfile = composerDefaultLLMProfile.value || {};
@@ -1500,8 +1502,7 @@ const ChatView = {
     const composerAddDisabled = computed(
       () =>
         composerDisabled.value ||
-        !String(submitEndpointRef.value || "").trim() ||
-        composerUploading.value
+        !String(submitEndpointRef.value || "").trim()
     );
     const workspaceDetachDisabled = computed(
       () =>
@@ -1828,8 +1829,8 @@ const ChatView = {
       await uploadComposerFileList(files);
     }
 
-    async function uploadComposerFileList(files) {
-      if (files.length === 0 || composerUploading.value) {
+    async function uploadComposerFileList(files, retryID = "") {
+      if (files.length === 0 || composerDisabled.value) {
         return;
       }
 
@@ -1843,10 +1844,19 @@ const ChatView = {
         endpointRef: String(composerDraftScope.value.endpointRef || "").trim(),
         topicID: normalizeTopicID(composerDraftScope.value.topicID),
       };
+      const retryItem = retryID
+        ? composerFiles.value.find((item) => item.id === retryID && item.status === "failed" && item.sourceFile)
+        : null;
+      if (retryID && !retryItem) {
+        return;
+      }
+      if (retryItem) {
+        files = [retryItem.sourceFile];
+      }
       const uploadItems = files.map((file) => {
         composerFileSequence += 1;
         return {
-          id: `composer-file-${Date.now()}-${composerFileSequence}`,
+          id: retryItem?.id || `composer-file-${Date.now()}-${composerFileSequence}`,
           name: String(file?.name || "").trim() || "file",
           status: "uploading",
           dirName: "",
@@ -1856,7 +1866,9 @@ const ChatView = {
         };
       });
       const uploadIDs = new Set(uploadItems.map((item) => item.id));
-      updateComposerFileDraft(uploadScope, (current) => [...current, ...uploadItems]);
+      updateComposerFileDraft(uploadScope, (current) => retryItem
+        ? current.map((item) => item.id === retryID ? uploadItems[0] : item)
+        : [...current, ...uploadItems]);
 
       const form = new FormData();
       for (const file of files) {
@@ -1873,7 +1885,6 @@ const ChatView = {
         form.append("workspace_dir", attachedDir);
       }
 
-      composerUploading.value = true;
       err.value = "";
       try {
         const data = await runtimeApiFetchForEndpoint(endpointRef, "/files/upload", {
@@ -1897,7 +1908,7 @@ const ChatView = {
               return {
                 ...item,
                 status: "failed",
-                error: t("chat_composer_upload_failed"),
+                error: `${t("chat_composer_upload_failed")} ${t("chat_composer_file_retry_hint")}`,
               };
             }
             return {
@@ -1914,12 +1925,13 @@ const ChatView = {
           uploadedFiles.some((file) => String(file?.dir_name || "").trim() === "workspace_dir") &&
           workspaceSidebarOpen.value &&
           workspaceSidebarTabID.value === WORKSPACE_TAB_ID &&
+          composerFileDraftKey(uploadScope) === composerFileDraftKey(composerDraftScope.value) &&
           attachedDir
         ) {
           await loadWorkspaceTree("", { force: true });
         }
       } catch (error) {
-        const message = error?.message || t("chat_composer_upload_failed");
+        const message = `${error?.message || t("chat_composer_upload_failed")} ${t("chat_composer_file_retry_hint")}`;
         updateComposerFileDraft(uploadScope, (current) =>
           current.map((item) =>
             uploadIDs.has(item.id)
@@ -1932,7 +1944,6 @@ const ChatView = {
           )
         );
       } finally {
-        composerUploading.value = false;
         if (composerFileDraftKey(uploadScope) === composerFileDraftKey(composerDraftScope.value)) {
           void nextTick(() => {
             composerRef.value?.focus?.({ preserveSelection: true });
@@ -2128,7 +2139,7 @@ const ChatView = {
 
     function removeComposerFile(item) {
       const itemID = String(item?.id || "").trim();
-      if (!itemID) {
+      if (!itemID || sending.value) {
         return;
       }
       updateComposerFileDraft(composerDraftScope.value, (current) =>
@@ -3231,19 +3242,24 @@ const ChatView = {
       const preserveDraft = Boolean(options.preserveDraft);
       const preserveSelection = Boolean(options.preserveSelection);
       const currentID = normalizeTopicID(selectedTopicID.value);
+      const endpointRef = submitEndpointRef.value;
+      const draftKey = composerFileDraftKey(composerDraftScope.value);
 
       topicsLoading.value = true;
       try {
         const data = await runtimeApiFetchForEndpoint(
-          submitEndpointRef.value,
+          endpointRef,
           `/topics?limit=${encodeURIComponent(TOPIC_PAGE_LIMIT)}`
         );
+        if (draftKey !== composerFileDraftKey(composerDraftScope.value)) {
+          return false;
+        }
         const items = Array.isArray(data?.items) ? [...data.items] : [];
         const targetTopicID = preferredTopicID || currentID;
         if (targetTopicID && !items.some((topic) => normalizeTopicID(topic?.id) === targetTopicID)) {
           try {
             const targetTopic = await runtimeApiFetchForEndpoint(
-              submitEndpointRef.value,
+              endpointRef,
               `/topics/${encodeURIComponent(targetTopicID)}`
             );
             if (normalizeTopicID(targetTopic?.id) === targetTopicID) {
@@ -3255,13 +3271,16 @@ const ChatView = {
             }
           }
         }
+        if (draftKey !== composerFileDraftKey(composerDraftScope.value)) {
+          return false;
+        }
         items.sort(compareTopicsNewestFirst);
         topics.value = items;
         topicsNextCursor.value = String(data?.next_cursor || "").trim();
 
         if (preferredTopicID && items.some((topic) => normalizeTopicID(topic?.id) === preferredTopicID)) {
           selectedTopicID.value = preferredTopicID;
-          rememberTopicSelection(submitEndpointRef.value, preferredTopicID);
+          rememberTopicSelection(endpointRef, preferredTopicID);
           creatingTopic.value = false;
           syncMobileTopicView({ preferChat: true });
           return true;
@@ -3271,7 +3290,7 @@ const ChatView = {
           return true;
         }
         if (currentID && items.some((topic) => normalizeTopicID(topic?.id) === currentID)) {
-          rememberTopicSelection(submitEndpointRef.value, currentID);
+          rememberTopicSelection(endpointRef, currentID);
           creatingTopic.value = false;
           syncMobileTopicView({ preferChat: true });
           return true;
@@ -3288,6 +3307,9 @@ const ChatView = {
         }
         return true;
       } catch (e) {
+        if (draftKey !== composerFileDraftKey(composerDraftScope.value)) {
+          return false;
+        }
         err.value = e?.message || t("msg_load_failed");
         if (!preserveSelection) {
           selectedTopicID.value = "";
@@ -3965,11 +3987,15 @@ const ChatView = {
     }
 
     async function submitTask() {
-      const task = String(taskInput.value || "").trim();
-      if (!task || sending.value || composerUploading.value) {
+      const draftText = String(taskInput.value || "");
+      const task = draftText.trim();
+      if (!task || sending.value || composerFilesPending.value) {
         return;
       }
       const submittedDraftScope = composerDraftScope.value;
+      const usesTopics = consoleTopicsEnabled.value;
+      let accepted = false;
+      let acceptedTopicID = "";
       const endpointRef = submitEndpointRef.value;
       if (!endpointRef) {
         err.value = submitBlockedMessage.value || t("msg_select_endpoint");
@@ -3982,10 +4008,10 @@ const ChatView = {
         llmProfile,
         files: composerFiles.value,
         topicID:
-          consoleTopicsEnabled.value && !creatingTopic.value
+          usesTopics && !creatingTopic.value
             ? normalizeTopicID(selectedTopicID.value)
             : "",
-        workspaceDir: consoleTopicsEnabled.value ? pendingWorkspace : "",
+        workspaceDir: usesTopics ? pendingWorkspace : "",
       });
       // Marks a task the chat watches, so the agent may ask its questions here.
       requestBody.trigger = CONSOLE_CHAT_TRIGGER;
@@ -3994,7 +4020,7 @@ const ChatView = {
       err.value = "";
       suppressDraftPersistence.value = true;
       taskInput.value = "";
-      if (consoleTopicsEnabled.value && !normalizeTopicID(selectedTopicID.value)) {
+      if (usesTopics && !normalizeTopicID(selectedTopicID.value)) {
         creatingTopic.value = true;
       }
 
@@ -4029,18 +4055,27 @@ const ChatView = {
         if (!taskID) {
           throw new Error(t("chat_missing_task_id"));
         }
+        const submittedTopicID = normalizeTopicID(submitted?.topic_id || requestBody.topic_id);
+        if (usesTopics && !submittedTopicID) {
+          throw new Error(t("chat_missing_topic_id"));
+        }
+        accepted = true;
+        acceptedTopicID = submittedTopicID;
+        clearChatDraft(submittedDraftScope.endpointRef, submittedDraftScope.topicID);
+        clearComposerFileDraft(submittedDraftScope);
+        // A response belongs to the composer that submitted it, even after navigation.
+        if (composerFileDraftKey(submittedDraftScope) !== composerFileDraftKey(composerDraftScope.value)) {
+          return;
+        }
         if (!steerTargetTaskID) {
           applyComposerTopicLLMProfile(llmProfile);
         }
-        const submittedTopicID = normalizeTopicID(submitted?.topic_id || requestBody.topic_id);
         patchHistoryItem(userHistoryID, {
           taskId: taskID,
           files: normalizeHistoryFileReferences(fileReferences),
           endpointRef,
           topicID: submittedTopicID,
         });
-        clearChatDraft(submittedDraftScope.endpointRef, submittedDraftScope.topicID);
-        clearComposerFileDraft(submittedDraftScope);
         let trackedTaskID = taskID;
         let trackedHistoryID = agentHistoryID;
         let needsTracking = true;
@@ -4068,11 +4103,8 @@ const ChatView = {
           void startTaskStream(taskID, agentHistoryID, endpointRef);
         }
 
-        if (consoleTopicsEnabled.value) {
-          const topicID = normalizeTopicID(submitted?.topic_id);
-          if (!topicID) {
-            throw new Error(t("chat_missing_topic_id"));
-          }
+        if (usesTopics) {
+          const topicID = submittedTopicID;
           creatingTopic.value = false;
           selectedTopicID.value = topicID;
           // The thread on screen is this topic's: its first exchange.
@@ -4086,11 +4118,14 @@ const ChatView = {
             });
             rememberWorkspaceBrowserRecentDir(requestBody.workspace_dir);
           }
-          rememberTopicSelection(submitEndpointRef.value, topicID);
+          rememberTopicSelection(endpointRef, topicID);
           await loadTopics({
             preferredTopicID: topicID,
             preserveSelection: true,
           });
+          if (endpointRef !== submitEndpointRef.value || normalizeTopicID(selectedTopicID.value) !== topicID) {
+            return;
+          }
           await syncChatRoute(topicID, { replace: true });
           if (steerTargetTaskID) {
             if (needsTracking) {
@@ -4115,9 +4150,17 @@ const ChatView = {
         await pollTask(taskID, agentHistoryID, endpointRef);
       } catch (e) {
         const message = e?.message || t("msg_load_failed");
+        if (!accepted) {
+          rememberChatDraft(submittedDraftScope.endpointRef, submittedDraftScope.topicID, draftText);
+          if (composerFileDraftKey(submittedDraftScope) !== composerFileDraftKey(composerDraftScope.value)) {
+            return;
+          }
+          taskInput.value = draftText;
+        } else if (endpointRef !== submitEndpointRef.value ||
+          (usesTopics && normalizeTopicID(selectedTopicID.value) !== acceptedTopicID)) {
+          return;
+        }
         err.value = message;
-        rememberChatDraft(submittedDraftScope.endpointRef, submittedDraftScope.topicID, task);
-        taskInput.value = task;
         patchHistoryItem(agentHistoryID, {
           status: "failed",
           text: message,
@@ -4459,6 +4502,7 @@ const ChatView = {
       openComposerWorkspaceBrowser,
       openComposerFilePicker,
       uploadComposerFiles,
+      uploadComposerFileList,
       composerDropActive,
       onChatPaneDragEnter,
       onChatPaneDragOver,
@@ -4770,6 +4814,8 @@ const ChatView = {
                 :voice-preview-enabled="composerVoicePreviewEnabled"
                 :voice-labels="composerVoiceLabels"
                 @upload="openComposerFilePicker"
+                @attach-files="uploadComposerFileList"
+                @retry-file="uploadComposerFileList([$event.sourceFile], $event.id)"
                 @voice="voiceInput.toggle"
                 @voice-cancel="voiceInput.cancel"
                 @voice-preview-toggle="voiceInput.togglePreview"
@@ -4868,6 +4914,8 @@ const ChatView = {
               :voice-preview-enabled="composerVoicePreviewEnabled"
               :voice-labels="composerVoiceLabels"
               @upload="openComposerFilePicker"
+              @attach-files="uploadComposerFileList"
+              @retry-file="uploadComposerFileList([$event.sourceFile], $event.id)"
               @voice="voiceInput.toggle"
               @voice-cancel="voiceInput.cancel"
               @voice-preview-toggle="voiceInput.togglePreview"
