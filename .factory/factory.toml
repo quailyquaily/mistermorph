@@ -1,0 +1,33 @@
+# .factory/factory.toml: how the factory works on this repository.
+# It lives on the orphan branch factory_board, which holds only .factory/.
+
+# The branch builds start from, and a ship run merges into. The remote is origin.
+base = "master"
+
+# Names whose "## name · time" sections count as yours.
+owners = ["lyric"]
+
+# What must pass: after each build, in each review, and on base before a ship
+# run pushes it (mirrors CI's gofmt check).
+test = 'test -z "$(gofmt -l .)" && go vet ./... && go test ./...'
+
+# Run after changes that need generated files or catalogs updated.
+after_change = []
+
+# Read before building or reviewing.
+read = ["AGENTS.md"]
+
+# Paths the factory must never change.
+never = [".github/workflows/", ".factory/factory.toml", "config.yaml", "secrets/"]
+
+# Added to the coder's rules for this repository.
+rules = [
+  "Scripted tests get a throwaway HOME, given as an absolute path.",
+  "In web/console use pnpm, never npm; run pnpm build (and pnpm test) when console sources change.",
+  "When adding or changing config keys, update assets/config/config.example.yaml.",
+  "Write new docs in English only.",
+]
+
+prefix = "FT"
+
+timezone = "Asia/Tokyo"
