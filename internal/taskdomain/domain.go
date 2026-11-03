@@ -70,6 +70,8 @@ type TaskInfo struct {
 	SteerTargetTaskID string            `json:"steer_target_task_id,omitempty"`
 	FileReferences    []FileReference   `json:"file_references,omitempty"`
 	Conversation      *TaskConversation `json:"conversation,omitempty"`
+	// UserReaction is the Console agent's single reaction to this task's originating message.
+	UserReaction string `json:"user_reaction,omitempty"`
 }
 
 type TaskTrigger struct {

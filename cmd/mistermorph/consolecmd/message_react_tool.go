@@ -5,22 +5,29 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
-	"github.com/quailyquaily/mistermorph/agent"
+	"github.com/clipperhouse/uax29/v2/graphemes"
+	"github.com/quailyquaily/mistermorph/internal/daemonruntime"
 )
 
 type consoleMessageReactTool struct {
-	lastEmoji string
+	store           *daemonruntime.ConsoleFileStore
+	hub             *consoleStreamHub
+	taskID          string
+	topicID         string
+	conversationKey string
 }
 
-func newConsoleMessageReactTool() *consoleMessageReactTool {
-	return &consoleMessageReactTool{}
+func newConsoleMessageReactTool(store *daemonruntime.ConsoleFileStore, hub *consoleStreamHub, job consoleLocalTaskJob) *consoleMessageReactTool {
+	return &consoleMessageReactTool{store: store, hub: hub, taskID: job.TaskID, topicID: job.TopicID, conversationKey: job.ConversationKey}
 }
 
 func (t *consoleMessageReactTool) Name() string { return "message_react" }
 
 func (t *consoleMessageReactTool) Description() string {
-	return "Sends the emoji as a normal text message in Console. Use for lightweight acknowledgements."
+	return "Attaches one emoji reaction to the user message that started this Console task. Does not send a reply. Repeating the same emoji is idempotent; a different emoji replaces the previous reaction."
 }
 
 func (t *consoleMessageReactTool) ParameterSchema() string {
@@ -30,7 +37,7 @@ func (t *consoleMessageReactTool) ParameterSchema() string {
 		"properties": map[string]any{
 			"emoji": map[string]any{
 				"type":        "string",
-				"description": "Emoji to send as the Console reply text.",
+				"description": "One Unicode emoji to attach to the originating user message.",
 			},
 		},
 		"required": []string{"emoji"},
@@ -39,37 +46,37 @@ func (t *consoleMessageReactTool) ParameterSchema() string {
 	return string(b)
 }
 
-func (t *consoleMessageReactTool) Execute(_ context.Context, params map[string]any) (string, error) {
-	if t == nil {
-		return "", fmt.Errorf("message_react is disabled")
+func (t *consoleMessageReactTool) Execute(ctx context.Context, params map[string]any) (string, error) {
+	if t == nil || t.store == nil {
+		return "", fmt.Errorf("message_react: originating target is unavailable")
+	}
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	for key := range params {
+		if key != "emoji" {
+			return "", fmt.Errorf("message_react: unsupported param %q; only the originating message can be targeted", key)
+		}
 	}
 	emoji, _ := params["emoji"].(string)
 	emoji = strings.TrimSpace(emoji)
 	if emoji == "" {
 		return "", fmt.Errorf("missing required param: emoji")
 	}
-	t.lastEmoji = emoji
-	return fmt.Sprintf("sent emoji message: %s", emoji), nil
-}
-
-func (t *consoleMessageReactTool) LastEmoji() string {
-	if t == nil {
-		return ""
+	// A flag, skin tone or ZWJ sequence is one visible emoji, not several badges.
+	clusters := graphemes.FromString(emoji)
+	symbol := strings.ContainsFunc(emoji, func(r rune) bool {
+		return unicode.IsSymbol(r) || r == '\u20e3' || r == '\u203c' || r == '\u2049' || r == '\u3030' || r == '\u303d'
+	})
+	if !utf8.ValidString(emoji) || !clusters.Next() || clusters.Next() || !symbol {
+		return "", fmt.Errorf("message_react: emoji must be a single Unicode emoji")
 	}
-	return strings.TrimSpace(t.lastEmoji)
-}
-
-func applyConsoleMessageReactionFinal(final *agent.Final, emoji string) *agent.Final {
-	emoji = strings.TrimSpace(emoji)
-	if emoji == "" {
-		return final
+	if t.topicID == "" || t.conversationKey != buildConsoleConversationKey(t.topicID) {
+		return "", fmt.Errorf("message_react: unauthorized originating target conversation")
 	}
-	if final == nil {
-		return &agent.Final{Output: emoji}
+	if err := t.store.SetUserReaction(t.taskID, t.topicID, t.conversationKey, emoji); err != nil {
+		return "", err
 	}
-	if final.IsLightweight || final.Output == nil || strings.TrimSpace(fmt.Sprint(final.Output)) == "" {
-		final.Output = emoji
-		final.IsLightweight = false
-	}
-	return final
+	t.hub.publish(consoleStreamFrame{TaskID: t.taskID, UserReaction: emoji})
+	return fmt.Sprintf("applied reaction %s to originating user message %s", emoji, t.taskID), nil
 }

@@ -50,6 +50,7 @@ import {
   normalizeTaskStatus,
   normalizeTopicID,
   taskActivity,
+  applyUserReaction,
   taskAgentText,
   taskDurationLabel,
   taskElevations,
@@ -2771,6 +2772,7 @@ const ChatView = {
         if (!frame || typeof frame !== "object") {
           return;
         }
+        replaceHistoryItems(applyUserReaction(chatHistoryItems.value, key, frame.user_reaction, endpointRef));
         const existingItem = chatHistoryItems.value.find((item) => item.id === historyID) || null;
         const nextPlan = normalizePlan(frame.plan || existingItem?.plan);
         const nextActivity = normalizeActivity(frame.activity || existingItem?.activity);
@@ -2795,7 +2797,10 @@ const ChatView = {
         if (typeof frame.reasoning === "string" && frame.reasoning.trim() !== "") {
           patch.reasoning = normalizeReasoning(frame.reasoning);
         }
-        if (frame.clear_text === true) {
+        if (frame.done && frame.user_reaction && !frame.text && !frame.error) {
+          patch.text = "";
+          patch.awaiting = false;
+        } else if (frame.clear_text === true) {
           // The text shown so far came from a response that called tools, not the reply.
           patch.text = buildPollingHint(activeAgentName.value, t, historyPendingSeed(existingItem, key));
           patch.awaiting = true;
@@ -3123,6 +3128,7 @@ const ChatView = {
       }
       try {
         const detail = await runtimeApiFetchForEndpoint(endpointRef, `/tasks/${encodeURIComponent(taskID)}`);
+        replaceHistoryItems(applyUserReaction(chatHistoryItems.value, key, detail?.user_reaction, endpointRef));
         const status = normalizeTaskStatus(detail?.status);
         const resolvedHistoryID = resolveAgentHistoryID(taskID, historyID);
         const existingItem = chatHistoryItems.value.find((item) => item.id === resolvedHistoryID) || null;

@@ -127,12 +127,17 @@ func (c *consoleFinalLLMClient) Chat(context.Context, llm.Request) (llm.Result, 
 }
 
 type consoleReactLLMClient struct {
-	requests []llm.Request
+	finalText   string
+	beforeReact func()
+	requests    []llm.Request
 }
 
 func (c *consoleReactLLMClient) Chat(_ context.Context, req llm.Request) (llm.Result, error) {
 	c.requests = append(c.requests, req)
 	if len(c.requests) == 1 {
+		if c.beforeReact != nil {
+			c.beforeReact()
+		}
 		return llm.Result{
 			ToolCalls: []llm.ToolCall{
 				{
@@ -145,7 +150,7 @@ func (c *consoleReactLLMClient) Chat(_ context.Context, req llm.Request) (llm.Re
 			},
 		}, nil
 	}
-	return llm.Result{Text: `{"type":"final","output":"fallback","is_lightweight":false}`}, nil
+	return llm.Result{Text: c.finalText}, nil
 }
 
 type consoleBlockingLLMClient struct {
@@ -837,141 +842,170 @@ func TestConsoleGenerationCleanupClosesTaskRuntime(t *testing.T) {
 	}
 }
 
-func TestConsoleLocalRuntimeMessageReactContinuesToFinalText(t *testing.T) {
-	client := &consoleReactLLMClient{}
-	logger := slog.Default()
-	workspaceDir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(workspaceDir, "report.pdf"), []byte("report"), 0o600); err != nil {
-		t.Fatalf("WriteFile() error = %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(workspaceDir, "diagram.png"), []byte("image-data"), 0o600); err != nil {
-		t.Fatalf("WriteFile(image) error = %v", err)
-	}
-	reader := viper.New()
-	reader.Set("file_cache_dir", t.TempDir())
-	reader.Set("file_state_dir", t.TempDir())
-	paths := runtimepaths.FromReader(reader)
-	route := llmutil.ResolvedRoute{
-		ClientConfig: llmconfig.ClientConfig{
-			Provider: "test",
-			Model:    "gpt-5.2",
-		},
-	}
-	baseRegistry := tools.NewRegistry()
-	commonDeps := depsutil.CommonDependencies{
-		Logger: func() (*slog.Logger, error) {
-			return logger, nil
-		},
-		LogOptions: func() agent.LogOptions {
-			return agent.LogOptions{}
-		},
-		ResolveLLMRoute: func(string) (llmutil.ResolvedRoute, error) {
-			return route, nil
-		},
-		CreateLLMClient: func(llmutil.ResolvedRoute) (llm.Client, error) {
-			return client, nil
-		},
-		Registry: func() *tools.Registry {
-			return baseRegistry
-		},
-		RuntimePaths: paths,
-		PromptSpec: func(context.Context, *slog.Logger, agent.LogOptions, string, llm.Client, string, []string) (agent.PromptSpec, []string, error) {
-			return agent.DefaultPromptSpec(), nil, nil
-		},
-	}
-	taskRuntime, err := taskruntime.Bootstrap(commonDeps, taskruntime.BootstrapOptions{
-		AgentConfig: agent.Config{
-			MaxSteps:        3,
-			ParseRetries:    0,
-			ToolRepeatLimit: 2,
-		},
-	})
-	if err != nil {
-		t.Fatalf("Bootstrap() error = %v", err)
+func TestConsoleLocalRuntimeMessageReactOriginAndFinalText(t *testing.T) {
+	for _, tc := range []struct{ name, finalText, output string }{
+		{"text", `{"type":"final","output":"fallback","is_lightweight":false}`, "fallback"},
+		{"reaction only", `{"type":"final","output":"","is_lightweight":true}`, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			client := &consoleReactLLMClient{finalText: tc.finalText}
+			logger := slog.Default()
+			workspaceDir := t.TempDir()
+			if err := os.WriteFile(filepath.Join(workspaceDir, "report.pdf"), []byte("report"), 0o600); err != nil {
+				t.Fatalf("WriteFile() error = %v", err)
+			}
+			if err := os.WriteFile(filepath.Join(workspaceDir, "diagram.png"), []byte("image-data"), 0o600); err != nil {
+				t.Fatalf("WriteFile(image) error = %v", err)
+			}
+			reader := viper.New()
+			reader.Set("file_cache_dir", t.TempDir())
+			reader.Set("file_state_dir", t.TempDir())
+			paths := runtimepaths.FromReader(reader)
+			route := llmutil.ResolvedRoute{
+				ClientConfig: llmconfig.ClientConfig{
+					Provider: "test",
+					Model:    "gpt-5.2",
+				},
+			}
+			baseRegistry := tools.NewRegistry()
+			commonDeps := depsutil.CommonDependencies{
+				Logger: func() (*slog.Logger, error) {
+					return logger, nil
+				},
+				LogOptions: func() agent.LogOptions {
+					return agent.LogOptions{}
+				},
+				ResolveLLMRoute: func(string) (llmutil.ResolvedRoute, error) {
+					return route, nil
+				},
+				CreateLLMClient: func(llmutil.ResolvedRoute) (llm.Client, error) {
+					return client, nil
+				},
+				Registry: func() *tools.Registry {
+					return baseRegistry
+				},
+				RuntimePaths: paths,
+				PromptSpec: func(context.Context, *slog.Logger, agent.LogOptions, string, llm.Client, string, []string) (agent.PromptSpec, []string, error) {
+					return agent.DefaultPromptSpec(), nil, nil
+				},
+			}
+			taskRuntime, err := taskruntime.Bootstrap(commonDeps, taskruntime.BootstrapOptions{
+				AgentConfig: agent.Config{
+					MaxSteps:        3,
+					ParseRetries:    0,
+					ToolRepeatLimit: 2,
+				},
+			})
+			if err != nil {
+				t.Fatalf("Bootstrap() error = %v", err)
+			}
+
+			generation := &consoleLocalRuntimeGeneration{
+				reader:     reader,
+				logger:     logger,
+				commonDeps: commonDeps,
+				paths:      paths,
+				bundle: &consoleLocalRuntimeBundle{
+					taskRuntime: taskRuntime,
+				},
+			}
+			store, err := daemonruntime.NewConsoleFileStore(daemonruntime.ConsoleFileStoreOptions{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := store.Upsert(daemonruntime.TaskInfo{ID: "task_react", TopicID: "topic_a", Task: "Hi", Conversation: runtimecore.BuildTaskConversation("console:topic_a", "private", consoleParticipantKey, consoleDisplayName, "", nil)}); err != nil {
+				t.Fatal(err)
+			}
+			client.beforeReact = func() {
+				if err := store.Upsert(daemonruntime.TaskInfo{ID: "later", TopicID: "topic_a", Task: "New message", CreatedAt: time.Now(), Conversation: runtimecore.BuildTaskConversation("console:topic_a", "private", consoleParticipantKey, consoleDisplayName, "", nil)}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			rt := &consoleLocalRuntime{store: store, streamHub: newConsoleStreamHub()}
+			final, runCtx, err := rt.runTask(context.Background(), "topic_a", consoleLocalTaskJob{
+				TaskID:          "task_react",
+				TopicID:         "topic_a",
+				ConversationKey: "console:topic_a",
+				WorkspaceDir:    workspaceDir,
+				Task:            "Hi",
+				FileReferences: []daemonruntime.FileReference{
+					{DirName: "workspace_dir", Path: "report.pdf"},
+					{DirName: "workspace_dir", Path: "diagram.png"},
+				},
+				CreatedAt:  time.Date(2026, time.May, 29, 12, 0, 0, 0, time.UTC),
+				Generation: generation,
+				Trigger:    daemonruntime.TaskTrigger{Source: "ui", TraceID: "trace_react"},
+			}, nil, nil, nil)
+			if err != nil {
+				t.Fatalf("runTask() error = %v", err)
+			}
+			if final == nil {
+				t.Fatal("final = nil")
+			}
+			if got := strings.TrimSpace(fmt.Sprint(final.Output)); got != tc.output {
+				t.Fatalf("final.Output = %q, want final text", got)
+			}
+			if len(client.requests) != 2 {
+				t.Fatalf("client.requests length = %d, want 2", len(client.requests))
+			}
+			if !client.requests[0].ReasoningDetails {
+				t.Fatal("first request did not enable reasoning details")
+			}
+			if !llmRequestHasTool(client.requests[0], "message_react") {
+				t.Fatalf("first request tools missing message_react: %#v", client.requests[0].Tools)
+			}
+			requestJSON, err := json.Marshal(client.requests[0].Messages)
+			if err != nil {
+				t.Fatalf("json.Marshal(messages) error = %v", err)
+			}
+			if !strings.Contains(string(requestJSON), "## Task File References") || !strings.Contains(string(requestJSON), `\"path\":\"report.pdf\"`) {
+				t.Fatalf("request messages missing file reference prompt: %s", string(requestJSON))
+			}
+			foundImagePart := false
+			for _, message := range client.requests[0].Messages {
+				for _, part := range message.Parts {
+					if part.Type == llm.PartTypeImageBase64 && part.MIMEType == "image/png" && part.DataBase64 != "" {
+						foundImagePart = true
+					}
+				}
+			}
+			if !foundImagePart {
+				t.Fatalf("request messages missing PNG image part: %#v", client.requests[0].Messages)
+			}
+			for _, message := range client.requests[0].Messages {
+				if message.Role == "user" && strings.Contains(message.Content, `"current_message"`) && strings.Contains(message.Content, "report.pdf") {
+					t.Fatalf("current user message contains a file reference: %s", message.Content)
+				}
+			}
+			meta := decodeConsoleInjectedMeta(t, client.requests[0])
+			for key, want := range map[string]string{
+				"run_id":           "task_react",
+				"task_id":          "task_react",
+				"trace_id":         "trace_react",
+				"topic_id":         "topic_a",
+				"console_task_id":  "task_react",
+				"console_topic_id": "topic_a",
+			} {
+				got, _ := meta[key].(string)
+				if got != want {
+					t.Fatalf("meta[%s] = %q, want %q; meta=%#v", key, got, want, meta)
+				}
+			}
+			if runCtx == nil || len(runCtx.Steps) != 1 || runCtx.Steps[0].Action != "message_react" {
+				t.Fatalf("run steps = %#v, want single message_react step", runCtx)
+			}
+			origin, _ := store.Get("task_react")
+			later, _ := store.Get("later")
+			if origin.UserReaction != "👍" || later.UserReaction != "" {
+				t.Fatalf("origin = %#v, later = %#v", origin, later)
+			}
+			frame, ok := rt.streamHub.Latest("task_react")
+			if !ok || frame.UserReaction != "👍" || frame.Text != "" {
+				t.Fatalf("reaction frame = %#v", frame)
+			}
+		})
 	}
 
-	generation := &consoleLocalRuntimeGeneration{
-		reader:     reader,
-		logger:     logger,
-		commonDeps: commonDeps,
-		paths:      paths,
-		bundle: &consoleLocalRuntimeBundle{
-			taskRuntime: taskRuntime,
-		},
-	}
-	rt := &consoleLocalRuntime{}
-	final, runCtx, err := rt.runTask(context.Background(), "topic_a", consoleLocalTaskJob{
-		TaskID:          "task_react",
-		TopicID:         "topic_a",
-		ConversationKey: "topic_a",
-		WorkspaceDir:    workspaceDir,
-		Task:            "Hi",
-		FileReferences: []daemonruntime.FileReference{
-			{DirName: "workspace_dir", Path: "report.pdf"},
-			{DirName: "workspace_dir", Path: "diagram.png"},
-		},
-		CreatedAt:  time.Date(2026, time.May, 29, 12, 0, 0, 0, time.UTC),
-		Generation: generation,
-		Trigger:    daemonruntime.TaskTrigger{Source: "ui", TraceID: "trace_react"},
-	}, nil, nil, nil)
-	if err != nil {
-		t.Fatalf("runTask() error = %v", err)
-	}
-	if final == nil {
-		t.Fatal("final = nil")
-	}
-	if got := strings.TrimSpace(fmt.Sprint(final.Output)); got != "fallback" {
-		t.Fatalf("final.Output = %q, want final text", got)
-	}
-	if len(client.requests) != 2 {
-		t.Fatalf("client.requests length = %d, want 2", len(client.requests))
-	}
-	if !client.requests[0].ReasoningDetails {
-		t.Fatal("first request did not enable reasoning details")
-	}
-	if !llmRequestHasTool(client.requests[0], "message_react") {
-		t.Fatalf("first request tools missing message_react: %#v", client.requests[0].Tools)
-	}
-	requestJSON, err := json.Marshal(client.requests[0].Messages)
-	if err != nil {
-		t.Fatalf("json.Marshal(messages) error = %v", err)
-	}
-	if !strings.Contains(string(requestJSON), "## Task File References") || !strings.Contains(string(requestJSON), `\"path\":\"report.pdf\"`) {
-		t.Fatalf("request messages missing file reference prompt: %s", string(requestJSON))
-	}
-	foundImagePart := false
-	for _, message := range client.requests[0].Messages {
-		for _, part := range message.Parts {
-			if part.Type == llm.PartTypeImageBase64 && part.MIMEType == "image/png" && part.DataBase64 != "" {
-				foundImagePart = true
-			}
-		}
-	}
-	if !foundImagePart {
-		t.Fatalf("request messages missing PNG image part: %#v", client.requests[0].Messages)
-	}
-	for _, message := range client.requests[0].Messages {
-		if message.Role == "user" && strings.Contains(message.Content, `"current_message"`) && strings.Contains(message.Content, "report.pdf") {
-			t.Fatalf("current user message contains a file reference: %s", message.Content)
-		}
-	}
-	meta := decodeConsoleInjectedMeta(t, client.requests[0])
-	for key, want := range map[string]string{
-		"run_id":           "task_react",
-		"task_id":          "task_react",
-		"trace_id":         "trace_react",
-		"topic_id":         "topic_a",
-		"console_task_id":  "task_react",
-		"console_topic_id": "topic_a",
-	} {
-		got, _ := meta[key].(string)
-		if got != want {
-			t.Fatalf("meta[%s] = %q, want %q; meta=%#v", key, got, want, meta)
-		}
-	}
-	if runCtx == nil || len(runCtx.Steps) != 1 || runCtx.Steps[0].Action != "message_react" {
-		t.Fatalf("run steps = %#v, want single message_react step", runCtx)
-	}
 }
 
 func decodeConsoleInjectedMeta(t *testing.T, req llm.Request) map[string]any {

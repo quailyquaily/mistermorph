@@ -19,6 +19,7 @@ func TestConsoleTaskStreamProxiesRemoteConsoleEndpoint(t *testing.T) {
 
 	remote, remoteRuntime := newConsoleRuntimeMountTestServer("/morph", runtimeToken)
 	remoteRuntime.streamHub = newConsoleStreamHub()
+	remoteRuntime.streamHub.publish(consoleStreamFrame{TaskID: taskID, UserReaction: "👍"})
 	remoteRuntime.streamHub.PublishReasoning(taskID, "remote reasoning")
 	remoteHTTP := httptest.NewServer(remote.handler())
 	remoteRuntimeURL := remoteHTTP.URL + "/morph/runtime"
@@ -77,7 +78,7 @@ func TestConsoleTaskStreamProxiesRemoteConsoleEndpoint(t *testing.T) {
 	if err := conn.ReadJSON(&frame); err != nil {
 		t.Fatalf("read remote stream frame: %v", err)
 	}
-	if frame.TaskID != taskID || frame.Reasoning != "remote reasoning" {
+	if frame.TaskID != taskID || frame.Reasoning != "remote reasoning" || frame.UserReaction != "👍" {
 		t.Fatalf("remote stream frame = %#v", frame)
 	}
 }

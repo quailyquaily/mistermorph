@@ -4731,6 +4731,10 @@ components:
           items:
             $ref: '#/components/schemas/FileReference'
           nullable: true
+        user_reaction:
+          type: string
+          description: Console agent reaction to this task's originating user message. Omitted until
+            a reaction is applied; a different emoji replaces the previous reaction.
         conversation:
           $ref: '#/components/schemas/TaskConversation'
       required:

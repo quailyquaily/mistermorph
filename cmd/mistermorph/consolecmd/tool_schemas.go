@@ -11,7 +11,7 @@ import (
 // built-in tools.
 var toolSchemaCatalog = sync.OnceValue(func() toolschema.Catalog {
 	catalog := toolschema.Build()
-	catalog.Channels["console"] = append(catalog.Channels["console"], toolschema.Describe(newConsoleMessageReactTool()))
+	catalog.Channels["console"] = append(catalog.Channels["console"], toolschema.Describe(&consoleMessageReactTool{}))
 	return catalog
 })
 
