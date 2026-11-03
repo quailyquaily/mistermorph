@@ -22,6 +22,7 @@ This document describes the built-in and runtime-injected tool parameters curren
   - `send_voice`, `send_photo`, `send_file`: runtime-injected, depend on active Telegram API context/chat metadata.
   - `message_react`: runtime-injected in Telegram and Slack runtimes; params/context differ by channel.
   - `memory_save`, `memory_search`, `memory_forget`, `journal_search`, `journal_read`: registered for a top-level run that has an audience when `memories.enabled` (default on). `memory_save` is always visible; the others are deferred and found with `tool_search`. See [Memories](./memories.md#tools).
+  - `skill_install_preview`, `skill_install`: Console only. A task that names one with `$` (the Skills page's Add skill does) gets it visible and runs with only the install tools. With `tools.tool_search.enabled` (default on), every other Console task gets both as deferred tools, found with `tool_search`. `skill_install` always asks for approval. See [Console skills page](./feat/feat_20260926_console_skills_page.md#41-installing-is-a-task).
 
 ### 2) ASCII architecture
 

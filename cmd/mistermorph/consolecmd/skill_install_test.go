@@ -32,7 +32,8 @@ func TestSkillInstallToolsAreConsoleOnly(t *testing.T) {
 		}
 		return strings.Join(out, ",")
 	}
-	// Only a task that names a tool with $ gets it, for that run.
+	// With tool search off, only a task that names a tool with $ gets it, for that run.
+	reader.Set("tools.tool_search.enabled", false)
 	for _, tc := range []struct {
 		name, task, want string
 	}{
@@ -47,11 +48,27 @@ func TestSkillInstallToolsAreConsoleOnly(t *testing.T) {
 			}
 		})
 	}
-	// The removed tools.<name>.enabled switches no longer add them.
-	reader.Set("tools.skill_install_preview.enabled", true)
-	reader.Set("tools.skill_install.enabled", true)
-	if got := names("anything"); got != "" {
-		t.Fatalf("old config switches still add tools: %q", got)
+	// With tool search on, every task gets both, deferred, unless it names them: then they are
+	// visible from the first request.
+	reader.Set("tools.tool_search.enabled", true)
+	for _, tc := range []struct {
+		name, task, want string
+		deferred         bool
+	}{
+		{name: "searchable", task: "install the skill at https://example.test", want: "skill_install_preview,skill_install", deferred: true},
+		{name: "named stays visible", task: "Preview it with $skill_install_preview, then call $skill_install.", want: "skill_install_preview,skill_install"},
+		{name: "one named", task: "use $skill_install_preview only", want: "skill_install_preview"},
+	} {
+		t.Run("tool search/"+tc.name, func(t *testing.T) {
+			if got := names(tc.task); got != tc.want {
+				t.Fatalf("tools = %q, want %q", got, tc.want)
+			}
+			for _, tool := range rt.skillInstallTools(gen, tc.task) {
+				if got := tools.IsDeferred(tool); got != tc.deferred {
+					t.Fatalf("%s deferred = %v, want %v", tool.Name(), got, tc.deferred)
+				}
+			}
+		})
 	}
 	if rt.skillInstallTools(nil, "$skill_install") != nil {
 		t.Fatal("expected no tools without a generation")
