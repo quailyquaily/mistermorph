@@ -35,3 +35,19 @@ Reused and verified head `d18813f0ab2fe1f1d368905fd197a407dd2bd390`; pushed `fac
 A disposable merge with that base was conflict-free; the configured Go gate passed on merge commit `22aeab73d67f432925f1a1cdaf3629e0c2cbbf3d`. No feature was merged into master. Changed paths were checked against the forbidden-path list; no forbidden path changed. No new implementation or fix was needed, so recovery continued at Build step 5 without another coding-agent invocation.
 
 The implementation and regression tests cover originating-target selection, later incoming messages, invalid/cross-conversation targets, persistence, idempotency/replacement, live updates and reload mapping. Actual browser layout and clipboard-independent conversation interactions were not checked. No authorized review has been recorded for this head; this item remains in review pending the separate review job, not ready. Full frontend-suite baseline failures remain visible for the owner.
+
+## factory · review · 2026-11-03 22:35
+head: d18813f0ab2fe1f1d368905fd197a407dd2bd390
+verdict: fix
+fix:
+- [P1] internal/domainjournal/journal_test.go:260: baseline concurrent journal initialization intermittently fails with `begin migration: database is locked (SQLITE_BUSY)`; fix initialization lock handling while retaining the regression test. Example: initial head gate failed; current base reproduced 2 failures in 20 runs.
+- [P1] web/console/src/core/chat-reasoning-bubble.test.mjs:25: baseline assertion rejects MarkdownContent throughout the status card although coder output uses it; scope the assertion to reasoning. Example: head and current base both fail with `true !== false`.
+- [P1] web/console/src/core/skills-page.test.mjs:28: baseline navigation assertion requires Skills immediately after TODO despite Memories between them; reconcile the test with the intended navigation. Example: TODO → Memories → Skills fails the adjacency regex on head and base.
+
+Codex reviewed all 19 changed files in `origin/master...HEAD`, merge base `1dbf971d4cc2d50d1671bb12b0c2ad072882f89d`, current base `172bd18d7f8b42bac97760cdf5be0c6bd9b3e05d`. No newly introduced defect was confirmed. The three findings above are pre-existing test failures, classified P1 by this run's test-failure rule, not attributed to FT2. Item stays in review/ for the owner to decide. Manager merge-tree check was conflict-free; no merge or implementation push was needed.
+
+Validation: required gofmt/vet/full Go gate ultimately passed (155 passing packages, 17 without tests). Initial run had a journal failure and three environment-only Unix-socket path-length failures; shorter absolute throwaway HOME paths removed the latter. Full frontend suite: head 306/308 passed; current base 303/305 passed with the same two failures. Frontend production build passed; targeted reaction/composer tests 27/27 passed; diff whitespace check passed. Base journal repeated test passed 18/20. Tests used isolated environment and absolute throwaway HOME. Initial base snapshot lacked local module files; completing the repository archive enabled retesting.
+
+Installs: none; reused existing Go caches, Node, pnpm and project dependencies. No source or lockfile changes, commits, fetches, pushes or gh calls by reviewer; manager verified clean worktree and unchanged head.
+
+Residual risks: browser layout/mobile rendering, real-model reactions and remote disconnect/reconnect UX were not manually tested; some frontend regressions use source matching. Existing independent decision-route emoji text behavior does not call message_react and was outside the changed tool-path review. No linked GitHub issues or PRs were present in the header or owner's section, so no review comments were applicable.
