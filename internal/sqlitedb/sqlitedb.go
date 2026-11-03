@@ -72,11 +72,32 @@ func OpenWithOptions(ctx context.Context, path string, migrations []Migration, o
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite database: %w", err)
 	}
-	if err := migrate(ctx, db, migrations); err != nil {
+	if err := migrateRetryingBusy(ctx, db, migrations); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
 	return db, nil
+}
+
+// migrateRetryingBusy runs migrate, trying again while it fails with SQLITE_BUSY, for up to
+// BusyTimeout. While another connection switches a new file to WAL, SQLite can report BUSY at
+// once without waiting out busy_timeout. A failed attempt rolls back, and user_version says which
+// steps ran, so trying again is safe.
+func migrateRetryingBusy(ctx context.Context, db *sql.DB, migrations []Migration) error {
+	deadline := time.Now().Add(BusyTimeout)
+	wait := 5 * time.Millisecond
+	for {
+		err := migrate(ctx, db, migrations)
+		if err == nil || !IsBusy(err) || time.Now().After(deadline) {
+			return err
+		}
+		select {
+		case <-ctx.Done():
+			return err
+		case <-time.After(wait):
+		}
+		wait = min(2*wait, 200*time.Millisecond)
+	}
 }
 
 func dsn(path string, opts Options) string {
@@ -133,6 +154,12 @@ func migrate(ctx context.Context, db *sql.DB, migrations []Migration) error {
 		return fmt.Errorf("commit migration: %w", err)
 	}
 	return nil
+}
+
+// IsBusy reports whether err is SQLite's SQLITE_BUSY (or an extended code of it).
+func IsBusy(err error) bool {
+	var coded interface{ Code() int }
+	return errors.As(err, &coded) && coded.Code()&0xff == 5
 }
 
 // IsNoRows reports whether err is sql.ErrNoRows.

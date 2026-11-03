@@ -254,3 +254,40 @@ func TestFTS5Trigram(t *testing.T) {
 		}
 	}
 }
+
+// Opening a new file from several connections at once races the switch to WAL, where SQLite can
+// report SQLITE_BUSY without waiting out busy_timeout. Open retries it.
+func TestConcurrentOpensOfNewFile(t *testing.T) {
+	for round := 0; round < 50; round++ {
+		path := filepath.Join(t.TempDir(), "new.db")
+		var wg sync.WaitGroup
+		errs := make(chan error, 4)
+		for i := 0; i < 4; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				db, err := Open(context.Background(), path, testMigrations)
+				if err == nil {
+					err = db.Close()
+				}
+				errs <- err
+			}()
+		}
+		wg.Wait()
+		close(errs)
+		for err := range errs {
+			if err != nil {
+				t.Fatalf("round %d: concurrent Open() error = %v", round, err)
+			}
+		}
+		db, err := Open(context.Background(), path, testMigrations)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var rows int
+		if err := db.QueryRow(`SELECT count(*) FROM items`).Scan(&rows); err != nil || rows != 1 {
+			t.Fatalf("round %d: items = %d, %v; want the seed once", round, rows, err)
+		}
+		_ = db.Close()
+	}
+}
