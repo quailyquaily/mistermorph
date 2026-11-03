@@ -391,6 +391,7 @@ Constraints:
 - `contacts_send` always uses topic `chat.message` (caller does not pass `topic`).
 - If cross-session forwarding is needed in group chat (for example, explicit "DM someone"), trigger it via explicit task/command, not by routing ordinary group replies to `contacts_send`.
 - If `chat_id` is provided:
+- Telegram text messages render Markdown (bold, italic, code, links) as Telegram HTML, as Telegram channel replies do. If Telegram rejects the markup, the text is sent again as plain text. Write plain Markdown, not Telegram MarkdownV2 escapes. File captions stay plain text.
   - Multiple contacts: the explicit chat must be a shared route for every contact; otherwise the tool returns an error instead of choosing another chat. Telegram, Slack, and Lark add mentions; LINE sends to the shared chat without mentions.
   - Single contact:
     - Telegram: used only when matching `tg_private_chat_id` or `tg_group_chat_ids`; otherwise falls back to `tg_private_chat_id`.

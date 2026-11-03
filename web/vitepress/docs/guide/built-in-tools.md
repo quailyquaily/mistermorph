@@ -76,6 +76,7 @@ Runs a web search and returns structured search results. Useful for discovering 
 Sends one outbound message to a single contact. Delivery is chosen from the contact profile, such as Telegram, Slack, or LINE.
 
 - Key limits: some group/supergroup contexts hide this tool by default.
+- Telegram text messages render Markdown (bold, italic, code, links), falling back to plain text if Telegram rejects the markup.
 
 ## Engine Tools
 

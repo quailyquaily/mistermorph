@@ -490,7 +490,7 @@ func (api *telegramAPI) sendMessageHTMLReplyInThreadWithMessageIDAndMarkup(ctx c
 	if text == "" {
 		text = "(empty)"
 	}
-	converted, convErr := renderTelegramHTMLFromMarkdown(text)
+	converted, convErr := telegramapi.RenderHTMLFromMarkdown(text)
 	if convErr != nil {
 		slog.Warn("failed to render telegram html", "text", text, "error", convErr)
 		return api.sendMessageWithParseModeReplyAndMessageIDAndMarkup(ctx, chatID, messageThreadID, text, disablePreview, "", replyToMessageID, replyMarkup)
@@ -513,7 +513,7 @@ func (api *telegramAPI) editMessageHTML(ctx context.Context, chatID int64, messa
 	if text == "" {
 		text = "(empty)"
 	}
-	converted, convErr := renderTelegramHTMLFromMarkdown(text)
+	converted, convErr := telegramapi.RenderHTMLFromMarkdown(text)
 	if convErr != nil {
 		slog.Warn("failed to render telegram html", "text", text, "error", convErr)
 		return api.editMessageWithParseMode(ctx, chatID, messageID, text, disablePreview, "")
@@ -567,13 +567,11 @@ func isTelegramEntityParseError(err error) bool {
 	}
 	var reqErr *telegramRequestError
 	if errors.As(err, &reqErr) {
-		desc := strings.ToLower(strings.TrimSpace(reqErr.Description))
-		if strings.Contains(desc, "can't parse entities") || strings.Contains(desc, "can't parse entity") {
+		if telegramapi.IsEntityParseError(reqErr.Description) {
 			return true
 		}
 	}
-	msg := strings.ToLower(strings.TrimSpace(err.Error()))
-	return strings.Contains(msg, "can't parse entities") || strings.Contains(msg, "can't parse entity")
+	return telegramapi.IsEntityParseError(err.Error())
 }
 
 func isTelegramMessageNotModified(err error) bool {

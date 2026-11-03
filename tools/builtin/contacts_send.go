@@ -85,7 +85,7 @@ func contactSendParameterSchema(withFile bool) string {
 		},
 		"message_text": map[string]any{
 			"type":        "string",
-			"description": "Plain text body; tool wraps it into envelope JSON. With path, the file's caption.",
+			"description": "Message body; tool wraps it into envelope JSON. Telegram renders Markdown in it (bold, italic, code, links); write plain Markdown, not Telegram MarkdownV2 escapes. With path, the file's caption.",
 		},
 		"message_base64": map[string]any{
 			"type":        "string",
