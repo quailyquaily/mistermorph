@@ -1,0 +1,39 @@
+# .factory/factory.toml: how the factory works on this repository.
+
+# The branch you merge into, and the remote the factory pushes to.
+base = "master"
+remote = "origin"
+
+# Names whose "## name · time" sections count as yours.
+owners = ["lyric"]
+
+# What must pass before anything reaches ready/ (mirrors CI's gofmt check).
+test = 'test -z "$(gofmt -l .)" && go vet ./... && go test ./...'
+
+# Run after changes that need generated files or catalogs updated.
+after_change = []
+
+# Read before analysing a request or building it.
+read = ["AGENTS.md"]
+
+# Paths the factory must never change.
+never = [".github/workflows/", ".factory/factory.toml", "config.yaml", "secrets/"]
+
+# Added to the coding agent's rules for this repository.
+rules = [
+  "Scripted tests get a throwaway HOME.",
+  "In web/console use pnpm, never npm; run pnpm build when console sources change.",
+  "When adding or changing config keys, update assets/config/config.example.yaml.",
+  "Write new docs in English only.",
+]
+
+prefix = "FT"
+
+# true when a review job reviews each build before it reaches ready/.
+review = false
+
+max_rounds = 3
+
+notify = "notify-send -a factory {title} {text}"
+
+timezone = "Asia/Tokyo"
