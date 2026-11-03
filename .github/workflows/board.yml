@@ -1,0 +1,56 @@
+# .github/workflows/board.yml on the factory_board branch: publish the board
+# as a GitHub Pages site, rebuilt on every push to factory_board.
+#
+# Anyone who can open the site sees every item: titles, threads, review
+# findings, branch names. On most plans a Pages site is public even when the
+# repository is private; private Pages needs GitHub Enterprise Cloud.
+#
+# Set it up once, in the factory_board worktree:
+#
+#   mkdir -p .github/workflows
+#   cp /path/to/factory/references/board-pages.yml .github/workflows/board.yml
+#   cp /path/to/factory/scripts/board.py .factory/board.py
+#   git add .github .factory/board.py
+#   git commit -m "Publish the board on GitHub Pages" && git push
+#
+# Then, on GitHub:
+#   Settings → Pages → Source: GitHub Actions.
+#   Settings → Environments → github-pages → Deployment branches: add
+#   factory_board (by default only the default branch may deploy).
+#
+# You commit these files yourself: the factory only writes items under
+# .factory/, ignores .factory/board.py, and its GitHub App has no Workflows
+# permission. Copy board.py again when the skill updates it.
+
+name: board
+
+on:
+  push:
+    branches: [factory_board]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: board-pages
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # board.py reads the history for when items moved
+      - run: mkdir site && python3 .factory/board.py . -o site/index.html
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@v4
