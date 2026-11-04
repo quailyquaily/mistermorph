@@ -4,11 +4,12 @@ import test from "node:test";
 import vm from "node:vm";
 import * as Vue from "vue";
 import { renderToString } from "vue/server-renderer";
+import { activityWorkerLabel } from "./chat-task-history.js";
 
 const source = await readFile(new URL("../components/ChatStatusCard.js", import.meta.url), "utf8");
 const styles = await readFile(new URL("../components/ChatStatusCard.css", import.meta.url), "utf8");
 // Load the real component without its CSS and application-wide translation dependencies.
-const context = { ...Vue, translate: (key, args) => `${key}${args ? `:${args.count}` : ""}` };
+const context = { ...Vue, activityWorkerLabel, translate: (key, args) => `${key}${args ? `:${args.count}` : ""}` };
 vm.runInNewContext(source.replace(/^import[^\n]*\n/gm, "")
   .replace("export default", "globalThis.component ="), context);
 
