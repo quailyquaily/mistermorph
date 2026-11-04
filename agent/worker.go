@@ -48,6 +48,33 @@ func withWorkerScope(ctx context.Context) context.Context {
 	return context.WithValue(ctx, workerScopeKey{}, &workerScope{calls: make(map[string]*workerState)})
 }
 
+// withResumedWorkerScope is withWorkerScope for a run resumed after an approval pause; the
+// first new worker gets the name after the allocated ones.
+func withResumedWorkerScope(ctx context.Context, allocated int) context.Context {
+	ctx = withWorkerScope(ctx)
+	scope := ctx.Value(workerScopeKey{}).(*workerScope)
+	scope.mu.Lock()
+	if allocated > scope.next {
+		scope.next = allocated
+	}
+	scope.mu.Unlock()
+	return ctx
+}
+
+// workersAllocated reports how many workers the context's scope has named.
+func workersAllocated(ctx context.Context) int {
+	if ctx == nil {
+		return 0
+	}
+	scope, ok := ctx.Value(workerScopeKey{}).(*workerScope)
+	if !ok {
+		return 0
+	}
+	scope.mu.Lock()
+	defer scope.mu.Unlock()
+	return scope.next
+}
+
 func workerCallKey(ctx context.Context, activityID string) string {
 	return llmstats.RunIDFromContext(ctx) + ":" + activityID
 }

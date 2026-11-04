@@ -62,6 +62,9 @@ func (e *Engine) resume(ctx context.Context, approvalRequestID string, opts RunO
 	}
 
 	ctx = llmstats.WithRunID(ctx, rs.RunID)
+	// One worker scope for the resumed run, as Run has, continuing the names given out before
+	// the pause.
+	ctx = withResumedWorkerScope(ctx, rs.WorkersAllocated)
 
 	// Verify action hash binding.
 	h, err := guard.ActionHash(guard.Action{

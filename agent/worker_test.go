@@ -8,7 +8,9 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/quailyquaily/mistermorph/guard"
 	"github.com/quailyquaily/mistermorph/internal/llmstats"
+	"github.com/quailyquaily/mistermorph/llm"
 	"github.com/quailyquaily/mistermorph/tools"
 )
 
@@ -136,5 +138,67 @@ func TestInProcessSubtaskHasNameWithoutPID(t *testing.T) {
 	}
 	if !reflect.DeepEqual(result.Worker, loaded.Worker) {
 		t.Fatal("reload changed an in-process worker")
+	}
+}
+
+type workerRecordingTool struct {
+	mu    sync.Mutex
+	names []string
+}
+
+func (t *workerRecordingTool) Name() string            { return "coder" }
+func (t *workerRecordingTool) Description() string     { return "records its worker" }
+func (t *workerRecordingTool) ParameterSchema() string { return "{}" }
+func (t *workerRecordingTool) Execute(ctx context.Context, _ map[string]any) (string, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if worker := WorkerFromContext(ctx); worker != nil {
+		t.names = append(t.names, worker.ID+"/"+worker.Name)
+	} else {
+		t.names = append(t.names, "")
+	}
+	return "ok", nil
+}
+
+// Coders started after an approval pause share one scope and continue the names given out
+// before the pause.
+func TestWorkerNamesContinueAfterApprovalResume(t *testing.T) {
+	store := newMemoryApprovalStore()
+	g := approvalsOnlyGuard(store)
+	coder := &workerRecordingTool{}
+	var installs int
+	registry := tools.NewRegistry()
+	registry.Register(coder)
+	registry.Register(&countingTool{name: "skill_install", result: "installed", count: &installs})
+	client := newMockClient(
+		llm.Result{ToolCalls: []llm.ToolCall{{ID: "c1", Name: "coder", Arguments: map[string]any{}}}},
+		llm.Result{ToolCalls: []llm.ToolCall{{ID: "i1", Name: "skill_install", Arguments: map[string]any{"preview_id": "p1"}}}},
+		llm.Result{ToolCalls: []llm.ToolCall{
+			{ID: "c2", Name: "coder", Arguments: map[string]any{"task": "a"}},
+			{ID: "c3", Name: "coder", Arguments: map[string]any{"task": "b"}},
+		}},
+		finalResponse("done"),
+	)
+	engine := New(client, registry, Config{MaxSteps: 6}, DefaultPromptSpec(), WithGuard(g))
+	pending, _, err := engine.Run(context.Background(), "work", RunOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	approvalID := pendingApprovalID(t, pending)
+	if err := g.ResolveApproval(context.Background(), approvalID, guard.ApprovalApproved, "tester", ""); err != nil {
+		t.Fatal(err)
+	}
+	if final, _, err := engine.Resume(context.Background(), approvalID); err != nil || final == nil || final.Output != "done" {
+		t.Fatalf("Resume() = %#v, %v", final, err)
+	}
+	seen := map[string]bool{}
+	for _, name := range coder.names {
+		if name == "" || seen[name] {
+			t.Fatalf("coder workers = %v, want three distinct", coder.names)
+		}
+		seen[name] = true
+	}
+	if len(seen) != 3 || !seen["worker-1/"+workerNames[0]] {
+		t.Fatalf("coder workers = %v", coder.names)
 	}
 }
