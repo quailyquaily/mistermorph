@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/quailyquaily/mistermorph/agent"
 	"github.com/quailyquaily/mistermorph/internal/pathroots"
 	"github.com/quailyquaily/mistermorph/internal/pathutil"
 	"github.com/quailyquaily/mistermorph/internal/shellenv"
@@ -168,6 +169,7 @@ func runShellCommand(ctx context.Context, common shellToolCommon, spec shellRunn
 	cmd.WaitDelay = 100 * time.Millisecond
 	err := cmd.Start()
 	if err == nil {
+		agent.RecordWorkerProcess(ctx, spec.Program, cmd.Process.Pid)
 		if spec.OnStart != nil {
 			spec.OnStart(cmd.Process.Pid)
 		}

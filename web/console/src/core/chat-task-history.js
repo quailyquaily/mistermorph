@@ -300,6 +300,34 @@ function normalizeActivityKind(raw) {
   return value === "tool" || value === "subtask" || value === "retry" ? value : "";
 }
 
+// Process records describe what ran; task completion does not remove them.
+function normalizeActivityWorker(raw) {
+  const id = String(raw?.id || "").trim();
+  const name = String(raw?.name || "").trim();
+  if (!id || !name) return null;
+  const processes = Array.isArray(raw?.processes)
+    ? raw.processes
+        .filter((process) => Number.isSafeInteger(process?.pid) && process.pid > 0)
+        .map((process) => ({
+          pid: process.pid,
+          program: String(process.program || "").trim(),
+          // Server records use activity_id; entries normalized here before use activityId.
+          activityId: String(process.activity_id || process.activityId || "").trim(),
+        }))
+    : [];
+  return { id, name, processes };
+}
+
+export function activityWorkerLabel(entry) {
+  const worker = entry?.worker;
+  if (!worker?.name) return "";
+  const wholeWorker = entry.kind === "subtask" || entry.name === "spawn" || entry.name === "coder";
+  const processes = (worker.processes || [])
+    .filter((process) => wholeWorker || process.activityId === entry.id)
+    .map((process) => `${process.program ? process.program + " " : ""}PID ${process.pid}`);
+  return [worker.name, ...processes].join(" · ");
+}
+
 function normalizeActivityEntry(raw) {
   const id = String(raw?.id || "").trim();
   const kind = normalizeActivityKind(raw?.kind);
@@ -318,6 +346,7 @@ function normalizeActivityEntry(raw) {
     id,
     kind,
     name: String(raw?.name || "").trim(),
+    worker: normalizeActivityWorker(raw?.worker),
     status: normalizeTaskStatus(raw?.status),
     at: String(raw?.at || "").trim(),
     stream: String(raw?.stream || "").trim(),

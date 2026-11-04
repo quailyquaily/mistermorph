@@ -5,6 +5,7 @@ package coderterm
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -179,4 +180,51 @@ func TestFailedSessionResumes(t *testing.T) {
 	if flag, _ := run(); flag != "--session-id" {
 		t.Fatalf("new cwd: flag=%s", flag)
 	}
+}
+
+func TestTerminalReportsProcessForNewAndReusedSession(t *testing.T) {
+	for _, reuse := range []bool{false, true} {
+		t.Run(fmt.Sprint(reuse), func(t *testing.T) {
+			dir := t.TempDir()
+			command := filepath.Join(dir, "claude")
+			if err := os.WriteFile(command, []byte("#!/bin/sh\nwhile read line; do :; done\n"), 0700); err != nil {
+				t.Fatal(err)
+			}
+			req := Request{Backend: "claude", Command: command, CWD: dir, Task: "test", LogRoot: dir, Env: []string{"HOME=" + dir, "PATH=" + os.Getenv("PATH")}}
+			var sessions Sessions
+			defer sessions.Close()
+			key := sessionKey{"topic", "claude"}
+			if reuse {
+				backend, _ := backendFor("claude")
+				started, err := start(backend, req, "")
+				if err != nil {
+					t.Fatal(err)
+				}
+				sessions.items = map[sessionKey]*session{key: started}
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			called := false
+			req.Process = func(pid int) {
+				called = true
+				if pid <= 0 || pid != sessions.items[key].cmd.Process.Pid {
+					t.Errorf("incorrect terminal PID: %d", pid)
+				}
+				cancel()
+			}
+			_, _ = sessions.Run(ctx, "topic", req)
+			if !called {
+				t.Fatal("missing terminal process callback")
+			}
+		})
+	}
+	t.Run("failed start", func(t *testing.T) {
+		dir := t.TempDir()
+		var sessions Sessions
+		defer sessions.Close()
+		_, err := sessions.Run(context.Background(), "topic", Request{Backend: "claude", Command: filepath.Join(dir, "missing"), CWD: dir, Task: "test", LogRoot: dir, Process: func(int) { t.Error("PID reported for failed start") }})
+		if err == nil {
+			t.Fatal("expected start error")
+		}
+	})
 }

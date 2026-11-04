@@ -34,13 +34,14 @@ type SubtaskRequest struct {
 }
 
 type SubtaskResult struct {
-	TaskID       string `json:"task_id"`
-	Status       string `json:"status"`
-	Summary      string `json:"summary"`
-	OutputKind   string `json:"output_kind"`
-	OutputSchema string `json:"output_schema"`
-	Output       any    `json:"output"`
-	Error        string `json:"error"`
+	Worker       *WorkerMetadata `json:"worker,omitempty"`
+	TaskID       string          `json:"task_id"`
+	Status       string          `json:"status"`
+	Summary      string          `json:"summary"`
+	OutputKind   string          `json:"output_kind"`
+	OutputSchema string          `json:"output_schema"`
+	Output       any             `json:"output"`
+	Error        string          `json:"error"`
 }
 
 type SubtaskRunner interface {

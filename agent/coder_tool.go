@@ -53,6 +53,8 @@ type CoderRequest struct {
 	// Progress reports status lines. step is a short, content-free label for what the CLI
 	// is doing now, such as "running a command", or "" when it has not changed.
 	Progress func(summary, text, step string)
+	// Process reports the OS PID of the CLI used for this task.
+	Process func(pid int)
 }
 
 type coderCLICommand struct {
@@ -149,6 +151,7 @@ func (t *coderTool) Execute(ctx context.Context, params map[string]any) (string,
 
 	result, err := runner.RunSubtask(ctx, SubtaskRequest{
 		RunFunc: func(runCtx context.Context) (*SubtaskResult, error) {
+			req.Process = func(pid int) { RecordWorkerProcess(runCtx, req.Backend, pid) }
 			req.Progress = func(summary, text, step string) {
 				EmitEvent(runCtx, nil, Event{
 					Kind: EventKindToolOutput, ToolName: coderToolName, Stream: req.Backend,
@@ -456,6 +459,9 @@ func runCoderCLI(ctx context.Context, req CoderRequest, emit func(string)) (outp
 		return "", err
 	}
 
+	if req.Process != nil {
+		req.Process(cmd.Process.Pid)
+	}
 	remaining := ""
 	if deadline, ok := ctx.Deadline(); ok {
 		remaining = fmt.Sprintf("; remaining task time: %s", time.Until(deadline).Round(time.Second))

@@ -314,6 +314,7 @@ func New(client llm.Client, registry *tools.Registry, cfg Config, spec PromptSpe
 }
 
 func (e *Engine) Run(ctx context.Context, task string, opts RunOptions) (*Final, *Context, error) {
+	ctx = withWorkerScope(ctx)
 	agentCtx := NewContext(task, e.config.MaxSteps)
 	if err := e.config.ContextCompaction.Validate(); err != nil {
 		return nil, agentCtx, err
