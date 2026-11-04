@@ -62,3 +62,21 @@ Installs: none.
 Tests: gofmt, `go vet ./...` and `go test ./...` pass; guard and Console sink tests pass under `-race`. No Console frontend change, so `pnpm` was not run.
 
 Not checked: a real Codex or Claude Code run with Guard on, in the Console.
+
+
+## factory · review · 2026-11-04 22:51
+head: 1d720135ebd54204513bf81b3d251e69bbcfa266
+verdict: fix
+fix:
+- [P1] cmd/mistermorph/consolecmd/stream_events.go:135: Coder progress formatting inserts status/newlines between fragments of a single command line before redaction. A split 24-character API-key value was emitted as two unredacted fragments (8 and 16 characters) in Console frames. Preserve raw per-command increments and redact before adding formatting or previews.
+- [P1] guard/stream_redact.go:135: Flush clears the unterminated private-key state but subsequently emits the pending final body fragment. BEGIN followed by a body without a trailing newline leaks that body after the redaction marker. Consume or discard partial along with the entire unfinished key block.
+- [P1] guard/stream_redact.go:240: Line-by-line release does not preserve the built-in environment-variable pattern's quoted multiline values. A quoted MISTER_MORPH value containing two lines hides the first line but exposes secondSECRET123456 on the second; whole-string redaction hides both. Hold quoted values through their closing quote, failing closed at the buffer limit.
+- [P1] guard/stream_redact.go:235: Releasing the 64 KB buffer can split an unfinished custom multiline match. With pattern `(?s)<secret>.*?</secret>`, 13105 repetitions of `safe
+` before a secret block cause SENSITIVEPAYLOAD123456 to appear in Console frames. Do not release unconfirmed content at the cap; fail closed when match boundaries cannot be established.
+- [P1] agent/coder_tool.go:873: Preview truncation still precedes redaction. A custom secret block starting before the preview cut and ending after character 1000 loses its closing delimiter, so the Console emits its payload. Redact complete raw content before preview truncation.
+notes:
+- [P2] agent/coder_tool.go:873: Guard-off previews also use the new line-boundary truncation. A status plus an 1100-character output line now becomes only an ellipsis instead of the previous 1000-character preview. Preserve the previous path when Guard is disabled.
+- Codex reviewed origin/master...HEAD, base 2bce552ee9e2c604830ea600ef7be055f3e71df0, covering all seven changed files. No merge conflicts.
+- Required gofmt check, go vet ./..., and go test ./... passed. Six targeted overlay reproductions exposed the defects above; five leak cases were confirmed in Console frames. Targeted baseline collector/sink comparisons passed. Source worktree remained clean.
+- Installs: none. Tests used an absolute throwaway HOME. No frontend source changes; pnpm not run.
+- Not checked: live Codex/Claude Code integration in a browser. No linked issues or PRs. Item stays in review/ for the owner to decide; add a note and move to new/ to request fixes.
