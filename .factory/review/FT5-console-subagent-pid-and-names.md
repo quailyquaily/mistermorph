@@ -38,3 +38,18 @@ Installs: none reportable; no dependency or configuration changes.
 Tests: manager independently passed `test -z "$(gofmt -l .)" && go vet ./... && go test ./...` with a throwaway absolute HOME. Codex also reports worker race tests, all 353 Console tests, and `pnpm build` passing.
 
 Not checked: browser visual inspection or real Codex/Claude CLI integration; process regression tests use local substitute programs. Owner should inspect worker names, program/PID display, and persistence after reload on finished tasks.
+
+## factory · review · 2026-11-04 11:24
+head: 92762c7531b595d239c3b24f1fca57ba0c9f1967
+verdict: fix
+fix:
+- [P1] Required Go test command failed with inherited environment: `TestHandleAgentSettingsPut` returned 409, expected 200. Codex reproduced the configuration-related failures on origin/master; this is a baseline/environment test gate, not a defect introduced by FT5 and has no changed-code location. Explicitly isolate the test environment before rerunning the gate. Fully isolated rerun passed; retained as a failing-test finding under the factory review rule.
+notes:
+- [P2] agent/engine_loop.go:1064-1066: Approval Resume does not establish a shared worker scope, so separate coder calls allocate the same worker ID/name and completion events lack worker metadata. Verified example: resumed calls coder-a and coder-b launched separate substitute CLIs but both used worker-1 / Milo, causing Console to combine their process records. Establish shared scope at Resume and preserve pre-approval allocation state.
+- [P2] web/console/src/core/chat-task-history.js:314: Worker normalization reads only activity_id although its output uses activityId. Verified example: re-normalizing a bash entry through the polling path changes its label from Milo / bash PID 12345 to Milo. Accept both field spellings to preserve process-to-activity association.
+
+Scope: Codex reviewed all 25 changed files in origin/master...HEAD. No tracked files changed, no commits made on the code branch, and no reportable installs. Branch merges cleanly with current origin/master.
+
+Validation: formatting, go vet and go test passed on the fully isolated rerun (155 packages); worker/coder race checks passed; Console tests passed 353/353; pnpm build passed with bundle-size warnings. Initial inherited-environment configuration failures and a temporary-path normalization failure also reproduced on base. Browser component fixtures verified ordinary/nested names, PIDs and completed-record reload.
+
+Not checked: real Codex/Claude CLI integration and full Console-service end-to-end reload. Owner should inspect the two P2 acceptance defects and decide whether to return this item to new/; it remains in review/ because of the recorded test gate.
