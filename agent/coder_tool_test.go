@@ -860,3 +860,53 @@ func TestCoderToolBypassApprovalsPerBackend(t *testing.T) {
 		t.Fatalf("description = %q", desc)
 	}
 }
+
+func TestCoderProcessReporting(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake CLI uses /bin/sh")
+	}
+	for _, backend := range []string{"codex", "claude"} {
+		for _, failStart := range []bool{false, true} {
+			t.Run(backend+"/failed-start="+strconv.FormatBool(failStart), func(t *testing.T) {
+				dir := t.TempDir()
+				pidFile := filepath.Join(dir, "pid")
+				writeFakeCoderExecutable(t, dir, backend, "printf '%s' \"$$\" > '"+pidFile+"'\n")
+				if failStart {
+					if err := os.WriteFile(filepath.Join(dir, backend), []byte("#!/nonexistent-worker-interpreter\n"), 0700); err != nil {
+						t.Fatal(err)
+					}
+				}
+				runner := &localSubtaskRunner{engine: New(nil, tools.NewRegistry(), Config{}, DefaultPromptSpec())}
+				tool := newCoderTool(coderToolDeps{Runner: runner, PathExtra: []string{dir}})
+				raw, err := tool.Execute(context.Background(), map[string]any{"coder": backend, "task": "test", "cwd": dir})
+				if err != nil {
+					t.Fatal(err)
+				}
+				var result SubtaskResult
+				if err := json.Unmarshal([]byte(raw), &result); err != nil {
+					t.Fatal(err)
+				}
+				if result.Worker == nil {
+					t.Fatal("missing worker")
+				}
+				if failStart {
+					if result.Status != SubtaskStatusFailed || len(result.Worker.Processes) != 0 {
+						t.Fatalf("failed start: %s", raw)
+					}
+					return
+				}
+				pidText, err := os.ReadFile(pidFile)
+				if err != nil {
+					t.Fatal(err)
+				}
+				pid, err := strconv.Atoi(string(pidText))
+				if err != nil {
+					t.Fatal(err)
+				}
+				if len(result.Worker.Processes) != 1 || result.Worker.Processes[0].PID != pid || result.Worker.Processes[0].Program != backend {
+					t.Fatalf("process mismatch: %s, actual PID %d", raw, pid)
+				}
+			})
+		}
+	}
+}

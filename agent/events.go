@@ -18,6 +18,7 @@ const (
 	EventKindToolStart               = "tool_start"
 	EventKindToolDone                = "tool_done"
 	EventKindToolOutput              = "tool_output"
+	EventKindWorkerProcess           = "worker_process"
 	EventKindLLMRetry                = "llm_retry"
 	EventKindLLMStart                = "llm_start"
 	EventKindLLMDone                 = "llm_done"
@@ -31,11 +32,12 @@ const (
 )
 
 type Event struct {
-	Kind       string `json:"kind"`
-	RunID      string `json:"run_id,omitempty"`
-	Model      string `json:"model,omitempty"`
-	Step       int    `json:"step,omitempty"`
-	ActivityID string `json:"activity_id,omitempty"`
+	Worker     *WorkerMetadata `json:"worker,omitempty"`
+	Kind       string          `json:"kind"`
+	RunID      string          `json:"run_id,omitempty"`
+	Model      string          `json:"model,omitempty"`
+	Step       int             `json:"step,omitempty"`
+	ActivityID string          `json:"activity_id,omitempty"`
 	// ParentActivityID links a tool call a codemode script made to the codemode call.
 	ParentActivityID string         `json:"parent_activity_id,omitempty"`
 	ConversationKey  string         `json:"conversation_key,omitempty"`
@@ -118,6 +120,9 @@ func emitEvent(ctx context.Context, sink EventSink, event Event, deliveryCtx con
 		if !ok {
 			return
 		}
+	}
+	if event.Worker == nil && ctx != nil {
+		event.Worker = workerForEvent(ctx, event).snapshot()
 	}
 	if strings.TrimSpace(event.RunID) == "" {
 		event.RunID = strings.TrimSpace(llmstats.RunIDFromContext(ctx))

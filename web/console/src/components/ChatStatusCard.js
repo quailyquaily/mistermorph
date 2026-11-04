@@ -1,5 +1,6 @@
 import { computed, nextTick, onBeforeUpdate, onMounted, onUpdated, ref } from "vue";
 import { translate } from "../core/context";
+import { activityWorkerLabel } from "../core/chat-task-history";
 import "./ChatStatusCard.css";
 
 const PANEL_PLAN = "plan";
@@ -319,6 +320,7 @@ const ChatStatusCard = {
       activityEntryNote,
       activityEntryTimeText,
       activityEntryTitle,
+      activityWorkerLabel,
       activityKindLabel,
       activityParams,
       activityChildren,
@@ -415,6 +417,7 @@ const ChatStatusCard = {
                       <span class="chat-activity-kind">{{ activityKindLabel(entry, t) }}</span>
                       <span class="chat-activity-name">
                         {{ activityEntryTitle(entry) }}
+                        <span v-if="activityWorkerLabel(entry)" class="chat-activity-worker"> · {{ activityWorkerLabel(entry) }}</span>
                         <span v-if="activityChildCount(entry) > 0" class="chat-activity-count">{{ t("chat_activity_calls", { count: activityChildCount(entry) }) }}</span>
                       </span>
                       <time v-if="activityEntryTimeText(entry)" class="chat-activity-time">
@@ -442,7 +445,7 @@ const ChatStatusCard = {
                         :class="activityChildClass(child)"
                       >
                         <span class="chat-activity-child-dot" aria-hidden="true"></span>
-                        <span class="chat-activity-name">{{ activityEntryTitle(child) }}</span>
+                        <span class="chat-activity-name">{{ activityEntryTitle(child) }}<span v-if="activityWorkerLabel(child)" class="chat-activity-worker"> · {{ activityWorkerLabel(child) }}</span></span>
                         <span v-if="activityChildParam(child)" class="chat-activity-param-value">{{ activityChildParam(child) }}</span>
                         <p v-if="child.error" class="chat-activity-note">{{ child.error }}</p>
                       </li>

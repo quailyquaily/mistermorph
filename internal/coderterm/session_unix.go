@@ -23,6 +23,7 @@ import (
 const Supported = true
 
 type session struct {
+	pid                         int
 	b                           backend
 	cwd, id, dir                string
 	transcriptDir, transcriptAt string
@@ -112,6 +113,7 @@ func start(b backend, req Request, resumeID string) (*session, error) {
 		s.screen.Close()
 		return nil, err
 	}
+	s.pid = s.cmd.Process.Pid
 	// The emulator's input pipe carries both terminal replies and user input.
 	go func() {
 		defer close(s.inputDone)

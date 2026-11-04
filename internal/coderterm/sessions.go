@@ -36,6 +36,8 @@ type Request struct {
 	BypassApprovals bool
 	Ask             func(context.Context, Question) (Answer, error)
 	Progress        func(string)
+	// Process reports the terminal PID, including when reusing a session.
+	Process func(int)
 }
 
 // Sessions belongs to one runtime. Its zero value is ready to use.
@@ -107,6 +109,9 @@ func (m *Sessions) Run(ctx context.Context, scope string, req Request) (string, 
 	s.busy = true
 	m.mu.Unlock()
 
+	if req.Process != nil {
+		req.Process(s.pid)
+	}
 	output, err := s.run(ctx, req)
 	m.mu.Lock()
 	s.busy = false

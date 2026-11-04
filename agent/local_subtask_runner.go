@@ -31,6 +31,7 @@ func (r *localSubtaskRunner) RunSubtask(ctx context.Context, req SubtaskRequest)
 	log := r.engine.log
 	EmitEvent(ctx, nil, Event{
 		Kind:       EventKindSubtaskStart,
+		Worker:     WorkerFromContext(runCtx),
 		ActivityID: taskID,
 		TaskID:     taskID,
 		Mode:       localSubtaskMode(req),
@@ -56,12 +57,16 @@ func (r *localSubtaskRunner) RunSubtask(ctx context.Context, req SubtaskRequest)
 		result = r.runAgentSubtask(runCtx, meta, taskID, req, target)
 	}
 
+	if result != nil {
+		result.Worker = WorkerFromContext(runCtx)
+	}
 	if log != nil && result != nil {
 		log.Info("subtask_done", "task_id", taskID, "status", result.Status, "output_kind", result.OutputKind)
 	}
 	if result != nil {
 		EmitEventDetached(ctx, nil, Event{
 			Kind:       EventKindSubtaskDone,
+			Worker:     result.Worker,
 			ActivityID: taskID,
 			TaskID:     taskID,
 			Status:     strings.TrimSpace(result.Status),
@@ -135,7 +140,17 @@ func (r *localSubtaskRunner) runAgentSubtask(ctx context.Context, meta map[strin
 }
 
 func PrepareSubtaskContext(ctx context.Context, meta map[string]any) (string, context.Context, map[string]any) {
+	ctx = withWorkerScope(ctx)
 	taskID := llmstats.NewSyntheticRunID("sub")
+	call, _ := ctx.Value(toolActivityContextKey{}).(toolActivity)
+	scope := ctx.Value(workerScopeKey{}).(*workerScope)
+	scope.mu.Lock()
+	worker := scope.calls[workerCallKey(ctx, call.id)]
+	scope.mu.Unlock()
+	if worker == nil {
+		worker = allocateWorker(ctx, taskID)
+	}
+	ctx = context.WithValue(ctx, workerContextKey{}, worker)
 	runCtx := llmstats.WithRunID(ctx, taskID)
 	runCtx = WithSubtaskDepth(runCtx, SubtaskDepthFromContext(runCtx)+1)
 

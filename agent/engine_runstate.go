@@ -42,6 +42,10 @@ type resumeState struct {
 	// VisibleTools and FoundTools keep tool search's state across an approval pause.
 	VisibleTools []string `json:"visible_tools,omitempty"`
 	FoundTools   []string `json:"found_tools,omitempty"`
+
+	// WorkersAllocated counts the worker names given out before the pause, so workers
+	// started after it get new names.
+	WorkersAllocated int `json:"workers_allocated,omitempty"`
 }
 
 type pendingToolSnapshot struct {
