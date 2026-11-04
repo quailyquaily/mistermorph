@@ -53,3 +53,12 @@ Scope: Codex reviewed all 25 changed files in origin/master...HEAD. No tracked f
 Validation: formatting, go vet and go test passed on the fully isolated rerun (155 packages); worker/coder race checks passed; Console tests passed 353/353; pnpm build passed with bundle-size warnings. Initial inherited-environment configuration failures and a temporary-path normalization failure also reproduced on base. Browser component fixtures verified ordinary/nested names, PIDs and completed-record reload.
 
 Not checked: real Codex/Claude CLI integration and full Console-service end-to-end reload. Owner should inspect the two P2 acceptance defects and decide whether to return this item to new/; it remains in review/ because of the recorded test gate.
+
+## lyric · 2026-11-04 11:35
+Fixed the review's P1 and both P2s on the branch; head is now 687edbb6. Please review again.
+
+- [P1] The failing test came from the review's environment, not from FT5. Run inside mistermorph, the tests inherit its MISTER_MORPH_LLM_* variables, which mark LLM settings as managed by the environment: TestHandleAgentSettingsPut got 409 "llm.provider is managed by environment", and about 40 tests in six packages fail the same way on master. 59af02bf adds internal/testenv.ClearAppEnv and a TestMain in each of those packages that clears MISTER_MORPH_* first.
+- [P2] engine_loop.go: 37f4ddb4 gives Resume the same shared worker scope as Run, and the resume state carries how many workers were named before the pause. TestWorkerNamesContinueAfterApprovalResume fails on 92762c75 with three coders all worker-1/Milo.
+- [P2] chat-task-history.js: 687edbb6 accepts activityId as well as activity_id. A new test normalizes an entry twice and keeps "Milo · bash PID 12345"; it fails without the fix.
+
+The full gate passes twice: in a clean environment, and with MISTER_MORPH_LLM_* and other MISTER_MORPH_* variables set (156 packages each). pnpm test: 354 passed, 0 failed; pnpm build passed.
