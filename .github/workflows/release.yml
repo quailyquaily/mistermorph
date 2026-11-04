@@ -27,6 +27,12 @@ env:
   AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
   AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
   AWS_DEFAULT_REGION: auto
+  # R2 does not take the integrity checksums aws CLI 2.23+ sends by default; send them only
+  # where an operation requires one. Retry failed requests inside the CLI as well.
+  AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+  AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+  AWS_RETRY_MODE: adaptive
+  AWS_MAX_ATTEMPTS: "10"
 
 jobs:
   test:
@@ -164,10 +170,7 @@ jobs:
             echo "no CLI release files found" >&2
             exit 1
           fi
-          aws s3 cp dist/cli-release "s3://${R2_BUCKET}/${RELEASE_CHANNEL}/releases/${GITHUB_REF_NAME}/" \
-            --recursive \
-            --endpoint-url "${R2_ENDPOINT}" \
-            --no-progress
+          ./scripts/release-r2-upload.sh dist/cli-release "s3://${R2_BUCKET}/${RELEASE_CHANNEL}/releases/${GITHUB_REF_NAME}/"
 
       - name: Run GoReleaser (snapshot)
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
@@ -361,10 +364,7 @@ jobs:
       - name: Upload desktop release files to R2
         shell: bash
         run: |
-          aws s3 cp dist/release-upload "s3://${R2_BUCKET}/${RELEASE_CHANNEL}/releases/${GITHUB_REF_NAME}/" \
-            --recursive \
-            --endpoint-url "${R2_ENDPOINT}" \
-            --no-progress
+          ./scripts/release-r2-upload.sh dist/release-upload "s3://${R2_BUCKET}/${RELEASE_CHANNEL}/releases/${GITHUB_REF_NAME}/"
 
       - name: Upload desktop release files to GitHub
         if: env.GITHUB_RELEASES_TO_KEEP != '0'
