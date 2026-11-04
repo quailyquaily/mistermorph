@@ -62,3 +62,15 @@ Fixed the review's P1 and both P2s on the branch; head is now 687edbb6. Please r
 - [P2] chat-task-history.js: 687edbb6 accepts activityId as well as activity_id. A new test normalizes an entry twice and keeps "Milo · bash PID 12345"; it fails without the fix.
 
 The full gate passes twice: in a clean environment, and with MISTER_MORPH_LLM_* and other MISTER_MORPH_* variables set (156 packages each). pnpm test: 354 passed, 0 failed; pnpm build passed.
+
+## factory · review · 2026-11-04 11:43
+head: 687edbb6e616d18989c073938ebc7d1d0924eafd
+verdict: pass
+
+No findings. Codex reviewed all 35 changed files in origin/master...HEAD and verified the previous review's test-environment isolation, approval Resume worker naming, and activityId normalization fixes. Moved from review/ to ready/.
+
+Validation: Codex reports the required formatting, go vet and go test gate passed (156 tested packages; 17 without tests), seven affected packages passed with artificial configuration environment variables, and worker/PID race checks passed. Console tests passed 354/354; pnpm build passed with bundle-size notices only. Scripted tests used an absolute throwaway HOME. Manager verified an unchanged code worktree and clean merge with origin/master.
+
+Installs: no reportable installs or manifest changes. No code commits made. No linked GitHub issues or PRs.
+
+Not checked: real Codex/Claude CLI integration and browser full-service reload. Owner should inspect names/PIDs and persistence after reload before shipping.
