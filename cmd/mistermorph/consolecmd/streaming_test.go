@@ -337,46 +337,50 @@ func TestConsoleEventPreviewSinkPublishesCoderActivityOutput(t *testing.T) {
 	}
 }
 
-func TestConsoleEventPreviewSinkHidesRawToolOutputWhenGuardEnabled(t *testing.T) {
+func TestConsoleEventPreviewSinkRedactsStreamedToolOutputWhenGuardEnabled(t *testing.T) {
 	hub := newConsoleStreamHub()
 	outputGuard := guard.New(guard.Config{Enabled: true}, nil, nil)
 	sink := newConsoleEventPreviewSink(hub, "task-guarded-tool", nil, outputGuard)
+	defer sink.Close()
+	const secret = "s3cr3tVALUEs3cr3tVALUE"
 
+	sink.HandleEvent(context.Background(), agent.Event{Kind: agent.EventKindToolStart, ActivityID: "tool:coder", ToolName: "coder", Status: "running"})
+	// The secret arrives split across two events; the line is shown once it is complete.
+	output := func(text string) {
+		sink.HandleEvent(context.Background(), agent.Event{
+			Kind: agent.EventKindToolOutput, ActivityID: "tool:coder", ToolName: "coder", Stream: "codex",
+			Text: text, Summary: "[codex] command_execution completed (item_1) exit=0", Status: "running",
+		})
+	}
+	output("$ cat .env\napi_key=" + secret[:9])
+	if frame, ok := hub.Latest("task-guarded-tool"); ok && frame.Activity != nil {
+		for _, entry := range frame.Activity.History {
+			if strings.Contains(entry.Output, secret[:9]) {
+				t.Fatalf("partial line shown: %q", entry.Output)
+			}
+		}
+	}
+	output(secret[9:] + "\nok\nlast line without newline")
 	sink.HandleEvent(context.Background(), agent.Event{
-		Kind:       agent.EventKindToolStart,
-		ActivityID: "tool:coder",
-		ToolName:   "coder",
-		Status:     "running",
-	})
-	sink.HandleEvent(context.Background(), agent.Event{
-		Kind:       agent.EventKindToolOutput,
-		ActivityID: "tool:coder",
-		ToolName:   "coder",
-		Stream:     "codex",
-		Text:       "password=unredacted",
-		Status:     "running",
-	})
-	sink.HandleEvent(context.Background(), agent.Event{
-		Kind:       agent.EventKindToolDone,
-		ActivityID: "tool:coder",
-		ToolName:   "coder",
-		Status:     "failed",
-		Error:      "password=unredacted",
+		Kind: agent.EventKindToolDone, ActivityID: "tool:coder", ToolName: "coder", Status: "failed",
+		Error: "api_key=" + secret,
 	})
 
 	frame, ok := hub.Latest("task-guarded-tool")
-	if !ok {
-		t.Fatal("expected status-only preview frame")
+	if !ok || frame.Activity == nil || len(frame.Activity.History) != 1 {
+		t.Fatalf("frame = %#v", frame)
 	}
-	if strings.Contains(frame.Text, "unredacted") {
-		t.Fatalf("preview leaked raw tool output: %q", frame.Text)
+	got := frame.Activity.History[0].Output
+	if strings.Contains(got, secret[:9]) || strings.Contains(got, secret[9:]) || strings.Contains(frame.Text, secret[9:]) {
+		t.Fatalf("leaked secret: %q / %q", got, frame.Text)
 	}
-	if frame.Activity != nil && frame.Activity.Current != nil && strings.Contains(frame.Activity.Current.Output, "unredacted") {
-		t.Fatalf("activity leaked raw tool output: %#v", frame.Activity.Current)
+	// The held last line is shown, redacted, when the call ends; the error is still dropped.
+	if got != "$ cat .env\napi_key=[redacted]\nok\nlast line without newline" || frame.Activity.History[0].Error != "" {
+		t.Fatalf("output = %q, error = %q", got, frame.Activity.History[0].Error)
 	}
 }
 
-func TestConsoleEventPreviewSinkKeepsCoderStatusWhenGuardEnabled(t *testing.T) {
+func TestConsoleEventPreviewSinkShowsCoderOutputLineByLineWhenGuardEnabled(t *testing.T) {
 	for _, backend := range []string{"claude", "codex"} {
 		t.Run(backend, func(t *testing.T) {
 			hub := newConsoleStreamHub()
@@ -384,9 +388,10 @@ func TestConsoleEventPreviewSinkKeepsCoderStatusWhenGuardEnabled(t *testing.T) {
 			defer sink.Close()
 			summary := "[" + backend + "] tool completed"
 			sink.HandleEvent(context.Background(), agent.Event{Kind: agent.EventKindToolStart, ActivityID: "coder", ToolName: "coder", Status: "running"})
-			sink.HandleEvent(context.Background(), agent.Event{Kind: agent.EventKindToolOutput, ToolName: "coder", Stream: backend, Summary: summary, Text: "private file contents"})
+			sink.HandleEvent(context.Background(), agent.Event{Kind: agent.EventKindToolOutput, ActivityID: "coder", ToolName: "coder", Stream: backend, Summary: summary,
+				Text: "\n" + summary + " $ go test ./...\nok  pkg\n"})
 			frame, _ := hub.Latest("task")
-			if frame.Activity == nil || frame.Activity.Current == nil || !strings.Contains(frame.Activity.Current.Output, summary) || strings.Contains(frame.Activity.Current.Output, "private") {
+			if frame.Activity == nil || frame.Activity.Current == nil || frame.Activity.Current.Output != "\n"+summary+" $ go test ./...\nok  pkg\n" {
 				t.Fatalf("guarded progress = %#v", frame.Activity)
 			}
 		})

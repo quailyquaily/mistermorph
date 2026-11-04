@@ -910,3 +910,22 @@ func TestCoderProcessReporting(t *testing.T) {
 		}
 	}
 }
+
+func TestTruncateCoderPreviewCutsAtLineBreaks(t *testing.T) {
+	short := "line one\nline two"
+	if got := truncateCoderPreview(short, 100); got != short {
+		t.Fatalf("short text changed: %q", got)
+	}
+	text := "$ cat .env\r\napi_key=s3cr3tVALUEs3cr3tVALUE\nmore"
+	// The cut falls inside the secret's line: the whole line goes.
+	if got := truncateCoderPreview(text, 20); got != "$ cat .env\n…" {
+		t.Fatalf("got %q", got)
+	}
+	if got := truncateCoderPreview("one very long line with token=s3cr3tVALUEs3cr3tVALUE", 30); got != "…" {
+		t.Fatalf("long first line = %q", got)
+	}
+	multi := "第一行\n第二行很长很长很长"
+	if got := truncateCoderPreview(multi, 6); got != "第一行\n…" {
+		t.Fatalf("runes = %q", got)
+	}
+}

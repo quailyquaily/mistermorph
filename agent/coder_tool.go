@@ -870,16 +870,30 @@ func (c *coderStreamCollector) emitActivity(summary string, details ...string) {
 	if len(details) > 0 {
 		text += " " + strings.Join(details, " ")
 	}
-	runes := []rune(strings.TrimSpace(text))
-	if len(runes) > 1000 {
-		runes = append(runes[:1000], []rune("…")...)
-	}
+	preview := truncateCoderPreview(strings.TrimSpace(text), coderPreviewMaxRunes)
 	c.lastActivity = strings.TrimSpace(summary)
 	if c.progress != nil {
-		c.progress("\n"+c.lastActivity+"\n", "\n"+string(runes)+"\n", c.step)
+		c.progress("\n"+c.lastActivity+"\n", "\n"+preview+"\n", c.step)
 	} else if c.emit != nil {
-		c.emit("\n" + string(runes) + "\n")
+		c.emit("\n" + preview + "\n")
 	}
+}
+
+const coderPreviewMaxRunes = 1000
+
+// truncateCoderPreview keeps text within max runes, cutting at a line break so no line is shown
+// in part: a cut inside a line could split a secret that Guard then cannot recognize. Text
+// whose first line alone is too long is replaced by "…".
+func truncateCoderPreview(text string, max int) string {
+	runes := []rune(text)
+	if len(runes) <= max {
+		return text
+	}
+	head := string(runes[:max])
+	if i := strings.LastIndexByte(head, '\n'); i >= 0 {
+		return strings.TrimRight(head[:i], "\r") + "\n…"
+	}
+	return "…"
 }
 
 func (c *coderStreamCollector) consumeCodex(payload map[string]any) {

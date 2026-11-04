@@ -144,6 +144,31 @@ becomes:
 
 You can add extra regex patterns under `guard.redaction.patterns`.
 
+#### Streamed tool output in the Console
+
+Tool output that streams while the tool runs, such as a coder's progress or a command's
+stdout, arrives in pieces that could split a secret. With Guard on, the Console redacts each
+stream the way an inline stream inspector does: it holds back only what could still become
+part of a match and shows the rest, redacted, as soon as it is safe
+(`guard/stream_redact.go`).
+
+- Output is shown a line at a time. The built-in patterns cross a line break only through
+  whitespace after `:`, `=` or `bearer`, so a line ending in one of those is held until the
+  next non-blank line and redacted together with it.
+- A private key block is held from its `BEGIN` line to its `END` line and redacted whole.
+  One with no `END` within 16 KB, or by the end of the stream, is replaced by
+  `[redacted private key]`, and the rest of its base64 lines are dropped.
+- A line over 64 KB is not shown: `[line over 64 KB hidden]` replaces it.
+- When a tool call ends, what its streams still hold is shown, redacted.
+- A custom pattern that may span lines (one with `(?s)` or `\n`) holds the stream and redacts
+  it in blocks of 64 KB, and at its end. Other custom patterns should match within one line.
+- Coder previews are cut at a line break, never inside a line, so a cut cannot split a secret.
+
+Redaction in the stream uses the same patterns as everywhere else, so text Guard does not
+recognize as a secret (for example a sensitive value shorter than 12 characters) is shown,
+as it would be in a final answer. Agent Link messages are complete when sent and are redacted
+whole. A spawn or coder result keeps only its status in the Console.
+
 ### Async approvals and audit
 
 Guard approvals are asynchronous by design:
