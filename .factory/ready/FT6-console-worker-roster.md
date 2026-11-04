@@ -52,3 +52,19 @@ Installs: none.
 Tests: gofmt, `go vet ./...` and `go test ./...` pass. `pnpm test` 374/374 and `pnpm build` pass. New tests: `activity_progress_roster_test.go`, `chat-workers.test.mjs`, `chat-worker-roster.test.mjs`.
 
 Not checked: the UI was not looked at in a browser, at desktop or phone width.
+
+## factory · review · 2026-11-04 21:42
+head: a83b790f13811f599045c5cedbdf1c205f95da9f
+verdict: pass
+notes:
+- [P2] cmd/mistermorph/consolecmd/activity_progress.go:603: Subagent final output is not saved in the roster. Verified example: `first line\nsecond line: answer 42` leaves Output empty and only `first line` as the summary; structured output `{"answer":42}` leaves only a generic summary. Persist the filtered final output so it remains available after reload.
+- [P2] cmd/mistermorph/consolecmd/activity_progress.go:595: Outer spawn tool success overwrites a failed worker after history trimming. Verified sequence: 25 read_file calls, model failure, subtask_done failed, then successful delivery of the failure envelope as tool_done done; roster ends done with an error retained. Preserve the subtask terminal state.
+- [P2] cmd/mistermorph/consolecmd/activity_progress.go:161: Roster output still depends on trimmed history. Verified engine/codemode sequence: 24 sequential coder calls evict the parent activity and its child entry; worker 23 retains full output but worker 24 has empty Output and only a first-line summary. Update roster output directly by worker/activity identity.
+
+Scope: origin/master...HEAD, including the intentional FT4/FT5 dependency merges. No merge conflict with origin/master. No P0/P1 findings; moved to ready under the factory review threshold, with the P2 defects above still outstanding.
+
+Validation reported by Codex: required gofmt check, go vet ./..., and go test ./... passed (156 packages passed, 17 without tests). Console pnpm test passed 374/374 and pnpm build passed in a temporary copy, with a >500 kB chunk warning. Temporary Go overlay reproductions confirmed the findings. Manager verified unchanged HEAD and clean worktree.
+
+Installs: none beyond pinned dependencies; no manifest or lockfile changes.
+
+Not checked: real coder CLI and desktop/phone browser interaction. Codex did not locate the review-code skill in its environment. No linked issues or PRs were specified. Ship FT4 and FT5 before FT6 or together with it.
