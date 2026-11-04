@@ -5,11 +5,13 @@
 
 REPO is a checkout of the factory_board branch, where the board lives; it
 defaults to the current directory. references/board-pages.yml runs it on
-GitHub Actions to publish the board on GitHub Pages. The page has a column per folder
-(not stop/: parked items are left out; backlog/ is the owner's and waits for nobody), a card per item (whose turn it is,
-its branch, its fix round) and, behind each card, the item's thread and the
-times it moved between folders, read from git. It needs only Python 3.11 and git, and loads nothing from the
-network. Item files are other people's text: everything is escaped.
+GitHub Actions to publish the board on GitHub Pages. The page draws the line as
+one rail with a stage per folder (not stop/: parked items are left out; backlog/
+is the owner's and waits for nobody), an entry per item (whose turn it is, how
+long it has waited) and, behind each entry, the item's thread and the times it
+moved between folders, read from git. It needs only Python 3.11 and git, and
+loads nothing from the network. Item files are other people's text: everything
+is escaped.
 """
 
 import argparse
@@ -28,7 +30,7 @@ FOLDERS = ["backlog", "new", "review", "ready", "done"]  # stop/ is parked: not 
 # lower case, so a slug can't be read as a number.
 ITEM = re.compile(r"^(?:(?:[A-Z]+(\d+)|(\d{4}))-)?([a-z0-9]+(?:-[a-z0-9]+)*)\.md$")
 SECTION = re.compile(r"^## (.+?) · (?:(plan|question|review) · )?(\d{4}-\d{2}-\d{2} \d{2}:\d{2})\s*$")
-DONE_SHOWN = 12
+DONE_SHOWN = 4
 TZ = None  # factory.toml's timezone; the machine's own when unset
 
 
@@ -88,22 +90,40 @@ def parse(text, signers=()):
     return header, title, sections, problems
 
 
-def moves(repo, path):
-    """When the item entered each folder: [(folder, unix time)], oldest first."""
-    out = git(repo, "log", "--follow", "--name-only", "--format=%x00%ct", "--", path)
-    seen = []
+def moves(repo):
+    """When each item entered each folder: {file name: [(folder, unix time)]}, oldest first.
+
+    Reads added files with renames off, because a move usually edits the file
+    too: appending a long review drops it below git's rename similarity, and
+    `git log --follow` then loses every folder before that commit. An item keeps
+    its file name between folders, except when numbered (<slug>.md becomes
+    <ID>-<slug>.md in one commit), which carries its history across.
+    """
+    out = git(repo, "log", "--reverse", "--no-renames", "--name-status", "--format=%x00%ct", "--", ".factory")
+    history = {}
     for chunk in out.split("\x00")[1:]:
-        parts = chunk.strip().splitlines()
-        if len(parts) < 2:
+        lines = chunk.strip().splitlines()
+        if not lines:
             continue
-        folder = parts[-1].split("/")[-2] if "/" in parts[-1] else ""
-        seen.append((folder, int(parts[0])))
-    seen.reverse()
-    steps = []
-    for folder, t in seen:
-        if not steps or steps[-1][0] != folder:
-            steps.append((folder, t))
-    return steps
+        t, added, deleted = int(lines[0]), [], set()
+        for line in lines[1:]:
+            status, _, path = line.partition("\t")
+            parts = path.split("/")
+            if len(parts) != 3 or parts[0] != ".factory":
+                continue
+            if status == "D":
+                deleted.add(parts[2])
+            elif status == "A" or parts[2] not in history:  # M with no A: the log is cut short
+                added.append((parts[1], parts[2]))
+        for folder, name in added:
+            m = ITEM.match(name)
+            bare = f"{m.group(3)}.md" if m else name
+            if name not in history and bare != name and bare in deleted and bare in history:
+                history[name] = history.pop(bare)
+            steps = history.setdefault(name, [])
+            if not steps or steps[-1][0] != folder:
+                steps.append((folder, t))
+    return history
 
 
 def turn(folder, sections):
@@ -124,6 +144,13 @@ def turn(folder, sections):
     return "you"
 
 
+def repo_name(repo, remote):
+    """The repository's name from its remote; a run's checkout is often just "clone"."""
+    url = git(repo, "remote", "get-url", remote).strip()
+    m = re.search(r"([^/:]+?)(?:\.git)?/?$", url)
+    return m.group(1) if m else os.path.basename(os.path.abspath(repo))
+
+
 def branch_link(repo, remote, base, branch):
     url = git(repo, "remote", "get-url", remote).strip()
     m = re.match(r"^(?:git@github\.com:|https://github\.com/)([\w.-]+/[\w.-]+?)(?:\.git)?$", url)
@@ -136,23 +163,142 @@ def when(t):
     return dt.datetime.fromtimestamp(t, TZ).strftime("%Y-%m-%d %H:%M") if t else ""
 
 
-def short(t, year):
-    """A card's time: the year only when it isn't this one."""
-    if not t:
-        return ""
-    d = dt.datetime.fromtimestamp(t, TZ)
-    return d.strftime("%m-%d %H:%M" if d.year == year else "%Y-%m-%d")
+def span(seconds):
+    """A length of time, to one figure the eye can compare: 40m, 19h, 1.2d."""
+    if seconds < 3600:
+        return f"{max(1, int(seconds / 60))}m"
+    if seconds < 86400:
+        return f"{round(seconds / 3600)}h"
+    return f"{seconds / 86400:.1f}d".replace(".0d", "d")
 
 
-# What a card asks of you, by folder, when it's your turn.
-ASK = {"review": "decide", "ready": "check"}
+def age(t, now):
+    """How long since t, in whole units: an entry's age needs no decimals."""
+    s = max(0, now - t)
+    if s < 3600:
+        return f"{max(1, int(s / 60))}m"
+    return f"{int(s / 3600)}h" if s < 86400 else f"{int(s / 86400)}d"
 
 
-def body_html(text):
-    out = html.escape(text)
-    out = re.sub(r"`([^`\n]+)`", r"<code>\1</code>", out)
-    out = re.sub(r"(https://[^\s<&]+(?:&amp;[^\s<&]+)*)", r'<a href="\1" rel="noopener">\1</a>', out)
-    return out
+# What an item asks of you, by folder, when it's your turn.
+ASK = {"review": "Decide: fix or take it", "ready": "Check, then ship"}
+
+
+def inline(text):
+    """Escape a line, then mark up its code, bold and links."""
+    out = []
+    for part in re.split(r"(`[^`\n]+`)", text):
+        if len(part) > 2 and part[0] == part[-1] == "`":
+            out.append(f"<code>{html.escape(part[1:-1])}</code>")
+            continue
+        part = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", html.escape(part))
+        out.append(re.sub(r"(https://[^\s<]*[^\s<.,;:!?)])", r'<a href="\1" rel="noopener">\1</a>', part))
+    return "".join(out)
+
+
+def body_html(text, review=False):
+    """The Markdown item files use: paragraphs, lists, headings and code fences.
+
+    In a review, also its fields: head, verdict, and the fix and notes lists
+    with their [P0]..[P3] severities. Anything else stays plain text.
+    """
+    out, para, open_list, fence = [], [], None, None
+
+    def flush():
+        nonlocal para, open_list
+        if para:
+            out.append("<p>" + "<br>".join(inline(p) for p in para) + "</p>")
+            para = []
+        if open_list:
+            out.append(f"</{open_list}>")
+            open_list = None
+
+    for line in text.splitlines():
+        if line.lstrip().startswith("```"):
+            if fence is None:
+                flush()
+                fence = []
+            else:
+                out.append("<pre>" + html.escape("\n".join(fence)) + "</pre>")
+                fence = None
+            continue
+        if fence is not None:
+            fence.append(line)
+            continue
+        if not line.strip():
+            flush()
+            continue
+        m = re.match(r"^#{1,6} +(.+)", line)
+        if m:
+            flush()
+            out.append(f"<h4>{inline(m.group(1))}</h4>")
+            continue
+        if review:
+            m = re.match(r"^verdict:\s*(\w+)", line)
+            if m:
+                flush()
+                v = html.escape(m.group(1))
+                out.append(f'<p class="verdict {v}">Verdict: {v}</p>')
+                continue
+            m = re.match(r"^head:\s*([0-9a-f]{7})[0-9a-f]*\s*$", line)
+            if m:
+                flush()
+                out.append(f"<p class=headsha>Reviewed <code>{m.group(1)}</code></p>")
+                continue
+            m = re.match(r"^(fix|notes):\s*$", line)
+            if m:
+                flush()
+                out.append("<h4>" + ("To fix" if m.group(1) == "fix" else "Notes") + "</h4>")
+                continue
+        m = re.match(r"^\s*(?:[-*] |(\d+)\. )(.*)", line)
+        if m:
+            if para:
+                flush()
+            tag = "ol" if m.group(1) else "ul"
+            if open_list != tag:
+                flush()
+                out.append(f"<{tag}>")
+                open_list = tag
+            sev = re.match(r"^\[(P\d)\] (.*)", m.group(2)) if review else None
+            if sev:
+                out.append(f'<li><span class="sev {sev.group(1).lower()}">{sev.group(1)}</span><span>{inline(sev.group(2))}</span></li>')
+            else:
+                out.append(f"<li>{inline(m.group(2))}</li>")
+            continue
+        if open_list:
+            flush()
+        para.append(line)
+    if fence is not None:  # an unclosed fence is still code
+        out.append("<pre>" + html.escape("\n".join(fence)) + "</pre>")
+    flush()
+    return "".join(out)
+
+
+def waiting_since(item):
+    """An item waits on you from the last word in its thread, not from its last move."""
+    if item["turn"] != "you":
+        return item["changed"]
+    latest = item["changed"]
+    for s in item["sections"]:
+        try:
+            t = dt.datetime.strptime(s["time"], "%Y-%m-%d %H:%M").replace(tzinfo=TZ).timestamp()
+        except ValueError:
+            continue  # a mistyped heading, reported as a problem
+        latest = max(latest, t)
+    return latest
+
+
+def average_stay(items, folder):
+    """Mean time per stay in a folder, counting finished stays only."""
+    stays = []
+    for it in items:
+        steps = it["steps"]
+        stays += [steps[i + 1][1] - t for i, (f, t) in enumerate(steps[:-1]) if f == folder]
+    return span(sum(stays) / len(stays)) if stays else ""
+
+
+def rounds(item):
+    return int(item["round"]) if item["round"].isdigit() else 0
 
 
 def load(repo):
@@ -168,6 +314,7 @@ def load(repo):
         sys.exit(f"board.py: prefix must be capital letters, not {prefix!r}")
     base, remote = cfg.get("base", "master"), cfg.get("remote", "origin")
     items = []
+    history = moves(repo)
     for folder in FOLDERS:
         d = os.path.join(repo, ".factory", folder)
         if not os.path.isdir(d):
@@ -183,7 +330,7 @@ def load(repo):
             path = os.path.join(".factory", folder, name)
             with open(os.path.join(repo, path), encoding="utf-8", errors="replace") as f:
                 header, title, sections, problems = parse(f.read(), owners | {"factory"})
-            steps = moves(repo, path)
+            steps = history.get(name, [])
             items.append({
                 "n": n, "slug": m.group(3), "folder": folder,
                 "id": str(n) if n else m.group(3), "label": label,
@@ -194,148 +341,249 @@ def load(repo):
                 "turn": turn(folder, sections),
                 "link": branch_link(repo, remote, base, header.get("branch", "")),
             })
-    name = os.path.basename(os.path.abspath(repo))
-    return cfg, name, items
+            items[-1]["since"] = waiting_since(items[-1])
+    return cfg, repo_name(repo, remote), items
 
 
 CSS = """
-:root{--bg:#f3f4f7;--surface:#fff;--fg:#1c1f2a;--muted:#5d6273;--line:#d9dce5;--accent:#5319e7;--accent-soft:#ece6fd;
---you:#b4530f;--you-soft:#fbeee3;--ok:#1d7a4c;--warn:#b42318;--code:#eceef3;
---sans:system-ui,-apple-system,"Segoe UI",sans-serif;--mono:ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace}
-@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#14161d;--surface:#1c1f28;--fg:#e4e6ee;--muted:#9aa0b3;--line:#2f3340;
---accent:#a98bff;--accent-soft:#2a2245;--you:#f0a060;--you-soft:#3a2a1c;--ok:#6fd0a0;--warn:#ff8a7a;--code:#232733;color-scheme:dark}}
-:root[data-theme=dark]{--bg:#14161d;--surface:#1c1f28;--fg:#e4e6ee;--muted:#9aa0b3;--line:#2f3340;
---accent:#a98bff;--accent-soft:#2a2245;--you:#f0a060;--you-soft:#3a2a1c;--ok:#6fd0a0;--warn:#ff8a7a;--code:#232733;color-scheme:dark}
+/* Layout: a drawing with almost nothing on it. One rail, one thin drop line per stage, and text.
+   The accent appears only on what waits for you: the gate's diamond, the count, the ask.
+   */
+:root{--ground:#fbfcfe;--plate:#fff;--ink:#17263d;--ink-2:#46566d;--ink-3:#66758a;--rule:#b4c2d4;--rule-soft:#dfe5ed;
+--grid:rgb(30 75 140 / .028);--gate:#a24c0a;--stop:#a8352a;--ok:#2a6f50;--tint:rgb(23 38 61 / .04);--shade:rgb(23 38 61 / .1);--code:rgb(30 75 140 / .07);
+--hair:1px;--sans:system-ui,-apple-system,"Segoe UI",sans-serif;--mono:ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;color-scheme:light}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 var(--sans);font-variant-numeric:tabular-nums;padding:28px max(16px,env(safe-area-inset-left)) 60px}
-header{max-width:1400px;margin:0 auto 22px;display:flex;flex-wrap:wrap;gap:8px 24px;align-items:baseline}
-h1{font-size:1.6rem;margin:0}
-.meta{color:var(--muted);font-size:.9rem}
-.sum{display:flex;gap:14px;flex-wrap:wrap;font-size:.9rem}
-.sum b{font-family:var(--mono)}
-.board{max-width:1400px;margin:0 auto;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:14px}
-.col{display:flex;flex-direction:column;gap:8px;min-width:0}
-.col h2{font:600 .8rem/1 var(--mono);color:var(--muted);margin:0;padding:6px 2px;display:flex;justify-content:space-between}
-.card{display:flex;flex-direction:column;gap:4px;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:10px 12px;color:inherit;text-decoration:none;
-transition:border-color 0s}
-/* Calm hover: sweeping the pointer across the board must not flash every card,
-   so the fill comes in after a beat and leaves at once. Touch screens get none. */
-@media (hover:hover){.card:hover{border-color:var(--accent);transition:border-color .15s ease-out 60ms}}
-.card:focus-visible,.close:focus-visible{outline:1.5px solid color-mix(in srgb,var(--accent) 55%,transparent);outline-offset:2px}
-.card .top{display:flex;justify-content:space-between;gap:8px;font:.76rem var(--mono);color:var(--muted)}
-.card .t{font-weight:600;line-height:1.3;text-wrap:balance;overflow-wrap:anywhere}
-.row{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:4px;font-size:.78rem;color:var(--muted)}
-.row:empty{display:none}
-.chip{font:600 .7rem/1 var(--mono);padding:4px 6px;border-radius:3px}
-.chip.you{background:var(--you-soft);color:var(--you)}
-.chip.bad{background:var(--you-soft);color:var(--warn)}
-.empty{color:var(--muted);font-size:.85rem;padding:2px}
-.more{color:var(--muted);font-size:.82rem;padding:2px}
-/* The thread opens over the board, so the page keeps its scroll position.
-   CSS only: :target shows it; closing links to a missing id, which clears
-   :target without scrolling the page the way href="#" would. */
-.detail{display:none;position:fixed;inset:0;z-index:1;padding:24px 16px;place-items:start center;overflow-y:auto;overscroll-behavior:contain}
-.detail:target{display:grid}
-.detail .shade{position:fixed;inset:0;background:color-mix(in srgb,var(--bg) 70%,transparent);backdrop-filter:blur(2px)}
-.panel{position:relative;width:min(820px,100%);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:20px 22px;
-box-shadow:0 12px 40px rgb(0 0 0 / .14);animation:rise .18s ease-out}
-@keyframes rise{from{opacity:0;transform:translateY(6px) scale(.985)}}
-@media (prefers-reduced-motion:reduce){.panel{animation:none}}
-.panel .head{display:flex;justify-content:space-between;gap:12px;align-items:baseline}
-.panel h2{margin:0;font-size:1.25rem;line-height:1.3;text-wrap:balance}
-.panel h2 span{color:var(--muted);font:600 .95rem var(--mono);margin-right:6px}
-.close{font-size:.9rem;color:var(--accent);flex:none;border-radius:2px}
-.facts{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:.88rem;color:var(--muted);margin:10px 0 0}
-.facts code,.sec code{font-family:var(--mono);font-size:.85em;background:var(--code);padding:.05em .3em;border-radius:3px}
-.steps{display:flex;flex-wrap:wrap;gap:4px 8px;margin:12px 0 6px;font:.78rem var(--mono);color:var(--muted)}
-.steps b{color:var(--fg);font-weight:600}
-.problems{color:var(--warn);font-size:.88rem;margin:10px 0 0}
-.sec{border-top:1px solid var(--line);padding:12px 0 4px}
-.sec .h{font:600 .8rem var(--mono);display:flex;flex-wrap:wrap;gap:4px 10px}
-.sec.you .h{color:var(--you)}
-.sec.agent .h{color:var(--accent)}
-.sec .h span{color:var(--muted);font-weight:400}
-.sec .b{white-space:pre-wrap;overflow-wrap:anywhere;margin-top:4px;font-size:.94rem;text-wrap:pretty}
-a{color:var(--accent)}
-@media (max-width:760px){.board{grid-template-columns:1fr;gap:20px}.col.none{display:none}.panel{padding:16px}}
+/* 24 CSS px is whole device pixels at 1, 1.25, 1.5 and 2x, and --hair is one device pixel, so the grid stays even. */
+body{margin:0;color:var(--ink);font:15px/1.5 var(--sans);font-variant-numeric:tabular-nums;background-color:var(--ground);
+background-image:linear-gradient(var(--grid) var(--hair),transparent 0),linear-gradient(90deg,var(--grid) var(--hair),transparent 0);background-size:24px 24px}
+::selection{background:color-mix(in srgb,var(--gate) 22%,transparent)}
+a{color:inherit}
+:focus-visible{outline:1.5px solid color-mix(in srgb,var(--ink) 50%,transparent);outline-offset:2px;border-radius:3px}
+.sheet{max-width:1280px;margin:0 auto;padding-block:30px 40px;padding-left:max(28px,env(safe-area-inset-left,0px));padding-right:max(28px,env(safe-area-inset-right,0px))}
+
+.top{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 18px;padding-bottom:14px;border-bottom:var(--hair) solid var(--rule-soft)}
+h1{margin:0;font-size:1.06rem;font-weight:600;letter-spacing:-.005em}
+.sum{font-size:.88rem;color:var(--ink-3)}
+.sum b{font-weight:600;color:var(--gate)}
+.drawn{margin-left:auto;font-size:.8rem;color:var(--ink-3)}
+
+/* Columns touch, so each stage's rail runs straight into the next node. */
+.line{display:grid;grid-template-columns:minmax(0,.86fr) repeat(3,minmax(0,1fr)) minmax(0,.86fr);align-items:start;margin-top:26px}
+.loop{grid-column:2;grid-row:1;position:relative;margin-left:6px;width:100%;height:20px;border:var(--hair) dashed var(--rule);border-bottom:0;border-radius:7px 7px 0 0}
+.loop span{position:absolute;top:-.72em;left:50%;transform:translateX(-50%);padding:0 7px;background:var(--ground);font-size:.72rem;line-height:1.4;color:var(--ink-3);white-space:nowrap}
+.st{grid-row:2;min-width:0;padding-right:26px}
+.st:last-child{padding-right:0}
+.rail{position:relative;height:13px;margin-right:-26px}
+.st:last-child .rail{margin-right:0}
+.rail::before{content:"";position:absolute;left:6px;right:0;top:6px;border-top:var(--hair) solid var(--rule)}
+.st.parked .rail::before{border-top-style:dashed}
+.st:last-child .rail::before{display:none}
+.node{position:absolute;left:1px;top:1px;width:11px;height:11px;border:var(--hair) solid var(--ink-3);border-radius:50%;background:var(--ground);z-index:1}
+.st.parked .node{border-style:dashed}
+.st.gate .node{left:2px;top:2px;width:9px;height:9px;border:0;border-radius:1px;background:var(--gate);transform:rotate(45deg)}
+.drop{margin-left:6px;padding:10px 0 2px 14px;border-left:var(--hair) solid var(--rule-soft)}
+.head h2{margin:0;display:flex;align-items:baseline;justify-content:space-between;gap:8px;font-size:.92rem;font-weight:600;line-height:1.3}
+.head h2 b{font-size:.84rem;font-weight:400;color:var(--ink-3)}
+.avg{display:block;min-height:1.4em;margin-top:1px;font-size:.76rem;line-height:1.4;color:var(--ink-3)}
+.items{list-style:none;margin:14px 0 0;padding:0;display:flex;flex-direction:column;gap:6px}
+.item{display:flex;flex-direction:column;gap:2px;margin:0 -8px;padding:6px 8px 7px;border-radius:5px;text-decoration:none;transition:background-color 0s}
+/* Calm hover: the tint comes in after a beat and leaves at once, so a sweep flashes nothing. */
+@media (hover:hover){.item:hover{background:var(--tint);transition:background-color .14s ease-out 60ms}}
+.meta{display:flex;justify-content:space-between;gap:8px;font-size:.74rem;line-height:1.4;color:var(--ink-3)}
+.t{font-size:.92rem;font-weight:500;line-height:1.36;text-wrap:pretty;overflow-wrap:anywhere}
+.st.side .t{font-weight:400;color:var(--ink-2)}
+.ask{margin-top:1px;font-size:.8rem;line-height:1.35;color:var(--gate)}
+.bad,.problems{font-size:.8rem;line-height:1.35;color:var(--stop)}
+.problems{margin:6px 0 0}
+.more,.idle{margin:10px 0 0;font-size:.8rem;color:var(--ink-3)}
+
+
+/* The thread is a second sheet. Only transform and opacity move, so it stays smooth however long
+   the thread is; visibility waits for the slide before it hides. */
+.detail{position:fixed;inset:0;z-index:20;visibility:hidden;transition:visibility 0s .2s}
+.detail:target{visibility:visible;transition:none}
+.shade{position:absolute;inset:0;background:var(--shade);opacity:0;transition:opacity .2s}
+.detail:target .shade{opacity:1}
+.drawer{position:absolute;inset:0 0 0 auto;width:min(660px,100%);background:var(--plate);border-left:var(--hair) solid var(--rule-soft);overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:var(--rule) transparent;opacity:0;transform:translateX(24px);transition:transform .24s cubic-bezier(.2,0,0,1),opacity .14s}
+.detail:target .drawer{opacity:1;transform:none}
+.bar{position:sticky;top:0;z-index:1;display:flex;justify-content:space-between;align-items:center;min-height:44px;padding:0 30px;background:var(--plate);font-size:.82rem;color:var(--ink-3)}
+.close{display:flex;align-items:center;min-height:44px;padding-left:16px;text-decoration:none}
+@media (hover:hover){.close:hover{color:var(--ink)}}
+.dr{padding:8px 30px 44px}
+.dr h2{margin:0;font-size:1.32rem;font-weight:600;line-height:1.25;letter-spacing:-.012em;text-wrap:balance}
+.call{margin:6px 0 0;font-size:.9rem;color:var(--gate)}
+.trail{list-style:none;display:flex;flex-wrap:wrap;gap:3px 0;margin:14px 0 0;padding:0;font-size:.78rem;color:var(--ink-3)}
+.trail li{display:flex;align-items:center;gap:4px}
+.trail li:not(:last-child)::after{content:"";width:12px;border-top:var(--hair) solid var(--rule);margin:0 7px 0 3px}
+.trail b{font-weight:400}
+.trail .cur b{font-weight:500;color:var(--ink-2)}
+.facts{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:3px}
+.facts a{font-size:.78rem;color:var(--ink-3);text-underline-offset:3px;text-decoration-color:var(--rule);overflow-wrap:anywhere}
+.thread{margin-top:18px;display:flex;flex-direction:column;border-top:var(--hair) solid var(--rule-soft)}
+.msg{padding:16px 0 18px}
+.msg+.msg{border-top:var(--hair) solid var(--rule-soft)}
+.who{display:flex;flex-wrap:wrap;align-items:baseline;gap:0 8px;margin-bottom:5px;font-size:.78rem;color:var(--ink-3)}
+.who b{font-size:.86rem;font-weight:600;color:var(--ink)}
+.who em{font-style:normal}
+.who time{margin-left:auto}
+.body{min-width:0;overflow-wrap:anywhere;font-size:.94rem;line-height:1.56;text-wrap:pretty;line-break:strict;color:var(--ink)}
+.body>*{margin:.55em 0 0}.body>:first-child{margin-top:0}
+.body strong{font-weight:600}
+.body h4{font-size:.78rem;font-weight:500;color:var(--ink-3);margin-top:1em}
+.body ul,.body ol{padding-left:1.25em}.body li+li{margin-top:.35em}
+.body ul:has(.sev){list-style:none;padding:0}
+.body li:has(.sev){display:grid;grid-template-columns:22px minmax(0,1fr);gap:6px;align-items:baseline}
+.body code{-webkit-box-decoration-break:clone;box-decoration-break:clone;font:.86em var(--mono);background:var(--code);padding:.08em .32em;border-radius:3px}
+.body pre{font:.84rem/1.45 var(--mono);background:var(--code);padding:10px 12px;border-radius:4px;overflow-x:auto}
+.sev{font-size:.76rem;font-weight:500;color:var(--ink-3)}
+.sev.p0,.sev.p1{color:var(--stop)}
+.verdict{font-size:.9rem;font-weight:500}
+.verdict.pass{color:var(--ok)}.verdict.fix{color:var(--stop)}
+.headsha{color:var(--ink-3);font-size:.78rem}
+.headsha code{background:none;padding:0}
+
+/* Below five columns' width the rail turns and runs down the page. Backlog goes last. */
+@media (max-width:980px){
+.line{display:flex;flex-direction:column;align-items:stretch;margin-top:22px}
+.loop,.avg:empty{display:none}
+.st{position:relative;padding:0;max-width:640px}
+.st.parked{order:9;margin-top:6px}
+.rail{position:absolute;top:0;left:0;margin:0;width:13px}
+.rail::before{display:none}
+.drop{padding:0 0 26px 18px;border-left-color:var(--rule)}
+.st.parked .drop,.st.side .drop{border-left-color:transparent}
+.top .drawn{margin-left:0;width:100%}
+.bar{padding:0 18px}.dr{padding:6px 18px 36px}
+}
+@media (max-width:480px){.sheet{padding-block:18px 28px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}}
+@media (prefers-reduced-motion:reduce){*{transition-duration:0s!important;transition-delay:0s!important}}
 """
 
 
+STATIONS = [
+    ("backlog", "Backlog", "parked side"),
+    ("new", "New", "works"),
+    ("review", "Review", "gate"),
+    ("ready", "Ready", "gate"),
+    ("done", "Done", "side end"),
+]
+
+# Everything works without this. Esc closes a thread and focus goes back to the
+# entry that opened it. --hair is one device pixel in CSS px, so lines stay crisp
+# at 1.25x and 1.5x, rebuilt when the window moves to another density or zooms.
+SCRIPT = """
+function hair(){const d=devicePixelRatio||1;document.documentElement.style.setProperty('--hair',Math.max(1,Math.floor(d+1e-6))/d+'px');matchMedia('(resolution:'+d+'dppx)').addEventListener('change',hair,{once:true})}
+hair();
+let opener=null;
+document.addEventListener('click',e=>{const a=e.target.closest('a.item');if(a)opener=a});
+addEventListener('keydown',e=>{if(e.key==='Escape'&&location.hash.startsWith('#item-'))location.hash='closed'});
+addEventListener('hashchange',()=>{if(!location.hash.startsWith('#item-')&&opener){opener.focus({preventScroll:true});opener=null}});
+"""
+
+
+def render_item(it, now):
+    e = html.escape
+    label = it["label"]
+    if rounds(it) > 1:
+        label += f" · round {it['round']}"
+    cues = ""
+    if it["turn"] == "you":
+        cues += f"<span class=ask>{ASK[it['folder']]}</span>"
+    if it["problems"]:
+        cues += "<span class=bad>Check the file</span>"
+    return (
+        f'<li><a class=item href="#item-{it["id"]}"><span class=meta><span>{label}</span>'
+        f'<time title="{when(it["since"])}">{age(it["since"], now)}</time></span>'
+        f'<span class=t>{e(it["title"])}</span>{cues}</a></li>')
+
+
+def render_station(name, cls, items, shown, avg, now):
+    stay = f"avg stay {avg}" if avg else ""
+    out = [
+        f'<section class="st {cls}"><div class=rail><span class=node></span></div><div class=drop>'
+        f"<div class=head><h2><span>{name}</span><b>{len(items)}</b></h2>"
+        f'<span class=avg title="Average stay, finished stays only">{stay}</span></div>']
+    if shown:
+        out.append("<ul class=items>" + "".join(render_item(it, now) for it in shown) + "</ul>")
+    else:
+        out.append("<p class=idle>Nothing here</p>")
+    if len(items) > len(shown):
+        out.append(f"<p class=more>and {len(items) - len(shown)} more</p>")
+    out.append("</div></section>")
+    return "".join(out)
+
+
+def render_trail(it, now):
+    """Each stop and how long the item stayed there."""
+    if not it["steps"]:
+        return ""
+    out = []
+    for i, (folder, t) in enumerate(it["steps"]):
+        last = i + 1 == len(it["steps"])
+        end = now if last else it["steps"][i + 1][1]
+        stay = "" if last and folder == "done" else f"<span>{span(end - t)}</span>"
+        cls = " class=cur" if last else ""
+        out.append(f'<li{cls} title="{when(t)}"><b>{html.escape(folder)}</b>{stay}</li>')
+    return "<ol class=trail>" + "".join(out) + "</ol>"
+
+
+def render_detail(it, now):
+    e = html.escape
+    call = ""
+    if it["turn"] == "you":
+        call = f"<p class=call>{ASK[it['folder']]}. Waiting {age(it['since'], now)}.</p>"
+    problems = ""
+    if it["problems"]:
+        problems = "<p class=problems>The file breaks the format: " + e("; ".join(sorted(set(it["problems"])))) + ".</p>"
+    branch = ""
+    if it["branch"]:
+        code = e(it["branch"])
+        branch = f'<a href="{e(it["link"])}" rel="noopener">{code}</a>' if it["link"] else f"<span>{code}</span>"
+        branch = f"<div class=facts>{branch}</div>"
+    thread = []
+    for s in it["sections"]:
+        kind = {"plan": "Plan", "review": "Review", "question": "Question"}.get(s["kind"], "")
+        kind = f"<em>{kind}</em>" if kind else ""
+        thread.append(
+            f'<section class=msg><div class=who><b>{e(s["who"])}</b>{kind}<time>{e(s["time"])}</time></div>'
+            f'<div class=body>{body_html(s["body"], s["kind"] == "review")}</div></section>')
+    return (
+        f'<article class=detail id="item-{it["id"]}" aria-label="{e(it["title"])}">'
+        '<a class=shade href="#closed" tabindex=-1 aria-hidden=true></a><div class=drawer>'
+        f'<div class=bar><span>{it["label"]} · {it["folder"]}</span><a class=close href="#closed">Close</a></div>'
+        f'<div class=dr><h2>{e(it["title"])}</h2>{call}{problems}{render_trail(it, now)}{branch}'
+        f'<div class=thread>{"".join(thread)}</div></div></div></article>')
+
+
 def render(cfg, name, items):
-    owners = set(cfg.get("owners", []))
     today = dt.datetime.now(TZ)
-    now = today.strftime("%Y-%m-%d %H:%M")
+    now = today.timestamp()
     by = {f: [] for f in FOLDERS}
     for it in items:
         by[it["folder"]].append(it)
     for f in FOLDERS:
-        by[f].sort(key=lambda it: -it["changed"] if f == "done" else it["changed"])
+        by[f].sort(key=lambda it: -it["changed"] if f == "done" else it["since"])
     yours = sum(1 for it in items if it["turn"] == "you")
     agents = sum(1 for it in items if it["turn"] == "agent")
+    sent_back = sum(max(0, rounds(it) - 1) for it in items)
     e = html.escape
+    gates = f"<b>{yours} at your gates</b> · " if yours else "Nothing at your gates · "
     out = [
         "<!doctype html><html lang=en><head><meta charset=utf-8>",
-        '<meta name=viewport content="width=device-width,initial-scale=1">',
-        f"<title>{e(name)} · factory board</title><style>{CSS}</style></head><body>",
-        f"<header><h1>{e(name)}</h1><span class=meta>factory board · built {now}</span>",
-        f'<span class=sum><span><b>{yours}</b> waiting for you</span><span><b>{agents}</b> for the agent</span>'
-        f"<span><b>{len(by['done'])}</b> done</span></span></header>",
-        '<main class=board>',
+        '<meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">',
+        f"<title>{e(name)} · factory board</title><style>{CSS}</style></head><body><div class=sheet>",
+        f"<header class=top><h1>{e(name)}</h1><span class=sum>{gates}{agents} with the agent · {len(by['done'])} done</span>",
+        f"<span class=drawn>Drawn {today:%b} {today.day}, {today:%H:%M}</span></header><main class=line>",
     ]
-    for f in FOLDERS:
-        shown = by[f][:DONE_SHOWN] if f == "done" else by[f]
-        none = "" if shown else " none"
-        out.append(f'<section class="col{none}"><h2><span>{f}/</span><span>{len(by[f])}</span></h2>')
-        if not shown:
-            out.append("<span class=empty>empty</span>")
-        for it in shown:
-            # One cue per card: what it asks of you. The agent's turn needs none.
-            row = ""
-            if it["turn"] == "you":
-                row += f'<span class="chip you">{ASK[f]}</span>'
-            if it["problems"]:
-                row += '<span class="chip bad">check file</span>'
-            if it["round"] not in ("", "0"):
-                row += f"<span>round {e(it['round'])}</span>"
-            out.append(
-                f'<a class=card href="#item-{it["id"]}">'
-                f'<span class=top><span>{it["label"]}</span>'
-                f'<time title="{when(it["changed"])}">{short(it["changed"], today.year)}</time></span>'
-                f'<span class=t>{e(it["title"])}</span><span class=row>{row}</span></a>')
-        if f == "done" and len(by[f]) > DONE_SHOWN:
-            out.append(f"<span class=more>and {len(by[f]) - DONE_SHOWN} more</span>")
-        out.append("</section>")
-    out.append("</main>")
-    for it in items:
-        facts = [f"in <code>{it['folder']}/</code>"]
-        if it["branch"]:
-            b = f"<code>{e(it['branch'])}</code>"
-            if it["link"]:
-                b = f'<a href="{e(it["link"])}" rel="noopener">{b}</a>'
-            facts.append("branch " + b)
-        if it["round"] not in ("", "0"):
-            facts.append(f"fix round {e(it['round'])}")
-        if it["turn"]:
-            facts.append(f"your turn: {ASK[it['folder']]}" if it["turn"] == "you" else "the agent's turn")
-        steps = " → ".join(f"<b>{e(fo)}/</b> {when(t)}" for fo, t in it["steps"])
-        out.append(
-            f'<article class=detail id="item-{it["id"]}" aria-label="{e(it["title"])}">'
-            '<a class=shade href="#_" tabindex=-1 aria-hidden=true></a><div class=panel>'
-            f'<div class=head><h2><span>{it["label"]}</span>{e(it["title"])}</h2>'
-            f'<a class=close href="#_">Close</a></div><div class=facts>{"<span>" + "</span><span>".join(facts) + "</span>"}</div>'
-            f'<div class=steps>{steps}</div>')
-        if it["problems"]:
-            out.append("<p class=problems>The file breaks the format: " + e("; ".join(sorted(set(it["problems"])))) + ".</p>")
-        for s in it["sections"]:
-            side = "agent" if s["who"] == "factory" else ("you" if s["who"] in owners else "")
-            kind = f" · {s['kind']}" if s["kind"] else ""
-            out.append(
-                f'<div class="sec {side}"><div class=h>{e(s["who"])}{kind}<span>{e(s["time"])}</span></div>'
-                f'<div class=b>{body_html(s["body"])}</div></div>')
-        out.append("</div></article>")
-    # Esc closes an open thread; everything else works without script.
-    out.append("<script>addEventListener('keydown',e=>{if(e.key==='Escape'&&location.hash.startsWith('#item-'))location.hash='_'})</script>")
-    out.append("</body></html>\n")
+    if sent_back:
+        out.append(f"<div class=loop><span>{sent_back} sent back</span></div>")
+    for key, title, cls in STATIONS:
+        shown = by[key][:DONE_SHOWN] if key == "done" else by[key]
+        avg = average_stay(items, key) if key in ("new", "review", "ready") else ""
+        out.append(render_station(title, cls, by[key], shown, avg, now))
+    out.append("</main></div>")
+    out += [render_detail(it, now) for it in items]
+    out.append(f"<script>{SCRIPT}</script></body></html>\n")
     return "".join(out)
 
 
