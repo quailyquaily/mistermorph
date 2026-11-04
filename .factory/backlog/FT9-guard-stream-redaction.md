@@ -146,3 +146,16 @@ notes:
 - Codex reviewed all nine changed files in origin/master...HEAD, base 2bce552ee9e2c604830ea600ef7be055f3e71df0. No merge conflicts. Seven synthetic-secret overlay reproductions confirmed Console leaks; all seven baseline Console-sink controls passed.
 - Required gofmt check, go vet ./..., and go test ./... passed; race tests for guard, agent and Console passed. Tests used an absolute throwaway HOME. No installs or frontend changes; pnpm not run. Source worktree remained clean.
 - Not checked: real Codex/Claude Code browser integration. Existing persistent-terminal path is not proven to satisfy live line-by-line output acceptance. No linked issues or PRs. Item stays in review/ for the owner to decide; add a note and move to new/ to request fixes.
+
+## lyric · 2026-11-05 00:03
+Shelve FT9
+
+## factory · 2026-11-05 00:03
+Shelved after three review rounds, all with verdict fix (heads 1d720135, 6044edb2, 83f14960). Each round fixed what was reported, and the next found new ways for line-by-line streaming to leak, because it has to reproduce Guard's regular expressions on text not yet seen: cross-line whitespace, quoted values, nested key blocks, content changed before Guard (trimming, prefixes, JSON escaping, dropped long lines).
+
+Left for when this is picked up again:
+- The branch `factory/FT9-guard-stream-redaction` (83f14960) is kept. It has useful parts apart from the redactor: coder status lines are sent apart from raw output, and each command's output, stderr and the assistant's text form raw parts (`agent.Event.Part`). Codex and Claude text deltas are read untrimmed, which also fixes dropped spaces in streamed text with Guard off.
+- The suggested next approach: redact each finished unit whole (a command's output, a message, a decoded tool input, stderr), which equals whole-text redaction by construction. Status lines stay live; output appears when its unit ends.
+- The open findings of the last review are above.
+
+Nothing was merged; with Guard on, the Console still shows coder status lines only.
