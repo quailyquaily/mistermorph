@@ -311,7 +311,8 @@ function normalizeActivityWorker(raw) {
         .map((process) => ({
           pid: process.pid,
           program: String(process.program || "").trim(),
-          activityId: String(process.activity_id || "").trim(),
+          // Server records use activity_id; entries normalized here before use activityId.
+          activityId: String(process.activity_id || process.activityId || "").trim(),
         }))
     : [];
   return { id, name, processes };

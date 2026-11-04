@@ -387,6 +387,17 @@ test("worker names and historical PIDs survive finished task reload, including n
   assert.equal(activityWorkerLabel({ id: "command", name: "bash", kind: "tool", worker: savedWorker }), "Milo · bash PID 456");
 });
 
+test("normalizing an already normalized activity keeps each process with its activity", () => {
+  const raw = { history: [{ id: "command", kind: "tool", name: "bash", status: "done", worker: {
+    id: "worker-1", name: "Milo", processes: [{ pid: 12345, program: "bash", activity_id: "command" }],
+  } }] };
+  const once = normalizeActivity(raw);
+  const twice = normalizeActivity(once);
+  assert.equal(activityWorkerLabel(once.history[0]), "Milo · bash PID 12345");
+  assert.equal(activityWorkerLabel(twice.history[0]), "Milo · bash PID 12345");
+  assert.deepEqual(twice, once);
+});
+
 test("worker labels omit invalid PIDs", () => {
   const activity = normalizeActivity({ history: [{ id: "spawn", kind: "tool", worker: {
     id: "worker-1", name: "Milo", processes: [{ pid: 0 }, { pid: -1 }, { pid: "123" }, { pid: 1.5 }],
