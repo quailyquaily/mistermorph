@@ -186,7 +186,7 @@ func runAwarenessLoop(ctx context.Context, d Dependencies, opts RunOptions) (run
 		refreshChatInfoOnStart(ctx, chatInfoStore, chatInfoRefresher, opts.ChatInfoContactsDir, logger)
 	}
 
-	runAwarenessTaskWithOpts := func(behavior awarenessutil.Behavior, task string, meta map[string]any, taskRunID, llmProfile, workspaceDir string, bashEnv []cronstore.BashEnvRef) (string, error) {
+	runAwarenessTaskWithOpts := func(behavior awarenessutil.Behavior, task string, meta map[string]any, taskRunID, llmProfile, workspaceDir string, bashEnv []cronstore.BashEnvRef, topicID, topicTitle string) (string, error) {
 		return runAwarenessTask(ctx, d, awarenessTaskOptions{
 			Behavior:                 behavior,
 			Logger:                   logger,
@@ -210,10 +210,12 @@ func runAwarenessLoop(ctx context.Context, d Dependencies, opts RunOptions) (run
 			TaskStore:                opts.TaskStore,
 			TaskProgress:             opts.TaskProgress,
 			BashEnv:                  bashEnv,
+			TopicID:                  topicID,
+			TopicTitle:               topicTitle,
 		})
 	}
 	runTask := func(behavior awarenessutil.Behavior, task string, meta map[string]any, taskRunID string) (string, error) {
-		return runAwarenessTaskWithOpts(behavior, task, meta, taskRunID, "", "", nil)
+		return runAwarenessTaskWithOpts(behavior, task, meta, taskRunID, "", "", nil, "", "")
 	}
 
 	runTaskAsync := func(behavior awarenessutil.Behavior, task string, taskEmpty bool, wakeSignal awarenessdomain.PokeInput) string {
@@ -347,7 +349,8 @@ func runAwarenessLoop(ctx context.Context, d Dependencies, opts RunOptions) (run
 						}
 					}
 					meta := awarenessutil.BuildCronMeta("cron", strings.TrimSpace(task.ID), due.ScheduledAtUTC, cronstore.ScheduleForTask(task), strings.TrimSpace(task.TZ), strings.TrimSpace(task.ChatID), extra)
-					summary, err := runAwarenessTaskWithOpts(awarenessutil.BehaviorCron, strings.TrimSpace(task.Content), meta, taskRunID, task.LLMProfile, task.WorkspaceDir, task.BashEnv)
+					summary, err := runAwarenessTaskWithOpts(awarenessutil.BehaviorCron, strings.TrimSpace(task.Content), meta, taskRunID, task.LLMProfile, task.WorkspaceDir, task.BashEnv,
+						daemonruntime.CronTopicID(task.ID), cronTopicTitle(task))
 					if err != nil {
 						notifyCronResult(ctx, opts.CronNotify, logger, task, taskRunID, "", err)
 						return err
@@ -399,6 +402,10 @@ type awarenessTaskOptions struct {
 	TaskStore                daemonruntime.TaskView
 	TaskProgress             TaskProgressFunc
 	BashEnv                  []cronstore.BashEnvRef
+	// TopicID records the run under this topic instead of Awareness, and TopicTitle names it:
+	// a TODO item's runs go to the item's own topic.
+	TopicID    string
+	TopicTitle string
 }
 
 func runAwarenessTask(ctx context.Context, d Dependencies, opts awarenessTaskOptions) (summary string, runErr error) {
@@ -766,11 +773,33 @@ func recordAwarenessTaskStart(opts awarenessTaskOptions, task string, now time.T
 		StartedAt: &startedAt,
 		TopicID:   daemonruntime.ConsoleAwarenessTopicID,
 	}
+	if topicID := strings.TrimSpace(opts.TopicID); topicID != "" {
+		info.TopicID = topicID
+	}
 	if opts.TaskTimeout > 0 {
 		info.Timeout = opts.TaskTimeout.String()
 	}
 	trigger := awarenessTaskTrigger(opts)
+	if title := strings.TrimSpace(opts.TopicTitle); title != "" {
+		// A store with topics names the run's topic as it records the run.
+		if store, ok := opts.TaskStore.(topicTitledTaskRecorder); ok {
+			return store.UpsertWithTrigger(info, trigger, title)
+		}
+	}
 	return taskdomain.RecordTaskUpsert(opts.TaskStore, info, trigger)
+}
+
+// topicTitledTaskRecorder records a task and sets its topic's title, such as the Console store.
+type topicTitledTaskRecorder interface {
+	UpsertWithTrigger(info daemonruntime.TaskInfo, trigger daemonruntime.TaskTrigger, topicTitle string) error
+}
+
+// cronTopicTitle names a TODO item's topic: the item's title, or its default.
+func cronTopicTitle(task cronstore.Task) string {
+	if title := strings.TrimSpace(task.Title); title != "" {
+		return title
+	}
+	return cronstore.DefaultTaskTitle
 }
 
 // extra holds more result fields, such as the plan and activity a live view kept; "final" is

@@ -126,6 +126,15 @@ function agentLinkTopicContactID(topicID) {
   return id.startsWith(AGENT_LINK_TOPIC_PREFIX) ? `mm:${id.slice(AGENT_LINK_TOPIC_PREFIX.length)}` : "";
 }
 
+// A TODO (cron) item's topic, "_cron_<task_id>", holds that item's runs, listed apart from the
+// person's own topics.
+const CRON_TOPIC_PREFIX = "_cron_";
+
+function isCronTopicID(topicID) {
+  const id = String(topicID || "").trim();
+  return id.startsWith(CRON_TOPIC_PREFIX) && id.length > CRON_TOPIC_PREFIX.length;
+}
+
 function isAgentLinkTopicID(topicID) {
   return agentLinkTopicContactID(topicID) !== "";
 }
@@ -154,7 +163,12 @@ function normalizeEndpointMode(raw) {
 
 function rememberTopicSelection(endpointRef, topicID) {
   const normalizedTopicID = normalizeTopicID(topicID);
-  if (!normalizedTopicID || normalizedTopicID === AWARENESS_TOPIC_ID || isAgentLinkTopicID(normalizedTopicID)) {
+  if (
+    !normalizedTopicID ||
+    normalizedTopicID === AWARENESS_TOPIC_ID ||
+    isAgentLinkTopicID(normalizedTopicID) ||
+    isCronTopicID(normalizedTopicID)
+  ) {
     return;
   }
   rememberLastTopicID(endpointRef, normalizedTopicID);
@@ -838,7 +852,7 @@ const ChatView = {
           }
           continue;
         }
-        if (isAgentLinkTopicID(topicID)) {
+        if (isAgentLinkTopicID(topicID) || isCronTopicID(topicID)) {
           continue;
         }
         items.push(topic);
@@ -1032,10 +1046,19 @@ const ChatView = {
         .filter((topic) => isAgentLinkTopicID(normalizeTopicID(topic?.id)))
         .sort((a, b) => String(b?.updated_at || "").localeCompare(String(a?.updated_at || ""))),
     );
+    // The TODO items' topics, the one with the latest run first.
+    const cronTopics = computed(() =>
+      topics.value
+        .filter((topic) => isCronTopicID(normalizeTopicID(topic?.id)))
+        .sort((a, b) => String(b?.updated_at || "").localeCompare(String(a?.updated_at || ""))),
+    );
     // While a topic is dragged, a pinned group is always there to drop it on, even an empty one.
     const topicSidebarGroups = computed(() => {
       if (topicSidebarView.value === "agents") {
         return agentTopics.value.length > 0 ? [{ key: "agents", label: "", topics: agentTopics.value }] : [];
+      }
+      if (topicSidebarView.value === "cron") {
+        return cronTopics.value.length > 0 ? [{ key: "cron", label: "", topics: cronTopics.value }] : [];
       }
       const groups =
         topicSidebarView.value === "tags"
@@ -1054,13 +1077,16 @@ const ChatView = {
       () =>
         Boolean(workspaceTopicID.value) &&
         !isAgentLinkTopicID(workspaceTopicID.value) &&
+        !isCronTopicID(workspaceTopicID.value) &&
         topics.value.some((topic) => normalizeTopicID(topic?.id) === normalizeTopicID(workspaceTopicID.value))
     );
     const topicTagsSaving = computed(() => topicTagSaves.value.has(normalizeTopicID(workspaceTopicID.value)));
 
+    // The agents' and TODO items' lists are a look aside, so the next visit opens on the date or
+    // tag list again.
     function setTopicSidebarView(view) {
-      topicSidebarView.value = view === "tags" || view === "agents" ? view : "date";
-      if (view !== "agents") {
+      topicSidebarView.value = view === "tags" || view === "agents" || view === "cron" ? view : "date";
+      if (view !== "agents" && view !== "cron") {
         saveTopicSidebarView(topicSidebarView.value);
       }
     }
@@ -1367,9 +1393,15 @@ const ChatView = {
       return topicID;
     });
     const selectedTopicIsAgent = computed(() => isAgentLinkTopicID(normalizeTopicID(selectedTopicID.value)));
+    const selectedTopicIsCron = computed(() => isCronTopicID(normalizeTopicID(selectedTopicID.value)));
     const selectedTopicIsReserved = computed(() => {
       const topicID = normalizeTopicID(selectedTopicID.value);
-      return topicID === DEFAULT_TOPIC_ID || topicID === AWARENESS_TOPIC_ID || selectedTopicIsAgent.value;
+      return (
+        topicID === DEFAULT_TOPIC_ID ||
+        topicID === AWARENESS_TOPIC_ID ||
+        selectedTopicIsAgent.value ||
+        selectedTopicIsCron.value
+      );
     });
     const topicDeleteAvailable = computed(
       () => Boolean(workspaceTopicID.value) && !selectedTopicIsReserved.value
@@ -2882,6 +2914,9 @@ const ChatView = {
       if (topicID === AWARENESS_TOPIC_ID) {
         return t("chat_topic_awareness");
       }
+      if (isCronTopicID(topicID)) {
+        return String(topic?.title || "").trim() || t("chat_topic_cron_untitled");
+      }
       if (isAgentLinkTopicID(topicID)) {
         const instanceID = agentLinkInstanceID(agentLinkTopicContactID(topicID));
         const endpoint = endpointState.items.find((item) => String(item?.instance_id || "").trim() === instanceID);
@@ -4228,7 +4263,9 @@ const ChatView = {
       }
     }
     watch(
-      () => normalizeTopicID(selectedTopicID.value) === AWARENESS_TOPIC_ID && !creatingTopic.value,
+      () =>
+        (normalizeTopicID(selectedTopicID.value) === AWARENESS_TOPIC_ID || selectedTopicIsCron.value) &&
+        !creatingTopic.value,
       (open) => {
         stopAwarenessRefresh();
         if (!open) return;
@@ -4535,6 +4572,9 @@ const ChatView = {
       topicDayGroups,
       topicSidebarGroups,
       topicSidebarView,
+      cronTopics,
+      isCronTopicID,
+      selectedTopicIsCron,
       agentTopics,
       topicAgentContact,
       topicAgentAvatar,
@@ -4651,6 +4691,16 @@ const ChatView = {
                 <PhRobot class="icon" />
               </AppButton>
               <AppButton
+                v-if="cronTopics.length > 0 || topicSidebarView === 'cron'"
+                :class="['plain sm icon chat-topic-view-toggle', { 'is-active': topicSidebarView === 'cron' }]"
+                :title="topicSidebarView === 'cron' ? t('chat_topics_view_date') : t('chat_topics_view_cron')"
+                :aria-label="t('chat_topics_view_cron')"
+                :aria-pressed="topicSidebarView === 'cron' ? 'true' : 'false'"
+                @click="setTopicSidebarView(topicSidebarView === 'cron' ? 'date' : 'cron')"
+              >
+                <PhAlarm class="icon" />
+              </AppButton>
+              <AppButton
                 :class="['plain sm icon chat-topic-view-toggle', { 'is-active': topicSidebarView === 'tags' }]"
                 :title="topicSidebarView === 'tags' ? t('chat_topics_view_date') : t('chat_topics_view_tags')"
                 :aria-label="t('chat_topics_view_tags')"
@@ -4678,6 +4728,9 @@ const ChatView = {
               </p>
               <p v-if="topicSidebarView === 'agents' && agentTopics.length === 0" class="chat-topic-tags-hint">
                 {{ t("chat_topics_agents_empty") }}
+              </p>
+              <p v-if="topicSidebarView === 'cron' && cronTopics.length === 0" class="chat-topic-tags-hint">
+                {{ t("chat_topics_cron_empty") }}
               </p>
               <section
                 v-for="group in topicSidebarGroups"
@@ -4720,7 +4773,7 @@ const ChatView = {
                   :class="[topicItemClass(topic), topicDropMarkClass(group, topic)]"
                   :title="topicTime(topic) || undefined"
                   :aria-current="topicIsActive(topic) ? 'page' : undefined"
-                  :draggable="mobileMode || topicSidebarView === 'agents' ? 'false' : 'true'"
+                  :draggable="mobileMode || topicSidebarView === 'agents' || topicSidebarView === 'cron' ? 'false' : 'true'"
                   @click="selectTopic(topic.id)"
                   @dragstart="onTopicDragStart($event, topic)"
                   @dragend="onTopicDragEnd"
@@ -4735,6 +4788,7 @@ const ChatView = {
                     :endpointRef="submitEndpointRef"
                     aria-hidden="true"
                   />
+                  <PhAlarm v-else-if="isCronTopicID(topic.id)" class="chat-topic-item-icon is-cron" aria-hidden="true" />
                   <span
                     v-else
                     class="topic-icon chat-topic-item-icon"
@@ -4885,6 +4939,9 @@ const ChatView = {
             </template>
             <p v-if="!showChatPlaceholder && selectedTopicIsAgent" class="chat-agent-topic-note">
               {{ t("chat_topic_agent_readonly", { name: deskTitle }) }}
+            </p>
+            <p v-else-if="!showChatPlaceholder && selectedTopicIsCron" class="chat-agent-topic-note">
+              {{ t("chat_topic_cron_readonly", { name: deskTitle }) }}
             </p>
             <ChatComposer
               v-else-if="!showChatPlaceholder"

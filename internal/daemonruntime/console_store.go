@@ -485,7 +485,7 @@ func (s *ConsoleFileStore) List(opts TaskListOptions) []TaskInfo {
 		if topicID != "" && strings.TrimSpace(item.TopicID) != topicID {
 			continue
 		}
-		if topicID == "" && (strings.TrimSpace(item.TopicID) == ConsoleAwarenessTopicID || IsAgentLinkTopicID(item.TopicID)) {
+		if topicID == "" && (strings.TrimSpace(item.TopicID) == ConsoleAwarenessTopicID || IsAgentLinkTopicID(item.TopicID) || IsCronTopicID(item.TopicID)) {
 			continue
 		}
 		if topicDeleted(s.topics[strings.TrimSpace(item.TopicID)]) {
@@ -567,8 +567,9 @@ func (s *ConsoleFileStore) DeleteTopic(id string) (bool, error) {
 		return false, fmt.Errorf("console task store is nil")
 	}
 	id = strings.TrimSpace(id)
-	// An Agent Link agent's topic stays: its next message would land in a deleted topic.
-	if id == "" || id == ConsoleDefaultTopicID || IsAgentLinkTopicID(id) {
+	// An Agent Link agent's topic stays: its next message would land in a deleted topic. So does a
+	// TODO item's topic, for its next run.
+	if id == "" || id == ConsoleDefaultTopicID || IsAgentLinkTopicID(id) || IsCronTopicID(id) {
 		return false, nil
 	}
 	now := time.Now().UTC()
@@ -1197,7 +1198,7 @@ func nextConsoleTopic(topic TopicInfo, exists bool, topicID string, title string
 		return normalizeTopicInfo(topic)
 	}
 	changed := false
-	if title != "" {
+	if title != "" && title != topic.Title {
 		topic.Title = title
 		topic.TitleCustomized = true
 		topic.TitleRevision++
