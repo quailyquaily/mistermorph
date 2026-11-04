@@ -73,3 +73,6 @@ Installs: pnpm install --frozen-lockfile --ignore-scripts installed 83 locked Co
 Residual risks: browser visual/mobile checks, real-model end-to-end reactions and remote disconnect/reconnect UX were not exercised. Some frontend regressions use source matching. Cancellation and lock-wait timeout boundaries were code-traced without dedicated fault injection; repeated concurrency tests do not prove races absent.
 
 Reviewer made no source/lockfile changes, commits, merges, pushes, fetches or gh calls; manager verified clean worktree and unchanged head. No linked GitHub issues or PRs in the header or owner sections, so no review comments applicable. Removed the prior clean FT1 review worktree during routine recovery; no stopped changes needed preservation.
+
+## factory · 2026-11-04 09:22
+Merged into master as 51b8a849 and released in tag v0.3.73. The merged master passed the full gate twice, 155 packages; pnpm test passed 341 of 341 and pnpm build passed. One earlier gate run failed TestSharedTopicsIntegrationPendingApproval/deny once; it did not fail again in 120 focused runs or 2 more full runs. No linked issues or PRs to close.

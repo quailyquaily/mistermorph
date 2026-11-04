@@ -61,3 +61,6 @@ Residual risks: no independent browser interaction or real-backend end-to-end va
 
 No linked GitHub issues or PRs in the header or owner sections, so no review comments required.
 Moved review/ → ready/. Owner should check the TODO interactions before shipping.
+
+## factory · 2026-11-04 09:22
+Merged into master as d7d96050 and released in tag v0.3.73. The merged master passed the full gate twice, 155 packages; pnpm test passed 341 of 341 and pnpm build passed. One earlier gate run failed TestSharedTopicsIntegrationPendingApproval/deny once; it did not fail again in 120 focused runs or 2 more full runs. No linked issues or PRs to close.

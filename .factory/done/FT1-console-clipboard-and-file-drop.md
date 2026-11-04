@@ -101,3 +101,6 @@ Installs: no new installs confirmed in this review; reused matching shared depen
 Reviewed paste/drop, attachment removal, concurrent upload, retries, failed sends, conversation switching, upload authorization, path/symlink boundaries, previews and agent file-reference delivery. Residual risks: real-browser/OS clipboard and drag/drop, visual layout, real-agent receipt and deployed authentication configuration were not manually verified.
 
 The initial coder tool call timed out; a follow-up Codex review completed and reused finished validation artifacts rather than duplicating running tests. No source/lockfile changes, commits or GitHub operations by the reviewer. No linked issues or PRs in the header or owner sections, so no GitHub comments applicable. Removed the previous review worktree during standard recovery; it was clean.
+
+## factory · 2026-11-04 09:22
+Merged into master as 0d79cdd3 and released in tag v0.3.73. The merged master passed the full gate twice, 155 packages; pnpm test passed 341 of 341 and pnpm build passed. One earlier gate run failed TestSharedTopicsIntegrationPendingApproval/deny once; it did not fail again in 120 focused runs or 2 more full runs. No linked issues or PRs to close.
