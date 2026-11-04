@@ -1,6 +1,6 @@
 ---
 branch: factory/FT9-guard-stream-redaction
-round: 1
+round: 2
 ---
 # Guard: redact streamed tool output instead of dropping it
 
@@ -80,3 +80,21 @@ notes:
 - Required gofmt check, go vet ./..., and go test ./... passed. Six targeted overlay reproductions exposed the defects above; five leak cases were confirmed in Console frames. Targeted baseline collector/sink comparisons passed. Source worktree remained clean.
 - Installs: none. Tests used an absolute throwaway HOME. No frontend source changes; pnpm not run.
 - Not checked: live Codex/Claude Code integration in a browser. No linked issues or PRs. Item stays in review/ for the owner to decide; add a note and move to new/ to request fixes.
+
+## lyric · 2026-11-04 23:02
+could you fix them?
+
+## factory · 2026-11-04 23:02
+Fix round 2 in the owner's checkout at the owner's request: commit 6044edb2, on 1d720135.
+
+- [P1] coder formatting: the coder now sends status lines and each command's raw output separately. A new `agent.Event.Part` names the Codex command item, and the Console keeps one redactor per part. `aggregated_output` is read untrimmed, and a finished command's last line is closed with a newline. Nothing formats or cuts output before Guard.
+- [P1] Flush: an unclosed key block's last line is dropped with the block, including a BEGIN line without a newline.
+- [P1] quoted `MISTER_MORPH_*` values: held until the closing quote. Past 64 KB they are hidden up to that quote.
+- [P1] 64 KB limit: held text is hidden instead of released, along with the rest of the open match. With a multi-line custom pattern, that is the rest of the stream (`[rest of output hidden: …]`). After a dangling line, the line is kept as context.
+- [P1] preview cut: removed from `agent/coder_tool.go`. The chat trace cuts its own 1000-character preview of each piece; the Console keeps its 6000-character tail.
+- [P2] with Guard off, a long line is shown again instead of "…".
+- Also: held state is tracked as lines arrive, since the first version rescanned everything held on each line (quadratic; a 64 KB test took 24 s and now takes 0.04 s).
+
+Tests: one regression test per finding, using the reviewer's reproductions (split 24-character key, key without a trailing newline, two-line quoted value, `safe` repeated 13105 times before a custom block, a custom block across character 1000, and the Guard-off long line). The Console test fails when the per-part key is removed. gofmt, `go vet ./...` and `go test ./...` pass; guard, Console and agent tests pass under `-race`.
+
+Not checked: a real Codex or Claude Code run in the Console with Guard on.
