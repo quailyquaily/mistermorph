@@ -16,8 +16,10 @@ escapes, absolute paths, and symlinks escaping the directory are rejected.
 Files must be readable, regular, non-empty, and no larger than 64 MiB, matching
 the Console upload limit. Files that `read_file` may not read may not be sent
 either: `send_file` refuses paths matching `tools.read_file.deny_paths` (by
-default `config.yaml`). The tool follows symlinks itself, checks the name of
-every file along the way, and confirms the file it opened is the one it checked,
+default `config.yaml`). The tool resolves the path one component at a time,
+as the operating system does, so a link's relative target applies to the folder
+the link really sits in. It checks the requested name, every link along the way
+and the resolved name, and confirms the file it opened is the one it resolved,
 so swapping a link during the call cannot deliver a denied file. No new
 configuration or manual setup is required.
 

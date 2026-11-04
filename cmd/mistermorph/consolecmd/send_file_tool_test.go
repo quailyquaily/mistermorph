@@ -396,7 +396,7 @@ func TestConsoleSendFileFollowsSymlinkChains(t *testing.T) {
 	tool, _ := attachmentFixture(t)
 	tool.denyPaths = []string{"private.txt"}
 	dir := tool.workspaceDir
-	for name, data := range map[string]string{"private.txt": "secret", "docs/report.txt": "report"} {
+	for name, data := range map[string]string{"private.txt": "secret", "docs/report.txt": "report", "report.txt": "different root report", "docs/sub/.keep": ""} {
 		if err := os.MkdirAll(filepath.Dir(filepath.Join(dir, name)), 0o700); err != nil {
 			t.Fatal(err)
 		}
@@ -414,18 +414,27 @@ func TestConsoleSendFileFollowsSymlinkChains(t *testing.T) {
 		"loop-b":     "loop-a",
 		"escape":     "../outside.txt",
 		"abs-escape": filepath.Join(tool.cacheDir, "outside.txt"),
+		// A relative target applies to the directory the link really sits in, after earlier
+		// components resolved through symlinks: alias/link is docs/sub/link -> docs/report.txt.
+		"alias":           "docs/sub",
+		"docs/sub/link":   "../report.txt",
+		"docs/sub/secret": "../../private.txt",
 	}
 	for name, target := range links {
 		if err := os.Symlink(target, filepath.Join(dir, name)); err != nil {
 			t.Fatal(err)
 		}
 	}
-	for _, path := range []string{"abs-report", "rel-report"} {
+	for _, path := range []string{"abs-report", "rel-report", "alias/link", "alias/../report.txt", "docs/sub/link"} {
 		if _, err := tool.Execute(context.Background(), map[string]any{"dir_name": "workspace_dir", "path": path}); err != nil {
 			t.Fatalf("%s: %v", path, err)
 		}
+		task, _ := tool.store.Get("task")
+		if got := task.Attachments[len(task.Attachments)-1].SizeBytes; got != int64(len("report")) {
+			t.Fatalf("%s delivered %d bytes, want docs/report.txt", path, got)
+		}
 	}
-	for path, want := range map[string]string{"hop1": "deny_paths", "docs/up": "deny_paths", "loop-a": "too many symlinks", "escape": "outside", "abs-escape": "outside"} {
+	for path, want := range map[string]string{"hop1": "deny_paths", "docs/up": "deny_paths", "alias/secret": "deny_paths", "loop-a": "too many symlinks", "escape": "outside", "abs-escape": "outside"} {
 		if _, err := tool.Execute(context.Background(), map[string]any{"dir_name": "workspace_dir", "path": path}); err == nil || !strings.Contains(err.Error(), want) {
 			t.Fatalf("%s: error = %v, want %q", path, err, want)
 		}
