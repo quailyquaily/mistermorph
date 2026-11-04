@@ -40,6 +40,29 @@ data and management operations.
 - A remote endpoint whose health payload reports `mode: console` exposes the same target-owned settings as the built-in local Console. The SPA sends those requests through `/api/proxy` to the remote Console's `/runtime` API.
 - Task WebSocket frames from a remote Console are relayed by the current Console. The browser never receives the remote runtime token, and task polling remains active as the fallback.
 
+## Message reactions
+
+In Console, `message_react({"emoji":"👍"})` attaches one agent reaction to the user
+message that started the calling task. It never selects the newest message and
+accepts no explicit target IDs. New or steered messages do not change that target.
+The tool checks the originating task's topic and conversation before writing.
+Missing, nonexistent, or unauthorized targets return errors; they never fall back
+to an emoji reply.
+
+Messages have no reaction initially. Repeating the same emoji is idempotent;
+a different emoji replaces the previous reaction. The tool accepts one Unicode
+emoji, including flags, skin tones, and joined emoji sequences. Success reports
+that the reaction was applied to the originating message. The tool does not create
+an assistant message; a separate final text response still appears when provided.
+
+The optional `user_reaction` field on task details and task lists stores the emoji
+separately from `result`. It uses the existing Console journal and persistence
+settings, so conversation reloads restore the badge. Task WebSocket frames carry
+`user_reaction` with `task_id`; the SPA applies it to that task's user bubble.
+Polling also reads the field, and remote Console endpoints relay the same frames.
+Other channel reaction tools keep their existing behavior. No new configuration
+keys are required.
+
 ## Restart
 
 Settings that only apply after a restart (`process_restart` and `runtime_restart` fields) show a **Restart now** banner once saved. It calls `POST /api/system/restart`:

@@ -613,6 +613,7 @@ const ChatHistoryItem = {
               <span v-if="fileKind(file)" class="chat-history-file-kind" aria-hidden="true">{{ fileKind(file) }}</span>
             </button>
           </div>
+          <span v-if="role === 'user' && item.reaction" class="chat-history-reaction" aria-label="Agent reaction">{{ item.reaction }}</span>
         </div>
         <button
           v-if="copyAvailable"

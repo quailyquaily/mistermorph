@@ -478,7 +478,7 @@ function taskAgentText(task, t, options = {}) {
     return errorText;
   }
   if (isTerminalStatus(normalizeTaskStatus(task?.status))) {
-    return t("chat_result_empty");
+    return task?.user_reaction ? "" : t("chat_result_empty");
   }
   const pendingText = String(options.pendingText || "").trim();
   if (pendingText) {
@@ -502,6 +502,7 @@ function taskHistoryItems(task, t, options = {}) {
       id: `${taskID}:user`,
       role: "user",
       text: userText,
+      reaction: String(task?.user_reaction || "").trim(),
       files: normalizeHistoryFileReferences(task?.file_references),
       endpointRef: String(options.endpointRef || "").trim(),
       topicID: normalizeTopicID(task?.topic_id),
@@ -641,6 +642,18 @@ function historyItemTaskKey(item) {
   return taskID ? `${taskID}\0${role}` : "";
 }
 
+// Replace the user item as well as the array: the chat keeps history in a shallowRef.
+function applyUserReaction(items, taskID, emoji, endpointRef) {
+  if (typeof emoji !== "string" || !emoji.trim()) return items;
+  const index = items.findIndex((item) =>
+    item.endpointRef === endpointRef && historyItemTaskKey(item) === `${taskID}\0user`
+  );
+  if (index < 0 || items[index].reaction === emoji.trim()) return items;
+  const next = items.slice();
+  next[index] = { ...items[index], reaction: emoji.trim() };
+  return next;
+}
+
 // A message sent from this page is shown before its task exists, under an id of its own; once the
 // task is loaded it comes back as "<task>:user" and "<task>:agent". Those keep the ids already on
 // screen, so the list updates the items in place: a new id would rebuild them, rendering the reply
@@ -683,6 +696,7 @@ function mergeRefreshedHistoryItems(currentItems, freshItems) {
 }
 
 export {
+  applyUserReaction,
   agentDisplayName,
   buildPollingHint,
   pollingActionWord,

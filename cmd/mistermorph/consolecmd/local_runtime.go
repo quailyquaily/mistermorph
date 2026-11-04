@@ -2744,7 +2744,7 @@ func (r *consoleLocalRuntime) runTask(ctx context.Context, conversationKey strin
 		}
 		promptprofile.AppendConsoleRuntimeBlocks(spec)
 	}
-	reactTool := newConsoleMessageReactTool()
+	reactTool := newConsoleMessageReactTool(r.store, r.streamHub, job)
 	reg := bundle.taskRuntime.BaseRegistry.Clone()
 	if err := reg.Replace(reactTool); err != nil {
 		return nil, nil, err
@@ -2814,7 +2814,6 @@ func (r *consoleLocalRuntime) runTask(ctx context.Context, conversationKey strin
 			result.Final = &agent.Final{Output: "✓ AGENTS.md saved\n\n" + content}
 		}
 	}
-	result.Final = applyConsoleMessageReactionFinal(result.Final, reactTool.LastEmoji())
 	return result.Final, result.Context, nil
 }
 

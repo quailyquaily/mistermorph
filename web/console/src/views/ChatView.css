@@ -2836,3 +2836,17 @@ body.artifact-preview-scroll-lock {
 .chat-shell.is-mobile-topics .chat-topic-list {
   padding-bottom: calc(52px + 32px);
 }
+
+.chat-history-reaction {
+  justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 4px;
+  padding: 2px 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg-2);
+  font-size: 16px;
+  line-height: 1.25;
+}

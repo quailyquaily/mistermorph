@@ -44,6 +44,8 @@ type consoleStreamFrame struct {
 	// ClearText takes back the reply text shown so far: it came from a response that called tools.
 	ClearText bool `json:"clear_text,omitempty"`
 	Done      bool `json:"done,omitempty"`
+	// UserReaction belongs to the user message identified by TaskID.
+	UserReaction string `json:"user_reaction,omitempty"`
 }
 
 type consoleStreamHub struct {
@@ -235,6 +237,9 @@ func (h *consoleStreamHub) publish(frame consoleStreamFrame) {
 	h.nextSeq++
 	frame.Seq = h.nextSeq
 	previous := h.latest[frame.TaskID]
+	if frame.UserReaction == "" {
+		frame.UserReaction = previous.UserReaction
+	}
 	if frame.Trace == nil {
 		frame.Trace = previous.Trace
 	}

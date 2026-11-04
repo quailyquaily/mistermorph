@@ -288,6 +288,43 @@ func (s *ConsoleFileStore) Update(id string, fn func(*TaskInfo)) error {
 	return s.UpdateWithTrigger(id, TaskTrigger{}, fn)
 }
 
+// SetUserReaction checks the originating message's conversation and persists its single
+// agent reaction under the same lock. Repeating an emoji does not append another journal event.
+func (s *ConsoleFileStore) SetUserReaction(id, topicID, conversationID, emoji string) error {
+	if s == nil || id == "" || topicID == "" || conversationID == "" {
+		return fmt.Errorf("message_react: originating target is required")
+	}
+	if strings.TrimSpace(emoji) == "" {
+		return fmt.Errorf("message_react: emoji is required")
+	}
+	unlock, err := s.lockShared()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	item, ok := s.items[id]
+	if !ok {
+		return fmt.Errorf("message_react: target %q not found", id)
+	}
+	if item.TopicID != topicID || item.Conversation == nil || item.Conversation.ConversationID != conversationID {
+		return fmt.Errorf("message_react: unauthorized target conversation")
+	}
+	if item.Task == "" && len(item.FileReferences) == 0 {
+		return fmt.Errorf("message_react: target has no originating user message")
+	}
+	if item.UserReaction == emoji {
+		return nil
+	}
+	item.UserReaction = emoji
+	cursor, err := s.appendTaskEventLocked(item, nil, time.Now().UTC(), s.triggerForTaskLocked(id, TaskTrigger{}), taskdomain.JournalTypeTaskUpdate)
+	if err != nil {
+		return err
+	}
+	s.items[id] = item
+	s.projectionCursor = cursor
+	return nil
+}
+
 func (s *ConsoleFileStore) RecordTaskUpdate(id string, trigger TaskTrigger, fn func(*TaskInfo)) error {
 	return s.UpdateWithTrigger(id, trigger, fn)
 }
