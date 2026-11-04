@@ -1,5 +1,6 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import "./ChatComposer.css";
+import { clipboardImageFiles } from "../core/chat-composer-files";
 
 import {
   buildComposerSuggestionItems,
@@ -29,6 +30,7 @@ const DEFAULT_FILE_LABELS = {
   remove: "Remove from task",
   uploading: "Uploading...",
   failed: "Upload failed",
+  retry: "Retry upload",
 };
 
 function sameSuggestionContext(a, b) {
@@ -323,6 +325,8 @@ export default {
     "stop",
     "attach",
     "upload",
+    "attachFiles",
+    "retryFile",
     "voice",
     "voiceCancel",
     "voicePreviewToggle",
@@ -768,6 +772,21 @@ export default {
       void nextTick(syncMirrorScroll);
     }
 
+    function handlePaste(event) {
+      if (props.disabled || props.attachDisabled) {
+        return;
+      }
+      const files = clipboardImageFiles(event.clipboardData);
+      if (!files.length) {
+        return;
+      }
+      // Let the browser insert ordinary text, including text accompanying an image.
+      if (!event.clipboardData.getData("text/plain")) {
+        event.preventDefault();
+      }
+      emit("attachFiles", files);
+    }
+
     function handleInputScroll() {
       syncMirrorScroll();
     }
@@ -1081,6 +1100,7 @@ export default {
       handleKeydown,
       handleKeyup,
       handleInput,
+      handlePaste,
       handleInputScroll,
       selectLLMProfile,
       selectAddAction,
@@ -1141,8 +1161,17 @@ export default {
               </span>
             </button>
             <button
+              v-if="item.status === 'failed' && item.sourceFile"
+              type="button"
+              class="chat-composer-file-retry"
+              :disabled="disabled || attachDisabled"
+              :aria-label="resolvedFileLabels.retry + ': ' + item.name"
+              @click="$emit('retryFile', item)"
+            >{{ resolvedFileLabels.retry }}</button>
+            <button
               type="button"
               class="chat-composer-file-remove"
+              :disabled="disabled"
               :title="resolvedFileLabels.remove"
               :aria-label="resolvedFileLabels.remove + ': ' + item.name"
               @click="$emit('removeFile', item)"
@@ -1243,6 +1272,7 @@ export default {
               :disabled="disabled"
               :placeholder="placeholder"
               @input="handleInput"
+              @paste="handlePaste"
               @keydown="handleKeydown"
               @keyup="handleKeyup"
               @scroll="handleInputScroll"

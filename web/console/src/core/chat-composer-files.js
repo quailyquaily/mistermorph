@@ -1,5 +1,22 @@
 import { normalizeTopicID } from "./chat-task-history.js";
 
+function clipboardImageFiles(data) {
+  const items = Array.from(data?.items || []).filter(
+    (item) => item.kind === "file" && String(item.type || "").startsWith("image/")
+  );
+  const files = items.length
+    ? items.map((item) => item.getAsFile()).filter(Boolean)
+    : Array.from(data?.files || []).filter((file) => String(file.type || "").startsWith("image/"));
+  return files.map((file, index) => {
+    if (file.name) {
+      return file;
+    }
+    const subtype = file.type.slice("image/".length).split("+")[0];
+    const extension = subtype === "jpeg" ? "jpg" : subtype.replace(/[^a-z0-9]/gi, "");
+    return new File([file], `clipboard-image-${index + 1}.${extension || "img"}`, { type: file.type });
+  });
+}
+
 function composerFileDraftKey(scope) {
   const endpointRef = String(scope?.endpointRef || "").trim();
   if (!endpointRef) {
@@ -54,6 +71,7 @@ function buildComposerSubmission(options = {}) {
 
 export {
   buildComposerSubmission,
+  clipboardImageFiles,
   composerFileDraftKey,
   composerFileExtension,
   composerFileReferences,

@@ -150,6 +150,21 @@
   height: 13px;
 }
 
+.chat-composer-file-retry {
+  border: 0;
+  padding: 0 7px;
+  background: transparent;
+  color: var(--text-1);
+  font-size: var(--font-size-meta);
+  cursor: pointer;
+}
+
+.chat-composer-file-retry:disabled,
+.chat-composer-file-remove:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .chat-composer-files + .chat-composer-grid,
 .chat-composer-voice-strip + .chat-composer-grid {
   padding-top: 6px;
