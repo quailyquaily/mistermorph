@@ -35,3 +35,15 @@ Installs: none.
 Tests: gofmt, `go vet ./...` and `go test ./...` pass; the cron loop tests passed 30 runs under `-race`. `pnpm test` 355/355 and `pnpm build` pass. New tests cover two items at once, the limit and order, an item due while running or queued, the heartbeat with every slot taken, shutdown, the run board, and the routes.
 
 Not checked: the TODO panel UI was not looked at in a browser.
+
+## factory · review · 2026-11-04 20:55
+head: 264d65915d7e2dfb2785a2f28e8dafe2dcd2021d
+verdict: pass
+
+Codex reviewed all 26 changed files in origin/master...HEAD against the request. No verified introduced defects; no unresolved P0/P1 findings. The branch merges cleanly with origin/master.
+
+Validation: required gofmt check, go vet ./... and go test ./... passed after removing inherited MISTER_MORPH_* environment overrides from the test process. The initial run failed six configuration tests because of those overrides (example: llm.cloudflare_api_token is managed by environment); this was not an introduced code defect. Race tests for awareness, cron and daemonruntime passed 10 repetitions. Console pnpm test passed 355/355; pnpm build passed with a bundle-size warning. Tests used an absolute-path throwaway HOME.
+
+Installs: none. No tracked files changed during review.
+
+Not checked: browser rendering, animation and mobile layout; end-to-end concurrency, cancellation and notifications with real LLM calls and long-running tasks. Owner should check the TODO panel in a browser before shipping.
