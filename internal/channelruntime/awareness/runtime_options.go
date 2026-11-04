@@ -15,6 +15,9 @@ func normalizeRunOptions(opts RunOptions, paths runtimepaths.Paths) RunOptions {
 	if opts.Interval <= 0 {
 		opts.Interval = configdefaults.DefaultHeartbeatInterval
 	}
+	if opts.CronMaxConcurrency <= 0 {
+		opts.CronMaxConcurrency = configdefaults.DefaultCronMaxConcurrency
+	}
 	if opts.TaskTimeout <= 0 {
 		opts.TaskTimeout = configdefaults.DefaultTaskTimeout
 	}

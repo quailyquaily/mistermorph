@@ -456,3 +456,36 @@ func TestTodoTasksRouteReturnsHeartbeatDisabled(t *testing.T) {
 		t.Fatalf("system_tasks len = %d, want 0", len(payload.SystemTasks))
 	}
 }
+
+func TestTodoRunsRouteListsQueuedAndRunningItems(t *testing.T) {
+	stateDir := t.TempDir()
+	paths := testRuntimePaths(stateDir)
+	board := &cronstore.RunBoard{}
+	defer cronstore.RegisterRunBoard(paths.CronPath, board)()
+	now := time.Date(2026, 11, 4, 12, 0, 0, 0, time.UTC)
+	board.Queue("long", false, now)
+	board.Start("long", now)
+	board.Queue("next", true, now)
+
+	mux := http.NewServeMux()
+	RegisterRoutes(mux, RoutesOptions{Mode: "serve", AuthToken: "token", RuntimePaths: paths})
+	for _, path := range []string{"/todo/runs", "/todo/tasks"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.Header.Set("Authorization", "Bearer token")
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s: status %d (%s)", path, rec.Code, rec.Body.String())
+		}
+		var payload struct {
+			Runs []cronstore.TaskRun `json:"runs"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+			t.Fatalf("%s: %v", path, err)
+		}
+		if len(payload.Runs) != 2 || payload.Runs[0].ID != "long" || payload.Runs[0].State != cronstore.RunRunning ||
+			payload.Runs[1].ID != "next" || payload.Runs[1].State != cronstore.RunQueued || !payload.Runs[1].Manual {
+			t.Fatalf("%s: runs = %+v", path, payload.Runs)
+		}
+	}
+}

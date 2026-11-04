@@ -122,6 +122,7 @@ func ConsoleFields() []Field {
 		{Path: "heartbeat.enabled", Kind: KindBool, ApplyMode: ApplyRuntimeRestart},
 		{Path: "heartbeat.interval", Kind: KindDuration, ApplyMode: ApplyRuntimeRestart},
 		{Path: "cron.enabled", Kind: KindBool, ApplyMode: ApplyRuntimeRestart},
+		{Path: "cron.max_concurrency", Kind: KindInt, ApplyMode: ApplyRuntimeRestart, Min: &one},
 
 		{Path: "guard.enabled", Kind: KindBool, ApplyMode: ApplyNextGeneration},
 		{Path: "guard.dir_name", Kind: KindString, ApplyMode: ApplyRuntimeRestart},

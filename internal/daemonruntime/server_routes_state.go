@@ -87,6 +87,13 @@ func (routes *routeRegistration) registerStateRoutes() {
 		paths := statePaths
 		handleTodoTasks(w, r, paths.cronPath, paths.contactsDir, mode, settingsReader)
 	})
+	mux.HandleFunc("/todo/runs", func(w http.ResponseWriter, r *http.Request) {
+		if !checkAuth(r, authToken) {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		handleTodoRuns(w, r, statePaths.cronPath)
+	})
 	mux.HandleFunc("/todo/tasks/", func(w http.ResponseWriter, r *http.Request) {
 		if !checkAuth(r, authToken) {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)

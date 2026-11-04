@@ -1368,6 +1368,7 @@ func handleTodoTasks(w http.ResponseWriter, r *http.Request, cronPath string, co
 			"llm_default_route": defaultRoute,
 			"llm_profiles":      profiles,
 			"chat_options":      todoChatOptions(r.Context(), contactsDir, mode),
+			"runs":              cronstore.Runs(cronPath),
 		})
 		return
 
@@ -1399,6 +1400,7 @@ func handleTodoTasks(w http.ResponseWriter, r *http.Request, cronPath string, co
 			"llm_default_route": defaultRoute,
 			"llm_profiles":      profiles,
 			"chat_options":      todoChatOptions(r.Context(), contactsDir, mode),
+			"runs":              cronstore.Runs(cronPath),
 		})
 		return
 
@@ -1488,6 +1490,16 @@ func handleContactsChatProfile(w http.ResponseWriter, r *http.Request, contactsD
 		"item_count": len(items),
 		"items":      items,
 	})
+}
+
+// handleTodoRuns lists the TODO items this runtime has queued or running now.
+func handleTodoRuns(w http.ResponseWriter, r *http.Request, cronPath string) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"runs": cronstore.Runs(cronPath)})
 }
 
 func handleTodoTaskRun(w http.ResponseWriter, r *http.Request, cronPath string, cronRun CronRunFunc) {

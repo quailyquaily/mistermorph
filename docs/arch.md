@@ -197,6 +197,8 @@ Notes:
 - Awareness shares the same agent execution core; it differs mainly by trigger path and metadata envelope.
 - Heartbeat is registered as the built-in cron task `__heartbeat__` when both `cron.enabled` and `heartbeat.enabled` are true.
 - If `cron.enabled` is false, Heartbeat does not run.
+- The cron loop runs up to `cron.max_concurrency` TODO items at once (default 8); items beyond it wait in order. An item never overlaps itself: an occurrence that comes due while the same item is still waiting or running is skipped, and a manual run returns `409 Conflict`. Heartbeat runs in a lane of its own beside them, so long TODO items do not hold it up. On shutdown, running items get the cancelled context and are waited for; queued items are logged as `cron_skip` with `reason=shutdown`.
+- `GET /todo/runs` (and the `runs` field of `GET /todo/tasks`) lists the items the loop has running or queued now; the Console TODO panel polls it to mark them.
 - Heartbeat does not read `TODO.md` or expand `TODO.RECUR.md`.
 - `/poke` is a separate awareness behavior. Its body is required and becomes the task text; empty or non-text bodies return `400 Bad Request`; bodies over 10 KB return `413 Request Entity Too Large`.
 - If `/poke` arrives while an awareness task is already running, the admin server returns `409 Conflict` and the caller must retry.

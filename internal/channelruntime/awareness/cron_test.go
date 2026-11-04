@@ -35,23 +35,19 @@ func TestCronLoopRunnerSkipsAlreadyInFlightTask(t *testing.T) {
 func TestCronLoopRunnerIncludesDueSystemTasks(t *testing.T) {
 	cronPath := filepath.Join(t.TempDir(), "cron.yaml")
 	now := time.Date(2026, 5, 26, 10, 30, 15, 0, time.UTC)
-	r := &cronLoopRunner{
-		opts: CronLoopOptions{
-			Path:        cronPath,
-			SystemTasks: []cronstore.Task{cronstore.HeartbeatTask("*/30 * * * *")},
-			Now:         func() time.Time { return now },
-		},
-		store:    cronstore.NewStore(cronPath),
-		queue:    make(chan cronstore.DueTask, 1),
-		inFlight: map[string]bool{},
-	}
+	r := newCronLoopRunner(CronLoopOptions{
+		Path:        cronPath,
+		SystemTasks: []cronstore.Task{cronstore.HeartbeatTask("*/30 * * * *")},
+		Now:         func() time.Time { return now },
+	})
 
 	r.tick(context.Background())
 
-	if len(r.queue) != 1 {
-		t.Fatalf("queue len = %d, want 1", len(r.queue))
+	// System tasks go to their own lane, apart from TODO items.
+	if len(r.queue) != 0 || len(r.systemQueue) != 1 {
+		t.Fatalf("queue len = %d, system queue len = %d, want 0 and 1", len(r.queue), len(r.systemQueue))
 	}
-	got := <-r.queue
+	got := <-r.systemQueue
 	if got.Task.ID != cronstore.HeartbeatTaskID {
 		t.Fatalf("task id = %q, want %q", got.Task.ID, cronstore.HeartbeatTaskID)
 	}
