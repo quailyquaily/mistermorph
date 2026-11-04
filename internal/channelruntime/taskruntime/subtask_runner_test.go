@@ -505,7 +505,8 @@ func TestRunSubtaskDirectPathSkipsLLMAndNormalizesResult(t *testing.T) {
 
 	result, err := rt.RunSubtask(context.Background(), agent.SubtaskRequest{
 		OutputSchema: "subtask.direct.v1",
-		RunFunc: func(context.Context) (*agent.SubtaskResult, error) {
+		RunFunc: func(ctx context.Context) (*agent.SubtaskResult, error) {
+			agent.RecordWorkerProcess(ctx, "codex", 123)
 			return &agent.SubtaskResult{
 				Status:     agent.SubtaskStatusDone,
 				OutputKind: agent.SubtaskOutputKindJSON,
@@ -520,6 +521,9 @@ func TestRunSubtaskDirectPathSkipsLLMAndNormalizesResult(t *testing.T) {
 	}
 	if result == nil {
 		t.Fatal("RunSubtask() result is nil")
+	}
+	if result.Worker == nil || result.Worker.Name == "" || len(result.Worker.Processes) != 1 || result.Worker.Processes[0].PID != 123 {
+		t.Fatalf("missing worker metadata: %+v", result.Worker)
 	}
 	if result.Status != agent.SubtaskStatusDone {
 		t.Fatalf("Status = %q, want done", result.Status)

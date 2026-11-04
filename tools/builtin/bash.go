@@ -244,6 +244,7 @@ func (t *BashTool) executeInSubtask(ctx context.Context, cmdStr string, cwd stri
 		taskID, runCtx, _ := agent.PrepareSubtaskContext(ctx, nil)
 		payload, err := t.runCommand(runCtx, cmdStr, cwd, timeout)
 		result := buildBashSubtaskResult(taskID, payload, err)
+		result.Worker = agent.WorkerFromContext(runCtx)
 		return marshalBashSubtaskResult(result, err)
 	}
 	req := agent.SubtaskRequest{

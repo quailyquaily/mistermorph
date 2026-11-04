@@ -7,6 +7,7 @@ import {
   mergeRefreshedHistoryItems,
   normalizeTaskStatus,
   normalizeActivity,
+  activityWorkerLabel,
   normalizePlan,
   normalizeElevations,
   normalizeQuestions,
@@ -360,4 +361,35 @@ test("keepHistoryItemIDs keeps the ids of messages sent from the page when their
   const clash = keepHistoryItemIDs([{ id: "t9:agent", role: "agent", taskId: "t1" }], loaded.concat([{ id: "t9:agent", role: "agent", taskId: "t9" }]));
   assert.deepEqual(clash.map((item) => item.id), ["t0:user", "t0:agent", "t1:user", "t1:agent", "t2:agent", "t9:agent"]);
   assert.deepEqual(keepHistoryItemIDs(onScreen, null), []);
+});
+
+test("worker names and historical PIDs survive finished task reload, including nested entries", () => {
+  const worker = { id: "worker-1", name: "Milo", processes: [
+    { pid: 123, program: "codex", activity_id: "coder" },
+    { pid: 456, program: "bash", activity_id: "command" },
+  ] };
+  const saved = { history: [
+    { id: "code", kind: "tool", name: "codemode", status: "done", children: [
+      { id: "coder", kind: "tool", name: "coder", status: "done", worker },
+    ] },
+    { id: "spawn", kind: "tool", name: "spawn", status: "done", worker: { id: "worker-2", name: "Luna" } },
+    { id: "old", kind: "tool", name: "coder", status: "done" },
+  ] };
+  const live = normalizeActivity(saved);
+  const reloaded = normalizeActivity(JSON.parse(JSON.stringify(saved)));
+  assert.deepEqual(live, reloaded);
+  assert.equal(activityWorkerLabel(reloaded.history[0].children[0]), "Milo · codex PID 123 · bash PID 456");
+  assert.equal(activityWorkerLabel(reloaded.history[1]), "Luna");
+  assert.equal(activityWorkerLabel(reloaded.history[2]), "");
+  assert.equal(reloaded.history[0].children[0].worker.id, "worker-1");
+  const savedWorker = reloaded.history[0].children[0].worker;
+  assert.equal(activityWorkerLabel({ id: "read", name: "read_file", kind: "tool", worker: savedWorker }), "Milo");
+  assert.equal(activityWorkerLabel({ id: "command", name: "bash", kind: "tool", worker: savedWorker }), "Milo · bash PID 456");
+});
+
+test("worker labels omit invalid PIDs", () => {
+  const activity = normalizeActivity({ history: [{ id: "spawn", kind: "tool", worker: {
+    id: "worker-1", name: "Milo", processes: [{ pid: 0 }, { pid: -1 }, { pid: "123" }, { pid: 1.5 }],
+  } }] });
+  assert.equal(activityWorkerLabel(activity.current), "Milo");
 });

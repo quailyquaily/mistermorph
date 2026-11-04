@@ -793,6 +793,7 @@ func (rt *Runtime) prepareRun(ctx context.Context, req RunRequest) (preparedRunt
 			terminalRequest := coderterm.Request{
 				Backend: request.Backend, Command: request.Command, Env: request.Env, CWD: request.CWD,
 				Task: request.Task, LogRoot: request.LogRoot, BypassApprovals: request.BypassApprovals,
+				Process: request.Process,
 				Progress: func(status string) {
 					if request.Progress != nil {
 						request.Progress(status, status+"\n", status)
@@ -1075,6 +1076,7 @@ func (rt *Runtime) runSubtask(ctx context.Context, req agent.SubtaskRequest, rou
 	}
 	agent.EmitEvent(ctx, nil, agent.Event{
 		Kind:    agent.EventKindSubtaskStart,
+		Worker:  agent.WorkerFromContext(runCtx),
 		TaskID:  taskID,
 		Text:    task,
 		Model:   model,
@@ -1113,9 +1115,11 @@ func (rt *Runtime) runSubtask(ctx context.Context, req agent.SubtaskRequest, rou
 			result = agent.SubtaskResultFromFinal(taskID, req.OutputSchema, runResult.Final)
 		}
 	}
+	result.Worker = agent.WorkerFromContext(runCtx)
 	logger.Info("subtask_done", "task_id", taskID, "status", result.Status, "output_kind", result.OutputKind)
 	agent.EmitEventDetached(ctx, nil, agent.Event{
 		Kind:       agent.EventKindSubtaskDone,
+		Worker:     result.Worker,
 		TaskID:     taskID,
 		Status:     strings.TrimSpace(result.Status),
 		Summary:    strings.TrimSpace(result.Summary),

@@ -25,20 +25,21 @@ type consoleActivityProgress struct {
 }
 
 type consoleActivityEntry struct {
-	ID         string         `json:"id"`
-	Kind       string         `json:"kind"`
-	Name       string         `json:"name,omitempty"`
-	Status     string         `json:"status,omitempty"`
-	At         string         `json:"at,omitempty"`
-	Stream     string         `json:"stream,omitempty"`
-	Output     string         `json:"output,omitempty"`
-	Args       map[string]any `json:"args,omitempty"`
-	Summary    string         `json:"summary,omitempty"`
-	Error      string         `json:"error,omitempty"`
-	TaskID     string         `json:"task_id,omitempty"`
-	Mode       string         `json:"mode,omitempty"`
-	Profile    string         `json:"profile,omitempty"`
-	OutputKind string         `json:"output_kind,omitempty"`
+	Worker     *agent.WorkerMetadata `json:"worker,omitempty"`
+	ID         string                `json:"id"`
+	Kind       string                `json:"kind"`
+	Name       string                `json:"name,omitempty"`
+	Status     string                `json:"status,omitempty"`
+	At         string                `json:"at,omitempty"`
+	Stream     string                `json:"stream,omitempty"`
+	Output     string                `json:"output,omitempty"`
+	Args       map[string]any        `json:"args,omitempty"`
+	Summary    string                `json:"summary,omitempty"`
+	Error      string                `json:"error,omitempty"`
+	TaskID     string                `json:"task_id,omitempty"`
+	Mode       string                `json:"mode,omitempty"`
+	Profile    string                `json:"profile,omitempty"`
+	OutputKind string                `json:"output_kind,omitempty"`
 	// Children are the tool calls a codemode script made, most recent last; ChildrenOmitted
 	// counts earlier ones dropped to stay within consoleActivityChildLimit.
 	Children        []consoleActivityEntry `json:"children,omitempty"`
@@ -86,6 +87,7 @@ func cloneConsoleActivityEntry(entry *consoleActivityEntry) *consoleActivityEntr
 		return nil
 	}
 	out := *entry
+	out.Worker = mergeConsoleWorker(nil, entry.Worker)
 	if len(entry.Args) > 0 {
 		out.Args = cloneConsoleArgs(entry.Args)
 	}
@@ -113,6 +115,11 @@ func cloneConsoleArgs(args map[string]any) map[string]any {
 }
 
 func updateConsoleActivityProgress(progress *consoleActivityProgress, event agent.Event) (*consoleActivityProgress, bool) {
+	if event.Kind == agent.EventKindWorkerProcess {
+		changed := updateConsoleWorkerEntries(progress, event.Worker)
+		return cloneConsoleActivityProgress(progress), changed
+	}
+	updateConsoleWorkerEntries(progress, event.Worker)
 	if strings.TrimSpace(event.Kind) == agent.EventKindToolOutput {
 		return updateConsoleActivityOutput(progress, event)
 	}
@@ -298,6 +305,7 @@ func buildConsoleActivityEntry(event agent.Event) *consoleActivityEntry {
 
 	entry := &consoleActivityEntry{
 		ID:         id,
+		Worker:     mergeConsoleWorker(nil, event.Worker),
 		Status:     strings.TrimSpace(event.Status),
 		At:         time.Now().Format(time.RFC3339Nano),
 		Summary:    strings.TrimSpace(event.Summary),
@@ -350,6 +358,7 @@ func mergeConsoleActivityChild(parent consoleActivityEntry, child consoleActivit
 }
 
 func mergeConsoleActivityEntry(base consoleActivityEntry, update consoleActivityEntry) consoleActivityEntry {
+	base.Worker = mergeConsoleWorker(base.Worker, update.Worker)
 	if strings.TrimSpace(update.Kind) != "" {
 		base.Kind = strings.TrimSpace(update.Kind)
 	}
@@ -390,4 +399,60 @@ func mergeConsoleActivityEntry(base consoleActivityEntry, update consoleActivity
 		base.OutputKind = strings.TrimSpace(update.OutputKind)
 	}
 	return base
+}
+
+// Merge snapshots by process identity: output callbacks may deliver older snapshots after
+// a process-start event. Never discard a PID already observed for this worker.
+func mergeConsoleWorker(base, update *agent.WorkerMetadata) *agent.WorkerMetadata {
+	if base == nil {
+		base = update
+	}
+	if base == nil {
+		return nil
+	}
+	out := *base
+	out.Processes = append([]agent.WorkerProcess(nil), base.Processes...)
+	if update != nil && update.ID == out.ID {
+		for _, process := range update.Processes {
+			if process.PID <= 0 {
+				continue
+			}
+			found := false
+			for _, existing := range out.Processes {
+				if existing == process {
+					found = true
+					break
+				}
+			}
+			if !found {
+				out.Processes = append(out.Processes, process)
+			}
+		}
+	}
+	return &out
+}
+
+func updateConsoleWorkerEntries(progress *consoleActivityProgress, worker *agent.WorkerMetadata) bool {
+	if progress == nil || worker == nil {
+		return false
+	}
+	changed := false
+	var visit func(*consoleActivityEntry)
+	visit = func(entry *consoleActivityEntry) {
+		if entry == nil {
+			return
+		}
+		if entry.Worker != nil && entry.Worker.ID == worker.ID {
+			entry.Worker = mergeConsoleWorker(entry.Worker, worker)
+			changed = true
+		}
+		for i := range entry.Children {
+			visit(&entry.Children[i])
+		}
+	}
+	for i := range progress.History {
+		visit(&progress.History[i])
+	}
+	visit(progress.Current)
+	return changed
 }

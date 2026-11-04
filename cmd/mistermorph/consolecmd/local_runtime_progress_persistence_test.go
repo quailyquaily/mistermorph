@@ -25,6 +25,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/pathroots"
 	"github.com/quailyquaily/mistermorph/llm"
 	"github.com/quailyquaily/mistermorph/tools"
+	"github.com/quailyquaily/mistermorph/tools/builtin"
 	"github.com/spf13/viper"
 )
 
@@ -396,4 +397,78 @@ func consoleProgressTaskUpdates(t *testing.T, journal *domainjournal.Journal, ta
 		t.Fatalf("journal.Replay() error = %v", err)
 	}
 	return updates
+}
+
+type consoleWorkerPersistenceTool struct{ roots pathroots.PathRoots }
+
+func (consoleWorkerPersistenceTool) Name() string            { return "work" }
+func (consoleWorkerPersistenceTool) Description() string     { return "test subtask process" }
+func (consoleWorkerPersistenceTool) ParameterSchema() string { return `{}` }
+func (tool consoleWorkerPersistenceTool) Execute(ctx context.Context, _ map[string]any) (string, error) {
+	runner, ok := agent.SubtaskRunnerFromContext(ctx)
+	if !ok {
+		return "", fmt.Errorf("missing subtask runner")
+	}
+	result, err := runner.RunSubtask(ctx, agent.SubtaskRequest{RunFunc: func(runCtx context.Context) (*agent.SubtaskResult, error) {
+		shell := builtin.NewBashTool(true, time.Second, 1024, tool.roots)
+		output, err := shell.Execute(runCtx, map[string]any{"cmd": "printf '%s' \"$$\""})
+		if err != nil {
+			return nil, err
+		}
+		return &agent.SubtaskResult{Status: agent.SubtaskStatusDone, Output: output}, nil
+	}})
+	if err != nil {
+		return "", err
+	}
+	raw, err := json.Marshal(result)
+	return string(raw), err
+}
+
+func TestConsolePersistsWorkerProcessesForTerminalTasks(t *testing.T) {
+	for _, terminal := range []daemonruntime.TaskStatus{daemonruntime.TaskDone, daemonruntime.TaskFailed, daemonruntime.TaskCanceled} {
+		t.Run(string(terminal), func(t *testing.T) {
+			last := consoleProgressPersistenceLLMStep{result: llm.Result{Text: `{"type":"final","output":"done"}`}}
+			if terminal == daemonruntime.TaskFailed {
+				last = consoleProgressPersistenceLLMStep{err: errors.New("model failed")}
+			}
+			if terminal == daemonruntime.TaskCanceled {
+				last = consoleProgressPersistenceLLMStep{err: context.Canceled}
+			}
+			rt, job, journal := newConsoleProgressPersistenceRuntime(t, []consoleProgressPersistenceLLMStep{
+				{result: consoleProgressToolCall("work")}, last,
+			}, "work", false)
+			dir := t.TempDir()
+			if err := job.Generation.commonDeps.Registry().Replace(consoleWorkerPersistenceTool{roots: pathroots.New(dir, dir, dir)}); err != nil {
+				t.Fatal(err)
+			}
+			rt.handleTaskJob(context.Background(), job.ConversationKey, job)
+			updates := consoleProgressTaskUpdates(t, journal, job.TaskID)
+			finished := updates[len(updates)-1]
+			if finished.Status != terminal {
+				t.Fatalf("status=%s", finished.Status)
+			}
+			raw, err := json.Marshal(finished.Result)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var saved struct {
+				Activity *consoleActivityProgress `json:"activity"`
+			}
+			if err := json.Unmarshal(raw, &saved); err != nil {
+				t.Fatal(err)
+			}
+			if saved.Activity == nil {
+				t.Fatal("missing persisted activity")
+			}
+			var worker *agent.WorkerMetadata
+			for _, entry := range saved.Activity.History {
+				if entry.Kind == "subtask" {
+					worker = entry.Worker
+				}
+			}
+			if worker == nil || worker.ID == "" || worker.Name == "" || len(worker.Processes) != 1 || worker.Processes[0].PID <= 0 || worker.Processes[0].Program != "bash" {
+				t.Fatalf("persisted worker=%+v, result=%s", worker, raw)
+			}
+		})
+	}
 }

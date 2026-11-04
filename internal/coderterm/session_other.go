@@ -10,6 +10,7 @@ import (
 const Supported = false
 
 type session struct {
+	pid               int
 	cwd, id           string
 	busy              bool
 	resumed, prompted bool
