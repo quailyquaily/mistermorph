@@ -5,6 +5,7 @@ import test from "node:test";
 import { computed, effectScope, nextTick, reactive, ref, watch } from "vue";
 import { createArrivalTracker, createHighlightWindow } from "./arrivals.js";
 import { isValidCronExpression } from "./cron.js";
+import { normalizeTodoRuns, todoRunsSignature, TODO_RUN_RUNNING } from "./todo-runs.js";
 
 const source = (await readFile(new URL("../views/TodoView.js", import.meta.url), "utf8"))
   .replace(/^import[\s\S]*?;\n/gm, "")
@@ -19,12 +20,13 @@ const task = (extra = {}) => ({
   llm_profile: "reviewer", bash_env: [{ name: "MODE", value: "review" }], ...extra,
 });
 
-async function mount(t, { rows = [task()], request = async () => ({}), lang = "en" } = {}) {
+async function mount(t, { rows = [task()], runs = [], request = async () => ({}), lang = "en" } = {}) {
   const calls = [];
   const errors = [];
   const successes = [];
   const context = {
     computed, ref, watch, createArrivalTracker, createHighlightWindow, isValidCronExpression,
+    normalizeTodoRuns, todoRunsSignature, TODO_RUN_RUNNING,
     AppSkeleton: {}, AppFab: {}, AppPage: {}, AppMarkdownEditor: {}, AppTabs: {},
     TodoCalendar: {}, WorkspaceDirPickerDialog: {},
     ...Object.fromEntries(["Discord", "WeChat", "WhatsApp", "Bluesky", "X", "Lark", "Line", "Slack", "Telegram"]
@@ -35,7 +37,8 @@ async function mount(t, { rows = [task()], request = async () => ({}), lang = "e
     endpointState: reactive({ selectedRef: "endpoint-one" }),
     localeState: { lang }, i18nExtensions: {},
     runtimeApiFetch: async (path, options) => {
-      if (!options) return { tasks: rows };
+      if (path === "/todo/runs") return { runs };
+      if (!options) return { tasks: rows, runs };
       calls.push({ path, ...plain(options) });
       return request(path, options);
     },
@@ -254,3 +257,31 @@ for (const [lang, label, title] of [["en", "Duplicate", "Review (copy)"], ["zh",
     assert.equal(view.selectedTask.value.title, title);
   });
 }
+
+test("the list shows which TODO items are running or waiting, and a running item cannot be started again", async (t) => {
+  const { view, calls } = await mount(t, {
+    rows: [task(), task({ id: "task-2", title: "Build" }), task({ id: "task-3", title: "Idle" })],
+    runs: [
+      { id: "task-1", state: "running", started_at: "2026-11-04T03:00:00Z" },
+      { id: "task-2", state: "queued" },
+      { id: "__heartbeat__", state: "running" },
+    ],
+  });
+  const [first, second, third] = view.tasks.value;
+  assert.equal(view.taskRun(first).state, "running");
+  assert.equal(view.runStateLabel(view.taskRun(first)), "Running");
+  assert.equal(view.runMarkerType(view.taskRun(first), "success"), "primary");
+  assert.equal(view.runMarkerClass(view.taskRun(first)), "todo-run-marker is-running");
+  assert.equal(view.runStateLabel(view.taskRun(second)), "Waiting");
+  assert.equal(view.runMarkerType(view.taskRun(second), "success"), "warning");
+  assert.equal(view.taskRun(third), null);
+  assert.equal(view.runMarkerType(view.taskRun(third), "success"), "success");
+  assert.equal(view.heartbeatRun().state, "running");
+
+  // task-1 is selected and running: Run now stays off and sends nothing.
+  assert.equal(view.canRunSelectedTask.value, false);
+  await view.runSelectedTaskNow();
+  assert.equal(calls.length, 0);
+  view.selectTask(third);
+  assert.equal(view.canRunSelectedTask.value, true);
+});

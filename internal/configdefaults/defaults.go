@@ -11,6 +11,7 @@ import (
 
 const (
 	DefaultHeartbeatInterval      = 30 * time.Minute
+	DefaultCronMaxConcurrency     = 8
 	DefaultLLMRequestTimeout      = 90 * time.Second
 	DefaultMaxSteps               = agent.DefaultMaxSteps
 	DefaultParseRetries           = agent.DefaultParseRetries
@@ -239,6 +240,7 @@ func Apply(v *viper.Viper) {
 	v.SetDefault("heartbeat.enabled", true)
 	v.SetDefault("heartbeat.interval", DefaultHeartbeatInterval)
 	v.SetDefault("cron.enabled", true)
+	v.SetDefault("cron.max_concurrency", DefaultCronMaxConcurrency)
 
 	v.SetDefault("secrets.allow_profiles", []string{})
 	v.SetDefault("auth_profiles", map[string]any{})

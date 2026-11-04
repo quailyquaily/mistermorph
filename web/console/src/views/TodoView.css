@@ -203,6 +203,31 @@
   white-space: normal;
 }
 
+/* A TODO item the runtime is running now, or holding until a slot frees up. */
+.todo-index-run-state {
+  color: var(--text-1);
+}
+
+.todo-run-marker.is-running {
+  animation: todo-run-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes todo-run-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .todo-run-marker.is-running {
+    animation: none;
+  }
+}
+
 /* No scheduled TODOs: a dashed row in the list's own geometry, where the first TODO will appear.
    It names the empty state, says what a TODO is for, and adds one when clicked. */
 .todo-empty-item {

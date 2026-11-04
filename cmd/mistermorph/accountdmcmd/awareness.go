@@ -53,10 +53,11 @@ func Run(ctx context.Context, channel string, awarenessDeps awarenessruntime.Dep
 		Notifier: awarenessruntime.NotifyFunc(func(ctx context.Context, text string) error {
 			return livesend.Notify(ctx, channel, text)
 		}),
-		CronEnabled:       cronCfg.Enabled,
-		CronPath:          deps.RuntimePaths.CronPath,
-		ChatInfoRefresher: chatinfo.NewFetcher(chatinfo.FetcherOptionsFromReader(viper.GetViper())),
-		TaskStore:         opts.TaskStore,
+		CronEnabled:        cronCfg.Enabled,
+		CronMaxConcurrency: cronCfg.MaxConcurrency,
+		CronPath:           deps.RuntimePaths.CronPath,
+		ChatInfoRefresher:  chatinfo.NewFetcher(chatinfo.FetcherOptionsFromReader(viper.GetViper())),
+		TaskStore:          opts.TaskStore,
 	}
 	pokeRequests := make(chan awarenessruntime.PokeRequest)
 	awarenessOpts.PokeRequests = pokeRequests

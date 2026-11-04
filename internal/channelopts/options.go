@@ -140,13 +140,18 @@ func HeartbeatConfigFromViper() HeartbeatConfig {
 
 type CronConfig struct {
 	Enabled bool
+	// MaxConcurrency is how many TODO items may run at once.
+	MaxConcurrency int
 }
 
 func CronConfigFromReader(r ConfigReader) CronConfig {
 	if r == nil {
 		return CronConfig{}
 	}
-	return CronConfig{Enabled: r.GetBool("cron.enabled")}
+	return CronConfig{
+		Enabled:        r.GetBool("cron.enabled"),
+		MaxConcurrency: r.GetInt("cron.max_concurrency"),
+	}
 }
 
 func CronConfigFromViper() CronConfig {
