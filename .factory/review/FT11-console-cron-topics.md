@@ -48,3 +48,20 @@ Tests: gofmt, `go vet ./...` and `go test ./...` pass; `pnpm test` 382/382 and `
 Not checked: the UI was not looked at in a browser, and no real TODO run was recorded through the Console.
 
 Merging with FT10: see FT10. The branches conflict in `console_store.go` and `ChatView.js`; merge FT10 first.
+
+## factory · review · 2026-11-05 00:59
+head: e0b01f0abdec943411165f18c0542e4a1c12b6a0
+verdict: fix
+fix:
+- [P1] internal/codemode/run_test.go:365: Required test command initially failed in TestMemoryWatcherStopsInvocations (`failed 0:slow:failed`). Investigate/stabilize the failure before approval. This is a factory test-gate finding, not a proven introduced defect: the exact command passed on retry; the test code is unchanged, and baseline overlay single-test/package checks each passed 20 repetitions.
+notes:
+- [P2] web/console/src/views/ChatView.js:855: Keep the sidebar and cron toggle accessible when only cron topics exist. Example: no normal topics plus one TODO run makes visibleTopics empty, hiding the desktop sidebar; mobile switches to chat without a return entry. Confirmed by executing the layout calculations.
+- [P2] internal/daemonruntime/types.go:191: Enforce cron topic read-only status at the backend submit entry, not only the composer. Example: submitting /help to _cron_weekly succeeds, and a supplied topic_title overwrites the TODO topic title. Confirmed through a temporary Go reproduction.
+- [P2] internal/channelruntime/awareness/run.go:353: Synchronize topic titles when saving a renamed TODO, not only when a run starts. Example: rename and disable a TODO with existing runs; the saved TODO has its new title while its topic retains the old title indefinitely. Confirmed through HTTP routes.
+- [P2] web/console/src/views/ChatView.js:1053: Refresh updated_at and reorder cron topics even when title/revision are unchanged. Example: A runs again after B, but metadata polling discards A's changed timestamp and leaves A behind B. Confirmed by executing frontend logic.
+
+Reviewed all 10 changed files in origin/master...HEAD, against master 2bce552ee9e2c604830ea600ef7be055f3e71df0. The branch merges cleanly with that master; no conflict resolution or code changes were needed.
+
+Validation: required gofmt/vet/Go-test command failed once as above, then passed in full on retry. pnpm test passed 382/382; pnpm build passed with a large-chunk warning. Temporary Go and frontend reproductions confirmed the four P2 findings. git diff --check passed. Tracked worktree and HEAD unchanged.
+
+Installs: none requiring reporting. Browser visuals and a real TODO run through Console were not checked. No linked GitHub issues or PRs were present. Item remains in review/ for the owner to decide; add a note and move it to new/ for fixes.
