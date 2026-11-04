@@ -111,6 +111,12 @@ func (t *ReadFileTool) resolvePath(ctx context.Context, rawPath string) (string,
 	return candAbs, nil
 }
 
+// DeniedPath reports whether path matches one of denyPaths, as tools.read_file.deny_paths are
+// matched, and returns the entry that matched. Other tools that read files apply the same list.
+func DeniedPath(path string, denyPaths []string) (string, bool) {
+	return denyPath(path, denyPaths)
+}
+
 func denyPath(path string, denyPaths []string) (string, bool) {
 	if len(denyPaths) == 0 {
 		return "", false

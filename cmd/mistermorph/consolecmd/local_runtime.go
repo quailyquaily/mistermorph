@@ -2746,6 +2746,9 @@ func (r *consoleLocalRuntime) runTask(ctx context.Context, conversationKey strin
 	}
 	reactTool := newConsoleMessageReactTool(r.store, r.streamHub, job)
 	reg := bundle.taskRuntime.BaseRegistry.Clone()
+	if err := reg.Replace(&consoleSendFileTool{store: r.store, hub: r.streamHub, taskID: job.TaskID, topicID: job.TopicID, workspaceDir: job.WorkspaceDir, cacheDir: consoleFileCacheDir(generation.reader), denyPaths: generation.reader.GetStringSlice("tools.read_file.deny_paths")}); err != nil {
+		return nil, nil, err
+	}
 	if err := reg.Replace(reactTool); err != nil {
 		return nil, nil, err
 	}

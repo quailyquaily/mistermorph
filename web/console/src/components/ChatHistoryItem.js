@@ -1,6 +1,6 @@
 import { computed, onBeforeUpdate, onUpdated } from "vue";
 
-import { translate } from "../core/context";
+import { apiFetchBlob, translate } from "../core/context";
 import { approvalParameterEntries, skillInstallApproval } from "../core/chat-approvals";
 import { agentLinkMessages, insightMessages, planStepMessages, pollingActionWord } from "../core/chat-task-history";
 import { recordComponentUpdate } from "../core/performance";
@@ -11,6 +11,7 @@ import ChatRichContent from "./ChatRichContent";
 import ChatSkillInstallPreview from "./ChatSkillInstallPreview";
 import ChatStatusCard from "./ChatStatusCard";
 import ChatSystemMessage from "./ChatSystemMessage";
+import ReceivedFile from "./ReceivedFile";
 import MosaicText from "./MosaicText";
 
 function roleOf(item) {
@@ -48,6 +49,7 @@ const ChatHistoryItem = {
     ChatStatusCard,
     ChatSystemMessage,
     MosaicText,
+    ReceivedFile,
   },
   emits: [
     "approval-approve",
@@ -354,6 +356,7 @@ const ChatHistoryItem = {
       approvalVisible,
       copyAvailable,
       copyButtonClass,
+      fetchAttachment: apiFetchBlob,
       fileKind,
       contextCompactNotice,
       contextCompactNoticeClass,
@@ -489,6 +492,16 @@ const ChatHistoryItem = {
               @rendered="emitRendered"
             />
           </div>
+          <ReceivedFile
+            v-for="file in item.attachments || []"
+            :key="file.id"
+            :file="file"
+            :task-id="item.taskId"
+            :topic-id="item.topicID || selectedTopicId"
+            :fetch-blob="fetchAttachment"
+            :download-label="t('chat_workspace_action_download')"
+            :error-label="t('artifact_preview_error')"
+          />
           <ChatQuestionCard
             v-for="question in questions"
             :key="question.id"

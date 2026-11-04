@@ -51,6 +51,27 @@ const maxAttempts = 5
 // sudo to have started (Started).
 var helperHandshakeTimeout = 10 * time.Second
 
+const socketName = "askpass.sock"
+
+// maxSocketPath is the longest Unix socket path every platform accepts: sun_path holds 104 bytes
+// on macOS and the BSDs and 108 on Linux, including the closing NUL.
+const maxSocketPath = 103
+
+// socketDir makes the private directory for the askpass socket. A long TMPDIR can make the socket
+// path too long to bind, so the directory then goes under /tmp instead. MkdirTemp creates it
+// readable only by its owner either way.
+func socketDir() (string, error) {
+	dir, err := os.MkdirTemp("", "mm-elevate-")
+	if err != nil {
+		return "", err
+	}
+	if len(filepath.Join(dir, socketName)) <= maxSocketPath {
+		return dir, nil
+	}
+	_ = os.RemoveAll(dir)
+	return os.MkdirTemp("/tmp", "mm-elevate-")
+}
+
 // Begin opens the session for an elevated command that runs in dir until deadline. The approver set
 // with WithApprover on ctx asks the user, or else (and always with cfg.Approver "dialog") the
 // desktop dialog (cfg.Dialog). Ending ctx gives up any ask in progress. The caller ends the session
@@ -60,11 +81,11 @@ func Begin(ctx context.Context, cfg Config, command, dir string, deadline time.T
 	if !ok || cfg.approverMode() == ApproverDialog {
 		approver = dialogApprover{configured: strings.TrimSpace(cfg.Dialog)}
 	}
-	tempDir, err := os.MkdirTemp("", "mm-elevate-")
+	tempDir, err := socketDir()
 	if err != nil {
 		return nil, fmt.Errorf("make the approval socket's directory: %w", err)
 	}
-	listener, err := net.Listen("unix", filepath.Join(tempDir, "askpass.sock"))
+	listener, err := net.Listen("unix", filepath.Join(tempDir, socketName))
 	if err != nil {
 		_ = os.RemoveAll(tempDir)
 		return nil, fmt.Errorf("listen for the askpass helper: %w", err)

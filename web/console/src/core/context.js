@@ -546,6 +546,7 @@ export {
   authValid,
   endpointState,
   apiFetch,
+  apiFetchBlob,
   onAuthExpired,
   fetchConsoleAuthConfig,
   ensureConsoleSession,

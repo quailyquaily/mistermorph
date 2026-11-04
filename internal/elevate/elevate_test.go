@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"io"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -710,5 +711,49 @@ func TestCheckContextAndOffered(t *testing.T) {
 				t.Fatalf("Offered() = %v, want %v", got, tc.wantOffered)
 			}
 		})
+	}
+}
+
+// A long TMPDIR would make the askpass socket path too long to bind; the directory then goes
+// under /tmp, still private to its owner.
+func TestSocketDirWithLongTMPDIR(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix sockets only")
+	}
+	long := filepath.Join(t.TempDir(), strings.Repeat("x", 90))
+	if err := os.MkdirAll(long, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TMPDIR", long)
+	dir, err := socketDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+	socket := filepath.Join(dir, socketName)
+	if len(socket) > maxSocketPath || strings.HasPrefix(dir, long) {
+		t.Fatalf("socket path %q (%d bytes) not shortened", socket, len(socket))
+	}
+	info, err := os.Stat(dir)
+	if err != nil || info.Mode().Perm() != 0o700 {
+		t.Fatalf("socket directory mode = %v, %v; want 0700", info.Mode().Perm(), err)
+	}
+	listener, err := net.Listen("unix", socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = listener.Close()
+
+	// A short TMPDIR is used as it is. t.TempDir may sit under a long TMPDIR itself, so use /tmp.
+	short, err := os.MkdirTemp("/tmp", "mm-t-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(short)
+	t.Setenv("TMPDIR", short)
+	if dir, err := socketDir(); err != nil || !strings.HasPrefix(dir, short) {
+		t.Fatalf("short TMPDIR not used: %q, %v", dir, err)
+	} else {
+		_ = os.RemoveAll(dir)
 	}
 }
