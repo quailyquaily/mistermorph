@@ -677,3 +677,72 @@ func TestConsoleEventPreviewSinkWebExtractSchedulesObserverSummary(t *testing.T)
 	}
 	t.Fatalf("observer summary did not appear, latest=%s", fmt.Sprintf("%#v", frame))
 }
+
+// Review findings: a secret split across coder output pieces leaked as fragments, and a custom
+// block crossing the preview cut lost its closing marker.
+func TestConsoleEventPreviewSinkRedactsCoderCommandOutputAcrossPieces(t *testing.T) {
+	redacting := guard.New(guard.Config{Enabled: true, Redaction: guard.RedactionConfig{Enabled: true,
+		Patterns: []guard.RegexPattern{{Name: "block", Re: `(?s)<secret>.*?</secret>`}}}}, nil, nil)
+	hub := newConsoleStreamHub()
+	sink := newConsoleEventPreviewSink(hub, "task", nil, redacting)
+	defer sink.Close()
+	ctx := context.Background()
+	const key = "abcdefghijklmnopqrstuvwx"
+	status := func(text string) {
+		sink.HandleEvent(ctx, agent.Event{Kind: agent.EventKindToolOutput, ActivityID: "coder", ToolName: "coder", Stream: "codex",
+			Summary: text, Text: "\n" + text + "\n", Status: "running"})
+	}
+	raw := func(part, text string) {
+		sink.HandleEvent(ctx, agent.Event{Kind: agent.EventKindToolOutput, ActivityID: "coder", ToolName: "coder", Stream: "codex",
+			Part: part, Text: text, Status: "running"})
+	}
+	var shown strings.Builder
+	record := func() {
+		if frame, ok := hub.Latest("task"); ok && frame.Activity != nil && frame.Activity.Current != nil {
+			shown.WriteString(frame.Activity.Current.Output)
+			shown.WriteString(frame.Text)
+		}
+	}
+	sink.HandleEvent(ctx, agent.Event{Kind: agent.EventKindToolStart, ActivityID: "coder", ToolName: "coder", Status: "running"})
+	status("[codex] command_execution in_progress (item_1) $ cat .env")
+	raw("item_1", "api_key="+key[:8])
+	record()
+	status("[codex] command_execution in_progress (item_2) $ ls")
+	raw("item_2", "a\n")
+	record()
+	raw("item_1", key[8:]+"\n"+strings.Repeat("y", 990)+"<secret>\n")
+	record()
+	raw("item_1", "PAYLOAD-0123456789\n</secret>\ndone\n")
+	record()
+	status("[codex] command_execution completed (item_1) exit=0 $ cat .env")
+	sink.HandleEvent(ctx, agent.Event{Kind: agent.EventKindToolDone, ActivityID: "coder", ToolName: "coder", Status: "done"})
+	record()
+
+	all := shown.String()
+	for _, piece := range []string{key[:8], key[8:], "PAYLOAD"} {
+		if strings.Contains(all, piece) {
+			t.Fatalf("shown %q", piece)
+		}
+	}
+	frame, _ := hub.Latest("task")
+	final := frame.Activity.History[0].Output
+	for _, want := range []string{"api_key=[redacted]", "[redacted]\ndone\n", "$ ls\n", "a\n", "exit=0 $ cat .env"} {
+		if !strings.Contains(final, want) {
+			t.Fatalf("output missing %q:\n%s", want, final)
+		}
+	}
+}
+
+// Review note: with Guard off, a long output line is shown, not cut to "…".
+func TestConsoleEventPreviewSinkShowsLongOutputWithoutGuard(t *testing.T) {
+	hub := newConsoleStreamHub()
+	sink := newConsoleEventPreviewSink(hub, "task", nil, nil)
+	defer sink.Close()
+	long := strings.Repeat("z", 1100)
+	sink.HandleEvent(context.Background(), agent.Event{Kind: agent.EventKindToolStart, ActivityID: "coder", ToolName: "coder", Status: "running"})
+	sink.HandleEvent(context.Background(), agent.Event{Kind: agent.EventKindToolOutput, ActivityID: "coder", ToolName: "coder", Stream: "codex", Part: "item_1", Text: long + "\n"})
+	frame, _ := hub.Latest("task")
+	if frame.Activity == nil || frame.Activity.Current.Output != long+"\n" {
+		t.Fatalf("frame = %#v", frame.Activity)
+	}
+}

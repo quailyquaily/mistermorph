@@ -116,9 +116,12 @@ func (s *consoleEventPreviewSink) HandleEvent(_ context.Context, event agent.Eve
 }
 
 // consoleOutputStreamKey names one output stream: a tool call's stream, such as a coder's
-// "codex" or a command's "stdout".
+// "codex" or a command's "stdout", and the part within it, such as one command's raw output.
 func consoleOutputStreamKey(event agent.Event) string {
-	return strings.TrimSpace(event.ActivityID) + "\x00" + strings.TrimSpace(event.ToolName) + "\x00" + strings.TrimSpace(event.Stream)
+	return strings.Join([]string{
+		strings.TrimSpace(event.ActivityID), strings.TrimSpace(event.ToolName),
+		strings.TrimSpace(event.Stream), strings.TrimSpace(event.Part),
+	}, "\x00")
 }
 
 // guardEvent applies Guard to event in place, and returns output events to handle first: the
@@ -186,10 +189,10 @@ func (s *consoleEventPreviewSink) flushStreams(activityID string) []agent.Event 
 		if text == "" {
 			continue
 		}
-		parts := strings.SplitN(key, "\x00", 3)
+		parts := strings.SplitN(key, "\x00", 4)
 		out = append(out, agent.Event{
 			Kind: agent.EventKindToolOutput, ActivityID: parts[0], ToolName: parts[1], Stream: parts[2],
-			Text: text, Status: "running",
+			Part: parts[3], Text: text, Status: "running",
 		})
 	}
 	return out

@@ -208,3 +208,77 @@ func itoa(n int) string {
 	}
 	return string(b)
 }
+
+// Review finding: an unclosed key block whose last line had no newline leaked that line.
+func TestStreamRedactorFlushDropsUnfinishedKeyLine(t *testing.T) {
+	for _, tc := range []struct{ name, text string }{
+		{"body after BEGIN line", "before\n-----BEGIN RSA PRIVATE KEY-----\n" + testKey},
+		{"BEGIN without newline", "before\n-----BEGIN RSA PRIVATE KEY-----" + testKey},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := newTestStreamRedactor(t)
+			all, _ := feed(s, tc.text, 7)
+			assertNoSecret(t, tc.name, all)
+			if all != "before\n"+streamRedactedKeyMarker {
+				t.Fatalf("got %q", all)
+			}
+		})
+	}
+}
+
+// Review finding: a quoted MISTER_MORPH_* value over two lines showed its second line.
+func TestStreamRedactorHoldsQuotedEnvValues(t *testing.T) {
+	text := "MISTER_MORPH_API_KEY=\"first" + testEnv + "\nsecond" + testKV + "\"\nafter\n"
+	want, _ := New(Config{Enabled: true}, nil, nil).RedactString(text)
+	for n := 1; n <= len(text); n++ {
+		s := newTestStreamRedactor(t)
+		all, _ := feed(s, text, n)
+		assertNoSecret(t, "chunk size "+itoa(n), all)
+		if all != want {
+			t.Fatalf("chunk size %d: got %q, want %q", n, all, want)
+		}
+	}
+	s := newTestStreamRedactor(t)
+	if got := s.Write("MISTER_MORPH_API_KEY='open\n"); got != "" {
+		t.Fatalf("open quote released: %q", got)
+	}
+	if got := s.Write("still open\n"); got != "" {
+		t.Fatalf("open quote released: %q", got)
+	}
+	// Past the limit the held value is hidden, not released, up to its closing quote.
+	got := s.Write(strings.Repeat(testKV+"\n", streamRedactMaxHeldBytes/len(testKV)+1))
+	got += s.Write(testKV + "\n" + testKV + "' tail\nnext\n")
+	assertNoSecret(t, "open quote over limit", got)
+	if got != streamRedactedHeldMarker+" tail\nnext\n" {
+		t.Fatalf("over limit = %q", got)
+	}
+}
+
+func TestStreamRedactorKeepsDanglingContextPastTheLimit(t *testing.T) {
+	s := newTestStreamRedactor(t)
+	got := s.Write("api_key:\n" + strings.Repeat("\n", streamRedactMaxHeldBytes+1))
+	got += s.Write("  " + testKV + "\n")
+	assertNoSecret(t, "dangling over limit", got)
+	if !strings.HasPrefix(got, streamRedactedHeldMarker) || !strings.Contains(got, "[redacted]") {
+		t.Fatalf("got %q", got)
+	}
+}
+
+// Review finding: releasing at the size limit split an open multi-line custom match.
+func TestStreamRedactorHidesHeldTextAtTheLimit(t *testing.T) {
+	s := newTestStreamRedactor(t, RegexPattern{Name: "block", Re: `(?s)<secret>.*?</secret>`})
+	text := strings.Repeat("safe\n", 13105) + "<secret>\nSENSITIVEPAYLOAD123456\n</secret>\n"
+	all, _ := feed(s, text, 4096)
+	if strings.Contains(all, "SENSITIVEPAYLOAD") {
+		t.Fatalf("payload shown: ...%q", all[max(0, len(all)-200):])
+	}
+	if !strings.HasSuffix(all, streamRedactedRestMarker) {
+		t.Fatalf("no marker for the hidden rest: ...%q", all[max(0, len(all)-200):])
+	}
+	// Under the limit, the stream is held to its end and redacted whole.
+	s = newTestStreamRedactor(t, RegexPattern{Name: "block", Re: `(?s)<secret>.*?</secret>`})
+	all, before := feed(s, "safe\n<secret>\nSENSITIVEPAYLOAD123456\n</secret>\nok\n", 3)
+	if before != "" || all != "safe\n[redacted]\nok\n" {
+		t.Fatalf("before %q, all %q", before, all)
+	}
+}

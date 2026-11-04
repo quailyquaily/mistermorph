@@ -150,19 +150,25 @@ Tool output that streams while the tool runs, such as a coder's progress or a co
 stdout, arrives in pieces that could split a secret. With Guard on, the Console redacts each
 stream the way an inline stream inspector does: it holds back only what could still become
 part of a match and shows the rest, redacted, as soon as it is safe
-(`guard/stream_redact.go`).
+(`guard/stream_redact.go`). Fed the raw text, the result equals redacting the whole text at
+once, except where it fails closed.
 
-- Output is shown a line at a time. The built-in patterns cross a line break only through
-  whitespace after `:`, `=` or `bearer`, so a line ending in one of those is held until the
-  next non-blank line and redacted together with it.
+- Each stream is the raw text: a coder sends its status lines and each command's output
+  separately (the event's `part` names the command), and nothing cuts or formats the output
+  before it is redacted. Previews are cut afterwards.
+- Output is shown a line at a time. Lines are held while a match may continue on the next
+  line: the last non-blank line ends in `:`, `=` or `bearer`, or a quoted `MISTER_MORPH_*`
+  value has not closed.
 - A private key block is held from its `BEGIN` line to its `END` line and redacted whole.
   One with no `END` within 16 KB, or by the end of the stream, is replaced by
-  `[redacted private key]`, and the rest of its base64 lines are dropped.
+  `[redacted private key]`, including its last line, and the rest of its base64 lines are
+  dropped.
 - A line over 64 KB is not shown: `[line over 64 KB hidden]` replaces it.
+- Held text past 64 KB is not shown either, since a match in it may still be open, and so is
+  the rest of that match: a quoted value up to its closing quote, or, with a custom pattern
+  that may span lines (one with `(?s)` or `\n`), the rest of the stream. Such a pattern holds
+  the stream to its end. Other custom patterns should match within one line.
 - When a tool call ends, what its streams still hold is shown, redacted.
-- A custom pattern that may span lines (one with `(?s)` or `\n`) holds the stream and redacts
-  it in blocks of 64 KB, and at its end. Other custom patterns should match within one line.
-- Coder previews are cut at a line break, never inside a line, so a cut cannot split a secret.
 
 Redaction in the stream uses the same patterns as everywhere else, so text Guard does not
 recognize as a secret (for example a sensitive value shorter than 12 characters) is shown,

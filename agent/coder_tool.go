@@ -53,6 +53,9 @@ type CoderRequest struct {
 	// Progress reports status lines. step is a short, content-free label for what the CLI
 	// is doing now, such as "running a command", or "" when it has not changed.
 	Progress func(summary, text, step string)
+	// Output reports a command's raw output as it arrives, unformatted, so a consumer can
+	// redact it as one stream: part names the command, and pieces of one part arrive in order.
+	Output func(part, text string)
 	// Process reports the OS PID of the CLI used for this task.
 	Process func(pid int)
 }
@@ -156,6 +159,12 @@ func (t *coderTool) Execute(ctx context.Context, params map[string]any) (string,
 				EmitEvent(runCtx, nil, Event{
 					Kind: EventKindToolOutput, ToolName: coderToolName, Stream: req.Backend,
 					Text: text, Summary: summary, Progress: step, Status: "running",
+				})
+			}
+			req.Output = func(part, text string) {
+				EmitEvent(runCtx, nil, Event{
+					Kind: EventKindToolOutput, ToolName: coderToolName, Stream: req.Backend,
+					Part: part, Text: text, Status: "running",
 				})
 			}
 			output, runErr := runCLI(runCtx, req, func(text string) {
@@ -370,6 +379,15 @@ func runCoderCLI(ctx context.Context, req CoderRequest, emit func(string)) (outp
 			emit(text)
 		}
 	}
+	emitOutput := func(part, text string) {
+		emitMu.Lock()
+		defer emitMu.Unlock()
+		if req.Output != nil {
+			req.Output(part, text)
+		} else if emit != nil {
+			emit(text)
+		}
+	}
 	spec := buildCoderCLICommand(req)
 	if strings.TrimSpace(spec.Command) == "" {
 		return "", fmt.Errorf("unsupported coder: %s", req.Backend)
@@ -411,6 +429,7 @@ func runCoderCLI(ctx context.Context, req CoderRequest, emit func(string)) (outp
 	progress(line, line, "")
 	collector := newCoderStreamCollector(req.Backend, publish)
 	collector.progress = progress
+	collector.output = emitOutput
 	var stderrTail coderTailBuffer
 	stderrTail.Limit = coderStderrTailBytes
 	defer func() {
@@ -711,6 +730,8 @@ type coderStreamCollector struct {
 	backend  string
 	emit     func(string)
 	progress func(summary, text, step string)
+	// output receives a command's raw output; without it, output goes into the status text.
+	output func(part, text string)
 
 	emitted       strings.Builder
 	final         string
@@ -718,6 +739,8 @@ type coderStreamCollector struct {
 	lastActivity  string
 	step          string
 	itemOutputLen map[string]int
+	// itemOutputEnd records the last character sent of each command's output.
+	itemOutputEnd map[string]rune
 }
 
 func newCoderStreamCollector(backend string, emit func(string)) *coderStreamCollector {
@@ -725,6 +748,7 @@ func newCoderStreamCollector(backend string, emit func(string)) *coderStreamColl
 		backend:       strings.ToLower(strings.TrimSpace(backend)),
 		emit:          emit,
 		itemOutputLen: map[string]int{},
+		itemOutputEnd: map[string]rune{},
 	}
 }
 
@@ -870,30 +894,15 @@ func (c *coderStreamCollector) emitActivity(summary string, details ...string) {
 	if len(details) > 0 {
 		text += " " + strings.Join(details, " ")
 	}
-	preview := truncateCoderPreview(strings.TrimSpace(text), coderPreviewMaxRunes)
+	// The text is not cut here: a cut before Guard's redaction could split a secret, so
+	// consumers that keep previews cut them after redacting.
+	text = strings.TrimSpace(text)
 	c.lastActivity = strings.TrimSpace(summary)
 	if c.progress != nil {
-		c.progress("\n"+c.lastActivity+"\n", "\n"+preview+"\n", c.step)
+		c.progress("\n"+c.lastActivity+"\n", "\n"+text+"\n", c.step)
 	} else if c.emit != nil {
-		c.emit("\n" + preview + "\n")
+		c.emit("\n" + text + "\n")
 	}
-}
-
-const coderPreviewMaxRunes = 1000
-
-// truncateCoderPreview keeps text within max runes, cutting at a line break so no line is shown
-// in part: a cut inside a line could split a secret that Guard then cannot recognize. Text
-// whose first line alone is too long is replaced by "…".
-func truncateCoderPreview(text string, max int) string {
-	runes := []rune(text)
-	if len(runes) <= max {
-		return text
-	}
-	head := string(runes[:max])
-	if i := strings.LastIndexByte(head, '\n'); i >= 0 {
-		return strings.TrimRight(head[:i], "\r") + "\n…"
-	}
-	return "…"
 }
 
 func (c *coderStreamCollector) consumeCodex(payload map[string]any) {
@@ -1038,22 +1047,46 @@ func (c *coderStreamCollector) consumeCodexCommandItem(item map[string]any) {
 	id := strings.TrimSpace(stringField(item, "id"))
 	command := strings.TrimSpace(stringField(item, "command"))
 	status := strings.TrimSpace(stringField(item, "status"))
-	output := stringField(item, "aggregated_output")
+	// Untrimmed: the output goes on exactly as the command printed it.
+	output, _ := item["aggregated_output"].(string)
 	emittedLen := c.itemOutputLen[id]
 	runes := []rune(output)
 	if emittedLen > len(runes) {
 		emittedLen = 0
 	}
-	details := string(runes[emittedLen:])
+	increment := string(runes[emittedLen:])
 	c.itemOutputLen[id] = len(runes)
-	if command != "" {
-		details = "$ " + command + "\n" + details
-	}
 	summary := fmt.Sprintf("[codex] command_execution %s (%s)", status, id)
 	if code, ok := item["exit_code"]; ok && code != nil {
 		summary += fmt.Sprintf(" exit=%v", code)
 	}
-	c.emitActivity(summary, details)
+	if c.output == nil {
+		details := increment
+		if command != "" {
+			details = "$ " + command + "\n" + details
+		}
+		c.emitActivity(summary, details)
+		return
+	}
+	// The status line and the output go separately: the output stays exactly as the command
+	// printed it, so Guard can redact it as one stream per command.
+	if command != "" {
+		c.emitActivity(summary, "$ "+command)
+	} else {
+		c.emitActivity(summary)
+	}
+	if increment != "" {
+		c.output(id, increment)
+		incRunes := []rune(increment)
+		c.itemOutputEnd[id] = incRunes[len(incRunes)-1]
+	}
+	if status != "in_progress" {
+		// A finished command's last line is complete even without a newline.
+		if end, ok := c.itemOutputEnd[id]; ok && end != '\n' {
+			c.output(id, "\n")
+		}
+		delete(c.itemOutputEnd, id)
+	}
 }
 
 func textFromValue(value any) string {

@@ -911,21 +911,48 @@ func TestCoderProcessReporting(t *testing.T) {
 	}
 }
 
-func TestTruncateCoderPreviewCutsAtLineBreaks(t *testing.T) {
-	short := "line one\nline two"
-	if got := truncateCoderPreview(short, 100); got != short {
-		t.Fatalf("short text changed: %q", got)
+// Review finding: status lines were inserted between pieces of one command line, so Guard saw
+// fragments of a secret as separate lines. Each command's output now goes out as it was printed.
+func TestCoderStreamCollectorSendsCommandOutputRawPerCommand(t *testing.T) {
+	collector := newCoderStreamCollector(coderBackendCodex, nil)
+	var status []string
+	raw := map[string]string{}
+	var order []string
+	collector.progress = func(_, text, _ string) { status = append(status, text) }
+	collector.output = func(part, text string) {
+		raw[part] += text
+		order = append(order, part)
 	}
-	text := "$ cat .env\r\napi_key=s3cr3tVALUEs3cr3tVALUE\nmore"
-	// The cut falls inside the secret's line: the whole line goes.
-	if got := truncateCoderPreview(text, 20); got != "$ cat .env\n…" {
-		t.Fatalf("got %q", got)
+	const key = "abcdefghijklmnopqrstuvwx"
+	long := strings.Repeat("x", 1500)
+	for _, line := range []string{
+		`{"type":"item.started","item":{"id":"item_1","type":"command_execution","status":"in_progress","command":"cat .env","aggregated_output":""}}`,
+		`{"type":"item.updated","item":{"id":"item_1","type":"command_execution","status":"in_progress","command":"cat .env","aggregated_output":"API_KEY=` + key[:8] + `"}}`,
+		`{"type":"item.started","item":{"id":"item_2","type":"command_execution","status":"in_progress","command":"ls","aggregated_output":"a\n"}}`,
+		`{"type":"item.updated","item":{"id":"item_1","type":"command_execution","status":"in_progress","command":"cat .env","aggregated_output":"API_KEY=` + key + `\n` + long + `"}}`,
+		`{"type":"item.completed","item":{"id":"item_1","type":"command_execution","status":"completed","command":"cat .env","aggregated_output":"API_KEY=` + key + `\n` + long + `","exit_code":0}}`,
+		`{"type":"item.completed","item":{"id":"item_2","type":"command_execution","status":"completed","command":"ls","aggregated_output":"a\n","exit_code":0}}`,
+	} {
+		if err := collector.ConsumeLine([]byte(line)); err != nil {
+			t.Fatal(err)
+		}
 	}
-	if got := truncateCoderPreview("one very long line with token=s3cr3tVALUEs3cr3tVALUE", 30); got != "…" {
-		t.Fatalf("long first line = %q", got)
+	// The output of each command is exactly what it printed, uncut, plus a closing newline.
+	if want := "API_KEY=" + key + "\n" + long + "\n"; raw["item_1"] != want {
+		t.Fatalf("item_1 output = %q...", raw["item_1"][:40])
 	}
-	multi := "第一行\n第二行很长很长很长"
-	if got := truncateCoderPreview(multi, 6); got != "第一行\n…" {
-		t.Fatalf("runes = %q", got)
+	if raw["item_2"] != "a\n" {
+		t.Fatalf("item_2 output = %q", raw["item_2"])
+	}
+	for _, text := range status {
+		if strings.Contains(text, key[:8]) || strings.Contains(text, "xxxx") {
+			t.Fatalf("status line carries output: %q", text)
+		}
+	}
+	if got := strings.Join(status, ""); !strings.Contains(got, "command_execution completed (item_1) exit=0 $ cat .env") {
+		t.Fatalf("status = %q", got)
+	}
+	if !reflect.DeepEqual(order, []string{"item_1", "item_2", "item_1", "item_1"}) {
+		t.Fatalf("output order = %v", order)
 	}
 }

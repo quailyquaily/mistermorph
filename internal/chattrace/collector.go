@@ -69,6 +69,9 @@ func (s *Collector) HandleEvent(ctx context.Context, event agent.Event) {
 			entry.Event.Summary = ""
 			entry.Event.Error = ""
 		}
+	} else if event.Kind == agent.EventKindToolOutput {
+		// Streamed output arrives uncut; the trace keeps a preview of each piece.
+		entry.Event.Text = tracePreview(event.Text)
 	}
 	s.append(entry)
 }
@@ -209,4 +212,15 @@ func (s *Collector) Restore(snapshot Snapshot) {
 			s.seq = entry.Seq
 		}
 	}
+}
+
+const tracePreviewMaxRunes = 1000
+
+// tracePreview keeps the first tracePreviewMaxRunes characters of text.
+func tracePreview(text string) string {
+	runes := []rune(text)
+	if len(runes) <= tracePreviewMaxRunes {
+		return text
+	}
+	return string(runes[:tracePreviewMaxRunes]) + "…"
 }
