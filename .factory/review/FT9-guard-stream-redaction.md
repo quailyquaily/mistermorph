@@ -98,3 +98,17 @@ Fix round 2 in the owner's checkout at the owner's request: commit 6044edb2, on 
 Tests: one regression test per finding, using the reviewer's reproductions (split 24-character key, key without a trailing newline, two-line quoted value, `safe` repeated 13105 times before a custom block, a custom block across character 1000, and the Guard-off long line). The Console test fails when the per-part key is removed. gofmt, `go vet ./...` and `go test ./...` pass; guard, Console and agent tests pass under `-race`.
 
 Not checked: a real Codex or Claude Code run in the Console with Guard on.
+
+
+## factory · review · 2026-11-04 23:21
+head: 6044edb290c3f6bfd5465801c197cfa2b7ccea22
+verdict: fix
+fix:
+- [P1] cmd/mistermorph/consolecmd/stream_events.go:138: Coder stderr prefixes and Claude text TrimSpace still alter raw content before redaction. stderr `api_key=\nabcdefghijklmnopqrstuvwx\n` exposes the value with a `[codex stderr]` prefix; Claude chunks `Bearer ` and `abcdefghijklmnopqrstuvwx` expose the concatenated token. Pass independent unmodified raw streams through Guard before formatting.
+- [P1] guard/stream_redact.go:238: dropLongLine releases held unfinished matches and clears context. With custom pattern `(?s)<secret>.*?</secret>`, `<secret>\nSENSITIVEPAYLOAD123456\n` followed by 65,537 x characters and `\n</secret>\n` exposes the payload in Console; quoted multiline environment values also leak after the long line. Discard unconfirmed content and retain skip state; handle BEGIN markers within discarded lines.
+- [P1] guard/stream_redact.go:281: An oversized private-key block clears the surrounding custom-match or quoted-environment-value context. A custom secret block containing a private key over 16 KB followed by END, then `SENSITIVEPAYLOAD123456\n</secret>`, exposes that payload in Console. Preserve outer match state or hide the rest of the stream when boundaries are uncertain.
+notes:
+- [P2] guard/stream_redact.go:277: Adjacent END and BEGIN markers on one line lose the second key block. `-----END RSA PRIVATE KEY----------BEGIN RSA PRIVATE KEY-----` followed by a second body containing `SENSITIVEPAYLOAD123456` exposes the body. Continue scanning after END for another BEGIN.
+- Codex reviewed all nine changed files in origin/master...HEAD, base 2bce552ee9e2c604830ea600ef7be055f3e71df0. No merge conflicts. Previous six regression cases pass, but eight additional synthetic-secret reproductions confirm Console leaks; all eight baseline Console-filter controls pass.
+- Required gofmt check, go vet ./..., and go test ./... passed. Tests used an absolute throwaway HOME. No installs. No frontend changes; pnpm not run. Source worktree remained clean.
+- Not checked: real Codex/Claude Code browser integration; CLI reproductions used fake processes. No linked issues or PRs. Item stays in review/ for the owner to decide; add a note and move to new/ to request fixes.
