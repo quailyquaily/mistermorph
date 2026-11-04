@@ -1,7 +1,6 @@
 import { computed, nextTick, onBeforeUpdate, onMounted, onUpdated, ref } from "vue";
 import { translate } from "../core/context";
 import { activityWorkerLabel } from "../core/chat-task-history";
-import MarkdownContent from "./MarkdownContent";
 import "./ChatStatusCard.css";
 
 const PANEL_PLAN = "plan";
@@ -199,8 +198,8 @@ function activityEntryNote(entry) {
   if (errorText) {
     return errorText;
   }
-  const outputText = String(entry?.output || "").trim();
-  if (outputText) {
+  const outputText = String(entry?.output || "");
+  if (outputText.trim()) {
     return outputText;
   }
   return cleanText(entry?.summary);
@@ -231,7 +230,6 @@ function normalizePanel(raw) {
 }
 
 const ChatStatusCard = {
-  components: { MarkdownContent },
   emits: ["toggle"],
   props: {
     itemId: {
@@ -436,12 +434,7 @@ const ChatStatusCard = {
                         <span class="chat-activity-param-value">{{ param.value }}</span>
                       </span>
                     </div>
-                    <MarkdownContent
-                      v-if="entry.name === 'coder' && (entry.stream === 'claude' || entry.stream === 'codex') && entry.output && !entry.error && activityChildren(entry).length === 0"
-                      :source="entry.output"
-                      class="chat-activity-markdown"
-                    />
-                    <p v-else-if="activityEntryNote(entry) && activityChildren(entry).length === 0" class="chat-activity-note">{{ activityEntryNote(entry) }}</p>
+                    <p v-if="activityEntryNote(entry) && activityChildren(entry).length === 0" class="chat-activity-note">{{ activityEntryNote(entry) }}</p>
                     <ol v-if="activityChildren(entry).length > 0" class="chat-activity-children">
                       <li v-if="entry.childrenOmitted > 0" class="chat-activity-child is-omitted">
                         {{ t("chat_activity_calls_omitted", { count: entry.childrenOmitted }) }}
