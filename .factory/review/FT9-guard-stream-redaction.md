@@ -131,3 +131,18 @@ Tests: each reviewer reproduction is a regression test (stderr `api_key=` with i
 Trade-off: after a 64 KB line, or 64 KB of held text, nothing more of that stream is shown until the call ends.
 
 Not checked: a real Codex or Claude Code run in the Console with Guard on.
+
+
+## factory · review · 2026-11-04 23:51
+head: 83f14960f89d8e87db5cccf46e54d3981e2b184e
+verdict: fix
+fix:
+- [P1] cmd/mistermorph/consolecmd/stream_events.go:138: Claude tool-input JSON serialization and complete-message text trimming still alter content before Guard. Example: a tool-input API-key assignment with its value on the next line is serialized with escaped newlines; two text blocks containing a bearer prefix with a trailing space and a credential lose the separating space. Both expose the synthetic secret in Console. Redact decoded input before serialization and preserve text-block whitespace (agent/coder_tool.go:878,1124,1155).
+- [P1] guard/stream_redact.go:131: Flush cuts an unfinished private-key suffix before redacting the enclosing buffer, destroying outer match context. Example: a custom multiline secret block or quoted environment value contains a secret followed by an unmatched private-key opener and the outer closing delimiter. Cutting that suffix removes the outer closer and exposes the preceding secret. Redact intact held content first or hide the whole uncertain buffer.
+- [P1] agent/coder_tool.go:479: Oversized stderr lines are discarded before Guard sees them (also line 650). Example: a line over four MiB containing a private-key opener is dropped, while subsequent body and closing lines are forwarded and the body is exposed. Suppress the remainder of the stream on overflow or explicitly signal fail-closed state to Guard.
+notes:
+- [P2] guard/stream_redact.go:20: Continuation detection omits form feed, unlike the built-in whitespace pattern. Example: an API-key separator followed by form feed, newline and its value is hidden by whole-text redaction but exposed by streaming. Match the built-in whitespace semantics.
+- [P2] guard/stream_redact.go:169: A quotation mark inside a private-key block prematurely closes an enclosing quoted environment value. Example: the enclosing value continues with sensitive text after the key block; whole-text redaction removes the key first and hides that text, but streaming releases it. Track quotes consistently with private-key removal or conservatively hide overlapping matches.
+- Codex reviewed all nine changed files in origin/master...HEAD, base 2bce552ee9e2c604830ea600ef7be055f3e71df0. No merge conflicts. Seven synthetic-secret overlay reproductions confirmed Console leaks; all seven baseline Console-sink controls passed.
+- Required gofmt check, go vet ./..., and go test ./... passed; race tests for guard, agent and Console passed. Tests used an absolute throwaway HOME. No installs or frontend changes; pnpm not run. Source worktree remained clean.
+- Not checked: real Codex/Claude Code browser integration. Existing persistent-terminal path is not proven to satisfy live line-by-line output acceptance. No linked issues or PRs. Item stays in review/ for the owner to decide; add a note and move to new/ to request fixes.
