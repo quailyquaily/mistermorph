@@ -2,6 +2,7 @@ package consolecmd
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -116,6 +117,8 @@ func (s *consoleEventPreviewSink) HandleEvent(_ context.Context, event agent.Eve
 		case agent.EventKindToolDone, agent.EventKindSubtaskDone:
 			event.Summary = ""
 			event.Error = ""
+			// A spawn or coder result keeps only its status, which the worker roster needs.
+			event.Text = consoleResultStatusOnly(event.Text)
 		}
 	}
 	if status := formatConsoleRuntimeStatus(event); status != "" {
@@ -497,4 +500,17 @@ func appendConsoleTail(existing string, chunk string, maxChars int) string {
 	}
 	keep := string(runes[len(runes)-maxChars:])
 	return "...\n" + strings.TrimLeft(keep, "\n")
+}
+
+// consoleResultStatusOnly reduces a subtask result envelope to its status, or returns "".
+func consoleResultStatusOnly(text string) string {
+	result, ok := parseConsoleSubtaskResult(text)
+	if !ok {
+		return ""
+	}
+	raw, err := json.Marshal(map[string]string{"status": strings.TrimSpace(result.Status)})
+	if err != nil {
+		return ""
+	}
+	return string(raw)
 }
