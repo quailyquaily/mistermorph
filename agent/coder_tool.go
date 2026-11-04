@@ -463,7 +463,14 @@ func runCoderCLI(ctx context.Context, req CoderRequest, emit func(string)) (outp
 	// even when a process the CLI left in the background still holds the pipes.
 	stdoutLines := &coderLineWriter{handle: func(line []byte) { _ = collector.ConsumeLine(line) }}
 	stderrLines := &coderLineWriter{handle: func(line []byte) {
-		progress(fmt.Sprintf("[%s] stderr received\n", req.Backend), fmt.Sprintf("[%s stderr] %s\n", req.Backend, line), "")
+		status := fmt.Sprintf("[%s] stderr received\n", req.Backend)
+		if req.Output == nil {
+			progress(status, fmt.Sprintf("[%s stderr] %s\n", req.Backend, line), "")
+			return
+		}
+		// The line itself goes out as printed, in a stream of its own, so Guard sees it whole.
+		progress(status, status, "")
+		emitOutput(coderOutputPartStderr, string(line)+"\n")
 	}}
 	stdoutLines.overflow = func() {
 		line := fmt.Sprintf("[%s] skipped an output line over %d bytes\n", req.Backend, coderLineMaxBytes)
@@ -791,12 +798,21 @@ func (c *coderStreamCollector) Error() string {
 	return strings.TrimSpace(c.errText)
 }
 
+// The parts of a coder's raw output other than its commands, which use their item IDs.
+const (
+	coderOutputPartText   = "text"
+	coderOutputPartStderr = "stderr"
+)
+
 func (c *coderStreamCollector) addDelta(text string) {
 	if c == nil || text == "" {
 		return
 	}
 	c.emitted.WriteString(text)
-	if c.emit != nil {
+	if c.output != nil {
+		// The assistant's text, as written, in a stream of its own.
+		c.output(coderOutputPartText, text)
+	} else if c.emit != nil {
 		c.emit(text)
 	}
 }
@@ -933,7 +949,11 @@ func (c *coderStreamCollector) consumeCodex(payload map[string]any) {
 		return
 	}
 	if strings.Contains(strings.ToLower(typ), "delta") {
-		if text := firstNonEmptyString(stringField(payload, "delta"), stringField(payload, "text")); text != "" {
+		delta, _ := payload["delta"].(string)
+		if delta == "" {
+			delta, _ = payload["text"].(string)
+		}
+		if text := delta; text != "" {
 			c.addDelta(text)
 			return
 		}
@@ -975,7 +995,8 @@ func claudeStreamDelta(value any) string {
 		return ""
 	}
 	if delta, ok := mapField(event, "delta"); ok {
-		if text := stringField(delta, "text"); text != "" {
+		// Untrimmed: the spaces between pieces are part of the text.
+		if text, _ := delta["text"].(string); text != "" {
 			return text
 		}
 	}

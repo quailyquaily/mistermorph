@@ -746,3 +746,43 @@ func TestConsoleEventPreviewSinkShowsLongOutputWithoutGuard(t *testing.T) {
 		t.Fatalf("frame = %#v", frame.Activity)
 	}
 }
+
+// Review finding: coder stderr and assistant text reached Guard formatted; as raw parts they
+// are redacted across pieces.
+func TestConsoleEventPreviewSinkRedactsCoderStderrAndText(t *testing.T) {
+	hub := newConsoleStreamHub()
+	sink := newConsoleEventPreviewSink(hub, "task", nil, guard.New(guard.Config{Enabled: true}, nil, nil))
+	defer sink.Close()
+	ctx := context.Background()
+	const secret = "abcdefghijklmnopqrstuvwx"
+	part := func(name, text string) {
+		sink.HandleEvent(ctx, agent.Event{Kind: agent.EventKindToolOutput, ActivityID: "coder", ToolName: "coder", Stream: "claude", Part: name, Text: text, Status: "running"})
+	}
+	var shown strings.Builder
+	record := func() {
+		if frame, ok := hub.Latest("task"); ok && frame.Activity != nil && frame.Activity.Current != nil {
+			shown.WriteString(frame.Activity.Current.Output)
+		}
+	}
+	sink.HandleEvent(ctx, agent.Event{Kind: agent.EventKindToolStart, ActivityID: "coder", ToolName: "coder", Status: "running"})
+	part("stderr", "api_key=\n")
+	record()
+	part("text", "Authorization: Bearer ")
+	record()
+	part("stderr", secret+"\n")
+	record()
+	part("text", secret+" done")
+	record()
+	sink.HandleEvent(ctx, agent.Event{Kind: agent.EventKindToolDone, ActivityID: "coder", ToolName: "coder", Status: "done"})
+	record()
+	if all := shown.String(); strings.Contains(all, secret[:8]) || strings.Contains(all, secret[8:]) {
+		t.Fatalf("shown: %q", all)
+	}
+	frame, _ := hub.Latest("task")
+	final := frame.Activity.History[0].Output
+	for _, want := range []string{"api_key=\n[redacted]\n", "Authorization: Bearer [redacted] done"} {
+		if !strings.Contains(final, want) {
+			t.Fatalf("output %q missing %q", final, want)
+		}
+	}
+}

@@ -153,22 +153,20 @@ part of a match and shows the rest, redacted, as soon as it is safe
 (`guard/stream_redact.go`). Fed the raw text, the result equals redacting the whole text at
 once, except where it fails closed.
 
-- Each stream is the raw text: a coder sends its status lines and each command's output
-  separately (the event's `part` names the command), and nothing cuts or formats the output
-  before it is redacted. Previews are cut afterwards.
-- Output is shown a line at a time. Lines are held while a match may continue on the next
-  line: the last non-blank line ends in `:`, `=` or `bearer`, or a quoted `MISTER_MORPH_*`
-  value has not closed.
-- A private key block is held from its `BEGIN` line to its `END` line and redacted whole.
-  One with no `END` within 16 KB, or by the end of the stream, is replaced by
-  `[redacted private key]`, including its last line, and the rest of its base64 lines are
-  dropped.
-- A line over 64 KB is not shown: `[line over 64 KB hidden]` replaces it.
-- Held text past 64 KB is not shown either, since a match in it may still be open, and so is
-  the rest of that match: a quoted value up to its closing quote, or, with a custom pattern
-  that may span lines (one with `(?s)` or `\n`), the rest of the stream. Such a pattern holds
-  the stream to its end. Other custom patterns should match within one line.
-- When a tool call ends, what its streams still hold is shown, redacted.
+- Each stream is the raw text. A coder sends its status lines apart from its raw output, and
+  each raw stream separately: every command's output, its stderr and the assistant's text
+  (the event's `part` names it). Nothing trims, prefixes, cuts or formats the raw text before
+  it is redacted; previews are cut afterwards.
+- Output is shown a line at a time. Lines are held while a match may continue past them:
+  inside a private key block (`BEGIN` to `END`, following every marker on a line in order),
+  after a line ending in `:`, `=` or `bearer`, inside a quoted `MISTER_MORPH_*` value, and,
+  with a custom pattern that may span lines (one with `(?s)` or `\n`), to the end of the
+  stream. Other custom patterns should match within one line.
+- It never tries to recover from uncertainty. When held text or a single line passes 64 KB,
+  nothing held is shown, and the rest of that stream is replaced by
+  `[rest of this output hidden: it could not be checked for secrets]`.
+- When a tool call ends, what its streams still hold is shown, redacted. A private key block
+  that never closed is shown as `[redacted private key]`.
 
 Redaction in the stream uses the same patterns as everywhere else, so text Guard does not
 recognize as a secret (for example a sensitive value shorter than 12 characters) is shown,

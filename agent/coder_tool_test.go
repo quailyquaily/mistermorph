@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -954,5 +955,44 @@ func TestCoderStreamCollectorSendsCommandOutputRawPerCommand(t *testing.T) {
 	}
 	if !reflect.DeepEqual(order, []string{"item_1", "item_2", "item_1", "item_1"}) {
 		t.Fatalf("output order = %v", order)
+	}
+}
+
+// Review finding: stderr lines carried a prefix and Claude's text pieces were trimmed, so Guard
+// saw "api_key=" and its value, or "Bearer " and its token, apart. Both now go out as written.
+func TestRunCoderCLISendsStderrAndTextRaw(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake shell executable uses /bin/sh")
+	}
+	binDir := t.TempDir()
+	script := `printf 'api_key=\nabcdefghijklmnopqrstuvwx\n' >&2
+printf '%s\n' '{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"Authorization: Bearer "}}}'
+printf '%s\n' '{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"abcdefghijklmnopqrstuvwx done"}}}'
+printf '%s\n' '{"type":"result","result":"Authorization: Bearer abcdefghijklmnopqrstuvwx done"}'
+`
+	writeFakeCoderExecutable(t, binDir, "claude", script)
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	var mu sync.Mutex
+	parts := map[string]string{}
+	var status strings.Builder
+	_, err := runCoderCLI(context.Background(), CoderRequest{
+		Backend:  coderBackendClaude,
+		Task:     "x",
+		CWD:      t.TempDir(),
+		Progress: func(_, text, _ string) { mu.Lock(); status.WriteString(text); mu.Unlock() },
+		Output:   func(part, text string) { mu.Lock(); parts[part] += text; mu.Unlock() },
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := parts[coderOutputPartStderr]; got != "api_key=\nabcdefghijklmnopqrstuvwx\n" {
+		t.Fatalf("stderr = %q", got)
+	}
+	if got := parts[coderOutputPartText]; got != "Authorization: Bearer abcdefghijklmnopqrstuvwx done" {
+		t.Fatalf("text = %q", got)
+	}
+	if strings.Contains(status.String(), "abcdefgh") {
+		t.Fatalf("status lines carry output: %q", status.String())
 	}
 }

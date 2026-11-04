@@ -60,7 +60,9 @@ func TestStreamRedactorRedactsSecretsSplitAcrossChunks(t *testing.T) {
 		"Authorization: Bearer " + testBearer + "\n" +
 		"api_key=" + testKV + "\n" +
 		"MISTER_MORPH_LLM_API_KEY=" + testEnv + "\n" +
+		"MISTER_MORPH_TOKEN=\"first" + testEnv + "\nsecond" + testKV + "\"\n" +
 		"-----BEGIN RSA PRIVATE KEY-----\n" + testKey + "\n" + testKey + "\n-----END RSA PRIVATE KEY-----\n" +
+		"password:\n\n   " + testKV + "\n" +
 		"done\n"
 	want, _ := New(Config{Enabled: true}, nil, nil).RedactString(text)
 	for n := 1; n <= len(text); n++ {
@@ -86,78 +88,106 @@ func TestStreamRedactorReleasesLinesAsTheyComplete(t *testing.T) {
 	}
 }
 
-func TestStreamRedactorHoldsLinesThatMayContinue(t *testing.T) {
-	for _, tc := range []struct{ name, text string }{
-		{"key and value on separate lines", "password:\n\n   " + testKV + "\nafter\n"},
-		{"equals at line end", "api_key =\n" + testKV + "\n"},
-		{"bearer at line end", "Authorization: Bearer\n" + testBearer + "\n"},
+func TestStreamRedactorHoldsWhileAMatchMayContinue(t *testing.T) {
+	for _, tc := range []struct{ name, first, rest string }{
+		{"separator at line end", "api_key =\n", "\n" + testKV + "\nafter\n"},
+		{"bearer at line end", "Authorization: Bearer \n", testBearer + "\n"},
+		{"open quoted value", "MISTER_MORPH_API_KEY='" + testEnv + "\n", testKV + "'\n"},
+		{"open key block", "-----BEGIN EC PRIVATE KEY-----\n", testKey + "\n-----END EC PRIVATE KEY-----\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s := newTestStreamRedactor(t)
-			first := s.Write(tc.text[:strings.IndexByte(tc.text, '\n')+1])
-			if first != "" {
-				t.Fatalf("dangling line released early: %q", first)
+			if got := s.Write(tc.first); got != "" {
+				t.Fatalf("released early: %q", got)
 			}
-			all, _ := feed(s, tc.text[strings.IndexByte(tc.text, '\n')+1:], 3)
-			all = first + all
+			all, _ := feed(s, tc.rest, 3)
 			assertNoSecret(t, tc.name, all)
-			if !strings.Contains(all, "[redacted]") {
-				t.Fatalf("not redacted: %q", all)
+			want, _ := New(Config{Enabled: true}, nil, nil).RedactString(tc.first + tc.rest)
+			if all != want {
+				t.Fatalf("got %q, want %q", all, want)
 			}
 		})
 	}
 }
 
-func TestStreamRedactorNeverShowsPrivateKeyBlocks(t *testing.T) {
+func TestStreamRedactorPrivateKeyBlocks(t *testing.T) {
 	block := "-----BEGIN OPENSSH PRIVATE KEY-----\n" + testKey + "\n"
-	t.Run("complete", func(t *testing.T) {
+	t.Run("text after END is shown", func(t *testing.T) {
 		s := newTestStreamRedactor(t)
-		shown := s.Write("before\n" + block)
-		if shown != "before\n" {
-			t.Fatalf("key lines released before END: %q", shown)
-		}
-		all, _ := feed(s, "-----END OPENSSH PRIVATE KEY----- tail\n", 5)
-		assertNoSecret(t, "complete", shown+all)
-		if !strings.Contains(all, "tail") {
-			t.Fatalf("text after the block lost: %q", all)
+		all, _ := feed(s, "before\n"+block+"-----END OPENSSH PRIVATE KEY----- tail\n", 5)
+		assertNoSecret(t, "complete", all)
+		if !strings.HasPrefix(all, "before\n") || !strings.HasSuffix(all, " tail\n") {
+			t.Fatalf("got %q", all)
 		}
 	})
-	t.Run("unterminated", func(t *testing.T) {
+	// Review finding: the last line of an unclosed block leaked when it had no newline.
+	for _, tc := range []struct{ name, text string }{
+		{"unclosed", "before\n" + block + testKey + "\n"},
+		{"unclosed, last line without newline", "before\n" + block + testKey},
+		{"unclosed, BEGIN without newline", "before\n-----BEGIN RSA PRIVATE KEY-----" + testKey},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := newTestStreamRedactor(t)
+			all, _ := feed(s, tc.text, 7)
+			assertNoSecret(t, tc.name, all)
+			if all != "before\n[redacted private key]\n" {
+				t.Fatalf("got %q", all)
+			}
+		})
+	}
+	// Review note: END and the next BEGIN on one line.
+	t.Run("END and BEGIN on one line", func(t *testing.T) {
 		s := newTestStreamRedactor(t)
-		all, before := feed(s, "before\n"+block+testKey+"\n", 4)
-		assertNoSecret(t, "unterminated", all)
-		if before != "before\n" || !strings.Contains(all, streamRedactedKeyMarker) {
-			t.Fatalf("before flush %q, all %q", before, all)
+		text := block + "-----END RSA PRIVATE KEY----------BEGIN RSA PRIVATE KEY-----\nSENSITIVEPAYLOAD123456\n-----END RSA PRIVATE KEY-----\nafter\n"
+		all, _ := feed(s, text, 9)
+		if strings.Contains(all, "SENSITIVEPAYLOAD") || strings.Contains(all, "secretkeymaterial") || !strings.HasSuffix(all, "after\n") {
+			t.Fatalf("got %q", all)
 		}
 	})
-	t.Run("oversized", func(t *testing.T) {
+	t.Run("over the limit", func(t *testing.T) {
 		s := newTestStreamRedactor(t)
-		long := block + strings.Repeat(testKey+"\n", streamRedactMaxKeyBytes/len(testKey)+2)
-		all, before := feed(s, long+"after the key\n", 1024)
-		assertNoSecret(t, "oversized", all)
-		if before != streamRedactedKeyMarker+"after the key\n" {
-			t.Fatalf("oversized key: %q", before)
-		}
-	})
-	t.Run("oversized then END", func(t *testing.T) {
-		s := newTestStreamRedactor(t)
-		long := block + strings.Repeat(testKey+"\n", streamRedactMaxKeyBytes/len(testKey)+2)
-		// A bare word after an over-long block looks like key material and is dropped too.
-		all, _ := feed(s, long+"word\n-----END OPENSSH PRIVATE KEY----- tail\nnext\n", 512)
-		assertNoSecret(t, "oversized then END", all)
-		if all != streamRedactedKeyMarker+" tail\nnext\n" {
+		long := block + strings.Repeat(testKey+"\n", streamRedactMaxBytes/len(testKey)+2)
+		all, _ := feed(s, "before\n"+long+"-----END OPENSSH PRIVATE KEY-----\nafter\n", 1024)
+		assertNoSecret(t, "over the limit", all)
+		if all != "before\n"+streamHiddenMarker {
 			t.Fatalf("got %q", all)
 		}
 	})
 }
 
-func TestStreamRedactorDropsOverlongLines(t *testing.T) {
-	s := newTestStreamRedactor(t)
-	long := "token=" + testKV + strings.Repeat("x", streamRedactMaxLineBytes) + " " + testKV + "\n"
-	all, _ := feed(s, "before\n"+long+"after\n", 4096)
-	assertNoSecret(t, "long line", all)
-	if all != "before\n"+streamRedactedLongMarker+"after\n" {
-		t.Fatalf("got %q", all)
+// Review findings: dropping a long line or an oversized key reset an open match, and its rest
+// was shown. The redactor now hides the rest of the stream instead.
+func TestStreamRedactorHidesTheRestWhenItCannotTell(t *testing.T) {
+	custom := RegexPattern{Name: "block", Re: `(?s)<secret>.*?</secret>`}
+	for _, tc := range []struct {
+		name     string
+		patterns []RegexPattern
+		text     string
+	}{
+		{"long line inside a custom block", []RegexPattern{custom},
+			"ok\n<secret>\nSENSITIVEPAYLOAD123456\n" + strings.Repeat("x", 65537) + "\n</secret>\nafter\n"},
+		{"long line inside a quoted value", nil,
+			"ok\nMISTER_MORPH_API_KEY=\"" + testEnv + "\n" + strings.Repeat("x", 65537) + "\nSENSITIVEPAYLOAD123456\"\nafter\n"},
+		{"long line inside a key block", nil,
+			"ok\n-----BEGIN RSA PRIVATE KEY-----\n" + strings.Repeat("x", 65537) + "\nSENSITIVEPAYLOAD123456\n-----END RSA PRIVATE KEY-----\nafter\n"},
+		{"held text past the limit", []RegexPattern{custom},
+			strings.Repeat("safe\n", 13105) + "<secret>\nSENSITIVEPAYLOAD123456\n</secret>\nafter\n"},
+		{"long line", nil, "ok\ntoken=" + testKV + strings.Repeat("x", 65537) + "\nSENSITIVEPAYLOAD123456\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := newTestStreamRedactor(t, tc.patterns...)
+			all, _ := feed(s, tc.text, 4096)
+			assertNoSecret(t, tc.name, all)
+			if strings.Contains(all, "SENSITIVEPAYLOAD") || strings.Contains(all, "after") {
+				t.Fatalf("shown after the marker: ...%q", all[max(0, len(all)-200):])
+			}
+			if !strings.HasSuffix(all, streamHiddenMarker) {
+				t.Fatalf("no marker: ...%q", all[max(0, len(all)-200):])
+			}
+			if got := s.Write("more\n"); got != "" {
+				t.Fatalf("shown after hiding: %q", got)
+			}
+		})
 	}
 }
 
@@ -169,16 +199,21 @@ func TestStreamRedactorCustomPatterns(t *testing.T) {
 			t.Fatalf("got %q", all)
 		}
 	})
-	t.Run("multi line", func(t *testing.T) {
+	t.Run("multi line is held to the end", func(t *testing.T) {
 		s := newTestStreamRedactor(t, RegexPattern{Name: "block", Re: `(?s)<secret>.*?</secret>`})
-		if got := s.Write("a\n<secret>\n"); got != "" {
-			t.Fatalf("held stream released: %q", got)
-		}
-		s.Write(testKV + "\n")
-		all := s.Write("</secret>\nb\n") + s.Flush()
+		all, before := feed(s, "a\n<secret>\n"+testKV+"\n</secret>\nb\n", 3)
 		assertNoSecret(t, "multi line", all)
-		if all != "a\n[redacted]\nb\n" {
-			t.Fatalf("got %q", all)
+		if before != "" || all != "a\n[redacted]\nb\n" {
+			t.Fatalf("before %q, all %q", before, all)
+		}
+	})
+	// Review finding: an oversized key inside a custom block ended the block's protection.
+	t.Run("key block inside a custom block", func(t *testing.T) {
+		s := newTestStreamRedactor(t, RegexPattern{Name: "block", Re: `(?s)<secret>.*?</secret>`})
+		key := "-----BEGIN RSA PRIVATE KEY-----\n" + strings.Repeat(testKey+"\n", 400) + "-----END RSA PRIVATE KEY-----\n"
+		all, _ := feed(s, "<secret>\n"+key+"SENSITIVEPAYLOAD123456\n</secret>\nafter\n", 1000)
+		if strings.Contains(all, "SENSITIVEPAYLOAD") || strings.Contains(all, "secretkeymaterial") || all != "[redacted]\nafter\n" {
+			t.Fatalf("got %q", all[:min(len(all), 300)])
 		}
 	})
 }
@@ -207,78 +242,4 @@ func itoa(n int) string {
 		n /= 10
 	}
 	return string(b)
-}
-
-// Review finding: an unclosed key block whose last line had no newline leaked that line.
-func TestStreamRedactorFlushDropsUnfinishedKeyLine(t *testing.T) {
-	for _, tc := range []struct{ name, text string }{
-		{"body after BEGIN line", "before\n-----BEGIN RSA PRIVATE KEY-----\n" + testKey},
-		{"BEGIN without newline", "before\n-----BEGIN RSA PRIVATE KEY-----" + testKey},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			s := newTestStreamRedactor(t)
-			all, _ := feed(s, tc.text, 7)
-			assertNoSecret(t, tc.name, all)
-			if all != "before\n"+streamRedactedKeyMarker {
-				t.Fatalf("got %q", all)
-			}
-		})
-	}
-}
-
-// Review finding: a quoted MISTER_MORPH_* value over two lines showed its second line.
-func TestStreamRedactorHoldsQuotedEnvValues(t *testing.T) {
-	text := "MISTER_MORPH_API_KEY=\"first" + testEnv + "\nsecond" + testKV + "\"\nafter\n"
-	want, _ := New(Config{Enabled: true}, nil, nil).RedactString(text)
-	for n := 1; n <= len(text); n++ {
-		s := newTestStreamRedactor(t)
-		all, _ := feed(s, text, n)
-		assertNoSecret(t, "chunk size "+itoa(n), all)
-		if all != want {
-			t.Fatalf("chunk size %d: got %q, want %q", n, all, want)
-		}
-	}
-	s := newTestStreamRedactor(t)
-	if got := s.Write("MISTER_MORPH_API_KEY='open\n"); got != "" {
-		t.Fatalf("open quote released: %q", got)
-	}
-	if got := s.Write("still open\n"); got != "" {
-		t.Fatalf("open quote released: %q", got)
-	}
-	// Past the limit the held value is hidden, not released, up to its closing quote.
-	got := s.Write(strings.Repeat(testKV+"\n", streamRedactMaxHeldBytes/len(testKV)+1))
-	got += s.Write(testKV + "\n" + testKV + "' tail\nnext\n")
-	assertNoSecret(t, "open quote over limit", got)
-	if got != streamRedactedHeldMarker+" tail\nnext\n" {
-		t.Fatalf("over limit = %q", got)
-	}
-}
-
-func TestStreamRedactorKeepsDanglingContextPastTheLimit(t *testing.T) {
-	s := newTestStreamRedactor(t)
-	got := s.Write("api_key:\n" + strings.Repeat("\n", streamRedactMaxHeldBytes+1))
-	got += s.Write("  " + testKV + "\n")
-	assertNoSecret(t, "dangling over limit", got)
-	if !strings.HasPrefix(got, streamRedactedHeldMarker) || !strings.Contains(got, "[redacted]") {
-		t.Fatalf("got %q", got)
-	}
-}
-
-// Review finding: releasing at the size limit split an open multi-line custom match.
-func TestStreamRedactorHidesHeldTextAtTheLimit(t *testing.T) {
-	s := newTestStreamRedactor(t, RegexPattern{Name: "block", Re: `(?s)<secret>.*?</secret>`})
-	text := strings.Repeat("safe\n", 13105) + "<secret>\nSENSITIVEPAYLOAD123456\n</secret>\n"
-	all, _ := feed(s, text, 4096)
-	if strings.Contains(all, "SENSITIVEPAYLOAD") {
-		t.Fatalf("payload shown: ...%q", all[max(0, len(all)-200):])
-	}
-	if !strings.HasSuffix(all, streamRedactedRestMarker) {
-		t.Fatalf("no marker for the hidden rest: ...%q", all[max(0, len(all)-200):])
-	}
-	// Under the limit, the stream is held to its end and redacted whole.
-	s = newTestStreamRedactor(t, RegexPattern{Name: "block", Re: `(?s)<secret>.*?</secret>`})
-	all, before := feed(s, "safe\n<secret>\nSENSITIVEPAYLOAD123456\n</secret>\nok\n", 3)
-	if before != "" || all != "safe\n[redacted]\nok\n" {
-		t.Fatalf("before %q, all %q", before, all)
-	}
 }
