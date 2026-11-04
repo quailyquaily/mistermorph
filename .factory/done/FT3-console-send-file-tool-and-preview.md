@@ -127,3 +127,11 @@ Validation: required exact gofmt/vet/full Go gate passed (155 passing packages, 
 Installs: 100 Go modules downloaded; pnpm install --frozen-lockfile installed 83 locked frontend packages; project-specified pnpm 12.3.4 auto-installed; esbuild postinstall executed. No sudo or system packages. Follow-up full validation reused caches with no additional installs. Contact notified.
 
 Residual risks: real-model end-to-end delivery, real-browser preview/download interaction and non-Linux behavior not verified. Initial manager wrapper timed out before a review result; a direct Codex review and validation follow-up completed. Reviewer changed no source/lockfiles, made no commits, and did not push, fetch or run gh. Manager verified unchanged HEAD and clean worktree. No linked issues or PRs in header/owner sections, so no GitHub comments applicable.
+
+## lyric · 2026-11-04 09:28
+fix and merge to master.
+
+## factory · 2026-11-04 09:28
+Fixed the review P2 in ea88fb9f: send_file now resolves the path one component at a time, so a relative symlink target applies to the directory the link really sits in (alias/link with alias -> docs/sub and docs/sub/link -> ../report.txt now delivers docs/report.txt). deny_paths is checked on the requested path, every link and the resolved path, and the SameFile check around the open is kept. TestConsoleSendFileFollowsSymlinkChains covers the reviewer's case; on 76628940 it fails with the root report.txt delivered. This commit was not reviewed by the factory.
+
+Merged into master as 7c28c32e. Conflicts with FT2 in streaming.go (the previous frame's UserReaction and Attachments both carry over) and ChatView.css (both rule sets kept). The merged master passed the full gate (155 packages); pnpm test passed 351 of 351 and pnpm build passed. No linked issues or PRs to close.
