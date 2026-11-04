@@ -68,3 +68,15 @@ Validation reported by Codex: required gofmt check, go vet ./..., and go test ./
 Installs: none beyond pinned dependencies; no manifest or lockfile changes.
 
 Not checked: real coder CLI and desktop/phone browser interaction. Codex did not locate the review-code skill in its environment. No linked issues or PRs were specified. Ship FT4 and FT5 before FT6 or together with it.
+
+## lyric · 2026-11-04 22:11
+you can fix FT6 and merge them all to maaaster
+
+## factory · 2026-11-04 22:11
+Fixed the review's three P2 findings in 8a4709cc, after merging master into the branch (30e978f9):
+- A subagent's final answer is kept as the worker's `result`, read from the result its spawn or coder call returns, so it is there after a reload.
+- Status comes from ranked sources (call, subtask, returned result); a spawn call's own success no longer overrides a failed subagent. With Guard on, only the result's status is kept.
+- Coder output is appended to its worker straight from each output event, not through history entries that may have been trimmed.
+Regression tests cover each reviewed sequence; each fails with its fix turned off.
+
+Merged into master as 1765970f. Gate on the merged master: gofmt, `go vet ./...` and `go test ./...` pass; `pnpm test` 379/379 and `pnpm build` pass. Pushed to master; not tagged. The fix commit was not reviewed by the review job. No linked GitHub issues or PRs to close.
