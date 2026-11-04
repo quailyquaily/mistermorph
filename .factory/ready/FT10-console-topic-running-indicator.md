@@ -47,3 +47,18 @@ Tests: gofmt, `go vet ./...` and `go test ./...` pass; `pnpm test` 382/382 and `
 Not checked: the UI was not looked at in a browser, at desktop or phone width.
 
 Merging with FT11: the two branches conflict in `internal/daemonruntime/console_store.go` (the same `List` filter line: keep FT10's `!opts.AllTopics &&` and FT11's `|| IsCronTopicID(item.TopicID)`) and in `web/console/src/views/ChatView.js`. Merge FT10 first.
+
+## factory · review · 2026-11-05 00:47
+head: 78c6d18a11524bb41a68ea9f7e36b96fc750289a
+verdict: pass
+notes:
+- [P2] web/console/src/views/ChatView.js:2936: overlapping polls discard every response when requests consistently take longer than the five-second polling interval. Reproduction with six-second responses discarded all ten successful responses, leaving the indicator absent. Avoid overlapping requests for the same endpoint while preserving endpoint-switch protection.
+- [P2] internal/daemonruntime/server_routes_tasks.go:538: activity aggregation reads only the first 201 tasks per status. With 202 pending tasks in distinct topics in ConsoleFileStore, HTTP 200 contained only 201 topics and omitted the oldest still-pending task. Paginate through all matching tasks before aggregating.
+
+Reviewed by Codex against origin/master (2bce552e), all 10 changed files. No P0/P1 findings; moved to ready under the factory threshold, with the two P2 defects retained for owner review. No merge conflict with master. No source edits or commits.
+
+Validation: configured gofmt/vet/Go test command passed in a full HEAD source copy (3597 files checked identical); pnpm test passed 382/382 and pnpm build passed with a large-chunk warning. Initial validation attempts failed because review caches were included and an incomplete copy omitted packages/workflow fixtures; complete-copy validation passed, so these are harness failures, not branch defects. Both P2 cases were reproduced.
+
+Installs: none beyond restoring pinned console dependencies with pnpm install --frozen-lockfile.
+
+Not checked: Chrome could not start; desktop/phone visual behavior and real task flows were not browser-verified. Reproduction artifacts retained in the review run directory. No linked GitHub issue or PR.
