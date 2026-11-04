@@ -1,6 +1,7 @@
 package consolecmd
 
 import (
+	"reflect"
 	"strings"
 	"time"
 
@@ -17,11 +18,38 @@ const (
 	// and consoleActivityMessageMaxChars the length of each.
 	consoleActivityMessageLimit    = 12
 	consoleActivityMessageMaxChars = 4000
+	// consoleActivityWorkerLimit bounds the workers kept in the roster; the oldest go first.
+	consoleActivityWorkerLimit = 32
 )
 
 type consoleActivityProgress struct {
 	Current *consoleActivityEntry  `json:"current,omitempty"`
 	History []consoleActivityEntry `json:"history,omitempty"`
+	// Workers are the subagents and coders the task started, in start order. Unlike History, a
+	// worker stays here after its entries scroll out, so the roster lists every one.
+	Workers []consoleActivityWorker `json:"workers,omitempty"`
+	// WorkersOmitted counts the oldest workers dropped to stay within consoleActivityWorkerLimit.
+	WorkersOmitted int `json:"workers_omitted,omitempty"`
+	// droppedWorkers keeps those IDs, so an entry still in the history does not add one back.
+	droppedWorkers map[string]bool
+}
+
+// consoleActivityWorker is one subagent or coder in the task's roster, with its latest state and
+// output.
+type consoleActivityWorker struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	// Kind is "coder" for a coder call, else "subagent".
+	Kind   string `json:"kind"`
+	Status string `json:"status,omitempty"`
+	// ActivityID is the spawn or coder call that started the worker.
+	ActivityID string                `json:"activity_id,omitempty"`
+	At         string                `json:"at,omitempty"`
+	Stream     string                `json:"stream,omitempty"`
+	Output     string                `json:"output,omitempty"`
+	Summary    string                `json:"summary,omitempty"`
+	Error      string                `json:"error,omitempty"`
+	Processes  []agent.WorkerProcess `json:"processes,omitempty"`
 }
 
 type consoleActivityEntry struct {
@@ -65,6 +93,17 @@ func cloneConsoleActivityProgress(progress *consoleActivityProgress) *consoleAct
 		Current: cloneConsoleActivityEntry(progress.Current),
 		History: make([]consoleActivityEntry, 0, len(progress.History)),
 	}
+	for _, worker := range progress.Workers {
+		worker.Processes = append([]agent.WorkerProcess(nil), worker.Processes...)
+		out.Workers = append(out.Workers, worker)
+	}
+	out.WorkersOmitted = progress.WorkersOmitted
+	if len(progress.droppedWorkers) > 0 {
+		out.droppedWorkers = make(map[string]bool, len(progress.droppedWorkers))
+		for id := range progress.droppedWorkers {
+			out.droppedWorkers[id] = true
+		}
+	}
 	for _, entry := range progress.History {
 		cloned := cloneConsoleActivityEntry(&entry)
 		if cloned == nil {
@@ -76,7 +115,7 @@ func cloneConsoleActivityProgress(progress *consoleActivityProgress) *consoleAct
 		last := out.History[len(out.History)-1]
 		out.Current = cloneConsoleActivityEntry(&last)
 	}
-	if out.Current == nil && len(out.History) == 0 {
+	if out.Current == nil && len(out.History) == 0 && len(out.Workers) == 0 {
 		return nil
 	}
 	return out
@@ -115,6 +154,18 @@ func cloneConsoleArgs(args map[string]any) map[string]any {
 }
 
 func updateConsoleActivityProgress(progress *consoleActivityProgress, event agent.Event) (*consoleActivityProgress, bool) {
+	if progress == nil {
+		// The entry updates fill this in place; an update that adds nothing still clones to nil.
+		progress = &consoleActivityProgress{}
+	}
+	_, changed := updateConsoleActivityEntries(progress, event)
+	if syncConsoleActivityWorkers(progress, event.Worker) {
+		changed = true
+	}
+	return cloneConsoleActivityProgress(progress), changed
+}
+
+func updateConsoleActivityEntries(progress *consoleActivityProgress, event agent.Event) (*consoleActivityProgress, bool) {
 	if event.Kind == agent.EventKindWorkerProcess {
 		changed := updateConsoleWorkerEntries(progress, event.Worker)
 		return cloneConsoleActivityProgress(progress), changed
@@ -455,4 +506,132 @@ func updateConsoleWorkerEntries(progress *consoleActivityProgress, worker *agent
 	}
 	visit(progress.Current)
 	return changed
+}
+
+// consoleWorkerRoot reports whether entry started a worker: a spawn or coder call, or the
+// subtask a spawn runs.
+func consoleWorkerRoot(entry *consoleActivityEntry) bool {
+	if entry == nil {
+		return false
+	}
+	switch strings.TrimSpace(entry.Kind) {
+	case "subtask":
+		return true
+	case "tool":
+		name := strings.TrimSpace(entry.Name)
+		return name == "spawn" || name == "coder"
+	}
+	return false
+}
+
+// syncConsoleActivityWorkers updates the roster from the entries that started workers, and merges
+// the processes an event reports into its worker. Workers are never removed, so a worker stays
+// listed after its entries scroll out of the history.
+func syncConsoleActivityWorkers(progress *consoleActivityProgress, eventWorker *agent.WorkerMetadata) bool {
+	if progress == nil {
+		return false
+	}
+	before := cloneConsoleActivityProgress(progress)
+	index := func(id string) int {
+		for i := range progress.Workers {
+			if progress.Workers[i].ID == id {
+				return i
+			}
+		}
+		return -1
+	}
+	byActivity := func(activityID string) int {
+		if activityID == "" {
+			return -1
+		}
+		for i := range progress.Workers {
+			if progress.Workers[i].ActivityID == activityID {
+				return i
+			}
+		}
+		return -1
+	}
+	visit := func(entry *consoleActivityEntry) {
+		if !consoleWorkerRoot(entry) {
+			return
+		}
+		i := -1
+		if entry.Worker != nil && strings.TrimSpace(entry.Worker.ID) != "" {
+			if progress.droppedWorkers[entry.Worker.ID] {
+				return
+			}
+			i = index(entry.Worker.ID)
+			if i < 0 {
+				kind := "subagent"
+				if strings.TrimSpace(entry.Name) == "coder" && entry.Kind == "tool" {
+					kind = "coder"
+				}
+				progress.Workers = append(progress.Workers, consoleActivityWorker{
+					ID:   entry.Worker.ID,
+					Name: entry.Worker.Name,
+					Kind: kind,
+				})
+				i = len(progress.Workers) - 1
+			}
+		} else if entry.Kind == "tool" {
+			// A completion that arrived without worker metadata still belongs to its call.
+			i = byActivity(entry.ID)
+		}
+		if i < 0 {
+			return
+		}
+		worker := &progress.Workers[i]
+		if entry.Kind == "tool" && worker.ActivityID == "" {
+			worker.ActivityID = entry.ID
+		}
+		if entry.Worker != nil {
+			if name := strings.TrimSpace(entry.Worker.Name); name != "" {
+				worker.Name = name
+			}
+			worker.Processes = mergeConsoleWorker(&agent.WorkerMetadata{ID: worker.ID, Processes: worker.Processes},
+				&agent.WorkerMetadata{ID: worker.ID, Processes: entry.Worker.Processes}).Processes
+		}
+		if status := strings.TrimSpace(entry.Status); status != "" {
+			worker.Status = status
+		}
+		if at := strings.TrimSpace(entry.At); at != "" {
+			worker.At = at
+		}
+		if stream := strings.TrimSpace(entry.Stream); stream != "" {
+			worker.Stream = stream
+		}
+		if entry.Output != "" {
+			worker.Output = entry.Output
+		}
+		if summary := strings.TrimSpace(entry.Summary); summary != "" {
+			worker.Summary = summary
+		}
+		if errText := strings.TrimSpace(entry.Error); errText != "" {
+			worker.Error = errText
+		}
+	}
+	for i := range progress.History {
+		visit(&progress.History[i])
+		for j := range progress.History[i].Children {
+			visit(&progress.History[i].Children[j])
+		}
+	}
+	if eventWorker != nil {
+		if i := index(eventWorker.ID); i >= 0 {
+			worker := &progress.Workers[i]
+			worker.Processes = mergeConsoleWorker(&agent.WorkerMetadata{ID: worker.ID, Processes: worker.Processes},
+				&agent.WorkerMetadata{ID: worker.ID, Processes: eventWorker.Processes}).Processes
+		}
+	}
+	if extra := len(progress.Workers) - consoleActivityWorkerLimit; extra > 0 {
+		if progress.droppedWorkers == nil {
+			progress.droppedWorkers = map[string]bool{}
+		}
+		for _, worker := range progress.Workers[:extra] {
+			progress.droppedWorkers[worker.ID] = true
+		}
+		progress.Workers = append([]consoleActivityWorker(nil), progress.Workers[extra:]...)
+		progress.WorkersOmitted += extra
+	}
+	return !reflect.DeepEqual(before, cloneConsoleActivityProgress(progress))
 }

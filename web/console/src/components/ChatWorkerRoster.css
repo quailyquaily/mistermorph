@@ -1,0 +1,211 @@
+/* The roster of subagents and coders, below the status card. */
+.chat-worker-roster {
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.chat-worker-list {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chat-worker-list-item {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.chat-worker-chip {
+  max-width: 100%;
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px 3px 3px;
+  border: 1px solid var(--line-soft);
+  border-radius: 999px;
+  background: var(--bg-2);
+  color: var(--text-1);
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-meta);
+  line-height: 1.2;
+  cursor: pointer;
+  transition: border-color 120ms ease, background-color 120ms ease;
+}
+
+.chat-worker-chip:hover {
+  border-color: var(--line);
+}
+
+.chat-worker-chip.is-selected {
+  border-color: color-mix(in srgb, var(--accent-1) 55%, var(--line));
+  background: color-mix(in srgb, var(--accent-1) 7%, var(--bg-2));
+  color: var(--text-0);
+}
+
+.chat-worker-chip:focus-visible {
+  outline: 2px solid var(--accent-1);
+  outline-offset: 2px;
+}
+
+.chat-worker-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-worker-avatar {
+  --worker-tone: hsl(var(--worker-hue, 210) 62% 50%);
+  width: 20px;
+  height: 20px;
+  flex: none;
+  display: block;
+}
+
+.chat-worker-avatar-bg {
+  fill: color-mix(in srgb, var(--worker-tone) 16%, var(--bg-2));
+}
+
+.chat-worker-avatar-cell {
+  fill: color-mix(in srgb, var(--worker-tone) 82%, var(--text-0));
+  shape-rendering: crispEdges;
+}
+
+.chat-worker-state-dot {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--text-2);
+}
+
+.chat-worker-chip.is-running .chat-worker-state-dot {
+  background: var(--q-c-orange);
+  animation: chat-worker-pulse 1.6s ease-in-out infinite;
+}
+
+.chat-worker-chip.is-done .chat-worker-state-dot {
+  background: var(--ok);
+}
+
+.chat-worker-chip.is-failed .chat-worker-state-dot {
+  background: var(--danger);
+}
+
+.chat-worker-chip.is-canceled .chat-worker-state-dot {
+  background: var(--text-2);
+}
+
+@keyframes chat-worker-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-worker-chip {
+    transition: none;
+  }
+
+  .chat-worker-chip.is-running .chat-worker-state-dot {
+    animation: none;
+  }
+}
+
+.chat-worker-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.chat-worker-omitted {
+  align-self: center;
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-meta);
+}
+
+/* The selected worker: the same terminal look as the progress panel. */
+.chat-worker-detail {
+  --chat-worker-terminal-bg: color-mix(in srgb, var(--q-c-dark) 92%, var(--q-c-blue) 8%);
+  --chat-worker-terminal-fg: color-mix(in srgb, var(--q-c-white) 86%, var(--q-c-blue-light) 14%);
+  --chat-worker-terminal-muted: color-mix(in srgb, var(--q-c-white) 52%, var(--q-c-blue-light) 18%);
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px 11px;
+  background: var(--chat-worker-terminal-bg);
+  color: var(--chat-worker-terminal-fg);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-meta);
+  line-height: 1.5;
+}
+
+.chat-worker-detail-head {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+}
+
+.chat-worker-detail-head .chat-worker-avatar-bg {
+  fill: color-mix(in srgb, var(--worker-tone) 30%, var(--chat-worker-terminal-bg));
+}
+
+.chat-worker-detail-head .chat-worker-avatar-cell {
+  fill: color-mix(in srgb, var(--worker-tone) 70%, var(--q-c-white));
+}
+
+.chat-worker-detail-name {
+  color: var(--q-c-white);
+  overflow-wrap: anywhere;
+}
+
+.chat-worker-detail-meta,
+.chat-worker-detail-pid {
+  color: var(--chat-worker-terminal-muted);
+}
+
+.chat-worker-detail-state.is-running {
+  color: var(--q-c-orange-light);
+}
+
+.chat-worker-detail-state.is-done {
+  color: var(--q-c-green-light);
+}
+
+.chat-worker-detail-state.is-failed {
+  color: var(--q-c-red-light);
+}
+
+.chat-worker-detail-state.is-canceled {
+  color: var(--chat-worker-terminal-muted);
+}
+
+.chat-worker-output {
+  max-height: min(320px, 44vh);
+  margin: 0;
+  overflow: auto;
+  color: color-mix(in srgb, var(--chat-worker-terminal-fg) 82%, transparent);
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--q-c-blue-light) 34%, transparent) transparent;
+}
+
+.chat-worker-output.is-empty {
+  color: var(--chat-worker-terminal-muted);
+}

@@ -1,3 +1,4 @@
+import { normalizeActivityWorkers } from "./chat-workers.js";
 import { taskApprovalState } from "./chat-approvals.js";
 import { placeSteeredAgentsAfterUsers } from "./chat-history-steering.js";
 import { formatDate } from "./intl-format.js";
@@ -404,7 +405,9 @@ function normalizeActivity(raw) {
     ? raw.history.map((entry) => normalizeActivityEntry(entry)).filter(Boolean)
     : [];
   const current = normalizeActivityEntry(raw?.current) || history[history.length - 1] || null;
-  return current || history.length > 0 ? { current, history } : null;
+  const workers = normalizeActivityWorkers(raw?.workers);
+  const workersOmitted = Math.max(0, Number(raw?.workers_omitted ?? raw?.workersOmitted) || 0);
+  return current || history.length > 0 || workers.length > 0 ? { current, history, workers, workersOmitted } : null;
 }
 
 function taskActivity(task) {

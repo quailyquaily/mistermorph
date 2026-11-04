@@ -11,6 +11,7 @@ import ChatRichContent from "./ChatRichContent";
 import ChatSkillInstallPreview from "./ChatSkillInstallPreview";
 import ChatStatusCard from "./ChatStatusCard";
 import ChatSystemMessage from "./ChatSystemMessage";
+import ChatWorkerRoster from "./ChatWorkerRoster";
 import ReceivedFile from "./ReceivedFile";
 import MosaicText from "./MosaicText";
 
@@ -48,6 +49,7 @@ const ChatHistoryItem = {
     ChatSkillInstallPreview,
     ChatStatusCard,
     ChatSystemMessage,
+    ChatWorkerRoster,
     MosaicText,
     ReceivedFile,
   },
@@ -461,6 +463,12 @@ const ChatHistoryItem = {
             <PhChatCircleDots v-if="statusIsDuration" class="chat-history-status-icon" aria-hidden="true" />
             {{ statusText }}
           </span>
+          <ChatWorkerRoster
+            v-if="item.activity?.workers?.length"
+            :item-id="item.id"
+            :activity="item.activity"
+            :status="item.status"
+          />
           <div
             v-if="reasoningVisible && expandedPanel === 'reasoning'"
             :class="surfaceClass"
