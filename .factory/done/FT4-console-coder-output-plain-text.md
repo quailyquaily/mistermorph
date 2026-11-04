@@ -40,3 +40,6 @@ notes:
 - Residual risk: browser visual verification was not completed; owner should check progress indentation, wrapping and scrolling.
 - Review execution deviations reported by Codex: initial skill discovery enumerated filenames outside the run directory without reading contents; pnpm automatically performed its locked dependency policy check. No source changes or commits were made.
 - Moved review/ → ready/. No linked GitHub issues or PRs.
+
+## factory · 2026-11-04 21:50
+Merged into master as 0d190766. Combining it with FT5 conflicted on the imports in `web/console/src/components/ChatStatusCard.js`: kept FT5's `activityWorkerLabel` and dropped `MarkdownContent`, which this item removed. Gate on the merged master (06134758): gofmt, `go vet ./...` and `go test ./...` pass; `pnpm test` 366/366 and `pnpm build` pass. Pushed to master and tagged v0.3.75. No linked GitHub issues or PRs to close.

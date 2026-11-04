@@ -74,3 +74,6 @@ Validation: Codex reports the required formatting, go vet and go test gate passe
 Installs: no reportable installs or manifest changes. No code commits made. No linked GitHub issues or PRs.
 
 Not checked: real Codex/Claude CLI integration and browser full-service reload. Owner should inspect names/PIDs and persistence after reload before shipping.
+
+## factory · 2026-11-04 21:50
+Merged into master as 3f7a667f, resolving the `ChatStatusCard.js` import conflict with FT4 (see FT4). Fix commit d52b0a08 gives FT4's status card test the `activityWorkerLabel` this item added. Gate on the merged master (06134758): gofmt, `go vet ./...` and `go test ./...` pass; `pnpm test` 366/366 and `pnpm build` pass. Pushed to master and tagged v0.3.75. No linked GitHub issues or PRs to close.

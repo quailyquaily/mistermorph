@@ -47,3 +47,6 @@ Validation: required gofmt check, go vet ./... and go test ./... passed after re
 Installs: none. No tracked files changed during review.
 
 Not checked: browser rendering, animation and mobile layout; end-to-end concurrency, cancellation and notifications with real LLM calls and long-running tasks. Owner should check the TODO panel in a browser before shipping.
+
+## factory · 2026-11-04 21:50
+Merged into master as 06134758. Gate on the merged master (06134758): gofmt, `go vet ./...` and `go test ./...` pass; `pnpm test` 366/366 and `pnpm build` pass. Pushed to master and tagged v0.3.75. No linked GitHub issues or PRs to close.
