@@ -151,12 +151,15 @@ def repo_name(repo, remote):
     return m.group(1) if m else os.path.basename(os.path.abspath(repo))
 
 
-def branch_link(repo, remote, base, branch):
+def github_url(repo, remote):
     url = git(repo, "remote", "get-url", remote).strip()
     m = re.match(r"^(?:git@github\.com:|https://github\.com/)([\w.-]+/[\w.-]+?)(?:\.git)?$", url)
-    if not m or not branch:
-        return ""
-    return f"https://github.com/{m.group(1)}/compare/{base}...{branch}"
+    return f"https://github.com/{m.group(1)}" if m else ""
+
+
+def branch_link(repo, remote, base, branch):
+    url = github_url(repo, remote)
+    return f"{url}/compare/{base}...{branch}" if url and branch else ""
 
 
 def when(t):
@@ -342,6 +345,7 @@ def load(repo):
                 "link": branch_link(repo, remote, base, header.get("branch", "")),
             })
             items[-1]["since"] = waiting_since(items[-1])
+    cfg["github_url"] = github_url(repo, remote)
     return cfg, repo_name(repo, remote), items
 
 
@@ -366,6 +370,7 @@ h1{margin:0;font-size:1.06rem;font-weight:600;letter-spacing:-.005em}
 .sum{font-size:.88rem;color:var(--ink-3)}
 .sum b{font-weight:600;color:var(--gate)}
 .drawn{margin-left:auto;font-size:.8rem;color:var(--ink-3)}
+.drawn a{text-decoration-color:var(--rule);text-underline-offset:3px}
 
 /* Columns touch, so each stage's rail runs straight into the next node. */
 .line{display:grid;grid-template-columns:minmax(0,.86fr) repeat(3,minmax(0,1fr)) minmax(0,.86fr);align-items:start;margin-top:26px}
@@ -396,6 +401,11 @@ h1{margin:0;font-size:1.06rem;font-weight:600;letter-spacing:-.005em}
 .bad,.problems{font-size:.8rem;line-height:1.35;color:var(--stop)}
 .problems{margin:6px 0 0}
 .more,.idle{margin:10px 0 0;font-size:.8rem;color:var(--ink-3)}
+.more summary{display:inline-block;list-style:none;cursor:pointer;text-decoration:underline;text-decoration-color:var(--rule);text-underline-offset:3px}
+.more summary::-webkit-details-marker{display:none}
+.more .hide,.more[open] .show{display:none}
+.more[open] .hide{display:inline}
+.more .items{margin-top:8px}
 
 
 /* The thread is a second sheet. Only transform and opacity move, so it stays smooth however long
@@ -463,7 +473,7 @@ h1{margin:0;font-size:1.06rem;font-weight:600;letter-spacing:-.005em}
 STATIONS = [
     ("backlog", "Backlog", "parked side"),
     ("new", "New", "works"),
-    ("review", "Review", "gate"),
+    ("review", "Review", "works"),
     ("ready", "Ready", "gate"),
     ("done", "Done", "side end"),
 ]
@@ -507,8 +517,11 @@ def render_station(name, cls, items, shown, avg, now):
         out.append("<ul class=items>" + "".join(render_item(it, now) for it in shown) + "</ul>")
     else:
         out.append("<p class=idle>Nothing here</p>")
-    if len(items) > len(shown):
-        out.append(f"<p class=more>and {len(items) - len(shown)} more</p>")
+    rest = items[len(shown):]
+    if rest:
+        out.append(
+            f"<details class=more><summary><span class=show>Show {len(rest)} more</span><span class=hide>Show fewer</span></summary>"
+            "<ul class=items>" + "".join(render_item(it, now) for it in rest) + "</ul></details>")
     out.append("</div></section>")
     return "".join(out)
 
@@ -568,16 +581,19 @@ def render(cfg, name, items):
     sent_back = sum(max(0, rounds(it) - 1) for it in items)
     e = html.escape
     gates = f"<b>{yours} at your gates</b> · " if yours else "Nothing at your gates · "
+    link = f'<a href="{e(cfg["github_url"])}" rel="noopener">GitHub</a> · ' if cfg.get("github_url") else ""
     out = [
         "<!doctype html><html lang=en><head><meta charset=utf-8>",
         '<meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">',
         f"<title>{e(name)} · factory board</title><style>{CSS}</style></head><body><div class=sheet>",
         f"<header class=top><h1>{e(name)}</h1><span class=sum>{gates}{agents} with the agent · {len(by['done'])} done</span>",
-        f"<span class=drawn>Drawn {today:%b} {today.day}, {today:%H:%M}</span></header><main class=line>",
+        f"<span class=drawn>{link}Drawn {today:%b} {today.day}, {today:%H:%M}</span></header><main class=line>",
     ]
     if sent_back:
         out.append(f"<div class=loop><span>{sent_back} sent back</span></div>")
     for key, title, cls in STATIONS:
+        if any(it["turn"] == "you" for it in by[key]):
+            cls = "gate"
         shown = by[key][:DONE_SHOWN] if key == "done" else by[key]
         avg = average_stay(items, key) if key in ("new", "review", "ready") else ""
         out.append(render_station(title, cls, by[key], shown, avg, now))
