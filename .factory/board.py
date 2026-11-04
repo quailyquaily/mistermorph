@@ -9,9 +9,11 @@ GitHub Actions to publish the board on GitHub Pages. The page draws the line as
 one rail with a stage per folder (not stop/: parked items are left out; backlog/
 is the owner's and waits for nobody), an entry per item (whose turn it is, how
 long it has waited) and, behind each entry, the item's thread and the times it
-moved between folders, read from git. It needs only Python 3.11 and git, and
-loads nothing from the network. Item files are other people's text: everything
-is escaped.
+moved between folders, read from git. With -o, older done items move to a
+done.html beside the page, so the board stays small however long the factory
+runs; their threads are the item files on GitHub. It needs only Python 3.11 and
+git, and loads nothing from the network. Item files are other people's text:
+everything is escaped.
 """
 
 import argparse
@@ -31,6 +33,8 @@ FOLDERS = ["backlog", "new", "review", "ready", "done"]  # stop/ is parked: not 
 ITEM = re.compile(r"^(?:(?:[A-Z]+(\d+)|(\d{4}))-)?([a-z0-9]+(?:-[a-z0-9]+)*)\.md$")
 SECTION = re.compile(r"^## (.+?) · (?:(plan|question|review) · )?(\d{4}-\d{2}-\d{2} \d{2}:\d{2})\s*$")
 DONE_SHOWN = 4
+ARCHIVE = "done.html"
+BOARD_BRANCH = "factory_board"
 TZ = None  # factory.toml's timezone; the machine's own when unset
 
 
@@ -335,7 +339,7 @@ def load(repo):
                 header, title, sections, problems = parse(f.read(), owners | {"factory"})
             steps = history.get(name, [])
             items.append({
-                "n": n, "slug": m.group(3), "folder": folder,
+                "n": n, "slug": m.group(3), "folder": folder, "file": path,
                 "id": str(n) if n else m.group(3), "label": label,
                 "title": title or m.group(3).replace("-", " "),
                 "branch": header.get("branch", ""), "round": header.get("round", ""),
@@ -406,6 +410,17 @@ h1{margin:0;font-size:1.06rem;font-weight:600;letter-spacing:-.005em}
 .more .hide,.more[open] .show{display:none}
 .more[open] .hide{display:inline}
 .more .items{margin-top:8px}
+.more a{text-underline-offset:3px;text-decoration-color:var(--rule)}
+.archive{max-width:760px;margin-top:18px}
+.archive summary{display:flex;justify-content:space-between;gap:8px;padding:12px 0;cursor:pointer;list-style:none;font-size:.92rem;font-weight:600;border-bottom:var(--hair) solid var(--rule-soft)}
+.archive summary::-webkit-details-marker{display:none}
+.archive summary b{font-size:.84rem;font-weight:400;color:var(--ink-3)}
+.archive ul{list-style:none;margin:0 0 14px;padding:0}
+.archive li{display:grid;grid-template-columns:52px minmax(0,1fr) auto;gap:10px;align-items:baseline;padding:9px 0;border-bottom:var(--hair) solid var(--rule-soft)}
+.archive .id,.archive time{font-size:.74rem;color:var(--ink-3)}
+.archive .t{font-size:.92rem;line-height:1.36;font-weight:400;color:var(--ink-2);overflow-wrap:anywhere;text-wrap:pretty}
+.archive .t a{text-decoration:none}
+@media (hover:hover){.archive .t a:hover{color:var(--ink);text-decoration:underline;text-decoration-color:var(--rule);text-underline-offset:3px}}
 
 
 /* The thread is a second sheet. Only transform and opacity move, so it stays smooth however long
@@ -507,7 +522,7 @@ def render_item(it, now):
         f'<span class=t>{e(it["title"])}</span>{cues}</a></li>')
 
 
-def render_station(name, cls, items, shown, avg, now):
+def render_station(name, cls, items, shown, avg, now, archive=False):
     stay = f"avg stay {avg}" if avg else ""
     out = [
         f'<section class="st {cls}"><div class=rail><span class=node></span></div><div class=drop>'
@@ -518,7 +533,9 @@ def render_station(name, cls, items, shown, avg, now):
     else:
         out.append("<p class=idle>Nothing here</p>")
     rest = items[len(shown):]
-    if rest:
+    if rest and archive:
+        out.append(f'<p class=more><a href="{ARCHIVE}">All {len(items)} done</a></p>')
+    elif rest:
         out.append(
             f"<details class=more><summary><span class=show>Show {len(rest)} more</span><span class=hide>Show fewer</span></summary>"
             "<ul class=items>" + "".join(render_item(it, now) for it in rest) + "</ul></details>")
@@ -568,7 +585,8 @@ def render_detail(it, now):
         f'<div class=thread>{"".join(thread)}</div></div></div></article>')
 
 
-def render(cfg, name, items):
+def render(cfg, name, items, archive=False):
+    """The board. With archive, older done items are left to done.html and their threads left out."""
     today = dt.datetime.now(TZ)
     now = today.timestamp()
     by = {f: [] for f in FOLDERS}
@@ -596,10 +614,40 @@ def render(cfg, name, items):
             cls = "gate"
         shown = by[key][:DONE_SHOWN] if key == "done" else by[key]
         avg = average_stay(items, key) if key in ("new", "review", "ready") else ""
-        out.append(render_station(title, cls, by[key], shown, avg, now))
+        out.append(render_station(title, cls, by[key], shown, avg, now, archive))
     out.append("</main></div>")
-    out += [render_detail(it, now) for it in items]
+    older = by["done"][DONE_SHOWN:] if archive else []
+    out += [render_detail(it, now) for it in items if it not in older]
     out.append(f"<script>{SCRIPT}</script></body></html>\n")
+    return "".join(out)
+
+
+def render_archive(cfg, name, items, board):
+    """Every done item by month, newest first. Each title opens its file on GitHub."""
+    e = html.escape
+    done = sorted((it for it in items if it["folder"] == "done"), key=lambda it: -it["changed"])
+    months = {}
+    for it in done:
+        month = dt.datetime.fromtimestamp(it["changed"], TZ).strftime("%B %Y") if it["changed"] else "Undated"
+        months.setdefault(month, []).append(it)
+    out = [
+        "<!doctype html><html lang=en><head><meta charset=utf-8>",
+        '<meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">',
+        f"<title>{e(name)} · done</title><style>{CSS}</style></head><body><div class=sheet>",
+        f"<header class=top><h1>{e(name)}</h1><span class=sum>{len(done)} done</span>",
+        f'<span class=drawn><a href="{e(board)}">Back to the board</a></span></header><main class=archive>',
+    ]
+    for i, (month, group) in enumerate(months.items()):
+        out.append(f'<details{" open" if i == 0 else ""}><summary><span>{month}</span><b>{len(group)}</b></summary><ul>')
+        for it in group:
+            title = e(it["title"])
+            if cfg.get("github_url"):
+                title = f'<a href="{e(cfg["github_url"])}/blob/{BOARD_BRANCH}/{e(it["file"])}" rel="noopener">{title}</a>'
+            day = dt.datetime.fromtimestamp(it["changed"], TZ) if it["changed"] else None
+            date = f"{day:%b} {day.day}" if day else ""
+            out.append(f'<li><span class=id>{it["label"]}</span><span class=t>{title}</span><time title="{when(it["changed"])}">{date}</time></li>')
+        out.append("</ul></details>")
+    out.append(f"</main></div><script>{SCRIPT}</script></body></html>\n")
     return "".join(out)
 
 
@@ -610,12 +658,19 @@ def main():
     a = ap.parse_args()
     if not os.path.isfile(os.path.join(a.repo, ".factory", "factory.toml")):
         sys.exit(f"board.py: {a.repo} has no .factory/factory.toml; give a checkout of factory_board")
-    page = render(*load(a.repo))
-    if a.out:
-        with open(a.out, "w", encoding="utf-8") as f:
-            f.write(page)
-    else:
-        sys.stdout.write(page)
+    cfg, name, items = load(a.repo)
+    if not a.out:  # one stream holds one page, so the board keeps every item
+        sys.stdout.write(render(cfg, name, items))
+        return
+    archive = os.path.join(os.path.dirname(a.out), ARCHIVE)
+    if os.path.basename(a.out) == ARCHIVE:
+        sys.exit(f"board.py: {ARCHIVE} is the done list's name; write the board to another")
+    long_done = sum(1 for it in items if it["folder"] == "done") > DONE_SHOWN
+    with open(a.out, "w", encoding="utf-8") as f:
+        f.write(render(cfg, name, items, long_done))
+    if long_done:
+        with open(archive, "w", encoding="utf-8") as f:
+            f.write(render_archive(cfg, name, items, os.path.basename(a.out)))
 
 
 if __name__ == "__main__":
