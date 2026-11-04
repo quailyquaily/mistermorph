@@ -1,6 +1,6 @@
 ---
 branch: factory/FT9-guard-stream-redaction
-round: 2
+round: 3
 ---
 # Guard: redact streamed tool output instead of dropping it
 
@@ -112,3 +112,22 @@ notes:
 - Codex reviewed all nine changed files in origin/master...HEAD, base 2bce552ee9e2c604830ea600ef7be055f3e71df0. No merge conflicts. Previous six regression cases pass, but eight additional synthetic-secret reproductions confirm Console leaks; all eight baseline Console-filter controls pass.
 - Required gofmt check, go vet ./..., and go test ./... passed. Tests used an absolute throwaway HOME. No installs. No frontend changes; pnpm not run. Source worktree remained clean.
 - Not checked: real Codex/Claude Code browser integration; CLI reproductions used fake processes. No linked issues or PRs. Item stays in review/ for the owner to decide; add a note and move to new/ to request fixes.
+
+## lyric · 2026-11-04 23:27
+sure
+
+## factory · 2026-11-04 23:27
+Fix round 3 in the owner's checkout at the owner's request: commit 83f14960, on 6044edb2.
+
+The round 2 findings came from recovery logic: separate trackers for keys, quotes, long lines and held text, where one recovery path cleared another's state. The redactor is rewritten around one rule instead: it never recovers. When held text or a single line passes 64 KB, nothing held is released and the rest of the stream is hidden behind `[rest of this output hidden: it could not be checked for secrets]`.
+
+- [P1] coder raw content: stderr and the assistant's text are now raw parts of their own, like command output (`stderr`, `text`). There is no `[codex stderr]` prefix, and Claude and Codex text deltas are read untrimmed. This also stops spaces between streamed words being dropped.
+- [P1] long line inside an open match: the rest of the stream is hidden; nothing is released and nothing recovers.
+- [P1] oversized key inside a custom block: the separate 16 KB key limit is gone. A key inside a custom block is held with the block to its end, or the rest is hidden past 64 KB.
+- [P2] END and BEGIN on one line: markers are followed in order on each line.
+
+Tests: each reviewer reproduction is a regression test (stderr `api_key=` with its value on the next line; Claude `Bearer ` and token in two pieces; a long line inside a custom block, a quoted value and a key block; an oversized key inside a custom block; END and BEGIN on one line). The all-chunk-sizes check now also covers a two-line quoted value and a key/value split by a blank line, and still equals whole-text redaction. gofmt, `go vet ./...` and `go test ./...` pass; guard, Console and agent tests pass under `-race`.
+
+Trade-off: after a 64 KB line, or 64 KB of held text, nothing more of that stream is shown until the call ends.
+
+Not checked: a real Codex or Claude Code run in the Console with Guard on.
