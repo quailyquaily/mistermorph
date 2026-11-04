@@ -79,3 +79,36 @@ func TestTopicActivityRouteListsTopicsWithUnfinishedTasks(t *testing.T) {
 		t.Fatalf("empty body = %q", body)
 	}
 }
+
+// The runtime's own topics (Awareness, Agent Link agents') count too, though a plain task list
+// leaves them out.
+func TestTopicActivityIncludesTheRuntimesOwnTopics(t *testing.T) {
+	store, err := NewConsoleFileStore(ConsoleFileStoreOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 11, 5, 9, 0, 0, 0, time.UTC)
+	agentTopic := AgentLinkTopicID("inst_0123456789abcdef0123456789abcdef")
+	for _, task := range []TaskInfo{
+		{ID: "hb", TopicID: ConsoleAwarenessTopicID, Status: TaskRunning},
+		{ID: "al", TopicID: agentTopic, Status: TaskPending},
+		{ID: "chat", TopicID: "t1", Status: TaskRunning},
+	} {
+		task.CreatedAt, task.Task = now, "x"
+		if err := store.Upsert(task); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got := topicActivity(store)
+	want := []TopicActivity{
+		{ID: agentTopic, Status: "pending", Pending: 1},
+		{ID: ConsoleAwarenessTopicID, Status: "running", Running: 1},
+		{ID: "t1", Status: "running", Running: 1},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("activity = %+v", got)
+	}
+	if plain := store.List(TaskListOptions{Status: TaskRunning, Limit: 10}); len(plain) != 1 || plain[0].ID != "chat" {
+		t.Fatalf("plain list = %+v", plain)
+	}
+}

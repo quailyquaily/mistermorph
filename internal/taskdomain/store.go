@@ -5,6 +5,9 @@ type TaskListOptions struct {
 	Limit   int
 	TopicID string
 	Cursor  string
+	// AllTopics, with no TopicID, includes the tasks in the runtime's own topics (Awareness, the
+	// Agent Link agents'), which a list without a topic otherwise leaves out.
+	AllTopics bool
 }
 
 type TaskReader interface {

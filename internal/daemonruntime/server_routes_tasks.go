@@ -535,7 +535,7 @@ type TopicActivity struct {
 func topicActivity(reader TaskReader) []TopicActivity {
 	byTopic := map[string]*TopicActivity{}
 	for _, status := range []TaskStatus{TaskQueued, TaskRunning, TaskPending} {
-		for _, task := range reader.List(TaskListOptions{Status: status, Limit: taskListInternalMaxLimit}) {
+		for _, task := range reader.List(TaskListOptions{Status: status, Limit: taskListInternalMaxLimit, AllTopics: true}) {
 			id := strings.TrimSpace(task.TopicID)
 			if id == "" {
 				continue
