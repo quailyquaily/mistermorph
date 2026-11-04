@@ -76,6 +76,28 @@ test("selecting a worker shows its PIDs and its output as plain text", async () 
   assert.match(html, /chat_worker_kind_coder/u);
   assert.ok(html.includes('<p class="chat-worker-output"># step\n&lt;b&gt;raw&lt;/b&gt; &amp; more\n</p>'));
   assert.doesNotMatch(html, /<b>raw/u);
+  // A lone section needs no label.
+  assert.doesNotMatch(html, /chat-worker-section-label/u);
+});
+
+test("a finished subagent shows its error and final result, each labelled", async () => {
+  const component = context.component;
+  const app = Vue.createSSRApp({
+    ...component,
+    setup(props, ctx) {
+      const state = component.setup(props, ctx);
+      state.select({ id: "worker-4" });
+      return state;
+    },
+  }, {
+    itemId: "t",
+    activity: normalizeActivity({ workers: [{ id: "worker-4", name: "Juno", kind: "subagent", status: "failed", error: "model failed", result: "first line\nsecond line: answer 42" }] }),
+    status: "done",
+  });
+  const html = await renderToString(app);
+  assert.match(html, /chat-worker-section is-error[\s\S]*?chat_worker_section_error[\s\S]*?model failed/u);
+  assert.match(html, /chat-worker-section is-result[\s\S]*?chat_worker_section_result[\s\S]*?first line\nsecond line: answer 42/u);
+  assert.match(html, /chat-worker-detail-state is-failed/u);
 });
 
 test("a selected worker without output says so", async () => {

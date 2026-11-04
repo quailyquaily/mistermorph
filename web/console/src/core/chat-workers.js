@@ -45,6 +45,7 @@ export function normalizeActivityWorkers(raw) {
       at: text(item.at),
       stream: text(item.stream),
       output: String(item.output || ""),
+      result: String(item.result || ""),
       summary: text(item.summary),
       error: text(item.error),
       processes: normalizeProcesses(item.processes),
@@ -68,17 +69,27 @@ export function workerState(worker, taskStatus) {
   return "running";
 }
 
-// workerOutput is the text to show for a worker: its error, else its output, else its summary.
-export function workerOutput(worker) {
+// workerSections is what the worker panel shows, in order: the error, the final result, and the
+// output printed while running. The summary stands in when there is no result or output.
+export function workerSections(worker) {
+  const sections = [];
   const error = text(worker?.error);
-  if (error) {
-    return error;
-  }
+  const result = String(worker?.result || "");
   const output = String(worker?.output || "");
-  if (output.trim()) {
-    return output;
+  if (error) {
+    sections.push({ kind: "error", text: error });
   }
-  return text(worker?.summary);
+  if (result.trim()) {
+    sections.push({ kind: "result", text: result });
+  }
+  if (output.trim()) {
+    sections.push({ kind: "output", text: output });
+  }
+  const summary = text(worker?.summary);
+  if (!result.trim() && !output.trim() && summary && summary !== error) {
+    sections.push({ kind: "summary", text: summary });
+  }
+  return sections;
 }
 
 export function workerProcessLabel(process) {
@@ -124,6 +135,6 @@ export function rosterWorkers(activity, taskStatus) {
   return workers.map((worker) => ({
     ...worker,
     state: workerState(worker, taskStatus),
-    note: workerOutput(worker),
+    sections: workerSections(worker),
   }));
 }

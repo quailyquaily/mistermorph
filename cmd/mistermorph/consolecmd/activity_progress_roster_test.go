@@ -117,3 +117,116 @@ func TestActivityRosterIsEmptyWithoutWorkersAndBounded(t *testing.T) {
 		t.Fatalf("dropped worker came back: first %s, %d workers", progress.Workers[0].ID, len(progress.Workers))
 	}
 }
+
+func subtaskEnvelope(t *testing.T, result agent.SubtaskResult) string {
+	t.Helper()
+	raw, err := json.Marshal(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(raw)
+}
+
+// Review finding: a subagent's final output was lost; only the first line of its summary stayed.
+func TestActivityRosterKeepsSubagentFinalOutput(t *testing.T) {
+	cases := []struct {
+		name   string
+		result agent.SubtaskResult
+		want   string
+	}{
+		{"text", agent.SubtaskResult{Status: "done", Summary: "first line", OutputKind: "text", Output: "first line\nsecond line: answer 42"}, "first line\nsecond line: answer 42"},
+		{"json", agent.SubtaskResult{Status: "done", Summary: "structured output", OutputKind: "json", Output: map[string]any{"answer": 42}}, "{\n  \"answer\": 42\n}"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			worker := &agent.WorkerMetadata{ID: "worker-1", Name: "Milo"}
+			var progress *consoleActivityProgress
+			for _, event := range []agent.Event{
+				{Kind: agent.EventKindToolStart, ActivityID: "spawn-1", ToolName: "spawn", Status: "running", Worker: worker},
+				{Kind: agent.EventKindSubtaskStart, TaskID: "sub-1", Status: "running", Worker: worker},
+				{Kind: agent.EventKindSubtaskDone, TaskID: "sub-1", Status: "done", Summary: tc.result.Summary, Worker: worker},
+				{Kind: agent.EventKindToolDone, ActivityID: "spawn-1", ToolName: "spawn", Status: "done", Text: subtaskEnvelope(t, tc.result), Worker: worker},
+			} {
+				progress, _ = updateConsoleActivityProgress(progress, event)
+			}
+			raw, _ := json.Marshal(progress)
+			var loaded consoleActivityProgress
+			if err := json.Unmarshal(raw, &loaded); err != nil {
+				t.Fatal(err)
+			}
+			if got := loaded.Workers[0].Result; got != tc.want {
+				t.Fatalf("result after reload = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// Review finding: the spawn call's own success overwrote a failed subagent once history trimmed.
+func TestActivityRosterKeepsSubagentFailureOverSpawnSuccess(t *testing.T) {
+	failure := agent.SubtaskResult{Status: "failed", Summary: "model failed", Error: "model failed"}
+	for _, tc := range []struct {
+		name string
+		text string
+	}{
+		{"result envelope", subtaskEnvelope(t, failure)},
+		// With Guard on, the Console keeps only the result's status.
+		{"status only", consoleResultStatusOnly(subtaskEnvelope(t, failure))},
+		// Without a readable result, the subtask's status still outranks the call's.
+		{"no result", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			worker := &agent.WorkerMetadata{ID: "worker-1", Name: "Milo"}
+			var progress *consoleActivityProgress
+			apply := func(event agent.Event) { progress, _ = updateConsoleActivityProgress(progress, event) }
+			apply(agent.Event{Kind: agent.EventKindToolStart, ActivityID: "spawn-1", ToolName: "spawn", Status: "running", Worker: worker})
+			apply(agent.Event{Kind: agent.EventKindSubtaskStart, TaskID: "sub-1", Status: "running", Worker: worker})
+			for i := 0; i < 25; i++ {
+				apply(agent.Event{Kind: agent.EventKindToolStart, ActivityID: fmt.Sprintf("read-%d", i), ToolName: "read_file", Status: "done", Worker: worker})
+			}
+			apply(agent.Event{Kind: agent.EventKindSubtaskDone, TaskID: "sub-1", Status: "failed", Error: "model failed", Worker: worker})
+			apply(agent.Event{Kind: agent.EventKindToolDone, ActivityID: "spawn-1", ToolName: "spawn", Status: "done", Text: tc.text, Worker: worker})
+			// Later events sync the roster again from the call's entry, which says done.
+			apply(agent.Event{Kind: agent.EventKindToolStart, ActivityID: "after", ToolName: "read_file", Status: "done"})
+			if got := progress.Workers[0]; got.Status != "failed" || got.Error != "model failed" {
+				t.Fatalf("worker = %+v", got)
+			}
+		})
+	}
+	if got := consoleResultStatusOnly(subtaskEnvelope(t, agent.SubtaskResult{Status: "done", Output: "secret=abcdefghijklmnop"})); got != `{"status":"done"}` {
+		t.Fatalf("status only = %q", got)
+	}
+	if got := consoleResultStatusOnly("plain observation"); got != "" {
+		t.Fatalf("status only of non-result = %q", got)
+	}
+}
+
+// Review finding: once a codemode entry left the history, later coders lost their output.
+func TestActivityRosterKeepsCoderOutputAfterItsEntryIsTrimmed(t *testing.T) {
+	var progress *consoleActivityProgress
+	apply := func(event agent.Event) { progress, _ = updateConsoleActivityProgress(progress, event) }
+	apply(agent.Event{Kind: agent.EventKindToolStart, ActivityID: "code", ToolName: "codemode", Status: "running"})
+	for i := 1; i <= 24; i++ {
+		worker := &agent.WorkerMetadata{ID: fmt.Sprintf("worker-%d", i), Name: fmt.Sprintf("W%d", i)}
+		id := fmt.Sprintf("coder-%d", i)
+		apply(agent.Event{Kind: agent.EventKindToolStart, ActivityID: id, ParentActivityID: "code", ToolName: "coder", Status: "running", Worker: worker})
+		apply(agent.Event{Kind: agent.EventKindToolOutput, ActivityID: id, ParentActivityID: "code", ToolName: "coder", Stream: "codex", Text: fmt.Sprintf("output %d\n", i), Worker: worker})
+		apply(agent.Event{Kind: agent.EventKindToolDone, ActivityID: id, ParentActivityID: "code", ToolName: "coder", Status: "done", Worker: worker,
+			Text: subtaskEnvelope(t, agent.SubtaskResult{Status: "done", OutputKind: "text", Output: fmt.Sprintf("answer %d", i)})})
+		// Unrelated calls push the codemode entry out of the history.
+		apply(agent.Event{Kind: agent.EventKindToolStart, ActivityID: fmt.Sprintf("read-%d", i), ToolName: "read_file", Status: "done"})
+	}
+	for _, entry := range progress.History {
+		if entry.ID == "code" {
+			t.Fatal("codemode entry is still in the history")
+		}
+	}
+	if len(progress.Workers) != 24 {
+		t.Fatalf("workers = %d", len(progress.Workers))
+	}
+	for i, worker := range progress.Workers {
+		n := i + 1
+		if worker.Output != fmt.Sprintf("output %d\n", n) || worker.Result != fmt.Sprintf("answer %d", n) || worker.Status != "done" {
+			t.Fatalf("worker %d = %+v", n, worker)
+		}
+	}
+}

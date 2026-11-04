@@ -6,15 +6,15 @@ import {
   normalizeActivityWorkers,
   rosterWorkers,
   workerAvatar,
-  workerOutput,
   workerProcessLabel,
+  workerSections,
   workerState,
 } from "./chat-workers.js";
 
 const serverWorkers = [
   {
     id: "worker-1", name: "Milo", kind: "subagent", status: "failed", activity_id: "spawn-1",
-    error: "gave up", summary: "partial", processes: [{ pid: 0, program: "x" }],
+    error: "gave up", summary: "partial", result: "partial answer\nwith detail", processes: [{ pid: 0, program: "x" }],
   },
   {
     id: "worker-2", name: "Nova", kind: "coder", status: "running", activity_id: "coder-1", stream: "codex",
@@ -61,11 +61,17 @@ test("workerState shows running, done, failed or canceled, and a live worker tak
   assert.equal(workerState({ status: "canceled" }, "running"), "canceled");
 });
 
-test("workerOutput prefers the error, then raw output, then the summary", () => {
-  assert.equal(workerOutput({ error: " boom ", output: "out", summary: "sum" }), "boom");
-  assert.equal(workerOutput({ output: "  keep\n spacing\n", summary: "sum" }), "  keep\n spacing\n");
-  assert.equal(workerOutput({ output: " \n ", summary: " sum " }), "sum");
-  assert.equal(workerOutput({}), "");
+test("workerSections shows the error, the result and the output, with the summary as a fallback", () => {
+  const kinds = (worker) => workerSections(worker).map((section) => section.kind);
+  assert.deepEqual(workerSections({ error: " boom ", result: "first\nsecond: 42", output: "  keep\n spacing\n", summary: "sum" }), [
+    { kind: "error", text: "boom" },
+    { kind: "result", text: "first\nsecond: 42" },
+    { kind: "output", text: "  keep\n spacing\n" },
+  ]);
+  assert.deepEqual(kinds({ result: "answer", summary: "answer" }), ["result"]);
+  assert.deepEqual(workerSections({ output: " \n ", result: " ", summary: " sum " }), [{ kind: "summary", text: "sum" }]);
+  assert.deepEqual(kinds({ error: "boom", summary: "boom" }), ["error"]);
+  assert.deepEqual(workerSections({}), []);
   assert.equal(workerProcessLabel({ pid: 7, program: "bash" }), "bash PID 7");
   assert.equal(workerProcessLabel({ pid: 7, program: "" }), "PID 7");
 });
@@ -88,9 +94,10 @@ test("workerAvatar depends on the name alone, is mirrored, and differs between n
 test("rosterWorkers adds the state and note to show", () => {
   const activity = normalizeActivity({ workers: serverWorkers });
   const roster = rosterWorkers(activity, "done");
-  assert.deepEqual(roster.map((worker) => [worker.name, worker.state, worker.note]), [
-    ["Milo", "failed", "gave up"],
-    ["Nova", "done", "  # not markdown\n<b>raw</b>\n"],
+  assert.deepEqual(roster.map((worker) => [worker.name, worker.state, worker.sections.map((section) => section.kind)]), [
+    ["Milo", "failed", ["error", "result"]],
+    ["Nova", "done", ["output"]],
   ]);
+  assert.equal(roster[0].sections[1].text, "partial answer\nwith detail");
   assert.deepEqual(rosterWorkers(null, "done"), []);
 });

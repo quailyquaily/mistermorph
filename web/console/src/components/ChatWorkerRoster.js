@@ -63,6 +63,10 @@ const ChatWorkerRoster = {
       return worker.kind === "coder" ? t("chat_worker_kind_coder") : t("chat_worker_kind_subagent");
     }
 
+    function sectionLabel(kind) {
+      return t(`chat_worker_section_${kind}`);
+    }
+
     function workerTitle(worker) {
       return `${worker.name} · ${kindLabel(worker)} · ${stateLabel(worker.state)}`;
     }
@@ -100,6 +104,7 @@ const ChatWorkerRoster = {
       select,
       stateLabel,
       kindLabel,
+      sectionLabel,
       workerTitle,
       workerProcessLabel,
     };
@@ -139,7 +144,16 @@ const ChatWorkerRoster = {
             class="chat-worker-detail-pid"
           >{{ workerProcessLabel(process) }}</span>
         </div>
-        <p v-if="selected.note" ref="outputRef" class="chat-worker-output">{{ selected.note }}</p>
+        <div v-if="selected.sections.length > 0" ref="outputRef" class="chat-worker-sections">
+          <section
+            v-for="section in selected.sections"
+            :key="section.kind"
+            :class="['chat-worker-section', 'is-' + section.kind]"
+          >
+            <h4 v-if="selected.sections.length > 1" class="chat-worker-section-label">{{ sectionLabel(section.kind) }}</h4>
+            <p class="chat-worker-output">{{ section.text }}</p>
+          </section>
+        </div>
         <p v-else class="chat-worker-output is-empty">{{ t("chat_worker_no_output") }}</p>
       </div>
     </section>
