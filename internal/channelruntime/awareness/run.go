@@ -36,21 +36,23 @@ import (
 )
 
 type RunOptions struct {
-	Interval            time.Duration
-	TaskTimeout         time.Duration
-	RequestTimeout      time.Duration
-	AgentLimits         agent.Limits
-	EngineToolsConfig   agent.EngineToolsConfig
-	Source              string
-	ChecklistPath       string
-	DisableHeartbeat    bool
-	InspectPrompt       bool
-	InspectRequest      bool
-	Notifier            Notifier
-	CronNotify          CronNotifyFunc
-	PokeRequests        <-chan PokeRequest
-	CronRequests        <-chan CronRequest
-	CronEnabled         bool
+	Interval          time.Duration
+	TaskTimeout       time.Duration
+	RequestTimeout    time.Duration
+	AgentLimits       agent.Limits
+	EngineToolsConfig agent.EngineToolsConfig
+	Source            string
+	ChecklistPath     string
+	DisableHeartbeat  bool
+	InspectPrompt     bool
+	InspectRequest    bool
+	Notifier          Notifier
+	CronNotify        CronNotifyFunc
+	PokeRequests      <-chan PokeRequest
+	CronRequests      <-chan CronRequest
+	CronEnabled       bool
+	// CronMaxConcurrency is how many TODO items may run at once (default 8).
+	CronMaxConcurrency  int
 	CronPath            string
 	ChatInfoContactsDir string
 	ChatInfoStore       *chatinfo.Store
@@ -297,6 +299,8 @@ func runAwarenessLoop(ctx context.Context, d Dependencies, opts RunOptions) (run
 				Path:        cronPath,
 				SystemTasks: systemTasks,
 				Requests:    opts.CronRequests,
+				// The heartbeat runs in its own lane beside these.
+				MaxConcurrency: opts.CronMaxConcurrency,
 				Run: func(ctx context.Context, due cronstore.DueTask) error {
 					task := due.Task
 					if strings.TrimSpace(task.ID) == cronstore.HeartbeatTaskID {

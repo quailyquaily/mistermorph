@@ -946,6 +946,10 @@ heartbeat:
 cron:
   # Enable cron scheduling. Missing cron.yaml is treated as an empty schedule.
   enabled: true
+  # How many TODO items may run at once. Items beyond it wait in order. An item never overlaps
+  # itself: an occurrence that comes due while it is still waiting or running is skipped. The
+  # heartbeat runs beside these and does not wait for them.
+  max_concurrency: 8
 
 # Agent loop limits.
 # - max_steps: maximum tool-call steps in the ReAct loop.

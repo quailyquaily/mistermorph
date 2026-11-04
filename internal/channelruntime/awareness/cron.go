@@ -26,6 +26,9 @@ type CronLoopOptions struct {
 	Run         func(context.Context, cronstore.DueTask) error
 	Now         func() time.Time
 	Requests    <-chan CronRequest
+	// MaxConcurrency is how many TODO items may run at once; values below 1 mean 1. System tasks
+	// (the heartbeat) run beside them in a lane of their own, so long items do not hold them up.
+	MaxConcurrency int
 }
 
 type CronRequest struct {
@@ -60,6 +63,11 @@ func TriggerCron(ctx context.Context, requests chan<- CronRequest, task cronstor
 	}
 }
 
+const (
+	cronQueueSize       = 1024
+	cronSystemQueueSize = 16
+)
+
 func RunCronLoop(ctx context.Context, opts CronLoopOptions) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -68,16 +76,30 @@ func RunCronLoop(ctx context.Context, opts CronLoopOptions) {
 		<-ctx.Done()
 		return
 	}
-	r := &cronLoopRunner{
-		opts:     opts,
-		store:    cronstore.NewStore(opts.Path),
-		queue:    make(chan cronstore.DueTask, 1024),
-		inFlight: map[string]bool{},
+	workers := opts.MaxConcurrency
+	if workers < 1 {
+		workers = 1
 	}
+	r := newCronLoopRunner(opts)
+	unregister := cronstore.RegisterRunBoard(opts.Path, r.board)
+	defer unregister()
+
+	var workerGroup sync.WaitGroup
+	workerGroup.Add(workers + 1)
+	for i := 0; i < workers; i++ {
+		go func() {
+			defer workerGroup.Done()
+			r.worker(ctx, r.queue)
+		}()
+	}
+	go func() {
+		defer workerGroup.Done()
+		r.worker(ctx, r.systemQueue)
+	}()
 	workerDone := make(chan struct{})
 	go func() {
-		defer close(workerDone)
-		r.worker(ctx)
+		workerGroup.Wait()
+		close(workerDone)
 	}()
 	schedulerQuiesced := make(chan struct{})
 	schedulerDone := make(chan struct{})
@@ -89,8 +111,11 @@ func RunCronLoop(ctx context.Context, opts CronLoopOptions) {
 	for {
 		select {
 		case <-ctx.Done():
+			// Nothing enqueues once the scheduler is quiet and this loop stops taking requests,
+			// so the queues can close. Workers wait for running items and log the queued ones.
 			<-schedulerQuiesced
 			close(r.queue)
+			close(r.systemQueue)
 			<-workerDone
 			<-schedulerDone
 			return
@@ -108,10 +133,31 @@ func RunCronLoop(ctx context.Context, opts CronLoopOptions) {
 	}
 }
 
+func newCronLoopRunner(opts CronLoopOptions) *cronLoopRunner {
+	r := &cronLoopRunner{
+		opts:        opts,
+		store:       cronstore.NewStore(opts.Path),
+		queue:       make(chan cronstore.DueTask, cronQueueSize),
+		systemQueue: make(chan cronstore.DueTask, cronSystemQueueSize),
+		systemIDs:   map[string]bool{},
+		inFlight:    map[string]bool{},
+		board:       &cronstore.RunBoard{},
+	}
+	for _, task := range opts.SystemTasks {
+		if id := strings.TrimSpace(task.ID); id != "" {
+			r.systemIDs[id] = true
+		}
+	}
+	return r
+}
+
 type cronLoopRunner struct {
-	opts  CronLoopOptions
-	store *cronstore.Store
-	queue chan cronstore.DueTask
+	opts        CronLoopOptions
+	store       *cronstore.Store
+	queue       chan cronstore.DueTask
+	systemQueue chan cronstore.DueTask
+	systemIDs   map[string]bool
+	board       *cronstore.RunBoard
 
 	mu       sync.Mutex
 	inFlight map[string]bool
@@ -205,10 +251,16 @@ func (r *cronLoopRunner) enqueue(ctx context.Context, item cronstore.DueTask) er
 	if !r.markInFlight(id) {
 		return daemonruntime.ErrCronBusy
 	}
+	queue := r.queue
+	if r.systemIDs[id] {
+		queue = r.systemQueue
+	}
+	r.board.Queue(id, item.Manual, r.now())
 	select {
-	case r.queue <- item:
+	case queue <- item:
 		return nil
 	default:
+		r.board.Done(id)
 		r.clearInFlight(id)
 		return fmt.Errorf("cron queue is full")
 	}
@@ -221,23 +273,27 @@ func (r *cronLoopRunner) now() time.Time {
 	return time.Now()
 }
 
-func (r *cronLoopRunner) worker(ctx context.Context) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case item, ok := <-r.queue:
-			if !ok {
-				return
-			}
-			id := strings.TrimSpace(item.Task.ID)
-			err := r.opts.Run(ctx, item)
-			if err != nil {
-				r.warn("cron_task_error", "task_id", id, "error", err.Error())
-			}
-			r.clearInFlight(id)
+// worker runs items from queue until it closes. Items still queued at shutdown are logged and
+// dropped; a running item gets the cancelled context and is waited for.
+func (r *cronLoopRunner) worker(ctx context.Context, queue <-chan cronstore.DueTask) {
+	for item := range queue {
+		id := strings.TrimSpace(item.Task.ID)
+		if ctx.Err() != nil {
+			r.warn("cron_skip", "task_id", id, "reason", "shutdown")
+			r.finish(id)
+			continue
 		}
+		r.board.Start(id, r.now())
+		if err := r.opts.Run(ctx, item); err != nil {
+			r.warn("cron_task_error", "task_id", id, "error", err.Error())
+		}
+		r.finish(id)
 	}
+}
+
+func (r *cronLoopRunner) finish(id string) {
+	r.board.Done(id)
+	r.clearInFlight(id)
 }
 
 func (r *cronLoopRunner) markInFlight(id string) bool {

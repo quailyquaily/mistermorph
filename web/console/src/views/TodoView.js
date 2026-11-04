@@ -13,6 +13,7 @@ import { rememberRecentWorkspaceDir } from "../core/recent-workspace-dirs";
 import { createArrivalTracker, createHighlightWindow } from "../core/arrivals";
 import { currentLocale, endpointState, runtimeApiFetch, translate } from "../core/context";
 import { isValidCronExpression } from "../core/cron";
+import { normalizeTodoRuns, todoRunsSignature, TODO_RUN_RUNNING } from "../core/todo-runs";
 import { modelVendorMeta } from "../core/model-vendor";
 import { invalidateConsoleSetupReadiness } from "../core/setup";
 import { requestSystemNotificationPermission } from "../core/system-notifications";
@@ -726,6 +727,10 @@ const TodoView = {
       { flush: "pre" },
     );
     const persistedTaskSignatures = ref(new Map());
+    // TODO items the runtime is running or has queued now, by task ID; polled while the page is open.
+    const taskRuns = ref(new Map());
+    let taskRunsSignature = "";
+    let taskRunsTimer = 0;
     const chatOptions = ref([]);
     const llmDefaultRouteModel = ref("");
     const llmProfiles = ref([]);
@@ -886,7 +891,8 @@ const TodoView = {
         !loading.value &&
         !saving.value &&
         !runningTaskKey.value &&
-        trimText(selectedStoredTask.value?.id) !== ""
+        trimText(selectedStoredTask.value?.id) !== "" &&
+        !taskRun(selectedStoredTask.value)
     );
     const canDuplicateSelectedTask = computed(
       () => Boolean(selectedTask.value) && !heartbeatSelected.value && !loading.value && !saving.value
@@ -1165,6 +1171,54 @@ const TodoView = {
         classes.push("is-arrived");
       }
       return classes.join(" ");
+    }
+
+    function applyTaskRuns(raw) {
+      const next = normalizeTodoRuns(raw);
+      const signature = todoRunsSignature(next);
+      if (signature !== taskRunsSignature) {
+        taskRunsSignature = signature;
+        taskRuns.value = next;
+      }
+    }
+
+    async function refreshTaskRuns() {
+      if (typeof document !== "undefined" && document.hidden) {
+        return;
+      }
+      try {
+        const data = await runtimeApiFetch("/todo/runs");
+        applyTaskRuns(data?.runs);
+      } catch {
+        // An older runtime has no /todo/runs; the list then shows no run state.
+      }
+    }
+
+    function taskRun(task) {
+      const id = trimText(task?.id);
+      return id ? taskRuns.value.get(id) || null : null;
+    }
+
+    function heartbeatRun() {
+      return taskRuns.value.get(HEARTBEAT_ITEM_KEY) || null;
+    }
+
+    function runStateLabel(run) {
+      return run?.state === TODO_RUN_RUNNING ? t("todo_run_state_running") : t("todo_run_state_queued");
+    }
+
+    function runMarkerType(run, fallback) {
+      if (!run) {
+        return fallback;
+      }
+      return run.state === TODO_RUN_RUNNING ? "primary" : "warning";
+    }
+
+    function runMarkerClass(run) {
+      if (!run) {
+        return "";
+      }
+      return run.state === TODO_RUN_RUNNING ? "todo-run-marker is-running" : "todo-run-marker is-queued";
     }
 
     function heartbeatClass() {
@@ -2319,6 +2373,7 @@ const TodoView = {
           loadedTasks.map((task) => [task._key, JSON.stringify(serializeTask(task, t("todo_untitled")))])
         );
         heartbeatEnabled.value = data.heartbeat_enabled !== false;
+        applyTaskRuns(data.runs);
         heartbeatTask.value = heartbeatRow ? normalizeTask(heartbeatRow, t("todo_heartbeat_title")) : null;
         selectedTaskKey.value = "";
         selectedTaskDraft.value = null;
@@ -2409,6 +2464,7 @@ const TodoView = {
           method: "POST",
         });
         notice.success(t("todo_run_success"));
+        void refreshTaskRuns();
       } catch (e) {
         notice.error(e.message || t("todo_run_failed"));
       } finally {
@@ -2429,9 +2485,13 @@ const TodoView = {
       refreshMobileMode();
       void load();
       void loadHeartbeat();
+      taskRunsTimer = window.setInterval(() => {
+        void refreshTaskRuns();
+      }, 5000);
     });
     onUnmounted(() => {
       window.removeEventListener("resize", refreshMobileMode);
+      window.clearInterval(taskRunsTimer);
     });
 
     return {
@@ -2455,6 +2515,11 @@ const TodoView = {
       canSave,
       canRunSelectedTask,
       runningTaskKey,
+      taskRun,
+      heartbeatRun,
+      runStateLabel,
+      runMarkerType,
+      runMarkerClass,
       calendarView,
       isMobile,
       showIndexPane,
@@ -2609,11 +2674,17 @@ const TodoView = {
                   <span class="workspace-sidebar-item-copy">
                     <span class="todo-index-item-name workspace-sidebar-item-title">{{ t("todo_heartbeat_title") }}</span>
                     <span class="todo-index-item-meta workspace-sidebar-item-meta">
+                      <span v-if="heartbeatRun()" class="todo-index-run-state">{{ runStateLabel(heartbeatRun()) }} · </span>
                       <span class="todo-index-schedule">{{ heartbeatIndexMeta }}</span>
                     </span>
                   </span>
                   <span class="todo-index-item-marker workspace-sidebar-item-marker" aria-hidden="true">
-                    <AppBadge dot :type="heartbeatDisabled ? 'default' : 'success'" size="sm" />
+                    <AppBadge
+                      dot
+                      :class="runMarkerClass(heartbeatRun())"
+                      :type="runMarkerType(heartbeatRun(), heartbeatDisabled ? 'default' : 'success')"
+                      size="sm"
+                    />
                   </span>
                 </button>
               </div>
@@ -2643,11 +2714,17 @@ const TodoView = {
                   <span class="workspace-sidebar-item-copy">
                     <span class="todo-index-item-name workspace-sidebar-item-title">{{ taskTitle(taskListDisplayTask(task)) }}</span>
                     <span class="todo-index-item-meta workspace-sidebar-item-meta">
+                      <span v-if="taskRun(task)" class="todo-index-run-state">{{ runStateLabel(taskRun(task)) }} · </span>
                       <span class="todo-index-schedule">{{ scheduleLabel(taskListDisplayTask(task)) }}</span>
                     </span>
                   </span>
                   <span class="todo-index-item-marker workspace-sidebar-item-marker" aria-hidden="true">
-                    <AppBadge dot :type="taskListDisplayTask(task).enabled === false ? 'default' : 'success'" size="sm" />
+                    <AppBadge
+                      dot
+                      :class="runMarkerClass(taskRun(task))"
+                      :type="runMarkerType(taskRun(task), taskListDisplayTask(task).enabled === false ? 'default' : 'success')"
+                      size="sm"
+                    />
                   </span>
                 </div>
               </div>

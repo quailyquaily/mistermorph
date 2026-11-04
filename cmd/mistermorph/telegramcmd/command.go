@@ -109,10 +109,11 @@ func buildAwarenessRuntime(
 		InspectPrompt:     inspectPrompt,
 		InspectRequest:    inspectRequest,
 		// Keep heartbeat alerts in logs only; avoid pushing failure alerts into chats.
-		Notifier:          nil,
-		CronEnabled:       cronCfg.Enabled,
-		CronPath:          paths.CronPath,
-		ChatInfoRefresher: chatInfoRefresher,
+		Notifier:           nil,
+		CronEnabled:        cronCfg.Enabled,
+		CronMaxConcurrency: cronCfg.MaxConcurrency,
+		CronPath:           paths.CronPath,
+		ChatInfoRefresher:  chatInfoRefresher,
 	}
 	return awarenessDeps, awarenessOpts
 }

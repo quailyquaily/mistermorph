@@ -99,20 +99,21 @@ func buildAwarenessRuntime(
 	chatInfoOptions.SlackBotToken = botToken
 	chatInfoOptions.SlackBaseURL = baseURL
 	awarenessOpts := awarenessruntime.RunOptions{
-		Interval:          hbCfg.Interval,
-		TaskTimeout:       taskTimeout,
-		RequestTimeout:    slackCfg.RequestTimeout,
-		AgentLimits:       slackCfg.AgentLimits,
-		EngineToolsConfig: slackCfg.EngineToolsConfig,
-		Source:            "slack",
-		ChecklistPath:     paths.HeartbeatPath,
-		DisableHeartbeat:  !hbCfg.Enabled || hbCfg.Interval <= 0,
-		InspectPrompt:     inspectPrompt,
-		InspectRequest:    inspectRequest,
-		Notifier:          newSlackAwarenessNotifier(botToken, baseURL, allowedChannelIDs),
-		CronEnabled:       cronCfg.Enabled,
-		CronPath:          paths.CronPath,
-		ChatInfoRefresher: chatinfo.NewFetcher(chatInfoOptions),
+		Interval:           hbCfg.Interval,
+		TaskTimeout:        taskTimeout,
+		RequestTimeout:     slackCfg.RequestTimeout,
+		AgentLimits:        slackCfg.AgentLimits,
+		EngineToolsConfig:  slackCfg.EngineToolsConfig,
+		Source:             "slack",
+		ChecklistPath:      paths.HeartbeatPath,
+		DisableHeartbeat:   !hbCfg.Enabled || hbCfg.Interval <= 0,
+		InspectPrompt:      inspectPrompt,
+		InspectRequest:     inspectRequest,
+		Notifier:           newSlackAwarenessNotifier(botToken, baseURL, allowedChannelIDs),
+		CronEnabled:        cronCfg.Enabled,
+		CronMaxConcurrency: cronCfg.MaxConcurrency,
+		CronPath:           paths.CronPath,
+		ChatInfoRefresher:  chatinfo.NewFetcher(chatInfoOptions),
 	}
 	return awarenessDeps, awarenessOpts
 }
