@@ -37,3 +37,14 @@ Tests: configured gofmt check, go vet ./..., go test ./... passed; pnpm test pas
 Installs: pinned dependencies restored with frozen lockfile; no unpinned tools or manifest/lockfile changes.
 Not checked: real browser UI, OS notification display and notification-click behavior manually. Remote endpoint task notifications were not added; implementation covers local Console topics.
 Moved new/ → review/ for review. No merge into master.
+
+## factory · review · 2026-11-05 12:21
+head: 2088522fd15334af0bc9829b519e987e8c4b1937
+verdict: pass
+notes:
+- Codex reviewed origin/master...HEAD across all 13 changed files; no qualifying P0/P1/P2/P3 findings.
+- Validation: configured gofmt check, go vet ./..., and go test ./... passed; pnpm test passed (397 tests); pnpm build passed with chunk-size warnings. Scripted tests used an absolute throwaway HOME.
+- Residual risks: supplemental browser automation did not complete due to module-loading and CDP session errors. Native cross-tab locks, OS notification display, and real notification clicks remain unverified in a browser; review relied on code inspection and mocked tests for these behaviors.
+- Installs: no unpinned installs or manifest/lockfile changes.
+- Branch merges cleanly with origin/master. Worktree clean and reviewed HEAD unchanged. No linked issues or PRs to comment on.
+- Moved review/ → ready/. Owner should manually verify native notifications and click navigation before ship; no merge into master.
