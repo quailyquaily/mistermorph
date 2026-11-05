@@ -214,3 +214,11 @@ notes:
 - Required gofmt check, go vet ./..., and go test ./... passed. Race tests for guard, agent, internal/chattrace and Console passed. git diff --check passed. Six synthetic-secret overlay Console assertions reproduced the findings; intact-text redaction controls and six baseline Console-filter controls passed.
 - Tests used an absolute throwaway HOME; source worktree remained clean. Installs: none. No frontend changes; pnpm not run.
 - Not checked: live Codex/Claude browser integration. Terminal failure used an injected runner; stdout overflow used a fake CLI. No linked issues or PRs. Item stays in review/ for the owner to decide; add a note and move to new/ to request fixes.
+
+## factory · 2026-11-05 16:38
+Moved review/ → backlog/ at the owner's word in chat ("move the FT9 to backlog"), after the round 4 review (head d4cb9514, verdict fix).
+
+Left for when this is picked up again:
+- The branch `factory/FT9-guard-stream-redaction` (d4cb9514) is kept, with master 4ea09a6d merged in. Nothing was merged into master; with Guard on, the Console still shows coder status lines only.
+- The whole-unit design held where a unit really is complete and unchanged. The three P1 findings are all places where it was not: a failed terminal run's partial output reported as a unit; the final-answer fallback, which reports text rebuilt from the live pieces; and key-part hiding done after other rules had already eaten a BEGIN line. The two P2 notes are text changed before Guard (trimmed plain lines, the `$ ` before a command).
+- The open findings of the last review are above.
