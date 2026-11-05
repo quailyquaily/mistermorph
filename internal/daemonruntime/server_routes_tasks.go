@@ -385,7 +385,7 @@ func (routes *routeRegistration) registerTaskRoutes() {
 				return
 			}
 			id := strings.TrimSuffix(suffix, "/regenerate-title")
-			if id == "" || strings.Contains(id, "/") || IsReservedTopicID(id) {
+			if id == "" || strings.Contains(id, "/") || !TopicNameRegenerable(id) {
 				http.Error(w, "topic cannot be renamed", http.StatusBadRequest)
 				return
 			}

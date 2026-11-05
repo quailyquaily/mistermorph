@@ -278,7 +278,8 @@ func shouldTrackScene(scene string) bool {
 	if scene == "" {
 		return true
 	}
-	return strings.HasSuffix(scene, ".loop")
+	// A TODO item's run is the agent loop of that item's topic. Only a run with a scope is recorded.
+	return strings.HasSuffix(scene, ".loop") || scene == "awareness.cron"
 }
 
 func normalizeConversationKey(key string) string {

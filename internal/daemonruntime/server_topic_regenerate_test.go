@@ -20,6 +20,8 @@ func TestTopicRegenerateRoute(t *testing.T) {
 		{"method", "GET", "topic_a", "token", nil, false, 405},
 		{"missing", "POST", "missing", "token", nil, false, 404},
 		{"reserved", "POST", "default", "token", nil, false, 400},
+		{"agent", "POST", "_agentlink_a", "token", nil, false, 400},
+		{"todo item", "POST", "_cron_weekly", "token", nil, false, 200},
 		{"unavailable", "POST", "topic_a", "token", nil, true, 503},
 		{"empty", "POST", "topic_a", "token", BadRequest("no conversation"), false, 400},
 		{"conflict", "POST", "topic_a", "token", ErrTopicTitleChanged, false, 409},
@@ -29,6 +31,9 @@ func TestTopicRegenerateRoute(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			store, _ := NewConsoleFileStore(ConsoleFileStoreOptions{})
 			if err := store.Upsert(TaskInfo{ID: "task", TopicID: "topic_a", Task: "hello"}); err != nil {
+				t.Fatal(err)
+			}
+			if err := store.Upsert(TaskInfo{ID: "run", TopicID: "_cron_weekly", Task: "report"}); err != nil {
 				t.Fatal(err)
 			}
 			calls := 0

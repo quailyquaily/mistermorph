@@ -36,8 +36,9 @@ test("the chat view polls topic activity and shows a status mark at the right of
   assert.match(view, /runtimeApiFetchForEndpoint\(endpointRef, "\/topics\/activity"\)/u);
   assert.match(view, /window\.setInterval\(\(\) => void refreshTopicActivity\(\), TOPIC_ACTIVITY_REFRESH_INTERVAL_MS\)/u);
   assert.match(view, /onUnmounted\(\(\) => \{\s*viewActive = false;\s*stopTopicActivityRefresh\(\);/u);
-  // The mark follows the title inside the topic button, so it sits at the item's right.
-  assert.match(view, /chat-topic-item-title[^\n]*\n\s*<\/span>\s*<span\s+v-if="topicActivityState\(topic\)"\s+:class="\['chat-topic-item-status', 'is-' \+ topicActivityState\(topic\)\]"/u);
+  // The mark follows the title and its second row inside the topic button, so it sits at the
+  // item's right.
+  assert.match(view, /chat-topic-item-title[^\n]*\n\s*<span\s+v-if="isCronTopicID\(topic\.id\)"[^>]*>[^<]*<\/span>\s*<\/span>\s*<span\s+v-if="topicActivityState\(topic\)"\s+:class="\['chat-topic-item-status', 'is-' \+ topicActivityState\(topic\)\]"/u);
   // A finished task and a newly followed one refresh the indicators at once.
   assert.match(view, /closeTaskStream\(taskID\);\s*void refreshTopicActivity\(\);/u);
   // The mark is the console's status mark: its size, square corners and colours come from the

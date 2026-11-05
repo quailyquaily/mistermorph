@@ -693,6 +693,62 @@ func (s *ConsoleFileStore) SetCronTopicTitle(taskID, title string) error {
 	return s.saveTopicTitleLocked(topic, now)
 }
 
+// SetCronTopicIconFromLLM sets the icon generated for a TODO item's topic at its first run. The
+// title stays the item's and the topic keeps its place in the list. A topic that has a generated
+// icon by now keeps it.
+func (s *ConsoleFileStore) SetCronTopicIconFromLLM(id, icon string) error {
+	if s == nil {
+		return fmt.Errorf("console task store is nil")
+	}
+	id = strings.TrimSpace(id)
+	if !IsCronTopicID(id) {
+		return nil
+	}
+	now := time.Now().UTC()
+
+	unlock, err := s.lockShared()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+
+	topic, ok := s.topics[id]
+	if !ok || topicDeleted(topic) || topic.LLMTitleGeneratedAt != nil {
+		return nil
+	}
+	topic.Icon = taskdomain.NormalizeTopicIcon(icon)
+	topic.LLMTitleGeneratedAt = &now
+	topic.TitleRevision++
+	return s.saveTopicTitleLocked(topic, now)
+}
+
+// SetCronTopicRunModel records the provider and model a TODO item's run uses. The topic keeps its
+// place in the list and its naming.
+func (s *ConsoleFileStore) SetCronTopicRunModel(id, provider, model string) error {
+	if s == nil {
+		return fmt.Errorf("console task store is nil")
+	}
+	id = strings.TrimSpace(id)
+	provider = strings.TrimSpace(provider)
+	model = strings.TrimSpace(model)
+	if !IsCronTopicID(id) {
+		return nil
+	}
+	unlock, err := s.lockShared()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+
+	topic, ok := s.topics[id]
+	if !ok || topicDeleted(topic) || (topic.LLMProvider == provider && topic.LLMModel == model) {
+		return nil
+	}
+	topic.LLMProvider = provider
+	topic.LLMModel = model
+	return s.saveTopicTitleLocked(topic, time.Now().UTC())
+}
+
 // BeginTopicTitleRegeneration invalidates pending naming results without changing
 // the displayed title, icon or topic ordering. Its revision survives a restart.
 func (s *ConsoleFileStore) BeginTopicTitleRegeneration(id string) (TopicInfo, error) {
@@ -712,6 +768,8 @@ func (s *ConsoleFileStore) BeginTopicTitleRegeneration(id string) (TopicInfo, er
 	return topic, nil
 }
 
+// CompleteTopicTitleRegeneration applies a regenerated title and icon. A TODO item's topic takes
+// the icon alone: its title is the item's, and the latest run orders it in the list.
 func (s *ConsoleFileStore) CompleteTopicTitleRegeneration(id string, revision uint64, title, icon string) (TopicInfo, error) {
 	unlock, err := s.lockShared()
 	if err != nil {
@@ -727,12 +785,14 @@ func (s *ConsoleFileStore) CompleteTopicTitleRegeneration(id string, revision ui
 		return TopicInfo{}, fmt.Errorf("missing topic title")
 	}
 	now := time.Now().UTC()
-	topic.Title = title
+	if !IsCronTopicID(id) {
+		topic.Title = title
+		topic.TitleCustomized = false
+		topic.UpdatedAt = now
+	}
 	topic.Icon = taskdomain.NormalizeTopicIcon(icon)
-	topic.TitleCustomized = false
 	topic.TitleRevision++
 	topic.LLMTitleGeneratedAt = &now
-	topic.UpdatedAt = now
 	if err := s.saveTopicTitleLocked(topic, now); err != nil {
 		return TopicInfo{}, err
 	}

@@ -1,6 +1,6 @@
 import { sameTopicTags } from "./topic-tags.js";
 
-// What a metadata poll changes in a loaded topic: its name, icon and tags. It returns the topic
+// What a metadata poll changes in a loaded topic: its name, icon, tags and a TODO run's model. It returns the topic
 // itself when nothing changed, or when the poll's copy is the older one.
 //
 // followsActivity also takes a newer updated_at on its own. That is for topics whose list is
@@ -19,6 +19,8 @@ export function mergeTopicMetadata(topic, next, followsActivity = false) {
     next.icon === topic.icon &&
     next.llm_title_generated_at === topic.llm_title_generated_at &&
     next.title_revision === topic.title_revision &&
+    next.llm_provider === topic.llm_provider &&
+    next.llm_model === topic.llm_model &&
     sameTopicTags(next.tags || [], topic.tags || []);
   if (sameNaming && !(followsActivity && next.updated_at !== topic.updated_at)) {
     return topic;

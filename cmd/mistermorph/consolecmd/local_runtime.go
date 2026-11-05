@@ -980,10 +980,19 @@ func (r *consoleLocalRuntime) runCron(ctx context.Context, task cronstore.Task) 
 	return awarenessloop.TriggerCron(ctx, cronRequests, task)
 }
 
+const (
+	// consoleWorkspaceSourceTodo is the source of a workspace set on a TODO item.
+	consoleWorkspaceSourceTodo     = "todo"
+	consoleCronTopicWorkspaceFixed = "a TODO item's workspace is set on the item"
+)
+
 func (r *consoleLocalRuntime) workspaceForTopic(_ context.Context, topicID string, defaultWorkspaceDir string) (daemonruntime.WorkspaceResolution, error) {
 	topicID = strings.TrimSpace(topicID)
 	if topicID == "" {
 		return daemonruntime.WorkspaceResolution{}, daemonruntime.BadRequest("topic_id is required")
+	}
+	if daemonruntime.IsCronTopicID(topicID) {
+		return r.workspaceForCronTopic(topicID, defaultWorkspaceDir)
 	}
 	store := r.currentWorkspaceStore()
 	if store == nil {
@@ -997,6 +1006,36 @@ func (r *consoleLocalRuntime) workspaceForTopic(_ context.Context, topicID strin
 		WorkspaceDir: resolution.WorkspaceDir,
 		Source:       string(resolution.Source),
 	}, nil
+}
+
+// workspaceForCronTopic is the workspace a TODO item's runs use, the way a run resolves it: the
+// one set on the item, else the default. An item that is gone (a one-time item that has run, or a
+// deleted one) has the one its latest run was given, which recordCronTopicRun keeps as the topic's
+// attachment; while the item exists, that attachment plays no part.
+func (r *consoleLocalRuntime) workspaceForCronTopic(topicID string, defaultWorkspaceDir string) (daemonruntime.WorkspaceResolution, error) {
+	generation := r.currentGeneration()
+	if generation == nil {
+		return daemonruntime.WorkspaceResolution{}, fmt.Errorf("console runtime generation is not initialized")
+	}
+	none := daemonruntime.WorkspaceResolution{Source: string(workspace.SourceNone)}
+	task, ok, err := cronstore.NewStore(generation.paths.CronPath).FindByID(strings.TrimPrefix(topicID, daemonruntime.CronTopicPrefix))
+	if err != nil {
+		return none, err
+	}
+	if !ok {
+		dir, err := workspace.LookupWorkspaceDir(r.currentWorkspaceStore(), buildConsoleConversationKey(topicID))
+		if err != nil || dir == "" {
+			return none, err
+		}
+		return daemonruntime.WorkspaceResolution{WorkspaceDir: dir, Source: consoleWorkspaceSourceTodo}, nil
+	}
+	if dir := strings.TrimSpace(task.WorkspaceDir); dir != "" {
+		return daemonruntime.WorkspaceResolution{WorkspaceDir: dir, Source: consoleWorkspaceSourceTodo}, nil
+	}
+	if dir := strings.TrimSpace(defaultWorkspaceDir); dir != "" {
+		return daemonruntime.WorkspaceResolution{WorkspaceDir: dir, Source: string(workspace.SourceDefault)}, nil
+	}
+	return none, nil
 }
 
 func (r *consoleLocalRuntime) topicMetadataForTopic(ctx context.Context, topicID, topicContextPath, defaultWorkspaceDir string) (daemonruntime.TopicMetadata, error) {
@@ -1129,6 +1168,9 @@ func (r *consoleLocalRuntime) setWorkspaceForTopic(_ context.Context, topicID st
 	if topicID == "" {
 		return daemonruntime.WorkspaceResolution{}, daemonruntime.BadRequest("topic_id is required")
 	}
+	if daemonruntime.IsCronTopicID(topicID) {
+		return daemonruntime.WorkspaceResolution{}, daemonruntime.BadRequest(consoleCronTopicWorkspaceFixed)
+	}
 	store := r.currentWorkspaceStore()
 	if store == nil {
 		return daemonruntime.WorkspaceResolution{}, fmt.Errorf("workspace store is not configured")
@@ -1147,6 +1189,9 @@ func (r *consoleLocalRuntime) deleteWorkspaceForTopic(_ context.Context, topicID
 	topicID = strings.TrimSpace(topicID)
 	if topicID == "" {
 		return daemonruntime.WorkspaceResolution{}, daemonruntime.BadRequest("topic_id is required")
+	}
+	if daemonruntime.IsCronTopicID(topicID) {
+		return daemonruntime.WorkspaceResolution{}, daemonruntime.BadRequest(consoleCronTopicWorkspaceFixed)
 	}
 	store := r.currentWorkspaceStore()
 	if store == nil {
@@ -3194,8 +3239,14 @@ func (r *consoleLocalRuntime) reloadAwarenessLoop() {
 			CronEnabled:        cronCfg.Enabled,
 			CronMaxConcurrency: cronCfg.MaxConcurrency,
 			CronPath:           generation.paths.CronPath,
-			ChatInfoRefresher:  chatinfo.NewFetcher(chatinfo.FetcherOptionsFromReader(reader)),
-			TaskStore:          r.store,
+			TopicContextScope: func(topicID string) topiccontext.Scope {
+				return topiccontext.Scope{Runtime: "console", ConversationKey: buildConsoleConversationKey(topicID), TopicID: topicID}
+			},
+			TopicRunStarted: func(run awarenessloop.TopicRun) {
+				r.recordCronTopicRun(generation, run)
+			},
+			ChatInfoRefresher: chatinfo.NewFetcher(chatinfo.FetcherOptionsFromReader(reader)),
+			TaskStore:         r.store,
 			TaskProgress: newConsoleAwarenessProgressFunc(
 				r.streamHub,
 				approvalGuardForGeneration(generation),

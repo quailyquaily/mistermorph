@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-import { cronSidebarGroups, cronTopicsOf, isCronTopicID } from "./chat-cron-topics.js";
+import { cronSidebarGroups, cronTopicModels, cronTopicModelText, cronTopicsOf, isCronTopicID } from "./chat-cron-topics.js";
 import { mergeTopicMetadata } from "./topic-metadata-merge.js";
 
 const view = await readFile(new URL("../views/ChatView.js", import.meta.url), "utf8");
@@ -11,7 +11,7 @@ const i18n = await readFile(new URL("../i18n/index.js", import.meta.url), "utf8"
 const metadata = await readFile(new URL("./topic-metadata.js", import.meta.url), "utf8");
 
 test("TODO items' topics are kept out of the person's topic list", () => {
-  assert.match(view, /import \{ cronSidebarGroups, cronTopicsOf, isCronTopicID \} from "\.\.\/core\/chat-cron-topics";/u);
+  assert.match(view, /import \{ cronSidebarGroups, cronTopicModels, cronTopicModelText, cronTopicsOf, isCronTopicID \} from "\.\.\/core\/chat-cron-topics";/u);
   assert.equal(isCronTopicID(" _cron_weekly "), true);
   for (const id of ["_cron_", "cron_weekly", "_agentlink_a", "_awareness", "", null]) {
     assert.equal(isCronTopicID(id), false, String(id));
@@ -25,7 +25,8 @@ test("a toggle switches the topic list to the TODO items' topics only", () => {
   assert.match(view, /if \(topicSidebarView\.value === "cron"\) \{\s*return cronSidebarGroups\(topics\.value\);/u);
   assert.match(view, /@click="setTopicSidebarView\(topicSidebarView === 'cron' \? 'date' : 'cron'\)"/u);
   assert.match(view, /view === "tags" \|\| view === "agents" \|\| view === "cron" \? view : "date"/u);
-  assert.match(view, /<PhAlarm v-else-if="isCronTopicID\(topic\.id\)" class="chat-topic-item-icon is-cron"/u);
+  // An item's topic takes its generated icon like any topic; the alarm stands in until it has one.
+  assert.match(view, /<PhAlarm v-else-if="isCronTopicID\(topic\.id\) && !topic\.icon" class="chat-topic-item-icon is-cron"/u);
   assert.match(icons, /PhAlarm,[\s\S]*const sources = \{\s*PhAlarm,/u);
 });
 
@@ -128,8 +129,93 @@ test("with TODO run topics, the TODO view lists them only, the latest run first"
   assert.deepEqual(runTopics.map((topic) => topic.id), ["_cron_weekly", "_cron_nightly"]);
 });
 
+const todoData = {
+  llm_default_route: { name: "default", inference_provider: "openai", model: "gpt-5.2" },
+  llm_profiles: [
+    { name: "ears", inference_provider: "anthropic", model: "claude-opus-5-5" },
+    { name: "bare", inference_provider: "openai_chat_compatible" },
+  ],
+  tasks: [
+    { id: "weekly", llm_profile: "ears" },
+    { id: "daily" },
+    { id: "local", llm_profile: " bare " },
+    { id: "gone", llm_profile: "old" },
+    { id: "" },
+  ],
+};
+const modelLabels = {
+  providerTitle: (id) => ({ openai: "OpenAI", anthropic: "Claude AI" })[id] || "",
+  unscheduled: "No longer scheduled",
+};
+
+test("a TODO item's topic is matched to the model the item runs with", () => {
+  const models = cronTopicModels(todoData);
+  assert.deepEqual([...models.keys()], ["_cron_weekly", "_cron_daily", "_cron_local", "_cron_gone"]);
+  assert.deepEqual(models.get("_cron_weekly"), { provider: "anthropic", model: "claude-opus-5-5" });
+  // An item without a profile runs on the default route, and so does one whose profile has gone:
+  // the runtime falls back to it.
+  assert.deepEqual(models.get("_cron_daily"), { provider: "openai", model: "gpt-5.2" });
+  assert.deepEqual(models.get("_cron_gone"), { provider: "openai", model: "gpt-5.2" });
+  assert.equal(cronTopicModels(null).size, 0);
+});
+
+test("the topic's second row names the provider and the model", () => {
+  const models = cronTopicModels(todoData);
+  const row = (id, topic = {}) => cronTopicModelText(models, { id, ...topic }, modelLabels);
+  assert.equal(row("_cron_weekly"), "Claude AI · claude-opus-5-5");
+  assert.equal(row(" _cron_daily "), "OpenAI · gpt-5.2");
+  // A provider without a name for people keeps its ID; a missing model leaves the provider alone.
+  assert.equal(row("_cron_local"), "openai_chat_compatible");
+  assert.equal(row("_cron_gone"), "OpenAI · gpt-5.2");
+  // While the item exists its settings win over what its latest run used.
+  assert.equal(row("_cron_weekly", { llm_provider: "openai", llm_model: "older" }), "Claude AI · claude-opus-5-5");
+  // A one-time item is gone once it has run: the topic shows what that run used.
+  assert.equal(row("_cron_finished", { llm_provider: "openai", llm_model: "gpt-5.2" }), "OpenAI · gpt-5.2");
+  // An item gone before runs recorded this has nothing to show, and is not called deleted: it may have finished.
+  assert.equal(row("_cron_finished"), "No longer scheduled");
+  // Before the items have loaded the row is blank, not a guess.
+  assert.equal(cronTopicModelText(null, { id: "_cron_weekly" }, modelLabels), "");
+});
+
+test("the chat view shows the model under a TODO topic's title and loads it for the TODO list", async () => {
+  const styles = await readFile(new URL("../views/ChatView.css", import.meta.url), "utf8");
+  assert.match(view, /<span\s+v-if="isCronTopicID\(topic\.id\)"\s+v-fade-truncate\s+class="chat-topic-item-meta workspace-sidebar-item-meta"\s*>\{\{ cronTopicModel\(topic\) \}\}<\/span>/u);
+  assert.match(view, /runtimeApiFetchForEndpoint\(endpointRef, "\/todo\/tasks"\)/u);
+  assert.match(view, /\(\) => topicSidebarView\.value === "cron",/u);
+  assert.match(view, /if \(shown\) \{\s*void loadCronTopicModels\(\);/u);
+  assert.match(styles, /\.chat-topic-item-meta\.workspace-sidebar-item-meta\s*\{[^}]*min-height: 1\.4em;[^}]*white-space: nowrap;/u);
+  for (const text of ['chat_topics_cron_item_unscheduled: "No longer scheduled"', 'chat_topics_cron_item_unscheduled: "不再安排运行"', 'chat_topics_cron_item_unscheduled: "実行予定はありません"']) {
+    assert.ok(i18n.includes(text), text);
+  }
+});
+
 test("the page that holds the topics is named Topics", () => {
   for (const text of ['nav_chat: "Topics"', 'chat_title: "Topics"', 'nav_chat: "话题"', 'chat_title: "话题"', 'nav_chat: "トピック"', 'chat_title: "トピック"']) {
     assert.ok(i18n.includes(text), text);
   }
+});
+
+test("a TODO topic's panel can redo the icon but not delete the topic", () => {
+  assert.match(view, /const topicRegenerateAvailable = computed\(\(\) => topicDeleteAvailable\.value \|\| \(Boolean\(workspaceTopicID\.value\) && selectedTopicIsCron\.value\)\);/u);
+  assert.match(view, /!topicRegenerateAvailable\.value \|\| topicDeleting\.value/u);
+  // In the desktop panel and the phone one.
+  assert.equal(view.match(/<div v-if="topicRegenerateAvailable" class="chat-topic-actions">/gu)?.length, 2);
+  assert.equal(view.match(/v-if="topicDeleteAvailable"\s+class="danger plain sm icon chat-topic-danger-action"/gu)?.length, 2);
+  assert.equal(view.match(/:title="topicRegenerateLabel"/gu)?.length, 2);
+  for (const text of ['chat_topic_regenerate_icon_action: "Regenerate icon"', 'chat_topic_regenerate_icon_action: "重新生成图标"', 'chat_topic_regenerate_icon_action: "アイコンを再生成"']) {
+    assert.ok(i18n.includes(text), text);
+  }
+});
+
+test("a TODO topic shows the workspace its runs use, read-only", () => {
+  assert.match(view, /\["attachment", "default", "none", "todo"\]\.includes\(rawSource\)/u);
+  assert.match(view, /workspaceSource\.value === "todo"\) \{\s*return t\("chat_workspace_hint_todo"\);/u);
+  // No workspace, no tab, and a tab left open falls back to the topic's.
+  assert.match(view, /const workspaceTabAvailable = computed\(\(\) => !selectedTopicIsCron\.value \|\| Boolean\(String\(workspaceDir\.value \|\| ""\)\.trim\(\)\)\);/u);
+  assert.match(view, /\.\.\.\(workspaceTabAvailable\.value\s*\? \[\s*\{\s*id: WORKSPACE_TAB_ID,/u);
+  assert.match(view, /if \(!available && !loading && workspaceSidebarTabID\.value === WORKSPACE_TAB_ID\) \{\s*workspaceSidebarTabID\.value = TOPIC_TAB_ID;/u);
+  // Nothing that attaches, detaches or adds to a composer it does not have, in either panel.
+  assert.equal(view.match(/<div v-if="!selectedTopicIsCron" class="chat-workspace-toolbar-actions">/gu)?.length, 2);
+  assert.equal(view.match(/<div v-if="!selectedTopicIsCron" class="chat-workspace-empty-actions">/gu)?.length, 2);
+  assert.equal(view.match(/v-if="!selectedTopicIsCron"\s+class="plain xs icon"\s+:title="t\('chat_workspace_action_insert'\)"/gu)?.length, 2);
 });

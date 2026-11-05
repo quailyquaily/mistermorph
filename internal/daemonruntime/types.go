@@ -182,6 +182,12 @@ func IsAgentLinkTopicID(id string) bool {
 	return strings.HasPrefix(id, AgentLinkTopicPrefix) && len(id) > len(AgentLinkTopicPrefix)
 }
 
+// TopicNameRegenerable reports whether a topic's generated naming can be redone: any topic of the
+// person's, and a TODO item's, where it is the icon alone (see CompleteTopicTitleRegeneration).
+func TopicNameRegenerable(id string) bool {
+	return !IsReservedTopicID(id) || IsCronTopicID(id)
+}
+
 // IsReservedTopicID reports whether id is a topic the runtime keeps for itself: the default topic,
 // Awareness, the Agent Link agents' topics and the TODO items' topics. Their titles are fixed (a
 // TODO item's topic follows the item's title), and a person does not start chats in the Agent

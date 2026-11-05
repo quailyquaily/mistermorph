@@ -422,6 +422,15 @@
   line-clamp: unset;
 }
 
+/* A TODO item's topic has a second row: the provider and model the item runs with. One line,
+   faded where it is cut; the row keeps its height while the text is still loading. */
+.chat-topic-item-meta.workspace-sidebar-item-meta {
+  min-width: 0;
+  min-height: 1.4em;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
 .chat-topic-item.is-active .chat-topic-item-title {
   color: var(--q-c-dark);
 }

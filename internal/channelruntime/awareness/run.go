@@ -30,6 +30,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/promptprofile"
 	"github.com/quailyquaily/mistermorph/internal/taskdomain"
 	"github.com/quailyquaily/mistermorph/internal/toolsutil"
+	"github.com/quailyquaily/mistermorph/internal/topiccontext"
 	"github.com/quailyquaily/mistermorph/internal/workspace"
 	"github.com/quailyquaily/mistermorph/llm"
 	"github.com/quailyquaily/mistermorph/tools"
@@ -52,8 +53,13 @@ type RunOptions struct {
 	CronRequests      <-chan CronRequest
 	CronEnabled       bool
 	// CronMaxConcurrency is how many TODO items may run at once (default 8).
-	CronMaxConcurrency  int
-	CronPath            string
+	CronMaxConcurrency int
+	CronPath           string
+	// TopicContextScope, when set, says where a run recorded under a topic keeps its context usage,
+	// for a runtime that shows it per topic.
+	TopicContextScope func(topicID string) topiccontext.Scope
+	// TopicRunStarted, when set, is told of each run once it is recorded under its topic.
+	TopicRunStarted     func(TopicRun)
 	ChatInfoContactsDir string
 	ChatInfoStore       *chatinfo.Store
 	ChatInfoRefresher   chatinfo.Refresher
@@ -187,6 +193,10 @@ func runAwarenessLoop(ctx context.Context, d Dependencies, opts RunOptions) (run
 	}
 
 	runAwarenessTaskWithOpts := func(behavior awarenessutil.Behavior, task string, meta map[string]any, taskRunID, llmProfile, workspaceDir string, bashEnv []cronstore.BashEnvRef, topicID, topicTitle string) (string, error) {
+		var contextScope topiccontext.Scope
+		if topicID != "" && opts.TopicContextScope != nil {
+			contextScope = opts.TopicContextScope(topicID)
+		}
 		return runAwarenessTask(ctx, d, awarenessTaskOptions{
 			Behavior:                 behavior,
 			Logger:                   logger,
@@ -212,6 +222,8 @@ func runAwarenessLoop(ctx context.Context, d Dependencies, opts RunOptions) (run
 			BashEnv:                  bashEnv,
 			TopicID:                  topicID,
 			TopicTitle:               topicTitle,
+			ContextScope:             contextScope,
+			TopicRunStarted:          opts.TopicRunStarted,
 		})
 	}
 	runTask := func(behavior awarenessutil.Behavior, task string, meta map[string]any, taskRunID string) (string, error) {
@@ -406,6 +418,20 @@ type awarenessTaskOptions struct {
 	// a TODO item's runs go to the item's own topic.
 	TopicID    string
 	TopicTitle string
+	// ContextScope, when it has a conversation key, records the run's context usage under it.
+	ContextScope topiccontext.Scope
+	// TopicRunStarted is told of the run once it is recorded under TopicID.
+	TopicRunStarted func(TopicRun)
+}
+
+// TopicRun is a run recorded under a topic, as it starts.
+type TopicRun struct {
+	TopicID string
+	Task    string
+	// WorkspaceDir is the workspace the run's item sets, if it sets one.
+	WorkspaceDir string
+	Provider     string
+	Model        string
 }
 
 func runAwarenessTask(ctx context.Context, d Dependencies, opts awarenessTaskOptions) (summary string, runErr error) {
@@ -422,6 +448,9 @@ func runAwarenessTask(ctx context.Context, d Dependencies, opts awarenessTaskOpt
 		workspaceDir = resolved
 	}
 	ctx = pathroots.WithWorkspaceDir(ctx, workspaceDir)
+	if opts.ContextScope.ConversationKey != "" {
+		ctx = topiccontext.WithScope(ctx, opts.ContextScope)
+	}
 	routePurpose := ""
 	reasoningEffort := ""
 	if thinkTask, ok := chatcommands.ExtractThinkTask(task); ok {
@@ -498,6 +527,19 @@ func runAwarenessTask(ctx context.Context, d Dependencies, opts awarenessTaskOpt
 	recordOpts.Model = taskModel
 	if err := recordAwarenessTaskStart(recordOpts, task, time.Now().UTC()); err != nil {
 		return "", fmt.Errorf("record awareness task start: %w", err)
+	}
+	if topicID := strings.TrimSpace(opts.TopicID); topicID != "" && opts.TopicRunStarted != nil {
+		route := opts.Route
+		if useTaskRoute {
+			route = taskRoute
+		}
+		opts.TopicRunStarted(TopicRun{
+			TopicID:      topicID,
+			Task:         task,
+			WorkspaceDir: strings.TrimSpace(opts.WorkspaceDir),
+			Provider:     firstNonEmpty(route.Values.InferenceProvider, route.ClientConfig.Provider),
+			Model:        taskModel,
+		})
 	}
 	var progress TaskProgress
 	if opts.TaskProgress != nil && opts.TaskStore != nil && strings.TrimSpace(opts.TaskRunID) != "" {

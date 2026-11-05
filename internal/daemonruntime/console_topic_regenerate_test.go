@@ -110,3 +110,103 @@ func TestTopicTitleTasksSelectsFirstAndRecentConversation(t *testing.T) {
 		t.Fatal("read deleted topic")
 	}
 }
+
+func TestCronTopicRegenerationChangesOnlyTheIcon(t *testing.T) {
+	store, err := NewConsoleFileStore(ConsoleFileStoreOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	topicID := CronTopicID("weekly")
+	if err := store.UpsertWithTrigger(TaskInfo{ID: "run", TopicID: topicID, Task: "report"}, TaskTrigger{}, "Weekly report"); err != nil {
+		t.Fatal(err)
+	}
+	before, _ := store.GetTopic(topicID)
+	started, err := store.BeginTopicTitleRegeneration(topicID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated, err := store.CompleteTopicTitleRegeneration(topicID, started.TitleRevision, "A generated name", "code")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Icon != "code" || updated.LLMTitleGeneratedAt == nil {
+		t.Fatalf("icon not applied: %+v", updated)
+	}
+	if updated.Title != "Weekly report" {
+		t.Fatalf("title = %q, want the item's", updated.Title)
+	}
+	if !updated.UpdatedAt.Equal(before.UpdatedAt) {
+		t.Fatal("regenerating the icon moved the topic in the list, which the latest run orders")
+	}
+}
+
+func TestSetCronTopicIconFromLLM(t *testing.T) {
+	store, err := NewConsoleFileStore(ConsoleFileStoreOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	topicID := CronTopicID("weekly")
+	if err := store.UpsertWithTrigger(TaskInfo{ID: "run", TopicID: topicID, Task: "report"}, TaskTrigger{}, "Weekly report"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Upsert(TaskInfo{ID: "chat", TopicID: "topic_a", Task: "hello"}); err != nil {
+		t.Fatal(err)
+	}
+	before, _ := store.GetTopic(topicID)
+	if err := store.SetCronTopicIconFromLLM(topicID, "code"); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := store.GetTopic(topicID)
+	if got.Icon != "code" || got.LLMTitleGeneratedAt == nil || got.Title != "Weekly report" || !got.UpdatedAt.Equal(before.UpdatedAt) || got.TitleRevision <= before.TitleRevision {
+		t.Fatalf("topic = %+v, before = %+v", got, before)
+	}
+	// Only the first generated icon lands: a regeneration may have got there first.
+	if err := store.SetCronTopicIconFromLLM(topicID, "chat"); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := store.GetTopic(topicID); got.Icon != "code" {
+		t.Fatalf("icon = %q, want it kept", got.Icon)
+	}
+	// Any other topic is left alone.
+	if err := store.SetCronTopicIconFromLLM("topic_a", "code"); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := store.GetTopic("topic_a"); got.Icon == "code" || got.LLMTitleGeneratedAt != nil {
+		t.Fatalf("person's topic changed: %+v", got)
+	}
+}
+
+func TestSetCronTopicRunModelSurvivesARestart(t *testing.T) {
+	root := t.TempDir()
+	opts := ConsoleFileStoreOptions{RootDir: root, JournalDir: filepath.Join(root, "journal"), Persist: true}
+	store, err := NewConsoleFileStore(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	topicID := CronTopicID("weekly")
+	if err := store.UpsertWithTrigger(TaskInfo{ID: "run", TopicID: topicID, Task: "report"}, TaskTrigger{}, "Weekly report"); err != nil {
+		t.Fatal(err)
+	}
+	before, _ := store.GetTopic(topicID)
+	if err := store.SetCronTopicRunModel(topicID, "openai", "gpt-5.2"); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := NewConsoleFileStore(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, ok := reopened.GetTopic(topicID)
+	if !ok || got.LLMProvider != "openai" || got.LLMModel != "gpt-5.2" || got.Title != "Weekly report" || !got.UpdatedAt.Equal(before.UpdatedAt) {
+		t.Fatalf("topic = %+v, before = %+v", got, before)
+	}
+	// Only a TODO item's topic takes it.
+	if err := store.Upsert(TaskInfo{ID: "chat", TopicID: "topic_a", Task: "hello"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetCronTopicRunModel("topic_a", "openai", "gpt-5.2"); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := store.GetTopic("topic_a"); got.LLMModel != "" {
+		t.Fatalf("person's topic changed: %+v", got)
+	}
+}

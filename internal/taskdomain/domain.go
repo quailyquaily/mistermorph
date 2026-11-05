@@ -98,9 +98,13 @@ type TopicInfo struct {
 	Tags                []string   `json:"tags,omitempty"`
 	TitleRevision       uint64     `json:"title_revision,omitempty"`
 	LLMTitleGeneratedAt *time.Time `json:"llm_title_generated_at,omitempty"`
-	CreatedAt           time.Time  `json:"created_at"`
-	UpdatedAt           time.Time  `json:"updated_at"`
-	DeletedAt           *time.Time `json:"deleted_at,omitempty"`
+	// LLMProvider and LLMModel are what a TODO item's latest run used, kept here because a one-time
+	// item is gone once it has run.
+	LLMProvider string     `json:"llm_provider,omitempty"`
+	LLMModel    string     `json:"llm_model,omitempty"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
+	DeletedAt   *time.Time `json:"deleted_at,omitempty"`
 }
 
 func ParseTaskStatus(raw string) (TaskStatus, bool) {

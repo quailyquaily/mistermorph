@@ -14,11 +14,13 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/awarenessutil"
 	"github.com/quailyquaily/mistermorph/internal/channelruntime/depsutil"
 	"github.com/quailyquaily/mistermorph/internal/cron"
+	"github.com/quailyquaily/mistermorph/internal/daemonruntime"
 	"github.com/quailyquaily/mistermorph/internal/llmconfig"
 	"github.com/quailyquaily/mistermorph/internal/llmutil"
 	"github.com/quailyquaily/mistermorph/internal/pathroots"
 	"github.com/quailyquaily/mistermorph/internal/shellenv"
 	"github.com/quailyquaily/mistermorph/internal/toolsutil"
+	"github.com/quailyquaily/mistermorph/internal/topiccontext"
 	"github.com/quailyquaily/mistermorph/llm"
 	"github.com/quailyquaily/mistermorph/tools"
 	"github.com/quailyquaily/mistermorph/tools/builtin"
@@ -948,4 +950,85 @@ func requestHasTool(req llm.Request, name string) bool {
 		}
 	}
 	return false
+}
+
+type awarenessScopeCaptureClient struct {
+	scopes []topiccontext.Scope
+}
+
+func (c *awarenessScopeCaptureClient) Chat(ctx context.Context, _ llm.Request) (llm.Result, error) {
+	scope, _ := topiccontext.ScopeFromContext(ctx)
+	c.scopes = append(c.scopes, scope)
+	return llm.Result{Text: `{"type":"final","output":"ok"}`}, nil
+}
+
+// A TODO item's topic shows the context its runs used, and hears of a run once the run is in it.
+func TestRunAwarenessTaskRecordsTopicContextAndAnnouncesTheRun(t *testing.T) {
+	store, err := daemonruntime.NewConsoleFileStore(daemonruntime.ConsoleFileStoreOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dependencies := depsutil.CommonDependencies{
+		PromptSpec: func(context.Context, *slog.Logger, agent.LogOptions, string, llm.Client, string, []string) (agent.PromptSpec, []string, error) {
+			return agent.PromptSpec{Identity: "identity"}, nil, nil
+		},
+	}
+	scope := topiccontext.Scope{Runtime: "console", ConversationKey: "console:_cron_weekly", TopicID: "_cron_weekly"}
+	workspaceDir := t.TempDir()
+	client := &awarenessScopeCaptureClient{}
+	var started TopicRun
+	var topicRecorded bool
+	_, err = runAwarenessTask(context.Background(), dependencies, awarenessTaskOptions{
+		Behavior:     awarenessutil.BehaviorCron,
+		Client:       client,
+		Model:        "model",
+		Task:         "prepare weekly report",
+		TaskRunID:    "run-1",
+		BaseRegistry: tools.NewRegistry(),
+		Config:       agent.Config{MaxSteps: 1},
+		TaskStore:    store,
+		TopicID:      "_cron_weekly",
+		TopicTitle:   "Weekly report",
+		ContextScope: scope,
+		WorkspaceDir: workspaceDir,
+		Route:        llmutil.ResolvedRoute{ClientConfig: llmconfig.ClientConfig{Provider: "openai"}},
+		TopicRunStarted: func(run TopicRun) {
+			started = run
+			_, topicRecorded = store.GetTopic(run.TopicID)
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := TopicRun{TopicID: "_cron_weekly", Task: "prepare weekly report", WorkspaceDir: workspaceDir, Provider: "openai", Model: "model"}
+	if started != want || !topicRecorded {
+		t.Fatalf("started = %+v, recorded = %v, want %+v", started, topicRecorded, want)
+	}
+	if len(client.scopes) == 0 || client.scopes[0] != scope {
+		t.Fatalf("scopes = %+v, want %+v", client.scopes, scope)
+	}
+
+	// A run without a scope, such as the heartbeat's, records none and announces nothing.
+	bare := &awarenessScopeCaptureClient{}
+	calls := 0
+	_, err = runAwarenessTask(context.Background(), dependencies, awarenessTaskOptions{
+		Behavior:        awarenessutil.BehaviorHeartbeat,
+		Client:          bare,
+		Model:           "model",
+		Task:            "check in",
+		TaskRunID:       "run-2",
+		BaseRegistry:    tools.NewRegistry(),
+		Config:          agent.Config{MaxSteps: 1},
+		TaskStore:       store,
+		TopicRunStarted: func(TopicRun) { calls++ },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if calls != 0 {
+		t.Fatalf("announced %d runs without a topic", calls)
+	}
+	if len(bare.scopes) == 0 || bare.scopes[0].ConversationKey != "" {
+		t.Fatalf("scopes = %+v, want none", bare.scopes)
+	}
 }

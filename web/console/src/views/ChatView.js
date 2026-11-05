@@ -65,13 +65,14 @@ import { isDesktopRuntime } from "../core/desktop-runtime";
 import { endpointChannelLabel } from "../core/endpoints";
 import { endpointRoutePath } from "../core/endpoint-routes";
 import { modelVendorMeta } from "../core/model-vendor";
+import { SETUP_PROVIDER_OPTIONS } from "../core/setup-contract";
 import { loadResource, resourceKey } from "../core/resources";
 import { workspaceTreeIcon } from "../core/workspace-icons";
 import { rememberRecentWorkspaceDir } from "../core/recent-workspace-dirs";
 import { buildTreeRows, hasOwnTreePath, setTreeExpanded, setTreeItems } from "../core/workspace-tree";
 import WorkspaceDirPickerDialog from "../components/WorkspaceDirPickerDialog";
 import { topicIcon, useTopicMetadata } from "../core/topic-metadata";
-import { cronSidebarGroups, cronTopicsOf, isCronTopicID } from "../core/chat-cron-topics";
+import { cronSidebarGroups, cronTopicModels, cronTopicModelText, cronTopicsOf, isCronTopicID } from "../core/chat-cron-topics";
 import { activelyViewedTopic, createTopicActivityTracker, topicActivitySignature, TOPIC_ACTIVITY_DONE, TOPIC_ACTIVITY_PENDING } from "../core/topic-activity";
 import { contextMeter } from "../core/context-meter";
 import {
@@ -873,6 +874,52 @@ const ChatView = {
     const hasVisibleTopics = computed(() => visibleTopics.value.length > 0);
     // The TODO items' topics, the one with the latest run first.
     const cronTopics = computed(() => cronTopicsOf(topics.value));
+    // The model each TODO item runs with, for the second row of its topic. Null until loaded.
+    const cronModels = ref(null);
+    let cronModelsLoadSeq = 0;
+
+    async function loadCronTopicModels() {
+      const seq = ++cronModelsLoadSeq;
+      const endpointRef = String(submitEndpointRef.value || "").trim();
+      if (!endpointRef) {
+        cronModels.value = null;
+        return;
+      }
+      try {
+        const data = await runtimeApiFetchForEndpoint(endpointRef, "/todo/tasks");
+        if (seq === cronModelsLoadSeq) {
+          cronModels.value = cronTopicModels(data);
+        }
+      } catch {
+        // The rows keep what they showed; a blank second row is better than a wrong one.
+      }
+    }
+
+    // Loaded while the TODO list is shown: on opening it, for another agent, and when an item's
+    // topic appears (a first run) or goes.
+    watch(
+      [
+        () => topicSidebarView.value === "cron",
+        () => String(submitEndpointRef.value || "").trim(),
+        () => cronTopics.value.map((topic) => normalizeTopicID(topic?.id)).join("|"),
+      ],
+      ([shown, endpointRef], previous) => {
+        if (endpointRef !== previous?.[1]) {
+          cronModels.value = null;
+        }
+        if (shown) {
+          void loadCronTopicModels();
+        }
+      },
+      { immediate: true },
+    );
+
+    function cronTopicModel(topic) {
+      return cronTopicModelText(cronModels.value, topic, {
+        providerTitle: (id) => SETUP_PROVIDER_OPTIONS.find((item) => item.value === id)?.title || id,
+        unscheduled: t("chat_topics_cron_item_unscheduled"),
+      });
+    }
     // The sidebar is there for the TODO items' topics too: with none of the person's own topics,
     // its TODO toggle is still the only way to them.
     const hasSidebarTopics = computed(() => hasVisibleTopics.value || cronTopics.value.length > 0);
@@ -1406,6 +1453,11 @@ const ChatView = {
       () => Boolean(workspaceTopicID.value) && !selectedTopicIsReserved.value
     );
     const topicDeleteDisabled = computed(() => !topicDeleteAvailable.value || topicDeleting.value);
+    // A TODO item's topic has no delete, but its generated icon can be redone; its title is the item's.
+    const topicRegenerateAvailable = computed(() => topicDeleteAvailable.value || (Boolean(workspaceTopicID.value) && selectedTopicIsCron.value));
+    const topicRegenerateLabel = computed(() =>
+      t(selectedTopicIsCron.value ? "chat_topic_regenerate_icon_action" : "chat_topic_regenerate_action")
+    );
     watch(workspaceTopicID, () => {
       topicTagsError.value = "";
     });
@@ -1415,7 +1467,7 @@ const ChatView = {
       topicNameFailure.value?.key === topicNameRequestKey.value ? topicNameFailure.value.message : ""
     );
     const topicRegenerateDisabled = computed(() =>
-      !topicDeleteAvailable.value || topicDeleting.value || topicRegenerating.value || historyLoading.value ||
+      !topicRegenerateAvailable.value || topicDeleting.value || topicRegenerating.value || historyLoading.value ||
       (!historyNextCursor.value && !chatHistoryItems.value.some((item) =>
         item.role === "user" && item.topicID === selectedTopicID.value &&
         String(item.text || "").trim() && !String(item.text || "").trim().startsWith("/")
@@ -1517,6 +1569,9 @@ const ChatView = {
         if (workspaceSource.value === "default") {
           return t("chat_workspace_hint_default");
         }
+        if (workspaceSource.value === "todo") {
+          return t("chat_workspace_hint_todo");
+        }
         return "";
       }
       if (creatingTopic.value) {
@@ -1544,18 +1599,30 @@ const ChatView = {
         String(workspaceDir.value || "").trim() === ""
     );
     const workspaceDirDisplay = computed(() => splitWorkspaceDisplayPath(workspaceDir.value));
+    // A TODO item's topic has no workspace of its own to attach: the tab shows the one its runs use,
+    // read-only, and only when there is one.
+    const workspaceTabAvailable = computed(() => !selectedTopicIsCron.value || Boolean(String(workspaceDir.value || "").trim()));
     const workspacePanelTabs = computed(() => [
       {
         id: TOPIC_TAB_ID,
         title: t("chat_topic_kicker"),
         icon: "PhChats",
       },
-      {
-        id: WORKSPACE_TAB_ID,
-        title: t("chat_workspace_label"),
-        icon: "PhCube",
-      },
+      ...(workspaceTabAvailable.value
+        ? [
+            {
+              id: WORKSPACE_TAB_ID,
+              title: t("chat_workspace_label"),
+              icon: "PhCube",
+            },
+          ]
+        : []),
     ]);
+    watch([workspaceTabAvailable, workspaceLoading], ([available, loading]) => {
+      if (!available && !loading && workspaceSidebarTabID.value === WORKSPACE_TAB_ID) {
+        workspaceSidebarTabID.value = TOPIC_TAB_ID;
+      }
+    });
     const selectedWorkspacePanelTab = computed(
       () => workspacePanelTabs.value.find((item) => item.id === workspaceSidebarTabID.value) || workspacePanelTabs.value[0]
     );
@@ -2215,7 +2282,7 @@ const ChatView = {
     function applyWorkspacePayload(data) {
       const nextDir = String(data?.workspace_dir || "").trim();
       const rawSource = String(data?.source || "").trim().toLowerCase();
-      const nextSource = ["attachment", "default", "none"].includes(rawSource)
+      const nextSource = ["attachment", "default", "none", "todo"].includes(rawSource)
         ? rawSource
         : nextDir
           ? "attachment"
@@ -3833,7 +3900,10 @@ const ChatView = {
           return { ...topic, ...updated };
         });
       } catch (e) {
-        topicNameFailure.value = { key, message: e?.message || t("chat_topic_regenerate_failed") };
+        topicNameFailure.value = {
+          key,
+          message: e?.message || t(isCronTopicID(topicID) ? "chat_topic_regenerate_icon_failed" : "chat_topic_regenerate_failed"),
+        };
       } finally {
         topicNameRequests.value.delete(key);
       }
@@ -4552,6 +4622,8 @@ const ChatView = {
       topicDeleting,
       topicDeleteError,
       topicRegenerating,
+      topicRegenerateAvailable,
+      topicRegenerateLabel,
       topicRegenerateError,
       topicRegenerateDisabled,
       topicDeleteDialogOpen,
@@ -4662,6 +4734,7 @@ const ChatView = {
       topicActivityState,
       topicActivityLabel,
       cronTopics,
+      cronTopicModel,
       isCronTopicID,
       selectedTopicIsCron,
       agentTopics,
@@ -4877,7 +4950,7 @@ const ChatView = {
                     :endpointRef="submitEndpointRef"
                     aria-hidden="true"
                   />
-                  <PhAlarm v-else-if="isCronTopicID(topic.id)" class="chat-topic-item-icon is-cron" aria-hidden="true" />
+                  <PhAlarm v-else-if="isCronTopicID(topic.id) && !topic.icon" class="chat-topic-item-icon is-cron" aria-hidden="true" />
                   <span
                     v-else
                     class="topic-icon chat-topic-item-icon"
@@ -4886,6 +4959,11 @@ const ChatView = {
                   ></span>
                   <span class="chat-topic-item-copy workspace-sidebar-item-copy">
                     <span v-fade-truncate class="chat-topic-item-title workspace-sidebar-item-title">{{ topicTitle(topic) }}</span>
+                    <span
+                      v-if="isCronTopicID(topic.id)"
+                      v-fade-truncate
+                      class="chat-topic-item-meta workspace-sidebar-item-meta"
+                    >{{ cronTopicModel(topic) }}</span>
                   </span>
                   <span
                     v-if="topicActivityState(topic)"
@@ -5135,7 +5213,7 @@ const ChatView = {
                         <p v-if="workspaceHintText" class="chat-workspace-pane-note">{{ workspaceHintText }}</p>
                       </div>
 
-                      <div class="chat-workspace-toolbar-actions">
+                      <div v-if="!selectedTopicIsCron" class="chat-workspace-toolbar-actions">
                         <AppButton
                           class="plain xs icon"
                           :title="t('chat_workspace_action_attach')"
@@ -5226,6 +5304,7 @@ const ChatView = {
                           <dt class="chat-workspace-status-term">{{ t("audit_action") }}</dt>
                           <dd class="chat-workspace-status-actions">
                             <AppButton
+                              v-if="!selectedTopicIsCron"
                               class="plain xs icon"
                               :title="t('chat_workspace_action_insert')"
                               :aria-label="t('chat_workspace_action_insert')"
@@ -5271,7 +5350,7 @@ const ChatView = {
                       <div class="chat-workspace-empty-lead">
                         <p class="chat-workspace-empty-title">{{ t("chat_workspace_empty_title") }}</p>
                       </div>
-                      <div class="chat-workspace-empty-actions">
+                      <div v-if="!selectedTopicIsCron" class="chat-workspace-empty-actions">
                         <AppButton
                           class="primary sm"
                           :disabled="workspaceAttachDisabled"
@@ -5303,11 +5382,11 @@ const ChatView = {
 
                     <header class="chat-topic-panel-head">
                       <h4 class="chat-topic-panel-title" :title="deskTitle">{{ deskTitle }}</h4>
-                      <div v-if="topicDeleteAvailable" class="chat-topic-actions">
+                      <div v-if="topicRegenerateAvailable" class="chat-topic-actions">
                         <AppButton
                           class="plain sm icon chat-topic-regenerate-action"
-                          :title="t('chat_topic_regenerate_action')"
-                          :aria-label="t('chat_topic_regenerate_action')"
+                          :title="topicRegenerateLabel"
+                          :aria-label="topicRegenerateLabel"
                           :loading="topicRegenerating"
                           :disabled="topicRegenerateDisabled"
                           @click="regenerateTopicName"
@@ -5315,6 +5394,7 @@ const ChatView = {
                           <PhMagicWand class="icon" />
                         </AppButton>
                         <AppButton
+                          v-if="topicDeleteAvailable"
                           class="danger plain sm icon chat-topic-danger-action"
                           :title="t('chat_topic_delete_action')"
                           :aria-label="t('chat_topic_delete_action')"
@@ -5483,7 +5563,7 @@ const ChatView = {
                       <p v-if="workspaceHintText" class="chat-workspace-pane-note">{{ workspaceHintText }}</p>
                     </div>
 
-                    <div class="chat-workspace-toolbar-actions">
+                    <div v-if="!selectedTopicIsCron" class="chat-workspace-toolbar-actions">
                       <AppButton
                         class="plain xs icon"
                         :title="t('chat_workspace_action_attach')"
@@ -5574,6 +5654,7 @@ const ChatView = {
                         <dt class="chat-workspace-status-term">{{ t("audit_action") }}</dt>
                         <dd class="chat-workspace-status-actions">
                           <AppButton
+                            v-if="!selectedTopicIsCron"
                             class="plain xs icon"
                             :title="t('chat_workspace_action_insert')"
                             :aria-label="t('chat_workspace_action_insert')"
@@ -5619,7 +5700,7 @@ const ChatView = {
                     <div class="chat-workspace-empty-lead">
                       <p class="chat-workspace-empty-title">{{ t("chat_workspace_empty_title") }}</p>
                     </div>
-                    <div class="chat-workspace-empty-actions">
+                    <div v-if="!selectedTopicIsCron" class="chat-workspace-empty-actions">
                       <AppButton
                         class="primary sm"
                         :disabled="workspaceAttachDisabled"
@@ -5651,11 +5732,11 @@ const ChatView = {
 
                   <header class="chat-topic-panel-head">
                     <h4 class="chat-topic-panel-title" :title="deskTitle">{{ deskTitle }}</h4>
-                    <div v-if="topicDeleteAvailable" class="chat-topic-actions">
+                    <div v-if="topicRegenerateAvailable" class="chat-topic-actions">
                       <AppButton
                         class="plain sm icon chat-topic-regenerate-action"
-                        :title="t('chat_topic_regenerate_action')"
-                        :aria-label="t('chat_topic_regenerate_action')"
+                        :title="topicRegenerateLabel"
+                        :aria-label="topicRegenerateLabel"
                         :loading="topicRegenerating"
                         :disabled="topicRegenerateDisabled"
                         @click="regenerateTopicName"
@@ -5663,6 +5744,7 @@ const ChatView = {
                         <PhMagicWand class="icon" />
                       </AppButton>
                       <AppButton
+                        v-if="topicDeleteAvailable"
                         class="danger plain sm icon chat-topic-danger-action"
                         :title="t('chat_topic_delete_action')"
                         :aria-label="t('chat_topic_delete_action')"
