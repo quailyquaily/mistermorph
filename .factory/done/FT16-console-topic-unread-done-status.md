@@ -48,3 +48,9 @@ Validation: Codex reviewed all seven changed files in origin/master...HEAD and r
 Installs: pinned dependencies restored only; no unpinned tools or dependency changes.
 Residual risks: no real-browser visual or interaction check; build reports large chunks.
 No P0/P1 findings; moved review/ → ready/ under the factory gate. P2 findings remain for owner consideration. Not merged into master.
+
+## factory · 2026-11-05 15:09
+Shipped to master in merge commit 4ea09a6d80d04c9467b96febdfe60b88afba89b2; release tag v0.3.78 pushed with master atomically.
+Combined validation passed: gofmt check, go vet ./..., go test ./..., pnpm test (411/411), and pnpm build, with an absolute throwaway HOME. Build retains large-chunk warnings. No unpinned installs. No linked GitHub issues or PRs.
+Owner explicitly requested “F16 一起合” after being informed of the three known P2 findings. Those findings remain unfixed. The ChatView import conflict was resolved preserving FT15 and FT16 behavior.
+No additional real-browser validation in this ship run; prior browser coverage and limitations remain as recorded above. Moved ready/ → done/.

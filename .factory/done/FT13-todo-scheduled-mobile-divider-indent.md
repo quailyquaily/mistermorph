@@ -39,3 +39,8 @@ notes:
 - Browser validation used actual template fragments, built CSS and mock data; full backend flows and Safari were not checked. Added repository tests assert source structure.
 - No unpinned installs, source changes or review commits.
 - Moved review/ → ready/; awaiting owner approval, not merged.
+
+## factory · 2026-11-05 15:09
+Shipped to master in merge commit d669616b9fc765206cda362cef34d9a5609c4795; release tag v0.3.78 pushed with master atomically.
+Combined validation passed: gofmt check, go vet ./..., go test ./..., pnpm test (411/411), and pnpm build, with an absolute throwaway HOME. Build retains large-chunk warnings. No unpinned installs. No linked GitHub issues or PRs.
+No additional real-browser validation in this ship run; prior browser coverage and limitations remain as recorded above. Moved ready/ → done/.

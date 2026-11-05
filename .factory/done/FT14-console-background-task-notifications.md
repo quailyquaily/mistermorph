@@ -48,3 +48,8 @@ notes:
 - Installs: no unpinned installs or manifest/lockfile changes.
 - Branch merges cleanly with origin/master. Worktree clean and reviewed HEAD unchanged. No linked issues or PRs to comment on.
 - Moved review/ → ready/. Owner should manually verify native notifications and click navigation before ship; no merge into master.
+
+## factory · 2026-11-05 15:09
+Shipped to master in merge commit 7169dda12500943a5bcf2c7eb5801e1ff27e56be; release tag v0.3.78 pushed with master atomically.
+Combined validation passed: gofmt check, go vet ./..., go test ./..., pnpm test (411/411), and pnpm build, with an absolute throwaway HOME. Build retains large-chunk warnings. No unpinned installs. No linked GitHub issues or PRs.
+No additional real-browser validation in this ship run; prior browser coverage and limitations remain as recorded above. Moved ready/ → done/.

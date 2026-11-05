@@ -50,3 +50,8 @@ notes:
 - No unpinned installs or manifest/lockfile changes; review left tracked files unchanged.
 - Interactive browser verification was not performed. Existing corrupted history is not retroactively repaired. Owner should inspect separate status lines in live and reloaded worker output before shipping.
 - Moved review/ → ready/. No linked GitHub issue or PR to comment on. Not merged into master.
+
+## factory · 2026-11-05 15:09
+Shipped to master in merge commit 839816dabae113302ed21ebe14e1c921982589cb; release tag v0.3.78 pushed with master atomically.
+Combined validation passed: gofmt check, go vet ./..., go test ./..., pnpm test (411/411), and pnpm build, with an absolute throwaway HOME. Build retains large-chunk warnings. No unpinned installs. No linked GitHub issues or PRs.
+No additional real-browser validation in this ship run; prior browser coverage and limitations remain as recorded above. Moved ready/ → done/.
