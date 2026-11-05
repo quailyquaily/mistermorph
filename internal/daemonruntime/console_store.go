@@ -485,7 +485,7 @@ func (s *ConsoleFileStore) List(opts TaskListOptions) []TaskInfo {
 		if topicID != "" && strings.TrimSpace(item.TopicID) != topicID {
 			continue
 		}
-		if topicID == "" && (strings.TrimSpace(item.TopicID) == ConsoleAwarenessTopicID || IsAgentLinkTopicID(item.TopicID)) {
+		if topicID == "" && !opts.AllTopics && (strings.TrimSpace(item.TopicID) == ConsoleAwarenessTopicID || IsAgentLinkTopicID(item.TopicID)) {
 			continue
 		}
 		if topicDeleted(s.topics[strings.TrimSpace(item.TopicID)]) {

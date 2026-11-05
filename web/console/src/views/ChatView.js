@@ -71,6 +71,7 @@ import { rememberRecentWorkspaceDir } from "../core/recent-workspace-dirs";
 import { buildTreeRows, hasOwnTreePath, setTreeExpanded, setTreeItems } from "../core/workspace-tree";
 import WorkspaceDirPickerDialog from "../components/WorkspaceDirPickerDialog";
 import { topicIcon, useTopicMetadata } from "../core/topic-metadata";
+import { normalizeTopicActivity, topicActivitySignature, TOPIC_ACTIVITY_PENDING } from "../core/topic-activity";
 import { contextMeter } from "../core/context-meter";
 import {
   groupTopicsByTag,
@@ -117,6 +118,7 @@ const CHAT_COMPOSER_MIN_HEIGHT = 80;
 const DEFAULT_TOPIC_ID = "default";
 const AWARENESS_TOPIC_ID = "_awareness";
 const AWARENESS_REFRESH_INTERVAL_MS = 5000;
+const TOPIC_ACTIVITY_REFRESH_INTERVAL_MS = 5000;
 // What another agent sends this one over Agent Link is kept in a topic per agent,
 // "_agentlink_<instance_id>", listed apart from the person's own topics.
 const AGENT_LINK_TOPIC_PREFIX = "_agentlink_";
@@ -532,6 +534,9 @@ const ChatView = {
     const topicDeleting = ref(false);
     const topicDeleteError = ref("");
     const topicSidebarView = ref(loadTopicSidebarView());
+    // Topics with unfinished tasks, by topic ID, polled while the chat view is open.
+    const topicActivity = shallowRef(new Map());
+    let topicActivityKey = "";
     const topicTagSaves = ref(new Set());
     const topicTagsError = ref("");
     const topicNameRequests = ref(new Set());
@@ -2737,6 +2742,7 @@ const ChatView = {
     }
 
     async function startTaskStream(taskID, historyID, endpointRef) {
+      void refreshTopicActivity();
       const key = String(taskID || "").trim();
       if (!key || !supportsConsoleTaskStream(endpointRef)) {
         return;
@@ -2904,6 +2910,41 @@ const ChatView = {
         classes.push("is-active");
       }
       return classes.join(" ");
+    }
+
+    // The running indicator at the right of a topic item: "running", "pending" (waiting for the
+    // person), or "" for a topic with nothing unfinished.
+    function topicActivityState(topic) {
+      return topicActivity.value.get(normalizeTopicID(topic?.id))?.status || "";
+    }
+
+    function topicActivityLabel(topic) {
+      return topicActivityState(topic) === TOPIC_ACTIVITY_PENDING
+        ? t("chat_topic_status_pending")
+        : t("chat_topic_status_running");
+    }
+
+    let topicActivityRequest = 0;
+    async function refreshTopicActivity() {
+      const endpointRef = String(submitEndpointRef.value || "").trim();
+      if (!consoleTopicsEnabled.value || !endpointRef || document.visibilityState === "hidden") {
+        return;
+      }
+      const request = ++topicActivityRequest;
+      try {
+        const data = await runtimeApiFetchForEndpoint(endpointRef, "/topics/activity");
+        if (request !== topicActivityRequest || endpointRef !== String(submitEndpointRef.value || "").trim()) {
+          return;
+        }
+        const next = normalizeTopicActivity(data?.topics);
+        const key = `${endpointRef}|${topicActivitySignature(next)}`;
+        if (key !== topicActivityKey) {
+          topicActivityKey = key;
+          topicActivity.value = next;
+        }
+      } catch {
+        // A runtime without /topics/activity shows no indicators.
+      }
     }
 
     function topicIsActive(topic) {
@@ -3191,6 +3232,7 @@ const ChatView = {
         if (isTerminalStatus(status)) {
           trackedTasks.delete(key);
           closeTaskStream(taskID);
+          void refreshTopicActivity();
           if (consoleTopicsEnabled.value) {
             void refreshWorkspaceState();
           }
@@ -4216,7 +4258,10 @@ const ChatView = {
       syncComposer();
     });
     function onPageVisibilityChange() {
-      if (document.visibilityState === "visible") resumeTrackedTasks();
+      if (document.visibilityState === "visible") {
+        resumeTrackedTasks();
+        void refreshTopicActivity();
+      }
     }
     // Heartbeat and TODO runs start on their own, so the awareness topic looks for new ones while
     // it is open; refreshHistory starts following any that are still running.
@@ -4238,11 +4283,33 @@ const ChatView = {
       },
       { immediate: true }
     );
+    // The topic list's running indicators follow tasks in every topic, not only the open one.
+    let topicActivityTimer = 0;
+    function stopTopicActivityRefresh() {
+      if (topicActivityTimer) {
+        window.clearInterval(topicActivityTimer);
+        topicActivityTimer = 0;
+      }
+    }
+    watch(
+      () => [consoleTopicsEnabled.value, String(submitEndpointRef.value || "").trim()],
+      ([enabled]) => {
+        stopTopicActivityRefresh();
+        topicActivityRequest += 1;
+        topicActivityKey = "";
+        topicActivity.value = new Map();
+        if (!enabled) return;
+        void refreshTopicActivity();
+        topicActivityTimer = window.setInterval(() => void refreshTopicActivity(), TOPIC_ACTIVITY_REFRESH_INTERVAL_MS);
+      },
+      { immediate: true }
+    );
     document.addEventListener("visibilitychange", onPageVisibilityChange);
     window.addEventListener("online", resumeTrackedTasks);
     window.addEventListener("pageshow", resumeTrackedTasks);
     onUnmounted(() => {
       viewActive = false;
+      stopTopicActivityRefresh();
       document.removeEventListener("visibilitychange", onPageVisibilityChange);
       window.removeEventListener("online", resumeTrackedTasks);
       window.removeEventListener("pageshow", resumeTrackedTasks);
@@ -4535,6 +4602,8 @@ const ChatView = {
       topicDayGroups,
       topicSidebarGroups,
       topicSidebarView,
+      topicActivityState,
+      topicActivityLabel,
       agentTopics,
       topicAgentContact,
       topicAgentAvatar,
@@ -4744,6 +4813,13 @@ const ChatView = {
                   <span class="chat-topic-item-copy workspace-sidebar-item-copy">
                     <span v-fade-truncate class="chat-topic-item-title workspace-sidebar-item-title">{{ topicTitle(topic) }}</span>
                   </span>
+                  <span
+                    v-if="topicActivityState(topic)"
+                    :class="['chat-topic-item-status', 'is-' + topicActivityState(topic)]"
+                    role="img"
+                    :title="topicActivityLabel(topic)"
+                    :aria-label="topicActivityLabel(topic)"
+                  ></span>
                 </button>
                 </template>
               </section>

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -312,6 +313,25 @@ func (routes *routeRegistration) registerTaskRoutes() {
 	})
 
 	// The tag view's arrangement: the order of the tag groups and of the topics within them.
+	// The topics with unfinished tasks, for a running indicator on each topic in the list.
+	mux.HandleFunc("/topics/activity", func(w http.ResponseWriter, r *http.Request) {
+		if !checkAuth(r, authToken) {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		if r.Method != http.MethodGet {
+			w.Header().Set("Allow", "GET")
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if reader == nil {
+			http.Error(w, "task reader is unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"topics": topicActivity(reader)})
+	})
+
 	mux.HandleFunc("/topics/layout", func(w http.ResponseWriter, r *http.Request) {
 		if !checkAuth(r, authToken) {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -500,4 +520,46 @@ func (routes *routeRegistration) registerTaskRoutes() {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
 	})
+}
+
+// TopicActivity is a topic with unfinished tasks. Status is "pending" when one of them waits for
+// the person (an approval or a question), else "running".
+type TopicActivity struct {
+	ID      string `json:"id"`
+	Status  string `json:"status"`
+	Running int    `json:"running"`
+	Pending int    `json:"pending"`
+}
+
+// topicActivity lists the topics with queued, running or pending tasks, by topic ID.
+func topicActivity(reader TaskReader) []TopicActivity {
+	byTopic := map[string]*TopicActivity{}
+	for _, status := range []TaskStatus{TaskQueued, TaskRunning, TaskPending} {
+		for _, task := range reader.List(TaskListOptions{Status: status, Limit: taskListInternalMaxLimit, AllTopics: true}) {
+			id := strings.TrimSpace(task.TopicID)
+			if id == "" {
+				continue
+			}
+			item := byTopic[id]
+			if item == nil {
+				item = &TopicActivity{ID: id}
+				byTopic[id] = item
+			}
+			if status == TaskPending {
+				item.Pending++
+			} else {
+				item.Running++
+			}
+		}
+	}
+	out := make([]TopicActivity, 0, len(byTopic))
+	for _, item := range byTopic {
+		item.Status = "running"
+		if item.Pending > 0 {
+			item.Status = "pending"
+		}
+		out = append(out, *item)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out
 }
