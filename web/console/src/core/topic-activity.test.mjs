@@ -40,6 +40,10 @@ test("the chat view polls topic activity and shows a status dot at the right of 
   assert.match(view, /chat-topic-item-title[^\n]*\n\s*<\/span>\s*<span\s+v-if="topicActivityState\(topic\)"\s+:class="\['chat-topic-item-status', 'is-' \+ topicActivityState\(topic\)\]"/u);
   // A finished task and a newly followed one refresh the indicators at once.
   assert.match(view, /closeTaskStream\(taskID\);\s*void refreshTopicActivity\(\);/u);
-  assert.match(styles, /\.chat-topic-item:has\(\.chat-topic-item-status\)\s*\{\s*grid-template-columns: 16px minmax\(0, 1fr\) 8px;/u);
+  assert.match(styles, /\.chat-topic-item:has\(\.chat-topic-item-status\)\s*\{\s*grid-template-columns: 16px minmax\(0, 1fr\) var\(--status-mark-size\);/u);
+  // It is one of the console's status marks: a small square in the status colors, blue for a
+  // running task as "on" is everywhere, orange for one that waits for the person.
+  assert.match(styles, /\.chat-topic-item-status \{\s*justify-self: end;\s*width: var\(--status-mark-size\);\s*height: var\(--status-mark-size\);\s*border-radius: 1px;\s*background: var\(--status-on\);/u);
+  assert.match(styles, /\.chat-topic-item-status\.is-pending \{\s*background: var\(--status-pending\);/u);
   assert.match(styles, /prefers-reduced-motion: reduce\)\s*\{\s*\.chat-topic-item-status\.is-running/u);
 });
