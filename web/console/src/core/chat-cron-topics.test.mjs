@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
+import { cronSidebarGroups, cronTopicsOf, isCronTopicID } from "./chat-cron-topics.js";
 import { mergeTopicMetadata } from "./topic-metadata-merge.js";
 
 const view = await readFile(new URL("../views/ChatView.js", import.meta.url), "utf8");
@@ -10,14 +11,18 @@ const i18n = await readFile(new URL("../i18n/index.js", import.meta.url), "utf8"
 const metadata = await readFile(new URL("./topic-metadata.js", import.meta.url), "utf8");
 
 test("TODO items' topics are kept out of the person's topic list", () => {
-  assert.match(view, /const CRON_TOPIC_PREFIX = "_cron_";/u);
+  assert.match(view, /import \{ cronSidebarGroups, cronTopicsOf, isCronTopicID \} from "\.\.\/core\/chat-cron-topics";/u);
+  assert.equal(isCronTopicID(" _cron_weekly "), true);
+  for (const id of ["_cron_", "cron_weekly", "_agentlink_a", "_awareness", "", null]) {
+    assert.equal(isCronTopicID(id), false, String(id));
+  }
   assert.match(view, /if \(isAgentLinkTopicID\(topicID\) \|\| isCronTopicID\(topicID\)\) \{\s*continue;\s*\}\s*items\.push\(topic\);/u);
   assert.match(view, /isAgentLinkTopicID\(normalizedTopicID\) \|\|\s*isCronTopicID\(normalizedTopicID\)\s*\) \{\s*return;\s*\}\s*rememberLastTopicID/u);
 });
 
 test("a toggle switches the topic list to the TODO items' topics only", () => {
-  assert.match(view, /if \(topicSidebarView\.value === "cron"\) \{\s*return cronTopics\.value\.length > 0 \? \[\{ key: "cron", label: "", topics: cronTopics\.value \}\] : \[\];/u);
-  assert.match(view, /v-if="cronTopics\.length > 0 \|\| topicSidebarView === 'cron'"/u);
+  assert.match(view, /const cronTopics = computed\(\(\) => cronTopicsOf\(topics\.value\)\);/u);
+  assert.match(view, /if \(topicSidebarView\.value === "cron"\) \{\s*return cronSidebarGroups\(topics\.value\);/u);
   assert.match(view, /@click="setTopicSidebarView\(topicSidebarView === 'cron' \? 'date' : 'cron'\)"/u);
   assert.match(view, /view === "tags" \|\| view === "agents" \|\| view === "cron" \? view : "date"/u);
   assert.match(view, /<PhAlarm v-else-if="isCronTopicID\(topic\.id\)" class="chat-topic-item-icon is-cron"/u);
@@ -69,4 +74,56 @@ test("a metadata poll brings a TODO topic's latest run time, which orders the TO
   // A rename still merges for every topic, with the newer time it came with.
   assert.deepEqual(mergeTopicMetadata(a, { ...ran, title: "A2", title_revision: 2 }), { ...ran, title: "A2", title_revision: 2 });
   assert.equal(mergeTopicMetadata(a, { ...a, tags: ["x"] }).tags[0], "x");
+});
+
+// The sidebar's own topics, as GET /topics returns them, with or without TODO items' topics.
+const ownTopics = [
+  { id: "01a1", title: "Trip plan", updated_at: "2026-11-05T08:00:00Z" },
+  { id: "_agentlink_inst_b", title: "Other agent", updated_at: "2026-11-05T11:00:00Z" },
+  { id: "_awareness", title: "Awareness", updated_at: "2026-11-05T12:00:00Z" },
+];
+const runTopics = [
+  { id: "_cron_weekly", title: "Weekly report", updated_at: "2026-11-05T09:00:00Z" },
+  { id: "_cron_nightly", title: "Nightly build", updated_at: "2026-11-05T10:00:00Z" },
+];
+
+// The toggle button of one sidebar view, from <AppButton to </AppButton>.
+function toggleButton(viewName) {
+  const click = view.indexOf(`@click="setTopicSidebarView(topicSidebarView === '${viewName}' ? 'date' : '${viewName}')"`);
+  assert.notEqual(click, -1, viewName);
+  return view.slice(view.lastIndexOf("<AppButton", click), view.indexOf("</AppButton>", click));
+}
+
+test("the TODO runs button is always in the sidebar, whether or not a TODO item has run", () => {
+  const button = toggleButton("cron");
+  assert.match(button, /<PhAlarm class="icon" \/>/u);
+  assert.match(button, /:aria-label="t\('chat_topics_view_cron'\)"/u);
+  // No condition at all, in particular none on the TODO items' topics.
+  assert.doesNotMatch(button, /v-if|v-show|cronTopics/u);
+  // The agents button, beside it, shows that the check sees a condition when there is one.
+  assert.match(toggleButton("agents"), /v-if="agentTopics\.length > 0/u);
+});
+
+test("with no TODO run topic, the TODO view is empty and says so; it never lists other topics", () => {
+  assert.deepEqual(cronTopicsOf(ownTopics), []);
+  assert.deepEqual(cronSidebarGroups(ownTopics), []);
+  for (const none of [[], null, undefined]) {
+    assert.deepEqual(cronSidebarGroups(none), []);
+  }
+  // The empty note is tied to the view and to there being no TODO topic, and has its text.
+  assert.match(view, /<p v-if="topicSidebarView === 'cron' && cronTopics\.length === 0" class="chat-topic-tags-hint">\s*\{\{ t\("chat_topics_cron_empty"\) \}\}/u);
+  assert.match(i18n, /chat_topics_cron_empty: "No TODO item has run yet\. Once an item runs, /u);
+  // Pressed again, the button goes back to the ordinary list, which keeps TODO topics out.
+  assert.match(toggleButton("cron"), /:aria-pressed="topicSidebarView === 'cron' \? 'true' : 'false'"/u);
+  assert.match(view, /topicSidebarView\.value = view === "tags" \|\| view === "agents" \|\| view === "cron" \? view : "date";/u);
+});
+
+test("with TODO run topics, the TODO view lists them only, the latest run first", () => {
+  const groups = cronSidebarGroups([...ownTopics, ...runTopics]);
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0].key, "cron");
+  assert.equal(groups[0].label, "");
+  assert.deepEqual(groups[0].topics.map((topic) => topic.id), ["_cron_nightly", "_cron_weekly"]);
+  // The loaded list is left as it was.
+  assert.deepEqual(runTopics.map((topic) => topic.id), ["_cron_weekly", "_cron_nightly"]);
 });
