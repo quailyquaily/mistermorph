@@ -97,3 +97,19 @@ Tests: gofmt, `go vet ./...` and `go test ./...` pass, with a throwaway HOME; `i
 Not checked: the UI was not looked at in a browser, at desktop or phone width, and no real TODO run or rename was made through the Console.
 
 Merging with FT10: as before, the branches conflict in `console_store.go` and `ChatView.js`; merge FT10 first.
+
+
+## factory · review · 2026-11-05 09:59
+head: 8b30ed8e4aad3ab5d9655b2ce2fa397e0c752ecc
+verdict: pass
+notes:
+- [P2] internal/daemonruntime/console_store.go:1231: Restrict the repeated-title optimization to cron recording; ordinary explicit title submissions must preserve title-customization/revision protection. Verified example: while a generated title is pending for a normal topic titled `Weekly report`, submit `/help` with `topic_title: "Weekly report"`; revision stays 1 and the late generated title overwrites the explicit choice. Restoring the previous condition via overlay increments the revision to 2 and rejects the late result.
+- [P3] web/console/src/views/ChatView.js:1083: Enforce the cron topic no-tags constraint at the backend tag-write endpoint as well as in the UI. Verified example: authenticated `PUT /topics/_cron_weekly/tags` with `{"tags":["Work"]}` returns 200 and persists the tag.
+
+Reviewed all 18 changed files in origin/master...HEAD against master b6244cab2d8a421431f52accb2bc05a9282448ae (merge base 2bce552ee9e2c604830ea600ef7be055f3e71df0). No P0/P1 findings; moves to ready/ under the factory gate. The owner should consider the P2/P3 notes before shipping. Merge-tree confirms a clean merge with current master; no merge or code changes made.
+
+Validation: required gofmt/vet/Go-test command passed on its first run; pnpm test passed 384/384; pnpm build with output redirected to the review artifact directory passed with a large-chunk warning. Both codemode cancellation tests passed 30 repetitions each. Prior four P2 fixes verified through code, regression tests and frontend expression execution. git diff --check passed. Tests used a throwaway absolute HOME; source worktree and HEAD unchanged.
+
+Installs: none. No linked GitHub issues or PRs present.
+
+Residual risks: desktop/mobile UI not observed in a browser; no real LLM-driven TODO run performed. The explicitly deferred need to reload for a newly created TODO topic remains. Codex did not have the review-code skill available locally and used its own review workflow.
