@@ -1,6 +1,6 @@
 ---
 branch: factory/FT9-guard-stream-redaction
-round: 3
+round: 4
 ---
 # Guard: redact streamed tool output instead of dropping it
 
@@ -159,3 +159,42 @@ Left for when this is picked up again:
 - The open findings of the last review are above.
 
 Nothing was merged; with Guard on, the Console still shows coder status lines only.
+
+## factory · plan · 2026-11-05 16:14
+Round 4 replaces the plan above. The line-by-line redactor is removed; the approach is the one suggested when the item was shelved.
+
+**Behaviour**
+1. The coder reports each complete unit of its output once it is whole, as a `tool_output_unit` event beside the live `tool_output` events: a command line (when the command starts), a completed command's whole output, a whole assistant message, a tool's input and its result, an error message, and at the end of the run all of stderr and any stdout lines that were not events. A unit is the text exactly as written.
+2. With Guard on, the Console shows each unit, redacted as a whole, under the status line it belongs to. The live pieces are still dropped, as on master.
+3. `Guard.RedactCompleteOutput` is `RedactString`, and also hides the part of a private key block that a complete text holds without its END line (hidden from BEGIN on) or without its BEGIN line (hidden up to END), as `[redacted private key]`.
+4. A tool's input is written as `key: value` lines with every string as it is, not as JSON.
+5. stderr and plain stdout lines are held to the end of the run. Past 1 MiB, or with a line skipped (over 4 MiB), none of it is shown, only a note that it was left out.
+6. Guard off: the Console ignores units and shows the live pieces as before. The chat trace never records units.
+
+**Scope**
+- `guard/redact_complete.go`, `agent/coder_tool.go`, `agent/events.go`, the Console event sink, `internal/chattrace/collector.go`, `docs/security.md`. `guard/stream_redact.go` and the earlier rounds' changes to the live path (`Event.Part`, raw parts, untrimmed deltas, the removed preview cut) are gone: against master, the live path is unchanged.
+- Left out: other streamed tool output (a shell command's stdout and stderr), still not shown while it streams with Guard on; other channels' coder progress notifications; the dropped spaces in streamed text with Guard off that round 2 fixed along the way, which is a separate defect of master.
+
+**Decisions**
+- Acceptance criterion 1 asks for output "live, line by line". It is met per unit instead: output appears when its unit is complete, not line by line. Three reviews showed that line-by-line release has to predict Guard's patterns on text not yet seen; redacting a complete unit equals whole-text redaction by construction. Status lines stay live. A long command shows its output when it ends.
+- Guard sees one unit at a time, as it sees one tool result at a time. A secret spread over two units (two commands' outputs) is not matched across them. Documented.
+- An END line without its BEGIN hides the unit up to it, and held output over the limit is not shown at all: fail closed, at the cost of hiding more.
+- A new event kind, not a flag on `tool_output`, so every existing consumer ignores it without a change; the chat trace, which records all events, drops it.
+
+**Checking**
+- Guard: complete texts equal `RedactString` (each built-in pattern, cross-line whitespace including form feed, a two-line quoted value, a custom multi-line pattern, 400 KB lines); key blocks whole, without END, without BEGIN, END and BEGIN on one line, oversized, and inside a custom block or a quoted value.
+- Coder: a command's growing output gives no unit until it completes, then the whole output with its edges; messages only when complete, with the spaces between text parts; tool input with a line break and a quote; stderr and plain lines whole at the end, before the last status line; too large or with a lost line.
+- Console: for each built-in pattern, a key block (whole, without END, without BEGIN), a custom multi-line pattern, a secret past the preview length and one in a 140 KB line, the output is fed live cut at every position and then as a unit: no frame holds 8 characters in a row of the secret, and the output ends with the redacted unit. Labels and order. Guard off: frames are identical with and without units.
+
+## factory · 2026-11-05 16:14
+Round 4, at the owner's word in chat ("implement FT9 and directly move to review status"), in the factory's build directory, outside the scheduled run. Master (4ea09a6d) was merged into the branch (6e05a96a, one conflict in `stream_events.go`), then d4cb9514.
+
+Built: as planned above. The findings of the round 3 review no longer have code to apply to, and their cases are covered by the new design: tool input is not JSON and message parts keep their spaces; an unmatched key BEGIN inside a custom block or a quoted value is redacted with the enclosing match first; a skipped stderr line hides all of stderr; form feed and a quote inside a key block follow whole-text redaction.
+
+Installs: none.
+
+Tests: gofmt, `go vet ./...` and `go test ./...` pass, with a throwaway HOME; `guard`, `agent`, `internal/chattrace` and `cmd/mistermorph/consolecmd` pass under `-race`. The Console tests fail when units are shown unredacted, when `RedactString` is used in place of `RedactCompleteOutput`, and when units are shown with Guard off. No Console frontend change, so `pnpm` was not run.
+
+Not checked: a real Codex or Claude Code run in the Console with Guard on. Whether completed Codex commands and messages always arrive as `item.completed` events was taken from the existing collector and its tests, not from a live run.
+
+For the owner: criterion 1 is met per unit, not line by line (see Decisions). Moved backlog/ → review/.
