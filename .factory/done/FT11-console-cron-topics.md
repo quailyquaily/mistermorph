@@ -113,3 +113,15 @@ Validation: required gofmt/vet/Go-test command passed on its first run; pnpm tes
 Installs: none. No linked GitHub issues or PRs present.
 
 Residual risks: desktop/mobile UI not observed in a browser; no real LLM-driven TODO run performed. The explicitly deferred need to reload for a newly created TODO topic remains. Codex did not have the review-code skill available locally and used its own review workflow.
+
+## lyric · 2026-11-05 10:13
+check all items in ready, if they are fine, merge to master, new tag, push
+
+## factory · 2026-11-05 10:13
+Checked and found fine to ship: the review passed at the branch head (8b30ed8e), with no P0 or P1.
+
+Merged into master as 353bdd87, after FT10. The two expected conflicts were resolved keeping both sides: in `console_store.go` the task list leaves TODO topics out unless `AllTopics` is set, so topic activity counts them; in `ChatView.js` both sets of names are returned. Gate on the merged master (FT10 and FT11 together): gofmt, `go vet ./...` and `go test ./...` pass, with a throwaway HOME; `pnpm test` 387/387 and `pnpm build` pass. Pushed to master and tagged v0.3.77.
+
+Looked at in a browser, on the merged build with a throwaway home and a stand-in LLM: with only a TODO topic the sidebar and its alarm toggle show; the toggle lists the TODO topics, the latest run first, each with the alarm icon; an open TODO topic shows its run and the read-only note; a task submitted to it is refused (400); saving a renamed item renames its topic in the list within the poll, without a reload; the list and toggle work at phone width (about 400px). No console errors.
+
+Shipped with the second review's notes open: [P2] a task submitted with a topic title equal to the topic's current one no longer protects that title from a pending generated one (the Console itself never sends a topic title); [P3] the tag route still accepts a TODO topic. A TODO topic created while the page is open still shows only after a reload. The codemode fix on this branch (29b1b622) was already on master as b6244cab. No linked GitHub issues or PRs to close.

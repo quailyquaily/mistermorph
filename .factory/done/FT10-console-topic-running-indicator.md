@@ -62,3 +62,15 @@ Validation: configured gofmt/vet/Go test command passed in a full HEAD source co
 Installs: none beyond restoring pinned console dependencies with pnpm install --frozen-lockfile.
 
 Not checked: Chrome could not start; desktop/phone visual behavior and real task flows were not browser-verified. Reproduction artifacts retained in the review run directory. No linked GitHub issue or PR.
+
+## lyric · 2026-11-05 10:13
+check all items in ready, if they are fine, merge to master, new tag, push
+
+## factory · 2026-11-05 10:13
+Checked and found fine to ship: the review passed at the branch head (78c6d18a), with no P0 or P1.
+
+Merged into master as 734939d5, cleanly. Gate on the merged master (FT10 and FT11 together): gofmt, `go vet ./...` and `go test ./...` pass, with a throwaway HOME; `pnpm test` 387/387 and `pnpm build` pass. Pushed to master and tagged v0.3.77 (at 353bdd87, with FT11).
+
+Looked at in a browser, on the merged build with a throwaway home and a stand-in LLM: a topic's dot appears while its task runs and goes when the task is stopped, without a reload; it shows on TODO topics too; at phone width (about 400px) the dot sits at the right of the item. No console errors.
+
+Shipped with the review's two P2 notes open: polls that take longer than 5 seconds drop every response, so the dot never shows on a slow runtime; and activity counts only the first 201 tasks of each status. The steady blue dot of a pending task was not seen. No linked GitHub issues or PRs to close.
