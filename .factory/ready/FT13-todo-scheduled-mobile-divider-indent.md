@@ -28,3 +28,14 @@ Tests: frontend 389 tests and pnpm build passed; gofmt check, go vet ./... and g
 Installs: no new unpinned tools or dependency manifest/lockfile changes reported.
 Not checked: backend-connected full navigation, error and first-run flows; browser checks used mocked data.
 Moved new/ → review/ for review; not merged into master.
+
+## factory · review · 2026-11-05 11:43
+head: 20c1985eb64618abf3af9227eca10fc246ca3d54
+verdict: pass
+notes:
+- Codex review of origin/master...HEAD found no actionable defects. Branch merges cleanly with master.
+- Reviewer ran gofmt check, go vet ./..., go test ./..., pnpm test (389 passing), and pnpm build successfully; build retains a large-chunk warning.
+- Reviewer reports Chromium checks at seven widths (320–1440px), across empty, populated, loading and refreshing states: matching 14px mobile insets and unchanged 30px desktop insets; reproduced the previous extra 16px mobile inset.
+- Browser validation used actual template fragments, built CSS and mock data; full backend flows and Safari were not checked. Added repository tests assert source structure.
+- No unpinned installs, source changes or review commits.
+- Moved review/ → ready/; awaiting owner approval, not merged.
