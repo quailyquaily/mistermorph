@@ -144,34 +144,51 @@ becomes:
 
 You can add extra regex patterns under `guard.redaction.patterns`.
 
-#### Streamed tool output in the Console
+#### Coder output in the Console
 
-Tool output that streams while the tool runs, such as a coder's progress or a command's
-stdout, arrives in pieces that could split a secret. With Guard on, the Console redacts each
-stream the way an inline stream inspector does: it holds back only what could still become
-part of a match and shows the rest, redacted, as soon as it is safe
-(`guard/stream_redact.go`). Fed the raw text, the result equals redacting the whole text at
-once, except where it fails closed.
+A coder (Codex, Claude Code) reports its work while it runs, and that output arrives in
+pieces that can split a secret anywhere. Redaction looks at the text it is given and no
+further, so pieces cannot be redacted one by one. With Guard on, the Console therefore does
+not show the pieces. It shows each **complete unit** of the coder's output as soon as the unit
+is whole, redacted as a whole (`Guard.RedactCompleteOutput`), under the status line it
+belongs to:
 
-- Each stream is the raw text. A coder sends its status lines apart from its raw output, and
-  each raw stream separately: every command's output, its stderr and the assistant's text
-  (the event's `part` names it). Nothing trims, prefixes, cuts or formats the raw text before
-  it is redacted; previews are cut afterwards.
-- Output is shown a line at a time. Lines are held while a match may continue past them:
-  inside a private key block (`BEGIN` to `END`, following every marker on a line in order),
-  after a line ending in `:`, `=` or `bearer`, inside a quoted `MISTER_MORPH_*` value, and,
-  with a custom pattern that may span lines (one with `(?s)` or `\n`), to the end of the
-  stream. Other custom patterns should match within one line.
-- It never tries to recover from uncertainty. When held text or a single line passes 64 KB,
-  nothing held is shown, and the rest of that stream is replaced by
-  `[rest of this output hidden: it could not be checked for secrets]`.
-- When a tool call ends, what its streams still hold is shown, redacted. A private key block
-  that never closed is shown as `[redacted private key]`.
+- a command line, when the command starts, and the command's whole output, when it has
+  completed; output still growing is not shown
+- a whole assistant message, when it is complete; text still being written is not shown
+- a tool's input and a tool's result
+- an error message
+- at the end of the run, everything the CLI wrote to stderr, and any stdout lines that were
+  not events, each as one text
 
-Redaction in the stream uses the same patterns as everywhere else, so text Guard does not
-recognize as a secret (for example a sensitive value shorter than 12 characters) is shown,
-as it would be in a final answer. Agent Link messages are complete when sent and are redacted
-whole. A spawn or coder result keeps only its status in the Console.
+What is shown for a unit is exactly Guard's redaction of that unit's whole text, so a secret
+split across the pieces of a unit, or lying past any preview length, is never shown in part.
+Previews are cut from the redacted text, never before. Three rules keep that true:
+
+- **Units are raw.** A unit is the text as written: not trimmed, prefixed, joined with
+  separators or escaped. A tool's input is written as `key: value` lines with every string as
+  it is, not as JSON, which would escape the line breaks a pattern may need.
+- **Parts of private key blocks are hidden.** A whole block is redacted as everywhere else. A
+  unit that holds a `BEGIN … PRIVATE KEY` line without its `END` line is hidden from that line
+  on, and one that holds an `END` line without its `BEGIN` is hidden up to it; each shows
+  `[redacted private key]` in its place.
+- **What cannot be checked whole is not shown.** stderr and plain stdout lines are held until
+  the run ends. If either grows past 1 MiB, or loses a line (lines over 4 MiB are skipped), none
+  of it is shown, only a note that it was left out.
+
+Limits to know:
+
+- Guard sees one unit at a time, as it sees one tool result at a time. A secret that a coder
+  spreads over two units, such as two commands' outputs, is not matched across them.
+- Redaction uses the same patterns as everywhere else, so text Guard does not recognize as a
+  secret (for example a sensitive value shorter than 12 characters) is shown, as it would be
+  in a final answer.
+- Other streamed tool output, such as a shell command's stdout and stderr, is still not shown
+  while it streams; its result is redacted when the tool ends. Agent Link messages are complete
+  when sent and are redacted whole. A spawn or coder result keeps only its status.
+
+With Guard off, nothing changes: the Console shows the pieces as they arrive, and the units,
+which repeat them, are ignored.
 
 ### Async approvals and audit
 

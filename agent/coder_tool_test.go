@@ -10,7 +10,6 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -909,90 +908,5 @@ func TestCoderProcessReporting(t *testing.T) {
 				}
 			})
 		}
-	}
-}
-
-// Review finding: status lines were inserted between pieces of one command line, so Guard saw
-// fragments of a secret as separate lines. Each command's output now goes out as it was printed.
-func TestCoderStreamCollectorSendsCommandOutputRawPerCommand(t *testing.T) {
-	collector := newCoderStreamCollector(coderBackendCodex, nil)
-	var status []string
-	raw := map[string]string{}
-	var order []string
-	collector.progress = func(_, text, _ string) { status = append(status, text) }
-	collector.output = func(part, text string) {
-		raw[part] += text
-		order = append(order, part)
-	}
-	const key = "abcdefghijklmnopqrstuvwx"
-	long := strings.Repeat("x", 1500)
-	for _, line := range []string{
-		`{"type":"item.started","item":{"id":"item_1","type":"command_execution","status":"in_progress","command":"cat .env","aggregated_output":""}}`,
-		`{"type":"item.updated","item":{"id":"item_1","type":"command_execution","status":"in_progress","command":"cat .env","aggregated_output":"API_KEY=` + key[:8] + `"}}`,
-		`{"type":"item.started","item":{"id":"item_2","type":"command_execution","status":"in_progress","command":"ls","aggregated_output":"a\n"}}`,
-		`{"type":"item.updated","item":{"id":"item_1","type":"command_execution","status":"in_progress","command":"cat .env","aggregated_output":"API_KEY=` + key + `\n` + long + `"}}`,
-		`{"type":"item.completed","item":{"id":"item_1","type":"command_execution","status":"completed","command":"cat .env","aggregated_output":"API_KEY=` + key + `\n` + long + `","exit_code":0}}`,
-		`{"type":"item.completed","item":{"id":"item_2","type":"command_execution","status":"completed","command":"ls","aggregated_output":"a\n","exit_code":0}}`,
-	} {
-		if err := collector.ConsumeLine([]byte(line)); err != nil {
-			t.Fatal(err)
-		}
-	}
-	// The output of each command is exactly what it printed, uncut, plus a closing newline.
-	if want := "API_KEY=" + key + "\n" + long + "\n"; raw["item_1"] != want {
-		t.Fatalf("item_1 output = %q...", raw["item_1"][:40])
-	}
-	if raw["item_2"] != "a\n" {
-		t.Fatalf("item_2 output = %q", raw["item_2"])
-	}
-	for _, text := range status {
-		if strings.Contains(text, key[:8]) || strings.Contains(text, "xxxx") {
-			t.Fatalf("status line carries output: %q", text)
-		}
-	}
-	if got := strings.Join(status, ""); !strings.Contains(got, "command_execution completed (item_1) exit=0 $ cat .env") {
-		t.Fatalf("status = %q", got)
-	}
-	if !reflect.DeepEqual(order, []string{"item_1", "item_2", "item_1", "item_1"}) {
-		t.Fatalf("output order = %v", order)
-	}
-}
-
-// Review finding: stderr lines carried a prefix and Claude's text pieces were trimmed, so Guard
-// saw "api_key=" and its value, or "Bearer " and its token, apart. Both now go out as written.
-func TestRunCoderCLISendsStderrAndTextRaw(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("fake shell executable uses /bin/sh")
-	}
-	binDir := t.TempDir()
-	script := `printf 'api_key=\nabcdefghijklmnopqrstuvwx\n' >&2
-printf '%s\n' '{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"Authorization: Bearer "}}}'
-printf '%s\n' '{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"abcdefghijklmnopqrstuvwx done"}}}'
-printf '%s\n' '{"type":"result","result":"Authorization: Bearer abcdefghijklmnopqrstuvwx done"}'
-`
-	writeFakeCoderExecutable(t, binDir, "claude", script)
-	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-
-	var mu sync.Mutex
-	parts := map[string]string{}
-	var status strings.Builder
-	_, err := runCoderCLI(context.Background(), CoderRequest{
-		Backend:  coderBackendClaude,
-		Task:     "x",
-		CWD:      t.TempDir(),
-		Progress: func(_, text, _ string) { mu.Lock(); status.WriteString(text); mu.Unlock() },
-		Output:   func(part, text string) { mu.Lock(); parts[part] += text; mu.Unlock() },
-	}, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := parts[coderOutputPartStderr]; got != "api_key=\nabcdefghijklmnopqrstuvwx\n" {
-		t.Fatalf("stderr = %q", got)
-	}
-	if got := parts[coderOutputPartText]; got != "Authorization: Bearer abcdefghijklmnopqrstuvwx done" {
-		t.Fatalf("text = %q", got)
-	}
-	if strings.Contains(status.String(), "abcdefgh") {
-		t.Fatalf("status lines carry output: %q", status.String())
 	}
 }

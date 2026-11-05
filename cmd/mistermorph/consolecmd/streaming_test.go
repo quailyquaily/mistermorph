@@ -2,6 +2,7 @@ package consolecmd
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
@@ -337,50 +338,46 @@ func TestConsoleEventPreviewSinkPublishesCoderActivityOutput(t *testing.T) {
 	}
 }
 
-func TestConsoleEventPreviewSinkRedactsStreamedToolOutputWhenGuardEnabled(t *testing.T) {
+func TestConsoleEventPreviewSinkHidesRawToolOutputWhenGuardEnabled(t *testing.T) {
 	hub := newConsoleStreamHub()
 	outputGuard := guard.New(guard.Config{Enabled: true}, nil, nil)
 	sink := newConsoleEventPreviewSink(hub, "task-guarded-tool", nil, outputGuard)
-	defer sink.Close()
-	const secret = "s3cr3tVALUEs3cr3tVALUE"
 
-	sink.HandleEvent(context.Background(), agent.Event{Kind: agent.EventKindToolStart, ActivityID: "tool:coder", ToolName: "coder", Status: "running"})
-	// The secret arrives split across two events; the line is shown once it is complete.
-	output := func(text string) {
-		sink.HandleEvent(context.Background(), agent.Event{
-			Kind: agent.EventKindToolOutput, ActivityID: "tool:coder", ToolName: "coder", Stream: "codex",
-			Text: text, Summary: "[codex] command_execution completed (item_1) exit=0", Status: "running",
-		})
-	}
-	output("$ cat .env\napi_key=" + secret[:9])
-	if frame, ok := hub.Latest("task-guarded-tool"); ok && frame.Activity != nil {
-		for _, entry := range frame.Activity.History {
-			if strings.Contains(entry.Output, secret[:9]) {
-				t.Fatalf("partial line shown: %q", entry.Output)
-			}
-		}
-	}
-	output(secret[9:] + "\nok\nlast line without newline")
 	sink.HandleEvent(context.Background(), agent.Event{
-		Kind: agent.EventKindToolDone, ActivityID: "tool:coder", ToolName: "coder", Status: "failed",
-		Error: "api_key=" + secret,
+		Kind:       agent.EventKindToolStart,
+		ActivityID: "tool:coder",
+		ToolName:   "coder",
+		Status:     "running",
+	})
+	sink.HandleEvent(context.Background(), agent.Event{
+		Kind:       agent.EventKindToolOutput,
+		ActivityID: "tool:coder",
+		ToolName:   "coder",
+		Stream:     "codex",
+		Text:       "password=unredacted",
+		Status:     "running",
+	})
+	sink.HandleEvent(context.Background(), agent.Event{
+		Kind:       agent.EventKindToolDone,
+		ActivityID: "tool:coder",
+		ToolName:   "coder",
+		Status:     "failed",
+		Error:      "password=unredacted",
 	})
 
 	frame, ok := hub.Latest("task-guarded-tool")
-	if !ok || frame.Activity == nil || len(frame.Activity.History) != 1 {
-		t.Fatalf("frame = %#v", frame)
+	if !ok {
+		t.Fatal("expected status-only preview frame")
 	}
-	got := frame.Activity.History[0].Output
-	if strings.Contains(got, secret[:9]) || strings.Contains(got, secret[9:]) || strings.Contains(frame.Text, secret[9:]) {
-		t.Fatalf("leaked secret: %q / %q", got, frame.Text)
+	if strings.Contains(frame.Text, "unredacted") {
+		t.Fatalf("preview leaked raw tool output: %q", frame.Text)
 	}
-	// The held last line is shown, redacted, when the call ends; the error is still dropped.
-	if got != "$ cat .env\napi_key=[redacted]\nok\nlast line without newline" || frame.Activity.History[0].Error != "" {
-		t.Fatalf("output = %q, error = %q", got, frame.Activity.History[0].Error)
+	if frame.Activity != nil && frame.Activity.Current != nil && strings.Contains(frame.Activity.Current.Output, "unredacted") {
+		t.Fatalf("activity leaked raw tool output: %#v", frame.Activity.Current)
 	}
 }
 
-func TestConsoleEventPreviewSinkShowsCoderOutputLineByLineWhenGuardEnabled(t *testing.T) {
+func TestConsoleEventPreviewSinkKeepsCoderStatusWhenGuardEnabled(t *testing.T) {
 	for _, backend := range []string{"claude", "codex"} {
 		t.Run(backend, func(t *testing.T) {
 			hub := newConsoleStreamHub()
@@ -388,10 +385,9 @@ func TestConsoleEventPreviewSinkShowsCoderOutputLineByLineWhenGuardEnabled(t *te
 			defer sink.Close()
 			summary := "[" + backend + "] tool completed"
 			sink.HandleEvent(context.Background(), agent.Event{Kind: agent.EventKindToolStart, ActivityID: "coder", ToolName: "coder", Status: "running"})
-			sink.HandleEvent(context.Background(), agent.Event{Kind: agent.EventKindToolOutput, ActivityID: "coder", ToolName: "coder", Stream: backend, Summary: summary,
-				Text: "\n" + summary + " $ go test ./...\nok  pkg\n"})
+			sink.HandleEvent(context.Background(), agent.Event{Kind: agent.EventKindToolOutput, ToolName: "coder", Stream: backend, Summary: summary, Text: "private file contents"})
 			frame, _ := hub.Latest("task")
-			if frame.Activity == nil || frame.Activity.Current == nil || frame.Activity.Current.Output != "\n"+summary+" $ go test ./...\nok  pkg\n" {
+			if frame.Activity == nil || frame.Activity.Current == nil || !strings.Contains(frame.Activity.Current.Output, summary) || strings.Contains(frame.Activity.Current.Output, "private") {
 				t.Fatalf("guarded progress = %#v", frame.Activity)
 			}
 		})
@@ -678,111 +674,152 @@ func TestConsoleEventPreviewSinkWebExtractSchedulesObserverSummary(t *testing.T)
 	t.Fatalf("observer summary did not appear, latest=%s", fmt.Sprintf("%#v", frame))
 }
 
-// Review findings: a secret split across coder output pieces leaked as fragments, and a custom
-// block crossing the preview cut lost its closing marker.
-func TestConsoleEventPreviewSinkRedactsCoderCommandOutputAcrossPieces(t *testing.T) {
-	redacting := guard.New(guard.Config{Enabled: true, Redaction: guard.RedactionConfig{Enabled: true,
-		Patterns: []guard.RegexPattern{{Name: "block", Re: `(?s)<secret>.*?</secret>`}}}}, nil, nil)
+// guardedCoderFrames feeds events to a sink and returns, as JSON, every frame the task had
+// after each of them: all that a Console could have shown.
+func guardedCoderFrames(t *testing.T, g *guard.Guard, events ...agent.Event) []string {
+	t.Helper()
 	hub := newConsoleStreamHub()
-	sink := newConsoleEventPreviewSink(hub, "task", nil, redacting)
+	sink := newConsoleEventPreviewSink(hub, "task", nil, g)
 	defer sink.Close()
-	ctx := context.Background()
-	const key = "abcdefghijklmnopqrstuvwx"
-	status := func(text string) {
-		sink.HandleEvent(ctx, agent.Event{Kind: agent.EventKindToolOutput, ActivityID: "coder", ToolName: "coder", Stream: "codex",
-			Summary: text, Text: "\n" + text + "\n", Status: "running"})
-	}
-	raw := func(part, text string) {
-		sink.HandleEvent(ctx, agent.Event{Kind: agent.EventKindToolOutput, ActivityID: "coder", ToolName: "coder", Stream: "codex",
-			Part: part, Text: text, Status: "running"})
-	}
-	var shown strings.Builder
-	record := func() {
-		if frame, ok := hub.Latest("task"); ok && frame.Activity != nil && frame.Activity.Current != nil {
-			shown.WriteString(frame.Activity.Current.Output)
-			shown.WriteString(frame.Text)
-		}
-	}
-	sink.HandleEvent(ctx, agent.Event{Kind: agent.EventKindToolStart, ActivityID: "coder", ToolName: "coder", Status: "running"})
-	status("[codex] command_execution in_progress (item_1) $ cat .env")
-	raw("item_1", "api_key="+key[:8])
-	record()
-	status("[codex] command_execution in_progress (item_2) $ ls")
-	raw("item_2", "a\n")
-	record()
-	raw("item_1", key[8:]+"\n"+strings.Repeat("y", 990)+"<secret>\n")
-	record()
-	raw("item_1", "PAYLOAD-0123456789\n</secret>\ndone\n")
-	record()
-	status("[codex] command_execution completed (item_1) exit=0 $ cat .env")
-	sink.HandleEvent(ctx, agent.Event{Kind: agent.EventKindToolDone, ActivityID: "coder", ToolName: "coder", Status: "done"})
-	record()
-
-	all := shown.String()
-	for _, piece := range []string{key[:8], key[8:], "PAYLOAD"} {
-		if strings.Contains(all, piece) {
-			t.Fatalf("shown %q", piece)
-		}
-	}
-	frame, _ := hub.Latest("task")
-	final := frame.Activity.History[0].Output
-	for _, want := range []string{"api_key=[redacted]", "[redacted]\ndone\n", "$ ls\n", "a\n", "exit=0 $ cat .env"} {
-		if !strings.Contains(final, want) {
-			t.Fatalf("output missing %q:\n%s", want, final)
-		}
-	}
-}
-
-// Review note: with Guard off, a long output line is shown, not cut to "…".
-func TestConsoleEventPreviewSinkShowsLongOutputWithoutGuard(t *testing.T) {
-	hub := newConsoleStreamHub()
-	sink := newConsoleEventPreviewSink(hub, "task", nil, nil)
-	defer sink.Close()
-	long := strings.Repeat("z", 1100)
 	sink.HandleEvent(context.Background(), agent.Event{Kind: agent.EventKindToolStart, ActivityID: "coder", ToolName: "coder", Status: "running"})
-	sink.HandleEvent(context.Background(), agent.Event{Kind: agent.EventKindToolOutput, ActivityID: "coder", ToolName: "coder", Stream: "codex", Part: "item_1", Text: long + "\n"})
-	frame, _ := hub.Latest("task")
-	if frame.Activity == nil || frame.Activity.Current.Output != long+"\n" {
-		t.Fatalf("frame = %#v", frame.Activity)
+	var frames []string
+	for _, event := range events {
+		event.ActivityID, event.ToolName, event.Status = "coder", "coder", "running"
+		if event.Stream == "" {
+			event.Stream = "codex"
+		}
+		sink.HandleEvent(context.Background(), event)
+		frame, _ := hub.Latest("task")
+		raw, err := json.Marshal(frame)
+		if err != nil {
+			t.Fatal(err)
+		}
+		frames = append(frames, string(raw))
+	}
+	return frames
+}
+
+// consoleCoderOutput is the coder's output in the last frame.
+func consoleCoderOutput(t *testing.T, frames []string) string {
+	t.Helper()
+	var frame consoleStreamFrame
+	if err := json.Unmarshal([]byte(frames[len(frames)-1]), &frame); err != nil {
+		t.Fatal(err)
+	}
+	if frame.Activity == nil || frame.Activity.Current == nil {
+		return ""
+	}
+	return frame.Activity.Current.Output
+}
+
+// assertNoPieceShown fails when any frame holds eight characters in a row of secret.
+func assertNoPieceShown(t *testing.T, frames []string, secret string) {
+	t.Helper()
+	for i := 0; i+8 <= len(secret); i++ {
+		piece := secret[i : i+8]
+		for n, frame := range frames {
+			if strings.Contains(frame, piece) {
+				t.Fatalf("frame %d shows %q of the secret: %s", n, piece, frame)
+			}
+		}
 	}
 }
 
-// Review finding: coder stderr and assistant text reached Guard formatted; as raw parts they
-// are redacted across pieces.
-func TestConsoleEventPreviewSinkRedactsCoderStderrAndText(t *testing.T) {
-	hub := newConsoleStreamHub()
-	sink := newConsoleEventPreviewSink(hub, "task", nil, guard.New(guard.Config{Enabled: true}, nil, nil))
-	defer sink.Close()
-	ctx := context.Background()
-	const secret = "abcdefghijklmnopqrstuvwx"
-	part := func(name, text string) {
-		sink.HandleEvent(ctx, agent.Event{Kind: agent.EventKindToolOutput, ActivityID: "coder", ToolName: "coder", Stream: "claude", Part: name, Text: text, Status: "running"})
+func outputPiece(text string) agent.Event {
+	return agent.Event{Kind: agent.EventKindToolOutput, Text: text}
+}
+
+func outputUnit(label, text string) agent.Event {
+	return agent.Event{Kind: agent.EventKindToolOutputUnit, Summary: label, Text: text}
+}
+
+// With Guard on, a coder's output is shown from its complete units, each redacted as a whole.
+// The live pieces, which may split a secret anywhere, are never shown.
+func TestConsoleEventPreviewSinkShowsRedactedCoderUnitsWhenGuardEnabled(t *testing.T) {
+	on := guard.New(guard.Config{Enabled: true, Redaction: guard.RedactionConfig{Enabled: true,
+		Patterns: []guard.RegexPattern{{Name: "block", Re: `(?s)<secret>.*?</secret>`}}}}, nil, nil)
+	jwt := "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U"
+	for _, tc := range []struct {
+		name   string
+		text   string // one complete piece of output
+		secret string
+		want   string // what the Console shows for it
+	}{
+		{"sensitive key and value", "token=abcdefghijklmnopqrstuvwx\nok\n", "abcdefghijklmnopqrstuvwx", "token=[redacted]\nok\n"},
+		{"value on the next line", "api_key=\nabcdefghijklmnopqrstuvwx\n", "abcdefghijklmnopqrstuvwx", "api_key=\n[redacted]\n"},
+		{"bearer token", "Authorization: Bearer abcdefghijklmnopqrstuvwx\n", "abcdefghijklmnopqrstuvwx", "Authorization: Bearer [redacted]\n"},
+		{"JWT", "jwt " + jwt + " end\n", jwt, "jwt [redacted_jwt] end\n"},
+		{"MISTER_MORPH value over two lines", "MISTER_MORPH_API_KEY=\"first line\nsecondSECRET123456\" rest\n", "secondSECRET123456", "[redacted_env]=[redacted] rest\n"},
+		{"private key block", "-----BEGIN RSA PRIVATE KEY-----\nSENSITIVEPAYLOAD123456\n-----END RSA PRIVATE KEY-----\n", "SENSITIVEPAYLOAD123456", "-----BEGIN PRIVATE KEY-----\n[redacted]\n-----END PRIVATE KEY-----\n"},
+		{"private key block without END", "key:\n-----BEGIN RSA PRIVATE KEY-----\nSENSITIVEPAYLOAD123456", "SENSITIVEPAYLOAD123456", "key:\n[redacted private key]\n"},
+		{"private key block without BEGIN", "SENSITIVEPAYLOAD123456\n-----END RSA PRIVATE KEY-----\nok\n", "SENSITIVEPAYLOAD123456", "[redacted private key]\nok\n"},
+		{"custom pattern over lines", "a <secret>\nSENSITIVEPAYLOAD123456\n</secret> z\n", "SENSITIVEPAYLOAD123456", "a [redacted] z\n"},
+		{"secret past the preview length", strings.Repeat("safe\n", 300) + "token=abcdefghijklmnopqrstuvwx\n", "abcdefghijklmnopqrstuvwx", ""},
+		{"secret in a very long line", strings.Repeat("x", 70_000) + " " + strings.Repeat("y", 70_000) + " token=abcdefghijklmnopqrstuvwx\ntail\n", "abcdefghijklmnopqrstuvwx", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// The output arrives live cut at every position in turn, then whole as a unit.
+			for cut := 0; cut <= len(tc.text); cut += 1 + len(tc.text)/97 {
+				frames := guardedCoderFrames(t, on,
+					agent.Event{Kind: agent.EventKindToolOutput, Summary: "[codex] command_execution in_progress (item_1)", Text: "[codex] command_execution in_progress (item_1) $ cat x\n" + tc.text[:cut]},
+					outputPiece(tc.text[cut:]),
+					outputUnit("", tc.text),
+				)
+				assertNoPieceShown(t, frames, tc.secret)
+				got := consoleCoderOutput(t, frames)
+				if !strings.HasPrefix(got, "[codex] command_execution in_progress (item_1)\n") && tc.want != "" {
+					t.Fatalf("cut %d: status line missing: %q", cut, got)
+				}
+				if tc.want != "" && !strings.HasSuffix(got, "\n"+tc.want) {
+					t.Fatalf("cut %d: output = %q, want it to end with %q", cut, got, tc.want)
+				}
+				if tc.want == "" && !strings.Contains(got, "[redacted]") {
+					t.Fatalf("cut %d: the redacted value is not in the tail: %.200q", cut, got)
+				}
+			}
+		})
 	}
-	var shown strings.Builder
-	record := func() {
-		if frame, ok := hub.Latest("task"); ok && frame.Activity != nil && frame.Activity.Current != nil {
-			shown.WriteString(frame.Activity.Current.Output)
+}
+
+func TestConsoleEventPreviewSinkCoderUnitLabelsAndOrder(t *testing.T) {
+	on := guard.New(guard.Config{Enabled: true}, nil, nil)
+	frames := guardedCoderFrames(t, on,
+		agent.Event{Kind: agent.EventKindToolOutput, Summary: "\n[claude] Bash (toolu_1)\n", Text: "\n[claude] Bash (toolu_1) {\"command\":\"x\"}\n"},
+		outputUnit("", "command: export API_KEY=\nabcdefghijklmnopqrstuvwx"),
+		outputUnit("[codex] stderr", "password=abcdefghijklmnop\nwarning: slow\n"),
+		outputUnit("[codex] stderr not shown: it was too large to check as a whole", ""),
+		outputUnit("", " \n"),
+		outputUnit("token=abcdefghijklmnopqrstuvwx", "x\n"),
+	)
+	assertNoPieceShown(t, frames, "abcdefghijklmnopqrstuvwx")
+	assertNoPieceShown(t, frames, "abcdefghijklmnop")
+	want := "[claude] Bash (toolu_1)\n" +
+		"command: export API_KEY=\n[redacted]\n" +
+		"[codex] stderr\npassword=[redacted]\nwarning: slow\n" +
+		"[codex] stderr not shown: it was too large to check as a whole\n" +
+		"token=[redacted]\nx\n"
+	if got := consoleCoderOutput(t, frames); strings.TrimLeft(got, "\n") != want {
+		t.Fatalf("output = %q,\nwant %q", got, want)
+	}
+}
+
+// Without Guard the Console shows the live pieces as it always did, and a unit, which repeats
+// them, changes nothing.
+func TestConsoleEventPreviewSinkIgnoresCoderUnitsWhenGuardDisabled(t *testing.T) {
+	live := []agent.Event{
+		{Kind: agent.EventKindToolOutput, Summary: "[codex] command_execution completed (item_1) exit=0", Text: "[codex] command_execution completed (item_1) exit=0 $ cat x\ntoken=abcdefgh"},
+		outputPiece("ijklmnopqrstuvwx\n"),
+	}
+	withUnits := []agent.Event{live[0], outputUnit("", "$ cat x"), live[1], outputUnit("[codex] stderr", "token=abcdefghijklmnopqrstuvwx\n")}
+	for name, g := range map[string]*guard.Guard{"no guard": nil, "guard disabled": guard.New(guard.Config{}, nil, nil)} {
+		plain := guardedCoderFrames(t, g, live...)
+		got := guardedCoderFrames(t, g, withUnits...)
+		if a, b := consoleCoderOutput(t, plain), consoleCoderOutput(t, got); a != b || !strings.Contains(b, "token=abcdefghijklmnopqrstuvwx") || strings.Contains(b, "stderr") {
+			t.Fatalf("%s: output with units = %q, without = %q", name, b, a)
 		}
-	}
-	sink.HandleEvent(ctx, agent.Event{Kind: agent.EventKindToolStart, ActivityID: "coder", ToolName: "coder", Status: "running"})
-	part("stderr", "api_key=\n")
-	record()
-	part("text", "Authorization: Bearer ")
-	record()
-	part("stderr", secret+"\n")
-	record()
-	part("text", secret+" done")
-	record()
-	sink.HandleEvent(ctx, agent.Event{Kind: agent.EventKindToolDone, ActivityID: "coder", ToolName: "coder", Status: "done"})
-	record()
-	if all := shown.String(); strings.Contains(all, secret[:8]) || strings.Contains(all, secret[8:]) {
-		t.Fatalf("shown: %q", all)
-	}
-	frame, _ := hub.Latest("task")
-	final := frame.Activity.History[0].Output
-	for _, want := range []string{"api_key=\n[redacted]\n", "Authorization: Bearer [redacted] done"} {
-		if !strings.Contains(final, want) {
-			t.Fatalf("output %q missing %q", final, want)
+		// A unit publishes no frame of its own.
+		if got[1] != got[0] || got[3] != got[2] {
+			t.Fatalf("%s: a unit changed the frame", name)
 		}
 	}
 }

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -61,11 +60,6 @@ type consoleEventPreviewSink struct {
 	pendingObserve  *consoleObserveRequest
 	observeCalls    map[agent.ObserveProfile]int
 	outputGuard     *guard.Guard
-
-	// streamMu guards streams: with Guard on, each tool output stream, keyed by
-	// consoleOutputStreamKey, is redacted as it arrives and flushed when its call ends.
-	streamMu sync.Mutex
-	streams  map[string]*guard.StreamRedactor
 }
 
 func newConsoleEventPreviewSink(hub *consoleStreamHub, taskID string, logger *slog.Logger, outputGuard *guard.Guard) *consoleEventPreviewSink {
@@ -104,101 +98,47 @@ func (s *consoleEventPreviewSink) HandleEvent(_ context.Context, event agent.Eve
 	if s == nil || s.hub == nil || strings.TrimSpace(s.taskID) == "" {
 		return
 	}
-	if s.outputGuard.Enabled() {
-		// Output streams before it is complete, so it passes through Guard a line at a time,
-		// held back only where a secret may continue. What a call's streams still hold is
-		// shown, redacted, before the call's end.
-		for _, flushed := range s.guardEvent(&event) {
-			s.handleEvent(flushed)
+	if strings.TrimSpace(event.Kind) == agent.EventKindToolOutputUnit {
+		// A unit repeats, whole, output that also arrives live in pieces. Without Guard the
+		// pieces are shown as they come and the unit is not needed. With Guard the pieces are
+		// dropped below, since a secret may be split between two of them, and the unit is shown
+		// instead, redacted as a whole.
+		if !s.outputGuard.Enabled() {
+			return
 		}
-	}
-	s.handleEvent(event)
-}
-
-// consoleOutputStreamKey names one output stream: a tool call's stream, such as a coder's
-// "codex" or a command's "stdout", and the part within it, such as one command's raw output.
-func consoleOutputStreamKey(event agent.Event) string {
-	return strings.Join([]string{
-		strings.TrimSpace(event.ActivityID), strings.TrimSpace(event.ToolName),
-		strings.TrimSpace(event.Stream), strings.TrimSpace(event.Part),
-	}, "\x00")
-}
-
-// guardEvent applies Guard to event in place, and returns output events to handle first: the
-// redacted rest of the streams of a call that ended.
-func (s *consoleEventPreviewSink) guardEvent(event *agent.Event) []agent.Event {
-	switch strings.TrimSpace(event.Kind) {
-	case agent.EventKindToolOutput:
-		if _, ok := consoleAgentLinkDirection(event.Stream); ok {
-			// An Agent Link message is complete, the whole text sent or answered, so it can
-			// pass through Guard as it is.
-			event.Text, _ = s.outputGuard.RedactString(event.Text)
-			return nil
-		}
-		event.Text = s.redactStream(*event)
-		event.Summary = ""
-		return nil
-	case agent.EventKindToolDone, agent.EventKindSubtaskDone:
-		var flushed []agent.Event
-		if event.Kind == agent.EventKindToolDone {
-			flushed = s.flushStreams(strings.TrimSpace(event.ActivityID))
-		}
-		event.Summary = ""
-		event.Error = ""
-		// A spawn or coder result keeps only its status, which the worker roster needs.
-		event.Text = consoleResultStatusOnly(event.Text)
-		return flushed
-	}
-	return nil
-}
-
-func (s *consoleEventPreviewSink) redactStream(event agent.Event) string {
-	key := consoleOutputStreamKey(event)
-	s.streamMu.Lock()
-	defer s.streamMu.Unlock()
-	stream := s.streams[key]
-	if stream == nil {
-		stream = s.outputGuard.NewStreamRedactor()
-		if stream == nil {
-			return ""
-		}
-		if s.streams == nil {
-			s.streams = map[string]*guard.StreamRedactor{}
-		}
-		s.streams[key] = stream
-	}
-	return stream.Write(event.Text)
-}
-
-// flushStreams ends the output streams of the call activityID and returns what they still held,
-// redacted, as output events.
-func (s *consoleEventPreviewSink) flushStreams(activityID string) []agent.Event {
-	s.streamMu.Lock()
-	defer s.streamMu.Unlock()
-	var out []agent.Event
-	keys := make([]string, 0, len(s.streams))
-	for key := range s.streams {
-		if strings.HasPrefix(key, activityID+"\x00") {
-			keys = append(keys, key)
-		}
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		text := s.streams[key].Flush()
-		delete(s.streams, key)
+		text := consoleGuardedOutputUnit(s.outputGuard, event)
 		if text == "" {
-			continue
+			return
 		}
-		parts := strings.SplitN(key, "\x00", 4)
-		out = append(out, agent.Event{
-			Kind: agent.EventKindToolOutput, ActivityID: parts[0], ToolName: parts[1], Stream: parts[2],
-			Part: parts[3], Text: text, Status: "running",
-		})
+		event.Kind, event.Text, event.Summary = agent.EventKindToolOutput, text, ""
+	} else if s.outputGuard.Enabled() {
+		// Tool and subtask events are emitted before their complete output can pass
+		// through Guard. Keep status metadata, but do not expose raw content.
+		switch strings.TrimSpace(event.Kind) {
+		case agent.EventKindToolOutput:
+			if _, ok := consoleAgentLinkDirection(event.Stream); ok {
+				// An Agent Link message is complete, the whole text sent or answered, so it can
+				// pass through Guard instead of being dropped.
+				event.Text, _ = s.outputGuard.RedactString(event.Text)
+				break
+			}
+			event.Text = ""
+			if event.ToolName == "coder" && event.Summary != "" {
+				// Coder emits complete status summaries separately from raw CLI output.
+				event.Text, _ = s.outputGuard.RedactString(event.Summary)
+				// Replacing the output also replaces its line ending. Keep each status
+				// on its own line without changing raw output chunks or existing endings.
+				if event.Text != "" && !strings.HasSuffix(event.Text, "\n") {
+					event.Text += "\n"
+				}
+			}
+		case agent.EventKindToolDone, agent.EventKindSubtaskDone:
+			event.Summary = ""
+			event.Error = ""
+			// A spawn or coder result keeps only its status, which the worker roster needs.
+			event.Text = consoleResultStatusOnly(event.Text)
+		}
 	}
-	return out
-}
-
-func (s *consoleEventPreviewSink) handleEvent(event agent.Event) {
 	if status := formatConsoleRuntimeStatus(event); status != "" {
 		s.hub.PublishPreview(s.taskID, status)
 	}
@@ -380,6 +320,23 @@ func (s *consoleEventPreviewSink) buildObserveRequestLocked(event agent.Event, a
 		Trigger:  strings.TrimSpace(event.Kind),
 		Snapshot: snapshot,
 	}
+}
+
+// consoleGuardedOutputUnit is the text shown for a complete piece of output with Guard on: its
+// label, if it has one, and the piece, each redacted as a whole and on lines of their own.
+// Nothing is cut before the redaction; the views keep their own tails of what they are given.
+func consoleGuardedOutputUnit(g *guard.Guard, event agent.Event) string {
+	var b strings.Builder
+	for _, part := range []string{event.Summary, event.Text} {
+		if strings.TrimSpace(part) == "" {
+			continue
+		}
+		b.WriteString(g.RedactCompleteOutput(part))
+		if !strings.HasSuffix(b.String(), "\n") {
+			b.WriteString("\n")
+		}
+	}
+	return b.String()
 }
 
 func (s *consoleEventPreviewSink) renderLocked() string {

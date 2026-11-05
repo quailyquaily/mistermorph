@@ -53,9 +53,11 @@ type CoderRequest struct {
 	// Progress reports status lines. step is a short, content-free label for what the CLI
 	// is doing now, such as "running a command", or "" when it has not changed.
 	Progress func(summary, text, step string)
-	// Output reports a command's raw output as it arrives, unformatted, so a consumer can
-	// redact it as one stream: part names the command, and pieces of one part arrive in order.
-	Output func(part, text string)
+	// Unit reports each complete piece of the CLI's output once it is whole: a command line, a
+	// command's output, a message, a tool input or result, and at the end what the CLI printed
+	// line by line. text is the piece exactly as written and label, if any, names it. The same
+	// output also goes out live, in pieces, through Progress and the emit callback.
+	Unit func(label, text string)
 	// Process reports the OS PID of the CLI used for this task.
 	Process func(pid int)
 }
@@ -147,6 +149,10 @@ func (t *coderTool) Execute(ctx context.Context, params map[string]any) (string,
 			output, err := t.deps.RunTerminal(ctx, req)
 			if output != "" {
 				emit(output)
+				// A terminal session returns its output whole.
+				if req.Unit != nil {
+					req.Unit("", output)
+				}
 			}
 			return output, err
 		}
@@ -161,10 +167,10 @@ func (t *coderTool) Execute(ctx context.Context, params map[string]any) (string,
 					Text: text, Summary: summary, Progress: step, Status: "running",
 				})
 			}
-			req.Output = func(part, text string) {
+			req.Unit = func(label, text string) {
 				EmitEvent(runCtx, nil, Event{
-					Kind: EventKindToolOutput, ToolName: coderToolName, Stream: req.Backend,
-					Part: part, Text: text, Status: "running",
+					Kind: EventKindToolOutputUnit, ToolName: coderToolName, Stream: req.Backend,
+					Text: text, Summary: label, Status: "running",
 				})
 			}
 			output, runErr := runCLI(runCtx, req, func(text string) {
@@ -379,15 +385,6 @@ func runCoderCLI(ctx context.Context, req CoderRequest, emit func(string)) (outp
 			emit(text)
 		}
 	}
-	emitOutput := func(part, text string) {
-		emitMu.Lock()
-		defer emitMu.Unlock()
-		if req.Output != nil {
-			req.Output(part, text)
-		} else if emit != nil {
-			emit(text)
-		}
-	}
 	spec := buildCoderCLICommand(req)
 	if strings.TrimSpace(spec.Command) == "" {
 		return "", fmt.Errorf("unsupported coder: %s", req.Backend)
@@ -427,9 +424,20 @@ func runCoderCLI(ctx context.Context, req CoderRequest, emit func(string)) (outp
 	}
 	line := fmt.Sprintf("[%s] diagnostics: %s\n", req.Backend, diagnosticDir)
 	progress(line, line, "")
+	unit := func(label, text string) {
+		emitMu.Lock()
+		defer emitMu.Unlock()
+		if req.Unit != nil {
+			req.Unit(label, text)
+		}
+	}
 	collector := newCoderStreamCollector(req.Backend, publish)
 	collector.progress = progress
-	collector.output = emitOutput
+	if req.Unit != nil {
+		collector.unit = unit
+	}
+	// What the CLI writes to stderr is one text, shown whole when the CLI ends.
+	var stderrWhole coderWholeOutput
 	var stderrTail coderTailBuffer
 	stderrTail.Limit = coderStderrTailBytes
 	defer func() {
@@ -463,20 +471,24 @@ func runCoderCLI(ctx context.Context, req CoderRequest, emit func(string)) (outp
 	// even when a process the CLI left in the background still holds the pipes.
 	stdoutLines := &coderLineWriter{handle: func(line []byte) { _ = collector.ConsumeLine(line) }}
 	stderrLines := &coderLineWriter{handle: func(line []byte) {
-		status := fmt.Sprintf("[%s] stderr received\n", req.Backend)
-		if req.Output == nil {
-			progress(status, fmt.Sprintf("[%s stderr] %s\n", req.Backend, line), "")
-			return
+		if req.Unit != nil {
+			stderrWhole.add(string(line) + "\n")
 		}
-		// The line itself goes out as printed, in a stream of its own, so Guard sees it whole.
-		progress(status, status, "")
-		emitOutput(coderOutputPartStderr, string(line)+"\n")
+		progress(fmt.Sprintf("[%s] stderr received\n", req.Backend), fmt.Sprintf("[%s stderr] %s\n", req.Backend, line), "")
 	}}
-	stdoutLines.overflow = func() {
+	skipped := func() {
 		line := fmt.Sprintf("[%s] skipped an output line over %d bytes\n", req.Backend, coderLineMaxBytes)
 		progress(line, line, "")
 	}
-	stderrLines.overflow = stdoutLines.overflow
+	// A skipped line leaves a hole, and what was around it can no longer be checked as a whole.
+	stdoutLines.overflow = func() {
+		collector.plain.drop()
+		skipped()
+	}
+	stderrLines.overflow = func() {
+		stderrWhole.drop()
+		skipped()
+	}
 	cmd.Stdout = io.MultiWriter(stdoutLog, stdoutLines)
 	cmd.Stderr = io.MultiWriter(stderrLog, &stderrTail, stderrLines)
 	cmd.WaitDelay = coderWaitDelay
@@ -498,6 +510,9 @@ func runCoderCLI(ctx context.Context, req CoderRequest, emit func(string)) (outp
 	waitErr := cmd.Wait()
 	stdoutLines.Flush()
 	stderrLines.Flush()
+	collector.plain.report(unit, fmt.Sprintf("[%s] output", req.Backend))
+	stderrWhole.report(unit, fmt.Sprintf("[%s] stderr", req.Backend))
+	collector.reportFinal()
 	output = capCoderOutput(collector.Output(), diagnosticDir)
 	if errors.Is(waitErr, exec.ErrWaitDelay) && ctx.Err() == nil {
 		line := fmt.Sprintf("[%s] exited; stopped reading output still held by a background process\n", req.Backend)
@@ -733,12 +748,69 @@ func coderExitError(backend string, err error) error {
 	return fmt.Errorf("%s exited with code %d", backend, exitErr.ExitCode())
 }
 
+// coderWholeOutputMaxBytes bounds output that is held to be shown whole.
+const coderWholeOutputMaxBytes = 1024 * 1024
+
+// coderWholeOutput holds output that arrives line by line until it can be reported as one
+// unit. A secret can span its lines, so it is never reported in parts: when it grows past
+// coderWholeOutputMaxBytes or loses a line, none of it is reported, only that it was left out.
+type coderWholeOutput struct {
+	mu   sync.Mutex
+	text strings.Builder
+	lost bool
+}
+
+func (o *coderWholeOutput) add(text string) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if o.lost {
+		return
+	}
+	if o.text.Len()+len(text) > coderWholeOutputMaxBytes {
+		o.lost = true
+		o.text.Reset()
+		return
+	}
+	o.text.WriteString(text)
+}
+
+func (o *coderWholeOutput) drop() {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.lost = true
+	o.text.Reset()
+}
+
+// report hands what was held to unit, under label, and holds nothing afterwards.
+func (o *coderWholeOutput) report(unit func(label, text string), label string) {
+	o.mu.Lock()
+	text, lost := o.text.String(), o.lost
+	o.text.Reset()
+	o.lost = false
+	o.mu.Unlock()
+	if unit == nil {
+		return
+	}
+	switch {
+	case lost:
+		unit(label+" not shown: it was too large to check as a whole", "")
+	case strings.TrimSpace(text) != "":
+		unit(label, text)
+	}
+}
+
 type coderStreamCollector struct {
 	backend  string
 	emit     func(string)
 	progress func(summary, text, step string)
-	// output receives a command's raw output; without it, output goes into the status text.
-	output func(part, text string)
+	// unit receives each complete piece of output: see CoderRequest.Unit.
+	unit func(label, text string)
+	// plain holds the stdout lines that are not events, to report them whole at the end.
+	plain coderWholeOutput
+	// commandShown records the commands whose command line was reported as a unit.
+	commandShown map[string]bool
+	// lastMessage is the last assistant message reported as a unit.
+	lastMessage string
 
 	emitted       strings.Builder
 	final         string
@@ -746,8 +818,6 @@ type coderStreamCollector struct {
 	lastActivity  string
 	step          string
 	itemOutputLen map[string]int
-	// itemOutputEnd records the last character sent of each command's output.
-	itemOutputEnd map[string]rune
 }
 
 func newCoderStreamCollector(backend string, emit func(string)) *coderStreamCollector {
@@ -755,7 +825,7 @@ func newCoderStreamCollector(backend string, emit func(string)) *coderStreamColl
 		backend:       strings.ToLower(strings.TrimSpace(backend)),
 		emit:          emit,
 		itemOutputLen: map[string]int{},
-		itemOutputEnd: map[string]rune{},
+		commandShown:  map[string]bool{},
 	}
 }
 
@@ -769,6 +839,9 @@ func (c *coderStreamCollector) ConsumeLine(line []byte) error {
 	}
 	var payload map[string]any
 	if err := json.Unmarshal(line, &payload); err != nil {
+		if c.unit != nil {
+			c.plain.add(string(line) + "\n")
+		}
 		c.addDelta(string(line) + "\n")
 		return nil
 	}
@@ -798,21 +871,12 @@ func (c *coderStreamCollector) Error() string {
 	return strings.TrimSpace(c.errText)
 }
 
-// The parts of a coder's raw output other than its commands, which use their item IDs.
-const (
-	coderOutputPartText   = "text"
-	coderOutputPartStderr = "stderr"
-)
-
 func (c *coderStreamCollector) addDelta(text string) {
 	if c == nil || text == "" {
 		return
 	}
 	c.emitted.WriteString(text)
-	if c.output != nil {
-		// The assistant's text, as written, in a stream of its own.
-		c.output(coderOutputPartText, text)
-	} else if c.emit != nil {
+	if c.emit != nil {
 		c.emit(text)
 	}
 }
@@ -877,6 +941,7 @@ func (c *coderStreamCollector) consumeClaude(payload map[string]any) {
 					c.step = claudeToolStep(stringField(block, "name"))
 					input, _ := json.Marshal(block["input"])
 					c.emitActivity(fmt.Sprintf("[claude] %s (%s)", stringField(block, "name"), stringField(block, "id")), string(input))
+					c.emitUnit(coderUnitValueText(block["input"]))
 				case "tool_result":
 					status := "completed"
 					if boolField(block, "is_error") {
@@ -884,11 +949,14 @@ func (c *coderStreamCollector) consumeClaude(payload map[string]any) {
 					}
 					c.step = coderStepThinking
 					c.emitActivity(fmt.Sprintf("[claude] %s %s", stringField(block, "tool_use_id"), status), textFromValue(block["content"]))
+					c.emitUnit(rawTextFromValue(block["content"]))
 				}
 			}
 		}
 		if text := textFromValue(payload["message"]); stringField(payload, "type") == "assistant" && text != "" {
 			c.setAssistantText(text)
+			// An assistant event holds a whole message.
+			c.emitMessageUnit(rawTextFromValue(payload["message"]))
 		}
 	case "result":
 		if text := stringField(payload, "result"); text != "" {
@@ -910,14 +978,15 @@ func (c *coderStreamCollector) emitActivity(summary string, details ...string) {
 	if len(details) > 0 {
 		text += " " + strings.Join(details, " ")
 	}
-	// The text is not cut here: a cut before Guard's redaction could split a secret, so
-	// consumers that keep previews cut them after redacting.
-	text = strings.TrimSpace(text)
+	runes := []rune(strings.TrimSpace(text))
+	if len(runes) > 1000 {
+		runes = append(runes[:1000], []rune("…")...)
+	}
 	c.lastActivity = strings.TrimSpace(summary)
 	if c.progress != nil {
-		c.progress("\n"+c.lastActivity+"\n", "\n"+text+"\n", c.step)
+		c.progress("\n"+c.lastActivity+"\n", "\n"+string(runes)+"\n", c.step)
 	} else if c.emit != nil {
-		c.emit("\n" + text + "\n")
+		c.emit("\n" + string(runes) + "\n")
 	}
 }
 
@@ -936,6 +1005,7 @@ func (c *coderStreamCollector) consumeCodex(payload map[string]any) {
 		c.emitActivity("[codex] " + typ)
 	case "error":
 		c.emitActivity("[codex] error", firstNonEmptyString(stringField(payload, "message"), stringField(payload, "error")))
+		c.emitUnit(firstNonEmptyString(stringField(payload, "message"), stringField(payload, "error")))
 	case "turn.failed":
 		if failure, ok := mapField(payload, "error"); ok {
 			c.errText = stringField(failure, "message")
@@ -946,14 +1016,11 @@ func (c *coderStreamCollector) consumeCodex(payload map[string]any) {
 			c.errText = "turn failed"
 		}
 		c.emitActivity("[codex] turn.failed", c.errText)
+		c.emitUnit(c.errText)
 		return
 	}
 	if strings.Contains(strings.ToLower(typ), "delta") {
-		delta, _ := payload["delta"].(string)
-		if delta == "" {
-			delta, _ = payload["text"].(string)
-		}
-		if text := delta; text != "" {
+		if text := firstNonEmptyString(stringField(payload, "delta"), stringField(payload, "text")); text != "" {
 			c.addDelta(text)
 			return
 		}
@@ -961,6 +1028,14 @@ func (c *coderStreamCollector) consumeCodex(payload map[string]any) {
 	if item, ok := mapField(payload, "item"); ok && isAssistantCoderItem(item) {
 		if text := firstNonEmptyString(stringField(item, "text"), textFromValue(item["content"])); text != "" {
 			c.setAssistantText(text)
+			// Only a completed item holds the whole message.
+			if typ == "item.completed" {
+				raw, _ := item["text"].(string)
+				if strings.TrimSpace(raw) == "" {
+					raw = rawTextFromValue(item["content"])
+				}
+				c.emitMessageUnit(raw)
+			}
 			return
 		}
 	}
@@ -974,6 +1049,7 @@ func (c *coderStreamCollector) consumeCodex(payload map[string]any) {
 	}
 	if item, ok := mapField(payload, "item"); ok && strings.TrimSpace(stringField(item, "type")) == "command_execution" {
 		c.consumeCodexCommandItem(item)
+		c.emitCodexCommandUnits(item, typ == "item.completed")
 		return
 	}
 	if item, ok := mapField(payload, "item"); ok && strings.HasPrefix(typ, "item.") {
@@ -995,8 +1071,7 @@ func claudeStreamDelta(value any) string {
 		return ""
 	}
 	if delta, ok := mapField(event, "delta"); ok {
-		// Untrimmed: the spaces between pieces are part of the text.
-		if text, _ := delta["text"].(string); text != "" {
+		if text := stringField(delta, "text"); text != "" {
 			return text
 		}
 	}
@@ -1068,45 +1143,143 @@ func (c *coderStreamCollector) consumeCodexCommandItem(item map[string]any) {
 	id := strings.TrimSpace(stringField(item, "id"))
 	command := strings.TrimSpace(stringField(item, "command"))
 	status := strings.TrimSpace(stringField(item, "status"))
-	// Untrimmed: the output goes on exactly as the command printed it.
-	output, _ := item["aggregated_output"].(string)
+	output := stringField(item, "aggregated_output")
 	emittedLen := c.itemOutputLen[id]
 	runes := []rune(output)
 	if emittedLen > len(runes) {
 		emittedLen = 0
 	}
-	increment := string(runes[emittedLen:])
+	details := string(runes[emittedLen:])
 	c.itemOutputLen[id] = len(runes)
+	if command != "" {
+		details = "$ " + command + "\n" + details
+	}
 	summary := fmt.Sprintf("[codex] command_execution %s (%s)", status, id)
 	if code, ok := item["exit_code"]; ok && code != nil {
 		summary += fmt.Sprintf(" exit=%v", code)
 	}
-	if c.output == nil {
-		details := increment
-		if command != "" {
-			details = "$ " + command + "\n" + details
-		}
-		c.emitActivity(summary, details)
+	c.emitActivity(summary, details)
+}
+
+// emitCodexCommandUnits reports a command's line once, as soon as it is known, and its whole
+// output when the command has completed. Output still growing is not reported: what a command
+// has printed so far can end in the middle of a secret.
+func (c *coderStreamCollector) emitCodexCommandUnits(item map[string]any, completed bool) {
+	if c == nil || c.unit == nil {
 		return
 	}
-	// The status line and the output go separately: the output stays exactly as the command
-	// printed it, so Guard can redact it as one stream per command.
-	if command != "" {
-		c.emitActivity(summary, "$ "+command)
-	} else {
-		c.emitActivity(summary)
+	id := strings.TrimSpace(stringField(item, "id"))
+	if command, _ := item["command"].(string); strings.TrimSpace(command) != "" && !c.commandShown[id] {
+		c.commandShown[id] = true
+		c.emitUnit("$ " + command)
 	}
-	if increment != "" {
-		c.output(id, increment)
-		incRunes := []rune(increment)
-		c.itemOutputEnd[id] = incRunes[len(incRunes)-1]
+	if !completed {
+		return
 	}
-	if status != "in_progress" {
-		// A finished command's last line is complete even without a newline.
-		if end, ok := c.itemOutputEnd[id]; ok && end != '\n' {
-			c.output(id, "\n")
+	delete(c.commandShown, id)
+	output, _ := item["aggregated_output"].(string)
+	c.emitUnit(output)
+}
+
+// emitUnit reports one complete piece of output, exactly as written.
+func (c *coderStreamCollector) emitUnit(text string) {
+	if c == nil || c.unit == nil || strings.TrimSpace(text) == "" {
+		return
+	}
+	c.unit("", text)
+}
+
+// emitMessageUnit reports a whole assistant message.
+func (c *coderStreamCollector) emitMessageUnit(text string) {
+	if c == nil || c.unit == nil || strings.TrimSpace(text) == "" {
+		return
+	}
+	c.lastMessage = text
+	c.unit("", text)
+}
+
+// reportFinal reports the CLI's final answer when it was not the last message reported, as
+// with a CLI whose messages arrive only in pieces.
+func (c *coderStreamCollector) reportFinal() {
+	if c == nil || c.unit == nil {
+		return
+	}
+	final := c.Output()
+	if final == "" || final == strings.TrimSpace(c.lastMessage) {
+		return
+	}
+	c.emitMessageUnit(final)
+}
+
+// rawTextFromValue is textFromValue without trimming: the text exactly as written, with the
+// spaces and line breaks at the edges of its parts, which decide what a secret pattern matches.
+func rawTextFromValue(value any) string {
+	switch v := value.(type) {
+	case string:
+		return v
+	case []any:
+		var b strings.Builder
+		for _, item := range v {
+			b.WriteString(rawTextFromValue(item))
 		}
-		delete(c.itemOutputEnd, id)
+		return b.String()
+	case map[string]any:
+		for _, key := range []string{"text", "output_text"} {
+			// A part that is only spaces still separates the parts around it.
+			if text, _ := v[key].(string); text != "" {
+				return text
+			}
+		}
+		if content, ok := v["content"]; ok {
+			return rawTextFromValue(content)
+		}
+		if message, ok := v["message"]; ok {
+			return rawTextFromValue(message)
+		}
+	}
+	return ""
+}
+
+// coderUnitValueText writes a decoded JSON value, such as a tool's input, as text in which every
+// string stands as it is: one "key: value" line per field, in key order, and one "- item" line
+// per list item. JSON would escape the line breaks and quotes inside strings, and a secret
+// pattern that needs them would not match.
+func coderUnitValueText(value any) string {
+	var b strings.Builder
+	writeCoderUnitValue(&b, value)
+	return b.String()
+}
+
+func writeCoderUnitValue(b *strings.Builder, value any) {
+	switch v := value.(type) {
+	case nil:
+	case string:
+		b.WriteString(v)
+	case map[string]any:
+		keys := make([]string, 0, len(v))
+		for key := range v {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		for i, key := range keys {
+			if i > 0 {
+				b.WriteString("\n")
+			}
+			b.WriteString(key)
+			b.WriteString(": ")
+			writeCoderUnitValue(b, v[key])
+		}
+	case []any:
+		for i, item := range v {
+			if i > 0 {
+				b.WriteString("\n")
+			}
+			b.WriteString("- ")
+			writeCoderUnitValue(b, item)
+		}
+	default:
+		raw, _ := json.Marshal(v)
+		b.Write(raw)
 	}
 }
 
