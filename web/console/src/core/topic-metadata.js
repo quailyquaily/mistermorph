@@ -2,7 +2,7 @@ import { onMounted, onUnmounted, watch } from "vue";
 import "../styles/topic-icons.css";
 import { runtimeApiFetchForEndpoint } from "./context";
 import { loadResource, resourceKey } from "./resources";
-import { sameTopicTags } from "./topic-tags";
+import { mergeTopicMetadata } from "./topic-metadata-merge.js";
 
 const topicIcons = import.meta.glob("../assets/topic-icons/*.svg", {
   eager: true,
@@ -14,8 +14,9 @@ export function topicIcon(topic) {
   return topicIcons[`../assets/topic-icons/${topic?.icon}.svg`] || topicIcons["../assets/topic-icons/chat.svg"];
 }
 
-// Merge naming results without resetting pagination, selection, or drafts.
-export function useTopicMetadata(topics, endpointRef) {
+// Merge naming results without resetting pagination, selection, or drafts. followsActivity says
+// which topics also take a newer updated_at (see mergeTopicMetadata).
+export function useTopicMetadata(topics, endpointRef, followsActivity = () => false) {
   let timer;
   let version = 0;
   let loading = false;
@@ -35,10 +36,8 @@ export function useTopicMetadata(topics, endpointRef) {
       if (disposed || version !== requestVersion || endpoint !== endpointRef.value) return;
       const updated = new Map((data?.items || []).map((topic) => [topic.id, topic]));
       topics.value = topics.value.map((topic) => {
-        const next = updated.get(topic.id);
-        if (!next || topic !== original.get(topic.id) || Number(next.title_revision || 0) < Number(topic.title_revision || 0) || Date.parse(next.updated_at) < Date.parse(topic.updated_at)) return topic;
-        if (next.title === topic.title && next.icon === topic.icon && next.llm_title_generated_at === topic.llm_title_generated_at && next.title_revision === topic.title_revision && sameTopicTags(next.tags || [], topic.tags || [])) return topic;
-        return { ...topic, ...next };
+        if (topic !== original.get(topic.id)) return topic;
+        return mergeTopicMetadata(topic, updated.get(topic.id), followsActivity(topic));
       });
     } catch {
       // Keep the current metadata; the next poll will retry.

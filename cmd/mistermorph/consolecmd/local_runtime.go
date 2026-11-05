@@ -197,8 +197,10 @@ func newConsoleLocalRuntime(cfg serveConfig, reader *viper.Viper) (*consoleLocal
 		return nil, err
 	}
 	slog.SetDefault(gen.logger)
+	out.notificationHub = newConsoleNotificationHub()
 	persistTasks := consoleTaskPersistenceEnabledFromReader(gen.reader)
 	store, err := daemonruntime.NewConsoleFileStore(daemonruntime.ConsoleFileStoreOptions{
+		OnTaskUpdate:         out.notificationHub.PublishTaskCompletion,
 		RootDir:              gen.paths.TaskTargetDir("console"),
 		Persist:              persistTasks,
 		JournalDir:           gen.paths.JournalDir,
@@ -235,7 +237,6 @@ func newConsoleLocalRuntime(cfg serveConfig, reader *viper.Viper) (*consoleLocal
 	out.elevations = newConsoleElevations(gen.logger)
 	// Chat tasks ask their elevated commands on approval cards, so they need no desktop dialog.
 	elevate.OfferClientApprovals()
-	out.notificationHub = newConsoleNotificationHub()
 	out.workspaceStore = workspace.NewStore(gen.paths.WorkspaceAttachmentsPath)
 	out.runner = runtimecore.NewConversationRunner[string, consoleLocalTaskJob](
 		workersCtx,
@@ -1473,6 +1474,9 @@ func (r *consoleLocalRuntime) submitTaskWithGeneration(ctx context.Context, gene
 	}()
 	if topicID := strings.TrimSpace(req.TopicID); daemonruntime.IsAgentLinkTopicID(topicID) {
 		return daemonruntime.SubmitTaskResponse{}, daemonruntime.BadRequest("an Agent Link agent's topic only holds what that agent sends")
+	} else if daemonruntime.IsCronTopicID(topicID) {
+		// Before anything else: a command or a topic title sent here would otherwise still land.
+		return daemonruntime.SubmitTaskResponse{}, daemonruntime.BadRequest("a TODO item's topic only holds that item's runs")
 	} else if topicID != "" && topicID != daemonruntime.ConsoleDefaultTopicID {
 		if topic, ok := r.store.GetTopic(topicID); !ok || topic == nil || topic.DeletedAt != nil {
 			return daemonruntime.SubmitTaskResponse{}, daemonruntime.BadRequest("topic not found")

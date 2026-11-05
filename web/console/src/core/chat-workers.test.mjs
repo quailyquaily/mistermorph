@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { normalizeActivity } from "./chat-task-history.js";
+import { normalizeActivity, taskListHistoryItems } from "./chat-task-history.js";
 import {
   normalizeActivityWorkers,
   rosterWorkers,
@@ -100,4 +100,32 @@ test("rosterWorkers adds the state and note to show", () => {
   ]);
   assert.equal(roster[0].sections[1].text, "partial answer\nwith detail");
   assert.deepEqual(rosterWorkers(null, "done"), []);
+});
+
+test("coder output keeps line boundaries through live normalization and restored history", () => {
+  for (const stream of ["codex", "claude"]) {
+    for (const output of [
+      "Codex is starting\nCodex is working\nCodex is working\n",
+      "\n  par", "\n  partial\n\tline  \n", "\n", "", " \t",
+      "Codex is startingCodex is working", // Old corrupt history is not repaired by guessing.
+    ]) {
+      const entry = { id: "coder", kind: "tool", name: "coder", stream, output };
+      const raw = { current: entry, history: [entry], workers: [
+        { id: "worker", name: "Milo", kind: "coder", stream, output },
+      ] };
+      const live = normalizeActivity(raw);
+      const tasks = JSON.parse(JSON.stringify([
+        { id: "task", status: "done", task: "code", result: { activity: raw, final: { output: "done" } } },
+      ]));
+      const restored = taskListHistoryItems(tasks, (key) => key).find((item) => item.activity).activity;
+      for (const activity of [live, normalizeActivity(live), restored]) {
+        assert.equal(activity.current.output, output);
+        assert.equal(activity.history[0].output, output);
+        assert.equal(activity.workers[0].output, output);
+        if (output.trim()) {
+          assert.deepEqual(workerSections(activity.workers[0]), [{ kind: "output", text: output }]);
+        }
+      }
+    }
+  }
 });

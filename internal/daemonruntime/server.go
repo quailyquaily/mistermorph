@@ -1337,7 +1337,13 @@ type todoChatOption struct {
 	ExpiresAt time.Time `json:"expires_at,omitempty"`
 }
 
-func handleTodoTasks(w http.ResponseWriter, r *http.Request, cronPath string, contactsDir string, mode string, settingsReader agentsettings.Reader) {
+// cronTopicTitler is a topic store that keeps a topic per TODO item, such as the Console's.
+type cronTopicTitler interface {
+	SetCronTopicTitle(taskID, title string) error
+}
+
+// topics, when it keeps a topic per TODO item, has the saved items' topics renamed after them.
+func handleTodoTasks(w http.ResponseWriter, r *http.Request, cronPath string, contactsDir string, mode string, settingsReader agentsettings.Reader, topics TopicReader) {
 	store := cronstore.NewStore(cronPath)
 	var defaultRoute runtimeLLMProfileOption
 	var profiles []runtimeLLMProfileOption
@@ -1388,6 +1394,17 @@ func handleTodoTasks(w http.ResponseWriter, r *http.Request, cronPath string, co
 		if err := store.Write(file); err != nil {
 			http.Error(w, strings.TrimSpace(err.Error()), http.StatusBadRequest)
 			return
+		}
+		if titler, ok := topics.(cronTopicTitler); ok {
+			for _, task := range file.Tasks {
+				title := strings.TrimSpace(task.Title)
+				if title == "" {
+					title = cronstore.DefaultTaskTitle
+				}
+				// The items are saved; a topic that could not be renamed is renamed by the
+				// item's next run.
+				_ = titler.SetCronTopicTitle(task.ID, title)
+			}
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{

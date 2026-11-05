@@ -34,7 +34,10 @@ var (
 )
 
 type ConsoleFileStoreOptions struct {
-	RootDir string
+	// OnTaskUpdate observes committed local writes, never journal replay or recovery.
+	// It runs under the store lock and must not block or call back into the store.
+	OnTaskUpdate func(previous, next TaskInfo)
+	RootDir      string
 	// Target names the runtime whose journal records the store reads and writes. Empty means
 	// "console"; an embedding program serving its own runtime API uses its own target.
 	Target         string
@@ -52,7 +55,8 @@ type ConsoleFileStoreOptions struct {
 }
 
 type ConsoleFileStore struct {
-	mu sync.RWMutex
+	onTaskUpdate func(previous, next TaskInfo)
+	mu           sync.RWMutex
 
 	rootDir              string
 	target               string
@@ -93,6 +97,7 @@ func NewConsoleFileStore(opts ConsoleFileStoreOptions) (*ConsoleFileStore, error
 	}
 	s := &ConsoleFileStore{
 		rootDir:              filepath.Clean(rootDir),
+		onTaskUpdate:         opts.OnTaskUpdate,
 		target:               consoleStoreTarget(opts.Target),
 		topicsProjectionPath: cleanOptionalPath(opts.TopicsProjectionPath),
 		persist:              opts.Persist,
@@ -281,6 +286,9 @@ func (s *ConsoleFileStore) UpsertWithTrigger(info TaskInfo, trigger TaskTrigger,
 	}
 	s.projectionCursor = cursor
 	s.persistTopicsProjectionLocked(now)
+	if s.onTaskUpdate != nil {
+		s.onTaskUpdate(previous, info)
+	}
 	return nil
 }
 
@@ -364,6 +372,9 @@ func (s *ConsoleFileStore) UpdateWithTrigger(id string, trigger TaskTrigger, fn 
 		s.triggers[id] = taskdomain.NormalizeTaskTrigger(trigger)
 	}
 	s.projectionCursor = cursor
+	if s.onTaskUpdate != nil {
+		s.onTaskUpdate(previous, item)
+	}
 	return nil
 }
 
@@ -485,7 +496,7 @@ func (s *ConsoleFileStore) List(opts TaskListOptions) []TaskInfo {
 		if topicID != "" && strings.TrimSpace(item.TopicID) != topicID {
 			continue
 		}
-		if topicID == "" && (strings.TrimSpace(item.TopicID) == ConsoleAwarenessTopicID || IsAgentLinkTopicID(item.TopicID)) {
+		if topicID == "" && !opts.AllTopics && (strings.TrimSpace(item.TopicID) == ConsoleAwarenessTopicID || IsAgentLinkTopicID(item.TopicID) || IsCronTopicID(item.TopicID)) {
 			continue
 		}
 		if topicDeleted(s.topics[strings.TrimSpace(item.TopicID)]) {
@@ -567,8 +578,9 @@ func (s *ConsoleFileStore) DeleteTopic(id string) (bool, error) {
 		return false, fmt.Errorf("console task store is nil")
 	}
 	id = strings.TrimSpace(id)
-	// An Agent Link agent's topic stays: its next message would land in a deleted topic.
-	if id == "" || id == ConsoleDefaultTopicID || IsAgentLinkTopicID(id) {
+	// An Agent Link agent's topic stays: its next message would land in a deleted topic. So does a
+	// TODO item's topic, for its next run.
+	if id == "" || id == ConsoleDefaultTopicID || IsAgentLinkTopicID(id) || IsCronTopicID(id) {
 		return false, nil
 	}
 	now := time.Now().UTC()
@@ -647,6 +659,36 @@ func (s *ConsoleFileStore) setTopicTitle(id, title, icon, expectedTitle string, 
 		topic.TitleCustomized = true
 	}
 	topic.UpdatedAt = now
+	topic.TitleRevision++
+	return s.saveTopicTitleLocked(topic, now)
+}
+
+// SetCronTopicTitle renames the topic of the TODO item with this ID after the item, so a saved
+// item's topic follows its title at once, not only at its next run. An item without a topic gets
+// none, and the topic keeps its place in the list, which the latest run orders.
+func (s *ConsoleFileStore) SetCronTopicTitle(taskID, title string) error {
+	if s == nil {
+		return fmt.Errorf("console task store is nil")
+	}
+	id := CronTopicID(taskID)
+	title = strings.TrimSpace(title)
+	if !IsCronTopicID(id) || title == "" {
+		return nil
+	}
+	now := time.Now().UTC()
+
+	unlock, err := s.lockShared()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+
+	topic, ok := s.topics[id]
+	if !ok || topicDeleted(topic) || topic.Title == title {
+		return nil
+	}
+	topic.Title = title
+	topic.TitleCustomized = true
 	topic.TitleRevision++
 	return s.saveTopicTitleLocked(topic, now)
 }
@@ -1197,7 +1239,7 @@ func nextConsoleTopic(topic TopicInfo, exists bool, topicID string, title string
 		return normalizeTopicInfo(topic)
 	}
 	changed := false
-	if title != "" {
+	if title != "" && title != topic.Title {
 		topic.Title = title
 		topic.TitleCustomized = true
 		topic.TitleRevision++
