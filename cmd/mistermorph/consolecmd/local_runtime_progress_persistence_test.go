@@ -240,6 +240,113 @@ func consoleProgressToolCall(name string) llm.Result {
 	}}}
 }
 
+type consoleCoderProgressPersistenceTool struct{ backend string }
+
+func (consoleCoderProgressPersistenceTool) Name() string            { return "work" }
+func (consoleCoderProgressPersistenceTool) Description() string     { return "test coder progress" }
+func (consoleCoderProgressPersistenceTool) ParameterSchema() string { return `{}` }
+func (tool consoleCoderProgressPersistenceTool) Execute(ctx context.Context, _ map[string]any) (string, error) {
+	worker := &agent.WorkerMetadata{ID: "coder-worker", Name: "Milo"}
+	event := agent.Event{ActivityID: "coder", ToolName: "coder", Worker: worker, Stream: tool.backend, Status: "running"}
+	event.Kind = agent.EventKindToolStart
+	agent.EmitEvent(ctx, nil, event)
+	event.Kind = agent.EventKindToolOutput
+	for _, status := range []string{"starting", "working", "working"} {
+		event.Summary = tool.backend + " is " + status
+		event.Text = event.Summary + "\n"
+		agent.EmitEvent(ctx, nil, event)
+	}
+	event.Summary = ""
+	for _, chunk := range []string{"", "\n", "  par", "tial\n\tline  \n"} {
+		event.Text = chunk
+		agent.EmitEvent(ctx, nil, event)
+	}
+	event.Kind, event.Status, event.Text = agent.EventKindToolDone, "done", ""
+	agent.EmitEvent(ctx, nil, event)
+	return "done", nil
+}
+
+func TestConsoleCoderProgressPersistsLineBoundaries(t *testing.T) {
+	for _, backend := range []string{"codex", "claude"} {
+		for _, guarded := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/guarded=%t", backend, guarded), func(t *testing.T) {
+				rt, job, journal := newConsoleProgressPersistenceRuntime(t, []consoleProgressPersistenceLLMStep{
+					{result: consoleProgressToolCall("work")},
+					{result: llm.Result{Text: `{"type":"final","output":"done"}`}},
+				}, "work", guarded)
+				if err := job.Generation.commonDeps.Registry().Replace(consoleCoderProgressPersistenceTool{backend: backend}); err != nil {
+					t.Fatal(err)
+				}
+				frames, unsubscribe := rt.streamHub.Subscribe(job.TaskID)
+				defer unsubscribe()
+				rt.handleTaskJob(context.Background(), job.ConversationKey, job)
+
+				// Rebuild the task projection from the durable journal, as a fresh runtime does.
+				reloaded, err := daemonruntime.NewConsoleFileStore(daemonruntime.ConsoleFileStoreOptions{
+					RootDir: t.TempDir(), Persist: true, Journal: journal,
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+				task, ok := reloaded.Get(job.TaskID)
+				if !ok || task.Status != daemonruntime.TaskDone {
+					t.Fatalf("restored task = %+v", task)
+				}
+				raw, err := json.Marshal(task.Result)
+				if err != nil {
+					t.Fatal(err)
+				}
+				var saved struct {
+					Activity *consoleActivityProgress `json:"activity"`
+					Trace    chattrace.Snapshot       `json:"trace"`
+				}
+				if err := json.Unmarshal(raw, &saved); err != nil {
+					t.Fatal(err)
+				}
+				want := backend + " is starting\n" + backend + " is working\n" + backend + " is working\n"
+				if !guarded {
+					want += "\n  partial\n\tline  \n"
+					var traceOutput string
+					for _, entry := range saved.Trace.Entries {
+						if entry.Event.Kind == agent.EventKindToolOutput && entry.Event.ToolName == "coder" {
+							traceOutput += entry.Event.Text
+						}
+					}
+					if traceOutput != want {
+						t.Fatalf("restored trace output = %q, want %q", traceOutput, want)
+					}
+				}
+				var live *consoleActivityProgress
+			drain:
+				for {
+					select {
+					case frame := <-frames:
+						if frame.Activity != nil {
+							live = frame.Activity
+						}
+					default:
+						break drain
+					}
+				}
+				for _, activity := range []*consoleActivityProgress{live, saved.Activity} {
+					if activity == nil || len(activity.Workers) != 1 || activity.Workers[0].Output != want {
+						t.Fatalf("worker output mismatch, want %q: %+v", want, activity)
+					}
+					var coder *consoleActivityEntry
+					for i := range activity.History {
+						if activity.History[i].ID == "coder" {
+							coder = &activity.History[i]
+						}
+					}
+					if coder == nil || coder.Output != want {
+						t.Fatalf("activity output mismatch, want %q: %+v", want, coder)
+					}
+				}
+			})
+		}
+	}
+}
+
 func newConsoleProgressPersistenceRuntime(
 	t *testing.T,
 	steps []consoleProgressPersistenceLLMStep,

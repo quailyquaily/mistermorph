@@ -113,6 +113,11 @@ func (s *consoleEventPreviewSink) HandleEvent(_ context.Context, event agent.Eve
 			if event.ToolName == "coder" && event.Summary != "" {
 				// Coder emits complete status summaries separately from raw CLI output.
 				event.Text, _ = s.outputGuard.RedactString(event.Summary)
+				// Replacing the output also replaces its line ending. Keep each status
+				// on its own line without changing raw output chunks or existing endings.
+				if event.Text != "" && !strings.HasSuffix(event.Text, "\n") {
+					event.Text += "\n"
+				}
 			}
 		case agent.EventKindToolDone, agent.EventKindSubtaskDone:
 			event.Summary = ""
