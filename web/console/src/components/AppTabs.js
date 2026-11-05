@@ -1,4 +1,4 @@
-import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import "./AppTabs.css";
 
 function tabID(tab, index) {
@@ -11,8 +11,9 @@ const AppTabs = {
     modelValue: { type: Object, default: null },
     disabled: { type: Boolean, default: false },
     ariaLabel: { type: String, default: "" },
-    // Shows only each tab's icon; its title becomes the tooltip and accessible name.
-    iconOnly: { type: Boolean, default: false },
+    // Shows only each tab's icon; its title becomes the tooltip and accessible name. "auto" does
+    // so only while the labels do not all fit, instead of cutting them short.
+    iconOnly: { type: [Boolean, String], default: false },
   },
   emits: ["update:modelValue", "change"],
   setup(props, { emit }) {
@@ -52,6 +53,25 @@ const AppTabs = {
     const indicatorReady = ref(false);
     let resizeObserver = null;
 
+    // iconOnly "auto": the labels are laid out first and measured, then dropped if any is cut.
+    // Both renders happen before the browser paints, so the labelled row is never seen cut.
+    const labelsCut = ref(false);
+    const iconsOnly = computed(() => (props.iconOnly === "auto" ? labelsCut.value : Boolean(props.iconOnly)));
+    let fitRun = 0;
+
+    function fitLabels() {
+      if (props.iconOnly !== "auto") return;
+      const run = ++fitRun;
+      labelsCut.value = false;
+      nextTick(() => {
+        if (run !== fitRun || !root.value) return;
+        const labels = [...root.value.querySelectorAll(".app-tabs-option-label")];
+        // Half a pixel of slack: scrollWidth is rounded, a label's own width is not.
+        labelsCut.value = labels.some((label) => label.scrollWidth > label.clientWidth + 0.5);
+        nextTick(placeIndicator);
+      });
+    }
+
     function placeIndicator() {
       const el = root.value;
       const active = el?.querySelector(".app-tabs-option.is-active");
@@ -63,22 +83,29 @@ const AppTabs = {
     }
 
     onMounted(() => {
+      fitLabels();
       placeIndicator();
       requestAnimationFrame(() => {
         indicatorReady.value = true;
       });
       if (typeof ResizeObserver === "function" && root.value) {
-        resizeObserver = new ResizeObserver(placeIndicator);
+        resizeObserver = new ResizeObserver(() => {
+          fitLabels();
+          placeIndicator();
+        });
         resizeObserver.observe(root.value);
       }
     });
     onBeforeUnmount(() => resizeObserver?.disconnect());
     watch(
       () => [tabID(props.modelValue, -1), props.tabs.map((tab, index) => `${tabID(tab, index)}:${tab.title}`).join("|")],
-      () => nextTick(placeIndicator),
+      () => {
+        fitLabels();
+        nextTick(placeIndicator);
+      },
     );
 
-    return { isActive, selectTab, onKeydown, root, indicator, indicatorReady };
+    return { isActive, selectTab, onKeydown, root, indicator, indicatorReady, iconsOnly };
   },
   template: `
     <div ref="root" class="app-tabs" :class="{ 'has-indicator': indicator.visible }" role="tablist" :aria-label="ariaLabel || undefined">
@@ -94,10 +121,10 @@ const AppTabs = {
         :key="tab.id ?? index"
         type="button"
         class="app-tabs-option"
-        :class="{ 'is-active': isActive(tab, index), 'is-icon-only': iconOnly && tab.icon }"
+        :class="{ 'is-active': isActive(tab, index), 'is-icon-only': iconsOnly && tab.icon }"
         role="tab"
-        :title="iconOnly && tab.icon ? tab.title : undefined"
-        :aria-label="iconOnly && tab.icon ? tab.title : undefined"
+        :title="iconsOnly && tab.icon ? tab.title : undefined"
+        :aria-label="iconsOnly && tab.icon ? tab.title : undefined"
         :aria-selected="isActive(tab, index)"
         :tabindex="isActive(tab, index) ? 0 : -1"
         :data-tab-index="index"
@@ -106,7 +133,7 @@ const AppTabs = {
         @keydown="onKeydown($event)"
       >
         <component v-if="tab.icon" :is="tab.icon" class="app-tabs-option-icon" aria-hidden="true" />
-        <span v-if="!(iconOnly && tab.icon)" class="app-tabs-option-label">{{ tab.title }}</span>
+        <span v-if="!(iconsOnly && tab.icon)" class="app-tabs-option-label">{{ tab.title }}</span>
       </button>
     </div>
   `,

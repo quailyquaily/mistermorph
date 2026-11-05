@@ -11,7 +11,9 @@ import { closePopupMenu, onPopupClose, opensKeyboard } from "./popup";
 // narrow window (under 768px when it is set up, or with useDialog "always") the menu opens in a
 // frameless dialog instead, optionally with a filter field. Arrow keys move through the items,
 // Enter chooses, Escape closes; opening one menu closes the others, and so does a click elsewhere.
-// Choosing an item emits "change". The default slot replaces the chosen item's label.
+// Choosing an item emits "change". The default slot replaces the chosen item's label. The
+// "dialog-header" slot sits between the filter and the list in the dialog, for controls that
+// narrow the items the caller passes (tabs, say).
 //
 // Derived from quail-ui 0.9.10 (Apache License 2.0).
 const AppDropdownMenu = {
@@ -56,6 +58,8 @@ const AppDropdownMenu = {
     });
     const hasSlot = computed(() => slots.default !== undefined);
     const hasPrepend = computed(() => hasSlotContent(slots.prepend));
+    // Asked on each render, not cached: what the slot holds can arrive after the dialog opens.
+    const hasDialogHeader = () => hasSlotContent(slots["dialog-header"]);
     const filteredItems = computed(() => {
       const text = filterText.value.trim().toLowerCase();
       if (!props.items?.length) {
@@ -202,6 +206,7 @@ const AppDropdownMenu = {
       actionCls,
       hasSlot,
       hasPrepend,
+      hasDialogHeader,
       filteredItems,
       useDialogFlag,
       select,
@@ -246,7 +251,9 @@ const AppDropdownMenu = {
             <div v-if="useFilter" class="filter-area">
               <AppInput ref="filterInput" v-model="filterText" class="filter-input" placeholder="Filter" />
             </div>
-            <div class="scroll-area" :style="{ height: scrollHeight, maxHeight: scrollHeight }">
+            <div v-if="hasDialogHeader()" class="header-area"><slot name="dialog-header" /></div>
+            <!-- v-scroll-edges (registered in main.js) fades the list where more of it is hidden. -->
+            <div v-scroll-edges class="scroll-area" :style="{ height: scrollHeight, maxHeight: scrollHeight }">
               <AppMenu v-if="filteredItems.length > 0" :items="filteredItems" :focused-index="focusedIndex" persistent no-frame no-shadow @action="select" />
               <div v-else class="empty-hint flow place-center" v-text="emptyHit"></div>
             </div>

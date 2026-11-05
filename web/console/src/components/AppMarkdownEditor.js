@@ -1,5 +1,5 @@
 import { storeToRefs } from "pinia";
-import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { computed, h, onBeforeUnmount, ref, watch } from "vue";
 
 import channelDiscordLogoURL from "../assets/images/channels/discord.svg";
 import channelWeChatLogoURL from "../assets/images/channels/wechat.svg";
@@ -9,6 +9,7 @@ import channelLineLogoURL from "../assets/images/channels/line.svg";
 import channelMixinLogoURL from "../assets/images/channels/mixin.svg";
 import channelSlackLogoURL from "../assets/images/channels/slack.svg";
 import channelTelegramLogoURL from "../assets/images/channels/telegram.svg";
+import { activeChannelTab, channelTabs, itemsForChannelTab } from "../core/channel-tabs";
 import {
   endpointState,
   runtimeApiDownloadForEndpoint,
@@ -16,6 +17,7 @@ import {
   translate,
 } from "../core/context";
 import { useContactsStore } from "../stores/contactsStore";
+import AppTabs from "./AppTabs";
 import MarkdownEditor from "./MarkdownEditor";
 import "./AppMarkdownEditor.css";
 
@@ -29,6 +31,15 @@ const CHANNEL_LOGOS = {
   wechat: channelWeChatLogoURL,
   whatsapp: channelWhatsAppLogoURL,
 };
+
+// A channel's logo as a tab icon. AppTabs draws an icon as a component, and the logos are image
+// files, so each gets a component of its own, made once.
+const CHANNEL_TAB_ICONS = Object.fromEntries(
+  Object.entries(CHANNEL_LOGOS).map(([channel, src]) => [
+    channel,
+    { name: "ChannelTabIcon", render: () => h("img", { src, alt: "" }) },
+  ]),
+);
 
 function trimText(value) {
   return String(value || "").trim();
@@ -115,6 +126,7 @@ function conversationItemsForProfiles(profiles) {
       subtitle: [platform, type].filter(Boolean).map((value) => value.toUpperCase()).join(" · "),
       value: `[${label}](${chatID})`,
       image: CHANNEL_LOGOS[platform] || initialAvatarDataURL(title),
+      channel: platform,
     });
   }
   return items.sort((left, right) => left.title.localeCompare(right.title));
@@ -122,6 +134,7 @@ function conversationItemsForProfiles(profiles) {
 
 const AppMarkdownEditor = {
   components: {
+    AppTabs,
     MarkdownEditor,
   },
   props: {
@@ -165,6 +178,27 @@ const AppMarkdownEditor = {
     const conversationItems = ref([]);
     const conversationsError = ref("");
     const conversationsLoading = ref(false);
+    // The picker's list is split by channel once it holds more than one. The chosen tab is kept
+    // while the editor lives, so the next mention starts in the same channel.
+    const conversationTabID = ref("");
+    const conversationTabs = computed(() =>
+      channelTabs(conversationItems.value, {
+        allTitle: t("markdown_editor_conversation_all"),
+        icon: (channel) => CHANNEL_TAB_ICONS[channel],
+      }),
+    );
+    const conversationTab = computed(() => activeChannelTab(conversationTabs.value, conversationTabID.value));
+    const visibleConversationItems = computed(() =>
+      itemsForChannelTab(conversationItems.value, conversationTab.value?.id),
+    );
+    // The list keeps one height whatever the tab or the filter leaves in it: the height of the
+    // whole list, up to nine rows. Otherwise the dialog resizes and re-centres when a tab is
+    // chosen, and the tabs move from under the pointer. A row is a little over 48px
+    // (AppMarkdownEditor.css) and the menu pads 16px; counting 49 only leaves a few pixels spare.
+    const conversationListHeight = computed(() => {
+      const rows = Math.min(conversationItems.value.length, 9);
+      return rows > 0 ? `min(${rows * 49 + 16}px, 60vh)` : "auto";
+    });
     let conversationsRequestSeq = 0;
     let contactAvatarsRequestSeq = 0;
     let contactAvatarsLoading = false;
@@ -271,6 +305,10 @@ const AppMarkdownEditor = {
       }
     }
 
+    function selectConversationTab(tab) {
+      conversationTabID.value = trimText(tab?.id);
+    }
+
     function insertReference(item) {
       const reference = trimText(item?.value);
       if (!reference) {
@@ -294,14 +332,18 @@ const AppMarkdownEditor = {
     return {
       contactsError,
       contactsLoading,
-      conversationItems,
+      conversationListHeight,
+      conversationTab,
+      conversationTabs,
       conversationsError,
       editorRef,
       insertReference,
       loadContactAvatars,
       loadConversations,
       mentionItems,
+      selectConversationTab,
       t,
+      visibleConversationItems,
     };
   },
   template: `
@@ -340,7 +382,8 @@ const AppMarkdownEditor = {
         </AppDropdownMenu>
         <AppDropdownMenu
           class="markdown-editor-toolbar-picker markdown-editor-conversation-picker"
-          :items="conversationItems"
+          :items="visibleConversationItems"
+          :scrollHeight="conversationListHeight"
           :placeholder="t('markdown_editor_conversation_placeholder')"
           :useFilter="true"
           useDialog="always"
@@ -359,6 +402,17 @@ const AppMarkdownEditor = {
           <span class="markdown-editor-toolbar-glyph" aria-hidden="true">
             <PhChat class="markdown-editor-toolbar-icon" />
           </span>
+          <template #dialog-header>
+            <AppTabs
+              v-if="conversationTabs.length > 0"
+              class="markdown-editor-picker-tabs"
+              :tabs="conversationTabs"
+              :modelValue="conversationTab"
+              iconOnly="auto"
+              :ariaLabel="t('markdown_editor_conversation_channels')"
+              @update:modelValue="selectConversationTab"
+            />
+          </template>
         </AppDropdownMenu>
         <slot name="toolbar"></slot>
       </template>

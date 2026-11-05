@@ -158,6 +158,7 @@ const ComponentsPreviewView = {
     ];
     const tabText = ref(tabItems[0]);
     const tabIcon = ref(tabItems[1]);
+    const tabAuto = ref(tabItems[0]);
 
     const sections = computed(() => [
       { id: "section", title: "AppSection" },
@@ -199,6 +200,7 @@ const ComponentsPreviewView = {
       tabItems,
       tabText,
       tabIcon,
+      tabAuto,
       panelValues,
       panelUpdate,
       savePanel,
@@ -300,7 +302,7 @@ const ComponentsPreviewView = {
 
       <section id="tabs" class="components-preview-section">
         <h2>AppTabs</h2>
-        <p class="components-preview-note">A segmented control with a sliding highlight. iconOnly shows square icon segments; each tab's title becomes its tooltip and accessible name.</p>
+        <p class="components-preview-note">A segmented control with a sliding highlight. iconOnly shows square icon segments; each tab's title becomes its tooltip and accessible name. iconOnly="auto" does so only while the labels do not all fit.</p>
         <div class="components-preview-grid">
           <div class="components-preview-demo">
             <span class="settings-field-label">With labels</span>
@@ -311,6 +313,13 @@ const ComponentsPreviewView = {
             <span class="settings-field-label">iconOnly</span>
             <AppTabs :tabs="tabItems" v-model="tabIcon" iconOnly ariaLabel="Icon only" :disabled="disabled" />
             <code>{{ show(tabIcon.id) }}</code>
+          </div>
+          <div class="components-preview-demo">
+            <span class="settings-field-label">iconOnly="auto", in 180px</span>
+            <div style="width: 180px">
+              <AppTabs :tabs="tabItems" v-model="tabAuto" iconOnly="auto" ariaLabel="Icons when crowded" :disabled="disabled" />
+            </div>
+            <code>{{ show(tabAuto.id) }}</code>
           </div>
         </div>
       </section>

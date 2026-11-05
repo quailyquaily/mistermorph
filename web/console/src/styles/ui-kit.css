@@ -870,6 +870,15 @@ body[data-theme=morph] .touchable.placeholder {
   width:100%;
 }
 
+/* The caller's controls for narrowing the list (tabs), between the filter and the list. */
+.q-menu-popup-body .header-area {
+  padding:0 1rem .5rem;
+}
+
+.q-menu-popup-body .header-area:first-child {
+  padding-top:1rem;
+}
+
 .q-menu-popup-body .scroll-area {
   overflow-y:scroll;
   overflow-x:hidden;
