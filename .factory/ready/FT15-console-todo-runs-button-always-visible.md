@@ -52,3 +52,13 @@ That is a flake on master: the `/shutdown` handler sends its reply before it can
 Looked at in a browser, on this build with a throwaway home and a stand-in LLM: with one ordinary topic and no TODO run, the button is there; pressed, the list shows only the note, and pressed again the topic is back; after a TODO item ran, the TODO view lists its topic and no note. At phone width (about 400px) the button is in the topics pane. No console errors.
 
 Not checked: zh and ja wording in the UI; a Console with no topic at all, which has no sidebar (see Decisions).
+
+## factory · review · 2026-11-05 12:42
+head: 4328cb24f03b0218b2227bd9b5c6acdd6f57e07b
+verdict: pass
+notes:
+- Codex reviewed all five changed files against origin/master...HEAD and the request and plan. No findings. The branch merges cleanly with master.
+- Validation passed with a throwaway HOME: gofmt check, go vet ./..., go test ./..., pnpm test (390/390), and pnpm build.
+- No non-pinned installs; only locked dependencies restored. Build reports a chunk-size warning above 500 kB.
+- Browser interaction was not repeated in this review. The previously reported shutdown cancellation race did not reproduce; this does not establish it is fixed.
+- No linked GitHub issue or PR. Ready for owner approval; not merged.
