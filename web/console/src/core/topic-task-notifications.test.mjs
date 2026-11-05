@@ -39,6 +39,7 @@ function browser(shared = sharedBrowserState()) {
   win.isSecureContext = true;
   win.shown = [];
   win.destinations = [];
+  win.titleLookups = [];
   win.focus = () => { win.focused = true; };
   win.Notification = class {
     static permission = "granted";
@@ -65,13 +66,14 @@ function deliver(win, raw = event, overrides = {}) {
   return handleTopicTaskNotification(raw, {
     win,
     scope: "/console",
-    translate: (key, vars) => key === "topic_notification_title" ? `Topic ${vars.topic}` : key,
+    translate: (key) => key,
     navigate: (path) => { win.destinations.push(path); },
+    topicTitle: async (topicID) => { win.titleLookups.push(topicID); return " Trip plan "; },
     ...overrides,
   });
 }
 
-test("success and failure notify in hidden tabs or unfocused windows, with identifiers only and a topic click destination", async () => {
+test("success and failure notify in hidden tabs or unfocused windows, with the topic's name and status only and a topic click destination", async () => {
   for (const status of ["done", "failed"]) {
     for (const [visible, focused] of [[false, false], [false, true], [true, false]]) {
       const win = browser();
@@ -79,8 +81,10 @@ test("success and failure notify in hidden tabs or unfocused windows, with ident
       assert.equal(await deliver(win, { ...event, status, body: "secret output", title: "secret input", error: "secret error" }), true);
       assert.equal(win.shown.length, 1);
       const notification = win.shown[0];
-      assert.equal(notification.title, `Topic ${event.topic_id}`);
-      assert.equal(notification.options.body, `status_${status}`);
+      // The topic's name as the sidebar shows it, never its ID or anything the event carried.
+      assert.equal(notification.title, "Trip plan");
+      assert.equal(notification.options.body, `topic_notification_${status}`);
+      assert.deepEqual(win.titleLookups, [event.topic_id]);
       notification.onclick();
       assert.equal(win.focused, true);
       assert.equal(notification.closed, true);
@@ -88,6 +92,55 @@ test("success and failure notify in hidden tabs or unfocused windows, with ident
       assert.equal(win.Notification.requests, 0);
     }
   }
+});
+
+test("a topic whose name cannot be read is notified as untitled, never by its ID", async () => {
+  const lookups = {
+    missing: undefined,
+    empty: async () => "  ",
+    failing: async () => { throw new Error("offline"); },
+    throwing: () => { throw new Error("broken"); },
+    "not text": async () => null,
+  };
+  for (const [name, topicTitle] of Object.entries(lookups)) {
+    const win = browser();
+    assert.equal(await deliver(win, { ...event, id: `topic-task:${name}` }, { topicTitle }), true, name);
+    assert.equal(win.shown[0].title, "chat_topic_untitled", name);
+    assert.equal(win.shown[0].options.body, "topic_notification_done", name);
+  }
+});
+
+test("a name that takes too long does not hold the notification back", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const win = browser();
+  const delivered = deliver(win, event, { topicTitle: () => new Promise(() => {}) });
+  // Let the handler reach the lookup, then pass its 3 seconds.
+  for (let i = 0; i < 10; i += 1) await Promise.resolve();
+  assert.equal(win.shown.length, 0);
+  t.mock.timers.tick(3000);
+  assert.equal(await delivered, true);
+  assert.equal(win.shown[0].title, "chat_topic_untitled");
+});
+
+test("coming back while the topic's name loads shows nothing, and the completion stays consumed", async () => {
+  const shared = sharedBrowserState();
+  const win = browser(shared);
+  let lookedUp = 0;
+  const topicTitle = async () => {
+    lookedUp += 1;
+    win.setForeground(true, true);
+    return "Trip plan";
+  };
+  assert.equal(await deliver(win, event, { topicTitle }), false);
+  assert.equal(lookedUp, 1);
+  assert.equal(win.shown.length, 0);
+  win.setForeground(false, false);
+  assert.equal(await deliver(win), false);
+  // A completion seen in the foreground does not ask for the name at all.
+  const front = browser();
+  front.setForeground(true, true);
+  assert.equal(await deliver(front), false);
+  assert.deepEqual(front.titleLookups, []);
 });
 
 test("foreground completions are consumed and never replayed after hiding or reloading", async () => {
@@ -198,6 +251,7 @@ test("permission is requested explicitly only from default; denied and unsupport
 });
 
 test("installed socket routes live completions, ignores stale sockets and reconnects without fetching history", async () => {
+  const requests = [];
   const { readFile } = await import("node:fs/promises");
   const { runInNewContext } = await import("node:vm");
   const { normalizeConsoleNotification, claimConsoleNotification, resolveBrowserNotificationPermission } = await import("./system-notification-utils.js");
@@ -230,6 +284,11 @@ test("installed socket routes live completions, ignores stale sockets and reconn
     buildConsoleNotificationURL: () => "ws://example.test/notifications",
     safeJSON: JSON.parse,
     translate: (key) => key,
+    CONSOLE_LOCAL_ENDPOINT_REF: "ep_console_local",
+    runtimeApiFetchForEndpoint: async (endpointRef, path) => {
+      requests.push(`${endpointRef} ${path}`);
+      return { id: event.topic_id, title: "Trip plan" };
+    },
     handleTopicTaskNotification,
     trackNotificationForeground,
     normalizeConsoleNotification,
@@ -246,6 +305,9 @@ test("installed socket routes live completions, ignores stale sockets and reconn
   sockets[0].onmessage({ data: JSON.stringify(event) });
   await flush();
   assert.equal(win.shown.length, 1);
+  // The one request is for the notified topic's name, on the local Console.
+  assert.equal(win.shown[0].title, "Trip plan");
+  assert.deepEqual(requests, ["ep_console_local /topics/topic%20%2F%E4%B8%AD%E6%96%87"]);
   sockets[0].close();
   reconnect();
   await flush();
@@ -264,4 +326,5 @@ test("installed socket routes live completions, ignores stale sockets and reconn
   sockets[1].onmessage({ data: JSON.stringify({ ...event, id: "logged-out" }) });
   await flush();
   assert.equal(win.shown.length, 2);
+  assert.equal(requests.length, 1);
 });

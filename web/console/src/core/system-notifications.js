@@ -6,6 +6,7 @@ import {
   translate,
   buildConsoleNotificationURL,
   createConsoleStreamTicket,
+  runtimeApiFetchForEndpoint,
   safeJSON,
 } from "./context";
 import {
@@ -21,6 +22,7 @@ import {
   requestBrowserNotificationPermission,
 } from "./system-notification-utils";
 
+import { CONSOLE_LOCAL_ENDPOINT_REF } from "./endpoints";
 import { handleTopicTaskNotification, trackNotificationForeground } from "./topic-task-notifications";
 
 const RECONNECT_DELAY_MS = 3000;
@@ -130,6 +132,7 @@ async function connectNotificationSocket(router) {
         scope: BASE_PATH,
         translate,
         navigate: (path) => router.push(path),
+        topicTitle: localTopicTitle,
         isCurrent: () => activeSocket === socket && generation === connectionGeneration && authValid.value,
       });
       return;
@@ -149,6 +152,12 @@ async function connectNotificationSocket(router) {
   socket.onerror = () => {
     socket.close();
   };
+}
+
+// The name of a topic of the local Console, whose tasks these notifications are about.
+async function localTopicTitle(topicID) {
+  const topic = await runtimeApiFetchForEndpoint(CONSOLE_LOCAL_ENDPOINT_REF, `/topics/${encodeURIComponent(topicID)}`);
+  return topic?.title;
 }
 
 function disconnectNotificationSocket() {
