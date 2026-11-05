@@ -2,6 +2,8 @@ import { watch } from "vue";
 
 import {
   authValid,
+  BASE_PATH,
+  translate,
   buildConsoleNotificationURL,
   createConsoleStreamTicket,
   safeJSON,
@@ -16,7 +18,10 @@ import {
   claimConsoleNotification,
   normalizeConsoleNotification,
   resolveBrowserNotificationPermission,
+  requestBrowserNotificationPermission,
 } from "./system-notification-utils";
+
+import { handleTopicTaskNotification, trackNotificationForeground } from "./topic-task-notifications";
 
 const RECONNECT_DELAY_MS = 3000;
 const NOTIFICATION_TEXT_LIMIT = 600;
@@ -35,18 +40,6 @@ export async function requestSystemNotificationPermission() {
     }
   }
   return await requestBrowserNotificationPermission();
-}
-
-async function requestBrowserNotificationPermission() {
-  const current = resolveBrowserNotificationPermission();
-  if (current !== "default") {
-    return current;
-  }
-  try {
-    return await window.Notification.requestPermission();
-  } catch {
-    return "unsupported";
-  }
 }
 
 export async function showSystemNotification(event) {
@@ -86,16 +79,17 @@ export async function showSystemNotification(event) {
   }
 }
 
-export function installSystemNotifications() {
+export function installSystemNotifications(router) {
   if (installed || typeof window === "undefined") {
     return;
   }
   installed = true;
+  trackNotificationForeground(window, BASE_PATH);
   watch(
     authValid,
     (valid) => {
       if (valid) {
-        void connectNotificationSocket();
+        void connectNotificationSocket(router);
       } else {
         disconnectNotificationSocket();
       }
@@ -104,7 +98,7 @@ export function installSystemNotifications() {
   );
 }
 
-async function connectNotificationSocket() {
+async function connectNotificationSocket(router) {
   if (!authValid.value || activeSocket) {
     return;
   }
@@ -114,7 +108,7 @@ async function connectNotificationSocket() {
   try {
     payload = await createConsoleStreamTicket();
   } catch {
-    scheduleReconnect(generation);
+    scheduleReconnect(generation, router);
     return;
   }
   if (generation !== connectionGeneration || !authValid.value) {
@@ -122,13 +116,25 @@ async function connectNotificationSocket() {
   }
   const url = buildConsoleNotificationURL(payload?.ticket);
   if (!url) {
-    scheduleReconnect(generation);
+    scheduleReconnect(generation, router);
     return;
   }
   const socket = new WebSocket(url);
   activeSocket = socket;
   socket.onmessage = (message) => {
-    const event = normalizeConsoleNotification(safeJSON(message.data, null));
+    if (activeSocket !== socket || generation !== connectionGeneration || !authValid.value) return;
+    const raw = safeJSON(message.data, null);
+    if (raw?.type === "topic_task_completed") {
+      void handleTopicTaskNotification(raw, {
+        win: window,
+        scope: BASE_PATH,
+        translate,
+        navigate: (path) => router.push(path),
+        isCurrent: () => activeSocket === socket && generation === connectionGeneration && authValid.value,
+      });
+      return;
+    }
+    const event = normalizeConsoleNotification(raw);
     if (!event || !claimConsoleNotification(window.localStorage, event.id)) {
       return;
     }
@@ -138,7 +144,7 @@ async function connectNotificationSocket() {
     if (activeSocket === socket) {
       activeSocket = null;
     }
-    scheduleReconnect(generation);
+    scheduleReconnect(generation, router);
   };
   socket.onerror = () => {
     socket.close();
@@ -156,13 +162,13 @@ function disconnectNotificationSocket() {
   }
 }
 
-function scheduleReconnect(generation) {
+function scheduleReconnect(generation, router) {
   if (!authValid.value || reconnectTimer || generation !== connectionGeneration) {
     return;
   }
   reconnectTimer = window.setTimeout(() => {
     reconnectTimer = 0;
-    void connectNotificationSocket();
+    void connectNotificationSocket(router);
   }, RECONNECT_DELAY_MS);
 }
 

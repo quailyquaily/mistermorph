@@ -10,6 +10,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	awarenessloop "github.com/quailyquaily/mistermorph/internal/channelruntime/awareness"
+	"github.com/quailyquaily/mistermorph/internal/daemonruntime"
 )
 
 func TestConsoleNotificationHubPublishesToSubscribers(t *testing.T) {
@@ -91,5 +92,116 @@ func TestNotificationWebSocketDeliversCronEvent(t *testing.T) {
 	}
 	if len(got) != 3 || got["id"] != "run-ws" || got["title"] != "WebSocket task" || got["body"] != "Delivered." {
 		t.Fatalf("unexpected notification frame: %#v", got)
+	}
+}
+
+func TestTopicTaskCompletionNotifications(t *testing.T) {
+	for _, status := range []daemonruntime.TaskStatus{daemonruntime.TaskDone, daemonruntime.TaskFailed} {
+		t.Run(string(status), func(t *testing.T) {
+			hub := newConsoleNotificationHub()
+			store, err := daemonruntime.NewConsoleFileStore(daemonruntime.ConsoleFileStoreOptions{
+				OnTaskUpdate: hub.PublishTaskCompletion,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			events, unsubscribe := hub.Subscribe()
+			defer unsubscribe()
+			info := daemonruntime.TaskInfo{ID: "task-1", TopicID: "topic-1", Status: daemonruntime.TaskRunning, Task: "private input"}
+			if err := store.Upsert(info); err != nil {
+				t.Fatal(err)
+			}
+			if err := store.Update(info.ID, func(task *daemonruntime.TaskInfo) {
+				task.Status = status
+				task.Error = "private error"
+				task.Result = map[string]any{"output": "private output"}
+			}); err != nil {
+				t.Fatal(err)
+			}
+			select {
+			case event := <-events:
+				raw, err := json.Marshal(event)
+				if err != nil {
+					t.Fatal(err)
+				}
+				var fields map[string]any
+				if err := json.Unmarshal(raw, &fields); err != nil {
+					t.Fatal(err)
+				}
+				if len(fields) != 4 || fields["type"] != "topic_task_completed" || fields["id"] != "topic-task:task-1" || fields["topic_id"] != "topic-1" || fields["status"] != string(status) {
+					t.Fatalf("unexpected completion frame: %s", raw)
+				}
+			default:
+				t.Fatal("missing live completion")
+			}
+			if err := store.Update(info.ID, func(task *daemonruntime.TaskInfo) { task.Status = status }); err != nil {
+				t.Fatal(err)
+			}
+			select {
+			case event := <-events:
+				t.Fatalf("repeated terminal update emitted %#v", event)
+			default:
+			}
+		})
+	}
+}
+
+func TestTopicTaskCompletionIgnoresNonTransitions(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		previous daemonruntime.TaskInfo
+		next     daemonruntime.TaskInfo
+	}{
+		{"empty", daemonruntime.TaskInfo{}, daemonruntime.TaskInfo{}},
+		{"historical", daemonruntime.TaskInfo{}, daemonruntime.TaskInfo{ID: "task", TopicID: "topic", Status: daemonruntime.TaskDone}},
+		{"repeated", daemonruntime.TaskInfo{ID: "task", Status: daemonruntime.TaskDone}, daemonruntime.TaskInfo{ID: "task", TopicID: "topic", Status: daemonruntime.TaskDone}},
+		{"running", daemonruntime.TaskInfo{ID: "task", Status: daemonruntime.TaskQueued}, daemonruntime.TaskInfo{ID: "task", TopicID: "topic", Status: daemonruntime.TaskRunning}},
+		{"canceled", daemonruntime.TaskInfo{ID: "task", Status: daemonruntime.TaskRunning}, daemonruntime.TaskInfo{ID: "task", TopicID: "topic", Status: daemonruntime.TaskCanceled}},
+		{"no topic", daemonruntime.TaskInfo{ID: "task", Status: daemonruntime.TaskRunning}, daemonruntime.TaskInfo{ID: "task", Status: daemonruntime.TaskFailed}},
+		{"cron", daemonruntime.TaskInfo{ID: "task", Status: daemonruntime.TaskRunning}, daemonruntime.TaskInfo{ID: "task", TopicID: daemonruntime.CronTopicID("todo"), Status: daemonruntime.TaskDone}},
+		{"steering", daemonruntime.TaskInfo{ID: "task", Status: daemonruntime.TaskRunning}, daemonruntime.TaskInfo{ID: "task", TopicID: "topic", Status: daemonruntime.TaskDone, SteerTargetTaskID: "parent"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			hub := newConsoleNotificationHub()
+			events, unsubscribe := hub.Subscribe()
+			defer unsubscribe()
+			hub.PublishTaskCompletion(tc.previous, tc.next)
+			select {
+			case event := <-events:
+				t.Fatalf("unexpected notification: %#v", event)
+			default:
+			}
+		})
+	}
+}
+
+func TestTopicNotificationWebSocketDoesNotReplayOnReconnect(t *testing.T) {
+	hub := newConsoleNotificationHub()
+	srv := &server{streamTickets: newSessionStore(""), localRuntime: &consoleLocalRuntime{notificationHub: hub}}
+	httpServer := httptest.NewServer(http.HandlerFunc(srv.handleNotificationWebSocket))
+	defer httpServer.Close()
+	publish := func(id string) {
+		hub.PublishTaskCompletion(daemonruntime.TaskInfo{ID: id, Status: daemonruntime.TaskRunning}, daemonruntime.TaskInfo{ID: id, TopicID: "topic-1", Status: daemonruntime.TaskDone})
+	}
+	publish("before-first-load")
+	for _, id := range []string{"first-live", "after-reconnect"} {
+		ticket, _, err := srv.streamTickets.Create(time.Minute)
+		if err != nil {
+			t.Fatal(err)
+		}
+		conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(httpServer.URL, "http")+"?ticket="+ticket, http.Header{"Origin": []string{httpServer.URL}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		publish(id)
+		_ = conn.SetReadDeadline(time.Now().Add(time.Second))
+		var event consoleNotification
+		if err := conn.ReadJSON(&event); err != nil {
+			t.Fatal(err)
+		}
+		if event.ID != "topic-task:"+id || event.TopicID != "topic-1" {
+			t.Fatalf("unexpected event: %#v", event)
+		}
+		_ = conn.Close()
 	}
 }

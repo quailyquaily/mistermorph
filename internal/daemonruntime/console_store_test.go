@@ -1205,3 +1205,46 @@ func TestReservedTopicIDs(t *testing.T) {
 		})
 	}
 }
+
+func TestConsoleFileStoreTaskObserverSkipsReplayAndRecovery(t *testing.T) {
+	root := t.TempDir()
+	var updates [][2]TaskStatus
+	opts := ConsoleFileStoreOptions{
+		RootDir: root, Persist: true, JournalDir: filepath.Join(root, "journal"),
+		OnTaskUpdate: func(previous, next TaskInfo) {
+			updates = append(updates, [2]TaskStatus{previous.Status, next.Status})
+		},
+	}
+	store, err := NewConsoleFileStore(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	info := TaskInfo{ID: "completed", TopicID: "topic", Status: TaskRunning}
+	if err := store.Upsert(info); err != nil {
+		t.Fatal(err)
+	}
+	info.Status = TaskDone
+	if err := store.Upsert(info); err != nil {
+		t.Fatal(err)
+	}
+	if len(updates) != 2 || updates[1] != [2]TaskStatus{TaskRunning, TaskDone} {
+		t.Fatalf("unexpected live updates: %v", updates)
+	}
+	if err := store.Upsert(TaskInfo{ID: "interrupted", TopicID: "topic", Status: TaskRunning}); err != nil {
+		t.Fatal(err)
+	}
+	updates = nil
+	reloaded, err := NewConsoleFileStore(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := reloaded.Get("completed"); !ok {
+		t.Fatal("missing recovered history")
+	}
+	if task, ok := reloaded.Get("interrupted"); !ok || task.Status != TaskCanceled {
+		t.Fatalf("expected startup recovery, got %#v", task)
+	}
+	if len(updates) != 0 {
+		t.Fatalf("replay or recovery called observer: %v", updates)
+	}
+}

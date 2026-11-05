@@ -8,24 +8,34 @@ import (
 
 	"github.com/gorilla/websocket"
 	awarenessloop "github.com/quailyquaily/mistermorph/internal/channelruntime/awareness"
+	"github.com/quailyquaily/mistermorph/internal/daemonruntime"
 )
+
+// Topic events carry identifiers and status only, never task text or output.
+type consoleNotification struct {
+	*awarenessloop.CronNotification
+	ID      string `json:"id"`
+	Type    string `json:"type,omitempty"`
+	TopicID string `json:"topic_id,omitempty"`
+	Status  string `json:"status,omitempty"`
+}
 
 type consoleNotificationHub struct {
 	mu   sync.RWMutex
-	subs map[chan awarenessloop.CronNotification]struct{}
+	subs map[chan consoleNotification]struct{}
 }
 
 func newConsoleNotificationHub() *consoleNotificationHub {
-	return &consoleNotificationHub{subs: map[chan awarenessloop.CronNotification]struct{}{}}
+	return &consoleNotificationHub{subs: map[chan consoleNotification]struct{}{}}
 }
 
-func (h *consoleNotificationHub) Subscribe() (<-chan awarenessloop.CronNotification, func()) {
+func (h *consoleNotificationHub) Subscribe() (<-chan consoleNotification, func()) {
 	if h == nil {
-		ch := make(chan awarenessloop.CronNotification)
+		ch := make(chan consoleNotification)
 		close(ch)
 		return ch, func() {}
 	}
-	ch := make(chan awarenessloop.CronNotification, 8)
+	ch := make(chan consoleNotification, 8)
 	h.mu.Lock()
 	h.subs[ch] = struct{}{}
 	h.mu.Unlock()
@@ -37,14 +47,42 @@ func (h *consoleNotificationHub) Subscribe() (<-chan awarenessloop.CronNotificat
 }
 
 func (h *consoleNotificationHub) Publish(notification awarenessloop.CronNotification) {
-	if h == nil || strings.TrimSpace(notification.ID) == "" {
-		return
-	}
 	notification.ID = strings.TrimSpace(notification.ID)
 	notification.Title = strings.TrimSpace(notification.Title)
 	notification.Body = strings.TrimSpace(notification.Body)
+	h.publish(consoleNotification{ID: notification.ID, CronNotification: &notification})
+}
+
+func (h *consoleNotificationHub) PublishTaskCompletion(previous, next daemonruntime.TaskInfo) {
+	if previous.ID == "" || next.ID == "" || strings.TrimSpace(next.TopicID) == "" || next.SteerTargetTaskID != "" {
+		return
+	}
+	// TODO runs retain their existing opt-in cron notification behavior.
+	if daemonruntime.IsCronTopicID(next.TopicID) {
+		return
+	}
+	switch previous.Status {
+	case daemonruntime.TaskQueued, daemonruntime.TaskRunning, daemonruntime.TaskPending:
+	default:
+		return
+	}
+	if next.Status != daemonruntime.TaskDone && next.Status != daemonruntime.TaskFailed {
+		return
+	}
+	h.publish(consoleNotification{
+		ID:      "topic-task:" + next.ID,
+		Type:    "topic_task_completed",
+		TopicID: next.TopicID,
+		Status:  string(next.Status),
+	})
+}
+
+func (h *consoleNotificationHub) publish(notification consoleNotification) {
+	if h == nil || notification.ID == "" {
+		return
+	}
 	h.mu.RLock()
-	subs := make([]chan awarenessloop.CronNotification, 0, len(h.subs))
+	subs := make([]chan consoleNotification, 0, len(h.subs))
 	for sub := range h.subs {
 		subs = append(subs, sub)
 	}

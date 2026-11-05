@@ -46,7 +46,7 @@ endpointState.hydrateEndpointSelection();
 installDesktopRuntimeMode();
 installExternalLinkHandler();
 installConsolePerformanceObservers();
-installSystemNotifications();
+installSystemNotifications(router);
 installChatBubbleTail();
 installTooltips();
 installDialogOrigin();
