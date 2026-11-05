@@ -156,7 +156,20 @@ const (
 	// AgentLinkTopicPrefix starts the ID of the topic that holds what another agent sends this one
 	// over Agent Link: one topic per agent, named after it, kept apart from the person's own topics.
 	AgentLinkTopicPrefix = "_agentlink_"
+	// CronTopicPrefix starts the ID of a TODO item's topic, which holds that item's runs.
+	CronTopicPrefix = "_cron_"
 )
+
+// CronTopicID is the topic of the TODO (cron) item with this ID.
+func CronTopicID(taskID string) string {
+	return CronTopicPrefix + strings.TrimSpace(taskID)
+}
+
+// IsCronTopicID reports whether id is a TODO item's topic.
+func IsCronTopicID(id string) bool {
+	id = strings.TrimSpace(id)
+	return strings.HasPrefix(id, CronTopicPrefix) && len(id) > len(CronTopicPrefix)
+}
 
 // AgentLinkTopicID is the topic of the agent with this Agent Link instance ID.
 func AgentLinkTopicID(instanceID string) string {
@@ -170,9 +183,10 @@ func IsAgentLinkTopicID(id string) bool {
 }
 
 // IsReservedTopicID reports whether id is a topic the runtime keeps for itself: the default topic,
-// Awareness and the Agent Link agents' topics. Their titles are fixed, and a person does not start
-// chats in the Agent Link ones.
+// Awareness, the Agent Link agents' topics and the TODO items' topics. Their titles are fixed (a
+// TODO item's topic follows the item's title), and a person does not start chats in the Agent
+// Link ones.
 func IsReservedTopicID(id string) bool {
 	id = strings.TrimSpace(id)
-	return id == ConsoleDefaultTopicID || id == ConsoleAwarenessTopicID || IsAgentLinkTopicID(id)
+	return id == ConsoleDefaultTopicID || id == ConsoleAwarenessTopicID || IsAgentLinkTopicID(id) || IsCronTopicID(id)
 }

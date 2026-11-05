@@ -485,7 +485,7 @@ func (s *ConsoleFileStore) List(opts TaskListOptions) []TaskInfo {
 		if topicID != "" && strings.TrimSpace(item.TopicID) != topicID {
 			continue
 		}
-		if topicID == "" && !opts.AllTopics && (strings.TrimSpace(item.TopicID) == ConsoleAwarenessTopicID || IsAgentLinkTopicID(item.TopicID)) {
+		if topicID == "" && !opts.AllTopics && (strings.TrimSpace(item.TopicID) == ConsoleAwarenessTopicID || IsAgentLinkTopicID(item.TopicID) || IsCronTopicID(item.TopicID)) {
 			continue
 		}
 		if topicDeleted(s.topics[strings.TrimSpace(item.TopicID)]) {
@@ -567,8 +567,9 @@ func (s *ConsoleFileStore) DeleteTopic(id string) (bool, error) {
 		return false, fmt.Errorf("console task store is nil")
 	}
 	id = strings.TrimSpace(id)
-	// An Agent Link agent's topic stays: its next message would land in a deleted topic.
-	if id == "" || id == ConsoleDefaultTopicID || IsAgentLinkTopicID(id) {
+	// An Agent Link agent's topic stays: its next message would land in a deleted topic. So does a
+	// TODO item's topic, for its next run.
+	if id == "" || id == ConsoleDefaultTopicID || IsAgentLinkTopicID(id) || IsCronTopicID(id) {
 		return false, nil
 	}
 	now := time.Now().UTC()
@@ -647,6 +648,36 @@ func (s *ConsoleFileStore) setTopicTitle(id, title, icon, expectedTitle string, 
 		topic.TitleCustomized = true
 	}
 	topic.UpdatedAt = now
+	topic.TitleRevision++
+	return s.saveTopicTitleLocked(topic, now)
+}
+
+// SetCronTopicTitle renames the topic of the TODO item with this ID after the item, so a saved
+// item's topic follows its title at once, not only at its next run. An item without a topic gets
+// none, and the topic keeps its place in the list, which the latest run orders.
+func (s *ConsoleFileStore) SetCronTopicTitle(taskID, title string) error {
+	if s == nil {
+		return fmt.Errorf("console task store is nil")
+	}
+	id := CronTopicID(taskID)
+	title = strings.TrimSpace(title)
+	if !IsCronTopicID(id) || title == "" {
+		return nil
+	}
+	now := time.Now().UTC()
+
+	unlock, err := s.lockShared()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+
+	topic, ok := s.topics[id]
+	if !ok || topicDeleted(topic) || topic.Title == title {
+		return nil
+	}
+	topic.Title = title
+	topic.TitleCustomized = true
 	topic.TitleRevision++
 	return s.saveTopicTitleLocked(topic, now)
 }
@@ -1197,7 +1228,7 @@ func nextConsoleTopic(topic TopicInfo, exists bool, topicID string, title string
 		return normalizeTopicInfo(topic)
 	}
 	changed := false
-	if title != "" {
+	if title != "" && title != topic.Title {
 		topic.Title = title
 		topic.TitleCustomized = true
 		topic.TitleRevision++
