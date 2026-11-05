@@ -1799,6 +1799,29 @@ func TestConsoleLocalRuntimeSubmitTaskStoresResolvedModel(t *testing.T) {
 	})
 }
 
+// A TODO item's topic is read-only at the runtime too, not only in the Console's composer: a
+// command sent to it is refused, and a topic title sent with it does not rename the topic.
+func TestConsoleSubmitRefusesATodoItemsTopic(t *testing.T) {
+	runtime := newConsoleGenerationTestRuntime(t, t.TempDir(), t.TempDir())
+	topicID := daemonruntime.CronTopicID("weekly")
+	run := daemonruntime.TaskInfo{ID: "cron:1", Status: daemonruntime.TaskDone, Task: "Run.", CreatedAt: time.Now().UTC(), TopicID: topicID}
+	if err := runtime.store.UpsertWithTrigger(run, daemonruntime.TaskTrigger{Source: "cron"}, "Weekly report"); err != nil {
+		t.Fatal(err)
+	}
+	for _, task := range []string{"/help", "hello"} {
+		_, err := runtime.submitTask(context.Background(), daemonruntime.SubmitTaskRequest{Task: task, TopicID: " " + topicID + " ", TopicTitle: "Mine now"})
+		if err == nil || !strings.Contains(err.Error(), "TODO item's topic") {
+			t.Fatalf("submit %q error = %v", task, err)
+		}
+	}
+	if topic, ok := runtime.store.GetTopic(topicID); !ok || topic.Title != "Weekly report" {
+		t.Fatalf("topic after refused submits = %+v", topic)
+	}
+	if got := runtime.store.List(daemonruntime.TaskListOptions{TopicID: topicID, Limit: 10}); len(got) != 1 {
+		t.Fatalf("topic tasks = %d, want the run only", len(got))
+	}
+}
+
 func TestConsoleSyntheticTaskUpdateFailureReleasesOnlyCallerOwnership(t *testing.T) {
 	runtime := newConsoleGenerationTestRuntime(t, t.TempDir(), t.TempDir())
 	generation, err := runtime.captureGeneration()

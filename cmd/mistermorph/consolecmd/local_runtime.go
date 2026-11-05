@@ -1473,6 +1473,9 @@ func (r *consoleLocalRuntime) submitTaskWithGeneration(ctx context.Context, gene
 	}()
 	if topicID := strings.TrimSpace(req.TopicID); daemonruntime.IsAgentLinkTopicID(topicID) {
 		return daemonruntime.SubmitTaskResponse{}, daemonruntime.BadRequest("an Agent Link agent's topic only holds what that agent sends")
+	} else if daemonruntime.IsCronTopicID(topicID) {
+		// Before anything else: a command or a topic title sent here would otherwise still land.
+		return daemonruntime.SubmitTaskResponse{}, daemonruntime.BadRequest("a TODO item's topic only holds that item's runs")
 	} else if topicID != "" && topicID != daemonruntime.ConsoleDefaultTopicID {
 		if topic, ok := r.store.GetTopic(topicID); !ok || topic == nil || topic.DeletedAt != nil {
 			return daemonruntime.SubmitTaskResponse{}, daemonruntime.BadRequest("topic not found")

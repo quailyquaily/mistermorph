@@ -85,7 +85,7 @@ func (routes *routeRegistration) registerStateRoutes() {
 			return
 		}
 		paths := statePaths
-		handleTodoTasks(w, r, paths.cronPath, paths.contactsDir, mode, settingsReader)
+		handleTodoTasks(w, r, paths.cronPath, paths.contactsDir, mode, settingsReader, opts.TaskTopic.TopicReader)
 	})
 	mux.HandleFunc("/todo/runs", func(w http.ResponseWriter, r *http.Request) {
 		if !checkAuth(r, authToken) {

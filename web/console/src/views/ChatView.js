@@ -871,6 +871,15 @@ const ChatView = {
       return items;
     });
     const hasVisibleTopics = computed(() => visibleTopics.value.length > 0);
+    // The TODO items' topics, the one with the latest run first.
+    const cronTopics = computed(() =>
+      topics.value
+        .filter((topic) => isCronTopicID(normalizeTopicID(topic?.id)))
+        .sort((a, b) => String(b?.updated_at || "").localeCompare(String(a?.updated_at || ""))),
+    );
+    // The sidebar is there for the TODO items' topics too: with none of the person's own topics,
+    // its TODO toggle is still the only way to them.
+    const hasSidebarTopics = computed(() => hasVisibleTopics.value || cronTopics.value.length > 0);
     const selectedTopic = computed(() => {
       const selectedID = normalizeTopicID(selectedTopicID.value);
       if (!selectedID) {
@@ -928,7 +937,7 @@ const ChatView = {
       if (!mobileTopicSplitEnabled.value) {
         return t("chat_title");
       }
-      if (!hasVisibleTopics.value) {
+      if (!hasSidebarTopics.value) {
         return creatingTopic.value ? t("chat_topic_new") : t("chat_title");
       }
       if (mobileTopicView.value === "topics") {
@@ -940,14 +949,14 @@ const ChatView = {
       return selectedTopic.value ? topicTitle(selectedTopic.value) : t("chat_title");
     });
     const mobileShowBack = computed(
-      () => mobileTopicSplitEnabled.value && hasVisibleTopics.value && mobileTopicView.value === "chat"
+      () => mobileTopicSplitEnabled.value && hasSidebarTopics.value && mobileTopicView.value === "chat"
     );
     const showTopicSidebar = computed(() => {
       if (!consoleTopicsEnabled.value) {
         return false;
       }
       if (!mobileTopicSplitEnabled.value) {
-        return hasVisibleTopics.value;
+        return hasSidebarTopics.value;
       }
       return mobileTopicView.value === "topics";
     });
@@ -1044,12 +1053,6 @@ const ChatView = {
     const agentTopics = computed(() =>
       topics.value
         .filter((topic) => isAgentLinkTopicID(normalizeTopicID(topic?.id)))
-        .sort((a, b) => String(b?.updated_at || "").localeCompare(String(a?.updated_at || ""))),
-    );
-    // The TODO items' topics, the one with the latest run first.
-    const cronTopics = computed(() =>
-      topics.value
-        .filter((topic) => isCronTopicID(normalizeTopicID(topic?.id)))
         .sort((a, b) => String(b?.updated_at || "").localeCompare(String(a?.updated_at || ""))),
     );
     // While a topic is dragged, a pinned group is always there to drop it on, even an empty one.
@@ -1347,7 +1350,7 @@ const ChatView = {
 
     const shellClass = computed(() => {
       const classes = ["chat-shell"];
-      if (consoleTopicsEnabled.value && hasVisibleTopics.value && !mobileTopicSplitEnabled.value) {
+      if (consoleTopicsEnabled.value && hasSidebarTopics.value && !mobileTopicSplitEnabled.value) {
         classes.push("has-sidebar");
       }
       // The workspace column stays in the grid while it can open, so showing and hiding it
@@ -1598,7 +1601,7 @@ const ChatView = {
         mobileTopicView.value = "chat";
         return;
       }
-      if (!hasVisibleTopics.value) {
+      if (!hasSidebarTopics.value) {
         mobileTopicView.value = "chat";
         return;
       }
@@ -1620,7 +1623,7 @@ const ChatView = {
     }
 
     function showTopicsView() {
-      if (!hasVisibleTopics.value) {
+      if (!hasSidebarTopics.value) {
         return;
       }
       syncMobileTopicView({ preferTopics: true });
@@ -4218,7 +4221,9 @@ const ChatView = {
       }
     }
 
-    useTopicMetadata(topics, submitEndpointRef);
+    // A TODO item's topic gets its runs while nobody chats in it, so the poll also brings the time
+    // of its latest run, which orders the TODO list.
+    useTopicMetadata(topics, submitEndpointRef, (topic) => isCronTopicID(topic?.id));
 
     // The history reserves a stable scrollbar gutter; the composer mirrors its measured width so both right edges line up.
     function syncHistoryScrollbarWidth() {

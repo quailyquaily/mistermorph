@@ -652,6 +652,36 @@ func (s *ConsoleFileStore) setTopicTitle(id, title, icon, expectedTitle string, 
 	return s.saveTopicTitleLocked(topic, now)
 }
 
+// SetCronTopicTitle renames the topic of the TODO item with this ID after the item, so a saved
+// item's topic follows its title at once, not only at its next run. An item without a topic gets
+// none, and the topic keeps its place in the list, which the latest run orders.
+func (s *ConsoleFileStore) SetCronTopicTitle(taskID, title string) error {
+	if s == nil {
+		return fmt.Errorf("console task store is nil")
+	}
+	id := CronTopicID(taskID)
+	title = strings.TrimSpace(title)
+	if !IsCronTopicID(id) || title == "" {
+		return nil
+	}
+	now := time.Now().UTC()
+
+	unlock, err := s.lockShared()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+
+	topic, ok := s.topics[id]
+	if !ok || topicDeleted(topic) || topic.Title == title {
+		return nil
+	}
+	topic.Title = title
+	topic.TitleCustomized = true
+	topic.TitleRevision++
+	return s.saveTopicTitleLocked(topic, now)
+}
+
 // BeginTopicTitleRegeneration invalidates pending naming results without changing
 // the displayed title, icon or topic ordering. Its revision survives a restart.
 func (s *ConsoleFileStore) BeginTopicTitleRegeneration(id string) (TopicInfo, error) {
