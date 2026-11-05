@@ -200,6 +200,15 @@ func (inv *invocation) loop(entry moejs.Value) {
 		}
 		select {
 		case done := <-inv.done:
+			if inv.opsCtx.Err() != nil {
+				// A cancelled operation returns as the invocation ends, and this select may see
+				// its return first. The invocation ended all the same: the script must not run
+				// on with the operation's cancellation as an error it could catch.
+				<-inv.ctx.Done()
+				inv.finishUnseen(done, OutcomeCancelled)
+				inv.endFromContext()
+				return
+			}
 			inv.settle(done)
 		case <-inv.ctx.Done():
 			inv.endFromContext()

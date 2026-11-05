@@ -18,6 +18,7 @@ type fakeHost struct {
 	tools     map[string]fakeTool
 	safe      map[string]bool
 	decisions map[string]Decision
+	check     func(op Op)
 	finish    func(op Op, result string, err error) (string, error)
 
 	mu       sync.Mutex
@@ -28,6 +29,9 @@ type fakeHost struct {
 }
 
 func (h *fakeHost) Check(_ context.Context, op Op) Decision {
+	if h.check != nil {
+		h.check(op)
+	}
 	if d, ok := h.decisions[op.Tool]; ok {
 		return d
 	}
@@ -360,6 +364,38 @@ func TestRunConcurrentInvocations(t *testing.T) {
 		}(i)
 	}
 	wg.Wait()
+}
+
+// A cancelled operation's return and the end of the invocation's context can both be ready when
+// the loop next waits. Whichever it sees first, the invocation ends as cancelled.
+func TestRunCancellationWinsOverACancelledOperationsReturn(t *testing.T) {
+	for i := range 20 {
+		ctx, cancel := context.WithCancel(context.Background())
+		returned := make(chan struct{})
+		slow := func(ctx context.Context, args map[string]any) (string, error) {
+			defer close(returned)
+			return sleepy(10*time.Second, "s")(ctx, args)
+		}
+		host := &fakeHost{
+			tools: map[string]fakeTool{"slow": slow, "gate": sleepy(10*time.Second, "g")},
+			safe:  map[string]bool{"slow": true, "gate": true},
+		}
+		// The loop is held in the check of the second operation while the task is cancelled and
+		// the first operation returns, so both are ready when it waits again.
+		host.check = func(op Op) {
+			if op.Tool != "gate" {
+				return
+			}
+			cancel()
+			<-returned
+			time.Sleep(10 * time.Millisecond)
+		}
+		r := Run(ctx, `await Promise.all([tools.slow({}), tools.gate({})])`, host, defaultLimits, nil)
+		cancel()
+		if r.Status != StatusCancelled || outcomes(r) != "0:slow:cancelled,1:gate:cancelled" {
+			t.Fatalf("run %d: result = %s %s", i, r.Status, outcomes(r))
+		}
+	}
 }
 
 func TestMemoryWatcherStopsInvocations(t *testing.T) {
