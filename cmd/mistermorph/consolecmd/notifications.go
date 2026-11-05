@@ -61,6 +61,11 @@ func (h *consoleNotificationHub) PublishTaskCompletion(previous, next daemonrunt
 	if daemonruntime.IsCronTopicID(next.TopicID) {
 		return
 	}
+	// Only the person's own chats notify. A heartbeat run in Awareness, or a task another agent
+	// started over Agent Link, is not something the person is waiting for.
+	if strings.TrimSpace(next.TopicID) == daemonruntime.ConsoleAwarenessTopicID || daemonruntime.IsAgentLinkTopicID(next.TopicID) {
+		return
+	}
 	switch previous.Status {
 	case daemonruntime.TaskQueued, daemonruntime.TaskRunning, daemonruntime.TaskPending:
 	default:

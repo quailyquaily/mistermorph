@@ -159,6 +159,8 @@ func TestTopicTaskCompletionIgnoresNonTransitions(t *testing.T) {
 		{"canceled", daemonruntime.TaskInfo{ID: "task", Status: daemonruntime.TaskRunning}, daemonruntime.TaskInfo{ID: "task", TopicID: "topic", Status: daemonruntime.TaskCanceled}},
 		{"no topic", daemonruntime.TaskInfo{ID: "task", Status: daemonruntime.TaskRunning}, daemonruntime.TaskInfo{ID: "task", Status: daemonruntime.TaskFailed}},
 		{"cron", daemonruntime.TaskInfo{ID: "task", Status: daemonruntime.TaskRunning}, daemonruntime.TaskInfo{ID: "task", TopicID: daemonruntime.CronTopicID("todo"), Status: daemonruntime.TaskDone}},
+		{"heartbeat", daemonruntime.TaskInfo{ID: "task", Status: daemonruntime.TaskRunning}, daemonruntime.TaskInfo{ID: "task", TopicID: daemonruntime.ConsoleAwarenessTopicID, Status: daemonruntime.TaskDone}},
+		{"agent link", daemonruntime.TaskInfo{ID: "task", Status: daemonruntime.TaskRunning}, daemonruntime.TaskInfo{ID: "task", TopicID: daemonruntime.AgentLinkTopicID("inst_b"), Status: daemonruntime.TaskFailed}},
 		{"steering", daemonruntime.TaskInfo{ID: "task", Status: daemonruntime.TaskRunning}, daemonruntime.TaskInfo{ID: "task", TopicID: "topic", Status: daemonruntime.TaskDone, SteerTargetTaskID: "parent"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -172,6 +174,25 @@ func TestTopicTaskCompletionIgnoresNonTransitions(t *testing.T) {
 			default:
 			}
 		})
+	}
+}
+
+// The default topic is reserved by the runtime too, but it holds the person's own chats.
+func TestTopicTaskCompletionNotifiesInTheDefaultTopic(t *testing.T) {
+	hub := newConsoleNotificationHub()
+	events, unsubscribe := hub.Subscribe()
+	defer unsubscribe()
+	hub.PublishTaskCompletion(
+		daemonruntime.TaskInfo{ID: "task", Status: daemonruntime.TaskRunning},
+		daemonruntime.TaskInfo{ID: "task", TopicID: daemonruntime.ConsoleDefaultTopicID, Status: daemonruntime.TaskDone},
+	)
+	select {
+	case event := <-events:
+		if event.Type != "topic_task_completed" || event.TopicID != daemonruntime.ConsoleDefaultTopicID {
+			t.Fatalf("unexpected event: %#v", event)
+		}
+	default:
+		t.Fatal("no notification for a task in the default topic")
 	}
 }
 
