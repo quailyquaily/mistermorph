@@ -69,6 +69,13 @@
   padding: 0;
 }
 
+/* Equal options: each takes the same share of the row, an icon-only one included. */
+.app-tabs.is-equal .app-tabs-option,
+.app-tabs.is-equal .app-tabs-option.is-icon-only {
+  flex: 1 1 0;
+  width: auto;
+}
+
 /* The label clips for the ellipsis, so its line box must be tall enough for descenders. */
 .app-tabs-option-label {
   min-width: 0;

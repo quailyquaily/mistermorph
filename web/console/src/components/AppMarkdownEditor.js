@@ -9,7 +9,7 @@ import channelLineLogoURL from "../assets/images/channels/line.svg";
 import channelMixinLogoURL from "../assets/images/channels/mixin.svg";
 import channelSlackLogoURL from "../assets/images/channels/slack.svg";
 import channelTelegramLogoURL from "../assets/images/channels/telegram.svg";
-import { activeChannelTab, channelTabs, itemsForChannelTab } from "../core/channel-tabs";
+import { activeChannelTab, channelTabs, itemsForChannelTab, longestChannelTab } from "../core/channel-tabs";
 import {
   endpointState,
   runtimeApiDownloadForEndpoint,
@@ -178,25 +178,23 @@ const AppMarkdownEditor = {
     const conversationItems = ref([]);
     const conversationsError = ref("");
     const conversationsLoading = ref(false);
-    // The picker's list is split by channel once it holds more than one. The chosen tab is kept
-    // while the editor lives, so the next mention starts in the same channel.
+    // The picker's list is split by channel once it holds more than one: a tab per channel, its
+    // logo alone. The chosen tab is kept while the editor lives, so the next mention starts in
+    // the same channel.
     const conversationTabID = ref("");
     const conversationTabs = computed(() =>
-      channelTabs(conversationItems.value, {
-        allTitle: t("markdown_editor_conversation_all"),
-        icon: (channel) => CHANNEL_TAB_ICONS[channel],
-      }),
+      channelTabs(conversationItems.value, { icon: (channel) => CHANNEL_TAB_ICONS[channel] }),
     );
     const conversationTab = computed(() => activeChannelTab(conversationTabs.value, conversationTabID.value));
     const visibleConversationItems = computed(() =>
       itemsForChannelTab(conversationItems.value, conversationTab.value?.id),
     );
     // The list keeps one height whatever the tab or the filter leaves in it: the height of the
-    // whole list, up to nine rows. Otherwise the dialog resizes and re-centres when a tab is
+    // longest channel's list, up to nine rows. Otherwise the dialog resizes and re-centres when a tab is
     // chosen, and the tabs move from under the pointer. A row is a little over 48px
     // (AppMarkdownEditor.css) and the menu pads 16px; counting 49 only leaves a few pixels spare.
     const conversationListHeight = computed(() => {
-      const rows = Math.min(conversationItems.value.length, 9);
+      const rows = Math.min(longestChannelTab(conversationItems.value, conversationTabs.value), 9);
       return rows > 0 ? `min(${rows * 49 + 16}px, 60vh)` : "auto";
     });
     let conversationsRequestSeq = 0;
@@ -408,7 +406,8 @@ const AppMarkdownEditor = {
               class="markdown-editor-picker-tabs"
               :tabs="conversationTabs"
               :modelValue="conversationTab"
-              iconOnly="auto"
+              iconOnly
+              equal
               :ariaLabel="t('markdown_editor_conversation_channels')"
               @update:modelValue="selectConversationTab"
             />

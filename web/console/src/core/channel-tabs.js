@@ -1,13 +1,11 @@
-// Tabs that split a picker's items by channel: "All" first, then one tab per channel that has an
-// item, in a fixed order so a tab keeps its place from one agent to the next. With fewer than
-// two channels there is nothing to split, and no tabs.
+// Tabs that split a picker's items by channel: one tab per channel that has an item, in a fixed
+// order so a tab keeps its place from one agent to the next. With fewer than two channels there
+// is nothing to split, and no tabs: every item shows.
 //
-//   const tabs = channelTabs(items, { allTitle: t("…_all"), icon });
+//   const tabs = channelTabs(items, { icon });
 //   const shown = itemsForChannelTab(items, activeChannelTab(tabs, chosenID)?.id);
 //
 // An item's channel is its `channel` field ("telegram", "slack", …).
-
-export const ALL_CHANNELS_TAB_ID = "all";
 
 const CHANNEL_TITLES = {
   telegram: "Telegram",
@@ -33,7 +31,7 @@ export function channelTitle(channel) {
 }
 
 // icon(channel) returns the tab's icon component, or nothing for a tab with a label only.
-export function channelTabs(items, { allTitle = "All", icon = () => null } = {}) {
+export function channelTabs(items, { icon = () => null } = {}) {
   const channels = new Set();
   for (const item of Array.isArray(items) ? items : []) {
     const channel = channelOf(item);
@@ -44,21 +42,27 @@ export function channelTabs(items, { allTitle = "All", icon = () => null } = {})
     const index = CHANNEL_ORDER.indexOf(channel);
     return index < 0 ? CHANNEL_ORDER.length : index;
   };
-  const ordered = [...channels].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
-  return [
-    { id: ALL_CHANNELS_TAB_ID, title: allTitle },
-    ...ordered.map((channel) => ({ id: channel, title: channelTitle(channel), icon: icon(channel) || undefined })),
-  ];
+  return [...channels]
+    .sort((a, b) => rank(a) - rank(b) || a.localeCompare(b))
+    .map((channel) => ({ id: channel, title: channelTitle(channel), icon: icon(channel) || undefined }));
 }
 
-// The chosen tab while it still exists, else "All": a channel's tab goes when its last item does.
+// The chosen tab while it still exists, else the first: a channel's tab goes when its last item
+// does. Null when there are no tabs.
 export function activeChannelTab(tabs, id) {
   if (!Array.isArray(tabs) || tabs.length === 0) return null;
   return tabs.find((tab) => tab.id === id) || tabs[0];
 }
 
+// One channel's items, or every item when there is no tab to choose.
 export function itemsForChannelTab(items, tabID) {
   const list = Array.isArray(items) ? items : [];
-  if (!tabID || tabID === ALL_CHANNELS_TAB_ID) return list;
-  return list.filter((item) => channelOf(item) === tabID);
+  return tabID ? list.filter((item) => channelOf(item) === tabID) : list;
+}
+
+// The most items any one tab shows: what a list must hold to keep one height across the tabs.
+export function longestChannelTab(items, tabs) {
+  const list = Array.isArray(items) ? items : [];
+  if (!Array.isArray(tabs) || tabs.length === 0) return list.length;
+  return Math.max(...tabs.map((tab) => itemsForChannelTab(list, tab.id).length));
 }
