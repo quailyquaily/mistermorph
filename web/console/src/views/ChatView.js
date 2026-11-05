@@ -71,6 +71,7 @@ import { rememberRecentWorkspaceDir } from "../core/recent-workspace-dirs";
 import { buildTreeRows, hasOwnTreePath, setTreeExpanded, setTreeItems } from "../core/workspace-tree";
 import WorkspaceDirPickerDialog from "../components/WorkspaceDirPickerDialog";
 import { topicIcon, useTopicMetadata } from "../core/topic-metadata";
+import { cronSidebarGroups, cronTopicsOf, isCronTopicID } from "../core/chat-cron-topics";
 import { normalizeTopicActivity, topicActivitySignature, TOPIC_ACTIVITY_PENDING } from "../core/topic-activity";
 import { contextMeter } from "../core/context-meter";
 import {
@@ -126,15 +127,6 @@ const AGENT_LINK_TOPIC_PREFIX = "_agentlink_";
 function agentLinkTopicContactID(topicID) {
   const id = String(topicID || "").trim();
   return id.startsWith(AGENT_LINK_TOPIC_PREFIX) ? `mm:${id.slice(AGENT_LINK_TOPIC_PREFIX.length)}` : "";
-}
-
-// A TODO (cron) item's topic, "_cron_<task_id>", holds that item's runs, listed apart from the
-// person's own topics.
-const CRON_TOPIC_PREFIX = "_cron_";
-
-function isCronTopicID(topicID) {
-  const id = String(topicID || "").trim();
-  return id.startsWith(CRON_TOPIC_PREFIX) && id.length > CRON_TOPIC_PREFIX.length;
 }
 
 function isAgentLinkTopicID(topicID) {
@@ -877,11 +869,7 @@ const ChatView = {
     });
     const hasVisibleTopics = computed(() => visibleTopics.value.length > 0);
     // The TODO items' topics, the one with the latest run first.
-    const cronTopics = computed(() =>
-      topics.value
-        .filter((topic) => isCronTopicID(normalizeTopicID(topic?.id)))
-        .sort((a, b) => String(b?.updated_at || "").localeCompare(String(a?.updated_at || ""))),
-    );
+    const cronTopics = computed(() => cronTopicsOf(topics.value));
     // The sidebar is there for the TODO items' topics too: with none of the person's own topics,
     // its TODO toggle is still the only way to them.
     const hasSidebarTopics = computed(() => hasVisibleTopics.value || cronTopics.value.length > 0);
@@ -1066,7 +1054,7 @@ const ChatView = {
         return agentTopics.value.length > 0 ? [{ key: "agents", label: "", topics: agentTopics.value }] : [];
       }
       if (topicSidebarView.value === "cron") {
-        return cronTopics.value.length > 0 ? [{ key: "cron", label: "", topics: cronTopics.value }] : [];
+        return cronSidebarGroups(topics.value);
       }
       const groups =
         topicSidebarView.value === "tags"
@@ -4764,8 +4752,8 @@ const ChatView = {
               >
                 <PhRobot class="icon" />
               </AppButton>
+              <!-- Always there, also before any TODO item has run: its list then says so. -->
               <AppButton
-                v-if="cronTopics.length > 0 || topicSidebarView === 'cron'"
                 :class="['plain sm icon chat-topic-view-toggle', { 'is-active': topicSidebarView === 'cron' }]"
                 :title="topicSidebarView === 'cron' ? t('chat_topics_view_date') : t('chat_topics_view_cron')"
                 :aria-label="t('chat_topics_view_cron')"
