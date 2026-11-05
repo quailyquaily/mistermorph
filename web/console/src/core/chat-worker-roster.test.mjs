@@ -22,7 +22,7 @@ const activity = normalizeActivity({
     { id: "worker-1", name: "Milo", kind: "subagent", status: "done", summary: "found it" },
     {
       id: "worker-2", name: "Nova", kind: "coder", status: "running", stream: "codex",
-      output: "# step\n<b>raw</b> & more\n", processes: [{ pid: 4242, program: "codex", activity_id: "coder-1" }],
+      output: "Codex is starting\nCodex is working\n  # step\n\t<b>raw</b> & more\n", processes: [{ pid: 4242, program: "codex", activity_id: "coder-1" }],
     },
   ],
   workers_omitted: 3,
@@ -74,7 +74,7 @@ test("selecting a worker shows its PIDs and its output as plain text", async () 
   assert.match(html, /id="chat-worker-detail-t"/u);
   assert.match(html, /chat-worker-detail-pid">codex PID 4242</u);
   assert.match(html, /chat_worker_kind_coder/u);
-  assert.ok(html.includes('<p class="chat-worker-output"># step\n&lt;b&gt;raw&lt;/b&gt; &amp; more\n</p>'));
+  assert.ok(html.includes('<p class="chat-worker-output">Codex is starting\nCodex is working\n  # step\n\t&lt;b&gt;raw&lt;/b&gt; &amp; more\n</p>'));
   assert.doesNotMatch(html, /<b>raw/u);
   // A lone section needs no label.
   assert.doesNotMatch(html, /chat-worker-section-label/u);
