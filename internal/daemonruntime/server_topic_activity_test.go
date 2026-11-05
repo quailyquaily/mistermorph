@@ -2,6 +2,7 @@ package daemonruntime
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -9,7 +10,7 @@ import (
 	"time"
 )
 
-func TestTopicActivityRouteListsTopicsWithUnfinishedTasks(t *testing.T) {
+func TestTopicActivityRouteListsUnfinishedTasksAndSuccessfulCompletions(t *testing.T) {
 	store := NewMemoryStore(100)
 	now := time.Date(2026, 11, 5, 9, 0, 0, 0, time.UTC)
 	for _, task := range []TaskInfo{
@@ -46,6 +47,8 @@ func TestTopicActivityRouteListsTopicsWithUnfinishedTasks(t *testing.T) {
 	want := []TopicActivity{
 		{ID: "alpha", Status: "running", Running: 2},
 		{ID: "beta", Status: "pending", Running: 1, Pending: 1},
+		{ID: "delta"},
+		{ID: "gamma", LatestDoneTaskID: "c1", LatestDoneAt: &now},
 	}
 	if !reflect.DeepEqual(payload.Topics, want) {
 		t.Fatalf("topics = %+v", payload.Topics)
@@ -68,7 +71,7 @@ func TestTopicActivityRouteListsTopicsWithUnfinishedTasks(t *testing.T) {
 			t.Fatalf("%s %q: status %d, want %d", tc.method, tc.auth, rec.Code, tc.code)
 		}
 	}
-	// With no tasks running, the list is empty, not null.
+	// With no tasks, the list is empty, not null.
 	mux = http.NewServeMux()
 	RegisterRoutes(mux, RoutesOptions{AuthToken: "token", TaskTopic: TaskTopicRoutes{TaskReader: NewMemoryStore(10)}})
 	req = httptest.NewRequest(http.MethodGet, "/topics/activity", nil)
@@ -110,5 +113,58 @@ func TestTopicActivityIncludesTheRuntimesOwnTopics(t *testing.T) {
 	}
 	if plain := store.List(TaskListOptions{Status: TaskRunning, Limit: 10}); len(plain) != 1 || plain[0].ID != "chat" {
 		t.Fatalf("plain list = %+v", plain)
+	}
+}
+
+func TestTopicActivityCompletionAndTaskHistory(t *testing.T) {
+	for _, status := range []TaskStatus{TaskDone, TaskFailed, TaskCanceled} {
+		t.Run(string(status), func(t *testing.T) {
+			store := NewMemoryStore(10)
+			now := time.Now().UTC()
+			task := TaskInfo{ID: "task", TopicID: "topic", CreatedAt: now, Status: TaskRunning}
+			if err := store.Upsert(task); err != nil {
+				t.Fatal(err)
+			}
+			if got := topicActivity(store); len(got) != 1 || got[0].Status != "running" {
+				t.Fatalf("running: %+v", got)
+			}
+			if err := store.Update(task.ID, func(info *TaskInfo) { info.Status = status; info.FinishedAt = &now }); err != nil {
+				t.Fatal(err)
+			}
+			got := topicActivity(store)
+			if len(got) != 1 || got[0].Status != "" {
+				t.Fatalf("terminal: %+v", got)
+			}
+			if (got[0].LatestDoneTaskID == task.ID) != (status == TaskDone) {
+				t.Fatalf("completion: %+v", got)
+			}
+			persisted, ok := store.Get(task.ID)
+			if !ok || persisted.Status != status || persisted.FinishedAt == nil {
+				t.Fatalf("history changed: %+v", persisted)
+			}
+		})
+	}
+}
+
+func TestTopicActivityPagesHistoryAndUsesCompletionOrder(t *testing.T) {
+	store := NewMemoryStore(1000)
+	start := time.Date(2026, 11, 5, 9, 0, 0, 0, time.UTC)
+	// The oldest created task finishes last, beyond the first page of task history.
+	finished := start.Add(time.Hour)
+	for i := 0; i < 250; i++ {
+		task := TaskInfo{ID: fmt.Sprintf("task-%03d", i), TopicID: "topic", CreatedAt: start.Add(time.Duration(i) * time.Second), Status: TaskDone}
+		if i == 0 {
+			task.FinishedAt = &finished
+		}
+		if err := store.Upsert(task); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := store.Upsert(TaskInfo{ID: "queued", TopicID: "topic", CreatedAt: start, Status: TaskQueued}); err != nil {
+		t.Fatal(err)
+	}
+	got := topicActivity(store)
+	if len(got) != 1 || got[0].LatestDoneTaskID != "task-000" || !got[0].LatestDoneAt.Equal(finished) || got[0].Status != "running" || got[0].Running != 1 {
+		t.Fatalf("activity = %+v", got)
 	}
 }

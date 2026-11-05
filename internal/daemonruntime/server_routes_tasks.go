@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/quailyquaily/mistermorph/internal/pagination"
 	"github.com/quailyquaily/mistermorph/internal/taskdomain"
@@ -522,20 +523,23 @@ func (routes *routeRegistration) registerTaskRoutes() {
 	})
 }
 
-// TopicActivity is a topic with unfinished tasks. Status is "pending" when one of them waits for
-// the person (an approval or a question), else "running".
+// TopicActivity reports unfinished work and the latest successful completion. An empty status
+// means no unfinished work; the client decides whether that completion has been viewed.
 type TopicActivity struct {
-	ID      string `json:"id"`
-	Status  string `json:"status"`
-	Running int    `json:"running"`
-	Pending int    `json:"pending"`
+	ID               string     `json:"id"`
+	Status           string     `json:"status"`
+	Running          int        `json:"running"`
+	Pending          int        `json:"pending"`
+	LatestDoneTaskID string     `json:"latest_done_task_id,omitempty"`
+	LatestDoneAt     *time.Time `json:"latest_done_at,omitempty"`
 }
 
-// topicActivity lists the topics with queued, running or pending tasks, by topic ID.
 func topicActivity(reader TaskReader) []TopicActivity {
 	byTopic := map[string]*TopicActivity{}
-	for _, status := range []TaskStatus{TaskQueued, TaskRunning, TaskPending} {
-		for _, task := range reader.List(TaskListOptions{Status: status, Limit: taskListInternalMaxLimit, AllTopics: true}) {
+	cursor := ""
+	for {
+		tasks := reader.List(TaskListOptions{Limit: taskListInternalMaxLimit, AllTopics: true, Cursor: cursor})
+		for _, task := range tasks {
 			id := strings.TrimSpace(task.TopicID)
 			if id == "" {
 				continue
@@ -545,18 +549,38 @@ func topicActivity(reader TaskReader) []TopicActivity {
 				item = &TopicActivity{ID: id}
 				byTopic[id] = item
 			}
-			if status == TaskPending {
+			switch task.Status {
+			case TaskPending:
 				item.Pending++
-			} else {
+			case TaskQueued, TaskRunning:
 				item.Running++
+			case TaskDone:
+				at := task.CreatedAt
+				if task.FinishedAt != nil {
+					at = *task.FinishedAt
+				}
+				if item.LatestDoneAt == nil || at.After(*item.LatestDoneAt) || (at.Equal(*item.LatestDoneAt) && task.ID > item.LatestDoneTaskID) {
+					item.LatestDoneTaskID = task.ID
+					item.LatestDoneAt = &at
+				}
 			}
 		}
+		if len(tasks) < taskListInternalMaxLimit {
+			break
+		}
+		last := tasks[len(tasks)-1]
+		next := pagination.EncodeKeysetCursor(last.CreatedAt, last.ID)
+		if next == cursor {
+			break
+		}
+		cursor = next
 	}
 	out := make([]TopicActivity, 0, len(byTopic))
 	for _, item := range byTopic {
-		item.Status = "running"
 		if item.Pending > 0 {
 			item.Status = "pending"
+		} else if item.Running > 0 {
+			item.Status = "running"
 		}
 		out = append(out, *item)
 	}
