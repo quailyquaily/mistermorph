@@ -47,3 +47,13 @@ export function resolveBrowserNotificationPermission(win = typeof window === "un
   const permission = String(win.Notification.permission || "default").trim().toLowerCase();
   return permission === "granted" || permission === "denied" ? permission : "default";
 }
+
+export async function requestBrowserNotificationPermission(win = typeof window === "undefined" ? null : window) {
+  const current = resolveBrowserNotificationPermission(win);
+  if (current !== "default") return current;
+  try {
+    return await win.Notification.requestPermission();
+  } catch {
+    return "unsupported";
+  }
+}

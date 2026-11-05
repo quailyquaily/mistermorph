@@ -197,8 +197,10 @@ func newConsoleLocalRuntime(cfg serveConfig, reader *viper.Viper) (*consoleLocal
 		return nil, err
 	}
 	slog.SetDefault(gen.logger)
+	out.notificationHub = newConsoleNotificationHub()
 	persistTasks := consoleTaskPersistenceEnabledFromReader(gen.reader)
 	store, err := daemonruntime.NewConsoleFileStore(daemonruntime.ConsoleFileStoreOptions{
+		OnTaskUpdate:         out.notificationHub.PublishTaskCompletion,
 		RootDir:              gen.paths.TaskTargetDir("console"),
 		Persist:              persistTasks,
 		JournalDir:           gen.paths.JournalDir,
@@ -235,7 +237,6 @@ func newConsoleLocalRuntime(cfg serveConfig, reader *viper.Viper) (*consoleLocal
 	out.elevations = newConsoleElevations(gen.logger)
 	// Chat tasks ask their elevated commands on approval cards, so they need no desktop dialog.
 	elevate.OfferClientApprovals()
-	out.notificationHub = newConsoleNotificationHub()
 	out.workspaceStore = workspace.NewStore(gen.paths.WorkspaceAttachmentsPath)
 	out.runner = runtimecore.NewConversationRunner[string, consoleLocalTaskJob](
 		workersCtx,

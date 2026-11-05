@@ -30,6 +30,7 @@ import toolChannelMixinLogoURL from "../assets/images/channels/mixin.svg";
 import toolChannelWeChatLogoURL from "../assets/images/channels/wechat.svg";
 import toolChannelWhatsAppLogoURL from "../assets/images/channels/whatsapp.svg";
 import AppMarkdownEditor from "../components/AppMarkdownEditor";
+import TopicNotificationSetting from "../components/TopicNotificationSetting";
 import SettingsAppPanel from "../components/SettingsAppPanel";
 import SettingsCreditsPanel from "../components/SettingsCreditsPanel";
 import SettingDialog from "../components/SettingDialog";
@@ -799,6 +800,7 @@ const SettingsView = {
     AppSidePane,
     AppMarkdownEditor,
     SettingsAppPanel,
+    TopicNotificationSetting,
     SettingsCreditsPanel,
     SettingDialog,
     SetupConnectionTestDialog,
@@ -6520,6 +6522,7 @@ const SettingsView = {
                     </div>
                     <AppLanguageSelector class="settings-console-control" :lang="lang" :presist="true" @change="onLanguageChange" />
                   </div>
+                  <TopicNotificationSetting />
                   <div class="settings-console-row">
                     <div class="settings-card-copy">
                       <h4 class="settings-card-title">{{ t("settings_logs_title") }}</h4>
