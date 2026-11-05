@@ -136,7 +136,7 @@ Settings that only apply after a restart (`process_restart` and `runtime_restart
   - dedicated `/setup` route for the minimal Console Local configuration path
   - shown when Console Local is online but local chat is not yet submittable
   - guides the user to finish provider/model/API key config, then refresh status
-- Chat:
+- Chat (named "Topics" in the navigation and in its own title; the route stays `/chat`):
   - send task directly to current agent
   - left secondary sidebar for topics, with one `New Topic` button, topic switching, current-topic delete, and a hidden system topic toggle exposed by clicking the topic sidebar title five times
   - topic title is seeded from the first prompt; once the new topic's task reaches the queue, a separate background LLM request names it and selects a theme icon from a fixed Phosphor catalog, without waiting for the task's reply

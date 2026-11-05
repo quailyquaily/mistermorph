@@ -127,3 +127,9 @@ test("with TODO run topics, the TODO view lists them only, the latest run first"
   // The loaded list is left as it was.
   assert.deepEqual(runTopics.map((topic) => topic.id), ["_cron_weekly", "_cron_nightly"]);
 });
+
+test("the page that holds the topics is named Topics", () => {
+  for (const text of ['nav_chat: "Topics"', 'chat_title: "Topics"', 'nav_chat: "话题"', 'chat_title: "话题"', 'nav_chat: "トピック"', 'chat_title: "トピック"']) {
+    assert.ok(i18n.includes(text), text);
+  }
+});
