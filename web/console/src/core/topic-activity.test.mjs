@@ -29,20 +29,26 @@ test("topicActivitySignature ignores order and changes with counts and status", 
   assert.equal(topicActivitySignature(new Map()), "");
 });
 
-test("the chat view polls topic activity and shows a status dot at the right of each topic", async () => {
+test("the chat view polls topic activity and shows a status mark at the right of each topic", async () => {
   const { readFile } = await import("node:fs/promises");
   const view = await readFile(new URL("../views/ChatView.js", import.meta.url), "utf8");
   const styles = await readFile(new URL("../views/ChatView.css", import.meta.url), "utf8");
   assert.match(view, /runtimeApiFetchForEndpoint\(endpointRef, "\/topics\/activity"\)/u);
   assert.match(view, /window\.setInterval\(\(\) => void refreshTopicActivity\(\), TOPIC_ACTIVITY_REFRESH_INTERVAL_MS\)/u);
   assert.match(view, /onUnmounted\(\(\) => \{\s*viewActive = false;\s*stopTopicActivityRefresh\(\);/u);
-  // The dot follows the title inside the topic button, so it sits at the item's right.
+  // The mark follows the title inside the topic button, so it sits at the item's right.
   assert.match(view, /chat-topic-item-title[^\n]*\n\s*<\/span>\s*<span\s+v-if="topicActivityState\(topic\)"\s+:class="\['chat-topic-item-status', 'is-' \+ topicActivityState\(topic\)\]"/u);
   // A finished task and a newly followed one refresh the indicators at once.
   assert.match(view, /closeTaskStream\(taskID\);\s*void refreshTopicActivity\(\);/u);
-  assert.match(styles, /\.chat-topic-item:has\(\.chat-topic-item-status\)\s*\{\s*grid-template-columns: 16px minmax\(0, 1fr\) 8px;/u);
-  assert.match(styles, /prefers-reduced-motion: reduce\)\s*\{\s*\.chat-topic-item-status\.is-running/u);
-  assert.match(styles, /\.chat-topic-item-status\.is-done\s*\{\s*background: var\(--q-c-green\)/u);
+  // The mark is the console's status mark: its size, square corners and colours come from the
+  // shared tokens. Finished is the plain filled mark; running is hollow with a breathing fill.
+  assert.match(styles, /\.chat-topic-item:has\(\.chat-topic-item-status\)\s*\{\s*grid-template-columns: 16px minmax\(0, 1fr\) var\(--status-mark-size\);/u);
+  assert.match(styles, /\.chat-topic-item-status\s*\{[^}]*width: var\(--status-mark-size\);[^}]*border: 1px solid currentColor;\s*border-radius: 1px;\s*color: var\(--status-on\);\s*background: currentColor;/u);
+  assert.match(styles, /\.chat-topic-item-status\.is-pending\s*\{\s*color: var\(--status-pending\);/u);
+  assert.match(styles, /\.chat-topic-item-status\.is-running\s*\{\s*background: transparent;/u);
+  assert.match(styles, /\.chat-topic-item-status\.is-running::after\s*\{[^}]*animation: chat-topic-status-fill /u);
+  assert.match(styles, /prefers-reduced-motion: reduce\)\s*\{\s*\.chat-topic-item-status\.is-running::after\s*\{\s*animation: none;\s*opacity: 0;/u);
+  assert.doesNotMatch(styles, /\.chat-topic-item-status[^{]*\{[^}]*(border-radius: 50%|--q-c-green|--q-c-orange)/u);
   assert.match(view, /window\.addEventListener\("focus", onPageVisibilityChange\)/u);
   assert.match(view, /window\.removeEventListener\("focus", onPageVisibilityChange\)/u);
   assert.match(view, /function onPageVisibilityChange\(\) \{\s*acknowledgeViewedTopic\(\)/u);

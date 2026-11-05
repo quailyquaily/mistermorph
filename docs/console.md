@@ -217,7 +217,7 @@ Tasks:
 - `DELETE /proxy?endpoint=<ref>&uri=/topics/{topic_id}`
 - `POST /proxy?endpoint=<ref>&uri=/topics/{topic_id}/regenerate-title`
 - `GET /proxy?endpoint=<ref>&uri=/topics/activity`
-  - the topics with unfinished tasks: `{"topics":[{"id","status","running","pending"}]}`, where `status` is `pending` when a task waits for the person (an approval or a question), else `running`. The Chat view polls it every 5 seconds while visible and shows a dot at the right of each such topic: pulsing for running, steady for pending.
+  - the topics with unfinished tasks: `{"topics":[{"id","status","running","pending"}]}`, where `status` is `pending` when a task waits for the person (an approval or a question), else `running`. The Chat view polls it every 5 seconds while visible and shows a status mark at the right of each such topic, the square mark used across the Console: breathing between hollow and filled blue for running, filled orange for pending. A topic whose task finished while it was not being viewed keeps a filled blue mark until it is viewed.
 
 Notes:
 - Topic APIs are guaranteed on `Console Local`; other runtimes may return `503` if they do not expose topic readers/deleters.

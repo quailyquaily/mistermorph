@@ -324,45 +324,60 @@
   box-shadow: none !important;
 }
 
-/* A topic with a task running, or one waiting for the person, gets a dot at its right. */
+/* A topic's status mark, at the right of its row. It is the console's square mark (base.css):
+   filled blue once a task has finished and until the topic is viewed, filled orange while a task
+   waits for the person, and breathing between hollow and filled, between off and on, while a
+   task runs. Colour says whose turn it is; running differs from finished in form as well, so
+   the two are told apart without the motion. */
 .chat-topic-item:has(.chat-topic-item-status) {
-  grid-template-columns: 16px minmax(0, 1fr) 8px;
+  grid-template-columns: 16px minmax(0, 1fr) var(--status-mark-size);
 }
 
 .chat-topic-item:has(.chat-topic-item-avatar):has(.chat-topic-item-status) {
-  grid-template-columns: 24px minmax(0, 1fr) 8px;
+  grid-template-columns: 24px minmax(0, 1fr) var(--status-mark-size);
 }
 
 .chat-topic-item-status {
   justify-self: end;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--q-c-orange);
+  box-sizing: border-box;
+  width: var(--status-mark-size);
+  height: var(--status-mark-size);
+  border: 1px solid currentColor;
+  border-radius: 1px;
+  color: var(--status-on);
+  background: currentColor;
 }
 
-.chat-topic-item-status.is-running {
-  animation: chat-topic-status-pulse 1.6s ease-in-out infinite;
-}
-
-/* Waiting for an answer or an approval: steady, so it reads as a call for attention, not work. */
 .chat-topic-item-status.is-pending {
-  background: var(--q-c-blue);
+  color: var(--status-pending);
 }
 
-.chat-topic-item-status.is-done {
-  background: var(--q-c-green);
+/* The outline is a real border, so it stays on device pixels at any zoom. The fill is its own
+   layer so that only opacity animates, which the compositor runs while the page is busy. */
+.chat-topic-item-status.is-running {
+  background: transparent;
 }
 
-@keyframes chat-topic-status-pulse {
-  50% {
-    opacity: 0.35;
+.chat-topic-item-status.is-running::after {
+  content: "";
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: currentColor;
+  animation: chat-topic-status-fill 0.9s ease-in-out infinite alternate;
+}
+
+@keyframes chat-topic-status-fill {
+  from {
+    opacity: 0;
   }
 }
 
+/* Without motion a running mark stays hollow. */
 @media (prefers-reduced-motion: reduce) {
-  .chat-topic-item-status.is-running {
+  .chat-topic-item-status.is-running::after {
     animation: none;
+    opacity: 0;
   }
 }
 
