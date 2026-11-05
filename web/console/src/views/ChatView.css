@@ -350,6 +350,10 @@
   background: var(--q-c-blue);
 }
 
+.chat-topic-item-status.is-done {
+  background: var(--q-c-green);
+}
+
 @keyframes chat-topic-status-pulse {
   50% {
     opacity: 0.35;

@@ -71,7 +71,7 @@ import { rememberRecentWorkspaceDir } from "../core/recent-workspace-dirs";
 import { buildTreeRows, hasOwnTreePath, setTreeExpanded, setTreeItems } from "../core/workspace-tree";
 import WorkspaceDirPickerDialog from "../components/WorkspaceDirPickerDialog";
 import { topicIcon, useTopicMetadata } from "../core/topic-metadata";
-import { normalizeTopicActivity, topicActivitySignature, TOPIC_ACTIVITY_PENDING } from "../core/topic-activity";
+import { activelyViewedTopic, createTopicActivityTracker, topicActivitySignature, TOPIC_ACTIVITY_DONE, TOPIC_ACTIVITY_PENDING } from "../core/topic-activity";
 import { contextMeter } from "../core/context-meter";
 import {
   groupTopicsByTag,
@@ -469,6 +469,9 @@ function applyDefaultHistoryDurationVisibility(items) {
   });
 }
 
+// Keep acknowledgements during navigation away from ChatView within this browser session.
+const topicActivityTracker = createTopicActivityTracker();
+
 function newHistoryID() {
   return `${Date.now()}_${Math.random().toString(16).slice(2, 10)}`;
 }
@@ -548,7 +551,7 @@ const ChatView = {
     const topicDeleting = ref(false);
     const topicDeleteError = ref("");
     const topicSidebarView = ref(loadTopicSidebarView());
-    // Topics with unfinished tasks, by topic ID, polled while the chat view is open.
+    // Unfinished tasks and unviewed successful completions, by topic ID.
     const topicActivity = shallowRef(new Map());
     let topicActivityKey = "";
     const topicTagSaves = ref(new Set());
@@ -2950,38 +2953,54 @@ const ChatView = {
       return classes.join(" ");
     }
 
-    // The running indicator at the right of a topic item: "running", "pending" (waiting for the
-    // person), or "" for a topic with nothing unfinished.
     function topicActivityState(topic) {
       return topicActivity.value.get(normalizeTopicID(topic?.id))?.status || "";
     }
 
     function topicActivityLabel(topic) {
-      return topicActivityState(topic) === TOPIC_ACTIVITY_PENDING
-        ? t("chat_topic_status_pending")
-        : t("chat_topic_status_running");
+      const status = topicActivityState(topic);
+      if (status === TOPIC_ACTIVITY_DONE) return t("chat_topic_status_done");
+      return status === TOPIC_ACTIVITY_PENDING ? t("chat_topic_status_pending") : t("chat_topic_status_running");
     }
 
-    let topicActivityRequest = 0;
+    function viewedTopicID() {
+      return activelyViewedTopic({
+        topicID: normalizeTopicID(selectedTopicID.value),
+        viewActive,
+        visibilityState: document.visibilityState,
+        focused: document.hasFocus(),
+        showChatPane: showChatPane.value,
+        creatingTopic: creatingTopic.value,
+      });
+    }
+
+    function publishTopicActivity() {
+      const next = topicActivityTracker.snapshot();
+      const key = topicActivitySignature(next);
+      if (key !== topicActivityKey) {
+        topicActivityKey = key;
+        topicActivity.value = next;
+      }
+    }
+
+    function acknowledgeViewedTopic() {
+      topicActivityTracker.acknowledge(viewedTopicID());
+      publishTopicActivity();
+    }
+
     async function refreshTopicActivity() {
       const endpointRef = String(submitEndpointRef.value || "").trim();
-      if (!consoleTopicsEnabled.value || !endpointRef || document.visibilityState === "hidden") {
+      if (!viewActive || !consoleTopicsEnabled.value || !endpointRef || document.visibilityState === "hidden") {
         return;
       }
-      const request = ++topicActivityRequest;
+      const request = topicActivityTracker.beginRequest();
       try {
         const data = await runtimeApiFetchForEndpoint(endpointRef, "/topics/activity");
-        if (request !== topicActivityRequest || endpointRef !== String(submitEndpointRef.value || "").trim()) {
-          return;
-        }
-        const next = normalizeTopicActivity(data?.topics);
-        const key = `${endpointRef}|${topicActivitySignature(next)}`;
-        if (key !== topicActivityKey) {
-          topicActivityKey = key;
-          topicActivity.value = next;
-        }
+        if (!viewActive || endpointRef !== String(submitEndpointRef.value || "").trim()) return;
+        topicActivityTracker.apply(request, data?.topics, viewedTopicID());
+        publishTopicActivity();
       } catch {
-        // A runtime without /topics/activity shows no indicators.
+        // Failed polls leave both the completion baseline and acknowledgements intact.
       }
     }
 
@@ -4298,6 +4317,7 @@ const ChatView = {
       syncComposer();
     });
     function onPageVisibilityChange() {
+      acknowledgeViewedTopic();
       if (document.visibilityState === "visible") {
         resumeTrackedTasks();
         void refreshTopicActivity();
@@ -4337,24 +4357,31 @@ const ChatView = {
       () => [consoleTopicsEnabled.value, String(submitEndpointRef.value || "").trim()],
       ([enabled]) => {
         stopTopicActivityRefresh();
-        topicActivityRequest += 1;
-        topicActivityKey = "";
-        topicActivity.value = new Map();
+        topicActivityTracker.setEndpoint(enabled ? String(submitEndpointRef.value || "").trim() : "");
+        publishTopicActivity();
         if (!enabled) return;
         void refreshTopicActivity();
         topicActivityTimer = window.setInterval(() => void refreshTopicActivity(), TOPIC_ACTIVITY_REFRESH_INTERVAL_MS);
       },
       { immediate: true }
     );
+    watch(
+      () => [selectedTopicID.value, showChatPane.value, creatingTopic.value],
+      acknowledgeViewedTopic,
+      { flush: "post" }
+    );
     document.addEventListener("visibilitychange", onPageVisibilityChange);
+    window.addEventListener("focus", onPageVisibilityChange);
     window.addEventListener("online", resumeTrackedTasks);
-    window.addEventListener("pageshow", resumeTrackedTasks);
+    window.addEventListener("pageshow", onPageVisibilityChange);
     onUnmounted(() => {
       viewActive = false;
       stopTopicActivityRefresh();
+      topicActivityTracker.beginRequest();
+      window.removeEventListener("focus", onPageVisibilityChange);
       document.removeEventListener("visibilitychange", onPageVisibilityChange);
       window.removeEventListener("online", resumeTrackedTasks);
-      window.removeEventListener("pageshow", resumeTrackedTasks);
+      window.removeEventListener("pageshow", onPageVisibilityChange);
       closeComposerFilePreview();
       historyLoadVersion += 1;
       persistComposerDraft();
