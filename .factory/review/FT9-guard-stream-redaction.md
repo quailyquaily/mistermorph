@@ -198,3 +198,19 @@ Tests: gofmt, `go vet ./...` and `go test ./...` pass, with a throwaway HOME; `g
 Not checked: a real Codex or Claude Code run in the Console with Guard on. Whether completed Codex commands and messages always arrive as `item.completed` events was taken from the existing collector and its tests, not from a live run.
 
 For the owner: criterion 1 is met per unit, not line by line (see Decisions). Moved backlog/ → review/.
+
+
+## factory · review · 2026-11-05 16:36
+head: d4cb9514c254413f4b374dd51bf45dac8ad4b189
+verdict: fix
+fix:
+- [P1] agent/coder_tool.go:154: Terminal failures publish partial content as a complete unit. A failed Claude runner returning an opening custom secret delimiter and SENSITIVEPAYLOAD123456 without the closing delimiter exposes the payload under the corresponding multiline pattern. Publish only confirmed complete output; hide uncertain failure output.
+- [P1] agent/coder_tool.go:1207: reportFinal republishes incomplete or modified incremental output after complete-unit suppression. A stdout line containing api_key= and over 4 MiB of spaces is discarded; the following credential is subsequently exposed by the final fallback despite the omission notice. Split bearer text can also lose its separating space. Do not recover complete units from the legacy incremental buffer; require confirmed complete, unmodified messages.
+- [P1] guard/redact_complete.go:34: Earlier redaction rules can destroy private-key delimiters before fragment detection. An environment-variable match consumes the BEGIN prefix of an unterminated private-key block, leaving its synthetic body visible in Console. Determine fragment spans from original text while preserving enclosing-match context, then hide all affected spans.
+notes:
+- [P2] agent/coder_tool.go:843: Plain stdout is trimmed before complete buffering. Four-space-indented credential=SENSITIVEPAYLOAD123456 matches an indentation-anchored custom pattern in the original text, but loses that protection after trimming. Preserve raw lines and newline information; parse a separate copy.
+- [P2] agent/coder_tool.go:1174: The command receives a $ prefix before redaction. An anchored custom pattern matching an ACME_CREDENTIAL assignment no longer matches the prefixed command, exposing its value. Redact the raw command before display formatting.
+- Codex reviewed all 10 changed files in origin/master...HEAD against the round-4 completed-unit plan. Base and merge-base: 4ea09a6d80d04c9467b96febdfe60b88afba89b2. No merge conflicts.
+- Required gofmt check, go vet ./..., and go test ./... passed. Race tests for guard, agent, internal/chattrace and Console passed. git diff --check passed. Six synthetic-secret overlay Console assertions reproduced the findings; intact-text redaction controls and six baseline Console-filter controls passed.
+- Tests used an absolute throwaway HOME; source worktree remained clean. Installs: none. No frontend changes; pnpm not run.
+- Not checked: live Codex/Claude browser integration. Terminal failure used an injected runner; stdout overflow used a fake CLI. No linked issues or PRs. Item stays in review/ for the owner to decide; add a note and move to new/ to request fixes.
