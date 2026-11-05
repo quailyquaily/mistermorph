@@ -1,6 +1,6 @@
 ---
 branch: factory/FT11-console-cron-topics
-round: 1
+round: 2
 ---
 # Console Chat: a topic for each TODO cron item, and a cron-only topic list
 
@@ -65,3 +65,35 @@ Reviewed all 10 changed files in origin/master...HEAD, against master 2bce552ee9
 Validation: required gofmt/vet/Go-test command failed once as above, then passed in full on retry. pnpm test passed 382/382; pnpm build passed with a large-chunk warning. Temporary Go and frontend reproductions confirmed the four P2 findings. git diff --check passed. Tracked worktree and HEAD unchanged.
 
 Installs: none requiring reporting. Browser visuals and a real TODO run through Console were not checked. No linked GitHub issues or PRs were present. Item remains in review/ for the owner to decide; add a note and move it to new/ for fixes.
+
+## factory · plan · 2026-11-05 09:47
+Fix round 2, added to the plan above.
+
+**Behaviour**
+6. The sidebar, and on a phone the way back to the topic list, are also there when the only topics are TODO items'.
+7. The runtime refuses a task submitted to a TODO topic, before a command runs or a topic title sent with it renames the topic.
+8. Saving the items in TODO renames their topics at once. An item that has not run gets no topic, and a renamed topic keeps its place in the list.
+9. The topic metadata poll (every 5 seconds) brings a TODO topic's newer `updated_at`, so the TODO list reorders when an item runs again.
+
+**Scope**
+- `internal/codemode/run.go` (the P1), the Console runtime's submit, `SetCronTopicTitle` on the Console store, the `/todo/tasks` save, the chat view, a new `web/console/src/core/topic-metadata-merge.js`, and `docs/console.md`.
+- Left out: the same two gaps for the Agent Link agents' topics (sidebar hidden when they are the only topics; their list not reordered by the poll), and a TODO topic created while the page is open, which still shows only after a reload.
+
+**Decisions**
+- The four P2 notes are fixed too, not only the P1: the owner asked for FT11 to be fixed, and each was a confirmed defect of this feature.
+- The P1 is a defect of master, not of this branch (`internal/codemode` is unchanged here). It is fixed here, in a commit of its own, because the review listed it under `fix:`; it can be cherry-picked to master.
+- Only TODO topics take a newer time from the poll. The date view keeps the order topics were loaded in, so its topics do not.
+
+## factory · 2026-11-05 09:47
+Fix round 2, at the owner's word in chat ("fix FT11"), for the review of e0b01f0a. Built in the factory's build directory, outside the scheduled run; the item stays in review/ for the next review.
+
+- 29b1b622 `fix(codemode)`: the P1. Not a test fault: when an invocation was cut short, a cancelled operation's return could be seen before the end of the invocation's context, and was then settled as a failure the script could catch ("failed 0:slow:failed"). The loop now ends the invocation either way. A new test holds the loop so both are ready at once; it fails without the fix.
+- 8b30ed8e `fix(console)`: the four P2 notes, as in the plan above.
+
+Installs: none.
+
+Tests: gofmt, `go vet ./...` and `go test ./...` pass, with a throwaway HOME; `internal/codemode` also passes 30 repetitions. `pnpm test` 384/384 and `pnpm build` pass. The branch merges cleanly with master (2bce552e).
+
+Not checked: the UI was not looked at in a browser, at desktop or phone width, and no real TODO run or rename was made through the Console.
+
+Merging with FT10: as before, the branches conflict in `console_store.go` and `ChatView.js`; merge FT10 first.
