@@ -966,6 +966,11 @@ body:has(.todo-page) .q-dialog .q-menu .q-menu-subtitle {
     max-width: none;
   }
 
+  /* Chat's divider is inside the list, whose horizontal gutter is zero on mobile. */
+  .todo-index-divider {
+    margin-inline: 0;
+  }
+
   .todo-editor-card {
     margin: 16px;
   }
