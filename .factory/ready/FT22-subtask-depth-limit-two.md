@@ -30,3 +30,14 @@ Added regression coverage for nested execution, worker identities, narrowed tool
 Tests: manager independently passed `test -z "$(gofmt -l .)" && go vet ./... && go test ./...` with a throwaway HOME. No prohibited paths changed. No additional installs.
 Not checked: live LLM providers and Console nested-worker rendering; no UI sources changed.
 Moved new/ → review/. Branch pushed; not merged into master.
+
+## factory · review · 2026-11-07 00:06
+head: 86d16f730e60db222ce75ad3d6c19a713b8fc30e
+verdict: pass
+notes:
+- Codex reviewed all 14 changed files and related callers against origin/master (fa4bab1b); no qualifying P0-P3 findings. Branch merges cleanly with base.
+- Required gofmt check, go vet ./... and go test ./... passed with a throwaway HOME (156 packages passed, 17 without tests).
+- Verified depth-0/1/2 execution, rejection of depth 3 before callbacks/model calls, leaf spawn exclusion, cancellation and result propagation. Additional overlay checks passed for profile inheritance/switching, client closure order and narrowed tool access.
+- No additional installs; review worktree remained clean.
+- Not checked: live model providers, external coder CLI execution and Console nested-worker rendering. No frontend sources changed.
+- Moved review/ → ready/; awaiting owner approval to ship. No linked GitHub issues or PRs.
