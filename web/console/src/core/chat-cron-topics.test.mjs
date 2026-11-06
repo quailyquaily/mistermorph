@@ -98,9 +98,13 @@ function toggleButton(viewName) {
 test("the TODO runs button is always in the sidebar, whether or not a TODO item has run", () => {
   const button = toggleButton("cron");
   assert.match(button, /<PhAlarm class="icon" \/>/u);
-  assert.match(button, /:aria-label="t\('chat_topics_view_cron'\)"/u);
-  // No condition at all, in particular none on the TODO items' topics.
-  assert.doesNotMatch(button, /v-if|v-show|cronTopics/u);
+  // Its name is TODO runs, with the running count while any run (see chat-cron-toggle.test.mjs).
+  assert.match(button, /:aria-label="cronToggleLabel"/u);
+  // No condition at all on the button, in particular none on the TODO items' topics; only its
+  // running mark comes and goes.
+  assert.doesNotMatch(button.match(/<AppButton[^>]*>/u)[0], /v-if|v-show|cronTopics/u);
+  assert.doesNotMatch(button, /cronTopics/u);
+  assert.deepEqual(button.match(/v-if="[^"]*"/gu), ['v-if="cronRunning > 0"']);
   // The agents button, beside it, shows that the check sees a condition when there is one.
   assert.match(toggleButton("agents"), /v-if="agentTopics\.length > 0/u);
 });

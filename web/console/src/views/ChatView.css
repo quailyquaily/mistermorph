@@ -208,6 +208,39 @@
   background: color-mix(in srgb, var(--q-c-blue) 12%, transparent) !important;
 }
 
+/* The TODO toggle's running mark: the topics' running mark, just off the icon's top right corner. It
+   sits on the icon's own box, so the toggle keeps its size, and is the status blue whether the
+   toggle is on or off, which the toggle's background tells apart. */
+.chat-topic-view-toggle-glyph {
+  position: relative;
+  display: inline-flex;
+  width: 14px;
+  height: 14px;
+}
+
+.chat-topic-view-toggle-status {
+  position: absolute;
+  top: -4px;
+  right: -8px;
+  box-sizing: border-box;
+  width: var(--status-mark-size);
+  height: var(--status-mark-size);
+  border: 1px solid currentColor;
+  border-radius: 1px;
+  color: var(--status-on);
+  background: transparent;
+  pointer-events: none;
+}
+
+.chat-topic-view-toggle-status::after {
+  content: "";
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: currentColor;
+  animation: chat-topic-status-fill 0.9s ease-in-out infinite alternate;
+}
+
 .chat-topic-tags-hint {
   margin: 0;
   padding: 10px 14px 2px;
@@ -375,7 +408,8 @@
 
 /* Without motion a running mark stays hollow. */
 @media (prefers-reduced-motion: reduce) {
-  .chat-topic-item-status.is-running::after {
+  .chat-topic-item-status.is-running::after,
+  .chat-topic-view-toggle-status::after {
     animation: none;
     opacity: 0;
   }
