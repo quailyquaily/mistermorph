@@ -11,7 +11,7 @@ const i18n = await readFile(new URL("../i18n/index.js", import.meta.url), "utf8"
 const metadata = await readFile(new URL("./topic-metadata.js", import.meta.url), "utf8");
 
 test("TODO items' topics are kept out of the person's topic list", () => {
-  assert.match(view, /import \{ cronSidebarGroups, cronTopicModels, cronTopicModelText, cronTopicsOf, isCronTopicID \} from "\.\.\/core\/chat-cron-topics";/u);
+  assert.match(view, /import \{ cronSidebarGroups, cronTopicModels, cronTopicModelText, cronTopicsOf, isCronTopicID, topicSidebarViewFor \} from "\.\.\/core\/chat-cron-topics";/u);
   assert.equal(isCronTopicID(" _cron_weekly "), true);
   for (const id of ["_cron_", "cron_weekly", "_agentlink_a", "_awareness", "", null]) {
     assert.equal(isCronTopicID(id), false, String(id));
