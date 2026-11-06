@@ -56,3 +56,13 @@ Installs: none.
 Visual verification: Claude Code reports static headless-browser checks at 1x and 2x with actual SVGs and approximate roster CSS, on light chips and the dark detail-panel surface. The Console currently has one light theme. The actual running-app roster was NOT visually checked; owner should inspect the 20px avatars there.
 
 Pushed branch and moved new/ → review/. No merge or release.
+
+## factory · review · 2026-11-06 23:43
+head: 275013f5287b2bc530b1f46c3c5998573fe4c7eb
+verdict: pass
+notes:
+- [P2] agent/worker.go:185: Resuming legacy approval state can duplicate worker display names. With workers_allocated: 32 and no worker_seed, legacy worker-9 is already Milo-2; the new 32-name allocator also assigns Milo-2 to worker-33. Codex verified this with a temporary Go overlay. Preserve/translate the legacy allocation rule or exclude names already used by historical workers.
+
+Codex reviewed all 29 changed files in origin/master...HEAD. No P0/P1 findings. The branch merges cleanly with master. Required gofmt check, go vet ./... and go test ./... passed; Console pnpm test passed 480/480 and pnpm build passed with the chunk-size warning. Tests used a throwaway absolute HOME. No installs. Working tree remains clean and reviewed HEAD unchanged.
+
+Residual risk: actual running-Console 20px avatars on light and dark backgrounds were not visually checked. Owner should inspect those and the P2 legacy-resume collision before shipping. No linked GitHub issues or PRs. Moved review/ → ready/ under the no-P0/P1 review rule; no merge or release.
