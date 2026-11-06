@@ -42,3 +42,16 @@ Installs: none.
 Tests: Console tests passed (448); pnpm build passed with a chunk-size warning. Configured gofmt, go vet ./... and go test ./... passed, independently rerun by the manager. Tests used throwaway HOME directories.
 Not checked: no live browser visual, mobile-layout or keyboard walkthrough; these still need manual inspection. No live LLM-backed run was exercised.
 Moved new/ → review/ for review; not merged or released.
+
+## factory · review · 2026-11-06 21:46
+head: 6687afe4d411e3dc55b17aef02a341caf88164c6
+verdict: pass
+notes:
+- [P2] web/console/src/views/TodoView.js:2539: A delayed run response mixes task context. Reproduction: submit task A, select B before acceptance; the dialog says B will start but opens A's topic. Switching endpoint while pending instead produces a dialog whose navigation only dismisses it. Capture the submitted title and validate task, endpoint and component lifecycle before opening the dialog.
+- [P2] web/console/src/core/todo-topic.js:106: The 30-second deadline does not interrupt a pending lookup. Reproduction with default options: a lookup that stays pending still has not completed after 31,522 ms, and abort does not settle it until lookup returns. Race each lookup against the deadline and cancellation so timeout feedback and lookup-only retry remain reachable.
+
+Codex reviewed all nine changed files in origin/master...HEAD. No P0/P1 findings; pass follows the factory threshold, not an absence of defects. No fixes made.
+Validation: configured gofmt check, go vet ./... and go test ./... passed; Console pnpm test passed (448 tests); pnpm build passed with a chunk-size warning. Independent reproduction scripts confirmed both P2 findings. Scripted tests used throwaway absolute HOME directories.
+Installs: none beyond restoring pinned dependencies with pnpm install --frozen-lockfile.
+Residual risks: browser automation twice timed out at Page.navigate; visual, mobile and keyboard checks remain unverified. No live LLM-backed run was exercised.
+Moved review/ → ready/ for owner inspection; not merged or released. No linked GitHub issues or PRs.
