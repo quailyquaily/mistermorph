@@ -193,7 +193,7 @@ func TestCoderTool_RespectsSubtaskDepthLimit(t *testing.T) {
 		},
 	})
 
-	raw, err := tool.Execute(WithSubtaskDepth(context.Background(), 1), map[string]any{
+	raw, err := tool.Execute(WithSubtaskDepth(context.Background(), SubtaskMaxDepth), map[string]any{
 		"coder": "codex",
 		"task":  "try it",
 		"cwd":   t.TempDir(),
@@ -213,6 +213,41 @@ func TestCoderTool_RespectsSubtaskDepthLimit(t *testing.T) {
 	}
 	if !strings.Contains(result.Error, "depth limit") {
 		t.Fatalf("result.Error = %q, want depth limit", result.Error)
+	}
+}
+
+func TestCoderTool_RunsFromSubtaskBelowDepthLimit(t *testing.T) {
+	t.Parallel()
+
+	runner := &localSubtaskRunner{
+		engine: New(noopSubtaskClient{}, tools.NewRegistry(), Config{}, DefaultPromptSpec()),
+	}
+	cliDepth := -1
+	tool := newCoderTool(coderToolDeps{
+		Runner: runner,
+		RunCLI: func(ctx context.Context, _ CoderRequest, _ func(string)) (string, error) {
+			cliDepth = SubtaskDepthFromContext(ctx)
+			return "patched", nil
+		},
+	})
+
+	raw, err := tool.Execute(WithSubtaskDepth(context.Background(), SubtaskMaxDepth-1), map[string]any{
+		"coder": "codex",
+		"task":  "try it",
+		"cwd":   t.TempDir(),
+	})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if cliDepth != SubtaskMaxDepth {
+		t.Fatalf("coder CLI depth = %d, want %d", cliDepth, SubtaskMaxDepth)
+	}
+	var result SubtaskResult
+	if err := json.Unmarshal([]byte(raw), &result); err != nil {
+		t.Fatalf("json.Unmarshal(result) error = %v", err)
+	}
+	if result.Status != SubtaskStatusDone || result.Output != "patched" {
+		t.Fatalf("result = %+v, want done with CLI output", result)
 	}
 }
 

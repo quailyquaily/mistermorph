@@ -380,7 +380,7 @@ func TestBashTool_Execute_RunInSubtaskDoesNotRecurse(t *testing.T) {
 	}
 
 	ctx := agent.WithSubtaskRunnerContext(context.Background(), runner)
-	ctx = agent.WithSubtaskDepth(ctx, 1)
+	ctx = agent.WithSubtaskDepth(ctx, agent.SubtaskMaxDepth)
 	out, err := tool.Execute(ctx, map[string]any{
 		"cmd":            "printf nested",
 		"run_in_subtask": true,
@@ -389,10 +389,36 @@ func TestBashTool_Execute_RunInSubtaskDoesNotRecurse(t *testing.T) {
 		t.Fatalf("Execute() error = %v (out=%q)", err, out)
 	}
 	if runner.req.Task != "" {
-		t.Fatalf("runner should not be called inside subtask, got task=%q", runner.req.Task)
+		t.Fatalf("runner should not be called at the subtask depth limit, got task=%q", runner.req.Task)
+	}
+	if runner.req.RunFunc != nil {
+		t.Fatal("runner should not be called at the subtask depth limit")
 	}
 	if !strings.Contains(out, "exit_code: 0") {
 		t.Fatalf("expected direct bash output, got %q", out)
+	}
+}
+
+func TestBashTool_Execute_RunInSubtaskFromSubtask(t *testing.T) {
+	tool := NewBashTool(true, 5*time.Second, 4096, pathroots.PathRoots{})
+	runner := &stubBashSubtaskRunner{
+		result: &agent.SubtaskResult{TaskID: "sub_nested_bash", Status: agent.SubtaskStatusDone, OutputKind: agent.SubtaskOutputKindJSON},
+	}
+
+	ctx := agent.WithSubtaskRunnerContext(context.Background(), runner)
+	ctx = agent.WithSubtaskDepth(ctx, agent.SubtaskMaxDepth-1)
+	out, err := tool.Execute(ctx, map[string]any{
+		"cmd":            "printf nested",
+		"run_in_subtask": true,
+	})
+	if err != nil {
+		t.Fatalf("Execute() error = %v (out=%q)", err, out)
+	}
+	if runner.req.RunFunc == nil {
+		t.Fatal("a subtask below the depth limit should run bash in its own subtask")
+	}
+	if !strings.Contains(out, "sub_nested_bash") {
+		t.Fatalf("expected subtask envelope, got %q", out)
 	}
 }
 

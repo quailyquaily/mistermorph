@@ -1104,7 +1104,7 @@ func (rt *Runtime) runSubtask(ctx context.Context, req agent.SubtaskRequest, rou
 			Registry:            req.Registry,
 			DisableRuntimeTools: true,
 			EngineToolsConfig: &agent.EngineToolsConfig{
-				SpawnEnabled: false,
+				SpawnEnabled: agent.SubtaskCanSpawn(runCtx, req),
 				CoderEnabled: false,
 			},
 			Meta: meta,

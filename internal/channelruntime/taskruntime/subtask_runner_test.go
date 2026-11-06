@@ -570,10 +570,10 @@ func TestRunSubtaskRejectsNestedDepth(t *testing.T) {
 		t.Fatalf("Bootstrap() error = %v", err)
 	}
 
-	ctx := agent.WithSubtaskDepth(context.Background(), 1)
+	ctx := agent.WithSubtaskDepth(context.Background(), agent.SubtaskMaxDepth)
 	result, err := rt.RunSubtask(ctx, agent.SubtaskRequest{
 		RunFunc: func(context.Context) (*agent.SubtaskResult, error) {
-			t.Fatal("nested subtask should not execute callback")
+			t.Fatal("subtask beyond the depth limit should not execute callback")
 			return nil, nil
 		},
 	})

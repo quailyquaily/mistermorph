@@ -156,7 +156,7 @@ Parameters:
 | `cmd` | `string` | Yes | None | Bash command to execute. Supports `file_cache_dir/...` and `file_state_dir/...` aliases. |
 | `cwd` | `string` | No | Current directory | Working directory for command execution. Supports `file_cache_dir/...` and `file_state_dir/...` aliases. |
 | `timeout_seconds` | `number` | No | `tools.bash.timeout` | Timeout override in seconds. |
-| `run_in_subtask` | `boolean` | No | `false` | If `true`, run the command inside the direct bash subtask boundary and return the structured subtask envelope JSON. |
+| `run_in_subtask` | `boolean` | No | `false` | If `true`, run the command inside the direct bash subtask boundary and return the structured subtask envelope JSON. In a subtask at the depth limit (depth 2), the command runs in the current subtask instead. |
 | `elevated` | `boolean` | No | `false` | Linux and macOS: run the command as root after the user approves it in a system dialog (see [Elevated commands](#elevated-commands)). Offered only when elevation is available. |
 
 Constraints:
@@ -487,7 +487,7 @@ Parameters:
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `task` | `string` | Yes | Task prompt. The sub-agent does not see the conversation, so it carries the background, goal and what to return. |
-| `tools` | `array<string>` | Yes | Tool whitelist, taken from the parent's registry. Cannot include `spawn`. |
+| `tools` | `array<string>` | Yes | Tool whitelist, taken from the parent's registry. Include `spawn` to let the sub-agent start its own sub-agents (see [Nesting](#nesting)). |
 | `model_profile` | `string` | No | Model profile the sub-agent runs on. Omit it to keep the parent's configuration (including a manually selected profile or the weighted candidate picked for the run). |
 | `output_schema` | `string` | No | Schema identifier; the sub-agent's `output` must then be JSON. |
 | `observe_profile` | `string` | No | Local observer profile: `default`, `long_shell` or `web_extract`. |
@@ -502,6 +502,16 @@ The `model` parameter was replaced by `model_profile`; passing `model` returns a
 - Selecting a profile affects only that subtask, not the session's main profile.
 
 Result: a JSON envelope with `task_id`, `status` (`done` or `failed`), `summary`, `output_kind` (`text` or `json`), `output_schema`, `output` and `error`.
+
+### Nesting
+
+Subtasks nest at most two levels deep. The main task is depth 0; its sub-agents run at depth 1, and theirs at depth 2. The limit is fixed and not configurable.
+
+- A sub-agent gets its own `spawn` only when the parent lists `spawn` in `tools` and the sub-agent runs at depth 1. With it comes `list_model_profiles` when profiles are available, and its `model_profile` works the same way as the parent's.
+- A sub-agent's `tools` are taken from its own whitelist, so a depth 2 sub-agent never gets a tool its parent did not have.
+- A depth 2 sub-agent has no `spawn`: `spawn` in the whitelist a depth 1 sub-agent passes is ignored. A subtask started at depth 2 any other way returns a failed envelope with `subtask depth limit reached (max=2)` and does not run.
+- `coder` and `bash` with `run_in_subtask` count toward the same limit: from depth 0 or 1 they run in a subtask; at depth 2 `coder` fails and `bash` runs the command in the current subtask.
+- Cancelling the main task cancels every level, and each level gets its child's envelope as the `spawn` result.
 
 ## `list_model_profiles`
 

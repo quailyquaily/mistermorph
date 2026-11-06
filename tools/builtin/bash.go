@@ -113,7 +113,8 @@ func (t *BashTool) Execute(ctx context.Context, params map[string]any) (string, 
 		return "", err
 	}
 	runInSubtask, _ := asBool(params["run_in_subtask"])
-	if runInSubtask && agent.SubtaskDepthFromContext(ctx) == 0 {
+	// At the subtask depth limit the command runs here, in the current subtask.
+	if runInSubtask && agent.CanStartSubtask(ctx) {
 		return t.executeInSubtask(ctx, inv.Command, inv.CWD, inv.Timeout)
 	}
 
