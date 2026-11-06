@@ -1,3 +1,7 @@
+---
+branch: factory/FT20-console-todo-topic-navigation
+round: 1
+---
 # TODO task topic entry and manual-run confirmation
 
 ## factory · 2026-11-06 16:35
@@ -18,3 +22,23 @@ Requirements and acceptance criteria:
 - Add regression coverage for existing/no-topic TODO entries, manual-run success/failure, delayed first-topic creation, repeated clicks, dialog dismissal, and navigation with the TODO runs filter initially off/on.
 
 Not implemented yet.
+
+## factory · plan · 2026-11-06 21:28
+Behaviour: Look up the selected TODO's existing task topic using GET only, never creating a topic by viewing an item. After an accepted manual run, show queued feedback and a dismiss action; enable navigation when the exact topic exists. Poll for first-topic creation; expose errors/timeouts and lookup-only retry without resubmitting. Prevent duplicate pending submissions. Navigation sets TODO runs ON and preserves the target through asynchronous loading.
+
+Scope: Console navigation, shared dialog button states, localization and regression tests. Scheduling and runtime behavior are unchanged.
+
+Decisions: Validate the canonical _cron_<taskID> topic through the endpoint used by ChatView. Poll once a second for up to 30 seconds. Dismissal stops UI polling, not the accepted run. Ordinary topic navigation retains its existing filter behavior.
+
+Checking: Test existing/missing topics, accepted/failed runs, delayed creation, duplicate clicks, dismissal/retry and filter initially off/on. Run Console tests/build and the configured Go checks. Inspect browser UI when available.
+
+## factory · 2026-11-06 21:28
+Recovered the interrupted build's two existing item commits; preserved the leftover test HOME outside the worktree. Claude Code checked the implementation and required no additional edits. No merge was needed: the fetched master is already an ancestor of this branch.
+
+Built: existing-topic entry in TODO view; queued manual-run dialog with bounded read-only lookup and safe retry/dismissal; topic navigation enabling TODO runs without losing the target. Updated all three Console languages and regression coverage.
+
+Commits: d25b80ae, 6687afe4. Head: 6687afe4d411e3dc55b17aef02a341caf88164c6.
+Installs: none.
+Tests: Console tests passed (448); pnpm build passed with a chunk-size warning. Configured gofmt, go vet ./... and go test ./... passed, independently rerun by the manager. Tests used throwaway HOME directories.
+Not checked: no live browser visual, mobile-layout or keyboard walkthrough; these still need manual inspection. No live LLM-backed run was exercised.
+Moved new/ → review/ for review; not merged or released.
