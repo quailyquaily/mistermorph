@@ -14,6 +14,9 @@ export function normalizeTopicActivity(raw) {
       status,
       running: Math.max(0, Number(item.running) || 0),
       pending: Math.max(0, Number(item.pending) || 0),
+      // Running tasks a TODO item's schedule started; the server counts them apart from queued
+      // ones and Run now runs.
+      cronRunning: Math.max(0, Math.floor(Number(item.cron_running) || 0)),
     });
   }
   return activity;
@@ -21,9 +24,16 @@ export function normalizeTopicActivity(raw) {
 
 export function topicActivitySignature(activity) {
   return [...activity.entries()]
-    .map(([id, item]) => `${id}:${item.status}:${item.running}:${item.pending}`)
+    .map(([id, item]) => `${id}:${item.status}:${item.running}:${item.pending}:${item.cronRunning || 0}`)
     .sort()
     .join("|");
+}
+
+// The TODO runs running now across every topic in the activity, listed in the sidebar or not.
+export function cronRunningCount(activity) {
+  let count = 0;
+  for (const item of activity?.values?.() || []) count += Math.max(0, Number(item?.cronRunning) || 0);
+  return count;
 }
 
 // A selected topic in the mobile sidebar or a background/unfocused window is not viewed.
@@ -76,7 +86,7 @@ export function createTopicActivityTracker() {
     snapshot() {
       const result = new Map([...activity].filter(([, item]) => item.status));
       for (const id of unread) {
-        if (!result.has(id)) result.set(id, { status: TOPIC_ACTIVITY_DONE, running: 0, pending: 0 });
+        if (!result.has(id)) result.set(id, { status: TOPIC_ACTIVITY_DONE, running: 0, pending: 0, cronRunning: 0 });
       }
       return result;
     },

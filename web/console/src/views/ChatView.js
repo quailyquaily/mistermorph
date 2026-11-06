@@ -73,7 +73,7 @@ import { buildTreeRows, hasOwnTreePath, setTreeExpanded, setTreeItems } from "..
 import WorkspaceDirPickerDialog from "../components/WorkspaceDirPickerDialog";
 import { topicIcon, useTopicMetadata } from "../core/topic-metadata";
 import { cronSidebarGroups, cronTopicModels, cronTopicModelText, cronTopicsOf, isCronTopicID } from "../core/chat-cron-topics";
-import { activelyViewedTopic, createTopicActivityTracker, topicActivitySignature, TOPIC_ACTIVITY_DONE, TOPIC_ACTIVITY_PENDING } from "../core/topic-activity";
+import { activelyViewedTopic, createTopicActivityTracker, cronRunningCount, topicActivitySignature, TOPIC_ACTIVITY_DONE, TOPIC_ACTIVITY_PENDING } from "../core/topic-activity";
 import { contextMeter } from "../core/context-meter";
 import {
   groupTopicsByTag,
@@ -923,6 +923,16 @@ const ChatView = {
     // The sidebar is there for the TODO items' topics too: with none of the person's own topics,
     // its TODO toggle is still the only way to them.
     const hasSidebarTopics = computed(() => hasVisibleTopics.value || cronTopics.value.length > 0);
+    // The TODO toggle's running mark counts every scheduled TODO run running now, whatever the
+    // sidebar shows or which topic is open.
+    const cronRunning = computed(() => cronRunningCount(topicActivity.value));
+    const cronToggleLabel = computed(() =>
+      cronRunning.value > 0 ? t("chat_topics_view_cron_running", { count: cronRunning.value }) : t("chat_topics_view_cron")
+    );
+    const cronToggleTitle = computed(() => {
+      if (topicSidebarView.value !== "cron") return cronToggleLabel.value;
+      return cronRunning.value > 0 ? t("chat_topics_view_date_cron_running", { count: cronRunning.value }) : t("chat_topics_view_date");
+    });
     const selectedTopic = computed(() => {
       const selectedID = normalizeTopicID(selectedTopicID.value);
       if (!selectedID) {
@@ -4381,6 +4391,12 @@ const ChatView = {
         void refreshTopicActivity();
       }
     }
+    // Back online, the activity is read again at once: what ran or ended meanwhile, such as a TODO
+    // run, shows without waiting for the next poll.
+    function onNetworkOnline() {
+      resumeTrackedTasks();
+      void refreshTopicActivity();
+    }
     // Heartbeat and TODO runs start on their own, so the awareness topic looks for new ones while
     // it is open; refreshHistory starts following any that are still running.
     let awarenessRefreshTimer = 0;
@@ -4430,7 +4446,7 @@ const ChatView = {
     );
     document.addEventListener("visibilitychange", onPageVisibilityChange);
     window.addEventListener("focus", onPageVisibilityChange);
-    window.addEventListener("online", resumeTrackedTasks);
+    window.addEventListener("online", onNetworkOnline);
     window.addEventListener("pageshow", onPageVisibilityChange);
     onUnmounted(() => {
       viewActive = false;
@@ -4438,7 +4454,7 @@ const ChatView = {
       topicActivityTracker.beginRequest();
       window.removeEventListener("focus", onPageVisibilityChange);
       document.removeEventListener("visibilitychange", onPageVisibilityChange);
-      window.removeEventListener("online", resumeTrackedTasks);
+      window.removeEventListener("online", onNetworkOnline);
       window.removeEventListener("pageshow", onPageVisibilityChange);
       closeComposerFilePreview();
       historyLoadVersion += 1;
@@ -4734,6 +4750,9 @@ const ChatView = {
       topicActivityState,
       topicActivityLabel,
       cronTopics,
+      cronRunning,
+      cronToggleLabel,
+      cronToggleTitle,
       cronTopicModel,
       isCronTopicID,
       selectedTopicIsCron,
@@ -4854,13 +4873,16 @@ const ChatView = {
               </AppButton>
               <!-- Always there, also before any TODO item has run: its list then says so. -->
               <AppButton
-                :class="['plain sm icon chat-topic-view-toggle', { 'is-active': topicSidebarView === 'cron' }]"
-                :title="topicSidebarView === 'cron' ? t('chat_topics_view_date') : t('chat_topics_view_cron')"
-                :aria-label="t('chat_topics_view_cron')"
+                :class="['plain sm icon chat-topic-view-toggle', { 'is-active': topicSidebarView === 'cron', 'is-running': cronRunning > 0 }]"
+                :title="cronToggleTitle"
+                :aria-label="cronToggleLabel"
                 :aria-pressed="topicSidebarView === 'cron' ? 'true' : 'false'"
                 @click="setTopicSidebarView(topicSidebarView === 'cron' ? 'date' : 'cron')"
               >
-                <PhAlarm class="icon" />
+                <span class="chat-topic-view-toggle-glyph">
+                  <PhAlarm class="icon" />
+                  <span v-if="cronRunning > 0" class="chat-topic-view-toggle-status" aria-hidden="true"></span>
+                </span>
               </AppButton>
               <AppButton
                 :class="['plain sm icon chat-topic-view-toggle', { 'is-active': topicSidebarView === 'tags' }]"

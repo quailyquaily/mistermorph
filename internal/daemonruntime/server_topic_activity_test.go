@@ -168,3 +168,164 @@ func TestTopicActivityPagesHistoryAndUsesCompletionOrder(t *testing.T) {
 		t.Fatalf("activity = %+v", got)
 	}
 }
+
+// Only running tasks a TODO item's schedule started count as running TODO runs: not queued or
+// finished ones, not Run now runs in the same topic, and not by the topic ID alone.
+func TestTopicActivityCountsRunningScheduledTodoRuns(t *testing.T) {
+	scheduled := TaskTrigger{Source: "console", Event: CronRunTriggerEvent, Ref: CronRunTriggerRefSchedule}
+	manual := TaskTrigger{Source: "console", Event: CronRunTriggerEvent, Ref: CronRunTriggerRefManual}
+	chat := TaskTrigger{Source: "ui", Event: "chat_submit"}
+	heartbeat := TaskTrigger{Source: "console", Event: "awareness_heartbeat"}
+	type task struct {
+		id, topic string
+		status    TaskStatus
+		trigger   TaskTrigger
+	}
+	cron := func(name string) string { return CronTopicID(name) }
+	for _, tc := range []struct {
+		name  string
+		tasks []task
+		want  map[string]int
+	}{
+		{"none", []task{
+			{"q", cron("a"), TaskQueued, scheduled},
+			{"p", cron("a"), TaskPending, scheduled},
+			{"d", cron("a"), TaskDone, scheduled},
+			{"f", cron("a"), TaskFailed, scheduled},
+			{"c", cron("a"), TaskCanceled, scheduled},
+			{"m", cron("a"), TaskRunning, manual},
+			{"chat", "t1", TaskRunning, chat},
+			{"hb", ConsoleAwarenessTopicID, TaskRunning, heartbeat},
+			{"untriggered", cron("b"), TaskRunning, TaskTrigger{}},
+		}, map[string]int{}},
+		{"one", []task{
+			{"s", cron("a"), TaskRunning, scheduled},
+			{"q", cron("a"), TaskQueued, scheduled},
+		}, map[string]int{cron("a"): 1}},
+		{"several topics and a mixed one", []task{
+			{"s1", cron("a"), TaskRunning, scheduled},
+			{"m1", cron("a"), TaskRunning, manual},
+			{"s2", cron("b"), TaskRunning, scheduled},
+			{"s3", cron("b"), TaskRunning, scheduled},
+			{"chat", "t1", TaskRunning, chat},
+		}, map[string]int{cron("a"): 1, cron("b"): 2}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			stores := map[string]interface {
+				TaskReader
+				RecordTaskUpsert(TaskInfo, TaskTrigger) error
+			}{}
+			console, err := NewConsoleFileStore(ConsoleFileStoreOptions{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			file, err := NewFileTaskStore(FileTaskStoreOptions{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			stores["console"], stores["file"] = console, file
+			for name, store := range stores {
+				now := time.Date(2026, 11, 6, 9, 0, 0, 0, time.UTC)
+				for _, item := range tc.tasks {
+					info := TaskInfo{ID: item.id, TopicID: item.topic, Status: item.status, Task: "x", CreatedAt: now}
+					if err := store.RecordTaskUpsert(info, item.trigger); err != nil {
+						t.Fatal(err)
+					}
+				}
+				got := map[string]int{}
+				for _, item := range topicActivity(store) {
+					if item.CronRunning > 0 {
+						got[item.ID] = item.CronRunning
+					}
+				}
+				if !reflect.DeepEqual(got, tc.want) {
+					t.Fatalf("%s: cron running = %v, want %v", name, got, tc.want)
+				}
+			}
+		})
+	}
+}
+
+// The old status and counts stay as they were, and finishing the last scheduled run clears the
+// count, whatever the run ended as.
+func TestTopicActivityCronRunningKeepsStatusAndClearsWhenRunsEnd(t *testing.T) {
+	for _, status := range []TaskStatus{TaskDone, TaskFailed, TaskCanceled} {
+		t.Run(string(status), func(t *testing.T) {
+			store, err := NewConsoleFileStore(ConsoleFileStoreOptions{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			now := time.Date(2026, 11, 6, 9, 0, 0, 0, time.UTC)
+			trigger := TaskTrigger{Source: "console", Event: CronRunTriggerEvent, Ref: CronRunTriggerRefSchedule}
+			topic := CronTopicID("a")
+			for _, id := range []string{"s1", "s2"} {
+				if err := store.RecordTaskUpsert(TaskInfo{ID: id, TopicID: topic, Status: TaskRunning, Task: "x", CreatedAt: now}, trigger); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := store.RecordTaskUpsert(TaskInfo{ID: "q", TopicID: topic, Status: TaskQueued, Task: "x", CreatedAt: now}, trigger); err != nil {
+				t.Fatal(err)
+			}
+			want := []TopicActivity{{ID: topic, Status: "running", Running: 3, CronRunning: 2}}
+			if got := topicActivity(store); !reflect.DeepEqual(got, want) {
+				t.Fatalf("running = %+v", got)
+			}
+			finish := func(id string) {
+				t.Helper()
+				if err := store.RecordTaskUpdate(id, TaskTrigger{}, func(info *TaskInfo) { info.Status = status; info.FinishedAt = &now }); err != nil {
+					t.Fatal(err)
+				}
+			}
+			finish("s1")
+			if got := topicActivity(store); len(got) != 1 || got[0].CronRunning != 1 || got[0].Running != 2 {
+				t.Fatalf("one of two finished: %+v", got)
+			}
+			finish("s2")
+			if got := topicActivity(store); len(got) != 1 || got[0].CronRunning != 0 || got[0].Running != 1 || got[0].Status != "running" {
+				t.Fatalf("last finished: %+v", got)
+			}
+			// The queued run starting counts once it runs.
+			if err := store.RecordTaskUpdate("q", TaskTrigger{}, func(info *TaskInfo) { info.Status = TaskRunning }); err != nil {
+				t.Fatal(err)
+			}
+			if got := topicActivity(store); len(got) != 1 || got[0].CronRunning != 1 {
+				t.Fatalf("queued started: %+v", got)
+			}
+		})
+	}
+}
+
+// Running runs beyond the first page of task history still count, and a reader that keeps no
+// triggers reports none.
+func TestTopicActivityCronRunningPagesHistory(t *testing.T) {
+	store, err := NewFileTaskStore(FileTaskStoreOptions{MaxItems: 1000})
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := time.Date(2026, 11, 6, 9, 0, 0, 0, time.UTC)
+	trigger := TaskTrigger{Source: "console", Event: CronRunTriggerEvent, Ref: CronRunTriggerRefSchedule}
+	if err := store.RecordTaskUpsert(TaskInfo{ID: "oldest", TopicID: CronTopicID("old"), Status: TaskRunning, Task: "x", CreatedAt: start}, trigger); err != nil {
+		t.Fatal(err)
+	}
+	for i := 1; i <= 250; i++ {
+		info := TaskInfo{ID: fmt.Sprintf("task-%03d", i), TopicID: "topic", Status: TaskDone, Task: "x", CreatedAt: start.Add(time.Duration(i) * time.Second)}
+		if err := store.RecordTaskUpsert(info, TaskTrigger{Source: "ui", Event: "chat_submit"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var got int
+	for _, item := range topicActivity(store) {
+		got += item.CronRunning
+	}
+	if got != 1 {
+		t.Fatalf("cron running = %d", got)
+	}
+
+	memory := NewMemoryStore(10)
+	if err := memory.Upsert(TaskInfo{ID: "s", TopicID: CronTopicID("a"), Status: TaskRunning, CreatedAt: start}); err != nil {
+		t.Fatal(err)
+	}
+	if activity := topicActivity(memory); len(activity) != 1 || activity[0].CronRunning != 0 || activity[0].Running != 1 {
+		t.Fatalf("memory = %+v", activity)
+	}
+}

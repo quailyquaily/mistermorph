@@ -232,6 +232,20 @@ func (s *FileTaskStore) Get(id string) (*TaskInfo, bool) {
 	return &cp, true
 }
 
+func (s *FileTaskStore) GetTrigger(taskID string) (TaskTrigger, bool) {
+	if s == nil {
+		return TaskTrigger{}, false
+	}
+	taskID = strings.TrimSpace(taskID)
+	if taskID == "" {
+		return TaskTrigger{}, false
+	}
+	s.mu.RLock()
+	trigger, ok := s.triggers[taskID]
+	s.mu.RUnlock()
+	return trigger, ok
+}
+
 func (s *FileTaskStore) List(opts TaskListOptions) []TaskInfo {
 	if s == nil {
 		return nil

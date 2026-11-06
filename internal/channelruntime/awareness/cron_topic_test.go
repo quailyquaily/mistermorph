@@ -84,9 +84,6 @@ func TestAwarenessTaskTriggerTellsScheduledFromManualRuns(t *testing.T) {
 			if err := recordAwarenessTaskStart(opts, "Run the build.", now); err != nil {
 				t.Fatal(err)
 			}
-			if err := recordAwarenessTaskFinish(opts, "done", nil, nil, now.Add(time.Minute)); err != nil {
-				t.Fatal(err)
-			}
 			trigger, ok := store.GetTrigger("run:1")
 			if !ok || trigger.Event != "awareness_"+string(tc.behavior) || trigger.Ref != tc.wantRef || trigger.TraceID != "run:1" {
 				t.Fatalf("trigger = %+v, %v", trigger, ok)
@@ -96,6 +93,12 @@ func TestAwarenessTaskTriggerTellsScheduledFromManualRuns(t *testing.T) {
 			}
 			if got := daemonruntime.IsScheduledCronRunTrigger(trigger); got != tc.scheduled {
 				t.Fatalf("IsScheduledCronRunTrigger = %v", got)
+			}
+			if err := recordAwarenessTaskFinish(opts, "done", nil, nil, now.Add(time.Minute)); err != nil {
+				t.Fatal(err)
+			}
+			if finished, ok := store.GetTrigger("run:1"); !ok || finished != trigger {
+				t.Fatalf("finished trigger = %+v, %v; want %+v", finished, ok, trigger)
 			}
 		})
 	}

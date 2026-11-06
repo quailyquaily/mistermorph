@@ -15,6 +15,11 @@ type TaskReader interface {
 	Get(id string) (*TaskInfo, bool)
 }
 
+// TaskTriggerReader reports what started a task, for task readers that keep it.
+type TaskTriggerReader interface {
+	GetTrigger(taskID string) (TaskTrigger, bool)
+}
+
 type TaskUpdater interface {
 	Update(id string, fn func(*TaskInfo)) error
 }
