@@ -24,3 +24,9 @@ This item registers the agreed naming and avatar change only. It does not author
 
 ## factory · 2026-11-06 21:47
 Moved to backlog: the item contains only a factory-authored intake section, not a section from a configured owner (lyric). That section explicitly limits authorization to intake. The factory cannot treat its own intake notes as an owner-authorized build request. No implementation was made. An owner section confirming the build requirements is needed before returning this item to new.
+
+## lyric · 2026-11-06 22:28
+move FT21 to new
+
+## factory · 2026-11-06 22:28
+Moved to new at the owner’s explicit request above. This authorizes the queued build under the existing requirements; the earlier intake-only restriction applied to intake, not to the subsequent build.
