@@ -11,7 +11,25 @@ import TodoCalendar from "../components/TodoCalendar";
 import WorkspaceDirPickerDialog from "../components/WorkspaceDirPickerDialog";
 import { rememberRecentWorkspaceDir } from "../core/recent-workspace-dirs";
 import { createArrivalTracker, createHighlightWindow } from "../core/arrivals";
-import { currentLocale, endpointState, runtimeApiFetch, translate } from "../core/context";
+import {
+  currentLocale,
+  endpointState,
+  runtimeApiFetch,
+  runtimeApiFetchForEndpoint,
+  runtimeEndpointByRef,
+  translate,
+} from "../core/context";
+import { endpointRoutePath } from "../core/endpoint-routes";
+import {
+  findTodoTopic,
+  todoTopicChatPath,
+  todoTopicsEndpointRef,
+  waitForTodoTopic,
+  TODO_TOPIC_CANCELLED,
+  TODO_TOPIC_ERROR,
+  TODO_TOPIC_READY,
+  TODO_TOPIC_UNAVAILABLE,
+} from "../core/todo-topic";
 import { isValidCronExpression } from "../core/cron";
 import { normalizeTodoRuns, todoRunsSignature, TODO_RUN_RUNNING } from "../core/todo-runs";
 import { modelVendorMeta } from "../core/model-vendor";
@@ -105,6 +123,13 @@ function nextTaskKey() {
 
 function trimText(value) {
   return String(value || "").trim();
+}
+
+// What a TODO item's topic lookup is for: the agent and the item.
+function taskTopicKey(endpointRef, taskID) {
+  const ref = trimText(endpointRef);
+  const id = trimText(taskID);
+  return ref && id ? `${ref}\u0000${id}` : "";
 }
 
 function browserTimezone() {
@@ -755,6 +780,16 @@ const TodoView = {
     const heartbeatTask = ref(null);
     const heartbeatEnabled = ref(true);
     const runningTaskKey = ref("");
+    // The selected item's topic, once the endpoint has it: { key, topicID }, key naming the
+    // endpoint and item it was looked up for, so an answer about another one is not shown.
+    const taskTopic = ref({ key: "", topicID: "" });
+    let taskTopicLookupSeq = 0;
+    // The dialog after a manual run is accepted. status is checking while it looks for the item's
+    // topic, then ready, unavailable (not there in time), error, or none when the endpoint lists no
+    // topics. It never requests another run.
+    const runDialogOpen = ref(false);
+    const runDialog = ref(emptyRunDialog());
+    let runDialogLookup = null;
     const calendarView = computed(() => trimText(route.query.view).toLowerCase() === "calendar");
 
     const heartbeatSelected = computed(() => selectedTaskKey.value === HEARTBEAT_ITEM_KEY);
@@ -891,6 +926,7 @@ const TodoView = {
         !loading.value &&
         !saving.value &&
         !runningTaskKey.value &&
+        !runDialogOpen.value &&
         trimText(selectedStoredTask.value?.id) !== "" &&
         !taskRun(selectedStoredTask.value)
     );
@@ -967,6 +1003,43 @@ const TodoView = {
         action: deleteSelectedTask,
       },
     ]);
+
+    const selectedTaskTopicKey = computed(() => {
+      const task = selectedStoredTask.value;
+      const id = trimText(task?.id);
+      if (!id || heartbeatSelected.value || !persistedTaskSignatures.value.has(task._key)) {
+        return "";
+      }
+      return taskTopicKey(endpointState.selectedRef, id);
+    });
+    const selectedTaskTopicID = computed(() =>
+      selectedTaskTopicKey.value && taskTopic.value.key === selectedTaskTopicKey.value ? taskTopic.value.topicID : ""
+    );
+    const runDialogText = computed(() => {
+      const dialog = runDialog.value;
+      const queued = t("todo_run_dialog_text", { title: dialog.title || t("todo_untitled") });
+      const detail = {
+        checking: t("todo_run_dialog_topic_checking"),
+        [TODO_TOPIC_READY]: t("todo_run_dialog_topic_ready"),
+        [TODO_TOPIC_UNAVAILABLE]: t("todo_run_dialog_topic_unavailable"),
+        [TODO_TOPIC_ERROR]: t("todo_run_dialog_topic_error", { error: dialog.error || t("msg_load_failed") }),
+      }[dialog.status];
+      return detail ? `${queued} ${detail}` : queued;
+    });
+    const runDialogActions = computed(() => {
+      const dialog = runDialog.value;
+      const dismiss = { name: "dismiss", label: t("action_close"), class: "outlined", action: closeRunDialog };
+      if (dialog.status === TODO_TOPIC_READY) {
+        return [dismiss, { name: "open", label: t("todo_action_open_topic"), class: "primary", action: openRunDialogTopic }];
+      }
+      if (dialog.status === "checking") {
+        return [dismiss, { name: "open", label: t("todo_action_open_topic"), class: "primary", loading: true, action() {} }];
+      }
+      if (dialog.status === TODO_TOPIC_UNAVAILABLE || dialog.status === TODO_TOPIC_ERROR) {
+        return [dismiss, { name: "retry", label: t("todo_run_dialog_check_again"), class: "primary", action: retryRunDialogTopic }];
+      }
+      return [dismiss];
+    });
 
     function refreshMobileMode() {
       isMobile.value = typeof window !== "undefined" && window.innerWidth <= 920;
@@ -2463,7 +2536,7 @@ const TodoView = {
         await runtimeApiFetch(`/todo/tasks/${encodeURIComponent(id)}/run`, {
           method: "POST",
         });
-        notice.success(t("todo_run_success"));
+        openRunDialog({ endpointRef, key, taskID: id, title: taskTitle(selectedStoredTask.value) });
         void refreshTaskRuns();
       } catch (e) {
         notice.error(e.message || t("todo_run_failed"));
@@ -2471,6 +2544,141 @@ const TodoView = {
         runningTaskKey.value = "";
       }
     }
+
+    // Looks the selected item's topic up once; viewing an item never creates its topic.
+    async function refreshSelectedTaskTopic() {
+      const key = selectedTaskTopicKey.value;
+      const seq = ++taskTopicLookupSeq;
+      if (!key) {
+        return;
+      }
+      const endpointRef = endpointState.selectedRef;
+      const taskID = trimText(selectedStoredTask.value?.id);
+      try {
+        const topicID = await findTodoTopic(
+          runtimeApiFetchForEndpoint,
+          todoTopicsEndpointRef(endpointRef, runtimeEndpointByRef),
+          taskID
+        );
+        if (seq === taskTopicLookupSeq && key === selectedTaskTopicKey.value) {
+          taskTopic.value = { key, topicID };
+        }
+      } catch {
+        // The entry shows up at the next lookup; the TODO itself does not depend on it.
+      }
+    }
+
+    function openTaskTopic(topicID) {
+      const path = todoTopicChatPath(topicID);
+      if (!path) {
+        return;
+      }
+      void router.push(endpointRoutePath(endpointState.selectedRef, path));
+    }
+
+    function emptyRunDialog() {
+      return { endpointRef: "", key: "", taskID: "", title: "", status: "", topicID: "", error: "" };
+    }
+
+    function cancelRunDialogLookup() {
+      if (runDialogLookup) {
+        runDialogLookup.abort();
+        runDialogLookup = null;
+      }
+    }
+
+    function openRunDialog({ endpointRef, key, taskID, title }) {
+      cancelRunDialogLookup();
+      runDialog.value = { ...emptyRunDialog(), endpointRef, key, taskID, title };
+      runDialogOpen.value = true;
+      void resolveRunDialogTopic();
+    }
+
+    // Closing the dialog only closes it: the accepted run goes on.
+    function closeRunDialog() {
+      cancelRunDialogLookup();
+      runDialogOpen.value = false;
+    }
+
+    // Finds the item's topic, which its first run creates when it starts: at once when it is there,
+    // else by asking again for a while. Only reads.
+    async function resolveRunDialogTopic() {
+      cancelRunDialogLookup();
+      const dialog = runDialog.value;
+      if (!runDialogOpen.value || !dialog.taskID) {
+        return;
+      }
+      const topicsEndpointRef = todoTopicsEndpointRef(dialog.endpointRef, runtimeEndpointByRef);
+      if (!topicsEndpointRef) {
+        runDialog.value = { ...dialog, status: "none", topicID: "", error: "" };
+        return;
+      }
+      const lookup = new AbortController();
+      runDialogLookup = lookup;
+      runDialog.value = { ...dialog, status: "checking", topicID: "", error: "" };
+      const result = await waitForTodoTopic(
+        () => findTodoTopic(runtimeApiFetchForEndpoint, topicsEndpointRef, dialog.taskID),
+        { signal: lookup.signal }
+      );
+      if (result.status === TODO_TOPIC_CANCELLED || runDialogLookup !== lookup) {
+        return;
+      }
+      runDialogLookup = null;
+      runDialog.value = {
+        ...runDialog.value,
+        status: result.status,
+        topicID: result.topicID,
+        error: trimText(result.error?.message),
+      };
+      const key = taskTopicKey(dialog.endpointRef, dialog.taskID);
+      if (result.status === TODO_TOPIC_READY && key === selectedTaskTopicKey.value) {
+        taskTopicLookupSeq += 1;
+        taskTopic.value = { key, topicID: result.topicID };
+      }
+    }
+
+    function retryRunDialogTopic() {
+      void resolveRunDialogTopic();
+    }
+
+    function openRunDialogTopic() {
+      const { topicID, endpointRef } = runDialog.value;
+      closeRunDialog();
+      if (topicID && endpointRef === endpointState.selectedRef) {
+        openTaskTopic(topicID);
+      }
+    }
+
+    watch(
+      () => [selectedTaskTopicKey.value, taskRun(selectedStoredTask.value)?.state || ""],
+      ([key], previous) => {
+        // A new item or agent is looked up; the same one again when its run state changes, until
+        // its topic is there.
+        if (previous && key === previous[0] && selectedTaskTopicID.value) {
+          return;
+        }
+        void refreshSelectedTaskTopic();
+      },
+      { immediate: true }
+    );
+    // The dialog is about the item and agent it was opened for, and its lookup stops with it.
+    watch(runDialogOpen, (open) => {
+      if (!open) {
+        cancelRunDialogLookup();
+      }
+    });
+    watch(
+      () => [endpointState.selectedRef, selectedTaskKey.value],
+      () => {
+        const dialog = runDialog.value;
+        if (
+          runDialogOpen.value &&
+          (dialog.endpointRef !== endpointState.selectedRef || dialog.key !== selectedTaskKey.value)
+        ) {
+          closeRunDialog();
+        }
+      }
+    );
 
     async function save() {
       if (heartbeatSelected.value) {
@@ -2492,6 +2700,8 @@ const TodoView = {
     onUnmounted(() => {
       window.removeEventListener("resize", refreshMobileMode);
       window.clearInterval(taskRunsTimer);
+      taskTopicLookupSeq += 1;
+      closeRunDialog();
     });
 
     return {
@@ -2596,6 +2806,13 @@ const TodoView = {
       setTodoView,
       load,
       runSelectedTaskNow,
+      selectedTaskTopicID,
+      openTaskTopic,
+      runDialogOpen,
+      runDialog,
+      runDialogText,
+      runDialogActions,
+      closeRunDialog,
       save,
     };
   },
@@ -2796,6 +3013,15 @@ const TodoView = {
             />
           </template>
           <template #actions>
+            <AppButton
+              v-if="selectedTaskTopicID"
+              class="plain xs icon todo-task-topic-link"
+              :title="t('todo_action_open_topic')"
+              :aria-label="t('todo_action_open_topic')"
+              @click="openTaskTopic(selectedTaskTopicID)"
+            >
+              <PhChats />
+            </AppButton>
             <AppButton class="primary xs" :disabled="!canSave" :loading="saving" @click="save">
               {{ t("action_save") }}
             </AppButton>
@@ -3183,6 +3409,13 @@ const TodoView = {
         :title="t('action_delete')"
         :text="deleteDialogText"
         :actions="deleteDialogActions"
+      />
+      <AppMessageDialog
+        v-model="runDialogOpen"
+        icon="PhTimer"
+        :title="t('todo_run_dialog_title')"
+        :text="runDialogText"
+        :actions="runDialogActions"
       />
     </AppPage>
   `,

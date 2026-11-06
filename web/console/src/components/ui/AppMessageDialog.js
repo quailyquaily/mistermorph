@@ -4,7 +4,8 @@ import AppButton from "./AppButton";
 import AppDialog from "./AppDialog";
 
 // AppMessageDialog: a short notice in a dialog: an icon (a component, or an emoji), a title, a line
-// of text and up to two buttons, each { name, label, class, action }.
+// of text and up to two buttons, each { name, label, class, action }, and optionally disabled or
+// loading. The text is a polite live region, so a change while the dialog is open is read out.
 //
 // Derived from quail-ui 0.9.10 (Apache License 2.0).
 const AppMessageDialog = {
@@ -45,9 +46,16 @@ const AppMessageDialog = {
           </div>
         </div>
         <div class="q-text-body mb-2 text-center font-bold">{{ title }}</div>
-        <div class="q-text-body-text mb-6 text-center message-dialog-text q-c-dark-2">{{ text }}</div>
+        <div class="q-text-body-text mb-6 text-center message-dialog-text q-c-dark-2" aria-live="polite">{{ text }}</div>
         <div class="buttons grid gap-4" :class="'grid-cols-' + acts.length">
-          <AppButton v-for="act in acts" :key="act.name" :class="act.class" @click="act.action">{{ act.label }}</AppButton>
+          <AppButton
+            v-for="act in acts"
+            :key="act.name"
+            :class="act.class"
+            :disabled="act.disabled === true"
+            :loading="act.loading === true"
+            @click="act.action"
+          >{{ act.label }}</AppButton>
         </div>
       </div>
     </AppDialog>

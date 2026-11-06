@@ -6,6 +6,7 @@ import { computed, effectScope, nextTick, reactive, ref, watch } from "vue";
 import { createArrivalTracker, createHighlightWindow } from "./arrivals.js";
 import { isValidCronExpression } from "./cron.js";
 import { normalizeTodoRuns, todoRunsSignature, TODO_RUN_RUNNING } from "./todo-runs.js";
+import * as todoTopic from "./todo-topic.js";
 
 const source = (await readFile(new URL("../views/TodoView.js", import.meta.url), "utf8"))
   .replace(/^import[\s\S]*?;\n/gm, "")
@@ -20,19 +21,40 @@ const task = (extra = {}) => ({
   llm_profile: "reviewer", bash_env: [{ name: "MODE", value: "review" }], ...extra,
 });
 
-async function mount(t, { rows = [task()], runs = [], request = async () => ({}), lang = "en" } = {}) {
+const consoleEndpoint = (ref) => ({ endpoint_ref: ref, can_submit: true, mode: "console" });
+
+// topic answers GET /topics/<id> for an endpoint: the topic, or "" for a 404, or it throws.
+async function mount(t, {
+  rows = [task()], runs = [], request = async () => ({}), lang = "en",
+  topic = async () => "", endpoint = consoleEndpoint, topicTimeoutMs = 200,
+} = {}) {
   const calls = [];
   const errors = [];
   const successes = [];
+  const lookups = [];
+  const pushes = [];
   const context = {
     computed, ref, watch, createArrivalTracker, createHighlightWindow, isValidCronExpression,
     normalizeTodoRuns, todoRunsSignature, TODO_RUN_RUNNING,
+    AbortController,
+    ...todoTopic,
+    waitForTodoTopic: (lookup, options) =>
+      todoTopic.waitForTodoTopic(lookup, { ...options, intervalMs: 2, timeoutMs: topicTimeoutMs }),
+    runtimeEndpointByRef: (ref) => (ref ? endpoint(ref) : null),
+    runtimeApiFetchForEndpoint: async (ref, path, options) => {
+      lookups.push({ ref, path, method: options?.method || "GET" });
+      const id = decodeURIComponent(path.replace(/^\/topics\//u, ""));
+      const found = await topic(id, ref);
+      if (!found) throw Object.assign(new Error("not found"), { status: 404 });
+      return found;
+    },
+    endpointRoutePath: (ref, path) => `/ep/${ref}${path}`,
     AppSkeleton: {}, AppFab: {}, AppPage: {}, AppMarkdownEditor: {}, AppTabs: {},
     TodoCalendar: {}, WorkspaceDirPickerDialog: {},
     ...Object.fromEntries(["Discord", "WeChat", "WhatsApp", "Bluesky", "X", "Lark", "Line", "Slack", "Telegram"]
       .map((name) => [`channel${name}LogoURL`, ""])),
     useNotice: () => ({ error: (message) => errors.push(message), success: (message) => successes.push(message) }),
-    useRoute: () => ({ query: {} }), useRouter: () => ({ replace() {} }),
+    useRoute: () => ({ query: {} }), useRouter: () => ({ replace() {}, push: async (path) => { pushes.push(path); } }),
     onMounted() {}, onUnmounted() {},
     endpointState: reactive({ selectedRef: "endpoint-one" }),
     localeState: { lang }, i18nExtensions: {},
@@ -50,7 +72,7 @@ async function mount(t, { rows = [task()], runs = [], request = async () => ({})
   t.after(() => scope.stop());
   await view.load();
   if (view.tasks.value.length) view.selectTask(view.tasks.value[0]);
-  return { view, calls, errors, successes, context };
+  return { view, calls, errors, successes, lookups, pushes, context };
 }
 
 function menu(view, id) {
@@ -96,6 +118,10 @@ test("dirty manual run waits for save and runs the persisted content exactly onc
   ran.resolve();
   await pending;
   assert.equal(view.runningTaskKey.value, "");
+  // The run is confirmed in a dialog; until it is closed, the item cannot be run again.
+  assert.equal(view.runDialogOpen.value, true);
+  assert.equal(menu(view, "run-manually").disabled, true);
+  view.closeRunDialog();
   assert.equal(menu(view, "run-manually").disabled, false);
 });
 
@@ -284,4 +310,186 @@ test("the list shows which TODO items are running or waiting, and a running item
   assert.equal(calls.length, 0);
   view.selectTask(third);
   assert.equal(view.canRunSelectedTask.value, true);
+});
+
+async function until(check, message) {
+  for (let i = 0; i < 500; i += 1) {
+    if (check()) return;
+    await new Promise((resolve) => setTimeout(resolve, 1));
+  }
+  assert.fail(message);
+}
+
+const topicLookups = (lookups) => lookups.filter((call) => call.path.startsWith("/topics/"));
+const dialogAction = (view, name) => view.runDialogActions.value.find((act) => act.name === name);
+
+test("an item with a topic shows the entry to it; looking it up only reads", async (t) => {
+  const { view, calls, lookups, pushes } = await mount(t, { topic: async (id) => ({ id, title: "Review" }) });
+  await until(() => view.selectedTaskTopicID.value, "the topic entry appears");
+  assert.equal(view.selectedTaskTopicID.value, "_cron_task-1");
+  assert.deepEqual(topicLookups(lookups).map((call) => [call.ref, call.path, call.method]), [
+    ["endpoint-one", "/topics/_cron_task-1", "GET"],
+  ]);
+  view.openTaskTopic(view.selectedTaskTopicID.value);
+  assert.deepEqual(pushes, ["/ep/endpoint-one/chat/_cron_task-1"]);
+  assert.equal(calls.length, 0, "viewing an item never creates its topic");
+});
+
+test("an item without a topic, or whose lookup fails, shows no entry", async (t) => {
+  for (const topic of [async () => "", async () => { throw new Error("offline"); }, async (id) => ({ id: `${id}-other` })]) {
+    const { view, calls, errors, lookups } = await mount(t, { topic });
+    await until(() => topicLookups(lookups).length === 1, "the topic is looked up");
+    await new Promise(setImmediate);
+    assert.equal(view.selectedTaskTopicID.value, "");
+    assert.deepEqual(errors, []);
+    assert.equal(calls.length, 0);
+  }
+  const unsaved = await mount(t, { rows: [], topic: async (id) => ({ id }) });
+  unsaved.view.tasks.value.push({ ...task({ id: "draft" }), _key: "draft-key" });
+  unsaved.view.selectTask(unsaved.view.tasks.value[0]);
+  await new Promise(setImmediate);
+  assert.equal(unsaved.view.selectedTaskTopicID.value, "");
+  assert.equal(topicLookups(unsaved.lookups).length, 0, "an unsaved item has no topic to look up");
+});
+
+test("an agent without Console topics shows no entry and a dismiss-only dialog", async (t) => {
+  const { view, calls, lookups } = await mount(t, {
+    endpoint: (ref) => ({ endpoint_ref: ref, can_submit: true, mode: "channel" }),
+    topic: async (id) => ({ id }),
+  });
+  await view.runSelectedTaskNow();
+  assert.deepEqual(calls.map((call) => call.method), ["POST"]);
+  assert.equal(view.runDialogOpen.value, true);
+  assert.equal(view.runDialog.value.status, "none");
+  assert.deepEqual(plain(view.runDialogActions.value.map((act) => act.name)), ["dismiss"]);
+  assert.equal(topicLookups(lookups).length, 0);
+  assert.equal(view.selectedTaskTopicID.value, "");
+});
+
+test("an accepted run waits for the first run's topic, then opens it; the run is requested once", async (t) => {
+  let created = false;
+  let answers = 0;
+  const { view, calls, lookups, pushes, successes } = await mount(t, {
+    topic: async (id) => {
+      answers += 1;
+      return created ? { id } : "";
+    },
+    topicTimeoutMs: 5000,
+  });
+  await until(() => answers === 1, "the entry lookup runs");
+  await view.runSelectedTaskNow();
+  assert.deepEqual(calls.map((call) => [call.method, call.path]), [["POST", "/todo/tasks/task-1/run"]]);
+  assert.deepEqual(successes, [], "a queued run is confirmed in the dialog, not a notice");
+  assert.equal(view.runDialogOpen.value, true);
+  assert.equal(view.runDialog.value.status, "checking");
+  assert.match(view.runDialogText.value, /"Review" will start soon/u);
+  assert.doesNotMatch(view.runDialogText.value, /started|finished|completed/iu);
+  const open = dialogAction(view, "open");
+  assert.equal(open.loading, true, "the topic action waits while the topic is looked up");
+  open.action();
+  assert.deepEqual(pushes, []);
+  await view.runSelectedTaskNow();
+  await until(() => answers >= 4, "the dialog keeps looking");
+  created = true;
+  await until(() => view.runDialog.value.status === "ready", "the topic is found without a refresh");
+  assert.equal(view.selectedTaskTopicID.value, "_cron_task-1", "the entry appears too");
+  assert.notEqual(dialogAction(view, "open").loading, true);
+  dialogAction(view, "open").action();
+  assert.equal(view.runDialogOpen.value, false);
+  assert.deepEqual(pushes, ["/ep/endpoint-one/chat/_cron_task-1"]);
+  assert.equal(calls.length, 1, "the run is never requested again");
+  assert.ok(topicLookups(lookups).every((call) => call.method === "GET"));
+});
+
+test("a failed run shows its error and no dialog", async (t) => {
+  const { view, errors, lookups } = await mount(t, { request: async () => { throw new Error("queue is full"); } });
+  await view.runSelectedTaskNow();
+  assert.deepEqual(errors, ["queue is full"]);
+  assert.equal(view.runDialogOpen.value, false);
+  assert.equal(topicLookups(lookups).length, 1, "only the entry lookup ran");
+});
+
+test("repeated clicks request one run", async (t) => {
+  const ran = deferred();
+  const { view, calls } = await mount(t, { request: () => ran.promise });
+  const first = view.runSelectedTaskNow();
+  const second = view.runSelectedTaskNow();
+  assert.equal(menu(view, "run-manually").disabled, true);
+  ran.resolve({});
+  await Promise.all([first, second]);
+  await view.runSelectedTaskNow();
+  assert.deepEqual(calls.map((call) => call.method), ["POST"]);
+});
+
+test("a topic that stays missing offers a lookup-only retry", async (t) => {
+  let created = false;
+  const { view, calls, lookups } = await mount(t, {
+    topic: async (id) => (created ? { id } : ""),
+    topicTimeoutMs: 15,
+  });
+  await view.runSelectedTaskNow();
+  await until(() => view.runDialog.value.status === "unavailable", "the lookup times out");
+  const asked = topicLookups(lookups).length;
+  assert.ok(asked >= 2 && asked < 40, `bounded lookups: ${asked}`);
+  assert.match(view.runDialogText.value, /not there yet/u);
+  assert.deepEqual(plain(view.runDialogActions.value.map((act) => act.name)), ["dismiss", "retry"]);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(topicLookups(lookups).length, asked, "polling stops at the timeout");
+  created = true;
+  dialogAction(view, "retry").action();
+  await until(() => view.runDialog.value.status === "ready", "the retry finds the topic");
+  assert.deepEqual(calls.map((call) => call.method), ["POST"], "retry only looks the topic up");
+});
+
+test("a failed lookup shows its error and retries the lookup only", async (t) => {
+  let fail = true;
+  const { view, calls } = await mount(t, {
+    topic: async (id) => {
+      if (fail) throw new Error("topics unavailable");
+      return { id };
+    },
+  });
+  await view.runSelectedTaskNow();
+  await until(() => view.runDialog.value.status === "error", "the lookup fails");
+  assert.match(view.runDialogText.value, /Could not look up its topic: topics unavailable/u);
+  fail = false;
+  dialogAction(view, "retry").action();
+  assert.equal(view.runDialog.value.status, "checking");
+  await until(() => view.runDialog.value.status === "ready", "the retry finds the topic");
+  assert.deepEqual(calls.map((call) => call.method), ["POST"]);
+});
+
+test("dismissing the dialog stops the lookup, not the run", async (t) => {
+  const { view, calls, lookups, pushes } = await mount(t, { topicTimeoutMs: 5000 });
+  await view.runSelectedTaskNow();
+  await until(() => topicLookups(lookups).length >= 3, "the dialog looks for the topic");
+  dialogAction(view, "dismiss").action();
+  assert.equal(view.runDialogOpen.value, false);
+  const asked = topicLookups(lookups).length;
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.ok(topicLookups(lookups).length <= asked + 1, "at most an in-flight lookup finishes");
+  assert.deepEqual(calls.map((call) => call.method), ["POST"], "nothing cancels the run");
+  assert.deepEqual(pushes, []);
+  // Closing it with Escape or the backdrop does the same, through v-model.
+  await view.runSelectedTaskNow();
+  assert.equal(view.runDialogOpen.value, true);
+  view.runDialogOpen.value = false;
+  await new Promise(setImmediate);
+  const after = topicLookups(lookups).length;
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.ok(topicLookups(lookups).length <= after + 1);
+  assert.deepEqual(calls.map((call) => call.method), ["POST", "POST"]);
+});
+
+test("the dialog closes when another item or agent is selected", async (t) => {
+  const { view, context } = await mount(t, { rows: [task(), task({ id: "task-2" })], topicTimeoutMs: 5000 });
+  await view.runSelectedTaskNow();
+  view.selectTask(view.tasks.value[1]);
+  await new Promise(setImmediate);
+  assert.equal(view.runDialogOpen.value, false);
+  view.selectTask(view.tasks.value[0]);
+  await view.runSelectedTaskNow();
+  context.endpointState.selectedRef = "endpoint-two";
+  await new Promise(setImmediate);
+  assert.equal(view.runDialogOpen.value, false);
 });
