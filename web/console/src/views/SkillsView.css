@@ -560,3 +560,42 @@
     column-gap: 12px;
   }
 }
+
+/* Another file of the skill, shown in place of SKILL.md: its path, then its text exactly as
+   stored (no markdown, no HTML), or a note when it cannot be shown. */
+.skills-doc-path {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.4;
+  text-transform: none;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.skills-file-note {
+  margin: 0;
+  color: var(--text-2);
+}
+
+.skills-file-preview {
+  max-height: clamp(320px, 70vh, 900px);
+  margin: 0;
+  padding: 12px 14px;
+  overflow: auto;
+  border: 1px solid var(--line-soft);
+  border-radius: 2px;
+  background: var(--q-bg-paper);
+  color: var(--text-0);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-ui);
+  line-height: 1.55;
+  white-space: pre;
+  tab-size: 4;
+}
+
+.skills-file-preview code {
+  font: inherit;
+  background: none;
+  padding: 0;
+}
