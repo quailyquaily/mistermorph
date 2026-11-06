@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/quailyquaily/mistermorph/internal/awarenessutil"
 	cronstore "github.com/quailyquaily/mistermorph/internal/cron"
 	"github.com/quailyquaily/mistermorph/internal/daemonruntime"
 )
@@ -53,5 +54,44 @@ func TestRecordAwarenessTaskStartUsesTheTodoItemsTopic(t *testing.T) {
 	}
 	if got := cronTopicTitle(cronstore.Task{ID: "x"}); got != cronstore.DefaultTaskTitle {
 		t.Fatalf("untitled = %q", got)
+	}
+}
+
+// A TODO item's run records whether its schedule or Run now started it, which is what the
+// Console's TODO toggle counts as running TODO runs.
+func TestCronRunTriggerTellsScheduledFromManualRuns(t *testing.T) {
+	now := time.Date(2026, 11, 6, 9, 0, 0, 0, time.UTC)
+	store, err := daemonruntime.NewConsoleFileStore(daemonruntime.ConsoleFileStoreOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		id        string
+		behavior  awarenessutil.Behavior
+		manual    bool
+		scheduled bool
+	}{
+		{"cron:scheduled", awarenessutil.BehaviorCron, false, true},
+		{"cron:manual", awarenessutil.BehaviorCron, true, false},
+		{"hb:1", awarenessutil.BehaviorHeartbeat, false, false},
+	} {
+		opts := awarenessTaskOptions{Behavior: tc.behavior, TaskRunID: tc.id, TaskStore: store}
+		if tc.behavior == awarenessutil.BehaviorCron {
+			opts.TopicID, opts.TopicTitle, opts.TriggerRef = daemonruntime.CronTopicID("task-4"), "Build", cronRunTriggerRef(tc.manual)
+		}
+		if err := recordAwarenessTaskStart(opts, "Run the build.", now); err != nil {
+			t.Fatal(err)
+		}
+		trigger, ok := store.GetTrigger(tc.id)
+		if !ok || daemonruntime.IsScheduledCronRun(trigger) != tc.scheduled {
+			t.Fatalf("%s: trigger = %+v, %v", tc.id, trigger, ok)
+		}
+		// The finish record keeps the trigger.
+		if err := recordAwarenessTaskFinish(opts, "done", nil, nil, now.Add(time.Minute)); err != nil {
+			t.Fatal(err)
+		}
+		if trigger, _ := store.GetTrigger(tc.id); daemonruntime.IsScheduledCronRun(trigger) != tc.scheduled {
+			t.Fatalf("%s: finished trigger = %+v", tc.id, trigger)
+		}
 	}
 }

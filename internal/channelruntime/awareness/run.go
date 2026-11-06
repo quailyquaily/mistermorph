@@ -192,7 +192,7 @@ func runAwarenessLoop(ctx context.Context, d Dependencies, opts RunOptions) (run
 		refreshChatInfoOnStart(ctx, chatInfoStore, chatInfoRefresher, opts.ChatInfoContactsDir, logger)
 	}
 
-	runAwarenessTaskWithOpts := func(behavior awarenessutil.Behavior, task string, meta map[string]any, taskRunID, llmProfile, workspaceDir string, bashEnv []cronstore.BashEnvRef, topicID, topicTitle string) (string, error) {
+	runAwarenessTaskWithOpts := func(behavior awarenessutil.Behavior, task string, meta map[string]any, taskRunID, llmProfile, workspaceDir string, bashEnv []cronstore.BashEnvRef, topicID, topicTitle, triggerRef string) (string, error) {
 		var contextScope topiccontext.Scope
 		if topicID != "" && opts.TopicContextScope != nil {
 			contextScope = opts.TopicContextScope(topicID)
@@ -222,12 +222,13 @@ func runAwarenessLoop(ctx context.Context, d Dependencies, opts RunOptions) (run
 			BashEnv:                  bashEnv,
 			TopicID:                  topicID,
 			TopicTitle:               topicTitle,
+			TriggerRef:               triggerRef,
 			ContextScope:             contextScope,
 			TopicRunStarted:          opts.TopicRunStarted,
 		})
 	}
 	runTask := func(behavior awarenessutil.Behavior, task string, meta map[string]any, taskRunID string) (string, error) {
-		return runAwarenessTaskWithOpts(behavior, task, meta, taskRunID, "", "", nil, "", "")
+		return runAwarenessTaskWithOpts(behavior, task, meta, taskRunID, "", "", nil, "", "", "")
 	}
 
 	runTaskAsync := func(behavior awarenessutil.Behavior, task string, taskEmpty bool, wakeSignal awarenessdomain.PokeInput) string {
@@ -362,7 +363,7 @@ func runAwarenessLoop(ctx context.Context, d Dependencies, opts RunOptions) (run
 					}
 					meta := awarenessutil.BuildCronMeta("cron", strings.TrimSpace(task.ID), due.ScheduledAtUTC, cronstore.ScheduleForTask(task), strings.TrimSpace(task.TZ), strings.TrimSpace(task.ChatID), extra)
 					summary, err := runAwarenessTaskWithOpts(awarenessutil.BehaviorCron, strings.TrimSpace(task.Content), meta, taskRunID, task.LLMProfile, task.WorkspaceDir, task.BashEnv,
-						daemonruntime.CronTopicID(task.ID), cronTopicTitle(task))
+						daemonruntime.CronTopicID(task.ID), cronTopicTitle(task), cronRunTriggerRef(due.Manual))
 					if err != nil {
 						notifyCronResult(ctx, opts.CronNotify, logger, task, taskRunID, "", err)
 						return err
@@ -418,6 +419,9 @@ type awarenessTaskOptions struct {
 	// a TODO item's runs go to the item's own topic.
 	TopicID    string
 	TopicTitle string
+	// TriggerRef is the ref of the run's recorded trigger: for a TODO item's run, whether its
+	// schedule or a person started it.
+	TriggerRef string
 	// ContextScope, when it has a conversation key, records the run's context usage under it.
 	ContextScope topiccontext.Scope
 	// TopicRunStarted is told of the run once it is recorded under TopicID.
@@ -836,6 +840,15 @@ type topicTitledTaskRecorder interface {
 	UpsertWithTrigger(info daemonruntime.TaskInfo, trigger daemonruntime.TaskTrigger, topicTitle string) error
 }
 
+// cronRunTriggerRef records whether a TODO item's run is one its schedule started or one a person
+// started with Run now.
+func cronRunTriggerRef(manual bool) string {
+	if manual {
+		return daemonruntime.CronRunTriggerRefManual
+	}
+	return daemonruntime.CronRunTriggerRefSchedule
+}
+
 // cronTopicTitle names a TODO item's topic: the item's title, or its default.
 func cronTopicTitle(task cronstore.Task) string {
 	if title := strings.TrimSpace(task.Title); title != "" {
@@ -883,6 +896,7 @@ func awarenessTaskTrigger(opts awarenessTaskOptions) daemonruntime.TaskTrigger {
 	return daemonruntime.TaskTrigger{
 		Source:  "console",
 		Event:   "awareness_" + string(awarenessutil.NormalizeBehavior(string(opts.Behavior))),
+		Ref:     strings.TrimSpace(opts.TriggerRef),
 		TraceID: strings.TrimSpace(opts.TaskRunID),
 	}
 }

@@ -160,6 +160,19 @@ const (
 	CronTopicPrefix = "_cron_"
 )
 
+// A TODO (cron) item's run is recorded with this trigger event; its ref tells a run its schedule
+// started from one a person started with Run now.
+const (
+	CronRunTriggerEvent       = "awareness_cron"
+	CronRunTriggerRefSchedule = "schedule"
+	CronRunTriggerRefManual   = "manual"
+)
+
+// IsScheduledCronRun reports whether trigger is that of a TODO item's run its schedule started.
+func IsScheduledCronRun(trigger TaskTrigger) bool {
+	return strings.TrimSpace(trigger.Event) == CronRunTriggerEvent && strings.TrimSpace(trigger.Ref) == CronRunTriggerRefSchedule
+}
+
 // CronTopicID is the topic of the TODO (cron) item with this ID.
 func CronTopicID(taskID string) string {
 	return CronTopicPrefix + strings.TrimSpace(taskID)
