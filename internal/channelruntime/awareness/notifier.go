@@ -29,11 +29,18 @@ type CronNotification struct {
 	ID    string `json:"id"`
 	Title string `json:"title"`
 	Body  string `json:"body"`
+	// Trigger is CronNotificationTriggerSchedule when the item's schedule fired the run. It is
+	// empty for a run a person asked for, so a receiver that does not know it treats it as before.
+	Trigger string `json:"trigger,omitempty"`
 }
+
+// CronNotificationTriggerSchedule marks a notification of a run that a TODO item's schedule fired.
+const CronNotificationTriggerSchedule = "cron"
 
 type CronNotifyFunc func(ctx context.Context, notification CronNotification) error
 
-func notifyCronResult(ctx context.Context, notify CronNotifyFunc, logger *slog.Logger, task cronstore.Task, runID, summary string, runErr error) {
+// manual is true for a run a person asked for, false for one the item's schedule fired.
+func notifyCronResult(ctx context.Context, notify CronNotifyFunc, logger *slog.Logger, task cronstore.Task, manual bool, runID, summary string, runErr error) {
 	if notify == nil || !cronstore.IsConsoleNotificationChatID(task.ChatID) {
 		return
 	}
@@ -45,6 +52,9 @@ func notifyCronResult(ctx context.Context, notify CronNotifyFunc, logger *slog.L
 		ID:    strings.TrimSpace(runID),
 		Title: title,
 		Body:  strings.TrimSpace(summary),
+	}
+	if !manual {
+		notification.Trigger = CronNotificationTriggerSchedule
 	}
 	if runErr != nil {
 		notification.Body = strings.TrimSpace(runErr.Error())

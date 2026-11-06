@@ -26,6 +26,14 @@ test("normalizeConsoleNotification trims and validates a cron event", () => {
   assert.equal(normalizeConsoleNotification({ title: "Missing id" }), null);
 });
 
+test("normalizeConsoleNotification drops a scheduled TODO run's notification and keeps the rest", () => {
+  const frame = { id: "run-1", title: "Daily review", body: "Review complete." };
+  assert.equal(normalizeConsoleNotification({ ...frame, trigger: "cron" }), null);
+  assert.equal(normalizeConsoleNotification({ ...frame, body: "route unavailable", trigger: " cron " }), null);
+  assert.deepEqual(normalizeConsoleNotification(frame), frame);
+  assert.deepEqual(normalizeConsoleNotification({ ...frame, trigger: "manual" }), frame);
+});
+
 test("claimConsoleNotification rejects a duplicate and bounds stored ids", () => {
   const values = new Map();
   const storage = {

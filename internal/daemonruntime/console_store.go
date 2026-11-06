@@ -34,9 +34,10 @@ var (
 )
 
 type ConsoleFileStoreOptions struct {
-	// OnTaskUpdate observes committed local writes, never journal replay or recovery.
+	// OnTaskUpdate observes committed local writes, never journal replay or recovery, with the
+	// trigger the task was recorded with (empty when it has none).
 	// It runs under the store lock and must not block or call back into the store.
-	OnTaskUpdate func(previous, next TaskInfo)
+	OnTaskUpdate func(previous, next TaskInfo, trigger TaskTrigger)
 	RootDir      string
 	// Target names the runtime whose journal records the store reads and writes. Empty means
 	// "console"; an embedding program serving its own runtime API uses its own target.
@@ -55,7 +56,7 @@ type ConsoleFileStoreOptions struct {
 }
 
 type ConsoleFileStore struct {
-	onTaskUpdate func(previous, next TaskInfo)
+	onTaskUpdate func(previous, next TaskInfo, trigger TaskTrigger)
 	mu           sync.RWMutex
 
 	rootDir              string
@@ -287,7 +288,7 @@ func (s *ConsoleFileStore) UpsertWithTrigger(info TaskInfo, trigger TaskTrigger,
 	s.projectionCursor = cursor
 	s.persistTopicsProjectionLocked(now)
 	if s.onTaskUpdate != nil {
-		s.onTaskUpdate(previous, info)
+		s.onTaskUpdate(previous, info, s.triggers[info.ID])
 	}
 	return nil
 }
@@ -373,7 +374,7 @@ func (s *ConsoleFileStore) UpdateWithTrigger(id string, trigger TaskTrigger, fn 
 	}
 	s.projectionCursor = cursor
 	if s.onTaskUpdate != nil {
-		s.onTaskUpdate(previous, item)
+		s.onTaskUpdate(previous, item, s.triggers[id])
 	}
 	return nil
 }

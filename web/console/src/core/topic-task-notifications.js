@@ -1,6 +1,6 @@
 import { endpointRoutePath } from "./endpoint-routes.js";
 import { CONSOLE_LOCAL_ENDPOINT_REF } from "./endpoints.js";
-import { resolveBrowserNotificationPermission } from "./system-notification-utils.js";
+import { isScheduledCronNotification, resolveBrowserNotificationPermission } from "./system-notification-utils.js";
 
 const PREFIX = "mistermorph_topic_notifications_v1:";
 // How long a notification waits for its topic's name before it goes out without one.
@@ -80,6 +80,7 @@ export async function handleTopicTaskNotification(raw, { win, scope, translate, 
       typeof raw.id !== "string" || !raw.id.trim() ||
       typeof raw.topic_id !== "string" || !raw.topic_id.trim() ||
       !["done", "failed"].includes(raw.status) ||
+      isScheduledCronNotification(raw) ||
       topicNotificationPermission(win) === "unsupported") {
     return false;
   }

@@ -1,8 +1,17 @@
 const CLAIM_STORAGE_KEY = "mistermorph_console_notification_ids_v1";
 const CLAIM_LIMIT = 64;
 
+// The trigger a notification frame carries when a TODO item's schedule fired the run it tells of.
+// The runtime says so from the run's own record. Such a run never raises a Console notification,
+// succeeded or failed; a frame without the trigger is shown as before.
+export const SCHEDULED_CRON_TRIGGER = "cron";
+
+export function isScheduledCronNotification(raw) {
+  return typeof raw?.trigger === "string" && raw.trigger.trim() === SCHEDULED_CRON_TRIGGER;
+}
+
 export function normalizeConsoleNotification(raw) {
-  if (!raw || typeof raw !== "object") {
+  if (!raw || typeof raw !== "object" || isScheduledCronNotification(raw)) {
     return null;
   }
   const id = String(raw.id || "").trim();

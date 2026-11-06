@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/quailyquaily/mistermorph/internal/awarenessutil"
 	cronstore "github.com/quailyquaily/mistermorph/internal/cron"
 	"github.com/quailyquaily/mistermorph/internal/daemonruntime"
 )
@@ -53,5 +54,49 @@ func TestRecordAwarenessTaskStartUsesTheTodoItemsTopic(t *testing.T) {
 	}
 	if got := cronTopicTitle(cronstore.Task{ID: "x"}); got != cronstore.DefaultTaskTitle {
 		t.Fatalf("untitled = %q", got)
+	}
+}
+
+// A TODO item's run records whether its schedule fired it, from start to finish, for the
+// Console to tell such runs from the ones a person asked for.
+func TestAwarenessTaskTriggerTellsScheduledFromManualRuns(t *testing.T) {
+	now := time.Date(2026, 11, 6, 9, 0, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		name      string
+		behavior  awarenessutil.Behavior
+		manual    bool
+		wantRef   string
+		scheduled bool
+	}{
+		{"scheduled cron", awarenessutil.BehaviorCron, false, daemonruntime.CronRunTriggerRefSchedule, true},
+		{"manual cron", awarenessutil.BehaviorCron, true, daemonruntime.CronRunTriggerRefManual, false},
+		{"heartbeat", awarenessutil.BehaviorHeartbeat, false, "", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			store, err := daemonruntime.NewConsoleFileStore(daemonruntime.ConsoleFileStoreOptions{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			opts := awarenessTaskOptions{
+				Behavior: tc.behavior, TaskRunID: "run:1", TaskStore: store, CronManual: tc.manual,
+				TopicID: daemonruntime.CronTopicID("task-4"), TopicTitle: "Morph build",
+			}
+			if err := recordAwarenessTaskStart(opts, "Run the build.", now); err != nil {
+				t.Fatal(err)
+			}
+			if err := recordAwarenessTaskFinish(opts, "done", nil, nil, now.Add(time.Minute)); err != nil {
+				t.Fatal(err)
+			}
+			trigger, ok := store.GetTrigger("run:1")
+			if !ok || trigger.Event != "awareness_"+string(tc.behavior) || trigger.Ref != tc.wantRef || trigger.TraceID != "run:1" {
+				t.Fatalf("trigger = %+v, %v", trigger, ok)
+			}
+			if got := daemonruntime.IsCronRunTrigger(trigger); got != (tc.behavior == awarenessutil.BehaviorCron) {
+				t.Fatalf("IsCronRunTrigger = %v", got)
+			}
+			if got := daemonruntime.IsScheduledCronRunTrigger(trigger); got != tc.scheduled {
+				t.Fatalf("IsScheduledCronRunTrigger = %v", got)
+			}
+		})
 	}
 }
