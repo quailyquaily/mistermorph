@@ -1,3 +1,7 @@
+---
+branch: factory/FT19-console-cron-toggle-running-status
+round: 1
+---
 # Show aggregate cron running status on the topic toolbar toggle
 
 ## factory · 2026-11-06 16:32
@@ -21,3 +25,25 @@ Acceptance checks:
 - Add regression tests for aggregation and button-state rendering using the existing test setup.
 
 Scope: read-only Console status presentation and minimum status plumbing needed for accuracy. No implementation in this intake change.
+
+## factory · plan · 2026-11-06 18:00
+Behaviour: Show an independent, localized running count and icon-attached marker on the always-enabled TODO runs toggle for strictly running scheduled cron tasks anywhere in the current endpoint. Successful full snapshots replace the count; errors retain it; stale replies are ignored; scope changes reset it and reconnect refreshes. Queued, manual and terminal tasks do not count. Preserve existing topic status, unread state and notifications.
+
+Scope: Extend authoritative trigger/activity metadata minimally, reuse the existing activity tracker and polling, and update toolbar rendering, styles, locales, documentation and regression tests. No cron execution or notification policy changes.
+
+Decisions: Count actual run trigger metadata, not topic naming. Keep the original icon, selected styling and pressed semantics. Reuse the hollow-square running marker without layout shift and use a static reduced-motion equivalent. No new polling or live announcements.
+
+Checking: Backend aggregation across pages and mixed triggers, zero/one/multiple and terminal transitions; frontend replay, malformed/error/stale snapshots, endpoint switches, reconnect and four selected/running combinations; localization, accessibility attributes and reduced motion. Inspect narrow/wide UI where feasible.
+
+## factory · 2026-11-06 18:00
+Built in commits 5a4286e9 and 07af0e8e; pushed branch factory/FT19-console-cron-toggle-running-status. Moved new/ → review/.
+
+Added recorded schedule/manual trigger distinction and per-topic cron_running activity counts, aggregated over the full endpoint snapshot. Added the toolbar marker and count labels in English, Chinese and Japanese, preserving filter interaction and existing status semantics.
+
+Decisions: Run now is considered manual and excluded. Runs started before the new trigger metadata exists are not counted; newly scheduled runs are counted. Failed snapshots retain the previous count, duplicate snapshots cannot inflate it, and online reconnect refreshes immediately.
+
+Verification: Manager independently passed gofmt cleanliness, go vet ./..., go test ./..., pnpm test (436/436) and pnpm build with an absolute throwaway HOME. No forbidden paths changed; both commits concern this item. Build reports a non-fatal bundle-size warning.
+
+Installs: none beyond pinned console dependencies.
+
+Visual checks: coder rendered the real header template with built CSS in headless Chrome at 220px and 310px, with normal/reduced motion, and checked stable bounds, hover and keyboard focus in the morph theme. This was not the live Console. Live runtime execution, phone layout and a real screen reader were not checked. A top-clipped focus ring appeared in the isolated test page; its source (existing styling versus harness) remains unverified and should be checked in review.
