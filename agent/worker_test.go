@@ -163,6 +163,8 @@ func (t *workerRecordingTool) Execute(ctx context.Context, _ map[string]any) (st
 // Coders started after an approval pause share one scope and continue the names given out
 // before the pause.
 func TestWorkerNamesContinueAfterApprovalResume(t *testing.T) {
+	useWorkerSeeds(t, 0x5eed)
+	order := workerPermutation(0x5eed, 1, len(workerNames))
 	store := newMemoryApprovalStore()
 	g := approvalsOnlyGuard(store)
 	coder := &workerRecordingTool{}
@@ -185,6 +187,15 @@ func TestWorkerNamesContinueAfterApprovalResume(t *testing.T) {
 		t.Fatal(err)
 	}
 	approvalID := pendingApprovalID(t, pending)
+	rec, _, err := store.Get(context.Background(), approvalID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rs, err := unmarshalResumeState(rec.ResumeState); err != nil || rs.WorkerSeed != 0x5eed || rs.WorkersAllocated != 1 {
+		t.Fatalf("resume state = %+v, %v", rs, err)
+	}
+	// The resumed run must not draw a new seed.
+	newWorkerSeed = func() uint64 { t.Fatal("resume drew a new worker seed"); return 1 }
 	if err := g.ResolveApproval(context.Background(), approvalID, guard.ApprovalApproved, "tester", ""); err != nil {
 		t.Fatal(err)
 	}
@@ -198,7 +209,9 @@ func TestWorkerNamesContinueAfterApprovalResume(t *testing.T) {
 		}
 		seen[name] = true
 	}
-	if len(seen) != 3 || !seen["worker-1/"+workerNames[0]] {
-		t.Fatalf("coder workers = %v", coder.names)
+	for i := 0; i < 3; i++ {
+		if want := fmt.Sprintf("worker-%d/%s", i+1, workerNames[order[i]]); !seen[want] {
+			t.Fatalf("coder workers = %v, want %s", coder.names, want)
+		}
 	}
 }

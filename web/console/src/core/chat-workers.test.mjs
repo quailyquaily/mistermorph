@@ -5,7 +5,6 @@ import { normalizeActivity, taskListHistoryItems } from "./chat-task-history.js"
 import {
   normalizeActivityWorkers,
   rosterWorkers,
-  workerAvatar,
   workerProcessLabel,
   workerSections,
   workerState,
@@ -76,21 +75,6 @@ test("workerSections shows the error, the result and the output, with the summar
   assert.equal(workerProcessLabel({ pid: 7, program: "" }), "PID 7");
 });
 
-test("workerAvatar depends on the name alone, is mirrored, and differs between names", () => {
-  const a = workerAvatar("Milo");
-  assert.deepEqual(workerAvatar(" Milo "), a);
-  assert.ok(a.hue >= 0 && a.hue < 360);
-  assert.ok(a.cells.length > 0);
-  const filled = new Set(a.cells.map((cell) => `${cell.x},${cell.y}`));
-  for (const cell of a.cells) {
-    assert.ok(cell.x >= 0 && cell.x < 5 && cell.y >= 0 && cell.y < 5);
-    assert.ok(filled.has(`${4 - cell.x},${cell.y}`), "pattern is mirrored");
-  }
-  const names = ["Milo", "Nova", "Iris", "Juno", "Milo-2", "Milo-3", "Otto", "Pia"];
-  const looks = new Set(names.map((name) => JSON.stringify(workerAvatar(name))));
-  assert.equal(looks.size, names.length);
-});
-
 test("rosterWorkers adds the state and note to show", () => {
   const activity = normalizeActivity({ workers: serverWorkers });
   const roster = rosterWorkers(activity, "done");
@@ -100,6 +84,36 @@ test("rosterWorkers adds the state and note to show", () => {
   ]);
   assert.equal(roster[0].sections[1].text, "partial answer\nwith detail");
   assert.deepEqual(rosterWorkers(null, "done"), []);
+});
+
+test("rosterWorkers names workers in the language and keeps their id and avatar", () => {
+  const activity = normalizeActivity({
+    workers: [
+      { id: "worker-1", name: "Gus", name_index: 26, avatar_index: 5, kind: "coder", status: "running", activity_id: "coder-1" },
+      { id: "worker-2", name: "Milo-2", name_index: 32, avatar_index: 0, kind: "subagent", status: "done" },
+      // A record from before names and avatars were allocated.
+      { id: "worker-3", name: "Cleo", kind: "subagent", status: "done" },
+    ],
+  });
+  assert.deepEqual(activity.workers.map((worker) => [worker.nameIndex, worker.avatarIndex]), [[26, 5], [32, 0], [undefined, undefined]]);
+  assert.deepEqual(normalizeActivity(activity).workers, activity.workers);
+  const view = (lang) => rosterWorkers(activity, "running", lang).map((worker) => [worker.id, worker.displayName, worker.avatarStyle, worker.state]);
+  const english = view("en");
+  assert.deepEqual(english, [
+    ["worker-1", "Gus", "bunko", "running"],
+    ["worker-2", "Milo-2", "aojashin", "done"],
+    ["worker-3", "Cleo", "paper", "done"],
+  ]);
+  const chinese = view("zh");
+  assert.deepEqual(chinese.map((row) => row[1]), ["冯晨", "张伟-2", "李娜"]);
+  assert.deepEqual(view("ja").map((row) => row[1]), ["山下航", "佐藤健-2", "田中陽菜"]);
+  // Only the shown name changes; switching back restores it.
+  for (const [i, row] of chinese.entries()) {
+    assert.deepEqual([row[0], row[2], row[3]], [english[i][0], english[i][2], english[i][3]]);
+  }
+  assert.deepEqual(view("en"), english);
+  // The stored name, used by older readers, is untouched.
+  assert.deepEqual(rosterWorkers(activity, "running", "zh").map((worker) => worker.name), ["Gus", "Milo-2", "Cleo"]);
 });
 
 test("coder output keeps line boundaries through live normalization and restored history", () => {

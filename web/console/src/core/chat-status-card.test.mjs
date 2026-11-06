@@ -9,7 +9,8 @@ import { activityWorkerLabel } from "./chat-task-history.js";
 const source = await readFile(new URL("../components/ChatStatusCard.js", import.meta.url), "utf8");
 const styles = await readFile(new URL("../components/ChatStatusCard.css", import.meta.url), "utf8");
 // Load the real component without its CSS and application-wide translation dependencies.
-const context = { ...Vue, activityWorkerLabel, translate: (key, args) => `${key}${args ? `:${args.count}` : ""}` };
+const localeState = Vue.reactive({ lang: "en" });
+const context = { ...Vue, activityWorkerLabel, localeState, translate: (key, args) => `${key}${args ? `:${args.count}` : ""}` };
 vm.runInNewContext(source.replace(/^import[^\n]*\n/gm, "")
   .replace("export default", "globalThis.component ="), context);
 
@@ -92,4 +93,16 @@ test("collapsed progress stays hidden and the final assistant reply retains Mark
   const richContent = await readFile(new URL("../components/ChatRichContent.js", import.meta.url), "utf8");
   assert.match(item, /<ChatRichContent\s+class="chat-history-markdown"\s+:source="item\.text"[^>]*format="auto"[^>]*theme="blueprint"/u);
   assert.match(richContent, /<MarkdownContent\s+v-if="segment\.kind === 'markdown'"[^>]*:source="segment\.source"/u);
+});
+
+test("activity entries name their worker in the Console's language", async () => {
+  const worker = { id: "worker-1", name: "Luna", name_index: 1, avatar_index: 3, processes: [{ pid: 77, program: "codex", activity_id: "coder" }] };
+  const names = {};
+  for (const lang of ["en", "zh", "ja", "fr", "en"]) {
+    localeState.lang = lang;
+    const html = await renderEntry({ worker });
+    names[lang] = html.match(/class="chat-activity-worker"> · ([^<]*)</u)[1];
+  }
+  localeState.lang = "en";
+  assert.deepEqual(names, { en: "Luna · codex PID 77", zh: "林悦 · codex PID 77", ja: "鈴木葵 · codex PID 77", fr: "Luna · codex PID 77" });
 });

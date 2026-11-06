@@ -387,6 +387,22 @@ test("worker names and historical PIDs survive finished task reload, including n
   assert.equal(activityWorkerLabel({ id: "command", name: "bash", kind: "tool", worker: savedWorker }), "Milo · bash PID 456");
 });
 
+test("worker labels follow the language from the recorded name index, and legacy names", () => {
+  const saved = { history: [
+    { id: "spawn", kind: "tool", name: "spawn", status: "done", worker: { id: "worker-1", name: "Hazel", name_index: 13, avatar_index: 4 } },
+    { id: "old", kind: "tool", name: "spawn", status: "done", worker: { id: "worker-2", name: "Luna" } },
+    { id: "odd", kind: "tool", name: "spawn", status: "done", worker: { id: "w", name: "Custom" } },
+  ] };
+  const reloaded = normalizeActivity(JSON.parse(JSON.stringify(saved)));
+  assert.deepEqual(normalizeActivity(reloaded), reloaded);
+  assert.deepEqual(reloaded.history[0].worker, { id: "worker-1", name: "Hazel", nameIndex: 13, avatarIndex: 4, processes: [] });
+  const labels = (lang) => reloaded.history.map((entry) => activityWorkerLabel(entry, lang));
+  assert.deepEqual(labels("en"), ["Hazel", "Luna", "Custom"]);
+  assert.deepEqual(labels("zh"), ["胡敏", "林悦", "Custom"]);
+  assert.deepEqual(labels("ja"), ["山口凛", "鈴木葵", "Custom"]);
+  assert.deepEqual(labels(undefined), labels("en"));
+});
+
 test("normalizing an already normalized activity keeps each process with its activity", () => {
   const raw = { history: [{ id: "command", kind: "tool", name: "bash", status: "done", worker: {
     id: "worker-1", name: "Milo", processes: [{ pid: 12345, program: "bash", activity_id: "command" }],

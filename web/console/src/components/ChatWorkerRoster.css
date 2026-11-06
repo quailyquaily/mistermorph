@@ -62,21 +62,20 @@
   white-space: nowrap;
 }
 
+/* The logo styles are round drawings with their own ground; the light ones (Aojashin, Washi) get a
+   hairline so their edge holds on a light chip. */
 .chat-worker-avatar {
-  --worker-tone: hsl(var(--worker-hue, 210) 62% 50%);
   width: 20px;
   height: 20px;
   flex: none;
   display: block;
+  border-radius: 50%;
+  user-select: none;
 }
 
-.chat-worker-avatar-bg {
-  fill: color-mix(in srgb, var(--worker-tone) 16%, var(--bg-2));
-}
-
-.chat-worker-avatar-cell {
-  fill: color-mix(in srgb, var(--worker-tone) 82%, var(--text-0));
-  shape-rendering: crispEdges;
+.chat-worker-avatar.is-aojashin,
+.chat-worker-avatar.is-paper {
+  box-shadow: 0 0 0 1px var(--line-soft);
 }
 
 .chat-worker-state-dot {
@@ -160,12 +159,11 @@
   gap: 4px 10px;
 }
 
-.chat-worker-detail-head .chat-worker-avatar-bg {
-  fill: color-mix(in srgb, var(--worker-tone) 30%, var(--chat-worker-terminal-bg));
-}
-
-.chat-worker-detail-head .chat-worker-avatar-cell {
-  fill: color-mix(in srgb, var(--worker-tone) 70%, var(--q-c-white));
+/* On the dark panel it is the dark styles whose edge needs the hairline. */
+.chat-worker-detail-head .chat-worker-avatar,
+.chat-worker-detail-head .chat-worker-avatar.is-aojashin,
+.chat-worker-detail-head .chat-worker-avatar.is-paper {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--q-c-white) 22%, transparent);
 }
 
 .chat-worker-detail-name {
