@@ -21,3 +21,6 @@ Requested by the owner in Console: register this feature in new; do not implemen
 
 ### Scope
 This item registers the agreed naming and avatar change only. It does not authorize implementation, merge or release during intake. Do not introduce a user-facing avatar editor or change the main agent's persona avatar.
+
+## factory · 2026-11-06 21:47
+Moved to backlog: the item contains only a factory-authored intake section, not a section from a configured owner (lyric). That section explicitly limits authorization to intake. The factory cannot treat its own intake notes as an owner-authorized build request. No implementation was made. An owner section confirming the build requirements is needed before returning this item to new.
