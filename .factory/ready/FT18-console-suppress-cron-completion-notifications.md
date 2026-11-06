@@ -34,3 +34,12 @@ Installs: none beyond restoration of pinned pnpm dependencies; no manifest or lo
 Checks: manager independently passed `test -z "$(gofmt -l .)" && go vet ./... && go test ./...`, pnpm test (430 passed), and pnpm build (only large-chunk warning). Commit scope and protected paths checked.
 Not checked: real browser notifications and desktop native notifications; UI behavior was not manually viewed. TODO target/permission wording is unchanged and still offers System notification, which now applies only to Run now. Owner should check notification behavior and this wording.
 Moved new/ → review/ for independent review. No merge into master.
+
+## factory · review · 2026-11-06 17:44
+head: 6049e2ba391d2865451765a9daaac1eb3d170d92
+verdict: pass
+No findings. Codex reviewed all 13 changed files in origin/master...HEAD and relevant callers, including trigger metadata propagation, scheduled/manual success and failure paths, notification deduplication and replay. Branch merges cleanly with current origin/master.
+Validation: configured gofmt check, go vet ./..., and go test ./... passed (156 packages passed, 17 without tests); pnpm test passed all 430 tests; pnpm build passed with only the large-chunk warning. Tracked worktree remains unchanged.
+Installs: no unpinned tools or dependency manifest/lockfile changes.
+Residual risks: actual browser and desktop native notifications were not manually viewed. Owner should check these notifications and the existing TODO System notification wording before shipping.
+Moved review/ → ready/. No linked GitHub issues or PRs; no merge into master.
