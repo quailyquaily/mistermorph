@@ -73,6 +73,25 @@ func (s *server) handleAgentSkillDetail(w http.ResponseWriter, r *http.Request) 
 	handler.SkillDetail(w, r)
 }
 
+// The file browser reads one folder or one file of a skill; neither route writes anything.
+func (s *server) handleAgentSkillDir(w http.ResponseWriter, r *http.Request) {
+	handler, err := s.agentSkillsHandler()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	handler.SkillDir(w, r)
+}
+
+func (s *server) handleAgentSkillFile(w http.ResponseWriter, r *http.Request) {
+	handler, err := s.agentSkillsHandler()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	handler.SkillFile(w, r)
+}
+
 func (s *server) handleAgentSettingsModels(w http.ResponseWriter, r *http.Request) {
 	owner := agentsettings.NewFileOwner(agentsettings.FileOwnerOptions{Reader: s.currentRuntimeConfigReader()})
 	agentsettings.NewHandler(agentsettings.HandlerOptions{Owner: owner}).Models(w, r)

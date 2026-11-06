@@ -573,6 +573,8 @@ func (s *server) handler() http.Handler {
 		register("/settings/agent/test", s.handleAgentSettingsTest)
 		register("/settings/agent/skills", s.handleAgentSkills)
 		register("/settings/agent/skills/detail", s.handleAgentSkillDetail)
+		register("/settings/agent/skills/dir", s.handleAgentSkillDir)
+		register("/settings/agent/skills/file", s.handleAgentSkillFile)
 		register("/settings/agent/skills/store", s.handleAgentSkillStore)
 		register("/settings/agent/skills/remove", s.handleAgentSkillRemove)
 		register("/settings/agent/skills/update", s.handleAgentSkillUpdate)
