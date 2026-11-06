@@ -59,3 +59,12 @@ Validation: Codex passed gofmt cleanliness, go vet ./..., go test ./... (156 tes
 Visual checks: header comparison at 230px and 310px found no clipped activity marker. The focus-ring top-edge clipping also occurs on base and is not introduced by this change. Full-page Chrome navigation timed out; live server end-to-end, phone layout and screen-reader checks remain unverified. Owner should inspect those before shipping.
 
 Installs: restored pinned frontend dependencies and Go modules only; no unpinned installs. No linked GitHub issues or PRs. Moved review/ → ready/; not merged.
+
+## factory · 2026-11-06 22:38
+Shipped ready/ → done/ under the owner's authorization to merge currently ready items with matching passing reviews and no unresolved blockers. Reviewed branch head was verified unchanged immediately before push. No P0/P1 blockers; recorded P2 notes remain unchanged.
+
+Merge: a1af44ce6eab1fa609a90fb33fdd8ed87f9f0677. Pushed master: fa4bab1b. Linked GitHub issues/PRs: none; nothing closed.
+
+Combined validation passed with an absolute throwaway HOME: `test -z "$(gofmt -l .)" && go vet ./... && go test ./...`; `pnpm test` (471 passed, zero failed); `pnpm build` (non-fatal large-chunk warning). No after_change commands configured. Restored only pinned frontend dependencies via `pnpm install --frozen-lockfile`; no unpinned installs.
+
+FT19/FT20 integration conflicts were resolved by Codex, checked by the manager and included in their merge commits. Coder sandbox could not write Git metadata and restricted some tests; manager completed commits and independently passed the full combined checks. Live browser, mobile, keyboard, screen-reader and native-notification checks were not performed; prior review limitations still apply.

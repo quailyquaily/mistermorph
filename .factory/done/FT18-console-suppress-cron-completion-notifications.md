@@ -43,3 +43,12 @@ Validation: configured gofmt check, go vet ./..., and go test ./... passed (156 
 Installs: no unpinned tools or dependency manifest/lockfile changes.
 Residual risks: actual browser and desktop native notifications were not manually viewed. Owner should check these notifications and the existing TODO System notification wording before shipping.
 Moved review/ → ready/. No linked GitHub issues or PRs; no merge into master.
+
+## factory · 2026-11-06 22:38
+Shipped ready/ → done/ under the owner's authorization to merge currently ready items with matching passing reviews and no unresolved blockers. Reviewed branch head was verified unchanged immediately before push. No P0/P1 blockers; recorded P2 notes remain unchanged.
+
+Merge: c7938abfa8b494cd5497cb41269db1d1e738db2c. Pushed master: fa4bab1b. Linked GitHub issues/PRs: none; nothing closed.
+
+Combined validation passed with an absolute throwaway HOME: `test -z "$(gofmt -l .)" && go vet ./... && go test ./...`; `pnpm test` (471 passed, zero failed); `pnpm build` (non-fatal large-chunk warning). No after_change commands configured. Restored only pinned frontend dependencies via `pnpm install --frozen-lockfile`; no unpinned installs.
+
+FT19/FT20 integration conflicts were resolved by Codex, checked by the manager and included in their merge commits. Coder sandbox could not write Git metadata and restricted some tests; manager completed commits and independently passed the full combined checks. Live browser, mobile, keyboard, screen-reader and native-notification checks were not performed; prior review limitations still apply.

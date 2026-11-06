@@ -52,3 +52,12 @@ Codex reviewed all 18 changed files in origin/master...HEAD (base 6365a87d), inc
 Validation: formatting check, go vet ./..., go test ./... passed; pnpm test passed (438 tests); pnpm build passed with a large-chunk warning. Targeted component reproduction and temporary Go overlay concurrency tests confirmed the findings. Scripted tests used an absolute throwaway HOME. Only pinned frontend dependencies were restored; no nonroutine installs. Worktree remained clean.
 
 Not checked: browser visuals, live remote deployment integration, and non-Unix platforms. No linked GitHub issue or PR. No implementation changes or merge into master.
+
+## factory · 2026-11-06 22:38
+Shipped ready/ → done/ under the owner's authorization to merge currently ready items with matching passing reviews and no unresolved blockers. Reviewed branch head was verified unchanged immediately before push. No P0/P1 blockers; recorded P2 notes remain unchanged.
+
+Merge: 266d1ae8077cd86f6f4ff122c8bb95066950a060. Pushed master: fa4bab1b. Linked GitHub issues/PRs: none; nothing closed.
+
+Combined validation passed with an absolute throwaway HOME: `test -z "$(gofmt -l .)" && go vet ./... && go test ./...`; `pnpm test` (471 passed, zero failed); `pnpm build` (non-fatal large-chunk warning). No after_change commands configured. Restored only pinned frontend dependencies via `pnpm install --frozen-lockfile`; no unpinned installs.
+
+FT19/FT20 integration conflicts were resolved by Codex, checked by the manager and included in their merge commits. Coder sandbox could not write Git metadata and restricted some tests; manager completed commits and independently passed the full combined checks. Live browser, mobile, keyboard, screen-reader and native-notification checks were not performed; prior review limitations still apply.
