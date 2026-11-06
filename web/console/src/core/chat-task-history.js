@@ -1,4 +1,5 @@
 import { normalizeActivityWorkers } from "./chat-workers.js";
+import { readWorkerIndices, workerDisplayName } from "./worker-identity.js";
 import { taskApprovalState } from "./chat-approvals.js";
 import { placeSteeredAgentsAfterUsers } from "./chat-history-steering.js";
 import { formatDate } from "./intl-format.js";
@@ -316,17 +317,19 @@ function normalizeActivityWorker(raw) {
           activityId: String(process.activity_id || process.activityId || "").trim(),
         }))
     : [];
-  return { id, name, processes };
+  return { id, name, ...readWorkerIndices(raw), processes };
 }
 
-export function activityWorkerLabel(entry) {
+// activityWorkerLabel names the worker an activity entry belongs to, in lang, with the processes
+// that entry started.
+export function activityWorkerLabel(entry, lang) {
   const worker = entry?.worker;
   if (!worker?.name) return "";
   const wholeWorker = entry.kind === "subtask" || entry.name === "spawn" || entry.name === "coder";
   const processes = (worker.processes || [])
     .filter((process) => wholeWorker || process.activityId === entry.id)
     .map((process) => `${process.program ? process.program + " " : ""}PID ${process.pid}`);
-  return [worker.name, ...processes].join(" · ");
+  return [workerDisplayName(worker, lang), ...processes].join(" · ");
 }
 
 function normalizeActivityEntry(raw) {

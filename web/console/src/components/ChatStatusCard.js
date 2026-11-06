@@ -1,5 +1,5 @@
 import { computed, nextTick, onBeforeUpdate, onMounted, onUpdated, ref } from "vue";
-import { translate } from "../core/context";
+import { localeState, translate } from "../core/context";
 import { activityWorkerLabel } from "../core/chat-task-history";
 import "./ChatStatusCard.css";
 
@@ -320,7 +320,7 @@ const ChatStatusCard = {
       activityEntryNote,
       activityEntryTimeText,
       activityEntryTitle,
-      activityWorkerLabel,
+      activityWorkerLabel: (entry) => activityWorkerLabel(entry, localeState.lang),
       activityKindLabel,
       activityParams,
       activityChildren,

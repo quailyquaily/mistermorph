@@ -1,32 +1,30 @@
 import { computed, nextTick, onBeforeUpdate, onUpdated, ref } from "vue";
 
-import { translate } from "../core/context";
-import { rosterWorkers, workerAvatar, workerProcessLabel } from "../core/chat-workers";
+import { localeState, translate } from "../core/context";
+import { rosterWorkers, workerProcessLabel } from "../core/chat-workers";
+import { workerAvatarURL } from "../core/worker-avatars";
 import "./ChatWorkerRoster.css";
 
-// WorkerAvatar draws a worker's generated avatar: its name decides the hue and the pattern.
+// WorkerAvatar shows the logo style the runtime allocated to a worker. It is decorative: the
+// worker's name is always beside it.
 const WorkerAvatar = {
   props: {
-    name: { type: String, required: true },
+    avatarStyle: { type: String, required: true },
   },
   setup(props) {
-    const avatar = computed(() => workerAvatar(props.name));
-    const style = computed(() => ({ "--worker-hue": String(avatar.value.hue) }));
-    return { avatar, style };
+    const src = computed(() => workerAvatarURL(props.avatarStyle));
+    return { src };
   },
   template: `
-    <svg class="chat-worker-avatar" :style="style" viewBox="-1 -1 7 7" aria-hidden="true" focusable="false">
-      <rect class="chat-worker-avatar-bg" x="-1" y="-1" width="7" height="7" rx="3.5" />
-      <rect
-        v-for="cell in avatar.cells"
-        :key="cell.x + ':' + cell.y"
-        class="chat-worker-avatar-cell"
-        :x="cell.x"
-        :y="cell.y"
-        width="1"
-        height="1"
-      />
-    </svg>
+    <img
+      :class="['chat-worker-avatar', 'is-' + avatarStyle]"
+      :src="src"
+      alt=""
+      aria-hidden="true"
+      width="20"
+      height="20"
+      draggable="false"
+    />
   `,
 };
 
@@ -44,7 +42,8 @@ const ChatWorkerRoster = {
     const selectedId = ref("");
     const outputRef = ref(null);
     let keepOutputPinned = true;
-    const workers = computed(() => rosterWorkers(props.activity, props.status));
+    // Names follow the Console's language; the worker's id and avatar do not.
+    const workers = computed(() => rosterWorkers(props.activity, props.status, localeState.lang));
     const omitted = computed(() => Math.max(0, Number(props.activity?.workersOmitted) || 0));
     const selected = computed(() => workers.value.find((worker) => worker.id === selectedId.value) || null);
     const detailId = computed(() => `chat-worker-detail-${String(props.itemId || "task")}`);
@@ -68,7 +67,7 @@ const ChatWorkerRoster = {
     }
 
     function workerTitle(worker) {
-      return `${worker.name} · ${kindLabel(worker)} · ${stateLabel(worker.state)}`;
+      return `${worker.displayName} · ${kindLabel(worker)} · ${stateLabel(worker.state)}`;
     }
 
     function outputAtBottom() {
@@ -121,8 +120,8 @@ const ChatWorkerRoster = {
             :aria-controls="worker.id === selectedId ? detailId : null"
             @click="select(worker)"
           >
-            <WorkerAvatar :name="worker.name" />
-            <span class="chat-worker-name">{{ worker.name }}</span>
+            <WorkerAvatar :avatar-style="worker.avatarStyle" />
+            <span class="chat-worker-name">{{ worker.displayName }}</span>
             <span class="chat-worker-state-dot" aria-hidden="true"></span>
             <span class="chat-worker-sr">{{ stateLabel(worker.state) }}</span>
           </button>
@@ -132,10 +131,10 @@ const ChatWorkerRoster = {
         </li>
       </ul>
 
-      <div v-if="selected" :id="detailId" class="chat-worker-detail" role="region" :aria-label="selected.name">
+      <div v-if="selected" :id="detailId" class="chat-worker-detail" role="region" :aria-label="selected.displayName">
         <div class="chat-worker-detail-head">
-          <WorkerAvatar :name="selected.name" />
-          <span class="chat-worker-detail-name">{{ selected.name }}</span>
+          <WorkerAvatar :avatar-style="selected.avatarStyle" />
+          <span class="chat-worker-detail-name">{{ selected.displayName }}</span>
           <span class="chat-worker-detail-meta">{{ kindLabel(selected) }}</span>
           <span :class="['chat-worker-detail-state', 'is-' + selected.state]">{{ stateLabel(selected.state) }}</span>
           <span

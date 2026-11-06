@@ -17,6 +17,8 @@ Every bitmap uses the drawing made for its size, never a scaled-down large one:
   circle inside the safe zone.
 - Console SVGs (web/console): the logos and favicon.svg, the drawing at 64 (they show below 64 CSS
   px on screens that are mostly retina); favicon.svg is Aojashin in light mode, Suimen in dark.
+  The worker avatars (src/assets/worker-avatars) are the 64 circle in each of the seven
+  colourways the icons come in.
   safari-pinned-tab.svg is the 16 drawing's lines in one colour.
 """
 import json, os, shutil, struct, sys
@@ -33,6 +35,9 @@ PACKAGING = os.path.join(ROOT, 'desktop', 'wails', 'packaging', 'icons')
 WEB = os.path.join(ROOT, 'web', 'console', 'public')
 WEB_ASSETS = os.path.join(ROOT, 'web', 'console', 'src', 'assets', 'images')
 COLOURWAY = 'aojashin'
+WORKER_AVATARS = os.path.join(ROOT, 'web', 'console', 'src', 'assets', 'worker-avatars')
+# The colourways design/brand/icons is drawn in; the console picks worker avatars among them.
+WORKER_AVATAR_COLOURWAYS = ('aojashin', 'night', 'paper', 'suimen', 'rinko', 'bunko', 'denko')
 
 # Big Sur's grid: an 824 px tile centred on 1024, and the shadow under it.
 MAC_TILE = 824 / 1024
@@ -122,7 +127,11 @@ def console_svgs():
     lines = circle.circle_icon('16', 'aojashin').split('</circle>', 1)[1]
     lines = lines.replace(circle.COLOURS['aojashin']['line'], '#000')
     files[os.path.join(WEB, 'safari-pinned-tab.svg')] = f'<svg width="16" height="16" {attrs}>{lines}</svg>'
+    for colourway in WORKER_AVATAR_COLOURWAYS:
+        files[os.path.join(WORKER_AVATARS, f'{colourway}.svg')] = (
+            f'<svg width="64" height="64" {attrs}>{circle.circle_icon("64", colourway)}</svg>')
     for path, text in files.items():
+        os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, 'w') as fh:
             fh.write(text + '\n')
 

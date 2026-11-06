@@ -46,6 +46,9 @@ type resumeState struct {
 	// WorkersAllocated counts the worker names given out before the pause, so workers
 	// started after it get new names.
 	WorkersAllocated int `json:"workers_allocated,omitempty"`
+	// WorkerSeed is the seed the task's worker names and avatars come from, so workers
+	// started after the pause continue the same random order. Absent in older states.
+	WorkerSeed uint64 `json:"worker_seed,omitempty"`
 }
 
 type pendingToolSnapshot struct {

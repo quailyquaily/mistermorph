@@ -998,8 +998,10 @@ func (e *Engine) guardDecide(ctx context.Context, st *engineLoopState, step int,
 
 func (e *Engine) requestToolApproval(ctx context.Context, st *engineLoopState, step int, pending pendingToolSnapshot, pre guard.Result) (*Final, error) {
 	pending.ApprovalIdentity = "tool_" + newRunID()
+	workers, workerSeed := workersAllocated(ctx)
 	rs := resumeState{
-		WorkersAllocated:        workersAllocated(ctx),
+		WorkersAllocated:        workers,
+		WorkerSeed:              workerSeed,
 		SessionID:               st.sessionID,
 		RunID:                   st.runID,
 		Model:                   st.model,

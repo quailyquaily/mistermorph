@@ -2,6 +2,8 @@
 // what they printed. Built from the task's activity ("workers", kept by the runtime beside the
 // activity history), so it is the same live and after a reload.
 
+import { readWorkerIndices, workerAvatarStyle, workerDisplayName } from "./worker-identity.js";
+
 const TERMINAL_STATUSES = new Set(["done", "failed", "canceled"]);
 
 function text(value) {
@@ -39,6 +41,7 @@ export function normalizeActivityWorkers(raw) {
     workers.push({
       id,
       name,
+      ...readWorkerIndices(item),
       kind: text(item.kind) === "coder" ? "coder" : "subagent",
       status: text(item.status).toLowerCase(),
       activityId: text(item.activity_id || item.activityId),
@@ -96,44 +99,14 @@ export function workerProcessLabel(process) {
   return `${process?.program ? `${process.program} ` : ""}PID ${process?.pid}`;
 }
 
-function hashName(name) {
-  let hash = 2166136261;
-  for (const char of text(name)) {
-    hash ^= char.codePointAt(0);
-    hash = Math.imul(hash, 16777619);
-  }
-  return hash >>> 0;
-}
-
-// workerAvatar draws a worker's avatar from its name alone, so a name looks the same wherever it
-// appears: a hue, and a 5x5 pattern mirrored left to right (15 cells chosen, 25 drawn).
-export function workerAvatar(name) {
-  const hash = hashName(name);
-  // A second round spreads names that differ only at the end.
-  let bits = Math.imul(hash ^ (hash >>> 15), 2246822507) >>> 0;
-  const cells = [];
-  for (let row = 0; row < 5; row += 1) {
-    const half = [];
-    for (let col = 0; col < 3; col += 1) {
-      half.push((bits & 1) === 1);
-      bits = bits >>> 1 || Math.imul(hash, 3266489909) >>> 0;
-    }
-    const line = [...half, half[1], half[0]];
-    line.forEach((on, x) => {
-      if (on) cells.push({ x, y: row });
-    });
-  }
-  if (cells.length === 0) {
-    cells.push({ x: 2, y: 2 });
-  }
-  return { hue: hash % 360, cells };
-}
-
-// rosterWorkers lists the workers to show for a task, in the order they started.
-export function rosterWorkers(activity, taskStatus) {
+// rosterWorkers lists the workers to show for a task, in the order they started, each with its
+// name in lang and its logo style.
+export function rosterWorkers(activity, taskStatus, lang) {
   const workers = Array.isArray(activity?.workers) ? activity.workers : [];
   return workers.map((worker) => ({
     ...worker,
+    displayName: workerDisplayName(worker, lang),
+    avatarStyle: workerAvatarStyle(worker),
     state: workerState(worker, taskStatus),
     sections: workerSections(worker),
   }));

@@ -43,7 +43,9 @@ the light theme and Suimen for the dark theme. The login and default avatar are 
 light theme so far; the boot splash is the Aojashin 64 drawing with the ghost drifting through it
 (`web/console/src/core/ghost-mark.js`, the drift quickened to a 2.4 s figure of eight); `favicon.svg` carries both and
 follows the browser's colour scheme. The console's SVG logos all use the 64 drawing, because they are shown below 64 CSS
-px on screens that are mostly retina.
+px on screens that are mostly retina. Worker avatars in the chat roster
+(`web/console/src/assets/worker-avatars/`) are the 64 circle drawing in each of the seven colourways; each task
+allocates them at random, as it does worker names.
 
 The app icons can't follow a theme, so they are the Aojashin circle. Each platform gets its own spec, and every bitmap
 uses the drawing made for its size (16 below 24 px, then 32, 64 from 48, 128 from 96, 256 from 192, 1024 from 512):
