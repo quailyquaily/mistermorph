@@ -41,3 +41,6 @@ notes:
 - No additional installs; review worktree remained clean.
 - Not checked: live model providers, external coder CLI execution and Console nested-worker rendering. No frontend sources changed.
 - Moved review/ → ready/; awaiting owner approval to ship. No linked GitHub issues or PRs.
+
+## factory · 2026-11-07 00:35
+Shipped on owner authorization after verifying the passing review matches the branch head. Merged into master at 5d824e6b7bdabd04849532015da16eb50743fdec; released as v0.3.80. No merge conflicts. Combined gofmt check, go vet ./... and go test ./... passed; Console pnpm test passed 480/480 and pnpm build passed (chunk-size warning only). Tests used a throwaway HOME. No additional installs. No linked issues or PRs to close. Live-provider and running-Console visual checks were not performed. Moved ready/ → done/.

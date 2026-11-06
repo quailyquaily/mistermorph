@@ -66,3 +66,6 @@ notes:
 Codex reviewed all 29 changed files in origin/master...HEAD. No P0/P1 findings. The branch merges cleanly with master. Required gofmt check, go vet ./... and go test ./... passed; Console pnpm test passed 480/480 and pnpm build passed with the chunk-size warning. Tests used a throwaway absolute HOME. No installs. Working tree remains clean and reviewed HEAD unchanged.
 
 Residual risk: actual running-Console 20px avatars on light and dark backgrounds were not visually checked. Owner should inspect those and the P2 legacy-resume collision before shipping. No linked GitHub issues or PRs. Moved review/ → ready/ under the no-P0/P1 review rule; no merge or release.
+
+## factory · 2026-11-07 00:35
+Shipped on owner authorization after verifying the passing review matches the branch head. Merged into master at 30a00e9b3c1702a0555b35a04810d80e287d2af9; released as v0.3.80. No merge conflicts. Combined gofmt check, go vet ./... and go test ./... passed; Console pnpm test passed 480/480 and pnpm build passed (chunk-size warning only). Tests used a throwaway HOME. No additional installs. No linked issues or PRs to close. Live-provider and running-Console visual checks were not performed. The documented P2 legacy approval-resume display-name collision remains. Moved ready/ → done/.
