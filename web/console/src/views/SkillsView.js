@@ -1,4 +1,4 @@
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import "./SkillsView.css";
 
@@ -8,6 +8,7 @@ import AppMarkdownEditor from "../components/AppMarkdownEditor";
 import AppPage from "../components/AppPage";
 import AppSkeleton from "../components/AppSkeleton";
 import MarkdownContent from "../components/MarkdownContent";
+import SkillFileTree from "../components/SkillFileTree";
 import { endpointApiFetch, endpointState, formatBytes, runtimeApiFetchForEndpoint, translate } from "../core/context";
 import { endpointRoutePath } from "../core/endpoint-routes";
 import {
@@ -19,6 +20,7 @@ import {
   stripFrontmatter,
 } from "../core/skills-install.js";
 import { skillToggleSettings } from "../core/skills-load.js";
+import { SKILL_DOC_PATH, skillFileURL, useSkillFilePreview } from "../core/skill-files.js";
 
 // Search appears once the list is long enough to need it.
 const SEARCH_THRESHOLD = 8;
@@ -63,6 +65,8 @@ function skillSourceText(skill) {
 // the switch first, then SKILL.md), and Add skill,
 // which starts a chat task where the agent reviews the skill and the user approves the install.
 // The store has its own view (SkillStoreView); here it only marks installed skills with updates.
+// The Files row opens a read-only tree of the skill's folder; choosing a file shows it as plain
+// text in place of SKILL.md until SKILL.md is chosen again.
 const SkillsView = {
   components: {
     AppDialogShell,
@@ -71,6 +75,7 @@ const SkillsView = {
     AppPage,
     AppSkeleton,
     MarkdownContent,
+    SkillFileTree,
   },
   setup() {
     const t = translate;
@@ -88,6 +93,13 @@ const SkillsView = {
     const query = ref("");
     let listSeq = 0;
     let detailSeq = 0;
+
+    // The file shown in place of SKILL.md ("" shows SKILL.md), read from the agent selected when
+    // it was opened.
+    const preview = useSkillFilePreview((id, path) => endpointApiFetch(endpointState.selectedRef, skillFileURL(id, path)));
+    const viewPath = preview.path;
+    const filePreview = preview.state;
+    const docSection = ref(null);
 
     const removeTarget = ref(null);
     const removeBusy = ref(false);
@@ -139,6 +151,41 @@ const SkillsView = {
       const files = selected.value?.files || [];
       const bytes = files.reduce((sum, file) => sum + (Number(file.size) || 0), 0);
       return t(files.length === 1 ? "skills_files_summary_one" : "skills_files_summary", { count: files.length, size: formatBytes(bytes) });
+    });
+    const endpointRef = computed(() => endpointState.selectedRef);
+    const treeSelectedPath = computed(() => viewPath.value || SKILL_DOC_PATH);
+    const filePreviewNote = computed(() => {
+      const preview = filePreview.value;
+      if (!preview) {
+        return "";
+      }
+      if (preview.status === "error") {
+        switch (preview.error) {
+          case "missing":
+            return t("skills_file_missing");
+          case "denied":
+            return t("skills_file_denied");
+          case "symlink":
+            return t("skills_file_symlink");
+          case "unsupported":
+            return t("skills_files_unsupported");
+          default:
+            return preview.message || t("skills_file_failed");
+        }
+      }
+      const data = preview.data;
+      switch (preview.status === "ready" ? data.kind : "") {
+        case "binary":
+          return t("skills_file_binary");
+        case "too_large":
+          return t("skills_file_too_large", { size: formatBytes(data.size), limit: formatBytes(data.limit) });
+        case "unsupported":
+          return t("skills_file_unsupported");
+        case "text":
+          return data.content ? "" : t("skills_file_empty");
+        default:
+          return "";
+      }
     });
     const documentSize = computed(() => {
       const file = (selected.value?.files || []).find((item) => item.path === "SKILL.md");
@@ -245,6 +292,22 @@ const SkillsView = {
         if (seq === detailSeq) {
           detailLoading.value = false;
         }
+      }
+    }
+
+    // Back to SKILL.md; any preview still loading is dropped.
+    function showDocument() {
+      preview.clear();
+    }
+
+    function openFile(path) {
+      const skill = selected.value;
+      if (!skill || editing.value) {
+        return;
+      }
+      void preview.open(skill.id, path);
+      if (viewPath.value) {
+        void nextTick(() => docSection.value?.scrollIntoView?.({ block: "nearest" }));
       }
     }
 
@@ -477,6 +540,7 @@ const SkillsView = {
       () => selected.value?.id || "",
       (id) => {
         filesExpanded.value = false;
+        showDocument();
         editing.value = false;
         editErr.value = "";
         // Another skill opens at its top, not at the last one's scroll position.
@@ -490,6 +554,7 @@ const SkillsView = {
       () => endpointState.selectedRef,
       () => {
         editing.value = false;
+        showDocument();
         detail.value = null;
         storeSkills.value = [];
         closeSkill();
@@ -532,6 +597,14 @@ const SkillsView = {
       filesExpanded,
       filesSummary,
       documentSize,
+      endpointRef,
+      treeSelectedPath,
+      viewPath,
+      filePreview,
+      filePreviewNote,
+      docSection,
+      openFile,
+      showDocument,
       enabledNote,
       showIndex,
       showDetail,
@@ -750,17 +823,38 @@ const SkillsView = {
                       <span>{{ filesSummary }}</span>
                       <PhCaretDown class="icon" :class="{ 'is-open': filesExpanded }" aria-hidden="true" />
                     </button>
-                    <ul v-if="filesExpanded" class="skills-files">
-                      <li v-for="file in selected.files" :key="file.path">
-                        <code>{{ file.path }}</code>
-                        <span>{{ formatBytes(file.size) }}</span>
-                      </li>
-                    </ul>
+                    <SkillFileTree
+                      v-if="filesExpanded"
+                      :endpointRef="endpointRef"
+                      :skillId="selected.id"
+                      :selectedPath="treeSelectedPath"
+                      :disabled="editing"
+                      :fallbackFiles="selected.files"
+                      @select="openFile"
+                    />
                   </dd>
                 </div>
               </dl>
 
-              <section class="skills-doc" :aria-label="'SKILL.md'">
+              <section v-if="viewPath" ref="docSection" class="skills-doc" :aria-label="viewPath">
+                <header class="skills-doc-head">
+                  <code class="skills-doc-label skills-doc-path" :title="viewPath">{{ viewPath }}</code>
+                  <span v-if="filePreview && filePreview.status === 'ready'" class="skills-doc-size">{{ formatBytes(filePreview.data.size) }}</span>
+                  <div class="skills-doc-actions">
+                    <AppButton class="plain xs" :title="t('skills_file_back')" @click="showDocument">
+                      <PhArrowLeft class="icon" />
+                      <span>SKILL.md</span>
+                    </AppButton>
+                  </div>
+                </header>
+                <div v-if="filePreview && filePreview.status === 'loading'" class="skills-index-loading" role="status" :aria-label="t('skills_files_loading')">
+                  <AppSkeleton variant="card" height="120px" :count="1" />
+                </div>
+                <AppNotice v-else-if="filePreview && filePreview.status === 'error'" type="error" :text="filePreviewNote" />
+                <p v-else-if="filePreviewNote" class="skills-file-note">{{ filePreviewNote }}</p>
+                <pre v-else-if="filePreview && filePreview.status === 'ready'" class="skills-file-preview" :aria-label="viewPath"><code>{{ filePreview.data.content }}</code></pre>
+              </section>
+              <section v-else ref="docSection" class="skills-doc" :aria-label="'SKILL.md'">
                 <header class="skills-doc-head">
                   <span class="skills-doc-label">SKILL.md</span>
                   <span v-if="documentSize" class="skills-doc-size">{{ documentSize }}</span>

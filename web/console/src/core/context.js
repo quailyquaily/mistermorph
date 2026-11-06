@@ -117,6 +117,10 @@ async function apiFetch(pathname, options = {}) {
       }
       const err = new Error(parsed.error || `HTTP ${resp.status}`);
       err.status = resp.status;
+      // Some routes name the failure (for example "path_not_found"), so callers need not parse text.
+      if (typeof parsed.code === "string") {
+        err.code = parsed.code;
+      }
       error = err.message;
       throw err;
     }

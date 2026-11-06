@@ -288,3 +288,56 @@ func clearRuntimeAgentSettingsEnv(t *testing.T) {
 		}
 	})
 }
+
+func TestAgentSkillFileRoutesNeedAuthAndStayInsideTheSkill(t *testing.T) {
+	clearRuntimeAgentSettingsEnv(t)
+	stateDir := t.TempDir()
+	skillDir := filepath.Join(stateDir, "skills", "kit")
+	for path, content := range map[string]string{
+		filepath.Join(skillDir, "SKILL.md"):          "---\nname: kit\n---\n# Kit\n",
+		filepath.Join(skillDir, "scripts", "run.sh"): "#!/bin/sh\necho hi\n",
+		filepath.Join(stateDir, "secret.txt"):        "secret\n",
+	} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	reader := viper.New()
+	reader.Set("config", filepath.Join(stateDir, "config.yaml"))
+	reader.Set("file_state_dir", stateDir)
+	reader.Set("skills.dir_name", "skills")
+
+	mux := http.NewServeMux()
+	RegisterRoutes(mux, RoutesOptions{
+		AuthToken:            "token",
+		AgentSettingsEnabled: true,
+		AgentSettingsReader:  reader,
+	})
+	get := func(target string, auth bool) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, target, nil)
+		if auth {
+			req.Header.Set("Authorization", "Bearer token")
+		}
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		return rec
+	}
+
+	for _, target := range []string{"/settings/agent/skills/dir?id=kit", "/settings/agent/skills/file?id=kit&path=SKILL.md"} {
+		if rec := get(target, false); rec.Code != http.StatusUnauthorized {
+			t.Fatalf("%s without auth: status = %d, want 401", target, rec.Code)
+		}
+	}
+	if rec := get("/settings/agent/skills/dir?id=kit&path=scripts", true); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"path":"scripts/run.sh"`) {
+		t.Fatalf("dir: status = %d (%s)", rec.Code, rec.Body.String())
+	}
+	if rec := get("/settings/agent/skills/file?id=kit&path=scripts/run.sh", true); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `echo hi`) {
+		t.Fatalf("file: status = %d (%s)", rec.Code, rec.Body.String())
+	}
+	if rec := get("/settings/agent/skills/file?id=kit&path=../../secret.txt", true); rec.Code != http.StatusBadRequest || strings.Contains(rec.Body.String(), "secret\\n") {
+		t.Fatalf("traversal: status = %d (%s)", rec.Code, rec.Body.String())
+	}
+}

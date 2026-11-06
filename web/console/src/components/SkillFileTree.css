@@ -1,0 +1,133 @@
+/* A skill's folder as a compact tree, in the Files row of the Skills page. Rows indent by depth;
+   folders open in place, files open in the document area below. */
+.skill-file-tree {
+  min-width: 0;
+  margin-top: 8px;
+}
+
+.skill-file-tree-list {
+  display: grid;
+  gap: 1px;
+  max-height: min(48vh, 420px);
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  list-style: none;
+  scrollbar-width: thin;
+}
+
+.skill-file-tree-row {
+  min-width: 0;
+  padding-left: calc(var(--skill-file-depth, 0) * 16px);
+}
+
+.skill-file-tree-item {
+  appearance: none;
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 12px 14px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 3px 6px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--text-1);
+  font: inherit;
+  text-align: left;
+}
+
+button.skill-file-tree-item {
+  cursor: pointer;
+}
+
+button.skill-file-tree-item:hover,
+button.skill-file-tree-item:focus-visible {
+  border-color: color-mix(in srgb, var(--line-soft) 74%, transparent);
+  background: var(--q-button-plain-hover-bg);
+  color: var(--text-0);
+  outline: none;
+}
+
+button.skill-file-tree-item:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.skill-file-tree-item.is-selected {
+  border-color: var(--line);
+  background: color-mix(in srgb, var(--q-bg-paper) 90%, var(--q-button-primary-border) 10%);
+  color: var(--text-0);
+}
+
+.skill-file-tree-item.is-inert {
+  color: var(--text-2);
+}
+
+.skill-file-tree-item .icon {
+  width: 14px;
+  height: 14px;
+  color: var(--text-2);
+}
+
+.skill-file-tree-caret {
+  width: 12px;
+  height: 12px;
+  transition: transform 0.16s ease;
+}
+
+.skill-file-tree-caret.is-open {
+  transform: rotate(90deg);
+}
+
+.skill-file-tree-name {
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-file-tree-size {
+  color: var(--text-2);
+  font-size: var(--font-size-meta);
+  white-space: nowrap;
+}
+
+/* Loading, empty, capped and error lines sit where the folder's entries would. */
+.skill-file-tree-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+  padding: 3px 6px 3px 32px;
+  color: var(--text-2);
+  font-size: var(--font-size-meta);
+}
+
+.skill-file-tree > .skill-file-tree-status {
+  padding-left: 0;
+}
+
+.skill-file-tree-status.is-error {
+  color: var(--q-c-red, var(--text-1));
+}
+
+.skill-file-tree-retry {
+  appearance: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--q-c-blue);
+  font: inherit;
+  cursor: pointer;
+}
+
+.skill-file-tree-retry:hover {
+  text-decoration: underline;
+}
