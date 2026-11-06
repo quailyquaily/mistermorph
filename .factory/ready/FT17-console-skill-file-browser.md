@@ -39,3 +39,16 @@ Tests: formatting check, go vet ./..., go test ./... passed; pnpm test passed (4
 Not checked: browser visual appearance and interaction have not been inspected manually. Owner should check nested directory layout, file preview styling, and returning to SKILL.md.
 
 Pushed branch and moved new/ → review/. No merge into master.
+
+## factory · review · 2026-11-06 17:22
+head: f8458b59d539a800cf74dbc4e4c2d337ec908f91
+verdict: pass
+notes:
+- [P2] internal/agentsettings/skills_files.go:127: Replacing a checked directory with a FIFO before root.Open can indefinitely block listing requests. A concurrent references/ directory/FIFO swap blocked 16 requests until a FIFO writer opened. Atomically reject special files with directory-only and appropriate nonblocking open flags.
+- [P2] web/console/src/components/SkillFileTree.js:80: Ordinary-object node lookup mistakes inherited properties for loaded directories. Expanding constructor/guide.md skips the request and throws "node.entries is not iterable"; __proto__/guide.md appears empty. Use Map, a null-prototype dictionary, or own-property checks for all node reads.
+
+Codex reviewed all 18 changed files in origin/master...HEAD (base 6365a87d), including authentication, traversal/symlink boundaries and preview safety. No P0/P1 findings; moved review/ → ready/ under the factory gate. The two P2 findings remain for owner consideration before shipping.
+
+Validation: formatting check, go vet ./..., go test ./... passed; pnpm test passed (438 tests); pnpm build passed with a large-chunk warning. Targeted component reproduction and temporary Go overlay concurrency tests confirmed the findings. Scripted tests used an absolute throwaway HOME. Only pinned frontend dependencies were restored; no nonroutine installs. Worktree remained clean.
+
+Not checked: browser visuals, live remote deployment integration, and non-Unix platforms. No linked GitHub issue or PR. No implementation changes or merge into master.
