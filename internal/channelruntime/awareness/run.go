@@ -192,7 +192,7 @@ func runAwarenessLoop(ctx context.Context, d Dependencies, opts RunOptions) (run
 		refreshChatInfoOnStart(ctx, chatInfoStore, chatInfoRefresher, opts.ChatInfoContactsDir, logger)
 	}
 
-	runAwarenessTaskWithOpts := func(behavior awarenessutil.Behavior, task string, meta map[string]any, taskRunID, llmProfile, workspaceDir string, bashEnv []cronstore.BashEnvRef, topicID, topicTitle string) (string, error) {
+	runAwarenessTaskWithOpts := func(behavior awarenessutil.Behavior, task string, meta map[string]any, taskRunID, llmProfile, workspaceDir string, bashEnv []cronstore.BashEnvRef, topicID, topicTitle string, cronManual bool) (string, error) {
 		var contextScope topiccontext.Scope
 		if topicID != "" && opts.TopicContextScope != nil {
 			contextScope = opts.TopicContextScope(topicID)
@@ -224,10 +224,11 @@ func runAwarenessLoop(ctx context.Context, d Dependencies, opts RunOptions) (run
 			TopicTitle:               topicTitle,
 			ContextScope:             contextScope,
 			TopicRunStarted:          opts.TopicRunStarted,
+			CronManual:               cronManual,
 		})
 	}
 	runTask := func(behavior awarenessutil.Behavior, task string, meta map[string]any, taskRunID string) (string, error) {
-		return runAwarenessTaskWithOpts(behavior, task, meta, taskRunID, "", "", nil, "", "")
+		return runAwarenessTaskWithOpts(behavior, task, meta, taskRunID, "", "", nil, "", "", false)
 	}
 
 	runTaskAsync := func(behavior awarenessutil.Behavior, task string, taskEmpty bool, wakeSignal awarenessdomain.PokeInput) string {
@@ -362,15 +363,15 @@ func runAwarenessLoop(ctx context.Context, d Dependencies, opts RunOptions) (run
 					}
 					meta := awarenessutil.BuildCronMeta("cron", strings.TrimSpace(task.ID), due.ScheduledAtUTC, cronstore.ScheduleForTask(task), strings.TrimSpace(task.TZ), strings.TrimSpace(task.ChatID), extra)
 					summary, err := runAwarenessTaskWithOpts(awarenessutil.BehaviorCron, strings.TrimSpace(task.Content), meta, taskRunID, task.LLMProfile, task.WorkspaceDir, task.BashEnv,
-						daemonruntime.CronTopicID(task.ID), cronTopicTitle(task))
+						daemonruntime.CronTopicID(task.ID), cronTopicTitle(task), due.Manual)
 					if err != nil {
-						notifyCronResult(ctx, opts.CronNotify, logger, task, taskRunID, "", err)
+						notifyCronResult(ctx, opts.CronNotify, logger, task, due.Manual, taskRunID, "", err)
 						return err
 					}
 					if summary == "" {
 						summary = "empty"
 					}
-					notifyCronResult(ctx, opts.CronNotify, logger, task, taskRunID, summary, nil)
+					notifyCronResult(ctx, opts.CronNotify, logger, task, due.Manual, taskRunID, summary, nil)
 					logger.Info("awareness_summary", "source", opts.Source, "behavior", awarenessutil.BehaviorCron, "task_id", strings.TrimSpace(task.ID), "message", summary)
 					if !due.Manual && strings.TrimSpace(task.At) != "" {
 						if _, deleteErr := cronstore.NewStore(cronPath).DeleteByID(task.ID); deleteErr != nil {
@@ -422,6 +423,8 @@ type awarenessTaskOptions struct {
 	ContextScope topiccontext.Scope
 	// TopicRunStarted is told of the run once it is recorded under TopicID.
 	TopicRunStarted func(TopicRun)
+	// CronManual marks a TODO item's run a person asked for, rather than one its schedule fired.
+	CronManual bool
 }
 
 // TopicRun is a run recorded under a topic, as it starts.
@@ -880,11 +883,21 @@ func recordAwarenessTaskFinish(opts awarenessTaskOptions, summary string, extra 
 }
 
 func awarenessTaskTrigger(opts awarenessTaskOptions) daemonruntime.TaskTrigger {
-	return daemonruntime.TaskTrigger{
+	behavior := awarenessutil.NormalizeBehavior(string(opts.Behavior))
+	trigger := daemonruntime.TaskTrigger{
 		Source:  "console",
-		Event:   "awareness_" + string(awarenessutil.NormalizeBehavior(string(opts.Behavior))),
+		Event:   "awareness_" + string(behavior),
 		TraceID: strings.TrimSpace(opts.TaskRunID),
 	}
+	// A TODO item's run says whether its schedule fired it or a person asked for it: the Console
+	// raises no notification for a scheduled run (see consolecmd's notification hub).
+	if behavior == awarenessutil.BehaviorCron {
+		trigger.Ref = daemonruntime.CronRunTriggerRefSchedule
+		if opts.CronManual {
+			trigger.Ref = daemonruntime.CronRunTriggerRefManual
+		}
+	}
+	return trigger
 }
 
 func notifyAwareness(ctx context.Context, notifier Notifier, logger *slog.Logger, message string) {

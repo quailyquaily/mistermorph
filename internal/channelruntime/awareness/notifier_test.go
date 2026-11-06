@@ -71,12 +71,12 @@ func TestNotifyCronResult(t *testing.T) {
 			ChatID: cronstore.ConsoleNotificationChatID,
 		}
 
-		notifyCronResult(context.Background(), notify, nil, task, "run-1", "  Review complete.  ", nil)
+		notifyCronResult(context.Background(), notify, nil, task, true, "run-1", "  Review complete.  ", nil)
 
 		if got.ID != "run-1" || got.Title != "Daily review" {
 			t.Fatalf("unexpected notification identity: %#v", got)
 		}
-		if got.Body != "Review complete." {
+		if got.Body != "Review complete." || got.Trigger != "" {
 			t.Fatalf("unexpected completed notification: %#v", got)
 		}
 	})
@@ -92,12 +92,36 @@ func TestNotifyCronResult(t *testing.T) {
 			ChatID: cronstore.ConsoleNotificationChatID,
 		}
 
-		notifyCronResult(context.Background(), notify, nil, task, "run-2", "", errors.New("route unavailable"))
+		notifyCronResult(context.Background(), notify, nil, task, true, "run-2", "", errors.New("route unavailable"))
 
-		if got.Title != cronstore.DefaultTaskTitle || got.Body != "route unavailable" {
+		if got.Title != cronstore.DefaultTaskTitle || got.Body != "route unavailable" || got.Trigger != "" {
 			t.Fatalf("unexpected failed notification: %#v", got)
 		}
 	})
+
+	// The Console decides what to show; the run only says its schedule fired it.
+	for _, tc := range []struct {
+		name   string
+		runErr error
+	}{
+		{"marks scheduled completed run", nil},
+		{"marks scheduled failed run", errors.New("route unavailable")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var got CronNotification
+			notify := func(_ context.Context, notification CronNotification) error {
+				got = notification
+				return nil
+			}
+			task := cronstore.Task{ID: "daily-review", ChatID: cronstore.ConsoleNotificationChatID}
+
+			notifyCronResult(context.Background(), notify, nil, task, false, "run-4", "done", tc.runErr)
+
+			if got.ID != "run-4" || got.Trigger != CronNotificationTriggerSchedule {
+				t.Fatalf("unexpected scheduled notification: %#v", got)
+			}
+		})
+	}
 
 	t.Run("ignores external target", func(t *testing.T) {
 		called := false
@@ -109,7 +133,7 @@ func TestNotifyCronResult(t *testing.T) {
 		notifyCronResult(context.Background(), notify, nil, cronstore.Task{
 			ID:     "external",
 			ChatID: "tg:-100",
-		}, "run-3", "done", nil)
+		}, false, "run-3", "done", nil)
 
 		if called {
 			t.Fatal("console notifier was called for an external chat target")

@@ -171,6 +171,26 @@ func IsCronTopicID(id string) bool {
 	return strings.HasPrefix(id, CronTopicPrefix) && len(id) > len(CronTopicPrefix)
 }
 
+const (
+	// CronRunTriggerEvent is the trigger event of a TODO (cron) item's run.
+	CronRunTriggerEvent = "awareness_cron"
+	// CronRunTriggerRefSchedule and CronRunTriggerRefManual tell, in a TODO item's run's trigger,
+	// whether its schedule fired the run or a person asked for it to run now.
+	CronRunTriggerRefSchedule = "schedule"
+	CronRunTriggerRefManual   = "manual"
+)
+
+// IsCronRunTrigger reports whether trigger is that of a TODO item's run, scheduled or manual.
+func IsCronRunTrigger(trigger TaskTrigger) bool {
+	return strings.TrimSpace(trigger.Event) == CronRunTriggerEvent
+}
+
+// IsScheduledCronRunTrigger reports whether trigger is that of a TODO item's run its schedule
+// fired. A run whose trigger does not say so, such as one recorded before runs said, is not.
+func IsScheduledCronRunTrigger(trigger TaskTrigger) bool {
+	return IsCronRunTrigger(trigger) && strings.TrimSpace(trigger.Ref) == CronRunTriggerRefSchedule
+}
+
 // AgentLinkTopicID is the topic of the agent with this Agent Link instance ID.
 func AgentLinkTopicID(instanceID string) string {
 	return AgentLinkTopicPrefix + strings.TrimSpace(instanceID)

@@ -1211,7 +1211,7 @@ func TestConsoleFileStoreTaskObserverSkipsReplayAndRecovery(t *testing.T) {
 	var updates [][2]TaskStatus
 	opts := ConsoleFileStoreOptions{
 		RootDir: root, Persist: true, JournalDir: filepath.Join(root, "journal"),
-		OnTaskUpdate: func(previous, next TaskInfo) {
+		OnTaskUpdate: func(previous, next TaskInfo, _ TaskTrigger) {
 			updates = append(updates, [2]TaskStatus{previous.Status, next.Status})
 		},
 	}
@@ -1246,5 +1246,53 @@ func TestConsoleFileStoreTaskObserverSkipsReplayAndRecovery(t *testing.T) {
 	}
 	if len(updates) != 0 {
 		t.Fatalf("replay or recovery called observer: %v", updates)
+	}
+}
+
+// The observer sees the trigger a task was recorded with, also on a later write that names none.
+func TestConsoleFileStoreTaskObserverReceivesTheTasksTrigger(t *testing.T) {
+	var got []TaskTrigger
+	store, err := NewConsoleFileStore(ConsoleFileStoreOptions{
+		OnTaskUpdate: func(_, _ TaskInfo, trigger TaskTrigger) { got = append(got, trigger) },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	scheduled := TaskTrigger{Source: "console", Event: CronRunTriggerEvent, Ref: CronRunTriggerRefSchedule, TraceID: "run"}
+	if err := store.UpsertWithTrigger(TaskInfo{ID: "run", TopicID: CronTopicID("todo"), Status: TaskRunning}, scheduled, "Todo"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Update("run", func(task *TaskInfo) { task.Status = TaskDone }); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Upsert(TaskInfo{ID: "plain", TopicID: "topic", Status: TaskRunning}); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 3 || got[0] != scheduled || got[1] != scheduled || got[2] != (TaskTrigger{}) {
+		t.Fatalf("observed triggers = %+v", got)
+	}
+}
+
+func TestCronRunTriggerClassification(t *testing.T) {
+	for _, tc := range []struct {
+		name           string
+		trigger        TaskTrigger
+		cron, schedule bool
+	}{
+		{"scheduled", TaskTrigger{Source: "console", Event: CronRunTriggerEvent, Ref: CronRunTriggerRefSchedule}, true, true},
+		{"manual", TaskTrigger{Source: "console", Event: CronRunTriggerEvent, Ref: CronRunTriggerRefManual}, true, false},
+		{"legacy cron without a ref", TaskTrigger{Source: "console", Event: CronRunTriggerEvent}, true, false},
+		{"heartbeat", TaskTrigger{Source: "console", Event: "awareness_heartbeat"}, false, false},
+		{"chat", TaskTrigger{Source: "ui", Event: "chat_submit", Ref: CronRunTriggerRefSchedule}, false, false},
+		{"empty", TaskTrigger{}, false, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := IsCronRunTrigger(tc.trigger); got != tc.cron {
+				t.Fatalf("IsCronRunTrigger = %v, want %v", got, tc.cron)
+			}
+			if got := IsScheduledCronRunTrigger(tc.trigger); got != tc.schedule {
+				t.Fatalf("IsScheduledCronRunTrigger = %v, want %v", got, tc.schedule)
+			}
+		})
 	}
 }

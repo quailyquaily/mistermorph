@@ -46,19 +46,27 @@ func (h *consoleNotificationHub) Subscribe() (<-chan consoleNotification, func()
 	}
 }
 
+// Publish raises a TODO item's opt-in system notification. A run the item's schedule fired raises
+// none: its result is in the item's topic, and the person did not ask for the run then.
 func (h *consoleNotificationHub) Publish(notification awarenessloop.CronNotification) {
+	if strings.TrimSpace(notification.Trigger) == awarenessloop.CronNotificationTriggerSchedule {
+		return
+	}
 	notification.ID = strings.TrimSpace(notification.ID)
 	notification.Title = strings.TrimSpace(notification.Title)
 	notification.Body = strings.TrimSpace(notification.Body)
 	h.publish(consoleNotification{ID: notification.ID, CronNotification: &notification})
 }
 
-func (h *consoleNotificationHub) PublishTaskCompletion(previous, next daemonruntime.TaskInfo) {
+// PublishTaskCompletion tells of a task in a topic that finished; trigger is the one the task was
+// recorded with.
+func (h *consoleNotificationHub) PublishTaskCompletion(previous, next daemonruntime.TaskInfo, trigger daemonruntime.TaskTrigger) {
 	if previous.ID == "" || next.ID == "" || strings.TrimSpace(next.TopicID) == "" || next.SteerTargetTaskID != "" {
 		return
 	}
-	// TODO runs retain their existing opt-in cron notification behavior.
-	if daemonruntime.IsCronTopicID(next.TopicID) {
+	// A TODO item's run, told apart by its own trigger rather than by its topic, notifies through
+	// the item's opt-in notification alone (see Publish), which a scheduled run never raises.
+	if daemonruntime.IsCronRunTrigger(trigger) {
 		return
 	}
 	// Only the person's own chats notify. A heartbeat run in Awareness, or a task another agent

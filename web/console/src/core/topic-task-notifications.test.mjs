@@ -94,6 +94,40 @@ test("success and failure notify in hidden tabs or unfocused windows, with the t
   }
 });
 
+test("a TODO item's scheduled run never notifies, succeeded or failed, in hidden tabs or unfocused windows", async () => {
+  for (const status of ["done", "failed"]) {
+    for (const [visible, focused] of [[false, false], [false, true], [true, false]]) {
+      const win = browser();
+      win.setForeground(visible, focused);
+      const scheduled = { ...event, id: `topic-task:scheduled-${status}`, topic_id: "_cron_todo", status, trigger: "cron" };
+      assert.equal(await deliver(win, scheduled), false);
+      assert.equal(await deliver(win, { ...scheduled, trigger: " cron " }), false);
+      assert.equal(win.shown.length, 0);
+      assert.deepEqual(win.titleLookups, []);
+    }
+  }
+});
+
+test("a run that is not scheduled notifies beside scheduled ones in the same topic, and replays stay silent", async () => {
+  const shared = sharedBrowserState();
+  const win = browser(shared);
+  const topic = { ...event, topic_id: "_cron_todo" };
+  const scheduled = { ...topic, id: "topic-task:scheduled", trigger: "cron" };
+  assert.equal(await deliver(win, scheduled), false);
+  // A run a person asked for, and a frame from a runtime that does not tell, notify as before.
+  assert.equal(await deliver(win, { ...topic, id: "topic-task:manual", trigger: "manual" }), true);
+  assert.equal(await deliver(win, { ...topic, id: "topic-task:legacy", status: "failed" }), true);
+  assert.equal(await deliver(win, { ...topic, id: "topic-task:odd", trigger: 7 }), true);
+  assert.equal(win.shown.length, 3);
+  assert.deepEqual(win.shown.map((n) => n.options.body), ["topic_notification_done", "topic_notification_failed", "topic_notification_done"]);
+  // Repeated, replayed and reloaded deliveries show nothing more.
+  for (const raw of [scheduled, { ...scheduled, status: "failed" }, { ...topic, id: "topic-task:manual" }, { ...topic, id: "topic-task:legacy" }]) {
+    assert.equal(await deliver(win, raw), false);
+    assert.equal(await deliver(browser(shared), raw), false);
+  }
+  assert.equal(win.shown.length, 3);
+});
+
 test("a topic whose name cannot be read is notified as untitled, never by its ID", async () => {
   const lookups = {
     missing: undefined,
@@ -317,8 +351,18 @@ test("installed socket routes live completions, ignores stale sockets and reconn
   sockets[1].onmessage({ data: JSON.stringify(event) });
   await flush();
   assert.equal(win.shown.length, 1);
+  // A scheduled TODO run's opt-in notification and completion show nothing, even repeated.
+  for (let i = 0; i < 2; i += 1) {
+    sockets[1].onmessage({ data: JSON.stringify({ id: "scheduled", title: "Cron", body: "Scheduled body", trigger: "cron" }) });
+    sockets[1].onmessage({ data: JSON.stringify({ ...event, id: "topic-task:scheduled", topic_id: "_cron_todo", status: "failed", trigger: "cron" }) });
+  }
+  await flush();
+  assert.equal(win.shown.length, 1);
+  assert.equal(requests.length, 1);
+  sockets[1].onmessage({ data: JSON.stringify({ id: "cron", title: "Cron", body: "Existing cron body" }) });
   sockets[1].onmessage({ data: JSON.stringify({ id: "cron", title: "Cron", body: "Existing cron body" }) });
   await flush();
+  assert.equal(win.shown.length, 2);
   assert.equal(win.shown[1].title, "Cron");
   assert.equal(win.shown[1].options.body, "Existing cron body");
   authValid.value = false;
