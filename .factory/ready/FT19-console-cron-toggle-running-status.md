@@ -47,3 +47,15 @@ Verification: Manager independently passed gofmt cleanliness, go vet ./..., go t
 Installs: none beyond pinned console dependencies.
 
 Visual checks: coder rendered the real header template with built CSS in headless Chrome at 220px and 310px, with normal/reduced motion, and checked stable bounds, hover and keyboard focus in the morph theme. This was not the live Console. Live runtime execution, phone layout and a real screen reader were not checked. A top-clipped focus ring appeared in the isolated test page; its source (existing styling versus harness) remains unverified and should be checked in review.
+
+## factory · review · 2026-11-06 18:12
+head: 07af0e8e86557890c531f851fd81236b47841f9d
+verdict: pass
+
+Codex reviewed all 15 changed files in origin/master...HEAD against the request and plan (base 6365a87dc643e8f9886950ced6eadc1dd478f3f9). No qualifying findings. Verified full-endpoint aggregation, trigger metadata, exclusion of manual/queued/terminal runs, filter interaction, labels, polling, reconnect, error retention and reduced motion.
+
+Validation: Codex passed gofmt cleanliness, go vet ./..., go test ./... (156 test packages), pnpm test (436/436), and pnpm build. Build has a non-fatal bundle-size warning. Tests used an absolute throwaway HOME. Worktree remains clean; no source changes or commits were made during review.
+
+Visual checks: header comparison at 230px and 310px found no clipped activity marker. The focus-ring top-edge clipping also occurs on base and is not introduced by this change. Full-page Chrome navigation timed out; live server end-to-end, phone layout and screen-reader checks remain unverified. Owner should inspect those before shipping.
+
+Installs: restored pinned frontend dependencies and Go modules only; no unpinned installs. No linked GitHub issues or PRs. Moved review/ → ready/; not merged.
