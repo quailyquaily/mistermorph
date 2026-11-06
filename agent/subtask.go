@@ -18,14 +18,20 @@ const (
 	SubtaskOutputKindJSON = "json"
 
 	subtaskSummaryMaxChars = 160
-	subtaskMaxDepth        = 1
+
+	// SubtaskMaxDepth is the deepest level a subtask may run at. The main task is depth 0, so the
+	// main task and its subtasks may start subtasks, and a subtask at this depth may not.
+	SubtaskMaxDepth = 2
 )
 
 type SubtaskRequest struct {
 	Task string
 	// ModelProfile names the model profile the subtask runs on. Empty keeps the configuration the
 	// parent task already selected.
-	ModelProfile   string
+	ModelProfile string
+	// AllowSpawn gives the subtask its own spawn tool, so it can start subtasks with tools from
+	// its registry. The runner drops it when the subtask would run at SubtaskMaxDepth.
+	AllowSpawn     bool
 	OutputSchema   string
 	ObserveProfile ObserveProfile
 	Registry       *tools.Registry
@@ -98,11 +104,23 @@ func SubtaskProfileError(profile string, err error) error {
 	return fmt.Errorf("model_profile %q: %w. Choose another profile, or omit model_profile to use the current model", strings.TrimSpace(profile), err)
 }
 
+// ValidateSubtaskStart reports an error when a run at ctx's depth may not start a subtask.
 func ValidateSubtaskStart(ctx context.Context) error {
-	if depth := SubtaskDepthFromContext(ctx); depth >= subtaskMaxDepth {
-		return fmt.Errorf("subtask depth limit reached (max=%d)", subtaskMaxDepth)
+	if !CanStartSubtask(ctx) {
+		return fmt.Errorf("subtask depth limit reached (max=%d)", SubtaskMaxDepth)
 	}
 	return nil
+}
+
+// CanStartSubtask reports whether a run at ctx's depth may start a subtask.
+func CanStartSubtask(ctx context.Context) bool {
+	return SubtaskDepthFromContext(ctx) < SubtaskMaxDepth
+}
+
+// SubtaskCanSpawn reports whether a subtask running with runCtx (the context from
+// PrepareSubtaskContext) gets a spawn tool for req.
+func SubtaskCanSpawn(runCtx context.Context, req SubtaskRequest) bool {
+	return req.AllowSpawn && req.RunFunc == nil && CanStartSubtask(runCtx)
 }
 
 func BuildSubtaskTask(task string, outputSchema string) string {

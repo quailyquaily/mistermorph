@@ -184,7 +184,7 @@ The error should tell the model it can choose another profile or omit `model_pro
 
 Fallbacks reuse `ResolveRouteWithProfileOverride` with the `main_loop` purpose: if the selected profile fails at request time, the subtask may fall back to the profiles in `routes.main_loop.fallback_profiles`, which can include the parent's model. There is no subagent-specific fallback config. Parameter and profile validation failures do not trigger model fallback.
 
-Selecting a profile for a subtask does not change the session's main profile. The existing tool whitelist, the one-level subtask depth limit and the result envelope keep their current contracts.
+Selecting a profile for a subtask does not change the session's main profile. The existing tool whitelist, the subtask depth limit (one level at the time; two levels since [feat_20261106_subtask_depth_two](feat_20261106_subtask_depth_two.md)) and the result envelope keep their current contracts.
 
 ## Implementation Scope
 

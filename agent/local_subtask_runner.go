@@ -113,6 +113,16 @@ func (r *localSubtaskRunner) runAgentSubtask(ctx context.Context, meta map[strin
 	if target.SystemPromptCacheControl != nil {
 		subOpts = append(subOpts, WithSystemPromptCacheControl(target.SystemPromptCacheControl))
 	}
+	canSpawn := SubtaskCanSpawn(ctx, req)
+	if canSpawn {
+		// A subtask's own subtasks select model profiles the same way the parent's do.
+		if r.engine.subtaskProfileResolver != nil {
+			subOpts = append(subOpts, WithSubtaskProfileResolver(r.engine.subtaskProfileResolver))
+		}
+		if r.engine.modelProfiles != nil {
+			subOpts = append(subOpts, WithModelProfiles(currentModelProfileLister(r.engine.modelProfiles, req.ModelProfile)))
+		}
+	}
 
 	subEngine := New(target.Client, req.Registry, Config{
 		MaxSteps:          r.engine.config.MaxSteps,
@@ -123,7 +133,7 @@ func (r *localSubtaskRunner) runAgentSubtask(ctx context.Context, meta map[strin
 		ToolCallTimeout:   r.engine.config.ToolCallTimeout,
 		ContextCompaction: r.engine.config.ContextCompaction,
 	}, r.engine.spec, append(subOpts, WithEngineToolsConfig(EngineToolsConfig{
-		SpawnEnabled: false,
+		SpawnEnabled: canSpawn,
 		CoderEnabled: false,
 	}))...)
 
@@ -137,6 +147,27 @@ func (r *localSubtaskRunner) runAgentSubtask(ctx context.Context, meta map[strin
 		return FailedSubtaskResult(taskID, err)
 	}
 	return SubtaskResultFromFinal(taskID, req.OutputSchema, final)
+}
+
+// currentModelProfileLister lists the parent's profiles for a subtask, with `current` on the
+// profile the subtask runs on. An empty profile keeps the parent's.
+func currentModelProfileLister(list ModelProfileLister, profile string) ModelProfileLister {
+	profile = strings.TrimSpace(profile)
+	if list == nil || profile == "" {
+		return list
+	}
+	return func(ctx context.Context) ([]ModelProfile, error) {
+		profiles, err := list(ctx)
+		if err != nil {
+			return profiles, err
+		}
+		out := make([]ModelProfile, len(profiles))
+		for i, p := range profiles {
+			p.Current = p.Name == profile
+			out[i] = p
+		}
+		return out, nil
+	}
 }
 
 func PrepareSubtaskContext(ctx context.Context, meta map[string]any) (string, context.Context, map[string]any) {

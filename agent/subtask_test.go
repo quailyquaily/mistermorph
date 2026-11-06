@@ -255,10 +255,10 @@ func TestLocalSubtaskRunnerRejectsNestedDepth(t *testing.T) {
 	engine := New(noopSubtaskClient{}, tools.NewRegistry(), Config{DefaultModel: "gpt-5.2"}, DefaultPromptSpec())
 	runner := &localSubtaskRunner{engine: engine}
 
-	ctx := WithSubtaskDepth(context.Background(), 1)
+	ctx := WithSubtaskDepth(context.Background(), SubtaskMaxDepth)
 	result, err := runner.RunSubtask(ctx, SubtaskRequest{
 		RunFunc: func(context.Context) (*SubtaskResult, error) {
-			t.Fatal("nested subtask should not execute callback")
+			t.Fatal("subtask beyond the depth limit should not execute callback")
 			return nil, nil
 		},
 	})

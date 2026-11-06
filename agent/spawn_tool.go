@@ -24,6 +24,7 @@ func (t *spawnTool) Name() string { return spawnToolName }
 func (t *spawnTool) Description() string {
 	return "Spawn a sub-agent to handle a self-contained sub-task. " +
 		"The sub-agent runs with its own context and a restricted set of tools you specify, and does not see this conversation. " +
+		"Include 'spawn' in its tools to let it start its own sub-agents; a sub-agent's sub-agent cannot spawn further. " +
 		"This call blocks until the sub-agent completes and returns a structured JSON envelope; sub-agents run one at a time."
 }
 
@@ -38,7 +39,7 @@ func (t *spawnTool) ParameterSchema() string {
 			"tools": map[string]any{
 				"type":        "array",
 				"items":       map[string]any{"type": "string"},
-				"description": "Whitelist of tool names the sub-agent can use. Cannot include 'spawn'.",
+				"description": "Whitelist of tool names the sub-agent can use. Include 'spawn' to let it start sub-agents with tools from this whitelist (ignored for a sub-agent's sub-agent).",
 			},
 			"model_profile": map[string]any{
 				"type":        "string",
@@ -75,13 +76,19 @@ func (t *spawnTool) Execute(ctx context.Context, params map[string]any) (string,
 	}
 
 	subRegistry := tools.NewRegistry()
+	allowSpawn := false
 	for _, raw := range rawTools {
 		name, ok := raw.(string)
 		if !ok {
 			continue
 		}
 		name = strings.TrimSpace(name)
-		if name == "" || strings.EqualFold(name, spawnToolName) {
+		if name == "" {
+			continue
+		}
+		// The sub-agent gets its own spawn tool from its runner, not this one.
+		if strings.EqualFold(name, spawnToolName) {
+			allowSpawn = true
 			continue
 		}
 		if t.deps.LookupTool == nil {
@@ -105,6 +112,7 @@ func (t *spawnTool) Execute(ctx context.Context, params map[string]any) (string,
 	req := SubtaskRequest{
 		Task:           task,
 		ModelProfile:   strings.TrimSpace(modelProfile),
+		AllowSpawn:     allowSpawn,
 		OutputSchema:   outputSchema,
 		ObserveProfile: NormalizeObserveProfile(observeProfile),
 		Registry:       subRegistry,
