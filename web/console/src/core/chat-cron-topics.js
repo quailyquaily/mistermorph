@@ -9,6 +9,13 @@ export function isCronTopicID(topicID) {
   return id.startsWith(CRON_TOPIC_PREFIX) && id.length > CRON_TOPIC_PREFIX.length;
 }
 
+// The sidebar view to show while topicID is open. A TODO item's topic is listed only in the TODO
+// runs view, so opening one, from a link or the address bar, turns that view on, never off; any
+// other topic leaves the view as it is.
+export function topicSidebarViewFor(topicID, view) {
+  return isCronTopicID(normalizeTopicID(topicID)) ? "cron" : view;
+}
+
 // The TODO items' topics among the loaded ones, the one with the latest run first.
 export function cronTopicsOf(topics) {
   return (Array.isArray(topics) ? topics : [])

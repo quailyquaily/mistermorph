@@ -72,7 +72,7 @@ import { rememberRecentWorkspaceDir } from "../core/recent-workspace-dirs";
 import { buildTreeRows, hasOwnTreePath, setTreeExpanded, setTreeItems } from "../core/workspace-tree";
 import WorkspaceDirPickerDialog from "../components/WorkspaceDirPickerDialog";
 import { topicIcon, useTopicMetadata } from "../core/topic-metadata";
-import { cronSidebarGroups, cronTopicModels, cronTopicModelText, cronTopicsOf, isCronTopicID } from "../core/chat-cron-topics";
+import { cronSidebarGroups, cronTopicModels, cronTopicModelText, cronTopicsOf, isCronTopicID, topicSidebarViewFor } from "../core/chat-cron-topics";
 import { activelyViewedTopic, createTopicActivityTracker, cronRunningCount, topicActivitySignature, TOPIC_ACTIVITY_DONE, TOPIC_ACTIVITY_PENDING } from "../core/topic-activity";
 import { contextMeter } from "../core/context-meter";
 import {
@@ -543,7 +543,8 @@ const ChatView = {
     const topicDeleteTarget = ref(null);
     const topicDeleting = ref(false);
     const topicDeleteError = ref("");
-    const topicSidebarView = ref(loadTopicSidebarView());
+    // Set before the topics load, so a TODO item's topic opened from a link is listed at once.
+    const topicSidebarView = ref(topicSidebarViewFor(route.params.topic_id, loadTopicSidebarView()));
     // Unfinished tasks and unviewed successful completions, by topic ID.
     const topicActivity = shallowRef(new Map());
     let topicActivityKey = "";
@@ -4544,7 +4545,8 @@ const ChatView = {
     );
     watch(
       () => routeTopicID.value,
-      () => {
+      (topicID) => {
+        topicSidebarView.value = topicSidebarViewFor(topicID, topicSidebarView.value);
         void syncTopicFromRoute().finally(() => {
           focusComposerOnDesktop();
         });
