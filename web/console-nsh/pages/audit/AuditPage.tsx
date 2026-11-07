@@ -38,8 +38,10 @@ import {
   type AuditGroup,
   type RiskType,
 } from "../../components/observe/audit-entries";
-import { AuditBadge, hint, t } from "../../components/observe/parts";
-import { Button, EmptyState, Icon, Page, ProgressBar, SidePane, Skeleton, StatusMark, TextField } from "../../components/ui";
+import { AuditBadge, hint, ObserveSection, t } from "../../components/observe/parts";
+import { createSlidingSelection, SCROLLBAR } from "../../components/motion";
+import { gutterX } from "../../components/frame/metrics";
+import { Button, EmptyState, Icon, Page, ProgressBar, SidePane, Skeleton, TextField } from "../../components/ui";
 
 const AUDIT_ITEMS_PER_PAGE = 50;
 const TASKS_PAGE_SIZE = 20;
@@ -50,12 +52,19 @@ type Stream = "audit" | "tasks";
 type PaneEntry = { kind: "audit"; key: string; item: AuditEntry } | { kind: "task"; key: string; item: any };
 type LedgerRow = { type: "group"; key: string; group: AuditGroup } | { type: "event"; key: string; item: AuditEntry };
 
+// Vue: the risk is meta text, red only when dangerous.
 const RISK_TEXT: Record<RiskType, string> = {
-  success: "text-ok",
-  warning: "text-warn-dark",
+  success: "text-subtle",
+  warning: "text-subtle",
   danger: "text-danger",
-  default: "text-muted-foreground",
+  default: "text-subtle",
 };
+/** The Vue index's width (`--workspace-sidebar-max-width`) and head height (`--workspace-head-height`). */
+const INDEX_WIDTH = 310;
+const HEAD_HEIGHT = 57;
+// A row's hover fill fades in after a short pause and out at once (styles/base.css).
+const ROW_TRANSITION = { transitionProperty: "colors", transitionDuration: 180, transitionTimingFunction: "ease" } as const;
+const ROW_HOVER = { transitionDelay: 60 };
 
 export function AuditPage() {
   const loading = signal(false);
@@ -133,7 +142,6 @@ export function AuditPage() {
     }
     return rows;
   });
-  const groupHeaderIndices = () => ledgerRows().flatMap((row, index) => (row.type === "group" ? [index] : []));
 
   // Events and tasks that appear at the top on a refresh flash briefly, as do tasks whose status
   // changed; the first load, other files, pages and agents do not.
@@ -533,25 +541,37 @@ export function AuditPage() {
 
   /* ---------- view ---------- */
 
-  function IndexItem(props: { title: string; subtitle?: string; selected: boolean; hint?: string; onPress: () => void; testID?: string }) {
+  /** An index row (Vue's workspace-sidebar-item): the selected one's fill is the gliding highlight. */
+  function IndexItem(props: {
+    title: string;
+    subtitle?: string;
+    selected: boolean;
+    hint?: string;
+    onPress: () => void;
+    onLayout?: (event: { bounds: { origin: { x: number; y: number }; size: { width: number; height: number } } }) => void;
+    testID?: string;
+  }) {
     return (
       <BaseButton
         selected={props.selected}
         onPress={() => props.onPress()}
+        onLayout={props.onLayout}
         accessibilityLabel={props.title}
         tooltip={hint(props.hint)}
         testID={props.testID}
-        class="flex-row items-center gap-2 rounded-(--radius) px-2.5 py-1.5 hover:bg-hover selected:bg-selection"
+        class={`flex-row items-center gap-2.5 rounded-(--radius) border border-transparent pb-[11px] pl-3.5 pr-[13px] pt-3 ${
+          props.selected ? "hover:bg-hover-faint" : "hover:bg-hover-soft"
+        }`}
+        style={ROW_TRANSITION}
+        hoverStyle={ROW_HOVER}
       >
-        <View class="flex-1 gap-0.5">
-          <Text class={`text-sm line-clamp-1 ${props.selected ? "font-medium text-foreground" : "text-subtle"}`}>{props.title}</Text>
+        <View class="flex-1 gap-1">
+          <Text class="text-sm leading-[16.1px] tracking-[-0.35px] text-foreground line-clamp-2">{props.title}</Text>
           <If when={props.subtitle}>
-            <Text class="text-xs text-muted-foreground line-clamp-1">{props.subtitle}</Text>
+            <Text class="font-mono text-xs leading-[16.2px] text-muted-foreground line-clamp-1">{props.subtitle}</Text>
           </If>
         </View>
-        <If when={props.selected}>
-          <StatusMark state="on" />
-        </If>
+        <View class="w-4" />
       </BaseButton>
     );
   }
@@ -587,16 +607,17 @@ export function AuditPage() {
     );
   }
 
-  function GroupHeader(props: { group: AuditGroup }) {
+  /** A run's head: "Run" and its id, the count at the right, on the stronger rule. */
+  function GroupHeader(props: { group: AuditGroup; first: boolean }) {
     return (
-      <View class="flex-row items-center justify-between gap-3 border-b border-line-faint bg-background px-1 py-1.5">
-        <View class="flex-1 flex-row items-center gap-2">
-          <Text class="font-mono text-xs uppercase tracking-wide text-muted-foreground">{t("audit_run")}</Text>
-          <Text class="flex-1 font-mono text-xs text-foreground line-clamp-1" tooltip={hint(props.group.title)}>
+      <View class={`flex-row items-baseline justify-between gap-3 border-b border-line py-2.5 ${props.first ? "" : "mt-6"}`}>
+        <View class="flex-1 flex-row items-baseline gap-2">
+          <Text class="text-xs text-subtle">{t("audit_run")}</Text>
+          <Text class="flex-1 font-mono text-xs text-subtle line-clamp-1" tooltip={hint(props.group.title)}>
             {props.group.title}
           </Text>
         </View>
-        <Text class="text-xs text-muted-foreground tabular-nums">{t("audit_page_count", { count: props.group.items.length })}</Text>
+        <Text class="text-xs text-subtle tabular-nums">{t("audit_page_count", { count: props.group.items.length })}</Text>
       </View>
     );
   }
@@ -607,61 +628,64 @@ export function AuditPage() {
         selected={isPaneEntry("audit", props.item.key)}
         onPress={() => openEntry(props.item)}
         accessibilityLabel={props.item.parsed ? props.item.primaryTitle : t("audit_raw")}
-        class={`flex-row items-center gap-2 border-b border-line-faint px-1 py-2 hover:bg-hover selected:bg-selection ${
-          isArrived(props.item.key) ? "bg-selection" : ""
+        class={`flex-row items-start gap-3 border-b border-line-soft px-1 py-[15px] hover:bg-hover selected:bg-selection ${
+          isArrived(props.item.key) ? "bg-selection-strong" : ""
         }`}
-        style={{ transitionProperty: "colors", transitionDuration: 600 }}
+        // An arrival's tint holds, then fades back (Vue's .is-arrived, 1.6 s).
+        style={{ transitionProperty: "colors", transitionDuration: isArrived(props.item.key) ? 0 : 1100 }}
       >
-        <View class="flex-1 gap-1">
-          <View class="flex-row flex-wrap items-center gap-2">
-            <Text class="text-sm font-semibold text-foreground">{props.item.parsed ? props.item.primaryTitle : t("audit_raw")}</Text>
+        <View class="flex-1 gap-1.5">
+          <View class="flex-row flex-wrap items-center gap-x-2.5 gap-y-1.5">
+            <Text class="text-sm font-semibold leading-[19.6px] text-foreground">{props.item.parsed ? props.item.primaryTitle : t("audit_raw")}</Text>
             <If when={props.item.parsed}>
               <EventBadges item={props.item} />
             </If>
           </View>
           <If when={!props.item.parsed || props.item.summary !== "-"}>
-            <Text class="text-sm text-subtle line-clamp-2">{props.item.parsed ? props.item.summary : props.item.raw}</Text>
+            <Text class="text-sm leading-normal text-subtle line-clamp-2">{props.item.parsed ? props.item.summary : props.item.raw}</Text>
           </If>
           <If when={props.item.hasReasons}>
-            <Text class="text-xs text-warn-dark line-clamp-2">{props.item.reasonsText}</Text>
+            <Text class="text-sm leading-normal text-foreground line-clamp-2">{props.item.reasonsText}</Text>
           </If>
           <If when={props.item.parsed}>
-            <View class="flex-row flex-wrap items-center gap-x-3 gap-y-0.5">
+            <View class="flex-row flex-wrap items-center gap-x-3 gap-y-1">
               <If when={props.item.tsText !== "-"}>
-                <Text class="text-xs text-muted-foreground tabular-nums" tooltip={hint(props.item.tsFull)}>
+                <Text class="font-mono text-xs leading-normal tracking-[0.02em] text-subtle tabular-nums" tooltip={hint(props.item.tsFull)}>
                   {props.item.tsText}
                 </Text>
               </If>
               <If when={props.item.toolName !== "-" && props.item.actionType !== "-"}>
-                <Text class="text-xs text-muted-foreground">{props.item.actionType}</Text>
+                <Text class="text-xs leading-normal text-subtle">{props.item.actionType}</Text>
               </If>
               <If when={props.item.stepText !== "-"}>
-                <Text class="text-xs text-muted-foreground tabular-nums">
+                <Text class="text-xs leading-normal text-subtle tabular-nums">
                   {t("audit_step")} {props.item.stepText}
                 </Text>
               </If>
             </View>
           </If>
         </View>
-        <Icon name="PhCaretRight" size={14} color="muted-foreground" />
+        <View class="mt-0.75">
+          <Icon name="PhCaretRight" size={14} color="subtle" />
+        </View>
       </BaseButton>
     );
   }
 
   function AuditLedger() {
     return (
-      <View class="flex-1 gap-2">
+      <View class="flex-1">
         <If when={err()}>
           <ErrorNotice text={err()} />
         </If>
         <If when={updatedAt()}>
-          <View class="flex-row flex-wrap justify-between gap-2">
-            <Text class="text-xs text-muted-foreground tabular-nums">
+          <View class={`justify-between gap-x-4 gap-y-1 py-3.5 ${isMobile() ? "" : "flex-row flex-wrap"}`}>
+            <Text class="text-xs leading-normal text-subtle tabular-nums">
               {filterText()
                 ? t("audit_filtered_count", { count: filteredItems().length, total: auditItems().length })
                 : t("audit_page_count", { count: auditItems().length })}
             </Text>
-            <Text class="text-xs text-muted-foreground tabular-nums">{t("audit_updated", { value: updatedAt() })}</Text>
+            <Text class="text-xs leading-normal text-subtle tabular-nums">{t("audit_updated", { value: updatedAt() })}</Text>
           </View>
         </If>
         <If when={loading() && auditItems().length === 0}>
@@ -694,8 +718,8 @@ export function AuditPage() {
             <List
               each={ledgerRows()}
               keyExtractor={(row) => row.key}
-              estimatedItemSize={72}
-              stickyHeaderIndices={groupHeaderIndices()}
+              estimatedItemSize={110}
+              scrollbar={SCROLLBAR}
               class="flex-1"
               contentClass="pb-4"
               testID="audit-feed"
@@ -705,7 +729,10 @@ export function AuditPage() {
                   when={row().type === "group"}
                   else={<EventRow item={(row() as Extract<LedgerRow, { type: "event" }>).item} />}
                 >
-                  <GroupHeader group={(row() as Extract<LedgerRow, { type: "group" }>).group} />
+                  <GroupHeader
+                    group={(row() as Extract<LedgerRow, { type: "group" }>).group}
+                    first={ledgerRows()[0]?.key === row().key}
+                  />
                 </If>
               )}
             </List>
@@ -717,32 +744,40 @@ export function AuditPage() {
 
   function TaskLedger() {
     return (
-      <View class="flex-1 gap-2">
+      <View class="flex-1">
         <If when={taskErr()}>
-          <ErrorNotice text={taskErr()} />
+          <View class="py-3.5">
+            <ErrorNotice text={taskErr()} />
+          </View>
         </If>
-        <Scroll class="flex-1" contentClass="pb-4" testID="audit-task-feed">
+        <Scroll class="flex-1" scrollbar={SCROLLBAR} contentClass="pb-4" testID="audit-task-feed">
           <Each of={taskItems()} key={(item) => String(item.id)}>
             {(item) => (
               <BaseButton
                 selected={isPaneEntry("task", String(item().id))}
                 onPress={() => void openTask(item())}
                 accessibilityLabel={taskTitle(item())}
-                class={`flex-row items-center gap-2 border-b border-line-faint px-1 py-2 hover:bg-hover selected:bg-selection ${
-                  isArrived(`task:${item().id}`) ? "bg-selection" : ""
-                }`}
+                // Desktop: one line, the title at the left, status, source and time at the right.
+                class={`gap-3 border-b border-line-soft px-1 hover:bg-hover selected:bg-selection ${
+                  isMobile() ? "flex-row items-start py-[15px]" : "flex-row items-center py-2.25"
+                } ${isArrived(`task:${item().id}`) ? "bg-selection-strong" : ""}`}
+                style={{ transitionProperty: "colors", transitionDuration: isArrived(`task:${item().id}`) ? 0 : 1100 }}
               >
-                <View class="flex-1 gap-1">
-                  <Text class="text-sm font-semibold text-foreground line-clamp-2">{taskTitle(item())}</Text>
-                  <View class="flex-row flex-wrap items-center gap-x-3 gap-y-0.5">
+                <View class={`flex-1 ${isMobile() ? "gap-1.5" : "flex-row items-center gap-4"}`}>
+                  <Text class={`text-sm leading-[19.6px] text-foreground ${isMobile() ? "font-semibold line-clamp-2" : "flex-1 font-medium line-clamp-1"}`}>
+                    {taskTitle(item())}
+                  </Text>
+                  <View class={`flex-row items-center gap-x-3 gap-y-1 ${isMobile() ? "flex-wrap" : ""}`}>
                     <AuditBadge badge={taskStatusBadge(item())} label={taskStatusLabel(item())} />
-                    <Text class="text-xs text-muted-foreground">{taskSourceLabel(item())}</Text>
-                    <Text class="text-xs text-muted-foreground tabular-nums" tooltip={hint(formatTime(item().created_at))}>
+                    <Text class="text-xs leading-normal text-subtle">{taskSourceLabel(item())}</Text>
+                    <Text class="font-mono text-xs leading-normal tracking-[0.02em] text-subtle tabular-nums" tooltip={hint(formatTime(item().created_at))}>
                       {formatShortTime(item().created_at)}
                     </Text>
                   </View>
                 </View>
-                <Icon name="PhCaretRight" size={14} color="muted-foreground" />
+                <View class={isMobile() ? "mt-0.75" : ""}>
+                  <Icon name="PhCaretRight" size={14} color="subtle" />
+                </View>
               </BaseButton>
             )}
           </Each>
@@ -760,10 +795,10 @@ export function AuditPage() {
 
   function DetailField(props: { label: string; value: string; mono?: boolean; wide?: boolean }) {
     return (
-      <View class={`gap-0.5 ${props.wide ? "w-full" : "min-w-28 flex-1"}`}>
-        <Text class="font-mono text-xs uppercase tracking-wide text-muted-foreground">{props.label}</Text>
+      <View class="gap-1" style={{ width: props.wide || isMobile() ? "100%" : "47%" }}>
+        <Text class="text-xs leading-normal text-subtle">{props.label}</Text>
         <View selectable>
-          <Text class={`text-sm text-foreground ${props.mono ? "font-mono" : ""}`}>{props.value}</Text>
+          <Text class={`text-sm leading-[22.4px] text-foreground ${props.mono ? "font-mono" : ""}`}>{props.value}</Text>
         </View>
       </View>
     );
@@ -771,8 +806,8 @@ export function AuditPage() {
 
   function DetailSection(props: { title: string; children?: JSX.Element }) {
     return (
-      <View class="gap-1.5">
-        <Text class="text-xs font-semibold uppercase tracking-wide text-subtle">{props.title}</Text>
+      <View class="gap-1">
+        <Text class="text-xs leading-normal text-subtle">{props.title}</Text>
         {props.children}
       </View>
     );
@@ -808,7 +843,7 @@ export function AuditPage() {
                 <EventBadges item={props.item} />
               </View>
             </If>
-            <View class="flex-row flex-wrap gap-x-4 gap-y-3">
+            <View class="flex-row flex-wrap justify-between gap-y-3.5">
               <If when={props.item.eventID !== "-"}>
                 <DetailField label={t("audit_event_id")} value={props.item.eventID} mono wide />
               </If>
@@ -868,7 +903,7 @@ export function AuditPage() {
           <View selectable>
             <Text class="text-sm text-foreground">{String(props.item.task ?? "")}</Text>
           </View>
-          <View class="flex-row flex-wrap gap-x-4 gap-y-3">
+          <View class="flex-row flex-wrap justify-between gap-y-3.5">
             <DetailField label={t("tasks_task_id_label")} value={String(props.item.id ?? "")} mono wide />
             <DetailField label={t("stats_model")} value={taskModelMeta(props.item)} />
             <DetailField label={t("tasks_runtime_label")} value={taskRuntimeMeta(props.item)} />
@@ -887,89 +922,120 @@ export function AuditPage() {
     );
   }
 
+  // One highlight glides between the index's rows (Vue's v-sliding-selection).
+  const indexKey = () => (isTasks() ? "tasks" : selectedStream() === "audit" && selectedFile() ? `file:${selectedFile()}` : null);
+  const indexSelection = createSlidingSelection(() => indexKey());
+  const fileRowKey = (item: AuditFileItem) => `file:${item.value}`;
+
   return (
     <Page title={t("audit_title")} hideBar scroll={false} testID="audit-page">
       <View class="flex-1 flex-row">
         <If when={showIndexPane()}>
           <View
-            class={`${isMobile() ? "flex-1" : "w-60 border-r border-line-faint"} bg-sidebar`}
+            class={`${isMobile() ? "flex-1" : ""} bg-sidebar`}
+            style={isMobile() ? undefined : { width: INDEX_WIDTH }}
             accessibilityLabel={t("audit_title")}
             testID="audit-index"
           >
-            <View class="border-b border-line-faint px-4 py-3">
-              <Text class="font-mono text-xs uppercase tracking-wide text-muted-foreground" role="header">
+            {/* The head: the page's title, as tall as the page bar (Vue's workspace-sidebar-head). */}
+            <View class="flex-row items-center" style={{ height: HEAD_HEIGHT, paddingLeft: gutterX(), paddingRight: gutterX() }}>
+              <Text class="flex-1 text-xl font-normal leading-[24px] tracking-[-0.6px] text-foreground line-clamp-1" role="header">
                 {t("audit_title")}
               </Text>
             </View>
-            <Scroll class="flex-1" contentClass="gap-1 p-2">
+            <Scroll class="flex-1" scrollbar={SCROLLBAR} contentClass={isMobile() ? "py-4" : "p-4"}>
               <If when={loading() && fileItems().length === 0}>
                 <ProgressBar indeterminate label={t("runtime_loading")} />
               </If>
               <If when={err() && isMobile() && !showLedgerPane()}>
-                <ErrorNotice text={err()} />
+                <View class="mx-4 mb-3">
+                  <ErrorNotice text={err()} />
+                </View>
               </If>
-              <Each of={currentFiles()} key={(item) => item.key}>
-                {(item) => (
-                  <IndexItem
-                    title={item().title}
-                    selected={selectedStream() === "audit" && item().value === selectedFile()}
-                    onPress={() => void onFileChange(item())}
-                    testID={`audit-file-${item().name}`}
-                  />
-                )}
-              </Each>
-              <If when={!loading() && !err() && fileItems().length === 0}>
-                <Text class="px-2.5 py-1.5 text-xs text-muted-foreground">{t("audit_no_file")}</Text>
-              </If>
-              <If when={archivedFiles().length > 0}>
-                <BaseButton
-                  onPress={() => archivesOpen.update((open) => !open)}
-                  accessibilityLabel={t("audit_archives")}
-                  selected={archivesOpen()}
-                  testID="audit-archives"
-                  class="mt-2 flex-row items-center gap-1.5 rounded-(--radius) px-2 py-1 hover:bg-hover"
-                >
-                  <View style={{ transform: [{ rotate: archivesOpen() ? 90 : 0 }], transitionProperty: "transform", transitionDuration: 150 }}>
-                    <Icon name="PhCaretRight" size={12} color="muted-foreground" />
-                  </View>
-                  <Text class="flex-1 font-mono text-xs uppercase tracking-wide text-muted-foreground">{t("audit_archives")}</Text>
-                  <Text class="text-xs text-muted-foreground tabular-nums">{String(archivedFiles().length)}</Text>
-                </BaseButton>
-                <If when={archivesOpen()}>
-                  <Each of={archivedFiles()} key={(item) => item.key}>
-                    {(item) => (
-                      <IndexItem
-                        title={item().title}
-                        subtitle={item().subtitle}
-                        hint={item().name}
-                        selected={selectedStream() === "audit" && item().value === selectedFile()}
-                        onPress={() => void onFileChange(item())}
-                        testID={`audit-file-${item().name}`}
-                      />
-                    )}
-                  </Each>
+              <View class="relative gap-0.5">
+                <indexSelection.Highlight class="rounded-(--radius) bg-selection" />
+                <Each of={currentFiles()} key={(item) => item.key}>
+                  {(item) => (
+                    <IndexItem
+                      title={item().title}
+                      selected={selectedStream() === "audit" && item().value === selectedFile()}
+                      onPress={() => void onFileChange(item())}
+                      onLayout={indexSelection.track(fileRowKey(item()))}
+                      testID={`audit-file-${item().name}`}
+                    />
+                  )}
+                </Each>
+                <If when={!loading() && !err() && fileItems().length === 0}>
+                  <Text class="px-3.5 py-1.5 text-xs text-subtle">{t("audit_no_file")}</Text>
                 </If>
-              </If>
-              <View class="my-2 h-px bg-line-faint" />
-              <IndexItem title={t("tasks_title")} selected={isTasks()} onPress={selectTaskStream} testID="audit-tasks" />
+                <If when={archivedFiles().length > 0}>
+                  {/* Vue's workspace-sidebar-divider as a disclosure: caret, mono label, count, rule. */}
+                  <BaseButton
+                    onPress={() => archivesOpen.update((open) => !open)}
+                    accessibilityLabel={t("audit_archives")}
+                    selected={archivesOpen()}
+                    testID="audit-archives"
+                    class="mt-2 flex-row items-center gap-2.5 px-3.5 pb-1 pt-2.5"
+                  >
+                    <View style={{ transform: [{ rotate: archivesOpen() ? 90 : 0 }], transitionProperty: "transform", transitionDuration: 180 }}>
+                      <Icon name="PhCaretRight" size={12} color="muted-foreground" />
+                    </View>
+                    <Text class="font-mono text-[11px] font-medium uppercase leading-[15.4px] tracking-[1.32px] text-muted-foreground">
+                      {t("audit_archives")}
+                    </Text>
+                    <Text class="font-mono text-[11px] leading-[15.4px] text-muted-foreground tabular-nums">{String(archivedFiles().length)}</Text>
+                    <View class="h-px flex-1 bg-linear-to-r from-line-soft to-transparent" />
+                  </BaseButton>
+                  <If when={archivesOpen()}>
+                    <Each of={archivedFiles()} key={(item) => item.key}>
+                      {(item) => (
+                        <IndexItem
+                          title={item().title}
+                          subtitle={item().subtitle}
+                          hint={item().name}
+                          selected={selectedStream() === "audit" && item().value === selectedFile()}
+                          onPress={() => void onFileChange(item())}
+                          onLayout={indexSelection.track(fileRowKey(item()))}
+                          testID={`audit-file-${item().name}`}
+                        />
+                      )}
+                    </Each>
+                  </If>
+                </If>
+                {/* Between the logs and Tasks: the divider's rule alone. */}
+                <View class="my-2.5 h-px bg-linear-to-r from-line-soft to-transparent" />
+                <IndexItem
+                  title={t("tasks_title")}
+                  selected={isTasks()}
+                  onPress={selectTaskStream}
+                  onLayout={indexSelection.track("tasks")}
+                  testID="audit-tasks"
+                />
+              </View>
             </Scroll>
           </View>
         </If>
 
         <If when={showLedgerPane()}>
-          <View class="flex-1 gap-3 p-4" testID="audit-ledger">
-            <View class="flex-row items-center gap-2">
+          {/* The open log: a boxed section the height of the workbench; its toolbar over the entries. */}
+          <ObserveSection
+            variant="boxed"
+            gap={0}
+            padding={16}
+            class="flex-1"
+            bodyClass="flex-1"
+            title={isTasks() ? t("tasks_title") : selectedFileTitle()}
+            meta={
+              <If when={!isTasks() && selectedFileItem()?.subtitle}>
+                <Text class="text-xs leading-[17.4px] text-muted-foreground line-clamp-1">{selectedFileItem()?.subtitle}</Text>
+              </If>
+            }
+            lead={
               <If when={mobileShowBack()}>
                 <Button variant="plain" size="xs" iconOnly icon="PhArrowLeft" title={t("audit_title")} onPress={() => mobileLedgerVisible.set(false)} />
               </If>
-              <View class="flex-1 gap-0.5">
-                <Text class="text-lg font-semibold text-foreground line-clamp-1" role="header">
-                  {isTasks() ? t("tasks_title") : selectedFileTitle()}
-                </Text>
-                <If when={!isTasks() && selectedFileItem()?.subtitle}>
-                  <Text class="text-xs text-muted-foreground">{selectedFileItem()?.subtitle}</Text>
-                </If>
-              </View>
+            }
+            actions={
               <If when={!isTasks() && pageValue() > 1}>
                 <Button
                   variant="plain"
@@ -980,29 +1046,37 @@ export function AuditPage() {
                   testID="audit-latest"
                 />
               </If>
-            </View>
-            <View class="flex-row flex-wrap items-center justify-between gap-2">
+            }
+            style={isMobile() ? { margin: 12 } : { marginTop: 8, marginRight: 8, marginBottom: 8, marginLeft: 16 }}
+            flush
+            testID="audit-ledger"
+          >
+            <View
+              class={`flex-row items-center justify-between border-b border-line-soft ${isMobile() ? "flex-wrap gap-1 px-3 py-2.5" : "gap-3 px-4 py-3"}`}
+            >
               <If
                 when={!isTasks()}
-                else={<Text class="text-xs text-muted-foreground tabular-nums">{t("audit_page_count", { count: taskItems().length })}</Text>}
+                else={<Text class="text-xs text-subtle tabular-nums">{t("audit_page_count", { count: taskItems().length })}</Text>}
               >
-                <View class="min-w-48 flex-1 flex-row items-center gap-2">
+                <View class={`flex-row flex-wrap items-center gap-x-3 gap-y-1.5 ${isMobile() ? "w-full" : "flex-1"}`}>
                   <TextField
                     value={filterText()}
                     onChange={(value) => filterText.set(value)}
                     placeholder={t("audit_filter_placeholder")}
                     accessibilityLabel={t("audit_filter_placeholder")}
-                    leadingIcon="PhMagnifyingGlass"
-                    class="max-w-md flex-1"
+                    size="xs"
+                    class={isMobile() ? "w-full" : "max-w-85 flex-1"}
                     testID="audit-filter"
                   />
-                  <Text class="text-xs text-muted-foreground">{t("audit_filter_scope")}</Text>
+                  <If when={!isMobile()}>
+                    <Text class="text-xs text-subtle">{t("audit_filter_scope")}</Text>
+                  </If>
                 </View>
               </If>
-              <View class="flex-row items-center gap-1" accessibilityLabel={t("audit_pagination")}>
+              <View class="ml-auto flex-row items-center gap-1" accessibilityLabel={t("audit_pagination")}>
                 <Button
                   variant="plain"
-                  size="sm"
+                  size={isMobile() ? "md" : "sm"}
                   iconOnly
                   icon="PhArrowLeft"
                   title={t("audit_newer")}
@@ -1010,12 +1084,12 @@ export function AuditPage() {
                   onPress={() => (untracked(isTasks) ? prevTaskPage() : void goPrev())}
                   testID="audit-newer"
                 />
-                <Text class="text-xs text-muted-foreground tabular-nums">
+                <Text class="min-w-13 text-center text-xs text-subtle tabular-nums">
                   {t("audit_page_number", { page: isTasks() ? taskPageIndex() + 1 : pageValue() })}
                 </Text>
                 <Button
                   variant="plain"
-                  size="sm"
+                  size={isMobile() ? "md" : "sm"}
                   iconOnly
                   icon="PhArrowRight"
                   title={t("audit_older")}
@@ -1025,13 +1099,17 @@ export function AuditPage() {
                 />
               </View>
             </View>
-            <If when={isTasks() ? taskLoading() : loading()}>
-              <ProgressBar indeterminate label={t("runtime_loading")} />
-            </If>
-            <If when={!isTasks()} else={<TaskLedger />}>
-              <AuditLedger />
-            </If>
-          </View>
+            <View class="h-0.75 overflow-hidden">
+              <If when={isTasks() ? taskLoading() : loading()}>
+                <ProgressBar indeterminate label={t("runtime_loading")} />
+              </If>
+            </View>
+            <View class={`flex-1 ${isMobile() ? "px-3" : "px-4"}`}>
+              <If when={!isTasks()} else={<TaskLedger />}>
+                <AuditLedger />
+              </If>
+            </View>
+          </ObserveSection>
         </If>
 
         <SidePane open={pane() !== null} onClose={closePane} sheet={isMobile()} label={paneLabel()}>

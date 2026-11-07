@@ -4,10 +4,11 @@
 // agents it opens a dialog with a filter instead. Folded, the sidebar shows the avatar only.
 import type { ImageAsset, JSX } from "nsh";
 import { computed, Image, Scroll, signal, Text, View } from "nsh";
-import { Button as BaseButton, Menu, MenuItem, MenuSeparator, Tooltip } from "nsh/base";
+import { Button as BaseButton, Menu, MenuItem, MenuSeparator } from "nsh/base";
 import { translate } from "../../lib/core/context.js";
 import type { EndpointItem } from "../../lib/shell";
-import { Icon, Modal, TextField } from "../ui";
+import { FadeText } from "../motion/FadeText";
+import { Icon, Modal, TextField, Tip } from "../ui";
 
 const t = translate as (key: string, vars?: Record<string, unknown>) => string;
 
@@ -222,29 +223,33 @@ export function AgentSwitcher(props: AgentSwitcherProps) {
 
   const trigger = (): JSX.Element => (
     <View
-      class={`h-full flex-row items-center gap-2 ${props.compact && !open() ? "justify-center px-0" : "px-3"} ${
-        open() ? "bg-card" : "hover:bg-hover"
+      class={`h-14 flex-row items-center gap-2 ${props.compact && !open() ? "justify-center px-0" : "px-[13px]"} ${
+        open() ? "bg-card" : "hover:bg-hover-soft"
       }`}
+      style={{ transitionProperty: "colors", transitionDuration: 140, transitionTimingFunction: "cubic-bezier(0.65, 0, 0.35, 1)" }}
     >
       <AgentAvatar image={triggerAvatar()} size={24} />
       <If when={!props.compact || open()}>
-        <Text class="flex-1 text-sm font-semibold text-foreground line-clamp-1">{triggerName()}</Text>
-        <View style={{ transform: [{ rotate: open() ? "180deg" : "0deg" }] }}>
-          <Icon name="PhCaretDown" size={14} color="subtle" />
+        <FadeText text={triggerName()} class="flex-1 text-xs font-semibold leading-[14.4px] text-foreground" />
+        <View
+          class="opacity-75"
+          style={{
+            rotate: open() ? "180deg" : "0deg",
+            transitionProperty: "transform",
+            transitionDuration: 180,
+            transitionTimingFunction: "cubic-bezier(0.65, 0, 0.35, 1)",
+          }}
+        >
+          <Icon name="PhCaretDown" size={14} color="foreground" />
         </View>
       </If>
     </View>
   );
 
-  const triggerTooltip = () =>
-    props.compact ? (
-      <Tooltip class="bg-foreground px-2 py-1">
-        <Text class="text-xs text-background">{triggerName()}</Text>
-      </Tooltip>
-    ) : undefined;
+  const triggerTooltip = () => (props.compact ? <Tip text={triggerName()} placement="right" /> : undefined);
 
   return (
-    <View class={`h-12 border-b border-line-soft ${props.class ?? ""}`} testID="agent-switcher">
+    <View class={`h-[57px] border-b border-line-soft ${props.class ?? ""}`} testID="agent-switcher">
       <If
         when={longMode()}
         else={
@@ -257,7 +262,7 @@ export function AgentSwitcher(props: AgentSwitcherProps) {
             popupClass="w-68 max-h-96 border border-line-soft bg-card shadow-lg"
             trigger={
               <View
-                class="h-full"
+                class="h-14"
                 role="button"
                 accessibilityLabel={t("endpoint_switcher_label")}
                 accessibilityState={{ expanded: menuOpen() }}
@@ -318,7 +323,7 @@ export function AgentSwitcher(props: AgentSwitcherProps) {
           accessibilityLabel={t("endpoint_switcher_label")}
           testID="agent-switcher-trigger"
           tooltip={triggerTooltip()}
-          class="h-full"
+          class="h-14"
         >
           {trigger()}
         </BaseButton>

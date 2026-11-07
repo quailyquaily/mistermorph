@@ -12,6 +12,7 @@ import { durationSeconds, formatDuration, splitDuration } from "../../lib/core/d
 import { pickDesktopDirectory } from "../../lib/core/desktop-runtime.js";
 import { ROW_MODES } from "../../lib/core/setting-rows.js";
 import { useRevealRow } from "../settings-page/reveal";
+import { isMobile } from "../../lib/shell";
 import { Icon } from "../ui";
 
 /** A choice in a settings list. `hint` shows beside the title, `one` is a unit's singular title. */
@@ -37,23 +38,27 @@ export interface QuantityUnit {
  */
 export const SettingsCanBrowsePaths = context<() => boolean>(() => false);
 
+/** Inside a side pane: forms take one field per row (`.app-side-pane .settings-form-grid`). */
+export const InSidePane = context<boolean>(false);
+
 /* ---------- the box and its parts ---------- */
 
 /** The classes of a field's box. */
 export function boxClass(state: { disabled?: boolean; invalid?: boolean; open?: boolean } = {}) {
-  return `min-h-9 flex-row items-stretch overflow-hidden rounded-(--radius) border bg-field ${
-    state.invalid ? "border-danger" : state.open ? "border-ring" : "border-input hover:border-ring"
+  // SettingFields.css `.sf-box`: 44pt high, 2pt corners, a hairline that firms up on hover and focus.
+  return `h-11 flex-row items-stretch overflow-hidden rounded-(--radius) border bg-field transition-colors duration-120 ${
+    state.invalid ? "border-danger/70" : state.open ? "border-blue/60" : "border-input hover:border-ink/32"
   } ${state.disabled ? "opacity-60" : ""}`;
 }
 
 const INPUT_CLASS = "flex-1 min-w-0 px-3 py-2 text-sm text-foreground placeholder:text-placeholder";
-const PART_CLASS = "flex-row items-center gap-1.5 px-3 hover:bg-hover active:bg-selection disabled:opacity-50";
+const PART_CLASS = "flex-row items-center gap-1.5 px-3 hover:bg-blue/6 active:bg-blue/10 focus:bg-blue/10 disabled:opacity-50";
 const MENU_POPUP = "min-w-40 max-h-80 rounded-(--radius) border border-border bg-popover py-1 shadow-md";
 const MENU_ITEM = "flex-row items-center justify-between gap-3 px-3 py-1.5 hover:bg-hover focus:bg-hover selected:bg-selection disabled:opacity-45";
 
 /** The hairline between two parts of a box. */
 function Sep() {
-  return <View class="w-px bg-line-faint" accessibilityElementsHidden />;
+  return <View class="h-5 w-px self-center bg-input" accessibilityElementsHidden />;
 }
 
 /** A pressable part of a box: a unit, Browse, a remove button. */
@@ -97,9 +102,16 @@ function Part(props: {
  * A settings form's grid (the Vue console's `.settings-form-grid`): fields two to a row where there
  * is room, a wide field on a row of its own.
  */
-export function SettingFieldGrid(props: { children?: JSX.Element; class?: string; testID?: string }) {
+export function SettingFieldGrid(props: { children?: JSX.Element; class?: string; testID?: string; tight?: boolean }) {
+  const single = InSidePane() || false;
+  // Two equal columns, 16pt apart (`.config-settings-fields`); `tight`: 12pt (`.settings-form-grid`,
+  // the LLM form). A wide field spans the row (`col-span-full`). One column (a plain stack, where
+  // every field takes the width) on phones and in side panes.
   return (
-    <View class={`flex-row flex-wrap gap-x-4 gap-y-4 ${props.class ?? ""}`} testID={props.testID}>
+    <View
+      class={`${single || isMobile() ? "" : "grid grid-cols-2"} ${props.tight ? "gap-3" : "gap-4"} ${props.class ?? ""}`}
+      testID={props.testID}
+    >
       {props.children}
     </View>
   );
@@ -128,20 +140,23 @@ export function SettingField(props: {
   return (
     <View
       ref={reveal.ref}
+      style={reveal.style()}
       testID={props.testID}
-      class={`min-w-0 gap-1.5 rounded-(--radius) ${props.wide ? "w-full" : "grow basis-64"} ${props.inactive ? "opacity-60" : ""} ${
-        reveal.marked() ? "bg-selection" : ""
+      class={`min-w-0 gap-[5px] rounded-(--radius) ${props.wide ? "col-span-full" : ""} ${props.inactive ? "opacity-55" : ""} ${
+        reveal.ringed() ? "ring-2 ring-blue" : ""
       } ${props.class ?? ""}`}
     >
       <If when={props.label || props.labelRight}>
-        <View class="flex-row items-center justify-between gap-2">
-          <Text class="text-xs font-medium text-subtle">{props.label ?? ""}</Text>
-          {props.labelRight}
+        <View class="flex-row items-center justify-between gap-3">
+          <Text class="min-w-0 shrink text-sm font-medium leading-[18.9px] text-foreground">{props.label ?? ""}</Text>
+          <If when={props.labelRight}>
+            <View class="shrink-0">{props.labelRight}</View>
+          </If>
         </View>
       </If>
       {props.children}
       <If when={props.note}>
-        <Text class={`text-xs text-muted-foreground ${props.noteItalic ? "italic" : ""}`}>{props.note}</Text>
+        <Text class={`text-xs leading-normal text-muted-foreground ${props.noteItalic ? "italic" : ""}`}>{props.note}</Text>
       </If>
     </View>
   );
@@ -749,8 +764,8 @@ export function SettingPercent(props: SettingPercentProps) {
     props.onChange?.(String(number / 100));
   };
   return (
-    <View class="min-h-9 flex-row items-center gap-3">
-      <View class="flex-1">
+    <View class="min-h-11 w-full flex-row items-center gap-4">
+      <View class="min-w-0 flex-1">
         <Slider
           value={percent() ?? 0}
           min={0}
@@ -762,18 +777,18 @@ export function SettingPercent(props: SettingPercentProps) {
           onChange={({ value }) => update(Array.isArray(value) ? value[0] : value)}
           class="disabled:opacity-50"
           trackClass="h-6 justify-center"
-          indicatorClass="h-1 rounded-full bg-line"
-          rangeClass="rounded-full bg-blue"
-          thumbClass="size-4 rounded-full border border-blue bg-card focus:border-ring active:bg-selection"
+          indicatorClass="h-1 rounded-[2px] bg-input"
+          rangeClass="rounded-[2px] bg-blue"
+          thumbClass="size-4 rounded-full border-2 border-blue bg-card shadow-[0_1px_3px_rgba(24,24,50,0.18)] transition-transform duration-120 hover:scale-115 focus:scale-115 focus:shadow-[0_0_0_4px_rgba(66,111,158,0.16)]"
         />
         <View class="flex-row justify-between px-px" accessibilityElementsHidden>
-          <Each of={[0, 25, 50, 75, 100]}>{() => <View class="h-1 w-px bg-line" />}</Each>
+          <Each of={[0, 25, 50, 75, 100]}>{() => <View class="h-1 w-px bg-input" />}</Each>
         </View>
       </View>
-      <View class="w-14 flex-row items-baseline justify-end">
-        <If when={percent() !== null} else={<Text class="font-mono text-sm text-muted-foreground">—</Text>}>
-          <Text class="font-mono text-sm text-foreground">{String(percent())}</Text>
-          <Text class="font-mono text-xs text-muted-foreground">%</Text>
+      <View class="min-w-14 flex-row items-baseline justify-end">
+        <If when={percent() !== null} else={<Text class="font-mono text-base text-muted-foreground">—</Text>}>
+          <Text class="font-mono text-base font-semibold tabular-nums text-foreground">{String(percent())}</Text>
+          <Text class="ml-px font-mono text-xs text-muted-foreground">%</Text>
         </If>
       </View>
     </View>

@@ -2,13 +2,16 @@
 // and the picked contact's card: avatar, the owner switch, its connections (copyable handles), the
 // agent's memories about it, its activity, and its YAML for editing. On a phone the index and the
 // card take turns, with a back button.
-import { batch, computed, effect, Image, List, Scroll, signal, Text, untracked, View } from "nsh";
+import { batch, computed, effect, Image, List, Scroll, signal, Text, untracked, View, windowSize } from "nsh";
 import {
   Blocks,
   DetailCard,
+  gutterX,
   IndexColumn,
+  IndexRow,
   InlineNotice,
   MobileBar,
+  MoreTrigger,
   Note,
   SearchField,
   SubHeading,
@@ -16,7 +19,8 @@ import {
   t,
 } from "../../components/knowledge/parts";
 import { ContactAvatar } from "../../components/shared/ContactAvatar";
-import { Button, DropdownMenu, Icon, MessageDialog, Page, TextField } from "../../components/ui";
+import { Button, DropdownMenu, Icon, MessageDialog, Page, TextField, type IconName } from "../../components/ui";
+import { FadeText, SCROLLBAR } from "../../components/motion";
 import { agentLinkAvatarURL } from "../../lib/core/agent-link-avatar.js";
 import { endpointState, formatShortTime, runtimeApiFetch } from "../../lib/core/context.js";
 import { endpointRoutePath } from "../../lib/core/endpoint-routes.js";
@@ -25,7 +29,6 @@ import { copyText } from "../../lib/platform";
 import { locationOf, navigate } from "../../lib/router";
 import { isMobile } from "../../lib/shell";
 import { useContactsStore } from "../../lib/stores/contactsStore.js";
-import { Button as BaseButton } from "nsh/base";
 import {
   channelHandles,
   channelLabel,
@@ -46,26 +49,56 @@ const contactID = (item: Contact | null | undefined) => String(item?.contact_id 
 
 /** The avatar with its kind badge (a person or an agent) at its corner. */
 function KindAvatar(props: { item: Contact; size?: "list" | "detail" }) {
+  // The badge: a 14pt white disc with a 10pt glyph at the avatar's lower right (1pt past its
+  // edge); the avatar is cut away 2pt clear of it (Vue .contacts-kind-badge and its mask).
+  const box = () => (props.size === "detail" ? 64 : 40);
+  const centre = () => box() - 6;
   return (
-    <View class="relative" accessibilityElementsHidden>
+    <View class="relative" accessibilityElementsHidden style={{ width: box(), height: box() }}>
       <ContactAvatar
         item={props.item}
         imageURL={agentLinkAvatarURL(props.item, endpointState.items)}
         name={displayName(props.item)}
         endpointRef={endpointState.selectedRef}
         size={props.size ?? "list"}
+        notch={{ x: centre(), y: centre(), r: 9 }}
       />
       <View
-        class={`absolute -bottom-0.5 -right-0.5 items-center justify-center rounded-full border border-card ${
-          isAgent(props.item) ? "bg-blue" : "bg-paper"
-        }`}
-        style={{ width: props.size === "detail" ? 22 : 16, height: props.size === "detail" ? 22 : 16 }}
+        class="absolute -bottom-px -right-px size-3.5 items-center justify-center rounded-full bg-white"
+        style={{ boxShadow: "inset 0 0 0 1px rgba(24, 24, 50, 0.09)" }}
       >
-        <Icon
-          name={isAgent(props.item) ? "PhCpu" : "PhUserCircle"}
-          size={props.size === "detail" ? 14 : 11}
-          color={isAgent(props.item) ? "primary-foreground" : "blue"}
-        />
+        <Icon name={isAgent(props.item) ? "PhCpu" : "PhUserCircle"} size={10} color={isAgent(props.item) ? "ink" : "blue"} />
+      </View>
+    </View>
+  );
+}
+
+// A connection row: a 28pt icon column (24 on phones), the name and handle, a 36pt copy button.
+const CONNECTION_GAP = () => (windowSize().width <= 620 ? "gap-[9px]" : "gap-[11px]");
+const CONNECTION_ICON = () => (windowSize().width <= 620 ? "w-6" : "w-7");
+
+/** A 36pt plain copy button with a 14pt icon (.contacts-copy-action). */
+function CopyButton(props: { onPress: () => void; testID?: string }) {
+  return (
+    <Button variant="plain" size="sm" iconOnly title={t("action_copy")} onPress={() => props.onPress()} testID={props.testID} class="size-9">
+      <Icon name="PhCopy" size={14} color="muted-foreground" />
+    </Button>
+  );
+}
+
+/** One line of the activity panel: its icon, a 12pt label, the 16pt value, the time under it. */
+function ActivityItem(props: { icon: IconName; label: string; value: string; time: string; divided?: boolean }) {
+  return (
+    <View class={`flex-row items-start gap-2.5 pb-4 ${props.divided ? "border-t border-line-soft pt-4" : "pt-0.5"}`}>
+      <View class="w-5 pt-px">
+        <Icon name={props.icon} size={18} color="muted-foreground" />
+      </View>
+      <View class="flex-1 gap-[3px]">
+        <Text class="text-xs leading-[22.4px] text-muted-foreground">{props.label}</Text>
+        <Text class="text-base font-semibold leading-[23.2px] text-foreground">{props.value}</Text>
+        <If when={props.time}>
+          <Text class="text-xs leading-[23.2px] text-muted-foreground">{props.time}</Text>
+        </If>
       </View>
     </View>
   );
@@ -329,7 +362,7 @@ export function ContactsPage() {
   });
 
   const contactMenu = () => [
-    { id: "delete", label: t("action_delete"), icon: "PhTrash" as const, danger: true, disabled: deleting(), onSelect: confirmDelete },
+    { id: "delete", label: t("action_delete"), disabled: deleting(), onSelect: confirmDelete },
   ];
 
   return (
@@ -349,15 +382,16 @@ export function ContactsPage() {
                 value={filterText()}
                 onChange={(value) => filterText.set(value)}
                 placeholder={t("contacts_filter_placeholder")}
+                icon={false}
                 testID="contacts-filter"
               />
             }
           >
             <If when={store.loading}>
-              <Blocks count={4} height={62} class="px-2" />
+              <Blocks count={4} height={65} class={isMobile() ? "pt-2" : "px-4 pt-2"} />
             </If>
             <If when={!store.loading && err()}>
-              <InlineNotice type="error" text={err()} class="mx-2" testID="contacts-error" />
+              <InlineNotice type="error" text={err()} class="mx-4 mt-2" testID="contacts-error" />
             </If>
             <If
               when={!store.loading && filteredItems().length > 0}
@@ -365,36 +399,34 @@ export function ContactsPage() {
                 <If when={!store.loading}>
                   <Note
                     text={items().length === 0 ? t("contacts_empty") : t("contacts_empty_filtered")}
-                    class="px-4"
+                    class="mx-4 mt-3 leading-normal"
                     testID="contacts-empty"
                   />
                 </If>
               }
             >
+              {/* A virtualized List: its rows are recycled cells, so the selected fill is each row's own and
+                  fades in and out (180 ms) rather than gliding as one highlight. */}
               <List
                 each={filteredItems()}
                 keyExtractor={(item) => contactID(item)}
-                estimatedItemSize={58}
+                estimatedItemSize={67}
                 class="flex-1"
-                contentClass="gap-0.5 px-2 pb-4"
+                scrollbar={SCROLLBAR}
+                contentClass={isMobile() ? "gap-0.5 pt-2 pb-4" : "gap-0.5 px-4 pt-2 pb-4"}
                 testID="contacts-list"
               >
                 {(item) => (
-                  <BaseButton
+                  <IndexRow
                     testID={`contact-row:${contactID(item())}`}
                     accessibilityLabel={contactAccessibilityLabel(item())}
-                    selected={!isMobile() && contactID(item()) === selectedContactID()}
+                    active={!isMobile() && contactID(item()) === selectedContactID()}
                     onPress={() => selectContact(item())}
-                    class={`flex-row items-center gap-3 rounded-(--radius) px-2.5 py-2 hover:bg-hover active:bg-selection ${
-                      !isMobile() && contactID(item()) === selectedContactID() ? "bg-selection" : ""
-                    }`}
-                  >
-                    <KindAvatar item={item()} />
-                    <View class="flex-1 gap-0.5">
-                      <Text class="text-sm text-foreground line-clamp-1">{displayName(item())}</Text>
-                      <Text class="text-xs text-muted-foreground line-clamp-1">{primaryContactMeta(item())}</Text>
-                    </View>
-                  </BaseButton>
+                    leading={<KindAvatar item={item()} />}
+                    title={displayName(item())}
+                    meta={primaryContactMeta(item())}
+                    metaFade
+                  />
                 )}
               </List>
             </If>
@@ -402,13 +434,17 @@ export function ContactsPage() {
         </If>
 
         <If when={showEditorPane()}>
-          <Scroll class="flex-1" contentClass="gap-4 p-5">
+          <Scroll class="flex-1" scrollbar={SCROLLBAR} contentClass="grow">
             <If
               when={selectedContact()}
               else={
-                <View class="items-center gap-2 py-16" testID="contacts-placeholder">
-                  <Text class="text-lg font-semibold text-foreground">{t("contacts_detail_empty_title")}</Text>
-                  <Note text={t("contacts_detail_empty_hint")} />
+                <View class="grow items-center justify-center px-6 py-[72px]" testID="contacts-placeholder" style={{ marginRight: gutterX() }}>
+                  <View class="max-w-[576px] items-center gap-2">
+                    <Text role="header" class="text-center text-xl leading-[24.0px] tracking-[-0.03em] text-foreground">
+                      {t("contacts_detail_empty_title")}
+                    </Text>
+                    <Text class="max-w-[544px] text-center text-base leading-[32.4px] text-subtle">{t("contacts_detail_empty_hint")}</Text>
+                  </View>
                 </View>
               }
             >
@@ -416,11 +452,8 @@ export function ContactsPage() {
                 <DetailCard
                   testID="contact-detail"
                   title={displayName(contact())}
-                  meta={
-                    <Text class="text-xs text-muted-foreground">
-                      {`${kindText(contact())} · ${channelLabel(contact().channel)}`}
-                    </Text>
-                  }
+                  class={isMobile() ? (windowSize().width <= 620 ? "m-3" : "m-4") : "mb-2 ml-5 mr-2 mt-2"}
+                  meta={`${kindText(contact())} · ${channelLabel(contact().channel)}`}
                   actions={
                     <If when={!editing()}>
                       <View class="flex-row items-center gap-1">
@@ -428,48 +461,44 @@ export function ContactsPage() {
                           variant="plain"
                           size="xs"
                           iconOnly
-                          icon="PhPencilSimple"
                           title={t("contacts_action_edit_yaml")}
                           onPress={() => void startEdit()}
                           testID="contact-edit"
-                        />
+                        >
+                          <Icon name="PhPencilSimple" size={14} color="subtle" />
+                        </Button>
                         <DropdownMenu
                           items={contactMenu()}
-                          trigger={
-                            <View
-                              role="button"
-                              accessibilityLabel={t("todo_action_more")}
-                              testID="contact-actions"
-                              class="size-7 items-center justify-center rounded-(--radius) hover:bg-hover active:bg-selection"
-                            >
-                              <Icon name="PhDotsThree" size={16} color="subtle" />
-                            </View>
-                          }
+                          disabled={deleting()}
+                          trigger={<MoreTrigger label={t("todo_action_more")} testID="contact-actions" />}
                         />
                       </View>
                     </If>
                   }
                 >
-                  <View class="flex-row" accessibilityLabel={kindText(contact())}>
-                    <KindAvatar item={contact()} size="detail" />
+                  <View class="flex-row items-center gap-3.5" accessibilityLabel={kindText(contact())}>
+                    <KindAvatar item={contact()} size={isMobile() ? "list" : "detail"} />
                   </View>
 
                   <If when={!editing() && !isAgent(contact())}>
-                    <View class="flex-row items-center gap-3">
+                    {/* One of the owner's own accounts: the switch, then what it means, between hairlines. */}
+                    <View class="flex-row items-start gap-3 border-y border-line-soft py-3">
                       <Each of={[ownerSwitchKey()]}>
                         {() => (
-                          <SwitchOnly
-                            checked={Boolean(contact().owner)}
-                            disabled={ownerSaving()}
-                            label={t("contacts_owner_label")}
-                            onChange={(value) => void setOwner(value)}
-                            testID="contact-owner"
-                          />
+                          <View class="pt-0.5">
+                            <SwitchOnly
+                              checked={Boolean(contact().owner)}
+                              disabled={ownerSaving()}
+                              label={t("contacts_owner_label")}
+                              onChange={(value) => void setOwner(value)}
+                              testID="contact-owner"
+                            />
+                          </View>
                         )}
                       </Each>
                       <View class="flex-1 gap-0.5">
-                        <Text class="text-sm text-foreground">{t("contacts_owner_label")}</Text>
-                        <Text class="text-xs text-muted-foreground">{t("contacts_owner_hint")}</Text>
+                        <Text class="text-sm font-medium leading-normal text-foreground">{t("contacts_owner_label")}</Text>
+                        <Text class="max-w-[620px] text-xs leading-normal text-muted-foreground">{t("contacts_owner_hint")}</Text>
                       </View>
                     </View>
                   </If>
@@ -477,66 +506,60 @@ export function ContactsPage() {
                   <If
                     when={editing()}
                     else={
-                      <View class={isMobile() ? "gap-5" : "flex-row items-start gap-6"}>
-                        <View class="flex-1 gap-5">
-                          <View class="gap-2">
+                      <View class={isMobile() ? "gap-[22px]" : "flex-row items-start"} style={isMobile() ? undefined : { gap: Math.min(44, Math.max(24, windowSize().width * 0.03)) }}>
+                        <View class={isMobile() ? "" : "flex-[2]"} style={{ minWidth: 0 }}>
+                          <View class="gap-2.5">
                             <SubHeading text={t("contacts_section_connections")} />
-                            <Each of={selectedConnections()} key={(connection) => connection.key}>
-                              {(connection) => (
-                                <View class="flex-row items-center gap-3 rounded-(--radius) border border-line-faint px-3 py-2">
-                                  <If
-                                    when={connection().logo}
-                                    else={
-                                      <Icon
-                                        name={connection().channelKey === "console" ? "PhTerminalWindow" : "PhLink"}
-                                        size={20}
-                                        color="subtle"
-                                      />
-                                    }
-                                  >
-                                    {(logo) => <Image src={logo()} style={{ width: 20, height: 20 }} accessibilityElementsHidden />}
-                                  </If>
-                                  <View class="flex-1 gap-0.5">
-                                    <Text class="text-sm font-medium text-foreground">{connection().channel}</Text>
-                                    <View selectable>
-                                      <Text class="font-mono text-xs text-subtle line-clamp-1">{connection().full}</Text>
+                            <View class="border-t border-line-soft">
+                              <Each of={selectedConnections()} key={(connection) => connection.key}>
+                                {(connection) => (
+                                  <View class={`min-h-[62px] flex-row items-center border-b border-line-soft py-2.5 ${CONNECTION_GAP()}`}>
+                                    <View class={CONNECTION_ICON()}>
+                                      <If
+                                        when={connection().logo}
+                                        else={
+                                          <Icon
+                                            name={connection().channelKey === "console" ? "PhTerminalWindow" : "PhLink"}
+                                            size={20}
+                                            color="subtle"
+                                          />
+                                        }
+                                      >
+                                        {(logo) => <Image src={logo()} style={{ width: 20, height: 20 }} accessibilityElementsHidden />}
+                                      </If>
+                                    </View>
+                                    <View class="flex-1 gap-[3px]" style={{ minWidth: 0 }}>
+                                      <Text class="text-sm font-semibold leading-[19.6px] text-foreground">{connection().channel}</Text>
+                                      <View selectable>
+                                        <FadeText text={connection().full} fade={29} class="font-mono text-xs leading-[20.3px] text-muted-foreground" />
+                                      </View>
+                                    </View>
+                                    <View class="w-9 items-center">
+                                      <If when={connection().copyable}>
+                                        <CopyButton onPress={() => void copyContactValue(connection().full)} testID={`contact-copy:${connection().key}`} />
+                                      </If>
                                     </View>
                                   </View>
-                                  <If when={connection().copyable}>
-                                    <Button
-                                      variant="plain"
-                                      size="xs"
-                                      iconOnly
-                                      icon="PhCopy"
-                                      title={t("action_copy")}
-                                      onPress={() => void copyContactValue(connection().full)}
-                                      testID={`contact-copy:${connection().key}`}
-                                    />
-                                  </If>
-                                </View>
-                              )}
-                            </Each>
-                            <View class="flex-row items-center gap-3 px-3 py-2">
-                              <Icon name="PhFingerprint" size={20} color="muted-foreground" />
-                              <View class="flex-1 gap-0.5">
-                                <Text class="text-xs text-muted-foreground">{t("contacts_field_contact_id")}</Text>
+                                )}
+                              </Each>
+                            </View>
+                            <View class={`mt-2 flex-row items-center pt-2.5 ${CONNECTION_GAP()}`}>
+                              <View class={CONNECTION_ICON()}>
+                                <Icon name="PhFingerprint" size={18} color="muted-foreground" />
+                              </View>
+                              <View class="flex-1 gap-[3px]" style={{ minWidth: 0 }}>
+                                <Text class="text-xs leading-[16.8px] text-muted-foreground">{t("contacts_field_contact_id")}</Text>
                                 <View selectable>
-                                  <Text class="font-mono text-xs text-foreground">{contactID(contact())}</Text>
+                                  <FadeText text={contactID(contact())} fade={29} class="font-mono text-xs leading-[17.4px] text-muted-foreground" />
                                 </View>
                               </View>
-                              <Button
-                                variant="plain"
-                                size="xs"
-                                iconOnly
-                                icon="PhCopy"
-                                title={t("action_copy")}
-                                onPress={() => void copyContactValue(contactID(contact()))}
-                                testID="contact-copy-id"
-                              />
+                              <View class="w-9 items-center">
+                                <CopyButton onPress={() => void copyContactValue(contactID(contact()))} testID="contact-copy-id" />
+                              </View>
                             </View>
                           </View>
 
-                          <View class="gap-2">
+                          <View class="mt-[22px] gap-2.5 border-t border-line-soft pt-[18px]">
                             <SubHeading text={t("contacts_section_memories")} />
                             <If when={memoriesLoading()}>
                               <Blocks count={1} height={48} />
@@ -545,45 +568,45 @@ export function ContactsPage() {
                               <Note text={t("contacts_memories_empty")} />
                             </If>
                             <If when={!memoriesLoading() && selectedMemories().length > 0}>
-                              <View class="gap-2" testID="contact-memories">
+                              <View testID="contact-memories">
                                 <Each of={selectedMemories()} key={(memory) => memory.id}>
-                                  {(memory) => (
-                                    <View class="gap-0.5 border-l-2 border-line pl-3">
-                                      <Text class="text-sm font-medium text-foreground">{memory().description ?? ""}</Text>
-                                      <Text class="text-xs text-subtle">{memory().body ?? ""}</Text>
+                                  {(memory, index) => (
+                                    <View selectable class={`gap-0.5 ${index() === 0 ? "pb-[9px]" : "border-t border-line-soft py-[9px]"}`}>
+                                      <Text class="text-xs font-semibold leading-[17.4px] text-foreground">{memory().description ?? ""}</Text>
+                                      <Text class="text-xs leading-[17.4px] text-subtle">{memory().body ?? ""}</Text>
                                     </View>
                                   )}
                                 </Each>
                               </View>
                             </If>
-                            <Button variant="plain" size="sm" label={t("contacts_memories_open")} onPress={openMemories} testID="contact-open-memories" />
+                            <View class="-ml-3 self-start">
+                              <Button variant="plain" size="sm" label={t("contacts_memories_open")} onPress={openMemories} testID="contact-open-memories" />
+                            </View>
                           </View>
                         </View>
 
-                        <View class={`gap-3 ${isMobile() ? "" : "w-56"}`}>
+                        <View
+                          class={isMobile() ? "gap-3.5 border-t border-line-soft pt-[18px]" : "min-w-55 flex-[0.85] gap-3.5 border-l border-line-soft"}
+                          style={isMobile() ? undefined : { paddingLeft: Math.min(32, Math.max(20, windowSize().width * 0.024)) }}
+                        >
                           <SubHeading text={t("contacts_section_activity")} />
-                          <View class="flex-row items-start gap-3">
-                            <Icon name="PhClockCounterClockwise" size={18} color="muted-foreground" />
-                            <View class="flex-1 gap-0.5">
-                              <Text class="text-xs text-muted-foreground">{t("contacts_field_last_interaction")}</Text>
-                              <Text class="text-sm font-medium text-foreground">
-                                {contact().last_interaction_at ? relativeTime(contact().last_interaction_at) : t("contacts_activity_none")}
-                              </Text>
-                              <If when={contact().last_interaction_at}>
-                                <Text class="font-mono text-xs text-muted-foreground">{formatShortTime(contact().last_interaction_at)}</Text>
-                              </If>
-                            </View>
+                          <View>
+                            <ActivityItem
+                              icon="PhClockCounterClockwise"
+                              label={t("contacts_field_last_interaction")}
+                              value={contact().last_interaction_at ? relativeTime(contact().last_interaction_at) : t("contacts_activity_none")}
+                              time={contact().last_interaction_at ? formatShortTime(contact().last_interaction_at) : ""}
+                            />
+                            <If when={contact().cooldown_until}>
+                              <ActivityItem
+                                icon="PhTimer"
+                                label={t("contacts_field_cooldown")}
+                                value={relativeTime(contact().cooldown_until)}
+                                time={formatShortTime(contact().cooldown_until)}
+                                divided
+                              />
+                            </If>
                           </View>
-                          <If when={contact().cooldown_until}>
-                            <View class="flex-row items-start gap-3">
-                              <Icon name="PhTimer" size={18} color="muted-foreground" />
-                              <View class="flex-1 gap-0.5">
-                                <Text class="text-xs text-muted-foreground">{t("contacts_field_cooldown")}</Text>
-                                <Text class="text-sm font-medium text-foreground">{relativeTime(contact().cooldown_until)}</Text>
-                                <Text class="font-mono text-xs text-muted-foreground">{formatShortTime(contact().cooldown_until)}</Text>
-                              </View>
-                            </View>
-                          </If>
                         </View>
                       </View>
                     }
@@ -604,7 +627,7 @@ export function ContactsPage() {
                             accessibilityLabel={t("contacts_editor_hint")}
                             testID="contact-yaml"
                           />
-                          <Note text={t("contacts_editor_hint")} />
+                          <Note text={t("contacts_editor_hint")} class="leading-normal" />
                           <View class="flex-row justify-end gap-2">
                             <Button variant="outlined" size="sm" label={t("action_cancel")} disabled={editorSaving()} onPress={stopEdit} testID="contact-edit-cancel" />
                             <Button

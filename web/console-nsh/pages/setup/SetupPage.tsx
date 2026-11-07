@@ -4,7 +4,7 @@
 // steps here with ?repair=<key>; those go back to it when saved. setup-state.ts holds the logic.
 import type { ImageAsset, InputRef, JSX } from "nsh";
 import { Image, Scroll, Text, View, windowSize } from "nsh";
-import { Button as BaseButton, Tooltip } from "nsh/base";
+import { Button as BaseButton } from "nsh/base";
 import { CodexAuthDialog, ProAuthDialog, XAIAuthDialog } from "../../components/settings/AuthDialogs";
 import { EnvManagedField } from "../../components/settings/EnvManagedField";
 import { ImageUploadField } from "../../components/settings/ImageUploadField";
@@ -13,7 +13,7 @@ import { SecretInput } from "../../components/settings/SecretInput";
 import { SetupConnectionTestDialog } from "../../components/settings/SetupConnectionTestDialog";
 import { SetupPickerDialog } from "../../components/settings/SetupPickerDialog";
 import { MarkdownEditor } from "../../components/shared/MarkdownEditor";
-import { Button, Icon, TextField, type IconName } from "../../components/ui";
+import { Button, Icon, TextField, Tip, type IconName } from "../../components/ui";
 import { isNetworkErrorMessage } from "../../lib/core/notices.js";
 import {
   PERSONA_AVATAR_MAX_SOURCE_BYTES,
@@ -87,11 +87,7 @@ function AuthActionButton(props: {
       disabled={props.disabled}
       accessibilityLabel={props.title}
       testID={props.testID}
-      tooltip={
-        <Tooltip class="bg-foreground px-2 py-1">
-          <Text class="text-xs text-background">{props.title}</Text>
-        </Tooltip>
-      }
+      tooltip={<Tip text={props.title} />}
       class={`min-h-9.5 min-w-9.5 flex-row items-center justify-center rounded-(--radius) border px-3 active:opacity-80 disabled:opacity-45 ${tone().box}`}
     >
       <If when={props.needsLogin} else={<Icon name={icon()} size={16} color={tone().color} />}>

@@ -42,7 +42,8 @@ import { Button, type IconName, Icon, SelectField, TextField } from "../ui";
 import { EnvManagedField } from "./EnvManagedField";
 import { InferenceProviderPicker, type ProviderItem } from "./InferenceProviderPicker";
 import { SecretInput, type SecretStatus } from "./SecretInput";
-import { SettingChoices, SettingField, SettingFieldGrid, SettingSelect } from "./SettingFields";
+import { InSidePane, SettingChoices, SettingField, SettingFieldGrid, SettingSelect } from "./SettingFields";
+import { isMobile } from "../../lib/shell";
 
 const t = translate as (key: string, vars?: Record<string, unknown> | null) => string;
 
@@ -342,7 +343,7 @@ export function LLMConfigForm(props: LLMConfigFormProps) {
   );
 
   return (
-    <SettingFieldGrid testID={props.testID}>
+    <SettingFieldGrid testID={props.testID} tight>
       <If when={!props.advancedOnly}>
         <SettingField label={t("settings_agent_provider_label")} wide>
           <If when={providerHasAuthAction()} else={providerPicker()}>
@@ -536,7 +537,7 @@ export function LLMConfigForm(props: LLMConfigFormProps) {
       </If>
 
       <If when={props.showAdvanced && !evaluateOnly()}>
-        <View class="w-full flex-row flex-wrap gap-4">
+        <View class={`col-span-full gap-3 ${isMobile() || InSidePane() ? "" : "grid grid-cols-2"}`}>
           <SettingField label={t("settings_llm_reasoning_label")}>
             <If when={!isFieldEnvManaged("reasoning_effort")} else={<EnvManagedField name={fieldManagedHeadline("reasoning_effort")} />}>
               <SelectField

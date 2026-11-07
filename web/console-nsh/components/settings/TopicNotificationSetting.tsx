@@ -3,6 +3,7 @@
 import { cleanup, effect, signal, Text, untracked, View } from "nsh";
 import { onVisibilityChange, requestNotificationPermission, type NotificationPermission } from "../../lib/platform";
 import { topicNotificationPermission } from "../../lib/core/topic-task-notifications.js";
+import { isMobile } from "../../lib/shell";
 import { Button } from "../ui";
 import { t } from "./DialogShell";
 
@@ -45,16 +46,18 @@ export function TopicNotificationSetting() {
   cleanup(onVisibilityChange(() => void refresh()));
 
   return (
-    <View class="flex-row flex-wrap items-center gap-3 py-3" testID="topic-notifications">
-      <View class="min-w-60 flex-1 gap-0.5">
-        <Text class="text-sm font-medium text-foreground">{t("topic_notifications_title")}</Text>
-        <Text class="text-xs text-muted-foreground">{t("topic_notifications_hint")}</Text>
-        <Text class="text-xs text-muted-foreground" testID="topic-notifications-state">
+    <View class={`gap-4 py-3 ${isMobile() ? "" : "flex-row items-center"}`} testID="topic-notifications">
+      <View class="min-w-0 flex-1 gap-1">
+        <Text class="text-sm font-medium leading-[18.9px] text-foreground">{t("topic_notifications_title")}</Text>
+        <Text class="text-xs leading-[20.3px] text-muted-foreground">{t("topic_notifications_hint")}</Text>
+        <Text class="text-xs leading-[20.3px] text-muted-foreground" testID="topic-notifications-state">
           {t(`topic_notifications_${permission()}`)}
         </Text>
       </View>
       <Button
         variant="outlined"
+        size="md"
+        class={isMobile() ? "self-stretch" : "min-w-[180px]"}
         label={t("topic_notifications_enable")}
         disabled={permission() !== "default"}
         loading={requesting()}

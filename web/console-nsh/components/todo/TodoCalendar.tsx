@@ -1,13 +1,17 @@
-// The TODO calendar (web/console/src/components/TodoCalendar.js): a month of the items' runs, the
-// month in the route's `month` query. Pressing a day selects it and reports its items; pressing an
-// item selects the item. On phones the cells show dots and a count, and the day's agenda follows.
-import { computed, effect, signal, Text, untracked, View } from "nsh";
+// The TODO calendar (web/console/src/components/TodoCalendar.js, styled as TodoCalendar.css): a
+// month of the items' runs, the month in the route's `month` query. Pressing a day selects it and
+// reports its items; pressing an item selects the item. On phones the cells show dots and a count,
+// and the day's agenda follows. The month changes at once, as in the Vue calendar.
+import { computed, effect, signal, Text, untracked, View, windowSize } from "nsh";
 import { Button as BaseButton, Popover } from "nsh/base";
 import { currentLocale, translate } from "../../lib/core/context.js";
 import { formatDate } from "../../lib/core/intl-format.js";
 import { projectTodoCalendar, visibleCalendarDays } from "../../lib/core/todo-calendar.js";
 import { currentRoute, locationOf, navigate } from "../../lib/router";
-import { Button, Skeleton } from "../ui";
+import { gutterX, gutterY } from "../frame/metrics";
+import { MOTION_EASE_CSS } from "../motion";
+import { Button, type IconName, Tip } from "../ui";
+import { TODO_HEAD_HEIGHT, TODO_INDEX_WIDTH } from "./TodoIndex";
 import type { CalendarSelection, TodoTask } from "./todo-state";
 
 const t = translate as (key: string, vars?: Record<string, unknown> | null) => string;
@@ -265,177 +269,285 @@ export function TodoCalendar(props: TodoCalendarProps) {
     });
   });
 
-  const EntryButton = (entryProps: { entry: () => CalendarEntry; meta: (entry: CalendarEntry) => string; agenda?: boolean }) => (
-    <BaseButton
-      onPress={() => selectEntry(entryProps.entry())}
-      accessibilityLabel={entryAccessibleName(entryProps.entry())}
-      class={`flex-row items-center gap-1.5 rounded-(--radius) px-1 hover:bg-hover active:bg-selection ${
-        entryProps.agenda ? "min-h-9 border border-line-faint bg-card px-2 py-1.5" : "py-0.5"
-      }`}
-    >
-      <View
-        class={`size-1.5 ${entryProps.entry().task.enabled === false ? "border border-status-off" : "bg-status-on"}`}
-      />
-      <Text
-        class={`flex-1 text-xs line-clamp-1 ${
-          entryProps.entry().task.enabled === false ? "text-muted-foreground line-through" : "text-foreground"
+  // The grid's width tells how wide a day is: a day 132pt wide or less shows its items' titles
+  // only (the Vue cells' container query), the run time staying in the item's name.
+  const gridWidth = signal(0);
+  const narrowCells = () => gridWidth() > 0 && (gridWidth() - 8) / 7 <= 132;
+  const windowHeight = () => windowSize().height;
+
+  /** A run in a cell, the popover or the agenda (`.todo-calendar-entry`). */
+  const EntryButton = (entryProps: {
+    entry: () => CalendarEntry;
+    meta: (entry: CalendarEntry) => string;
+    /** cell: in a month cell (6pt square, 11pt mono time); list: the popover's and agenda's rows. */
+    cell?: boolean;
+    outside?: boolean;
+    agenda?: boolean;
+  }) => {
+    const disabled = () => entryProps.entry().task.enabled === false;
+    const showMeta = () => !entryProps.cell || !narrowCells();
+    return (
+      <BaseButton
+        onPress={() => selectEntry(entryProps.entry())}
+        accessibilityLabel={entryAccessibleName(entryProps.entry())}
+        tooltip={<Tip text={entryMeta(entryProps.entry())} />}
+        class={`flex-row items-center ${
+          entryProps.cell ? "gap-1.5 rounded-(--radius) py-[3px] pl-[5px] pr-1.5" : "gap-[5px] px-1 py-[3px]"
+        } ${entryProps.agenda ? "min-h-[38px] px-2 py-[7px]" : ""} ${
+          entryProps.outside
+            ? "hover:bg-blue/5"
+            : disabled()
+              ? "bg-line-soft/40 hover:bg-blue/13"
+              : "bg-blue/7 hover:bg-blue/13"
         }`}
+        style={{ transitionProperty: "colors", transitionDuration: 120 }}
       >
-        {props.taskTitle(entryProps.entry().task)}
-      </Text>
-      <Text class="font-mono text-xs text-muted-foreground line-clamp-1">{entryProps.meta(entryProps.entry())}</Text>
-    </BaseButton>
+        <View
+          class={`${entryProps.cell ? "size-1.5 rounded-[1px]" : "size-[7px]"} ${disabled() ? "bg-muted-foreground" : "bg-blue"} ${
+            entryProps.outside ? "opacity-50" : ""
+          }`}
+        />
+        <Text
+          class={`flex-1 text-xs font-medium leading-[15px] ${
+            disabled() || entryProps.outside ? "text-muted-foreground" : "text-foreground"
+          }`}
+          style={{ numberOfLines: 1 }}
+        >
+          {props.taskTitle(entryProps.entry().task)}
+        </Text>
+        <If when={showMeta()}>
+          <Text
+            class={`font-mono leading-[15px] text-muted-foreground ${entryProps.cell ? "text-[11px]" : "max-w-[38%] text-xs"} ${
+              entryProps.outside ? "opacity-50" : ""
+            }`}
+            style={{ numberOfLines: 1 }}
+          >
+            {entryProps.meta(entryProps.entry())}
+          </Text>
+        </If>
+      </BaseButton>
+    );
+  };
+
+  /** A day of the month (`.todo-calendar-day`). */
+  const DayCell = (dayProps: { day: () => CalendarDay; column: number }) => {
+    const day = () => dayProps.day();
+    const selected = () => day().key === selectedDate();
+    const weekend = () => dayProps.column === 0 || dayProps.column === 6;
+    // Out of the month: paper; in it: white, weekends tinted 2.5 %, today 6 % (blue on white).
+    const fill = () => (day().inMonth ? "bg-card" : "bg-paper");
+    const tint = () => (!day().inMonth ? "" : day().isToday ? "bg-blue/6" : weekend() ? "bg-blue/[0.025]" : "");
+    return (
+      <View
+        role="cell"
+        accessibilityLabel={day().key}
+        accessibilityState={{ selected: selected() }}
+        testID={`todo-calendar-day-${day().key}`}
+        onPress={() => selectDate(day())}
+        class={`group relative flex-1 ${props.mobile ? "p-[3px]" : "pb-2 pl-[7px] pr-[7px] pt-[7px]"} ${fill()}`}
+      >
+        <If when={tint()}>
+          <View accessibilityElementsHidden class={`absolute inset-0 ${tint()}`} style={{ pointerEvents: "none" }} />
+        </If>
+        {/* The hover and selection rings, drawn inside the cell (an inset 1pt line). */}
+        <View
+          accessibilityElementsHidden
+          class={`absolute inset-0 border ${selected() ? "border-blue/60" : "border-transparent group-hover:border-line-soft"}`}
+          style={{ pointerEvents: "none" }}
+        />
+        <BaseButton
+          onPress={() => selectDate(day())}
+          selected={selected()}
+          accessibilityLabel={day().key}
+          class={`items-center justify-center self-start rounded-(--radius) ${props.mobile ? "size-[23px]" : "size-[25px]"} ${
+            day().isToday ? "bg-blue" : ""
+          }`}
+        >
+          <Text
+            class={`font-semibold ${props.mobile ? "text-[11px]" : "text-xs"} ${
+              day().isToday ? "text-paper" : day().inMonth ? "text-subtle" : "text-muted-foreground opacity-70"
+            }`}
+          >
+            {String(day().day)}
+          </Text>
+        </BaseButton>
+        <If
+          when={!props.mobile}
+          else={
+            <If when={entriesFor(day()).length > 0}>
+              <View class="mt-px flex-row items-center justify-center gap-0.5" accessibilityElementsHidden>
+                <Each of={entriesFor(day()).slice(0, 3)} key={(entry) => `${entry.task_id}:${entry.date}`}>
+                  {(entry) => <View class={`size-1 ${entry().task.enabled === false ? "bg-muted-foreground" : "bg-blue"}`} />}
+                </Each>
+                <Text class="ml-0.5 text-[11px] leading-[11px] text-muted-foreground">{String(entriesFor(day()).length)}</Text>
+              </View>
+            </If>
+          }
+        >
+          <View class="mt-[3px] gap-[3px]">
+            <Each of={entriesFor(day()).slice(0, 3)} key={(entry) => `${entry.task_id}:${entry.date}`}>
+              {(entry) => <EntryButton entry={entry} meta={entryCellMeta} cell outside={!day().inMonth} />}
+            </Each>
+            <If when={entriesFor(day()).length > 3}>
+              <Popover
+                open={expandedDate() === day().key}
+                onOpenChange={({ open }) => {
+                  if (!open && untracked(expandedDate) === untracked(day).key) expandedDate.set("");
+                }}
+                placement="bottom"
+                align={dayProps.column >= 5 ? "end" : "start"}
+                offset={2}
+                // `.todo-calendar-overflow`: 320 wide, a line frame on paper with the large shadow.
+                popupClass="max-h-70 w-80 gap-1 border border-line bg-paper p-[9px] transition duration-120"
+                popupStyle={{ boxShadow: "0 12px 34px rgba(20, 29, 48, 0.18)", transitionTimingFunction: MOTION_EASE_CSS }}
+                popupStartingClass="opacity-0 -translate-y-1"
+                popupEndingClass="opacity-0"
+                trigger={
+                  <BaseButton
+                    onPress={() => toggleOverflow(day())}
+                    accessibilityLabel={t("todo_calendar_more", { count: entriesFor(day()).length - 3 })}
+                    class="self-start px-1 py-0.5"
+                  >
+                    <Text class="text-xs text-blue">{t("todo_calendar_more", { count: entriesFor(day()).length - 3 })}</Text>
+                  </BaseButton>
+                }
+              >
+                <Text class="px-1 pb-1.5 pt-0.5 font-mono text-xs font-semibold text-muted-foreground">{day().key}</Text>
+                <Each of={entriesFor(day())} key={(entry) => `${entry.task_id}:${entry.date}`}>
+                  {(entry) => <EntryButton entry={entry} meta={entryCellMeta} />}
+                </Each>
+              </Popover>
+            </If>
+          </View>
+        </If>
+      </View>
+    );
+  };
+
+  /** A plain icon button of the toolbar, centred in its row (Button sits at the top of its box). */
+  const ToolButton = (buttonProps: { icon: IconName; title: string; testID?: string; selected?: boolean; onPress: () => void }) => (
+    <View>
+      <Button
+        variant="plain"
+        iconOnly
+        icon={buttonProps.icon}
+        title={buttonProps.title}
+        selected={buttonProps.selected}
+        testID={buttonProps.testID}
+        onPress={buttonProps.onPress}
+      />
+    </View>
   );
 
   return (
-    <View class="flex-1 gap-2" accessibilityLabel={t("todo_view_calendar")} testID="todo-calendar">
-      <View class={`gap-1 ${props.mobile ? "" : "flex-row items-center justify-between"}`}>
-        <View class="min-h-11 flex-row items-center gap-1">
-          <Text class="flex-1 text-base font-semibold text-foreground" role="header">
+    <View
+      class="flex-1"
+      style={{ paddingHorizontal: props.mobile ? gutterX() : 8, paddingBottom: props.mobile ? gutterY() : 8 }}
+      accessibilityLabel={t("todo_view_calendar")}
+      testID="todo-calendar"
+    >
+      {/* The toolbar: the index's head (title, list toggle, add) over the list's width, then the
+          month and the way through months (Today, then ‹ ›). One 57pt row on desktops; two rows on
+          phones, without the add button (the floating one adds). */}
+      <View
+        class={props.mobile ? "" : "flex-row items-center gap-4"}
+        style={{ height: props.mobile ? undefined : TODO_HEAD_HEIGHT, marginHorizontal: props.mobile ? -gutterX() : -8 }}
+      >
+        <View
+          class="flex-row items-center"
+          style={{
+            width: props.mobile ? undefined : TODO_INDEX_WIDTH,
+            minHeight: TODO_HEAD_HEIGHT,
+            paddingLeft: gutterX(),
+            paddingRight: props.mobile ? gutterX() : 0,
+          }}
+        >
+          <Text class="flex-1 text-xl font-normal leading-[24px] tracking-[-0.6px] text-foreground" role="header" style={{ numberOfLines: 1 }}>
             {t("todo_title")}
           </Text>
-          <Button
-            variant="plain"
-            iconOnly
-            icon="PhCalendarBlank"
-            title={t("todo_view_list")}
-            selected
-            testID="todo-view-toggle"
-            onPress={() => props.onShowList?.()}
-          />
+          <ToolButton icon="PhCalendarBlank" title={t("todo_view_list")} selected testID="todo-view-toggle" onPress={() => props.onShowList?.()} />
           <If when={!props.mobile}>
-            <Button
-              variant="plain"
-              iconOnly
-              icon="PhPlus"
-              title={t("todo_action_add")}
-              testID="todo-calendar-add"
-              onPress={() => props.onAddTask?.()}
-            />
+            <ToolButton icon="PhPlus" title={t("todo_action_add")} testID="todo-calendar-add" onPress={() => props.onAddTask?.()} />
           </If>
         </View>
-        <View class="flex-row items-center justify-between gap-3">
-          <Text class="text-base font-semibold text-foreground" testID="todo-calendar-month">
+        <View
+          class={`flex-row items-center justify-between gap-3 ${props.mobile ? "min-h-11 pb-2" : "flex-1"}`}
+          style={{ paddingLeft: props.mobile ? gutterX() : 0, paddingRight: gutterX() }}
+        >
+          <Text
+            class={`flex-1 font-semibold text-foreground ${windowSize().width <= 520 ? "text-base" : "text-lg"}`}
+            style={{ numberOfLines: 1 }}
+            testID="todo-calendar-month"
+          >
             {monthTitle()}
           </Text>
           <View class="flex-row items-center gap-0.5">
-            <Button variant="plain" iconOnly icon="PhCalendarDot" title={t("todo_calendar_today")} onPress={showToday} />
-            <Button variant="plain" iconOnly icon="PhCaretLeft" title={t("todo_calendar_previous")} onPress={() => setMonth(-1)} />
-            <Button variant="plain" iconOnly icon="PhCaretRight" title={t("todo_calendar_next")} onPress={() => setMonth(1)} />
+            <View class="mr-1.5">
+              <ToolButton icon="PhCalendarDot" title={t("todo_calendar_today")} onPress={showToday} />
+            </View>
+            <ToolButton icon="PhCaretLeft" title={t("todo_calendar_previous")} onPress={() => setMonth(-1)} />
+            <ToolButton icon="PhCaretRight" title={t("todo_calendar_next")} onPress={() => setMonth(1)} />
           </View>
         </View>
       </View>
 
-      <View class="flex-row border-b border-line-faint">
+      {/* The weekdays' row: framed, tinted blue 4 % on paper, weekends a shade quieter. */}
+      <View class="flex-row border-x border-t border-line bg-blue/4" role="row">
         <Each of={weekdayLabels()}>
-          {(label) => (
-            <Text class={`flex-1 py-1.5 font-mono text-xs uppercase text-muted-foreground ${props.mobile ? "text-center" : "px-1.5"}`}>
-              {label()}
-            </Text>
+          {(label, index) => (
+            <View class={`flex-1 ${index() > 0 ? "border-l border-line-soft" : ""} ${props.mobile ? "px-0.5 py-1.5" : "px-2.5 py-[7px]"}`}>
+              <Text
+                class={`text-xs font-semibold uppercase tracking-[0.3px] text-muted-foreground ${props.mobile ? "text-center" : ""} ${
+                  index() === 0 || index() === 6 ? "opacity-70" : ""
+                }`}
+                style={{ numberOfLines: 1 }}
+              >
+                {label()}
+              </Text>
+            </View>
           )}
         </Each>
       </View>
 
       <If
         when={!props.tasksLoading}
-        else={<Skeleton rows={3} label={t("todo_view_calendar")} />}
+        else={
+          <View class="min-h-105 gap-2 border border-line p-3" accessibilityLabel={t("todo_view_calendar")}>
+            <Each of={[0, 1, 2]}>{() => <View class="h-[118px] animate-pulse rounded-(--radius) bg-muted" />}</Each>
+          </View>
+        }
       >
-        <View class={`gap-px bg-line-faint ${props.mobile ? "" : "flex-1"}`}>
+        <View
+          class={`relative gap-px border-x border-b border-line bg-line ${props.mobile ? "" : "flex-1"}`}
+          style={props.mobile ? undefined : { minHeight: Math.min(720, windowHeight() - 118) }}
+          onLayout={(event) => gridWidth.set(event.bounds.size.width)}
+          role="grid"
+        >
           <Each of={weeks()} key={(week) => week.key}>
             {(week) => (
-              <View class={`flex-row gap-px ${props.mobile ? "h-14" : "min-h-28 flex-1"}`}>
+              <View class={`flex-row gap-px ${props.mobile ? "h-[58px]" : "min-h-28 flex-1"}`}>
                 <Each of={week().days} key={(day) => day.key}>
-                  {(day) => (
-                    <View
-                      role="cell"
-                      accessibilityLabel={day().key}
-                      accessibilityState={{ selected: day().key === selectedDate() }}
-                      testID={`todo-calendar-day-${day().key}`}
-                      onPress={() => selectDate(day())}
-                      class={`flex-1 gap-0.5 p-1 ${day().inMonth ? "bg-card" : "bg-paper"} ${
-                        day().key === selectedDate() ? "bg-selection" : ""
-                      } ${props.mobile ? "items-center" : ""}`}
-                    >
-                      <View
-                        class={`size-6 items-center justify-center rounded-(--radius) ${
-                          day().isToday ? "bg-primary" : ""
-                        }`}
-                      >
-                        <Text
-                          class={`text-xs ${
-                            day().isToday
-                              ? "font-semibold text-primary-foreground"
-                              : day().inMonth
-                                ? "text-foreground"
-                                : "text-muted-foreground"
-                          }`}
-                        >
-                          {String(day().day)}
-                        </Text>
-                      </View>
-                      <If
-                        when={!props.mobile}
-                        else={
-                          <If when={entriesFor(day()).length > 0}>
-                            <View class="flex-row items-center gap-0.5" accessibilityElementsHidden>
-                              <Each of={entriesFor(day()).slice(0, 3)} key={(entry) => `${entry.task_id}:${entry.date}`}>
-                                {(entry) => (
-                                  <View class={`size-1 ${entry().task.enabled === false ? "bg-status-off" : "bg-blue"}`} />
-                                )}
-                              </Each>
-                              <Text class="ml-0.5 text-xs text-muted-foreground">{String(entriesFor(day()).length)}</Text>
-                            </View>
-                          </If>
-                        }
-                      >
-                        <Each of={entriesFor(day()).slice(0, 3)} key={(entry) => `${entry.task_id}:${entry.date}`}>
-                          {(entry) => <EntryButton entry={entry} meta={entryCellMeta} />}
-                        </Each>
-                        <If when={entriesFor(day()).length > 3}>
-                          <Popover
-                            open={expandedDate() === day().key}
-                            onOpenChange={({ open }) => {
-                              if (!open && untracked(expandedDate) === untracked(day).key) expandedDate.set("");
-                            }}
-                            placement="bottom"
-                            align="start"
-                            popupClass="w-64 gap-1 rounded-(--radius) border border-border bg-popover p-2 shadow-md"
-                            trigger={
-                              <BaseButton
-                                onPress={() => toggleOverflow(day())}
-                                class="self-start rounded-(--radius) px-1 hover:bg-hover"
-                              >
-                                <Text class="text-xs text-blue">
-                                  {t("todo_calendar_more", { count: entriesFor(day()).length - 3 })}
-                                </Text>
-                              </BaseButton>
-                            }
-                          >
-                            <Text class="px-1 font-mono text-xs text-muted-foreground">{day().key}</Text>
-                            <Each of={entriesFor(day())} key={(entry) => `${entry.task_id}:${entry.date}`}>
-                              {(entry) => <EntryButton entry={entry} meta={entryCellMeta} />}
-                            </Each>
-                          </Popover>
-                        </If>
-                      </If>
-                    </View>
-                  )}
+                  {(day, column) => <DayCell day={day} column={column()} />}
                 </Each>
               </View>
             )}
           </Each>
+          {/* No runs this month: the note over the grid, which shows through blurred. */}
+          <If when={isEmpty()}>
+            <View
+              class="absolute inset-0 items-center justify-center gap-[5px] bg-paper-soft p-6 backdrop-blur-[3px]"
+              style={{ pointerEvents: "none" }}
+            >
+              <Text class="text-center text-base font-semibold text-foreground">{t("todo_calendar_empty")}</Text>
+              <Text class="text-center text-base text-muted-foreground">{t("todo_calendar_empty_hint")}</Text>
+            </View>
+          </If>
         </View>
-        <If when={isEmpty()}>
-          <View class="items-center gap-1 py-4">
-            <Text class="text-sm font-medium text-foreground">{t("todo_calendar_empty")}</Text>
-            <Text class="text-xs text-muted-foreground">{t("todo_calendar_empty_hint")}</Text>
-          </View>
-        </If>
       </If>
 
       <If when={props.mobile}>
         <View class="gap-2 pt-3" accessibilityLabel={t("todo_calendar_agenda")}>
-          <View class="border-b border-line pb-2">
+          <View class="border-b border-line pb-[7px]">
             <Text class="text-sm font-semibold text-foreground">{selectedDateTitle()}</Text>
           </View>
           <If

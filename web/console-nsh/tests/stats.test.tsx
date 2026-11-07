@@ -101,12 +101,12 @@ test("usage shows the summary, the daily chart, and the hosts and models", async
   expect(dailyCall?.uri).toContain("days=30");
 
   // Another range asks again for that many days.
-  await app.press("id:stats-daily-range-7");
+  await app.press("role:tab[7D]");
   await app.waitUntil(() => calls.some((call) => call.uri?.includes("days=7")));
   await app.waitFor("3/7"); // active days
 
   // The cache view shows the cache figures.
-  await app.press("id:stats-daily-metric-cache");
+  await app.press("role:tab[Cache]");
   await app.waitFor("Uncached");
 
   // By model lists every model.
@@ -123,8 +123,9 @@ test("an agent without the daily route says so, and a failing usage call shows i
     },
   });
   await app.waitFor("usage store unavailable");
-  await app.waitFor("This agent does not report daily usage yet. Update it to see this chart.");
-  await app.waitFor("No usage records");
+  // Shown in mono caps, as Vue's .stats-daily-empty.
+  await app.waitFor("THIS AGENT DOES NOT REPORT DAILY USAGE YET. UPDATE IT TO SEE THIS CHART.");
+  await app.waitFor("NO USAGE RECORDS");
 });
 
 test("an empty range says there were no requests", async () => {
@@ -135,6 +136,6 @@ test("an empty range says there were no requests", async () => {
       "GET /proxy:/stats/llm/daily": { body: { days: [], summary: {}, models: [] } },
     },
   });
-  await app.waitFor("No requests in this range");
-  await app.waitFor("No usage records");
+  await app.waitFor("NO REQUESTS IN THIS RANGE");
+  await app.waitFor("NO USAGE RECORDS");
 });

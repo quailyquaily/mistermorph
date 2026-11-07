@@ -1,8 +1,9 @@
 // Troubleshooting (the Vue console's RepairView): the issues that block startup, each with only
 // the actions that can resolve it: retry, replace or remove a missing secret, edit the file's
 // source, or redo that part of setup. With no issue left it goes on to setup.
-import { batch, effect, Scroll, signal, Text, untracked, View } from "nsh";
+import { batch, effect, Scroll, signal, Text, untracked, View, windowSize } from "nsh";
 import { Button, Kicker, MessageDialog, Modal, ProgressBar, TextField } from "../../components/ui";
+import { ObserveSection } from "../../components/observe/parts";
 import { endpointApiFetch, translate } from "../../lib/core/context.js";
 import { endpointRefFromRouteParam, endpointRoutePath } from "../../lib/core/endpoint-routes.js";
 import { useNotice } from "../../lib/core/notices.js";
@@ -246,16 +247,24 @@ export function RepairPage() {
 
   effect(() => untracked(() => void load()));
 
+  const phone = () => windowSize().width <= 640;
+  const pad = () => Math.round(Math.min(80, Math.max(24, windowSize().width * 0.06)));
+
   return (
     <View class="flex-1 bg-background" testID="repair-page">
-      <Scroll class="flex-1" contentClass="grow items-center justify-center px-4 py-6 md:px-10 md:py-16">
+      {/* Vue: centred with clamp(24px, 6vw, 80px) around it; phones (<=640) from the top, 24/16. */}
+      <Scroll
+        class="flex-1"
+        contentClass={`grow items-center ${phone() ? "" : "justify-center"}`}
+        contentStyle={phone() ? { paddingTop: 24, paddingBottom: 24, paddingLeft: 16, paddingRight: 16 } : { padding: pad() }}
+      >
         <View class="w-full gap-4" style={{ maxWidth: 760 }}>
           <View class="gap-2 p-2">
-            <Text class="text-xs font-semibold uppercase tracking-widest text-muted-foreground">{t("repair_kicker")}</Text>
-            <Text role="header" class="text-3xl font-semibold text-foreground">
+            <Text class="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">{t("repair_kicker")}</Text>
+            <Text role="header" class="text-[32px] font-semibold leading-[34.6px] tracking-[-0.02em] text-foreground">
               {t("repair_title")}
             </Text>
-            <Text class="text-base text-muted-foreground">{t("repair_intro")}</Text>
+            <Text class="text-base leading-[49.6px] text-muted-foreground">{t("repair_intro")}</Text>
           </View>
 
           <If when={loading()}>
@@ -269,25 +278,29 @@ export function RepairPage() {
             <View class="gap-3" testID="repair-list">
               <Each of={items()} key={(item) => issueID(item)}>
                 {(item) => (
-                  <View class="gap-3 rounded-(--radius) border border-line-faint bg-card p-4" testID={`repair-item-${issueID(item())}`}>
-                    <View class="gap-1">
-                      <Text class="text-base font-semibold text-foreground">{issueTitle(item())}</Text>
-                      <View class="flex-row flex-wrap items-center gap-2.5">
-                        <Text class="text-xs text-subtle">{item().name}</Text>
+                  // One issue: a boxed section; the head names the problem, the resource and the field its meta.
+                  <ObserveSection
+                    variant="boxed"
+                    title={issueTitle(item())}
+                    meta={
+                      <View class="flex-1 flex-row items-center">
+                        <Text class="shrink text-xs text-subtle line-clamp-1">{item().name}</Text>
                         <If when={fieldLabel(item())}>
-                          <View class="bg-selection px-1.5 py-0.75">
+                          <View class="ml-2.5 bg-primary/9 px-1.5 py-0.75">
                             <Text class="font-mono text-xs text-primary">{fieldLabel(item())}</Text>
                           </View>
                         </If>
                       </View>
-                    </View>
+                    }
+                    testID={`repair-item-${issueID(item())}`}
+                  >
                     <View selectable>
                       <Text class="font-mono text-xs text-muted-foreground line-clamp-1">{item().path}</Text>
                     </View>
-                    <View selectable class="border border-line-soft bg-muted px-3 py-2.5">
-                      <Text class="font-mono text-sm text-subtle">{item().error}</Text>
+                    <View selectable class="border border-line-soft bg-line-soft/30 px-3 py-2.5">
+                      <Text class="font-mono text-base leading-normal text-subtle">{item().error}</Text>
                     </View>
-                    <View class="flex-row flex-wrap justify-end gap-2.5">
+                    <View class={phone() ? "gap-2.5" : "flex-row flex-wrap justify-end gap-2.5"}>
                       <If when={canRetry(item())}>
                         <Button variant="outlined" size="sm" label={t("repair_action_retry")} onPress={() => void load()} />
                       </If>
@@ -317,7 +330,7 @@ export function RepairPage() {
                         <Button variant="primary" size="sm" label={t("repair_action_use_setup")} onPress={() => goToSetup(item())} />
                       </If>
                     </View>
-                  </View>
+                  </ObserveSection>
                 )}
               </Each>
             </View>

@@ -3,7 +3,8 @@
 //
 // Vue to nsh: `save` is `onSave({ new_password })`.
 import { effect, signal, Text, untracked, View } from "nsh";
-import { Badge, Button, Section, TextField } from "../ui";
+import { Button, TextField } from "../ui";
+import { RestartTag, SettingsCard } from "../settings-page/parts";
 import { SettingDialog } from "./SettingDialog";
 
 export interface ConsolePasswordPanelProps {
@@ -46,9 +47,11 @@ export function ConsolePasswordPanel(props: ConsolePasswordPanelProps) {
   }
 
   return (
-    <Section
-      variant="card"
+    <SettingsCard
       title="Web Console sign-in"
+      headOnly
+      metaLead={<RestartTag />}
+      meta="Protects browser access to this Console. It is separate from the incoming Runtime API access token."
       actions={
         <Button
           variant="plain"
@@ -60,12 +63,6 @@ export function ConsolePasswordPanel(props: ConsolePasswordPanelProps) {
         />
       }
     >
-      <View class="flex-row flex-wrap items-center gap-2">
-        <Badge tone="warn" label="Restart required" />
-        <Text class="flex-1 text-xs text-muted-foreground">
-          Protects browser access to this Console. It is separate from the incoming Runtime API access token.
-        </Text>
-      </View>
       <SettingDialog
         open={open()}
         onOpenChange={(value) => open.set(value)}
@@ -100,6 +97,6 @@ export function ConsolePasswordPanel(props: ConsolePasswordPanelProps) {
           />
         </View>
       </SettingDialog>
-    </Section>
+    </SettingsCard>
   );
 }

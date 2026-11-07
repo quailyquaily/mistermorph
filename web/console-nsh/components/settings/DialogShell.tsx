@@ -4,7 +4,7 @@ import type { JSX } from "nsh";
 import { Scroll, Text, View } from "nsh";
 import { Dialog } from "nsh/base";
 import { translate } from "../../lib/core/context.js";
-import { Button, type ModalSize } from "../ui";
+import { Modal, type ModalSize } from "../ui";
 
 /** `translate` typed: the JS default `vars = null` makes TS reject variables. */
 export const t = translate as unknown as (key: string, vars?: Record<string, unknown> | null) => string;
@@ -32,45 +32,19 @@ export interface DialogShellProps {
   testID?: string;
 }
 
+/**
+ * The Vue AppDialogShell is the console's Modal (title bar with the red close square, body, footer),
+ * so this is Modal, which also grows out of the control that opened it. While `closeDisabled`, the
+ * close button and Escape do nothing.
+ */
 export function DialogShell(props: DialogShellProps) {
   const close = () => {
     if (!props.closeDisabled) props.onClose();
   };
   return (
-    <Dialog
-      open={props.open}
-      onOpenChange={({ open }) => {
-        if (!open) close();
-      }}
-      closeOnEscape={!props.closeDisabled}
-      closeOnBackdropPress={!props.closeDisabled}
-      closeOnSwipe={!props.closeDisabled}
-      testID={props.testID}
-      animation="fade"
-      backdropClass="bg-scrim"
-      class={`m-auto max-h-[90%] ${WIDTHS[props.size ?? "md"]} rounded-(--radius) border border-line bg-popover shadow-xl`}
-    >
-      <View class="flex-row items-center gap-3 border-b border-line-faint px-4 py-3">
-        <Text class="flex-1 text-base font-semibold text-foreground" role="header">
-          {props.title ?? ""}
-        </Text>
-        <Button
-          variant="plain"
-          size="xs"
-          iconOnly
-          icon="PhX"
-          title={t("action_close")}
-          disabled={props.closeDisabled}
-          onPress={close}
-        />
-      </View>
-      <Scroll class="shrink" contentClass="gap-3 p-4">
-        {props.children}
-      </Scroll>
-      <If when={props.footer}>
-        <View class="flex-row flex-wrap items-center justify-end gap-2 border-t border-line-faint px-4 py-3">{props.footer}</View>
-      </If>
-    </Dialog>
+    <Modal open={props.open} onClose={close} title={props.title} size={props.size ?? "md"} footer={props.footer} testID={props.testID} closeLabel={t("action_close")}>
+      {props.children}
+    </Modal>
   );
 }
 

@@ -2,7 +2,7 @@
 // (web/console/src/components/WorkspaceDirPickerDialog.js). It reports `onConfirm` with the chosen
 // path; the caller decides what picking it means. In the desktop app, browsing the local agent,
 // the native folder picker is offered too: what it picks becomes the selection.
-import { batch, computed, effect, Image, List, signal, Text, untracked, View } from "nsh";
+import { batch, computed, effect, Image, List, signal, Text, untracked, View, windowSize } from "nsh";
 import type { InputRef } from "nsh";
 import { Button as BaseButton } from "nsh/base";
 import { runtimeApiFetch, runtimeApiFetchForEndpoint, endpointState, translate } from "../../lib/core/context.js";
@@ -13,7 +13,8 @@ import { workspaceTreeIcon } from "../../lib/core/workspace-icons.js";
 import { buildTreeRows, hasOwnTreePath, normalizeTreeItems } from "../../lib/core/workspace-tree.js";
 import { hasFeature, isDesktop, pickDirectory } from "../../lib/platform";
 import { isMobile } from "../../lib/shell";
-import { Button, Modal, TextField, Toggle } from "../ui";
+import { createSlidingSelection, FadeText, SCROLLBAR } from "../motion";
+import { Button, Modal, TextField, Tip, Toggle } from "../ui";
 
 const t = translate as (key: string, vars?: Record<string, unknown> | null) => string;
 
@@ -408,22 +409,40 @@ export function WorkspaceDirPickerDialog(props: WorkspaceDirPickerDialogProps) {
     props.onConfirm?.(dir);
   }
 
-  const SourceItem = (item: { id: string; title: string }) => (
+  // The places: workspace-sidebar items without a meta line (40pt, 14pt titles), the selected
+  // one on the list's gliding highlight.
+  const placeSelection = createSlidingSelection(() => sourceID());
+  const SourceItem = (item: { id: string; title: string; path?: string }) => (
     <BaseButton
       onPress={() => void activateSource(item.id)}
       disabled={creating()}
       selected={sourceID() === item.id}
       accessibilityLabel={item.title}
+      tooltip={item.path ? <Tip text={item.path} /> : undefined}
       testID={`workspace-source-${item.id}`}
-      class={`rounded-(--radius) px-2.5 py-1.5 hover:bg-hover disabled:opacity-45 ${
-        sourceID() === item.id ? "bg-selection" : ""
-      }`}
+      onLayout={placeSelection.track(item.id)}
+      class={`min-h-10 justify-center rounded-(--radius) border border-transparent pb-2 pl-3.5 pr-[13px] pt-2 disabled:opacity-45 ${
+        sourceID() === item.id ? "hover:bg-hover-faint" : "hover:bg-hover-soft"
+      } ${isMobile() ? "min-w-37 max-w-60" : ""}`}
+      // The hover fill comes in after 60ms and goes at once (calm hover).
+      style={{ transitionProperty: "colors", transitionDuration: 180, transitionTimingFunction: "ease" }}
+      hoverStyle={{ transitionDelay: 60 }}
     >
-      <Text class={`text-sm line-clamp-1 ${sourceID() === item.id ? "font-medium text-foreground" : "text-subtle"}`}>
+      <Text class="text-sm leading-[18.2px] tracking-[-0.35px] text-foreground" style={{ numberOfLines: 1 }}>
         {item.title}
       </Text>
     </BaseButton>
   );
+
+  /** A small mono caps label (`.ui-kicker`). */
+  const Kicker = (kicker: { text: string }) => (
+    <Text class="font-mono text-xs font-medium uppercase tracking-[1.92px] text-muted-foreground" style={{ numberOfLines: 1 }}>
+      {kicker.text}
+    </Text>
+  );
+
+  // The picker is min(68vh, 560) tall in Vue with 12pt above and below; the Modal's body has 16.
+  const pickerHeight = () => Math.min(windowSize().height * 0.68, 560) - 8;
 
   return (
     <Modal
@@ -434,156 +453,185 @@ export function WorkspaceDirPickerDialog(props: WorkspaceDirPickerDialogProps) {
       scroll={false}
       testID="workspace-dir-picker"
       closeLabel={t("action_cancel")}
-      footer={
-        <View class="flex-1 flex-row flex-wrap items-center justify-between gap-2">
-          <Toggle
-            checked={showHidden()}
-            disabled={loading() || creating()}
-            label={t("chat_workspace_dialog_show_hidden")}
-            testID="workspace-show-hidden"
-            onChange={(checked) => void setShowHidden(checked)}
-          />
-          <View class="flex-row items-center gap-2">
-            <Button
-              variant="outlined"
-              label={t("action_cancel")}
-              disabled={Boolean(props.confirming) || creating()}
-              testID="workspace-cancel"
-              onPress={close}
-            />
-            <Button
-              variant="primary"
-              label={dialogConfirmLabel()}
-              loading={Boolean(props.confirming)}
-              disabled={confirmButtonDisabled()}
-              testID="workspace-confirm"
-              onPress={confirm}
-            />
-          </View>
-        </View>
-      }
     >
-      <View class="flex-1 gap-3">
+      <View class="gap-4" style={{ height: pickerHeight() }}>
         <If when={error()}>
           <View class="rounded-(--radius) border-l-2 border-danger bg-paper px-3 py-2" role="alert">
             <Text class="text-sm text-danger">{error()}</Text>
           </View>
         </If>
-        <View class={isMobile() ? "gap-2" : "flex-row gap-3"} style={{ height: isMobile() ? 460 : 380 }}>
-          <View class={isMobile() ? "flex-row flex-wrap items-center gap-1" : "w-40 gap-1"}>
-            <Text class="px-2.5 font-mono text-xs uppercase tracking-wide text-muted-foreground">
-              {t("chat_workspace_dialog_places")}
-            </Text>
-            <SourceItem id={SOURCE_RECENT} title={t("chat_workspace_dialog_recent")} />
-            <SourceItem id={SOURCE_HOME} title={t("chat_workspace_dialog_home")} />
-            <SourceItem id={SOURCE_SYSTEM} title={t("chat_workspace_dialog_system")} />
-            <Each of={placeSourceItems()} key={(item) => item.id}>
-              {(item) => <SourceItem id={item().id} title={item().title} />}
-            </Each>
-          </View>
+        <View class="flex-1 gap-3.5">
+          <View class={`flex-1 gap-3.5 ${isMobile() ? "" : "flex-row"}`}>
+            <View class={isMobile() ? "gap-3" : "w-55 gap-2"}>
+              <Kicker text={t("chat_workspace_dialog_places")} />
+              <View class={`relative gap-0.5 ${isMobile() ? "flex-row flex-wrap gap-2" : ""}`}>
+                <placeSelection.Highlight class="rounded-(--radius) bg-selection" />
+                <SourceItem id={SOURCE_RECENT} title={t("chat_workspace_dialog_recent")} />
+                <SourceItem id={SOURCE_HOME} title={t("chat_workspace_dialog_home")} />
+                <SourceItem id={SOURCE_SYSTEM} title={t("chat_workspace_dialog_system")} />
+                <Each of={placeSourceItems()} key={(item) => item.id}>
+                  {(item) => <SourceItem id={item().id} title={item().title} path={item().path} />}
+                </Each>
+              </View>
+            </View>
 
-          <View class="flex-1 gap-2">
-            <View class="flex-row items-center gap-2">
-              <Text class="font-mono text-xs uppercase tracking-wide text-muted-foreground">
-                {t("chat_workspace_dialog_create_in")}
-              </Text>
-              <Text class="flex-1 font-mono text-xs text-foreground line-clamp-1" testID="workspace-create-parent">
-                {createParent() || t("chat_workspace_dialog_selection_empty")}
-              </Text>
-              <If when={canPickNative()}>
+            <View class="flex-1">
+              <View class="mb-2 min-h-8 flex-row items-center justify-between gap-2.5">
+                <View class="flex-1 flex-row items-center gap-2">
+                  <Kicker text={t("chat_workspace_dialog_create_in")} />
+                  <FadeText
+                    text={createParent() || t("chat_workspace_dialog_selection_empty")}
+                    class="flex-1 font-mono text-xs leading-[16.8px] text-subtle"
+                    testID="workspace-create-parent"
+                  />
+                </View>
+                <If when={canPickNative()}>
+                  <Button
+                    variant="plain"
+                    size="xs"
+                    iconOnly
+                    icon="PhFolderOpen"
+                    title={t("todo_workspace_dir_browse")}
+                    loading={picking()}
+                    disabled={creating() || Boolean(props.confirming)}
+                    testID="workspace-native-pick"
+                    onPress={() => void pickNative()}
+                  />
+                </If>
                 <Button
                   variant="plain"
                   size="xs"
-                  iconOnly
-                  icon="PhFolderOpen"
-                  title={t("todo_workspace_dir_browse")}
-                  loading={picking()}
-                  disabled={creating() || Boolean(props.confirming)}
-                  testID="workspace-native-pick"
-                  onPress={() => void pickNative()}
-                />
-              </If>
-              <Button
-                variant="plain"
-                size="xs"
-                icon="PhPlus"
-                label={t("chat_workspace_dialog_new_directory")}
-                disabled={createDisabled() || createOpen()}
-                testID="workspace-new-directory"
-                onPress={openCreate}
-              />
-            </View>
-
-            <If when={createOpen()}>
-              <View class="flex-row items-center gap-2">
-                <TextField
-                  class="flex-1"
-                  value={createName()}
-                  placeholder={t("chat_workspace_dialog_directory_name")}
-                  accessibilityLabel={t("chat_workspace_dialog_directory_name")}
-                  disabled={creating()}
-                  testID="workspace-directory-name"
-                  inputRef={(node) => {
-                    createField = node;
-                  }}
-                  onChange={(value) => createName.set(value)}
-                  onSubmit={() => void createDir()}
-                />
-                <Button variant="plain" label={t("action_cancel")} disabled={creating()} onPress={cancelCreate} />
-                <Button
-                  variant="primary"
-                  label={t("chat_workspace_dialog_create_directory")}
-                  loading={creating()}
-                  disabled={createSubmitDisabled()}
-                  testID="workspace-create-directory"
-                  onPress={() => void createDir()}
+                  icon="PhPlus"
+                  label={t("chat_workspace_dialog_new_directory")}
+                  disabled={createDisabled() || createOpen()}
+                  testID="workspace-new-directory"
+                  onPress={openCreate}
                 />
               </View>
-            </If>
 
-            <View class="flex-1 rounded-(--radius) border border-line-faint bg-field">
-              <If
-                when={!(loading() && rows().length === 0)}
-                else={<Text class="p-3 text-sm text-muted-foreground">{t("chat_workspace_dialog_loading")}</Text>}
-              >
-                <List
-                  each={rows()}
-                  keyExtractor={(row) => `browser:${row.key}`}
-                  class="flex-1"
-                  contentClass="py-1"
-                  testID="workspace-tree"
-                  empty={<Text class="p-3 text-sm text-muted-foreground">{emptyText()}</Text>}
-                >
-                  {(row) => (
-                    <BaseButton
-                      onPress={() => void selectNode(row())}
-                      disabled={!row().entry.is_dir || creating()}
-                      selected={selection() === text(row().entry.path)}
-                      accessibilityLabel={row().entry.path}
-                      testID={`workspace-row-${row().entry.path}`}
-                      class={`flex-row items-center gap-2 py-1 pr-2 hover:bg-hover disabled:opacity-60 ${
-                        selection() === text(row().entry.path) ? "bg-selection" : ""
-                      }`}
-                      style={{ paddingLeft: 8 + row().depth * 16 }}
-                    >
-                      <Image
-                        src={workspaceTreeIcon(row().entry, row().expanded)}
-                        accessibilityElementsHidden
-                        style={{ width: 16, height: 16 }}
-                      />
-                      <If
-                        when={row().source === "recent"}
-                        else={<Text class="flex-1 text-sm text-foreground line-clamp-1">{row().entry.name}</Text>}
-                      >
-                        <View class="flex-1">
-                          <Text class="text-sm text-foreground line-clamp-1">{row().entry.name}</Text>
-                          <Text class="font-mono text-xs text-muted-foreground line-clamp-1">{row().entry.path}</Text>
-                        </View>
-                      </If>
-                    </BaseButton>
-                  )}
-                </List>
+              <If when={createOpen()}>
+                <View class={`mb-2 gap-2 ${isMobile() ? "" : "flex-row items-center"}`}>
+                  <TextField
+                    class="flex-1"
+                    value={createName()}
+                    placeholder={t("chat_workspace_dialog_directory_name")}
+                    accessibilityLabel={t("chat_workspace_dialog_directory_name")}
+                    disabled={creating()}
+                    testID="workspace-directory-name"
+                    inputRef={(node) => {
+                      createField = node;
+                    }}
+                    onChange={(value) => createName.set(value)}
+                    onSubmit={() => void createDir()}
+                  />
+                  <View class="flex-row items-center justify-end gap-2">
+                    <Button variant="plain" size="sm" label={t("action_cancel")} disabled={creating()} onPress={cancelCreate} />
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      label={t("chat_workspace_dialog_create_directory")}
+                      loading={creating()}
+                      disabled={createSubmitDisabled()}
+                      testID="workspace-create-directory"
+                      onPress={() => void createDir()}
+                    />
+                  </View>
+                </View>
               </If>
+
+              {/* The browser (`.workspace-picker-browser`): a soft hairline on paper. */}
+              <View class="flex-1 overflow-hidden rounded-(--radius) border border-line-soft/85 bg-paper">
+                <If
+                  when={!(loading() && rows().length === 0)}
+                  else={<Text class="p-3.5 text-sm leading-[20.3px] text-muted-foreground">{t("chat_workspace_dialog_loading")}</Text>}
+                >
+                  <List
+                    each={rows()}
+                    keyExtractor={(row) => `browser:${row.key}`}
+                    class="flex-1"
+                    contentClass="gap-0.5 p-1.5"
+                    scrollbar={SCROLLBAR}
+                    testID="workspace-tree"
+                    empty={<Text class="p-3.5 text-sm leading-[20.3px] text-muted-foreground">{emptyText()}</Text>}
+                  >
+                    {(row) => (
+                      <View style={{ paddingLeft: row().depth * 14 }}>
+                        <BaseButton
+                          onPress={() => void selectNode(row())}
+                          disabled={!row().entry.is_dir || creating()}
+                          selected={selection() === text(row().entry.path)}
+                          accessibilityLabel={row().entry.path}
+                          tooltip={<Tip text={row().entry.path} />}
+                          testID={`workspace-row-${row().entry.path}`}
+                          // `.chat-workspace-tree-entry`: a quiet row that takes a hairline and the
+                          // plain hover fill; the chosen one a firmer line on a faint ink tint.
+                          class={`flex-row items-center gap-2 rounded-(--radius) border pb-[7px] pl-2 pr-2.5 pt-[7px] disabled:opacity-70 ${
+                            selection() === text(row().entry.path)
+                              ? "border-line bg-blue-dark/10"
+                              : "border-transparent hover:border-line-soft/75 hover:bg-hover"
+                          } ${row().source === "recent" ? "py-2" : ""}`}
+                          style={{ transitionProperty: "colors", transitionDuration: 180 }}
+                        >
+                          <View class="size-[18px] items-center justify-center">
+                            <Image
+                              src={workspaceTreeIcon(row().entry, row().expanded)}
+                              accessibilityElementsHidden
+                              style={{ width: 16, height: 16 }}
+                            />
+                          </View>
+                          <If
+                            when={row().source === "recent"}
+                            else={
+                              <FadeText
+                                text={row().entry.name}
+                                noTooltip
+                                class={`flex-1 text-sm leading-[20.3px] ${
+                                  selection() === text(row().entry.path) ? "text-foreground" : "text-subtle"
+                                }`}
+                              />
+                            }
+                          >
+                            <View class="flex-1 gap-0.5">
+                              <FadeText text={row().entry.name} noTooltip class="text-sm leading-[18.2px] text-foreground" />
+                              <FadeText text={row().entry.path} noTooltip class="text-xs leading-[15.6px] text-muted-foreground" />
+                            </View>
+                          </If>
+                        </BaseButton>
+                      </View>
+                    )}
+                  </List>
+                </If>
+              </View>
+            </View>
+          </View>
+
+          {/* The actions sit in the picker itself, under the browser, with no rule above them. */}
+          <View class="flex-row flex-wrap items-center justify-between gap-2">
+            <Toggle
+              checked={showHidden()}
+              disabled={loading() || creating()}
+              label={t("chat_workspace_dialog_show_hidden")}
+              testID="workspace-show-hidden"
+              onChange={(checked) => void setShowHidden(checked)}
+            />
+            <View class="flex-row items-center gap-2">
+              <Button
+                variant="plain"
+                size="sm"
+                label={t("action_cancel")}
+                disabled={Boolean(props.confirming) || creating()}
+                testID="workspace-cancel"
+                onPress={close}
+              />
+              <Button
+                variant="primary"
+                size="sm"
+                label={dialogConfirmLabel()}
+                loading={Boolean(props.confirming)}
+                disabled={confirmButtonDisabled()}
+                testID="workspace-confirm"
+                onPress={confirm}
+              />
             </View>
           </View>
         </View>

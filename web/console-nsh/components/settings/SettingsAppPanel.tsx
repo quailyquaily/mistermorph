@@ -9,7 +9,9 @@ import { canCheckDesktopUpdate, desktopRuntimeVersion, isDesktopRuntime } from "
 import { CONSOLE_LOCAL_ENDPOINT_REF, endpointDisplayItem } from "../../lib/core/endpoints.js";
 import { pushNotice } from "../../lib/core/notices.js";
 import { checkDesktopUpdate, copyText, openExternal, origin } from "../../lib/platform";
-import { Button, Icon, Markdown, Section, Toggle } from "../ui";
+import { Button, Icon, Markdown } from "../ui";
+import { isMobile } from "../../lib/shell";
+import { SettingRow, SettingsCard, SettingSwitch } from "../settings-page/parts";
 import { SettingSelect } from "./SettingFields";
 import { t } from "./DialogShell";
 
@@ -45,30 +47,32 @@ export function SettingsAppPanel() {
   const hint = () => t(`settings_app_hint_${mode()}`);
 
   return (
-    <View class="gap-5" testID="settings-app">
-      <Section variant="card" title={t("settings_app_title")} meta={t("settings_section_app_meta")}>
+    <View class="gap-4" testID="settings-app">
+      <SettingsCard title={t("settings_app_title")} meta={t("settings_section_app_meta")}>
         <If when={agent()} else={<Text class="text-sm text-muted-foreground">{t("settings_app_no_agent")}</Text>}>
           {(current) => (
-            <View class="flex-row items-center gap-3">
+            <View class="flex-row flex-wrap items-center gap-3.5">
               <Image
                 src={current().image || appLogo}
                 accessibilityElementsHidden
-                class="rounded-(--radius)"
-                style={{ width: 48, height: 48 }}
+                class="rounded-[14px] border border-line/70 bg-paper"
+                style={{ width: 56, height: 56 }}
               />
-              <View class="flex-1 gap-0.5">
-                <Text class="text-sm font-semibold text-foreground">{current().name}</Text>
-                <Text class="text-xs text-muted-foreground" testID="settings-app-hint">
+              <View class="min-w-0 flex-1 gap-1">
+                <Text class="text-base font-semibold text-subtle" style={{ numberOfLines: 1 }}>
+                  {current().name}
+                </Text>
+                <Text class="text-xs leading-normal text-muted-foreground" testID="settings-app-hint">
                   {hint()}
                 </Text>
               </View>
               <If when={mode() === "waiting"}>
-                <Button variant="primary" size="xs" icon="PhDownloadSimple" label={t("settings_app_install")} disabled />
+                <Button variant="primary" size="xs" class={isMobile() ? "self-stretch" : ""} icon="PhDownloadSimple" label={t("settings_app_install")} disabled />
               </If>
             </View>
           )}
         </If>
-      </Section>
+      </SettingsCard>
     </View>
   );
 }
@@ -118,20 +122,10 @@ export function releaseNotesSource(notes: unknown) {
     .trim();
 }
 
-function Row(props: { title: string; note?: string; first?: boolean; children?: JSX.Element; status?: JSX.Element; testID?: string }) {
-  return (
-    <View class={`flex-row flex-wrap items-center gap-3 py-3 ${props.first ? "" : "border-t border-line-faint"}`} testID={props.testID}>
-      <View class="min-w-60 flex-1 gap-0.5">
-        <Text class="text-sm font-medium text-foreground">{props.title}</Text>
-        <If when={props.note}>
-          <Text class="text-xs text-muted-foreground">{props.note}</Text>
-        </If>
-        {props.status}
-      </View>
-      {props.children}
-    </View>
-  );
-}
+const Row = SettingRow;
+
+/** A row's control (`.settings-console-control`): at least 180pt, full width on phones. */
+const control = () => (isMobile() ? "self-stretch" : "min-w-[180px]");
 
 export function SettingsUpdatePanel(props: SettingsUpdatePanelProps) {
   const loading = signal(false);
@@ -339,10 +333,10 @@ export function SettingsUpdatePanel(props: SettingsUpdatePanelProps) {
   });
 
   return (
-    <Section variant="card" title={t("settings_auto_update_card_title")} meta={t("settings_auto_update_card_hint")}>
+    <SettingsCard title={t("settings_auto_update_card_title")} meta={t("settings_auto_update_card_hint")} list>
       <View testID="settings-update">
         <Row first title={t("settings_update_channel_title")} note={t("settings_update_channel_hint")}>
-          <View class="w-44">
+          <View class={isMobile() ? "self-stretch" : "w-[180px]"}>
             <SettingSelect
               value={channel()}
               options={[
@@ -356,11 +350,12 @@ export function SettingsUpdatePanel(props: SettingsUpdatePanelProps) {
             />
           </View>
         </Row>
-        <Row title={t("settings_update_auto_title")} note={t("settings_update_auto_hint")}>
-          <Toggle
+        <Row inline title={t("settings_update_auto_title")} note={t("settings_update_auto_hint")}>
+          <SettingSwitch
             checked={enabled()}
             disabled={loading() || saving()}
             onChange={setEnabled}
+            accessibilityLabel={t("settings_update_auto_title")}
             testID="settings-update-auto"
           />
         </Row>
@@ -368,13 +363,15 @@ export function SettingsUpdatePanel(props: SettingsUpdatePanelProps) {
           title={t("settings_update_version_title")}
           note={installedText()}
           status={
-            <Text class={`text-xs ${stateTone()}`} testID="settings-update-state">
+            <Text class={`text-xs leading-[17.4px] ${stateTone()}`} testID="settings-update-state">
               {stateText()}
             </Text>
           }
         >
           <Button
             variant="outlined"
+            size="md"
+            class={control()}
             icon="PhArrowClockwise"
             label={t("settings_update_check_action")}
             loading={checking()}
@@ -384,7 +381,7 @@ export function SettingsUpdatePanel(props: SettingsUpdatePanelProps) {
           />
         </Row>
         <If when={hasRelease()}>
-          <View class="flex-row flex-wrap items-start gap-3 border-t border-line-faint py-3" testID="settings-update-release">
+          <View class="flex-row flex-wrap items-start gap-3 border-t border-line-soft py-3" testID="settings-update-release">
             <View class="min-w-60 flex-1 gap-1.5">
               <Text class="text-sm font-medium text-foreground">{releaseTitle()}</Text>
               <View class="flex-row flex-wrap items-center gap-2">
@@ -424,6 +421,6 @@ export function SettingsUpdatePanel(props: SettingsUpdatePanelProps) {
           </View>
         </If>
       </View>
-    </Section>
+    </SettingsCard>
   );
 }

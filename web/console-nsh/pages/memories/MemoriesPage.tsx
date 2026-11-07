@@ -3,19 +3,26 @@
 // facts, with who may hear each one up front; Journal, after All memories, is the raw record,
 // searched, or the events a memory came from. On a phone the index and the picked view take turns,
 // with a back button.
-import { batch, computed, effect, Scroll, signal, Text, untracked, View } from "nsh";
+import type { JSX } from "nsh";
+import { batch, computed, effect, signal, Text, untracked, View } from "nsh";
 import { Button as BaseButton, DatePicker } from "nsh/base";
 import {
   Blocks,
+  DetailCard,
+  gutterX,
+  gutterY,
   IndexColumn,
   IndexDivider,
   IndexRow,
   InlineNotice,
   MobileBar,
   Note,
+  RowCount,
   SearchField,
   t,
+  TurnCaret,
 } from "../../components/knowledge/parts";
+import { createSlidingSelection, EdgeScroll, MOTION_EASE_CSS, MOTION_NORMAL, motionMs } from "../../components/motion";
 import { Button, Icon, MessageDialog, Modal, Page, SelectField, TextField, type IconName } from "../../components/ui";
 import { currentLocale, endpointState, formatShortTime, runtimeApiFetch } from "../../lib/core/context.js";
 import { endpointRoutePath } from "../../lib/core/endpoint-routes.js";
@@ -67,9 +74,8 @@ interface Draft {
 }
 
 // The color of a visibility: private is plain, a conversation green, public orange.
-const VISIBILITY_TEXT: Record<string, string> = { private: "text-subtle", conversation: "text-ok", public: "text-warn-dark" };
 const VISIBILITY_MARK: Record<string, string> = { private: "bg-subtle", conversation: "bg-ok", public: "bg-warn-dark" };
-const AUDIENCE_MARK: Record<string, string> = { owner: "bg-subtle", contact: "bg-blue-lighter", conversation: "bg-ok", general: "bg-subtle" };
+const AUDIENCE_MARK: Record<string, string> = { owner: "bg-blue", contact: "bg-blue-lighter", conversation: "bg-ok", general: "bg-blue" };
 
 function kindIcon(kind: string): IconName {
   switch (kind) {
@@ -268,9 +274,15 @@ export function MemoriesPage() {
         const count = [countText("memories_count_memory", section.items.length), rules ? countText("memories_count_rule", rules) : ""]
           .filter(Boolean)
           .join(", ");
-        return { ...section, title: subjectTitle(section.subject), meta: `${subjectMeta(section.subject)} · ${count}` };
+        const kind = subjectKind(section.subject);
+        return {
+          ...section,
+          title: subjectTitle(section.subject),
+          meta: `${subjectMeta(section.subject)} · ${count}`,
+          literal: kind !== "owner" && kind !== "general",
+        };
       }
-      return { ...section, title: t(`memories_section_${section.key}`), meta: t(`memories_section_${section.key}_meta`) };
+      return { ...section, title: t(`memories_section_${section.key}`), meta: t(`memories_section_${section.key}_meta`), literal: false };
     }),
   );
   const filterActive = () => Boolean(query().trim() || subject());
@@ -521,6 +533,54 @@ export function MemoriesPage() {
     });
   });
 
+  // The index as one flat list (dividers and rows side by side), so its rows are siblings of the
+  // gliding highlight (Vue: v-sliding-selection on .memories-index-list).
+  type IndexEntry = {
+    key: string;
+    label?: string;
+    row?: { key: string; testID: string; icon: IconName; title: string; meta: string; count?: string; active: boolean; onPress: () => void };
+  };
+  const indexEntries = computed<IndexEntry[]>(() => {
+    const out: IndexEntry[] = [];
+    for (const row of indexItems()) {
+      if (row.divider) out.push({ key: `divider:${row.divider}`, label: row.divider });
+      out.push({
+        key: row.key,
+        row: {
+          key: row.key,
+          testID: `memories-subject:${row.key}`,
+          icon: kindIcon(row.kind),
+          title: row.title,
+          meta: row.meta,
+          count: row.count,
+          active: !onJournal() && row.active,
+          onPress: () => pickSubject(row.subject),
+        },
+      });
+      if (row.kind === "all") {
+        out.push({
+          key: "journal",
+          row: {
+            key: "journal",
+            testID: "memories-journal",
+            icon: "PhClockCounterClockwise",
+            title: t("memories_tab_journal"),
+            meta: t("memories_journal_item_meta"),
+            active: onJournal(),
+            onPress: pickJournal,
+          },
+        });
+      }
+    }
+    return out;
+  });
+  // Unlike Skills and Contacts, the picked subject stays marked on a phone too (Vue does the same).
+  const activeIndexKey = () => {
+    if (onJournal()) return "journal";
+    return indexItems().find((row) => row.active)?.key ?? null;
+  };
+  const sliding = createSlidingSelection(activeIndexKey);
+
   return (
     <Page hideBar scroll={false} testID="memories-page">
       <If when={mobileShowBack()}>
@@ -533,38 +593,38 @@ export function MemoriesPage() {
             label={t("memories_index_label")}
             fill={isMobile()}
             testID="memories-index"
-            top={<SearchField value={query()} onChange={(value) => query.set(value)} placeholder={t("memories_search")} testID="memories-search" />}
+            top={
+              <SearchField
+                value={query()}
+                onChange={(value) => query.set(value)}
+                placeholder={t("memories_search")}
+                icon={false}
+                testID="memories-search"
+              />
+            }
           >
-            <If
-              when={!(loading() && !loaded())}
-              else={<Blocks count={4} height={52} />}
-            >
-              <Each of={indexItems()} key={(row) => row.key}>
-                {(row) => (
-                  <View class="gap-0.5">
-                    <If when={row().divider}>
-                      <IndexDivider label={row().divider} />
-                    </If>
-                    <IndexRow
-                      testID={`memories-subject:${row().key}`}
-                      icon={kindIcon(row().kind)}
-                      title={row().title}
-                      meta={row().meta}
-                      active={!onJournal() && row().active}
-                      onPress={() => pickSubject(row().subject)}
-                      trailing={<Text class="font-mono text-xs text-muted-foreground">{row().count}</Text>}
-                    />
-                    <If when={row().kind === "all"}>
+            <If when={!(loading() && !loaded())} else={<Blocks count={4} height={52} class={isMobile() ? "px-4" : ""} />}>
+              <sliding.Highlight class="rounded-(--radius) bg-selection" />
+              <Each of={indexEntries()} key={(entry) => entry.key}>
+                {(entry) => (
+                  <If
+                    when={entry().row}
+                    else={<IndexDivider label={entry().label ?? ""} class="pt-3.5" />}
+                  >
+                    {(row) => (
                       <IndexRow
-                        testID="memories-journal"
-                        icon="PhClockCounterClockwise"
-                        title={t("memories_tab_journal")}
-                        meta={t("memories_journal_item_meta")}
-                        active={onJournal()}
-                        onPress={pickJournal}
+                        testID={row().testID}
+                        icon={row().icon}
+                        title={row().title}
+                        meta={row().meta}
+                        active={row().active}
+                        sliding
+                        onLayout={sliding.track(row().key)}
+                        onPress={() => row().onPress()}
+                        trailing={row().count !== undefined ? <RowCount value={row().count!} /> : undefined}
                       />
-                    </If>
-                  </View>
+                    )}
+                  </If>
                 )}
               </Each>
             </If>
@@ -572,7 +632,16 @@ export function MemoriesPage() {
         </If>
 
         <If when={showMainPane()}>
-          <Scroll class="flex-1" contentClass="gap-4 p-5" testID="memories-main">
+          <EdgeScroll
+            class="flex-1"
+            contentClass="gap-5"
+            style={
+              isMobile()
+                ? { paddingLeft: gutterX(), paddingRight: gutterX(), paddingTop: 16 }
+                : { paddingLeft: 20, paddingRight: gutterX(), paddingTop: 18, marginLeft: 4 }
+            }
+            testID="memories-main"
+          >
             <If when={err()}>
               <InlineNotice type="error" text={err()} testID="memories-error" />
             </If>
@@ -580,14 +649,17 @@ export function MemoriesPage() {
               when={!onJournal()}
               else={
                 <View class="gap-4">
-                  <View class="flex-row flex-wrap items-center gap-2">
-                    <SearchField
+                  <View class="flex-row flex-wrap items-center gap-2.5">
+                    <TextField
                       value={journalQuery()}
                       onChange={(value) => journalQuery.set(value)}
                       onSubmit={searchJournal}
                       placeholder={t("memories_journal_search")}
+                      accessibilityLabel={t("memories_journal_search")}
+                      leadingIcon="PhMagnifyingGlass"
+                      size="sm"
                       testID="journal-search"
-                      class="min-w-48 flex-1"
+                      class="min-w-65 flex-[2]"
                     />
                     <SinceField value={journalSince()} onChange={(value) => journalSince.set(value)} />
                     <Button variant="outlined" size="sm" label={t("memories_journal_go")} loading={journalLoading()} onPress={searchJournal} testID="journal-go" />
@@ -595,7 +667,7 @@ export function MemoriesPage() {
 
                   <If when={sourcesOf()}>
                     {(item) => (
-                      <Banner label={t("memories_sources_title")} text={t("memories_sources_for", { value: item().description })} tone="blue">
+                      <Banner label={t("memories_sources_title")} text={t("memories_sources_for", { value: item().description })}>
                         <Button variant="outlined" size="sm" label={t("memories_back_to_memory")} onPress={backToMemory} testID="journal-back-to-memory" />
                         <Button variant="plain" size="sm" label={t("memories_show_all")} onPress={clearSources} testID="journal-show-all" />
                       </Banner>
@@ -603,38 +675,51 @@ export function MemoriesPage() {
                   </If>
 
                   <If when={!journalSearched()}>
-                    <Note text={t("memories_journal_meta")} />
+                    <Note text={t("memories_journal_meta")} class="max-w-[620px] leading-normal" />
                   </If>
                   <If when={journalSearched() && !days().length}>
-                    <Note text={t("memories_journal_empty")} />
+                    <View class="items-center px-4 py-10">
+                      <Text class="text-center text-sm leading-normal text-muted-foreground">{t("memories_journal_empty")}</Text>
+                    </View>
                   </If>
                   <Each of={days()} key={(day) => day.label}>
                     {(day) => (
                       <SectionCard title={day().label} meta={countText("memories_count_event", day().events.length)}>
                         <Each of={day().events} key={(event) => String(event.seq ?? event.id)}>
-                          {(event) => (
-                            <View class="flex-row items-start gap-3 border-t border-line-faint py-2.5" testID={`journal-event:${event().id}`}>
-                              <Text class="w-12 pt-0.5 font-mono text-xs text-muted-foreground">{event().clock}</Text>
-                              <View class="w-32 flex-row items-center gap-1.5 pt-0.5">
-                                <View class={`size-1.5 rounded-full ${AUDIENCE_MARK[event().audienceKind || "owner"] ?? "bg-subtle"}`} />
-                                <Text class="flex-1 text-xs text-subtle line-clamp-1">{event().audienceText}</Text>
-                              </View>
-                              <View class="flex-1 gap-1">
+                          {(event, index) => (
+                            <View
+                              class={`flex-row items-start gap-4 px-4 py-3 ${index() === 0 ? "" : "border-t border-line-soft"} ${sourcesOf() ? "bg-[#dc892014]" : ""}`}
+                              testID={`journal-event:${event().id}`}
+                            >
+                              <Text class="w-[72px] pt-0.5 font-mono text-xs tabular-nums text-muted-foreground">{event().clock}</Text>
+                              <If when={!isMobile()}>
+                                <JournalAudience kind={event().audienceKind} text={event().audienceText} />
+                              </If>
+                              <View class="flex-1 gap-1.5">
+                                <If when={isMobile()}>
+                                  <JournalAudience kind={event().audienceKind} text={event().audienceText} />
+                                </If>
                                 <View selectable>
-                                  <Text class="text-sm text-foreground">{event().text || t("memories_journal_no_text")}</Text>
+                                  <Text class="text-sm leading-[17.1px] text-foreground" style={{ numberOfLines: 4 }}>
+                                    {event().text || t("memories_journal_no_text")}
+                                  </Text>
                                 </View>
-                                <View class="flex-row flex-wrap items-center gap-3">
+                                <View class="flex-row flex-wrap items-center gap-x-4 gap-y-1">
                                   <If when={event().chatPath}>
-                                    <Text role="link" class="font-mono text-xs text-blue underline" onPress={() => void navigate(event().chatPath)}>
+                                    <Text
+                                      role="link"
+                                      class="font-mono text-[11px] text-muted-foreground hover:text-foreground"
+                                      onPress={() => void navigate(event().chatPath)}
+                                    >
                                       {`${event().trace?.task_id || t("memories_open_chat")} ↗`}
                                     </Text>
                                   </If>
                                   <If when={!event().chatPath && event().trace?.task_id}>
-                                    <Text class="font-mono text-xs text-muted-foreground">{event().trace?.task_id ?? ""}</Text>
+                                    <Text class="font-mono text-[11px] text-muted-foreground">{event().trace?.task_id ?? ""}</Text>
                                   </If>
                                   <If when={event().memory}>
                                     {(memory) => (
-                                      <Text role="button" class="text-xs text-blue underline" onPress={() => openMemory(memory())}>
+                                      <Text role="button" class="text-xs text-blue underline hover:text-ink" onPress={() => openMemory(memory())}>
                                         {t("memories_remembered_as", { value: memory().description })}
                                       </Text>
                                     )}
@@ -648,28 +733,33 @@ export function MemoriesPage() {
                     )}
                   </Each>
                   <If when={journalMore()}>
-                    <Note text={t("memories_journal_more")} />
+                    <Note text={t("memories_journal_more")} class="max-w-[620px] leading-normal" />
                   </If>
                 </View>
               }
             >
               <If when={!(loading() && !loaded())} else={<Blocks count={3} height={96} />}>
-                <View class="gap-1">
-                  <Text class="text-xl font-semibold text-foreground" role="header">
-                    {subject() ? subjectTitle(subject()) : t("memories_all_subjects")}
-                  </Text>
-                  <Text class="text-sm text-subtle">{subjectLine(subject())}</Text>
+                <View class="gap-0.5">
+                  {/* The phone's page bar names the subject already. */}
+                  <If when={!isMobile()}>
+                    <View selectable>
+                      <Text class="text-lg font-semibold leading-normal tracking-[-0.01em] text-foreground" role="header">
+                        {subject() ? subjectTitle(subject()) : t("memories_all_subjects")}
+                      </Text>
+                    </View>
+                  </If>
+                  <Text class="max-w-[520px] text-xs leading-normal text-muted-foreground">{subjectLine(subject())}</Text>
                 </View>
 
                 <If when={!items().length}>
-                  <View class="items-center gap-2 py-12" testID="memories-empty">
+                  <View class="items-center gap-2.5 px-4 py-14" testID="memories-empty">
                     <Icon name="PhBrain" size={28} color="muted-foreground" />
-                    <Note text={t("memories_empty")} />
+                    <Text class="max-w-[360px] text-center text-sm leading-normal text-muted-foreground">{t("memories_empty")}</Text>
                   </View>
                 </If>
                 <If when={items().length > 0 && !sections().length}>
-                  <View class="items-center gap-2 py-8">
-                    <Note text={t("memories_no_match")} />
+                  <View class="items-center gap-2.5 px-4 py-10">
+                    <Text class="text-center text-sm leading-normal text-muted-foreground">{t("memories_no_match")}</Text>
                     <If when={filterActive()}>
                       <Button variant="outlined" size="sm" label={t("logs_clear_filters")} onPress={clearFilters} testID="memories-clear-filters" />
                     </If>
@@ -678,11 +768,12 @@ export function MemoriesPage() {
 
                 <Each of={sections()} key={(section) => section.key}>
                   {(section) => (
-                    <SectionCard title={section().title} meta={section().meta}>
+                    <SectionCard title={section().title} meta={section().meta} literal={section().literal}>
                       <Each of={section().items} key={(item) => item.id}>
-                        {(item) => (
+                        {(item, index) => (
                           <MemoryRow
                             item={item()}
+                            first={index() === 0}
                             open={expanded() === item().id}
                             busy={visibilityBusy() === item().id}
                             confirmingPublic={publicTarget() === item().id}
@@ -704,7 +795,8 @@ export function MemoriesPage() {
                 </Each>
               </If>
             </If>
-          </Scroll>
+            <View style={{ height: gutterY() }} />
+          </EdgeScroll>
         </If>
       </View>
 
@@ -730,44 +822,48 @@ export function MemoriesPage() {
       >
         <If when={editTarget()}>
           {(target) => (
-            <View class="gap-3">
-              <Text class="font-mono text-xs text-muted-foreground">{`${target().subject}/${target().name ?? ""}`}</Text>
-              <View class="flex-row gap-3">
-                <SelectField
-                  class="flex-1"
-                  label={t("memories_field_type")}
-                  items={typeOptions()}
-                  value={draft().type}
-                  onChange={(value) => draft.update((now) => ({ ...now, type: value }))}
-                  testID="memory-edit-type"
-                />
-                <SelectField
-                  class="flex-1"
-                  label={t("memories_field_visibility")}
-                  items={visibilityOptions()}
-                  value={draft().visibility}
-                  onChange={(value) => draft.update((now) => ({ ...now, visibility: value }))}
-                  testID="memory-edit-visibility"
-                />
+            <View class="gap-3 pt-2">
+              <Text class="font-mono text-[11px] text-muted-foreground">{`${target().subject}/${target().name ?? ""}`}</Text>
+              <View class={isMobile() ? "gap-3" : "flex-row gap-3"}>
+                <EditField label={t("memories_field_type")} half>
+                  <SelectField
+                    items={typeOptions()}
+                    value={draft().type}
+                    onChange={(value) => draft.update((now) => ({ ...now, type: value }))}
+                    testID="memory-edit-type"
+                  />
+                </EditField>
+                <EditField label={t("memories_field_visibility")} half>
+                  <SelectField
+                    items={visibilityOptions()}
+                    value={draft().visibility}
+                    onChange={(value) => draft.update((now) => ({ ...now, visibility: value }))}
+                    testID="memory-edit-visibility"
+                  />
+                </EditField>
               </View>
-              <Text class="text-xs text-muted-foreground">{t(`memories_visibility_hint_${draft().visibility}`)}</Text>
-              <TextField
-                label={t("memories_field_description")}
-                value={draft().description}
-                onChange={(value) => draft.update((now) => ({ ...now, description: value }))}
-                maxLength={200}
-                disabled={saving()}
-                testID="memory-edit-description"
-              />
-              <TextField
-                label={t("memories_field_body")}
-                value={draft().body}
-                onChange={(value) => draft.update((now) => ({ ...now, body: value }))}
-                multiline
-                rows={6}
-                disabled={saving()}
-                testID="memory-edit-body"
-              />
+              <Text class="-mt-1 text-xs leading-normal text-muted-foreground">{t(`memories_visibility_hint_${draft().visibility}`)}</Text>
+              <EditField label={t("memories_field_description")}>
+                <TextField
+                  accessibilityLabel={t("memories_field_description")}
+                  value={draft().description}
+                  onChange={(value) => draft.update((now) => ({ ...now, description: value }))}
+                  maxLength={200}
+                  disabled={saving()}
+                  testID="memory-edit-description"
+                />
+              </EditField>
+              <EditField label={t("memories_field_body")}>
+                <TextField
+                  accessibilityLabel={t("memories_field_body")}
+                  value={draft().body}
+                  onChange={(value) => draft.update((now) => ({ ...now, body: value }))}
+                  multiline
+                  rows={6}
+                  disabled={saving()}
+                  testID="memory-edit-body"
+                />
+              </EditField>
               <If when={editErr()}>
                 <InlineNotice type="error" text={editErr()} testID="memory-edit-error" />
               </If>
@@ -792,41 +888,44 @@ export function MemoriesPage() {
   );
 }
 
-/** A boxed section with its title and meta (AppSection variant="boxed" is-list). */
-function SectionCard(props: { title: string; meta?: string; children?: import("nsh").JSX.Element }) {
+/** A boxed section whose body is a list of rows (AppSection variant="boxed" is-list): the rows
+ * carry their own inset, so the body keeps 4pt above the first and below the last. */
+function SectionCard(props: { title: string; meta?: string; literal?: boolean; children?: JSX.Element }) {
   return (
-    <View class="rounded-(--radius) border border-line-faint bg-card px-4 pt-3 pb-1">
-      <View class="flex-row items-baseline justify-between gap-3 pb-2">
-        <Text class="text-base font-semibold text-foreground" role="header">
-          {props.title}
-        </Text>
-        <If when={props.meta}>
-          <Text class="text-xs text-muted-foreground">{props.meta}</Text>
-        </If>
-      </View>
+    <DetailCard title={props.title} meta={props.meta} literal={props.literal === true} bodyClass="py-1">
+      {props.children}
+    </DetailCard>
+  );
+}
+
+/** The bracketed note with its choices (.memory-confirm): the Make public confirmation, and the
+ * Sources banner of the journal. An amber mark and a mono caps label in brackets. */
+function Banner(props: { label: string; text: string; children?: JSX.Element }) {
+  return (
+    <View role="alert" class="flex-row flex-wrap items-center gap-x-2.5 gap-y-1.5 rounded-(--radius) border border-[#c9a27a8f] bg-paper-soft px-3 py-2">
+      <View class="size-[7px] rounded-[1px] bg-status-pending" />
+      <Text class="font-mono text-[11px] font-medium uppercase tracking-[0.12em] text-status-pending">
+        <Text class="opacity-45">[</Text>
+        {props.label}
+        <Text class="opacity-45">]</Text>
+      </Text>
+      <Text class="min-w-65 flex-1 text-xs leading-normal text-foreground">{props.text}</Text>
       {props.children}
     </View>
   );
 }
 
-/** A bracketed note with its choices: the Make public confirmation, the Sources banner. */
-function Banner(props: { label: string; text: string; tone: "warn" | "blue"; children?: import("nsh").JSX.Element }) {
-  return (
-    <View
-      role="alert"
-      class={`flex-row flex-wrap items-center gap-2 rounded-(--radius) border-l-2 bg-paper px-3 py-2 ${
-        props.tone === "warn" ? "border-warn" : "border-blue"
-      }`}
-    >
-      <Text class={`font-mono text-xs uppercase ${props.tone === "warn" ? "text-warn-dark" : "text-blue"}`}>{`[${props.label}]`}</Text>
-      <Text class="min-w-40 flex-1 text-sm text-foreground">{props.text}</Text>
-      {props.children}
-    </View>
-  );
+/** Who may hear a memory: a 7pt square mark in the visibility's tone. */
+function VisibilityMark(props: { value: string; dim?: boolean }) {
+  return <View class={`size-[7px] rounded-[1px] ${VISIBILITY_MARK[props.value] ?? "bg-subtle"} ${props.dim ? "opacity-45" : ""}`} />;
 }
+
+// A memory row's fills (Vue .memory-head): hover accent 4 %, an opened row and its more-area 6 %.
+const MEMORY_HOVER = "hover:bg-[#426f9e0a]";
 
 function MemoryRow(props: {
   item: Memory;
+  first: boolean;
   open: boolean;
   busy: boolean;
   confirmingPublic: boolean;
@@ -841,38 +940,55 @@ function MemoryRow(props: {
   onEdit: () => void;
   onForget: () => void;
 }) {
+  // A narrow column puts who may hear it above the title, not beside it.
+  const stacked = () => isMobile();
   return (
-    <View class="border-t border-line-faint" testID={`memory:${props.item.id}`}>
+    <View
+      class={props.first ? "" : "border-t border-line-soft"}
+      testID={`memory:${props.item.id}`}
+      style={{ opacity: props.busy ? 0.6 : 1, transitionProperty: "opacity", transitionDuration: motionMs(MOTION_NORMAL), transitionTimingFunction: MOTION_EASE_CSS }}
+    >
       <BaseButton
         onPress={() => props.onToggle()}
         accessibilityLabel={props.item.description}
         testID={`memory-head:${props.item.id}`}
-        class="flex-row items-start gap-3 py-2.5 hover:bg-hover"
+        class={`gap-x-4 gap-y-1 px-4 pb-[13px] pt-3.5 ${stacked() ? "" : "flex-row items-start"} ${props.open ? "bg-hover-soft" : MEMORY_HOVER}`}
+        style={{ transitionProperty: "colors", transitionDuration: motionMs(MOTION_NORMAL), transitionTimingFunction: MOTION_EASE_CSS }}
       >
-        <View class="w-24 flex-row items-center gap-1.5 pt-0.5">
-          <View class={`size-1.5 rounded-full ${VISIBILITY_MARK[props.item.visibility] ?? "bg-subtle"}`} />
-          <Text class={`text-xs ${VISIBILITY_TEXT[props.item.visibility] ?? "text-subtle"}`}>{t(`memories_visibility_${props.item.visibility}`)}</Text>
-        </View>
-        <View class="flex-1 gap-1">
-          <Text class="text-sm font-medium text-foreground">{props.item.description}</Text>
-          <Text class={`text-sm text-subtle ${props.open ? "" : "line-clamp-2"}`}>
-            {props.claimText ? <Text class="font-medium text-warn-dark">{`${props.claimText} `}</Text> : null}
-            {props.item.body}
-          </Text>
-          <View class="flex-row flex-wrap gap-x-3 gap-y-0.5">
-            <Text class="text-xs text-muted-foreground">{t(`memories_type_${props.item.type}`)}</Text>
-            <Text class="text-xs text-muted-foreground">{props.learnedText}</Text>
-            <Text class="text-xs text-muted-foreground">{formatShortTime(props.item.updated_at)}</Text>
+        <If when={!stacked()}>
+          <View class="w-[104px] flex-row items-center gap-2 pt-0.5">
+            <VisibilityMark value={props.item.visibility} />
+            <Text class="text-xs leading-normal text-muted-foreground">{t(`memories_visibility_${props.item.visibility}`)}</Text>
           </View>
+        </If>
+        <View class={`flex-row items-start gap-4 ${stacked() ? "" : "flex-1"}`}>
+          <View class="flex-1 gap-1">
+            <If when={stacked()}>
+              <View class="flex-row items-center gap-2">
+                <VisibilityMark value={props.item.visibility} />
+                <Text class="text-xs leading-normal text-muted-foreground">{t(`memories_visibility_${props.item.visibility}`)}</Text>
+              </View>
+            </If>
+            <Text class="text-sm font-medium leading-[20.3px] text-foreground">{props.item.description}</Text>
+            <Text class="text-xs leading-[21.7px] text-subtle" style={{ numberOfLines: props.open ? 0 : 1 }}>
+              {props.claimText ? <Text class="font-semibold text-blue">{`${props.claimText} `}</Text> : null}
+              {props.item.body}
+            </Text>
+            <View class="flex-row flex-wrap gap-x-3 gap-y-0.5">
+              <Text class="text-xs leading-normal tabular-nums text-muted-foreground">{t(`memories_type_${props.item.type}`)}</Text>
+              <Text class="text-xs leading-normal tabular-nums text-muted-foreground">{props.learnedText}</Text>
+              <Text class="text-xs leading-normal tabular-nums text-muted-foreground">{formatShortTime(props.item.updated_at)}</Text>
+            </View>
+          </View>
+          <TurnCaret open={props.open} size={16} duration={MOTION_NORMAL} class="mt-0.5" />
         </View>
-        <Icon name={props.open ? "PhCaretUp" : "PhCaretDown"} size={14} color="muted-foreground" />
       </BaseButton>
 
       <If when={props.open}>
-        <View class="gap-3 pb-3 pl-27">
-          <View class="flex-row flex-wrap items-center gap-2">
-            <Text class="text-xs text-subtle">{t("memories_who_may_hear")}</Text>
-            <View class="flex-row rounded-(--radius) border border-line-faint" accessibilityLabel={t("memories_field_visibility")}>
+        <View class={`gap-3.5 bg-hover-soft pb-4 pr-4 pt-1 ${stacked() ? "pl-4" : "pl-[136px]"}`}>
+          <View class="flex-row flex-wrap items-center gap-x-3 gap-y-2">
+            <Text class="text-xs font-medium text-muted-foreground">{t("memories_who_may_hear")}</Text>
+            <View class="h-8 flex-row border border-line-soft bg-background p-0.5" accessibilityLabel={t("memories_field_visibility")}>
               <Each of={[...VISIBILITIES]}>
                 {(value) => (
                   <BaseButton
@@ -881,19 +997,23 @@ function MemoryRow(props: {
                     disabled={props.busy}
                     accessibilityLabel={t(`memories_visibility_${value()}`)}
                     testID={`memory-visibility:${props.item.id}:${value()}`}
-                    class={`flex-row items-center gap-1.5 px-2.5 py-1 hover:bg-hover disabled:opacity-45 ${
-                      props.item.visibility === value() ? "bg-selection" : ""
-                    }`}
+                    class={`h-[26px] flex-row items-center gap-1.5 px-[11.2px] ${props.item.visibility === value() ? "bg-card" : ""}`}
+                    style={{
+                      boxShadow: props.item.visibility === value() ? "0 0 0 1px rgba(165, 186, 208, 0.52)" : "none",
+                      transitionProperty: "colors, box-shadow",
+                      transitionDuration: motionMs(MOTION_NORMAL),
+                      transitionTimingFunction: MOTION_EASE_CSS,
+                    }}
                   >
-                    <View class={`size-1.5 rounded-full ${VISIBILITY_MARK[value()]}`} />
-                    <Text class={`text-xs ${props.item.visibility === value() ? "font-medium text-foreground" : "text-subtle"}`}>
+                    <VisibilityMark value={value()} dim={props.item.visibility !== value()} />
+                    <Text class={`text-xs font-medium ${props.item.visibility === value() ? "text-foreground" : "text-muted-foreground"}`}>
                       {t(`memories_visibility_${value()}`)}
                     </Text>
                   </BaseButton>
                 )}
               </Each>
             </View>
-            <Text class="text-xs text-muted-foreground">{t(`memories_visibility_hint_${props.item.visibility}`)}</Text>
+            <Text class="min-w-55 flex-1 text-xs leading-normal text-muted-foreground">{t(`memories_visibility_hint_${props.item.visibility}`)}</Text>
           </View>
 
           <If when={props.confirmingPublic}>
@@ -902,14 +1022,13 @@ function MemoryRow(props: {
               text={`${t("memories_public_confirm")}${
                 props.item.told_by ? ` ${t("memories_public_confirm_told", { value: props.toldByName })}` : ""
               }`}
-              tone="warn"
             >
               <Button variant="outlined" size="sm" label={t("action_cancel")} onPress={() => props.onCancelPublic()} testID="memory-public-cancel" />
               <Button variant="primary" size="sm" label={t("memories_make_public")} onPress={() => props.onVisibility("public")} testID="memory-public-confirm" />
             </Banner>
           </If>
 
-          <View class="flex-row flex-wrap items-center gap-2">
+          <View class="flex-row flex-wrap items-center gap-1.5">
             <Button
               variant="outlined"
               size="sm"
@@ -921,8 +1040,8 @@ function MemoryRow(props: {
             />
             <Button variant="outlined" size="sm" label={t("action_edit")} onPress={() => props.onEdit()} testID={`memory-edit:${props.item.id}`} />
             <Button variant="ghost-danger" size="sm" label={t("memories_forget")} onPress={() => props.onForget()} testID={`memory-forget:${props.item.id}`} />
-            <View selectable class="flex-1">
-              <Text class="font-mono text-xs text-muted-foreground line-clamp-1">{`${props.item.subject}/${props.item.name ?? ""}`}</Text>
+            <View selectable class="ml-auto">
+              <Text class="font-mono text-[11px] text-muted-foreground">{`${props.item.subject}/${props.item.name ?? ""}`}</Text>
             </View>
           </View>
         </View>
@@ -950,13 +1069,35 @@ function SinceField(props: { value: string; onChange: (value: string) => void })
       clearButton={<Icon name="PhX" size={12} color="muted-foreground" />}
       clearButtonAccessibilityLabel={t("audit_clear_filter")}
       trigger={
-        <View class="h-8 min-w-36 flex-row items-center gap-2 rounded-(--radius) border border-input bg-field px-2.5 hover:border-ring">
+        <View class="h-9.5 min-w-36 flex-row items-center gap-2 rounded-(--radius) border border-input bg-field px-2.5 hover:border-ring">
           <Icon name="PhCalendarBlank" size={14} color="muted-foreground" />
-          <Text class={`font-mono text-sm ${props.value ? "text-foreground" : "text-placeholder"}`}>
+          <Text class={`text-sm tabular-nums ${props.value ? "text-foreground" : "text-placeholder"}`}>
             {props.value || t("memories_journal_since")}
           </Text>
         </View>
       }
     />
+  );
+}
+
+/** Where a journal event was heard: mono 11pt with a square mark (owner blue, a contact pale blue, a group green). */
+function JournalAudience(props: { kind?: string; text: string }) {
+  return (
+    <View class={`flex-row items-center gap-[7px] pt-[3px] ${isMobile() ? "" : "w-[150px]"}`}>
+      <View class={`size-[7px] rounded-[1px] ${AUDIENCE_MARK[props.kind || "owner"] ?? "bg-blue"}`} />
+      <Text class="flex-1 font-mono text-[11px] text-muted-foreground" style={{ numberOfLines: 1 }}>
+        {props.text}
+      </Text>
+    </View>
+  );
+}
+
+/** A field of the edit dialog under its label: mono 11pt caps (Vue .memory-edit-field > span). */
+function EditField(props: { label: string; half?: boolean; children?: JSX.Element }) {
+  return (
+    <View class={`gap-1.5 ${props.half && !isMobile() ? "flex-1" : ""}`} style={{ minWidth: 0 }}>
+      <Text class="font-mono text-[11px] font-medium uppercase leading-[15.4px] tracking-[0.04em] text-muted-foreground">{props.label}</Text>
+      {props.children}
+    </View>
   );
 }

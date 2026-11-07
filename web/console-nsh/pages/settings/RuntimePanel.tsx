@@ -16,8 +16,10 @@ import {
 import { endpointChannelLabel, endpointDisplayItem } from "../../lib/core/endpoints.js";
 import { useNotice } from "../../lib/core/notices.js";
 import { reactiveRecord } from "../../lib/stores/reactive-record.js";
-import { Button, StatusMark } from "../../components/ui";
-import { Fold, SettingsCard } from "../../components/settings-page/parts";
+import { Button, Icon, StatusMark } from "../../components/ui";
+import { Button as BaseButton, Collapsible } from "nsh/base";
+import { isMobile } from "../../lib/shell";
+import { SettingsCard } from "../../components/settings-page/parts";
 import { PokeDialog } from "../../components/settings-page/PokeDialog";
 import { CHANNEL_LOGOS } from "./constants";
 import { t } from "./i18n";
@@ -83,29 +85,58 @@ function emptyOverview() {
 type Tone = "healthy" | "stale" | "error" | "unknown";
 const MARK: Record<Tone, "on" | "pending" | "error" | "off"> = { healthy: "on", stale: "pending", error: "error", unknown: "off" };
 
-function StatusLabel(props: { tone: Tone; text: string; testID?: string }) {
+function StatusLabel(props: { tone: Tone; text: string; testID?: string; small?: boolean }) {
   return (
-    <View class="flex-row items-center gap-1.5" testID={props.testID}>
+    <View class="flex-row items-center gap-2" testID={props.testID}>
       <StatusMark state={MARK[props.tone]} />
-      <Text class="text-xs text-subtle">{props.text}</Text>
+      <Text class={`${props.small ? "text-xs" : "text-sm"} text-foreground`}>{props.text}</Text>
     </View>
   );
 }
 
-function Ledger(props: { rows: { key: string; label: string; value: string }[]; testID?: string }) {
+/**
+ * Label and value rows (`.runtime-ledger`): the label in the panel's grey, the value in mono, a third
+ * and two thirds of the row (two fifths and three on phones), 10pt apart on hairlines. `columns`
+ * lays the rows out two to a line (`.runtime-metrics`, 32pt apart).
+ */
+function Ledger(props: { rows: { key: string; label: string; value: string }[]; columns?: 2; testID?: string }) {
+  const two = () => props.columns === 2 && !isMobile();
   return (
-    <View testID={props.testID}>
+    <View testID={props.testID} class={two() ? "grid grid-cols-2 gap-x-8" : ""}>
       <Each of={props.rows} key={(row) => row.key}>
         {(row, index) => (
-          <View class={`flex-row items-center justify-between gap-3 py-2 ${index() === 0 ? "" : "border-t border-line-faint"}`}>
-            <Text class="text-xs text-muted-foreground">{row().label}</Text>
-            <View selectable class="shrink">
-              <Text class="font-mono text-xs tabular-nums text-foreground line-clamp-1">{row().value}</Text>
+          <View
+            class={`flex-row items-baseline gap-4 py-2.5 ${index() === props.rows.length - 1 ? "" : "border-b border-line-soft"}`}
+          >
+            <Text class={`min-w-0 ${isMobile() ? "flex-[2]" : "flex-1"} text-sm leading-normal text-subtle`}>{row().label}</Text>
+            <View selectable class={`min-w-0 ${isMobile() ? "flex-[3]" : "flex-[2]"}`}>
+              <Text class="font-mono text-sm leading-normal tabular-nums text-foreground">{row().value}</Text>
             </View>
           </View>
         )}
       </Each>
     </View>
+  );
+}
+
+/** A line that folds the rest away (`.runtime-panel summary`): the text, a chevron at the right that turns over. */
+function RuntimeFold(props: { open: boolean; onToggle: () => void; title: string; children?: JSX.Element; testID?: string }) {
+  return (
+    <Collapsible open={props.open} content={<View class="gap-3 pb-1">{props.children}</View>}>
+      <View
+        role="button"
+        accessibilityLabel={props.title}
+        accessibilityState={{ expanded: props.open }}
+        onPress={() => props.onToggle()}
+        testID={props.testID}
+        class="min-h-11 flex-row items-center justify-between gap-3 py-[11px]"
+      >
+        <Text class="text-sm leading-normal text-subtle">{props.title}</Text>
+        <View class="transition-transform duration-160" style={{ transform: [{ rotate: props.open ? "180deg" : "0deg" }] }}>
+          <Icon name="PhCaretDown" size={16} color="subtle" />
+        </View>
+      </View>
+    </Collapsible>
   );
 }
 
@@ -345,23 +376,26 @@ export function RuntimePanel(): JSX.Element {
   });
 
   return (
-    <View class="gap-5" testID="runtime-panel">
+    <View class="gap-[18px] pb-6" testID="runtime-panel">
       <SettingsCard
         title={heroTitle()}
+        literal
+        metaLead={
+          <View class="flex-row items-center gap-3.5">
+            <Text class="text-xs text-muted-foreground">{modeLabel()}</Text>
+            <StatusLabel small tone={statusTone()} text={statusLabel()} testID="runtime-status" />
+          </View>
+        }
         actions={
           <If when={canPoke()}>
             <Button variant="plain" size="xs" label={t("runtime_action_poke")} loading={poking()} disabled={pokeDisabled()} onPress={openPokeDialog} testID="runtime-poke" />
           </If>
         }
       >
-        <View class="flex-row flex-wrap items-center gap-3">
-          <Text class="text-xs text-muted-foreground">{modeLabel()}</Text>
-          <StatusLabel tone={statusTone()} text={statusLabel()} testID="runtime-status" />
-        </View>
         <If when={canPoke() && awarenessRunning()}>
-          <Text class="text-xs text-muted-foreground">{t("runtime_poke_busy")}</Text>
+          <Text class="text-sm leading-normal text-subtle">{t("runtime_poke_busy")}</Text>
         </If>
-        <Text class="text-xs text-muted-foreground" testID="runtime-update">
+        <Text class="min-h-[21px] text-sm leading-normal text-subtle" testID="runtime-update">
           {loading()
             ? t("runtime_loading")
             : hasData()
@@ -369,7 +403,7 @@ export function RuntimePanel(): JSX.Element {
               : t("runtime_no_data")}
         </Text>
         <If when={err()}>
-          <View role="alert" class="gap-0.5 rounded-(--radius) border border-danger px-3 py-2" testID="runtime-error">
+          <View role="alert" class="gap-1" testID="runtime-error">
             <Text class="text-sm text-danger">{err()}</Text>
             <If when={hasData()}>
               <Text class="text-xs text-muted-foreground">{t("runtime_stale_hint")}</Text>
@@ -382,16 +416,16 @@ export function RuntimePanel(): JSX.Element {
       </SettingsCard>
 
       <If when={hasData()}>
-        <View class="flex-row flex-wrap gap-5">
-          <SettingsCard title={t("runtime_current_model")} class="min-w-72 flex-1">
+        <View class={isMobile() ? "gap-[18px]" : "flex-row items-start gap-[18px]"}>
+          <SettingsCard title={t("runtime_current_model")} class="min-w-0 flex-1" list>
             <Ledger rows={routeRows()} testID="runtime-model" />
           </SettingsCard>
-          <SettingsCard title={t("group_channels")} class="min-w-72 flex-1" testID="runtime-channels">
+          <SettingsCard title={t("group_channels")} class="min-w-0 flex-1" testID="runtime-channels" bodyClass="gap-3">
             <Each of={configuredChannels()} key={(item) => item.key}>
               {(item) => (
-                <View class="flex-row items-center justify-between gap-3 py-1.5">
+                <View class="flex-row flex-wrap items-center justify-between gap-2">
                   <View class="flex-row items-center gap-2">
-                    <Image src={CHANNEL_LOGOS[item().key]} accessibilityElementsHidden style={{ width: 16, height: 16 }} />
+                    <Image src={CHANNEL_LOGOS[item().key]} accessibilityElementsHidden style={{ width: 20, height: 20 }} />
                     <Text class="text-sm text-foreground">{item().title}</Text>
                   </View>
                   <StatusLabel tone={channelTone(item())} text={channelStatusText(item())} />
@@ -399,7 +433,7 @@ export function RuntimePanel(): JSX.Element {
               )}
             </Each>
             <If when={unconfiguredChannels().length}>
-              <Fold
+              <RuntimeFold
                 open={unconfiguredOpen()}
                 onToggle={() => unconfiguredOpen.update((open) => !open)}
                 title={t(configuredChannels().length ? "runtime_status_not_configured" : "runtime_no_channels")}
@@ -409,34 +443,37 @@ export function RuntimePanel(): JSX.Element {
                   <Each of={unconfiguredChannels()} key={(item) => item.key}>
                     {(item) => (
                       <View class="flex-row items-center gap-2">
-                        <Image src={CHANNEL_LOGOS[item().key]} accessibilityElementsHidden style={{ width: 16, height: 16 }} />
-                        <Text class="text-sm text-muted-foreground">{item().title}</Text>
+                        <Image src={CHANNEL_LOGOS[item().key]} accessibilityElementsHidden style={{ width: 20, height: 20 }} />
+                        <Text class="text-sm text-subtle">{item().title}</Text>
                       </View>
                     )}
                   </Each>
                 </View>
-              </Fold>
+              </RuntimeFold>
             </If>
           </SettingsCard>
         </View>
 
-        <SettingsCard title={t("group_runtime")}>
-          <Ledger rows={runtimeMetrics()} testID="runtime-metrics" />
+        <SettingsCard title={t("group_runtime")} list>
+          <Ledger rows={runtimeMetrics()} columns={2} testID="runtime-metrics" />
         </SettingsCard>
 
         <SettingsCard
           title={t("runtime_technical_details")}
           actions={
-            <Button
-              variant="plain"
-              size="xs"
-              iconOnly
-              icon={technicalOpen() ? "PhCaretUp" : "PhCaretDown"}
-              title={t("runtime_technical_details")}
+            <BaseButton
               onPress={() => technicalOpen.update((open) => !open)}
+              accessibilityLabel={t("runtime_technical_details")}
               testID="runtime-technical-toggle"
-            />
+              class="size-8 items-center justify-center rounded-(--radius) hover:bg-hover"
+            >
+              <View class="transition-transform duration-160" style={{ transform: [{ rotate: technicalOpen() ? "180deg" : "0deg" }] }}>
+                <Icon name="PhCaretDown" size={16} color="subtle" />
+              </View>
+            </BaseButton>
           }
+          headOnly={!technicalOpen()}
+          list
         >
           <If when={technicalOpen()}>
             <Ledger rows={technicalRows()} testID="runtime-technical" />

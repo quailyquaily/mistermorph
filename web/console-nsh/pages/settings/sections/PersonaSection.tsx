@@ -11,8 +11,10 @@ import {
 import { safeJSON } from "../../../lib/core/context.js";
 import { ProgressBar, TextField } from "../../../components/ui";
 import { ImageUploadField, type AdjustedImage, uploadAdjustedImage } from "../../../components/settings/ImageUploadField";
-import { MarkdownEditor } from "../../../components/shared/MarkdownEditor";
+import { AppMarkdownEditor } from "../../../components/shared/MarkdownEditor";
 import { SettingField, SettingsCard } from "../../../components/settings-page/parts";
+import defaultAvatar from "../../../assets/images/app_logo_current.svg";
+import { isMobile } from "../../../lib/shell";
 import type { SettingsStore } from "../store";
 import { t } from "../i18n";
 
@@ -43,14 +45,16 @@ export function PersonaSection(props: { s: SettingsStore }) {
   const s = props.s;
   const busy = () => s.personaLoading() || s.personaSaving();
   return (
-    <View class="gap-5" testID="settings-persona">
+    <View class="gap-4" testID="settings-persona">
       <If when={s.personaLoading()}>
         <ProgressBar indeterminate label={t("settings_persona_title")} />
       </If>
-      <SettingsCard title={t("settings_persona_title")} meta={s.selectedSection()?.meta}>
+      <SettingsCard title={t("settings_persona_title")} meta={s.selectedSection()?.meta} bodyClass={isMobile() ? "gap-2" : "gap-[18px]"}>
         <SettingField label={t("settings_persona_avatar_title")}>
           <ImageUploadField
             previewUrl={s.personaAvatarURL()}
+            defaultImage={defaultAvatar}
+            previewSize={96}
             disabled={s.personaAvatarDisabled()}
             busy={s.personaAvatarBusy()}
             crop
@@ -76,8 +80,8 @@ export function PersonaSection(props: { s: SettingsStore }) {
             testID="settings-persona-name"
           />
         </SettingField>
-        <View class="flex-row flex-wrap gap-4">
-          <SettingField label={t("settings_persona_identity_emoji_label")} class="min-w-48 flex-1">
+        <View class={isMobile() ? "gap-2" : "flex-row gap-3"}>
+          <SettingField label={t("settings_persona_identity_emoji_label")} class="min-w-0 flex-1">
             <TextField
               value={s.state.persona.emoji}
               onChange={(value) => s.updatePersonaField("emoji", value)}
@@ -87,7 +91,7 @@ export function PersonaSection(props: { s: SettingsStore }) {
               testID="settings-persona-emoji"
             />
           </SettingField>
-          <SettingField label={t("settings_persona_identity_creature_label")} class="min-w-48 flex-1">
+          <SettingField label={t("settings_persona_identity_creature_label")} class="min-w-0 flex-1">
             <TextField
               value={s.state.persona.creature}
               onChange={(value) => s.updatePersonaField("creature", value)}
@@ -112,9 +116,10 @@ export function PersonaSection(props: { s: SettingsStore }) {
         </SettingField>
         <SettingField
           label={t("settings_persona_soul_title")}
-          right={<Text class="font-mono text-xs text-muted-foreground">{s.personaEditorMeta()}</Text>}
+          right={<Text class="text-xs leading-[17.4px] text-muted-foreground">{s.personaEditorMeta()}</Text>}
         >
-          <MarkdownEditor
+          <AppMarkdownEditor
+            preview={false}
             value={s.soulContent()}
             onChange={(value) => s.updatePersonaSoulContent(value)}
             height={460}

@@ -2,15 +2,16 @@
 // windows; on phones the list, then the section with a back button. Search across settings sits
 // above the list. One save bar for the whole page; leaving a section with unsaved changes asks
 // first. The sections are in ./sections, the state and requests in ./store.ts.
-import type { JSX, ScrollRef } from "nsh";
+import type { InputRef, JSX, ScrollRef } from "nsh";
 import { batch, cleanup, effect, Scroll, signal, Text, untracked, View } from "nsh";
-import { Button as BaseButton } from "nsh/base";
+import { Button as BaseButton, Input } from "nsh/base";
 import { endpointState } from "../../lib/core/context.js";
 import { endpointRoutePath } from "../../lib/core/endpoint-routes.js";
 import { buildSettingsSearchIndex, searchSettings } from "../../lib/core/settings-search.js";
 import { currentRoute, navigate, setLeaveGuard } from "../../lib/router";
 import { isMobile } from "../../lib/shell";
-import { Button, confirm, Icon, MessageDialog, Page, TextField } from "../../components/ui";
+import { Button, confirm, Icon, type IconName, MessageDialog, Page } from "../../components/ui";
+import { createScrollEdges, createSlidingSelection, SCROLLBAR } from "../../components/motion";
 import { SettingsSaveRegistryContext } from "../../components/settings/ConfigSettingsPanel";
 import { SettingsCanBrowsePaths } from "../../components/settings/SettingFields";
 import { SecretPicker } from "../../components/settings/SecretInput";
@@ -73,6 +74,39 @@ const SECTIONS: Record<string, (s: SettingsStore, pane: PaneTargetValue) => JSX.
   runtime: () => <RuntimePanel />,
   credits: () => <SettingsCreditsPanel />,
 };
+
+/** A row of the section list: icon and title; the list's sliding highlight marks the selected one. */
+function SectionItem(props: {
+  item: { id: string; icon: IconName; title: string };
+  selected: boolean;
+  mobile: boolean;
+  onPress: () => void;
+  onLayout: (event: { bounds: { origin: { x: number; y: number }; size: { width: number; height: number } } }) => void;
+}) {
+  const hovered = signal(false);
+  return (
+    <View onLayout={props.onLayout} onMouseEnter={() => hovered.set(true)} onMouseLeave={() => hovered.set(false)}>
+    <BaseButton
+      onPress={() => props.onPress()}
+      accessibilityLabel={props.item.title}
+      selected={props.selected}
+      testID={`settings-section-${props.item.id}`}
+      class={`flex-row items-center gap-2.5 rounded-(--radius) border border-transparent transition-colors duration-180 ${
+        props.mobile ? "min-h-11 px-3 py-2.5" : "min-h-10 py-2 pl-3.5 pr-[13px]"
+      } ${
+        props.selected ? "hover:bg-blue/3" : "hover:bg-hover-soft"
+      }`}
+    >
+      <Icon
+        name={props.item.icon}
+        size={18}
+        color={props.selected ? "blue" : hovered() ? "subtle" : "muted-foreground"}
+      />
+      <Text class="flex-1 text-sm leading-[18.2px] tracking-tight text-foreground line-clamp-2">{props.item.title}</Text>
+    </BaseButton>
+    </View>
+  );
+}
 
 export function SettingsPage() {
   const s = createSettingsStore();
@@ -196,10 +230,7 @@ export function SettingsPage() {
           const y = Math.max(0, scrollOffset + top - scroll.bounds.size.height / 2 + found.measured.bounds.size.height / 2);
           scrollRef.scrollTo({ y, animated: true });
         }
-        reveal.marked.set(text);
-        setTimeout(() => {
-          if (untracked(reveal.marked) === text) reveal.marked.set("");
-        }, 2000);
+        reveal.mark(text);
         return;
       }
       await sleep(50);
@@ -227,78 +258,106 @@ export function SettingsPage() {
   }
 
   /* --- the frame --- */
+  // The section list (SettingsView.css `.settings-index`, common.css `.workspace-sidebar-item`):
+  // 40pt rows, an 18pt icon that turns blue on the selected row, and one soft highlight that
+  // glides from row to row (the Vue list's v-sliding-selection) instead of each row lighting up.
+  // The selected row is marked by the highlight alone: Vue's list keeps a dot for it but hides it.
   const sectionSelected = (id: string) => !mobile() && sectionID() === id;
+  const selection = createSlidingSelection(() => (mobile() ? null : sectionID()));
+  const indexEdges = createScrollEdges();
+  const searchFocused = signal(false);
+  let searchInput: InputRef | undefined;
   const index = () => (
-    <View class={mobile() ? "flex-1" : "w-64 border-r border-line-faint"} testID="settings-index">
-      <View class="px-3 pb-2 pt-3">
-        <TextField
+    <View class={mobile() ? "flex-1" : "w-[310px]"} testID="settings-index">
+      <View
+        class={`mx-4 mb-2 mt-4 h-[34px] flex-row items-center gap-2 rounded-(--radius) border bg-card px-2.5 ${
+          searchFocused() ? "border-subtle" : "border-line"
+        }`}
+      >
+        <Icon name="PhMagnifyingGlass" size={14} color="muted-foreground" />
+        <Input
+          ref={(node: InputRef) => {
+            searchInput = node;
+          }}
           value={query()}
-          onChange={(value) => query.set(value)}
+          onChange={({ value }) => query.set(value)}
           onSubmit={() => {
             const first = untracked(results)[0];
             if (first) void goToSetting(first);
           }}
-          onKeyPress={(key) => {
+          onKeyPress={({ key }) => {
             if (key === "Escape" && untracked(query)) query.set("");
           }}
-          leadingIcon="PhMagnifyingGlass"
+          onFocus={() => searchFocused.set(true)}
+          onBlur={() => searchFocused.set(false)}
           placeholder={t("settings_search_placeholder")}
           accessibilityLabel={t("settings_search_placeholder")}
+          autoCapitalize="none"
+          autoCorrect={false}
           testID="settings-search"
+          class="flex-1 px-0.5 text-xs text-foreground placeholder:text-placeholder"
         />
-      </View>
-      <Scroll class="flex-1" contentClass="gap-0.5 px-2 pb-4">
-        <If
-          when={searching()}
-          else={
-            <Each of={s.settingsSections()} key={(item) => item.id}>
-              {(item) => (
-                <BaseButton
-                  onPress={() => void selectSection(item().id)}
-                  accessibilityLabel={item().title}
-                  selected={sectionSelected(item().id)}
-                  testID={`settings-section-${item().id}`}
-                  class={`flex-row items-center gap-2.5 rounded-(--radius) px-2.5 py-2 hover:bg-hover ${
-                    sectionSelected(item().id) ? "bg-selection" : ""
-                  }`}
-                >
-                  <Icon name={item().icon} size={16} color={sectionSelected(item().id) ? "foreground" : "muted-foreground"} />
-                  <Text class={`flex-1 text-sm line-clamp-1 ${sectionSelected(item().id) ? "font-medium text-foreground" : "text-subtle"}`}>
-                    {item().title}
-                  </Text>
-                  <If when={sectionSelected(item().id)}>
-                    <View class="size-1.5 rounded-full bg-blue" />
-                  </If>
-                  <If when={mobile()}>
-                    <Icon name="PhCaretRight" size={14} color="muted-foreground" />
-                  </If>
-                </BaseButton>
-              )}
-            </Each>
-          }
-        >
-          <View role="listbox" accessibilityLabel={t("settings_search_placeholder")} class="gap-0.5" testID="settings-search-results">
-            <If when={results().length === 0}>
-              <Text class="px-2.5 py-2 text-sm text-muted-foreground">{t("settings_search_empty")}</Text>
-            </If>
-            <Each of={results()} key={(entry) => entry.id}>
-              {(entry) => (
-                <BaseButton
-                  role="option"
-                  selected={activeResultID() === entry().id}
-                  onPress={() => void goToSetting(entry())}
-                  accessibilityLabel={entry().title}
-                  class={`gap-0.5 rounded-(--radius) px-2.5 py-2 hover:bg-hover ${activeResultID() === entry().id ? "bg-selection" : ""}`}
-                >
-                  <Text class="text-sm text-foreground line-clamp-1">{entry().title}</Text>
-                  <If when={searchWhere(entry())}>
-                    <Text class="text-xs text-muted-foreground line-clamp-1">{searchWhere(entry())}</Text>
-                  </If>
-                </BaseButton>
-              )}
-            </Each>
-          </View>
+        <If when={searching()}>
+          <BaseButton
+            onPress={() => {
+              query.set("");
+              searchInput?.focus();
+            }}
+            accessibilityLabel={t("audit_clear_filter")}
+            class="size-4 items-center justify-center rounded-(--radius) hover:bg-blue/6"
+          >
+            <Icon name="PhX" size={11} color="subtle" />
+          </BaseButton>
         </If>
+      </View>
+      <Scroll
+        class="flex-1"
+        contentClass="grow"
+        scrollbar={SCROLLBAR}
+        onScroll={indexEdges.handlers.onScroll}
+        onLayout={indexEdges.handlers.onLayout}
+        scrollEventThrottle={indexEdges.handlers.scrollEventThrottle}
+        style={indexEdges.style()}
+      >
+        <View class={`grow pb-4 ${mobile() ? "" : "px-4"}`} onLayout={indexEdges.onContentLayout}>
+          <If
+            when={searching()}
+            else={
+              <View class="relative gap-0.5">
+                <selection.Highlight class="rounded-(--radius) bg-selection" />
+                <Each of={s.settingsSections()} key={(item) => item.id}>
+                  {(item) => <SectionItem item={item()} selected={sectionSelected(item().id)} mobile={mobile()} onLayout={selection.track(item().id)} onPress={() => void selectSection(item().id)} />}
+                </Each>
+              </View>
+            }
+          >
+            <View role="listbox" accessibilityLabel={t("settings_search_placeholder")} class="gap-0.5" testID="settings-search-results">
+              <If when={results().length === 0}>
+                <Text class="my-1 text-xs text-muted-foreground">{t("settings_search_empty")}</Text>
+              </If>
+              <Each of={results()} key={(entry) => entry.id}>
+                {(entry) => (
+                  <BaseButton
+                    role="option"
+                    selected={activeResultID() === entry().id}
+                    onPress={() => void goToSetting(entry())}
+                    accessibilityLabel={entry().title}
+                    class={`gap-1 rounded-(--radius) border border-transparent py-2 pl-3.5 pr-[13px] transition-colors duration-180 hover:bg-hover-soft ${
+                      activeResultID() === entry().id ? "bg-selection" : ""
+                    }`}
+                  >
+                    <Text class="text-sm leading-[15.1px] tracking-tight text-foreground line-clamp-2">{entry().title}</Text>
+                    <If when={searchWhere(entry())}>
+                      <Text class={`text-xs leading-[16.8px] ${activeResultID() === entry().id ? "text-subtle" : "text-muted-foreground"}`}>
+                        {searchWhere(entry())}
+                      </Text>
+                    </If>
+                  </BaseButton>
+                )}
+              </Each>
+            </View>
+          </If>
+        </View>
       </Scroll>
     </View>
   );
@@ -306,38 +365,52 @@ export function SettingsPage() {
   const contentKey = () =>
     `${sectionID()}${s.agentSettingsUnsupported() && ["agent", "routes", "tools", "mcp"].includes(sectionID()) ? ":unsupported" : ""}`;
 
+  // The section's own scroll (`.settings-panel-scroll`): 16pt from the top, the right and the
+  // bottom, none at the left, where the section list is the edge; 16pt both sides on phones.
+  // Hidden content at an edge fades out (v-scroll-edges).
+  const panelEdges = createScrollEdges();
   const content = () => (
     <Scroll
       ref={(node: ScrollRef) => {
         scrollRef = node;
       }}
-      onScroll={({ offset }) => {
-        scrollOffset = offset.y;
+      onScroll={(event) => {
+        scrollOffset = event.offset.y;
+        panelEdges.handlers.onScroll(event);
       }}
+      onLayout={panelEdges.handlers.onLayout}
+      scrollEventThrottle={panelEdges.handlers.scrollEventThrottle}
+      style={panelEdges.style()}
       class="flex-1"
-      contentClass="gap-5 p-5 pb-28"
+      contentClass="grow"
+      scrollbar={SCROLLBAR}
       testID="settings-panel"
     >
-      <SettingsRestartBanner
-        pending={s.restartState.pending}
-        busy={s.restartState.busy}
-        restarting={s.restartState.restarting}
-        tasksRunning={s.restartState.tasksRunning}
-        error={s.restartState.error}
-        onRestart={(force) => void s.restartProcess(force)}
-        onCancelForce={() => {
-          s.restartState.tasksRunning = false;
-        }}
-      />
-      <Each of={[contentKey()]} key={(id) => id}>
-        {(key) =>
-          untracked(() => {
-            const [id, unsupported] = key().split(":");
-            if (unsupported) return <UnsupportedSection s={s} />;
-            return SECTIONS[id]?.(s, pane) ?? <View />;
-          })
-        }
-      </Each>
+      <View
+        onLayout={panelEdges.onContentLayout}
+        class={`grow gap-4 pt-4 ${mobile() ? "px-3" : "pl-0 pr-4"} ${s.saveBarVisible() ? "pb-[88px]" : "pb-4"}`}
+      >
+        <SettingsRestartBanner
+          pending={s.restartState.pending}
+          busy={s.restartState.busy}
+          restarting={s.restartState.restarting}
+          tasksRunning={s.restartState.tasksRunning}
+          error={s.restartState.error}
+          onRestart={(force) => void s.restartProcess(force)}
+          onCancelForce={() => {
+            s.restartState.tasksRunning = false;
+          }}
+        />
+        <Each of={[contentKey()]} key={(id) => id}>
+          {(key) =>
+            untracked(() => {
+              const [id, unsupported] = key().split(":");
+              if (unsupported) return <UnsupportedSection s={s} />;
+              return SECTIONS[id]?.(s, pane) ?? <View />;
+            })
+          }
+        </Each>
+      </View>
     </Scroll>
   );
 
@@ -363,14 +436,14 @@ export function SettingsPage() {
                       testID="settings-back"
                     />
                   </If>
-                  <Text class="text-lg font-semibold text-foreground line-clamp-1" role="header">
+                  <Text class="text-xl leading-[22.8px] tracking-[-0.03em] text-foreground line-clamp-1" role="header">
                     {barTitle()}
                   </Text>
                 </View>
               }
             >
               <View class="flex-1">
-                <View class="flex-1 flex-row">
+                <View class={`flex-1 flex-row ${mobile() ? "" : "gap-1"}`}>
                   <If when={showIndexPane()}>{index()}</If>
                   <If when={showPanelPane()}>{content()}</If>
                   <If when={showPanelPane() && !mobile()}>
@@ -390,7 +463,6 @@ export function SettingsPage() {
                   saving={s.sectionSaving()}
                   busy={s.sectionSaveBusy()}
                   onSave={() => void s.saveSection()}
-                  onDiscard={() => s.discardSection()}
                   overSheet={mobile() && Boolean(s.openChannel() || s.openedProfile())}
                 />
               </View>

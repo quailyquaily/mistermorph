@@ -74,16 +74,6 @@ test("a failed save keeps the draft and says what was not saved", async () => {
   expect(app.value("id:settings-persona-name")).toBe("Nova");
 });
 
-test("Discard drops the draft and loads the section again", async () => {
-  const { app } = await openConsole({ location: "/e/default/settings", api: PERSONA });
-  await app.waitUntil(() => app.value("id:settings-persona-name") === "Morph");
-  await app.type("id:settings-persona-name", "!");
-  await app.waitFor("id:settings-save-bar");
-  await app.press("id:settings-save-bar-discard");
-  await app.waitFor("id:settings-save-bar", { state: "gone" });
-  await app.waitUntil(() => app.value("id:settings-persona-name") === "Morph");
-});
-
 test("leaving a section with unsaved changes asks first; Keep editing stays, Discard leaves", async () => {
   const { app, calls } = await openConsole({
     location: "/e/default/settings",

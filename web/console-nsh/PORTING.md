@@ -68,3 +68,22 @@ scripts/build-web.sh /tmp/site                # the web site for console serve
 
 Look at the result: `console serve --console-static-dir /tmp/site` and a browser, or the desktop app.
 Headless tests prove behaviour, not the look.
+
+## Traps found while matching the Vue console
+
+- `leading-[1.4]` (a unitless line height) does not render as size × 1.4: write points, `leading-[19.6px]`.
+- Opacity modifiers on the app's own colour tokens (`bg-paper/70`) do nothing: add a token to
+  `theme.json` (`paper-soft`, `card-soft`) instead.
+- `style={{ display: "flex" }}` turns a View into a row.
+- On an inverted `List`, `scrollToEnd()` goes to the oldest item (nsh 0.4.0): use
+  `scrollToIndex({ index: 0 })` to show the newest.
+- `lifecycle()` from `nsh` breaks the whole page on the web runtime (0.4.0).
+- A page loaded in a hidden browser tab gets no frames, so animated values stall part-way until
+  the tab is shown; take screenshots from a visible tab.
+- Headless Chrome reports no hover and no fine pointer, so nsh lays the app out in its tablet
+  idiom. Launch it with
+  `--blink-settings=primaryPointerType=4,availablePointerTypes=4,primaryHoverType=2,availableHoverTypes=2`
+  for desktop screenshots.
+- Masks (`maskImage`) are drawn on the web only; on GPUI and Windows, `FadeText` keeps "…".
+- Shared motion helpers (sliding selection, fade truncation, scroll edges, entrances, dialog
+  origin) are in `components/motion/` (see its README).

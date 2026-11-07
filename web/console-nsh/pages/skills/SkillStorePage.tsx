@@ -2,10 +2,11 @@
 // of the store's skills with search and tag filters. A card opens a side panel with the skill's
 // details and SKILL.md (read from GitHub at the commit the store pins), and Install or Update, which
 // start the same review in chat as Add skill. On a phone the panel slides in over the grid.
-import { batch, computed, effect, Scroll, signal, Text, untracked, View } from "nsh";
-import { Button as BaseButton } from "nsh/base";
-import { Blocks, Note, SearchField, t } from "../../components/knowledge/parts";
-import { Button, Page, SidePane } from "../../components/ui";
+import { batch, computed, effect, keymap, LayoutAnimation, reduceMotion, signal, Text, untracked, View } from "nsh";
+import { Button as BaseButton, Sheet } from "nsh/base";
+import { Blocks, gutterX, gutterY, Note, ROW_TRANSITION, SearchField, t, WorkspaceTitle } from "../../components/knowledge/parts";
+import { EdgeScroll, MOTION_SLOW } from "../../components/motion";
+import { Button, Icon, Page } from "../../components/ui";
 import { endpointApiFetch, endpointState, formatBytes, runtimeApiFetchForEndpoint } from "../../lib/core/context.js";
 import { endpointRoutePath } from "../../lib/core/endpoint-routes.js";
 import {
@@ -55,11 +56,25 @@ export function SkillStorePage() {
   const links = () => storeSkillLinks(selected()) as { folder: string; document: string };
   const documentSource = () => (doc().id === selected()?.id ? (stripFrontmatter(doc().content) as string) : "");
 
+  // Opening or closing the panel narrows or widens the grid's column over 260 ms (Vue: the
+  // grid-template-columns transition of .store-shell); switching skills changes nothing in size.
+  function glidePanel(opening: boolean) {
+    if (untracked(isMobile) || reduceMotion() || opening === Boolean(untracked(selected))) return;
+    LayoutAnimation.configureNext({
+      duration: MOTION_SLOW,
+      create: { type: "easeOut", property: "opacity" },
+      update: { type: "easeInEaseOut" },
+      delete: { type: "easeOut", property: "opacity" },
+    });
+  }
+
   function open(skill: StoreSkill) {
+    glidePanel(true);
     const route = untracked(() => currentRoute());
     void navigate(locationOf(route.path, { ...route.query, skill: skill.id }), { replace: true });
   }
   function close() {
+    glidePanel(false);
     const route = untracked(() => currentRoute());
     void navigate(locationOf(route.path, { ...route.query, skill: undefined }), { replace: true });
   }
@@ -144,7 +159,7 @@ export function SkillStorePage() {
   const openInstalled = (skill: StoreSkill) =>
     void navigate(locationOf(endpointRoutePath(endpointState.selectedRef, "/skills"), { skill: skill.id }));
 
-  // Escape closes the panel: SidePane binds it beside the grid, and the sheet on a phone.
+  // Escape closes the panel: the page binds it beside the grid, and the sheet on a phone.
 
   effect(() => {
     void selectedKey();
@@ -177,24 +192,48 @@ export function SkillStorePage() {
     </If>
   );
 
+  // The grid: as many 260pt columns as fit, 12pt apart, sharing the width (Vue: repeat(auto-fill,
+  // minmax(260px, 1fr))); a flex wrap would stretch a lone last card across the row.
+  const gridWidth = signal(0);
+  const columns = () => Math.max(1, Math.floor((gridWidth() + 12) / (260 + 12)));
+  // Floored to a whole point: a share that rounds up by a hair wraps the last card of a row.
+  const cardWidth = () => (gridWidth() > 0 ? Math.floor((gridWidth() - 12 * (columns() - 1)) / columns()) : undefined);
+
+  keymap.bind("escape", () => {
+    if (!untracked(isMobile) && untracked(selected)) close();
+  });
+
   return (
     <Page
       scroll={false}
       testID="store-page"
       leading={
         <View class="flex-row items-center gap-2">
-          <Button variant="plain" size="xs" iconOnly icon="PhArrowLeft" title={t("skills_title")} onPress={backToSkills} testID="store-back" />
-          <Text class="text-lg font-semibold text-foreground" role="header">
-            {t("skills_store_title")}
-          </Text>
+          <BaseButton
+            onPress={backToSkills}
+            accessibilityLabel={t("skills_title")}
+            testID="store-back"
+            class="size-8 items-center justify-center rounded-(--radius) hover:bg-hover active:bg-press"
+            style={ROW_TRANSITION}
+          >
+            <Icon name="PhArrowLeft" size={13} color="subtle" />
+          </BaseButton>
+          <WorkspaceTitle text={t("skills_store_title")} />
         </View>
       }
     >
-      <View class="flex-1 flex-row">
-        <Scroll class="flex-1" contentClass="gap-4 p-5">
+      <View class="flex-1 flex-row" style={{ paddingLeft: gutterX(), paddingTop: gutterY(), paddingRight: isMobile() ? gutterX() : selected() ? 0 : gutterX() }}>
+        <EdgeScroll class="flex-1" contentClass="gap-4" style={{ maxWidth: 1120 }}>
           <If when={skills().length}>
-            <View class="gap-3">
-              <SearchField value={query()} onChange={(value) => query.set(value)} placeholder={t("skills_store_search")} testID="store-search" />
+            <View class="gap-2.5">
+              <SearchField
+                value={query()}
+                onChange={(value) => query.set(value)}
+                placeholder={t("skills_store_search")}
+                large
+                testID="store-search"
+                class="max-w-[420px]"
+              />
               <If when={tags().length}>
                 <View class="flex-row flex-wrap gap-1.5" accessibilityLabel={t("skills_fact_tags")}>
                   <TagChip label={t("skills_store_all")} active={!tag()} onPress={() => tag.set("")} />
@@ -212,8 +251,8 @@ export function SkillStorePage() {
               <Note text={t("skills_store_unsupported")} />
             </If>
             <If when={!unsupported() && error()}>
-              <View class="flex-row items-center gap-3" testID="store-error">
-                <Text class="text-sm text-danger">{error()}</Text>
+              <View class="flex-row items-center gap-2" testID="store-error">
+                <Text class="text-xs text-danger">{error()}</Text>
                 <Button variant="plain" size="xs" label={t("skills_store_retry")} onPress={() => void load()} testID="store-retry" />
               </View>
             </If>
@@ -223,7 +262,7 @@ export function SkillStorePage() {
             <If when={!unsupported() && !error() && loaded() && skills().length > 0 && !visible().length}>
               <Note text={t("skills_no_match")} />
             </If>
-            <View class="flex-row flex-wrap gap-3">
+            <View testID="store-grid" class="flex-row flex-wrap gap-3 pb-6" onLayout={({ bounds }) => gridWidth.set(bounds.size.width)}>
               <Each of={unsupported() || error() ? [] : visible()} key={(skill) => skill.id}>
                 {(skill) => (
                   <BaseButton
@@ -231,31 +270,38 @@ export function SkillStorePage() {
                     accessibilityLabel={skill().name}
                     selected={selected()?.id === skill().id}
                     onPress={() => open(skill())}
-                    class={`min-h-36 grow basis-64 gap-2 rounded-(--radius) border bg-card p-4 hover:border-ring active:bg-hover ${
-                      selected()?.id === skill().id ? "border-blue" : "border-line-faint"
+                    class={`min-h-[148px] gap-2 rounded-(--radius) border bg-card px-4 py-3.5 hover:border-[#7092b5d8] ${
+                      selected()?.id === skill().id ? "border-[#7092b5d8]" : "border-line"
                     }`}
+                    style={{ width: cardWidth(), transitionProperty: "colors", transitionDuration: 120, transitionTimingFunction: "ease" }}
                   >
-                    <View class="flex-row items-start gap-2">
-                      <Text class="flex-1 text-sm font-semibold text-foreground line-clamp-1">{skill().name}</Text>
+                    <View class="flex-row items-baseline justify-between gap-2">
+                      <Text class="shrink text-base font-semibold text-foreground" style={{ numberOfLines: 1 }}>
+                        {skill().name}
+                      </Text>
                       <If when={skill().updateAvailable}>
-                        <Text class="font-mono text-xs text-warn-dark">{t("skills_update_available")}</Text>
+                        <Text class="text-xs text-blue">{t("skills_update_available")}</Text>
                       </If>
                       <If when={!skill().updateAvailable && skill().installed}>
-                        <Text class="font-mono text-xs text-ok">{t("skills_store_installed")}</Text>
+                        <Text class="text-xs text-muted-foreground">{t("skills_store_installed")}</Text>
                       </If>
                     </View>
-                    <Text class="flex-1 text-xs text-subtle line-clamp-3">{skill().description}</Text>
+                    <Text class="flex-1 text-xs leading-[23.2px] text-subtle" style={{ numberOfLines: 3 }}>
+                      {skill().description}
+                    </Text>
                     <View class="flex-row items-center justify-between gap-2">
-                      <View class="flex-1 flex-row flex-wrap gap-1">
+                      <View class="flex-1 flex-row gap-1 overflow-hidden">
                         <Each of={skill().tags.slice(0, CARD_TAGS)}>
                           {(item) => (
-                            <View class="rounded-(--radius) bg-muted px-1.5 py-px">
-                              <Text class="font-mono text-xs text-subtle">{item()}</Text>
+                            <View class="rounded-(--radius) bg-light-2 px-1.5 py-px">
+                              <Text class="text-xs text-muted-foreground" style={{ numberOfLines: 1 }}>
+                                {item()}
+                              </Text>
                             </View>
                           )}
                         </Each>
                       </View>
-                      <Text class="font-mono text-xs text-muted-foreground">
+                      <Text class="text-xs text-muted-foreground" style={{ numberOfLines: 1 }}>
                         {`${skill().version ? `v${skill().version}` : ""}${skill().author ? ` · ${skill().author}` : ""}`}
                       </Text>
                     </View>
@@ -264,16 +310,37 @@ export function SkillStorePage() {
               </Each>
             </View>
           </If>
-        </Scroll>
+        </EdgeScroll>
 
-        <SidePane open={Boolean(selected())} onClose={close} sheet={isMobile()} label={selected()?.name}>
-          {detail()}
-        </SidePane>
+        {/* The panel: a white sheet 440pt wide beside the grid, 4pt off it, fading in as the grid narrows. */}
+        <If when={!isMobile() && selected()}>
+          <View class="ml-1 w-[440px] pb-2 pl-2" accessibilityLabel={selected()?.name}>
+            <View class="flex-1 overflow-hidden rounded-lg bg-card" style={{ boxShadow: "0 1px 4px rgba(24, 24, 50, 0.07)" }}>
+              {detail()}
+            </View>
+          </View>
+        </If>
       </View>
+
+      {/* Phones: the panel slides in from the right over a mask (Vue: .store-panel-mobile). */}
+      <Sheet
+        open={isMobile() && Boolean(selected())}
+        side="right"
+        onOpenChange={({ open: next }) => {
+          if (!next) close();
+        }}
+        backdropClass="bg-black/24"
+        popupClass="h-full w-[92%] max-w-[440px] pb-1 pr-1 pt-1.5"
+      >
+        <View class="flex-1 overflow-hidden rounded-lg bg-card" style={{ boxShadow: "0 1px 4px rgba(24, 24, 50, 0.07)" }}>
+          {detail()}
+        </View>
+      </Sheet>
     </Page>
   );
 }
 
+/** A tag filter: 26pt, a hairline that darkens on hover; the active one blue on a blue tint. */
 function TagChip(props: { label: string; active: boolean; onPress: () => void }) {
   return (
     <BaseButton
@@ -281,9 +348,14 @@ function TagChip(props: { label: string; active: boolean; onPress: () => void })
       selected={props.active}
       accessibilityLabel={props.label}
       testID={`store-tag:${props.label}`}
-      class={`rounded-(--radius) border px-2 py-0.5 hover:bg-hover ${props.active ? "border-blue bg-selection" : "border-line-faint bg-card"}`}
+      class={`h-[26px] justify-center rounded-(--radius) border px-2.5 ${
+        props.active ? "border-blue bg-blue/8" : "border-line hover:border-muted-foreground"
+      }`}
+      style={{ transitionProperty: "colors", transitionDuration: 120, transitionTimingFunction: "ease" }}
     >
-      <Text class={`text-xs ${props.active ? "text-ink" : "text-subtle"}`}>{props.label}</Text>
+      <Text class={`text-xs ${props.active ? "text-blue" : "text-subtle"}`} style={{ transitionProperty: "colors", transitionDuration: 120 }}>
+        {props.label}
+      </Text>
     </BaseButton>
   );
 }

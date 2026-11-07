@@ -12,6 +12,7 @@
 // supports the upload's `image` option (see the report). Until then the host sends the file as
 // picked.
 import { Buffer } from "buffer";
+import type { ImageAsset } from "nsh";
 import { Canvas, effect, Image, PanResponder, signal, Text, untracked, View } from "nsh";
 import { pushNotice } from "../../lib/core/notices.js";
 import { type PickedFile, pickFiles, releaseFile, type UploadResult, type UploadTarget, uploadFile } from "../../lib/platform";
@@ -61,6 +62,10 @@ export interface ImageUploadFieldProps {
   previewUrl?: string;
   /** An SVG shown when there is no image (the Vue `defaultMarkup`). */
   defaultMarkup?: string;
+  /** An image asset shown when there is no image, in place of `defaultMarkup` (the app's logo). */
+  defaultImage?: ImageAsset;
+  /** The preview's side in points (Vue: 96 for the persona avatar). */
+  previewSize?: number;
   disabled?: boolean;
   busy?: boolean;
   /** Square output, filling the frame. */
@@ -77,14 +82,25 @@ export interface ImageUploadFieldProps {
   testID?: string;
 }
 
-/** The image, the default SVG, or a cube when there is neither. */
-function ImageFace(props: { previewUrl?: string; defaultMarkup?: string; size: number }) {
+/**
+ * The image, the default logo (68% of the frame, `.image-upload-logo`), or a cube when there is
+ * neither.
+ */
+function ImageFace(props: { previewUrl?: string; defaultMarkup?: string; defaultImage?: ImageAsset; size: number }) {
+  const logo = () => Math.round(props.size * 0.68);
   return (
     <If
       when={props.previewUrl}
       else={
-        <If when={props.defaultMarkup} else={<Icon name="PhCube" size={Math.round(props.size / 2.5)} color="muted-foreground" />}>
-          <Image src={svgDataURL(props.defaultMarkup ?? "")} accessibilityElementsHidden style={{ width: props.size, height: props.size }} />
+        <If
+          when={props.defaultImage}
+          else={
+            <If when={props.defaultMarkup} else={<Icon name="PhCube" size={Math.round(props.size / 3.4)} color="muted-foreground" />}>
+              <Image src={svgDataURL(props.defaultMarkup ?? "")} accessibilityElementsHidden style={{ width: logo(), height: logo() }} />
+            </If>
+          }
+        >
+          <Image src={props.defaultImage!} accessibilityElementsHidden style={{ width: logo(), height: logo() }} />
         </If>
       }
     >
@@ -177,10 +193,11 @@ export function ImageUploadField(props: ImageUploadFieldProps) {
         accessibilityLabel={previewTitle()}
         disabled={props.disabled || props.busy}
         onPress={openPreviewDialog}
-        class="size-20 items-center justify-center overflow-hidden rounded-(--radius) border border-line-faint bg-paper hover:border-ring disabled:opacity-50"
+        class="items-center justify-center overflow-hidden rounded-[8px] border border-transparent transition-colors duration-120 hover:border-blue/45 hover:shadow-[0_0_0_3px_rgba(66,111,158,0.12)] disabled:opacity-70"
+        style={{ width: props.previewSize ?? 96, height: props.previewSize ?? 96 }}
         testID="image-upload-preview"
       >
-        <ImageFace previewUrl={props.previewUrl} defaultMarkup={props.defaultMarkup} size={80} />
+        <ImageFace previewUrl={props.previewUrl} defaultMarkup={props.defaultMarkup} defaultImage={props.defaultImage} size={props.previewSize ?? 96} />
       </View>
 
       <DialogShell
@@ -192,8 +209,8 @@ export function ImageUploadField(props: ImageUploadFieldProps) {
         testID="image-upload-dialog"
       >
         <View class="items-center gap-4">
-          <View class="size-60 items-center justify-center overflow-hidden rounded-(--radius) border border-line-faint bg-paper">
-            <ImageFace previewUrl={props.previewUrl} defaultMarkup={props.defaultMarkup} size={240} />
+          <View class="size-[300px] max-w-full items-center justify-center overflow-hidden rounded-[8px] border border-line-faint bg-paper">
+            <ImageFace previewUrl={props.previewUrl} defaultMarkup={props.defaultMarkup} defaultImage={props.defaultImage} size={300} />
           </View>
           <View class="flex-row gap-2">
             <Button

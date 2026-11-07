@@ -5,7 +5,7 @@
 // The card sits in a recycled List row, so its state (expanded, the preview ticket and its renewal
 // timer) lives in an ArtifactPreviews store keyed by the row's item and the block.
 import { effect, Image, Text, untracked, View, WebView } from "nsh";
-import { Button, Modal } from "../ui";
+import { Button, Modal, Tip } from "../ui";
 import { createArtifactPreviewTicket, renewArtifactPreviewTicket } from "../../lib/core/context.js";
 import { t } from "./i18n";
 import { keyedState } from "./rowState";
@@ -258,7 +258,7 @@ export function ArtifactPreviewCard(props: {
       <View class="flex-row items-center gap-2">
         <Text class="text-sm font-semibold text-foreground">{label()}</Text>
         <If when={name()}>
-          <Text class="flex-1 font-mono text-xs text-muted-foreground line-clamp-1" tooltip={<Text class="text-xs">{displayPath()}</Text>}>
+          <Text class="flex-1 font-mono text-xs text-muted-foreground line-clamp-1" tooltip={<Tip text={displayPath()} />}>
             {name()}
           </Text>
         </If>

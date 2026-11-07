@@ -10,8 +10,9 @@
 // `provide("settingsSaveRegistry", ...)` is the SettingsSaveRegistry context.
 import { batch, cleanup, computed, context, effect, signal, Text, untracked, View } from "nsh";
 import { buildConfigUpdate, createConfigDraft } from "../../lib/core/config-fields.js";
-import { Button, ProgressBar, Section, TextField, Toggle } from "../ui";
+import { Button, ProgressBar, TextField } from "../ui";
 import { useRevealRow } from "../settings-page/reveal";
+import { RestartTag, SettingSwitch, SettingsCard } from "../settings-page/parts";
 import { EnvManagedField } from "./EnvManagedField";
 import { SecretInput } from "./SecretInput";
 import {
@@ -306,7 +307,7 @@ export function ConfigSettingsPanel(props: ConfigSettingsPanelProps) {
     />
   );
 
-  const restartTag = () => <Text class="font-mono text-xs uppercase tracking-wide text-warn-dark">Restart required</Text>;
+  const restartTag = () => <RestartTag />;
 
   const editor = (field: ConfigField, group: ConfigGroup) => (
     <If when={environmentManaged(field) && !field.secret} else={typedEditor(field, group)}>
@@ -421,25 +422,27 @@ export function ConfigSettingsPanel(props: ConfigSettingsPanelProps) {
     return (
       <View
         ref={reveal.ref}
+      style={reveal.style()}
         testID={`setting-${field.path}`}
-        class={`w-full flex-row items-center justify-between gap-4 rounded-(--radius) py-1 ${fieldInactive(field) ? "opacity-60" : ""} ${
-          reveal.marked() ? "bg-selection" : ""
+        class={`col-span-full flex-row items-center justify-between gap-4 rounded-(--radius) py-1 ${fieldInactive(field) ? "opacity-55" : ""} ${
+          reveal.ringed() ? "ring-2 ring-blue" : ""
         }`}
       >
-        <View class="flex-1 gap-0.5">
-          <Text class="text-sm font-medium text-foreground">{field.label ?? ""}</Text>
+        <View class="flex-1 gap-1">
+          <Text class="text-sm font-medium leading-[18.9px] text-foreground">{field.label ?? ""}</Text>
           <If when={field.note}>
-            <Text class="text-xs text-muted-foreground">{field.note}</Text>
+            <Text class="text-xs leading-[20.3px] text-muted-foreground">{field.note}</Text>
           </If>
           <If when={fieldInactive(field)}>
             <Text class="text-xs italic text-muted-foreground">{dependencyNote(field)}</Text>
           </If>
           <If when={restartRequired(field)}>{restartTag()}</If>
         </View>
-        <Toggle
+        <SettingSwitch
           checked={Boolean(draft()[field.path])}
           disabled={fieldDisabled(field, rowProps.group)}
           onChange={(checked) => updateField(field, checked)}
+          accessibilityLabel={field.label}
           testID={`setting-${field.path}-switch`}
         />
       </View>
@@ -486,7 +489,7 @@ export function ConfigSettingsPanel(props: ConfigSettingsPanelProps) {
   };
 
   return (
-    <View class={`gap-4 ${props.class ?? ""}`} testID={props.testID}>
+    <View class={`min-w-0 gap-4 ${props.class ?? ""}`} testID={props.testID}>
       <If when={props.loading}>
         <ProgressBar indeterminate label="Loading" />
       </If>
@@ -497,8 +500,8 @@ export function ConfigSettingsPanel(props: ConfigSettingsPanelProps) {
       </If>
       <Each of={props.groups || []} key={(group) => group.id}>
         {(group, index) => (
-          <Section
-            variant={props.embedded ? "plain" : "card"}
+          <SettingsCard
+            variant={props.embedded ? "plain" : "boxed"}
             title={showHeading() ? group().title || "" : ""}
             meta={showHeading() ? group().note || "" : ""}
             actions={
@@ -515,7 +518,7 @@ export function ConfigSettingsPanel(props: ConfigSettingsPanelProps) {
                 </Each>
               </SettingFieldGrid>
             </View>
-          </Section>
+          </SettingsCard>
         )}
       </Each>
       <If when={!registered() && props.savePlacement === "footer"}>

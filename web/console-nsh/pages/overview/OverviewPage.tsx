@@ -22,9 +22,9 @@ import {
   token,
   untracked,
   View,
+  windowSize,
 } from "nsh";
-import { Tooltip } from "nsh/base";
-import { Button, Icon, ProgressBar, usePageError } from "../../components/ui";
+import { Button, Icon, ProgressBar, Tip, usePageError } from "../../components/ui";
 import { RollingNumber } from "../../components/shared/RollingNumber";
 import { summarizeAgentReadout } from "../../lib/core/agent-readout.js";
 import { formatCompactCost, formatExactCost } from "../../lib/core/cost-format.js";
@@ -73,6 +73,9 @@ const REFRESH_MS = 60000;
 const ADD_KEY = "add-console";
 // The draw-in: nodes appear in order, then each line is drawn along its path.
 const NODE_STEP_MS = 110;
+const NODE_IN_MS = 420;
+// Vue's overview-node-in curve.
+const NODE_EASE = "cubic-bezier(0.25, 1, 0.5, 1)" as const;
 const PLOT_START_MS = 380;
 const PLOT_STEP_MS = 150;
 const PLOT_MS = 900;
@@ -212,6 +215,13 @@ function color(name: Parameters<typeof token>[0]) {
   return token(name) as string;
 }
 
+/** `color-mix(in srgb, a share, b)` for two #rrggbb[aa] tokens, as an opaque #rrggbb. */
+function mix(a: string, share: number, b: string) {
+  const rgb = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) || 0);
+  const [x, y] = [rgb(a), rgb(b)];
+  return `#${x.map((v, i) => Math.round(v * share + y[i] * (1 - share)).toString(16).padStart(2, "0")).join("")}`;
+}
+
 /** The animated values of one line: its draw-in (0 to 1), and its traffic's phase (0 to 1, looping). */
 interface LineMotion {
   plot: AnimatedValue;
@@ -323,6 +333,24 @@ export function OverviewPage() {
     disposed = true;
   });
 
+  // While the page is hidden (a background tab, a headless capture) the browser runs no animation
+  // frames, and the web runtime steps animated values only at their deadlines: an entrance on an
+  // animated value is caught part-way and stays there until the page shows again (the overview
+  // read ~25% opaque, its lower nodes nearly invisible). So the nodes fade in with a style
+  // transition (a CSS transition on the web, which runs on the clock, not on frames), and the
+  // lines, which a canvas draws from animated values, are set to drawn once they should be: a
+  // timer runs in a hidden page too, and a canvas redraws on `set` without a frame.
+  const still = () => untracked(reduceMotion);
+  const landTimers: ReturnType<typeof setTimeout>[] = [];
+  cleanup(() => landTimers.forEach((id) => clearTimeout(id)));
+  function landAt(value: AnimatedValue, to: number, afterMs: number) {
+    landTimers.push(
+      setTimeout(() => {
+        if (!disposed) value.set(to);
+      }, afterMs + 60),
+    );
+  }
+
   async function updateConnections() {
     measureQueued = false;
     if (disposed) return;
@@ -393,7 +421,7 @@ export function OverviewPage() {
     }
     if (!motion.started) {
       motion.started = true;
-      if (untracked(reduceMotion)) {
+      if (still()) {
         motion.plot.set(1);
       } else {
         void motion.plot.timing(1, {
@@ -401,6 +429,8 @@ export function OverviewPage() {
           delay: PLOT_START_MS + index * PLOT_STEP_MS,
           easing: Easing.bezier(0.55, 0, 0.25, 1),
         });
+        landAt(motion.plot, 1, PLOT_START_MS + index * PLOT_STEP_MS + PLOT_MS);
+
         // Traffic starts once the lines are drawn; each line's pulse runs a little behind the last.
         void motion.phase.keyframes([0, 1], {
           duration: TRAFFIC_PERIOD_MS,
@@ -422,10 +452,13 @@ export function OverviewPage() {
   function drawConnections(cx: CanvasRenderingContext2D) {
     const list = connections();
     const active = activeKey();
+    // Vue: lines are the accent 30% into the page; pending ones the orange 65%.
     const accent = color("primary");
-    const soft = color("blue-lighter");
+    const paper = color("background");
+    const soft = mix(accent, 0.3, paper);
     const offline = color("muted-foreground");
-    const pending = color("warn");
+    const pending = mix(color("warn"), 0.65, paper);
+
     list.forEach((connection, index) => {
       const motion = motionFor(connection.endpoint_ref, index);
       const path = new Path2D(connection.path);
@@ -538,9 +571,7 @@ export function OverviewPage() {
           role="image"
           accessibilityLabel={props.row.statusLabel}
           tooltip={
-            <Tooltip class="bg-foreground px-2 py-1">
-              <Text class="text-xs text-background">{props.row.statusLabel}</Text>
-            </Tooltip>
+            <Tip text={props.row.statusLabel} />
           }
           class="absolute bottom-0.5 right-0 items-center justify-center rounded-[3px] bg-background"
           style={{ width: 13, height: 13 }}
@@ -590,46 +621,44 @@ export function OverviewPage() {
         class="flex-row items-end"
         tooltip={
           props.exact ? (
-            <Tooltip class="bg-foreground px-2 py-1">
-              <Text class="font-mono text-xs text-background">{props.exact}</Text>
-            </Tooltip>
+            <Tip text={props.exact} />
           ) : undefined
         }
       >
-        <Text class="pr-1.5 font-mono text-xs uppercase tracking-widest text-muted-foreground">{props.label}</Text>
-        <View class="mb-1 flex-1 border-b border-dotted border-muted-foreground" style={{ minWidth: 8 }} />
-        <View class="pl-1.5">
-          <RollingNumber value={props.value} class="font-mono text-xs text-foreground" />
+        <Text class="pr-1.25 font-mono text-[11px] uppercase leading-[15.4px] tracking-[0.12em] text-muted-foreground">{props.label}</Text>
+        <View class="mb-1 flex-1 border-b border-dotted border-muted-foreground/55" style={{ minWidth: 8 }} />
+        <View class="pl-1.25">
+          <RollingNumber value={props.value} class="font-mono text-[11px] leading-[15.4px] text-foreground" />
         </View>
       </View>
     );
   }
 
-  function ReadoutCard(props: { readout: Readout; leader: "top" | "left" }) {
+  function ReadoutCard(props: { readout: Readout; leader: "top" | "left"; short?: boolean }) {
     return (
-      <View class="relative w-full rounded-(--radius) border border-line-soft bg-paper" testID="overview-readout">
+      <View class="relative w-full rounded-(--radius) border border-line-soft bg-card" testID="overview-readout">
         <View
           accessibilityElementsHidden
           class={
             props.leader === "top"
               ? "absolute -top-3.75 left-1/2 h-3.5 border-l border-dashed border-line"
-              : "absolute bottom-10 -left-6.25 w-6 border-t border-dashed border-line"
+              : props.short
+                ? "absolute bottom-10 -left-4.25 w-4 border-t border-dashed border-line"
+                : "absolute bottom-10 -left-6.25 w-6 border-t border-dashed border-line"
           }
         />
         <View class="flex-row items-center gap-1.75 border-b border-line-soft px-2 py-1.5">
-          <View class="size-1.5 rounded-[1px] bg-blue" />
+          <View class="size-1.5 rounded-[1px] bg-ink" />
           <If when={props.readout.model}>
             <View
-              class="shrink flex-row"
+              class="shrink flex-row gap-1"
               tooltip={
-                <Tooltip class="bg-foreground px-2 py-1">
-                  <Text class="font-mono text-xs text-background">{props.readout.model}</Text>
-                </Tooltip>
+                <Tip text={props.readout.model} />
               }
             >
-              <Text class="font-mono text-xs text-blue opacity-55">[</Text>
-              <Text class="shrink font-mono text-xs text-foreground line-clamp-1">{props.readout.model}</Text>
-              <Text class="font-mono text-xs text-blue opacity-55">]</Text>
+              <Text class="font-mono text-[11px] leading-[14.3px] text-ink opacity-55">[</Text>
+              <Text class="shrink font-mono text-[11px] leading-[14.3px] text-foreground line-clamp-1">{props.readout.model}</Text>
+              <Text class="font-mono text-[11px] leading-[14.3px] text-ink opacity-55">]</Text>
             </View>
           </If>
           <View class="ml-auto flex-row gap-1">
@@ -640,9 +669,7 @@ export function OverviewPage() {
                     src={channel().logo}
                     accessibilityLabel={channel().title}
                     tooltip={
-                      <Tooltip class="bg-foreground px-2 py-1">
-                        <Text class="text-xs text-background">{channel().title}</Text>
-                      </Tooltip>
+                      <Tip text={channel().title} />
                     }
                     style={{ width: 12, height: 12 }}
                   />
@@ -664,19 +691,17 @@ export function OverviewPage() {
               accessibilityLabel={t("overview_readout_cache")}
               accessibilityValue={{ min: 0, max: 100, now: cache().value }}
               tooltip={
-                <Tooltip class="bg-foreground px-2 py-1">
-                  <Text class="text-xs text-background">{t("overview_readout_cache_hint")}</Text>
-                </Tooltip>
+                <Tip text={t("overview_readout_cache_hint")} />
               }
               class="flex-row items-center gap-1.5 border-t border-line-soft px-2 pb-2 pt-1.75"
             >
-              <Text class="font-mono text-xs uppercase tracking-widest text-muted-foreground">{t("overview_readout_cache")}</Text>
+              <Text class="font-mono text-[11px] uppercase leading-[15.4px] tracking-[0.12em] text-muted-foreground">{t("overview_readout_cache")}</Text>
               <View class="flex-1 flex-row gap-0.5" style={{ height: 7 }} accessibilityElementsHidden>
                 <Each of={Array.from({ length: METER_SEGMENTS }, (_, i) => i + 1)}>
-                  {(segment) => <View class={`flex-1 ${segment() <= cache().lit ? "bg-blue" : "bg-line-soft"}`} />}
+                  {(segment) => <View class={`flex-1 ${segment() <= cache().lit ? "bg-primary" : "bg-line-soft"}`} />}
                 </Each>
               </View>
-              <RollingNumber value={cache().percent} class="font-mono text-xs text-foreground" />
+              <RollingNumber value={cache().percent} class="font-mono text-[11px] leading-[15.4px] text-foreground" />
             </View>
           )}
         </If>
@@ -705,28 +730,63 @@ export function OverviewPage() {
         class={`items-center gap-4 rounded-lg px-2 py-4 ${props.row.local ? "flex-col-reverse" : ""} ${props.row.connected ? "group" : ""}`}
         style={{ cursor: props.row.connected ? "pointer" : "default" }}
       >
-        <View
-          class={`rounded-full p-1 ${props.row.local ? "border border-primary" : "border-2 border-transparent"} ${
-            props.row.connected ? "group-hover:border-primary group-focus:border-primary group-active:border-primary" : ""
-          }`}
+        <If
+          when={props.row.local}
+          else={
+            // Vue's outline: 2px, 5px clear of the avatar, taking no room (hence the negative margin).
+            <View
+              class={`-m-1.75 rounded-full border-2 border-transparent p-1.25 transition-colors duration-150 ${
+                props.row.connected ? "group-hover:border-primary group-focus:border-primary group-active:border-primary" : ""
+              }`}
+            >
+              <Portrait row={props.row} size={72} />
+            </View>
+          }
         >
-          <Portrait row={props.row} size={props.row.local ? 80 : 72} />
-        </View>
+          {/* The console: a pale ring 5px clear of the avatar and an accent ring 9px out. */}
+          <View class="-m-2.25 rounded-full border border-primary p-0.5">
+            <View class="rounded-full border border-primary/30 p-1.25">
+              <Portrait row={props.row} size={80} />
+            </View>
+          </View>
+        </If>
         <Identity row={props.row} />
       </View>
     );
   }
 
+  /**
+   * The nodes come in one after another, opacity only (the connection lines are measured from the
+   * nodes' positions, so they must not move): Vue's overview-node-in, 420ms, 110ms apart. The
+   * style starts at 0 and turns to 1 a moment after the node is laid out, which the transition
+   * (with the node's delay) carries; reduced motion starts at 1.
+   */
+  function nodeEntrance(index: number) {
+    const shown = signal(still());
+    if (!still()) landTimers.push(setTimeout(() => shown.set(true), 32));
+    return () => ({
+      opacity: shown() ? 1 : 0,
+      transitionProperty: "opacity",
+      transitionDuration: still() ? 0 : NODE_IN_MS,
+      transitionDelay: still() ? 0 : index * NODE_STEP_MS,
+      transitionTimingFunction: NODE_EASE,
+    });
+  }
+
+  // Vue's row gap: clamp(48px, 7vw, 80px).
+  const rowGap = () => Math.min(80, Math.max(48, Math.round(windowSize().width * 0.07)));
+  // Too narrow for a centred portrait with the card beside it: the two sit side by side as a pair.
+  const narrow = () => windowSize().width <= 600;
+
   /** A node, with its readout below it, or beside it for the console. */
   function Node(props: { row: EndpointRow; index: number }) {
-    const opacity = createAnimatedValue(untracked(reduceMotion) ? 1 : 0);
-    if (!untracked(reduceMotion)) void opacity.timing(1, { duration: 420, delay: props.index * NODE_STEP_MS });
+    const entrance = nodeEntrance(untracked(() => props.index));
     return (
       <If
         when={props.row.local}
         else={
           <View
-            style={{ opacity, width: 208, maxWidth: "45%" }}
+            style={{ ...entrance(), width: 208, maxWidth: "45%" }}
             onLayout={queueConnections}
             testID={`overview-item-${props.row.endpoint_ref}`}
           >
@@ -736,20 +796,22 @@ export function OverviewPage() {
         }
       >
         <View
-          class="w-full flex-row items-end justify-center gap-6"
-          style={{ opacity }}
+          class={`w-full flex-row items-end justify-center ${narrow() ? "gap-4" : "gap-6"}`}
+          style={entrance()}
           onLayout={queueConnections}
           testID={`overview-item-${props.row.endpoint_ref}`}
         >
-          <View class="flex-1" />
+          <If when={!narrow()}>
+            <View class="flex-1" />
+          </If>
           <View style={{ maxWidth: 192 }}>
             <NodeLink row={props.row} />
           </View>
-          <View class="flex-1 items-start pb-4">
+          <View class={narrow() ? "shrink items-start" : "flex-1 items-start"} style={narrow() ? { flexBasis: 208 } : undefined}>
             <If when={readoutFor(props.row)}>
               {(readout) => (
                 <View style={{ width: 208, maxWidth: "100%" }}>
-                  <ReadoutCard readout={readout()} leader="left" />
+                  <ReadoutCard readout={readout()} leader="left" short={narrow()} />
                 </View>
               )}
             </If>
@@ -760,10 +822,10 @@ export function OverviewPage() {
   }
 
   function AddNode(props: { index: number }) {
-    const opacity = createAnimatedValue(untracked(reduceMotion) ? 1 : 0);
-    if (!untracked(reduceMotion)) void opacity.timing(1, { duration: 420, delay: props.index * NODE_STEP_MS });
+    const entrance = nodeEntrance(untracked(() => props.index));
+
     return (
-      <View style={{ opacity, width: 208, maxWidth: "45%" }} onLayout={queueConnections}>
+      <View style={{ ...entrance(), width: 208, maxWidth: "45%" }} onLayout={queueConnections}>
         <View
           role="link"
           accessibilityLabel={t("overview_add_console")}
@@ -777,10 +839,10 @@ export function OverviewPage() {
           class="group items-center gap-4 rounded-lg px-2 py-4"
           style={{ cursor: "pointer" }}
         >
-          <View class="rounded-full border-2 border-transparent p-1 group-hover:border-primary group-focus:border-primary">
+          <View class="-m-1.75 rounded-full border-2 border-transparent p-1.25 transition-colors duration-150 group-hover:border-primary group-focus:border-primary">
             <View
               ref={portraitRef(ADD_KEY)}
-              class="items-center justify-center rounded-full border-[1.5px] border-dashed border-primary bg-background"
+              class="items-center justify-center rounded-full border-[1.5px] border-dashed border-primary bg-secondary"
               style={{ width: 72, height: 72 }}
             >
               <Icon name="PhPlus" size={28} color="primary" />
@@ -834,7 +896,8 @@ export function OverviewPage() {
             </If>
             <View
               class="flex-row flex-wrap justify-center px-6"
-              style={{ rowGap: 64, columnGap: 24 }}
+              style={{ rowGap: rowGap(), columnGap: 24 }}
+
               testID="overview-endpoints"
             >
               <Each of={endpointRows()} key={(row) => row.endpoint_ref}>

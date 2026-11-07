@@ -1,26 +1,32 @@
 // A dropdown of the TODO editor (the Vue page's AppDropdownMenu with a #prepend label): the field's
 // name before the chosen item, items with a logo or an icon and a second line, and an optional
-// filter. Built here because SelectField in ui.tsx draws plain titles only.
+// filter. Built here because SelectField in ui.tsx draws plain titles only. Metrics are the Vue
+// page's `.todo-dropdown` (views/TodoView.css): a 44pt trigger with the name in text-1 at 500, the
+// value at 400; in the list, logos and icons sit on 24pt round plates and two-line rows are 52pt.
 import { Image, Text, View } from "nsh";
 import { Select } from "nsh/base";
-import { Icon, type IconName } from "../ui";
+import { FadeText } from "../motion";
+import { Icon, type IconName, MENU_POPUP, MENU_POPUP_STYLE } from "../ui";
+import { FIELD_FRAME, FIELD_PAD, FIELD_TRANSITION, Prepend } from "./TodoFields";
 import type { TodoMenuItem } from "./todo-state";
 
+/** An item's logo or icon on its round plate (Vue `.menu-image` / `.menu-icon`: 24pt, line-soft 62 %). */
 function ItemMedia(props: { item: TodoMenuItem | undefined; size?: number }) {
+  const size = () => props.size ?? 24;
   return (
-    <If
-      when={props.item?.image}
-      else={
-        <If when={props.item?.icon}>
-          <Icon name={props.item!.icon as IconName} size={props.size ?? 15} color="subtle" />
-        </If>
-      }
-    >
-      <Image
-        src={props.item!.image!}
+    <If when={props.item?.image || props.item?.icon}>
+      <View
+        class="items-center justify-center rounded-full bg-line-soft/60"
+        style={{ width: size(), height: size() }}
         accessibilityElementsHidden
-        style={{ width: props.size ?? 15, height: props.size ?? 15 }}
-      />
+      >
+        <If
+          when={props.item?.image}
+          else={<Icon name={props.item!.icon as IconName} size={size() - 10} color="muted-foreground" />}
+        >
+          <Image src={props.item!.image!} style={{ width: size(), height: size(), borderRadius: size() / 2 }} />
+        </If>
+      </View>
     </If>
   );
 }
@@ -51,41 +57,43 @@ export function TodoSelect(props: {
       searchAccessibilityLabel={props.label}
       accessibilityLabel={props.label}
       testID={props.testID}
+      offset={4}
       onChange={({ value }) => value !== null && props.onChange?.(value)}
-      class={`flex-row items-center gap-2 rounded-(--radius) border border-input bg-field px-2.5 py-1.5 disabled:opacity-50 ${
+      class={`${FIELD_FRAME} ${FIELD_PAD} hover:border-outline-line-hover aria-expanded:border-ring disabled:bg-transparent disabled:opacity-50 ${
         props.class ?? ""
       }`}
-      popupClass="max-h-96 min-w-64 rounded-(--radius) border border-border bg-popover py-1 shadow-md"
-      itemClass="px-3 py-1.5 hover:bg-hover focus:bg-hover selected:bg-selection"
-      searchClass="mx-2 mb-1 rounded-(--radius) border border-input px-2 py-1 text-sm"
+      style={FIELD_TRANSITION}
+      popupClass={`${MENU_POPUP} max-h-100`}
+      popupStyle={MENU_POPUP_STYLE}
+      itemClass="min-h-10 justify-center px-4 py-2 hover:bg-hover focus:bg-hover selected:bg-selection"
+      searchClass="mx-2 mb-2 h-9.5 rounded-(--radius) border border-input bg-field px-3 text-sm text-foreground"
       empty={
-        <View class="px-3 py-2">
+        <View class="px-4 py-2">
           <Text class="text-xs text-muted-foreground">{props.placeholder ?? ""}</Text>
         </View>
       }
       renderItem={(entry) => (
-        <View class="flex-row items-center gap-2">
+        <View class={`flex-row items-center gap-2.5 ${byValue().get(entry.value)?.subtitle ? "min-h-9" : ""}`}>
           <ItemMedia item={byValue().get(entry.value)} />
-          <View class="flex-1">
+          <View class="flex-1 gap-0.5">
             <Text class="text-sm text-foreground line-clamp-1">{entry.title}</Text>
             <If when={byValue().get(entry.value)?.subtitle}>
-              <Text class="text-xs text-muted-foreground line-clamp-1">{byValue().get(entry.value)?.subtitle}</Text>
+              <Text class="text-xs leading-[15px] text-muted-foreground line-clamp-1">{byValue().get(entry.value)?.subtitle}</Text>
             </If>
           </View>
         </View>
       )}
       trigger={
         <View class="flex-1 flex-row items-center gap-2">
-          <Text class="font-mono text-xs uppercase tracking-wide text-muted-foreground">{props.label}</Text>
+          <Prepend medium>{props.label}</Prepend>
           <If when={!props.hideSelectedMedia}>
-            <ItemMedia item={props.current ?? undefined} size={14} />
+            <ItemMedia item={props.current ?? undefined} />
           </If>
-          <Text
-            class={`flex-1 text-sm line-clamp-1 ${props.current ? "text-foreground" : "text-placeholder"}`}
-          >
-            {props.current?.title ?? props.placeholder ?? ""}
-          </Text>
-          <Icon name="PhCaretDown" size={12} color="muted-foreground" />
+          <FadeText
+            text={props.current?.title ?? props.placeholder ?? ""}
+            class={`flex-1 text-sm ${props.current ? "text-foreground" : "text-placeholder"}`}
+          />
+          <Icon name="PhCaretDown" size={14} color="muted-foreground" class="opacity-50" />
         </View>
       }
     />

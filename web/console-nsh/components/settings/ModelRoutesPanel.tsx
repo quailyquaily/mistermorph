@@ -27,7 +27,9 @@ import {
   useProfile,
 } from "../../lib/core/model-routes.js";
 import { layoutRouteLines } from "../../lib/core/route-lines.js";
-import { Button, Icon, Section } from "../ui";
+import { Button, Icon } from "../ui";
+import { isMobile } from "../../lib/shell";
+import { SettingsCard } from "../settings-page/parts";
 import { type ConfigFieldState, type ConfigUpdate, SettingsSaveRegistryContext } from "./ConfigSettingsPanel";
 
 export interface RouteProfileItem {
@@ -371,8 +373,10 @@ export function ModelRoutesPanel(props: ModelRoutesPanelProps) {
     for (const line of lines()) {
       cx.save?.();
       const fallback = line.kind === "fallback";
-      cx.globalAlpha = line.dim ? 0.3 : line.implicit && !line.active ? 0.55 : line.active ? 1 : 0.75;
-      cx.strokeStyle = fallback ? color("warn") : line.active ? color("blue") : color("blue-lighter");
+      // `.model-routes-line`: the primary at 30% (20% for a route left on the default), the full
+      // colour while its route is selected, orange dashes for fallbacks, 18% when dimmed.
+      cx.globalAlpha = line.dim ? 0.18 : line.active ? 1 : fallback ? 0.65 : line.implicit ? 0.2 : 0.3;
+      cx.strokeStyle = fallback ? color("warn") : color("primary");
       cx.lineWidth = line.width;
       cx.lineCap = "round";
       cx.lineJoin = "round";
@@ -411,15 +415,14 @@ export function ModelRoutesPanel(props: ModelRoutesPanelProps) {
       onPress={onPress}
       selected={pressed}
       accessibilityLabel={label}
-      class="rounded-(--radius) border border-line-faint px-2 py-0.5 hover:border-ring hover:bg-hover active:bg-selection"
+      class="h-6 justify-center rounded-(--radius) border border-line bg-card px-2 transition-colors duration-120 hover:border-blue/45 hover:bg-hover-soft active:bg-selection selected:border-blue selected:bg-blue/10"
     >
-      <Text class="text-xs text-subtle">{label}</Text>
+      <Text class="text-xs font-medium text-subtle">{label}</Text>
     </BaseButton>
   );
 
   return (
-    <Section
-      variant="card"
+    <SettingsCard
       title="Model Routes"
       meta="Where each kind of work sends its requests. Line weight is the share; dashed lines are fallbacks, in order. Select a route to change it."
       actions={
@@ -445,7 +448,7 @@ export function ModelRoutesPanel(props: ModelRoutesPanelProps) {
 
         <If when={selectedPurpose()}>
           {(purpose) => (
-            <View class="flex-row flex-wrap items-center gap-2 rounded-(--radius) bg-selection px-3 py-2">
+            <View class="mb-2 flex-row flex-wrap items-center gap-x-3 gap-y-2 border-l-2 border-blue bg-blue/4 px-3 py-2.5">
               <Text class="text-sm font-semibold text-foreground">{purpose().label}</Text>
               <View class="flex-1 min-w-48">
                 <If
@@ -477,10 +480,10 @@ export function ModelRoutesPanel(props: ModelRoutesPanelProps) {
           )}
         </If>
 
-        <View ref={mapRef} class="relative flex-row items-center py-2" onLayout={scheduleMeasure}>
+        <View ref={mapRef} class={`relative flex-row pb-1 pt-2 ${selected() ? "items-start" : "items-center"}`} onLayout={scheduleMeasure}>
           <Canvas class="absolute inset-0" style={{ pointerEvents: "none" }} draw={draw} accessibilityElementsHidden />
 
-          <View class="w-2/5 min-w-36 gap-2" accessibilityLabel="Kinds of work">
+          <View class="min-w-[150px] flex-1 gap-2.5" accessibilityLabel="Kinds of work">
             <Each of={purposes()} key={(purpose) => purpose.key}>
               {(purpose) => (
                 <BaseButton
@@ -493,32 +496,34 @@ export function ModelRoutesPanel(props: ModelRoutesPanelProps) {
                   onLayout={scheduleMeasure}
                   accessibilityLabel={purpose().label}
                   testID={`route-${purpose().key}`}
-                  class={`gap-0.5 rounded-(--radius) border px-3 py-2 hover:border-ring ${
+                  class={`gap-0.5 rounded-(--radius) border bg-card px-2.5 py-2 transition duration-200 ${
                     selected() === purpose().key
-                      ? "border-blue bg-selection"
+                      ? "border-blue ring-2 ring-blue/22"
                       : problems(purpose()).length
-                        ? "border-danger bg-card"
-                        : "border-line-faint bg-card"
-                  }`}
+                        ? "border-danger"
+                        : "border-line hover:border-blue/45"
+                  } ${selected() && selected() !== purpose().key ? "opacity-60" : ""}`}
                 >
-                  <View class="flex-row items-center gap-1.5">
-                    <Text class="text-sm font-medium text-foreground">{purpose().label}</Text>
+                  <View class="flex-row flex-wrap items-baseline gap-1.5">
+                    <Text class="text-sm font-semibold text-foreground">{purpose().label}</Text>
                     <If when={purpose().legacy}>
-                      <Text class="rounded-(--radius) border border-line px-1 font-mono text-xs uppercase text-muted-foreground">Legacy</Text>
+                      <Text class="rounded-(--radius) border border-line px-[5px] font-mono text-[11px] font-medium uppercase tracking-[0.06em] text-muted-foreground">Legacy</Text>
                     </If>
                     <If when={changed(purpose())}>
                       <View class="size-1.5 rounded-full bg-warn" accessibilityLabel="Unsaved" />
                     </If>
                   </View>
-                  <Text class="text-xs text-muted-foreground">{purpose().note}</Text>
+                  <If when={!isMobile()}>
+                    <Text class="text-xs leading-[15.4px] text-muted-foreground">{purpose().note}</Text>
+                  </If>
                 </BaseButton>
               )}
             </Each>
           </View>
 
-          <View class="flex-1 min-w-14" />
+          <View class={isMobile() ? "w-9" : "min-w-14 flex-[0.9]"} />
 
-          <View class="w-2/5 min-w-40 gap-2" accessibilityLabel="Profiles">
+          <View class={`min-w-[170px] flex-1 ${selected() ? "gap-1.5" : "gap-2.5"}`} accessibilityLabel="Profiles">
             <Each of={profileNodes()} key={(node) => node.name}>
               {(node) => (
                 <View
@@ -528,20 +533,22 @@ export function ModelRoutesPanel(props: ModelRoutesPanelProps) {
                   }}
                   onLayout={scheduleMeasure}
                   testID={`profile-${node().name}`}
-                  class={`gap-1 rounded-(--radius) border px-3 py-2 ${
+                  class={`gap-0.5 rounded-(--radius) border ${selected() ? "px-2 py-1.5" : "px-2.5 py-2"} ${
                     node().missing
-                      ? "border-danger bg-card"
+                      ? "border-dashed border-danger bg-card"
                       : roleOf(node().name).role === "use" || roleOf(node().name).role === "split"
-                        ? "border-blue bg-selection"
+                        ? "border-blue bg-blue/6"
                         : roleOf(node().name).role === "fallback"
-                          ? "border-warn bg-card"
-                          : "border-line-faint bg-card"
+                          ? "border-dashed border-muted-foreground bg-card"
+                          : "border-line bg-card"
                   }`}
                 >
-                  <View class="flex-row flex-wrap items-center gap-1.5">
-                    <Text class="font-mono text-sm text-foreground">{node().name}</Text>
+                  <View class="flex-row flex-wrap items-baseline gap-1.5">
+                    <Text class="font-mono text-sm font-semibold text-foreground">{node().name}</Text>
                     <If when={roleOf(node().name).role === "use"}>
-                      <Text class="font-mono text-xs text-blue">{roleOf(node().name).implicit ? "default" : "all"}</Text>
+                      <Text class="rounded-(--radius) bg-blue/12 px-[5px] font-mono text-[11px] font-medium uppercase leading-[17.6px] tracking-[0.04em] text-blue">
+                        {roleOf(node().name).implicit ? "default" : "all"}
+                      </Text>
                     </If>
                     <If when={roleOf(node().name).role === "split"}>
                       <If
@@ -552,14 +559,16 @@ export function ModelRoutesPanel(props: ModelRoutesPanelProps) {
                       </If>
                     </If>
                     <If when={roleOf(node().name).role === "fallback"}>
-                      <Text class="font-mono text-xs text-warn-dark">fallback {roleOf(node().name).order}</Text>
+                      <Text class="rounded-(--radius) bg-warn/12 px-[5px] font-mono text-[11px] font-medium uppercase leading-[17.6px] tracking-[0.04em] text-warn-dark">
+                        fallback {roleOf(node().name).order}
+                      </Text>
                     </If>
                   </View>
                   <If when={node().missing}>
                     <Text class="text-xs text-danger">No profile has this name.</Text>
                   </If>
                   <If when={!node().missing && node().note}>
-                    <Text class="text-xs text-muted-foreground">{node().note}</Text>
+                    <Text class="text-xs leading-[15.4px] text-muted-foreground">{node().note}</Text>
                   </If>
                   <If when={selectedPurpose() && !locked(selectedPurpose())}>
                     <View class="flex-row flex-wrap gap-1">
@@ -601,10 +610,10 @@ export function ModelRoutesPanel(props: ModelRoutesPanelProps) {
               disabled={props.loading || props.saving}
               onPress={() => props.onAddProfile?.()}
               accessibilityLabel="Add profile"
-              class="flex-row items-center gap-1.5 self-start rounded-(--radius) border border-dashed border-line px-3 py-1.5 hover:bg-hover disabled:opacity-50"
+              class="min-h-10 flex-row items-center justify-center gap-1.5 rounded-(--radius) border border-dashed border-input px-2.5 py-1.5 transition-colors duration-120 hover:border-blue disabled:opacity-55"
             >
-              <Icon name="PhPlus" size={14} color="blue" />
-              <Text class="text-sm text-blue">Add profile</Text>
+              <Icon name="PhPlus" size={14} color="subtle" />
+              <Text class="text-sm text-subtle">Add profile</Text>
             </BaseButton>
           </View>
 
@@ -639,6 +648,6 @@ export function ModelRoutesPanel(props: ModelRoutesPanelProps) {
           </Each>
         </View>
       </View>
-    </Section>
+    </SettingsCard>
   );
 }

@@ -49,7 +49,7 @@ test("a blocking issue sends the console to troubleshooting, and a replaced secr
   });
   await app.waitFor("id:repair-page");
   expect(lastLocation(app).startsWith("/e/default/troubleshooting")).toBe(true);
-  await app.waitFor("text:Secret is missing");
+  await app.waitFor("text:SECRET IS MISSING"); // the boxed section's caps title
   await app.waitFor("text:llm.api_key");
   await app.waitFor("text:keyring entry llm.api_key not found");
   // A missing secret offers no Retry and no Setup, only its own fixes and the source.
@@ -80,7 +80,7 @@ test("removing a secret reference asks first, and a failure is reported", async 
       },
     },
   });
-  await app.waitFor("text:Secret is missing");
+  await app.waitFor("text:SECRET IS MISSING"); // the boxed section's caps title
   await app.press("role:button[Remove Reference]");
   await app.waitFor("id:repair-remove-dialog");
   await app.waitFor("text:/Remove llm.api_key from config.yaml/");
@@ -108,7 +108,7 @@ test("edit source loads the file, saves it, and setup opens the step to fix", as
       },
     },
   });
-  await app.waitFor("text:Identity file is invalid");
+  await app.waitFor("text:IDENTITY FILE IS INVALID");
   await app.press("role:button[Edit Source]");
   await app.waitFor("id:raw-text-editor");
   await app.waitFor("text:Edit Source identity.yaml");
@@ -155,7 +155,7 @@ test("an unreadable file offers Retry, which checks again", async () => {
       },
     },
   });
-  await app.waitFor("text:File cannot be read");
+  await app.waitFor("text:FILE CANNOT BE READ");
   expect(app.shows("role:button[Edit Source]")).toBe(false);
   const before = checks;
   await app.press("role:button[Retry]");

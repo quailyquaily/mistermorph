@@ -15,7 +15,8 @@ import { wheelStep } from "../../lib/core/rolling-wheel.js";
 const RUNS = 3;
 const MIDDLE = 10;
 const STRIP = Array.from({ length: RUNS * 10 }, (_, i) => ({ i, n: i % 10 }));
-const TURN_MS = 420;
+// Vue's --motion-slow, with its cubic-bezier(0.2, 0.7, 0.1, 1).
+const TURN_MS = 260;
 
 interface Glyph {
   key: string;
@@ -28,6 +29,8 @@ export interface RollingNumberProps {
   value?: string | number;
   /** Text classes for the glyphs (size, weight, color, font). */
   class?: string;
+  /** Text style for the glyphs, for what a class cannot say (a computed font size). */
+  style?: Record<string, unknown>;
   testID?: string;
 }
 
@@ -91,7 +94,7 @@ export function RollingNumber(props: RollingNumberProps) {
 
   return (
     <View class="relative flex-row" accessibilityLabel={text()} testID={props.testID}>
-      <Text class={`absolute opacity-0 tabular-nums ${props.class ?? ""}`} style={{ numberOfLines: 1 }}>
+      <Text class={`absolute opacity-0 tabular-nums ${props.class ?? ""}`} style={{ ...props.style, numberOfLines: 1 }}>
         {text()}
       </Text>
       <Each of={glyphs()} key={(glyph) => glyph.key}>
@@ -99,7 +102,7 @@ export function RollingNumber(props: RollingNumberProps) {
           <If
             when={glyph().digit >= 0}
             else={
-              <Text class={`tabular-nums ${props.class ?? ""}`} accessibilityElementsHidden>
+              <Text class={`tabular-nums ${props.class ?? ""}`} style={props.style} accessibilityElementsHidden>
                 {glyph().ch}
               </Text>
             }
@@ -107,7 +110,7 @@ export function RollingNumber(props: RollingNumberProps) {
             <View class="relative overflow-hidden" accessibilityElementsHidden>
               <Text
                 class={`tabular-nums ${props.class ?? ""}`}
-                style={{ opacity: digitHeight() > 0 ? 0 : 1 }}
+                style={{ ...props.style, opacity: digitHeight() > 0 ? 0 : 1 }}
                 onLayout={({ bounds }) => {
                   if (bounds.size.height > 0 && Math.abs(bounds.size.height - untracked(digitHeight)) > 0.5) digitHeight.set(bounds.size.height);
                 }}
@@ -126,7 +129,8 @@ export function RollingNumber(props: RollingNumberProps) {
               >
                 <Each of={STRIP} key={(cell) => cell.i}>
                   {(cell) => (
-                    <Text class={`text-center tabular-nums ${props.class ?? ""}`} style={{ height: digitHeight() || undefined }}>
+                    <Text class={`text-center tabular-nums ${props.class ?? ""}`} style={{ ...props.style, height: digitHeight() || undefined }}>
+
                       {String(cell().n)}
                     </Text>
                   )}

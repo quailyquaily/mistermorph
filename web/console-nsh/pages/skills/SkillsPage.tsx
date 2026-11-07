@@ -5,25 +5,33 @@
 // skills with updates. The Files row opens a read-only tree of the skill's folder; choosing a file
 // shows it as plain text in place of SKILL.md until SKILL.md is chosen again.
 import type { ScrollRef, ViewRef } from "nsh";
-import { batch, computed, effect, keymap, Scroll, signal, Text, untracked, View } from "nsh";
-import { Popover } from "nsh/base";
-import { Button, DropdownMenu, Fab, Icon, Markdown, MessageDialog, Modal, Page, TextField, Toggle } from "../../components/ui";
+import { batch, computed, effect, keymap, Scroll, signal, Text, untracked, View, windowSize } from "nsh";
+import { Button as BaseButton, Popover } from "nsh/base";
+import { Button, DropdownMenu, Fab, Icon, MENU_POPUP, MENU_POPUP_STYLE, MENU_STARTING, MessageDialog, Modal, Page, TextField } from "../../components/ui";
+import { createSlidingSelection, FadeText, SCROLLBAR } from "../../components/motion";
 import { AppMarkdownEditor } from "../../components/shared/MarkdownEditor";
 import { SkillFileTree } from "../../components/knowledge/SkillFileTree";
+import { SkillDocument } from "../../components/knowledge/SkillDocument";
 import {
   Blocks,
   DetailCard,
+  HeadButton,
   IndexColumn,
   IndexRow,
   InlineNotice,
   LinkText,
   MobileBar,
+  MonoLabel,
+  MoreTrigger,
   Note,
+  PropertyList,
   PropertyRow,
   PropertyText,
+  ROW_TRANSITION,
   SearchField,
   SwitchOnly,
   t,
+  TurnCaret,
 } from "../../components/knowledge/parts";
 import {
   endpointApiFetch,
@@ -547,53 +555,57 @@ export function SkillsPage() {
     {
       id: "remove",
       label: t("skills_remove"),
-      icon: "PhTrash" as const,
-      danger: true,
       disabled: catalog().readOnly || removeBusy(),
       onSelect: () => askRemove(untracked(selected)),
     },
   ];
 
+  // The selected row's fill is one highlight that glides between rows (Vue: v-sliding-selection).
+  const sliding = createSlidingSelection(() => (isMobile() ? null : selected()?.id || null));
+  const NOTE_PAD = () => (isMobile() ? "px-4" : "-mt-2");
+  const previewMaxHeight = () => Math.min(900, Math.max(320, windowSize().height * 0.7));
+
   const indexActions = (
     <>
-      <Button
-        variant="plain"
-        size="sm"
-        iconOnly
-        icon="PhStorefront"
-        title={t("skills_store_browse")}
-        disabled={unsupported()}
-        onPress={openStore}
-        testID="skills-store"
-      />
+      <HeadButton icon="PhStorefront" title={t("skills_store_browse")} disabled={unsupported()} onPress={openStore} testID="skills-store" />
       <If when={!isMobile()}>
-        <Button variant="plain" size="sm" iconOnly icon="PhPlus" title={t("skills_add")} disabled={unsupported()} onPress={openAdd} testID="skills-add" />
+        <HeadButton icon="PhPlus" title={t("skills_add")} disabled={unsupported()} onPress={openAdd} testID="skills-add" />
       </If>
       <Popover
         open={menuOpen()}
         onOpenChange={({ open }) => menuOpen.set(open)}
         placement="bottom"
         align="end"
-        popupClass="w-72 rounded-(--radius) border border-border bg-popover p-3 shadow-md"
+        popupClass={`${MENU_POPUP} w-[280px]`}
+        popupStyle={MENU_POPUP_STYLE}
+        popupStartingClass={MENU_STARTING}
+        popupEndingClass="opacity-0"
         trigger={
           <View
             role="button"
             accessibilityLabel={t("skills_more")}
             testID="skills-more"
-            class="size-8 items-center justify-center rounded-(--radius) hover:bg-hover active:bg-selection"
+            class={`size-9.5 items-center justify-center rounded-(--radius) hover:bg-hover active:bg-press ${menuOpen() ? "bg-hover" : ""}`}
+            style={ROW_TRANSITION}
           >
-            <Icon name="PhDotsThree" size={16} color="subtle" />
+            <Icon name="PhDotsThree" size={13} color="subtle" />
           </View>
         }
       >
-        <Toggle
-          checked={catalog().enabled}
-          disabled={locked() || unsupported()}
-          label={t("skills_enabled")}
-          hint={t("skills_enabled_note")}
-          onChange={(value) => setEnabled(value)}
-          testID="skills-enabled"
-        />
+        {/* One row holding the global switch, in the menu's frame: its title and note, the switch at the end. */}
+        <View class="flex-row items-center justify-between gap-4 px-4 py-2">
+          <View class="flex-1 gap-[3px]">
+            <Text class="text-sm text-foreground">{t("skills_enabled")}</Text>
+            <Text class="text-xs leading-[20.3px] text-muted-foreground">{t("skills_enabled_note")}</Text>
+          </View>
+          <SwitchOnly
+            checked={catalog().enabled}
+            disabled={locked() || unsupported()}
+            label={t("skills_enabled")}
+            onChange={(value) => setEnabled(value)}
+            testID="skills-enabled"
+          />
+        </View>
       </Popover>
     </>
   );
@@ -609,43 +621,50 @@ export function SkillsPage() {
             title={t("skills_title")}
             fill={isMobile()}
             actions={indexActions}
+            headRight="none"
             testID="skills-index"
-            top={
-              showSearch() ? (
-                <SearchField value={query()} onChange={(value) => query.set(value)} placeholder={t("skills_search")} testID="skills-search" />
-              ) : undefined
-            }
           >
+            <If when={showSearch()}>
+              <View class={`pb-2 ${isMobile() ? "px-4" : ""}`}>
+                <SearchField value={query()} onChange={(value) => query.set(value)} placeholder={t("skills_search")} testID="skills-search" />
+              </View>
+            </If>
             <If
               when={!(loading() && !skills().length && !unsupported())}
-              else={<Blocks count={3} height={52} />}
+              else={<Blocks count={3} height={52} class={isMobile() ? "px-4" : ""} />}
             >
               <If when={unsupported()}>
-                <Note text={t("skills_unsupported")} class="px-2" />
+                <Note text={t("skills_unsupported")} class={NOTE_PAD()} />
               </If>
               <If when={!unsupported() && !skills().length}>
-                <Note text={t("skills_empty_add_note", { path: skillsRoot() })} class="px-2" />
+                <Note text={t("skills_empty_add_note", { path: skillsRoot() })} class={NOTE_PAD()} />
               </If>
               <If when={!unsupported() && skills().length > 0 && !visibleSkills().length}>
-                <Note text={t("skills_no_match")} class="px-2" />
+                <Note text={t("skills_no_match")} class={NOTE_PAD()} />
               </If>
+              <sliding.Highlight class="rounded-(--radius) bg-selection" />
               <Each of={unsupported() ? [] : visibleSkills()} key={(skill) => skill.id}>
                 {(skill) => (
                   <IndexRow
                     testID={`skill-row:${skill().id}`}
                     title={skill().name}
                     meta={skill().description}
+                    metaLines={2}
                     active={!isMobile() && selected()?.id === skill().id}
+                    sliding
+                    onLayout={sliding.track(skill().id)}
                     onPress={() => openSkill(skill())}
                     trailing={
-                      <View class="flex-row items-center gap-2">
+                      <View class="flex-row items-center gap-2.5">
                         <If when={updateFor(skill())}>
-                          <Text class="font-mono text-xs text-warn-dark">{t("skills_update_available")}</Text>
+                          <Text class="text-xs text-blue">{t("skills_update_available")}</Text>
                         </If>
-                        <View
-                          accessibilityLabel={isOn(skill()) ? t("skills_on") : t("skills_off")}
-                          class={`size-2 rounded-full border ${isOn(skill()) ? "border-status-on bg-status-on" : "border-status-off"}`}
-                        />
+                        <View class="w-4 items-center" accessibilityLabel={isOn(skill()) ? t("skills_on") : t("skills_off")}>
+                          <View
+                            class={`size-[7px] rounded-[1px] border ${isOn(skill()) ? "border-blue bg-blue" : "border-status-off"}`}
+                            style={ROW_TRANSITION}
+                          />
+                        </View>
                       </View>
                     }
                   />
@@ -659,7 +678,8 @@ export function SkillsPage() {
           <Scroll
             ref={detailScroll}
             class="flex-1"
-            contentClass="gap-4 p-5"
+            scrollbar={SCROLLBAR}
+            contentClass="grow"
             onScroll={(event) => {
               detailOffset = event.offset.y;
               detailHeight = event.size.height;
@@ -672,30 +692,38 @@ export function SkillsPage() {
               when={selected()}
               else={
                 <If when={!isMobile() && !loading()}>
-                  <View class="gap-3">
+                  {/* No skill open: an Add skill tile in the middle of the column. */}
+                  <View class="grow gap-3 px-4 py-6">
                     <If when={err()}>
                       <InlineNotice type="error" text={err()} testID="skills-error" />
                     </If>
-                    <View class="items-center gap-3 py-16">
-                      <Button
-                        variant="outlined"
-                        iconOnly
-                        icon="PhPlus"
-                        title={t("skills_add")}
-                        disabled={unsupported()}
-                        onPress={openAdd}
-                        testID="skills-empty-add"
-                      />
+                    <View class="flex-1 items-center justify-center gap-3">
+                      {/* Buttons align themselves to the start; a wrapper as wide as each centres it. */}
+                      <View>
+                        <Button
+                          variant="outlined"
+                          size="md"
+                          iconOnly
+                          title={t("skills_add")}
+                          disabled={unsupported()}
+                          onPress={openAdd}
+                          testID="skills-empty-add"
+                        >
+                          <Icon name="PhPlus" size={18} color="subtle" />
+                        </Button>
+                      </View>
                       <If when={!skills().length}>
                         <Note text={t("skills_empty_title")} />
-                        <Button
-                          variant="plain"
-                          size="sm"
-                          icon="PhStorefront"
-                          label={t("skills_store_browse")}
-                          disabled={unsupported()}
-                          onPress={openStore}
-                        />
+                        <View>
+                          <Button
+                            variant="plain"
+                            size="sm"
+                            icon="PhStorefront"
+                            label={t("skills_store_browse")}
+                            disabled={unsupported()}
+                            onPress={openStore}
+                          />
+                        </View>
                       </If>
                     </View>
                   </View>
@@ -706,24 +734,13 @@ export function SkillsPage() {
                 <DetailCard
                   testID="skill-detail"
                   title={skill().name}
-                  actions={
-                    <DropdownMenu
-                      items={skillMenu()}
-                      trigger={
-                        <View
-                          role="button"
-                          accessibilityLabel={t("skills_more")}
-                          testID="skill-actions"
-                          class="size-7 items-center justify-center rounded-(--radius) hover:bg-hover active:bg-selection"
-                        >
-                          <Icon name="PhDotsThree" size={16} color="subtle" />
-                        </View>
-                      }
-                    />
-                  }
+                  class={isMobile() ? "mx-3 mt-2 mb-4" : "mb-2 ml-5 mr-2 mt-2"}
+                  actions={<DropdownMenu items={skillMenu()} trigger={<MoreTrigger label={t("skills_more")} testID="skill-actions" />} />}
                 >
                   <If when={skill().description}>
-                    <Text class="text-sm text-subtle">{skill().description}</Text>
+                    <View selectable>
+                      <Text class="text-sm leading-[21.7px] text-subtle">{skill().description}</Text>
+                    </View>
                   </If>
                   <If when={catalog().readOnly && catalog().readOnlyReason}>
                     <InlineNotice type="warning" text={catalog().readOnlyReason} />
@@ -733,8 +750,8 @@ export function SkillsPage() {
                   </If>
                   <If when={selectedUpdate()}>
                     {(entry) => (
-                      <View class="flex-row flex-wrap items-center gap-3 rounded-(--radius) border border-warn bg-paper px-3 py-2">
-                        <Text class="flex-1 text-sm text-foreground">{t("skills_update_note", { version: entry().version })}</Text>
+                      <View class="flex-row flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-(--radius) border border-[#426f9e4d] bg-[#426f9e0f] px-2.5 py-2">
+                        <Text class="text-xs text-subtle">{t("skills_update_note", { version: entry().version })}</Text>
                         <Button
                           variant="outlined"
                           size="xs"
@@ -748,15 +765,17 @@ export function SkillsPage() {
                     )}
                   </If>
                   <If when={skill().modified.length}>
-                    <View class="flex-row items-start gap-2">
-                      <Icon name="PhWarning" size={15} color="warn-dark" />
-                      <Text class="flex-1 text-sm text-warn-dark">{t("skills_modified_since", { files: skill().modified.join(", ") })}</Text>
+                    <View class="flex-row items-start gap-1.5">
+                      <View class="pt-px">
+                        <Icon name="PhWarning" size={14} color="danger" />
+                      </View>
+                      <Text class="flex-1 text-xs leading-[17.4px] text-danger">{t("skills_modified_since", { files: skill().modified.join(", ") })}</Text>
                     </View>
                   </If>
 
-                  <View>
-                    <PropertyRow label={t("skills_field_enabled")}>
-                      <View class="flex-row items-center gap-3">
+                  <PropertyList>
+                    <PropertyRow label={t("skills_field_enabled")} center>
+                      <View class="flex-row flex-wrap items-center gap-x-3 gap-y-2">
                         <SwitchOnly
                           checked={isOn(skill())}
                           disabled={locked()}
@@ -764,7 +783,7 @@ export function SkillsPage() {
                           onChange={(value) => setLoaded(skill(), value)}
                           testID="skill-loaded"
                         />
-                        <Text class="flex-1 text-xs text-muted-foreground">{enabledNote()}</Text>
+                        <Text class="text-xs leading-normal text-muted-foreground">{enabledNote()}</Text>
                       </View>
                     </PropertyRow>
                     <If when={skillSourceText(skill())}>
@@ -788,38 +807,42 @@ export function SkillsPage() {
                       </PropertyRow>
                     </If>
                     <PropertyRow label={t("skills_fact_files")}>
-                      <Button
-                        variant="plain"
-                        size="xs"
-                        label={filesSummary()}
-                        selected={filesExpanded()}
-                        onPress={() => filesExpanded.update((open) => !open)}
-                        testID="skill-files-toggle"
-                      >
-                        <Icon name={filesExpanded() ? "PhCaretUp" : "PhCaretDown"} size={12} color="subtle" />
-                      </Button>
-                      <If when={filesExpanded()}>
-                        <SkillFileTree
-                          endpointRef={endpointState.selectedRef}
-                          skillId={skill().id}
-                          selectedPath={treeSelectedPath()}
-                          disabled={editing()}
-                          fallbackFiles={skill().files}
-                          onSelect={(path) => openFile(path)}
-                        />
-                      </If>
+                      <View class="gap-0">
+                        <BaseButton
+                          onPress={() => filesExpanded.update((open) => !open)}
+                          selected={filesExpanded()}
+                          accessibilityLabel={filesSummary()}
+                          testID="skill-files-toggle"
+                          class="group flex-row items-center gap-1.5 self-start"
+                        >
+                          <Text class="text-xs leading-normal text-subtle group-hover:text-foreground" style={ROW_TRANSITION}>
+                            {filesSummary()}
+                          </Text>
+                          <TurnCaret open={filesExpanded()} />
+                        </BaseButton>
+                        <If when={filesExpanded()}>
+                          <SkillFileTree
+                            endpointRef={endpointState.selectedRef}
+                            skillId={skill().id}
+                            selectedPath={treeSelectedPath()}
+                            disabled={editing()}
+                            fallbackFiles={skill().files}
+                            onSelect={(path) => openFile(path)}
+                          />
+                        </If>
+                      </View>
                     </PropertyRow>
-                  </View>
+                  </PropertyList>
 
-                  <View ref={docSection} class="gap-3 border-t border-line-faint pt-4" testID="skill-doc">
+                  <View ref={docSection} class="gap-3 pt-1" testID="skill-doc">
                     <If
                       when={viewPath()}
                       else={
                         <View class="gap-3">
-                          <View class="flex-row items-center gap-3">
-                            <Text class="font-mono text-xs uppercase tracking-wide text-muted-foreground">SKILL.md</Text>
+                          <View class="min-h-8 flex-row items-center gap-2.5">
+                            <MonoLabel text="SKILL.md" />
                             <If when={documentSize()}>
-                              <Text class="font-mono text-xs text-muted-foreground">{documentSize()}</Text>
+                              <Text class="text-xs text-muted-foreground">{documentSize()}</Text>
                             </If>
                             <View class="flex-1" />
                             <If
@@ -880,18 +903,19 @@ export function SkillsPage() {
                             />
                           </If>
                           <If when={!(detailLoading() && !detail()) && !editing() && documentSource()}>
-                            <Markdown source={documentSource()} onLinkPress={(url) => openExternal(url)} />
+                            <SkillDocument source={documentSource()} onLinkPress={(url) => openExternal(url)} />
                           </If>
                         </View>
                       }
                     >
-                      <View class="flex-row items-center gap-3">
-                        <View class="flex-1" selectable>
-                          <Text class="font-mono text-xs text-foreground line-clamp-1">{viewPath()}</Text>
+                      <View class="min-h-8 flex-row items-center gap-2.5">
+                        <View class="shrink" selectable style={{ minWidth: 0 }}>
+                          <FadeText text={viewPath()} fade={26} class="font-mono text-[11px] font-medium leading-[15.4px] text-muted-foreground" />
                         </View>
                         <If when={previewData(filePreview())}>
-                          {(data) => <Text class="font-mono text-xs text-muted-foreground">{formatBytes(data().size)}</Text>}
+                          {(data) => <Text class="text-xs text-muted-foreground">{formatBytes(data().size)}</Text>}
                         </If>
+                        <View class="flex-1" />
                         <Button
                           variant="plain"
                           size="xs"
@@ -912,15 +936,17 @@ export function SkillsPage() {
                         <Note text={filePreviewNote()} testID="skill-file-note" />
                       </If>
                       <If when={filePreview()?.status === "ready" && !filePreviewNote()}>
-                        {/* Plain text, never HTML or rendered Markdown. */}
-                        <View
-                          selectable
-                          accessibilityLabel={viewPath()}
-                          testID="skill-file-preview"
-                          class="rounded-(--radius) border border-line-faint bg-paper p-3"
+                        {/* Plain text, never HTML or rendered Markdown: 14pt mono on the paper, scrolling past 70% of the window. */}
+                        <Scroll
+                          scrollbar={SCROLLBAR}
+                          class="grow-0 rounded-(--radius) border border-line-soft bg-background"
+                          style={{ maxHeight: previewMaxHeight(), flexGrow: 0 }}
+                          contentClass="px-3.5 py-3"
                         >
-                          <Text class="font-mono text-xs text-foreground">{previewData(filePreview())?.content ?? ""}</Text>
-                        </View>
+                          <View selectable accessibilityLabel={viewPath()} testID="skill-file-preview">
+                            <Text class="font-mono text-sm leading-[21.7px] text-foreground">{previewData(filePreview())?.content ?? ""}</Text>
+                          </View>
+                        </Scroll>
                       </If>
                     </If>
                   </View>
@@ -930,7 +956,6 @@ export function SkillsPage() {
           </Scroll>
         </If>
       </View>
-
       <If when={isMobile() && showIndex()}>
         <Fab icon="PhPlus" label={t("skills_add")} disabled={unsupported()} onPress={openAdd} testID="skills-fab" />
       </If>

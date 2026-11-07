@@ -1,15 +1,28 @@
 // The topic list beside the conversation (the whole screen on phones): its views (by date, by tag,
 // the agents' topics, the TODO items' runs with their running count), foldable groups, each topic
-// with its icon, title and activity mark, and older topics on demand. A virtualized list: rows
-// read their item in bindings and keep nothing of their own.
-import { Image, List, Text, token, View } from "nsh";
+// with its icon, title and activity mark, and older topics on demand. Metrics from the Vue
+// console's ChatView.css / common.css (`.chat-topic-*`, `.workspace-sidebar-*`): a 57pt head, rows
+// 40pt tall 2pt apart (44 on phones) with a 20pt icon and a 14pt title that fades where it is cut,
+// group labels in mono caps with a hairline running out to the right, one selection highlight that
+// glides between rows, and calm hover fills.
+//
+// The rows are an `Each` in a scroll view rather than a virtualized List: a sidebar holds dozens of
+// topics (older ones load on demand), and the sliding highlight must share the rows' parent to
+// measure them and move with them.
+import { createAnimatedValue, Image, Scroll, Text, token, View } from "nsh";
 import { Button as BaseButton } from "nsh/base";
-import { Button, Icon, Spinner } from "../../components/ui";
+import { Button, Icon, Spinner, Tip } from "../../components/ui";
 import { ContactAvatar } from "../../components/shared/ContactAvatar";
+import { FadeText } from "../../components/motion/FadeText";
+import { createScrollEdges, SCROLLBAR } from "../../components/motion/ScrollEdges";
+import { createSlidingSelection } from "../../components/motion/SlidingSelection";
+import { motionMs } from "../../components/motion/tokens";
 import { t } from "../../components/chat/i18n";
 import { normalizeTopicID } from "../../lib/core/chat-task-history.js";
 import type { ChatController, SidebarView, TopicRow } from "./chatController";
 
+// A view toggle in the head: a 38pt square with a 14pt icon, the buttons flush; on, a blue icon on
+// a blue tint. The TODO toggle carries the running mark off its icon's top right corner.
 function ViewToggle(props: {
   icon: "PhRobot" | "PhAlarm" | "PhTag";
   label: string;
@@ -25,38 +38,37 @@ function ViewToggle(props: {
       onPress={props.onPress}
       accessibilityLabel={props.label}
       testID={props.testID}
-      tooltip={
-        <View class="bg-foreground px-2 py-1">
-          <Text class="text-xs text-background">{props.title}</Text>
-        </View>
-      }
-      class="size-8 items-center justify-center rounded-(--radius) hover:bg-hover selected:bg-selection"
+      tooltip={<Tip text={props.title} />}
+      class="size-[38px] items-center justify-center rounded-(--radius) transition-colors duration-[180ms] hover:bg-hover-soft selected:bg-blue/12"
     >
       <View>
-        <Icon name={props.icon} size={16} color={props.active ? "blue" : "subtle"} />
+        <Icon name={props.icon} size={14} color={props.active ? "blue" : "subtle"} />
         <If when={props.running}>
-          <View class="absolute -right-2 -top-1 size-2 border border-status-on bg-status-on" testID="chat-cron-running" />
+          <StatusDot status="running" label={props.label} class="absolute -right-2 -top-1" testID="chat-cron-running" />
         </If>
       </View>
     </BaseButton>
   );
 }
 
-function StatusDot(props: { status: string; label: string }) {
-  const cls = () =>
-    props.status === "pending"
-      ? "bg-status-pending border-status-pending"
-      : props.status === "running"
-        ? "border-status-on"
-        : "bg-status-on border-status-on";
+// The console's square status mark (7pt): filled blue once a task finished and until the topic is
+// viewed, filled orange while a task waits for the person, and while one runs a hollow square whose
+// fill breathes in and out (only its opacity moves; without motion it stays hollow).
+function StatusDot(props: { status: string; label: string; class?: string; testID?: string }) {
+  const fill = createAnimatedValue(0);
+  if (motionMs(1) > 0) void fill.keyframes([0, 1], { duration: 900, easing: "easeInOut", iterations: "infinite", direction: "alternate" });
   return (
     <View
       role="image"
       accessibilityLabel={props.label}
-      tooltip={<Text class="text-xs">{props.label}</Text>}
-      class={`size-2 border ${cls()}`}
-      testID={`chat-topic-status-${props.status}`}
-    />
+      tooltip={<Tip text={props.label} />}
+      class={`size-[7px] rounded-[1px] border ${props.status === "pending" ? "border-status-pending bg-status-pending" : props.status === "running" ? "border-status-on" : "border-status-on bg-status-on"} ${props.class ?? ""}`}
+      testID={props.testID ?? `chat-topic-status-${props.status}`}
+    >
+      <If when={props.status === "running"}>
+        <View class="flex-1 bg-status-on" style={{ opacity: fill }} />
+      </If>
+    </View>
   );
 }
 
@@ -64,21 +76,24 @@ export function TopicSidebar(props: { c: ChatController; class?: string }) {
   const c = props.c;
   const view = () => c.topicSidebarView();
   const toggle = (next: SidebarView) => c.setTopicSidebarView(view() === next ? "date" : next);
+  const edges = createScrollEdges({ start: false });
+  const activeKey = () => {
+    const active = c.topicRows().find((row) => row.kind === "topic" && c.topicIsActive(row.topic));
+    return active ? active.key : null;
+  };
+  const selection = createSlidingSelection(activeKey);
+  // Rows are 40pt (44 on phones, a touch target), 2pt apart.
+  const rowHeight = () => (c.mobileMode() ? "min-h-11" : "min-h-10");
 
   const topicRow = (row: () => Extract<TopicRow, { kind: "topic" }>) => (
     <BaseButton
       selected={c.topicIsActive(row().topic)}
       onPress={() => c.selectTopic(row().topic?.id)}
+      onLayout={selection.track(row().key)}
       accessibilityLabel={c.topicTitle(row().topic)}
       testID={`chat-topic-${normalizeTopicID(row().topic?.id)}`}
-      tooltip={
-        c.topicTimeLabel(row().topic) ? (
-          <View class="bg-foreground px-2 py-1">
-            <Text class="text-xs text-background">{c.topicTimeLabel(row().topic)}</Text>
-          </View>
-        ) : undefined
-      }
-      class="mx-2 flex-row items-center gap-2 rounded-(--radius) px-2 py-1.5 hover:bg-hover selected:bg-selection"
+      tooltip={c.topicTimeLabel(row().topic) ? <Tip text={c.topicTimeLabel(row().topic)} /> : undefined}
+      class={`mt-0.5 ${rowHeight()} flex-row items-center gap-2.5 rounded-(--radius) border border-transparent py-2 pl-3.5 pr-[13px] transition-colors duration-[180ms] hover:bg-hover-soft`}
     >
       <If
         when={view() === "agents"}
@@ -89,11 +104,11 @@ export function TopicSidebar(props: { c: ChatController; class?: string }) {
               <Image
                 src={c.topicIcon(row().topic)}
                 accessibilityElementsHidden
-                style={{ width: 16, height: 16, tintColor: token("subtle") as string }}
+                style={{ width: 20, height: 20, tintColor: token("subtle") as string }}
               />
             }
           >
-            <Icon name="PhAlarm" size={16} color="subtle" />
+            <Icon name="PhAlarm" size={20} color="subtle" />
           </If>
         }
       >
@@ -106,9 +121,9 @@ export function TopicSidebar(props: { c: ChatController; class?: string }) {
         />
       </If>
       <View class="flex-1 gap-px">
-        <Text class="text-sm text-foreground line-clamp-1">{c.topicTitle(row().topic)}</Text>
+        <FadeText text={c.topicTitle(row().topic)} class="text-sm leading-5 tracking-[-0.025em] text-foreground" noTooltip />
         <If when={c.isCronTopicID(row().topic?.id)}>
-          <Text class="font-mono text-xs text-muted-foreground line-clamp-1">{c.cronTopicModel(row().topic)}</Text>
+          <FadeText text={c.cronTopicModel(row().topic)} class="font-mono text-xs text-muted-foreground" noTooltip />
         </If>
       </View>
       <If when={c.topicActivityState(row().topic)}>
@@ -117,43 +132,59 @@ export function TopicSidebar(props: { c: ChatController; class?: string }) {
     </BaseButton>
   );
 
+  // A group's heading: a small mono label in caps, then a hairline that runs out to the list's
+  // edge, fading (the Vue console's `.workspace-sidebar-divider`). A foldable group's is a toggle
+  // with a caret, and its count while folded.
+  const groupLabel = (row: () => Extract<TopicRow, { kind: "group" }>) => (
+    <>
+      <If when={row().collapsible}>
+        <Icon name={row().collapsed ? "PhCaretRight" : "PhCaretDown"} size={11} color="muted-foreground" />
+      </If>
+      <If when={row().group.pinned} else={<If when={row().collapsible && !row().group.untagged}><Icon name="PhTag" size={12} color="muted-foreground" /></If>}>
+        <Icon name="PhPushPin" size={12} color="muted-foreground" />
+      </If>
+      <Text
+        class={`font-mono text-[11px] font-medium leading-[15.4px] text-muted-foreground line-clamp-1 ${
+          view() === "tags" ? "tracking-[0.02em]" : "uppercase tracking-[0.12em]"
+        }`}
+      >
+        {row().group.label}
+      </Text>
+      <If when={row().collapsible && row().collapsed}>
+        <Text class="font-mono text-[11px] leading-[15.4px] text-muted-foreground">{String(row().group.topics.length)}</Text>
+      </If>
+      <View class="h-px flex-1 bg-linear-to-r from-line-soft to-transparent" />
+    </>
+  );
+
   const groupRow = (row: () => Extract<TopicRow, { kind: "group" }>) => (
     <If
       when={row().collapsible}
-      else={
-        <View class="px-4 pb-1 pt-3">
-          <Text class="font-mono text-xs uppercase text-muted-foreground">{row().group.label}</Text>
-        </View>
-      }
+      else={<View class="flex-row items-center gap-2.5 pb-1 pl-3.5 pr-3.5 pt-2.5">{groupLabel(row)}</View>}
     >
       <BaseButton
         onPress={() => c.toggleTopicGroup(row().group)}
         accessibilityLabel={row().group.label}
-        tooltip={
-          <View class="bg-foreground px-2 py-1">
-            <Text class="text-xs text-background">{row().collapsed ? t("chat_topics_group_expand") : t("chat_topics_group_collapse")}</Text>
-          </View>
-        }
+        tooltip={<Tip text={row().collapsed ? t("chat_topics_group_expand") : t("chat_topics_group_collapse")} />}
         testID={`chat-topic-group-${row().group.key}`}
-        class="mx-2 mt-2 flex-row items-center gap-1.5 rounded-(--radius) px-2 py-1 hover:bg-hover"
+        class="mt-1.5 flex-row items-center gap-2.5 rounded-(--radius) pb-1 pl-3.5 pr-3.5 pt-2.5 transition-colors duration-[180ms] hover:bg-hover-soft"
       >
-        <Icon name={row().collapsed ? "PhCaretRight" : "PhCaretDown"} size={11} color="muted-foreground" />
-        <If when={row().group.pinned} else={<If when={!row().group.untagged}><Icon name="PhTag" size={12} color="muted-foreground" /></If>}>
-          <Icon name="PhPushPin" size={12} color="muted-foreground" />
-        </If>
-        <Text class="flex-1 font-mono text-xs uppercase text-muted-foreground line-clamp-1">{row().group.label}</Text>
-        <If when={row().collapsed}>
-          <Text class="font-mono text-xs text-muted-foreground">{String(row().group.topics.length)}</Text>
-        </If>
+        {groupLabel(row)}
       </BaseButton>
     </If>
   );
 
   return (
     <View class={`bg-sidebar ${props.class ?? ""}`} testID="chat-topic-sidebar">
-      <View class="min-h-12 flex-row items-center gap-1 border-b border-line-faint px-3">
-        <View class="flex-1" onPress={() => c.clickTopicSidebarTitle()} testID="chat-topics-title">
-          <Text class="text-base font-semibold text-foreground" role="header">
+      {/* The head: the title on the left, the view toggles and New flush at the right. A hairline
+          under it shows once topics have scrolled beneath it. */}
+      <View
+        class={`h-[57px] flex-row items-center pl-[25.6px] transition-colors duration-[180ms] ${c.mobileMode() ? "pr-[25.6px]" : ""} border-b ${
+          edges.scrolled() ? "border-line-faint" : "border-transparent"
+        }`}
+      >
+        <View class="mr-3 flex-1" onPress={() => c.clickTopicSidebarTitle()} testID="chat-topics-title">
+          <Text class="text-xl leading-6 tracking-[-0.03em] text-foreground" role="header">
             {t("chat_topics_title")}
           </Text>
         </View>
@@ -185,20 +216,57 @@ export function TopicSidebar(props: { c: ChatController; class?: string }) {
           testID="chat-topics-view-tags"
         />
         <If when={!c.mobileTopicSplitEnabled()}>
-          <Button variant="plain" size="sm" iconOnly icon="PhPlus" title={t("chat_topic_new")} onPress={() => c.startNewTopic()} testID="chat-topic-new" />
+          <BaseButton
+            onPress={() => c.startNewTopic()}
+            accessibilityLabel={t("chat_topic_new")}
+            tooltip={<Tip text={t("chat_topic_new")} />}
+            testID="chat-topic-new"
+            class="size-[38px] items-center justify-center rounded-(--radius) transition-colors duration-[180ms] hover:bg-hover-soft"
+          >
+            <Icon name="PhPlus" size={14} color="subtle" />
+          </BaseButton>
         </If>
       </View>
       <If when={c.topicsLoading() && c.topicRows().length === 0}>
         <Spinner class="items-center py-3" />
       </If>
-      <List
-        each={c.topicRows()}
-        keyExtractor={(row) => row.key}
-        estimatedItemSize={34}
+      <Scroll
         class={`flex-1 ${c.topicsLoading() ? "opacity-70" : ""}`}
-        contentStyle={{ paddingTop: 6, paddingBottom: 12 }}
         testID="chat-topic-list"
-        footer={() => (
+        onScroll={edges.handlers.onScroll}
+        onLayout={edges.handlers.onLayout}
+        scrollEventThrottle={edges.handlers.scrollEventThrottle}
+        style={edges.style()}
+        contentClass="grow"
+        scrollbar={SCROLLBAR}
+      >
+        {/* The list's gutter (16pt) as views inside the content rather than its padding: the
+            content is at least the viewport's height, and padding on top of that made a list that
+            fits scroll by its padding. Phones keep room under the floating New button. */}
+        <View class="grow px-4" onLayout={edges.onContentLayout}>
+          <View class="h-4" />
+          <selection.Highlight class="rounded-(--radius) bg-selection" testID="chat-topic-selection" />
+          <Each of={c.topicRows()} key={(row) => row.key}>
+            {(row) => (
+              <If
+                when={row().kind === "topic"}
+                else={
+                  <If
+                    when={row().kind === "group"}
+                    else={
+                      <View class="px-3.5 pb-2.5 pt-1.5">
+                        <Text class="text-xs leading-[18px] text-muted-foreground">{(row() as Extract<TopicRow, { kind: "note" }>).text}</Text>
+                      </View>
+                    }
+                  >
+                    {groupRow(row as () => Extract<TopicRow, { kind: "group" }>)}
+                  </If>
+                }
+              >
+                {topicRow(row as () => Extract<TopicRow, { kind: "topic" }>)}
+              </If>
+            )}
+          </Each>
           <If when={c.topicsNextCursor()}>
             <View class="items-center py-2">
               <Button
@@ -211,28 +279,9 @@ export function TopicSidebar(props: { c: ChatController; class?: string }) {
               />
             </View>
           </If>
-        )}
-      >
-        {(row) => (
-          <If
-            when={row().kind === "topic"}
-            else={
-              <If
-                when={row().kind === "group"}
-                else={
-                  <View class="px-4 py-2">
-                    <Text class="text-xs text-muted-foreground">{(row() as Extract<TopicRow, { kind: "note" }>).text}</Text>
-                  </View>
-                }
-              >
-                {groupRow(row as () => Extract<TopicRow, { kind: "group" }>)}
-              </If>
-            }
-          >
-            {topicRow(row as () => Extract<TopicRow, { kind: "topic" }>)}
-          </If>
-        )}
-      </List>
+          <View class={c.mobileTopicSplitEnabled() ? "h-21" : "h-4"} />
+        </View>
+      </Scroll>
     </View>
   );
 }

@@ -9,7 +9,7 @@ import { InlineNotice } from "../../../components/settings/DialogShell";
 import { ProviderLogo } from "../../../components/settings/InferenceProviderPicker";
 import { LLMConfigForm } from "../../../components/settings/LLMConfigForm";
 import { SettingsPane } from "../../../components/settings/PaneTarget";
-import { DirtyDot, Fold, SettingField, SettingsCard } from "../../../components/settings-page/parts";
+import { DirtyDot, Fold, PlaceholderButton, SettingField, SettingsCard } from "../../../components/settings-page/parts";
 import { useRevealRow } from "../../../components/settings-page/reveal";
 import type { LLMProfile, SettingsStore } from "../store";
 import { t } from "../i18n";
@@ -17,9 +17,10 @@ import { t } from "../i18n";
 function SubHeading(props: { title: string; note: string }) {
   const reveal = useRevealRow(() => props.title);
   return (
-    <View ref={reveal.ref} class={`gap-0.5 rounded-(--radius) ${reveal.marked() ? "bg-selection" : ""}`}>
-      <Text class="text-sm font-semibold text-foreground">{props.title}</Text>
-      <Text class="text-xs text-muted-foreground">{props.note}</Text>
+    <View ref={reveal.ref}
+      style={reveal.style()} class={`gap-1 rounded-(--radius) ${reveal.ringed() ? "ring-2 ring-blue" : ""}`}>
+      <Text class="text-sm font-medium leading-[18.9px] text-foreground">{props.title}</Text>
+      <Text class="text-xs leading-[20.3px] text-muted-foreground">{props.note}</Text>
     </View>
   );
 }
@@ -34,8 +35,8 @@ function ProfileRow(props: { s: SettingsStore; profile: LLMProfile }) {
       selected={active()}
       accessibilityLabel={props.profile.name || t("settings_agent_profile_placeholder")}
       testID={`settings-profile-${props.profile.name || props.profile._key}`}
-      class={`flex-row items-center gap-3 rounded-(--radius) border px-3 py-2 hover:bg-hover ${
-        active() ? "border-blue bg-selection" : "border-line-faint"
+      class={`flex-row items-center gap-3 border-b border-line-soft px-2 py-3 transition-colors duration-120 ${
+        active() ? "bg-blue/9" : "hover:bg-blue/5"
       }`}
     >
       <View
@@ -43,7 +44,7 @@ function ProfileRow(props: { s: SettingsStore; profile: LLMProfile }) {
       >
         <ProviderLogo item={provider()} size={28} />
         <If when={s.profileIsInUse(props.profile)}>
-          <View class="absolute -right-0.5 -top-0.5 size-2 rounded-full bg-ok" />
+          <View class="absolute -bottom-[3px] -right-[3px] size-[11px] rounded-[1px] border-2 border-card bg-status-on" />
         </If>
       </View>
       <View class="flex-1 gap-0.5">
@@ -53,7 +54,7 @@ function ProfileRow(props: { s: SettingsStore; profile: LLMProfile }) {
       <If when={s.profileDirty(props.profile)}>
         <DirtyDot label={t("settings_channel_unsaved")} testID="settings-profile-dirty" />
       </If>
-      <Icon name="PhCaretRight" size={14} color="muted-foreground" />
+      <Icon name="PhCaretRight" size={12} color="muted-foreground" />
     </BaseButton>
   );
 }
@@ -65,7 +66,7 @@ export function AgentSection(props: { s: SettingsStore }) {
   const profiles = () => s.state.llm.profiles.filter((item) => !item._draft);
   const fallbackItems = () => s.profileOptions().map((item) => ({ value: item.value, label: item.title, description: item.note }));
   return (
-    <View class="gap-5" testID="settings-agent">
+    <View class="gap-4" testID="settings-agent">
       <SettingsCard
         title={t("settings_agent_block_title")}
         meta={s.selectedSection()?.meta}
@@ -118,15 +119,17 @@ export function AgentSection(props: { s: SettingsStore }) {
           testID="settings-llm-form"
         />
 
-        <View class="gap-3 border-t border-line-faint pt-4">
+        <View class="gap-3 border-t border-line-soft pt-3">
           <SubHeading title={t("settings_agent_profiles_title")} note={t("settings_agent_profiles_note")} />
-          <View class="gap-2" testID="settings-profile-list">
-            <Each of={profiles()} key={(profile) => profile._key}>
-              {(profile) => <ProfileRow s={s} profile={profile()} />}
-            </Each>
-            <Button
-              variant="outlined"
-              icon="PhPlus"
+          <View testID="settings-profile-list">
+            <If when={profiles().length}>
+              <View class="mb-3 border-t border-line-soft">
+                <Each of={profiles()} key={(profile) => profile._key}>
+                  {(profile) => <ProfileRow s={s} profile={profile()} />}
+                </Each>
+              </View>
+            </If>
+            <PlaceholderButton
               label={t("settings_agent_profile_add")}
               disabled={locked()}
               onPress={() => s.openAddProfileDialog()}
@@ -135,11 +138,11 @@ export function AgentSection(props: { s: SettingsStore }) {
           </View>
         </View>
 
-        <View class="gap-3 border-t border-line-faint pt-4">
+        <View class="gap-3 border-t border-line-soft pt-3">
           <SubHeading title={t("settings_agent_fallback_title")} note={t("settings_agent_fallback_note")} />
           <If
             when={s.profileOptions().length}
-            else={<Text class="text-sm text-muted-foreground">{t("settings_agent_fallback_empty")}</Text>}
+            else={<Text class="text-xs leading-normal text-muted-foreground">{t("settings_agent_fallback_empty")}</Text>}
           >
             <View class="gap-2" testID="settings-fallback-list">
               <Each of={s.state.llm.fallback_profiles.map((name, index) => ({ name, index }))} key={(item) => `${item.index}:${item.name}`}>
@@ -185,9 +188,7 @@ export function AgentSection(props: { s: SettingsStore }) {
                   </View>
                 )}
               </Each>
-              <Button
-                variant="outlined"
-                icon="PhPlus"
+              <PlaceholderButton
                 label={t("settings_agent_fallback_add")}
                 disabled={locked() || !s.profileOptions().length}
                 onPress={() => s.addFallbackProfile()}
@@ -230,6 +231,7 @@ export function ProfilePane(props: { s: SettingsStore; sheet?: boolean }) {
   };
   return (
     <SettingsPane
+      literal
       open={!!s.openedProfile()}
       sheet={props.sheet}
       title={title()}

@@ -17,7 +17,7 @@ test("Image: picking an image opens the adjust dialog for it", async () => {
   await app.waitFor("id:image-upload-dialog");
   await app.press("Replace");
   await app.waitFor("id:image-adjust-dialog");
-  expect(app.shows("id:image-upload-dialog")).toBe(false);
+  await app.waitFor("id:image-upload-dialog", { state: "gone" });
   expect(app.texts()).toContain("Avatar");
   expect(app.texts()).toContain("100%");
   const pick = app.host.calls().find((call) => call.name === "morph.file.pick");
@@ -67,7 +67,7 @@ test("Image: an image that cannot load says so and cannot be saved; Delete remov
   await app.press("id:image-upload-preview");
   await app.press("id:image-upload-delete");
   await app.waitUntil(() => eventsNamed("image.delete").length === 1);
-  expect(app.shows("id:image-upload-dialog")).toBe(false);
+  await app.waitFor("id:image-upload-dialog", { state: "gone" }); // the dialog shrinks away first
   // Without an image there is nothing to delete.
   await app.press("id:image-upload-preview");
   expect(app.enabled("id:image-upload-delete")).toBe(false);

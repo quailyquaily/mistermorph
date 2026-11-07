@@ -1,10 +1,11 @@
-// The Heartbeat editor (the Vue page's heartbeat editor card): HEARTBEAT.md in a Markdown editor,
-// saved with its own Save.
-import { View } from "nsh";
+// The Heartbeat editor (the Vue page's heartbeat editor card, views/TodoView.css
+// `.todo-heartbeat-editor-*`): a boxed card whose head is the mono "HEARTBEAT" label, the note on
+// one line and a plain Save; HEARTBEAT.md in a Markdown editor that fills the rest of the card.
+import { Text, View } from "nsh";
 import { translate } from "../../lib/core/context.js";
 import { AppMarkdownEditor } from "../shared/MarkdownEditor";
-import { Button, Icon, ProgressBar, Section } from "../ui";
-import { Text } from "nsh";
+import { Button, Icon, ProgressBar } from "../ui";
+import { TodoCard } from "./TodoCard";
 import type { TodoState } from "./todo-state";
 
 const t = translate as (key: string, vars?: Record<string, unknown> | null) => string;
@@ -12,11 +13,12 @@ const t = translate as (key: string, vars?: Record<string, unknown> | null) => s
 export function TodoHeartbeatEditor(props: { state: TodoState }) {
   const state = props.state;
   return (
-    <Section
-      variant="card"
+    <TodoCard
       title={t("todo_heartbeat_title")}
       meta={t("todo_heartbeat_editor_meta")}
-      class="flex-1"
+      fill
+      bodyClass="gap-2"
+      testID="todo-heartbeat-editor"
       actions={
         <Button
           variant="plain"
@@ -40,14 +42,14 @@ export function TodoHeartbeatEditor(props: { state: TodoState }) {
       </If>
       <AppMarkdownEditor
         value={state.heartbeatContent()}
-        height="clamp(320px, 60vh, 760px)"
+        height="100%"
         disabled={state.heartbeatLoading() || state.heartbeatSaving()}
         placeholder={t("todo_heartbeat_placeholder")}
         accessibilityLabel={t("todo_heartbeat_title")}
         testID="todo-heartbeat-content"
-        class="flex-1"
+        class="min-h-80 flex-1"
         onChange={(value) => state.onHeartbeatContentChange(value)}
       />
-    </Section>
+    </TodoCard>
   );
 }

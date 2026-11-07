@@ -12,8 +12,11 @@
 // A panel given a target (and not `mobile`) shows its pane there; without one it shows the pane
 // beside its own list, and on phones (`mobile`) as a drawer.
 import type { JSX } from "nsh";
-import { cleanup, effect, type Signal, signal, Scroll, Text, untracked, View } from "nsh";
+import { cleanup, effect, type Signal, signal, Scroll, untracked, View } from "nsh";
 import { Button, SidePane } from "../ui";
+import { SCROLLBAR } from "../motion";
+import { PaneHead } from "../settings-page/parts";
+import { InSidePane } from "./SettingFields";
 
 /** What a panel puts in the outlet: an id (a new id rebuilds the pane) and how to draw it. */
 export interface PaneContent {
@@ -93,29 +96,35 @@ export function SettingsPane(props: {
   onClose: () => void;
   children?: JSX.Element;
   foot?: JSX.Element;
+  /** Plain icon buttons before the close button. */
+  actions?: JSX.Element;
+  /** The title is a name the user gave: keep its case. */
+  literal?: boolean;
   testID?: string;
 }) {
   return (
     <SidePane open={props.open} sheet={props.sheet} onClose={props.onClose} label={props.label || props.title}>
+      <InSidePane.Provider value={true}>
       <View class="flex-1" testID={props.testID}>
-        <View class="flex-row items-start gap-3 border-b border-line-faint px-4 py-3">
-          <View class="flex-1 gap-0.5">
-            <Text class="text-base font-semibold text-foreground line-clamp-1" role="header">
-              {props.title}
-            </Text>
-            <If when={props.meta}>
-              <Text class="text-xs text-muted-foreground">{props.meta}</Text>
-            </If>
-          </View>
-          <Button variant="plain" size="xs" iconOnly icon="PhX" title={props.closeLabel} onPress={props.onClose} />
-        </View>
-        <Scroll class="flex-1" contentClass="gap-4 p-4">
+        <PaneHead
+          title={props.title}
+          meta={props.meta}
+          literal={props.literal}
+          actions={
+            <>
+              {props.actions}
+              <Button variant="plain" size="xs" iconOnly icon="PhX" title={props.closeLabel} onPress={props.onClose} />
+            </>
+          }
+        />
+        <Scroll class="flex-1" contentClass="gap-4 px-4 pb-6 pt-4" scrollbar={SCROLLBAR}>
           {props.children}
         </Scroll>
         <If when={props.foot}>
-          <View class="flex-row items-center justify-end gap-3 border-t border-line-faint px-4 py-3">{props.foot}</View>
+          <View class="flex-row items-center justify-end gap-3 border-t border-line-soft px-4 pb-4 pt-3">{props.foot}</View>
         </If>
       </View>
+      </InSidePane.Provider>
     </SidePane>
   );
 }

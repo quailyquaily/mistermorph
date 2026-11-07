@@ -61,7 +61,7 @@ test("the index groups subjects with counts; a subject shows its rules and facts
 
   await app.press("id:memories-subject:general");
   await app.waitFor("text:How the agent works with everyone.");
-  expect(app.shows("text:Rules")).toBe(true);
+  expect(app.shows("text:/^rules$/i")).toBe(true);
   expect(app.shows("text:Likes tea")).toBe(false);
 
   await app.press("id:memories-subject:all");

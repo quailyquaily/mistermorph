@@ -1,12 +1,11 @@
 // Usage (the Vue console's StatsView): the summary sheet (total cost, tokens, requests and their
 // breakdowns), the daily chart, and the usage by API host or by model.
-import { batch, effect, signal, Text, untracked, View } from "nsh";
+import { batch, effect, signal, Text, untracked, View, windowSize } from "nsh";
 import { endpointState, formatShortTime, runtimeApiFetch } from "../../lib/core/context.js";
-import { isMobile } from "../../lib/shell";
 import { RollingNumber } from "../../components/shared/RollingNumber";
 import { DailyUsagePanel } from "../../components/observe/DailyUsagePanel";
 import { ModelLedger } from "../../components/observe/ModelLedger";
-import { hint, t, wholeNumber } from "../../components/observe/parts";
+import { hint, ObserveSection, t, wholeNumber } from "../../components/observe/parts";
 import { costMetrics, summaryHeroMetrics, tokenMetrics, type Metric, type Totals } from "../../components/observe/usage-metrics";
 import { Icon, type IconName, Page, ProgressBar, Tabs } from "../../components/ui";
 
@@ -76,125 +75,176 @@ export function StatsPage() {
     });
   });
 
+  // Vue's breakpoints are the window's: the sheet stacks at 1080, band cells pair up at 560.
+  const wide = () => windowSize().width > 1080;
+  const narrow = () => windowSize().width <= 560;
+  // clamp(20px, 2.6vw, 34px) between the page's blocks; clamp(18px, 2vw, 24px) inside the sheet.
+  const pageGap = () => Math.round(Math.min(34, Math.max(20, windowSize().width * 0.026)));
+  const sheetPad = () => Math.round(Math.min(24, Math.max(18, windowSize().width * 0.02)));
+  // --font-size-hero: clamp(2.5rem, 2rem + 2vw, 4rem).
+  const heroSize = () => Math.round(Math.min(64, Math.max(40, 32 + windowSize().width * 0.02)));
+
   return (
     <Page title={t("stats_title")} error={err()} testID="stats-page">
-      <If when={loading()}>
-        <ProgressBar indeterminate label={t("runtime_loading")} />
-      </If>
-
-      <View
-        class={`gap-6 rounded-(--radius) border border-line-faint bg-card p-5 ${isMobile() ? "" : "flex-row"}`}
-        testID="stats-hero"
-      >
-        <View class="flex-1 gap-4">
-          <If when={metaItems().length > 0}>
-            <View class="flex-row flex-wrap gap-x-4 gap-y-1">
-              <Each of={metaItems()} key={(item) => item.key}>
-                {(item) => (
-                  <View class="flex-row items-center gap-1.5" accessibilityLabel={item().label} tooltip={hint(item().label)}>
-                    <If when={item().icon}>
-                      <Icon name={item().icon!} size={13} color="muted-foreground" />
-                    </If>
-                    <Text class="text-xs text-muted-foreground tabular-nums">{item().text}</Text>
-                  </View>
-                )}
-              </Each>
-            </View>
-          </If>
-          <View class="gap-1">
-            <Text class="font-mono text-xs uppercase tracking-wide text-muted-foreground">{hero().primary.label}</Text>
-            <View class="self-start" tooltip={hint(hero().primary.title)}>
-              <RollingNumber
-                value={hero().primary.value}
-                class={`text-4xl font-semibold ${hero().primary.unavailable ? "text-muted-foreground" : "text-foreground"}`}
-                testID="stats-total-cost"
-              />
-            </View>
-          </View>
-          <View class="flex-row flex-wrap gap-8">
-            <Each of={hero().secondary} key={(item) => item.key}>
-              {(item) => (
-                <View class="gap-0.5">
-                  <Text class="font-mono text-xs uppercase tracking-wide text-muted-foreground">{item().label}</Text>
-                  <Text class={`text-lg font-medium tabular-nums ${item().unavailable ? "text-muted-foreground" : "text-foreground"}`}>
-                    {item().value}
-                  </Text>
-                </View>
-              )}
-            </Each>
-          </View>
-        </View>
-
-        <If when={summaryCosts().length > 0 || summaryTokens().length > 0}>
-          <View class={`flex-1 gap-4 ${isMobile() ? "border-t border-line-faint pt-4" : "border-l border-dashed border-line pl-6"}`}>
-            <If when={summaryCosts().length > 0}>
-              <SummaryGroup icon="PhWallet" title={t("stats_costs")} items={summaryCosts()} />
-            </If>
-            <If when={summaryTokens().length > 0}>
-              <SummaryGroup icon="PhChartBar" title={t("stats_tokens")} items={summaryTokens()} />
-            </If>
-          </View>
+      <View style={{ rowGap: pageGap() }} class="pb-6">
+        <If when={loading()}>
+          <ProgressBar indeterminate label={t("runtime_loading")} />
         </If>
-      </View>
 
-      <DailyUsagePanel />
+        {/* The summary sheet: a boxed section without a head. */}
+        <ObserveSection variant="boxed" padding={sheetPad()} testID="stats-hero">
+          <View class={wide() ? "flex-row" : ""} style={wide() ? { columnGap: sheetPad() + 10 } : { rowGap: 18 }}>
+            <View
+              class="justify-between"
+              style={{ rowGap: Math.round(Math.min(34, Math.max(18, windowSize().width * 0.024))), ...(wide() ? { flexGrow: 0.92, flexShrink: 1, flexBasis: 0 } : {}) }}
+            >
 
-      <View class="gap-4">
-        <Tabs
-          items={[
-            { id: "api_hosts", label: t("stats_group_api_hosts") },
-            { id: "models", label: t("stats_group_models") },
-          ]}
-          value={activeTab()}
-          onChange={(id) => activeTab.set(id === "models" ? "models" : "api_hosts")}
-        />
-        <If
-          when={activeTab() === "api_hosts"}
-          else={
-            <If when={payload().models.length > 0} else={<EmptyUsage />}>
-              <View class="gap-4 rounded-(--radius) border border-line-faint bg-card p-4" testID="stats-models">
-                <Text class="text-base font-semibold text-foreground">{t("stats_group_models")}</Text>
-                <ModelLedger models={payload().models} scope="models" />
+              <If when={metaItems().length > 0}>
+                <View class="flex-row flex-wrap gap-x-3.5 gap-y-1.5">
+                  <Each of={metaItems()} key={(item) => item.key}>
+                    {(item) => (
+                      <View class="flex-row items-center gap-1.25" accessibilityLabel={item().label} tooltip={hint(item().label)}>
+                        <If when={item().icon}>
+                          <Icon name={item().icon!} size={14} color="subtle" />
+                        </If>
+                        <Text class="font-mono text-xs leading-normal text-subtle tabular-nums">{item().text}</Text>
+                      </View>
+                    )}
+                  </Each>
+                </View>
+              </If>
+              {/* The spotlight: the total cost, large, and the totals under a rule. */}
+              <View class="justify-end gap-1.5" style={{ minHeight: Math.round(Math.min(108, Math.max(76, windowSize().width * 0.09))) }}>
+                <Text class={LABEL}>{hero().primary.label}</Text>
+                <View class="self-start" tooltip={hint(hero().primary.title)}>
+                  <RollingNumber
+                    value={hero().primary.value}
+                    class={`font-semibold tracking-[-0.055em] ${hero().primary.unavailable ? "text-subtle" : "text-foreground"}`}
+                    style={{ fontSize: heroSize(), lineHeight: Math.round(heroSize() * 0.9) }}
+                    testID="stats-total-cost"
+                  />
+                </View>
+                <View class="mt-3.5 flex-row gap-4.5 border-t border-line-soft pt-3.5">
+                  <Each of={hero().secondary} key={(item) => item.key}>
+                    {(item) => (
+                      <View class="flex-1 gap-1" tooltip={hint(item().title)}>
+                        <Text class={LABEL}>{item().label}</Text>
+                        <Text
+                          class={`text-base leading-[17.3px] tabular-nums ${item().unavailable ? "font-medium text-subtle" : "font-semibold text-foreground"}`}
+                        >
+                          {item().value}
+                        </Text>
+                      </View>
+                    )}
+                  </Each>
+                </View>
+              </View>
+            </View>
+
+            <If when={summaryCosts().length > 0 || summaryTokens().length > 0}>
+              <View
+                class={`relative justify-end gap-4 ${wide() ? "pt-0.5" : "border-t border-line-soft pt-4"}`}
+                style={wide() ? { flexGrow: 1.08, flexShrink: 1, flexBasis: 0, minWidth: 320, paddingLeft: sheetPad() } : undefined}
+              >
+                <If when={wide()}>
+                  {/* Vue's faint dashed divider, inset at the ends. */}
+                  <View accessibilityElementsHidden class="absolute bottom-1 left-0 top-0.5 border-l border-dashed border-ink/20" />
+                </If>
+                <If when={summaryCosts().length > 0}>
+                  <SummaryGroup icon="PhWallet" title={t("stats_costs")} items={summaryCosts()} columns={wide() ? 4 : 2} />
+                </If>
+                <If when={summaryTokens().length > 0}>
+                  <SummaryGroup icon="PhChartBar" title={t("stats_tokens")} items={summaryTokens()} columns={wide() ? 4 : 2} />
+                </If>
               </View>
             </If>
-          }
-        >
-          <If when={payload().api_hosts.length > 0} else={<EmptyUsage />}>
-            <View class="gap-4" testID="stats-hosts">
-              <Each of={payload().api_hosts} key={(host) => String(host.api_host)}>
-                {(host) => <HostBlock host={host()} />}
-              </Each>
-            </View>
+          </View>
+        </ObserveSection>
+
+        <DailyUsagePanel />
+
+        <View class="gap-3">
+          <Tabs
+            items={[
+              { id: "api_hosts", label: t("stats_group_api_hosts") },
+              { id: "models", label: t("stats_group_models") },
+            ]}
+            value={activeTab()}
+            onChange={(id) => activeTab.set(id === "models" ? "models" : "api_hosts")}
+            class="self-start"
+          />
+          <If
+            when={activeTab() === "api_hosts"}
+            else={
+              <If when={payload().models.length > 0} else={<EmptyUsage />}>
+                <ObserveSection title={t("stats_group_models")} gap={14} testID="stats-models">
+                  <ModelLedger models={payload().models} scope="models" />
+                </ObserveSection>
+              </If>
+            }
+          >
+            <If when={payload().api_hosts.length > 0} else={<EmptyUsage />}>
+              <View style={{ rowGap: Math.round(Math.min(40, Math.max(28, windowSize().width * 0.03))) }} testID="stats-hosts">
+                <Each of={payload().api_hosts} key={(host) => String(host.api_host)}>
+                  {(host) => <HostBlock host={host()} narrow={narrow()} />}
+                </Each>
+              </View>
+            </If>
           </If>
-        </If>
+        </View>
       </View>
     </Page>
   );
 }
 
+// Vue's .stats-*-label: mono meta caps, tracked.
+const LABEL = "font-mono text-xs font-medium uppercase leading-normal tracking-[0.12em] text-subtle";
+
 function EmptyUsage() {
+  return <Text class={`pt-1.5 ${LABEL}`}>{t("stats_no_data")}</Text>;
+}
+
+/** Splits a list into rows of `size`. */
+function rowsOf<T>(items: T[], size: number): T[][] {
+  const rows: T[][] = [];
+  for (let i = 0; i < items.length; i += size) rows.push(items.slice(i, i + size));
+  return rows;
+}
+
+function BandHead(props: { icon: IconName; title: string }) {
   return (
-    <View class="items-center rounded-(--radius) border border-dashed border-line py-10">
-      <Text class="text-sm text-muted-foreground">{t("stats_no_data")}</Text>
+    <View class="flex-row items-center gap-2">
+      <Icon name={props.icon} size={15} color="ink" />
+      <Text class="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-foreground">{props.title}</Text>
     </View>
   );
 }
 
-function SummaryGroup(props: { icon: IconName; title: string; items: Metric[] }) {
+/** A group of the sheet's side: its head, then label over value in columns. */
+function SummaryGroup(props: { icon: IconName; title: string; items: Metric[]; columns: number }) {
   return (
-    <View class="gap-2">
-      <View class="flex-row items-center gap-1.5">
-        <Icon name={props.icon} size={14} color="subtle" />
-        <Text class="font-mono text-xs uppercase tracking-wide text-subtle">{props.title}</Text>
-      </View>
-      <View class="flex-row flex-wrap gap-x-6 gap-y-2">
-        <Each of={props.items} key={(item) => item.key}>
-          {(item) => (
-            <View class="gap-0.5">
-              <Text class="text-xs text-muted-foreground">{item().label}</Text>
-              <View class="self-start" tooltip={hint(item().title)}>
-                <RollingNumber value={item().value} class="text-base font-medium text-foreground" />
-              </View>
+    <View class="gap-2.25">
+      <BandHead icon={props.icon} title={props.title} />
+      <View class="gap-2.5 pt-0.5">
+        <Each of={rowsOf(props.items, props.columns)}>
+          {(row) => (
+            <View class="flex-row gap-4.5">
+              <Each of={Array.from({ length: props.columns }, (_, i) => row()[i] ?? null)}>
+                {(item) => (
+                  <View class="flex-1 gap-1">
+                    <If when={item()}>
+                      {(metric) => (
+                        <>
+                          <Text class={LABEL}>{metric().label}</Text>
+                          <View class="self-start" tooltip={hint(metric().title)}>
+                            <RollingNumber value={metric().value} class="text-xs leading-[17.4px] text-subtle" />
+                          </View>
+                        </>
+                      )}
+                    </If>
+                  </View>
+                )}
+              </Each>
             </View>
           )}
         </Each>
@@ -203,24 +253,31 @@ function SummaryGroup(props: { icon: IconName; title: string; items: Metric[] })
   );
 }
 
-function MetricBand(props: { icon: IconName; title: string; items: Metric[] }) {
+/** Costs or tokens of a host: its head, then a datasheet row of cells between hairlines. */
+function MetricBand(props: { icon: IconName; title: string; items: Metric[]; narrow: boolean }) {
   return (
-    <View class="gap-2 border-t border-line-faint pt-3">
-      <View class="flex-row items-center gap-1.5">
-        <Icon name={props.icon} size={14} color="subtle" />
-        <Text class="font-mono text-xs uppercase tracking-wide text-subtle">{props.title}</Text>
-      </View>
-      <View class="flex-row flex-wrap gap-x-6 gap-y-2">
-        <Each of={props.items} key={(item) => item.key}>
-          {(item) => (
-            <View class="min-w-24 gap-0.5">
-              <Text class="text-xs text-muted-foreground">{item().label}</Text>
-              <View class="self-start" tooltip={hint(item().title)}>
-                <RollingNumber
-                  value={item().value}
-                  class={`text-base font-medium ${item().unavailable ? "text-muted-foreground" : "text-foreground"}`}
-                />
-              </View>
+    <View class="gap-2.5">
+      <BandHead icon={props.icon} title={props.title} />
+      <View class="border-y border-line-soft">
+        <Each of={rowsOf(props.items, props.narrow ? 2 : props.items.length)}>
+          {(row, rowIndex) => (
+            <View class={`flex-row ${rowIndex() > 0 ? "border-t border-line-soft" : ""}`}>
+              <Each of={row()}>
+                {(item, index) => (
+                  <View
+                    class={`flex-1 gap-1.5 px-3.5 pb-2.75 pt-3 ${index() > 0 ? "border-l border-line-soft" : ""}`}
+                    style={{ minWidth: props.narrow ? 0 : 132 }}
+                  >
+                    <Text class={LABEL}>{item().label}</Text>
+                    <View class="self-start" tooltip={hint(item().title)}>
+                      <RollingNumber
+                        value={item().value}
+                        class={`text-base leading-[17.3px] ${item().unavailable ? "font-medium text-subtle" : "font-semibold text-foreground"}`}
+                      />
+                    </View>
+                  </View>
+                )}
+              </Each>
             </View>
           )}
         </Each>
@@ -229,26 +286,27 @@ function MetricBand(props: { icon: IconName; title: string; items: Metric[] }) {
   );
 }
 
-function HostBlock(props: { host: Totals }) {
+function HostBlock(props: { host: Totals; narrow: boolean }) {
   return (
-    <View class="gap-3 rounded-(--radius) border border-line-faint bg-card p-4" testID={`stats-host-${props.host.api_host}`}>
-      <View class="flex-row flex-wrap items-center justify-between gap-2">
-        <View class="flex-1 gap-0.5">
-          <Text class="text-base font-semibold text-foreground">{t("stats_api_host")}</Text>
-          <Text class="font-mono text-xs text-muted-foreground">{String(props.host.api_host ?? "")}</Text>
+    <ObserveSection
+      title={t("stats_api_host")}
+      gap={14}
+      testID={`stats-host-${props.host.api_host}`}
+      meta={
+        <View class="flex-1 flex-row items-baseline">
+          <Text class="shrink font-mono text-sm font-semibold text-foreground line-clamp-1">{String(props.host.api_host ?? "")}</Text>
+          <View class="ml-4 flex-row items-baseline gap-2">
+            <Text class={LABEL}>{t("stats_requests")}</Text>
+            <Text class="text-base font-semibold leading-none text-foreground tabular-nums">{wholeNumber(props.host.requests)}</Text>
+          </View>
         </View>
-        <View class="flex-row items-center gap-1.5 rounded-(--radius) border border-line-faint px-2 py-0.5">
-          <Text class="text-xs text-muted-foreground">{t("stats_requests")}</Text>
-          <Text class="text-xs font-medium text-foreground tabular-nums">{wholeNumber(props.host.requests)}</Text>
-        </View>
-      </View>
-      <MetricBand icon="PhWallet" title={t("stats_costs")} items={costMetrics(props.host || {})} />
-      <MetricBand icon="PhChartBar" title={t("stats_tokens")} items={tokenMetrics(props.host || {})} />
+      }
+    >
+      <MetricBand icon="PhWallet" title={t("stats_costs")} items={costMetrics(props.host || {})} narrow={props.narrow} />
+      <MetricBand icon="PhChartBar" title={t("stats_tokens")} items={tokenMetrics(props.host || {})} narrow={props.narrow} />
       <If when={Array.isArray(props.host.models) && props.host.models.length > 0}>
-        <View class="border-t border-line-faint pt-3">
-          <ModelLedger models={props.host.models} scope={String(props.host.api_host)} />
-        </View>
+        <ModelLedger models={props.host.models} scope={String(props.host.api_host)} />
       </If>
-    </View>
+    </ObserveSection>
   );
 }

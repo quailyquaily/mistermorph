@@ -5,7 +5,9 @@
 // questions and password requests, the topic and workspace panel, and the mobile split.
 //
 // It runs in the ChatPage component's body: its effects, timers and sockets go with the page.
-import { batch, cleanup, computed, effect, signal, untracked } from "nsh";
+import { batch, cleanup, computed, effect, LayoutAnimation, signal, untracked } from "nsh";
+import { MOTION_SLOW, motionMs } from "../../components/motion/tokens";
+import { HISTORY_END_PADDING } from "../../components/chat/ChatHistoryList";
 import type { ListRef } from "nsh";
 import { approvalDetailsByID, taskApprovalState } from "../../lib/core/chat-approvals.js";
 import { formatDate, formatNumber } from "../../lib/core/intl-format.js";
@@ -1419,6 +1421,16 @@ export function createChatController() {
 
   function toggleWorkspaceSidebar() {
     if (!untracked(workspaceSidebarAvailable)) return;
+    // The panel opens and closes in one motion (the Vue console animates its grid column over the
+    // slow token): the conversation narrows or widens and the panel fades in or out with it.
+    if (!untracked(mobileMode)) {
+      LayoutAnimation.configureNext({
+        duration: motionMs(MOTION_SLOW),
+        create: { type: "easeInEaseOut", property: "opacity" },
+        update: { type: "easeInEaseOut" },
+        delete: { type: "easeInEaseOut", property: "opacity" },
+      });
+    }
     workspaceSidebarOpen.update((open) => !open);
   }
 
@@ -1617,12 +1629,25 @@ export function createChatController() {
 
   /* ---------- history ---------- */
 
-  const stickToBottom = () => historyList?.scrollToEnd({ animated: false });
+  // The newest message is item 0 of the inverted list. Scroll to that index, not `scrollToEnd()`:
+  // nsh 0.4's core resolves an inverted list's "end" to content offset 0, the top of the content,
+  // which is the OLDEST message (list.rs `end_offset`), so a topic opened at its first message.
+  // Resolved natively, the index scroll also follows the row while it is measured.
+  // An inverted list lays its content padding out mirrored too: the history's 20pt `paddingTop`
+  // is below the newest message, so the scroll goes that much past item 0's own end.
+  const stickToBottom = (animated = false) => historyList?.scrollToIndex({ index: 0, viewPosition: 0, viewOffset: HISTORY_END_PADDING, animated });
+  // How far the history is scrolled up from the newest message, in points (ChatHistoryList keeps it).
+  let historyDistanceFromEnd = 0;
+  let historyViewport = 0;
 
   function scrollHistoryToBottom(options: { force?: boolean; smooth?: boolean } = {}) {
     // The inverted list keeps the newest message in view while it is there; a send or a load moves
-    // back to it.
-    if (options.force || options.smooth) setTimeout(() => historyList?.scrollToEnd({ animated: Boolean(options.smooth) }), 0);
+    // back to it. A send glides there when it is near (within 1.5 screens), and jumps from farther,
+    // so the view never trails the conversation (the Vue console's scrollHistoryToBottom).
+    if (!options.force && !options.smooth) return;
+    const near = historyDistanceFromEnd <= Math.max(1, historyViewport) * 1.5;
+    const animated = Boolean(options.smooth) && near;
+    setTimeout(() => stickToBottom(animated), 0);
   }
 
   function replaceHistoryItems(items: HistoryItem[]) {
@@ -3102,6 +3127,10 @@ export function createChatController() {
     },
     setHistoryList: (list: ListRef) => {
       historyList = list;
+    },
+    setHistoryScroll: (distanceFromEnd: number, viewport: number) => {
+      historyDistanceFromEnd = distanceFromEnd;
+      historyViewport = viewport;
     },
     stickToBottom,
     setLLMProfile: (value: string) => composerLLMProfile.set(value),

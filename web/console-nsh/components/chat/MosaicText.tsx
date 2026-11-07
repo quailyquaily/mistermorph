@@ -36,7 +36,7 @@ export function MosaicText(props: { text: string; label?: string; pitch?: number
         style={{ width: width(), height: height() }}
         draw={(cx) => {
           const current = layout();
-          const shades = shadeColors(rgbOf("line", [165, 186, 208]), rgbOf("subtle", [60, 74, 90]));
+          const shades = shadeColors(rgbOf("line", [165, 186, 208]), rgbOf("muted-foreground", [95, 120, 148]));
           const size = { pitch: pitch(), piece: pitch() * 0.8 };
           drawMosaicText(cx as never, current, shades, size, elapsed(), reduceMotion());
         }}

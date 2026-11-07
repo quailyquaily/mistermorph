@@ -4,7 +4,8 @@
 // Vue to nsh: `save` is `onSave(values, onComplete)`, `add-opened` is `onAddOpened()`,
 // `pane-change` is `onPaneChange(open)`; `paneTarget` is a PaneTarget (see PaneTarget.tsx).
 import { batch, cleanup, computed, effect, signal, Text, untracked, View } from "nsh";
-import { Button, ProgressBar, Section, StatusMark, TextField } from "../ui";
+import { Button, ProgressBar, StatusMark, TextField } from "../ui";
+import { SettingsCard } from "../settings-page/parts";
 import { DialogShell, t } from "./DialogShell";
 import { type PaneTarget, SettingsPane, usePaneTarget } from "./PaneTarget";
 import { SecretInput } from "./SecretInput";
@@ -183,6 +184,7 @@ export function ConsoleEndpointsPanel(props: ConsoleEndpointsPanelProps) {
 
   const pane = () => (
     <SettingsPane
+      literal
       open={editorOpen()}
       sheet={props.mobile}
       title={paneTitle()}
@@ -256,9 +258,11 @@ export function ConsoleEndpointsPanel(props: ConsoleEndpointsPanelProps) {
   return (
     <View class="flex-row" testID="console-endpoints">
       <View class="flex-1">
-        <Section
-          variant="card"
+        <SettingsCard
           title={t("remote_agents_title")}
+          list
+          metaLead={<Text class="font-mono text-xs font-semibold text-foreground">{String((props.endpoints || []).length)}</Text>}
+          meta={t("remote_agents_note")}
           actions={
             <Button
               variant="plain"
@@ -271,15 +275,11 @@ export function ConsoleEndpointsPanel(props: ConsoleEndpointsPanelProps) {
             />
           }
         >
-          <View class="flex-row gap-1.5">
-            <Text class="font-mono text-xs text-foreground">{String((props.endpoints || []).length)}</Text>
-            <Text class="flex-1 text-xs text-muted-foreground">{t("remote_agents_note")}</Text>
-          </View>
           <If when={props.loading}>
             <ProgressBar indeterminate />
           </If>
           <If when={!props.loading && !rows().length}>
-            <Text class="text-sm text-muted-foreground" testID="console-endpoints-empty">
+            <Text class="py-5 text-base text-muted-foreground" testID="console-endpoints-empty">
               {t("remote_agents_empty")}
             </Text>
           </If>
@@ -292,8 +292,8 @@ export function ConsoleEndpointsPanel(props: ConsoleEndpointsPanelProps) {
                   accessibilityState={{ selected: editorOpen() && editingName() === endpoint().name, disabled: busy() }}
                   disabled={busy()}
                   onPress={() => edit(endpoint())}
-                  class={`gap-1 px-2 py-2.5 hover:bg-hover ${index() > 0 ? "border-t border-line-faint" : ""} ${
-                    editorOpen() && editingName() === endpoint().name ? "bg-selection" : ""
+                  class={`gap-1 px-2 py-2.5 hover:bg-hover ${index() > 0 ? "border-t border-line-soft" : ""} ${
+                    editorOpen() && editingName() === endpoint().name ? "bg-blue/9" : ""
                   }`}
                 >
                   <View class="flex-row items-center justify-between gap-3">
@@ -310,7 +310,7 @@ export function ConsoleEndpointsPanel(props: ConsoleEndpointsPanelProps) {
               )}
             </Each>
           </View>
-        </Section>
+        </SettingsCard>
       </View>
 
       <If when={!inTarget()}>{pane()}</If>
