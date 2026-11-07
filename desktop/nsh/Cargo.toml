@@ -1,0 +1,51 @@
+[package]
+name = "mistermorph-desktop"
+description = "The Mister Morph desktop app: the nsh console in web/console-nsh, drawn by GPUI, with the backend it runs."
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+build = "build.rs"
+
+[workspace]
+
+[[bin]]
+name = "MrMorph"
+path = "src/main.rs"
+
+[features]
+# Follow the `pro` release channel (the Go `pro` build tag).
+pro = []
+
+[dependencies]
+anyhow = "1"
+base64 = "0.22"
+dirs = "5"
+env_logger = "0.11"
+flate2 = "1"
+futures = "0.3"
+hex = "0.4"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp", "bmp"] }
+log = "0.4"
+mime_guess = "2"
+notify-rust = "4"
+nsh-base = "=0.4.0"
+nsh-engine = { version = "=0.4.0", default-features = false }
+nsh-platform-gpui = { version = "=0.4.0", default-features = false, features = ["js"] }
+gpui_platform = { package = "gpui-fast-platform", version = "0.1.9", default-features = false, features = ["font-kit", "wayland", "x11"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+sys-locale = "0.3"
+tar = "0.4"
+ureq = "3"
+url = "2"
+yaml-rust2 = "0.10"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[profile.release]
+lto = "thin"
+strip = true

@@ -1,0 +1,771 @@
+import { normalizeActivityWorkers } from "./chat-workers.js";
+import { readWorkerIndices, workerDisplayName } from "./worker-identity.js";
+import { taskApprovalState } from "./chat-approvals.js";
+import { placeSteeredAgentsAfterUsers } from "./chat-history-steering.js";
+import { formatDate } from "./intl-format.js";
+
+const AWARENESS_TOPIC_ID = "_awareness";
+const LEGACY_HEARTBEAT_TOPIC_ID = "_heartbeat";
+const POLLING_ACTION_KEYS = [
+  "chat_polling_action_ponder",
+  "chat_polling_action_think",
+  "chat_polling_action_research",
+  "chat_polling_action_weigh",
+  "chat_polling_action_reflect",
+  "chat_polling_action_tinker",
+];
+
+function normalizeTaskStatus(raw) {
+  const value = String(raw || "").trim().toLowerCase();
+  switch (value) {
+    case "queued":
+    case "running":
+    case "pending":
+    case "done":
+    case "failed":
+    case "canceled":
+      return value;
+    default:
+      return "queued";
+  }
+}
+
+function isTerminalStatus(status) {
+  return status === "done" || status === "failed" || status === "canceled";
+}
+
+function normalizeTopicID(raw) {
+  const topicID = String(raw || "").trim();
+  return topicID === LEGACY_HEARTBEAT_TOPIC_ID ? AWARENESS_TOPIC_ID : topicID;
+}
+
+function normalizeHistoryFileReferences(rawItems) {
+  if (!Array.isArray(rawItems)) {
+    return [];
+  }
+  return rawItems
+    .map((item, index) => {
+      const dirName = String(item?.dir_name || item?.dirName || "").trim();
+      const path = String(item?.path || "").trim();
+      if (!path || (dirName !== "workspace_dir" && dirName !== "file_cache_dir")) {
+        return null;
+      }
+      const pathParts = path.split(/[\\/]/u).filter(Boolean);
+      const name = String(item?.name || "").trim() || pathParts[pathParts.length - 1] || path;
+      return {
+        id: `history-file-${dirName}-${path}-${index}`,
+        name,
+        dirName,
+        path,
+        status: "ready",
+        sourceFile: item?.sourceFile || null,
+      };
+    })
+    .filter(Boolean);
+}
+
+function stringifyResult(result) {
+  if (typeof result === "string") {
+    return result.trim();
+  }
+  if (result === undefined || result === null) {
+    return "";
+  }
+  try {
+    return JSON.stringify(result, null, 2);
+  } catch {
+    return String(result);
+  }
+}
+
+function historyTimeLabel(raw, locale = "en-US", now = new Date()) {
+  const text = String(raw || "").trim();
+  if (!text) {
+    return "";
+  }
+  const date = new Date(text);
+  if (Number.isNaN(date.getTime())) {
+    return text;
+  }
+  const current = now instanceof Date ? now : new Date(now);
+  const sameDay =
+    !Number.isNaN(current.getTime()) &&
+    current.getFullYear() === date.getFullYear() &&
+    current.getMonth() === date.getMonth() &&
+    current.getDate() === date.getDate();
+  const timeLabel = formatDate(date, locale, {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  if (sameDay) {
+    return timeLabel;
+  }
+  const dayLabel = formatDate(date, locale, {
+    month: "short",
+    day: "numeric",
+  });
+  return `${dayLabel} ${timeLabel}`;
+}
+
+function timestampMs(raw) {
+  const text = String(raw || "").trim();
+  if (!text) {
+    return 0;
+  }
+  const value = Date.parse(text);
+  return Number.isFinite(value) ? value : 0;
+}
+
+function taskDurationMs(task, now = Date.now()) {
+  const status = normalizeTaskStatus(task?.status);
+  const finishedMs = timestampMs(task?.finished_at);
+  const startedMs = timestampMs(task?.started_at) || (finishedMs > 0 ? timestampMs(task?.created_at) : 0);
+  if (startedMs <= 0) {
+    return 0;
+  }
+  const currentMs = now instanceof Date ? now.getTime() : Number(now);
+  const endMs = finishedMs > 0 ? finishedMs : isTerminalStatus(status) ? 0 : currentMs;
+  if (!Number.isFinite(endMs) || endMs <= startedMs) {
+    return 0;
+  }
+  return endMs - startedMs;
+}
+
+// Compact and unit-lettered, the same in every locale: "45s", "2m23s", "1h5m0s".
+function durationPartsLabel(durationMs) {
+  const totalSeconds = Math.max(1, Math.round(Number(durationMs || 0) / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) {
+    return `${hours}h${minutes}m${seconds}s`;
+  }
+  if (minutes > 0) {
+    return `${minutes}m${seconds}s`;
+  }
+  return `${seconds}s`;
+}
+
+// Shown beside a thinking icon; the icon's label spells it out ("Thought for 2m23s").
+function taskDurationLabel(task, now = Date.now()) {
+  const durationMs = taskDurationMs(task, now);
+  if (durationMs <= 0) {
+    return "";
+  }
+  return durationPartsLabel(durationMs);
+}
+
+function taskRawJSON(task) {
+  return task ? stringifyResult(task) : "";
+}
+
+// A list of strings, the shape a model most often returns instead of text, shows as a Markdown
+// list, like the server's outputfmt.FormatFinalOutput.
+function markdownList(items) {
+  if (!Array.isArray(items) || items.length === 0 || !items.every((item) => typeof item === "string")) {
+    return "";
+  }
+  return items.map((item) => `- ${item.trim()}`).join("\n");
+}
+
+function taskOutputText(task) {
+  const finalOutput = task?.result?.final?.output;
+  if (typeof finalOutput === "string") {
+    return finalOutput.trim();
+  }
+  const list = markdownList(finalOutput);
+  if (list) {
+    return list;
+  }
+  if (finalOutput !== undefined && finalOutput !== null) {
+    return stringifyResult(finalOutput);
+  }
+  // Tasks an embedding program ran through the integration package used to store a plain
+  // result.output summary instead.
+  const legacyOutput = task?.result?.output;
+  if (typeof legacyOutput === "string") {
+    return legacyOutput.trim();
+  }
+  return "";
+}
+
+function isContextCompactCommand(raw) {
+  return /^\/ctx(?:@\S+)?\s+compact$/iu.test(String(raw || "").trim());
+}
+
+function normalizePlanStatus(raw) {
+  const value = String(raw || "").trim().toLowerCase();
+  switch (value) {
+    case "completed":
+    case "in_progress":
+    case "pending":
+      return value;
+    default:
+      return "pending";
+  }
+}
+
+function normalizePlan(raw) {
+  const steps = Array.isArray(raw?.steps)
+    ? raw.steps
+        .map((step) => {
+          const out = { step: String(step?.step || "").trim(), status: normalizePlanStatus(step?.status) };
+          const note = String(step?.note || "").trim();
+          return note ? { ...out, note } : out;
+        })
+        .filter((step) => step.step)
+    : [];
+  return steps.length > 0 ? { steps } : null;
+}
+
+function taskPlan(task) {
+  return normalizePlan(task?.result?.plan || task?.result?.final?.plan);
+}
+
+// The messages the agent sent before its reply (insights), in order; null when there are none.
+function normalizeInsights(raw) {
+  const insights = Array.isArray(raw) ? raw.map((text) => String(text || "").trim()).filter(Boolean) : [];
+  return insights.length > 0 ? insights : null;
+}
+
+function taskInsights(task) {
+  return normalizeInsights(task?.result?.insights);
+}
+
+// The questions the agent asked while working (ask_user), in order; null when there are none.
+function normalizeQuestions(raw) {
+  const questions = (Array.isArray(raw) ? raw : [])
+    .map((question) => {
+      const id = String(question?.id || "").trim();
+      const text = String(question?.text || "").trim();
+      if (!id || !text) {
+        return null;
+      }
+      const options = (Array.isArray(question?.options) ? question.options : [])
+        .map((option) => ({
+          label: String(option?.label || "").trim(),
+          description: String(option?.description || "").trim(),
+        }))
+        .filter((option) => option.label);
+      const status = ["open", "answered", "expired"].includes(question?.status) ? question.status : "expired";
+      return {
+        id,
+        text,
+        options,
+        choices_only: question.choices_only === true,
+        status,
+        answer: String(question?.answer || "").trim(),
+        option: Number.isInteger(question?.option) ? question.option : null,
+      };
+    })
+    .filter(Boolean);
+  return questions.length > 0 ? questions : null;
+}
+
+function taskQuestions(task) {
+  return normalizeQuestions(task?.result?.questions);
+}
+
+const ELEVATION_STATUSES = ["open", "allowed", "declined", "expired", "rejected"];
+
+// The elevated commands that asked for the sudo password here, in order; null when there are none.
+function normalizeElevations(raw) {
+  const elevations = (Array.isArray(raw) ? raw : [])
+    .map((elevation) => {
+      const id = String(elevation?.id || "").trim();
+      const command = String(elevation?.command || "");
+      if (!id || !command.trim()) {
+        return null;
+      }
+      const status = ELEVATION_STATUSES.includes(elevation?.status) ? elevation.status : "expired";
+      // The command and directory stay as sent: they are what the person approves.
+      return {
+        id,
+        command,
+        cwd: String(elevation?.cwd || ""),
+        host: String(elevation?.host || "").trim(),
+        deadline: Number.isFinite(Number(elevation?.deadline)) ? Math.trunc(Number(elevation.deadline)) : 0,
+        attempt: Number.isInteger(elevation?.attempt) ? elevation.attempt : 0,
+        status,
+      };
+    })
+    .filter(Boolean);
+  return elevations.length > 0 ? elevations : null;
+}
+
+function taskElevations(task) {
+  return normalizeElevations(task?.result?.elevations);
+}
+
+function normalizeActivityKind(raw) {
+  const value = String(raw || "").trim().toLowerCase();
+  return value === "tool" || value === "subtask" || value === "retry" ? value : "";
+}
+
+// Process records describe what ran; task completion does not remove them.
+function normalizeActivityWorker(raw) {
+  const id = String(raw?.id || "").trim();
+  const name = String(raw?.name || "").trim();
+  if (!id || !name) return null;
+  const processes = Array.isArray(raw?.processes)
+    ? raw.processes
+        .filter((process) => Number.isSafeInteger(process?.pid) && process.pid > 0)
+        .map((process) => ({
+          pid: process.pid,
+          program: String(process.program || "").trim(),
+          // Server records use activity_id; entries normalized here before use activityId.
+          activityId: String(process.activity_id || process.activityId || "").trim(),
+        }))
+    : [];
+  return { id, name, ...readWorkerIndices(raw), processes };
+}
+
+// activityWorkerLabel names the worker an activity entry belongs to, in lang, with the processes
+// that entry started.
+export function activityWorkerLabel(entry, lang) {
+  const worker = entry?.worker;
+  if (!worker?.name) return "";
+  const wholeWorker = entry.kind === "subtask" || entry.name === "spawn" || entry.name === "coder";
+  const processes = (worker.processes || [])
+    .filter((process) => wholeWorker || process.activityId === entry.id)
+    .map((process) => `${process.program ? process.program + " " : ""}PID ${process.pid}`);
+  return [workerDisplayName(worker, lang), ...processes].join(" · ");
+}
+
+function normalizeActivityEntry(raw) {
+  const id = String(raw?.id || "").trim();
+  const kind = normalizeActivityKind(raw?.kind);
+  if (!id || !kind) {
+    return null;
+  }
+  const args =
+    raw?.args && typeof raw.args === "object" && !Array.isArray(raw.args)
+      ? Object.fromEntries(
+          Object.entries(raw.args)
+            .map(([key, value]) => [String(key || "").trim(), value])
+            .filter(([key]) => key)
+        )
+      : null;
+  return {
+    id,
+    kind,
+    name: String(raw?.name || "").trim(),
+    worker: normalizeActivityWorker(raw?.worker),
+    status: normalizeTaskStatus(raw?.status),
+    at: String(raw?.at || "").trim(),
+    stream: String(raw?.stream || "").trim(),
+    output: String(raw?.output || ""),
+    args: args && Object.keys(args).length > 0 ? args : null,
+    summary: String(raw?.summary || "").trim(),
+    error: String(raw?.error || "").trim(),
+    taskId: String(raw?.task_id || "").trim(),
+    mode: String(raw?.mode || "").trim(),
+    profile: String(raw?.profile || "").trim(),
+    outputKind: String(raw?.output_kind || "").trim(),
+    children: Array.isArray(raw?.children) ? raw.children.map((child) => normalizeActivityEntry(child)).filter(Boolean) : [],
+    childrenOmitted: Math.max(0, Number(raw?.children_omitted) || 0),
+    messages: normalizeActivityMessages(raw?.messages),
+  };
+}
+
+// The messages agent_send exchanged with another agent over Agent Link.
+function normalizeActivityMessages(raw) {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  return raw
+    .map((message) => ({
+      direction: String(message?.direction || "").trim(),
+      peer: String(message?.peer || "").trim(),
+      text: String(message?.text || "").trim(),
+      at: String(message?.at || "").trim(),
+    }))
+    .filter((message) => ["sent", "reply", "pending"].includes(message.direction));
+}
+
+// What the task exchanged with other agents over Agent Link, in order, including the sends a
+// codemode script made. A pending note is dropped once that agent's answer is in.
+function agentLinkMessages(activity) {
+  const history = Array.isArray(activity?.history) ? activity.history : [];
+  const out = [];
+  const collect = (entry) => {
+    const messages = Array.isArray(entry?.messages) ? entry.messages : [];
+    messages.forEach((message, index) => {
+      out.push({ ...message, key: `${entry.id}:agentlink:${index}` });
+    });
+    (Array.isArray(entry?.children) ? entry.children : []).forEach(collect);
+  };
+  history.forEach(collect);
+  return out.filter(
+    (message, index) =>
+      message.direction !== "pending" ||
+      !out.slice(index + 1).some((later) => later.direction === "reply" && later.peer === message.peer)
+  );
+}
+
+function normalizeActivity(raw) {
+  const history = Array.isArray(raw?.history)
+    ? raw.history.map((entry) => normalizeActivityEntry(entry)).filter(Boolean)
+    : [];
+  const current = normalizeActivityEntry(raw?.current) || history[history.length - 1] || null;
+  const workers = normalizeActivityWorkers(raw?.workers);
+  const workersOmitted = Math.max(0, Number(raw?.workers_omitted ?? raw?.workersOmitted) || 0);
+  return current || history.length > 0 || workers.length > 0 ? { current, history, workers, workersOmitted } : null;
+}
+
+function taskActivity(task) {
+  return normalizeActivity(task?.result?.activity);
+}
+
+function normalizeReasoning(raw) {
+  return typeof raw === "string" ? raw.trim() : "";
+}
+
+function taskReasoning(task) {
+  return normalizeReasoning(task?.result?.reasoning);
+}
+
+function chatApprovalReasonText(raw, t) {
+  const reason = String(raw || "").trim().toLowerCase();
+  switch (reason) {
+    case "bash_requires_approval":
+      return t("audit_reason_bash_requires_approval");
+    case "powershell_requires_approval":
+      return t("chat_approval_reason_powershell");
+    default:
+      return reason.replaceAll("_", " ");
+  }
+}
+
+function stableHash(raw) {
+  const text = String(raw || "");
+  let hash = 2166136261;
+  for (let index = 0; index < text.length; index += 1) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function agentDisplayName(agentName, t) {
+  const value = String(agentName || "").trim();
+  return value || t("chat_agent_name_fallback");
+}
+
+function buildPollingHint(agentName, t, seed) {
+  const actionKey = POLLING_ACTION_KEYS[stableHash(seed || "agent") % POLLING_ACTION_KEYS.length];
+  return t("chat_polling_hint", {
+    name: agentDisplayName(agentName, t),
+    action: t(actionKey),
+  });
+}
+
+// The action of the polling hint, in English, for the mosaic word that stands in for it: the mosaic
+// font has Latin letters only. Same order as POLLING_ACTION_KEYS, so the word matches the hint.
+const POLLING_ACTION_WORDS = ["pondering", "thinking", "researching", "weighing", "reflecting", "tinkering"];
+
+function pollingActionWord(seed) {
+  return POLLING_ACTION_WORDS[stableHash(seed || "agent") % POLLING_ACTION_WORDS.length];
+}
+
+// Whether a task's reply has nothing to show yet: no output, no error, no approval to answer, and
+// still running. Its text is then the polling hint.
+function taskAwaitingReply(task) {
+  if (taskApprovalState(task)) return false;
+  if (taskOutputText(task) || String(task?.error || "").trim()) return false;
+  return !isTerminalStatus(normalizeTaskStatus(task?.status));
+}
+
+function historyPendingSeed(item, fallback = "agent") {
+  const candidates = [item?.pendingSeed, item?.taskId, item?.id, fallback];
+  for (const candidate of candidates) {
+    const value = String(candidate || "").trim();
+    if (value) {
+      return value;
+    }
+  }
+  return "agent";
+}
+
+function taskAgentText(task, t, options = {}) {
+  const approval = taskApprovalState(task);
+  if (approval?.status === "pending") {
+    return approval.message || t("chat_approval_waiting_text");
+  }
+  if (approval?.status === "denied") {
+    return t("chat_approval_denied");
+  }
+  if (approval?.status === "expired") {
+    return t("chat_approval_expired");
+  }
+  const output = taskOutputText(task);
+  if (output) {
+    return output;
+  }
+  const errorText = String(task?.error || "").trim();
+  if (errorText) {
+    if (errorText === "Approval denied. Task canceled.") {
+      return t("chat_approval_denied");
+    }
+    if (errorText === "Approval expired. Task canceled.") {
+      return t("chat_approval_expired");
+    }
+    return errorText;
+  }
+  if (isTerminalStatus(normalizeTaskStatus(task?.status))) {
+    return task?.user_reaction ? "" : t("chat_result_empty");
+  }
+  const pendingText = String(options.pendingText || "").trim();
+  if (pendingText) {
+    return pendingText;
+  }
+  return buildPollingHint(options.agentName, t, options.pendingSeed || task?.id || task?.created_at);
+}
+
+function taskHistoryItems(task, t, options = {}) {
+  const taskID = String(task?.id || "").trim();
+  if (!taskID) {
+    return [];
+  }
+  const items = [];
+  const userText = String(task?.task || "").trim();
+  const presentation = isContextCompactCommand(userText) ? "context-compact" : "";
+  const locale = String(options.locale || "en-US");
+  const now = options.now || new Date();
+  if (userText) {
+    items.push({
+      id: `${taskID}:user`,
+      role: "user",
+      text: userText,
+      reaction: String(task?.user_reaction || "").trim(),
+      files: normalizeHistoryFileReferences(task?.file_references),
+      endpointRef: String(options.endpointRef || "").trim(),
+      topicID: normalizeTopicID(task?.topic_id),
+      status: "",
+      timeText: historyTimeLabel(task?.created_at, locale, now),
+      durationText: "",
+      durationVisible: false,
+      durationVisibleManual: false,
+      taskId: "",
+      rawJSON: "",
+      steerTargetTaskID: String(task?.steer_target_task_id || "").trim(),
+    });
+  }
+  if (options.includeAgent !== false) {
+    items.push({
+      id: `${taskID}:agent`,
+      role: "agent",
+      attachments: Array.isArray(task?.attachments) ? task.attachments : [],
+      topicID: normalizeTopicID(task?.topic_id),
+      text: taskAgentText(task, t, {
+        agentName: options.agentName,
+        pendingSeed: taskID,
+      }),
+      awaiting: taskAwaitingReply(task),
+      plan: taskPlan(task),
+      insights: taskInsights(task),
+      questions: taskQuestions(task),
+      elevations: taskElevations(task),
+      activity: taskActivity(task),
+      reasoning: taskReasoning(task),
+      approval: taskApprovalState(task),
+      approvalBusy: false,
+      approvalError: "",
+      status: normalizeTaskStatus(task?.status),
+      timeText: historyTimeLabel(task?.finished_at || task?.started_at || task?.created_at, locale, now),
+      durationText: taskDurationLabel(task, now),
+      durationVisible: false,
+      durationVisibleManual: false,
+      taskId: taskID,
+      rawJSON: taskRawJSON(task),
+      pendingSeed: taskID,
+      presentation,
+    });
+  }
+  return items;
+}
+
+// What each finished plan step produced, in the agent's words: the agent reports a step done with a
+// line of text, and the chat shows each as a message of its own, before the task's reply. They come
+// from the plan, so they appear as the plan streams in.
+function planStepMessages(plan) {
+  const steps = Array.isArray(plan?.steps) ? plan.steps : [];
+  const out = [];
+  steps.forEach((step, index) => {
+    if (step?.status === "completed" && step.note) {
+      out.push({ key: `step:${index}`, text: step.note });
+    }
+  });
+  return out;
+}
+
+// The agent's insights, each a message of its own before the plan step messages and the reply.
+function insightMessages(insights) {
+  return (normalizeInsights(insights) || []).map((text, index) => ({ key: `insight:${index}`, text }));
+}
+
+function taskListHistoryItems(tasks, t, options = {}) {
+  const sortedTasks = Array.isArray(tasks) ? [...tasks] : [];
+  sortedTasks.sort((left, right) => {
+    const leftTime = Date.parse(String(left?.created_at || "").trim());
+    const rightTime = Date.parse(String(right?.created_at || "").trim());
+    return (Number.isFinite(leftTime) ? leftTime : 0) - (Number.isFinite(rightTime) ? rightTime : 0);
+  });
+
+  const items = [];
+  for (const task of sortedTasks) {
+    const targetTaskID = String(task?.steer_target_task_id || "").trim();
+    items.push(
+      ...taskHistoryItems(task, t, {
+        ...options,
+        includeAgent: !targetTaskID,
+      })
+    );
+  }
+  return placeSteeredAgentsAfterUsers(items);
+}
+
+// Merges a fresh load of a topic's latest tasks into the history on screen. The fresh items replace
+// the ones on screen for the same tasks, and older items loaded beyond that page stay before them.
+// overlap is false when no task on screen is in the fresh page; the older items are then dropped,
+// since tasks may be missing between them and the page.
+// A running task's live state (the reply streamed so far, insights, questions, elevations, plan,
+// activity, reasoning) comes over its stream and is stored only when the task ends, so the task
+// list does not have it yet. A reload keeps what the page already shows for each running task, instead of
+// blanking it until the stream replays it.
+function keepLiveTaskState(currentItems, nextItems) {
+  const live = new Map();
+  for (const item of Array.isArray(currentItems) ? currentItems : []) {
+    const taskID = String(item?.taskId || "").trim();
+    if (item?.role === "agent" && taskID && !isTerminalStatus(item.status)) {
+      live.set(taskID, item);
+    }
+  }
+  const next = Array.isArray(nextItems) ? nextItems : [];
+  if (live.size === 0) {
+    return next;
+  }
+  return next.map((item) => {
+    const current = item?.role === "agent" && !isTerminalStatus(item.status) ? live.get(String(item?.taskId || "").trim()) : null;
+    if (!current) {
+      return item;
+    }
+    const out = { ...item };
+    for (const key of ["insights", "questions", "elevations", "plan", "activity", "reasoning"]) {
+      if (!out[key] && current[key]) {
+        out[key] = current[key];
+      }
+    }
+    if (current.awaiting === false && out.awaiting !== false && current.text) {
+      out.text = current.text;
+      out.awaiting = false;
+    }
+    return out;
+  });
+}
+
+// The task and role a history item shows: a message sent from this page carries its task in taskId
+// (set once the task is created), a loaded one in its id ("<task>:user", "<task>:agent").
+function historyItemTaskKey(item) {
+  const role = String(item?.role || "");
+  if (role !== "user" && role !== "agent") {
+    return "";
+  }
+  let taskID = String(item?.taskId || "").trim();
+  const id = String(item?.id || "");
+  if (!taskID && id.endsWith(`:${role}`)) {
+    taskID = id.slice(0, -(role.length + 1));
+  }
+  return taskID ? `${taskID}\0${role}` : "";
+}
+
+// Replace the user item as well as the array: the chat keeps history in a shallowRef.
+function applyUserReaction(items, taskID, emoji, endpointRef) {
+  if (typeof emoji !== "string" || !emoji.trim()) return items;
+  const index = items.findIndex((item) =>
+    item.endpointRef === endpointRef && historyItemTaskKey(item) === `${taskID}\0user`
+  );
+  if (index < 0 || items[index].reaction === emoji.trim()) return items;
+  const next = items.slice();
+  next[index] = { ...items[index], reaction: emoji.trim() };
+  return next;
+}
+
+// A message sent from this page is shown before its task exists, under an id of its own; once the
+// task is loaded it comes back as "<task>:user" and "<task>:agent". Those keep the ids already on
+// screen, so the list updates the items in place: a new id would rebuild them, rendering the reply
+// (Markdown, highlighting) a second time just as it lands, and drop state kept by id.
+function keepHistoryItemIDs(currentItems, nextItems) {
+  const next = Array.isArray(nextItems) ? nextItems : [];
+  const onScreen = new Map();
+  for (const item of Array.isArray(currentItems) ? currentItems : []) {
+    const key = historyItemTaskKey(item);
+    if (key && item?.id && !onScreen.has(key)) {
+      onScreen.set(key, item.id);
+    }
+  }
+  if (onScreen.size === 0) {
+    return next;
+  }
+  const taken = new Set(next.map((item) => item?.id));
+  return next.map((item) => {
+    const id = onScreen.get(historyItemTaskKey(item));
+    if (!id || id === item.id || taken.has(id)) {
+      return item;
+    }
+    taken.add(id);
+    return { ...item, id };
+  });
+}
+
+function mergeRefreshedHistoryItems(currentItems, freshItems) {
+  const current = Array.isArray(currentItems) ? currentItems : [];
+  const fresh = Array.isArray(freshItems) ? freshItems : [];
+  const freshTaskIDs = new Set(fresh.map((item) => String(item?.taskId || "").trim()).filter(Boolean));
+  const firstShared = current.findIndex((item) => freshTaskIDs.has(String(item?.taskId || "").trim()));
+  if (firstShared < 0) {
+    return { items: fresh, overlap: false };
+  }
+  const older = current
+    .slice(0, firstShared)
+    .filter((item) => String(item?.taskId || "").trim() !== "");
+  return { items: [...older, ...fresh], overlap: true };
+}
+
+export {
+  applyUserReaction,
+  agentDisplayName,
+  buildPollingHint,
+  pollingActionWord,
+  taskAwaitingReply,
+  chatApprovalReasonText,
+  historyPendingSeed,
+  historyTimeLabel,
+  isContextCompactCommand,
+  isTerminalStatus,
+  keepHistoryItemIDs,
+  keepLiveTaskState,
+  mergeRefreshedHistoryItems,
+  normalizeActivity,
+  normalizeElevations,
+  normalizeHistoryFileReferences,
+  normalizeInsights,
+  normalizePlan,
+  normalizeQuestions,
+  normalizeReasoning,
+  normalizeTaskStatus,
+  normalizeTopicID,
+  taskActivity,
+  taskAgentText,
+  taskDurationLabel,
+  taskElevations,
+  taskInsights,
+  taskListHistoryItems,
+  taskPlan,
+  taskQuestions,
+  taskRawJSON,
+  taskReasoning,
+  planStepMessages,
+  insightMessages,
+  agentLinkMessages,
+};
