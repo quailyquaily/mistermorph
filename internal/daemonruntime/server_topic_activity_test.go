@@ -169,9 +169,9 @@ func TestTopicActivityPagesHistoryAndUsesCompletionOrder(t *testing.T) {
 	}
 }
 
-// Only running tasks a TODO item's schedule started count as running TODO runs: not queued or
-// finished ones, not Run now runs in the same topic, and not by the topic ID alone.
-func TestTopicActivityCountsRunningScheduledTodoRuns(t *testing.T) {
+// Running TODO runs count, whether their schedule or Run now started them: not queued or finished
+// ones, not other tasks, and not by the topic ID alone.
+func TestTopicActivityCountsRunningTodoRuns(t *testing.T) {
 	scheduled := TaskTrigger{Source: "console", Event: CronRunTriggerEvent, Ref: CronRunTriggerRefSchedule}
 	manual := TaskTrigger{Source: "console", Event: CronRunTriggerEvent, Ref: CronRunTriggerRefManual}
 	chat := TaskTrigger{Source: "ui", Event: "chat_submit"}
@@ -193,7 +193,7 @@ func TestTopicActivityCountsRunningScheduledTodoRuns(t *testing.T) {
 			{"d", cron("a"), TaskDone, scheduled},
 			{"f", cron("a"), TaskFailed, scheduled},
 			{"c", cron("a"), TaskCanceled, scheduled},
-			{"m", cron("a"), TaskRunning, manual},
+			{"mq", cron("a"), TaskQueued, manual},
 			{"chat", "t1", TaskRunning, chat},
 			{"hb", ConsoleAwarenessTopicID, TaskRunning, heartbeat},
 			{"untriggered", cron("b"), TaskRunning, TaskTrigger{}},
@@ -202,13 +202,16 @@ func TestTopicActivityCountsRunningScheduledTodoRuns(t *testing.T) {
 			{"s", cron("a"), TaskRunning, scheduled},
 			{"q", cron("a"), TaskQueued, scheduled},
 		}, map[string]int{cron("a"): 1}},
+		{"run now", []task{
+			{"m", cron("a"), TaskRunning, manual},
+		}, map[string]int{cron("a"): 1}},
 		{"several topics and a mixed one", []task{
 			{"s1", cron("a"), TaskRunning, scheduled},
 			{"m1", cron("a"), TaskRunning, manual},
 			{"s2", cron("b"), TaskRunning, scheduled},
 			{"s3", cron("b"), TaskRunning, scheduled},
 			{"chat", "t1", TaskRunning, chat},
-		}, map[string]int{cron("a"): 1, cron("b"): 2}},
+		}, map[string]int{cron("a"): 2, cron("b"): 2}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			stores := map[string]interface {
@@ -246,7 +249,7 @@ func TestTopicActivityCountsRunningScheduledTodoRuns(t *testing.T) {
 	}
 }
 
-// The old status and counts stay as they were, and finishing the last scheduled run clears the
+// The old status and counts stay as they were, and finishing the last running TODO run clears the
 // count, whatever the run ended as.
 func TestTopicActivityCronRunningKeepsStatusAndClearsWhenRunsEnd(t *testing.T) {
 	for _, status := range []TaskStatus{TaskDone, TaskFailed, TaskCanceled} {

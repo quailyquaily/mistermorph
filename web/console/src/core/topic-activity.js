@@ -14,8 +14,8 @@ export function normalizeTopicActivity(raw) {
       status,
       running: Math.max(0, Number(item.running) || 0),
       pending: Math.max(0, Number(item.pending) || 0),
-      // Running tasks a TODO item's schedule started; the server counts them apart from queued
-      // ones and Run now runs.
+      // TODO items' runs running now, from their schedule or Run now; the server counts them apart
+      // from queued ones.
       cronRunning: Math.max(0, Math.floor(Number(item.cron_running) || 0)),
     });
   }

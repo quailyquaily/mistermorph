@@ -325,12 +325,16 @@ const dialogAction = (view, name) => view.runDialogActions.value.find((act) => a
 
 test("an item with a topic shows the entry to it; looking it up only reads", async (t) => {
   const { view, calls, lookups, pushes } = await mount(t, { topic: async (id) => ({ id, title: "Review" }) });
+  assert.equal(menu(view, "open-topic"), undefined, "no entry until the topic is known");
   await until(() => view.selectedTaskTopicID.value, "the topic entry appears");
   assert.equal(view.selectedTaskTopicID.value, "_cron_task-1");
+  const ids = view.taskActionMenuItems.value.map((item) => item.id);
+  assert.equal(ids[ids.indexOf("open-topic") + 1], "duplicate", "the entry sits right above Duplicate");
+  assert.equal(menu(view, "open-topic").title, "Open topic");
   assert.deepEqual(topicLookups(lookups).map((call) => [call.ref, call.path, call.method]), [
     ["endpoint-one", "/topics/_cron_task-1", "GET"],
   ]);
-  view.openTaskTopic(view.selectedTaskTopicID.value);
+  menu(view, "open-topic").action();
   assert.deepEqual(pushes, ["/ep/endpoint-one/chat/_cron_task-1"]);
   assert.equal(calls.length, 0, "viewing an item never creates its topic");
 });
@@ -341,6 +345,7 @@ test("an item without a topic, or whose lookup fails, shows no entry", async (t)
     await until(() => topicLookups(lookups).length === 1, "the topic is looked up");
     await new Promise(setImmediate);
     assert.equal(view.selectedTaskTopicID.value, "");
+    assert.equal(menu(view, "open-topic"), undefined);
     assert.deepEqual(errors, []);
     assert.equal(calls.length, 0);
   }

@@ -185,12 +185,6 @@ func IsCronRunTrigger(trigger TaskTrigger) bool {
 	return strings.TrimSpace(trigger.Event) == CronRunTriggerEvent
 }
 
-// IsScheduledCronRunTrigger reports whether trigger is that of a TODO item's run its schedule
-// fired. A run whose trigger does not say so, such as one recorded before runs said, is not.
-func IsScheduledCronRunTrigger(trigger TaskTrigger) bool {
-	return IsCronRunTrigger(trigger) && strings.TrimSpace(trigger.Ref) == CronRunTriggerRefSchedule
-}
-
 // AgentLinkTopicID is the topic of the agent with this Agent Link instance ID.
 func AgentLinkTopicID(instanceID string) string {
 	return AgentLinkTopicPrefix + strings.TrimSpace(instanceID)

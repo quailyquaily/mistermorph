@@ -924,8 +924,8 @@ const ChatView = {
     // The sidebar is there for the TODO items' topics too: with none of the person's own topics,
     // its TODO toggle is still the only way to them.
     const hasSidebarTopics = computed(() => hasVisibleTopics.value || cronTopics.value.length > 0);
-    // The TODO toggle's running mark counts every scheduled TODO run running now, whatever the
-    // sidebar shows or which topic is open.
+    // The TODO toggle's running mark counts every TODO run running now, from its schedule or Run
+    // now, whatever the sidebar shows or which topic is open.
     const cronRunning = computed(() => cronRunningCount(topicActivity.value));
     const cronToggleLabel = computed(() =>
       cronRunning.value > 0 ? t("chat_topics_view_cron_running", { count: cronRunning.value }) : t("chat_topics_view_cron")

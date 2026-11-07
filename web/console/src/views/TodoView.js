@@ -959,6 +959,16 @@ const TodoView = {
         disabled: !canRunSelectedTask.value,
         action: runSelectedTaskNow,
       },
+      // There only once the item has a topic: viewing an item never creates one.
+      ...(selectedTaskTopicID.value
+        ? [
+            {
+              id: "open-topic",
+              title: t("todo_action_open_topic"),
+              action: () => openTaskTopic(selectedTaskTopicID.value),
+            },
+          ]
+        : []),
       {
         id: "duplicate",
         title: t("todo_action_duplicate"),
@@ -3013,15 +3023,6 @@ const TodoView = {
             />
           </template>
           <template #actions>
-            <AppButton
-              v-if="selectedTaskTopicID"
-              class="plain xs icon todo-task-topic-link"
-              :title="t('todo_action_open_topic')"
-              :aria-label="t('todo_action_open_topic')"
-              @click="openTaskTopic(selectedTaskTopicID)"
-            >
-              <PhChats />
-            </AppButton>
             <AppButton class="primary xs" :disabled="!canSave" :loading="saving" @click="save">
               {{ t("action_save") }}
             </AppButton>

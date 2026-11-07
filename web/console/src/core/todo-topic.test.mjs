@@ -151,8 +151,7 @@ test("the Topics page sets the list before loading, so the target stays selected
   assert.match(chatView, /if \(preferredTopicID && items\.some\(\(topic\) => normalizeTopicID\(topic\?\.id\) === preferredTopicID\)\) \{\s*selectedTopicID\.value = preferredTopicID;/u);
 });
 
-test("the TODO view shows its topic entry and run dialog with the console's components", () => {
-  assert.match(todoView, /<AppButton\s+v-if="selectedTaskTopicID"\s+class="plain xs icon todo-task-topic-link"\s+:title="t\('todo_action_open_topic'\)"\s+:aria-label="t\('todo_action_open_topic'\)"\s+@click="openTaskTopic\(selectedTaskTopicID\)"/u);
+test("the TODO view shows its run dialog with the console's components", () => {
   assert.match(todoView, /<AppMessageDialog\s+v-model="runDialogOpen"\s+icon="PhTimer"\s+:title="t\('todo_run_dialog_title'\)"\s+:text="runDialogText"\s+:actions="runDialogActions"/u);
   assert.match(todoView, /!runningTaskKey\.value &&\s*!runDialogOpen\.value &&/u);
   assert.doesNotMatch(todoView, /todo_run_success/u);

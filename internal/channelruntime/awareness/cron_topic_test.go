@@ -62,15 +62,14 @@ func TestRecordAwarenessTaskStartUsesTheTodoItemsTopic(t *testing.T) {
 func TestAwarenessTaskTriggerTellsScheduledFromManualRuns(t *testing.T) {
 	now := time.Date(2026, 11, 6, 9, 0, 0, 0, time.UTC)
 	for _, tc := range []struct {
-		name      string
-		behavior  awarenessutil.Behavior
-		manual    bool
-		wantRef   string
-		scheduled bool
+		name     string
+		behavior awarenessutil.Behavior
+		manual   bool
+		wantRef  string
 	}{
-		{"scheduled cron", awarenessutil.BehaviorCron, false, daemonruntime.CronRunTriggerRefSchedule, true},
-		{"manual cron", awarenessutil.BehaviorCron, true, daemonruntime.CronRunTriggerRefManual, false},
-		{"heartbeat", awarenessutil.BehaviorHeartbeat, false, "", false},
+		{"scheduled cron", awarenessutil.BehaviorCron, false, daemonruntime.CronRunTriggerRefSchedule},
+		{"manual cron", awarenessutil.BehaviorCron, true, daemonruntime.CronRunTriggerRefManual},
+		{"heartbeat", awarenessutil.BehaviorHeartbeat, false, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			store, err := daemonruntime.NewConsoleFileStore(daemonruntime.ConsoleFileStoreOptions{})
@@ -90,9 +89,6 @@ func TestAwarenessTaskTriggerTellsScheduledFromManualRuns(t *testing.T) {
 			}
 			if got := daemonruntime.IsCronRunTrigger(trigger); got != (tc.behavior == awarenessutil.BehaviorCron) {
 				t.Fatalf("IsCronRunTrigger = %v", got)
-			}
-			if got := daemonruntime.IsScheduledCronRunTrigger(trigger); got != tc.scheduled {
-				t.Fatalf("IsScheduledCronRunTrigger = %v", got)
 			}
 			if err := recordAwarenessTaskFinish(opts, "done", nil, nil, now.Add(time.Minute)); err != nil {
 				t.Fatal(err)

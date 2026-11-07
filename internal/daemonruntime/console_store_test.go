@@ -1275,23 +1275,20 @@ func TestConsoleFileStoreTaskObserverReceivesTheTasksTrigger(t *testing.T) {
 
 func TestCronRunTriggerClassification(t *testing.T) {
 	for _, tc := range []struct {
-		name           string
-		trigger        TaskTrigger
-		cron, schedule bool
+		name    string
+		trigger TaskTrigger
+		cron    bool
 	}{
-		{"scheduled", TaskTrigger{Source: "console", Event: CronRunTriggerEvent, Ref: CronRunTriggerRefSchedule}, true, true},
-		{"manual", TaskTrigger{Source: "console", Event: CronRunTriggerEvent, Ref: CronRunTriggerRefManual}, true, false},
-		{"legacy cron without a ref", TaskTrigger{Source: "console", Event: CronRunTriggerEvent}, true, false},
-		{"heartbeat", TaskTrigger{Source: "console", Event: "awareness_heartbeat"}, false, false},
-		{"chat", TaskTrigger{Source: "ui", Event: "chat_submit", Ref: CronRunTriggerRefSchedule}, false, false},
-		{"empty", TaskTrigger{}, false, false},
+		{"scheduled", TaskTrigger{Source: "console", Event: CronRunTriggerEvent, Ref: CronRunTriggerRefSchedule}, true},
+		{"manual", TaskTrigger{Source: "console", Event: CronRunTriggerEvent, Ref: CronRunTriggerRefManual}, true},
+		{"legacy cron without a ref", TaskTrigger{Source: "console", Event: CronRunTriggerEvent}, true},
+		{"heartbeat", TaskTrigger{Source: "console", Event: "awareness_heartbeat"}, false},
+		{"chat", TaskTrigger{Source: "ui", Event: "chat_submit", Ref: CronRunTriggerRefSchedule}, false},
+		{"empty", TaskTrigger{}, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := IsCronRunTrigger(tc.trigger); got != tc.cron {
 				t.Fatalf("IsCronRunTrigger = %v, want %v", got, tc.cron)
-			}
-			if got := IsScheduledCronRunTrigger(tc.trigger); got != tc.schedule {
-				t.Fatalf("IsScheduledCronRunTrigger = %v, want %v", got, tc.schedule)
 			}
 		})
 	}
