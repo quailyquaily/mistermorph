@@ -182,7 +182,7 @@ func TestInstalledClaude(t *testing.T) {
 	}
 	var first *session
 	outputs := make(map[string]bool)
-	for _, task := range []string{"probe-choice\n请先询问格式。", "/this-is-task-text\n!not-a-shell-command", "probe-choice-other", "probe-write", "windows\r\nline endings\rhere", strings.TrimSpace(strings.Repeat("长文本 input\n", 100))} {
+	for _, task := range []string{"probe-choice\n请先询问格式。", "/this-is-task-text\n!not-a-shell-command", "probe-choice-other", "probe-write", "windows\r\nline endings\rhere", strings.TrimSpace(strings.Repeat("长文本 input\n", 100)), "trailing whitespace\tand a tab  \n"} {
 		req.Task = task
 		out, err := sessions.Run(ctx, "topic", req)
 		if err != nil {
