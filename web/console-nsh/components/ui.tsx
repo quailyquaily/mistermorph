@@ -4,7 +4,7 @@
 // The look follows the Vue console's ui-kit: square-ish corners (2px), hairlines, a dark blue
 // primary, quiet plain buttons, mono caps for labels, and red only for what is destructive.
 import type { InputRef, JSX } from "nsh";
-import { cleanup, effect, Image, Scroll, signal, split, Text, token, untracked, View } from "nsh";
+import { cleanup, effect, Image, keymap, Scroll, signal, Text, token, untracked, View } from "nsh";
 import {
   Button as BaseButton,
   Checkbox as BaseCheckbox,
@@ -15,6 +15,7 @@ import {
   MenuSeparator,
   Progress,
   Select,
+  Sheet,
   Switch,
   TextView,
   Tooltip,
@@ -892,5 +893,75 @@ export function Page(props: {
         </Scroll>
       </If>
     </View>
+  );
+}
+
+/* ---------- side pane and floating action ---------- */
+
+/**
+ * The panel at the right of a list that edits or inspects one of its items (the Vue console's
+ * AppSidePane). On wide windows it is a column beside the list: put it last in a `flex-row`.
+ * With `sheet` (phones) it is a drawer from the right over a scrim. Escape closes it.
+ */
+export function SidePane(props: {
+  open: boolean;
+  onClose: () => void;
+  sheet?: boolean;
+  label?: string;
+  class?: string;
+  children?: JSX.Element;
+}) {
+  return (
+    <If
+      when={props.sheet}
+      else={
+        <If when={props.open}>
+          <SidePaneColumn onClose={props.onClose} label={props.label} class={props.class}>
+            {props.children}
+          </SidePaneColumn>
+        </If>
+      }
+    >
+      <Sheet
+        open={props.open}
+        side="right"
+        onOpenChange={({ open }) => {
+          if (!open) props.onClose();
+        }}
+        backdropClass="bg-scrim"
+        popupClass={`h-full w-[88%] max-w-md border-l border-line bg-card ${props.class ?? ""}`}
+      >
+        {props.children}
+      </Sheet>
+    </If>
+  );
+}
+
+function SidePaneColumn(props: { onClose: () => void; label?: string; class?: string; children?: JSX.Element }) {
+  keymap.bind("escape", () => props.onClose());
+  return (
+    <View accessibilityLabel={props.label} class={`w-96 border-l border-line-faint bg-card ${props.class ?? ""}`}>
+      {props.children}
+    </View>
+  );
+}
+
+/** The floating add button of a page (the Vue console's AppFab): bottom right, over the content. */
+export function Fab(props: { label: string; icon?: IconName; disabled?: boolean; onPress?: () => void; testID?: string }) {
+  return (
+    <BaseButton
+      onPress={() => props.onPress?.()}
+      disabled={props.disabled}
+      accessibilityLabel={props.label}
+      testID={props.testID}
+      tooltip={
+        <Tooltip class="bg-foreground px-2 py-1">
+          <Text class="text-xs text-background">{props.label}</Text>
+        </Tooltip>
+      }
+      class="absolute bottom-5 right-5 size-12 items-center justify-center rounded-full bg-primary shadow-lg active:opacity-80 disabled:opacity-45"
+    >
+      <Icon name={props.icon ?? "PhPlus"} size={22} color="primary-foreground" />
+    </BaseButton>
   );
 }
