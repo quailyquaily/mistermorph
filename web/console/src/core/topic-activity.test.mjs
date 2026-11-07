@@ -179,7 +179,7 @@ test("same endpoint remount preserves unread state; old completions never become
   assert.equal(poll(state, [done("b", "2026-11-05T10:00:00Z")]), "");
 });
 
-// The TODO toggle's running count: the scheduled TODO runs the server counts as running, summed
+// The TODO toggle's running count: the TODO runs the server counts as running, summed
 // over the whole activity snapshot, whatever the sidebar lists.
 const cronRow = (id, cronRunning, extra = {}) => ({ id, status: "running", running: cronRunning, cron_running: cronRunning, ...extra });
 function cronCount(state, rows) {
@@ -187,11 +187,11 @@ function cronCount(state, rows) {
   return cronRunningCount(state.snapshot());
 }
 
-test("the TODO running count sums every topic's scheduled runs and ignores the rest", () => {
+test("the TODO running count sums every topic's TODO runs and ignores the rest", () => {
   const state = tracker();
   assert.equal(cronCount(state), 0);
   assert.equal(cronCount(state, []), 0);
-  // Chat tasks, queued work, pending questions and Run now runs bring no cron_running.
+  // Chat tasks, queued work and pending questions bring no cron_running.
   assert.equal(cronCount(state, [running("chat"), { id: "_cron_a", status: "running", running: 1 }, { id: "_cron_b", status: "pending", running: 0, pending: 1 }]), 0);
   assert.equal(cronCount(state, [cronRow("_cron_a", 1)]), 1);
   // Topics the sidebar does not list (or has not loaded) count too, and so does a pending topic's

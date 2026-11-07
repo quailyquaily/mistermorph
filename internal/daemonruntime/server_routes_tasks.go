@@ -525,8 +525,8 @@ func (routes *routeRegistration) registerTaskRoutes() {
 
 // TopicActivity reports unfinished work and the latest successful completion. An empty status
 // means no unfinished work; the client decides whether that completion has been viewed.
-// CronRunning counts, apart from Running (which also counts queued tasks), the tasks running now
-// that a TODO item's schedule started; a run started with Run now is not one.
+// CronRunning counts, apart from Running (which also counts queued tasks), the TODO items' runs
+// running now, whether their schedule or Run now started them.
 type TopicActivity struct {
 	ID               string     `json:"id"`
 	Status           string     `json:"status"`
@@ -559,7 +559,7 @@ func topicActivity(reader TaskReader) []TopicActivity {
 			case TaskQueued, TaskRunning:
 				item.Running++
 				if task.Status == TaskRunning && triggers != nil {
-					if trigger, ok := triggers.GetTrigger(task.ID); ok && IsScheduledCronRunTrigger(trigger) {
+					if trigger, ok := triggers.GetTrigger(task.ID); ok && IsCronRunTrigger(trigger) {
 						item.CronRunning++
 					}
 				}
