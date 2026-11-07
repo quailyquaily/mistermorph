@@ -4,6 +4,7 @@ package coderterm
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -116,6 +117,34 @@ func TestTranscriptWaitsForThisTurnsFinalMessage(t *testing.T) {
 	}
 	if !r.complete || r.assistant != "## Done\n\n**Result**" {
 		t.Fatalf("final response: %+v", r)
+	}
+}
+
+func TestTranscriptAcceptsWrappedPaste(t *testing.T) {
+	tests := []struct {
+		name, recorded string
+		ok             bool
+	}{
+		{"plain", "Coding task:\nfix it", true},
+		{"wrapped", "\n\n<pasted_content id=\"ea6b\">\nCoding task:\nfix it\n</pasted_content id=\"ea6b\">\n", true},
+		{"wrapped mismatch", "\n\n<pasted_content id=\"ea6b\">\nCoding task:\nother\n</pasted_content id=\"ea6b\">\n", false},
+		{"unclosed", "<pasted_content id=\"ea6b\">\nCoding task:\nfix it", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "session.jsonl")
+			line, err := json.Marshal(map[string]any{"type": "user", "message": map[string]any{"content": tt.recorded}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(path, append(line, '\n'), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			r := claudeTranscript{path: path, expected: "Coding task:\nfix it"}
+			if err := r.read(); (err == nil) != tt.ok {
+				t.Fatalf("read() error = %v, want ok=%v", err, tt.ok)
+			}
+		})
 	}
 }
 

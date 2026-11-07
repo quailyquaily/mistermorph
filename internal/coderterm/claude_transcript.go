@@ -7,8 +7,36 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"regexp"
 	"strings"
 )
+
+var pastedContentOpen = regexp.MustCompile(`<pasted_content id="([^"]*)">`)
+
+// unwrapPastedContent undoes the wrapper newer Claude Code versions record around pasted
+// input: "\n\n<pasted_content id=\"x\">\n…\n</pasted_content id=\"x\">\n".
+func unwrapPastedContent(text string) string {
+	var b strings.Builder
+	for {
+		m := pastedContentOpen.FindStringSubmatchIndex(text)
+		if m == nil {
+			break
+		}
+		closeTag := "</pasted_content id=\"" + text[m[2]:m[3]] + "\">"
+		end := strings.Index(text[m[1]:], closeTag)
+		if end < 0 {
+			break
+		}
+		b.WriteString(text[:m[0]])
+		inner := text[m[1] : m[1]+end]
+		inner = strings.TrimPrefix(inner, "\n")
+		inner = strings.TrimSuffix(inner, "\n")
+		b.WriteString(inner)
+		text = text[m[1]+end+len(closeTag):]
+	}
+	b.WriteString(text)
+	return strings.TrimSpace(b.String())
+}
 
 // claudeTranscript only reads new user/assistant text. Tool output is deliberately ignored.
 type claudeTranscript struct {
@@ -87,7 +115,7 @@ func (r *claudeTranscript) read() error {
 		}
 		if entry.Type == "user" {
 			if r.user == "" && text != "" {
-				if r.expected != "" && text != r.expected {
+				if r.expected != "" && unwrapPastedContent(text) != r.expected {
 					return fmt.Errorf("Claude transcript does not match the submitted task")
 				}
 				r.user = text
