@@ -1,6 +1,6 @@
 // The app frame's state, as the Vue console's useAppShell had it: which endpoint is selected,
 // the navigation, and the shared data every workspace page preloads.
-import { computed, effect, signal, untracked, windowSize } from "nsh";
+import { batch, computed, effect, signal, untracked, windowSize } from "nsh";
 import defaultEndpointAvatar from "../assets/images/app_logo_current.svg";
 import { lastTopicID } from "./core/chat-topic-memory.js";
 import { endpointDisplayItem, visibleEndpoints } from "./core/endpoints.js";
@@ -18,14 +18,63 @@ export const MOBILE_BREAKPOINT = 980;
 export const isMobile = computed(() => windowSize().width <= MOBILE_BREAKPOINT);
 
 const SIDEBAR_COLLAPSED_STORAGE_KEY = "mistermorph.sidebarCollapsed";
+/** The sidebar's two widths: unfolded, and folded to its icons. */
+export const SIDEBAR_WIDTH = 200;
+export const SIDEBAR_COLLAPSED_WIDTH = 52;
+const SIDEBAR_MIDPOINT = (SIDEBAR_WIDTH + SIDEBAR_COLLAPSED_WIDTH) / 2;
+
+// The sidebar folds to its icons by dragging its right edge (or with the keyboard on the edge);
+// the choice is remembered. While dragged it follows the pointer, and on release it settles on
+// the nearer width.
 const collapsed = signal(false);
+const dragWidth = signal<number | null>(null);
 export const sidebarCollapsed = () => collapsed();
+/** The width the sidebar follows while its edge is dragged, else null. */
+export const sidebarDragWidth = () => dragWidth();
+/** Whether the sidebar draws folded now: while dragged, by the nearer width. */
+export const sidebarShowsCollapsed = computed(() => {
+  const width = dragWidth();
+  return width === null ? collapsed() : width < SIDEBAR_MIDPOINT;
+});
+/** The sidebar's width now. */
+export const sidebarWidth = computed(() => {
+  const width = dragWidth();
+  if (width !== null) return width;
+  return collapsed() ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_WIDTH;
+});
 export function setSidebarCollapsed(next: boolean) {
   collapsed.set(Boolean(next));
   localStore.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, next ? "1" : "0");
 }
 export function loadSidebarCollapsed() {
   collapsed.set(localStore.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === "1");
+}
+let dragStartWidth = SIDEBAR_WIDTH;
+/** The edge drag began. */
+export function startSidebarDrag() {
+  dragStartWidth = untracked(() => (collapsed() ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_WIDTH));
+}
+/** The edge moved by `dx` points since the drag began. */
+export function moveSidebarDrag(dx: number) {
+  dragWidth.set(Math.min(SIDEBAR_WIDTH, Math.max(SIDEBAR_COLLAPSED_WIDTH, dragStartWidth + dx)));
+}
+/** The edge was released: the sidebar settles on the nearer width. */
+export function endSidebarDrag() {
+  const width = untracked(() => dragWidth());
+  batch(() => {
+    if (width !== null) setSidebarCollapsed(width < SIDEBAR_MIDPOINT);
+    dragWidth.set(null);
+  });
+}
+
+/** Whether the phone's More menu is open; it closes on any navigation. */
+const mobileMore = signal(false);
+export const mobileMoreOpen = () => mobileMore();
+export function setMobileMoreOpen(open: boolean) {
+  mobileMore.set(Boolean(open));
+}
+export function closeMobileMore() {
+  mobileMore.set(false);
 }
 
 export const inShellless = () => route()?.meta.shellless === true;
@@ -38,6 +87,19 @@ export const inSetup = () => {
 export const inStandalone = () => inOverview() || inSetup();
 export const mobileBottomNavVisible = () =>
   isMobile() && !inStandalone() && !inShellless() && route()?.meta.mobileBottomNav !== false;
+
+function normalizeNavPath(path: string) {
+  const normalized = String(path || "").trim().replace(/\/+$/, "");
+  return normalized || "/";
+}
+
+/** Whether `path` is the nav item's page or a page below it. */
+export function isNavPathActive(item: { id?: string } | null | undefined, path: string) {
+  if (!item || typeof item.id !== "string" || !item.id) return false;
+  const current = normalizeNavPath(path);
+  const target = normalizeNavPath(item.id);
+  return current === target || current.startsWith(`${target}/`);
+}
 
 export interface NavItem {
   id: string;
@@ -118,26 +180,40 @@ function navTargetPath(item: NavItem, restoreChatTopic = true) {
 /** Opens a nav item; chat reopens its last topic. */
 export function goTo(item: NavItem, restoreChatTopic = true) {
   const next = navTargetPath(item, restoreChatTopic);
-  if (next && untracked(() => route()?.path) !== next) {
+  if (!next) return;
+  closeMobileMore();
+  if (untracked(() => route()?.path) !== next) {
     void navigate(next);
   }
 }
 
-/** Switches to another endpoint, staying on the same page where it can. */
+/**
+ * Switches to another endpoint, staying on the same page where it can. Chat reopens that agent's
+ * last topic on wide windows; on a phone it opens the topic list.
+ */
 export function switchEndpoint(value: string) {
+  closeMobileMore();
   const targetRef = String(value || "").trim();
   const canSelect = visibleEndpoints(endpointState.items, { connectedOnly: true }).some(
     (endpoint: { endpoint_ref: string }) => endpoint.endpoint_ref === targetRef,
   );
   if (!canSelect) return;
-  endpointState.setSelectedEndpointRef(targetRef);
   const path = untracked(() => route()?.path) || "";
-  const next = endpointSwitchPath(targetRef, path, lastTopicID(chatSubmitEndpointRef(targetRef)));
-  if (next) void navigate(next);
+  const topicID = untracked(isMobile) ? "" : lastTopicID(chatSubmitEndpointRef(targetRef));
+  const next = endpointSwitchPath(targetRef, path, topicID);
+  if (next && next !== path) void navigate(next);
+}
+
+/** Opens the overview of every agent. */
+export function goOverview() {
+  closeMobileMore();
+  if (untracked(() => route()?.path) !== "/overview") void navigate("/overview");
 }
 
 export function goSettings() {
-  void navigate(endpointRoutePath(endpointState.selectedRef, "/settings"));
+  closeMobileMore();
+  const next = endpointRoutePath(endpointState.selectedRef, "/settings");
+  if (next && untracked(() => route()?.path) !== next) void navigate(next);
 }
 
 function preloadSharedResources() {
@@ -174,7 +250,14 @@ export function startShell() {
   loadSidebarCollapsed();
   effect(() => {
     void route()?.fullPath;
-    untracked(() => void refreshEndpointsAndPreload());
+    untracked(() => {
+      closeMobileMore();
+      void refreshEndpointsAndPreload();
+    });
+  });
+  // The More menu belongs to the phone layout.
+  effect(() => {
+    if (!isMobile()) untracked(closeMobileMore);
   });
   effect(() => {
     void endpointState.selectedRef;

@@ -24,6 +24,8 @@ export interface Boot {
   desktopVersion: string;
   /** What the host can do beyond the basics (see `hasFeature`). */
   features: string[];
+  /** Whether the browser treats the page as a secure context; absent from older hosts. */
+  secureContext?: boolean;
 }
 
 let config: Boot = {
@@ -70,6 +72,9 @@ export const languages = () => config.languages;
 export const initialLocation = () => config.location || "/";
 export const basePath = () => config.basePath || "/";
 export const origin = () => config.origin;
+/** The browser's `isSecureContext`, or null when the host did not report it. */
+export const secureContext = (): boolean | null =>
+  typeof config.secureContext === "boolean" ? config.secureContext : null;
 /** Whether the host offers an optional feature: `notifications`, `pickDirectory`, `checkUpdate`, `restart`, `quit`, `openLog`, `saveFile`, `pickFile`. */
 export const hasFeature = (name: string) => config.features.includes(name);
 
@@ -209,6 +214,18 @@ export interface UploadTarget {
   field?: string;
   /** Extra form fields, with `field`. */
   fields?: Record<string, string>;
+  /**
+   * Send the picked image cropped, scaled and re-encoded instead of the file itself (an avatar
+   * must be image/webp): the crop in the image's pixels, the size to draw it at, the type and
+   * quality to encode. The host does it, since the app cannot read the file's pixels.
+   */
+  image?: {
+    crop: { sx: number; sy: number; sw: number; sh: number };
+    width: number;
+    height: number;
+    type: string;
+    quality: number;
+  };
 }
 export interface UploadResult {
   ok: boolean;

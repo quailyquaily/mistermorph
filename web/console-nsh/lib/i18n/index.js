@@ -386,6 +386,8 @@ const I18N = {
     audit_risk_high: "High",
     audit_risk_critical: "Critical",
     logs_search: "Search messages, task IDs, fields…",
+    logs_export: "Export",
+    markdown_editor_preview: "Preview",
     logs_level: "Log level",
     logs_level_short: "Level",
     logs_filters: "Filters",
@@ -2192,6 +2194,8 @@ const I18N = {
     audit_risk_high: "高",
     audit_risk_critical: "严重",
     logs_search: "搜索消息、任务 ID、字段…",
+    logs_export: "导出",
+    markdown_editor_preview: "预览",
     logs_level: "日志级别",
     logs_level_short: "级别",
     logs_filters: "筛选",
@@ -3997,6 +4001,8 @@ const I18N = {
     audit_risk_high: "高",
     audit_risk_critical: "重大",
     logs_search: "メッセージ・タスク ID・フィールドを検索…",
+    logs_export: "エクスポート",
+    markdown_editor_preview: "プレビュー",
     logs_level: "ログレベル",
     logs_level_short: "レベル",
     logs_filters: "絞り込み",
@@ -5438,6 +5444,11 @@ function messageFrom(messages, lang, key) {
   return null;
 }
 
+/**
+ * @param {string} key
+ * @param {Record<string, unknown> | null} [vars]
+ * @returns {string}
+ */
 function translate(key, vars = null) {
   let text = messageFrom(I18N, localeState.lang, key);
   if (text === null) {

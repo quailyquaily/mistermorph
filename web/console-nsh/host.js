@@ -72,10 +72,32 @@ function pickFiles({ accept = "", multiple = false } = {}) {
   });
 }
 
+// Crops, scales and re-encodes a picked image (an avatar must be image/webp).
+async function encodeImage(file, image) {
+  const bitmap = await createImageBitmap(file);
+  const canvas = document.createElement("canvas");
+  canvas.width = image.width;
+  canvas.height = image.height;
+  const context = canvas.getContext("2d");
+  context.imageSmoothingQuality = "high";
+  const { sx, sy, sw, sh } = image.crop;
+  context.drawImage(bitmap, sx, sy, sw, sh, 0, 0, image.width, image.height);
+  bitmap.close();
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, image.type, image.quality));
+  if (!blob) throw new Error(`this browser cannot encode ${image.type}`);
+  return new File([blob], file.name.replace(/\.[^.]*$/, "") + extensionOf(image.type), { type: image.type });
+}
+
+function extensionOf(type) {
+  const sub = String(type || "").split("/")[1] || "bin";
+  return `.${sub === "jpeg" ? "jpg" : sub}`;
+}
+
 // XMLHttpRequest, as fetch reports no upload progress.
-function uploadFile(player, { id, url, method = "POST", headers = {}, field = "", fields = {} }) {
+async function uploadFile(player, { id, url, method = "POST", headers = {}, field = "", fields = {}, image = null }) {
   const entry = files.get(id);
   if (!entry) throw new Error("the file is gone");
+  const body = image ? await encodeImage(entry.file, image) : entry.file;
   return new Promise((resolve, reject) => {
     const request = new XMLHttpRequest();
     request.open(method, url);
@@ -96,10 +118,10 @@ function uploadFile(player, { id, url, method = "POST", headers = {}, field = ""
     if (field) {
       const form = new FormData();
       for (const [name, value] of Object.entries(fields)) form.append(name, value);
-      form.append(field, entry.file, entry.file.name);
+      form.append(field, body, body.name);
       request.send(form);
     } else {
-      request.send(entry.file);
+      request.send(body);
     }
   });
 }
@@ -166,6 +188,7 @@ export function createHost(player) {
         session: readStore(sessionStorage),
         languages: [...(navigator.languages || [navigator.language || "en"])],
         desktopVersion: "",
+        secureContext: window.isSecureContext,
         features: ["pickFile", "saveFile", ...(typeof Notification === "undefined" ? [] : ["notifications"])],
       }),
     ],

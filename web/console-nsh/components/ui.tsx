@@ -440,9 +440,12 @@ export function DropdownMenu(props: {
   align?: "start" | "center" | "end";
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  /** The trigger does not open the menu (while its page saves or loads). */
+  disabled?: boolean;
   class?: string;
 }) {
   return (
+    <If when={!props.disabled} else={<View class="opacity-45">{props.trigger}</View>}>
     <Menu
       trigger={props.trigger}
       placement={props.placement ?? "bottom"}
@@ -480,6 +483,7 @@ export function DropdownMenu(props: {
         )}
       </Each>
     </Menu>
+    </If>
   );
 }
 

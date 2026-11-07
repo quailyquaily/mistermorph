@@ -7,12 +7,31 @@
   "theme": "theme.json",
   "icon": "assets/apple-touch-icon.png",
   "capabilities": {
-    "network": { "hosts": ["*"] },
-    "webview": { "hosts": ["*"] },
+    "network": {
+      "hosts": [
+        "*"
+      ]
+    },
+    "webview": {
+      "hosts": [
+        "*"
+      ]
+    },
     "clipboard": true,
     "picker": true,
-    "openUrl": { "schemes": ["http", "https", "mailto"] },
-    "host": ["morph.*"]
+    "openUrl": {
+      "schemes": [
+        "http",
+        "https",
+        "mailto"
+      ]
+    },
+    "host": [
+      "morph.*"
+    ],
+    "speech": true
   },
-  "web": { "host": "./host.js" }
+  "web": {
+    "host": "./host.js"
+  }
 }
