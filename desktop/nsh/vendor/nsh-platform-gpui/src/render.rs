@@ -82,6 +82,7 @@ struct Saved {
     matrix: Option<[f32; 20]>,
     rounded: Option<RoundedClip>,
     clip_polygon: Option<Rc<[shape::Pt]>>,
+    masks: usize,
 }
 
 /// The state of one drawing pass.
@@ -109,6 +110,9 @@ pub(crate) struct DrawCx<'a> {
     /// The clip as a convex polygon (window coordinates) when it is
     /// rounded or not axis-aligned: paths are cut to it.
     clip_polygon: Option<Rc<[shape::Pt]>>,
+    /// The masks (`maskImage`) of the views being drawn, outermost first:
+    /// what is drawn now shows at the product of their alphas.
+    masks: Vec<crate::decor::Mask>,
     saved: Vec<Saved>,
     /// Hosted items drawn in this pass, with their window bounds.
     pub(crate) drawn: Vec<(Rc<dyn Hosted>, Bounds<Pixels>)>,
@@ -138,6 +142,7 @@ impl<'a> DrawCx<'a> {
             matrix: None,
             rounded: None,
             clip_polygon: None,
+            masks: Vec::new(),
             saved: Vec::new(),
             drawn: Vec::new(),
             measured: None,
@@ -184,7 +189,7 @@ impl<'a> DrawCx<'a> {
     }
 
     /// [`DrawCx::map`] as a pair.
-    fn map_pt(&self, (x, y): shape::Pt) -> shape::Pt {
+    pub(crate) fn map_pt(&self, (x, y): shape::Pt) -> shape::Pt {
         if let Some(p) = self.transform.map(x, y) {
             return p;
         }
@@ -307,6 +312,23 @@ impl<'a> DrawCx<'a> {
 
     /// True when the clip is rounded or not axis-aligned (kept as a
     /// polygon, [`DrawCx::shows`]).
+    /// Draws what follows through `mask` (with the masks already pushed).
+    pub(crate) fn push_mask(&mut self, mask: crate::decor::Mask) {
+        self.save();
+        self.masks.push(mask);
+    }
+
+    /// True while a mask applies.
+    pub(crate) fn masked(&self) -> bool {
+        !self.masks.is_empty()
+    }
+
+    /// How much of what is drawn at `(x, y)` (window coordinates) shows
+    /// through the masks: 1 without any.
+    pub(crate) fn mask_alpha(&self, x: f32, y: f32) -> f32 {
+        self.masks.iter().map(|m| m.alpha((x, y))).product()
+    }
+
     pub(crate) fn has_clip_polygon(&self) -> bool {
         self.clip_polygon.is_some()
     }
@@ -342,6 +364,7 @@ impl<'a> DrawCx<'a> {
             matrix: self.matrix,
             rounded: self.rounded,
             clip_polygon: self.clip_polygon.clone(),
+            masks: self.masks.len(),
         });
     }
 
@@ -354,6 +377,7 @@ impl<'a> DrawCx<'a> {
                 self.matrix = s.matrix;
                 self.rounded = s.rounded;
                 self.clip_polygon = s.clip_polygon;
+                self.masks.truncate(s.masks);
             }
             None => log::error!("render: pop without push"),
         }
@@ -611,13 +635,25 @@ pub(crate) fn draw_view(cx: &mut DrawCx<'_>, view: &NshView, parent: Mat4, origi
         return;
     }
     let matrix = crate::decor::color_matrix(&state);
+    let masks = crate::decor::mask_images(&state);
+    let (w, h) = (state.frame.size.width.0, state.frame.size.height.0);
     drop(state);
     cx.set_transform(world);
     cx.push_opacity(opacity);
     if let Some(m) = matrix {
         cx.push_color_matrix(m);
     }
+    let mut pushed = 0;
+    for g in &masks {
+        if let Some(mask) = crate::decor::Mask::new(cx, g, w, h) {
+            cx.push_mask(mask);
+            pushed += 1;
+        }
+    }
     draw_content(cx, view, world);
+    for _ in 0..pushed {
+        cx.pop();
+    }
     if matrix.is_some() {
         cx.pop();
     }

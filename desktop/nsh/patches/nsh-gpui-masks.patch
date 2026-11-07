@@ -1,0 +1,242 @@
+diff --git a/crates/gpui/nsh-platform-gpui/src/render.rs b/crates/gpui/nsh-platform-gpui/src/render.rs
+index 8ea57e4..ae1754b 100644
+--- a/crates/gpui/nsh-platform-gpui/src/render.rs
++++ b/crates/gpui/nsh-platform-gpui/src/render.rs
+@@ -82,6 +82,7 @@ struct Saved {
+     matrix: Option<[f32; 20]>,
+     rounded: Option<RoundedClip>,
+     clip_polygon: Option<Rc<[shape::Pt]>>,
++    masks: usize,
+ }
+ 
+ /// The state of one drawing pass.
+@@ -109,6 +110,9 @@ pub(crate) struct DrawCx<'a> {
+     /// The clip as a convex polygon (window coordinates) when it is
+     /// rounded or not axis-aligned: paths are cut to it.
+     clip_polygon: Option<Rc<[shape::Pt]>>,
++    /// The masks (`maskImage`) of the views being drawn, outermost first:
++    /// what is drawn now shows at the product of their alphas.
++    masks: Vec<crate::decor::Mask>,
+     saved: Vec<Saved>,
+     /// Hosted items drawn in this pass, with their window bounds.
+     pub(crate) drawn: Vec<(Rc<dyn Hosted>, Bounds<Pixels>)>,
+@@ -138,6 +142,7 @@ impl<'a> DrawCx<'a> {
+             matrix: None,
+             rounded: None,
+             clip_polygon: None,
++            masks: Vec::new(),
+             saved: Vec::new(),
+             drawn: Vec::new(),
+             measured: None,
+@@ -184,7 +189,7 @@ impl<'a> DrawCx<'a> {
+     }
+ 
+     /// [`DrawCx::map`] as a pair.
+-    fn map_pt(&self, (x, y): shape::Pt) -> shape::Pt {
++    pub(crate) fn map_pt(&self, (x, y): shape::Pt) -> shape::Pt {
+         if let Some(p) = self.transform.map(x, y) {
+             return p;
+         }
+@@ -307,6 +312,23 @@ impl<'a> DrawCx<'a> {
+ 
+     /// True when the clip is rounded or not axis-aligned (kept as a
+     /// polygon, [`DrawCx::shows`]).
++    /// Draws what follows through `mask` (with the masks already pushed).
++    pub(crate) fn push_mask(&mut self, mask: crate::decor::Mask) {
++        self.save();
++        self.masks.push(mask);
++    }
++
++    /// True while a mask applies.
++    pub(crate) fn masked(&self) -> bool {
++        !self.masks.is_empty()
++    }
++
++    /// How much of what is drawn at `(x, y)` (window coordinates) shows
++    /// through the masks: 1 without any.
++    pub(crate) fn mask_alpha(&self, x: f32, y: f32) -> f32 {
++        self.masks.iter().map(|m| m.alpha((x, y))).product()
++    }
++
+     pub(crate) fn has_clip_polygon(&self) -> bool {
+         self.clip_polygon.is_some()
+     }
+@@ -342,6 +364,7 @@ impl<'a> DrawCx<'a> {
+             matrix: self.matrix,
+             rounded: self.rounded,
+             clip_polygon: self.clip_polygon.clone(),
++            masks: self.masks.len(),
+         });
+     }
+ 
+@@ -354,6 +377,7 @@ impl<'a> DrawCx<'a> {
+                 self.matrix = s.matrix;
+                 self.rounded = s.rounded;
+                 self.clip_polygon = s.clip_polygon;
++                self.masks.truncate(s.masks);
+             }
+             None => log::error!("render: pop without push"),
+         }
+@@ -611,13 +635,25 @@ pub(crate) fn draw_view(cx: &mut DrawCx<'_>, view: &NshView, parent: Mat4, origi
+         return;
+     }
+     let matrix = crate::decor::color_matrix(&state);
++    let masks = crate::decor::mask_images(&state);
++    let (w, h) = (state.frame.size.width.0, state.frame.size.height.0);
+     drop(state);
+     cx.set_transform(world);
+     cx.push_opacity(opacity);
+     if let Some(m) = matrix {
+         cx.push_color_matrix(m);
+     }
++    let mut pushed = 0;
++    for g in &masks {
++        if let Some(mask) = crate::decor::Mask::new(cx, g, w, h) {
++            cx.push_mask(mask);
++            pushed += 1;
++        }
++    }
+     draw_content(cx, view, world);
++    for _ in 0..pushed {
++        cx.pop();
++    }
+     if matrix.is_some() {
+         cx.pop();
+     }
+diff --git a/crates/gpui/nsh-platform-gpui/src/text.rs b/crates/gpui/nsh-platform-gpui/src/text.rs
+index 36e897e..d23b778 100644
+--- a/crates/gpui/nsh-platform-gpui/src/text.rs
++++ b/crates/gpui/nsh-platform-gpui/src/text.rs
+@@ -2227,6 +2227,23 @@ fn paint_glyphs(cx: &mut DrawCx<'_>, mut glyphs: Vec<Painted>) {
+             )
+         });
+     }
++    // Through a mask, each glyph shows at the mask's alpha at its middle.
++    if cx.masked() {
++        glyphs.retain_mut(|(origin, _, _, size, color)| {
++            let s = f32::from(*size);
++            let alpha = cx.mask_alpha(
++                f32::from(origin.x) + 0.3 * s,
++                f32::from(origin.y) - 0.35 * s,
++            );
++            match color {
++                Some(c) => {
++                    c.a *= alpha;
++                    c.a > 0.002
++                }
++                None => alpha >= 0.5,
++            }
++        });
++    }
+     if glyphs.is_empty() {
+         return;
+     }
+diff --git a/crates/gpui/nsh-platform-gpui/src/decor.rs b/crates/gpui/nsh-platform-gpui/src/decor.rs
+index 7d0ed85..71dca99 100644
+--- a/crates/gpui/nsh-platform-gpui/src/decor.rs
++++ b/crates/gpui/nsh-platform-gpui/src/decor.rs
+@@ -129,6 +129,19 @@ fn det4(m: &[[f32; 4]; 4]) -> f32 {
+ 
+ /// The color matrix of the view's filters, or `None` when they change no
+ /// color.
++pub(crate) use gradient::Mask;
++
++/// The view's masks (`maskImage`): gradients whose alpha is how much of the
++/// view shows. Text is drawn through them glyph by glyph ([`Mask`]).
++pub(crate) fn mask_images(state: &ViewState) -> Vec<nsh_core::Gradient> {
++    state
++        .style
++        .effects
++        .as_deref()
++        .map(|e| e.mask_images.clone())
++        .unwrap_or_default()
++}
++
+ pub(crate) fn color_matrix(state: &ViewState) -> Option<[f32; 20]> {
+     let e = state.style.effects.as_deref()?;
+     let m = nsh_core::compose_color_matrices(&e.filters)?;
+diff --git a/crates/gpui/nsh-platform-gpui/src/decor/gradient.rs b/crates/gpui/nsh-platform-gpui/src/decor/gradient.rs
+index 8fcbf18..7ab1571 100644
+--- a/crates/gpui/nsh-platform-gpui/src/decor/gradient.rs
++++ b/crates/gpui/nsh-platform-gpui/src/decor/gradient.rs
+@@ -34,6 +34,9 @@ use crate::{
+ /// Most pixels along a side of a gradient's image.
+ const MAX_SIDE: f32 = 768.0;
+ 
++/// Most pixels along a side of a repeating gradient's image.
++const REPEATING_MAX_SIDE: f32 = 4096.0;
++
+ /// How many images are kept before those not drawn lately are let go.
+ const MAX_KEPT: usize = 96;
+ 
+@@ -138,6 +141,46 @@ impl Geometry {
+     }
+ }
+ 
++/// A view's mask (`maskImage`) as GPUI can draw it: GPUI has no alpha
++/// masks, so what is drawn through one is faded by the mask's alpha where
++/// it is. Glyphs are faded one by one (a fade over a text's last letters,
++/// the edges of a scroller); backgrounds, images and canvases are drawn as
++/// they are. Linear gradients only; the others mask nothing.
++pub(crate) struct Mask {
++    /// The gradient line in window coordinates.
++    a: Pt,
++    b: Pt,
++    /// Alphas along it (in the ramp's alpha channel).
++    ramp: Ramp,
++}
++
++impl Mask {
++    /// The mask `g` over a `w` x `h` view, at the transform set on `cx`.
++    pub(crate) fn new(cx: &DrawCx<'_>, g: &Gradient, w: f32, h: f32) -> Option<Mask> {
++        if g.stops.len() < 2 || w <= 0.0 || h <= 0.0 {
++            return None;
++        }
++        let Geometry::Linear { a, b } = Geometry::of(g.kind, w, h) else {
++            return None;
++        };
++        let ramp = Ramp::new(g, w, h, |c| {
++            let (_, _, _, alpha) = c.to_f64();
++            [1.0, 1.0, 1.0, alpha as f32]
++        });
++        Some(Mask {
++            a: cx.map_pt(a),
++            b: cx.map_pt(b),
++            ramp,
++        })
++    }
++
++    /// The mask's alpha at `p` (window coordinates).
++    pub(crate) fn alpha(&self, p: Pt) -> f32 {
++        let t = Geometry::Linear { a: self.a, b: self.b }.t(p);
++        self.ramp.at(t)[3].clamp(0.0, 1.0)
++    }
++}
++
+ /// A gradient's colors: premultiplied stops, sorted.
+ struct Ramp {
+     stops: Vec<([f32; 4], f32)>,
+@@ -246,13 +289,17 @@ fn draw_image(
+     radii: [f32; 4],
+ ) {
+     let b = cx.rect(0.0, 0.0, w, h);
++    // A repeating gradient has detail at every period (hatching, a grid):
++    // stretched up from a smaller image its fine lines blur, so it is drawn
++    // at the view's own size, up to REPEATING_MAX_SIDE.
++    let max = if ramp.repeating {
++        REPEATING_MAX_SIDE
++    } else {
++        MAX_SIDE
++    };
+     let size = (
+-        (f32::from(b.size.width) * cx.scale)
+-            .clamp(1.0, MAX_SIDE)
+-            .ceil() as u32,
+-        (f32::from(b.size.height) * cx.scale)
+-            .clamp(1.0, MAX_SIDE)
+-            .ceil() as u32,
++        (f32::from(b.size.width) * cx.scale).clamp(1.0, max).ceil() as u32,
++        (f32::from(b.size.height) * cx.scale).clamp(1.0, max).ceil() as u32,
+     );
+     let key = image_key(ramp, geometry, w, h, size);
+     let image = KEPT.with_borrow_mut(|kept| {

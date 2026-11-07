@@ -129,6 +129,19 @@ fn det4(m: &[[f32; 4]; 4]) -> f32 {
 
 /// The color matrix of the view's filters, or `None` when they change no
 /// color.
+pub(crate) use gradient::Mask;
+
+/// The view's masks (`maskImage`): gradients whose alpha is how much of the
+/// view shows. Text is drawn through them glyph by glyph ([`Mask`]).
+pub(crate) fn mask_images(state: &ViewState) -> Vec<nsh_core::Gradient> {
+    state
+        .style
+        .effects
+        .as_deref()
+        .map(|e| e.mask_images.clone())
+        .unwrap_or_default()
+}
+
 pub(crate) fn color_matrix(state: &ViewState) -> Option<[f32; 20]> {
     let e = state.style.effects.as_deref()?;
     let m = nsh_core::compose_color_matrices(&e.filters)?;

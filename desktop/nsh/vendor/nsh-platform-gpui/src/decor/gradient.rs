@@ -34,6 +34,9 @@ use crate::{
 /// Most pixels along a side of a gradient's image.
 const MAX_SIDE: f32 = 768.0;
 
+/// Most pixels along a side of a repeating gradient's image.
+const REPEATING_MAX_SIDE: f32 = 4096.0;
+
 /// How many images are kept before those not drawn lately are let go.
 const MAX_KEPT: usize = 96;
 
@@ -135,6 +138,46 @@ impl Geometry {
             Geometry::Radial { c, r } => ((p.0 - c.0) / r.0).hypot((p.1 - c.1) / r.1),
             Geometry::Conic { c, from } => conic_t(p.0 - c.0, p.1 - c.1, from),
         }
+    }
+}
+
+/// A view's mask (`maskImage`) as GPUI can draw it: GPUI has no alpha
+/// masks, so what is drawn through one is faded by the mask's alpha where
+/// it is. Glyphs are faded one by one (a fade over a text's last letters,
+/// the edges of a scroller); backgrounds, images and canvases are drawn as
+/// they are. Linear gradients only; the others mask nothing.
+pub(crate) struct Mask {
+    /// The gradient line in window coordinates.
+    a: Pt,
+    b: Pt,
+    /// Alphas along it (in the ramp's alpha channel).
+    ramp: Ramp,
+}
+
+impl Mask {
+    /// The mask `g` over a `w` x `h` view, at the transform set on `cx`.
+    pub(crate) fn new(cx: &DrawCx<'_>, g: &Gradient, w: f32, h: f32) -> Option<Mask> {
+        if g.stops.len() < 2 || w <= 0.0 || h <= 0.0 {
+            return None;
+        }
+        let Geometry::Linear { a, b } = Geometry::of(g.kind, w, h) else {
+            return None;
+        };
+        let ramp = Ramp::new(g, w, h, |c| {
+            let (_, _, _, alpha) = c.to_f64();
+            [1.0, 1.0, 1.0, alpha as f32]
+        });
+        Some(Mask {
+            a: cx.map_pt(a),
+            b: cx.map_pt(b),
+            ramp,
+        })
+    }
+
+    /// The mask's alpha at `p` (window coordinates).
+    pub(crate) fn alpha(&self, p: Pt) -> f32 {
+        let t = Geometry::Linear { a: self.a, b: self.b }.t(p);
+        self.ramp.at(t)[3].clamp(0.0, 1.0)
     }
 }
 
@@ -246,13 +289,17 @@ fn draw_image(
     radii: [f32; 4],
 ) {
     let b = cx.rect(0.0, 0.0, w, h);
+    // A repeating gradient has detail at every period (hatching, a grid):
+    // stretched up from a smaller image its fine lines blur, so it is drawn
+    // at the view's own size, up to REPEATING_MAX_SIDE.
+    let max = if ramp.repeating {
+        REPEATING_MAX_SIDE
+    } else {
+        MAX_SIDE
+    };
     let size = (
-        (f32::from(b.size.width) * cx.scale)
-            .clamp(1.0, MAX_SIDE)
-            .ceil() as u32,
-        (f32::from(b.size.height) * cx.scale)
-            .clamp(1.0, MAX_SIDE)
-            .ceil() as u32,
+        (f32::from(b.size.width) * cx.scale).clamp(1.0, max).ceil() as u32,
+        (f32::from(b.size.height) * cx.scale).clamp(1.0, max).ceil() as u32,
     );
     let key = image_key(ramp, geometry, w, h, size);
     let image = KEPT.with_borrow_mut(|kept| {

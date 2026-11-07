@@ -108,15 +108,24 @@ folders, `~/.config` and `~/.cache` on Linux):
 Closing the window quits (Linux, Windows) or hides the app (macOS), as before. Ctrl+Q / Cmd+Q
 quits.
 
-## Touchpad scrolling patch
+## Patches to nsh-platform-gpui
 
-`vendor/nsh-platform-gpui` is nsh-platform-gpui 0.4.0 with `patches/nsh-wayland-touchpad.patch`
-applied, wired in through `[patch.crates-io]` in Cargo.toml. GPUI's Wayland client multiplies
-touchpad scroll amounts by 3 and reports a finger lift as an empty move, so without it scrolling
-runs about three times too far and never glides. The patch divides the amount back and treats the
-empty move as the lift, so nsh's own momentum runs. It was found and tested by hand in the inua
-System Monitor spike. Drop the vendored copy once nsh or GPUI Fast ship a fix; on X11 the divide
-has not been checked.
+`vendor/nsh-platform-gpui` is nsh-platform-gpui 0.4.0 with the patches in `patches/` applied, wired
+in through `[patch.crates-io]` in Cargo.toml. Drop the vendored copy once nsh or GPUI Fast ship
+these. To rebuild it: copy the crate from the cargo registry to `crates/gpui/nsh-platform-gpui` in a
+scratch git repo, `git apply` each patch in order, and copy the result back.
+
+- `nsh-wayland-touchpad.patch`: GPUI's Wayland client multiplies touchpad scroll amounts by 3 and
+  reports a finger lift as an empty move, so without it scrolling runs about three times too far
+  and never glides. The patch divides the amount back and treats the empty move as the lift, so
+  nsh's own momentum runs. It was found and tested by hand in the inua System Monitor spike; on
+  X11 the divide has not been checked.
+- `nsh-gpui-masks.patch`: GPUI has no alpha masks, so upstream ignores `maskImage` and the
+  console's fade truncation and scroll-edge fades did not show on the desktop. The patch keeps the
+  linear masks of the views being drawn and fades each glyph by the mask's alpha at its middle
+  (fills, images and canvases are drawn as they are). It also draws repeating gradients
+  (hatching, the paper grid) at the view's own size up to 4096 pixels a side, instead of
+  stretching a 768-pixel image, which blurred their fine lines.
 
 ## Linux packaging
 

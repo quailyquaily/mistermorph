@@ -2227,6 +2227,23 @@ fn paint_glyphs(cx: &mut DrawCx<'_>, mut glyphs: Vec<Painted>) {
             )
         });
     }
+    // Through a mask, each glyph shows at the mask's alpha at its middle.
+    if cx.masked() {
+        glyphs.retain_mut(|(origin, _, _, size, color)| {
+            let s = f32::from(*size);
+            let alpha = cx.mask_alpha(
+                f32::from(origin.x) + 0.3 * s,
+                f32::from(origin.y) - 0.35 * s,
+            );
+            match color {
+                Some(c) => {
+                    c.a *= alpha;
+                    c.a > 0.002
+                }
+                None => alpha >= 0.5,
+            }
+        });
+    }
     if glyphs.is_empty() {
         return;
     }
