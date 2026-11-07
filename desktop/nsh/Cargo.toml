@@ -49,3 +49,9 @@ libc = "0.2"
 [profile.release]
 lto = "thin"
 strip = true
+
+# nsh-platform-gpui 0.4.0 with patches/nsh-wayland-touchpad.patch: GPUI's Wayland client
+# multiplies touchpad scroll amounts by 3 and reports finger lifts as empty moves, so scrolling
+# ran ahead of other apps and never glided. Drop this once nsh/GPUI Fast ship the fix.
+[patch.crates-io]
+nsh-platform-gpui = { path = "vendor/nsh-platform-gpui" }

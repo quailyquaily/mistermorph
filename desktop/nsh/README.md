@@ -108,6 +108,16 @@ folders, `~/.config` and `~/.cache` on Linux):
 Closing the window quits (Linux, Windows) or hides the app (macOS), as before. Ctrl+Q / Cmd+Q
 quits.
 
+## Touchpad scrolling patch
+
+`vendor/nsh-platform-gpui` is nsh-platform-gpui 0.4.0 with `patches/nsh-wayland-touchpad.patch`
+applied, wired in through `[patch.crates-io]` in Cargo.toml. GPUI's Wayland client multiplies
+touchpad scroll amounts by 3 and reports a finger lift as an empty move, so without it scrolling
+runs about three times too far and never glides. The patch divides the amount back and treats the
+empty move as the lift, so nsh's own momentum runs. It was found and tested by hand in the inua
+System Monitor spike. Drop the vendored copy once nsh or GPUI Fast ship a fix; on X11 the divide
+has not been checked.
+
 ## Linux packaging
 
 The app is two executables side by side, `MrMorph` and `morph`; there is no WebKitGTK any more.
