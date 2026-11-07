@@ -257,6 +257,7 @@ export function MCPSettingsPanel(props: MCPSettingsPanelProps) {
             <TextField
               class="flex-1"
               value={row().key}
+              clearable={Boolean(row().key)}
               placeholder={pairProps.keyPlaceholder}
               disabled={busy()}
               mono
@@ -265,6 +266,7 @@ export function MCPSettingsPanel(props: MCPSettingsPanelProps) {
             <TextField
               class="flex-1"
               value={row().value}
+              clearable={Boolean(row().value)}
               placeholder={pairProps.valuePlaceholder}
               disabled={busy()}
               mono
@@ -320,6 +322,7 @@ export function MCPSettingsPanel(props: MCPSettingsPanelProps) {
       <TextField
         label={t("settings_mcp_name")}
         value={editor().name}
+        clearable={Boolean(editor().name)}
         placeholder={t("settings_mcp_name_placeholder")}
         disabled={busy()}
         onChange={(value) => updateEditor("name", value)}
@@ -338,6 +341,7 @@ export function MCPSettingsPanel(props: MCPSettingsPanelProps) {
         label={t("settings_mcp_description")}
         hint={t("settings_mcp_description_note")}
         value={editor().description}
+        clearable={Boolean(editor().description)}
         placeholder={t("settings_mcp_description_placeholder")}
         disabled={busy()}
         onChange={(value) => updateEditor("description", value)}
@@ -350,6 +354,7 @@ export function MCPSettingsPanel(props: MCPSettingsPanelProps) {
             <TextField
               label={t("settings_mcp_command")}
               value={editor().command}
+              clearable={Boolean(editor().command)}
               placeholder="node"
               disabled={busy()}
               mono
@@ -388,6 +393,7 @@ export function MCPSettingsPanel(props: MCPSettingsPanelProps) {
         <TextField
           label={t("settings_mcp_url")}
           value={editor().url}
+          clearable={Boolean(editor().url)}
           placeholder="https://mcp.example.com/mcp"
           disabled={busy()}
           mono

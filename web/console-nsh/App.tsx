@@ -7,6 +7,8 @@ import "./assets/fonts/ibm-plex-sans-latin-500-normal.woff2";
 import "./assets/fonts/ibm-plex-sans-latin-600-normal.woff2";
 import "./assets/fonts/ibm-plex-mono-latin-400-normal.woff2";
 import "./assets/fonts/ibm-plex-mono-latin-500-normal.woff2";
+import { Scrollbar } from "nsh/base";
+import { SCROLLBAR } from "./components/motion/ScrollEdges";
 import { Shell } from "./components/Shell";
 import { authState, configureApiBase, endpointState, localeState } from "./lib/core/context.js";
 import { currentLocale } from "./lib/i18n/index.js";
@@ -15,6 +17,10 @@ import { boot, reportFrontendReady, setDocumentLanguage, startVisibilityTracking
 import { route, router, startRouter } from "./lib/router";
 import { inShellless, inStandalone, startShell } from "./lib/shell";
 import { PageView } from "./pages/routes";
+
+// Every scroll bar is the console's (styles/base.css: thin hairline thumbs shown while the pointer is
+// over the area), including those nsh draws for itself (a reply's tables and code blocks).
+Scrollbar.setTheme(SCROLLBAR);
 
 function App() {
   startShell();

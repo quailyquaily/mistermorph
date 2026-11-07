@@ -293,6 +293,7 @@ export function LLMConfigForm(props: LLMConfigFormProps) {
     <If when={isFieldEnvManaged(field)} else={
       <TextField
         value={String(props.config?.[field] ?? "")}
+        clearable={Boolean(String(props.config?.[field] ?? ""))}
         placeholder={options.placeholder}
         keyboardType={options.keyboardType}
         multiline={options.multiline}
@@ -399,6 +400,7 @@ export function LLMConfigForm(props: LLMConfigFormProps) {
               {fieldWithAction(
                 <TextField
                   value={String(props.config?.endpoint ?? "")}
+                  clearable={Boolean(String(props.config?.endpoint ?? ""))}
                   placeholder={t("settings_agent_endpoint_placeholder")}
                   disabled={busy()}
                   accessibilityLabel={t("settings_agent_endpoint_label")}
@@ -489,6 +491,7 @@ export function LLMConfigForm(props: LLMConfigFormProps) {
             {fieldWithAction(
               <TextField
                 value={String(props.config?.model ?? "")}
+                clearable={Boolean(String(props.config?.model ?? ""))}
                 placeholder={t("settings_agent_model_placeholder")}
                 disabled={busy()}
                 accessibilityLabel={t("settings_agent_model_label")}
@@ -514,6 +517,7 @@ export function LLMConfigForm(props: LLMConfigFormProps) {
         <SettingField label="Description" wide note="Shown to the agent when it picks a profile for a subtask.">
           <TextField
             value={String(props.config?.description ?? "")}
+            clearable={Boolean(String(props.config?.description ?? ""))}
             placeholder="What this profile is good for"
             disabled={busy()}
             accessibilityLabel="Description"
@@ -583,6 +587,7 @@ export function LLMConfigForm(props: LLMConfigFormProps) {
           <SettingField label="AWS profile">
             <TextField
               value={String(props.config?.bedrock_aws_profile ?? "")}
+              clearable={Boolean(String(props.config?.bedrock_aws_profile ?? ""))}
               disabled={busy()}
               accessibilityLabel="AWS profile"
               onChange={(value) => updateField("bedrock_aws_profile", value)}
@@ -593,6 +598,7 @@ export function LLMConfigForm(props: LLMConfigFormProps) {
           <SettingField label="Azure deployment" wide>
             <TextField
               value={String(props.config?.azure_deployment ?? "")}
+              clearable={Boolean(String(props.config?.azure_deployment ?? ""))}
               disabled={busy()}
               accessibilityLabel="Azure deployment"
               onChange={(value) => updateField("azure_deployment", value)}
@@ -622,6 +628,7 @@ export function LLMConfigForm(props: LLMConfigFormProps) {
           <SettingField label="Cache key prefix">
             <TextField
               value={String(props.config?.cache_key_prefix ?? "")}
+              clearable={Boolean(String(props.config?.cache_key_prefix ?? ""))}
               disabled={busy()}
               accessibilityLabel="Cache key prefix"
               onChange={(value) => updateField("cache_key_prefix", value)}
@@ -631,6 +638,7 @@ export function LLMConfigForm(props: LLMConfigFormProps) {
         <SettingField label="Request timeout">
           <TextField
             value={String(props.config?.request_timeout ?? "")}
+            clearable={Boolean(String(props.config?.request_timeout ?? ""))}
             placeholder="90s"
             disabled={busy()}
             accessibilityLabel="Request timeout"
@@ -641,6 +649,7 @@ export function LLMConfigForm(props: LLMConfigFormProps) {
           <SettingField label="Temperature">
             <TextField
               value={String(props.config?.temperature ?? "")}
+              clearable={Boolean(String(props.config?.temperature ?? ""))}
               keyboardType="decimal-pad"
               disabled={busy()}
               accessibilityLabel="Temperature"
@@ -650,6 +659,7 @@ export function LLMConfigForm(props: LLMConfigFormProps) {
           <SettingField label="Reasoning budget tokens">
             <TextField
               value={String(props.config?.reasoning_budget_tokens ?? "")}
+              clearable={Boolean(String(props.config?.reasoning_budget_tokens ?? ""))}
               keyboardType="number-pad"
               disabled={busy()}
               accessibilityLabel="Reasoning budget tokens"

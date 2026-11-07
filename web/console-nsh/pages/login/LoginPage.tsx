@@ -111,7 +111,7 @@ export function LoginPage() {
   const phone = () => windowSize().width <= 480;
   return (
     <View
-      class={`flex-1 items-center bg-background px-4 ${phone() ? "" : "justify-center"}`}
+      class={`flex-1 items-center px-4 ${phone() ? "" : "justify-center"}`}
       style={phone() ? { paddingTop: windowSize().height * 0.12 } : { paddingTop: 24, paddingBottom: windowSize().height * 0.1 }}
     >
       <View class="w-full gap-4" style={{ maxWidth: 400 }}>

@@ -251,7 +251,7 @@ export function RepairPage() {
   const pad = () => Math.round(Math.min(80, Math.max(24, windowSize().width * 0.06)));
 
   return (
-    <View class="flex-1 bg-background" testID="repair-page">
+    <View class="flex-1" testID="repair-page">
       {/* Vue: centred with clamp(24px, 6vw, 80px) around it; phones (<=640) from the top, 24/16. */}
       <Scroll
         class="flex-1"

@@ -270,6 +270,7 @@ export function ProfilePane(props: { s: SettingsStore; sheet?: boolean }) {
             <SettingField label={t("settings_agent_profile_name_label")}>
               <TextField
                 value={profile().name}
+                clearable={Boolean(profile().name)}
                 onChange={(value) => s.updateProfileField(untracked(profile)._key, { field: "name", value })}
                 placeholder={t("settings_agent_profile_name_placeholder")}
                 accessibilityLabel={t("settings_agent_profile_name_label")}

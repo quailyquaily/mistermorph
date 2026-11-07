@@ -10,9 +10,9 @@
 // `provide("settingsSaveRegistry", ...)` is the SettingsSaveRegistry context.
 import { batch, cleanup, computed, context, effect, signal, Text, untracked, View } from "nsh";
 import { buildConfigUpdate, createConfigDraft } from "../../lib/core/config-fields.js";
-import { Button, ProgressBar, TextField } from "../ui";
+import { Button, TextField } from "../ui";
 import { useRevealRow } from "../settings-page/reveal";
-import { RestartTag, SettingSwitch, SettingsCard } from "../settings-page/parts";
+import { LoadingLine, RestartTag, SettingSwitch, SettingsCard } from "../settings-page/parts";
 import { EnvManagedField } from "./EnvManagedField";
 import { SecretInput } from "./SecretInput";
 import {
@@ -406,6 +406,7 @@ export function ConfigSettingsPanel(props: ConfigSettingsPanelProps) {
     return (
       <TextField
         value={text()}
+        clearable={Boolean(text())}
         keyboardType={field.type === "int" ? "number-pad" : field.type === "float" ? "decimal-pad" : undefined}
         placeholder={field.placeholder || ""}
         disabled={disabled()}
@@ -491,7 +492,7 @@ export function ConfigSettingsPanel(props: ConfigSettingsPanelProps) {
   return (
     <View class={`min-w-0 gap-4 ${props.class ?? ""}`} testID={props.testID}>
       <If when={props.loading}>
-        <ProgressBar indeterminate label="Loading" />
+        <LoadingLine label="Loading" />
       </If>
       <If when={validationError()}>
         <View class="rounded-(--radius) border border-danger bg-card px-3 py-2" role="alert">

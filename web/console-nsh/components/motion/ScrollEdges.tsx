@@ -14,13 +14,11 @@
 //   </Scroll>                                              // it only once scrolled)
 //
 // The state changes only when an edge appears or goes, so scrolling re-renders nothing; the
-// scroll events it listens to are throttled. Masks are drawn by the web backend only (the
-// desktop GPUI build ignores `maskImage`): there the edges stay sharp.
+// scroll events it listens to are throttled. On the desktop (the shell's patched GPUI backend,
+// desktop/nsh/patches) the mask fades the text under it; rows' fills and images stay whole.
 import type { JSX, ScrollRef } from "nsh";
-import { platform, Scroll, signal, View } from "nsh";
+import { Scroll, signal, View } from "nsh";
 import type { ScrollbarTheme } from "nsh/base";
-
-const CAN_MASK = platform.os === "web";
 
 /**
  * The console's scroll bars (styles/base.css): thin hairline thumbs that show while the pointer is
@@ -94,7 +92,7 @@ export function createScrollEdges(options: { fade?: number; start?: boolean; end
       const start = options.start !== false && scrolled();
       const end = options.end !== false && more();
       const length = viewport();
-      if (!CAN_MASK || (!start && !end) || length <= 0) return {};
+      if ((!start && !end) || length <= 0) return {};
       // Stops in points along the scroller (gradients take no calc()); a sharp edge has none.
       const head = start ? `transparent 0px, #000 ${fade}px` : "#000 0px";
       const tail = end ? `#000 ${Math.max(start ? fade : 0, length - fade)}px, transparent ${length}px` : `#000 ${length}px`;

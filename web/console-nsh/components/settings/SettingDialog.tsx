@@ -1,13 +1,15 @@
-// A settings dialog with Cancel and Save (the Vue console's SettingDialog). While saving it cannot
-// be closed: Escape and the backdrop do nothing, Cancel is disabled.
+// A settings dialog with Cancel and Save (the Vue console's SettingDialog, an AppDialog). While
+// saving it cannot be closed: Escape and the backdrop do nothing, Cancel is disabled.
+//
+// It is built on the ui's DialogLayer, as AppDialog is in Vue: the scrim and panel fade in, the
+// panel growing out of the control that opened it, and go back into it on close (Escape too).
 //
 // Vue to nsh: `modelValue` is `open`, `update:modelValue` is `onOpenChange(open)`; `cancel` and
 // `save` are `onCancel()` and `onSave()`.
 import type { JSX } from "nsh";
 import { Scroll, Text, View } from "nsh";
-import { Dialog } from "nsh/base";
 import { translate } from "../../lib/core/context.js";
-import { Button, type ModalSize } from "../ui";
+import { Button, DialogLayer, type ModalSize } from "../ui";
 import { SCROLLBAR } from "../motion";
 import { isMobile } from "../../lib/shell";
 
@@ -42,18 +44,12 @@ export function SettingDialog(props: SettingDialogProps) {
     props.onCancel?.();
   };
   return (
-    <Dialog
+    <DialogLayer
       open={props.open}
-      onOpenChange={({ open }) => {
-        if (!open) cancel();
-      }}
-      closeOnEscape={!props.saving}
-      closeOnBackdropPress={!props.saving}
-      closeOnSwipe={!props.saving}
+      onClose={cancel}
       testID={props.testID}
-      animation="fade"
-      backdropClass="bg-scrim"
-      class={`m-auto max-h-[90%] ${WIDTHS[props.size ?? "lg"]} rounded-(--radius) border border-line bg-popover shadow-xl`}
+      label={props.title}
+      panelClass={WIDTHS[props.size ?? "lg"]}
     >
       {/* SettingDialog.css: a 44pt title bar, a 20pt body (16 on phones), and the actions in a 60pt
           strip on the paper, Cancel at the left and Save at the right. */}
@@ -77,6 +73,6 @@ export function SettingDialog(props: SettingDialogProps) {
           testID={props.testID ? `${props.testID}-save` : undefined}
         />
       </View>
-    </Dialog>
+    </DialogLayer>
   );
 }

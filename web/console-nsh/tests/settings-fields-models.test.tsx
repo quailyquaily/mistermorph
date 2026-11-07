@@ -13,7 +13,7 @@ test("routes: select a route, split it, step the shares and save", async () => {
   await app.waitFor("text:Reset to default");
   await app.press("id:profile-smart >> label:Split");
   await app.waitUntil(() => out(app, "dirty") === "true");
-  await app.press("id:node-more-smart");
+  await app.press("id:line-more-smart");
   await app.press("id:routes-save");
   await app.waitUntil(() => out(app, "saved") !== "null");
   const saved = JSON.parse(out(app, "saved"));

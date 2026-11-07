@@ -3,7 +3,7 @@
 // files as a tree, and what to do with the selected one).
 import { Image, List, Scroll, Text, View } from "nsh";
 import { Button as BaseButton } from "nsh/base";
-import { Button, Icon, Kicker, Tabs, Tip, Toggle } from "../../components/ui";
+import { Button, Icon, Kicker, Tabs, Tip, TipButton, Toggle } from "../../components/ui";
 import { TopicTagsEditor } from "../../components/chat/TopicTagsEditor";
 import { t } from "../../components/chat/i18n";
 import { formatBytes } from "../../lib/core/context.js";
@@ -261,7 +261,7 @@ function WorkspaceTab(props: { c: ChatController }) {
           >
             <List each={c.workspaceTreeRows()} keyExtractor={(row: any) => `workspace:${row.key}`} estimatedItemSize={28} class="flex-1" testID="chat-workspace-tree">
               {(row) => (
-                <BaseButton
+                <TipButton
                   selected={String(row().entry?.path || "") === String(selected()?.path || "")}
                   onPress={() => void c.selectWorkspaceTreeNode(row())}
                   accessibilityLabel={row().entry?.name}
@@ -271,7 +271,7 @@ function WorkspaceTab(props: { c: ChatController }) {
                 >
                   <Image src={workspaceTreeIcon(row().entry, row().expanded)} accessibilityElementsHidden style={{ width: 15, height: 15 }} />
                   <Text class="flex-1 text-sm text-foreground line-clamp-1">{row().entry?.name}</Text>
-                </BaseButton>
+                </TipButton>
               )}
             </List>
           </If>

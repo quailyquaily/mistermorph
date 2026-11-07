@@ -203,6 +203,7 @@ export function AuthProfilesPanel(props: AuthProfilesPanelProps) {
                   <SettingField label="Name">
                     <TextField
                       value={profile().name}
+                      clearable={Boolean(profile().name)}
                       disabled={busy()}
                       accessibilityLabel={label("Name")}
                       onChange={(value) => update(key, { name: value })}
@@ -211,6 +212,7 @@ export function AuthProfilesPanel(props: AuthProfilesPanelProps) {
                   <SettingField label="Credential kind">
                     <TextField
                       value={profile().credential_kind}
+                      clearable={Boolean(profile().credential_kind)}
                       disabled={busy()}
                       accessibilityLabel={label("Credential kind")}
                       onChange={(value) => update(key, { credential_kind: value })}
@@ -219,6 +221,7 @@ export function AuthProfilesPanel(props: AuthProfilesPanelProps) {
                   <SettingField label="Credential secret" wide>
                     <TextField
                       value={profile().credential_secret}
+                      clearable={Boolean(profile().credential_secret)}
                       masked
                       placeholder={profile()._configured ? "Configured — enter a new value to replace" : "Required"}
                       disabled={busy()}
@@ -274,6 +277,7 @@ export function AuthProfilesPanel(props: AuthProfilesPanelProps) {
                             <SettingField label="Header name" wide>
                               <TextField
                                 value={entry()[1]?.inject?.name || ""}
+                                clearable={Boolean(entry()[1]?.inject?.name || "")}
                                 disabled={busy()}
                                 accessibilityLabel="Header name"
                                 onChange={(value) => updateInjection(key, entry()[0], "name", value)}

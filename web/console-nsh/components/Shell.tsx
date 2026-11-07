@@ -14,12 +14,22 @@ import { MobileBottomMenus, MobileBottomNav } from "./frame/MobileBottomNav";
 import { Sidebar } from "./frame/Sidebar";
 import { ConfirmHost, NoticeHost } from "./ui";
 
+// The page paper's grid (Vue --morph-bg-grid-image with the morph theme's override in base.css):
+// a faint 100pt grid, no minor lines, anchored at the window's corner as the body's background is
+// (`background-position: -1px -1px`, each line the cell's first half point). Columns with a fill of
+// their own (the sidebar) cover it, as in Vue.
+const GRID_LINE = "rgba(26, 75, 140, 0.028)";
+const PAPER_GRID = [90, 180]
+  .map((angle) => `repeating-linear-gradient(${angle}deg, transparent 0 99px, ${GRID_LINE} 99px 99.5px, transparent 99.5px 100px)`)
+  .join(", ");
+
 export function Shell(props: { shellless: boolean; standalone: boolean; children?: JSX.Element }) {
   const withSidebar = () => !props.shellless && !props.standalone && !isMobile();
   // Every press passes here first (capture), so dialogs know which control opened them.
   return (
     <View
       class="flex-1 bg-background"
+      style={{ backgroundImage: PAPER_GRID }}
       onTouchStartCapture={(event) => notePress(event.pageX, event.pageY)}
     >
       <InsecureBanner />

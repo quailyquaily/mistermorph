@@ -3,7 +3,7 @@
 // conversation are separate views, and the panel is a sheet. The behaviour is in chatController.
 import { Text, View } from "nsh";
 import { Button as BaseButton, Sheet } from "nsh/base";
-import { Button, Fab, Icon, Kicker, MessageDialog, Page, Tip } from "../../components/ui";
+import { Button, Fab, Icon, Kicker, MessageDialog, Page, Tip, TipButton } from "../../components/ui";
 import { ChatComposer } from "../../components/chat/ChatComposer";
 import { ChatHistoryList, chatGutter } from "../../components/chat/ChatHistoryList";
 import { t } from "../../components/chat/i18n";
@@ -98,7 +98,7 @@ function Composer(props: { c: ChatController; landing?: boolean }) {
 function WorkspaceToggle(props: { c: ChatController; bare?: boolean }) {
   return (
     <View class={props.bare ? "" : "size-[38px] border border-line-soft bg-background p-0.5"}>
-      <BaseButton
+      <TipButton
         selected={props.c.workspaceSidebarOpen()}
         accessibilityLabel={props.c.workspaceSidebarToggleLabel()}
         tooltip={<Tip text={props.c.workspaceSidebarToggleLabel()} />}
@@ -109,7 +109,7 @@ function WorkspaceToggle(props: { c: ChatController; bare?: boolean }) {
         <View style={{ scale: [-1, 1] }}>
           <Icon name="PhSidebarSimple" size={16} color={props.c.workspaceSidebarOpen() ? "blue-dark" : "muted-foreground"} />
         </View>
-      </BaseButton>
+      </TipButton>
     </View>
   );
 }

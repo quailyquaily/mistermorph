@@ -10,7 +10,7 @@ import { projectTodoCalendar, visibleCalendarDays } from "../../lib/core/todo-ca
 import { currentRoute, locationOf, navigate } from "../../lib/router";
 import { gutterX, gutterY } from "../frame/metrics";
 import { MOTION_EASE_CSS } from "../motion";
-import { Button, type IconName, Tip } from "../ui";
+import { Button, Tip, TipButton, type IconName } from "../ui";
 import { TODO_HEAD_HEIGHT, TODO_INDEX_WIDTH } from "./TodoIndex";
 import type { CalendarSelection, TodoTask } from "./todo-state";
 
@@ -287,7 +287,7 @@ export function TodoCalendar(props: TodoCalendarProps) {
     const disabled = () => entryProps.entry().task.enabled === false;
     const showMeta = () => !entryProps.cell || !narrowCells();
     return (
-      <BaseButton
+      <TipButton
         onPress={() => selectEntry(entryProps.entry())}
         accessibilityLabel={entryAccessibleName(entryProps.entry())}
         tooltip={<Tip text={entryMeta(entryProps.entry())} />}
@@ -325,7 +325,7 @@ export function TodoCalendar(props: TodoCalendarProps) {
             {entryProps.meta(entryProps.entry())}
           </Text>
         </If>
-      </BaseButton>
+      </TipButton>
     );
   };
 

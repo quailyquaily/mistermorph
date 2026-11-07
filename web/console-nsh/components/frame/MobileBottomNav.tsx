@@ -21,7 +21,7 @@ import {
   type NavItem,
 } from "../../lib/shell";
 import defaultEndpointAvatar from "../../assets/images/app_logo_current.svg";
-import { Icon, TextField, Tip, type IconName } from "../ui";
+import { Icon, TextField, Tip, TipButton, type IconName } from "../ui";
 import { AgentAvatar, AgentOptionList, filterAgentItems, normalizeAgentItems, OverviewRow } from "./AgentSwitcher";
 import { usePersonaSummary } from "./personaSummary";
 import { NavList } from "./Sidebar";
@@ -207,7 +207,7 @@ export function MobileBottomNav() {
       <View class="flex-row" style={{ height: MOBILE_NAV_HEIGHT }}>
         <Each of={primaryItems()} key={(item) => item.id}>
           {(item, index) => (
-            <BaseButton
+            <TipButton
               selected={activeSlot() === index()}
               onPress={() => navigateTo(item())}
               accessibilityLabel={item().title}
@@ -216,10 +216,10 @@ export function MobileBottomNav() {
               class={slotClass}
             >
               <Icon name={item().icon as IconName} size={22} color={activeSlot() === index() ? "blue" : "muted-foreground"} />
-            </BaseButton>
+            </TipButton>
           )}
         </Each>
-        <BaseButton
+        <TipButton
           selected={activeSlot() === primaryItems().length}
           onPress={toggleMore}
           accessibilityLabel={moreLabel()}
@@ -228,8 +228,8 @@ export function MobileBottomNav() {
           class={slotClass}
         >
           <Icon name={moreIcon()} size={22} color={activeSlot() === primaryItems().length ? "blue" : "muted-foreground"} />
-        </BaseButton>
-        <BaseButton
+        </TipButton>
+        <TipButton
           selected={activeSlot() === slotCount() - 1}
           onPress={() => setAgentMenuOpen(!agentMenuOpen())}
           accessibilityLabel={`${t("nav_agent")}: ${selectedName()}`}
@@ -251,7 +251,7 @@ export function MobileBottomNav() {
               </If>
             </View>
           </View>
-        </BaseButton>
+        </TipButton>
       </View>
     </View>
   );

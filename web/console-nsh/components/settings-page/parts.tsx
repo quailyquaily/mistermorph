@@ -7,6 +7,8 @@ import { isMobile } from "../../lib/shell";
 import { Icon, type IconName } from "../ui";
 import { useRevealRow } from "./reveal";
 
+export { LoadingLine } from "../ui";
+
 /** "Restart required" beside a label or under a toggle's note (`.config-settings-restart`): quiet mono. */
 export function RestartTag(props: { label?: string }) {
   return (
@@ -324,8 +326,10 @@ export function SettingsCard(props: {
 
 /**
  * The full-width dashed button that adds an item at the end of a list (`.settings-profile-placeholder`,
- * the ui-kit's `placeholder` button): 44pt, a dashed hairline, the label in the middle. The Vue
- * button's faint diagonal hatching is left out (no repeating gradients here).
+ * the ui-kit's `placeholder` button): 44pt, a dashed hairline, the label in the middle. Its look is
+ * what Vue draws, measured: SettingsView.css gives it a 135deg hatching under a paper gradient, but
+ * the morph theme's `.touchable.placeholder { background: … !important }` replaces that background,
+ * so Vue shows white at 46% (68% on hover) on a blue dashed hairline at 36% (52%), 180ms.
  */
 export function PlaceholderButton(props: { label: string; icon?: IconName; disabled?: boolean; onPress?: () => void; testID?: string; class?: string }) {
   return (
@@ -334,7 +338,7 @@ export function PlaceholderButton(props: { label: string; icon?: IconName; disab
       disabled={props.disabled}
       accessibilityLabel={props.label}
       testID={props.testID}
-      class={`h-11 flex-row items-center justify-center gap-2 rounded-(--radius) border border-dashed border-line bg-paper/90 transition-colors duration-180 hover:border-muted-foreground/60 hover:bg-paper disabled:opacity-50 ${
+      class={`h-11 flex-row items-center justify-center gap-2 rounded-(--radius) border border-dashed border-blue/36 bg-white/46 transition-colors duration-180 ease-in-out hover:border-blue/52 hover:bg-white/68 disabled:opacity-50 ${
         props.class ?? ""
       }`}
     >

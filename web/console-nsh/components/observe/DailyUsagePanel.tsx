@@ -3,9 +3,8 @@
 // served them. Drawn with nsh/base/plot: a Bar per segment in one stack, a grid at the axis ticks,
 // a dashed average line. Hovering a day shows its readout and tooltip; pressing the plot pins the
 // hovered day; pressing a legend entry shows only that model.
-import { batch, cleanup, computed, effect, signal, Text, untracked, View, windowSize } from "nsh";
+import { batch, cleanup, computed, effect, signal, Text, token, untracked, View, windowSize } from "nsh";
 import { Bar, Grid, Plot, PlotAxis } from "nsh/base/plot";
-import { Button as BaseButton } from "nsh/base";
 import { endpointState, runtimeApiFetch } from "../../lib/core/context.js";
 import { prefersReducedMotion, tweenValue } from "../../lib/core/tween.js";
 import {
@@ -15,7 +14,7 @@ import {
   assignModelSlots,
   summarizeDailyUsage,
 } from "../../lib/core/daily-usage.js";
-import { ProgressBar, Tabs } from "../ui";
+import { ProgressBar, Tabs, TipButton } from "../ui";
 import { compactCost, compactNumber, exactCost as exactCostText, exactNumber, formatIntl, hint, ObserveSection, percentWhole, t } from "./parts";
 
 type Metric = "cost" | "tokens" | "cache";
@@ -33,19 +32,32 @@ const CACHE_PART_KEYS: Record<string, string> = {
 };
 
 // The series' colors, by segment: model slots 1 to 4, Other, and the cache split. Each has the
-// fill class its bar paints with and the background class of its swatch.
-const SERIES: Record<string, { fill: string; swatch: string }> = {
-  s0: { fill: "fill-chart-1", swatch: "bg-chart-1" },
-  s1: { fill: "fill-chart-2", swatch: "bg-chart-2" },
-  s2: { fill: "fill-chart-3", swatch: "bg-chart-3" },
-  s3: { fill: "fill-chart-4", swatch: "bg-chart-4" },
-  other: { fill: "fill-muted-foreground/40", swatch: "bg-muted-foreground/40" },
+// fill class its bar paints with, the background class of its swatch, and the same colour as a
+// theme token and the share of it (`tone`), which today's hatch is drawn in.
+const SERIES: Record<string, { fill: string; swatch: string; tone: [Parameters<typeof token>[0], number] }> = {
+  s0: { fill: "fill-chart-1", swatch: "bg-chart-1", tone: ["chart-1", 100] },
+  s1: { fill: "fill-chart-2", swatch: "bg-chart-2", tone: ["chart-2", 100] },
+  s2: { fill: "fill-chart-3", swatch: "bg-chart-3", tone: ["chart-3", 100] },
+  s3: { fill: "fill-chart-4", swatch: "bg-chart-4", tone: ["chart-4", 100] },
+  other: { fill: "fill-muted-foreground/40", swatch: "bg-muted-foreground/40", tone: ["muted-foreground", 40] },
   // Cache split: one hue (Vue's --stats-accent), darkest for what the cache served.
-  hits: { fill: "fill-ink", swatch: "bg-ink" },
-  writes: { fill: "fill-ink/50", swatch: "bg-ink/50" },
-  uncached: { fill: "fill-ink/20", swatch: "bg-ink/20" },
+  hits: { fill: "fill-ink", swatch: "bg-ink", tone: ["ink", 100] },
+  writes: { fill: "fill-ink/50", swatch: "bg-ink/50", tone: ["ink", 50] },
+  uncached: { fill: "fill-ink/20", swatch: "bg-ink/20", tone: ["ink", 20] },
 };
 const STACK_FIELDS = ["s0", "s1", "s2", "s3", "other", "hits", "writes", "uncached"] as const;
+// Today is still filling up, so its segments are hatched instead of solid (Vue
+// .stats-daily-bar.is-today .stats-daily-segment): a 1px ring inside each segment in its colour,
+// over 135deg stripes 2px wide on a 5px pitch. Each series has a twin that holds only today's
+// value (the series itself then has none that day), stacked right after it, whose bar is painted
+// by its background part: the ring as four 1px edge gradients, then the stripes.
+const TODAY_SUFFIX = ":today";
+const todayHatch = (field: string) => {
+  const [name, share] = SERIES[field].tone;
+  const c = share === 100 ? String(token(name)) : `color-mix(in srgb, ${token(name)} ${share}%, transparent)`;
+  const edge = (side: string) => `linear-gradient(to ${side}, ${c} 0 1px, transparent 1px)`;
+  return [edge("right"), edge("left"), edge("bottom"), edge("top"), `repeating-linear-gradient(135deg, ${c} 0 2px, transparent 2px 5px)`].join(", ");
+};
 
 interface Segment {
   key: string;
@@ -130,8 +142,12 @@ export function DailyUsagePanel() {
   const rows = computed(() =>
     series().days.map((day: any, index: number) => {
       const row: Record<string, number | string | null> = { index, date: day.date };
-      for (const field of STACK_FIELDS) row[field] = null;
-      for (const segment of day.segments as Segment[]) row[seriesField(segment)] = segment.value;
+      for (const field of STACK_FIELDS) {
+        row[field] = null;
+        row[field + TODAY_SUFFIX] = null;
+      }
+      const suffix = day.isToday ? TODAY_SUFFIX : "";
+      for (const segment of day.segments as Segment[]) row[seriesField(segment) + suffix] = segment.value;
       return row;
     }),
   );
@@ -482,15 +498,22 @@ export function DailyUsagePanel() {
           <Grid y={(series().ticks as number[]).filter((value) => value > 0)} class="stroke-line-soft" style={{ strokeDasharray: "3 3" }} />
 
           <Grid y={[0]} class="stroke-line" />
-          {STACK_FIELDS.map((field) => (
+          {STACK_FIELDS.flatMap((field) => [
             <Bar
               value={(row: Record<string, number | string | null>) => row[field] as number}
               stack="day"
               stagger={0.5}
               inactiveOpacity={0.55}
               class={SERIES[field].fill}
-            />
-          ))}
+            />,
+            <Bar
+              value={(row: Record<string, number | string | null>) => row[field + TODAY_SUFFIX] as number}
+              stack="day"
+              stagger={0.5}
+              inactiveOpacity={0.55}
+              backgroundStyle={{ backgroundImage: todayHatch(field) }}
+            />,
+          ])}
           <If when={averageLine() !== null}>
             <Grid y={[averageLine() ?? 0]} class="stroke-foreground/45" style={{ strokeDasharray: "3 3" }} />
           </If>
@@ -517,7 +540,7 @@ export function DailyUsagePanel() {
         <View class="-mt-1 flex-row flex-wrap gap-x-1.5 gap-y-0.5" testID="stats-daily-legend">
           <Each of={series().legend as Segment[]} key={(item) => item.key}>
             {(item) => (
-              <BaseButton
+              <TipButton
                 disabled={isCache()}
                 selected={isolate() === item().key}
                 onPress={() => toggleIsolate(item().key)}
@@ -531,7 +554,7 @@ export function DailyUsagePanel() {
                 <View class={`size-2 ${swatchClass(item())}`} />
                 <Text class={`${MONO} text-subtle line-clamp-1`}>{segmentName(item().key)}</Text>
                 <Text class={`${MONO} text-foreground`}>{metricValue(item().value)}</Text>
-              </BaseButton>
+              </TipButton>
             )}
           </Each>
         </View>

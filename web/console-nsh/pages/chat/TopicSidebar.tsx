@@ -11,7 +11,7 @@
 // measure them and move with them.
 import { createAnimatedValue, Image, Scroll, Text, token, View } from "nsh";
 import { Button as BaseButton } from "nsh/base";
-import { Button, Icon, Spinner, Tip } from "../../components/ui";
+import { Button, Icon, Spinner, Tip, TipButton } from "../../components/ui";
 import { ContactAvatar } from "../../components/shared/ContactAvatar";
 import { FadeText } from "../../components/motion/FadeText";
 import { createScrollEdges, SCROLLBAR } from "../../components/motion/ScrollEdges";
@@ -33,7 +33,7 @@ function ViewToggle(props: {
   testID: string;
 }) {
   return (
-    <BaseButton
+    <TipButton
       selected={props.active}
       onPress={props.onPress}
       accessibilityLabel={props.label}
@@ -47,7 +47,7 @@ function ViewToggle(props: {
           <StatusDot status="running" label={props.label} class="absolute -right-2 -top-1" testID="chat-cron-running" />
         </If>
       </View>
-    </BaseButton>
+    </TipButton>
   );
 }
 
@@ -86,7 +86,7 @@ export function TopicSidebar(props: { c: ChatController; class?: string }) {
   const rowHeight = () => (c.mobileMode() ? "min-h-11" : "min-h-10");
 
   const topicRow = (row: () => Extract<TopicRow, { kind: "topic" }>) => (
-    <BaseButton
+    <TipButton
       selected={c.topicIsActive(row().topic)}
       onPress={() => c.selectTopic(row().topic?.id)}
       onLayout={selection.track(row().key)}
@@ -129,7 +129,7 @@ export function TopicSidebar(props: { c: ChatController; class?: string }) {
       <If when={c.topicActivityState(row().topic)}>
         <StatusDot status={c.topicActivityState(row().topic)} label={c.topicActivityLabel(row().topic)} />
       </If>
-    </BaseButton>
+    </TipButton>
   );
 
   // A group's heading: a small mono label in caps, then a hairline that runs out to the list's
@@ -162,7 +162,7 @@ export function TopicSidebar(props: { c: ChatController; class?: string }) {
       when={row().collapsible}
       else={<View class="flex-row items-center gap-2.5 pb-1 pl-3.5 pr-3.5 pt-2.5">{groupLabel(row)}</View>}
     >
-      <BaseButton
+      <TipButton
         onPress={() => c.toggleTopicGroup(row().group)}
         accessibilityLabel={row().group.label}
         tooltip={<Tip text={row().collapsed ? t("chat_topics_group_expand") : t("chat_topics_group_collapse")} />}
@@ -170,7 +170,7 @@ export function TopicSidebar(props: { c: ChatController; class?: string }) {
         class="mt-1.5 flex-row items-center gap-2.5 rounded-(--radius) pb-1 pl-3.5 pr-3.5 pt-2.5 transition-colors duration-[180ms] hover:bg-hover-soft"
       >
         {groupLabel(row)}
-      </BaseButton>
+      </TipButton>
     </If>
   );
 
@@ -216,7 +216,7 @@ export function TopicSidebar(props: { c: ChatController; class?: string }) {
           testID="chat-topics-view-tags"
         />
         <If when={!c.mobileTopicSplitEnabled()}>
-          <BaseButton
+          <TipButton
             onPress={() => c.startNewTopic()}
             accessibilityLabel={t("chat_topic_new")}
             tooltip={<Tip text={t("chat_topic_new")} />}
@@ -224,7 +224,7 @@ export function TopicSidebar(props: { c: ChatController; class?: string }) {
             class="size-[38px] items-center justify-center rounded-(--radius) transition-colors duration-[180ms] hover:bg-hover-soft"
           >
             <Icon name="PhPlus" size={14} color="subtle" />
-          </BaseButton>
+          </TipButton>
         </If>
       </View>
       <If when={c.topicsLoading() && c.topicRows().length === 0}>

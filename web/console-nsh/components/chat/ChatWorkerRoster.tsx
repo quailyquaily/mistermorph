@@ -4,7 +4,7 @@
 // page's state, keyed by message, since rows recycle.
 import { Image, Text, View } from "nsh";
 import { Button as BaseButton } from "nsh/base";
-import { Tip } from "../ui";
+import { Tip, TipButton } from "../ui";
 import { localeState } from "../../lib/core/context.js";
 import { rosterWorkers, workerProcessLabel } from "../../lib/core/chat-workers.js";
 import { workerAvatarURL } from "../../lib/core/worker-avatars.js";
@@ -42,7 +42,7 @@ export function ChatWorkerRoster(props: { itemID: string; activity: any; status:
         <View class="flex-row flex-wrap items-center gap-1.5">
           <Each of={workers()} key={(worker) => `${props.itemID}:worker:${worker.id}`}>
             {(worker) => (
-              <BaseButton
+              <TipButton
                 selected={worker().id === selectedID()}
                 onPress={() => props.selected.set(props.itemID, selectedID() === worker().id ? "" : worker().id)}
                 accessibilityLabel={`${worker().displayName} · ${kindLabel(worker())} · ${stateLabel(worker().state)}`}
@@ -52,7 +52,7 @@ export function ChatWorkerRoster(props: { itemID: string; activity: any; status:
                 <WorkerAvatar avatarStyle={worker().avatarStyle} />
                 <Text class="text-xs text-foreground">{worker().displayName}</Text>
                 <View class={`size-1.5 rounded-full border ${stateTone(worker().state)}`} />
-              </BaseButton>
+              </TipButton>
             )}
           </Each>
           <If when={omitted() > 0}>

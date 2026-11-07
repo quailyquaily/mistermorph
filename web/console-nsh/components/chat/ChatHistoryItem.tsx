@@ -10,7 +10,7 @@ import { Canvas, createMotion, effect, Image, pixelRatio, platform, Text, token,
 import { MOTION_EASE, MOTION_SLOW } from "../motion/tokens";
 import { Button as BaseButton } from "nsh/base";
 import { ICONS } from "../icons";
-import { Button, Icon, Tip } from "../ui";
+import { Button, Icon, Tip, TipButton } from "../ui";
 import { approvalParameterEntries, skillInstallApproval } from "../../lib/core/chat-approvals.js";
 import { agentLinkMessages, insightMessages, planStepMessages, pollingActionWord } from "../../lib/core/chat-task-history.js";
 import type { ArtifactPreviews } from "./ArtifactPreviewCard";
@@ -130,7 +130,7 @@ function Bubble(props: { system?: boolean; files?: boolean; children?: JSX.Eleme
 /** Copy, under a message: a quiet 24pt square that shows on hover, and a check once copied. */
 function CopyButton(props: { copied: boolean; label: string; onPress: () => void }) {
   return (
-    <BaseButton
+    <TipButton
       onPress={props.onPress}
       accessibilityLabel={props.label}
       tooltip={<Tip text={props.label} />}
@@ -151,7 +151,7 @@ function CopyButton(props: { copied: boolean; label: string; onPress: () => void
         class="absolute transition duration-150"
         style={{ width: 14, height: 14, tintColor: token("blue") as string, opacity: props.copied ? 1 : 0, scale: props.copied ? 1 : 0.7 }}
       />
-    </BaseButton>
+    </TipButton>
   );
 }
 
@@ -444,7 +444,7 @@ export function ChatHistoryItem(props: { item: HistoryItem; ctx: ChatRowContext;
           <View class="border border-t-0 border-line-soft bg-card py-[3px]">
             <Each of={userFiles()} key={(file) => file.id}>
               {(file) => (
-                <BaseButton
+                <TipButton
                   onPress={() => previewUserFile(file())}
                   accessibilityLabel={`${t("chat_composer_file_preview")}: ${file().name}`}
                   tooltip={<Tip text={`${t("chat_composer_file_preview")}: ${file().name}`} />}
@@ -455,7 +455,7 @@ export function ChatHistoryItem(props: { item: HistoryItem; ctx: ChatRowContext;
                   <If when={fileKind(file())}>
                     <Text class="font-mono text-[11px] font-medium tracking-[0.1em] text-muted-foreground">{fileKind(file())}</Text>
                   </If>
-                </BaseButton>
+                </TipButton>
               )}
             </Each>
           </View>

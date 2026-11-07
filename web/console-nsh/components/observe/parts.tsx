@@ -133,7 +133,9 @@ export function ObserveSection(props: {
   const gap = () => props.gap ?? 16;
   return (
     <View
-      class={`${boxed() ? "rounded-(--radius) border border-line-soft bg-card-soft" : ""} ${props.class ?? ""}`}
+      // Vue's boxed AppSection: paper at 70%, the page's grid faintly through it (unless the caller
+      // gives it a fill of its own).
+      class={`${boxed() ? `rounded-(--radius) border border-line-soft ${/(^|\s)bg-/.test(props.class ?? "") ? "" : "bg-paper/70"}` : ""} ${props.class ?? ""}`}
       style={{ ...props.style, rowGap: boxed() ? 0 : gap() }}
       testID={props.testID}
     >

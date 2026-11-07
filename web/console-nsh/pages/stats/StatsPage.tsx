@@ -1,6 +1,7 @@
 // Usage (the Vue console's StatsView): the summary sheet (total cost, tokens, requests and their
 // breakdowns), the daily chart, and the usage by API host or by model.
-import { batch, effect, signal, Text, untracked, View, windowSize } from "nsh";
+import { batch, Canvas, effect, pixelRatio, signal, Text, token, untracked, View, windowSize } from "nsh";
+import type { CanvasRenderingContext2D } from "nsh";
 import { endpointState, formatShortTime, runtimeApiFetch } from "../../lib/core/context.js";
 import { RollingNumber } from "../../components/shared/RollingNumber";
 import { DailyUsagePanel } from "../../components/observe/DailyUsagePanel";
@@ -147,8 +148,8 @@ export function StatsPage() {
                 style={wide() ? { flexGrow: 1.08, flexShrink: 1, flexBasis: 0, minWidth: 320, paddingLeft: sheetPad() } : undefined}
               >
                 <If when={wide()}>
-                  {/* Vue's faint dashed divider, inset at the ends. */}
-                  <View accessibilityElementsHidden class="absolute bottom-1 left-0 top-0.5 border-l border-dashed border-ink/20" />
+                  {/* Vue's faint dashed divider, inset at the ends and faded into them. */}
+                  <Canvas accessibilityElementsHidden class="absolute bottom-1 left-0 top-0.5 w-px" style={{ pointerEvents: "none" }} draw={drawSideRule} />
                 </If>
                 <If when={summaryCosts().length > 0}>
                   <SummaryGroup icon="PhWallet" title={t("stats_costs")} items={summaryCosts()} columns={wide() ? 4 : 2} />
@@ -309,4 +310,35 @@ function HostBlock(props: { host: Totals; narrow: boolean }) {
       </If>
     </ObserveSection>
   );
+}
+
+// Vue .stats-hero-side::before: a 1px rule of soft dashes (repeating 180deg: the colour 0-3px,
+// fading out 3-6px, clear 6-9px) in the stats accent at 20%, under a mask that fades it in over
+// the top 8% and out over the bottom 16% (0.92 between), at opacity .72. Drawn a device pixel row
+// at a time, each row's alpha the product of the three, so it is the same on every platform.
+function drawSideRule(cx: CanvasRenderingContext2D, size: { width: number; height: number }) {
+  const { height } = size;
+  if (height <= 0) return;
+  // --stats-accent: color-mix(in srgb, accent-1 68%, text-0 32%).
+  const accent = mixHex(token("blue") as string, token("foreground") as string, 0.68);
+  cx.fillStyle = accent;
+  const step = 1 / Math.max(1, pixelRatio());
+  for (let y = 0; y < height; y += step) {
+    const mid = y + step / 2;
+    const at = mid % 9;
+    const dash = at < 3 ? 1 : at < 6 ? (6 - at) / 3 : 0;
+    if (dash <= 0) continue;
+    const f = mid / height;
+    const mask = f < 0.08 ? (f / 0.08) * 0.92 : f <= 0.84 ? 0.92 : ((1 - f) / 0.16) * 0.92;
+    cx.globalAlpha = 0.2 * dash * mask * 0.72;
+    cx.fillRect(0, y, 1, step);
+  }
+  cx.globalAlpha = 1;
+}
+
+/** `color-mix(in srgb, a share, b)` of two `#rrggbb[aa]` colours, as `#rrggbb`. */
+function mixHex(a: string, b: string, share: number) {
+  const channel = (hex: string, i: number) => parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16);
+  const out = [0, 1, 2].map((i) => Math.round(channel(a, i) * share + channel(b, i) * (1 - share)));
+  return `#${out.map((n) => n.toString(16).padStart(2, "0")).join("")}`;
 }

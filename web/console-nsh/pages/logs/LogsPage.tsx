@@ -5,7 +5,7 @@
 // Following keeps the newest line in view until the reader scrolls up, filters or opens a line;
 // then a note says when newer logs came. Export saves the lines shown as a text file.
 import type { ListRef } from "nsh";
-import { batch, cleanup, computed, effect, List, signal, Text, untracked, View, windowSize } from "nsh";
+import { batch, cleanup, computed, effect, List, signal, Text, token, untracked, View, windowSize } from "nsh";
 import { Button as BaseButton } from "nsh/base";
 import { currentLocale, endpointState, formatBytes, formatShortTime, runtimeApiFetchForEndpoint } from "../../lib/core/context.js";
 import { filterLogEntries, logClock, logDayKey, logDayLabel, logFieldPreview, logSnapshotKey, parseLogLine } from "../../lib/core/logs.js";
@@ -55,6 +55,7 @@ const LEVEL_TEXT: Record<string, string> = {
 const TIME_W = 96;
 const LEVEL_W = 68;
 const LABEL = "font-mono text-[11px] font-medium uppercase leading-[15.4px] tracking-[0.12em]";
+const errorHatch = () => `repeating-linear-gradient(-45deg, color-mix(in srgb, ${token("danger")} 9%, transparent) 0 1px, transparent 1px 7px)`;
 
 export function LogsPage() {
   const err = signal("");
@@ -415,7 +416,7 @@ export function LogsPage() {
     );
     return (
       <View
-        class={`border-b border-line-soft/60 ${props.entry.level === "error" ? "bg-danger/5" : ""} ${isArrived(props.entry) ? "bg-selection-strong" : ""}`}
+        class={`border-b border-line-soft/60 ${isArrived(props.entry) ? "bg-selection-strong" : ""}`}
         // An arrival's tint holds, then fades back (Vue's .is-arrived).
         style={{ transitionProperty: "colors", transitionDuration: isArrived(props.entry) ? 0 : 1100 }}
       >
@@ -424,7 +425,13 @@ export function LogsPage() {
           selected={isOpen()}
           accessibilityLabel={props.entry.msg}
           class={`hover:bg-hover-soft selected:bg-hover-soft ${compact() ? "gap-0.5 px-2.5 py-2" : "min-h-8 flex-row items-center gap-4 px-4 py-1.25"}`}
-          style={{ transitionProperty: "colors", transitionDuration: 180 }}
+          style={{
+            transitionProperty: "colors",
+            transitionDuration: 180,
+            // Errors get a faint drafting hatch so they survive a fast scroll (Vue
+            // .logs-entry.is-error > .logs-entry-summary): 1px -45deg lines on a 7px pitch.
+            backgroundImage: props.entry.level === "error" ? errorHatch() : undefined,
+          }}
           hoverStyle={{ transitionDelay: 60 }}
         >
           <If

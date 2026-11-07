@@ -215,6 +215,7 @@ function ChannelField(props: { s: SettingsStore; channel: string; field: Field }
         <SettingField label={t(`${f.key}_label`)} note={f.note ? t(`${f.key}_note`) : undefined}>
           <TextField
             value={draft()[f.field]}
+            clearable={Boolean(draft()[f.field])}
             onChange={(value) => set(f.field, value)}
             placeholder={t(`${f.key}_placeholder`)}
             accessibilityLabel={t(`${f.key}_label`)}
@@ -231,6 +232,7 @@ function ChannelField(props: { s: SettingsStore; channel: string; field: Field }
             else={
               <TextField
                 value={draft()[f.field]}
+                clearable={Boolean(draft()[f.field])}
                 onChange={(value) => set(f.field, value)}
                 placeholder={t(`${f.key}_placeholder`)}
                 accessibilityLabel={t(`${f.key}_label`)}

@@ -106,10 +106,13 @@ export function SettingsRestartBanner(props: {
 }) {
   return (
     <If when={props.pending}>
+      {/* Vue's .settings-restart-banner: sticky 8pt below the top of the panel's scroll, so a save
+          made further down still shows it; an opaque tint (orange-light 10% into the paper) since
+          the content scrolls under it. */}
       <View
         testID="settings-restart-banner"
-       
-        class="flex-row flex-wrap items-center gap-3 border border-warn/45 bg-warn/10 px-3.5 py-2.5 shadow-[0_2px_8px_rgba(24,24,50,0.08)]"
+        class="flex-row flex-wrap items-center gap-3 border border-warn/45 px-3.5 py-2.5 shadow-[0_2px_8px_rgba(24,24,50,0.08)]"
+        style={{ position: "sticky", top: 8, zIndex: 5, backgroundColor: "color-mix(in srgb, #eea03e 10%, #f6faff)" }}
       >
         <View class={props.restarting ? "animate-spin" : ""} style={{ animationDuration: 800 }}>
           <Icon name="PhArrowClockwise" size={18} color="warn" />

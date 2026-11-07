@@ -14,7 +14,7 @@ import { buildTreeRows, hasOwnTreePath, normalizeTreeItems } from "../../lib/cor
 import { hasFeature, isDesktop, pickDirectory } from "../../lib/platform";
 import { isMobile } from "../../lib/shell";
 import { createSlidingSelection, FadeText, SCROLLBAR } from "../motion";
-import { Button, Modal, TextField, Tip, Toggle } from "../ui";
+import { Button, Modal, TextField, Tip, TipButton, Toggle } from "../ui";
 
 const t = translate as (key: string, vars?: Record<string, unknown> | null) => string;
 
@@ -413,7 +413,7 @@ export function WorkspaceDirPickerDialog(props: WorkspaceDirPickerDialogProps) {
   // one on the list's gliding highlight.
   const placeSelection = createSlidingSelection(() => sourceID());
   const SourceItem = (item: { id: string; title: string; path?: string }) => (
-    <BaseButton
+    <TipButton
       onPress={() => void activateSource(item.id)}
       disabled={creating()}
       selected={sourceID() === item.id}
@@ -431,7 +431,7 @@ export function WorkspaceDirPickerDialog(props: WorkspaceDirPickerDialogProps) {
       <Text class="text-sm leading-[18.2px] tracking-[-0.35px] text-foreground" style={{ numberOfLines: 1 }}>
         {item.title}
       </Text>
-    </BaseButton>
+    </TipButton>
   );
 
   /** A small mono caps label (`.ui-kicker`). */
@@ -556,7 +556,7 @@ export function WorkspaceDirPickerDialog(props: WorkspaceDirPickerDialogProps) {
                   >
                     {(row) => (
                       <View style={{ paddingLeft: row().depth * 14 }}>
-                        <BaseButton
+                        <TipButton
                           onPress={() => void selectNode(row())}
                           disabled={!row().entry.is_dir || creating()}
                           selected={selection() === text(row().entry.path)}
@@ -596,7 +596,7 @@ export function WorkspaceDirPickerDialog(props: WorkspaceDirPickerDialogProps) {
                               <FadeText text={row().entry.path} noTooltip class="text-xs leading-[15.6px] text-muted-foreground" />
                             </View>
                           </If>
-                        </BaseButton>
+                        </TipButton>
                       </View>
                     )}
                   </List>

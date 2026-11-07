@@ -87,11 +87,13 @@ export function SettingsDialogs(props: { s: SettingsStore }) {
               <SettingField label={t("settings_agent_profile_name_label")}>
                 <TextField
                   value={draft().name}
+                  clearable={Boolean(draft().name)}
                   onChange={(value) => s.updateProfileField(untracked(draft)._key, { field: "name", value })}
                   placeholder={t("settings_agent_profile_name_placeholder")}
                   accessibilityLabel={t("settings_agent_profile_name_label")}
                   disabled={s.agentSaving() || s.agentSettingsReadOnly()}
                   error={s.addProfileError()}
+                  autoFocus
                   testID="settings-add-profile-name"
                 />
               </SettingField>

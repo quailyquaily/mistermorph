@@ -9,14 +9,14 @@
 // Vue to nsh: `modelValue` is `value`, `update:modelValue` is `onChange(value)`, `ariaLabel` is
 // `accessibilityLabel`, the `toolbar` slot is the `toolbar` prop, the `height` CSS string may also be
 // points, and the exposed `insertAtCursor` comes through `editorRef`.
-import type { EditorRef, EditorSelection } from "nsh/base";
+import type { EditorDecoration, EditorRef, EditorSelection } from "nsh/base";
 import type { JSX } from "nsh";
 import { batch, effect, Image, signal, Text, untracked, View } from "nsh";
 import { Button as BaseButton, Editor } from "nsh/base";
 import { activeChannelTab, channelTabs, itemsForChannelTab } from "../../lib/core/channel-tabs.js";
 import { endpointState, runtimeApiFetchForEndpoint, translate } from "../../lib/core/context.js";
 import { useContactsStore } from "../../lib/stores/contactsStore.js";
-import { Icon, type IconName, Markdown, Modal, TextField, Tip } from "../ui";
+import { Icon, Markdown, Modal, TextField, Tip, TipButton, type IconName } from "../ui";
 import { ContactAvatar } from "./ContactAvatar";
 import discordLogo from "../../assets/images/channels/discord.svg";
 import larkLogo from "../../assets/images/channels/lark.svg";
@@ -52,6 +52,8 @@ export interface MarkdownEditorProps {
   /** Controls at the start of the toolbar. */
   toolbar?: JSX.Element;
   editorRef?: (api: MarkdownEditorApi) => void;
+  /** Styles over the Markdown highlighting (ranges of the source), passed to the Editor. */
+  decorations?: EditorDecoration[];
   class?: string;
   testID?: string;
 }
@@ -192,6 +194,7 @@ export function MarkdownEditor(props: MarkdownEditorProps) {
             }}
             value={props.value ?? ""}
             language="markdown"
+            decorations={props.decorations}
             placeholder={props.placeholder || null}
             readOnly={locked()}
             lineNumbers={false}
@@ -337,7 +340,7 @@ function PickerButton(props: {
   };
   return (
     <>
-      <BaseButton
+      <TipButton
         disabled={props.disabled}
         onPress={() => {
           batch(() => {
@@ -354,7 +357,7 @@ function PickerButton(props: {
         class="size-9 items-center justify-center rounded-[6px] transition-colors duration-120 hover:bg-blue/6 active:bg-blue/10 disabled:opacity-45"
       >
         <Icon name={props.icon} size={18} color="subtle" />
-      </BaseButton>
+      </TipButton>
       <Modal open={open()} onClose={() => open.set(false)} title={props.title} size="sm" testID={`${props.testID}-dialog`}>
         {props.header}
         <TextField value={filter()} onChange={(value) => filter.set(value)} placeholder={props.placeholder} leadingIcon="PhMagnifyingGlass" autoFocus />

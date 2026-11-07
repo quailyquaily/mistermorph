@@ -86,7 +86,7 @@ export function ChatMarkdown(props: { source: string; streaming?: boolean; class
         strong: "font-semibold",
         blockquote: "border-l-[3px] border-blue/45 bg-hover-soft py-[12.8px] pl-4 pr-4 text-foreground",
         list: "gap-[3.5px]",
-        table: "self-start border-r border-line-soft",
+        table: "max-w-full self-start border-r border-line-soft",
         tableHead: "bg-line/12",
         tableCell: "border-r-0 border-b-line/31 px-[11.5px] py-[9.3px] text-base leading-[27.2px] text-foreground",
         tableHeaderCell: "border-b-line-soft font-semibold",

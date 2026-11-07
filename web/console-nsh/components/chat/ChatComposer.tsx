@@ -10,7 +10,7 @@ import type { InputRef, JSX } from "nsh";
 import { cleanup, effect, Image, keymap, LayoutAnimation, reduceMotion, signal, Text, token, untracked, View } from "nsh";
 import { Button as BaseButton, Input, Select } from "nsh/base";
 import { ICONS } from "../icons";
-import { Button, DropdownMenu, Icon, type IconName, Spinner, Tip } from "../ui";
+import { Button, DropdownMenu, Icon, Spinner, Tip, TipButton, type IconName } from "../ui";
 import {
   buildComposerSuggestionItems,
   composerSuggestionInsertText,
@@ -376,7 +376,7 @@ export function ChatComposer(props: ChatComposerProps) {
   // the stop square.
   const sendEmpty = () => !props.stopMode && value().trim() === "" && !(props.fileItems ?? []).length;
   const sendControl = () => (
-    <BaseButton
+    <TipButton
       onPress={() => (props.stopMode ? props.onStop?.() : props.onSubmit?.())}
       disabled={props.stopMode ? false : props.sendDisabled}
       accessibilityLabel={props.sendLabel}
@@ -413,7 +413,7 @@ export function ChatComposer(props: ChatComposerProps) {
           }}
         />
       </If>
-    </BaseButton>
+    </TipButton>
   );
 
   const actions = () => (
@@ -514,7 +514,7 @@ export function ChatComposer(props: ChatComposerProps) {
                 <View
                   class={`flex-row items-center gap-1 rounded-(--radius) border px-1.5 py-1 ${item().status === "failed" ? "border-danger" : "border-line-faint"} bg-card`}
                 >
-                  <BaseButton
+                  <TipButton
                     disabled={item().status !== "ready"}
                     onPress={() => item().status === "ready" && props.onPreviewFile?.(item())}
                     accessibilityLabel={`${fileLabels().preview}: ${item().name}`}
@@ -530,7 +530,7 @@ export function ChatComposer(props: ChatComposerProps) {
                         </Text>
                       </If>
                     </View>
-                  </BaseButton>
+                  </TipButton>
                   <If when={item().status === "failed" && item().sourceFile}>
                     <Button
                       variant="plain"

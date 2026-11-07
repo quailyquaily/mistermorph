@@ -3,8 +3,8 @@
 import { effect, Image, signal, Text, untracked, View } from "nsh";
 import { apiFetch } from "../../lib/core/context.js";
 import { openExternal } from "../../lib/platform";
-import { Button, Icon, ProgressBar, Tip } from "../ui";
-import { SettingsCard } from "../settings-page/parts";
+import { Button, Icon, Tip } from "../ui";
+import { LoadingLine, SettingsCard } from "../settings-page/parts";
 import { InlineNotice, t } from "./DialogShell";
 
 interface CreditItem {
@@ -83,7 +83,7 @@ export function SettingsCreditsPanel() {
   return (
     <View class="gap-4" testID="settings-credits">
       <If when={loading()}>
-        <ProgressBar indeterminate />
+        <LoadingLine />
       </If>
       <If when={error()}>
         <InlineNotice type="error" text={error()} testID="settings-credits-error" />

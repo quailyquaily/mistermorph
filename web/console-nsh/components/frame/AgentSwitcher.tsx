@@ -8,7 +8,7 @@ import { Button as BaseButton, Menu, MenuItem, MenuSeparator } from "nsh/base";
 import { translate } from "../../lib/core/context.js";
 import type { EndpointItem } from "../../lib/shell";
 import { FadeText } from "../motion/FadeText";
-import { Icon, Modal, TextField, Tip } from "../ui";
+import { Icon, Modal, TextField, Tip, TipButton } from "../ui";
 
 const t = translate as (key: string, vars?: Record<string, unknown>) => string;
 
@@ -318,7 +318,7 @@ export function AgentSwitcher(props: AgentSwitcherProps) {
           </Menu>
         }
       >
-        <BaseButton
+        <TipButton
           onPress={openDialog}
           accessibilityLabel={t("endpoint_switcher_label")}
           testID="agent-switcher-trigger"
@@ -326,7 +326,7 @@ export function AgentSwitcher(props: AgentSwitcherProps) {
           class="h-14"
         >
           {trigger()}
-        </BaseButton>
+        </TipButton>
       </If>
       <Modal
         open={dialogOpen()}

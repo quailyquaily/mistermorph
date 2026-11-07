@@ -4,8 +4,8 @@
 // The look follows the Vue console's ui-kit: square-ish corners (2px), hairlines, a dark blue
 // primary, quiet plain buttons, mono caps for labels, and red only for what is destructive.
 import type { InputRef, JSX } from "nsh";
-import type { TextViewClasses, TextViewStyles } from "nsh/base";
-import { cleanup, createAnimatedValue, createMotion, effect, Image, keymap, Scroll, signal, Text, token, untracked, View, windowSize } from "nsh";
+import type { ButtonProps as BaseButtonProps, TextViewClasses, TextViewStyles } from "nsh/base";
+import { cleanup, createAnimatedValue, createMotion, Easing, effect, Image, keymap, reduceMotion, Scroll, signal, Text, token, untracked, View, windowSize } from "nsh";
 import {
   Button as BaseButton,
   Checkbox as BaseCheckbox,
@@ -163,6 +163,34 @@ export function Tip(props: { text: string; placement?: "top" | "bottom" | "left"
 
 /* ---------- buttons ---------- */
 
+// nsh 0.4.0's base Button drops the `tooltip` every element takes (a hint on it, or anything inside
+// it, never shows), so a button's tooltip goes on a view around it. The view takes the classes that
+// place the button in its parent (flex, self, margins, widths, position) and the button the rest,
+// stretched across the view when the view is sized, so the layout is the button's own.
+const OUTER_CLASS =
+  /^(?:-?m[trblxyse]?-|flex-(?:1|auto|none|initial)$|grow|shrink|basis-|self-|w-|min-w-|max-w-|absolute$|fixed$|sticky$|inset|top-|left-|right-|bottom-|start-|end-|z-|order-|col-|row-span|row-start|row-end)/;
+const SIZED_CLASS = /^(?:self-stretch|w-|flex-1|flex-auto|grow|basis-|min-w-)/;
+
+function splitButtonClass(cls: string | undefined): [string, string] {
+  const outer: string[] = [];
+  const inner: string[] = [];
+  for (const c of (cls ?? "").split(/\s+/).filter(Boolean)) (!c.includes(":") && OUTER_CLASS.test(c) ? outer : inner).push(c);
+  if (outer.some((c) => SIZED_CLASS.test(c))) inner.push("self-stretch");
+  return [outer.join(" "), inner.join(" ")];
+}
+
+/** nsh/base's Button with a `tooltip` that shows (see above). Same props. */
+export function TipButton(props: BaseButtonProps) {
+  const split = () => splitButtonClass(props.class ?? undefined);
+  return (
+    // The wrapper is what sits in the parent, so it reports the layout (a sliding selection places
+    // its highlight from these frames, which are relative to the parent).
+    <View class={split()[0]} tooltip={props.tooltip} onLayout={props.onLayout}>
+      <BaseButton {...props} tooltip={undefined} onLayout={undefined} class={split()[1]} />
+    </View>
+  );
+}
+
 export type ButtonVariant = "primary" | "outlined" | "plain" | "danger" | "highlight" | "ghost-danger";
 export type ButtonSize = "md" | "sm" | "xs" | "xxs";
 
@@ -274,7 +302,7 @@ export function Button(props: ButtonProps) {
   const enabled = () => !props.disabled && !props.loading;
   const iconColor = (): TokenName => (props.disabled ? variant().disabledText : props.selected ? "ink" : variant().text);
   return (
-    <BaseButton
+    <TipButton
       disabled={!enabled()}
       selected={props.selected}
       onPress={() => enabled() && props.onPress?.()}
@@ -315,7 +343,7 @@ export function Button(props: ButtonProps) {
         </Text>
       </If>
       {props.children}
-    </BaseButton>
+    </TipButton>
   );
 }
 
@@ -352,7 +380,7 @@ export interface TextFieldProps {
   leadingIcon?: IconName;
   /** Something inside the field, after the text (a reveal button, a unit). */
   trailing?: JSX.Element;
-  /** Vue's clear button inside the field's end (AppInput's `clear-btn`): empties it (`onChange("")`). */
+  /** Vue's clear button inside the field's end (AppInput's `clear-btn`): empties it (`onChange("")`); shown while the field holds text, as Vue's. */
   clearable?: boolean;
   /** Called after the clear button emptied the field. */
   onClear?: () => void;
@@ -418,7 +446,7 @@ export function TextField(props: TextFieldProps) {
           }`}
           style={props.multiline ? { minHeight: lines() * 18.2 + 24 } : undefined}
         />
-        <If when={props.clearable && !props.disabled && !props.readonly && !props.multiline}>
+        <If when={props.clearable && props.value !== "" && !props.disabled && !props.readonly && !props.multiline}>
           <BaseButton
             onPress={() => {
               props.onChange?.("");
@@ -536,11 +564,80 @@ export function SelectField(props: {
 }) {
   const current = () => props.items.find((item) => item.value === props.value);
   const height = () => ({ md: "h-11", sm: "h-9.5", xs: "h-8" })[props.size ?? "md"];
+  const triggerClass = () =>
+    `${height()} flex-row items-center justify-between gap-2 rounded-(--radius) border bg-field ${
+      props.size === "xs" ? "pl-[9.6px]" : "pl-[12.8px]"
+    } pr-2 transition-colors duration-180`;
+  const valueText = () => (
+    <Text class={`flex-1 ${props.size === "xs" ? "text-xs" : "text-sm"} ${current() ? "text-foreground" : "text-placeholder"} line-clamp-1`}>
+      {current()?.label ?? props.placeholder ?? ""}
+    </Text>
+  );
+  // nsh's Select lays its list over the trigger on the web, the chosen row on the field (as a
+  // macOS pop-up button); the ui-kit's dropdown (.q-menu) drops below it, 8pt down, at least as wide
+  // as the field, with the chevron turned while open; the chosen row is not marked (the field says it). A Menu places as asked, so the plain select
+  // is a menu of checkable rows; only the searchable one keeps Select (it filters as one types).
+  const open = signal(false);
+  const triggerWidth = signal(0);
+  const plain = () => (
+    <Menu
+      placement="bottom"
+      // .q-menu is the field's width and at least 220pt, overflowing to the left: its right
+      // edge is the field's.
+      align="end"
+      offset={8}
+      onOpenChange={({ open: next }) => open.set(next)}
+      popupClass={`${MENU_POPUP} max-h-80`}
+      popupStyle={{ ...MENU_POPUP_STYLE, minWidth: Math.max(220, triggerWidth()) }}
+      popupStartingClass={MENU_STARTING}
+      popupEndingClass="opacity-0"
+      trigger={
+        <View
+          testID={props.testID}
+          accessibilityLabel={props.label || props.placeholder}
+          accessibilityValue={{ text: current()?.label ?? "" }}
+          onLayout={(event) => triggerWidth.set(event.bounds.size.width)}
+          class={`${triggerClass()} group ${open() ? "border-ring" : "border-input"}`}
+        >
+          {valueText()}
+          <Icon
+            name="PhCaretDown"
+            size={14}
+            color="muted-foreground"
+            class={`opacity-50 transition duration-180 group-hover:opacity-100 ${open() ? "rotate-180" : ""}`}
+          />
+        </View>
+      }
+    >
+      <Each of={props.items} key={(item) => item.value}>
+        {(item) => (
+          <MenuItem
+            disabled={item().disabled}
+            checked={item().value === props.value}
+            indicator={<View />}
+            indicatorClass="hidden"
+            onSelect={() => props.onChange?.(item().value)}
+            class="px-4 py-2.5 hover:bg-hover focus:bg-hover disabled:opacity-50"
+          >
+            <Text class="text-sm leading-5 text-foreground">{item().label}</Text>
+            <If when={item().description}>
+              <Text class="text-xs text-muted-foreground">{item().description}</Text>
+            </If>
+          </MenuItem>
+        )}
+      </Each>
+    </Menu>
+  );
   return (
     <View class={`gap-1 ${props.class ?? ""}`}>
       <If when={props.label}>
         <Text class="text-xs font-medium text-subtle">{props.label}</Text>
       </If>
+      <If when={props.searchable && !props.disabled} else={
+        <If when={!props.disabled} else={<View class={`${triggerClass()} border-input opacity-50`}>{valueText()}<Icon name="PhCaretDown" size={14} color="muted-foreground" class="opacity-50" /></View>}>
+          {plain()}
+        </If>
+      }>
       <Select
         items={props.items.map((item) => ({ value: item.value, title: item.label, disabled: item.disabled }))}
         value={props.value}
@@ -568,6 +665,7 @@ export function SelectField(props: {
           </View>
         }
       />
+      </If>
       <If when={props.hint}>
         <Text class="text-xs text-muted-foreground">{props.hint}</Text>
       </If>
@@ -897,7 +995,45 @@ export function EmptyState(props: { title: string; text?: string; icon?: IconNam
 }
 
 /** A progress bar, 0..1. */
+/**
+ * Indeterminate loading (AppProgress `infinite`, base.css): a 2pt line-soft hairline with a short
+ * blue segment (28% of the track, fading at both ends) sweeping across every 1.2s, in place of the
+ * ui-kit's bar. Reduced motion: the segment fills the track at half strength and stays.
+ */
+export function LoadingLine(props: { label?: string; class?: string; testID?: string }) {
+  const width = signal(0);
+  const sweep = createAnimatedValue(0);
+  const still = untracked(reduceMotion);
+  if (!still) {
+    void sweep.keyframes([0, 1], { duration: 1200, easing: Easing.bezier(0.45, 0, 0.55, 1), iterations: "infinite" });
+  }
+  cleanup(() => void sweep.stop());
+  const segment = () => (still ? width() : width() * 0.28);
+  return (
+    <View
+      role="progressbar"
+      accessibilityLabel={props.label}
+      testID={props.testID}
+      class={`h-0.5 overflow-hidden bg-line-soft ${props.class ?? ""}`}
+      onLayout={(event) => width.set(event.bounds.size.width)}
+    >
+      <View
+        class="h-full"
+        style={{
+          width: segment(),
+          opacity: still ? 0.5 : 1,
+          backgroundImage: "linear-gradient(90deg, transparent, #426f9e 45%, #426f9e 55%, transparent)",
+          // translateX(-100%) to translateX(357%) of the segment: fully across the track.
+          transform: [{ translateX: still ? 0 : sweep.interpolate({ inputRange: [0, 1], outputRange: [-segment(), segment() * 3.57] }) }],
+        }}
+      />
+    </View>
+  );
+}
+
+/** A bar of progress; `indeterminate` is Vue's scanning hairline (LoadingLine). */
 export function ProgressBar(props: { value?: number; indeterminate?: boolean; tone?: Tone; class?: string; label?: string }) {
+  if (untracked(() => props.indeterminate)) return <LoadingLine label={props.label} class={props.class} />;
   const bar = () => (props.tone === "danger" ? "bg-danger" : props.tone === "warn" ? "bg-warn" : props.tone === "ok" ? "bg-ok" : "bg-blue");
   return (
     <Progress
@@ -942,7 +1078,7 @@ export function Tabs(props: {
       <indicator.Highlight class="bg-segment" />
       <Each of={props.items} key={(item) => item.id}>
         {(item) => (
-          <BaseButton
+          <TipButton
             role="tab"
             selected={props.value === item().id}
             disabled={item().disabled}
@@ -971,7 +1107,7 @@ export function Tabs(props: {
             <If when={item().count !== undefined}>
               <Text class="font-mono text-xs text-muted-foreground">{String(item().count)}</Text>
             </If>
-          </BaseButton>
+          </TipButton>
         )}
       </Each>
     </View>
@@ -990,7 +1126,8 @@ export function Tabs(props: {
 // both can move, natively, on opacity and transform alone.
 const DIALOG_SHADOW = "0 12px 24px rgba(20, 24, 32, 0.14)";
 
-function DialogLayer(props: {
+/** The dialog layer under `Modal` and `MessageDialog` (scrim, panel, the motion from the pressing control): for a dialog with a panel of its own. */
+export function DialogLayer(props: {
   open: boolean;
   onClose: () => void;
   testID?: string;
@@ -1059,6 +1196,11 @@ function DialogLayer(props: {
   return (
     <Dialog
       open={shown()}
+      // Escape and back would close the layer at once, under the closing motion: they only ask
+      // (onCancel), and the panel goes out as a press on the scrim or the close button makes it.
+      closeOnEscape={false}
+      closeOnSwipe={false}
+      onCancel={() => props.onClose()}
       onOpenChange={({ open }) => {
         if (!open) props.onClose();
       }}
@@ -1136,7 +1278,7 @@ export function Modal(props: {
         <If when={props.headerActions}>
           <View class="flex-row items-center gap-1 pr-1">{props.headerActions}</View>
         </If>
-        <BaseButton
+        <TipButton
           onPress={props.onClose}
           accessibilityLabel={props.closeLabel ?? "Close"}
           tooltip={<Tip text={props.closeLabel ?? "Close"} />}
@@ -1144,7 +1286,7 @@ export function Modal(props: {
           class="w-11 items-center justify-center bg-close transition-colors duration-180 hover:bg-close-hover focus:bg-close-hover"
         >
           <Icon name="PhX" size={14} color="danger" />
-        </BaseButton>
+        </TipButton>
       </View>
       <If when={props.scroll !== false} else={<View class="flex-1 p-4">{props.children}</View>}>
         <EdgeScroll class="shrink" contentClass="p-4 gap-3">
@@ -1338,7 +1480,7 @@ export function Page(props: {
 }) {
   usePageError(() => props.error ?? "");
   return (
-    <View class="flex-1 bg-background" testID={props.testID}>
+    <View class="flex-1" testID={props.testID}>
       <If when={!props.hideBar}>
         <PageBar title={props.title} leading={props.leading} actions={props.actions} />
       </If>
@@ -1452,7 +1594,7 @@ export function Fab(props: { label: string; icon?: IconName; disabled?: boolean;
     <View class="absolute bottom-4 right-4" style={{ ...enter.style, pointerEvents: "box-none" }}>
       <View class="absolute -left-1.25 -top-1.25 size-2 border-l border-t border-muted-foreground" style={{ pointerEvents: "none" }} />
       <View class="absolute -bottom-1.25 -right-1.25 size-2 border-b border-r border-muted-foreground" style={{ pointerEvents: "none" }} />
-      <BaseButton
+      <TipButton
         onPress={() => props.onPress?.()}
         disabled={props.disabled}
         accessibilityLabel={props.label}
@@ -1463,7 +1605,7 @@ export function Fab(props: { label: string; icon?: IconName; disabled?: boolean;
         activeStyle={{ boxShadow: "0 2px 6px rgba(20, 29, 48, 0.18)" }}
       >
         <Icon name={props.icon ?? "PhPlus"} size={22} color="primary-foreground" />
-      </BaseButton>
+      </TipButton>
     </View>
   );
 }

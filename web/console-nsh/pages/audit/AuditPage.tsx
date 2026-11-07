@@ -41,7 +41,7 @@ import {
 import { AuditBadge, hint, ObserveSection, t } from "../../components/observe/parts";
 import { createSlidingSelection, SCROLLBAR } from "../../components/motion";
 import { gutterX } from "../../components/frame/metrics";
-import { Button, EmptyState, Icon, Page, ProgressBar, SidePane, Skeleton, TextField } from "../../components/ui";
+import { Button, EmptyState, Icon, Page, ProgressBar, SidePane, Skeleton, TextField, TipButton } from "../../components/ui";
 
 const AUDIT_ITEMS_PER_PAGE = 50;
 const TASKS_PAGE_SIZE = 20;
@@ -552,7 +552,7 @@ export function AuditPage() {
     testID?: string;
   }) {
     return (
-      <BaseButton
+      <TipButton
         selected={props.selected}
         onPress={() => props.onPress()}
         onLayout={props.onLayout}
@@ -572,7 +572,7 @@ export function AuditPage() {
           </If>
         </View>
         <View class="w-4" />
-      </BaseButton>
+      </TipButton>
     );
   }
 
@@ -932,7 +932,8 @@ export function AuditPage() {
       <View class="flex-1 flex-row">
         <If when={showIndexPane()}>
           <View
-            class={`${isMobile() ? "flex-1" : ""} bg-sidebar`}
+            // Transparent, as Vue's workspace sidebar: the page paper's grid runs under it.
+            class={isMobile() ? "flex-1" : ""}
             style={isMobile() ? undefined : { width: INDEX_WIDTH }}
             accessibilityLabel={t("audit_title")}
             testID="audit-index"

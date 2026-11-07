@@ -22,10 +22,13 @@ import {
   token,
   untracked,
   View,
+  platform,
   windowSize,
 } from "nsh";
 import { Button, Icon, ProgressBar, Tip, usePageError } from "../../components/ui";
 import { RollingNumber } from "../../components/shared/RollingNumber";
+import { CutoutAvatar } from "../../components/shared/CutoutAvatar";
+import { APP_LOGO_STROKES } from "./app-logo";
 import { summarizeAgentReadout } from "../../lib/core/agent-readout.js";
 import { formatCompactCost, formatExactCost } from "../../lib/core/cost-format.js";
 import {
@@ -41,7 +44,6 @@ import { endpointDisplayItem, isConsoleLocalEndpoint, visibleEndpoints } from ".
 import { endpointRoutePath } from "../../lib/core/endpoint-routes.js";
 import { localStore } from "../../lib/platform";
 import { locationOf, navigate } from "../../lib/router";
-import logoURL from "../../assets/images/app_logo_current.svg";
 import telegramLogo from "../../assets/images/channels/telegram.svg";
 import slackLogo from "../../assets/images/channels/slack.svg";
 import lineLogo from "../../assets/images/channels/line.svg";
@@ -68,6 +70,9 @@ const CHANNEL_LOGOS: Record<string, ImageAsset> = {
   bluesky: blueskyLogo,
   x: xLogo,
 };
+// Only the web draws a filter blur (GPUI draws none).
+const CAN_BLUR = platform.os === "web";
+const SMEAR: Record<string, string> = { foreground: "bg-foreground", subtle: "bg-subtle", primary: "bg-primary" };
 const METER_SEGMENTS = 16;
 const REFRESH_MS = 60000;
 const ADD_KEY = "add-console";
@@ -220,6 +225,28 @@ function mix(a: string, share: number, b: string) {
   const rgb = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) || 0);
   const [x, y] = [rgb(a), rgb(b)];
   return `#${x.map((v, i) => Math.round(v * share + y[i] * (1 - share)).toString(16).padStart(2, "0")).join("")}`;
+}
+
+const LOGO_STROKES = APP_LOGO_STROKES.map((d) => new Path2D(d));
+
+/** The app logo (the avatar of an agent without one), drawn from its SVG's shapes. */
+function paintLogo(cx: CanvasRenderingContext2D, size: number) {
+  cx.save();
+  cx.scale(size / 100, size / 100);
+  cx.fillStyle = "#F1F4F8";
+  cx.beginPath();
+  cx.arc(50, 50, 49, 0, Math.PI * 2);
+  cx.fill();
+  cx.strokeStyle = "#2463AE";
+  cx.lineWidth = 3;
+  cx.lineCap = "round";
+  for (const path of LOGO_STROKES) cx.stroke(path);
+  cx.strokeStyle = "#D5DFEC";
+  cx.lineWidth = 1;
+  cx.beginPath();
+  cx.arc(50, 50, 48.5, 0, Math.PI * 2);
+  cx.stroke();
+  cx.restore();
 }
 
 /** The animated values of one line: its draw-in (0 to 1), and its traffic's phase (0 to 1, looping). */
@@ -547,25 +574,22 @@ export function OverviewPage() {
   };
 
   function Portrait(props: { row: EndpointRow; size: number }) {
-    const src = () =>
-      props.row.avatar_url && !failedAvatars()[props.row.avatar_url] ? props.row.avatar_url : (logoURL as ImageAsset | string);
+    const src = () => (props.row.avatar_url && !failedAvatars()[props.row.avatar_url] ? props.row.avatar_url : null);
     const offline = () => !props.row.connected && !props.row.pending;
     return (
       <View ref={portraitRef(props.row.endpoint_ref)} class="relative rounded-full">
-        <Image
+        {/* The status mark sits in a notch cut out of the avatar, 2pt clear of it (the mark's 13pt
+            box, rounded 3, at the lower right 2pt up), rather than on a plate painted over it. */}
+        <CutoutAvatar
+          size={props.size}
           src={src()}
-          accessibilityElementsHidden
+          paint={paintLogo}
+          background={token("card") as string}
+          notch={{ x: props.size - 13, y: props.size - 15, w: 13, h: 13, radius: 3 }}
           onError={() => {
             if (props.row.avatar_url) failedAvatars.update((map) => ({ ...map, [props.row.avatar_url]: true }));
           }}
-          class="rounded-full border border-line-faint bg-muted"
-          style={{
-            width: props.size,
-            height: props.size,
-            objectFit: "cover",
-            filter: offline() ? "grayscale(1)" : undefined,
-            opacity: offline() ? 0.65 : 1,
-          }}
+          style={{ filter: offline() ? "grayscale(1)" : undefined, opacity: offline() ? 0.65 : 1 }}
         />
         <View
           role="image"
@@ -573,7 +597,7 @@ export function OverviewPage() {
           tooltip={
             <Tip text={props.row.statusLabel} />
           }
-          class="absolute bottom-0.5 right-0 items-center justify-center rounded-[3px] bg-background"
+          class="absolute bottom-0.5 right-0 items-center justify-center"
           style={{ width: 13, height: 13 }}
         >
           <View
@@ -595,22 +619,43 @@ export function OverviewPage() {
     const detailMasked = () => !showAddresses() && props.row.maskDetail;
     return (
       <View class="w-full items-center gap-1.5">
-        <Text
+        <Private
+          masked={titleMasked()}
+          text={props.row.title}
           class={`text-center text-base font-semibold ${props.row.connected || props.row.pending ? "text-foreground" : "text-subtle"}`}
-          accessibilityElementsHidden={titleMasked()}
-          style={{ filter: titleMasked() ? "blur(6px)" : undefined }}
-        >
-          {props.row.title}
-        </Text>
+        />
         <If when={props.row.detail}>
-          <Text
-            class={`text-center text-xs ${props.row.local ? "text-primary" : "text-subtle"}`}
-            accessibilityElementsHidden={detailMasked()}
-            style={{ filter: detailMasked() ? "blur(6px)" : undefined }}
-          >
-            {props.row.detail}
-          </Text>
+          <Private masked={detailMasked()} text={props.row.detail} class={`text-center text-xs ${props.row.local ? "text-primary" : "text-subtle"}`} />
         </If>
+      </View>
+    );
+  }
+
+  /** An address that blurs while addresses are hidden (Vue .is-private / .is-masked: filter
+   * blur(6px), transitioned over 240ms). Filters don't transition in nsh, so a sharp copy and a
+   * blurred one cross-fade on opacity. Outside the web nothing draws a blur, so there the masked
+   * copy is a soft smear of the text's colour over the text's box instead (the text stays hidden). */
+  function Private(props: { masked: boolean; text: string; class: string }) {
+    const fade = { transitionProperty: "opacity", transitionDuration: 240, transitionTimingFunction: NODE_EASE } as const;
+    return (
+      <View class="relative max-w-full">
+        <Text class={props.class} accessibilityElementsHidden={props.masked} style={{ ...fade, opacity: props.masked ? 0 : 1 }}>
+          {props.text}
+        </Text>
+        <View accessibilityElementsHidden class="absolute inset-0" style={{ ...fade, opacity: props.masked ? 1 : 0, pointerEvents: "none" }}>
+          <If
+            when={CAN_BLUR}
+            else={
+              <View class="flex-1 items-center justify-center px-0.5">
+                <View class={`h-[58%] w-full rounded-full opacity-25 ${SMEAR[/text-(foreground|subtle|primary)/.exec(props.class)?.[1] ?? "subtle"]}`} />
+              </View>
+            }
+          >
+            <Text class={props.class} style={{ filter: "blur(6px)" }}>
+              {props.text}
+            </Text>
+          </If>
+        </View>
       </View>
     );
   }
@@ -860,7 +905,7 @@ export function OverviewPage() {
   }
 
   return (
-    <View class="relative flex-1 bg-background" testID="overview-page">
+    <View class="relative flex-1" testID="overview-page">
       <Scroll class="flex-1" contentClass="grow items-center justify-center px-6 pb-16 pt-16">
         <Text role="header" class="absolute size-px overflow-hidden opacity-0">
           {t("nav_overview")}

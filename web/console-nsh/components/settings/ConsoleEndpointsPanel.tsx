@@ -4,8 +4,8 @@
 // Vue to nsh: `save` is `onSave(values, onComplete)`, `add-opened` is `onAddOpened()`,
 // `pane-change` is `onPaneChange(open)`; `paneTarget` is a PaneTarget (see PaneTarget.tsx).
 import { batch, cleanup, computed, effect, signal, Text, untracked, View } from "nsh";
-import { Button, ProgressBar, StatusMark, TextField } from "../ui";
-import { SettingsCard } from "../settings-page/parts";
+import { Button, StatusMark, TextField } from "../ui";
+import { LoadingLine, SettingsCard } from "../settings-page/parts";
 import { DialogShell, t } from "./DialogShell";
 import { type PaneTarget, SettingsPane, usePaneTarget } from "./PaneTarget";
 import { SecretInput } from "./SecretInput";
@@ -213,6 +213,7 @@ export function ConsoleEndpointsPanel(props: ConsoleEndpointsPanelProps) {
       <TextField
         label={t("remote_agent_name")}
         value={draft().name}
+        clearable={Boolean(draft().name)}
         disabled={props.saving}
         onChange={(value) => updateDraft("name", value)}
         onSubmit={save}
@@ -221,6 +222,7 @@ export function ConsoleEndpointsPanel(props: ConsoleEndpointsPanelProps) {
       <TextField
         label="Runtime API URL"
         value={draft().url}
+        clearable={Boolean(draft().url)}
         placeholder="https://agent.example.com/runtime"
         disabled={props.saving}
         mono
@@ -276,7 +278,7 @@ export function ConsoleEndpointsPanel(props: ConsoleEndpointsPanelProps) {
           }
         >
           <If when={props.loading}>
-            <ProgressBar indeterminate />
+            <LoadingLine />
           </If>
           <If when={!props.loading && !rows().length}>
             <Text class="py-5 text-base text-muted-foreground" testID="console-endpoints-empty">

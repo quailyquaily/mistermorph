@@ -3,10 +3,9 @@
 // Pressing it copies the name. Children sit at its end, such as the secret picker's button.
 import type { JSX } from "nsh";
 import { cleanup, signal, Text, View } from "nsh";
-import { Button as BaseButton } from "nsh/base";
 import { translate } from "../../lib/core/context.js";
 import { copyText } from "../../lib/platform";
-import { Icon, Tip } from "../ui";
+import { Icon, Tip, TipButton } from "../ui";
 
 const t = translate as (key: string, vars?: Record<string, unknown> | null) => string;
 
@@ -52,7 +51,7 @@ export function EnvManagedField(props: EnvManagedFieldProps) {
         props.class ?? ""
       }`}
     >
-      <BaseButton
+      <TipButton
         onPress={() => void copy()}
         accessibilityLabel={title()}
         tooltip={
@@ -67,7 +66,7 @@ export function EnvManagedField(props: EnvManagedFieldProps) {
         <Text class={`font-mono text-xs uppercase tracking-wide ${copied() ? "text-ok" : "text-muted-foreground"}`}>
           {copied() ? t("settings_env_managed_copied") : t("settings_env_managed_tag")}
         </Text>
-      </BaseButton>
+      </TipButton>
       {props.children}
     </View>
   );

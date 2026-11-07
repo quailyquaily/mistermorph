@@ -81,6 +81,7 @@ export function ConsolePasswordPanel(props: ConsolePasswordPanelProps) {
           <TextField
             label="New password"
             value={password()}
+            clearable={Boolean(password())}
             masked
             disabled={props.saving}
             onChange={(value) => password.set(value)}
@@ -89,6 +90,7 @@ export function ConsolePasswordPanel(props: ConsolePasswordPanelProps) {
           <TextField
             label="Confirm password"
             value={confirmation()}
+            clearable={Boolean(confirmation())}
             masked
             disabled={props.saving}
             onChange={(value) => confirmation.set(value)}

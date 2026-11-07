@@ -25,7 +25,7 @@ import {
   type NavItem,
 } from "../../lib/shell";
 import { createSlidingSelection } from "../motion/SlidingSelection";
-import { Icon, Tip, type IconName } from "../ui";
+import { Icon, Tip, TipButton, type IconName } from "../ui";
 import defaultEndpointAvatar from "../../assets/images/app_logo_current.svg";
 import { AgentSwitcher } from "./AgentSwitcher";
 import { usePersonaSummary } from "./personaSummary";
@@ -52,7 +52,7 @@ export function NavLink(props: {
   // the page you are on is ink on the list's sliding highlight (no fill of its own), and a row
   // lights up 6 % after a short pause when the pointer rests on it and goes out at once.
   return (
-    <BaseButton
+    <TipButton
       selected={active()}
       onPress={props.onPress}
       onLayout={props.onLayout}
@@ -74,7 +74,7 @@ export function NavLink(props: {
           {props.item.title}
         </Text>
       </If>
-    </BaseButton>
+    </TipButton>
   );
 }
 

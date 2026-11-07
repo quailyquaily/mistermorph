@@ -16,7 +16,11 @@ export const HISTORY_END_PADDING = 20;
 
 /** The conversation's side gutter: the Vue console's clamp(12px, 2vw, 20px). */
 export function chatGutter() {
-  return Math.min(20, Math.max(12, windowSize().width * 0.02));
+  // Vue --chat-history-gutter-x: clamp(12px, 2vw, 20px), and the usual 16px phone gutter at
+  // 620px and under (the composer and the empty state share it, so they stay aligned).
+  const width = windowSize().width;
+  if (width <= 620) return 16;
+  return Math.min(20, Math.max(12, width * 0.02));
 }
 
 // A question and a reply of a few lines, three times; fixed widths, so it reads as a conversation

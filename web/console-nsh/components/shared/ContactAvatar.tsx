@@ -6,7 +6,8 @@
 // Ported from web/console/src/components/ContactAvatar.js. The Vue version waited for an
 // IntersectionObserver; nsh has none, so the download starts when the avatar is made, and a
 // module-level cache keeps recycled List rows from downloading the same avatar again.
-import { cleanup, computed, effect, Image, platform, signal, Text, untracked, View } from "nsh";
+import { cleanup, computed, effect, Image, signal, Text, untracked, View } from "nsh";
+import { CutoutAvatar } from "./CutoutAvatar";
 import { runtimeApiDownloadForEndpoint } from "../../lib/core/context.js";
 
 export interface ContactAvatarProps {
@@ -21,14 +22,14 @@ export interface ContactAvatarProps {
   /** `list` (40 points) or `detail` (64 points). */
   size?: "list" | "detail";
   /** A round notch cut out of the avatar where a badge sits (its centre and radius, in points): the
-   * row behind shows through the gap instead of the badge wearing a ring. Web only (masks). */
+   * row behind shows through the gap instead of the badge wearing a ring. Drawn on a canvas
+   * (CutoutAvatar), so every platform cuts it. */
   notch?: { x: number; y: number; r: number };
   class?: string;
   testID?: string;
 }
 
 const CACHE_LIMIT = 200;
-const CAN_MASK = platform.os === "web";
 // endpointRef + "\u0000" + path -> blob URL, oldest first.
 const downloaded = new Map<string, string>();
 
@@ -102,33 +103,49 @@ export function ContactAvatar(props: ContactAvatarProps) {
     failed.set(true);
   }
 
-  // The notch: transparent inside r - 0.3, opaque from r + 0.3 (a soft edge of about one device
-  // pixel, Vue: radial-gradient(circle at 34px 34px, transparent 8.6px, #000 9.2px)).
-  const mask = () =>
-    props.notch && CAN_MASK
-      ? `radial-gradient(circle at ${props.notch.x}px ${props.notch.y}px, transparent ${props.notch.r - 0.4}px, #000 ${props.notch.r + 0.2}px)`
-      : undefined;
+  const initial = () => (
+    <Text class={`font-semibold leading-none text-blue ${props.size === "detail" ? "text-[22px]" : "text-[15px]"}`}>
+      {contactInitial(props.name)}
+    </Text>
+  );
+  // With a notch, the disc (its paper, the image, the hairline) is drawn cut; the initial sits on
+  // it, clear of the notch.
+  if (props.notch) {
+    return (
+      <View
+        testID={props.testID}
+        accessibilityElementsHidden
+        class={`items-center justify-center ${props.class ?? ""}`}
+        style={{ width: dimension(), height: dimension(), minWidth: dimension() }}
+      >
+        <CutoutAvatar
+          size={dimension()}
+          src={shown() || null}
+          background="#ffffff"
+          notch={props.notch}
+          onError={handleImageError}
+          class="absolute left-0 top-0"
+        />
+        <If when={!shown()}>{initial()}</If>
+      </View>
+    );
+  }
   return (
     <View
       testID={props.testID}
       accessibilityElementsHidden
-      class={`items-center justify-center overflow-hidden rounded-full bg-card ${props.class ?? ""}`}
+      class={`items-center justify-center overflow-hidden rounded-full bg-white ${props.class ?? ""}`}
       style={{
         width: dimension(),
         height: dimension(),
         minWidth: dimension(),
-        maskImage: mask(),
         // A faint inner hairline keeps a pale avatar from melting into the row.
         boxShadow: "inset 0 0 0 1px rgba(24, 24, 50, 0.09)",
       }}
     >
       <If
         when={shown()}
-        else={
-          <Text class={`font-semibold leading-none text-blue ${props.size === "detail" ? "text-[22px]" : "text-[15px]"}`}>
-            {contactInitial(props.name)}
-          </Text>
-        }
+        else={initial()}
       >
         {(src) => (
           <Image
