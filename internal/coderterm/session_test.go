@@ -228,3 +228,19 @@ func TestTerminalReportsProcessForNewAndReusedSession(t *testing.T) {
 		}
 	})
 }
+
+func TestNormalizeTask(t *testing.T) {
+	for _, tc := range []struct{ name, in, want string }{
+		{"plain", "task", "task"},
+		{"trailing newline", "task\n", "task"},
+		{"trailing spaces", "task   ", "task"},
+		{"tab", "a\tb", "a    b"},
+		{"inner whitespace kept", "  a  \n\nb", "  a  \n\nb"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := normalizeTask(tc.in); got != tc.want {
+				t.Fatalf("normalizeTask(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}

@@ -231,7 +231,7 @@ func (s *session) run(parent context.Context, req Request) (output string, err e
 	} else {
 		progress(name + " is starting")
 	}
-	expected := "Coding task:\n" + req.Task
+	expected := "Coding task:\n" + normalizeTask(req.Task)
 	var turn turnReader
 	var offset int64
 	var sent, declined, idle bool
@@ -477,4 +477,10 @@ func (s *session) submit(ctx context.Context, text string, paste bool) error {
 	s.screen.SendText("\r")
 	s.mu.Unlock()
 	return nil
+}
+
+// normalizeTask applies the edits Claude Code makes to submitted input (tabs become four
+// spaces, trailing whitespace is trimmed), so the transcript records exactly what was sent.
+func normalizeTask(task string) string {
+	return strings.TrimRight(strings.ReplaceAll(task, "\t", "    "), " \t\r\n")
 }
