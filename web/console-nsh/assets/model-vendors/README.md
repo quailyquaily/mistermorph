@@ -1,0 +1,76 @@
+# Provider Assets
+
+这批文件先用于选型和界面预览，不代表每家都已经拿到了完整品牌包。
+
+- `cc-switch.svg`
+  - 来源：`https://github.com/farion1231/cc-switch/blob/efd236a474aee8d31c51c99684a7a6df712ad90e/src/assets/icons/logo.svg`
+  - 说明：CC Switch 官方仓库的彩色 logo，保留原始 SVG。
+  - 许可：MIT，版权及许可全文见 `cc-switch.LICENSE`。
+
+- `magpie.svg`
+  - 来源：`https://github.com/yetone/magpie/blob/8b14afea15322f035f7c68b7e941e0aa68a92f45/internal/gui/assets/icons/magpie.svg`
+  - 说明：Magpie 官方仓库的喜鹊图标，保留原始 SVG。
+  - 许可：MIT，版权及许可全文见 `magpie.LICENSE`。
+
+- `openai.svg`
+  - 来源：`https://openai.com/brand/`
+  - 说明：自动化访问品牌页时被 Cloudflare 拦截；当前文件取自 `openai.com` 官方页面内嵌的 knot SVG。
+- `anthropic.png`
+  - 来源：`https://www.anthropic.com/`
+  - 实际下载：`https://cdn.prod.website-files.com/67ce28cfec624e2b733f8a52/67d31dd7aa394792257596c5_webclip.png`
+  - 说明：Anthropic 官网公开暴露的 256x256 webclip。
+- `claude.svg`
+  - 来源：`https://lobehub.com/icons/claude`
+  - 实际下载：`https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/claude-color.svg`
+  - 说明：LobeHub 标注为 Claude official icon，来源站点为 `https://claude.ai`。
+- `gemini.png`
+  - 来源：Google 官方产品静态资源
+  - 实际下载：`https://www.gstatic.com/images/branding/productlogos/gemini_2025/v1/web-24dp/logo_gemini_2025_color_2x_web_24dp.png`
+  - 说明：当前只定位到公开 PNG，暂未找到同源 SVG。
+- `groq.svg`
+  - 来源：`https://groq.com/favicon.svg`
+- `mistral.svg`
+  - 来源：`https://mistral.ai/brand`
+  - 实际下载：`https://mistral.ai/img/mistral-ai-logo.svg`
+- `deepseek.png`
+  - 来源：`https://deepseek.com/`
+  - 实际下载：`https://cdn.deepseek.com/logo.png`
+  - 说明：当前只定位到公开 PNG，暂未找到官方 SVG；这里保留的是从官网 logo 中裁出的鲸鱼 mark，不带文字。
+- `xai.svg`
+  - 来源：`https://lobehub.com/icons/xai`
+  - 实际下载：`https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/xai.svg`
+  - 说明：xAI 官方品牌页的下载包当前返回 `403`；LobeHub 标注为 xAI official icon，来源站点为 `https://x.ai`。
+- `cloudflare.svg`
+  - 来源：`https://www.cloudflare.com/logo/`
+  - 实际下载：`https://cf-icons.pages.dev/logo.svg`
+  - 说明：下载文件是 Cloudflare logotype + cloud mark；当前文件只通过 `viewBox` 显示 cloud mark，保留原始路径。
+- `amazon-bedrock.svg`
+  - 来源：`https://aws.amazon.com/architecture/icons/`
+  - 实际下载：`https://www.iconsforaws.com/aws-icons-list/Architecture-Service-Icons_02072025/Arch_Artificial-Intelligence/64/Arch_Amazon-Bedrock_64.svg`
+  - 说明：Amazon Bedrock 官方 AWS architecture icon。
+- `kimi.svg`
+  - 来源：`https://lobehub.com/icons/kimi`
+  - 实际下载：`https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/kimi-color.svg`
+  - 说明：LobeHub 标注为 Kimi official icon，来源站点为 `https://kimi.moonshot.cn`。
+- `qwen.svg`
+  - 来源：`https://lobehub.com/icons/qwen`
+  - 实际下载：`https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/qwen-color.svg`
+  - 说明：LobeHub 的图标条目指向 Qwen 官方 Hugging Face 组织 `https://huggingface.co/Qwen`。
+- `zai.svg`
+  - 来源：`https://lobehub.com/icons/zai`
+  - 实际下载：`https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/zai.svg`
+  - 说明：LobeHub 的图标条目指向 Z.AI 官网 `https://z.ai`。
+- `openrouter.svg`
+  - 来源：`https://lobehub.com/icons/openrouter`
+  - 实际下载：`https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/openrouter.svg`
+  - 说明：LobeHub 标注为 OpenRouter official icon，来源站点为 `https://openrouter.ai`。
+- `sakana.svg`
+  - 来源：`https://console.sakana.ai/`
+  - 实际下载：`https://console.sakana.ai/icon.svg`
+- `meta.svg`
+  - 来源：`https://about.meta.com/brand/resources/meta/company-brand/`
+  - 实际下载：`https://upload.wikimedia.org/wikipedia/commons/d/d0/Meta_Platforms_logo.svg`
+  - 说明：Meta 官方品牌资源中的 symbol，由 Wikimedia Commons 保存；文件移除了 viewBox 外的 wordmark 路径。
+- `typesafe.svg`
+  - 来源：`https://typesafe.ai/`
+  - 说明：提取官网内联 SVG 的独立标志路径，移除文字并调整 viewBox；使用透明背景，不使用粉底 Apple Touch 图标。
