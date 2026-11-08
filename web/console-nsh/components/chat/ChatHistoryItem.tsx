@@ -6,7 +6,22 @@
 // It is a List row: it is made once per cell and shows whatever item the cell holds now, so every
 // value is read from `props.item` in a binding and per-item state lives in ChatRowContext.
 import type { JSX } from "nsh";
-import { Canvas, createMotion, effect, Image, pixelRatio, platform, Text, token, untracked, View, windowSize } from "nsh";
+import {
+  Canvas,
+  cleanup,
+  createAnimatedValue,
+  createMotion,
+  Easing,
+  effect,
+  Image,
+  pixelRatio,
+  platform,
+  Text,
+  token,
+  untracked,
+  View,
+  windowSize,
+} from "nsh";
 import { MOTION_EASE, MOTION_SLOW, motionMs } from "../motion/tokens";
 import { Button as BaseButton } from "nsh/base";
 import { ICONS } from "../icons";
@@ -28,6 +43,7 @@ import { MosaicText } from "./MosaicText";
 import { ReceivedFile, type ReceivedFiles } from "./ReceivedFile";
 import type { KeyedState } from "./rowState";
 import { bubbleTail, traceTailFill, traceTailOutline } from "./bubbleTail";
+import { CHECK_CORNER_AT, CHECK_DRAW_MS, CHECK_SIZE, checkAction, checkDash, checkDashOffset, checkStroke } from "./copyCheck";
 
 export type HistoryItem = Record<string, any> & { id: string; role: string; text: string };
 
@@ -132,30 +148,34 @@ function Bubble(props: { system?: boolean; files?: boolean; children?: JSX.Eleme
 
 /**
  * Copy, under a message: a quiet 24pt square that shows on hover, and a check once copied. Each
- * successful copy also dips the button and springs it back while a ring widens and fades around it
- * (the Vue console's copy feedback), every time, including a copy repeated while the check still
- * shows. Only transform and opacity move, so the bubble never shifts; with reduced motion only the
- * check shows.
+ * successful copy draws the check as a pen would (copyCheck.ts): the short stroke down, then the
+ * long one up, every time, including a copy repeated while the check still shows. The check keeps
+ * the copy icon's 14pt box and nothing scales, so the bubble never shifts; with reduced motion the
+ * whole check shows at once.
  */
 function CopyButton(props: { copied: boolean; copySeq: number; label: string; onPress: () => void }) {
-  const pop = createMotion({ initial: { scale: 1 } });
-  const ring = createMotion({ initial: { opacity: 0, scale: 1 } });
+  const stroke = checkStroke(CHECK_SIZE);
+  const dash = checkDash(stroke);
+  const drawn = createAnimatedValue(0);
+  cleanup(() => void drawn.stop());
   let seen = untracked(() => props.copySeq);
   effect(() => {
     const seq = props.copySeq;
     const copied = props.copied;
     untracked(() => {
-      if (seq === seen) return;
+      const action = checkAction(seen, seq, copied, motionMs(1) === 0);
       seen = seq;
-      if (!copied || motionMs(1) === 0) return;
-      // The Vue keyframes: down to 0.82 at 35%, over to 1.1 at 70%, back to 1; the ring spreads
-      // 7pt beyond the 24pt square (1.58) as it fades.
-      void pop.play({
-        duration: 340,
-        easing: MOTION_EASE,
-        keyframes: { scale: [1, { offset: 0.35, value: 0.82 }, { offset: 0.7, value: 1.1 }, { offset: 1, value: 1 }] },
-      });
-      void ring.play({ duration: 560, easing: MOTION_EASE, keyframes: { opacity: [1, 0], scale: [1, 1.58] } });
+      if (action === "show") drawn.set(1);
+      if (action !== "draw") return;
+      drawn.set(0);
+      void drawn.keyframes(
+        [
+          { offset: 0, value: 0, easing: Easing.bezier(0.45, 0, 0.55, 1) },
+          { offset: CHECK_CORNER_AT, value: stroke.corner, easing: Easing.bezier(0.3, 0, 0.2, 1) },
+          { offset: 1, value: 1 },
+        ],
+        { duration: CHECK_DRAW_MS },
+      );
     });
   });
   return (
@@ -167,20 +187,41 @@ function CopyButton(props: { copied: boolean; copySeq: number; label: string; on
       class={`-mt-0.5 size-6 items-center justify-center rounded-(--radius) transition duration-150 hover:bg-press hover:opacity-100 focus:opacity-100 ${
         props.copied ? "opacity-70" : HOVER ? "opacity-0 group-hover:opacity-70" : "opacity-70"
       }`}
-      style={pop.style}
     >
-      <View accessibilityElementsHidden class="absolute inset-0 rounded-(--radius) border-2 border-blue/45" style={{ ...ring.style, pointerEvents: "none" }} />
       <Image
         src={ICONS.PhCopy}
         accessibilityElementsHidden
         class="absolute transition duration-150"
-        style={{ width: 14, height: 14, tintColor: token("muted-foreground") as string, opacity: props.copied ? 0 : 1, scale: props.copied ? 0.7 : 1 }}
+        style={{ width: CHECK_SIZE, height: CHECK_SIZE, tintColor: token("muted-foreground") as string, opacity: props.copied ? 0 : 1 }}
       />
-      <Image
-        src={ICONS.PhCheck}
+      {/* The check appears at once (its stroke is what moves) and fades when it expires; its test id
+          marks it only while it holds. */}
+      <Canvas
         accessibilityElementsHidden
-        class="absolute transition duration-150"
-        style={{ width: 14, height: 14, tintColor: token("blue") as string, opacity: props.copied ? 1 : 0, scale: props.copied ? 1 : 0.7 }}
+        testID={props.copied ? "chat-copy-check" : undefined}
+        class="absolute"
+        style={{
+          width: CHECK_SIZE,
+          height: CHECK_SIZE,
+          opacity: props.copied ? 1 : 0,
+          transitionProperty: "opacity",
+          transitionDuration: props.copied ? 0 : motionMs(150),
+          pointerEvents: "none",
+        }}
+        draw={(cx) => {
+          const [a, b, c] = stroke.points;
+          cx.strokeStyle = String(token("blue"));
+          cx.lineWidth = stroke.width;
+          cx.lineCap = "round";
+          cx.lineJoin = "round";
+          cx.setLineDash(dash.segments);
+          cx.lineDashOffset = drawn.interpolate({ inputRange: [0, 1], outputRange: [checkDashOffset(stroke, 0), checkDashOffset(stroke, 1)] });
+          cx.beginPath();
+          cx.moveTo(a[0], a[1]);
+          cx.lineTo(b[0], b[1]);
+          cx.lineTo(c[0], c[1]);
+          cx.stroke();
+        }}
       />
     </TipButton>
   );
