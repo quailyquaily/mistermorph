@@ -62,3 +62,7 @@ Moved backlog → new at the owner's request: "update it to FT36's branch, and m
 
 The design is committed on the item's branch, `factory/FT36-agent-db-usage-db` (90cd3ed5,
 `docs/feat/feat_20261108_agent_db.md`), and is not on master. Builds continue on that branch.
+
+## lyric · 2026-11-09 00:17
+Build the feature designed in `docs/feat/feat_20261108_agent_db.md` on this branch: move the agent's state into
+`agent.db` and `usage.db` as the design describes, following its milestones (M0 to M7) and its tests.
