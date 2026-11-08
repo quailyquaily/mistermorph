@@ -15,3 +15,7 @@ Registered only; not yet diagnosed or implemented.
 
 ## factory · 2026-11-08 13:28
 Moved from new to backlog at the owner’s request: “move FT 26~29 to backlog”.
+
+## lyric · 2026-11-08 18:04
+
+FT29,28 放到 new
