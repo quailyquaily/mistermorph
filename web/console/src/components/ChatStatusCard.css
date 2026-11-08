@@ -1,6 +1,17 @@
 .chat-status-card {
+  /* One height bounds both the panel and the list scrolling inside it, so their edges always meet:
+     the panel ends where the scrolling ends, with no strip below it and nothing cut off. Short
+     progress takes only its own height. The small viewport unit keeps the bound inside the visible
+     screen on phones whose browser bars come and go, without changing while the page scrolls. */
+  --chat-status-details-max-height: min(340px, 46vh);
   width: 100%;
   min-width: 0;
+}
+
+@supports (height: 1svh) {
+  .chat-status-card {
+    --chat-status-details-max-height: min(340px, 46svh);
+  }
 }
 
 .chat-status-summary {
@@ -71,6 +82,7 @@
   min-height: 0;
   display: grid;
   grid-template-rows: 1fr;
+  max-height: var(--chat-status-details-max-height);
   margin-top: 6px;
   overflow: hidden;
 }
@@ -145,7 +157,7 @@
   position: relative;
   min-width: 0;
   min-height: 0;
-  max-height: min(340px, 46vh);
+  max-height: var(--chat-status-details-max-height);
   display: grid;
   gap: 12px;
   padding: 10px 12px 11px;
