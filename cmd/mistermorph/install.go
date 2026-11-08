@@ -20,7 +20,7 @@ func newInstallCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "install [dir]",
-		Short: "Install config.yaml plus the core onboarding markdown files",
+		Short: "Install config.yaml, and the identity and soul in agent.db",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dir, err := resolveInstallDir(args)
@@ -57,12 +57,6 @@ func newInstallCmd() *cobra.Command {
 				}
 			}
 
-			cronPath := filepath.Join(dir, "cron.yaml")
-			writeCron := true
-			if _, err := os.Stat(cronPath); err == nil {
-				writeCron = false
-			}
-
 			configStep := installStep{
 				Name:  "config.yaml",
 				Path:  cfgPath,
@@ -85,21 +79,7 @@ func newInstallCmd() *cobra.Command {
 				return err
 			}
 
-			deferredSteps := []installStep{
-				{
-					Name:   "cron.yaml",
-					Path:   cronPath,
-					Write:  writeCron,
-					Loader: loadCronTemplate,
-				},
-			}
-			fmt.Println(clifmt.Headerf("==> Installing deferred state files (%d files)", len(deferredSteps)))
-			for i, step := range deferredSteps {
-				if err := writeInstallStepFile(i+1, len(deferredSteps), step); err != nil {
-					return err
-				}
-			}
-
+			fmt.Println("[i] the heartbeat workflows and the TODO list start empty in agent.db")
 			fmt.Printf("[i] initialized %s\n", dir)
 			return nil
 		},

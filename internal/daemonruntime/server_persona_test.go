@@ -174,3 +174,47 @@ func TestHeartbeatRoutes(t *testing.T) {
 		t.Fatalf("DELETE missing = %d", rec.Code)
 	}
 }
+
+func TestTodoRoutesKeepOrderAndRenderCronYAML(t *testing.T) {
+	stateDir := t.TempDir()
+	do := personaTestMux(t, stateDir)
+	body := `{"tasks":[{"id":"z","cron":"0 9 * * *","content":"last letter first"},{"id":"a","at":"2030-01-02 09:00","tz":"UTC","content":"then a"}]}`
+	if rec := do(http.MethodPut, "/todo/tasks", body); rec.Code != http.StatusOK {
+		t.Fatalf("PUT /todo/tasks = %d %s", rec.Code, rec.Body.String())
+	}
+	rec := do(http.MethodGet, "/todo/tasks", "")
+	var listed struct {
+		Tasks []struct {
+			ID string `json:"id"`
+		} `json:"tasks"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &listed); err != nil || len(listed.Tasks) != 2 || listed.Tasks[0].ID != "z" {
+		t.Fatalf("GET /todo/tasks = %s", rec.Body.String())
+	}
+	if rec := do(http.MethodPut, "/todo/tasks", `{"tasks":[{"id":"bad","content":"no schedule"}]}`); rec.Code != http.StatusBadRequest {
+		t.Fatalf("invalid list = %d", rec.Code)
+	}
+	rec = do(http.MethodGet, "/todo/files/cron.yaml", "")
+	var file struct {
+		Content string `json:"content"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &file)
+	if !strings.HasPrefix(file.Content, "version: 1\ntasks:\n    - id: z\n") {
+		t.Fatalf("cron.yaml = %q", file.Content)
+	}
+	edited, _ := json.Marshal(map[string]string{"content": "version: 1\ntasks:\n  - id: a\n    cron: \"*/5 * * * *\"\n    content: only a\n"})
+	if rec := do(http.MethodPut, "/todo/files/cron.yaml", string(edited)); rec.Code != http.StatusOK {
+		t.Fatalf("PUT cron.yaml = %d %s", rec.Code, rec.Body.String())
+	}
+	rec = do(http.MethodGet, "/todo/tasks", "")
+	if err := json.Unmarshal(rec.Body.Bytes(), &listed); err != nil || len(listed.Tasks) != 1 || listed.Tasks[0].ID != "a" {
+		t.Fatalf("after raw save = %s", rec.Body.String())
+	}
+	bad, _ := json.Marshal(map[string]string{"content": "tasks: [unclosed"})
+	if rec := do(http.MethodPut, "/todo/files/cron.yaml", string(bad)); rec.Code != http.StatusBadRequest {
+		t.Fatalf("unparsable cron.yaml = %d", rec.Code)
+	}
+	if _, err := os.Stat(filepath.Join(stateDir, "cron.yaml")); !os.IsNotExist(err) {
+		t.Fatalf("cron.yaml written: %v", err)
+	}
+}

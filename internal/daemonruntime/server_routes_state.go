@@ -77,7 +77,7 @@ func (routes *routeRegistration) registerStateRoutes() {
 			http.Error(w, "invalid file name", http.StatusBadRequest)
 			return
 		}
-		handleTextFileDetail(w, r, spec.Name, spec.Path)
+		handleStateFileDetail(w, r, spec)
 	})
 	mux.HandleFunc("/todo/tasks", func(w http.ResponseWriter, r *http.Request) {
 		if !checkAuth(r, authToken) {

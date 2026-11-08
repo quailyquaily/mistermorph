@@ -79,7 +79,7 @@ func (t *TodoUpdateTool) SetAddContext(ctx todo.AddResolveContext) {
 func (t *TodoUpdateTool) Name() string { return "todo_update" }
 
 func (t *TodoUpdateTool) Description() string {
-	return "Updates cron.yaml under file_state_dir. Supports add_once, add_recurring, and delete actions for scheduled agent tasks."
+	return "Updates the TODO list (scheduled agent tasks). Supports add_once, add_recurring, and delete actions."
 }
 
 func (t *TodoUpdateTool) ParameterSchema() string {

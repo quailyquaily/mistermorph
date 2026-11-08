@@ -978,6 +978,7 @@ const (
 	stateFileIdentity  = "identity"
 	stateFileSoul      = "soul"
 	stateFileHeartbeat = "heartbeat"
+	stateFileCron      = "cron"
 )
 
 type stateFileSpec struct {
@@ -998,7 +999,7 @@ type consoleContact struct {
 
 func runtimeStateFileSpecs(paths runtimeStatePaths) []stateFileSpec {
 	return []stateFileSpec{
-		{Name: "cron.yaml", Group: "cron", Path: paths.cronPath},
+		{Name: "cron.yaml", Group: "cron", Path: paths.cronPath, Kind: stateFileCron, StateDir: paths.stateDir},
 		{Name: "ACTIVE.md", Group: "contacts", Path: paths.contactsActive},
 		{Name: "INACTIVE.md", Group: "contacts", Path: paths.contactsInactive},
 		{Name: statepaths.IdentityFilename, Group: "persona", Path: paths.agentDBPath, Kind: stateFileIdentity, StateDir: paths.stateDir},
@@ -1014,7 +1015,10 @@ func describeStateFile(spec stateFileSpec) map[string]any {
 	}
 	exists := false
 	ctx := context.Background()
-	if store, err := personastore.ForStateDir(ctx, spec.StateDir); err == nil {
+	if spec.Kind == stateFileCron {
+		// The TODO list is always there, empty or not.
+		exists = true
+	} else if store, err := personastore.ForStateDir(ctx, spec.StateDir); err == nil {
 		switch spec.Kind {
 		case stateFileIdentity, stateFileSoul:
 			id, ok, err := store.Identity(ctx)
@@ -1031,8 +1035,17 @@ func describeStateFile(spec stateFileSpec) map[string]any {
 	}
 }
 
-func describeStateFiles(paths runtimeStatePaths, group string) []map[string]any {
+// stateFileGroup is the group a route names; the TODO routes name the cron group "todo".
+func stateFileGroup(group string) string {
 	group = strings.ToLower(strings.TrimSpace(group))
+	if group == "todo" {
+		return "cron"
+	}
+	return group
+}
+
+func describeStateFiles(paths runtimeStatePaths, group string) []map[string]any {
+	group = stateFileGroup(group)
 	specs := runtimeStateFileSpecs(paths)
 	items := make([]map[string]any, 0, len(specs))
 	for _, spec := range specs {
@@ -1047,7 +1060,7 @@ func describeStateFiles(paths runtimeStatePaths, group string) []map[string]any 
 }
 
 func resolveStateFileSpec(paths runtimeStatePaths, group string, name string) (stateFileSpec, bool) {
-	group = strings.ToLower(strings.TrimSpace(group))
+	group = stateFileGroup(group)
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return stateFileSpec{}, false
@@ -1165,8 +1178,52 @@ func handleStateFileDetail(w http.ResponseWriter, r *http.Request, spec stateFil
 	switch spec.Kind {
 	case stateFileIdentity, stateFileSoul, stateFileHeartbeat:
 		handlePersonaFileDetail(w, r, spec)
+	case stateFileCron:
+		handleCronFileDetail(w, r, spec)
 	default:
 		handleTextFileDetail(w, r, spec.Name, spec.Path)
+	}
+}
+
+// handleCronFileDetail serves the TODO list as the cron.yaml text it was; a save parses the text
+// and replaces the list, validated as the file was.
+func handleCronFileDetail(w http.ResponseWriter, r *http.Request, spec stateFileSpec) {
+	store := cronstore.NewStore(spec.Path)
+	switch r.Method {
+	case http.MethodGet:
+		file, _, err := store.Read()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		content, err := cronstore.RenderFile(file)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"name": spec.Name, "content": content})
+	case http.MethodPut:
+		var req struct {
+			Content string `json:"content"`
+		}
+		if err := json.NewDecoder(io.LimitReader(r.Body, 4<<20)).Decode(&req); err != nil {
+			http.Error(w, "invalid json", http.StatusBadRequest)
+			return
+		}
+		file, err := cronstore.ParseFile(req.Content)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if err := store.Write(file); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "name": spec.Name})
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
 }
 

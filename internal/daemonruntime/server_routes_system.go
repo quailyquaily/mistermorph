@@ -406,7 +406,6 @@ func (routes *routeRegistration) registerSystemRoutes() {
 			diagnoseDirWritable("file_cache_dir", paths.cacheDir),
 			diagnoseFileReadable("contacts_active", paths.contactsActive),
 			diagnoseFileReadable("contacts_inactive", paths.contactsInactive),
-			diagnoseFileReadable("cron", paths.cronPath),
 			diagnoseAgentDB("agent_db", paths.agentDBPath),
 			diagnoseFileReadable("audit_jsonl", paths.auditPath),
 		}

@@ -10,6 +10,7 @@ func migrations() []sqlitedb.Migration {
 	return []sqlitedb.Migration{
 		{Name: "create meta, Console sessions, Agent Link peers and topic state", SQL: stateimport.MetaTableSQL + smallStateSQL},
 		{Name: "create identity and heartbeat workflows", SQL: personaSQL},
+		{Name: "create cron tasks", SQL: cronSQL},
 	}
 }
 
@@ -89,4 +90,29 @@ CREATE TABLE heartbeat_workflows (
 	updated_at   TEXT NOT NULL
 );
 CREATE INDEX heartbeat_workflows_by_position ON heartbeat_workflows (position);
+`
+
+// cronSQL: the TODO list (§3).
+const cronSQL = `
+CREATE TABLE cron_tasks (
+	id              TEXT PRIMARY KEY,
+	position        INTEGER NOT NULL,
+	title           TEXT NOT NULL DEFAULT '',
+	enabled         INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+	at              TEXT NOT NULL DEFAULT '',
+	cron            TEXT NOT NULL DEFAULT '',
+	tz              TEXT NOT NULL DEFAULT '',
+	content         TEXT NOT NULL,
+	chat_id         TEXT NOT NULL DEFAULT '',
+	mention         TEXT NOT NULL DEFAULT '',
+	llm_profile     TEXT NOT NULL DEFAULT '',
+	workspace_dir   TEXT NOT NULL DEFAULT '',
+	bash_env        TEXT NOT NULL DEFAULT '[]',
+	created_at      TEXT NOT NULL,
+	updated_at      TEXT NOT NULL,
+	last_run_at     TEXT,
+	last_run_status TEXT NOT NULL DEFAULT '',
+	CHECK ((at = '') <> (cron = ''))
+);
+CREATE INDEX cron_tasks_by_position ON cron_tasks (position);
 `

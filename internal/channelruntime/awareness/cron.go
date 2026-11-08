@@ -284,8 +284,21 @@ func (r *cronLoopRunner) worker(ctx context.Context, queue <-chan cronstore.DueT
 			continue
 		}
 		r.board.Start(id, r.now())
+		stored := !r.systemIDs[id]
+		if stored {
+			if err := r.store.RecordRunStart(id, r.now()); err != nil {
+				r.warn("cron_run_record_error", "task_id", id, "error", err.Error())
+			}
+		}
+		status := cronstore.RunStatusDone
 		if err := r.opts.Run(ctx, item); err != nil {
+			status = cronstore.RunStatusFailed
 			r.warn("cron_task_error", "task_id", id, "error", err.Error())
+		}
+		if stored {
+			if err := r.store.RecordRunResult(id, status); err != nil {
+				r.warn("cron_run_record_error", "task_id", id, "error", err.Error())
+			}
 		}
 		r.finish(id)
 	}

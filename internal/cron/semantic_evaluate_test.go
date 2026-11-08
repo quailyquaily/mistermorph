@@ -42,7 +42,7 @@ func TestMatchTaskIndexOnDecisionRoute(t *testing.T) {
 		wantChats int
 	}{
 		{name: "matched", selected: "task_1", want: 1},
-		{name: "no match", selected: "no_match", want: -1, wantErr: "no matching cron task"},
+		{name: "no match", selected: "no_match", want: -1, wantErr: "no matching TODO task"},
 		{name: "ambiguous", selected: "ambiguous", want: -1, wantErr: "ambiguous"},
 		{name: "invalid", selected: "task_9", want: -1, wantErr: "invalid evaluate response"},
 		{name: "evaluate unsupported", evalErr: llm.ErrEvaluateUnsupported, want: 0, wantChats: 1},

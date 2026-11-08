@@ -35,8 +35,8 @@ func TestInstallWritesIdentityAndSoulUnderStateDir(t *testing.T) {
 	}
 
 	assertInstalledPersona(t, stateDir)
-	if _, err := os.Stat(filepath.Join(stateDir, "cron.yaml")); err != nil {
-		t.Fatalf("cron.yaml should exist under state dir: %v", err)
+	if _, err := os.Stat(filepath.Join(stateDir, "cron.yaml")); !os.IsNotExist(err) {
+		t.Fatalf("cron.yaml should not be written: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(stateDir, "SCRIPTS.md")); !os.IsNotExist(err) {
 		t.Fatalf("SCRIPTS.md should not be created during install, err=%v", err)
@@ -77,8 +77,8 @@ func TestInstallUsesConfiguredStateDirWhenArgMissing(t *testing.T) {
 	}
 
 	assertInstalledPersona(t, stateDir)
-	if _, err := os.Stat(filepath.Join(stateDir, "cron.yaml")); err != nil {
-		t.Fatalf("cron.yaml should exist under configured file_state_dir: %v", err)
+	if _, err := os.Stat(filepath.Join(stateDir, "cron.yaml")); !os.IsNotExist(err) {
+		t.Fatalf("cron.yaml should not be written: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(stateDir, "SCRIPTS.md")); !os.IsNotExist(err) {
 		t.Fatalf("SCRIPTS.md should not be created during install, err=%v", err)
