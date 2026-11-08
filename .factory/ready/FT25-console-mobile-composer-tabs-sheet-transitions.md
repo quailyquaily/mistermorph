@@ -39,3 +39,13 @@ Install: temporary playwright-core@1.65.0 for existing Chromium; no manifest/loc
 Coder checked mobile layouts and transitions in headless Chromium, not physical devices. Not checked: iOS Safari, physical iPhone/Android, real touch tab scrolling, dark theme, successful live transcription or normal-speed CPU timings.
 Test incident: coder reports one fake-audio request with a fake key accidentally reached OpenAI and returned 401; test configuration was corrected before further tests. No real provider credentials were used in that request.
 Moved new/ → review/. Owner should inspect mobile appearance/interaction on real devices and verify voice transcription against their configured provider.
+
+## factory · review · 2026-11-08 13:46
+head: 7a099705c7be07f8b5b4278a606335f52b68c656
+verdict: pass
+
+Codex reviewed all 22 changed files in origin/master...HEAD against the request and plan; no verified actionable findings. Branch merges cleanly with base cfd68a0e.
+Validation reported by Codex: required Go formatting/vet/tests passed; pnpm test passed 499/499; pnpm build passed with chunk-size warning. Chromium component checks passed for ordinary and 47,300-character multiline paste, content/selection/editing/undo, unsupported and denied voice input, duplicate starts and mocked transcription, narrow tab overflow, sheet open/close and rapid toggling, focus, backdrop dismissal, reduced motion and simulated safe area. Tests used temporary absolute HOME; no real provider calls. Manager verified unchanged tracked files and reviewed head.
+Install: temporary playwright-core@1.65.0 (not a repository-pinned tool); repository manifests unchanged. Locked project dependencies restored.
+Residual risks: component harness rather than full-app end-to-end coverage; no physical phones, iOS Safari, real soft keyboard or live transcription. Performance improvement ratios not independently remeasured. Owner should check these mobile interactions on real devices before shipping.
+Moved review/ → ready/.
