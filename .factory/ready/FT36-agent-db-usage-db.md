@@ -120,3 +120,19 @@ Manager independently reran the configured gofmt/vet/test gate successfully. Cod
 No installs or manifest/lockfile changes. Desktop test build used temporary symlinks to existing system libraries and RUST_FONTCONFIG_DLOPEN; coder removed its temporary build output.
 
 Not checked manually: desktop/browser/Android interfaces, especially password-protected desktop login and update checks. No live Cloudflare/R2 backup, real power-loss test, nsh production build or rustfmt check. Import interruption was simulated. Owner should inspect migration recovery, partial contacts import and desktop login/update behavior after the next review. No deployment or merge into master.
+
+## factory · review · 2026-11-09 05:26
+head: 44ea87904e06bc8ad021107ef9a9dc3911eecc77
+verdict: pass
+notes:
+- [P2] contacts/db_store.go:43: Nested contacts.dir_name resolves the wrong database. With address/people, migration writes one contact into the state directory's agent.db while runtime opens address/agent.db and returns zero contacts. Pass the state database location explicitly rather than deriving it from the contacts directory's parent.
+- [P2] internal/configstore/store.go:552: Config migration changes relative file targets when the default config directory differs from the state directory. A previously existing mixin.keystore_file=credentials/mixin.json resolves to a nonexistent state-directory path after migration, breaking sends. Preserve original relative-path targets during import.
+- [P2] internal/cron/store.go:299: Semantic task deletion holds the agent.db write lock while waiting for the model. A concurrent context save waited about 9.7 seconds and failed with SQLITE_BUSY. Match outside the transaction and revalidate the target before committing.
+- [P2] contacts/db_store.go:254: Contact and handle reads lack one transaction snapshot. Concurrent complete replacements returned nickname=V1001 with tg_private_chat_id=1002, a combination never committed. Read both within one transaction.
+- [P2] internal/llmstats/usage_query.go:108: Usage summary queries lack one consistent snapshot. Concurrent appends produced total requests=1 but per-model requests summing to 3 in the same response. Share one read transaction across the aggregate queries.
+
+Codex reviewed the full origin/master...HEAD range and fix-round changes df7ff8c0..HEAD. All seven previous findings' original trigger scenarios passed verification. No P0/P1 findings; review → ready under the factory threshold, with the five P2 defects above retained for owner consideration before shipping. No merge conflict with origin/master; no code changes or commits.
+
+Validation: configured gofmt/vet/test gate passed (162 Go packages); nsh check passed; Console tests 276 passed; desktop cargo test --locked --offline 51 passed/1 ignored; Cloudflare startup script tests 10 passed; git diff --check passed. Reproduction assertions ran separately using overlays outside the worktree. Scripted tests used an absolute throwaway HOME. Desktop initial linking failed, then passed using existing shared libraries. No unpinned installs or manifest changes. Review-code skill was unavailable in the coder environment; review requirements were supplied in the task.
+
+Not verified: manual browser/desktop/Android GUI, live Cloudflare/R2 restore and actual power-loss recovery (interruption was simulated). No linked GitHub issue or PR. No deployment or merge into master.
