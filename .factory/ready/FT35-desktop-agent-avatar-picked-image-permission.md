@@ -31,3 +31,13 @@ Tests: manager independently passed `test -z "$(gofmt -l .)" && go vet ./... && 
 Installs: only pinned Rust toolchain 1.99.1 and locked crates restored; no new dependencies or manifest changes. Coder used temporary pkg-config metadata and library links against existing runtime libraries to replace missing development metadata, then removed them; no system packages installed. Coder reported temporary files outside the run directory, contrary to the requested directory boundary; these were reported removed. Retained Rust build cache is about 8.5 GB.
 Not checked: real desktop GUI avatar replacement, GPUI Image.getSize/data-URI rendering end-to-end, macOS/Windows dialogs; the ignored test requires a real built backend. Tests verify permission acceptance and image decoding, not a live GUI upload.
 Moved new/ → review/ for review; not merged into master.
+
+## factory · review · 2026-11-09 00:04
+head: ecb2f6f79e92f3c8156a5af9b328e2d62898389f
+verdict: pass
+notes:
+- Codex reviewed origin/master...HEAD (3 files); no qualifying findings. Merge compatibility with origin/master is clean.
+- Codex passed the configured gofmt, go vet ./... and go test ./... checks, plus 16 targeted Rust file-module tests covering selected-image data URIs, unselected file URL denial, cancellation, invalid images, size limits, file growth and avatar encoding/upload. Tests used a throwaway HOME.
+- No unpinned tool installs or dependency manifest changes. Tracked worktree remains unchanged. Console sources unchanged; nsh checks not required.
+- Residual risks: full desktop Cargo build was not rerun; real desktop GUI avatar replacement and macOS/Windows dialogs remain unverified. Owner should check the real desktop avatar replacement before shipping.
+- Moved review/ → ready/; not merged into master.
