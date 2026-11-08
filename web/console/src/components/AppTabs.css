@@ -8,6 +8,52 @@
   border: 1px solid var(--line-soft);
   background: var(--q-bg-page);
   box-sizing: border-box;
+  /* Options keep their labels whole; a row wider than its room (a phone, a narrow panel) scrolls
+     sideways instead of squeezing every label to an ellipsis. */
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.app-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+/* An end of a scrolling row that hides options fades out, so the row reads as one to swipe. */
+.app-tabs.is-overflow-start,
+.app-tabs.is-overflow-end {
+  --app-tabs-fade-start: 0px;
+  --app-tabs-fade-end: 0px;
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    #000 var(--app-tabs-fade-start),
+    #000 calc(100% - var(--app-tabs-fade-end)),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    #000 var(--app-tabs-fade-start),
+    #000 calc(100% - var(--app-tabs-fade-end)),
+    transparent 100%
+  );
+}
+
+.app-tabs.is-overflow-start {
+  --app-tabs-fade-start: 24px;
+}
+
+.app-tabs.is-overflow-end {
+  --app-tabs-fade-end: 24px;
+}
+
+/* The track hugs its options, so its inner padding is the same 2px on every side instead of
+   trailing off into empty track when the row is given more width than it needs. */
+.app-tabs:not(.is-equal) {
+  width: fit-content;
+  max-width: 100%;
 }
 
 .app-tabs-option {
@@ -15,7 +61,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  flex: 0 1 auto;
+  flex: 0 0 auto;
   gap: 6px;
   height: 32px;
   min-width: 0;
@@ -69,11 +115,17 @@
   padding: 0;
 }
 
-/* Equal options: each takes the same share of the row, an icon-only one included. */
+/* Equal options: each takes the same share of the row, an icon-only one included, but never
+   less than its own label; past that the row scrolls. */
 .app-tabs.is-equal .app-tabs-option,
 .app-tabs.is-equal .app-tabs-option.is-icon-only {
   flex: 1 1 0;
   width: auto;
+  min-width: max-content;
+}
+
+.app-tabs.is-equal .app-tabs-option.is-icon-only {
+  min-width: 32px;
 }
 
 /* The label clips for the ellipsis, so its line box must be tall enough for descenders. */
