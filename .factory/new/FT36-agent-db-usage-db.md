@@ -136,3 +136,6 @@ Codex reviewed the full origin/master...HEAD range and fix-round changes df7ff8c
 Validation: configured gofmt/vet/test gate passed (162 Go packages); nsh check passed; Console tests 276 passed; desktop cargo test --locked --offline 51 passed/1 ignored; Cloudflare startup script tests 10 passed; git diff --check passed. Reproduction assertions ran separately using overlays outside the worktree. Scripted tests used an absolute throwaway HOME. Desktop initial linking failed, then passed using existing shared libraries. No unpinned installs or manifest changes. Review-code skill was unavailable in the coder environment; review requirements were supplied in the task.
 
 Not verified: manual browser/desktop/Android GUI, live Cloudflare/R2 restore and actual power-loss recovery (interruption was simulated). No linked GitHub issue or PR. No deployment or merge into master.
+
+## factory · 2026-11-09 06:00
+Moved ready → new for the owner-requested Claude Code verification and repair of the five remaining P2 findings. Continue on the existing branch; no release or merge into master is authorized by this fix run.
