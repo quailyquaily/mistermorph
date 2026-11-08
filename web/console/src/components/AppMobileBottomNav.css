@@ -7,6 +7,10 @@
   flex: 0 0 auto;
   display: grid;
   grid-template-columns: repeat(var(--nav-count, 5), minmax(0, 1fr));
+  /* One row filling the strip between its top rule and the safe area. The height is border-box,
+     so the rule takes 1px of --mobile-nav-height; a slot sized to the full height would overflow
+     the row and sit its icon half a pixel low. */
+  grid-template-rows: minmax(0, 1fr);
   height: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom, 0px));
   padding: 0 4px env(safe-area-inset-bottom, 0px);
   border-top: 1px solid var(--line);
@@ -25,17 +29,20 @@
   transition: left var(--motion-normal) var(--motion-ease);
 }
 
+/* Every slot is its whole cell, with no padding of its own, and centres its icon or portrait
+   both ways in it. */
 .mobile-bottom-nav-item {
   appearance: none;
   position: relative;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
+  align-self: stretch;
   min-width: 0;
-  height: var(--mobile-nav-height);
+  min-height: 0;
+  height: auto;
   margin: 0;
-  padding: 0 2px;
+  padding: 0;
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -65,42 +72,18 @@
   height: 22px;
 }
 
-/* The agent slot: its portrait with the same square status mark as the desktop switcher. */
-.mobile-agent-switcher-face {
-  position: relative;
-  flex: 0 0 auto;
-  width: 22px;
-  height: 22px;
-}
-
+/* The agent slot: its portrait alone. Pressing or selecting it adds nothing to the portrait (no
+   ring, no status mark, no press fill); the top rule marks it as selected, and keyboard focus
+   keeps the slot's outline. Connection status is shown in the switcher's list. */
 .mobile-agent-switcher-trigger .mobile-agent-switcher-avatar {
+  flex: 0 0 auto;
   width: 22px;
   min-width: 22px;
   height: 22px;
 }
 
-.mobile-agent-switcher-trigger.is-active .mobile-agent-switcher-avatar {
-  box-shadow: 0 0 0 1.5px var(--q-c-blue);
-}
-
-.mobile-agent-switcher-mark {
-  position: absolute;
-  right: -3px;
-  bottom: -2px;
-  width: 8px;
-  height: 8px;
-  border: 1.5px solid var(--q-bg-white);
-  border-radius: 1px;
-  box-sizing: content-box;
-}
-
-.mobile-agent-switcher-mark.is-online {
-  background: var(--status-on);
-}
-
-.mobile-agent-switcher-mark.is-offline {
-  background: var(--q-bg-white);
-  box-shadow: inset 0 0 0 1px var(--status-off);
+.mobile-agent-switcher-trigger:active {
+  background: transparent;
 }
 
 .mobile-bottom-more-panel {
