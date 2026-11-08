@@ -136,6 +136,10 @@ Headless tests prove behaviour, not the look.
   `safeArea()` has their sizes). The app's frame takes them once (`lib/systemInsets.ts`): pages and
   their 57pt bars need no inset of their own, and `env(safe-area-inset-*)` must not be added inside
   the frame on Android. Overlays cover the whole surface and take the insets themselves.
+- nsh/base's `Sheet` is such an overlay: the frame's padding does not reach it, and its panel runs
+  under the status bar unless it is padded. The chat's phone panel (`WorkspaceSheet`) pads its
+  popup with `rightSheetInsets` (`lib/systemInsets.ts`); a new sheet at a side does the same, never
+  adding the frame's inset on top.
 - The packaged app gets no `usesCleartextTraffic`, and its `fetch` goes through HttpURLConnection,
   which then refuses `http://`: `scripts/build-android.sh` runs `nsh package` with an SDK whose
   `aapt2` adds it, for console servers on the local network.

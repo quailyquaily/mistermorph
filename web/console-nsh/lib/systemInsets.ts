@@ -10,7 +10,10 @@
 // - while the software keyboard is up, its height (which covers the navigation bar) replaces the
 //   bottom inset, so nothing adds both;
 // - dialogs are an Overlay over the whole surface, outside the frame: their layer takes the same
-//   insets itself.
+//   insets itself;
+// - so are the sheets docked at a side (nsh/base's `Sheet`, the chat's topic and workspace panel on
+//   phones): the panel takes the insets of the edges it touches, inside its own paper, and the
+//   frame's padding never reaches it, so nothing is taken twice.
 //
 // iOS, the desktops and the web are unchanged (they pass no insets here). Pure functions, no
 // state, so the tests can check the numbers.
@@ -61,5 +64,22 @@ export function dialogLayerInsets(area: Partial<Edges>, keyboard: number, gap: n
     right: size(area.right) + gap,
     left: size(area.left) + gap,
     bottom: (raised > 0 ? Math.max(raised, size(area.bottom)) : size(area.bottom)) + gap,
+  };
+}
+
+/**
+ * The padding of a sheet docked at the right edge, from the top of the surface to its bottom (the
+ * chat's topic and workspace panel on phones): the status bar's inset at the top, the right inset
+ * (a cutout or the navigation bar in landscape) at its edge, and at the bottom the navigation bar's
+ * inset, or the keyboard's height while it is up. Its left edge is in the middle of the surface:
+ * nothing there. The sheet is an Overlay, outside the frame: this is all the room it gets.
+ */
+export function rightSheetInsets(area: Partial<Edges>, keyboard: number): Edges {
+  const raised = size(keyboard);
+  return {
+    top: size(area.top),
+    right: size(area.right),
+    bottom: raised > 0 ? Math.max(raised, size(area.bottom)) : size(area.bottom),
+    left: 0,
   };
 }
