@@ -84,7 +84,7 @@ export const origin = () => config.origin;
 /** The browser's `isSecureContext`, or null when the host did not report it. */
 export const secureContext = (): boolean | null =>
   typeof config.secureContext === "boolean" ? config.secureContext : null;
-/** Whether the host offers an optional feature: `notifications`, `pickDirectory`, `checkUpdate`, `restart`, `quit`, `openLog`, `saveFile`, `pickFile`. */
+/** Whether the host offers an optional feature: `notifications`, `pickDirectory`, `checkUpdate`, `restart`, `quit`, `openLog`, `saveFile`, `pickFile`, `voiceRecord`, `voicePreview`. */
 export const hasFeature = (name: string) => config.features.includes(name);
 
 /* ---------- the server (phone app) ---------- */
@@ -234,13 +234,16 @@ export function onNotificationPress(listener: (id: string) => void) {
 /* ---------- voice recording ---------- */
 
 /**
- * The web host's microphone (feature "voiceRecord"): nsh records no audio on the web, so the page
- * records and keeps the recording as a file to upload to the agent's /voice/transcribe. Elsewhere
- * voice input uses nsh's Speech instead.
+ * The host's microphone (feature "voiceRecord"): nsh records no audio on the web and the desktop
+ * app's window recognizes no speech, so their hosts record (the page with MediaRecorder, the
+ * desktop app with the system's recorder) and keep the recording as a file to upload to the
+ * agent's /voice/transcribe. Elsewhere voice input uses nsh's Speech instead.
  */
 export const voiceRecording = {
   available: () => hosted && hasFeature("voiceRecord"),
-  /** Why this page cannot record: "" when it can, "insecure" or "unsupported". */
+  /** Whether the host shows the words while it records (feature "voicePreview", the browser's). */
+  previews: () => hasFeature("voicePreview"),
+  /** Why the host cannot record: "" when it can, "insecure" or "unsupported" (a browser), "recorder" (no recorder program). */
   async support(): Promise<string> {
     return String((await hostChannel.call("morph.voice.support", {})) ?? "unsupported");
   },

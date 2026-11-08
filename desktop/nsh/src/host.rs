@@ -23,8 +23,9 @@ use crate::{
     store::{AppState, KvStore},
 };
 
-/// What the host features the app may use (`hasFeature`).
-pub const FEATURES: [&str; 8] = ["notifications", "pickDirectory", "checkUpdate", "restart", "quit", "openLog", "saveFile", "pickFile"];
+/// What the host features the app may use (`hasFeature`). `voiceRecord`: the microphone records
+/// for the agent to transcribe (src/voice.rs), as the browser's does.
+pub const FEATURES: [&str; 9] = ["notifications", "pickDirectory", "checkUpdate", "restart", "quit", "openLog", "saveFile", "pickFile", "voiceRecord"];
 
 /// Work for the main thread, where the window and GPUI's dialogs are.
 pub enum Ui {
@@ -53,6 +54,7 @@ pub struct Desktop {
     session: Mutex<BTreeMap<String, String>>,
     app_state: Mutex<AppState>,
     files: Mutex<Registry>,
+    pub voice: crate::voice::Recorder,
     ready: AtomicBool,
 }
 
@@ -81,6 +83,7 @@ impl Desktop {
             session: Mutex::new(BTreeMap::new()),
             app_state: Mutex::new(AppState::load(crate::paths::app_state_file().as_deref())),
             files: Mutex::new(Registry::default()),
+            voice: crate::voice::Recorder::new(crate::voice::Recorder::default_dir()),
             ready: AtomicBool::new(false),
         }
     }
@@ -283,7 +286,55 @@ pub fn install(host: &HostChannel, desktop: &Arc<Desktop>) {
 
     let d = desktop.clone();
     host.handle("morph.file.release", move |call| {
-        lock(&d.files).release(&text(call.data(), "id"));
+        let id = text(call.data(), "id");
+        let released = {
+            let mut files = lock(&d.files);
+            let picked = files.get(&id);
+            files.release(&id);
+            picked
+        };
+        if let Some(picked) = released {
+            d.voice.forget(&picked.path);
+        }
+        call.resolve(Value::Null);
+    });
+
+    // Voice input: the recorder answers from its own thread (src/voice.rs).
+    host.handle("morph.voice.support", |call| call.resolve(json!(crate::voice::support())));
+
+    let d = desktop.clone();
+    host.handle("morph.voice.start", move |call| {
+        let Some(reply) = call.into_reply() else {
+            return;
+        };
+        let log = d.log.clone();
+        d.voice.start(move |answer| {
+            if answer["ok"] != json!(true) {
+                log.line(&format!("desktop_window voice recording failed to start: {answer}"));
+            }
+            reply.resolve(answer)
+        });
+    });
+
+    let d = desktop.clone();
+    host.handle("morph.voice.stop", move |call| {
+        let Some(reply) = call.into_reply() else {
+            return;
+        };
+        let registered = d.clone();
+        d.voice.stop(move |result| match result {
+            Ok(Some(picked)) => reply.resolve(registered.register_file(picked)),
+            Ok(None) => reply.resolve(Value::Null),
+            Err(err) => {
+                registered.log.line(&format!("desktop_window voice recording failed: {err}"));
+                reply.reject(err)
+            }
+        });
+    });
+
+    let d = desktop.clone();
+    host.handle("morph.voice.cancel", move |call| {
+        d.voice.cancel();
         call.resolve(Value::Null);
     });
 
@@ -365,7 +416,7 @@ mod tests {
 
     #[test]
     fn features_match_the_contract() {
-        for feature in ["notifications", "pickDirectory", "checkUpdate", "restart", "quit", "openLog", "saveFile", "pickFile"] {
+        for feature in ["notifications", "pickDirectory", "checkUpdate", "restart", "quit", "openLog", "saveFile", "pickFile", "voiceRecord"] {
             assert!(FEATURES.contains(&feature));
         }
     }

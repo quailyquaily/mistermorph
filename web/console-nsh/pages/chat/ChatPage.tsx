@@ -72,7 +72,7 @@ function Composer(props: { c: ChatController; landing?: boolean }) {
       }
       voiceElapsed={c.voice.elapsed()}
       voicePreview={c.voice.preview()}
-      voicePreviewEnabled={c.voice.previewEnabled()}
+      voicePreviewEnabled={c.voice.previewable ? c.voice.previewEnabled() : null}
       voiceLabels={{
         recording: t("chat_composer_voice_recording"),
         transcribing: t("chat_composer_voice_transcribing"),

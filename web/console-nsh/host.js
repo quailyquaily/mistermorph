@@ -356,7 +356,7 @@ export function createHost(player) {
         languages: [...(navigator.languages || [navigator.language || "en"])],
         desktopVersion: "",
         secureContext: window.isSecureContext,
-        features: ["pickFile", "saveFile", "voiceRecord", ...(typeof Notification === "undefined" ? [] : ["notifications"])],
+        features: ["pickFile", "saveFile", "voiceRecord", "voicePreview", ...(typeof Notification === "undefined" ? [] : ["notifications"])],
       }),
     ],
     [
