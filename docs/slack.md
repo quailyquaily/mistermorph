@@ -151,7 +151,7 @@ slack:
   addressing_confidence_threshold: 0.6
   addressing_interject_threshold: 0.6
   task_timeout: "0s"
-  max_concurrency: 3
+  max_concurrency: 8
 ```
 
 Inbound Slack images are downloaded under `file_cache_dir/slack/` and passed to image-capable models as image parts. The current runtime accepts PNG, JPEG, and WebP images, keeps at most 3 images per message, and rejects images larger than 5 MiB each.

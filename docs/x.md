@@ -44,7 +44,7 @@ x:
     max_posts_per_day: 50
     allow_links_in_posts: false
   task_timeout: "0s"
-  max_concurrency: 3
+  max_concurrency: 8
   serve_listen: ""
 ```
 

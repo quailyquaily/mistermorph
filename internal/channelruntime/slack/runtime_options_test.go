@@ -43,8 +43,8 @@ func TestNormalizeRunOptionsDefaults(t *testing.T) {
 	if got.AgentLimits.ToolRepeatLimit != 256 {
 		t.Fatalf("agent tool repeat limit = %d, want 256", got.AgentLimits.ToolRepeatLimit)
 	}
-	if got.MaxConcurrency != 3 {
-		t.Fatalf("max concurrency = %d, want 3", got.MaxConcurrency)
+	if got.MaxConcurrency != 8 {
+		t.Fatalf("max concurrency = %d, want 8", got.MaxConcurrency)
 	}
 	if got.GroupTriggerMode != "talkative" {
 		t.Fatalf("group trigger mode = %q, want talkative", got.GroupTriggerMode)

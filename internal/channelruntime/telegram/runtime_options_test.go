@@ -66,8 +66,8 @@ func TestNormalizeRunOptionsDefaults(t *testing.T) {
 	if got.TaskTimeout != time.Hour {
 		t.Fatalf("task timeout = %v, want 1h", got.TaskTimeout)
 	}
-	if got.MaxConcurrency != 3 {
-		t.Fatalf("max concurrency = %d, want 3", got.MaxConcurrency)
+	if got.MaxConcurrency != 8 {
+		t.Fatalf("max concurrency = %d, want 8", got.MaxConcurrency)
 	}
 	if got.BusMaxInFlight != 1024 {
 		t.Fatalf("bus max inflight = %d, want 1024", got.BusMaxInFlight)

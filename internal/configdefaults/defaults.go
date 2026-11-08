@@ -22,7 +22,7 @@ const (
 	DefaultFileCacheMaxAge        = 7 * 24 * time.Hour
 	DefaultFileCacheMaxFiles      = 1000
 	DefaultFileCacheMaxTotalBytes = int64(512 * 1024 * 1024)
-	DefaultChannelMaxConcurrency  = 3
+	DefaultChannelMaxConcurrency  = 8
 	DefaultBusMaxInFlight         = 1024
 	DefaultServerMaxQueue         = 100
 	DefaultGroupTriggerMode       = "talkative"
