@@ -126,19 +126,28 @@ function entryNote(entry: any) {
   return cleanText(entry?.summary);
 }
 
+// The details panel is a dark terminal on every screen, as in the Vue console: its own ink (the
+// page's foreground with a touch of blue), light text, and the theme's light accents for status.
+const TERMINAL_BG = "bg-[#1b1f3b]";
+const TERMINAL_FG = "text-[#e8eef5]";
+const TERMINAL_MUTED = "text-[#d5e0ecb2]";
+const TERMINAL_NOTE = "text-[#e8eef5d1]";
+const TERMINAL_VALUE = "text-[#d9e3ee]";
+const TERMINAL_ERROR = "text-[#e08a9e]";
+
 function dotClass(status: string) {
   switch (status) {
     case "done":
     case "completed":
-      return "bg-status-on border-status-on";
+      return "bg-[#5a8788] border-[#5a8788]";
     case "failed":
     case "canceled":
-      return "bg-status-error border-status-error";
+      return "bg-[#c06a80] border-[#c06a80]";
     case "running":
     case "in_progress":
-      return "bg-status-pending border-status-pending";
+      return "bg-[#eea03e] border-[#eea03e]";
     default:
-      return "border-status-off";
+      return "bg-[#ffffff4d] border-[#ffffff4d]";
   }
 }
 
@@ -216,7 +225,7 @@ export function ChatStatusCard(props: {
         <PinnedScroll
           resetKey={`${props.itemID}:${panel()}`}
           maxHeight={280}
-          class="rounded-(--radius) border border-line-faint bg-paper"
+          class={`rounded-(--radius) ${TERMINAL_BG}`}
           contentClass="gap-2 p-3"
         >
           <If when={panel() === PANEL_PLAN}>
@@ -225,7 +234,7 @@ export function ChatStatusCard(props: {
                 <View class="flex-row items-start gap-2">
                   <View class={`mt-1.5 size-2 border ${dotClass(normalizePlanStatus(step()?.status))}`} />
                   <Text
-                    class={`flex-1 text-sm ${normalizePlanStatus(step()?.status) === "completed" ? "text-muted-foreground" : "text-foreground"}`}
+                    class={`flex-1 text-sm ${normalizePlanStatus(step()?.status) === "completed" ? TERMINAL_MUTED : TERMINAL_FG}`}
                   >
                     {String(step()?.step ?? "")}
                   </Text>
@@ -241,27 +250,27 @@ export function ChatStatusCard(props: {
                   <View class="flex-1 gap-1">
                     <View class="flex-row flex-wrap items-baseline gap-1.5">
                       <If when={kindLabel(entry())}>
-                        <Text class="font-mono text-xs uppercase text-muted-foreground">{kindLabel(entry())}</Text>
+                        <Text class={`font-mono text-xs uppercase ${TERMINAL_MUTED}`}>{kindLabel(entry())}</Text>
                       </If>
-                      <Text class="text-sm font-medium text-foreground">
+                      <Text class={`text-sm font-medium ${TERMINAL_FG}`}>
                         {entryTitle(entry())}
                         {activityWorkerLabel(entry(), localeState.lang) ? ` · ${activityWorkerLabel(entry(), localeState.lang)}` : ""}
                       </Text>
                       <If when={childCount(entry()) > 0}>
-                        <Text class="text-xs text-muted-foreground">{t("chat_activity_calls", { count: childCount(entry()) })}</Text>
+                        <Text class={`text-xs ${TERMINAL_MUTED}`}>{t("chat_activity_calls", { count: childCount(entry()) })}</Text>
                       </If>
                       <View class="flex-1" />
                       <If when={entryTime(entry())}>
-                        <Text class="font-mono text-xs text-muted-foreground">{entryTime(entry())}</Text>
+                        <Text class={`font-mono text-xs ${TERMINAL_MUTED}`}>{entryTime(entry())}</Text>
                       </If>
                     </View>
                     <If when={activityParams(entry()).length > 0}>
                       <View class="flex-row flex-wrap gap-1.5">
                         <Each of={activityParams(entry())} key={(param) => param.key}>
                           {(param) => (
-                            <View class="flex-row gap-1 rounded-(--radius) bg-muted px-1.5 py-px">
-                              <Text class="font-mono text-xs text-muted-foreground">{param().key}</Text>
-                              <Text class="font-mono text-xs text-foreground line-clamp-2">{param().value}</Text>
+                            <View class="flex-row gap-1">
+                              <Text class={`font-mono text-xs ${TERMINAL_MUTED}`}>{param().key}</Text>
+                              <Text class={`font-mono text-xs ${TERMINAL_VALUE} line-clamp-2`}>{param().value}</Text>
                             </View>
                           )}
                         </Each>
@@ -269,15 +278,15 @@ export function ChatStatusCard(props: {
                     </If>
                     <If when={entryNote(entry()) && children(entry()).length === 0}>
                       <View selectable>
-                        <Text class={`text-xs ${cleanText(entry()?.error) ? "text-danger" : "text-subtle"} line-clamp-6`}>
+                        <Text class={`text-xs ${cleanText(entry()?.error) ? TERMINAL_ERROR : TERMINAL_NOTE} line-clamp-6`}>
                           {entryNote(entry())}
                         </Text>
                       </View>
                     </If>
                     <If when={children(entry()).length > 0}>
-                      <View class="gap-1 border-l border-line-faint pl-2">
+                      <View class="gap-1 border-l border-[#ffffff26] pl-2">
                         <If when={Number(entry()?.childrenOmitted) > 0}>
-                          <Text class="text-xs text-muted-foreground">
+                          <Text class={`text-xs ${TERMINAL_MUTED}`}>
                             {t("chat_activity_calls_omitted", { count: entry()?.childrenOmitted })}
                           </Text>
                         </If>
@@ -286,18 +295,18 @@ export function ChatStatusCard(props: {
                             <View class="gap-0.5">
                               <View class="flex-row items-center gap-1.5">
                                 <View class={`size-1.5 border ${dotClass(normalizeTaskStatus(child()?.status))}`} />
-                                <Text class="text-xs text-foreground">
+                                <Text class={`text-xs ${TERMINAL_FG}`}>
                                   {entryTitle(child())}
                                   {activityWorkerLabel(child(), localeState.lang) ? ` · ${activityWorkerLabel(child(), localeState.lang)}` : ""}
                                 </Text>
                                 <If when={activityParams(child())[0]?.value}>
-                                  <Text class="flex-1 font-mono text-xs text-muted-foreground line-clamp-1">
+                                  <Text class={`flex-1 font-mono text-xs ${TERMINAL_MUTED} line-clamp-1`}>
                                     {activityParams(child())[0]?.value}
                                   </Text>
                                 </If>
                               </View>
                               <If when={child()?.error}>
-                                <Text class="text-xs text-danger">{String(child()?.error ?? "")}</Text>
+                                <Text class={`text-xs ${TERMINAL_ERROR}`}>{String(child()?.error ?? "")}</Text>
                               </If>
                             </View>
                           )}
