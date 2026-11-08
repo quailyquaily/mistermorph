@@ -105,3 +105,6 @@ notes:
 Codex reviewed origin/master...HEAD against the design and item plan. No merge conflicts with origin/master. Configured gofmt/vet/test gate passed (162 Go packages); nsh check passed; nsh test --web-host tests/noHost.js passed (276 tests). Scripted tests used an isolated absolute temporary HOME. No installs; no tracked code changes or commits. Review-code skill was unavailable in the coder environment; review requirements were supplied in the task.
 
 Not verified: desktop/Android GUI and live Cloudflare/R2 backup. Import recovery was tested by recreating interrupted state, not a real power loss. Reproduction artifacts retained locally. No linked GitHub issue or PR was present. Item stays in review/ for the owner to decide; add a note and move to new/ for fixes.
+
+## factory · 2026-11-09 04:40
+Moved review → new at the owner’s request: "Move FT36 back to new". Continue on the existing branch and address the review findings.
