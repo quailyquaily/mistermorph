@@ -20,8 +20,8 @@ func TestRuntimeStateFileSpecsIncludesHeartbeat(t *testing.T) {
 	paths := runtimeStatePathsFrom(testRuntimePaths(t.TempDir()))
 
 	items := describeStateFiles(paths, "")
-	if len(items) != 6 {
-		t.Fatalf("len(items) = %d, want 6", len(items))
+	if len(items) != 4 {
+		t.Fatalf("len(items) = %d, want 4", len(items))
 	}
 
 	foundHeartbeat := false
@@ -55,8 +55,11 @@ func TestResolveStateFileSpec(t *testing.T) {
 	if spec, ok := resolveStateFileSpec(paths, "", "heartbeat.md"); !ok || spec.Group != "heartbeat" {
 		t.Fatalf("resolve heartbeat failed: ok=%v spec=%#v", ok, spec)
 	}
-	if _, ok := resolveStateFileSpec(paths, "cron", "ACTIVE.md"); ok {
+	if _, ok := resolveStateFileSpec(paths, "cron", "identity.yaml"); ok {
 		t.Fatalf("resolve with wrong group should fail")
+	}
+	if _, ok := resolveStateFileSpec(paths, "", "ACTIVE.md"); ok {
+		t.Fatalf("the contacts files are no longer state files")
 	}
 	if spec, ok := resolveStateFileSpec(paths, "cron", "cron.yaml"); !ok || spec.Name != "cron.yaml" {
 		t.Fatalf("resolve cron failed: ok=%v spec=%#v", ok, spec)
@@ -91,8 +94,8 @@ func TestStateFilesRoute(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("invalid json: %v", err)
 	}
-	if len(payload.Items) != 6 {
-		t.Fatalf("len(items) = %d, want 6", len(payload.Items))
+	if len(payload.Items) != 4 {
+		t.Fatalf("len(items) = %d, want 4", len(payload.Items))
 	}
 }
 
@@ -202,7 +205,7 @@ func TestContactsListRoute(t *testing.T) {
 	if err != nil {
 		t.Fatalf("decode avatar: %v", err)
 	}
-	contactStore := contacts.NewFileStore(contactsDir)
+	contactStore := contacts.NewStore(contactsDir)
 	if err := contactStore.PutContactAvatar(context.Background(), "tg:@alice", avatarRaw); err != nil {
 		t.Fatalf("write contact avatar: %v", err)
 	}
@@ -402,21 +405,17 @@ func TestContactsListRoute(t *testing.T) {
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status = %d, want %d (%s)", rec.Code, http.StatusOK, rec.Body.String())
 		}
-		activeRaw, err := os.ReadFile(filepath.Join(contactsDir, "ACTIVE.md"))
+		activeRaw, err := storedContactsText(contactsDir, contacts.StatusActive)
 		if err != nil {
 			t.Fatalf("read ACTIVE.md: %v", err)
 		}
 		if !strings.Contains(string(activeRaw), `nickname: Alice Updated`) {
 			t.Fatalf("ACTIVE.md missing updated nickname: %s", string(activeRaw))
 		}
-		if !strings.Contains(string(activeRaw), `persona_brief: updated maintainer`) {
-			t.Fatalf("ACTIVE.md missing updated brief: %s", string(activeRaw))
-		}
-		if !strings.Contains(string(activeRaw), `- console`) {
-			t.Fatalf("ACTIVE.md missing updated topic: %s", string(activeRaw))
-		}
-		if !strings.Contains(string(activeRaw), `x_note: keep-me`) {
-			t.Fatalf("ACTIVE.md should preserve unknown yaml fields: %s", string(activeRaw))
+		// The table keeps the Contact's fields: the legacy profile fields and unknown keys are
+		// not stored.
+		if strings.Contains(string(activeRaw), `persona_brief`) || strings.Contains(string(activeRaw), `x_note`) {
+			t.Fatalf("stored contact kept fields it has no column for: %s", string(activeRaw))
 		}
 	})
 
@@ -453,12 +452,12 @@ func TestContactsListRoute(t *testing.T) {
 				t.Fatalf("PATCH %s owner = %v, want %v", tc.body, payload.Item.Owner, tc.wantOwner)
 			}
 		}
-		activeRaw, err := os.ReadFile(filepath.Join(contactsDir, "ACTIVE.md"))
+		activeRaw, err := storedContactsText(contactsDir, contacts.StatusActive)
 		if err != nil {
 			t.Fatalf("read ACTIVE.md: %v", err)
 		}
-		if !strings.Contains(string(activeRaw), `x_note: keep-me`) || strings.Contains(string(activeRaw), "owner:") {
-			t.Fatalf("ACTIVE.md after unmarking = %s, want the other fields kept and no owner", string(activeRaw))
+		if !strings.Contains(string(activeRaw), `nickname: Alice Updated`) || strings.Contains(string(activeRaw), "owner:") {
+			t.Fatalf("contact after unmarking = %s, want the other fields kept and no owner", string(activeRaw))
 		}
 	})
 
@@ -476,7 +475,7 @@ func TestContactsListRoute(t *testing.T) {
 			t.Fatalf("status = %d, want %d (%s)", rec.Code, http.StatusOK, rec.Body.String())
 		}
 
-		inactiveRaw, err := os.ReadFile(filepath.Join(contactsDir, "INACTIVE.md"))
+		inactiveRaw, err := storedContactsText(contactsDir, contacts.StatusInactive)
 		if err != nil {
 			t.Fatalf("read INACTIVE.md: %v", err)
 		}
@@ -531,7 +530,7 @@ func TestContactsListRoute(t *testing.T) {
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status = %d, want %d (%s)", rec.Code, http.StatusOK, rec.Body.String())
 		}
-		activeRaw, err := os.ReadFile(filepath.Join(contactsDir, "ACTIVE.md"))
+		activeRaw, err := storedContactsText(contactsDir, contacts.StatusActive)
 		if err != nil {
 			t.Fatalf("read ACTIVE.md: %v", err)
 		}
@@ -564,7 +563,7 @@ func TestContactsListRoute(t *testing.T) {
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status = %d, want %d (%s)", rec.Code, http.StatusOK, rec.Body.String())
 		}
-		inactiveRaw, err := os.ReadFile(filepath.Join(contactsDir, "INACTIVE.md"))
+		inactiveRaw, err := storedContactsText(contactsDir, contacts.StatusInactive)
 		if err != nil {
 			t.Fatalf("read INACTIVE.md: %v", err)
 		}
@@ -588,7 +587,7 @@ func TestContactsListRoute(t *testing.T) {
 func TestContactAvatarRouteDoesNotParseContactMarkdown(t *testing.T) {
 	stateDir := t.TempDir()
 	contactsDir := filepath.Join(stateDir, "contacts")
-	store := contacts.NewFileStore(contactsDir)
+	store := contacts.NewStore(contactsDir)
 	ctx := context.Background()
 	if err := store.PutContact(ctx, contacts.Contact{
 		ContactID:       "tg:@alice",
@@ -604,16 +603,6 @@ func TestContactAvatarRouteDoesNotParseContactMarkdown(t *testing.T) {
 	if err := store.PutContactAvatar(ctx, "tg:@alice", avatarRaw); err != nil {
 		t.Fatalf("PutContactAvatar() error = %v", err)
 	}
-	activePath := filepath.Join(contactsDir, "ACTIVE.md")
-	activeRaw, err := os.ReadFile(activePath)
-	if err != nil {
-		t.Fatalf("read ACTIVE.md: %v", err)
-	}
-	activeRaw = append(activeRaw, []byte("\n## Broken\n\n```yaml\ncontact_id: [\n```\n")...)
-	if err := os.WriteFile(activePath, activeRaw, 0o600); err != nil {
-		t.Fatalf("write malformed ACTIVE.md: %v", err)
-	}
-
 	mux := http.NewServeMux()
 	RegisterRoutes(mux, RoutesOptions{
 		Mode:         "serve",
@@ -627,4 +616,23 @@ func TestContactAvatarRouteDoesNotParseContactMarkdown(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d (%s)", rec.Code, http.StatusOK, rec.Body.String())
 	}
+}
+
+// storedContactsText is the stored contacts of one status as the YAML editor shows them.
+func storedContactsText(contactsDir string, status contacts.Status) ([]byte, error) {
+	store := contacts.NewStore(contactsDir)
+	items, err := store.ListContacts(context.Background(), status)
+	if err != nil {
+		return nil, err
+	}
+	var b strings.Builder
+	for _, item := range items {
+		block, _, err := store.GetContactYAML(context.Background(), item.ContactID)
+		if err != nil {
+			return nil, err
+		}
+		b.WriteString(block.YAML)
+		b.WriteString("\n---\n")
+	}
+	return []byte(b.String()), nil
 }

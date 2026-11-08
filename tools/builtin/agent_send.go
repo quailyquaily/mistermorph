@@ -48,11 +48,8 @@ func AgentSendAvailable(ctx context.Context, contactsDir string) (bool, error) {
 	if contactsDir == "" {
 		return false, nil
 	}
-	ids, err := loadActiveAgentContactIDs(ctx, contacts.NewFileStore(contactsDir))
-	if err != nil {
-		return false, err
-	}
-	return len(ids) > 0, nil
+	// The same check ACTIVE.md had: an active contact of kind agent, now a query on contacts.
+	return contacts.NewStore(contactsDir).HasActiveAgent(ctx)
 }
 
 func loadActiveAgentContactIDs(ctx context.Context, store contacts.ContactStore) (map[string]struct{}, error) {

@@ -132,7 +132,7 @@ func TestResolveAgentIdentityDoesNotRefreshAvatarBeforeAuthorization(t *testing.
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
 	}))
-	store := contacts.NewFileStore(t.TempDir())
+	store := contacts.NewStore(t.TempDir())
 	refresher, err := contacts.NewContactAvatarRefresher(context.Background(), store, nil)
 	if err != nil {
 		t.Fatalf("NewContactAvatarRefresher() error = %v", err)
@@ -163,7 +163,7 @@ func TestEnqueueObservedContactAvatarUsesResolvedSlackIdentity(t *testing.T) {
 		avatarRequested <- struct{}{}
 		_, _ = w.Write([]byte("\x89PNG\r\n\x1a\n"))
 	}))
-	store := contacts.NewFileStore(t.TempDir())
+	store := contacts.NewStore(t.TempDir())
 	if err := store.PutContact(context.Background(), contacts.Contact{
 		ContactID:       "slack:T111:U222",
 		Channel:         contacts.ChannelSlack,

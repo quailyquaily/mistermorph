@@ -21,7 +21,7 @@ func TestInboundAdapterHandleInboundMessage(t *testing.T) {
 	}
 	defer bus.Close()
 
-	store := contacts.NewFileStore(t.TempDir())
+	store := contacts.NewStore(t.TempDir())
 	adapter, err := NewInboundAdapter(InboundAdapterOptions{
 		Bus:   bus,
 		Store: store,
@@ -227,7 +227,7 @@ func TestInboundMessageCarriesLightweightDecided(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer bus.Close()
-	adapter, err := NewInboundAdapter(InboundAdapterOptions{Bus: bus, Store: contacts.NewFileStore(t.TempDir())})
+	adapter, err := NewInboundAdapter(InboundAdapterOptions{Bus: bus, Store: contacts.NewStore(t.TempDir())})
 	if err != nil {
 		t.Fatal(err)
 	}

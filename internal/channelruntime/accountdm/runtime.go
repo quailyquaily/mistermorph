@@ -78,7 +78,7 @@ func runLoop(ctx context.Context, d Dependencies, opts Options) error {
 			_ = bus.Close()
 		}
 	}()
-	contactsStore := contacts.NewFileStore(d.RuntimePaths.ContactsDir)
+	contactsStore := contacts.NewStore(d.RuntimePaths.ContactsDir)
 	if err := contactsStore.Ensure(context.Background()); err != nil {
 		return err
 	}

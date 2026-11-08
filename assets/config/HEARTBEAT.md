@@ -7,7 +7,7 @@
 
 ## Contacts Proactive Check
 
-- Use `read_file` to read `file_state_dir/contacts/ACTIVE.md`, then select contacts for the current round.
+- Use `contacts_list` to list the active contacts, then select contacts for the current round.
 - Send selected items using `contacts_send` (one send call per selected contact).
 - Session feedback states are updated by runtime program flow (no LLM tool call needed).
 - If no contact is selected, summarize the reason (for example: no fresh candidates, cooldown, trust constraints).

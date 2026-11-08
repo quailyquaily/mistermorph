@@ -662,7 +662,7 @@ func TestNewTelegramRuntimeStatePublishesCompleteOwner(t *testing.T) {
 	if err != nil {
 		t.Fatalf("StartInproc() error = %v", err)
 	}
-	contactsStore := contacts.NewFileStore(t.TempDir())
+	contactsStore := contacts.NewStore(t.TempDir())
 	if err := contactsStore.Ensure(context.Background()); err != nil {
 		t.Fatalf("Ensure() error = %v", err)
 	}

@@ -11,7 +11,7 @@ import (
 )
 
 func ActiveContactCandidateIDs(ctx context.Context, contactsDir string) ([]string, error) {
-	rows, err := contacts.NewFileStore(contactsDir).ListContacts(ctx, contacts.StatusActive)
+	rows, err := contacts.NewStore(contactsDir).ListContacts(ctx, contacts.StatusActive)
 	if err != nil {
 		return nil, err
 	}

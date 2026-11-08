@@ -404,8 +404,6 @@ func (routes *routeRegistration) registerSystemRoutes() {
 			{"id": "runtime_mode", "ok": strings.TrimSpace(mode) != "", "detail": strings.TrimSpace(mode)},
 			diagnoseDirWritable("file_state_dir", paths.stateDir),
 			diagnoseDirWritable("file_cache_dir", paths.cacheDir),
-			diagnoseFileReadable("contacts_active", paths.contactsActive),
-			diagnoseFileReadable("contacts_inactive", paths.contactsInactive),
 			diagnoseAgentDB("agent_db", paths.agentDBPath),
 			diagnoseFileReadable("audit_jsonl", paths.auditPath),
 		}

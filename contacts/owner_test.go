@@ -10,7 +10,7 @@ import (
 
 func TestOwnerIsSetOnlyByEditingTheContact(t *testing.T) {
 	ctx := context.Background()
-	store := NewFileStore(filepath.Join(t.TempDir(), "contacts"))
+	store := NewStore(filepath.Join(t.TempDir(), "contacts"))
 	service := NewService(store)
 	now := time.Date(2026, 10, 27, 7, 0, 0, 0, time.UTC)
 
@@ -61,7 +61,7 @@ func TestOwnerIsSetOnlyByEditingTheContact(t *testing.T) {
 
 func TestSetOwnerKeepsTheRestOfTheYAML(t *testing.T) {
 	ctx := context.Background()
-	store := NewFileStore(filepath.Join(t.TempDir(), "contacts"))
+	store := NewStore(filepath.Join(t.TempDir(), "contacts"))
 	if _, err := NewService(store).UpsertContact(ctx, Contact{
 		ContactID: "tg:1002", Kind: KindHuman, Channel: ChannelTelegram, TGUserID: 1002, ContactNickname: "Me",
 	}, time.Date(2026, 10, 27, 7, 0, 0, 0, time.UTC)); err != nil {

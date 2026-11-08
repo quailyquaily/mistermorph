@@ -68,7 +68,7 @@ func TestRefreshChatInfoOnStartFetchesCandidatesWhenStoreEmpty(t *testing.T) {
 	ctx := context.Background()
 	stateDir := t.TempDir()
 	contactsDir := filepath.Join(stateDir, "contacts")
-	if err := contacts.NewFileStore(contactsDir).PutContact(ctx, contacts.Contact{
+	if err := contacts.NewStore(contactsDir).PutContact(ctx, contacts.Contact{
 		ContactID:      "tg:@alice",
 		Kind:           contacts.KindHuman,
 		Channel:        contacts.ChannelTelegram,
@@ -113,7 +113,7 @@ func TestRefreshChatInfoOnStartFetchesMissingCandidatesWhenStoreHasItems(t *test
 	ctx := context.Background()
 	stateDir := t.TempDir()
 	contactsDir := filepath.Join(stateDir, "contacts")
-	if err := contacts.NewFileStore(contactsDir).PutContact(ctx, contacts.Contact{
+	if err := contacts.NewStore(contactsDir).PutContact(ctx, contacts.Contact{
 		ContactID:      "tg:@alice",
 		Kind:           contacts.KindHuman,
 		Channel:        contacts.ChannelTelegram,

@@ -193,7 +193,7 @@ func Run(ctx context.Context, d depsutil.CommonDependencies, opts Options) error
 	defer generations.Close()
 	generations.Start(ctx)
 
-	contactsStore := contacts.NewFileStore(d.RuntimePaths.ContactsDir)
+	contactsStore := contacts.NewStore(d.RuntimePaths.ContactsDir)
 	nameAgentTopics(ctx, taskStore, contactsStore, logger)
 	workspaceStore := workspace.NewStore(d.RuntimePaths.WorkspaceAttachmentsPath)
 	runControl := runtimecontrol.New()
@@ -440,7 +440,7 @@ func recordAgentTask(store daemonruntime.TaskView, info daemonruntime.TaskInfo, 
 
 // nameAgentTopics names the agents' topics that have no title, such as those made for tasks that
 // were moved out of the default topic, after the agents' contacts.
-func nameAgentTopics(ctx context.Context, store daemonruntime.TaskView, contactsStore *contacts.FileStore, logger *slog.Logger) {
+func nameAgentTopics(ctx context.Context, store daemonruntime.TaskView, contactsStore *contacts.DBStore, logger *slog.Logger) {
 	topics, ok := store.(interface {
 		GetTopic(id string) (*daemonruntime.TopicInfo, bool)
 		SetTopicTitle(id string, title string) error
@@ -476,7 +476,7 @@ func conversationKey(msg link.Message) string {
 	return mode + ":" + msg.From + ":" + session
 }
 
-func peerDisplayName(ctx context.Context, store *contacts.FileStore, instanceID string) string {
+func peerDisplayName(ctx context.Context, store *contacts.DBStore, instanceID string) string {
 	contact, ok, err := store.GetContact(ctx, link.ContactID(instanceID))
 	if err != nil || !ok {
 		return ""
@@ -484,7 +484,7 @@ func peerDisplayName(ctx context.Context, store *contacts.FileStore, instanceID 
 	return strings.TrimSpace(contact.ContactNickname)
 }
 
-func touchContact(ctx context.Context, store *contacts.FileStore, instanceID string, logger *slog.Logger) {
+func touchContact(ctx context.Context, store *contacts.DBStore, instanceID string, logger *slog.Logger) {
 	contact, ok, err := store.GetContact(ctx, link.ContactID(instanceID))
 	if err != nil || !ok {
 		return

@@ -103,35 +103,6 @@ func (routes *routeRegistration) registerStateRoutes() {
 		handleTodoTaskRun(w, r, paths.cronPath, cronRun)
 	})
 
-	mux.HandleFunc("/contacts/files", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		if !checkAuth(r, authToken) {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
-		}
-		paths := statePaths
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"items": describeStateFiles(paths, "contacts"),
-		})
-	})
-	mux.HandleFunc("/contacts/files/", func(w http.ResponseWriter, r *http.Request) {
-		if !checkAuth(r, authToken) {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
-		}
-		paths := statePaths
-		name := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, "/contacts/files/"))
-		spec, ok := resolveStateFileSpec(paths, "contacts", name)
-		if !ok {
-			http.Error(w, "invalid file name", http.StatusBadRequest)
-			return
-		}
-		handleTextFileDetail(w, r, spec.Name, spec.Path)
-	})
 	mux.HandleFunc("/contacts/chat-profile", func(w http.ResponseWriter, r *http.Request) {
 		if !checkAuth(r, authToken) {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -156,7 +127,7 @@ func (routes *routeRegistration) registerStateRoutes() {
 			return
 		}
 		paths := statePaths
-		store := contacts.NewFileStore(paths.contactsDir)
+		store := contacts.NewStore(paths.contactsDir)
 		avatar, found, err := store.ReadContactAvatar(r.Context(), contactID)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -185,7 +156,7 @@ func (routes *routeRegistration) registerStateRoutes() {
 			return
 		}
 		paths := statePaths
-		store := contacts.NewFileStore(paths.contactsDir)
+		store := contacts.NewStore(paths.contactsDir)
 		service := contacts.NewService(store)
 		items, err := listContactsForConsole(r.Context(), service)
 		if err != nil {
@@ -207,7 +178,7 @@ func (routes *routeRegistration) registerStateRoutes() {
 			return
 		}
 		paths := statePaths
-		store := contacts.NewFileStore(paths.contactsDir)
+		store := contacts.NewStore(paths.contactsDir)
 		svc := contacts.NewService(store)
 
 		switch r.Method {

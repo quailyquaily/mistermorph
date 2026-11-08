@@ -14,7 +14,7 @@ import (
 
 func TestInboundAdapterPublishesMixinMessage(t *testing.T) {
 	ctx := context.Background()
-	store := contacts.NewFileStore(t.TempDir())
+	store := contacts.NewStore(t.TempDir())
 	if err := store.Ensure(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -84,7 +84,7 @@ func TestInboundAdapterPublishesMixinMessage(t *testing.T) {
 
 func TestInboundAdapterDedupesByConversationAndMessageID(t *testing.T) {
 	ctx := context.Background()
-	store := contacts.NewFileStore(t.TempDir())
+	store := contacts.NewStore(t.TempDir())
 	if err := store.Ensure(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -119,7 +119,7 @@ func TestInboundAdapterDedupesByConversationAndMessageID(t *testing.T) {
 
 func TestInboundAdapterDoesNotMarkFailedDeliverySeen(t *testing.T) {
 	ctx := context.Background()
-	store := contacts.NewFileStore(t.TempDir())
+	store := contacts.NewStore(t.TempDir())
 	if err := store.Ensure(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -159,7 +159,7 @@ func TestInboundAdapterDoesNotMarkFailedDeliverySeen(t *testing.T) {
 
 func TestInboundMessageRoundTrip(t *testing.T) {
 	ctx := context.Background()
-	store := contacts.NewFileStore(t.TempDir())
+	store := contacts.NewStore(t.TempDir())
 	if err := store.Ensure(ctx); err != nil {
 		t.Fatal(err)
 	}

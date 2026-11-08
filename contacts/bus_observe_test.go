@@ -10,7 +10,7 @@ import (
 
 func TestObserveInboundBusMessage_TelegramSenderAndMention(t *testing.T) {
 	ctx := context.Background()
-	store := NewFileStore(t.TempDir())
+	store := NewStore(t.TempDir())
 	svc := NewService(store)
 	now := time.Date(2026, 2, 10, 9, 0, 0, 0, time.UTC)
 
@@ -80,7 +80,7 @@ func TestObserveInboundBusMessage_TelegramSenderAndMention(t *testing.T) {
 
 func TestObserveInboundBusMessageWithResult_TelegramKeepsPersistedContactID(t *testing.T) {
 	ctx := context.Background()
-	store := NewFileStore(t.TempDir())
+	store := NewStore(t.TempDir())
 	svc := NewService(store)
 	now := time.Date(2026, 8, 30, 12, 0, 0, 0, time.UTC)
 	if _, err := svc.UpsertContact(ctx, Contact{
@@ -185,7 +185,7 @@ func TestObserveInboundBusMessage_AgentSenderAndKindPreservation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := context.Background()
-			svc := NewService(NewFileStore(t.TempDir()))
+			svc := NewService(NewStore(t.TempDir()))
 			now := time.Date(2026, 8, 17, 0, 0, 0, 0, time.UTC)
 			if tt.existing != nil {
 				if _, err := svc.UpsertContact(ctx, *tt.existing, now.Add(-time.Hour)); err != nil {
@@ -228,7 +228,7 @@ func TestObserveInboundBusMessage_TelegramNicknameMerge(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := context.Background()
-			svc := NewService(NewFileStore(t.TempDir()))
+			svc := NewService(NewStore(t.TempDir()))
 			now := time.Date(2026, 2, 10, 9, 15, 0, 0, time.UTC)
 
 			if _, err := svc.UpsertContact(ctx, Contact{
@@ -272,7 +272,7 @@ func TestObserveInboundBusMessage_TelegramNicknameMerge(t *testing.T) {
 
 func TestObserveInboundBusMessage_TelegramPrivateChatSetOnce(t *testing.T) {
 	ctx := context.Background()
-	store := NewFileStore(t.TempDir())
+	store := NewStore(t.TempDir())
 	svc := NewService(store)
 	now := time.Date(2026, 2, 10, 9, 30, 0, 0, time.UTC)
 
@@ -318,7 +318,7 @@ func TestObserveInboundBusMessage_TelegramPrivateChatSetOnce(t *testing.T) {
 
 func TestObserveInboundBusMessage_SlackSenderAndMention(t *testing.T) {
 	ctx := context.Background()
-	store := NewFileStore(t.TempDir())
+	store := NewStore(t.TempDir())
 	svc := NewService(store)
 	now := time.Date(2026, 2, 10, 9, 45, 0, 0, time.UTC)
 
@@ -377,7 +377,7 @@ func TestObserveInboundBusMessage_SlackSenderAndMention(t *testing.T) {
 
 func TestObserveInboundBusMessage_SlackDMSetOnce(t *testing.T) {
 	ctx := context.Background()
-	store := NewFileStore(t.TempDir())
+	store := NewStore(t.TempDir())
 	svc := NewService(store)
 	now := time.Date(2026, 2, 10, 9, 50, 0, 0, time.UTC)
 
@@ -422,7 +422,7 @@ func TestObserveInboundBusMessage_SlackDMSetOnce(t *testing.T) {
 
 func TestObserveInboundBusMessage_LineSenderAndMention(t *testing.T) {
 	ctx := context.Background()
-	store := NewFileStore(t.TempDir())
+	store := NewStore(t.TempDir())
 	svc := NewService(store)
 	now := time.Date(2026, 3, 5, 9, 55, 0, 0, time.UTC)
 
@@ -478,7 +478,7 @@ func TestObserveInboundBusMessage_LineSenderAndMention(t *testing.T) {
 
 func TestObserveInboundBusMessage_LarkSenderAndMention(t *testing.T) {
 	ctx := context.Background()
-	store := NewFileStore(t.TempDir())
+	store := NewStore(t.TempDir())
 	svc := NewService(store)
 	now := time.Date(2026, 3, 5, 10, 5, 0, 0, time.UTC)
 
@@ -534,7 +534,7 @@ func TestObserveInboundBusMessage_LarkSenderAndMention(t *testing.T) {
 
 func TestObserveInboundBusMessage_MixinSender(t *testing.T) {
 	ctx := context.Background()
-	store := NewFileStore(t.TempDir())
+	store := NewStore(t.TempDir())
 	svc := NewService(store)
 	now := time.Date(2026, 8, 27, 10, 5, 0, 0, time.UTC)
 	const conversationID = "8f7059b9-b1b2-4ed8-a99f-4ac2f07a9a34"
@@ -565,7 +565,7 @@ func TestObserveInboundBusMessage_MixinSender(t *testing.T) {
 
 func TestObserveInboundBusMessage_ConsoleUser(t *testing.T) {
 	ctx := context.Background()
-	store := NewFileStore(t.TempDir())
+	store := NewStore(t.TempDir())
 	svc := NewService(store)
 	now := time.Date(2026, 3, 17, 11, 0, 0, 0, time.UTC)
 
@@ -608,7 +608,7 @@ func timePtr(ts time.Time) *time.Time {
 
 func TestObserveInboundBusMessage_DiscordDMAndServer(t *testing.T) {
 	ctx := context.Background()
-	svc := NewService(NewFileStore(t.TempDir()))
+	svc := NewService(NewStore(t.TempDir()))
 	now := time.Date(2026, 9, 30, 10, 0, 0, 0, time.UTC)
 	observe := func(key, chatType string) {
 		t.Helper()

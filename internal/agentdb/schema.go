@@ -11,6 +11,7 @@ func migrations() []sqlitedb.Migration {
 		{Name: "create meta, Console sessions, Agent Link peers and topic state", SQL: stateimport.MetaTableSQL + smallStateSQL},
 		{Name: "create identity and heartbeat workflows", SQL: personaSQL},
 		{Name: "create cron tasks", SQL: cronSQL},
+		{Name: "create contacts and the contacts bus inbox and outbox", SQL: contactsSQL},
 	}
 }
 
@@ -115,4 +116,64 @@ CREATE TABLE cron_tasks (
 	CHECK ((at = '') <> (cron = ''))
 );
 CREATE INDEX cron_tasks_by_position ON cron_tasks (position);
+`
+
+// contactsSQL: contacts, their channel handles, and the bus inbox and outbox (§2).
+const contactsSQL = `
+CREATE TABLE contacts (
+	contact_id          TEXT PRIMARY KEY,
+	status              TEXT NOT NULL CHECK (status IN ('active', 'inactive')),
+	kind                TEXT NOT NULL CHECK (kind IN ('human', 'agent')),
+	channel             TEXT NOT NULL DEFAULT '',
+	nickname            TEXT NOT NULL DEFAULT '',
+	paired              INTEGER NOT NULL DEFAULT 0 CHECK (paired IN (0, 1)),
+	owner               INTEGER NOT NULL DEFAULT 0 CHECK (owner IN (0, 1)),
+	deactivated_by      TEXT NOT NULL DEFAULT '',
+	cooldown_until      TEXT,
+	last_interaction_at TEXT,
+	created_at          TEXT NOT NULL,
+	updated_at          TEXT NOT NULL
+);
+CREATE INDEX contacts_by_status ON contacts (status, last_interaction_at DESC);
+CREATE INDEX contacts_by_kind ON contacts (kind) WHERE status = 'active';
+
+CREATE TABLE contact_handles (
+	contact_id TEXT NOT NULL REFERENCES contacts (contact_id) ON DELETE CASCADE,
+	field      TEXT NOT NULL,
+	value      TEXT NOT NULL,
+	position   INTEGER NOT NULL DEFAULT 0,
+	PRIMARY KEY (contact_id, field, value)
+);
+CREATE INDEX contact_handles_lookup ON contact_handles (field, value);
+
+CREATE TABLE contact_bus_inbox (
+	channel             TEXT NOT NULL,
+	platform_message_id TEXT NOT NULL,
+	conversation_key    TEXT NOT NULL DEFAULT '',
+	seen_at             TEXT NOT NULL,
+	PRIMARY KEY (channel, platform_message_id)
+);
+CREATE INDEX contact_bus_inbox_by_seen ON contact_bus_inbox (seen_at);
+
+CREATE TABLE contact_bus_outbox (
+	channel         TEXT NOT NULL,
+	idempotency_key TEXT NOT NULL,
+	contact_id      TEXT NOT NULL DEFAULT '',
+	peer_id         TEXT NOT NULL DEFAULT '',
+	item_id         TEXT NOT NULL DEFAULT '',
+	content_type    TEXT NOT NULL DEFAULT '',
+	payload         BLOB,
+	file            TEXT,
+	status          TEXT NOT NULL CHECK (status IN ('pending', 'sent', 'failed')),
+	attempts        INTEGER NOT NULL DEFAULT 0,
+	accepted        INTEGER NOT NULL DEFAULT 0 CHECK (accepted IN (0, 1)),
+	deduped         INTEGER NOT NULL DEFAULT 0 CHECK (deduped IN (0, 1)),
+	last_error      TEXT NOT NULL DEFAULT '',
+	created_at      TEXT NOT NULL,
+	updated_at      TEXT NOT NULL,
+	last_attempt_at TEXT,
+	sent_at         TEXT,
+	PRIMARY KEY (channel, idempotency_key)
+);
+CREATE INDEX contact_bus_outbox_pending ON contact_bus_outbox (status, updated_at) WHERE status = 'pending';
 `

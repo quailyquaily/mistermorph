@@ -41,7 +41,7 @@ ENDIF
 ## Reference Format
 
 ### People Reference Format
-- You can find contacts at `${file_state_dir}/contacts/ACTIVE.md` or `${file_state_dir}/contacts/INACTIVE.md`.
+- Look up contacts with the `contacts_list` tool (filter by status, kind or channel).
 - Use canonical reference Markdown-like syntax: `[name](protocol:id)` for internal references to people, person, or agents.
 - Example references: `[John Wick](tg:@johnwick)`, `[Alice](aqua:123Dfjvjkdkd000s)`.
 

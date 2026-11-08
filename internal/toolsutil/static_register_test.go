@@ -224,7 +224,7 @@ func TestRegisterStaticToolsAgentSendRequiresActiveAgent(t *testing.T) {
 		t.Fatal("agent_send registered without an active Agent")
 	}
 
-	svc := contacts.NewService(contacts.NewFileStore(contactsDir))
+	svc := contacts.NewService(contacts.NewStore(contactsDir))
 	if _, err := svc.UpsertContact(ctx, contacts.Contact{
 		ContactID: "contact:alice",
 		Kind:      contacts.KindHuman,

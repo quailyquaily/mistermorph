@@ -1000,8 +1000,6 @@ type consoleContact struct {
 func runtimeStateFileSpecs(paths runtimeStatePaths) []stateFileSpec {
 	return []stateFileSpec{
 		{Name: "cron.yaml", Group: "cron", Path: paths.cronPath, Kind: stateFileCron, StateDir: paths.stateDir},
-		{Name: "ACTIVE.md", Group: "contacts", Path: paths.contactsActive},
-		{Name: "INACTIVE.md", Group: "contacts", Path: paths.contactsInactive},
 		{Name: statepaths.IdentityFilename, Group: "persona", Path: paths.agentDBPath, Kind: stateFileIdentity, StateDir: paths.stateDir},
 		{Name: statepaths.SoulFilename, Group: "persona", Path: paths.agentDBPath, Kind: stateFileSoul, StateDir: paths.stateDir},
 		{Name: "HEARTBEAT.md", Group: "heartbeat", Path: paths.agentDBPath, Kind: stateFileHeartbeat, StateDir: paths.stateDir},
@@ -1111,7 +1109,7 @@ func listContactsForConsole(ctx context.Context, svc *contacts.Service) ([]conso
 	return out, nil
 }
 
-func attachContactAvatarURLs(ctx context.Context, store *contacts.FileStore, items []consoleContact) error {
+func attachContactAvatarURLs(ctx context.Context, store *contacts.DBStore, items []consoleContact) error {
 	if store == nil {
 		return errors.New("contacts store unavailable")
 	}

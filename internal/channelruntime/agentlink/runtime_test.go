@@ -123,7 +123,7 @@ func TestRunnerAnswersAgentLinkMessages(t *testing.T) {
 	})
 
 	t.Run("records the sender as an Agent contact", func(t *testing.T) {
-		store := contacts.NewFileStore(deps.RuntimePaths.ContactsDir)
+		store := contacts.NewStore(deps.RuntimePaths.ContactsDir)
 		waitFor(t, "contact", func() bool {
 			contact, ok, err := store.GetContact(ctx, link.ContactID(sender.InstanceID()))
 			return err == nil && ok && contact.Kind == contacts.KindAgent && contact.ContactNickname == "Asker"

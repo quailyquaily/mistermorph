@@ -179,7 +179,7 @@ func executeContactSendTool(ctx context.Context, params map[string]any, opts Con
 	if contactsDir == "" {
 		return "", fmt.Errorf("contacts dir is not configured")
 	}
-	store := contacts.NewFileStore(contactsDir)
+	store := contacts.NewStore(contactsDir)
 	if policy.activeAgentsOnly {
 		activeAgentIDs, err := loadActiveAgentContactIDs(ctx, store)
 		if err != nil {

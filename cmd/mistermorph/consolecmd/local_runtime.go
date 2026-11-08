@@ -562,7 +562,7 @@ func (r *consoleLocalRuntime) prepareGeneration(reader *viper.Viper) (*consoleLo
 	r.nextGeneration++
 	nextGeneration := r.nextGeneration
 	r.generationMu.Unlock()
-	contactsStore := contacts.NewFileStore(snapshot.paths.ContactsDir)
+	contactsStore := contacts.NewStore(snapshot.paths.ContactsDir)
 	generation := &consoleLocalRuntimeGeneration{
 		generation: nextGeneration,
 		reader:     snapshot.reader,

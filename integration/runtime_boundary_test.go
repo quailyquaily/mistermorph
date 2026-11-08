@@ -271,8 +271,8 @@ func TestIntegrationRuntimeStateStoresStayIsolatedFromGlobalViper(t *testing.T) 
 		t.Fatalf("runtimeB task = %#v, exists=%v", got, ok)
 	}
 
-	contactsA := contacts.NewFileStore(commonA.RuntimePaths.ContactsDir)
-	contactsB := contacts.NewFileStore(commonB.RuntimePaths.ContactsDir)
+	contactsA := contacts.NewStore(commonA.RuntimePaths.ContactsDir)
+	contactsB := contacts.NewStore(commonB.RuntimePaths.ContactsDir)
 	if err := contactsA.PutContact(context.Background(), contacts.Contact{ContactID: "shared-contact", Kind: contacts.KindHuman, Channel: contacts.ChannelTelegram, ContactNickname: "alpha"}); err != nil {
 		t.Fatalf("runtimeA contact write error = %v", err)
 	}

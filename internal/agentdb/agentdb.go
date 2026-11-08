@@ -282,12 +282,25 @@ func Now() string {
 	return FormatTime(time.Now())
 }
 
-// FormatTime formats t as agent.db stores times; the zero time is "".
+// FormatTime formats t as agent.db stores times: RFC 3339 in UTC, to the second, so the text sorts
+// and compares as the times do. The zero time is "".
 func FormatTime(t time.Time) string {
 	if t.IsZero() {
 		return ""
 	}
-	return t.UTC().Format(time.RFC3339Nano)
+	return t.UTC().Format(time.RFC3339)
+}
+
+// preciseLayout is RFC 3339 with all nine fraction digits, a fixed width that still sorts.
+const preciseLayout = "2006-01-02T15:04:05.000000000Z07:00"
+
+// FormatTimePrecise is FormatTime to the nanosecond, for records whose times are compared
+// exactly when read back (the bus outbox).
+func FormatTimePrecise(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.UTC().Format(preciseLayout)
 }
 
 // ParseTime reads a time agent.db stored; "" is the zero time.

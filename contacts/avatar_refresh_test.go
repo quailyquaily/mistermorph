@@ -17,7 +17,7 @@ func TestContactAvatarRefresherRefreshesAndDeduplicates(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	store := NewFileStore(t.TempDir())
+	store := NewStore(t.TempDir())
 	if err := store.PutContact(ctx, Contact{ContactID: "tg:1", Channel: ChannelTelegram, ContactNickname: "Alice"}); err != nil {
 		t.Fatalf("PutContact() error = %v", err)
 	}
@@ -64,7 +64,7 @@ func TestContactAvatarRefresherCacheRules(t *testing.T) {
 
 	tests := []struct {
 		name          string
-		prepare       func(*testing.T, *FileStore, string)
+		prepare       func(*testing.T, *DBStore, string)
 		fetch         ContactAvatarFetchFunc
 		wantCalls     int32
 		wantAvatar    bool
@@ -72,7 +72,7 @@ func TestContactAvatarRefresherCacheRules(t *testing.T) {
 	}{
 		{
 			name: "fresh cache skips fetch",
-			prepare: func(t *testing.T, store *FileStore, contactID string) {
+			prepare: func(t *testing.T, store *DBStore, contactID string) {
 				if err := store.PutContactAvatar(context.Background(), contactID, testContactAvatarPNG(t)); err != nil {
 					t.Fatalf("prepare avatar: %v", err)
 				}
@@ -105,7 +105,7 @@ func TestContactAvatarRefresherCacheRules(t *testing.T) {
 			t.Parallel()
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
-			store := NewFileStore(t.TempDir())
+			store := NewStore(t.TempDir())
 			contactID := "tg:1"
 			if test.prepare != nil {
 				test.prepare(t, store, contactID)
@@ -153,7 +153,7 @@ func TestContactAvatarRefresherCacheRules(t *testing.T) {
 }
 
 func TestContactAvatarRefresherRemembersMissingAvatar(t *testing.T) {
-	store := NewFileStore(t.TempDir())
+	store := NewStore(t.TempDir())
 	refresher, err := NewContactAvatarRefresher(context.Background(), store, nil)
 	if err != nil {
 		t.Fatalf("NewContactAvatarRefresher() error = %v", err)
@@ -179,7 +179,7 @@ func TestContactAvatarRefresherRemembersMissingAvatar(t *testing.T) {
 
 func TestContactAvatarRefresherPrewarmsMatchingChannelContacts(t *testing.T) {
 	ctx := context.Background()
-	store := NewFileStore(t.TempDir())
+	store := NewStore(t.TempDir())
 	for _, contact := range []Contact{
 		{ContactID: "tg:1", Channel: ChannelTelegram, ContactNickname: "Alice"},
 		{ContactID: "slack:T1:U1", Channel: ChannelSlack, ContactNickname: "Bob"},
@@ -212,7 +212,7 @@ func TestContactAvatarRefresherPrewarmsMatchingChannelContacts(t *testing.T) {
 }
 
 func TestContactAvatarRefresherPrunesExpiredMissingAvatars(t *testing.T) {
-	store := NewFileStore(t.TempDir())
+	store := NewStore(t.TempDir())
 	refresher, err := NewContactAvatarRefresher(context.Background(), store, nil)
 	if err != nil {
 		t.Fatalf("NewContactAvatarRefresher() error = %v", err)
@@ -238,7 +238,7 @@ func TestContactAvatarRefresherPrunesExpiredMissingAvatars(t *testing.T) {
 
 func TestContactAvatarRefresherDoesNotRecreateDeletedContactAvatar(t *testing.T) {
 	ctx := context.Background()
-	store := NewFileStore(t.TempDir())
+	store := NewStore(t.TempDir())
 	if err := store.PutContact(ctx, Contact{
 		ContactID:       "tg:1",
 		Channel:         ChannelTelegram,
@@ -311,7 +311,7 @@ func TestFetchContactAvatarURL(t *testing.T) {
 	}
 }
 
-func prepareStaleContactAvatar(t *testing.T, store *FileStore, contactID string) {
+func prepareStaleContactAvatar(t *testing.T, store *DBStore, contactID string) {
 	t.Helper()
 	if err := store.PutContactAvatar(context.Background(), contactID, testContactAvatarPNG(t)); err != nil {
 		t.Fatalf("prepare avatar: %v", err)

@@ -23,7 +23,7 @@ func newTestBus(t *testing.T) *busruntime.Inproc {
 
 func TestInboundAdapterPublishesAndDedupesDiscordMessages(t *testing.T) {
 	ctx := context.Background()
-	store := contacts.NewFileStore(t.TempDir())
+	store := contacts.NewStore(t.TempDir())
 	if err := store.Ensure(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +83,7 @@ func TestInboundAdapterPublishesAndDedupesDiscordMessages(t *testing.T) {
 
 func TestInboundAdapterRejectsInvalidMessages(t *testing.T) {
 	ctx := context.Background()
-	store := contacts.NewFileStore(t.TempDir())
+	store := contacts.NewStore(t.TempDir())
 	if err := store.Ensure(ctx); err != nil {
 		t.Fatal(err)
 	}

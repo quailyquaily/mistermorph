@@ -31,7 +31,7 @@ func LoadContactSnapshot(ctx context.Context, contactsDir string) (ContactSnapsh
 	if contactsDir == "" {
 		return ContactSnapshot{}, fmt.Errorf("contacts dir is not configured")
 	}
-	svc := contacts.NewService(contacts.NewFileStore(contactsDir))
+	svc := contacts.NewService(contacts.NewStore(contactsDir))
 	items, err := svc.ListContacts(ctx, contacts.StatusActive)
 	if err != nil {
 		return ContactSnapshot{}, err

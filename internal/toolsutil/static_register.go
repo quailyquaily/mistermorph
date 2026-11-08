@@ -31,6 +31,7 @@ const (
 	BuiltinImageEdit     = "image_edit"
 	BuiltinContactsSend  = "contacts_send"
 	BuiltinAgentSend     = "agent_send"
+	BuiltinContactsList  = "contacts_list"
 	BuiltinSpawn         = "spawn"
 	BuiltinCoder         = "coder"
 )
@@ -48,6 +49,7 @@ var builtinToolNameSet = map[string]struct{}{
 	BuiltinImageEdit:     {},
 	BuiltinContactsSend:  {},
 	BuiltinAgentSend:     {},
+	BuiltinContactsList:  {},
 	BuiltinSpawn:         {},
 	BuiltinCoder:         {},
 }
@@ -412,6 +414,11 @@ func RegisterStaticTools(reg *tools.Registry, cfg StaticRegistryConfig, selected
 			cfg.WebSearch.MaxResults,
 			strings.TrimSpace(cfg.Common.UserAgent),
 		))
+	}
+
+	// contacts_list reads the contacts in agent.db, as reading the contacts files with read_file did.
+	if isSelected(BuiltinContactsList) && strings.TrimSpace(cfg.ContactsSend.ContactsDir) != "" {
+		_ = reg.Replace(builtin.NewContactsListTool(cfg.ContactsSend.ContactsDir))
 	}
 
 	contactSendOpts := builtin.ContactsSendToolOptions{

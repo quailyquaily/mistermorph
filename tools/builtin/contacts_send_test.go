@@ -438,7 +438,7 @@ func TestPlanContactsSendBatchHonorsExplicitNonTelegramChatID(t *testing.T) {
 func TestExecuteContactsSendBatchLoopsAndMentionsSharedTelegramChats(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 2, 10, 12, 0, 0, 0, time.UTC)
-	store := contacts.NewFileStore(filepath.Join(t.TempDir(), "contacts"))
+	store := contacts.NewStore(filepath.Join(t.TempDir(), "contacts"))
 	svc := contacts.NewService(store)
 	for _, contact := range []contacts.Contact{
 		{
@@ -518,7 +518,7 @@ func TestExecuteContactsSendBatchLoopsAndMentionsSharedTelegramChats(t *testing.
 func TestExecuteContactsSendBatchHonorsExplicitTelegramChatID(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 7, 18, 1, 0, 0, 0, time.UTC)
-	store := contacts.NewFileStore(filepath.Join(t.TempDir(), "contacts"))
+	store := contacts.NewStore(filepath.Join(t.TempDir(), "contacts"))
 	svc := contacts.NewService(store)
 	for _, contact := range []contacts.Contact{
 		{
@@ -574,7 +574,7 @@ func TestExecuteContactsSendBatchHonorsExplicitTelegramChatID(t *testing.T) {
 func TestExecuteContactsSendBatchRejectsExplicitChatUnavailableToRecipient(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 7, 18, 1, 5, 0, 0, time.UTC)
-	store := contacts.NewFileStore(filepath.Join(t.TempDir(), "contacts"))
+	store := contacts.NewStore(filepath.Join(t.TempDir(), "contacts"))
 	svc := contacts.NewService(store)
 	for _, contact := range []contacts.Contact{
 		{
@@ -622,7 +622,7 @@ func TestExecuteContactsSendBatchRejectsExplicitChatUnavailableToRecipient(t *te
 func TestExecuteContactsSendBatchRecordsFailureCooldownForAllMergedRecipients(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 2, 10, 12, 15, 0, 0, time.UTC)
-	store := contacts.NewFileStore(filepath.Join(t.TempDir(), "contacts"))
+	store := contacts.NewStore(filepath.Join(t.TempDir(), "contacts"))
 	svc := contacts.NewServiceWithOptions(store, contacts.ServiceOptions{FailureCooldown: time.Hour})
 	for _, contact := range []contacts.Contact{
 		{
@@ -681,7 +681,7 @@ func TestExecuteContactsSendBatchRecordsFailureCooldownForAllMergedRecipients(t 
 func TestExecuteContactsSendSinglePrefixesTelegramMention(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 2, 10, 12, 30, 0, 0, time.UTC)
-	store := contacts.NewFileStore(filepath.Join(t.TempDir(), "contacts"))
+	store := contacts.NewStore(filepath.Join(t.TempDir(), "contacts"))
 	svc := contacts.NewService(store)
 	if _, err := svc.UpsertContact(ctx, contacts.Contact{
 		ContactID:       "tg:@ballcatcat",
@@ -719,7 +719,7 @@ func TestExecuteContactsSendSinglePrefixesTelegramMention(t *testing.T) {
 func TestExecuteContactsSendSingleKeepsExplicitTelegramRoute(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 8, 17, 0, 0, 0, 0, time.UTC)
-	store := contacts.NewFileStore(filepath.Join(t.TempDir(), "contacts"))
+	store := contacts.NewStore(filepath.Join(t.TempDir(), "contacts"))
 	svc := contacts.NewService(store)
 	if _, err := svc.UpsertContact(ctx, contacts.Contact{
 		ContactID:        "contact:smith",
@@ -754,7 +754,7 @@ func TestExecuteContactsSendSingleChatIDTarget(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 7, 3, 1, 0, 0, 0, time.UTC)
 	contactsDir := filepath.Join(t.TempDir(), "contacts")
-	store := contacts.NewFileStore(contactsDir)
+	store := contacts.NewStore(contactsDir)
 	svc := contacts.NewService(store)
 	sender := &recordingContactsSendSender{}
 
@@ -787,7 +787,7 @@ func TestExecuteContactsSendSingleChatIDTargetUsesContactIDWhenChatIDEmpty(t *te
 	ctx := context.Background()
 	now := time.Date(2026, 7, 3, 1, 0, 0, 0, time.UTC)
 	contactsDir := filepath.Join(t.TempDir(), "contacts")
-	svc := contacts.NewService(contacts.NewFileStore(contactsDir))
+	svc := contacts.NewService(contacts.NewStore(contactsDir))
 	sender := &recordingContactsSendSender{}
 
 	_, err := executeContactsSendResolved(ctx, map[string]any{
@@ -809,7 +809,7 @@ func TestExecuteContactsSendSingleChatIDTargetRejectsMismatchedHint(t *testing.T
 	ctx := context.Background()
 	now := time.Date(2026, 7, 3, 1, 0, 0, 0, time.UTC)
 	contactsDir := filepath.Join(t.TempDir(), "contacts")
-	svc := contacts.NewService(contacts.NewFileStore(contactsDir))
+	svc := contacts.NewService(contacts.NewStore(contactsDir))
 	sender := &recordingContactsSendSender{}
 
 	_, err := executeContactsSendResolved(ctx, map[string]any{

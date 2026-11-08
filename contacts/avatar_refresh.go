@@ -30,7 +30,7 @@ type contactAvatarRefreshRequest struct {
 type ContactAvatarRefresher struct {
 	ctx     context.Context
 	cancel  context.CancelFunc
-	store   *FileStore
+	store   *DBStore
 	logger  *slog.Logger
 	queue   chan contactAvatarRefreshRequest
 	mu      sync.Mutex
@@ -39,7 +39,7 @@ type ContactAvatarRefresher struct {
 	wg      sync.WaitGroup
 }
 
-func NewContactAvatarRefresher(ctx context.Context, store *FileStore, logger *slog.Logger) (*ContactAvatarRefresher, error) {
+func NewContactAvatarRefresher(ctx context.Context, store *DBStore, logger *slog.Logger) (*ContactAvatarRefresher, error) {
 	if store == nil {
 		return nil, fmt.Errorf("contacts store is required")
 	}

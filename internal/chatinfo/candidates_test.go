@@ -11,7 +11,7 @@ import (
 func TestActiveContactCandidateIDs(t *testing.T) {
 	ctx := context.Background()
 	contactsDir := t.TempDir()
-	store := contacts.NewFileStore(contactsDir)
+	store := contacts.NewStore(contactsDir)
 	for _, contact := range []contacts.Contact{
 		{
 			ContactID:       "tg:@alice",

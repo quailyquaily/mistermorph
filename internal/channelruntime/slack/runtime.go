@@ -232,7 +232,7 @@ func runSlackLoop(ctx context.Context, d Dependencies, opts RunOptions) error {
 		}
 	}()
 
-	contactsStore := contacts.NewFileStore(d.RuntimePaths.ContactsDir)
+	contactsStore := contacts.NewStore(d.RuntimePaths.ContactsDir)
 	if err := contactsStore.Ensure(context.Background()); err != nil {
 		return err
 	}

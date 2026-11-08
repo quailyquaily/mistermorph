@@ -163,7 +163,8 @@ func (s *sessionStore) Create(ttl time.Duration) (string, time.Time, error) {
 	token := base64.RawURLEncoding.EncodeToString(buf)
 	hash := tokenHash(token)
 	now := time.Now().UTC()
-	expiresAt := now.Add(ttl)
+	// agent.db keeps times to the second.
+	expiresAt := now.Add(ttl).Truncate(time.Second)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()

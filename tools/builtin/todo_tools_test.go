@@ -360,7 +360,7 @@ func TestTodoUpdateAddOnceIgnoresUnusedBuiltinSpeakerPeople(t *testing.T) {
 
 func seedTodoContacts(t *testing.T, contactsDir string) {
 	t.Helper()
-	svc := contacts.NewService(contacts.NewFileStore(contactsDir))
+	svc := contacts.NewService(contacts.NewStore(contactsDir))
 	now := time.Date(2026, 2, 9, 12, 0, 0, 0, time.UTC)
 	_, err := svc.UpsertContact(context.Background(), contacts.Contact{
 		ContactID:       "tg:1001",

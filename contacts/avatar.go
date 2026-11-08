@@ -24,7 +24,7 @@ type ContactAvatar struct {
 	ModTime     time.Time
 }
 
-func (s *FileStore) PutContactAvatar(ctx context.Context, contactID string, raw []byte) error {
+func (s *DBStore) PutContactAvatar(ctx context.Context, contactID string, raw []byte) error {
 	if err := ensureNotCanceled(ctx); err != nil {
 		return err
 	}
@@ -50,7 +50,7 @@ func (s *FileStore) PutContactAvatar(ctx context.Context, contactID string, raw 
 	})
 }
 
-func (s *FileStore) ReadContactAvatar(ctx context.Context, contactID string) (ContactAvatar, bool, error) {
+func (s *DBStore) ReadContactAvatar(ctx context.Context, contactID string) (ContactAvatar, bool, error) {
 	if err := ensureNotCanceled(ctx); err != nil {
 		return ContactAvatar{}, false, err
 	}
@@ -87,7 +87,7 @@ func (s *FileStore) ReadContactAvatar(ctx context.Context, contactID string) (Co
 	}, true, nil
 }
 
-func (s *FileStore) DeleteContactAvatar(ctx context.Context, contactID string) error {
+func (s *DBStore) DeleteContactAvatar(ctx context.Context, contactID string) error {
 	if err := ensureNotCanceled(ctx); err != nil {
 		return err
 	}
@@ -104,7 +104,7 @@ func (s *FileStore) DeleteContactAvatar(ctx context.Context, contactID string) e
 	return nil
 }
 
-func (s *FileStore) ContactAvatarFresh(ctx context.Context, contactID string, now time.Time, ttl time.Duration) (bool, error) {
+func (s *DBStore) ContactAvatarFresh(ctx context.Context, contactID string, now time.Time, ttl time.Duration) (bool, error) {
 	if err := ensureNotCanceled(ctx); err != nil {
 		return false, err
 	}
@@ -133,7 +133,7 @@ func (s *FileStore) ContactAvatarFresh(ctx context.Context, contactID string, no
 	return !now.After(info.ModTime().UTC().Add(ttl)), nil
 }
 
-func (s *FileStore) ContactAvatarRevisions(ctx context.Context, contactIDs []string) (map[string]time.Time, error) {
+func (s *DBStore) ContactAvatarRevisions(ctx context.Context, contactIDs []string) (map[string]time.Time, error) {
 	if err := ensureNotCanceled(ctx); err != nil {
 		return nil, err
 	}
@@ -174,11 +174,11 @@ func (s *FileStore) ContactAvatarRevisions(ctx context.Context, contactIDs []str
 	return out, nil
 }
 
-func (s *FileStore) contactAvatarsPath() string {
+func (s *DBStore) contactAvatarsPath() string {
 	return filepath.Join(s.rootPath(), contactAvatarsDirName)
 }
 
-func (s *FileStore) contactAvatarPath(contactID string) string {
+func (s *DBStore) contactAvatarPath(contactID string) string {
 	return filepath.Join(s.contactAvatarsPath(), contactAvatarFilename(contactID))
 }
 

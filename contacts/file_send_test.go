@@ -36,7 +36,7 @@ func TestSendDecisionWithFile(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := context.Background()
-			store := NewFileStore(filepath.Join(t.TempDir(), "contacts"))
+			store := NewStore(filepath.Join(t.TempDir(), "contacts"))
 			svc := NewService(store)
 			if _, err := svc.UpsertContact(ctx, Contact{ContactID: "tg:42", Kind: KindHuman, Channel: ChannelTelegram, TGPrivateChatID: 42}, now); err != nil {
 				t.Fatal(err)
