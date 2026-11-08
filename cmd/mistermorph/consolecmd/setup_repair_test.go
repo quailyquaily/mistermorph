@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/quailyquaily/mistermorph/internal/configstore"
 	"github.com/quailyquaily/mistermorph/internal/personastore"
 	"github.com/quailyquaily/mistermorph/internal/secref"
 	"github.com/spf13/viper"
@@ -195,5 +196,50 @@ func TestHandleSetupRepairFixesARejectedIdentityFile(t *testing.T) {
 	}
 	if _, err := os.Stat(path + ".imported"); err != nil {
 		t.Fatalf("rejected file not kept: %v", err)
+	}
+}
+
+// Without --config the config is in agent.db, named <state>/agent.db#config.yaml: the repair page
+// reads and saves it there, not as a file of that name.
+func TestHandleSetupRepairFileReadsTheConfigInAgentDB(t *testing.T) {
+	stateDir := t.TempDir()
+	configPath := configstore.DBConfigPath(stateDir)
+	if err := configstore.WriteFileBy(configPath, []byte("llm:\n  model: from-db\n"), configstore.ByCLI); err != nil {
+		t.Fatal(err)
+	}
+	prevConfig, hadConfig := viper.Get("config"), viper.IsSet("config")
+	viper.Set("config", configPath)
+	t.Cleanup(func() {
+		if hadConfig {
+			viper.Set("config", prevConfig)
+		} else {
+			viper.Set("config", nil)
+		}
+	})
+	srv := &server{cfg: serveConfig{stateDir: stateDir}}
+	get := func() (int, string) {
+		t.Helper()
+		rec := httptest.NewRecorder()
+		srv.handleSetupRepairFile(rec, httptest.NewRequest(http.MethodGet, "/api/setup/file?key=config", nil))
+		var payload struct {
+			Content string `json:"content"`
+		}
+		_ = json.Unmarshal(rec.Body.Bytes(), &payload)
+		return rec.Code, payload.Content
+	}
+	if code, content := get(); code != http.StatusOK || !strings.Contains(content, "model: from-db") {
+		t.Fatalf("GET = %d, %q", code, content)
+	}
+	body, _ := json.Marshal(map[string]string{"content": "llm:\n  model: repaired\n"})
+	rec := httptest.NewRecorder()
+	srv.handleSetupRepairFile(rec, httptest.NewRequest(http.MethodPut, "/api/setup/file?key=config", bytes.NewBuffer(body)))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("PUT = %d (%s)", rec.Code, rec.Body.String())
+	}
+	if code, content := get(); code != http.StatusOK || !strings.Contains(content, "model: repaired") {
+		t.Fatalf("GET after PUT = %d, %q", code, content)
+	}
+	if _, err := os.Stat(configPath); !os.IsNotExist(err) {
+		t.Fatalf("a file named %s was written: %v", configPath, err)
 	}
 }

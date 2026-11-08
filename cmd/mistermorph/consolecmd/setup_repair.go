@@ -145,7 +145,7 @@ func (s *server) handleSetupRepairFile(w http.ResponseWriter, r *http.Request) {
 	}
 	switch r.Method {
 	case http.MethodGet:
-		raw, err := os.ReadFile(item.Path)
+		raw, err := configstore.ReadFile(item.Path)
 		if err != nil {
 			if os.IsNotExist(err) {
 				writeError(w, http.StatusNotFound, fmt.Sprintf("%s is missing", item.Name))
