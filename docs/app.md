@@ -139,7 +139,7 @@ That backend is built with `CGO_ENABLED=0` on purpose. Keep it that way unless y
 The packaging scripts are in `desktop/nsh/packaging/` (DMG, AppImage, deb). CI installs the
 desktop build's tools through `.github/actions/setup-desktop-build` (the nsh release the shell's
 crates pin, v0.4.0); `build_app.yaml` builds and packages the app for Linux, macOS and Windows
-on every push.
+when run by hand (Actions, "Build Desktop App") or for a pushed tag that is not a release tag.
 
 The macOS tag release job requires Apple signing secrets in GitHub Actions. It imports the Developer ID Application certificate into a temporary keychain, signs the app bundle, signs the DMG, submits the DMG through `notarytool`, staples the ticket to the DMG and app bundle, then uploads the release assets.
 
