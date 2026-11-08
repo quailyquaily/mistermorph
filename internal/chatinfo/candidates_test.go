@@ -51,7 +51,7 @@ func TestActiveContactCandidateIDs(t *testing.T) {
 		}
 	}
 
-	got, err := ActiveContactCandidateIDs(ctx, contactsDir)
+	got, err := ActiveContactCandidateIDs(ctx, "", contactsDir)
 	if err != nil {
 		t.Fatalf("ActiveContactCandidateIDs() error = %v", err)
 	}
@@ -70,7 +70,7 @@ func TestActiveContactCandidateIDs(t *testing.T) {
 }
 
 func TestActiveContactCandidateIDsMissingFile(t *testing.T) {
-	got, err := ActiveContactCandidateIDs(context.Background(), t.TempDir())
+	got, err := ActiveContactCandidateIDs(context.Background(), "", t.TempDir())
 	if err != nil {
 		t.Fatalf("ActiveContactCandidateIDs() error = %v", err)
 	}

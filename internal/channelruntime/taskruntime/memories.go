@@ -41,7 +41,7 @@ func AttachMemories(ctx context.Context, paths runtimepaths.Paths, cfg toolsutil
 		return nil, nil
 	}
 	if dir := strings.TrimSpace(paths.ContactsDir); dir != "" {
-		if moved, moveErr := store.MoveContactProfiles(ctx, contacts.NewStore(dir)); moveErr != nil {
+		if moved, moveErr := store.MoveContactProfiles(ctx, contacts.NewStoreInStateDir(paths.StateDir, dir)); moveErr != nil {
 			slog.Default().Warn("memories_contact_profiles_move_error", "error", moveErr.Error())
 		} else if moved > 0 {
 			slog.Default().Info("memories_contact_profiles_moved", "memories", moved)

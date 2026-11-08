@@ -193,7 +193,7 @@ func Run(ctx context.Context, d depsutil.CommonDependencies, opts Options) error
 	defer generations.Close()
 	generations.Start(ctx)
 
-	contactsStore := contacts.NewStore(d.RuntimePaths.ContactsDir)
+	contactsStore := contacts.NewStoreInStateDir(d.RuntimePaths.StateDir, d.RuntimePaths.ContactsDir)
 	nameAgentTopics(ctx, taskStore, contactsStore, logger)
 	workspaceStore := workspace.NewStore(d.RuntimePaths.WorkspaceAttachmentsPath)
 	runControl := runtimecontrol.New()
@@ -353,7 +353,7 @@ func Run(ctx context.Context, d depsutil.CommonDependencies, opts Options) error
 	go func() {
 		defer close(syncDone)
 		link.SyncContacts(ctx, node, link.ContactSyncOptions{
-			ContactsDir: d.RuntimePaths.ContactsDir, InactiveAfter: opts.InactiveAfter, Logger: logger,
+			ContactsDir: d.RuntimePaths.ContactsDir, StateDir: d.RuntimePaths.StateDir, InactiveAfter: opts.InactiveAfter, Logger: logger,
 		})
 	}()
 	logger.Info("runtime_start", "instance_id", node.InstanceID(), "max_hops", opts.MaxHops)

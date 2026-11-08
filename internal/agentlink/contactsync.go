@@ -24,6 +24,9 @@ const (
 // ContactSyncOptions configure SyncContacts.
 type ContactSyncOptions struct {
 	ContactsDir string
+	// StateDir is the state folder whose agent.db keeps the contacts and peers; empty, the folder
+	// above ContactsDir.
+	StateDir string
 	// InactiveAfter is how long an agent may stay unreachable before its contact becomes inactive.
 	InactiveAfter time.Duration
 	Logger        *slog.Logger
@@ -93,13 +96,22 @@ func SyncContacts(ctx context.Context, node *Node, opts ContactSyncOptions) {
 	}
 }
 
+// contactSyncDB is the agent.db that keeps the peers: the state folder's, or the one beside the
+// contacts folder when no state folder is named.
+func contactSyncDB(opts ContactSyncOptions) *agentdb.Lazy {
+	if stateDir := strings.TrimSpace(opts.StateDir); stateDir != "" {
+		return agentdb.CachedStateDir(stateDir)
+	}
+	return agentdb.CachedBeside(opts.ContactsDir)
+}
+
 func newContactSync(node *Node, opts ContactSyncOptions, logger *slog.Logger) *contactSync {
 	return &contactSync{
 		node:   node,
-		store:  contacts.NewStore(opts.ContactsDir),
+		store:  contacts.NewStoreInStateDir(opts.StateDir, opts.ContactsDir),
 		opts:   opts,
 		logger: logger.With("component", "agentlink_contacts"),
-		db:     agentdb.CachedBeside(opts.ContactsDir),
+		db:     contactSyncDB(opts),
 		peers:  map[string]*peerRecord{},
 	}
 }

@@ -18,12 +18,17 @@ const (
 // ContactsListTool lists the agent's contacts from agent.db, filtered by status, kind and channel.
 // It replaces reading contacts/ACTIVE.md and INACTIVE.md with read_file.
 type ContactsListTool struct {
+	stateDir    string
 	contactsDir string
 }
 
-// NewContactsListTool returns the tool for the contacts whose folder is contactsDir.
-func NewContactsListTool(contactsDir string) *ContactsListTool {
-	return &ContactsListTool{contactsDir: pathutil.ExpandHomePath(strings.TrimSpace(contactsDir))}
+// NewContactsListTool returns the tool for the contacts whose folder is contactsDir, kept in the
+// agent.db of stateDir (the folder above contactsDir when stateDir is empty).
+func NewContactsListTool(stateDir, contactsDir string) *ContactsListTool {
+	return &ContactsListTool{
+		stateDir:    pathutil.ExpandHomePath(strings.TrimSpace(stateDir)),
+		contactsDir: pathutil.ExpandHomePath(strings.TrimSpace(contactsDir)),
+	}
 }
 
 func (t *ContactsListTool) Name() string { return "contacts_list" }
@@ -97,7 +102,7 @@ func (t *ContactsListTool) Execute(ctx context.Context, params map[string]any) (
 		limit = contactsListDefaultLimit
 	}
 	limit = min(limit, contactsListMaxLimit)
-	items, err := contacts.NewStore(t.contactsDir).ListContactsFiltered(ctx, filter)
+	items, err := contacts.NewStoreInStateDir(t.stateDir, t.contactsDir).ListContactsFiltered(ctx, filter)
 	if err != nil {
 		return "", err
 	}

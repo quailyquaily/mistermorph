@@ -266,3 +266,28 @@ func TestRenderAndParseContactsFiles(t *testing.T) {
 		t.Fatalf("round trip = %#v\nwant %#v", again, contact)
 	}
 }
+
+// A contacts folder nested below the state folder (contacts.dir_name: address/people) is kept in
+// the state folder's agent.db, where its files were imported; NewStore keeps agent.db above the
+// contacts folder, for a contacts folder directly in its state folder.
+func TestStoreInStateDirUsesTheStateAgentDB(t *testing.T) {
+	ctx := context.Background()
+	state := t.TempDir()
+	nested := filepath.Join(state, "address", "people")
+	if err := NewStoreInStateDir(state, nested).PutContact(ctx, Contact{ContactID: "tg:1", TGUserID: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(state, "address", "agent.db")); !os.IsNotExist(err) {
+		t.Fatalf("agent.db opened above the nested contacts folder: %v", err)
+	}
+	// The same database through the default contacts folder.
+	if _, ok, err := NewStore(filepath.Join(state, "contacts")).GetContact(ctx, "tg:1"); err != nil || !ok {
+		t.Fatalf("contact in the state folder's agent.db: %v, %v", ok, err)
+	}
+	if _, ok, err := NewStoreInStateDir(" ", filepath.Join(state, "contacts")).GetContact(ctx, "tg:1"); err != nil || !ok {
+		t.Fatalf("an empty state folder is NewStore's: %v, %v", ok, err)
+	}
+	if err := NewStoreInStateDir("", "").Ensure(ctx); err == nil {
+		t.Fatal("a store with no folders opened a database")
+	}
+}

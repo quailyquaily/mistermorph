@@ -632,6 +632,11 @@ Where the code differs from the text above, and why:
   `topic_preferences` in `meta` (`contacts_legacy_profiles`) in the same transaction, and
   `MoveContactProfiles`, which runs when a run attaches memories, turns them into memories and
   clears them. They never become contact columns.
+- **The contacts are in the state folder's agent.db**, whatever `contacts.dir_name` says: the
+  runtime opens the contacts store with the state folder (`contacts.NewStoreInStateDir`), so a
+  nested folder such as `address/people` is read from the database its files were imported into.
+  The folder itself keeps the avatars. `contacts.NewStore(dir)` alone keeps `agent.db` in the folder
+  above `dir`, for a contacts folder directly in its state folder.
 - **Contacts keep only the Contact's fields.** Unknown keys in a contact's YAML (which the file kept)
   are not stored.
 - **The config document.** `internal/configstore` renders the config tables as a YAML document in

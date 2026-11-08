@@ -95,7 +95,7 @@ func Export(ctx context.Context, loc Locations, dir string) (Result, error) {
 		return result, err
 	}
 
-	listed, err := contacts.NewStore(loc.ContactsDir).ListContactsFiltered(ctx, contacts.ContactFilter{})
+	listed, err := contacts.NewStoreInStateDir(loc.StateDir, loc.ContactsDir).ListContactsFiltered(ctx, contacts.ContactFilter{})
 	if err != nil {
 		return result, err
 	}
@@ -247,7 +247,7 @@ func Import(ctx context.Context, loc Locations, dir string) (Result, error) {
 		if hasInactive {
 			statuses = append(statuses, contacts.StatusInactive)
 		}
-		if err := contacts.NewStore(loc.ContactsDir).ReplaceStatuses(ctx, statuses, listed); err != nil {
+		if err := contacts.NewStoreInStateDir(loc.StateDir, loc.ContactsDir).ReplaceStatuses(ctx, statuses, listed); err != nil {
 			return result, fmt.Errorf("contacts: %w", err)
 		}
 		if hasActive {

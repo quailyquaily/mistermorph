@@ -11,8 +11,11 @@ import (
 
 func TestContactsListFiltersByStatusKindAndChannel(t *testing.T) {
 	ctx := context.Background()
-	dir := filepath.Join(t.TempDir(), "contacts")
-	store := contacts.NewStore(dir)
+	// A contacts folder nested below the state folder (contacts.dir_name: address/people) is kept
+	// in the state folder's agent.db.
+	state := t.TempDir()
+	dir := filepath.Join(state, "address", "people")
+	store := contacts.NewStoreInStateDir(state, dir)
 	for _, c := range []contacts.Contact{
 		{ContactID: "tg:1", Kind: contacts.KindHuman, Channel: contacts.ChannelTelegram, ContactNickname: "Ann", TGUserID: 1},
 		{ContactID: "mm:inst_a", Kind: contacts.KindAgent, Channel: contacts.ChannelAgentLink, ContactNickname: "Bot"},
@@ -25,7 +28,7 @@ func TestContactsListFiltersByStatusKindAndChannel(t *testing.T) {
 	if _, err := store.SetContactStatus(ctx, "slack:T1:U2", contacts.StatusInactive); err != nil {
 		t.Fatal(err)
 	}
-	tool := NewContactsListTool(dir)
+	tool := NewContactsListTool(state, dir)
 	run := func(params map[string]any) []string {
 		t.Helper()
 		out, err := tool.Execute(ctx, params)
@@ -65,8 +68,27 @@ func TestContactsListFiltersByStatusKindAndChannel(t *testing.T) {
 	if _, err := tool.Execute(ctx, map[string]any{"kind": "robot"}); err == nil {
 		t.Fatal("bad kind accepted")
 	}
-	available, err := AgentSendAvailable(ctx, dir)
+	available, err := AgentSendAvailableInStateDir(ctx, state, dir)
 	if err != nil || !available {
+		t.Fatalf("AgentSendAvailableInStateDir = %v, %v", available, err)
+	}
+}
+
+// AgentSendAvailable, for a contacts folder directly in its state folder, keeps working as before.
+func TestAgentSendAvailableBesideTheContactsFolder(t *testing.T) {
+	ctx := context.Background()
+	dir := filepath.Join(t.TempDir(), "contacts")
+	if available, err := AgentSendAvailable(ctx, dir); err != nil || available {
+		t.Fatalf("AgentSendAvailable with no contacts = %v, %v", available, err)
+	}
+	if err := contacts.NewStore(dir).PutContact(ctx, contacts.Contact{ContactID: "mm:inst_a", Kind: contacts.KindAgent,
+		Channel: contacts.ChannelAgentLink}); err != nil {
+		t.Fatal(err)
+	}
+	if available, err := AgentSendAvailable(ctx, dir); err != nil || !available {
 		t.Fatalf("AgentSendAvailable = %v, %v", available, err)
+	}
+	if available, err := AgentSendAvailable(ctx, " "); err != nil || available {
+		t.Fatalf("AgentSendAvailable without a folder = %v, %v", available, err)
 	}
 }

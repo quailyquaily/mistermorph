@@ -20,9 +20,12 @@ import (
 )
 
 type TodoUpdateTool struct {
-	Enabled    bool
-	CronPath   string
-	Contacts   string
+	Enabled  bool
+	CronPath string
+	Contacts string
+	// StateDir is the state folder whose agent.db keeps the contacts; empty, the folder above
+	// Contacts.
+	StateDir   string
 	Client     llm.Client
 	Model      string
 	AddContext todo.AddResolveContext
@@ -318,7 +321,7 @@ func (t *TodoUpdateTool) resolveAddContent(ctx context.Context, content string, 
 	if len(people) == 0 {
 		return t.resolveAddPlaceholders(content, rewritten, warnings)
 	}
-	snapshot, snapErr := todo.LoadContactSnapshot(ctx, contactsDir)
+	snapshot, snapErr := todo.LoadContactSnapshot(ctx, t.StateDir, contactsDir)
 	if snapErr != nil {
 		return "", nil, snapErr
 	}

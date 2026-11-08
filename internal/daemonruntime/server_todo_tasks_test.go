@@ -227,7 +227,7 @@ func TestTodoChatOptionsIncludeNewSlackChatsAndNamelessCachedDM(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	before := todoChatOptions(ctx, dir, "console")
+	before := todoChatOptions(ctx, "", dir, "console")
 	if len(before) != 3 {
 		t.Fatalf("options before new contact = %#v, want console, channel and nameless DM", before)
 	}
@@ -237,7 +237,7 @@ func TestTodoChatOptionsIncludeNewSlackChatsAndNamelessCachedDM(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	options := todoChatOptions(ctx, dir, "console")
+	options := todoChatOptions(ctx, "", dir, "console")
 	if len(options) != 5 {
 		t.Fatalf("options after new contact = %#v, want five deduplicated options", options)
 	}

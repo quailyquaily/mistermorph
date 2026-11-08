@@ -85,7 +85,7 @@ func (routes *routeRegistration) registerStateRoutes() {
 			return
 		}
 		paths := statePaths
-		handleTodoTasks(w, r, paths.cronPath, paths.contactsDir, mode, settingsReader, opts.TaskTopic.TopicReader)
+		handleTodoTasks(w, r, paths.cronPath, paths.stateDir, paths.contactsDir, mode, settingsReader, opts.TaskTopic.TopicReader)
 	})
 	mux.HandleFunc("/todo/runs", func(w http.ResponseWriter, r *http.Request) {
 		if !checkAuth(r, authToken) {
@@ -127,7 +127,7 @@ func (routes *routeRegistration) registerStateRoutes() {
 			return
 		}
 		paths := statePaths
-		store := contacts.NewStore(paths.contactsDir)
+		store := contacts.NewStoreInStateDir(paths.stateDir, paths.contactsDir)
 		avatar, found, err := store.ReadContactAvatar(r.Context(), contactID)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -156,7 +156,7 @@ func (routes *routeRegistration) registerStateRoutes() {
 			return
 		}
 		paths := statePaths
-		store := contacts.NewStore(paths.contactsDir)
+		store := contacts.NewStoreInStateDir(paths.stateDir, paths.contactsDir)
 		service := contacts.NewService(store)
 		items, err := listContactsForConsole(r.Context(), service)
 		if err != nil {
@@ -178,7 +178,7 @@ func (routes *routeRegistration) registerStateRoutes() {
 			return
 		}
 		paths := statePaths
-		store := contacts.NewStore(paths.contactsDir)
+		store := contacts.NewStoreInStateDir(paths.stateDir, paths.contactsDir)
 		svc := contacts.NewService(store)
 
 		switch r.Method {

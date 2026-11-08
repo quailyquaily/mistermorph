@@ -12,8 +12,10 @@ import (
 )
 
 type TodoUpdateRegisterConfig struct {
-	Enabled     bool
-	CronPath    string
+	Enabled  bool
+	CronPath string
+	// StateDir is the state folder whose agent.db keeps the contacts of ContactsDir.
+	StateDir    string
 	ContactsDir string
 }
 
@@ -27,6 +29,7 @@ func BuildTodoUpdateRegisterConfig(enabled bool, fileStateDir, contactsDirName s
 	return TodoUpdateRegisterConfig{
 		Enabled:     enabled,
 		CronPath:    pathutil.ResolveStateFile(fileStateDir, statepaths.CronFilename),
+		StateDir:    pathutil.ResolveStateDir(fileStateDir),
 		ContactsDir: pathutil.ResolveStateChildDir(fileStateDir, strings.TrimSpace(contactsDirName), "contacts"),
 	}
 }
@@ -49,13 +52,15 @@ func RegisterTodoUpdateTool(reg *tools.Registry, cfg TodoUpdateRegisterConfig, c
 	if !cfg.Enabled {
 		return
 	}
-	_ = reg.Replace(builtin.NewTodoUpdateToolWithLLM(
+	tool := builtin.NewTodoUpdateToolWithLLM(
 		true,
 		cfg.CronPath,
 		cfg.ContactsDir,
 		client,
 		model,
-	))
+	)
+	tool.StateDir = strings.TrimSpace(cfg.StateDir)
+	_ = reg.Replace(tool)
 }
 
 func SetTodoUpdateToolAddContext(reg *tools.Registry, ctx todo.AddResolveContext) {

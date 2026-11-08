@@ -1455,7 +1455,7 @@ type cronTopicTitler interface {
 }
 
 // topics, when it keeps a topic per TODO item, has the saved items' topics renamed after them.
-func handleTodoTasks(w http.ResponseWriter, r *http.Request, cronPath string, contactsDir string, mode string, settingsReader agentsettings.Reader, topics TopicReader) {
+func handleTodoTasks(w http.ResponseWriter, r *http.Request, cronPath string, stateDir string, contactsDir string, mode string, settingsReader agentsettings.Reader, topics TopicReader) {
 	store := cronstore.NewStore(cronPath)
 	var defaultRoute runtimeLLMProfileOption
 	var profiles []runtimeLLMProfileOption
@@ -1485,7 +1485,7 @@ func handleTodoTasks(w http.ResponseWriter, r *http.Request, cronPath string, co
 			"heartbeat_enabled": todoRuntimeSettings(settingsReader).GetBool("heartbeat.enabled"),
 			"llm_default_route": defaultRoute,
 			"llm_profiles":      profiles,
-			"chat_options":      todoChatOptions(r.Context(), contactsDir, mode),
+			"chat_options":      todoChatOptions(r.Context(), stateDir, contactsDir, mode),
 			"runs":              cronstore.Runs(cronPath),
 		})
 		return
@@ -1528,7 +1528,7 @@ func handleTodoTasks(w http.ResponseWriter, r *http.Request, cronPath string, co
 			"heartbeat_enabled": todoRuntimeSettings(settingsReader).GetBool("heartbeat.enabled"),
 			"llm_default_route": defaultRoute,
 			"llm_profiles":      profiles,
-			"chat_options":      todoChatOptions(r.Context(), contactsDir, mode),
+			"chat_options":      todoChatOptions(r.Context(), stateDir, contactsDir, mode),
 			"runs":              cronstore.Runs(cronPath),
 		})
 		return
@@ -1539,7 +1539,7 @@ func handleTodoTasks(w http.ResponseWriter, r *http.Request, cronPath string, co
 	}
 }
 
-func todoChatOptions(ctx context.Context, contactsDir string, mode string) []todoChatOption {
+func todoChatOptions(ctx context.Context, stateDir string, contactsDir string, mode string) []todoChatOption {
 	store := chatinfo.NewStore(contactsDir)
 	items, _, err := store.Read(ctx)
 	if err != nil {
@@ -1580,7 +1580,7 @@ func todoChatOptions(ctx context.Context, contactsDir string, mode string) []tod
 	}
 	// Newly observed conversations are selectable before their remote profiles
 	// have been fetched. Reading local contacts keeps this endpoint network-free.
-	candidates, err := chatinfo.ActiveContactCandidateIDs(ctx, contactsDir)
+	candidates, err := chatinfo.ActiveContactCandidateIDs(ctx, stateDir, contactsDir)
 	if err == nil {
 		for _, chatID := range candidates {
 			key := strings.ToLower(chatID)

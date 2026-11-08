@@ -85,7 +85,7 @@ func TestRefreshChatInfoOnStartFetchesCandidatesWhenStoreEmpty(t *testing.T) {
 			Type:     "supergroup",
 			Name:     "Project Room",
 		}, nil
-	}), contactsDir, nil)
+	}), "", contactsDir, nil)
 
 	items, exists, err := store.Read(ctx)
 	if err != nil {
@@ -144,7 +144,7 @@ func TestRefreshChatInfoOnStartFetchesMissingCandidatesWhenStoreHasItems(t *test
 			Type:     "group",
 			Name:     "New Room",
 		}, nil
-	}), contactsDir, nil)
+	}), "", contactsDir, nil)
 
 	if len(fetchedChatIDs) != 1 || fetchedChatIDs[0] != "tg:-100456" {
 		t.Fatalf("fetched chat IDs = %#v, want [tg:-100456]", fetchedChatIDs)

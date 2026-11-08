@@ -29,16 +29,29 @@ const (
 
 // DBStore keeps the contacts in agent.db: one contacts row each, and a contact_handles row per
 // channel identifier, so a lookup by any of them is an index seek. root is the contacts folder,
-// which keeps the avatars; agent.db is in the state folder above it.
+// which keeps the avatars; agent.db is in the state folder.
 type DBStore struct {
 	root string
 	mu   sync.Mutex
 	db   *agentdb.Lazy
 }
 
-// NewStore returns the contacts store whose folder (for avatars) is root.
+// NewStore returns the contacts store whose folder (for avatars) is root, for a contacts folder
+// directly in its state folder: agent.db is in the folder above root. A runtime, whose contacts
+// folder is contacts.dir_name and may be nested deeper, uses NewStoreInStateDir.
 func NewStore(root string) *DBStore {
+	return NewStoreInStateDir("", root)
+}
+
+// NewStoreInStateDir returns the contacts store whose folder (for avatars) is root, kept in the
+// agent.db of stateDir, where the contacts files of root were imported. An empty stateDir is
+// NewStore's: agent.db in the folder above root.
+func NewStoreInStateDir(stateDir, root string) *DBStore {
 	store := &DBStore{root: strings.TrimSpace(root)}
+	if stateDir = strings.TrimSpace(stateDir); stateDir != "" {
+		store.db = agentdb.CachedStateDir(stateDir)
+		return store
+	}
 	// No folder, no database: "contacts" alone would put agent.db in the working directory.
 	store.db = agentdb.CachedBeside(store.root)
 	return store

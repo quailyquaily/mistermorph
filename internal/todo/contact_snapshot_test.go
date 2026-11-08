@@ -38,7 +38,7 @@ func TestLoadContactSnapshot(t *testing.T) {
 		t.Fatalf("UpsertContact(alice) error = %v", err)
 	}
 
-	snap, err := LoadContactSnapshot(context.Background(), contactsDir)
+	snap, err := LoadContactSnapshot(context.Background(), "", contactsDir)
 	if err != nil {
 		t.Fatalf("LoadContactSnapshot() error = %v", err)
 	}
