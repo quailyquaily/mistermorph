@@ -73,3 +73,19 @@ Built and pushed commits b9f8ba24 (channel defaults) and 1d671c15 (Console confi
 - Existing limitations retained: stopping a task waiting for a runner slot takes effect once it starts; approval-paused work releases its slot, user-question waits hold it. Cron TODO tasks use separate scheduling even when they share Console topic keys.
 
 Moved new/ → review/. Owner/reviewer should inspect the shared runner limiter/reload behavior and the new settings field. No merge or deployment performed.
+
+## factory · review · 2026-11-09 08:18
+head: 1d671c15829b2e5f935030826b3f5786bc5be391
+verdict: pass
+
+Codex reviewed origin/master...HEAD, including all 40 changed files and shared concurrency/isolation behavior. No verified introduced P0–P3 findings.
+
+Validation reported by Codex:
+- Configured gofmt check, go vet ./..., and go test ./... passed.
+- go test -race for internal/channelruntime/core and cmd/mistermorph/consolecmd passed.
+- nsh check passed; nsh test --web-host tests/noHost.js passed (285/285).
+- All scripted tests used an absolute throwaway HOME. No installs, dependency restoration, code changes or commits; manager confirmed a clean worktree.
+
+Residual risks: no interactive UI visual checks or live model, coding-tool, or external-channel integration checks. The coder could not locate its review-code skill/security reference, so no claim of completing that reference's security checklist is made.
+
+Branch merges cleanly with the fetched master. Moved review/ → ready/ for owner approval; no merge or deployment performed. No linked GitHub issues or PRs to comment on.
