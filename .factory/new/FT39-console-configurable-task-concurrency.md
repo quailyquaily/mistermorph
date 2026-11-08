@@ -22,3 +22,6 @@ Acceptance tests:
 - Cover default, explicit override, invalid settings and runtime reconstruction/restart.
 
 This item records a requested fix, not an implemented or deployed change.
+
+## factory · 2026-11-09 06:33
+Owner follow-up: all task-concurrency defaults should be 8. See FT40 in new/. This supersedes the earlier default of 3: console.max_concurrency must default to 8, preferably via the shared channel default updated by FT40. Preserve all other requirements and explicit overrides.
