@@ -7,6 +7,10 @@
   flex: 0 0 auto;
   display: grid;
   grid-template-columns: repeat(var(--nav-count, 5), minmax(0, 1fr));
+  /* One row filling the strip between its top rule and the safe area. The height is border-box,
+     so the rule takes 1px of --mobile-nav-height; a slot sized to the full height would overflow
+     the row and sit its icon half a pixel low. */
+  grid-template-rows: minmax(0, 1fr);
   height: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom, 0px));
   padding: 0 4px env(safe-area-inset-bottom, 0px);
   border-top: 1px solid var(--line);
@@ -25,17 +29,20 @@
   transition: left var(--motion-normal) var(--motion-ease);
 }
 
+/* Every slot is its whole cell, with no padding of its own, and centres its icon or portrait
+   both ways in it. */
 .mobile-bottom-nav-item {
   appearance: none;
   position: relative;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
+  align-self: stretch;
   min-width: 0;
-  height: var(--mobile-nav-height);
+  min-height: 0;
+  height: auto;
   margin: 0;
-  padding: 0 2px;
+  padding: 0;
   border: 0;
   border-radius: 0;
   background: transparent;
