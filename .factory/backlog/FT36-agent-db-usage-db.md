@@ -44,3 +44,11 @@ tables: `settings` (one row per config key path, typed by the Console's settings
 a column per field; `soul` with status and preset columns and its Markdown body; `heartbeat_workflows`, one row per
 checklist workflow with an on/off switch. One `change_log` records before and after for every change (secrets
 logged without values). See §1 and §7 of the design.
+
+## factory · 2026-11-09 00:14
+Design changed at the owner's request: "soul could be similar a text field of identity. why we need a change_log?"
+and, on removing the change log, "yes".
+
+- The soul is a text column of `identity` (Markdown, no front matter); there is no `soul` table, status or preset.
+  A draft `soul.md` is imported as empty, its original kept as `soul.md.imported`.
+- There is no `change_log`: recovery is `morph state snapshot` and the export commands.
