@@ -75,6 +75,7 @@ import { topicIcon, useTopicMetadata } from "../core/topic-metadata";
 import { cronSidebarGroups, cronTopicModels, cronTopicModelText, cronTopicsOf, isCronTopicID, topicSidebarViewFor } from "../core/chat-cron-topics";
 import { activelyViewedTopic, createTopicActivityTracker, cronRunningCount, topicActivitySignature, TOPIC_ACTIVITY_DONE, TOPIC_ACTIVITY_PENDING } from "../core/topic-activity";
 import { contextMeter } from "../core/context-meter";
+import { createHistoryFollower } from "../core/chat-history-follow";
 import {
   groupTopicsByTag,
   knownTopicTags,
@@ -624,7 +625,6 @@ const ChatView = {
     const chatStatusExpandedState = ref({});
     const historyAutoStick = ref(true);
     let dialogShellPreloadCancel = null;
-    let historyUserScrollIntentAt = 0;
     let rawRevealTimerID = 0;
     let heartbeatRevealTimerID = 0;
     let copiedHistoryTimerID = 0;
@@ -2651,20 +2651,19 @@ const ChatView = {
       return historyViewport.value;
     }
 
-    function historyDistanceFromBottom() {
-      const viewport = historyViewportElement();
-      if (!viewport) {
-        return 0;
-      }
-      return viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop;
-    }
-
-    function historyNearBottom() {
-      return historyDistanceFromBottom() <= 28;
-    }
+    // Deferred scrolls and settle checks are dropped once another history load starts or the
+    // history on screen changes (another topic, endpoint or a new topic).
+    const historyFollower = createHistoryFollower({
+      viewport: historyViewportElement,
+      following: historyAutoStick,
+      scope: () => `${historyLoadVersion}\u0000${historyScope()}`,
+      nextTick: (fn) => void nextTick(fn),
+      frame: (fn) => window.requestAnimationFrame(fn),
+      reducedMotion: () => Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches),
+    });
 
     function markHistoryScrollIntent() {
-      historyUserScrollIntentAt = Date.now();
+      historyFollower.markIntent();
     }
 
     function markHistoryPointerScrollIntent(event) {
@@ -2680,55 +2679,16 @@ const ChatView = {
       }
     }
 
-    function hasRecentHistoryScrollIntent() {
-      return Date.now() - historyUserScrollIntentAt <= 1200;
-    }
-
     function handleHistoryScroll() {
-      if (historyNearBottom()) {
-        historyAutoStick.value = true;
-        return;
-      }
-      if (hasRecentHistoryScrollIntent()) {
-        historyAutoStick.value = false;
-      }
+      historyFollower.handleScroll();
     }
 
-    // smooth: glide down to a message that just arrived (one sent), when it is near; a streaming
-    // reply, a load and a long way down still jump, so the view never lags the text.
     function scrollHistoryToBottom(options = {}) {
-      const force = Boolean(options.force);
-      const smooth = Boolean(options.smooth);
-      void nextTick(() => {
-        const viewport = historyViewportElement();
-        if (!viewport) {
-          return;
-        }
-        if (!force && !historyAutoStick.value) {
-          return;
-        }
-        window.requestAnimationFrame(() => {
-          const node = historyViewportElement();
-          if (!node) {
-            return;
-          }
-          const distance = node.scrollHeight - node.clientHeight - node.scrollTop;
-          const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
-          if (smooth && !reduced && distance > 0 && distance < node.clientHeight * 1.5) {
-            node.scrollTo({ top: node.scrollHeight, behavior: "smooth" });
-          } else {
-            node.scrollTop = node.scrollHeight;
-          }
-          historyAutoStick.value = true;
-        });
-      });
+      historyFollower.scrollToBottom(options);
     }
 
     function handleMarkdownRendered() {
-      if (!historyAutoStick.value) {
-        return;
-      }
-      scrollHistoryToBottom({ force: true });
+      historyFollower.handleContentRendered();
     }
 
     function replaceHistoryItems(items) {
@@ -2806,6 +2766,10 @@ const ChatView = {
       } else {
         nextState[key] = value;
       }
+      // Opening or closing a panel changes the layout where the reader is looking; background
+      // updates must not pull the view to the bottom while it settles, or after, unless the view is
+      // still at the bottom.
+      historyFollower.holdForLayoutChange();
       chatStatusExpandedState.value = nextState;
     }
 
@@ -4453,6 +4417,7 @@ const ChatView = {
       viewActive = false;
       stopTopicActivityRefresh();
       topicActivityTracker.beginRequest();
+      historyFollower.dispose();
       window.removeEventListener("focus", onPageVisibilityChange);
       document.removeEventListener("visibilitychange", onPageVisibilityChange);
       window.removeEventListener("online", onNetworkOnline);
