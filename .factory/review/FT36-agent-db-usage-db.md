@@ -1,6 +1,6 @@
 ---
 branch: factory/FT36-agent-db-usage-db
-round: 0
+round: 1
 ---
 # Move the agent's state into SQLite: agent.db and usage.db
 
@@ -66,3 +66,25 @@ The design is committed on the item's branch, `factory/FT36-agent-db-usage-db` (
 ## lyric · 2026-11-09 00:17
 Build the feature designed in `docs/feat/feat_20261108_agent_db.md` on this branch: move the agent's state into
 `agent.db` and `usage.db` as the design describes, following its milestones (M0 to M7) and its tests.
+
+## factory · plan · 2026-11-09 03:33
+Behaviour: implement M0 safe snapshots first, then M1–M7: usage, small state, persona/heartbeat, TODO, contacts, config and export/import. Preserve runtime/prompt/channel semantics and config precedence; empty installations create empty schemas, legacy imports are transactional and repeat-safe with rejects recorded and originals retained. Explicit --config remains file-backed.
+
+Scope: the complete design on the existing branch, as requested by the latest owner section. Logs, audit, avatars, accountdm peers and topic projections stay files. Existing memory and journal storage is unchanged. Never paths remain unchanged.
+
+Decisions: use central agent.db migrations, structured tables and a soul column with no change log. Import marks commit with data; renames occur after commit and are retried. Implement milestones in topical commits rather than splitting this owner-approved item.
+
+Checking: store field/import/reject/rename tests; usage parity, concurrency, repricing, DST/+05:30; config precedence and explicit-file behavior; contacts handles/limits; cron ordering/locks; persona and heartbeat; live snapshot integrity; full Go gate and Console check/tests. Manual UI checks remain separate.
+
+## factory · 2026-11-09 03:33
+Built M0–M7 with Claude Code; pushed head df7ff8c0. Round 1; new → review.
+
+Implemented SQLite stores, transactional legacy imports, live snapshots and Cloudflare integration, config/state commands, contacts_list, structured persona/heartbeat APIs and Console editors, TODO last-run display and database-backed config source information. Database-backed /var/lib/morph_nest edits now fail clearly; whole-document import/install omit the bootstrap key as documented.
+
+Manager independently reran the configured gofmt/vet/test gate successfully after the final fixes; forbidden paths unchanged. Coder reports 162 Go packages passing uncached, nsh check passing, 276 Console tests passing; desktop 47 passed/1 ignored and Cloudflare 24 passed before the final UI fixes. No deployment performed.
+
+Install: unpinned user-level goimports @latest; local pkg-config shim for existing fontconfig libraries. No dependency manifest or lockfile changes. All scripted tests used throwaway HOME directories.
+
+Review attention: topic legacy files rename individually because the folder holds out-of-scope state; legacy contact profiles are retained in meta then moved to memories later, and unknown contact YAML keys are no longer kept. Config preserves otherwise-unrepresentable values in settings, normalizes profile-only route objects, and permits legacy bootstrap state-folder resolution. Agent DB timestamps generally use second precision. Empty test-generated SQLite artifacts were accidentally included in an intermediate commit, then removed without rewriting history; coder inspected them and reported only schema/import markers, no user data or secrets. Empty-state-dir regression tests prevent recreation.
+
+Not checked manually: browser, desktop and Android UI, especially persona/heartbeat editors and TODO last-run display. No live Cloudflare/R2 backup test; no nsh production build or pinned-toolchain rustfmt check. Review should verify these differences and migration safety before approving shipment.
