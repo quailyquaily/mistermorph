@@ -1,0 +1,139 @@
+diff --git a/crates/gpui/nsh-platform-gpui/src/events.rs b/crates/gpui/nsh-platform-gpui/src/events.rs
+index e664593..7268b12 100644
+--- a/crates/gpui/nsh-platform-gpui/src/events.rs
++++ b/crates/gpui/nsh-platform-gpui/src/events.rs
+@@ -43,6 +43,35 @@ const LINE: f32 = 16.0;
+ /// `wl_pointer::Event::Axis`), so scrolling runs ahead of every other app.
+ const WAYLAND_TOUCHPAD_GAIN: f32 = if cfg!(target_os = "linux") { 3.0 } else { 1.0 };
+ 
++/// How many times the system's amount a wheel notch or touchpad movement
++/// scrolls. At 1 a notch scrolled 48 points (about two lines of the
++/// console's text) and a touchpad followed the fingers, which felt slow;
++/// at 2 a notch scrolls 96, close to the 100 pixels of browsers on Windows.
++/// macOS reports its own accelerated amounts and keeps them.
++const SCROLL_GAIN: f32 = if cfg!(target_os = "macos") { 1.0 } else { 2.0 };
++
++/// GPUI's scroll delta as nsh's `(dx, dy, precise)`. GPUI's deltas move
++/// the content (positive: down / right); nsh's scroll toward the end.
++/// Ctrl + wheel pinches instead ([`crate::input::wheel`]): its amounts
++/// keep the system's size, so zooming keeps its pace.
++fn scroll_amounts(delta: ScrollDelta, ctrl: bool) -> (f32, f32, bool) {
++    let gain = if ctrl { 1.0 } else { SCROLL_GAIN };
++    match delta {
++        ScrollDelta::Pixels(p) => (
++            -f32::from(p.x) / WAYLAND_TOUCHPAD_GAIN * gain,
++            -f32::from(p.y) / WAYLAND_TOUCHPAD_GAIN * gain,
++            true,
++        ),
++        ScrollDelta::Lines(l) => (-l.x * LINE * gain, -l.y * LINE * gain, false),
++    }
++}
++
++/// Whether a scroll is GPUI's Wayland client reporting the fingers'
++/// lift: an empty precise move.
++fn touchpad_lift(dx: f32, dy: f32, precise: bool) -> bool {
++    precise && cfg!(target_os = "linux") && dx == 0.0 && dy == 0.0
++}
++
+ fn gesture_phase(phase: TouchPhase) -> GesturePhase {
+     match phase {
+         TouchPhase::Started => GesturePhase::Began,
+@@ -309,16 +338,7 @@ pub(crate) fn install(
+             return;
+         }
+         let (x, y) = root_point(&s, e.position);
+-        // GPUI's deltas move the content (positive: down / right); nsh's
+-        // scroll toward the end.
+-        let (dx, dy, precise) = match e.delta {
+-            ScrollDelta::Pixels(p) => (
+-                -f32::from(p.x) / WAYLAND_TOUCHPAD_GAIN,
+-                -f32::from(p.y) / WAYLAND_TOUCHPAD_GAIN,
+-                true,
+-            ),
+-            ScrollDelta::Lines(l) => (-l.x * LINE, -l.y * LINE, false),
+-        };
++        let (dx, dy, precise) = scroll_amounts(e.delta, e.modifiers.control);
+         let event = WheelEvent {
+             x,
+             y,
+@@ -328,7 +348,7 @@ pub(crate) fn install(
+             modifiers: crate::keys::modifiers(&e.modifiers),
+             time: s.clock(),
+         };
+-        if precise && cfg!(target_os = "linux") && dx == 0.0 && dy == 0.0 {
++        if touchpad_lift(dx, dy, precise) {
+             crate::input::touchpad_lifted(&s, event);
+         } else if precise {
+             crate::input::touchpad(&s, event, gesture_phase(e.touch_phase));
+@@ -416,3 +436,71 @@ pub(crate) fn install(
+         crate::rt::flush(cx);
+     });
+ }
++
++#[cfg(test)]
++mod tests {
++    use gpui::{point, px};
++
++    use super::*;
++
++    fn pixels(x: f32, y: f32) -> ScrollDelta {
++        ScrollDelta::Pixels(point(px(x), px(y)))
++    }
++
++    #[test]
++    fn wheel_lines_scroll_by_the_gain() {
++        // A notch down is three lines up in GPUI's terms (content moves up).
++        let (dx, dy, precise) = scroll_amounts(ScrollDelta::Lines(point(0.0, -3.0)), false);
++        assert!(!precise);
++        assert_eq!(dx, 0.0);
++        assert_eq!(dy, 3.0 * LINE * SCROLL_GAIN);
++        let (dx, dy, _) = scroll_amounts(ScrollDelta::Lines(point(3.0, 3.0)), false);
++        assert_eq!(
++            (dx, dy),
++            (-3.0 * LINE * SCROLL_GAIN, -3.0 * LINE * SCROLL_GAIN)
++        );
++    }
++
++    #[test]
++    fn touchpad_pixels_scroll_by_the_gain_after_the_wayland_divide() {
++        let (dx, dy, precise) = scroll_amounts(pixels(6.0, -12.0), false);
++        assert!(precise);
++        assert_eq!(dx, -6.0 / WAYLAND_TOUCHPAD_GAIN * SCROLL_GAIN);
++        assert_eq!(dy, 12.0 / WAYLAND_TOUCHPAD_GAIN * SCROLL_GAIN);
++    }
++
++    #[test]
++    fn scrolls_faster_than_the_system_off_macos() {
++        let k = if cfg!(target_os = "macos") { 1.0 } else { 2.0 };
++        assert_eq!(SCROLL_GAIN, k);
++        let (_, notch, _) = scroll_amounts(ScrollDelta::Lines(point(0.0, -3.0)), false);
++        assert_eq!(notch, 3.0 * LINE * k);
++    }
++
++    #[test]
++    fn ctrl_keeps_the_systems_amounts_for_zooming() {
++        let (_, dy, _) = scroll_amounts(ScrollDelta::Lines(point(0.0, -1.0)), true);
++        assert_eq!(dy, LINE);
++        let (dx, dy, _) = scroll_amounts(pixels(-9.0, 9.0), true);
++        assert_eq!(
++            (dx, dy),
++            (9.0 / WAYLAND_TOUCHPAD_GAIN, -9.0 / WAYLAND_TOUCHPAD_GAIN)
++        );
++    }
++
++    #[test]
++    fn empty_moves_stay_empty_and_lift_the_fingers() {
++        for ctrl in [false, true] {
++            let (dx, dy, precise) = scroll_amounts(pixels(0.0, 0.0), ctrl);
++            assert_eq!((dx, dy), (0.0, 0.0));
++            assert_eq!(touchpad_lift(dx, dy, precise), cfg!(target_os = "linux"));
++            let (dx, dy, precise) = scroll_amounts(ScrollDelta::Lines(point(0.0, 0.0)), ctrl);
++            assert_eq!((dx, dy), (0.0, 0.0));
++            assert!(!touchpad_lift(dx, dy, precise));
++        }
++        // The smallest move is still a move, not a lift.
++        let (dx, dy, precise) = scroll_amounts(pixels(0.0, 0.01), false);
++        assert!(dy < 0.0);
++        assert!(!touchpad_lift(dx, dy, precise));
++    }
++}
