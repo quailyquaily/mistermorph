@@ -49,3 +49,17 @@ Visual checks: coder checked actual components/styles with mock data in system C
 Installs: temporary playwright-core@1.65.0 via package manager to drive installed Chrome; no manifest or lockfile changes. Other restored dependencies were pinned.
 
 Not checked: WebKit/Safari, physical mobile devices, or the full app with a real backend. Owner/reviewer should verify the original progress-height issue on the affected browser and inspect copy animations.
+
+## factory · review · 2026-11-08 20:31
+head: 6733cf8120ffec83f38b460f83f1dd7a7419d1b2
+verdict: pass
+notes:
+- [P2] web/markdown-renderer/src/styles.css:271: Reduced-motion animation override has lower specificity than the new data-copy-pulse rules. Match their specificity and synchronize web/console/src/vendor/markdown-renderer/index.css:1403. Example: Chrome with prefers-reduced-motion: reduce still computes mmr-inline-copy-ring at 0.52s and runs an active animation after inline-code copying.
+
+No P0/P1 findings; moved review → ready under the factory review threshold. Owner should inspect the P2 reduced-motion defect before shipping.
+
+Validation: Codex reviewed all 14 changed files in origin/master...HEAD. Mandatory gofmt/vet/Go tests passed; console tests 537/537 and pnpm build passed (chunk-size warning); renderer tests 10/10 passed. Scripted tests used a throwaway absolute HOME. Browser checks covered clipboard interactions and fallback, selection, keyboard/touch, repeated feedback, desktop/mobile sizes, four resizes and progress updates; panel/scroller heights matched and outer scrolling remained stable. Source worktree stayed clean.
+
+Installs: temporary playwright-core@1.65.0 for browser checks, not pinned by the repository; no manifest/lockfile changes. Pinned renderer dependency restoration warned that esbuild build scripts were blocked; tests passed.
+
+Residual risks: Safari, physical mobile devices and full app with a real backend were not checked. Original progress-height issue was not naturally reproduced. No linked GitHub issue or PR.
