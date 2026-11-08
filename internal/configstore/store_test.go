@@ -367,6 +367,8 @@ func TestImportFileOnce(t *testing.T) {
 	}
 	want := viperSettings(t, []byte(realConfig))
 	normalizeRoutes(want)
+	// The file was beside config.yaml, which is in another folder than agent.db.
+	want["llm"].(map[string]any)["pricing_file"] = filepath.Join(filepath.Dir(file), "pricing.yaml")
 	if got := viperSettings(t, out); !reflect.DeepEqual(got, want) {
 		t.Fatalf("imported config differs:\n%s", out)
 	}
@@ -379,6 +381,109 @@ func TestImportFileOnce(t *testing.T) {
 	}
 	if _, err := ImportFile(ctx, t.TempDir(), writeTemp(t, "- not\n- a mapping\n")); err == nil {
 		t.Fatal("a list config imported")
+	}
+}
+
+// The import keeps a relative file setting pointing at the file beside the imported config.
+func TestImportFileKeepsRelativeFileTargets(t *testing.T) {
+	ctx := context.Background()
+	t.Setenv("HOME", t.TempDir())
+	config := func(pricing, keystore string) string {
+		return "llm:\n  pricing_file: " + pricing + "\nmixin:\n  keystore_file: " + keystore + "\n"
+	}
+	read := func(t *testing.T, state string) (string, string) {
+		t.Helper()
+		out, err := ReadFile(DBConfigPath(state))
+		if err != nil {
+			t.Fatal(err)
+		}
+		v := viperSettings(t, out)
+		pricing, _ := v["llm"].(map[string]any)["pricing_file"].(string)
+		keystore, _ := v["mixin"].(map[string]any)["keystore_file"].(string)
+		return pricing, keystore
+	}
+
+	t.Run("config folder is not the state folder", func(t *testing.T) {
+		state := t.TempDir()
+		file := writeTemp(t, config("./pricing.yaml", "credentials/mixin.json"))
+		if ran, err := ImportFile(ctx, state, file); err != nil || !ran {
+			t.Fatalf("ImportFile = %v, %v", ran, err)
+		}
+		pricing, keystore := read(t, state)
+		dir := filepath.Dir(file)
+		if pricing != filepath.Join(dir, "pricing.yaml") || keystore != filepath.Join(dir, "credentials", "mixin.json") {
+			t.Fatalf("pricing_file = %q, keystore_file = %q, want them in %s", pricing, keystore, dir)
+		}
+	})
+	t.Run("config folder is the state folder", func(t *testing.T) {
+		state := t.TempDir()
+		file := filepath.Join(state, "config.yaml")
+		if err := os.WriteFile(file, []byte(config("./pricing.yaml", "credentials/mixin.json")), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if ran, err := ImportFile(ctx, state, file); err != nil || !ran {
+			t.Fatalf("ImportFile = %v, %v", ran, err)
+		}
+		if pricing, keystore := read(t, state); pricing != "./pricing.yaml" || keystore != "credentials/mixin.json" {
+			t.Fatalf("pricing_file = %q, keystore_file = %q, want them as written", pricing, keystore)
+		}
+	})
+	t.Run("absolute, home, reference and empty paths", func(t *testing.T) {
+		state := t.TempDir()
+		file := writeTemp(t, config("~/pricing.yaml", "/etc/morph/mixin.json")+"tools:\n  bash:\n    timeout: 30s\n")
+		if ran, err := ImportFile(ctx, state, file); err != nil || !ran {
+			t.Fatalf("ImportFile = %v, %v", ran, err)
+		}
+		if pricing, keystore := read(t, state); pricing != "~/pricing.yaml" || keystore != "/etc/morph/mixin.json" {
+			t.Fatalf("pricing_file = %q, keystore_file = %q, want them as written", pricing, keystore)
+		}
+
+		state = t.TempDir()
+		file = writeTemp(t, config(`"${FT36_PRICING}"`, `""`))
+		if ran, err := ImportFile(ctx, state, file); err != nil || !ran {
+			t.Fatalf("ImportFile = %v, %v", ran, err)
+		}
+		rows, err := Settings(ctx, state)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := map[string]string{}
+		for _, row := range rows {
+			got[row[0]] = row[2]
+		}
+		if got["llm.pricing_file"] != `"${FT36_PRICING}"` || got["mixin.keystore_file"] != `""` {
+			t.Fatalf("settings = %v, want the reference and the empty path as written", got)
+		}
+	})
+	t.Run("a path that is not a string", func(t *testing.T) {
+		state := t.TempDir()
+		file := writeTemp(t, "mixin:\n  keystore_file: [a, b]\n")
+		if ran, err := ImportFile(ctx, state, file); err != nil || !ran {
+			t.Fatalf("ImportFile = %v, %v", ran, err)
+		}
+		out, err := ReadFile(DBConfigPath(state))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(out), "- a") {
+			t.Fatalf("a list keystore_file was not kept as written:\n%s", out)
+		}
+	})
+}
+
+// Saving a config to agent.db (the Console, morph config import) keeps relative paths as written:
+// they resolve from the state folder, as they did before the save.
+func TestWriteFileKeepsRelativeFileSettings(t *testing.T) {
+	path := DBConfigPath(t.TempDir())
+	if err := WriteFileBy(path, []byte("llm:\n  pricing_file: ./pricing.yaml\n"), ByCLI); err != nil {
+		t.Fatal(err)
+	}
+	out, err := ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(out), "pricing_file: ./pricing.yaml") {
+		t.Fatalf("saved config:\n%s", out)
 	}
 }
 

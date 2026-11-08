@@ -9,12 +9,14 @@
 //
 // The agent.db config is named by a path like a file's, <state>/agent.db#config.yaml, so the code
 // that resolves paths relative to the config (a pricing file, a keystore) finds them in the state
-// folder, as it found them beside ~/.morph/config.yaml.
+// folder. Importing a config file from another folder makes its relative ones absolute, so they
+// keep naming the files beside it.
 package configstore
 
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -22,6 +24,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 
@@ -549,6 +552,7 @@ func ImportFile(ctx context.Context, stateDir, filePath string) (bool, error) {
 		if err != nil {
 			return result, err
 		}
+		rows = rebaseConfigRelativeFiles(rows, filepath.Dir(filePath), stateDir)
 		if err := saveRows(ctx, tx, dropBootstrapKeys(rows), ByImport); err != nil {
 			return result, err
 		}
@@ -558,6 +562,46 @@ func ImportFile(ctx context.Context, stateDir, filePath string) (bool, error) {
 		return ran, err
 	}
 	return true, finishPendingRename(ctx, db)
+}
+
+// ConfigRelativeFileKeys are the settings whose relative paths resolve from the config's folder:
+// the folder of a config file, the state folder for the config in agent.db.
+var ConfigRelativeFileKeys = []string{"llm.pricing_file", "mixin.keystore_file"}
+
+// rebaseConfigRelativeFiles keeps the relative file settings of a config imported from configDir
+// pointing at the same files once the config is in the agent.db of stateDir: a relative path is
+// made absolute from configDir, unless the two folders are the same. A path that is absolute,
+// starts with ~ or holds a ${VAR} or secret reference (known only when the config is read) is
+// kept as written.
+func rebaseConfigRelativeFiles(rows Rows, configDir, stateDir string) Rows {
+	if sameFolder(configDir, stateDir) {
+		return rows
+	}
+	base := filepath.Clean(pathutil.ExpandHomePath(strings.TrimSpace(configDir)))
+	if abs, err := filepath.Abs(base); err == nil {
+		base = abs
+	}
+	settings := append([]settingRow(nil), rows.Settings...)
+	for i, s := range settings {
+		if !slices.Contains(ConfigRelativeFileKeys, s.Path) {
+			continue
+		}
+		var value string
+		if err := json.Unmarshal([]byte(s.Value), &value); err != nil {
+			continue
+		}
+		path := strings.TrimSpace(value)
+		if path == "" || filepath.IsAbs(path) || strings.HasPrefix(path, "~") || strings.Contains(path, "${") {
+			continue
+		}
+		encoded, err := json.Marshal(filepath.Join(base, path))
+		if err != nil {
+			continue
+		}
+		settings[i].Value = string(encoded)
+	}
+	rows.Settings = settings
+	return rows
 }
 
 // finishPendingRename renames the config file a committed import named to <name>.imported, then

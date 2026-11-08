@@ -642,6 +642,11 @@ Where the code differs from the text above, and why:
   (`mcp.servers[<name>].<key>` for the named lists), so a saved document reads back the same,
   comments aside. A route written as `{profile: x}` reads back as `x`. The agent.db config is
   named `<state>/agent.db#config.yaml`, so paths relative to the config resolve in the state folder.
+  The import of `~/.morph/config.yaml` into the `agent.db` of another state folder rewrites the
+  relative paths that resolve from the config's folder (`llm.pricing_file`, `mixin.keystore_file`)
+  as the absolute paths they named, so they keep naming the files beside the old config. Paths that
+  are absolute, start with `~` or hold a `${VAR}` or secret reference are kept as written; a save
+  to `agent.db` (the Console, `morph config import`) keeps its relative paths as written.
 - **The state folder.** Besides `--state-dir` and `MISTER_MORPH_FILE_STATE_DIR`, `file_state_dir` in
   an older `~/.morph/config.yaml` (or its `.imported` copy) still settles the state folder, so an
   install that moved its state keeps finding it.
