@@ -429,3 +429,96 @@ func TestBootstrapKeyIsRefusedNotDropped(t *testing.T) {
 		t.Fatalf("config =\n%s", out)
 	}
 }
+
+// A read sees one save, never the tables of two: the settings, profiles, routes and MCP servers
+// of a config read while other saves alternate all come from the same document.
+func TestConcurrentReadsSeeOneSave(t *testing.T) {
+	path := DBConfigPath(t.TempDir())
+	doc := func(v string) []byte {
+		return []byte(`llm:
+  model: model-` + v + `
+  profiles:
+    alt:
+      model: alt-` + v + `
+  routes:
+    decision: alt
+mcp:
+  servers:
+    - name: srv-` + v + `
+      command: run-` + v + `
+review_marker: ` + v + `
+`)
+	}
+	if err := WriteFileBy(path, doc("a"), ByCLI); err != nil {
+		t.Fatal(err)
+	}
+	type parsed struct {
+		LLM struct {
+			Model    string `yaml:"model"`
+			Profiles map[string]struct {
+				Model string `yaml:"model"`
+			} `yaml:"profiles"`
+		} `yaml:"llm"`
+		MCP struct {
+			Servers []struct {
+				Name    string `yaml:"name"`
+				Command string `yaml:"command"`
+			} `yaml:"servers"`
+		} `yaml:"mcp"`
+		Marker string `yaml:"review_marker"`
+	}
+	stop := make(chan struct{})
+	writerDone := make(chan error, 1)
+	go func() {
+		defer close(writerDone)
+		for i := 0; i < 150; i++ {
+			v := "a"
+			if i%2 == 0 {
+				v = "b"
+			}
+			if err := WriteFileBy(path, doc(v), ByCLI); err != nil {
+				writerDone <- err
+				return
+			}
+		}
+	}()
+	errs := make(chan error, 4)
+	for r := 0; r < 4; r++ {
+		go func() {
+			for {
+				select {
+				case <-stop:
+					errs <- nil
+					return
+				default:
+				}
+				raw, err := ReadFile(path)
+				if err != nil {
+					errs <- err
+					return
+				}
+				var p parsed
+				if err := yaml.Unmarshal(raw, &p); err != nil {
+					errs <- err
+					return
+				}
+				v := p.Marker
+				ok := p.LLM.Model == "model-"+v && p.LLM.Profiles["alt"].Model == "alt-"+v &&
+					len(p.MCP.Servers) == 1 && p.MCP.Servers[0].Name == "srv-"+v && p.MCP.Servers[0].Command == "run-"+v
+				if !ok {
+					errs <- errors.New("read mixes two saves:\n" + string(raw))
+					return
+				}
+			}
+		}()
+	}
+	if err := <-writerDone; err != nil {
+		t.Fatal(err)
+	}
+	close(stop)
+	for r := 0; r < 4; r++ {
+		if err := <-errs; err != nil {
+			t.Fatal(err)
+		}
+	}
+}

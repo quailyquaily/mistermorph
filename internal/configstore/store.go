@@ -77,18 +77,36 @@ func ReadFile(path string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	saved, err := hasConfig(ctx, db)
-	if err != nil {
+	var rows Rows
+	saved := false
+	if err := readTx(ctx, db, func(q queryer) error {
+		if saved, err = hasConfig(ctx, q); err != nil || !saved {
+			return err
+		}
+		rows, err = loadRows(ctx, q)
+		return err
+	}); err != nil {
 		return nil, err
 	}
 	if !saved {
 		return nil, &fs.PathError{Op: "open", Path: path, Err: fs.ErrNotExist}
 	}
-	rows, err := loadRows(ctx, db)
-	if err != nil {
-		return nil, err
-	}
 	return rows.render()
+}
+
+// readTx runs fn in one read transaction, so the config's tables are read as one save left them,
+// never half of one save and half of the next. A read-only transaction begins deferred: it does
+// not take the write lock, and its snapshot is the database at its first read.
+func readTx(ctx context.Context, db *agentdb.DB, fn func(q queryer) error) error {
+	tx, err := db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := fn(tx); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // Exists reports whether the config at path is there.
@@ -533,8 +551,11 @@ func Settings(ctx context.Context, stateDir string) ([][3]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	rows, err := loadRows(ctx, db)
-	if err != nil {
+	var rows Rows
+	if err := readTx(ctx, db, func(q queryer) error {
+		rows, err = loadRows(ctx, q)
+		return err
+	}); err != nil {
 		return nil, err
 	}
 	out := make([][3]string, 0, len(rows.Settings))
