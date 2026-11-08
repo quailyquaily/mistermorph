@@ -341,3 +341,45 @@ func TestContactsImportUsesTheConfiguredFolderOverRepeatedStarts(t *testing.T) {
 		t.Fatalf("people/ACTIVE.md not renamed after its import: %v", err)
 	}
 }
+
+// A start that imported ~/.morph/config.yaml but could not rename it is followed by starts that
+// read agent.db, even when the file has broken since.
+func TestStartAfterAnInterruptedConfigImportReadsAgentDB(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root renames in a read-only folder")
+	}
+	resetRootConfigForTest(t)
+	state := t.TempDir()
+	t.Setenv("MISTER_MORPH_FILE_STATE_DIR", state)
+	morph := filepath.Join(os.Getenv("HOME"), ".morph")
+	if err := os.MkdirAll(morph, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(morph, "config.yaml")
+	if err := os.WriteFile(file, []byte("llm:\n  model: from-import\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(morph, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	err := loadRootConfig(nil)
+	if err := os.Chmod(morph, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err == nil {
+		t.Fatal("the first start renamed in a read-only folder")
+	}
+	if err := os.WriteFile(file, []byte("llm: [\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	viper.Reset()
+	if err := loadRootConfig(nil); err != nil {
+		t.Fatalf("second start: %v", err)
+	}
+	if got := viper.GetString("llm.model"); got != "from-import" {
+		t.Fatalf("llm.model = %q", got)
+	}
+	if _, err := os.Stat(file + ".imported"); err != nil {
+		t.Fatalf("config.yaml not renamed on the second start: %v", err)
+	}
+}

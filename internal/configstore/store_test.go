@@ -522,3 +522,59 @@ review_marker: ` + v + `
 		}
 	}
 }
+
+// An import that committed but could not rename its file (a crash, a folder it cannot write)
+// finishes the rename on the next call, without parsing the file again: a file broken since does
+// not stop the config in agent.db from loading.
+func TestImportFileFinishesAnInterruptedRename(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root renames in a read-only folder")
+	}
+	ctx := context.Background()
+	state := t.TempDir()
+	folder := t.TempDir()
+	file := filepath.Join(folder, "config.yaml")
+	if err := os.WriteFile(file, []byte("llm:\n  model: imported\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(folder, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	ran, err := ImportFile(ctx, state, file)
+	if err := os.Chmod(folder, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if !ran || err == nil {
+		t.Fatalf("ImportFile in a read-only folder = %v, %v; want imported with a rename error", ran, err)
+	}
+	if _, err := os.Stat(file); err != nil {
+		t.Fatalf("file gone after a failed rename: %v", err)
+	}
+	// The file breaks before the next start.
+	if err := os.WriteFile(file, []byte("llm: [\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if ran, err := ImportFile(ctx, state, file); err != nil || ran {
+		t.Fatalf("ImportFile after the interruption = %v, %v; want the rename finished, nothing imported", ran, err)
+	}
+	if _, err := os.Stat(file); !os.IsNotExist(err) {
+		t.Fatalf("file still in place: %v", err)
+	}
+	if raw, err := os.ReadFile(file + ".imported"); err != nil || string(raw) != "llm: [\n" {
+		t.Fatalf("imported copy = %q, %v", raw, err)
+	}
+	out, err := ReadFile(DBConfigPath(state))
+	if err != nil || !strings.Contains(string(out), "model: imported") {
+		t.Fatalf("config = %s, %v", out, err)
+	}
+	// Nothing is pending any more: a new file at the path is left alone.
+	if err := os.WriteFile(file, []byte("llm: [\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if ran, err := ImportFile(ctx, state, file); err != nil || ran {
+		t.Fatalf("ImportFile of a new broken file = %v, %v", ran, err)
+	}
+	if _, err := os.Stat(file); err != nil {
+		t.Fatalf("a new file was renamed: %v", err)
+	}
+}

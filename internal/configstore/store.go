@@ -15,8 +15,10 @@ package configstore
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -26,6 +28,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/agentdb"
 	"github.com/quailyquaily/mistermorph/internal/fsstore"
 	"github.com/quailyquaily/mistermorph/internal/pathutil"
+	"github.com/quailyquaily/mistermorph/internal/stateimport"
 	"github.com/quailyquaily/mistermorph/internal/statepaths"
 	"gopkg.in/yaml.v3"
 )
@@ -496,13 +499,30 @@ func saveRows(ctx context.Context, q queryer, rows Rows, by string) error {
 // ImportName is the config import's mark in meta.
 const ImportName = "config"
 
+// pendingRenameKey holds, in meta, the config file an import committed but has not renamed yet.
+// The file may be outside the state folder (~/.morph/config.yaml beside another state folder), so
+// it is not in the import mark, whose renames every open of agent.db finishes; ImportFile finishes
+// this one.
+const pendingRenameKey = "config_import_pending_rename"
+
 // ImportFile imports the config file at filePath into agent.db in stateDir, once: unless the
 // config was imported before or agent.db already holds a config. The file is renamed
-// <name>.imported after the import commits. It reports whether it imported.
+// <name>.imported after the import commits; a rename a crash left undone is finished on the next
+// call, without reading the file again. It reports whether it imported.
 func ImportFile(ctx context.Context, stateDir, filePath string) (bool, error) {
 	filePath = filepath.Clean(strings.TrimSpace(filePath))
+	if abs, err := filepath.Abs(filePath); err == nil {
+		filePath = abs
+	}
 	db, err := agentdb.CachedStateDir(stateDir).GetWithoutImports(ctx)
 	if err != nil {
+		return false, err
+	}
+	if err := finishPendingRename(ctx, db); err != nil {
+		// The config is in agent.db: the file that should have been renamed is not read again.
+		slog.Default().Warn("config_import_rename_failed", "error", err)
+	}
+	if done, err := stateimport.Imported(ctx, db, ImportName); err != nil || done {
 		return false, err
 	}
 	raw, err := os.ReadFile(filePath)
@@ -517,6 +537,10 @@ func ImportFile(ctx context.Context, stateDir, filePath string) (bool, error) {
 	}
 	ran, err := agentdb.RunImport(ctx, db, agentdb.Importer{Name: ImportName, Run: func(ctx context.Context, tx *sql.Tx, env agentdb.ImportEnv) (agentdb.ImportResult, error) {
 		var result agentdb.ImportResult
+		if _, err := tx.ExecContext(ctx, `INSERT INTO meta (key, value) VALUES (?, ?)
+			ON CONFLICT (key) DO UPDATE SET value = excluded.value`, pendingRenameKey, filePath); err != nil {
+			return result, err
+		}
 		saved, err := hasConfig(ctx, tx)
 		if err != nil || saved {
 			return result, err
@@ -533,14 +557,32 @@ func ImportFile(ctx context.Context, stateDir, filePath string) (bool, error) {
 	if err != nil || !ran {
 		return ran, err
 	}
-	// The file may be outside the state folder (~/.morph/config.yaml beside another state folder),
-	// so it is renamed here rather than by the import mark.
-	if _, err := os.Stat(filePath + ".imported"); os.IsNotExist(err) {
-		if err := os.Rename(filePath, filePath+".imported"); err != nil {
-			return true, err
+	return true, finishPendingRename(ctx, db)
+}
+
+// finishPendingRename renames the config file a committed import named to <name>.imported, then
+// forgets it. A file whose .imported name is taken is left in place rather than overwrite the
+// earlier original; a rename that fails stays pending for the next call.
+func finishPendingRename(ctx context.Context, db *agentdb.DB) error {
+	var path string
+	err := db.QueryRowContext(ctx, `SELECT value FROM meta WHERE key = ?`, pendingRenameKey).Scan(&path)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if path = strings.TrimSpace(path); path != "" {
+		if _, err := os.Lstat(path); err == nil {
+			if _, err := os.Lstat(path + stateimport.ImportedSuffix); os.IsNotExist(err) {
+				if err := os.Rename(path, path+stateimport.ImportedSuffix); err != nil {
+					return fmt.Errorf("rename imported config %s: %w", path, err)
+				}
+			}
 		}
 	}
-	return true, nil
+	_, err = db.ExecContext(ctx, `DELETE FROM meta WHERE key = ?`, pendingRenameKey)
+	return err
 }
 
 // ---------- reading one value ----------
