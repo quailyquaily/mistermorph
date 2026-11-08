@@ -44,3 +44,15 @@ Installs: No unpinned tools or dependencies; restored locked pnpm dependencies o
 Visual checks: Coder measured the real component in a static headless-Chrome harness at 375px and 320px, including a simulated 34px safe area and idle/pressed/selected/focus states; centering within 0.01px and no overflow. Not checked in the running application or on physical iOS/Android devices. Only the existing light theme was checked; no separate dark theme exists. Empty portrait fallback is markup-tested, not visually checked; the offline screenshot had a harness-only broken logo. Review should inspect the mobile navigation in the actual application.
 
 Moved new/ → review/.
+
+## factory · review · 2026-11-08 12:33
+head: f616b9c7c471341b5bbf4880884175a3a95bdefa
+verdict: pass
+
+Codex reviewed all three changed files against origin/master and the request/plan. No verified introduced defects found. The branch merges cleanly with master. Tracked files and branch head remained unchanged during review.
+
+Validation: Configured gofmt check, go vet ./... and go test ./... passed (exit 0) after clearing review-cache interference and rerunning. Console pnpm test passed all 486 tests; pnpm build passed with the existing large-chunk warning. Only locked dependencies and the specified pnpm version were restored; no unpinned installs.
+
+Residual risks: Actual-application visual verification remains incomplete. The frontend started, but both available browsers timed out loading it. Owner should check mobile centering, portrait idle/pressed/selected appearance, visible keyboard focus and safe-area layout on real devices before shipping. No physical-device or theme visual verification was completed in this review.
+
+Moved review/ → ready/. Not merged into master.
