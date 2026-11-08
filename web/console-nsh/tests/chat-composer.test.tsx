@@ -1,6 +1,7 @@
 // The composer: commands as you type, the keys through sent messages, drafts per topic, attached
 // files (upload, failure, retry, preview, removal) and the model picker.
 import { expect, test } from "nsh/test";
+import { nextComposerRows, SINGLE_ROW } from "../components/chat/composerRows";
 import { openConsole, type ApiRequest } from "./harness";
 
 const NOW = new Date().toISOString();
@@ -155,4 +156,32 @@ test("the arrow keys move through the suggestions and Escape closes them", async
   await app.waitFor("id:chat-composer-suggestions");
   await app.keyboard.press("escape");
   await app.waitFor("id:chat-composer-suggestions", { state: "gone" });
+});
+
+// A line that wraps beside the controls but fits the wider field above them used to flip the
+// layout on every layout pass (the field's height decided the rows, the rows its width), until a
+// phone's page ran out of memory.
+test("the field moves above the controls when its text wraps, and stays there while the line fits the wider field", () => {
+  const line = "a line that wraps beside the buttons";
+  const up = nextComposerRows(SINGLE_ROW, line, false);
+  expect(up.multi).toBe(true);
+  // Laid out again at the full width it is one line: no edit, so no move back.
+  let rows = up;
+  for (let pass = 0; pass < 10; pass += 1) rows = nextComposerRows(rows, line, true);
+  expect(rows).toBe(up);
+  // Typing on keeps it up.
+  expect(nextComposerRows(up, `${line} and more`, true).multi).toBe(true);
+});
+
+test("the field comes back down once the text is shorter than when it moved up, or empty", () => {
+  const up = nextComposerRows(SINGLE_ROW, "a line that wraps beside the buttons", false);
+  expect(nextComposerRows(up, "a line that wraps", true)).toEqual(SINGLE_ROW);
+  expect(nextComposerRows(up, "", true)).toEqual(SINGLE_ROW);
+  // Shorter but still more than one line at the full width, or holding a line break: it stays up.
+  expect(nextComposerRows(up, "a line that wraps", false).multi).toBe(true);
+  expect(nextComposerRows(up, "one\ntwo", true).multi).toBe(true);
+  // A line break moves it up from one row too.
+  const broken = nextComposerRows(SINGLE_ROW, "one\n", false);
+  expect(broken.multi).toBe(true);
+  expect(nextComposerRows(broken, "one", true)).toEqual(SINGLE_ROW);
 });

@@ -17,6 +17,7 @@ import {
   composerTriggerContext,
   replaceComposerSuggestionToken,
 } from "../../lib/core/chat-composer-suggestions.js";
+import { nextComposerRows, SINGLE_ROW, type ComposerRows } from "./composerRows";
 import { t } from "./i18n";
 
 const DEFAULT_MAX_ROWS = 24;
@@ -166,8 +167,18 @@ export function ChatComposer(props: ChatComposerProps) {
   };
   const maxHeight = () => DEFAULT_MAX_ROWS * LINE_HEIGHT;
   const fieldHeight = () => Math.max(LINE_HEIGHT, Math.min(contentHeight(), maxHeight()));
-  // More than one line of text: the field moves above the controls.
-  const multiRow = () => contentHeight() > LINE_HEIGHT * 1.5;
+  // More than one line of text: the field moves above the controls. One way per edit, as the move
+  // itself widens the field (composerRows.ts).
+  const rows = signal<ComposerRows>(SINGLE_ROW);
+  const multiRow = () => rows().multi;
+  effect(() => {
+    const text = value();
+    const oneLine = contentHeight() <= LINE_HEIGHT * 1.5;
+    untracked(() => {
+      const next = nextComposerRows(rows(), text, oneLine);
+      if (next !== rows()) rows.set(next);
+    });
+  });
   // The field eases to its new height as lines come and go (the Vue composer's height transition),
   // rather than snapping; the history above makes room in the same motion.
   function growTo(height: number) {
