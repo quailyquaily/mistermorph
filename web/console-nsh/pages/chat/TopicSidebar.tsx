@@ -73,6 +73,12 @@ function StatusDot(props: { status: string; label: string; class?: string; testI
   );
 }
 
+// A foldable group's heading, a toggle: its caret, icon, label, count and hairline sit in the
+// middle of its hover fill, 7pt above and below (the static heading's 10 and 4 together, so the
+// list keeps its rhythm). Exported for tests/topic-group-heading.test.tsx.
+export const TOPIC_GROUP_TOGGLE_CLASS =
+  "mt-1.5 flex-row items-center gap-2.5 rounded-(--radius) py-[7px] pl-3.5 pr-3.5 transition-colors duration-[180ms] hover:bg-hover-soft";
+
 export function TopicSidebar(props: { c: ChatController; class?: string }) {
   const c = props.c;
   const view = () => c.topicSidebarView();
@@ -172,7 +178,7 @@ export function TopicSidebar(props: { c: ChatController; class?: string }) {
         accessibilityLabel={row().group.label}
         tooltip={<Tip text={row().collapsed ? t("chat_topics_group_expand") : t("chat_topics_group_collapse")} />}
         testID={`chat-topic-group-${row().group.key}`}
-        class="mt-1.5 flex-row items-center gap-2.5 rounded-(--radius) pb-1 pl-3.5 pr-3.5 pt-2.5 transition-colors duration-[180ms] hover:bg-hover-soft"
+        class={TOPIC_GROUP_TOGGLE_CLASS}
       >
         {groupLabel(row)}
       </TipButton>
