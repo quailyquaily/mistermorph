@@ -17,3 +17,6 @@ Registered in new/ only; implementation and diagnosis have not started.
 
 ## factory · 2026-11-08 13:28
 Moved from new to backlog at the owner’s request: “move FT 26~29 to backlog”.
+
+## factory · 2026-11-08 19:36
+Moved from backlog to new at the owner’s request: “FT26, 27 放到 new”.
