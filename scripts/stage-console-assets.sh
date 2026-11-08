@@ -23,6 +23,23 @@ if [[ ! -f "${TARGET_DIR}/index.html" ]]; then
   exit 1
 fi
 
+# Precompressed copies: the server sends name.br / name.gz to browsers that accept them
+# (cmd/mistermorph/consolecmd/static_assets.go). The nsh build writes its own; the Vue build
+# writes none, so text files of 1 KB or more get a gzip copy here.
+compressed=0
+while IFS= read -r -d '' file; do
+  if [[ -e "${file}.gz" || -e "${file}.br" ]]; then
+    continue
+  fi
+  if [[ "$(wc -c <"${file}")" -lt 1024 ]]; then
+    continue
+  fi
+  gzip -9 -n -k "${file}"
+  compressed=$((compressed + 1))
+done < <(find "${TARGET_DIR}" -type f \( -name '*.js' -o -name '*.mjs' -o -name '*.css' -o -name '*.svg' \
+  -o -name '*.json' -o -name '*.webmanifest' -o -name '*.wasm' -o -name '*.txt' -o -name '*.ttf' \) -print0)
+
 echo "Staged console assets:"
 echo "  source: ${SOURCE_DIR}"
 echo "  target: ${TARGET_DIR}"
+echo "  gzipped: ${compressed} files"

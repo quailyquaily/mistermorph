@@ -140,6 +140,8 @@ type server struct {
 	webSockets                  consoleWebSocketHandlers
 	secretStore                 secref.OSStore
 	settingsWriteMu             sync.Mutex
+	// staticETags caches the ETags of embedded Console files (static_assets.go).
+	staticETags sync.Map
 	// stopServing ends serve as SIGTERM would; set while serve runs.
 	stopMu      sync.Mutex
 	stopServing context.CancelFunc
@@ -1454,6 +1456,8 @@ func (s *server) serveSPAIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	body := renderSPAIndex(raw, s.cfg.basePath)
+	// It names the hashed files of the current build: always revalidated.
+	w.Header().Set("Cache-Control", "no-cache")
 	http.ServeContent(w, r, "index.html", time.Time{}, bytes.NewReader(body))
 }
 
@@ -1462,90 +1466,6 @@ func renderSPAIndex(raw []byte, basePath string) []byte {
 	body := bytes.ReplaceAll(raw, []byte("__MISTERMORPH_BASE_PATH__"), []byte(display))
 	body = bytes.ReplaceAll(body, []byte("__MISTERMORPH_BASE_HREF__"), []byte(html.EscapeString(displayBaseHref(basePath))))
 	return body
-}
-
-func (s *server) serveStaticAsset(w http.ResponseWriter, r *http.Request, rel string) bool {
-	if s == nil {
-		return false
-	}
-	rel = strings.TrimPrefix(strings.TrimSpace(rel), "/")
-	if rel == "" {
-		return false
-	}
-	if strings.TrimSpace(s.cfg.staticDir) != "" {
-		target := filepath.Join(s.cfg.staticDir, filepath.FromSlash(rel))
-		if fi, err := os.Stat(target); err == nil && !fi.IsDir() {
-			http.ServeFile(w, r, target)
-			return true
-		}
-		return false
-	}
-	if s.cfg.staticFS == nil {
-		return false
-	}
-
-	file, info, err := openStaticFSFile(s.cfg.staticFS, rel)
-	if err != nil {
-		return false
-	}
-	defer file.Close()
-
-	serveStaticFSFile(w, r, rel, file, info)
-	return true
-}
-
-func (s *server) readStaticAsset(rel string) ([]byte, error) {
-	if s == nil {
-		return nil, fs.ErrNotExist
-	}
-	rel = strings.TrimPrefix(strings.TrimSpace(rel), "/")
-	if rel == "" {
-		return nil, fs.ErrNotExist
-	}
-	if strings.TrimSpace(s.cfg.staticDir) != "" {
-		return os.ReadFile(filepath.Join(s.cfg.staticDir, filepath.FromSlash(rel)))
-	}
-	if s.cfg.staticFS == nil {
-		return nil, fs.ErrNotExist
-	}
-	return fs.ReadFile(s.cfg.staticFS, rel)
-}
-
-func openStaticFSFile(staticFS fs.FS, rel string) (fs.File, fs.FileInfo, error) {
-	clean := strings.TrimPrefix(path.Clean("/"+strings.TrimSpace(rel)), "/")
-	if clean == "" {
-		return nil, nil, fs.ErrNotExist
-	}
-	file, err := staticFS.Open(clean)
-	if err != nil {
-		return nil, nil, err
-	}
-	info, err := file.Stat()
-	if err != nil {
-		_ = file.Close()
-		return nil, nil, err
-	}
-	if info.IsDir() {
-		_ = file.Close()
-		return nil, nil, fs.ErrNotExist
-	}
-	return file, info, nil
-}
-
-func serveStaticFSFile(w http.ResponseWriter, r *http.Request, name string, file fs.File, info fs.FileInfo) {
-	if ctype := mime.TypeByExtension(path.Ext(name)); ctype != "" {
-		w.Header().Set("Content-Type", ctype)
-	}
-	if rs, ok := file.(io.ReadSeeker); ok {
-		http.ServeContent(w, r, path.Base(name), info.ModTime(), rs)
-		return
-	}
-	body, err := io.ReadAll(file)
-	if err != nil {
-		http.NotFound(w, r)
-		return
-	}
-	http.ServeContent(w, r, path.Base(name), info.ModTime(), bytes.NewReader(body))
 }
 
 func joinBasePath(basePath, suffix string) string {
