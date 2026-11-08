@@ -134,7 +134,7 @@ func OpenUsageStore(ctx context.Context, path string, opts UsageStoreOptions) (*
 		logger = slog.Default()
 	}
 	stateDir := filepath.Dir(path)
-	db, release, err := sharedUsageDBs.acquire(ctx, path, func() (*sql.DB, error) {
+	db, release, err := sharedUsageDBs.Acquire(path, func() (*sql.DB, error) {
 		db, err := sqlitedb.Open(ctx, path, usageMigrations(stateDir, pricingSource))
 		if err != nil {
 			return nil, fmt.Errorf("open usage database: %w", err)
@@ -433,52 +433,7 @@ func boolInt(v bool) int {
 	return 0
 }
 
-// sharedDBs keeps one *sql.DB per path in a process, shared by every handle on it.
-type sharedDBs struct {
-	mu  sync.Mutex
-	dbs map[string]*sharedDB
-}
-
-type sharedDB struct {
-	db   *sql.DB
-	refs int
-}
-
-var sharedUsageDBs = &sharedDBs{dbs: map[string]*sharedDB{}}
-
-func (s *sharedDBs) acquire(_ context.Context, path string, open func() (*sql.DB, error)) (*sql.DB, func(), error) {
-	key := path
-	if abs, err := filepath.Abs(path); err == nil {
-		key = abs
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	entry := s.dbs[key]
-	if entry == nil {
-		db, err := open()
-		if err != nil {
-			return nil, nil, err
-		}
-		entry = &sharedDB{db: db}
-		s.dbs[key] = entry
-	}
-	entry.refs++
-	var once sync.Once
-	release := func() {
-		once.Do(func() {
-			s.mu.Lock()
-			defer s.mu.Unlock()
-			entry.refs--
-			if entry.refs == 0 {
-				_ = entry.db.Close()
-				if s.dbs[key] == entry {
-					delete(s.dbs, key)
-				}
-			}
-		})
-	}
-	return entry.db, release, nil
-}
+var sharedUsageDBs = sqlitedb.NewShared()
 
 // UsageSink records a wrapped client's calls into usage.db. It opens the store on the first call,
 // so wrapping a client costs nothing, and a client that is never used never opens the database.

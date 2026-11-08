@@ -1,17 +1,24 @@
 package consolecmd
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
+	"database/sql"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"log/slog"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/quailyquaily/mistermorph/internal/fsstore"
+	"github.com/quailyquaily/mistermorph/internal/agentdb"
+	"github.com/quailyquaily/mistermorph/internal/stateimport"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -58,73 +65,87 @@ type tokenSession struct {
 	ExpiresAt time.Time
 }
 
+// sessionPruneInterval is how often Validate deletes expired sessions from agent.db.
+const sessionPruneInterval = time.Minute
+
+// sessionStore holds Console login sessions: in agent.db (console_sessions) when it has a state
+// folder, so a restart keeps people logged in, or in memory (stream tickets). Only a token's
+// SHA-256 is kept, never the token.
+type sessionStore struct {
+	mu        sync.Mutex
+	db        *agentdb.DB
+	sessions  map[string]tokenSession
+	lastPrune time.Time
+}
+
+func init() {
+	agentdb.Register(agentdb.Importer{Name: "console_sessions", Order: 70, Run: importConsoleSessions})
+}
+
+// legacySessionsFile is console/sessions.json, which held the sessions before agent.db.
+var legacySessionsFile = filepath.Join("console", "sessions.json")
+
 type persistedSessions struct {
 	Version  int               `json:"version"`
 	Sessions map[string]string `json:"sessions"`
 }
 
-type sessionStore struct {
-	mu       sync.RWMutex
-	path     string
-	sessions map[string]tokenSession
-}
-
-func newSessionStore(path string) *sessionStore {
-	store := &sessionStore{
-		path:     strings.TrimSpace(path),
-		sessions: map[string]tokenSession{},
+func importConsoleSessions(ctx context.Context, tx *sql.Tx, env agentdb.ImportEnv) (agentdb.ImportResult, error) {
+	var result agentdb.ImportResult
+	raw, err := os.ReadFile(filepath.Join(env.StateDir, legacySessionsFile))
+	if os.IsNotExist(err) {
+		return result, nil
 	}
-	store.load()
-	return store
-}
-
-func (s *sessionStore) load() {
-	if s == nil || strings.TrimSpace(s.path) == "" {
-		return
+	if err != nil {
+		return result, err
 	}
+	result.Rename = append(result.Rename, filepath.ToSlash(legacySessionsFile))
 	var payload persistedSessions
-	ok, err := fsstore.ReadJSON(s.path, &payload)
-	if err != nil || !ok {
-		return
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		result.Rejects = append(result.Rejects, stateimport.Reject{Source: filepath.ToSlash(legacySessionsFile), Error: err.Error()})
+		return result, nil
 	}
 	now := time.Now().UTC()
-	for tokenHash, expiresAtRaw := range payload.Sessions {
-		tokenHash = strings.TrimSpace(tokenHash)
-		if tokenHash == "" {
+	for hash, expiresRaw := range payload.Sessions {
+		hash = strings.TrimSpace(hash)
+		expiresAt, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(expiresRaw))
+		if hash == "" || err != nil {
+			result.Rejects = append(result.Rejects, stateimport.Reject{Source: filepath.ToSlash(legacySessionsFile), Error: "bad session entry"})
 			continue
 		}
-		expiresAt, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(expiresAtRaw))
-		if err != nil {
-			continue
-		}
-		expiresAt = expiresAt.UTC()
 		if !expiresAt.After(now) {
 			continue
 		}
-		s.sessions[tokenHash] = tokenSession{ExpiresAt: expiresAt}
+		if _, err := tx.ExecContext(ctx, `INSERT OR REPLACE INTO console_sessions (token_hash, created_at, expires_at) VALUES (?, ?, ?)`,
+			hash, agentdb.FormatTime(now), agentdb.FormatTime(expiresAt)); err != nil {
+			return result, err
+		}
 	}
+	return result, nil
 }
 
-func (s *sessionStore) persistLocked() error {
-	if s == nil || strings.TrimSpace(s.path) == "" {
+// newSessionStore keeps sessions in agent.db in stateDir, or in memory when stateDir is "" or the
+// database cannot open.
+func newSessionStore(stateDir string) *sessionStore {
+	store := &sessionStore{sessions: map[string]tokenSession{}}
+	if strings.TrimSpace(stateDir) == "" {
+		return store
+	}
+	db, err := agentdb.OpenStateDir(context.Background(), stateDir)
+	if err != nil {
+		slog.Default().Warn("console_sessions_store_unavailable", "error", err)
+		return store
+	}
+	store.db = db
+	return store
+}
+
+// Close releases the store's database handle.
+func (s *sessionStore) Close() error {
+	if s == nil || s.db == nil {
 		return nil
 	}
-	payload := persistedSessions{
-		Version:  1,
-		Sessions: map[string]string{},
-	}
-	for tokenHash, item := range s.sessions {
-		tokenHash = strings.TrimSpace(tokenHash)
-		if tokenHash == "" {
-			continue
-		}
-		expiresAt := item.ExpiresAt.UTC()
-		if expiresAt.IsZero() {
-			continue
-		}
-		payload.Sessions[tokenHash] = expiresAt.Format(time.RFC3339Nano)
-	}
-	return fsstore.WriteJSONAtomic(s.path, payload, fsstore.FileOptions{})
+	return s.db.Close()
 }
 
 func (s *sessionStore) Create(ttl time.Duration) (string, time.Time, error) {
@@ -141,18 +162,33 @@ func (s *sessionStore) Create(ttl time.Duration) (string, time.Time, error) {
 	}
 	token := base64.RawURLEncoding.EncodeToString(buf)
 	hash := tokenHash(token)
-	expiresAt := time.Now().UTC().Add(ttl)
+	now := time.Now().UTC()
+	expiresAt := now.Add(ttl)
 
 	s.mu.Lock()
-	s.pruneExpiredLocked(time.Now().UTC())
-	s.sessions[hash] = tokenSession{ExpiresAt: expiresAt}
-	if err := s.persistLocked(); err != nil {
-		delete(s.sessions, hash)
-		s.mu.Unlock()
-		return "", time.Time{}, err
+	defer s.mu.Unlock()
+	if s.db != nil {
+		ctx := context.Background()
+		tx, err := s.db.BeginTx(ctx, nil)
+		if err != nil {
+			return "", time.Time{}, err
+		}
+		defer func() { _ = tx.Rollback() }()
+		if _, err := tx.ExecContext(ctx, `DELETE FROM console_sessions WHERE expires_at <= ?`, agentdb.FormatTime(now)); err != nil {
+			return "", time.Time{}, err
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO console_sessions (token_hash, created_at, expires_at) VALUES (?, ?, ?)`,
+			hash, agentdb.FormatTime(now), agentdb.FormatTime(expiresAt)); err != nil {
+			return "", time.Time{}, err
+		}
+		if err := tx.Commit(); err != nil {
+			return "", time.Time{}, err
+		}
+		s.lastPrune = now
+		return token, expiresAt, nil
 	}
-	s.mu.Unlock()
-
+	s.pruneExpiredLocked(now)
+	s.sessions[hash] = tokenSession{ExpiresAt: expiresAt}
 	return token, expiresAt, nil
 }
 
@@ -165,18 +201,28 @@ func (s *sessionStore) Validate(token string) (time.Time, bool) {
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	changed := s.pruneExpiredLocked(now)
-	if changed {
-		_ = s.persistLocked()
+	if s.db != nil {
+		ctx := context.Background()
+		if now.Sub(s.lastPrune) >= sessionPruneInterval {
+			if _, err := s.db.ExecContext(ctx, `DELETE FROM console_sessions WHERE expires_at <= ?`, agentdb.FormatTime(now)); err == nil {
+				s.lastPrune = now
+			}
+		}
+		var raw string
+		if err := s.db.QueryRowContext(ctx, `SELECT expires_at FROM console_sessions WHERE token_hash = ?`, hash).Scan(&raw); err != nil {
+			return time.Time{}, false
+		}
+		expiresAt, err := agentdb.ParseTime(raw)
+		if err != nil || !expiresAt.After(now) {
+			_, _ = s.db.ExecContext(ctx, `DELETE FROM console_sessions WHERE token_hash = ?`, hash)
+			return time.Time{}, false
+		}
+		return expiresAt.UTC(), true
 	}
+	s.pruneExpiredLocked(now)
 	session, ok := s.sessions[hash]
-	if !ok {
-		return time.Time{}, false
-	}
-	if !session.ExpiresAt.After(now) {
+	if !ok || !session.ExpiresAt.After(now) {
 		delete(s.sessions, hash)
-		_ = s.persistLocked()
 		return time.Time{}, false
 	}
 	return session.ExpiresAt, true
@@ -188,23 +234,20 @@ func (s *sessionStore) Delete(token string) {
 	}
 	hash := tokenHash(token)
 	s.mu.Lock()
-	_, existed := s.sessions[hash]
-	delete(s.sessions, hash)
-	if existed {
-		_ = s.persistLocked()
+	defer s.mu.Unlock()
+	if s.db != nil {
+		_, _ = s.db.ExecContext(context.Background(), `DELETE FROM console_sessions WHERE token_hash = ?`, hash)
+		return
 	}
-	s.mu.Unlock()
+	delete(s.sessions, hash)
 }
 
-func (s *sessionStore) pruneExpiredLocked(now time.Time) bool {
-	changed := false
+func (s *sessionStore) pruneExpiredLocked(now time.Time) {
 	for k, v := range s.sessions {
 		if !v.ExpiresAt.After(now) {
 			delete(s.sessions, k)
-			changed = true
 		}
 	}
-	return changed
 }
 
 func tokenHash(token string) string {

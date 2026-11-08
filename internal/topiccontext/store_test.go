@@ -1,13 +1,16 @@
 package topiccontext
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/quailyquaily/mistermorph/internal/agentdb"
 	"github.com/quailyquaily/mistermorph/internal/topicstate"
 )
 
@@ -204,13 +207,33 @@ func TestStoreConcurrentWritesKeepItems(t *testing.T) {
 	}
 }
 
-func TestStoreMovesTheLegacyFileIntoTopicFolders(t *testing.T) {
+func TestStoreImportsTheLegacyFileAndTopicFolders(t *testing.T) {
 	root := t.TempDir()
 	legacy := filepath.Join(root, "topic_context.json")
-	raw := `{"version":1,"items":{"console:a":{"conversation_key":"console:a","model":"m","context_window_tokens":1000,"used_input_tokens":250}}}`
+	raw := `{"version":1,"items":{"console:a":{"conversation_key":"console:a","model":"m","context_window_tokens":1000,"used_input_tokens":250},` +
+		`"console:b":{"conversation_key":"console:b","model":"old","used_input_tokens":1}}}`
 	if err := os.WriteFile(legacy, []byte(raw), 0o600); err != nil {
 		t.Fatalf("write legacy: %v", err)
 	}
+	writeTopicFile := func(key, name, content string) {
+		t.Helper()
+		dir := filepath.Join(root, "topics", topicstate.Key(key))
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// A topic folder's own file is newer than the shared file and wins.
+	writeTopicFile("console:b", "context.json", `{"conversation_key":"console:b","topic_id":"b","runtime":"console","model":"new",`+
+		`"normalized_model":"new","context_window_tokens":2000,"context_window_source":"builtin","used_input_tokens":500,`+
+		`"cached_input_tokens":7,"cache_creation_input_tokens":3,"last_run_id":"r","last_origin_event_id":"e","updated_at":"2026-01-02T03:04:05Z"}`)
+	writeTopicFile("console:b", "context_snapshot.json", `{"conversation_key":"console:b","topic_id":"b","captured_at":"2026-01-02T03:04:05Z","input_tokens":500,"method":"estimate","parts":[]}`)
+	writeTopicFile("console:b", "context_request.json", `{"captured_at":"2026-01-02T03:04:05Z","messages":[{"role":"user","content":"hi"}]}`)
+	writeTopicFile("console:b", "context_checkpoint.json", `{"kept":"as a file"}`)
+	writeTopicFile("console:c", "context.json", `not json`)
+
 	store := NewStore(legacy)
 	item, ok, err := store.Get("console:a")
 	if err != nil || !ok {
@@ -219,16 +242,61 @@ func TestStoreMovesTheLegacyFileIntoTopicFolders(t *testing.T) {
 	if item.UsedInputTokens != 250 || item.UsageRatio != 0.25 {
 		t.Fatalf("item = %+v", item)
 	}
-	if _, err := os.Stat(filepath.Join(root, "topics", topicstate.Key("console:a"), "context.json")); err != nil {
-		t.Fatalf("topic file missing: %v", err)
+	b, ok, err := store.Get("console:b")
+	if err != nil || !ok {
+		t.Fatalf("Get(b) ok=%v err=%v", ok, err)
 	}
-	if _, err := os.Stat(legacy); !os.IsNotExist(err) {
-		t.Fatalf("legacy file should be gone, stat err = %v", err)
+	want := Item{ConversationKey: "console:b", TopicID: "b", Runtime: "console", Model: "new", NormalizedModel: "new",
+		ContextWindowTokens: 2000, ContextWindowSource: "builtin", UsedInputTokens: 500, CachedInputTokens: 7,
+		CacheCreationInputTokens: 3, UsageRatio: 0.25, LastRunID: "r", LastOriginEventID: "e", UpdatedAt: "2026-01-02T03:04:05Z"}
+	if b != want {
+		t.Fatalf("item b = %+v\nwant %+v", b, want)
+	}
+	snapshot, ok, err := store.Snapshot("console:b")
+	if err != nil || !ok || snapshot.InputTokens != 500 {
+		t.Fatalf("snapshot = %+v, %v, %v", snapshot, ok, err)
+	}
+	var stored storedRequest
+	if found, err := store.readStoredRequest("console:b", &stored); err != nil || !found || stored.Messages[0].Content != "hi" {
+		t.Fatalf("stored request = %+v, %v, %v", stored, found, err)
+	}
+	if _, err := os.Stat(legacy + ".imported"); err != nil {
+		t.Fatalf("legacy file not renamed: %v", err)
+	}
+	dirB := filepath.Join(root, "topics", topicstate.Key("console:b"))
+	for _, name := range []string{"context.json", "context_snapshot.json", "context_request.json"} {
+		if _, err := os.Stat(filepath.Join(dirB, name+".imported")); err != nil {
+			t.Fatalf("%s not renamed: %v", name, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(dirB, "context_checkpoint.json")); err != nil {
+		t.Fatalf("checkpoint moved: %v", err)
+	}
+	db, err := store.handle()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rejects, err := agentdb.Rejects(context.Background(), db, "topic_state")
+	if err != nil || rejects.Count != 1 || !strings.HasSuffix(rejects.Rejects[0].Source, "/context.json") {
+		t.Fatalf("rejects = %+v, %v", rejects, err)
 	}
 	if err := store.Delete("console:a"); err != nil {
 		t.Fatalf("Delete() error = %v", err)
 	}
 	if _, ok, _ := store.Get("console:a"); ok {
 		t.Fatalf("item still there after Delete()")
+	}
+	// Removing a topic deletes its rows and its folder.
+	if err := topicstate.Remove(root, "console:b"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, _ := store.Get("console:b"); ok {
+		t.Fatal("context row left after Remove")
+	}
+	if _, ok, _ := store.Snapshot("console:b"); ok {
+		t.Fatal("snapshot row left after Remove")
+	}
+	if _, err := os.Stat(dirB); !os.IsNotExist(err) {
+		t.Fatalf("topic folder left after Remove: %v", err)
 	}
 }

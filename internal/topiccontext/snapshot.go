@@ -2,17 +2,17 @@ package topiccontext
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"math"
-	"os"
-	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
 	"time"
 	"unicode/utf8"
 
-	"github.com/quailyquaily/mistermorph/internal/fsstore"
 	"github.com/quailyquaily/mistermorph/internal/topicstate"
 	"github.com/quailyquaily/mistermorph/llm"
 )
@@ -104,25 +104,43 @@ func (s *Store) ObserveRequest(ctx context.Context, request llm.Request, sample 
 	snapshot.ConversationKey = normalizeConversationKey(scope.ConversationKey)
 	snapshot.TopicID = strings.TrimSpace(scope.TopicID)
 	snapshot.ContextWindowTokens = itemFromSample(scope, sample).ContextWindowTokens
-	options := fsstore.FileOptions{DirPerm: 0o700, FilePerm: 0o600}
-	path := s.snapshotPath(snapshot.ConversationKey)
-	// The full request is kept beside the snapshot so the provider can count its parts later. A
-	// request too large to keep (many images) is counted by estimate only.
+	// The full request is kept beside the snapshot, gzipped, so the provider can count its parts
+	// later. A request too large to keep (many images) is counted by estimate only.
 	stored := storedRequest{CapturedAt: snapshot.CapturedAt, Model: request.Model, Messages: request.Messages, Tools: request.Tools, MessageKinds: layout.MessageKinds}
+	var compressed []byte
 	if raw, err := json.Marshal(stored); err == nil && len(raw) <= storedRequestLimit {
-		_ = fsstore.WriteTextAtomic(requestPath(path), string(raw), options)
-	} else {
-		_ = os.Remove(requestPath(path))
+		compressed, _ = topicstate.Gzip(raw)
 	}
-	_ = writeSnapshot(path, snapshot)
+	_ = s.writeSnapshot(snapshot, compressed, true)
 }
 
-func writeSnapshot(path string, snapshot Snapshot) error {
-	return fsstore.WriteJSONAtomic(path, snapshot, fsstore.FileOptions{DirPerm: 0o700, FilePerm: 0o600})
-}
-
-func readJSONFile(path string, out any) (bool, error) {
-	return fsstore.ReadJSON(path, out)
+// writeSnapshot saves the snapshot row. With withRequest the stored request is replaced by
+// request (NULL when nil); without it the stored request is kept.
+func (s *Store) writeSnapshot(snapshot Snapshot, request []byte, withRequest bool) error {
+	data, err := json.Marshal(snapshot)
+	if err != nil {
+		return err
+	}
+	db, err := s.handle()
+	if err != nil {
+		return err
+	}
+	var requestArg any
+	if request != nil {
+		requestArg = request
+	}
+	if !withRequest {
+		_, err = db.ExecContext(context.Background(), `UPDATE topic_context_snapshots SET snapshot = ?, topic_id = ?, run_id = ?,
+			model = ?, captured_at = ? WHERE conversation_key = ?`, string(data), snapshot.TopicID, snapshot.RunID,
+			snapshot.Model, snapshot.CapturedAt, snapshot.ConversationKey)
+		return err
+	}
+	_, err = db.ExecContext(context.Background(), `INSERT INTO topic_context_snapshots (conversation_key, topic_id, run_id,
+		model, captured_at, snapshot, request) VALUES (?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT (conversation_key) DO UPDATE SET topic_id = excluded.topic_id, run_id = excluded.run_id,
+		model = excluded.model, captured_at = excluded.captured_at, snapshot = excluded.snapshot, request = excluded.request`,
+		snapshot.ConversationKey, snapshot.TopicID, snapshot.RunID, snapshot.Model, snapshot.CapturedAt, string(data), requestArg)
+	return err
 }
 
 // storedRequest is a snapshot's full request, for counting by the provider.
@@ -134,12 +152,7 @@ type storedRequest struct {
 	MessageKinds []string      `json:"message_kinds,omitempty"`
 }
 
-const storedRequestLimit = 8 << 20
-
-// requestPath is the full request kept beside a snapshot, in the same topic folder.
-func requestPath(snapshotPath string) string {
-	return filepath.Join(filepath.Dir(snapshotPath), "context_request.json")
-}
+const storedRequestLimit = topicstate.StoredRequestLimit
 
 // Snapshot returns the conversation's latest request snapshot.
 func (s *Store) Snapshot(conversationKey string) (Snapshot, bool, error) {
@@ -147,12 +160,47 @@ func (s *Store) Snapshot(conversationKey string) (Snapshot, bool, error) {
 	if s == nil || s.stateDir == "" || conversationKey == "" {
 		return Snapshot{}, false, nil
 	}
-	var snapshot Snapshot
-	ok, err := fsstore.ReadJSON(s.snapshotPath(conversationKey), &snapshot)
-	if err != nil || !ok {
+	db, err := s.handle()
+	if err != nil {
 		return Snapshot{}, false, err
 	}
+	var raw string
+	err = db.QueryRowContext(context.Background(), `SELECT snapshot FROM topic_context_snapshots WHERE conversation_key = ?`, conversationKey).Scan(&raw)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Snapshot{}, false, nil
+	}
+	if err != nil {
+		return Snapshot{}, false, err
+	}
+	var snapshot Snapshot
+	if err := json.Unmarshal([]byte(raw), &snapshot); err != nil {
+		return Snapshot{}, false, fmt.Errorf("decode context snapshot: %w", err)
+	}
 	return snapshot, true, nil
+}
+
+// readStoredRequest reads the request kept with the conversation's snapshot.
+func (s *Store) readStoredRequest(conversationKey string, out *storedRequest) (bool, error) {
+	db, err := s.handle()
+	if err != nil {
+		return false, err
+	}
+	var blob []byte
+	err = db.QueryRowContext(context.Background(), `SELECT request FROM topic_context_snapshots WHERE conversation_key = ?`, conversationKey).Scan(&blob)
+	if errors.Is(err, sql.ErrNoRows) || (err == nil && len(blob) == 0) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("read stored request: %w", err)
+	}
+	raw, err := topicstate.Gunzip(blob, storedRequestLimit)
+	if err != nil {
+		return false, fmt.Errorf("read stored request: %w", err)
+	}
+	if err := json.Unmarshal(raw, out); err != nil {
+		return false, fmt.Errorf("read stored request: %w", err)
+	}
+	return true, nil
 }
 
 // DeleteSnapshot removes the conversation's snapshot, which holds its prompts and messages.
@@ -161,24 +209,17 @@ func (s *Store) DeleteSnapshot(conversationKey string) error {
 	if s == nil || s.stateDir == "" || conversationKey == "" {
 		return nil
 	}
-	path := s.snapshotPath(conversationKey)
-	for _, file := range []string{path, requestPath(path)} {
-		if err := os.Remove(file); err != nil && !os.IsNotExist(err) {
-			return err
-		}
+	db, err := s.handle()
+	if err != nil {
+		return err
 	}
-	// The topic folder goes too once nothing else is in it.
-	topicstate.RemoveIfEmpty(s.stateDir, conversationKey)
-	return nil
+	_, err = db.ExecContext(context.Background(), `DELETE FROM topic_context_snapshots WHERE conversation_key = ?`, conversationKey)
+	return err
 }
 
-// TopicDir is the folder under file_state_dir/topics that holds a conversation's topic state.
+// TopicDir is the folder under file_state_dir/topics that holds a conversation's file state.
 func (s *Store) TopicDir(conversationKey string) string {
 	return topicstate.Dir(s.stateDir, normalizeConversationKey(conversationKey))
-}
-
-func (s *Store) snapshotPath(conversationKey string) string {
-	return filepath.Join(s.TopicDir(conversationKey), "context_snapshot.json")
 }
 
 // BuildSnapshot splits a request into parts and counts them. layout tags the messages; a request
