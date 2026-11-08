@@ -141,7 +141,7 @@ The tag release workflow does this on the macOS runner:
 The packaging script is:
 
 ```bash
-desktop/wails/packaging/package-darwin.sh
+desktop/nsh/packaging/package-darwin.sh
 ```
 
 If `CODESIGN_IDENTITY` is not set, the script uses ad hoc signing for local test distribution. Ad hoc builds are not release builds and may require testers to manually bypass Gatekeeper.

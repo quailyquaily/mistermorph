@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Packages the nsh desktop app (MrMorph, the GPUI shell) and the morph backend as MrMorph.app,
+# a DMG and the updater tarball. The bundle id is the one notifications are shown under.
 
 set -euo pipefail
 
@@ -13,8 +15,8 @@ DESKTOP_BIN="${DESKTOP_BIN:-${ROOT_DIR}/dist/MrMorph}"
 BACKEND_BIN="${BACKEND_BIN:-${ROOT_DIR}/dist/morph}"
 BUNDLED_BACKEND_NAME="${BUNDLED_BACKEND_NAME:-morph}"
 # The iconset: every size drawn for that size, on the macOS icon grid (design/brand/generator/platforms.py).
-ICONSET_SOURCE="${ICONSET_SOURCE:-${ROOT_DIR}/desktop/wails/packaging/icons/macos}"
-DMG_BACKGROUND_SOURCE="${DMG_BACKGROUND_SOURCE:-${ROOT_DIR}/desktop/wails/packaging/dmg-background.png}"
+ICONSET_SOURCE="${ICONSET_SOURCE:-${ROOT_DIR}/desktop/nsh/packaging/icons/macos}"
+DMG_BACKGROUND_SOURCE="${DMG_BACKGROUND_SOURCE:-${ROOT_DIR}/desktop/nsh/packaging/dmg-background.png}"
 OUT_DIR="${OUT_DIR:-${ROOT_DIR}/dist}"
 APP_DIR="${OUT_DIR}/${APP_BUNDLE_NAME}.app"
 DMG_PATH="${DMG_PATH:-${OUT_DIR}/MrMorph-darwin-${ARCH}.dmg}"

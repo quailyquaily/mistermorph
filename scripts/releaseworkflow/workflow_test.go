@@ -86,9 +86,9 @@ func TestReleaseExecutableNames(t *testing.T) {
 		{[]string{"scripts", "build-backend.sh"}, []string{"./bin/morph", "./bin/morph.exe"}},
 		{[]string{"scripts", "build-desktop.sh"}, []string{"./bin/MrMorph", "./bin/MrMorph.exe", "./bin/morph", "./bin/morph.exe"}},
 		{[]string{"scripts", "mistermorph-wrapper.sh"}, []string{`MORPH_CLI_PATH="${MORPH_CLI_PATH:-morph}"`}},
-		{[]string{"desktop", "wails", "packaging", "package-darwin.sh"}, []string{`APP_EXECUTABLE_NAME="${APP_EXECUTABLE_NAME:-MrMorph}"`, `BUNDLED_BACKEND_NAME="${BUNDLED_BACKEND_NAME:-morph}"`}},
-		{[]string{"desktop", "wails", "packaging", "package-linux-appimage.sh"}, []string{`APP_BINARY_NAME="${APP_BINARY_NAME:-MrMorph}"`, `BUNDLED_BACKEND_NAME="${BUNDLED_BACKEND_NAME:-morph}"`}},
-		{[]string{"desktop", "wails", "packaging", "package-linux-deb.sh"}, []string{`APP_BINARY_NAME="${APP_BINARY_NAME:-MrMorph}"`, `BUNDLED_BACKEND_NAME="${BUNDLED_BACKEND_NAME:-morph}"`}},
+		{[]string{"desktop", "nsh", "packaging", "package-darwin.sh"}, []string{`APP_EXECUTABLE_NAME="${APP_EXECUTABLE_NAME:-MrMorph}"`, `BUNDLED_BACKEND_NAME="${BUNDLED_BACKEND_NAME:-morph}"`}},
+		{[]string{"desktop", "nsh", "packaging", "package-linux-appimage.sh"}, []string{`APP_BINARY_NAME="${APP_BINARY_NAME:-MrMorph}"`, `BUNDLED_BACKEND_NAME="${BUNDLED_BACKEND_NAME:-morph}"`}},
+		{[]string{"desktop", "nsh", "packaging", "package-linux-deb.sh"}, []string{`APP_BINARY_NAME="${APP_BINARY_NAME:-MrMorph}"`, `BUNDLED_BACKEND_NAME="${BUNDLED_BACKEND_NAME:-morph}"`}},
 	}
 	for _, check := range checks {
 		content := readRepoFile(t, check.file...)
@@ -104,7 +104,7 @@ func TestReleaseExecutableNames(t *testing.T) {
 		required []string
 	}{
 		{[]string{".github", "workflows", "release.yml"}, []string{"raw_desktop_binary: dist/MrMorph", "bundled_backend_binary: dist/morph", `BUNDLED_BACKEND_NAME="morph"`}},
-		{[]string{".github", "workflows", "build_app.yaml"}, []string{"--desktop-output ./dist/MrMorph", "--backend-output ./dist/morph"}},
+		{[]string{".github", "workflows", "build_app.yaml"}, []string{`--desktop-output "./dist/MrMorph${exe}"`, `--backend-output "./dist/morph${exe}"`}},
 	}
 	for _, check := range workflowChecks {
 		content := readRepoFile(t, check.file...)
@@ -123,9 +123,9 @@ func TestReleaseArtifactNames(t *testing.T) {
 	}{
 		{[]string{".goreleaser.yaml"}, []string{`name_template: "morph_{{ .Version }}_{{ .Os }}_{{ .Arch }}"`}},
 		{[]string{"scripts", "install-release.sh"}, []string{`ASSET_NAME="morph_${ASSET_VERSION}_${OS}_${ARCH}.${ARCHIVE_EXT}"`}},
-		{[]string{"desktop", "wails", "packaging", "package-darwin.sh"}, []string{`MrMorph-darwin-${ARCH}.dmg`, `MrMorph-darwin-${ARCH}.tar.gz`}},
-		{[]string{"desktop", "wails", "packaging", "package-linux-appimage.sh"}, []string{`MrMorph-linux-${ARCH}.AppImage`, `MrMorph-linux-${ARCH}.tar.gz`}},
-		{[]string{"desktop", "wails", "packaging", "package-linux-deb.sh"}, []string{`MrMorph-linux-${ARCH}.deb`}},
+		{[]string{"desktop", "nsh", "packaging", "package-darwin.sh"}, []string{`MrMorph-darwin-${ARCH}.dmg`, `MrMorph-darwin-${ARCH}.tar.gz`}},
+		{[]string{"desktop", "nsh", "packaging", "package-linux-appimage.sh"}, []string{`MrMorph-linux-${ARCH}.AppImage`, `MrMorph-linux-${ARCH}.tar.gz`}},
+		{[]string{"desktop", "nsh", "packaging", "package-linux-deb.sh"}, []string{`MrMorph-linux-${ARCH}.deb`}},
 		{[]string{".github", "workflows", "release.yml"}, []string{"MrMorph-linux-amd64.AppImage", "MrMorph-linux-amd64.deb", "MrMorph-darwin-arm64.dmg"}},
 		{[]string{".github", "workflows", "windows-signing.yml"}, []string{"MrMorph-windows-amd64.zip", `morph_${version}_windows_amd64.zip`, `morph_${version}_windows_arm64.zip`}},
 	}
@@ -191,10 +191,9 @@ func TestAutomaticReleaseExcludesUnsignedWindowsArtifacts(t *testing.T) {
 
 func TestDesktopPackagesRegisterMisterMorphApplicationID(t *testing.T) {
 	for _, file := range [][]string{
-		{"desktop", "wails", "packaging", "package-darwin.sh"},
-		{"desktop", "wails", "packaging", "package-linux-appimage.sh"},
-		{"desktop", "wails", "packaging", "package-linux-deb.sh"},
-		{"desktop", "wails", "packaging", "windows", "wails.exe.manifest"},
+		{"desktop", "nsh", "packaging", "package-darwin.sh"},
+		{"desktop", "nsh", "packaging", "package-linux-appimage.sh"},
+		{"desktop", "nsh", "packaging", "package-linux-deb.sh"},
 	} {
 		content := readRepoFile(t, file...)
 		if !strings.Contains(content, "com.mistermorph") {
@@ -203,22 +202,22 @@ func TestDesktopPackagesRegisterMisterMorphApplicationID(t *testing.T) {
 	}
 
 	for _, file := range [][]string{
-		{"desktop", "wails", "packaging", "package-linux-appimage.sh"},
-		{"desktop", "wails", "packaging", "package-linux-deb.sh"},
+		{"desktop", "nsh", "packaging", "package-linux-appimage.sh"},
+		{"desktop", "nsh", "packaging", "package-linux-deb.sh"},
 	} {
 		content := readRepoFile(t, file...)
 		if !strings.Contains(content, "APPLICATION_ID") || !strings.Contains(content, "Icon=${APPLICATION_ID}") {
 			t.Errorf("%s does not associate the application ID with its icon", filepath.Join(file...))
 		}
-		if !strings.Contains(content, `DESKTOP_FILE_ID="${DESKTOP_FILE_ID:-org.wails.mistermorph}"`) ||
+		if !strings.Contains(content, `DESKTOP_FILE_ID="${DESKTOP_FILE_ID:-com.mistermorph}"`) ||
 			!strings.Contains(content, "${DESKTOP_FILE_ID}.desktop") {
-			t.Errorf("%s does not associate its desktop file with the Wails GTK application ID", filepath.Join(file...))
+			t.Errorf("%s does not name its desktop file after the window's app id", filepath.Join(file...))
 		}
 	}
 }
 
 func TestDarwinPackageBuildsStyledDMG(t *testing.T) {
-	script := readRepoFile(t, "desktop", "wails", "packaging", "package-darwin.sh")
+	script := readRepoFile(t, "desktop", "nsh", "packaging", "package-darwin.sh")
 
 	for _, token := range []string{
 		"DMG_BACKGROUND_SOURCE",
@@ -250,11 +249,11 @@ func TestDarwinPackageBuildsStyledDMG(t *testing.T) {
 		`echo "signing DMG`,
 	)
 
-	background := readRepoFile(t, "desktop", "wails", "packaging", "dmg-background.svg")
+	background := readRepoFile(t, "desktop", "nsh", "packaging", "dmg-background.svg")
 	if !strings.Contains(background, `viewBox="0 0 760 480"`) {
 		t.Fatal("DMG background must match the Finder window content size")
 	}
-	if len(readRepoFile(t, "desktop", "wails", "packaging", "dmg-background.png")) == 0 {
+	if len(readRepoFile(t, "desktop", "nsh", "packaging", "dmg-background.png")) == 0 {
 		t.Fatal("DMG background PNG is empty")
 	}
 }
@@ -287,4 +286,42 @@ func readRepoFile(t *testing.T, parts ...string) string {
 		t.Fatalf("read %s: %v", filepath.Join(parts...), err)
 	}
 	return string(content)
+}
+
+func TestDesktopReleasesBuildTheNshShell(t *testing.T) {
+	setup := readRepoFile(t, ".github", "actions", "setup-desktop-build", "action.yml")
+	for _, token := range []string{
+		"default: v0.4.0",
+		"releases/download/${NSH_VERSION}/install.sh",
+		"releases/download/$env:NSH_VERSION/install.ps1",
+		"workspaces: desktop/nsh -> target",
+	} {
+		if !strings.Contains(setup, token) {
+			t.Errorf("desktop build setup missing %q", token)
+		}
+	}
+	cargo := readRepoFile(t, "desktop", "nsh", "Cargo.toml")
+	if !strings.Contains(cargo, `nsh-engine = { version = "=0.4.0"`) {
+		t.Error("desktop/nsh pins another nsh version than the CI setup installs")
+	}
+
+	for _, workflow := range []string{"release.yml", "windows-signing.yml", "build_app.yaml"} {
+		content := readRepoFile(t, ".github", "workflows", workflow)
+		if !strings.Contains(content, "uses: ./.github/actions/setup-desktop-build") {
+			t.Errorf("%s does not set up the desktop build", workflow)
+		}
+		if strings.Contains(strings.ToLower(content), "wails") {
+			t.Errorf("%s still builds the Wails app", workflow)
+		}
+	}
+	release := readRepoFile(t, ".github", "workflows", "release.yml")
+	windows := readRepoFile(t, ".github", "workflows", "windows-signing.yml")
+	for name, content := range map[string]string{"release.yml": release, "windows-signing.yml": windows} {
+		if !strings.Contains(content, "./desktop/nsh/build.sh") {
+			t.Errorf("%s does not build the shell with desktop/nsh/build.sh", name)
+		}
+		if !strings.Contains(content, `-tags "noembedconsole ${GO_BUILD_TAGS}"`) {
+			t.Errorf("%s bundles a backend with an embedded console the shell does not use", name)
+		}
+	}
 }

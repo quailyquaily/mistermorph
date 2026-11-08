@@ -1,6 +1,6 @@
 # Desktop App
 
-Mister Morph includes a desktop App that wraps the existing Console backend and UI.
+Mister Morph includes a desktop App that runs the Console backend and draws the Console natively.
 
 ## User Quick Start
 
@@ -20,40 +20,42 @@ You do not need to run `morph console serve`.
 
 ## Current Shape
 
-The desktop code lives in `desktop/wails` and builds with `wailsdesktop production`.
+The desktop code lives in `desktop/nsh`: a Rust [GPUI](https://www.gpui.rs) shell that draws the
+nsh Console (`web/console-nsh`) natively, without a WebView.
 
-- the Wails process owns the native window and Go bindings
+- the shell owns the native window and runs the Console's TSX app with nsh
 - a child process runs the bundled backend with `console serve`
-- the App routes WebView traffic to that child process
+- the Console talks to that child process over HTTP on the loopback interface
 
-The wrapper only handles lifecycle, process management, restart, and proxying.
+The shell handles the window, the backend's lifecycle and restart, and the Console's host
+functions (files, notifications, update checks). `desktop/nsh/README.md` has the details.
 
 ## Architecture
 
 ```text
 +--------------------------------------------------------------+
-| Desktop App Process (Wails)                                  |
+| Desktop App Process (MrMorph, GPUI)                          |
 |                                                              |
 |  +----------------------+        +------------------------+  |
-|  | WebView (UI)         | <----> | Reverse Proxy Handler  |  |
-|  | path: /console/*     |  HTTP  | in desktop/wails host  |  |
+|  | Console (nsh, TSX)   | -----> | Backend manager        |  |
+|  | drawn by GPUI        |  HTTP  | start/stop/health      |  |
 |  +----------------------+        +------------------------+  |
-|             ^                              |                 |
-|             | JS bridge                    v                 |
-|  +----------------------+        +------------------------+  |
-|  | App binding          |        | Child Process Manager  |  |
-|  | RestartApp()         |        | start/stop/wait/health |  |
-|  +----------------------+        +------------------------+  |
-+----------------------------------------------|---------------+
-                                               |
-                                               | spawn
-                                               v
-                           +----------------------------------+
-                           | Child: bundled backend `console serve` |
-                           | listen: 127.0.0.1:<random>       |
-                           | base path: /console              |
-                           | login: off without a password    |
-                           +----------------------------------+
+|             |                              |                 |
+|             | morph.* host calls           |                 |
+|             v                              |                 |
+|  +----------------------+                  |                 |
+|  | Host (files, notify, |                  |                 |
+|  | update, restart)     |                  |                 |
+|  +----------------------+                  |                 |
++--------------------------------------------|-----------------+
+                                             |
+                                             | spawn
+                                             v
+                         +---------------------------------------+
+                         | Child: bundled backend `console serve` |
+                         | listen: 127.0.0.1:<random>            |
+                         | base path: /                          |
+                         +---------------------------------------+
 ```
 
 ## Startup and Restart
@@ -65,9 +67,8 @@ desktop main
   -> resolve backend binary path
   -> reserve random loopback port
   -> spawn child: bundled backend console serve
-  -> poll GET /health until ready
-  -> open native window
-  -> proxy requests to the child process
+  -> poll GET /health until ready (every 350 ms, up to 25 s)
+  -> show the Console, or the startup error view if the backend did not start
 ```
 
 First run:
@@ -75,19 +76,17 @@ First run:
 ```text
 incomplete config
   -> console backend starts without login (no password set)
-  -> frontend routes to /setup
+  -> Console routes to /setup
   -> user saves agent settings + identity/soul
-  -> frontend calls App.RestartApp()
+  -> Console asks the shell to restart the backend
 ```
 
-`App.RestartApp()` starts a new copy of the desktop executable, then quits the old one.
+A restart stops the backend, starts it again on a new port and reloads the Console. The
+startup error view offers Restart, Open Log, Copy Diagnostics and Quit.
 
 ## Paths and Configuration
 
-- Console assets are embedded in the bundled backend by default.
-- You can override static assets with:
-  - `console.static_dir`
-  - `--console-static-dir /abs/path/to/dist`
+- The shell embeds the Console it draws; the bundled backend serves only the API.
 - `--config <path>` passed to the desktop App is forwarded to the child `console serve` process.
 - `--check-update` checks the desktop release manifest and prints JSON, then exits.
 
@@ -100,49 +99,28 @@ auto_update:
   channel: community
 ```
 
-With this enabled, desktop startup checks the latest update manifest of the release channel, `https://downloads.mistermorph.com/<channel>/latest/update.json`, and downloads a verified update package into the user cache. `--check-update` also uses this setting to decide whether to download. It does not replace the running app yet; Wails v3 alpha.93 does not expose an updater service package, so applying the update still needs a platform-specific install/relaunch step in this repository.
+With this enabled, desktop startup checks the latest update manifest of the release channel, `https://downloads.mistermorph.com/<channel>/latest/update.json`, and downloads a verified update package into the user cache. `--check-update` also uses this setting to decide whether to download. It does not replace the running app yet: applying the update still needs a platform-specific install/relaunch step.
 
 ## Local Build and Run
 
-On Ubuntu or Debian, install desktop build dependencies first:
+The build needs Rust (rustup installs the toolchain in `desktop/nsh/rust-toolchain.toml`),
+[nsh 0.4.0](https://nsh.dev/docs/installation), Node and Go. On Ubuntu or Debian, GPUI also
+needs these development packages, and a Vulkan driver at run time:
 
 ```bash
-sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev
+sudo apt-get install -y libfontconfig-dev libfreetype-dev libwayland-dev libx11-xcb-dev libxkbcommon-dev libxkbcommon-x11-dev libzstd-dev
 ```
 
-Wails v3 alpha.93 defaults to GTK4/WebKitGTK 6 on Linux, and this repository
-uses that default for Linux desktop builds.
-
-Build the backend binary (the scripts default to the nsh Console and the nsh desktop app in
-`desktop/nsh`; `--console vue` and `--wails` build the Vue Console and this Wails app):
+Build the app and its backend into `./bin`:
 
 ```bash
-./scripts/build-backend.sh --console vue --output ./bin/morph
+./scripts/build-desktop.sh --release   # ./bin/MrMorph and ./bin/morph (nsh Console embedded)
+./bin/MrMorph
 ```
 
-Build a local desktop release binary:
-
-```bash
-./scripts/build-desktop.sh --wails --release
-```
-
-Run from source:
-
-```bash
-go run -tags 'wailsdesktop production' ./desktop/wails
-```
-
-Build only the desktop wrapper:
-
-```bash
-go build -tags 'wailsdesktop production' -o ./bin/MrMorph ./desktop/wails
-```
-
-For local debug builds with DevTools, use:
-
-```bash
-./scripts/build-desktop.sh --wails
-```
+Without `--release` the shell is a debug build. `desktop/nsh/build.sh` builds both into
+`bin/desktop-nsh/` with a backend that embeds no Console; `make -C desktop/nsh run` builds and
+starts it.
 
 ## Release Packaging
 
@@ -158,11 +136,17 @@ The Linux deb package installs the app under `/opt/mistermorph`, adds the deskto
 
 That backend is built with `CGO_ENABLED=0` on purpose. Keep it that way unless you have a packaging plan to change it.
 
+The packaging scripts are in `desktop/nsh/packaging/` (DMG, AppImage, deb). CI installs the
+desktop build's tools through `.github/actions/setup-desktop-build` (the nsh release the shell's
+crates pin, v0.4.0); `build_app.yaml` builds and packages the app for Linux, macOS and Windows
+on every push.
+
 The macOS tag release job requires Apple signing secrets in GitHub Actions. It imports the Developer ID Application certificate into a temporary keychain, signs the app bundle, signs the DMG, submits the DMG through `notarytool`, staples the ticket to the DMG and app bundle, then uploads the release assets.
 
 ## Known Gaps
 
 - Local macOS test packages can still use ad hoc signing; those builds may require testers to manually bypass Gatekeeper on first launch.
 - Windows ships as a zip bundle, not an installer.
-- No dedicated UI yet for backend startup failures.
-- The wrapper still reuses the CLI backend through child-process orchestration rather than an in-process console module.
+- The shell has been run only on Linux so far; the macOS and Windows builds are new (see
+  `desktop/nsh/README.md` for what is not verified there).
+- The shell still reuses the CLI backend through child-process orchestration rather than an in-process console module.

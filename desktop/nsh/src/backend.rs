@@ -1,5 +1,5 @@
 //! The backend the app talks to: the bundled `morph` binary running `console serve` on a random
-//! loopback port (desktop/wails/host.go and backend_binary.go).
+//! loopback port, as the Wails app did.
 use std::{
     io::Read,
     net::TcpListener,

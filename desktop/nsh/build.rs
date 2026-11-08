@@ -41,7 +41,25 @@ fn main() {
     }
     code.push_str("];\n");
     fs::write(out.join("assets.rs"), code).unwrap();
+
+    windows_icon(&manifest);
 }
+
+/// Gives MrMorph.exe the app icon (`packaging/icons/windows/appicon.ico`, made by
+/// design/brand/generator/platforms.py). The window sets its own icon at run time (shell.rs);
+/// this one is what Explorer, shortcuts and the taskbar show for the file. The desktop app builds
+/// on the machine it is for, so the host decides.
+#[cfg(windows)]
+fn windows_icon(manifest: &Path) {
+    let icon = manifest.join("packaging/icons/windows/appicon.ico");
+    println!("cargo:rerun-if-changed={}", icon.display());
+    let mut res = winresource::WindowsResource::new();
+    res.set_icon(icon.to_str().expect("icon path is UTF-8"));
+    res.compile().expect("embedding the Windows icon resource");
+}
+
+#[cfg(not(windows))]
+fn windows_icon(_manifest: &Path) {}
 
 fn build_app(app: &Path, out: &Path) {
     // lib/generated/* (config templates, icon maps) comes from scripts/generate.mjs, which

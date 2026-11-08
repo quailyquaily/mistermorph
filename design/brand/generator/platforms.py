@@ -6,11 +6,11 @@
 
 Every bitmap uses the drawing made for its size, never a scaled-down large one:
 
-- macOS (desktop/wails/packaging/icons/macos): the iconset for iconutil, 16 to 1024 px. Big Sur's
+- macOS (desktop/nsh/packaging/icons/macos): the iconset for iconutil, 16 to 1024 px. Big Sur's
   icon grid: the tile is 824/1024 of the canvas, centred, over a soft shadow.
-- Windows (desktop/wails/packaging/icons/windows/appicon.ico): 16, 20, 24, 32, 40, 48, 64, 96 and
+- Windows (desktop/nsh/packaging/icons/windows/appicon.ico): 16, 20, 24, 32, 40, 48, 64, 96 and
   256 px, the tile filling the canvas with a margin of 1/32.
-- Linux (desktop/wails/packaging/icons/linux/hicolor): the freedesktop icon theme's sizes, 16 to
+- Linux (desktop/nsh/packaging/icons/linux/hicolor): the freedesktop icon theme's sizes, 16 to
   512 px, plus scalable/apps/icon.svg; the tile fills the canvas with a margin of 1/32.
 - Web (web/console/public): favicon.ico (16, 32, 48) and the manifest's "any" icons; full-bleed
   squares for its "maskable" icons and for apple-touch-icon.png (both masked by the platform), the
@@ -31,7 +31,7 @@ import circle  # noqa: E402
 
 ROOT = os.path.abspath(os.path.join(HERE, '..', '..', '..'))
 BUILD = os.path.join(ROOT, 'design', 'brand', 'platforms', '.build')
-PACKAGING = os.path.join(ROOT, 'desktop', 'wails', 'packaging', 'icons')
+PACKAGING = os.path.join(ROOT, 'desktop', 'nsh', 'packaging', 'icons')
 WEB = os.path.join(ROOT, 'web', 'console', 'public')
 WEB_ASSETS = os.path.join(ROOT, 'web', 'console', 'src', 'assets', 'images')
 COLOURWAY = 'aojashin'
@@ -179,7 +179,7 @@ def pack():
     # The console also bundles these two, and the desktop app's macOS icon keeps its old path.
     for name in ('favicon.ico', 'apple-touch-icon.png'):
         shutil.copyfile(os.path.join(WEB, name), os.path.join(WEB_ASSETS, name))
-    shutil.copyfile(os.path.join(PACKAGING, 'macos', 'icon_512x512@2x.png'), os.path.join(ROOT, 'desktop', 'wails', 'packaging', 'appicon.png'))
+    shutil.copyfile(os.path.join(PACKAGING, 'macos', 'icon_512x512@2x.png'), os.path.join(ROOT, 'desktop', 'nsh', 'packaging', 'appicon.png'))
     shutil.rmtree(BUILD, ignore_errors=True)
     print('packed appicon.ico and favicon.ico; copied favicon.ico, apple-touch-icon.png and appicon.png')
 

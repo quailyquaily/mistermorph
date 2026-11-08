@@ -229,52 +229,26 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 12.3.4
+      - name: Set up the desktop app build
+        uses: ./.github/actions/setup-desktop-build
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-          cache-dependency-path: web/console/pnpm-lock.yaml
-
-      - name: Install frontend deps
-        run: pnpm --dir web/console install --frozen-lockfile
-
-      - name: Build frontend
-        run: pnpm --dir web/console exec vite build --config "${CONSOLE_VITE_CONFIG}"
-
-      - name: Stage console assets
-        shell: bash
-        run: ./scripts/stage-console-assets.sh
-
-      - name: Install Linux desktop build deps
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev
-
-      - name: Verify desktop package compiles
-        shell: bash
-        run: go test -tags "wailsdesktop production ${GO_BUILD_TAGS}" ./desktop/wails -count=1
-
+      # The GPUI shell in desktop/nsh draws web/console-nsh itself (build.rs runs `nsh build`).
       - name: Build desktop app binary
         shell: bash
         run: |
           mkdir -p dist
-          desktop_version="${GITHUB_REF_NAME#v}"
-          desktop_ldflags="-s -w -X main.desktopVersion=${desktop_version}"
-          GOOS="${{ matrix.goos }}" GOARCH="${{ matrix.goarch }}" \
-            go build -trimpath -tags "wailsdesktop production ${GO_BUILD_TAGS}" -ldflags "${desktop_ldflags}" -o "${{ matrix.raw_desktop_binary }}" ./desktop/wails
+          shell_args=(--skip-backend --output-dir dist)
+          if [[ " ${GO_BUILD_TAGS} " == *" pro "* ]]; then
+            shell_args+=(--pro)
+          fi
+          VERSION="${GITHUB_REF_NAME#v}" ./desktop/nsh/build.sh "${shell_args[@]}"
 
+      # The shell draws the console, so the bundled backend serves only the API.
       - name: Build bundled backend binary
         shell: bash
         run: |
           CGO_ENABLED=0 GOOS="${{ matrix.goos }}" GOARCH="${{ matrix.goarch }}" \
-            go build -trimpath -tags "${GO_BUILD_TAGS}" -ldflags "-s -w" -o "${{ matrix.bundled_backend_binary }}" ./cmd/mistermorph
+            go build -trimpath -tags "noembedconsole ${GO_BUILD_TAGS}" -ldflags "-s -w" -o "${{ matrix.bundled_backend_binary }}" ./cmd/mistermorph
 
       - name: Set up macOS signing
         if: matrix.package_kind == 'dmg'
@@ -302,7 +276,7 @@ jobs:
           OUT_DIR="dist" \
           BUNDLED_BACKEND_NAME="morph" \
           TARBALL_PATH="dist/${{ matrix.update_asset }}" \
-          ./desktop/wails/packaging/package-darwin.sh
+          ./desktop/nsh/packaging/package-darwin.sh
 
       - name: Package Linux AppImage
         if: matrix.package_kind == 'appimage'
@@ -318,7 +292,7 @@ jobs:
           OUT_DIR="dist" \
           APPIMAGE_NAME="${{ matrix.desktop_asset }}" \
           TARBALL_PATH="dist/${{ matrix.update_asset }}" \
-          ./desktop/wails/packaging/package-linux-appimage.sh
+          ./desktop/nsh/packaging/package-linux-appimage.sh
 
       - name: Package Linux DEB
         if: matrix.package_kind == 'appimage'
@@ -333,7 +307,7 @@ jobs:
           BACKEND_BIN="${{ matrix.bundled_backend_binary }}" \
           OUT_DIR="dist" \
           DEB_NAME="${{ matrix.deb_asset }}" \
-          ./desktop/wails/packaging/package-linux-deb.sh
+          ./desktop/nsh/packaging/package-linux-deb.sh
 
       - name: Generate checksum
         shell: bash

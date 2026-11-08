@@ -110,9 +110,9 @@ pub fn open(cx: &mut App, desktop: Arc<Desktop>, bundle: Bundle, assets: Option<
     Ok(handle)
 }
 
-/// The Wails app's window icon (the tile filling its canvas).
+/// The window icon: the 256 Linux icon, the tile filling its canvas (packaging/icons).
 fn window_icon() -> Option<Arc<image::RgbaImage>> {
-    const ICON: &[u8] = include_bytes!("../../wails/packaging/icons/linux/hicolor/256x256/apps/icon.png");
+    const ICON: &[u8] = include_bytes!("../packaging/icons/linux/hicolor/256x256/apps/icon.png");
     image::load_from_memory(ICON).ok().map(|i| Arc::new(i.to_rgba8()))
 }
 

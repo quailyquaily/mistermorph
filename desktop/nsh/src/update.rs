@@ -1,4 +1,4 @@
-//! The update check of the desktop app: internal/updatecheck and desktop/wails/update.go in Rust.
+//! The update check of the desktop app: internal/updatecheck (and the Wails app's check) in Rust.
 //! It reads a release channel's `update.json`, compares versions and, with auto update on,
 //! downloads and verifies the package into the user cache. It does not install it.
 use std::{

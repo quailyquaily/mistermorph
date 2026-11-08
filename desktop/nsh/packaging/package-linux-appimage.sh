@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Packages the nsh desktop app (MrMorph, the GPUI shell) and the morph backend as an AppImage and
+# the updater tarball (the AppDir). linuxdeploy bundles the shell's few shared libraries; the
+# Vulkan loader and driver, which the shell opens at run time, come from the host system.
 
 set -euo pipefail
 
@@ -7,7 +10,8 @@ CALLER_DIR="$(pwd)"
 APP_BINARY_NAME="${APP_BINARY_NAME:-MrMorph}"
 DISPLAY_NAME="${DISPLAY_NAME:-MrMorph}"
 APPLICATION_ID="${APPLICATION_ID:-com.mistermorph}"
-DESKTOP_FILE_ID="${DESKTOP_FILE_ID:-org.wails.mistermorph}"
+# Named as the window's app id, so Wayland compositors match the window to this entry and its icon.
+DESKTOP_FILE_ID="${DESKTOP_FILE_ID:-com.mistermorph}"
 VERSION="${VERSION:-0.0.0}"
 ARCH="${ARCH:-amd64}"
 DESKTOP_BIN="${DESKTOP_BIN:-${ROOT_DIR}/dist/MrMorph}"
@@ -15,7 +19,7 @@ BACKEND_BIN="${BACKEND_BIN:-${ROOT_DIR}/dist/morph}"
 BUNDLED_BACKEND_NAME="${BUNDLED_BACKEND_NAME:-morph}"
 # The icon theme: every freedesktop size drawn for that size, plus a scalable SVG
 # (design/brand/generator/platforms.py).
-ICON_THEME_SOURCE="${ICON_THEME_SOURCE:-${ROOT_DIR}/desktop/wails/packaging/icons/linux/hicolor}"
+ICON_THEME_SOURCE="${ICON_THEME_SOURCE:-${ROOT_DIR}/desktop/nsh/packaging/icons/linux/hicolor}"
 OUT_DIR="${OUT_DIR:-${ROOT_DIR}/dist}"
 WORK_ROOT="${WORK_ROOT:-${OUT_DIR}/appimage-work}"
 APPIMAGE_NAME="${APPIMAGE_NAME:-MrMorph-linux-${ARCH}.AppImage}"
@@ -54,7 +58,7 @@ install_icon_theme() {
   done
 }
 
-for command_name in curl find ldd readelf tar; do
+for command_name in curl tar; do
   if ! command -v "${command_name}" >/dev/null 2>&1; then
     echo "missing required command: ${command_name}" >&2
     exit 1
@@ -88,8 +92,6 @@ esac
 
 APPDIR="${BUILD_DIR}/${APP_BINARY_NAME}-${APPIMAGE_ARCH}.AppDir"
 LINUXDEPLOY="${TOOLS_DIR}/linuxdeploy-${APPIMAGE_ARCH}.AppImage"
-APPRUN="${APPDIR}/AppRun"
-GTK_PLUGIN="${TOOLS_DIR}/linuxdeploy-plugin-gtk.sh"
 DESKTOP_FILE="${WORK_ROOT}/${DESKTOP_FILE_ID}.desktop"
 OUTPUT_PATH="${OUT_DIR}/${APPIMAGE_NAME}"
 
@@ -119,68 +121,15 @@ cp "${DESKTOP_FILE}" "${APPDIR}/"
 curl -fsSL \
   "https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-${APPIMAGE_ARCH}.AppImage" \
   -o "${LINUXDEPLOY}"
-curl -fsSL \
-  "https://github.com/AppImage/AppImageKit/releases/download/continuous/AppRun-${APPIMAGE_ARCH}" \
-  -o "${APPRUN}"
-curl -fsSL \
-  "https://raw.githubusercontent.com/linuxdeploy/linuxdeploy-plugin-gtk/master/linuxdeploy-plugin-gtk.sh" \
-  -o "${GTK_PLUGIN}"
-chmod +x "${LINUXDEPLOY}" "${APPRUN}" "${GTK_PLUGIN}"
-
-mapfile -t gtk_files < <(find /usr -type f \( \
-  -name "WebKitWebProcess" -o \
-  -name "WebKitNetworkProcess" -o \
-  -name "libwebkit2gtkinjectedbundle.so" \
-\))
-if [[ "${#gtk_files[@]}" -eq 0 ]]; then
-  echo "failed to locate WebKit helper files under /usr" >&2
-  exit 1
-fi
-for gtk_file in "${gtk_files[@]}"; do
-  target_dir="${APPDIR}$(dirname "${gtk_file}")"
-  mkdir -p "${target_dir}"
-  cp "${gtk_file}" "${target_dir}/"
-done
-
-gtk_version=""
-ldd_output="$(ldd "${APPDIR}/usr/bin/${APP_BINARY_NAME}")"
-case "${ldd_output}" in
-  *"libgtk-x11-2.0.so"*)
-    gtk_version="2"
-    ;;
-  *"libgtk-3.so"*)
-    gtk_version="3"
-    ;;
-  *"libgtk-4.so"*)
-    gtk_version="4"
-    ;;
-esac
-if [[ -z "${gtk_version}" ]]; then
-  echo "unable to determine GTK version from desktop binary" >&2
-  exit 1
-fi
-
-no_strip=""
-for candidate in \
-  /usr/lib/libgtk-4.so.1 \
-  /usr/lib64/libgtk-4.so.1 \
-  /usr/lib/x86_64-linux-gnu/libgtk-4.so.1 \
-  /usr/lib/libgtk-3.so.0 \
-  /usr/lib64/libgtk-3.so.0 \
-  /usr/lib/x86_64-linux-gnu/libgtk-3.so.0
-do
-  if [[ -f "${candidate}" ]] && readelf -S "${candidate}" | grep -q '\.relr\.dyn'; then
-    no_strip="1"
-    break
-  fi
-done
+chmod +x "${LINUXDEPLOY}"
 
 pushd "${BUILD_DIR}" >/dev/null
+# The shell's libraries first (AppRun becomes a link to it, from the desktop entry's Exec); the
+# backend is a static Go binary and is copied in afterwards so linuxdeploy leaves it alone.
 PATH="${TOOLS_DIR}:${PATH}" \
-LINUXDEPLOY="${LINUXDEPLOY}" \
-DEPLOY_GTK_VERSION="${gtk_version}" \
-NO_STRIP="${no_strip}" \
-  "${LINUXDEPLOY}" --appimage-extract-and-run --appdir "${APPDIR}" --plugin gtk
+  "${LINUXDEPLOY}" --appimage-extract-and-run --appdir "${APPDIR}" \
+    --executable "${APPDIR}/usr/bin/${APP_BINARY_NAME}" \
+    --desktop-file "${APPDIR}/${DESKTOP_FILE_ID}.desktop"
 
 cp "${BACKEND_BIN}" "${APPDIR}/usr/bin/${BUNDLED_BACKEND_NAME}"
 chmod +x "${APPDIR}/usr/bin/${BUNDLED_BACKEND_NAME}"

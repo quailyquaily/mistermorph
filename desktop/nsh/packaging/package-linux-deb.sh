@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Packages the nsh desktop app (MrMorph, the GPUI shell) and the morph backend as a .deb that
+# installs both into /opt/mistermorph. The shell draws with Vulkan: a driver comes from the system.
 
 set -euo pipefail
 
@@ -8,7 +10,8 @@ PACKAGE_NAME="${PACKAGE_NAME:-mistermorph-desktop}"
 APP_BINARY_NAME="${APP_BINARY_NAME:-MrMorph}"
 DISPLAY_NAME="${DISPLAY_NAME:-MrMorph}"
 APPLICATION_ID="${APPLICATION_ID:-com.mistermorph}"
-DESKTOP_FILE_ID="${DESKTOP_FILE_ID:-org.wails.mistermorph}"
+# Named as the window's app id, so Wayland compositors match the window to this entry and its icon.
+DESKTOP_FILE_ID="${DESKTOP_FILE_ID:-com.mistermorph}"
 VERSION="${VERSION:-0.0.0}"
 ARCH="${ARCH:-amd64}"
 DESKTOP_BIN="${DESKTOP_BIN:-${ROOT_DIR}/dist/MrMorph}"
@@ -16,7 +19,7 @@ BACKEND_BIN="${BACKEND_BIN:-${ROOT_DIR}/dist/morph}"
 BUNDLED_BACKEND_NAME="${BUNDLED_BACKEND_NAME:-morph}"
 # The icon theme: every freedesktop size drawn for that size, plus a scalable SVG
 # (design/brand/generator/platforms.py).
-ICON_THEME_SOURCE="${ICON_THEME_SOURCE:-${ROOT_DIR}/desktop/wails/packaging/icons/linux/hicolor}"
+ICON_THEME_SOURCE="${ICON_THEME_SOURCE:-${ROOT_DIR}/desktop/nsh/packaging/icons/linux/hicolor}"
 OUT_DIR="${OUT_DIR:-${ROOT_DIR}/dist}"
 WORK_ROOT="${WORK_ROOT:-${OUT_DIR}/deb-work}"
 DEB_NAME="${DEB_NAME:-MrMorph-linux-${ARCH}.deb}"
@@ -129,7 +132,8 @@ Section: utils
 Priority: optional
 Architecture: ${DEB_ARCH}
 Maintainer: MisterMorph Maintainers <noreply@quaily.com>
-Depends: libgtk-4-1, libwebkitgtk-6.0-4, ca-certificates
+Depends: libfontconfig1, libfreetype6, libxkbcommon0, libxkbcommon-x11-0, libwayland-client0, libx11-xcb1, libxcb1, libzstd1, libvulkan1, ca-certificates
+Recommends: mesa-vulkan-drivers
 Description: MisterMorph Desktop
  Desktop application for MisterMorph.
 EOF

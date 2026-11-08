@@ -1,9 +1,9 @@
 # MisterMorph Desktop (GPUI + nsh)
 
 The desktop app as a Rust [GPUI](https://www.gpui.rs) shell that draws the nsh console in
-`web/console-nsh` natively, without a WebView. It replaces the Wails wrapper in `desktop/wails`
-(still in place until the cutover) and keeps its behaviour: it starts the bundled `morph`
-backend on a random loopback port, waits for it, and stops it on quit.
+`web/console-nsh` natively, without a WebView. It replaced the Wails app and keeps its behaviour
+and files: it starts the bundled `morph` backend on a random loopback port, waits for it, and
+stops it on quit.
 
 | File | What |
 | --- | --- |
@@ -127,47 +127,46 @@ scratch git repo, `git apply` each patch in order, and copy the result back.
   (hatching, the paper grid) at the view's own size up to 4096 pixels a side, instead of
   stretching a 768-pixel image, which blurred their fine lines.
 
-## Linux packaging
+## Packaging
 
-The app is two executables side by side, `MrMorph` and `morph`; there is no WebKitGTK any more.
-Runtime libraries: fontconfig, freetype, libxkbcommon(-x11), libwayland-client, libxcb, libX11-xcb,
-zstd and a Vulkan loader and driver (`libvulkan1` plus `mesa-vulkan-drivers` or the vendor's).
+The app is two executables side by side, `MrMorph` and `morph`; there is no WebKitGTK. The
+scripts in `packaging/` take both (`DESKTOP_BIN`, `BACKEND_BIN`, `VERSION`, `ARCH`) and are what
+the release workflows run:
 
-- **deb**: install both into `/opt/mistermorph`, the icons from `desktop/wails/packaging/icons/linux/hicolor`
-  into `/usr/share/icons/hicolor`, and a desktop entry whose `StartupWMClass` is the window's app id,
-  `com.mistermorph` (Wayland compositors match the window to the entry, and its icon, by it):
+| Script | Makes |
+| --- | --- |
+| `package-darwin.sh` | `MrMorph.app` (bundle id `com.mistermorph`, which notifications are shown under), signed and notarized when the Apple settings are given, in a DMG; the updater tarball holds the `.app` |
+| `package-linux-appimage.sh` | An AppImage (linuxdeploy bundles the shell's few libraries; the Vulkan loader and driver come from the host, which the shell opens at run time); the updater tarball holds the AppDir |
+| `package-linux-deb.sh` | A `.deb` installing both into `/opt/mistermorph`, the icon theme and a desktop entry |
 
-  ```ini
-  [Desktop Entry]
-  Type=Application
-  Name=MisterMorph
-  Exec=/opt/mistermorph/MrMorph
-  Icon=com.mistermorph
-  StartupWMClass=com.mistermorph
-  Categories=Utility;Development;
-  ```
+Linux runtime libraries: fontconfig, freetype, libxkbcommon(-x11), libwayland-client, libxcb,
+libX11-xcb, zstd and a Vulkan loader and driver (`libvulkan1` plus `mesa-vulkan-drivers` or the
+vendor's). The desktop entry is named after the window's app id, `com.mistermorph`, and says so
+in `StartupWMClass`: Wayland compositors match the window to the entry, and its icon, by it. In
+the AppImage the backend is found in `$APPDIR/usr/bin` and starts with the AppImage loader
+variables removed.
 
-  (name the installed icon `com.mistermorph.png`, or change `Icon=` to the name used.) Depends:
-  `libfontconfig1, libfreetype6, libxkbcommon0, libxkbcommon-x11-0, libwayland-client0, libx11-xcb1, libzstd1, libvulkan1`.
-- **AppImage**: `MrMorph` and `morph` in `usr/bin`; the backend is found there through `$APPDIR`
-  and starts with the AppImage loader variables removed, as before. The Vulkan driver comes from
-  the host system; do not bundle it.
-- **tar.gz** (the updater payload): the same two files.
+Windows ships `MrMorph.exe` and `morph.exe` in a zip (`.github/workflows/windows-signing.yml`
+signs them); `build.rs` embeds `packaging/icons/windows/appicon.ico` in `MrMorph.exe`.
 
-`desktop/wails/packaging/package-linux-*.sh` can be adapted: replace the WebKitGTK dependencies and
-the Wails binary with the files above.
+The icons in `packaging/icons` and `packaging/appicon.png` are made by
+`design/brand/generator/platforms.py`.
+
+CI installs what the build needs (the GPUI packages on Linux, Node, nsh at the version the crates
+pin, a Rust cache) with `.github/actions/setup-desktop-build`; bump its `nsh-version` together with
+the `nsh-*` versions in `Cargo.toml`.
 
 ## macOS and Windows
 
 The code is written for both (GPUI, notify-rust, `dirs` and the process handling are
 cross-platform; Windows starts the backend with `CREATE_NO_WINDOW` and builds as a GUI-subsystem
-executable in release) but was built and run only on Linux. Not verified there:
+executable in release) but was built and run only on Linux; the macOS and Windows builds come from CI
+(`.github/workflows/build_app.yaml`). Not verified there:
 
 - that it compiles and the window opens (Metal on macOS, DirectX on Windows);
 - notifications: notify-rust shows them, but pressing one does not send `morph.notify.press`
   (only Linux reports the press);
-- macOS: the app bundle, signing and notarization (`desktop/wails/packaging/package-darwin.sh`
-  signs a Wails bundle; the new bundle needs `Info.plist` with `CFBundleIdentifier`
-  `com.mistermorph` for notifications to show);
+- macOS: that the signed and notarized bundle from `packaging/package-darwin.sh` launches and
+  shows notifications;
 - Windows: a backend left running if the app is killed (no job object yet; Linux uses
-  `PR_SET_PDEATHSIG`), and the executable's icon resource.
+  `PR_SET_PDEATHSIG`), and the icon `build.rs` embeds.

@@ -1,4 +1,4 @@
-//! The parts of the Mister Morph config the desktop shell reads itself (desktop/wails/config.go):
+//! The parts of the Mister Morph config the desktop shell reads itself (as the Wails app did):
 //! where it is, and `auto_update`.
 use std::path::{Path, PathBuf};
 

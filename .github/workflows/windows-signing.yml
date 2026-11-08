@@ -96,15 +96,19 @@ jobs:
         shell: bash
         run: ./scripts/stage-console-assets.sh
 
-      - name: Verify desktop package compiles
-        shell: bash
-        run: go test -tags "wailsdesktop production ${GO_BUILD_TAGS}" ./desktop/wails -count=1
+      - name: Set up the desktop app build
+        uses: ./.github/actions/setup-desktop-build
 
-      - name: Generate Windows desktop resources
+      # The GPUI shell in desktop/nsh draws web/console-nsh itself (build.rs runs `nsh build`
+      # and embeds the app icon), and is a GUI-subsystem executable in release builds.
+      - name: Build the desktop shell
         shell: bash
-        env:
-          ARCH: amd64
-        run: ./scripts/generate-desktop-windows-resources.sh
+        run: |
+          shell_args=(--skip-backend --output-dir dist/desktop-shell)
+          if [[ " ${GO_BUILD_TAGS} " == *" pro "* ]]; then
+            shell_args+=(--pro)
+          fi
+          VERSION="${RELEASE_TAG#v}" ./desktop/nsh/build.sh "${shell_args[@]}"
 
       - name: Build unsigned Windows binaries
         shell: bash
@@ -118,13 +122,11 @@ jobs:
           commit_date="$(git show -s --format=%cI HEAD)"
           cli_ldflags="-s -w -X main.version=${version} -X main.commit=${commit} -X main.date=${commit_date}"
 
-          GOOS=windows GOARCH=amd64 \
-            go build -trimpath -tags "wailsdesktop production ${GO_BUILD_TAGS}" \
-            -ldflags "-s -w -X main.desktopVersion=${version} -H=windowsgui" \
-            -o "${unsigned_dir}/MrMorph.exe" ./desktop/wails
+          cp dist/desktop-shell/MrMorph.exe "${unsigned_dir}/MrMorph.exe"
 
+          # The desktop's backend: the shell draws the console, so it serves only the API.
           CGO_ENABLED=0 GOOS=windows GOARCH=amd64 \
-            go build -trimpath -tags "${GO_BUILD_TAGS}" -ldflags "-s -w" \
+            go build -trimpath -tags "noembedconsole ${GO_BUILD_TAGS}" -ldflags "-s -w" \
             -o "${unsigned_dir}/morph.exe" ./cmd/mistermorph
 
           CGO_ENABLED=0 GOOS=windows GOARCH=amd64 \

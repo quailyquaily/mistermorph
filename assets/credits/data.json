@@ -36,11 +36,18 @@
       "summary": "Converts Markdown into controlled HTML in agent-facing flows."
     },
     {
-      "id": "wails",
-      "name": "Wails",
-      "link": "https://github.com/wailsapp/wails",
-      "license": "MIT",
-      "summary": "Powers the desktop shell and application packaging path."
+      "id": "nsh",
+      "name": "NSH",
+      "link": "https://github.com/longbridge/nsh",
+      "license": "Apache-2.0",
+      "summary": "Runs the Console's TSX app natively in the desktop shell."
+    },
+    {
+      "id": "gpui",
+      "name": "GPUI",
+      "link": "https://github.com/longbridge/gpui-fast",
+      "license": "Apache-2.0",
+      "summary": "Draws the desktop app's window on the GPU."
     },
     {
       "id": "vue",

@@ -26,7 +26,6 @@ cmd/mistermorph/consolecmd/static/*
 bin/
 dist/
 resources/
-desktop/wails/rsrc_windows_*.syso
 
 # Editor swap files
 *.swp

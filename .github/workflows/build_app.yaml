@@ -11,16 +11,18 @@ permissions:
 
 jobs:
   build-app:
-    name: Build Wails App (${{ matrix.label }})
+    name: Build Desktop App (${{ matrix.label }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - label: linux-amd64
-            os: ubuntu-latest
+            os: ubuntu-24.04
           - label: macos-arm64
             os: macos-14
+          - label: windows-amd64
+            os: windows-2022
 
     steps:
       - name: Checkout
@@ -31,58 +33,52 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 12.3.4
+      - name: Set up the desktop app build
+        uses: ./.github/actions/setup-desktop-build
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-          cache-dependency-path: web/console/pnpm-lock.yaml
+      - name: Test the desktop shell
+        shell: bash
+        run: cd desktop/nsh && cargo test
 
-      - name: Install frontend deps
-        run: pnpm --dir web/console install --frozen-lockfile
-
-      - name: Build frontend
-        run: pnpm --dir web/console build
-
-      - name: Install Linux desktop build deps
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev
-
-      - name: Verify desktop package compiles
-        run: go test -tags "wailsdesktop production" ./desktop/wails -count=1
-
+      # The GPUI shell (desktop/nsh) and a backend with the nsh Console embedded, side by side.
       - name: Build desktop app and bundled backend
+        shell: bash
         run: |
-          ./scripts/build-desktop.sh --wails --release --no-frontend \
-            --desktop-output ./dist/MrMorph \
-            --backend-output ./dist/morph
-          shasum -a 256 dist/MrMorph > dist/MrMorph.sha256
-          shasum -a 256 dist/morph > dist/morph.sha256
+          exe=""
+          if [[ "${RUNNER_OS}" == "Windows" ]]; then exe=".exe"; fi
+          ./scripts/build-desktop.sh --release \
+            --desktop-output "./dist/MrMorph${exe}" \
+            --backend-output "./dist/morph${exe}"
+          sum() { if command -v sha256sum >/dev/null; then sha256sum "$1"; else shasum -a 256 "$1"; fi; }
+          sum "dist/MrMorph${exe}" > "dist/MrMorph${exe}.sha256"
+          sum "dist/morph${exe}" > "dist/morph${exe}.sha256"
 
       - name: Package macOS DMG
         if: runner.os == 'macOS'
         env:
           VERSION: "0.0.0"
           ARCH: arm64
-        run: ./desktop/wails/packaging/package-darwin.sh
+        run: ./desktop/nsh/packaging/package-darwin.sh
+
+      - name: Package Linux AppImage and DEB
+        if: runner.os == 'Linux'
+        env:
+          VERSION: "0.0.0"
+          ARCH: amd64
+        run: |
+          ./desktop/nsh/packaging/package-linux-appimage.sh
+          ./desktop/nsh/packaging/package-linux-deb.sh
 
       - name: Upload desktop artifact
         uses: actions/upload-artifact@v4
         with:
           name: MrMorph-${{ matrix.label }}
           path: |
-            dist/MrMorph
-            dist/MrMorph.sha256
-            dist/morph
-            dist/morph.sha256
+            dist/MrMorph*
+            dist/morph*
             dist/*.dmg
+            dist/*.AppImage
+            dist/*.deb
             dist/*.tar.gz
           if-no-files-found: error
           retention-days: 3

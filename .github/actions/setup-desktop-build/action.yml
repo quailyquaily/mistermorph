@@ -1,0 +1,56 @@
+name: Set up the desktop app build
+description: >
+  What desktop/nsh/build.sh needs besides Go: the GPUI development packages on Linux, Node (for
+  web/console-nsh/scripts/generate.mjs), the nsh CLI at the version the shell's crates pin, and a
+  Rust cache. The Rust toolchain itself comes from desktop/nsh/rust-toolchain.toml (rustup
+  installs it on the first cargo call).
+
+inputs:
+  nsh-version:
+    description: The nsh release to install (the nsh-* crates in desktop/nsh/Cargo.toml use the same)
+    default: v0.4.0
+
+runs:
+  using: composite
+  steps:
+    - name: Install Linux desktop build deps
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libfontconfig-dev libfreetype-dev libwayland-dev libx11-xcb-dev \
+          libxkbcommon-dev libxkbcommon-x11-dev libzstd-dev
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 22
+
+    # nsh's install scripts from the pinned release download that release's archive and check
+    # its .sha256 before installing it.
+    - name: Install nsh (macOS, Linux)
+      if: runner.os != 'Windows'
+      shell: bash
+      env:
+        NSH_VERSION: ${{ inputs.nsh-version }}
+      run: |
+        curl -fsSL "https://github.com/longbridge/nsh/releases/download/${NSH_VERSION}/install.sh" | sh
+        echo "${HOME}/.local/bin" >> "${GITHUB_PATH}"
+
+    - name: Install nsh (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      env:
+        NSH_VERSION: ${{ inputs.nsh-version }}
+      run: |
+        Invoke-RestMethod "https://github.com/longbridge/nsh/releases/download/$env:NSH_VERSION/install.ps1" | Invoke-Expression
+        Join-Path $env:LOCALAPPDATA 'nsh\bin' | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+    - name: Show nsh version
+      shell: bash
+      run: nsh --version
+
+    - name: Cache the shell's Rust build
+      uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: desktop/nsh -> target

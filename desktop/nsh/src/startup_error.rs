@@ -1,4 +1,4 @@
-//! What the window shows when the backend does not start (desktop/wails/startup_error.go).
+//! What the window shows when the backend does not start (as the Wails app did).
 use serde::Serialize;
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]

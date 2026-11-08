@@ -52,10 +52,10 @@ uses the drawing made for its size (16 below 24 px, then 32, 64 from 48, 128 fro
 
 | Platform | Files | Spec |
 |---|---|---|
-| macOS | `desktop/wails/packaging/icons/macos/`, the iconset `package-darwin.sh` turns into the `.icns`; `packaging/appicon.png` is its 1024 | Big Sur's grid: the tile is 824/1024 of the canvas, centred over a soft shadow |
-| Windows | `desktop/wails/packaging/icons/windows/appicon.ico`: 16, 20, 24, 32, 40, 48, 64, 96, 256 | The tile fills the canvas, margin 1/32 |
-| Linux | `desktop/wails/packaging/icons/linux/hicolor/`: 16 to 512 and `scalable/`, installed as the icon theme by the `.deb` and the AppImage | As Windows |
-| Window icon | macOS: `appicon.png`; Linux and Windows: the 256 Linux icon (`desktop/wails/icon*.go`) | |
+| macOS | `desktop/nsh/packaging/icons/macos/`, the iconset `package-darwin.sh` turns into the `.icns`; `packaging/appicon.png` is its 1024 | Big Sur's grid: the tile is 824/1024 of the canvas, centred over a soft shadow |
+| Windows | `desktop/nsh/packaging/icons/windows/appicon.ico`: 16, 20, 24, 32, 40, 48, 64, 96, 256 | The tile fills the canvas, margin 1/32 |
+| Linux | `desktop/nsh/packaging/icons/linux/hicolor/`: 16 to 512 and `scalable/`, installed as the icon theme by the `.deb` and the AppImage | As Windows |
+| Window icon | The 256 Linux icon (`desktop/nsh/src/shell.rs`); macOS shows the bundle's `.icns`, and Windows embeds `appicon.ico` in `MrMorph.exe` (`desktop/nsh/build.rs`) | |
 | Web | `web/console/public/`: `favicon.ico` (16, 32, 48) and `android-chrome-*` for the manifest's `any`; `maskable-*` and `apple-touch-icon.png`, full-bleed squares for the platform to mask; `safari-pinned-tab.svg`, the 16 drawing's lines in one colour | The circle, scaled to 0.9, keeps the ghost inside the maskable safe zone |
 
 Not done yet:
