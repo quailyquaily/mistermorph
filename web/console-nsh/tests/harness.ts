@@ -106,6 +106,9 @@ function defaults(options: ConsoleOptions): Record<string, ApiHandler> {
     "GET /proxy:/state/files": { body: { items: READY_FILES } },
     "GET /proxy:/state/files/identity.yaml": { body: { content: "name: Morph\n" } },
     "GET /proxy:/state/files/soul.md": { body: { content: "# Soul\n" } },
+    "GET /proxy:/persona/identity": {
+      body: { exists: true, identity: { name: "Morph", name_alts: [], creature: "", vibe: "", emoji: "", soul: "# Soul", extra: {} } },
+    },
     "GET /proxy:/contacts/list": { body: { items: [] } },
     "GET /proxy:/topics": { body: { items: [] } },
     "GET /proxy:/topics/activity": { body: { topics: [] } },

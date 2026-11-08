@@ -6,11 +6,7 @@ import {
   runtimeApiFetchForEndpoint,
 } from "../core/context";
 import { CONSOLE_LOCAL_ENDPOINT_REF } from "../core/endpoints";
-import {
-  parseIdentityProfile,
-  PERSONA_AVATAR_ENDPOINT,
-  PERSONA_IDENTITY_ENDPOINT,
-} from "../core/persona-profile";
+import { loadPersonaRecord, PERSONA_AVATAR_ENDPOINT } from "../core/persona-profile";
 import { endpointState } from "./endpointStore";
 
 const identityInflightByEndpoint = new Map();
@@ -35,16 +31,13 @@ function shouldIgnorePersonaLoadError(err) {
   return err?.status === 401 || err?.status === 404;
 }
 
-function readPersonaName(raw) {
-  return String(parseIdentityProfile(raw).name || "").trim();
-}
-
 async function fetchPersonaName(endpointRef, options = {}) {
   try {
-    const payload = await runtimeApiFetchForEndpoint(endpointRef, PERSONA_IDENTITY_ENDPOINT, {
-      perfSource: options.perfSource,
-    });
-    return readPersonaName(payload?.content || "");
+    const record = await loadPersonaRecord(
+      (pathname, fetchOptions) => runtimeApiFetchForEndpoint(endpointRef, pathname, fetchOptions),
+      { perfSource: options.perfSource }
+    );
+    return String(record.profile.name || "").trim();
   } catch (err) {
     if (!shouldIgnorePersonaLoadError(err)) {
       throw err;

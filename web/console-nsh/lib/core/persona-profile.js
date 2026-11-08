@@ -4,6 +4,9 @@ const PERSONA_IDENTITY_FILE = "identity.yaml";
 const PERSONA_SOUL_FILE = "soul.md";
 const PERSONA_IDENTITY_ENDPOINT = `/persona/files/${PERSONA_IDENTITY_FILE}`;
 const PERSONA_SOUL_ENDPOINT = `/persona/files/${PERSONA_SOUL_FILE}`;
+// The identity and its soul as fields (rows of agent.db). The two file endpoints above stay for
+// runtimes from before agent.db, which answer 404 here.
+const PERSONA_IDENTITY_API = "/persona/identity";
 const PERSONA_AVATAR_ENDPOINT = "/persona/avatar";
 const PERSONA_IDENTITY_UPDATED_EVENT = "mistermorph:persona-identity-updated";
 const PERSONA_AVATAR_UPDATED_EVENT = "mistermorph:persona-avatar-updated";
@@ -119,6 +122,89 @@ function normalizeSoulDocument(raw) {
   return value ? `${value}\n` : "";
 }
 
+// A persona record is what the Console edits: the four identity fields, the soul, and which API the
+// runtime has. "identity" is /persona/identity; "files" is identity.yaml and soul.md on a runtime
+// from before agent.db, where identityRaw keeps the YAML so a save leaves its other keys alone.
+function personaRecordFromIdentityPayload(payload) {
+  const identity = payload?.identity && typeof payload.identity === "object" ? payload.identity : {};
+  const profile = buildEmptyPersonaIdentityState();
+  for (const field of IDENTITY_FIELDS) {
+    profile[field] = trimText(identity[field]);
+  }
+  const soul = normalizeSoulDocument(identity.soul);
+  return {
+    api: "identity",
+    exists: payload?.exists === true,
+    profile,
+    identityRaw: "",
+    soul,
+    soulExists: soul !== "",
+  };
+}
+
+async function readPersonaFile(fetchJSON, endpoint, options) {
+  try {
+    const payload = await fetchJSON(endpoint, options);
+    return { exists: true, content: normalizeText(payload?.content || "") };
+  } catch (err) {
+    if (err?.status === 404) {
+      return { exists: false, content: "" };
+    }
+    throw err;
+  }
+}
+
+// loadPersonaRecord reads the persona with fetchJSON(path, options), the endpoint's runtime fetch.
+async function loadPersonaRecord(fetchJSON, options = {}) {
+  try {
+    return personaRecordFromIdentityPayload(await fetchJSON(PERSONA_IDENTITY_API, options));
+  } catch (err) {
+    if (err?.status !== 404) {
+      throw err;
+    }
+  }
+  const identity = await readPersonaFile(fetchJSON, PERSONA_IDENTITY_ENDPOINT, options);
+  const soul = await readPersonaFile(fetchJSON, PERSONA_SOUL_ENDPOINT, options);
+  return {
+    api: "files",
+    exists: identity.exists,
+    profile: parseIdentityProfile(identity.content),
+    identityRaw: identity.content,
+    soul: normalizeSoulDocument(soul.content),
+    soulExists: soul.exists,
+  };
+}
+
+// savePersonaRecord writes change.profile (the four fields) and/or change.soul over record, in the
+// API record came from, and returns the record as saved.
+async function savePersonaRecord(fetchJSON, record, change = {}) {
+  const profile = change.profile ? buildEmptyPersonaIdentityState() : null;
+  if (profile) {
+    for (const field of IDENTITY_FIELDS) {
+      profile[field] = trimText(change.profile[field]);
+    }
+  }
+  const soul = typeof change.soul === "string" ? normalizeSoulDocument(change.soul) : null;
+  if (record?.api !== "files") {
+    const body = { ...(profile || {}) };
+    if (soul !== null) {
+      body.soul = soul;
+    }
+    return personaRecordFromIdentityPayload(await fetchJSON(PERSONA_IDENTITY_API, { method: "PUT", body }));
+  }
+  const next = { ...record };
+  if (profile) {
+    const content = buildIdentityYAML(profile, record.identityRaw);
+    await fetchJSON(PERSONA_IDENTITY_ENDPOINT, { method: "PUT", body: { content } });
+    Object.assign(next, { exists: true, profile, identityRaw: content });
+  }
+  if (soul !== null) {
+    await fetchJSON(PERSONA_SOUL_ENDPOINT, { method: "PUT", body: { content: soul } });
+    Object.assign(next, { soul, soulExists: true });
+  }
+  return next;
+}
+
 // What window events were to the Vue console: pages that show the persona listen with
 // onPersonaEvent(PERSONA_AVATAR_UPDATED_EVENT, listener), which returns a function that stops it.
 const personaListeners = new Map();
@@ -146,7 +232,10 @@ function dispatchPersonaIdentityUpdated() {
 }
 
 export {
+  loadPersonaRecord,
   onPersonaEvent,
+  personaRecordFromIdentityPayload,
+  savePersonaRecord,
   buildEmptyPersonaIdentityState,
   buildIdentityYAML,
   buildPersonaIdentitySnapshot,
@@ -159,6 +248,7 @@ export {
   PERSONA_AVATAR_SIZE,
   PERSONA_AVATAR_SOURCE_TYPES,
   PERSONA_AVATAR_UPDATED_EVENT,
+  PERSONA_IDENTITY_API,
   PERSONA_IDENTITY_ENDPOINT,
   PERSONA_IDENTITY_FILE,
   PERSONA_IDENTITY_UPDATED_EVENT,

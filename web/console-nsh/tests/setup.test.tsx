@@ -14,14 +14,57 @@ const STATE_FILES = (names: string[]) => ({
   body: { items: names.map((name) => ({ name, exists: true, path: `/state/${name}`, group: "persona" })) },
 });
 
-/** A console that has no model yet: the agent cannot take chats until setup saves one. */
-function freshConsole(extra: Record<string, any> = {}) {
+type Identity = { name: string; creature: string; vibe: string; emoji: string };
+
+/**
+ * A console that has no model yet: the agent cannot take chats until setup saves one. Its runtime
+ * keeps the persona in agent.db (/persona/identity); with `legacy` it is a runtime from before
+ * agent.db, which has only identity.yaml and soul.md.
+ */
+function freshConsole(extra: Record<string, any> = {}, options: { legacy?: boolean } = {}) {
   const state = {
     configured: false,
-    identity: "",
+    identity: null as Identity | null,
     soul: "",
+    identityYAML: "",
+    identityPuts: [] as any[],
     savedLLM: null as any,
   };
+  const persona: Record<string, any> = options.legacy
+    ? {
+        "GET /proxy:/persona/identity": { status: 404, body: { error: "404 page not found" } },
+        "GET /proxy:/persona/files/identity.yaml": () =>
+          state.identityYAML ? { body: { content: state.identityYAML } } : { status: 404, body: { error: "not found" } },
+        "PUT /proxy:/persona/files/identity.yaml": (request: ApiRequest) => {
+          state.identityYAML = String(request.json?.content || "");
+          return { body: {} };
+        },
+        "GET /proxy:/persona/files/soul.md": () =>
+          state.soul ? { body: { content: state.soul } } : { status: 404, body: { error: "not found" } },
+        "PUT /proxy:/persona/files/soul.md": (request: ApiRequest) => {
+          state.soul = String(request.json?.content || "");
+          return { body: {} };
+        },
+      }
+    : {
+        "GET /proxy:/persona/identity": () => ({
+          body: {
+            exists: state.identity !== null,
+            identity: { name: "", creature: "", vibe: "", emoji: "", ...(state.identity || {}), name_alts: [], soul: state.soul, extra: {} },
+          },
+        }),
+        "PUT /proxy:/persona/identity": (request: ApiRequest) => {
+          const body = request.json || {};
+          state.identityPuts.push(body);
+          const next: Identity = { name: "", creature: "", vibe: "", emoji: "", ...(state.identity || {}) };
+          for (const key of ["name", "creature", "vibe", "emoji"] as const) {
+            if (typeof body[key] === "string") next[key] = body[key];
+          }
+          state.identity = next;
+          if (typeof body.soul === "string") state.soul = body.soul.trim();
+          return { body: { exists: true, identity: { ...next, name_alts: [], soul: state.soul, extra: {} } } };
+        },
+      };
   const api: Record<string, any> = {
     "GET /endpoints": () => ({ body: { items: [localEndpoint({ can_submit: state.configured })] } }),
     "GET /settings/agent": { body: { config_source: "defaults", config_revision: "rev-1", llm: {}, tools: {} } },
@@ -31,19 +74,13 @@ function freshConsole(extra: Record<string, any> = {}) {
       return { body: { config_source: "config", config_revision: "rev-2", llm: request.json?.llm || {}, tools: {} } };
     },
     "GET /proxy:/state/files": () =>
-      STATE_FILES([...(state.identity ? ["identity.yaml"] : []), ...(state.soul ? ["soul.md"] : []), "HEARTBEAT.md", "cron.yaml"]),
-    "GET /proxy:/persona/files/identity.yaml": () =>
-      state.identity ? { body: { content: state.identity } } : { status: 404, body: { error: "not found" } },
-    "PUT /proxy:/persona/files/identity.yaml": (request: ApiRequest) => {
-      state.identity = String(request.json?.content || "");
-      return { body: {} };
-    },
-    "GET /proxy:/persona/files/soul.md": () =>
-      state.soul ? { body: { content: state.soul } } : { status: 404, body: { error: "not found" } },
-    "PUT /proxy:/persona/files/soul.md": (request: ApiRequest) => {
-      state.soul = String(request.json?.content || "");
-      return { body: {} };
-    },
+      STATE_FILES([
+        ...(state.identity || state.identityYAML ? ["identity.yaml"] : []),
+        ...(state.soul ? ["soul.md"] : []),
+        "HEARTBEAT.md",
+        "cron.yaml",
+      ]),
+    ...persona,
     "GET /proxy:/persona/avatar": { status: 404, body: { error: "not found" } },
     "GET /proxy:/topics": { body: { items: [] } },
     ...extra,
@@ -82,7 +119,9 @@ test("a fresh console walks through the model, the persona and the soul, then op
   await app.press("id:setup-submit");
 
   await app.waitFor("id:setup-stage-soul");
-  expect(state.identity).toContain("Nova");
+  expect(state.identity?.name).toBe("Nova");
+  // The persona is saved as fields, not as identity.yaml.
+  expect(calls.some((call) => call.uri?.startsWith("/persona/files/"))).toBe(false);
   // A preset must be chosen before Finish shows.
   expect(app.shows("id:setup-submit")).toBe(false);
   await app.press("id:setup-soul-cat");
@@ -91,6 +130,7 @@ test("a fresh console walks through the model, the persona and the soul, then op
 
   await app.waitFor("id:setup-stage-done");
   expect(state.soul.length).toBeGreaterThan(10);
+  expect(Object.keys(state.identityPuts.at(-1) || {})).toEqual(["soul"]);
   await app.waitFor("text:/Nova/");
   await app.press("id:setup-enter-chat");
   await app.waitUntil(() => lastLocation(app).startsWith("/e/default/chat"));
@@ -169,8 +209,8 @@ test("the connection test sends the form and shows a failure", async () => {
 test("a repair from troubleshooting saves one step and goes back to setup", async () => {
   const { state, api } = freshConsole();
   state.configured = true;
-  state.identity = "name: Old\n";
-  state.soul = "# Soul\n";
+  state.identity = { name: "Old", creature: "", vibe: "", emoji: "" };
+  state.soul = "# Soul";
   const { app } = await openConsole({ location: "/e/default/setup/persona?repair=identity", api });
   await app.waitFor("id:setup-stage-persona");
   await app.waitUntil(() => app.value("id:setup-persona-name") === "Old");
@@ -180,5 +220,22 @@ test("a repair from troubleshooting saves one step and goes back to setup", asyn
   await app.type("id:setup-persona-name", "Fixed");
   await app.press("id:setup-submit");
   await app.waitFor("id:setup-stage-done");
-  expect(state.identity).toContain("Fixed");
+  expect(state.identity?.name).toBe("Fixed");
+});
+
+test("on a runtime from before agent.db, setup saves identity.yaml and soul.md", async () => {
+  const { state, api } = freshConsole({}, { legacy: true });
+  state.configured = true;
+  const { app, calls } = await openConsole({ location: "/e/default/setup", api });
+  await app.waitFor("id:setup-stage-persona");
+  await app.type("id:setup-persona-name", "Nova");
+  await app.press("id:setup-submit");
+  await app.waitFor("id:setup-stage-soul");
+  expect(state.identityYAML).toContain("name: Nova");
+  await app.press("id:setup-soul-cat");
+  await app.waitFor("id:setup-soul-spotlight");
+  await app.press("id:setup-submit");
+  await app.waitFor("id:setup-stage-done");
+  expect(state.soul.length).toBeGreaterThan(10);
+  expect(calls.some((call) => call.method === "PUT" && call.uri === "/persona/identity")).toBe(false);
 });

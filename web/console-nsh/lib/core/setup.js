@@ -2,12 +2,7 @@ import { sessionStore } from "../platform";
 import { endpointApiFetch, runtimeApiFetchForEndpoint } from "./context";
 import { endpointRoutePath } from "./endpoint-routes";
 import { CONSOLE_LOCAL_ENDPOINT_REF, visibleEndpoints } from "./endpoints";
-import {
-  PERSONA_IDENTITY_ENDPOINT,
-  PERSONA_IDENTITY_FILE,
-  PERSONA_SOUL_ENDPOINT,
-  PERSONA_SOUL_FILE,
-} from "./persona-profile";
+import { loadPersonaRecord } from "./persona-profile";
 import { invalidateResource, loadResource, resourceKey } from "./resources";
 import { SETUP_REQUIRED_MARKDOWN_FILES } from "./setup-contract";
 
@@ -152,31 +147,6 @@ async function consoleStateFileInfo(fileName, endpointRef = CONSOLE_LOCAL_ENDPOI
   }
 }
 
-async function consoleRuntimeTextFileInfo(endpointPath, endpointRef = CONSOLE_LOCAL_ENDPOINT_REF, options = {}) {
-  const ref = typeof endpointRef === "string" ? endpointRef.trim() : "";
-  if (!ref) {
-    return null;
-  }
-  try {
-    const data = await runtimeApiFetchForEndpoint(ref, endpointPath, {
-      perfSource: options.perfSource,
-    });
-    const content = typeof data?.content === "string" ? data.content : "";
-    return {
-      exists: true,
-      content,
-    };
-  } catch (err) {
-    if (err?.status === 404) {
-      return {
-        exists: false,
-        content: "",
-      };
-    }
-    return null;
-  }
-}
-
 async function consoleStateFilesIndex(endpointRef = CONSOLE_LOCAL_ENDPOINT_REF) {
   const ref = typeof endpointRef === "string" ? endpointRef.trim() : "";
   if (!ref) {
@@ -241,32 +211,30 @@ async function ensureConsoleDeferredSetupFiles(endpointRef = CONSOLE_LOCAL_ENDPO
   return index;
 }
 
-async function consoleIdentityExists(endpointRef = CONSOLE_LOCAL_ENDPOINT_REF, stateFilesIndex) {
-  const index =
-    stateFilesIndex === undefined ? await consoleStateFilesIndex(endpointRef) : stateFilesIndex;
-  if (index) {
-    if (index.get(PERSONA_IDENTITY_FILE)?.exists === true) {
-      return true;
-    }
+// consolePersonaRecord is the endpoint's persona (identity and soul), or null when it cannot be read.
+async function consolePersonaRecord(endpointRef = CONSOLE_LOCAL_ENDPOINT_REF) {
+  const ref = typeof endpointRef === "string" ? endpointRef.trim() : "";
+  if (!ref) {
+    return null;
   }
-  const info = await consoleRuntimeTextFileInfo(PERSONA_IDENTITY_ENDPOINT, endpointRef, {
-    perfSource: "setup-readiness",
-  });
-  return info ? info.exists === true : null;
+  try {
+    return await loadPersonaRecord(
+      (pathname, options) => runtimeApiFetchForEndpoint(ref, pathname, options),
+      { perfSource: "setup-readiness" }
+    );
+  } catch {
+    return null;
+  }
 }
 
-async function consoleSoulExists(endpointRef = CONSOLE_LOCAL_ENDPOINT_REF, stateFilesIndex) {
-  const index =
-    stateFilesIndex === undefined ? await consoleStateFilesIndex(endpointRef) : stateFilesIndex;
-  if (index) {
-    if (index.get(PERSONA_SOUL_FILE)?.exists === true) {
-      return true;
-    }
-  }
-  const info = await consoleRuntimeTextFileInfo(PERSONA_SOUL_ENDPOINT, endpointRef, {
-    perfSource: "setup-readiness",
-  });
-  return info ? info.exists === true : null;
+async function consoleIdentityExists(endpointRef = CONSOLE_LOCAL_ENDPOINT_REF, personaRecord) {
+  const record = personaRecord === undefined ? await consolePersonaRecord(endpointRef) : personaRecord;
+  return record ? record.exists === true : null;
+}
+
+async function consoleSoulExists(endpointRef = CONSOLE_LOCAL_ENDPOINT_REF, personaRecord) {
+  const record = personaRecord === undefined ? await consolePersonaRecord(endpointRef) : personaRecord;
+  return record ? record.soulExists === true : null;
 }
 
 function setupReadinessSignature(items) {
@@ -341,16 +309,16 @@ async function resolveConsoleSetupStageUncached(items, endpointRef) {
     }
     targetEndpointRef = local.endpoint_ref;
   }
-  const stateFilesIndex = await consoleStateFilesIndex(targetEndpointRef);
-  const hasIdentity = await consoleIdentityExists(targetEndpointRef, stateFilesIndex);
+  const personaRecord = await consolePersonaRecord(targetEndpointRef);
+  const hasIdentity = await consoleIdentityExists(targetEndpointRef, personaRecord);
   if (hasIdentity !== true) {
     return { stage: "persona", setup };
   }
-  const hasSoul = await consoleSoulExists(targetEndpointRef, stateFilesIndex);
+  const hasSoul = await consoleSoulExists(targetEndpointRef, personaRecord);
   if (hasSoul !== true) {
     return { stage: "soul", setup };
   }
-  await ensureConsoleDeferredSetupFiles(targetEndpointRef, stateFilesIndex);
+  await ensureConsoleDeferredSetupFiles(targetEndpointRef);
   return { stage: "ready", setup };
 }
 

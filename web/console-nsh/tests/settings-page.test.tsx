@@ -3,7 +3,16 @@
 import { expect, test } from "nsh/test";
 import { type ApiHandler, openConsole } from "./harness";
 
+const IDENTITY = { name: "Morph", name_alts: ["Mo"], creature: "fox", vibe: "calm", emoji: "🦊", soul: "# Soul\n\nBe kind.", extra: { pronouns: "they" } };
+
 const PERSONA: Record<string, ApiHandler> = {
+  "GET /proxy:/persona/identity": { body: { exists: true, identity: IDENTITY } },
+  "GET /proxy/download:/persona/avatar": { status: 404, body: { error: "not found" } },
+};
+
+// A runtime from before agent.db: no /persona/identity, only identity.yaml and soul.md.
+const LEGACY_PERSONA: Record<string, ApiHandler> = {
+  "GET /proxy:/persona/identity": { status: 404, body: { error: "404 page not found" } },
   "GET /proxy:/persona/files/identity.yaml": { body: { content: "name: Morph\nemoji: 🦊\ncreature: fox\nvibe: calm\n" } },
   "GET /proxy:/persona/files/soul.md": { body: { content: "# Soul\n\nBe kind.\n" } },
   "GET /proxy/download:/persona/avatar": { status: 404, body: { error: "not found" } },
@@ -25,22 +34,25 @@ test("the persona section loads the identity and soul", async () => {
   await app.waitUntil(() => app.value("id:settings-persona-name") === "Morph");
   expect(app.value("id:settings-persona-creature")).toBe("fox");
   expect(app.value("id:settings-persona-vibe")).toBe("calm");
-  expect(calls.some((call) => call.uri === "/persona/files/soul.md")).toBe(true);
+  expect(app.value("id:settings-persona-emoji")).toBe("🦊");
+  // The identity and the soul come from one structured request, not the file endpoints.
+  expect(calls.some((call) => call.uri === "/persona/identity")).toBe(true);
+  expect(calls.some((call) => call.uri?.startsWith("/persona/files/"))).toBe(false);
   // The section list beside it, with the selected section marked.
   expect(app.shows("id:settings-section-persona")).toBe(true);
   expect(app.shows("id:settings-section-agent")).toBe(true);
   expect(app.shows("id:settings-save-bar")).toBe(false);
 });
 
-test("an edit shows the save bar, and Save writes identity.yaml", async () => {
-  let saved = "";
+test("an edit shows the save bar, and Save sends the changed identity fields", async () => {
+  let saved: any = null;
   const { app } = await openConsole({
     location: "/e/default/settings",
     api: {
       ...PERSONA,
-      "PUT /proxy:/persona/files/identity.yaml": (request) => {
-        saved = String(request.json?.content || "");
-        return { body: { ok: true } };
+      "PUT /proxy:/persona/identity": (request) => {
+        saved = request.json;
+        return { body: { exists: true, identity: { ...IDENTITY, ...request.json } } };
       },
     },
   });
@@ -49,12 +61,35 @@ test("an edit shows the save bar, and Save writes identity.yaml", async () => {
   await app.waitFor("id:settings-save-bar");
   expect(app.shows("Unsaved changes (1)")).toBe(true);
   await app.press("id:settings-save-bar-save");
+  await app.waitUntil(() => saved !== null);
+  // The four fields the form edits; the soul (unchanged), name_alts and extra are left alone.
+  expect(saved).toEqual({ name: "Morph Two", creature: "fox", vibe: "calm", emoji: "🦊" });
+  await app.waitFor("id:settings-save-bar", { state: "gone" });
+  await app.waitFor("Saved");
+});
+
+test("on a runtime from before agent.db, the persona loads and saves identity.yaml", async () => {
+  let saved = "";
+  const { app } = await openConsole({
+    location: "/e/default/settings",
+    api: {
+      ...LEGACY_PERSONA,
+      "PUT /proxy:/persona/files/identity.yaml": (request) => {
+        saved = String(request.json?.content || "");
+        return { body: { ok: true } };
+      },
+    },
+  });
+  await app.waitUntil(() => app.value("id:settings-persona-name") === "Morph");
+  expect(app.value("id:settings-persona-creature")).toBe("fox");
+  await app.type("id:settings-persona-name", " Two");
+  await app.waitFor("id:settings-save-bar");
+  await app.press("id:settings-save-bar-save");
   await app.waitUntil(() => saved !== "");
   expect(saved).toContain("name: Morph Two");
   // Fields it does not edit stay as they were.
   expect(saved).toContain("creature: fox");
   await app.waitFor("id:settings-save-bar", { state: "gone" });
-  await app.waitFor("Saved");
 });
 
 test("a failed save keeps the draft and says what was not saved", async () => {
@@ -62,7 +97,7 @@ test("a failed save keeps the draft and says what was not saved", async () => {
     location: "/e/default/settings",
     api: {
       ...PERSONA,
-      "PUT /proxy:/persona/files/identity.yaml": { status: 500, body: { error: "disk full" } },
+      "PUT /proxy:/persona/identity": { status: 500, body: { error: "disk full" } },
     },
   });
   await app.waitUntil(() => app.value("id:settings-persona-name") === "Morph");

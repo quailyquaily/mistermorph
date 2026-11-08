@@ -3,8 +3,9 @@ import { expect, test } from "nsh/test";
 import { type ApiHandler, openConsole } from "./harness";
 
 const PERSONA: Record<string, ApiHandler> = {
-  "GET /proxy:/persona/files/identity.yaml": { body: { content: "name: Morph\n" } },
-  "GET /proxy:/persona/files/soul.md": { body: { content: "# Soul\n" } },
+  "GET /proxy:/persona/identity": {
+    body: { exists: true, identity: { name: "Morph", name_alts: [], creature: "", vibe: "", emoji: "", soul: "# Soul", extra: {} } },
+  },
   "GET /proxy/download:/persona/avatar": { status: 404, body: { error: "not found" } },
 };
 
