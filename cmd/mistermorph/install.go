@@ -11,7 +11,6 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/configbootstrap"
 	"github.com/quailyquaily/mistermorph/internal/pathutil"
 	"github.com/quailyquaily/mistermorph/internal/secref"
-	"github.com/quailyquaily/mistermorph/internal/statepaths"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -58,87 +57,35 @@ func newInstallCmd() *cobra.Command {
 				}
 			}
 
-			personaDir := filepath.Join(dir, statepaths.PersonaDirName)
-			identityPath := filepath.Join(personaDir, statepaths.IdentityFilename)
-			writeIdentity := true
-			if _, err := os.Stat(identityPath); err == nil {
-				writeIdentity = false
-			}
-			soulPath := filepath.Join(personaDir, statepaths.SoulFilename)
-			writeSoul := true
-			if _, err := os.Stat(soulPath); err == nil {
-				writeSoul = false
-			}
-			hbPath := filepath.Join(dir, "HEARTBEAT.md")
-			writeHeartbeat := true
-			if _, err := os.Stat(hbPath); err == nil {
-				writeHeartbeat = false
-			}
 			cronPath := filepath.Join(dir, "cron.yaml")
 			writeCron := true
 			if _, err := os.Stat(cronPath); err == nil {
 				writeCron = false
 			}
 
-			initialSteps := []installStep{
-				{
-					Name:  "config.yaml",
-					Path:  cfgPath,
-					Write: writeConfig,
-					Loader: func() (string, error) {
-						body, err := loadConfigExample()
-						if err != nil {
-							return "", err
-						}
-						return patchInitConfigWithSetup(body, dir, cfgSetup)
-					},
-				},
-				{
-					Name:   statepaths.IdentityFilename,
-					Path:   identityPath,
-					Write:  writeIdentity,
-					Loader: loadIdentityTemplate,
-				},
-				{
-					Name:   statepaths.SoulFilename,
-					Path:   soulPath,
-					Write:  writeSoul,
-					Loader: loadSoulTemplate,
+			configStep := installStep{
+				Name:  "config.yaml",
+				Path:  cfgPath,
+				Write: writeConfig,
+				Loader: func() (string, error) {
+					body, err := loadConfigExample()
+					if err != nil {
+						return "", err
+					}
+					return patchInitConfigWithSetup(body, dir, cfgSetup)
 				},
 			}
-			fmt.Println(clifmt.Headerf("==> Installing setup flow (%d steps)", len(initialSteps)))
-			for i, step := range initialSteps {
-				if err := writeInstallStepFile(i+1, len(initialSteps), step); err != nil {
-					if step.Name == "config.yaml" {
-						discardInstallSetupSecrets(cmd.Context(), cfgSetup, installSecretStore)
-					}
-					return err
-				}
-				if !step.Write {
-					continue
-				}
-				if yes || !supportsInteractivePrompts(cmd) {
-					continue
-				}
-				switch step.Name {
-				case statepaths.IdentityFilename:
-					if err := runInstallIdentitySetup(cmd.InOrStdin(), cmd.OutOrStdout(), step.Path); err != nil {
-						return err
-					}
-				case statepaths.SoulFilename:
-					if err := runInstallSoulSetup(cmd.InOrStdin(), cmd.OutOrStdout(), step.Path); err != nil {
-						return err
-					}
-				}
+			fmt.Println(clifmt.Headerf("==> Installing setup flow (%d steps)", 3))
+			if err := writeInstallStepFile(1, 3, configStep); err != nil {
+				discardInstallSetupSecrets(cmd.Context(), cfgSetup, installSecretStore)
+				return err
+			}
+			interactive := !yes && supportsInteractivePrompts(cmd)
+			if err := installPersona(cmd, dir, interactive); err != nil {
+				return err
 			}
 
 			deferredSteps := []installStep{
-				{
-					Name:   "HEARTBEAT.md",
-					Path:   hbPath,
-					Write:  writeHeartbeat,
-					Loader: loadHeartbeatTemplate,
-				},
 				{
 					Name:   "cron.yaml",
 					Path:   cronPath,

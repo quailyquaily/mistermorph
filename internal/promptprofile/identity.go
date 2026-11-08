@@ -1,17 +1,18 @@
 package promptprofile
 
 import (
+	"context"
 	"log/slog"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/quailyquaily/mistermorph/agent"
-	markdownutil "github.com/quailyquaily/mistermorph/internal/markdown"
-	"github.com/quailyquaily/mistermorph/internal/onboardingcheck"
+	"github.com/quailyquaily/mistermorph/internal/personastore"
 	"github.com/quailyquaily/mistermorph/internal/statepaths"
 )
 
+// ApplyPersonaIdentity puts the identity and the soul into the prompt, read from agent.db for
+// each run. The identity is rendered as the [identity.yaml] block it was; an empty soul is left
+// out. configuredPersonaDir names the persona folder (<state>/persona) of the state to read.
 func ApplyPersonaIdentity(spec *agent.PromptSpec, log *slog.Logger, configuredPersonaDir ...string) {
 	if spec == nil {
 		return
@@ -27,23 +28,33 @@ func ApplyPersonaIdentity(spec *agent.PromptSpec, log *slog.Logger, configuredPe
 	if personaDir == "" {
 		personaDir = statepaths.PersonaDir()
 	}
-	identity := personaDocCandidate{
-		Path:  filepath.Join(personaDir, statepaths.IdentityFilename),
-		Label: statepaths.IdentityFilename,
-		Kind:  "identity_yaml",
+	ctx := context.Background()
+	identityStatus, soulStatus := "missing", "missing"
+	identityDoc, soulDoc := "", ""
+	store, err := personastore.ForPersonaDir(ctx, personaDir)
+	if err == nil {
+		var id personastore.Identity
+		var ok bool
+		id, ok, err = store.Identity(ctx)
+		if err == nil && ok {
+			identityDoc = strings.TrimSpace(personastore.RenderIdentityYAML(id))
+			identityStatus = "loaded"
+			if soulDoc = strings.TrimSpace(id.Soul); soulDoc != "" {
+				soulStatus = "loaded"
+			} else {
+				soulStatus = "empty"
+			}
+		}
 	}
-	soul := personaDocCandidate{
-		Path:  filepath.Join(personaDir, statepaths.SoulFilename),
-		Label: statepaths.SoulFilename,
-		Kind:  "soul_markdown",
+	if err != nil {
+		log.Warn("persona_load_failed", "persona_dir", personaDir, "error", err.Error())
+		identityStatus, soulStatus = "error", "error"
 	}
-	identityDoc, identityStatus := loadPersonaDoc(identity, log)
-	soulDoc, soulStatus := loadPersonaDoc(soul, log)
 	if identityDoc == "" && soulDoc == "" {
 		log.Debug("persona_identity_skipped", "identity_status", identityStatus, "soul_status", soulStatus)
 		return
 	}
-	spec.Identity = buildPersonaIdentity(identityDoc, identity.Label, soulDoc, soul.Label)
+	spec.Identity = buildPersonaIdentity(identityDoc, statepaths.IdentityFilename, soulDoc, statepaths.SoulFilename)
 	log.Info(
 		"persona_identity_applied",
 		"identity_loaded", identityDoc != "",
@@ -51,50 +62,6 @@ func ApplyPersonaIdentity(spec *agent.PromptSpec, log *slog.Logger, configuredPe
 		"identity_status", identityStatus,
 		"soul_status", soulStatus,
 	)
-}
-
-type personaDocCandidate struct {
-	Path  string
-	Label string
-	Kind  string
-}
-
-func loadPersonaDoc(candidate personaDocCandidate, log *slog.Logger) (string, string) {
-	path := candidate.Path
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		if !os.IsNotExist(err) && log != nil {
-			log.Warn("persona_load_failed", "kind", candidate.Kind, "path", path, "error", err.Error())
-		}
-		if os.IsNotExist(err) {
-			return "", "missing"
-		}
-		return "", "error"
-	}
-	content := strings.TrimSpace(string(raw))
-	if content == "" {
-		return "", "empty"
-	}
-	if candidate.Kind != "identity_yaml" && strings.EqualFold(markdownutil.FrontmatterStatus(string(raw)), "draft") {
-		return "", "draft"
-	}
-	if candidate.Kind == "identity_yaml" {
-		if err := onboardingcheck.ValidateIdentityYAML(string(raw)); err != nil {
-			if log != nil {
-				log.Warn("persona_load_failed", "kind", candidate.Kind, "path", path, "error", err.Error())
-			}
-			return "", "malformed"
-		}
-	}
-	contentSource := string(raw)
-	if candidate.Kind != "identity_yaml" {
-		contentSource = markdownutil.StripFrontmatter(contentSource)
-	}
-	content = strings.TrimSpace(contentSource)
-	if content == "" {
-		return "", "empty"
-	}
-	return content, "loaded"
 }
 
 func buildPersonaIdentity(identityDoc string, identityLabel string, soulDoc string, soulLabel string) string {

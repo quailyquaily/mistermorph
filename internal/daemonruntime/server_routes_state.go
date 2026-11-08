@@ -47,7 +47,7 @@ func (routes *routeRegistration) registerStateRoutes() {
 			http.Error(w, "invalid file name", http.StatusBadRequest)
 			return
 		}
-		handleTextFileDetail(w, r, spec.Name, spec.Path)
+		handleStateFileDetail(w, r, spec)
 	})
 
 	mux.HandleFunc("/todo/files", func(w http.ResponseWriter, r *http.Request) {
@@ -390,7 +390,29 @@ func (routes *routeRegistration) registerStateRoutes() {
 			http.Error(w, "invalid file name", http.StatusBadRequest)
 			return
 		}
-		handleTextFileDetail(w, r, spec.Name, spec.Path)
+		handleStateFileDetail(w, r, spec)
+	})
+	mux.HandleFunc("/persona/identity", func(w http.ResponseWriter, r *http.Request) {
+		if !checkAuth(r, authToken) {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		handlePersonaIdentity(w, r, statePaths.stateDir)
+	})
+	mux.HandleFunc("/heartbeat/workflows", func(w http.ResponseWriter, r *http.Request) {
+		if !checkAuth(r, authToken) {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		handleHeartbeatWorkflows(w, r, statePaths.stateDir)
+	})
+	mux.HandleFunc("/heartbeat/workflows/", func(w http.ResponseWriter, r *http.Request) {
+		if !checkAuth(r, authToken) {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		id := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, "/heartbeat/workflows/"))
+		handleHeartbeatWorkflow(w, r, statePaths.stateDir, id)
 	})
 	mux.HandleFunc("/persona/avatar", func(w http.ResponseWriter, r *http.Request) {
 		if !checkAuth(r, authToken) {

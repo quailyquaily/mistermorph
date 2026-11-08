@@ -24,7 +24,9 @@ function api(overrides: Record<string, unknown> = {}) {
   return {
     "GET /proxy:/todo/tasks": { body: tasksBody() },
     "GET /proxy:/todo/runs": { body: { runs: [] } },
-    "GET /proxy:/state/files/HEARTBEAT.md": { body: { content: "Check the inbox." } },
+    "GET /proxy:/heartbeat/workflows": {
+      body: { items: [{ id: "hb-1", title: "Inbox", instructions: "Check the inbox.", enabled: true }] },
+    },
     "PUT /proxy:/todo/tasks": (request: ApiRequest) => ({ body: { ...tasksBody(), tasks: request.json?.tasks } }),
     ...overrides,
   } as Record<string, any>;
@@ -514,31 +516,44 @@ test("the desktop app offers its native folder picker for the local agent", asyn
   await app.waitUntil(() => app.value("id:todo-workspace-dir") === "/Users/me/work");
 });
 
-test("Heartbeat edits HEARTBEAT.md with its own Save", async () => {
+test("Heartbeat edits its workflows with its own Save", async () => {
   const { app, calls } = await openTodo({
-    "PUT /proxy:/state/files/HEARTBEAT.md": { body: { ok: true } },
+    "PUT /proxy:/heartbeat/workflows": (request: ApiRequest) => ({ body: { items: request.json?.items } }),
   });
   await app.press("id:todo-heartbeat-item");
-  await app.waitFor("Heartbeat content is saved to HEARTBEAT.md. The heartbeat task runs on a schedule.");
+  await app.waitFor("The heartbeat runs its switched-on workflows, in this order, on a schedule.");
+  await app.waitUntil(() => app.value("id:todo-heartbeat-workflow-title-0") === "Inbox");
   expect(app.enabled("id:todo-heartbeat-save")).toBe(false);
-  await app.type("id:todo-heartbeat-content-source", " And the calendar.");
+  // Add a second workflow, name it, move it first and switch the inbox off.
+  await app.press("id:todo-heartbeat-add");
+  await app.waitFor("id:todo-heartbeat-workflow-1");
+  expect(app.enabled("id:todo-heartbeat-save")).toBe(false);
+  await app.type("id:todo-heartbeat-workflow-title-1", "Calendar");
+  await app.press("id:todo-heartbeat-workflow-up-1");
+  await app.waitUntil(() => app.value("id:todo-heartbeat-workflow-title-0") === "Calendar");
+  await app.press("id:todo-heartbeat-workflow-enabled-1");
   await app.press("id:todo-heartbeat-save");
   await app.waitFor("Saved");
-  // The editor holds the loaded text and the typed one (headless typing lands at the caret, at the start).
-  const content = proxied(calls, "PUT", "/state/files/HEARTBEAT.md")[0].json.content;
-  expect(content).toContain("Check the inbox.");
-  expect(content).toContain(" And the calendar.");
+  const items = proxied(calls, "PUT", "/heartbeat/workflows")[0].json.items;
+  expect(items.map((item: any) => item.title)).toEqual(["Calendar", "Inbox"]);
+  expect(items[0].id).toBe("");
+  expect(items[1]).toEqual({ id: "hb-1", title: "Inbox", instructions: "Check the inbox.", enabled: false });
 });
 
-test("a missing HEARTBEAT.md can be saved at once, and a disabled heartbeat says so", async () => {
-  const { app } = await openTodo({
+test("a heartbeat workflow can be deleted, and a disabled heartbeat says so", async () => {
+  const { app, calls } = await openTodo({
     "GET /proxy:/todo/tasks": { body: tasksBody({ heartbeat_enabled: false }) },
-    "GET /proxy:/state/files/HEARTBEAT.md": { status: 404, body: { error: "not found" } },
+    "PUT /proxy:/heartbeat/workflows": (request: ApiRequest) => ({ body: { items: request.json?.items } }),
   });
   await app.waitFor("id:todo-heartbeat-item >> text:Disabled");
   await app.press("id:todo-heartbeat-item");
   await app.waitFor("The heartbeat task is disabled.");
-  expect(app.enabled("id:todo-heartbeat-save")).toBe(true);
+  await app.waitFor("id:todo-heartbeat-workflow-0");
+  await app.press("id:todo-heartbeat-workflow-delete-0");
+  await app.waitFor("No workflows yet. Without one switched on there is no heartbeat task.");
+  await app.press("id:todo-heartbeat-save");
+  await app.waitFor("Saved");
+  expect(proxied(calls, "PUT", "/heartbeat/workflows")[0].json.items).toEqual([]);
 });
 
 test("on a phone the list and the editor take turns, with a back button and a floating add", async () => {

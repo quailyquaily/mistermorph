@@ -17,14 +17,7 @@ import (
 )
 
 func TestRuntimeStateFileSpecsIncludesHeartbeat(t *testing.T) {
-	paths := runtimeStatePaths{
-		cronPath:         "/tmp/cron.yaml",
-		contactsActive:   "/tmp/ACTIVE.md",
-		contactsInactive: "/tmp/INACTIVE.md",
-		identityPath:     "/tmp/persona/identity.yaml",
-		soulPath:         "/tmp/persona/soul.md",
-		heartbeatPath:    "/tmp/HEARTBEAT.md",
-	}
+	paths := runtimeStatePathsFrom(testRuntimePaths(t.TempDir()))
 
 	items := describeStateFiles(paths, "")
 	if len(items) != 6 {

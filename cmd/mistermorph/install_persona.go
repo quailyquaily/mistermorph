@@ -2,12 +2,19 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/quailyquaily/mistermorph/internal/clifmt"
+	"github.com/quailyquaily/mistermorph/internal/personastore"
+	"github.com/quailyquaily/mistermorph/internal/statepaths"
+	"github.com/spf13/cobra"
 )
 
 var installIdentityYAMLFenceRE = regexp.MustCompile("(?is)```(?:yaml|yml)\\s*\\n([\\s\\S]*?)\\n```")
@@ -195,4 +202,98 @@ func buildInstallIdentityYAML(values installIdentityProfile) string {
 		"vibe: " + installYAMLString(values.Vibe),
 		"emoji: " + installYAMLString(values.Emoji),
 	}, "\n")
+}
+
+// installPersona writes the identity and the soul preset into agent.db in dir, steps 2 and 3 of
+// the setup flow. An identity already there (or imported from the files an older version wrote)
+// is kept, and so is its soul. Interactive setup edits a scratch copy of identity.yaml and
+// soul.md, as the prompts and the system editor work on files, and saves what they hold.
+func installPersona(cmd *cobra.Command, dir string, interactive bool) error {
+	ctx := cmd.Context()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	store, err := personastore.Open(ctx, dir)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = store.Close() }()
+	existing, hasIdentity, err := store.Identity(ctx)
+	if err != nil {
+		return err
+	}
+	dbPath := store.DB().Path()
+	writeIdentity := !hasIdentity
+	writeSoul := !hasIdentity || strings.TrimSpace(existing.Soul) == ""
+
+	scratch, err := os.MkdirTemp(dir, ".install-persona-")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.RemoveAll(scratch) }()
+
+	id := existing
+	report := func(index int, name string, write bool) {
+		fmt.Printf("[%d/3] %s ... ", index, name)
+		if !write {
+			fmt.Printf("%s %s\n", clifmt.Success("done"), clifmt.Warn("(skipped)"))
+			fmt.Printf("    %s %s\n", dbPath, clifmt.Warn("(skipped)"))
+			return
+		}
+		fmt.Println(clifmt.Success("done"))
+		fmt.Printf("    %s\n", dbPath)
+	}
+	if writeIdentity {
+		body, err := loadIdentityTemplate()
+		if err != nil {
+			return err
+		}
+		path := filepath.Join(scratch, statepaths.IdentityFilename)
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			return err
+		}
+		if interactive {
+			if err := runInstallIdentitySetup(cmd.InOrStdin(), cmd.OutOrStdout(), path); err != nil {
+				return err
+			}
+		}
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		parsed, err := personastore.ParseIdentityYAML(string(raw))
+		if err != nil {
+			return err
+		}
+		parsed.Soul = id.Soul
+		id = parsed
+	}
+	report(2, statepaths.IdentityFilename, writeIdentity)
+	if writeSoul {
+		body, err := loadSoulTemplate()
+		if err != nil {
+			return err
+		}
+		path := filepath.Join(scratch, statepaths.SoulFilename)
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			return err
+		}
+		if interactive {
+			if err := runInstallSoulSetup(cmd.InOrStdin(), cmd.OutOrStdout(), path); err != nil {
+				return err
+			}
+		}
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		id.Soul = personastore.ParseSoul(string(raw))
+	}
+	if writeIdentity || writeSoul {
+		if _, err := store.SaveIdentity(ctx, id, personastore.ByInstall); err != nil {
+			return err
+		}
+	}
+	report(3, statepaths.SoulFilename, writeSoul)
+	return nil
 }

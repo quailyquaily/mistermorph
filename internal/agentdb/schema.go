@@ -9,6 +9,7 @@ import (
 func migrations() []sqlitedb.Migration {
 	return []sqlitedb.Migration{
 		{Name: "create meta, Console sessions, Agent Link peers and topic state", SQL: stateimport.MetaTableSQL + smallStateSQL},
+		{Name: "create identity and heartbeat workflows", SQL: personaSQL},
 	}
 }
 
@@ -61,4 +62,31 @@ CREATE TABLE workspace_attachments (
 	workspace_dir TEXT NOT NULL,
 	updated_at    TEXT NOT NULL
 );
+`
+
+// personaSQL: the identity, soul included, and the heartbeat workflows (§1).
+const personaSQL = `
+CREATE TABLE identity (
+	id         INTEGER PRIMARY KEY CHECK (id = 1),
+	name       TEXT NOT NULL DEFAULT '',
+	name_alts  TEXT NOT NULL DEFAULT '[]',
+	creature   TEXT NOT NULL DEFAULT '',
+	vibe       TEXT NOT NULL DEFAULT '',
+	emoji      TEXT NOT NULL DEFAULT '',
+	soul       TEXT NOT NULL DEFAULT '',
+	extra      TEXT NOT NULL DEFAULT '{}',
+	updated_at TEXT NOT NULL,
+	updated_by TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE heartbeat_workflows (
+	id           TEXT PRIMARY KEY,
+	position     INTEGER NOT NULL,
+	title        TEXT NOT NULL,
+	instructions TEXT NOT NULL,
+	enabled      INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+	created_at   TEXT NOT NULL,
+	updated_at   TEXT NOT NULL
+);
+CREATE INDEX heartbeat_workflows_by_position ON heartbeat_workflows (position);
 `

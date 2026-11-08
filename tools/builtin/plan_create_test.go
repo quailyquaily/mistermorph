@@ -97,7 +97,10 @@ func TestPlanCreateExecuteOmitsStyleFromSchemaAndPayload(t *testing.T) {
 }
 
 func TestPlanCreateExecuteUsesCapturedPersonaDirectory(t *testing.T) {
-	personaDir := t.TempDir()
+	personaDir := filepath.Join(t.TempDir(), "persona")
+	if err := os.MkdirAll(personaDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
 	identity := "name: Captured Persona\ncreature: test\nvibe: precise\nemoji: test\n"
 	if err := os.WriteFile(filepath.Join(personaDir, "identity.yaml"), []byte(identity), 0o600); err != nil {
 		t.Fatalf("WriteFile(identity) error = %v", err)

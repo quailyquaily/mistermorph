@@ -407,9 +407,7 @@ func (routes *routeRegistration) registerSystemRoutes() {
 			diagnoseFileReadable("contacts_active", paths.contactsActive),
 			diagnoseFileReadable("contacts_inactive", paths.contactsInactive),
 			diagnoseFileReadable("cron", paths.cronPath),
-			diagnoseFileReadable("persona_identity", paths.identityPath),
-			diagnoseFileReadable("persona_soul", paths.soulPath),
-			diagnoseFileReadable("heartbeat_checklist", paths.heartbeatPath),
+			diagnoseAgentDB("agent_db", paths.agentDBPath),
 			diagnoseFileReadable("audit_jsonl", paths.auditPath),
 		}
 		w.Header().Set("Content-Type", "application/json")

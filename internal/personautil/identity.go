@@ -1,26 +1,19 @@
 package personautil
 
 import (
-	"os"
-	"path/filepath"
+	"context"
 	"strings"
 
+	"github.com/quailyquaily/mistermorph/internal/personastore"
 	"github.com/quailyquaily/mistermorph/internal/statepaths"
 	"gopkg.in/yaml.v3"
 )
 
 const IdentityFilename = statepaths.IdentityFilename
 
+// LoadAgentName is the identity's name in agent.db in stateDir, or "" without one.
 func LoadAgentName(stateDir string) string {
-	stateDir = strings.TrimSpace(stateDir)
-	if stateDir == "" {
-		return ""
-	}
-	raw, err := os.ReadFile(filepath.Join(stateDir, statepaths.PersonaDirName, statepaths.IdentityFilename))
-	if err != nil {
-		return ""
-	}
-	return parseIdentityNameFromYAML(string(raw))
+	return personastore.LoadAgentName(context.Background(), stateDir)
 }
 
 func parseIdentityNameFromYAML(raw string) string {

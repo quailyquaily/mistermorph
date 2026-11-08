@@ -314,3 +314,31 @@ func Bool(v bool) int {
 	}
 	return 0
 }
+
+var (
+	cachedMu sync.Mutex
+	cached   = map[string]*Lazy{}
+)
+
+// Cached returns a process-wide lazy handle on agent.db at path, for readers that run often and
+// keep no handle of their own (the prompt's persona, a heartbeat tick). It opens on first use and
+// stays open.
+func Cached(path string) *Lazy {
+	path = filepath.Clean(strings.TrimSpace(path))
+	if abs, err := filepath.Abs(path); err == nil {
+		path = abs
+	}
+	cachedMu.Lock()
+	defer cachedMu.Unlock()
+	lazy := cached[path]
+	if lazy == nil {
+		lazy = NewLazy(path)
+		cached[path] = lazy
+	}
+	return lazy
+}
+
+// CachedStateDir is Cached for agent.db in stateDir.
+func CachedStateDir(stateDir string) *Lazy {
+	return Cached(filepath.Join(strings.TrimSpace(stateDir), statepaths.AgentDBFilename))
+}
