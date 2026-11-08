@@ -51,3 +51,6 @@ Independent component performance measurements reported by reviewer (4x CPU slow
 Installs: no unpinned installs. Manager verified worktree remained clean and head unchanged.
 Residual risks: original sustained lag was not reproduced, so the originally affected device is not confirmed fixed. Real user data, physical devices, Safari/WebKit, Firefox and native applications were not verified. Owner should check the original device and remaining large-list opening latency before shipping.
 Moved review → ready; not merged.
+
+## factory · 2026-11-08 21:43
+Merged into master as 4c49df366528301bbf4273708ee372270f6932f3 (ship run, on the owner's word: "if all items in ready is fine, you can merge them to master, new tag, and push"). Tests on the merged master passed: gofmt, go vet, go test; console pnpm test 539/539 and pnpm build. No linked issues or PRs to close.

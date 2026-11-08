@@ -63,3 +63,8 @@ Validation: Codex reviewed all 14 changed files in origin/master...HEAD. Mandato
 Installs: temporary playwright-core@1.65.0 for browser checks, not pinned by the repository; no manifest/lockfile changes. Pinned renderer dependency restoration warned that esbuild build scripts were blocked; tests passed.
 
 Residual risks: Safari, physical mobile devices and full app with a real backend were not checked. Original progress-height issue was not naturally reproduced. No linked GitHub issue or PR.
+
+## factory · 2026-11-08 21:43
+Merged into master as b3f50a70c1f91f78ed41c4d692822d692680faed (ship run, on the owner's word: "if all items in ready is fine, you can merge them to master, new tag, and push"). Tests on the merged master passed: gofmt, go vet, go test; console pnpm test 539/539 and pnpm build. No linked issues or PRs to close.
+
+Open from the review: the [P2] reduced-motion override does not reach the new copy animation (web/markdown-renderer/src/styles.css:271).
