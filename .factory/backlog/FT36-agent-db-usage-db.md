@@ -24,3 +24,13 @@ Acceptance criteria:
 
 Backlog: the design is for the owner to review first. Build it in the design's milestones, one item each, when it
 moves to new/.
+
+## factory · 2026-11-09 00:03
+Scope added at the owner's request: "i'd like to migrate config.yaml to agent.db as well."
+
+The design now covers it (§7 Config, milestone M6): the config is a verbatim YAML document in `agent.db` with
+revisions, loaded in the same order as today (defaults, YAML, `${VAR}` expansion and flag overrides, environment).
+`file_state_dir` becomes a bootstrap setting (`MISTER_MORPH_FILE_STATE_DIR` or a new `--state-dir`), since the
+config cannot say where its own database is. `--config <path>` keeps using that file, so systemd, the Cloudflare
+deploy and the desktop shell keep working; the default `~/.morph/config.yaml` is imported. Every config writer
+goes through one `configstore.Store`; `morph config edit` / `show` / `export` / `import` replace editing the file.
