@@ -455,7 +455,9 @@ exist is still rejected by the code, not by a foreign key, since a profile can c
 
 **Reading it from outside the backend.** The desktop shell reads `auto_update.enabled` and `auto_update.channel`
 from the config file before the backend runs (`desktop/nsh/src/config.rs`). Without `--config`, it reads them from
-the backend's settings API once the backend is up; until then it uses the defaults.
+the backend's settings API once the backend is up, logged in as the Console is (the session token the Console keeps
+in the app's local store); with a Console password and no valid login yet, it waits for the user to log in and reads
+them then. Until then it uses the defaults.
 
 **Editing by hand.** `morph config get <path>` and `morph config set <path> <value>` change one setting;
 `morph config export <file>` writes the whole config as YAML (in the order of `config.example.yaml`) and

@@ -108,16 +108,26 @@ fn main() -> ExitCode {
                         if explicit {
                             update::start_auto_check(desktop.auto_update.clone(), desktop.log.clone());
                         } else {
-                            // The config is in agent.db: read auto_update from the backend.
+                            // The config is in agent.db: read auto_update from the backend, logged
+                            // in as the Console is. With a Console password and no valid login yet,
+                            // the read waits for the user to log in.
                             let addr = addr.clone();
-                            let fallback = desktop.auto_update.clone();
-                            let log = desktop.log.clone();
+                            let desktop = desktop.clone();
                             std::thread::spawn(move || {
-                                let cfg = match config::fetch_backend_auto_update(&addr, backend::DEFAULT_BASE_PATH) {
+                                let log = desktop.log.clone();
+                                let read = config::read_backend_auto_update(
+                                    desktop.console_token(),
+                                    |token| config::fetch_backend_auto_update(&addr, backend::DEFAULT_BASE_PATH, token),
+                                    |refused| {
+                                        log.line("desktop_update auto_update_settings_waiting_for_console_login");
+                                        desktop.wait_console_token(refused, None)
+                                    },
+                                );
+                                let cfg = match read {
                                     Ok(cfg) => cfg,
                                     Err(err) => {
                                         log.line(&format!("desktop_update auto_update_settings_unavailable error={err:?}"));
-                                        fallback
+                                        desktop.auto_update.clone()
                                     }
                                 };
                                 update::start_auto_check(cfg, log);
