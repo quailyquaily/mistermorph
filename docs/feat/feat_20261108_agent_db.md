@@ -62,7 +62,9 @@ stays a file too (§7).
   data nobody queries (`bash_env`, a context snapshot's parts) is a JSON text column.
 - **One transaction per change.** No lock files for these stores: SQLite's write lock replaces them.
 - **The files are imported once and kept.** Each old file is imported on first open, then renamed to
-  `<name>.imported`, never deleted by the import.
+  `<name>.imported`, never deleted by the import. The config's open (before the config is loaded) runs no imports:
+  they run on the next open, so an import that depends on a setting (the contacts folder's `contacts.dir_name`)
+  sees the configured value.
 
 ## Conventions
 
