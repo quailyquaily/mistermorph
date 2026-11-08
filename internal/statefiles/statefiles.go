@@ -239,7 +239,15 @@ func Import(ctx context.Context, loc Locations, dir string) (Result, error) {
 		result.Files = append(result.Files, HeartbeatFile)
 	}
 	if hasActive || hasInactive {
-		if err := contacts.NewStore(loc.ContactsDir).ReplaceAll(ctx, listed); err != nil {
+		// Only the files given are replaced: ACTIVE.md alone keeps the inactive contacts.
+		var statuses []contacts.Status
+		if hasActive {
+			statuses = append(statuses, contacts.StatusActive)
+		}
+		if hasInactive {
+			statuses = append(statuses, contacts.StatusInactive)
+		}
+		if err := contacts.NewStore(loc.ContactsDir).ReplaceStatuses(ctx, statuses, listed); err != nil {
 			return result, fmt.Errorf("contacts: %w", err)
 		}
 		if hasActive {

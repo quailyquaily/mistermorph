@@ -241,12 +241,33 @@ func ParseContactsFile(content string) ([]Contact, error) {
 	return out, nil
 }
 
-// ReplaceAll replaces every contact with items, in one transaction, for `morph state import`.
-// Owner, paired and the statuses come from items; the active limit applies.
-func (s *DBStore) ReplaceAll(ctx context.Context, items []ListedContact) error {
+// ReplaceStatuses replaces the contacts of the given statuses with items, in one transaction, for
+// `morph state import`: importing only ACTIVE.md replaces the active contacts and keeps the
+// inactive ones. Every item's status must be one of statuses; a contact in items that had another
+// status takes the item's. Owner and paired come from items; the active limit applies.
+func (s *DBStore) ReplaceStatuses(ctx context.Context, statuses []Status, items []ListedContact) error {
+	replaced := map[Status]bool{}
+	for _, status := range statuses {
+		switch status {
+		case StatusActive, StatusInactive:
+			replaced[status] = true
+		default:
+			return fmt.Errorf("unknown contact status %q", status)
+		}
+	}
+	if len(replaced) == 0 {
+		return nil
+	}
+	for _, item := range items {
+		if !replaced[normalizeStatus(item.Status)] {
+			return fmt.Errorf("contact %s is %s, which is not being replaced", item.ContactID, normalizeStatus(item.Status))
+		}
+	}
 	return s.inTx(ctx, func(ctx context.Context, tx *sql.Tx) error {
-		if _, err := tx.ExecContext(ctx, `DELETE FROM contacts`); err != nil {
-			return err
+		for status := range replaced {
+			if _, err := tx.ExecContext(ctx, `DELETE FROM contacts WHERE status = ?`, string(status)); err != nil {
+				return err
+			}
 		}
 		for _, item := range items {
 			owner, paired := item.Owner, item.Paired

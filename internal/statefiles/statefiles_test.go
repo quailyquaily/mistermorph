@@ -177,3 +177,81 @@ func stripFrontMatter(s string) string {
 	}
 	return s
 }
+
+// Importing one of the contacts files replaces the contacts of its status and keeps the others.
+func TestImportOfOneContactsFileKeepsTheOtherStatus(t *testing.T) {
+	ctx := context.Background()
+	contactsFile := func(title string, ids ...string) string {
+		out := "# " + title + "\n"
+		for _, id := range ids {
+			out += "\n## " + id + "\n\n```yaml\ncontact_id: \"" + id + "\"\nkind: \"human\"\n```\n"
+		}
+		return out
+	}
+	statuses := func(store *contacts.DBStore) map[string]contacts.Status {
+		t.Helper()
+		listed, err := store.ListContactsFiltered(ctx, contacts.ContactFilter{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		out := map[string]contacts.Status{}
+		for _, item := range listed {
+			out[item.ContactID] = item.Status
+		}
+		return out
+	}
+	for _, tc := range []struct {
+		name  string
+		files map[string]string
+		want  map[string]contacts.Status
+	}{
+		{
+			name:  "active only",
+			files: map[string]string{ActiveFile: contactsFile("Active Contacts", "tg:789")},
+			want:  map[string]contacts.Status{"tg:789": contacts.StatusActive, "tg:456": contacts.StatusInactive},
+		},
+		{
+			name:  "inactive only",
+			files: map[string]string{InactiveFile: contactsFile("Inactive Contacts", "tg:789")},
+			want:  map[string]contacts.Status{"tg:123": contacts.StatusActive, "tg:789": contacts.StatusInactive},
+		},
+		{
+			name:  "active only, moving an inactive contact",
+			files: map[string]string{ActiveFile: contactsFile("Active Contacts", "tg:123", "tg:456")},
+			want:  map[string]contacts.Status{"tg:123": contacts.StatusActive, "tg:456": contacts.StatusActive},
+		},
+		{
+			name:  "both",
+			files: map[string]string{ActiveFile: contactsFile("Active Contacts", "tg:1"), InactiveFile: contactsFile("Inactive Contacts")},
+			want:  map[string]contacts.Status{"tg:1": contacts.StatusActive},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			target := locationsFor(t.TempDir())
+			store := contacts.NewStore(target.ContactsDir)
+			for _, id := range []string{"tg:123", "tg:456"} {
+				if err := store.PutContact(ctx, contacts.Contact{ContactID: id, Kind: contacts.KindHuman}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if _, err := store.SetContactStatus(ctx, "tg:456", contacts.StatusInactive); err != nil {
+				t.Fatal(err)
+			}
+			dir := t.TempDir()
+			for rel, content := range tc.files {
+				if err := os.MkdirAll(filepath.Dir(filepath.Join(dir, rel)), 0o700); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(dir, rel), []byte(content), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if _, err := Import(ctx, target, dir); err != nil {
+				t.Fatal(err)
+			}
+			if got := statuses(store); !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("contacts = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
