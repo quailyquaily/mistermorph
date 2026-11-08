@@ -1,13 +1,36 @@
 .mobile-bottom-menu-layer {
+  /* A sheet rises over a decelerating ease and drops away over an accelerating one, like the chat
+     workspace drawer. Reduced motion sets both to zero, so it simply appears and goes. */
+  --mobile-sheet-in: 280ms;
+  --mobile-sheet-out: 200ms;
+  --mobile-sheet-ease-in: cubic-bezier(0.16, 1, 0.3, 1);
+  --mobile-sheet-ease-out: cubic-bezier(0.7, 0, 0.84, 0);
   position: fixed;
   inset: 0;
   z-index: 49;
+  background-color: rgb(20 29 48 / 0%);
+  /* A closing sheet no longer takes taps; the page and the nav strip beneath answer at once. */
+  pointer-events: none;
+  transition: background-color var(--mobile-sheet-out) var(--mobile-sheet-ease-out);
 }
 
+.mobile-bottom-menu-layer.is-open {
+  background-color: rgb(20 29 48 / 14%);
+  pointer-events: auto;
+  transition: background-color var(--mobile-sheet-in) var(--mobile-sheet-ease-in);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mobile-bottom-menu-layer {
+    --mobile-sheet-in: 0ms;
+    --mobile-sheet-out: 0ms;
+  }
+}
+
+/* Catches the tap outside the sheet that closes it. */
 .mobile-bottom-menu-mask {
   position: absolute;
   inset: 0;
-  background: rgb(20 29 48 / 14%);
 }
 
 /* A sheet docked on the nav strip: full width, square, a hairline top rule, rising from
@@ -19,6 +42,9 @@
   left: 0;
   max-height: min(62dvh, 440px);
   overflow: hidden;
+  /* Closed, the sheet sits its own height lower, behind the nav strip and the screen's foot. */
+  transform: translate3d(0, 100%, 0);
+  transition: transform var(--mobile-sheet-out) var(--mobile-sheet-ease-out);
   border-top: 1px solid var(--line);
   background: var(--q-bg-white);
   color: var(--text-0);
@@ -98,22 +124,10 @@
   background: color-mix(in srgb, var(--q-c-blue) 14%, transparent);
 }
 
-.mobile-bottom-menu-enter-active,
-.mobile-bottom-menu-leave-active {
-  transition: opacity var(--motion-normal) var(--motion-ease);
-}
-
-.mobile-bottom-menu-enter-active .mobile-bottom-menu-panel,
-.mobile-bottom-menu-leave-active .mobile-bottom-menu-panel {
-  transition: translate var(--motion-normal) var(--motion-ease);
-}
-
-.mobile-bottom-menu-enter-from,
-.mobile-bottom-menu-leave-to {
-  opacity: 0;
-}
-
-.mobile-bottom-menu-enter-from .mobile-bottom-menu-panel,
-.mobile-bottom-menu-leave-to .mobile-bottom-menu-panel {
-  translate: 0 16px;
+/* Show and hide: the sheet slides its whole height up from behind the nav strip (which stays
+   above the layer) while the tint fades in, and back down as it fades out. Toggling mid-slide
+   turns it around from where it is. */
+.mobile-bottom-menu-layer.is-open .mobile-bottom-menu-panel {
+  transform: translate3d(0, 0, 0);
+  transition: transform var(--mobile-sheet-in) var(--mobile-sheet-ease-in);
 }
