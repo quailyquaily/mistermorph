@@ -1,6 +1,6 @@
 ---
 branch: factory/FT36-agent-db-usage-db
-round: 1
+round: 2
 ---
 # Move the agent's state into SQLite: agent.db and usage.db
 
@@ -108,3 +108,15 @@ Not verified: desktop/Android GUI and live Cloudflare/R2 backup. Import recovery
 
 ## factory · 2026-11-09 04:40
 Moved review → new at the owner’s request: "Move FT36 back to new". Continue on the existing branch and address the review findings.
+
+## factory · plan · 2026-11-09 05:01
+Fix round 2 addition: address both P1 and all five P2 findings from the latest review. Resolve contacts migration configuration before imports, preserve omitted status collections atomically, read config in one transaction, recover pending legacy renames without reparsing, export empty soul explicitly, authenticate desktop settings and retry after login, and read database config in setup repair. Reuse existing stores/authentication; no new features or config keys. Add regression coverage for each finding, including repeated startup, partial-import directions, concurrent reads, interrupted import, soul roundtrip, setup repair and desktop auth readiness.
+
+## factory · 2026-11-09 05:01
+Claude Code fixed all seven findings in eight topical commits, df7ff8c0..44ea8790. Pushed 44ea8790; round 2; new → review. The worktree is clean and forbidden paths are unchanged. No base merge was needed.
+
+Manager independently reran the configured gofmt/vet/test gate successfully. Coder reports 162 Go packages passing, repeated/race regression runs passing, and desktop cargo test --offline: 51 passed, 0 failed, 1 ignored. Console sources did not change, so nsh check/tests were not rerun. Scripted tests used absolute throwaway HOME directories.
+
+No installs or manifest/lockfile changes. Desktop test build used temporary symlinks to existing system libraries and RUST_FONTCONFIG_DLOPEN; coder removed its temporary build output.
+
+Not checked manually: desktop/browser/Android interfaces, especially password-protected desktop login and update checks. No live Cloudflare/R2 backup, real power-loss test, nsh production build or rustfmt check. Import interruption was simulated. Owner should inspect migration recovery, partial contacts import and desktop login/update behavior after the next review. No deployment or merge into master.
