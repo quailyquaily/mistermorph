@@ -4,7 +4,7 @@
 // window around the total. Beside it, the selected part's sections or messages, and the selected
 // one's text. Phones (≤ 720 points) show one level at a time: the overview, a part's items, an
 // item's text; Back steps up a level before it leaves for the topic.
-import { batch, Canvas, computed, effect, Scroll, signal, Text, token, untracked, View, windowSize } from "nsh";
+import { batch, Canvas, computed, effect, platform, Scroll, signal, Text, token, untracked, View, windowSize } from "nsh";
 import { Button as BaseButton } from "nsh/base";
 import { Button, Icon, Page, Spinner, Tip } from "../../components/ui";
 import { t } from "../../components/chat/i18n";
@@ -233,21 +233,16 @@ export function ContextPage() {
       goPhoneStep(untracked(phoneStep) - 1);
       return;
     }
-    void router.push(topicPath());
+    if (platform.os === "android") {
+      if (!goBack()) void router.replace(topicPath());
+    } else {
+      void router.push(topicPath());
+    }
   }
 
-  // Android's Back steps back through the phone's views, then goes back to where the inspector was
-  // opened from; opened first (the app reopened here), it goes to the topic in its place.
-  onSystemBack(
-    () => true,
-    () => {
-      if (untracked(isPhone) && untracked(phoneStep) > 0) {
-        goPhoneStep(untracked(phoneStep) - 1);
-        return;
-      }
-      if (!goBack()) void router.replace(topicPath());
-    },
-  );
+  // Android's system and topbar Back share the same steps and history: opened first (the app
+  // reopened here), the topic replaces the inspector instead of leaving it behind in history.
+  onSystemBack(() => true, back);
 
   // Selecting the selected part again clears the selection.
   function togglePart(kind: string) {

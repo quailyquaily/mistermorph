@@ -61,6 +61,9 @@ test("back leaves for the topic's chat", async () => {
   await app.waitFor("id:context-page", { state: "gone" });
   // The chat opens on that topic: it asks for it by its id.
   await app.waitUntil(() => calls.some((call) => call.uri === "/topics/topic-1"));
+  expect(app.host.calls().some((call) =>
+    call.name === "morph.history" && (call.data as any)?.op === "push" && (call.data as any)?.url === "/e/default/chat/topic-1",
+  )).toBe(true);
 });
 
 test("a runtime without the route says it cannot show the window", async () => {

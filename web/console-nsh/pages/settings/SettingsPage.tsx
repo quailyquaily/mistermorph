@@ -8,7 +8,7 @@ import { Button as BaseButton, Input } from "nsh/base";
 import { endpointState } from "../../lib/core/context.js";
 import { endpointRoutePath } from "../../lib/core/endpoint-routes.js";
 import { buildSettingsSearchIndex, searchSettings } from "../../lib/core/settings-search.js";
-import { goBack, previousLocation } from "../../lib/platform";
+import { previousLocation } from "../../lib/platform";
 import { currentRoute, navigate, setLeaveGuard } from "../../lib/router";
 import { isMobile } from "../../lib/shell";
 import { onSystemBack } from "../../lib/systemBack";
@@ -128,9 +128,15 @@ export function SettingsPage() {
   // Android's Back from a section goes to the sections, as the bar's back arrow does. A section
   // opened from the sections also goes back to their address, so the next Back leaves Settings
   // instead of only changing the address under the same screen.
-  onSystemBack(mobileShowBack, () => {
+  onSystemBack(mobileShowBack, async () => {
+    const indexPath = endpointRoutePath(endpointState.selectedRef, "/settings");
+    if (previousLocation() === indexPath) {
+      // Replacing with the previous entry removes this section from mobile history. Wait for
+      // the leave guard and route to finish before hiding the editor; cancellation keeps it.
+      await navigate(indexPath, { replace: true });
+      if (disposed || untracked(() => currentRoute().path) !== indexPath) return;
+    }
     mobilePanelVisible.set(false);
-    if (previousLocation() === endpointRoutePath(endpointState.selectedRef, "/settings")) goBack();
   });
   const barTitle = () => (mobileShowBack() ? s.selectedSection()?.title || t("settings_title") : t("settings_title"));
   const sectionID = () => s.selectedSection()?.id || "";

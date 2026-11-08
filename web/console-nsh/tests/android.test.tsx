@@ -143,6 +143,98 @@ test("Back steps up through the context inspector, then to its topic, also when 
   await expectSystemBack(app);
 });
 
+test("Settings Back keeps the editor and draft on cancel, and leaves only after Discard", async () => {
+  const { app } = await openConsole({
+    platform: "android",
+    location: "/e/default/settings",
+    api: {
+      ...QUIET,
+      "GET /settings/agent": {
+        body: {
+          config_revision: "rev-1",
+          llm: { inference_provider: "openai", model: "gpt-5.2", profiles: [], fallback_profiles: [] },
+          tools: { web_search: { enabled: false } },
+          mcp: { servers: [] },
+          config_values: {},
+          field_states: {},
+        },
+      },
+    },
+  });
+  await app.waitFor("id:settings-section-tools");
+  await app.press("id:settings-section-tools");
+  await app.waitFor("id:settings-tool-web_search-switch");
+  await app.press("id:settings-tool-web_search-switch");
+  await app.waitFor("id:settings-save-bar");
+
+  await app.back();
+  await app.waitFor("id:dialog-action-cancel");
+  await app.press("id:dialog-action-cancel");
+  await app.waitFor("id:dialog-action-cancel", { state: "gone" });
+  await app.waitUntil(() => location(app) === "/e/default/settings/tools");
+  expect(app.shows("id:settings-tool-web_search-switch")).toBe(true);
+  expect(app.shows("id:settings-back")).toBe(true);
+  expect(app.shows("id:settings-index")).toBe(false);
+  expect(app.shows("id:settings-save-bar")).toBe(true);
+  // The changed value survived cancellation: toggling it back clears the draft.
+  await app.press("id:settings-tool-web_search-switch");
+  await app.waitFor("id:settings-save-bar", { state: "gone" });
+  await app.press("id:settings-tool-web_search-switch");
+  await app.waitFor("id:settings-save-bar");
+
+  await app.back();
+  await app.waitFor("id:dialog-action-confirm");
+  expect(app.shows("id:settings-tool-web_search-switch")).toBe(true);
+  await app.press("id:dialog-action-confirm");
+  await app.waitFor("id:settings-index");
+  await app.waitUntil(() => location(app) === "/e/default/settings");
+  expect(app.shows("id:settings-tool-web_search-switch")).toBe(false);
+  expect(app.shows("id:settings-save-bar")).toBe(false);
+  await expectSystemBack(app);
+});
+
+for (const restored of [true, false]) {
+  test(`Context topbar Back does not leave the inspector in history (${restored ? "restored" : "opened from topic"})`, async () => {
+    const { app } = await openConsole({
+      platform: "android",
+      location: `/e/default/chat/topic-1${restored ? "/context" : ""}`,
+      api: {
+        ...QUIET,
+        "GET /proxy:/topics": TOPICS,
+        "GET /proxy:/topic/topic-1/context": { body: CONTEXT },
+        "GET /proxy:/topic/topic-1/metadata": {
+          body: { context: { available: true, used_input_tokens: 1000, context_window_tokens: 100000 } },
+        },
+      },
+    });
+    if (!restored) {
+      await app.waitFor("id:chat-workspace-toggle");
+      await app.press("id:chat-workspace-toggle");
+      await app.waitFor("id:chat-topic-context-inspect");
+      await app.press("id:chat-topic-context-inspect");
+    }
+    await app.waitFor("id:context-overview");
+    await app.press("id:context-part-history");
+    await app.waitFor("id:context-items");
+    await app.press("id:context-back");
+    await app.waitFor("id:context-overview");
+    expect(location(app)).toBe("/e/default/chat/topic-1/context");
+    await app.press("id:context-back");
+    await app.waitFor("id:chat-back");
+    await app.waitUntil(() => location(app) === "/e/default/chat/topic-1");
+    if (!restored) {
+      // The topic restores its open workspace sheet; Back closes that before the topic.
+      await app.waitFor("id:chat-topic-context-inspect");
+      await app.back();
+      await app.waitFor("id:chat-topic-context-inspect", { state: "gone" });
+    }
+    await app.back();
+    await app.waitFor("id:chat-topic-sidebar");
+    await app.waitUntil(() => location(app) === "/e/default/chat");
+    await expectSystemBack(app);
+  });
+}
+
 test("a dialog takes Back before the page: on the login page, Back closes the server dialog", async () => {
   const { app } = await openConsole({ platform: "android", password: true, location: "/e/default/todo" });
   await app.waitUntil(() => location(app).startsWith("/login"));
