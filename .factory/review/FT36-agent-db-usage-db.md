@@ -88,3 +88,20 @@ Install: unpinned user-level goimports @latest; local pkg-config shim for existi
 Review attention: topic legacy files rename individually because the folder holds out-of-scope state; legacy contact profiles are retained in meta then moved to memories later, and unknown contact YAML keys are no longer kept. Config preserves otherwise-unrepresentable values in settings, normalizes profile-only route objects, and permits legacy bootstrap state-folder resolution. Agent DB timestamps generally use second precision. Empty test-generated SQLite artifacts were accidentally included in an intermediate commit, then removed without rewriting history; coder inspected them and reported only schema/import markers, no user data or secrets. Empty-state-dir regression tests prevent recreation.
 
 Not checked manually: browser, desktop and Android UI, especially persona/heartbeat editors and TODO last-run display. No live Cloudflare/R2 backup test; no nsh production build or pinned-toolchain rustfmt check. Review should verify these differences and migration safety before approving shipment.
+
+## factory · review · 2026-11-09 03:49
+head: df7ff8c070fd396a6d57fcdf6885a8d982327908
+verdict: fix
+fix:
+- [P1] cmd/mistermorph/root.go:275: Contacts migration runs before config is loaded, ignoring custom contacts.dir_name. Example: contacts.dir_name=people with people/ACTIVE.md produces an empty contacts table on two successive starts while imported:contacts is already set. Resolve migration configuration before importing and marking completion.
+- [P1] internal/statefiles/statefiles.go:241: Partial contacts import calls ReplaceAll and deletes the omitted status collection. Example: active tg:123 and inactive tg:456, importing only contacts/ACTIVE.md succeeds but deletes tg:456. Replace only supplied collections atomically; preserve omitted ones.
+notes:
+- [P2] internal/configstore/store.go:87: Multi-table config reads lack a consistent transaction snapshot. Alternating two coherent configurations produced an export with llm.model=B and review_marker=A, a combination never committed. Read all tables within one transaction.
+- [P2] internal/configstore/store.go:515: Config import does not recover the post-commit/pre-rename interruption. Recreating that state leaves the legacy file unrenamed on restart; corrupting it then makes config where exit 1 despite valid database config. Persist pending rename state and retry without parsing an already imported source.
+- [P2] internal/statefiles/statefiles.go:84: Exporting an empty soul leaves a stale soul.md. Export Old soul, clear the database soul, export to the same directory, then import: Old soul is restored. Export an explicit empty value.
+- [P2] desktop/nsh/src/config.rs:82: Desktop auto-update settings request lacks authentication. With a Console password and auto-update enabled, the request returns 401 whereas an authenticated request returns enabled; after YAML migration the desktop falls back to disabled without retry. Use authenticated local access and retry after authentication is ready.
+- [P2] cmd/mistermorph/consolecmd/setup_repair.go:148: Setup repair reads the database config identifier as a filesystem path. With valid database config, authenticated GET /console/api/setup/file?key=config returns 404. Use configstore.ReadFile.
+
+Codex reviewed origin/master...HEAD against the design and item plan. No merge conflicts with origin/master. Configured gofmt/vet/test gate passed (162 Go packages); nsh check passed; nsh test --web-host tests/noHost.js passed (276 tests). Scripted tests used an isolated absolute temporary HOME. No installs; no tracked code changes or commits. Review-code skill was unavailable in the coder environment; review requirements were supplied in the task.
+
+Not verified: desktop/Android GUI and live Cloudflare/R2 backup. Import recovery was tested by recreating interrupted state, not a real power loss. Reproduction artifacts retained locally. No linked GitHub issue or PR was present. Item stays in review/ for the owner to decide; add a note and move to new/ for fixes.
