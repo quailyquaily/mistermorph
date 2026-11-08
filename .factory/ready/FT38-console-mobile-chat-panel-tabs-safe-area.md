@@ -28,3 +28,13 @@ The Android sheet now applies its own top/right/bottom insets (keyboard replaces
 Tests: manager independently passed gofmt cleanliness, go vet ./..., go test ./..., nsh check, and nsh test --web-host tests/noHost.js (296/296). Added 11 focused tests plus fixture coverage for sheet geometry and interaction; coder reports the new inset/width tests fail against old behaviour.
 Installs: none; no manifest changes.
 Not checked: no real Android device/emulator or actual full-console browser/desktop visual inspection was available. Coder inspected only headless screenshots of a throwaway replica with simulated 24pt inset; these are not real-app visual verification. Landscape and keyboard behaviour have helper-test coverage only. Owner/reviewer should inspect the actual mobile panel on Android, including selected/unselected tabs and nonzero top inset. Other side sheets remain out of scope.
+
+## factory · review · 2026-11-09 07:57
+head: 7898ddb01f94bea606da4a02d120af9a7e0d8c36
+verdict: pass
+notes:
+- Codex reviewed all eight changed files against origin/master and the request/plan; no findings. Branch merges cleanly with base.
+- Validation by Codex: gofmt cleanliness, go vet ./..., go test ./..., nsh check, nsh test --web-host tests/noHost.js (296/296), nsh build and diff whitespace checks passed. Tests used an isolated HOME.
+- Installs: no unpinned installs or manifest changes; pinned TypeScript 7.0.2 restored. Worktree clean and reviewed HEAD unchanged.
+- Residual risks: no real Android device/emulator or full-app browser/desktop visual inspection. Landscape and keyboard inset behavior have helper-test coverage only; native rendering, touch hit targets and dynamic inset changes remain unverified on device. Owner should inspect the actual mobile panel with a nonzero top inset before shipping.
+- Moved review/ → ready/. No linked GitHub issue or PR.
