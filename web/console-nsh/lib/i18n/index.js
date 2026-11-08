@@ -450,6 +450,9 @@ const I18N = {
     logs_load_older: "Load older",
     logs_no_older: "No older logs",
     chat_topics_load_older: "Load older topics",
+    chat_topics_search: "Search topics",
+    chat_topics_search_empty: "No loaded topic title matches “{query}”.",
+    chat_topics_search_older: "Load older topics to search further back.",
     logs_new_available: "Logs have been updated",
     logs_latest: "Latest",
 
@@ -2273,6 +2276,9 @@ const I18N = {
     logs_load_older: "加载更早日志",
     logs_no_older: "没有更早日志",
     chat_topics_load_older: "加载更早话题",
+    chat_topics_search: "搜索话题",
+    chat_topics_search_empty: "已加载的话题中没有标题匹配“{query}”。",
+    chat_topics_search_older: "加载更早话题以继续往前搜索。",
     logs_new_available: "日志有更新",
     logs_latest: "最新",
 
@@ -4095,6 +4101,9 @@ const I18N = {
     logs_load_older: "古いログを読み込む",
     logs_no_older: "古いログはありません",
     chat_topics_load_older: "古いトピックを読み込む",
+    chat_topics_search: "トピックを検索",
+    chat_topics_search_empty: "読み込み済みのトピックに「{query}」と一致するタイトルはありません。",
+    chat_topics_search_older: "さらに前を検索するには、以前のトピックを読み込んでください。",
     logs_new_available: "ログが更新されました",
     logs_latest: "最新",
 

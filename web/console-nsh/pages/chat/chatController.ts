@@ -809,7 +809,8 @@ export function createChatController() {
   const topicGroupCollapsed = (group: any) => topicGroupCollapsible(group) && collapsedTopicGroups().has(group.key);
 
   function toggleTopicGroup(group: any) {
-    if (!untracked(() => topicGroupCollapsible(group))) return;
+    // While a search lasts every matching group is open and its heading is no toggle.
+    if (untracked(topicSearching) || !untracked(() => topicGroupCollapsible(group))) return;
     const keys = new Set(untracked(collapsedTopicGroups));
     if (keys.has(group.key)) keys.delete(group.key);
     else keys.add(group.key);
@@ -817,17 +818,46 @@ export function createChatController() {
     localStore.setItem(TOPIC_GROUPS_COLLAPSED_STORAGE_KEY, JSON.stringify([...keys]));
   }
 
+  // The sidebar's search: a filter on the titles (as the rows show them, fallbacks included) of
+  // the loaded topics in the current view. It asks the runtime for nothing; older topics join it
+  // once loaded. It lives as long as the page and is not saved.
+  const topicSearch = signal("");
+  const topicSearchQuery = computed(() => topicSearch().trim().toLowerCase());
+  const topicSearching = () => topicSearchQuery() !== "";
+  const setTopicSearch = (value: string) => topicSearch.set(String(value ?? ""));
+  const topicMatchesSearch = (topic: any, query: string) => !query || topicTitle(topic).toLowerCase().includes(query);
+
+  // The current view's groups with only the matching topics, before they become rows: a group
+  // without a match goes, and a folded group with one opens while the search lasts (its saved
+  // fold stays as it was).
+  const searchedTopicGroups = computed((): any[] => {
+    const query = topicSearchQuery();
+    const groups = topicSidebarGroups();
+    if (!query) return groups;
+    const out: any[] = [];
+    for (const group of groups) {
+      const matches = (group.topics || []).filter((topic: any) => topicMatchesSearch(topic, query));
+      if (matches.length > 0) out.push({ ...group, topics: matches });
+    }
+    return out;
+  });
+
   /** The topic list as rows for the virtualized list: notes, group headings, topics. */
   const topicRows = computed((): TopicRow[] => {
     const rows: TopicRow[] = [];
     const view = topicSidebarView();
-    const groups = topicSidebarGroups();
-    if (view === "tags" && knownTags().length === 0 && groups.length > 0) rows.push({ kind: "note", key: "note:tags", text: t("chat_topics_tags_hint") });
+    const searching = topicSearching();
+    const groups = searchedTopicGroups();
+    if (view === "tags" && !searching && knownTags().length === 0 && groups.length > 0) rows.push({ kind: "note", key: "note:tags", text: t("chat_topics_tags_hint") });
     if (view === "agents" && agentTopics().length === 0) rows.push({ kind: "note", key: "note:agents", text: t("chat_topics_agents_empty") });
     if (view === "cron" && cronTopics().length === 0) rows.push({ kind: "note", key: "note:cron", text: t("chat_topics_cron_empty") });
+    if (searching && groups.length === 0 && topicSidebarGroups().some((group) => (group.topics || []).length > 0)) {
+      rows.push({ kind: "note", key: "note:search-empty", text: t("chat_topics_search_empty", { query: topicSearch().trim() }) });
+      if (topicsNextCursor()) rows.push({ kind: "note", key: "note:search-older", text: t("chat_topics_search_older") });
+    }
     for (const group of groups) {
-      const collapsible = topicGroupCollapsible(group);
-      const collapsed = topicGroupCollapsed(group);
+      const collapsible = !searching && topicGroupCollapsible(group);
+      const collapsed = collapsible && topicGroupCollapsed(group);
       if (group.label) rows.push({ kind: "group", key: `group:${group.key}`, group, collapsible, collapsed });
       if (collapsed) continue;
       for (const topic of group.topics) rows.push({ kind: "topic", key: `topic:${group.key}:${normalizeTopicID(topic?.id)}`, topic, group });
@@ -3083,6 +3113,9 @@ export function createChatController() {
     cronToggleLabel,
     cronToggleTitle,
     topicRows,
+    topicSearch,
+    topicSearching,
+    setTopicSearch,
     selectedTopicIsAgent,
     selectedTopicIsCron,
     workspaceTopicID,

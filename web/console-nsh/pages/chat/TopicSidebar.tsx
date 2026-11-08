@@ -1,6 +1,7 @@
 // The topic list beside the conversation (the whole screen on phones): its views (by date, by tag,
-// the agents' topics, the TODO items' runs with their running count), foldable groups, each topic
-// with its icon, title and activity mark, and older topics on demand. Metrics from the Vue
+// the agents' topics, the TODO items' runs with their running count), a search on the loaded
+// topics' titles, foldable groups, each topic with its icon, title and activity mark, and older
+// topics on demand. Metrics from the Vue
 // console's ChatView.css / common.css (`.chat-topic-*`, `.workspace-sidebar-*`): a 57pt head, rows
 // 40pt tall 2pt apart (44 on phones) with a 20pt icon and a 14pt title that fades where it is cut,
 // group labels in mono caps with a hairline running out to the right, one selection highlight that
@@ -9,9 +10,9 @@
 // The rows are an `Each` in a scroll view rather than a virtualized List: a sidebar holds dozens of
 // topics (older ones load on demand), and the sliding highlight must share the rows' parent to
 // measure them and move with them.
-import { createAnimatedValue, Image, Scroll, Text, token, View } from "nsh";
+import { cleanup, createAnimatedValue, effect, Image, keymap, Scroll, signal, Text, token, View } from "nsh";
 import { Button as BaseButton } from "nsh/base";
-import { Button, Icon, Spinner, Tip, TipButton } from "../../components/ui";
+import { Button, Icon, Spinner, TextField, Tip, TipButton } from "../../components/ui";
 import { ContactAvatar } from "../../components/shared/ContactAvatar";
 import { gutterX } from "../../components/knowledge/parts";
 import { FadeText } from "../../components/motion/FadeText";
@@ -89,6 +90,12 @@ export function TopicSidebar(props: { c: ChatController; class?: string }) {
   // the title at the page's 12pt, rows edge to edge with their content 12pt in, group labels at 14.
   // The desktop sidebar keeps its 16pt list gutter and 25.6pt title.
   const rowPadding = () => (c.mobileMode() ? "px-3" : "pl-3.5 pr-[13px]");
+  // Escape empties the search while it has the focus and holds text.
+  const searchFocused = signal(false);
+  effect(() => {
+    if (!searchFocused() || !c.topicSearch()) return;
+    cleanup(keymap.bind("escape", () => c.setTopicSearch(""), { when: "always" }));
+  });
 
   const topicRow = (row: () => Extract<TopicRow, { kind: "topic" }>) => (
     <TipButton
@@ -181,57 +188,75 @@ export function TopicSidebar(props: { c: ChatController; class?: string }) {
 
   return (
     <View class={`bg-sidebar ${props.class ?? ""}`} testID="chat-topic-sidebar">
-      {/* The head: the title on the left, the view toggles and New flush at the right. A hairline
-          under it shows once topics have scrolled beneath it. */}
+      {/* The head: the title on the left, the view toggles and New flush at the right, and the
+          search under them. A hairline under both shows once topics have scrolled beneath. */}
       <View
-        class={`h-[57px] flex-row items-center ${c.mobileMode() ? "" : "pl-[25.6px]"} transition-colors duration-[180ms] border-b ${
-          edges.scrolled() ? "border-line-faint" : "border-transparent"
-        }`}
-        style={c.mobileMode() ? { paddingLeft: gutterX(), paddingRight: gutterX() } : undefined}
+        class={`transition-colors duration-[180ms] border-b ${edges.scrolled() ? "border-line-faint" : "border-transparent"}`}
       >
-        <View class="mr-3 flex-1" onPress={() => c.clickTopicSidebarTitle()} testID="chat-topics-title">
-          <Text class="text-xl leading-6 tracking-[-0.03em] text-foreground" role="header">
-            {t("chat_topics_title")}
-          </Text>
-        </View>
-        <If when={c.agentTopics().length > 0 || view() === "agents"}>
+        <View
+          class={`h-[57px] flex-row items-center ${c.mobileMode() ? "" : "pl-[25.6px]"}`}
+          style={c.mobileMode() ? { paddingLeft: gutterX(), paddingRight: gutterX() } : undefined}
+        >
+          <View class="mr-3 flex-1" onPress={() => c.clickTopicSidebarTitle()} testID="chat-topics-title">
+            <Text class="text-xl leading-6 tracking-[-0.03em] text-foreground" role="header">
+              {t("chat_topics_title")}
+            </Text>
+          </View>
+          <If when={c.agentTopics().length > 0 || view() === "agents"}>
+            <ViewToggle
+              icon="PhRobot"
+              label={t("chat_topics_view_agents")}
+              title={view() === "agents" ? t("chat_topics_view_date") : t("chat_topics_view_agents")}
+              active={view() === "agents"}
+              onPress={() => toggle("agents")}
+              testID="chat-topics-view-agents"
+            />
+          </If>
           <ViewToggle
-            icon="PhRobot"
-            label={t("chat_topics_view_agents")}
-            title={view() === "agents" ? t("chat_topics_view_date") : t("chat_topics_view_agents")}
-            active={view() === "agents"}
-            onPress={() => toggle("agents")}
-            testID="chat-topics-view-agents"
+            icon="PhAlarm"
+            label={c.cronToggleLabel()}
+            title={c.cronToggleTitle()}
+            active={view() === "cron"}
+            running={c.cronRunning() > 0}
+            onPress={() => toggle("cron")}
+            testID="chat-topics-view-cron"
           />
-        </If>
-        <ViewToggle
-          icon="PhAlarm"
-          label={c.cronToggleLabel()}
-          title={c.cronToggleTitle()}
-          active={view() === "cron"}
-          running={c.cronRunning() > 0}
-          onPress={() => toggle("cron")}
-          testID="chat-topics-view-cron"
-        />
-        <ViewToggle
-          icon="PhTag"
-          label={t("chat_topics_view_tags")}
-          title={view() === "tags" ? t("chat_topics_view_date") : t("chat_topics_view_tags")}
-          active={view() === "tags"}
-          onPress={() => toggle("tags")}
-          testID="chat-topics-view-tags"
-        />
-        <If when={!c.mobileTopicSplitEnabled()}>
-          <TipButton
-            onPress={() => c.startNewTopic()}
-            accessibilityLabel={t("chat_topic_new")}
-            tooltip={<Tip text={t("chat_topic_new")} />}
-            testID="chat-topic-new"
-            class="size-[38px] items-center justify-center rounded-(--radius) transition-colors duration-[180ms] hover:bg-hover-soft"
-          >
-            <Icon name="PhPlus" size={14} color="subtle" />
-          </TipButton>
-        </If>
+          <ViewToggle
+            icon="PhTag"
+            label={t("chat_topics_view_tags")}
+            title={view() === "tags" ? t("chat_topics_view_date") : t("chat_topics_view_tags")}
+            active={view() === "tags"}
+            onPress={() => toggle("tags")}
+            testID="chat-topics-view-tags"
+          />
+          <If when={!c.mobileTopicSplitEnabled()}>
+            <TipButton
+              onPress={() => c.startNewTopic()}
+              accessibilityLabel={t("chat_topic_new")}
+              tooltip={<Tip text={t("chat_topic_new")} />}
+              testID="chat-topic-new"
+              class="size-[38px] items-center justify-center rounded-(--radius) transition-colors duration-[180ms] hover:bg-hover-soft"
+            >
+              <Icon name="PhPlus" size={14} color="subtle" />
+            </TipButton>
+          </If>
+        </View>
+        {/* The search: the loaded topics of this view whose title holds the text, as it is typed.
+            It aligns with the rows (the list's 16pt gutter; the phone gutter on a phone). */}
+        <View class={`pb-2 ${c.mobileMode() ? "" : "px-4"}`} style={c.mobileMode() ? { paddingLeft: gutterX(), paddingRight: gutterX() } : undefined}>
+          <TextField
+            value={c.topicSearch()}
+            onChange={(value) => c.setTopicSearch(value)}
+            onFocus={() => searchFocused.set(true)}
+            onBlur={() => searchFocused.set(false)}
+            placeholder={t("chat_topics_search")}
+            accessibilityLabel={t("chat_topics_search")}
+            leadingIcon="PhMagnifyingGlass"
+            size={c.mobileMode() ? "md" : "sm"}
+            clearable
+            testID="chat-topics-search"
+          />
+        </View>
       </View>
       <If when={c.topicsLoading() && c.topicRows().length === 0}>
         <Spinner class="items-center py-3" />
