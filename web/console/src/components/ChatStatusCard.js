@@ -1,4 +1,4 @@
-import { computed, nextTick, onBeforeUpdate, onMounted, onUpdated, ref } from "vue";
+import { computed, nextTick, onBeforeUnmount, onBeforeUpdate, onMounted, onUpdated, ref, watch } from "vue";
 import { localeState, translate } from "../core/context";
 import { activityWorkerLabel } from "../core/chat-task-history";
 import "./ChatStatusCard.css";
@@ -304,6 +304,35 @@ const ChatStatusCard = {
       void nextTick(scrollDetailsToBottom);
     });
 
+    function rememberDetailsPinned() {
+      keepDetailsPinned = detailsAtBottom();
+    }
+
+    // The panel's height follows the window, so a resize can leave a panel that was following the
+    // latest entry short of the bottom; it keeps following. A panel the reader scrolled up in stays
+    // where it is. Only the panel's own scroll moves, never the history around it.
+    let detailsResizeObserver = null;
+    function observeDetailsSize(node) {
+      detailsResizeObserver?.disconnect();
+      detailsResizeObserver = null;
+      if (!node || typeof ResizeObserver === "undefined") {
+        return;
+      }
+      detailsResizeObserver = new ResizeObserver(() => {
+        if (keepDetailsPinned) {
+          scrollDetailsToBottom();
+        }
+      });
+      detailsResizeObserver.observe(node);
+    }
+
+    watch(detailsRef, observeDetailsSize, { flush: "post" });
+
+    onBeforeUnmount(() => {
+      detailsResizeObserver?.disconnect();
+      detailsResizeObserver = null;
+    });
+
     return {
       t,
       PANEL_PLAN,
@@ -311,6 +340,7 @@ const ChatStatusCard = {
       PANEL_REASONING,
       activePanel,
       detailsRef,
+      rememberDetailsPinned,
       planSteps,
       activityItems,
       isExpanded,
@@ -383,12 +413,12 @@ const ChatStatusCard = {
       <Transition name="chat-status-crack">
         <div
           v-if="
-            (isExpanded(PANEL_PLAN) && plan) ||
-            (isExpanded(PANEL_ACTIVITY) && activity)
+            (isExpanded(PANEL_PLAN) && plan && planSteps.length > 0) ||
+            (isExpanded(PANEL_ACTIVITY) && activity && activityItems.length > 0)
           "
           class="chat-status-details-shell"
         >
-          <div ref="detailsRef" class="chat-status-details">
+          <div ref="detailsRef" class="chat-status-details" @scroll.passive="rememberDetailsPinned">
             <section v-if="isExpanded(PANEL_PLAN) && plan" class="chat-status-detail">
               <ol class="chat-plan-list">
                 <li

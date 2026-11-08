@@ -61,6 +61,10 @@ const ChatHistoryList = {
       type: String,
       default: "",
     },
+    copiedPulse: {
+      type: Number,
+      default: 0,
+    },
     expandedState: {
       type: Object,
       default: () => ({}),
@@ -232,6 +236,7 @@ const ChatHistoryList = {
       :submit-endpoint-ref="submitEndpointRef"
       :selected-topic-id="selectedTopicId"
       :copied="copied(item)"
+      :copy-pulse="copied(item) ? copiedPulse : 0"
       :expanded-panel="expandedPanel(item)"
       :auto-preview="autoPreview(item)"
       :stream-profiler="streamProfiler"

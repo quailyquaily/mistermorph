@@ -85,6 +85,11 @@ const ChatHistoryItem = {
       type: Boolean,
       default: false,
     },
+    // Raised on every successful copy; its parity restarts the copied animation on a repeat copy.
+    copyPulse: {
+      type: Number,
+      default: 0,
+    },
     expandedPanel: {
       type: String,
       default: "",
@@ -190,9 +195,12 @@ const ChatHistoryItem = {
       const match = /\.([a-z0-9]{1,6})$/i.exec(String(file?.name || ""));
       return match ? match[1].toUpperCase() : "";
     }
-    const copyButtonClass = computed(() =>
-      props.copied ? "chat-history-copy-action is-copied" : "chat-history-copy-action"
-    );
+    const copyButtonClass = computed(() => {
+      if (!props.copied) {
+        return "chat-history-copy-action";
+      }
+      return `chat-history-copy-action is-copied ${props.copyPulse % 2 === 0 ? "is-copied-even" : "is-copied-odd"}`;
+    });
     const approvalStatus = computed(() => {
       const value = String(props.item?.approval?.status || "").trim().toLowerCase();
       return value === "denied" || value === "expired" ? value : "pending";
@@ -399,7 +407,7 @@ const ChatHistoryItem = {
     </div>
     <article
       :class="itemClass"
-      v-memo="[item, arriving, copied, expandedPanel, autoPreview, streamProfiler, submitEndpointRef, selectedTopicId, approvalApproveLabel, approvalDenyLabel, approvalTitle]"
+      v-memo="[item, arriving, copied, copyPulse, expandedPanel, autoPreview, streamProfiler, submitEndpointRef, selectedTopicId, approvalApproveLabel, approvalDenyLabel, approvalTitle]"
     >
       <span
         v-if="statusText && role !== 'agent'"
