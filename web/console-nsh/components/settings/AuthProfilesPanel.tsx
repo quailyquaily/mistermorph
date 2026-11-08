@@ -6,7 +6,8 @@
 import { batch, effect, signal, Text, untracked, View } from "nsh";
 import { Collapsible } from "nsh/base";
 import { HTTP_METHOD_OPTIONS } from "../../lib/core/config-options.js";
-import { Button, Icon, Section, TextField, Toggle } from "../ui";
+import { Button, Icon, TextField, Toggle } from "../ui";
+import { SettingsCard } from "../settings-page/parts";
 import { SettingChoices, SettingField, SettingFieldGrid, SettingSelect } from "./SettingFields";
 
 /** An auth profile as the runtime reports it. */
@@ -171,8 +172,7 @@ export function AuthProfilesPanel(props: AuthProfilesPanelProps) {
   };
 
   return (
-    <Section
-      variant="card"
+    <SettingsCard
       title="Auth profiles"
       meta="Credentials and request limits used by authenticated HTTP tools."
       actions={
@@ -203,6 +203,7 @@ export function AuthProfilesPanel(props: AuthProfilesPanelProps) {
                   <SettingField label="Name">
                     <TextField
                       value={profile().name}
+                      clearable={Boolean(profile().name)}
                       disabled={busy()}
                       accessibilityLabel={label("Name")}
                       onChange={(value) => update(key, { name: value })}
@@ -211,6 +212,7 @@ export function AuthProfilesPanel(props: AuthProfilesPanelProps) {
                   <SettingField label="Credential kind">
                     <TextField
                       value={profile().credential_kind}
+                      clearable={Boolean(profile().credential_kind)}
                       disabled={busy()}
                       accessibilityLabel={label("Credential kind")}
                       onChange={(value) => update(key, { credential_kind: value })}
@@ -219,6 +221,7 @@ export function AuthProfilesPanel(props: AuthProfilesPanelProps) {
                   <SettingField label="Credential secret" wide>
                     <TextField
                       value={profile().credential_secret}
+                      clearable={Boolean(profile().credential_secret)}
                       masked
                       placeholder={profile()._configured ? "Configured — enter a new value to replace" : "Required"}
                       disabled={busy()}
@@ -274,6 +277,7 @@ export function AuthProfilesPanel(props: AuthProfilesPanelProps) {
                             <SettingField label="Header name" wide>
                               <TextField
                                 value={entry()[1]?.inject?.name || ""}
+                                clearable={Boolean(entry()[1]?.inject?.name || "")}
                                 disabled={busy()}
                                 accessibilityLabel="Header name"
                                 onChange={(value) => updateInjection(key, entry()[0], "name", value)}
@@ -309,7 +313,7 @@ export function AuthProfilesPanel(props: AuthProfilesPanelProps) {
                       </View>
                     </Collapsible>
                   </SettingField>
-                  <View class="w-full flex-row flex-wrap gap-4">
+                  <View class="col-span-full flex-row flex-wrap gap-4">
                     <Toggle
                       class="grow basis-40"
                       checked={profile().deny_private_ips}
@@ -347,6 +351,6 @@ export function AuthProfilesPanel(props: AuthProfilesPanelProps) {
         </Each>
         <Button variant="outlined" label="Add auth profile" icon="PhPlus" disabled={busy()} onPress={add} />
       </View>
-    </Section>
+    </SettingsCard>
   );
 }

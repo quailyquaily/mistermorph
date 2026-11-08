@@ -13,7 +13,7 @@ test("routes: select a route, split it, step the shares and save", async () => {
   await app.waitFor("text:Reset to default");
   await app.press("id:profile-smart >> label:Split");
   await app.waitUntil(() => out(app, "dirty") === "true");
-  await app.press("id:node-more-smart");
+  await app.press("id:line-more-smart");
   await app.press("id:routes-save");
   await app.waitUntil(() => out(app, "saved") !== "null");
   const saved = JSON.parse(out(app, "saved"));
@@ -30,7 +30,7 @@ test("routes: a fallback is added in order, and a problem blocks the save", asyn
   await app.waitFor("id:route-main_loop");
   await app.press("id:route-main_loop");
   await app.press("id:profile-default >> label:Fallback");
-  await app.waitFor("text:fallback 1");
+  await app.waitFor("text:FALLBACK 1");
   await app.press("text:Done");
   // Addressing names a profile that does not exist: saving says so.
   await app.press("id:route-addressing");
@@ -49,7 +49,7 @@ test("routes: Add profile asks the page to start one", async () => {
 
 test("auth profiles: Save waits for a complete profile and sends the list", async () => {
   const { app } = await openFixture("/auth");
-  await app.waitFor("text:Auth profiles");
+  await app.waitFor("text:AUTH PROFILES");
   await app.press("text:Add auth profile");
   expect(app.enabled("id:auth-save")).toBe(false);
   await app.type("label:Name 2", "slack");

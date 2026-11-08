@@ -159,6 +159,7 @@ export function InferenceProviderPicker(props: InferenceProviderPickerProps) {
       >
         <TextField
           value={filter()}
+          clearable={Boolean(filter())}
           onChange={(value) => filter.set(value)}
           placeholder={t("settings_inference_provider_filter_placeholder")}
           leadingIcon="PhMagnifyingGlass"

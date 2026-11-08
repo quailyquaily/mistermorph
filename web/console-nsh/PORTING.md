@@ -68,3 +68,40 @@ scripts/build-web.sh /tmp/site                # the web site for console serve
 
 Look at the result: `console serve --console-static-dir /tmp/site` and a browser, or the desktop app.
 Headless tests prove behaviour, not the look.
+
+## Traps found while matching the Vue console
+
+- `leading-[1.4]` (a unitless line height) does not render as size × 1.4: write points, `leading-[19.6px]`.
+- Opacity modifiers on the app's own colour tokens (`bg-paper/70`) do nothing: add a token to
+  `theme.json` (`paper-soft`, `card-soft`) instead.
+- `style={{ display: "flex" }}` turns a View into a row.
+- On an inverted `List`, `scrollToEnd()` goes to the oldest item (nsh 0.4.0): use
+  `scrollToIndex({ index: 0 })` to show the newest.
+- `lifecycle()` from `nsh` breaks the whole page on the web runtime (0.4.0).
+- A page loaded in a hidden browser tab gets no frames, so animated values stall part-way until
+  the tab is shown; take screenshots from a visible tab.
+- Headless Chrome reports no hover and no fine pointer, so nsh lays the app out in its tablet
+  idiom. Launch it with
+  `--blink-settings=primaryPointerType=4,availablePointerTypes=4,primaryHoverType=2,availableHoverTypes=2`
+  for desktop screenshots.
+- Masks (`maskImage`): the web draws them; upstream GPUI ignores them, and the desktop shell's
+  patched copy (`desktop/nsh/patches/nsh-gpui-masks.patch`) fades text glyphs under a linear mask
+  (not fills or images). For a cut-out of anything but text, draw on a `Canvas`
+  (`components/shared/CutoutAvatar.tsx`).
+- Repeating gradients work, though the docs don't say so: `backgroundImage:
+  "repeating-linear-gradient(135deg, <c> 0 2px, transparent 2px 5px)"` (hatching, the paper grid in
+  `Shell`). Put them in `style` (Tailwind arbitrary values can't hold the spaces).
+- nsh/base's `Button` drops the `tooltip` prop: a button with a tooltip is `TipButton` (ui.tsx),
+  which puts the tooltip on a view around it and gives that view the button's placement classes
+  and `onLayout`.
+- nsh/base's `Select` opens its list over the field on the web (`placement` is ignored there):
+  `SelectField` is a `Menu` below the field, as Vue's dropdown; only the searchable one is a Select.
+- A `TextView` table can't be narrower than column floors nsh estimates from character counts
+  (about 0.55em a letter plus 2rem), not measured: on phones a table Vue fits may scroll sideways.
+- Canvases draw with animated values natively (`createAnimatedValue` in coordinates, alphas,
+  dashes): the route map's draw-in and traffic run without JS per frame.
+- `position: "sticky"` works in a `Scroll`; the base `Editor` colours ranges through decorations.
+- Headless screenshots catch compositor fades part-way (a tooltip looks half transparent): run a
+  `frames` step before the shot.
+- Shared motion helpers (sliding selection, fade truncation, scroll edges, entrances, dialog
+  origin) are in `components/motion/` (see its README).

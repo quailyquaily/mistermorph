@@ -1,6 +1,6 @@
 // The app frame's state, as the Vue console's useAppShell had it: which endpoint is selected,
 // the navigation, and the shared data every workspace page preloads.
-import { batch, computed, effect, signal, untracked, windowSize } from "nsh";
+import { batch, computed, effect, LayoutAnimation, reduceMotion, signal, untracked, windowSize } from "nsh";
 import defaultEndpointAvatar from "../assets/images/app_logo_current.svg";
 import { lastTopicID } from "./core/chat-topic-memory.js";
 import { endpointDisplayItem, visibleEndpoints } from "./core/endpoints.js";
@@ -43,6 +43,11 @@ export const sidebarWidth = computed(() => {
   return collapsed() ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_WIDTH;
 });
 export function setSidebarCollapsed(next: boolean) {
+  // The column eases to its new width (200 ms, as the Vue grid's transition), unless it follows a
+  // drag, which is already where the pointer put it.
+  if (untracked(() => dragWidth()) === null && untracked(() => collapsed()) !== Boolean(next) && !reduceMotion()) {
+    LayoutAnimation.configureNext({ duration: 200, update: { type: "easeInEaseOut" } });
+  }
   collapsed.set(Boolean(next));
   localStore.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, next ? "1" : "0");
 }
@@ -78,6 +83,16 @@ export function closeMobileMore() {
 }
 
 export const inShellless = () => route()?.meta.shellless === true;
+
+/**
+ * The top-level page shown ("chat", "settings", ...): a new page settles in when it changes, but
+ * not when another topic or settings section opens within it (core/page-transitions.js).
+ */
+export const currentPageKey = computed(() => {
+  const path = route()?.path || "";
+  const page = endpointPagePath(path) || path;
+  return String(page).split("/")[1] || "";
+});
 export const inOverview = () => route()?.path === "/overview";
 export const inSetup = () => {
   const path = route()?.path || "";

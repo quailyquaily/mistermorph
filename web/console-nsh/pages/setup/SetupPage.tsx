@@ -3,8 +3,8 @@
 // name and look, and its soul (a preset, or a document of one's own). Troubleshooting sends single
 // steps here with ?repair=<key>; those go back to it when saved. setup-state.ts holds the logic.
 import type { ImageAsset, InputRef, JSX } from "nsh";
-import { Image, Scroll, Text, View, windowSize } from "nsh";
-import { Button as BaseButton, Tooltip } from "nsh/base";
+import { Image, Scroll, Text, token, View, windowSize } from "nsh";
+import { Button as BaseButton } from "nsh/base";
 import { CodexAuthDialog, ProAuthDialog, XAIAuthDialog } from "../../components/settings/AuthDialogs";
 import { EnvManagedField } from "../../components/settings/EnvManagedField";
 import { ImageUploadField } from "../../components/settings/ImageUploadField";
@@ -13,7 +13,7 @@ import { SecretInput } from "../../components/settings/SecretInput";
 import { SetupConnectionTestDialog } from "../../components/settings/SetupConnectionTestDialog";
 import { SetupPickerDialog } from "../../components/settings/SetupPickerDialog";
 import { MarkdownEditor } from "../../components/shared/MarkdownEditor";
-import { Button, Icon, TextField, type IconName } from "../../components/ui";
+import { Button, Icon, TextField, Tip, TipButton, type IconName } from "../../components/ui";
 import { isNetworkErrorMessage } from "../../lib/core/notices.js";
 import {
   PERSONA_AVATAR_MAX_SOURCE_BYTES,
@@ -82,22 +82,18 @@ function AuthActionButton(props: {
       ? { box: "border-blue-lighter bg-selection", color: "blue" as const }
       : { box: "border-danger bg-card", color: "danger" as const };
   return (
-    <BaseButton
+    <TipButton
       onPress={props.onPress}
       disabled={props.disabled}
       accessibilityLabel={props.title}
       testID={props.testID}
-      tooltip={
-        <Tooltip class="bg-foreground px-2 py-1">
-          <Text class="text-xs text-background">{props.title}</Text>
-        </Tooltip>
-      }
+      tooltip={<Tip text={props.title} />}
       class={`min-h-9.5 min-w-9.5 flex-row items-center justify-center rounded-(--radius) border px-3 active:opacity-80 disabled:opacity-45 ${tone().box}`}
     >
       <If when={props.needsLogin} else={<Icon name={icon()} size={16} color={tone().color} />}>
         <Text class="text-sm font-medium text-blue">{props.loginLabel}</Text>
       </If>
-    </BaseButton>
+    </TipButton>
   );
 }
 
@@ -447,6 +443,11 @@ function PersonaStage(props: { s: SetupState }) {
 /* ---------- the soul ---------- */
 
 /** A preset's sprite sheet, walking: one frame of its first row at a time, scaled up. */
+// Vue .setup-soul-card-custom: a white-to-warm wash over 1px rules on a 13px pitch.
+const RULED_PAPER =
+  "linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(250, 248, 244, 0.9)), " +
+  "repeating-linear-gradient(180deg, transparent, transparent 12px, rgba(77, 85, 99, 0.05) 12px, rgba(77, 85, 99, 0.05) 13px)";
+
 function SoulSprite(props: { card: SoulCard; tick: number }) {
   const frameWidth = () => Number(props.card.spriteFrameWidth) || 16;
   const frameHeight = () => Number(props.card.spriteFrameHeight) || 16;
@@ -481,9 +482,17 @@ function SoulStage(props: { s: SetupState }) {
     marginLeft: order === 0 ? 0 : -22,
     zIndex: active ? 40 : 10 + order,
     transform: active ? [{ translateY: -12 }, { scale: 1.02 }] : [{ translateY: 18 }, { scale: 0.94 }],
-    transitionProperty: "transform",
+    // Vue .setup-soul-card (white at 78%, a soft drop) and .is-active (the accent's 8% tint, a
+    // deeper drop in its colour).
+    backgroundColor: active ? `color-mix(in srgb, ${token(accent)} 8%, rgba(255, 255, 255, 0.96))` : "rgba(255, 255, 255, 0.78)",
+    boxShadow: active
+      ? `0 18px 28px color-mix(in srgb, ${token(accent)} 12%, rgba(28, 33, 41, 0.1))`
+      : "0 12px 24px rgba(28, 33, 41, 0.06)",
+    transitionProperty: "transform, colors",
     transitionDuration: 180,
   });
+  // Vue .setup-soul-card:hover: whiter (the active card keeps its tint).
+  const hoverStyle = (active: boolean) => (active ? undefined : { backgroundColor: "rgba(255, 255, 255, 0.94)" });
   return (
     <View class="gap-2.5 p-2" testID="setup-form-soul">
       <If
@@ -545,10 +554,11 @@ function SoulStage(props: { s: SetupState }) {
                   onPress={() => s.applySoulPreset(card().id)}
                   accessibilityLabel={card().title}
                   testID={`setup-soul-${card().id}`}
-                  class={`items-center justify-center gap-2 rounded-(--radius) border px-2.5 py-3 shadow-sm hover:bg-card ${
-                    s.soulPresetId() === card().id ? `border-${accent} bg-card` : "border-line-soft bg-paper"
+                  class={`items-center justify-center gap-2 rounded-(--radius) border px-2.5 py-3 ${
+                    s.soulPresetId() === card().id ? `border-${accent}` : "border-line-soft"
                   }`}
                   style={stackStyle(s.soulPresetId() === card().id, card().stackIndex ?? 0)}
+                  hoverStyle={hoverStyle(s.soulPresetId() === card().id)}
                 >
                   <View class="size-8.5 items-center justify-center overflow-hidden rounded-(--radius) border border-line bg-card">
                     <If when={card().faceSrc} else={<Icon name={card().icon as IconName} size={18} color={accent} />}>
@@ -564,10 +574,16 @@ function SoulStage(props: { s: SetupState }) {
               onPress={s.selectCustomSoul}
               accessibilityLabel={t("setup_soul_custom_title")}
               testID="setup-soul-custom"
-              class={`items-center justify-center gap-2 rounded-(--radius) border px-2.5 py-3 shadow-sm hover:bg-card ${
-                s.isCustomSoulSelected() ? `border-${accent} bg-card` : "border-line-soft bg-paper"
+              class={`items-center justify-center gap-2 rounded-(--radius) border px-2.5 py-3 ${
+                s.isCustomSoulSelected() ? `border-${accent}` : "border-line-soft"
               }`}
-              style={stackStyle(s.isCustomSoulSelected(), cards().length)}
+              style={{
+                ...stackStyle(s.isCustomSoulSelected(), cards().length),
+                // A blank sheet of ruled paper until it is chosen (Vue .setup-soul-card-custom, whose
+                // background replaces the card's own).
+                ...(s.isCustomSoulSelected() ? {} : { backgroundColor: "transparent", backgroundImage: RULED_PAPER }),
+              }}
+              hoverStyle={s.isCustomSoulSelected() ? undefined : { backgroundColor: "rgba(255, 255, 255, 0.94)", backgroundImage: "none" }}
             >
               <View class="size-8.5 items-center justify-center rounded-(--radius) border border-dashed border-line bg-card">
                 <Icon name={s.customSoulCardIcon() as IconName} size={18} color={accent} />
@@ -650,10 +666,11 @@ export function SetupPage() {
   const accent = () => STAGE_ACCENT[s.stageMeta().tone];
   const narrow = () => windowSize().width <= NARROW;
   return (
-    <View class="flex-1 bg-background" testID="setup-page">
+    <View class="flex-1" testID="setup-page">
       <Scroll class="flex-1" contentClass={`grow items-center justify-center ${narrow() ? "p-4" : "p-6"}`}>
         <View
-          class={`w-full rounded-(--radius) border border-line-faint bg-card ${narrow() ? "p-3" : "p-4.5"}`}
+          // Vue's boxed AppSection: paper at 70%, the page's grid faintly through it.
+          class={`w-full rounded-(--radius) border border-line-faint bg-paper/70 ${narrow() ? "p-3" : "p-4.5"}`}
           style={{ maxWidth: 640 }}
           testID={`setup-stage-${s.routeStage()}`}
         >

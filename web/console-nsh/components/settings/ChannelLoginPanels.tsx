@@ -314,6 +314,7 @@ export function WeChatLoginPanel(props: WeChatLoginPanelProps) {
               <TextField
                 class="flex-1"
                 value={verifyCode()}
+                clearable={Boolean(verifyCode())}
                 placeholder={t("settings_wechat_login_code_placeholder")}
                 onChange={(value) => verifyCode.set(value)}
                 onSubmit={submitCode}

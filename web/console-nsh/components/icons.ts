@@ -1,6 +1,7 @@
 // Generated from the Phosphor icons the Vue console used (regular weight). Names match the
 // Vue components (PhChats), so ports keep the same icon names.
 import type { ImageAsset } from "nsh";
+import AppIconEditorDelete from "../assets/icons/editor-delete.svg";
 import PhAlarm from "../assets/icons/alarm.svg";
 import PhAppWindow from "../assets/icons/app-window.svg";
 import PhArrowBendDownRight from "../assets/icons/arrow-bend-down-right.svg";
@@ -104,6 +105,8 @@ import PhX from "../assets/icons/x.svg";
 import PhXCircle from "../assets/icons/x-circle.svg";
 
 export const ICONS = {
+  /** The ui-kit's clear-field glyph (a backspace key with a cross), Vue's AppIconEditorDelete. */
+  AppIconEditorDelete,
   PhAlarm,
   PhAppWindow,
   PhArrowBendDownRight,

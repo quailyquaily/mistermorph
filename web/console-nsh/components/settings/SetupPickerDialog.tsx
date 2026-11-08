@@ -7,8 +7,9 @@
 import type { ListRef } from "nsh";
 import { batch, computed, effect, keymap, List, signal, Text, untracked, View } from "nsh";
 import { buildPickerRows, highlightParts } from "../../lib/core/setup-picker.js";
-import { Icon, ProgressBar, TextField } from "../ui";
+import { Icon, TextField } from "../ui";
 import { DialogShell, InlineNotice, t } from "./DialogShell";
+import { LoadingLine } from "../settings-page/parts";
 
 /** A choice: `title` shown, `value` used; `note`, `meta` and `verdict` ("avoid" goes to Others). */
 export interface SetupPickerItem {
@@ -191,6 +192,7 @@ export function SetupPickerDialogContent(props: SetupPickerDialogContentProps) {
     <View class="gap-3" testID="setup-picker">
       <TextField
         value={query()}
+        clearable={Boolean(query())}
         onChange={(value) => query.set(value)}
         onSubmit={() => selectItem(rowAt(untracked(active)))}
         placeholder={props.filterPlaceholder}
@@ -200,7 +202,7 @@ export function SetupPickerDialogContent(props: SetupPickerDialogContentProps) {
         testID="setup-picker-filter"
       />
       <If when={props.loading}>
-        <ProgressBar indeterminate label={t("setup_llm_test_target_loading")} />
+        <LoadingLine label={t("setup_llm_test_target_loading")} />
       </If>
       <If when={props.error}>
         <InlineNotice type="error" text={props.error ?? ""} testID="setup-picker-error" />

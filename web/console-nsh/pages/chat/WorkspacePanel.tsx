@@ -3,7 +3,7 @@
 // files as a tree, and what to do with the selected one).
 import { Image, List, Scroll, Text, View } from "nsh";
 import { Button as BaseButton } from "nsh/base";
-import { Button, Icon, Kicker, Tabs, Toggle } from "../../components/ui";
+import { Button, Icon, Kicker, Tabs, Tip, TipButton, Toggle } from "../../components/ui";
 import { TopicTagsEditor } from "../../components/chat/TopicTagsEditor";
 import { t } from "../../components/chat/i18n";
 import { formatBytes } from "../../lib/core/context.js";
@@ -203,7 +203,7 @@ function WorkspaceTab(props: { c: ChatController }) {
           <View class="flex-row items-start gap-2 p-4 pb-2">
             <View class="flex-1 gap-1">
               <Kicker>{t("chat_workspace_label")}</Kicker>
-              <View selectable tooltip={<Text class="text-xs">{c.workspaceDir()}</Text>}>
+              <View selectable tooltip={<Tip text={c.workspaceDir()} />}>
                 <Text class="font-mono text-xs line-clamp-2" testID="chat-workspace-path">
                   <If when={c.workspaceDirDisplay().prefix}>
                     <Text class="text-muted-foreground">{c.workspaceDirDisplay().prefix}</Text>
@@ -261,17 +261,17 @@ function WorkspaceTab(props: { c: ChatController }) {
           >
             <List each={c.workspaceTreeRows()} keyExtractor={(row: any) => `workspace:${row.key}`} estimatedItemSize={28} class="flex-1" testID="chat-workspace-tree">
               {(row) => (
-                <BaseButton
+                <TipButton
                   selected={String(row().entry?.path || "") === String(selected()?.path || "")}
                   onPress={() => void c.selectWorkspaceTreeNode(row())}
                   accessibilityLabel={row().entry?.name}
-                  tooltip={<Text class="text-xs">{row().entry?.path}</Text>}
+                  tooltip={<Tip text={row().entry?.path} />}
                   class="mx-2 flex-row items-center gap-1.5 rounded-(--radius) py-1 pr-2 hover:bg-hover selected:bg-selection"
                   style={{ paddingLeft: 8 + row().depth * 14 }}
                 >
                   <Image src={workspaceTreeIcon(row().entry, row().expanded)} accessibilityElementsHidden style={{ width: 15, height: 15 }} />
                   <Text class="flex-1 text-sm text-foreground line-clamp-1">{row().entry?.name}</Text>
-                </BaseButton>
+                </TipButton>
               )}
             </List>
           </If>

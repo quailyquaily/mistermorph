@@ -7,9 +7,10 @@
 // Not ported: the coloured overlay that marked command and skill tokens inside the text (a native
 // text field draws its own text; nothing can be laid exactly over it).
 import type { InputRef, JSX } from "nsh";
-import { cleanup, effect, Image, keymap, signal, Text, untracked, View } from "nsh";
+import { cleanup, effect, Image, keymap, LayoutAnimation, reduceMotion, signal, Text, token, untracked, View } from "nsh";
 import { Button as BaseButton, Input, Select } from "nsh/base";
-import { Button, DropdownMenu, Icon, type IconName } from "../ui";
+import { ICONS } from "../icons";
+import { Button, DropdownMenu, Icon, Spinner, Tip, TipButton, type IconName } from "../ui";
 import {
   buildComposerSuggestionItems,
   composerSuggestionInsertText,
@@ -19,7 +20,8 @@ import {
 import { t } from "./i18n";
 
 const DEFAULT_MAX_ROWS = 24;
-const LINE_HEIGHT = 20;
+// The Vue field: IBM Plex Mono at 14pt in 1.58 lines.
+const LINE_HEIGHT = 22.12;
 
 export interface ComposerFileItem {
   id: string;
@@ -164,6 +166,15 @@ export function ChatComposer(props: ChatComposerProps) {
   };
   const maxHeight = () => DEFAULT_MAX_ROWS * LINE_HEIGHT;
   const fieldHeight = () => Math.max(LINE_HEIGHT, Math.min(contentHeight(), maxHeight()));
+  // More than one line of text: the field moves above the controls.
+  const multiRow = () => contentHeight() > LINE_HEIGHT * 1.5;
+  // The field eases to its new height as lines come and go (the Vue composer's height transition),
+  // rather than snapping; the history above makes room in the same motion.
+  function growTo(height: number) {
+    if (Math.abs(height - untracked(contentHeight)) < 0.5) return;
+    if (!reduceMotion()) LayoutAnimation.configureNext({ duration: 180, update: { type: "easeInEaseOut" } });
+    contentHeight.set(height);
+  }
   // Enter sends on desktops; while suggestions show it picks one, also on phones.
   const submitBehavior = () => (props.submitOnEnter !== false || suggestionsVisible() ? "submit" : "newline");
 
@@ -331,172 +342,82 @@ export function ChatComposer(props: ChatComposerProps) {
     { id: "chat-composer-add-workspace", label: props.attachLabel || "", icon: "PhCube" as IconName, onSelect: () => props.onAttach?.() },
   ];
 
+  // The add button: a bare "+" in a 38pt square, its label for screen readers only (the Vue
+  // console's `.chat-composer-add-menu`); the line-soft fill while the menu is open or a workspace
+  // is attached.
   const addTrigger = (): JSX.Element => (
     <View
-      class={`min-h-8 flex-row items-center gap-1.5 rounded-(--radius) px-2 hover:bg-hover ${props.attachActive ? "bg-selection" : ""}`}
+      class={`size-[38px] items-center justify-center rounded-(--radius) transition-colors duration-[180ms] hover:bg-hover-soft aria-expanded:bg-segment ${props.attachActive ? "bg-segment" : ""}`}
       accessibilityLabel={props.addLabel}
       testID="chat-composer-add"
     >
-      <Icon name="PhPlus" size={16} color={props.attachActive ? "blue" : "subtle"} />
-      <Text class="text-sm text-subtle">{props.addLabel}</Text>
+      <Icon name="PhPlus" size={14} color={props.attachActive ? "foreground" : "subtle"} />
     </View>
   );
 
-  return (
-    <View class={`gap-1.5 ${props.landing ? "w-full" : ""}`} testID={props.testID}>
-      <View
-        class="gap-2 rounded-(--radius) border border-line bg-field px-2 py-2 shadow-sm"
-        onPress={() => focus({ preserveSelection: true })}
-      >
-        <If when={suggestionsVisible()}>
-          <View role="listbox" accessibilityLabel={suggestionTitle()} class="gap-0.5 border-b border-line-faint pb-1.5" testID="chat-composer-suggestions">
-            <Text class="px-2 font-mono text-xs uppercase text-muted-foreground">{suggestionTitle()}</Text>
-            <Each of={suggestionItems()} key={(item) => item.key}>
-              {(item, index) => (
-                <BaseButton
-                  role="option"
-                  selected={index() === activeIndex()}
-                  onPress={() => applySuggestion(item())}
-                  accessibilityLabel={item().title}
-                  class="flex-row items-baseline gap-2 rounded-(--radius) px-2 py-1 hover:bg-hover selected:bg-selection"
-                >
-                  <Text class="font-mono text-sm text-foreground">{item().title}</Text>
-                  <If when={item().description}>
-                    <Text class="flex-1 text-xs text-muted-foreground line-clamp-1">{item().description}</Text>
-                  </If>
-                </BaseButton>
-              )}
-            </Each>
-            <If when={!suggestionItems().length}>
-              <Text class="px-2 py-1 text-xs text-muted-foreground">{suggestionEmpty()}</Text>
-            </If>
-          </View>
-        </If>
-        <If when={(props.fileItems ?? []).length}>
-          <View class="flex-row flex-wrap gap-1.5" accessibilityLabel={fileLabels().files} testID="chat-composer-files">
-            <Each of={props.fileItems ?? []} key={(item) => item.id}>
-              {(item) => (
-                <View
-                  class={`flex-row items-center gap-1 rounded-(--radius) border px-1.5 py-1 ${item().status === "failed" ? "border-danger" : "border-line-faint"} bg-card`}
-                >
-                  <BaseButton
-                    disabled={item().status !== "ready"}
-                    onPress={() => item().status === "ready" && props.onPreviewFile?.(item())}
-                    accessibilityLabel={`${fileLabels().preview}: ${item().name}`}
-                    tooltip={
-                      <Text class="text-xs">
-                        {item().status === "ready" ? fileLabels().preview : item().status === "uploading" ? fileLabels().uploading : item().error || fileLabels().failed}
-                      </Text>
-                    }
-                    class="flex-row items-center gap-1.5"
-                  >
-                    <Icon name="PhPaperclip" size={13} color={item().status === "failed" ? "danger" : "subtle"} />
-                    <View class="gap-px">
-                      <Text class="max-w-48 text-xs text-foreground line-clamp-1">{item().name}</Text>
-                      <If when={item().status === "uploading" || item().status === "failed"}>
-                        <Text class={`max-w-60 text-xs ${item().status === "failed" ? "text-danger" : "text-muted-foreground"}`}>
-                          {item().status === "uploading" ? fileLabels().uploading : item().error || fileLabels().failed}
-                        </Text>
-                      </If>
-                    </View>
-                  </BaseButton>
-                  <If when={item().status === "failed" && item().sourceFile}>
-                    <Button
-                      variant="plain"
-                      size="xxs"
-                      label={fileLabels().retry}
-                      disabled={props.disabled || props.attachDisabled}
-                      onPress={() => props.onRetryFile?.(item())}
-                    />
-                  </If>
-                  <Button
-                    variant="plain"
-                    size="xxs"
-                    iconOnly
-                    icon="PhXCircle"
-                    title={`${fileLabels().remove}: ${item().name}`}
-                    disabled={props.disabled}
-                    onPress={() => props.onRemoveFile?.(item())}
-                  />
-                </View>
-              )}
-            </Each>
-          </View>
-        </If>
-        <If when={voiceActive()}>
-          <View role="text" class="flex-row items-center gap-2 rounded-(--radius) bg-paper px-2 py-1" testID="chat-composer-voice-strip">
-            <View class={`size-2 rounded-full ${props.voiceState === "recording" ? "bg-danger" : "bg-status-pending"}`} />
-            <Text class="font-mono text-xs text-subtle">{voiceElapsedText()}</Text>
-            <Text class={`flex-1 text-sm ${props.voicePreview ? "text-foreground" : "text-muted-foreground"} line-clamp-2`}>
-              {voiceStatusText()}
-            </Text>
-            <If when={props.voicePreviewEnabled !== null && props.voicePreviewEnabled !== undefined && props.voiceState === "recording"}>
-              <Button
-                variant="plain"
-                size="xxs"
-                iconOnly
-                icon={props.voicePreviewEnabled ? "PhEye" : "PhEyeSlash"}
-                title={props.voicePreviewEnabled ? voiceLabels().previewOff : voiceLabels().previewOn}
-                selected={props.voicePreviewEnabled === true}
-                onPress={() => props.onVoicePreviewToggle?.()}
-              />
-            </If>
-            <If when={props.voiceState === "recording"}>
-              <Button variant="plain" size="xxs" iconOnly icon="PhX" title={voiceLabels().discard} onPress={() => props.onVoiceCancel?.()} />
-            </If>
-          </View>
-        </If>
-        <View class="flex-row items-end gap-1.5">
-          <If
-            when={!props.attachDisabled && !props.uploading}
-            else={
-              <Button
-                variant="plain"
-                size="sm"
-                icon="PhPlus"
-                label={props.addLabel}
-                disabled
-                loading={props.uploading}
-                testID="chat-composer-add"
-              />
-            }
-          >
-            <DropdownMenu trigger={addTrigger()} items={addItems()} placement="top" align="start" />
+  const addControl = () => (
+    <If
+      when={!props.attachDisabled && !props.uploading}
+      else={
+        <View class="size-[38px] items-center justify-center opacity-45" accessibilityLabel={props.addLabel} testID="chat-composer-add">
+          <If when={props.uploading} else={<Icon name="PhPlus" size={14} color="subtle" />}>
+            <Spinner size={14} />
           </If>
-          <Input
-            ref={field}
-            value={value()}
-            multiline
-            submitBehavior={submitBehavior()}
-            returnKeyType={props.submitOnEnter === false ? "default" : "send"}
-            placeholder={props.placeholder}
-            accessibilityLabel={props.placeholder}
-            readonly={props.disabled}
-            autoCapitalize="sentences"
-            testID="chat-composer-input"
-            onFocus={() => focused.set(true)}
-            onBlur={() => focused.set(false)}
-            onChange={({ value: next }) => {
-              resetHistory();
-              props.onChange(next);
-              const range = untracked(selection);
-              syncSuggestions(next, range.end > next.length || range.end === 0 ? next.length : range.end);
-            }}
-            onSelectionChange={({ start, end }) => {
-              selection.set({ start, end });
-              syncSuggestions(untracked(value), end);
-            }}
-            onSubmit={onSubmitKey}
-            onContentSizeChange={({ size }) => contentHeight.set(Math.ceil(size.height))}
-            onPaste={(event) => {
-              if (props.disabled || props.attachDisabled) return;
-              const files = namedImages(Array.isArray(event?.files) ? (event.files as File[]) : []);
-              if (files.length) props.onAttachFiles?.(files);
-            }}
-            class="flex-1 px-1 py-1.5 text-sm text-foreground placeholder:text-placeholder"
-            style={{ height: fieldHeight() + 12, lineHeight: LINE_HEIGHT }}
-          />
-          <View class="flex-row items-center gap-1">
+        </View>
+      }
+    >
+      <DropdownMenu trigger={addTrigger()} items={addItems()} placement="top" align="start" />
+    </If>
+  );
+
+  // Send, through three states by its look rather than by swapping parts (the Vue console's
+  // `.chat-composer-send`): nothing to send, a hairline square with a muted plane nudged down-left;
+  // ready, filled ink with the plane settled; running, the same fill with the plane crossfading into
+  // the stop square.
+  const sendEmpty = () => !props.stopMode && value().trim() === "" && !(props.fileItems ?? []).length;
+  const sendControl = () => (
+    <TipButton
+      onPress={() => (props.stopMode ? props.onStop?.() : props.onSubmit?.())}
+      disabled={props.stopMode ? false : props.sendDisabled}
+      accessibilityLabel={props.sendLabel}
+      tooltip={<Tip text={props.sendLabel ?? ""} />}
+      testID="chat-composer-send"
+      class={`size-[38px] items-center justify-center rounded-(--radius) border transition-colors duration-[180ms] ${
+        sendEmpty() ? "border-line-soft bg-transparent" : "border-primary bg-primary hover:bg-ink"
+      } ${!sendEmpty() && props.sendDisabled && !props.stopMode ? "opacity-45" : ""}`}
+    >
+      <If when={!props.sending} else={<Spinner size={14} />}>
+        <Image
+          src={ICONS.PhPaperPlaneTilt}
+          accessibilityElementsHidden
+          class="absolute transition duration-[260ms]"
+          style={{
+            width: 14,
+            height: 14,
+            tintColor: token(sendEmpty() ? "muted-foreground" : "primary-foreground") as string,
+            opacity: props.stopMode ? 0 : 1,
+            scale: props.stopMode ? 0.6 : 1,
+            translate: sendEmpty() ? [-1.5, 1.5] : [0, 0],
+          }}
+        />
+        <Image
+          src={ICONS.PhStop}
+          accessibilityElementsHidden
+          class="absolute transition duration-[260ms]"
+          style={{
+            width: 14,
+            height: 14,
+            tintColor: token("primary-foreground") as string,
+            opacity: props.stopMode ? 1 : 0,
+            scale: props.stopMode ? 1 : 0.6,
+          }}
+        />
+      </If>
+    </TipButton>
+  );
+
+  const actions = () => (
+    <View class="flex-row items-center gap-2">
             <If when={profiles().length > 1}>
               <Select
                 items={profiles().map((item) => ({ value: item.value, title: item.title }))}
@@ -504,7 +425,7 @@ export function ChatComposer(props: ChatComposerProps) {
                 searchable
                 disabled={props.disabled}
                 accessibilityLabel={profileTitle()}
-                tooltip={<Text class="text-xs">{profileTitle()}</Text>}
+                tooltip={<Tip text={profileTitle()} />}
                 onChange={({ value: next }) => next !== null && props.onLLMProfileChange?.(String(next).trim())}
                 testID="chat-composer-profile"
                 placement="top"
@@ -552,22 +473,159 @@ export function ChatComposer(props: ChatComposerProps) {
                 testID="chat-composer-voice"
               />
             </If>
-            <Button
-              variant="primary"
-              size="sm"
-              iconOnly
-              icon={props.stopMode ? "PhStop" : "PhPaperPlaneTilt"}
-              title={props.sendLabel}
-              loading={props.sending}
-              disabled={props.sendDisabled}
-              onPress={() => (props.stopMode ? props.onStop?.() : props.onSubmit?.())}
-              testID="chat-composer-send"
-            />
+      {sendControl()}
+    </View>
+  );
+
+  return (
+    <View class={`gap-2 ${props.landing ? "w-full" : "pb-2.5"}`} testID={props.testID}>
+      <View
+        class="rounded-(--radius) border border-input bg-field transition duration-[260ms] focus-within:border-blue/45 focus-within:shadow-md"
+        onPress={() => focus({ preserveSelection: true })}
+      >
+        <If when={suggestionsVisible()}>
+          <View role="listbox" accessibilityLabel={suggestionTitle()} class="gap-0.5 border-b border-line-faint p-1.5" testID="chat-composer-suggestions">
+            <Text class="px-2 font-mono text-xs uppercase text-muted-foreground">{suggestionTitle()}</Text>
+            <Each of={suggestionItems()} key={(item) => item.key}>
+              {(item, index) => (
+                <BaseButton
+                  role="option"
+                  selected={index() === activeIndex()}
+                  onPress={() => applySuggestion(item())}
+                  accessibilityLabel={item().title}
+                  class="flex-row items-baseline gap-2 rounded-(--radius) px-2 py-1 hover:bg-hover selected:bg-selection"
+                >
+                  <Text class="font-mono text-sm text-foreground">{item().title}</Text>
+                  <If when={item().description}>
+                    <Text class="flex-1 text-xs text-muted-foreground line-clamp-1">{item().description}</Text>
+                  </If>
+                </BaseButton>
+              )}
+            </Each>
+            <If when={!suggestionItems().length}>
+              <Text class="px-2 py-1 text-xs text-muted-foreground">{suggestionEmpty()}</Text>
+            </If>
           </View>
+        </If>
+        <If when={(props.fileItems ?? []).length}>
+          <View class="flex-row flex-wrap gap-1.5 px-2.5 pt-2.5" accessibilityLabel={fileLabels().files} testID="chat-composer-files">
+            <Each of={props.fileItems ?? []} key={(item) => item.id}>
+              {(item) => (
+                <View
+                  class={`flex-row items-center gap-1 rounded-(--radius) border px-1.5 py-1 ${item().status === "failed" ? "border-danger" : "border-line-faint"} bg-card`}
+                >
+                  <TipButton
+                    disabled={item().status !== "ready"}
+                    onPress={() => item().status === "ready" && props.onPreviewFile?.(item())}
+                    accessibilityLabel={`${fileLabels().preview}: ${item().name}`}
+                    tooltip={<Tip text={item().status === "ready" ? fileLabels().preview : item().status === "uploading" ? fileLabels().uploading : item().error || fileLabels().failed} />}
+                    class="flex-row items-center gap-1.5"
+                  >
+                    <Icon name="PhPaperclip" size={13} color={item().status === "failed" ? "danger" : "subtle"} />
+                    <View class="gap-px">
+                      <Text class="max-w-48 text-xs text-foreground line-clamp-1">{item().name}</Text>
+                      <If when={item().status === "uploading" || item().status === "failed"}>
+                        <Text class={`max-w-60 text-xs ${item().status === "failed" ? "text-danger" : "text-muted-foreground"}`}>
+                          {item().status === "uploading" ? fileLabels().uploading : item().error || fileLabels().failed}
+                        </Text>
+                      </If>
+                    </View>
+                  </TipButton>
+                  <If when={item().status === "failed" && item().sourceFile}>
+                    <Button
+                      variant="plain"
+                      size="xxs"
+                      label={fileLabels().retry}
+                      disabled={props.disabled || props.attachDisabled}
+                      onPress={() => props.onRetryFile?.(item())}
+                    />
+                  </If>
+                  <Button
+                    variant="plain"
+                    size="xxs"
+                    iconOnly
+                    icon="PhXCircle"
+                    title={`${fileLabels().remove}: ${item().name}`}
+                    disabled={props.disabled}
+                    onPress={() => props.onRemoveFile?.(item())}
+                  />
+                </View>
+              )}
+            </Each>
+          </View>
+        </If>
+        <If when={voiceActive()}>
+          <View role="text" class="mx-2.5 mt-2.5 flex-row items-center gap-2 rounded-(--radius) bg-paper px-2 py-1" testID="chat-composer-voice-strip">
+            <View class={`size-2 rounded-full ${props.voiceState === "recording" ? "bg-danger" : "bg-status-pending"}`} />
+            <Text class="font-mono text-xs text-subtle">{voiceElapsedText()}</Text>
+            <Text class={`flex-1 text-sm ${props.voicePreview ? "text-foreground" : "text-muted-foreground"} line-clamp-2`}>
+              {voiceStatusText()}
+            </Text>
+            <If when={props.voicePreviewEnabled !== null && props.voicePreviewEnabled !== undefined && props.voiceState === "recording"}>
+              <Button
+                variant="plain"
+                size="xxs"
+                iconOnly
+                icon={props.voicePreviewEnabled ? "PhEye" : "PhEyeSlash"}
+                title={props.voicePreviewEnabled ? voiceLabels().previewOff : voiceLabels().previewOn}
+                selected={props.voicePreviewEnabled === true}
+                onPress={() => props.onVoicePreviewToggle?.()}
+              />
+            </If>
+            <If when={props.voiceState === "recording"}>
+              <Button variant="plain" size="xxs" iconOnly icon="PhX" title={voiceLabels().discard} onPress={() => props.onVoiceCancel?.()} />
+            </If>
+          </View>
+        </If>
+        {/* One row (add, the field, actions) while the text is one line; longer, the field takes the
+            whole width above a row of the controls, as the Vue composer's multi-row grid does. The
+            field stays the same element, so it keeps its focus and caret. */}
+        <View class={multiRow() ? "min-h-[104px] gap-2 px-2.5 pb-2 pt-3" : "min-h-[54px] flex-row items-center gap-2.5 px-2.5 py-2"}>
+          <If when={!multiRow()}>{addControl()}</If>
+          <Input
+            ref={field}
+            value={value()}
+            multiline
+            submitBehavior={submitBehavior()}
+            returnKeyType={props.submitOnEnter === false ? "default" : "send"}
+            placeholder={props.placeholder}
+            accessibilityLabel={props.placeholder}
+            readonly={props.disabled}
+            autoCapitalize="sentences"
+            testID="chat-composer-input"
+            onFocus={() => focused.set(true)}
+            onBlur={() => focused.set(false)}
+            onChange={({ value: next }) => {
+              resetHistory();
+              props.onChange(next);
+              const range = untracked(selection);
+              syncSuggestions(next, range.end > next.length || range.end === 0 ? next.length : range.end);
+            }}
+            onSelectionChange={({ start, end }) => {
+              selection.set({ start, end });
+              syncSuggestions(untracked(value), end);
+            }}
+            onSubmit={onSubmitKey}
+            onContentSizeChange={({ size }) => growTo(Math.ceil(size.height))}
+            onPaste={(event) => {
+              if (props.disabled || props.attachDisabled) return;
+              const files = namedImages(Array.isArray(event?.files) ? (event.files as File[]) : []);
+              if (files.length) props.onAttachFiles?.(files);
+            }}
+            class={`font-mono text-sm text-foreground placeholder:text-muted-foreground ${multiRow() ? "w-full py-0" : "flex-1 py-1.5"}`}
+            style={{ height: fieldHeight() + (multiRow() ? 0 : 12), lineHeight: LINE_HEIGHT }}
+          />
+          <If when={!multiRow()}>{actions()}</If>
+          <If when={multiRow()}>
+            <View class="flex-row items-center justify-between">
+              {addControl()}
+              {actions()}
+            </View>
+          </If>
         </View>
       </View>
       <If when={props.footerText}>
-        <Text class="text-center text-xs text-muted-foreground">{props.footerText}</Text>
+        <Text class="px-3 text-center font-mono text-[11px] leading-[15.4px] tracking-[0.02em] text-muted-foreground">{props.footerText}</Text>
       </If>
     </View>
   );

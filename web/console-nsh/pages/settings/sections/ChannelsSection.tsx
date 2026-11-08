@@ -2,16 +2,18 @@
 // right (a sheet on phones). Closing the pane keeps the draft: it stays in the save bar, and the
 // tile shows it is unsaved.
 import type { JSX } from "nsh";
-import { Image, keymap, Scroll, Text, untracked, View } from "nsh";
+import { Image, keymap, Scroll, signal, Text, untracked, View } from "nsh";
 import { Button as BaseButton } from "nsh/base";
 import { endpointApiFetch } from "../../../lib/core/context.js";
 import { CHANNEL_TRIGGER_CONFIG_GROUPS } from "../../../lib/core/config-field-groups.js";
-import { Button, DropdownMenu, SelectField, SidePane, TextField } from "../../../components/ui";
+import { Button, DropdownMenu, Kicker, SelectField, SidePane, TextField } from "../../../components/ui";
+import { SCROLLBAR } from "../../../components/motion";
 import { ConfigSettingsPanel, type ConfigGroup } from "../../../components/settings/ConfigSettingsPanel";
 import { EnvManagedField } from "../../../components/settings/EnvManagedField";
+import { InSidePane } from "../../../components/settings/SettingFields";
 import { SecretInput } from "../../../components/settings/SecretInput";
 import { WeChatLoginPanel, XLoginPanel } from "../../../components/settings/ChannelLoginPanels";
-import { DirtyDot, SettingField, SettingToggleRow } from "../../../components/settings-page/parts";
+import { DirtyDot, PaneHead, SettingField, SettingToggleRow } from "../../../components/settings-page/parts";
 import { CHANNEL_LOGOS } from "../constants";
 import type { SettingsStore } from "../store";
 import { t } from "../i18n";
@@ -122,40 +124,60 @@ const CHANNEL_FIELDS: Record<string, { metaKey: string; fields: Field[] }> = {
   },
 };
 
+/**
+ * A channel's tile (`.settings-channel-tile`): a 144pt square with the logo over the name, in
+ * colour once the channel is configured and grey until then (in colour on hover); the frame turns
+ * blue on hover and while its pane is open. Top right: running in Console; top left: unsaved.
+ */
+function ChannelTile(props: { s: SettingsStore; item: { id: string; titleKey: string; configured: boolean; running: boolean; dirty: boolean } }) {
+  const s = props.s;
+  const hovered = signal(false);
+  const active = () => s.openChannel() === props.item.id;
+  const lit = () => props.item.configured || hovered();
+  return (
+    <View onMouseEnter={() => hovered.set(true)} onMouseLeave={() => hovered.set(false)}>
+      <BaseButton
+        onPress={() => s.openChannelPane(props.item.id)}
+        selected={active()}
+        accessibilityLabel={t(props.item.titleKey)}
+        testID={`settings-channel-${props.item.id}`}
+        class={`size-36 items-center justify-center gap-2.5 overflow-hidden rounded-(--radius) border bg-card p-3 transition-colors duration-120 focus:outline-2 focus:outline-blue ${
+          active() || hovered() ? "border-blue/45" : "border-line"
+        }`}
+      >
+        <Image
+          src={CHANNEL_LOGOS[props.item.id]}
+          accessibilityElementsHidden
+          class={lit() ? "" : "grayscale"}
+          style={{ width: 44, height: 44, opacity: props.item.configured ? 1 : hovered() ? 0.8 : 0.45 }}
+        />
+        <Text class="max-w-full text-center text-xs leading-[16.2px] text-subtle">{t(props.item.titleKey)}</Text>
+        <If when={props.item.running}>
+          <View
+            accessibilityLabel={t("settings_channel_state_running")}
+            testID={`settings-channel-${props.item.id}-running`}
+            class="absolute right-3 top-3 size-[7px] rounded-[1px] bg-status-on"
+          />
+        </If>
+        <If when={props.item.dirty}>
+          <DirtyDot label={t("settings_channel_unsaved")} testID={`settings-channel-${props.item.id}-dirty`} class="absolute left-3 top-3" />
+        </If>
+      </BaseButton>
+    </View>
+  );
+}
+
 export function ChannelsSection(props: { s: SettingsStore }) {
   const s = props.s;
   return (
-    <View class="gap-6" testID="settings-channels">
+    <View class="gap-[22px]" testID="settings-channels">
       <Each of={s.channelGroups()} key={(group) => group.id}>
         {(group) => (
-          <View class="gap-2">
-            <Text class="font-mono text-xs uppercase tracking-wide text-muted-foreground">{t(group().titleKey)}</Text>
+          <View class="gap-2.5">
+            <Kicker>{t(group().titleKey)}</Kicker>
             <View class="flex-row flex-wrap gap-3">
               <Each of={group().items} key={(item) => item.id}>
-                {(item) => (
-                  <BaseButton
-                    onPress={() => s.openChannelPane(untracked(item).id)}
-                    selected={s.openChannel() === item().id}
-                    accessibilityLabel={t(item().titleKey)}
-                    testID={`settings-channel-${item().id}`}
-                    class={`w-40 flex-row items-center gap-2.5 rounded-(--radius) border bg-card px-3 py-3 hover:bg-hover ${
-                      s.openChannel() === item().id ? "border-blue bg-selection" : "border-line-faint"
-                    } ${item().configured ? "" : "opacity-80"}`}
-                  >
-                    <Image src={CHANNEL_LOGOS[item().id]} accessibilityElementsHidden style={{ width: 22, height: 22 }} />
-                    <Text class="flex-1 text-sm font-medium text-foreground line-clamp-1">{t(item().titleKey)}</Text>
-                    <If when={item().running}>
-                      <View
-                        accessibilityLabel={t("settings_channel_state_running")}
-                        testID={`settings-channel-${item().id}-running`}
-                        class="size-2 rounded-full bg-ok"
-                      />
-                    </If>
-                    <If when={item().dirty}>
-                      <DirtyDot label={t("settings_channel_unsaved")} testID={`settings-channel-${item().id}-dirty`} />
-                    </If>
-                  </BaseButton>
-                )}
+                {(item) => <ChannelTile s={s} item={item()} />}
               </Each>
             </View>
           </View>
@@ -193,6 +215,7 @@ function ChannelField(props: { s: SettingsStore; channel: string; field: Field }
         <SettingField label={t(`${f.key}_label`)} note={f.note ? t(`${f.key}_note`) : undefined}>
           <TextField
             value={draft()[f.field]}
+            clearable={Boolean(draft()[f.field])}
             onChange={(value) => set(f.field, value)}
             placeholder={t(`${f.key}_placeholder`)}
             accessibilityLabel={t(`${f.key}_label`)}
@@ -209,6 +232,7 @@ function ChannelField(props: { s: SettingsStore; channel: string; field: Field }
             else={
               <TextField
                 value={draft()[f.field]}
+                clearable={Boolean(draft()[f.field])}
                 onChange={(value) => set(f.field, value)}
                 placeholder={t(`${f.key}_placeholder`)}
                 accessibilityLabel={t(`${f.key}_label`)}
@@ -296,7 +320,10 @@ function ChannelField(props: { s: SettingsStore; channel: string; field: Field }
 function ChannelPaneBody(props: { s: SettingsStore }) {
   const s = props.s;
   const managed = () => s.channelManagedItem(s.openChannel());
+  // The pane's forms take one field per row; the provider is here because the body is built
+  // before the frame around it.
   return (
+    <InSidePane.Provider value={true}>
     <View class="gap-4">
       <Each of={s.openChannel() ? [s.openChannel()] : []} key={(id) => id}>
         {(id) => (
@@ -308,7 +335,7 @@ function ChannelPaneBody(props: { s: SettingsStore }) {
       {/* Kept mounted while another channel (or none) is open, so a draft here is not lost. */}
       <Each of={CHANNEL_TRIGGER_CONFIG_GROUPS as ConfigGroup[]} key={(group) => group.id}>
         {(group) => (
-          <View style={{ display: s.openChannel() === group().id ? "flex" : "none" }} testID={`settings-channel-trigger-${group().id}`}>
+          <View class={s.openChannel() === group().id ? "min-w-0" : "hidden opacity-0"} testID={`settings-channel-trigger-${group().id}`}>
             <ConfigSettingsPanel
               groups={[group()]}
               values={s.consoleConfigValues()}
@@ -326,7 +353,7 @@ function ChannelPaneBody(props: { s: SettingsStore }) {
       </Each>
       <If when={managed()}>
         {(item) => (
-          <View class="border-t border-line-faint">
+          <View class="border-t border-line-soft">
             <SettingToggleRow
               first
               title={t("settings_channel_run_in_console")}
@@ -340,6 +367,7 @@ function ChannelPaneBody(props: { s: SettingsStore }) {
         )}
       </If>
     </View>
+    </InSidePane.Provider>
   );
 }
 
@@ -347,31 +375,29 @@ function ChannelPaneHeader(props: { s: SettingsStore }) {
   const s = props.s;
   const id = () => s.openChannel();
   return (
-    <View class="flex-row items-start gap-3 border-b border-line-faint px-4 py-3">
-      <View class="flex-1 gap-0.5">
-        <Text class="text-base font-semibold text-foreground line-clamp-1" role="header">
-          {t(s.openChannelTitleKey())}
-        </Text>
-        <If when={CHANNEL_FIELDS[id()]?.metaKey}>
-          <Text class="text-xs text-muted-foreground">{t(CHANNEL_FIELDS[id()]?.metaKey || "")}</Text>
-        </If>
-      </View>
-      <DropdownMenu
-        trigger={
-          <Button
-            variant="plain"
-            size="xs"
-            iconOnly
-            icon="PhDotsThree"
-            title={t("todo_action_more")}
-            disabled={s.consoleLoading() || s.consoleSaving()}
-            testID="settings-channel-menu"
+    <PaneHead
+      title={t(s.openChannelTitleKey())}
+      meta={CHANNEL_FIELDS[id()]?.metaKey ? t(CHANNEL_FIELDS[id()]?.metaKey || "") : undefined}
+      actions={
+        <>
+          <DropdownMenu
+            trigger={
+              <Button
+                variant="plain"
+                size="xs"
+                iconOnly
+                icon="PhDotsThree"
+                title={t("todo_action_more")}
+                disabled={s.consoleLoading() || s.consoleSaving()}
+                testID="settings-channel-menu"
+              />
+            }
+            items={s.channelActionMenuItems(id())}
           />
-        }
-        items={s.channelActionMenuItems(id())}
-      />
-      <Button variant="plain" size="xs" iconOnly icon="PhX" title={t("settings_channel_close")} onPress={() => s.closeChannelPane()} testID="settings-channel-close" />
-    </View>
+          <Button variant="plain" size="xs" iconOnly icon="PhX" title={t("settings_channel_close")} onPress={() => s.closeChannelPane()} testID="settings-channel-close" />
+        </>
+      }
+    />
   );
 }
 
@@ -383,12 +409,14 @@ export function ChannelPane(props: { s: SettingsStore; sheet?: boolean }) {
   const s = props.s;
   const open = () => Boolean(s.openChannel());
   const frame = (body: JSX.Element) => (
+    <InSidePane.Provider value={true}>
     <View class="flex-1" testID="settings-channel-pane" accessibilityLabel={t(s.openChannelTitleKey())}>
       <ChannelPaneHeader s={s} />
-      <Scroll class="flex-1" contentClass="gap-4 p-4 pb-28">
+      <Scroll class="flex-1" contentClass={`gap-4 px-4 pt-4 ${s.saveBarVisible() ? "pb-[88px]" : "pb-6"}`} scrollbar={SCROLLBAR}>
         {body}
       </Scroll>
     </View>
+    </InSidePane.Provider>
   );
   keymap.bind("escape", () => {
     if (untracked(open) && !props.sheet) s.closeChannelPane();
@@ -397,7 +425,7 @@ export function ChannelPane(props: { s: SettingsStore; sheet?: boolean }) {
     <If
       when={props.sheet}
       else={
-        <View class="w-96 border-l border-line-faint bg-card" style={{ display: open() ? "flex" : "none" }}>
+        <View class={`w-96 border-l border-line-soft bg-paper ${open() ? "" : "hidden"}`}>
           {frame(<ChannelPaneBody s={s} />)}
         </View>
       }

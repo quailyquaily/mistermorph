@@ -4,7 +4,7 @@
 // and the agent each open a sheet docked on the strip, over a scrim; Escape or the scrim closes it.
 import type { JSX } from "nsh";
 import { computed, keymap, signal, Text, View } from "nsh";
-import { Button as BaseButton, Tooltip } from "nsh/base";
+import { Button as BaseButton } from "nsh/base";
 import { translate } from "../../lib/core/context.js";
 import {
   closeMobileMore,
@@ -21,7 +21,7 @@ import {
   type NavItem,
 } from "../../lib/shell";
 import defaultEndpointAvatar from "../../assets/images/app_logo_current.svg";
-import { Icon, TextField, type IconName } from "../ui";
+import { Icon, TextField, Tip, TipButton, type IconName } from "../ui";
 import { AgentAvatar, AgentOptionList, filterAgentItems, normalizeAgentItems, OverviewRow } from "./AgentSwitcher";
 import { usePersonaSummary } from "./personaSummary";
 import { NavList } from "./Sidebar";
@@ -30,8 +30,8 @@ import { uiSlots } from "./slots";
 const t = translate as (key: string, vars?: Record<string, unknown>) => string;
 
 const PRIMARY_PAGE_PATHS = ["/chat", "/contacts", "/todo"];
-/** The strip's height, without the bottom safe area. */
-export const MOBILE_NAV_HEIGHT = 56;
+/** The strip's height, without the bottom safe area and its 1pt top hairline (`--mobile-nav-height` 52, border-box). */
+export const MOBILE_NAV_HEIGHT = 51;
 
 // The agent sheet; More's state is lib/shell's (navigation closes it).
 const agentMenuOpen = signal(false);
@@ -181,12 +181,8 @@ export function MobileBottomNav() {
     return 4 + ((width() - 8) / count) * (activeSlot() + 0.5) - 14;
   };
 
-  const slotClass = "flex-1 items-center justify-center active:bg-hover focus:border focus:border-blue";
-  const tip = (label: string) => (
-    <Tooltip class="bg-foreground px-2 py-1">
-      <Text class="text-xs text-background">{label}</Text>
-    </Tooltip>
-  );
+  const slotClass = "flex-1 items-center justify-center px-0.5 hover:bg-hover-soft active:bg-hover-soft transition-colors duration-160";
+  const tip = (label: string) => <Tip text={label} />;
 
   return (
     <View
@@ -211,7 +207,7 @@ export function MobileBottomNav() {
       <View class="flex-row" style={{ height: MOBILE_NAV_HEIGHT }}>
         <Each of={primaryItems()} key={(item) => item.id}>
           {(item, index) => (
-            <BaseButton
+            <TipButton
               selected={activeSlot() === index()}
               onPress={() => navigateTo(item())}
               accessibilityLabel={item().title}
@@ -220,10 +216,10 @@ export function MobileBottomNav() {
               class={slotClass}
             >
               <Icon name={item().icon as IconName} size={22} color={activeSlot() === index() ? "blue" : "muted-foreground"} />
-            </BaseButton>
+            </TipButton>
           )}
         </Each>
-        <BaseButton
+        <TipButton
           selected={activeSlot() === primaryItems().length}
           onPress={toggleMore}
           accessibilityLabel={moreLabel()}
@@ -232,8 +228,8 @@ export function MobileBottomNav() {
           class={slotClass}
         >
           <Icon name={moreIcon()} size={22} color={activeSlot() === primaryItems().length ? "blue" : "muted-foreground"} />
-        </BaseButton>
-        <BaseButton
+        </TipButton>
+        <TipButton
           selected={activeSlot() === slotCount() - 1}
           onPress={() => setAgentMenuOpen(!agentMenuOpen())}
           accessibilityLabel={`${t("nav_agent")}: ${selectedName()}`}
@@ -255,7 +251,7 @@ export function MobileBottomNav() {
               </If>
             </View>
           </View>
-        </BaseButton>
+        </TipButton>
       </View>
     </View>
   );

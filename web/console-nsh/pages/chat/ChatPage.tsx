@@ -2,10 +2,10 @@
 // panel (web/console/src/views/ChatView.js). On phones (≤ 980 points) the topic list and the
 // conversation are separate views, and the panel is a sheet. The behaviour is in chatController.
 import { Text, View } from "nsh";
-import { Sheet } from "nsh/base";
-import { Button, Fab, Kicker, MessageDialog, Page } from "../../components/ui";
+import { Button as BaseButton, Sheet } from "nsh/base";
+import { Button, Fab, Icon, Kicker, MessageDialog, Page, Tip, TipButton } from "../../components/ui";
 import { ChatComposer } from "../../components/chat/ChatComposer";
-import { ChatHistoryList } from "../../components/chat/ChatHistoryList";
+import { ChatHistoryList, chatGutter } from "../../components/chat/ChatHistoryList";
 import { t } from "../../components/chat/i18n";
 import { RawJsonDialog } from "../../components/shared/RawJsonDialog";
 import { WorkspaceDirPickerDialog } from "../../components/shared/WorkspaceDirPickerDialog";
@@ -91,18 +91,26 @@ function Composer(props: { c: ChatController; landing?: boolean }) {
   );
 }
 
-function WorkspaceToggle(props: { c: ChatController }) {
+// The panel toggle (the Vue console's `.chat-workspace-dock`): a one-segment version of the
+// panel's tabs, a 38pt outlined box with a 32pt square button inset in it, on the header line at
+// the top right. Open, it takes the tabs' selected fill. The drawn sidebar is mirrored: the panel
+// opens on the right.
+function WorkspaceToggle(props: { c: ChatController; bare?: boolean }) {
   return (
-    <Button
-      variant="plain"
-      size="sm"
-      iconOnly
-      icon="PhSidebarSimple"
-      title={props.c.workspaceSidebarToggleLabel()}
-      selected={props.c.workspaceSidebarOpen()}
-      onPress={() => props.c.toggleWorkspaceSidebar()}
-      testID="chat-workspace-toggle"
-    />
+    <View class={props.bare ? "" : "size-[38px] border border-line-soft bg-background p-0.5"}>
+      <TipButton
+        selected={props.c.workspaceSidebarOpen()}
+        accessibilityLabel={props.c.workspaceSidebarToggleLabel()}
+        tooltip={<Tip text={props.c.workspaceSidebarToggleLabel()} />}
+        onPress={() => props.c.toggleWorkspaceSidebar()}
+        testID="chat-workspace-toggle"
+        class="size-8 items-center justify-center transition-colors duration-[180ms] hover:bg-hover-soft selected:bg-selection-strong"
+      >
+        <View style={{ scale: [-1, 1] }}>
+          <Icon name="PhSidebarSimple" size={16} color={props.c.workspaceSidebarOpen() ? "blue-dark" : "muted-foreground"} />
+        </View>
+      </TipButton>
+    </View>
   );
 }
 
@@ -127,19 +135,21 @@ function ChatMain(props: { c: ChatController }) {
               onLoadOlder={() => void c.loadOlderHistory()}
               ctx={c.rowContext}
               onListRef={(list) => c.setHistoryList(list)}
+              onScrollFromEnd={(distance, viewport) => c.setHistoryScroll(distance, viewport)}
+              topInset={dockVisible() && !c.desktopWorkspaceSidebarVisible() ? 64 : 20}
             />
-            <View class="w-full max-w-3xl self-center px-5 pb-3 pt-1">
+            <View class="w-full max-w-[832px] self-center" style={{ paddingLeft: chatGutter(), paddingRight: chatGutter() }}>
               <If
                 when={c.selectedTopicIsAgent()}
                 else={
                   <If when={c.selectedTopicIsCron()} else={<Composer c={c} />}>
-                    <Text class="py-3 text-center text-sm text-muted-foreground" testID="chat-readonly-topic">
+                    <Text class="border-t border-line-soft px-3.5 py-3 text-center text-sm text-muted-foreground" testID="chat-readonly-topic">
                       {t("chat_topic_cron_readonly", { name: c.deskTitle() })}
                     </Text>
                   </If>
                 }
               >
-                <Text class="py-3 text-center text-sm text-muted-foreground" testID="chat-readonly-topic">
+                <Text class="border-t border-line-soft px-3.5 py-3 text-center text-sm text-muted-foreground" testID="chat-readonly-topic">
                   {t("chat_topic_agent_readonly", { name: c.deskTitle() })}
                 </Text>
               </If>
@@ -158,7 +168,7 @@ function ChatMain(props: { c: ChatController }) {
         </View>
       </If>
       <If when={dockVisible() && !c.desktopWorkspaceSidebarVisible()}>
-        <View class="absolute right-3 top-2">
+        <View class="absolute right-4 top-[9.5px]">
           <WorkspaceToggle c={c} />
         </View>
       </If>
@@ -174,11 +184,11 @@ export function ChatPage() {
       <If when={c.mobileShowBack()}>
         <Button variant="plain" size="xs" iconOnly icon="PhArrowLeft" title={t("chat_topics_title")} onPress={() => c.showTopicsView()} testID="chat-back" />
       </If>
-      <Text class="flex-1 text-lg font-semibold text-foreground line-clamp-1" role="header">
+      <Text class="flex-1 text-xl leading-6 tracking-[-0.03em] text-foreground line-clamp-1" role="header">
         {c.mobileTopicSplitEnabled() ? c.mobileBarTitle() : t("chat_title")}
       </Text>
       <If when={c.mobileTopicSplitEnabled() && c.showChatPane() && c.workspaceSidebarAvailable()}>
-        <WorkspaceToggle c={c} />
+        <WorkspaceToggle c={c} bare />
       </If>
     </View>
   );
@@ -205,13 +215,13 @@ export function ChatPage() {
       >
         <View class="flex-1 flex-row">
           <If when={c.showTopicSidebar()}>
-            <TopicSidebar c={c} class={c.mobileTopicSplitEnabled() ? "flex-1" : "w-72 border-r border-line-faint"} />
+            <TopicSidebar c={c} class={c.mobileTopicSplitEnabled() ? "flex-1" : "w-[314px] pr-1"} />
           </If>
           <If when={c.showChatPane()}>
             <ChatMain c={c} />
           </If>
           <If when={c.desktopWorkspaceSidebarVisible()}>
-            <WorkspacePanel c={c} class="w-80 border-l border-line-faint" trailing={<WorkspaceToggle c={c} />} />
+            <WorkspacePanel c={c} class="w-[314px] pl-1" trailing={<WorkspaceToggle c={c} />} />
           </If>
         </View>
         <If when={c.showTopicSidebar() && c.mobileTopicSplitEnabled()}>

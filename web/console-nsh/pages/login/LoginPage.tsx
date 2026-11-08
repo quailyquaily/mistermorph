@@ -1,10 +1,11 @@
 // The login page: the console's password, then on to setup or the page that sent us here.
 // Without a password the console logs in by itself and this page only passes through.
 import type { InputRef } from "nsh";
-import { effect, Image, signal, Text, untracked, View } from "nsh";
+import { effect, Image, signal, Text, untracked, View, windowSize } from "nsh";
 import loginLogo from "../../assets/images/app_logo.svg";
 import { LanguageSelector } from "../../components/LanguageSelector";
 import { Button, Icon, TextField } from "../../components/ui";
+import { ObserveSection } from "../../components/observe/parts";
 import {
   apiFetch,
   authState,
@@ -106,50 +107,65 @@ export function LoginPage() {
     if (!authState.token) focusPassword();
   }
 
+  // Vue: centred, 24/16 padding and 10vh under it; on phones (<=480) it sits 12vh from the top.
+  const phone = () => windowSize().width <= 480;
   return (
-    <View class="flex-1 items-center justify-center bg-background p-6">
-      <View class="w-full max-w-sm gap-6">
-        <View class="items-center gap-3">
-          <Image src={loginLogo} class="size-14" />
-          <Text class="text-xl font-semibold text-foreground" role="header">
+    <View
+      class={`flex-1 items-center px-4 ${phone() ? "" : "justify-center"}`}
+      style={phone() ? { paddingTop: windowSize().height * 0.12 } : { paddingTop: 24, paddingBottom: windowSize().height * 0.1 }}
+    >
+      <View class="w-full gap-4" style={{ maxWidth: 400 }}>
+        {/* The brand: the mark and the name in tracked mono caps. */}
+        <View class="flex-row items-center gap-3 px-0.5">
+          <Image src={loginLogo} style={{ width: 32, height: 32 }} />
+          <Text class="font-mono text-base font-semibold uppercase leading-[20.8px] tracking-[0.14em] text-foreground" role="header">
             Mister Morph
           </Text>
         </View>
-        <View class="gap-4 rounded-(--radius) border border-line-faint bg-card p-5">
-          <View class="flex-row items-baseline justify-between gap-3">
-            <Text class="text-base font-semibold text-foreground">{t("login_subtitle")}</Text>
-            <Text class="font-mono text-xs text-muted-foreground line-clamp-1">{host}</Text>
-          </View>
-          <TextField
-            label={t("login_password_label")}
-            value={password()}
-            onChange={(value) => {
-              password.set(value);
-              err.set("");
-            }}
-            onSubmit={() => void submit()}
-            placeholder={t("login_password_placeholder")}
-            masked={!showPassword()}
-            disabled={busy()}
-            error={err()}
-            testID="login-password"
-            inputRef={(node) => (passwordInput = node)}
-            trailing={
-              <Button
-                variant="plain"
-                size="xxs"
-                iconOnly
-                icon={showPassword() ? "PhEyeSlash" : "PhEye"}
-                title={t(showPassword() ? "login_hide_password" : "login_show_password")}
+        <ObserveSection
+          variant="boxed"
+          title={t("login_subtitle")}
+          meta={<Text class="font-mono text-xs leading-[17.4px] text-muted-foreground line-clamp-1">{host}</Text>}
+          gap={0}
+        >
+          <View class="px-2 pb-1 pt-2">
+            <Text class="mb-2 font-mono text-[11px] font-medium uppercase leading-[15.4px] tracking-[0.12em] text-muted-foreground">
+              {t("login_password_label")}
+            </Text>
+            {/* A fixed slot under the field, so an error never shifts the button. */}
+            <View style={{ minHeight: 44 + 30 }}>
+              <TextField
+                value={password()}
+                onChange={(value) => {
+                  password.set(value);
+                  err.set("");
+                }}
+                onSubmit={() => void submit()}
+                placeholder={t("login_password_placeholder")}
+                accessibilityLabel={t("login_password_label")}
+                masked={!showPassword()}
                 disabled={busy()}
-                selected={showPassword()}
-                onPress={() => showPassword.update((v) => !v)}
+                error={err()}
+                testID="login-password"
+                inputRef={(node) => (passwordInput = node)}
+                trailing={
+                  <Button
+                    variant="plain"
+                    size="xs"
+                    iconOnly
+                    icon={showPassword() ? "PhEyeSlash" : "PhEye"}
+                    title={t(showPassword() ? "login_hide_password" : "login_show_password")}
+                    disabled={busy()}
+                    selected={showPassword()}
+                    onPress={() => showPassword.update((v) => !v)}
+                  />
+                }
               />
-            }
-          />
-          <Button variant="primary" size="md" block label={t("login_button")} loading={busy()} onPress={() => void submit()} />
-        </View>
-        <View class="items-center">
+            </View>
+            <Button variant="primary" size="md" block label={t("login_button")} loading={busy()} onPress={() => void submit()} />
+          </View>
+        </ObserveSection>
+        <View class="items-end">
           <LanguageSelector />
         </View>
       </View>

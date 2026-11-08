@@ -9,14 +9,14 @@
 // Vue to nsh: `modelValue` is `value`, `update:modelValue` is `onChange(value)`, `ariaLabel` is
 // `accessibilityLabel`, the `toolbar` slot is the `toolbar` prop, the `height` CSS string may also be
 // points, and the exposed `insertAtCursor` comes through `editorRef`.
-import type { EditorRef, EditorSelection } from "nsh/base";
+import type { EditorDecoration, EditorRef, EditorSelection } from "nsh/base";
 import type { JSX } from "nsh";
 import { batch, effect, Image, signal, Text, untracked, View } from "nsh";
-import { Button as BaseButton, Editor, Tooltip } from "nsh/base";
+import { Button as BaseButton, Editor } from "nsh/base";
 import { activeChannelTab, channelTabs, itemsForChannelTab } from "../../lib/core/channel-tabs.js";
 import { endpointState, runtimeApiFetchForEndpoint, translate } from "../../lib/core/context.js";
 import { useContactsStore } from "../../lib/stores/contactsStore.js";
-import { Icon, type IconName, Markdown, Modal, TextField } from "../ui";
+import { Icon, Markdown, Modal, TextField, Tip, TipButton, type IconName } from "../ui";
 import { ContactAvatar } from "./ContactAvatar";
 import discordLogo from "../../assets/images/channels/discord.svg";
 import larkLogo from "../../assets/images/channels/lark.svg";
@@ -52,6 +52,8 @@ export interface MarkdownEditorProps {
   /** Controls at the start of the toolbar. */
   toolbar?: JSX.Element;
   editorRef?: (api: MarkdownEditorApi) => void;
+  /** Styles over the Markdown highlighting (ranges of the source), passed to the Editor. */
+  decorations?: EditorDecoration[];
   class?: string;
   testID?: string;
 }
@@ -86,6 +88,7 @@ function textPosition(text: string, offset: number) {
 export function MarkdownEditor(props: MarkdownEditorProps) {
   let editor: EditorRef | undefined;
   const mode = signal<"edit" | "preview">("edit");
+  const focused = signal(false);
   // The last selections, so a toolbar press (which takes the focus) still inserts at the caret.
   let lastSelections: EditorSelection[] = [];
 
@@ -153,11 +156,13 @@ export function MarkdownEditor(props: MarkdownEditorProps) {
   return (
     <View class={`gap-1.5 ${props.class ?? ""}`} testID={props.testID}>
       <View
-        class={`overflow-hidden rounded-(--radius) border border-input bg-field ${props.disabled ? "opacity-60" : ""}`}
+        class={`overflow-hidden rounded-(--radius) border bg-card transition-colors duration-200 ${focused() ? "border-ring" : "border-input"} ${
+          props.disabled ? "opacity-60" : ""
+        }`}
         style={heightStyle(props.height)}
       >
         <If when={props.toolbar || showTabs()}>
-          <View class="flex-row items-center gap-1 border-b border-line-faint px-1.5 py-1" role="toolbar" accessibilityLabel={`${label()} toolbar`}>
+          <View class="min-h-11 flex-row items-center gap-1 p-1" role="toolbar" accessibilityLabel={`${label()} toolbar`}>
             {props.toolbar}
             <View class="flex-1" />
             <If when={showTabs()}>
@@ -189,6 +194,7 @@ export function MarkdownEditor(props: MarkdownEditorProps) {
             }}
             value={props.value ?? ""}
             language="markdown"
+            decorations={props.decorations}
             placeholder={props.placeholder || null}
             readOnly={locked()}
             lineNumbers={false}
@@ -204,6 +210,8 @@ export function MarkdownEditor(props: MarkdownEditorProps) {
             testID={props.testID ? `${props.testID}-source` : undefined}
             class="flex-1"
             classes={{ content: "px-4 py-3", placeholder: "text-placeholder" }}
+            onFocus={() => focused.set(true)}
+            onBlur={() => focused.set(false)}
             onChange={({ value }) => {
               if (untracked(locked)) return;
               lastValue = value;
@@ -332,7 +340,7 @@ function PickerButton(props: {
   };
   return (
     <>
-      <BaseButton
+      <TipButton
         disabled={props.disabled}
         onPress={() => {
           batch(() => {
@@ -344,14 +352,12 @@ function PickerButton(props: {
         accessibilityLabel={props.title}
         testID={props.testID}
         tooltip={
-          <Tooltip class="bg-foreground px-2 py-1">
-            <Text class="text-xs text-background">{props.title}</Text>
-          </Tooltip>
+          <Tip text={props.title} />
         }
-        class="size-7 items-center justify-center rounded-(--radius) hover:bg-hover active:bg-selection disabled:opacity-45"
+        class="size-9 items-center justify-center rounded-[6px] transition-colors duration-120 hover:bg-blue/6 active:bg-blue/10 disabled:opacity-45"
       >
-        <Icon name={props.icon} size={16} color="subtle" />
-      </BaseButton>
+        <Icon name={props.icon} size={18} color="subtle" />
+      </TipButton>
       <Modal open={open()} onClose={() => open.set(false)} title={props.title} size="sm" testID={`${props.testID}-dialog`}>
         {props.header}
         <TextField value={filter()} onChange={(value) => filter.set(value)} placeholder={props.placeholder} leadingIcon="PhMagnifyingGlass" autoFocus />

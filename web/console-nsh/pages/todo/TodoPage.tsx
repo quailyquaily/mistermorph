@@ -1,91 +1,113 @@
 // The TODO page (web/console/src/views/TodoView.js): scheduled and manual agent tasks. A list (or
 // the calendar) at the left, the selected item's editor at the right; on phones one at a time, with
 // a back button over the editor and the floating add button over the list.
-import { effect, Scroll, Text, untracked, View } from "nsh";
+import { effect, Scroll, Text, untracked, View, windowSize } from "nsh";
+import { Button as BaseButton } from "nsh/base";
 import { translate } from "../../lib/core/context.js";
 import { isMobile } from "../../lib/shell";
-import { Button, Fab, type MessageAction, MessageDialog, Page } from "../../components/ui";
+import { Button, Fab, type MessageAction, MessageDialog, Page, PageTitle } from "../../components/ui";
 import { WorkspaceDirPickerDialog } from "../../components/shared/WorkspaceDirPickerDialog";
 import { TodoCalendar } from "../../components/todo/TodoCalendar";
 import { TodoHeartbeatEditor } from "../../components/todo/TodoHeartbeatEditor";
-import { TodoIndex } from "../../components/todo/TodoIndex";
+import { ROW_TRANSITION, TODO_INDEX_WIDTH, TodoIndex } from "../../components/todo/TodoIndex";
+import { TodoCard } from "../../components/todo/TodoCard";
+import { gutterX, gutterY } from "../../components/frame/metrics";
+import { Entrance, FadeText, SCROLLBAR } from "../../components/motion";
 import { TodoTaskEditor } from "../../components/todo/TodoTaskEditor";
 import { createTodoState, type TodoState, type TodoTask } from "../../components/todo/todo-state";
 import { TODO_TOPIC_ERROR, TODO_TOPIC_READY, TODO_TOPIC_UNAVAILABLE } from "../../lib/core/todo-topic.js";
 
 const t = translate as (key: string, vars?: Record<string, unknown> | null) => string;
 
-function CalendarDayDetail(props: { state: TodoState }) {
+/** The selected day's TODOs in the calendar's side column (the Vue page's day detail card). */
+function CalendarDayDetail(props: { state: TodoState; panel?: boolean }) {
   const state = props.state;
   return (
-    <View
-      class="gap-3 rounded-(--radius) border border-line-faint bg-card p-4"
+    <TodoCard
+      panel={props.panel}
+      list
+      title={state.selectedCalendarDateTitle()}
+      meta={t("todo_calendar_item_count", { count: state.selectedCalendarTasks().length })}
       accessibilityLabel={t("todo_calendar_agenda")}
       testID="todo-day-detail"
     >
-      <View class="gap-0.5">
-        <Text class="text-base font-semibold text-foreground">{state.selectedCalendarDateTitle()}</Text>
-        <Text class="text-xs text-muted-foreground">
-          {t("todo_calendar_item_count", { count: state.selectedCalendarTasks().length })}
-        </Text>
-      </View>
       <If
         when={state.selectedCalendarTasks().length > 0}
-        else={<Text class="text-xs text-muted-foreground">{t("todo_calendar_day_empty")}</Text>}
+        else={<Text class="px-1 py-[18px] text-xs text-muted-foreground">{t("todo_calendar_day_empty")}</Text>}
       >
-        <View class="gap-1">
+        <View>
           <Each of={state.selectedCalendarTasks()} key={(task: TodoTask) => task._key}>
-            {(task) => (
-              <Button
-                variant="plain"
-                block
-                class="justify-start py-1"
-                title={state.taskTitle(task())}
-                testID={`todo-day-item-${task().id}`}
+            {(task, index) => (
+              <BaseButton
                 onPress={() => state.selectTask(task())}
+                accessibilityLabel={state.taskTitle(task())}
+                testID={`todo-day-item-${task().id}`}
+                // Rows on hairlines (`.todo-calendar-day-detail-item`): a 7pt status square, the
+                // name in 14pt semibold, the schedule in mono; the last row drops its rule.
+                class={`flex-row items-center gap-2.5 px-1 py-[13px] hover:bg-blue/5 ${
+                  index() < state.selectedCalendarTasks().length - 1 ? "border-b border-line-soft" : ""
+                }`}
+                style={ROW_TRANSITION}
               >
-                <View class="flex-1 flex-row items-center gap-2">
-                  <View class={`size-1.5 ${task().enabled === false ? "border border-status-off" : "bg-status-on"}`} />
-                  <View class="flex-1 gap-0.5">
-                    <Text
-                      class={`text-sm line-clamp-1 ${task().enabled === false ? "text-muted-foreground" : "text-foreground"}`}
-                    >
-                      {state.taskTitle(task())}
-                    </Text>
-                    <Text class="text-xs text-muted-foreground line-clamp-1">{state.scheduleLabel(task())}</Text>
-                  </View>
+                <View class={`size-[7px] ${task().enabled === false ? "bg-muted-foreground" : "bg-blue"}`} />
+                <View class="flex-1 gap-[3px]">
+                  <FadeText
+                    text={state.taskTitle(task())}
+                    class={`text-sm font-semibold ${task().enabled === false ? "text-muted-foreground" : "text-foreground"}`}
+                  />
+                  <Text class="font-mono text-xs leading-[16.8px] text-muted-foreground">{state.scheduleLabel(task())}</Text>
                 </View>
-              </Button>
+              </BaseButton>
             )}
           </Each>
         </View>
       </If>
-    </View>
+    </TodoCard>
   );
 }
 
-function Placeholder(props: { state: TodoState }) {
+/** Nothing selected (`.todo-placeholder`): centred in the pane, the title, a note and Add TODO. */
+function Placeholder(props: { state: TodoState; mobile?: boolean }) {
   const state = props.state;
+  const height = () => windowSize().height;
+  const width = () => windowSize().width;
   return (
-    <View class="items-start gap-3 p-5" testID="todo-placeholder">
-      <View class="gap-1">
-        <Text class="text-lg font-semibold text-foreground">{t("todo_detail_empty_title")}</Text>
-        <Text class="text-sm text-muted-foreground">{t("todo_detail_empty_hint")}</Text>
+    <View
+      class="flex-1 items-center justify-center"
+      testID="todo-placeholder"
+      style={{
+        marginTop: props.mobile ? 0 : gutterY(),
+        marginRight: gutterX(),
+        marginBottom: gutterY(),
+        marginLeft: props.mobile ? gutterX() : 0,
+        // clamp(28px, 8vh, 88px) clamp(18px, 4vw, 64px)
+        paddingVertical: Math.min(88, Math.max(28, height() * 0.08)),
+        paddingHorizontal: Math.min(64, Math.max(18, width() * 0.04)),
+      }}
+    >
+      <View class="w-full max-w-xl items-center gap-2">
+        <Text class="max-w-55 text-center text-xl font-normal leading-[24px] tracking-[-0.6px] text-foreground" role="header">
+          {t("todo_detail_empty_title")}
+        </Text>
+        <Text class="max-w-[34rem] text-center text-base leading-[25.9px] text-subtle">{t("todo_detail_empty_hint")}</Text>
       </View>
-      <Button
-        variant="primary"
-        icon="PhPlus"
-        label={t("todo_action_add")}
-        disabled={state.loading() || state.saving()}
-        testID="todo-placeholder-add"
-        onPress={state.addTask}
-      />
+      <View class="mt-4 flex-row items-center justify-center gap-2">
+        <Button
+          variant="primary"
+          size="md"
+          icon="PhPlus"
+          label={t("todo_action_add")}
+          disabled={state.loading() || state.saving()}
+          testID="todo-placeholder-add"
+          onPress={state.addTask}
+        />
+      </View>
     </View>
   );
 }
 
 /** What the editor side shows, in the Vue template's order. */
-function EditorPane(props: { state: TodoState }) {
+function EditorPane(props: { state: TodoState; mobile?: boolean }) {
   const state = props.state;
   const mode = () => {
     if (!state.showEditorPane()) return "none";
@@ -94,23 +116,29 @@ function EditorPane(props: { state: TodoState }) {
     if (state.calendarView() && state.selectedCalendarDate()) return "day";
     return "placeholder";
   };
+  // In the calendar's side column the card is a panel inset 8 all round and scrolls within the
+  // column; beside the list it is a framed box (margin 8 8 8 16), on phones 16 all round.
+  const panel = () => !props.mobile && state.calendarView();
+  const margin = () =>
+    props.mobile ? { margin: 16, marginBottom: 96 } : panel() ? { margin: 8 } : { marginTop: 8, marginRight: 8, marginBottom: 8, marginLeft: 16 };
   return (
-    <Scroll class="flex-1" contentClass={`gap-4 ${isMobile() ? "p-4 pb-24" : "p-5"}`}>
-      <If when={mode() === "heartbeat"}>
-        <TodoHeartbeatEditor state={state} />
-      </If>
-      <If when={mode() === "task"}>
-        <View class="rounded-(--radius) border border-line-faint bg-card p-4">
-          <TodoTaskEditor state={state} />
-        </View>
-      </If>
-      <If when={mode() === "day"}>
-        <CalendarDayDetail state={state} />
-      </If>
-      <If when={mode() === "placeholder"}>
-        <Placeholder state={state} />
-      </If>
-    </Scroll>
+    <If when={mode() !== "placeholder"} else={<Placeholder state={state} mobile={props.mobile} />}>
+      <Scroll class="flex-1" scrollbar={SCROLLBAR} contentClass="min-h-full">
+        <Entrance watch={`${mode()}:${state.selectedTaskKey() ?? ""}:${state.selectedCalendarDate() ?? ""}`} class="flex-1" rise={4}>
+          <View class="flex-1" style={margin()}>
+            <If when={mode() === "heartbeat"}>
+              <TodoHeartbeatEditor state={state} />
+            </If>
+            <If when={mode() === "task"}>
+              <TodoTaskEditor state={state} panel={panel()} />
+            </If>
+            <If when={mode() === "day"}>
+              <CalendarDayDetail state={state} panel={panel()} />
+            </If>
+          </View>
+        </Entrance>
+      </Scroll>
+    </If>
   );
 }
 
@@ -170,38 +198,43 @@ export function TodoPage() {
             testID="todo-back"
             onPress={state.showIndexView}
           />
-          <Text class="flex-1 text-lg font-semibold text-foreground line-clamp-1" role="header">
-            {state.mobileBarTitle()}
-          </Text>
+          <PageTitle text={state.mobileBarTitle()} />
         </View>
       }
     >
       <If
         when={isMobile()}
         else={
-          <View class="flex-1 flex-row">
-            <If
-              when={state.calendarView()}
-              else={
-                <View class="w-72 border-r border-line-faint bg-sidebar">
+          <If
+            when={state.calendarView()}
+            else={
+              // The list's column (310) and the editor beside it, 4 apart (the workbench's gap).
+              <View class="flex-1 flex-row gap-1">
+                <View style={{ width: TODO_INDEX_WIDTH }}>
                   <TodoIndex state={state} />
                 </View>
-              }
-            >
-              <Scroll class="flex-1" contentClass="min-h-full p-4">
+                <View class="flex-1">
+                  <EditorPane state={state} />
+                </View>
+              </View>
+            }
+          >
+            {/* The calendar and its side column share the page's height, 1.45 : 0.55 (360 at least). */}
+            <View class="flex-1 flex-row gap-1">
+              <Scroll class="flex-[1.45]" scrollbar={SCROLLBAR} contentClass="min-h-full">
                 <Calendar state={state} />
               </Scroll>
-            </If>
-            <View class={state.calendarView() ? "w-96 border-l border-line-faint" : "flex-1"}>
-              <EditorPane state={state} />
+              <View class="min-w-90 flex-[0.55]">
+                <EditorPane state={state} />
+              </View>
             </View>
-          </View>
+          </If>
         }
       >
         <View class="flex-1">
-          <If when={state.showIndexPane()} else={<EditorPane state={state} />}>
+          <If when={state.showIndexPane()} else={<EditorPane state={state} mobile />}>
             <If when={state.calendarView()} else={<TodoIndex state={state} mobile />}>
-              <Scroll class="flex-1" contentClass="px-4 pb-24">
+              <Scroll class="flex-1" scrollbar={SCROLLBAR} contentClass="pb-24">
                 <Calendar state={state} mobile />
               </Scroll>
             </If>

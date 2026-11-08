@@ -156,6 +156,7 @@ function PasswordAsk(props: {
       <TextField
         class="flex-1"
         value={password()}
+        clearable={Boolean(password())}
         onChange={(value) => password.set(value)}
         onSubmit={(text) => submit(text)}
         masked
@@ -443,6 +444,7 @@ export function SecretInput(props: SecretInputProps) {
       <If when={mode() === "typing"}>
         <TextField
           value={value()}
+          clearable={Boolean(value())}
           onChange={(next) => props.onChange?.(next)}
           masked={!typedVisible()}
           placeholder={props.placeholder}

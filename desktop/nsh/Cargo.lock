@@ -4576,8 +4576,6 @@ dependencies = [
 [[package]]
 name = "nsh-platform-gpui"
 version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e3828245c26e734567b3e6058398c0e4d5809063636460f990a0eaf8a0f74c3"
 dependencies = [
  "anyhow",
  "crossbeam-channel",

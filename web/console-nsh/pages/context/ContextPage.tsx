@@ -6,7 +6,7 @@
 // item's text; Back steps up a level before it leaves for the topic.
 import { batch, Canvas, computed, effect, Scroll, signal, Text, token, untracked, View, windowSize } from "nsh";
 import { Button as BaseButton } from "nsh/base";
-import { Button, Icon, Page, Spinner } from "../../components/ui";
+import { Button, Icon, Page, Spinner, Tip } from "../../components/ui";
 import { t } from "../../components/chat/i18n";
 import { contextCellGrid, contextRing } from "../../lib/core/context-inspector.js";
 import { currentLocale, endpointState, runtimeApiFetch } from "../../lib/core/context.js";
@@ -87,7 +87,7 @@ function Swatch(props: { kind: string }) {
 
 function CacheBadge(props: { cache: any }) {
   return (
-    <View class="rounded-(--radius) border border-line px-1" tooltip={<Text class="text-xs">{t("context_inspector_cache_key")}</Text>}>
+    <View class="rounded-(--radius) border border-line px-1" tooltip={<Tip text={t("context_inspector_cache_key")} />}>
       <Text class="font-mono text-xs text-subtle">{cacheLabel(props.cache)}</Text>
     </View>
   );
@@ -306,7 +306,7 @@ export function ContextPage() {
                   <View
                     onPress={() => togglePart(cell().kind)}
                     accessibilityLabel={cell().cache ? `${partLabel(cell().kind)} · ${cacheLabel(cell().cache)}` : partLabel(cell().kind)}
-                    tooltip={<Text class="text-xs">{cell().cache ? `${partLabel(cell().kind)} · ${cacheLabel(cell().cache)}` : partLabel(cell().kind)}</Text>}
+                    tooltip={<Tip text={cell().cache ? `${partLabel(cell().kind)} · ${cacheLabel(cell().cache)}` : partLabel(cell().kind)} />}
                     class={`${partBg(cell().kind)} ${selectedKind() && selectedKind() !== cell().kind ? "opacity-25" : ""} ${
                       cell().cache ? "border-2 border-foreground" : ""
                     }`}

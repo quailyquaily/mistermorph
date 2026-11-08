@@ -7,6 +7,7 @@
 // IntersectionObserver; nsh has none, so the download starts when the avatar is made, and a
 // module-level cache keeps recycled List rows from downloading the same avatar again.
 import { cleanup, computed, effect, Image, signal, Text, untracked, View } from "nsh";
+import { CutoutAvatar } from "./CutoutAvatar";
 import { runtimeApiDownloadForEndpoint } from "../../lib/core/context.js";
 
 export interface ContactAvatarProps {
@@ -20,6 +21,10 @@ export interface ContactAvatarProps {
   endpointRef: string;
   /** `list` (40 points) or `detail` (64 points). */
   size?: "list" | "detail";
+  /** A round notch cut out of the avatar where a badge sits (its centre and radius, in points): the
+   * row behind shows through the gap instead of the badge wearing a ring. Drawn on a canvas
+   * (CutoutAvatar), so every platform cuts it. */
+  notch?: { x: number; y: number; r: number };
   class?: string;
   testID?: string;
 }
@@ -98,20 +103,49 @@ export function ContactAvatar(props: ContactAvatarProps) {
     failed.set(true);
   }
 
+  const initial = () => (
+    <Text class={`font-semibold leading-none text-blue ${props.size === "detail" ? "text-[22px]" : "text-[15px]"}`}>
+      {contactInitial(props.name)}
+    </Text>
+  );
+  // With a notch, the disc (its paper, the image, the hairline) is drawn cut; the initial sits on
+  // it, clear of the notch.
+  if (props.notch) {
+    return (
+      <View
+        testID={props.testID}
+        accessibilityElementsHidden
+        class={`items-center justify-center ${props.class ?? ""}`}
+        style={{ width: dimension(), height: dimension(), minWidth: dimension() }}
+      >
+        <CutoutAvatar
+          size={dimension()}
+          src={shown() || null}
+          background="#ffffff"
+          notch={props.notch}
+          onError={handleImageError}
+          class="absolute left-0 top-0"
+        />
+        <If when={!shown()}>{initial()}</If>
+      </View>
+    );
+  }
   return (
     <View
       testID={props.testID}
       accessibilityElementsHidden
-      class={`items-center justify-center overflow-hidden rounded-full bg-paper ${props.class ?? ""}`}
-      style={{ width: dimension(), height: dimension(), minWidth: dimension() }}
+      class={`items-center justify-center overflow-hidden rounded-full bg-white ${props.class ?? ""}`}
+      style={{
+        width: dimension(),
+        height: dimension(),
+        minWidth: dimension(),
+        // A faint inner hairline keeps a pale avatar from melting into the row.
+        boxShadow: "inset 0 0 0 1px rgba(24, 24, 50, 0.09)",
+      }}
     >
       <If
         when={shown()}
-        else={
-          <Text class={`font-semibold text-blue ${props.size === "detail" ? "text-[22px]" : "text-[15px]"}`}>
-            {contactInitial(props.name)}
-          </Text>
-        }
+        else={initial()}
       >
         {(src) => (
           <Image

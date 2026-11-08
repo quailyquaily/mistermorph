@@ -4,7 +4,7 @@ import { openFixture, out } from "./fixtures/settings-fields-open";
 
 test("a panel saves only what changed, as config changes", async () => {
   const { app } = await openFixture("/panel");
-  await app.waitFor("text:Logging");
+  await app.waitFor("text:LOGGING");
   expect(app.enabled("id:panel-save")).toBe(false);
   await app.press("id:setting-logging.enabled-switch");
   await app.waitUntil(() => out(app, "dirty") === "true");
@@ -15,7 +15,7 @@ test("a panel saves only what changed, as config changes", async () => {
 
 test("a field that depends on a switch is off until the switch is on", async () => {
   const { app } = await openFixture("/panel");
-  await app.waitFor("text:Logging");
+  await app.waitFor("text:LOGGING");
   expect(app.shows("text:Turn on Write logs to change this.")).toBe(true);
   expect(app.enabled("label:Level")).toBe(false);
   await app.press("id:setting-logging.enabled-switch");
@@ -25,7 +25,7 @@ test("a field that depends on a switch is off until the switch is on", async () 
 
 test("an invalid value is reported, not saved", async () => {
   const { app } = await openFixture("/panel");
-  await app.waitFor("text:Logging");
+  await app.waitFor("text:LOGGING");
   await app.press("id:setting-logging.enabled-switch");
   await app.clear("label:Max size");
   await app.type("label:Max size", "ten");
@@ -36,7 +36,7 @@ test("an invalid value is reported, not saved", async () => {
 
 test("a clearable field resets to the default, and an environment variable locks a field", async () => {
   const { app } = await openFixture("/panel");
-  await app.waitFor("text:Logging");
+  await app.waitFor("text:LOGGING");
   expect(app.value("label:Temperature")).toBe("0.7");
   await app.press("id:setting-llm.temperature-clear");
   await app.waitUntil(() => app.value("label:Temperature") === "");
@@ -47,12 +47,12 @@ test("a clearable field resets to the default, and an environment variable locks
   expect(app.shows("text:MODEL=gpt-5")).toBe(true);
   // A flag manages Listen, which needs a restart.
   expect(app.shows("text:Managed by a command-line flag")).toBe(true);
-  expect(app.texts()).toContain("RESTART REQUIRED");
+  expect(app.texts()).toContain("Restart required");
 });
 
 test("new values from the runtime replace the draft", async () => {
   const { app } = await openFixture("/panel");
-  await app.waitFor("text:Logging");
+  await app.waitFor("text:LOGGING");
   await app.press("id:setting-logging.enabled-switch");
   await app.waitUntil(() => out(app, "dirty") === "true");
   await app.press("id:reload");

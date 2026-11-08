@@ -5,7 +5,8 @@
 // Vue to nsh: `modelValue` is `servers`; `save` is `onSave(servers)`, `pane-change` is
 // `onPaneChange(open)`; `paneTarget` is a PaneTarget (see PaneTarget.tsx).
 import { batch, cleanup, computed, effect, signal, Text, untracked, View } from "nsh";
-import { Button, Icon, Section, Skeleton, Tabs, TextField, Toggle } from "../ui";
+import { Button, Icon, Skeleton, Tabs, TextField } from "../ui";
+import { SettingSwitch, SettingsCard, SettingToggleRow } from "../settings-page/parts";
 import { t } from "./DialogShell";
 import { type PaneTarget, SettingsPane, usePaneTarget } from "./PaneTarget";
 
@@ -242,8 +243,8 @@ export function MCPSettingsPanel(props: MCPSettingsPanelProps) {
   }
 
   const transportTabs = () => [
-    { id: "stdio", label: t("settings_mcp_stdio") },
-    { id: "http", label: t("settings_mcp_http") },
+    { id: "stdio", label: t("settings_mcp_stdio"), icon: "PhTerminalWindow" as const },
+    { id: "http", label: t("settings_mcp_http"), icon: "PhGlobe" as const },
   ];
   const inTarget = () => !!props.paneTarget && !props.mobile;
   const showFoot = () => dirty() || editingIndex() < 0 || !!dialogError();
@@ -256,6 +257,7 @@ export function MCPSettingsPanel(props: MCPSettingsPanelProps) {
             <TextField
               class="flex-1"
               value={row().key}
+              clearable={Boolean(row().key)}
               placeholder={pairProps.keyPlaceholder}
               disabled={busy()}
               mono
@@ -264,6 +266,7 @@ export function MCPSettingsPanel(props: MCPSettingsPanelProps) {
             <TextField
               class="flex-1"
               value={row().value}
+              clearable={Boolean(row().value)}
               placeholder={pairProps.valuePlaceholder}
               disabled={busy()}
               mono
@@ -285,6 +288,7 @@ export function MCPSettingsPanel(props: MCPSettingsPanelProps) {
 
   const pane = () => (
     <SettingsPane
+      literal
       open={paneOpen()}
       sheet={props.mobile}
       title={paneTitle()}
@@ -318,14 +322,16 @@ export function MCPSettingsPanel(props: MCPSettingsPanelProps) {
       <TextField
         label={t("settings_mcp_name")}
         value={editor().name}
+        clearable={Boolean(editor().name)}
         placeholder={t("settings_mcp_name_placeholder")}
         disabled={busy()}
         onChange={(value) => updateEditor("name", value)}
         testID="mcp-name"
       />
-      <Toggle
-        label={t("settings_mcp_on_demand")}
-        hint={t("settings_mcp_on_demand_note", { name: editor().name.trim() || "<name>" })}
+      <SettingToggleRow
+        first
+        title={t("settings_mcp_on_demand")}
+        note={t("settings_mcp_on_demand_note", { name: editor().name.trim() || "<name>" })}
         checked={editor().on_demand}
         disabled={busy()}
         onChange={updateOnDemand}
@@ -335,6 +341,7 @@ export function MCPSettingsPanel(props: MCPSettingsPanelProps) {
         label={t("settings_mcp_description")}
         hint={t("settings_mcp_description_note")}
         value={editor().description}
+        clearable={Boolean(editor().description)}
         placeholder={t("settings_mcp_description_placeholder")}
         disabled={busy()}
         onChange={(value) => updateEditor("description", value)}
@@ -347,6 +354,7 @@ export function MCPSettingsPanel(props: MCPSettingsPanelProps) {
             <TextField
               label={t("settings_mcp_command")}
               value={editor().command}
+              clearable={Boolean(editor().command)}
               placeholder="node"
               disabled={busy()}
               mono
@@ -385,6 +393,7 @@ export function MCPSettingsPanel(props: MCPSettingsPanelProps) {
         <TextField
           label={t("settings_mcp_url")}
           value={editor().url}
+          clearable={Boolean(editor().url)}
           placeholder="https://mcp.example.com/mcp"
           disabled={busy()}
           mono
@@ -436,8 +445,7 @@ export function MCPSettingsPanel(props: MCPSettingsPanelProps) {
   return (
     <View class="flex-row" testID="mcp-settings">
       <View class="flex-1">
-        <Section
-          variant="card"
+        <SettingsCard
           title={t("settings_mcp_title")}
           meta={t("settings_section_mcp_meta")}
           actions={
@@ -472,10 +480,12 @@ export function MCPSettingsPanel(props: MCPSettingsPanelProps) {
             <If
               when={servers().length}
               else={
-                <View class="min-h-44 items-center justify-center gap-2" testID="mcp-empty">
-                  <Icon name="PhPlugsConnected" size={34} color="muted-foreground" />
-                  <Text class="text-sm font-semibold text-foreground">{t("settings_mcp_empty")}</Text>
-                  <Text class="text-center text-xs text-muted-foreground">{t("settings_mcp_empty_note")}</Text>
+                <View class="min-h-45 items-center justify-center gap-2" testID="mcp-empty">
+                  <View class="mb-1">
+                    <Icon name="PhPlugsConnected" size={34} color="muted-foreground" />
+                  </View>
+                  <Text class="text-base font-semibold text-subtle">{t("settings_mcp_empty")}</Text>
+                  <Text class="text-center text-base text-muted-foreground">{t("settings_mcp_empty_note")}</Text>
                 </View>
               }
             >
@@ -483,8 +493,8 @@ export function MCPSettingsPanel(props: MCPSettingsPanelProps) {
                 <Each of={servers()} key={(server) => String(server._key || server.name)}>
                   {(server, index) => (
                     <View
-                      class={`flex-row items-center gap-3 ${index() > 0 ? "border-t border-line-faint" : ""} ${
-                        paneOpen() && editingIndex() === index() ? "bg-selection" : ""
+                      class={`flex-row items-center gap-3 ${index() > 0 ? "border-t border-line-soft" : ""} ${
+                        paneOpen() && editingIndex() === index() ? "bg-blue/9" : ""
                       }`}
                     >
                       <View
@@ -503,20 +513,21 @@ export function MCPSettingsPanel(props: MCPSettingsPanelProps) {
                           <Text class="text-xs text-muted-foreground">{t("settings_mcp_on_demand_hint", { name: server().name })}</Text>
                         </If>
                       </View>
-                      <Toggle
-                        class="pr-2"
-                        checked={server().enable !== false}
-                        disabled={busy()}
-                        testID={`mcp-enable-${index()}`}
-                        onChange={(value) => setServerEnabled(index(), value)}
-                      />
+                      <View class="pr-2">
+                        <SettingSwitch
+                          checked={server().enable !== false}
+                          disabled={busy()}
+                                                    testID={`mcp-enable-${index()}`}
+                          onChange={(value) => setServerEnabled(index(), value)}
+                        />
+                      </View>
                     </View>
                   )}
                 </Each>
               </View>
             </If>
           </If>
-        </Section>
+        </SettingsCard>
       </View>
       <If when={!inTarget()}>{pane()}</If>
     </View>

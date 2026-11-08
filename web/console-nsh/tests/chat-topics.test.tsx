@@ -51,7 +51,8 @@ test("a topic in the address opens at once, and the tag view groups by tag", asy
   });
   await app.waitFor("text:Try Lisbon.");
   await app.press("id:chat-topics-view-tags");
-  await app.waitFor("FOOD");
+  // In the tag view a group's label is the tag, in its own case (the date view's are capitals).
+  await app.waitFor("food");
   await app.waitFor("id:chat-topic-group-tag:food");
   await app.press("id:chat-topics-view-tags");
   await app.waitFor("TODAY");
