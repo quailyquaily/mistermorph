@@ -94,6 +94,9 @@ Headless tests prove behaviour, not the look.
 - Repeating gradients work, though the docs don't say so: `backgroundImage:
   "repeating-linear-gradient(135deg, <c> 0 2px, transparent 2px 5px)"` (hatching, the paper grid in
   `Shell`). Put them in `style` (Tailwind arbitrary values can't hold the spaces).
+- nsh/base's indeterminate `Progress` neither sizes nor moves its indicator: left alone it fills the
+  track and stands still (a dash). `Spinner` and `LoadingLine` (ui.tsx) animate their own segment.
+  A loading `Button` draws the ui-kit's moving stripe over itself, not a spinner beside its label.
 - nsh/base's `Button` drops the `tooltip` prop: a button with a tooltip is `TipButton` (ui.tsx),
   which puts the tooltip on a view around it and gives that view the button's placement classes
   and `onLayout`.
