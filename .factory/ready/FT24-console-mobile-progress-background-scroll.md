@@ -46,3 +46,12 @@ Coder visual checks: Chromium and WebKit mobile at 390×760, active-run WebKit, 
 Installs: temporary playwright-core@1.65.0 and Playwright WebKit for browser testing; scratch tools removed, no manifest/lockfile changes.
 Not checked: physical iPhone/Android and genuine touch momentum. Actual device color-mix support remains unknown. Headless mobile WebKit showed chat text through the topic header, left outside scope.
 Owner/reviewer focus: confirm dark surface on the affected phone and the deliberate shared behavior that expanding progress away from bottom pauses following until returning to bottom. No base merge or deployment performed.
+
+## factory · review · 2026-11-08 13:07
+head: 69ad883dc3c5f1379cedf94f5d6da8731256a16f
+verdict: pass
+Codex reviewed origin/master...HEAD, all five changed files, against the request and plan. No qualifying findings. Branch merges cleanly with origin/master.
+Validation: required gofmt check, go vet ./..., go test ./... passed; pnpm test passed 494/494; pnpm build passed with only the chunk-size advisory. Scripted tests used an isolated temporary HOME. Chromium mobile and desktop checks passed for background refresh, older-message reading and restored bottom following; mobile progress toggle and dark fallback checks passed.
+Installs: no unpinned tools or manifest/lockfile changes. No source changes or commits by the reviewer.
+Residual risks: this review did not test physical phones, Safari/WebKit or real touch momentum. Browser checks used a mocked API; old-browser color compatibility was simulated. Owner should confirm the dark surface and scroll behavior on the affected phone.
+Moved review/ → ready/. No linked GitHub issue or PR. No merge or deployment.
