@@ -26,9 +26,9 @@ const (
 	SceneConsole = "console.voice"
 )
 
-// NewClient builds the transcription client from LLM values, recording usage under journalDir
+// NewClient builds the transcription client from LLM values, recording usage in usageDBPath
 // (none when empty). It returns (nil, nil) when llm.routes.transcription is not set.
-func NewClient(values llmutil.RuntimeValues, journalDir string, logger *slog.Logger) (llm.TranscriptionClient, error) {
+func NewClient(values llmutil.RuntimeValues, usageDBPath string, logger *slog.Logger) (llm.TranscriptionClient, error) {
 	routeValues, err := llmutil.TranscriptionRouteValues(values)
 	if errors.Is(err, llmutil.ErrTranscriptionRouteUnset) {
 		return nil, nil
@@ -45,7 +45,7 @@ func NewClient(values llmutil.RuntimeValues, journalDir string, logger *slog.Log
 		Provider:     meta.Provider,
 		APIBase:      meta.Endpoint,
 		DefaultModel: meta.Model,
-		JournalDir:   journalDir,
+		UsageDBPath:  usageDBPath,
 		Logger:       logger,
 	}), nil
 }

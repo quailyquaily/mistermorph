@@ -791,7 +791,7 @@ func buildManagedRuntimeDepsFromReader(logger *slog.Logger, reader *viper.Viper)
 						APIBase:             cfg.Endpoint,
 						DefaultModel:        cfg.Model,
 						ContextWindowTokens: cfg.ContextWindowTokens,
-						JournalDir:          paths.LLMUsageJournalDir,
+						UsageDBPath:         paths.UsageDBPath,
 						TopicContextStore:   topiccontext.NewStore(paths.TopicContextPath),
 						Logger:              logger,
 					})
@@ -813,7 +813,7 @@ func buildManagedRuntimeDepsFromReader(logger *slog.Logger, reader *viper.Viper)
 				Provider:     meta.Provider,
 				APIBase:      meta.Endpoint,
 				DefaultModel: meta.Model,
-				JournalDir:   paths.LLMUsageJournalDir,
+				UsageDBPath:  paths.UsageDBPath,
 				Logger:       logger,
 			}), nil
 		},

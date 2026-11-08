@@ -364,7 +364,7 @@ func (r *llmRuntimeResolver) CreateClient(route llmutil.ResolvedRoute) (llm.Clie
 				APIBase:             cfg.Endpoint,
 				DefaultModel:        cfg.Model,
 				ContextWindowTokens: cfg.ContextWindowTokens,
-				JournalDir:          r.paths.LLMUsageJournalDir,
+				UsageDBPath:         r.paths.UsageDBPath,
 				TopicContextStore:   topiccontext.NewStore(r.paths.TopicContextPath),
 				Logger:              slog.Default(),
 			})
@@ -391,7 +391,7 @@ func (r *llmRuntimeResolver) CreateImageClient() (llm.ImageClient, error) {
 		Provider:     meta.Provider,
 		APIBase:      meta.Endpoint,
 		DefaultModel: meta.Model,
-		JournalDir:   r.paths.LLMUsageJournalDir,
+		UsageDBPath:  r.paths.UsageDBPath,
 		Logger:       slog.Default(),
 	}), nil
 }

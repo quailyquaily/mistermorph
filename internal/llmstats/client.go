@@ -18,15 +18,15 @@ type ClientOptions struct {
 	APIBase             string
 	DefaultModel        string
 	ContextWindowTokens int64
-	JournalDir          string
-	RotateMaxFileBytes  int64
-	TopicContextStore   *topiccontext.Store
-	Logger              *slog.Logger
+	// UsageDBPath is usage.db; with no path, calls are not recorded.
+	UsageDBPath       string
+	TopicContextStore *topiccontext.Store
+	Logger            *slog.Logger
 }
 
 type UsageClient struct {
 	Base                llm.Client
-	Journal             *Journal
+	Usage               *UsageSink
 	Provider            string
 	APIBase             string
 	DefaultModel        string
@@ -38,7 +38,7 @@ type UsageClient struct {
 
 type ImageUsageClient struct {
 	Base         llm.ImageClient
-	Journal      *Journal
+	Usage        *UsageSink
 	Provider     string
 	APIBase      string
 	DefaultModel string
@@ -50,13 +50,12 @@ func WrapClient(base llm.Client, opts ClientOptions) llm.Client {
 	if base == nil {
 		return nil
 	}
-	journalDir := strings.TrimSpace(opts.JournalDir)
-	if journalDir == "" {
+	if strings.TrimSpace(opts.UsageDBPath) == "" {
 		return base
 	}
 	return &UsageClient{
 		Base:                base,
-		Journal:             NewJournal(journalDir, JournalOptions{MaxFileBytes: opts.RotateMaxFileBytes}),
+		Usage:               NewUsageSink(opts.UsageDBPath, opts.Logger),
 		Provider:            normalizeProvider(opts.Provider),
 		APIBase:             normalizeAPIBase(opts.APIBase),
 		DefaultModel:        normalizeModel(opts.DefaultModel),
@@ -71,13 +70,12 @@ func WrapImageClient(base llm.ImageClient, opts ClientOptions) llm.ImageClient {
 	if base == nil {
 		return nil
 	}
-	journalDir := strings.TrimSpace(opts.JournalDir)
-	if journalDir == "" {
+	if strings.TrimSpace(opts.UsageDBPath) == "" {
 		return base
 	}
 	return &ImageUsageClient{
 		Base:         base,
-		Journal:      NewJournal(journalDir, JournalOptions{MaxFileBytes: opts.RotateMaxFileBytes}),
+		Usage:        NewUsageSink(opts.UsageDBPath, opts.Logger),
 		Provider:     normalizeProvider(opts.Provider),
 		APIBase:      normalizeAPIBase(opts.APIBase),
 		DefaultModel: normalizeModel(opts.DefaultModel),
@@ -92,7 +90,7 @@ func WrapRuntimeClient(base llm.Client, provider, apiBase, defaultModel string, 
 		APIBase:             apiBase,
 		DefaultModel:        defaultModel,
 		ContextWindowTokens: contextWindowTokens,
-		JournalDir:          statepaths.LLMUsageJournalDir(),
+		UsageDBPath:         statepaths.UsageDBPath(),
 		TopicContextStore:   topiccontext.NewStore(statepaths.TopicContextPath()),
 		Logger:              logger,
 	})
@@ -103,7 +101,7 @@ func WrapRuntimeImageClient(base llm.ImageClient, provider, apiBase, defaultMode
 		Provider:     provider,
 		APIBase:      apiBase,
 		DefaultModel: defaultModel,
-		JournalDir:   statepaths.LLMUsageJournalDir(),
+		UsageDBPath:  statepaths.UsageDBPath(),
 		Logger:       logger,
 	})
 }
@@ -128,7 +126,7 @@ func (c *UsageClient) Chat(ctx context.Context, req llm.Request) (llm.Result, er
 	if err != nil {
 		return res, err
 	}
-	if c.Journal == nil {
+	if c.Usage == nil {
 		return res, nil
 	}
 
@@ -143,7 +141,7 @@ func (c *UsageClient) Chat(ctx context.Context, req llm.Request) (llm.Result, er
 		Usage:      res.Usage,
 		DurationMs: durationMillis(res.Duration, finished.Sub(start)),
 	})
-	appendUsageRecord(c.Journal, c.Logger, rec)
+	c.Usage.Record(ctx, rec)
 	sample := topiccontext.UsageSample{
 		RunID:                    rec.RunID,
 		OriginEventID:            rec.OriginEventID,
@@ -168,7 +166,7 @@ func (c *UsageClient) Evaluate(ctx context.Context, req llm.EvaluateRequest) (*l
 	}
 	started := c.now()
 	res, err := llm.Evaluate(ctx, c.Base, req)
-	if res != nil && res.Usage != nil && c.Journal != nil {
+	if res != nil && res.Usage != nil && c.Usage != nil {
 		finished := c.now()
 		rec := requestRecordFromUsage(ctx, requestRecordInput{
 			TS: finished, Provider: firstNonEmpty(res.Provider, c.Provider), APIBase: c.APIBase,
@@ -176,7 +174,7 @@ func (c *UsageClient) Evaluate(ctx context.Context, req llm.EvaluateRequest) (*l
 			Usage: res.Usage.Details, DurationMs: durationMillis(res.Duration, finished.Sub(started)),
 		})
 		rec.Evaluation = &EvaluationRecord{Emulated: res.Emulated, Failed: err != nil, Usage: res.Usage}
-		appendUsageRecord(c.Journal, c.Logger, rec)
+		c.Usage.Record(ctx, rec)
 	}
 	// Judgment usage must not replace the main conversation's context estimate.
 	return res, err
@@ -205,7 +203,7 @@ func (c *ImageUsageClient) GenerateImage(ctx context.Context, req llm.ImageReque
 		Usage:      res.Usage,
 		DurationMs: durationMillis(res.Duration, finished.Sub(start)),
 	})
-	appendUsageRecord(c.Journal, c.Logger, rec)
+	c.Usage.Record(ctx, rec)
 	return res, nil
 }
 
@@ -232,14 +230,14 @@ func (c *ImageUsageClient) EditImage(ctx context.Context, req llm.ImageEditReque
 		Usage:      res.Usage,
 		DurationMs: durationMillis(res.Duration, finished.Sub(start)),
 	})
-	appendUsageRecord(c.Journal, c.Logger, rec)
+	c.Usage.Record(ctx, rec)
 	return res, nil
 }
 
 // TranscriptionUsageClient records the usage of transcription requests.
 type TranscriptionUsageClient struct {
 	Base         llm.TranscriptionClient
-	Journal      *Journal
+	Usage        *UsageSink
 	Provider     string
 	APIBase      string
 	DefaultModel string
@@ -251,13 +249,12 @@ func WrapTranscriptionClient(base llm.TranscriptionClient, opts ClientOptions) l
 	if base == nil {
 		return nil
 	}
-	journalDir := strings.TrimSpace(opts.JournalDir)
-	if journalDir == "" {
+	if strings.TrimSpace(opts.UsageDBPath) == "" {
 		return base
 	}
 	return &TranscriptionUsageClient{
 		Base:         base,
-		Journal:      NewJournal(journalDir, JournalOptions{MaxFileBytes: opts.RotateMaxFileBytes}),
+		Usage:        NewUsageSink(opts.UsageDBPath, opts.Logger),
 		Provider:     normalizeProvider(opts.Provider),
 		APIBase:      normalizeAPIBase(opts.APIBase),
 		DefaultModel: normalizeModel(opts.DefaultModel),
@@ -271,7 +268,7 @@ func WrapRuntimeTranscriptionClient(base llm.TranscriptionClient, provider, apiB
 		Provider:     provider,
 		APIBase:      apiBase,
 		DefaultModel: defaultModel,
-		JournalDir:   statepaths.LLMUsageJournalDir(),
+		UsageDBPath:  statepaths.UsageDBPath(),
 		Logger:       logger,
 	})
 }
@@ -299,7 +296,7 @@ func (c *TranscriptionUsageClient) Transcribe(ctx context.Context, req llm.Trans
 		Usage:      res.Usage,
 		DurationMs: durationMillis(res.Duration, finished.Sub(start)),
 	})
-	appendUsageRecord(c.Journal, c.Logger, rec)
+	c.Usage.Record(ctx, rec)
 	return res, nil
 }
 
@@ -308,8 +305,8 @@ func (c *TranscriptionUsageClient) Close() error {
 		return nil
 	}
 	var firstErr error
-	if c.Journal != nil {
-		if err := c.Journal.Close(); err != nil && firstErr == nil {
+	if c.Usage != nil {
+		if err := c.Usage.Close(); err != nil && firstErr == nil {
 			firstErr = err
 		}
 	}
@@ -362,21 +359,6 @@ func requestRecordFromUsage(ctx context.Context, in requestRecordInput) RequestR
 	return normalizeRequestRecord(rec)
 }
 
-func appendUsageRecord(journal *Journal, logger *slog.Logger, rec RequestRecord) {
-	if journal == nil {
-		return
-	}
-	if _, recErr := journal.Append(rec); recErr != nil && logger != nil {
-		logger.Warn(
-			"llm_usage_record_error",
-			"error", recErr.Error(),
-			"provider", rec.Provider,
-			"api_host", rec.APIHost,
-			"model", rec.Model,
-		)
-	}
-}
-
 func toInt64Map(in map[string]int) map[string]int64 {
 	if len(in) == 0 {
 		return nil
@@ -393,8 +375,8 @@ func (c *UsageClient) Close() error {
 		return nil
 	}
 	var firstErr error
-	if c.Journal != nil {
-		if err := c.Journal.Close(); err != nil && firstErr == nil {
+	if c.Usage != nil {
+		if err := c.Usage.Close(); err != nil && firstErr == nil {
 			firstErr = err
 		}
 	}
@@ -411,8 +393,8 @@ func (c *ImageUsageClient) Close() error {
 		return nil
 	}
 	var firstErr error
-	if c.Journal != nil {
-		if err := c.Journal.Close(); err != nil && firstErr == nil {
+	if c.Usage != nil {
+		if err := c.Usage.Close(); err != nil && firstErr == nil {
 			firstErr = err
 		}
 	}

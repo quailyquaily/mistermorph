@@ -10,8 +10,11 @@ import (
 	"sync"
 	"time"
 
+	uniaiapi "github.com/quailyquaily/uniai"
+
 	"github.com/quailyquaily/mistermorph/internal/agentsettings"
 	"github.com/quailyquaily/mistermorph/internal/llmstats"
+	"github.com/quailyquaily/mistermorph/internal/pricingutil"
 	"github.com/quailyquaily/mistermorph/internal/runtimecommands"
 )
 
@@ -310,15 +313,13 @@ func (routes *routeRegistration) registerSystemRoutes() {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
-		store := llmstats.NewProjectionStoreWithOptions(
-			capturedPaths.LLMUsageJournalDir,
-			capturedPaths.LLMUsageProjectionPath,
-			llmstats.ProjectionOptions{
-				PricingFile: settingsReader.GetString("llm.pricing_file"),
-				ConfigPath:  pricingConfigPath,
-			},
-		)
-		proj, err := store.Refresh()
+		store, err := openUsageStats(r.Context(), capturedPaths.UsageDBPath, settingsReader, pricingConfigPath)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		defer func() { _ = store.Close() }()
+		proj, err := store.Usage(r.Context())
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -366,15 +367,13 @@ func (routes *routeRegistration) registerSystemRoutes() {
 			}
 			loc = parsed
 		}
-		store := llmstats.NewProjectionStoreWithOptions(
-			capturedPaths.LLMUsageJournalDir,
-			capturedPaths.LLMUsageProjectionPath,
-			llmstats.ProjectionOptions{
-				PricingFile: settingsReader.GetString("llm.pricing_file"),
-				ConfigPath:  pricingConfigPath,
-			},
-		)
-		daily, err := store.Daily(days, loc)
+		store, err := openUsageStats(r.Context(), capturedPaths.UsageDBPath, settingsReader, pricingConfigPath)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		defer func() { _ = store.Close() }()
+		daily, err := store.Daily(r.Context(), days, loc)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -421,4 +420,20 @@ func (routes *routeRegistration) registerSystemRoutes() {
 		})
 	})
 
+}
+
+// openUsageStats opens usage.db priced with the catalog the captured settings name, so the totals
+// use the same prices whichever process recorded the rows. A catalog that changed since the rows
+// were priced prices them again first.
+func openUsageStats(ctx context.Context, path string, settings interface {
+	GetString(string) string
+	GetInt(string) int
+}, configPath string) (*llmstats.UsageStore, error) {
+	pricingFile := settings.GetString("llm.pricing_file")
+	return llmstats.OpenUsageStore(ctx, path, llmstats.UsageStoreOptions{
+		Pricing: func() (*uniaiapi.PricingCatalog, string, error) {
+			return pricingutil.LoadCatalog(pricingFile, configPath)
+		},
+		RetentionDays: settings.GetInt(llmstats.RetentionDaysKey),
+	})
 }

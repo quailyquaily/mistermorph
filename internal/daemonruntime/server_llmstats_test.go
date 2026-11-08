@@ -1,6 +1,7 @@
 package daemonruntime
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -17,9 +18,8 @@ func TestLLMUsageStatsRoute(t *testing.T) {
 	stateDir := t.TempDir()
 	paths := testRuntimePaths(stateDir)
 
-	journal := llmstats.NewJournal(paths.LLMUsageJournalDir, llmstats.JournalOptions{})
-	defer func() { _ = journal.Close() }()
-	if _, err := journal.Append(llmstats.RequestRecord{
+	journal := openTestUsageStore(t, paths.UsageDBPath)
+	if err := journal.Append(llmstats.RequestRecord{
 		TS:                       time.Date(2026, 3, 7, 12, 0, 0, 0, time.UTC).Format(time.RFC3339),
 		Provider:                 "openai",
 		APIBase:                  "https://api.openai.com",
@@ -102,8 +102,8 @@ func TestLLMUsageStatsRouteUsesCapturedPricingConfig(t *testing.T) {
 	writePricing(filepath.Join(configDirA, "pricing.yaml"), "1")
 	writePricing(filepath.Join(configDirB, "pricing.yaml"), "9")
 
-	journal := llmstats.NewJournal(paths.LLMUsageJournalDir, llmstats.JournalOptions{})
-	if _, err := journal.Append(llmstats.RequestRecord{
+	journal := openTestUsageStore(t, paths.UsageDBPath)
+	if err := journal.Append(llmstats.RequestRecord{
 		TS:          time.Now().UTC().Format(time.RFC3339),
 		Provider:    "openai",
 		APIBase:     "https://example.test",
@@ -113,9 +113,6 @@ func TestLLMUsageStatsRouteUsesCapturedPricingConfig(t *testing.T) {
 		TotalTokens: 1_000_000,
 	}); err != nil {
 		t.Fatalf("Append() error = %v", err)
-	}
-	if err := journal.Close(); err != nil {
-		t.Fatalf("Journal.Close() error = %v", err)
 	}
 
 	settings := viper.New()
@@ -155,8 +152,8 @@ func TestLLMDailyStatsRoute(t *testing.T) {
 	stateDir := t.TempDir()
 	paths := testRuntimePaths(stateDir)
 
-	journal := llmstats.NewJournal(paths.LLMUsageJournalDir, llmstats.JournalOptions{})
-	if _, err := journal.Append(llmstats.RequestRecord{
+	journal := openTestUsageStore(t, paths.UsageDBPath)
+	if err := journal.Append(llmstats.RequestRecord{
 		TS:           time.Now().UTC().Format(time.RFC3339),
 		Provider:     "openai",
 		APIBase:      "https://api.openai.com",
@@ -167,9 +164,6 @@ func TestLLMDailyStatsRoute(t *testing.T) {
 		TotalCost:    0.5,
 	}); err != nil {
 		t.Fatalf("Append() error = %v", err)
-	}
-	if err := journal.Close(); err != nil {
-		t.Fatalf("Journal.Close() error = %v", err)
 	}
 
 	mux := http.NewServeMux()
@@ -224,4 +218,14 @@ func TestLLMDailyStatsRoute(t *testing.T) {
 			}
 		})
 	}
+}
+
+func openTestUsageStore(t *testing.T, path string) *llmstats.UsageStore {
+	t.Helper()
+	store, err := llmstats.OpenUsageStore(context.Background(), path, llmstats.UsageStoreOptions{})
+	if err != nil {
+		t.Fatalf("OpenUsageStore() error = %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	return store
 }

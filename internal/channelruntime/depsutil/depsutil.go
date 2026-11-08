@@ -89,7 +89,7 @@ func (d CommonDependencies) TranscriptionClient() (llm.TranscriptionClient, erro
 	if d.Logger != nil {
 		logger, _ = d.Logger()
 	}
-	return voiceinput.NewClient(values, d.RuntimePaths.LLMUsageJournalDir, logger)
+	return voiceinput.NewClient(values, d.RuntimePaths.UsageDBPath, logger)
 }
 
 func (d CommonDependencies) Validate() error {

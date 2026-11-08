@@ -642,7 +642,7 @@ func (rt *Runtime) sharedDependencies(snap runtimeSnapshot) depsutil.CommonDepen
 				Provider:     meta.Provider,
 				APIBase:      meta.Endpoint,
 				DefaultModel: meta.Model,
-				JournalDir:   snap.Paths.LLMUsageJournalDir,
+				UsageDBPath:  snap.Paths.UsageDBPath,
 				Logger:       snap.Logger,
 			}), nil
 		},

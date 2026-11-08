@@ -417,6 +417,7 @@ export const SYSTEM_ADVANCED_CONFIG_GROUPS = [
       { path: "tasks.dir_name", label: "Tasks directory name", type: "string" },
       { path: "tasks.persistence_targets", label: "Task persistence targets", type: "string_list", options: TASK_TARGET_OPTIONS, wide: true },
       { path: "tasks.rotate_max_bytes", label: "Task journal rotation size", type: "int", editor: "bytes" },
+      { path: "stats.llm_usage.retention_days", label: "LLM usage retention (days, 0 keeps all)", type: "int" },
     ],
   },
   {

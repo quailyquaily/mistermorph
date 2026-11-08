@@ -2,11 +2,10 @@ package llmstats
 
 import (
 	"context"
-	"encoding/json"
-	"github.com/quailyquaily/mistermorph/llm"
-	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/quailyquaily/mistermorph/llm"
 )
 
 type failedEvaluator struct{}
@@ -20,27 +19,13 @@ func (failedEvaluator) Evaluate(context.Context, llm.EvaluateRequest) (*llm.Eval
 }
 func TestEvaluateRecordsUsageOnError(t *testing.T) {
 	dir := t.TempDir()
-	c := WrapClient(failedEvaluator{}, ClientOptions{JournalDir: dir, Provider: "openai", DefaultModel: "alias"})
+	c := WrapClient(failedEvaluator{}, ClientOptions{UsageDBPath: filepath.Join(dir, "usage.db"), Provider: "openai", DefaultModel: "alias"})
 	defer c.(*UsageClient).Close()
 	_, err := llm.Evaluate(context.Background(), c, llm.EvaluateRequest{Scene: "telegram.addressing_decision"})
 	if err != llm.ErrEvaluateInvalidResponse {
 		t.Fatal(err)
 	}
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(entries) != 1 {
-		t.Fatalf("journal files=%d", len(entries))
-	}
-	data, err := os.ReadFile(filepath.Join(dir, entries[0].Name()))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var rec RequestRecord
-	if err := json.Unmarshal(data, &rec); err != nil {
-		t.Fatal(err)
-	}
+	rec := readTestRecords(t, filepath.Join(dir, "usage.db"), 1)[0]
 	if rec.Operation != "evaluate" || rec.Model != "actual-model" || rec.InputTokens != 10 {
 		t.Fatalf("record=%+v", rec)
 	}

@@ -21,8 +21,8 @@ func TestIntegrationUsageClientWrapReleasesClosedSharedClient(t *testing.T) {
 	base := &integrationLifecycleClient{}
 	root := t.TempDir()
 	wrap := integrationUsageClientWrap(runtimepaths.Paths{
-		LLMUsageJournalDir: filepath.Join(root, "usage"),
-		TopicContextPath:   filepath.Join(root, "topic_context.json"),
+		UsageDBPath:      filepath.Join(root, "usage.db"),
+		TopicContextPath: filepath.Join(root, "topic_context.json"),
 	}, slog.Default())
 	cfg := llmconfig.ClientConfig{Provider: "test", Model: "test-model"}
 

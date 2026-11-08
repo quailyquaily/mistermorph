@@ -6,7 +6,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -447,11 +446,11 @@ func TestContextCompactionUsageIsWrittenToUsageJournal(t *testing.T) {
 			return llm.Result{}, fmt.Errorf("unexpected call %d", index)
 		}
 	}}
-	journalDir := t.TempDir()
+	usageDBPath := filepath.Join(t.TempDir(), "usage.db")
 	usageClient := llmstats.WrapClient(baseClient, llmstats.ClientOptions{
 		Provider:     "test",
 		DefaultModel: "test-model",
-		JournalDir:   journalDir,
+		UsageDBPath:  usageDBPath,
 	}).(*llmstats.UsageClient)
 	engine := newContextCompactionEngine(usageClient, contextCompactionTestConfig())
 	if _, _, err := engine.Run(context.Background(), "old task", RunOptions{
@@ -464,19 +463,16 @@ func TestContextCompactionUsageIsWrittenToUsageJournal(t *testing.T) {
 	if err := usageClient.Close(); err != nil {
 		t.Fatalf("Close() error = %v", err)
 	}
-	entries, err := os.ReadDir(journalDir)
+	records, err := llmstats.ReadUsageRecords(context.Background(), usageDBPath)
 	if err != nil {
-		t.Fatalf("ReadDir() error = %v", err)
+		t.Fatalf("ReadUsageRecords() error = %v", err)
 	}
-	if len(entries) != 1 {
-		t.Fatalf("journal files = %d, want 1", len(entries))
+	found := false
+	for _, rec := range records {
+		found = found || rec.Scene == "chat.context_compact"
 	}
-	raw, err := os.ReadFile(filepath.Join(journalDir, entries[0].Name()))
-	if err != nil {
-		t.Fatalf("ReadFile() error = %v", err)
-	}
-	if !strings.Contains(string(raw), `"scene":"chat.context_compact"`) {
-		t.Fatalf("usage journal does not contain compaction scene: %s", raw)
+	if !found {
+		t.Fatalf("usage records do not contain compaction scene: %+v", records)
 	}
 }
 

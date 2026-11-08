@@ -161,6 +161,14 @@ The first start after upgrading imports the older `events.*.jsonl` segments into
 
 The state folder holds SQLite databases (`journal/journal.db`, `memory.db`, `agent.db`, `usage.db`). Copying or archiving the live folder can catch a database and its write-ahead log at different moments, and such a copy may not open. Use `morph state snapshot <dir>` instead: it copies each database with `VACUUM INTO` (a consistent copy while the agent keeps running) and every other file as it is, into `<dir>`, which must not exist or be empty. Back up `<dir>`. `--skip usage` leaves the LLM usage database out.
 
+## LLM Usage
+
+Every successful model call (chat, evaluation, image and transcription) is one row of `<file_state_dir>/usage.db`, shared by every process. A chat call whose provider reports no cost is priced from the pricing catalog (`llm.pricing_file`, or the built-in one) when it is recorded; when the catalog changes, those rows are priced again on the next start. The Console's Stats page and `GET /stats/llm/usage` and `/stats/llm/daily` read the database.
+
+`stats.llm_usage.retention_days` (default `0`, keep everything) deletes rows older than that many days once a day.
+
+An older install's JSONL journal (`stats/llm_usage/*.jsonl`) is imported the first time `usage.db` opens: the folder is renamed `stats/llm_usage.imported`, and lines that do not parse are skipped and listed in the database's `meta` table under `import_rejects:llm_usage` (the Stats page shows their count). `stats/llm_usage_projection.json` is deleted.
+
 ## Memories
 
 ```yaml

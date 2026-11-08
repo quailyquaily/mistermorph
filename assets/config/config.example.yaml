@@ -570,6 +570,13 @@ contacts:
 memories:
   enabled: true
 
+# Usage statistics.
+stats:
+  llm_usage:
+    # LLM calls are recorded in <file_state_dir>/usage.db, one row per call. Rows older than this
+    # many days are deleted once a day; 0 keeps everything.
+    retention_days: 0
+
 # Task projections and journal settings.
 tasks:
   # Directory name under file_state_dir for task projection snapshots.

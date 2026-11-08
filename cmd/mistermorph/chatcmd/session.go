@@ -450,7 +450,7 @@ func buildChatSession(cmd *cobra.Command, deps Dependencies) (*chatSession, erro
 					APIBase:             cfg.Endpoint,
 					DefaultModel:        cfg.Model,
 					ContextWindowTokens: cfg.ContextWindowTokens,
-					JournalDir:          runtimePaths.LLMUsageJournalDir,
+					UsageDBPath:         runtimePaths.UsageDBPath,
 					TopicContextStore:   topicContextStore,
 					Logger:              logger,
 				})
