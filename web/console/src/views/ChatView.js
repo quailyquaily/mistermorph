@@ -2,6 +2,7 @@ import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, 
 import { useRoute, useRouter } from "vue-router";
 import { useNotice } from "../core/notices";
 import { useVoiceInput } from "../composables/useVoiceInput";
+import { voiceInputErrorKey } from "../core/voice-input";
 import "./ChatView.css";
 
 import AppKicker from "../components/AppKicker";
@@ -674,16 +675,15 @@ const ChatView = {
         taskInput.value = current ? `${current} ${text}` : text;
       },
       onError(e) {
-        if (e?.name === "NotAllowedError" || e?.name === "SecurityError") {
-          notice.error(t("chat_composer_voice_denied"));
-          return;
-        }
-        notice.error(e?.message || t("chat_composer_voice_failed"));
+        notice.error(t(voiceInputErrorKey(e), { message: String(e?.message || "").trim() }));
       },
     });
-    const composerVoiceLabel = computed(() =>
-      voiceInput.state.value === "recording" ? t("chat_composer_voice_stop") : t("chat_composer_voice")
-    );
+    const composerVoiceLabel = computed(() => {
+      if (voiceInput.unsupported) {
+        return t(`chat_composer_voice_${voiceInput.unsupported}_label`);
+      }
+      return voiceInput.state.value === "recording" ? t("chat_composer_voice_stop") : t("chat_composer_voice");
+    });
     const composerVoiceLabels = computed(() => ({
       recording: t("chat_composer_voice_recording"),
       transcribing: t("chat_composer_voice_transcribing"),
@@ -5068,6 +5068,7 @@ const ChatView = {
                 :suggestion-labels="composerSuggestionLabels"
                 @attach="openComposerWorkspaceBrowser"
                 :voice-available="voiceInput.available.value"
+                :voice-unavailable="Boolean(voiceInput.unsupported)"
                 :voice-state="voiceInput.state.value"
                 :voice-label="composerVoiceLabel"
                 :voice-elapsed="voiceInput.elapsed.value"
@@ -5171,6 +5172,7 @@ const ChatView = {
               :suggestion-labels="composerSuggestionLabels"
               @attach="openComposerWorkspaceBrowser"
               :voice-available="voiceInput.available.value"
+              :voice-unavailable="Boolean(voiceInput.unsupported)"
               :voice-state="voiceInput.state.value"
               :voice-label="composerVoiceLabel"
               :voice-elapsed="voiceInput.elapsed.value"

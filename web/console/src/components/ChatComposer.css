@@ -689,6 +689,11 @@ html body .q-button.chat-composer-send.is-empty:disabled {
   box-shadow: none !important;
 }
 
+/* Shown where the page cannot record, so a tap can say why; drawn fainter than a working mic. */
+.chat-composer-voice.is-unavailable .icon {
+  opacity: 0.45;
+}
+
 html body .q-button.chat-composer-voice.is-recording,
 html body .q-button.chat-composer-voice.is-recording:hover {
   color: var(--danger) !important;

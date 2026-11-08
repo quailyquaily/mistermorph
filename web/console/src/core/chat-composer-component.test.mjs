@@ -190,3 +190,16 @@ test("ChatComposer skips collapsing a field that is already at its tallest and o
   assert.match(measure, /if \(Math\.abs\(currentHeight - maxHeight\) < 0\.5\) \{\s*const overflowHeight = field\.scrollHeight;\s*if \(overflowHeight > maxHeight \+ 0\.5\) \{/u);
   assert.match(measure, /visualRows: maxRows \+ 1,/u);
 });
+
+test("ChatComposer keeps the mic for agents that can transcribe and marks it when the page cannot record", async () => {
+  const component = await source("../components/ChatComposer.js");
+  const view = await source("../views/ChatView.js");
+  const styles = await source("../components/ChatComposer.css");
+
+  assert.match(component, /voiceUnavailable: \{\s*type: Boolean,\s*default: false,\s*\}/u);
+  assert.match(component, /'is-unavailable': voiceUnavailable/u);
+  assert.match(styles, /\.chat-composer-voice\.is-unavailable \.icon \{\s*opacity: 0\.45;/u);
+  assert.equal((view.match(/:voice-unavailable="Boolean\(voiceInput\.unsupported\)"/gu) || []).length, 2);
+  assert.match(view, /notice\.error\(t\(voiceInputErrorKey\(e\), \{ message: String\(e\?\.message \|\| ""\)\.trim\(\) \}\)\);/u);
+  assert.match(view, /if \(voiceInput\.unsupported\) \{\s*return t\(`chat_composer_voice_\$\{voiceInput\.unsupported\}_label`\);/u);
+});

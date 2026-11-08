@@ -294,6 +294,12 @@ export default {
       type: Boolean,
       default: false,
     },
+    // voiceUnavailable: the agent can transcribe but this page cannot record (plain HTTP, or no
+    // MediaRecorder). The mic still shows, muted; a tap explains why through the voice event.
+    voiceUnavailable: {
+      type: Boolean,
+      default: false,
+    },
     voiceState: {
       type: String,
       default: "idle",
@@ -1358,7 +1364,7 @@ export default {
             </template>
             <AppButton
               v-if="voiceAvailable"
-              :class="['plain sm icon chat-composer-voice', { 'is-recording': voiceState === 'recording' }]"
+              :class="['plain sm icon chat-composer-voice', { 'is-recording': voiceState === 'recording', 'is-unavailable': voiceUnavailable }]"
               :loading="voiceState === 'transcribing'"
               :disabled="disabled || voiceState === 'transcribing'"
               :title="voiceLabel"
