@@ -5,7 +5,7 @@
 // primary, quiet plain buttons, mono caps for labels, and red only for what is destructive.
 import type { InputRef, JSX } from "nsh";
 import type { ButtonProps as BaseButtonProps, TextViewClasses, TextViewStyles } from "nsh/base";
-import { cleanup, createAnimatedValue, createMotion, Easing, effect, Image, keyboardFrame, keymap, Overlay, platform, reduceMotion, Scroll, signal, Text, token, untracked, View, windowSize } from "nsh";
+import { cleanup, createAnimatedValue, createMotion, Easing, effect, Image, keyboardFrame, keymap, Overlay, platform, reduceMotion, safeArea, Scroll, signal, Text, token, untracked, View, windowSize } from "nsh";
 import {
   Button as BaseButton,
   Checkbox as BaseCheckbox,
@@ -27,6 +27,7 @@ import { recentPress } from "./motion/pressOrigin";
 import { EdgeScroll } from "./motion/ScrollEdges";
 import { FadeText } from "./motion/FadeText";
 import { CHROME_BAR_HEIGHT, gutterX, gutterY, pageGap, pageTop } from "./frame/metrics";
+import { dialogLayerInsets } from "../lib/systemInsets";
 import { createSlidingSelection } from "./motion/SlidingSelection";
 import { MOTION_EASE, MOTION_EASE_CSS, MOTION_NORMAL, MOTION_SLOW, motionMs } from "./motion/tokens";
 
@@ -1301,12 +1302,21 @@ export function DialogLayer(props: {
       {props.children}
     </View>,
   ];
-  const layerClass = () => `absolute inset-0 items-center ${narrow() ? "justify-end" : "justify-center p-4"}`;
+  const layerClass = () =>
+    `absolute inset-0 items-center ${narrow() ? "justify-end" : `justify-center ${OVERLAY_DIALOGS ? "" : "p-4"}`}`;
   // On phones the panel is a sheet at the bottom: the layer does not shrink when the software
   // keyboard opens, so the sheet rises by the keyboard's height (0 without one). A number, not
   // `env(keyboard-inset-height)`: the env value moves the sheet natively but not in nsh's layout,
-  // where presses are matched.
-  const layerStyle = () => (narrow() ? { paddingBottom: keyboardFrame().height } : undefined);
+  // where presses are matched. Android's Overlay covers the whole surface, status and navigation
+  // bars included, so there the layer also keeps the panel out from under them
+  // (lib/systemInsets.ts), with the 16pt margin of wide windows on top.
+  const layerStyle = () => {
+    if (OVERLAY_DIALOGS) {
+      const insets = dialogLayerInsets(safeArea(), narrow() ? keyboardFrame().height : 0, narrow() ? 0 : 16);
+      return { paddingTop: insets.top, paddingRight: insets.right, paddingBottom: insets.bottom, paddingLeft: insets.left };
+    }
+    return narrow() ? { paddingBottom: keyboardFrame().height } : undefined;
+  };
 
   return (
     // Android: nsh 0.4.0's Dialog is a window of its own below the status bar, and presses in it

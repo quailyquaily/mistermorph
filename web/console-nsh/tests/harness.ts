@@ -9,7 +9,7 @@
 // API keys are "METHOD /path" for console routes (`GET /auth/me`), and "METHOD /proxy:/uri" for
 // what pages ask an agent through /api/proxy (`GET /proxy:/topics`): the uri without its query
 // matches, or with it when the key has one. A value is a response, or a function of the request.
-import type { App, StubRequest, StubResponse } from "nsh/test";
+import type { App, SafeArea, StubRequest, StubResponse } from "nsh/test";
 import { open } from "nsh/test";
 
 export const ORIGIN = "http://console.test";
@@ -48,7 +48,18 @@ export interface ConsoleOptions {
   runtime?: "web" | "desktop";
   features?: string[];
   locale?: string;
+  /**
+   * `"android"`: the phone app on Android, whose own host (lib/mobileHost.ts) answers `morph.*`
+   * from the app's storage, where `location` and the console server's address are saved.
+   */
+  platform?: "android";
+  /** The system bars' insets (`safeArea()`), with `platform`. */
+  safeArea?: SafeArea;
 }
+
+/** Where the phone app keeps the console server's address and its last location (lib/mobileHost.ts). */
+export const MOBILE_SERVER_KEY = "mistermorph_console_server_v1";
+export const MOBILE_LOCATION_KEY = "mistermorph_console_mobile_location_v1";
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -136,6 +147,25 @@ function keysFor(request: ApiRequest) {
 export async function openConsole(options: ConsoleOptions = {}): Promise<{ app: App; calls: ApiRequest[] }> {
   const calls: ApiRequest[] = [];
   const routes = { ...defaults(options), ...(options.api || {}) };
+  // A bare "*" is a GET of any URL; each method needs its own catch-all.
+  const network = Object.fromEntries(["GET", "POST", "PUT", "PATCH", "DELETE"].map((method) => [`${method} *`, answer]));
+  if (options.platform === "android") {
+    const app = await open("../App.tsx", {
+      width: options.width ?? 390,
+      height: options.height ?? 844,
+      platform: "android",
+      locale: options.locale ?? "en-US",
+      safeArea: options.safeArea ?? null,
+      storage: {
+        [MOBILE_SERVER_KEY]: ORIGIN,
+        [MOBILE_LOCATION_KEY]: options.location ?? "/",
+        "quail-language": "en",
+        ...(options.kv || {}),
+      },
+      network,
+    });
+    return { app, calls };
+  }
   const app = await open("../App.tsx", {
     width: options.width ?? 1280,
     height: options.height ?? 800,
@@ -164,8 +194,7 @@ export async function openConsole(options: ConsoleOptions = {}): Promise<{ app: 
         ...(options.host || {}),
       },
     },
-    // A bare "*" is a GET of any URL; each method needs its own catch-all.
-    network: Object.fromEntries(["GET", "POST", "PUT", "PATCH", "DELETE"].map((method) => [`${method} *`, answer])),
+    network,
   });
   return { app, calls };
 

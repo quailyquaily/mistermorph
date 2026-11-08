@@ -1,6 +1,6 @@
 // The app frame's state, as the Vue console's useAppShell had it: which endpoint is selected,
 // the navigation, and the shared data every workspace page preloads.
-import { batch, computed, effect, LayoutAnimation, reduceMotion, signal, untracked, windowSize } from "nsh";
+import { batch, computed, effect, keyboardFrame, LayoutAnimation, platform, reduceMotion, safeArea, signal, untracked, windowSize } from "nsh";
 import defaultEndpointAvatar from "../assets/images/app_logo_current.svg";
 import { lastTopicID } from "./core/chat-topic-memory.js";
 import { endpointDisplayItem, visibleEndpoints } from "./core/endpoints.js";
@@ -10,6 +10,7 @@ import { NAV_ITEMS_META, navigate, route, currentPath } from "./router";
 import { useContactsStore } from "./stores/contactsStore.js";
 import { usePersonaStore } from "./stores/personaStore.js";
 import { localStore } from "./platform";
+import { frameInsets } from "./systemInsets";
 
 export { currentPath };
 
@@ -102,6 +103,13 @@ export const inSetup = () => {
 export const inStandalone = () => inOverview() || inSetup();
 export const mobileBottomNavVisible = () =>
   isMobile() && !inStandalone() && !inShellless() && route()?.meta.mobileBottomNav !== false;
+
+/** Android draws the app under its status and navigation bars (lib/systemInsets.ts). */
+export const EDGE_TO_EDGE = platform.os === "android";
+/** The frame's and the navigation strip's room for the system bars on Android; null elsewhere. */
+export const systemInsets = computed(() =>
+  EDGE_TO_EDGE ? frameInsets(safeArea(), keyboardFrame().height, mobileBottomNavVisible()) : null,
+);
 
 function normalizeNavPath(path: string) {
   const normalized = String(path || "").trim().replace(/\/+$/, "");
