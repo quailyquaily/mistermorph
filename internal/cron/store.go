@@ -4,8 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"time"
 
@@ -288,20 +290,43 @@ func (s *Store) Delete(ctx context.Context, id, content string) (DeleteResult, e
 	if query == "" {
 		return DeleteResult{}, fmt.Errorf("id or content is required")
 	}
+	// The model picks the task from the list as it is now, outside any transaction: holding the
+	// write lock while it answers would stall every other writer of agent.db. The pick is then
+	// deleted by id, from the list as it is when the delete commits, and only if it is still the
+	// task the model saw.
+	file, _, err := s.Read()
+	if err != nil {
+		return DeleteResult{}, err
+	}
+	tasks := file.Tasks
+	if len(tasks) == 0 {
+		return DeleteResult{}, fmt.Errorf("no matching TODO task")
+	}
+	if s.Semantics == nil {
+		return DeleteResult{}, fmt.Errorf("cron semantic resolver is required")
+	}
+	idx, err := s.Semantics.MatchTaskIndex(ctx, query, tasks)
+	if err != nil {
+		return DeleteResult{}, err
+	}
+	if idx < 0 || idx >= len(tasks) {
+		return DeleteResult{}, fmt.Errorf("no matching TODO task")
+	}
+	matched := tasks[idx]
 	var result DeleteResult
-	err := s.mutate(ctx, func(ctx context.Context, tx *sql.Tx, tasks []Task) error {
-		if len(tasks) == 0 {
-			return fmt.Errorf("no matching TODO task")
+	err = s.mutate(ctx, func(ctx context.Context, tx *sql.Tx, tasks []Task) error {
+		idx := -1
+		for i, task := range tasks {
+			if strings.TrimSpace(task.ID) == strings.TrimSpace(matched.ID) {
+				idx = i
+				break
+			}
 		}
-		if s.Semantics == nil {
-			return fmt.Errorf("cron semantic resolver is required")
+		if idx < 0 {
+			return fmt.Errorf("%w: %s was deleted while the model matched it", ErrTaskChanged, matched.ID)
 		}
-		idx, err := s.Semantics.MatchTaskIndex(ctx, query, tasks)
-		if err != nil {
-			return err
-		}
-		if idx < 0 || idx >= len(tasks) {
-			return fmt.Errorf("no matching TODO task")
+		if !sameTaskDefinition(tasks[idx], matched) {
+			return fmt.Errorf("%w: %s was edited while the model matched it", ErrTaskChanged, matched.ID)
 		}
 		deleted := tasks[idx]
 		tasks = append(tasks[:idx], tasks[idx+1:]...)
@@ -312,6 +337,18 @@ func (s *Store) Delete(ctx context.Context, id, content string) (DeleteResult, e
 		return nil
 	})
 	return result, err
+}
+
+// ErrTaskChanged is a semantic delete whose matched task was deleted or edited while the model
+// was matching it. Nothing is deleted; matching again sees the list as it is now.
+var ErrTaskChanged = errors.New("the matched TODO task changed; nothing was deleted, try again")
+
+// sameTaskDefinition reports whether a and b are the same task as clients wrote it. The last run,
+// which the scheduler records on its own, does not count.
+func sameTaskDefinition(a, b Task) bool {
+	a.LastRunAt, a.LastRunStatus = "", ""
+	b.LastRunAt, b.LastRunStatus = "", ""
+	return reflect.DeepEqual(a, b)
 }
 
 func (s *Store) DeleteByID(id string) (DeleteResult, error) {
