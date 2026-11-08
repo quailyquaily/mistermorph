@@ -45,3 +45,7 @@ Validation: configured gofmt cleanliness, go vet ./... and go test ./... passed.
 Installs: no unpinned installs or manifest changes. Tracked worktree files unchanged.
 Residual risks: real backend connection, physical display contrast, Firefox/Safari, desktop GPUI and Android were not verified. Faint loading stripes are drawn but owner should check their readability on a real display.
 Moved review → ready; awaiting owner approval, not merged into base. No linked GitHub issues or PRs.
+
+## factory · 2026-11-08 20:30
+Merged into master at da3b43b8f85a8ee38998568b687e63101fbcfb16; released in v0.3.84 at b95f560b64af8a80ecbc84e5b5477bd86fb20552. No linked GitHub issues or PRs to close.
+Combined verification passed: gofmt/vet/Go tests, Vue 519 tests and build, nsh typecheck/build and 265 tests, core 245 tests, Chrome button-loading regressions 3/3. No manifest changes or new unpinned installs. Android/iOS physical-device and emulator checks remain unperformed; real-display loading contrast remains unverified. No deployment performed. Moved ready → done.
