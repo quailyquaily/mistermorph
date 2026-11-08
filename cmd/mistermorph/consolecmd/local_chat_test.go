@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/quailyquaily/mistermorph/internal/daemonruntime"
 	"github.com/quailyquaily/mistermorph/internal/localconsole"
@@ -60,7 +61,11 @@ func TestLocalChatConnectionWithoutConfiguredToken(t *testing.T) {
 	if err := localconsole.Stop(context.Background(), s.cfg.stateDir); err != nil {
 		t.Fatal(err)
 	}
-	if ctx.Err() == nil {
+	// The shutdown handler answers before it stops the service, so the cancel can land just after
+	// Stop returns.
+	select {
+	case <-ctx.Done():
+	case <-time.After(5 * time.Second):
 		t.Fatal("console stop did not cancel the service")
 	}
 }
