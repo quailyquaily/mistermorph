@@ -24,3 +24,11 @@ Installs: none.
 Verification: configured gofmt, go vet ./... and go test ./... passed; nsh check passed; nsh test --web-host tests/noHost.js passed (273/273). Manager independently reran all checks with a throwaway HOME; the initial verification command timed out, and the longer rerun passed.
 Not checked: no on-screen visual inspection in browser, desktop or Android; layout is covered by automated measurements only.
 Moved new/ → review/ for review.
+
+## factory · review · 2026-11-09 01:45
+head: 0739e7b15cf25c71d37eb51461ef9e72202370b0
+verdict: pass
+No findings in origin/master...HEAD; all three changed files reviewed by Codex.
+Validation: configured gofmt check, go vet ./... and go test ./... passed; nsh check passed; Console tests passed (273/273). Tests ran with an isolated absolute-path HOME. No unpinned installs. Review worktree remained clean.
+Residual risks: no real browser, desktop or Android visual inspection. The added layout tests measure a View fixture using the shared styles rather than the actual TipButton.
+Moved review/ → ready/; awaiting owner approval before shipping.
