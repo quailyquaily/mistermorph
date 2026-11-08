@@ -20,6 +20,7 @@ import { ChatQuestionCard, type QuestionAnswer, type QuestionState } from "./Cha
 import { ChatRichContent } from "./ChatRichContent";
 import { ChatSkillInstallPreview } from "./ChatSkillInstallPreview";
 import { ChatStatusCard } from "./ChatStatusCard";
+import { ChatStatusMark } from "./ChatStatusMark";
 import { ChatSystemMessage } from "./ChatSystemMessage";
 import { ChatWorkerRoster } from "./ChatWorkerRoster";
 import { t } from "./i18n";
@@ -270,23 +271,17 @@ export function ChatHistoryItem(props: { item: HistoryItem; ctx: ChatRowContext;
   const autoPreview = () => item()?.id !== "" && item()?.id === ctx.autoPreviewItemID();
   const copied = () => item()?.id !== "" && item()?.id === ctx.copiedItemID();
 
-  // The message's time, or for a reply the time it took ("💬 1s"): mono, at the label size, muted
-  // (the Vue console's `.chat-history-status`).
-  const statusMark = () => (
+  // The message's time, or for a reply the time it took (ChatStatusMark), alone or first on the
+  // reply's summary line.
+  const statusMark = (onSummaryLine = false) => (
     <If when={statusText()}>
-      <View
-        role={statusInteractive() ? "button" : "text"}
-        accessibilityLabel={statusLabel()}
+      <ChatStatusMark
+        text={statusText()}
+        label={statusLabel()}
+        duration={statusIsDuration()}
         onPress={statusInteractive() ? () => ctx.onTimeClick(item()) : undefined}
-        tooltip={statusIsDuration() ? <Text class="text-xs">{statusLabel()}</Text> : undefined}
-        testID="chat-history-status"
-        class={`flex-row items-center ${isAgent() ? "self-start" : "mr-2 self-end"}`}
-      >
-        <If when={statusIsDuration()}>
-          <Icon name="PhChatCircleDots" size={13} color="muted-foreground" class="mr-[3px]" />
-        </If>
-        <Text class="font-mono text-[11px] leading-[15.4px] tracking-[0.04em] text-muted-foreground">{statusText()}</Text>
-      </View>
+        placement={onSummaryLine ? "summary" : isAgent() ? "reply" : "sent"}
+      />
     </If>
   );
 
@@ -312,7 +307,7 @@ export function ChatHistoryItem(props: { item: HistoryItem; ctx: ChatRowContext;
           status={item()?.status}
           expandedPanel={expandedPanel()}
           onToggle={(panel) => ctx.onToggleStatus(item()?.id, panel)}
-          summaryPrefix={statusMark()}
+          summaryPrefix={statusMark(true)}
         />
       </If>
       <If when={item()?.activity?.workers?.length}>
