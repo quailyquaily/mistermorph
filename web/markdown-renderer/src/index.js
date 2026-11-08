@@ -68,6 +68,12 @@ let vizPromise = null;
 let mermaidModulePromise = null;
 let infographicClassPromise = null;
 const COPY_FEEDBACK_DURATION_MS = 360;
+// Inline code has no icon to swap, so its copied tint stays long enough to be seen.
+const INLINE_COPY_FEEDBACK_DURATION_MS = 1200;
+// Inline code inside a link or another control belongs to that control: a click there follows the
+// link or presses the control instead of copying.
+const INLINE_COPY_INTERACTIVE_SELECTOR =
+  "a, button, summary, label, select, textarea, input, [role='button'], [role='link'], [contenteditable]:not([contenteditable='false'])";
 const SHIKI_THEME = "github-dark";
 const STREAM_FINAL_SETTLE_MS = 900;
 let shikiHighlighterPromise = null;
@@ -692,6 +698,29 @@ function renderMathFence(pre, source) {
   pre.replaceWith(block);
 }
 
+function saveSelectionState(doc) {
+  const selection = doc.getSelection?.() || null;
+  const ranges = [];
+  for (let index = 0; index < (selection?.rangeCount || 0); index += 1) {
+    ranges.push(selection.getRangeAt(index).cloneRange());
+  }
+  return { activeElement: doc.activeElement || null, ranges, selection };
+}
+
+function restoreSelectionState(state) {
+  const { activeElement, ranges, selection } = state;
+  if (activeElement && typeof activeElement.focus === "function" && activeElement.isConnected !== false) {
+    activeElement.focus({ preventScroll: true });
+  }
+  if (!selection) {
+    return;
+  }
+  selection.removeAllRanges();
+  for (const range of ranges) {
+    selection.addRange(range);
+  }
+}
+
 async function copyTextToClipboard(text, doc) {
   const value = stringValue(text);
   if (!value) {
@@ -706,6 +735,9 @@ async function copyTextToClipboard(text, doc) {
     // Fall back to execCommand below.
   }
 
+  // The fallback copies from a hidden field, which takes the focus and the selection; both go back
+  // to where the reader left them, without scrolling.
+  const saved = saveSelectionState(doc);
   const textarea = doc.createElement("textarea");
   textarea.value = value;
   textarea.setAttribute("readonly", "readonly");
@@ -713,6 +745,7 @@ async function copyTextToClipboard(text, doc) {
   textarea.style.left = "-9999px";
   textarea.style.top = "0";
   doc.body.append(textarea);
+  textarea.focus({ preventScroll: true });
   textarea.select();
   textarea.setSelectionRange(0, textarea.value.length);
   try {
@@ -721,6 +754,7 @@ async function copyTextToClipboard(text, doc) {
     }
   } finally {
     textarea.remove();
+    restoreSelectionState(saved);
   }
 }
 
@@ -898,6 +932,9 @@ function isInlineCopyCode(code) {
   if (code.closest("pre")) {
     return false;
   }
+  if (code.parentElement?.closest(INLINE_COPY_INTERACTIVE_SELECTOR)) {
+    return false;
+  }
   if (
     code.classList.contains("math-inline") ||
     code.classList.contains("math-display") ||
@@ -909,54 +946,109 @@ function isInlineCopyCode(code) {
   return Boolean(stringValue(code.textContent).trim());
 }
 
+// A click that ends a drag-selection inside the code is the reader selecting text, not asking for a
+// copy; the selection stays as it is.
+function selectionTouches(node) {
+  const selection = node.ownerDocument?.getSelection?.();
+  if (!selection || selection.isCollapsed || !selection.rangeCount) {
+    return false;
+  }
+  for (let index = 0; index < selection.rangeCount; index += 1) {
+    if (selection.getRangeAt(index).intersectsNode(node)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function setInlineCopyState(code, state) {
+  const text = stringValue(code.textContent);
+  code.dataset.copyState = state;
+  if (state === "copied") {
+    // Alternating the state's parity restarts its animation on every successful copy.
+    code.dataset.copyPulse = code.dataset.copyPulse === "1" ? "2" : "1";
+    code.setAttribute("title", "Copied");
+    code.setAttribute("aria-label", `Copied: ${text}`);
+    return;
+  }
+  if (state === "failed") {
+    code.setAttribute("title", "Copy failed");
+    code.setAttribute("aria-label", `Copy failed: ${text}`);
+    return;
+  }
+  code.setAttribute("title", "Click to copy");
+  code.setAttribute("aria-label", `Copy code: ${text}`);
+}
+
 function enhanceInlineCode(container) {
   const doc = container.ownerDocument;
   for (const code of Array.from(container.querySelectorAll("code"))) {
-    if (!isInlineCopyCode(code)) {
+    if (code.__mmrInlineCopyReady || !isInlineCopyCode(code)) {
       continue;
     }
-    const source = stringValue(code.textContent);
+    code.__mmrInlineCopyReady = true;
     code.classList.add("mmr-inline-copy");
     code.setAttribute("role", "button");
     code.setAttribute("tabindex", "0");
-    code.setAttribute("title", "Click to copy");
-    code.setAttribute("aria-label", "Copy code");
+    setInlineCopyState(code, "");
 
     let resetTimerID = 0;
-    const resetState = () => {
-      code.dataset.copyBusy = "";
-      code.dataset.copyState = "";
-      code.setAttribute("title", "Click to copy");
-      code.setAttribute("aria-label", "Copy code");
-    };
+    let attempt = 0;
     const triggerCopy = async (event) => {
       event.preventDefault();
       event.stopPropagation();
-      if (code.dataset.copyBusy === "1") {
+      const current = ++attempt;
+      let copied = false;
+      try {
+        await copyTextToClipboard(code.textContent, doc);
+        copied = true;
+      } catch {
+        copied = false;
+      }
+      if (current !== attempt) {
         return;
       }
-      code.dataset.copyBusy = "1";
-      try {
-        await copyTextToClipboard(source, doc);
-        code.dataset.copyState = "copied";
-        code.setAttribute("title", "Copied");
-        code.setAttribute("aria-label", "Code copied");
-      } catch {
-        code.dataset.copyState = "failed";
-        code.setAttribute("title", "Copy failed");
-        code.setAttribute("aria-label", "Copy failed");
-      } finally {
-        const view = documentView(doc);
-        view.clearTimeout(resetTimerID);
-        resetTimerID = view.setTimeout(resetState, COPY_FEEDBACK_DURATION_MS);
-      }
+      const view = documentView(doc);
+      view.clearTimeout(resetTimerID);
+      setInlineCopyState(code, copied ? "copied" : "failed");
+      resetTimerID = view.setTimeout(() => {
+        resetTimerID = 0;
+        setInlineCopyState(code, "");
+      }, INLINE_COPY_FEEDBACK_DURATION_MS);
     };
 
-    code.addEventListener("click", triggerCopy);
-    code.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" || event.key === " ") {
-        void triggerCopy(event);
+    // Chrome starts no text selection inside a focusable element, so while a pointer is pressed the
+    // code leaves the tab order; it returns once the press (and its click) is over. The keyboard
+    // still reaches it.
+    code.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0 || !code.hasAttribute("tabindex")) {
+        return;
       }
+      code.removeAttribute("tabindex");
+      const view = documentView(doc);
+      const restore = () => {
+        doc.removeEventListener("pointerup", restore, true);
+        doc.removeEventListener("pointercancel", restore, true);
+        view.setTimeout(() => code.setAttribute("tabindex", "0"), 0);
+      };
+      doc.addEventListener("pointerup", restore, true);
+      doc.addEventListener("pointercancel", restore, true);
+    });
+    code.addEventListener("click", (event) => {
+      if (selectionTouches(code)) {
+        return;
+      }
+      void triggerCopy(event);
+    });
+    code.addEventListener("keydown", (event) => {
+      if (event.target !== code || (event.key !== "Enter" && event.key !== " ")) {
+        return;
+      }
+      if (event.repeat) {
+        event.preventDefault();
+        return;
+      }
+      void triggerCopy(event);
     });
   }
 }
