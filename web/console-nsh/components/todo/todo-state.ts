@@ -50,6 +50,8 @@ export interface TodoTask {
   llm_profile: string;
   workspace_dir: string;
   bash_env: { name: string; value: string }[];
+  last_run_at: string;
+  last_run_status: string;
   mode: string;
   repeat_kind: string;
   repeat_time: string;

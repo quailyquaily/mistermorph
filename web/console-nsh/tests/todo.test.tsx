@@ -78,6 +78,35 @@ test("editing an item enables Save, and Save sends every item with the edit", as
   expect(app.enabled("id:todo-save")).toBe(false);
 });
 
+test("the editor shows when the item last ran and how it ended; saves never send it back", async () => {
+  const { app, calls } = await openTodo({
+    "GET /proxy:/todo/tasks": {
+      body: tasksBody({
+        tasks: [
+          { id: "task-1", title: "Review", content: "Original content", cron: "15 9 * * 1,3", tz: "UTC+9", last_run_at: "2030-01-01T09:15:00Z", last_run_status: "failed" },
+          { id: "task-2", title: "Report", content: "Write it", at: "2030-01-02 12:30", tz: "UTC" },
+          { id: "task-3", title: "Digest", content: "Sum it up", cron: "0 8 * * *", tz: "UTC", last_run_at: "2030-01-01T08:00:00Z", last_run_status: "done" },
+        ],
+      }),
+    },
+  });
+  await app.press("id:todo-item-task-1");
+  await app.waitFor("id:todo-last-run");
+  await app.waitFor("text:/^Last run .+ · Failed$/");
+  await app.press("id:todo-item-task-3");
+  await app.waitFor("text:/^Last run .+ · Done$/");
+  await app.press("id:todo-item-task-2");
+  await app.waitFor("text:Not run yet");
+  expect(app.shows("text:/· Failed$/")).toBe(false);
+
+  await app.clear("id:todo-title");
+  await app.type("id:todo-title", "Report v2");
+  await app.press("id:todo-save");
+  await app.waitFor("Saved");
+  const sent = proxied(calls, "PUT", "/todo/tasks")[0].json.tasks;
+  expect(sent.some((task: any) => "last_run_at" in task || "last_run_status" in task)).toBe(false);
+});
+
 test("a failed save shows the error and keeps the edit to save again", async () => {
   let fail = true;
   const { app, calls } = await openTodo({
