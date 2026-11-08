@@ -13,6 +13,7 @@ import { createAnimatedValue, Image, Scroll, Text, token, View } from "nsh";
 import { Button as BaseButton } from "nsh/base";
 import { Button, Icon, Spinner, Tip, TipButton } from "../../components/ui";
 import { ContactAvatar } from "../../components/shared/ContactAvatar";
+import { gutterX } from "../../components/knowledge/parts";
 import { FadeText } from "../../components/motion/FadeText";
 import { createScrollEdges, SCROLLBAR } from "../../components/motion/ScrollEdges";
 import { createSlidingSelection } from "../../components/motion/SlidingSelection";
@@ -84,6 +85,10 @@ export function TopicSidebar(props: { c: ChatController; class?: string }) {
   const selection = createSlidingSelection(activeKey);
   // Rows are 40pt (44 on phones, a touch target), 2pt apart.
   const rowHeight = () => (c.mobileMode() ? "min-h-11" : "min-h-10");
+  // On a phone the topics are a page of their own and take the pages' phone gutter (Contacts, TODO):
+  // the title at the page's 12pt, rows edge to edge with their content 12pt in, group labels at 14.
+  // The desktop sidebar keeps its 16pt list gutter and 25.6pt title.
+  const rowPadding = () => (c.mobileMode() ? "px-3" : "pl-3.5 pr-[13px]");
 
   const topicRow = (row: () => Extract<TopicRow, { kind: "topic" }>) => (
     <TipButton
@@ -93,7 +98,7 @@ export function TopicSidebar(props: { c: ChatController; class?: string }) {
       accessibilityLabel={c.topicTitle(row().topic)}
       testID={`chat-topic-${normalizeTopicID(row().topic?.id)}`}
       tooltip={c.topicTimeLabel(row().topic) ? <Tip text={c.topicTimeLabel(row().topic)} /> : undefined}
-      class={`mt-0.5 ${rowHeight()} flex-row items-center gap-2.5 rounded-(--radius) border border-transparent py-2 pl-3.5 pr-[13px] transition-colors duration-[180ms] hover:bg-hover-soft`}
+      class={`mt-0.5 ${rowHeight()} flex-row items-center gap-2.5 rounded-(--radius) border border-transparent py-2 ${rowPadding()} transition-colors duration-[180ms] hover:bg-hover-soft`}
     >
       <If
         when={view() === "agents"}
@@ -179,9 +184,10 @@ export function TopicSidebar(props: { c: ChatController; class?: string }) {
       {/* The head: the title on the left, the view toggles and New flush at the right. A hairline
           under it shows once topics have scrolled beneath it. */}
       <View
-        class={`h-[57px] flex-row items-center pl-[25.6px] transition-colors duration-[180ms] ${c.mobileMode() ? "pr-[25.6px]" : ""} border-b ${
+        class={`h-[57px] flex-row items-center ${c.mobileMode() ? "" : "pl-[25.6px]"} transition-colors duration-[180ms] border-b ${
           edges.scrolled() ? "border-line-faint" : "border-transparent"
         }`}
+        style={c.mobileMode() ? { paddingLeft: gutterX(), paddingRight: gutterX() } : undefined}
       >
         <View class="mr-3 flex-1" onPress={() => c.clickTopicSidebarTitle()} testID="chat-topics-title">
           <Text class="text-xl leading-6 tracking-[-0.03em] text-foreground" role="header">
@@ -240,10 +246,11 @@ export function TopicSidebar(props: { c: ChatController; class?: string }) {
         contentClass="grow"
         scrollbar={SCROLLBAR}
       >
-        {/* The list's gutter (16pt) as views inside the content rather than its padding: the
-            content is at least the viewport's height, and padding on top of that made a list that
-            fits scroll by its padding. Phones keep room under the floating New button. */}
-        <View class="grow px-4" onLayout={edges.onContentLayout}>
+        {/* The list's gutter (16pt; none on a phone, where rows run edge to edge as Contacts' do) as
+            views inside the content rather than its padding: the content is at least the viewport's
+            height, and padding on top of that made a list that fits scroll by its padding. Phones
+            keep room under the floating New button. */}
+        <View class={`grow ${c.mobileMode() ? "" : "px-4"}`} onLayout={edges.onContentLayout}>
           <View class="h-4" />
           <selection.Highlight class="rounded-(--radius) bg-selection" testID="chat-topic-selection" />
           <Each of={c.topicRows()} key={(row) => row.key}>
