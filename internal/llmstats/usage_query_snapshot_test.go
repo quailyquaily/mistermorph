@@ -8,17 +8,24 @@ import (
 	"time"
 )
 
-// appendWhileReading appends records with one cache detail each until the returned stop is
-// called, which reports the writer's error.
-func appendWhileReading(t *testing.T, s *UsageStore) func() {
+// maxConcurrentAppends bounds the writer, so the table and each read stay small (under -race too)
+// while reads still race the appends.
+const maxConcurrentAppends = 500
+
+// appendWhileReading appends records with one cache detail each, up to maxConcurrentAppends or
+// until the returned stop is called, which reports the writer's error. writing is open while the
+// writer appends.
+func appendWhileReading(t *testing.T, s *UsageStore) (writing <-chan struct{}, stopWriter func()) {
 	t.Helper()
 	stop := make(chan struct{})
 	errs := make(chan error, 1)
+	running := make(chan struct{})
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		for i := 0; ; i++ {
+		defer close(running)
+		for i := 0; i < maxConcurrentAppends; i++ {
 			select {
 			case <-stop:
 				errs <- nil
@@ -36,13 +43,24 @@ func appendWhileReading(t *testing.T, s *UsageStore) func() {
 				return
 			}
 		}
+		errs <- nil
 	}()
-	return func() {
+	return running, func() {
 		close(stop)
 		wg.Wait()
 		if err := <-errs; err != nil {
 			t.Errorf("writer: %v", err)
 		}
+	}
+}
+
+// stopped reports whether the reads can end: the writer is done and a few reads saw its last rows.
+func stopped(writing <-chan struct{}, reads int) bool {
+	select {
+	case <-writing:
+		return reads >= 20
+	default:
+		return false
 	}
 }
 
@@ -55,10 +73,10 @@ func TestUsageIsOneSnapshot(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
-	stop := appendWhileReading(t, s)
+	writing, stop := appendWhileReading(t, s)
 	defer stop()
 
-	for i := 0; i < 300; i++ {
+	for i := 0; i < 300 && !stopped(writing, i); i++ {
 		p, err := s.Usage(ctx)
 		if err != nil {
 			t.Fatal(err)
@@ -87,10 +105,10 @@ func TestDailyIsOneSnapshot(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
-	stop := appendWhileReading(t, s)
+	writing, stop := appendWhileReading(t, s)
 	defer stop()
 
-	for i := 0; i < 300; i++ {
+	for i := 0; i < 300 && !stopped(writing, i); i++ {
 		d, err := s.Daily(ctx, 2, time.UTC)
 		if err != nil {
 			t.Fatal(err)
