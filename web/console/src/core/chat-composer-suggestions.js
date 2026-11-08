@@ -276,18 +276,20 @@ function composerCommandHighlightCandidates(commands) {
   return source
     .map((item) => trimText(item?.value))
     .filter((value) => value.startsWith("/"))
-    .sort((a, b) => b.length - a.length);
+    .sort((a, b) => b.length - a.length)
+    .map((value) => ({ value, lower: value.toLowerCase() }));
 }
 
-function matchingComposerCommand(text, index, commands) {
-  const lowerText = text.toLowerCase();
-  for (const command of composerCommandHighlightCandidates(commands)) {
-    const end = index + command.length;
+// Compares only the token's own characters, so a long draft is not lowercased once per "/".
+function matchingComposerCommand(text, index, candidates) {
+  for (const command of candidates) {
+    const end = index + command.value.length;
     if (
-      lowerText.slice(index, end) === command.toLowerCase() &&
+      end <= text.length &&
+      text.slice(index, end).toLowerCase() === command.lower &&
       (end >= text.length || /\s/u.test(text.charAt(end)))
     ) {
-      return command;
+      return command.value;
     }
   }
   return "";
@@ -305,38 +307,56 @@ function appendComposerHighlightSegment(out, type, text) {
   out.push({ type, text });
 }
 
+// Splits the draft into plain text and command/skill tokens for the composer's highlight layer.
+// It jumps from one "/" or "$" to the next and builds the commands list once, so the work stays
+// linear in the draft's length, even for long pasted text full of paths.
 function composerHighlightSegments({
   text: rawText = "",
   commands = COMPOSER_COMMAND_SUGGESTIONS,
 } = {}) {
   const text = String(rawText || "");
+  const trigger = /[/$]/g;
   const out = [];
-  let index = 0;
-  while (index < text.length) {
-    const char = text.charAt(index);
-    if ((char !== "/" && char !== "$") || !composerTokenBoundary(text, index)) {
-      appendComposerHighlightSegment(out, "text", char);
-      index += 1;
+  let candidates = null;
+  let plainStart = 0;
+  let match = trigger.exec(text);
+  while (match) {
+    const start = match.index;
+    if (!composerTokenBoundary(text, start)) {
+      match = trigger.exec(text);
       continue;
     }
+    const char = text.charAt(start);
+    let end = -1;
     if (char === "/") {
-      const command = matchingComposerCommand(text, index, commands);
+      candidates = candidates || composerCommandHighlightCandidates(commands);
+      const command = matchingComposerCommand(text, start, candidates);
       if (command) {
-        appendComposerHighlightSegment(out, "command", text.slice(index, index + command.length));
-        index += command.length;
-        continue;
+        end = start + command.length;
       }
     }
-    const end = composerTokenEnd(text, index);
-    appendComposerHighlightSegment(out, char === "/" ? "command" : "skill", text.slice(index, end));
-    index = end;
+    if (end < 0) {
+      end = composerTokenEnd(text, start);
+    }
+    appendComposerHighlightSegment(out, "text", text.slice(plainStart, start));
+    appendComposerHighlightSegment(out, char === "/" ? "command" : "skill", text.slice(start, end));
+    plainStart = end;
+    trigger.lastIndex = Math.max(end, start + 1);
+    match = trigger.exec(text);
   }
+  appendComposerHighlightSegment(out, "text", text.slice(plainStart));
   return out.length ? out : [{ type: "text", text: "" }];
+}
+
+// The highlight layer only earns its cost when there is a token to color.
+function composerHasHighlightTokens(segments) {
+  return Array.isArray(segments) && segments.some((segment) => segment?.type !== "text");
 }
 
 export {
   COMPOSER_COMMAND_SUGGESTIONS,
   buildComposerSuggestionItems,
+  composerHasHighlightTokens,
   composerHighlightSegments,
   composerSuggestionInsertText,
   composerTriggerContext,

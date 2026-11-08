@@ -375,11 +375,18 @@
 .chat-composer-input {
   position: relative;
   z-index: 1;
-  color: transparent;
-  -webkit-text-fill-color: transparent;
+  color: var(--text-0);
+  -webkit-text-fill-color: currentColor;
   box-shadow: none;
   appearance: none;
   caret-color: var(--text-0);
+}
+
+/* With a command or skill token in the draft, the mirror behind the field draws the text in
+   color and the field's own text turns transparent over it. Otherwise the field draws it. */
+.chat-composer.is-highlighting .chat-composer-input {
+  color: transparent;
+  -webkit-text-fill-color: transparent;
 }
 
 .chat-composer-input::placeholder {
@@ -389,6 +396,11 @@
 
 .chat-composer-input::selection {
   background: color-mix(in srgb, var(--line) 54%, transparent);
+  color: var(--text-0);
+  -webkit-text-fill-color: var(--text-0);
+}
+
+.chat-composer.is-highlighting .chat-composer-input::selection {
   color: transparent;
   -webkit-text-fill-color: transparent;
 }
@@ -396,6 +408,12 @@
 .chat-composer-input:disabled {
   cursor: default;
   opacity: 0.56;
+}
+
+/* A draft held while the field is disabled stays legible, as it does over the mirror; only the
+   placeholder fades. */
+.chat-composer:not(.is-highlighting) .chat-composer-input:disabled:not(:placeholder-shown) {
+  opacity: 1;
 }
 
 .chat-composer.is-single-row .chat-composer-highlight,

@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   COMPOSER_COMMAND_SUGGESTIONS,
   buildComposerSuggestionItems,
+  composerHasHighlightTokens,
   composerHighlightSegments,
   composerSuggestionInsertText,
   composerTriggerContext,
@@ -228,4 +229,92 @@ test("composerHighlightSegments marks slash commands and skill tokens", () => {
       { type: "skill", text: "$ope" },
     ]
   );
+});
+
+// The reference the faster segmenter must agree with: one character at a time, as it was.
+function referenceSegments(text, commands = COMPOSER_COMMAND_SUGGESTIONS) {
+  const values = commands.map((item) => String(item.value).trim()).filter((value) => value.startsWith("/"))
+    .sort((a, b) => b.length - a.length);
+  const out = [];
+  const push = (type, value) => {
+    if (!value) return;
+    const previous = out[out.length - 1];
+    if (previous?.type === type) previous.text += value;
+    else out.push({ type, text: value });
+  };
+  let index = 0;
+  while (index < text.length) {
+    const char = text.charAt(index);
+    const boundary = index === 0 || /\s/u.test(text.charAt(index - 1));
+    if ((char !== "/" && char !== "$") || !boundary) {
+      push("text", char);
+      index += 1;
+      continue;
+    }
+    if (char === "/") {
+      const command = values.find((value) => text.slice(index, index + value.length).toLowerCase() === value.toLowerCase() &&
+        (index + value.length >= text.length || /\s/u.test(text.charAt(index + value.length))));
+      if (command) {
+        push("command", text.slice(index, index + command.length));
+        index += command.length;
+        continue;
+      }
+    }
+    let end = index;
+    while (end < text.length && !/\s/u.test(text.charAt(end))) end += 1;
+    push(char === "/" ? "command" : "skill", text.slice(index, end));
+    index = end;
+  }
+  return out.length ? out : [{ type: "text", text: "" }];
+}
+
+test("composerHighlightSegments matches the character-by-character reference", () => {
+  const samples = [
+    "",
+    "plain text only",
+    "/help",
+    "/HELP me",
+    "/models list\n/models  list",
+    "a/b c /x/y $skill$more\t$ /",
+    "  if (x) { open('/usr/lib', $HOME); } // see /help\n",
+    "/ctx compact now and /ctx\n$imagegen",
+    "日本語 /help 中文 $技能",
+  ];
+  for (const text of samples) {
+    assert.deepEqual(composerHighlightSegments({ text }), referenceSegments(text), JSON.stringify(text));
+  }
+  const commands = normalizeComposerCommandItems([{ value: "/models list" }, { value: "/think" }]);
+  const text = "/models list then /think and /models";
+  assert.deepEqual(composerHighlightSegments({ text, commands }), referenceSegments(text, commands));
+});
+
+test("composerHighlightSegments keeps a large multiline paste intact in linear work", () => {
+  const line = "  at open (/usr/local/lib/app.js:12:3) then $HOME and /help\n";
+  const text = line.repeat(4000);
+  const lowered = { chars: 0 };
+  const lowerCase = String.prototype.toLowerCase;
+  String.prototype.toLowerCase = function toLowerCase() {
+    lowered.chars += this.length;
+    return lowerCase.call(this);
+  };
+  let segments;
+  try {
+    segments = composerHighlightSegments({ text });
+  } finally {
+    String.prototype.toLowerCase = lowerCase;
+  }
+  // Every character survives, in order: highlighting never changes the draft.
+  assert.equal(segments.map((segment) => segment.text).join(""), text);
+  assert.ok(composerHasHighlightTokens(segments));
+  // Only command-sized pieces at each token are lowercased, never the whole draft once per "/":
+  // the old segmenter lowercased the full text for every slash token, here about 8000 times.
+  assert.ok(lowered.chars < 4 * text.length, `lowercased ${lowered.chars} chars for a ${text.length}-char draft`);
+});
+
+test("composerHasHighlightTokens is true only when a command or skill token is present", () => {
+  assert.equal(composerHasHighlightTokens(composerHighlightSegments({ text: "" })), false);
+  assert.equal(composerHasHighlightTokens(composerHighlightSegments({ text: "a/b and c$d\nplain" })), false);
+  assert.equal(composerHasHighlightTokens(composerHighlightSegments({ text: "run /help" })), true);
+  assert.equal(composerHasHighlightTokens(composerHighlightSegments({ text: "use $skill" })), true);
+  assert.equal(composerHasHighlightTokens(null), false);
 });
