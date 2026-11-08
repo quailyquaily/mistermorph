@@ -325,3 +325,27 @@ func TestDesktopReleasesBuildTheNshShell(t *testing.T) {
 		}
 	}
 }
+
+func TestAndroidAppIsReleasedWithTheReleaseKeystore(t *testing.T) {
+	release := readRepoFile(t, ".github", "workflows", "release.yml")
+	for _, token := range []string{
+		"android-app:",
+		"web/console-nsh/scripts/build-android.sh",
+		"secrets.ANDROID_KEYSTORE_BASE64",
+		`--keystore "${keystore}" --key-alias "${ANDROID_KEY_ALIAS}"`,
+		"MrMorph-android.apk",
+		"needs: [desktop-apps, android-app]",
+	} {
+		if !strings.Contains(release, token) {
+			t.Errorf("release workflow missing %q", token)
+		}
+	}
+	buildApp := readRepoFile(t, ".github", "workflows", "build_app.yaml")
+	if !strings.Contains(buildApp, "web/console-nsh/scripts/build-android.sh --out dist/MrMorph-android.apk") {
+		t.Error("build_app.yaml does not build the Android app")
+	}
+	script := readRepoFile(t, "web", "console-nsh", "scripts", "build-android.sh")
+	if !strings.Contains(script, `android:usesCleartextTraffic="true"`) {
+		t.Error("the Android build no longer lets the app reach http:// console servers")
+	}
+}

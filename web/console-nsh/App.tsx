@@ -1,6 +1,6 @@
 // The entry: read the host's boot data, restore the session and the language, start the router,
 // then mount the frame. Page logic lives in pages/, shared state in lib/.
-import { effect, mount, untracked, View } from "nsh";
+import { effect, keyboardFrame, mount, untracked, View } from "nsh";
 import "./assets/fonts/ibm-plex-sans-latin-400-normal.woff2";
 import "./assets/fonts/ibm-plex-sans-latin-400-italic.woff2";
 import "./assets/fonts/ibm-plex-sans-latin-500-normal.woff2";
@@ -13,7 +13,7 @@ import { Shell } from "./components/Shell";
 import { authState, configureApiBase, endpointState, localeState } from "./lib/core/context.js";
 import { currentLocale } from "./lib/i18n/index.js";
 import { installSystemNotifications } from "./lib/core/system-notifications.js";
-import { boot, reportFrontendReady, setDocumentLanguage, startVisibilityTracking } from "./lib/platform";
+import { boot, isMobile, reportFrontendReady, setDocumentLanguage, startVisibilityTracking } from "./lib/platform";
 import { route, router, startRouter } from "./lib/router";
 import { inShellless, inStandalone, startShell } from "./lib/shell";
 import { PageView } from "./pages/routes";
@@ -37,7 +37,9 @@ function App() {
     }
   });
   return (
-    <View class="flex-1 bg-background">
+    // The phone app's surface does not shrink when the software keyboard opens: the app does, so
+    // the composer and the fields stay above it (dialogs make room themselves, in their own layer).
+    <View class="flex-1 bg-background" style={isMobile() ? { paddingBottom: keyboardFrame().height } : undefined}>
       <If when={route()}>
         <Shell shellless={inShellless()} standalone={inStandalone()}>
           <PageView />

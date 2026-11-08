@@ -143,6 +143,28 @@ when run by hand (Actions, "Build Desktop App") or for a pushed tag that is not 
 
 The macOS tag release job requires Apple signing secrets in GitHub Actions. It imports the Developer ID Application certificate into a temporary keychain, signs the app bundle, signs the DMG, submits the DMG through `notarytool`, staples the ticket to the DMG and app bundle, then uploads the release assets.
 
+## Android App
+
+The console also builds as an Android app (`web/console-nsh/scripts/build-android.sh`). It is a client
+only: on first launch it asks for the address of a running `morph console serve` (for example
+`192.168.1.5:9080` on the local network, or an `https://` address), checks that a console answers there,
+and logs in as the web console does. Plain `http://` addresses work; the console shows its usual
+warning about them.
+
+```bash
+web/console-nsh/scripts/build-android.sh                          # web/console-nsh/dist-android/MrMorph.apk, debug key
+web/console-nsh/scripts/build-android.sh --abi x86_64 --run       # for an emulator: install and start it
+NSH_KEYSTORE_PASSWORD=… web/console-nsh/scripts/build-android.sh --keystore release.keystore --key-alias morph
+```
+
+It needs nsh 0.4.0, Node and the Android SDK (`ANDROID_HOME`, with `platforms;android-35` and build
+tools); no NDK and no Gradle. Tagged releases publish `MrMorph-android.apk` when the repository has the
+`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD` and `ANDROID_KEY_ALIAS` secrets: Android only
+updates an app signed with the same key, so releases are never signed with a runner's debug key.
+
+Not available in the Android app yet: attaching files other than images, system notifications,
+changing avatars and saving files (log exports, downloads).
+
 ## Known Gaps
 
 - Local macOS test packages can still use ad hoc signing; those builds may require testers to manually bypass Gatekeeper on first launch.

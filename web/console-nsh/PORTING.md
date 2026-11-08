@@ -1,8 +1,9 @@
 # The Mister Morph console in nsh
 
 One TSX app (nsh 0.4.0, Native Shell) that builds as the web console (`scripts/build-web.sh`, served by
-`console serve --console-static-dir`) and as the desktop app (`desktop/nsh`, a GPUI shell that embeds
-it and runs the backend). It reimplements `web/console` (Vue) screen for screen; `web/console/src`
+`console serve --console-static-dir`), as the desktop app (`desktop/nsh`, a GPUI shell that embeds
+it and runs the backend) and as the Android app (`scripts/build-android.sh`, a client of a console
+server elsewhere). It reimplements `web/console` (Vue) screen for screen; `web/console/src`
 stays the reference for behaviour, states and copy until the cutover.
 
 ## Layout
@@ -12,6 +13,8 @@ stays the reference for behaviour, states and copy until the cutover.
 | `App.tsx` | Boot (host data, session, language), router start, the frame |
 | `host.js` | The web page's host: answers `morph.*` in the browser (address bar, storage, files, notifications) |
 | `lib/platform.ts` | The `morph.*` host contract. The only file that knows a host exists |
+| `lib/mobileHost.ts` | The contract answered inside the app on Android (no embedding app): saved values, the server address, the photo picker |
+| `pages/login/ServerDialog.tsx` | The Android app's console server: entered on the login page, checked before it is saved |
 | `lib/core/*.js` | Logic from `web/console/src/core`, nearly verbatim. Change as little as possible |
 | `lib/stores/*.js` | The Pinia stores on nsh signals, same API (`authState.token`, `endpointState.items`) |
 | `lib/i18n/index.js` | The Vue console's strings, unchanged: `translate(key, vars)` |
@@ -105,3 +108,22 @@ Headless tests prove behaviour, not the look.
   `frames` step before the shot.
 - Shared motion helpers (sliding selection, fade truncation, scroll edges, entrances, dialog
   origin) are in `components/motion/` (see its README).
+
+### Android (nsh 0.4.0)
+
+- A pressable view that clips (`overflow-hidden`) and casts an outer shadow never gets its presses:
+  the runtime moves its children into an inner box that takes them. `Button` drops its shadow on
+  Android; do not combine the two on anything pressable.
+- Android gives a touch that no view takes to the views behind it: the dialog's scrim heard presses on
+  the panel's padding. The scrim ignores presses inside the panel's frame.
+- Neither the surface nor a dialog shrinks when the software keyboard opens. The app's root and the
+  dialog layer add `keyboardFrame().height` as bottom padding. Not `env(keyboard-inset-height)`:
+  it moves views natively but not in the layout presses are matched against.
+- Dialogs are an `Overlay` on Android (`DialogLayer`): with it Back hides the keyboard first, then
+  closes the dialog.
+- The packaged app gets no `usesCleartextTraffic`, and its `fetch` goes through HttpURLConnection,
+  which then refuses `http://`: `scripts/build-android.sh` runs `nsh package` with an SDK whose
+  `aapt2` adds it, for console servers on the local network.
+- 0.4.0 has the photo picker but no `Picker.pickFiles` and no `Notifications`: the Android app
+  attaches images only and shows no system notifications. Avatars (crop and re-encode) and saving
+  files are not available there yet; they say so.

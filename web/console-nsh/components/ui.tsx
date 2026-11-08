@@ -5,7 +5,7 @@
 // primary, quiet plain buttons, mono caps for labels, and red only for what is destructive.
 import type { InputRef, JSX } from "nsh";
 import type { ButtonProps as BaseButtonProps, TextViewClasses, TextViewStyles } from "nsh/base";
-import { cleanup, createAnimatedValue, createMotion, Easing, effect, Image, keymap, reduceMotion, Scroll, signal, Text, token, untracked, View, windowSize } from "nsh";
+import { cleanup, createAnimatedValue, createMotion, Easing, effect, Image, keyboardFrame, keymap, Overlay, platform, reduceMotion, Scroll, signal, Text, token, untracked, View, windowSize } from "nsh";
 import {
   Button as BaseButton,
   Checkbox as BaseCheckbox,
@@ -176,6 +176,10 @@ function splitButtonClass(cls: string | undefined): [string, string] {
   const inner: string[] = [];
   for (const c of (cls ?? "").split(/\s+/).filter(Boolean)) (!c.includes(":") && OUTER_CLASS.test(c) ? outer : inner).push(c);
   if (outer.some((c) => SIZED_CLASS.test(c))) inner.push("self-stretch");
+  // A wrapper stretched by its parent (a dialog's close button, `items-stretch` in the title bar)
+  // is taller than the button: the button fills it. Growing from its own size, it stays as it was
+  // wherever the wrapper is not stretched.
+  inner.push("grow");
   return [outer.join(" "), inner.join(" ")];
 }
 
@@ -296,8 +300,14 @@ export interface ButtonProps {
 const ALIGN_SELF = { start: "self-start", center: "self-center", end: "self-end", stretch: "self-stretch", auto: "self-auto" } as const;
 
 /** The console's button: one command, any input. */
+// nsh 0.4.0 on Android: a box that clips (`overflow-hidden`, which rounds the press layer) and casts
+// an outer shadow moves its children into an inner box that takes the presses, and the button
+// never gets them. Android buttons go without the shadow.
+const BUTTON_SHADOWS = platform.os !== "android";
+
 export function Button(props: ButtonProps) {
   const variant = () => BUTTON_VARIANTS[props.variant ?? "primary"];
+  const shadow = () => (BUTTON_SHADOWS ? variant().shadow : undefined);
   const size = () => BUTTON_SIZES[props.size ?? "sm"];
   const enabled = () => !props.disabled && !props.loading;
   const iconColor = (): TokenName => (props.disabled ? variant().disabledText : props.selected ? "ink" : variant().text);
@@ -313,13 +323,13 @@ export function Button(props: ButtonProps) {
         props.iconOnly ? `${size().square} px-0` : size().box
       } ${props.block ? "self-stretch" : ALIGN_SELF[props.align ?? "start"]} ${props.selected ? "bg-selection" : ""} ${props.class ?? ""}`}
       style={{
-        boxShadow: variant().shadow?.[0],
+        boxShadow: shadow()?.[0],
         transitionProperty: "colors, box-shadow",
         transitionDuration: 180,
         transitionTimingFunction: "ease-out",
       }}
-      hoverStyle={variant().shadow && enabled() ? { boxShadow: variant().shadow![1] } : undefined}
-      disabledStyle={variant().shadow ? { boxShadow: "none" } : undefined}
+      hoverStyle={shadow() && enabled() ? { boxShadow: shadow()![1] } : undefined}
+      disabledStyle={shadow() ? { boxShadow: "none" } : undefined}
     >
       <View
         accessibilityElementsHidden
@@ -1127,6 +1137,9 @@ export function Tabs(props: {
 const DIALOG_SHADOW = "0 12px 24px rgba(20, 24, 32, 0.14)";
 
 /** The dialog layer under `Modal` and `MessageDialog` (scrim, panel, the motion from the pressing control): for a dialog with a panel of its own. */
+/** Android draws dialogs in an Overlay, not nsh's Dialog window (see DialogLayer). */
+const OVERLAY_DIALOGS = platform.os === "android";
+
 export function DialogLayer(props: {
   open: boolean;
   onClose: () => void;
@@ -1193,37 +1206,75 @@ export function DialogLayer(props: {
     });
   });
 
-  return (
-    <Dialog
-      open={shown()}
-      // Escape and back would close the layer at once, under the closing motion: they only ask
-      // (onCancel), and the panel goes out as a press on the scrim or the close button makes it.
-      closeOnEscape={false}
-      closeOnSwipe={false}
-      onCancel={() => props.onClose()}
-      onOpenChange={({ open }) => {
-        if (!open) props.onClose();
+  // The panel's frame in the layer, which the scrim covers from its origin.
+  let panelBox: { origin: { x: number; y: number }; size: { width: number; height: number } } | null = null;
+  // The scrim and the panel, in whichever layer holds them.
+  const layer = () => [
+    <View
+      accessibilityElementsHidden
+      class="absolute inset-0 bg-dialog-scrim"
+      style={{ opacity: scrim }}
+      // Android hands a touch that nothing in the panel takes (its padding, a label) to the views
+      // behind it, so the scrim hears presses on the panel too: only those outside it close.
+      onPress={(event) => {
+        const box = panelBox;
+        const { x, y } = event.position;
+        if (box && x >= box.origin.x && x <= box.origin.x + box.size.width && y >= box.origin.y && y <= box.origin.y + box.size.height) return;
+        props.onClose();
       }}
-      testID={props.testID}
-      animation="none"
-      class={`absolute inset-0 items-center ${narrow() ? "justify-end" : "justify-center p-4"}`}
+      focusable={false}
+    />,
+    <View
+      accessibilityLabel={props.label}
+      onLayout={(event) => {
+        panelBox = event.bounds;
+        enter(event.bounds);
+      }}
+      class={`max-h-[90%] border border-dialog-line bg-dialog ${narrow() ? "w-full" : "rounded-(--radius)"} ${props.panelClass}`}
+      style={{ ...(props.panelStyle ?? {}), boxShadow: DIALOG_SHADOW, transformOrigin: origin() ?? "center", ...panel.style }}
     >
-      <View
-        accessibilityElementsHidden
-        class="absolute inset-0 bg-dialog-scrim"
-        style={{ opacity: scrim }}
-        onPress={() => props.onClose()}
-        focusable={false}
-      />
-      <View
-        accessibilityLabel={props.label}
-        onLayout={(event) => enter(event.bounds)}
-        class={`max-h-[90%] border border-dialog-line bg-dialog ${narrow() ? "w-full" : "rounded-(--radius)"} ${props.panelClass}`}
-        style={{ ...(props.panelStyle ?? {}), boxShadow: DIALOG_SHADOW, transformOrigin: origin() ?? "center", ...panel.style }}
-      >
-        {props.children}
-      </View>
-    </Dialog>
+      {props.children}
+    </View>,
+  ];
+  const layerClass = () => `absolute inset-0 items-center ${narrow() ? "justify-end" : "justify-center p-4"}`;
+  // On phones the panel is a sheet at the bottom: the layer does not shrink when the software
+  // keyboard opens, so the sheet rises by the keyboard's height (0 without one). A number, not
+  // `env(keyboard-inset-height)`: the env value moves the sheet natively but not in nsh's layout,
+  // where presses are matched.
+  const layerStyle = () => (narrow() ? { paddingBottom: keyboardFrame().height } : undefined);
+
+  return (
+    // Android: nsh 0.4.0's Dialog is a window of its own below the status bar, and presses in it
+    // land one status bar higher than what is drawn (a press on a footer button hits the row above
+    // it), so the layer is an Overlay over the app's own view there; Back still asks (onCancel).
+    <If
+      when={OVERLAY_DIALOGS}
+      else={
+        <Dialog
+          open={shown()}
+          // Escape and back would close the layer at once, under the closing motion: they only ask
+          // (onCancel), and the panel goes out as a press on the scrim or the close button makes it.
+          closeOnEscape={false}
+          closeOnSwipe={false}
+          onCancel={() => props.onClose()}
+          onOpenChange={({ open }) => {
+            if (!open) props.onClose();
+          }}
+          testID={props.testID}
+          animation="none"
+          class={layerClass()}
+          style={layerStyle()}
+        >
+          {layer()}
+        </Dialog>
+      }
+    >
+      <If when={shown()}>
+        <Overlay onCancel={() => props.onClose()} testID={props.testID} class={layerClass()} style={layerStyle()}>
+          {layer()}
+        </Overlay>
+      </If>
+    </If>
   );
 }
 

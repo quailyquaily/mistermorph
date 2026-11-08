@@ -9,12 +9,15 @@ inputs:
   nsh-version:
     description: The nsh release to install (the nsh-* crates in desktop/nsh/Cargo.toml use the same)
     default: v0.4.0
+  gpui:
+    description: '"true" for the desktop shell (GPUI packages, Rust cache); "false" for the console alone (the Android app)'
+    default: "true"
 
 runs:
   using: composite
   steps:
     - name: Install Linux desktop build deps
-      if: runner.os == 'Linux'
+      if: runner.os == 'Linux' && inputs.gpui == 'true'
       shell: bash
       run: |
         sudo apt-get update
@@ -51,6 +54,7 @@ runs:
       run: nsh --version
 
     - name: Cache the shell's Rust build
+      if: inputs.gpui == 'true'
       uses: Swatinem/rust-cache@v2
       with:
         workspaces: desktop/nsh -> target

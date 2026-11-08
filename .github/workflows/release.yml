@@ -348,10 +348,80 @@ jobs:
         run: |
           gh release upload "${GITHUB_REF_NAME}" dist/release-upload/* --clobber
 
+  android-app:
+    name: Build Android App
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: goreleaser
+    runs-on: ubuntu-24.04
+    env:
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+
+    steps:
+      # Android installs an update only when it is signed with the same key as the installed app,
+      # and a runner's debug key is new every run: without the release keystore there is no
+      # Android asset.
+      - name: Check the release keystore
+        id: keystore
+        shell: bash
+        run: |
+          if [[ -z "${ANDROID_KEYSTORE_BASE64}" || -z "${ANDROID_KEYSTORE_PASSWORD}" || -z "${ANDROID_KEY_ALIAS}" ]]; then
+            echo "::warning::ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD or ANDROID_KEY_ALIAS is not set: no Android app in this release"
+            echo "ready=false" >> "${GITHUB_OUTPUT}"
+          else
+            echo "ready=true" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Checkout
+        if: steps.keystore.outputs.ready == 'true'
+        uses: actions/checkout@v4
+
+      - name: Set up the console build
+        if: steps.keystore.outputs.ready == 'true'
+        uses: ./.github/actions/setup-desktop-build
+        with:
+          gpui: "false"
+
+      - name: Install the Android platform
+        if: steps.keystore.outputs.ready == 'true'
+        run: yes | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --install "platforms;android-35" "build-tools;35.0.0" >/dev/null
+
+      # The phone app (web/console-nsh as a client of a console server elsewhere), for phones'
+      # arm64-v8a and armeabi-v7a.
+      - name: Build the APK
+        if: steps.keystore.outputs.ready == 'true'
+        shell: bash
+        env:
+          NSH_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          keystore="${RUNNER_TEMP}/release.keystore"
+          printf '%s' "${ANDROID_KEYSTORE_BASE64}" | base64 --decode > "${keystore}"
+          VERSION="${GITHUB_REF_NAME}" web/console-nsh/scripts/build-android.sh \
+            --keystore "${keystore}" --key-alias "${ANDROID_KEY_ALIAS}" \
+            --out dist/release-upload/MrMorph-android.apk
+          rm -f "${keystore}"
+          (cd dist/release-upload && shasum -a 256 MrMorph-android.apk > MrMorph-android.apk.sha256)
+
+      - name: Upload Android release files to R2
+        if: steps.keystore.outputs.ready == 'true'
+        shell: bash
+        run: |
+          ./scripts/release-r2-upload.sh dist/release-upload "s3://${R2_BUCKET}/${RELEASE_CHANNEL}/releases/${GITHUB_REF_NAME}/"
+
+      - name: Upload Android release files to GitHub
+        if: steps.keystore.outputs.ready == 'true' && env.GITHUB_RELEASES_TO_KEEP != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          gh release upload "${GITHUB_REF_NAME}" dist/release-upload/* --clobber
+
   release-metadata:
     name: Publish Release Metadata
-    if: startsWith(github.ref, 'refs/tags/')
-    needs: desktop-apps
+    # After the Android app's assets too, but a failed Android build does not hold the release back.
+    if: startsWith(github.ref, 'refs/tags/') && !cancelled() && needs.desktop-apps.result == 'success'
+    needs: [desktop-apps, android-app]
     runs-on: ubuntu-latest
 
     steps:

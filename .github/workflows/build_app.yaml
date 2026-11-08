@@ -82,3 +82,37 @@ jobs:
             dist/*.tar.gz
           if-no-files-found: error
           retention-days: 3
+
+  build-android:
+    name: Build Android App
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up the console build
+        uses: ./.github/actions/setup-desktop-build
+        with:
+          gpui: "false"
+
+      # The runner's SDK (ANDROID_HOME) has its build tools; nsh compiles against API 35.
+      - name: Install the Android platform
+        run: yes | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --install "platforms;android-35" "build-tools;35.0.0" >/dev/null
+
+      # The phone app: the console as a client of a console server elsewhere, signed with this
+      # runner's debug key (fine for testing; releases sign with the release keystore).
+      - name: Build the APK
+        run: |
+          web/console-nsh/scripts/build-android.sh --out dist/MrMorph-android.apk
+          sha256sum dist/MrMorph-android.apk > dist/MrMorph-android.apk.sha256
+
+      - name: Upload Android artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MrMorph-android
+          path: |
+            dist/MrMorph-android.apk
+            dist/MrMorph-android.apk.sha256
+          if-no-files-found: error
+          retention-days: 3

@@ -16,8 +16,9 @@ import {
 } from "../../lib/core/context.js";
 import { endpointRoutePath } from "../../lib/core/endpoint-routes.js";
 import { consoleSetupTargetEndpointRef, resolveConsoleSetupStage, setupStagePath } from "../../lib/core/setup.js";
-import { origin } from "../../lib/platform";
+import { isMobile, origin, serverAddress } from "../../lib/platform";
 import { currentRoute, locationOf, navigate } from "../../lib/router";
+import { ServerDialog } from "./ServerDialog";
 
 export function LoginPage() {
   const password = signal("");
@@ -25,13 +26,16 @@ export function LoginPage() {
   const err = signal("");
   const showPassword = signal(false);
   let passwordInput: InputRef | undefined;
-  const host = (() => {
+  const hostOf = () => {
     try {
       return new URL(origin()).host;
     } catch {
       return "";
     }
-  })();
+  };
+  const host = signal(hostOf());
+  // The phone app has no server of its own: the user enters the console's address in a dialog.
+  const serverOpen = signal(false);
   // /login?stay skips the automatic session check and redirect, e.g. to preview this page.
   const stay = () => {
     const value = currentRoute().query.stay;
@@ -63,6 +67,29 @@ export function LoginPage() {
 
   async function submit() {
     if (busy()) return;
+    if (isMobile()) {
+      if (!serverAddress()) {
+        serverOpen.set(true);
+        return;
+      }
+      if (!password().trim()) {
+        // A console without a password logs in by itself.
+        busy.set(true);
+        err.set("");
+        try {
+          if (await ensureConsoleSession()) {
+            await finishLogin();
+            return;
+          }
+        } catch (e) {
+          err.set((e as Error)?.message || t("login_failed"));
+          busy.set(false);
+          return;
+        } finally {
+          busy.set(false);
+        }
+      }
+    }
     if (!password().trim()) {
       err.set(t("login_required_password"));
       focusPassword();
@@ -89,6 +116,10 @@ export function LoginPage() {
   // Once, after the page's elements exist: log in by itself when the console has no password.
   effect(() => untracked(() => void start()));
   async function start() {
+    if (isMobile() && !serverAddress()) {
+      serverOpen.set(true);
+      return;
+    }
     if (stay()) {
       focusPassword();
       return;
@@ -125,7 +156,20 @@ export function LoginPage() {
         <ObserveSection
           variant="boxed"
           title={t("login_subtitle")}
-          meta={<Text class="font-mono text-xs leading-[17.4px] text-muted-foreground line-clamp-1">{host}</Text>}
+          meta={
+            <If when={isMobile()} else={<Text class="font-mono text-xs leading-[17.4px] text-muted-foreground line-clamp-1">{host()}</Text>}>
+              <Button
+                variant="plain"
+                size="xs"
+                icon="PhPlugsConnected"
+                label={host() || t("login_server_set")}
+                title={t("login_server_title")}
+                disabled={busy()}
+                testID="login-server-open"
+                onPress={() => serverOpen.set(true)}
+              />
+            </If>
+          }
           gap={0}
         >
           <View class="px-2 pb-1 pt-2">
@@ -169,6 +213,18 @@ export function LoginPage() {
           <LanguageSelector />
         </View>
       </View>
+      <If when={isMobile()}>
+        <ServerDialog
+          open={serverOpen()}
+          onClose={() => serverOpen.set(false)}
+          onSaved={() => {
+            serverOpen.set(false);
+            host.set(hostOf());
+            // A console without a password logs in by itself.
+            void start();
+          }}
+        />
+      </If>
     </View>
   );
 }
