@@ -23,3 +23,14 @@ Built and pushed f44dbf48. Linux/Windows wheel and touchpad deltas gain 2x after
 Installs: none beyond restoring pinned Cargo dependencies; no manifests/lockfiles changed for dependencies. Missing fontconfig/xkbcommon development packages were worked around using dynamic fontconfig loading and links to installed runtime libraries in temporary build files; no sudo/system install.
 Tests: manager independently passed `test -z "$(gofmt -l .)" && go vet ./... && go test ./...`. Coder reports desktop `cargo test --locked`: 46 passed, 1 ignored. Vendor crate tests: 207 passed (including all 5 new tests), 4 failed due to absent upstream gallery image/font fixtures; scratch-only stand-in font used. Those fixture-dependent tests remain unverified, not a complete vendor-suite pass. Console source checks not applicable (no TSX changes).
 Not checked: real desktop UI/physical scroll feel, X11 and Windows behavior, or macOS execution. Owner should check wheel/touchpad speed and momentum on actual devices before shipping.
+
+## factory · review · 2026-11-09 01:07
+head: f44dbf48125d41573d8506548644dde196740c62
+verdict: pass
+notes:
+- Codex reviewed all four changed files in origin/master...HEAD (base 6e88f224) and found no verified defects introduced by FT32. No merge conflicts with base.
+- Required gofmt, go vet ./..., and go test ./... passed after normalizing the temporary TMPDIR path: 156 packages passed, 17 had no tests. The initial run had 23 failures caused by a TMPDIR containing '..'; the identical failures reproduced on base. This test-environment issue is not an outstanding FT32 P1 finding; no branch fix was made.
+- Desktop cargo test --locked --offline: 46 passed, 1 ignored. Vendor library suite: 208 passed, 3 failed due to two missing image fixtures and a replacement font differing from Pacifico. All five new scrolling tests passed; the full vendor suite is not a pass.
+- Applying the new vendor patch to base reproduced HEAD. git diff --check reports trailing whitespace in the patch at line 8.
+- No unpinned installs, manifest edits, or lockfile changes. Rust validation used temporary dynamic-loading configuration, runtime-library links and a replacement font. Scripted tests used temporary absolute HOME directories; the worktree remained clean.
+- Console source checks were not applicable. Windows/macOS execution, real wheel/touchpad feel and inertia remain unverified; check on actual devices before shipping. Linux/Windows gain is 2x; macOS stays 1x, and Ctrl-modified input stays unchanged.
