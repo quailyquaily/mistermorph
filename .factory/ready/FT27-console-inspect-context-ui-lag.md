@@ -40,3 +40,14 @@ Checks: 40 background store updates caused no rerenders/refetches; ten open/clos
 Manager independently passed configured gofmt, go vet ./..., go test ./..., pnpm test (521 tests), and pnpm build. Build emits non-fatal bundle-size warnings. Two focused regression tests added. Verified all commits and changed paths against start 8b613ef1; no protected paths changed.
 Install: playwright-core 1.65.0 in scratch only, not in repository dependencies. Scripted tests used throwaway HOME directories.
 Not checked: real user data, physical phones, Safari/WebKit, Firefox, Android WebView, native desktop/Android apps (web/console-nsh). Chrome phone viewport emulation is not real-device verification. Native context page has similar patterns but was not changed. Owner should verify the originally affected device and review remaining large-list opening latency.
+
+
+## factory · review · 2026-11-08 21:06
+head: 33accb5fea078e467a5cb1998f18aeeb733c0f19
+verdict: pass
+No findings. Codex reviewed all four changed files and all hunks in origin/master...HEAD. Merge compatibility with current master checked cleanly.
+Validation reported by Codex: configured gofmt, go vet ./..., go test ./... passed; pnpm test passed all 521 tests; pnpm build passed with non-fatal bundle-size warnings. Chrome desktop and phone viewports covered 40/753 items, full content, scrolling, typing, locale changes, background updates, repeated open/close and late-request cleanup without verified regressions.
+Independent component performance measurements reported by reviewer (4x CPU slowdown, median of five): large phone-list selection approximately 100 to 27 ms, back to list 266 to 99 ms; opening still approximately 363 ms. Different harness from build measurements; not directly comparable.
+Installs: no unpinned installs. Manager verified worktree remained clean and head unchanged.
+Residual risks: original sustained lag was not reproduced, so the originally affected device is not confirmed fixed. Real user data, physical devices, Safari/WebKit, Firefox and native applications were not verified. Owner should check the original device and remaining large-list opening latency before shipping.
+Moved review → ready; not merged.
