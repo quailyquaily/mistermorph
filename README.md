@@ -114,7 +114,7 @@ Useful commands:
 go test ./...
 ```
 
-The Console frontend lives in `web/console/` and uses `pnpm`. See [docs/console.md](docs/console.md) and [docs/app.md](docs/app.md) for build details.
+Both scripts build the nsh Console (`web/console-nsh/`, which needs nsh 0.4.0) and the nsh desktop app (`desktop/nsh/`, which also needs Rust). `--console vue` (backend) and `--wails` (desktop) build the Vue Console in `web/console/` (which uses `pnpm`) and the Wails app instead. See [docs/console.md](docs/console.md) and [docs/app.md](docs/app.md) for build details.
 
 ## Configuration Template
 

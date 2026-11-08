@@ -1,12 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Usage: scripts/stage-console-assets.sh [SOURCE_DIR]
+# Copies a built console (default: the Vue build in web/console/dist; the nsh console builds to
+# web/console-nsh/dist) into the folder the backend embeds.
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SOURCE_DIR="${ROOT_DIR}/web/console/dist"
+SOURCE_DIR="${1:-${ROOT_DIR}/web/console/dist}"
 TARGET_DIR="${ROOT_DIR}/cmd/mistermorph/consolecmd/static"
 
 if [[ ! -f "${SOURCE_DIR}/index.html" ]]; then
-  echo "missing ${SOURCE_DIR}/index.html; run 'pnpm --dir web/console build' first" >&2
+  echo "missing ${SOURCE_DIR}/index.html; build the console first ('pnpm --dir web/console build', or web/console-nsh/scripts/build-web.sh for the nsh console)" >&2
   exit 1
 fi
 

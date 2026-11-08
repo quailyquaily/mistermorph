@@ -113,16 +113,17 @@ sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev
 Wails v3 alpha.93 defaults to GTK4/WebKitGTK 6 on Linux, and this repository
 uses that default for Linux desktop builds.
 
-Build the backend binary:
+Build the backend binary (the scripts default to the nsh Console and the nsh desktop app in
+`desktop/nsh`; `--console vue` and `--wails` build the Vue Console and this Wails app):
 
 ```bash
-./scripts/build-backend.sh --output ./bin/morph
+./scripts/build-backend.sh --console vue --output ./bin/morph
 ```
 
 Build a local desktop release binary:
 
 ```bash
-./scripts/build-desktop.sh --release
+./scripts/build-desktop.sh --wails --release
 ```
 
 Run from source:
@@ -140,7 +141,7 @@ go build -tags 'wailsdesktop production' -o ./bin/MrMorph ./desktop/wails
 For local debug builds with DevTools, use:
 
 ```bash
-./scripts/build-desktop.sh
+./scripts/build-desktop.sh --wails
 ```
 
 ## Release Packaging

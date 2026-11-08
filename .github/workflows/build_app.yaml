@@ -60,7 +60,7 @@ jobs:
 
       - name: Build desktop app and bundled backend
         run: |
-          ./scripts/build-desktop.sh --release --no-frontend \
+          ./scripts/build-desktop.sh --wails --release --no-frontend \
             --desktop-output ./dist/MrMorph \
             --backend-output ./dist/morph
           shasum -a 256 dist/MrMorph > dist/MrMorph.sha256
