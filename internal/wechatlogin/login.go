@@ -13,8 +13,9 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/quailyquaily/mistermorph/internal/configstore"
+
 	"github.com/quailyquaily/mistermorph/internal/configbootstrap"
-	"github.com/quailyquaily/mistermorph/internal/fsstore"
 	"github.com/quailyquaily/mistermorph/internal/secref"
 	"github.com/quailyquaily/mistermorph/internal/wechatapi"
 )
@@ -171,7 +172,7 @@ func writeConfig(configPath string, values map[string]string) (string, error) {
 	if configPath == "" {
 		return "", fmt.Errorf("config path is required")
 	}
-	data, err := os.ReadFile(configPath)
+	data, err := configstore.ReadFile(configPath)
 	if err != nil && !os.IsNotExist(err) {
 		return "", err
 	}
@@ -200,5 +201,5 @@ func writeConfig(configPath string, values map[string]string) (string, error) {
 	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
 		return "", err
 	}
-	return previous, fsstore.WriteTextAtomic(configPath, string(serialized), fsstore.FileOptions{DirPerm: 0o755, FilePerm: 0o600})
+	return previous, configstore.WriteFileBy(configPath, serialized, configstore.ByLogin)
 }

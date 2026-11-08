@@ -57,8 +57,41 @@ pub fn parse_go_bool(value: &str) -> Option<bool> {
     }
 }
 
+/// Reads `auto_update` from the backend's settings API answer (`GET /api/settings/auto-update`),
+/// for a config kept in agent.db, which the shell cannot read before the backend runs.
+pub fn parse_settings_auto_update(body: &str) -> Result<AutoUpdate, String> {
+    let value: serde_json::Value = serde_json::from_str(body).map_err(|e| format!("read auto_update settings: {e}"))?;
+    let section = &value["auto_update"];
+    if !section.is_object() {
+        return Err("read auto_update settings: no auto_update".to_owned());
+    }
+    let enabled = match &section["enabled"] {
+        serde_json::Value::Bool(b) => *b,
+        serde_json::Value::String(s) => parse_go_bool(s.trim()).unwrap_or(false),
+        _ => false,
+    };
+    let channel = section["channel"].as_str().unwrap_or("").trim().to_lowercase();
+    Ok(AutoUpdate { enabled, channel })
+}
+
+/// Fetches `auto_update` from the backend at `addr` (`127.0.0.1:<port>`) under `base_path`.
+pub fn fetch_backend_auto_update(addr: &str, base_path: &str) -> Result<AutoUpdate, String> {
+    let base = base_path.trim().trim_end_matches('/');
+    let url = format!("http://{}{}/api/settings/auto-update", addr.trim(), base);
+    let agent = crate::http::agent(Some(std::time::Duration::from_secs(10)));
+    let mut response = agent.get(&url).call().map_err(|e| format!("get {url}: {e}"))?;
+    let status = response.status().as_u16();
+    let body = response.body_mut().read_to_string().map_err(|e| format!("get {url}: {e}"))?;
+    if status != 200 {
+        return Err(format!("get {url}: status {status}"));
+    }
+    parse_settings_auto_update(&body)
+}
+
 /// The config file: `--config <path>` (or `--config=<path>`) when given, else
-/// `~/.morph/config.yaml` when it exists. The flag tells whether it was explicit.
+/// `~/.morph/config.yaml` when it exists. The flag tells whether it was explicit. Without
+/// `--config` the backend keeps the config in agent.db (and imports that file once), so only an
+/// explicit path is passed on to it.
 pub fn resolve_config_path(args: &[String]) -> (Option<PathBuf>, bool) {
     if let Some(explicit) = extract_config_path(args) {
         return (Some(crate::paths::expand_home(&explicit)), true);
@@ -117,6 +150,16 @@ mod tests {
         assert_eq!(parse_auto_update("").unwrap(), AutoUpdate::default());
         assert_eq!(parse_auto_update("auto_update: 3\n").unwrap(), AutoUpdate::default());
         assert!(parse_auto_update("a: [\n").is_err());
+    }
+
+    #[test]
+    fn reads_auto_update_from_the_settings_api() {
+        let cfg = parse_settings_auto_update(r#"{"auto_update":{"enabled":true,"channel":" Pro "},"config_path":"x"}"#).unwrap();
+        assert_eq!(cfg, AutoUpdate { enabled: true, channel: "pro".to_owned() });
+        let cfg = parse_settings_auto_update(r#"{"auto_update":{"enabled":"false"}}"#).unwrap();
+        assert_eq!(cfg, AutoUpdate::default());
+        assert!(parse_settings_auto_update(r#"{"error":"unauthorized"}"#).is_err());
+        assert!(parse_settings_auto_update("not json").is_err());
     }
 
     #[test]

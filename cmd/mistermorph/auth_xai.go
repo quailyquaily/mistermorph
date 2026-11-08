@@ -10,8 +10,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/quailyquaily/mistermorph/internal/configstore"
+
 	"github.com/quailyquaily/mistermorph/internal/configbootstrap"
-	"github.com/quailyquaily/mistermorph/internal/fsstore"
 	"github.com/quailyquaily/mistermorph/internal/xaiauth"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -207,7 +208,7 @@ func setXAIDefaultLLMConfig() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	data, err := os.ReadFile(configPath)
+	data, err := configstore.ReadFile(configPath)
 	if err != nil && !os.IsNotExist(err) {
 		return configPath, err
 	}
@@ -218,10 +219,7 @@ func setXAIDefaultLLMConfig() (string, error) {
 	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
 		return configPath, err
 	}
-	if err := fsstore.WriteTextAtomic(configPath, string(serialized), fsstore.FileOptions{
-		DirPerm:  0o755,
-		FilePerm: 0o600,
-	}); err != nil {
+	if err := configstore.WriteFileBy(configPath, serialized, configstore.ByLogin); err != nil {
 		return configPath, err
 	}
 

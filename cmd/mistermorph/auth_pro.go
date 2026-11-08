@@ -8,8 +8,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/quailyquaily/mistermorph/internal/configstore"
+
 	"github.com/quailyquaily/mistermorph/internal/configbootstrap"
-	"github.com/quailyquaily/mistermorph/internal/fsstore"
 	"github.com/quailyquaily/mistermorph/internal/llmutil"
 	"github.com/quailyquaily/mistermorph/internal/proaccount"
 	"github.com/spf13/cobra"
@@ -125,7 +126,7 @@ func maybeSetProAsDefaultLLM(force bool) (updated bool, configPath string, autoU
 	if err != nil {
 		return false, "", false, err
 	}
-	data, readErr := os.ReadFile(configPath)
+	data, readErr := configstore.ReadFile(configPath)
 	if readErr != nil {
 		if !os.IsNotExist(readErr) {
 			return false, configPath, false, readErr
@@ -146,7 +147,7 @@ func maybeSetProAsDefaultLLM(force bool) (updated bool, configPath string, autoU
 	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
 		return false, configPath, false, err
 	}
-	if err := fsstore.WriteTextAtomic(configPath, string(serialized), fsstore.FileOptions{DirPerm: 0o755, FilePerm: 0o600}); err != nil {
+	if err := configstore.WriteFileBy(configPath, serialized, configstore.ByLogin); err != nil {
 		return false, configPath, false, err
 	}
 	viper.Set("config", configPath)

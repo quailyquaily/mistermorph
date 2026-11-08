@@ -12,6 +12,7 @@ func migrations() []sqlitedb.Migration {
 		{Name: "create identity and heartbeat workflows", SQL: personaSQL},
 		{Name: "create cron tasks", SQL: cronSQL},
 		{Name: "create contacts and the contacts bus inbox and outbox", SQL: contactsSQL},
+		{Name: "create the config tables", SQL: configSQL},
 	}
 }
 
@@ -176,4 +177,94 @@ CREATE TABLE contact_bus_outbox (
 	PRIMARY KEY (channel, idempotency_key)
 );
 CREATE INDEX contact_bus_outbox_pending ON contact_bus_outbox (status, updated_at) WHERE status = 'pending';
+`
+
+// configSQL: the config (§7).
+const configSQL = `
+CREATE TABLE settings (
+	path       TEXT PRIMARY KEY,
+	kind       TEXT NOT NULL CHECK (kind IN ('string', 'duration', 'bool', 'int', 'float',
+	                                          'string_list', 'string_map', 'json')),
+	value      TEXT NOT NULL,
+	updated_at TEXT NOT NULL,
+	updated_by TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE llm_profiles (
+	name                    TEXT PRIMARY KEY,
+	position                INTEGER NOT NULL,
+	description             TEXT NOT NULL DEFAULT '',
+	abilities               TEXT NOT NULL DEFAULT '[]',
+	inference_provider      TEXT NOT NULL DEFAULT '',
+	provider                TEXT NOT NULL DEFAULT '',
+	endpoint                TEXT NOT NULL DEFAULT '',
+	api_key                 TEXT NOT NULL DEFAULT '',
+	model                   TEXT NOT NULL DEFAULT '',
+	supports_image_parts    INTEGER CHECK (supports_image_parts IN (0, 1)),
+	context_window_tokens   INTEGER,
+	headers                 TEXT NOT NULL DEFAULT '{}',
+	cache_ttl               TEXT NOT NULL DEFAULT '',
+	cache_key_prefix        TEXT NOT NULL DEFAULT '',
+	request_timeout         TEXT NOT NULL DEFAULT '',
+	tools_emulation_mode    TEXT NOT NULL DEFAULT '',
+	temperature             REAL,
+	reasoning_effort        TEXT NOT NULL DEFAULT '',
+	reasoning_budget_tokens INTEGER,
+	provider_options        TEXT NOT NULL DEFAULT '{}',
+	updated_at              TEXT NOT NULL,
+	updated_by              TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE llm_routes (
+	purpose           TEXT PRIMARY KEY CHECK (purpose IN ('main_loop', 'decision', 'addressing', 'awareness',
+	                                                     'heartbeat', 'think', 'plan_create', 'image',
+	                                                     'transcription')),
+	profile           TEXT NOT NULL DEFAULT '',
+	fallback_profiles TEXT NOT NULL DEFAULT '[]',
+	updated_at        TEXT NOT NULL,
+	updated_by        TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE llm_route_candidates (
+	purpose  TEXT NOT NULL REFERENCES llm_routes (purpose) ON DELETE CASCADE,
+	position INTEGER NOT NULL,
+	profile  TEXT NOT NULL,
+	weight   INTEGER NOT NULL DEFAULT 1 CHECK (weight >= 0),
+	PRIMARY KEY (purpose, position)
+);
+
+CREATE TABLE mcp_servers (
+	name          TEXT PRIMARY KEY,
+	position      INTEGER NOT NULL,
+	enabled       INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+	on_demand     INTEGER NOT NULL DEFAULT 0 CHECK (on_demand IN (0, 1)),
+	description   TEXT NOT NULL DEFAULT '',
+	type          TEXT NOT NULL DEFAULT 'stdio' CHECK (type IN ('stdio', 'http')),
+	command       TEXT NOT NULL DEFAULT '',
+	args          TEXT NOT NULL DEFAULT '[]',
+	env           TEXT NOT NULL DEFAULT '{}',
+	url           TEXT NOT NULL DEFAULT '',
+	headers       TEXT NOT NULL DEFAULT '{}',
+	allowed_tools TEXT NOT NULL DEFAULT '[]',
+	updated_at    TEXT NOT NULL,
+	updated_by    TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE console_endpoints (
+	name       TEXT PRIMARY KEY,
+	position   INTEGER NOT NULL,
+	url        TEXT NOT NULL,
+	auth_token TEXT NOT NULL DEFAULT '',
+	updated_at TEXT NOT NULL,
+	updated_by TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE auth_profiles (
+	name              TEXT PRIMARY KEY,
+	credential_kind   TEXT NOT NULL DEFAULT '',
+	credential_secret TEXT NOT NULL DEFAULT '',
+	allow             TEXT NOT NULL DEFAULT '{}',
+	bindings          TEXT NOT NULL DEFAULT '{}',
+	updated_at        TEXT NOT NULL,
+	updated_by        TEXT NOT NULL DEFAULT ''
+);
 `

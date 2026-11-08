@@ -249,3 +249,29 @@ test("on a phone the sections come first, then a section with a back button", as
   await app.waitFor("id:settings-index");
   expect(app.shows("id:settings-persona")).toBe(false);
 });
+
+test("System: says the config is kept in agent.db, or names the --config file", async () => {
+  const dbPath = "/home/u/.morph/agent.db#config.yaml";
+  const { app } = await openConsole({
+    location: "/e/default/settings/system",
+    api: {
+      "GET /settings/system": { body: { config_path: dbPath, config_revision: "rev-1", config_values: {}, field_states: {} } },
+      "GET /settings/auto-update": { body: { auto_update: { enabled: false, channel: "" }, channels: [] } },
+    },
+  });
+  await app.waitFor("id:settings-config-store");
+  await app.waitFor("text:Kept in agent.db in the state folder. Use morph config export and import to edit it as a file.");
+  expect(app.texts()).toContain("agent.db");
+});
+
+test("System: names the config file given with --config", async () => {
+  const { app } = await openConsole({
+    location: "/e/default/settings/system",
+    api: {
+      "GET /settings/system": { body: { config_path: "/etc/morph/config.yaml", config_revision: "rev-1", config_values: {}, field_states: {} } },
+      "GET /settings/auto-update": { body: { auto_update: { enabled: false, channel: "" }, channels: [] } },
+    },
+  });
+  await app.waitFor("id:settings-config-store");
+  await app.waitFor("text:The file named with --config: /etc/morph/config.yaml");
+});

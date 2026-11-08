@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/quailyquaily/mistermorph/internal/agentdb"
+	"github.com/quailyquaily/mistermorph/internal/configstore"
 	"github.com/quailyquaily/mistermorph/internal/configutil"
 	"github.com/quailyquaily/mistermorph/internal/personastore"
 	"github.com/quailyquaily/mistermorph/internal/secref"
@@ -137,7 +138,7 @@ func BrokenItems(items []Item) []Item {
 
 func InspectConfigPath(path string, source secref.Source) Item {
 	item := baseItem(FileKeyConfig, "config.yaml", "llm", path)
-	raw, err := os.ReadFile(item.Path)
+	raw, err := configstore.ReadFile(item.Path)
 	if err != nil {
 		return itemForReadError(item, err)
 	}

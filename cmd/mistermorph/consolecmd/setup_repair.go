@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/quailyquaily/mistermorph/internal/configstore"
+
 	"github.com/quailyquaily/mistermorph/internal/configbootstrap"
 	"github.com/quailyquaily/mistermorph/internal/configutil"
 	"github.com/quailyquaily/mistermorph/internal/fsstore"
@@ -72,7 +74,7 @@ func (s *server) handleSetupRepairSecret(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	raw, err := os.ReadFile(configPath)
+	raw, err := configstore.ReadFile(configPath)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -239,6 +241,9 @@ func (s *server) setupRepairStateDir() string {
 }
 
 func writeRepairFile(path string, content []byte) error {
+	if configstore.IsDBConfigPath(path) {
+		return configstore.WriteFileBy(path, content, configstore.ByConsole)
+	}
 	mode := os.FileMode(0o644)
 	if st, err := os.Stat(path); err == nil {
 		mode = st.Mode().Perm()

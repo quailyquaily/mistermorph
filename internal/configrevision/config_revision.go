@@ -4,6 +4,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"os"
+
+	"github.com/quailyquaily/mistermorph/internal/configstore"
 )
 
 type Snapshot struct {
@@ -12,7 +14,7 @@ type Snapshot struct {
 }
 
 func Read(path string) (Snapshot, error) {
-	data, err := os.ReadFile(path)
+	data, err := configstore.ReadFile(path)
 	if err != nil {
 		if !os.IsNotExist(err) {
 			return Snapshot{}, err

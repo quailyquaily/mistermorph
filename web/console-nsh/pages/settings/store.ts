@@ -475,6 +475,7 @@ export function createSettingsStore() {
   const consoleSaving = signal(false);
   const consoleSavingTarget = signal("");
   const consoleConfigPath = signal("");
+  const systemConfigPath = signal("");
   const consoleConfigValues = signal<Record<string, any>>({});
   const consoleFieldStates = signal<Record<string, any>>({});
   const consoleEndpoints = signal<any[]>([]);
@@ -2563,6 +2564,7 @@ export function createSettingsStore() {
         settingsConfigRevision.set(trimText(data?.config_revision) || untracked(settingsConfigRevision));
         systemConfigValues.set(obj(data?.config_values));
         systemFieldStates.set(obj(data?.field_states));
+        systemConfigPath.set(str(data?.config_path));
         systemSettingsLoaded.set(true);
       });
     } catch (e: any) {
@@ -3321,6 +3323,8 @@ export function createSettingsStore() {
   return {
     state,
     loggingOut,
+    // where the config the page edits is kept: agent.db, or the file --config names
+    configPath: computed(() => systemConfigPath() || consoleConfigPath() || llmConfigPath()),
     // endpoint
     settingsEndpointRef,
     consoleRuntimeEndpoints,

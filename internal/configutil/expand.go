@@ -10,6 +10,8 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/quailyquaily/mistermorph/internal/configstore"
+
 	"github.com/quailyquaily/mistermorph/internal/secref"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
@@ -101,7 +103,7 @@ func readExpandedConfigFile(
 	overrides map[string]string,
 	warn func(format string, args ...any),
 ) error {
-	raw, err := os.ReadFile(path)
+	raw, err := configstore.ReadFile(path)
 	if err != nil {
 		return err
 	}

@@ -9,6 +9,7 @@ import (
 	"github.com/quailyquaily/mistermorph/assets"
 	"github.com/quailyquaily/mistermorph/internal/clifmt"
 	"github.com/quailyquaily/mistermorph/internal/configbootstrap"
+	"github.com/quailyquaily/mistermorph/internal/configstore"
 	"github.com/quailyquaily/mistermorph/internal/pathutil"
 	"github.com/quailyquaily/mistermorph/internal/secref"
 	"github.com/spf13/cobra"
@@ -20,7 +21,7 @@ func newInstallCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "install [dir]",
-		Short: "Install config.yaml, and the identity and soul in agent.db",
+		Short: "Install the config, the identity and the soul into agent.db",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dir, err := resolveInstallDir(args)
@@ -32,9 +33,16 @@ func newInstallCmd() *cobra.Command {
 				return err
 			}
 
-			cfgPath := filepath.Join(dir, "config.yaml")
+			// The config goes into agent.db. A config.yaml already in the folder (an older
+			// install) is kept: it is imported into agent.db on the next start.
+			cfgPath := configstore.DBConfigPath(dir)
 			writeConfig := true
-			if _, err := os.Stat(cfgPath); err == nil {
+			if legacy := filepath.Join(dir, "config.yaml"); fileExists(legacy) {
+				fmt.Fprintf(os.Stderr, "warn: config already exists, skipping: %s\n", legacy)
+				writeConfig = false
+			} else if exists, err := configstore.Exists(cfgPath); err != nil {
+				return err
+			} else if exists {
 				fmt.Fprintf(os.Stderr, "warn: config already exists, skipping: %s\n", cfgPath)
 				writeConfig = false
 			}
@@ -107,11 +115,17 @@ func writeInstallStepFile(index int, total int, step installStep) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(step.Path), 0o755); err != nil {
-		return err
-	}
-	if err := os.WriteFile(step.Path, []byte(body), 0o644); err != nil {
-		return err
+	if configstore.IsDBConfigPath(step.Path) {
+		if err := configstore.WriteFileBy(step.Path, []byte(body), configstore.ByInstall); err != nil {
+			return err
+		}
+	} else {
+		if err := os.MkdirAll(filepath.Dir(step.Path), 0o755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(step.Path, []byte(body), 0o644); err != nil {
+			return err
+		}
 	}
 	fmt.Println(clifmt.Success("done"))
 	fmt.Printf("    %s\n", step.Path)
@@ -211,4 +225,9 @@ func buildInstallBootstrapConfig(dir string, setup *installConfigSetup) configbo
 	}
 
 	return cfg
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }

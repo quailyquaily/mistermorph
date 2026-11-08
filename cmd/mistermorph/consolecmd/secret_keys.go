@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/quailyquaily/mistermorph/internal/configstore"
+
 	"github.com/quailyquaily/mistermorph/internal/configutil"
 	"github.com/quailyquaily/mistermorph/internal/secref"
 	"github.com/quailyquaily/mistermorph/internal/secretkeys"
@@ -60,7 +62,7 @@ func (s *server) handleSecretKeys(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"available": false, "keys": []secretKeyPayload{}, "fields": map[string]secretFieldPayload{}})
 		return
 	}
-	raw, err := os.ReadFile(configPath)
+	raw, err := configstore.ReadFile(configPath)
 	if err != nil && !os.IsNotExist(err) {
 		writeError(w, http.StatusServiceUnavailable, "config file could not be read")
 		return

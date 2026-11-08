@@ -68,7 +68,10 @@ fn main() -> ExitCode {
     };
 
     let log = Arc::new(desktop_log::DesktopLog::open());
-    let supervisor = backend::Supervisor::spawn(backend::BackendConfig::new(config_path.clone()), log.clone());
+    // Only a config named with --config is passed on: without it the backend keeps the config in
+    // agent.db.
+    let backend_config = if explicit { config_path.clone() } else { None };
+    let supervisor = backend::Supervisor::spawn(backend::BackendConfig::new(backend_config), log.clone());
     let (ui_tx, mut ui_rx) = futures::channel::mpsc::unbounded();
     let desktop = Arc::new(host::Desktop::new(log.clone(), started_at, config_path, auto_update, supervisor, ui_tx));
     // The backend starts while the window opens.
@@ -99,9 +102,28 @@ fn main() -> ExitCode {
         cx.spawn(async move |cx| {
             let mut checked = false;
             while let Some(command) = ui_rx.next().await {
-                if matches!(command, host::Ui::BackendReady(_)) && !checked {
-                    checked = true;
-                    update::start_auto_check(desktop.auto_update.clone(), desktop.log.clone());
+                if let host::Ui::BackendReady(addr) = &command {
+                    if !checked {
+                        checked = true;
+                        if explicit {
+                            update::start_auto_check(desktop.auto_update.clone(), desktop.log.clone());
+                        } else {
+                            // The config is in agent.db: read auto_update from the backend.
+                            let addr = addr.clone();
+                            let fallback = desktop.auto_update.clone();
+                            let log = desktop.log.clone();
+                            std::thread::spawn(move || {
+                                let cfg = match config::fetch_backend_auto_update(&addr, backend::DEFAULT_BASE_PATH) {
+                                    Ok(cfg) => cfg,
+                                    Err(err) => {
+                                        log.line(&format!("desktop_update auto_update_settings_unavailable error={err:?}"));
+                                        fallback
+                                    }
+                                };
+                                update::start_auto_check(cfg, log);
+                            });
+                        }
+                    }
                 }
                 if handle.update(cx, |shell, window, cx| shell.command(command, window, cx)).is_err() {
                     break;

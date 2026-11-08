@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"os"
 
+	"github.com/quailyquaily/mistermorph/internal/configstore"
+
 	"github.com/quailyquaily/mistermorph/internal/configbootstrap"
 	"gopkg.in/yaml.v3"
 )
 
 func loadYAMLDocument(configPath string) (*yaml.Node, error) {
-	data, err := os.ReadFile(configPath)
+	data, err := configstore.ReadFile(configPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return configbootstrap.NewEmptyDocument(), nil

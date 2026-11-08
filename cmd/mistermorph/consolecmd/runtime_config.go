@@ -3,10 +3,12 @@ package consolecmd
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/quailyquaily/mistermorph/internal/configdefaults"
+	"github.com/quailyquaily/mistermorph/internal/configstore"
 	"github.com/quailyquaily/mistermorph/internal/configutil"
 	"github.com/quailyquaily/mistermorph/internal/pathutil"
 	"github.com/quailyquaily/mistermorph/internal/workspace"
@@ -146,6 +148,10 @@ func loadConsoleRuntimeConfig(configPath string, overrides consoleRuntimeOverrid
 		}
 		expandConfiguredDirKeyOnReader(v, "file_state_dir")
 		expandConfiguredDirKeyOnReader(v, "file_cache_dir")
+		if configstore.IsDBConfigPath(configPath) {
+			// agent.db is in the state folder it configures.
+			v.Set("file_state_dir", filepath.Dir(configPath))
+		}
 	}
 	workspaceDir, err := workspace.ValidateDefaultDir(v.GetString("workspace_dir"))
 	if err != nil {

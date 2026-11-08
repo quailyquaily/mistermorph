@@ -6,10 +6,11 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/quailyquaily/mistermorph/internal/configstore"
 
 	"github.com/quailyquaily/mistermorph/internal/configutil"
 	"github.com/quailyquaily/mistermorph/internal/secref"
@@ -111,7 +112,7 @@ func (s *server) handleSecretReveal(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "no config file")
 		return
 	}
-	raw, err := os.ReadFile(configPath)
+	raw, err := configstore.ReadFile(configPath)
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, "config file could not be read")
 		return

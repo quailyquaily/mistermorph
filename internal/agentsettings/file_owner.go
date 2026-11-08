@@ -14,12 +14,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/quailyquaily/mistermorph/internal/configstore"
+
 	"github.com/quailyquaily/mistermorph/internal/configbootstrap"
 	"github.com/quailyquaily/mistermorph/internal/configdefaults"
 	"github.com/quailyquaily/mistermorph/internal/configrevision"
 	"github.com/quailyquaily/mistermorph/internal/configsettings"
 	"github.com/quailyquaily/mistermorph/internal/configutil"
-	"github.com/quailyquaily/mistermorph/internal/fsstore"
 	"github.com/quailyquaily/mistermorph/internal/llmselect"
 	"github.com/quailyquaily/mistermorph/internal/llmutil"
 	"github.com/quailyquaily/mistermorph/internal/mcphost"
@@ -311,7 +312,7 @@ func (o *FileOwner) Update(ctx context.Context, update AgentSettingsUpdate) (Age
 	if err := os.MkdirAll(filepath.Dir(o.configPath), 0o755); err != nil {
 		return AgentSettingsView{}, err
 	}
-	if err := fsstore.WriteTextAtomic(o.configPath, string(serialized), fsstore.FileOptions{DirPerm: 0o755, FilePerm: 0o600}); err != nil {
+	if err := configstore.WriteFileBy(o.configPath, serialized, configstore.ByConsole); err != nil {
 		return AgentSettingsView{}, err
 	}
 	committed = true
@@ -749,7 +750,7 @@ func ReadFileSettings(configPath string) (FileSettings, error) {
 }
 
 func readFileSettingsWithSource(configPath string, source secref.Source) (FileSettings, error) {
-	data, err := os.ReadFile(configPath)
+	data, err := configstore.ReadFile(configPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return defaultAgentSettingsPayload()
@@ -801,11 +802,10 @@ func buildAgentSkillsSettingsResponse(configPath string, configValid bool, sourc
 	reader := viper.New()
 	configdefaults.Apply(reader)
 	if configValid {
-		if _, err := os.Stat(configPath); err != nil {
-			if os.IsNotExist(err) {
-				return buildAgentSkillsSettingsPayloadFromReader(reader)
-			}
+		if exists, err := configstore.Exists(configPath); err != nil {
 			return SkillsSettingsPayload{}, err
+		} else if !exists {
+			return buildAgentSkillsSettingsPayloadFromReader(reader)
 		}
 		expanded, err := readExpandedAgentSettingsConfigWithSource(configPath, source)
 		if err != nil {
@@ -831,7 +831,7 @@ func buildAgentSkillsSettingsPayloadFromReader(reader Reader) (SkillsSettingsPay
 }
 
 func inspectAgentSettingsConfigSource(configPath string) (bool, string, error) {
-	data, err := os.ReadFile(configPath)
+	data, err := configstore.ReadFile(configPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return false, "defaults", nil
@@ -1987,7 +1987,7 @@ func ensureRoutePolicyMappingValue(node *yaml.Node, key string) *yaml.Node {
 }
 
 func loadYAMLDocument(configPath string) (*yaml.Node, error) {
-	data, err := os.ReadFile(configPath)
+	data, err := configstore.ReadFile(configPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return configbootstrap.NewEmptyDocument(), nil
@@ -2006,7 +2006,7 @@ func isInvalidConfigYAMLError(err error) bool {
 
 // skillsLoadFromConfigFile returns skills.load from the config file on disk, or nil if it can't be read.
 func skillsLoadFromConfigFile(configPath string) []string {
-	data, err := os.ReadFile(configPath)
+	data, err := configstore.ReadFile(configPath)
 	if err != nil {
 		return nil
 	}

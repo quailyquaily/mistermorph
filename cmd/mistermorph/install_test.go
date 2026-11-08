@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/quailyquaily/mistermorph/internal/configstore"
 	"github.com/quailyquaily/mistermorph/internal/personastore"
 	"github.com/spf13/viper"
 )
@@ -35,6 +36,7 @@ func TestInstallWritesIdentityAndSoulUnderStateDir(t *testing.T) {
 	}
 
 	assertInstalledPersona(t, stateDir)
+	assertInstalledConfig(t, stateDir)
 	if _, err := os.Stat(filepath.Join(stateDir, "cron.yaml")); !os.IsNotExist(err) {
 		t.Fatalf("cron.yaml should not be written: %v", err)
 	}
@@ -77,6 +79,7 @@ func TestInstallUsesConfiguredStateDirWhenArgMissing(t *testing.T) {
 	}
 
 	assertInstalledPersona(t, stateDir)
+	assertInstalledConfig(t, stateDir)
 	if _, err := os.Stat(filepath.Join(stateDir, "cron.yaml")); !os.IsNotExist(err) {
 		t.Fatalf("cron.yaml should not be written: %v", err)
 	}
@@ -197,5 +200,17 @@ func TestInstallKeepsAnImportedIdentity(t *testing.T) {
 	id, _, err := store.Identity(context.Background())
 	if err != nil || id.Name != "Kept" || id.Soul != "Mine." {
 		t.Fatalf("identity = %+v, %v", id, err)
+	}
+}
+
+// assertInstalledConfig checks that install wrote the example config into agent.db, not a file.
+func assertInstalledConfig(t *testing.T, stateDir string) {
+	t.Helper()
+	if _, err := os.Stat(filepath.Join(stateDir, "config.yaml")); !os.IsNotExist(err) {
+		t.Fatalf("config.yaml should not be written: %v", err)
+	}
+	raw, err := configstore.ReadFile(configstore.DBConfigPath(stateDir))
+	if err != nil || !strings.Contains(string(raw), "inference_provider:") {
+		t.Fatalf("config in agent.db = %q, %v", raw, err)
 	}
 }
