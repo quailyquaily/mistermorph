@@ -35,3 +35,15 @@ Tests: Manager independently passed `test -z "$(gofmt -l .)" && go vet ./... && 
 Not checked: The actual chat-bubble animation was not visually verified in a live Console. Coder reports a temporary Chrome fixture using the same geometry/Canvas calls showed ordered drawing and static reduced-motion confirmation; this does not verify the real control. Desktop and Android were not run. Clipboard failure was not induced; its controller path is unchanged. Owner/reviewer should inspect the actual chat control's animation, including repeated copy and reduced motion.
 
 Moved new/ → review/.
+
+## factory · review · 2026-11-09 06:19
+head: 5523b1db1461d9d639ad278562f28e6a8f3ef386
+verdict: pass
+
+No findings. Codex reviewed all four changed files against origin/master and the item request/plan. Branch merges cleanly with base.
+
+Validation (Codex): configured gofmt/vet/Go tests passed; nsh check passed; nsh tests: 290 passed, 0 failed; five focused copy tests passed; Web bundle passed. Tests used an absolute throwaway HOME. Codex reports actual Web control verification of ordered stroke drawing, fixed 14x14 size, repeat restart, expiry/reset, reduced-motion static check, and no success after simulated application clipboard rejection.
+
+Residual risks: native desktop and Android were not run; real system clipboard rejection was not verified. Browser runtime swallowing some clipboard errors is pre-existing, not introduced by this change.
+
+Installs: none. No code changes or review commits. Moved review/ → ready/; awaiting owner approval before ship.
