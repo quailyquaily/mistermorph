@@ -34,3 +34,13 @@ revisions, loaded in the same order as today (defaults, YAML, `${VAR}` expansion
 config cannot say where its own database is. `--config <path>` keeps using that file, so systemd, the Cloudflare
 deploy and the desktop shell keep working; the default `~/.morph/config.yaml` is imported. Every config writer
 goes through one `configstore.Store`; `morph config edit` / `show` / `export` / `import` replace editing the file.
+
+## factory · 2026-11-09 00:10
+Design changed at the owner's request: "you shouldn't simply use documents table for those thing."
+
+The config, persona and heartbeat are no longer stored as verbatim text documents. The design now gives them
+tables: `settings` (one row per config key path, typed by the Console's settings registry) plus `llm_profiles`,
+`llm_routes` and `llm_route_candidates`, `mcp_servers`, `console_endpoints` and `auth_profiles`; `identity` with
+a column per field; `soul` with status and preset columns and its Markdown body; `heartbeat_workflows`, one row per
+checklist workflow with an on/off switch. One `change_log` records before and after for every change (secrets
+logged without values). See §1 and §7 of the design.
