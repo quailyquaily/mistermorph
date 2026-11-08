@@ -25,3 +25,16 @@ This item records a requested fix, not an implemented or deployed change.
 
 ## factory · 2026-11-09 06:33
 Owner follow-up: all task-concurrency defaults should be 8. See FT40 in new/. This supersedes the earlier default of 3: console.max_concurrency must default to 8, preferably via the shared channel default updated by FT40. Preserve all other requirements and explicit overrides.
+
+## factory · 2026-11-09 06:36
+Owner requested merging FT39 and FT40, retaining only FT39. FT40's full scope is now part of this item; the earlier reference to a separate FT40 dependency is superseded. Implement both scopes together under FT39.
+
+Consolidated additional requirements (formerly FT40):
+- Set the shared channel task-concurrency default and every channel-specific task-concurrency default to 8; audit fallback paths for remaining defaults of 3.
+- Keep cron.max_concurrency at 8 and verify omitted-value behavior. Console's new console.max_concurrency must default to 8 via the shared default rather than a separate literal.
+- Preserve explicit user overrides, including 1, and existing invalid-value handling. Do not change deployment configuration or introduce a process-wide aggregate budget.
+- Update assets/config/config.example.yaml and relevant English documentation consistently; do not modify config.yaml.
+- Add regression tests proving omitted settings resolve to 8 across all task runners and explicit values remain effective.
+- Acceptance: channels, cron and Console each default to eight simultaneous independent tasks, while preserving same-topic ordering and configured upper limits. Do not change unrelated concurrency settings such as network pools or tool parallelism.
+
+All original FT39 concurrency, isolation, cancellation, configuration and restart requirements remain in scope. This is a board consolidation only, not implementation or deployment.
