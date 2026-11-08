@@ -21,7 +21,20 @@
 - Example run:
   - `./bin/mistermorph run --task "Summarize this repo" --provider openai --model gpt-5.2 --api-key "$OPENAI_API_KEY"`
 
-### Console Frontend (`web/console`)
+### Console Frontends
+
+There are two consoles. A request about "the Console" (its UI, the mobile view, the desktop or
+Android app) is about the nsh console unless it names the Vue one.
+
+- `web/console-nsh`: the nsh (TSX) console. It is what the desktop app, the Android app and the
+  web console built by `scripts/build-backend.sh` (the default `--console nsh`) show.
+  - Type check: `nsh check`; tests: `nsh test --web-host tests/noHost.js` (both in `web/console-nsh`).
+  - Web build: `web/console-nsh/scripts/build-web.sh <dir>`; Android: `web/console-nsh/scripts/build-android.sh`.
+  - `web/console-nsh/PORTING.md` lists the nsh traps already found.
+- `web/console`: the Vue console, the reference design the nsh console was ported from, and what
+  the release workflow embeds in the CLI.
+
+### Vue Console (`web/console`)
 
 - Package manager: use `pnpm` (do not use `npm`).
 - Allowed commands:
