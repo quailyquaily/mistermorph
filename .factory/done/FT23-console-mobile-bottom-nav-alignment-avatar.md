@@ -56,3 +56,8 @@ Validation: Configured gofmt check, go vet ./... and go test ./... passed (exit 
 Residual risks: Actual-application visual verification remains incomplete. The frontend started, but both available browsers timed out loading it. Owner should check mobile centering, portrait idle/pressed/selected appearance, visible keyboard focus and safe-area layout on real devices before shipping. No physical-device or theme visual verification was completed in this review.
 
 Moved review/ → ready/. Not merged into master.
+
+## factory · 2026-11-08 14:05
+Owner authorized shipping ready items if fine, with a new tag and push. Reviewed head unchanged; no P0/P1 blockers. Merged into master at 640f286907d9518eefc028b1ffcc63cadd937800; published in v0.3.81.
+Combined verification passed: Go formatting, go vet ./..., go test ./..., pnpm test (519/519), pnpm build. Existing chunk-size advisory only. No unpinned installs. Physical-device, full-app visual and live-transcription checks were not repeated during shipping; review limitations remain. No deployment.
+No linked GitHub issue or PR to close. Moved ready/ → done/.

@@ -49,3 +49,8 @@ Validation reported by Codex: required Go formatting/vet/tests passed; pnpm test
 Install: temporary playwright-core@1.65.0 (not a repository-pinned tool); repository manifests unchanged. Locked project dependencies restored.
 Residual risks: component harness rather than full-app end-to-end coverage; no physical phones, iOS Safari, real soft keyboard or live transcription. Performance improvement ratios not independently remeasured. Owner should check these mobile interactions on real devices before shipping.
 Moved review/ → ready/.
+
+## factory · 2026-11-08 14:05
+Owner authorized shipping ready items if fine, with a new tag and push. Reviewed head unchanged; no P0/P1 blockers. Merged into master at 011a1c7d5284733286c0d2b8826cc15d6981208f; published in v0.3.81.
+Combined verification passed: Go formatting, go vet ./..., go test ./..., pnpm test (519/519), pnpm build. Existing chunk-size advisory only. No unpinned installs. Physical-device, full-app visual and live-transcription checks were not repeated during shipping; review limitations remain. No deployment.
+No linked GitHub issue or PR to close. Moved ready/ → done/.

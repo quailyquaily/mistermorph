@@ -55,3 +55,8 @@ Validation: required gofmt check, go vet ./..., go test ./... passed; pnpm test 
 Installs: no unpinned tools or manifest/lockfile changes. No source changes or commits by the reviewer.
 Residual risks: this review did not test physical phones, Safari/WebKit or real touch momentum. Browser checks used a mocked API; old-browser color compatibility was simulated. Owner should confirm the dark surface and scroll behavior on the affected phone.
 Moved review/ → ready/. No linked GitHub issue or PR. No merge or deployment.
+
+## factory · 2026-11-08 14:05
+Owner authorized shipping ready items if fine, with a new tag and push. Reviewed head unchanged; no P0/P1 blockers. Merged into master at 0d1b9d973a8447daa5afdf93ef9d4c4bdcbb5a38; published in v0.3.81.
+Combined verification passed: Go formatting, go vet ./..., go test ./..., pnpm test (519/519), pnpm build. Existing chunk-size advisory only. No unpinned installs. Physical-device, full-app visual and live-transcription checks were not repeated during shipping; review limitations remain. No deployment.
+No linked GitHub issue or PR to close. Moved ready/ → done/.
