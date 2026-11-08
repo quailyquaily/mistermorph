@@ -70,10 +70,18 @@ if [ ! -f "${CONFIG_PATH}" ]; then
   fi
 fi
 
+SNAPSHOT_SKIP="${MISTER_MORPH_R2_BACKUP_SKIP:-}"
 backup_state() {
   # One object replaces the previous backup only after a complete upload succeeds.
-  # A live backup is not a transaction across files; graceful shutdown saves quiescent state.
-  tar -czf "${BACKUP_DIR}/state.tar.gz" -C "${STATE_DIR}" . || return 1
+  # The SQLite databases are copied with VACUUM INTO (morph state snapshot): a tar of the live
+  # folder can catch a database and its WAL at different moments and not restore.
+  rm -rf "${BACKUP_DIR}/snapshot"
+  if [ -n "${SNAPSHOT_SKIP}" ]; then
+    mistermorph --config "${CONFIG_PATH}" state snapshot "${BACKUP_DIR}/snapshot" --skip "${SNAPSHOT_SKIP}" >/dev/null || return 1
+  else
+    mistermorph --config "${CONFIG_PATH}" state snapshot "${BACKUP_DIR}/snapshot" >/dev/null || return 1
+  fi
+  tar -czf "${BACKUP_DIR}/state.tar.gz" -C "${BACKUP_DIR}/snapshot" . || return 1
   r2 s3 cp "${BACKUP_DIR}/state.tar.gz" "${R2_URI}" --only-show-errors
 }
 

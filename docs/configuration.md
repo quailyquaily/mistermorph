@@ -157,6 +157,10 @@ Accepted task and topic changes from every runtime are written to the unified jo
 
 The first start after upgrading imports the older `events.*.jsonl` segments into the database once and leaves them on disk; a line that cannot be read is kept in the database as it was. `tasks.rotate_max_bytes` applied to those segments and is ignored now.
 
+## Backing Up State
+
+The state folder holds SQLite databases (`journal/journal.db`, `memory.db`, `agent.db`, `usage.db`). Copying or archiving the live folder can catch a database and its write-ahead log at different moments, and such a copy may not open. Use `morph state snapshot <dir>` instead: it copies each database with `VACUUM INTO` (a consistent copy while the agent keeps running) and every other file as it is, into `<dir>`, which must not exist or be empty. Back up `<dir>`. `--skip usage` leaves the LLM usage database out.
+
 ## Memories
 
 ```yaml

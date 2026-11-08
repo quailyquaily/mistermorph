@@ -13,6 +13,11 @@ function fixture(t) {
   fs.mkdirSync(path.join(dir, "bin"));
   fs.writeFileSync(path.join(dir, "template.yaml"), "console:\n  endpoints: []\n");
   fs.writeFileSync(path.join(dir, "bin/mistermorph"), `#!/bin/sh
+if [ "$3" = state ] && [ "$4" = snapshot ]; then
+  printf '%s\\n' "$@" >> "$TEST_SNAPSHOT_ARGS"
+  mkdir -p "$5" && cp -R "$MISTER_MORPH_FILE_STATE_DIR"/. "$5"/
+  exit 0
+fi
 printf '%s\\n' "$@" > "$TEST_ARGS"
 printf 'saved by console\\n' > "$MISTER_MORPH_FILE_STATE_DIR/chat.txt"
 if [ "\${TEST_HOLD:-0}" = 1 ]; then
@@ -50,6 +55,7 @@ esac
     MISTER_MORPH_R2_SECRET_ACCESS_KEY: "dummy-secret",
     TEST_ARGS: path.join(dir, "args"), TEST_REMOTE: path.join(dir, "remote.tar.gz"),
     TEST_AWS_LOG: path.join(dir, "aws.log"),
+    TEST_SNAPSHOT_ARGS: path.join(dir, "snapshot-args"),
     TEST_READY: path.join(dir, "ready"),
   };
   return { dir, env, run(extra = {}) {
@@ -66,6 +72,17 @@ test("entrypoint starts Console on the container port and saves state on exit", 
   assert.match(fs.readFileSync(f.env.TEST_ARGS, "utf8"), /console\nserve\n--console-listen\n0.0.0.0:8787/);
   assert.ok(fs.existsSync(f.env.TEST_REMOTE));
   assert.match(fs.readFileSync(path.join(f.env.MISTER_MORPH_FILE_STATE_DIR, "config.yaml"), "utf8"), /endpoints: \[\]/);
+});
+
+test("backups tar a state snapshot, not the live folder", t => {
+  const f = fixture(t);
+  const result = f.run({ MISTER_MORPH_R2_BACKUP_SKIP: "usage" });
+  assert.equal(result.status, 0, result.stderr);
+  const args = fs.readFileSync(f.env.TEST_SNAPSHOT_ARGS, "utf8");
+  assert.match(args, /^--config\n.*config\.yaml\nstate\nsnapshot\n.*\/snapshot\n--skip\nusage\n/);
+  const archive = spawnSync("tar", ["-xOf", f.env.TEST_REMOTE, "./chat.txt"], { encoding: "utf8" });
+  assert.equal(archive.status, 0, archive.stderr);
+  assert.equal(archive.stdout, "saved by console\n");
 });
 
 test("restart restores state and preserves Console-edited config", t => {

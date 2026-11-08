@@ -19,6 +19,7 @@ import (
 	"github.com/quailyquaily/mistermorph/cmd/mistermorph/runcmd"
 	"github.com/quailyquaily/mistermorph/cmd/mistermorph/skillscmd"
 	"github.com/quailyquaily/mistermorph/cmd/mistermorph/slackcmd"
+	"github.com/quailyquaily/mistermorph/cmd/mistermorph/statecmd"
 	"github.com/quailyquaily/mistermorph/cmd/mistermorph/telegramcmd"
 	"github.com/quailyquaily/mistermorph/cmd/mistermorph/wechatcmd"
 	"github.com/quailyquaily/mistermorph/cmd/mistermorph/whatsappcmd"
@@ -213,6 +214,7 @@ func newRootRuntime() *rootRuntime {
 	cmd.AddCommand(skillscmd.New())
 	cmd.AddCommand(consolecmd.New(version))
 	cmd.AddCommand(newInstallCmd())
+	cmd.AddCommand(statecmd.New())
 	cmd.AddCommand(newVersionCmd())
 
 	return &rootRuntime{

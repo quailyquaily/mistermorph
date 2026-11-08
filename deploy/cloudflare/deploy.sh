@@ -81,6 +81,7 @@ const secrets = {
 for (const key of ["MISTER_MORPH_R2_ACCOUNT_ID", "MISTER_MORPH_R2_BUCKET", "MISTER_MORPH_R2_PREFIX", "MISTER_MORPH_R2_ACCESS_KEY_ID", "MISTER_MORPH_R2_SECRET_ACCESS_KEY"]) {
   if (process.env[key]) secrets[key] = process.env[key];
 }
+if (process.env.MISTER_MORPH_R2_BACKUP_SKIP) secrets.MISTER_MORPH_R2_BACKUP_SKIP = process.env.MISTER_MORPH_R2_BACKUP_SKIP;
 if (process.env.MISTER_MORPH_LLM_API_KEY) secrets.MISTER_MORPH_LLM_API_KEY = process.env.MISTER_MORPH_LLM_API_KEY;
 if (process.env.MISTER_MORPH_CONFIG_PATH) {
   secrets.MISTER_MORPH_CONFIG_YAML = fs.readFileSync(process.env.MISTER_MORPH_CONFIG_PATH, "utf8");
