@@ -61,7 +61,7 @@ func Source(path string) string {
 }
 
 func dbFor(ctx context.Context, path string) (*agentdb.DB, error) {
-	return agentdb.Cached(filepath.Join(filepath.Dir(filepath.Clean(path)), statepaths.AgentDBFilename)).Get(ctx)
+	return agentdb.CachedBeside(path).Get(ctx)
 }
 
 // ReadFile returns the config at path as YAML. A missing file, or an agent.db that holds no

@@ -12,7 +12,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/quailyquaily/mistermorph/internal/agentdb"
 	"github.com/quailyquaily/mistermorph/internal/pathutil"
-	"github.com/quailyquaily/mistermorph/internal/statepaths"
 )
 
 type SemanticResolver interface {
@@ -33,7 +32,7 @@ func NewStore(path string) *Store {
 	path = pathutil.ExpandHomePath(strings.TrimSpace(path))
 	store := &Store{Path: path}
 	if path != "" {
-		store.db = agentdb.Cached(filepath.Join(filepath.Dir(path), statepaths.AgentDBFilename))
+		store.db = agentdb.CachedBeside(path)
 	}
 	return store
 }

@@ -14,7 +14,6 @@ import (
 	"github.com/quailyquaily/mistermorph/contacts"
 	"github.com/quailyquaily/mistermorph/internal/agentdb"
 	"github.com/quailyquaily/mistermorph/internal/stateimport"
-	"github.com/quailyquaily/mistermorph/internal/statepaths"
 )
 
 const (
@@ -100,7 +99,7 @@ func newContactSync(node *Node, opts ContactSyncOptions, logger *slog.Logger) *c
 		store:  contacts.NewStore(opts.ContactsDir),
 		opts:   opts,
 		logger: logger.With("component", "agentlink_contacts"),
-		db:     agentdb.Cached(filepath.Join(filepath.Dir(filepath.Clean(opts.ContactsDir)), statepaths.AgentDBFilename)),
+		db:     agentdb.CachedBeside(opts.ContactsDir),
 		peers:  map[string]*peerRecord{},
 	}
 }

@@ -945,6 +945,11 @@ type runtimeStatePaths struct {
 func runtimeStatePathsFrom(paths runtimepaths.Paths) runtimeStatePaths {
 	stateDir := paths.StateDir
 	contactsDir := paths.ContactsDir
+	// No state folder, no agent.db: joining "" would name agent.db in the working directory.
+	agentDBPath := ""
+	if strings.TrimSpace(stateDir) != "" {
+		agentDBPath = filepath.Join(stateDir, statepaths.AgentDBFilename)
+	}
 	return runtimeStatePaths{
 		stateDir:         stateDir,
 		cacheDir:         paths.CacheDir,
@@ -958,7 +963,7 @@ func runtimeStatePathsFrom(paths runtimepaths.Paths) runtimeStatePaths {
 		heartbeatPath:    paths.HeartbeatPath,
 		cronPath:         paths.CronPath,
 		auditPath:        paths.AuditPath,
-		agentDBPath:      filepath.Join(stateDir, statepaths.AgentDBFilename),
+		agentDBPath:      agentDBPath,
 	}
 }
 

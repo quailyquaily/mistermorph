@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/quailyquaily/mistermorph/internal/agentdb"
-	"github.com/quailyquaily/mistermorph/internal/statepaths"
 	"gopkg.in/yaml.v3"
 )
 
@@ -40,7 +39,8 @@ type DBStore struct {
 // NewStore returns the contacts store whose folder (for avatars) is root.
 func NewStore(root string) *DBStore {
 	store := &DBStore{root: strings.TrimSpace(root)}
-	store.db = agentdb.Cached(filepath.Join(filepath.Dir(store.rootPath()), statepaths.AgentDBFilename))
+	// No folder, no database: "contacts" alone would put agent.db in the working directory.
+	store.db = agentdb.CachedBeside(store.root)
 	return store
 }
 

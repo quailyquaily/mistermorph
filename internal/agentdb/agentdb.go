@@ -335,9 +335,14 @@ var (
 
 // Cached returns a process-wide lazy handle on agent.db at path, for readers that run often and
 // keep no handle of their own (the prompt's persona, a heartbeat tick). It opens on first use and
-// stays open.
+// stays open. An empty path gives a handle that never opens: it is not agent.db in the working
+// directory.
 func Cached(path string) *Lazy {
-	path = filepath.Clean(strings.TrimSpace(path))
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return NewLazy("")
+	}
+	path = filepath.Clean(path)
 	if abs, err := filepath.Abs(path); err == nil {
 		path = abs
 	}
@@ -351,7 +356,22 @@ func Cached(path string) *Lazy {
 	return lazy
 }
 
-// CachedStateDir is Cached for agent.db in stateDir.
+// CachedStateDir is Cached for agent.db in stateDir. An empty stateDir gives a handle that never
+// opens, the way OpenStateDir refuses one.
 func CachedStateDir(stateDir string) *Lazy {
-	return Cached(filepath.Join(strings.TrimSpace(stateDir), statepaths.AgentDBFilename))
+	stateDir = strings.TrimSpace(stateDir)
+	if stateDir == "" {
+		return NewLazy("")
+	}
+	return Cached(filepath.Join(stateDir, statepaths.AgentDBFilename))
+}
+
+// CachedBeside is Cached for agent.db in the folder that holds path (cron.yaml, config.yaml, the
+// contacts folder). An empty path gives a handle that never opens.
+func CachedBeside(path string) *Lazy {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return NewLazy("")
+	}
+	return CachedStateDir(filepath.Dir(filepath.Clean(path)))
 }

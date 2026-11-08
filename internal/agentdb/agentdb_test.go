@@ -262,3 +262,34 @@ func TestEmptyFirstRunCreatesEmptySchema(t *testing.T) {
 		}
 	}
 }
+
+// An empty state folder or path is no database, not agent.db in the working directory.
+func TestEmptyPathsNeverOpenInWorkingDirectory(t *testing.T) {
+	t.Chdir(t.TempDir())
+	ctx := context.Background()
+	for name, lazy := range map[string]*Lazy{
+		"cached":           Cached(""),
+		"cached state dir": CachedStateDir(" "),
+		"cached beside":    CachedBeside(""),
+	} {
+		t.Run(name, func(t *testing.T) {
+			if lazy.Path() != "" {
+				t.Fatalf("Path() = %q, want none", lazy.Path())
+			}
+			if db, err := lazy.Get(ctx); err == nil {
+				_ = db.Close()
+				t.Fatal("Get() opened a database for an empty path")
+			}
+		})
+	}
+	if _, err := OpenStateDir(ctx, ""); err == nil {
+		t.Fatal("OpenStateDir(\"\") opened a database")
+	}
+	if matches, _ := filepath.Glob("agent.db*"); len(matches) > 0 {
+		t.Fatalf("working directory has %v", matches)
+	}
+	beside := CachedBeside(filepath.Join(t.TempDir(), "cron.yaml"))
+	if !filepath.IsAbs(beside.Path()) || filepath.Base(beside.Path()) != "agent.db" {
+		t.Fatalf("CachedBeside path = %q", beside.Path())
+	}
+}
