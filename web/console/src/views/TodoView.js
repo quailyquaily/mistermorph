@@ -3156,6 +3156,7 @@ const TodoView = {
               <AppTabs
                 :class="saving || loading ? 'todo-repeat-kind-tabs is-disabled' : 'todo-repeat-kind-tabs'"
                 :tabs="repeatKindTabs"
+                equal
                 :modelValue="repeatKindTab(selectedTask)"
                 :disabled="saving || loading"
                 :ariaLabel="t('todo_field_repeat')"

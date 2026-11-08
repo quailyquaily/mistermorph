@@ -1,4 +1,5 @@
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { tabsOverflowEdges, tabsScrollTarget } from "../core/tabs-scroll";
 import "./AppTabs.css";
 
 function tabID(tab, index) {
@@ -52,7 +53,20 @@ const AppTabs = {
     const root = ref(null);
     const indicator = ref({ visible: false, x: 0, width: 0 });
     const indicatorReady = ref(false);
+    // Which ends of a scrolling row hide options, so CSS can fade just those edges.
+    const overflow = ref({ start: false, end: false });
     let resizeObserver = null;
+
+    function updateOverflow() {
+      const el = root.value;
+      if (!el) {
+        return;
+      }
+      const next = tabsOverflowEdges(el);
+      if (next.start !== overflow.value.start || next.end !== overflow.value.end) {
+        overflow.value = next;
+      }
+    }
 
     function placeIndicator() {
       const el = root.value;
@@ -62,6 +76,29 @@ const AppTabs = {
         return;
       }
       indicator.value = { visible: true, x: active.offsetLeft, width: active.offsetWidth };
+      revealActive(el, active);
+      updateOverflow();
+    }
+
+    // In a row that scrolls, the active option is scrolled into view along the row only, so the
+    // page itself does not move.
+    function revealActive(el, active) {
+      const left = tabsScrollTarget({
+        scrollLeft: el.scrollLeft,
+        clientWidth: el.clientWidth,
+        scrollWidth: el.scrollWidth,
+        start: active.offsetLeft,
+        end: active.offsetLeft + active.offsetWidth,
+      });
+      if (left === null) {
+        return;
+      }
+      const smooth = indicatorReady.value && !window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+      if (typeof el.scrollTo === "function") {
+        el.scrollTo({ left, behavior: smooth ? "smooth" : "auto" });
+      } else {
+        el.scrollLeft = left;
+      }
     }
 
     onMounted(() => {
@@ -80,10 +117,17 @@ const AppTabs = {
       () => nextTick(placeIndicator),
     );
 
-    return { isActive, selectTab, onKeydown, root, indicator, indicatorReady };
+    return { isActive, selectTab, onKeydown, root, indicator, indicatorReady, overflow, updateOverflow };
   },
   template: `
-    <div ref="root" class="app-tabs" :class="{ 'has-indicator': indicator.visible, 'is-equal': equal }" role="tablist" :aria-label="ariaLabel || undefined">
+    <div
+      ref="root"
+      class="app-tabs"
+      :class="{ 'has-indicator': indicator.visible, 'is-equal': equal, 'is-overflow-start': overflow.start, 'is-overflow-end': overflow.end }"
+      role="tablist"
+      :aria-label="ariaLabel || undefined"
+      @scroll.passive="updateOverflow"
+    >
       <span
         v-if="indicator.visible"
         class="app-tabs-indicator"

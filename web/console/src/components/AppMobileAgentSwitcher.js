@@ -61,7 +61,6 @@ const AppMobileAgentSwitcher = {
     );
     const selectedEntry = computed(() => normalizedItems.value.find((item) => item.value === selectedValue.value) || null);
     const selectedName = computed(() => selectedEntry.value?.title || normalizeText(props.selectedItem?.title) || props.t("nav_agent"));
-    const selectedOnline = computed(() => selectedEntry.value?.connected === true);
     const showFilter = computed(() => normalizedItems.value.length > 8);
     const filteredItems = computed(() => {
       const query = normalizeText(filter.value).toLocaleLowerCase();
@@ -106,7 +105,6 @@ const AppMobileAgentSwitcher = {
 
     return {
       selectedName,
-      selectedOnline,
       filter,
       selectedValue,
       selectedAvatar,
@@ -130,11 +128,8 @@ const AppMobileAgentSwitcher = {
       aria-haspopup="dialog"
       @click="toggle"
     >
-      <span class="mobile-agent-switcher-face">
-        <img v-if="selectedAvatar" class="mobile-agent-switcher-avatar" :src="selectedAvatar" alt="" />
-        <span v-else class="mobile-agent-switcher-avatar is-empty" aria-hidden="true"></span>
-        <span class="mobile-agent-switcher-mark" :class="selectedOnline ? 'is-online' : 'is-offline'" aria-hidden="true"></span>
-      </span>
+      <img v-if="selectedAvatar" class="mobile-agent-switcher-avatar" :src="selectedAvatar" alt="" />
+      <span v-else class="mobile-agent-switcher-avatar is-empty" aria-hidden="true"></span>
     </button>
 
     <AppMobileBottomMenu
