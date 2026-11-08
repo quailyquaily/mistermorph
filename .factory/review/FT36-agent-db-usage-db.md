@@ -1,6 +1,6 @@
 ---
 branch: factory/FT36-agent-db-usage-db
-round: 2
+round: 3
 ---
 # Move the agent's state into SQLite: agent.db and usage.db
 
@@ -139,3 +139,13 @@ Not verified: manual browser/desktop/Android GUI, live Cloudflare/R2 restore and
 
 ## factory · 2026-11-09 06:00
 Moved ready → new for the owner-requested Claude Code verification and repair of the five remaining P2 findings. Continue on the existing branch; no release or merge into master is authorized by this fix run.
+
+## factory · plan · 2026-11-09 06:56
+Fix round 3: verify the five remaining P2 findings with pre-fix failing regressions, then fix explicit state-database selection for nested contacts folders, preserve config-relative file targets during legacy import, move semantic task matching outside write transactions with target revalidation, and use one read snapshot for contact/handle and usage aggregate responses. Retain the existing branch and feature scope; no release.
+
+## factory · 2026-11-09 06:56
+Claude Code verified and fixed all five reported trigger scenarios in six commits, 44ea8790..e6bd3620. Pushed e6bd3620; round 3; new → review. Runtime contacts callers now explicitly name the state directory; legacy public NewStore retains its parent-directory behavior. Config migration preserves relative llm.pricing_file and mixin.keystore_file targets. Semantic deletion matches without holding a transaction, then revalidates the task definition before deletion. Contact and usage reads use consistent transactions, including daily usage details.
+
+Each defect has committed regression coverage; coder demonstrated failures against old code using external overlays. Manager independently passed the configured gofmt/vet/full Go test gate and git diff --check on final HEAD; worktree clean and protected paths unchanged. Coder reports 162 packages passing, relevant race checks passing, 20 repeated contacts/usage/cron runs and 10 root/configstore runs passing. Initial unbounded usage-test writer timed out under race; it was capped and reruns passed. No installs or dependency changes.
+
+Limitations: environment-supplied relative paths still resolve from the new state directory; interpolation/secret-reference values are not rewritten during import. No Console/desktop source changes, so those suites were not rerun. No manual browser/desktop/Android, live Cloudflare/R2 or actual power-loss checks. No deployment, tag or merge into master. Await independent review before returning to ready.
