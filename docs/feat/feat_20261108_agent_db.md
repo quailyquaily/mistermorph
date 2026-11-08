@@ -1,7 +1,7 @@
 ---
 date: 2026-11-08
 title: agent.db and usage.db, the agent's state in SQLite
-status: proposed
+status: implemented
 ---
 
 # agent.db and usage.db, the agent's state in SQLite
@@ -608,3 +608,42 @@ Each step ships on its own and leaves the others on files.
   from enabled workflows only, and none when all are off; the template's commented example imported as nothing.
 - Console: the settings page, the persona, heartbeat and TODO editors and the contacts YAML editor work unchanged
   against the new stores.
+
+## Implementation notes
+
+Where the code differs from the text above, and why:
+
+- **Imports are marked, not numbered.** The schema of every table is one list of migrations in
+  `internal/agentdb` (one `user_version`). Each store's import is an importer its package registers;
+  it runs in a `BEGIN IMMEDIATE` transaction that also writes `imported:<store>` in `meta`, so a
+  process that does not link a store's package neither imports its files nor marks them imported.
+  The files are renamed after the commit, and every open finishes renames a crash left undone.
+- **Topic folders stay.** A topic folder also holds its context checkpoint and found tools, and
+  `topics/layout.json` holds the topic list's layout; none of these is in §6. So the imported files
+  are renamed in place (`context.json.imported`, ...) instead of renaming `topics/`. A
+  `workspace.json` in a folder with nothing else naming its conversation key is imported the first
+  time that key is asked for.
+- **Legacy contact profile fields.** `memories.MoveContactProfiles` cannot run inside the contacts
+  import (the memories package imports contacts). The import keeps `persona_brief` and
+  `topic_preferences` in `meta` (`contacts_legacy_profiles`) in the same transaction, and
+  `MoveContactProfiles`, which runs when a run attaches memories, turns them into memories and
+  clears them. They never become contact columns.
+- **Contacts keep only the Contact's fields.** Unknown keys in a contact's YAML (which the file kept)
+  are not stored.
+- **The config document.** `internal/configstore` renders the config tables as a YAML document in
+  `config.example.yaml`'s order and saves a document by updating only the rows that differ, so the
+  code that edits the config keeps editing a document. A column holds a value only when it has the
+  column's type and is not its default; anything else about an item (an empty value written out, a
+  value of another type, a key without a column) is a `settings` row at the item's path
+  (`mcp.servers[<name>].<key>` for the named lists), so a saved document reads back the same,
+  comments aside. A route written as `{profile: x}` reads back as `x`. The agent.db config is
+  named `<state>/agent.db#config.yaml`, so paths relative to the config resolve in the state folder.
+- **The state folder.** Besides `--state-dir` and `MISTER_MORPH_FILE_STATE_DIR`, `file_state_dir` in
+  an older `~/.morph/config.yaml` (or its `.imported` copy) still settles the state folder, so an
+  install that moved its state keeps finding it.
+- **Times** in `agent.db` are RFC 3339 UTC to the second, so the text sorts as the times do; the bus
+  outbox keeps nanoseconds in a fixed-width form.
+- **The desktop shell** passes `--config` to the backend only when it was given one.
+- `morph config where` prints which config is in use; `morph state export|import` writes and reads
+  `config.yaml`, `persona/identity.yaml`, `persona/soul.md`, `HEARTBEAT.md`,
+  `contacts/ACTIVE.md`, `contacts/INACTIVE.md` and `cron.yaml`.

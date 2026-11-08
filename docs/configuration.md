@@ -36,6 +36,22 @@ Interactive setup and Console settings save new local credentials in macOS Keych
 
 YAML expansion is done on parsed config values before they are passed to Viper. This may normalize the in-memory YAML formatting, but it does not write back to the config file.
 
+
+## Where the Config Is
+
+Without `--config`, the config is in `<file_state_dir>/agent.db` (tables for LLM profiles, routes, MCP servers, Console endpoints and auth profiles, and a `settings` row for every other value). The state folder is settled before any config is read: `--state-dir`, else `MISTER_MORPH_FILE_STATE_DIR`, else `file_state_dir` in a `~/.morph/config.yaml` an older version wrote, else `~/.morph`; `file_state_dir` is not a setting of the config agent.db holds. The first start without `--config` imports `~/.morph/config.yaml` into agent.db and renames it `config.yaml.imported`.
+
+With `--config <path>`, that file is the config, read and saved as before; agent.db holds no config. systemd units and the Cloudflare deploy pass a path.
+
+Loading keeps its order either way: defaults, then the config, then `${VAR}` and secret expansion with the flag overrides, then `MISTER_MORPH_*` environment variables. Values are kept as written (`${OPENAI_API_KEY}`, `${secret:...}`) and expanded when read.
+
+Edit the config in the Console's settings, or:
+
+- `morph config get <path>` and `morph config set <path> <value>` (the value is read as YAML; `--unset` removes it);
+- `morph config export <file>` (the whole config as YAML, in the order of `config.example.yaml`) and `morph config import <file>` (replace it in one transaction; comments are not kept);
+- `morph config edit` (export, `$EDITOR`, import);
+- `morph config where`.
+
 ## Request Retries and Fallback
 
 LLM request failures retry the same profile up to five times after the initial attempt. This includes request timeouts, all HTTP 5xx responses, HTTP 400, EOF, connection failures, and otherwise unclassified request errors. HTTP 401, 403, 404, 415, 422, and 429, plus recognized rate-limit errors, switch directly to fallback without same-profile retries.

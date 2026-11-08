@@ -1,5 +1,9 @@
 # Example config for mistermorph
 #
+# Without --config the config is kept in <file_state_dir>/agent.db: edit it in the Console, or with
+# `morph config get|set|export|import|edit`. A ~/.morph/config.yaml an older version wrote is imported
+# once and kept as config.yaml.imported. With --config <path>, that file is the config.
+#
 # Usage:
 #   ./morph run --config ./assets/config/config.example.yaml --task "..."
 #
@@ -984,7 +988,9 @@ timeout: "60m"
 # The directory must already exist and be readable. Empty disables the default.
 workspace_dir: ""
 
-# Base directory for local state (tasks/contacts/skills/heartbeat).
+# Base directory for local state (agent.db, usage.db, memory.db, the journal, skills).
+# Read only from a --config file: without --config the state folder is --state-dir, else
+# MISTER_MORPH_FILE_STATE_DIR, else ~/.morph, and agent.db (which is in it) does not keep this key.
 file_state_dir: "~/.morph"
 # Prompt profile context injection.
 # Global temporary file cache directory used for inbound/outbound file handling (e.g. Telegram/Slack tools).
