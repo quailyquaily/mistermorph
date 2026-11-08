@@ -111,9 +111,9 @@ import type { QuestionAnswer, QuestionState } from "../../components/chat/ChatQu
 import { hasArtifactBlock } from "../../components/chat/ChatRichContent";
 import { createReceivedFiles } from "../../components/chat/ReceivedFile";
 import { keyedState } from "../../components/chat/rowState";
-import { fetchEndpointBlob, saveEndpointFile, uploadPickedFile } from "../../components/chat/files";
+import { fetchEndpointBlob, saveEndpointFile, transcribeRecording, uploadPickedFile } from "../../components/chat/files";
 import { t } from "../../components/chat/i18n";
-import { createVoiceInput } from "../../components/chat/voice";
+import { createVoiceInput, voiceErrorKey } from "../../components/chat/voice";
 
 const POLL_INTERVAL_MS = 1200;
 const POLL_RETRY_MAX_MS = 15000;
@@ -396,6 +396,7 @@ export function createChatController() {
   const mobileTopicView = signal<"topics" | "chat">(untracked(mobileMode) && !untracked(routeTopicID) ? "topics" : "chat");
   const chatHistoryItems = signal<HistoryItem[]>([]);
   const copiedHistoryItemID = signal("");
+  const copySeq = signal(0);
   const historyLoading = signal(false);
   const historyLoadingOlder = signal(false);
   const historyItemsScope = signal("");
@@ -1659,7 +1660,10 @@ export function createChatController() {
     if (!text.trim()) return;
     try {
       await copyText(text);
-      copiedHistoryItemID.set(String(item?.id || ""));
+      batch(() => {
+        copiedHistoryItemID.set(String(item?.id || ""));
+        copySeq.update((n) => n + 1);
+      });
       clearTimeout(copiedHistoryTimer);
       copiedHistoryTimer = setTimeout(() => copiedHistoryItemID.set(""), 1200);
     } catch (error) {
@@ -2817,6 +2821,11 @@ export function createChatController() {
   /* ---------- voice ---------- */
 
   const voice = createVoiceInput({
+    // In a browser the page records and the agent transcribes (components/chat/voice.ts).
+    endpointRef: () => submitEndpointRef(),
+    canTranscribe: async (endpointRef) => (await runtimeApiFetchForEndpoint(endpointRef, "/voice/transcribe"))?.available === true,
+    transcribe: (endpointRef, file) => transcribeRecording(endpointRef, file),
+    release: (file) => releaseFile(file),
     onText(text) {
       if (composer) {
         composer.insertText(text);
@@ -2826,10 +2835,7 @@ export function createChatController() {
       setTaskInput(current ? `${current} ${text}` : text);
     },
     onError(error) {
-      pushNotice({
-        type: "error",
-        text: error.code === "not-allowed" || error.code === "ERR_ACCESS_DENIED" ? t("chat_composer_voice_denied") : error.message || t("chat_composer_voice_failed"),
-      });
+      pushNotice({ type: "error", text: t(voiceErrorKey(error), { message: String(error.message || "").trim() }) });
     },
   });
 
@@ -2841,6 +2847,7 @@ export function createChatController() {
     endpointRef: () => submitEndpointRef(),
     topicID: () => selectedTopicID(),
     copiedItemID: () => copiedHistoryItemID(),
+    copySeq: () => copySeq(),
     expandedPanel: chatStatusExpandedPanel,
     autoPreviewItemID: () => autoPreviewHistoryID(),
     previews,

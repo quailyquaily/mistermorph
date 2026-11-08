@@ -63,7 +63,13 @@ function Composer(props: { c: ChatController; landing?: boolean }) {
       footerText={props.landing ? "" : c.chatDisclaimer()}
       voiceAvailable={c.voice.available()}
       voiceState={c.voice.state()}
-      voiceLabel={c.voice.state() === "recording" ? t("chat_composer_voice_stop") : t("chat_composer_voice")}
+      voiceLabel={
+        c.voice.unsupported()
+          ? t(`chat_composer_voice_${c.voice.unsupported()}_label`)
+          : c.voice.state() === "recording"
+            ? t("chat_composer_voice_stop")
+            : t("chat_composer_voice")
+      }
       voiceElapsed={c.voice.elapsed()}
       voicePreview={c.voice.preview()}
       voicePreviewEnabled={c.voice.previewEnabled()}

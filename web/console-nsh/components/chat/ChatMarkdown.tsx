@@ -6,13 +6,32 @@
 import { Image, Scroll, signal, Text, View } from "nsh";
 import { Button as BaseButton, TextView, type TextViewCodeBlock } from "nsh/base";
 import { ICONS } from "../icons";
+import { pushNotice } from "../../lib/core/notices.js";
 import { copyText, openExternal } from "../../lib/platform";
 import { CODE_PANEL, CODE_TOKEN_COLORS, expandTabs, highlightCode } from "./codeHighlight";
+import { t } from "./i18n";
+import { inlineCopyText, linkInlineCode } from "./inlineCopy";
 
 export function openChatLink(url: string) {
+  const code = inlineCopyText(url);
+  if (code !== null) {
+    void copyInlineCode(code);
+    return;
+  }
   const target = String(url || "").trim();
   if (!target || target.startsWith("#")) return;
   if (/^(https?:|mailto:)/i.test(target)) openExternal(target);
+}
+
+// Inline code copies its text when pressed (inlineCopy.ts); a notice says it was copied, and only
+// once it was.
+async function copyInlineCode(code: string) {
+  try {
+    await copyText(code);
+    pushNotice({ type: "success", text: t("chat_inline_code_copied", { code: code.length > 48 ? `${code.slice(0, 47)}…` : code }), timeout: 1600 });
+  } catch {
+    pushNotice({ type: "error", text: t("chat_inline_code_copy_failed") });
+  }
 }
 
 // The Vue panel: code at 0.92 of the 14pt pre (12.88pt), in the pre's 1.62 lines of 14pt (22.68pt); padding 1.08em 1.12em, with
@@ -69,7 +88,7 @@ export function ChatMarkdown(props: { source: string; streaming?: boolean; class
   return (
     <TextView
       testID={props.testID}
-      markdown={props.source}
+      markdown={linkInlineCode(props.source)}
       options={{ streaming: props.streaming === true }}
       selectable
       renderCodeBlock={(block) => <CodeBlock block={block} copyLabel={props.copyLabel ?? "Copy"} />}
@@ -82,7 +101,9 @@ export function ChatMarkdown(props: { source: string; streaming?: boolean; class
         heading2: "text-lg font-semibold tracking-[-0.02em]",
         heading3: "text-base font-semibold",
         heading4: "text-base font-semibold",
-        code: "font-mono text-[14px] bg-selection",
+        // Its own ink and no underline, so inline code pressed to copy (a link around it) does not
+        // read as a link.
+        code: "font-mono text-[14px] text-foreground no-underline bg-selection",
         strong: "font-semibold",
         blockquote: "border-l-[3px] border-blue/45 bg-hover-soft py-[12.8px] pl-4 pr-4 text-foreground",
         list: "gap-[3.5px]",

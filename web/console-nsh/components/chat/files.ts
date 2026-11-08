@@ -49,6 +49,24 @@ export async function uploadPickedFile(endpointRef: string, file: PickedFile, fi
   }
 }
 
+/** Transcribes a voice recording with the agent's transcription model (POST /voice/transcribe). */
+export async function transcribeRecording(endpointRef: string, file: PickedFile): Promise<string> {
+  const result = await uploadFile(file, {
+    url: proxyURL(endpointRef, "/voice/transcribe"),
+    method: "POST",
+    headers: authHeaders(),
+    field: "audio",
+  });
+  if (!result.ok) {
+    throw uploadError(result.status, result.statusText, result.body);
+  }
+  try {
+    return String(JSON.parse(result.body || "{}")?.text || "").trim();
+  } catch {
+    return "";
+  }
+}
+
 /** Saves what the agent serves at `uri` (through /api/proxy/download) as `name`. */
 export async function saveEndpointFile(endpointRef: string, uri: string, name: string) {
   return saveFile({ name: String(name || "").trim() || "download", url: proxyURL(endpointRef, uri, true), headers: authHeaders() });

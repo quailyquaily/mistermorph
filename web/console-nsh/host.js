@@ -161,8 +161,175 @@ function notificationState() {
   return Notification.permission;
 }
 
+// Voice input. nsh records no audio on the web, so the page does it: the microphone through
+// MediaRecorder, kept as a file the app uploads to the agent's /voice/transcribe (the Vue
+// console's useVoiceInput), and, where the browser has speech recognition, a live preview of the
+// words sent as morph.voice.preview events. Calls answer with results rather than throwing, so the
+// app gets the browser's error name (NotAllowedError, NotFoundError, ...) to explain.
+
+// Formats the transcription APIs read, in order of preference.
+const RECORDING_TYPES = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus", "audio/mp4"];
+// Speech recognition errors that will not go away by restarting it.
+const PREVIEW_FATAL_ERRORS = new Set(["not-allowed", "service-not-allowed", "audio-capture", "language-not-supported", "network"]);
+// Speech recognition stops by itself after a pause; it restarts this many times in a row without
+// hearing anything before the preview gives up.
+const PREVIEW_MAX_IDLE_RESTARTS = 3;
+
+// Why this page cannot record: "" when it can, "insecure" (browsers only open the microphone on
+// HTTPS or localhost) or "unsupported".
+function voiceSupport() {
+  if (window.isSecureContext === false) return "insecure";
+  if (typeof MediaRecorder === "undefined" || !navigator.mediaDevices?.getUserMedia) return "unsupported";
+  return "";
+}
+
+function recordingType() {
+  return RECORDING_TYPES.find((type) => MediaRecorder.isTypeSupported?.(type)) || "";
+}
+
+function recordingExtension(type) {
+  const base = String(type || "").split(";")[0];
+  if (base === "audio/mp4") return "m4a";
+  if (base === "audio/ogg") return "ogg";
+  return "webm";
+}
+
+function createVoiceRecorder(player) {
+  // The recording under way: { stream, recorder, chunks, type, recognition }.
+  let current = null;
+  // Set while the browser asks for the microphone, so a second start does not open another stream.
+  let starting = false;
+
+  function startPreview(rec, lang) {
+    const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!Recognition) return;
+    const separator = /^(ja|zh|ko|th)\b/i.test(lang) ? "" : " ";
+    let done = "";
+    let session = "";
+    let idleRestarts = 0;
+    let failed = false;
+    const recognition = new Recognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    if (lang) recognition.lang = lang;
+    recognition.onresult = (event) => {
+      idleRestarts = 0;
+      let text = "";
+      for (let i = 0; i < event.results.length; i += 1) text += event.results[i]?.[0]?.transcript || "";
+      session = text.trim();
+      if (current === rec) player.hostEvent("morph.voice.preview", { text: [done, session].filter(Boolean).join(separator) });
+    };
+    recognition.onerror = (event) => {
+      if (PREVIEW_FATAL_ERRORS.has(event?.error)) failed = true;
+    };
+    recognition.onend = () => {
+      done = [done, session].filter(Boolean).join(separator);
+      session = "";
+      if (current !== rec || failed || idleRestarts >= PREVIEW_MAX_IDLE_RESTARTS) return;
+      idleRestarts += 1;
+      try {
+        recognition.start();
+      } catch {
+        // The preview is a convenience; the recording goes on without it.
+      }
+    };
+    rec.recognition = recognition;
+    try {
+      recognition.start();
+    } catch {
+      rec.recognition = null;
+    }
+  }
+
+  function release(rec) {
+    try {
+      rec.recognition?.abort();
+    } catch {
+      // Already stopped.
+    }
+    rec.recognition = null;
+    for (const track of rec.stream.getTracks()) track.stop();
+  }
+
+  return {
+    support: () => voiceSupport(),
+    async start({ preview = true, lang = "" } = {}) {
+      const reason = voiceSupport();
+      if (reason) return { ok: false, error: reason };
+      if (current || starting) return { ok: false, error: "busy" };
+      starting = true;
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      } catch (error) {
+        return { ok: false, error: error?.name || "failed", message: String(error?.message || "") };
+      } finally {
+        starting = false;
+      }
+      const type = recordingType();
+      let recorder;
+      try {
+        recorder = new MediaRecorder(stream, type ? { mimeType: type } : undefined);
+      } catch (error) {
+        for (const track of stream.getTracks()) track.stop();
+        return { ok: false, error: error?.name || "NotSupportedError", message: String(error?.message || "") };
+      }
+      const rec = { stream, recorder, chunks: [], type: recorder.mimeType || type, recognition: null };
+      recorder.addEventListener("dataavailable", (event) => {
+        if (event.data?.size) rec.chunks.push(event.data);
+      });
+      current = rec;
+      recorder.start();
+      if (preview) startPreview(rec, lang || navigator.language || "");
+      return { ok: true };
+    },
+    // Stops and keeps the recording as a file for morph.file.upload; null when nothing was recorded.
+    stop() {
+      const rec = current;
+      if (!rec) return null;
+      current = null;
+      return new Promise((resolve) => {
+        rec.recorder.addEventListener(
+          "stop",
+          () => {
+            release(rec);
+            const blob = new Blob(rec.chunks, { type: rec.type || "audio/webm" });
+            if (!blob.size) {
+              resolve(null);
+              return;
+            }
+            const file = new File([blob], `voice.${recordingExtension(rec.type)}`, { type: blob.type });
+            const id = String(nextFileID++);
+            files.set(id, { file, preview: "" });
+            resolve({ id, name: file.name, size: file.size, type: file.type, preview: "" });
+          },
+          { once: true },
+        );
+        try {
+          rec.recorder.stop();
+        } catch {
+          release(rec);
+          resolve(null);
+        }
+      });
+    },
+    cancel() {
+      const rec = current;
+      if (!rec) return;
+      current = null;
+      try {
+        rec.recorder.stop();
+      } catch {
+        // Already stopped.
+      }
+      release(rec);
+    },
+  };
+}
+
 export function createHost(player) {
   const notifications = new Map();
+  const voice = createVoiceRecorder(player);
   const sendVisibility = () =>
     player.hostEvent("morph.visibility", { visible: document.visibilityState === "visible", focused: document.hasFocus() });
 
@@ -189,7 +356,7 @@ export function createHost(player) {
         languages: [...(navigator.languages || [navigator.language || "en"])],
         desktopVersion: "",
         secureContext: window.isSecureContext,
-        features: ["pickFile", "saveFile", ...(typeof Notification === "undefined" ? [] : ["notifications"])],
+        features: ["pickFile", "saveFile", "voiceRecord", ...(typeof Notification === "undefined" ? [] : ["notifications"])],
       }),
     ],
     [
@@ -248,6 +415,10 @@ export function createHost(player) {
       },
     ],
     ["morph.file.save", saveFile],
+    ["morph.voice.support", () => voice.support()],
+    ["morph.voice.start", (args) => voice.start(args)],
+    ["morph.voice.stop", () => voice.stop()],
+    ["morph.voice.cancel", () => voice.cancel()],
   ]);
 
   queueMicrotask(sendVisibility);

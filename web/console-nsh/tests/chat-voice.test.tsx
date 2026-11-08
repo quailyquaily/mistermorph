@@ -29,3 +29,15 @@ test("speaking fills the draft, and discarding keeps it as it was", async () => 
   await app.waitFor("id:chat-composer-voice-strip", { state: "gone" });
   expect(app.value("id:chat-composer-input")).toBe("book a table");
 });
+
+test("a voice input error says why: no secure connection, no recorder, blocked, no microphone, busy", async () => {
+  const { voiceErrorKey } = await import("../components/chat/voice");
+  expect(voiceErrorKey({ code: "insecure" })).toBe("chat_composer_voice_insecure");
+  expect(voiceErrorKey({ code: "unsupported" })).toBe("chat_composer_voice_unsupported");
+  expect(voiceErrorKey({ code: "NotAllowedError" })).toBe("chat_composer_voice_denied");
+  expect(voiceErrorKey({ code: "not-allowed" })).toBe("chat_composer_voice_denied");
+  expect(voiceErrorKey({ code: "NotFoundError" })).toBe("chat_composer_voice_no_mic");
+  expect(voiceErrorKey({ code: "NotReadableError" })).toBe("chat_composer_voice_mic_busy");
+  expect(voiceErrorKey({ code: "failed", message: "HTTP 502" })).toBe("chat_composer_voice_failed_detail");
+  expect(voiceErrorKey({ code: "failed" })).toBe("chat_composer_voice_failed");
+});

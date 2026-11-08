@@ -7,7 +7,7 @@
 // value is read from `props.item` in a binding and per-item state lives in ChatRowContext.
 import type { JSX } from "nsh";
 import { Canvas, createMotion, effect, Image, pixelRatio, platform, Text, token, untracked, View, windowSize } from "nsh";
-import { MOTION_EASE, MOTION_SLOW } from "../motion/tokens";
+import { MOTION_EASE, MOTION_SLOW, motionMs } from "../motion/tokens";
 import { Button as BaseButton } from "nsh/base";
 import { ICONS } from "../icons";
 import { Button, Icon, Tip, TipButton } from "../ui";
@@ -35,6 +35,8 @@ export interface ChatRowContext {
   endpointRef: () => string;
   topicID: () => string;
   copiedItemID: () => string;
+  /** Counts successful copies, so a copy repeated while the check still shows plays again. */
+  copySeq: () => number;
   expandedPanel: (itemID: string) => string;
   autoPreviewItemID: () => string;
   previews: ArtifactPreviews;
@@ -127,8 +129,34 @@ function Bubble(props: { system?: boolean; files?: boolean; children?: JSX.Eleme
   );
 }
 
-/** Copy, under a message: a quiet 24pt square that shows on hover, and a check once copied. */
-function CopyButton(props: { copied: boolean; label: string; onPress: () => void }) {
+/**
+ * Copy, under a message: a quiet 24pt square that shows on hover, and a check once copied. Each
+ * successful copy also dips the button and springs it back while a ring widens and fades around it
+ * (the Vue console's copy feedback), every time, including a copy repeated while the check still
+ * shows. Only transform and opacity move, so the bubble never shifts; with reduced motion only the
+ * check shows.
+ */
+function CopyButton(props: { copied: boolean; copySeq: number; label: string; onPress: () => void }) {
+  const pop = createMotion({ initial: { scale: 1 } });
+  const ring = createMotion({ initial: { opacity: 0, scale: 1 } });
+  let seen = untracked(() => props.copySeq);
+  effect(() => {
+    const seq = props.copySeq;
+    const copied = props.copied;
+    untracked(() => {
+      if (seq === seen) return;
+      seen = seq;
+      if (!copied || motionMs(1) === 0) return;
+      // The Vue keyframes: down to 0.82 at 35%, over to 1.1 at 70%, back to 1; the ring spreads
+      // 7pt beyond the 24pt square (1.58) as it fades.
+      void pop.play({
+        duration: 340,
+        easing: MOTION_EASE,
+        keyframes: { scale: [1, { offset: 0.35, value: 0.82 }, { offset: 0.7, value: 1.1 }, { offset: 1, value: 1 }] },
+      });
+      void ring.play({ duration: 560, easing: MOTION_EASE, keyframes: { opacity: [1, 0], scale: [1, 1.58] } });
+    });
+  });
   return (
     <TipButton
       onPress={props.onPress}
@@ -138,7 +166,9 @@ function CopyButton(props: { copied: boolean; label: string; onPress: () => void
       class={`-mt-0.5 size-6 items-center justify-center rounded-(--radius) transition duration-150 hover:bg-press hover:opacity-100 focus:opacity-100 ${
         props.copied ? "opacity-70" : HOVER ? "opacity-0 group-hover:opacity-70" : "opacity-70"
       }`}
+      style={pop.style}
     >
+      <View accessibilityElementsHidden class="absolute inset-0 rounded-(--radius) border-2 border-blue/45" style={{ ...ring.style, pointerEvents: "none" }} />
       <Image
         src={ICONS.PhCopy}
         accessibilityElementsHidden
@@ -424,7 +454,7 @@ export function ChatHistoryItem(props: { item: HistoryItem; ctx: ChatRowContext;
         </View>
       </If>
       <If when={copyAvailable()}>
-        <CopyButton copied={copied()} label={t("action_copy")} onPress={() => ctx.onCopy(item())} />
+        <CopyButton copied={copied()} copySeq={ctx.copySeq()} label={t("action_copy")} onPress={() => ctx.onCopy(item())} />
       </If>
     </View>
   );
@@ -468,7 +498,7 @@ export function ChatHistoryItem(props: { item: HistoryItem; ctx: ChatRowContext;
       </If>
       <If when={copyAvailable()}>
         <View class="mr-2">
-          <CopyButton copied={copied()} label={t("action_copy")} onPress={() => ctx.onCopy(item())} />
+          <CopyButton copied={copied()} copySeq={ctx.copySeq()} label={t("action_copy")} onPress={() => ctx.onCopy(item())} />
         </View>
       </If>
     </View>

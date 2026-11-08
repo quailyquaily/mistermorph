@@ -231,6 +231,40 @@ export function onNotificationPress(listener: (id: string) => void) {
   return hostChannel.on("morph.notify.press", (data: unknown) => listener(String((data as { id?: string })?.id || "")));
 }
 
+/* ---------- voice recording ---------- */
+
+/**
+ * The web host's microphone (feature "voiceRecord"): nsh records no audio on the web, so the page
+ * records and keeps the recording as a file to upload to the agent's /voice/transcribe. Elsewhere
+ * voice input uses nsh's Speech instead.
+ */
+export const voiceRecording = {
+  available: () => hosted && hasFeature("voiceRecord"),
+  /** Why this page cannot record: "" when it can, "insecure" or "unsupported". */
+  async support(): Promise<string> {
+    return String((await hostChannel.call("morph.voice.support", {})) ?? "unsupported");
+  },
+  /** Opens the microphone (asking for it first); `error` is the browser's error name when it cannot. */
+  async start(options: { preview: boolean; lang: string }): Promise<{ ok: boolean; error?: string; message?: string }> {
+    return ((await hostChannel.call("morph.voice.start", options, { timeout: 0 })) ?? { ok: false, error: "failed" }) as {
+      ok: boolean;
+      error?: string;
+      message?: string;
+    };
+  },
+  /** Stops and returns the recording as a picked file, or null when nothing was recorded. */
+  async stop(): Promise<PickedFile | null> {
+    return ((await hostChannel.call("morph.voice.stop", {}, { timeout: 0 })) ?? null) as PickedFile | null;
+  },
+  cancel() {
+    void hostChannel.call("morph.voice.cancel", {}).catch(() => {});
+  },
+  /** The live preview of the words while recording, where the browser recognizes speech. */
+  onPreview(listener: (text: string) => void) {
+    return hostChannel.on("morph.voice.preview", (data: unknown) => listener(String((data as { text?: string })?.text || "")));
+  },
+};
+
 /* ---------- files ---------- */
 
 /**
