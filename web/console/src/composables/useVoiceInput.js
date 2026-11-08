@@ -1,11 +1,17 @@
 import { onUnmounted, ref, watch } from "vue";
 
 import { runtimeApiFetchForEndpoint } from "../core/context";
+import { VoiceInputUnsupportedError, voiceRecordingUnsupportedReason } from "../core/voice-input";
 
 // Voice input for the chat composer: records from the microphone and transcribes the recording
 // with the agent's llm.routes.transcription model (POST /voice/transcribe on its runtime).
 // state is "idle", "recording" or "transcribing". available is false until the agent reports
-// a usable transcription route, and stays false in browsers without MediaRecorder.
+// a usable transcription route.
+//
+// The mic shows whenever the agent can transcribe, even where this page cannot record:
+// unsupported is then "insecure" (browsers only open the microphone on HTTPS or localhost, so a
+// phone reaching the Console over plain HTTP has none) or "unsupported" (no MediaRecorder), and
+// a tap reports that through onError instead of recording. Typing is never affected.
 //
 // While recording, browsers with speech recognition (Chrome, Edge, Safari) also show a live
 // preview of the words. The browser's own speech service makes it (Chrome sends the audio to
@@ -26,14 +32,6 @@ const PREVIEW_FATAL_ERRORS = new Set(["not-allowed", "service-not-allowed", "aud
 // Speech recognition stops by itself after a pause; it restarts this many times in a row
 // without hearing anything before the preview gives up.
 const PREVIEW_MAX_IDLE_RESTARTS = 3;
-
-function recordingSupported() {
-  return (
-    typeof window !== "undefined" &&
-    typeof window.MediaRecorder !== "undefined" &&
-    Boolean(navigator?.mediaDevices?.getUserMedia)
-  );
-}
 
 function recordingType() {
   for (const type of RECORDING_TYPES) {
@@ -88,6 +86,7 @@ function extensionFor(type) {
 // text while recording and transcribing.
 export function useVoiceInput({ endpointRef, onText, onError }) {
   const available = ref(false);
+  const unsupported = voiceRecordingUnsupportedReason();
   const state = ref("idle");
   const elapsed = ref(0);
   const preview = ref("");
@@ -100,6 +99,8 @@ export function useVoiceInput({ endpointRef, onText, onError }) {
   let elapsedTimer = 0;
   let statusSeq = 0;
   let discard = false;
+  // Set while the browser asks for the microphone, so a second tap does not open another stream.
+  let starting = false;
   let recognition = null;
   let previewDone = "";
 
@@ -204,7 +205,7 @@ export function useVoiceInput({ endpointRef, onText, onError }) {
     const seq = ++statusSeq;
     available.value = false;
     const ref = String((typeof endpointRef === "function" ? endpointRef() : endpointRef?.value) || "").trim();
-    if (!ref || !recordingSupported()) {
+    if (!ref) {
       return;
     }
     try {
@@ -261,17 +262,33 @@ export function useVoiceInput({ endpointRef, onText, onError }) {
     if (state.value !== "idle" || !available.value) {
       return;
     }
+    if (unsupported) {
+      onError?.(new VoiceInputUnsupportedError(unsupported));
+      return;
+    }
+    if (starting) {
+      return;
+    }
+    starting = true;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch (err) {
       releaseStream();
       onError?.(err);
       return;
+    } finally {
+      starting = false;
     }
     const type = recordingType();
     chunks = [];
     discard = false;
-    recorder = new window.MediaRecorder(stream, type ? { mimeType: type } : undefined);
+    try {
+      recorder = new window.MediaRecorder(stream, type ? { mimeType: type } : undefined);
+    } catch (err) {
+      releaseStream();
+      onError?.(err);
+      return;
+    }
     recorder.ondataavailable = (event) => {
       if (event.data && event.data.size > 0) {
         chunks.push(event.data);
@@ -335,6 +352,7 @@ export function useVoiceInput({ endpointRef, onText, onError }) {
 
   return {
     available,
+    unsupported,
     state,
     elapsed,
     preview,

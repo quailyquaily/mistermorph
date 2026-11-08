@@ -239,6 +239,7 @@ const InferenceProviderPicker = {
             v-if="!isFiltering"
             class="inference-provider-tabs"
             :tabs="groupTabs"
+            equal
             :modelValue="selectedGroupTab"
             :ariaLabel="t('settings_inference_provider_group_label')"
             @change="changeGroup"

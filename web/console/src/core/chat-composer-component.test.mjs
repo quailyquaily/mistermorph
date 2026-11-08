@@ -151,3 +151,55 @@ test("ChatView defaults the last agent status to duration without overriding man
   assert.match(view, /durationVisible:\s*item\?\.durationVisible === true/u);
   assert.match(view, /durationVisible:\s*defaultDurationVisible/u);
 });
+
+test("ChatComposer draws plain drafts in the field itself and only mirrors drafts with tokens", async () => {
+  const component = await source("../components/ChatComposer.js");
+  const styles = await source("../components/ChatComposer.css");
+
+  // A long paste is not segmented at all, and text without "/" or "$" skips the segmenter.
+  assert.match(component, /const HIGHLIGHT_MAX_LENGTH = 10000;/u);
+  assert.match(component, /text\.length > HIGHLIGHT_MAX_LENGTH \|\| \(!text\.includes\("\/"\) && !text\.includes\("\$"\)\)/u);
+  assert.match(component, /const highlightActive = computed\(\(\) => composerHasHighlightTokens\(highlightSegments\.value\)\);/u);
+  // The mirror layer, and its second layout of the draft, exists only while it colors a token.
+  assert.match(component, /<div v-if="highlightActive" ref="composerMirror" class="chat-composer-highlight"/u);
+  assert.match(component, /classes\.push\("is-highlighting"\)/u);
+  assert.match(component, /watch\(highlightActive,[\s\S]*?nextTick\(syncMirrorScroll\)/u);
+  // The field's own text is visible unless the mirror draws it.
+  assert.match(styles, /\.chat-composer-input \{[^}]*color: var\(--text-0\);[^}]*-webkit-text-fill-color: currentColor;/us);
+  assert.match(styles, /\.chat-composer\.is-highlighting \.chat-composer-input \{[^}]*color: transparent;[^}]*-webkit-text-fill-color: transparent;/us);
+  assert.match(styles, /\.chat-composer\.is-highlighting \.chat-composer-input::selection \{[^}]*color: transparent;/us);
+});
+
+test("ChatComposer leaves text paste to the browser so content and selection are kept", async () => {
+  const component = await source("../components/ChatComposer.js");
+  const paste = component.slice(component.indexOf("function handlePaste(event)"), component.indexOf("function handleInputScroll()"));
+
+  // Only image files are taken over; text is inserted natively at the selection.
+  assert.match(paste, /const files = clipboardImageFiles\(event\.clipboardData\);\s*if \(!files\.length\) \{\s*return;\s*\}/u);
+  assert.match(paste, /if \(!event\.clipboardData\.getData\("text\/plain"\)\) \{\s*event\.preventDefault\(\);/u);
+  assert.equal((paste.match(/preventDefault/gu) || []).length, 1);
+});
+
+test("ChatComposer skips collapsing a field that is already at its tallest and overflowing", async () => {
+  const component = await source("../components/ChatComposer.js");
+  const measure = component.slice(component.indexOf("function measureTextarea(field)"), component.indexOf("function singleLineTextareaMetrics(field)"));
+  const fastPath = measure.indexOf("const currentHeight = Number.parseFloat(field.style.height) || 0;");
+  const collapse = measure.indexOf('field.style.height = "0px";');
+
+  assert.ok(fastPath > 0 && fastPath < collapse, "the at-max check comes before the collapse-and-measure");
+  assert.match(measure, /if \(Math\.abs\(currentHeight - maxHeight\) < 0\.5\) \{\s*const overflowHeight = field\.scrollHeight;\s*if \(overflowHeight > maxHeight \+ 0\.5\) \{/u);
+  assert.match(measure, /visualRows: maxRows \+ 1,/u);
+});
+
+test("ChatComposer keeps the mic for agents that can transcribe and marks it when the page cannot record", async () => {
+  const component = await source("../components/ChatComposer.js");
+  const view = await source("../views/ChatView.js");
+  const styles = await source("../components/ChatComposer.css");
+
+  assert.match(component, /voiceUnavailable: \{\s*type: Boolean,\s*default: false,\s*\}/u);
+  assert.match(component, /'is-unavailable': voiceUnavailable/u);
+  assert.match(styles, /\.chat-composer-voice\.is-unavailable \.icon \{\s*opacity: 0\.45;/u);
+  assert.equal((view.match(/:voice-unavailable="Boolean\(voiceInput\.unsupported\)"/gu) || []).length, 2);
+  assert.match(view, /notice\.error\(t\(voiceInputErrorKey\(e\), \{ message: String\(e\?\.message \|\| ""\)\.trim\(\) \}\)\);/u);
+  assert.match(view, /if \(voiceInput\.unsupported\) \{\s*return t\(`chat_composer_voice_\$\{voiceInput\.unsupported\}_label`\);/u);
+});

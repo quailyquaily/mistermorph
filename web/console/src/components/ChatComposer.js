@@ -4,6 +4,7 @@ import { clipboardImageFiles } from "../core/chat-composer-files";
 
 import {
   buildComposerSuggestionItems,
+  composerHasHighlightTokens,
   composerHighlightSegments,
   composerSuggestionInsertText,
   composerTriggerContext,
@@ -11,6 +12,9 @@ import {
 } from "../core/chat-composer-suggestions";
 
 const DEFAULT_MAX_ROWS = 24;
+// Drafts longer than this skip command/skill coloring: a long paste is read as text, and a
+// highlight layer over it doubles the layout work on every keystroke.
+const HIGHLIGHT_MAX_LENGTH = 10000;
 const DEFAULT_SUGGESTION_LABELS = {
   commands: "Commands",
   skills: "Skills",
@@ -290,6 +294,12 @@ export default {
       type: Boolean,
       default: false,
     },
+    // voiceUnavailable: the agent can transcribe but this page cannot record (plain HTTP, or no
+    // MediaRecorder). The mic still shows, muted; a tap explains why through the voice event.
+    voiceUnavailable: {
+      type: Boolean,
+      default: false,
+    },
     voiceState: {
       type: String,
       default: "idle",
@@ -380,12 +390,19 @@ export default {
       return props.voiceState === "transcribing" ? resolvedVoiceLabels.value.transcribing : resolvedVoiceLabels.value.recording;
     });
     const inputValue = computed(() => normalizedText(props.modelValue));
-    const highlightSegments = computed(() =>
-      composerHighlightSegments({
-        text: inputValue.value,
+    const highlightSegments = computed(() => {
+      const text = inputValue.value;
+      if (text.length > HIGHLIGHT_MAX_LENGTH || (!text.includes("/") && !text.includes("$"))) {
+        return [{ type: "text", text }];
+      }
+      return composerHighlightSegments({
+        text,
         commands: props.commands,
-      })
-    );
+      });
+    });
+    // Without a token to color, the field draws its own text and the mirror layer is left out, so
+    // the draft is laid out once instead of twice.
+    const highlightActive = computed(() => composerHasHighlightTokens(highlightSegments.value));
     const rootClass = computed(() => {
       const classes = ["chat-composer"];
       if (props.landing) {
@@ -395,6 +412,9 @@ export default {
         classes.push("without-add-actions");
       }
       classes.push(singleLine.value ? "is-single-row" : "is-multi-row");
+      if (highlightActive.value) {
+        classes.push("is-highlighting");
+      }
       return classes.join(" ");
     });
     const addMenuClass = computed(() =>
@@ -903,6 +923,21 @@ export default {
       const minHeight = lineHeight + paddingTop + paddingBottom + borderTop + borderBottom;
       const maxHeight = lineHeight * maxRows + paddingTop + paddingBottom + borderTop + borderBottom;
 
+      // A field already at its tallest that still overflows stays there; reading scrollHeight at
+      // the current height tells that without collapsing the field and laying out the draft twice.
+      const currentHeight = Number.parseFloat(field.style.height) || 0;
+      if (Math.abs(currentHeight - maxHeight) < 0.5) {
+        const overflowHeight = field.scrollHeight;
+        if (overflowHeight > maxHeight + 0.5) {
+          return {
+            maxHeight,
+            minHeight,
+            scrollHeight: overflowHeight,
+            visualRows: maxRows + 1,
+          };
+        }
+      }
+
       // Measured at no height with motion off, then put back, so the field eases from the height it
       // had to the new one instead of from nothing.
       const previousHeight = field.style.height;
@@ -1039,6 +1074,11 @@ export default {
         llmProfileDialogOpen.value = false;
       }
     });
+    watch(highlightActive, (active) => {
+      if (active) {
+        void nextTick(syncMirrorScroll);
+      }
+    });
     watch(suggestionItems, (items) => {
       if (!items.length || suggestionIndex.value >= items.length) {
         suggestionIndex.value = 0;
@@ -1070,6 +1110,7 @@ export default {
     return {
       inputValue,
       highlightSegments,
+      highlightActive,
       composerRoot,
       composerField,
       composerMirror,
@@ -1257,7 +1298,7 @@ export default {
             </div>
           </div>
           <div class="chat-composer-input-shell">
-            <div ref="composerMirror" class="chat-composer-highlight" aria-hidden="true">
+            <div v-if="highlightActive" ref="composerMirror" class="chat-composer-highlight" aria-hidden="true">
               <span
                 v-for="(segment, index) in highlightSegments"
                 :key="index + ':' + segment.type + ':' + segment.text"
@@ -1323,7 +1364,7 @@ export default {
             </template>
             <AppButton
               v-if="voiceAvailable"
-              :class="['plain sm icon chat-composer-voice', { 'is-recording': voiceState === 'recording' }]"
+              :class="['plain sm icon chat-composer-voice', { 'is-recording': voiceState === 'recording', 'is-unavailable': voiceUnavailable }]"
               :loading="voiceState === 'transcribing'"
               :disabled="disabled || voiceState === 'transcribing'"
               :title="voiceLabel"
