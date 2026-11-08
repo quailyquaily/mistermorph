@@ -76,7 +76,7 @@ jobs:
     # macOS, so the darwin CLI binaries can be signed and notarized as they are built
     # (scripts/macos-sign-cli.sh, a GoReleaser post-build hook).
     needs: test
-    runs-on: macos-14
+    runs-on: macos-15
 
     steps:
       - name: Checkout
@@ -210,7 +210,7 @@ jobs:
             bundled_backend_binary: dist/morph
             package_kind: appimage
           - label: macos-arm64
-            os: macos-14
+            os: macos-15
             goos: darwin
             goarch: arm64
             desktop_asset: MrMorph-darwin-arm64.dmg
