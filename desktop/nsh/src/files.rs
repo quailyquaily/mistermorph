@@ -30,16 +30,33 @@ impl Picked {
         })
     }
 
-    /// The app's `PickedFile`: images get a `file://` preview an `Image` can show.
+    /// The app's `PickedFile`; images get a preview an `Image` can show (see [`Picked::preview`]).
     pub fn to_json(&self, id: &str) -> Value {
-        let preview = if self.mime.starts_with("image/") {
-            url::Url::from_file_path(&self.path).map(String::from).unwrap_or_default()
-        } else {
-            String::new()
-        };
-        json!({ "id": id, "name": self.name, "size": self.size, "type": self.mime, "preview": preview })
+        json!({ "id": id, "name": self.name, "size": self.size, "type": self.mime, "preview": self.preview() })
+    }
+
+    /// A `data:` URI of the picked image's bytes, or "" for other files, images over
+    /// [`PREVIEW_MAX_BYTES`] and files that can no longer be read.
+    ///
+    /// Not a `file://` URL: nsh checks images, `Image.getSize` and `Image.prefetch` against
+    /// `capabilities.network`, which cannot grant a local file (it has no host), and should not:
+    /// that would open every file to the app. The bytes the user picked are bytes the app holds,
+    /// which nsh shows without a grant, so picking a file lets the app show that file and no other.
+    pub fn preview(&self) -> String {
+        if !self.mime.starts_with("image/") || self.size > PREVIEW_MAX_BYTES {
+            return String::new();
+        }
+        let mut bytes = Vec::new();
+        let read = std::fs::File::open(&self.path).and_then(|f| f.take(PREVIEW_MAX_BYTES + 1).read_to_end(&mut bytes));
+        if read.is_err() || bytes.is_empty() || bytes.len() as u64 > PREVIEW_MAX_BYTES {
+            return String::new();
+        }
+        format!("data:{};base64,{}", self.mime, base64::engine::general_purpose::STANDARD.encode(bytes))
     }
 }
+
+/// The largest image a picked file's preview carries (the console takes avatars up to 10 MB).
+pub const PREVIEW_MAX_BYTES: u64 = 16 << 20;
 
 /// The files the app holds ids of.
 #[derive(Default)]
@@ -63,6 +80,26 @@ impl Registry {
     pub fn release(&mut self, id: &str) {
         self.files.remove(id);
     }
+}
+
+/// What `morph.file.pick` answers for the open dialog's choice: nothing when it was cancelled
+/// (`None`), else the chosen files `register` gives ids. GPUI's dialog has no type filter: what
+/// `accept` refuses, and what cannot be read, is left out and told to `skipped`.
+pub fn pick_answer(
+    paths: Option<Vec<PathBuf>>,
+    accept: &str,
+    mut register: impl FnMut(Picked) -> Value,
+    mut skipped: impl FnMut(String),
+) -> Value {
+    let mut list = Vec::new();
+    for path in paths.unwrap_or_default() {
+        match Picked::describe(&path) {
+            Ok(file) if accepts(accept, &file) => list.push(register(file)),
+            Ok(file) => skipped(format!("{:?}: not {accept:?}", file.name)),
+            Err(err) => skipped(format!("{}: {err}", path.display())),
+        }
+    }
+    Value::Array(list)
 }
 
 /// Whether `name` (or its type) is one `accept` (`image/*,.pdf`) lets through; an empty
@@ -356,12 +393,111 @@ mod tests {
         let id = registry.add(picked.clone());
         let json = registry.get(&id).unwrap().to_json(&id);
         assert_eq!(json["type"], "image/png");
-        assert!(json["preview"].as_str().unwrap().starts_with("file:///"));
+        assert_eq!(json["preview"], "data:image/png;base64,cG5nIQ==");
         registry.release(&id);
         assert!(registry.get(&id).is_none());
         let text = Picked::describe(&temp_file("notes.zzz", b"")).unwrap();
         assert_eq!(text.to_json("2")["preview"], "");
         assert_eq!(text.mime, "");
+    }
+
+    /// The console's access as nsh enforces it: what `web/console-nsh/nsh.json` declares.
+    fn console_access() -> nsh_engine::Access {
+        let manifest = concat!(env!("CARGO_MANIFEST_DIR"), "/../../web/console-nsh/nsh.json");
+        let manifest: Value = serde_json::from_str(&std::fs::read_to_string(manifest).unwrap()).unwrap();
+        let declared = nsh_engine::Capabilities::from_json(&manifest["capabilities"]).unwrap();
+        nsh_engine::Access { declared, granted: None }
+    }
+
+    #[test]
+    fn previews_a_picked_png_the_console_may_load() {
+        let path = std::env::temp_dir().join(format!("morph-files-{}/picked-avatar.png", std::process::id()));
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        image::RgbaImage::from_pixel(40, 20, image::Rgba([1, 2, 3, 255])).save(&path).unwrap();
+        let picked = Picked::describe(&path).unwrap();
+        let preview = picked.preview();
+        assert!(preview.starts_with("data:image/png;base64,"), "{preview}");
+
+        // What `Image.getSize`, `Image.prefetch` and `<Image>` check: the picked image is the
+        // app's bytes, the same file as a `file://` URL (and any other file) stays refused.
+        let access = console_access();
+        assert!(access.allows_media(&preview));
+        let file_url = url::Url::from_file_path(&path).unwrap().to_string();
+        assert!(!access.allows_media(&file_url), "{file_url}");
+        let other = url::Url::from_file_path(path.with_file_name("not-picked.png")).unwrap().to_string();
+        assert!(!access.allows_media(&other));
+        assert!(!access.allows_media("file:///etc/passwd"));
+
+        // The preview is the picked file, with its size.
+        let (_, data) = preview.split_once(',').unwrap();
+        let bytes = base64::engine::general_purpose::STANDARD.decode(data).unwrap();
+        assert_eq!(bytes, std::fs::read(&path).unwrap());
+        assert_eq!(image::load_from_memory(&bytes).unwrap().to_rgba8().dimensions(), (40, 20));
+    }
+
+    #[test]
+    fn previews_only_readable_images_of_bounded_size() {
+        let dir = std::env::temp_dir().join(format!("morph-files-{}/previews", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        // Not an image: no preview.
+        let text = dir.join("notes.txt");
+        std::fs::write(&text, b"hello").unwrap();
+        assert_eq!(Picked::describe(&text).unwrap().preview(), "");
+        // Larger than the preview carries: none (the console refuses it before it loads).
+        let huge = dir.join("huge.png");
+        std::fs::File::create(&huge).unwrap().set_len(PREVIEW_MAX_BYTES + 1).unwrap();
+        assert_eq!(Picked::describe(&huge).unwrap().preview(), "");
+        // Gone since it was picked, or empty: none.
+        let gone = Picked { path: dir.join("gone.png"), name: "gone.png".into(), size: 3, mime: "image/png".into() };
+        assert_eq!(gone.preview(), "");
+        let empty = dir.join("empty.png");
+        std::fs::write(&empty, b"").unwrap();
+        assert_eq!(Picked::describe(&empty).unwrap().preview(), "");
+    }
+
+    #[test]
+    fn invalid_images_fail_to_load_not_to_pick() {
+        let path = temp_file("broken.png", b"this is not a png");
+        let picked = Picked::describe(&path).unwrap();
+        // The bytes reach the app, whose `Image.getSize` then fails to decode them: the console's
+        // "could not load the image" notice, not a permission error.
+        let preview = picked.preview();
+        assert!(console_access().allows_media(&preview));
+        let (_, data) = preview.split_once(',').unwrap();
+        assert!(image::load_from_memory(&base64::engine::general_purpose::STANDARD.decode(data).unwrap()).is_err());
+        // Uploading it as an avatar fails with a message, nothing is sent.
+        let target = ImageTarget { crop: Crop { sx: 0.0, sy: 0.0, sw: 1.0, sh: 1.0 }, width: 8, height: 8, mime: "image/webp".into(), quality: 0.9 };
+        assert!(encode_image(&path, &target).unwrap_err().starts_with("read the image"));
+        let request = UploadRequest { url: "http://127.0.0.1:9/avatar".into(), field: "file".into(), image: Some(target), ..Default::default() };
+        assert!(upload(&picked, &request, "", |_, _| {}).unwrap_err().starts_with("read the image"));
+    }
+
+    #[test]
+    fn answers_picks_and_cancellations() {
+        let png = temp_file("pick.png", b"png!");
+        let pdf = temp_file("pick.pdf", b"%PDF");
+        let mut registry = Registry::default();
+        let mut skipped = Vec::new();
+        // Cancelled: nothing picked, nothing registered (the avatar stays as it was).
+        let cancelled = pick_answer(None, "image/*", |_| panic!("nothing was chosen"), |s| skipped.push(s));
+        assert_eq!(cancelled, json!([]));
+        // Chosen: what `accept` takes, with ids; the rest is skipped.
+        let gone = png.with_file_name("gone.png");
+        let answer = pick_answer(
+            Some(vec![png.clone(), pdf, gone]),
+            "image/png,image/jpeg,image/webp",
+            |f| {
+                let id = registry.add(f.clone());
+                f.to_json(&id)
+            },
+            |s| skipped.push(s),
+        );
+        let list = answer.as_array().unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0]["name"], "pick.png");
+        assert!(list[0]["preview"].as_str().unwrap().starts_with("data:image/png;base64,"));
+        assert_eq!(registry.get(list[0]["id"].as_str().unwrap()).unwrap().path, png);
+        assert_eq!(skipped.len(), 2, "{skipped:?}");
     }
 
     #[test]

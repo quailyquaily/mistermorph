@@ -97,7 +97,7 @@ folders, `~/.config` and `~/.cache` on Linux):
 | `morph.visibility` (event) | On window activation and visibility changes: `{ visible, focused }` |
 | `morph.notify.state` / `request` | `"granted"`: desktop notification services ask apps no permission |
 | `morph.notify.show`, `morph.notify.press` (event) | notify-rust; on Linux pressing the notification brings the window forward and sends `morph.notify.press` |
-| `morph.file.pick` / `release` | GPUI's open dialog (the desktop portal on Linux); `accept` filters the chosen files afterwards, since the dialog has no type filter. Images get a `file://` preview |
+| `morph.file.pick` / `release` | GPUI's open dialog (the desktop portal on Linux); `accept` filters the chosen files afterwards, since the dialog has no type filter. Images (up to 16 MB) get a `data:` preview of the picked bytes: nsh refuses `file://` images under `capabilities.network`, so only the chosen file is shown |
 | `morph.file.upload` | Multipart (`field`, `fields`) or the raw file, chunked, with `morph.file.progress` events. With `image`, the picture is cropped, scaled (Lanczos3) and re-encoded first: **WebP is lossless** (the `image` crate has no lossy WebP encoder; `quality` applies to JPEG only) |
 | `morph.file.save` | Fetches (`url` + `headers`) or decodes (`text`, `base64`) first, then GPUI's save dialog in the Downloads folder |
 | `morph.desktop.pickDirectory` | GPUI's folder dialog (`title` and `current` are not passed: GPUI's dialog takes neither) |

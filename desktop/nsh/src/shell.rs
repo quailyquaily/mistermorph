@@ -249,20 +249,14 @@ impl Shell {
         let picked = cx.prompt_for_paths(PathPromptOptions { files: true, directories: false, multiple, prompt: None });
         let desktop = self.desktop.clone();
         std::thread::spawn(move || match futures::executor::block_on(picked) {
-            Ok(Ok(Some(paths))) => {
-                let mut list = Vec::new();
-                for path in paths {
-                    match crate::files::Picked::describe(&path) {
-                        // GPUI's dialog has no type filter: what `accept` refuses is left out.
-                        Ok(file) if crate::files::accepts(&accept, &file) => list.push(desktop.register_file(file)),
-                        Ok(file) => desktop.log.line(&format!("desktop_window pick skipped {:?}: not {accept:?}", file.name)),
-                        Err(err) => desktop.log.line(&format!("desktop_window pick skipped {}: {err}", path.display())),
-                    }
-                }
-                reply.resolve(json!(list));
-            }
+            Ok(Ok(paths)) => reply.resolve(crate::files::pick_answer(
+                paths,
+                &accept,
+                |file| desktop.register_file(file),
+                |skipped| desktop.log.line(&format!("desktop_window pick skipped {skipped}")),
+            )),
             Ok(Err(err)) => reply.reject(err.to_string()),
-            _ => reply.resolve(json!([])),
+            Err(_) => reply.resolve(json!([])),
         });
     }
 
