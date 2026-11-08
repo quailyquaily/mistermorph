@@ -15,15 +15,28 @@ import { currentLocale } from "./lib/i18n/index.js";
 import { installSystemNotifications } from "./lib/core/system-notifications.js";
 import { boot, isMobile, reportFrontendReady, setDocumentLanguage, startVisibilityTracking } from "./lib/platform";
 import { route, router, startRouter } from "./lib/router";
-import { inShellless, inStandalone, startShell } from "./lib/shell";
+import { inShellless, inStandalone, startShell, systemInsets } from "./lib/shell";
+import { startSystemBack } from "./lib/systemBack";
 import { PageView } from "./pages/routes";
 
 // Every scroll bar is the console's (styles/base.css: thin hairline thumbs shown while the pointer is
 // over the area), including those nsh draws for itself (a reply's tables and code blocks).
 Scrollbar.setTheme(SCROLLBAR);
 
+// The frame's padding: on Android, the room the system bars and the keyboard take (lib/systemInsets.ts);
+// on iOS, the keyboard's.
+function frameStyle() {
+  const insets = systemInsets();
+  if (insets) {
+    const { top, right, bottom, left } = insets.frame;
+    return { paddingTop: top, paddingRight: right, paddingBottom: bottom, paddingLeft: left };
+  }
+  return isMobile() ? { paddingBottom: keyboardFrame().height } : undefined;
+}
+
 function App() {
   startShell();
+  startSystemBack();
   // Screen readers, hyphenation and the browser's translate offer read the page language.
   effect(() => {
     const language = currentLocale();
@@ -39,7 +52,9 @@ function App() {
   return (
     // The phone app's surface does not shrink when the software keyboard opens: the app does, so
     // the composer and the fields stay above it (dialogs make room themselves, in their own layer).
-    <View class="flex-1 bg-background" style={isMobile() ? { paddingBottom: keyboardFrame().height } : undefined}>
+    // On Android the surface also runs under the status and navigation bars: the frame keeps the
+    // pages out from under them.
+    <View class="flex-1 bg-background" style={frameStyle()}>
       <If when={route()}>
         <Shell shellless={inShellless()} standalone={inStandalone()}>
           <PageView />

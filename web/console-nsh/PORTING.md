@@ -20,6 +20,8 @@ stays the reference for behaviour, states and copy until the cutover.
 | `lib/i18n/index.js` | The Vue console's strings, unchanged: `translate(key, vars)` |
 | `lib/router.ts` | Routes, the guard, `navigate()`, `currentRoute()`, `setLeaveGuard()` |
 | `lib/shell.ts` | The frame's state: endpoints, nav items, mobile breakpoint |
+| `lib/systemBack.ts` | Android's Back (button and edge swipe): `onSystemBack` for a screen's own back, then the history |
+| `lib/systemInsets.ts` | The room Android's status and navigation bars take: the frame's, the bottom nav's, the dialogs' |
 | `components/ui.tsx` | The design system: Button, TextField, Toggle, SelectField, DropdownMenu, Modal, MessageDialog, confirm, Badge, Section, Page, Markdown, Icon, ... |
 | `components/icons.ts` | The Phosphor icons the console uses, by their Vue names (`PhChats`) |
 | `components/Shell.tsx` | Sidebar, mobile bottom nav, notice stack |
@@ -121,6 +123,16 @@ Headless tests prove behaviour, not the look.
   it moves views natively but not in the layout presses are matched against.
 - Dialogs are an `Overlay` on Android (`DialogLayer`): with it Back hides the keyboard first, then
   closes the dialog.
+- Back (the button, and the edge swipe of gesture navigation, which the system turns into the same
+  event) reaches the app only while it listens (`BackHandler`); otherwise the system leaves the app.
+  `lib/systemBack.ts` listens only while there is something to go back to: a view registered with
+  `onSystemBack` (a page whose phone layout has its own back arrow registers what the arrow does;
+  `MobileBar` does it for its users), else the run's history, which `lib/mobileHost.ts` keeps and
+  the router hears as a browser's back. A new phone detail view with a back arrow registers too.
+- The surface runs under the status bar and the navigation bar (nsh draws Android edge to edge;
+  `safeArea()` has their sizes). The app's frame takes them once (`lib/systemInsets.ts`): pages and
+  their 57pt bars need no inset of their own, and `env(safe-area-inset-*)` must not be added inside
+  the frame on Android. Overlays cover the whole surface and take the insets themselves.
 - The packaged app gets no `usesCleartextTraffic`, and its `fetch` goes through HttpURLConnection,
   which then refuses `http://`: `scripts/build-android.sh` runs `nsh package` with an SDK whose
   `aapt2` adds it, for console servers on the local network.

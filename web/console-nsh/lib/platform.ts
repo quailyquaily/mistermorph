@@ -155,6 +155,18 @@ export function onHistoryPop(listener: (location: string) => void) {
   return hostChannel.on("morph.pop", (data: unknown) => listener(String((data as { location?: string })?.location || "/")));
 }
 
+/**
+ * Whether the phone app has a place to go back to in this run (its own history: no browser keeps
+ * one there). Always false on the web and the desktop, whose back buttons are the browser's.
+ */
+export const canGoBack = () => MOBILE && mobileHost.canGoBack();
+/** Goes back a place in the phone app's history; the router hears it as `onHistoryPop`. False when it cannot. */
+export function goBack(): boolean {
+  return MOBILE ? mobileHost.goBack() : false;
+}
+/** Where `goBack` would go (path, query and hash), or "" when it cannot. */
+export const previousLocation = () => (MOBILE ? mobileHost.previousEntry() : "");
+
 export function setDocumentTitle(title: string) {
   if (hosted) void hostChannel.call("morph.title", { title }).catch(() => {});
 }

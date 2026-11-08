@@ -151,6 +151,12 @@ only: on first launch it asks for the address of a running `morph console serve`
 and logs in as the web console does. Plain `http://` addresses work; the console shows its usual
 warning about them.
 
+Android's Back (the back button, or the swipe in from the screen's edge with gesture navigation) closes
+an open dialog or menu, then does what the screen's own back arrow does (an open topic back to the topic
+list, a settings section back to the sections), then goes back through the pages opened since launch;
+on the first screen it leaves the app. The app keeps its pages clear of the status bar and the
+navigation bar in portrait and landscape.
+
 ```bash
 web/console-nsh/scripts/build-android.sh                          # web/console-nsh/dist-android/MrMorph.apk, debug key
 web/console-nsh/scripts/build-android.sh --abi x86_64 --run       # for an emulator: install and start it

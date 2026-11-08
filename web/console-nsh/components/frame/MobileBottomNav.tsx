@@ -1,7 +1,8 @@
 // The phone navigation (the Vue console's AppMobileBottomNav, AppMobileBottomMenu and
 // AppMobileAgentSwitcher): a docked strip of icons at the foot of the window, the primary pages,
 // More, and the agent. A short blue rule on the strip's top edge slides to the active slot. More
-// and the agent each open a sheet docked on the strip, over a scrim; Escape or the scrim closes it.
+// and the agent each open a sheet docked on the strip, over a scrim; Escape, Android's Back or the
+// scrim closes it.
 import type { JSX } from "nsh";
 import { computed, keymap, signal, Text, View } from "nsh";
 import { Button as BaseButton } from "nsh/base";
@@ -18,8 +19,10 @@ import {
   selectedEndpointItem,
   setMobileMoreOpen,
   switchEndpoint,
+  systemInsets,
   type NavItem,
 } from "../../lib/shell";
+import { onSystemBack } from "../../lib/systemBack";
 import defaultEndpointAvatar from "../../assets/images/app_logo_current.svg";
 import { Icon, TextField, Tip, TipButton, type IconName } from "../ui";
 import { AgentAvatar, AgentOptionList, filterAgentItems, normalizeAgentItems, OverviewRow } from "./AgentSwitcher";
@@ -75,6 +78,8 @@ function navigateTo(item: NavItem) {
 /** A sheet docked on the strip, rising from behind it, over a scrim. */
 function BottomSheet(props: { label: string; onClose: () => void; testID?: string; children?: JSX.Element }) {
   keymap.bind("escape", () => props.onClose());
+  // Android's Back closes the sheet before it leaves the page.
+  onSystemBack(() => true, () => props.onClose());
   return (
     <View class="absolute inset-0 z-40" testID={props.testID}>
       <View
@@ -189,7 +194,10 @@ export function MobileBottomNav() {
       role="navigation"
       accessibilityLabel={t("mobile_nav")}
       testID="mobile-bottom-nav"
-      class="relative z-50 border-t border-line bg-card px-1 pb-[env(safe-area-inset-bottom)]"
+      // Its card runs under the bottom system bar: on Android by the room lib/systemInsets.ts gives
+      // it (none while the keyboard is up), elsewhere by the safe area.
+      class={`relative z-50 border-t border-line bg-card px-1 ${systemInsets() ? "" : "pb-[env(safe-area-inset-bottom)]"}`}
+      style={systemInsets() ? { paddingBottom: systemInsets()!.bottomNav } : undefined}
       onLayout={({ bounds }) => width.set(bounds.size.width)}
     >
       <If when={activeSlot() >= 0 && width() > 0}>

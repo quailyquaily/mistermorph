@@ -11,7 +11,9 @@ import { t } from "../../components/chat/i18n";
 import { contextCellGrid, contextRing } from "../../lib/core/context-inspector.js";
 import { currentLocale, endpointState, runtimeApiFetch } from "../../lib/core/context.js";
 import { endpointRoutePath } from "../../lib/core/endpoint-routes.js";
+import { goBack } from "../../lib/platform";
 import { currentRoute, router } from "../../lib/router";
+import { onSystemBack } from "../../lib/systemBack";
 
 const RING_RADIUS = 40;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
@@ -221,14 +223,31 @@ export function ContextPage() {
     });
   }
 
+  const topicPath = () => {
+    const id = untracked(topicID);
+    return endpointRoutePath(endpointState.selectedRef, id ? `/chat/${encodeURIComponent(id)}` : "/chat");
+  };
+
   function back() {
     if (untracked(isPhone) && untracked(phoneStep) > 0) {
       goPhoneStep(untracked(phoneStep) - 1);
       return;
     }
-    const id = untracked(topicID);
-    void router.push(endpointRoutePath(endpointState.selectedRef, id ? `/chat/${encodeURIComponent(id)}` : "/chat"));
+    void router.push(topicPath());
   }
+
+  // Android's Back steps back through the phone's views, then goes back to where the inspector was
+  // opened from; opened first (the app reopened here), it goes to the topic in its place.
+  onSystemBack(
+    () => true,
+    () => {
+      if (untracked(isPhone) && untracked(phoneStep) > 0) {
+        goPhoneStep(untracked(phoneStep) - 1);
+        return;
+      }
+      if (!goBack()) void router.replace(topicPath());
+    },
+  );
 
   // Selecting the selected part again clears the selection.
   function togglePart(kind: string) {

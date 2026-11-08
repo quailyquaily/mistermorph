@@ -14,6 +14,7 @@ import { Scroll, Text, View, windowSize } from "nsh";
 import { Button as BaseButton, Switch } from "nsh/base";
 import { translate } from "../../lib/core/context.js";
 import { isMobile } from "../../lib/shell";
+import { onSystemBack } from "../../lib/systemBack";
 import { createScrollEdges, FadeText, MOTION_EASE_CSS, MOTION_NORMAL, motionMs, SCROLLBAR } from "../motion";
 import { Icon, TextField, type IconName } from "../ui";
 
@@ -412,8 +413,15 @@ export function LinkText(props: { text: string; onPress: () => void; testID?: st
   );
 }
 
-/** The phone's page bar while one item is open: back, then its title (the workspace title face). */
+/**
+ * The phone's page bar while one item is open: back, then its title (the workspace title face).
+ * Android's Back does what its back arrow does while it shows.
+ */
 export function MobileBar(props: { title: string; backLabel: string; onBack?: () => void; actions?: JSX.Element }) {
+  onSystemBack(
+    () => Boolean(props.onBack),
+    () => props.onBack?.(),
+  );
   return (
     <View class="h-[57px] flex-row items-center gap-2 border-b border-line-soft" style={{ paddingLeft: gutterX(), paddingRight: gutterX() }}>
       <If when={props.onBack}>

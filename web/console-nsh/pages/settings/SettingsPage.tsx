@@ -8,8 +8,10 @@ import { Button as BaseButton, Input } from "nsh/base";
 import { endpointState } from "../../lib/core/context.js";
 import { endpointRoutePath } from "../../lib/core/endpoint-routes.js";
 import { buildSettingsSearchIndex, searchSettings } from "../../lib/core/settings-search.js";
+import { goBack, previousLocation } from "../../lib/platform";
 import { currentRoute, navigate, setLeaveGuard } from "../../lib/router";
 import { isMobile } from "../../lib/shell";
+import { onSystemBack } from "../../lib/systemBack";
 import { Button, confirm, Icon, type IconName, MessageDialog, Page } from "../../components/ui";
 import { createScrollEdges, createSlidingSelection, SCROLLBAR } from "../../components/motion";
 import { SettingsSaveRegistryContext } from "../../components/settings/ConfigSettingsPanel";
@@ -123,6 +125,13 @@ export function SettingsPage() {
   const showIndexPane = () => !mobile() || !mobilePanelVisible();
   const showPanelPane = () => !mobile() || mobilePanelVisible();
   const mobileShowBack = () => mobile() && mobilePanelVisible();
+  // Android's Back from a section goes to the sections, as the bar's back arrow does. A section
+  // opened from the sections also goes back to their address, so the next Back leaves Settings
+  // instead of only changing the address under the same screen.
+  onSystemBack(mobileShowBack, () => {
+    mobilePanelVisible.set(false);
+    if (previousLocation() === endpointRoutePath(endpointState.selectedRef, "/settings")) goBack();
+  });
   const barTitle = () => (mobileShowBack() ? s.selectedSection()?.title || t("settings_title") : t("settings_title"));
   const sectionID = () => s.selectedSection()?.id || "";
 

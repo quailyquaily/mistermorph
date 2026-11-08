@@ -24,6 +24,7 @@ import { createArrivalTracker, createChangeTracker, createHighlightWindow } from
 import { isVisible } from "../../lib/platform";
 import { navigate } from "../../lib/router";
 import { isMobile } from "../../lib/shell";
+import { onSystemBack } from "../../lib/systemBack";
 import { RawJsonDialogContent } from "../../components/shared/RawJsonDialog";
 import {
   auditEntries,
@@ -102,6 +103,8 @@ export function AuditPage() {
   const showIndexPane = () => !isMobile() || !mobileLedgerVisible();
   const showLedgerPane = () => !isMobile() || mobileLedgerVisible();
   const mobileShowBack = () => isMobile() && mobileLedgerVisible();
+  // Android's Back from a ledger goes to the files, as the bar's back arrow does.
+  onSystemBack(mobileShowBack, () => mobileLedgerVisible.set(false));
   const currentEndpointRef = () => String(endpointState.selectedRef || "").trim();
   const taskFeedEndpointRef = computed(() => {
     const selected: any = runtimeEndpointByRef(endpointState.selectedRef);

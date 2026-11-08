@@ -5,6 +5,7 @@ import { effect, Scroll, Text, untracked, View, windowSize } from "nsh";
 import { Button as BaseButton } from "nsh/base";
 import { translate } from "../../lib/core/context.js";
 import { isMobile } from "../../lib/shell";
+import { onSystemBack } from "../../lib/systemBack";
 import { Button, Fab, type MessageAction, MessageDialog, Page, PageTitle } from "../../components/ui";
 import { WorkspaceDirPickerDialog } from "../../components/shared/WorkspaceDirPickerDialog";
 import { TodoCalendar } from "../../components/todo/TodoCalendar";
@@ -161,6 +162,11 @@ function Calendar(props: { state: TodoState; mobile?: boolean }) {
 
 export function TodoPage() {
   const state = createTodoState();
+  // Android's Back from an open task goes to the list, as the bar's back arrow does.
+  onSystemBack(
+    () => state.mobileShowBack(),
+    () => state.showIndexView(),
+  );
   effect(() => untracked(() => void state.start()));
 
   const runDialogActions = (): MessageAction[] => {

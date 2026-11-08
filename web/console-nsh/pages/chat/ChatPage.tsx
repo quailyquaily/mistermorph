@@ -9,6 +9,7 @@ import { ChatHistoryList, chatGutter } from "../../components/chat/ChatHistoryLi
 import { t } from "../../components/chat/i18n";
 import { RawJsonDialog } from "../../components/shared/RawJsonDialog";
 import { WorkspaceDirPickerDialog } from "../../components/shared/WorkspaceDirPickerDialog";
+import { onSystemBack } from "../../lib/systemBack";
 import { createChatController, type ChatController } from "./chatController";
 import { FilePreviewDialog } from "./FilePreviewDialog";
 import { TopicSidebar } from "./TopicSidebar";
@@ -178,6 +179,11 @@ function ChatMain(props: { c: ChatController }) {
 
 export function ChatPage() {
   const c = createChatController();
+  // Android's Back from an open topic goes to the topic list, as the bar's back arrow does.
+  onSystemBack(
+    () => c.mobileShowBack(),
+    () => c.showTopicsView(),
+  );
 
   const mobileLeading = () => (
     <View class="flex-1 flex-row items-center gap-2">

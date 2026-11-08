@@ -10,7 +10,7 @@
 // (`lifecycle`), the photo picker (`Picker.pickImages`; there is no picker for other files yet) and
 // `fetch` with `FormData` for uploads. There are no system notifications and no way to save a file,
 // so those report "unsupported" and the console hides or explains them.
-import { effect, lifecycle, locale, Picker, Storage } from "nsh";
+import { effect, lifecycle, locale, Picker, signal, Storage, untracked } from "nsh";
 
 /** The saved address of the console server, `https://host[:port][/base]`. */
 export const SERVER_KEY = "mistermorph_console_server_v1";
@@ -64,6 +64,51 @@ export function parseServer(raw: string): { origin: string; basePath: string; ad
 let kv: Record<string, string> = {};
 const session: Record<string, string> = {};
 let location = "/";
+
+// The places the app went through in this run, as a browser tab keeps them: the router pushes and
+// replaces (morph.history), and Back (lib/systemBack.ts) goes to the one before, which reaches the
+// router as the browser's back button does (morph.pop). Nothing to go back to at the first one:
+// there the system takes Back and leaves the app. Not saved: the next launch starts with the last
+// location alone.
+let entries: string[] = [];
+const depth = signal(0);
+
+function writeEntry(op: string, url: string) {
+  const index = untracked(depth);
+  if (entries.length === 0) {
+    entries = [url];
+  } else if (op === "push") {
+    // Opening where the app already is adds nothing to go back through.
+    if (entries[index] !== url) entries = [...entries.slice(0, index + 1), url];
+  } else if (index > 0 && entries[index - 1] === url) {
+    // Replacing a place with the one before it (a page's own back arrow) is going back to it.
+    entries = entries.slice(0, index);
+  } else {
+    entries = [...entries.slice(0, index), url];
+  }
+  depth.set(entries.length - 1);
+}
+
+/** Whether Back has a place in this run's history to go back to. */
+export const canGoBack = () => depth() > 0;
+
+/** Goes back one place: the router hears it as a browser's back. False at the first place. */
+export function goBack(): boolean {
+  const index = untracked(depth);
+  if (index <= 0) return false;
+  depth.set(index - 1);
+  // The place to reopen at the next launch follows, as the address bar does on the web.
+  location = entries[index - 1];
+  void kvSet({ area: "local", key: LOCATION_KEY, value: location });
+  emit("morph.pop", { location });
+  return true;
+}
+
+/** The place Back goes to, or "" at the first one. */
+export function previousEntry(): string {
+  const index = untracked(depth);
+  return index > 0 ? entries[index - 1] : "";
+}
 
 // Files the user picked: their bytes stay here, as on the web (a File cannot cross the JSON contract).
 const files = new Map<string, File>();
@@ -178,6 +223,7 @@ export async function call(name: string, data?: unknown): Promise<unknown> {
       return kvSet(args);
     case "morph.history":
       location = String(args.url || "/");
+      writeEntry(String(args.op || "push"), location);
       return kvSet({ area: "local", key: LOCATION_KEY, value: location });
     case "morph.title":
     case "morph.language":
