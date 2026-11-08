@@ -72,16 +72,32 @@ export function StatusMark(props: { state: "on" | "off" | "pending" | "error" | 
   return <View class={`size-2 border ${cls()} ${props.class ?? ""}`} />;
 }
 
-/** The one spinner. */
+/**
+ * The one spinner: a short 2pt hairline whose blue segment sweeps across it. nsh's indeterminate
+ * Progress leaves the indicator's width and motion to the app, so the segment is moved here (left to
+ * itself it fills the track and stands still, which reads as a dash). Reduced motion: it stays put.
+ */
 export function Spinner(props: { size?: number; class?: string }) {
+  const width = () => props.size ?? 24;
+  const segment = () => Math.max(4, Math.round(width() * 0.4));
+  const sweep = createAnimatedValue(0);
+  const still = untracked(reduceMotion);
+  if (!still) {
+    void sweep.keyframes([0, 1], { duration: 900, easing: Easing.bezier(0.45, 0, 0.55, 1), iterations: "infinite" });
+  }
+  cleanup(() => void sweep.stop());
   return (
     <View class={props.class}>
-      <Progress
-        indeterminate
-        class="h-0.5 overflow-hidden bg-line-faint"
-        style={{ width: props.size ?? 24 }}
-        indicatorClass="h-0.5 bg-blue"
-      />
+      <View role="progressbar" class="h-0.5 overflow-hidden bg-line-faint" style={{ width: width() }}>
+        <View
+          class="h-full bg-blue"
+          style={{
+            width: still ? width() : segment(),
+            opacity: still ? 0.5 : 1,
+            transform: [{ translateX: still ? 0 : sweep.interpolate({ inputRange: [0, 1], outputRange: [-segment(), width()] }) }],
+          }}
+        />
+      </View>
     </View>
   );
 }
@@ -205,7 +221,18 @@ export type ButtonSize = "md" | "sm" | "xs" | "xxs";
 // plain opacity, each variant fades to its own paler colours.
 const BUTTON_VARIANTS: Record<
   ButtonVariant,
-  { box: string; text: TokenName; textClass: string; disabledText: TokenName; press: string; shadow?: [string, string] }
+  {
+    box: string;
+    text: TokenName;
+    textClass: string;
+    disabledText: TokenName;
+    press: string;
+    shadow?: [string, string];
+    /** The loading stripe's two bands (the ui-kit's --q-progress-color and --q-progress-color-light). */
+    stripe: [string, string];
+    /** Filled variants keep their fill while loading (`.touchable.loading.*[disabled]`), text at on-disabled. */
+    loadingBox?: string;
+  }
 > = {
   primary: {
     box: "bg-primary border-[0.5px] border-primary-line disabled:bg-primary-disabled disabled:border-primary-disabled-line",
@@ -213,6 +240,8 @@ const BUTTON_VARIANTS: Record<
     textClass: "text-primary-foreground group-disabled:text-on-disabled",
     disabledText: "on-disabled",
     press: "group-active:bg-press-light",
+    stripe: ["#ffffff1a", "#ffffff0d"],
+    loadingBox: "bg-primary border-[0.5px] border-primary-line",
     shadow: [
       "inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 0 4px rgba(24, 46, 72, 0.05)",
       "inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 1px 3px rgba(24, 46, 72, 0.1)",
@@ -224,6 +253,7 @@ const BUTTON_VARIANTS: Record<
     textClass: "text-foreground group-disabled:text-outline-disabled-text",
     disabledText: "outline-disabled-text",
     press: "group-active:bg-press",
+    stripe: ["#00000000", "#00000008"],
     shadow: [
       "inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 0 4px rgba(24, 46, 72, 0.05)",
       "inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 1px 3px rgba(24, 46, 72, 0.1)",
@@ -235,6 +265,7 @@ const BUTTON_VARIANTS: Record<
     textClass: "text-subtle group-hover:text-foreground group-disabled:text-plain-disabled-text",
     disabledText: "plain-disabled-text",
     press: "group-active:bg-press",
+    stripe: ["#00000000", "#00000008"],
   },
   danger: {
     box: "bg-destructive border-[0.5px] border-destructive hover:bg-danger-light hover:border-danger-light disabled:bg-outline-disabled-bg disabled:border-danger-disabled-line",
@@ -242,6 +273,8 @@ const BUTTON_VARIANTS: Record<
     textClass: "text-destructive-foreground group-disabled:text-danger-disabled-text",
     disabledText: "danger-disabled-text",
     press: "group-active:bg-press-light",
+    stripe: ["#ffffff26", "#ffffff0d"],
+    loadingBox: "bg-destructive border-[0.5px] border-destructive",
   },
   highlight: {
     box: "bg-warn border-[0.5px] border-warn-dark hover:bg-warn-light hover:border-warn-light disabled:bg-warn-disabled disabled:border-warn-disabled-line",
@@ -249,6 +282,8 @@ const BUTTON_VARIANTS: Record<
     textClass: "text-primary-foreground group-disabled:text-on-disabled",
     disabledText: "on-disabled",
     press: "group-active:bg-press-light",
+    stripe: ["#ffffff26", "#ffffff0d"],
+    loadingBox: "bg-warn border-[0.5px] border-warn-dark",
   },
   "ghost-danger": {
     box: "hover:bg-close disabled:bg-transparent",
@@ -256,6 +291,7 @@ const BUTTON_VARIANTS: Record<
     textClass: "text-danger group-disabled:text-plain-disabled-text",
     disabledText: "plain-disabled-text",
     press: "group-active:bg-press",
+    stripe: ["#00000000", "#ff000008"],
   },
 };
 
@@ -282,7 +318,7 @@ export interface ButtonProps {
   /** The tooltip, and the accessible name when there is no label. */
   title?: string;
   disabled?: boolean;
-  /** Busy: shows a spinner and blocks presses. */
+  /** Busy: the ui-kit's moving stripe over the button, which keeps its size and content, and presses blocked. */
   loading?: boolean;
   /** Full width. */
   block?: boolean;
@@ -299,6 +335,32 @@ export interface ButtonProps {
 
 const ALIGN_SELF = { start: "self-start", center: "self-center", end: "self-end", stretch: "self-stretch", auto: "self-auto" } as const;
 
+// The ui-kit's loading look (`.touchable.loading .ocean .wave`): 45° bands 10px apart over the
+// whole button, sliding 28px (one period across) every second, under the label and over the fill,
+// so the button keeps its size and content. Reduced motion: the bands stay put.
+const STRIPE_SHIFT = 28;
+
+function LoadingStripes(props: { colors: [string, string]; testID?: string }) {
+  const shift = createAnimatedValue(0);
+  const still = untracked(reduceMotion);
+  if (!still) {
+    void shift.keyframes([0, 1], { duration: 1000, easing: Easing.linear, iterations: "infinite" });
+  }
+  cleanup(() => void shift.stop());
+  return (
+    <View accessibilityElementsHidden testID={props.testID} class="absolute inset-0 overflow-hidden" style={{ pointerEvents: "none" }}>
+      <View
+        class="absolute inset-y-0 right-0"
+        style={{
+          left: -STRIPE_SHIFT,
+          backgroundImage: `repeating-linear-gradient(45deg, ${props.colors[0]} 0 10px, ${props.colors[1]} 10px 20px)`,
+          transform: [{ translateX: still ? 0 : shift.interpolate({ inputRange: [0, 1], outputRange: [0, STRIPE_SHIFT] }) }],
+        }}
+      />
+    </View>
+  );
+}
+
 /** The console's button: one command, any input. */
 // nsh 0.4.0 on Android: a box that clips (`overflow-hidden`, which rounds the press layer) and casts
 // an outer shadow moves its children into an inner box that takes the presses, and the button
@@ -310,7 +372,12 @@ export function Button(props: ButtonProps) {
   const shadow = () => (BUTTON_SHADOWS ? variant().shadow : undefined);
   const size = () => BUTTON_SIZES[props.size ?? "sm"];
   const enabled = () => !props.disabled && !props.loading;
-  const iconColor = (): TokenName => (props.disabled ? variant().disabledText : props.selected ? "ink" : variant().text);
+  // Loading blocks presses as disabled does; a filled variant keeps its fill (the ui-kit's
+  // `.touchable.loading.*[disabled]`) so the stripe reads as busy rather than unavailable.
+  const loadingFill = () => (props.loading ? variant().loadingBox : undefined);
+  const iconColor = (): TokenName =>
+    loadingFill() ? "on-disabled" : props.disabled || props.loading ? variant().disabledText : props.selected ? "ink" : variant().text;
+  const textClass = () => (loadingFill() ? "text-on-disabled" : props.selected && enabled() ? "text-ink" : variant().textClass);
   return (
     <TipButton
       disabled={!enabled()}
@@ -319,7 +386,7 @@ export function Button(props: ButtonProps) {
       accessibilityLabel={props.label || props.title || props.icon || undefined}
       testID={props.testID}
       tooltip={props.title ? <Tip text={props.title} /> : undefined}
-      class={`group relative flex-row items-center justify-center overflow-hidden rounded-(--radius) border-transparent ${variant().box} ${
+      class={`group relative flex-row items-center justify-center overflow-hidden rounded-(--radius) border-transparent ${loadingFill() ?? variant().box} ${
         props.iconOnly ? `${size().square} px-0` : size().box
       } ${props.block ? "self-stretch" : ALIGN_SELF[props.align ?? "start"]} ${props.selected ? "bg-selection" : ""} ${props.class ?? ""}`}
       style={{
@@ -329,7 +396,7 @@ export function Button(props: ButtonProps) {
         transitionTimingFunction: "ease-out",
       }}
       hoverStyle={shadow() && enabled() ? { boxShadow: shadow()![1] } : undefined}
-      disabledStyle={shadow() ? { boxShadow: "none" } : undefined}
+      disabledStyle={shadow() && !loadingFill() ? { boxShadow: "none" } : undefined}
     >
       <View
         accessibilityElementsHidden
@@ -337,16 +404,14 @@ export function Button(props: ButtonProps) {
         style={{ pointerEvents: "none" }}
       />
       <If when={props.loading}>
-        <Spinner size={14} />
+        <LoadingStripes colors={variant().stripe} testID={props.testID ? `${props.testID}-loading` : undefined} />
       </If>
-      <If when={props.icon && !props.loading}>
+      <If when={props.icon}>
         <Icon name={props.icon!} size={size().icon} color={iconColor()} />
       </If>
       <If when={props.label && !props.iconOnly}>
         <Text
-          class={`${size().text} font-medium tracking-[0.01em] transition-colors duration-180 ${
-            props.selected && enabled() ? "text-ink" : variant().textClass
-          }`}
+          class={`${size().text} font-medium tracking-[0.01em] transition-colors duration-180 ${textClass()}`}
           style={{ numberOfLines: 1 }}
         >
           {props.label}
