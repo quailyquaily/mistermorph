@@ -23,11 +23,14 @@ type ConversationRunnerOptions[K comparable, J any] struct {
 	Logger      *slog.Logger
 	OnDrop      func(K, J)
 	OnPanic     func(K, J)
+	// Limiter, when set, bounds concurrent conversations instead of the sem channel. Use it for
+	// a limit that changes while the runner keeps its queued and running work.
+	Limiter ConversationLimiter
 }
 
 type ConversationRunner[K comparable, J any] struct {
 	workersCtx  context.Context
-	sem         chan struct{}
+	limiter     ConversationLimiter
 	queueSize   int
 	idleTimeout time.Duration
 	logger      *slog.Logger
@@ -66,9 +69,13 @@ func NewConversationRunner[K comparable, J any](
 	if logger == nil {
 		logger = slog.Default()
 	}
+	limiter := opts.Limiter
+	if limiter == nil {
+		limiter = chanLimiter(sem)
+	}
 	runner := &ConversationRunner[K, J]{
 		workersCtx:  workersCtx,
-		sem:         sem,
+		limiter:     limiter,
 		queueSize:   queueSize,
 		idleTimeout: idleTimeout,
 		logger:      logger,
@@ -216,14 +223,18 @@ func (r *ConversationRunner[K, J]) runWorker(key K, w *conversationWorker[J]) {
 				default:
 				}
 			}
-			select {
-			case r.sem <- struct{}{}:
-			case <-r.workersCtx.Done():
+			if err := r.limiter.Acquire(r.workersCtx); err != nil {
+				r.dropJob(key, job)
+				return
+			}
+			// A slot granted as shutdown began must not start the job.
+			if r.workersCtx.Err() != nil {
+				r.limiter.Release()
 				r.dropJob(key, job)
 				return
 			}
 			func() {
-				defer func() { <-r.sem }()
+				defer r.limiter.Release()
 				r.handleJob(key, job)
 			}()
 			timer.Reset(r.idleTimeout)

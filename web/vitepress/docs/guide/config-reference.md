@@ -187,9 +187,12 @@ Shell defaults are platform-specific:
 - `console.password_hash`
 - `console.session_ttl`
 - `console.managed_runtimes`
+- `console.max_concurrency`
 - `console.endpoints[].name`
 - `console.endpoints[].url`
 - `console.endpoints[].auth_token`
+
+`console.max_concurrency` (default 8) is how many Console topics run a task at once. Tasks in one topic always run one after another; further topics wait in order for a free slot. The limit is local to the Console's own runtime: each channel has its own `<channel>.max_concurrency` (default 8, one slot per chat or conversation), the TODO scheduler has `cron.max_concurrency` (default 8), and there is no process-wide total. Set `1` to run one topic at a time; values below 1 fall back to the default.
 
 ## Telegram
 
