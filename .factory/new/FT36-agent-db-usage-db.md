@@ -1,3 +1,7 @@
+---
+branch: factory/FT36-agent-db-usage-db
+round: 0
+---
 # Move the agent's state into SQLite: agent.db and usage.db
 
 ## factory · 2026-11-08 23:45
@@ -52,3 +56,9 @@ and, on removing the change log, "yes".
 - The soul is a text column of `identity` (Markdown, no front matter); there is no `soul` table, status or preset.
   A draft `soul.md` is imported as empty, its original kept as `soul.md.imported`.
 - There is no `change_log`: recovery is `morph state snapshot` and the export commands.
+
+## factory · 2026-11-09 00:15
+Moved backlog → new at the owner's request: "update it to FT36's branch, and move it to new/".
+
+The design is committed on the item's branch, `factory/FT36-agent-db-usage-db` (90cd3ed5,
+`docs/feat/feat_20261108_agent_db.md`), and is not on master. Builds continue on that branch.
