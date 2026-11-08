@@ -31,3 +31,13 @@ Six layout regressions cover running, completed, failed and reasoning-only repli
 Tests: nsh check passed; nsh test --web-host tests/noHost.js passed (277 passed, 0 failed). Configured test `test -z "$(gofmt -l .)" && go vet ./... && go test ./...` passed, independently rerun by the manager. Tests used throwaway HOME directories. No unpinned tools or dependencies installed; no forbidden paths changed.
 
 Not checked: actual UI appearance in a browser or desktop app. Headless Chrome did not fetch the local test page; only headless layout measurements were obtained. Narrow-window wrapping needs a manual look and has no dedicated regression test. Layout tests exercise the extracted component inside the summary line, not the ChatHistoryItem placement wiring.
+
+## factory · review · 2026-11-09 01:31
+head: 72f60754f6efc58a77ba83992215edba1619f817
+verdict: pass
+
+Codex reviewed all four changed files against the request and plan on origin/master...HEAD (base 6e88f22447d3177780cf97faff38675363701e38). No findings. Branch merges cleanly with base; review made no tracked-file changes.
+
+Validation: configured Go formatting/vet/tests passed; nsh check passed; nsh web-host tests passed (277 passed, 0 failed). Tests used throwaway HOME directories. An initial isolated Go run lacked source packages; rerunning the exact configured command in the full worktree passed. No unpinned tools or dependencies installed.
+
+Residual risks: 320pt headless component measurements verified wrapping and first-row timestamp centring, but actual browser/desktop appearance, full-chat narrow-width wrapping and click areas were not visually checked; nsh web runtime was unavailable. Owner should inspect these before shipping.
