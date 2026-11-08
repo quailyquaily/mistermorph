@@ -41,3 +41,8 @@ Codex reviewed all four changed files in origin/master...HEAD against the reques
 Validation (Codex): Go formatting, go vet ./... and go test ./... passed; nsh check passed; all 277 nsh tests passed; nsh build passed without unknown-class warnings. An independent boundary probe reproduced the P3 feedback issue. Scripted tests used a throwaway absolute HOME. Manager confirmed the worktree remained clean.
 
 Installs: none beyond pinned dependencies. No visual inspection or real Android keyboard verification. No linked GitHub issues or PRs.
+
+## factory · 2026-11-09 05:44
+Shipped to master with owner authorization after combined validation. Merge commit: 9ee8db79a79b2c5ed7266e4a3531ad6a1aac4894. Release: v0.3.87 (3f056a84). Moved ready → done. No linked GitHub issues or PRs to close.
+
+Validation: manager independently passed gofmt, go vet ./... and go test ./...; Codex also passed the Go gate, nsh check, all 285 Console tests, nsh build, and desktop cargo test --locked (50 passed, 1 ignored). Combined integration review found no concrete defects. No unpinned installs or dependency changes; temporary desktop linking configuration used existing runtime libraries. Extra standalone vendor scrolling tests were blocked by missing upstream font fixtures; not a full vendor-suite pass. Real-device UI, physical scrolling and desktop avatar rendering remain unverified. No deployment. FT31 retains its documented P3 empty-view search-feedback issue.

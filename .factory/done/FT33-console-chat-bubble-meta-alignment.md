@@ -41,3 +41,8 @@ Codex reviewed all four changed files against the request and plan on origin/mas
 Validation: configured Go formatting/vet/tests passed; nsh check passed; nsh web-host tests passed (277 passed, 0 failed). Tests used throwaway HOME directories. An initial isolated Go run lacked source packages; rerunning the exact configured command in the full worktree passed. No unpinned tools or dependencies installed.
 
 Residual risks: 320pt headless component measurements verified wrapping and first-row timestamp centring, but actual browser/desktop appearance, full-chat narrow-width wrapping and click areas were not visually checked; nsh web runtime was unavailable. Owner should inspect these before shipping.
+
+## factory · 2026-11-09 05:44
+Shipped to master with owner authorization after combined validation. Merge commit: 9e10a916421ca4a101154b00eeebd953706241b1. Release: v0.3.87 (3f056a84). Moved ready → done. No linked GitHub issues or PRs to close.
+
+Validation: manager independently passed gofmt, go vet ./... and go test ./...; Codex also passed the Go gate, nsh check, all 285 Console tests, nsh build, and desktop cargo test --locked (50 passed, 1 ignored). Combined integration review found no concrete defects. No unpinned installs or dependency changes; temporary desktop linking configuration used existing runtime libraries. Extra standalone vendor scrolling tests were blocked by missing upstream font fixtures; not a full vendor-suite pass. Real-device UI, physical scrolling and desktop avatar rendering remain unverified. No deployment. FT31 retains its documented P3 empty-view search-feedback issue.

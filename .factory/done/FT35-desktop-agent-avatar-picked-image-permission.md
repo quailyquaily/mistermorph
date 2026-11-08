@@ -41,3 +41,8 @@ notes:
 - No unpinned tool installs or dependency manifest changes. Tracked worktree remains unchanged. Console sources unchanged; nsh checks not required.
 - Residual risks: full desktop Cargo build was not rerun; real desktop GUI avatar replacement and macOS/Windows dialogs remain unverified. Owner should check the real desktop avatar replacement before shipping.
 - Moved review/ → ready/; not merged into master.
+
+## factory · 2026-11-09 05:44
+Shipped to master with owner authorization after combined validation. Merge commit: 3f056a845a812debee8273966f1acc6e53526cd4. Release: v0.3.87 (3f056a84). Moved ready → done. No linked GitHub issues or PRs to close.
+
+Validation: manager independently passed gofmt, go vet ./... and go test ./...; Codex also passed the Go gate, nsh check, all 285 Console tests, nsh build, and desktop cargo test --locked (50 passed, 1 ignored). Combined integration review found no concrete defects. No unpinned installs or dependency changes; temporary desktop linking configuration used existing runtime libraries. Extra standalone vendor scrolling tests were blocked by missing upstream font fixtures; not a full vendor-suite pass. Real-device UI, physical scrolling and desktop avatar rendering remain unverified. No deployment. FT31 retains its documented P3 empty-view search-feedback issue.

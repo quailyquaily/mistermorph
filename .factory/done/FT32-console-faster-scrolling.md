@@ -34,3 +34,8 @@ notes:
 - Applying the new vendor patch to base reproduced HEAD. git diff --check reports trailing whitespace in the patch at line 8.
 - No unpinned installs, manifest edits, or lockfile changes. Rust validation used temporary dynamic-loading configuration, runtime-library links and a replacement font. Scripted tests used temporary absolute HOME directories; the worktree remained clean.
 - Console source checks were not applicable. Windows/macOS execution, real wheel/touchpad feel and inertia remain unverified; check on actual devices before shipping. Linux/Windows gain is 2x; macOS stays 1x, and Ctrl-modified input stays unchanged.
+
+## factory · 2026-11-09 05:44
+Shipped to master with owner authorization after combined validation. Merge commit: a4c4a50520707c9243b0a1f9e4cb84a5406cd304. Release: v0.3.87 (3f056a84). Moved ready → done. No linked GitHub issues or PRs to close.
+
+Validation: manager independently passed gofmt, go vet ./... and go test ./...; Codex also passed the Go gate, nsh check, all 285 Console tests, nsh build, and desktop cargo test --locked (50 passed, 1 ignored). Combined integration review found no concrete defects. No unpinned installs or dependency changes; temporary desktop linking configuration used existing runtime libraries. Extra standalone vendor scrolling tests were blocked by missing upstream font fixtures; not a full vendor-suite pass. Real-device UI, physical scrolling and desktop avatar rendering remain unverified. No deployment. FT31 retains its documented P3 empty-view search-feedback issue.
