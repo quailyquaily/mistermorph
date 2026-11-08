@@ -119,3 +119,31 @@ export function contextRing(grid, circumference, minArc = 1.5) {
   }
   return { arcs, triggerAngle: grid.trigger ? (grid.trigger / grid.window) * 360 : null };
 }
+
+// An item's preview in the phone's item list: its first line of text, trimmed and cut to max
+// characters. Headings ("## Persona", "[[ Persona ]]") only repeat the label, so the first line
+// that is not one is used, else the first line. Lines are read from the start until one serves,
+// so a long text is not split whole for its first line.
+const SNIPPET_HEADING = /^(#{1,6}\s|\[\[.*\]\]$)/;
+
+export function contextSnippet(content, max = 160) {
+  const text = String(content || "");
+  let first = "";
+  let line = "";
+  for (let start = 0; start <= text.length; ) {
+    const end = text.indexOf("\n", start);
+    const stop = end < 0 ? text.length : end;
+    const candidate = text.slice(start, stop).trim();
+    if (candidate) {
+      if (!first) first = candidate;
+      if (!SNIPPET_HEADING.test(candidate)) {
+        line = candidate;
+        break;
+      }
+    }
+    if (end < 0) break;
+    start = end + 1;
+  }
+  line = line || first;
+  return line.length > max ? `${line.slice(0, max)}…` : line;
+}

@@ -292,8 +292,12 @@
   grid-template-columns: auto minmax(0, 1fr) auto 3.5em;
 }
 
+/* A part can hold hundreds of items: rows out of view skip layout and paint (they stay in the
+   page, for find and screen readers), so showing a long list again stays quick. */
 .context-view-item {
   grid-template-columns: minmax(0, 1fr) 56px 4.5em;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 32px;
 }
 
 .context-view-legend-item:hover,
@@ -471,6 +475,7 @@
     "snippet snippet chevron";
   row-gap: 2px;
   min-height: 52px;
+  contain-intrinsic-size: auto 52px;
   padding: 8px 4px;
   border-bottom: 1px solid color-mix(in srgb, var(--context-pane-line) 50%, transparent);
   border-radius: 0;
