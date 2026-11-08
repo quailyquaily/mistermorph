@@ -2081,19 +2081,145 @@ body[data-theme] .chat-workspace-dock .chat-workspace-toggle.q-button[aria-expan
 }
 
 .chat-history-copy-action.is-copied .chat-history-copied-icon path {
-  animation: chat-history-check-draw var(--motion-slow) var(--motion-ease) 60ms both;
+  stroke-dashoffset: 0;
+}
+
+/* Each successful copy plays the same feedback: the button dips and springs back, a ring widens and
+   fades around it, and the check draws itself. All of it is transform, opacity and shadow, so the
+   bubble never moves. Copies alternate between two classes running identical keyframes under
+   different names, which restarts the animation when a copy repeats while the check still shows. */
+.chat-history-copy-action {
+  position: relative;
+}
+
+.chat-history-copy-action::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.chat-history-copy-action.is-copied-odd {
+  animation: chat-history-copy-pop 340ms var(--motion-ease);
+}
+
+.chat-history-copy-action.is-copied-even {
+  animation: chat-history-copy-pop-again 340ms var(--motion-ease);
+}
+
+.chat-history-copy-action.is-copied-odd::after {
+  animation: chat-history-copy-ring 560ms var(--motion-ease);
+}
+
+.chat-history-copy-action.is-copied-even::after {
+  animation: chat-history-copy-ring-again 560ms var(--motion-ease);
+}
+
+.chat-history-copy-action.is-copied-odd .chat-history-copied-icon path {
+  animation: chat-history-check-draw 260ms var(--motion-ease) 60ms both;
+}
+
+.chat-history-copy-action.is-copied-even .chat-history-copied-icon path {
+  animation: chat-history-check-draw-again 260ms var(--motion-ease) 60ms both;
+}
+
+@keyframes chat-history-copy-pop {
+  0% {
+    transform: scale(1);
+  }
+  35% {
+    transform: scale(0.82);
+  }
+  70% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes chat-history-copy-pop-again {
+  0% {
+    transform: scale(1);
+  }
+  35% {
+    transform: scale(0.82);
+  }
+  70% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes chat-history-copy-ring {
+  from {
+    opacity: 1;
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-1) 45%, transparent);
+  }
+  to {
+    opacity: 0;
+    box-shadow: 0 0 0 7px color-mix(in srgb, var(--accent-1) 0%, transparent);
+  }
+}
+
+@keyframes chat-history-copy-ring-again {
+  from {
+    opacity: 1;
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-1) 45%, transparent);
+  }
+  to {
+    opacity: 0;
+    box-shadow: 0 0 0 7px color-mix(in srgb, var(--accent-1) 0%, transparent);
+  }
 }
 
 @keyframes chat-history-check-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
   to {
     stroke-dashoffset: 0;
   }
 }
 
+@keyframes chat-history-check-draw-again {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* Without motion, a copy still answers: the button's tint flashes and fades, with nothing moving. */
+@keyframes chat-history-copy-flash {
+  from {
+    background-color: color-mix(in srgb, var(--accent-1) 22%, transparent);
+  }
+}
+
+@keyframes chat-history-copy-flash-again {
+  from {
+    background-color: color-mix(in srgb, var(--accent-1) 22%, transparent);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .chat-history-copy-action.is-copied-odd {
+    animation: chat-history-copy-flash 600ms ease-out;
+  }
+
+  .chat-history-copy-action.is-copied-even {
+    animation: chat-history-copy-flash-again 600ms ease-out;
+  }
+
+  .chat-history-copy-action.is-copied::after,
   .chat-history-copy-action.is-copied .chat-history-copied-icon path {
     animation: none;
-    stroke-dashoffset: 0;
   }
 }
 
@@ -2105,12 +2231,12 @@ body[data-theme] .chat-workspace-dock .chat-workspace-toggle.q-button[aria-expan
 }
 
 .chat-history-copy-action:focus-visible {
-  outline: 1px solid color-mix(in srgb, var(--q-c-accent) 55%, transparent);
+  outline: 1px solid color-mix(in srgb, var(--accent-1) 55%, transparent);
   outline-offset: 2px;
 }
 
 .chat-history-copy-action.is-copied {
-  color: var(--q-c-accent);
+  color: var(--accent-1);
 }
 
 @media (hover: hover) {

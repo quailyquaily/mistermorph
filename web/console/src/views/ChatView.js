@@ -76,6 +76,7 @@ import { topicIcon, useTopicMetadata } from "../core/topic-metadata";
 import { cronSidebarGroups, cronTopicModels, cronTopicModelText, cronTopicsOf, isCronTopicID, topicSidebarViewFor } from "../core/chat-cron-topics";
 import { activelyViewedTopic, createTopicActivityTracker, cronRunningCount, topicActivitySignature, TOPIC_ACTIVITY_DONE, TOPIC_ACTIVITY_PENDING } from "../core/topic-activity";
 import { contextMeter } from "../core/context-meter";
+import { createCopyFeedback, writeClipboardText } from "../core/chat-copy-feedback";
 import { createHistoryFollower } from "../core/chat-history-follow";
 import {
   groupTopicsByTag,
@@ -527,6 +528,13 @@ const ChatView = {
     );
     const chatHistoryItems = shallowRef([]);
     const copiedHistoryItemID = ref("");
+    const copiedHistoryPulse = ref(0);
+    const historyCopyFeedback = createCopyFeedback({
+      apply: ({ id, pulse }) => {
+        copiedHistoryItemID.value = id;
+        copiedHistoryPulse.value = pulse;
+      },
+    });
     const historyLoading = ref(false);
     const historyLoadingOlder = ref(false);
     // Which topic the history on screen belongs to. While another topic's history loads, the list
@@ -628,7 +636,6 @@ const ChatView = {
     let dialogShellPreloadCancel = null;
     let rawRevealTimerID = 0;
     let heartbeatRevealTimerID = 0;
-    let copiedHistoryTimerID = 0;
     let viewActive = true;
     let mobileWorkspaceFocusBeforeOpen = null;
     let mobileWorkspaceBodyOverflowBeforeOpen = "";
@@ -2697,11 +2704,7 @@ const ChatView = {
     }
 
     function resetHistoryCopyState() {
-      if (copiedHistoryTimerID) {
-        window.clearTimeout(copiedHistoryTimerID);
-        copiedHistoryTimerID = 0;
-      }
-      copiedHistoryItemID.value = "";
+      historyCopyFeedback.reset();
     }
 
     async function copyHistoryItem(item) {
@@ -2709,33 +2712,9 @@ const ChatView = {
       if (!text.trim()) {
         return;
       }
-      try {
-        if (navigator?.clipboard?.writeText) {
-          await navigator.clipboard.writeText(text);
-        } else {
-          const textarea = document.createElement("textarea");
-          textarea.value = text;
-          textarea.setAttribute("readonly", "true");
-          textarea.style.position = "fixed";
-          textarea.style.left = "-9999px";
-          textarea.style.top = "0";
-          document.body.appendChild(textarea);
-          textarea.focus();
-          textarea.select();
-          document.execCommand("copy");
-          document.body.removeChild(textarea);
-        }
-        copiedHistoryItemID.value = String(item?.id || "");
-        if (copiedHistoryTimerID) {
-          window.clearTimeout(copiedHistoryTimerID);
-        }
-        copiedHistoryTimerID = window.setTimeout(() => {
-          copiedHistoryItemID.value = "";
-          copiedHistoryTimerID = 0;
-        }, 1200);
-      } catch {
-        // Copy should not compete with task errors in the chat error surface.
-      }
+      // A failed copy shows nothing: copy should not compete with task errors in the chat error
+      // surface, and the button must never claim a copy that did not happen.
+      await historyCopyFeedback.copy(item?.id, () => writeClipboardText(text));
     }
 
     function historyItemStreamProfiler() {
@@ -4547,6 +4526,7 @@ const ChatView = {
       t,
       chatHistoryItems,
       copiedHistoryItemID,
+      copiedHistoryPulse,
       historyLoading,
       historySwitching,
       historyLoadingOlder,
@@ -5081,6 +5061,7 @@ const ChatView = {
                   :submit-endpoint-ref="submitEndpointRef"
                   :selected-topic-id="selectedTopicID"
                   :copied-item-id="copiedHistoryItemID"
+                  :copied-pulse="copiedHistoryPulse"
                   :expanded-state="chatStatusExpandedState"
                   :auto-preview-item-id="autoPreviewHistoryID"
                   :stream-profiler="historyStreamProfilerEnabled"
