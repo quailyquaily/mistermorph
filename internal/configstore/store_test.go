@@ -3,6 +3,7 @@ package configstore
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -391,3 +392,40 @@ func writeTemp(t *testing.T, content string) string {
 }
 
 var _ = yaml.Node{}
+
+// An edit of the config in agent.db that moves the state folder is refused with the reason; the
+// folder agent.db is in, however spelled, is accepted; a whole document written in drops it.
+func TestBootstrapKeyIsRefusedNotDropped(t *testing.T) {
+	state := t.TempDir()
+	path := DBConfigPath(state)
+	other := filepath.Join(t.TempDir(), "elsewhere")
+
+	err := CheckBootstrapKeys(path, []byte("file_state_dir: "+other+"\nlogging:\n  level: warn\n"))
+	var bootstrap *BootstrapKeyError
+	if !errors.As(err, &bootstrap) || bootstrap.Key != "file_state_dir" || bootstrap.StateDir != state || bootstrap.Value != other {
+		t.Fatalf("err = %v, want a BootstrapKeyError for %s", err, state)
+	}
+	if msg := err.Error(); !strings.Contains(msg, "--state-dir") || !strings.Contains(msg, "MISTER_MORPH_FILE_STATE_DIR") {
+		t.Fatalf("message does not say how to move the state folder: %s", msg)
+	}
+	for _, same := range []string{state, state + "/", filepath.Join(state, "."), ""} {
+		if err := CheckBootstrapKeys(path, []byte("file_state_dir: \""+same+"\"\n")); err != nil {
+			t.Fatalf("file_state_dir %q: %v", same, err)
+		}
+	}
+	file := filepath.Join(t.TempDir(), "config.yaml")
+	if err := CheckBootstrapKeys(file, []byte("file_state_dir: "+other+"\n")); err != nil {
+		t.Fatalf("a file config may set file_state_dir: %v", err)
+	}
+
+	if err := WriteFileBy(path, []byte("file_state_dir: "+other+"\nlogging:\n  level: info\n"), ByImport); err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	out, err := ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(out), "file_state_dir") || !strings.Contains(string(out), "level: info") {
+		t.Fatalf("config =\n%s", out)
+	}
+}

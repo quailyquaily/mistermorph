@@ -183,6 +183,10 @@ func newSetCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			// The config in agent.db cannot move the state folder it is in: say so, not drop it.
+			if err := configstore.CheckBootstrapKeys(path, out); err != nil {
+				return err
+			}
 			return configstore.WriteFileBy(path, out, configstore.ByCLI)
 		},
 	}
@@ -294,6 +298,9 @@ func newEditCmd() *cobra.Command {
 			if bytes.Equal(edited, raw) {
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "config unchanged")
 				return nil
+			}
+			if err := configstore.CheckBootstrapKeys(path, edited); err != nil {
+				return fmt.Errorf("the edited config was not saved: %w", err)
 			}
 			if err := ImportDocument(path, edited); err != nil {
 				return fmt.Errorf("the edited config was not saved: %w", err)

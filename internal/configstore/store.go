@@ -25,7 +25,9 @@ import (
 
 	"github.com/quailyquaily/mistermorph/internal/agentdb"
 	"github.com/quailyquaily/mistermorph/internal/fsstore"
+	"github.com/quailyquaily/mistermorph/internal/pathutil"
 	"github.com/quailyquaily/mistermorph/internal/statepaths"
+	"gopkg.in/yaml.v3"
 )
 
 // DBConfigName is the name of the agent.db config, as a file in the state folder.
@@ -124,6 +126,9 @@ func WriteFileBy(path string, data []byte, by string) error {
 	if err != nil {
 		return err
 	}
+	// A whole document (an import, the install template, a login's rewrite) keeps what agent.db can
+	// keep and leaves file_state_dir, as documented. Edits of one value (the Console's settings,
+	// morph config set and edit) call CheckBootstrapKeys first, so a change is refused, not dropped.
 	rows = dropBootstrapKeys(rows)
 	ctx := context.Background()
 	db, err := dbFor(ctx, path)
@@ -543,6 +548,58 @@ func Settings(ctx context.Context, stateDir string) ([][3]string, error) {
 // BootstrapKeys are settled before the config is read, so agent.db does not keep them: the state
 // folder holds agent.db.
 var BootstrapKeys = []string{"file_state_dir"}
+
+// BootstrapKeyError is a save to the config in agent.db that sets file_state_dir to another folder.
+// agent.db is in the state folder, so it cannot keep a setting that moves the folder.
+type BootstrapKeyError struct {
+	Key      string
+	Value    string
+	StateDir string
+}
+
+func (e *BootstrapKeyError) Error() string {
+	return fmt.Sprintf("%s cannot be changed while the config is kept in agent.db: agent.db is in the state folder %s, "+
+		"which is settled before the config is read, so %q would not be used. To use another state folder, start morph "+
+		"with --state-dir or MISTER_MORPH_FILE_STATE_DIR", e.Key, e.StateDir, e.Value)
+}
+
+// CheckBootstrapKeys returns a *BootstrapKeyError when data, a config document for the agent.db
+// config at path, sets file_state_dir to a folder other than the one agent.db is in. Writers that
+// edit a value call it before WriteFileBy, which drops the key. The folder agent.db is in, spelled
+// any way, is accepted. A file config is not checked.
+func CheckBootstrapKeys(path string, data []byte) error {
+	if !IsDBConfigPath(path) {
+		return nil
+	}
+	var doc map[string]any
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		return nil // parseDocument reports it
+	}
+	stateDir := filepath.Dir(filepath.Clean(strings.TrimSpace(path)))
+	for _, key := range BootstrapKeys {
+		raw, ok := doc[key]
+		if !ok || raw == nil {
+			continue
+		}
+		value := strings.TrimSpace(fmt.Sprint(raw))
+		if value == "" || sameFolder(os.ExpandEnv(value), stateDir) {
+			continue
+		}
+		return &BootstrapKeyError{Key: key, Value: value, StateDir: stateDir}
+	}
+	return nil
+}
+
+func sameFolder(a, b string) bool {
+	clean := func(p string) string {
+		p = filepath.Clean(pathutil.ExpandHomePath(strings.TrimSpace(p)))
+		if abs, err := filepath.Abs(p); err == nil {
+			p = abs
+		}
+		return p
+	}
+	return clean(a) == clean(b)
+}
 
 func dropBootstrapKeys(rows Rows) Rows {
 	kept := rows.Settings[:0:0]

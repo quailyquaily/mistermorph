@@ -39,7 +39,7 @@ YAML expansion is done on parsed config values before they are passed to Viper. 
 
 ## Where the Config Is
 
-Without `--config`, the config is in `<file_state_dir>/agent.db` (tables for LLM profiles, routes, MCP servers, Console endpoints and auth profiles, and a `settings` row for every other value). The state folder is settled before any config is read: `--state-dir`, else `MISTER_MORPH_FILE_STATE_DIR`, else `file_state_dir` in a `~/.morph/config.yaml` an older version wrote, else `~/.morph`; `file_state_dir` is not a setting of the config agent.db holds. The first start without `--config` imports `~/.morph/config.yaml` into agent.db and renames it `config.yaml.imported`.
+Without `--config`, the config is in `<file_state_dir>/agent.db` (tables for LLM profiles, routes, MCP servers, Console endpoints and auth profiles, and a `settings` row for every other value). The state folder is settled before any config is read: `--state-dir`, else `MISTER_MORPH_FILE_STATE_DIR`, else `file_state_dir` in a `~/.morph/config.yaml` an older version wrote, else `~/.morph`; `file_state_dir` is not a setting of the config agent.db holds. Setting it to another folder with `morph config set` or `morph config edit`, or in the Console's settings (which show it read-only), is refused with that reason; a whole document written into agent.db (`morph config import`, install, the first-start import) drops it. The first start without `--config` imports `~/.morph/config.yaml` into agent.db and renames it `config.yaml.imported`.
 
 With `--config <path>`, that file is the config, read and saved as before; agent.db holds no config. systemd units and the Cloudflare deploy pass a path.
 

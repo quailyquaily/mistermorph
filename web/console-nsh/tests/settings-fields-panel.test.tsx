@@ -48,6 +48,9 @@ test("a clearable field resets to the default, and an environment variable locks
   // A flag manages Listen, which needs a restart.
   expect(app.shows("text:Managed by a command-line flag")).toBe(true);
   expect(app.texts()).toContain("Restart required");
+  // With the config in agent.db the state folder is where agent.db is: locked, and it says how to move it.
+  expect(app.enabled("label:State directory")).toBe(false);
+  expect(app.shows("text:/^The folder agent.db is in.*--state-dir or MISTER_MORPH_FILE_STATE_DIR/")).toBe(true);
 });
 
 test("new values from the runtime replace the draft", async () => {

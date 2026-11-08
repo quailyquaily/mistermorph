@@ -141,6 +141,7 @@ const PANEL_GROUPS = [
       { path: "llm.api_key", label: "API key", type: "string", secret: true },
       { path: "llm.model", label: "Model", type: "string" },
       { path: "server.listen", label: "Listen", type: "string" },
+      { path: "file_state_dir", label: "State directory", type: "string" },
     ],
   },
   {
@@ -158,12 +159,14 @@ function Panel() {
     "llm.temperature": 0.7,
     "llm.model": "gpt-5",
     "server.listen": "127.0.0.1:9080",
+    "file_state_dir": "/home/me/.morph",
     "tools.timeout": "30s",
   });
   const states = {
     "llm.temperature": { explicit: true },
     "llm.model": { source: "environment_override", env_name: "MODEL=gpt-5" },
     "server.listen": { apply_mode: "process_restart", source: "runtime_override" },
+    "file_state_dir": { apply_mode: "process_restart", source: "state_folder", editable: false },
     "llm.api_key": { configured: true, explicit: true, source: "file" },
   };
   const saved = signal<unknown>(null);

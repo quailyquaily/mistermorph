@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/quailyquaily/mistermorph/internal/configsettings"
+	"github.com/quailyquaily/mistermorph/internal/configstore"
 	"github.com/spf13/viper"
 )
 
@@ -143,5 +144,56 @@ func TestHandleSystemSettingsRejectsInvalidWorkspace(t *testing.T) {
 	}
 	if string(raw) != initial {
 		t.Fatalf("invalid update changed config:\n%s", raw)
+	}
+}
+
+// With the config in agent.db, file_state_dir is the folder agent.db is in: shown, not editable,
+// and a change is refused with the reason instead of being dropped.
+func TestHandleSystemSettingsStateFolderInAgentDB(t *testing.T) {
+	stateDir := t.TempDir()
+	configPath := configstore.DBConfigPath(stateDir)
+	if err := configstore.WriteFileBy(configPath, []byte("logging:\n  level: debug\n"), configstore.ByCLI); err != nil {
+		t.Fatal(err)
+	}
+	previous, hadConfig := viper.Get("config"), viper.IsSet("config")
+	viper.Set("config", configPath)
+	t.Cleanup(func() {
+		if hadConfig {
+			viper.Set("config", previous)
+		} else {
+			viper.Set("config", nil)
+		}
+	})
+
+	getRec := httptest.NewRecorder()
+	(&server{}).handleSystemSettings(getRec, httptest.NewRequest(http.MethodGet, "/api/settings/system", nil))
+	if getRec.Code != http.StatusOK {
+		t.Fatalf("GET status = %d: %s", getRec.Code, getRec.Body.String())
+	}
+	var payload struct {
+		ConfigRevision string                               `json:"config_revision"`
+		ConfigValues   map[string]any                       `json:"config_values"`
+		FieldStates    map[string]configsettings.FieldState `json:"field_states"`
+	}
+	if err := json.Unmarshal(getRec.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	state := payload.FieldStates["file_state_dir"]
+	if payload.ConfigValues["file_state_dir"] != stateDir || state.Editable || state.Source != configsettings.SourceStateFolder {
+		t.Fatalf("file_state_dir = %v, %#v", payload.ConfigValues["file_state_dir"], state)
+	}
+
+	body := `{"config_revision":` + fmt.Sprintf("%q", payload.ConfigRevision) + `,"config_changes":{"file_state_dir":"/srv/elsewhere"}}`
+	putRec := httptest.NewRecorder()
+	(&server{}).handleSystemSettings(putRec, httptest.NewRequest(http.MethodPut, "/api/settings/system", strings.NewReader(body)))
+	if putRec.Code != http.StatusBadRequest || !strings.Contains(putRec.Body.String(), "--state-dir") {
+		t.Fatalf("PUT status = %d: %s", putRec.Code, putRec.Body.String())
+	}
+	raw, err := configstore.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "file_state_dir") || !strings.Contains(string(raw), "level: debug") {
+		t.Fatalf("config after a refused save =\n%s", raw)
 	}
 }
