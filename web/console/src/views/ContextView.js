@@ -1,18 +1,21 @@
-import { computed, nextTick, onUnmounted, ref, watch } from "vue";
+import { computed, nextTick, onUnmounted, ref, shallowRef, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
 import AppPage from "../components/AppPage";
-import { contextCellGrid, contextRing } from "../core/context-inspector";
-import { currentLocale, endpointState, runtimeApiFetch, translate } from "../core/context";
+import { contextCellGrid, contextRing, contextSnippet } from "../core/context-inspector";
+import { currentLocale, endpointState, localeState, runtimeApiFetch, translate } from "../core/context";
+import { formatNumber } from "../core/intl-format";
 import { endpointRoutePath } from "../core/endpoint-routes";
 import "./ContextView.css";
 
 const RING_RADIUS = 40;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 
+// A cached formatter: the item list formats a count per row on every render, and
+// Number#toLocaleString(locale) would build a new Intl.NumberFormat for each.
 function formatTokens(value) {
   const n = Number(value);
-  return Number.isFinite(n) && n > 0 ? Math.round(n).toLocaleString(currentLocale()) : "0";
+  return Number.isFinite(n) && n > 0 ? formatNumber(Math.round(n), currentLocale()) : "0";
 }
 
 function formatShare(value) {
@@ -25,6 +28,10 @@ function formatShare(value) {
 // prompt, skills, tools, history, current message, this run's steps), each part's share of the
 // cells matching its share of the tokens. Beside it, the selected part's sections or messages, and
 // the selected one's text.
+//
+// A large context has hundreds of items, so a click repatches only what it changes: the snapshot is
+// kept as plain data (it is only ever replaced whole), each cell and item row is memoized on the
+// selection state it shows, and a row's preview is worked out once per item.
 const ContextView = {
   components: { AppPage },
   setup() {
@@ -33,7 +40,7 @@ const ContextView = {
     const router = useRouter();
     const loading = ref(false);
     const error = ref("");
-    const snapshot = ref(null);
+    const snapshot = shallowRef(null);
     const selectedKind = ref("");
     const selectedItem = ref("");
     // Phones show one level at a time: the overview (0), a part's items (1), an item's text (2).
@@ -46,8 +53,12 @@ const ContextView = {
       phoneStep.value = 0;
     }
     phoneQuery?.addEventListener("change", onPhoneChange);
-    onUnmounted(() => phoneQuery?.removeEventListener("change", onPhoneChange));
     let request = 0;
+    onUnmounted(() => {
+      phoneQuery?.removeEventListener("change", onPhoneChange);
+      // A load still on its way finds the view gone and leaves it be.
+      request += 1;
+    });
 
     const topicID = computed(() => String(route.params.topic_id || "").trim());
     const grid = computed(() => contextCellGrid(snapshot.value));
@@ -132,14 +143,16 @@ const ContextView = {
       return selected.value && selected.value.items.length > 1 ? itemLabel(entry.part) : partLabel(selectedKind.value);
     }
 
-    // The first line of an item's text, as a preview in the item list.
-    // The first line of an item's text, as a preview in the item list. Headings ("## Persona",
-    // "[[ Persona ]]") only repeat the label, so the first line that is not one is used.
+    // The first line of an item's text, as a preview in the phone's item list; once per item.
+    const snippets = new WeakMap();
     function snippet(part) {
-      const lines = String(part?.content || "").split("\n").map((text) => text.trim()).filter(Boolean);
-      const heading = /^(#{1,6}\s|\[\[.*\]\]$)/;
-      const line = lines.find((text) => !heading.test(text)) || lines[0] || "";
-      return line.length > 160 ? `${line.slice(0, 160)}…` : line;
+      if (!part || typeof part !== "object") return "";
+      let text = snippets.get(part);
+      if (text === undefined) {
+        text = contextSnippet(part.content);
+        snippets.set(part, text);
+      }
+      return text;
     }
 
     function cacheLabel(cache) {
@@ -192,7 +205,7 @@ const ContextView = {
     });
 
     return {
-      t, loading, error, snapshot, grid, selected, selectedKind, selectedItem, item, methodNote,
+      t, localeState, loading, error, snapshot, grid, selected, selectedKind, selectedItem, item, methodNote,
       ring, ringRadius: RING_RADIUS, ringCircumference: RING_CIRCUMFERENCE,
       isPhone, viewEl, barTitle, showOverview, showItems, showText, selectItem,
       back, partLabel, entryLabel, snippet, cacheLabel, togglePart, formatTokens, formatShare,
@@ -253,6 +266,7 @@ const ContextView = {
               <span
                 v-for="cell in grid.cells"
                 :key="cell.key"
+                v-memo="[cell, selectedKind === cell.kind, !selectedKind, localeState.lang]"
                 :class="['context-view-cell', 'is-' + cell.kind, { 'is-dim': selectedKind && selectedKind !== cell.kind, 'is-cache': cell.cache }]"
                 :title="cell.cache ? partLabel(cell.kind) + ' · ' + cacheLabel(cell.cache) : partLabel(cell.kind)"
                 @click="togglePart(cell.kind)"
@@ -298,6 +312,7 @@ const ContextView = {
             <button
               v-for="entry in selected.items"
               :key="entry.key"
+              v-memo="[entry, selectedItem === entry.key, isPhone, localeState.lang]"
               type="button"
               :class="['context-view-item', { 'is-selected': selectedItem === entry.key }]"
               :aria-current="selectedItem === entry.key ? 'true' : null"
