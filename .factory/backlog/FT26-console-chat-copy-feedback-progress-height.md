@@ -15,3 +15,6 @@ Acceptance criteria:
 - Add regression coverage for copy behavior and feedback state. Check the visual height alignment and animation in the UI; explicitly report any visual checks that cannot be performed.
 
 Scope: register these chat/progress UI fixes only; coordinate with FT24's progress styling and scroll-stability work rather than duplicating or undoing it.
+
+## factory · 2026-11-08 13:28
+Moved from new to backlog at the owner’s request: “move FT 26~29 to backlog”.

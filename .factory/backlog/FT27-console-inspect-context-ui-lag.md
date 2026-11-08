@@ -14,3 +14,6 @@ Acceptance criteria:
 - Record the confirmed cause and before/after performance evidence, and add focused regression coverage where practical. Explicitly report any browser or device checks not performed.
 
 Registered in new/ only; implementation and diagnosis have not started.
+
+## factory · 2026-11-08 13:28
+Moved from new to backlog at the owner’s request: “move FT 26~29 to backlog”.

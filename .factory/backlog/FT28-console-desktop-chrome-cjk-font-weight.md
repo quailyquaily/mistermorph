@@ -14,3 +14,6 @@ Acceptance criteria:
 - Add appropriate regression coverage and visually verify desktop Chrome with Chinese, Japanese, Korean, mixed-script, and explicitly bold text. Record the tested environment and any verification limitations.
 
 Request registered only; not diagnosed or implemented.
+
+## factory · 2026-11-08 13:28
+Moved from new to backlog at the owner’s request: “move FT 26~29 to backlog”.

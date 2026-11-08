@@ -12,3 +12,6 @@ Acceptance criteria:
 - Add regression coverage for loading-state rendering and transitions; verify representative buttons in the UI.
 
 Registered only; not yet diagnosed or implemented.
+
+## factory · 2026-11-08 13:28
+Moved from new to backlog at the owner’s request: “move FT 26~29 to backlog”.
