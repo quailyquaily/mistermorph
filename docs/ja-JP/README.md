@@ -111,7 +111,7 @@ CLI モードと設定の詳細は [../modes.md](../modes.md) と [../configurat
 go test ./...
 ```
 
-Console フロントエンドは `web/console/` にあり、`pnpm` を使います。ローカルビルドの詳細は [../console.md](../console.md) と [../app.md](../app.md) を参照してください。
+Console は `web/console-nsh/` にある nsh (0.4.0) の TSX アプリで、Web 版・デスクトップ版・Android 版を共通のソースから作ります。ローカルビルドの詳細は [../console.md](../console.md) と [../app.md](../app.md) を参照してください。
 
 ## 設定テンプレート
 

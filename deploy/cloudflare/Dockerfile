@@ -1,13 +1,18 @@
 # syntax=docker/dockerfile:1.7
 
-FROM node:24-alpine AS console
-WORKDIR /src/web/console
-RUN npm install --global pnpm@12.3.4
-COPY web/console/package.json web/console/pnpm-lock.yaml web/console/pnpm-workspace.yaml ./
-RUN pnpm install --frozen-lockfile
-COPY web/console/ ./
-COPY assets/config/ /src/assets/config/
-RUN pnpm build
+# The Console (web/console-nsh) as a static site. The nsh CLI is a glibc build, so this stage is
+# Debian; nsh's install script downloads the pinned release and checks its .sha256.
+FROM node:24-bookworm-slim AS console
+ARG NSH_VERSION=v0.4.0
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates curl \
+  && rm -rf /var/lib/apt/lists/* \
+  && curl -fsSL "https://github.com/longbridge/nsh/releases/download/${NSH_VERSION}/install.sh" | sh
+ENV PATH="/root/.local/bin:${PATH}"
+WORKDIR /src
+COPY assets/config/ ./assets/config/
+COPY web/console-nsh/ ./web/console-nsh/
+RUN web/console-nsh/scripts/build-web.sh /src/console-dist
 
 FROM golang:1.25-alpine AS builder
 WORKDIR /src
@@ -16,7 +21,7 @@ COPY go.mod go.sum ./
 COPY third_party/ultraviolet/ ./third_party/ultraviolet/
 RUN go mod download
 COPY . .
-COPY --from=console /src/web/console/dist/ ./cmd/mistermorph/consolecmd/static/
+COPY --from=console /src/console-dist/ ./cmd/mistermorph/consolecmd/static/
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o /out/mistermorph ./cmd/mistermorph
 
 FROM alpine:3.22

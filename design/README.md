@@ -40,11 +40,11 @@ python3 design/brand/generator/platforms.py --pack                              
 
 Every icon in the product but the boot splash uses the circle drawing. The console's logos and favicons use Aojashin for
 the light theme and Suimen for the dark theme. The login and default avatar are Aojashin, since the console has only a
-light theme so far; the boot splash is the Aojashin 64 drawing with the ghost drifting through it
-(`web/console/src/core/ghost-mark.js`, the drift quickened to a 2.4 s figure of eight); `favicon.svg` carries both and
+light theme so far; the Vue console's boot splash (removed with it) was the Aojashin 64 drawing with the ghost drifting
+through it, the drift quickened to a 2.4 s figure of eight; `favicon.svg` carries both and
 follows the browser's colour scheme. The console's SVG logos all use the 64 drawing, because they are shown below 64 CSS
 px on screens that are mostly retina. Worker avatars in the chat roster
-(`web/console/src/assets/worker-avatars/`) are the 64 circle drawing in each of the seven colourways; each task
+(`web/console-nsh/assets/worker-avatars/`) are the 64 circle drawing in each of the seven colourways; each task
 allocates them at random, as it does worker names.
 
 The app icons can't follow a theme, so they are the Aojashin circle. Each platform gets its own spec, and every bitmap
@@ -56,7 +56,7 @@ uses the drawing made for its size (16 below 24 px, then 32, 64 from 48, 128 fro
 | Windows | `desktop/nsh/packaging/icons/windows/appicon.ico`: 16, 20, 24, 32, 40, 48, 64, 96, 256 | The tile fills the canvas, margin 1/32 |
 | Linux | `desktop/nsh/packaging/icons/linux/hicolor/`: 16 to 512 and `scalable/`, installed as the icon theme by the `.deb` and the AppImage | As Windows |
 | Window icon | The 256 Linux icon (`desktop/nsh/src/shell.rs`); macOS shows the bundle's `.icns`, and Windows embeds `appicon.ico` in `MrMorph.exe` (`desktop/nsh/build.rs`) | |
-| Web | `web/console/public/`: `favicon.ico` (16, 32, 48) and `android-chrome-*` for the manifest's `any`; `maskable-*` and `apple-touch-icon.png`, full-bleed squares for the platform to mask; `safari-pinned-tab.svg`, the 16 drawing's lines in one colour | The circle, scaled to 0.9, keeps the ghost inside the maskable safe zone |
+| Web | `web/console-nsh/assets/`: `favicon.ico` (16, 32, 48), and `apple-touch-icon.png`, a full-bleed square for the platform to mask (also the app icon in `nsh.json`); `assets/images/`: `android-chrome-*` and `safari-pinned-tab.svg`, the 16 drawing's lines in one colour | The circle, scaled to 0.9, keeps the ghost inside the safe zone |
 
 Not done yet:
 
@@ -64,5 +64,4 @@ Not done yet:
 
 - Suimen, in the dark favicon, is the only cyber colourway in the product so far.
 - The console still has one light theme; the other UI themes are specified in `DESIGN.md` §7.
-- Every card in the console is now a section (`DESIGN.md` §7, `web/console/src/components/AppSection.js`); Quail's
-  card is no longer registered. The console's `/__components` page shows every form of a section and a notice.
+- Every card in the console is now a section (`DESIGN.md` §7, `Section` in `web/console-nsh/components/ui.tsx`). The console's `/__components` page shows every form of a section and a notice.

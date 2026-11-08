@@ -18,7 +18,6 @@ env:
   # --- Release channel -------------------------------------------------------
   RELEASE_CHANNEL: community
   GO_BUILD_TAGS: ""
-  CONSOLE_VITE_CONFIG: vite.config.js
   PRODUCT_NAME: MisterMorph
   # Number of public GitHub releases to keep; 0 publishes to R2 only.
   GITHUB_RELEASES_TO_KEEP: "10"
@@ -74,30 +73,17 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v6
-        with:
-          version: 12.3.4
+      - name: Set up the desktop app build
+        uses: ./.github/actions/setup-desktop-build
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v5
-        with:
-          node-version: 22
-          cache: pnpm
-          cache-dependency-path: web/console/pnpm-lock.yaml
-
-      - name: Install frontend deps
-        run: pnpm --dir web/console install --frozen-lockfile
-
-      - name: Build frontend
-        run: pnpm --dir web/console exec vite build --config "$env:CONSOLE_VITE_CONFIG"
+      # The Console the CLI binaries embed: web/console-nsh as a static site.
+      - name: Build the console
+        shell: bash
+        run: web/console-nsh/scripts/build-web.sh web/console-nsh/dist
 
       - name: Stage console assets
         shell: bash
         run: ./scripts/stage-console-assets.sh
-
-      - name: Set up the desktop app build
-        uses: ./.github/actions/setup-desktop-build
 
       # The GPUI shell in desktop/nsh draws web/console-nsh itself (build.rs runs `nsh build`
       # and embeds the app icon), and is a GUI-subsystem executable in release builds.

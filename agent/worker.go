@@ -49,7 +49,7 @@ type workerState struct {
 }
 
 // workerNames is the English name pool. The Console keeps the same list, and a pool of the
-// same size for each of its other languages, in web/console/src/core/worker-identity.js; the
+// same size for each of its other languages, in web/console-nsh/lib/core/worker-identity.js; the
 // first eight are the names given out before names were random.
 var workerNames = [...]string{
 	"Milo", "Luna", "Pip", "Cleo", "Finn", "Nova", "Remy", "Iris",
@@ -59,7 +59,7 @@ var workerNames = [...]string{
 }
 
 // workerAvatarCount is the number of logo styles (the brand colourways) the Console draws
-// worker avatars from: web/console/src/assets/worker-avatars.
+// worker avatars from: web/console-nsh/assets/worker-avatars.
 const workerAvatarCount = 7
 
 // newWorkerSeed draws a task's seed; tests replace it to control the allocation.

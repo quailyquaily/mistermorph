@@ -2,15 +2,15 @@
 set -euo pipefail
 
 # Usage: scripts/stage-console-assets.sh [SOURCE_DIR]
-# Copies a built console (default: the Vue build in web/console/dist; the nsh console builds to
-# web/console-nsh/dist) into the folder the backend embeds.
+# Copies the built Console (default: web/console-nsh/dist, from
+# web/console-nsh/scripts/build-web.sh) into the folder the backend embeds.
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SOURCE_DIR="${1:-${ROOT_DIR}/web/console/dist}"
+SOURCE_DIR="${1:-${ROOT_DIR}/web/console-nsh/dist}"
 TARGET_DIR="${ROOT_DIR}/cmd/mistermorph/consolecmd/static"
 
 if [[ ! -f "${SOURCE_DIR}/index.html" ]]; then
-  echo "missing ${SOURCE_DIR}/index.html; build the console first ('pnpm --dir web/console build', or web/console-nsh/scripts/build-web.sh for the nsh console)" >&2
+  echo "missing ${SOURCE_DIR}/index.html; build the console first (web/console-nsh/scripts/build-web.sh)" >&2
   exit 1
 fi
 
@@ -24,8 +24,8 @@ if [[ ! -f "${TARGET_DIR}/index.html" ]]; then
 fi
 
 # Precompressed copies: the server sends name.br / name.gz to browsers that accept them
-# (cmd/mistermorph/consolecmd/static_assets.go). The nsh build writes its own; the Vue build
-# writes none, so text files of 1 KB or more get a gzip copy here.
+# (cmd/mistermorph/consolecmd/static_assets.go). The nsh build writes its own for most files;
+# text files of 1 KB or more it left without one get a gzip copy here.
 compressed=0
 while IFS= read -r -d '' file; do
   if [[ -e "${file}.gz" || -e "${file}.br" ]]; then

@@ -81,15 +81,14 @@ sudo journalctl -u mister-morph -f
 
 ## Optional: install Console service
 
-1. Build and place SPA assets:
+1. Build and place the Console (needs nsh 0.4.0 and Node; the binary also embeds it, so this is
+   only for serving a newer build than the binary's):
 
 ```bash
-cd web/console
-pnpm install
-pnpm build
+web/console-nsh/scripts/build-web.sh ./console-dist
 
 sudo install -d -m 0755 /opt/morph/web/console
-sudo rsync -a ./dist/ /opt/morph/web/console/dist/
+sudo rsync -a --delete ./console-dist/ /opt/morph/web/console/dist/
 ```
 
 2. Install and start Console service:

@@ -16,11 +16,13 @@
 !skills/**
 !third_party/ultraviolet/**
 !tools/**
-!web/console/**
+!web/console-nsh/**
 !deploy/cloudflare/Dockerfile
 !deploy/cloudflare/start.sh
 !deploy/cloudflare/config.example.yaml
 **/node_modules
+web/console-nsh/.nsh
+web/console-nsh/dist-android
 **/dist
 **/.git
 **/.env

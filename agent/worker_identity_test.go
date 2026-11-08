@@ -251,7 +251,7 @@ func TestWorkerMetadataJSON(t *testing.T) {
 
 // The Console renders the names and avatars from its own copy of the pools; they must agree.
 func TestWorkerPoolsMatchConsole(t *testing.T) {
-	source, err := os.ReadFile(filepath.Join("..", "web", "console", "src", "core", "worker-identity.js"))
+	source, err := os.ReadFile(filepath.Join("..", "web", "console-nsh", "lib", "core", "worker-identity.js"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -279,7 +279,7 @@ func TestWorkerPoolsMatchConsole(t *testing.T) {
 	if styles == nil || len(quoted.FindAll(styles[1], -1)) != workerAvatarCount {
 		t.Fatalf("console avatar styles: %q", styles)
 	}
-	assets, err := filepath.Glob(filepath.Join("..", "web", "console", "src", "assets", "worker-avatars", "*.svg"))
+	assets, err := filepath.Glob(filepath.Join("..", "web", "console-nsh", "assets", "worker-avatars", "*.svg"))
 	if err != nil || len(assets) != workerAvatarCount {
 		t.Fatalf("avatar assets = %v, %v", assets, err)
 	}

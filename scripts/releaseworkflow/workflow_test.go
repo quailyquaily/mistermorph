@@ -19,8 +19,8 @@ func TestWindowsSigningWorkflowContract(t *testing.T) {
 		"runs-on: windows-2022",
 		"actions/checkout@v5",
 		"actions/setup-go@v6",
-		"pnpm/action-setup@v6",
-		"actions/setup-node@v5",
+		"./.github/actions/setup-desktop-build",
+		"web/console-nsh/scripts/build-web.sh",
 		"secrets.ES_USERNAME",
 		"secrets.ES_PASSWORD",
 		"secrets.ES_CREDENTIAL_ID",
@@ -347,5 +347,21 @@ func TestAndroidAppIsReleasedWithTheReleaseKeystore(t *testing.T) {
 	script := readRepoFile(t, "web", "console-nsh", "scripts", "build-android.sh")
 	if !strings.Contains(script, `android:usesCleartextTraffic="true"`) {
 		t.Error("the Android build no longer lets the app reach http:// console servers")
+	}
+}
+
+// The CLI embeds the nsh Console (web/console-nsh); the Vue Console (web/console) is gone.
+func TestReleasesEmbedTheNshConsole(t *testing.T) {
+	for _, name := range []string{"release.yml", "windows-signing.yml"} {
+		workflow := readRepoFile(t, ".github", "workflows", name)
+		assertOrdered(t, workflow,
+			"web/console-nsh/scripts/build-web.sh web/console-nsh/dist",
+			"./scripts/stage-console-assets.sh",
+		)
+		for _, token := range []string{"web/console/", "pnpm", "CONSOLE_VITE_CONFIG"} {
+			if strings.Contains(workflow, token) {
+				t.Errorf("%s still builds the Vue console: found %q", name, token)
+			}
+		}
 	}
 }

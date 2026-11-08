@@ -1,2 +1,0 @@
-allowBuilds:
-  esbuild@0.21.5: true

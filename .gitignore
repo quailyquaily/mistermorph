@@ -17,8 +17,6 @@ dump
 .DS_Store
 
 # Admin SPA dependencies
-web/console/node_modules/
-web/console/dist/
 cmd/mistermorph/consolecmd/static/*
 !cmd/mistermorph/consolecmd/static/.gitkeep
 .pnpm-store/

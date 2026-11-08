@@ -38,80 +38,60 @@ Notes:
 - This is a same-package extension point. It does not export `server` as a public API.
 - Duplicate route patterns will fail through `http.ServeMux`, so downstream routes should use their own prefix such as `/pro/...`.
 
-## Console Frontend Routes
+## Console Frontend
 
-Route extensions live at:
+The Console is `web/console-nsh`, a TSX app on nsh. Its extension modules are plain modules a
+downstream build replaces by source overlay; each must keep the names and shapes below. The open
+build leaves all of them empty.
+
+### Setup-free paths
 
 ```text
-web/console/src/ext/routes/index.js
+web/console-nsh/lib/ext/routes/index.js
 ```
-
-The upstream default is empty:
 
 ```js
 export const routeExtensions = {
-  routes: [],
   setupFreePaths: [],
 };
 ```
 
-Downstream builds can provide the same module shape:
+`setupFreePaths` is added to the setup guard's allowlist (lib/router.ts). It only bypasses the
+setup-completion guard; it does not make a route public, and normal Console auth still applies.
+There is no hook for extra pages yet.
 
-```js
-export const routeExtensions = {
-  routes: [
-    { path: "/skill-store", component: () => import("pro-console/views/SkillStoreView") },
-  ],
-  setupFreePaths: [],
-};
-```
-
-`routes` is passed to Vue Router. Extension routes are mounted after upstream routes and before the root redirect. They should add new pages, not replace upstream pages.
-
-`setupFreePaths` is added to the setup guard allowlist. It only bypasses the setup-completion guard. It does not make a route public; normal Console auth still applies unless the route itself is public.
-
-## Console Frontend Slots
-
-UI slots live at:
+### Slots
 
 ```text
-web/console/src/ext/slots/index.js
+web/console-nsh/components/frame/slots.ts
 ```
-
-The current slot ids are:
 
 | Slot id | Location | Props |
 | --- | --- | --- |
-| `sidebar.before_runtime` | In the sidebar nav list, immediately before the Runtime nav item. | `selectedEndpointItem`, `currentPath`, `mobile`, `t` |
-| `sidebar.bottom_left` | At the lower part of the desktop sidebar and mobile drawer. | `selectedEndpointItem`, `currentPath`, `t` |
+| `sidebar.before_runtime` | In the sidebar's navigation, just before Settings (not in the folded sidebar), and in the phone's More menu. | `selectedEndpointItem`, `currentPath`, `mobile`, `t` |
+| `sidebar.bottom_left` | At the foot of the sidebar (not in the folded sidebar), and at the foot of the phone's More menu. | `selectedEndpointItem`, `currentPath`, `t` |
 
-The upstream default exports `null` entries. A `null` slot renders nothing.
+A slot is a function component, `(props: SidebarSlotProps) => JSX.Element`; `null` renders
+nothing:
 
-Example downstream module:
+```tsx
+import { SkillStoreNavEntry } from "pro-console/SkillStoreNavEntry";
+import { AccountBadge } from "pro-console/AccountBadge";
 
-```js
-import SkillStoreNavEntry from "pro-console/components/SkillStoreNavEntry";
-import AccountBadge from "pro-console/components/AccountBadge";
-
-const uiSlots = {
+export const uiSlots = {
   "sidebar.before_runtime": SkillStoreNavEntry,
   "sidebar.bottom_left": AccountBadge,
 };
-
-export { uiSlots };
 ```
 
-Slot components use the same JavaScript Vue component style as the rest of the Console. They may import existing frontend helpers such as API functions, stores, or `translate`.
+Slot components may use the Console's own helpers (API functions, `translate`, the UI kit in
+`components/ui.tsx`).
 
-## Console i18n
-
-i18n extensions live at:
+### i18n
 
 ```text
-web/console/src/ext/i18n/index.js
+web/console-nsh/lib/ext/i18n/index.js
 ```
-
-The upstream default is empty:
 
 ```js
 export const i18nExtensions = {};
@@ -144,37 +124,8 @@ Lookup order:
 4. English `i18nExtensions`.
 5. The key itself.
 
-Core messages win over extension messages. Use extension-specific key names to avoid accidental collisions.
+Core messages win over extension messages. Use extension-specific key names to avoid accidental
+collisions. Variable replacement uses the `{name}` syntax: `translate("skill_store_count", { count: 3 })`.
 
-Variable replacement uses the existing `{name}` syntax:
-
-```js
-translate("skill_store_count", { count: 3 });
-```
-
-## Providing Frontend Extensions
-
-Downstream builds can provide these modules either by source overlay or by Vite alias. The replacement module must export the same names:
-
-- `routeExtensions` from `web/console/src/ext/routes`
-- `uiSlots` from `web/console/src/ext/slots`
-- `i18nExtensions` from `web/console/src/ext/i18n`
-
-Keep extension modules small. They should register routes, slots, or messages. Product logic belongs in downstream components and API handlers.
-
-## AppMarkdownEditor Read-Only State
-
-`AppMarkdownEditor` supports separate `disabled` and `readOnly` states:
-
-```vue
-<AppMarkdownEditor v-model="body" readOnly />
-<AppMarkdownEditor v-model="body" :disabled="saving" :readOnly="locked" />
-```
-
-Semantics:
-
-- `disabled`: disabled form control. The editor cannot be focused or edited.
-- `readOnly`: enabled form control. Text remains selectable and scrollable, but cannot be edited.
-- If both are true, `disabled` wins.
-
-This is not a registry hook, but downstream route views and slot components can rely on it for read-only markdown surfaces.
+Keep extension modules small. They should register slots, setup-free paths or messages. Product
+logic belongs in downstream components and API handlers.

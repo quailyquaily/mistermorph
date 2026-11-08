@@ -16,7 +16,6 @@ env:
   RELEASE_CHANNEL: community
   GO_BUILD_TAGS: ""
   GORELEASER_CONFIG: .goreleaser.yaml
-  CONSOLE_VITE_CONFIG: vite.config.js
   # Number of public GitHub releases to keep; 0 publishes to R2 only.
   GITHUB_RELEASES_TO_KEEP: "10"
   # ---------------------------------------------------------------------------
@@ -47,23 +46,15 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+      - name: Set up the console build
+        uses: ./.github/actions/setup-desktop-build
         with:
-          version: 12.3.4
+          gpui: "false"
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-          cache-dependency-path: web/console/pnpm-lock.yaml
-
-      - name: Install frontend deps
-        run: pnpm --dir web/console install --frozen-lockfile
-
-      - name: Build frontend
-        run: pnpm --dir web/console exec vite build --config "${CONSOLE_VITE_CONFIG}"
+      # The Console the CLI embeds: web/console-nsh as a static site.
+      - name: Build the console
+        shell: bash
+        run: web/console-nsh/scripts/build-web.sh web/console-nsh/dist
 
       - name: Stage console assets
         shell: bash
@@ -89,23 +80,15 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+      - name: Set up the console build
+        uses: ./.github/actions/setup-desktop-build
         with:
-          version: 12.3.4
+          gpui: "false"
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-          cache-dependency-path: web/console/pnpm-lock.yaml
-
-      - name: Install frontend deps
-        run: pnpm --dir web/console install --frozen-lockfile
-
-      - name: Build frontend
-        run: pnpm --dir web/console exec vite build --config "${CONSOLE_VITE_CONFIG}"
+      # The Console the CLI embeds: web/console-nsh as a static site.
+      - name: Build the console
+        shell: bash
+        run: web/console-nsh/scripts/build-web.sh web/console-nsh/dist
 
       - name: Stage console assets
         shell: bash

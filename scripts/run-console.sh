@@ -4,7 +4,8 @@ set -euo pipefail
 # Usage: scripts/run-console.sh [console flags]
 # Example: scripts/run-console.sh --console-listen 127.0.0.1:9081
 # Requires Go. Builds a Linux backend without the embedded frontend and runs Console's API only;
-# serve the frontend yourself, e.g. `pnpm --dir web/console dev` (it proxies to 127.0.0.1:9080).
+# serve the frontend yourself, e.g. build it with `web/console-nsh/scripts/build-web.sh <dir>` and
+# pass `--console-static-dir <dir>`.
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT_DIR}"

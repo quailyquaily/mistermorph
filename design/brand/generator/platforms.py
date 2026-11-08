@@ -12,13 +12,13 @@ Every bitmap uses the drawing made for its size, never a scaled-down large one:
   256 px, the tile filling the canvas with a margin of 1/32.
 - Linux (desktop/nsh/packaging/icons/linux/hicolor): the freedesktop icon theme's sizes, 16 to
   512 px, plus scalable/apps/icon.svg; the tile fills the canvas with a margin of 1/32.
-- Web (web/console/public): favicon.ico (16, 32, 48) and the manifest's "any" icons; full-bleed
-  squares for its "maskable" icons and for apple-touch-icon.png (both masked by the platform), the
-  circle inside the safe zone.
-- Console SVGs (web/console): the logos and favicon.svg, the drawing at 64 (they show below 64 CSS
-  px on screens that are mostly retina); favicon.svg is Aojashin in light mode, Suimen in dark.
-  The worker avatars (src/assets/worker-avatars) are the 64 circle in each of the seven
-  colourways the icons come in.
+- Web (web/console-nsh/assets): favicon.ico (16, 32, 48), and apple-touch-icon.png (the app's
+  icon in nsh.json too) as a full-bleed square, masked by the platform, the circle inside the safe
+  zone; the "any" icons (android-chrome-*) in assets/images.
+- Console SVGs (web/console-nsh/assets): the logos (images/) and favicon.svg, the drawing at 64
+  (they show below 64 CSS px on screens that are mostly retina); favicon.svg is Aojashin in light
+  mode, Suimen in dark. The worker avatars (worker-avatars/) are the 64 circle in each of the
+  seven colourways the icons come in.
   safari-pinned-tab.svg is the 16 drawing's lines in one colour.
 """
 import json, os, shutil, struct, sys
@@ -32,10 +32,10 @@ import circle  # noqa: E402
 ROOT = os.path.abspath(os.path.join(HERE, '..', '..', '..'))
 BUILD = os.path.join(ROOT, 'design', 'brand', 'platforms', '.build')
 PACKAGING = os.path.join(ROOT, 'desktop', 'nsh', 'packaging', 'icons')
-WEB = os.path.join(ROOT, 'web', 'console', 'public')
-WEB_ASSETS = os.path.join(ROOT, 'web', 'console', 'src', 'assets', 'images')
+WEB = os.path.join(ROOT, 'web', 'console-nsh', 'assets')
+WEB_ASSETS = os.path.join(ROOT, 'web', 'console-nsh', 'assets', 'images')
 COLOURWAY = 'aojashin'
-WORKER_AVATARS = os.path.join(ROOT, 'web', 'console', 'src', 'assets', 'worker-avatars')
+WORKER_AVATARS = os.path.join(ROOT, 'web', 'console-nsh', 'assets', 'worker-avatars')
 # The colourways design/brand/icons is drawn in; the console picks worker avatars among them.
 WORKER_AVATAR_COLOURWAYS = ('aojashin', 'night', 'paper', 'suimen', 'rinko', 'bunko', 'denko')
 
@@ -104,8 +104,7 @@ def plan():
     for size in FAVICON_SIZES:
         jobs.append((placed(size, size), os.path.join(BUILD, 'favicon', f'{size}.png'), size))
     for size in (192, 512):
-        jobs.append((placed(size, size), os.path.join(WEB, f'android-chrome-{size}x{size}.png'), size))
-        jobs.append((placed(size, size, square=True), os.path.join(WEB, f'maskable-{size}x{size}.png'), size))
+        jobs.append((placed(size, size), os.path.join(WEB_ASSETS, f'android-chrome-{size}x{size}.png'), size))
     jobs.append((placed(180, 180, square=True), os.path.join(WEB, 'apple-touch-icon.png'), 180))
     return jobs
 
@@ -126,7 +125,7 @@ def console_svgs():
     # Safari's pinned tab is a one-colour silhouette: the lines of the 16 drawing, without the panel.
     lines = circle.circle_icon('16', 'aojashin').split('</circle>', 1)[1]
     lines = lines.replace(circle.COLOURS['aojashin']['line'], '#000')
-    files[os.path.join(WEB, 'safari-pinned-tab.svg')] = f'<svg width="16" height="16" {attrs}>{lines}</svg>'
+    files[os.path.join(WEB_ASSETS, 'safari-pinned-tab.svg')] = f'<svg width="16" height="16" {attrs}>{lines}</svg>'
     for colourway in WORKER_AVATAR_COLOURWAYS:
         files[os.path.join(WORKER_AVATARS, f'{colourway}.svg')] = (
             f'<svg width="64" height="64" {attrs}>{circle.circle_icon("64", colourway)}</svg>')

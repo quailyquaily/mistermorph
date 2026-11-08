@@ -111,7 +111,7 @@ CLI 模式与配置说明见：[../modes.md](../modes.md)、[../configuration.md
 go test ./...
 ```
 
-Console 前端位于 `web/console/`，使用 `pnpm`。本地构建细节见：[../console.md](../console.md) 与 [../app.md](../app.md)。
+Console 位于 `web/console-nsh/`，是基于 nsh（0.4.0）的 TSX 应用，Web、桌面和 Android 版本共用同一份源码。本地构建细节见：[../console.md](../console.md) 与 [../app.md](../app.md)。
 
 ## 配置模板
 

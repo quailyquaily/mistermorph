@@ -1,6 +1,6 @@
 # Mistermorph Console SPA
 
-This document describes the Console SPA under `web/console`, used by:
+This document describes the Console under `web/console-nsh`, used by:
 
 ```bash
 morph console
@@ -9,15 +9,10 @@ morph console
 `morph console serve` remains supported with the same flags and behavior.
 
 Stack:
-- Vue 3 + Vue Router
-- `quail-ui`
-- Vite (`src` -> `dist`)
-- package manager: `pnpm`
-
-Quail UI JavaScript uses named imports from `src/components/quail.js`, not the
-full `QuailUI` plugin. Add new components there, including any dependencies that
-the component resolves through Vue's global registry. `main.js` keeps the shared
-popup-close handler and the full Quail UI stylesheet.
+- A TSX app on [nsh](https://nsh.dev) 0.4.0, one source for the web Console, the desktop app
+  (`desktop/nsh`, GPUI) and the Android app.
+- The web build is a static site (`web/console-nsh/scripts/build-web.sh`); it needs nsh and Node.
+- `web/console-nsh/PORTING.md` lists the nsh traps already found.
 
 ## Runtime Notes
 
@@ -143,7 +138,7 @@ Settings that only apply after a restart (`process_restart` and `runtime_restart
   - initial naming uses only the first user message, keeps its language, and does not invent a subject for greetings; request timeouts, retries, and fallback follow the configured LLM route
   - generated titles and icons are persisted together; failed naming leaves the seed title, later messages do not rename the topic, and background results cannot overwrite a customized title or restore a deleted topic
   - topic items use the selected icon, or a chat icon for old/unknown values; visible pages check metadata every five seconds without resetting topic selection, drafts, or pagination
-  - `internal/taskdomain/topic_icons.json` maps theme IDs to descriptions; matching regular-weight Phosphor SVGs live in `web/console/src/assets/topic-icons/`, with their MIT license. Topic icons use CSS masks and inherit the text color without Vue icon components. Greetings use a separate waving-hand icon, with specific themes for pets, babies, home and family, food, fitness, music, and travel
+  - `internal/taskdomain/topic_icons.json` maps theme IDs to descriptions; matching regular-weight Phosphor SVGs live in `web/console-nsh/assets/topic-icons/`, with their MIT license. Topic icons are drawn tinted with the text color. Greetings use a separate waving-hand icon, with specific themes for pets, babies, home and family, food, fitness, music, and travel
   - `Regenerate name` sits below the properties in the Topic panel, separate from Delete Topic, on desktop and mobile. It generates the name and icon from the first user message and the latest six conversation turns, preferring recent substantive discussion when the subject changes
   - regeneration excludes slash commands, reasoning, tool logs, and incomplete replies. Each user message is capped at 600 characters and each completed assistant reply at 400; the total naming input is capped at 8,000 characters
   - regeneration keeps the current name and icon until success, rejects duplicate requests for the same topic, and leaves them unchanged on failure. A title revision prevents late results from overwriting subsequent edits or deletion; starting regeneration also invalidates pending initial naming. Empty and system topics cannot be regenerated
@@ -279,18 +274,11 @@ Paginated runtime lists return `items`, `limit`, `has_next`, and optional `next_
 
 ## Build (production static)
 
-1. Build frontend:
+1. Build the Console and stage it as the CLI/backend binary's embedded assets
+   (`scripts/build-backend.sh` does both, then builds the binary):
 
 ```bash
-cd web/console
-pnpm install
-pnpm build
-```
-
-2. Stage embedded console assets for the CLI/backend binary:
-
-```bash
-cd ../..
+web/console-nsh/scripts/build-web.sh
 ./scripts/stage-console-assets.sh
 ```
 
@@ -320,41 +308,29 @@ console:
 
 `http://127.0.0.1:9080/`
 
-## Dev (hot reload)
+## Dev
 
-1. Build and stage console assets once before running the CLI from source:
-
-```bash
-cd web/console
-pnpm install
-pnpm build
-cd ../..
-./scripts/stage-console-assets.sh
-```
-
-2. Start console backend:
+1. Build the Console into a folder and serve it from there, so a rebuild shows on reload:
 
 ```bash
+web/console-nsh/scripts/build-web.sh /tmp/morph-console
+./scripts/stage-console-assets.sh /tmp/morph-console
 MISTER_MORPH_CONSOLE_PASSWORD=secret \
 MISTER_MORPH_SERVER_AUTH_TOKEN=dev-token \
-go run ./cmd/mistermorph console
+go run ./cmd/mistermorph console --console-static-dir /tmp/morph-console
 ```
 
-3. Start Vite dev server:
+2. Open `http://127.0.0.1:9080/`. After changing the Console, run `build-web.sh` again and reload.
+
+3. Check and test the Console:
 
 ```bash
-cd web/console
-pnpm install
-pnpm dev
+cd web/console-nsh
+nsh check
+nsh test --web-host tests/noHost.js
 ```
 
-4. Open:
-
-`http://127.0.0.1:5173/`
-
 Notes:
-- Vite proxies `/api` to `http://127.0.0.1:9080`.
-- During frontend dev, Vite page is enough; backend static `dist` is mainly for production serving.
 - If you omit `--console-static-dir`, `console` falls back to its embedded SPA assets.
 - `./scripts/stage-console-assets.sh` is required before `go run ./cmd/mistermorph ...`, because the CLI validates embedded Console assets at startup.
 - Optional external endpoints should point to an existing channel runtime such as `morph telegram`, `morph slack`, `morph line`, or `morph lark`.
