@@ -33,3 +33,13 @@ Tests: manager independently passed `test -z "$(gofmt -l .)" && go vet ./... && 
 Install: coder installed androguard==4.1.2 in a temporary virtual environment to inspect the nsh 0.4.0 Android runtime; no repository dependency changes. Process deviation: that environment was outside the designated build directory, contrary to the requested work boundary.
 Not checked: no Android SDK, adb, emulator or physical device available; no APK build or visual/device gesture verification. Portrait/landscape and keyboard coverage checks inset calculations, not actual rendered geometry or software keyboard interaction. Existing native side-sheet touch-offset concern remains unverified and unchanged. Owner/reviewer should check Android device navigation, topbar geometry, keyboard and native sheets.
 Moved new/ → review/. No base merge or deployment.
+
+## factory · review · 2026-11-08 18:48
+head: f4482025f57d5554deb045684df4a5834ed77fd4
+verdict: pass
+notes:
+- [P2] web/console-nsh/pages/settings/SettingsPage.tsx:132: System Back hides the editor before the leave confirmation completes. Reproduced Settings list → Tools → change toggle → system Back → Keep editing: URL remains /settings/tools but controls disappear and the list is shown. Hide the panel only after navigation is approved; preserve it on cancellation.
+- [P2] web/console-nsh/pages/context/ContextPage.tsx:236: The topbar back arrow still pushes history, unlike the new system Back handler. Reproduced restored Context → topbar Back → system Back to topic list → system Back: Context reopens. Reuse the system Back history/replace behavior for Android's topbar arrow.
+Validation: Codex reviewed all 18 changed files in origin/master...HEAD (base 8b613ef1). Required gofmt/vet/Go tests passed. nsh typecheck and bundle build passed; nsh tests passed 259/259 across 34 files run individually after directory-entry discovery failed; pure logic tests passed 245/245. Two additional isolated regression assertions failed and confirmed the P2 findings above. No P0/P1 found; pass is the factory threshold, not an absence of defects.
+Limits: nsh web packaging could not complete because the web runtime is absent. No Android device/emulator, physical gesture, portrait/landscape geometry, keyboard, or iOS/desktop visual verification. Vue console sources unchanged. Tests used isolated copies and throwaway HOME inside the review directory. No unpinned installs, source edits or code commits. Branch merges cleanly with origin/master. No linked GitHub issue or PR.
+Moved review/ → ready/. Owner should inspect both P2 defects and verify Android device behavior before ship.
