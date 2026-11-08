@@ -106,3 +106,13 @@ test("activity entries name their worker in the Console's language", async () =>
   localeState.lang = "en";
   assert.deepEqual(names, { en: "Luna · codex PID 77", zh: "林悦 · codex PID 77", ja: "鈴木葵 · codex PID 77", fr: "Luna · codex PID 77" });
 });
+
+test("the progress panel's dark surface does not depend on color-mix()", () => {
+  const details = styles.match(/\n\.chat-status-details \{[\s\S]*?\n\}/u)?.[0] || "";
+  assert.match(details, /\n {2}background-color: var\(--q-c-dark\);/u);
+  assert.doesNotMatch(details, /\n {2}background:/u, "no shorthand that one unresolved color-mix() can void");
+  const fallback = styles.match(/@supports not \(color: color-mix\([^)]*\)\) \{[\s\S]*?\n\}/u)?.[0] || "";
+  for (const token of ["--chat-status-terminal-bg: var(--q-c-dark)", "--chat-status-terminal-fg: var(--q-c-white)", "--chat-status-terminal-muted: var(--q-c-dark-4)"]) {
+    assert.ok(fallback.includes(token), token);
+  }
+});

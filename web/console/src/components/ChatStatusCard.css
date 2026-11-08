@@ -151,9 +151,14 @@
   padding: 10px 12px 11px;
   overflow: auto;
   border: 0;
-  background:
+  /* The surface is dark on every screen. Its base is the plain dark token, painted on its own, so
+     the panel stays dark (and its light text readable) even where the tinted layers above cannot be
+     computed; in one background shorthand a single unresolved color-mix() drops the whole
+     background and leaves light text on the light page. */
+  background-color: var(--q-c-dark);
+  background-image:
     linear-gradient(180deg, color-mix(in srgb, var(--q-c-white) 4%, transparent), transparent 34px),
-    var(--chat-status-terminal-bg);
+    linear-gradient(var(--chat-status-terminal-bg), var(--chat-status-terminal-bg));
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--q-c-white) 7%, transparent);
   color: var(--chat-status-terminal-fg);
   font-family: var(--font-mono);
@@ -161,6 +166,16 @@
   line-height: 1.5;
   scrollbar-width: thin;
   scrollbar-color: color-mix(in srgb, var(--q-c-blue-light) 34%, transparent) transparent;
+}
+
+/* Without color-mix() the tinted tokens cannot be computed; plain theme tokens keep the text light
+   on the dark surface instead of falling back to the page's dark ink. */
+@supports not (color: color-mix(in srgb, #000 50%, #fff)) {
+  .chat-status-details {
+    --chat-status-terminal-bg: var(--q-c-dark);
+    --chat-status-terminal-fg: var(--q-c-white);
+    --chat-status-terminal-muted: var(--q-c-dark-4);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
