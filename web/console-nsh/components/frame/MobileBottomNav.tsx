@@ -4,7 +4,7 @@
 // and the agent each open a sheet docked on the strip, over a scrim; Escape, Android's Back or the
 // scrim closes it.
 import type { JSX } from "nsh";
-import { computed, keymap, signal, Text, View } from "nsh";
+import { computed, createAnimatedValue, effect, keymap, signal, Text, untracked, View } from "nsh";
 import { Button as BaseButton } from "nsh/base";
 import { translate } from "../../lib/core/context.js";
 import {
@@ -23,6 +23,7 @@ import {
   type NavItem,
 } from "../../lib/shell";
 import { onSystemBack } from "../../lib/systemBack";
+import { MOTION_EASE, motionMs } from "../motion/tokens";
 import defaultEndpointAvatar from "../../assets/images/app_logo_current.svg";
 import { Icon, TextField, Tip, TipButton, type IconName } from "../ui";
 import { AgentAvatar, AgentOptionList, filterAgentItems, normalizeAgentItems, OverviewRow } from "./AgentSwitcher";
@@ -75,23 +76,82 @@ function navigateTo(item: NavItem) {
   goTo(item, false);
 }
 
-/** A sheet docked on the strip, rising from behind it, over a scrim. */
-function BottomSheet(props: { label: string; onClose: () => void; testID?: string; children?: JSX.Element }) {
+// The sheets rise from behind the strip and sink back into it (the Vue console's 280ms in, 200ms
+// out). Reopening one while it sinks turns it round from where it is, as the motion runs from the
+// animated value's current position. A closing sheet takes no presses; with reduced motion it
+// appears and goes at once.
+const SHEET_IN_MS = 280;
+const SHEET_OUT_MS = 200;
+const SHEET_OUT_EASE: [number, number, number, number] = [0.4, 0, 1, 1];
+
+/** A sheet docked on the strip, rising from behind it, over a scrim; kept until it has sunk back. */
+function BottomSheet(props: { open: boolean; label: string; onClose: () => void; testID?: string; children?: JSX.Element }) {
+  const shown = signal(untracked(() => props.open));
+  const closing = signal(false);
+  // 0 hidden behind the strip, 1 fully risen; the scrim fades with it.
+  const progress = createAnimatedValue(0);
+  const height = signal(0);
+  let generation = 0;
+
+  effect(() => {
+    const open = props.open;
+    untracked(() => {
+      const run = ++generation;
+      if (open) {
+        closing.set(false);
+        if (!shown()) shown.set(true);
+        void progress.timing(1, { duration: motionMs(SHEET_IN_MS), easing: MOTION_EASE });
+      } else if (shown()) {
+        closing.set(true);
+        void progress.timing(0, { duration: motionMs(SHEET_OUT_MS), easing: SHEET_OUT_EASE }).then(() => {
+          if (run === generation) {
+            closing.set(false);
+            shown.set(false);
+          }
+        });
+      }
+    });
+  });
+
+  return (
+    <If when={shown()}>
+      <SheetLayer {...props} closing={closing()} progress={progress} height={height()} onHeight={(value) => height.set(value)} />
+    </If>
+  );
+}
+
+function SheetLayer(props: {
+  label: string;
+  onClose: () => void;
+  testID?: string;
+  children?: JSX.Element;
+  closing: boolean;
+  progress: ReturnType<typeof createAnimatedValue>;
+  /** The sheet's height, which it rises by. */
+  height: number;
+  onHeight: (height: number) => void;
+}) {
   keymap.bind("escape", () => props.onClose());
   // Android's Back closes the sheet before it leaves the page.
-  onSystemBack(() => true, () => props.onClose());
+  onSystemBack(() => !props.closing, () => props.onClose());
   return (
-    <View class="absolute inset-0 z-40" testID={props.testID}>
+    <View class="absolute inset-0 z-40" testID={props.closing ? undefined : props.testID} style={props.closing ? { pointerEvents: "none" } : undefined}>
       <View
         class="absolute inset-0 bg-scrim"
         accessibilityElementsHidden
+        style={{ opacity: props.progress }}
         onPress={() => props.onClose()}
-        testID={props.testID ? `${props.testID}-mask` : undefined}
+        testID={props.testID && !props.closing ? `${props.testID}-mask` : undefined}
       />
       <View
         role="menu"
         accessibilityLabel={props.label}
         class="absolute bottom-0 left-0 right-0 max-h-[62%] border-t border-line bg-card"
+        // Until its first layout the sheet's height is unknown: it starts far below, not at 0.
+        onLayout={({ bounds }) => props.onHeight(bounds.size.height)}
+        style={{
+          transform: [{ translateY: props.progress.interpolate({ inputRange: [0, 1], outputRange: [props.height > 0 ? props.height + 1 : 4000, 0] }) }],
+        }}
       >
         <View class="min-h-9.5 flex-row items-center gap-2 border-b border-line-soft px-4">
           <View class="size-1.5 bg-muted-foreground" />
@@ -111,52 +171,48 @@ export function MobileBottomMenus() {
   const filtered = () => filterAgentItems(items(), agentFilter());
   return (
     <>
-      <If when={mobileMoreOpen()}>
-        <BottomSheet label={t("nav_more")} onClose={closeMobileMore} testID="mobile-more">
-          <View class="shrink">
-            <NavList items={moreItems()} mobile onNavigate={navigateTo} testPrefix="mobile-more" />
-            <If when={BottomLeft}>
-              <View class="border-t border-line-soft px-3 pb-3 pt-2">
-                {BottomLeft?.({ selectedEndpointItem: selectedEndpointItem(), currentPath: currentPath(), t })}
-              </View>
-            </If>
-          </View>
-        </BottomSheet>
-      </If>
-      <If when={agentMenuOpen()}>
-        <BottomSheet label={t("endpoint_switcher_title")} onClose={() => setAgentMenuOpen(false)} testID="mobile-agents">
-          <If when={showFilter()}>
-            <TextField
-              class="mx-2.5 mb-2 mt-1"
-              value={agentFilter()}
-              onChange={(value) => agentFilter.set(String(value || ""))}
-              placeholder={t("endpoint_switcher_filter_placeholder")}
-              testID="mobile-agents-filter"
-            />
+      <BottomSheet open={mobileMoreOpen()} label={t("nav_more")} onClose={closeMobileMore} testID="mobile-more">
+        <View class="shrink">
+          <NavList items={moreItems()} mobile onNavigate={navigateTo} testPrefix="mobile-more" />
+          <If when={BottomLeft}>
+            <View class="border-t border-line-soft px-3 pb-3 pt-2">
+              {BottomLeft?.({ selectedEndpointItem: selectedEndpointItem(), currentPath: currentPath(), t })}
+            </View>
           </If>
-          <View class="shrink">
-            <AgentOptionList
-              items={filtered()}
-              selectedValue={String(selectedEndpointItem()?.value || "").trim()}
-              rowClass="min-h-12 px-4"
-              testPrefix="mobile-agent-option"
-              onSelect={(item) => {
-                if (!item.connected) return;
-                setAgentMenuOpen(false);
-                switchEndpoint(item.value);
-              }}
-            />
-          </View>
-          <OverviewRow
-            class="min-h-12 px-4"
-            testID="mobile-agents-overview"
-            onPress={() => {
+        </View>
+      </BottomSheet>
+      <BottomSheet open={agentMenuOpen()} label={t("endpoint_switcher_title")} onClose={() => setAgentMenuOpen(false)} testID="mobile-agents">
+        <If when={showFilter()}>
+          <TextField
+            class="mx-2.5 mb-2 mt-1"
+            value={agentFilter()}
+            onChange={(value) => agentFilter.set(String(value || ""))}
+            placeholder={t("endpoint_switcher_filter_placeholder")}
+            testID="mobile-agents-filter"
+          />
+        </If>
+        <View class="shrink">
+          <AgentOptionList
+            items={filtered()}
+            selectedValue={String(selectedEndpointItem()?.value || "").trim()}
+            rowClass="min-h-12 px-4"
+            testPrefix="mobile-agent-option"
+            onSelect={(item) => {
+              if (!item.connected) return;
               setAgentMenuOpen(false);
-              goOverview();
+              switchEndpoint(item.value);
             }}
           />
-        </BottomSheet>
-      </If>
+        </View>
+        <OverviewRow
+          class="min-h-12 px-4"
+          testID="mobile-agents-overview"
+          onPress={() => {
+            setAgentMenuOpen(false);
+            goOverview();
+          }}
+        />
+      </BottomSheet>
     </>
   );
 }
@@ -177,7 +233,6 @@ export function MobileBottomNav() {
     moreActive() ? `${moreCurrentItem()?.title} · ${t("nav_more")}` : t("nav_more");
 
   const selectedName = () => selectedEndpointItem()?.title || t("nav_agent");
-  const selectedOnline = () => selectedEndpointItem()?.connected === true;
   const selectedAvatar = () => personaAvatarURL() || selectedEndpointItem()?.image || defaultEndpointAvatar;
 
   const width = signal(0);
@@ -187,6 +242,7 @@ export function MobileBottomNav() {
   };
 
   const slotClass = "flex-1 items-center justify-center px-0.5 hover:bg-hover-soft active:bg-hover-soft transition-colors duration-160";
+  const agentSlotClass = "flex-1 items-center justify-center px-0.5";
   const tip = (label: string) => <Tip text={label} />;
 
   return (
@@ -243,22 +299,12 @@ export function MobileBottomNav() {
           accessibilityLabel={`${t("nav_agent")}: ${selectedName()}`}
           testID="mobile-nav-agent"
           tooltip={tip(selectedName())}
-          class={slotClass}
+          class={agentSlotClass}
         >
-          <View class="relative size-5.5">
-            <View class={`rounded-full ${activeSlot() === slotCount() - 1 ? "border-[1.5px] border-blue" : ""}`}>
-              <AgentAvatar image={selectedAvatar()} size={22} />
-            </View>
-            <View
-              class={`absolute -bottom-0.5 -right-0.75 size-2.75 rounded-[1px] border-[1.5px] border-card ${
-                selectedOnline() ? "bg-status-on" : "bg-card"
-              }`}
-            >
-              <If when={!selectedOnline()}>
-                <View class="size-full rounded-[1px] border border-status-off" />
-              </If>
-            </View>
-          </View>
+          {/* The portrait alone: selecting or pressing the slot adds nothing to it (no ring, no
+              status mark, no press fill); the top rule marks it selected, and the switcher's list
+              shows whether the agent is connected. */}
+          <AgentAvatar image={selectedAvatar()} size={22} />
         </TipButton>
       </View>
     </View>
