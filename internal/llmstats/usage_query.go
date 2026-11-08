@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/quailyquaily/mistermorph/internal/stateimport"
 )
 
 // totalsColumns aggregates llm_requests into the columns scanTotals reads.
@@ -34,9 +36,29 @@ func finishTotals(t *Totals, currencies int, currency string, estimated int) {
 	t.CostEstimated = estimated != 0
 }
 
+// rowsQueryer is what the aggregate queries read through: the read transaction of one response.
+type rowsQueryer interface {
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+}
+
+// readSnapshot runs fn in one read-only transaction, so every query of a response sees the
+// database as one moment left it: records appended meanwhile are in all of its totals or in none.
+// A read-only transaction begins deferred, so it does not wait for, or block, the writers.
+func (s *UsageStore) readSnapshot(ctx context.Context, fn func(*sql.Tx) error) error {
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := fn(tx); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 // queryTotals runs a GROUP BY over llm_requests and calls fn with each group's key columns
 // (keys of them, scanned as text) and totals.
-func queryTotals(ctx context.Context, db *sql.DB, query string, keys int, args []any, fn func([]string, Totals)) error {
+func queryTotals(ctx context.Context, db rowsQueryer, query string, keys int, args []any, fn func([]string, Totals)) error {
 	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return err
@@ -63,7 +85,7 @@ func queryTotals(ctx context.Context, db *sql.DB, query string, keys int, args [
 
 // queryCacheDetails sums cache_details per group and calls fn with each group's keys, detail
 // name and sum.
-func queryCacheDetails(ctx context.Context, db *sql.DB, query string, keys int, args []any, fn func([]string, string, int64)) error {
+func queryCacheDetails(ctx context.Context, db rowsQueryer, query string, keys int, args []any, fn func([]string, string, int64)) error {
 	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return err
@@ -99,33 +121,44 @@ func (s *UsageStore) Usage(ctx context.Context) (Projection, error) {
 		return Projection{}, fmt.Errorf("usage store is not open")
 	}
 	var out Projection
-	if err := queryTotals(ctx, s.db, `SELECT `+totalsColumns+` FROM llm_requests`, 0, nil, func(_ []string, t Totals) {
-		out.Summary = t
-	}); err != nil {
-		return Projection{}, err
-	}
 	byModel := map[string]*Totals{}
-	if err := queryTotals(ctx, s.db, `SELECT model, `+totalsColumns+` FROM llm_requests GROUP BY model`, 1, nil, func(k []string, t Totals) {
-		byModel[k[0]] = &t
-	}); err != nil {
-		return Projection{}, err
-	}
 	type hostModel struct{ host, model string }
 	byHostModel := map[hostModel]*Totals{}
-	if err := queryTotals(ctx, s.db, `SELECT api_host, model, `+totalsColumns+` FROM llm_requests GROUP BY api_host, model`, 2, nil, func(k []string, t Totals) {
-		byHostModel[hostModel{k[0], k[1]}] = &t
-	}); err != nil {
-		return Projection{}, err
-	}
-	if err := queryCacheDetails(ctx, s.db, `SELECT r.api_host, r.model, j.key, SUM(j.value) FROM llm_requests r, json_each(r.cache_details) j
-		WHERE r.cache_details != '{}' GROUP BY r.api_host, r.model, j.key`, 2, nil, func(k []string, name string, sum int64) {
-		addDetail(&out.Summary, name, sum)
-		if t := byModel[k[1]]; t != nil {
-			addDetail(t, name, sum)
+	var rejectCount int
+	if err := s.readSnapshot(ctx, func(tx *sql.Tx) error {
+		if err := queryTotals(ctx, tx, `SELECT `+totalsColumns+` FROM llm_requests`, 0, nil, func(_ []string, t Totals) {
+			out.Summary = t
+		}); err != nil {
+			return err
 		}
-		if t := byHostModel[hostModel{k[0], k[1]}]; t != nil {
-			addDetail(t, name, sum)
+		if err := queryTotals(ctx, tx, `SELECT model, `+totalsColumns+` FROM llm_requests GROUP BY model`, 1, nil, func(k []string, t Totals) {
+			byModel[k[0]] = &t
+		}); err != nil {
+			return err
 		}
+		if err := queryTotals(ctx, tx, `SELECT api_host, model, `+totalsColumns+` FROM llm_requests GROUP BY api_host, model`, 2, nil, func(k []string, t Totals) {
+			byHostModel[hostModel{k[0], k[1]}] = &t
+		}); err != nil {
+			return err
+		}
+		if err := queryCacheDetails(ctx, tx, `SELECT r.api_host, r.model, j.key, SUM(j.value) FROM llm_requests r, json_each(r.cache_details) j
+			WHERE r.cache_details != '{}' GROUP BY r.api_host, r.model, j.key`, 2, nil, func(k []string, name string, sum int64) {
+			addDetail(&out.Summary, name, sum)
+			if t := byModel[k[1]]; t != nil {
+				addDetail(t, name, sum)
+			}
+			if t := byHostModel[hostModel{k[0], k[1]}]; t != nil {
+				addDetail(t, name, sum)
+			}
+		}); err != nil {
+			return err
+		}
+		rejects, err := stateimport.Rejects(ctx, tx, usageImportStore)
+		if err != nil {
+			return err
+		}
+		rejectCount = rejects.Count
+		return nil
 	}); err != nil {
 		return Projection{}, err
 	}
@@ -151,11 +184,7 @@ func (s *UsageStore) Usage(ctx context.Context) (Projection, error) {
 	}
 	sortAPIHostSummaries(out.APIHosts)
 
-	rejects, err := s.ImportRejects(ctx)
-	if err != nil {
-		return Projection{}, err
-	}
-	out.SkippedRecords = int64(rejects.Count)
+	out.SkippedRecords = int64(rejectCount)
 	out.ProjectedRecords = out.Summary.Requests
 	out.UpdatedAt = s.now().UTC().Format(time.RFC3339)
 	return out, nil
@@ -221,28 +250,30 @@ func (s *UsageStore) Daily(ctx context.Context, days int, loc *time.Location) (D
 
 	dayModels := make([]map[string]*Totals, days)
 	rangeModels := map[string]*Totals{}
-	if err := queryTotals(ctx, s.db, with+`SELECT days.i, r.model, `+totalsColumns+join+`GROUP BY days.i, r.model`, 2, args, func(k []string, t Totals) {
-		i := atoiSafe(k[0])
-		if i < 0 || i >= days {
-			return
+	if err := s.readSnapshot(ctx, func(tx *sql.Tx) error {
+		if err := queryTotals(ctx, tx, with+`SELECT days.i, r.model, `+totalsColumns+join+`GROUP BY days.i, r.model`, 2, args, func(k []string, t Totals) {
+			i := atoiSafe(k[0])
+			if i < 0 || i >= days {
+				return
+			}
+			if dayModels[i] == nil {
+				dayModels[i] = map[string]*Totals{}
+			}
+			copyT := t
+			dayModels[i][k[1]] = &copyT
+		}); err != nil {
+			return err
 		}
-		if dayModels[i] == nil {
-			dayModels[i] = map[string]*Totals{}
-		}
-		copyT := t
-		dayModels[i][k[1]] = &copyT
-	}); err != nil {
-		return DailyUsage{}, err
-	}
-	if err := queryCacheDetails(ctx, s.db, with+`SELECT days.i, r.model, j.key, SUM(j.value)`+join+`, json_each(r.cache_details) j
-		WHERE r.cache_details != '{}' GROUP BY days.i, r.model, j.key`, 2, args, func(k []string, name string, sum int64) {
-		i := atoiSafe(k[0])
-		if i < 0 || i >= days || dayModels[i] == nil {
-			return
-		}
-		if t := dayModels[i][k[1]]; t != nil {
-			addDetail(t, name, sum)
-		}
+		return queryCacheDetails(ctx, tx, with+`SELECT days.i, r.model, j.key, SUM(j.value)`+join+`, json_each(r.cache_details) j
+			WHERE r.cache_details != '{}' GROUP BY days.i, r.model, j.key`, 2, args, func(k []string, name string, sum int64) {
+			i := atoiSafe(k[0])
+			if i < 0 || i >= days || dayModels[i] == nil {
+				return
+			}
+			if t := dayModels[i][k[1]]; t != nil {
+				addDetail(t, name, sum)
+			}
+		})
 	}); err != nil {
 		return DailyUsage{}, err
 	}
