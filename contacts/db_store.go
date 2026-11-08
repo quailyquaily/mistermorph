@@ -223,7 +223,9 @@ func scanContactRow(scan func(...any) error) (contactRow, error) {
 }
 
 // loadContacts reads the contacts the WHERE clause selects, with their handles, ordered by id.
-func loadContacts(ctx context.Context, q queryer, where string, args ...any) ([]contactRow, error) {
+// It takes a transaction because the contacts and their handles are two queries: outside one, a
+// write between them would pair one save's contact with another's handles.
+func loadContacts(ctx context.Context, q *sql.Tx, where string, args ...any) ([]contactRow, error) {
 	rows, err := q.QueryContext(ctx, `SELECT `+contactColumns+` FROM contacts `+where+` ORDER BY contact_id`, args...)
 	if err != nil {
 		return nil, err
@@ -288,7 +290,7 @@ func loadContacts(ctx context.Context, q queryer, where string, args ...any) ([]
 	return out, nil
 }
 
-func getContactRow(ctx context.Context, q queryer, contactID string) (contactRow, bool, error) {
+func getContactRow(ctx context.Context, q *sql.Tx, contactID string) (contactRow, bool, error) {
 	rows, err := loadContacts(ctx, q, `WHERE contact_id = ?`, strings.TrimSpace(contactID))
 	if err != nil || len(rows) == 0 {
 		return contactRow{}, false, err
@@ -375,12 +377,35 @@ func (s *DBStore) inTx(ctx context.Context, fn func(context.Context, *sql.Tx) er
 	return tx.Commit()
 }
 
-func (s *DBStore) GetContact(ctx context.Context, contactID string) (Contact, bool, error) {
+// readContacts runs loadContacts in a read-only transaction: one snapshot of agent.db, taken
+// without the write lock.
+func (s *DBStore) readContacts(ctx context.Context, where string, args ...any) ([]contactRow, error) {
 	db, err := s.handle(ctx)
 	if err != nil {
-		return Contact{}, false, err
+		return nil, err
 	}
-	row, ok, err := getContactRow(ctx, db, contactID)
+	tx, err := db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	rows, err := loadContacts(ctx, tx, where, args...)
+	if err != nil {
+		return nil, err
+	}
+	return rows, tx.Commit()
+}
+
+func (s *DBStore) readContact(ctx context.Context, contactID string) (contactRow, bool, error) {
+	rows, err := s.readContacts(ctx, `WHERE contact_id = ?`, strings.TrimSpace(contactID))
+	if err != nil || len(rows) == 0 {
+		return contactRow{}, false, err
+	}
+	return rows[0], true, nil
+}
+
+func (s *DBStore) GetContact(ctx context.Context, contactID string) (Contact, bool, error) {
+	row, ok, err := s.readContact(ctx, contactID)
 	return row.contact, ok, err
 }
 
@@ -473,18 +498,15 @@ func (s *DBStore) SetContactStatusBy(ctx context.Context, contactID string, stat
 }
 
 func (s *DBStore) ListContacts(ctx context.Context, status Status) ([]Contact, error) {
-	db, err := s.handle(ctx)
-	if err != nil {
-		return nil, err
-	}
 	var rows []contactRow
+	var err error
 	switch strings.ToLower(strings.TrimSpace(string(status))) {
 	case string(StatusActive):
-		rows, err = loadContacts(ctx, db, `WHERE status = 'active'`)
+		rows, err = s.readContacts(ctx, `WHERE status = 'active'`)
 	case string(StatusInactive):
-		rows, err = loadContacts(ctx, db, `WHERE status = 'inactive'`)
+		rows, err = s.readContacts(ctx, `WHERE status = 'inactive'`)
 	default:
-		rows, err = loadContacts(ctx, db, ``)
+		rows, err = s.readContacts(ctx, ``)
 	}
 	if err != nil {
 		return nil, err
@@ -511,10 +533,6 @@ type ListedContact struct {
 
 // ListContactsFiltered lists the contacts the filter selects, by id.
 func (s *DBStore) ListContactsFiltered(ctx context.Context, filter ContactFilter) ([]ListedContact, error) {
-	db, err := s.handle(ctx)
-	if err != nil {
-		return nil, err
-	}
 	var conds []string
 	var args []any
 	if v := strings.ToLower(strings.TrimSpace(string(filter.Status))); v != "" {
@@ -533,7 +551,7 @@ func (s *DBStore) ListContactsFiltered(ctx context.Context, filter ContactFilter
 	if len(conds) > 0 {
 		where = "WHERE " + strings.Join(conds, " AND ")
 	}
-	rows, err := loadContacts(ctx, db, where, args...)
+	rows, err := s.readContacts(ctx, where, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -565,15 +583,11 @@ func (s *DBStore) FindContactsByHandle(ctx context.Context, field, value string)
 	if value == "" {
 		return nil, nil
 	}
-	db, err := s.handle(ctx)
-	if err != nil {
-		return nil, err
-	}
 	match := `value = ?`
 	if field == "tg_username" {
 		match = `value = ? COLLATE NOCASE`
 	}
-	rows, err := loadContacts(ctx, db, `WHERE contact_id IN (SELECT contact_id FROM contact_handles WHERE field = ? AND `+match+`)`, field, value)
+	rows, err := s.readContacts(ctx, `WHERE contact_id IN (SELECT contact_id FROM contact_handles WHERE field = ? AND `+match+`)`, field, value)
 	if err != nil {
 		return nil, err
 	}
@@ -611,11 +625,7 @@ func contactYAMLBlock(row contactRow) (ContactYAMLBlock, error) {
 
 // GetContactYAML renders one contact as the YAML block the contacts file had for it.
 func (s *DBStore) GetContactYAML(ctx context.Context, contactID string) (ContactYAMLBlock, bool, error) {
-	db, err := s.handle(ctx)
-	if err != nil {
-		return ContactYAMLBlock{}, false, err
-	}
-	row, ok, err := getContactRow(ctx, db, contactID)
+	row, ok, err := s.readContact(ctx, contactID)
 	if err != nil || !ok {
 		return ContactYAMLBlock{}, ok, err
 	}
