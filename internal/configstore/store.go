@@ -63,7 +63,7 @@ func Source(path string) string {
 }
 
 func dbFor(ctx context.Context, path string) (*agentdb.DB, error) {
-	return agentdb.CachedBeside(path).Get(ctx)
+	return agentdb.CachedBeside(path).GetWithoutImports(ctx)
 }
 
 // ReadFile returns the config at path as YAML. A missing file, or an agent.db that holds no
@@ -483,7 +483,7 @@ const ImportName = "config"
 // <name>.imported after the import commits. It reports whether it imported.
 func ImportFile(ctx context.Context, stateDir, filePath string) (bool, error) {
 	filePath = filepath.Clean(strings.TrimSpace(filePath))
-	db, err := agentdb.CachedStateDir(stateDir).Get(ctx)
+	db, err := agentdb.CachedStateDir(stateDir).GetWithoutImports(ctx)
 	if err != nil {
 		return false, err
 	}
@@ -529,7 +529,7 @@ func ImportFile(ctx context.Context, stateDir, filePath string) (bool, error) {
 
 // Settings lists the settings rows: path, kind and JSON value, for diagnostics and tests.
 func Settings(ctx context.Context, stateDir string) ([][3]string, error) {
-	db, err := agentdb.CachedStateDir(stateDir).Get(ctx)
+	db, err := agentdb.CachedStateDir(stateDir).GetWithoutImports(ctx)
 	if err != nil {
 		return nil, err
 	}

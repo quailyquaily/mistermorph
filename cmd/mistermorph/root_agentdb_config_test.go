@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/quailyquaily/mistermorph/cmd/mistermorph/configcmd"
+	"github.com/quailyquaily/mistermorph/contacts"
 	"github.com/quailyquaily/mistermorph/internal/agentdb"
 	"github.com/quailyquaily/mistermorph/internal/configstore"
 	"github.com/spf13/viper"
@@ -289,5 +290,54 @@ func TestConfigExportThenImportChangesNothing(t *testing.T) {
 	}
 	if err := configcmd.ImportDocument(path, []byte("- a list\n")); err == nil {
 		t.Fatal("a list imported as a config")
+	}
+}
+
+// The contacts import reads contacts.dir_name from the config, which for an install without
+// --config is in agent.db; so opening agent.db for the config must not run it with the default.
+func TestContactsImportUsesTheConfiguredFolderOverRepeatedStarts(t *testing.T) {
+	resetRootConfigForTest(t)
+	ctx := context.Background()
+	state := t.TempDir()
+	t.Setenv("MISTER_MORPH_FILE_STATE_DIR", state)
+	morph := filepath.Join(os.Getenv("HOME"), ".morph")
+	if err := os.MkdirAll(morph, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(morph, "config.yaml"), []byte("contacts:\n  dir_name: people\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	people := filepath.Join(state, "people")
+	if err := os.MkdirAll(people, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	active := "# Active Contacts\n\n## Ann\n\n```yaml\ncontact_id: \"tg:123\"\nkind: \"human\"\ntg_user_id: 123\nnickname: \"Ann\"\n```\n"
+	if err := os.WriteFile(filepath.Join(people, "ACTIVE.md"), []byte(active), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	for start := 1; start <= 2; start++ {
+		viper.Reset()
+		if err := loadRootConfig(nil); err != nil {
+			t.Fatalf("start %d: %v", start, err)
+		}
+		if got := viper.GetString("contacts.dir_name"); got != "people" {
+			t.Fatalf("start %d: contacts.dir_name = %q", start, got)
+		}
+		listed, err := contacts.NewStore(filepath.Join(state, viper.GetString("contacts.dir_name"))).
+			ListContactsFiltered(ctx, contacts.ContactFilter{})
+		if err != nil {
+			t.Fatalf("start %d: %v", start, err)
+		}
+		if len(listed) != 1 || listed[0].ContactID != "tg:123" {
+			t.Fatalf("start %d: contacts = %+v, want tg:123 from people/ACTIVE.md", start, listed)
+		}
+		// The process ends: its handles on agent.db close.
+		if err := agentdb.CachedStateDir(state).Close(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(people, "ACTIVE.md.imported")); err != nil {
+		t.Fatalf("people/ACTIVE.md not renamed after its import: %v", err)
 	}
 }

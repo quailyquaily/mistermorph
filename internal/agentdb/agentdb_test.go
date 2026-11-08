@@ -293,3 +293,49 @@ func TestEmptyPathsNeverOpenInWorkingDirectory(t *testing.T) {
 		t.Fatalf("CachedBeside path = %q", beside.Path())
 	}
 }
+
+// The config opens agent.db before the settings the imports read are loaded; the imports wait for
+// the next Open or Get, even while the config's handle keeps the pool open.
+func TestOpenWithoutImportsDefersThemToTheNextOpen(t *testing.T) {
+	var runs atomic.Int32
+	withImporter(t, testImporter(&runs, nil))
+	ctx := context.Background()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "notes.txt"), []byte("one\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	lazy := NewLazy(filepath.Join(dir, "agent.db"))
+	defer func() { _ = lazy.Close() }()
+	config, err := lazy.GetWithoutImports(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if done, err := stateimport.Imported(ctx, config, "notes"); err != nil || done || runs.Load() != 0 {
+		t.Fatalf("imported before any open with imports: done=%v runs=%d err=%v", done, runs.Load(), err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "notes.txt")); err != nil {
+		t.Fatalf("notes.txt renamed by an open without imports: %v", err)
+	}
+	db, err := lazy.Get(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if runs.Load() != 1 {
+		t.Fatalf("runs after Get = %d, want 1", runs.Load())
+	}
+	other, err := Open(ctx, filepath.Join(dir, "agent.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = other.Close()
+	if runs.Load() != 1 {
+		t.Fatalf("runs after a second open = %d, want 1", runs.Load())
+	}
+	var n int
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM notes`).Scan(&n); err != nil || n != 1 {
+		t.Fatalf("notes = %d, %v", n, err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "notes.txt.imported")); err != nil {
+		t.Fatalf("notes.txt not renamed: %v", err)
+	}
+}

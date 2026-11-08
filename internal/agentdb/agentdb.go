@@ -6,7 +6,9 @@
 // them and take a *DB.
 //
 // Each store's files from an older version are imported once by an Importer the store's package
-// registers. An import runs in one transaction that also writes an import mark in meta; the files
+// registers. The imports run on the first Open, or Get of a Lazy, of the file in a process; the
+// config, which is read before the settings they depend on are known, opens without them. An
+// import runs in one transaction that also writes an import mark in meta; the files
 // are renamed <name>.imported only after it commits, and every open finishes renames a crash left
 // undone. A process that does not link a store's package does not import its files, and does not
 // mark them imported either.
@@ -22,6 +24,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/quailyquaily/mistermorph/internal/sqlitedb"
@@ -126,6 +129,25 @@ func Path() string {
 // Open opens agent.db at path, creating it with an empty schema when missing, and runs the
 // registered imports that have not run yet.
 func Open(ctx context.Context, path string) (*DB, error) {
+	db, err := open(ctx, path)
+	if err != nil {
+		return nil, err
+	}
+	if err := runPendingImports(ctx, db); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	return db, nil
+}
+
+// OpenWithoutImports opens agent.db at path like Open, but does not run the registered imports.
+// It is for the config, which is read before the settings the imports depend on (the contacts
+// folder's contacts.dir_name) are known. The next Open, or Get of a Lazy, runs them.
+func OpenWithoutImports(ctx context.Context, path string) (*DB, error) {
+	return open(ctx, path)
+}
+
+func open(ctx context.Context, path string) (*DB, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -139,15 +161,8 @@ func Open(ctx context.Context, path string) (*DB, error) {
 		if err != nil {
 			return nil, fmt.Errorf("open agent database: %w", err)
 		}
-		stateDir := filepath.Dir(path)
-		if err := stateimport.FinishRenames(ctx, db, stateDir, logger); err != nil {
+		if err := stateimport.FinishRenames(ctx, db, filepath.Dir(path), logger); err != nil {
 			logger.Warn("agent_db_import_rename_failed", "error", err)
-		}
-		for _, importer := range registered() {
-			if _, err := runImport(ctx, db, stateDir, importer, logger); err != nil {
-				_ = db.Close()
-				return nil, fmt.Errorf("import %s into agent database: %w", importer.Name, err)
-			}
 		}
 		return db, nil
 	})
@@ -155,6 +170,40 @@ func Open(ctx context.Context, path string) (*DB, error) {
 		return nil, err
 	}
 	return &DB{DB: db, path: path, release: release}, nil
+}
+
+// importState is whether the registered imports have run on a connection pool.
+type importState struct {
+	mu   sync.Mutex
+	done atomic.Bool
+}
+
+// importStates maps each *sql.DB pool to its importState.
+var importStates sync.Map
+
+// runPendingImports runs the registered imports whose mark is not set yet, once per connection
+// pool: a pool first opened without them gets them on its next Open or Get.
+func runPendingImports(ctx context.Context, db *DB) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	value, _ := importStates.LoadOrStore(db.DB, &importState{})
+	state := value.(*importState)
+	if state.done.Load() {
+		return nil
+	}
+	state.mu.Lock()
+	defer state.mu.Unlock()
+	if state.done.Load() {
+		return nil
+	}
+	for _, importer := range registered() {
+		if _, err := runImport(ctx, db.DB, db.StateDir(), importer, slog.Default()); err != nil {
+			return fmt.Errorf("import %s into agent database: %w", importer.Name, err)
+		}
+	}
+	state.done.Store(true)
+	return nil
 }
 
 // OpenStateDir opens agent.db in stateDir.
@@ -239,8 +288,25 @@ func (l *Lazy) Path() string {
 	return l.path
 }
 
-// Get returns the open database.
+// Get returns the open database, after running the registered imports that have not run yet.
 func (l *Lazy) Get(ctx context.Context) (*DB, error) {
+	db, err := l.get(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := runPendingImports(ctx, db); err != nil {
+		return nil, err
+	}
+	return db, nil
+}
+
+// GetWithoutImports returns the open database without running the registered imports, for the
+// config (see OpenWithoutImports).
+func (l *Lazy) GetWithoutImports(ctx context.Context) (*DB, error) {
+	return l.get(ctx)
+}
+
+func (l *Lazy) get(ctx context.Context) (*DB, error) {
 	if l == nil || l.path == "" {
 		return nil, fmt.Errorf("agent database path is required")
 	}
@@ -253,7 +319,7 @@ func (l *Lazy) Get(ctx context.Context) (*DB, error) {
 		_ = l.db.Close()
 		l.db = nil
 	}
-	db, err := Open(ctx, l.path)
+	db, err := open(ctx, l.path)
 	if err != nil {
 		return nil, err
 	}
