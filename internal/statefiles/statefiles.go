@@ -81,10 +81,10 @@ func Export(ctx context.Context, loc Locations, dir string) (Result, error) {
 		if err := write(dir, IdentityFile, personastore.RenderIdentityYAML(id), &result); err != nil {
 			return result, err
 		}
-		if soul := personastore.RenderSoul(id.Soul); soul != "" {
-			if err := write(dir, SoulFile, soul, &result); err != nil {
-				return result, err
-			}
+		// An empty soul is written as an empty soul.md, so an export into a folder that holds an
+		// older one does not leave that soul to be imported back.
+		if err := write(dir, SoulFile, personastore.RenderSoul(id.Soul), &result); err != nil {
+			return result, err
 		}
 	}
 	workflows, err := persona.Workflows(ctx)

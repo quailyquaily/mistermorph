@@ -255,3 +255,41 @@ func TestImportOfOneContactsFileKeepsTheOtherStatus(t *testing.T) {
 		})
 	}
 }
+
+// A soul cleared since the last export is exported as an empty soul.md, which imports as no soul.
+func TestExportOfAClearedSoulReplacesTheOldSoulFile(t *testing.T) {
+	ctx := context.Background()
+	loc := locationsFor(t.TempDir())
+	persona, err := personastore.Open(ctx, loc.StateDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = persona.Close() }()
+	if _, err := persona.SaveIdentity(ctx, personastore.Identity{Name: "Morph", Soul: "Old soul"}, personastore.ByCLI); err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(t.TempDir(), "export")
+	if _, err := Export(ctx, loc, dir); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := persona.SaveIdentity(ctx, personastore.Identity{Name: "Morph"}, personastore.ByCLI); err != nil {
+		t.Fatal(err)
+	}
+	result, err := Export(ctx, loc, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(strings.Join(result.Files, ","), "persona/soul.md") {
+		t.Fatalf("files = %v, want persona/soul.md", result.Files)
+	}
+	if raw, err := os.ReadFile(filepath.Join(dir, SoulFile)); err != nil || len(raw) != 0 {
+		t.Fatalf("soul.md = %q, %v; want empty", raw, err)
+	}
+	if _, err := Import(ctx, loc, dir); err != nil {
+		t.Fatal(err)
+	}
+	id, ok, err := persona.Identity(ctx)
+	if err != nil || !ok || id.Soul != "" || id.Name != "Morph" {
+		t.Fatalf("identity after the import = %+v, %v, %v; want no soul", id, ok, err)
+	}
+}
