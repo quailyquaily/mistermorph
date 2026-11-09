@@ -6,6 +6,7 @@
 // A selection names its reply by id (and its task, should the reply be replaced by the task's own
 // row) and its worker by id, never a copy of the data: the panel looks them up in the live history,
 // so a plan, progress or output still streaming keeps growing there.
+import { signal, untracked } from "nsh";
 
 export type ActivityDetailKind = "plan" | "activity" | "reasoning" | "worker";
 
@@ -57,4 +58,31 @@ export function findActivityDetailItem<T extends { id: string; taskId?: string; 
 export function activityDetailWorkerID(key: string, itemID: string): string {
   const prefix = `${String(itemID || "").trim()}\u0000worker\u0000`;
   return key && key.startsWith(prefix) ? key.slice(prefix.length) : "";
+}
+
+/**
+ * The entry point (`activityDetailKey`) that takes the keyboard focus back as the detail panel
+ * closes. `request(key)` sets it, and it stays until that change has settled (the effects that
+ * read it have run, the panel's close included), then clears: the entries on screen then see it
+ * and take the focus, and an entry drawn later does not.
+ */
+export function createFocusReturn() {
+  const key = signal("");
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const stop = () => {
+    if (timer) clearTimeout(timer);
+    timer = undefined;
+  };
+  return {
+    key: () => key(),
+    request(next: string) {
+      stop();
+      key.set(next);
+      timer = setTimeout(() => {
+        timer = undefined;
+        if (untracked(key) === next) key.set("");
+      }, 0);
+    },
+    dispose: stop,
+  };
 }

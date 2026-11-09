@@ -12,7 +12,7 @@
 // reply answers) and close; Escape closes it beside the conversation, and on phones the sheet's
 // own Escape, Back and scrim do.
 import { cleanup, effect, keymap, Text, View } from "nsh";
-import { Icon, StatusMark, Tip, TipButton } from "../../components/ui";
+import { Icon, popupOpen, StatusMark, Tip, TipButton } from "../../components/ui";
 import { CHROME_BAR_HEIGHT } from "../../components/frame/metrics";
 import { activityDetailKey, type ActivityDetailRef } from "../../components/chat/activityDetail";
 import type { ArtifactPreviews } from "../../components/chat/ArtifactPreviewCard";
@@ -62,12 +62,13 @@ export function ActivityDetailPanel(props: {
   class?: string;
   onClose: () => void;
 }) {
-  // Beside the conversation, Escape closes it, also from the composer (where Escape types nothing;
-  // the composer's own Escape, closing its suggestions, is bound later and goes first). A dialog
-  // over the page (`escape` false) gets Escape instead: the binding is dropped meanwhile, since a
-  // binding that fires takes the key. The phone's sheet takes Escape and Back itself.
+  // Beside the conversation, Escape closes it, also from the composer (where Escape types nothing).
+  // A dialog of the page (`escape` false) or any popup over it (a dialog, a menu, a select, the
+  // composer's suggestions: `popupOpen`, whether it opened before the panel or after) gets Escape
+  // instead: the binding is dropped meanwhile, since a binding that fires takes the key. The phone's
+  // sheet takes Escape and Back itself.
   effect(() => {
-    if (props.phone || props.escape === false) return;
+    if (props.phone || props.escape === false || popupOpen()) return;
     cleanup(keymap.bind("escape", () => props.onClose(), { when: "always" }));
   });
 

@@ -2,8 +2,10 @@
 // and workers open there (never inside the conversation), one at a time; it and the topic and
 // workspace panel replace each other; close, Escape and Back dismiss it; another conversation
 // closes it; and what still streams keeps growing in it.
+import { batch, effect, signal, untracked } from "nsh";
 import { expect, open, test, type App } from "nsh/test";
-import { openConsole, type ApiRequest } from "./harness";
+import { createFocusReturn } from "../components/chat/activityDetail";
+import { localEndpoint, openConsole, type ApiRequest } from "./harness";
 
 const NOW = new Date().toISOString();
 const TOPICS = {
@@ -146,6 +148,90 @@ test("while a dialog is over the page, Escape is not the panel's", async () => {
   await app.waitFor("id:chat-detail-panel", { state: "gone" });
 });
 
+// Escape is the topmost popup's: a menu or dialog opened over the page, or the composer's
+// suggestions, take it before the panel beside the conversation, whichever opened first.
+test("Escape closes the agent menu opened over the panel before the panel", async () => {
+  const { app } = await openChat();
+  await app.press("id:chat-status-plan");
+  await app.waitFor("id:chat-detail-panel");
+  await app.press("id:agent-switcher-trigger");
+  await app.waitFor("label:Overview");
+  await app.keyboard.press("escape");
+  await app.wait(300);
+  expect(app.shows("id:chat-detail-panel")).toBe(true);
+});
+
+test("Escape is the agent dialog's, opened over the panel from outside the chat page", async () => {
+  const agents = Array.from({ length: 8 }, (_, index) => ({
+    endpoint_ref: `ep_${index}`,
+    name: `Remote ${index}`,
+    url: `https://agent-${index}.example.com`,
+    connected: true,
+    agent_name: `Agent ${index}`,
+    mode: "console",
+    can_submit: true,
+    avatar_url: "",
+  }));
+  const { app } = await openConsole({ location: CHAT, endpoints: [localEndpoint(), ...agents], api: API });
+  await app.waitFor("id:chat-status-card");
+  await app.press("id:chat-status-plan");
+  await app.waitFor("id:chat-detail-panel");
+  await app.press("id:agent-switcher-trigger");
+  await app.waitFor("id:agent-switcher-filter");
+  // (Headless, Escape never reaches nsh's dialog itself: only that the panel leaves it alone.)
+  await app.keyboard.press("escape");
+  await app.wait(300);
+  expect(app.shows("id:chat-detail-panel")).toBe(true);
+});
+
+test("Escape closes the composer's suggestions shown before the panel opened, then the panel", async () => {
+  const { app } = await openChat({
+    api: { "GET /commands": { body: { items: [{ value: "/alpha", title: "/alpha", description: "First" }] } } },
+  });
+  await app.type("id:chat-composer-input", "/");
+  await app.waitFor("id:chat-composer-suggestions");
+  await app.press("id:chat-status-plan");
+  await app.waitFor("id:chat-detail-panel");
+  expect(app.shows("id:chat-composer-suggestions")).toBe(true);
+  await app.keyboard.press("escape");
+  await app.waitFor("id:chat-composer-suggestions", { state: "gone" });
+  expect(app.shows("id:chat-detail-panel")).toBe(true);
+  await app.keyboard.press("escape");
+  await app.waitFor("id:chat-detail-panel", { state: "gone" });
+  expect(app.value("id:chat-composer-input")).toBe("/");
+});
+
+// The entry that opened the panel takes the keyboard focus back as it closes (its `focus` effect,
+// ChatStatusCard's Column, ChatWorkerRoster's chip). Headless steps cannot tell which view has the
+// keyboard focus, nor press a focused button from the keyboard: the request is checked as those
+// effects see it, in the same batch as the panel's close, as a key press runs.
+test("the focus-return request is seen by the entries as the panel closes, then cleared", async () => {
+  const focusReturn = createFocusReturn();
+  const panelOpen = signal(true);
+  const seen: string[] = [];
+  effect(() => {
+    const key = focusReturn.key();
+    if (key) untracked(() => seen.push(key));
+  });
+  batch(() => {
+    panelOpen.set(false);
+    focusReturn.request("item-1\u0000plan");
+  });
+  expect(seen).toEqual(["item-1\u0000plan"]);
+  expect(untracked(focusReturn.key)).toBe("item-1\u0000plan");
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  // Cleared once settled: an entry drawn later does not take the focus.
+  expect(untracked(focusReturn.key)).toBe("");
+
+  // A second close soon after takes the request over; the first one's clearing leaves it alone.
+  focusReturn.request("item-1\u0000plan");
+  focusReturn.request("item-1\u0000worker\u0000w1");
+  expect(seen.at(-1)).toBe("item-1\u0000worker\u0000w1");
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  expect(untracked(focusReturn.key)).toBe("");
+  focusReturn.dispose();
+});
+
 test("closing the panel leaves the focus in the composer that had it", async () => {
   const { app } = await openChat();
   await app.type("id:chat-composer-input", "half");
@@ -261,6 +347,35 @@ test("on a phone the details open in the right sheet, and Back closes it to the 
   await app.press("id:chat-detail-close");
   await app.waitFor("id:chat-detail-panel", { state: "gone" });
   // The workspace sheet still opens from the bar, alone.
+  await app.press("id:chat-workspace-toggle");
+  await app.waitFor("id:chat-workspace-panel");
+  expect(app.shows("id:chat-detail-panel")).toBe(false);
+});
+
+// The sheet goes out with what it showed: closing the details does not put the workspace panel
+// (or its narrower width) in the sheet under its exit (chatController's mobileSheetDetail).
+// Headless runs do not draw the sheet's exit, so this checks only that the workspace panel never
+// shows on the way out; the exit's look is not checked here.
+test("on a phone the closing sheet keeps the details, never showing the workspace panel", async () => {
+  const { app } = await openConsole({ platform: "android", location: CHAT, api: API });
+  await app.waitFor("id:chat-status-card");
+  await app.press("id:chat-status-plan");
+  await app.waitFor("id:chat-detail-panel");
+  let workspaceShown = false;
+  const watch = setInterval(() => {
+    if (app.shows("id:chat-workspace-panel")) workspaceShown = true;
+  }, 5);
+  try {
+    await app.press("id:chat-detail-close");
+    expect(app.shows("id:chat-workspace-panel")).toBe(false);
+    await app.waitFor("id:chat-detail-panel", { state: "gone" });
+    await app.wait(400);
+  } finally {
+    clearInterval(watch);
+  }
+  expect(workspaceShown).toBe(false);
+  expect(app.shows("id:chat-workspace-panel")).toBe(false);
+  // The workspace sheet still opens alone afterwards.
   await app.press("id:chat-workspace-toggle");
   await app.waitFor("id:chat-workspace-panel");
   expect(app.shows("id:chat-detail-panel")).toBe(false);

@@ -123,16 +123,18 @@ function WorkspaceToggle(props: { c: ChatController; bare?: boolean }) {
   );
 }
 
-/** The detail panel of the reply entry the page has open, if any. */
+/** The detail panel of the reply entry the page has open, if any; on phones, the sheet's (kept while it goes out). */
 function DetailPanel(props: { c: ChatController; phone?: boolean; class?: string }) {
   const c = props.c;
+  const shown = () => (props.phone ? c.mobileSheetDetail() : c.activityDetail());
+  const item = () => (props.phone ? c.mobileSheetDetailItem() : c.activityDetailItem());
   return (
-    <If when={c.activityDetail()}>
+    <If when={shown()}>
       {(detail) => (
         <ActivityDetailPanel
           detail={detail()}
-          item={c.activityDetailItem()}
-          context={c.activityDetailContext()}
+          item={item()}
+          context={c.activityDetailContextOf(item())}
           endpointRef={c.submitEndpointRef()}
           topicID={c.selectedTopicID()}
           previews={c.rowContext.previews}
@@ -277,10 +279,11 @@ export function ChatPage() {
         </If>
         <WorkspaceSheet
           open={c.mobileWorkspaceSidebarVisible() || c.mobileActivityDetailVisible()}
-          wide={c.mobileActivityDetailVisible()}
+          wide={c.mobileSheetDetail() !== null}
           onClose={() => (c.mobileActivityDetailVisible() ? c.closeActivityDetail() : c.closeMobileWorkspaceSidebar())}
         >
-          <If when={c.mobileActivityDetailVisible()} else={<WorkspacePanel c={c} class="flex-1" phone />}>
+          {/* What the sheet showed stays while it goes out (chatController's mobileSheetDetail). */}
+          <If when={c.mobileSheetDetail() !== null} else={<WorkspacePanel c={c} class="flex-1" phone />}>
             <DetailPanel c={c} class="flex-1" phone />
           </If>
         </WorkspaceSheet>

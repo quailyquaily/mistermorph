@@ -679,6 +679,26 @@ export interface Choice {
   disabled?: boolean;
 }
 
+/* ---------- popups over the page ---------- */
+
+// The popups open over a page: dialogs, menus, selects and the composer's suggestions. Escape is the
+// topmost one's, but a keymap binding that fires takes the key from them all (and the newest
+// binding fires first, whichever popup opened last), so a page's own Escape (a panel beside the
+// content) holds back while any of them is open.
+const openPopups = signal(0);
+
+/** Whether a popup (`trackPopup`) is open over the page. */
+export const popupOpen = () => openPopups() > 0;
+
+/** Counts a popup as open while `open()` says so, until the component that tracks it goes. */
+export function trackPopup(open: () => boolean) {
+  effect(() => {
+    if (!open()) return;
+    untracked(() => openPopups.set(untracked(openPopups) + 1));
+    cleanup(() => openPopups.set(untracked(openPopups) - 1));
+  });
+}
+
 /** A dropdown of choices (the Vue console's AppSelect / AppDropdownMenu in select mode). */
 export function SelectField(props: {
   items: Choice[];
@@ -710,6 +730,8 @@ export function SelectField(props: {
   // as the field, with the chevron turned while open; the chosen row is not marked (the field says it). A Menu places as asked, so the plain select
   // is a menu of checkable rows; only the searchable one keeps Select (it filters as one types).
   const open = signal(false);
+  // Disabled, the list goes without saying it closed.
+  trackPopup(() => open() && !props.disabled);
   const triggerWidth = signal(0);
   const plain = () => (
     <Menu
@@ -781,6 +803,7 @@ export function SelectField(props: {
         searchable={props.searchable}
         accessibilityLabel={props.label || props.placeholder}
         onChange={({ value }) => value !== null && props.onChange?.(value)}
+        onOpenChange={({ open: next }) => open.set(next)}
         testID={props.testID}
         class={`${height()} flex-row items-center justify-between gap-2 rounded-(--radius) border border-input bg-field ${
           props.size === "xs" ? "pl-[9.6px]" : "pl-[12.8px]"
@@ -865,6 +888,8 @@ export function DropdownMenu(props: {
   disabled?: boolean;
   class?: string;
 }) {
+  const shown = signal(false);
+  trackPopup(() => (props.open ?? shown()) && !props.disabled);
   return (
     <If when={!props.disabled} else={<View class="opacity-45">{props.trigger}</View>}>
     <Menu
@@ -872,7 +897,10 @@ export function DropdownMenu(props: {
       placement={props.placement ?? "bottom"}
       align={props.align ?? "end"}
       open={props.open}
-      onOpenChange={({ open }) => props.onOpenChange?.(open)}
+      onOpenChange={({ open }) => {
+        shown.set(open);
+        props.onOpenChange?.(open);
+      }}
       popupClass={`${MENU_POPUP} ${props.class ?? ""}`}
       popupStyle={bottomSheetStyle(8, { style: MENU_POPUP_STYLE })}
       popupStartingClass={MENU_STARTING}
@@ -1307,6 +1335,7 @@ export function DialogLayer(props: {
   children?: JSX.Element;
 }) {
   const shown = signal(untracked(() => props.open));
+  trackPopup(() => props.open);
   const panel = createMotion({ initial: { opacity: 0 } });
   const scrim = createAnimatedValue(0);
   const origin = signal<[number, number] | null>(null);

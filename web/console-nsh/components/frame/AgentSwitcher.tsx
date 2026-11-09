@@ -8,7 +8,7 @@ import { Button as BaseButton, Menu, MenuItem, MenuSeparator } from "nsh/base";
 import { translate } from "../../lib/core/context.js";
 import type { EndpointItem } from "../../lib/shell";
 import { FadeText } from "../motion/FadeText";
-import { bottomSheetStyle, Icon, Modal, TextField, Tip, TipButton } from "../ui";
+import { bottomSheetStyle, Icon, Modal, TextField, Tip, TipButton, trackPopup } from "../ui";
 
 const t = translate as (key: string, vars?: Record<string, unknown>) => string;
 
@@ -183,6 +183,7 @@ export interface AgentSwitcherProps {
 
 export function AgentSwitcher(props: AgentSwitcherProps) {
   const menuOpen = signal(false);
+  trackPopup(menuOpen);
   const dialogOpen = signal(false);
   const filter = signal("");
 

@@ -113,6 +113,7 @@ import { createReceivedFiles } from "../../components/chat/ReceivedFile";
 import { keyedState } from "../../components/chat/rowState";
 import {
   activityDetailKey,
+  createFocusReturn,
   findActivityDetailItem,
   normalizeActivityDetail,
   type ActivityDetailRef,
@@ -462,9 +463,8 @@ export function createChatController() {
     },
     { equals: (a, b) => activityDetailKey(a) === activityDetailKey(b) && a?.taskID === b?.taskID },
   );
-  // The entry point that takes the keyboard focus back as the detail panel closes: set and cleared
-  // in one go, so only the entry on screen then takes it.
-  const detailFocusReturn = signal("");
+  // The entry point that takes the keyboard focus back as the detail panel closes (activityDetail.ts).
+  const detailFocusReturn = createFocusReturn();
   const workspaceSidebarTabID = signal(TOPIC_TAB_ID);
   const workspaceTreeItems = signal<Record<string, any[]>>({});
   const workspaceTreeExpanded = signal<Record<string, boolean>>({ "": true });
@@ -729,9 +729,8 @@ export function createChatController() {
     rawDialogOpen() || filePreview().open || topicDeleteDialogOpen() || workspaceBrowserOpen();
   /** The reply the detail panel shows, read live from the history (null once it is gone). */
   const activityDetailItem = computed(() => findActivityDetailItem(chatHistoryItems(), activityDetail()));
-  /** What that reply answers: the message before it, on one line. */
-  const activityDetailContext = () => {
-    const item = activityDetailItem();
+  /** What a reply answers: the message before it, on one line. */
+  const activityDetailContextOf = (item: HistoryItem | null) => {
     if (!item) return "";
     const items = chatHistoryItems();
     for (let index = items.indexOf(item) - 1; index >= 0; index -= 1) {
@@ -739,6 +738,19 @@ export function createChatController() {
     }
     return "";
   };
+  /** What the detail panel's reply answers. */
+  const activityDetailContext = () => activityDetailContextOf(activityDetailItem());
+  // The phone's right sheet shows the details or the workspace panel. While it goes out (neither is
+  // open any more) it keeps the details it showed, and their width: closing them must not put the
+  // workspace panel in the sheet under its exit. Only opening it again changes what it shows.
+  const mobileSheetDetail = signal<ActivityDetailRef | null>(null);
+  effect(() => {
+    const detail = mobileActivityDetailVisible() ? activityDetail() : null;
+    const open = detail !== null || mobileWorkspaceSidebarVisible();
+    if (open) untracked(() => mobileSheetDetail.set(detail));
+  });
+  /** The reply the phone's sheet shows, live (also while it goes out). */
+  const mobileSheetDetailItem = computed(() => findActivityDetailItem(chatHistoryItems(), mobileSheetDetail()));
   // Consecutive topics of one local day share a date heading.
   const topicDayGroups = computed(() => {
     const groups: any[] = [];
@@ -1567,8 +1579,7 @@ export function createChatController() {
     if (!current) return;
     setRightPanel(RIGHT_PANEL_NONE);
     if (options.restoreFocus === false || composer?.focused()) return;
-    detailFocusReturn.set(activityDetailKey(current));
-    detailFocusReturn.set("");
+    detailFocusReturn.request(activityDetailKey(current));
   }
 
   function onWorkspaceTabChange(id: string) {
@@ -2986,7 +2997,7 @@ export function createChatController() {
     copiedItemID: () => copiedHistoryItemID(),
     copySeq: () => copySeq(),
     detail: () => activityDetail(),
-    focusReturn: () => detailFocusReturn(),
+    focusReturn: () => detailFocusReturn.key(),
     autoPreviewItemID: () => autoPreviewHistoryID(),
     previews,
     receivedFiles,
@@ -3146,6 +3157,7 @@ export function createChatController() {
     resetRawReveal();
     resetHeartbeatReveal();
     clearTimeout(copiedHistoryTimer);
+    detailFocusReturn.dispose();
     previews.dispose();
     receivedFiles.dispose();
   });
@@ -3179,6 +3191,9 @@ export function createChatController() {
     activityDetail,
     activityDetailItem,
     activityDetailContext,
+    activityDetailContextOf,
+    mobileSheetDetail,
+    mobileSheetDetailItem,
     pageDialogOpen,
     workspaceSidebarTabID,
     workspaceTreeLoading,
