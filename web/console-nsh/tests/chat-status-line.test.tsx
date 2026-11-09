@@ -19,9 +19,9 @@ for (const line of ["running", "done", "failed", "reasoning"]) {
     const mark = frames()[`${line}-mark`];
     expect(card).toBeDefined();
     expect(mark).toBeDefined();
-    // The columns are taller than the time: the line is as tall as they are (panels closed), and
-    // the time's middle is the line's.
-    expect(mark.h).toBeLessThan(card.h);
+    // The time is no taller than the columns (both a 20pt box, design/ui-refresh.html §3): the
+    // line is as tall as they are (panels closed), and the time's middle is the line's.
+    expect(mark.h).toBeLessThanOrEqual(card.h);
     expect(Math.abs(mark.y + mark.h / 2 - card.h / 2)).toBeLessThan(0.75);
     expect(mark.x).toBe(0);
   });
@@ -42,5 +42,6 @@ test("alone, a reply's time keeps to the left and a sent message's to the right"
   expect(reply.x).toBe(0);
   expect(reply.w).toBeLessThan(frames()["reply-column"].w);
   expect(sent.w).toBeLessThan(column.w);
-  expect(Math.abs(sent.x + sent.w + 8 - column.w)).toBeLessThan(0.75);
+  // A sent message's time ends on its bubble's text edge: 8pt inset, 1pt border, 14pt padding.
+  expect(Math.abs(sent.x + sent.w + 23 - column.w)).toBeLessThan(0.75);
 });

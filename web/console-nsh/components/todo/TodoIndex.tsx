@@ -8,7 +8,7 @@
 //   its transform); the items keep only their hover fill, which comes in after 60ms and goes at once
 //   so sweeping the pointer down the list does not flash every row;
 // - an item that just arrived or changed holds a blue tint, then fades back (createArrivalTint);
-// - a running item's marker pulses (opacity only, natively);
+// - a running item's marker turns into the running ring (StatusMark);
 // - the head sits flush with the list at rest and draws its hairline only once something has
 //   scrolled under it; the list's hidden end fades (createScrollEdges).
 import { createAnimatedValue, effect, reduceMotion, Scroll, Text, untracked, View } from "nsh";
@@ -17,7 +17,7 @@ import { translate } from "../../lib/core/context.js";
 import { TODO_RUN_RUNNING } from "../../lib/core/todo-runs.js";
 import { gutterX, gutterY } from "../frame/metrics";
 import { createArrivalTint, createScrollEdges, createSlidingSelection, SCROLLBAR } from "../motion";
-import { Button, Icon } from "../ui";
+import { Button, Icon, StatusMark } from "../ui";
 import type { TodoRun, TodoState, TodoTask } from "./todo-state";
 
 const t = translate as (key: string, vars?: Record<string, unknown> | null) => string;
@@ -32,29 +32,15 @@ export const ROW_HOVER = { transitionDelay: 60 };
 export const ROW_TRANSITION = { transitionProperty: "colors", transitionDuration: 180, transitionTimingFunction: "ease" } as const;
 
 /**
- * The item's marker, a 7pt status square: running (blue, pulsing), waiting (orange), else blue when
- * enabled and hollow when not (the Vue console's badge dot overrides in styles/base.css).
+ * The item's marker, a 7pt status square: waiting (orange), else blue when enabled and hollow when
+ * not (the Vue console's badge dot overrides in styles/base.css); the turning ring while it runs.
  */
 export function RunMarker(props: { run: TodoRun | null; enabled: boolean }) {
-  const opacity = createAnimatedValue(1);
-  const running = () => props.run?.state === TODO_RUN_RUNNING;
-  effect(() => {
-    const on = running();
-    untracked(() => {
-      if (on && !reduceMotion()) {
-        void opacity.keyframes([1, 0.35, 1], { duration: 1600, easing: "easeInOut", iterations: "infinite" });
-      } else {
-        opacity.set(1);
-      }
-    });
-  });
-  const cls = () => {
-    if (props.run) return running() ? "bg-status-on border-status-on" : "bg-status-pending border-status-pending";
-    return props.enabled ? "bg-status-on border-status-on" : "border-status-off";
-  };
+  const state = () =>
+    props.run ? (props.run.state === TODO_RUN_RUNNING ? "running" : "pending") : props.enabled ? "on" : "off";
   return (
     <View class="w-4 items-center justify-center" accessibilityElementsHidden>
-      <View class={`size-[7px] rounded-[2px] border ${cls()}`} style={{ opacity }} />
+      <StatusMark state={state()} size={7} corner={2} />
     </View>
   );
 }

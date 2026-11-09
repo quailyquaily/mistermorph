@@ -14,7 +14,6 @@ import {
   Easing,
   effect,
   Image,
-  pixelRatio,
   platform,
   Text,
   token,
@@ -25,7 +24,7 @@ import {
 import { MOTION_EASE, MOTION_SLOW, motionMs } from "../motion/tokens";
 import { Button as BaseButton } from "nsh/base";
 import { ICONS } from "../icons";
-import { Button, Icon, Tip, TipButton } from "../ui";
+import { Button, Icon, StatusMark, Tip, TipButton } from "../ui";
 import { approvalParameterEntries, skillInstallApproval } from "../../lib/core/chat-approvals.js";
 import { agentLinkMessages, insightMessages, planStepMessages, pollingActionWord } from "../../lib/core/chat-task-history.js";
 import type { ArtifactPreviews } from "./ArtifactPreviewCard";
@@ -42,7 +41,6 @@ import { t } from "./i18n";
 import { MosaicText } from "./MosaicText";
 import { ReceivedFile, type ReceivedFiles } from "./ReceivedFile";
 import type { KeyedState } from "./rowState";
-import { bubbleTail, traceTailFill, traceTailOutline } from "./bubbleTail";
 import { CHECK_CORNER_AT, CHECK_DRAW_MS, CHECK_SIZE, checkAction, checkDash, checkDashOffset, checkStroke } from "./copyCheck";
 
 export type HistoryItem = Record<string, any> & { id: string; role: string; text: string };
@@ -97,33 +95,9 @@ const playedArrivals = new Set<string>();
 // pointer is over the message; touch screens have no hover, so there it always shows.
 const HOVER = platform.desktop;
 
-// The tail at the top right of a sent message's bubble (bubbleTail.ts): drawn on a canvas that
-// starts on the bubble's right border, so the fill covers the corner of the bubble's own border and
-// the stroke continues it, at the border's width in device pixels.
-function BubbleTail() {
-  const tail = () => bubbleTail(pixelRatio());
-  return (
-    <Canvas
-      accessibilityElementsHidden
-      class="absolute top-0"
-      style={{ width: tail().width, height: tail().height, right: tail().line - tail().width, pointerEvents: "none" }}
-      draw={(cx) => {
-        const shape = tail();
-        cx.fillStyle = String(token("card"));
-        traceTailFill(cx, shape);
-        cx.fill();
-        cx.strokeStyle = String(token("line-soft"));
-        cx.lineWidth = shape.line;
-        cx.lineJoin = "round";
-        traceTailOutline(cx, shape);
-        cx.stroke();
-      }}
-    />
-  );
-}
-
-/** A sent message's bubble: white paper, a hairline edge and a tail at the top right (the Vue
- * console's `.chat-history-user .chat-history-bubble`); a system message's: a dashed box. */
+/** A sent message's bubble: white paper and a hairline edge, its corners 14pt round but the top
+ * right, which stays 2pt where the tail was (design/ui-refresh.html §3); files hang beneath it,
+ * taking its bottom corners. A system message's: a dashed box. */
 function Bubble(props: { system?: boolean; files?: boolean; children?: JSX.Element }) {
   return (
     <If
@@ -134,13 +108,10 @@ function Bubble(props: { system?: boolean; files?: boolean; children?: JSX.Eleme
         </View>
       }
     >
-      <View class="relative">
-        <View
-          class={`rounded-(--radius) rounded-tr-none border border-line-soft bg-card px-3.5 pb-[11px] pt-2.5 ${props.files ? "border-b-0" : ""}`}
-        >
-          {props.children}
-        </View>
-        <BubbleTail />
+      <View
+        class={`rounded-[14px] rounded-tr-[2px] border border-line-soft bg-card px-3.5 pb-[11px] pt-2.5 ${props.files ? "rounded-b-none border-b-0" : ""}`}
+      >
+        {props.children}
       </View>
     </If>
   );
@@ -507,7 +478,7 @@ export function ChatHistoryItem(props: { item: HistoryItem; ctx: ChatRowContext;
           </View>
         </Bubble>
         <If when={userFiles().length}>
-          <View class="border border-t-0 border-line-soft bg-card py-[3px]">
+          <View class="rounded-b-[14px] border border-t-0 border-line-soft bg-card py-[3px]">
             <Each of={userFiles()} key={(file) => file.id}>
               {(file) => (
                 <TipButton
@@ -565,7 +536,7 @@ export function ChatHistoryItem(props: { item: HistoryItem; ctx: ChatRowContext;
         else={<If when={isAgent()} else={messageBody()}>{agentBody()}</If>}
       >
         <View class="flex-row items-center gap-2 self-center" role="text" testID="chat-context-notice">
-          <View class={`size-2 border ${status() === "failed" ? "bg-status-error border-status-error" : isTerminalStatus(status()) ? "bg-status-on border-status-on" : "bg-status-pending border-status-pending"}`} />
+          <StatusMark state={status() === "failed" ? "error" : isTerminalStatus(status()) ? "on" : "running"} />
           <Text class="font-mono text-xs text-subtle">{String(item()?.text ?? "")}</Text>
         </View>
       </If>

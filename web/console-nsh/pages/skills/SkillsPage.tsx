@@ -54,6 +54,7 @@ import { openExternal } from "../../lib/platform";
 import { currentRoute, locationOf, navigate } from "../../lib/router";
 import { isMobile } from "../../lib/shell";
 import { scrollIntoViewNearest } from "./scroll";
+import { MobileBarSpacer } from "../../components/frame/mobileBar";
 
 // Search appears once the list is long enough to need it.
 const SEARCH_THRESHOLD = 8;
@@ -953,6 +954,7 @@ export function SkillsPage() {
                 </DetailCard>
               )}
             </If>
+            <MobileBarSpacer />
           </Scroll>
         </If>
       </View>

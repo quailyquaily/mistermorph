@@ -4,7 +4,7 @@
 import type { JSX } from "nsh";
 import { Text, View } from "nsh";
 import { Button as BaseButton } from "nsh/base";
-import { Icon } from "../ui";
+import { Icon, StatusMark } from "../ui";
 import { localeState } from "../../lib/core/context.js";
 import { t } from "./i18n";
 import { activityWorkerLabel } from "../../lib/core/chat-task-history.js";
@@ -135,6 +135,36 @@ const TERMINAL_NOTE = "text-[#e8eef5d1]";
 const TERMINAL_VALUE = "text-[#d9e3ee]";
 const TERMINAL_ERROR = "text-[#e08a9e]";
 
+/** A status square's colour on the terminal. */
+function dotColor(status: string) {
+  switch (status) {
+    case "done":
+    case "completed":
+      return "#5a8788";
+    case "failed":
+    case "canceled":
+      return "#c06a80";
+    case "running":
+    case "in_progress":
+      return "#eea03e";
+    default:
+      return "#ffffff4d";
+  }
+}
+
+/** A plan step's or activity entry's status mark in the terminal's colours; running, the turning
+ *  ring in its running orange. */
+function StatusSquare(props: { status: string }) {
+  return (
+    <StatusMark
+      state={props.status === "running" || props.status === "in_progress" ? "running" : "on"}
+      color={dotColor(props.status)}
+      ringColor={dotColor("running")}
+      class="mt-1.5"
+    />
+  );
+}
+
 function dotClass(status: string) {
   switch (status) {
     case "done":
@@ -156,6 +186,8 @@ function planProgress(plan: any) {
   return `${steps.filter((step: any) => step.status === "completed").length}/${steps.length}`;
 }
 
+// A status column: mono 11 on a 16pt line in a 20pt box, 6pt each side, one baseline with the
+// time beside it (design/ui-refresh.html §3).
 function Column(props: { label: string; value?: string; expanded: boolean; onPress: () => void; testID?: string }) {
   return (
     <BaseButton
@@ -163,11 +195,11 @@ function Column(props: { label: string; value?: string; expanded: boolean; onPre
       selected={props.expanded}
       accessibilityLabel={props.label}
       testID={props.testID}
-      class="flex-row items-center gap-1 rounded-(--radius) px-1.5 py-0.5 hover:bg-hover selected:bg-selection"
+      class="h-5 flex-row items-center gap-1 rounded-(--radius) px-1.5 hover:bg-hover selected:bg-selection"
     >
-      <Text class="font-mono text-xs uppercase text-muted-foreground">{props.label}</Text>
+      <Text class="font-mono text-[11px] leading-4 uppercase text-muted-foreground">{props.label}</Text>
       <If when={props.value}>
-        <Text class="font-mono text-xs text-foreground">{props.value}</Text>
+        <Text class="font-mono text-[11px] leading-4 text-foreground">{props.value}</Text>
       </If>
       <Icon name={props.expanded ? "PhCaretUp" : "PhCaretDown"} size={11} color="muted-foreground" />
     </BaseButton>
@@ -232,7 +264,7 @@ export function ChatStatusCard(props: {
             <Each of={steps()} key={(_step, index) => `${props.itemID}:plan:${index}`}>
               {(step) => (
                 <View class="flex-row items-start gap-2">
-                  <View class={`mt-1.5 size-2 border ${dotClass(normalizePlanStatus(step()?.status))}`} />
+                  <StatusSquare status={normalizePlanStatus(step()?.status)} />
                   <Text
                     class={`flex-1 text-sm ${normalizePlanStatus(step()?.status) === "completed" ? TERMINAL_MUTED : TERMINAL_FG}`}
                   >
@@ -246,7 +278,7 @@ export function ChatStatusCard(props: {
             <Each of={items()} key={(entry, index) => `${props.itemID}:activity:${entryKey(entry, index)}`}>
               {(entry) => (
                 <View class="flex-row items-start gap-2">
-                  <View class={`mt-1.5 size-2 border ${dotClass(normalizeTaskStatus(entry()?.status))}`} />
+                  <StatusSquare status={normalizeTaskStatus(entry()?.status)} />
                   <View class="flex-1 gap-1">
                     <View class="flex-row flex-wrap items-baseline gap-1.5">
                       <If when={kindLabel(entry())}>

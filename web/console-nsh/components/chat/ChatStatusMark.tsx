@@ -1,6 +1,7 @@
-// A message's time, or for a reply the time it took ("💬 1s"): mono, at the label size, muted (the
-// Vue console's `.chat-history-status`). Shown above a sent message, alone above a reply, or first
-// on a reply's summary line (ChatStatusCard).
+// A message's time, or for a reply the time it took ("💬 1s"): mono 11 on a 16pt line in a 20pt
+// box, muted, the same face, size and line as the status columns beside it (design/ui-refresh.html
+// §3). Shown above a sent message, alone above a reply, or first on a reply's summary line
+// (ChatStatusCard).
 //
 // `placement` says where it is. Alone it keeps to its side of the column: a reply's at the left, a
 // sent message's at the right, in line with the bubble. On a reply's summary line it takes no
@@ -14,7 +15,8 @@ export type StatusMarkPlacement = "summary" | "reply" | "sent";
 const PLACEMENT: Record<StatusMarkPlacement, string> = {
   summary: "",
   reply: "self-start",
-  sent: "mr-2 self-end",
+  // Ends on the bubble's text edge: the bubble's 8pt inset, its 1pt border and 14pt padding.
+  sent: "mr-[23px] self-end",
 };
 
 export function ChatStatusMark(props: {
@@ -35,12 +37,12 @@ export function ChatStatusMark(props: {
       tooltip={props.duration ? <Text class="text-xs">{props.label}</Text> : undefined}
       testID="chat-history-status"
       onLayout={props.onLayout}
-      class={`flex-row items-center ${PLACEMENT[props.placement]}`}
+      class={`h-5 flex-row items-center ${PLACEMENT[props.placement]}`}
     >
       <If when={props.duration}>
         <Icon name="PhChatCircleDots" size={13} color="muted-foreground" class="mr-[3px]" />
       </If>
-      <Text class="font-mono text-[11px] leading-[15.4px] tracking-[0.04em] text-muted-foreground">{props.text}</Text>
+      <Text class="font-mono text-[11px] leading-4 tracking-[0.04em] text-muted-foreground">{props.text}</Text>
     </View>
   );
 }

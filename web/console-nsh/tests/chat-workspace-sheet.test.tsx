@@ -52,7 +52,7 @@ test("off Android the sheet adds no inset", async () => {
   near(frames()["sheet-body"].h, 844);
 });
 
-test("the sheet's tabs are a 57pt row with the segmented control across it in equal halves", async () => {
+test("the sheet's tabs are a 57pt row with the tabs across it in equal halves", async () => {
   const { frames } = await openGallery({ platform: "android", safeArea: BARS });
   const f = frames();
   const row = f["phone-row"];
@@ -61,26 +61,26 @@ test("the sheet's tabs are a 57pt row with the segmented control across it in eq
   // As tall as a page's bar, as wide as the sheet.
   near(row.h, 57);
   near(row.w, f["sheet-body"].w);
-  // The options share the control (the row less its 16pt gutters, the 1pt outline and 2pt inset)
-  // equally, end to end: no part of the outlined box is a dead area.
-  const inner = row.w - 32 - 2 - 4;
+  // The options share the row less its 16pt gutters equally, end to end (design/ui-refresh.html §1:
+  // tabs on a hairline, no outlined box).
+  const inner = row.w - 32;
   near(topicTab.w, inner / 2);
   near(workspaceTab.w, inner / 2);
-  near(topicTab.x, 3);
+  near(topicTab.x, 0);
   near(workspaceTab.x, topicTab.x + topicTab.w);
-  // The 32pt options sit in the middle of the 38pt control, itself in the middle of the row.
-  near(topicTab.h, 32);
+  // 36pt options, in the middle of the row (to the half point it snaps to).
+  near(topicTab.h, 36);
   near(workspaceTab.y, topicTab.y);
-  near(topicTab.y, 3);
+  expect(Math.abs(topicTab.y - (row.h - topicTab.h) / 2)).toBeLessThanOrEqual(0.5);
 });
 
 test("the wide window's panel row keeps its layout: low in its row, options as wide as their labels", async () => {
   const { frames } = await openGallery({ platform: "linux", safeArea: undefined });
   const f = frames();
-  // 8pt above the 38pt control, nothing below.
+  // 8pt above the 38pt toggle beside the 36pt tabs, nothing below.
   near(f["wide-row"].h, 46);
-  near(f["wide-tab-topic"].y, 3);
-  near(f["wide-tab-topic"].x, 3);
+  near(f["wide-tab-topic"].y, 0);
+  near(f["wide-tab-topic"].x, 0);
   near(f["wide-tab-workspace"].x, f["wide-tab-topic"].x + f["wide-tab-topic"].w);
   // Not stretched: each option fits its label.
   expect(f["wide-tab-workspace"].w).toBeGreaterThan(f["wide-tab-topic"].w);

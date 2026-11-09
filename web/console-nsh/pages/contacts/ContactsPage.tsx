@@ -42,6 +42,7 @@ import {
   relativeTime,
   type Contact,
 } from "./contact-format";
+import { MobileBarSpacer } from "../../components/frame/mobileBar";
 
 type Memory = { id: string; description?: string; body?: string };
 
@@ -408,6 +409,7 @@ export function ContactsPage() {
               {/* A virtualized List: its rows are recycled cells, so the selected fill is each row's own and
                   fades in and out (180 ms) rather than gliding as one highlight. */}
               <List
+                footer={MobileBarSpacer}
                 each={filteredItems()}
                 keyExtractor={(item) => contactID(item)}
                 estimatedItemSize={67}
@@ -649,6 +651,7 @@ export function ContactsPage() {
                 </DetailCard>
               )}
             </If>
+            <MobileBarSpacer />
           </Scroll>
         </If>
       </View>

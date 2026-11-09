@@ -1,10 +1,11 @@
 // The phone navigation (the Vue console's AppMobileBottomNav, AppMobileBottomMenu and
-// AppMobileAgentSwitcher): a docked strip of icons at the foot of the window, the primary pages,
-// More, and the agent. A short blue rule on the strip's top edge slides to the active slot. More
-// and the agent each open a sheet docked on the strip, over a scrim; Escape, Android's Back or the
-// scrim closes it.
+// AppMobileAgentSwitcher): icons at the foot of the window, the primary pages, More, and the agent,
+// in a capsule that floats on the page (the layout of Telegram's tab bar, without its labels;
+// design/ui-refresh.html §4). A lighter pill behind the active slot slides to it, and its icon fills.
+// More and the agent each open a sheet that rises above the bar, over a scrim; Escape, Android's
+// Back or the scrim closes it.
 import type { JSX } from "nsh";
-import { computed, createAnimatedValue, effect, keymap, signal, Text, untracked, View } from "nsh";
+import { computed, createAnimatedValue, effect, keymap, platform, signal, Text, untracked, View } from "nsh";
 import { Button as BaseButton } from "nsh/base";
 import { translate } from "../../lib/core/context.js";
 import {
@@ -30,12 +31,23 @@ import { AgentAvatar, AgentOptionList, filterAgentItems, normalizeAgentItems, Ov
 import { usePersonaSummary } from "./personaSummary";
 import { NavList } from "./Sidebar";
 import { uiSlots } from "./slots";
+import { BAR_BELOW, mobileBarRoom, MOBILE_NAV_HEIGHT } from "./mobileBar";
+
+export { MOBILE_NAV_HEIGHT };
 
 const t = translate as (key: string, vars?: Record<string, unknown>) => string;
 
 const PRIMARY_PAGE_PATHS = ["/chat", "/contacts", "/todo"];
-/** The strip's height, without the bottom safe area and its 1pt top hairline (`--mobile-nav-height` 52, border-box). */
-export const MOBILE_NAV_HEIGHT = 51;
+/** The capsule's inset from the window's sides, and its padding round the slots (its height and
+ * gap below: components/frame/mobileBar.tsx). */
+const BAR_SIDE = 12;
+const BAR_INSET = 4;
+/** Each slot's width, and how far it reaches under its neighbour: only one slot is ever selected,
+ *  so their pills never show together and the slots can sit closer than their own width. */
+const SLOT = 60;
+const SLOT_OVERLAP = 8;
+const SLOT_STEP = SLOT - SLOT_OVERLAP;
+const BAR_SHADOW = "0 6px 20px rgba(14, 44, 87, 0.10), 0 1px 3px rgba(14, 44, 87, 0.06)";
 
 // The agent sheet; More's state is lib/shell's (navigation closes it).
 const agentMenuOpen = signal(false);
@@ -147,9 +159,11 @@ function SheetLayer(props: {
         role="menu"
         accessibilityLabel={props.label}
         class="absolute bottom-0 left-0 right-0 max-h-[62%] border-t border-line bg-card"
+        // The floating bar stays over the sheet's foot: its last row ends above the bar.
         // Until its first layout the sheet's height is unknown: it starts far below, not at 0.
         onLayout={({ bounds }) => props.onHeight(bounds.size.height)}
         style={{
+          paddingBottom: mobileBarRoom(),
           transform: [{ translateY: props.progress.interpolate({ inputRange: [0, 1], outputRange: [props.height > 0 ? props.height + 1 : 4000, 0] }) }],
         }}
       >
@@ -235,14 +249,13 @@ export function MobileBottomNav() {
   const selectedName = () => selectedEndpointItem()?.title || t("nav_agent");
   const selectedAvatar = () => personaAvatarURL() || selectedEndpointItem()?.image || defaultEndpointAvatar;
 
-  const width = signal(0);
-  const indicatorLeft = () => {
-    const count = slotCount();
-    return 4 + ((width() - 8) / count) * (activeSlot() + 0.5) - 14;
-  };
+  // The capsule holds its slots and no more, centred: each slot is SLOT wide and overlaps the one
+  // before it by SLOT_OVERLAP. The active pill takes one slot.
+  const rowWidth = () => SLOT + SLOT_STEP * (slotCount() - 1);
+  // (Literal classes: w-[60px] is SLOT, -ml-[8px] SLOT_OVERLAP.)
+  const slotClass = (index: number, press = true) =>
+    `w-[60px] ${index > 0 ? "-ml-[8px]" : ""} items-center justify-center rounded-full ${press ? "active:bg-hover-soft transition-colors duration-160" : ""}`;
 
-  const slotClass = "flex-1 items-center justify-center px-0.5 hover:bg-hover-soft active:bg-hover-soft transition-colors duration-160";
-  const agentSlotClass = "flex-1 items-center justify-center px-0.5";
   const tip = (label: string) => <Tip text={label} />;
 
   return (
@@ -250,62 +263,79 @@ export function MobileBottomNav() {
       role="navigation"
       accessibilityLabel={t("mobile_nav")}
       testID="mobile-bottom-nav"
-      // Its card runs under the bottom system bar: on Android by the room lib/systemInsets.ts gives
-      // it (none while the keyboard is up), elsewhere by the safe area.
-      class={`relative z-50 border-t border-line bg-card px-1 ${systemInsets() ? "" : "pb-[env(safe-area-inset-bottom)]"}`}
-      style={systemInsets() ? { paddingBottom: systemInsets()!.bottomNav } : undefined}
-      onLayout={({ bounds }) => width.set(bounds.size.width)}
+      // The capsule floats over the foot of the page, which scrolls on under it (each page's main
+      // list ends with MobileBarSpacer). It sits above the bottom system bar: on Android by the
+      // room lib/systemInsets.ts gives it (none while the keyboard is up), elsewhere by the safe
+      // area. Only the capsule takes presses; the page shows and works round it.
+      class={`absolute bottom-0 left-0 right-0 z-50 items-center ${systemInsets() ? "" : "pb-[env(safe-area-inset-bottom)]"}`}
+      style={{
+        paddingLeft: BAR_SIDE,
+        paddingRight: BAR_SIDE,
+        paddingBottom: systemInsets() ? systemInsets()!.bottomNav + BAR_BELOW : undefined,
+        pointerEvents: "box-none",
+      }}
     >
-      <If when={activeSlot() >= 0 && width() > 0}>
-        <View
-          accessibilityElementsHidden
-          class="absolute left-0 -top-px h-0.5 w-7 bg-blue"
-          style={{
-            transform: [{ translateX: indicatorLeft() }],
-            transitionProperty: "transform",
-            transitionDuration: 220,
-            transitionTimingFunction: "ease-out",
-          }}
-        />
-      </If>
-      <View class="flex-row" style={{ height: MOBILE_NAV_HEIGHT }}>
-        <Each of={primaryItems()} key={(item) => item.id}>
-          {(item, index) => (
-            <TipButton
-              selected={activeSlot() === index()}
-              onPress={() => navigateTo(item())}
-              accessibilityLabel={item().title}
-              testID={`mobile-nav-${item().pagePath.slice(1)}`}
-              tooltip={tip(item().title)}
-              class={slotClass}
-            >
-              <Icon name={item().icon as IconName} size={22} color={activeSlot() === index() ? "blue" : "muted-foreground"} />
-            </TipButton>
-          )}
-        </Each>
-        <TipButton
-          selected={activeSlot() === primaryItems().length}
-          onPress={toggleMore}
-          accessibilityLabel={moreLabel()}
-          testID="mobile-nav-more"
-          tooltip={tip(moreLabel())}
-          class={slotClass}
-        >
-          <Icon name={moreIcon()} size={22} color={activeSlot() === primaryItems().length ? "blue" : "muted-foreground"} />
-        </TipButton>
-        <TipButton
-          selected={activeSlot() === slotCount() - 1}
-          onPress={() => setAgentMenuOpen(!agentMenuOpen())}
-          accessibilityLabel={`${t("nav_agent")}: ${selectedName()}`}
-          testID="mobile-nav-agent"
-          tooltip={tip(selectedName())}
-          class={agentSlotClass}
-        >
-          {/* The portrait alone: selecting or pressing the slot adds nothing to it (no ring, no
-              status mark, no press fill); the top rule marks it selected, and the switcher's list
-              shows whether the agent is connected. */}
-          <AgentAvatar image={selectedAvatar()} size={22} />
-        </TipButton>
+      <View
+        class="max-w-full rounded-full border-[0.5px] border-line bg-card/85"
+        style={{
+          padding: BAR_INSET,
+          marginBottom: systemInsets() ? 0 : BAR_BELOW,
+          backdropFilter: "blur(20px)",
+          boxShadow: platform.os === "android" ? undefined : BAR_SHADOW,
+        }}
+      >
+        <View class="relative flex-row" style={{ width: rowWidth(), height: MOBILE_NAV_HEIGHT - BAR_INSET * 2 }}>
+          <If when={activeSlot() >= 0}>
+            <View
+              accessibilityElementsHidden
+              class="absolute bottom-0 left-0 top-0 rounded-full bg-blue/10"
+              style={{
+                width: SLOT,
+                transform: [{ translateX: SLOT_STEP * activeSlot() }],
+                transitionProperty: "transform",
+                transitionDuration: motionMs(240),
+                transitionTimingFunction: "cubic-bezier(0.2, 0.7, 0.2, 1)",
+              }}
+            />
+          </If>
+          <Each of={primaryItems()} key={(item) => item.id}>
+            {(item, index) => (
+              <TipButton
+                selected={activeSlot() === index()}
+                onPress={() => navigateTo(item())}
+                accessibilityLabel={item().title}
+                testID={`mobile-nav-${item().pagePath.slice(1)}`}
+                tooltip={tip(item().title)}
+                class={slotClass(index())}
+              >
+                <Icon name={item().icon as IconName} size={24} filled={activeSlot() === index()} color={activeSlot() === index() ? "blue" : "muted-foreground"} />
+              </TipButton>
+            )}
+          </Each>
+          <TipButton
+            selected={activeSlot() === primaryItems().length}
+            onPress={toggleMore}
+            accessibilityLabel={moreLabel()}
+            testID="mobile-nav-more"
+            tooltip={tip(moreLabel())}
+            class={slotClass(primaryItems().length)}
+          >
+            <Icon name={moreIcon()} size={24} filled={activeSlot() === primaryItems().length} color={activeSlot() === primaryItems().length ? "blue" : "muted-foreground"} />
+          </TipButton>
+          <TipButton
+            selected={activeSlot() === slotCount() - 1}
+            onPress={() => setAgentMenuOpen(!agentMenuOpen())}
+            accessibilityLabel={`${t("nav_agent")}: ${selectedName()}`}
+            testID="mobile-nav-agent"
+            tooltip={tip(selectedName())}
+            class={slotClass(slotCount() - 1, false)}
+          >
+            {/* The portrait alone, as Telegram's profile slot: selecting or pressing it adds nothing
+                to it (no ring, no status mark, no press fill); the pill behind it marks it selected,
+                and the switcher's list shows whether the agent is connected. */}
+            <AgentAvatar image={selectedAvatar()} size={28} />
+          </TipButton>
+        </View>
       </View>
     </View>
   );

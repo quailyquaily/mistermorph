@@ -97,26 +97,25 @@ function Composer(props: { c: ChatController; landing?: boolean }) {
   );
 }
 
-// The panel toggle (the Vue console's `.chat-workspace-dock`): a one-segment version of the
-// panel's tabs, a 38pt outlined box with a 32pt square button inset in it, on the header line at
-// the top right. Open, it takes the tabs' selected fill. The drawn sidebar is mirrored: the panel
-// opens on the right.
+// The panel toggle: a 38pt square with a 14pt icon, as the Topics head's view toggles, on the
+// header line at the top right, in the same place whether the panel is shut (over the
+// conversation) or open (at the end of the panel's tab row). Open, a blue icon on a blue tint. The
+// drawn sidebar is mirrored: the panel opens on the right.
 function WorkspaceToggle(props: { c: ChatController; bare?: boolean }) {
+  const open = () => props.c.workspaceSidebarOpen();
   return (
-    <View class={props.bare ? "" : "size-[38px] border border-line-soft bg-background p-0.5"}>
-      <TipButton
-        selected={props.c.workspaceSidebarOpen()}
-        accessibilityLabel={props.c.workspaceSidebarToggleLabel()}
-        tooltip={<Tip text={props.c.workspaceSidebarToggleLabel()} />}
-        onPress={() => props.c.toggleWorkspaceSidebar()}
-        testID="chat-workspace-toggle"
-        class="size-8 items-center justify-center transition-colors duration-[180ms] hover:bg-hover-soft selected:bg-selection-strong"
-      >
-        <View style={{ scale: [-1, 1] }}>
-          <Icon name="PhSidebarSimple" size={16} color={props.c.workspaceSidebarOpen() ? "blue-dark" : "muted-foreground"} />
-        </View>
-      </TipButton>
-    </View>
+    <TipButton
+      selected={open()}
+      accessibilityLabel={props.c.workspaceSidebarToggleLabel()}
+      tooltip={<Tip text={props.c.workspaceSidebarToggleLabel()} />}
+      onPress={() => props.c.toggleWorkspaceSidebar()}
+      testID="chat-workspace-toggle"
+      class={`${props.bare ? "size-8" : "size-[38px]"} items-center justify-center rounded-(--radius) transition-colors duration-[180ms] hover:bg-hover-soft selected:bg-blue/12`}
+    >
+      <View style={{ scale: [-1, 1] }}>
+        <Icon name="PhSidebarSimple" size={props.bare ? 16 : 14} color={open() ? "blue" : "subtle"} />
+      </View>
+    </TipButton>
   );
 }
 
@@ -142,7 +141,9 @@ function ChatMain(props: { c: ChatController }) {
               ctx={c.rowContext}
               onListRef={(list) => c.setHistoryList(list)}
               onScrollFromEnd={(distance, viewport) => c.setHistoryScroll(distance, viewport)}
-              topInset={dockVisible() && !c.desktopWorkspaceSidebarVisible() ? 64 : 20}
+              // The same room at the top whether the panel is open or not, so opening it never
+              // moves the conversation down or up.
+              topInset={dockVisible() ? 64 : 20}
             />
             <View class="w-full max-w-[832px] self-center" style={{ paddingLeft: chatGutter(), paddingRight: chatGutter() }}>
               <If
@@ -174,7 +175,7 @@ function ChatMain(props: { c: ChatController }) {
         </View>
       </If>
       <If when={dockVisible() && !c.desktopWorkspaceSidebarVisible()}>
-        <View class="absolute right-4 top-[9.5px]">
+        <View class="absolute right-3 top-2">
           <WorkspaceToggle c={c} />
         </View>
       </If>

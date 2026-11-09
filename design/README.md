@@ -18,6 +18,7 @@ exploration rounds, is at <https://claude.ai/artifact/6TyRi4ba7hmnEWbw75BuhM> (p
 | `brand/tokens.json` | Colourway palettes, optical-size notes, typefaces |
 | `brand/generator/` | The Python that draws all of the above, and `render.mjs` for the PNGs |
 | `boards/` | Every canvas board as a PNG: the brand sheet (`01`, `02`), the Aojashin colourway (`03`) and the exploration rounds (`10`–`13`) |
+| `ui-refresh.html` | The approved console UI refresh (2026-11-09): view-toggle sag, sidebar edge, message bubbles and meta line, the phone tab bar, the border-beam loading state for the composer and buttons, and the Running mark's morph. Live demos with the values to build from; open it in a browser |
 
 ## Regenerating
 

@@ -17,6 +17,7 @@ import { Entrance, FadeText, SCROLLBAR } from "../../components/motion";
 import { TodoTaskEditor } from "../../components/todo/TodoTaskEditor";
 import { createTodoState, type TodoState, type TodoTask } from "../../components/todo/todo-state";
 import { TODO_TOPIC_ERROR, TODO_TOPIC_READY, TODO_TOPIC_UNAVAILABLE } from "../../lib/core/todo-topic.js";
+import { MobileBarSpacer } from "../../components/frame/mobileBar";
 
 const t = translate as (key: string, vars?: Record<string, unknown> | null) => string;
 
@@ -138,6 +139,7 @@ function EditorPane(props: { state: TodoState; mobile?: boolean }) {
             </If>
           </View>
         </Entrance>
+        <MobileBarSpacer />
       </Scroll>
     </If>
   );
@@ -229,6 +231,7 @@ export function TodoPage() {
             <View class="flex-1 flex-row gap-1">
               <Scroll class="flex-[1.45]" scrollbar={SCROLLBAR} contentClass="min-h-full">
                 <Calendar state={state} />
+                <MobileBarSpacer />
               </Scroll>
               <View class="min-w-90 flex-[0.55]">
                 <EditorPane state={state} />
@@ -242,6 +245,7 @@ export function TodoPage() {
             <If when={state.calendarView()} else={<TodoIndex state={state} mobile />}>
               <Scroll class="flex-1" scrollbar={SCROLLBAR} contentClass="pb-24">
                 <Calendar state={state} mobile />
+                <MobileBarSpacer />
               </Scroll>
             </If>
           </If>

@@ -1,7 +1,7 @@
 // The sidebar of wide windows (the Vue console's AppSidebar, AppSidebarControls and AppNavList):
 // the agent switcher, the workspace navigation, the runtime extension slot at its foot, and its
 // right edge, which folds it to its icons when dragged (or with the arrow keys while focused).
-import { cleanup, keymap, PanResponder, Text, View } from "nsh";
+import { cleanup, effect, keymap, PanResponder, signal, Text, token, View } from "nsh";
 import { EdgeScroll } from "../motion/ScrollEdges";
 import { Button as BaseButton } from "nsh/base";
 import { translate } from "../../lib/core/context.js";
@@ -25,6 +25,7 @@ import {
   type NavItem,
 } from "../../lib/shell";
 import { createSlidingSelection } from "../motion/SlidingSelection";
+import { BandEdge } from "../motion/Sag";
 import { Icon, Tip, TipButton, type IconName } from "../ui";
 import defaultEndpointAvatar from "../../assets/images/app_logo_current.svg";
 import { AgentSwitcher } from "./AgentSwitcher";
@@ -49,8 +50,10 @@ export function NavLink(props: {
 }) {
   const active = () => isNavItemActive(props.item);
   // AppNavList.css: 42pt rows, 14pt sides, a 14pt icon 10pt before a 14pt label in the second ink;
-  // the page you are on is ink on the list's sliding highlight (no fill of its own), and a row
-  // lights up 6 % after a short pause when the pointer rests on it and goes out at once.
+  // the page you are on is ink on the list's highlight (no fill of its own: the sidebar draws its
+  // band, which flares into the sidebar's edge), and another row lights up 6 % after a short pause when
+  // the pointer rests on it and goes out at once. Every row keeps a hover style, transparent on the
+  // current one: a row without one misses the pointer leaving it, and would light up later.
   return (
     <TipButton
       selected={active()}
@@ -61,7 +64,7 @@ export function NavLink(props: {
       tooltip={props.collapsed ? <Tip text={props.item.title} placement="right" /> : undefined}
       class={`flex-row items-center gap-2.5 ${props.mobile ? "min-h-12 px-4" : "min-h-[42px]"} ${
         props.collapsed ? "justify-center px-0" : props.mobile ? "" : "px-3.5"
-      } ${active() ? "hover:bg-hover-faint focus:bg-hover-faint" : "hover:bg-hover-soft focus:bg-hover-soft"}`}
+      } ${active() ? "hover:bg-transparent focus:bg-transparent" : "hover:bg-hover-soft focus:bg-hover-soft"}`}
       style={{ transitionProperty: "colors", transitionDuration: 160, transitionTimingFunction: "ease" }}
       hoverStyle={{ transitionDelay: 60 }}
     >
@@ -85,13 +88,34 @@ export function NavList(props: {
   mobile?: boolean;
   onNavigate: (item: NavItem) => void;
   testPrefix?: string;
+  /** The page's row's centre (y) in the list, or null: where the sidebar draws its band. */
+  onActiveCenter?: (y: number | null) => void;
+  /** Leave the page's highlight to the caller (the sidebar draws it with its edge). */
+  noHighlight?: boolean;
 }) {
   const BeforeRuntime = uiSlots["sidebar.before_runtime"];
   const activeId = () => props.items.find((item) => !item.separator && isNavItemActive(item))?.id ?? null;
   const selection = createSlidingSelection(activeId);
+  const centers = signal<Record<string, number>>({});
+  const track = (id: string) => {
+    const tracked = selection.track(id);
+    return (event: { bounds: { origin: { x: number; y: number }; size: { width: number; height: number } } }) => {
+      tracked(event);
+      const y = event.bounds.origin.y + event.bounds.size.height / 2;
+      if (centers()[id] !== y) centers.set({ ...centers(), [id]: y });
+    };
+  };
+  if (props.onActiveCenter) {
+    effect(() => {
+      const id = activeId();
+      props.onActiveCenter?.(id ? centers()[id] ?? null : null);
+    });
+  }
   return (
     <View class={`relative ${props.mobile ? "py-1" : "pb-3 pt-2"}`}>
-      <selection.Highlight class="bg-selection" testID={`${props.testPrefix ?? "nav"}-selection`} />
+      <If when={!props.noHighlight}>
+        <selection.Highlight class="bg-selection" testID={`${props.testPrefix ?? "nav"}-selection`} />
+      </If>
       <Each of={props.items} key={(item) => item.id}>
         {(item) => (
           <If
@@ -111,7 +135,7 @@ export function NavList(props: {
               collapsed={props.collapsed}
               mobile={props.mobile}
               onPress={() => props.onNavigate(item())}
-              onLayout={selection.track(item().id)}
+              onLayout={track(item().id)}
               testID={`${props.testPrefix ?? "nav"}-${item().pagePath.slice(1)}`}
             />
           </If>
@@ -173,17 +197,42 @@ function SidebarEdge() {
   );
 }
 
+/** A navigation row's height in the sidebar (NavLink's `min-h-[42px]`). */
+const NAV_ROW = 42;
+
 export function Sidebar() {
   const { personaAvatarURL, personaName } = usePersonaSummary();
   const BottomLeft = uiSlots["sidebar.bottom_left"];
   const collapsed = () => sidebarShowsCollapsed();
+  // The page's row's band is drawn with the sidebar's edge (design/ui-refresh.html §2), so it runs
+  // right up to the edge and flares into it: placed at the row's centre in the list, moved by where
+  // the list sits in the sidebar and how far it has scrolled; none while the row is out of sight.
+  const rowCenter = signal<number | null>(null);
+  const listTop = signal(0);
+  const listHeight = signal(0);
+  const scrollY = signal(0);
+  const edgeCenter = () => {
+    const row = rowCenter();
+    if (row === null) return null;
+    const y = row - scrollY();
+    return y < 0 || y > listHeight() ? null : listTop() + y;
+  };
   return (
     <View
-      class="relative z-10 select-none border-r border-line-soft bg-nav"
+      class="relative z-10 select-none"
       style={{ width: sidebarWidth() }}
       accessibilityLabel={t("mobile_nav")}
       testID="sidebar"
     >
+      {/* The sidebar's fill, its right edge and the active row's band are one drawing, so the band
+          reaches the edge and flares into it. */}
+      <BandEdge
+        center={edgeCenter}
+        band={{ size: NAV_ROW, color: String(token("selection")) }}
+        fill={String(token("nav"))}
+        line={String(token("line-soft"))}
+        class="absolute inset-0"
+      />
       <AgentSwitcher
         items={endpointItems()}
         selectedItem={selectedEndpointItem()}
@@ -194,9 +243,23 @@ export function Sidebar() {
         onChange={(item) => switchEndpoint(item.value)}
         onOverview={goOverview}
       />
-      <EdgeScroll class="flex-1">
-        <NavList items={navItems()} collapsed={collapsed()} onNavigate={(item) => goTo(item)} />
-      </EdgeScroll>
+      <View
+        class="flex-1"
+        onLayout={({ bounds }) => {
+          listTop.set(bounds.origin.y);
+          listHeight.set(bounds.size.height);
+        }}
+      >
+        <EdgeScroll class="flex-1" onScroll={(event) => scrollY.set(event.offset.y)}>
+          <NavList
+            items={navItems()}
+            collapsed={collapsed()}
+            onNavigate={(item) => goTo(item)}
+            onActiveCenter={(y) => rowCenter.set(y)}
+            noHighlight
+          />
+        </EdgeScroll>
+      </View>
       <If when={BottomLeft && !collapsed()}>
         <View class="p-3">
           {BottomLeft?.({ selectedEndpointItem: selectedEndpointItem(), currentPath: currentPath(), t })}

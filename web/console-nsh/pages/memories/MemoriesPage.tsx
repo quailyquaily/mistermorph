@@ -39,6 +39,7 @@ import {
 import { currentRoute, navigate } from "../../lib/router";
 import { isMobile } from "../../lib/shell";
 import { useContactsStore } from "../../lib/stores/contactsStore.js";
+import { MobileBarSpacer } from "../../components/frame/mobileBar";
 
 const VISIBILITIES = ["private", "conversation", "public"] as const;
 const TYPES = ["person", "feedback", "context", "reference"];
@@ -796,6 +797,7 @@ export function MemoriesPage() {
               </If>
             </If>
             <View style={{ height: gutterY() }} />
+            <MobileBarSpacer />
           </EdgeScroll>
         </If>
       </View>

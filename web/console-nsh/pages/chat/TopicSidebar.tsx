@@ -10,18 +10,19 @@
 // The rows are an `Each` in a scroll view rather than a virtualized List: a sidebar holds dozens of
 // topics (older ones load on demand), and the sliding highlight must share the rows' parent to
 // measure them and move with them.
-import { createAnimatedValue, Image, Scroll, Text, token, View } from "nsh";
+import { Image, Scroll, signal, Text, token, View } from "nsh";
 import { Button as BaseButton } from "nsh/base";
-import { Button, Icon, Spinner, Tip, TipButton } from "../../components/ui";
+import { Button, Icon, Spinner, StatusMark, Tip, TipButton } from "../../components/ui";
 import { ContactAvatar } from "../../components/shared/ContactAvatar";
 import { gutterX, IndexSearch } from "../../components/knowledge/parts";
 import { FadeText } from "../../components/motion/FadeText";
 import { createScrollEdges, SCROLLBAR } from "../../components/motion/ScrollEdges";
 import { createSlidingSelection } from "../../components/motion/SlidingSelection";
-import { motionMs } from "../../components/motion/tokens";
+import { sagHalf, SagRule } from "../../components/motion/Sag";
 import { t } from "../../components/chat/i18n";
 import { normalizeTopicID } from "../../lib/core/chat-task-history.js";
 import type { ChatController, SidebarView, TopicRow } from "./chatController";
+import { MobileBarSpacer } from "../../components/frame/mobileBar";
 
 // A view toggle in the head: a 38pt square with a 14pt icon, the buttons flush; on, a blue icon on
 // a blue tint. The TODO toggle carries the running mark off its icon's top right corner.
@@ -33,11 +34,14 @@ function ViewToggle(props: {
   running?: boolean;
   onPress: () => void;
   testID: string;
+  /** Its centre along the head, for the head's sag. */
+  onCenter?: (x: number) => void;
 }) {
   return (
     <TipButton
       selected={props.active}
       onPress={props.onPress}
+      onLayout={({ bounds }) => props.onCenter?.(bounds.origin.x + bounds.size.width / 2)}
       accessibilityLabel={props.label}
       testID={props.testID}
       tooltip={<Tip text={props.title} />}
@@ -53,23 +57,18 @@ function ViewToggle(props: {
   );
 }
 
-// The console's square status mark (7pt): filled blue once a task finished and until the topic is
-// viewed, filled orange while a task waits for the person, and while one runs a hollow square whose
-// fill breathes in and out (only its opacity moves; without motion it stays hollow).
+// The topic's status mark (7pt): filled blue once a task finished and until the topic is viewed,
+// filled orange while a task waits for the person, the turning ring while one runs.
 function StatusDot(props: { status: string; label: string; class?: string; testID?: string }) {
-  const fill = createAnimatedValue(0);
-  if (motionMs(1) > 0) void fill.keyframes([0, 1], { duration: 900, easing: "easeInOut", iterations: "infinite", direction: "alternate" });
   return (
     <View
       role="image"
       accessibilityLabel={props.label}
       tooltip={<Tip text={props.label} />}
-      class={`size-[7px] rounded-[1px] border ${props.status === "pending" ? "border-status-pending bg-status-pending" : props.status === "running" ? "border-status-on" : "border-status-on bg-status-on"} ${props.class ?? ""}`}
+      class={`size-[7px] ${props.class ?? ""}`}
       testID={props.testID ?? `chat-topic-status-${props.status}`}
     >
-      <If when={props.status === "running"}>
-        <View class="flex-1 bg-status-on" style={{ opacity: fill }} />
-      </If>
+      <StatusMark state={props.status === "running" ? "running" : props.status === "pending" ? "pending" : "on"} size={7} />
     </View>
   );
 }
@@ -85,6 +84,12 @@ export function TopicSidebar(props: { c: ChatController; class?: string }) {
   const view = () => c.topicSidebarView();
   const toggle = (next: SidebarView) => c.setTopicSidebarView(view() === next ? "date" : next);
   const edges = createScrollEdges({ start: false });
+  // Where each view toggle sits along the head, for the sag under the one that is on.
+  const toggleCenters = signal<Partial<Record<SidebarView, number>>>({});
+  const placeToggle = (key: SidebarView) => (x: number) => {
+    if (toggleCenters()[key] !== x) toggleCenters.set({ ...toggleCenters(), [key]: x });
+  };
+  const sagCenter = () => (view() === "date" ? null : toggleCenters()[view()] ?? null);
   const activeKey = () => {
     const active = c.topicRows().find((row) => row.kind === "topic" && c.topicIsActive(row.topic));
     return active ? active.key : null;
@@ -189,10 +194,9 @@ export function TopicSidebar(props: { c: ChatController; class?: string }) {
   return (
     <View class={`bg-sidebar ${props.class ?? ""}`} testID="chat-topic-sidebar">
       {/* The head: the title on the left, the view toggles and New flush at the right, and the
-          search under them. A hairline under both shows once topics have scrolled beneath. */}
-      <View
-        class={`transition-colors duration-[180ms] border-b ${edges.scrolled() ? "border-line-faint" : "border-transparent"}`}
-      >
+          search under them. The hairline under both shows once topics have scrolled beneath, and
+          sags softly under the view toggle that is on (design/ui-refresh.html §1). */}
+      <View class="relative z-10">
         <View
           class={`h-[57px] flex-row items-center ${c.mobileMode() ? "" : "pl-[25.6px]"}`}
           style={c.mobileMode() ? { paddingLeft: gutterX(), paddingRight: gutterX() } : undefined}
@@ -210,6 +214,7 @@ export function TopicSidebar(props: { c: ChatController; class?: string }) {
               active={view() === "agents"}
               onPress={() => toggle("agents")}
               testID="chat-topics-view-agents"
+              onCenter={placeToggle("agents")}
             />
           </If>
           <ViewToggle
@@ -220,6 +225,7 @@ export function TopicSidebar(props: { c: ChatController; class?: string }) {
             running={c.cronRunning() > 0}
             onPress={() => toggle("cron")}
             testID="chat-topics-view-cron"
+            onCenter={placeToggle("cron")}
           />
           <ViewToggle
             icon="PhTag"
@@ -228,6 +234,7 @@ export function TopicSidebar(props: { c: ChatController; class?: string }) {
             active={view() === "tags"}
             onPress={() => toggle("tags")}
             testID="chat-topics-view-tags"
+            onCenter={placeToggle("tags")}
           />
           <If when={!c.mobileTopicSplitEnabled()}>
             <TipButton
@@ -250,6 +257,12 @@ export function TopicSidebar(props: { c: ChatController; class?: string }) {
           placeholder={t("chat_topics_search")}
           mobile={c.mobileMode()}
           testID="chat-topics-search"
+        />
+        <SagRule
+          center={sagCenter}
+          half={sagHalf(38)}
+          color={edges.scrolled() ? String(token("line-faint")) : "rgba(0, 0, 0, 0)"}
+          class="absolute -bottom-[6px] left-0 right-0 h-[7px]"
         />
       </View>
       <If when={c.topicsLoading() && c.topicRows().length === 0}>
@@ -308,6 +321,7 @@ export function TopicSidebar(props: { c: ChatController; class?: string }) {
           </If>
           <View class={c.mobileTopicSplitEnabled() ? "h-21" : "h-4"} />
         </View>
+        <MobileBarSpacer />
       </Scroll>
     </View>
   );
