@@ -14,6 +14,7 @@ mod shell;
 mod startup_error;
 mod store;
 mod update;
+mod voice;
 mod window_state;
 
 use std::{
@@ -85,6 +86,7 @@ fn main() -> ExitCode {
     gpui_platform::application().run(move |cx| {
         let quitting = desktop.clone();
         cx.on_app_quit(move |_| {
+            quitting.voice.shutdown();
             quitting.supervisor.stop();
             async {}
         })
@@ -143,7 +145,8 @@ fn main() -> ExitCode {
         .detach();
         cx.activate(true);
     });
-    // Quitting stopped it already; this covers a run that ended another way.
+    // Quitting stopped them already; this covers a run that ended another way.
+    stopper.voice.shutdown();
     stopper.supervisor.stop();
     if result.load(Ordering::SeqCst) { ExitCode::SUCCESS } else { ExitCode::FAILURE }
 }

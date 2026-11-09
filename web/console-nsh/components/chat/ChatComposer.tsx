@@ -24,6 +24,8 @@ import { t } from "./i18n";
 const DEFAULT_MAX_ROWS = 24;
 // The Vue field: IBM Plex Mono at 14pt in 1.58 lines.
 const LINE_HEIGHT = 22.12;
+// Around the 38-point mic, for a 44-point touch target.
+const VOICE_HIT_SLOP = 3;
 
 export interface ComposerFileItem {
   id: string;
@@ -481,6 +483,30 @@ export function ChatComposer(props: ChatComposerProps) {
     </TipButton>
   );
 
+  // The mic, an icon button drawn as the add and send controls are (a 38-point square, a 14-point
+  // glyph) whose presses count 3 points around it: a 44-point target for a finger. While it records
+  // it is selected and shows Stop; while the recording is transcribed it waits with a spinner.
+  const voiceControl = () => (
+    <TipButton
+      onPress={() => props.onVoice?.()}
+      disabled={props.disabled || props.voiceState === "transcribing"}
+      selected={props.voiceState === "recording"}
+      accessibilityLabel={props.voiceLabel}
+      tooltip={<Tip text={props.voiceLabel ?? ""} />}
+      hitSlop={VOICE_HIT_SLOP}
+      testID="chat-composer-voice"
+      class="size-[38px] items-center justify-center rounded-(--radius) transition-colors duration-[180ms] hover:bg-hover-soft selected:bg-selection disabled:opacity-45"
+    >
+      <If when={props.voiceState !== "transcribing"} else={<Spinner size={14} />}>
+        <Icon
+          name={props.voiceState === "recording" ? "PhStop" : "PhMicrophone"}
+          size={14}
+          color={props.voiceState === "recording" ? "ink" : "subtle"}
+        />
+      </If>
+    </TipButton>
+  );
+
   const actions = () => (
     <View class="flex-row items-center gap-2">
             <If when={profiles().length > 1}>
@@ -526,20 +552,7 @@ export function ChatComposer(props: ChatComposerProps) {
                 }
               />
             </If>
-            <If when={props.voiceAvailable}>
-              <Button
-                variant="plain"
-                size="sm"
-                iconOnly
-                icon={props.voiceState === "recording" ? "PhStop" : "PhMicrophone"}
-                title={props.voiceLabel}
-                selected={props.voiceState === "recording"}
-                loading={props.voiceState === "transcribing"}
-                disabled={props.disabled || props.voiceState === "transcribing"}
-                onPress={() => props.onVoice?.()}
-                testID="chat-composer-voice"
-              />
-            </If>
+            <If when={props.voiceAvailable}>{voiceControl()}</If>
       {sendControl()}
     </View>
   );
