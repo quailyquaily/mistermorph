@@ -279,8 +279,12 @@ test("on a phone the model picker lowers the keyboard, and typing goes on after 
   expect(body.llm_profile).toBe("cheap");
   expect(body.task).toBe("hello!");
 
-  // Cancelled (Back) also gives the field back.
+  // Send lowered the keyboard. A tap raises it again; then a cancelled (Back) picker also gives the
+  // field back.
   await app.waitFor("queue full");
+  expect(await fieldFocused(app)).toBe(false);
+  await app.press("id:chat-composer-input");
+  expect(await fieldFocused(app)).toBe(true);
   await app.press("label:LLM profile: cheap");
   await app.waitFor("text:gpt-5-mini");
   expect(await fieldFocused(app)).toBe(false);
@@ -326,6 +330,99 @@ test("on the desktop the add menu and the model picker leave the field focused",
   await app.waitFor("label:LLM profile: cheap");
   expect(await fieldFocused(app)).toBe(true);
   expect(app.value("id:chat-composer-input")).toBe("draft");
+});
+
+// Send on a phone lowers the keyboard as the message goes, once, and keeps what a failed send keeps.
+test("on a phone Send lowers the keyboard and sends once; a failed send keeps the draft", async () => {
+  const bodies: any[] = [];
+  const { app } = await openPhoneChat((request) => {
+    bodies.push(request.json);
+    return { status: 500, body: { error: "queue full" } };
+  });
+  await app.waitFor("id:chat-composer-input");
+  // Nothing to send: Send is disabled, and the keyboard stays up.
+  await app.press("id:chat-composer-input");
+  expect(app.enabled("id:chat-composer-send")).toBe(false);
+  expect(await fieldFocused(app)).toBe(true);
+
+  await app.type("id:chat-composer-input", "hello");
+  expect(await fieldFocused(app)).toBe(true);
+  await app.press("id:chat-composer-send");
+  await app.waitFor("queue full");
+  expect(bodies.map((body) => body.task)).toEqual(["hello"]);
+  await app.waitUntil(() => app.value("id:chat-composer-input") === "hello");
+  expect(await fieldFocused(app)).toBe(false);
+
+  // With the keyboard already down, Send sends again and leaves it down.
+  await app.press("id:chat-composer-send");
+  await app.waitUntil(() => bodies.length === 2);
+  expect(bodies[1].task).toBe("hello");
+  await app.waitUntil(() => app.enabled("id:chat-composer-send"));
+  await app.waitUntil(() => app.value("id:chat-composer-input") === "hello");
+  expect(await fieldFocused(app)).toBe(false);
+});
+
+test("on a phone a sent message clears the field with the keyboard down, and Stop leaves the keyboard alone", async () => {
+  let posts = 0;
+  let stops = 0;
+  const { app } = await openConsole({
+    platform: "android",
+    safeArea: BARS,
+    location: "/e/default/chat/topic-1",
+    api: {
+      "GET /proxy:/todo/tasks": { body: { items: [] } },
+      "GET /proxy:/topics": TOPICS,
+      "GET /proxy:/tasks": { body: { items: [] } },
+      "GET /proxy:/llm/profiles": PROFILES,
+      "POST /proxy:/tasks": () => {
+        posts += 1;
+        return { body: { id: "task-1", status: "queued", topic_id: "topic-1" } };
+      },
+      "GET /proxy:/tasks/task-1": { body: { id: "task-1", task: "Hello there", status: "running", topic_id: "topic-1", created_at: NOW } },
+      "POST /proxy:/tasks/task-1/stop": () => {
+        stops += 1;
+        return { body: { ok: true } };
+      },
+    },
+  });
+  await app.waitFor("id:chat-composer-input");
+  await app.type("id:chat-composer-input", "Hello there");
+  await app.press("id:chat-composer-send");
+  await app.waitFor("Hello there");
+  await app.waitUntil(() => app.value("id:chat-composer-input") === "");
+  expect(posts).toBe(1);
+  expect(await fieldFocused(app)).toBe(false);
+
+  // While the reply runs Send is Stop: it stops the task and leaves a raised keyboard up.
+  await app.waitFor("label:Stop Task");
+  await app.press("id:chat-composer-input");
+  expect(await fieldFocused(app)).toBe(true);
+  await app.press("id:chat-composer-send");
+  await app.waitUntil(() => stops === 1);
+  expect(posts).toBe(1);
+  expect(await fieldFocused(app)).toBe(true);
+});
+
+test("on the desktop Send leaves the field focused", async () => {
+  const bodies: any[] = [];
+  const { app } = await openConsole({
+    location: "/e/default/chat/topic-1",
+    api: {
+      "GET /proxy:/topics": TOPICS,
+      "GET /proxy:/tasks": history,
+      "POST /proxy:/tasks": (request: ApiRequest) => {
+        bodies.push(request.json);
+        return { status: 500, body: { error: "queue full" } };
+      },
+    },
+  });
+  await app.waitFor("text:Logs are fine.");
+  await app.type("id:chat-composer-input", "draft");
+  await app.press("id:chat-composer-send");
+  await app.waitFor("queue full");
+  expect(bodies.map((body) => body.task)).toEqual(["draft"]);
+  await app.waitUntil(() => app.value("id:chat-composer-input") === "draft");
+  expect(await fieldFocused(app)).toBe(true);
 });
 
 test("the model picker's sheet rises above a keyboard its search field raised, within the screen", () => {
