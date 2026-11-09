@@ -5,17 +5,21 @@
 //! a browser, the app records and the agent's transcription route (`llm.routes.transcription`)
 //! transcribes the recording (POST /voice/transcribe). The recording is the system's: PipeWire's
 //! `pw-record`, PulseAudio's `parecord` or ALSA's `arecord`, 16 kHz mono WAV in a temporary file
-//! that goes when the app releases it. That is Linux only for now: elsewhere, or without any of
+//! that goes when the app releases it. The recordings (and the recorder's log) are kept in a
+//! directory of the app's alone: made at the first recording under a random name, failing rather
+//! than taking one that is already there, open to the user only (0700), and each file in it is
+//! created anew (0600), never opened through whatever was there before. That is Linux only for now: elsewhere, or without any of
 //! them, `support` answers [`NO_RECORDER`] and a tap on the mic says so.
 //!
 //! The recorder runs from a thread of its own that lives as long as the app, so on Linux it gets
 //! SIGTERM when the app goes (the parent-death signal follows the thread that forked).
 use std::{
     ffi::OsString,
+    fs::File,
     io::{Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
-    sync::{Mutex, mpsc},
+    sync::{Arc, Mutex, mpsc},
     time::{Duration, Instant},
 };
 
@@ -98,41 +102,52 @@ pub fn support() -> &'static str {
 }
 
 type Job = Box<dyn FnOnce(&mut Worker) + Send>;
+type Locate = Arc<dyn Fn() -> Option<(Program, PathBuf)> + Send + Sync>;
 
 /// The app's microphone: one recording at a time.
 pub struct Recorder {
-    dir: PathBuf,
+    parent: PathBuf,
+    locate: Locate,
     jobs: Mutex<Option<mpsc::Sender<Job>>>,
 }
 
 impl Recorder {
-    /// Recordings go in `dir`, which is the recorder's own.
-    pub fn new(dir: PathBuf) -> Recorder {
-        Recorder { dir, jobs: Mutex::new(None) }
+    /// Recordings go in a private directory the recorder makes in `parent` when it first records.
+    pub fn new(parent: PathBuf) -> Recorder {
+        Recorder::with_program(parent, Arc::new(system_program))
     }
 
-    /// Where this run of the app keeps its recordings.
-    pub fn default_dir() -> PathBuf {
-        std::env::temp_dir().join(format!("mistermorph-voice-{}", std::process::id()))
+    /// As [`Recorder::new`], recording with the program `locate` finds when a recording starts.
+    fn with_program(parent: PathBuf, locate: Locate) -> Recorder {
+        Recorder { parent, locate, jobs: Mutex::new(None) }
+    }
+
+    /// Where this run of the app makes its recordings' directory: the system's temporary directory.
+    pub fn default_parent() -> PathBuf {
+        std::env::temp_dir()
+    }
+
+    fn worker(&self) -> Worker {
+        Worker { parent: self.parent.clone(), locate: self.locate.clone(), dir: None, next: 0, session: None }
     }
 
     fn run(&self, job: impl FnOnce(&mut Worker) + Send + 'static) {
         let mut jobs = self.jobs.lock().unwrap_or_else(|e| e.into_inner());
         let sender = jobs.get_or_insert_with(|| {
             let (tx, rx) = mpsc::channel::<Job>();
-            let mut worker = Worker { dir: self.dir.clone(), next: 0, session: None };
+            let mut worker = self.worker();
             let _ = std::thread::Builder::new().name("voice-recorder".into()).spawn(move || {
                 for job in rx {
                     job(&mut worker);
                 }
-                worker.cancel();
             });
             tx
         });
         if let Err(mpsc::SendError(job)) = sender.send(Box::new(job)) {
-            // The thread could not start: answer from here, without a recorder of its own.
+            // The thread could not start: answer from here, with a worker that cleans up after
+            // itself as it goes (dropped, it stops its recorder and removes its directory).
             *jobs = None;
-            let mut worker = Worker { dir: self.dir.clone(), next: 0, session: None };
+            let mut worker = self.worker();
             job(&mut worker);
         }
     }
@@ -159,17 +174,22 @@ impl Recorder {
         let (tx, rx) = mpsc::channel();
         self.run(move |worker| {
             worker.cancel();
-            let _ = std::fs::remove_dir_all(&worker.dir);
+            if let Some(dir) = worker.dir.take() {
+                let _ = dir.close();
+            }
             let _ = tx.send(());
         });
         let _ = rx.recv_timeout(STOP_GRACE);
     }
 
-    /// The app released a file: a recording of ours is deleted.
+    /// The app released a file: a recording of ours is deleted. Nothing was recorded before the
+    /// recorder's first job, so then there is nothing to do.
     pub fn forget(&self, path: &Path) {
-        if path.starts_with(&self.dir) {
-            let _ = std::fs::remove_file(path);
+        if self.jobs.lock().unwrap_or_else(|e| e.into_inner()).is_none() {
+            return;
         }
+        let path = path.to_owned();
+        self.run(move |worker| worker.forget(&path));
     }
 }
 
@@ -180,35 +200,80 @@ struct Session {
 }
 
 struct Worker {
-    dir: PathBuf,
+    parent: PathBuf,
+    locate: Locate,
+    /// The recordings' directory, once made; removed with everything in it when dropped.
+    dir: Option<tempfile::TempDir>,
     next: u64,
     session: Option<Session>,
 }
 
+/// Makes a directory in `parent` for this run's recordings: a random name, created by this call
+/// (a name already taken, by a file, a directory or a link, is never used), open to the user only.
+fn make_private_dir(parent: &Path) -> std::io::Result<tempfile::TempDir> {
+    let mut builder = tempfile::Builder::new();
+    builder.prefix("mistermorph-voice-");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        builder.permissions(std::fs::Permissions::from_mode(0o700));
+    }
+    builder.tempdir_in(parent)
+}
+
+/// Creates the file `path`, which must not exist yet (not even as a dangling link), open to the
+/// user only.
+fn create_private(path: &Path) -> std::io::Result<File> {
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    options.open(path)
+}
+
 impl Worker {
+    /// The recordings' directory, made the first time it is needed.
+    fn dir(&mut self) -> std::io::Result<PathBuf> {
+        if self.dir.is_none() {
+            self.dir = Some(make_private_dir(&self.parent)?);
+        }
+        Ok(self.dir.as_ref().map(|dir| dir.path().to_owned()).unwrap_or_default())
+    }
+
     fn start(&mut self) -> Value {
         if self.session.is_some() {
             return json!({ "ok": false, "error": "busy" });
         }
-        let Some((program, exe)) = system_program() else {
+        let Some((program, exe)) = (self.locate)() else {
             return json!({ "ok": false, "error": NO_RECORDER });
         };
-        if let Err(err) = std::fs::create_dir_all(&self.dir) {
-            return json!({ "ok": false, "error": "failed", "message": format!("cannot keep the recording: {err}") });
-        }
-        self.next += 1;
-        let path = self.dir.join(format!("voice-{}.wav", self.next));
-        let log = self.dir.join(format!("voice-{}.log", self.next));
-        let stderr = match std::fs::File::create(&log) {
-            Ok(file) => Stdio::from(file),
-            Err(_) => Stdio::null(),
+        let cannot_keep = |err: std::io::Error| json!({ "ok": false, "error": "failed", "message": format!("cannot keep the recording: {err}") });
+        let dir = match self.dir() {
+            Ok(dir) => dir,
+            Err(err) => return cannot_keep(err),
         };
+        self.next += 1;
+        let path = dir.join(format!("voice-{}.wav", self.next));
+        let log = dir.join(format!("voice-{}.log", self.next));
+        // Both files are made here, so the recorder writes into files of ours and nothing else.
+        let stderr = match create_private(&log) {
+            Ok(file) => Stdio::from(file),
+            Err(err) => return cannot_keep(err),
+        };
+        if let Err(err) = create_private(&path) {
+            let _ = std::fs::remove_file(&log);
+            return cannot_keep(err);
+        }
         let mut command = Command::new(&exe);
         command.args(program.args(&path)).stdin(Stdio::null()).stdout(Stdio::null()).stderr(stderr);
         die_with_app(&mut command);
         let mut child = match command.spawn() {
             Ok(child) => child,
             Err(err) => {
+                let _ = std::fs::remove_file(&path);
                 let _ = std::fs::remove_file(&log);
                 return json!({ "ok": false, "error": "failed", "message": format!("{}: {err}", program.name()) });
             }
@@ -260,6 +325,21 @@ impl Worker {
             let _ = std::fs::remove_file(&session.path);
             let _ = std::fs::remove_file(&session.log);
         }
+    }
+
+    /// Deletes `path` when it is one of the recordings in this worker's directory.
+    fn forget(&mut self, path: &Path) {
+        if let Some(dir) = &self.dir
+            && path.parent() == Some(dir.path())
+        {
+            let _ = std::fs::remove_file(path);
+        }
+    }
+}
+
+impl Drop for Worker {
+    fn drop(&mut self) {
+        self.cancel();
     }
 }
 
@@ -412,26 +492,204 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// A recorder for the tests, standing in for `arecord`: it writes a WAV header and four bytes
+    /// of sound to its file (as a killed recorder leaves it, sizes 0) and records until SIGINT. With
+    /// `deaf` it says so and gives up at once, as without a microphone.
+    #[cfg(target_os = "linux")]
+    fn fake_recorder(dir: &Path, deaf: bool) -> Locate {
+        use std::os::unix::fs::PermissionsExt;
+        let bin = dir.join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        let exe = bin.join("arecord");
+        let body = if deaf {
+            "echo 'arecord: no such device' >&2\nexit 1\n".to_owned()
+        } else {
+            concat!(
+                "for a; do out=$a; done\n",
+                "printf 'RIFF\\044\\000\\000\\000WAVEfmt \\020\\000\\000\\000\\001\\000\\001\\000\\200\\076\\000\\000\\000\\175\\000\\000\\002\\000\\020\\000data\\000\\000\\000\\000\\001\\002\\003\\004' > \"$out\"\n",
+                "echo 'fake: recording' >&2\n",
+                "trap 'exit 0' INT TERM\n",
+                "while :; do sleep 0.02; done\n",
+            )
+            .to_owned()
+        };
+        std::fs::write(&exe, format!("#!/bin/sh\n{body}")).unwrap();
+        std::fs::set_permissions(&exe, std::fs::Permissions::from_mode(0o755)).unwrap();
+        Arc::new(move || Some((Program::Arecord, exe.clone())))
+    }
+
+    fn start(recorder: &Recorder) -> Value {
+        let (tx, rx) = mpsc::channel();
+        recorder.start(move |answer| tx.send(answer).unwrap());
+        rx.recv_timeout(Duration::from_secs(5)).unwrap()
+    }
+
+    fn stop(recorder: &Recorder) -> Result<Option<Picked>, String> {
+        let (tx, rx) = mpsc::channel();
+        recorder.stop(move |result| tx.send(result).unwrap());
+        rx.recv_timeout(Duration::from_secs(10)).unwrap()
+    }
+
+    /// The directories in `parent` the recorder made (named as it names them).
+    fn made_dirs(parent: &Path, but: &Path) -> Vec<PathBuf> {
+        let mut dirs: Vec<PathBuf> = std::fs::read_dir(parent)
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .filter(|path| path != but && path.file_name().unwrap().to_string_lossy().starts_with("mistermorph-voice-"))
+            .collect();
+        dirs.sort();
+        dirs
+    }
+
+    #[cfg(unix)]
+    fn mode(path: &Path) -> u32 {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::symlink_metadata(path).unwrap().permissions().mode() & 0o777
+    }
+
+    #[cfg(unix)]
     #[test]
-    fn only_our_own_recordings_are_deleted_on_release() {
-        let dir = scratch("forget");
-        let recorder = Recorder::new(dir.join("voice"));
-        std::fs::create_dir_all(dir.join("voice")).unwrap();
-        let ours = dir.join("voice").join("voice-1.wav");
+    fn a_private_file_is_never_one_that_was_there() {
+        let dir = scratch("create");
+        let victim = dir.join("victim.txt");
+        std::fs::write(&victim, b"keep me").unwrap();
+        let link = dir.join("voice-1.log");
+        std::os::unix::fs::symlink(&victim, &link).unwrap();
+        let dangling = dir.join("voice-1.wav");
+        std::os::unix::fs::symlink(dir.join("nowhere"), &dangling).unwrap();
+        let plain = dir.join("voice-2.log");
+        std::fs::write(&plain, b"theirs").unwrap();
+        for path in [&link, &dangling, &plain] {
+            assert_eq!(create_private(path).unwrap_err().kind(), std::io::ErrorKind::AlreadyExists, "{path:?}");
+        }
+        assert_eq!(std::fs::read(&victim).unwrap(), b"keep me");
+        assert!(!dir.join("nowhere").exists());
+        assert_eq!(std::fs::read(&plain).unwrap(), b"theirs");
+        let ours = dir.join("voice-3.log");
+        create_private(&ours).unwrap().write_all(b"ok").unwrap();
+        assert_eq!(mode(&ours), 0o600);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_recordings_directory_is_new_random_and_private() {
+        let dir = scratch("private");
+        // The default umask: a directory made without asking for 0700 would be 0755.
+        unsafe {
+            libc::umask(0o022);
+        }
+        // What the app used to make, planted beforehand: never taken.
+        let planted = dir.join(format!("mistermorph-voice-{}", std::process::id()));
+        std::fs::create_dir_all(&planted).unwrap();
+        let (a, b) = (make_private_dir(&dir).unwrap(), make_private_dir(&dir).unwrap());
+        for made in [&a, &b] {
+            assert_ne!(made.path(), planted);
+            assert_eq!(made.path().parent(), Some(dir.as_path()));
+            assert_eq!(mode(made.path()), 0o700);
+        }
+        assert_ne!(a.path(), b.path());
+        // Not in a parent that is not there (nor making it).
+        assert!(make_private_dir(&dir.join("gone")).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_recording_never_writes_through_a_planted_link() {
+        use std::os::unix::fs::symlink;
+        let dir = scratch("planted");
+        let parent = dir.join("tmp");
+        std::fs::create_dir_all(&parent).unwrap();
+        unsafe {
+            libc::umask(0o022);
+        }
+        // Someone else planted the old predictable directory, with links where the files would go.
+        let victim = dir.join("victim.txt");
+        std::fs::write(&victim, b"keep me").unwrap();
+        let planted = parent.join(format!("mistermorph-voice-{}", std::process::id()));
+        std::fs::create_dir_all(&planted).unwrap();
+        for name in ["voice-1.log", "voice-1.wav"] {
+            symlink(&victim, planted.join(name)).unwrap();
+        }
+        let recorder = Recorder::with_program(parent.clone(), fake_recorder(&dir, false));
+        assert_eq!(start(&recorder), json!({ "ok": true }));
+        let made = made_dirs(&parent, &planted);
+        assert_eq!(made.len(), 1, "{made:?}");
+        let own = &made[0];
+        assert_eq!(mode(own), 0o700);
+        for name in ["voice-1.log", "voice-1.wav"] {
+            assert_eq!(mode(&own.join(name)), 0o600, "{name}");
+            assert!(!std::fs::symlink_metadata(own.join(name)).unwrap().file_type().is_symlink());
+        }
+        let picked = stop(&recorder).unwrap().expect("a recording");
+        assert_eq!(picked.path, own.join("voice-1.wav"));
+        assert_eq!(picked.size, 48);
+        assert_eq!((picked.name.as_str(), picked.mime.as_str()), ("voice.wav", MIME));
+        assert!(!own.join("voice-1.log").exists());
+        assert_eq!(std::fs::read(&victim).unwrap(), b"keep me");
+        // A second recording goes in the same directory, and a release removes only ours.
+        assert_eq!(start(&recorder), json!({ "ok": true }));
+        assert_eq!(made_dirs(&parent, &planted), made);
+        recorder.cancel();
         let theirs = dir.join("picked.wav");
-        std::fs::write(&ours, b"x").unwrap();
         std::fs::write(&theirs, b"x").unwrap();
         recorder.forget(&theirs);
-        recorder.forget(&ours);
+        recorder.forget(&planted.join("voice-1.wav"));
+        recorder.forget(&picked.path);
+        assert!(matches!(stop(&recorder), Ok(None)));
         assert!(theirs.exists());
-        assert!(!ours.exists());
+        assert!(std::fs::symlink_metadata(planted.join("voice-1.wav")).is_ok());
+        assert!(!picked.path.exists());
+        assert_eq!(std::fs::read_dir(own).unwrap().count(), 0, "the cancelled recording is gone");
+        // Quitting removes our directory and leaves the planted one (and what it points at) alone.
+        recorder.shutdown();
+        assert!(!own.exists());
+        assert!(planted.exists());
+        assert_eq!(std::fs::read(&victim).unwrap(), b"keep me");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_recorder_that_gives_up_leaves_nothing_behind() {
+        let dir = scratch("deaf");
+        let parent = dir.join("tmp");
+        std::fs::create_dir_all(&parent).unwrap();
+        let recorder = Recorder::with_program(parent.clone(), fake_recorder(&dir, true));
+        let answer = start(&recorder);
+        assert_eq!(answer["error"], "audio-capture", "{answer}");
+        assert_eq!(answer["message"], "arecord: arecord: no such device");
+        let made = made_dirs(&parent, Path::new(""));
+        assert_eq!(made.len(), 1);
+        assert_eq!(std::fs::read_dir(&made[0]).unwrap().count(), 0);
+        recorder.shutdown();
+        assert!(made_dirs(&parent, Path::new("")).is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn without_a_recorder_or_a_directory_nothing_starts() {
+        let dir = scratch("none");
+        // No recorder: no directory made either.
+        let recorder = Recorder::with_program(dir.clone(), Arc::new(|| None));
+        assert_eq!(start(&recorder)["error"], NO_RECORDER);
+        assert!(made_dirs(&dir, Path::new("")).is_empty());
+        recorder.shutdown();
+        // Nowhere to keep the recording: it says so, and starts nothing.
+        let recorder = Recorder::with_program(dir.join("gone"), Arc::new(|| Some((Program::Arecord, PathBuf::from("/nonexistent/arecord")))));
+        let answer = start(&recorder);
+        assert_eq!(answer["error"], "failed", "{answer}");
+        assert!(answer["message"].as_str().unwrap().starts_with("cannot keep the recording"), "{answer}");
+        assert!(matches!(stop(&recorder), Ok(None)));
+        recorder.shutdown();
         let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn stopping_without_a_recording_gives_nothing() {
         let dir = scratch("idle");
-        let recorder = Recorder::new(dir.join("voice"));
+        let recorder = Recorder::new(dir.clone());
         let (tx, rx) = mpsc::channel();
         recorder.stop(move |result| tx.send(result.map(|p| p.is_none())).unwrap());
         assert_eq!(rx.recv_timeout(Duration::from_secs(5)).unwrap(), Ok(true));
@@ -446,7 +704,7 @@ mod tests {
     #[ignore = "needs a recorder and an audio server"]
     fn records_from_the_microphone() {
         let dir = scratch("live");
-        let recorder = Recorder::new(dir.join("voice"));
+        let recorder = Recorder::new(dir.clone());
         let (tx, rx) = mpsc::channel();
         recorder.start(move |answer| tx.send(answer).unwrap());
         let answer = rx.recv_timeout(Duration::from_secs(5)).unwrap();
@@ -464,7 +722,7 @@ mod tests {
         recorder.forget(&picked.path);
         assert!(!picked.path.exists());
         recorder.shutdown();
-        assert!(!dir.join("voice").exists());
+        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 0);
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

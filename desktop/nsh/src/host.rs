@@ -83,7 +83,7 @@ impl Desktop {
             session: Mutex::new(BTreeMap::new()),
             app_state: Mutex::new(AppState::load(crate::paths::app_state_file().as_deref())),
             files: Mutex::new(Registry::default()),
-            voice: crate::voice::Recorder::new(crate::voice::Recorder::default_dir()),
+            voice: crate::voice::Recorder::new(crate::voice::Recorder::default_parent()),
             ready: AtomicBool::new(false),
         }
     }
