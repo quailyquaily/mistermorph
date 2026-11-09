@@ -28,3 +28,13 @@ Installs: none; no manifest or lockfile changes.
 Tests: manager independently verified gofmt clean, go vet ./..., go test ./..., nsh check and nsh test --web-host tests/noHost.js (321 passed, 0 failed), using a throwaway HOME. Coder also reports a clean nsh build. Added desktop/mobile consumer tests for accessibility, clearing, loading/empty/error states and a headless geometry fixture.
 Not checked: actual desktop/mobile page screenshots and visual appearance. Headless Chrome could not load HTTP pages in this environment; geometry was checked with the layout fixture only. No Android SDK/emulator was available. Typed-input font size could not be inspected by the headless runner; both consumers share its implementation.
 Moved new/ → review/. Owner should visually compare both pages on desktop and mobile before shipping.
+
+## factory · review · 2026-11-09 20:06
+head: ad3ddf5327f6e7cecd472359432a3da35eb703f4
+verdict: pass
+notes:
+- Codex reviewed all five changed files in origin/master...HEAD against the request and plan; no findings. The branch merges cleanly with origin/master.
+- Validation: gofmt clean, go vet ./..., go test ./..., nsh check, and nsh test --web-host tests/noHost.js all passed (321 tests passed, 0 failed). Tests used a throwaway HOME. git diff --check passed; worktree clean and reviewed HEAD unchanged.
+- Installs: none.
+- Residual risk: actual desktop/mobile visual appearance remains unverified. Supplemental browser validation could not start because the nsh Web runtime was unavailable; headless layout tests do not replace visual comparison. Owner should compare both pages at desktop/mobile sizes before shipping.
+- Moved review/ → ready/. No linked GitHub issue or PR.
