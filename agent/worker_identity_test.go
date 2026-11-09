@@ -201,7 +201,7 @@ func TestWorkerResumeKeepsTheTaskOrder(t *testing.T) {
 		newWorkerSeed = func() uint64 { t.Fatal("legacy resume drew a new seed"); return 1 }
 		ctx := withResumedWorkerScope(context.Background(), 3, 0)
 		got := allocateWorker(ctx, "after").snapshot()
-		if got.ID != "worker-4" || got.Name != "Cleo" || *got.NameIndex != 3 || *got.AvatarIndex != 3 {
+		if got.ID != "worker-4" || got.Name != "Darwin" || *got.NameIndex != 3 || *got.AvatarIndex != 3 {
 			t.Fatalf("legacy continuation = %+v", got)
 		}
 	})
@@ -249,6 +249,31 @@ func TestWorkerMetadataJSON(t *testing.T) {
 	}
 }
 
+func TestWorkerNamesAreScientists(t *testing.T) {
+	if len(workerNames) != 32 {
+		t.Fatalf("pool size %d: name indices already recorded assume 32", len(workerNames))
+	}
+	seen := map[string]bool{}
+	plain := regexp.MustCompile(`^[A-Z][a-z]+$`)
+	for _, name := range workerNames {
+		// A repeat adds "-<n>", so a name must not contain a dash of its own.
+		if seen[name] || !plain.MatchString(name) {
+			t.Fatalf("name %q (repeat %v)", name, seen[name])
+		}
+		seen[name] = true
+	}
+	for _, name := range []string{"Einstein", "Curie", "Newton", "Darwin", "Noether"} {
+		if !seen[name] {
+			t.Fatalf("%s is missing", name)
+		}
+	}
+	for index, want := range map[int]string{0: "Einstein", 4: "Noether", 31: "Archimedes", 32: "Einstein-2", 67: "Darwin-3"} {
+		if got := workerName(index); got != want {
+			t.Fatalf("workerName(%d) = %q, want %q", index, got, want)
+		}
+	}
+}
+
 // The Console renders the names and avatars from its own copy of the pools; they must agree.
 func TestWorkerPoolsMatchConsole(t *testing.T) {
 	source, err := os.ReadFile(filepath.Join("..", "web", "console-nsh", "lib", "core", "worker-identity.js"))
@@ -256,8 +281,15 @@ func TestWorkerPoolsMatchConsole(t *testing.T) {
 		t.Fatal(err)
 	}
 	quoted := regexp.MustCompile(`"([^"]+)"`)
-	pool := func(lang string) []string {
-		block := regexp.MustCompile(`(?s)\n  ` + lang + `: Object\.freeze\(\[(.*?)\]\)`).FindSubmatch(source)
+	pools := func(name string) []byte {
+		block := regexp.MustCompile(`(?s)export const ` + name + ` = Object\.freeze\(\{(.*?)\n\}\);`).FindSubmatch(source)
+		if block == nil {
+			t.Fatalf("no %s", name)
+		}
+		return block[1]
+	}
+	pool := func(pools []byte, lang string) []string {
+		block := regexp.MustCompile(`(?s)\n  ` + lang + `: Object\.freeze\(\[(.*?)\]\)`).FindSubmatch(pools)
 		if block == nil {
 			t.Fatalf("no %s pool", lang)
 		}
@@ -267,12 +299,24 @@ func TestWorkerPoolsMatchConsole(t *testing.T) {
 		}
 		return names
 	}
-	if got := pool("en"); !slices.Equal(got, workerNames[:]) {
+	current, legacy := pools("WORKER_NAME_POOLS"), pools("LEGACY_WORKER_NAME_POOLS")
+	if got := pool(current, "en"); !slices.Equal(got, workerNames[:]) {
 		t.Fatalf("console English pool = %v", got)
 	}
 	for _, lang := range []string{"zh", "ja"} {
-		if got := pool(lang); len(got) != len(workerNames) {
+		if got := pool(current, lang); len(got) != len(workerNames) {
 			t.Fatalf("%s pool has %d names", lang, len(got))
+		}
+	}
+	// Records written before the scientist pool keep their names; the Console tells them apart
+	// only because no scientist shares a name with the legacy pool.
+	oldNames := pool(legacy, "en")
+	if len(oldNames) != len(workerNames) || oldNames[0] != "Milo" || oldNames[31] != "Zoe" {
+		t.Fatalf("console legacy pool = %v", oldNames)
+	}
+	for _, name := range workerNames {
+		if slices.Contains(oldNames, name) {
+			t.Fatalf("%s is in both pools", name)
 		}
 	}
 	styles := regexp.MustCompile(`WORKER_AVATAR_STYLES = Object\.freeze\(\[([^\]]*)\]\)`).FindSubmatch(source)

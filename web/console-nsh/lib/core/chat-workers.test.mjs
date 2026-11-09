@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { normalizeActivity, taskListHistoryItems } from "./chat-task-history.js";
+import { activityWorkerLabel, normalizeActivity, taskListHistoryItems } from "./chat-task-history.js";
 import {
   normalizeActivityWorkers,
   rosterWorkers,
@@ -114,6 +114,65 @@ test("rosterWorkers names workers in the language and keeps their id and avatar"
   assert.deepEqual(view("en"), english);
   // The stored name, used by older readers, is untouched.
   assert.deepEqual(rosterWorkers(activity, "running", "zh").map((worker) => worker.name), ["Gus", "Milo-2", "Cleo"]);
+});
+
+test("scientist names agree on every worker surface, for subagents, coders and nested workers", () => {
+  // As the runtime records them: a subagent, a coder it started, a root coder after the pool ran
+  // out, and a worker from a task that started before the scientist pool.
+  const subagent = { id: "worker-1", name: "Noether", name_index: 4, avatar_index: 2 };
+  const nested = { id: "worker-2", name: "Curie", name_index: 1, avatar_index: 6, processes: [{ pid: 77, program: "codex", activity_id: "coder-2" }] };
+  const repeat = { id: "worker-33", name: "Darwin-2", name_index: 35, avatar_index: 0 };
+  const legacy = { id: "worker-34", name: "Hazel", name_index: 13, avatar_index: 4 };
+  const saved = {
+    history: [
+      { id: "spawn-1", kind: "tool", name: "spawn", status: "done", worker: subagent, children: [
+        { id: "coder-2", kind: "tool", name: "coder", status: "done", worker: nested },
+      ] },
+      { id: "coder-33", kind: "tool", name: "coder", status: "done", worker: repeat },
+      { id: "spawn-34", kind: "tool", name: "spawn", status: "done", worker: legacy },
+    ],
+    workers: [
+      { ...subagent, kind: "subagent", status: "done", activity_id: "spawn-1" },
+      { ...nested, kind: "coder", status: "done", activity_id: "coder-2" },
+      { ...repeat, kind: "coder", status: "done", activity_id: "coder-33" },
+      { ...legacy, kind: "subagent", status: "done", activity_id: "spawn-34" },
+    ],
+  };
+  const live = normalizeActivity(saved);
+  // A reload or replay reads the same record again; a reconnect normalizes it once more.
+  const reloaded = normalizeActivity(JSON.parse(JSON.stringify(saved)));
+  assert.deepEqual(normalizeActivity(live), reloaded);
+  const surfaces = (activity, lang) => ({
+    roster: rosterWorkers(activity, "done", lang).map((worker) => [worker.id, worker.displayName, worker.avatarStyle]),
+    labels: [
+      activityWorkerLabel(activity.history[0], lang),
+      activityWorkerLabel(activity.history[0].children[0], lang),
+      activityWorkerLabel(activity.history[1], lang),
+      activityWorkerLabel(activity.history[2], lang),
+    ],
+  });
+  const want = {
+    en: ["Noether", "Curie", "Darwin-2", "Hazel"],
+    zh: ["诺特", "居里", "达尔文-2", "胡敏"],
+    ja: ["ネーター", "キュリー", "ダーウィン-2", "山口凛"],
+    fr: ["Noether", "Curie", "Darwin-2", "Hazel"],
+  };
+  const styles = ["paper", "denko", "aojashin", "rinko"];
+  for (const lang of ["en", "zh", "ja", "fr", "en"]) {
+    const names = want[lang];
+    for (const activity of [live, reloaded]) {
+      const seen = surfaces(activity, lang);
+      assert.deepEqual(seen.roster, [
+        ["worker-1", names[0], styles[0]],
+        ["worker-2", names[1], styles[1]],
+        ["worker-33", names[2], styles[2]],
+        ["worker-34", names[3], styles[3]],
+      ], lang);
+      assert.deepEqual(seen.labels, [names[0], `${names[1]} · codex PID 77`, names[2], names[3]], lang);
+    }
+  }
+  // The recorded English name stays as stored.
+  assert.deepEqual(reloaded.workers.map((worker) => worker.name), ["Noether", "Curie", "Darwin-2", "Hazel"]);
 });
 
 test("coder output keeps line boundaries through live normalization and restored history", () => {
