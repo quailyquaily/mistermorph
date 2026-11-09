@@ -685,6 +685,9 @@ export function SelectField(props: {
         </View>
       }
     >
+      {/* nsh's Menu does not scroll: its rows past max-h-80 would run off the popup, and off the
+          sheet into the bottom inset on touch screens. */}
+      <Scroll class="shrink">
       <Each of={props.items} key={(item) => item.value}>
         {(item) => (
           <MenuItem
@@ -702,6 +705,7 @@ export function SelectField(props: {
           </MenuItem>
         )}
       </Each>
+      </Scroll>
     </Menu>
   );
   return (

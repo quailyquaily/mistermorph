@@ -137,7 +137,7 @@ Headless tests prove behaviour, not the look.
   inset under the popup class's own bottom padding (an inline `paddingBottom` replaces it, so pass
   it), its `max-h-*` grown by the inset, the keyboard's height instead of the inset for a sheet
   that rises, and the desktops' popups unchanged. nsh's `Menu` sheet does not scroll: a long menu
-  needs a `Scroll` of its own (`AgentSwitcher`).
+  needs a `Scroll` of its own (`AgentSwitcher`, `SelectField`).
 - Dialogs are an `Overlay` on Android (`DialogLayer`): with it Back hides the keyboard first, then
   closes the dialog.
 - Back (the button, and the edge swipe of gesture navigation, which the system turns into the same

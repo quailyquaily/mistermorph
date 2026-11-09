@@ -133,6 +133,15 @@ function Gallery() {
           ]}
         />
       </View>
+      <View class="flex-row gap-2 p-2">
+        <SelectField
+          testID="long-field"
+          placeholder="Pick"
+          value={fieldValue()}
+          onChange={(value) => fieldValue.set(value)}
+          items={rows(14).map((row) => ({ value: row.value, label: `Choice ${row.value.slice(1)}` }))}
+        />
+      </View>
       <Text testID="state">{`opened=${opened() ?? ""} chosen=${chosen()} field=${fieldValue()}`}</Text>
       <Text>{JSON.stringify(frames())}</Text>
     </View>

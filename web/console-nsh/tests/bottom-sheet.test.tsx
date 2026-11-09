@@ -156,3 +156,15 @@ test("on a phone with insets the shared dropdowns still open, choose and close",
   await app.press("text:Bravo");
   await app.waitFor("text:opened= chosen=second field=b");
 });
+
+for (const [platform, safeArea] of [["android", BARS], ["linux", undefined]] as const) {
+  test(`a SelectField's long menu scrolls to its last choice (${platform})`, async () => {
+    const { app } = await openGallery(platform, safeArea);
+    await app.press("id:long-field");
+    await app.waitFor("text:Choice 0");
+    await app.scroll("text:Choice 3", 1000);
+    await app.press("text:Choice 13");
+    await app.waitFor("text:opened= chosen= field=v13");
+    await app.waitFor("text:Choice 0", { state: "gone" });
+  });
+}
