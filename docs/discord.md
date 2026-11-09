@@ -22,7 +22,7 @@ discord:
   addressing_confidence_threshold: 0.6
   addressing_interject_threshold: 0.6
   task_timeout: "0s"
-  max_concurrency: 3
+  max_concurrency: 8
   serve_listen: ""
 ```
 

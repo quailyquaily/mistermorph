@@ -37,7 +37,7 @@ wechat:
   bot_id: ""            # written by login
   base_url: ""          # written by login; empty uses https://ilinkai.weixin.qq.com
   task_timeout: "0s"
-  max_concurrency: 3
+  max_concurrency: 8
   serve_listen: ""
 ```
 

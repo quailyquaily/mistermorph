@@ -31,7 +31,7 @@ bluesky:
     thread_context_depth: 6
     max_reply_posts: 3
   task_timeout: "0s"
-  max_concurrency: 3
+  max_concurrency: 8
   serve_listen: ""
 ```
 

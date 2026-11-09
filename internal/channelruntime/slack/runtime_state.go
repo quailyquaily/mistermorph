@@ -17,6 +17,7 @@ import (
 	agentlinkruntime "github.com/quailyquaily/mistermorph/internal/channelruntime/agentlink"
 	runtimecore "github.com/quailyquaily/mistermorph/internal/channelruntime/core"
 	"github.com/quailyquaily/mistermorph/internal/chathistory"
+	"github.com/quailyquaily/mistermorph/internal/configdefaults"
 	"github.com/quailyquaily/mistermorph/internal/daemonruntime"
 	"github.com/quailyquaily/mistermorph/internal/personautil"
 	"github.com/quailyquaily/mistermorph/internal/runtimecontrol"
@@ -135,7 +136,7 @@ func newSlackRuntimeState(config slackRuntimeStateConfig) (*slackRuntimeState, e
 	groupTriggerMode := strings.ToLower(strings.TrimSpace(config.options.GroupTriggerMode))
 	maxConcurrency := config.options.MaxConcurrency
 	if maxConcurrency <= 0 {
-		maxConcurrency = 1
+		maxConcurrency = configdefaults.DefaultChannelMaxConcurrency
 	}
 	pendingApprovals := newSlackPendingApprovalRegistry(sharedGuard, config.taskStore, logger)
 	state := &slackRuntimeState{

@@ -639,6 +639,11 @@ console:
   password_hash: "" # or set via MISTER_MORPH_CONSOLE_PASSWORD_HASH
   # Session TTL for console bearer token (7 days).
   session_ttl: "168h"
+  # Max number of Console topics running a task at once (each topic remains serial; extra
+  # topics wait in order). Local to the Console's own runtime: managed channel runtimes and cron
+  # keep their own max_concurrency, and there is no process-wide total. Set 1 to run one topic
+  # at a time; values below 1 use the default (8). Applied when Console reloads its config.
+  max_concurrency: 8
   # Channel runtimes managed in-process by `morph console serve`.
   # Managed runtimes are merged into Console itself:
   # - they do not appear as separate endpoints
@@ -679,7 +684,7 @@ telegram:
   # Per-message agent timeout (0 uses top-level timeout).
   task_timeout: "0s"
   # Max number of chats processed concurrently (each chat remains serial).
-  max_concurrency: 3
+  max_concurrency: 8
   # Runtime API listen address for Telegram runtime (standard base path: `/runtime`).
   # Protected by server.auth_token.
   serve_listen: ""
@@ -713,7 +718,7 @@ slack:
   # Per-message agent timeout (0 uses top-level timeout).
   task_timeout: "0s"
   # Max number of conversations processed concurrently.
-  max_concurrency: 3
+  max_concurrency: 8
   # Runtime API listen address for Slack runtime (standard base path: `/runtime`).
   # Protected by server.auth_token.
   serve_listen: ""
@@ -746,7 +751,7 @@ line:
   # Per-message agent timeout (0 uses top-level timeout).
   task_timeout: "0s"
   # Max number of conversations processed concurrently.
-  max_concurrency: 3
+  max_concurrency: 8
   # Runtime API listen address for LINE runtime (standard base path: `/runtime`).
   # Protected by server.auth_token.
   serve_listen: ""
@@ -778,7 +783,7 @@ lark:
   # Per-message agent timeout (0 uses top-level timeout).
   task_timeout: "0s"
   # Max number of conversations processed concurrently.
-  max_concurrency: 3
+  max_concurrency: 8
   # Runtime API listen address for Lark runtime (standard base path: `/runtime`).
   # Protected by server.auth_token.
   serve_listen: ""
@@ -794,7 +799,7 @@ mixin:
   # Per-message agent timeout (0 uses top-level timeout).
   task_timeout: "0s"
   # Max number of conversations processed concurrently.
-  max_concurrency: 3
+  max_concurrency: 8
   # Runtime API listen address for Mixin runtime (standard base path: `/runtime`).
   # Protected by server.auth_token.
   serve_listen: ""
@@ -828,7 +833,7 @@ discord:
   # Per-message agent timeout (0 uses top-level timeout).
   task_timeout: "0s"
   # Max number of conversations processed concurrently.
-  max_concurrency: 3
+  max_concurrency: 8
   # Runtime API listen address for Discord runtime (standard base path: `/runtime`).
   # Protected by server.auth_token.
   serve_listen: ""
@@ -844,7 +849,7 @@ wechat:
   # Per-message agent timeout (0 uses top-level timeout).
   task_timeout: "0s"
   # Max number of conversations processed concurrently.
-  max_concurrency: 3
+  max_concurrency: 8
   # Runtime API listen address for WeChat runtime (standard base path: `/runtime`).
   # Protected by server.auth_token.
   serve_listen: ""
@@ -857,7 +862,7 @@ whatsapp:
   # Per-message agent timeout (0 uses top-level timeout).
   task_timeout: "0s"
   # Max number of conversations processed concurrently.
-  max_concurrency: 3
+  max_concurrency: 8
   # Runtime API listen address for WhatsApp runtime (standard base path: `/runtime`).
   # Protected by server.auth_token.
   serve_listen: ""
@@ -894,7 +899,7 @@ bluesky:
   # Per-message agent timeout (0 uses top-level timeout).
   task_timeout: "0s"
   # Max number of conversations processed concurrently.
-  max_concurrency: 3
+  max_concurrency: 8
   # Runtime API listen address for the Bluesky runtime (standard base path: `/runtime`).
   # Protected by server.auth_token. Served when dm.enabled is on.
   serve_listen: ""
@@ -938,7 +943,7 @@ x:
     # A post with a link costs over 13 times as much; off removes links from replies.
     allow_links_in_posts: false
   task_timeout: "0s"
-  max_concurrency: 3
+  max_concurrency: 8
   serve_listen: ""
 
 # Heartbeat (periodic awareness/checkpoint).

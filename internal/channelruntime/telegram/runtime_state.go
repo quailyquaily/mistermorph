@@ -17,6 +17,7 @@ import (
 	agentlinkruntime "github.com/quailyquaily/mistermorph/internal/channelruntime/agentlink"
 	runtimecore "github.com/quailyquaily/mistermorph/internal/channelruntime/core"
 	"github.com/quailyquaily/mistermorph/internal/chathistory"
+	"github.com/quailyquaily/mistermorph/internal/configdefaults"
 	"github.com/quailyquaily/mistermorph/internal/daemonruntime"
 	"github.com/quailyquaily/mistermorph/internal/filecache"
 	"github.com/quailyquaily/mistermorph/internal/personautil"
@@ -214,7 +215,7 @@ func newTelegramRuntimeState(config telegramRuntimeStateConfig) (*telegramRuntim
 	state.pendingApprovals = newTelegramPendingApprovalRegistry(state.guard, state.taskStore, logger)
 	maxConcurrency := config.options.MaxConcurrency
 	if maxConcurrency <= 0 {
-		maxConcurrency = 1
+		maxConcurrency = configdefaults.DefaultChannelMaxConcurrency
 	}
 	state.runner = runtimecore.NewConversationRunner[string, telegramJob](
 		workersCtx,

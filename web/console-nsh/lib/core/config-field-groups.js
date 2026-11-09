@@ -425,6 +425,12 @@ export const SYSTEM_ADVANCED_CONFIG_GROUPS = [
     title: "Runtime capacity",
     fields: [
       { path: "server.max_queue", label: "Maximum queued tasks", type: "int" },
+      {
+        path: "console.max_concurrency",
+        label: "Concurrent Console topics",
+        type: "int",
+        note: "How many topics run a task at once. Tasks in one topic always run in order. Channels and TODO runs have their own limits.",
+      },
       { path: "bus.max_inflight", label: "Maximum in-flight bus messages", type: "int" },
       { path: "user_agent", label: "Outbound User-Agent", type: "string", wide: true },
     ],

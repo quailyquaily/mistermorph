@@ -117,6 +117,7 @@ func ConsoleFields() []Field {
 		{Path: "console.password_hash", Kind: KindString, Sensitive: true, ApplyMode: ApplyProcessRestart},
 		{Path: "console.session_ttl", Kind: KindDuration, ApplyMode: ApplyProcessRestart},
 		{Path: "console.managed_runtimes", Kind: KindStringList, ApplyMode: ApplyRuntimeRestart},
+		{Path: "console.max_concurrency", Kind: KindInt, ApplyMode: ApplyRuntimeRestart, Min: &one},
 		{Path: "server.auth_token", Kind: KindString, Sensitive: true, ApplyMode: ApplyRuntimeRestart},
 
 		{Path: "heartbeat.enabled", Kind: KindBool, ApplyMode: ApplyRuntimeRestart},

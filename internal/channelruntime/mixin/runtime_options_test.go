@@ -15,8 +15,8 @@ func TestNormalizeRunOptionsDefaults(t *testing.T) {
 	if opts.TaskTimeout != time.Hour {
 		t.Fatalf("task timeout = %s, want 1h", opts.TaskTimeout)
 	}
-	if opts.MaxConcurrency != 3 {
-		t.Fatalf("max concurrency = %d, want 3", opts.MaxConcurrency)
+	if opts.MaxConcurrency != 8 {
+		t.Fatalf("max concurrency = %d, want 8", opts.MaxConcurrency)
 	}
 	if opts.ServerListen != "127.0.0.1:8792" {
 		t.Fatalf("server listen = %q, want %q", opts.ServerListen, "127.0.0.1:8792")

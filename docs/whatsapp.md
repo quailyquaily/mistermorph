@@ -16,7 +16,7 @@ This is not the Cloud API for business numbers, and not a linked WhatsApp Web de
 whatsapp:
   api_token: ""   # or MISTER_MORPH_WHATSAPP_API_TOKEN
   task_timeout: "0s"
-  max_concurrency: 3
+  max_concurrency: 8
   serve_listen: ""
 ```
 

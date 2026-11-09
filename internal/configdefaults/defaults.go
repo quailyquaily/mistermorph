@@ -22,7 +22,7 @@ const (
 	DefaultFileCacheMaxAge        = 7 * 24 * time.Hour
 	DefaultFileCacheMaxFiles      = 1000
 	DefaultFileCacheMaxTotalBytes = int64(512 * 1024 * 1024)
-	DefaultChannelMaxConcurrency  = 3
+	DefaultChannelMaxConcurrency  = 8
 	DefaultBusMaxInFlight         = 1024
 	DefaultServerMaxQueue         = 100
 	DefaultGroupTriggerMode       = "talkative"
@@ -121,6 +121,7 @@ func Apply(v *viper.Viper) {
 	v.SetDefault("console.password_hash", "")
 	v.SetDefault("console.session_ttl", 7*24*time.Hour)
 	v.SetDefault("console.endpoints", []map[string]any{})
+	v.SetDefault("console.max_concurrency", DefaultChannelMaxConcurrency)
 
 	v.SetDefault("telegram.poll_timeout", DefaultTelegramPollTimeout)
 	v.SetDefault("telegram.group_trigger_mode", DefaultGroupTriggerMode)

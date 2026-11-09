@@ -2,6 +2,8 @@ package configdefaults
 
 import (
 	"bytes"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -144,5 +146,48 @@ func TestApplyDoesNotRegisterRemovedConfig(t *testing.T) {
 		if v.IsSet(key) {
 			t.Errorf("%s should not be configurable", key)
 		}
+	}
+}
+
+func TestTaskConcurrencyDefaultsAreEightAndMatchConfigTemplate(t *testing.T) {
+	raw, err := assets.ConfigFS.ReadFile("config/config.example.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	template := viper.New()
+	template.SetConfigType("yaml")
+	if err := template.ReadConfig(bytes.NewReader(raw)); err != nil {
+		t.Fatal(err)
+	}
+	if DefaultChannelMaxConcurrency != 8 || DefaultCronMaxConcurrency != 8 {
+		t.Fatalf("defaults = channel %d cron %d, want 8 8", DefaultChannelMaxConcurrency, DefaultCronMaxConcurrency)
+	}
+	keys := []string{"console.max_concurrency", "cron.max_concurrency"}
+	for _, channel := range []string{"telegram", "slack", "line", "lark", "mixin", "discord", "wechat", "whatsapp", "bluesky", "x"} {
+		keys = append(keys, channel+".max_concurrency")
+	}
+	for _, key := range keys {
+		t.Run(key, func(t *testing.T) {
+			defaults := viper.New()
+			Apply(defaults)
+			if got := defaults.GetInt(key); got != 8 {
+				t.Errorf("omitted value = %d, want 8", got)
+			}
+			if got := template.GetInt(key); got != 8 {
+				t.Errorf("template = %d, want 8", got)
+			}
+			section, field, _ := strings.Cut(key, ".")
+			for _, explicit := range []int{1, 3, 20} {
+				configured := viper.New()
+				Apply(configured)
+				configured.SetConfigType("yaml")
+				if err := configured.ReadConfig(strings.NewReader(fmt.Sprintf("%s:\n  %s: %d\n", section, field, explicit))); err != nil {
+					t.Fatal(err)
+				}
+				if got := configured.GetInt(key); got != explicit {
+					t.Errorf("explicit value = %d, want %d", got, explicit)
+				}
+			}
+		})
 	}
 }

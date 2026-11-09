@@ -167,6 +167,8 @@ type consoleLocalRuntime struct {
 	seq                   atomic.Uint64
 	// skillEnabler writes skills.enabled/load after an install; set by the console server.
 	skillEnabler func(ctx context.Context, skillID string) error
+	// taskLimiter bounds how many topics run a task at once (console.max_concurrency).
+	taskLimiter *runtimecore.ResizableLimiter
 }
 
 type topicDeleterFunc func(id string) (bool, error)
@@ -238,9 +240,12 @@ func newConsoleLocalRuntime(cfg serveConfig, reader *viper.Viper) (*consoleLocal
 	// Chat tasks ask their elevated commands on approval cards, so they need no desktop dialog.
 	elevate.OfferClientApprovals()
 	out.workspaceStore = workspace.NewStore(gen.paths.WorkspaceAttachmentsPath)
+	// Each topic runs its tasks in order; independent topics share console.max_concurrency
+	// slots. The limiter outlives generations so a reload resizes it without dropping work.
+	out.taskLimiter = runtimecore.NewResizableLimiter(consoleMaxConcurrencyFromReader(gen.reader))
 	out.runner = runtimecore.NewConversationRunner[string, consoleLocalTaskJob](
 		workersCtx,
-		make(chan struct{}, 1),
+		nil,
 		16,
 		func(workerCtx context.Context, conversationKey string, job consoleLocalTaskJob) {
 			out.handleTaskJob(workerCtx, conversationKey, job)
@@ -249,6 +254,7 @@ func newConsoleLocalRuntime(cfg serveConfig, reader *viper.Viper) (*consoleLocal
 			Logger:  gen.logger,
 			OnDrop:  out.handleDroppedTaskJob,
 			OnPanic: out.handleTaskJobPanic,
+			Limiter: out.taskLimiter,
 		},
 	)
 	if err := inprocBus.Subscribe(busruntime.TopicChatMessage, out.handleConsoleBusMessage); err != nil {
@@ -390,6 +396,21 @@ func consoleDefaultTimeoutFromReader(r interface {
 		return configdefaults.DefaultTaskTimeout
 	}
 	return timeout
+}
+
+// consoleMaxConcurrencyFromReader reads console.max_concurrency. Like the channel runtimes,
+// values below 1 fall back to the shared channel default.
+func consoleMaxConcurrencyFromReader(r interface {
+	GetInt(string) int
+}) int {
+	if r == nil {
+		return configdefaults.DefaultChannelMaxConcurrency
+	}
+	limit := r.GetInt("console.max_concurrency")
+	if limit <= 0 {
+		return configdefaults.DefaultChannelMaxConcurrency
+	}
+	return limit
 }
 
 func consoleAgentLimitsFromReader(r interface {
@@ -697,6 +718,9 @@ func (r *consoleLocalRuntime) applyPreparedGenerationLocked(generation *consoleL
 	r.authToken = authToken
 	r.handler = consoleGenerationHandler(generation, daemonruntime.NewHandler(r.routesOptions(strings.TrimSpace(authToken))))
 	r.handlerMu.Unlock()
+	if r.taskLimiter != nil && generation != nil {
+		r.taskLimiter.SetLimit(consoleMaxConcurrencyFromReader(generation.reader))
+	}
 	slog.SetDefault(r.currentLogger())
 	r.reloadAwarenessLoop()
 	r.reloadAgentLinkRunner()

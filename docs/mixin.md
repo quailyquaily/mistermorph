@@ -20,7 +20,7 @@ mixin:
   keystore_file: "./secrets/mixin-keystore.json"
   allowed_conversation_ids: []
   task_timeout: "0s"
-  max_concurrency: 3
+  max_concurrency: 8
   serve_listen: ""
 ```
 

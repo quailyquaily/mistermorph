@@ -14,8 +14,8 @@ func TestNormalizeRunOptionsDefaults(t *testing.T) {
 	if opts.TaskTimeout != time.Hour {
 		t.Fatalf("task timeout = %s, want %s", opts.TaskTimeout, time.Hour)
 	}
-	if opts.MaxConcurrency != 3 {
-		t.Fatalf("max concurrency = %d, want 3", opts.MaxConcurrency)
+	if opts.MaxConcurrency != 8 {
+		t.Fatalf("max concurrency = %d, want 8", opts.MaxConcurrency)
 	}
 	if opts.WebhookListen != "127.0.0.1:18080" {
 		t.Fatalf("webhook listen = %q, want %q", opts.WebhookListen, "127.0.0.1:18080")
