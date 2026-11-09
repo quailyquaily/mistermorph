@@ -103,6 +103,7 @@ import { pushNotice } from "../../lib/core/notices.js";
 import { copyText, hasFocus, isVisible, localStore, onVisibilityChange, pickFiles, releaseFile, type PickedFile } from "../../lib/platform";
 import { currentRoute, router } from "../../lib/router";
 import { isMobile } from "../../lib/shell";
+import { dismissSoftKeyboard } from "../../lib/softKeyboard";
 import { createArtifactPreviews } from "../../components/chat/ArtifactPreviewCard";
 import type { ComposerFileItem, ComposerHandle, ComposerProfileItem } from "../../components/chat/ChatComposer";
 import type { ChatRowContext, HistoryItem } from "../../components/chat/ChatHistoryItem";
@@ -1006,6 +1007,14 @@ export function createChatController() {
     if (!untracked(hasSidebarTopics)) return;
     syncMobileTopicView({ preferTopics: true });
     void syncChatRoute("", { replace: true });
+  }
+
+  // The phone bar's back arrow: with the software keyboard up its first tap only lowers it, and the
+  // view, the topic and the draft stay as they were; the next tap goes to the list. Android's
+  // system Back needs none of this: the system lowers the keyboard before the app hears it.
+  function mobileBack() {
+    if (dismissSoftKeyboard(composer?.focused() ?? false)) return;
+    showTopicsView();
   }
 
   let lastMobile: boolean | undefined;
@@ -3202,6 +3211,7 @@ export function createChatController() {
     selectTopic,
     startNewTopic,
     showTopicsView,
+    mobileBack,
     setTopicSidebarView,
     clickTopicSidebarTitle,
     loadOlderTopics,

@@ -46,6 +46,8 @@ export interface ComposerProfileItem {
 
 export interface ComposerHandle {
   focus: (options?: { preserveSelection?: boolean }) => void;
+  /** Whether the field has the focus now (untracked). */
+  focused: () => boolean;
   insertText: (text: string) => void;
   closeSuggestions: () => void;
 }
@@ -340,7 +342,7 @@ export function ChatComposer(props: ChatComposerProps) {
     if (props.disabled) untracked(closeSuggestions);
   });
 
-  props.onReady?.({ focus, insertText, closeSuggestions });
+  props.onReady?.({ focus, focused: () => untracked(focused), insertText, closeSuggestions });
 
   // On touch screens the add menu and the model picker are sheets at the bottom of the screen, where
   // the software keyboard is (composerSheets.ts): the keyboard goes down as one opens, as phones do

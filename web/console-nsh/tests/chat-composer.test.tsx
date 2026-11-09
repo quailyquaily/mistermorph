@@ -1,10 +1,12 @@
 // The composer: commands as you type, the keys through sent messages, drafts per topic, attached
 // files (upload, failure, retry, preview, removal), the model picker, and its add menu and model
-// picker on phones, where they are sheets the software keyboard would cover.
+// picker on phones, where they are sheets the software keyboard would cover, and the phone bar's
+// back arrow, whose first tap with the keyboard up only lowers it.
 import type { App } from "nsh/test";
 import { expect, test } from "nsh/test";
 import { nextComposerRows, SINGLE_ROW } from "../components/chat/composerRows";
 import { PROFILE_SHEET_MAX_HEIGHT, PROFILE_SHEET_PADDING } from "../components/chat/composerSheets";
+import { softKeyboardUp } from "../lib/softKeyboard";
 import { bottomSheetInsets } from "../lib/systemInsets";
 import { openConsole, type ApiRequest } from "./harness";
 
@@ -307,6 +309,74 @@ test("on a phone with the keyboard down the sheets open and close as before, lea
   // The field takes a tap as before.
   await app.press("id:chat-composer-input");
   expect(await fieldFocused(app)).toBe(true);
+});
+
+// Headless runs have no software keyboard and report no keyboard frame: the focused field stands
+// for the keyboard being up (lib/softKeyboard.ts), as on a phone whose frame has not reported yet.
+test("on a phone the back arrow lowers the keyboard first, then goes to the topic list", async () => {
+  const { app } = await openPhoneChat();
+  await app.waitFor("id:chat-composer-input");
+  await app.type("id:chat-composer-input", "half a thought");
+  expect(await fieldFocused(app)).toBe(true);
+
+  // The first tap only lowers the keyboard: the conversation stays, with its draft.
+  await app.press("id:chat-back");
+  await app.wait(300);
+  expect(app.shows("id:chat-back")).toBe(true);
+  expect(app.shows("id:chat-topic-sidebar")).toBe(false);
+  expect(app.value("id:chat-composer-input")).toBe("half a thought");
+  // Nothing gives the field the focus back.
+  expect(await fieldFocused(app)).toBe(false);
+
+  // With the keyboard down the next tap goes to the list.
+  await app.press("id:chat-back");
+  await app.waitFor("id:chat-topic-sidebar");
+  expect(app.shows("id:chat-back")).toBe(false);
+
+  // The topic keeps its draft, and opening it again does not raise the keyboard.
+  await app.press("id:chat-topic-topic-1");
+  await app.waitFor("id:chat-back");
+  await app.waitUntil(() => app.value("id:chat-composer-input") === "half a thought");
+  expect(await fieldFocused(app)).toBe(false);
+});
+
+test("on a phone with the keyboard down the back arrow goes to the topic list at once", async () => {
+  const { app } = await openPhoneChat();
+  await app.waitFor("id:chat-composer-input");
+  expect(await fieldFocused(app)).toBe(false);
+  await app.press("id:chat-back");
+  await app.waitFor("id:chat-topic-sidebar");
+  expect(app.shows("id:chat-back")).toBe(false);
+});
+
+test("in a narrow desktop window the back arrow goes to the topic list with the field focused", async () => {
+  const { app } = await openConsole({
+    location: "/e/default/chat/topic-1",
+    width: 390,
+    height: 844,
+    api: { "GET /proxy:/topics": TOPICS, "GET /proxy:/tasks": history, "GET /proxy:/llm/profiles": PROFILES },
+  });
+  await app.waitFor("text:Logs are fine.");
+  await app.type("id:chat-composer-input", "draft");
+  expect(await fieldFocused(app)).toBe(true);
+  await app.press("id:chat-back");
+  await app.waitFor("id:chat-topic-sidebar");
+  expect(app.shows("id:chat-back")).toBe(false);
+});
+
+test("the software keyboard is up by its frame, or by the focused field until a frame reports one", () => {
+  const cases: { name: string; desktop?: boolean; height: number; frameReported: boolean; fieldFocused: boolean; up: boolean }[] = [
+    { name: "a keyboard frame", height: 300, frameReported: true, fieldFocused: true, up: true },
+    { name: "a keyboard frame still going down, the field already unfocused", height: 120, frameReported: true, fieldFocused: false, up: true },
+    { name: "no frame after frames reported: a hardware keyboard", height: 0, frameReported: true, fieldFocused: true, up: false },
+    { name: "no frame reported yet, the field focused", height: 0, frameReported: false, fieldFocused: true, up: true },
+    { name: "no frame reported yet, the field unfocused", height: 0, frameReported: false, fieldFocused: false, up: false },
+    { name: "a desktop", desktop: true, height: 0, frameReported: false, fieldFocused: true, up: false },
+  ];
+  for (const item of cases) {
+    const { name, up, desktop = false, ...state } = item;
+    expect({ name, up: softKeyboardUp({ desktop, ...state }) }).toEqual({ name, up });
+  }
 });
 
 test("on the desktop the add menu and the model picker leave the field focused", async () => {
