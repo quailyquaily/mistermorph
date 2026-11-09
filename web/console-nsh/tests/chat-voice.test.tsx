@@ -67,13 +67,17 @@ test("speaking fills the draft, and discarding keeps it as it was", async () => 
   expect(app.value("id:chat-composer-input")).toBe("book a table");
 });
 
-test("a voice input error says why: no secure connection, no recorder, blocked, no microphone, busy", async () => {
+test("a voice input error says why: no secure connection, no recorder, blocked, refused on the phone, no microphone, busy", async () => {
   const { voiceErrorKey } = await import("../components/chat/voice");
   expect(voiceErrorKey({ code: "insecure" })).toBe("chat_composer_voice_insecure");
   expect(voiceErrorKey({ code: "unsupported" })).toBe("chat_composer_voice_unsupported");
   expect(voiceErrorKey({ code: "recorder" })).toBe("chat_composer_voice_recorder");
   expect(voiceErrorKey({ code: "NotAllowedError" })).toBe("chat_composer_voice_denied");
   expect(voiceErrorKey({ code: "not-allowed" })).toBe("chat_composer_voice_denied");
+  expect(voiceErrorKey({ code: "permission-denied" })).toBe("chat_composer_voice_permission_denied");
+  expect(voiceErrorKey({ code: "permission-blocked" })).toBe("chat_composer_voice_permission_blocked");
+  expect(voiceErrorKey({ code: "no_mic" })).toBe("chat_composer_voice_no_mic");
+  expect(voiceErrorKey({ code: "busy", message: "start failed" })).toBe("chat_composer_voice_mic_busy");
   expect(voiceErrorKey({ code: "NotFoundError" })).toBe("chat_composer_voice_no_mic");
   expect(voiceErrorKey({ code: "audio-capture" })).toBe("chat_composer_voice_no_mic");
   expect(voiceErrorKey({ code: "NotReadableError" })).toBe("chat_composer_voice_mic_busy");

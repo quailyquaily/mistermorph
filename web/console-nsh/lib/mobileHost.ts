@@ -10,7 +10,12 @@
 // (`lifecycle`), the photo picker (`Picker.pickImages`; there is no picker for other files yet) and
 // `fetch` with `FormData` for uploads. There are no system notifications and no way to save a file,
 // so those report "unsupported" and the console hides or explains them.
-import { effect, lifecycle, locale, Picker, signal, Storage, untracked } from "nsh";
+//
+// nsh records no audio, so voice input comes from the app's own native part (android/src, built
+// into the APK by scripts/build-android.sh): it answers `morph.voice.*` over nsh's host channel,
+// records with the system's microphone (asking for it at the first recording) and sends the
+// recording to the agent's /voice/transcribe itself. An APK without it has no voice input.
+import { effect, host, lifecycle, locale, Picker, signal, Storage, untracked } from "nsh";
 
 /** The saved address of the console server, `https://host[:port][/base]`. */
 export const SERVER_KEY = "mistermorph_console_server_v1";
@@ -114,6 +119,65 @@ export function previousEntry(): string {
 const files = new Map<string, File>();
 let nextFileID = 1;
 
+/* ---------- voice input (the native part) ---------- */
+
+// Whether the native part answers: asked once at boot.
+let nativeVoice = false;
+// The recordings the native part keeps, by id: uploaded and released there.
+const voiceFiles = new Set<string>();
+
+async function probeVoice(): Promise<boolean> {
+  try {
+    await host.call("morph.voice.support", {});
+    return true;
+  } catch (error) {
+    // No handler: an APK `nsh package` built alone, or a test without the native part.
+    console.warn("voice input: no native recorder in this app:", (error as Error)?.message || error);
+    return false;
+  }
+}
+
+function voiceCall(name: string, data: unknown = {}) {
+  if (!nativeVoice) return Promise.reject(new Error("Voice input is not available in this build of the phone app."));
+  return host.call(name, data, { timeout: 0 });
+}
+
+/** Ends whatever the native part records or sends, and tells the console (`morph.voice.ended`). */
+function endVoice(reason: string) {
+  voiceFiles.clear();
+  void voiceCall("morph.voice.cancel").catch((error: Error) => console.warn("voice input: cancel failed:", error?.message || error));
+  emit("morph.voice.ended", { reason });
+}
+
+async function voiceStop() {
+  const file = (await voiceCall("morph.voice.stop")) as { id?: string; name?: string; size?: number; type?: string } | null;
+  if (!file?.id) return null;
+  voiceFiles.add(file.id);
+  return { id: file.id, name: String(file.name || "voice.m4a"), size: Number(file.size) || 0, type: String(file.type || "audio/mp4"), preview: "" };
+}
+
+async function voiceUpload(data: { id: string; url: string; method?: string; headers?: Record<string, string>; field?: string; fields?: Record<string, string> }) {
+  try {
+    const result = (await voiceCall("morph.voice.upload", {
+      id: data.id,
+      url: data.url,
+      method: data.method || "POST",
+      headers: data.headers ?? {},
+      field: data.field || "",
+      fields: data.fields ?? {},
+    })) as { ok?: boolean; status?: number; statusText?: string; body?: string };
+    return { ok: result?.ok === true, status: Number(result?.status) || 0, statusText: String(result?.statusText || ""), body: String(result?.body ?? "") };
+  } finally {
+    // The native part deletes a recording once its upload ended.
+    voiceFiles.delete(data.id);
+  }
+}
+
+function voiceRelease(id: string) {
+  voiceFiles.delete(id);
+  return voiceCall("morph.voice.release", { id }).then(() => null);
+}
+
 async function bootData() {
   const keys = await Storage.keys().catch(() => [] as string[]);
   const values: Record<string, string> = {};
@@ -124,10 +188,21 @@ async function bootData() {
   kv = values;
   location = kv[LOCATION_KEY] || "/";
   const server = parseServer(kv[SERVER_KEY] || "");
+  nativeVoice = await probeVoice();
+  if (nativeVoice) {
+    // The native part ended a recording by itself: the app left the foreground, or the recorder failed.
+    host.on("morph.voice.ended", (data: unknown) => {
+      voiceFiles.clear();
+      emit("morph.voice.ended", data);
+    });
+  }
   // The app's state is the window's visibility: in front and taking input, or not.
   effect(() => {
     const state = lifecycle();
     emit("morph.visibility", { visible: state !== "background", focused: state === "active" });
+    // Nothing records in the background: the native part stops when the activity does, and the
+    // app ends its side here too. (A permission question only makes the app "inactive".)
+    if (state === "background" && nativeVoice) untracked(() => endVoice("background"));
   });
   return {
     runtime: "mobile",
@@ -138,7 +213,7 @@ async function bootData() {
     session: { ...session },
     languages: [locale()],
     desktopVersion: "",
-    features: ["pickFile"],
+    features: nativeVoice ? ["pickFile", "voiceRecord"] : ["pickFile"],
     secureContext: server ? server.origin.startsWith("https:") : null,
   };
 }
@@ -237,9 +312,18 @@ export async function call(name: string, data?: unknown): Promise<unknown> {
     case "morph.file.pick":
       return pick(args);
     case "morph.file.upload":
-      return upload(args);
+      return voiceFiles.has(String(args.id || "")) ? voiceUpload(args) : upload(args);
     case "morph.file.release":
-      return release(args);
+      return voiceFiles.has(String(args.id || "")) ? voiceRelease(String(args.id)) : release(args);
+    case "morph.voice.support":
+      return nativeVoice ? voiceCall("morph.voice.support").then((reason) => String(reason ?? "")) : "unsupported";
+    case "morph.voice.start":
+      return voiceCall("morph.voice.start", {});
+    case "morph.voice.stop":
+      return voiceStop();
+    case "morph.voice.cancel":
+      voiceFiles.clear();
+      return voiceCall("morph.voice.cancel").then(() => null);
     case "morph.file.save":
       throw new Error("Saving files is not available in the phone app yet.");
     default:

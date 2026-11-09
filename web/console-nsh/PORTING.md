@@ -13,7 +13,8 @@ stays the reference for behaviour, states and copy until the cutover.
 | `App.tsx` | Boot (host data, session, language), router start, the frame |
 | `host.js` | The web page's host: answers `morph.*` in the browser (address bar, storage, files, notifications) |
 | `lib/platform.ts` | The `morph.*` host contract. The only file that knows a host exists |
-| `lib/mobileHost.ts` | The contract answered inside the app on Android (no embedding app): saved values, the server address, the photo picker |
+| `lib/mobileHost.ts` | The contract answered inside the app on Android (no embedding app): saved values, the server address, the photo picker, voice input through the native part |
+| `android/src` | The Android app's own Java, built into the APK's classes.dex (`scripts/android-host.sh`): the microphone behind `morph.voice.*` (`MorphApplication`, `VoiceController`) |
 | `pages/login/ServerDialog.tsx` | The Android app's console server: entered on the login page, checked before it is saved |
 | `lib/core/*.js` | Logic from `web/console/src/core`, nearly verbatim. Change as little as possible |
 | `lib/stores/*.js` | The Pinia stores on nsh signals, same API (`authState.token`, `endpointState.items`) |
@@ -68,6 +69,8 @@ nsh check                                     # types (the only type check)
 nsh build                                     # bundler: unknown classes, text in a View
 nsh test tests --web-host tests/noHost.js     # headless tests; one file: tests/x.test.tsx
 node --test lib/core/*.test.mjs               # the copied pure logic
+node --test scripts/android-manifest.test.mjs # what the APK's manifest adds
+scripts/android-host.sh test                  # the Android native part on the JDK
 scripts/build-web.sh /tmp/site                # the web site for console serve
 ```
 

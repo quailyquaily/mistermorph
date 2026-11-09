@@ -1,0 +1,61 @@
+// What the phone app adds to the AndroidManifest.xml `nsh package` writes (build-android.sh's aapt2
+// shim runs this on the manifest before aapt2 links it):
+//
+// - cleartext HTTP: the console server is usually plain http:// on the local network, and nsh
+//   declares `android:usesCleartextTraffic` only for its development builds;
+// - voice input (android/src): the microphone permission (asked at the first recording), the
+//   Application that answers `morph.voice.*` (MorphApplication) and the transparent activity that
+//   asks for the permission. A microphone is not required to install the app.
+//
+//   node scripts/android-manifest.mjs AndroidManifest.xml     patches the file in place
+import { readFileSync, writeFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
+export const APPLICATION = "com.mistermorph.console.MorphApplication";
+export const PERMISSION_ACTIVITY = "com.mistermorph.console.VoicePermissionActivity";
+// The configuration changes nsh's own activity handles, so a rotation does not restart the question.
+const CONFIG_CHANGES =
+  "orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode|density|fontScale|locale|layoutDirection";
+
+/** The manifest with the phone app's additions; a manifest that has them already comes back unchanged. */
+export function patchManifest(xml) {
+  let out = String(xml);
+  if (!/<application\b/.test(out) || !/<\/application>/.test(out)) {
+    throw new Error("the manifest has no <application>: did nsh change the manifest it links?");
+  }
+  if (!out.includes("usesCleartextTraffic")) {
+    out = out.replace(/<application\b/, '<application android:usesCleartextTraffic="true"');
+  }
+  if (!out.includes("android.permission.RECORD_AUDIO")) {
+    out = out.replace(
+      /<application\b/,
+      '<uses-permission android:name="android.permission.RECORD_AUDIO" />\n    ' +
+        '<uses-feature android:name="android.hardware.microphone" android:required="false" />\n    <application',
+    );
+  }
+  if (!out.includes(APPLICATION)) {
+    if (/<application\b[^>]*\sandroid:name=/.test(out)) {
+      throw new Error("the manifest names its own Application: MorphApplication cannot replace it");
+    }
+    out = out.replace(/<application\b/, `<application android:name="${APPLICATION}"`);
+  }
+  if (!out.includes(PERMISSION_ACTIVITY)) {
+    out = out.replace(
+      /<\/application>/,
+      `    <activity android:name="${PERMISSION_ACTIVITY}" android:exported="false"\n` +
+        `            android:theme="@android:style/Theme.Translucent.NoTitleBar"\n` +
+        `            android:excludeFromRecents="true"\n` +
+        `            android:configChanges="${CONFIG_CHANGES}" />\n    </application>`,
+    );
+  }
+  return out;
+}
+
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  const file = process.argv[2];
+  if (!file) {
+    console.error("usage: node scripts/android-manifest.mjs AndroidManifest.xml");
+    process.exit(1);
+  }
+  writeFileSync(file, patchManifest(readFileSync(file, "utf8")));
+}

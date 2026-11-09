@@ -159,14 +159,27 @@ list, a settings section back to the sections), then goes back through the pages
 on the first screen it leaves the app. The app keeps its pages clear of the status bar and the
 navigation bar in portrait and landscape.
 
+Voice input works as in the web console: the composer's mic shows while the agent's
+`llm.routes.transcription` route is ready (`GET /voice/transcribe`). The app records with Android's
+microphone (AAC in an `.m4a` file in its cache), sends the recording to the agent's
+`/voice/transcribe` when the mic is pressed again, and adds the text to the draft, which is never sent
+by itself. The first recording asks for the microphone; after a refusal the next tap asks again, and
+once Android stops asking (refused twice, or "Don't ask again") the app explains how to allow it in
+Settings. Leaving the app, or switching to another topic or agent, ends the recording or its
+transcription and deletes the file; recordings are also deleted once sent or discarded. nsh records
+no audio itself, so this comes from the app's own Java (`web/console-nsh/android/src`), which the
+build compiles into the APK.
+
 ```bash
 web/console-nsh/scripts/build-android.sh                          # web/console-nsh/dist-android/MrMorph.apk, debug key
 web/console-nsh/scripts/build-android.sh --abi x86_64 --run       # for an emulator: install and start it
 NSH_KEYSTORE_PASSWORD=… web/console-nsh/scripts/build-android.sh --keystore release.keystore --key-alias morph
 ```
 
-It needs nsh 0.4.0, Node and the Android SDK (`ANDROID_HOME`, with `platforms;android-35` and build
-tools); no NDK and no Gradle. Tagged releases publish `MrMorph-android.apk` when the repository has the
+It needs the nsh 0.4.0 distribution (its `bin/nsh` first on `PATH`: the build uses its Android
+runtime and `embed/android/nsh.aar`), Node, a JDK (`javac`; `JAVA_HOME` is honoured) and the Android
+SDK (`ANDROID_HOME`, with `platforms;android-35` and build tools); no NDK and no Gradle. The native
+part's tests run on the JDK alone: `web/console-nsh/scripts/android-host.sh test`. Tagged releases publish `MrMorph-android.apk` when the repository has the
 `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD` and `ANDROID_KEY_ALIAS` secrets: Android only
 updates an app signed with the same key, so releases are never signed with a runner's debug key.
 
