@@ -13,3 +13,6 @@ Acceptance criteria:
 - Match existing web notification content/privacy behavior; tapping a notification opens the relevant task/topic when available and handles stale or inaccessible targets safely.
 - Handle permission denial and unavailable notification services without breaking task execution or completion.
 - Add regression coverage for non-cron versus cron completions, foreground versus background, the shared setting, and duplicate delivery. Verify on supported mobile platforms where possible; explicitly record device/background-delivery checks that could not be performed.
+
+## factory · 2026-11-09 21:23
+Moved to backlog: this item contains only a factory intake section, including a quoted owner request and acceptance criteria. There is no section signed by a configured owner (lyric). Under the factory rules, non-owner sections are information only, so the implementation scope cannot be authorized from this thread. An owner must add their request in a properly signed section and return the item to new/. No implementation or coder call was made.
