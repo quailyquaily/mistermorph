@@ -38,3 +38,8 @@ Validation: Codex reports gofmt cleanliness, go vet ./... and go test ./... pass
 Installs: none beyond pinned dependency restoration.
 Residual risks: isolated real-component browser checks, not the full Console page; native desktop, Android devices and software keyboards remain unverified. Owner should confirm native visual alignment before shipping.
 Moved review/ → ready/.
+
+## factory · 2026-11-09 22:22
+Merged into master in 9bee62f18c4c163e11a661989174eb249138b442; pushed with release tag v0.3.89 (integrated head 9bee62f18c4c163e11a661989174eb249138b442). Owner authorized shipping all ready items if checks pass.
+
+Integrated validation passed: gofmt cleanliness, go vet ./..., go test ./..., nsh check, all 345 Console web-host tests, and nsh build. FT46 composer constant conflict resolved while preserving voice hit target and sheet safe-area behavior. Tests used an absolute throwaway HOME; no installs. Real microphone, physical mobile/native visual layout and software keyboard checks were not performed. No linked GitHub issue or PR to close. Moved ready/ → done/.

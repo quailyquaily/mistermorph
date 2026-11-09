@@ -38,3 +38,8 @@ notes:
 - Installs: none.
 - Residual risk: actual desktop/mobile visual appearance remains unverified. Supplemental browser validation could not start because the nsh Web runtime was unavailable; headless layout tests do not replace visual comparison. Owner should compare both pages at desktop/mobile sizes before shipping.
 - Moved review/ → ready/. No linked GitHub issue or PR.
+
+## factory · 2026-11-09 22:22
+Merged into master in 112dc58fd26315e5d4b10e9047bfb9f170b4ae7e; pushed with release tag v0.3.89 (integrated head 9bee62f18c4c163e11a661989174eb249138b442). Owner authorized shipping all ready items if checks pass.
+
+Integrated validation passed: gofmt cleanliness, go vet ./..., go test ./..., nsh check, all 345 Console web-host tests, and nsh build. FT46 composer constant conflict resolved while preserving voice hit target and sheet safe-area behavior. Tests used an absolute throwaway HOME; no installs. Real microphone, physical mobile/native visual layout and software keyboard checks were not performed. No linked GitHub issue or PR to close. Moved ready/ → done/.

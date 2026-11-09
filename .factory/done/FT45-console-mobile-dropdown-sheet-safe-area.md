@@ -49,3 +49,8 @@ notes:
 - Real Android/iOS devices and real software-keyboard animation were not verified; full Console panel screenshots were not exhaustively checked. Owner should inspect these before shipping.
 - No unpinned installs or manifest/lockfile changes. Manager confirmed clean worktree and unchanged reviewed HEAD.
 - Moved review/ → ready/. No linked GitHub issues or PRs.
+
+## factory · 2026-11-09 22:22
+Merged into master in d2ede60ed9f102a1436352751464734d079516d0; pushed with release tag v0.3.89 (integrated head 9bee62f18c4c163e11a661989174eb249138b442). Owner authorized shipping all ready items if checks pass.
+
+Integrated validation passed: gofmt cleanliness, go vet ./..., go test ./..., nsh check, all 345 Console web-host tests, and nsh build. FT46 composer constant conflict resolved while preserving voice hit target and sheet safe-area behavior. Tests used an absolute throwaway HOME; no installs. Real microphone, physical mobile/native visual layout and software keyboard checks were not performed. No linked GitHub issue or PR to close. Moved ready/ → done/.
