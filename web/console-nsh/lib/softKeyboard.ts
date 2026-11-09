@@ -4,15 +4,19 @@
 //
 // Whether the keyboard is up comes from its frame (`keyboardFrame()`, native on Android and iOS,
 // the visual viewport on the web). A focused field alone is not a keyboard: with a hardware
-// keyboard the field has the focus and nothing covers the view. Until the frame has reported a
-// keyboard once in this run, though, there is no telling that it reports one at all (a browser
-// that does not shrink its visual viewport, headless runs), and the focused field counts. The
-// desktops have no software keyboard.
+// keyboard the field has the focus and nothing covers the view. The Android app reads the frame
+// from the system's keyboard insets from the start, so there a zero frame is no software keyboard,
+// whatever has the focus. On the web, until the frame has reported a keyboard once in this run,
+// there is no telling that it reports one at all (a browser that does not shrink its visual
+// viewport), and the focused field counts. The desktops have no software keyboard.
 import { effect, Keyboard, keyboardFrame, platform, untracked } from "nsh";
 
 export interface SoftKeyboardState {
   /** The desktops' idiom: no software keyboard. */
   desktop: boolean;
+  /** The host reports the keyboard's frame from the start (the Android app): a zero frame is no
+   * keyboard, even before it has reported one, with a hardware keyboard typing in a focused field. */
+  frameNative: boolean;
   /** The keyboard's height over the surface now (0 when hidden). While it is still going down it
    * counts as up: a second tap then only lowers it again, and never leaves by accident. */
   height: number;
@@ -26,7 +30,8 @@ export interface SoftKeyboardState {
 export function softKeyboardUp(state: SoftKeyboardState): boolean {
   if (state.desktop) return false;
   if (state.height > 0) return true;
-  return !state.frameReported && state.fieldFocused;
+  if (state.frameNative || state.frameReported) return false;
+  return state.fieldFocused;
 }
 
 let frameReported = false;
@@ -42,6 +47,7 @@ effect(() => {
 export function dismissSoftKeyboard(fieldFocused: boolean): boolean {
   const up = softKeyboardUp({
     desktop: platform.desktop,
+    frameNative: platform.os === "android",
     height: untracked(keyboardFrame).height,
     frameReported,
     fieldFocused,

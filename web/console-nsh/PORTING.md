@@ -147,9 +147,11 @@ Headless tests prove behaviour, not the look.
 - Dialogs are an `Overlay` on Android (`DialogLayer`): with it Back hides the keyboard first, then
   closes the dialog.
 - A phone bar's back arrow does not hide the keyboard by itself: the chat's arrow calls
-  `dismissSoftKeyboard` (`lib/softKeyboard.ts`) first and goes back only when nothing was up. Trust
-  `keyboardFrame()` once it has reported a keyboard; a focused field alone may have a hardware
-  keyboard. Headless runs report no frame, so there the focused field stands for the keyboard.
+  `dismissSoftKeyboard` (`lib/softKeyboard.ts`) first and goes back only when nothing was up. On
+  Android trust `keyboardFrame()` from the start (the host reads the system's keyboard insets); a
+  focused field alone may have a hardware keyboard. On the web trust it once it has reported a
+  keyboard; before that the focused field stands for the keyboard. Headless runs report no frame,
+  so a headless Android phone with a focused field is one with a hardware keyboard.
 - Back (the button, and the edge swipe of gesture navigation, which the system turns into the same
   event) reaches the app only while it listens (`BackHandler`); otherwise the system leaves the app.
   `lib/systemBack.ts` listens only while there is something to go back to: a view registered with
