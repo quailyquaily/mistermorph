@@ -66,3 +66,16 @@ test("a message sent from the landing composer starts a topic and shows the repl
   expect(calls.some((call) => call.method === "POST" && call.uri === "/tasks")).toBe(true);
   expect(app.value("id:chat-composer-input")).toBe("");
 });
+
+test("a topic in the address that the agent does not have falls back to the landing composer", async () => {
+  const { app } = await openConsole({
+    location: `${CHAT}/gone`,
+    api: {
+      "GET /proxy:/topics": { body: { items: [topic("topic-1", "Ops")] } },
+      "GET /proxy:/topics/gone": { status: 404, body: { error: "not found" } },
+      "GET /proxy:/tasks": { body: { items: [] } },
+    },
+  });
+  await app.waitFor("id:chat-placeholder");
+  await app.waitFor("New Topic");
+});

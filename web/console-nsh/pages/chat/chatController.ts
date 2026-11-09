@@ -405,7 +405,9 @@ export function createChatController() {
   const topicsLoading = signal(false);
   const topicsLoadingOlder = signal(false);
   const topicsNextCursor = signal("");
-  const selectedTopicID = signal("");
+  // The topic the address names is selected at once, so returning to Chat shows it straight away;
+  // loadTopics drops it if the agent has no such topic.
+  const selectedTopicID = signal(untracked(routeTopicID));
   const creatingTopic = signal(false);
   const showSystemTopics = signal(false);
   const topicDeleteDialogOpen = signal(false);
@@ -2147,6 +2149,15 @@ export function createChatController() {
         syncMobileTopicView({ preferChat: true });
         return true;
       }
+      // A topic selected from the address before the list came, which the agent does not have.
+      if (preferredTopicID && currentID === preferredTopicID) {
+        batch(() => {
+          selectedTopicID.set("");
+          creatingTopic.set(false);
+        });
+        syncMobileTopicView({ preferTopics: true });
+        return true;
+      }
       if (!preserveSelection) {
         batch(() => {
           selectedTopicID.set("");
@@ -2359,6 +2370,16 @@ export function createChatController() {
 
   async function refreshChatData(options: { preferredTopicID?: string; preserveSelection?: boolean } = {}) {
     let topicsLoaded = true;
+    const preferred = normalizeTopicID(options.preferredTopicID);
+    if (untracked(consoleTopicsEnabled) && preferred && normalizeTopicID(untracked(selectedTopicID)) === preferred) {
+      // The address's topic is already selected: its conversation loads beside the topic list,
+      // and again only if the list shows the topic is not there.
+      const early = loadHistory();
+      topicsLoaded = await loadTopics(options);
+      await early;
+      if (normalizeTopicID(untracked(selectedTopicID)) !== preferred) await loadHistory({ keepError: !topicsLoaded });
+      return;
+    }
     if (untracked(consoleTopicsEnabled)) topicsLoaded = await loadTopics(options);
     else resetTopicState();
     // The Vue page cleared a failed topic load's error here at once; it stays until the next load.
