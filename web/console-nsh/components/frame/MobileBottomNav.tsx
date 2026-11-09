@@ -5,7 +5,7 @@
 // More and the agent each open a sheet that rises above the bar, over a scrim; Escape, Android's
 // Back or the scrim closes it.
 import type { JSX } from "nsh";
-import { computed, createAnimatedValue, effect, keymap, platform, signal, Text, untracked, View } from "nsh";
+import { computed, createAnimatedValue, effect, keymap, platform, signal, Text, untracked, View, windowSize } from "nsh";
 import { Button as BaseButton } from "nsh/base";
 import { translate } from "../../lib/core/context.js";
 import {
@@ -31,22 +31,13 @@ import { AgentAvatar, AgentOptionList, filterAgentItems, normalizeAgentItems, Ov
 import { usePersonaSummary } from "./personaSummary";
 import { NavList } from "./Sidebar";
 import { uiSlots } from "./slots";
-import { BAR_BELOW, mobileBarRoom, MOBILE_NAV_HEIGHT } from "./mobileBar";
+import { BAR_BELOW, BAR_INSET, BAR_SIDE, mobileBarRoom, mobileNavSlots, MOBILE_NAV_HEIGHT } from "./mobileBar";
 
 export { MOBILE_NAV_HEIGHT };
 
 const t = translate as (key: string, vars?: Record<string, unknown>) => string;
 
 const PRIMARY_PAGE_PATHS = ["/chat", "/contacts", "/todo"];
-/** The capsule's inset from the window's sides, and its padding round the slots (its height and
- * gap below: components/frame/mobileBar.tsx). */
-const BAR_SIDE = 12;
-const BAR_INSET = 4;
-/** Each slot's width, and how far it reaches under its neighbour: only one slot is ever selected,
- *  so their pills never show together and the slots can sit closer than their own width. */
-const SLOT = 60;
-const SLOT_OVERLAP = 8;
-const SLOT_STEP = SLOT - SLOT_OVERLAP;
 const BAR_SHADOW = "0 6px 20px rgba(14, 44, 87, 0.10), 0 1px 3px rgba(14, 44, 87, 0.06)";
 
 // The agent sheet; More's state is lib/shell's (navigation closes it).
@@ -231,8 +222,12 @@ export function MobileBottomMenus() {
   );
 }
 
-/** The strip itself. */
-export function MobileBottomNav() {
+/** A frame the strip reports for layout checks (tests/mobile-bottom-nav.test.tsx). */
+export type MobileNavFrame = { x: number; y: number; w: number; h: number };
+
+/** The strip itself. `onSlotLayout` hears each slot's frame in the row (by its test id) and the
+ * active pill's ("highlight", where its slide puts it). */
+export function MobileBottomNav(props: { onSlotLayout?: (name: string, frame: MobileNavFrame) => void } = {}) {
   const { personaAvatarURL } = usePersonaSummary();
   const slotCount = () => primaryItems().length + 2;
   const activeSlot = () => {
@@ -249,12 +244,27 @@ export function MobileBottomNav() {
   const selectedName = () => selectedEndpointItem()?.title || t("nav_agent");
   const selectedAvatar = () => personaAvatarURL() || selectedEndpointItem()?.image || defaultEndpointAvatar;
 
-  // The capsule holds its slots and no more, centred: each slot is SLOT wide and overlaps the one
-  // before it by SLOT_OVERLAP. The active pill takes one slot.
-  const rowWidth = () => SLOT + SLOT_STEP * (slotCount() - 1);
-  // (Literal classes: w-[60px] is SLOT, -ml-[8px] SLOT_OVERLAP.)
-  const slotClass = (index: number, press = true) =>
-    `w-[60px] ${index > 0 ? "-ml-[8px]" : ""} items-center justify-center rounded-full ${press ? "active:bg-hover-soft transition-colors duration-160" : ""}`;
+  // The capsule holds its slots and no more, centred: each slot has its own stretch of the row,
+  // side by side (none reaches under its neighbour, so a press always lands on the slot drawn
+  // there), NAV_SLOT_MAX wide where the strip has room and narrower on a narrow phone, so all five
+  // fit. The active pill is one slot wide and slides to the slot's place in the same geometry.
+  // The strip's own width (the frame it floats in), the window's until its first layout.
+  const stripWidth = signal(0);
+  const slots = computed(() => mobileNavSlots(stripWidth() || windowSize().width, slotCount()));
+  const slotClass = (press = true) =>
+    `items-center justify-center rounded-full ${press ? "active:bg-hover-soft transition-colors duration-160" : ""}`;
+  const slotStyle = () => ({ width: slots().slot });
+  type LayoutEvent = { bounds: { origin: { x: number; y: number }; size: { width: number; height: number } } };
+  const report = (name: string) =>
+    props.onSlotLayout
+      ? ({ bounds }: LayoutEvent) =>
+          props.onSlotLayout?.(name, { x: bounds.origin.x, y: bounds.origin.y, w: bounds.size.width, h: bounds.size.height })
+      : undefined;
+  effect(() => {
+    const slot = activeSlot();
+    const { slot: width, left } = slots();
+    if (props.onSlotLayout && slot >= 0) untracked(() => props.onSlotLayout?.("highlight", { x: left(slot), y: 0, w: width, h: MOBILE_NAV_HEIGHT - BAR_INSET * 2 }));
+  });
 
   const tip = (label: string) => <Tip text={label} />;
 
@@ -268,6 +278,7 @@ export function MobileBottomNav() {
       // room lib/systemInsets.ts gives it (none while the keyboard is up), elsewhere by the safe
       // area. Only the capsule takes presses; the page shows and works round it.
       class={`absolute bottom-0 left-0 right-0 z-50 items-center ${systemInsets() ? "" : "pb-[env(safe-area-inset-bottom)]"}`}
+      onLayout={({ bounds }) => stripWidth.set(bounds.size.width)}
       style={{
         paddingLeft: BAR_SIDE,
         paddingRight: BAR_SIDE,
@@ -284,14 +295,14 @@ export function MobileBottomNav() {
           boxShadow: platform.os === "android" ? undefined : BAR_SHADOW,
         }}
       >
-        <View class="relative flex-row" style={{ width: rowWidth(), height: MOBILE_NAV_HEIGHT - BAR_INSET * 2 }}>
+        <View class="relative flex-row" style={{ width: slots().rowWidth, height: MOBILE_NAV_HEIGHT - BAR_INSET * 2 }}>
           <If when={activeSlot() >= 0}>
             <View
               accessibilityElementsHidden
               class="absolute bottom-0 left-0 top-0 rounded-full bg-blue/10"
               style={{
-                width: SLOT,
-                transform: [{ translateX: SLOT_STEP * activeSlot() }],
+                width: slots().slot,
+                transform: [{ translateX: slots().left(activeSlot()) }],
                 transitionProperty: "transform",
                 transitionDuration: motionMs(240),
                 transitionTimingFunction: "cubic-bezier(0.2, 0.7, 0.2, 1)",
@@ -306,7 +317,9 @@ export function MobileBottomNav() {
                 accessibilityLabel={item().title}
                 testID={`mobile-nav-${item().pagePath.slice(1)}`}
                 tooltip={tip(item().title)}
-                class={slotClass(index())}
+                class={slotClass()}
+                style={slotStyle()}
+                onLayout={report(`mobile-nav-${item().pagePath.slice(1)}`)}
               >
                 <Icon name={item().icon as IconName} size={24} filled={activeSlot() === index()} color={activeSlot() === index() ? "blue" : "muted-foreground"} />
               </TipButton>
@@ -318,7 +331,9 @@ export function MobileBottomNav() {
             accessibilityLabel={moreLabel()}
             testID="mobile-nav-more"
             tooltip={tip(moreLabel())}
-            class={slotClass(primaryItems().length)}
+            class={slotClass()}
+            style={slotStyle()}
+            onLayout={report("mobile-nav-more")}
           >
             <Icon name={moreIcon()} size={24} filled={activeSlot() === primaryItems().length} color={activeSlot() === primaryItems().length ? "blue" : "muted-foreground"} />
           </TipButton>
@@ -328,7 +343,9 @@ export function MobileBottomNav() {
             accessibilityLabel={`${t("nav_agent")}: ${selectedName()}`}
             testID="mobile-nav-agent"
             tooltip={tip(selectedName())}
-            class={slotClass(slotCount() - 1, false)}
+            class={slotClass(false)}
+            style={slotStyle()}
+            onLayout={report("mobile-nav-agent")}
           >
             {/* The portrait alone, as Telegram's profile slot: selecting or pressing it adds nothing
                 to it (no ring, no status mark, no press fill); the pill behind it marks it selected,
