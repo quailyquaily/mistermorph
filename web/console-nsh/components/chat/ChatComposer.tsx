@@ -17,13 +17,10 @@ import {
   composerTriggerContext,
   replaceComposerSuggestionToken,
 } from "../../lib/core/chat-composer-suggestions.js";
+import { COMPOSER_LINE_HEIGHT as LINE_HEIGHT, composerFieldBox, composerRowClass } from "./composerField";
 import { nextComposerRows, SINGLE_ROW, type ComposerRows } from "./composerRows";
 import { PROFILE_SHEET_MAX_HEIGHT, sheetKeyboardLift } from "./composerSheets";
 import { t } from "./i18n";
-
-const DEFAULT_MAX_ROWS = 24;
-// The Vue field: IBM Plex Mono at 14pt in 1.58 lines.
-const LINE_HEIGHT = 22.12;
 
 export interface ComposerFileItem {
   id: string;
@@ -166,12 +163,13 @@ export function ChatComposer(props: ChatComposerProps) {
     const chosen = String(selectedProfile()?.title ?? "").trim();
     return label && chosen ? `${label}: ${chosen}` : label || chosen;
   };
-  const maxHeight = () => DEFAULT_MAX_ROWS * LINE_HEIGHT;
-  const fieldHeight = () => Math.max(LINE_HEIGHT, Math.min(contentHeight(), maxHeight()));
   // More than one line of text: the field moves above the controls. One way per edit, as the move
   // itself widens the field (composerRows.ts).
   const rows = signal<ComposerRows>(SINGLE_ROW);
   const multiRow = () => rows().multi;
+  // On one row the field is as tall as the controls with its line on their centre line
+  // (composerField.ts); above them it is as tall as its text.
+  const fieldBox = () => composerFieldBox(multiRow(), contentHeight());
   effect(() => {
     const text = value();
     const oneLine = contentHeight() <= LINE_HEIGHT * 1.5;
@@ -647,7 +645,7 @@ export function ChatComposer(props: ChatComposerProps) {
         {/* One row (add, the field, actions) while the text is one line; longer, the field takes the
             whole width above a row of the controls, as the Vue composer's multi-row grid does. The
             field stays the same element, so it keeps its focus and caret. */}
-        <View class={multiRow() ? "min-h-[104px] gap-2 px-2.5 pb-2 pt-3" : "min-h-[54px] flex-row items-center gap-2.5 px-2.5 py-2"}>
+        <View class={composerRowClass(multiRow())}>
           <If when={!multiRow()}>{addControl()}</If>
           <Input
             ref={field}
@@ -679,8 +677,8 @@ export function ChatComposer(props: ChatComposerProps) {
               const files = namedImages(Array.isArray(event?.files) ? (event.files as File[]) : []);
               if (files.length) props.onAttachFiles?.(files);
             }}
-            class={`font-mono text-sm text-foreground placeholder:text-muted-foreground ${multiRow() ? "w-full py-0" : "flex-1 py-1.5"}`}
-            style={{ height: fieldHeight() + (multiRow() ? 0 : 12), lineHeight: LINE_HEIGHT }}
+            class={`font-mono text-sm text-foreground placeholder:text-muted-foreground ${multiRow() ? "w-full" : "flex-1"}`}
+            style={fieldBox()}
           />
           <If when={!multiRow()}>{actions()}</If>
           <If when={multiRow()}>
