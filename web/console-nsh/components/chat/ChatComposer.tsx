@@ -11,7 +11,7 @@ import { batch, cleanup, effect, Image, Keyboard, keyboardFrame, keymap, LayoutA
 import { Button as BaseButton, Input, Select } from "nsh/base";
 import { BorderBeam } from "../motion/BorderBeam";
 import { ICONS } from "../icons";
-import { bottomSheetStyle, Button, BusyBeam, busyLook, DropdownMenu, Icon, Tip, TipButton, type IconName } from "../ui";
+import { bottomSheetStyle, Button, BusyBeam, busyLook, DropdownMenu, Icon, Tip, TipButton, trackPopup, type IconName } from "../ui";
 import {
   buildComposerSuggestionItems,
   composerSuggestionInsertText,
@@ -301,6 +301,8 @@ export function ChatComposer(props: ChatComposerProps) {
     applyHistory(next, items[next]);
   }
 
+  // The suggestion list is a popup while its keys are bound (below): Escape is its own then.
+  trackPopup(() => focused() && !props.disabled && suggestionsVisible());
   // The keys the field lends: the suggestion list's while it shows, else Up and Down through the
   // messages sent before while the field is empty or showing one of them.
   effect(() => {
@@ -376,6 +378,7 @@ export function ChatComposer(props: ChatComposerProps) {
   // The model picker's search field raises the keyboard inside the sheet: the sheet then rises above
   // it. Only once the keyboard the opening lowered is down, so the sheet does not come in tall.
   const profileSheetOpen = signal(false);
+  trackPopup(profileSheetOpen);
   const profileSheetLifts = signal(false);
   effect(() => {
     if (profileSheetOpen() && keyboardFrame().height === 0) untracked(() => profileSheetLifts.set(true));

@@ -1,14 +1,16 @@
-// A running or finished task's plan, activity and reasoning as foldable columns of one summary line
-// (the time or duration before them). One panel opens at a time; which one is the page's state,
-// keyed by the message. Ported from web/console/src/components/ChatStatusCard.js.
-import type { JSX } from "nsh";
-import { Text, View } from "nsh";
+// A running or finished task's plan, activity and reasoning as columns of one summary line (the
+// time or duration before them). A column opens its panel in the temporary detail panel beside the
+// conversation (pages/chat/ActivityDetailPanel.tsx), never inside the conversation: which one is
+// open is the page's state (activityDetail.ts). The plan's steps and the activity's entries are
+// drawn here, as a dark terminal, for that panel. Ported from
+// web/console/src/components/ChatStatusCard.js.
+import type { JSX, ViewRef } from "nsh";
+import { effect, Text, View } from "nsh";
 import { Button as BaseButton } from "nsh/base";
 import { Icon, StatusMark } from "../ui";
 import { localeState } from "../../lib/core/context.js";
 import { t } from "./i18n";
 import { activityWorkerLabel } from "../../lib/core/chat-task-history.js";
-import { PinnedScroll } from "./PinnedScroll";
 
 export const PANEL_PLAN = "plan";
 export const PANEL_ACTIVITY = "activity";
@@ -33,7 +35,7 @@ function normalizeActivityKind(raw: unknown) {
   return value === "tool" || value === "subtask" ? value : "";
 }
 
-function activityEntries(activity: any): any[] {
+export function activityEntries(activity: any): any[] {
   const history = Array.isArray(activity?.history) ? activity.history.filter(Boolean) : [];
   const current = activity ? activity.current || history[history.length - 1] || null : null;
   if (!current) return history;
@@ -128,7 +130,7 @@ function entryNote(entry: any) {
 
 // The details panel is a dark terminal on every screen, as in the Vue console: its own ink (the
 // page's foreground with a touch of blue), light text, and the theme's light accents for status.
-const TERMINAL_BG = "bg-[#1b1f3b]";
+export const TERMINAL_BG = "bg-[#1b1f3b]";
 const TERMINAL_FG = "text-[#e8eef5]";
 const TERMINAL_MUTED = "text-[#d5e0ecb2]";
 const TERMINAL_NOTE = "text-[#e8eef5d1]";
@@ -181,18 +183,24 @@ function dotClass(status: string) {
   }
 }
 
-function planProgress(plan: any) {
+export function planProgress(plan: any) {
   const steps = Array.isArray(plan?.steps) ? plan.steps : [];
   return `${steps.filter((step: any) => step.status === "completed").length}/${steps.length}`;
 }
 
 // A status column: mono 11 on a 16pt line in a 20pt box, 6pt each side, one baseline with the
-// time beside it (design/ui-refresh.html §3).
-function Column(props: { label: string; value?: string; expanded: boolean; onPress: () => void; testID?: string }) {
+// time beside it (design/ui-refresh.html §3). Its caret points to the side the panel opens on;
+// selected, the panel shows it. `focus` hands it the keyboard focus back as its panel closes.
+function Column(props: { label: string; value?: string; selected: boolean; focus?: boolean; onPress: () => void; testID?: string }) {
+  let node: ViewRef | undefined;
+  effect(() => {
+    if (props.focus) node?.focus();
+  });
   return (
     <BaseButton
+      ref={(ref: ViewRef) => (node = ref)}
       onPress={props.onPress}
-      selected={props.expanded}
+      selected={props.selected}
       accessibilityLabel={props.label}
       testID={props.testID}
       class="h-5 flex-row items-center gap-1 rounded-(--radius) px-1.5 hover:bg-hover selected:bg-selection"
@@ -201,8 +209,103 @@ function Column(props: { label: string; value?: string; expanded: boolean; onPre
       <If when={props.value}>
         <Text class="font-mono text-[11px] leading-4 text-foreground">{props.value}</Text>
       </If>
-      <Icon name={props.expanded ? "PhCaretUp" : "PhCaretDown"} size={11} color="muted-foreground" />
+      <Icon name="PhCaretRight" size={11} color={props.selected ? "blue" : "muted-foreground"} />
     </BaseButton>
+  );
+}
+
+/** The plan's steps on the terminal, each with its status mark. */
+export function ChatPlanSteps(props: { itemID: string; plan: any }) {
+  const steps = (): any[] => (Array.isArray(props.plan?.steps) ? props.plan.steps : []);
+  return (
+    <Each of={steps()} key={(_step, index) => `${props.itemID}:plan:${index}`}>
+      {(step) => (
+        <View class="flex-row items-start gap-2">
+          <StatusSquare status={normalizePlanStatus(step()?.status)} />
+          <View selectable class="flex-1">
+            <Text class={`text-sm ${normalizePlanStatus(step()?.status) === "completed" ? TERMINAL_MUTED : TERMINAL_FG}`}>
+              {String(step()?.step ?? "")}
+            </Text>
+          </View>
+        </View>
+      )}
+    </Each>
+  );
+}
+
+/** The activity's entries on the terminal: tools and subtasks with their parameters, output and
+ *  nested calls. */
+export function ChatActivityEntries(props: { itemID: string; activity: any }) {
+  const items = () => activityEntries(props.activity);
+  return (
+    <Each of={items()} key={(entry, index) => `${props.itemID}:activity:${entryKey(entry, index)}`}>
+      {(entry) => (
+        <View class="flex-row items-start gap-2">
+          <StatusSquare status={normalizeTaskStatus(entry()?.status)} />
+          <View class="flex-1 gap-1">
+            <View class="flex-row flex-wrap items-baseline gap-1.5">
+              <If when={kindLabel(entry())}>
+                <Text class={`font-mono text-xs uppercase ${TERMINAL_MUTED}`}>{kindLabel(entry())}</Text>
+              </If>
+              <Text class={`text-sm font-medium ${TERMINAL_FG}`}>
+                {entryTitle(entry())}
+                {activityWorkerLabel(entry(), localeState.lang) ? ` · ${activityWorkerLabel(entry(), localeState.lang)}` : ""}
+              </Text>
+              <If when={childCount(entry()) > 0}>
+                <Text class={`text-xs ${TERMINAL_MUTED}`}>{t("chat_activity_calls", { count: childCount(entry()) })}</Text>
+              </If>
+              <View class="flex-1" />
+              <If when={entryTime(entry())}>
+                <Text class={`font-mono text-xs ${TERMINAL_MUTED}`}>{entryTime(entry())}</Text>
+              </If>
+            </View>
+            <If when={activityParams(entry()).length > 0}>
+              <View class="flex-row flex-wrap gap-1.5">
+                <Each of={activityParams(entry())} key={(param) => param.key}>
+                  {(param) => (
+                    <View class="flex-row gap-1">
+                      <Text class={`font-mono text-xs ${TERMINAL_MUTED}`}>{param().key}</Text>
+                      <Text class={`font-mono text-xs ${TERMINAL_VALUE} line-clamp-2`}>{param().value}</Text>
+                    </View>
+                  )}
+                </Each>
+              </View>
+            </If>
+            <If when={entryNote(entry()) && children(entry()).length === 0}>
+              <View selectable>
+                <Text class={`text-xs ${cleanText(entry()?.error) ? TERMINAL_ERROR : TERMINAL_NOTE}`}>{entryNote(entry())}</Text>
+              </View>
+            </If>
+            <If when={children(entry()).length > 0}>
+              <View class="gap-1 border-l border-[#ffffff26] pl-2">
+                <If when={Number(entry()?.childrenOmitted) > 0}>
+                  <Text class={`text-xs ${TERMINAL_MUTED}`}>{t("chat_activity_calls_omitted", { count: entry()?.childrenOmitted })}</Text>
+                </If>
+                <Each of={children(entry())} key={(child, index) => `${props.itemID}:activity:child:${entryKey(child, index)}`}>
+                  {(child) => (
+                    <View class="gap-0.5">
+                      <View class="flex-row items-center gap-1.5">
+                        <View class={`size-1.5 border ${dotClass(normalizeTaskStatus(child()?.status))}`} />
+                        <Text class={`text-xs ${TERMINAL_FG}`}>
+                          {entryTitle(child())}
+                          {activityWorkerLabel(child(), localeState.lang) ? ` · ${activityWorkerLabel(child(), localeState.lang)}` : ""}
+                        </Text>
+                        <If when={activityParams(child())[0]?.value}>
+                          <Text class={`flex-1 font-mono text-xs ${TERMINAL_MUTED} line-clamp-1`}>{activityParams(child())[0]?.value}</Text>
+                        </If>
+                      </View>
+                      <If when={child()?.error}>
+                        <Text class={`text-xs ${TERMINAL_ERROR}`}>{String(child()?.error ?? "")}</Text>
+                      </If>
+                    </View>
+                  )}
+                </Each>
+              </View>
+            </If>
+          </View>
+        </View>
+      )}
+    </Each>
   );
 }
 
@@ -212,145 +315,49 @@ export function ChatStatusCard(props: {
   activity: any;
   hasReasoning: boolean;
   status: string;
-  expandedPanel: string;
-  onToggle: (panel: string) => void;
+  /** The panel of this reply the detail panel shows ("" for none of them). */
+  selectedPanel: string;
+  /** The panel whose column takes the focus back now (its panel just closed). */
+  focusPanel?: string;
+  onOpen: (panel: string) => void;
   summaryPrefix?: JSX.Element;
 }) {
   const panel = () => {
-    const value = cleanText(props.expandedPanel);
+    const value = cleanText(props.selectedPanel);
     return value === PANEL_PLAN || value === PANEL_ACTIVITY || value === PANEL_REASONING ? value : "";
   };
-  const steps = (): any[] => (Array.isArray(props.plan?.steps) ? props.plan.steps : []);
-  const items = () => activityEntries(props.activity);
+  const focus = (name: string) => cleanText(props.focusPanel) === name;
 
   return (
-    <View class="gap-1.5" testID="chat-status-card">
-      <View class="flex-row flex-wrap items-center gap-2">
-        {props.summaryPrefix}
-        <If when={props.plan}>
-          <Column
-            label={t("chat_plan_title")}
-            value={planProgress(props.plan)}
-            expanded={panel() === PANEL_PLAN}
-            onPress={() => props.onToggle(PANEL_PLAN)}
-            testID="chat-status-plan"
-          />
-        </If>
-        <If when={props.activity}>
-          <Column
-            label={t("chat_activity_title")}
-            expanded={panel() === PANEL_ACTIVITY}
-            onPress={() => props.onToggle(PANEL_ACTIVITY)}
-            testID="chat-status-activity"
-          />
-        </If>
-        <If when={props.hasReasoning}>
-          <Column
-            label={t("chat_reasoning_title")}
-            expanded={panel() === PANEL_REASONING}
-            onPress={() => props.onToggle(PANEL_REASONING)}
-            testID="chat-status-reasoning"
-          />
-        </If>
-      </View>
-      <If when={(panel() === PANEL_PLAN && props.plan) || (panel() === PANEL_ACTIVITY && props.activity)}>
-        <PinnedScroll
-          resetKey={`${props.itemID}:${panel()}`}
-          maxHeight={280}
-          class={`rounded-(--radius) ${TERMINAL_BG}`}
-          contentClass="gap-2 p-3"
-        >
-          <If when={panel() === PANEL_PLAN}>
-            <Each of={steps()} key={(_step, index) => `${props.itemID}:plan:${index}`}>
-              {(step) => (
-                <View class="flex-row items-start gap-2">
-                  <StatusSquare status={normalizePlanStatus(step()?.status)} />
-                  <Text
-                    class={`flex-1 text-sm ${normalizePlanStatus(step()?.status) === "completed" ? TERMINAL_MUTED : TERMINAL_FG}`}
-                  >
-                    {String(step()?.step ?? "")}
-                  </Text>
-                </View>
-              )}
-            </Each>
-          </If>
-          <If when={panel() === PANEL_ACTIVITY}>
-            <Each of={items()} key={(entry, index) => `${props.itemID}:activity:${entryKey(entry, index)}`}>
-              {(entry) => (
-                <View class="flex-row items-start gap-2">
-                  <StatusSquare status={normalizeTaskStatus(entry()?.status)} />
-                  <View class="flex-1 gap-1">
-                    <View class="flex-row flex-wrap items-baseline gap-1.5">
-                      <If when={kindLabel(entry())}>
-                        <Text class={`font-mono text-xs uppercase ${TERMINAL_MUTED}`}>{kindLabel(entry())}</Text>
-                      </If>
-                      <Text class={`text-sm font-medium ${TERMINAL_FG}`}>
-                        {entryTitle(entry())}
-                        {activityWorkerLabel(entry(), localeState.lang) ? ` · ${activityWorkerLabel(entry(), localeState.lang)}` : ""}
-                      </Text>
-                      <If when={childCount(entry()) > 0}>
-                        <Text class={`text-xs ${TERMINAL_MUTED}`}>{t("chat_activity_calls", { count: childCount(entry()) })}</Text>
-                      </If>
-                      <View class="flex-1" />
-                      <If when={entryTime(entry())}>
-                        <Text class={`font-mono text-xs ${TERMINAL_MUTED}`}>{entryTime(entry())}</Text>
-                      </If>
-                    </View>
-                    <If when={activityParams(entry()).length > 0}>
-                      <View class="flex-row flex-wrap gap-1.5">
-                        <Each of={activityParams(entry())} key={(param) => param.key}>
-                          {(param) => (
-                            <View class="flex-row gap-1">
-                              <Text class={`font-mono text-xs ${TERMINAL_MUTED}`}>{param().key}</Text>
-                              <Text class={`font-mono text-xs ${TERMINAL_VALUE} line-clamp-2`}>{param().value}</Text>
-                            </View>
-                          )}
-                        </Each>
-                      </View>
-                    </If>
-                    <If when={entryNote(entry()) && children(entry()).length === 0}>
-                      <View selectable>
-                        <Text class={`text-xs ${cleanText(entry()?.error) ? TERMINAL_ERROR : TERMINAL_NOTE} line-clamp-6`}>
-                          {entryNote(entry())}
-                        </Text>
-                      </View>
-                    </If>
-                    <If when={children(entry()).length > 0}>
-                      <View class="gap-1 border-l border-[#ffffff26] pl-2">
-                        <If when={Number(entry()?.childrenOmitted) > 0}>
-                          <Text class={`text-xs ${TERMINAL_MUTED}`}>
-                            {t("chat_activity_calls_omitted", { count: entry()?.childrenOmitted })}
-                          </Text>
-                        </If>
-                        <Each of={children(entry())} key={(child, index) => `${props.itemID}:activity:child:${entryKey(child, index)}`}>
-                          {(child) => (
-                            <View class="gap-0.5">
-                              <View class="flex-row items-center gap-1.5">
-                                <View class={`size-1.5 border ${dotClass(normalizeTaskStatus(child()?.status))}`} />
-                                <Text class={`text-xs ${TERMINAL_FG}`}>
-                                  {entryTitle(child())}
-                                  {activityWorkerLabel(child(), localeState.lang) ? ` · ${activityWorkerLabel(child(), localeState.lang)}` : ""}
-                                </Text>
-                                <If when={activityParams(child())[0]?.value}>
-                                  <Text class={`flex-1 font-mono text-xs ${TERMINAL_MUTED} line-clamp-1`}>
-                                    {activityParams(child())[0]?.value}
-                                  </Text>
-                                </If>
-                              </View>
-                              <If when={child()?.error}>
-                                <Text class={`text-xs ${TERMINAL_ERROR}`}>{String(child()?.error ?? "")}</Text>
-                              </If>
-                            </View>
-                          )}
-                        </Each>
-                      </View>
-                    </If>
-                  </View>
-                </View>
-              )}
-            </Each>
-          </If>
-        </PinnedScroll>
+    <View class="flex-row flex-wrap items-center gap-2" testID="chat-status-card">
+      {props.summaryPrefix}
+      <If when={props.plan}>
+        <Column
+          label={t("chat_plan_title")}
+          value={planProgress(props.plan)}
+          selected={panel() === PANEL_PLAN}
+          focus={focus(PANEL_PLAN)}
+          onPress={() => props.onOpen(PANEL_PLAN)}
+          testID="chat-status-plan"
+        />
+      </If>
+      <If when={props.activity}>
+        <Column
+          label={t("chat_activity_title")}
+          selected={panel() === PANEL_ACTIVITY}
+          focus={focus(PANEL_ACTIVITY)}
+          onPress={() => props.onOpen(PANEL_ACTIVITY)}
+          testID="chat-status-activity"
+        />
+      </If>
+      <If when={props.hasReasoning}>
+        <Column
+          label={t("chat_reasoning_title")}
+          selected={panel() === PANEL_REASONING}
+          focus={focus(PANEL_REASONING)}
+          onPress={() => props.onOpen(PANEL_REASONING)}
+          testID="chat-status-reasoning"
+        />
       </If>
     </View>
   );

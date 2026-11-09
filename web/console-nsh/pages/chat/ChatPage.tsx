@@ -1,6 +1,8 @@
-// Chat: the agent's topics, the open conversation and its composer, and the topic and workspace
-// panel (web/console/src/views/ChatView.js). On phones (≤ 980 points) the topic list and the
-// conversation are separate views, and the panel is a sheet. The behaviour is in chatController.
+// Chat: the agent's topics, the open conversation and its composer, and the panel at its right
+// (web/console/src/views/ChatView.js): the topic and workspace panel, or the temporary detail panel
+// of a reply's plan, progress, reasoning or worker, never both. On phones (≤ 980 points) the topic
+// list and the conversation are separate views, and the panel is a sheet. The behaviour is in
+// chatController.
 import { Text, View } from "nsh";
 import { Button, Fab, Icon, Kicker, MessageDialog, Page, Tip, TipButton } from "../../components/ui";
 import { ChatComposer } from "../../components/chat/ChatComposer";
@@ -12,6 +14,8 @@ import { onSystemBack } from "../../lib/systemBack";
 import { createChatController, type ChatController } from "./chatController";
 import { FilePreviewDialog } from "./FilePreviewDialog";
 import { TopicSidebar } from "./TopicSidebar";
+import { Entrance } from "../../components/motion";
+import { ActivityDetailPanel } from "./ActivityDetailPanel";
 import { WorkspacePanel, WorkspaceSheet } from "./WorkspacePanel";
 
 function Composer(props: { c: ChatController; landing?: boolean }) {
@@ -116,6 +120,31 @@ function WorkspaceToggle(props: { c: ChatController; bare?: boolean }) {
         <Icon name="PhSidebarSimple" size={props.bare ? 16 : 14} color={open() ? "blue" : "subtle"} />
       </View>
     </TipButton>
+  );
+}
+
+/** The detail panel of the reply entry the page has open, if any; on phones, the sheet's (kept while it goes out). */
+function DetailPanel(props: { c: ChatController; phone?: boolean; class?: string }) {
+  const c = props.c;
+  const shown = () => (props.phone ? c.mobileSheetDetail() : c.activityDetail());
+  const item = () => (props.phone ? c.mobileSheetDetailItem() : c.activityDetailItem());
+  return (
+    <If when={shown()}>
+      {(detail) => (
+        <ActivityDetailPanel
+          detail={detail()}
+          item={item()}
+          context={c.activityDetailContextOf(item())}
+          endpointRef={c.submitEndpointRef()}
+          topicID={c.selectedTopicID()}
+          previews={c.rowContext.previews}
+          phone={props.phone}
+          escape={!c.pageDialogOpen()}
+          class={props.class}
+          onClose={() => c.closeActivityDetail()}
+        />
+      )}
+    </If>
   );
 }
 
@@ -232,15 +261,31 @@ export function ChatPage() {
           <If when={c.showChatPane()}>
             <ChatMain c={c} />
           </If>
-          <If when={c.desktopWorkspaceSidebarVisible()}>
-            <WorkspacePanel c={c} class="w-[314px] pl-1" trailing={<WorkspaceToggle c={c} />} />
+          {/* One column for either panel: switching between them (or between entries) keeps the
+              column and plays the new content's entrance, with no outgoing panel beside it. */}
+          <If when={c.desktopRightPanelVisible()}>
+            <Entrance watch={c.rightPanelKey()} class="w-[314px] pl-1" testID="chat-right-panel">
+              <If
+                when={c.desktopActivityDetailVisible()}
+                else={<WorkspacePanel c={c} class="flex-1" trailing={<WorkspaceToggle c={c} />} />}
+              >
+                <DetailPanel c={c} class="flex-1" />
+              </If>
+            </Entrance>
           </If>
         </View>
         <If when={c.showTopicSidebar() && c.mobileTopicSplitEnabled()}>
           <Fab label={t("chat_topic_new")} onPress={() => c.startNewTopic()} testID="chat-topic-new-fab" />
         </If>
-        <WorkspaceSheet open={c.mobileWorkspaceSidebarVisible()} onClose={() => c.closeMobileWorkspaceSidebar()}>
-          <WorkspacePanel c={c} class="flex-1" phone />
+        <WorkspaceSheet
+          open={c.mobileWorkspaceSidebarVisible() || c.mobileActivityDetailVisible()}
+          wide={c.mobileSheetDetail() !== null}
+          onClose={() => (c.mobileActivityDetailVisible() ? c.closeActivityDetail() : c.closeMobileWorkspaceSidebar())}
+        >
+          {/* What the sheet showed stays while it goes out (chatController's mobileSheetDetail). */}
+          <If when={c.mobileSheetDetail() !== null} else={<WorkspacePanel c={c} class="flex-1" phone />}>
+            <DetailPanel c={c} class="flex-1" phone />
+          </If>
         </WorkspaceSheet>
         <WorkspaceDirPickerDialog
           open={c.workspaceBrowserOpen()}
@@ -252,7 +297,7 @@ export function ChatPage() {
           onConfirm={(dir) => void c.attachWorkspace(dir)}
         />
         <FilePreviewDialog c={c} />
-        <RawJsonDialog open={c.rawDialogOpen()} json={c.rawDialogJSON()} onClose={() => c.closeRawDialog()} />
+        <RawJsonDialog open={c.rawDialogOpen()} json={c.rawDialogJSON()} onClose={() => c.closeRawDialog()} testID="chat-raw-json" />
         <MessageDialog
           open={c.topicDeleteDialogOpen()}
           onClose={() => c.closeTopicDeleteDialog()}

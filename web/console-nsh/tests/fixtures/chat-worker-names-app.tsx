@@ -1,11 +1,13 @@
 // A test entry for tests/chat-worker-names.test.tsx: a task's worker roster (ChatWorkerRoster) at
 // phone width, as the runtime records its workers: scientists by name index, a nested coder, a
 // repeat once the pool ran out, and a worker from before the scientist pool, with buttons that
-// switch the Console's language.
-import { mount, View } from "nsh";
+// switch the Console's language. A chip opens its worker in the detail panel (ActivityDetailPanel)
+// beside the roster, as the chat page does.
+import { mount, signal, View } from "nsh";
 import { Button } from "../../components/ui";
 import { ChatWorkerRoster } from "../../components/chat/ChatWorkerRoster";
-import { keyedState } from "../../components/chat/rowState";
+import { createArtifactPreviews } from "../../components/chat/ArtifactPreviewCard";
+import { ActivityDetailPanel } from "../../pages/chat/ActivityDetailPanel";
 import { normalizeActivity } from "../../lib/core/chat-task-history.js";
 import { localeState } from "../../lib/core/context.js";
 import { WORKER_NAME_POOLS } from "../../lib/core/worker-identity.js";
@@ -24,7 +26,9 @@ workers.push(
   { id: "worker-34", name: "Hazel", name_index: 13, avatar_index: 5, kind: "subagent", status: "failed" },
 );
 const activity = normalizeActivity({ workers });
-const selected = keyedState<string>();
+const selected = signal("");
+const previews = createArtifactPreviews();
+const item = { id: "task-1", role: "agent", text: "", status: "running", activity };
 
 function Gallery() {
   return (
@@ -34,7 +38,27 @@ function Gallery() {
           <Button testID={`lang-${lang}`} variant="outlined" size="xs" label={lang} onPress={() => localeState.setLanguage(lang)} />
         ))}
       </View>
-      <ChatWorkerRoster itemID="task-1" activity={activity} status="running" selected={selected} />
+      <ChatWorkerRoster
+        itemID="task-1"
+        activity={activity}
+        status="running"
+        selectedID={selected()}
+        onSelect={(id) => selected.set(selected() === id ? "" : id)}
+      />
+      <If when={selected()}>
+        {(workerID) => (
+          <ActivityDetailPanel
+            detail={{ itemID: "task-1", kind: "worker", workerID: workerID() }}
+            item={item}
+            context=""
+            endpointRef=""
+            topicID=""
+            previews={previews}
+            phone
+            onClose={() => selected.set("")}
+          />
+        )}
+      </If>
     </View>
   );
 }
