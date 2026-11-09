@@ -1,7 +1,10 @@
 // The composer: commands as you type, the keys through sent messages, drafts per topic, attached
-// files (upload, failure, retry, preview, removal) and the model picker.
+// files (upload, failure, retry, preview, removal), the model picker, and its add menu and model
+// picker on phones, where they are sheets the software keyboard would cover.
+import type { App } from "nsh/test";
 import { expect, test } from "nsh/test";
 import { nextComposerRows, SINGLE_ROW } from "../components/chat/composerRows";
+import { sheetKeyboardLift } from "../components/chat/composerSheets";
 import { openConsole, type ApiRequest } from "./harness";
 
 const NOW = new Date().toISOString();
@@ -184,4 +187,155 @@ test("the field comes back down once the text is shorter than when it moved up, 
   const broken = nextComposerRows(SINGLE_ROW, "one\n", false);
   expect(broken.multi).toBe(true);
   expect(nextComposerRows(broken, "one", true)).toEqual(SINGLE_ROW);
+});
+
+// On phones the add menu and the model picker are sheets at the bottom of the screen, under the
+// software keyboard the focused field keeps up (Android shrinks neither the surface nor an overlay
+// for it). Headless engines draw no keyboard: it is up while the field has the focus, which a
+// hardware key shows (it types into the focused field, and nowhere without one).
+const PROFILES = {
+  body: { default: { model: "gpt-5.2", provider: "openai" }, items: [{ name: "cheap", model: "gpt-5-mini", provider: "openai" }] },
+};
+/** A phone with gesture navigation: a 24pt status bar, a 16pt gesture handle. */
+const BARS = { top: 24, right: 0, bottom: 16, left: 0 };
+
+async function openPhoneChat(post?: (request: ApiRequest) => { status: number; body: unknown }) {
+  return openConsole({
+    platform: "android",
+    safeArea: BARS,
+    location: "/e/default/chat/topic-1",
+    api: {
+      "GET /proxy:/todo/tasks": { body: { items: [] } },
+      "GET /proxy:/topics": TOPICS,
+      "GET /proxy:/tasks": { body: { items: [] } },
+      "GET /proxy:/llm/profiles": PROFILES,
+      ...(post ? { "POST /proxy:/tasks": post } : {}),
+    },
+  });
+}
+
+/** Whether the field has the focus (the keyboard is up): a key typed lands in it. */
+async function fieldFocused(app: App) {
+  const before = app.value("id:chat-composer-input") ?? "";
+  await app.keyboard.press("`");
+  const after = app.value("id:chat-composer-input") ?? "";
+  if (after === before) return false;
+  // Take the probe back out.
+  await app.keyboard.press("backspace");
+  await app.waitUntil(() => app.value("id:chat-composer-input") === before);
+  return true;
+}
+
+test("on a phone the add menu lowers the keyboard, and closing it gives the field back with its draft", async () => {
+  const { app } = await openPhoneChat();
+  await app.waitFor("id:chat-composer-input");
+  await app.type("id:chat-composer-input", "half a thought");
+  expect(await fieldFocused(app)).toBe(true);
+
+  await app.press("id:chat-composer-add");
+  await app.waitFor("text:Upload Files");
+  await app.waitFor("text:Attach Workspace");
+  expect(await fieldFocused(app)).toBe(false);
+  expect(app.value("id:chat-composer-input")).toBe("half a thought");
+
+  // Closed without a choice (Back): the field has the focus again, the caret after the text.
+  await app.back();
+  await app.waitFor("text:Upload Files", { state: "gone" });
+  await app.waitUntil(() => app.value("id:chat-composer-input") === "half a thought");
+  await app.keyboard.press("shift+1");
+  await app.waitUntil(() => app.value("id:chat-composer-input") === "half a thought!");
+
+  // Upload goes on to the photo picker: the keyboard stays down, the draft stays.
+  await app.press("id:chat-composer-add");
+  await app.press("text:Upload Files");
+  await app.waitUntil(() => app.picks().length === 1);
+  expect(await fieldFocused(app)).toBe(false);
+  expect(app.value("id:chat-composer-input")).toBe("half a thought!");
+});
+
+test("on a phone the model picker lowers the keyboard, and typing goes on after a model is chosen", async () => {
+  let body: any = null;
+  const { app } = await openPhoneChat((request) => {
+    body = request.json;
+    return { status: 500, body: { error: "queue full" } };
+  });
+  await app.waitFor("id:chat-composer-input");
+  await app.type("id:chat-composer-input", "hello");
+  await app.waitFor("label:LLM profile: Default");
+
+  await app.press("label:LLM profile: Default");
+  await app.waitFor("text:gpt-5-mini");
+  // The sheet's search field is not focused: nothing raises the keyboard over the sheet.
+  expect(await fieldFocused(app)).toBe(false);
+  expect(app.value("text:Filter")).toBe("");
+
+  await app.press("text:cheap");
+  await app.waitFor("text:gpt-5-mini", { state: "gone" });
+  await app.keyboard.press("shift+1");
+  await app.waitUntil(() => app.value("id:chat-composer-input") === "hello!");
+  await app.press("id:chat-composer-send");
+  await app.waitUntil(() => body !== null);
+  expect(body.llm_profile).toBe("cheap");
+  expect(body.task).toBe("hello!");
+
+  // Cancelled (Back) also gives the field back.
+  await app.waitFor("queue full");
+  await app.press("label:LLM profile: cheap");
+  await app.waitFor("text:gpt-5-mini");
+  expect(await fieldFocused(app)).toBe(false);
+  await app.back();
+  await app.waitFor("text:gpt-5-mini", { state: "gone" });
+  expect(await fieldFocused(app)).toBe(true);
+});
+
+test("on a phone with the keyboard down the sheets open and close as before, leaving it down", async () => {
+  const { app } = await openPhoneChat();
+  await app.waitFor("label:LLM profile: Default");
+  expect(await fieldFocused(app)).toBe(false);
+
+  await app.press("id:chat-composer-add");
+  await app.waitFor("text:Attach Workspace");
+  await app.back();
+  await app.waitFor("text:Attach Workspace", { state: "gone" });
+  expect(await fieldFocused(app)).toBe(false);
+
+  await app.press("label:LLM profile: Default");
+  await app.press("text:cheap");
+  await app.waitFor("label:LLM profile: cheap");
+  expect(await fieldFocused(app)).toBe(false);
+  // The field takes a tap as before.
+  await app.press("id:chat-composer-input");
+  expect(await fieldFocused(app)).toBe(true);
+});
+
+test("on the desktop the add menu and the model picker leave the field focused", async () => {
+  const { app } = await openConsole({
+    location: "/e/default/chat/topic-1",
+    api: { "GET /proxy:/topics": TOPICS, "GET /proxy:/tasks": history, "GET /proxy:/llm/profiles": PROFILES },
+  });
+  await app.waitFor("text:Logs are fine.");
+  await app.type("id:chat-composer-input", "draft");
+  await app.press("id:chat-composer-add");
+  await app.waitFor("text:Upload Files");
+  expect(await fieldFocused(app)).toBe(true);
+  await app.keyboard.press("escape");
+  await app.waitFor("text:Upload Files", { state: "gone" });
+  await app.press("label:LLM profile: Default");
+  await app.press("text:cheap");
+  await app.waitFor("label:LLM profile: cheap");
+  expect(await fieldFocused(app)).toBe(true);
+  expect(app.value("id:chat-composer-input")).toBe("draft");
+});
+
+test("the model picker's sheet rises above a keyboard its search field raised, within the screen", () => {
+  // Hidden: nsh places the sheet (its own room for the navigation bar).
+  expect(sheetKeyboardLift(0, 24, 844, 320)).toBeUndefined();
+  expect(sheetKeyboardLift(Number.NaN, 24, 844, 320)).toBeUndefined();
+  // Up on a phone: the keyboard's height under the sheet (it covers the navigation bar), the list
+  // as tall as on the desktops above it.
+  expect(sheetKeyboardLift(300, 24, 844, 320)).toEqual({ paddingBottom: 300, maxHeight: 620 });
+  // A phone on its side: the list keeps to the room between the status bar and the keyboard.
+  expect(sheetKeyboardLift(200, 24, 390, 320)).toEqual({ paddingBottom: 200, maxHeight: 366 });
+  // No room at all: the list gets none rather than a negative height.
+  expect(sheetKeyboardLift(500, 24, 390, 320)).toEqual({ paddingBottom: 500, maxHeight: 500 });
 });

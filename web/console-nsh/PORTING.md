@@ -124,6 +124,12 @@ Headless tests prove behaviour, not the look.
 - Neither the surface nor a dialog shrinks when the software keyboard opens. The app's root and the
   dialog layer add `keyboardFrame().height` as bottom padding. Not `env(keyboard-inset-height)`:
   it moves views natively but not in the layout presses are matched against.
+- On touch screens nsh/base's `Menu` and `Select` are sheets at the bottom of the screen (their
+  `placement` is the desktops'), and opening one does not take the focus from a text field: a
+  sheet opened from beside a focused field lies under its keyboard. The composer's add menu and
+  model picker call `Keyboard.dismiss()` as they open and focus the field again as they close
+  (`components/chat/ChatComposer.tsx`); a sheet with a field of its own rises by
+  `keyboardFrame().height` (`components/chat/composerSheets.ts`).
 - Dialogs are an `Overlay` on Android (`DialogLayer`): with it Back hides the keyboard first, then
   closes the dialog.
 - Back (the button, and the edge swipe of gesture navigation, which the system turns into the same

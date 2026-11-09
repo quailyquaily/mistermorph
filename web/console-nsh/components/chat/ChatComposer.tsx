@@ -7,7 +7,7 @@
 // Not ported: the coloured overlay that marked command and skill tokens inside the text (a native
 // text field draws its own text; nothing can be laid exactly over it).
 import type { InputRef, JSX } from "nsh";
-import { cleanup, effect, Image, keymap, LayoutAnimation, reduceMotion, signal, Text, token, untracked, View } from "nsh";
+import { batch, cleanup, effect, Image, Keyboard, keyboardFrame, keymap, LayoutAnimation, platform, reduceMotion, safeArea, signal, Text, token, untracked, View, windowSize } from "nsh";
 import { Button as BaseButton, Input, Select } from "nsh/base";
 import { ICONS } from "../icons";
 import { Button, DropdownMenu, Icon, Spinner, Tip, TipButton, type IconName } from "../ui";
@@ -18,6 +18,7 @@ import {
   replaceComposerSuggestionToken,
 } from "../../lib/core/chat-composer-suggestions.js";
 import { nextComposerRows, SINGLE_ROW, type ComposerRows } from "./composerRows";
+import { PROFILE_SHEET_MAX_HEIGHT, sheetKeyboardLift } from "./composerSheets";
 import { t } from "./i18n";
 
 const DEFAULT_MAX_ROWS = 24;
@@ -339,6 +340,53 @@ export function ChatComposer(props: ChatComposerProps) {
 
   props.onReady?.({ focus, insertText, closeSuggestions });
 
+  // On touch screens the add menu and the model picker are sheets at the bottom of the screen, where
+  // the software keyboard is (composerSheets.ts): the keyboard goes down as one opens, as phones do
+  // for a sheet opened from a text field. The text and its caret stay; the field takes the focus
+  // back when the sheet closes without leading elsewhere (cancelled, a model chosen), so typing goes
+  // on. Upload and Attach go on to a picker or a dialog, and leave the keyboard down. The desktops'
+  // popups open at their trigger and leave the field as it is.
+  const touchSheets = () => !platform.desktop;
+  let refocusAfterSheet = false;
+  function sheetOpened() {
+    if (!touchSheets()) return;
+    refocusAfterSheet = untracked(focused);
+    Keyboard.dismiss();
+  }
+  function sheetClosed() {
+    if (!refocusAfterSheet) return;
+    // After the item's onSelect, whichever order the menu reports them in.
+    setTimeout(() => {
+      if (!refocusAfterSheet) return;
+      refocusAfterSheet = false;
+      focus({ preserveSelection: true });
+    }, 0);
+  }
+  function leaveFromSheet(action: () => void) {
+    refocusAfterSheet = false;
+    action();
+  }
+
+  // The model picker's search field raises the keyboard inside the sheet: the sheet then rises above
+  // it. Only once the keyboard the opening lowered is down, so the sheet does not come in tall.
+  const profileSheetOpen = signal(false);
+  const profileSheetLifts = signal(false);
+  effect(() => {
+    if (profileSheetOpen() && keyboardFrame().height === 0) untracked(() => profileSheetLifts.set(true));
+  });
+  const profileSheetStyle = () =>
+    touchSheets() && profileSheetLifts()
+      ? sheetKeyboardLift(keyboardFrame().height, safeArea().top, windowSize().height, PROFILE_SHEET_MAX_HEIGHT)
+      : undefined;
+  function profileSheetOpenChange(open: boolean) {
+    batch(() => {
+      profileSheetOpen.set(open);
+      profileSheetLifts.set(false);
+    });
+    if (open) sheetOpened();
+    else sheetClosed();
+  }
+
   function onSubmitKey() {
     if (untracked(suggestionsVisible)) {
       if (suggestionItems().length) applySuggestion();
@@ -349,8 +397,8 @@ export function ChatComposer(props: ChatComposerProps) {
   }
 
   const addItems = () => [
-    { id: "chat-composer-upload-files", label: props.uploadLabel || "", icon: "PhPaperclip" as IconName, onSelect: () => props.onUpload?.() },
-    { id: "chat-composer-add-workspace", label: props.attachLabel || "", icon: "PhCube" as IconName, onSelect: () => props.onAttach?.() },
+    { id: "chat-composer-upload-files", label: props.uploadLabel || "", icon: "PhPaperclip" as IconName, onSelect: () => leaveFromSheet(() => props.onUpload?.()) },
+    { id: "chat-composer-add-workspace", label: props.attachLabel || "", icon: "PhCube" as IconName, onSelect: () => leaveFromSheet(() => props.onAttach?.()) },
   ];
 
   // The add button: a bare "+" in a 38pt square, its label for screen readers only (the Vue
@@ -377,7 +425,13 @@ export function ChatComposer(props: ChatComposerProps) {
         </View>
       }
     >
-      <DropdownMenu trigger={addTrigger()} items={addItems()} placement="top" align="start" />
+      <DropdownMenu
+        trigger={addTrigger()}
+        items={addItems()}
+        placement="top"
+        align="start"
+        onOpenChange={(open) => (open ? sheetOpened() : sheetClosed())}
+      />
     </If>
   );
 
@@ -438,11 +492,13 @@ export function ChatComposer(props: ChatComposerProps) {
                 accessibilityLabel={profileTitle()}
                 tooltip={<Tip text={profileTitle()} />}
                 onChange={({ value: next }) => next !== null && props.onLLMProfileChange?.(String(next).trim())}
+                onOpenChange={({ open }) => profileSheetOpenChange(open)}
                 testID="chat-composer-profile"
                 placement="top"
                 align="end"
                 class="min-h-8 flex-row items-center gap-1 rounded-(--radius) px-2 hover:bg-hover disabled:opacity-45"
                 popupClass="min-w-60 max-h-80 rounded-(--radius) border border-border bg-popover py-1 shadow-md"
+                popupStyle={profileSheetStyle()}
                 itemClass="px-3 py-1.5 hover:bg-hover focus:bg-hover selected:bg-selection"
                 searchClass="mx-2 mb-1 rounded-(--radius) border border-input px-2 py-1 text-sm"
                 searchPlaceholder="Filter"
