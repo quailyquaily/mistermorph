@@ -10,11 +10,11 @@
 // The rows are an `Each` in a scroll view rather than a virtualized List: a sidebar holds dozens of
 // topics (older ones load on demand), and the sliding highlight must share the rows' parent to
 // measure them and move with them.
-import { cleanup, createAnimatedValue, effect, Image, keymap, Scroll, signal, Text, token, View } from "nsh";
+import { createAnimatedValue, Image, Scroll, Text, token, View } from "nsh";
 import { Button as BaseButton } from "nsh/base";
-import { Button, Icon, Spinner, TextField, Tip, TipButton } from "../../components/ui";
+import { Button, Icon, Spinner, Tip, TipButton } from "../../components/ui";
 import { ContactAvatar } from "../../components/shared/ContactAvatar";
-import { gutterX } from "../../components/knowledge/parts";
+import { gutterX, IndexSearch } from "../../components/knowledge/parts";
 import { FadeText } from "../../components/motion/FadeText";
 import { createScrollEdges, SCROLLBAR } from "../../components/motion/ScrollEdges";
 import { createSlidingSelection } from "../../components/motion/SlidingSelection";
@@ -96,12 +96,6 @@ export function TopicSidebar(props: { c: ChatController; class?: string }) {
   // the title at the page's 12pt, rows edge to edge with their content 12pt in, group labels at 14.
   // The desktop sidebar keeps its 16pt list gutter and 25.6pt title.
   const rowPadding = () => (c.mobileMode() ? "px-3" : "pl-3.5 pr-[13px]");
-  // Escape empties the search while it has the focus and holds text.
-  const searchFocused = signal(false);
-  effect(() => {
-    if (!searchFocused() || !c.topicSearch()) return;
-    cleanup(keymap.bind("escape", () => c.setTopicSearch(""), { when: "always" }));
-  });
 
   const topicRow = (row: () => Extract<TopicRow, { kind: "topic" }>) => (
     <TipButton
@@ -248,21 +242,15 @@ export function TopicSidebar(props: { c: ChatController; class?: string }) {
           </If>
         </View>
         {/* The search: the loaded topics of this view whose title holds the text, as it is typed.
-            It aligns with the rows (the list's 16pt gutter; the phone gutter on a phone). */}
-        <View class={`pb-2 ${c.mobileMode() ? "" : "px-4"}`} style={c.mobileMode() ? { paddingLeft: gutterX(), paddingRight: gutterX() } : undefined}>
-          <TextField
-            value={c.topicSearch()}
-            onChange={(value) => c.setTopicSearch(value)}
-            onFocus={() => searchFocused.set(true)}
-            onBlur={() => searchFocused.set(false)}
-            placeholder={t("chat_topics_search")}
-            accessibilityLabel={t("chat_topics_search")}
-            leadingIcon="PhMagnifyingGlass"
-            size={c.mobileMode() ? "md" : "sm"}
-            clearable
-            testID="chat-topics-search"
-          />
-        </View>
+            The index search Contacts has too (same field, gutters and room around it); it aligns
+            with the rows. Escape empties it. */}
+        <IndexSearch
+          value={c.topicSearch()}
+          onChange={(value) => c.setTopicSearch(value)}
+          placeholder={t("chat_topics_search")}
+          mobile={c.mobileMode()}
+          testID="chat-topics-search"
+        />
       </View>
       <If when={c.topicsLoading() && c.topicRows().length === 0}>
         <Spinner class="items-center py-3" />
@@ -282,7 +270,8 @@ export function TopicSidebar(props: { c: ChatController; class?: string }) {
             height, and padding on top of that made a list that fits scroll by its padding. Phones
             keep room under the floating New button. */}
         <View class={`grow ${c.mobileMode() ? "" : "px-4"}`} onLayout={edges.onContentLayout}>
-          <View class="h-4" />
+          {/* 8pt before the first row, as under Contacts' search. */}
+          <View class="h-2" />
           <selection.Highlight class="rounded-(--radius) bg-selection" testID="chat-topic-selection" />
           <Each of={c.topicRows()} key={(row) => row.key}>
             {(row) => (

@@ -9,11 +9,11 @@ import {
   gutterX,
   IndexColumn,
   IndexRow,
+  IndexSearch,
   InlineNotice,
   MobileBar,
   MoreTrigger,
   Note,
-  SearchField,
   SubHeading,
   SwitchOnly,
   t,
@@ -377,12 +377,12 @@ export function ContactsPage() {
             fill={isMobile()}
             scroll={false}
             testID="contacts-index"
-            top={
-              <SearchField
+            search={
+              <IndexSearch
                 value={filterText()}
                 onChange={(value) => filterText.set(value)}
                 placeholder={t("contacts_filter_placeholder")}
-                icon={false}
+                mobile={isMobile()}
                 testID="contacts-filter"
               />
             }
