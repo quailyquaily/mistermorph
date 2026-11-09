@@ -13,7 +13,7 @@ import { pickDesktopDirectory } from "../../lib/core/desktop-runtime.js";
 import { ROW_MODES } from "../../lib/core/setting-rows.js";
 import { useRevealRow } from "../settings-page/reveal";
 import { isMobile } from "../../lib/shell";
-import { Icon } from "../ui";
+import { bottomSheetStyle, Icon } from "../ui";
 
 /** A choice in a settings list. `hint` shows beside the title, `one` is a unit's singular title. */
 export interface SettingOption {
@@ -217,6 +217,7 @@ export function SettingMenu(props: SettingMenuProps) {
       }}
       class={`flex-row items-stretch ${props.class ?? ""}`}
       popupClass={`${MENU_POPUP} ${props.matchWidth ? "" : ""}`}
+      popupStyle={bottomSheetStyle(4, { contentMax: 320 })}
       itemClass={MENU_ITEM}
       trigger={props.trigger}
       renderItem={(entry) => (

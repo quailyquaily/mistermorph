@@ -11,7 +11,7 @@ import { Button as BaseButton, DatePicker, Switch, TimeField } from "nsh/base";
 import { currentLocale, formatTime, translate } from "../../lib/core/context.js";
 import { formatDate } from "../../lib/core/intl-format.js";
 import { AppMarkdownEditor } from "../shared/MarkdownEditor";
-import { Button, DropdownMenu, Icon, type MenuEntry, Spinner, Tabs, Tip } from "../ui";
+import { bottomSheetStyle, Button, DropdownMenu, Icon, type MenuEntry, Spinner, Tabs, Tip } from "../ui";
 import * as model from "./todo-model.js";
 import { TodoCard } from "./TodoCard";
 import { FIELD_FOCUS, FIELD_FRAME, FIELD_PAD, FIELD_TRANSITION, FieldNote, Prepend, TodoInput } from "./TodoFields";
@@ -104,7 +104,7 @@ function RunAtField(props: { task: TodoTask; disabled: boolean; onChange: (value
       }}
       offset={4}
       popupClass="rounded-(--radius) border border-line-faint bg-dialog p-3"
-      popupStyle={{ boxShadow: "inset 0 1px 0 rgba(255, 255, 255, 0.85), 0 10px 24px rgba(24, 46, 72, 0.12)" }}
+      popupStyle={bottomSheetStyle(12, { style: { boxShadow: "inset 0 1px 0 rgba(255, 255, 255, 0.85), 0 10px 24px rgba(24, 46, 72, 0.12)" } })}
       backdropClass="bg-scrim"
       headerClass="flex-row items-center justify-between pb-2"
       rowClass="flex-row justify-between"

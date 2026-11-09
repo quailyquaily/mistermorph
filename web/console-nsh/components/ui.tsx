@@ -27,7 +27,7 @@ import { recentPress } from "./motion/pressOrigin";
 import { EdgeScroll } from "./motion/ScrollEdges";
 import { FadeText } from "./motion/FadeText";
 import { CHROME_BAR_HEIGHT, gutterX, gutterY, pageGap, pageTop } from "./frame/metrics";
-import { dialogLayerInsets } from "../lib/systemInsets";
+import { bottomSheetInsets, dialogLayerInsets } from "../lib/systemInsets";
 import { createSlidingSelection } from "./motion/SlidingSelection";
 import { MOTION_EASE, MOTION_EASE_CSS, MOTION_NORMAL, MOTION_SLOW, motionMs } from "./motion/tokens";
 
@@ -664,7 +664,7 @@ export function SelectField(props: {
       offset={8}
       onOpenChange={({ open: next }) => open.set(next)}
       popupClass={`${MENU_POPUP} max-h-80`}
-      popupStyle={{ ...MENU_POPUP_STYLE, minWidth: Math.max(220, triggerWidth()) }}
+      popupStyle={bottomSheetStyle(8, { style: { ...MENU_POPUP_STYLE, minWidth: Math.max(220, triggerWidth()) }, contentMax: 320 })}
       popupStartingClass={MENU_STARTING}
       popupEndingClass="opacity-0"
       trigger={
@@ -685,6 +685,9 @@ export function SelectField(props: {
         </View>
       }
     >
+      {/* nsh's Menu does not scroll: its rows past max-h-80 would run off the popup, and off the
+          sheet into the bottom inset on touch screens. */}
+      <Scroll class="shrink">
       <Each of={props.items} key={(item) => item.value}>
         {(item) => (
           <MenuItem
@@ -702,6 +705,7 @@ export function SelectField(props: {
           </MenuItem>
         )}
       </Each>
+      </Scroll>
     </Menu>
   );
   return (
@@ -729,7 +733,7 @@ export function SelectField(props: {
         align="start"
         offset={4}
         popupClass={MENU_POPUP}
-        popupStyle={MENU_POPUP_STYLE}
+        popupStyle={bottomSheetStyle(8, { style: MENU_POPUP_STYLE })}
         itemClass="px-4 py-2 text-sm text-foreground hover:bg-hover focus:bg-hover selected:bg-selection"
         searchClass="mx-2 mb-1 rounded-(--radius) border border-input px-2 py-1 text-sm"
         trigger={
@@ -776,6 +780,23 @@ export const MENU_POPUP_STYLE = {
 } as const;
 export const MENU_STARTING = "opacity-0 -translate-y-1";
 
+/**
+ * A dropdown's `popupStyle` on touch screens, where nsh/base's `Menu`, `Select` and `DatePicker`
+ * are sheets at the bottom of the screen: `style` with the room for the navigation bar or gesture
+ * handle under its last row (`bottomSheetInsets`, lib/systemInsets.ts). `padding` is the bottom
+ * padding its `popupClass` gives (`py-2`: 8), `contentMax` its `max-h-*` in points, if any;
+ * `keyboard` the keyboard's height for a sheet that rises above it. The desktops' popups, and
+ * sheets with no inset to clear, keep `style` as it is. Read it in a binding: it follows the insets.
+ */
+export function bottomSheetStyle<S extends object>(
+  padding: number,
+  options: { style?: S; contentMax?: number; keyboard?: number } = {},
+): (S & Partial<{ paddingBottom: number; maxHeight: number }>) | S | undefined {
+  if (platform.desktop) return options.style;
+  const insets = bottomSheetInsets(safeArea(), options.keyboard ?? 0, windowSize().height, padding, options.contentMax);
+  return insets ? { ...(options.style ?? ({} as S)), ...insets } : options.style;
+}
+
 /** A menu of commands opened from a trigger (the Vue console's AppMenu and dropdown menus). */
 export function DropdownMenu(props: {
   trigger: JSX.Element;
@@ -797,7 +818,7 @@ export function DropdownMenu(props: {
       open={props.open}
       onOpenChange={({ open }) => props.onOpenChange?.(open)}
       popupClass={`${MENU_POPUP} ${props.class ?? ""}`}
-      popupStyle={MENU_POPUP_STYLE}
+      popupStyle={bottomSheetStyle(8, { style: MENU_POPUP_STYLE })}
       popupStartingClass={MENU_STARTING}
       popupEndingClass="opacity-0"
     >

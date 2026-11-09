@@ -6,7 +6,7 @@
 import { Image, Text, View } from "nsh";
 import { Select } from "nsh/base";
 import { FadeText } from "../motion";
-import { Icon, type IconName, MENU_POPUP, MENU_POPUP_STYLE } from "../ui";
+import { bottomSheetStyle, Icon, type IconName, MENU_POPUP, MENU_POPUP_STYLE } from "../ui";
 import { FIELD_FRAME, FIELD_PAD, FIELD_TRANSITION, Prepend } from "./TodoFields";
 import type { TodoMenuItem } from "./todo-state";
 
@@ -64,7 +64,7 @@ export function TodoSelect(props: {
       }`}
       style={FIELD_TRANSITION}
       popupClass={`${MENU_POPUP} max-h-100`}
-      popupStyle={MENU_POPUP_STYLE}
+      popupStyle={bottomSheetStyle(8, { style: MENU_POPUP_STYLE, contentMax: 400 })}
       itemClass="min-h-10 justify-center px-4 py-2 hover:bg-hover focus:bg-hover selected:bg-selection"
       searchClass="mx-2 mb-2 h-9.5 rounded-(--radius) border border-input bg-field px-3 text-sm text-foreground"
       empty={

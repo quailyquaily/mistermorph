@@ -4,7 +4,8 @@
 import type { App } from "nsh/test";
 import { expect, test } from "nsh/test";
 import { nextComposerRows, SINGLE_ROW } from "../components/chat/composerRows";
-import { sheetKeyboardLift } from "../components/chat/composerSheets";
+import { PROFILE_SHEET_MAX_HEIGHT, PROFILE_SHEET_PADDING } from "../components/chat/composerSheets";
+import { bottomSheetInsets } from "../lib/systemInsets";
 import { openConsole, type ApiRequest } from "./harness";
 
 const NOW = new Date().toISOString();
@@ -328,14 +329,19 @@ test("on the desktop the add menu and the model picker leave the field focused",
 });
 
 test("the model picker's sheet rises above a keyboard its search field raised, within the screen", () => {
-  // Hidden: nsh places the sheet (its own room for the navigation bar).
-  expect(sheetKeyboardLift(0, 24, 844, 320)).toBeUndefined();
-  expect(sheetKeyboardLift(Number.NaN, 24, 844, 320)).toBeUndefined();
-  // Up on a phone: the keyboard's height under the sheet (it covers the navigation bar), the list
-  // as tall as on the desktops above it.
-  expect(sheetKeyboardLift(300, 24, 844, 320)).toEqual({ paddingBottom: 300, maxHeight: 620 });
+  const lift = (keyboard: number, area: { top: number; bottom: number }, height: number) =>
+    bottomSheetInsets(area, keyboard, height, PROFILE_SHEET_PADDING, PROFILE_SHEET_MAX_HEIGHT);
+  // Hidden, no bars: the sheet is as its classes draw it.
+  expect(lift(0, { top: 24, bottom: 0 }, 844)).toBeUndefined();
+  expect(lift(Number.NaN, { top: 24, bottom: 0 }, 844)).toBeUndefined();
+  // Hidden over a 16pt gesture handle: its 4pt padding above the handle, its list as tall as before.
+  expect(lift(0, { top: 24, bottom: 16 }, 844)).toEqual({ paddingBottom: 20, maxHeight: 336 });
+  // Up on a phone: the keyboard's height under the sheet (it covers the navigation bar: not both),
+  // its 4pt padding, the list as tall as on the desktops above it.
+  expect(lift(300, { top: 24, bottom: 0 }, 844)).toEqual({ paddingBottom: 304, maxHeight: 620 });
+  expect(lift(300, { top: 24, bottom: 16 }, 844)).toEqual({ paddingBottom: 304, maxHeight: 620 });
   // A phone on its side: the list keeps to the room between the status bar and the keyboard.
-  expect(sheetKeyboardLift(200, 24, 390, 320)).toEqual({ paddingBottom: 200, maxHeight: 366 });
+  expect(lift(200, { top: 24, bottom: 16 }, 390)).toEqual({ paddingBottom: 204, maxHeight: 366 });
   // No room at all: the list gets none rather than a negative height.
-  expect(sheetKeyboardLift(500, 24, 390, 320)).toEqual({ paddingBottom: 500, maxHeight: 500 });
+  expect(lift(500, { top: 24, bottom: 16 }, 390)).toEqual({ paddingBottom: 504, maxHeight: 500 });
 });
