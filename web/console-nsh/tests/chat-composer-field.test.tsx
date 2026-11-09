@@ -5,7 +5,7 @@
 // tests/fixtures/composer-field-app.tsx, which lays the row out as ChatComposer does.
 import type { App } from "nsh/test";
 import { expect, open, test } from "nsh/test";
-import { COMPOSER_CONTROL_SIZE, COMPOSER_LINE_HEIGHT, composerFieldBox, composerRowClass } from "../components/chat/composerField";
+import { COMPOSER_CONTROL_SIZE, COMPOSER_LINE_HEIGHT, composerFieldBox, composerFrameBorder, composerFrameClass, composerRowClass } from "../components/chat/composerField";
 
 type Frame = { x: number; y: number; w: number; h: number };
 type State = { multi: boolean; measured: number; box: { height: number; paddingTop: number; paddingBottom: number } };
@@ -39,6 +39,10 @@ function expectAligned(report: Record<string, any>, name: string) {
   expect(state.box.paddingBottom).toBeGreaterThanOrEqual(0);
   // The row keeps its 54pt (8 + 38 + 8).
   near(row.h, 54);
+  // The frame is the row and its 1pt border all round, on a phone as on a desktop.
+  const shell = report[`${name}-shell`] as Frame;
+  near(shell.h - row.h, 2);
+  near(shell.w - row.w, 2);
 }
 
 /** A few frames for the layout to settle. */
@@ -107,4 +111,62 @@ test("above the controls the field grows with its text up to 24 lines, unpadded"
   expect(composerFieldBox(true, 100 * COMPOSER_LINE_HEIGHT).height).toBe(24 * COMPOSER_LINE_HEIGHT);
   expect(composerRowClass(false)).toContain("items-center");
   expect(composerRowClass(true)).not.toContain("flex-row");
+});
+
+// The frame's border on a phone is the design's composer line (design/ui-refresh.html's
+// `.composer`), which can be seen against the field; the desktop keeps the fields' `input`.
+type Rgba = [number, number, number, number];
+
+function rgba(hex: string): Rgba {
+  const digits = hex.replace("#", "");
+  const full = digits.length === 6 ? `${digits}ff` : digits;
+  return [0, 2, 4, 6].map((at) => parseInt(full.slice(at, at + 2), 16) / 255) as Rgba;
+}
+
+/** `top` laid over the opaque `under`. */
+function over(top: Rgba, under: Rgba): Rgba {
+  return [0, 1, 2].map((i) => top[i] * top[3] + under[i] * (1 - top[3])).concat(1) as Rgba;
+}
+
+function luminance(color: Rgba) {
+  const channel = (c: number) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+  return 0.2126 * channel(color[0]) + 0.7152 * channel(color[1]) + 0.0722 * channel(color[2]);
+}
+
+function contrast(a: Rgba, b: Rgba) {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+test("on a phone the composer's frame is the design's line, a light border the field does not hide", async () => {
+  expect(composerFrameBorder(true)).toBe("border-line");
+  expect(composerFrameBorder(false)).toBe("border-input");
+  const { report } = await openRow({ width: 390 });
+  const tokens = report().tokens as Record<string, string>;
+  const color = (name: string) => rgba(tokens[name.replace("border-", "")]);
+  // The page under the composer, the field's fill over it, and each border over that.
+  const field = over(color("field"), color("background"));
+  const phone = contrast(over(color(composerFrameBorder(true)), field), field);
+  const desktop = contrast(over(color(composerFrameBorder(false)), field), field);
+  expect(phone).toBeGreaterThan(desktop * 1.1);
+  // Light: a hairline, well short of the muted text beside it.
+  expect(phone).toBeLessThan(contrast(color("muted-foreground"), field) / 2);
+});
+
+test("the composer's frame differs between a phone and a desktop only in its border's colour", () => {
+  const phone = composerFrameClass(true);
+  const desktop = composerFrameClass(false);
+  // The desktop's frame is the one it had.
+  expect(desktop).toBe("relative rounded-(--radius) border border-input bg-field transition duration-[260ms] focus-within:border-blue/45 focus-within:shadow-md");
+  expect(phone.replace("border-line", "border-input")).toBe(desktop);
+  for (const frame of [phone, desktop]) {
+    const classes = frame.split(" ");
+    // One 1pt border, the same radius, and the focus look over the resting colour.
+    expect(classes).toContain("border");
+    expect(classes.filter((name) => /^border-\d/.test(name))).toEqual([]);
+    expect(classes).toContain("rounded-(--radius)");
+    expect(classes).toContain("focus-within:border-blue/45");
+    expect(classes).toContain("focus-within:shadow-md");
+    expect(classes).toContain("bg-field");
+  }
 });
