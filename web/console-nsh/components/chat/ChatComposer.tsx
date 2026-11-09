@@ -11,7 +11,7 @@ import { cleanup, effect, Image, keymap, LayoutAnimation, reduceMotion, signal, 
 import { Button as BaseButton, Input, Select } from "nsh/base";
 import { BorderBeam } from "../motion/BorderBeam";
 import { ICONS } from "../icons";
-import { Button, DropdownMenu, Icon, Spinner, Tip, TipButton, type IconName } from "../ui";
+import { Button, BusyBeam, busyLook, DropdownMenu, Icon, Tip, TipButton, type IconName } from "../ui";
 import {
   buildComposerSuggestionItems,
   composerSuggestionInsertText,
@@ -371,10 +371,15 @@ export function ChatComposer(props: ChatComposerProps) {
     <If
       when={!props.attachDisabled && !props.uploading}
       else={
-        <View class="size-[38px] items-center justify-center opacity-45" accessibilityLabel={props.addLabel} testID="chat-composer-add">
-          <If when={props.uploading} else={<Icon name="PhPlus" size={14} color="subtle" />}>
-            <Spinner size={14} />
-          </If>
+        // Uploading, it is a busy plain button (BusyBeam, busyLook).
+        <View
+          class={`relative size-[38px] items-center justify-center rounded-(--radius) ${props.uploading ? "" : "opacity-45"}`}
+          accessibilityLabel={props.addLabel}
+          accessibilityState={{ busy: !!props.uploading }}
+          testID="chat-composer-add"
+        >
+          <Icon name="PhPlus" size={14} color={props.uploading ? busyLook("plain").text : "subtle"} />
+          <BusyBeam busy={!!props.uploading} variant="plain" short testID="chat-composer-add-beam" />
         </View>
       }
     >
@@ -385,20 +390,20 @@ export function ChatComposer(props: ChatComposerProps) {
   // Send, through three states by its look rather than by swapping parts (the Vue console's
   // `.chat-composer-send`): nothing to send, a hairline square with a muted plane nudged down-left;
   // ready, filled ink with the plane settled; running, the same fill with the plane crossfading into
-  // the stop square.
+  // the stop square. While a message is being sent it is a busy primary button (BusyBeam, busyLook).
+  const sendBusy = () => !!props.sending && !props.stopMode;
   const sendEmpty = () => !props.stopMode && value().trim() === "" && !(props.fileItems ?? []).length;
   const sendControl = () => (
     <TipButton
       onPress={() => (props.stopMode ? props.onStop?.() : props.onSubmit?.())}
-      disabled={props.stopMode ? false : props.sendDisabled}
+      disabled={props.stopMode ? false : props.sendDisabled || sendBusy()}
       accessibilityLabel={props.sendLabel}
       tooltip={<Tip text={props.sendLabel ?? ""} />}
       testID="chat-composer-send"
-      class={`size-[38px] items-center justify-center rounded-(--radius) border transition-colors duration-[180ms] ${
-        sendEmpty() ? "border-line-soft bg-transparent" : "border-primary bg-primary hover:bg-ink"
-      } ${!sendEmpty() && props.sendDisabled && !props.stopMode ? "opacity-45" : ""}`}
+      class={`relative size-[38px] items-center justify-center rounded-(--radius) border transition-colors duration-[180ms] ${
+        sendBusy() ? busyLook("primary").box : sendEmpty() ? "border-line-soft bg-transparent" : "border-primary bg-primary hover:bg-ink"
+      } ${!sendEmpty() && props.sendDisabled && !props.stopMode && !sendBusy() ? "opacity-45" : ""}`}
     >
-      <If when={!props.sending} else={<Spinner size={14} />}>
         <Image
           src={ICONS.PhPaperPlaneTilt}
           accessibilityElementsHidden
@@ -406,7 +411,7 @@ export function ChatComposer(props: ChatComposerProps) {
           style={{
             width: 14,
             height: 14,
-            tintColor: token(sendEmpty() ? "muted-foreground" : "primary-foreground") as string,
+            tintColor: token(sendBusy() ? busyLook("primary").text : sendEmpty() ? "muted-foreground" : "primary-foreground") as string,
             opacity: props.stopMode ? 0 : 1,
             scale: props.stopMode ? 0.6 : 1,
             translate: sendEmpty() ? [-1.5, 1.5] : [0, 0],
@@ -424,7 +429,7 @@ export function ChatComposer(props: ChatComposerProps) {
             scale: props.stopMode ? 1 : 0.6,
           }}
         />
-      </If>
+        <BusyBeam busy={sendBusy()} short testID="chat-composer-send-beam" />
     </TipButton>
   );
 

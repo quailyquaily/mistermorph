@@ -24,6 +24,7 @@ import {
 import { dismissNotice, noticeState, pushNotice } from "../lib/core/notices.js";
 import { FILLED_ICONS, ICONS, type IconName } from "./icons";
 import { BorderBeam, type BeamTone } from "./motion/BorderBeam";
+import { RunningMark } from "./motion/RunningMark";
 import { sagHalf, SagRule } from "./motion/Sag";
 import { recentPress } from "./motion/pressOrigin";
 import { EdgeScroll } from "./motion/ScrollEdges";
@@ -56,23 +57,50 @@ export function Icon(props: { name: IconName; size?: number; color?: TokenName; 
   );
 }
 
-/** The console's square status mark: filled when on, hollow when off, orange when waiting. */
-export function StatusMark(props: { state: "on" | "off" | "pending" | "error" | "unread"; class?: string }) {
-  const cls = () => {
+export type StatusState = "on" | "off" | "pending" | "error" | "unread" | "running";
+
+/**
+ * The console's square status mark: filled when on, hollow when off, orange when waiting. Running,
+ * it morphs into a turning ring and back when it ends (design/ui-refresh.html §7, RunningMark), so
+ * any mark that can show a run gets the animation by passing `running`.
+ */
+export function StatusMark(props: {
+  state: StatusState;
+  /** The square's side (default 8). */
+  size?: number;
+  /** The square's corner radius (default square). */
+  corner?: number;
+  /** The settled square's colour in place of the state's own (a mark on a dark panel). */
+  color?: string;
+  /** The ring's colour (default the theme's status-on blue). */
+  ringColor?: string;
+  class?: string;
+  testID?: string;
+}) {
+  const stateColor = (): TokenName => {
     switch (props.state) {
-      case "on":
-        return "bg-status-on border-status-on";
-      case "unread":
-        return "bg-status-on border-status-on";
       case "pending":
-        return "bg-status-pending border-status-pending";
+        return "status-pending";
       case "error":
-        return "bg-status-error border-status-error";
+        return "status-error";
+      case "off":
+        return "status-off";
       default:
-        return "border-status-off";
+        return "status-on";
     }
   };
-  return <View class={`size-2 border ${cls()} ${props.class ?? ""}`} />;
+  return (
+    <RunningMark
+      running={props.state === "running"}
+      color={props.color ?? String(token(stateColor()))}
+      hollow={props.state === "off" && !props.color}
+      ringColor={props.ringColor}
+      size={props.size ?? 8}
+      corner={props.corner}
+      class={props.class}
+      testID={props.testID}
+    />
+  );
 }
 
 /**
@@ -354,6 +382,36 @@ const ALIGN_SELF = { start: "self-start", center: "self-center", end: "self-end"
 
 const LOADING_TEXT_CLASS: Partial<Record<TokenName, string>> = { ink: "text-ink", danger: "text-danger", "warn-dark": "text-warn-dark" };
 
+/**
+ * The busy state's beam (design/ui-refresh.html §6) for any control drawn as a button `variant`:
+ * mount it last inside the control's `relative` box. It rides the box's own border (the soft
+ * hairline of `busyLook`), or, for the bare variants, draws a faint hairline of its own to ride.
+ * `short` is the 40pt beam of xs/xxs and icon-sized controls (else 64).
+ */
+export function BusyBeam(props: { busy: boolean; variant?: ButtonVariant; short?: boolean; border?: number; testID?: string }) {
+  const variant = () => BUTTON_VARIANTS[props.variant ?? "primary"];
+  return (
+    <If when={props.busy}>
+      <BorderBeam
+        length={props.short ? 40 : 64}
+        tone={variant().beam}
+        track={variant().loadingTrack ? String(token(variant().loadingTrack!)) : undefined}
+        border={props.border ?? (variant().loadingTrack ? 0 : variant().loadingText ? 0.5 : 1)}
+        testID={props.testID}
+      />
+    </If>
+  );
+}
+
+/**
+ * How a control drawn as a button `variant` looks while busy: `box`, the classes for its fill and
+ * hairline (filled variants turn soft), and `text`, its text and icon colour. Use with BusyBeam.
+ */
+export function busyLook(variant: ButtonVariant = "primary"): { box: string; text: TokenName } {
+  const v = BUTTON_VARIANTS[variant];
+  return { box: v.loadingBox ?? "", text: v.loadingText ?? v.disabledText };
+}
+
 /** The console's button: one command, any input. */
 // nsh 0.4.0 on Android: a box that clips (`overflow-hidden`, which rounds the press layer) and casts
 // an outer shadow moves its children into an inner box that takes the presses, and the button
@@ -374,7 +432,6 @@ export function Button(props: ButtonProps) {
     loadingText() ?? (props.disabled || props.loading ? variant().disabledText : props.selected ? "ink" : variant().text);
   const textClass = () =>
     loadingText() ? LOADING_TEXT_CLASS[loadingText()!] : props.selected && enabled() ? "text-ink" : variant().textClass;
-  const beamLength = () => (props.size === "xs" || props.size === "xxs" ? 40 : 64);
   return (
     <TipButton
       disabled={!enabled()}
@@ -400,14 +457,12 @@ export function Button(props: ButtonProps) {
         class={`absolute inset-0 transition-colors duration-100 ease-out ${variant().press}`}
         style={{ pointerEvents: "none" }}
       />
-      <If when={props.loading}>
-        <BorderBeam
-          length={beamLength()}
-          tone={variant().beam}
-          track={variant().loadingTrack ? String(token(variant().loadingTrack!)) : undefined}
-          border={variant().loadingTrack ? 0 : variant().loadingText ? 0.5 : 1}
-          testID={props.testID ? `${props.testID}-loading` : undefined} />
-      </If>
+      <BusyBeam
+        busy={!!props.loading}
+        variant={props.variant}
+        short={props.size === "xs" || props.size === "xxs"}
+        testID={props.testID ? `${props.testID}-loading` : undefined}
+      />
       <If when={props.icon}>
         <Icon name={props.icon!} size={size().icon} color={iconColor()} />
       </If>

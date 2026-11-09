@@ -11,7 +11,7 @@ import { Button as BaseButton, DatePicker, Switch, TimeField } from "nsh/base";
 import { currentLocale, translate } from "../../lib/core/context.js";
 import { formatDate } from "../../lib/core/intl-format.js";
 import { AppMarkdownEditor } from "../shared/MarkdownEditor";
-import { Button, DropdownMenu, Icon, type MenuEntry, Spinner, Tabs, Tip } from "../ui";
+import { Button, BusyBeam, busyLook, DropdownMenu, Icon, type MenuEntry, Tabs, Tip } from "../ui";
 import * as model from "./todo-model.js";
 import { TodoCard } from "./TodoCard";
 import { FIELD_FOCUS, FIELD_FRAME, FIELD_PAD, FIELD_TRANSITION, FieldNote, Prepend, TodoInput } from "./TodoFields";
@@ -202,6 +202,7 @@ export function TodoTaskEditor(props: { state: TodoState; panel?: boolean }) {
   const state = props.state;
   const task = () => state.selectedTask() as TodoTask;
   const busy = () => state.saving() || state.loading();
+  const taskStarting = () => state.runningTaskKey() === task()._key;
   const kind = () => model.repeatKind(task()) as string;
   const formWidth = signal(0);
   const pickerColumns = () => (formWidth() >= 1120 ? 4 : formWidth() >= 720 ? 2 : 1);
@@ -266,17 +267,17 @@ export function TodoTaskEditor(props: { state: TodoState; panel?: boolean }) {
             disabled={busy()}
             items={menuItems()}
             trigger={
+              // While the task's run is being started from this menu, a busy plain button (BusyBeam).
               <View
                 testID="todo-task-actions"
                 accessibilityLabel={t("todo_action_more")}
                 role="button"
                 tooltip={<Tip text={t("todo_action_more")} />}
-                class="size-8 items-center justify-center rounded-(--radius) hover:bg-hover"
+                class={`relative size-8 items-center justify-center rounded-(--radius) ${taskStarting() ? "" : "hover:bg-hover"}`}
                 style={{ transitionProperty: "colors", transitionDuration: 180 }}
               >
-                <If when={state.runningTaskKey() === task()._key} else={<Icon name="PhDotsThree" size={16} color="subtle" />}>
-                  <Spinner size={14} />
-                </If>
+                <Icon name="PhDotsThree" size={16} color={taskStarting() ? busyLook("plain").text : "subtle"} />
+                <BusyBeam busy={taskStarting()} variant="plain" short testID="todo-task-actions-beam" />
               </View>
             }
           />

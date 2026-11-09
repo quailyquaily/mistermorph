@@ -10,7 +10,7 @@ import { createMotion, effect, Image, platform, Text, token, untracked, View, wi
 import { MOTION_EASE, MOTION_SLOW, motionMs } from "../motion/tokens";
 import { Button as BaseButton } from "nsh/base";
 import { ICONS } from "../icons";
-import { Button, Icon, Tip, TipButton } from "../ui";
+import { Button, Icon, StatusMark, Tip, TipButton } from "../ui";
 import { approvalParameterEntries, skillInstallApproval } from "../../lib/core/chat-approvals.js";
 import { agentLinkMessages, insightMessages, planStepMessages, pollingActionWord } from "../../lib/core/chat-task-history.js";
 import type { ArtifactPreviews } from "./ArtifactPreviewCard";
@@ -502,7 +502,7 @@ export function ChatHistoryItem(props: { item: HistoryItem; ctx: ChatRowContext;
         else={<If when={isAgent()} else={messageBody()}>{agentBody()}</If>}
       >
         <View class="flex-row items-center gap-2 self-center" role="text" testID="chat-context-notice">
-          <View class={`size-2 border ${status() === "failed" ? "bg-status-error border-status-error" : isTerminalStatus(status()) ? "bg-status-on border-status-on" : "bg-status-pending border-status-pending"}`} />
+          <StatusMark state={status() === "failed" ? "error" : isTerminalStatus(status()) ? "on" : "running"} />
           <Text class="font-mono text-xs text-subtle">{String(item()?.text ?? "")}</Text>
         </View>
       </If>
