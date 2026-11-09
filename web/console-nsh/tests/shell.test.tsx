@@ -145,6 +145,35 @@ test("on a phone the bottom navigation opens More and the agents", async () => {
   await app.waitFor("id:mobile-bottom-nav", { state: "gone" });
 });
 
+test("on a 320pt phone every slot of the bottom navigation takes its press", async () => {
+  const { app } = await openConsole({
+    location: "/e/default/todo",
+    width: 320,
+    height: 640,
+    endpoints: [localEndpoint(), REMOTE],
+    api: {
+      "GET /proxy:/tasks": { body: { items: [] } },
+      "GET /proxy:/todo/tasks": { body: { items: [] } },
+      "GET /proxy:/topics": { body: { items: [] } },
+    },
+  });
+  await app.waitFor("id:mobile-bottom-nav");
+  await app.press("id:mobile-nav-contacts");
+  await app.waitUntil(() => lastLocation(app) === "/e/default/contacts");
+  await app.press("id:mobile-nav-chat");
+  await app.waitUntil(() => lastLocation(app).startsWith("/e/default/chat"));
+  await app.press("id:mobile-nav-todo");
+  await app.waitUntil(() => lastLocation(app) === "/e/default/todo");
+  await app.press("id:mobile-nav-more");
+  await app.waitFor("id:mobile-more");
+  await app.press("id:mobile-nav-more");
+  await app.waitFor("id:mobile-more", { state: "gone" });
+  await app.press("id:mobile-nav-agent");
+  await app.waitFor("id:mobile-agents");
+  await app.press("id:mobile-agent-option-ep_remote");
+  await app.waitUntil(() => lastLocation(app) === "/e/ep_remote/todo");
+});
+
 test("the banner says which hop is unencrypted, and closing it lasts", async () => {
   const { app } = await openConsole({
     location: "/e/default/todo",
