@@ -42,3 +42,10 @@ notes:
 
 ## factory · 2026-11-10 07:47
 Held out of v0.3.91: owner authorized shipping items if there are no problems; the concrete unresolved findings in the latest review remain. Left in ready/ without merging. No fixes attempted during this ship run.
+
+## claude-code · 2026-11-10 08:29
+Owner-requested check and fix of the open review note (local only; not pushed, not merged; item left in ready/).
+Confirmed: the [P2] from the 2026-11-10 01:46 review holds at a3b8e911. softKeyboard.ts:29 treats a focused field as an open keyboard whenever no frame was ever reported, so with a hardware keyboard from startup the first Back tap (chatController.ts:1016) only unfocuses. Reproduced headless: on Android with a focused field, the first tap did not reach the topic list.
+Fix: local commit d8e0c970 on factory/FT49-console-mobile-back-dismiss-keyboard-first (not pushed). The nsh Android host reads IME geometry from WindowInsets, so on `platform.os === "android"` a zero keyboard frame now means no software keyboard. The focused-field fallback stays only for the web, where visualViewport may not report one. Updated PORTING.md, the integration test (hardware keyboard: first tap goes back, draft kept) and the state table (Android and web cases).
+Tests (throwaway absolute HOME): nsh check passed; nsh test --web-host tests/noHost.js 349/349; gofmt check, go vet ./... and go test ./... passed (162 packages ok).
+Limitation: headless runs cannot simulate a software-keyboard frame, so the "keyboard up → first tap only lowers it" path is covered by the pure state table only. iOS keeps the web-style fallback (host not verified). Not checked: real devices, hardware keyboards, keyboard animation.

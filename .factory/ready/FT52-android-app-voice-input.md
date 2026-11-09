@@ -59,3 +59,10 @@ Moved review/ → ready/ under the no-P0/P1 review rule. Owner should inspect th
 
 ## factory · 2026-11-10 07:47
 Held out of v0.3.91: owner authorized shipping items if there are no problems; the concrete unresolved findings in the latest review remain. Left in ready/ without merging. No fixes attempted during this ship run.
+
+## claude-code · 2026-11-10 08:29
+Owner-requested check and fix of the open review note (local only; not pushed, not merged; item left in ready/).
+Confirmed: the [P2] from the 2026-11-10 03:33 review holds at 496fffd5. In voice.ts:176-186 a start cancelled while its reply was pending lets a late `ok` go with the shared `recorder.cancel()`. When a newer recording started meanwhile, that cancel ends the newer one while the UI shows recording. The Android host answers a pending start with `cancelled` on cancel. The browser host ignores a cancel during getUserMedia (host.js:256-283; meanwhile a new start gets `busy`), so the race is real in shared code. Reproduced with the async recorder stub.
+Fix: local commit a44edbcc on factory/FT52-android-app-voice-input (not pushed). A new start now waits until the older unanswered start has settled and a late yes was let go; a cancel meanwhile means it never asks the host. Two regression tests in chat-voice-lifecycle.test.tsx (both failed before the fix).
+Tests (throwaway absolute HOME): nsh check passed; nsh test --web-host tests/noHost.js 361/361; gofmt check, go vet ./... and go test ./... passed (162 packages ok). Java host tests and the APK were not rerun: no Java/Android files changed.
+Not checked: real Android device, microphone, permission dialogs, browser getUserMedia prompt timing. A start the host never answers now keeps the next start waiting (mic shows recording, still cancellable).

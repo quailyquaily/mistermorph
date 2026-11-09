@@ -42,3 +42,10 @@ notes:
 
 ## factory · 2026-11-10 07:47
 Held out of v0.3.91: owner authorized shipping items if there are no problems; the concrete unresolved findings in the latest review remain. Left in ready/ without merging. No fixes attempted during this ship run.
+
+## claude-code · 2026-11-10 08:29
+Owner-requested check and fix of the open review note (local only; not pushed, not merged; item left in ready/).
+Confirmed: the [P2] from the 2026-11-10 01:20 review holds at 72d42e47. On a wide touch screen, ChatComposer.tsx:462 dismisses the keyboard (`!platform.desktop`), but submitTask's finally (chatController.ts:2868, `focusComposerOnDesktop`) refocuses the field, because `mobileMode` is width <= 980 (lib/shell.ts:19), not the platform. Reproduced headless: Android at 1280x800, a failed send left the field focused.
+Fix: local commit 044e57c0 on factory/FT48-console-mobile-send-dismiss-keyboard (not pushed). Send passes `onSubmit({ keyboardDismissed: true })` when it lowered the keyboard, and submitTask then skips the post-send refocus. Enter, Stop and the desktops are unchanged. Regression test: chat-composer.test.tsx "on a wide touch screen Send lowers the keyboard and the send does not raise it again" (failed before the fix, passes after).
+Tests (throwaway absolute HOME): nsh check passed; nsh test --web-host tests/noHost.js 349/349; gofmt check, go vet ./... and go test ./... passed (162 packages ok).
+Not checked: real Android/iOS devices or tablets, actual software keyboards, visuals. Headless focus checks only.

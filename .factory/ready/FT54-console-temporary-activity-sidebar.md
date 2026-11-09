@@ -59,3 +59,17 @@ Residual risks: actual Android/desktop hosts, physical-device safe areas and sof
 
 ## factory · 2026-11-10 07:47
 Held out of v0.3.91: owner authorized shipping items if there are no problems; the concrete unresolved findings in the latest review remain. Left in ready/ without merging. No fixes attempted during this ship run.
+
+## claude-code · 2026-11-10 08:29
+Owner-requested check and fix of the three open review notes (local only; not pushed, not merged; item left in ready/).
+Confirmed at e8efa578:
+- [P2] Escape priority: ActivityDetailPanel.tsx:71 binds Escape `always`; the newest keymap binding wins and takes the key from nsh's native dialogs and menus. Reproduced headless with the Agent picker dialog (>8 agents, outside pageDialogOpen) and with composer suggestions opened before the panel. The Agent menu case did not reproduce headless (the headless Menu takes Escape itself).
+- [P2] Focus restoration: chatController.ts:1570-1571 sets and clears the key in one call, so the entries' focus effects never see it (verified: inside a batch an effect sees nothing).
+- [P3] Mobile exit: ChatPage.tsx:280/283 switch the sheet's width and content to the workspace panel as soon as the details close. Confirmed from the code; headless does not draw the sheet's exit.
+Fix: local commit 361286a9 on factory/FT54-console-temporary-activity-sidebar (not pushed).
+- A shared popup registry, `trackPopup` / `popupOpen` in components/ui.tsx, covers DialogLayer (Modal, MessageDialog, confirm), DropdownMenu, SelectField, AgentSwitcher's Menu and the composer's model picker and suggestions. The panel's Escape binding is dropped while any of them is open.
+- `createFocusReturn` (components/chat/activityDetail.ts) keeps the request until the change has settled, then clears it.
+- The phone sheet keeps the outgoing details and width (`mobileSheetDetail`) until it opens again.
+Tests added in chat-detail-panel.test.tsx: agent dialog Escape, suggestions Escape (both failed before), focus-return request (reactive test), phone exit guard.
+Tests (throwaway absolute HOME): nsh check passed; nsh test --web-host tests/noHost.js 360/360; gofmt check, go vet ./... and go test ./... passed (162 packages ok).
+Not checked: real keyboard focus (headless cannot query focus or press a focused button), the Agent menu in a real browser, the sheet's exit look on a device, desktop/Android hosts. Native popups that this registry does not cover (Popover, BottomSheet, raw Select/Sheet on other pages) still lose Escape to the panel if one is ever shown over it.
