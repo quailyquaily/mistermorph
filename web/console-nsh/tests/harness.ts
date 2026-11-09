@@ -55,6 +55,10 @@ export interface ConsoleOptions {
   platform?: "android";
   /** The system bars' insets (`safeArea()`), with `platform`. */
   safeArea?: SafeArea;
+  /** The user asks for less motion. */
+  reducedMotion?: boolean;
+  /** A manual clock (`app.clock`): time moves only as the test moves it. */
+  clock?: boolean;
 }
 
 /** Where the phone app keeps the console server's address and its last location (lib/mobileHost.ts). */
@@ -175,6 +179,8 @@ export async function openConsole(options: ConsoleOptions = {}): Promise<{ app: 
     // A desktop idiom; "web" would load host.js, which needs a browser page.
     platform: "linux",
     locale: options.locale ?? "en-US",
+    reducedMotion: options.reducedMotion ?? false,
+    clock: options.clock ? {} : null,
     host: {
       handlers: {
         "morph.boot": {
