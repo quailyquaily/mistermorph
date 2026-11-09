@@ -111,6 +111,11 @@ Headless tests prove behaviour, not the look.
 - `position: "sticky"` works in a `Scroll`; the base `Editor` colours ranges through decorations.
 - Headless screenshots catch compositor fades part-way (a tooltip looks half transparent): run a
   `frames` step before the shot.
+- A multiline `Input` draws its first line at the top of its content box, and the height
+  `onContentSizeChange` reports is the platform's measure (headless runs ignore `lineHeight`: 17pt
+  for a 22.12pt line). A field that must centre one line beside other controls gets a fixed box
+  with the line placed from `lineHeight`, not padding around the measured height
+  (`components/chat/composerField.ts`).
 - Shared motion helpers (sliding selection, fade truncation, scroll edges, entrances, dialog
   origin) are in `components/motion/` (see its README).
 
