@@ -3,7 +3,7 @@
 //
 // The look follows the Vue console's ui-kit: square-ish corners (2px), hairlines, a dark blue
 // primary, quiet plain buttons, mono caps for labels, and red only for what is destructive.
-import type { InputRef, JSX } from "nsh";
+import type { Bounds, InputRef, JSX } from "nsh";
 import type { ButtonProps as BaseButtonProps, TextViewClasses, TextViewStyles } from "nsh/base";
 import { cleanup, createAnimatedValue, createMotion, Easing, effect, Image, keyboardFrame, keymap, Overlay, platform, reduceMotion, safeArea, Scroll, signal, Text, token, untracked, View, windowSize } from "nsh";
 import {
@@ -1140,6 +1140,8 @@ export function Tabs(props: {
   narrow?: boolean;
   accessibilityLabel?: string;
   class?: string;
+  /** Each option's frame in the control, as `onLayout` reports it (to measure the options). */
+  onItemLayout?: (id: string, event: { bounds: Bounds }) => void;
 }) {
   const indicator = createSlidingSelection(() => props.value, { duration: MOTION_NORMAL });
   const narrow = () => props.narrow ?? windowSize().width < 380;
@@ -1159,7 +1161,10 @@ export function Tabs(props: {
             selected={props.value === item().id}
             disabled={item().disabled}
             onPress={() => props.onChange?.(item().id)}
-            onLayout={indicator.track(item().id)}
+            onLayout={(event: { bounds: Bounds }) => {
+              indicator.track(item().id)(event);
+              props.onItemLayout?.(item().id, event);
+            }}
             accessibilityLabel={item().label}
             tooltip={props.iconOnly && item().icon ? <Tip text={item().label} /> : undefined}
             class={`group h-8 flex-row items-center justify-center gap-1.5 ${

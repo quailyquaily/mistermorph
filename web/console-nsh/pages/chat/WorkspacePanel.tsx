@@ -1,13 +1,16 @@
 // The panel beside the conversation (a sheet on phones): the open topic (its title, regenerate and
 // delete, pin, tags, context window meter, dates) and its workspace (the attached directory, its
 // files as a tree, and what to do with the selected one).
+import type { Bounds } from "nsh";
 import { Image, List, Scroll, Text, View } from "nsh";
-import { Button as BaseButton } from "nsh/base";
+import { Sheet } from "nsh/base";
 import { Button, Icon, Kicker, Tabs, Tip, TipButton, Toggle } from "../../components/ui";
+import { CHROME_BAR_HEIGHT } from "../../components/frame/metrics";
 import { TopicTagsEditor } from "../../components/chat/TopicTagsEditor";
 import { t } from "../../components/chat/i18n";
 import { formatBytes } from "../../lib/core/context.js";
 import { workspaceTreeIcon } from "../../lib/core/workspace-icons.js";
+import { rightSheetSystemInsets } from "../../lib/shell";
 import type { ChatController } from "./chatController";
 import { TOPIC_TAB_ID, WORKSPACE_TAB_ID } from "./chatController";
 
@@ -332,20 +335,92 @@ function WorkspaceTab(props: { c: ChatController }) {
   );
 }
 
-/** The panel's body: its tabs, then the topic or the workspace. `trailing` sits in the tab row. */
-export function WorkspacePanel(props: { c: ChatController; trailing?: any; class?: string }) {
+/** A tab of the panel, as `ChatController.workspacePanelTabs` lists them. */
+export interface WorkspacePanelTab {
+  id: string;
+  label: string;
+}
+
+/**
+ * The panel's tab row: the console's segmented control (`Tabs`).
+ *
+ * - Beside the conversation (wide windows) it sits low in its row, 12pt in, the toggle (`trailing`)
+ *   at its right; its options are as wide as their labels.
+ * - In the phone's sheet (`phone`) the row is as tall as a page's bar (57pt), the control in its
+ *   middle, on the panel's 16pt gutter, and spans the row: its options share it equally, so all of
+ *   the outlined box takes presses and the selected fill covers a whole half.
+ */
+export function WorkspacePanelTabs(props: {
+  tabs: WorkspacePanelTab[];
+  value: string;
+  onChange: (id: string) => void;
+  phone?: boolean;
+  trailing?: any;
+  /** Each option's frame, as `onLayout` reports it (tests). */
+  onTabLayout?: (id: string, event: { bounds: Bounds }) => void;
+}) {
+  return (
+    <View
+      class={props.phone ? "flex-row items-center px-4" : "flex-row items-end gap-2 px-3 pt-2"}
+      style={props.phone ? { height: CHROME_BAR_HEIGHT } : undefined}
+      testID="chat-workspace-tabs"
+    >
+      <Tabs
+        class="flex-1"
+        equal={props.phone}
+        items={props.tabs.map((tab) => ({ id: tab.id, label: tab.label }))}
+        value={props.value}
+        onChange={(id) => props.onChange(id)}
+        onItemLayout={props.onTabLayout}
+      />
+      {props.trailing}
+    </View>
+  );
+}
+
+/**
+ * The panel on phones: a sheet from the right over a scrim. Like the dialogs, it is an Overlay
+ * over the whole surface, outside the app's frame, so on Android it runs under the status bar (and
+ * the navigation bar) unless it keeps out from under them itself: its paper reaches the edges and
+ * its padding takes the bars' insets (lib/systemInsets.ts `rightSheetInsets`), once. Elsewhere
+ * there are none.
+ */
+export function WorkspaceSheet(props: { open: boolean; onClose: () => void; children?: any }) {
+  const padding = () => {
+    const insets = rightSheetSystemInsets();
+    return insets ? { paddingTop: insets.top, paddingRight: insets.right, paddingBottom: insets.bottom } : undefined;
+  };
+  return (
+    <Sheet
+      open={props.open}
+      side="right"
+      onOpenChange={({ open }) => {
+        if (!open) props.onClose();
+      }}
+      backdropClass="bg-scrim"
+      popupClass="h-full w-[88%] max-w-md border-l border-line bg-card"
+      popupStyle={padding()}
+    >
+      {props.children}
+    </Sheet>
+  );
+}
+
+/**
+ * The panel's body: its tabs, then the topic or the workspace. `trailing` sits in the tab row;
+ * `phone` lays the row out for the sheet (`WorkspacePanelTabs`).
+ */
+export function WorkspacePanel(props: { c: ChatController; trailing?: any; phone?: boolean; class?: string }) {
   const c = props.c;
   return (
     <View class={`bg-card ${props.class ?? ""}`} accessibilityLabel={t("chat_workspace_label")} testID="chat-workspace-panel">
-      <View class="flex-row items-end gap-2 px-3 pt-2">
-        <Tabs
-          class="flex-1"
-          items={c.workspacePanelTabs().map((tab) => ({ id: tab.id, label: tab.label }))}
-          value={c.workspaceSidebarTabID()}
-          onChange={(id) => c.onWorkspaceTabChange(id)}
-        />
-        {props.trailing}
-      </View>
+      <WorkspacePanelTabs
+        tabs={c.workspacePanelTabs()}
+        value={c.workspaceSidebarTabID()}
+        onChange={(id) => c.onWorkspaceTabChange(id)}
+        phone={props.phone}
+        trailing={props.trailing}
+      />
       <If when={c.workspaceSidebarTabID() === WORKSPACE_TAB_ID} else={<If when={c.workspaceSidebarTabID() === TOPIC_TAB_ID}>
             <Scroll class="flex-1">
               <TopicTab c={c} />

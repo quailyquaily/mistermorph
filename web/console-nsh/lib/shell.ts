@@ -10,7 +10,7 @@ import { NAV_ITEMS_META, navigate, route, currentPath } from "./router";
 import { useContactsStore } from "./stores/contactsStore.js";
 import { usePersonaStore } from "./stores/personaStore.js";
 import { localStore } from "./platform";
-import { frameInsets } from "./systemInsets";
+import { frameInsets, rightSheetInsets } from "./systemInsets";
 
 export { currentPath };
 
@@ -110,6 +110,8 @@ export const EDGE_TO_EDGE = platform.os === "android";
 export const systemInsets = computed(() =>
   EDGE_TO_EDGE ? frameInsets(safeArea(), keyboardFrame().height, mobileBottomNavVisible()) : null,
 );
+/** A right-docked sheet's room for the system bars on Android (it covers the frame); null elsewhere. */
+export const rightSheetSystemInsets = computed(() => (EDGE_TO_EDGE ? rightSheetInsets(safeArea(), keyboardFrame().height) : null));
 
 function normalizeNavPath(path: string) {
   const normalized = String(path || "").trim().replace(/\/+$/, "");

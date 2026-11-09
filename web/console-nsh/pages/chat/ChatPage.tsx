@@ -2,7 +2,6 @@
 // panel (web/console/src/views/ChatView.js). On phones (≤ 980 points) the topic list and the
 // conversation are separate views, and the panel is a sheet. The behaviour is in chatController.
 import { Text, View } from "nsh";
-import { Button as BaseButton, Sheet } from "nsh/base";
 import { Button, Fab, Icon, Kicker, MessageDialog, Page, Tip, TipButton } from "../../components/ui";
 import { ChatComposer } from "../../components/chat/ChatComposer";
 import { ChatHistoryList, chatGutter } from "../../components/chat/ChatHistoryList";
@@ -13,7 +12,7 @@ import { onSystemBack } from "../../lib/systemBack";
 import { createChatController, type ChatController } from "./chatController";
 import { FilePreviewDialog } from "./FilePreviewDialog";
 import { TopicSidebar } from "./TopicSidebar";
-import { WorkspacePanel } from "./WorkspacePanel";
+import { WorkspacePanel, WorkspaceSheet } from "./WorkspacePanel";
 
 function Composer(props: { c: ChatController; landing?: boolean }) {
   const c = props.c;
@@ -239,17 +238,9 @@ export function ChatPage() {
         <If when={c.showTopicSidebar() && c.mobileTopicSplitEnabled()}>
           <Fab label={t("chat_topic_new")} onPress={() => c.startNewTopic()} testID="chat-topic-new-fab" />
         </If>
-        <Sheet
-          open={c.mobileWorkspaceSidebarVisible()}
-          side="right"
-          onOpenChange={({ open }) => {
-            if (!open) c.closeMobileWorkspaceSidebar();
-          }}
-          backdropClass="bg-scrim"
-          popupClass="h-full w-[88%] max-w-md border-l border-line bg-card"
-        >
-          <WorkspacePanel c={c} class="flex-1" />
-        </Sheet>
+        <WorkspaceSheet open={c.mobileWorkspaceSidebarVisible()} onClose={() => c.closeMobileWorkspaceSidebar()}>
+          <WorkspacePanel c={c} class="flex-1" phone />
+        </WorkspaceSheet>
         <WorkspaceDirPickerDialog
           open={c.workspaceBrowserOpen()}
           endpointRef={c.submitEndpointRef()}
