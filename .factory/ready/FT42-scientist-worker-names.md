@@ -41,3 +41,13 @@ Installs: none. No manifest or config changes.
 Checks: Manager independently passed `test -z "$(gofmt -l .)" && go vet ./... && go test ./...`, `nsh check`, and `nsh test --web-host tests/noHost.js` (287 passed). Coder additionally reports `node --test lib/` (247 passed). All changes are within scope; no forbidden paths changed.
 
 Not checked: UI was not visually inspected; rendered component tests cover names but not appearance. Chinese/Japanese conventional spellings have not had native-speaker review. Owner should inspect localized names and legacy-history display before shipping.
+
+## factory · review · 2026-11-09 09:57
+head: 56115e18f51afc973f456d4624822e6e8c960708
+verdict: pass
+
+Codex reviewed all eight changed files in origin/master...HEAD; no qualifying findings. Branch merges cleanly with master.
+
+Validation: formatting check, go vet ./..., and go test ./... passed (156 packages); nsh check passed; nsh test --web-host tests/noHost.js passed (287 tests); node --test lib/ passed (247 tests). Legacy pools match the baseline and 10,240 legacy name/avatar comparisons passed. Tests used a throwaway absolute HOME. Installs: none. Review worktree unchanged.
+
+Residual risks: UI appearance was not manually inspected; Chinese and Japanese scientist names have not had native-speaker review. Owner should check those before shipping. Moved review/ → ready/; not merged.
