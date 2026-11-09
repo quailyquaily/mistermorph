@@ -14,3 +14,6 @@ What it covers:
 Rules: Aojashin only; restyle existing elements, add none; no background patterns. Not adopted items are listed at the end of the spec; leave them out.
 
 nsh has no CSS masks or `offset-path`: the beam needs its own drawing (a gradient stroke along the rounded-rect path with an animated offset, plus a faint blurred copy), built once and shared by buttons and the composer. Check this first.
+
+## factory · 2026-11-09 09:47
+Moved to backlog: the required approved specification `design/ui-refresh.html` is absent from the fetched base (`3f056a84`) and factory_board. Claude Code independently checked the worktree and found no equivalent approved refresh specification. The live demos, remaining values, and explicitly excluded designs cannot be verified; implementing them would require inventing the approved design. Add the specification to the base and return this item to new to resume. No implementation commits, installs, or tests; no UI was changed or visually checked.
