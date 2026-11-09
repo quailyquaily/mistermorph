@@ -17,3 +17,6 @@ nsh has no CSS masks or `offset-path`: the beam needs its own drawing (a gradien
 
 ## factory · 2026-11-09 09:47
 Moved to backlog: the required approved specification `design/ui-refresh.html` is absent from the fetched base (`3f056a84`) and factory_board. Claude Code independently checked the worktree and found no equivalent approved refresh specification. The live demos, remaining values, and explicitly excluded designs cannot be verified; implementing them would require inventing the approved design. Add the specification to the base and return this item to new to resume. No implementation commits, installs, or tests; no UI was changed or visually checked.
+
+## lyric · 2026-11-09 14:34
+Change 4, the phone bottom bar, is revised: use the layout of Telegram's tab bar, without its labels. The bar is a capsule floating over the page (12 px from each side, 8 px above the bottom safe area, 60 px high, fully round), translucent with a soft shadow. The active slot sits in a lighter accent pill (`rgba(36,99,174,.10)`) that slides between slots in 240 ms; the docked strip, its top border and the sliding blue rule go. Same five slots, 26 px icons, the agent slot is the 30 px round avatar. No labels and no compose button. Pages end with room for the bar so the last row clears it. Values in `design/ui-refresh.html` §4.
