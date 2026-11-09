@@ -42,7 +42,10 @@ export interface ConsoleOptions {
   /** Window size (1280 × 800, the desktop layout). */
   width?: number;
   height?: number;
-  /** Extra host handlers (`morph.file.pick`, `morph.desktop.*`). */
+  /**
+   * Extra host handlers (`morph.file.pick`, `morph.desktop.*`). With `platform: "android"`, the
+   * native part's handlers the app's own host calls (`morph.voice.*`), as the APK's Java answers them.
+   */
   host?: Record<string, unknown>;
   /** The host's runtime (`web`). */
   runtime?: "web" | "desktop";
@@ -169,6 +172,8 @@ export async function openConsole(options: ConsoleOptions = {}): Promise<{ app: 
         "quail-language": "en",
         ...(options.kv || {}),
       },
+      host: options.host ? { handlers: options.host } : null,
+      clock: options.clock ? {} : null,
       network,
     });
     return { app, calls };

@@ -3,14 +3,19 @@
 // - Where nsh's Speech module recognizes speech (the platform's own recognizer), it listens while
 //   the mic is on, shows the words as they come (the live preview, which can be turned off), and
 //   puts the final text into the draft to read and edit before sending.
-// - Where the host records instead (feature "voiceRecord": the web page's host.js, and the desktop
-//   app, whose GPUI window recognizes no speech), the host records (lib/platform voiceRecording)
-//   and the agent's llm.routes.transcription model transcribes the recording
-//   (POST /voice/transcribe), as the Vue console's useVoiceInput did. The mic then shows whenever
-//   the agent can transcribe, even where the host cannot record: `unsupported` is "insecure"
-//   (browsers only open the microphone on HTTPS or localhost), "unsupported" (no recorder in the
-//   browser) or "recorder" (no recorder program on the desktop), and a tap explains it instead of
-//   recording. Typing is never affected.
+// - Where the host records instead (feature "voiceRecord": the web page's host.js, the desktop
+//   app, whose GPUI window recognizes no speech, and the Android app's native part), the host
+//   records (lib/platform voiceRecording) and the agent's llm.routes.transcription model
+//   transcribes the recording (POST /voice/transcribe), as the Vue console's useVoiceInput did. The
+//   mic then shows whenever the agent can transcribe, even where the host cannot record:
+//   `unsupported` is "insecure" (browsers only open the microphone on HTTPS or localhost),
+//   "unsupported" (no recorder in the browser), "recorder" (no recorder program on the desktop) or
+//   "no_mic" (a phone without one), and a tap explains it instead of recording. Typing is never
+//   affected.
+//
+// The words go into the draft of the conversation they were spoken for: when `scope` (the agent
+// and the topic) changes, or the host ends the recording (the phone app left the foreground), what
+// is under way is thrown away, and an answer that comes later is dropped.
 import type { Signal, SpeechSession } from "nsh";
 import { cleanup, effect, locale, signal, Speech, untracked } from "nsh";
 import { hasFocus, isVisible, localStore, onVisibilityChange, voiceRecording, type PickedFile } from "../../lib/platform";
@@ -23,20 +28,27 @@ export type VoiceState = "idle" | "recording" | "transcribing";
 
 export interface VoiceInputOptions {
   onText: (text: string) => void;
-  /** `code` is the platform's or browser's error name, "insecure", "unsupported" or "recorder". */
+  /** `code` is the platform's or browser's error name, "insecure", "unsupported", "recorder", or the phone's (lib/platform `voiceRecording.start`). */
   onError: (error: { code: string; message?: string }) => void;
+  /** What the words belong to (the agent and the conversation): a change throws away what is under way. */
+  scope?: () => string;
   /** The agent that transcribes a browser's recording, and whether it can (GET /voice/transcribe). */
   endpointRef?: () => string;
   canTranscribe?: (endpointRef: string) => Promise<boolean>;
   transcribe?: (endpointRef: string, file: PickedFile) => Promise<string>;
   release?: (file: PickedFile) => void;
+  /** The host's recorder (lib/platform `voiceRecording`); tests give their own. */
+  recorder?: VoiceRecorder;
 }
 
+export type VoiceRecorder = typeof voiceRecording;
+
 export function createVoiceInput(options: VoiceInputOptions) {
-  const records = voiceRecording.available() && Boolean(options.transcribe && options.canTranscribe && options.endpointRef);
+  const recorder = options.recorder ?? voiceRecording;
+  const records = recorder.available() && Boolean(options.transcribe && options.canTranscribe && options.endpointRef);
   // Whether there is a live preview to turn on and off: the platform's recognizer has one, and a
   // recording host only where it says so (the browser's speech recognition; the desktop has none).
-  const previewable = !records || voiceRecording.previews();
+  const previewable = !records || recorder.previews();
   // Whether a new recording may start: the platform recognizes speech, or the agent transcribes.
   const ready = signal(false);
   const state = signal<VoiceState>("idle");
@@ -51,12 +63,18 @@ export function createVoiceInput(options: VoiceInputOptions) {
   let session: SpeechSession | null = null;
   let recording = false;
   let discard = false;
+  // Bumped by every recording and every discard: what an older one's promises bring is dropped.
+  let attempt = 0;
+  // The host's start still unanswered (and, for a start already thrown away, its letting go):
+  // the host records one at a time and `recorder.cancel()` ends whichever it records, so a newer
+  // start waits for this one to settle rather than be ended by it.
+  let pendingStart: Promise<void> | null = null;
   let elapsedTimer: ReturnType<typeof setInterval> | undefined;
   let stopTimer: ReturnType<typeof setTimeout> | undefined;
   let disposed = false;
 
   if (records) {
-    void voiceRecording
+    void recorder
       .support()
       .then((reason) => {
         if (!disposed) unsupported.set(reason);
@@ -66,8 +84,17 @@ export function createVoiceInput(options: VoiceInputOptions) {
         if (!disposed) unsupported.set("unsupported");
       });
     cleanup(
-      voiceRecording.onPreview((text) => {
+      recorder.onPreview((text) => {
         if (recording && untracked(state) === "recording" && untracked(previewEnabled)) preview.set(text.trim());
+      }),
+    );
+    // The host let go of the microphone and the recording by itself: nothing to stop or send.
+    cleanup(
+      recorder.onEnded((ended) => {
+        if (disposed || !recording) return;
+        attempt += 1;
+        finish();
+        if (ended.reason === "error") options.onError({ code: "failed", message: ended.message });
       }),
     );
     // The mic shows while the agent the composer sends to can transcribe (GET /voice/transcribe).
@@ -150,20 +177,34 @@ export function createVoiceInput(options: VoiceInputOptions) {
       return;
     }
     // Recording until the browser has asked for the microphone, so a second tap does nothing.
+    const mine = ++attempt;
     state.set("recording");
     recording = true;
-    const started = await voiceRecording.start({ preview: previewable && untracked(previewEnabled), lang: locale() || "" }).catch((error: Error) => ({
+    const stale = () => disposed || !recording || mine !== attempt;
+    // An older start thrown away before the host answered: once its answer came and a yes was let
+    // go, the host is free; a cancel meanwhile leaves this one nothing to start.
+    while (pendingStart) {
+      await pendingStart;
+      if (stale()) return;
+    }
+    const request = recorder.start({ preview: previewable && untracked(previewEnabled), lang: locale() || "" }).catch((error: Error) => ({
       ok: false,
       error: "failed",
       message: String(error?.message || ""),
     }));
-    if (disposed || !recording) {
-      if (started.ok) voiceRecording.cancel();
-      return;
-    }
+    const settled: Promise<void> = request.then((answer) => {
+      // A yes for a recording thrown away meanwhile is let go before a newer start may go.
+      if (answer.ok && stale()) recorder.cancel();
+      if (pendingStart === settled) pendingStart = null;
+    });
+    pendingStart = settled;
+    const started = await request;
+    await settled;
+    if (stale()) return;
     if (!started.ok) {
       finish();
-      options.onError({ code: String(started.error || "failed"), message: started.message });
+      // Cancelled by the host (the app left the foreground while asking): nothing went wrong.
+      if (started.error !== "cancelled") options.onError({ code: String(started.error || "failed"), message: started.message });
       return;
     }
     begin();
@@ -177,18 +218,22 @@ export function createVoiceInput(options: VoiceInputOptions) {
   }
 
   async function stopRecording() {
+    const mine = attempt;
+    const current = () => mine === attempt && !disposed;
     const ref = String(options.endpointRef!() || "").trim();
     let file: PickedFile | null = null;
     try {
-      file = await voiceRecording.stop();
-      if (!file || !ref || discard || disposed) return;
+      file = await recorder.stop();
+      if (!file || !ref || !current()) return;
       const text = await options.transcribe!(ref, file);
-      if (text && !discard && !disposed) options.onText(text);
+      // Nothing heard leaves the draft as it was.
+      if (text && current()) options.onText(text);
     } catch (error) {
-      if (!disposed) options.onError({ code: "failed", message: (error as Error)?.message });
+      if (current()) options.onError({ code: "failed", message: (error as Error)?.message });
     } finally {
       if (file) options.release?.(file);
-      if (!disposed) finish();
+      // A discarded recording already finished; a newer one is not this one's to end.
+      if (current()) finish();
     }
   }
 
@@ -211,9 +256,10 @@ export function createVoiceInput(options: VoiceInputOptions) {
   function cancel() {
     if (records) {
       if (!recording) return;
+      attempt += 1;
       discard = true;
       finish();
-      voiceRecording.cancel();
+      recorder.cancel();
       return;
     }
     if (!session) return;
@@ -233,6 +279,17 @@ export function createVoiceInput(options: VoiceInputOptions) {
     previewEnabled.set(next);
     localStore.setItem(PREVIEW_STORAGE_KEY, next ? "on" : "off");
     if (!next) preview.set("");
+  }
+
+  // Another agent or conversation: its draft is not where these words go.
+  if (options.scope) {
+    let scope = untracked(options.scope);
+    effect(() => {
+      const next = options.scope!();
+      if (next === scope) return;
+      scope = next;
+      untracked(cancel);
+    });
   }
 
   cleanup(() => {
@@ -301,6 +358,10 @@ export function voiceErrorKey(error: { code?: string; message?: string }): strin
       return "chat_composer_voice_unsupported";
     case "recorder":
       return "chat_composer_voice_recorder";
+    case "permission-denied":
+      return "chat_composer_voice_permission_denied";
+    case "permission-blocked":
+      return "chat_composer_voice_permission_blocked";
     case "NotAllowedError":
     case "SecurityError":
     case "not-allowed":
@@ -310,6 +371,7 @@ export function voiceErrorKey(error: { code?: string; message?: string }): strin
     case "NotFoundError":
     case "OverconstrainedError":
     case "audio-capture":
+    case "no_mic":
       return "chat_composer_voice_no_mic";
     case "NotReadableError":
     case "AbortError":

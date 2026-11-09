@@ -234,20 +234,25 @@ export function onNotificationPress(listener: (id: string) => void) {
 /* ---------- voice recording ---------- */
 
 /**
- * The host's microphone (feature "voiceRecord"): nsh records no audio on the web and the desktop
- * app's window recognizes no speech, so their hosts record (the page with MediaRecorder, the
- * desktop app with the system's recorder) and keep the recording as a file to upload to the
- * agent's /voice/transcribe. Elsewhere voice input uses nsh's Speech instead.
+ * The host's microphone (feature "voiceRecord"): nsh records no audio on the web and the phone, and
+ * the desktop app's window recognizes no speech, so their hosts record (the page with
+ * MediaRecorder, the desktop app with the system's recorder, the Android app with its native part:
+ * lib/mobileHost.ts) and keep the recording as a file to upload to the agent's /voice/transcribe.
+ * Elsewhere voice input uses nsh's Speech instead.
  */
 export const voiceRecording = {
   available: () => hosted && hasFeature("voiceRecord"),
   /** Whether the host shows the words while it records (feature "voicePreview", the browser's). */
   previews: () => hasFeature("voicePreview"),
-  /** Why the host cannot record: "" when it can, "insecure" or "unsupported" (a browser), "recorder" (no recorder program). */
+  /** Why the host cannot record: "" when it can, "insecure" or "unsupported" (a browser), "recorder" (no recorder program), "no_mic" (a phone without a microphone). */
   async support(): Promise<string> {
     return String((await hostChannel.call("morph.voice.support", {})) ?? "unsupported");
   },
-  /** Opens the microphone (asking for it first); `error` is the browser's error name when it cannot. */
+  /**
+   * Opens the microphone (asking for it first); `error` is the browser's error name when it cannot,
+   * or the phone's `permission-denied` (asked again next time), `permission-blocked` (only the
+   * system's Settings can allow it), `no_mic`, `busy` or `cancelled` (the app left the foreground).
+   */
   async start(options: { preview: boolean; lang: string }): Promise<{ ok: boolean; error?: string; message?: string }> {
     return ((await hostChannel.call("morph.voice.start", options, { timeout: 0 })) ?? { ok: false, error: "failed" }) as {
       ok: boolean;
@@ -265,6 +270,18 @@ export const voiceRecording = {
   /** The live preview of the words while recording, where the browser recognizes speech. */
   onPreview(listener: (text: string) => void) {
     return hostChannel.on("morph.voice.preview", (data: unknown) => listener(String((data as { text?: string })?.text || "")));
+  },
+  /**
+   * Hears the host end a recording (or its upload) by itself, having let go of the microphone and
+   * the file: `reason` "background" (the phone app left the foreground) or "error" (the recorder
+   * failed, `message` says how). The web page and the desktop app never do.
+   */
+  onEnded(listener: (ended: { reason: string; message: string }) => void) {
+    if (!hosted) return () => {};
+    return hostChannel.on("morph.voice.ended", (data: unknown) => {
+      const ended = (data || {}) as { reason?: string; message?: string };
+      listener({ reason: String(ended.reason || ""), message: String(ended.message || "") });
+    });
   },
 };
 

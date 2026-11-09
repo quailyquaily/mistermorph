@@ -344,9 +344,17 @@ func TestAndroidAppIsReleasedWithTheReleaseKeystore(t *testing.T) {
 	if !strings.Contains(buildApp, "web/console-nsh/scripts/build-android.sh --out dist/MrMorph-android.apk") {
 		t.Error("build_app.yaml does not build the Android app")
 	}
+	// build-android.sh patches the manifest nsh links with scripts/android-manifest.mjs.
 	script := readRepoFile(t, "web", "console-nsh", "scripts", "build-android.sh")
-	if !strings.Contains(script, `android:usesCleartextTraffic="true"`) {
+	if !strings.Contains(script, "scripts/android-manifest.mjs") {
+		t.Error("the Android build no longer patches the manifest nsh links")
+	}
+	manifest := readRepoFile(t, "web", "console-nsh", "scripts", "android-manifest.mjs")
+	if !strings.Contains(manifest, `android:usesCleartextTraffic="true"`) {
 		t.Error("the Android build no longer lets the app reach http:// console servers")
+	}
+	if !strings.Contains(manifest, "android.permission.RECORD_AUDIO") {
+		t.Error("the Android build no longer asks for the microphone voice input records with")
 	}
 }
 

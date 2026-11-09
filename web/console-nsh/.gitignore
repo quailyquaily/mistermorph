@@ -1,3 +1,6 @@
 .nsh/
 node_modules/
 dist/
+# The root .gitignore's `mistermorph` (the CLI binary) would hide the Java package's directories.
+!/android/src/com/mistermorph/
+!/android/test/com/mistermorph/

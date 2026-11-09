@@ -2887,11 +2887,17 @@ export function createChatController() {
   /* ---------- voice ---------- */
 
   const voice = createVoiceInput({
-    // In a browser the page records and the agent transcribes (components/chat/voice.ts).
+    // In a browser, the desktop app and the Android app the host records and the agent transcribes
+    // (components/chat/voice.ts).
     endpointRef: () => submitEndpointRef(),
     canTranscribe: async (endpointRef) => (await runtimeApiFetchForEndpoint(endpointRef, "/voice/transcribe"))?.available === true,
     transcribe: (endpointRef, file) => transcribeRecording(endpointRef, file),
     release: (file) => releaseFile(file),
+    // The draft the words go into: switching topic or agent swaps it, and drops what is under way.
+    scope: () => {
+      const scope = composerDraftScope();
+      return `${scope.endpointRef}\n${scope.topicID}`;
+    },
     onText(text) {
       if (composer) {
         composer.insertText(text);
