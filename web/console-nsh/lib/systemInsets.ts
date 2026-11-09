@@ -13,9 +13,12 @@
 //   insets itself;
 // - so are the sheets docked at a side (nsh/base's `Sheet`, the chat's topic and workspace panel on
 //   phones): the panel takes the insets of the edges it touches, inside its own paper, and the
-//   frame's padding never reaches it, so nothing is taken twice.
+//   frame's padding never reaches it, so nothing is taken twice;
+// - and the dropdowns that are sheets at the bottom on touch screens (nsh/base's Menu, Select,
+//   DatePicker): their panel takes the bottom inset under its own padding (`bottomSheetInsets`,
+//   on iOS and the web too, wherever `safeArea()` reports one).
 //
-// iOS, the desktops and the web are unchanged (they pass no insets here). Pure functions, no
+// Otherwise iOS, the desktops and the web are unchanged (they pass no insets here). Pure functions, no
 // state, so the tests can check the numbers.
 
 export interface Edges {
@@ -82,4 +85,40 @@ export function rightSheetInsets(area: Partial<Edges>, keyboard: number): Edges 
     bottom: raised > 0 ? Math.max(raised, size(area.bottom)) : size(area.bottom),
     left: 0,
   };
+}
+
+/** The bottom of a sheet at the bottom of the screen. */
+export interface BottomSheetInsets {
+  /** The sheet's own padding under its last row, plus the room the system takes there. */
+  paddingBottom: number;
+  /** The class's height at most, grown by that room, within the screen below the status bar. */
+  maxHeight: number;
+}
+
+/**
+ * The bottom of a sheet at the bottom of the screen: nsh/base's `Menu`, `Select` and `DatePicker`
+ * on touch screens (their `placement` is the desktops'). The sheet is an overlay over the whole
+ * surface, outside the frame, and nsh pads it with nothing: its last row would sit under the
+ * navigation bar or the gesture handle. So it keeps `padding` (its classes' bottom padding, which
+ * an inline `paddingBottom` replaces) above the bottom inset `area.bottom`, and grows its
+ * `contentMax` (its `max-h-*` class, if any) by that inset, so its rows keep the room they had.
+ *
+ * `keyboard` is the software keyboard's height for a sheet that rises above it (0 for one that
+ * stays down, or while it is hidden): the keyboard covers the navigation bar, so it replaces the
+ * inset rather than adding to it. Either way the sheet ends below the status bar (`area.top`).
+ * `undefined` when there is nothing to clear: the sheet is as its classes draw it.
+ */
+export function bottomSheetInsets(
+  area: Partial<Edges>,
+  keyboard: number,
+  windowHeight: number,
+  padding: number,
+  contentMax?: number,
+): BottomSheetInsets | undefined {
+  const raised = size(keyboard);
+  const clear = raised > 0 ? Math.max(raised, size(area.bottom)) : size(area.bottom);
+  if (clear === 0) return undefined;
+  const room = Math.max(0, size(windowHeight) - size(area.top) - clear);
+  const content = contentMax === undefined ? room : Math.min(size(contentMax), room);
+  return { paddingBottom: clear + size(padding), maxHeight: clear + content };
 }

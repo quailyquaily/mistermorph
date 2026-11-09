@@ -129,7 +129,15 @@ Headless tests prove behaviour, not the look.
   sheet opened from beside a focused field lies under its keyboard. The composer's add menu and
   model picker call `Keyboard.dismiss()` as they open and focus the field again as they close
   (`components/chat/ChatComposer.tsx`); a sheet with a field of its own rises by
-  `keyboardFrame().height` (`components/chat/composerSheets.ts`).
+  `keyboardFrame().height` (`bottomSheetStyle`'s `keyboard`).
+- Those sheets (`Menu`, `Select` and `DatePicker`'s calendar; not `Popover`, which stays at its
+  trigger) cover the surface down to its bottom edge, and nsh pads them with nothing: their last
+  row lies under the navigation bar or gesture handle (iOS's home indicator too). Give every such
+  `popupStyle` `bottomSheetStyle(padding, { style, contentMax })` (`components/ui.tsx`): the bottom
+  inset under the popup class's own bottom padding (an inline `paddingBottom` replaces it, so pass
+  it), its `max-h-*` grown by the inset, the keyboard's height instead of the inset for a sheet
+  that rises, and the desktops' popups unchanged. nsh's `Menu` sheet does not scroll: a long menu
+  needs a `Scroll` of its own (`AgentSwitcher`).
 - Dialogs are an `Overlay` on Android (`DialogLayer`): with it Back hides the keyboard first, then
   closes the dialog.
 - Back (the button, and the edge swipe of gesture navigation, which the system turns into the same

@@ -7,10 +7,10 @@
 // Not ported: the coloured overlay that marked command and skill tokens inside the text (a native
 // text field draws its own text; nothing can be laid exactly over it).
 import type { InputRef, JSX } from "nsh";
-import { batch, cleanup, effect, Image, Keyboard, keyboardFrame, keymap, LayoutAnimation, platform, reduceMotion, safeArea, signal, Text, token, untracked, View, windowSize } from "nsh";
+import { batch, cleanup, effect, Image, Keyboard, keyboardFrame, keymap, LayoutAnimation, platform, reduceMotion, signal, Text, token, untracked, View } from "nsh";
 import { Button as BaseButton, Input, Select } from "nsh/base";
 import { ICONS } from "../icons";
-import { Button, DropdownMenu, Icon, Spinner, Tip, TipButton, type IconName } from "../ui";
+import { bottomSheetStyle, Button, DropdownMenu, Icon, Spinner, Tip, TipButton, type IconName } from "../ui";
 import {
   buildComposerSuggestionItems,
   composerSuggestionInsertText,
@@ -18,7 +18,7 @@ import {
   replaceComposerSuggestionToken,
 } from "../../lib/core/chat-composer-suggestions.js";
 import { nextComposerRows, SINGLE_ROW, type ComposerRows } from "./composerRows";
-import { PROFILE_SHEET_MAX_HEIGHT, sheetKeyboardLift } from "./composerSheets";
+import { PROFILE_SHEET_MAX_HEIGHT, PROFILE_SHEET_PADDING } from "./composerSheets";
 import { t } from "./i18n";
 
 const DEFAULT_MAX_ROWS = 24;
@@ -374,10 +374,13 @@ export function ChatComposer(props: ChatComposerProps) {
   effect(() => {
     if (profileSheetOpen() && keyboardFrame().height === 0) untracked(() => profileSheetLifts.set(true));
   });
+  // Above the navigation bar or gesture handle as every bottom sheet (bottomSheetStyle), and above
+  // the keyboard instead once it lifts: the keyboard covers that bar, so the two are never added.
   const profileSheetStyle = () =>
-    touchSheets() && profileSheetLifts()
-      ? sheetKeyboardLift(keyboardFrame().height, safeArea().top, windowSize().height, PROFILE_SHEET_MAX_HEIGHT)
-      : undefined;
+    bottomSheetStyle(PROFILE_SHEET_PADDING, {
+      contentMax: PROFILE_SHEET_MAX_HEIGHT,
+      keyboard: touchSheets() && profileSheetLifts() ? keyboardFrame().height : 0,
+    });
   function profileSheetOpenChange(open: boolean) {
     batch(() => {
       profileSheetOpen.set(open);

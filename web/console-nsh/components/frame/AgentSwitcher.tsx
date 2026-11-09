@@ -8,7 +8,7 @@ import { Button as BaseButton, Menu, MenuItem, MenuSeparator } from "nsh/base";
 import { translate } from "../../lib/core/context.js";
 import type { EndpointItem } from "../../lib/shell";
 import { FadeText } from "../motion/FadeText";
-import { Icon, Modal, TextField, Tip, TipButton } from "../ui";
+import { bottomSheetStyle, Icon, Modal, TextField, Tip, TipButton } from "../ui";
 
 const t = translate as (key: string, vars?: Record<string, unknown>) => string;
 
@@ -260,6 +260,7 @@ export function AgentSwitcher(props: AgentSwitcherProps) {
             align="start"
             offset={0}
             popupClass="w-68 max-h-96 border border-line-soft bg-card shadow-lg"
+            popupStyle={bottomSheetStyle(0, { contentMax: 384 })}
             trigger={
               <View
                 class="h-14"

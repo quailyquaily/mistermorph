@@ -23,7 +23,7 @@ import {
   TurnCaret,
 } from "../../components/knowledge/parts";
 import { createSlidingSelection, EdgeScroll, MOTION_EASE_CSS, MOTION_NORMAL, motionMs } from "../../components/motion";
-import { Button, Icon, MessageDialog, Modal, Page, SelectField, TextField, type IconName } from "../../components/ui";
+import { bottomSheetStyle, Button, Icon, MessageDialog, Modal, Page, SelectField, TextField, type IconName } from "../../components/ui";
 import { currentLocale, endpointState, formatShortTime, runtimeApiFetch } from "../../lib/core/context.js";
 import { endpointRoutePath } from "../../lib/core/endpoint-routes.js";
 import {
@@ -1061,6 +1061,7 @@ function SinceField(props: { value: string; onChange: (value: string) => void })
       onChange={({ value }) => props.onChange(typeof value === "string" ? value.slice(0, 10) : "")}
       offset={4}
       popupClass="rounded-(--radius) border border-border bg-popover p-3 shadow-md"
+      popupStyle={bottomSheetStyle(12)}
       backdropClass="bg-scrim"
       headerClass="flex-row items-center justify-between pb-2"
       rowClass="flex-row justify-between"
