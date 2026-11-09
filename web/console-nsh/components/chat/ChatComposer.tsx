@@ -89,7 +89,8 @@ export interface ChatComposerProps {
   /** null when there is no live preview. */
   voicePreviewEnabled?: boolean | null;
   voiceLabels?: { recording: string; transcribing: string; discard: string; previewOn: string; previewOff: string };
-  onSubmit?: () => void;
+  /** `keyboardDismissed`: Send lowered the touch keyboard, and the field should stay unfocused. */
+  onSubmit?: (options?: { keyboardDismissed?: boolean }) => void;
   onStop?: () => void;
   onAttach?: () => void;
   onUpload?: () => void;
@@ -349,10 +350,10 @@ export function ChatComposer(props: ChatComposerProps) {
   // back when the sheet closes without leading elsewhere (cancelled, a model chosen), so typing goes
   // on. Upload and Attach go on to a picker or a dialog, and leave the keyboard down. The desktops'
   // popups open at their trigger and leave the field as it is.
-  const touchSheets = () => !platform.desktop;
+  const touchScreen = () => !platform.desktop;
   let refocusAfterSheet = false;
   function sheetOpened() {
-    if (!touchSheets()) return;
+    if (!touchScreen()) return;
     refocusAfterSheet = untracked(focused);
     Keyboard.dismiss();
   }
@@ -382,7 +383,7 @@ export function ChatComposer(props: ChatComposerProps) {
   const profileSheetStyle = () =>
     bottomSheetStyle(PROFILE_SHEET_PADDING, {
       contentMax: PROFILE_SHEET_MAX_HEIGHT,
-      keyboard: touchSheets() && profileSheetLifts() ? keyboardFrame().height : 0,
+      keyboard: touchScreen() && profileSheetLifts() ? keyboardFrame().height : 0,
     });
   function profileSheetOpenChange(open: boolean) {
     batch(() => {
@@ -452,9 +453,25 @@ export function ChatComposer(props: ChatComposerProps) {
   // the stop square. While a message is being sent it is a busy primary button (BusyBeam, busyLook).
   const sendBusy = () => !!props.sending && !props.stopMode;
   const sendEmpty = () => !props.stopMode && value().trim() === "" && !(props.fileItems ?? []).length;
+  // On touch screens a tap on Send lowers the keyboard, as messaging apps do, so the reply is not
+  // under it; the draft stays the parent's to clear or keep. The parent is told, so that it does not
+  // give the field the focus back after the send, whatever the window's width (a tablet lays the
+  // chat out as a desktop does). Stop, Enter and the desktops leave the keyboard as it is.
+  function send() {
+    if (props.stopMode) {
+      props.onStop?.();
+      return;
+    }
+    if (!touchScreen()) {
+      props.onSubmit?.();
+      return;
+    }
+    Keyboard.dismiss();
+    props.onSubmit?.({ keyboardDismissed: true });
+  }
   const sendControl = () => (
     <TipButton
-      onPress={() => (props.stopMode ? props.onStop?.() : props.onSubmit?.())}
+      onPress={send}
       disabled={props.stopMode ? false : props.sendDisabled || sendBusy()}
       accessibilityLabel={props.sendLabel}
       tooltip={<Tip text={props.sendLabel ?? ""} />}
