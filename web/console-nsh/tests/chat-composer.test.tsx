@@ -403,6 +403,50 @@ test("on a phone a sent message clears the field with the keyboard down, and Sto
   expect(await fieldFocused(app)).toBe(true);
 });
 
+// A wide touch screen (a tablet, 1280 wide) lays the chat out as a desktop does, but Send still
+// lowers the keyboard: the send that follows must not raise it again, whether it fails or succeeds.
+test("on a wide touch screen Send lowers the keyboard and the send does not raise it again", async () => {
+  const bodies: any[] = [];
+  let fail = true;
+  const { app } = await openConsole({
+    platform: "android",
+    width: 1280,
+    height: 800,
+    safeArea: BARS,
+    location: "/e/default/chat/topic-1",
+    api: {
+      "GET /proxy:/todo/tasks": { body: { items: [] } },
+      "GET /proxy:/topics": TOPICS,
+      "GET /proxy:/tasks": { body: { items: [] } },
+      "GET /proxy:/llm/profiles": PROFILES,
+      "POST /proxy:/tasks": (request: ApiRequest) => {
+        bodies.push(request.json);
+        if (fail) return { status: 500, body: { error: "queue full" } };
+        return { status: 200, body: { id: "task-1", status: "queued", topic_id: "topic-1" } };
+      },
+      "GET /proxy:/tasks/task-1": { body: { id: "task-1", task: "hello", status: "running", topic_id: "topic-1", created_at: NOW } },
+    },
+  });
+  await app.waitFor("id:chat-composer-input");
+  await app.type("id:chat-composer-input", "hello");
+  expect(await fieldFocused(app)).toBe(true);
+  await app.press("id:chat-composer-send");
+  await app.waitFor("queue full");
+  await app.waitUntil(() => app.enabled("id:chat-composer-send"));
+  expect(bodies.map((body) => body.task)).toEqual(["hello"]);
+  expect(app.value("id:chat-composer-input")).toBe("hello");
+  expect(await fieldFocused(app)).toBe(false);
+
+  fail = false;
+  await app.press("id:chat-composer-input");
+  expect(await fieldFocused(app)).toBe(true);
+  await app.press("id:chat-composer-send");
+  await app.waitUntil(() => app.value("id:chat-composer-input") === "");
+  await app.waitUntil(() => app.enabled("id:chat-composer-send"));
+  expect(bodies.map((body) => body.task)).toEqual(["hello", "hello"]);
+  expect(await fieldFocused(app)).toBe(false);
+});
+
 test("on the desktop Send leaves the field focused", async () => {
   const bodies: any[] = [];
   const { app } = await openConsole({

@@ -2745,7 +2745,9 @@ export function createChatController() {
     }
   }
 
-  async function submitTask() {
+  // `keyboardDismissed`: Send lowered a touch keyboard, so the field is not focused again after the
+  // send, even where the window is wide enough for the desktop layout.
+  async function submitTask(options: { keyboardDismissed?: boolean } = {}) {
     const draftText = String(untracked(taskInput) || "");
     const task = draftText.trim();
     if (!task || untracked(sending) || untracked(composerFilesPending)) return;
@@ -2865,7 +2867,7 @@ export function createChatController() {
     } finally {
       suppressDraftPersistence = false;
       sending.set(false);
-      focusComposerOnDesktop();
+      if (!options.keyboardDismissed) focusComposerOnDesktop();
     }
   }
 

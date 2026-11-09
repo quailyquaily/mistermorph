@@ -88,7 +88,8 @@ export interface ChatComposerProps {
   /** null when there is no live preview. */
   voicePreviewEnabled?: boolean | null;
   voiceLabels?: { recording: string; transcribing: string; discard: string; previewOn: string; previewOff: string };
-  onSubmit?: () => void;
+  /** `keyboardDismissed`: Send lowered the touch keyboard, and the field should stay unfocused. */
+  onSubmit?: (options?: { keyboardDismissed?: boolean }) => void;
   onStop?: () => void;
   onAttach?: () => void;
   onUpload?: () => void;
@@ -452,15 +453,20 @@ export function ChatComposer(props: ChatComposerProps) {
   const sendBusy = () => !!props.sending && !props.stopMode;
   const sendEmpty = () => !props.stopMode && value().trim() === "" && !(props.fileItems ?? []).length;
   // On touch screens a tap on Send lowers the keyboard, as messaging apps do, so the reply is not
-  // under it; the draft stays the parent's to clear or keep. The parent gives the field the focus
-  // back after a send on desktops only. Stop, Enter and the desktops leave the keyboard as it is.
+  // under it; the draft stays the parent's to clear or keep. The parent is told, so that it does not
+  // give the field the focus back after the send, whatever the window's width (a tablet lays the
+  // chat out as a desktop does). Stop, Enter and the desktops leave the keyboard as it is.
   function send() {
     if (props.stopMode) {
       props.onStop?.();
       return;
     }
-    if (touchScreen()) Keyboard.dismiss();
-    props.onSubmit?.();
+    if (!touchScreen()) {
+      props.onSubmit?.();
+      return;
+    }
+    Keyboard.dismiss();
+    props.onSubmit?.({ keyboardDismissed: true });
   }
   const sendControl = () => (
     <TipButton

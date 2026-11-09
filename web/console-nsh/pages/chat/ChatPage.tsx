@@ -79,7 +79,7 @@ function Composer(props: { c: ChatController; landing?: boolean }) {
         previewOn: t("chat_composer_voice_preview_on"),
         previewOff: t("chat_composer_voice_preview_off"),
       }}
-      onSubmit={() => void c.submitTask()}
+      onSubmit={(options) => void c.submitTask(options)}
       onStop={() => void c.stopActiveTask()}
       onAttach={() => c.openWorkspaceBrowser({ pending: true })}
       onUpload={() => void c.openComposerFilePicker()}
