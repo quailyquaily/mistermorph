@@ -69,3 +69,15 @@ Verification: manager independently passed gofmt check, go vet ./..., go test ./
 Dependency change: tempfile, already locked at 3.27.0, promoted to a direct desktop dependency; Cargo.toml/Cargo.lock changed without version changes. No system tools installed.
 
 Not checked: real desktop window/foreground refresh, physical microphone or phone, live transcription, macOS or Windows. UI behavior checked headlessly only. Existing platform gaps remain: desktop recording Linux-only; Android has no voice entry. No linked GitHub issue/PR. Ready for review, not merged into master.
+
+## factory · review · 2026-11-09 16:33
+head: 907cd6f29e3bc7fcb93fd2efc34050765fe3ef11
+verdict: pass
+
+No findings. Codex reviewed all 12 changed files in origin/master...HEAD and verified the prior P1 temporary-directory/symlink truncation and P2 active-recording stop-control findings are fixed. Base merges without conflicts.
+
+Validation: Codex reports the required gofmt/vet/test gate passed; nsh check passed; all 291 web-host tests passed. Isolated desktop recording-module tests: 9 passed, 1 real-microphone test skipped. git diff --check passed. Tests used an absolute throwaway HOME. Manager verified clean worktree and unchanged reviewed HEAD. No installs, dependency downloads, code commits or additional manifest/lock edits. Codex did not locate its review-code skill.
+
+Residual risks: Full desktop application build, real window/foreground refresh, physical microphone/phone and actual transcription were not checked in this review. Desktop recording remains Linux-only; Android's missing entry and macOS/Windows limitations remain. No linked GitHub issue or PR. Moved review/ → ready/ for owner approval; not merged.
+
+Run note: Codex reported accidentally creating an empty lock file outside the review directory, then deleting it; no retained outside-directory change was reported.
