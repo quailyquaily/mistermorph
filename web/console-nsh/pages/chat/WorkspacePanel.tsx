@@ -401,9 +401,11 @@ export function WorkspacePanelTabs(props: {
  * over the whole surface, outside the app's frame, so on Android it runs under the status bar (and
  * the navigation bar) unless it keeps out from under them itself: its paper reaches the edges and
  * its padding takes the bars' insets (lib/systemInsets.ts `rightSheetInsets`), once. Elsewhere
- * there are none.
+ * there are none. The detail panel (ActivityDetailPanel) shares it, `wide`: as wide as a phone, up to
+ * the same 448pt, so output and reasoning get the whole screen; the close in its head and Back
+ * take it away (there is no scrim beside it on a phone to press).
  */
-export function WorkspaceSheet(props: { open: boolean; onClose: () => void; children?: any }) {
+export function WorkspaceSheet(props: { open: boolean; onClose: () => void; wide?: boolean; children?: any }) {
   const padding = () => {
     const insets = rightSheetSystemInsets();
     return insets ? { paddingTop: insets.top, paddingRight: insets.right, paddingBottom: insets.bottom } : undefined;
@@ -416,7 +418,7 @@ export function WorkspaceSheet(props: { open: boolean; onClose: () => void; chil
         if (!open) props.onClose();
       }}
       backdropClass="bg-scrim"
-      popupClass="h-full w-[88%] max-w-md border-l border-line bg-card"
+      popupClass={`h-full ${props.wide ? "w-full" : "w-[88%]"} max-w-md border-l border-line bg-card`}
       popupStyle={padding()}
     >
       {props.children}

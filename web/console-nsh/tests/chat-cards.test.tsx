@@ -157,7 +157,7 @@ test("a password request sends the password once and clears the field", async ()
   expect(app.value("id:chat-elevation-password")).toBe("");
 });
 
-test("the plan and progress fold open, the time shows the duration, and copy copies the reply", async () => {
+test("the plan and progress open in the detail panel, the time shows the duration, and copy copies the reply", async () => {
   const done = task("t1", {
     status: "done",
     finished_at: new Date(Date.parse(NOW) + 125000).toISOString(),
@@ -173,9 +173,9 @@ test("the plan and progress fold open, the time shows the duration, and copy cop
   });
   await app.waitFor("id:chat-status-card");
   await app.press("id:chat-status-plan");
-  await app.waitFor("Look around");
+  await app.waitFor("id:chat-detail-panel >> text:Look around");
   await app.press("id:chat-status-activity");
-  await app.waitFor("du -sh");
+  await app.waitFor("id:chat-detail-panel >> text:du -sh");
   await app.waitFor("Look around", { state: "gone" });
   // The last reply shows how long it thought.
   await app.waitFor("2m5s");

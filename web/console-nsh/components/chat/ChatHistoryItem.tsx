@@ -1,7 +1,8 @@
 // One message of the conversation (the Vue console's ChatHistoryItem): a person's message with its
-// files, or the agent's reply with what it did on the way (status card, workers, reasoning, step
-// messages, received files, questions, password requests, Agent Link messages), its reply text or
-// the wait before it, an approval it asks for, and copy.
+// files, or the agent's reply with what it did on the way (status card, workers, step messages,
+// received files, questions, password requests, Agent Link messages), its reply text or the wait
+// before it, an approval it asks for, and copy. The plan, progress, reasoning and workers are
+// compact entry points only: their details open in the temporary panel beside the conversation.
 //
 // It is a List row: it is made once per cell and shows whatever item the cell holds now, so every
 // value is read from `props.item` in a binding and per-item state lives in ChatRowContext.
@@ -27,6 +28,7 @@ import { ICONS } from "../icons";
 import { Button, Icon, StatusMark, Tip, TipButton } from "../ui";
 import { approvalParameterEntries, skillInstallApproval } from "../../lib/core/chat-approvals.js";
 import { agentLinkMessages, insightMessages, planStepMessages, pollingActionWord } from "../../lib/core/chat-task-history.js";
+import { activityDetailKey, activityDetailWorkerID, type ActivityDetailRef } from "./activityDetail";
 import type { ArtifactPreviews } from "./ArtifactPreviewCard";
 import { ChatAgentLinkExchange } from "./ChatAgentLinkExchange";
 import { ChatElevationCard, type ElevationAnswer, type ElevationState } from "./ChatElevationCard";
@@ -52,17 +54,20 @@ export interface ChatRowContext {
   copiedItemID: () => string;
   /** Counts successful copies, so a copy repeated while the check still shows plays again. */
   copySeq: () => number;
-  expandedPanel: (itemID: string) => string;
+  /** What the temporary detail panel shows (activityDetail.ts), or null. */
+  detail: () => ActivityDetailRef | null;
+  /** The entry point (`activityDetailKey`) that takes the keyboard focus back now, "" otherwise. */
+  focusReturn: () => string;
   autoPreviewItemID: () => string;
   previews: ArtifactPreviews;
   receivedFiles: ReceivedFiles;
   questions: KeyedState<QuestionState>;
   elevations: KeyedState<ElevationState>;
-  workers: KeyedState<string>;
   folds: KeyedState<boolean>;
   onCopy: (item: HistoryItem) => void;
   onPreviewFile: (item: any) => void;
-  onToggleStatus: (itemID: string, panel: string) => void;
+  /** Opens an entry in the detail panel, or closes it when it already shows that entry. */
+  onOpenDetail: (detail: ActivityDetailRef) => void;
   onTimeClick: (item: HistoryItem) => void;
   onApprove: (item: HistoryItem) => void;
   onDeny: (item: HistoryItem) => void;
@@ -279,7 +284,21 @@ export function ChatHistoryItem(props: { item: HistoryItem; ctx: ChatRowContext;
   const statusText = () => String(statusIsDuration() ? item()?.durationText : item()?.timeText || "").trim();
   const statusLabel = () => (statusIsDuration() ? t("chat_task_duration_thought", { duration: statusText() }) : statusText());
   const statusInteractive = () => isAgent() && String(item()?.durationText || item()?.rawJSON || "").trim() !== "";
-  const expandedPanel = () => ctx.expandedPanel(item()?.id);
+  // This reply's entry the detail panel shows, and the one that takes the focus back as it closes.
+  const shownDetail = () => {
+    const detail = ctx.detail();
+    return detail && detail.itemID === item()?.id ? detail : null;
+  };
+  const selectedPanel = () => (shownDetail()?.kind === "worker" ? "" : (shownDetail()?.kind ?? ""));
+  const selectedWorker = () => (shownDetail()?.kind === "worker" ? String(shownDetail()?.workerID || "") : "");
+  const focusEntry = (kind: string, workerID = "") => {
+    const key = ctx.focusReturn();
+    return key !== "" && key === activityDetailKey({ itemID: item()?.id, kind: kind as ActivityDetailRef["kind"], workerID });
+  };
+  const focusPanel = () => (["plan", "activity", "reasoning"].find((kind) => focusEntry(kind)) ?? "");
+  const focusWorker = () => activityDetailWorkerID(ctx.focusReturn(), item()?.id);
+  const openDetail = (kind: ActivityDetailRef["kind"], workerID?: string) =>
+    ctx.onOpenDetail({ itemID: item()?.id, taskID: String(item()?.taskId || "").trim() || undefined, kind, workerID });
   const autoPreview = () => item()?.id !== "" && item()?.id === ctx.autoPreviewItemID();
   const copied = () => item()?.id !== "" && item()?.id === ctx.copiedItemID();
 
@@ -317,25 +336,21 @@ export function ChatHistoryItem(props: { item: HistoryItem; ctx: ChatRowContext;
           activity={taskActivity()}
           hasReasoning={reasoningVisible()}
           status={item()?.status}
-          expandedPanel={expandedPanel()}
-          onToggle={(panel) => ctx.onToggleStatus(item()?.id, panel)}
+          selectedPanel={selectedPanel()}
+          focusPanel={focusPanel()}
+          onOpen={(panel) => openDetail(panel as ActivityDetailRef["kind"])}
           summaryPrefix={statusMark(true)}
         />
       </If>
       <If when={item()?.activity?.workers?.length}>
-        <ChatWorkerRoster itemID={item()?.id} activity={item()?.activity} status={item()?.status} selected={ctx.workers} />
-      </If>
-      <If when={reasoningVisible() && expandedPanel() === "reasoning"}>
-        <View class="rounded-(--radius) border border-line-faint bg-paper p-3" testID="chat-reasoning">
-          <ChatRichContent
-            source={String(item()?.reasoning ?? "")}
-            ownerKey={`${item()?.id}:reasoning`}
-            endpointRef={ctx.endpointRef()}
-            fallbackTopicID={ctx.topicID()}
-            streaming={streaming()}
-            previews={ctx.previews}
-          />
-        </View>
+        <ChatWorkerRoster
+          itemID={item()?.id}
+          activity={item()?.activity}
+          status={item()?.status}
+          selectedID={selectedWorker()}
+          focusID={focusWorker()}
+          onSelect={(workerID) => openDetail("worker", workerID)}
+        />
       </If>
       <Each of={stepMessages()} key={(message) => message.key}>
         {(message) => (

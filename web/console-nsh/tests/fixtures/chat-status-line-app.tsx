@@ -40,8 +40,8 @@ function Gallery() {
             activity={line.activity}
             hasReasoning={line.reasoning}
             status={line.status}
-            expandedPanel=""
-            onToggle={() => {}}
+            selectedPanel=""
+            onOpen={() => {}}
             summaryPrefix={
               line.mark ? (
                 <ChatStatusMark
