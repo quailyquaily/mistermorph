@@ -395,12 +395,26 @@ h1{margin:0;font-size:1.06rem;font-weight:600;letter-spacing:-.005em}
 .head h2 b{font-size:.84rem;font-weight:400;color:var(--ink-3)}
 .avg{display:block;min-height:1.4em;margin-top:1px;font-size:.76rem;line-height:1.4;color:var(--ink-3)}
 .items{list-style:none;margin:14px 0 0;padding:0;display:flex;flex-direction:column;gap:6px}
-.item{display:flex;flex-direction:column;gap:2px;margin:0 -8px;padding:6px 8px 7px;border-radius:5px;text-decoration:none;transition:background-color 0s}
+.item{position:relative;display:flex;flex-direction:column;gap:2px;margin:0 -8px;padding:6px 8px 7px;border-radius:5px;transition:background-color 0s}
+/* The title's link covers the whole entry; the ID button sits above it. */
+.item a.t{text-decoration:none}
+.item a.t::after{content:"";position:absolute;inset:0;border-radius:inherit}
+.item a.t:focus-visible{outline:none}
+.item:has(a.t:focus-visible){outline:1.5px solid color-mix(in srgb,var(--ink) 50%,transparent);outline-offset:2px}
 /* Calm hover: the tint comes in after a beat and leaves at once, so a sweep flashes nothing. */
 @media (hover:hover){.item:hover{background:var(--tint);transition:background-color .14s ease-out 60ms}}
 .meta{display:flex;justify-content:space-between;gap:8px;font-size:.74rem;line-height:1.4;color:var(--ink-3)}
 .t{font-size:.92rem;font-weight:500;line-height:1.36;text-wrap:pretty;overflow-wrap:anywhere}
 .st.side .t{font-weight:400;color:var(--ink-2)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+/* An ID copies itself. The check draws in one stroke and fades; the label never changes width. */
+.id{position:relative;z-index:1;padding:0;border:0;background:none;font:inherit;color:inherit;cursor:copy;border-radius:2px}
+@media (hover:hover){.id:hover{color:var(--ink);text-decoration:underline dotted;text-decoration-color:var(--rule);text-underline-offset:3px}}
+.id .ok{position:absolute;left:calc(100% + 3px);top:50%;width:10px;height:10px;margin-top:-5px;fill:none;stroke:var(--ok);stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;opacity:0;pointer-events:none;transition:opacity .2s}
+.id.copied .ok{opacity:1;transition:none}
+/* pathLength=1, so a dash of 1 is the whole stroke: the offset runs 1 → 0 to draw it. */
+.id .ok path{stroke-dasharray:1;stroke-dashoffset:1;transition:stroke-dashoffset 0s .2s}
+.id.copied .ok path{stroke-dashoffset:0;transition:stroke-dashoffset .26s cubic-bezier(.2,0,0,1)}
 .ask{margin-top:1px;font-size:.8rem;line-height:1.35;color:var(--gate)}
 .bad,.problems{font-size:.8rem;line-height:1.35;color:var(--stop)}
 .problems{margin:6px 0 0}
@@ -434,7 +448,33 @@ h1{margin:0;font-size:1.06rem;font-weight:600;letter-spacing:-.005em}
 .bar{position:sticky;top:0;z-index:1;display:flex;justify-content:space-between;align-items:center;min-height:44px;padding:0 30px;background:var(--plate);font-size:.82rem;color:var(--ink-3)}
 .close{display:flex;align-items:center;min-height:44px;padding-left:16px;text-decoration:none}
 @media (hover:hover){.close:hover{color:var(--ink)}}
-.dr{padding:8px 30px 44px}
+.dr{min-width:0;padding:8px 30px 44px}
+/* A long thread gets an index beside it, sticky under the bar, named by kind or first words (the
+   time is in the thread, and in each name's tooltip). Each mark says what a section is:
+   your notes solid ink, other people's hollow, the factory's reports pale, a plan a square,
+   a review a diamond in its verdict's colour, a question in the colour of what waits for you. */
+.drawer.has-toc{width:min(860px,100%)}
+.cols{display:grid;grid-template-columns:212px minmax(0,1fr)}
+.has-toc .dr{padding-left:22px}
+.toc{position:sticky;top:44px;align-self:start;max-height:calc(100dvh - 44px);overflow-y:auto;overscroll-behavior:contain;scrollbar-width:none;padding:14px 0 24px 30px}
+.toc ol{list-style:none;margin:0;padding:0;border-left:var(--hair) solid var(--rule-soft)}
+.toc a{position:relative;display:grid;grid-template-columns:8px minmax(0,1fr);gap:8px;align-items:center;margin-left:calc(-1 * var(--hair));padding:4px 6px 4px 10px;border-left:var(--hair) solid transparent;font-size:.78rem;line-height:1.35;color:var(--ink-3);text-decoration:none}
+.toc a span{overflow:hidden;white-space:nowrap}
+.toc a.owner span{color:var(--ink-2)}
+/* A name that does not fit fades out over its last letters; one that fits is left alone. */
+.toc a span.cut{mask-image:linear-gradient(to right,#000 calc(100% - 2.4em),transparent)}
+@media (hover:hover){.toc a:hover span{color:var(--ink)}}
+.toc a[aria-current]{border-left-color:var(--ink)}
+.toc a[aria-current] span{color:var(--ink);font-weight:500}
+.toc i{justify-self:center;width:7px;height:7px;border-radius:50%;background:var(--rule)}
+.toc .owner i{background:var(--ink)}
+.toc .other i{background:none;border:var(--hair) solid var(--ink-3)}
+.toc .plan i{border-radius:1px;background:var(--ink-3)}
+.toc .review i{width:6px;height:6px;border-radius:1px;transform:rotate(45deg);background:var(--ink-3)}
+.toc .review.pass i{background:var(--ok)}
+.toc .review.fix i{background:var(--stop)}
+.toc .question i{background:var(--gate)}
+.msg{scroll-margin-top:52px}
 .dr h2{margin:0;font-size:1.32rem;font-weight:600;line-height:1.25;letter-spacing:-.012em;text-wrap:balance}
 .call{margin:6px 0 0;font-size:.9rem;color:var(--gate)}
 .trail{list-style:none;display:flex;flex-wrap:wrap;gap:3px 0;margin:14px 0 0;padding:0;font-size:.78rem;color:var(--ink-3)}
@@ -480,6 +520,17 @@ h1{margin:0;font-size:1.06rem;font-weight:600;letter-spacing:-.005em}
 .top .drawn{margin-left:0;width:100%}
 .bar{padding:0 18px}.dr{padding:6px 18px 36px}
 }
+/* On a narrow drawer the index is a strip of marks under the bar; names are kept for screen readers. */
+@media (max-width:720px){
+.cols{display:block}
+.has-toc .dr{padding-left:18px}
+.toc{top:44px;z-index:1;max-height:none;overflow:auto hidden;padding:0 12px;background:var(--plate);border-bottom:var(--hair) solid var(--rule-soft)}
+.toc ol{display:flex;border:0}
+.toc a{display:flex;justify-content:center;align-items:center;width:24px;height:30px;margin:0;padding:0;border:0;border-bottom:1.5px solid transparent}
+.toc a span{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+.toc a[aria-current]{border-bottom-color:var(--ink)}
+.msg{scroll-margin-top:84px}
+}
 @media (max-width:480px){.sheet{padding-block:18px 28px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}}
 @media (prefers-reduced-motion:reduce){*{transition-duration:0s!important;transition-delay:0s!important}}
 """
@@ -493,6 +544,9 @@ STATIONS = [
     ("done", "Done", "side end"),
 ]
 
+# Announces a copied ID to screen readers.
+SAY = "<p id=say class=sr aria-live=polite></p>"
+
 # Everything works without this. Esc closes a thread and focus goes back to the
 # entry that opened it. --hair is one device pixel in CSS px, so lines stay crisp
 # at 1.25x and 1.5x, rebuilt when the window moves to another density or zooms.
@@ -500,26 +554,95 @@ SCRIPT = """
 function hair(){const d=devicePixelRatio||1;document.documentElement.style.setProperty('--hair',Math.max(1,Math.floor(d+1e-6))/d+'px');matchMedia('(resolution:'+d+'dppx)').addEventListener('change',hair,{once:true})}
 hair();
 let opener=null;
-document.addEventListener('click',e=>{const a=e.target.closest('a.item');if(a)opener=a});
+document.addEventListener('click',e=>{const a=e.target.closest('.item a.t');if(a)opener=a});
+// Copy an ID. The check draws itself once; a second click draws it again. Without the
+// clipboard API, or when it refuses (an old browser, a page not served over https), a hidden
+// field copies it.
+const say=document.getElementById('say');
+function copy(text){
+  return navigator.clipboard&&isSecureContext?navigator.clipboard.writeText(text).catch(()=>copyField(text)):copyField(text);
+}
+function copyField(text){
+  const t=document.createElement('textarea');t.value=text;t.setAttribute('readonly','');t.style.cssText='position:fixed;opacity:0';
+  document.body.append(t);t.select();const ok=document.execCommand('copy');t.remove();
+  return ok?Promise.resolve():Promise.reject();
+}
+document.addEventListener('click',e=>{
+  const b=e.target.closest('button.id');if(!b)return;
+  copy(b.dataset.copy).then(()=>{
+    b.classList.remove('copied');void b.offsetWidth;b.classList.add('copied');
+    clearTimeout(b._t);b._t=setTimeout(()=>b.classList.remove('copied'),1400);
+    say.textContent='';say.textContent='Copied '+b.dataset.copy;
+  },()=>{say.textContent='Could not copy '+b.dataset.copy});
+});
+// The section index. Its links keep the item's own hash, because the drawer is open only while
+// its id is the target; a click scrolls the drawer instead. The current section is the last one
+// whose top has passed under the bar, read once a frame while the drawer scrolls.
+for(const d of document.querySelectorAll('.drawer.has-toc')){
+  const nav=d.querySelector('.toc'),links=[...nav.querySelectorAll('a')],secs=links.map(a=>document.getElementById(a.dataset.sec));
+  let frame=0,held=null;
+  const margin=()=>parseFloat(getComputedStyle(secs[0]).scrollMarginTop)||0;
+  const mark=a=>{
+    for(const x of links)x===a?x.setAttribute('aria-current','true'):x.removeAttribute('aria-current');
+    // Keep the mark in view when the index scrolls itself: down a tall column, or along the phone strip.
+    if(nav.scrollHeight>nav.clientHeight+1){const t=a.offsetTop,h=a.offsetHeight;if(t<nav.scrollTop||t+h>nav.scrollTop+nav.clientHeight)nav.scrollTop=t-(nav.clientHeight-h)/2}
+    if(nav.scrollWidth>nav.clientWidth+1){const l=a.offsetLeft,w=a.offsetWidth;if(l<nav.scrollLeft||l+w>nav.scrollLeft+nav.clientWidth)nav.scrollLeft=l-(nav.clientWidth-w)/2}
+  };
+  const update=()=>{
+    frame=0;if(held)return;
+    const line=d.getBoundingClientRect().top+margin()+24;let cur=0;
+    secs.forEach((s,i)=>{if(s.getBoundingClientRect().top<=line)cur=i});
+    if(d.scrollTop+d.clientHeight>=d.scrollHeight-2)cur=secs.length-1;
+    mark(links[cur]);
+  };
+  d.addEventListener('scroll',()=>{if(!frame)frame=requestAnimationFrame(update)},{passive:true});
+  // A clicked section stays marked, even one too near the end to reach the top, until the
+  // reader scrolls on their own.
+  for(const ev of ['wheel','touchstart','keydown','pointerdown'])d.addEventListener(ev,e=>{if(!nav.contains(e.target))held=null},{passive:true});
+  nav.addEventListener('click',e=>{
+    const a=e.target.closest('a');if(!a)return;e.preventDefault();
+    const s=document.getElementById(a.dataset.sec),dist=s.getBoundingClientRect().top-d.getBoundingClientRect().top-margin();
+    // Glide over a short way; jump a long one, so the view never trails the click.
+    const smooth=Math.abs(dist)<d.clientHeight*1.5&&!matchMedia('(prefers-reduced-motion:reduce)').matches;
+    held=a;mark(a);d.scrollTo({top:d.scrollTop+dist,behavior:smooth?'smooth':'auto'});
+  });
+  // Fade only the names that are cut; the column's width is fixed, so once is enough.
+  for(const n of nav.querySelectorAll('span'))n.classList.toggle('cut',n.scrollWidth>n.clientWidth+1);
+  update();
+}
 addEventListener('keydown',e=>{if(e.key==='Escape'&&location.hash.startsWith('#item-'))location.hash='closed'});
 addEventListener('hashchange',()=>{if(!location.hash.startsWith('#item-')&&opener){opener.focus({preventScroll:true});opener=null}});
 """
 
 
+def id_button(label):
+    """An item's ID, which copies itself: FT16 is what people paste into chats and commits.
+
+    An unnumbered item ("new") has no ID yet, so it stays text.
+    """
+    if not re.fullmatch(r"[A-Z]+\d+", label):
+        return f"<span>{label}</span>"
+    return (
+        f'<button type=button class=id data-copy="{label}" title="Copy {label}">{label}'
+        '<svg class=ok viewBox="0 0 10 10" aria-hidden=true><path pathLength=1 d="M1.5 5.5 4 8l5-6"/></svg></button>')
+
+
 def render_item(it, now):
+    """An entry. The title is the link, stretched over the entry, so the ID button can sit
+    beside it: a button inside a link is invalid HTML, and its click would open the item."""
     e = html.escape
-    label = it["label"]
+    label = id_button(it["label"])
     if rounds(it) > 1:
-        label += f" · round {it['round']}"
+        label += f"<span> · round {it['round']}</span>"
     cues = ""
     if it["turn"] == "you":
         cues += f"<span class=ask>{ASK[it['folder']]}</span>"
     if it["problems"]:
         cues += "<span class=bad>Check the file</span>"
     return (
-        f'<li><a class=item href="#item-{it["id"]}"><span class=meta><span>{label}</span>'
+        f'<li class=item><span class=meta><span>{label}</span>'
         f'<time title="{when(it["since"])}">{age(it["since"], now)}</time></span>'
-        f'<span class=t>{e(it["title"])}</span>{cues}</a></li>')
+        f'<a class=t href="#item-{it["id"]}">{e(it["title"])}</a>{cues}</li>')
 
 
 def render_station(name, cls, items, shown, avg, now, archive=False):
@@ -557,7 +680,43 @@ def render_trail(it, now):
     return "<ol class=trail>" + "".join(out) + "</ol>"
 
 
-def render_detail(it, now):
+# A thread this long gets an index of its sections beside it.
+TOC_FROM = 3
+
+
+def gist(body):
+    """A section's first words, without Markdown: what tells one report or note from the next."""
+    for line in body.splitlines():
+        text = re.sub(r"[`*]", "", re.sub(r"^\s*(?:#+|[-*]|\d+\.)\s+", "", line)).strip()
+        if text:
+            return text[:80]
+    return ""
+
+
+def section_kind(s, owners):
+    """How the index marks a section: its classes and its name there. A plan, review or
+    question is named by its kind; a report or note by its first words, since its mark
+    already says who wrote it."""
+    if s["kind"] == "review":
+        v = re.search(r"^verdict:\s*(pass|fix)\b", s["body"], re.M)
+        return ("review " + v.group(1), f"Review · {v.group(1)}") if v else ("review", "Review")
+    if s["kind"] in ("plan", "question"):
+        return s["kind"], s["kind"].capitalize()
+    cls = "factory" if s["who"] == "factory" else "owner" if s["who"] in owners else "other"
+    return cls, gist(s["body"]) or s["who"]
+
+
+def render_toc(it, owners):
+    out = []
+    for i, s in enumerate(it["sections"]):
+        cls, name = section_kind(s, owners)
+        out.append(
+            f'<li><a class="{cls}" href="#item-{it["id"]}" data-sec="s{it["id"]}-{i}" title="{html.escape(s["who"])} · {html.escape(s["time"])}">'
+            f'<i></i><span>{html.escape(name)}</span></a></li>')
+    return '<nav class=toc aria-label="Sections"><ol>' + "".join(out) + "</ol></nav>"
+
+
+def render_detail(it, now, owners):
     e = html.escape
     call = ""
     if it["turn"] == "you":
@@ -571,18 +730,19 @@ def render_detail(it, now):
         branch = f'<a href="{e(it["link"])}" rel="noopener">{code}</a>' if it["link"] else f"<span>{code}</span>"
         branch = f"<div class=facts>{branch}</div>"
     thread = []
-    for s in it["sections"]:
+    for i, s in enumerate(it["sections"]):
         kind = {"plan": "Plan", "review": "Review", "question": "Question"}.get(s["kind"], "")
         kind = f"<em>{kind}</em>" if kind else ""
         thread.append(
-            f'<section class=msg><div class=who><b>{e(s["who"])}</b>{kind}<time>{e(s["time"])}</time></div>'
+            f'<section class=msg id="s{it["id"]}-{i}"><div class=who><b>{e(s["who"])}</b>{kind}<time>{e(s["time"])}</time></div>'
             f'<div class=body>{body_html(s["body"], s["kind"] == "review")}</div></section>')
+    toc = render_toc(it, owners) if len(it["sections"]) >= TOC_FROM else ""
     return (
         f'<article class=detail id="item-{it["id"]}" aria-label="{e(it["title"])}">'
-        '<a class=shade href="#closed" tabindex=-1 aria-hidden=true></a><div class=drawer>'
-        f'<div class=bar><span>{it["label"]} · {it["folder"]}</span><a class=close href="#closed">Close</a></div>'
-        f'<div class=dr><h2>{e(it["title"])}</h2>{call}{problems}{render_trail(it, now)}{branch}'
-        f'<div class=thread>{"".join(thread)}</div></div></div></article>')
+        f'<a class=shade href="#closed" tabindex=-1 aria-hidden=true></a><div class="drawer{" has-toc" if toc else ""}">'
+        f'<div class=bar><span>{id_button(it["label"])} · {it["folder"]}</span><a class=close href="#closed">Close</a></div>'
+        f'<div class=cols>{toc}<div class=dr><h2>{e(it["title"])}</h2>{call}{problems}{render_trail(it, now)}{branch}'
+        f'<div class=thread>{"".join(thread)}</div></div></div></div></article>')
 
 
 def render(cfg, name, items, archive=False):
@@ -617,8 +777,9 @@ def render(cfg, name, items, archive=False):
         out.append(render_station(title, cls, by[key], shown, avg, now, archive))
     out.append("</main></div>")
     older = by["done"][DONE_SHOWN:] if archive else []
-    out += [render_detail(it, now) for it in items if it not in older]
-    out.append(f"<script>{SCRIPT}</script></body></html>\n")
+    owners = set(cfg.get("owners", []))
+    out += [render_detail(it, now, owners) for it in items if it not in older]
+    out.append(f"{SAY}<script>{SCRIPT}</script></body></html>\n")
     return "".join(out)
 
 
@@ -645,9 +806,9 @@ def render_archive(cfg, name, items, board):
                 title = f'<a href="{e(cfg["github_url"])}/blob/{BOARD_BRANCH}/{e(it["file"])}" rel="noopener">{title}</a>'
             day = dt.datetime.fromtimestamp(it["changed"], TZ) if it["changed"] else None
             date = f"{day:%b} {day.day}" if day else ""
-            out.append(f'<li><span class=id>{it["label"]}</span><span class=t>{title}</span><time title="{when(it["changed"])}">{date}</time></li>')
+            out.append(f'<li>{id_button(it["label"])}<span class=t>{title}</span><time title="{when(it["changed"])}">{date}</time></li>')
         out.append("</ul></details>")
-    out.append(f"</main></div><script>{SCRIPT}</script></body></html>\n")
+    out.append(f"</main></div>{SAY}<script>{SCRIPT}</script></body></html>\n")
     return "".join(out)
 
 
