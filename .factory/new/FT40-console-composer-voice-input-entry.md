@@ -49,3 +49,6 @@ notes:
 Validation: Codex reviewed all 10 changed files in origin/master...HEAD. Required gofmt/vet/test gate passed; nsh check passed; nsh web-host tests passed 290/290. Isolated recording-module checks passed 6 with 1 real-microphone test skipped; UI failure reproduction passed. Scripted tests used an absolute throwaway HOME; no live external API calls. Manager checked finding locations and clean worktree. No code commits or installs.
 
 Residual risks: No real desktop window, physical device/microphone or actual transcription validation. Android has no entry and macOS/Windows only expose the missing-recorder explanation; these existing platform gaps remain, not new regressions. No linked GitHub issue or PR was present. Item stays in review/ for owner decision; add a note and move it to new/ for a fix round.
+
+## factory · 2026-11-09 15:48
+Owner requested: “move ft40 to new.” Moved from review/ to new/ for a fix round addressing the recorded review findings. Preserve the existing item branch and review history.
