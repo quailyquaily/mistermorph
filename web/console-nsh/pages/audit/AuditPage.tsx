@@ -43,6 +43,7 @@ import { AuditBadge, hint, ObserveSection, t } from "../../components/observe/pa
 import { createSlidingSelection, SCROLLBAR } from "../../components/motion";
 import { gutterX } from "../../components/frame/metrics";
 import { Button, EmptyState, Icon, Page, ProgressBar, SidePane, Skeleton, TextField, TipButton } from "../../components/ui";
+import { MobileBarSpacer } from "../../components/frame/mobileBar";
 
 const AUDIT_ITEMS_PER_PAGE = 50;
 const TASKS_PAGE_SIZE = 20;
@@ -719,6 +720,7 @@ export function AuditPage() {
             }
           >
             <List
+              footer={MobileBarSpacer}
               each={ledgerRows()}
               keyExtractor={(row) => row.key}
               estimatedItemSize={110}
@@ -791,6 +793,7 @@ export function AuditPage() {
               action={<Button variant="plain" size="sm" label={t("tasks_empty_action")} onPress={goChat} />}
             />
           </If>
+          <MobileBarSpacer />
         </Scroll>
       </View>
     );
@@ -889,6 +892,7 @@ export function AuditPage() {
               <RawJsonDialogContent json={paneJSON()} testID="audit-pane-json" />
             </DetailSection>
           </If>
+          <MobileBarSpacer />
         </Scroll>
       </View>
     );
@@ -920,6 +924,7 @@ export function AuditPage() {
               </If>
             </If>
           </DetailSection>
+          <MobileBarSpacer />
         </Scroll>
       </View>
     );
@@ -1016,6 +1021,7 @@ export function AuditPage() {
                   testID="audit-tasks"
                 />
               </View>
+              <MobileBarSpacer />
             </Scroll>
           </View>
         </If>

@@ -18,6 +18,7 @@ import { gutterX, gutterY } from "../../components/frame/metrics";
 import { isMobile } from "../../lib/shell";
 import type { IconName } from "../../components/icons";
 import { Button, Icon, Page, ProgressBar, SelectField, Skeleton, TextField } from "../../components/ui";
+import { MobileBarSpacer } from "../../components/frame/mobileBar";
 
 const LIMIT_OPTIONS = [100, 300, 1000];
 const LEVEL_OPTIONS = ["", "issues", "error", "warn", "info", "debug"];
@@ -672,6 +673,7 @@ export function LogsPage() {
             </View>
           </If>
           <List
+            footer={MobileBarSpacer}
             ref={list}
             each={rows()}
             keyExtractor={(row) => row.key}

@@ -104,6 +104,16 @@ import PhWarningOctagon from "../assets/icons/warning-octagon.svg";
 import PhX from "../assets/icons/x.svg";
 import PhXCircle from "../assets/icons/x-circle.svg";
 
+import PhChatsFill from "../assets/icons/chats-fill.svg";
+import PhUsersFill from "../assets/icons/users-fill.svg";
+import PhListChecksFill from "../assets/icons/list-checks-fill.svg";
+import PhSquaresFourFill from "../assets/icons/squares-four-fill.svg";
+import PhBrainFill from "../assets/icons/brain-fill.svg";
+import PhMagicWandFill from "../assets/icons/magic-wand-fill.svg";
+import PhChartBarFill from "../assets/icons/chart-bar-fill.svg";
+import PhFingerprintFill from "../assets/icons/fingerprint-fill.svg";
+import PhGearSixFill from "../assets/icons/gear-six-fill.svg";
+
 export const ICONS = {
   /** The ui-kit's clear-field glyph (a backspace key with a cross), Vue's AppIconEditorDelete. */
   AppIconEditorDelete,
@@ -211,3 +221,16 @@ export const ICONS = {
 } satisfies Record<string, ImageAsset>;
 
 export type IconName = keyof typeof ICONS;
+
+/** The fill weight of the navigation's icons (Phosphor 2.2.1): the phone bar's selected slot. */
+export const FILLED_ICONS: Partial<Record<IconName, ImageAsset>> = {
+  PhChats: PhChatsFill,
+  PhUsers: PhUsersFill,
+  PhListChecks: PhListChecksFill,
+  PhSquaresFour: PhSquaresFourFill,
+  PhBrain: PhBrainFill,
+  PhMagicWand: PhMagicWandFill,
+  PhChartBar: PhChartBarFill,
+  PhFingerprint: PhFingerprintFill,
+  PhGearSix: PhGearSixFill,
+};

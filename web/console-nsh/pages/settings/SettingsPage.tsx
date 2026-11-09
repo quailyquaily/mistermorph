@@ -38,6 +38,7 @@ import { UnsupportedSection } from "./sections/UnsupportedSection";
 import { RuntimePanel } from "./RuntimePanel";
 import { SettingsAppPanel } from "../../components/settings/SettingsAppPanel";
 import { SettingsCreditsPanel } from "../../components/settings/SettingsCreditsPanel";
+import { MobileBarSpacer } from "../../components/frame/mobileBar";
 
 function routeSection() {
   const value = currentRoute()?.params?.section as unknown;
@@ -373,6 +374,7 @@ export function SettingsPage() {
             </View>
           </If>
         </View>
+        <MobileBarSpacer />
       </Scroll>
     </View>
   );
@@ -426,6 +428,7 @@ export function SettingsPage() {
           }
         </Each>
       </View>
+      <MobileBarSpacer />
     </Scroll>
   );
 

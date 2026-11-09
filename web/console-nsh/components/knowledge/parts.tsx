@@ -17,6 +17,7 @@ import { isMobile } from "../../lib/shell";
 import { onSystemBack } from "../../lib/systemBack";
 import { createScrollEdges, FadeText, MOTION_EASE_CSS, MOTION_NORMAL, motionMs, SCROLLBAR } from "../motion";
 import { Icon, TextField, type IconName } from "../ui";
+import { MobileBarSpacer } from "../frame/mobileBar";
 
 /** translate with its variables typed (the JS default `vars = null` reads as `null` only). */
 export const t = translate as unknown as (key: string, vars?: Record<string, unknown>) => string;
@@ -197,6 +198,7 @@ export function IndexColumn(props: {
           <View class={`grow gap-0.5 ${props.listClass ?? listPad()}`} style={{ paddingBottom: 16 + gutterY() }} onLayout={edges.onContentLayout}>
             {props.children}
           </View>
+          <MobileBarSpacer />
         </Scroll>
       </If>
     </View>

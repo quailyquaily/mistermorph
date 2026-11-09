@@ -156,6 +156,8 @@ function planProgress(plan: any) {
   return `${steps.filter((step: any) => step.status === "completed").length}/${steps.length}`;
 }
 
+// A status column: mono 11 on a 16pt line in a 20pt box, 6pt each side, one baseline with the
+// time beside it (design/ui-refresh.html §3).
 function Column(props: { label: string; value?: string; expanded: boolean; onPress: () => void; testID?: string }) {
   return (
     <BaseButton
@@ -163,11 +165,11 @@ function Column(props: { label: string; value?: string; expanded: boolean; onPre
       selected={props.expanded}
       accessibilityLabel={props.label}
       testID={props.testID}
-      class="flex-row items-center gap-1 rounded-(--radius) px-1.5 py-0.5 hover:bg-hover selected:bg-selection"
+      class="h-5 flex-row items-center gap-1 rounded-(--radius) px-1.5 hover:bg-hover selected:bg-selection"
     >
-      <Text class="font-mono text-xs uppercase text-muted-foreground">{props.label}</Text>
+      <Text class="font-mono text-[11px] leading-4 uppercase text-muted-foreground">{props.label}</Text>
       <If when={props.value}>
-        <Text class="font-mono text-xs text-foreground">{props.value}</Text>
+        <Text class="font-mono text-[11px] leading-4 text-foreground">{props.value}</Text>
       </If>
       <Icon name={props.expanded ? "PhCaretUp" : "PhCaretDown"} size={11} color="muted-foreground" />
     </BaseButton>

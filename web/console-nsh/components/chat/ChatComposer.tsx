@@ -9,6 +9,7 @@
 import type { InputRef, JSX } from "nsh";
 import { cleanup, effect, Image, keymap, LayoutAnimation, reduceMotion, signal, Text, token, untracked, View } from "nsh";
 import { Button as BaseButton, Input, Select } from "nsh/base";
+import { BorderBeam } from "../motion/BorderBeam";
 import { ICONS } from "../icons";
 import { Button, DropdownMenu, Icon, Spinner, Tip, TipButton, type IconName } from "../ui";
 import {
@@ -491,7 +492,7 @@ export function ChatComposer(props: ChatComposerProps) {
   return (
     <View class={`gap-2 ${props.landing ? "w-full" : "pb-2.5"}`} testID={props.testID}>
       <View
-        class="rounded-(--radius) border border-input bg-field transition duration-[260ms] focus-within:border-blue/45 focus-within:shadow-md"
+        class="relative rounded-(--radius) border border-input bg-field transition duration-[260ms] focus-within:border-blue/45 focus-within:shadow-md"
         onPress={() => focus({ preserveSelection: true })}
       >
         <If when={suggestionsVisible()}>
@@ -634,6 +635,10 @@ export function ChatComposer(props: ChatComposerProps) {
             </View>
           </If>
         </View>
+        {/* While a task runs, the border beam travels the frame (design/ui-refresh.html §5). */}
+        <If when={props.stopMode}>
+          <BorderBeam length={96} testID="chat-composer-beam" />
+        </If>
       </View>
       <If when={props.footerText}>
         <Text class="px-3 text-center font-mono text-[11px] leading-[15.4px] tracking-[0.02em] text-muted-foreground">{props.footerText}</Text>

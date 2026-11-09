@@ -22,14 +22,16 @@ import {
   Tooltip,
 } from "nsh/base";
 import { dismissNotice, noticeState, pushNotice } from "../lib/core/notices.js";
-import { ICONS, type IconName } from "./icons";
+import { FILLED_ICONS, ICONS, type IconName } from "./icons";
+import { BorderBeam, type BeamTone } from "./motion/BorderBeam";
+import { sagHalf, SagRule } from "./motion/Sag";
 import { recentPress } from "./motion/pressOrigin";
 import { EdgeScroll } from "./motion/ScrollEdges";
 import { FadeText } from "./motion/FadeText";
 import { CHROME_BAR_HEIGHT, gutterX, gutterY, pageGap, pageTop } from "./frame/metrics";
 import { dialogLayerInsets } from "../lib/systemInsets";
-import { createSlidingSelection } from "./motion/SlidingSelection";
 import { MOTION_EASE, MOTION_EASE_CSS, MOTION_NORMAL, MOTION_SLOW, motionMs } from "./motion/tokens";
+import { MobileBarSpacer, mobileBarRoom } from "./frame/mobileBar";
 
 export type { IconName };
 
@@ -38,11 +40,11 @@ type TokenName = Parameters<typeof token>[0];
 
 /* ---------- icons and marks ---------- */
 
-/** A Phosphor icon (regular weight), tinted with a theme token. */
-export function Icon(props: { name: IconName; size?: number; color?: TokenName; class?: string }) {
+/** A Phosphor icon (regular weight, or its fill weight with `filled` where there is one), tinted with a theme token. */
+export function Icon(props: { name: IconName; size?: number; color?: TokenName; class?: string; filled?: boolean }) {
   return (
     <Image
-      src={ICONS[props.name]}
+      src={(props.filled && FILLED_ICONS[props.name]) || ICONS[props.name]}
       class={props.class}
       accessibilityElementsHidden
       style={{
@@ -229,10 +231,17 @@ const BUTTON_VARIANTS: Record<
     disabledText: TokenName;
     press: string;
     shadow?: [string, string];
-    /** The loading stripe's two bands (the ui-kit's --q-progress-color and --q-progress-color-light). */
-    stripe: [string, string];
-    /** Filled variants keep their fill while loading (`.touchable.loading.*[disabled]`), text at on-disabled. */
+    /** The border beam's colour while loading. */
+    beam: BeamTone;
+    /** The box while loading, in place of `box` and its disabled look: filled variants turn soft (a
+     * tint of their colour, a hairline and text in it); plain ones gain a faint hairline for the
+     * beam to ride. Without it the variant's disabled look stays (outlined). */
     loadingBox?: string;
+    /** The text and icon colour on `loadingBox`. */
+    loadingText?: TokenName;
+    /** A box without a border: the faint hairline drawn for the beam to ride while loading, not
+     * laid out, so the button keeps its size. */
+    loadingTrack?: TokenName;
   }
 > = {
   primary: {
@@ -241,8 +250,9 @@ const BUTTON_VARIANTS: Record<
     textClass: "text-primary-foreground group-disabled:text-on-disabled",
     disabledText: "on-disabled",
     press: "group-active:bg-press-light",
-    stripe: ["#ffffff1a", "#ffffff0d"],
-    loadingBox: "bg-primary border-[0.5px] border-primary-line",
+    beam: "blue",
+    loadingBox: "bg-blue/10 border-[0.5px] border-blue/35",
+    loadingText: "ink",
     shadow: [
       "inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 0 4px rgba(24, 46, 72, 0.05)",
       "inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 1px 3px rgba(24, 46, 72, 0.1)",
@@ -254,7 +264,7 @@ const BUTTON_VARIANTS: Record<
     textClass: "text-foreground group-disabled:text-outline-disabled-text",
     disabledText: "outline-disabled-text",
     press: "group-active:bg-press",
-    stripe: ["#00000000", "#00000008"],
+    beam: "blue",
     shadow: [
       "inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 0 4px rgba(24, 46, 72, 0.05)",
       "inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 1px 3px rgba(24, 46, 72, 0.1)",
@@ -266,7 +276,9 @@ const BUTTON_VARIANTS: Record<
     textClass: "text-subtle group-hover:text-foreground group-disabled:text-plain-disabled-text",
     disabledText: "plain-disabled-text",
     press: "group-active:bg-press",
-    stripe: ["#00000000", "#00000008"],
+    beam: "blue",
+    loadingBox: "bg-transparent",
+    loadingTrack: "line-faint",
   },
   danger: {
     box: "bg-destructive border-[0.5px] border-destructive hover:bg-danger-light hover:border-danger-light disabled:bg-outline-disabled-bg disabled:border-danger-disabled-line",
@@ -274,8 +286,9 @@ const BUTTON_VARIANTS: Record<
     textClass: "text-destructive-foreground group-disabled:text-danger-disabled-text",
     disabledText: "danger-disabled-text",
     press: "group-active:bg-press-light",
-    stripe: ["#ffffff26", "#ffffff0d"],
-    loadingBox: "bg-destructive border-[0.5px] border-destructive",
+    beam: "red",
+    loadingBox: "bg-danger/10 border-[0.5px] border-danger/35",
+    loadingText: "danger",
   },
   highlight: {
     box: "bg-warn border-[0.5px] border-warn-dark hover:bg-warn-light hover:border-warn-light disabled:bg-warn-disabled disabled:border-warn-disabled-line",
@@ -283,8 +296,9 @@ const BUTTON_VARIANTS: Record<
     textClass: "text-primary-foreground group-disabled:text-on-disabled",
     disabledText: "on-disabled",
     press: "group-active:bg-press-light",
-    stripe: ["#ffffff26", "#ffffff0d"],
-    loadingBox: "bg-warn border-[0.5px] border-warn-dark",
+    beam: "amber",
+    loadingBox: "bg-warn/12 border-[0.5px] border-warn/40",
+    loadingText: "warn-dark",
   },
   "ghost-danger": {
     box: "hover:bg-close disabled:bg-transparent",
@@ -292,7 +306,9 @@ const BUTTON_VARIANTS: Record<
     textClass: "text-danger group-disabled:text-plain-disabled-text",
     disabledText: "plain-disabled-text",
     press: "group-active:bg-press",
-    stripe: ["#00000000", "#ff000008"],
+    beam: "red",
+    loadingBox: "bg-transparent",
+    loadingTrack: "danger-disabled-line",
   },
 };
 
@@ -319,7 +335,7 @@ export interface ButtonProps {
   /** The tooltip, and the accessible name when there is no label. */
   title?: string;
   disabled?: boolean;
-  /** Busy: the ui-kit's moving stripe over the button, which keeps its size and content, and presses blocked. */
+  /** Busy: disabled (presses blocked), keeping its size and content, with the border beam running round it (design/ui-refresh.html §6). */
   loading?: boolean;
   /** Full width. */
   block?: boolean;
@@ -336,31 +352,7 @@ export interface ButtonProps {
 
 const ALIGN_SELF = { start: "self-start", center: "self-center", end: "self-end", stretch: "self-stretch", auto: "self-auto" } as const;
 
-// The ui-kit's loading look (`.touchable.loading .ocean .wave`): 45° bands 10px apart over the
-// whole button, sliding 28px (one period across) every second, under the label and over the fill,
-// so the button keeps its size and content. Reduced motion: the bands stay put.
-const STRIPE_SHIFT = 28;
-
-function LoadingStripes(props: { colors: [string, string]; testID?: string }) {
-  const shift = createAnimatedValue(0);
-  const still = untracked(reduceMotion);
-  if (!still) {
-    void shift.keyframes([0, 1], { duration: 1000, easing: Easing.linear, iterations: "infinite" });
-  }
-  cleanup(() => void shift.stop());
-  return (
-    <View accessibilityElementsHidden testID={props.testID} class="absolute inset-0 overflow-hidden" style={{ pointerEvents: "none" }}>
-      <View
-        class="absolute inset-y-0 right-0"
-        style={{
-          left: -STRIPE_SHIFT,
-          backgroundImage: `repeating-linear-gradient(45deg, ${props.colors[0]} 0 10px, ${props.colors[1]} 10px 20px)`,
-          transform: [{ translateX: still ? 0 : shift.interpolate({ inputRange: [0, 1], outputRange: [0, STRIPE_SHIFT] }) }],
-        }}
-      />
-    </View>
-  );
-}
+const LOADING_TEXT_CLASS: Partial<Record<TokenName, string>> = { ink: "text-ink", danger: "text-danger", "warn-dark": "text-warn-dark" };
 
 /** The console's button: one command, any input. */
 // nsh 0.4.0 on Android: a box that clips (`overflow-hidden`, which rounds the press layer) and casts
@@ -373,12 +365,16 @@ export function Button(props: ButtonProps) {
   const shadow = () => (BUTTON_SHADOWS ? variant().shadow : undefined);
   const size = () => BUTTON_SIZES[props.size ?? "sm"];
   const enabled = () => !props.disabled && !props.loading;
-  // Loading blocks presses as disabled does; a filled variant keeps its fill (the ui-kit's
-  // `.touchable.loading.*[disabled]`) so the stripe reads as busy rather than unavailable.
+  // Loading is disabled: presses are blocked. Filled variants turn soft (their own tint, hairline
+  // and text) so the beam reads on them; outlined keeps its disabled look; plain ones keep their
+  // disabled text with a faint hairline drawn for the beam. The button's size never changes.
   const loadingFill = () => (props.loading ? variant().loadingBox : undefined);
+  const loadingText = () => (props.loading ? variant().loadingText : undefined);
   const iconColor = (): TokenName =>
-    loadingFill() ? "on-disabled" : props.disabled || props.loading ? variant().disabledText : props.selected ? "ink" : variant().text;
-  const textClass = () => (loadingFill() ? "text-on-disabled" : props.selected && enabled() ? "text-ink" : variant().textClass);
+    loadingText() ?? (props.disabled || props.loading ? variant().disabledText : props.selected ? "ink" : variant().text);
+  const textClass = () =>
+    loadingText() ? LOADING_TEXT_CLASS[loadingText()!] : props.selected && enabled() ? "text-ink" : variant().textClass;
+  const beamLength = () => (props.size === "xs" || props.size === "xxs" ? 40 : 64);
   return (
     <TipButton
       disabled={!enabled()}
@@ -387,7 +383,7 @@ export function Button(props: ButtonProps) {
       accessibilityLabel={props.label || props.title || props.icon || undefined}
       testID={props.testID}
       tooltip={props.title ? <Tip text={props.title} /> : undefined}
-      class={`group relative flex-row items-center justify-center overflow-hidden rounded-(--radius) border-transparent ${loadingFill() ?? variant().box} ${
+      class={`group relative flex-row items-center justify-center ${props.loading ? "" : "overflow-hidden"} rounded-(--radius) border-transparent ${loadingFill() ?? variant().box} ${
         props.iconOnly ? `${size().square} px-0` : size().box
       } ${props.block ? "self-stretch" : ALIGN_SELF[props.align ?? "start"]} ${props.selected ? "bg-selection" : ""} ${props.class ?? ""}`}
       style={{
@@ -397,7 +393,7 @@ export function Button(props: ButtonProps) {
         transitionTimingFunction: "ease-out",
       }}
       hoverStyle={shadow() && enabled() ? { boxShadow: shadow()![1] } : undefined}
-      disabledStyle={shadow() && !loadingFill() ? { boxShadow: "none" } : undefined}
+      disabledStyle={shadow() ? { boxShadow: "none" } : undefined}
     >
       <View
         accessibilityElementsHidden
@@ -405,7 +401,12 @@ export function Button(props: ButtonProps) {
         style={{ pointerEvents: "none" }}
       />
       <If when={props.loading}>
-        <LoadingStripes colors={variant().stripe} testID={props.testID ? `${props.testID}-loading` : undefined} />
+        <BorderBeam
+          length={beamLength()}
+          tone={variant().beam}
+          track={variant().loadingTrack ? String(token(variant().loadingTrack!)) : undefined}
+          border={variant().loadingTrack ? 0 : variant().loadingText ? 0.5 : 1}
+          testID={props.testID ? `${props.testID}-loading` : undefined} />
       </If>
       <If when={props.icon}>
         <Icon name={props.icon!} size={size().icon} color={iconColor()} />
@@ -1124,11 +1125,10 @@ export function ProgressBar(props: { value?: number; indeterminate?: boolean; to
 }
 
 /**
- * Tabs as the Vue console's AppTabs: a segmented control. A 38pt box on a hairline with 2pt of
- * padding, 32pt options in quiet text; the current option is ink on a soft blue segment that
- * slides between options (FLIP on its transform, as the sidebar's selection). `equal` gives every
- * option the same share of the row; an item's `icon` shows before its label (`iconOnly` hides
- * labels, keeping them as tooltips).
+ * Tabs (design/ui-refresh.html §1): the options in quiet text on a hairline, the current one in ink
+ * with the hairline dipping softly under it; the dip glides to the next option when it changes.
+ * `equal` gives every option the same share of the row; an item's `icon` shows before its label
+ * (`iconOnly` hides labels, keeping them as tooltips).
  */
 export function Tabs(props: {
   items: { id: string; label: string; count?: number; disabled?: boolean; icon?: IconName }[];
@@ -1141,17 +1141,21 @@ export function Tabs(props: {
   accessibilityLabel?: string;
   class?: string;
 }) {
-  const indicator = createSlidingSelection(() => props.value, { duration: MOTION_NORMAL });
   const narrow = () => props.narrow ?? windowSize().width < 380;
+  // Each option's place along the row, for the dip under the current one.
+  const boxes = signal<Record<string, { x: number; w: number }>>({});
+  const track = (id: string) => (event: { bounds: { origin: { x: number }; size: { width: number } } }) => {
+    const box = { x: event.bounds.origin.x, w: event.bounds.size.width };
+    const old = boxes()[id];
+    if (!old || old.x !== box.x || old.w !== box.w) boxes.set({ ...boxes(), [id]: box });
+  };
+  const current = () => boxes()[props.value] ?? null;
   return (
     <View
-      class={`relative h-9.5 flex-row items-center self-start border border-line-soft p-[2px] ${props.equal ? "self-stretch" : ""} ${
-        props.class ?? ""
-      }`}
+      class={`relative flex-row items-center self-start ${props.equal ? "self-stretch" : ""} ${props.class ?? ""}`}
       role="tablist"
       accessibilityLabel={props.accessibilityLabel}
     >
-      <indicator.Highlight class="bg-segment" />
       <Each of={props.items} key={(item) => item.id}>
         {(item) => (
           <TipButton
@@ -1159,20 +1163,19 @@ export function Tabs(props: {
             selected={props.value === item().id}
             disabled={item().disabled}
             onPress={() => props.onChange?.(item().id)}
-            onLayout={indicator.track(item().id)}
+            onLayout={track(item().id)}
             accessibilityLabel={item().label}
             tooltip={props.iconOnly && item().icon ? <Tip text={item().label} /> : undefined}
-            class={`group h-8 flex-row items-center justify-center gap-1.5 ${
-              props.iconOnly && item().icon ? "w-8" : narrow() ? "px-1.5" : "px-[12.8px]"
-            } ${props.equal ? "flex-1" : ""} ${props.value === item().id ? "" : "hover:bg-hover active:bg-segment"} disabled:opacity-50`}
-            style={{ transitionProperty: "colors", transitionDuration: 120 }}
+            class={`group h-9 flex-row items-center justify-center gap-1.5 ${
+              props.iconOnly && item().icon ? "w-9" : narrow() ? "px-2" : "px-3"
+            } ${props.equal ? "flex-1" : ""} disabled:opacity-50`}
           >
             <If when={item().icon}>
               <Icon name={item().icon!} size={16} color={props.value === item().id ? "ink" : "muted-foreground"} />
             </If>
             <If when={!(props.iconOnly && item().icon)}>
               <Text
-                class={`${narrow() ? "text-xs leading-[16.8px]" : "text-sm leading-[19.6px]"} font-medium ${
+                class={`${narrow() ? "text-xs leading-[16.8px]" : "text-sm leading-[19.6px]"} font-medium transition-colors duration-120 ${
                   props.value === item().id ? "text-ink" : "text-muted-foreground group-hover:text-foreground"
                 }`}
                 style={{ numberOfLines: 1 }}
@@ -1186,6 +1189,12 @@ export function Tabs(props: {
           </TipButton>
         )}
       </Each>
+      <SagRule
+        center={() => (current() ? current()!.x + current()!.w / 2 : null)}
+        half={sagHalf(Math.min(current()?.w ?? 38, 64))}
+        color={String(token("line-soft"))}
+        class="absolute -bottom-[6px] left-0 right-0 h-[7px]"
+      />
     </View>
   );
 }
@@ -1618,6 +1627,7 @@ export function Page(props: {
           >
             {props.children}
           </View>
+          <MobileBarSpacer />
         </EdgeScroll>
       </If>
     </View>
@@ -1717,7 +1727,8 @@ export function Fab(props: { label: string; icon?: IconName; disabled?: boolean;
     },
   });
   return (
-    <View class="absolute bottom-4 right-4" style={{ ...enter.style, pointerEvents: "box-none" }}>
+    // Above the phone's floating bottom bar when it shows (its room less the gap under a list).
+    <View class="absolute right-4" style={{ ...enter.style, bottom: mobileBarRoom() > 0 ? mobileBarRoom() - 4 : 16, pointerEvents: "box-none" }}>
       <View class="absolute -left-1.25 -top-1.25 size-2 border-l border-t border-muted-foreground" style={{ pointerEvents: "none" }} />
       <View class="absolute -bottom-1.25 -right-1.25 size-2 border-b border-r border-muted-foreground" style={{ pointerEvents: "none" }} />
       <TipButton

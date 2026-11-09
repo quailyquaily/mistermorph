@@ -9,7 +9,7 @@
 // The rows are an `Each` in a scroll view rather than a virtualized List: a sidebar holds dozens of
 // topics (older ones load on demand), and the sliding highlight must share the rows' parent to
 // measure them and move with them.
-import { createAnimatedValue, Image, Scroll, Text, token, View } from "nsh";
+import { Canvas, cleanup, createAnimatedValue, Easing, effect, Image, reduceMotion, Scroll, signal, Text, token, untracked, View } from "nsh";
 import { Button as BaseButton } from "nsh/base";
 import { Button, Icon, Spinner, Tip, TipButton } from "../../components/ui";
 import { ContactAvatar } from "../../components/shared/ContactAvatar";
@@ -17,10 +17,12 @@ import { gutterX } from "../../components/knowledge/parts";
 import { FadeText } from "../../components/motion/FadeText";
 import { createScrollEdges, SCROLLBAR } from "../../components/motion/ScrollEdges";
 import { createSlidingSelection } from "../../components/motion/SlidingSelection";
-import { motionMs } from "../../components/motion/tokens";
+import { sagHalf, SagRule } from "../../components/motion/Sag";
+import { withAlpha } from "../../components/motion/color";
 import { t } from "../../components/chat/i18n";
 import { normalizeTopicID } from "../../lib/core/chat-task-history.js";
 import type { ChatController, SidebarView, TopicRow } from "./chatController";
+import { MobileBarSpacer } from "../../components/frame/mobileBar";
 
 // A view toggle in the head: a 38pt square with a 14pt icon, the buttons flush; on, a blue icon on
 // a blue tint. The TODO toggle carries the running mark off its icon's top right corner.
@@ -32,11 +34,14 @@ function ViewToggle(props: {
   running?: boolean;
   onPress: () => void;
   testID: string;
+  /** Its centre along the head, for the head's sag. */
+  onCenter?: (x: number) => void;
 }) {
   return (
     <TipButton
       selected={props.active}
       onPress={props.onPress}
+      onLayout={({ bounds }) => props.onCenter?.(bounds.origin.x + bounds.size.width / 2)}
       accessibilityLabel={props.label}
       testID={props.testID}
       tooltip={<Tip text={props.title} />}
@@ -53,22 +58,105 @@ function ViewToggle(props: {
 }
 
 // The console's square status mark (7pt): filled blue once a task finished and until the topic is
-// viewed, filled orange while a task waits for the person, and while one runs a hollow square whose
-// fill breathes in and out (only its opacity moves; without motion it stays hollow).
+// viewed, filled orange while a task waits for the person. While one runs, the square becomes a
+// turning arc (design/ui-refresh.html §7): one shape, not a swap. Its corners round and it grows
+// into a 12pt ring while the fill empties (180 ms), the ring opens a quarter and turns, one lap per
+// 1.2 s; when the run ends the arc closes (120 ms) and the ring shrinks back into the square
+// (180 ms). It is drawn on a 14pt canvas centred on the 7pt box, so the row's layout never moves.
+// Reduced motion: a still open ring, no morph.
+const MARK_EASE = Easing.bezier(0.2, 0.7, 0.2, 1);
+const RING = 5.2;
+
 function StatusDot(props: { status: string; label: string; class?: string; testID?: string }) {
-  const fill = createAnimatedValue(0);
-  if (motionMs(1) > 0) void fill.keyframes([0, 1], { duration: 900, easing: "easeInOut", iterations: "infinite", direction: "alternate" });
+  const running = () => props.status === "running";
+  const startRunning = untracked(running);
+  const still = untracked(reduceMotion);
+  // 0 the square, 1 the ring; 0 closed, 1 open a quarter; the turn in radians.
+  const ring = createAnimatedValue(startRunning ? 1 : 0);
+  const open = createAnimatedValue(startRunning ? 1 : 0);
+  const turn = createAnimatedValue(0);
+  let generation = 0;
+  const spin = () => {
+    if (!still) void turn.keyframes([0, Math.PI * 2], { duration: 1200, easing: Easing.linear, iterations: "infinite" });
+  };
+  if (startRunning) spin();
+  effect(() => {
+    const now = running();
+    untracked(() => {
+      const run = ++generation;
+      if (now) {
+        if (still) {
+          ring.set(1);
+          open.set(1);
+          return;
+        }
+        void ring.timing(1, { duration: 180, easing: MARK_EASE }).then(({ finished }) => {
+          if (!finished || run !== generation) return;
+          spin();
+          void open.timing(1, { duration: 140, easing: MARK_EASE });
+        });
+      } else {
+        if (still) {
+          ring.set(0);
+          open.set(0);
+          return;
+        }
+        void open.timing(0, { duration: 120, easing: MARK_EASE }).then(({ finished }) => {
+          if (!finished || run !== generation) return;
+          void turn.stop();
+          void ring.timing(0, { duration: 180, easing: MARK_EASE });
+        });
+      }
+    });
+  });
+  cleanup(() => {
+    for (const value of [ring, open, turn]) void value.stop();
+  });
+
   return (
     <View
       role="image"
       accessibilityLabel={props.label}
       tooltip={<Tip text={props.label} />}
-      class={`size-[7px] rounded-[1px] border ${props.status === "pending" ? "border-status-pending bg-status-pending" : props.status === "running" ? "border-status-on" : "border-status-on bg-status-on"} ${props.class ?? ""}`}
+      class={`size-[7px] ${props.class ?? ""}`}
       testID={props.testID ?? `chat-topic-status-${props.status}`}
     >
-      <If when={props.status === "running"}>
-        <View class="flex-1 bg-status-on" style={{ opacity: fill }} />
-      </If>
+      <Canvas
+        accessibilityElementsHidden
+        class="absolute"
+        style={{ left: -3.5, top: -3.5, width: 14, height: 14, pointerEvents: "none" }}
+        draw={(cx) => {
+          const blue = withAlpha(String(token("status-on")));
+          const settled = withAlpha(String(token(props.status === "pending" ? "status-pending" : "status-on")));
+          // The square growing into the ring: its path from 6pt (a 7pt square's 1pt border) to the
+          // ring's, its corners from square to round, its fill emptying.
+          const side = ring.interpolate({ inputRange: [0, 1], outputRange: [6, RING * 2] });
+          const corner = ring.interpolate({ inputRange: [0, 1], outputRange: [0.5, RING] });
+          const at = ring.interpolate({ inputRange: [0, 1], outputRange: [4, 7 - RING] });
+          cx.save();
+          cx.globalAlpha = ring.interpolate({ inputRange: [0, 0.999, 1], outputRange: [1, 1, 0] });
+          cx.beginPath();
+          cx.roundRect(at, at, side, side, corner);
+          cx.fillStyle = ring.interpolate({ inputRange: [0, 1], outputRange: [settled, withAlpha(blue, 0)] });
+          cx.fill();
+          cx.lineWidth = ring.interpolate({ inputRange: [0, 1], outputRange: [1, 1.6] });
+          cx.strokeStyle = ring.interpolate({ inputRange: [0, 1], outputRange: [settled, blue] });
+          cx.stroke();
+          cx.restore();
+          // The ring itself, once the square has become it: an arc opening a quarter as it turns.
+          cx.save();
+          cx.globalAlpha = ring.interpolate({ inputRange: [0, 0.999, 1], outputRange: [0, 0, 1] });
+          cx.translate(7, 7);
+          cx.rotate(turn);
+          cx.beginPath();
+          cx.arc(0, 0, RING, 0, open.interpolate({ inputRange: [0, 1], outputRange: [Math.PI * 2, Math.PI * 1.5] }));
+          cx.lineWidth = 1.6;
+          cx.lineCap = "round";
+          cx.strokeStyle = blue;
+          cx.stroke();
+          cx.restore();
+        }}
+      />
     </View>
   );
 }
@@ -78,6 +166,12 @@ export function TopicSidebar(props: { c: ChatController; class?: string }) {
   const view = () => c.topicSidebarView();
   const toggle = (next: SidebarView) => c.setTopicSidebarView(view() === next ? "date" : next);
   const edges = createScrollEdges({ start: false });
+  // Where each view toggle sits along the head, for the sag under the one that is on.
+  const toggleCenters = signal<Partial<Record<SidebarView, number>>>({});
+  const placeToggle = (key: SidebarView) => (x: number) => {
+    if (toggleCenters()[key] !== x) toggleCenters.set({ ...toggleCenters(), [key]: x });
+  };
+  const sagCenter = () => (view() === "date" ? null : toggleCenters()[view()] ?? null);
   const activeKey = () => {
     const active = c.topicRows().find((row) => row.kind === "topic" && c.topicIsActive(row.topic));
     return active ? active.key : null;
@@ -181,12 +275,11 @@ export function TopicSidebar(props: { c: ChatController; class?: string }) {
 
   return (
     <View class={`bg-sidebar ${props.class ?? ""}`} testID="chat-topic-sidebar">
-      {/* The head: the title on the left, the view toggles and New flush at the right. A hairline
-          under it shows once topics have scrolled beneath it. */}
+      {/* The head: the title on the left, the view toggles and New flush at the right. The hairline
+          under it shows once topics have scrolled beneath it, and sags softly under the view
+          toggle that is on (design/ui-refresh.html §1). */}
       <View
-        class={`h-[57px] flex-row items-center ${c.mobileMode() ? "" : "pl-[25.6px]"} transition-colors duration-[180ms] border-b ${
-          edges.scrolled() ? "border-line-faint" : "border-transparent"
-        }`}
+        class={`relative z-10 h-[57px] flex-row items-center ${c.mobileMode() ? "" : "pl-[25.6px]"}`}
         style={c.mobileMode() ? { paddingLeft: gutterX(), paddingRight: gutterX() } : undefined}
       >
         <View class="mr-3 flex-1" onPress={() => c.clickTopicSidebarTitle()} testID="chat-topics-title">
@@ -202,6 +295,7 @@ export function TopicSidebar(props: { c: ChatController; class?: string }) {
             active={view() === "agents"}
             onPress={() => toggle("agents")}
             testID="chat-topics-view-agents"
+            onCenter={placeToggle("agents")}
           />
         </If>
         <ViewToggle
@@ -212,6 +306,7 @@ export function TopicSidebar(props: { c: ChatController; class?: string }) {
           running={c.cronRunning() > 0}
           onPress={() => toggle("cron")}
           testID="chat-topics-view-cron"
+          onCenter={placeToggle("cron")}
         />
         <ViewToggle
           icon="PhTag"
@@ -220,6 +315,7 @@ export function TopicSidebar(props: { c: ChatController; class?: string }) {
           active={view() === "tags"}
           onPress={() => toggle("tags")}
           testID="chat-topics-view-tags"
+          onCenter={placeToggle("tags")}
         />
         <If when={!c.mobileTopicSplitEnabled()}>
           <TipButton
@@ -232,6 +328,12 @@ export function TopicSidebar(props: { c: ChatController; class?: string }) {
             <Icon name="PhPlus" size={14} color="subtle" />
           </TipButton>
         </If>
+        <SagRule
+          center={sagCenter}
+          half={sagHalf(38)}
+          color={edges.scrolled() ? String(token("line-faint")) : "rgba(0, 0, 0, 0)"}
+          class="absolute -bottom-[6px] left-0 right-0 h-[7px]"
+        />
       </View>
       <If when={c.topicsLoading() && c.topicRows().length === 0}>
         <Spinner class="items-center py-3" />
@@ -288,6 +390,7 @@ export function TopicSidebar(props: { c: ChatController; class?: string }) {
           </If>
           <View class={c.mobileTopicSplitEnabled() ? "h-21" : "h-4"} />
         </View>
+        <MobileBarSpacer />
       </Scroll>
     </View>
   );

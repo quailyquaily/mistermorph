@@ -20,6 +20,7 @@ import {
 import { currentRoute, locationOf, navigate } from "../../lib/router";
 import { isMobile } from "../../lib/shell";
 import { StoreSkillDetail, type StoreDoc, type StoreSkill } from "./StoreSkillDetail";
+import { MobileBarSpacer } from "../../components/frame/mobileBar";
 
 // How many tags a card shows; the panel shows them all.
 const CARD_TAGS = 3;
@@ -310,6 +311,7 @@ export function SkillStorePage() {
               </Each>
             </View>
           </If>
+          <MobileBarSpacer />
         </EdgeScroll>
 
         {/* The panel: a white sheet 440pt wide beside the grid, 4pt off it, fading in as the grid narrows. */}

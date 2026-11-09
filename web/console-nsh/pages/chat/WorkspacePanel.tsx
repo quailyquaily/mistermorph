@@ -1,6 +1,11 @@
 // The panel beside the conversation (a sheet on phones): the open topic (its title, regenerate and
 // delete, pin, tags, context window meter, dates) and its workspace (the attached directory, its
 // files as a tree, and what to do with the selected one).
+//
+// One layout throughout: a 16pt gutter that the tabs' labels, the title, the rows and the tree all
+// start on; properties as rows of a 12pt label in an 88pt column beside a value on one 20pt line;
+// names at 15pt, values at 14pt, figures (dates, sizes, the window share) in mono at 12pt; icon
+// actions as 32pt squares.
 import { Image, List, Scroll, Text, View } from "nsh";
 import { Button as BaseButton } from "nsh/base";
 import { Button, Icon, Kicker, Tabs, Tip, TipButton, Toggle } from "../../components/ui";
@@ -20,12 +25,22 @@ function ErrorNote(props: { text: string }) {
   );
 }
 
-function PropertyRow(props: { label: string; children?: any; title?: string }) {
+/** A property: its label in the panel's label column, the value beside it on the same 20pt line. */
+function PropertyRow(props: { label: string; children?: any; title?: string; testID?: string }) {
   return (
-    <View class="flex-row items-start gap-3 py-1.5" tooltip={props.title ? <Text class="text-xs">{props.title}</Text> : undefined}>
-      <Text class="w-24 pt-0.5 text-xs text-muted-foreground">{props.label}</Text>
-      <View class="flex-1 gap-1">{props.children}</View>
+    <View class="min-h-9 flex-row items-start gap-3 py-2" tooltip={props.title ? <Text class="text-xs">{props.title}</Text> : undefined} testID={props.testID}>
+      <Text class="w-[88px] text-xs leading-5 text-muted-foreground">{props.label}</Text>
+      <View class="min-w-0 flex-1 gap-1.5">{props.children}</View>
     </View>
+  );
+}
+
+/** A figure in a property's value: a date, a size, a share. */
+function Figure(props: { children?: any; strong?: boolean; testID?: string }) {
+  return (
+    <Text class={`font-mono text-xs leading-5 tracking-[0.02em] ${props.strong ? "font-medium text-foreground" : "text-foreground"}`} testID={props.testID}>
+      {props.children}
+    </Text>
   );
 }
 
@@ -39,13 +54,13 @@ function ContextMeter(props: { c: ChatController }) {
     <If when={progress()}>
       {(p) => (
         <PropertyRow label={t("chat_topic_context_ratio_label")} title={p().title}>
-          <View class="flex-row items-center gap-1.5">
-            <Text class="text-sm font-semibold text-foreground" testID="chat-topic-context-ratio">
+          <View class="h-5 flex-row items-center gap-1">
+            <Figure strong testID="chat-topic-context-ratio">
               {p().label}
-            </Text>
+            </Figure>
             <Button
               variant="plain"
-              size="xs"
+              size="xxs"
               iconOnly
               icon="PhMagnifyingGlass"
               title={t("context_inspector_open")}
@@ -58,7 +73,7 @@ function ContextMeter(props: { c: ChatController }) {
               role="progressbar"
               accessibilityLabel={t("chat_topic_context_ratio_label")}
               accessibilityValue={{ min: 0, max: 100, now: Math.round(p().fill * 100), text: p().label }}
-              class="relative h-1.5 overflow-hidden rounded-full bg-muted"
+              class="relative h-1 overflow-hidden rounded-[1px] bg-line-faint"
             >
               <If
                 when={p().meter}
@@ -88,19 +103,19 @@ function ContextMeter(props: { c: ChatController }) {
 function TopicTab(props: { c: ChatController }) {
   const c = props.c;
   return (
-    <View class="gap-3 p-4" testID="chat-topic-panel">
+    <View class="gap-2 px-4 pb-4 pt-3" testID="chat-topic-panel">
       <If when={c.topicDeleteError() || c.topicRegenerateError()}>
         <ErrorNote text={c.topicDeleteError() || c.topicRegenerateError()} />
       </If>
-      <View class="flex-row items-start gap-2">
-        <Text class="flex-1 text-base font-semibold text-foreground" role="header" testID="chat-topic-panel-title">
+      <View class="min-h-8 flex-row items-center gap-2">
+        <Text class="flex-1 text-[15px] font-semibold leading-[22px] text-foreground line-clamp-2" role="header" testID="chat-topic-panel-title">
           {c.deskTitle()}
         </Text>
         <If when={c.topicRegenerateAvailable()}>
-          <View class="flex-row items-center gap-1">
+          <View class="-mr-2 flex-row items-center">
             <Button
               variant="plain"
-              size="sm"
+              size="xs"
               iconOnly
               icon="PhMagicWand"
               title={c.topicRegenerateLabel()}
@@ -112,7 +127,7 @@ function TopicTab(props: { c: ChatController }) {
             <If when={c.topicDeleteAvailable()}>
               <Button
                 variant="ghost-danger"
-                size="sm"
+                size="xs"
                 iconOnly
                 icon="PhTrash"
                 title={t("chat_topic_delete_action")}
@@ -125,7 +140,7 @@ function TopicTab(props: { c: ChatController }) {
           </View>
         </If>
       </View>
-      <View>
+      <View class="border-t border-line-faint pt-1">
         <If when={c.topicTagsAvailable()}>
           <PropertyRow label={t("chat_topic_pin_label")}>
             <Toggle
@@ -154,7 +169,7 @@ function TopicTab(props: { c: ChatController }) {
         <Each of={c.topicPropertyRows()} key={(row) => row.key}>
           {(row) => (
             <PropertyRow label={row().label} title={row().title}>
-              <Text class="text-sm text-foreground">{row().value}</Text>
+              <Figure>{row().value}</Figure>
             </PropertyRow>
           )}
         </Each>
@@ -170,10 +185,10 @@ function WorkspaceTab(props: { c: ChatController }) {
     <If
       when={c.workspaceReady()}
       else={
-        <View class="gap-1 p-4">
-          <Text class="text-sm font-medium text-foreground">{t("chat_workspace_unavailable_title")}</Text>
+        <View class="gap-1 px-4 pb-4 pt-3">
+          <Text class="text-[15px] font-semibold leading-[22px] text-foreground">{t("chat_workspace_unavailable_title")}</Text>
           <If when={c.workspaceHintText()}>
-            <Text class="text-xs text-muted-foreground">{c.workspaceHintText()}</Text>
+            <Text class="text-xs leading-[18px] text-muted-foreground">{c.workspaceHintText()}</Text>
           </If>
         </View>
       }
@@ -181,15 +196,18 @@ function WorkspaceTab(props: { c: ChatController }) {
       <If
         when={c.workspaceDir()}
         else={
-          <View class="gap-3 p-4">
+          <View class="gap-3 px-4 pb-4 pt-3">
             <If when={c.workspaceError()}>
               <ErrorNote text={c.workspaceError()} />
             </If>
-            <Text class="text-sm font-medium text-foreground">{t("chat_workspace_empty_title")}</Text>
+            <View class="min-h-8 justify-center">
+              <Text class="text-[15px] font-semibold leading-[22px] text-foreground">{t("chat_workspace_empty_title")}</Text>
+            </View>
             <If when={!c.selectedTopicIsCron()}>
               <Button
-                variant="primary"
-                size="sm"
+                variant="outlined"
+                size="xs"
+                icon="PhPlus"
                 label={t("chat_workspace_action_attach")}
                 disabled={c.workspaceAttachDisabled()}
                 onPress={() => c.openWorkspaceBrowser()}
@@ -200,11 +218,11 @@ function WorkspaceTab(props: { c: ChatController }) {
         }
       >
         <View class="flex-1">
-          <View class="flex-row items-start gap-2 p-4 pb-2">
-            <View class="flex-1 gap-1">
+          <View class="flex-row items-start gap-2 px-4 pb-2 pt-3">
+            <View class="min-w-0 flex-1 gap-1">
               <Kicker>{t("chat_workspace_label")}</Kicker>
               <View selectable tooltip={<Tip text={c.workspaceDir()} />}>
-                <Text class="font-mono text-xs line-clamp-2" testID="chat-workspace-path">
+                <Text class="font-mono text-xs leading-5 line-clamp-2" testID="chat-workspace-path">
                   <If when={c.workspaceDirDisplay().prefix}>
                     <Text class="text-muted-foreground">{c.workspaceDirDisplay().prefix}</Text>
                   </If>
@@ -213,11 +231,11 @@ function WorkspaceTab(props: { c: ChatController }) {
                 </Text>
               </View>
               <If when={c.workspaceHintText()}>
-                <Text class="text-xs text-muted-foreground">{c.workspaceHintText()}</Text>
+                <Text class="text-xs leading-[18px] text-muted-foreground">{c.workspaceHintText()}</Text>
               </If>
             </View>
             <If when={!c.selectedTopicIsCron()}>
-              <View class="flex-row items-center gap-0.5">
+              <View class="-mr-2 flex-row items-center">
                 <Button
                   variant="plain"
                   size="xs"
@@ -254,7 +272,7 @@ function WorkspaceTab(props: { c: ChatController }) {
           <If
             when={c.workspaceTreeRows().length > 0}
             else={
-              <Text class="px-4 py-3 text-xs text-muted-foreground">
+              <Text class="px-4 py-2 text-xs leading-5 text-muted-foreground">
                 {c.workspaceTreeLoading() ? t("chat_workspace_tree_loading") : t("chat_workspace_tree_empty")}
               </Text>
             }
@@ -266,29 +284,28 @@ function WorkspaceTab(props: { c: ChatController }) {
                   onPress={() => void c.selectWorkspaceTreeNode(row())}
                   accessibilityLabel={row().entry?.name}
                   tooltip={<Tip text={row().entry?.path} />}
-                  class="mx-2 flex-row items-center gap-1.5 rounded-(--radius) py-1 pr-2 hover:bg-hover selected:bg-selection"
+                  class="mx-2 min-h-8 flex-row items-center gap-2 rounded-(--radius) pr-2 hover:bg-hover-soft selected:bg-selection"
                   style={{ paddingLeft: 8 + row().depth * 14 }}
                 >
-                  <Image src={workspaceTreeIcon(row().entry, row().expanded)} accessibilityElementsHidden style={{ width: 15, height: 15 }} />
-                  <Text class="flex-1 text-sm text-foreground line-clamp-1">{row().entry?.name}</Text>
+                  <Image src={workspaceTreeIcon(row().entry, row().expanded)} accessibilityElementsHidden style={{ width: 16, height: 16 }} />
+                  <Text class="flex-1 text-sm leading-5 text-foreground line-clamp-1">{row().entry?.name}</Text>
                 </TipButton>
               )}
             </List>
           </If>
           <If when={selected()}>
             {(entry) => (
-              <View class="gap-2 border-t border-line-faint p-4" testID="chat-workspace-selection">
-                <View class="flex-row items-center gap-2">
-                  <Text class="flex-1 text-sm font-medium text-foreground line-clamp-1">{entry().name}</Text>
+              <View class="border-t border-line-faint px-4 pb-3 pt-2" testID="chat-workspace-selection">
+                <View class="min-h-8 flex-row items-center gap-2">
+                  <Text class="flex-1 text-[15px] font-semibold leading-[22px] text-foreground line-clamp-1">{entry().name}</Text>
                   <Kicker>{entry().is_dir ? t("chat_workspace_kind_dir") : t("chat_workspace_kind_file")}</Kicker>
                 </View>
-                <View class="flex-row items-center gap-3">
-                  <Text class="w-16 text-xs text-muted-foreground">{t("audit_size")}</Text>
-                  <Text class="text-xs text-foreground">{formatBytes(entry().size_bytes)}</Text>
-                </View>
-                <View class="flex-row items-center gap-3">
-                  <Text class="w-16 text-xs text-muted-foreground">{t("audit_action")}</Text>
-                  <View class="flex-row items-center gap-0.5">
+                <PropertyRow label={t("audit_size")}>
+                  <Figure>{formatBytes(entry().size_bytes)}</Figure>
+                </PropertyRow>
+                <View class="min-h-9 flex-row items-center gap-3">
+                  <Text class="w-[88px] text-xs leading-5 text-muted-foreground">{t("audit_action")}</Text>
+                  <View class="-ml-2 flex-row items-center">
                     <If when={!c.selectedTopicIsCron()}>
                       <Button
                         variant="plain"
@@ -332,15 +349,16 @@ function WorkspaceTab(props: { c: ChatController }) {
   );
 }
 
-/** The panel's body: its tabs, then the topic or the workspace. `trailing` sits in the tab row. */
+/** The panel's body: its tabs (icons, their names as tooltips), then the topic or the workspace. `trailing` sits in the tab row. */
 export function WorkspacePanel(props: { c: ChatController; trailing?: any; class?: string }) {
   const c = props.c;
   return (
-    <View class={`bg-card ${props.class ?? ""}`} accessibilityLabel={t("chat_workspace_label")} testID="chat-workspace-panel">
-      <View class="flex-row items-end gap-2 px-3 pt-2">
+    <View class={props.class ?? ""} accessibilityLabel={t("chat_workspace_label")} testID="chat-workspace-panel">
+      <View class="flex-row items-end gap-2 pl-1 pr-3 pt-2">
         <Tabs
           class="flex-1"
-          items={c.workspacePanelTabs().map((tab) => ({ id: tab.id, label: tab.label }))}
+          items={c.workspacePanelTabs().map((tab) => ({ id: tab.id, label: tab.label, icon: tab.icon }))}
+          iconOnly
           value={c.workspaceSidebarTabID()}
           onChange={(id) => c.onWorkspaceTabChange(id)}
         />
