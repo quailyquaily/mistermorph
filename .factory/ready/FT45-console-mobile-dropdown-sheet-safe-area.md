@@ -37,3 +37,15 @@ Coder reports fixture screenshot checks with zero and 34pt insets, long menu/sel
 Installs: no manifest/lockfile changes; existing nsh 0.4.0 and Chrome used. The coder could not establish whether any additional screenshot utility was installed; no confirmed unpinned install to report.
 
 Moved new/ → review/. Owner/reviewer should inspect mobile safe-area clearance, keyboard transition and long-list scrolling on real devices.
+
+## factory · review · 2026-11-09 20:47
+head: 265ae3a252156ce0ea9830f794960d07bca3296e
+verdict: pass
+notes:
+- Codex reviewed origin/master...HEAD (base 28d1dcf8), all 13 changed files and related callers. No findings; branch merges cleanly with base.
+- Required gofmt check, go vet ./..., and go test ./... passed; 162 packages passed and 19 had no tests. nsh check passed; console tests passed 325/325. Tests used an absolute throwaway HOME.
+- Initial temporary test copy omitted workflow test inputs; after restoring these inputs the checks passed, including rerunning the required Go command in the review worktree. No product test failure remains.
+- Reviewer reports browser screenshot checks at 0/34pt inset, long lists and simulated keyboard; final choices remained reachable and selectable. Keyboard dismissal, focus restoration and desktop behavior passed automated checks.
+- Real Android/iOS devices and real software-keyboard animation were not verified; full Console panel screenshots were not exhaustively checked. Owner should inspect these before shipping.
+- No unpinned installs or manifest/lockfile changes. Manager confirmed clean worktree and unchanged reviewed HEAD.
+- Moved review/ → ready/. No linked GitHub issues or PRs.
