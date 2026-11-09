@@ -31,3 +31,15 @@ Installs: none.
 Checks: gofmt clean; go vet ./... and go test ./... passed. nsh check passed; coder's nsh build passed. Manager independently reran Console tests: 290 passed, 0 failed. Initial combined verification hit the shell time limit during Console tests; standalone rerun completed successfully. Scripted verification used throwaway absolute HOME paths.
 Not checked: no visual UI inspection on real Android, emulator or mobile browser; no Android SDK/emulator available. Headless Android checks verify focus rather than rendering a software keyboard. Owner should verify visible keyboard dismissal/restoration, safe areas, and profile-search sheet position on a physical Android device (including possible double lift by native sheet behavior).
 Moved new/ → review/; not merged into master.
+
+## factory · review · 2026-11-09 09:33
+head: 90c179eb0115503024c417d75e6fb27426766279
+verdict: pass
+
+No findings. Codex reviewed all four changed files in origin/master...HEAD against the request and plan. Branch merges cleanly with origin/master.
+
+Validation: required gofmt/vet/test gate passed; nsh check passed; nsh web-host tests passed 290/290. Codex also reports two Chromium selection-preservation checks passed and simulated portrait/landscape keyboard-height checks kept both popups actionable, profile-search options above the keyboard, and draft/selection intact. Three initial headless cursor probes were invalid because the engine does not process arrow keys; browser checks superseded them. Scripted tests used absolute throwaway HOME paths. Manager confirmed clean worktree and unchanged HEAD. No installs, code edits or external API calls.
+
+Residual risks: no real Android device or emulator validation of software-keyboard animation, focus restoration or system safe areas. Browser viewport simulation does not substitute for those device checks; owner should inspect them before shipping. No linked GitHub issue or PR.
+
+Moved review/ → ready/; not merged into master.
