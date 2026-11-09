@@ -48,14 +48,16 @@ type workerState struct {
 	metadata WorkerMetadata
 }
 
-// workerNames is the English name pool. The Console keeps the same list, and a pool of the
-// same size for each of its other languages, in web/console-nsh/lib/core/worker-identity.js; the
-// first eight are the names given out before names were random.
+// workerNames is the English name pool: famous scientists. The Console keeps the same list,
+// and the same scientists in the same order for each of its other languages, in
+// web/console-nsh/lib/core/worker-identity.js. A name index keeps its meaning across builds, so
+// the list keeps its size and order. Workers named before this pool carry ordinary first names
+// (Milo, Luna, ...); the Console still recognises and shows those as recorded.
 var workerNames = [...]string{
-	"Milo", "Luna", "Pip", "Cleo", "Finn", "Nova", "Remy", "Iris",
-	"John", "Ada", "Theo", "Ruby", "Jack", "Hazel", "Owen", "Mia",
-	"Leo", "Ivy", "Sam", "Nora", "Felix", "June", "Max", "Rose",
-	"Eli", "Maya", "Gus", "Ella", "Oscar", "Lily", "Ben", "Zoe",
+	"Einstein", "Curie", "Newton", "Darwin", "Noether", "Galileo", "Turing", "Lovelace",
+	"Faraday", "Maxwell", "Bohr", "Planck", "Kepler", "Pasteur", "Mendel", "Hopper",
+	"Franklin", "Feynman", "Hubble", "Tesla", "Euler", "Gauss", "Lavoisier", "Mendeleev",
+	"Hawking", "Meitner", "Fermi", "Dirac", "Copernicus", "Ramanujan", "Goodall", "Archimedes",
 }
 
 // workerAvatarCount is the number of logo styles (the brand colourways) the Console draws

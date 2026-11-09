@@ -3,11 +3,36 @@
 // avatar_index), so a worker keeps the same picks through reloads and resumes, and switching the
 // language changes only the name shown. The worker's identity is its id, never its name.
 
-// The name pools. Each language has its own names, natural there rather than translated, and
-// every pool has the same size, because a name index picks the same position in each. The
-// English pool is the runtime's (agent/worker.go) and must stay the same list in the same order;
-// its first eight are the names given out before names were random.
+// The name pools: famous scientists. Every language names the same scientist at the same
+// position, in the form conventional there (Einstein, 爱因斯坦, アインシュタイン), and every pool has
+// the same size, because a name index picks the same position in each. The English pool is the
+// runtime's (agent/worker.go) and must stay the same list in the same order.
 export const WORKER_NAME_POOLS = Object.freeze({
+  en: Object.freeze([
+    "Einstein", "Curie", "Newton", "Darwin", "Noether", "Galileo", "Turing", "Lovelace",
+    "Faraday", "Maxwell", "Bohr", "Planck", "Kepler", "Pasteur", "Mendel", "Hopper",
+    "Franklin", "Feynman", "Hubble", "Tesla", "Euler", "Gauss", "Lavoisier", "Mendeleev",
+    "Hawking", "Meitner", "Fermi", "Dirac", "Copernicus", "Ramanujan", "Goodall", "Archimedes",
+  ]),
+  zh: Object.freeze([
+    "爱因斯坦", "居里", "牛顿", "达尔文", "诺特", "伽利略", "图灵", "洛夫莱斯",
+    "法拉第", "麦克斯韦", "玻尔", "普朗克", "开普勒", "巴斯德", "孟德尔", "霍珀",
+    "富兰克林", "费曼", "哈勃", "特斯拉", "欧拉", "高斯", "拉瓦锡", "门捷列夫",
+    "霍金", "迈特纳", "费米", "狄拉克", "哥白尼", "拉马努金", "古道尔", "阿基米德",
+  ]),
+  ja: Object.freeze([
+    "アインシュタイン", "キュリー", "ニュートン", "ダーウィン", "ネーター", "ガリレオ", "チューリング", "ラブレス",
+    "ファラデー", "マクスウェル", "ボーア", "プランク", "ケプラー", "パスツール", "メンデル", "ホッパー",
+    "フランクリン", "ファインマン", "ハッブル", "テスラ", "オイラー", "ガウス", "ラボアジエ", "メンデレーエフ",
+    "ホーキング", "マイトナー", "フェルミ", "ディラック", "コペルニクス", "ラマヌジャン", "グドール", "アルキメデス",
+  ]),
+});
+
+// The ordinary first names workers had before they were named after scientists. Records the
+// runtime wrote then carry one of these English names, often with the index it was drawn at; they
+// keep showing it (in each language's legacy pool) rather than turning into whichever scientist
+// now sits at that index. The lists and their order are frozen history: never edit them.
+export const LEGACY_WORKER_NAME_POOLS = Object.freeze({
   en: Object.freeze([
     "Milo", "Luna", "Pip", "Cleo", "Finn", "Nova", "Remy", "Iris",
     "John", "Ada", "Theo", "Ruby", "Jack", "Hazel", "Owen", "Mia",
@@ -43,40 +68,67 @@ function index(value) {
   return Number.isSafeInteger(number) && number >= 0 ? number : null;
 }
 
-// workerNamePool is the pool for a Console language; a language without one uses English.
-export function workerNamePool(lang) {
+function poolFor(pools, lang) {
   const key = text(lang).toLowerCase().split(/[-_]/u)[0];
-  return Object.hasOwn(WORKER_NAME_POOLS, key) ? WORKER_NAME_POOLS[key] : WORKER_NAME_POOLS.en;
+  return Object.hasOwn(pools, key) ? pools[key] : pools.en;
 }
 
-function nameAt(nameIndex, lang) {
-  const pool = workerNamePool(lang);
+// workerNamePool is the scientist pool for a Console language; a language without one uses English.
+export function workerNamePool(lang) {
+  return poolFor(WORKER_NAME_POOLS, lang);
+}
+
+function nameAt(pool, nameIndex) {
   const round = Math.floor(nameIndex / pool.length);
   const name = pool[nameIndex % pool.length];
   return round > 0 ? `${name}-${round + 1}` : name;
 }
 
-// legacyNameIndex reads a name index back from an English name a record without indices
-// carries ("Milo", or "Milo-2" for a repeat), so older histories still follow the language. A
-// name not in the pool has none.
-function legacyNameIndex(name) {
+// englishNameIndex reads a name index back from an English name in pools ("Curie", or "Curie-2"
+// for a repeat). A name not in the pool has none.
+function englishNameIndex(pools, name) {
   const match = /^(.+?)(?:-([2-9]|[1-9]\d+))?$/u.exec(text(name));
   if (!match) return null;
-  const position = WORKER_NAME_POOLS.en.indexOf(match[1]);
+  const position = pools.en.indexOf(match[1]);
   if (position < 0) return null;
   const round = match[2] ? Number(match[2]) - 1 : 0;
-  return round * WORKER_NAME_POOL_SIZE + position;
+  return round * pools.en.length + position;
 }
 
-// workerNameIndex is the worker's recorded name index, or the one its legacy name implies.
+// resolveWorkerName decides which pools and index name a worker, or null to show the recorded name
+// as it is. A recorded index is trusted when the recorded name is the one the runtime gives at that
+// index, from the scientist pools or, for older records, the legacy ones, or when there is no
+// name; a record without an index is read back from its English name. Anything else (a name from
+// neither pool, or one that does not match its index) is not relabelled.
+function resolveWorkerName(worker) {
+  const name = text(worker?.name);
+  const recorded = index(worker?.nameIndex ?? worker?.name_index);
+  if (recorded !== null) {
+    if (!name || nameAt(WORKER_NAME_POOLS.en, recorded) === name) {
+      return { pools: WORKER_NAME_POOLS, nameIndex: recorded };
+    }
+    if (nameAt(LEGACY_WORKER_NAME_POOLS.en, recorded) === name) {
+      return { pools: LEGACY_WORKER_NAME_POOLS, nameIndex: recorded };
+    }
+    return null;
+  }
+  for (const pools of [WORKER_NAME_POOLS, LEGACY_WORKER_NAME_POOLS]) {
+    const nameIndex = englishNameIndex(pools, name);
+    if (nameIndex !== null) return { pools, nameIndex };
+  }
+  return null;
+}
+
+// workerNameIndex is the index the worker's name is shown from (in the scientist pools, or the
+// legacy ones for an older record), or null when its recorded name is shown as it is.
 export function workerNameIndex(worker) {
-  return index(worker?.nameIndex ?? worker?.name_index) ?? legacyNameIndex(worker?.name);
+  return resolveWorkerName(worker)?.nameIndex ?? null;
 }
 
-// workerDisplayName is the worker's name in lang. A legacy name outside the pools shows as it was.
+// workerDisplayName is the worker's name in lang. A name outside the pools shows as it was.
 export function workerDisplayName(worker, lang) {
-  const nameIndex = workerNameIndex(worker);
-  return nameIndex === null ? text(worker?.name) : nameAt(nameIndex, lang);
+  const resolved = resolveWorkerName(worker);
+  return resolved ? nameAt(poolFor(resolved.pools, lang), resolved.nameIndex) : text(worker?.name);
 }
 
 function hash(value) {

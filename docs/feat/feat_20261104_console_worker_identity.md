@@ -8,9 +8,18 @@ status: implemented
 
 Each `spawn` and `coder` call gets a task-local worker ID and a friendly name before
 its first progress event. The tool call and its subtask share that identity. Nested
-workers share the task's allocator. Names come from a short pool; later rounds add
-numeric suffixes, such as `Milo-2`, so names stay distinct when the pool is exhausted.
-The display name is not used as an identifier.
+workers share the task's allocator. Names come from a pool of 32 famous scientists
+(Einstein, Curie, Noether, ...); later rounds add numeric suffixes, such as `Curie-2`,
+so names stay distinct when the pool is exhausted. The display name is not used as an
+identifier.
+
+The Console shows each scientist in the form conventional in its language (`Curie`,
+`居里`, `キュリー`), with English for languages without a pool. The pool position is
+part of the recorded `name_index`, so the pool keeps its size and order. Workers named
+before the scientist pool carry ordinary first names (`Milo`, `Luna-2`, ...); a
+record whose name is the old name at its index, or an old name without an index, keeps
+showing that name in each language rather than the scientist now at that position. A
+name matching neither pool is shown as recorded.
 
 Events, subtask results, and Console activity entries carry optional `worker`
 metadata with `id`, `name`, and `processes`. Each process record has an OS `pid`, a
