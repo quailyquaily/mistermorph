@@ -43,6 +43,7 @@ import {
   type Contact,
 } from "./contact-format";
 import { MobileBarSpacer } from "../../components/frame/mobileBar";
+import { createPullSearch } from "../../components/shared/pullSearch";
 
 type Memory = { id: string; description?: string; body?: string };
 
@@ -111,6 +112,10 @@ export function ContactsPage() {
 
   const err = signal("");
   const filterText = signal("");
+  // On a touch phone the filter hides until the index is pulled down from its top
+  // (components/shared/pullSearch.ts), then heads the list; once shown it stays while the page
+  // lives, the index being rebuilt each time the phone comes back from a contact.
+  const filterRevealed = signal(false);
   const selectedContactID = signal("");
   const mobileEditorVisible = signal(false);
 
@@ -366,6 +371,72 @@ export function ContactsPage() {
     { id: "delete", label: t("action_delete"), disabled: deleting(), onSelect: confirmDelete },
   ];
 
+  const pull = createPullSearch({
+    query: () => filterText(),
+    revealed: filterRevealed,
+    label: t("contacts_filter_placeholder"),
+  });
+  const filterField = () => (
+    <IndexSearch
+      value={filterText()}
+      onChange={(value) => filterText.set(value)}
+      placeholder={t("contacts_filter_placeholder")}
+      mobile={isMobile()}
+      testID="contacts-filter"
+    />
+  );
+  const contactRow = (item: () => Contact) => (
+    <IndexRow
+      testID={`contact-row:${contactID(item())}`}
+      accessibilityLabel={contactAccessibilityLabel(item())}
+      active={!isMobile() && contactID(item()) === selectedContactID()}
+      onPress={() => selectContact(item())}
+      leading={<KindAvatar item={item()} />}
+      title={displayName(item())}
+      meta={primaryContactMeta(item())}
+      metaFade
+    />
+  );
+  // The desktop's index: the filter above it (IndexColumn's), the loading blocks, an error, the
+  // list or the note that there is nothing in it.
+  const desktopIndex = () => (
+    <>
+      <If when={store.loading}>
+        <Blocks count={4} height={65} class="px-4 pt-2" />
+      </If>
+      <If when={!store.loading && err()}>
+        <InlineNotice type="error" text={err()} class="mx-4 mt-2" testID="contacts-error" />
+      </If>
+      <If
+        when={!store.loading && filteredItems().length > 0}
+        else={
+          <If when={!store.loading}>
+            <Note
+              text={items().length === 0 ? t("contacts_empty") : t("contacts_empty_filtered")}
+              class="mx-4 mt-3 leading-normal"
+              testID="contacts-empty"
+            />
+          </If>
+        }
+      >
+        {/* A virtualized List: its rows are recycled cells, so the selected fill is each row's own and
+            fades in and out (180 ms) rather than gliding as one highlight. */}
+        <List
+          footer={MobileBarSpacer}
+          each={filteredItems()}
+          keyExtractor={(item) => contactID(item)}
+          estimatedItemSize={67}
+          class="flex-1"
+          scrollbar={SCROLLBAR}
+          contentClass="gap-0.5 px-4 pt-2 pb-4"
+          testID="contacts-list"
+        >
+          {(item) => contactRow(item)}
+        </List>
+      </If>
+    </>
+  );
+
   return (
     <Page hideBar scroll={false} testID="contacts-page">
       <If when={mobileShowBack()}>
@@ -378,58 +449,54 @@ export function ContactsPage() {
             fill={isMobile()}
             scroll={false}
             testID="contacts-index"
-            search={
-              <IndexSearch
-                value={filterText()}
-                onChange={(value) => filterText.set(value)}
-                placeholder={t("contacts_filter_placeholder")}
-                mobile={isMobile()}
-                testID="contacts-filter"
-              />
-            }
+            search={isMobile() ? undefined : filterField()}
           >
-            <If when={store.loading}>
-              <Blocks count={4} height={65} class={isMobile() ? "pt-2" : "px-4 pt-2"} />
-            </If>
-            <If when={!store.loading && err()}>
-              <InlineNotice type="error" text={err()} class="mx-4 mt-2" testID="contacts-error" />
-            </If>
-            <If
-              when={!store.loading && filteredItems().length > 0}
-              else={
-                <If when={!store.loading}>
-                  <Note
-                    text={items().length === 0 ? t("contacts_empty") : t("contacts_empty_filtered")}
-                    class="mx-4 mt-3 leading-normal"
-                    testID="contacts-empty"
-                  />
-                </If>
-              }
-            >
-              {/* A virtualized List: its rows are recycled cells, so the selected fill is each row's own and
-                  fades in and out (180 ms) rather than gliding as one highlight. */}
+            <If when={isMobile()} else={desktopIndex()}>
+              {/* On a phone the list is always there, so a pull reaches the filter while it loads,
+                  fails or is empty too; the filter and an error head it and scroll with it, and stay
+                  the same views (a focused field keeps its focus) as matches come and go. */}
               <List
                 footer={MobileBarSpacer}
-                each={filteredItems()}
+                header={() => (
+                  <View>
+                    <If when={pull.shown()}>{filterField()}</If>
+                    <If when={!store.loading && err()}>
+                      <InlineNotice type="error" text={err()} class="mx-4 mt-2" testID="contacts-error" />
+                    </If>
+                    {/* With the list's 2pt gap, the 8pt the list keeps before its first row (as the
+                        list's top padding did under the filter). */}
+                    <View class="h-1.5" />
+                  </View>
+                )}
+                empty={() => (
+                  <If
+                    when={store.loading}
+                    else={
+                      <Note
+                        text={items().length === 0 ? t("contacts_empty") : t("contacts_empty_filtered")}
+                        class="mx-4 mt-1 leading-normal"
+                        testID="contacts-empty"
+                      />
+                    }
+                  >
+                    <Blocks count={4} height={65} />
+                  </If>
+                )}
+                each={store.loading ? [] : filteredItems()}
                 keyExtractor={(item) => contactID(item)}
                 estimatedItemSize={67}
                 class="flex-1"
                 scrollbar={SCROLLBAR}
-                contentClass={isMobile() ? "gap-0.5 pt-2 pb-4" : "gap-0.5 px-4 pt-2 pb-4"}
+                contentClass="gap-0.5 pb-4"
+                refreshIndicator={pull.indicator}
+                refreshing={pull.refreshing()}
+                onRefresh={pull.onRefresh}
+                onScrollDragStart={pull.onDragStart}
+                accessibilityActions={pull.actions()}
+                onAccessibilityAction={pull.onAction}
                 testID="contacts-list"
               >
-                {(item) => (
-                  <IndexRow
-                    testID={`contact-row:${contactID(item())}`}
-                    accessibilityLabel={contactAccessibilityLabel(item())}
-                    active={!isMobile() && contactID(item()) === selectedContactID()}
-                    onPress={() => selectContact(item())}
-                    leading={<KindAvatar item={item()} />}
-                    title={displayName(item())}
-                    meta={primaryContactMeta(item())}
-                    metaFade
-                  />
-                )}
+                {(item) => contactRow(item)}
               </List>
             </If>
           </IndexColumn>

@@ -23,6 +23,7 @@ import { t } from "../../components/chat/i18n";
 import { normalizeTopicID } from "../../lib/core/chat-task-history.js";
 import type { ChatController, SidebarView, TopicRow } from "./chatController";
 import { MobileBarSpacer } from "../../components/frame/mobileBar";
+import { createPullSearch } from "../../components/shared/pullSearch";
 
 // A view toggle in the head: a 38pt square with a 14pt icon, the buttons flush; on, a blue icon on
 // a blue tint. The TODO toggle carries the running mark off its icon's top right corner.
@@ -101,6 +102,26 @@ export function TopicSidebar(props: { c: ChatController; class?: string }) {
   // the title at the page's 12pt, rows edge to edge with their content 12pt in, group labels at 14.
   // The desktop sidebar keeps its 16pt list gutter and 25.6pt title.
   const rowPadding = () => (c.mobileMode() ? "px-3" : "pl-3.5 pr-[13px]");
+  // On a touch phone the search hides until the list is pulled down from its top, and then sits
+  // at the top of the list, scrolling with it; the desktop's stays under the head.
+  const pull = createPullSearch({
+    query: () => c.topicSearch(),
+    revealed: c.topicSearchRevealed,
+    mobile: () => c.mobileMode(),
+    label: t("chat_topics_search"),
+  });
+  // The search: the loaded topics of this view whose title holds the text, as it is typed. The
+  // index search Contacts has too (same field, gutters and room around it); it aligns with the
+  // rows. Escape empties it.
+  const search = () => (
+    <IndexSearch
+      value={c.topicSearch()}
+      onChange={(value) => c.setTopicSearch(value)}
+      placeholder={t("chat_topics_search")}
+      mobile={c.mobileMode()}
+      testID="chat-topics-search"
+    />
+  );
 
   const topicRow = (row: () => Extract<TopicRow, { kind: "topic" }>) => (
     <TipButton
@@ -193,9 +214,10 @@ export function TopicSidebar(props: { c: ChatController; class?: string }) {
 
   return (
     <View class={`bg-sidebar ${props.class ?? ""}`} testID="chat-topic-sidebar">
-      {/* The head: the title on the left, the view toggles and New flush at the right, and the
-          search under them. The hairline under both shows once topics have scrolled beneath, and
-          sags softly under the view toggle that is on (design/ui-refresh.html §1). */}
+      {/* The head: the title on the left, the view toggles and New flush at the right, and on a
+          desktop the search under them (on a phone it is the list's). The hairline under the head
+          shows once topics have scrolled beneath, and sags softly under the view toggle that is on
+          (design/ui-refresh.html §1). */}
       <View class="relative z-10">
         <View
           class={`h-[57px] flex-row items-center ${c.mobileMode() ? "" : "pl-[25.6px]"}`}
@@ -248,16 +270,7 @@ export function TopicSidebar(props: { c: ChatController; class?: string }) {
             </TipButton>
           </If>
         </View>
-        {/* The search: the loaded topics of this view whose title holds the text, as it is typed.
-            The index search Contacts has too (same field, gutters and room around it); it aligns
-            with the rows. Escape empties it. */}
-        <IndexSearch
-          value={c.topicSearch()}
-          onChange={(value) => c.setTopicSearch(value)}
-          placeholder={t("chat_topics_search")}
-          mobile={c.mobileMode()}
-          testID="chat-topics-search"
-        />
+        <If when={!c.mobileMode()}>{search()}</If>
         <SagRule
           center={sagCenter}
           half={sagHalf(38)}
@@ -277,12 +290,21 @@ export function TopicSidebar(props: { c: ChatController; class?: string }) {
         style={edges.style()}
         contentClass="grow"
         scrollbar={SCROLLBAR}
+        refreshIndicator={pull.indicator}
+        refreshing={pull.refreshing()}
+        onRefresh={pull.onRefresh}
+        onScrollDragStart={pull.onDragStart}
+        accessibilityActions={pull.actions()}
+        onAccessibilityAction={pull.onAction}
       >
         {/* The list's gutter (16pt; none on a phone, where rows run edge to edge as Contacts' do) as
             views inside the content rather than its padding: the content is at least the viewport's
             height, and padding on top of that made a list that fits scroll by its padding. Phones
             keep room under the floating New button. */}
         <View class={`grow ${c.mobileMode() ? "" : "px-4"}`} onLayout={edges.onContentLayout}>
+          {/* On a phone the search, once pulled down: the list's first view, scrolling with it, at
+              the head's foot as on a desktop while the list is at its top. */}
+          <If when={c.mobileMode() && pull.shown()}>{search()}</If>
           {/* 8pt before the first row, as under Contacts' search. */}
           <View class="h-2" />
           <selection.Highlight class="rounded-(--radius) bg-selection" testID="chat-topic-selection" />
