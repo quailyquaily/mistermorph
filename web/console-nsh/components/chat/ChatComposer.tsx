@@ -11,7 +11,7 @@ import { batch, cleanup, effect, Image, Keyboard, keyboardFrame, keymap, LayoutA
 import { Button as BaseButton, Input, Select } from "nsh/base";
 import { BorderBeam } from "../motion/BorderBeam";
 import { ICONS } from "../icons";
-import { bottomSheetStyle, Button, BusyBeam, busyLook, DropdownMenu, Icon, Spinner, Tip, TipButton, type IconName } from "../ui";
+import { bottomSheetStyle, Button, BusyBeam, busyLook, DropdownMenu, Icon, Tip, TipButton, type IconName } from "../ui";
 import {
   buildComposerSuggestionItems,
   composerSuggestionInsertText,
@@ -493,7 +493,8 @@ export function ChatComposer(props: ChatComposerProps) {
 
   // The mic, an icon button drawn as the add and send controls are (a 38-point square, a 14-point
   // glyph) whose presses count 3 points around it: a 44-point target for a finger. While it records
-  // it is selected and shows Stop; while the recording is transcribed it waits with a spinner.
+  // it is selected and shows Stop; while the recording is transcribed it is a busy plain button
+  // (BusyBeam, busyLook): its disabled microphone with the beam round it.
   const voiceControl = () => (
     <TipButton
       onPress={() => props.onVoice?.()}
@@ -503,15 +504,16 @@ export function ChatComposer(props: ChatComposerProps) {
       tooltip={<Tip text={props.voiceLabel ?? ""} />}
       hitSlop={VOICE_HIT_SLOP}
       testID="chat-composer-voice"
-      class="size-[38px] items-center justify-center rounded-(--radius) transition-colors duration-[180ms] hover:bg-hover-soft selected:bg-selection disabled:opacity-45"
+      class={`relative size-[38px] items-center justify-center rounded-(--radius) transition-colors duration-[180ms] hover:bg-hover-soft selected:bg-selection ${
+        props.voiceState === "transcribing" ? "" : "disabled:opacity-45"
+      }`}
     >
-      <If when={props.voiceState !== "transcribing"} else={<Spinner size={14} />}>
-        <Icon
-          name={props.voiceState === "recording" ? "PhStop" : "PhMicrophone"}
-          size={14}
-          color={props.voiceState === "recording" ? "ink" : "subtle"}
-        />
-      </If>
+      <Icon
+        name={props.voiceState === "recording" ? "PhStop" : "PhMicrophone"}
+        size={14}
+        color={props.voiceState === "transcribing" ? busyLook("plain").text : props.voiceState === "recording" ? "ink" : "subtle"}
+      />
+      <BusyBeam busy={props.voiceState === "transcribing"} variant="plain" short testID="chat-composer-voice-beam" />
     </TipButton>
   );
 
