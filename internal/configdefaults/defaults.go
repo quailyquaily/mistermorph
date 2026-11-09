@@ -338,4 +338,7 @@ func Apply(v *viper.Viper) {
 	// Memories the agent saves on purpose, scoped to who may hear them (docs/memories.md).
 	v.SetDefault("memories.enabled", true)
 
+	// LLM usage rows in usage.db older than this many days are deleted daily; 0 keeps them all.
+	v.SetDefault("stats.llm_usage.retention_days", 0)
+
 }

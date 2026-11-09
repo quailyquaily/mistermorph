@@ -59,12 +59,17 @@ Console uses `/data/state`, including `/data/state/config.yaml`. The entrypoint:
 - Restores `<R2_PREFIX>/state.tar.gz` before starting Console. A missing object
   means new state; a failed R2 request or corrupt archive stops startup.
 - Uploads an archive every `MISTER_MORPH_R2_BACKUP_INTERVAL` seconds (default `60`).
+  The archive is made from `morph state snapshot`, not from the live folder: each
+  SQLite database (`journal/journal.db`, `memory.db`, `agent.db`, `usage.db`) is
+  copied with `VACUUM INTO`, so a backup taken while Console writes still opens.
+  `MISTER_MORPH_R2_BACKUP_SKIP=usage` leaves the LLM usage database out of the
+  archive where its size matters.
 - Forwards shutdown signals to Console, waits for it to exit, then uploads a final
   archive. A failed final backup produces a nonzero exit status.
 
 **R2 backup is not a persistent disk or a transaction across files.** An abrupt
-termination can lose writes since the last successful backup. A live backup can
-capture files at different points in time. Only state under `/data/state` is saved;
+termination can lose writes since the last successful backup. Files other than the
+databases are copied one by one and can be captured at different points in time. Only state under `/data/state` is saved;
 cache files and paths outside it are not. Backup failures are logged. Monitor them
 and keep independent copies of important backups. The bucket contains configuration,
 conversation data, and possibly credentials entered in Console; keep it private.

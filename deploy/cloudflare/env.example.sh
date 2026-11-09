@@ -20,6 +20,8 @@ export MISTER_MORPH_R2_PREFIX="${MISTER_MORPH_R2_PREFIX:-console-prod}"
 export MISTER_MORPH_R2_ACCESS_KEY_ID="${MISTER_MORPH_R2_ACCESS_KEY_ID:-}"
 export MISTER_MORPH_R2_SECRET_ACCESS_KEY="${MISTER_MORPH_R2_SECRET_ACCESS_KEY:-}"
 export MISTER_MORPH_R2_BACKUP_INTERVAL="${MISTER_MORPH_R2_BACKUP_INTERVAL:-60}"
+# Databases to leave out of the backup, comma-separated (for example "usage", the LLM usage numbers).
+# export MISTER_MORPH_R2_BACKUP_SKIP=usage
 # Testing only: 1 bypasses R2 and accepts data loss when a cloud container stops.
 export MISTER_MORPH_ALLOW_EPHEMERAL_STATE="${MISTER_MORPH_ALLOW_EPHEMERAL_STATE:-0}"
 

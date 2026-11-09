@@ -23,7 +23,7 @@ func TestFileStoreContactAvatarLifecycle(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	store := NewFileStore(t.TempDir())
+	store := NewStore(t.TempDir())
 	contactID := "tg:../../1234"
 	raw := testContactAvatarPNG(t)
 
@@ -93,7 +93,7 @@ func TestFileStoreContactAvatarValidation(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	store := NewFileStore(t.TempDir())
+	store := NewStore(t.TempDir())
 
 	tests := []struct {
 		name      string
@@ -119,7 +119,7 @@ func TestFileStoreContactAvatarHonorsCanceledContext(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	store := NewFileStore(t.TempDir())
+	store := NewStore(t.TempDir())
 	if err := store.PutContactAvatar(ctx, "tg:1", testContactAvatarPNG(t)); err == nil {
 		t.Fatal("PutContactAvatar() error = nil, want context error")
 	}

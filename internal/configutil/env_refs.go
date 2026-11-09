@@ -5,6 +5,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/quailyquaily/mistermorph/internal/configstore"
+
 	"gopkg.in/yaml.v3"
 )
 
@@ -24,7 +26,7 @@ type EnvRefCheck struct {
 // InspectConfigEnvRefs reports whether environment variables referenced by
 // YAML scalar values are set, empty, or missing. It never returns their values.
 func InspectConfigEnvRefs(path string) ([]EnvRefCheck, error) {
-	raw, err := os.ReadFile(path)
+	raw, err := configstore.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}

@@ -354,10 +354,6 @@ func newServer(cfg serveConfig) (*server, error) {
 	if passwordErr != nil {
 		return nil, passwordErr
 	}
-	sessionStorePath := ""
-	if strings.TrimSpace(cfg.stateDir) != "" {
-		sessionStorePath = filepath.Join(cfg.stateDir, "console", "sessions.json")
-	}
 
 	reader, err := loadConsoleRuntimeConfig(cfg.configPath, cfg.runtimeOverrides)
 	if err != nil {
@@ -399,7 +395,7 @@ func newServer(cfg serveConfig) (*server, error) {
 		cfg:              cfg,
 		startedAt:        time.Now().UTC(),
 		password:         password,
-		sessions:         newSessionStore(sessionStorePath),
+		sessions:         newSessionStore(cfg.stateDir),
 		streamTickets:    newSessionStore(""),
 		artifactPreviews: newArtifactPreviewStore(),
 		limiter:          newLoginLimiter(),
@@ -439,6 +435,7 @@ func runConsole(ctx context.Context, cfg serveConfig) error {
 			return err
 		}
 		defer srv.localRuntime.Close()
+		defer func() { _ = srv.sessions.Close() }()
 		defer srv.managed.Close()
 		return srv.serve(ctx, ln)
 	})

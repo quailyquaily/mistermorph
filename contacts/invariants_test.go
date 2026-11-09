@@ -30,7 +30,7 @@ func (m *mockSender) Send(ctx context.Context, contact Contact, decision ShareDe
 func TestInvariantOutboxIdempotency(t *testing.T) {
 	ctx := context.Background()
 	root := filepath.Join(t.TempDir(), "contacts")
-	store := NewFileStore(root)
+	store := NewStore(root)
 	svc := NewService(store)
 	now := time.Date(2026, 2, 8, 21, 0, 0, 0, time.UTC)
 
@@ -71,19 +71,22 @@ func TestInvariantOutboxIdempotency(t *testing.T) {
 func TestSendDecisionWithLegacyOutboxRecordMissingAttempts(t *testing.T) {
 	ctx := context.Background()
 	root := filepath.Join(t.TempDir(), "contacts")
-	store := NewFileStore(root)
+	if err := os.MkdirAll(root, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	store := NewStore(root)
 	svc := NewService(store)
 	now := time.Date(2026, 2, 8, 21, 15, 0, 0, time.UTC)
 
-	if err := store.Ensure(ctx); err != nil {
-		t.Fatalf("Ensure() error = %v", err)
-	}
 	if err := os.WriteFile(
 		filepath.Join(root, "bus_outbox.json"),
 		[]byte("{\"version\":1,\"records\":[{\"channel\":\"telegram\",\"idempotency_key\":\"legacy:k0\",\"status\":\"sent\",\"created_at\":\"2026-02-08T20:00:00Z\",\"updated_at\":\"2026-02-08T20:00:00Z\",\"sent_at\":\"2026-02-08T20:00:00Z\"}]}\n"),
 		0o600,
 	); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
+	}
+	if err := store.Ensure(ctx); err != nil {
+		t.Fatalf("Ensure() error = %v", err)
 	}
 
 	if _, err := svc.UpsertContact(ctx, Contact{
@@ -118,7 +121,7 @@ func TestSendDecisionWithLegacyOutboxRecordMissingAttempts(t *testing.T) {
 func TestSendDecisionResolvesTelegramUsernameToPrivateChatContact(t *testing.T) {
 	ctx := context.Background()
 	root := filepath.Join(t.TempDir(), "contacts")
-	store := NewFileStore(root)
+	store := NewStore(root)
 	svc := NewService(store)
 	now := time.Date(2026, 2, 10, 11, 30, 0, 0, time.UTC)
 
@@ -161,7 +164,7 @@ func TestSendDecisionResolvesTelegramUsernameToPrivateChatContact(t *testing.T) 
 func TestSendDecisionTelegramUsernameWithoutPrivateChatID(t *testing.T) {
 	ctx := context.Background()
 	root := filepath.Join(t.TempDir(), "contacts")
-	store := NewFileStore(root)
+	store := NewStore(root)
 	svc := NewService(store)
 	now := time.Date(2026, 2, 10, 11, 45, 0, 0, time.UTC)
 
@@ -201,7 +204,7 @@ func TestSendDecisionTelegramUsernameWithoutPrivateChatID(t *testing.T) {
 func TestSendDecisionUnknownProtocolNotFoundSuggestsProtocolChannel(t *testing.T) {
 	ctx := context.Background()
 	root := filepath.Join(t.TempDir(), "contacts")
-	store := NewFileStore(root)
+	store := NewStore(root)
 	svc := NewService(store)
 	now := time.Date(2026, 2, 10, 11, 50, 0, 0, time.UTC)
 
@@ -235,7 +238,7 @@ func TestSendDecisionUnknownProtocolNotFoundSuggestsProtocolChannel(t *testing.T
 func TestSendDecisionChatIDHintAllowsTelegramChannelResolution(t *testing.T) {
 	ctx := context.Background()
 	root := filepath.Join(t.TempDir(), "contacts")
-	store := NewFileStore(root)
+	store := NewStore(root)
 	svc := NewService(store)
 	now := time.Date(2026, 2, 10, 12, 0, 0, 0, time.UTC)
 
@@ -274,7 +277,7 @@ func TestSendDecisionChatIDHintAllowsTelegramChannelResolution(t *testing.T) {
 func TestSendDecisionInvalidChatIDHintFailsBeforeSend(t *testing.T) {
 	ctx := context.Background()
 	root := filepath.Join(t.TempDir(), "contacts")
-	store := NewFileStore(root)
+	store := NewStore(root)
 	svc := NewService(store)
 	now := time.Date(2026, 2, 10, 12, 10, 0, 0, time.UTC)
 
@@ -310,7 +313,7 @@ func TestSendDecisionInvalidChatIDHintFailsBeforeSend(t *testing.T) {
 func TestSendDecisionChatIDHintAllowsSlackChannelResolution(t *testing.T) {
 	ctx := context.Background()
 	root := filepath.Join(t.TempDir(), "contacts")
-	store := NewFileStore(root)
+	store := NewStore(root)
 	svc := NewService(store)
 	now := time.Date(2026, 2, 10, 12, 20, 0, 0, time.UTC)
 
@@ -356,7 +359,7 @@ func TestSendDecisionChatIDHintAllowsSlackChannelResolution(t *testing.T) {
 func TestSendDecisionPrefersSlackTargetWhenNoChatIDHint(t *testing.T) {
 	ctx := context.Background()
 	root := filepath.Join(t.TempDir(), "contacts")
-	store := NewFileStore(root)
+	store := NewStore(root)
 	svc := NewService(store)
 	now := time.Date(2026, 2, 10, 12, 30, 0, 0, time.UTC)
 

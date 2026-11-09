@@ -3,7 +3,6 @@ package topiccontext
 import (
 	"context"
 	"errors"
-	"os"
 	"path/filepath"
 	"testing"
 
@@ -92,8 +91,11 @@ func TestCountSnapshotRemembersAProviderThatCannotCount(t *testing.T) {
 
 func TestCountSnapshotNeedsTheStoredRequest(t *testing.T) {
 	store, ctx := observedStore(t, 900)
-	path := store.snapshotPath("console:t1")
-	if err := os.Remove(requestPath(path)); err != nil {
+	db, err := store.handle()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`UPDATE topic_context_snapshots SET request = NULL WHERE conversation_key = ?`, "console:t1"); err != nil {
 		t.Fatal(err)
 	}
 	calls := 0

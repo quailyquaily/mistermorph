@@ -8,11 +8,14 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/quailyquaily/mistermorph/internal/configstore"
+
 	"github.com/quailyquaily/mistermorph/internal/configbootstrap"
 	"github.com/quailyquaily/mistermorph/internal/configutil"
 	"github.com/quailyquaily/mistermorph/internal/fsstore"
 	"github.com/quailyquaily/mistermorph/internal/onboardingcheck"
 	"github.com/quailyquaily/mistermorph/internal/pathutil"
+	"github.com/quailyquaily/mistermorph/internal/personastore"
 	"github.com/quailyquaily/mistermorph/internal/secref"
 	"github.com/quailyquaily/mistermorph/internal/statepaths"
 	"github.com/spf13/viper"
@@ -71,7 +74,7 @@ func (s *server) handleSetupRepairSecret(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	raw, err := os.ReadFile(configPath)
+	raw, err := configstore.ReadFile(configPath)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -136,9 +139,13 @@ func (s *server) handleSetupRepairFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if item.Key == onboardingcheck.FileKeyIdentity || item.Key == onboardingcheck.FileKeySoul {
+		s.handleSetupRepairPersona(w, r, item)
+		return
+	}
 	switch r.Method {
 	case http.MethodGet:
-		raw, err := os.ReadFile(item.Path)
+		raw, err := configstore.ReadFile(item.Path)
 		if err != nil {
 			if os.IsNotExist(err) {
 				writeError(w, http.StatusNotFound, fmt.Sprintf("%s is missing", item.Name))
@@ -191,9 +198,11 @@ func (s *server) resolveSetupRepairFile(rawKey string) (onboardingcheck.Item, er
 	case onboardingcheck.FileKeyConfig:
 		return onboardingcheck.InspectConfigPath(configPath, s.setupRepairSecretSource()), nil
 	case onboardingcheck.FileKeyIdentity:
-		return onboardingcheck.InspectIdentityYAMLPath(filepath.Join(stateDir, statepaths.PersonaDirName, statepaths.IdentityFilename)), nil
+		identity, _ := onboardingcheck.InspectPersona(stateDir)
+		return identity, nil
 	case onboardingcheck.FileKeySoul:
-		return onboardingcheck.InspectSoulPath(filepath.Join(stateDir, statepaths.PersonaDirName, statepaths.SoulFilename)), nil
+		_, soul := onboardingcheck.InspectPersona(stateDir)
+		return soul, nil
 	default:
 		return onboardingcheck.Item{}, fmt.Errorf("invalid repair file key")
 	}
@@ -232,9 +241,96 @@ func (s *server) setupRepairStateDir() string {
 }
 
 func writeRepairFile(path string, content []byte) error {
+	if configstore.IsDBConfigPath(path) {
+		return configstore.WriteFileBy(path, content, configstore.ByConsole)
+	}
 	mode := os.FileMode(0o644)
 	if st, err := os.Stat(path); err == nil {
 		mode = st.Mode().Perm()
 	}
 	return fsstore.WriteTextAtomic(path, string(content), fsstore.FileOptions{FilePerm: mode})
+}
+
+// handleSetupRepairPersona serves the identity and the soul, which are rows of agent.db, in the
+// file shapes the repair page edits: identity.yaml and soul.md.
+func (s *server) handleSetupRepairPersona(w http.ResponseWriter, r *http.Request, item onboardingcheck.Item) {
+	ctx := r.Context()
+	store, err := personastore.ForStateDir(ctx, s.setupRepairStateDir())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		id, ok, err := store.Identity(ctx)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		content := ""
+		if item.Key == onboardingcheck.FileKeyIdentity {
+			if item.Status == onboardingcheck.StatusMalformed {
+				// The rejected file, to repair.
+				if raw, err := os.ReadFile(item.Path); err == nil {
+					writeJSON(w, http.StatusOK, map[string]any{"key": item.Key, "name": item.Name, "path": item.Path, "content": string(raw)})
+					return
+				}
+			}
+			if !ok {
+				writeError(w, http.StatusNotFound, fmt.Sprintf("%s is missing", item.Name))
+				return
+			}
+			content = personastore.RenderIdentityYAML(id)
+		} else {
+			if !ok || strings.TrimSpace(id.Soul) == "" {
+				writeError(w, http.StatusNotFound, fmt.Sprintf("%s is missing", item.Name))
+				return
+			}
+			content = personastore.RenderSoul(id.Soul)
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"key": item.Key, "name": item.Name, "path": item.Path, "content": content})
+	case http.MethodPut:
+		var req setupRepairFilePayload
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<20)).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid json")
+			return
+		}
+		var patch personastore.IdentityPatch
+		if item.Key == onboardingcheck.FileKeyIdentity {
+			parsed, err := personastore.ParseIdentityYAML(req.Content)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			patch = personastore.IdentityPatch{Name: &parsed.Name, NameAlts: &parsed.NameAlts, Creature: &parsed.Creature,
+				Vibe: &parsed.Vibe, Emoji: &parsed.Emoji, Extra: &parsed.Extra}
+		} else {
+			soul := personastore.ParseSoul(req.Content)
+			patch = personastore.IdentityPatch{Soul: &soul}
+		}
+		if _, err := store.PatchIdentity(ctx, patch, personastore.ByConsole); err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if item.Key == onboardingcheck.FileKeyIdentity {
+			// The rejected file is repaired; keep it beside the others the import read.
+			stateDir := s.setupRepairStateDir()
+			if _, found := onboardingcheck.RejectedIdentityFile(ctx, store, stateDir); found {
+				broken := filepath.Join(stateDir, statepaths.PersonaDirName, statepaths.IdentityFilename)
+				if _, err := os.Stat(broken + ".imported"); os.IsNotExist(err) {
+					_ = os.Rename(broken, broken+".imported")
+				} else {
+					_ = os.Rename(broken, broken+".rejected")
+				}
+			}
+		}
+		next, err := s.resolveSetupRepairFile(item.Key)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "item": next})
+	default:
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
 }

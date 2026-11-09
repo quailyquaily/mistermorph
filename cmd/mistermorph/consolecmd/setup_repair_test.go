@@ -2,6 +2,7 @@ package consolecmd
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +11,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/quailyquaily/mistermorph/internal/configstore"
+	"github.com/quailyquaily/mistermorph/internal/personastore"
 	"github.com/quailyquaily/mistermorph/internal/secref"
 	"github.com/spf13/viper"
 )
@@ -91,12 +94,14 @@ func TestHandleSetupRepairFilePutRepairsIdentity(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d (%s)", rec.Code, http.StatusOK, rec.Body.String())
 	}
-	raw, err := os.ReadFile(path)
+	store, err := personastore.Open(context.Background(), stateDir)
 	if err != nil {
-		t.Fatalf("ReadFile() error = %v", err)
+		t.Fatal(err)
 	}
-	if len(raw) == 0 {
-		t.Fatalf("expected repaired identity.yaml content")
+	defer func() { _ = store.Close() }()
+	id, ok, err := store.Identity(context.Background())
+	if err != nil || !ok || id.Name != "Momo" || id.Creature != "cat" {
+		t.Fatalf("repaired identity = %+v, %v, %v", id, ok, err)
 	}
 	if !bytes.Contains(rec.Body.Bytes(), []byte(`"status":"ok"`)) {
 		t.Fatalf("response should report repaired file: %s", rec.Body.String())
@@ -162,5 +167,79 @@ func TestHandleSetupRepairSecretDeleteRemovesReference(t *testing.T) {
 	}
 	if strings.Contains(string(raw), "api_key") || !strings.Contains(string(raw), "model: gpt-test") {
 		t.Fatalf("config reference was not removed cleanly:\n%s", raw)
+	}
+}
+
+func TestHandleSetupRepairFixesARejectedIdentityFile(t *testing.T) {
+	stateDir := t.TempDir()
+	path := filepath.Join(stateDir, "persona", "identity.yaml")
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("name: [\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	srv := &server{cfg: serveConfig{stateDir: stateDir}}
+	get := httptest.NewRecorder()
+	srv.handleSetupRepairFile(get, httptest.NewRequest(http.MethodGet, "/api/setup/file?key=identity", nil))
+	if get.Code != http.StatusOK || !strings.Contains(get.Body.String(), `name: [`) {
+		t.Fatalf("GET = %d %s", get.Code, get.Body.String())
+	}
+	body := `{"content":"name: Fixed\n"}`
+	put := httptest.NewRecorder()
+	srv.handleSetupRepairFile(put, httptest.NewRequest(http.MethodPut, "/api/setup/file?key=identity", strings.NewReader(body)))
+	if put.Code != http.StatusOK || !strings.Contains(put.Body.String(), `"status":"ok"`) {
+		t.Fatalf("PUT = %d %s", put.Code, put.Body.String())
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("rejected file left in place: %v", err)
+	}
+	if _, err := os.Stat(path + ".imported"); err != nil {
+		t.Fatalf("rejected file not kept: %v", err)
+	}
+}
+
+// Without --config the config is in agent.db, named <state>/agent.db#config.yaml: the repair page
+// reads and saves it there, not as a file of that name.
+func TestHandleSetupRepairFileReadsTheConfigInAgentDB(t *testing.T) {
+	stateDir := t.TempDir()
+	configPath := configstore.DBConfigPath(stateDir)
+	if err := configstore.WriteFileBy(configPath, []byte("llm:\n  model: from-db\n"), configstore.ByCLI); err != nil {
+		t.Fatal(err)
+	}
+	prevConfig, hadConfig := viper.Get("config"), viper.IsSet("config")
+	viper.Set("config", configPath)
+	t.Cleanup(func() {
+		if hadConfig {
+			viper.Set("config", prevConfig)
+		} else {
+			viper.Set("config", nil)
+		}
+	})
+	srv := &server{cfg: serveConfig{stateDir: stateDir}}
+	get := func() (int, string) {
+		t.Helper()
+		rec := httptest.NewRecorder()
+		srv.handleSetupRepairFile(rec, httptest.NewRequest(http.MethodGet, "/api/setup/file?key=config", nil))
+		var payload struct {
+			Content string `json:"content"`
+		}
+		_ = json.Unmarshal(rec.Body.Bytes(), &payload)
+		return rec.Code, payload.Content
+	}
+	if code, content := get(); code != http.StatusOK || !strings.Contains(content, "model: from-db") {
+		t.Fatalf("GET = %d, %q", code, content)
+	}
+	body, _ := json.Marshal(map[string]string{"content": "llm:\n  model: repaired\n"})
+	rec := httptest.NewRecorder()
+	srv.handleSetupRepairFile(rec, httptest.NewRequest(http.MethodPut, "/api/setup/file?key=config", bytes.NewBuffer(body)))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("PUT = %d (%s)", rec.Code, rec.Body.String())
+	}
+	if code, content := get(); code != http.StatusOK || !strings.Contains(content, "model: repaired") {
+		t.Fatalf("GET after PUT = %d, %q", code, content)
+	}
+	if _, err := os.Stat(configPath); !os.IsNotExist(err) {
+		t.Fatalf("a file named %s was written: %v", configPath, err)
 	}
 }

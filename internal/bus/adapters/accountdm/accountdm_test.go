@@ -13,7 +13,7 @@ import (
 
 func TestInboundRoundTripDedupeAndContacts(t *testing.T) {
 	ctx := context.Background()
-	store := contacts.NewFileStore(t.TempDir())
+	store := contacts.NewStore(t.TempDir())
 	if err := store.Ensure(ctx); err != nil {
 		t.Fatal(err)
 	}

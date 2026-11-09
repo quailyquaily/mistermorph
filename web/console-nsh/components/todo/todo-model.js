@@ -459,6 +459,10 @@ function normalizeTask(item = {}, fallbackTitle = DEFAULT_TODO_TITLE) {
     llm_profile: trimText(item.llm_profile),
     workspace_dir: trimText(item.workspace_dir),
     bash_env: normalizeBashEnv(item.bash_env),
+    // Kept by the runtime's store, never sent back: when the scheduler last started the task and
+    // how that run ended ("done", "failed", or "" while it has no result).
+    last_run_at: trimText(item.last_run_at),
+    last_run_status: trimText(item.last_run_status).toLowerCase(),
     mode: cron !== "" && at === "" ? "recurring" : "once",
     ...recurring,
   };
@@ -635,6 +639,22 @@ function isValidAtValue(raw) {
 
 function atInputValue(task) {
   return trimText(task?.at).replace(" ", "T");
+}
+
+// taskLastRun is the editor's last-run line for a saved task: { time, status, label } where status
+// is "done", "failed", "pending" (started, no result yet) or "never"; null for a task not saved yet.
+function taskLastRun(task, formatTime = (value) => value) {
+  if (!trimText(task?.id)) {
+    return null;
+  }
+  const at = trimText(task?.last_run_at);
+  if (!at) {
+    return { time: "", status: "never", label: t("todo_last_run_never") };
+  }
+  const raw = trimText(task?.last_run_status).toLowerCase();
+  const status = raw === "done" || raw === "failed" ? raw : "pending";
+  const time = String(formatTime(at) || at);
+  return { time, status, label: t(`todo_last_run_${status}`, { time }) };
 }
 
 function serializeTask(task, fallbackTitle = DEFAULT_TODO_TITLE) {
@@ -1701,6 +1721,7 @@ export {
   defaultAtValue,
   atInputValue,
   serializeTask,
+  taskLastRun,
   normalizeTaskBeforeSave,
   recurringCron,
   taskTitle,

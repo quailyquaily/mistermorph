@@ -87,7 +87,7 @@ func bootstrapTelegramRuntimeState(ctx context.Context, d Dependencies, opts Run
 		}
 	}()
 
-	contactsStore := contacts.NewFileStore(d.RuntimePaths.ContactsDir)
+	contactsStore := contacts.NewStoreInStateDir(d.RuntimePaths.StateDir, d.RuntimePaths.ContactsDir)
 	contactsService := contacts.NewService(contactsStore)
 	avatarRefresher, err := contacts.NewContactAvatarRefresher(ctx, contactsStore, logger.With("channel", "telegram"))
 	if err != nil {

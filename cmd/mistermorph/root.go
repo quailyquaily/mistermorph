@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 
 	"github.com/quailyquaily/mistermorph/cmd/mistermorph/blueskycmd"
 	"github.com/quailyquaily/mistermorph/cmd/mistermorph/chatcmd"
+	"github.com/quailyquaily/mistermorph/cmd/mistermorph/configcmd"
 	"github.com/quailyquaily/mistermorph/cmd/mistermorph/consolecmd"
 	"github.com/quailyquaily/mistermorph/cmd/mistermorph/discordcmd"
 	"github.com/quailyquaily/mistermorph/cmd/mistermorph/larkcmd"
@@ -19,11 +21,13 @@ import (
 	"github.com/quailyquaily/mistermorph/cmd/mistermorph/runcmd"
 	"github.com/quailyquaily/mistermorph/cmd/mistermorph/skillscmd"
 	"github.com/quailyquaily/mistermorph/cmd/mistermorph/slackcmd"
+	"github.com/quailyquaily/mistermorph/cmd/mistermorph/statecmd"
 	"github.com/quailyquaily/mistermorph/cmd/mistermorph/telegramcmd"
 	"github.com/quailyquaily/mistermorph/cmd/mistermorph/wechatcmd"
 	"github.com/quailyquaily/mistermorph/cmd/mistermorph/whatsappcmd"
 	"github.com/quailyquaily/mistermorph/cmd/mistermorph/xcmd"
 	"github.com/quailyquaily/mistermorph/guard"
+	"github.com/quailyquaily/mistermorph/internal/configstore"
 	"github.com/quailyquaily/mistermorph/internal/configutil"
 	"github.com/quailyquaily/mistermorph/internal/llmconfig"
 	"github.com/quailyquaily/mistermorph/internal/llmselect"
@@ -33,6 +37,7 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/pathutil"
 	"github.com/quailyquaily/mistermorph/internal/runtimepaths"
 	"github.com/quailyquaily/mistermorph/internal/skillsutil"
+	"github.com/quailyquaily/mistermorph/internal/statepaths"
 	"github.com/quailyquaily/mistermorph/internal/toolsutil"
 	"github.com/quailyquaily/mistermorph/internal/topiccontext"
 	"github.com/quailyquaily/mistermorph/internal/workspace"
@@ -40,6 +45,7 @@ import (
 	"github.com/quailyquaily/mistermorph/tools"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"gopkg.in/yaml.v3"
 )
 
 const (
@@ -74,8 +80,10 @@ func newRootRuntime() *rootRuntime {
 		PersistentPreRunE: runRootPreflight,
 	}
 
-	cmd.PersistentFlags().String("config", "", "Config file path (optional).")
+	cmd.PersistentFlags().String("config", "", "Config file path (optional). Without it, the config is in agent.db in the state folder.")
 	_ = viper.BindPFlag("config", cmd.PersistentFlags().Lookup("config"))
+	cmd.PersistentFlags().String("state-dir", "", "State folder (default $MISTER_MORPH_FILE_STATE_DIR, else ~/.morph).")
+	_ = viper.BindPFlag("file_state_dir", cmd.PersistentFlags().Lookup("state-dir"))
 
 	// Global logging flags (usable across subcommands like run/console/telegram).
 	cmd.PersistentFlags().String("log-level", "", "Logging level: debug|info|warn|error (defaults to info).")
@@ -213,6 +221,8 @@ func newRootRuntime() *rootRuntime {
 	cmd.AddCommand(skillscmd.New())
 	cmd.AddCommand(consolecmd.New(version))
 	cmd.AddCommand(newInstallCmd())
+	cmd.AddCommand(statecmd.New())
+	cmd.AddCommand(configcmd.New())
 	cmd.AddCommand(newVersionCmd())
 
 	return &rootRuntime{
@@ -252,6 +262,25 @@ func loadRootConfig(cmd *cobra.Command) error {
 	}
 
 	cfgFile, explicit := resolveConfigFile()
+	if !explicit {
+		// Without --config the config is in agent.db, which is in the state folder; so the state
+		// folder is settled first. A config.yaml at the default path is imported once.
+		stateDir := bootstrapStateDir(cmd)
+		viper.Set("file_state_dir", stateDir)
+		ctx := context.Background()
+		if cmd != nil && cmd.Context() != nil {
+			ctx = cmd.Context()
+		}
+		if defaultPath := pathutil.DefaultConfigPath(); defaultPath != "" {
+			if imported, err := configstore.ImportFile(ctx, stateDir, defaultPath); err != nil {
+				return &rootConfigError{Path: defaultPath, Err: err}
+			} else if imported {
+				_, _ = fmt.Fprintf(os.Stderr, "info: imported %s into %s; the file is kept as %s.imported\n",
+					defaultPath, filepath.Join(stateDir, statepaths.AgentDBFilename), defaultPath)
+			}
+		}
+		cfgFile = configstore.DBConfigPath(stateDir)
+	}
 	if cfgFile != "" {
 		if err := configutil.ReadExpandedConfigWithOverrides(
 			viper.GetViper(),
@@ -260,20 +289,61 @@ func loadRootConfig(cmd *cobra.Command) error {
 			warnf,
 		); err != nil {
 			if !explicit && os.IsNotExist(err) {
-				return nil
+				viper.Set("config", cfgFile)
+				return validateWorkspaceDir()
 			}
 			return &rootConfigError{Path: cfgFile, Err: err}
 		}
 		viper.Set("config", cfgFile)
-		expandConfiguredDirKey("file_state_dir")
+		if explicit {
+			expandConfiguredDirKey("file_state_dir")
+		} else {
+			// The state folder is not a setting of the config it holds.
+			viper.Set("file_state_dir", bootstrapStateDir(cmd))
+		}
 		expandConfiguredDirKey("file_cache_dir")
 	}
+	return validateWorkspaceDir()
+}
+
+func validateWorkspaceDir() error {
 	workspaceDir, err := workspace.ValidateDefaultDir(viper.GetString("workspace_dir"))
 	if err != nil {
 		return fmt.Errorf("workspace_dir: %w", err)
 	}
 	viper.Set("workspace_dir", workspaceDir)
 	return nil
+}
+
+// bootstrapStateDir is the state folder, settled before any config is read: --state-dir, else
+// MISTER_MORPH_FILE_STATE_DIR, else file_state_dir in the config.yaml an older install kept at the
+// default path (or its imported copy), else ~/.morph.
+func bootstrapStateDir(cmd *cobra.Command) string {
+	if cmd != nil {
+		if flag := cmd.Flag("state-dir"); flag != nil && flag.Changed && strings.TrimSpace(flag.Value.String()) != "" {
+			return pathutil.ResolveStateDir(flag.Value.String())
+		}
+	}
+	if env := strings.TrimSpace(os.Getenv(envPrefix + "_FILE_STATE_DIR")); env != "" {
+		return pathutil.ResolveStateDir(env)
+	}
+	defaultPath := pathutil.DefaultConfigPath()
+	for _, path := range []string{defaultPath, defaultPath + ".imported"} {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		var cfg struct {
+			FileStateDir string `yaml:"file_state_dir"`
+		}
+		if yaml.Unmarshal(raw, &cfg) == nil && strings.TrimSpace(cfg.FileStateDir) != "" {
+			expanded, _ := configutil.ExpandStrictEnv(strings.TrimSpace(cfg.FileStateDir))
+			if strings.TrimSpace(expanded) != "" {
+				return pathutil.ResolveStateDir(expanded)
+			}
+		}
+	}
+	return pathutil.ResolveStateDir("")
 }
 
 func rootConfigSecretOverrides(cmd *cobra.Command) map[string]string {
@@ -362,7 +432,7 @@ func (r *llmRuntimeResolver) CreateClient(route llmutil.ResolvedRoute) (llm.Clie
 				APIBase:             cfg.Endpoint,
 				DefaultModel:        cfg.Model,
 				ContextWindowTokens: cfg.ContextWindowTokens,
-				JournalDir:          r.paths.LLMUsageJournalDir,
+				UsageDBPath:         r.paths.UsageDBPath,
 				TopicContextStore:   topiccontext.NewStore(r.paths.TopicContextPath),
 				Logger:              slog.Default(),
 			})
@@ -389,7 +459,7 @@ func (r *llmRuntimeResolver) CreateImageClient() (llm.ImageClient, error) {
 		Provider:     meta.Provider,
 		APIBase:      meta.Endpoint,
 		DefaultModel: meta.Model,
-		JournalDir:   r.paths.LLMUsageJournalDir,
+		UsageDBPath:  r.paths.UsageDBPath,
 		Logger:       slog.Default(),
 	}), nil
 }

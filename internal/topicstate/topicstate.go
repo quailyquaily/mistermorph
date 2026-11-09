@@ -1,13 +1,18 @@
-// Package topicstate places a conversation's state in its own folder under
-// file_state_dir/topics, so everything kept for one topic sits together and goes away with it.
+// Package topicstate keeps what a conversation holds apart from its messages. Its context use,
+// request snapshot and workspace are rows of agent.db keyed by the conversation key; its context
+// checkpoint and found tools are files in its own folder under file_state_dir/topics.
 package topicstate
 
 import (
+	"context"
+
 	"crypto/sha256"
 	"encoding/hex"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/quailyquaily/mistermorph/internal/agentdb"
 )
 
 // DirName is the folder under file_state_dir that holds the topic folders.
@@ -34,11 +39,20 @@ func LockPath(stateDir string, conversationKey string) string {
 	return filepath.Join(strings.TrimSpace(stateDir), "locks", "topic_"+Key(conversationKey)+".lck")
 }
 
-// Remove deletes a conversation's folder and everything in it.
+// Remove deletes a conversation's rows in agent.db, in one transaction, then its folder and
+// everything in it.
 func Remove(stateDir string, conversationKey string) error {
 	dir := Dir(stateDir, conversationKey)
 	if dir == "" {
 		return nil
+	}
+	db, err := agentdb.OpenStateDir(context.Background(), stateDir)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = db.Close() }()
+	if err := RemoveRows(context.Background(), db, conversationKey); err != nil {
+		return err
 	}
 	return os.RemoveAll(dir)
 }

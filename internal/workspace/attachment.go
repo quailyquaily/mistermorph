@@ -2,14 +2,16 @@ package workspace
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 
-	"github.com/quailyquaily/mistermorph/internal/fsstore"
+	"github.com/quailyquaily/mistermorph/internal/agentdb"
 	"github.com/quailyquaily/mistermorph/internal/pathutil"
+	"github.com/quailyquaily/mistermorph/internal/statepaths"
 	"github.com/quailyquaily/mistermorph/internal/topicstate"
 )
 
@@ -30,24 +32,14 @@ type Resolution struct {
 	Source       Source
 }
 
-// Store keeps each conversation's attached workspace in its topic folder,
-// file_state_dir/topics/<key>/workspace.json. path names the old shared file,
-// workspace_attachments.json in the state dir; whatever it still holds is moved into the topic
-// folders the first time the store is used.
+// Store keeps each conversation's attached workspace in agent.db (workspace_attachments), keyed by
+// the scope key. path names the old shared file, workspace_attachments.json in the state folder;
+// agent.db is beside it.
 type Store struct {
-	path      string
-	stateDir  string
-	mu        sync.Mutex
-	migrateMu sync.Mutex
-	migrated  bool
+	path     string
+	stateDir string
+	db       *agentdb.Lazy
 }
-
-type attachmentFile struct {
-	Version     int                   `json:"version"`
-	Attachments map[string]Attachment `json:"attachments"`
-}
-
-const attachmentFileName = "workspace.json"
 
 func NewStore(path string) *Store {
 	path = strings.TrimSpace(path)
@@ -55,7 +47,11 @@ func NewStore(path string) *Store {
 	if path != "" {
 		stateDir = filepath.Dir(path)
 	}
-	return &Store{path: path, stateDir: stateDir}
+	store := &Store{path: path, stateDir: stateDir}
+	if stateDir != "" {
+		store.db = agentdb.NewLazy(filepath.Join(stateDir, statepaths.AgentDBFilename))
+	}
+	return store
 }
 
 func (s *Store) Get(scopeKey string) (Attachment, bool, error) {
@@ -63,12 +59,40 @@ func (s *Store) Get(scopeKey string) (Attachment, bool, error) {
 	if s == nil || s.stateDir == "" || scopeKey == "" {
 		return Attachment{}, false, nil
 	}
-	if err := s.migrateLegacy(); err != nil {
+	db, err := s.db.Get(context.Background())
+	if err != nil {
 		return Attachment{}, false, err
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.readLocked(scopeKey)
+	return readAttachment(context.Background(), db, db, scopeKey)
+}
+
+type queryer interface {
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
+// readAttachment reads the scope's row. A workspace.json the import could not key is imported the
+// first time its scope is asked for.
+func readAttachment(ctx context.Context, q queryer, db *agentdb.DB, scopeKey string) (Attachment, bool, error) {
+	var att Attachment
+	err := q.QueryRowContext(ctx, `SELECT workspace_dir FROM workspace_attachments WHERE scope_key = ?`, scopeKey).Scan(&att.WorkspaceDir)
+	if errors.Is(err, sql.ErrNoRows) {
+		if db == nil {
+			return Attachment{}, false, nil
+		}
+		dir, err := topicstate.ImportFolderWorkspace(ctx, db, scopeKey)
+		if err != nil || dir == "" {
+			return Attachment{}, false, err
+		}
+		return Attachment{WorkspaceDir: dir}, true, nil
+	}
+	if err != nil {
+		return Attachment{}, false, err
+	}
+	att.WorkspaceDir = strings.TrimSpace(att.WorkspaceDir)
+	if att.WorkspaceDir == "" {
+		return Attachment{}, false, nil
+	}
+	return att, true, nil
 }
 
 func (s *Store) Set(scopeKey string, attachment Attachment) (Attachment, bool, error) {
@@ -82,13 +106,16 @@ func (s *Store) Set(scopeKey string, attachment Attachment) (Attachment, bool, e
 	}
 	var prev Attachment
 	var hadPrev bool
-	err := s.withMutationLock(scopeKey, func() error {
+	err := s.withTx(scopeKey, func(ctx context.Context, tx *sql.Tx) error {
 		var err error
-		prev, hadPrev, err = s.readLocked(scopeKey)
+		prev, hadPrev, err = readAttachment(ctx, tx, nil, scopeKey)
 		if err != nil {
 			return err
 		}
-		return fsstore.WriteJSONAtomic(s.attachmentPath(scopeKey), attachment, fsstore.FileOptions{})
+		_, err = tx.ExecContext(ctx, `INSERT INTO workspace_attachments (scope_key, workspace_dir, updated_at) VALUES (?, ?, ?)
+			ON CONFLICT (scope_key) DO UPDATE SET workspace_dir = excluded.workspace_dir, updated_at = excluded.updated_at`,
+			scopeKey, attachment.WorkspaceDir, agentdb.Now())
+		return err
 	})
 	if err != nil {
 		return Attachment{}, false, err
@@ -103,17 +130,14 @@ func (s *Store) Delete(scopeKey string) (Attachment, bool, error) {
 	}
 	var prev Attachment
 	var hadPrev bool
-	err := s.withMutationLock(scopeKey, func() error {
+	err := s.withTx(scopeKey, func(ctx context.Context, tx *sql.Tx) error {
 		var err error
-		prev, hadPrev, err = s.readLocked(scopeKey)
+		prev, hadPrev, err = readAttachment(ctx, tx, nil, scopeKey)
 		if err != nil || !hadPrev {
 			return err
 		}
-		if err := os.Remove(s.attachmentPath(scopeKey)); err != nil && !os.IsNotExist(err) {
-			return err
-		}
-		topicstate.RemoveIfEmpty(s.stateDir, scopeKey)
-		return nil
+		_, err = tx.ExecContext(ctx, `DELETE FROM workspace_attachments WHERE scope_key = ?`, scopeKey)
+		return err
 	})
 	if err != nil {
 		return Attachment{}, false, err
@@ -121,78 +145,26 @@ func (s *Store) Delete(scopeKey string) (Attachment, bool, error) {
 	return prev, hadPrev, nil
 }
 
-func (s *Store) withMutationLock(scopeKey string, fn func() error) error {
-	if err := s.migrateLegacy(); err != nil {
+// withTx runs fn in one transaction, after importing the scope's workspace.json if the import
+// left it in its folder.
+func (s *Store) withTx(scopeKey string, fn func(context.Context, *sql.Tx) error) error {
+	ctx := context.Background()
+	db, err := s.db.Get(ctx)
+	if err != nil {
 		return err
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return fsstore.WithLock(context.Background(), topicstate.LockPath(s.stateDir, scopeKey), fn)
-}
-
-func (s *Store) attachmentPath(scopeKey string) string {
-	return filepath.Join(topicstate.Dir(s.stateDir, scopeKey), attachmentFileName)
-}
-
-func (s *Store) readLocked(scopeKey string) (Attachment, bool, error) {
-	var att Attachment
-	found, err := fsstore.ReadJSON(s.attachmentPath(scopeKey), &att)
-	if err != nil || !found {
-		return Attachment{}, false, err
+	if _, err := topicstate.ImportFolderWorkspace(ctx, db, scopeKey); err != nil {
+		return err
 	}
-	att.WorkspaceDir = strings.TrimSpace(att.WorkspaceDir)
-	if att.WorkspaceDir == "" {
-		return Attachment{}, false, nil
-	}
-	return att, true, nil
-}
-
-// migrateLegacy moves the attachments of the old shared file into their topic folders, keeping
-// any attachment already there, and then removes the old file.
-func (s *Store) migrateLegacy() error {
-	s.migrateMu.Lock()
-	defer s.migrateMu.Unlock()
-	if s.migrated || s.path == "" {
-		return nil
-	}
-	if _, err := os.Stat(s.path); os.IsNotExist(err) {
-		s.migrated = true
-		return nil
-	}
-	lockPath := s.path + ".lck"
-	err := fsstore.WithLock(context.Background(), lockPath, func() error {
-		var persisted attachmentFile
-		found, err := fsstore.ReadJSON(s.path, &persisted)
-		if err != nil || !found {
-			return err
-		}
-		for scopeKey, att := range persisted.Attachments {
-			scopeKey = strings.TrimSpace(scopeKey)
-			att.WorkspaceDir = strings.TrimSpace(att.WorkspaceDir)
-			if scopeKey == "" || att.WorkspaceDir == "" {
-				continue
-			}
-			err := fsstore.WithLock(context.Background(), topicstate.LockPath(s.stateDir, scopeKey), func() error {
-				if _, err := os.Stat(s.attachmentPath(scopeKey)); err == nil {
-					return nil
-				}
-				return fsstore.WriteJSONAtomic(s.attachmentPath(scopeKey), att, fsstore.FileOptions{})
-			})
-			if err != nil {
-				return err
-			}
-		}
-		if err := os.Remove(s.path); err != nil && !os.IsNotExist(err) {
-			return err
-		}
-		return nil
-	})
+	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("move workspace attachments into topic folders: %w", err)
+		return err
 	}
-	_ = os.Remove(lockPath)
-	s.migrated = true
-	return nil
+	defer func() { _ = tx.Rollback() }()
+	if err := fn(ctx, tx); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 type CommandAction string

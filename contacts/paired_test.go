@@ -3,7 +3,6 @@ package contacts
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -13,7 +12,7 @@ import (
 func TestPairAgentIsOnlyStructuredPathThatCanGrantPaired(t *testing.T) {
 	ctx := context.Background()
 	root := filepath.Join(t.TempDir(), "contacts")
-	store := NewFileStore(root)
+	store := NewStore(root)
 	service := NewService(store)
 	now := time.Date(2026, 8, 17, 7, 0, 0, 0, time.UTC)
 
@@ -87,7 +86,7 @@ func TestPairAgentReplacesOnlyPlaceholderTelegramNickname(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			ctx := context.Background()
-			store := NewFileStore(filepath.Join(t.TempDir(), "contacts"))
+			store := NewStore(filepath.Join(t.TempDir(), "contacts"))
 			service := NewService(store)
 			now := time.Date(2026, 8, 17, 8, 0, 0, 0, time.UTC)
 			if _, err := service.UpsertContact(ctx, Contact{
@@ -120,7 +119,7 @@ func TestPairAgentReplacesOnlyPlaceholderTelegramNickname(t *testing.T) {
 func TestFileStorePairedRoundTrip(t *testing.T) {
 	ctx := context.Background()
 	root := filepath.Join(t.TempDir(), "contacts")
-	store := NewFileStore(root)
+	store := NewStore(root)
 
 	if err := store.PutContact(ctx, Contact{
 		ContactID:       "slack:T100:U200",
@@ -142,18 +141,18 @@ func TestFileStorePairedRoundTrip(t *testing.T) {
 		t.Fatalf("GetContact() = %#v, %v", got, ok)
 	}
 
-	raw, err := os.ReadFile(filepath.Join(root, "ACTIVE.md"))
-	if err != nil {
-		t.Fatalf("ReadFile(ACTIVE.md) error = %v", err)
+	block, ok, err := store.GetContactYAML(ctx, "slack:T100:U200")
+	if err != nil || !ok {
+		t.Fatalf("GetContactYAML() = %v, %v", ok, err)
 	}
-	if !strings.Contains(string(raw), "paired: true") {
-		t.Fatalf("ACTIVE.md missing paired state:\n%s", raw)
+	if !strings.Contains(block.YAML, "paired: true") {
+		t.Fatalf("contact YAML missing paired state:\n%s", block.YAML)
 	}
 }
 
 func TestFileStorePutContactPreservesPairedAfterStaleRead(t *testing.T) {
 	ctx := context.Background()
-	store := NewFileStore(filepath.Join(t.TempDir(), "contacts"))
+	store := NewStore(filepath.Join(t.TempDir(), "contacts"))
 	observed := Contact{
 		ContactID:       "tg:@peer_bot",
 		Kind:            KindAgent,
@@ -187,7 +186,7 @@ func TestFileStorePutContactPreservesPairedAfterStaleRead(t *testing.T) {
 func TestPairAgentReactivatesInactiveContact(t *testing.T) {
 	ctx := context.Background()
 	root := filepath.Join(t.TempDir(), "contacts")
-	store := NewFileStore(root)
+	store := NewStore(root)
 	service := NewService(store)
 	base := time.Date(2026, 8, 17, 11, 0, 0, 0, time.UTC)
 	for i := 1; i <= maxActiveContacts+1; i++ {

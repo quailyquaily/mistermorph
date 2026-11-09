@@ -642,7 +642,7 @@ func (rt *Runtime) sharedDependencies(snap runtimeSnapshot) depsutil.CommonDepen
 				Provider:     meta.Provider,
 				APIBase:      meta.Endpoint,
 				DefaultModel: meta.Model,
-				JournalDir:   snap.Paths.LLMUsageJournalDir,
+				UsageDBPath:  snap.Paths.UsageDBPath,
 				Logger:       snap.Logger,
 			}), nil
 		},
@@ -668,6 +668,7 @@ func (rt *Runtime) sharedDependencies(snap runtimeSnapshot) depsutil.CommonDepen
 			TodoUpdate: toolsutil.TodoUpdateRegisterConfig{
 				Enabled:     todoEnabled,
 				CronPath:    snap.Paths.CronPath,
+				StateDir:    snap.Paths.StateDir,
 				ContactsDir: snap.Paths.ContactsDir,
 			},
 			Image:      imageToolsRegisterConfigFromSnapshot(snap, snap.LLMValues, imageGenerateEnabled, imageEditEnabled),

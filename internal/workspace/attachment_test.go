@@ -1,15 +1,11 @@
 package workspace
 
 import (
-	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
-	"github.com/quailyquaily/mistermorph/internal/fsstore"
 	"github.com/quailyquaily/mistermorph/internal/topicstate"
 )
 
@@ -213,73 +209,45 @@ func TestValidateDir_RejectsOutsideAllowedRoots(t *testing.T) {
 	}
 }
 
-func TestStoreSetWaitsForCrossProcessLock(t *testing.T) {
-	store := NewStore(filepath.Join(t.TempDir(), "workspace_attachments.json"))
-	scopeKey := "line:Cgroup123"
-	dir := t.TempDir()
-	done := make(chan error, 1)
-
-	err := fsstore.WithLock(context.Background(), topicstate.LockPath(store.stateDir, scopeKey), func() error {
-		go func() {
-			_, _, err := store.Set(scopeKey, Attachment{WorkspaceDir: dir})
-			done <- err
-		}()
-		select {
-		case err := <-done:
-			return fmt.Errorf("set finished while lock was held: %v", err)
-		case <-time.After(120 * time.Millisecond):
-			return nil
-		}
-	})
-	if err != nil {
-		t.Fatalf("holding external lock: %v", err)
-	}
-
-	select {
-	case err := <-done:
-		if err != nil {
-			t.Fatalf("store.Set() error = %v", err)
-		}
-	case <-time.After(1 * time.Second):
-		t.Fatalf("store.Set() did not finish after lock release")
-	}
-
-	got, ok, err := store.Get(scopeKey)
-	if err != nil {
-		t.Fatalf("store.Get() error = %v", err)
-	}
-	if !ok {
-		t.Fatalf("store.Get() found = false, want true")
-	}
-	if got.WorkspaceDir != dir {
-		t.Fatalf("workspace dir = %q, want %q", got.WorkspaceDir, dir)
-	}
-}
-
-func TestStoreMovesTheLegacyFileIntoTopicFolders(t *testing.T) {
+func TestStoreImportsTheLegacyFileAndTopicFolders(t *testing.T) {
 	root := t.TempDir()
 	legacy := filepath.Join(root, "workspace_attachments.json")
 	raw := `{"version":1,"attachments":{"console:a":{"workspace_dir":"/srv/a"},"console:b":{"workspace_dir":"/srv/b"}}}`
 	if err := os.WriteFile(legacy, []byte(raw), 0o600); err != nil {
 		t.Fatalf("write legacy: %v", err)
 	}
+	// A folder whose workspace.json is the only file: nothing in it names the key, so it is
+	// imported the first time its scope is asked for.
+	lone := filepath.Join(root, "topics", topicstate.Key("console:c"))
+	if err := os.MkdirAll(lone, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(lone, "workspace.json"), []byte(`{"workspace_dir":"/srv/c"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	store := NewStore(legacy)
-	for key, want := range map[string]string{"console:a": "/srv/a", "console:b": "/srv/b"} {
+	for key, want := range map[string]string{"console:a": "/srv/a", "console:b": "/srv/b", "console:c": "/srv/c"} {
 		got, ok, err := store.Get(key)
 		if err != nil || !ok || got.WorkspaceDir != want {
 			t.Fatalf("Get(%q) = %+v ok=%v err=%v", key, got, ok, err)
 		}
-		if _, err := os.Stat(filepath.Join(root, "topics", topicstate.Key(key), "workspace.json")); err != nil {
-			t.Fatalf("topic file for %q missing: %v", key, err)
-		}
 	}
-	if _, err := os.Stat(legacy); !os.IsNotExist(err) {
-		t.Fatalf("legacy file should be gone, stat err = %v", err)
+	if _, err := os.Stat(legacy + ".imported"); err != nil {
+		t.Fatalf("legacy file not renamed: %v", err)
 	}
-	if _, had, err := store.Delete("console:a"); err != nil || !had {
-		t.Fatalf("Delete() had=%v err=%v", had, err)
+	if _, err := os.Stat(filepath.Join(lone, "workspace.json.imported")); err != nil {
+		t.Fatalf("folder file not renamed: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(root, "topics", topicstate.Key("console:a"))); !os.IsNotExist(err) {
-		t.Fatalf("empty topic folder should be gone, stat err = %v", err)
+	if prev, had, err := store.Delete("console:a"); err != nil || !had || prev.WorkspaceDir != "/srv/a" {
+		t.Fatalf("Delete() = %+v had=%v err=%v", prev, had, err)
+	}
+	if _, ok, _ := store.Get("console:a"); ok {
+		t.Fatal("attachment left after Delete")
+	}
+	if prev, had, err := store.Set("console:b", Attachment{WorkspaceDir: "/srv/b2"}); err != nil || !had || prev.WorkspaceDir != "/srv/b" {
+		t.Fatalf("Set() = %+v had=%v err=%v", prev, had, err)
+	}
+	if got, _, _ := NewStore(legacy).Get("console:b"); got.WorkspaceDir != "/srv/b2" {
+		t.Fatalf("after Set = %+v", got)
 	}
 }

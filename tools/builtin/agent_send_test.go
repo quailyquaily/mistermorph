@@ -40,7 +40,7 @@ func TestAgentSendToolOnlySendsToActiveAgents(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 8, 17, 8, 0, 0, 0, time.UTC)
 	contactsDir := filepath.Join(t.TempDir(), "contacts")
-	svc := contacts.NewService(contacts.NewFileStore(contactsDir))
+	svc := contacts.NewService(contacts.NewStore(contactsDir))
 	for _, contact := range []contacts.Contact{
 		{
 			ContactID:      "contact:smith",
@@ -117,7 +117,7 @@ func TestAgentSendCooldown(t *testing.T) {
 	setup := func(t *testing.T, ok bool) (string, *atomic.Int32, string) {
 		t.Helper()
 		contactsDir := filepath.Join(t.TempDir(), "contacts")
-		svc := contacts.NewService(contacts.NewFileStore(contactsDir))
+		svc := contacts.NewService(contacts.NewStore(contactsDir))
 		if _, err := svc.UpsertContact(ctx, contacts.Contact{
 			ContactID:      "contact:smith",
 			Kind:           contacts.KindAgent,
@@ -178,7 +178,7 @@ func TestAgentSendCooldown(t *testing.T) {
 		if got := requests.Load(); got != 2 {
 			t.Fatalf("request count = %d, want 2", got)
 		}
-		contact, ok, err := contacts.NewFileStore(contactsDir).GetContact(ctx, "contact:smith")
+		contact, ok, err := contacts.NewStore(contactsDir).GetContact(ctx, "contact:smith")
 		if err != nil || !ok {
 			t.Fatalf("GetContact() = %v, %v", ok, err)
 		}

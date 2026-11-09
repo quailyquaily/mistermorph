@@ -19,7 +19,7 @@ func resolveChatInfoRuntime(opts RunOptions) (*chatinfo.Store, chatinfo.Refreshe
 	return store, opts.ChatInfoRefresher
 }
 
-func refreshChatInfoOnStart(ctx context.Context, store *chatinfo.Store, refresher chatinfo.Refresher, contactsDir string, logger *slog.Logger) {
+func refreshChatInfoOnStart(ctx context.Context, store *chatinfo.Store, refresher chatinfo.Refresher, stateDir, contactsDir string, logger *slog.Logger) {
 	if store == nil || refresher == nil {
 		return
 	}
@@ -27,7 +27,7 @@ func refreshChatInfoOnStart(ctx context.Context, store *chatinfo.Store, refreshe
 	if err := store.RefreshExpired(ctx, now, refresher); err != nil && logger != nil {
 		logger.Warn("chat_profile_refresh_expired_failed", "error", err.Error())
 	}
-	candidates, err := chatinfo.ActiveContactCandidateIDs(ctx, contactsDir)
+	candidates, err := chatinfo.ActiveContactCandidateIDs(ctx, stateDir, contactsDir)
 	if err != nil {
 		if logger != nil {
 			logger.Warn("chat_profile_startup_candidates_failed", "error", err.Error())

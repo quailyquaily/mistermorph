@@ -17,7 +17,7 @@ import (
 
 func TestInboundFlowPublishValidatedInbound(t *testing.T) {
 	ctx := context.Background()
-	store := contacts.NewFileStore(filepath.Join(t.TempDir(), "contacts"))
+	store := contacts.NewStore(filepath.Join(t.TempDir(), "contacts"))
 	if err := store.Ensure(ctx); err != nil {
 		t.Fatalf("Ensure() error = %v", err)
 	}
@@ -96,7 +96,7 @@ func TestInboundFlowPublishValidatedInbound(t *testing.T) {
 
 func TestInboundFlowValidationBoundary(t *testing.T) {
 	ctx := context.Background()
-	store := contacts.NewFileStore(filepath.Join(t.TempDir(), "contacts"))
+	store := contacts.NewStore(filepath.Join(t.TempDir(), "contacts"))
 	if err := store.Ensure(ctx); err != nil {
 		t.Fatalf("Ensure() error = %v", err)
 	}

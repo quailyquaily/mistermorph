@@ -5,10 +5,10 @@ use std::{
     collections::BTreeMap,
     path::PathBuf,
     sync::{
-        Arc, Mutex,
+        Arc, Condvar, Mutex,
         atomic::{AtomicBool, Ordering},
     },
-    time::Instant,
+    time::{Duration, Instant},
 };
 
 use futures::channel::mpsc::UnboundedSender;
@@ -50,6 +50,8 @@ pub struct Desktop {
     pub ui: UnboundedSender<Ui>,
     origin: Mutex<String>,
     kv: Mutex<KvStore>,
+    /// Notified when a value of `kv` changes (the Console's login, see `wait_console_token`).
+    kv_changed: Condvar,
     session: Mutex<BTreeMap<String, String>>,
     app_state: Mutex<AppState>,
     files: Mutex<Registry>,
@@ -78,6 +80,7 @@ impl Desktop {
             ui,
             origin: Mutex::new(String::new()),
             kv: Mutex::new(KvStore::load(crate::paths::kv_file())),
+            kv_changed: Condvar::new(),
             session: Mutex::new(BTreeMap::new()),
             app_state: Mutex::new(AppState::load(crate::paths::app_state_file().as_deref())),
             files: Mutex::new(Registry::default()),
@@ -126,7 +129,38 @@ impl Desktop {
             };
             return Ok(());
         }
-        lock(&self.kv).set(key, value)
+        let saved = lock(&self.kv).set(key, value);
+        self.kv_changed.notify_all();
+        saved
+    }
+
+    /// The Console's session token, saved in the local store when the user logs in.
+    pub fn console_token(&self) -> Option<String> {
+        crate::config::console_token(lock(&self.kv).values().get(crate::config::CONSOLE_AUTH_KEY).map(String::as_str))
+    }
+
+    /// Waits until the Console holds a session token other than `refused` (a login after the
+    /// backend refused that one) and returns it; none once `limit` passes without one.
+    pub fn wait_console_token(&self, refused: Option<&str>, limit: Option<Duration>) -> Option<String> {
+        let deadline = limit.map(|limit| Instant::now() + limit);
+        let mut kv = lock(&self.kv);
+        loop {
+            let token = crate::config::console_token(kv.values().get(crate::config::CONSOLE_AUTH_KEY).map(String::as_str));
+            if token.is_some() && token.as_deref() != refused {
+                return token;
+            }
+            let wait = match deadline {
+                Some(deadline) => match deadline.checked_duration_since(Instant::now()) {
+                    Some(left) if !left.is_zero() => left,
+                    _ => return None,
+                },
+                None => Duration::from_secs(60),
+            };
+            kv = match self.kv_changed.wait_timeout(kv, wait) {
+                Ok((guard, _)) => guard,
+                Err(poisoned) => poisoned.into_inner().0,
+            };
+        }
     }
 
     fn remember_location(&self, url: &str) {
@@ -361,6 +395,31 @@ mod tests {
         assert_eq!(list(&["en-US", "ja-JP"]), ["en-US", "ja-JP"]);
         assert_eq!(list(&["zh_CN.UTF-8", "zh-CN", "C"]), ["zh-CN"]);
         assert_eq!(list(&[]), ["en"]);
+    }
+
+    #[test]
+    fn waits_for_a_console_login() {
+        let (ui, _rx) = futures::channel::mpsc::unbounded();
+        let log = Arc::new(DesktopLog::none());
+        let supervisor = Supervisor::spawn(crate::backend::BackendConfig::new(None), log.clone());
+        let desktop = Arc::new(Desktop::new(log, Instant::now(), None, AutoUpdate::default(), supervisor, ui));
+        let key = crate::config::CONSOLE_AUTH_KEY;
+        desktop.set_value("local", key, None).unwrap();
+        assert_eq!(desktop.console_token(), None);
+        assert_eq!(desktop.wait_console_token(None, Some(Duration::from_millis(20))), None);
+
+        desktop.set_value("local", key, Some(r#"{"token":"stale"}"#.into())).unwrap();
+        assert_eq!(desktop.console_token(), Some("stale".to_owned()));
+        // The refused token is not an answer; the next login is.
+        assert_eq!(desktop.wait_console_token(Some("stale"), Some(Duration::from_millis(20))), None);
+        let login = desktop.clone();
+        let saver = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(50));
+            login.set_value("local", key, Some(r#"{"token":"fresh","expiresAt":"x"}"#.into())).unwrap();
+        });
+        assert_eq!(desktop.wait_console_token(Some("stale"), Some(Duration::from_secs(10))), Some("fresh".to_owned()));
+        saver.join().unwrap();
+        desktop.set_value("local", key, None).unwrap();
     }
 
     #[test]

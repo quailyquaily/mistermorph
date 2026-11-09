@@ -167,7 +167,7 @@ func TestTodoTasksRouteIncludesContactChatsWithoutExternalFetch(t *testing.T) {
 		})
 	}))
 	defer slackServer.Close()
-	if err := contacts.NewFileStore(stateDir+"/contacts").PutContact(context.Background(), contacts.Contact{
+	if err := contacts.NewStore(stateDir+"/contacts").PutContact(context.Background(), contacts.Contact{
 		ContactID:       "slack:T111:U222",
 		Kind:            contacts.KindHuman,
 		Channel:         contacts.ChannelSlack,
@@ -227,17 +227,17 @@ func TestTodoChatOptionsIncludeNewSlackChatsAndNamelessCachedDM(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	before := todoChatOptions(ctx, dir, "console")
+	before := todoChatOptions(ctx, "", dir, "console")
 	if len(before) != 3 {
 		t.Fatalf("options before new contact = %#v, want console, channel and nameless DM", before)
 	}
-	if err := contacts.NewFileStore(dir).PutContact(ctx, contacts.Contact{
+	if err := contacts.NewStore(dir).PutContact(ctx, contacts.Contact{
 		ContactID: "slack:T111:U444", Channel: contacts.ChannelSlack, Kind: contacts.KindHuman,
 		SlackTeamID: "T111", SlackUserID: "U444", SlackDMChannelID: "D555", SlackChannelIDs: []string{"C222", "C666"},
 	}); err != nil {
 		t.Fatal(err)
 	}
-	options := todoChatOptions(ctx, dir, "console")
+	options := todoChatOptions(ctx, "", dir, "console")
 	if len(options) != 5 {
 		t.Fatalf("options after new contact = %#v, want five deduplicated options", options)
 	}

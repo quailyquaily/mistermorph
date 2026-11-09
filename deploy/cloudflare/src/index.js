@@ -48,6 +48,7 @@ export class MisterMorphContainer extends Container {
       "MISTER_MORPH_R2_ACCESS_KEY_ID",
       "MISTER_MORPH_R2_SECRET_ACCESS_KEY",
       "MISTER_MORPH_R2_BACKUP_INTERVAL",
+      "MISTER_MORPH_R2_BACKUP_SKIP",
     ]) {
       if (nonempty(env[key])) this.envVars[key] = env[key];
     }

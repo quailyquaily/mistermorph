@@ -63,10 +63,8 @@ func shouldRunRuntimeFilePreflight(cmd *cobra.Command) bool {
 }
 
 func runRuntimeFilePreflight(stderr io.Writer) error {
-	for _, item := range []onboardingcheck.Item{
-		onboardingcheck.InspectIdentityYAMLPath(statepaths.PersonaIdentityPath()),
-		onboardingcheck.InspectSoulPath(statepaths.PersonaSoulPath()),
-	} {
+	identity, soul := onboardingcheck.InspectPersona(statepaths.FileStateDir())
+	for _, item := range []onboardingcheck.Item{identity, soul} {
 		if !item.IsBroken() {
 			continue
 		}

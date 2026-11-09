@@ -17,7 +17,7 @@ const contactsCheckedKey = "contacts_profiles_checked_at"
 // memories about each contact, learned from the owner (who wrote them in the contacts file) and
 // private. The fields leave the contacts file only after the memories are saved, and the files
 // are read again only when they change.
-func (s *Store) MoveContactProfiles(ctx context.Context, store *contacts.FileStore) (int, error) {
+func (s *Store) MoveContactProfiles(ctx context.Context, store *contacts.DBStore) (int, error) {
 	if s == nil || store == nil {
 		return 0, nil
 	}

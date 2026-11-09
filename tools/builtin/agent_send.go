@@ -43,16 +43,21 @@ func (t *AgentSendTool) Execute(ctx context.Context, params map[string]any) (str
 	})
 }
 
+// AgentSendAvailable reports whether an active contact is an agent, for contacts whose folder is
+// contactsDir directly in its state folder. AgentSendAvailableInStateDir names the state folder.
 func AgentSendAvailable(ctx context.Context, contactsDir string) (bool, error) {
+	return AgentSendAvailableInStateDir(ctx, "", contactsDir)
+}
+
+// AgentSendAvailableInStateDir reports whether an active contact is an agent, for contacts whose
+// folder is contactsDir, kept in the agent.db of stateDir.
+func AgentSendAvailableInStateDir(ctx context.Context, stateDir, contactsDir string) (bool, error) {
 	contactsDir = pathutil.ExpandHomePath(strings.TrimSpace(contactsDir))
 	if contactsDir == "" {
 		return false, nil
 	}
-	ids, err := loadActiveAgentContactIDs(ctx, contacts.NewFileStore(contactsDir))
-	if err != nil {
-		return false, err
-	}
-	return len(ids) > 0, nil
+	// The same check ACTIVE.md had: an active contact of kind agent, now a query on contacts.
+	return contacts.NewStoreInStateDir(pathutil.ExpandHomePath(strings.TrimSpace(stateDir)), contactsDir).HasActiveAgent(ctx)
 }
 
 func loadActiveAgentContactIDs(ctx context.Context, store contacts.ContactStore) (map[string]struct{}, error) {

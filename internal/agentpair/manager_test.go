@@ -268,7 +268,7 @@ func TestManagerRecordsExpirationWithoutAnotherMessage(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	root := t.TempDir()
-	store := contacts.NewFileStore(filepath.Join(root, "contacts"))
+	store := contacts.NewStore(filepath.Join(root, "contacts"))
 	admins, err := ParseAdmins([]string{"tg:11"})
 	if err != nil {
 		t.Fatalf("ParseAdmins() error = %v", err)
@@ -302,10 +302,10 @@ func TestManagerRecordsExpirationWithoutAnotherMessage(t *testing.T) {
 	t.Fatalf("expiration was not journaled: %v", journalEventTypes(t, journalDir))
 }
 
-func newTestManager(t *testing.T, self Peer, adminIDs []string, now func() time.Time, send SendFunc) (*Manager, *contacts.FileStore, string) {
+func newTestManager(t *testing.T, self Peer, adminIDs []string, now func() time.Time, send SendFunc) (*Manager, *contacts.DBStore, string) {
 	t.Helper()
 	root := t.TempDir()
-	store := contacts.NewFileStore(filepath.Join(root, "contacts"))
+	store := contacts.NewStore(filepath.Join(root, "contacts"))
 	admins, err := ParseAdmins(adminIDs)
 	if err != nil {
 		t.Fatalf("ParseAdmins() error = %v", err)
@@ -351,7 +351,7 @@ func telegramAliasPeer(username string) Peer {
 	}
 }
 
-func assertPairedTelegramContact(t *testing.T, store *contacts.FileStore, username string, privateChatID int64) {
+func assertPairedTelegramContact(t *testing.T, store *contacts.DBStore, username string, privateChatID int64) {
 	t.Helper()
 	items, err := store.ListContacts(context.Background(), contacts.StatusActive)
 	if err != nil {

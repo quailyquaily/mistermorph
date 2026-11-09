@@ -303,7 +303,7 @@ func (s *Service) findPairContact(ctx context.Context, candidate Contact) (Conta
 			return contact, ok, err
 		}
 	}
-	records, err := s.contactStore.ListContacts(ctx, "")
+	records, err := s.pairCandidates(ctx, candidate)
 	if err != nil {
 		return Contact{}, false, err
 	}
@@ -325,6 +325,57 @@ func (s *Service) findPairContact(ctx context.Context, candidate Contact) (Conta
 	}
 	sort.Strings(ids)
 	return Contact{}, false, fmt.Errorf("Agent identity matches multiple contacts: %s", strings.Join(ids, ", "))
+}
+
+// HandleFinder is a contact store that finds contacts by a channel identifier with an index.
+type HandleFinder interface {
+	FindContactsByHandle(ctx context.Context, field, value string) ([]Contact, error)
+}
+
+// pairCandidates are the contacts that share an identifier with candidate: found by handle when
+// the store can, every contact otherwise. pairContactIdentityMatches then decides.
+func (s *Service) pairCandidates(ctx context.Context, candidate Contact) ([]Contact, error) {
+	finder, ok := s.contactStore.(HandleFinder)
+	if !ok {
+		return s.contactStore.ListContacts(ctx, "")
+	}
+	candidate = normalizeContact(candidate, time.Now().UTC())
+	probes := []struct{ field, value string }{
+		{"tg_username", normalizeTelegramUsername(candidate.TGUsername)},
+		{"slack_user_id", strings.TrimSpace(candidate.SlackUserID)},
+		{"line_user_id", refid.NormalizeLineID(candidate.LineUserID)},
+		{"lark_open_id", refid.NormalizeLarkID(candidate.LarkOpenID)},
+		{"mixin_user_id", refid.NormalizeMixinID(candidate.MixinUserID)},
+		{"discord_user_id", refid.NormalizeDiscordID(candidate.DiscordUserID)},
+		{"wechat_user_id", refid.NormalizeWeChatID(candidate.WeChatUserID)},
+		{"whatsapp_user_id", refid.NormalizeWhatsAppID(candidate.WhatsAppUserID)},
+		{"bluesky_user_id", refid.NormalizeBlueskyID(candidate.BlueskyUserID)},
+		{"x_user_id", refid.NormalizeXUserID(candidate.XUserID)},
+	}
+	if candidate.TGUserID > 0 {
+		probes = append(probes, struct{ field, value string }{"tg_user_id", strconv.FormatInt(candidate.TGUserID, 10)})
+	}
+	if candidate.TGPrivateChatID > 0 {
+		probes = append(probes, struct{ field, value string }{"tg_private_chat_id", strconv.FormatInt(candidate.TGPrivateChatID, 10)})
+	}
+	seen := map[string]bool{}
+	var out []Contact
+	for _, probe := range probes {
+		if probe.value == "" {
+			continue
+		}
+		found, err := finder.FindContactsByHandle(ctx, probe.field, probe.value)
+		if err != nil {
+			return nil, err
+		}
+		for _, contact := range found {
+			if !seen[contact.ContactID] {
+				seen[contact.ContactID] = true
+				out = append(out, contact)
+			}
+		}
+	}
+	return out, nil
 }
 
 func pairContactIdentityMatches(a, b Contact) bool {
@@ -551,7 +602,12 @@ func (s *Service) resolveSendContact(ctx context.Context, contactID string) (Con
 	if username == "" {
 		return Contact{}, false, nil
 	}
-	records, err := s.contactStore.ListContacts(ctx, "")
+	var records []Contact
+	if finder, ok := s.contactStore.(HandleFinder); ok {
+		records, err = finder.FindContactsByHandle(ctx, "tg_username", username)
+	} else {
+		records, err = s.contactStore.ListContacts(ctx, "")
+	}
 	if err != nil {
 		return Contact{}, false, err
 	}

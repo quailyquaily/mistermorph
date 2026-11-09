@@ -50,6 +50,8 @@ export interface TodoTask {
   llm_profile: string;
   workspace_dir: string;
   bash_env: { name: string; value: string }[];
+  last_run_at: string;
+  last_run_status: string;
   mode: string;
   repeat_kind: string;
   repeat_time: string;
@@ -120,6 +122,24 @@ const notice = {
   success: (text: string) => pushNotice({ type: "success", text }),
 };
 
+
+/** One heartbeat workflow as the editor holds it; `_key` stays while `id` is empty for a new one. */
+export type HeartbeatWorkflow = { _key: string; id: string; title: string; instructions: string; enabled: boolean };
+
+let heartbeatWorkflowSeq = 0;
+
+function heartbeatWorkflowFrom(item: any): HeartbeatWorkflow {
+  const id = typeof item?.id === "string" ? item.id.trim() : "";
+  heartbeatWorkflowSeq += 1;
+  return {
+    _key: id || `new-workflow-${heartbeatWorkflowSeq}`,
+    id,
+    title: typeof item?.title === "string" ? item.title : "",
+    instructions: typeof item?.instructions === "string" ? item.instructions : "",
+    enabled: item?.enabled !== false,
+  };
+}
+
 export function createTodoState() {
   const loading = signal(false);
   const saving = signal(false);
@@ -148,8 +168,8 @@ export function createTodoState() {
   const repeatInputRevision = signal(0);
   const heartbeatLoading = signal(false);
   const heartbeatSaving = signal(false);
-  const heartbeatContent = signal("");
-  const heartbeatMissing = signal(false);
+  // The heartbeat's workflows (agent.db heartbeat_workflows), edited here and saved as one list.
+  const heartbeatWorkflows = signal<HeartbeatWorkflow[]>([]);
   const heartbeatDirty = signal(false);
   const heartbeatTask = signal<TodoTask | null>(null);
   const heartbeatEnabled = signal(true);
@@ -276,7 +296,12 @@ export function createTodoState() {
     () => !loading() && !saving() && taskHasLocalChanges() && !selectedSaveValidationMessage(),
   );
   const canSaveHeartbeat = computed(
-    () => heartbeatSelected() && !heartbeatLoading() && !heartbeatSaving() && (heartbeatMissing() || heartbeatDirty()),
+    () =>
+      heartbeatSelected() &&
+      !heartbeatLoading() &&
+      !heartbeatSaving() &&
+      heartbeatDirty() &&
+      heartbeatWorkflows().every((item) => trimText(item.title) !== ""),
   );
   const canSave = computed(() => (heartbeatSelected() ? canSaveHeartbeat() : canSaveTasks()));
 
@@ -794,33 +819,49 @@ export function createTodoState() {
   async function loadHeartbeat() {
     heartbeatLoading.set(true);
     try {
-      const data = await runtimeApiFetch(`/state/files/${encodeURIComponent(model.HEARTBEAT_FILE_NAME)}`);
+      const data = await runtimeApiFetch("/heartbeat/workflows");
       if (disposed) return;
+      const items = Array.isArray(data?.items) ? data.items : [];
       batch(() => {
-        heartbeatContent.set(String(data?.content || ""));
-        heartbeatMissing.set(false);
+        heartbeatWorkflows.set(items.map((item: any) => heartbeatWorkflowFrom(item)));
         heartbeatDirty.set(false);
       });
     } catch (e) {
-      if ((e as { status?: number })?.status === 404) {
-        batch(() => {
-          heartbeatContent.set("");
-          heartbeatMissing.set(true);
-          heartbeatDirty.set(false);
-        });
-        return;
-      }
       notice.error(errorMessage(e) || t("msg_read_failed"));
     } finally {
       heartbeatLoading.set(false);
     }
   }
 
-  function onHeartbeatContentChange(value: string) {
+  function editHeartbeatWorkflows(change: (items: HeartbeatWorkflow[]) => HeartbeatWorkflow[]) {
     batch(() => {
-      heartbeatContent.set(String(value || ""));
+      heartbeatWorkflows.update((items) => change(items));
       heartbeatDirty.set(true);
     });
+  }
+
+  function addHeartbeatWorkflow() {
+    editHeartbeatWorkflows((items) => [...items, heartbeatWorkflowFrom({ title: "", instructions: "", enabled: true })]);
+  }
+
+  function updateHeartbeatWorkflow(key: string, patch: Partial<Omit<HeartbeatWorkflow, "_key" | "id">>) {
+    editHeartbeatWorkflows((items) => items.map((item) => (item._key === key ? { ...item, ...patch } : item)));
+  }
+
+  function moveHeartbeatWorkflow(key: string, delta: number) {
+    editHeartbeatWorkflows((items) => {
+      const from = items.findIndex((item) => item._key === key);
+      const to = from + delta;
+      if (from < 0 || to < 0 || to >= items.length) return items;
+      const next = [...items];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
+  }
+
+  function removeHeartbeatWorkflow(key: string) {
+    editHeartbeatWorkflows((items) => items.filter((item) => item._key !== key));
   }
 
   async function saveHeartbeat() {
@@ -829,12 +870,16 @@ export function createTodoState() {
     }
     heartbeatSaving.set(true);
     try {
-      await runtimeApiFetch(`/state/files/${encodeURIComponent(model.HEARTBEAT_FILE_NAME)}`, {
-        method: "PUT",
-        body: { content: untracked(heartbeatContent) },
-      });
+      const items = untracked(heartbeatWorkflows).map((item) => ({
+        id: item.id,
+        title: trimText(item.title),
+        instructions: item.instructions,
+        enabled: item.enabled,
+      }));
+      const data = await runtimeApiFetch("/heartbeat/workflows", { method: "PUT", body: { items } });
+      const saved = Array.isArray(data?.items) ? data.items : null;
       batch(() => {
-        heartbeatMissing.set(false);
+        if (saved) heartbeatWorkflows.set(saved.map((item: any) => heartbeatWorkflowFrom(item)));
         heartbeatDirty.set(false);
       });
       invalidateConsoleSetupReadiness();
@@ -1143,7 +1188,7 @@ export function createTodoState() {
     heartbeatLoading,
     heartbeatSaving,
     heartbeatSelected,
-    heartbeatContent,
+    heartbeatWorkflows,
     heartbeatDisabled,
     heartbeatIndexMeta,
     canSave,
@@ -1197,7 +1242,10 @@ export function createTodoState() {
     openWorkspacePicker,
     closeWorkspacePicker,
     pickWorkspaceDir,
-    onHeartbeatContentChange,
+    addHeartbeatWorkflow,
+    updateHeartbeatWorkflow,
+    moveHeartbeatWorkflow,
+    removeHeartbeatWorkflow,
     edits,
   };
 }

@@ -3,16 +3,16 @@ package topiccontext
 import (
 	"bytes"
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"text/template"
 	"time"
 
-	"github.com/quailyquaily/mistermorph/internal/fsstore"
-	"github.com/quailyquaily/mistermorph/internal/topicstate"
+	"github.com/quailyquaily/mistermorph/internal/agentdb"
+	"github.com/quailyquaily/mistermorph/internal/statepaths"
 	"github.com/quailyquaily/mistermorph/llm"
 )
 
@@ -66,23 +66,14 @@ type UsageSample struct {
 	UpdatedAt                time.Time
 }
 
-// Store keeps each conversation's context usage in its topic folder, file_state_dir/topics/<key>/
-// context.json. path names the old shared file, topic_context.json in the state dir; whatever it
-// still holds is moved into the topic folders the first time the store is used.
+// Store keeps each conversation's context use and latest request snapshot in agent.db
+// (topic_contexts and topic_context_snapshots), keyed by the conversation key. path names the old
+// shared file, topic_context.json in the state folder; agent.db is beside it.
 type Store struct {
-	path      string
-	stateDir  string
-	mu        sync.Mutex
-	migrateMu sync.Mutex
-	migrated  bool
+	path     string
+	stateDir string
+	db       *agentdb.Lazy
 }
-
-type storeFile struct {
-	Version int             `json:"version"`
-	Items   map[string]Item `json:"items"`
-}
-
-const contextFileName = "context.json"
 
 func NewStore(path string) *Store {
 	path = strings.TrimSpace(path)
@@ -90,7 +81,15 @@ func NewStore(path string) *Store {
 	if path != "" {
 		stateDir = filepath.Dir(path)
 	}
-	return &Store{path: path, stateDir: stateDir}
+	store := &Store{path: path, stateDir: stateDir}
+	if stateDir != "" {
+		store.db = agentdb.NewLazy(filepath.Join(stateDir, statepaths.AgentDBFilename))
+	}
+	return store
+}
+
+func (s *Store) handle() (*agentdb.DB, error) {
+	return s.db.Get(context.Background())
 }
 
 func (s *Store) ObserveUsage(ctx context.Context, sample UsageSample) {
@@ -106,14 +105,21 @@ func (s *Store) Get(conversationKey string) (Item, bool, error) {
 	if s == nil || s.stateDir == "" || conversationKey == "" {
 		return Item{}, false, nil
 	}
-	if err := s.migrateLegacy(); err != nil {
+	db, err := s.handle()
+	if err != nil {
 		return Item{}, false, err
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	var item Item
-	found, err := fsstore.ReadJSON(s.itemPath(conversationKey), &item)
-	if err != nil || !found {
+	err = db.QueryRowContext(context.Background(), `SELECT conversation_key, topic_id, runtime, model, normalized_model,
+		context_window_tokens, context_window_source, used_input_tokens, cached_input_tokens, cache_creation_input_tokens,
+		usage_ratio, last_run_id, last_origin_event_id, updated_at FROM topic_contexts WHERE conversation_key = ?`, conversationKey).
+		Scan(&item.ConversationKey, &item.TopicID, &item.Runtime, &item.Model, &item.NormalizedModel, &item.ContextWindowTokens,
+			&item.ContextWindowSource, &item.UsedInputTokens, &item.CachedInputTokens, &item.CacheCreationInputTokens,
+			&item.UsageRatio, &item.LastRunID, &item.LastOriginEventID, &item.UpdatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Item{}, false, nil
+	}
+	if err != nil {
 		return Item{}, false, err
 	}
 	item, ok := normalizeItem(conversationKey, item)
@@ -125,15 +131,26 @@ func (s *Store) UpdateFromSample(scope Scope, sample UsageSample) error {
 	if s == nil || s.stateDir == "" || scope.ConversationKey == "" || sample.InputTokens <= 0 {
 		return nil
 	}
-	if err := s.migrateLegacy(); err != nil {
+	item := itemFromSample(scope, sample)
+	db, err := s.handle()
+	if err != nil {
 		return err
 	}
-	item := itemFromSample(scope, sample)
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return fsstore.WithLock(context.Background(), topicstate.LockPath(s.stateDir, scope.ConversationKey), func() error {
-		return fsstore.WriteJSONAtomic(s.itemPath(scope.ConversationKey), item, fsstore.FileOptions{})
-	})
+	_, err = db.ExecContext(context.Background(), `INSERT INTO topic_contexts (conversation_key, topic_id, runtime, model,
+		normalized_model, context_window_tokens, context_window_source, used_input_tokens, cached_input_tokens,
+		cache_creation_input_tokens, usage_ratio, last_run_id, last_origin_event_id, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT (conversation_key) DO UPDATE SET topic_id = excluded.topic_id, runtime = excluded.runtime,
+		model = excluded.model, normalized_model = excluded.normalized_model,
+		context_window_tokens = excluded.context_window_tokens, context_window_source = excluded.context_window_source,
+		used_input_tokens = excluded.used_input_tokens, cached_input_tokens = excluded.cached_input_tokens,
+		cache_creation_input_tokens = excluded.cache_creation_input_tokens, usage_ratio = excluded.usage_ratio,
+		last_run_id = excluded.last_run_id, last_origin_event_id = excluded.last_origin_event_id,
+		updated_at = excluded.updated_at`,
+		item.ConversationKey, item.TopicID, item.Runtime, item.Model, item.NormalizedModel, item.ContextWindowTokens,
+		item.ContextWindowSource, item.UsedInputTokens, item.CachedInputTokens, item.CacheCreationInputTokens,
+		item.UsageRatio, item.LastRunID, item.LastOriginEventID, item.UpdatedAt)
+	return err
 }
 
 // Delete forgets a conversation's context usage.
@@ -142,69 +159,12 @@ func (s *Store) Delete(conversationKey string) error {
 	if s == nil || s.stateDir == "" || conversationKey == "" {
 		return nil
 	}
-	if err := s.migrateLegacy(); err != nil {
-		return err
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if err := os.Remove(s.itemPath(conversationKey)); err != nil && !os.IsNotExist(err) {
-		return err
-	}
-	topicstate.RemoveIfEmpty(s.stateDir, conversationKey)
-	return nil
-}
-
-func (s *Store) itemPath(conversationKey string) string {
-	return filepath.Join(topicstate.Dir(s.stateDir, conversationKey), contextFileName)
-}
-
-// migrateLegacy moves the items of the old shared file into their topic folders, keeping any
-// newer item already there, and then removes the old file.
-func (s *Store) migrateLegacy() error {
-	s.migrateMu.Lock()
-	defer s.migrateMu.Unlock()
-	if s.migrated || s.path == "" {
-		return nil
-	}
-	if _, err := os.Stat(s.path); os.IsNotExist(err) {
-		s.migrated = true
-		return nil
-	}
-	lockPath := s.path + ".lck"
-	err := fsstore.WithLock(context.Background(), lockPath, func() error {
-		var persisted storeFile
-		found, err := fsstore.ReadJSON(s.path, &persisted)
-		if err != nil || !found {
-			return err
-		}
-		for key, item := range persisted.Items {
-			key = normalizeConversationKey(key)
-			item, ok := normalizeItem(key, item)
-			if !ok {
-				continue
-			}
-			key = item.ConversationKey
-			err := fsstore.WithLock(context.Background(), topicstate.LockPath(s.stateDir, key), func() error {
-				if _, err := os.Stat(s.itemPath(key)); err == nil {
-					return nil
-				}
-				return fsstore.WriteJSONAtomic(s.itemPath(key), item, fsstore.FileOptions{})
-			})
-			if err != nil {
-				return err
-			}
-		}
-		if err := os.Remove(s.path); err != nil && !os.IsNotExist(err) {
-			return err
-		}
-		return nil
-	})
+	db, err := s.handle()
 	if err != nil {
-		return fmt.Errorf("move topic context into topic folders: %w", err)
+		return err
 	}
-	_ = os.Remove(lockPath)
-	s.migrated = true
-	return nil
+	_, err = db.ExecContext(context.Background(), `DELETE FROM topic_contexts WHERE conversation_key = ?`, conversationKey)
+	return err
 }
 
 func normalizeItem(key string, item Item) (Item, bool) {

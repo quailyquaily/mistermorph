@@ -7,12 +7,14 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/quailyquaily/mistermorph/internal/agentdb"
 )
 
 func TestFileStoreContactsReadWrite(t *testing.T) {
 	ctx := context.Background()
 	root := filepath.Join(t.TempDir(), "contacts")
-	store := NewFileStore(root)
+	store := NewStore(root)
 	if err := store.Ensure(ctx); err != nil {
 		t.Fatalf("Ensure() error = %v", err)
 	}
@@ -76,7 +78,7 @@ func TestFileStoreContactsReadWrite(t *testing.T) {
 func TestFileStoreBusRecordsRoundTrip(t *testing.T) {
 	ctx := context.Background()
 	root := filepath.Join(t.TempDir(), "contacts")
-	store := NewFileStore(root)
+	store := NewStore(root)
 	if err := store.Ensure(ctx); err != nil {
 		t.Fatalf("Ensure() error = %v", err)
 	}
@@ -132,10 +134,10 @@ func TestFileStoreBusRecordsRoundTrip(t *testing.T) {
 func TestFileStoreBusOutboxRejectsUnknownField(t *testing.T) {
 	ctx := context.Background()
 	root := filepath.Join(t.TempDir(), "contacts")
-	store := NewFileStore(root)
-	if err := store.Ensure(ctx); err != nil {
-		t.Fatalf("Ensure() error = %v", err)
+	if err := os.MkdirAll(root, 0o700); err != nil {
+		t.Fatal(err)
 	}
+	store := NewStore(root)
 	if err := os.WriteFile(
 		filepath.Join(root, "bus_outbox.json"),
 		[]byte("{\"version\":1,\"records\":[{\"channel\":\"telegram\",\"idempotency_key\":\"k\",\"status\":\"sent\",\"attempts\":1,\"created_at\":\"2026-02-08T12:00:00Z\",\"updated_at\":\"2026-02-08T12:00:00Z\",\"sent_at\":\"2026-02-08T12:00:00Z\",\"unknown\":\"x\"}]}\n"),
@@ -143,24 +145,38 @@ func TestFileStoreBusOutboxRejectsUnknownField(t *testing.T) {
 	); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
-	if _, _, err := store.GetBusOutboxRecord(ctx, ChannelTelegram, "k"); err == nil {
-		t.Fatalf("GetBusOutboxRecord() expected decode error for unknown field")
+	if err := store.Ensure(ctx); err != nil {
+		t.Fatalf("Ensure() error = %v", err)
+	}
+	// The import lists the file as a reject, as reading it failed before.
+	if _, ok, err := store.GetBusOutboxRecord(ctx, ChannelTelegram, "k"); err != nil || ok {
+		t.Fatalf("GetBusOutboxRecord() = %v, %v; want no record", ok, err)
+	}
+	db, err := store.db.Get(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rejects, err := agentdb.Rejects(ctx, db, "contacts"); err != nil || rejects.Count != 1 {
+		t.Fatalf("rejects = %+v, %v", rejects, err)
 	}
 }
 
 func TestFileStoreBusOutboxLoadsLegacyRecordWithoutAttempts(t *testing.T) {
 	ctx := context.Background()
 	root := filepath.Join(t.TempDir(), "contacts")
-	store := NewFileStore(root)
-	if err := store.Ensure(ctx); err != nil {
-		t.Fatalf("Ensure() error = %v", err)
+	if err := os.MkdirAll(root, 0o700); err != nil {
+		t.Fatal(err)
 	}
+	store := NewStore(root)
 	if err := os.WriteFile(
 		filepath.Join(root, "bus_outbox.json"),
 		[]byte("{\"version\":1,\"records\":[{\"channel\":\"telegram\",\"idempotency_key\":\"legacy:k1\",\"status\":\"sent\",\"created_at\":\"2026-02-08T12:00:00Z\",\"updated_at\":\"2026-02-08T12:00:00Z\",\"sent_at\":\"2026-02-08T12:00:00Z\"}]}\n"),
 		0o600,
 	); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
+	}
+	if err := store.Ensure(ctx); err != nil {
+		t.Fatalf("Ensure() error = %v", err)
 	}
 
 	record, ok, err := store.GetBusOutboxRecord(ctx, ChannelTelegram, "legacy:k1")
@@ -178,7 +194,7 @@ func TestFileStoreBusOutboxLoadsLegacyRecordWithoutAttempts(t *testing.T) {
 func TestFileStorePutBusOutboxRecordRejectsZeroAttempts(t *testing.T) {
 	ctx := context.Background()
 	root := filepath.Join(t.TempDir(), "contacts")
-	store := NewFileStore(root)
+	store := NewStore(root)
 	if err := store.Ensure(ctx); err != nil {
 		t.Fatalf("Ensure() error = %v", err)
 	}
@@ -199,10 +215,10 @@ func TestFileStorePutBusOutboxRecordRejectsZeroAttempts(t *testing.T) {
 func TestFileStoreParsesProfileMarkdownTemplate(t *testing.T) {
 	ctx := context.Background()
 	root := filepath.Join(t.TempDir(), "contacts")
-	store := NewFileStore(root)
-	if err := store.Ensure(ctx); err != nil {
-		t.Fatalf("Ensure() error = %v", err)
+	if err := os.MkdirAll(root, 0o700); err != nil {
+		t.Fatal(err)
 	}
+	store := NewStore(root)
 	activeBody := `---
 created_at: "1970-01-01T00:00:00Z"
 updated_at: "1970-01-01T00:00:00Z"
@@ -244,6 +260,9 @@ slack_dm_channel_id: "D222"
 	if err := os.WriteFile(filepath.Join(root, "INACTIVE.md"), []byte(inactiveBody), 0o600); err != nil {
 		t.Fatalf("WriteFile(INACTIVE.md) error = %v", err)
 	}
+	if err := store.Ensure(ctx); err != nil {
+		t.Fatalf("Ensure() error = %v", err)
+	}
 
 	active, err := store.ListContacts(ctx, StatusActive)
 	if err != nil {
@@ -277,7 +296,7 @@ slack_dm_channel_id: "D222"
 func TestFileStorePutContact_ActiveOverflowMovesToInactive(t *testing.T) {
 	ctx := context.Background()
 	root := filepath.Join(t.TempDir(), "contacts")
-	store := NewFileStore(root)
+	store := NewStore(root)
 	if err := store.Ensure(ctx); err != nil {
 		t.Fatalf("Ensure() error = %v", err)
 	}
@@ -321,7 +340,7 @@ func TestFileStorePutContact_ActiveOverflowMovesToInactive(t *testing.T) {
 func TestFileStoreSlackContactRoundTrip(t *testing.T) {
 	ctx := context.Background()
 	root := filepath.Join(t.TempDir(), "contacts")
-	store := NewFileStore(root)
+	store := NewStore(root)
 	if err := store.Ensure(ctx); err != nil {
 		t.Fatalf("Ensure() error = %v", err)
 	}

@@ -23,7 +23,7 @@ func (routes *routeRegistration) registerVoiceRoutes() {
 	mux := routes.mux
 	authToken := routes.authToken
 	settingsReader := routes.settingsReader
-	journalDir := routes.paths.LLMUsageJournalDir
+	usageDBPath := routes.paths.UsageDBPath
 
 	mux.HandleFunc("/voice/transcribe", func(w http.ResponseWriter, r *http.Request) {
 		if !checkAuth(r, authToken) {
@@ -34,7 +34,7 @@ func (routes *routeRegistration) registerVoiceRoutes() {
 		case http.MethodGet:
 			writeVoiceJSON(w, http.StatusOK, voiceTranscriptionStatus(settingsReader))
 		case http.MethodPost:
-			handleVoiceTranscribe(w, r, settingsReader, journalDir)
+			handleVoiceTranscribe(w, r, settingsReader, usageDBPath)
 		default:
 			w.Header().Set("Allow", "GET, POST")
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -72,7 +72,7 @@ func voiceTranscriptionStatus(reader llmutil.ConfigReader) voiceTranscriptionSta
 	return voiceTranscriptionStatusPayload{Available: true, Profile: profile, Model: strings.TrimSpace(routeValues.Model)}
 }
 
-func handleVoiceTranscribe(w http.ResponseWriter, r *http.Request, reader llmutil.ConfigReader, journalDir string) {
+func handleVoiceTranscribe(w http.ResponseWriter, r *http.Request, reader llmutil.ConfigReader, usageDBPath string) {
 	if reader == nil {
 		http.Error(w, "transcription is unavailable", http.StatusServiceUnavailable)
 		return
@@ -82,7 +82,7 @@ func handleVoiceTranscribe(w http.ResponseWriter, r *http.Request, reader llmuti
 		http.Error(w, strings.TrimSpace(err.Error()), http.StatusInternalServerError)
 		return
 	}
-	client, err := voiceinput.NewClient(values, journalDir, slog.Default())
+	client, err := voiceinput.NewClient(values, usageDBPath, slog.Default())
 	if err != nil {
 		http.Error(w, strings.TrimSpace(err.Error()), http.StatusServiceUnavailable)
 		return

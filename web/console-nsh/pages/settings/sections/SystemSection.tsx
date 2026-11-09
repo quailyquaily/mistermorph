@@ -59,6 +59,20 @@ export function SystemSection(props: { s: SettingsStore }) {
           <View class="border-t border-line-soft">
             <TopicNotificationSetting />
           </View>
+          <If when={s.configPath()}>
+            <SettingRow
+              title={t("settings_config_store_title")}
+              note={
+                s.configPath().endsWith("agent.db#config.yaml")
+                  ? t("settings_config_store_db")
+                  : t("settings_config_store_file", { path: s.configPath() })
+              }
+            >
+              <Text class="font-mono text-xs text-muted-foreground" testID="settings-config-store">
+                {s.configPath().endsWith("agent.db#config.yaml") ? "agent.db" : s.configPath()}
+              </Text>
+            </SettingRow>
+          </If>
           <SettingRow title={t("settings_logs_title")} note={t("settings_logs_hint")}>
             <Button
               variant="outlined"

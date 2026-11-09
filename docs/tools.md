@@ -9,7 +9,8 @@ This document describes the built-in and runtime-injected tool parameters curren
 - `static` tools (fully constructable from config and Contacts state):
   - `read_file`, `write_file`, `bash`, `powershell`, `url_fetch`, `web_search`, `contacts_send`, `agent_send`.
   - `contacts_send` is static, but default exposure is limited to awareness runs when enabled, or to explicit `$contacts_send` opt-in.
-  - `agent_send` is exposed only while `contacts/ACTIVE.md` contains at least one `kind: agent` Contact.
+  - `agent_send` is exposed only while at least one active Contact is `kind: agent`.
+  - `contacts_list` lists the contacts (in `agent.db`) whenever a contacts folder is configured.
 - `engine-scoped` tools:
   - `spawn`: registered when an agent engine is assembled for a run; depends on the current subtask runner and parent tool lookup. See [`spawn`](#spawn).
   - `list_model_profiles`: registered next to `spawn` when more than one model profile can run a subtask. See [`list_model_profiles`](#list_model_profiles).
@@ -361,14 +362,32 @@ Returns `status` (`created` or `replaced`), `id`, `subject`, `name`, `visibility
 
 `journal_read`: `seq`. Returns the event with its payload, cut at 8 KiB (`truncated`).
 
+## `contacts_list`
+
+Purpose: list the agent's contacts: people and agents it can reach.
+
+Parameters:
+
+| Parameter | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `status` | `string` | No | `active` | `active`, `inactive` or `all`. |
+| `kind` | `string` | No | All | `human` or `agent`. |
+| `channel` | `string` | No | All | Only contacts on this channel (`telegram`, `slack`, `agentlink`, ...). |
+| `limit` | `integer` | No | `50` | Most contacts to return (at most 200). |
+
+Returns JSON: `count`, `total`, `truncated` and `contacts`, each with its `contact_id`, `nickname`, `kind`, `channel`, `status`, `owner`, `paired`, channel identifiers and `last_interaction_at`.
+
+Notes:
+
+- Registered whenever the runtime has a contacts folder. It replaces reading `contacts/ACTIVE.md` and `INACTIVE.md` with `read_file`; those files no longer exist (they are imported into `agent.db` once and kept as `*.imported`).
+
 ## `contacts_send`
 
 Purpose: send one message or one local file to one or more contacts (auto-routed via Telegram/Slack/LINE/Lark/Discord/Mixin/WeChat/WhatsApp).
 
 Contact profile maintenance:
 
-- To read contacts, use `read_file` on `file_state_dir/contacts/ACTIVE.md` and `file_state_dir/contacts/INACTIVE.md`.
-- To update contacts, use `write_file` to edit those files directly (following the YAML profile template structure).
+- To find contacts, use `contacts_list`. Contacts are rows of `<file_state_dir>/agent.db`, not files; the owner edits them in the Console (one contact's YAML at a time) or with `morph state export` / `import`.
 
 Parameters:
 
@@ -456,7 +475,7 @@ Parameters and return values are those of `contacts_send` without `path` and `fi
 
 Constraints:
 
-- Registered only when `contacts/ACTIVE.md` contains at least one `kind: agent` Contact. Availability is refreshed when preparing each task.
+- Registered only when at least one active Contact is `kind: agent` (a query on the `contacts` table). Availability is refreshed when preparing each task.
 - Every target is checked again immediately before planning the send. All targets must still be active and have `kind: agent`.
 - Protocol references such as `tg:@username` must resolve to an active Agent Contact. Arbitrary chat or user addresses cannot bypass the check.
 - A multi-target call is rejected before sending anything when any target is not an active Agent.

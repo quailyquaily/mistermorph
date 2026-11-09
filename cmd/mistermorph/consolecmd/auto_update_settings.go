@@ -11,10 +11,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/quailyquaily/mistermorph/internal/configstore"
+
 	"github.com/quailyquaily/mistermorph/integration"
 	"github.com/quailyquaily/mistermorph/internal/configbootstrap"
 	"github.com/quailyquaily/mistermorph/internal/configrevision"
-	"github.com/quailyquaily/mistermorph/internal/fsstore"
 	"github.com/quailyquaily/mistermorph/internal/updatecheck"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
@@ -185,7 +186,7 @@ func (s *server) handleAutoUpdateSettingsPut(w http.ResponseWriter, r *http.Requ
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	if err := fsstore.WriteTextAtomic(configPath, string(serialized), fsstore.FileOptions{DirPerm: 0o755, FilePerm: 0o600}); err != nil {
+	if err := configstore.WriteFileBy(configPath, serialized, configstore.ByConsole); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -200,7 +201,7 @@ func (s *server) handleAutoUpdateSettingsPut(w http.ResponseWriter, r *http.Requ
 }
 
 func readAutoUpdateSettings(configPath string) (autoUpdateSettingsPayload, error) {
-	data, err := os.ReadFile(configPath)
+	data, err := configstore.ReadFile(configPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return defaultAutoUpdateSettingsPayload(), nil

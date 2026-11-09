@@ -12,6 +12,7 @@ func normalizeRunOptions(opts RunOptions, paths runtimepaths.Paths) RunOptions {
 	opts.ChecklistPath = strings.TrimSpace(opts.ChecklistPath)
 	opts.CronPath = strings.TrimSpace(opts.CronPath)
 	opts.ChatInfoContactsDir = strings.TrimSpace(opts.ChatInfoContactsDir)
+	opts.ChatInfoStateDir = strings.TrimSpace(opts.ChatInfoStateDir)
 	if opts.Interval <= 0 {
 		opts.Interval = configdefaults.DefaultHeartbeatInterval
 	}
@@ -36,6 +37,9 @@ func normalizeRunOptions(opts RunOptions, paths runtimepaths.Paths) RunOptions {
 	}
 	if opts.ChatInfoContactsDir == "" {
 		opts.ChatInfoContactsDir = paths.ContactsDir
+	}
+	if opts.ChatInfoStateDir == "" {
+		opts.ChatInfoStateDir = paths.StateDir
 	}
 	return opts
 }

@@ -125,7 +125,7 @@ func runLineLoop(ctx context.Context, d Dependencies, opts RunOptions) error {
 		}
 	}()
 
-	contactsStore := contacts.NewFileStore(d.RuntimePaths.ContactsDir)
+	contactsStore := contacts.NewStoreInStateDir(d.RuntimePaths.StateDir, d.RuntimePaths.ContactsDir)
 	if err := contactsStore.Ensure(context.Background()); err != nil {
 		return err
 	}

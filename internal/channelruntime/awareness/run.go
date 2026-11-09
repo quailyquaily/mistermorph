@@ -61,9 +61,12 @@ type RunOptions struct {
 	// TopicRunStarted, when set, is told of each run once it is recorded under its topic.
 	TopicRunStarted     func(TopicRun)
 	ChatInfoContactsDir string
-	ChatInfoStore       *chatinfo.Store
-	ChatInfoRefresher   chatinfo.Refresher
-	TaskStore           daemonruntime.TaskView
+	// ChatInfoStateDir is the state folder whose agent.db keeps the contacts of
+	// ChatInfoContactsDir.
+	ChatInfoStateDir  string
+	ChatInfoStore     *chatinfo.Store
+	ChatInfoRefresher chatinfo.Refresher
+	TaskStore         daemonruntime.TaskView
 	// TaskProgress, when set, follows each recorded run while it works.
 	TaskProgress TaskProgressFunc
 }
@@ -189,7 +192,7 @@ func runAwarenessLoop(ctx context.Context, d Dependencies, opts RunOptions) (run
 	var wg sync.WaitGroup
 	chatInfoStore, chatInfoRefresher := resolveChatInfoRuntime(opts)
 	if opts.CronEnabled {
-		refreshChatInfoOnStart(ctx, chatInfoStore, chatInfoRefresher, opts.ChatInfoContactsDir, logger)
+		refreshChatInfoOnStart(ctx, chatInfoStore, chatInfoRefresher, opts.ChatInfoStateDir, opts.ChatInfoContactsDir, logger)
 	}
 
 	runAwarenessTaskWithOpts := func(behavior awarenessutil.Behavior, task string, meta map[string]any, taskRunID, llmProfile, workspaceDir string, bashEnv []cronstore.BashEnvRef, topicID, topicTitle string, cronManual bool) (string, error) {

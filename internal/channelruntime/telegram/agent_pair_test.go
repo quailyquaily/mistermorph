@@ -90,7 +90,7 @@ func TestTelegramPrivateAdminPairCommandRunsBeforeAllowlist(t *testing.T) {
 	}))
 	api := newTelegramAPI(server.Client, server.URL, "token")
 	root := t.TempDir()
-	store := contacts.NewFileStore(filepath.Join(root, "contacts"))
+	store := contacts.NewStore(filepath.Join(root, "contacts"))
 	admins, err := agentpair.ParseAdmins([]string{"tg:@admin"})
 	if err != nil {
 		t.Fatalf("ParseAdmins() error = %v", err)

@@ -43,7 +43,7 @@ func TestContactsChatProfileRouteDoesNotRefreshExpiredItems(t *testing.T) {
 	}))
 	defer slackServer.Close()
 
-	if err := contacts.NewFileStore(stateDir+"/contacts").PutContact(context.Background(), contacts.Contact{
+	if err := contacts.NewStore(stateDir+"/contacts").PutContact(context.Background(), contacts.Contact{
 		ContactID:       "slack:T111:U222",
 		Kind:            contacts.KindHuman,
 		Channel:         contacts.ChannelSlack,

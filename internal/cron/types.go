@@ -38,7 +38,18 @@ type Task struct {
 	// runtime default.
 	WorkspaceDir string       `yaml:"workspace_dir,omitempty" json:"workspace_dir,omitempty"`
 	BashEnv      []BashEnvRef `yaml:"bash_env,omitempty" json:"bash_env,omitempty"`
+	// LastRunAt is when the scheduler last started the task (RFC 3339), and LastRunStatus how
+	// that run ended: "", "done" or "failed". They are kept by the store, not written by clients,
+	// and are not part of cron.yaml.
+	LastRunAt     string `yaml:"-" json:"last_run_at,omitempty"`
+	LastRunStatus string `yaml:"-" json:"last_run_status,omitempty"`
 }
+
+// Run statuses in LastRunStatus.
+const (
+	RunStatusDone   = "done"
+	RunStatusFailed = "failed"
+)
 
 type DueTask struct {
 	Task           Task

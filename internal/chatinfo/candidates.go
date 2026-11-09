@@ -10,8 +10,10 @@ import (
 	refid "github.com/quailyquaily/mistermorph/internal/entryutil/refid"
 )
 
-func ActiveContactCandidateIDs(ctx context.Context, contactsDir string) ([]string, error) {
-	rows, err := contacts.NewFileStore(contactsDir).ListContacts(ctx, contacts.StatusActive)
+// ActiveContactCandidateIDs lists the chat ids of the active contacts whose folder is contactsDir,
+// kept in the agent.db of stateDir.
+func ActiveContactCandidateIDs(ctx context.Context, stateDir, contactsDir string) ([]string, error) {
+	rows, err := contacts.NewStoreInStateDir(stateDir, contactsDir).ListContacts(ctx, contacts.StatusActive)
 	if err != nil {
 		return nil, err
 	}

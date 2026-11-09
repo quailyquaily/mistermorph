@@ -6,8 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/quailyquaily/mistermorph/internal/topiccontext"
-	"github.com/quailyquaily/mistermorph/internal/topicstate"
 	"io"
 	"log/slog"
 	"mime"
@@ -23,6 +21,11 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/quailyquaily/mistermorph/internal/agentdb"
+	"github.com/quailyquaily/mistermorph/internal/personastore"
+	"github.com/quailyquaily/mistermorph/internal/topiccontext"
+	"github.com/quailyquaily/mistermorph/internal/topicstate"
 
 	"github.com/quailyquaily/mistermorph/contacts"
 	"github.com/quailyquaily/mistermorph/internal/agentlink"
@@ -936,11 +939,17 @@ type runtimeStatePaths struct {
 	heartbeatPath    string
 	cronPath         string
 	auditPath        string
+	agentDBPath      string
 }
 
 func runtimeStatePathsFrom(paths runtimepaths.Paths) runtimeStatePaths {
 	stateDir := paths.StateDir
 	contactsDir := paths.ContactsDir
+	// No state folder, no agent.db: joining "" would name agent.db in the working directory.
+	agentDBPath := ""
+	if strings.TrimSpace(stateDir) != "" {
+		agentDBPath = filepath.Join(stateDir, statepaths.AgentDBFilename)
+	}
 	return runtimeStatePaths{
 		stateDir:         stateDir,
 		cacheDir:         paths.CacheDir,
@@ -954,6 +963,7 @@ func runtimeStatePathsFrom(paths runtimepaths.Paths) runtimeStatePaths {
 		heartbeatPath:    paths.HeartbeatPath,
 		cronPath:         paths.CronPath,
 		auditPath:        paths.AuditPath,
+		agentDBPath:      agentDBPath,
 	}
 }
 
@@ -966,10 +976,24 @@ func describeFile(name, p string) map[string]any {
 	}
 }
 
+// Kinds of state "files": a file on disk, or rows of agent.db the routes render as the file
+// they were and parse back on save.
+const (
+	stateFileOnDisk    = ""
+	stateFileIdentity  = "identity"
+	stateFileSoul      = "soul"
+	stateFileHeartbeat = "heartbeat"
+	stateFileCron      = "cron"
+)
+
 type stateFileSpec struct {
 	Name  string
 	Group string
 	Path  string
+	// Kind is stateFileOnDisk or the rows the file stands for.
+	Kind string
+	// StateDir is where agent.db is, for the kinds that are rows.
+	StateDir string
 }
 
 type consoleContact struct {
@@ -980,24 +1004,58 @@ type consoleContact struct {
 
 func runtimeStateFileSpecs(paths runtimeStatePaths) []stateFileSpec {
 	return []stateFileSpec{
-		{Name: "cron.yaml", Group: "cron", Path: paths.cronPath},
-		{Name: "ACTIVE.md", Group: "contacts", Path: paths.contactsActive},
-		{Name: "INACTIVE.md", Group: "contacts", Path: paths.contactsInactive},
-		{Name: statepaths.IdentityFilename, Group: "persona", Path: paths.identityPath},
-		{Name: statepaths.SoulFilename, Group: "persona", Path: paths.soulPath},
-		{Name: "HEARTBEAT.md", Group: "heartbeat", Path: paths.heartbeatPath},
+		{Name: "cron.yaml", Group: "cron", Path: paths.cronPath, Kind: stateFileCron, StateDir: paths.stateDir},
+		{Name: statepaths.IdentityFilename, Group: "persona", Path: paths.agentDBPath, Kind: stateFileIdentity, StateDir: paths.stateDir},
+		{Name: statepaths.SoulFilename, Group: "persona", Path: paths.agentDBPath, Kind: stateFileSoul, StateDir: paths.stateDir},
+		{Name: "HEARTBEAT.md", Group: "heartbeat", Path: paths.agentDBPath, Kind: stateFileHeartbeat, StateDir: paths.stateDir},
 	}
 }
 
-func describeStateFiles(paths runtimeStatePaths, group string) []map[string]any {
+// describeStateFile reports whether a state file, or the rows it stands for, is there.
+func describeStateFile(spec stateFileSpec) map[string]any {
+	if spec.Kind == stateFileOnDisk {
+		return describeFile(spec.Name, spec.Path)
+	}
+	exists := false
+	ctx := context.Background()
+	if spec.Kind == stateFileCron {
+		// The TODO list is always there, empty or not.
+		exists = true
+	} else if store, err := personastore.ForStateDir(ctx, spec.StateDir); err == nil {
+		switch spec.Kind {
+		case stateFileIdentity, stateFileSoul:
+			id, ok, err := store.Identity(ctx)
+			exists = err == nil && ok && (spec.Kind == stateFileIdentity || strings.TrimSpace(id.Soul) != "")
+		case stateFileHeartbeat:
+			// The workflow list is always there, empty or not.
+			exists = true
+		}
+	}
+	return map[string]any{
+		"name":   spec.Name,
+		"path":   spec.Path,
+		"exists": exists,
+	}
+}
+
+// stateFileGroup is the group a route names; the TODO routes name the cron group "todo".
+func stateFileGroup(group string) string {
 	group = strings.ToLower(strings.TrimSpace(group))
+	if group == "todo" {
+		return "cron"
+	}
+	return group
+}
+
+func describeStateFiles(paths runtimeStatePaths, group string) []map[string]any {
+	group = stateFileGroup(group)
 	specs := runtimeStateFileSpecs(paths)
 	items := make([]map[string]any, 0, len(specs))
 	for _, spec := range specs {
 		if group != "" && spec.Group != group {
 			continue
 		}
-		item := describeFile(spec.Name, spec.Path)
+		item := describeStateFile(spec)
 		item["group"] = spec.Group
 		items = append(items, item)
 	}
@@ -1005,7 +1063,7 @@ func describeStateFiles(paths runtimeStatePaths, group string) []map[string]any 
 }
 
 func resolveStateFileSpec(paths runtimeStatePaths, group string, name string) (stateFileSpec, bool) {
-	group = strings.ToLower(strings.TrimSpace(group))
+	group = stateFileGroup(group)
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return stateFileSpec{}, false
@@ -1056,7 +1114,7 @@ func listContactsForConsole(ctx context.Context, svc *contacts.Service) ([]conso
 	return out, nil
 }
 
-func attachContactAvatarURLs(ctx context.Context, store *contacts.FileStore, items []consoleContact) error {
+func attachContactAvatarURLs(ctx context.Context, store *contacts.DBStore, items []consoleContact) error {
 	if store == nil {
 		return errors.New("contacts store unavailable")
 	}
@@ -1116,6 +1174,60 @@ func consoleContactInteractionTimestamp(item consoleContact) time.Time {
 		return time.Time{}
 	}
 	return item.LastInteractionAt.UTC()
+}
+
+// handleStateFileDetail reads and saves a state file, or the rows it stands for.
+func handleStateFileDetail(w http.ResponseWriter, r *http.Request, spec stateFileSpec) {
+	switch spec.Kind {
+	case stateFileIdentity, stateFileSoul, stateFileHeartbeat:
+		handlePersonaFileDetail(w, r, spec)
+	case stateFileCron:
+		handleCronFileDetail(w, r, spec)
+	default:
+		handleTextFileDetail(w, r, spec.Name, spec.Path)
+	}
+}
+
+// handleCronFileDetail serves the TODO list as the cron.yaml text it was; a save parses the text
+// and replaces the list, validated as the file was.
+func handleCronFileDetail(w http.ResponseWriter, r *http.Request, spec stateFileSpec) {
+	store := cronstore.NewStore(spec.Path)
+	switch r.Method {
+	case http.MethodGet:
+		file, _, err := store.Read()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		content, err := cronstore.RenderFile(file)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"name": spec.Name, "content": content})
+	case http.MethodPut:
+		var req struct {
+			Content string `json:"content"`
+		}
+		if err := json.NewDecoder(io.LimitReader(r.Body, 4<<20)).Decode(&req); err != nil {
+			http.Error(w, "invalid json", http.StatusBadRequest)
+			return
+		}
+		file, err := cronstore.ParseFile(req.Content)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if err := store.Write(file); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "name": spec.Name})
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
 }
 
 func handleTextFileDetail(w http.ResponseWriter, r *http.Request, name, filePath string) {
@@ -1343,7 +1455,7 @@ type cronTopicTitler interface {
 }
 
 // topics, when it keeps a topic per TODO item, has the saved items' topics renamed after them.
-func handleTodoTasks(w http.ResponseWriter, r *http.Request, cronPath string, contactsDir string, mode string, settingsReader agentsettings.Reader, topics TopicReader) {
+func handleTodoTasks(w http.ResponseWriter, r *http.Request, cronPath string, stateDir string, contactsDir string, mode string, settingsReader agentsettings.Reader, topics TopicReader) {
 	store := cronstore.NewStore(cronPath)
 	var defaultRoute runtimeLLMProfileOption
 	var profiles []runtimeLLMProfileOption
@@ -1373,7 +1485,7 @@ func handleTodoTasks(w http.ResponseWriter, r *http.Request, cronPath string, co
 			"heartbeat_enabled": todoRuntimeSettings(settingsReader).GetBool("heartbeat.enabled"),
 			"llm_default_route": defaultRoute,
 			"llm_profiles":      profiles,
-			"chat_options":      todoChatOptions(r.Context(), contactsDir, mode),
+			"chat_options":      todoChatOptions(r.Context(), stateDir, contactsDir, mode),
 			"runs":              cronstore.Runs(cronPath),
 		})
 		return
@@ -1416,7 +1528,7 @@ func handleTodoTasks(w http.ResponseWriter, r *http.Request, cronPath string, co
 			"heartbeat_enabled": todoRuntimeSettings(settingsReader).GetBool("heartbeat.enabled"),
 			"llm_default_route": defaultRoute,
 			"llm_profiles":      profiles,
-			"chat_options":      todoChatOptions(r.Context(), contactsDir, mode),
+			"chat_options":      todoChatOptions(r.Context(), stateDir, contactsDir, mode),
 			"runs":              cronstore.Runs(cronPath),
 		})
 		return
@@ -1427,7 +1539,7 @@ func handleTodoTasks(w http.ResponseWriter, r *http.Request, cronPath string, co
 	}
 }
 
-func todoChatOptions(ctx context.Context, contactsDir string, mode string) []todoChatOption {
+func todoChatOptions(ctx context.Context, stateDir string, contactsDir string, mode string) []todoChatOption {
 	store := chatinfo.NewStore(contactsDir)
 	items, _, err := store.Read(ctx)
 	if err != nil {
@@ -1468,7 +1580,7 @@ func todoChatOptions(ctx context.Context, contactsDir string, mode string) []tod
 	}
 	// Newly observed conversations are selectable before their remote profiles
 	// have been fetched. Reading local contacts keeps this endpoint network-free.
-	candidates, err := chatinfo.ActiveContactCandidateIDs(ctx, contactsDir)
+	candidates, err := chatinfo.ActiveContactCandidateIDs(ctx, stateDir, contactsDir)
 	if err == nil {
 		for _, chatID := range candidates {
 			key := strings.ToLower(chatID)
@@ -1603,6 +1715,24 @@ func diagnoseDirWritable(id, p string) map[string]any {
 	name := fd.Name()
 	_ = fd.Close()
 	_ = os.Remove(name)
+	return map[string]any{"id": id, "ok": true}
+}
+
+// diagnoseAgentDB checks that agent.db opens and passes a quick integrity check.
+func diagnoseAgentDB(id, p string) map[string]any {
+	ctx := context.Background()
+	db, err := agentdb.Open(ctx, p)
+	if err != nil {
+		return map[string]any{"id": id, "ok": false, "detail": err.Error()}
+	}
+	defer func() { _ = db.Close() }()
+	var result string
+	if err := db.QueryRowContext(ctx, "PRAGMA quick_check").Scan(&result); err != nil {
+		return map[string]any{"id": id, "ok": false, "detail": err.Error()}
+	}
+	if result != "ok" {
+		return map[string]any{"id": id, "ok": false, "detail": result}
+	}
 	return map[string]any{"id": id, "ok": true}
 }
 

@@ -30,13 +30,11 @@ import {
 } from "../../lib/core/llm-env-managed.js";
 import { dismissNotice, isNetworkErrorMessage, pushNotice, useNotice } from "../../lib/core/notices.js";
 import {
-  buildIdentityYAML as buildPersonaIdentityYAML,
   dispatchPersonaAvatarUpdated,
   dispatchPersonaIdentityUpdated,
-  parseIdentityProfile as parsePersonaIdentityProfile,
+  loadPersonaRecord,
   PERSONA_AVATAR_ENDPOINT,
-  PERSONA_IDENTITY_ENDPOINT,
-  PERSONA_SOUL_ENDPOINT,
+  savePersonaRecord,
 } from "../../lib/core/persona-profile.js";
 import { pickRandomPersonaSeed } from "../../lib/core/persona-seeds.js";
 import { openReentrantDialog } from "../../lib/core/reentrant-dialog.js";
@@ -265,7 +263,8 @@ export function useSetup() {
   const configRevision = signal("");
   const llmEnvManaged = signal<Record<string, unknown>>({});
   const llmSecretFields = signal<Record<string, { configured?: boolean; editable?: boolean; source?: string }>>({});
-  const loadedIdentityRaw = signal("");
+  // The persona as loaded: which API the runtime has, and the identity.yaml text on an old one.
+  const loadedPersonaRecord = signal<any>(null);
   const loadedSoulRaw = signal<string | null>(null);
   const personaAvatarURL = signal("");
   const personaAvatarBusy = signal(false);
@@ -537,10 +536,9 @@ export function useSetup() {
 
   /* ---------- loading ---------- */
 
-  function applyPersonaContent(raw: string | null) {
-    const text = normalizeText(raw);
-    loadedIdentityRaw.set(text);
-    const parsed = parsePersonaIdentityProfile(text);
+  function applyPersonaRecord(record: any) {
+    loadedPersonaRecord.set(record);
+    const parsed = record?.profile || {};
     personaForm.set({
       name: String(parsed.name || ""),
       creature: String(parsed.creature || ""),
@@ -571,14 +569,18 @@ export function useSetup() {
   }
   cleanup(() => setPersonaAvatarObjectURL(""));
 
-  async function loadSetupTextFile(endpoint: string): Promise<string | null> {
-    try {
-      const payload = await runtimeApiFetchForEndpoint(routeEndpointRef(), endpoint);
-      return String(payload?.content || "");
-    } catch (error) {
-      if ((error as { status?: number })?.status === 404) return null;
-      throw error;
-    }
+  function loadSetupPersonaRecord() {
+    const endpointRef = routeEndpointRef();
+    return loadPersonaRecord((pathname: string, options?: any) => runtimeApiFetchForEndpoint(endpointRef, pathname, options));
+  }
+
+  function saveSetupPersonaRecord(change: { profile?: PersonaForm; soul?: string }) {
+    const endpointRef = routeEndpointRef();
+    return savePersonaRecord(
+      (pathname: string, options?: any) => runtimeApiFetchForEndpoint(endpointRef, pathname, options),
+      untracked(loadedPersonaRecord),
+      change
+    );
   }
 
   async function loadPersonaAvatar() {
@@ -647,14 +649,9 @@ export function useSetup() {
       err.set("");
     });
     try {
-      const content = await loadSetupTextFile(PERSONA_IDENTITY_ENDPOINT);
-      applyPersonaContent(content);
+      applyPersonaRecord(await loadSetupPersonaRecord());
       await loadPersonaAvatar();
     } catch (error) {
-      if ((error as { status?: number })?.status === 404) {
-        applyPersonaContent("");
-        return;
-      }
       err.set(errorMessage(error, "msg_load_failed"));
     } finally {
       loading.set(false);
@@ -667,13 +664,10 @@ export function useSetup() {
       err.set("");
     });
     try {
-      const content = await loadSetupTextFile(PERSONA_SOUL_ENDPOINT);
-      applySoulContent(content);
+      const record = await loadSetupPersonaRecord();
+      loadedPersonaRecord.set(record);
+      applySoulContent(record.soulExists ? record.soul : null);
     } catch (error) {
-      if ((error as { status?: number })?.status === 404) {
-        applySoulContent(null);
-        return;
-      }
       err.set(errorMessage(error, "msg_load_failed"));
     } finally {
       loading.set(false);
@@ -867,9 +861,7 @@ export function useSetup() {
       err.set("");
     });
     try {
-      const content = buildPersonaIdentityYAML(untracked(personaForm), untracked(loadedIdentityRaw));
-      loadedIdentityRaw.set(content);
-      await runtimeApiFetchForEndpoint(routeEndpointRef(), PERSONA_IDENTITY_ENDPOINT, { method: "PUT", body: { content } });
+      loadedPersonaRecord.set(await saveSetupPersonaRecord({ profile: untracked(personaForm) }));
       dispatchPersonaIdentityUpdated();
       invalidateConsoleSetupReadiness();
       await finishStep();
@@ -936,7 +928,7 @@ export function useSetup() {
         soulSelectionKind.set("custom");
         soulEditMode.set(false);
       });
-      await runtimeApiFetchForEndpoint(routeEndpointRef(), PERSONA_SOUL_ENDPOINT, { method: "PUT", body: { content } });
+      loadedPersonaRecord.set(await saveSetupPersonaRecord({ soul: content }));
       invalidateConsoleSetupReadiness();
       await finishStep();
     } catch (error) {

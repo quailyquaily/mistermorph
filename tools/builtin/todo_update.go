@@ -20,9 +20,12 @@ import (
 )
 
 type TodoUpdateTool struct {
-	Enabled    bool
-	CronPath   string
-	Contacts   string
+	Enabled  bool
+	CronPath string
+	Contacts string
+	// StateDir is the state folder whose agent.db keeps the contacts; empty, the folder above
+	// Contacts.
+	StateDir   string
 	Client     llm.Client
 	Model      string
 	AddContext todo.AddResolveContext
@@ -79,7 +82,7 @@ func (t *TodoUpdateTool) SetAddContext(ctx todo.AddResolveContext) {
 func (t *TodoUpdateTool) Name() string { return "todo_update" }
 
 func (t *TodoUpdateTool) Description() string {
-	return "Updates cron.yaml under file_state_dir. Supports add_once, add_recurring, and delete actions for scheduled agent tasks."
+	return "Updates the TODO list (scheduled agent tasks). Supports add_once, add_recurring, and delete actions."
 }
 
 func (t *TodoUpdateTool) ParameterSchema() string {
@@ -318,7 +321,7 @@ func (t *TodoUpdateTool) resolveAddContent(ctx context.Context, content string, 
 	if len(people) == 0 {
 		return t.resolveAddPlaceholders(content, rewritten, warnings)
 	}
-	snapshot, snapErr := todo.LoadContactSnapshot(ctx, contactsDir)
+	snapshot, snapErr := todo.LoadContactSnapshot(ctx, t.StateDir, contactsDir)
 	if snapErr != nil {
 		return "", nil, snapErr
 	}

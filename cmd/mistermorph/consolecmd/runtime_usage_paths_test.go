@@ -1,9 +1,7 @@
 package consolecmd
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http"
@@ -172,50 +170,33 @@ func assertConsoleUsageJournalPath(
 	if imageUsageClient.Provider != "openai" || imageUsageClient.APIBase != "https://example.test/v1" || imageUsageClient.DefaultModel != "test-image-model" {
 		t.Fatalf("image usage metadata = %q/%q/%q", imageUsageClient.Provider, imageUsageClient.APIBase, imageUsageClient.DefaultModel)
 	}
-	appendConsoleUsagePathTestRecord(t, imageUsageClient.Journal, "image_generate", "test-image-model")
+	appendConsoleUsagePathTestRecord(t, imageUsageClient.Usage, "image_generate", "test-image-model")
 	if err := imageUsageClient.Close(); err != nil {
 		t.Fatalf("ImageUsageClient.Close() error = %v", err)
 	}
 
-	entries, err := os.ReadDir(capturedPaths.LLMUsageJournalDir)
+	records, err := llmstats.ReadUsageRecords(context.Background(), capturedPaths.UsageDBPath)
 	if err != nil {
-		t.Fatalf("ReadDir(captured journal) error = %v", err)
+		t.Fatalf("ReadUsageRecords(captured) error = %v", err)
 	}
-	if len(entries) == 0 {
-		t.Fatal("captured usage journal is empty")
+	if len(records) == 0 {
+		t.Fatal("captured usage database is empty")
 	}
 	foundChat := false
-	for _, entry := range entries {
-		data, err := os.ReadFile(filepath.Join(capturedPaths.LLMUsageJournalDir, entry.Name()))
-		if err != nil {
-			t.Fatal(err)
+	for _, record := range records {
+		if record.Operation != "chat" {
+			continue
 		}
-		decoder := json.NewDecoder(bytes.NewReader(data))
-		for {
-			var record llmstats.RequestRecord
-			if err := decoder.Decode(&record); err == io.EOF {
-				break
-			} else if err != nil {
-				t.Fatal(err)
-			}
-			if record.Operation != "chat" {
-				continue
-			}
-			foundChat = true
-			if record.Provider != "openai" || record.APIBase != "https://example.test/v1" || record.Model != "test-model" || record.InputTokens != 13 {
-				t.Fatalf("chat usage record = %+v", record)
-			}
+		foundChat = true
+		if record.Provider != "openai" || record.APIBase != "https://example.test/v1" || record.Model != "test-model" || record.InputTokens != 13 {
+			t.Fatalf("chat usage record = %+v", record)
 		}
 	}
 	if !foundChat {
 		t.Fatal("captured chat usage record is missing")
 	}
-	globalEntries, err := os.ReadDir(globalPaths.LLMUsageJournalDir)
-	if err != nil && !os.IsNotExist(err) {
-		t.Fatalf("ReadDir(global journal) error = %v", err)
-	}
-	if len(globalEntries) != 0 {
-		t.Fatalf("global usage journal entries = %d, want 0", len(globalEntries))
+	if _, err := os.Stat(globalPaths.UsageDBPath); !os.IsNotExist(err) {
+		t.Fatalf("global usage database was used: %v", err)
 	}
 	topicItem, ok, err := topiccontext.NewStore(capturedPaths.TopicContextPath).Get(conversationKey)
 	if err != nil || !ok || topicItem.Model != "test-model" || topicItem.Runtime != "console" {
@@ -226,12 +207,17 @@ func assertConsoleUsageJournalPath(
 	}
 }
 
-func appendConsoleUsagePathTestRecord(t *testing.T, journal *llmstats.Journal, operation, model string) {
+func appendConsoleUsagePathTestRecord(t *testing.T, sink *llmstats.UsageSink, operation, model string) {
 	t.Helper()
-	if journal == nil {
-		t.Fatal("usage journal is nil")
+	if sink == nil {
+		t.Fatal("usage sink is nil")
 	}
-	_, err := journal.Append(llmstats.RequestRecord{
+	store, err := llmstats.OpenUsageStore(context.Background(), sink.Path(), llmstats.UsageStoreOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = store.Close() }()
+	err = store.Append(llmstats.RequestRecord{
 		TS:        time.Date(2026, time.July, 21, 12, 0, 0, 0, time.UTC).Format(time.RFC3339),
 		Provider:  "openai",
 		APIBase:   "https://example.test/v1",
@@ -239,6 +225,6 @@ func appendConsoleUsagePathTestRecord(t *testing.T, journal *llmstats.Journal, o
 		Operation: operation,
 	})
 	if err != nil {
-		t.Fatalf("Journal.Append() error = %v", err)
+		t.Fatalf("UsageStore.Append() error = %v", err)
 	}
 }

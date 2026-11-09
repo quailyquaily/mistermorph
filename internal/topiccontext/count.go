@@ -3,7 +3,6 @@ package topiccontext
 import (
 	"context"
 	"errors"
-	"fmt"
 	"math"
 	"sort"
 	"time"
@@ -35,7 +34,7 @@ func (s *Store) CountSnapshot(ctx context.Context, conversationKey string, count
 		return snapshot, nil
 	}
 	var stored storedRequest
-	found, err := readStoredRequest(requestPath(s.snapshotPath(snapshot.ConversationKey)), &stored)
+	found, err := s.readStoredRequest(snapshot.ConversationKey, &stored)
 	if err != nil {
 		return snapshot, err
 	}
@@ -58,7 +57,7 @@ func (s *Store) CountSnapshot(ctx context.Context, conversationKey string, count
 }
 
 func (s *Store) saveSnapshot(snapshot Snapshot) error {
-	return writeSnapshot(s.snapshotPath(snapshot.ConversationKey), snapshot)
+	return s.writeSnapshot(snapshot, nil, false)
 }
 
 // countGroups returns each top-level part's provider-counted size, and the whole request's under
@@ -212,12 +211,4 @@ func applyCounts(snapshot *Snapshot, groups map[string]int64) {
 		return n
 	}
 	sumUp(snapshot.Parts)
-}
-
-func readStoredRequest(path string, out *storedRequest) (bool, error) {
-	ok, err := readJSONFile(path, out)
-	if err != nil {
-		return false, fmt.Errorf("read stored request: %w", err)
-	}
-	return ok, nil
 }

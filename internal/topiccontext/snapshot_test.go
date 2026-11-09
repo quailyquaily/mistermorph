@@ -145,26 +145,38 @@ func TestObserveRequestKeepsTheLatestSnapshotPerConversation(t *testing.T) {
 	}
 }
 
-func TestSnapshotsLiveInTheTopicFolder(t *testing.T) {
+func TestSnapshotsAreRowsOfAgentDB(t *testing.T) {
 	root := t.TempDir()
 	store := NewStore(filepath.Join(root, "topic_context.json"))
 	request, layout := testRequest()
 	ctx := llm.WithRequestLayout(WithScope(context.Background(), Scope{ConversationKey: "console:t1", TopicID: "t1"}), layout)
-	store.ObserveRequest(ctx, request, UsageSample{Scene: "console.loop", InputTokens: 900})
-	dir := store.TopicDir("console:t1")
-	if filepath.Dir(dir) != filepath.Join(root, "topics") {
-		t.Fatalf("topic folder = %s", dir)
+	store.ObserveRequest(ctx, request, UsageSample{Scene: "console.loop", InputTokens: 900, RunID: "run-1", Model: "m"})
+	db, err := store.handle()
+	if err != nil {
+		t.Fatal(err)
 	}
-	for _, name := range []string{"context_snapshot.json", "context_request.json"} {
-		if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
-			t.Fatalf("%s: %v", name, err)
-		}
+	var topicID, runID, model string
+	var size int
+	if err := db.QueryRow(`SELECT topic_id, run_id, model, length(request) FROM topic_context_snapshots WHERE conversation_key = ?`, "console:t1").
+		Scan(&topicID, &runID, &model, &size); err != nil {
+		t.Fatal(err)
+	}
+	if topicID != "t1" || runID != "run-1" || model != "m" || size == 0 {
+		t.Fatalf("row = %q %q %q, request %d bytes", topicID, runID, model, size)
+	}
+	var stored storedRequest
+	if found, err := store.readStoredRequest("console:t1", &stored); err != nil || !found || len(stored.Messages) != len(request.Messages) {
+		t.Fatalf("stored request = %d messages, %v, %v", len(stored.Messages), found, err)
+	}
+	if _, err := os.Stat(store.TopicDir("console:t1")); !os.IsNotExist(err) {
+		t.Fatalf("a topic folder was made: %v", err)
 	}
 	if err := store.DeleteSnapshot("console:t1"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(dir); !os.IsNotExist(err) {
-		t.Fatalf("topic folder left after delete: %v", err)
+	var rows int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM topic_context_snapshots`).Scan(&rows); err != nil || rows != 0 {
+		t.Fatalf("rows after delete = %d, %v", rows, err)
 	}
 }
 

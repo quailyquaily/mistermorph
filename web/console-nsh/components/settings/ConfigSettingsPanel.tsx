@@ -225,6 +225,10 @@ export function ConfigSettingsPanel(props: ConfigSettingsPanelProps) {
   const sourceLabel = (field: ConfigField) => {
     const source = stateFor(field).source;
     if (source === "runtime_override") return "Managed by a command-line flag";
+    // The config is in agent.db, which is in this folder: the runtime refuses to change it here.
+    if (source === "state_folder") {
+      return "The folder agent.db is in, so it is not saved with the settings. Start morph with --state-dir or MISTER_MORPH_FILE_STATE_DIR to use another.";
+    }
     if (source === "config_aws_ref") return "AWS Secrets Manager reference";
     if (source === "config_os_ref") return "System secret store";
     return "";
@@ -468,7 +472,7 @@ export function ConfigSettingsPanel(props: ConfigSettingsPanelProps) {
             {editor(field, group)}
             <If when={sourceLabel(field) || showClear(field)}>
               <View class="min-h-6 flex-row items-center justify-between gap-3">
-                <Text class="text-xs text-muted-foreground">{sourceLabel(field)}</Text>
+                <Text class="flex-1 text-xs text-muted-foreground">{sourceLabel(field)}</Text>
                 <If when={showClear(field)}>
                   <Button
                     variant="plain"

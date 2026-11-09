@@ -21,7 +21,7 @@ func TestInboundAdapterHandleInboundMessage(t *testing.T) {
 	}
 	defer bus.Close()
 
-	store := contacts.NewFileStore(t.TempDir())
+	store := contacts.NewStore(t.TempDir())
 	adapter, err := NewInboundAdapter(InboundAdapterOptions{
 		Bus:   bus,
 		Store: store,
@@ -121,7 +121,7 @@ func TestInboundAdapterRejectsUnsupportedChatType(t *testing.T) {
 	}
 	defer bus.Close()
 
-	store := contacts.NewFileStore(t.TempDir())
+	store := contacts.NewStore(t.TempDir())
 	adapter, err := NewInboundAdapter(InboundAdapterOptions{Bus: bus, Store: store})
 	if err != nil {
 		t.Fatalf("NewInboundAdapter() error = %v", err)
@@ -221,7 +221,7 @@ func TestInboundAdapterHandleInboundPrivateMessage(t *testing.T) {
 	}
 	defer bus.Close()
 
-	store := contacts.NewFileStore(t.TempDir())
+	store := contacts.NewStore(t.TempDir())
 	adapter, err := NewInboundAdapter(InboundAdapterOptions{Bus: bus, Store: store})
 	if err != nil {
 		t.Fatalf("NewInboundAdapter() error = %v", err)

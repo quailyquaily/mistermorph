@@ -9,9 +9,9 @@ import (
 	"github.com/quailyquaily/mistermorph/assets"
 	"github.com/quailyquaily/mistermorph/internal/clifmt"
 	"github.com/quailyquaily/mistermorph/internal/configbootstrap"
+	"github.com/quailyquaily/mistermorph/internal/configstore"
 	"github.com/quailyquaily/mistermorph/internal/pathutil"
 	"github.com/quailyquaily/mistermorph/internal/secref"
-	"github.com/quailyquaily/mistermorph/internal/statepaths"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -21,7 +21,7 @@ func newInstallCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "install [dir]",
-		Short: "Install config.yaml plus the core onboarding markdown files",
+		Short: "Install the config, the identity and the soul into agent.db",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dir, err := resolveInstallDir(args)
@@ -33,9 +33,16 @@ func newInstallCmd() *cobra.Command {
 				return err
 			}
 
-			cfgPath := filepath.Join(dir, "config.yaml")
+			// The config goes into agent.db. A config.yaml already in the folder (an older
+			// install) is kept: it is imported into agent.db on the next start.
+			cfgPath := configstore.DBConfigPath(dir)
 			writeConfig := true
-			if _, err := os.Stat(cfgPath); err == nil {
+			if legacy := filepath.Join(dir, "config.yaml"); fileExists(legacy) {
+				fmt.Fprintf(os.Stderr, "warn: config already exists, skipping: %s\n", legacy)
+				writeConfig = false
+			} else if exists, err := configstore.Exists(cfgPath); err != nil {
+				return err
+			} else if exists {
 				fmt.Fprintf(os.Stderr, "warn: config already exists, skipping: %s\n", cfgPath)
 				writeConfig = false
 			}
@@ -58,101 +65,29 @@ func newInstallCmd() *cobra.Command {
 				}
 			}
 
-			personaDir := filepath.Join(dir, statepaths.PersonaDirName)
-			identityPath := filepath.Join(personaDir, statepaths.IdentityFilename)
-			writeIdentity := true
-			if _, err := os.Stat(identityPath); err == nil {
-				writeIdentity = false
+			configStep := installStep{
+				Name:  "config.yaml",
+				Path:  cfgPath,
+				Write: writeConfig,
+				Loader: func() (string, error) {
+					body, err := loadConfigExample()
+					if err != nil {
+						return "", err
+					}
+					return patchInitConfigWithSetup(body, dir, cfgSetup)
+				},
 			}
-			soulPath := filepath.Join(personaDir, statepaths.SoulFilename)
-			writeSoul := true
-			if _, err := os.Stat(soulPath); err == nil {
-				writeSoul = false
+			fmt.Println(clifmt.Headerf("==> Installing setup flow (%d steps)", 3))
+			if err := writeInstallStepFile(1, 3, configStep); err != nil {
+				discardInstallSetupSecrets(cmd.Context(), cfgSetup, installSecretStore)
+				return err
 			}
-			hbPath := filepath.Join(dir, "HEARTBEAT.md")
-			writeHeartbeat := true
-			if _, err := os.Stat(hbPath); err == nil {
-				writeHeartbeat = false
-			}
-			cronPath := filepath.Join(dir, "cron.yaml")
-			writeCron := true
-			if _, err := os.Stat(cronPath); err == nil {
-				writeCron = false
+			interactive := !yes && supportsInteractivePrompts(cmd)
+			if err := installPersona(cmd, dir, interactive); err != nil {
+				return err
 			}
 
-			initialSteps := []installStep{
-				{
-					Name:  "config.yaml",
-					Path:  cfgPath,
-					Write: writeConfig,
-					Loader: func() (string, error) {
-						body, err := loadConfigExample()
-						if err != nil {
-							return "", err
-						}
-						return patchInitConfigWithSetup(body, dir, cfgSetup)
-					},
-				},
-				{
-					Name:   statepaths.IdentityFilename,
-					Path:   identityPath,
-					Write:  writeIdentity,
-					Loader: loadIdentityTemplate,
-				},
-				{
-					Name:   statepaths.SoulFilename,
-					Path:   soulPath,
-					Write:  writeSoul,
-					Loader: loadSoulTemplate,
-				},
-			}
-			fmt.Println(clifmt.Headerf("==> Installing setup flow (%d steps)", len(initialSteps)))
-			for i, step := range initialSteps {
-				if err := writeInstallStepFile(i+1, len(initialSteps), step); err != nil {
-					if step.Name == "config.yaml" {
-						discardInstallSetupSecrets(cmd.Context(), cfgSetup, installSecretStore)
-					}
-					return err
-				}
-				if !step.Write {
-					continue
-				}
-				if yes || !supportsInteractivePrompts(cmd) {
-					continue
-				}
-				switch step.Name {
-				case statepaths.IdentityFilename:
-					if err := runInstallIdentitySetup(cmd.InOrStdin(), cmd.OutOrStdout(), step.Path); err != nil {
-						return err
-					}
-				case statepaths.SoulFilename:
-					if err := runInstallSoulSetup(cmd.InOrStdin(), cmd.OutOrStdout(), step.Path); err != nil {
-						return err
-					}
-				}
-			}
-
-			deferredSteps := []installStep{
-				{
-					Name:   "HEARTBEAT.md",
-					Path:   hbPath,
-					Write:  writeHeartbeat,
-					Loader: loadHeartbeatTemplate,
-				},
-				{
-					Name:   "cron.yaml",
-					Path:   cronPath,
-					Write:  writeCron,
-					Loader: loadCronTemplate,
-				},
-			}
-			fmt.Println(clifmt.Headerf("==> Installing deferred state files (%d files)", len(deferredSteps)))
-			for i, step := range deferredSteps {
-				if err := writeInstallStepFile(i+1, len(deferredSteps), step); err != nil {
-					return err
-				}
-			}
-
+			fmt.Println("[i] the heartbeat workflows and the TODO list start empty in agent.db")
 			fmt.Printf("[i] initialized %s\n", dir)
 			return nil
 		},
@@ -180,11 +115,17 @@ func writeInstallStepFile(index int, total int, step installStep) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(step.Path), 0o755); err != nil {
-		return err
-	}
-	if err := os.WriteFile(step.Path, []byte(body), 0o644); err != nil {
-		return err
+	if configstore.IsDBConfigPath(step.Path) {
+		if err := configstore.WriteFileBy(step.Path, []byte(body), configstore.ByInstall); err != nil {
+			return err
+		}
+	} else {
+		if err := os.MkdirAll(filepath.Dir(step.Path), 0o755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(step.Path, []byte(body), 0o644); err != nil {
+			return err
+		}
 	}
 	fmt.Println(clifmt.Success("done"))
 	fmt.Printf("    %s\n", step.Path)
@@ -284,4 +225,9 @@ func buildInstallBootstrapConfig(dir string, setup *installConfigSetup) configbo
 	}
 
 	return cfg
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }

@@ -344,7 +344,7 @@ func New(deps Dependencies) *cobra.Command {
 							APIBase:             cfg.Endpoint,
 							DefaultModel:        cfg.Model,
 							ContextWindowTokens: cfg.ContextWindowTokens,
-							JournalDir:          runtimePaths.LLMUsageJournalDir,
+							UsageDBPath:         runtimePaths.UsageDBPath,
 							TopicContextStore:   topicStore,
 							Logger:              logger,
 						})
@@ -362,7 +362,7 @@ func New(deps Dependencies) *cobra.Command {
 					Provider:     meta.Provider,
 					APIBase:      meta.Endpoint,
 					DefaultModel: meta.Model,
-					JournalDir:   runtimePaths.LLMUsageJournalDir,
+					UsageDBPath:  runtimePaths.UsageDBPath,
 					Logger:       logger,
 				}), nil
 			}

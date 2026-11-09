@@ -26,12 +26,14 @@ type ContactSnapshotItem struct {
 	PreferredID  string   `json:"preferred_id,omitempty"`
 }
 
-func LoadContactSnapshot(ctx context.Context, contactsDir string) (ContactSnapshot, error) {
+// LoadContactSnapshot lists the active contacts whose folder is contactsDir, kept in the agent.db
+// of stateDir (the folder above contactsDir when stateDir is empty).
+func LoadContactSnapshot(ctx context.Context, stateDir, contactsDir string) (ContactSnapshot, error) {
 	contactsDir = pathutil.ExpandHomePath(strings.TrimSpace(contactsDir))
 	if contactsDir == "" {
 		return ContactSnapshot{}, fmt.Errorf("contacts dir is not configured")
 	}
-	svc := contacts.NewService(contacts.NewFileStore(contactsDir))
+	svc := contacts.NewService(contacts.NewStoreInStateDir(pathutil.ExpandHomePath(strings.TrimSpace(stateDir)), contactsDir))
 	items, err := svc.ListContacts(ctx, contacts.StatusActive)
 	if err != nil {
 		return ContactSnapshot{}, err

@@ -8,7 +8,7 @@
 // weekdays above 680; the weekday chips run 7 to a row, 4 in a narrow form or window, 2 on a phone.
 import { signal, Text, View, windowSize } from "nsh";
 import { Button as BaseButton, DatePicker, Switch, TimeField } from "nsh/base";
-import { currentLocale, translate } from "../../lib/core/context.js";
+import { currentLocale, formatTime, translate } from "../../lib/core/context.js";
 import { formatDate } from "../../lib/core/intl-format.js";
 import { AppMarkdownEditor } from "../shared/MarkdownEditor";
 import { Button, DropdownMenu, Icon, type MenuEntry, Spinner, Tabs, Tip } from "../ui";
@@ -479,6 +479,17 @@ export function TodoTaskEditor(props: { state: TodoState; panel?: boolean }) {
               </Each>
             </Text>
           </View>
+
+          <If when={model.taskLastRun(task(), formatTime)}>
+            {(lastRun) => (
+              <Text
+                testID="todo-last-run"
+                class={`text-xs leading-[17.4px] ${lastRun().status === "failed" ? "text-danger" : "text-muted-foreground"}`}
+              >
+                {lastRun().label}
+              </Text>
+            )}
+          </If>
 
           <View class="gap-[5px]">
             <TodoInput

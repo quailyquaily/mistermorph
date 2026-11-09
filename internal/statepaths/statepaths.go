@@ -12,10 +12,15 @@ const (
 	CronFilename               = "cron.yaml"
 	JournalDirName             = "journal"
 	MemoryDBFilename           = "memory.db"
-	PersonaDirName             = "persona"
-	IdentityFilename           = "identity.yaml"
-	SoulFilename               = "soul.md"
-	AvatarFilename             = "avatar.webp"
+	// AgentDBFilename is the database for the agent's own state: config, persona, contacts, TODO,
+	// Console sessions, Agent Link peers and topic state.
+	AgentDBFilename = "agent.db"
+	// UsageDBFilename is the database for LLM usage, written on every model call.
+	UsageDBFilename  = "usage.db"
+	PersonaDirName   = "persona"
+	IdentityFilename = "identity.yaml"
+	SoulFilename     = "soul.md"
+	AvatarFilename   = "avatar.webp"
 )
 
 func FileStateDir() string {
@@ -49,6 +54,16 @@ func JournalDir() string {
 // MemoryDBPath is the SQLite database for memories and their reminder counts. The journal has its own.
 func MemoryDBPath() string {
 	return filepath.Clean(filepath.Join(FileStateDir(), MemoryDBFilename))
+}
+
+// AgentDBPath is the SQLite database for the agent's own state.
+func AgentDBPath() string {
+	return filepath.Clean(filepath.Join(FileStateDir(), AgentDBFilename))
+}
+
+// UsageDBPath is the SQLite database for LLM usage.
+func UsageDBPath() string {
+	return filepath.Clean(filepath.Join(FileStateDir(), UsageDBFilename))
 }
 
 func LLMUsageJournalDir() string {

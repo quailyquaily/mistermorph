@@ -120,7 +120,7 @@ func TestSlackPrivateAdminPairCommandRunsBeforeAllowlist(t *testing.T) {
 	}))
 	api := newSlackAPI(server.Client, server.URL, "bot-token", "app-token")
 	root := t.TempDir()
-	store := contacts.NewFileStore(filepath.Join(root, "contacts"))
+	store := contacts.NewStore(filepath.Join(root, "contacts"))
 	admins, err := agentpair.ParseAdmins([]string{"slack:T123:U11"})
 	if err != nil {
 		t.Fatalf("ParseAdmins() error = %v", err)

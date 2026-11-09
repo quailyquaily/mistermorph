@@ -149,10 +149,12 @@ Settings that only apply after a restart (`process_restart` and `runtime_restart
 - Tasks:
   - list + detail (read-only)
 - Files:
-  - unified editor for `cron.yaml`, `identity.yaml`, `soul.md`, and `HEARTBEAT.md`
+  - `cron.yaml`, `identity.yaml`, `soul.md` and `HEARTBEAT.md` are rows of `agent.db`; their routes render them in the file shapes and parse a save back (for one release)
+- Heartbeat (in TODO):
+  - the heartbeat's workflows, one card each: a title, a switch (an off workflow is kept but not run) and Markdown instructions; add, move up or down, delete; Save replaces the list
 - Contacts:
   - dedicated sidebar entry
-  - structured list rendering from `ACTIVE.md` + `INACTIVE.md`
+  - structured list from the `contacts` table (`agent.db`)
   - status filter (`all|active|inactive`)
   - circular cached avatars with a stable initial fallback; local and remote endpoints use the same authenticated proxy path
 - Audit:
@@ -229,17 +231,25 @@ Runtime routes used through `/proxy`:
   - `/auth/codex/*`, `/auth/xai/*`, `/auth/pro/*`
 - Overview/runtime:
   - `GET /overview`
-- Files:
+- Files (rendered from and parsed back into `agent.db`; kept for one release):
   - `GET /state/files`
   - `GET /state/files/{name}` (`cron.yaml|identity.yaml|soul.md|HEARTBEAT.md`)
   - `PUT /state/files/{name}`
   - `GET /persona/files`
   - `GET /persona/files/{name}` (`identity.yaml|soul.md`)
   - `PUT /persona/files/{name}`
+  - `GET|PUT /todo/files/cron.yaml` (the TODO list as `cron.yaml` text)
+- Persona and heartbeat:
+  - `GET /persona/identity`: `{exists, identity}`, the identity with `soul` and `extra`
+  - `PUT|PATCH /persona/identity`: change the fields the body names (`name`, `name_alts`, `creature`, `vibe`, `emoji`, `soul`, `extra`)
+  - `GET /heartbeat/workflows`: `{items, task, task_empty}`, in order, with the task a tick would run
+  - `PUT /heartbeat/workflows` `{"items": [...]}`: replace the list in that order (an item with an `id` keeps its row)
+  - `POST /heartbeat/workflows`: add one (at `position` when given)
+  - `GET|PATCH|DELETE /heartbeat/workflows/{id}`: one workflow (`title`, `instructions`, `enabled`, `position`)
   - `GET /persona/avatar`
   - `PUT /persona/avatar`
   - `DELETE /persona/avatar`
-- Contacts:
+- Contacts (the whole-file `/contacts/files/*` routes are removed; `/contacts/item` edits one contact's YAML):
   - `GET /contacts/list?status=all|active|inactive`
   - `GET /contacts/avatar?contact_id=<contact_id>`
 
@@ -459,3 +469,14 @@ The Console process must also be updated for the restored commands and records.
 Remote chat does not read local topic files or import terminal input history.
 Server persistence settings still apply. See the [design](feat/feat_20260917_tui_shared_topics.md)
 for storage and execution boundaries.
+
+## State Storage
+
+The agent's state is in SQLite, next to the journal and the memories (see `docs/feat/feat_20261108_agent_db.md`):
+
+- `<file_state_dir>/agent.db`: the config (unless `--config` names a file), the identity and soul, the heartbeat workflows, contacts (with an index of every channel identifier), the contacts bus inbox and outbox, the TODO list, Console login sessions, Agent Link peers, and each conversation's context use, latest request snapshot and workspace.
+- `<file_state_dir>/usage.db`: LLM usage, one row per call (`stats.llm_usage.retention_days` bounds it).
+
+Each change is one transaction; there are no lock files for these stores (the TODO scheduler keeps `locks/cron.scheduler.lck`). The files an older version kept (`config.yaml` at the default path, `persona/identity.yaml`, `persona/soul.md`, `HEARTBEAT.md`, `contacts/ACTIVE.md`, `INACTIVE.md`, `bus_inbox.json`, `bus_outbox.json`, `cron.yaml`, `console/sessions.json`, `agentlink/peers.json`, `topics/*/context*.json` and `workspace.json`, `stats/llm_usage/*.jsonl`) are imported the first time the database opens after the config is loaded (so a custom `contacts.dir_name` is honoured) and renamed `*.imported`; a record that does not parse is skipped and listed in the database's `meta` table under `import_rejects:<store>`.
+
+The Console's System settings say where the config is kept. Use `morph state export <dir>` and `morph state import <dir>` to work on the state as files, `morph config export|import|edit` for the config alone, and `morph state snapshot <dir>` for backups. `morph state import` changes only what the folder has a file for: a missing file leaves its store as it is, and `contacts/ACTIVE.md` without `INACTIVE.md` replaces the active contacts and keeps the inactive ones (and the other way round).

@@ -136,7 +136,7 @@ func integrationUsageClientWrap(paths runtimepaths.Paths, logger *slog.Logger) l
 			APIBase:             cfg.Endpoint,
 			DefaultModel:        cfg.Model,
 			ContextWindowTokens: cfg.ContextWindowTokens,
-			JournalDir:          paths.LLMUsageJournalDir,
+			UsageDBPath:         paths.UsageDBPath,
 			TopicContextStore:   topicStore,
 			Logger:              logger,
 		})

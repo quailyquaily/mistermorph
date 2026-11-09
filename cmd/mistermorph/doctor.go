@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/quailyquaily/mistermorph/internal/configdefaults"
+	"github.com/quailyquaily/mistermorph/internal/configstore"
 	"github.com/quailyquaily/mistermorph/internal/configutil"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -42,7 +43,11 @@ func newDoctorCmd() *cobra.Command {
 		SilenceErrors: true,
 		SilenceUsage:  true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			path, _ := resolveConfigFile()
+			// After the root preflight, "config" names the config in use: the --config file or agent.db.
+			path := strings.TrimSpace(viper.GetString("config"))
+			if exists, err := configstore.Exists(path); path == "" || err != nil || !exists {
+				path, _ = resolveConfigFile()
+			}
 			return runDoctor(cmd.OutOrStdout(), path, &http.Client{Timeout: 15 * time.Second})
 		},
 	}

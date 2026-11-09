@@ -2,11 +2,9 @@ package llmstats
 
 import (
 	"context"
-	"encoding/json"
 	"math"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -100,7 +98,7 @@ func TestUsageClientRecordsRequestMetadata(t *testing.T) {
 		Provider:     "openai",
 		APIBase:      "https://api.openai.com",
 		DefaultModel: "gpt-5.2",
-		JournalDir:   root,
+		UsageDBPath:  filepath.Join(root, "usage.db"),
 	}).(*UsageClient)
 	client.now = func() time.Time {
 		return time.Date(2026, 3, 7, 12, 0, 0, 0, time.UTC)
@@ -113,21 +111,8 @@ func TestUsageClientRecordsRequestMetadata(t *testing.T) {
 		t.Fatalf("Chat() error = %v", err)
 	}
 
-	entries, err := os.ReadDir(root)
-	if err != nil {
-		t.Fatalf("ReadDir() error = %v", err)
-	}
-	if len(entries) != 1 {
-		t.Fatalf("len(entries) = %d, want 1", len(entries))
-	}
-	data, err := os.ReadFile(filepath.Join(root, entries[0].Name()))
-	if err != nil {
-		t.Fatalf("ReadFile() error = %v", err)
-	}
-	var rec RequestRecord
-	if err := json.Unmarshal(data[:len(data)-1], &rec); err != nil {
-		t.Fatalf("Unmarshal() error = %v", err)
-	}
+	records := readTestRecords(t, filepath.Join(root, "usage.db"), 1)
+	rec := records[0]
 	if rec.RunID != "run_test_1" || rec.OriginEventID != "evt_test_1" {
 		t.Fatalf("record metadata = %+v", rec)
 	}
@@ -160,13 +145,13 @@ func TestUsageClientObservesTopicContextInCapturedStore(t *testing.T) {
 	clientA := WrapClient(stubUsageClient{}, ClientOptions{
 		Provider:          "openai",
 		DefaultModel:      "model-a",
-		JournalDir:        filepath.Join(rootA, "usage"),
+		UsageDBPath:       filepath.Join(rootA, "usage.db"),
 		TopicContextStore: topiccontext.NewStore(pathA),
 	}).(*UsageClient)
 	clientB := WrapClient(stubUsageClient{}, ClientOptions{
 		Provider:          "openai",
 		DefaultModel:      "model-b",
-		JournalDir:        filepath.Join(rootB, "usage"),
+		UsageDBPath:       filepath.Join(rootB, "usage.db"),
 		TopicContextStore: topiccontext.NewStore(pathB),
 	}).(*UsageClient)
 	t.Cleanup(func() {
@@ -204,7 +189,7 @@ func TestImageUsageClientRecordsRequestMetadata(t *testing.T) {
 		Provider:     "openai",
 		APIBase:      "https://api.openai.com",
 		DefaultModel: "gpt-image-1",
-		JournalDir:   root,
+		UsageDBPath:  filepath.Join(root, "usage.db"),
 	}).(*ImageUsageClient)
 	client.now = func() time.Time {
 		return time.Date(2026, 5, 14, 12, 0, 0, 0, time.UTC)
@@ -219,26 +204,8 @@ func TestImageUsageClientRecordsRequestMetadata(t *testing.T) {
 		t.Fatalf("EditImage() error = %v", err)
 	}
 
-	entries, err := os.ReadDir(root)
-	if err != nil {
-		t.Fatalf("ReadDir() error = %v", err)
-	}
-	if len(entries) != 1 {
-		t.Fatalf("len(entries) = %d, want 1", len(entries))
-	}
-	data, err := os.ReadFile(filepath.Join(root, entries[0].Name()))
-	if err != nil {
-		t.Fatalf("ReadFile() error = %v", err)
-	}
-	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
-	if len(lines) != 2 {
-		t.Fatalf("len(lines) = %d, want 2", len(lines))
-	}
-
-	var generateRec RequestRecord
-	if err := json.Unmarshal([]byte(lines[0]), &generateRec); err != nil {
-		t.Fatalf("Unmarshal(generate) error = %v", err)
-	}
+	records := readTestRecords(t, filepath.Join(root, "usage.db"), 2)
+	generateRec := records[0]
 	if generateRec.Operation != operationImageGenerate || generateRec.Scene != "tool.image_generate" {
 		t.Fatalf("generate record operation = %+v", generateRec)
 	}
@@ -255,14 +222,23 @@ func TestImageUsageClientRecordsRequestMetadata(t *testing.T) {
 		t.Fatalf("generate duration = %d, want 125", generateRec.DurationMs)
 	}
 
-	var editRec RequestRecord
-	if err := json.Unmarshal([]byte(lines[1]), &editRec); err != nil {
-		t.Fatalf("Unmarshal(edit) error = %v", err)
-	}
+	editRec := records[1]
 	if editRec.Operation != operationImageEdit || editRec.Scene != "tool.image_edit" {
 		t.Fatalf("edit record operation = %+v", editRec)
 	}
 	if editRec.Model != "gpt-image-1" || editRec.TotalTokens != 24 || !costAlmostEqual(editRec.TotalCost, 0.11) {
 		t.Fatalf("edit record content = %+v", editRec)
 	}
+}
+
+func readTestRecords(t *testing.T, path string, want int) []RequestRecord {
+	t.Helper()
+	records, err := ReadUsageRecords(context.Background(), path)
+	if err != nil {
+		t.Fatalf("ReadUsageRecords() error = %v", err)
+	}
+	if len(records) != want {
+		t.Fatalf("records = %d, want %d: %+v", len(records), want, records)
+	}
+	return records
 }

@@ -186,7 +186,7 @@ func TestExecuteContactsSendFile(t *testing.T) {
 
 	newService := func(t *testing.T) *contacts.Service {
 		t.Helper()
-		svc := contacts.NewService(contacts.NewFileStore(filepath.Join(t.TempDir(), "contacts")))
+		svc := contacts.NewService(contacts.NewStore(filepath.Join(t.TempDir(), "contacts")))
 		for _, contact := range []contacts.Contact{
 			{ContactID: "tg:@ann", Kind: contacts.KindHuman, Channel: contacts.ChannelTelegram, TGUsername: "ann", TGGroupChatIDs: []int64{-1001}},
 			{ContactID: "tg:@bob", Kind: contacts.KindHuman, Channel: contacts.ChannelTelegram, TGUsername: "bob", TGGroupChatIDs: []int64{-1001}},

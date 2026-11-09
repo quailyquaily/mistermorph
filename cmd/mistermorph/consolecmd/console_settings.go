@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/quailyquaily/mistermorph/internal/configstore"
+
 	"github.com/quailyquaily/mistermorph/integration"
 	"github.com/quailyquaily/mistermorph/internal/agentsettings"
 	"github.com/quailyquaily/mistermorph/internal/channelopts"
@@ -17,7 +19,6 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/configrevision"
 	"github.com/quailyquaily/mistermorph/internal/configsettings"
 	"github.com/quailyquaily/mistermorph/internal/entryutil/refid"
-	"github.com/quailyquaily/mistermorph/internal/fsstore"
 	"github.com/quailyquaily/mistermorph/internal/secref"
 	"github.com/quailyquaily/mistermorph/internal/xlogin"
 	"github.com/spf13/viper"
@@ -577,7 +578,7 @@ func (s *server) handleConsoleSettingsPut(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	if err := fsstore.WriteTextAtomic(configPath, string(serialized), fsstore.FileOptions{DirPerm: 0o755, FilePerm: 0o600}); err != nil {
+	if err := configstore.WriteFileBy(configPath, serialized, configstore.ByConsole); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -657,7 +658,7 @@ func (s *server) handleConsoleSettingsPut(w http.ResponseWriter, r *http.Request
 }
 
 func readConsoleSettings(configPath string) (consoleSettingsPayload, error) {
-	data, err := os.ReadFile(configPath)
+	data, err := configstore.ReadFile(configPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return defaultConsoleSettingsPayload(), nil

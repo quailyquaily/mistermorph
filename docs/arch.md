@@ -270,13 +270,17 @@ Telegram progress updates:
 ## 6. State Directory and Naming Baseline
 
 ```text
-file_state_dir (default ~/.morph)
-├── HEARTBEAT.md
-├── contacts/
-│   ├── ACTIVE.md
-│   ├── INACTIVE.md
-│   ├── bus_inbox.json
-│   └── bus_outbox.json
+file_state_dir (default ~/.morph; --state-dir or MISTER_MORPH_FILE_STATE_DIR)
+├── agent.db              config, identity and soul, heartbeat workflows, contacts and their
+│                         handles, bus inbox/outbox, TODO list, Console sessions, Agent Link
+│                         peers, topic context use, request snapshots and workspaces
+├── usage.db              LLM usage, one row per call
+├── memory.db             memories
+├── journal/journal.db    task and topic events
+├── persona/avatar.webp
+├── contacts/avatars/
+├── topics/<key>/         a conversation's context checkpoint and found tools
+├── locks/cron.scheduler.lck
 ├── guard/
 │   ├── audit/guard_audit.jsonl
 │   └── approvals/guard_approvals.json
@@ -285,7 +289,8 @@ file_state_dir (default ~/.morph)
 
 Additional notes:
 
-- `HEARTBEAT.md` is the default heartbeat checklist input (`statepaths.HeartbeatChecklistPath()`).
+- `internal/agentdb` opens `agent.db` (one list of migrations for every table); each store registers the one-time import of the files it replaced, which are renamed `*.imported`. See `docs/feat/feat_20261108_agent_db.md`.
+- The heartbeat's task comes from the enabled `heartbeat_workflows` rows.
 - Contacts bus dedupe keys:
   - inbox: `(channel, platform_message_id)`
   - outbox: `(channel, idempotency_key)`

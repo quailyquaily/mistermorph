@@ -35,3 +35,11 @@ design/brand/generator/platform-jobs.json
 
 # The phone app built by web/console-nsh/scripts/build-android.sh
 web/console-nsh/dist-android/
+
+# Runtime state databases (agent.db, usage.db, memory.db and their WAL files) are never source.
+agent.db
+agent.db-*
+usage.db
+usage.db-*
+memory.db
+memory.db-*

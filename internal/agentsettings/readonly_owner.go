@@ -4,8 +4,9 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"os"
 	"strings"
+
+	"github.com/quailyquaily/mistermorph/internal/configstore"
 )
 
 type readOnlyOwner struct {
@@ -50,8 +51,7 @@ func (o *readOnlyOwner) View(context.Context) (AgentSettingsView, error) {
 	}
 	configExists := false
 	if configPath != "" {
-		_, err := os.Stat(configPath)
-		configExists = err == nil
+		configExists, _ = configstore.Exists(configPath)
 	}
 	reason := o.reason
 	if reason == "" {

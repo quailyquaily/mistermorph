@@ -87,7 +87,7 @@ func TestAgentSendOverAgentLink(t *testing.T) {
 	// putContact (re)writes the peer's contact, which clears its cooldown.
 	putContact := func(t *testing.T) {
 		t.Helper()
-		if err := contacts.NewFileStore(contactsDir).PutContact(ctx, contacts.Contact{
+		if err := contacts.NewStore(contactsDir).PutContact(ctx, contacts.Contact{
 			ContactID: peerContact, Kind: contacts.KindAgent, Channel: contacts.ChannelAgentLink, ContactNickname: "Peer",
 		}); err != nil {
 			t.Fatal(err)

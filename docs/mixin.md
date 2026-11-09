@@ -24,7 +24,7 @@ mixin:
   serve_listen: ""
 ```
 
-A relative `keystore_file` is resolved from the directory containing `config.yaml`.
+A relative `keystore_file` is resolved from the directory containing `config.yaml`, or from the state folder when the config is in `agent.db`. Importing `~/.morph/config.yaml` into the `agent.db` of another state folder rewrites a relative `keystore_file` as the absolute path it pointed at.
 
 `allowed_conversation_ids` contains Mixin conversation UUIDs. An empty list allows every conversation. To find the current conversation UUID, send `/id` in a private conversation or mention the bot with `/id` in a group.
 

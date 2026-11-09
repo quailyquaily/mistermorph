@@ -48,15 +48,13 @@ import {
 } from "../../lib/core/config-field-groups.js";
 import {
   buildEmptyPersonaIdentityState,
-  buildIdentityYAML,
   buildPersonaIdentitySnapshot,
   dispatchPersonaAvatarUpdated,
   dispatchPersonaIdentityUpdated,
+  loadPersonaRecord,
   normalizeSoulDocument,
-  parseIdentityProfile,
   PERSONA_AVATAR_ENDPOINT,
-  PERSONA_IDENTITY_ENDPOINT,
-  PERSONA_SOUL_ENDPOINT,
+  savePersonaRecord,
 } from "../../lib/core/persona-profile.js";
 import { modelPickerItemsFromPayload } from "../../lib/core/setup-picker.js";
 import { reactiveRecord } from "../../lib/stores/reactive-record.js";
@@ -475,6 +473,7 @@ export function createSettingsStore() {
   const consoleSaving = signal(false);
   const consoleSavingTarget = signal("");
   const consoleConfigPath = signal("");
+  const systemConfigPath = signal("");
   const consoleConfigValues = signal<Record<string, any>>({});
   const consoleFieldStates = signal<Record<string, any>>({});
   const consoleEndpoints = signal<any[]>([]);
@@ -507,7 +506,8 @@ export function createSettingsStore() {
   const personaSavingTarget = signal("");
   const personaErr = signal("");
   const personaOk = signal("");
-  const loadedIdentityRaw = signal("");
+  // The persona as loaded: which API the runtime has, and the identity.yaml text on an old one.
+  const loadedPersonaRecord = signal<any>(null);
   const loadedIdentitySnapshot = signal("");
   const loadedSoulSnapshot = signal("");
   const personaSettingsLoaded = signal(false);
@@ -2563,6 +2563,7 @@ export function createSettingsStore() {
         settingsConfigRevision.set(trimText(data?.config_revision) || untracked(settingsConfigRevision));
         systemConfigValues.set(obj(data?.config_values));
         systemFieldStates.set(obj(data?.field_states));
+        systemConfigPath.set(str(data?.config_path));
         systemSettingsLoaded.set(true);
       });
     } catch (e: any) {
@@ -2574,19 +2575,13 @@ export function createSettingsStore() {
 
   /* --- persona --- */
 
-  function applyPersonaIdentityContent(raw: string) {
+  function applyPersonaRecord(record: any) {
     batch(() => {
-      loadedIdentityRaw.set(normalizeText(raw));
-      Object.assign(state.persona, parseIdentityProfile(untracked(loadedIdentityRaw)));
+      loadedPersonaRecord.set(record);
+      Object.assign(state.persona, record.profile);
       loadedIdentitySnapshot.set(untracked(() => buildPersonaIdentitySnapshot(state.persona)));
-    });
-  }
-
-  function applyPersonaSoulContent(raw: string) {
-    const next = normalizeSoulDocument(raw);
-    batch(() => {
-      soulContent.set(next);
-      loadedSoulSnapshot.set(next);
+      soulContent.set(record.soul);
+      loadedSoulSnapshot.set(record.soul);
     });
   }
 
@@ -2618,7 +2613,7 @@ export function createSettingsStore() {
     batch(() => {
       Object.assign(state.persona, buildEmptyPersonaIdentityState());
       soulContent.set("");
-      loadedIdentityRaw.set("");
+      loadedPersonaRecord.set(null);
       loadedIdentitySnapshot.set(untracked(() => buildPersonaIdentitySnapshot(state.persona)));
       loadedSoulSnapshot.set("");
       personaSettingsLoaded.set(false);
@@ -2626,15 +2621,8 @@ export function createSettingsStore() {
     });
   }
 
-  async function loadPersonaFile(endpointRef: string, endpoint: string) {
-    try {
-      const payload: any = await runtimeApiFetchForEndpoint(endpointRef, endpoint);
-      return String(payload?.content || "");
-    } catch (e: any) {
-      if (e?.status === 404) return "";
-      throw e;
-    }
-  }
+  const personaFetch = (endpointRef: string) => (pathname: string, options?: any) =>
+    runtimeApiFetchForEndpoint(endpointRef, pathname, options);
 
   async function loadPersonaAvatar(endpointRef: string, requestSeq = personaSettingsRequestSeq) {
     try {
@@ -2664,12 +2652,9 @@ export function createSettingsStore() {
       personaOk.set("");
     });
     try {
-      const identityContent = await loadPersonaFile(target, PERSONA_IDENTITY_ENDPOINT);
+      const record = await loadPersonaRecord(personaFetch(target));
       if (!isCurrentPersona(requestSeq, target)) return;
-      applyPersonaIdentityContent(identityContent);
-      const soul = await loadPersonaFile(target, PERSONA_SOUL_ENDPOINT);
-      if (!isCurrentPersona(requestSeq, target)) return;
-      applyPersonaSoulContent(soul);
+      applyPersonaRecord(record);
       await loadPersonaAvatar(target, requestSeq);
       if (!isCurrentPersona(requestSeq, target)) return;
       personaSettingsLoaded.set(true);
@@ -2693,25 +2678,16 @@ export function createSettingsStore() {
     const target = currentRef();
     let setupReadinessDirty = false;
     try {
-      if (untracked(personaIdentityDirty)) {
-        const content = untracked(() => buildIdentityYAML(state.persona, loadedIdentityRaw()));
-        await runtimeApiFetchForEndpoint(target, PERSONA_IDENTITY_ENDPOINT, { method: "PUT", body: { content } });
-        if (target !== currentRef()) return false;
-        batch(() => {
-          loadedIdentityRaw.set(content);
-          loadedIdentitySnapshot.set(untracked(() => buildPersonaIdentitySnapshot(state.persona)));
+      const identityDirty = untracked(personaIdentityDirty);
+      const soulDirty = untracked(personaSoulDirty);
+      if (identityDirty || soulDirty) {
+        const saved = await savePersonaRecord(personaFetch(target), untracked(loadedPersonaRecord), {
+          profile: identityDirty ? untracked(() => ({ ...state.persona })) : undefined,
+          soul: soulDirty ? untracked(soulContent) : undefined,
         });
-        dispatchPersonaIdentityUpdated();
-        setupReadinessDirty = true;
-      }
-      if (untracked(personaSoulDirty)) {
-        const content = normalizeSoulDocument(untracked(soulContent));
-        await runtimeApiFetchForEndpoint(target, PERSONA_SOUL_ENDPOINT, { method: "PUT", body: { content } });
         if (target !== currentRef()) return false;
-        batch(() => {
-          soulContent.set(content);
-          loadedSoulSnapshot.set(content);
-        });
+        applyPersonaRecord(saved);
+        if (identityDirty) dispatchPersonaIdentityUpdated();
         setupReadinessDirty = true;
       }
       if (setupReadinessDirty) invalidateConsoleSetupReadiness();
@@ -3321,6 +3297,8 @@ export function createSettingsStore() {
   return {
     state,
     loggingOut,
+    // where the config the page edits is kept: agent.db, or the file --config names
+    configPath: computed(() => systemConfigPath() || consoleConfigPath() || llmConfigPath()),
     // endpoint
     settingsEndpointRef,
     consoleRuntimeEndpoints,

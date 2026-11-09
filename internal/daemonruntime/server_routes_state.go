@@ -47,7 +47,7 @@ func (routes *routeRegistration) registerStateRoutes() {
 			http.Error(w, "invalid file name", http.StatusBadRequest)
 			return
 		}
-		handleTextFileDetail(w, r, spec.Name, spec.Path)
+		handleStateFileDetail(w, r, spec)
 	})
 
 	mux.HandleFunc("/todo/files", func(w http.ResponseWriter, r *http.Request) {
@@ -77,7 +77,7 @@ func (routes *routeRegistration) registerStateRoutes() {
 			http.Error(w, "invalid file name", http.StatusBadRequest)
 			return
 		}
-		handleTextFileDetail(w, r, spec.Name, spec.Path)
+		handleStateFileDetail(w, r, spec)
 	})
 	mux.HandleFunc("/todo/tasks", func(w http.ResponseWriter, r *http.Request) {
 		if !checkAuth(r, authToken) {
@@ -85,7 +85,7 @@ func (routes *routeRegistration) registerStateRoutes() {
 			return
 		}
 		paths := statePaths
-		handleTodoTasks(w, r, paths.cronPath, paths.contactsDir, mode, settingsReader, opts.TaskTopic.TopicReader)
+		handleTodoTasks(w, r, paths.cronPath, paths.stateDir, paths.contactsDir, mode, settingsReader, opts.TaskTopic.TopicReader)
 	})
 	mux.HandleFunc("/todo/runs", func(w http.ResponseWriter, r *http.Request) {
 		if !checkAuth(r, authToken) {
@@ -103,35 +103,6 @@ func (routes *routeRegistration) registerStateRoutes() {
 		handleTodoTaskRun(w, r, paths.cronPath, cronRun)
 	})
 
-	mux.HandleFunc("/contacts/files", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		if !checkAuth(r, authToken) {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
-		}
-		paths := statePaths
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"items": describeStateFiles(paths, "contacts"),
-		})
-	})
-	mux.HandleFunc("/contacts/files/", func(w http.ResponseWriter, r *http.Request) {
-		if !checkAuth(r, authToken) {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
-		}
-		paths := statePaths
-		name := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, "/contacts/files/"))
-		spec, ok := resolveStateFileSpec(paths, "contacts", name)
-		if !ok {
-			http.Error(w, "invalid file name", http.StatusBadRequest)
-			return
-		}
-		handleTextFileDetail(w, r, spec.Name, spec.Path)
-	})
 	mux.HandleFunc("/contacts/chat-profile", func(w http.ResponseWriter, r *http.Request) {
 		if !checkAuth(r, authToken) {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -156,7 +127,7 @@ func (routes *routeRegistration) registerStateRoutes() {
 			return
 		}
 		paths := statePaths
-		store := contacts.NewFileStore(paths.contactsDir)
+		store := contacts.NewStoreInStateDir(paths.stateDir, paths.contactsDir)
 		avatar, found, err := store.ReadContactAvatar(r.Context(), contactID)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -185,7 +156,7 @@ func (routes *routeRegistration) registerStateRoutes() {
 			return
 		}
 		paths := statePaths
-		store := contacts.NewFileStore(paths.contactsDir)
+		store := contacts.NewStoreInStateDir(paths.stateDir, paths.contactsDir)
 		service := contacts.NewService(store)
 		items, err := listContactsForConsole(r.Context(), service)
 		if err != nil {
@@ -207,7 +178,7 @@ func (routes *routeRegistration) registerStateRoutes() {
 			return
 		}
 		paths := statePaths
-		store := contacts.NewFileStore(paths.contactsDir)
+		store := contacts.NewStoreInStateDir(paths.stateDir, paths.contactsDir)
 		svc := contacts.NewService(store)
 
 		switch r.Method {
@@ -390,7 +361,29 @@ func (routes *routeRegistration) registerStateRoutes() {
 			http.Error(w, "invalid file name", http.StatusBadRequest)
 			return
 		}
-		handleTextFileDetail(w, r, spec.Name, spec.Path)
+		handleStateFileDetail(w, r, spec)
+	})
+	mux.HandleFunc("/persona/identity", func(w http.ResponseWriter, r *http.Request) {
+		if !checkAuth(r, authToken) {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		handlePersonaIdentity(w, r, statePaths.stateDir)
+	})
+	mux.HandleFunc("/heartbeat/workflows", func(w http.ResponseWriter, r *http.Request) {
+		if !checkAuth(r, authToken) {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		handleHeartbeatWorkflows(w, r, statePaths.stateDir)
+	})
+	mux.HandleFunc("/heartbeat/workflows/", func(w http.ResponseWriter, r *http.Request) {
+		if !checkAuth(r, authToken) {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		id := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, "/heartbeat/workflows/"))
+		handleHeartbeatWorkflow(w, r, statePaths.stateDir, id)
 	})
 	mux.HandleFunc("/persona/avatar", func(w http.ResponseWriter, r *http.Request) {
 		if !checkAuth(r, authToken) {

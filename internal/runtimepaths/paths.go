@@ -14,6 +14,8 @@ type Paths struct {
 	CacheDir                 string
 	JournalDir               string
 	MemoryDBPath             string
+	AgentDBPath              string
+	UsageDBPath              string
 	ContactsDir              string
 	TasksDir                 string
 	WorkspaceAttachmentsPath string
@@ -61,6 +63,8 @@ func FromReader(reader Reader) Paths {
 		CacheDir:                 cacheDir,
 		JournalDir:               journalDir,
 		MemoryDBPath:             filepath.Join(stateDir, statepaths.MemoryDBFilename),
+		AgentDBPath:              filepath.Join(stateDir, statepaths.AgentDBFilename),
+		UsageDBPath:              filepath.Join(stateDir, statepaths.UsageDBFilename),
 		ContactsDir:              contactsDir,
 		TasksDir:                 tasksDir,
 		WorkspaceAttachmentsPath: filepath.Join(stateDir, "workspace_attachments.json"),

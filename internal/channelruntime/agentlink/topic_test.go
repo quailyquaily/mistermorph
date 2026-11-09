@@ -56,7 +56,7 @@ func TestNameAgentTopicsFillsOnlyMissingTitles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewConsoleFileStore() error = %v", err)
 	}
-	contactsStore := contacts.NewFileStore(filepath.Join(root, "contacts"))
+	contactsStore := contacts.NewStore(filepath.Join(root, "contacts"))
 	const untitled = "inst_0123456789abcdef0123456789abcdef"
 	const titled = "inst_fedcba9876543210fedcba9876543210"
 	for _, tc := range []struct{ instance, nickname, topicTitle string }{

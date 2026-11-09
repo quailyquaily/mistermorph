@@ -18,8 +18,10 @@ This document tracks where prompts are defined today, how they are composed at r
 
 ### 3) Persona identity
 
-- `ApplyPersonaIdentity(...)` loads local persona docs and may replace `spec.Identity`.
-- Canonical files are `persona/identity.yaml` and `persona/soul.md`.
+- `ApplyPersonaIdentity(...)` reads the identity row of `<file_state_dir>/agent.db` for each run and may replace `spec.Identity`.
+- The identity's fields (name, name_alts, creature, vibe, emoji, and any extra keys) are rendered as the `[identity.yaml]` block, in the shape the file had. The soul is a Markdown column of the same row, rendered as the `[soul.md]` block; an empty soul is left out. The old `persona/identity.yaml` and `persona/soul.md` are imported once (a soul whose front matter says `status: draft` is imported as empty) and kept as `*.imported`.
+- The system prompt tells the model to find contacts with the `contacts_list` tool.
+- The heartbeat's task is the enabled heartbeat workflows (rows of `heartbeat_workflows`), rendered as `## <title>` followed by the instructions, in order; with none enabled there is no heartbeat task.
 - `persona/avatar.webp` is only a UI asset and is not injected into prompts.
 
 ### 4) Runtime prompt blocks

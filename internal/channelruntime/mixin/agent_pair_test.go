@@ -10,7 +10,7 @@ import (
 )
 
 func TestMixinPairTargetResolvesExistingAgentByIdentityNumber(t *testing.T) {
-	store := contacts.NewFileStore(t.TempDir())
+	store := contacts.NewStore(t.TempDir())
 	if err := store.Ensure(context.Background()); err != nil {
 		t.Fatal(err)
 	}

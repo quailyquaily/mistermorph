@@ -36,6 +36,22 @@ Interactive setup and Console settings save new local credentials in macOS Keych
 
 YAML expansion is done on parsed config values before they are passed to Viper. This may normalize the in-memory YAML formatting, but it does not write back to the config file.
 
+
+## Where the Config Is
+
+Without `--config`, the config is in `<file_state_dir>/agent.db` (tables for LLM profiles, routes, MCP servers, Console endpoints and auth profiles, and a `settings` row for every other value). The state folder is settled before any config is read: `--state-dir`, else `MISTER_MORPH_FILE_STATE_DIR`, else `file_state_dir` in a `~/.morph/config.yaml` an older version wrote, else `~/.morph`; `file_state_dir` is not a setting of the config agent.db holds. Setting it to another folder with `morph config set` or `morph config edit`, or in the Console's settings (which show it read-only), is refused with that reason; a whole document written into agent.db (`morph config import`, install, the first-start import) drops it. The first start without `--config` imports `~/.morph/config.yaml` into agent.db and renames it `config.yaml.imported`.
+
+With `--config <path>`, that file is the config, read and saved as before; agent.db holds no config. systemd units and the Cloudflare deploy pass a path.
+
+Loading keeps its order either way: defaults, then the config, then `${VAR}` and secret expansion with the flag overrides, then `MISTER_MORPH_*` environment variables. Values are kept as written (`${OPENAI_API_KEY}`, `${secret:...}`) and expanded when read.
+
+Edit the config in the Console's settings, or:
+
+- `morph config get <path>` and `morph config set <path> <value>` (the value is read as YAML; `--unset` removes it);
+- `morph config export <file>` (the whole config as YAML, in the order of `config.example.yaml`) and `morph config import <file>` (replace it in one transaction; comments are not kept);
+- `morph config edit` (export, `$EDITOR`, import);
+- `morph config where`.
+
 ## Request Retries and Fallback
 
 LLM request failures retry the same profile up to five times after the initial attempt. This includes request timeouts, all HTTP 5xx responses, HTTP 400, EOF, connection failures, and otherwise unclassified request errors. HTTP 401, 403, 404, 415, 422, and 429, plus recognized rate-limit errors, switch directly to fallback without same-profile retries.
@@ -156,6 +172,18 @@ There is no global fallback or CLI flag for this setting.
 Accepted task and topic changes from every runtime are written to the unified journal, `<file_state_dir>/journal/journal.db` (SQLite). `tasks.persistence_targets` only selects the runtimes whose task projections are saved and restored across process restarts. Removing a runtime from this list does not disable its journal records.
 
 The first start after upgrading imports the older `events.*.jsonl` segments into the database once and leaves them on disk; a line that cannot be read is kept in the database as it was. `tasks.rotate_max_bytes` applied to those segments and is ignored now.
+
+## Backing Up State
+
+The state folder holds SQLite databases (`journal/journal.db`, `memory.db`, `agent.db`, `usage.db`). Copying or archiving the live folder can catch a database and its write-ahead log at different moments, and such a copy may not open. Use `morph state snapshot <dir>` instead: it copies each database with `VACUUM INTO` (a consistent copy while the agent keeps running) and every other file as it is, into `<dir>`, which must not exist or be empty. Back up `<dir>`. `--skip usage` leaves the LLM usage database out.
+
+## LLM Usage
+
+Every successful model call (chat, evaluation, image and transcription) is one row of `<file_state_dir>/usage.db`, shared by every process. A chat call whose provider reports no cost is priced from the pricing catalog (`llm.pricing_file`, or the built-in one) when it is recorded; when the catalog changes, those rows are priced again on the next start. The Console's Stats page and `GET /stats/llm/usage` and `/stats/llm/daily` read the database.
+
+`stats.llm_usage.retention_days` (default `0`, keep everything) deletes rows older than that many days once a day.
+
+An older install's JSONL journal (`stats/llm_usage/*.jsonl`) is imported the first time `usage.db` opens: the folder is renamed `stats/llm_usage.imported`, and lines that do not parse are skipped and listed in the database's `meta` table under `import_rejects:llm_usage` (the Stats page shows their count). `stats/llm_usage_projection.json` is deleted.
 
 ## Memories
 

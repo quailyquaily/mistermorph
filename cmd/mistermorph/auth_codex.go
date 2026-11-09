@@ -9,9 +9,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/quailyquaily/mistermorph/internal/configstore"
+
 	"github.com/quailyquaily/mistermorph/internal/codexauth"
 	"github.com/quailyquaily/mistermorph/internal/configbootstrap"
-	"github.com/quailyquaily/mistermorph/internal/fsstore"
 	"github.com/quailyquaily/mistermorph/internal/pathutil"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -134,7 +135,7 @@ func maybeSetCodexAsDefaultLLM(force bool) (updated bool, configPath string, aut
 	if err != nil {
 		return false, "", false, err
 	}
-	data, readErr := os.ReadFile(configPath)
+	data, readErr := configstore.ReadFile(configPath)
 	if readErr != nil {
 		if !os.IsNotExist(readErr) {
 			return false, configPath, false, readErr
@@ -155,7 +156,7 @@ func maybeSetCodexAsDefaultLLM(force bool) (updated bool, configPath string, aut
 	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
 		return false, configPath, false, err
 	}
-	if err := fsstore.WriteTextAtomic(configPath, string(serialized), fsstore.FileOptions{DirPerm: 0o755, FilePerm: 0o600}); err != nil {
+	if err := configstore.WriteFileBy(configPath, serialized, configstore.ByLogin); err != nil {
 		return false, configPath, false, err
 	}
 	viper.Set("config", configPath)

@@ -11,7 +11,7 @@ import (
 
 func TestLoadContactSnapshot(t *testing.T) {
 	contactsDir := t.TempDir()
-	svc := contacts.NewService(contacts.NewFileStore(contactsDir))
+	svc := contacts.NewService(contacts.NewStore(contactsDir))
 	now := time.Date(2026, 2, 9, 12, 0, 0, 0, time.UTC)
 
 	_, err := svc.UpsertContact(context.Background(), contacts.Contact{
@@ -38,7 +38,7 @@ func TestLoadContactSnapshot(t *testing.T) {
 		t.Fatalf("UpsertContact(alice) error = %v", err)
 	}
 
-	snap, err := LoadContactSnapshot(context.Background(), contactsDir)
+	snap, err := LoadContactSnapshot(context.Background(), "", contactsDir)
 	if err != nil {
 		t.Fatalf("LoadContactSnapshot() error = %v", err)
 	}

@@ -267,6 +267,7 @@ func SystemFields() []Field {
 		{Path: "tasks.dir_name", Kind: KindString, ApplyMode: ApplyProcessRestart},
 		{Path: "tasks.persistence_targets", Kind: KindStringList, ApplyMode: ApplyRuntimeRestart},
 		{Path: "tasks.rotate_max_bytes", Kind: KindInt, ApplyMode: ApplyRuntimeRestart, Min: &zero},
+		{Path: "stats.llm_usage.retention_days", Kind: KindInt, ApplyMode: ApplyProcessRestart, Min: &zero},
 		{Path: "server.max_queue", Kind: KindInt, ApplyMode: ApplyProcessRestart, Min: &one},
 		{Path: "bus.max_inflight", Kind: KindInt, ApplyMode: ApplyProcessRestart, Min: &one},
 		{Path: "user_agent", Kind: KindString, ApplyMode: ApplyProcessRestart},

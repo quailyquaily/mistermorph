@@ -141,9 +141,9 @@ func TestIntegrationUsageAndTopicContextStayInsideRuntimeSnapshot(t *testing.T) 
 				t.Fatalf("ImageUsageClient.Close() error = %v", err)
 			}
 
-			entries, err := os.ReadDir(snap.Paths.LLMUsageJournalDir)
-			if err != nil || len(entries) == 0 {
-				t.Fatalf("captured usage journal entries = %d, err=%v", len(entries), err)
+			records, err := llmstats.ReadUsageRecords(context.Background(), snap.Paths.UsageDBPath)
+			if err != nil || len(records) == 0 {
+				t.Fatalf("captured usage records = %d, err=%v", len(records), err)
 			}
 		})
 	}
@@ -152,10 +152,8 @@ func TestIntegrationUsageAndTopicContextStayInsideRuntimeSnapshot(t *testing.T) 
 	if _, err := os.Stat(globalPaths.TopicContextPath); !os.IsNotExist(err) {
 		t.Fatalf("global topic context path was used: %v", err)
 	}
-	if entries, err := os.ReadDir(globalPaths.LLMUsageJournalDir); err == nil && len(entries) != 0 {
-		t.Fatalf("global usage journal entries = %d, want 0", len(entries))
-	} else if err != nil && !os.IsNotExist(err) {
-		t.Fatalf("ReadDir(global usage journal) error = %v", err)
+	if _, err := os.Stat(globalPaths.UsageDBPath); !os.IsNotExist(err) {
+		t.Fatalf("global usage database was used: %v", err)
 	}
 }
 
@@ -273,8 +271,8 @@ func TestIntegrationRuntimeStateStoresStayIsolatedFromGlobalViper(t *testing.T) 
 		t.Fatalf("runtimeB task = %#v, exists=%v", got, ok)
 	}
 
-	contactsA := contacts.NewFileStore(commonA.RuntimePaths.ContactsDir)
-	contactsB := contacts.NewFileStore(commonB.RuntimePaths.ContactsDir)
+	contactsA := contacts.NewStore(commonA.RuntimePaths.ContactsDir)
+	contactsB := contacts.NewStore(commonB.RuntimePaths.ContactsDir)
 	if err := contactsA.PutContact(context.Background(), contacts.Contact{ContactID: "shared-contact", Kind: contacts.KindHuman, Channel: contacts.ChannelTelegram, ContactNickname: "alpha"}); err != nil {
 		t.Fatalf("runtimeA contact write error = %v", err)
 	}

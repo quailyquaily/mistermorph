@@ -1,20 +1,19 @@
 package awarenessutil
 
 import (
+	"context"
 	"errors"
 	"fmt"
-	"os"
-	"regexp"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
 	awarenessdomain "github.com/quailyquaily/mistermorph/internal/awareness"
+	"github.com/quailyquaily/mistermorph/internal/personastore"
 )
 
 const awarenessFailureThreshold = 3
-
-var awarenessHTMLComment = regexp.MustCompile(`(?s)<!--.*?-->`)
 
 type Behavior string
 
@@ -176,37 +175,18 @@ func (s *State) EndFailure(err error) (bool, string) {
 	return false, ""
 }
 
-func readHeartbeatChecklist(path string) (string, bool, error) {
-	path = strings.TrimSpace(path)
-	if path == "" {
+// readHeartbeatChecklist renders the heartbeat task from the enabled workflows in agent.db, in the
+// state folder checklistPath (its HEARTBEAT.md, which the workflows were) is in. With none
+// enabled there is no task.
+func readHeartbeatChecklist(checklistPath string) (string, bool, error) {
+	checklistPath = strings.TrimSpace(checklistPath)
+	if checklistPath == "" {
 		return "", true, nil
 	}
-	raw, err := os.ReadFile(path)
+	ctx := context.Background()
+	store, err := personastore.ForStateDir(ctx, filepath.Dir(checklistPath))
 	if err != nil {
-		if os.IsNotExist(err) {
-			return "", true, nil
-		}
 		return "", true, err
 	}
-	content := string(raw)
-	if isChecklistEmptyContent(content) {
-		return "", true, nil
-	}
-	return strings.TrimSpace(content), false, nil
-}
-
-func isChecklistEmptyContent(content string) bool {
-	stripped := awarenessHTMLComment.ReplaceAllString(content, "")
-	lines := strings.Split(stripped, "\n")
-	for _, line := range lines {
-		l := strings.TrimSpace(line)
-		if l == "" {
-			continue
-		}
-		if strings.HasPrefix(l, "#") {
-			continue
-		}
-		return false
-	}
-	return true
+	return store.HeartbeatTask(ctx)
 }

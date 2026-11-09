@@ -99,6 +99,8 @@ auto_update:
   channel: community
 ```
 
+Without `--config` the config is in agent.db, and the shell reads `auto_update` from the backend once it runs. When the Console has a password, the shell reads it with the Console's login, so a desktop that is not logged in yet checks for updates after the login.
+
 With this enabled, desktop startup checks the latest update manifest of the release channel, `https://downloads.mistermorph.com/<channel>/latest/update.json`, and downloads a verified update package into the user cache. `--check-update` also uses this setting to decide whether to download. It does not replace the running app yet: applying the update still needs a platform-specific install/relaunch step.
 
 ## Local Build and Run

@@ -31,6 +31,7 @@ const (
 	BuiltinImageEdit     = "image_edit"
 	BuiltinContactsSend  = "contacts_send"
 	BuiltinAgentSend     = "agent_send"
+	BuiltinContactsList  = "contacts_list"
 	BuiltinSpawn         = "spawn"
 	BuiltinCoder         = "coder"
 )
@@ -48,6 +49,7 @@ var builtinToolNameSet = map[string]struct{}{
 	BuiltinImageEdit:     {},
 	BuiltinContactsSend:  {},
 	BuiltinAgentSend:     {},
+	BuiltinContactsList:  {},
 	BuiltinSpawn:         {},
 	BuiltinCoder:         {},
 }
@@ -414,6 +416,11 @@ func RegisterStaticTools(reg *tools.Registry, cfg StaticRegistryConfig, selected
 		))
 	}
 
+	// contacts_list reads the contacts in agent.db, as reading the contacts files with read_file did.
+	if isSelected(BuiltinContactsList) && strings.TrimSpace(cfg.ContactsSend.ContactsDir) != "" {
+		_ = reg.Replace(builtin.NewContactsListTool(cfg.ContactsSend.StateDir, cfg.ContactsSend.ContactsDir))
+	}
+
 	contactSendOpts := builtin.ContactsSendToolOptions{
 		Enabled:               true,
 		ContactsDir:           cfg.ContactsSend.ContactsDir,
@@ -436,7 +443,7 @@ func RegisterStaticTools(reg *tools.Registry, cfg StaticRegistryConfig, selected
 		PathRoots:             cfg.Common.PathRoots,
 	}
 	if isSelected(BuiltinAgentSend) {
-		available, err := builtin.AgentSendAvailable(context.Background(), cfg.ContactsSend.ContactsDir)
+		available, err := builtin.AgentSendAvailableInStateDir(context.Background(), cfg.ContactsSend.StateDir, cfg.ContactsSend.ContactsDir)
 		if err == nil && available {
 			_ = reg.Replace(builtin.NewAgentSendTool(contactSendOpts))
 		}
