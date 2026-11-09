@@ -40,3 +40,19 @@ Installs: none; reused existing tools.
 Tests: configured gofmt + go vet ./... + go test ./... passed, independently rerun by manager. Coder reports nsh check and nsh build clean; nsh tests 355 passed, 0 failed; core Node tests 247 passed. Commit scope checked against origin/master; no forbidden paths changed.
 
 Not verified: full Chat page desktop/mobile appearance, actual transitions and reduced-motion appearance, real Android/desktop devices. Only standalone panel screenshots were inspected by coder. No regression asserting conversation scroll preservation or entry focus restoration; composer focus preservation is covered. Reasoning streaming has no dedicated test (plans, progress and workers do). Dialog Escape delivery itself is not verified by headless tests. Review should inspect these interaction and layout gaps.
+
+## factory · review · 2026-11-10 04:49
+head: e8efa578b395ee298f5886eedd336666954e4401
+verdict: pass
+notes:
+- [P2] web/console-nsh/pages/chat/ActivityDetailPanel.tsx:70-71: The always-active Escape binding takes priority over global dialogs and previously opened input suggestions. Example: open Plan, open the Agent picker, press Escape; details close while the picker stays open. Typing `/` before opening Plan likewise leaves suggestions open. Give the topmost dialog/suggestions dismissal priority.
+- [P2] web/console-nsh/pages/chat/chatController.ts:1570-1571: Focus restoration is cleared within the same batched event before consumers see it. Example: focus Plan and press Enter, then focus Close and press Enter; activeElement becomes BODY and Enter cannot reopen Plan. Retain the restoration request until consumed or restore focus after unmount.
+- [P3] web/console-nsh/pages/chat/ChatPage.tsx:283-285: Mobile dismissal replaces details with Workspace during the roughly 200ms exit animation and changes width to 88%. Example: at 390x844, closing Plan flashes a 342px Topic/Workspace panel before it exits, even when Workspace was not open. Retain outgoing detail content and width until animation completes.
+
+No P0/P1 findings; moved review/ → ready/ under the factory review threshold. The owner should inspect the three interaction defects before shipping.
+
+Validation (Codex): configured gofmt check, go vet ./..., go test ./... passed; nsh check/build passed; nsh tests 355/355 and core Node tests 247/247 passed. Reviewed origin/master...HEAD (merge base b0b7cc57540122fce453c6bbd303fe3bf7176899). Chrome static-build checks reproduced all findings and checked desktop/mobile layout, reduced motion, long-chat scroll restoration and reasoning/worker streaming. Manager verified unchanged HEAD and clean worktree. Branch merges cleanly with origin/master.
+
+Installs: no unpinned installs; nsh restored pinned TypeScript 7.0.2. Tests used an absolute throwaway HOME.
+
+Residual risks: actual Android/desktop hosts, physical-device safe areas and software keyboard, real WebSocket streams, end-to-end artifact preview/download not verified. Browser checks used mocked APIs. The nsh web-target test entry did not run successfully; static build with Chrome was used instead. No linked GitHub issue or PR.
