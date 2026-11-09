@@ -56,3 +56,6 @@ Validation (Codex): configured gofmt check, go vet ./..., go test ./... passed; 
 Installs: no unpinned installs; nsh restored pinned TypeScript 7.0.2. Tests used an absolute throwaway HOME.
 
 Residual risks: actual Android/desktop hosts, physical-device safe areas and software keyboard, real WebSocket streams, end-to-end artifact preview/download not verified. Browser checks used mocked APIs. The nsh web-target test entry did not run successfully; static build with Chrome was used instead. No linked GitHub issue or PR.
+
+## factory · 2026-11-10 07:47
+Held out of v0.3.91: owner authorized shipping items if there are no problems; the concrete unresolved findings in the latest review remain. Left in ready/ without merging. No fixes attempted during this ship run.

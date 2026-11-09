@@ -56,3 +56,6 @@ Limitations: Browser compilation passed, but complete packaging was blocked by m
 Installs: No unpinned tool installs or dependency manifest changes reported. No linked issues or PRs in this item.
 
 Moved review/ → ready/ under the no-P0/P1 review rule. Owner should inspect the P2 race and complete real-device verification before shipping. No merge to master.
+
+## factory · 2026-11-10 07:47
+Held out of v0.3.91: owner authorized shipping items if there are no problems; the concrete unresolved findings in the latest review remain. Left in ready/ without merging. No fixes attempted during this ship run.

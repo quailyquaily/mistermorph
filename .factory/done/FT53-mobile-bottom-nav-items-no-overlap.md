@@ -42,3 +42,9 @@ notes:
 - No browser visual inspection, Android device/emulator run, APK build or actual increased system font-size check. Highlight assertions verify computed coordinates, not final rendering. Supplemental web packaging failed because the local web runtime was unavailable; required checks passed.
 - No installs or code changes. Tests used a throwaway HOME within the review directory. Review worktree remained clean.
 - Moved review/ → ready/. Owner acceptance should check narrow-screen visuals, larger system fonts and Android rendering before shipping.
+
+## factory · 2026-11-10 07:47
+Merged into master: afcb097b. Released with tag v0.3.91 at afcb097b; master and tag pushed atomically.
+Combined validation passed: gofmt check, go vet ./..., go test ./..., nsh check, nsh test --web-host tests/noHost.js (364/364), nsh build, and git diff --check. Scripted tests used an absolute throwaway HOME. No unpinned installs. No linked issues or PRs to close.
+Not verified: real-device Android/mobile keyboard, touch gestures, system font-size and final visual appearance; no APK packaging or release CI validation in this ship run.
+Moved ready/ → done/.

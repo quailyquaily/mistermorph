@@ -39,3 +39,6 @@ notes:
 - Required validation passed: gofmt check, go vet ./..., go test ./... (162 packages passed, 19 without tests), nsh check, and nsh test --web-host tests/noHost.js (348 passed). The supplemental wide-Android reproduction failed as expected for the P2 above; it is not a failure of the configured mandatory suite.
 - No P0/P1 findings; moved review/ → ready/ under the factory review threshold. Owner should inspect the wide-mobile focus issue before shipping.
 - Installs: none. Scripted tests used a throwaway absolute HOME. Real Android/iOS keyboards were not available; only headless focus behavior was verified.
+
+## factory · 2026-11-10 07:47
+Held out of v0.3.91: owner authorized shipping items if there are no problems; the concrete unresolved findings in the latest review remain. Left in ready/ without merging. No fixes attempted during this ship run.

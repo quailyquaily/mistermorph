@@ -41,3 +41,9 @@ notes:
 - Installs: none. No code changes or commits.
 - Not checked: real device, emulator or browser interaction, full build, Android drag-start events, actual touch scrolling, refresh-gap dismissal, soft keyboard, visual layout and screen reader behavior. Headless tests do not establish these behaviors.
 - Moved review/ → ready/. Owner should inspect the mobile interaction before shipping; not merged into master.
+
+## factory · 2026-11-10 07:47
+Merged into master: 5f43db33. Released with tag v0.3.91 at afcb097b; master and tag pushed atomically.
+Combined validation passed: gofmt check, go vet ./..., go test ./..., nsh check, nsh test --web-host tests/noHost.js (364/364), nsh build, and git diff --check. Scripted tests used an absolute throwaway HOME. No unpinned installs. No linked issues or PRs to close.
+Not verified: real-device Android/mobile keyboard, touch gestures, system font-size and final visual appearance; no APK packaging or release CI validation in this ship run.
+Moved ready/ → done/.

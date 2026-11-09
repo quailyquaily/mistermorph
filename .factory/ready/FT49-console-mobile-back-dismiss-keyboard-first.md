@@ -39,3 +39,6 @@ notes:
 - Validation: gofmt check, go vet ./..., go test ./..., nsh check, and nsh test --web-host tests/noHost.js passed (349 Console tests, zero failures). git diff --check passed; six source-level state checks performed. Scripted tests used an absolute throwaway HOME. Working tree and head unchanged.
 - Installs: none.
 - Not checked: physical devices or visual UI, Android/iOS keyboard animation, mobile-browser viewport reporting, actual hardware-keyboard interaction. Hardware-keyboard finding reproduced at source-state level only.
+
+## factory · 2026-11-10 07:47
+Held out of v0.3.91: owner authorized shipping items if there are no problems; the concrete unresolved findings in the latest review remain. Left in ready/ without merging. No fixes attempted during this ship run.
