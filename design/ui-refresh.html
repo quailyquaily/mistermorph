@@ -1,0 +1,472 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>UI refresh · approved</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600&family=Shippori+Mincho:wght@700&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap">
+<style>
+/* Aojashin (青写真), DESIGN.md §4 and §7. */
+:root {
+  --app: #F1F4F8; --panel: #EBF0F6; --surface: #F9FBFD; --surface2: #E4EBF4; --nav: #E6EDF6;
+  --t0: #0E2C57; --t1: #34507A; --t2: #566A8A; --line: #C8D4E4; --soft: #DCE4EF; --faint: #E4EBF4;
+  --accent: #2463AE; --accent-fill: rgba(36, 99, 174, 0.08);
+  --ok: #2F7A62; --warn: #A86A12; --danger: #B8412D;
+  --mono: "Geist Mono", ui-monospace, monospace;
+  --sans: "Zen Kaku Gothic New", system-ui, sans-serif;
+  --serif: "Shippori Mincho", serif;
+}
+* { box-sizing: border-box; }
+html { background: var(--app); }
+body { margin: 0; background: var(--app); color: var(--t0); font-family: var(--sans); font-size: 14px; line-height: 1.6; }
+button { font: inherit; }
+.page { max-width: 1120px; margin: 0 auto; padding: 56px 24px 96px; display: flex; flex-direction: column; gap: 28px; }
+.kicker { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.16em; color: var(--t2); text-transform: uppercase; }
+h1 { margin: 0; font-family: var(--serif); font-size: 36px; line-height: 1.25; }
+.lead { margin: 0; max-width: 760px; font-size: 15px; line-height: 1.7; color: var(--t1); }
+.rules { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { font-family: var(--mono); font-size: 11px; color: var(--t1); border: 1px solid var(--line); border-radius: 2px; padding: 2px 8px; }
+
+section.box { background: var(--surface); border: 1px solid var(--line); border-radius: 2px; }
+.head { min-height: 48px; display: flex; align-items: center; gap: 10px; padding: 0 16px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.head .mark { width: 7px; height: 7px; background: var(--accent); flex: none; }
+.head h2 { margin: 0; font-family: var(--mono); font-weight: 500; font-size: 11px; letter-spacing: 0.12em; }
+.head .desc { font-size: 12.5px; color: var(--t2); }
+.head .tag { margin-left: auto; font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.12em; color: var(--ok); border: 1px solid rgba(47, 122, 98, 0.45); border-radius: 2px; padding: 1px 6px; }
+.body { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); }
+.demo { padding: 22px 20px 24px; border-right: 1px solid var(--faint); display: flex; flex-direction: column; gap: 16px; justify-content: center; }
+.spec { padding: 18px 20px 22px; font-size: 13px; color: var(--t1); }
+.spec dl { margin: 0; display: grid; grid-template-columns: 128px minmax(0, 1fr); gap: 6px 12px; }
+.spec dt { font-family: var(--mono); font-size: 11px; color: var(--t2); padding-top: 2px; }
+.spec dd { margin: 0; }
+.spec code, .note code { font-family: var(--mono); font-size: 12px; background: var(--surface2); border-radius: 2px; padding: 0 4px; }
+.note { margin: 0; padding: 12px 16px 14px; border-top: 1px solid var(--faint); font-size: 12.5px; color: var(--t2); }
+.label { font-family: var(--mono); font-size: 11px; color: var(--t2); }
+@media (max-width: 760px) { .body { grid-template-columns: minmax(0, 1fr); } .demo { border-right: none; border-bottom: 1px solid var(--faint); } }
+
+/* 1 · View toggles */
+.topics-head { width: 288px; max-width: 100%; position: relative; height: 57px; display: flex; align-items: center; padding: 0 0 0 4px; }
+.topics-head .title { flex: 1; font-size: 20px; letter-spacing: -0.03em; }
+.toggle { width: 38px; height: 38px; display: flex; align-items: center; justify-content: center; border: none; border-radius: 2px; background: transparent; color: var(--t2); cursor: pointer; }
+.toggle[aria-pressed="true"] { background: var(--accent-fill); color: var(--accent); }
+.topics-head svg.rule { position: absolute; left: 0; bottom: -5px; }
+
+/* 2 · Sidebar: the fill and the edge are one shape, so no colour shows outside the bend */
+.sidebar { width: 232px; position: relative; background: transparent; padding: 12px; height: 236px; display: flex; flex-direction: column; gap: 2px; }
+.sidebar svg.edge { position: absolute; inset: 0; z-index: 0; overflow: visible; }
+.nav-item { position: relative; z-index: 1; height: 36px; display: flex; align-items: center; gap: 10px; padding: 0 10px; border: none; border-radius: 2px; background: transparent; color: var(--t1); font-size: 14px; text-align: left; cursor: pointer; }
+.nav-item[aria-current="page"] { background: var(--accent-fill); color: var(--accent); }
+
+/* 3 · Messages */
+.chat { display: flex; flex-direction: column; gap: 22px; max-width: 460px; }
+.sent { align-self: flex-end; display: flex; flex-direction: column; align-items: flex-end; gap: 7px; margin-right: 8px; max-width: 88%; }
+.meta { font-family: var(--mono); font-size: 11px; line-height: 16px; letter-spacing: 0.04em; color: var(--t2); }
+.sent .meta { margin-right: 15px; }
+.bubble { background: var(--surface); border: 1px solid var(--soft); border-radius: 14px 2px 14px 14px; padding: 9px 14px 10px; font-size: 16px; line-height: 27px; }
+.reply { display: flex; flex-direction: column; gap: 7px; }
+.status-line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-family: var(--mono); font-size: 11px; line-height: 16px; color: var(--t2); }
+.status-line .time { display: flex; align-items: center; gap: 3px; letter-spacing: 0.04em; }
+.column { height: 20px; display: flex; align-items: center; gap: 4px; padding: 0 6px; border: none; border-radius: 2px; background: transparent; font: inherit; color: var(--t2); text-transform: uppercase; }
+.column b { font-weight: 400; color: var(--t0); }
+.reply .text { font-size: 16px; line-height: 27px; }
+
+/* 4 · Phone bottom bar: a floating pill (the layout of Telegram's tab bar), icons only */
+.phone-frame { position: relative; width: 390px; max-width: 100%; height: 300px; border: 1px solid var(--line); border-radius: 2px; overflow: hidden; background: var(--app); }
+.phone-frame .rows { padding: 6px 0 0; }
+.phone-frame .row { height: 52px; display: flex; flex-direction: column; justify-content: center; gap: 2px; padding: 0 16px; border-bottom: 1px solid var(--soft); }
+.phone-frame .row b { font-weight: 500; font-size: 14px; color: var(--t0); }
+.phone-frame .row span { font-family: var(--mono); font-size: 11px; color: var(--t2); }
+.phone-bar { position: absolute; left: 12px; right: 12px; bottom: 22px; height: 60px; padding: 5px; border-radius: 30px; display: flex;
+  background: rgba(249, 251, 253, 0.86); backdrop-filter: blur(20px) saturate(180%); -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 0.5px solid var(--line); box-shadow: 0 6px 20px rgba(14, 44, 87, 0.10), 0 1px 3px rgba(14, 44, 87, 0.06); }
+.phone-bar .pill { position: absolute; top: 5px; bottom: 5px; left: 5px; border-radius: 25px; background: rgba(36, 99, 174, 0.10); transition: transform 240ms cubic-bezier(.2,.7,.2,1); }
+.slot { position: relative; flex: 1 1 0; min-width: 0; display: flex; align-items: center; justify-content: center; border: none; border-radius: 25px; background: transparent; color: var(--t2); cursor: pointer; }
+.slot[aria-current="page"] { color: var(--accent); }
+.slot .on { display: none; }
+.slot[aria-current="page"] .on { display: inline; }
+.slot[aria-current="page"] .off { display: none; }
+.slot .avatar { width: 30px; height: 30px; border-radius: 50%; display: block; }
+.home-ind { position: absolute; left: 50%; bottom: 7px; width: 134px; height: 5px; margin-left: -67px; border-radius: 3px; background: var(--t0); opacity: .85; }
+
+/* 5 · Border beam (loading) */
+@keyframes beam-move { from { offset-distance: 0%; } to { offset-distance: 100%; } }
+.beam { position: absolute; inset: -1px; padding: 1px; border-radius: 3px; pointer-events: none;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0); }
+.beam-glow { position: absolute; inset: 0; pointer-events: none; filter: blur(3px); opacity: 0.25; }
+.beam-glow .beam { inset: -3px; padding: 3px; border-radius: 5px; }
+.beam-dot { position: absolute; top: 0; left: 0; width: 64px; height: 64px;
+  background: linear-gradient(to right, rgba(36, 99, 174, 0), #2463AE 72%, #A9CCF5);
+  offset-path: inset(0 round 3px); offset-path: rect(0 auto auto 0 round 3px); offset-rotate: auto;
+  animation: beam-move 2.3s linear infinite; }
+.beam-glow .beam-dot { offset-path: inset(0 round 5px); offset-path: rect(0 auto auto 0 round 5px); }
+.long .beam-dot { width: 96px; height: 96px; }
+.short .beam-dot { width: 40px; height: 40px; }
+.tone-danger .beam-dot { background: linear-gradient(to right, rgba(184, 65, 45, 0), #B8412D 72%, #F2B2A5); }
+.tone-amber .beam-dot { background: linear-gradient(to right, rgba(168, 106, 18, 0), #A86A12 72%, #E8C27E); }
+
+.composer { position: relative; width: 100%; max-width: 420px; min-height: 54px; display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 2px; background: var(--surface); }
+.composer .add { width: 38px; height: 38px; display: flex; align-items: center; justify-content: center; border: none; background: transparent; color: var(--t2); flex: none; }
+.composer input { flex: 1; min-width: 0; border: none; outline: none; background: transparent; color: var(--t0); font-family: var(--mono); font-size: 14px; }
+.send { width: 38px; height: 38px; flex: none; display: flex; align-items: center; justify-content: center; border-radius: 2px; border: 1px solid var(--soft); background: transparent; color: var(--t2); }
+.send.stop { border-color: var(--accent); background: var(--accent); color: #FFFFFF; }
+
+/* 6 · Buttons */
+.btn { position: relative; height: 38px; padding: 0 12.8px; border-radius: 2px; font-size: 14px; font-weight: 500; cursor: pointer; white-space: nowrap; }
+.btn.md { height: 44px; padding: 0 16px; }
+.btn.xs { height: 32px; font-size: 12px; }
+.btn.xxs { height: 24px; font-size: 11.2px; }
+.primary { background: #2463AE; border: 0.5px solid #1D5596; color: #FFFFFF; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18); }
+.outlined { background: var(--surface); border: 1px solid var(--line); color: var(--t0); }
+.plain { background: transparent; border: 1px solid transparent; color: var(--t1); }
+.danger { background: #B8412D; border: 0.5px solid #A63A28; color: #FFFFFF; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16); }
+.highlight { background: #A86A12; border: 0.5px solid #8F5A0F; color: #FFFFFF; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16); }
+.ghost-danger { background: transparent; border: 1px solid transparent; color: #B8412D; }
+.btn[aria-busy="true"] { cursor: default; box-shadow: none; }
+.primary[aria-busy="true"] { background: rgba(36, 99, 174, 0.10); border: 1px solid rgba(36, 99, 174, 0.35); color: #1D5596; }
+.danger[aria-busy="true"] { background: rgba(184, 65, 45, 0.10); border: 1px solid rgba(184, 65, 45, 0.35); color: #9A3423; }
+.highlight[aria-busy="true"] { background: rgba(168, 106, 18, 0.12); border: 1px solid rgba(168, 106, 18, 0.40); color: #7F500D; }
+.outlined[aria-busy="true"] { background: #F4F7FA; border: 1px solid var(--soft); color: #8292AA; }
+.plain[aria-busy="true"] { border: 1px solid var(--soft); color: #8292AA; }
+.ghost-danger[aria-busy="true"] { border: 1px solid rgba(184, 65, 45, 0.25); color: #8292AA; }
+.btn-grid { display: grid; grid-template-columns: 110px repeat(2, minmax(0, 1fr)); gap: 12px 16px; align-items: center; }
+.btn-grid .row-name { font-family: var(--mono); font-size: 12px; color: var(--t1); }
+
+/* 7 · Running mark */
+@keyframes morph {
+  0%, 16% { width: 7px; height: 7px; border-radius: 0; background: #2463AE; border-width: 0; border-color: #2463AE; transform: rotate(0deg); animation-timing-function: cubic-bezier(.2, .7, .2, 1); }
+  24% { width: 12px; height: 12px; border-radius: 50%; background: rgba(36, 99, 174, 0); border-width: 1.6px; border-color: #2463AE; transform: rotate(0deg); animation-timing-function: ease-out; }
+  28% { border-right-color: rgba(36, 99, 174, 0); transform: rotate(90deg); animation-timing-function: linear; }
+  70% { width: 12px; height: 12px; border-radius: 50%; border-width: 1.6px; border-color: #2463AE; border-right-color: rgba(36, 99, 174, 0); transform: rotate(1170deg); animation-timing-function: ease-out; }
+  74% { width: 12px; height: 12px; border-radius: 50%; background: rgba(36, 99, 174, 0); border-width: 1.6px; border-color: #2463AE; transform: rotate(1260deg); animation-timing-function: cubic-bezier(.2, .7, .2, 1); }
+  82%, 100% { width: 7px; height: 7px; border-radius: 0; background: #2463AE; border-width: 0; border-color: #2463AE; transform: rotate(1260deg); }
+}
+.morph { display: inline-flex; width: 14px; height: 14px; align-items: center; justify-content: center; flex: none; }
+.morph > span { box-sizing: border-box; border-style: solid; animation: morph 5s infinite; }
+.frames { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; font-family: var(--mono); font-size: 10px; color: var(--t2); }
+.frame { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.frame .cell { width: 14px; height: 14px; display: flex; align-items: center; justify-content: center; }
+.frames .arrow { color: var(--accent); display: flex; flex-direction: column; align-items: center; gap: 6px; }
+
+ul.plainlist { margin: 0; padding: 14px 20px 18px 36px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--t1); }
+
+@media (prefers-reduced-motion: reduce) {
+  .beam-dot { animation: none; offset-distance: 12%; }
+  .phone-bar .pill { transition: none; }
+  .morph > span { animation: none; width: 12px; height: 12px; border-radius: 50%; border-width: 1.6px; border-color: #2463AE; border-right-color: transparent; }
+}
+</style>
+</head>
+<body>
+<main class="page">
+
+  <header style="display: flex; flex-direction: column; gap: 14px">
+    <span class="kicker">Mister Morph · UI refresh · approved 2026-11-09</span>
+    <h1>The approved changes, as they should be built</h1>
+    <p class="lead">Each section is one change to the nsh console (<code>web/console-nsh</code>, drawn by the GPUI shell): a live demo on the left, the values to build from on the right. Everything restyles elements the console already has; nothing here adds a new element. The exploration canvas is <a href="https://claude.ai/artifact/61xvCmktR31RFPjqo89TSg" style="color: var(--accent)">Morph Arcs</a> (private until shared).</p>
+    <div class="rules">
+      <span class="chip">青写真 Aojashin only</span>
+      <span class="chip">no new elements</span>
+      <span class="chip">no background patterns (chat, phone, login)</span>
+      <span class="chip">curves sparingly</span>
+    </div>
+  </header>
+
+  <!-- 1 -->
+  <section class="box">
+    <div class="head"><span class="mark"></span><h2>[1 · VIEW TOGGLES]</h2><span class="desc">The hairline under the Topics head sags softly under the active toggle.</span><span class="tag">APPROVED</span></div>
+    <div class="body">
+      <div class="demo">
+        <div class="topics-head">
+          <span class="title">Topics</span>
+          <button class="toggle" type="button" aria-pressed="false" aria-label="TODO runs"><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13a7 7 0 1 0 14 0a7 7 0 1 0 -14 0M12 9.5V13l2.5 1.5M4 5.5 6.5 3M20 5.5 17.5 3" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+          <button class="toggle" type="button" aria-pressed="true" aria-label="By tag"><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 12.5V4h8.5l8.5 8.5-8 8zM7.2 7.8a.6.6 0 1 0 1.2 0a.6.6 0 1 0 -1.2 0" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+          <button class="toggle" type="button" aria-label="New topic"><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg></button>
+          <svg class="rule" width="288" height="10" viewBox="0 0 288 10" aria-hidden="true">
+            <defs><linearGradient id="sag-grad" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2="0"><stop offset="0" stop-color="#DCE4EF"/><stop offset="0.5" stop-color="#2463AE"/><stop offset="1" stop-color="#DCE4EF"/></linearGradient></defs>
+            <path id="sag-path" fill="none" stroke="url(#sag-grad)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+      </div>
+      <div class="spec"><dl>
+        <dt>where</dt><dd>The hairline under the topic list’s head (<code>TopicSidebar.tsx</code>), below the active view toggle.</dd>
+        <dt>shape</dt><dd><code>y + d · (1 − u²)²</code>, <code>u = (x − cx) / h</code>: flat where it starts and ends, no kink.</dd>
+        <dt>size</dt><dd>half-width <code>h</code> 56 px (112 px wide), depth <code>d</code> 3.5 px, centred on the active toggle.</dd>
+        <dt>stroke</dt><dd>1.4 px, one continuous line; colour fades <code>#DCE4EF</code> → <code>#2463AE</code> at the low point → <code>#DCE4EF</code>.</dd>
+        <dt>change</dt><dd>When the toggle changes, the sag moves to it (180 ms, ease-out). No toggle on: a straight hairline.</dd>
+      </dl></div>
+    </div>
+  </section>
+
+  <!-- 2 -->
+  <section class="box">
+    <div class="head"><span class="mark"></span><h2>[2 · SIDEBAR]</h2><span class="desc">The active page’s band runs to the sidebar’s straight edge and flares into it.</span><span class="tag">APPROVED</span></div>
+    <div class="body">
+      <div class="demo">
+        <nav class="sidebar" id="sidebar" aria-label="Main (demo)">
+          <div style="height: 64px"></div>
+          <button class="nav-item" type="button" aria-current="page"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h13v9H8l-5 4zM16 9h5v12l-4-3H9v-4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>Chat</button>
+          <button class="nav-item" type="button"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M5.5 9a3.5 3.5 0 1 0 7 0a3.5 3.5 0 1 0 -7 0M3 19.5c0-3.2 2.7-5 6-5s6 1.8 6 5M15.5 5.6a3.5 3.5 0 0 1 0 6.8M17.5 14.6c2 .6 3.5 2.2 3.5 4.9" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>Contacts</button>
+          <button class="nav-item" type="button"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6l1.5 1.5L8 5M4 12l1.5 1.5L8 11M4 18l1.5 1.5L8 17M11 6.5h9M11 12.5h9M11 18.5h9" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>TODO</button>
+          <svg class="edge" width="232" height="236" viewBox="0 0 232 236" aria-hidden="true">
+            <defs><linearGradient id="edge-grad" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2="0"><stop offset="0" stop-color="#C8D4E4"/><stop offset="0.5" stop-color="#2463AE"/><stop offset="1" stop-color="#C8D4E4"/></linearGradient></defs>
+            <path id="edge-fill" fill="#E6EDF6"/>
+            <path id="edge-line" fill="none" stroke="#C8D4E4" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </nav>
+      </div>
+      <div class="spec"><dl>
+        <dt>where</dt><dd>The right edge of the wide-window sidebar (<code>components/frame/Sidebar.tsx</code>), level with the active nav item.</dd>
+        <dt>shape</dt><dd>The edge stays straight: the nav is not a set of tabs, so it has no sag. The active row’s band reaches the edge and meets it in two arcs, radius 6, above and below, so band and edge read as one line.</dd>
+        <dt>size</dt><dd>The band is the row’s height (42 px), the column’s full width.</dd>
+        <dt>stroke</dt><dd>The sidebar’s own 1 px hairline, <code>#C8D4E4</code>. No blue.</dd>
+        <dt>fill</dt><dd>The sidebar’s <code>#E6EDF6</code>, the band and the hairline are one drawing, so the band never runs past the edge.</dd>
+        <dt>change</dt><dd>The band glides to the new item (320 ms, <code>cubic-bezier(.3,.7,.2,1)</code>). Folded sidebar: the same. (The demo above still shows the earlier bent edge.)</dd>
+      </dl></div>
+    </div>
+  </section>
+
+  <!-- 3 -->
+  <section class="box">
+    <div class="head"><span class="mark"></span><h2>[3 · MESSAGES]</h2><span class="desc">Rounder bubbles; the time and status columns on one line (FT33).</span><span class="tag">APPROVED</span></div>
+    <div class="body">
+      <div class="demo">
+        <div class="chat">
+          <div class="sent"><span class="meta">22:13</span><div class="bubble">Back closes the app instead of leaving the topic. Can you look?</div></div>
+          <div class="reply">
+            <div class="status-line">
+              <span class="time"><svg width="13" height="13" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H10l-6 4zM8.5 10.5h.01M12 10.5h.01M15.5 10.5h.01" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>41s</span>
+              <button class="column" type="button" aria-expanded="false">Plan <b>3/3</b><svg width="11" height="11" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+              <button class="column" type="button" aria-expanded="false">Activity<svg width="11" height="11" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+            </div>
+            <div class="text">Found it: on resume the route stack starts empty, so the first back leaves the app.</div>
+          </div>
+        </div>
+      </div>
+      <div class="spec"><dl>
+        <dt>bubble</dt><dd>Sent messages (<code>Bubble</code> in <code>ChatHistoryItem.tsx</code>): radius 14 px, the tail corner (top right) 2 px. Paper, 1 px hairline, as now.</dd>
+        <dt>replies</dt><dd>Agent replies stay plain text: no bubble, avatar or name.</dd>
+        <dt>meta line</dt><dd>The status mark (time or duration) and the <code>ChatStatusCard</code> columns: one face and size, Geist Mono 11 px, one 16 px line. Columns 20 px tall, 6 px side padding. Today the mark is 11 px and the columns 12 px, on two baselines.</dd>
+        <dt>edges</dt><dd>A sent message’s time ends on the bubble’s text edge (15 px in from its right).</dd>
+      </dl></div>
+    </div>
+  </section>
+
+  <!-- 4 -->
+  <section class="box">
+    <div class="head"><span class="mark"></span><h2>[4 · PHONE BOTTOM BAR]</h2><span class="desc">The layout of Telegram’s tab bar: a floating pill, the active slot held in a lighter pill. Icons only.</span><span class="tag">APPROVED</span></div>
+    <div class="body">
+      <div class="demo">
+        <div class="phone-frame">
+          <div class="rows"><div class="row"><b>Release checklist v0.3.85</b><span>12:08 · plan 4/6</span></div><div class="row"><b>Nightly backup report</b><span>10:03 · done</span></div><div class="row"><b>Translate the onboarding notes</b><span>09:57 · waiting</span></div><div class="row"><b>Weekly usage summary</b><span>yesterday · done</span></div><div class="row"><b>Android back leaves the app</b><span>yesterday · done</span></div></div>
+          <nav class="phone-bar" id="phone-bar" aria-label="Main (demo)">
+            <span class="pill" aria-hidden="true"></span>
+            <button class="slot" type="button" aria-label="Chat" aria-current="page"><svg class="on" width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h13v9H8l-5 4zM16 9h5v12l-4-3H9v-4" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg><svg class="off" width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h13v9H8l-5 4zM16 9h5v12l-4-3H9v-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+            <button class="slot" type="button" aria-label="Contacts"><svg class="on" width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><path d="M5.5 9a3.5 3.5 0 1 0 7 0a3.5 3.5 0 1 0 -7 0M3 19.5c0-3.2 2.7-5 6-5s6 1.8 6 5M15.5 5.6a3.5 3.5 0 0 1 0 6.8M17.5 14.6c2 .6 3.5 2.2 3.5 4.9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><svg class="off" width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><path d="M5.5 9a3.5 3.5 0 1 0 7 0a3.5 3.5 0 1 0 -7 0M3 19.5c0-3.2 2.7-5 6-5s6 1.8 6 5M15.5 5.6a3.5 3.5 0 0 1 0 6.8M17.5 14.6c2 .6 3.5 2.2 3.5 4.9" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+            <button class="slot" type="button" aria-label="TODO"><svg class="on" width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6l1.5 1.5L8 5M4 12l1.5 1.5L8 11M4 18l1.5 1.5L8 17M11 6.5h9M11 12.5h9M11 18.5h9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><svg class="off" width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6l1.5 1.5L8 5M4 12l1.5 1.5L8 11M4 18l1.5 1.5L8 17M11 6.5h9M11 12.5h9M11 18.5h9" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+            <button class="slot" type="button" aria-label="More"><svg class="on" width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg><svg class="off" width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+            <button class="slot" type="button" aria-label="Agent: Morph"><svg class="avatar" viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="50" fill="#E4EBF4"/><g fill="none" stroke="#2463AE" stroke-width="7" stroke-linecap="round"><path d="M18 30 C33 30 37 37 50 37 C63 37 67 30 82 30"/><path d="M14 50 L86 50"/><path d="M18 70 C33 70 37 63 50 63 C63 63 67 70 82 70"/></g></svg></button>
+          </nav>
+          <span class="home-ind" aria-hidden="true"></span>
+        </div>
+        <span class="label">(tap a slot: the pill slides to it)</span>
+      </div>
+      <div class="spec"><dl>
+        <dt>where</dt><dd><code>components/frame/MobileBottomNav.tsx</code>: the same slots as now (Chat, Contacts, TODO, More, Agent). No labels, no new buttons.</dd>
+        <dt>bar</dt><dd>A capsule floating over the page, centred and only as wide as its slots: five 60 px slots, each overlapping the one before by 8 px (only one is ever selected, so their pills never meet), 276 px in all with a 4 px inset. 8 px above the bottom safe area, 58 px high. (The demo above is the earlier full-width bar.)</dd>
+        <dt>surface</dt><dd>Translucent card <code>rgba(249,251,253,0.86)</code> with a 20 px blur, a 0.5 px <code>#C8D4E4</code> hairline, shadow <code>0 6px 20px rgba(14,44,87,.10)</code>. Where nsh can’t blur, the card is opaque <code>#F9FBFD</code>.</dd>
+        <dt>active</dt><dd>A pill behind the slot, the slot’s 60 px × 50 px, round, <code>rgba(36,99,174,.10)</code>. It slides to the new slot in 240 ms, <code>cubic-bezier(.2,.7,.2,1)</code>; with reduced motion it jumps. The icon fills and turns <code>#2463AE</code>; others stay outlined <code>#566A8A</code>.</dd>
+        <dt>icons</dt><dd>24 px. The agent slot is the avatar alone, 28 px round, as Telegram’s profile slot.</dd>
+        <dt>page</dt><dd>The page runs under the bar: scrolling content ends with room for it (bar + gaps), so the last row clears it. The More and Agent sheets still rise from the foot of the window, over the bar.</dd>
+        <dt>removed</dt><dd>The docked full-width strip, its top border and the sliding 2 px blue rule.</dd>
+        <dt>not taken</dt><dd>Text labels under the icons and Telegram’s floating compose button: both would be new elements.</dd>
+      </dl></div>
+    </div>
+  </section>
+
+  <!-- 5 -->
+  <section class="box">
+    <div class="head"><span class="mark"></span><h2>[5 · BORDER BEAM · COMPOSER]</h2><span class="desc">The loading state. Idle composer as now; while a task runs, a beam travels its border.</span><span class="tag">APPROVED</span></div>
+    <div class="body">
+      <div class="demo">
+        <span class="label">IDLE · UNCHANGED</span>
+        <div class="composer">
+          <button class="add" type="button" aria-label="Add"><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg></button>
+          <input type="text" placeholder="Message" aria-label="Message">
+          <button class="send" type="button" aria-label="Send"><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" style="transform: translate(-1.5px, 1.5px)"><path d="M21 3L3 10.5l7 3 3 7zM10 13.5 21 3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        </div>
+        <span class="label" style="color: var(--accent)">RUNNING · BORDER BEAM</span>
+        <div class="composer">
+          <span class="beam-glow long" aria-hidden="true"><span class="beam"><span class="beam-dot"></span></span></span>
+          <span class="long" aria-hidden="true"><span class="beam"><span class="beam-dot"></span></span></span>
+          <button class="add" type="button" aria-label="Add"><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg></button>
+          <input type="text" placeholder="Message" aria-label="Message">
+          <button class="send stop" type="button" aria-label="Stop"><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6h12v12H6z" fill="currentColor"/></svg></button>
+        </div>
+      </div>
+      <div class="spec"><dl>
+        <dt>beam</dt><dd>A gradient segment riding the element’s existing 1 px border: clear tail → <code>#2463AE</code> at 72% → <code>#A9CCF5</code> head. Length 96 px on the composer, 64 px on md/sm buttons, 40 px on xs/xxs.</dd>
+        <dt>motion</dt><dd>Clockwise, one lap per 2.3 s, linear, constant speed around the corners (it follows the 2 px radius).</dd>
+        <dt>glow</dt><dd>A copy on a 3 px ring, blur 3 px, 25% opacity. Faint by design.</dd>
+        <dt>composer</dt><dd>Shown only while the task runs. The send square has already become stop and stays pressable.</dd>
+        <dt>reduced motion</dt><dd>The beam rests at the top left (12% along the border).</dd>
+      </dl></div>
+    </div>
+    <p class="note">nsh/GPUI has no CSS masks or <code>offset-path</code>: the beam is a gradient stroke along the rounded-rect path, its dash offset animated, with a blurred copy under it. Build it once as a shared primitive for buttons and the composer.</p>
+  </section>
+
+  <!-- 6 -->
+  <section class="box">
+    <div class="head"><span class="mark"></span><h2>[6 · BUTTONS · LOADING]</h2><span class="desc">A busy button is a disabled button with a beam. It replaces the moving stripes.</span><span class="tag">APPROVED</span></div>
+    <div class="body">
+      <div class="demo">
+        <div class="btn-grid">
+          <span></span><span class="label">REST</span><span class="label" style="color: var(--accent)">LOADING</span>
+          <span class="row-name">primary</span>
+          <span><button class="btn primary" type="button">Run now</button></span>
+          <span><button class="btn primary" type="button" disabled aria-busy="true"><span class="beam-glow" aria-hidden="true"><span class="beam"><span class="beam-dot"></span></span></span><span aria-hidden="true"><span class="beam"><span class="beam-dot"></span></span></span>Run now</button></span>
+          <span class="row-name">danger</span>
+          <span><button class="btn danger" type="button">Delete</button></span>
+          <span><button class="btn danger" type="button" disabled aria-busy="true"><span class="beam-glow tone-danger" aria-hidden="true"><span class="beam"><span class="beam-dot"></span></span></span><span class="tone-danger" aria-hidden="true"><span class="beam"><span class="beam-dot"></span></span></span>Delete</button></span>
+          <span class="row-name">highlight</span>
+          <span><button class="btn highlight" type="button">Review</button></span>
+          <span><button class="btn highlight" type="button" disabled aria-busy="true"><span class="beam-glow tone-amber" aria-hidden="true"><span class="beam"><span class="beam-dot"></span></span></span><span class="tone-amber" aria-hidden="true"><span class="beam"><span class="beam-dot"></span></span></span>Review</button></span>
+          <span class="row-name">outlined</span>
+          <span><button class="btn outlined" type="button">Save</button></span>
+          <span><button class="btn outlined" type="button" disabled aria-busy="true"><span class="beam-glow" aria-hidden="true"><span class="beam"><span class="beam-dot"></span></span></span><span aria-hidden="true"><span class="beam"><span class="beam-dot"></span></span></span>Save</button></span>
+          <span class="row-name">plain</span>
+          <span><button class="btn plain" type="button">Load older</button></span>
+          <span><button class="btn plain" type="button" disabled aria-busy="true"><span class="beam-glow" aria-hidden="true"><span class="beam"><span class="beam-dot"></span></span></span><span aria-hidden="true"><span class="beam"><span class="beam-dot"></span></span></span>Load older</button></span>
+          <span class="row-name">ghost-danger</span>
+          <span><button class="btn ghost-danger" type="button">Remove</button></span>
+          <span><button class="btn ghost-danger" type="button" disabled aria-busy="true"><span class="beam-glow tone-danger" aria-hidden="true"><span class="beam"><span class="beam-dot"></span></span></span><span class="tone-danger" aria-hidden="true"><span class="beam"><span class="beam-dot"></span></span></span>Remove</button></span>
+          <span class="row-name">sizes</span>
+          <span style="grid-column: span 2; display: flex; flex-wrap: wrap; align-items: center; gap: 10px">
+            <button class="btn primary md" type="button" disabled aria-busy="true"><span class="beam-glow" aria-hidden="true"><span class="beam"><span class="beam-dot"></span></span></span><span aria-hidden="true"><span class="beam"><span class="beam-dot"></span></span></span>md</button>
+            <button class="btn primary" type="button" disabled aria-busy="true"><span class="beam-glow" aria-hidden="true"><span class="beam"><span class="beam-dot"></span></span></span><span aria-hidden="true"><span class="beam"><span class="beam-dot"></span></span></span>sm</button>
+            <button class="btn primary xs" type="button" disabled aria-busy="true"><span class="beam-glow short" aria-hidden="true"><span class="beam"><span class="beam-dot"></span></span></span><span class="short" aria-hidden="true"><span class="beam"><span class="beam-dot"></span></span></span>xs</button>
+            <button class="btn primary xxs" type="button" disabled aria-busy="true"><span class="beam-glow short" aria-hidden="true"><span class="beam"><span class="beam-dot"></span></span></span><span class="short" aria-hidden="true"><span class="beam"><span class="beam-dot"></span></span></span>xxs</button>
+          </span>
+        </div>
+      </div>
+      <div class="spec"><dl>
+        <dt>where</dt><dd><code>Button</code> in <code>components/ui.tsx</code>, its <code>loading</code> prop. <code>LoadingStripes</code> goes.</dd>
+        <dt>behaviour</dt><dd>Loading is disabled: presses are blocked and the button is <code>disabled</code> (and <code>aria-busy</code>). Label and icon stay.</dd>
+        <dt>filled</dt><dd>Primary, danger and highlight turn soft: a tint of their colour with a hairline and text in it. Primary <code>rgba(36,99,174,.10)</code> / <code>.35</code> / <code>#1D5596</code>; danger <code>rgba(184,65,45,.10)</code> / <code>.35</code> / <code>#9A3423</code>; highlight <code>rgba(168,106,18,.12)</code> / <code>.40</code> / <code>#7F500D</code>.</dd>
+        <dt>light</dt><dd>Outlined takes its disabled look (<code>#F4F7FA</code>, <code>#DCE4EF</code>, <code>#8292AA</code>). Plain and ghost-danger take their disabled text and, while busy only, a faint hairline (<code>#DCE4EF</code>; ghost-danger <code>rgba(184,65,45,.25)</code>) for the beam.</dd>
+        <dt>beam colour</dt><dd>The button’s own: blue (primary, outlined, plain), red (danger, ghost-danger: <code>#B8412D</code> → <code>#F2B2A5</code>), amber (highlight: <code>#A86A12</code> → <code>#E8C27E</code>).</dd>
+        <dt>sizes</dt><dd>Unchanged: md 44, sm 38, xs 32, xxs 24; 2 px corners. Beam 64 px on md/sm, 40 px on xs/xxs.</dd>
+      </dl></div>
+    </div>
+  </section>
+
+  <!-- 7 -->
+  <section class="box">
+    <div class="head"><span class="mark"></span><h2>[7 · STATUS MARK · RUNNING]</h2><span class="desc">The square morphs into a turning arc while something runs, and back when it ends.</span><span class="tag">APPROVED</span></div>
+    <div class="body">
+      <div class="demo">
+        <span style="display: flex; align-items: center; gap: 10px; font-size: 14px"><span class="morph" aria-hidden="true"><span></span></span>Release checklist v0.3.85 <span class="label">(live loop)</span></span>
+        <div class="frames">
+          <div class="frame"><span class="cell"><span style="width: 7px; height: 7px; background: #2463AE"></span></span>square</div>
+          <div class="arrow">180 ms<span>→</span></div>
+          <div class="frame"><span class="cell"><span style="width: 10px; height: 10px; border-radius: 30%; background: rgba(36,99,174,.5); border: 1.2px solid #2463AE"></span></span>rounds</div>
+          <div class="arrow">&nbsp;<span>→</span></div>
+          <div class="frame"><span class="cell"><span style="width: 12px; height: 12px; border-radius: 50%; border: 1.6px solid #2463AE"></span></span>ring</div>
+          <div class="arrow">&nbsp;<span>→</span></div>
+          <div class="frame"><span class="cell"><span style="width: 12px; height: 12px; border-radius: 50%; border: 1.6px solid #2463AE; border-right-color: transparent; transform: rotate(45deg)"></span></span>opens, turns</div>
+          <div class="arrow">done<span>→</span></div>
+          <div class="frame"><span class="cell"><span style="width: 12px; height: 12px; border-radius: 50%; border: 1.6px solid #2463AE"></span></span>closes</div>
+          <div class="arrow">180 ms<span>→</span></div>
+          <div class="frame"><span class="cell"><span style="width: 7px; height: 7px; background: #2463AE"></span></span>square</div>
+        </div>
+      </div>
+      <div class="spec"><dl>
+        <dt>shape</dt><dd>One shape, not a swap. Square 7 px filled ↔ ring 12 px, 1.6 px stroke, in a 14 px box.</dd>
+        <dt>start</dt><dd>Corners round and it grows into the ring while the fill empties: 180 ms, <code>cubic-bezier(.2,.7,.2,1)</code>. The ring opens a quarter as it starts to turn.</dd>
+        <dt>running</dt><dd>A 270° arc turning one lap per 1.2 s, linear.</dd>
+        <dt>end</dt><dd>The arc finishes its turn and closes (120 ms), then the ring shrinks back into the square (180 ms).</dd>
+        <dt>reduced motion</dt><dd>A still open ring; no morph.</dd>
+        <dt>scope</dt><dd>Only Running. Other states keep their square marks.</dd>
+      </dl></div>
+    </div>
+  </section>
+
+  <section class="box">
+    <div class="head"><span class="mark" style="background: var(--t2)"></span><h2>[NOT ADOPTED · OPEN]</h2></div>
+    <ul class="plainlist">
+      <li>Topic group heading: keeps its current design (centring stays backlog item FT34).</li>
+      <li>A curved composer rule: dropped for the border beam.</li>
+      <li>Reply-suggestion pills: approved in look, but the console has no reply suggestions; they need a feature first.</li>
+      <li>Thinking, Waiting-for-you and Done marks: dropped.</li>
+      <li>Open: hover and press one shade darker and one focus ring for every button; the context-window dial; motion on curves.</li>
+    </ul>
+  </section>
+</main>
+<script>
+// §1's sag: y + d·(1 − u²)², drawn as one path with a gradient across the dip.
+(function () {
+  var x0 = 0, x1 = 288, y = 5, cx = 231, h = 56, d = 3.5;
+  var f = function (n) { return Math.round(n * 100) / 100; };
+  var p = "M" + x0 + " " + y + " L" + f(cx - h) + " " + y;
+  for (var k = 1; k <= 64; k++) {
+    var x = cx - h + (2 * h * k) / 64, u = (x - cx) / h;
+    p += " L" + f(x) + " " + f(y + d * Math.pow(1 - u * u, 2));
+  }
+  p += " L" + x1 + " " + y;
+  document.getElementById("sag-path").setAttribute("d", p);
+  var g = document.getElementById("sag-grad");
+  g.setAttribute("x1", f(cx - h));
+  g.setAttribute("x2", f(cx + h));
+})();
+// §4's pill follows the selected slot.
+(function () {
+  var bar = document.getElementById("phone-bar"), pill = bar.querySelector(".pill"), slots = bar.querySelectorAll(".slot");
+  function place() {
+    var cur = bar.querySelector('.slot[aria-current="page"]');
+    pill.style.width = cur.offsetWidth + "px";
+    pill.style.transform = "translateX(" + (cur.offsetLeft - 5) + "px)";
+  }
+  slots.forEach(function (b) { b.addEventListener("click", function () {
+    slots.forEach(function (o) { o.removeAttribute("aria-current"); });
+    b.setAttribute("aria-current", "page"); place();
+  }); });
+  place(); window.addEventListener("resize", place);
+})();
+// §2's edge: the same sag, upright; the fill shares the path.
+(function () {
+  var W = 232, H = 236, X = 231.3, h = 48, d = 4;
+  var nav = document.getElementById("sidebar"), fill = document.getElementById("edge-fill"),
+      line = document.getElementById("edge-line"), g = document.getElementById("edge-grad");
+  var f = function (n) { return Math.round(n * 100) / 100; };
+  var cy = 0, anim = 0;
+  function draw(c) {
+    var pts = "", y0 = Math.max(0, c - h), y1 = Math.min(H, c + h);
+    for (var k = 0; k <= 64; k++) {
+      var y = y0 + ((y1 - y0) * k) / 64, u = (y - c) / h;
+      pts += " L" + f(X - d * Math.pow(1 - u * u, 2)) + " " + f(y);
+    }
+    line.setAttribute("d", "M" + X + " 0" + pts + " L" + X + " " + H);
+    fill.setAttribute("d", "M0 0 L" + X + " 0" + pts + " L" + X + " " + H + " L0 " + H + "Z");
+    g.setAttribute("y1", f(c - h)); g.setAttribute("y2", f(c + h));
+  }
+  function target() { var a = nav.querySelector('.nav-item[aria-current="page"]'); return a.offsetTop + a.offsetHeight / 2; }
+  function go(to) {
+    var from = cy, t0 = performance.now(), reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    cancelAnimationFrame(anim);
+    (function step(now) {
+      var t = reduce ? 1 : Math.min(1, (now - t0) / 180), e = 1 - Math.pow(1 - t, 3);
+      cy = from + (to - from) * e; draw(cy);
+      if (t < 1) anim = requestAnimationFrame(step);
+    })(t0);
+  }
+  nav.querySelectorAll(".nav-item").forEach(function (b) { b.addEventListener("click", function () {
+    nav.querySelectorAll(".nav-item").forEach(function (o) { o.removeAttribute("aria-current"); });
+    b.setAttribute("aria-current", "page"); go(target());
+  }); });
+  cy = target(); draw(cy);
+})();
+</script>
+</body>
+</html>
