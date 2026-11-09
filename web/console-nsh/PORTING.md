@@ -116,6 +116,12 @@ Headless tests prove behaviour, not the look.
   for a 22.12pt line). A field that must centre one line beside other controls gets a fixed box
   with the line placed from `lineHeight`, not padding around the measured height
   (`components/chat/composerField.ts`).
+- A pull down from a list's top is the scroll view's own pull-to-refresh (`onRefresh` with
+  `refreshIndicator={{ height }}`: no spinner, the platform decides the gesture, short and empty
+  lists included). Touch handlers on the list would not do: the scroll view takes the touches over
+  from JS (`onTouchCancel`) once it drags. A released pull leaves the refresh on (the indicator's
+  room kept above the content) until the app sets `refreshing` true and then false in a later
+  turn. Topics' and Contacts' phone searches use it (`components/shared/pullSearch.ts`).
 - Shared motion helpers (sliding selection, fade truncation, scroll edges, entrances, dialog
   origin) are in `components/motion/` (see its README).
 

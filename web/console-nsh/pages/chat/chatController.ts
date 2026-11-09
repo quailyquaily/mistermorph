@@ -827,6 +827,10 @@ export function createChatController() {
   const topicSearchQuery = computed(() => topicSearch().trim().toLowerCase());
   const topicSearching = () => topicSearchQuery() !== "";
   const setTopicSearch = (value: string) => topicSearch.set(String(value ?? ""));
+  // On a touch phone the search hides until the topic list is pulled down from its top
+  // (components/shared/pullSearch.ts); once shown it stays while the page lives, the sidebar
+  // being rebuilt each time the phone comes back from a topic.
+  const topicSearchRevealed = signal(false);
   const topicMatchesSearch = (topic: any, query: string) => !query || topicTitle(topic).toLowerCase().includes(query);
 
   // The current view's groups with only the matching topics, before they become rows: a group
@@ -3137,6 +3141,7 @@ export function createChatController() {
     topicSearch,
     topicSearching,
     setTopicSearch,
+    topicSearchRevealed,
     selectedTopicIsAgent,
     selectedTopicIsCron,
     workspaceTopicID,
