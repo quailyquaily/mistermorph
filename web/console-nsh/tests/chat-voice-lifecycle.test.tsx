@@ -221,3 +221,61 @@ test("a start the host cancelled is no error; a refused one says why; a late gra
   expect(t.voice.state()).toBe("idle");
   expect(t.log.slice(-2)).toEqual(["start", "cancel"]);
 });
+
+// The host records one at a time and `cancel` ends whichever it records. A start cancelled before
+// the host answered is let go (cancelled) when its yes comes; a newer start waits for that, so the
+// letting go cannot end the newer recording.
+test("a cancelled start's late yes is let go before the next recording starts, never ending it", async () => {
+  const t = setup();
+  await settle();
+  t.voice.toggle();
+  expect(t.log).toEqual(["start"]);
+  t.voice.cancel();
+  expect(t.voice.state()).toBe("idle");
+  expect(t.log).toEqual(["start", "cancel"]);
+
+  // A new recording while the first start is still unanswered: it waits for that answer.
+  t.voice.toggle();
+  expect(t.voice.state()).toBe("recording");
+  await settle();
+  expect(t.log).toEqual(["start", "cancel"]);
+
+  // The first start's late yes is let go, and only then does the new one start.
+  t.starts[0].resolve({ ok: true });
+  await settle();
+  expect(t.log).toEqual(["start", "cancel", "cancel", "start"]);
+  t.starts[1].resolve({ ok: true });
+  await settle();
+  expect(t.voice.state()).toBe("recording");
+  expect(t.log).toEqual(["start", "cancel", "cancel", "start"]);
+
+  // It records, and is stopped and transcribed as usual.
+  t.voice.toggle();
+  t.stops[0].resolve(FILE("v2"));
+  await settle();
+  t.transcriptions[0].resolve("second take");
+  await settle();
+  expect(t.texts).toEqual(["second take"]);
+  expect(t.errors).toEqual([]);
+  expect(t.voice.state()).toBe("idle");
+});
+
+test("recordings started and cancelled while an old start is unanswered: only the last one starts", async () => {
+  const t = setup();
+  await settle();
+  t.voice.toggle();
+  t.voice.cancel();
+  // B, cancelled while it waits for the first start's answer, never reaches the host.
+  t.voice.toggle();
+  t.voice.cancel();
+  t.voice.toggle();
+  expect(t.voice.state()).toBe("recording");
+  t.starts[0].resolve({ ok: false, error: "cancelled" });
+  await settle();
+  expect(t.log.filter((entry) => entry === "start").length).toBe(2);
+  t.starts[1].resolve({ ok: true });
+  await settle();
+  expect(t.voice.state()).toBe("recording");
+  expect(t.log.at(-1)).toBe("start");
+  expect(t.errors).toEqual([]);
+});

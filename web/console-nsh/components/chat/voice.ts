@@ -65,6 +65,10 @@ export function createVoiceInput(options: VoiceInputOptions) {
   let discard = false;
   // Bumped by every recording and every discard: what an older one's promises bring is dropped.
   let attempt = 0;
+  // The host's start still unanswered (and, for a start already thrown away, its letting go):
+  // the host records one at a time and `recorder.cancel()` ends whichever it records, so a newer
+  // start waits for this one to settle rather than be ended by it.
+  let pendingStart: Promise<void> | null = null;
   let elapsedTimer: ReturnType<typeof setInterval> | undefined;
   let stopTimer: ReturnType<typeof setTimeout> | undefined;
   let disposed = false;
@@ -176,15 +180,27 @@ export function createVoiceInput(options: VoiceInputOptions) {
     const mine = ++attempt;
     state.set("recording");
     recording = true;
-    const started = await recorder.start({ preview: previewable && untracked(previewEnabled), lang: locale() || "" }).catch((error: Error) => ({
+    const stale = () => disposed || !recording || mine !== attempt;
+    // An older start thrown away before the host answered: once its answer came and a yes was let
+    // go, the host is free; a cancel meanwhile leaves this one nothing to start.
+    while (pendingStart) {
+      await pendingStart;
+      if (stale()) return;
+    }
+    const request = recorder.start({ preview: previewable && untracked(previewEnabled), lang: locale() || "" }).catch((error: Error) => ({
       ok: false,
       error: "failed",
       message: String(error?.message || ""),
     }));
-    if (disposed || !recording || mine !== attempt) {
-      if (started.ok) recorder.cancel();
-      return;
-    }
+    const settled: Promise<void> = request.then((answer) => {
+      // A yes for a recording thrown away meanwhile is let go before a newer start may go.
+      if (answer.ok && stale()) recorder.cancel();
+      if (pendingStart === settled) pendingStart = null;
+    });
+    pendingStart = settled;
+    const started = await request;
+    await settled;
+    if (stale()) return;
     if (!started.ok) {
       finish();
       // Cancelled by the host (the app left the foreground while asking): nothing went wrong.
