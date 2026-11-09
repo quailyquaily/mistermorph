@@ -1,6 +1,6 @@
 ---
 branch: factory/FT40-console-composer-voice-input-entry
-round: 1
+round: 2
 ---
 # Restore the composer voice-input icon button when the model route is ready
 
@@ -52,3 +52,20 @@ Residual risks: No real desktop window, physical device/microphone or actual tra
 
 ## factory · 2026-11-09 15:48
 Owner requested: “move ft40 to new.” Moved from review/ to new/ for a fix round addressing the recorded review findings. Preserve the existing item branch and review history.
+
+## factory · plan · 2026-11-09 16:20
+Fix round 2 addition. Behaviour: atomically create a random private recording directory, exclusively create recording/log files, fail safely without following pre-existing symlinks, and preserve cleanup/stop/discard/release. Keep stop/transcribe available for an active recording after failed route refresh; readiness still gates starting a new session.
+Scope: review P1 temporary-file vulnerability and P2 active-session controls, with regression tests; unsupported-platform scope unchanged.
+Decisions: reuse the already-locked tempfile crate as a direct dependency; no system tooling or config changes.
+Checking: precreated path/symlink and permissions regressions, fake recorder lifecycle, failed readiness refresh during recording, repository Go gate and Console check/tests. Physical device and real-window checks are not assumed.
+
+## factory · 2026-11-09 16:20
+Fix round 2 built and pushed 907cd6f2, with commits 68ee8ea5 (private recording storage) and 907cd6f2 (preserve active recording controls). Moved new/ → review/.
+
+Recordings now use an atomically created random directory with mode 0700 and exclusively created files with mode 0600. Pre-existing files/symlinks are not accepted; failure, cancellation, release and shutdown cleanup are covered. A failed readiness refresh no longer removes stop/transcribe during an active session; unavailable routes still cannot start new recordings.
+
+Verification: manager independently passed gofmt check, go vet ./..., go test ./..., nsh check and all 291 web-host tests. An initial combined verification command timed out; a fresh complete run passed. Coder reports desktop cargo test --offline: 59 passed, 2 ignored, and cargo check without warnings. Security regressions and the Console regression were also checked against reverted fixes and failed as expected. Scripted tests used absolute throwaway HOME directories. Manager checked commit scope and changed-path list: no forbidden paths changed; worktree clean. Base merges without conflict, so no merge was needed.
+
+Dependency change: tempfile, already locked at 3.27.0, promoted to a direct desktop dependency; Cargo.toml/Cargo.lock changed without version changes. No system tools installed.
+
+Not checked: real desktop window/foreground refresh, physical microphone or phone, live transcription, macOS or Windows. UI behavior checked headlessly only. Existing platform gaps remain: desktop recording Linux-only; Android has no voice entry. No linked GitHub issue/PR. Ready for review, not merged into master.
