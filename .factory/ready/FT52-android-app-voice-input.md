@@ -42,3 +42,17 @@ Installs reported by coder: Temurin JDK 17.0.21+9, Android build-tools 35.0.0 an
 Not verified: no Android device or emulator available; installation, actual microphone capture/transcription, permission dialogs, background cancellation on device, and all visual/UI checks remain unverified. Release CI was not run; JDK/compiler availability there remains to be checked. Owner/reviewer should inspect native host integration and packaging and perform real-device checks before shipping.
 
 Moved new/ → review/; no merge to master.
+
+## factory · review · 2026-11-10 03:33
+head: 496fffd5248c960cda611060e051d6f97644703c
+verdict: pass
+notes:
+- [P2] web/console-nsh/components/chat/voice.ts:184-185: A stale successful start reply calls the shared recorder.cancel(), cancelling a newer recording. Example verified with an asynchronous host stub: start A, cancel A while its reply is pending, start B, then deliver A's and B's success replies; calls are start → cancel → start → cancel while UI remains recording. Serialize restart until old startup cleanup finishes, or scope cancellation to the recording instance.
+
+Validation: Codex reviewed origin/master...HEAD; no P0/P1 findings. Configured gofmt check, go vet ./... and go test ./... passed. nsh check passed; Console tests 359/359, Java host tests 15/15, manifest tests 3/3 and core tests 247/247 passed. Scripted tests used a throwaway HOME. Manager confirmed unchanged worktree and clean merge with current origin/master.
+
+Limitations: Browser compilation passed, but complete packaging was blocked by missing nsh web runtime. Android APK was not rebuilt because this review environment lacks Android SDK and nsh Android release resources. No real-device microphone capture/transcription, permission dialogs, lifecycle behavior or visual/UI checks were performed; release CI was not run. The P2 race was reproduced with an asynchronous stub, not a device.
+
+Installs: No unpinned tool installs or dependency manifest changes reported. No linked issues or PRs in this item.
+
+Moved review/ → ready/ under the no-P0/P1 review rule. Owner should inspect the P2 race and complete real-device verification before shipping. No merge to master.
