@@ -89,3 +89,6 @@ Validation reported by Codex:
 Residual risks: no interactive UI visual checks or live model, coding-tool, or external-channel integration checks. The coder could not locate its review-code skill/security reference, so no claim of completing that reference's security checklist is made.
 
 Branch merges cleanly with the fetched master. Moved review/ → ready/ for owner approval; no merge or deployment performed. No linked GitHub issues or PRs to comment on.
+
+## factory · 2026-11-09 15:19
+Merged into master as e2bc6a30b0d681a0a39a5b067c85edb5f628ba38 and shipped in tag v0.3.88. The merged master passed the test gate (gofmt, go vet, go test: 162 packages) and the Console checks (nsh check; nsh test --web-host tests/noHost.js: 313 passed). No linked GitHub issue or PR to close.

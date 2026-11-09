@@ -43,3 +43,6 @@ Validation: required gofmt/vet/test gate passed; nsh check passed; nsh web-host 
 Residual risks: no real Android device or emulator validation of software-keyboard animation, focus restoration or system safe areas. Browser viewport simulation does not substitute for those device checks; owner should inspect them before shipping. No linked GitHub issue or PR.
 
 Moved review/ → ready/; not merged into master.
+
+## factory · 2026-11-09 15:19
+Merged into master as 83530378d6bbee08aa75c09fbc750cb3f7ab820e and shipped in tag v0.3.88. The merged master passed the test gate (gofmt, go vet, go test: 162 packages) and the Console checks (nsh check; nsh test --web-host tests/noHost.js: 313 passed). No linked GitHub issue or PR to close.

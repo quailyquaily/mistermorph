@@ -164,3 +164,6 @@ Codex reviewed the complete origin/master...HEAD range (232 files), emphasizing 
 Validation: required gofmt/vet/full Go test gate passed (162 packages); nsh check passed; Console tests 276 passed; Console release bundle passed; desktop cargo test --locked --offline 51 passed/1 ignored; Cloudflare Node tests 24 passed. Six unauthenticated endpoint checks returned 401; YAML merge-key password protection regression passed. Scripted tests used an absolute throwaway HOME. No installs, manifest changes, tracked code edits or commits. Manager confirmed clean worktree and unchanged reviewed HEAD. No merge conflict with origin/master. Review-code skill was unavailable at the supplied coder path; explicit review standards were supplied instead.
 
 Not verified: manual browser/desktop/Android interactions, live Cloudflare/R2 restore and actual power loss. No linked GitHub issue or PR. No deployment or merge into master. Owner should assess the four P2 findings before shipping.
+
+## factory · 2026-11-09 15:19
+Merged into master as 6db229e0813fbf33379de4035d22cae264e2f662 and shipped in tag v0.3.88. The merged master passed the test gate (gofmt, go vet, go test: 162 packages) and the Console checks (nsh check; nsh test --web-host tests/noHost.js: 313 passed). No linked GitHub issue or PR to close.

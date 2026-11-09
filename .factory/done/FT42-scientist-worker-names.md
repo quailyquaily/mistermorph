@@ -51,3 +51,6 @@ Codex reviewed all eight changed files in origin/master...HEAD; no qualifying fi
 Validation: formatting check, go vet ./..., and go test ./... passed (156 packages); nsh check passed; nsh test --web-host tests/noHost.js passed (287 tests); node --test lib/ passed (247 tests). Legacy pools match the baseline and 10,240 legacy name/avatar comparisons passed. Tests used a throwaway absolute HOME. Installs: none. Review worktree unchanged.
 
 Residual risks: UI appearance was not manually inspected; Chinese and Japanese scientist names have not had native-speaker review. Owner should check those before shipping. Moved review/ → ready/; not merged.
+
+## factory · 2026-11-09 15:19
+Merged into master as 28d1dcf8be6f278575f8b3e8d76b66404dced2ae and shipped in tag v0.3.88. The merged master passed the test gate (gofmt, go vet, go test: 162 packages) and the Console checks (nsh check; nsh test --web-host tests/noHost.js: 313 passed). No linked GitHub issue or PR to close.

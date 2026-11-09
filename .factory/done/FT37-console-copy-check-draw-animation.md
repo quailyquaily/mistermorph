@@ -47,3 +47,6 @@ Validation (Codex): configured gofmt/vet/Go tests passed; nsh check passed; nsh 
 Residual risks: native desktop and Android were not run; real system clipboard rejection was not verified. Browser runtime swallowing some clipboard errors is pre-existing, not introduced by this change.
 
 Installs: none. No code changes or review commits. Moved review/ → ready/; awaiting owner approval before ship.
+
+## factory · 2026-11-09 15:19
+Merged into master as b4e75b86805a525c891a9178b1604af30df4aa99 and shipped in tag v0.3.88. The merged master passed the test gate (gofmt, go vet, go test: 162 packages) and the Console checks (nsh check; nsh test --web-host tests/noHost.js: 313 passed). No linked GitHub issue or PR to close.

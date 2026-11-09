@@ -38,3 +38,6 @@ notes:
 - Installs: no unpinned installs or manifest changes; pinned TypeScript 7.0.2 restored. Worktree clean and reviewed HEAD unchanged.
 - Residual risks: no real Android device/emulator or full-app browser/desktop visual inspection. Landscape and keyboard inset behavior have helper-test coverage only; native rendering, touch hit targets and dynamic inset changes remain unverified on device. Owner should inspect the actual mobile panel with a nonzero top inset before shipping.
 - Moved review/ → ready/. No linked GitHub issue or PR.
+
+## factory · 2026-11-09 15:19
+Merged into master as 02fe660572a2f14d3791dac846a662bb5d2c2d94 and shipped in tag v0.3.88. The merged master passed the test gate (gofmt, go vet, go test: 162 packages) and the Console checks (nsh check; nsh test --web-host tests/noHost.js: 313 passed). No linked GitHub issue or PR to close.
