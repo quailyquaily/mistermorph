@@ -20,3 +20,6 @@ Moved to backlog: the required approved specification `design/ui-refresh.html` i
 
 ## lyric · 2026-11-09 14:34
 Change 4, the phone bottom bar, is revised: use the layout of Telegram's tab bar, without its labels. The bar is a capsule floating over the page (12 px from each side, 8 px above the bottom safe area, 60 px high, fully round), translucent with a soft shadow. The active slot sits in a lighter accent pill (`rgba(36,99,174,.10)`) that slides between slots in 240 ms; the docked strip, its top border and the sliding blue rule go. Same five slots, 26 px icons, the agent slot is the 30 px round avatar. No labels and no compose button. Pages end with room for the bar so the last row clears it. Values in `design/ui-refresh.html` §4.
+
+## lyric · 2026-11-09 14:54
+Change 2, the sidebar edge, is revised: the bend uses the soft sag of change 1, upright (`x = edge − d·(1 − u²)²`, half-height 48 px, depth 4 px, 1.4 px stroke fading `#C8D4E4` → `#2463AE` → `#C8D4E4`). The sidebar's fill is drawn by the same path and stops at the line, so the page colour shows inside the bend and the sidebar's colour never runs past its edge. Values in `design/ui-refresh.html` §2.
