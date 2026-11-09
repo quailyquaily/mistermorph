@@ -31,3 +31,13 @@ Installs: none.
 Tests: Manager verified formatting, go vet ./..., go test ./..., nsh check, and the final full nsh suite (355 passed, 0 failed). Initial manager shell timed out during the UI suite; a fresh complete run passed. Coder also built the web bundle successfully and added 10 focused pull-search tests.
 Not checked: No real device or emulator visual, touch-gesture, keyboard or screen-reader checks. Review mobile spacing, trigger feel, Android drag-start behavior and accessibility action on a device.
 Moved new/ → review/. Not merged into master.
+
+## factory · review · 2026-11-10 02:47
+head: 7f9ba47c9ba05d4c5ea90bb1135f786664039332
+verdict: pass
+notes:
+- Codex reviewed all six changed files against origin/master (b0b7cc57); no verified P0–P3 findings.
+- Validation passed: Go formatting, go vet ./..., go test ./... (162 packages passed, 19 without tests), nsh check, nsh test --web-host tests/noHost.js (355 passed, 0 failed), and git diff --check. Tests used an isolated HEAD copy and absolute throwaway HOME.
+- Installs: none. No code changes or commits.
+- Not checked: real device, emulator or browser interaction, full build, Android drag-start events, actual touch scrolling, refresh-gap dismissal, soft keyboard, visual layout and screen reader behavior. Headless tests do not establish these behaviors.
+- Moved review/ → ready/. Owner should inspect the mobile interaction before shipping; not merged into master.
