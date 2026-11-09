@@ -28,3 +28,15 @@ Tests: configured gofmt + go vet ./... + go test ./... passed, independently rep
 Installs: none; no dependency changes. No protected paths changed.
 Visual checking: coder captured headless fixture screenshots at 320pt and 390pt; only unfocused frame-border pixels changed, focused screenshots unchanged. Real chat page, desktop GPUI, individual attachment/voice/error/busy states and Android/iOS software-keyboard open/close were not visually checked; no device/emulator/display available. Existing headless keyboard/sheet tests passed. Owner should inspect the composer border on a real phone, including keyboard open and closed.
 Moved new/ → review/; not merged into master.
+
+## factory · review · 2026-11-10 02:08
+head: 105505a21ce105c8dcc263af3172ba8a3b0f68ea
+verdict: pass
+notes:
+- Codex reviewed origin/master...HEAD; no confirmed P0/P1/P2/P3 findings. Branch merges cleanly with origin/master. Review worktree unchanged.
+- Configured gofmt + go vet ./... + go test ./... passed (162 test packages). An initial incomplete test-copy setup failed; the complete verified HEAD copy passed. All scripted tests used a throwaway absolute HOME.
+- nsh check passed; nsh test --web-host tests/noHost.js: 347 passed, 0 failed, including composer-field 8 and composer 12.
+- Installs: none beyond restoration of pinned Go dependencies.
+- Coverage limitation: the fixture case named desktop is 760pt wide and still uses the mobile branch; desktop border preservation is checked by a string assertion, not desktop rendering.
+- Real-phone keyboard open/close, narrow-screen visual states, and actual desktop rendering were not checked. Owner should inspect these before shipping.
+- Moved review/ → ready/; not merged into master.
