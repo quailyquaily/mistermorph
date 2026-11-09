@@ -220,3 +220,42 @@ test("the desktop app records with the system's recorder, and says so when it ha
   await deaf.app.waitUntil(() => deaf.app.texts().some((text) => text.startsWith("No microphone was found")));
   expect(deaf.app.count("id:chat-composer-voice-strip")).toBe(0);
 });
+
+test("a recording under way keeps its stop when the route check fails; a new one needs a ready route", async () => {
+  let route: unknown = READY;
+  const { app, calls } = await openRecording(() => route as any);
+  const starts = () => app.host.calls().filter((call) => call.name === "morph.voice.start").length;
+  await app.press("label:Voice input");
+  await app.waitFor("id:chat-composer-voice-strip");
+  // Away and back while recording, and the agent cannot say whether it transcribes.
+  route = { status: 500, body: { error: "boom" } };
+  await app.host.send("morph.visibility", { visible: false, focused: false });
+  await app.host.send("morph.visibility", { visible: true, focused: true });
+  await app.waitUntil(() => transcribeChecks(calls) === 2);
+  await app.wait(50);
+  // Still recording, and it can still be stopped and transcribed, not only discarded.
+  expect(app.count("id:chat-composer-voice-strip")).toBe(1);
+  expect(app.count("label:Discard recording")).toBe(1);
+  await app.press("label:Stop and transcribe");
+  await app.waitUntil(() => app.value("id:chat-composer-input") === "book a table");
+  await app.waitFor("id:chat-composer-voice-strip", { state: "gone" });
+  // Done: with the route unavailable there is no mic to start another.
+  await app.waitFor("id:chat-composer-voice", { state: "gone" });
+  expect(starts()).toBe(1);
+  // The same while the route is unset rather than failing.
+  route = READY;
+  await app.host.send("morph.visibility", { visible: false, focused: false });
+  await app.host.send("morph.visibility", { visible: true, focused: true });
+  await app.waitFor("id:chat-composer-voice");
+  await app.press("label:Voice input");
+  await app.waitFor("id:chat-composer-voice-strip");
+  route = UNSET;
+  await app.host.send("morph.visibility", { visible: false, focused: false });
+  await app.host.send("morph.visibility", { visible: true, focused: true });
+  await app.waitUntil(() => transcribeChecks(calls) === 4);
+  await app.wait(50);
+  await app.press("label:Stop and transcribe");
+  await app.waitFor("id:chat-composer-voice-strip", { state: "gone" });
+  await app.waitFor("id:chat-composer-voice", { state: "gone" });
+  expect(starts()).toBe(2);
+});

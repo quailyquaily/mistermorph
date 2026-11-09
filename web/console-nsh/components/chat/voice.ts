@@ -37,10 +37,14 @@ export function createVoiceInput(options: VoiceInputOptions) {
   // Whether there is a live preview to turn on and off: the platform's recognizer has one, and a
   // recording host only where it says so (the browser's speech recognition; the desktop has none).
   const previewable = !records || voiceRecording.previews();
-  const available = signal(false);
+  // Whether a new recording may start: the platform recognizes speech, or the agent transcribes.
+  const ready = signal(false);
+  const state = signal<VoiceState>("idle");
+  // The mic shows while a recording may start, and stays while one is under way even when a later
+  // check finds the route gone (or fails), so it can still be stopped and transcribed.
+  const available = () => ready() || state() !== "idle";
   // Why the host cannot record here: "", "insecure", "unsupported" or "recorder".
   const unsupported = signal("");
-  const state = signal<VoiceState>("idle");
   const elapsed = signal(0);
   const preview = signal("");
   const previewEnabled = signal(localStore.getItem(PREVIEW_STORAGE_KEY) !== "off");
@@ -75,13 +79,13 @@ export function createVoiceInput(options: VoiceInputOptions) {
       endpointRef: () => options.endpointRef!(),
       active: () => front(),
       check: (ref) => options.canTranscribe!(ref),
-      ready: available,
+      ready,
       disposed: () => disposed,
     });
   } else {
     void Speech.available()
       .then((ok) => {
-        if (!disposed) available.set(ok === true);
+        if (!disposed) ready.set(ok === true);
       })
       .catch((error: Error) => {
         console.warn("voice input unavailable:", error?.message || error);
@@ -166,7 +170,7 @@ export function createVoiceInput(options: VoiceInputOptions) {
   }
 
   function start() {
-    if (untracked(state) !== "idle" || !untracked(available)) return;
+    if (untracked(state) !== "idle" || !untracked(ready)) return;
     discard = false;
     if (records) void startRecording();
     else startSpeech();
