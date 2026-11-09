@@ -1,7 +1,8 @@
 // The parts Skills, the Skill Store, Memories and Contacts share: the workspace index column (the
 // Vue console's workspace-sidebar-section), its rows and group dividers, the boxed section a page
 // shows its picked item in (AppSection variant="boxed"), its property list (ui-property-list), the
-// inline notice (AppNotice), the phone bar with its back button, and the search field.
+// inline notice (AppNotice), the phone bar with its back button, the search field, and the index
+// search that Topics and Contacts share.
 //
 // Metrics are the Vue console's (views/common.css, components/AppSection.css, the pages' CSS):
 // CSS px are points here. The index column sits on the page paper with no frame of its own, a
@@ -10,7 +11,7 @@
 // components/motion's sliding selection); a row's hover fill comes in after 60 ms and goes at once,
 // so sweeping the pointer down a list does not flash every row it passes.
 import type { JSX } from "nsh";
-import { Scroll, Text, View, windowSize } from "nsh";
+import { cleanup, effect, keymap, Scroll, signal, Text, View, windowSize } from "nsh";
 import { Button as BaseButton, Switch } from "nsh/base";
 import { translate } from "../../lib/core/context.js";
 import { isMobile } from "../../lib/shell";
@@ -77,8 +78,8 @@ export function Note(props: { text: string; class?: string; testID?: string }) {
 }
 
 /**
- * The search field at the top of an index or a grid. Memories and Contacts use the plain 32pt
- * field (AppInput, 12pt text); Skills and the store add the magnifier.
+ * The search field at the top of an index or a grid. Memories uses the plain 32pt field (AppInput,
+ * 12pt text); Skills and the store add the magnifier. Topics and Contacts use `IndexSearch`.
  */
 export function SearchField(props: {
   value: string;
@@ -105,6 +106,61 @@ export function SearchField(props: {
       testID={props.testID}
       class={props.class}
     />
+  );
+}
+
+/** The index search's box: its gutters, the room above and below the field, and the field's size. */
+export function indexSearchMetrics(mobile: boolean) {
+  // The list's 16pt gutter on a desktop, the page's phone gutter on a phone, where rows run edge to
+  // edge with their content that far in. No room above: the field sits right under the 57pt head;
+  // 8pt below it, then the list's own 8pt before its first row.
+  const gutter = mobile ? gutterX() : 16;
+  return { gutter, top: 0, bottom: 8, size: (mobile ? "md" : "sm") as "md" | "sm" };
+}
+
+/**
+ * The search under the head of the Topics and Contacts indexes, one field for both: a 14pt text
+ * field with the magnifier and a clear button, 38pt tall on a desktop and 44pt (a touch target) on
+ * a phone, as wide as the column less its gutters. Escape empties it while it has the focus and
+ * holds text. It owns its spacing: put it in `IndexColumn`'s `search`, not its `top`.
+ */
+export function IndexSearch(props: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  /** The phone layout (default: the console's mobile breakpoint). */
+  mobile?: boolean;
+  testID: string;
+}) {
+  const metrics = () => indexSearchMetrics(props.mobile ?? isMobile());
+  const focused = signal(false);
+  effect(() => {
+    if (!focused() || !props.value) return;
+    cleanup(keymap.bind("escape", () => props.onChange(""), { when: "always" }));
+  });
+  return (
+    <View
+      testID={`${props.testID}-box`}
+      style={{
+        paddingLeft: metrics().gutter,
+        paddingRight: metrics().gutter,
+        paddingTop: metrics().top,
+        paddingBottom: metrics().bottom,
+      }}
+    >
+      <TextField
+        value={props.value}
+        onChange={(value) => props.onChange(value)}
+        onFocus={() => focused.set(true)}
+        onBlur={() => focused.set(false)}
+        placeholder={props.placeholder}
+        accessibilityLabel={props.placeholder}
+        leadingIcon="PhMagnifyingGlass"
+        size={metrics().size}
+        clearable
+        testID={props.testID}
+      />
+    </View>
   );
 }
 
@@ -142,8 +198,10 @@ export function HeadButton(props: { icon: IconName; title: string; disabled?: bo
 export function IndexColumn(props: {
   title: string;
   actions?: JSX.Element;
-  /** Above the scrolling list (a search field). */
+  /** Above the scrolling list (a search field), in a box padded 16pt (14 above). */
   top?: JSX.Element;
+  /** Above the scrolling list as it is, with no box of its own: an `IndexSearch`. */
+  search?: JSX.Element;
   fill?: boolean;
   label?: string;
   testID?: string;
@@ -156,7 +214,8 @@ export function IndexColumn(props: {
   listClass?: string;
 }) {
   const edges = createScrollEdges({ start: false });
-  const listPad = () => (props.fill ? (props.top ? "pt-2" : "pt-4") : props.top ? "px-4 pt-2" : "px-4 pt-4");
+  const hasTop = () => Boolean(props.top || props.search);
+  const listPad = () => (props.fill ? (hasTop() ? "pt-2" : "pt-4") : hasTop() ? "px-4 pt-2" : "px-4 pt-4");
   return (
     <View
       testID={props.testID}
@@ -184,6 +243,7 @@ export function IndexColumn(props: {
       <If when={props.top}>
         <View class="px-4 pb-2 pt-3.5">{props.top}</View>
       </If>
+      <If when={props.search}>{props.search}</If>
       <If when={props.scroll !== false} else={<View class="flex-1">{props.children}</View>}>
         <Scroll
           class="flex-1"
