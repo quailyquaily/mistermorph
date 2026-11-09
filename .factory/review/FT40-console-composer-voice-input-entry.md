@@ -37,3 +37,15 @@ Verification: manager independently passed gofmt check, go vet ./..., go test ./
 Installs: none; reused pinned/cached tooling and temporary library symlinks.
 
 Other observations: coder reports its scratch server sent a dummy API key to OpenAI during a heartbeat and transcription request despite a locally configured profile endpoint. No real key was used. This possible pre-existing endpoint-selection issue was not fixed or independently diagnosed in this item.
+
+## factory · review · 2026-11-09 09:06
+head: c0e2cfa1ba3a746bfc410c317cc5d7cac9d384d9
+verdict: fix
+fix:
+- [P1] desktop/nsh/src/voice.rs:202: The predictable PID-based temporary directory accepts pre-created directories, and File::create follows a pre-planted voice-1.log symlink, truncating a file writable by the app. Atomically create a random private directory with mode 0700 and exclusively create recording/log files. Example: the coder's isolated test pre-created a voice-1.log symlink and started a fake recorder; its target was truncated to zero bytes. A directory created with umask 022 was mode 0755.
+notes:
+- [P2] web/console-nsh/components/chat/voice.ts:285: A failed foreground readiness refresh sets ready=false and hides the stop/transcribe action while recording continues. Gate starting a recording on readiness, but preserve stop for an active session. Example: start recording, background and foreground the window, return HTTP 500 from readiness; recording continues with only discard available.
+
+Validation: Codex reviewed all 10 changed files in origin/master...HEAD. Required gofmt/vet/test gate passed; nsh check passed; nsh web-host tests passed 290/290. Isolated recording-module checks passed 6 with 1 real-microphone test skipped; UI failure reproduction passed. Scripted tests used an absolute throwaway HOME; no live external API calls. Manager checked finding locations and clean worktree. No code commits or installs.
+
+Residual risks: No real desktop window, physical device/microphone or actual transcription validation. Android has no entry and macOS/Windows only expose the missing-recorder explanation; these existing platform gaps remain, not new regressions. No linked GitHub issue or PR was present. Item stays in review/ for owner decision; add a note and move it to new/ for a fix round.
