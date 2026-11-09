@@ -194,7 +194,7 @@ export function ChatPage() {
   const mobileLeading = () => (
     <View class="flex-1 flex-row items-center gap-2">
       <If when={c.mobileShowBack()}>
-        <Button variant="plain" size="xs" iconOnly icon="PhArrowLeft" title={t("chat_topics_title")} onPress={() => c.showTopicsView()} testID="chat-back" />
+        <Button variant="plain" size="xs" iconOnly icon="PhArrowLeft" title={t("chat_topics_title")} onPress={() => c.mobileBack()} testID="chat-back" />
       </If>
       <Text class="flex-1 text-xl leading-6 tracking-[-0.03em] text-foreground line-clamp-1" role="header">
         {c.mobileTopicSplitEnabled() ? c.mobileBarTitle() : t("chat_title")}

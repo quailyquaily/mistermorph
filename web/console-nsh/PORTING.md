@@ -21,6 +21,7 @@ stays the reference for behaviour, states and copy until the cutover.
 | `lib/router.ts` | Routes, the guard, `navigate()`, `currentRoute()`, `setLeaveGuard()` |
 | `lib/shell.ts` | The frame's state: endpoints, nav items, mobile breakpoint |
 | `lib/systemBack.ts` | Android's Back (button and edge swipe): `onSystemBack` for a screen's own back, then the history |
+| `lib/softKeyboard.ts` | Whether the software keyboard is up; a phone back arrow lowers it before it leaves |
 | `lib/systemInsets.ts` | The room Android's status and navigation bars take: the frame's, the bottom nav's, the dialogs' |
 | `components/ui.tsx` | The design system: Button, TextField, Toggle, SelectField, DropdownMenu, Modal, MessageDialog, confirm, Badge, Section, Page, Markdown, Icon, ... |
 | `components/icons.ts` | The Phosphor icons the console uses, by their Vue names (`PhChats`) |
@@ -151,6 +152,12 @@ Headless tests prove behaviour, not the look.
   needs a `Scroll` of its own (`AgentSwitcher`, `SelectField`).
 - Dialogs are an `Overlay` on Android (`DialogLayer`): with it Back hides the keyboard first, then
   closes the dialog.
+- A phone bar's back arrow does not hide the keyboard by itself: the chat's arrow calls
+  `dismissSoftKeyboard` (`lib/softKeyboard.ts`) first and goes back only when nothing was up. On
+  Android trust `keyboardFrame()` from the start (the host reads the system's keyboard insets); a
+  focused field alone may have a hardware keyboard. On the web trust it once it has reported a
+  keyboard; before that the focused field stands for the keyboard. Headless runs report no frame,
+  so a headless Android phone with a focused field is one with a hardware keyboard.
 - Back (the button, and the edge swipe of gesture navigation, which the system turns into the same
   event) reaches the app only while it listens (`BackHandler`); otherwise the system leaves the app.
   `lib/systemBack.ts` listens only while there is something to go back to: a view registered with
