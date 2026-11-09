@@ -30,3 +30,12 @@ Manager verification: gofmt check, go vet ./..., go test ./..., nsh check, and n
 Not checked: actual Android/iOS keyboards, mobile browsers or desktop app visually; no real device/emulator/display was available. Headless tests verify focus behavior only.
 Coder reported writing a build-tooling memory note outside the requested worktree; this was not part of the code commit and was not independently inspected.
 Moved new/ → review/ for review; not merged.
+
+## factory · review · 2026-11-10 01:20
+head: 72d42e47da16341a6c7eb203a79cb9afbb5ef75d
+verdict: pass
+notes:
+- [P2] web/console-nsh/components/chat/ChatComposer.tsx:462: On wide mobile screens, post-submit focus restoration undoes Keyboard.dismiss because the parent uses width >980 rather than platform.desktop. Codex reproduced Android 1280x800: send "hello", receive HTTP 500, then typing "!" changes the preserved draft to "hello!" without refocusing; exactly one request was sent. Gate post-send focus restoration on desktop platform while preserving Stop and desktop behavior.
+- Required validation passed: gofmt check, go vet ./..., go test ./... (162 packages passed, 19 without tests), nsh check, and nsh test --web-host tests/noHost.js (348 passed). The supplemental wide-Android reproduction failed as expected for the P2 above; it is not a failure of the configured mandatory suite.
+- No P0/P1 findings; moved review/ → ready/ under the factory review threshold. Owner should inspect the wide-mobile focus issue before shipping.
+- Installs: none. Scripted tests used a throwaway absolute HOME. Real Android/iOS keyboards were not available; only headless focus behavior was verified.
