@@ -407,11 +407,16 @@ h1{margin:0;font-size:1.06rem;font-weight:600;letter-spacing:-.005em}
 .t{font-size:.92rem;font-weight:500;line-height:1.36;text-wrap:pretty;overflow-wrap:anywhere}
 .st.side .t{font-weight:400;color:var(--ink-2)}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
-/* An ID copies itself. The check draws in one stroke and fades; the label never changes width. */
+/* An ID copies itself. The check draws in one stroke over the ID's middle, through a soft hole cut
+   in the letters so it reads on its own; the label never changes width. The hole switches at once,
+   both ways (an animated mask repaints the text each frame and it flickers), and stays until the
+   check has faded. */
 .id{position:relative;z-index:1;padding:0;border:0;background:none;font:inherit;color:inherit;cursor:copy;border-radius:2px}
 @media (hover:hover){.id:hover{color:var(--ink);text-decoration:underline dotted;text-decoration-color:var(--rule);text-underline-offset:3px}}
-.id .ok{position:absolute;left:calc(100% + 3px);top:50%;width:10px;height:10px;margin-top:-5px;fill:none;stroke:var(--ok);stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;opacity:0;pointer-events:none;transition:opacity .2s}
+.id .ok{position:absolute;left:50%;top:50%;width:10px;height:10px;margin:-5px 0 0 -5px;fill:none;stroke:var(--ok);stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;opacity:0;pointer-events:none;transition:opacity .2s}
 .id.copied .ok{opacity:1;transition:none}
+.id .lbl{display:inline-block}
+.id:is(.copied,.fading) .lbl{-webkit-mask-image:radial-gradient(circle at 50% 50%,transparent 6.5px,#000 10px);mask-image:radial-gradient(circle at 50% 50%,transparent 6.5px,#000 10px)}
 /* pathLength=1, so a dash of 1 is the whole stroke: the offset runs 1 → 0 to draw it. */
 .id .ok path{stroke-dasharray:1;stroke-dashoffset:1;transition:stroke-dashoffset 0s .2s}
 .id.copied .ok path{stroke-dashoffset:0;transition:stroke-dashoffset .26s cubic-bezier(.2,0,0,1)}
@@ -454,7 +459,7 @@ h1{margin:0;font-size:1.06rem;font-weight:600;letter-spacing:-.005em}
    your notes solid ink, other people's hollow, the factory's reports pale, a plan a square,
    a review a diamond in its verdict's colour, a question in the colour of what waits for you. */
 .drawer.has-toc{width:min(860px,100%)}
-.cols{display:grid;grid-template-columns:212px minmax(0,1fr)}
+.has-toc .cols{display:grid;grid-template-columns:212px minmax(0,1fr)}
 .has-toc .dr{padding-left:22px}
 .toc{position:sticky;top:44px;align-self:start;max-height:calc(100dvh - 44px);overflow-y:auto;overscroll-behavior:contain;scrollbar-width:none;padding:14px 0 24px 30px}
 .toc ol{list-style:none;margin:0;padding:0;border-left:var(--hair) solid var(--rule-soft)}
@@ -522,7 +527,7 @@ h1{margin:0;font-size:1.06rem;font-weight:600;letter-spacing:-.005em}
 }
 /* On a narrow drawer the index is a strip of marks under the bar; names are kept for screen readers. */
 @media (max-width:720px){
-.cols{display:block}
+.has-toc .cols{display:block}
 .has-toc .dr{padding-left:18px}
 .toc{top:44px;z-index:1;max-height:none;overflow:auto hidden;padding:0 12px;background:var(--plate);border-bottom:var(--hair) solid var(--rule-soft)}
 .toc ol{display:flex;border:0}
@@ -570,8 +575,10 @@ function copyField(text){
 document.addEventListener('click',e=>{
   const b=e.target.closest('button.id');if(!b)return;
   copy(b.dataset.copy).then(()=>{
-    b.classList.remove('copied');void b.offsetWidth;b.classList.add('copied');
-    clearTimeout(b._t);b._t=setTimeout(()=>b.classList.remove('copied'),1400);
+    clearTimeout(b._t);clearTimeout(b._u);
+    b.classList.remove('copied','fading');void b.offsetWidth;b.classList.add('copied');
+    // The check fades for .2s; the hole under it closes only after.
+    b._t=setTimeout(()=>{b.classList.replace('copied','fading');b._u=setTimeout(()=>b.classList.remove('fading'),200)},1400);
     say.textContent='';say.textContent='Copied '+b.dataset.copy;
   },()=>{say.textContent='Could not copy '+b.dataset.copy});
 });
@@ -623,7 +630,7 @@ def id_button(label):
     if not re.fullmatch(r"[A-Z]+\d+", label):
         return f"<span>{label}</span>"
     return (
-        f'<button type=button class=id data-copy="{label}" title="Copy {label}">{label}'
+        f'<button type=button class=id data-copy="{label}" title="Copy {label}"><span class=lbl>{label}</span>'
         '<svg class=ok viewBox="0 0 10 10" aria-hidden=true><path pathLength=1 d="M1.5 5.5 4 8l5-6"/></svg></button>')
 
 
