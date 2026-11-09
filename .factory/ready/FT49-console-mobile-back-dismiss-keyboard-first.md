@@ -29,3 +29,13 @@ Known limitation for review: on a phone using a hardware keyboard before any sof
 Installs: none.
 Tests: gofmt check, go vet ./..., go test ./... passed (manager independently reran). Claude Code reports nsh check passed and all 349 Console tests passed, including a regression that fails with the arrow change removed.
 Not checked: physical-device or visual UI behavior, Android/iOS keyboard animation, mobile-browser viewport reporting, and hardware-keyboard behavior. No Android SDK/emulator was available.
+
+## factory · review · 2026-11-10 01:46
+head: a3b8e91167dd03993270db67b31aadf970eba4fa
+verdict: pass
+notes:
+- [P2] web/console-nsh/lib/softKeyboard.ts:29: With a hardware keyboard from startup, height=0, frameReported=false and fieldFocused=true causes the first Back tap to dismiss focus rather than return to the topic list. Source-level reproduction yields one dismissal and zero navigations, violating the closed-keyboard acceptance criterion. Distinguish reliable zero-height reports from unavailable geometry, and add hardware-keyboard coverage.
+- Codex reviewed all six changed files in origin/master...HEAD. No P0/P1 findings; moved review/ → ready/ under the factory review threshold. The P2 remains for owner consideration before shipping.
+- Validation: gofmt check, go vet ./..., go test ./..., nsh check, and nsh test --web-host tests/noHost.js passed (349 Console tests, zero failures). git diff --check passed; six source-level state checks performed. Scripted tests used an absolute throwaway HOME. Working tree and head unchanged.
+- Installs: none.
+- Not checked: physical devices or visual UI, Android/iOS keyboard animation, mobile-browser viewport reporting, actual hardware-keyboard interaction. Hardware-keyboard finding reproduced at source-state level only.
