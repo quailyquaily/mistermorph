@@ -29,3 +29,12 @@ Verification: manager reran gofmt cleanliness, go vet ./... and go test ./... su
 Installs: none.
 Visual checks: coder captured real ChatComposer screenshots in headless Chrome at 700px and 390px, empty/populated/focused/disabled. Web alignment was already within roughly 0.5px before the fix; no original visible web offset reproduced. Headless runtime regression tests expose the differing measured-line-height case.
 Not checked: native desktop (no display), Android (no SDK/device), full Console page in a real browser, software keyboard, and visual multiline transition. Automated wrapping/clearing checks passed. Native line placement still needs device confirmation.
+
+## factory · review · 2026-11-09 21:20
+head: 94ec79536590ae0df7d40087090712e5d93ca2e0
+verdict: pass
+No findings. Codex reviewed all five changed files against origin/master and the request/plan; no P0/P1 or lower-priority defects found. Branch merges cleanly with base.
+Validation: Codex reports gofmt cleanliness, go vet ./... and go test ./... passing (162 packages); nsh check passed; nsh test --web-host tests/noHost.js passed (319/319). Six additional Chrome layout checks and two real ChatComposer browser probes passed, covering desktop/mobile widths, empty/populated/focus/disabled states, wrapping, Shift+Enter, Enter send, clearing, and scrolling to the final line. Tests used an identical external copy and throwaway HOME. Manager verified unchanged worktree and reviewed head.
+Installs: none beyond pinned dependency restoration.
+Residual risks: isolated real-component browser checks, not the full Console page; native desktop, Android devices and software keyboards remain unverified. Owner should confirm native visual alignment before shipping.
+Moved review/ → ready/.
