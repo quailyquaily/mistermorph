@@ -39,3 +39,16 @@ export function composerFieldBox(multi: boolean, measured: number, maxRows = DEF
   const height = Math.max(COMPOSER_CONTROL_SIZE, paddingTop + content);
   return { height, paddingTop, paddingBottom: height - paddingTop - content, lineHeight: COMPOSER_LINE_HEIGHT };
 }
+
+/** The colour of the composer's 1pt frame: on a phone, the design's composer border (`line`,
+ *  design/ui-refresh.html's `.composer`); on a desktop, the fields' `input`, as before. On a
+ *  phone `input` over the field's white is too pale to see where the composer begins. */
+export function composerFrameBorder(mobile: boolean): "border-line" | "border-input" {
+  return mobile ? "border-line" : "border-input";
+}
+
+/** The composer's frame. Only the border's colour differs between a phone and a desktop: its width,
+ *  radius and the focus look are the same, so switching never moves anything. */
+export function composerFrameClass(mobile: boolean): string {
+  return `relative rounded-(--radius) border ${composerFrameBorder(mobile)} bg-field transition duration-[260ms] focus-within:border-blue/45 focus-within:shadow-md`;
+}

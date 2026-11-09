@@ -1,11 +1,12 @@
-// A test entry for tests/chat-composer-field.test.tsx: the composer's field row as ChatComposer lays
-// it out (composerRowClass, composerFieldBox, nextComposerRows), a 38pt add button, the field and a
-// 38pt Send, with the field's measured text height fed back as the composer does, and the frames,
-// boxes and row mode read out as text. A second row is read-only, as a disabled composer is.
+// A test entry for tests/chat-composer-field.test.tsx: the composer's frame and field row as
+// ChatComposer lays them out (composerFrameClass, composerRowClass, composerFieldBox,
+// nextComposerRows), a 38pt add button, the field and a 38pt Send, with the field's measured text
+// height fed back as the composer does, and the frames, boxes and row mode read out as text. A
+// second row is read-only, as a disabled composer is.
 import type { Bounds } from "nsh";
-import { mount, signal, Text, View } from "nsh";
+import { mount, signal, Text, token, View, windowSize } from "nsh";
 import { Input } from "nsh/base";
-import { COMPOSER_LINE_HEIGHT, composerFieldBox, composerRowClass } from "../../components/chat/composerField";
+import { COMPOSER_LINE_HEIGHT, composerFieldBox, composerFrameClass, composerRowClass } from "../../components/chat/composerField";
 import { nextComposerRows, SINGLE_ROW, type ComposerRows } from "../../components/chat/composerRows";
 
 type Frame = { x: number; y: number; w: number; h: number };
@@ -36,7 +37,8 @@ function FieldRow(props: { name: string; readonly?: boolean }) {
   };
   const control = (part: string) => <View class="size-[38px] rounded-(--radius) border border-line-soft" onLayout={track(`${props.name}-${part}`)} />;
   return (
-    <View class="rounded-(--radius) border border-input bg-field" onLayout={track(`${props.name}-shell`)}>
+    // lib/shell's isMobile (980pt), without the app's frame and stores.
+    <View class={composerFrameClass(windowSize().width <= 980)} onLayout={track(`${props.name}-shell`)}>
       <View class={composerRowClass(multi())} onLayout={track(`${props.name}-row`)}>
         <If when={!multi()}>{control("add")}</If>
         <Input
@@ -68,6 +70,9 @@ function FieldRow(props: { name: string; readonly?: boolean }) {
     </View>
   );
 }
+
+// The theme's colours the frame is drawn in, for the test's contrast check.
+put("tokens", Object.fromEntries(["background", "field", "line", "input", "muted-foreground"].map((name) => [name, String(token(name as "line"))])));
 
 mount(() => (
   <View class="gap-3 bg-background p-4">

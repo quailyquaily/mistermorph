@@ -18,7 +18,8 @@ import {
   composerTriggerContext,
   replaceComposerSuggestionToken,
 } from "../../lib/core/chat-composer-suggestions.js";
-import { COMPOSER_LINE_HEIGHT as LINE_HEIGHT, composerFieldBox, composerRowClass } from "./composerField";
+import { isMobile } from "../../lib/shell";
+import { COMPOSER_LINE_HEIGHT as LINE_HEIGHT, composerFieldBox, composerFrameClass, composerRowClass } from "./composerField";
 import { nextComposerRows, SINGLE_ROW, type ComposerRows } from "./composerRows";
 import { PROFILE_SHEET_MAX_HEIGHT, PROFILE_SHEET_PADDING } from "./composerSheets";
 import { t } from "./i18n";
@@ -570,7 +571,7 @@ export function ChatComposer(props: ChatComposerProps) {
   return (
     <View class={`gap-2 ${props.landing ? "w-full" : "pb-2.5"}`} testID={props.testID}>
       <View
-        class="relative rounded-(--radius) border border-input bg-field transition duration-[260ms] focus-within:border-blue/45 focus-within:shadow-md"
+        class={composerFrameClass(isMobile())}
         onPress={() => focus({ preserveSelection: true })}
       >
         <If when={suggestionsVisible()}>
