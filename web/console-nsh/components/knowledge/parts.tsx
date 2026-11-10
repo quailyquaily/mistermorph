@@ -113,10 +113,10 @@ export function SearchField(props: {
 /** The index search's box: its gutters, the room above and below the field, and the field's size. */
 export function indexSearchMetrics(mobile: boolean) {
   // The list's 16pt gutter on a desktop, the page's phone gutter on a phone, where rows run edge to
-  // edge with their content that far in. No room above: the field sits right under the 57pt head;
-  // 8pt below it, then the list's own 8pt before its first row.
+  // edge with their content that far in. 4pt above the field, under the 57pt head, and 4pt below
+  // it, then the list's own 8pt before its first row: 8pt of room in all, split evenly.
   const gutter = mobile ? gutterX() : 16;
-  return { gutter, top: 0, bottom: 8, size: (mobile ? "md" : "sm") as "md" | "sm" };
+  return { gutter, top: 4, bottom: 4, size: (mobile ? "md" : "sm") as "md" | "sm" };
 }
 
 /**
