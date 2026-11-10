@@ -195,12 +195,13 @@ func runAwarenessLoop(ctx context.Context, d Dependencies, opts RunOptions) (run
 		refreshChatInfoOnStart(ctx, chatInfoStore, chatInfoRefresher, opts.ChatInfoStateDir, opts.ChatInfoContactsDir, logger)
 	}
 
-	runAwarenessTaskWithOpts := func(behavior awarenessutil.Behavior, task string, meta map[string]any, taskRunID, llmProfile, workspaceDir string, bashEnv []cronstore.BashEnvRef, topicID, topicTitle string, cronManual bool) (string, error) {
+	// runCtx is the run's own context: a cron item's execution context, so stopping it ends the run.
+	runAwarenessTaskWithOpts := func(runCtx context.Context, behavior awarenessutil.Behavior, task string, meta map[string]any, taskRunID, llmProfile, workspaceDir string, bashEnv []cronstore.BashEnvRef, topicID, topicTitle string, cronManual bool) (string, error) {
 		var contextScope topiccontext.Scope
 		if topicID != "" && opts.TopicContextScope != nil {
 			contextScope = opts.TopicContextScope(topicID)
 		}
-		return runAwarenessTask(ctx, d, awarenessTaskOptions{
+		return runAwarenessTask(runCtx, d, awarenessTaskOptions{
 			Behavior:                 behavior,
 			Logger:                   logger,
 			LogOptions:               logOpts,
@@ -230,8 +231,8 @@ func runAwarenessLoop(ctx context.Context, d Dependencies, opts RunOptions) (run
 			CronManual:               cronManual,
 		})
 	}
-	runTask := func(behavior awarenessutil.Behavior, task string, meta map[string]any, taskRunID string) (string, error) {
-		return runAwarenessTaskWithOpts(behavior, task, meta, taskRunID, "", "", nil, "", "", false)
+	runTask := func(runCtx context.Context, behavior awarenessutil.Behavior, task string, meta map[string]any, taskRunID string) (string, error) {
+		return runAwarenessTaskWithOpts(runCtx, behavior, task, meta, taskRunID, "", "", nil, "", "", false)
 	}
 
 	runTaskAsync := func(behavior awarenessutil.Behavior, task string, taskEmpty bool, wakeSignal awarenessdomain.PokeInput) string {
@@ -248,7 +249,7 @@ func runAwarenessLoop(ctx context.Context, d Dependencies, opts RunOptions) (run
 		go func() {
 			defer wg.Done()
 
-			summary, runErr := runTask(behavior, task, meta, taskRunID)
+			summary, runErr := runTask(ctx, behavior, task, meta, taskRunID)
 			if runErr != nil {
 				displayErr := depsutil.FormatRuntimeError(runErr)
 				alert, alertMsg := state.EndFailure(errors.New(displayErr))
@@ -338,7 +339,7 @@ func runAwarenessLoop(ctx context.Context, d Dependencies, opts RunOptions) (run
 							"cron_scheduled_at_utc": due.ScheduledAtUTC.UTC().Format(time.RFC3339),
 							"runtime_source":        strings.TrimSpace(opts.Source),
 						})
-						summary, err := runTask(awarenessutil.BehaviorHeartbeat, strings.TrimSpace(taskText), meta, taskRunID)
+						summary, err := runTask(ctx, awarenessutil.BehaviorHeartbeat, strings.TrimSpace(taskText), meta, taskRunID)
 						if err != nil {
 							return err
 						}
@@ -365,9 +366,12 @@ func runAwarenessLoop(ctx context.Context, d Dependencies, opts RunOptions) (run
 						}
 					}
 					meta := awarenessutil.BuildCronMeta("cron", strings.TrimSpace(task.ID), due.ScheduledAtUTC, cronstore.ScheduleForTask(task), strings.TrimSpace(task.TZ), strings.TrimSpace(task.ChatID), extra)
-					summary, err := runAwarenessTaskWithOpts(awarenessutil.BehaviorCron, strings.TrimSpace(task.Content), meta, taskRunID, task.LLMProfile, task.WorkspaceDir, task.BashEnv,
+					summary, err := runAwarenessTaskWithOpts(ctx, awarenessutil.BehaviorCron, strings.TrimSpace(task.Content), meta, taskRunID, task.LLMProfile, task.WorkspaceDir, task.BashEnv,
 						daemonruntime.CronTopicID(task.ID), cronTopicTitle(task), due.Manual)
 					if err != nil {
+						if errors.Is(context.Cause(ctx), cronstore.ErrRunStopped) {
+							err = cronstore.ErrRunStopped
+						}
 						notifyCronResult(ctx, opts.CronNotify, logger, task, due.Manual, taskRunID, "", err)
 						return err
 					}
@@ -562,11 +566,16 @@ func runAwarenessTask(ctx context.Context, d Dependencies, opts awarenessTaskOpt
 		if progress != nil {
 			extra = progress.Result(nil, agentCtx)
 		}
-		if err := recordAwarenessTaskFinish(recordOpts, summary, extra, runErr, time.Now().UTC()); err != nil {
+		// A run someone stopped ends as stopped, whatever error the cancellation surfaced as.
+		finishErr := runErr
+		if finishErr != nil && errors.Is(context.Cause(ctx), cronstore.ErrRunStopped) {
+			finishErr = cronstore.ErrRunStopped
+		}
+		if err := recordAwarenessTaskFinish(recordOpts, summary, extra, finishErr, time.Now().UTC()); err != nil {
 			runErr = errors.Join(runErr, fmt.Errorf("record awareness task finish: %w", err))
 		}
 		if progress != nil {
-			progress.Close(summary, runErr)
+			progress.Close(summary, finishErr)
 		}
 	}()
 
@@ -867,6 +876,14 @@ func recordAwarenessTaskFinish(opts awarenessTaskOptions, summary string, extra 
 		result := make(map[string]any, len(extra)+1)
 		for key, value := range extra {
 			result[key] = value
+		}
+		if errors.Is(runErr, cronstore.ErrRunStopped) {
+			info.Status = daemonruntime.TaskCanceled
+			info.Error = cronstore.ErrRunStopped.Error()
+			if len(result) > 0 {
+				info.Result = result
+			}
+			return
 		}
 		if runErr != nil {
 			info.Status = daemonruntime.TaskFailed

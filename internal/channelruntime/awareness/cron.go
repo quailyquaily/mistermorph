@@ -255,7 +255,7 @@ func (r *cronLoopRunner) enqueue(ctx context.Context, item cronstore.DueTask) er
 	if r.systemIDs[id] {
 		queue = r.systemQueue
 	}
-	r.board.Queue(id, item.Manual, r.now())
+	item.RunID = r.board.Queue(id, item.Manual, r.now())
 	select {
 	case queue <- item:
 		return nil
@@ -274,7 +274,8 @@ func (r *cronLoopRunner) now() time.Time {
 }
 
 // worker runs items from queue until it closes. Items still queued at shutdown are logged and
-// dropped; a running item gets the cancelled context and is waited for.
+// dropped; a running item gets the cancelled context and is waited for. Each item runs under a
+// context of its own, so stopping it (cronstore.StopRun) cancels that execution and no other.
 func (r *cronLoopRunner) worker(ctx context.Context, queue <-chan cronstore.DueTask) {
 	for item := range queue {
 		id := strings.TrimSpace(item.Task.ID)
@@ -283,25 +284,46 @@ func (r *cronLoopRunner) worker(ctx context.Context, queue <-chan cronstore.DueT
 			r.finish(id)
 			continue
 		}
-		r.board.Start(id, r.now())
-		stored := !r.systemIDs[id]
-		if stored {
-			if err := r.store.RecordRunStart(id, r.now()); err != nil {
-				r.warn("cron_run_record_error", "task_id", id, "error", err.Error())
-			}
+		r.runItem(ctx, id, item)
+	}
+}
+
+func (r *cronLoopRunner) runItem(ctx context.Context, id string, item cronstore.DueTask) {
+	runCtx, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
+	if !r.board.Start(id, item.RunID, r.now(), cancel) {
+		// Stopped while it waited: it never ran, so its last run stays as it was.
+		r.info("cron_run_stopped", "task_id", id, "run_id", item.RunID, "started", false)
+		r.board.Finish(id, item.RunID, cronstore.RunStatusCanceled, r.now())
+		r.clearInFlight(id)
+		return
+	}
+	stored := !r.systemIDs[id]
+	if stored {
+		if err := r.store.RecordRunStart(id, r.now()); err != nil {
+			r.warn("cron_run_record_error", "task_id", id, "error", err.Error())
 		}
-		status := cronstore.RunStatusDone
-		if err := r.opts.Run(ctx, item); err != nil {
+	}
+	status := cronstore.RunStatusDone
+	err := r.opts.Run(runCtx, item)
+	// From here on a stop is too late: the run's end, not the request, decides how it ended.
+	cancel(nil)
+	if err != nil {
+		if errors.Is(context.Cause(runCtx), cronstore.ErrRunStopped) {
+			status = cronstore.RunStatusCanceled
+			r.info("cron_run_stopped", "task_id", id, "run_id", item.RunID, "started", true)
+		} else {
 			status = cronstore.RunStatusFailed
 			r.warn("cron_task_error", "task_id", id, "error", err.Error())
 		}
-		if stored {
-			if err := r.store.RecordRunResult(id, status); err != nil {
-				r.warn("cron_run_record_error", "task_id", id, "error", err.Error())
-			}
-		}
-		r.finish(id)
 	}
+	if stored {
+		if err := r.store.RecordRunResult(id, status); err != nil {
+			r.warn("cron_run_record_error", "task_id", id, "error", err.Error())
+		}
+	}
+	r.board.Finish(id, item.RunID, status, r.now())
+	r.clearInFlight(id)
 }
 
 func (r *cronLoopRunner) finish(id string) {
@@ -328,6 +350,12 @@ func (r *cronLoopRunner) clearInFlight(id string) {
 func (r *cronLoopRunner) warn(msg string, args ...any) {
 	if r.opts.Logger != nil {
 		r.opts.Logger.Warn(msg, append([]any{"source", strings.TrimSpace(r.opts.Source)}, args...)...)
+	}
+}
+
+func (r *cronLoopRunner) info(msg string, args ...any) {
+	if r.opts.Logger != nil {
+		r.opts.Logger.Info(msg, append([]any{"source", strings.TrimSpace(r.opts.Source)}, args...)...)
 	}
 }
 

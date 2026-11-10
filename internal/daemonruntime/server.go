@@ -1621,28 +1621,81 @@ func handleContactsChatProfile(w http.ResponseWriter, r *http.Request, contactsD
 	})
 }
 
-// handleTodoRuns lists the TODO items this runtime has queued or running now.
+// handleTodoRuns lists the TODO items this runtime has queued or running now, and how its
+// recent runs ended ("finished"), so a client that stopped one can confirm how it ended.
 func handleTodoRuns(w http.ResponseWriter, r *http.Request, cronPath string) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{"runs": cronstore.Runs(cronPath)})
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"runs":     cronstore.Runs(cronPath),
+		"finished": cronstore.FinishedRuns(cronPath),
+	})
 }
 
-func handleTodoTaskRun(w http.ResponseWriter, r *http.Request, cronPath string, cronRun CronRunFunc) {
+// handleTodoTaskAction serves POST /todo/tasks/{id}/run and POST /todo/tasks/{id}/stop.
+func handleTodoTaskAction(w http.ResponseWriter, r *http.Request, cronPath string, cronRun CronRunFunc) {
+	id, action, ok := parseTodoTaskAction(r.URL)
+	if !ok {
+		http.Error(w, "invalid cron task path", http.StatusBadRequest)
+		return
+	}
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if cronRun == nil {
-		http.Error(w, "cron runner is unavailable", http.StatusServiceUnavailable)
+	if action == "stop" {
+		handleTodoTaskStop(w, r, cronPath, id)
 		return
 	}
-	id, ok := parseTodoTaskRunID(r.URL)
-	if !ok {
-		http.Error(w, "invalid cron task run path", http.StatusBadRequest)
+	handleTodoTaskRun(w, r, cronPath, cronRun, id)
+}
+
+// handleTodoTaskStop stops one execution of a TODO item: the body names it by its run_id (from
+// GET /todo/runs), so a request meant for a run that has ended never stops a later one. The item,
+// its schedule and its later runs stay as they are. The answer is the execution's state, not a
+// promise: 202 "stopping" while it winds down (its end then shows in GET /todo/runs "finished"),
+// 200 with how it ended ("done", "failed", "canceled") when it already had, 404 "not_found".
+func handleTodoTaskStop(w http.ResponseWriter, r *http.Request, cronPath string, id string) {
+	var req struct {
+		RunID string `json:"run_id"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(&req); err != nil {
+		writeTodoStopJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid json"})
+		return
+	}
+	runID := strings.TrimSpace(req.RunID)
+	if runID == "" {
+		writeTodoStopJSON(w, http.StatusBadRequest, map[string]any{"error": "run_id is required"})
+		return
+	}
+	result := cronstore.StopRun(cronPath, id, runID)
+	switch result.Status {
+	case cronstore.StopStopping:
+		writeTodoStopJSON(w, http.StatusAccepted, result)
+	case cronstore.StopNotFound:
+		writeTodoStopJSON(w, http.StatusNotFound, map[string]any{
+			"error":  "this run is not running",
+			"status": result.Status,
+			"id":     result.ID,
+			"run_id": result.RunID,
+		})
+	default:
+		writeTodoStopJSON(w, http.StatusOK, result)
+	}
+}
+
+func writeTodoStopJSON(w http.ResponseWriter, status int, body any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(body)
+}
+
+func handleTodoTaskRun(w http.ResponseWriter, r *http.Request, cronPath string, cronRun CronRunFunc, id string) {
+	if cronRun == nil {
+		http.Error(w, "cron runner is unavailable", http.StatusServiceUnavailable)
 		return
 	}
 	store := cronstore.NewStore(cronPath)
@@ -1676,28 +1729,33 @@ func handleTodoTaskRun(w http.ResponseWriter, r *http.Request, cronPath string, 
 	})
 }
 
-func parseTodoTaskRunID(u *url.URL) (string, bool) {
+// parseTodoTaskAction reads /todo/tasks/{id}/{action}.
+func parseTodoTaskAction(u *url.URL) (string, string, bool) {
 	if u == nil {
-		return "", false
+		return "", "", false
 	}
 	rawPath := u.EscapedPath()
 	if rawPath == "" {
 		rawPath = u.Path
 	}
 	rest := strings.TrimPrefix(rawPath, "/todo/tasks/")
-	if rest == rawPath || !strings.HasSuffix(rest, "/run") {
-		return "", false
+	if rest == rawPath {
+		return "", "", false
 	}
-	idRaw := strings.TrimSuffix(rest, "/run")
-	if strings.TrimSpace(idRaw) == "" || strings.Contains(idRaw, "/") {
-		return "", false
+	cut := strings.LastIndex(rest, "/")
+	if cut < 0 {
+		return "", "", false
+	}
+	idRaw, action := rest[:cut], rest[cut+1:]
+	if strings.TrimSpace(idRaw) == "" || strings.Contains(idRaw, "/") || (action != "run" && action != "stop") {
+		return "", "", false
 	}
 	id, err := url.PathUnescape(idRaw)
 	if err != nil {
-		return "", false
+		return "", "", false
 	}
 	id = strings.TrimSpace(id)
-	return id, id != ""
+	return id, action, id != ""
 }
 
 func diagnoseDirWritable(id, p string) map[string]any {
