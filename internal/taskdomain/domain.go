@@ -81,6 +81,9 @@ type TaskInfo struct {
 	Conversation      *TaskConversation `json:"conversation,omitempty"`
 	// UserReaction is the Console agent's single reaction to this task's originating message.
 	UserReaction string `json:"user_reaction,omitempty"`
+	// AwaitingAnswer is set on a running task whose run waits on the person's answer to a question
+	// it asked (ask_user). The task routes fill it in from the live run; it is never stored.
+	AwaitingAnswer bool `json:"awaiting_answer,omitempty"`
 }
 
 type TaskTrigger struct {

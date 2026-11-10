@@ -1391,6 +1391,10 @@ func (r *consoleLocalRuntime) routesOptions(authToken string) daemonruntime.Rout
 			Stop:            r.stopTask,
 			AnswerQuestion:  r.answerQuestion,
 			AnswerElevation: r.answerElevation,
+			// A chat task's question (ask_user) waits on the run control for its answer.
+			AwaitingAnswer: func(taskID string) bool {
+				return r.runControl.AwaitingAnswer("console", taskID)
+			},
 			TopicMetadata: func(ctx context.Context, topicID string) (daemonruntime.TopicMetadata, error) {
 				return r.topicMetadataForTopic(ctx, topicID, paths.TopicContextPath, defaultWorkspaceDir)
 			},
