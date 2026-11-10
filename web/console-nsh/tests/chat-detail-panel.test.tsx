@@ -1,7 +1,8 @@
 // The temporary detail panel at the right of the conversation: a reply's plan, progress, reasoning
 // and workers open there (never inside the conversation), one at a time; it and the topic and
 // workspace panel replace each other; close, Escape and Back dismiss it; another conversation
-// closes it; and what still streams keeps growing in it.
+// closes it; and what still streams keeps growing in it. Progress and a coder's output never repeat
+// the message the reply answers at their top; the conversation keeps it.
 import { batch, effect, signal, untracked } from "nsh";
 import { expect, open, test, type App } from "nsh/test";
 import { createFocusReturn } from "../components/chat/activityDetail";
@@ -61,6 +62,16 @@ function inConversation(app: App, text: string) {
   return app.shows(`id:chat-item-agent >> text:${text}`);
 }
 
+/** The panel's head names the message the reply answers. */
+function hasContext(app: App) {
+  return app.shows("id:chat-detail-context");
+}
+
+/** The user's message is still in the conversation. */
+function userMessageShown(app: App) {
+  return app.shows("id:chat-item-user >> text:Clean the disk");
+}
+
 async function openChat(options: { kv?: Record<string, string>; api?: Record<string, unknown> } = {}) {
   const { app, calls } = await openConsole({ location: CHAT, kv: options.kv, api: { ...API, ...(options.api || {}) } });
   await app.waitFor("id:chat-status-card");
@@ -80,27 +91,42 @@ test("plan, progress, reasoning and each worker open in the panel, never inside 
   expect(inPanel(app, "Plan")).toBe(true);
   expect(inPanel(app, "2/2")).toBe(true);
   expect(inPanel(app, "Clean the disk")).toBe(true);
+  expect(hasContext(app)).toBe(true);
 
+  // Progress: its head is the title, the mark and close, without the message it answers.
   await app.press("id:chat-status-activity");
   await app.waitFor("id:chat-detail-activity");
   expect(inPanel(app, "du -sh")).toBe(true);
   expect(inConversation(app, "du -sh")).toBe(false);
+  expect(inPanel(app, "Progress")).toBe(true);
+  expect(app.shows("id:chat-detail-panel >> id:chat-detail-close")).toBe(true);
+  expect(hasContext(app)).toBe(false);
+  expect(inPanel(app, "Clean the disk")).toBe(false);
+  expect(userMessageShown(app)).toBe(true);
 
   await app.press("id:chat-status-reasoning");
   await app.waitFor("id:chat-detail-reasoning");
   expect(inPanel(app, "First I looked at the biggest folders.")).toBe(true);
   expect(inConversation(app, "First I looked at the biggest folders.")).toBe(false);
+  expect(inPanel(app, "Clean the disk")).toBe(true);
 
+  // A coder's output: its name, avatar, output and close, without the message either.
   await app.press("label:Curie · Coder · Done");
   await app.waitFor("id:chat-detail-worker");
   expect(inPanel(app, "Curie")).toBe(true);
   expect(inPanel(app, "compiled 3 files")).toBe(true);
   expect(inConversation(app, "compiled 3 files")).toBe(false);
+  expect(app.shows("id:chat-detail-panel >> id:chat-detail-close")).toBe(true);
+  expect(hasContext(app)).toBe(false);
+  expect(inPanel(app, "Clean the disk")).toBe(false);
+  expect(userMessageShown(app)).toBe(true);
 
+  // A subagent keeps it.
   await app.press("label:Noether · Subagent · Done");
   await app.waitUntil(() => inPanel(app, "Noether"));
   expect(inPanel(app, "found 2 caches")).toBe(true);
   expect(inPanel(app, "compiled 3 files")).toBe(false);
+  expect(inPanel(app, "Clean the disk")).toBe(true);
   // Switching never adds a panel.
   expect(app.count("id:chat-detail-panel")).toBe(1);
   // The reply keeps its own actions.
@@ -323,11 +349,15 @@ test("a running task's progress and a worker's output keep growing in the open p
   const before = polls;
   await app.waitUntil(() => polls > before + 1 && inPanel(app, `step-${Math.min(polls, 4)}`), { timeout: 8000 });
   await app.waitFor("id:chat-detail-panel >> text:step-4", { timeout: 8000 });
+  // While it streams, nothing above the progress either.
+  expect(hasContext(app)).toBe(false);
 
   await app.press("label:Curie · Coder · Running");
   await app.waitFor("id:chat-detail-worker");
   await app.waitUntil(() => app.texts().some((text) => text.includes("line 4")), { timeout: 8000 });
   expect(app.count("id:chat-detail-panel")).toBe(1);
+  expect(hasContext(app)).toBe(false);
+  expect(userMessageShown(app)).toBe(true);
 });
 
 test("on a phone the details open in the right sheet, and Back closes it to the conversation", async () => {
@@ -336,7 +366,29 @@ test("on a phone the details open in the right sheet, and Back closes it to the 
   await app.press("id:chat-status-plan");
   await app.waitFor("id:chat-detail-panel");
   expect(inPanel(app, "Look around")).toBe(true);
+  expect(hasContext(app)).toBe(true);
   expect(app.shows("id:chat-workspace-panel")).toBe(false);
+  // Progress and a coder's output in the sheet: no message above them, the conversation keeps it.
+  await app.press("id:chat-detail-close");
+  await app.waitFor("id:chat-detail-panel", { state: "gone" });
+  await app.press("id:chat-status-activity");
+  await app.waitFor("id:chat-detail-activity");
+  expect(inPanel(app, "du -sh")).toBe(true);
+  expect(hasContext(app)).toBe(false);
+  expect(inPanel(app, "Clean the disk")).toBe(false);
+  await app.press("id:chat-detail-close");
+  await app.waitFor("id:chat-detail-panel", { state: "gone" });
+  await app.press("label:Curie · Coder · Done");
+  await app.waitFor("id:chat-detail-worker");
+  expect(inPanel(app, "compiled 3 files")).toBe(true);
+  expect(app.shows("id:chat-detail-panel >> id:chat-detail-close")).toBe(true);
+  expect(hasContext(app)).toBe(false);
+  expect(inPanel(app, "Clean the disk")).toBe(false);
+  expect(userMessageShown(app)).toBe(true);
+  await app.press("id:chat-detail-close");
+  await app.waitFor("id:chat-detail-panel", { state: "gone" });
+  await app.press("id:chat-status-plan");
+  await app.waitFor("id:chat-detail-panel");
   // Back closes the sheet, not the topic.
   await app.back();
   await app.waitFor("id:chat-detail-panel", { state: "gone" });
@@ -398,6 +450,28 @@ test("the open plan follows the reply as it changes, and says when there is noth
   expect(inPanel(app, "Reasoning")).toBe(true);
   await app.press("id:show-missing-worker");
   await app.waitFor("id:chat-detail-panel >> text:No output yet.");
+  // Progress with nothing yet: the empty note under the head, no message above it.
+  await app.press("id:show-activity");
+  await app.waitFor("id:chat-detail-empty");
+  expect(inPanel(app, "Progress")).toBe(true);
+  expect(hasContext(app)).toBe(false);
+  // A coder that wrote nothing yet: likewise, and a subagent keeps the message.
+  await app.press("id:show-coder");
+  await app.waitFor("id:chat-detail-worker");
+  expect(inPanel(app, "Curie")).toBe(true);
+  expect(inPanel(app, "No output yet.")).toBe(true);
+  expect(hasContext(app)).toBe(false);
+  await app.press("id:show-subagent");
+  await app.waitUntil(() => inPanel(app, "Noether"));
+  expect(inPanel(app, "Clean the disk")).toBe(true);
+  // A failed reply: still none for progress or the coder.
+  await app.press("id:fail");
+  await app.press("id:show-coder");
+  await app.waitUntil(() => inPanel(app, "Curie") && !hasContext(app));
+  await app.press("id:show-activity");
+  await app.waitUntil(() => inPanel(app, "Progress"));
+  expect(app.shows("id:chat-detail-empty")).toBe(true);
+  expect(hasContext(app)).toBe(false);
   // The reply gone from the history: the panel stays, empty, and its close still works.
   await app.press("id:drop-reply");
   await app.waitFor("id:chat-detail-panel >> text:Nothing to show yet.");
