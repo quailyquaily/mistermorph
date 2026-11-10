@@ -29,3 +29,12 @@ Visual checks: coder compared headless Chrome screenshots at 1280pt and 390pt; f
 Installs: none reported. Coder reused existing pinned tooling and Playwright from an older build scratch directory; it also reported writing a tooling-memory note outside the requested worktree. These were outside the requested worktree isolation; no such files are part of this commit.
 Initial push lacked credential HTTP-path configuration; retry with command-local credential.useHttpPath=true succeeded.
 Moved new/ → review/ for review; not merged or shipped.
+
+## factory · review · 2026-11-11 06:12
+head: 157812bb6f4d913b8987ed0dd90467db9045284a
+verdict: pass
+notes:
+- Claude Code reviewed origin/master...HEAD against the request and plan; no findings. Changes are limited to shared search spacing and regression tests; no protected paths changed. Branch merges cleanly with current origin/master.
+- Validation: gofmt cleanliness, go vet ./..., and go test ./... passed with throwaway HOME. nsh check passed; nsh test --web-host tests/noHost.js passed, 524/524 tests. Manager checked saved test results and the diff; worktree is clean.
+- Installs: none reported. Live Console, Android device/emulator, and native desktop visual checks were not independently performed in this review.
+- Moved review/ → ready/; not merged or shipped. No linked GitHub issues or PRs to comment on.
