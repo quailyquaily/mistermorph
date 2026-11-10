@@ -9,8 +9,8 @@
 // grows at the end (progress, output, reasoning being written) unless the reader scrolled up.
 //
 // Its head is its title (the panel's name, or the worker's), what it belongs to (the message the
-// reply answers) and close; Escape closes it beside the conversation, and on phones the sheet's
-// own Escape, Back and scrim do.
+// reply answers; not for progress or a coder's output, see `showContext`) and close; Escape closes
+// it beside the conversation, and on phones the sheet's own Escape, Back and scrim do.
 import { cleanup, effect, keymap, Text, View } from "nsh";
 import { Icon, popupOpen, StatusMark, Tip, TipButton } from "../../components/ui";
 import { CHROME_BAR_HEIGHT } from "../../components/frame/metrics";
@@ -118,6 +118,15 @@ export function ActivityDetailPanel(props: {
   // Progress and output grow at their end, and reasoning while it is written: the scroller starts
   // there and follows. A plan reads from its first step.
   const startPinned = () => kind() === "activity" || kind() === "worker" || (kind() === "reasoning" && streaming());
+  // Progress and a coder's output are the run itself, read beside the conversation that already
+  // shows the message they answer: their head is only the title, the mark and close. A plan, the
+  // reasoning and a subagent still name what they answer.
+  const showContext = () => {
+    if (!props.context) return false;
+    if (kind() === "activity") return false;
+    if (kind() === "worker" && worker()?.kind === "coder") return false;
+    return true;
+  };
 
   return (
     <View class={`${props.class ?? ""}`} accessibilityLabel={title()} testID="chat-detail-panel">
@@ -140,7 +149,7 @@ export function ActivityDetailPanel(props: {
         </If>
         <CloseButton phone={props.phone} onPress={() => props.onClose()} />
       </View>
-      <If when={props.context}>
+      <If when={showContext()}>
         <Text class="px-4 pb-2 text-xs leading-[18px] text-muted-foreground line-clamp-2" testID="chat-detail-context">
           {props.context}
         </Text>
