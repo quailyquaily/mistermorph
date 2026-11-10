@@ -1,6 +1,7 @@
 // The Topics and Contacts searches on a touch phone: hidden until the list is pulled down from its
 // top (components/shared/pullSearch.ts), then at the top of the list; on a desktop (and a
-// desktop's window narrowed to the phone layout) they show as before.
+// desktop's window narrowed to the phone layout) they always show, at the top of the list too
+// (tests/desktop-index-search.test.tsx).
 import type { App } from "nsh/test";
 import { expect, test } from "nsh/test";
 import { openConsole, type ApiRequest } from "./harness";
@@ -131,10 +132,12 @@ test("on a phone the topic search and its query stay while the page lives, throu
   await app.waitFor("id:chat-topic-list");
   expect(app.value("id:chat-topics-search")).toBe("trip");
   expect(app.shows("id:chat-topic-topic-2")).toBe(false);
-  // Wide (a tablet's landscape): the desktop layout, the search under the head with its query.
+  // Wide (a tablet's landscape): the desktop layout, the one search at the list's top with its query.
   await app.setViewport(1280, 800);
   await app.waitFor("id:chat-topic-sidebar");
   expect(app.value("id:chat-topics-search")).toBe("trip");
+  expect(app.count("id:chat-topics-search")).toBe(1);
+  expect(app.shows("id:chat-topic-list >> id:chat-topics-search")).toBe(true);
   await app.setViewport(390, 844);
   await app.waitFor("id:chat-topic-list");
   expect(app.value("id:chat-topics-search")).toBe("trip");
@@ -144,11 +147,11 @@ test("on a phone the topic search and its query stay while the page lives, throu
   expect(app.shows("id:chat-topics-search")).toBe(true);
 });
 
-test("on a desktop the topic search shows at once under the head, also in a window narrowed to the phone layout", async () => {
+test("on a desktop the topic search shows at once at the list's top, also in a window narrowed to the phone layout", async () => {
   const wide = await openConsole({ location: "/e/default/chat", api: chatApi(TOPICS) });
   await wide.app.waitFor("id:chat-topic-topic-1");
   expect(wide.app.shows("id:chat-topics-search")).toBe(true);
-  expect(wide.app.shows("id:chat-topic-list >> id:chat-topics-search")).toBe(false);
+  expect(wide.app.shows("id:chat-topic-list >> id:chat-topics-search")).toBe(true);
 
   const narrow = await openConsole({ location: "/e/default/chat", width: 390, height: 844, api: chatApi(TOPICS) });
   await narrow.app.waitFor("id:chat-topic-topic-1");
@@ -222,11 +225,11 @@ test("on a phone an empty or failed contacts list can be pulled for the filter",
   expect(broken.shows("text:contacts unavailable")).toBe(true);
 });
 
-test("on a desktop the contacts filter shows at once above the list, also in a window narrowed to the phone layout", async () => {
+test("on a desktop the contacts filter shows at once at the list's top, also in a window narrowed to the phone layout", async () => {
   const wide = await openConsole({ location: "/e/default/contacts", api: contactsApi([ALICE]) as any });
   await wide.app.waitFor("id:contact-row:tg:1001");
   expect(wide.app.shows("id:contacts-filter")).toBe(true);
-  expect(wide.app.shows("id:contacts-list >> id:contacts-filter")).toBe(false);
+  expect(wide.app.shows("id:contacts-list >> id:contacts-filter")).toBe(true);
 
   const narrow = await openConsole({ location: "/e/default/contacts", width: 420, api: contactsApi([ALICE]) as any });
   await narrow.app.waitFor("id:contact-row:tg:1001");

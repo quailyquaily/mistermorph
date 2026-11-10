@@ -1,6 +1,7 @@
 // A list's search that hides on touch phones until the list is pulled down from its top, as
 // Telegram's chat list does (Topics, Contacts). Elsewhere (desktops, and a desktop's window
-// narrowed to the phone layout, which has no finger to pull with) the search shows as before.
+// narrowed to the phone layout, which has no finger to pull with) the search always shows. It is
+// the list's first view everywhere, scrolling with it, never part of the page's head.
 //
 //   const pull = createPullSearch({ query: () => text(), revealed });
 //   <If when={pull.shown()}><IndexSearch … /></If>
