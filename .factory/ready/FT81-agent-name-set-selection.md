@@ -37,3 +37,13 @@ Built and pushed ba55ab3c in four focused commits. Added tools.agent_name_set wi
 Tests: manager independently passed `test -z "$(gofmt -l .)" && go vet ./... && go test ./...` with a throwaway HOME. Claude Code reported `nsh check` passed, Console suite 530 passed, and core Node tests 257 passed. Final tree passes; first two intermediate commits individually fail the cross-language pool parity test because frontend pools arrive in the third commit.
 UI: Claude Code reported Chrome checks against a real Console, save/reload persistence, desktop and 390pt mobile screenshots in en/zh/ja. Native desktop and Android were not checked; no live model-driven spawn/coder session was checked (engine integration tests cover naming).
 Installs: none. Branch push initially required credential.useHttpPath=true; command-scoped retry succeeded. No protected paths changed. Moved new/ → review/ for review.
+
+## factory · review · 2026-11-11 07:39
+head: ba55ab3ce6a71edf2b2def119c811460e139bd76
+verdict: pass
+notes:
+- Claude Code reviewed all 44 changed files against origin/master and the request/plan; no qualifying P0/P1/P2/P3 findings. Branch merges cleanly with master.
+- Validation with a throwaway HOME: required gofmt/vet/Go test gate passed; nsh check passed; Console tests 530 passed; core Node tests 257 passed. No installs. Worktree clean and reviewed HEAD unchanged.
+- Not checked in this review: live model-driven spawn/coder sessions, visual browser/native desktop/Android UI, and a complete runtime-generation rebuild following a settings save. Engine tests cover both consumers and approval-resume identity stability.
+- Final tree passes; the first two intermediate commits fail the cross-language pool test individually, as already recorded in the build report.
+- Moved review/ → ready/. No linked GitHub issues or PRs to comment on.
