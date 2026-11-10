@@ -33,3 +33,13 @@ Tests: Manager independently passed gofmt cleanliness, go vet ./..., go test ./.
 Not checked: no actual Android device/emulator, adb, emulator binary or /dev/kvm available; UI was not visually inspected in a native runtime. Headless Android-mode tests are not native verification. Native scroll interception/event timing remain unverified; a fast first move after holding may let scrolling win and cancel without writing. No edge autoscroll; offscreen groups cannot be reached in one drag.
 Manual native verification: build/install APK, open tag view, compare swipe/tap with a 450ms hold followed by dragging onto another named group; verify target feedback, preserved tags and persistence after reopening. Release without movement, cancel/Back, flick after hold, drop outside/on pseudo groups/on an existing tag: no writes. Simulate persistence failure and check visible error; also verify desktop drag and tap tag editing.
 Push initially required command-local credential.useHttpPath=true; retry succeeded. Moved new/ → review/ for review, not released.
+
+## factory · review · 2026-11-11 06:53
+head: f2d433405fe710cd03b21385a4107e0d293f1f3b
+verdict: pass
+notes:
+- Claude Code reviewed origin/master...HEAD; no confirmed P0/P1 findings. All four changed files reviewed; worktree remains clean. Branch merges cleanly with current master.
+- Residual risk at web/console-nsh/pages/chat/topicDrag.ts:254-258,320: the native scroll view may intercept the first vertical move after the 450ms hold before JS claims the responder. Example inferred from runtime code: 5dp drift during hold then 8dp movement can cross native touch slop and cancel the lifted row without assigning a tag. Coder rated this P2, but it was not reproduced on a device; retained as an unverified risk rather than a confirmed defect. Consider disabling scroll when the hold activates and verify on Android.
+- Tests passed: gofmt cleanliness, go vet ./..., go test ./..., nsh check, nsh test --web-host tests/noHost.js (536 passed, 0 failed, 10m14s). Tests used an isolated HOME; manager checked recorded exit markers. Installs: none.
+- Actual Android device/emulator verification remains unavailable; headless tests do not establish native gesture behavior. Touch-specific end-to-end persistence success/failure coverage remains incomplete; shared desktop persistence tests exist. Mobile browser behavior was not verified. Owner should inspect the native hold-to-drag interaction before release.
+- No linked GitHub issues or PRs. Moved review/ → ready/ under factory policy (no P0/P1); not merged or released.
