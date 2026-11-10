@@ -3,13 +3,18 @@
 // copies of ComposerMeasure and composerLayout), a 38pt add button, the field and the actions, with
 // the frames, boxes, row mode and the field's own measured text height (what it shows, at the width
 // it has) read out as text. A second row is read-only, as a disabled composer is; a third has wider
-// actions, as with the model picker and voice input.
+// actions, as with the model picker and voice input. Each row has a placeholder in its slot
+// (ComposerFieldSlot.tsx), long ones in English, Japanese and Chinese, and the last row none; the
+// placeholder's frame and laid-out lines are read out too. `<row>-field` is the slot's frame in the
+// row (the field's place), `<row>-input-box` the input's in the slot.
 import type { Bounds } from "nsh";
 import { effect, mount, signal, Text, token, untracked, View, windowSize } from "nsh";
 import { Input } from "nsh/base";
-import { COMPOSER_FIELD_TEXT, COMPOSER_LINE_HEIGHT, composerFieldBox, composerFrameClass, composerRowClass } from "../../components/chat/composerField";
+import { COMPOSER_LINE_HEIGHT, composerFieldBox, composerFrameClass, composerRowClass } from "../../components/chat/composerField";
+import { COMPOSER_INPUT_CLASS, ComposerFieldSlot, composerPlaceholderShown } from "../../components/chat/ComposerFieldSlot";
 import { ComposerMeasure, INITIAL_MEASURES } from "../../components/chat/ComposerMeasure";
 import { composerLayout, ONE_ROW, sameComposerLayout, type ComposerLayout } from "../../components/chat/composerRows";
+import { PLACEHOLDERS } from "./composerPlaceholders";
 
 type Frame = { x: number; y: number; w: number; h: number };
 
@@ -26,7 +31,7 @@ function track(name: string) {
   };
 }
 
-function FieldRow(props: { name: string; readonly?: boolean; tools?: boolean }) {
+function FieldRow(props: { name: keyof typeof PLACEHOLDERS; readonly?: boolean; tools?: boolean }) {
   const value = signal("");
   const measures = signal(INITIAL_MEASURES);
   const actionsWidth = signal(0);
@@ -94,18 +99,31 @@ function FieldRow(props: { name: string; readonly?: boolean; tools?: boolean }) 
       <View class={composerRowClass(multi())} onLayout={track(`${props.name}-row`)}>
         <ComposerMeasure text={value()} actionsWidth={actionsWidth()} onMeasure={(next) => measures.set(next)} />
         <If when={!multi()}>{control("add")}</If>
-        <Input
-          value={value()}
-          multiline
-          readonly={props.readonly}
-          placeholder="Ask anything"
-          testID={`${props.name}-input`}
-          onChange={({ value: next }) => value.set(next)}
-          onContentSizeChange={({ size }) => shown.set(Math.ceil(size.height))}
-          onLayout={track(`${props.name}-field`)}
-          class={`${COMPOSER_FIELD_TEXT} text-foreground placeholder:text-muted-foreground ${layout().rows === "one" ? "flex-1" : layout().rows === "wide" ? "w-full" : ""}`}
-          style={{ ...box(), ...width() }}
-        />
+        <ComposerFieldSlot
+          rows={layout().rows}
+          style={width()}
+          placeholder={PLACEHOLDERS[props.name]}
+          shown={composerPlaceholderShown(PLACEHOLDERS[props.name], value(), false)}
+          lineTop={box().paddingTop}
+          onLayout={(bounds) => track(`${props.name}-field`)({ bounds })}
+          onPlaceholderLayout={(bounds) => track(`${props.name}-placeholder`)({ bounds })}
+          onPlaceholderTextLayout={(lines) => put(`${props.name}-placeholder-lines`, lines.map((line) => ({ text: line.text, w: line.bounds.size.width })))}
+          testID={`${props.name}-placeholder`}
+        >
+          <Input
+            value={value()}
+            multiline
+            readonly={props.readonly}
+            placeholder={PLACEHOLDERS[props.name]}
+            accessibilityLabel={PLACEHOLDERS[props.name]}
+            testID={`${props.name}-input`}
+            onChange={({ value: next }) => value.set(next)}
+            onContentSizeChange={({ size }) => shown.set(Math.ceil(size.height))}
+            onLayout={track(`${props.name}-input-box`)}
+            class={COMPOSER_INPUT_CLASS}
+            style={box()}
+          />
+        </ComposerFieldSlot>
         <If when={!multi()}>{actions()}</If>
         <If when={multi()}>
           <View class="flex-row items-center justify-between" onLayout={track(`${props.name}-controls`)}>
@@ -126,6 +144,7 @@ mount(() => (
     <FieldRow name="live" />
     <FieldRow name="readonly" readonly />
     <FieldRow name="tools" tools />
+    <FieldRow name="bare" />
     <Text>{JSON.stringify(report())}</Text>
   </View>
 ));

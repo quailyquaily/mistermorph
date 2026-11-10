@@ -1,6 +1,6 @@
 // The composer's text on one row shares the centre line of the add button and Send beside it:
-// empty (its placeholder), with text and focus (typing focuses it), and read-only, on a desktop and a phone. Text that
-// wraps moves the field above the controls as before, and clearing it brings the one row back with
+// empty (its placeholder, one line whatever its length), with text and focus (typing focuses it),
+// and read-only, on a desktop and a phone. Text that wraps moves the field above the controls as before, and clearing it brings the one row back with
 // the same geometry. At the wrapping boundary the composer is either the one row with one line or
 // the whole two-row layout with two lines or more, never the taller layout holding one line, and
 // it gets there the same way back. The boxes come from components/chat/composerField.ts and
@@ -9,6 +9,8 @@
 import type { App } from "nsh/test";
 import { expect, open, test } from "nsh/test";
 import { COMPOSER_CONTROL_SIZE, COMPOSER_LINE_HEIGHT, composerFieldBox, composerFrameBorder, composerFrameClass, composerRowClass } from "../components/chat/composerField";
+import { COMPOSER_INPUT_CLASS, COMPOSER_PLACEHOLDER_STYLE, composerPlaceholderShown, composerSlotClass } from "../components/chat/ComposerFieldSlot";
+import { PLACEHOLDERS } from "./fixtures/composerPlaceholders";
 
 type Frame = { x: number; y: number; w: number; h: number };
 type State = {
@@ -108,6 +110,112 @@ for (const [device, options] of [
     expectAligned(report(), "live");
   });
 }
+
+// The placeholder (components/chat/ComposerFieldSlot.tsx) is one line laid over the field's first
+// line box, cut with an ellipsis when it does not fit: long English, Japanese and Chinese ones at
+// phone widths take no more room than none at all, and leave the rows, the field's box and the
+// draft's measures as they are. (Headless runs lay a text out on one line whatever its width, so
+// the ellipsis itself is checked in a browser; here, its place, its box and its single line.)
+const WITH_PLACEHOLDER = ["live", "readonly", "tools"] as const;
+
+function expectPlaceholderLine(report: Record<string, any>, name: string) {
+  const state = report[`${name}-state`] as State;
+  const field = report[`${name}-field`] as Frame;
+  const placeholder = report[`${name}-placeholder`] as Frame;
+  expect(state.rows).toBe("one");
+  // Across the field, on the line the draft's first line takes, one line tall.
+  near(placeholder.x, 0);
+  near(placeholder.w, field.w);
+  near(placeholder.y, state.box.paddingTop);
+  near(placeholder.h, COMPOSER_LINE_HEIGHT);
+  const lines = report[`${name}-placeholder-lines`] as { text: string; w: number }[];
+  expect(lines.length).toBe(1);
+  expect(lines[0].w).toBeLessThanOrEqual(field.w + 0.5);
+  // The input fills its slot: the slot's frame is the field's.
+  const input = report[`${name}-input-box`] as Frame;
+  near(input.x, 0);
+  near(input.y, 0);
+  near(input.w, field.w);
+  near(input.h, field.h);
+}
+
+for (const [device, options] of [
+  ["a desktop", { width: 760, platform: "linux" as const }],
+  ["a narrow desktop window", { width: 480, platform: "linux" as const }],
+  ["a phone", { width: 390 }],
+  ["a small phone", { width: 320 }],
+] as const) {
+  test(`on ${device} long placeholders take one line in the one-row field, as an empty one does`, async () => {
+    const { app, report } = await openRow(options);
+    await app.waitUntil(() => WITH_PLACEHOLDER.every((name) => report()[`${name}-placeholder-lines`]) && !!report()["bare-state"]);
+    await frames(app);
+    const all = report();
+    for (const name of WITH_PLACEHOLDER) {
+      expectAligned(all, name);
+      expectPlaceholderLine(all, name);
+      expect(app.shows(`id:${name}-placeholder`)).toBe(true);
+      // The hidden copies measure the empty draft, not the placeholder.
+      near(all[`${name}-state`].measures.oneRow, all["bare-state"].measures.oneRow);
+      near(all[`${name}-state`].measures.twoRows, all["bare-state"].measures.twoRows);
+      expect(all[`${name}-state`].changes).toBe(0);
+    }
+    // With the same controls beside it, a long placeholder's field is exactly the field without one.
+    for (const key of ["field", "row", "shell"]) expect(all[`live-${key}`].h).toBe(all[`bare-${key}`].h);
+    near(all["live-field"].w, all["bare-field"].w);
+    // No placeholder: nothing drawn.
+    expectAligned(all, "bare");
+    expect(app.shows("id:bare-placeholder")).toBe(false);
+    for (const text of Object.values(PLACEHOLDERS).filter(Boolean)) expect(app.texts().filter((shown) => shown === text).length).toBe(1);
+  });
+
+  test(`on ${device} typing hides the placeholder, and clearing a multiline draft brings it back on one line`, async () => {
+    const { app, report } = await openRow(options);
+    const state = () => report()["live-state"] as State;
+    await app.waitUntil(() => app.shows("id:live-placeholder"));
+    await app.type("id:live-input", "H");
+    await app.waitUntil(() => state().value === "H");
+    expect(app.shows("id:live-placeholder")).toBe(false);
+    expectAligned(report(), "live");
+    // Real text still wraps and moves the field above the controls.
+    await app.type("id:live-input", LATIN);
+    await app.waitUntil(() => state().rows === "wide");
+    expect(app.shows("id:live-placeholder")).toBe(false);
+    const backToOneRow = async () => {
+      await app.waitUntil(() => state().value === "" && state().rows === "one" && app.shows("id:live-placeholder"));
+      await app.waitUntil(() => !!report()["live-placeholder"] && Math.abs((report()["live-field"] as Frame).h - COMPOSER_CONTROL_SIZE) < 0.5);
+      await frames(app);
+      expectAligned(report(), "live");
+      expectPlaceholderLine(report(), "live");
+    };
+    await app.clear("id:live-input");
+    await backToOneRow();
+    // A draft of several lines, pasted, then cleared.
+    await app.paste("id:live-input", { text: "one\ntwo\nthree" });
+    await app.waitUntil(() => state().rows === "wide");
+    expect(app.shows("id:live-placeholder")).toBe(false);
+    await app.clear("id:live-input");
+    await backToOneRow();
+    // A read-only field keeps its placeholder, as before.
+    expect(app.shows("id:readonly-placeholder")).toBe(true);
+  }, 60000);
+}
+
+test("the placeholder is one line cut with an ellipsis, shown for an empty draft with nothing composed", () => {
+  expect(COMPOSER_PLACEHOLDER_STYLE).toEqual({ numberOfLines: 1, textOverflow: "ellipsis", lineHeight: COMPOSER_LINE_HEIGHT });
+  expect(composerPlaceholderShown("Tell Morph anything", "", false)).toBe(true);
+  expect(composerPlaceholderShown("Tell Morph anything", "h", false)).toBe(false);
+  expect(composerPlaceholderShown("Tell Morph anything", "\n", false)).toBe(false);
+  // An input method composing in an empty field: its text is not in the draft yet everywhere.
+  expect(composerPlaceholderShown("Tell Morph anything", "", true)).toBe(false);
+  for (const none of ["", null, undefined]) expect(composerPlaceholderShown(none, "", false)).toBe(false);
+  // The field keeps a placeholder of its own for screen readers (on the web, its textarea's only
+  // accessible name), but draws it transparent: what wraps there is never seen.
+  expect(COMPOSER_INPUT_CLASS.split(" ")).toContain("placeholder:text-transparent");
+  // The slot takes the place the field took in each layout.
+  expect(composerSlotClass("one")).toBe("flex-1");
+  expect(composerSlotClass("wide")).toBe("w-full");
+  expect(composerSlotClass("narrow")).toBe("");
+});
 
 // The boundary between one row and two. The field's own report of its text (`shown`, at the width
 // it has) is what the user sees: one line on one row, two lines or more on two rows.
