@@ -8,7 +8,9 @@
 //   asks for the permission. A microphone is not required to install the app.
 // - task notifications (android/src, TaskNotifier): the notification permission (asked only from
 //   Settings' notifications row), the job that watches the server while the app is away, the
-//   transparent activity that asks for the permission and the one a pressed notification starts.
+//   transparent activity that asks for the permission and the one a pressed notification starts,
+//   and the network-state permission the job's network constraint needs (Android 14+ refuses to
+//   schedule a job with a network constraint without it for apps targeting API 34+).
 //
 //   node scripts/android-manifest.mjs AndroidManifest.xml     patches the file in place
 import { readFileSync, writeFileSync } from "node:fs";
@@ -41,6 +43,10 @@ export function patchManifest(xml) {
   }
   if (!out.includes("android.permission.POST_NOTIFICATIONS")) {
     out = out.replace(/<application\b/, '<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />\n    <application');
+  }
+  if (!out.includes("android.permission.ACCESS_NETWORK_STATE")) {
+    // A normal permission, granted at install: nothing asks for it.
+    out = out.replace(/<application\b/, '<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />\n    <application');
   }
   if (!out.includes(APPLICATION)) {
     if (/<application\b[^>]*\sandroid:name=/.test(out)) {

@@ -78,7 +78,7 @@ ln -s "$runtime/lib" "$shim/nsh-runtime/android/release/lib"
 # console server is usually plain http:// on the local network, nsh's Android runtime fetches through
 # HttpURLConnection, which enforces it, and `nsh package` declares it only for its development
 # builds), voice input's permission, Application and permission activity, and the task
-# notifications' permission, activities and job. So nsh runs with an
+# notifications' permissions, activities and job. So nsh runs with an
 # SDK whose aapt2 patches the manifest before linking it; everything else is the real SDK.
 tools="$shim/sdk/build-tools/$(basename "$build_tools")"
 mkdir -p "$tools"
@@ -113,6 +113,7 @@ rm -f "$built"
 if [[ "$format" == apk ]]; then
   manifest=$("$build_tools/aapt2" dump xmltree --file AndroidManifest.xml "$built")
   for wanted in usesCleartextTraffic android.permission.RECORD_AUDIO android.permission.POST_NOTIFICATIONS \
+    android.permission.ACCESS_NETWORK_STATE \
     com.mistermorph.console.MorphApplication com.mistermorph.console.VoicePermissionActivity \
     com.mistermorph.console.NotificationPermissionActivity com.mistermorph.console.NotificationOpenActivity \
     com.mistermorph.console.TaskNotifierJob; do

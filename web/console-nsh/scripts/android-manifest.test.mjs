@@ -63,6 +63,30 @@ test("adds the notification permission, its activities and the watcher's job", (
   assert.equal(out.split("android.intent.category.LAUNCHER").length, 2);
 });
 
+test("adds the network-state permission the watcher's network-constrained job needs", () => {
+  const out = patchManifest(NSH_MANIFEST);
+  // Android 14+ refuses to schedule a job with a network constraint without it (targeting API 34+).
+  assert.match(out, /<uses-permission android:name="android\.permission\.ACCESS_NETWORK_STATE" \/>/);
+  assert.ok(out.indexOf("ACCESS_NETWORK_STATE") < out.indexOf("<application"));
+  assert.equal(out.split("android.permission.ACCESS_NETWORK_STATE").length, 2);
+  // Patching again adds it no second time.
+  assert.equal(patchManifest(out).split("android.permission.ACCESS_NETWORK_STATE").length, 2);
+});
+
+test("keeps a network-state permission the manifest declares already", () => {
+  const declared = NSH_MANIFEST.replace(
+    '<uses-permission android:name="android.permission.INTERNET" />',
+    '<uses-permission android:name="android.permission.INTERNET" />\n    ' +
+      '<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />',
+  );
+  const out = patchManifest(declared);
+  assert.equal(out.split("android.permission.ACCESS_NETWORK_STATE").length, 2);
+  // Its other additions still come.
+  assert.match(out, /android\.permission\.POST_NOTIFICATIONS/);
+  assert.ok(out.includes(NOTIFIER_JOB));
+  assert.equal(patchManifest(out), out);
+});
+
 test("is idempotent and keeps what nsh already declares", () => {
   const once = patchManifest(NSH_MANIFEST);
   assert.equal(patchManifest(once), once);

@@ -155,7 +155,8 @@ final class AndroidTaskNotifications implements TaskNotifier.Platform {
         try {
             scheduler.schedule(job.build());
         } catch (RuntimeException e) {
-            // Too many jobs, or a manifest without the service: no watch, and nothing else breaks.
+            // Too many jobs, or a manifest without the service or ACCESS_NETWORK_STATE (which the network
+            // constraint needs on Android 14+): no watch, and nothing else breaks.
         }
     }
 }

@@ -69,6 +69,10 @@ asking the row says to allow notifications in the system settings. On older vers
 allowed unless they were turned off. Turning the app's notifications, or its "Topic task notifications"
 channel, off in the system settings stops the watch at its next request. The app never asks by itself.
 
+The manifest also declares `ACCESS_NETWORK_STATE`, a normal permission granted at install: the job waits
+for a network, and Android 14 and newer refuse to schedule such a job for an app targeting API 34+
+without it (the APK targets API 35).
+
 ## Limits
 
 - Delivery is not instant in every case. JobScheduler runs the job when Android allows: Doze and app
@@ -95,8 +99,8 @@ channel, off in the system settings stops the watch at its next request. The app
 - `web/console-nsh/scripts/android-host.sh test`: `TaskNotifierTest`, the watcher on the JDK against a
   local HTTP server: once per device, foreground suppression, exclusions, permission and sign-out,
   ended sessions, retries, untitled topics, process restarts, the job's pacing.
-- `node --test web/console-nsh/scripts/android-manifest.test.mjs`: the permission, activities and job in
-  the APK's manifest.
+- `node --test web/console-nsh/scripts/android-manifest.test.mjs`: the permissions, activities and job in
+  the APK's manifest; `scripts/build-android.sh` checks them again in the built APK.
 - `nsh test tests/android-notifications.test.tsx` and `tests/background-task-notifications.test.tsx`
   (in `web/console-nsh`, with `--web-host tests/noHost.js`): configuration, the Settings row, pressed
   notifications (also of a deleted topic), and the page stepping aside.
