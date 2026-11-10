@@ -45,3 +45,17 @@ Feasibility resolved: latest base provides repository-owned Android Java extensi
 Tests: coder passed gofmt, go vet ./..., go test ./... (162 packages); manager independently reran the complete configured command successfully with an absolute throwaway HOME. Coder also passed nsh check, nsh tests (413), Android notifier tests (15), existing voice tests (15), manifest tests (4), core Node tests (247), and Android APK build. Coder's live server/JVM watcher check confirmed unauthorized rejection, running-task tracking and exactly one completion notification. All scripted tests used throwaway HOME.
 
 Installs: none new; existing JDK/Android SDK reused. No real device or emulator available: UI appearance, OS permission dialog, notification taps, Doze and process-killed delivery were not verified. Doze/vendor throttling can delay delivery; force-stop/reboot requires reopening; server restart loses history; network/session needed; no iOS support. Review should especially inspect native lifecycle/job scheduling and these limitations.
+
+## factory · review · 2026-11-10 17:51
+head: d91ff341dfd406dd31a6c9260d2bdb59d0387454
+verdict: fix
+fix:
+- [P1] web/console-nsh/scripts/android-manifest.mjs:42: Declare android.permission.ACCESS_NETWORK_STATE. AndroidTaskNotifications.java:152-159 schedules a network-constrained JobScheduler job; Android 14+ requires this permission for apps targeting API 34+. The APK targets API 35 but lacks it, so scheduling throws SecurityException, silently caught, and background task notifications never run. Add manifest-test coverage and the build-android.sh permission assertion.
+
+Example: on Android 14/15, enable notifications, submit a non-cron chat task, then switch apps. Scheduling the background watcher throws because ACCESS_NETWORK_STATE is absent; task completion produces no notification. This is verified from the code/manifest and Android's documented platform contract, not a device reproduction.
+Reference: https://developer.android.com/about/versions/14/behavior-changes-14#jobscheduler
+
+Validation: Claude Code reviewed origin/master...HEAD; configured gofmt/vet/go test command passed (162 packages); nsh check passed; nsh tests 413/413; native TaskNotifier tests 15/15 and VoiceController tests passed; manifest tests 4/4. Tests used an absolute throwaway HOME. Manager verified clean tracked worktree and unchanged reviewed head. No new installs. No linked issues or PRs.
+Residual risks: no device/emulator checks for permission dialog, appearance, notification taps, Doze/vendor throttling or process-killed delivery. APK was inspected, not rebuilt during review. Foreground tap routing and battery behavior remain unverified. Existing documented force-stop/reboot, server-history and iOS limitations remain.
+
+Round 1 of 3: moved review/ → new/ for a fix round.
