@@ -31,3 +31,14 @@ UI: Coder compared Chrome before/after screenshots at desktop 1280, mobile 420, 
 Not checked: native desktop app and real Android device/emulator.
 Push initially required credential.useHttpPath=true; retry with command-local setting succeeded.
 Move: new/ → review/.
+
+## factory · review · 2026-11-10 15:28
+head: 08e22874f8cbaf0ac49b9817f244196255c612dc
+verdict: pass
+notes:
+- Claude Code reviewed all seven changed files against the request and plan on origin/master...HEAD; no qualifying findings. The branch merges cleanly with current master. Review made no edits or commits; working tree verified clean.
+- Validation: gofmt check, go vet ./..., go test ./..., and nsh check passed with a throwaway HOME. Final full console suite passed: 409 passed, 0 failed; all six new desktop search tests and updated pull-search tests passed.
+- Initial console suite: 408 passed, 1 failed; settings-integrations-channels X login test timed out waiting for the approval message after 5000 ms. Three isolated reruns and the second full suite passed. Suspected timing flake; not reproduced against base, so pre-existing status is unverified.
+- Installs: none.
+- Residual risks: this review did not independently render UI or validate native desktop/Android. Contacts desktop loading lacks automated coverage; desktop-width browser pull-to-reveal was not exercised. Earlier build reports visual checks, not independently repeated here.
+- Move: review/ → ready/.
