@@ -81,7 +81,11 @@ function StatusDot(props: {
 }) {
   return (
     <View
-      ref={props.ref}
+      // A callback, never `ref={props.ref}`: with no ref passed (no `onPartLayout`), the compiled
+      // `ref={props.ref}` assigns the node to `props.ref`, which the web runtime refuses ("Cannot
+      // redefine property: ref"): mounting a status mark threw and the list froze (the TODO view
+      // opened while a run went on kept showing the date list). Headless tests (QuickJS) never threw.
+      ref={(node: ViewRef) => props.ref?.(node)}
       onLayout={props.onLayout}
       role="image"
       accessibilityLabel={props.label}
