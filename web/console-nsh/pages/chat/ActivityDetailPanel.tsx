@@ -4,6 +4,9 @@
 // panel (the page has one right panel: opening either closes the other), in the same shell: a
 // 314pt column beside the conversation on wide windows, the right sheet on phones.
 //
+// A plan, progress and a worker's output are drawn on one dark terminal (ChatTerminal); reasoning
+// is the reply's own rich text.
+//
 // It reads the reply from the live history by id (activityDetail.ts), so a plan, progress,
 // reasoning or output still streaming keeps growing here; its scroller follows the end of what
 // grows at the end (progress, output, reasoning being written) unless the reader scrolled up.
@@ -18,7 +21,8 @@ import { activityDetailKey, type ActivityDetailRef } from "../../components/chat
 import type { ArtifactPreviews } from "../../components/chat/ArtifactPreviewCard";
 import type { HistoryItem } from "../../components/chat/ChatHistoryItem";
 import { ChatRichContent } from "../../components/chat/ChatRichContent";
-import { activityEntries, ChatActivityEntries, ChatPlanSteps, planProgress, TERMINAL_BG } from "../../components/chat/ChatStatusCard";
+import { activityEntries, ChatActivityEntries, ChatPlanSteps, planProgress } from "../../components/chat/ChatStatusCard";
+import { ChatTerminal } from "../../components/chat/ChatTerminal";
 import { ChatWorkerOutput, replyWorkers, WorkerAvatar } from "../../components/chat/ChatWorkerRoster";
 import { t } from "../../components/chat/i18n";
 import { PinnedScroll } from "../../components/chat/PinnedScroll";
@@ -161,14 +165,14 @@ export function ActivityDetailPanel(props: {
           testID={`chat-detail-${kind()}`}
         >
           <If when={kind() === "plan"}>
-            <View class={`gap-2 rounded-(--radius) p-3 ${TERMINAL_BG}`}>
+            <ChatTerminal>
               <ChatPlanSteps itemID={props.detail.itemID} plan={item()?.plan} />
-            </View>
+            </ChatTerminal>
           </If>
           <If when={kind() === "activity"}>
-            <View class={`gap-2 rounded-(--radius) p-3 ${TERMINAL_BG}`}>
+            <ChatTerminal>
               <ChatActivityEntries itemID={props.detail.itemID} activity={{ ...(item()?.activity ?? {}), history: entries(), current: null }} />
-            </View>
+            </ChatTerminal>
           </If>
           <If when={kind() === "reasoning"}>
             <View class="px-1">
@@ -184,9 +188,9 @@ export function ActivityDetailPanel(props: {
           </If>
           <If when={kind() === "worker" && worker()}>
             {(entry) => (
-              <View class="px-1">
+              <ChatTerminal>
                 <ChatWorkerOutput worker={entry()} />
-              </View>
+              </ChatTerminal>
             )}
           </If>
         </PinnedScroll>

@@ -2,7 +2,7 @@
 // time or duration before them). A column opens its panel in the temporary detail panel beside the
 // conversation (pages/chat/ActivityDetailPanel.tsx), never inside the conversation: which one is
 // open is the page's state (activityDetail.ts). The plan's steps and the activity's entries are
-// drawn here, as a dark terminal, for that panel. Ported from
+// drawn here, on its dark terminal (ChatTerminal.tsx), for that panel. Ported from
 // web/console/src/components/ChatStatusCard.js.
 import type { JSX, ViewRef } from "nsh";
 import { effect, Text, View } from "nsh";
@@ -11,6 +11,7 @@ import { Icon, StatusMark } from "../ui";
 import { localeState } from "../../lib/core/context.js";
 import { t } from "./i18n";
 import { activityWorkerLabel } from "../../lib/core/chat-task-history.js";
+import { TERMINAL_ERROR, TERMINAL_FG, TERMINAL_LABEL, TERMINAL_MUTED, TERMINAL_VALUE, terminalNoteClass } from "./ChatTerminal";
 
 export const PANEL_PLAN = "plan";
 export const PANEL_ACTIVITY = "activity";
@@ -128,15 +129,6 @@ function entryNote(entry: any) {
   return cleanText(entry?.summary);
 }
 
-// The details panel is a dark terminal on every screen, as in the Vue console: its own ink (the
-// page's foreground with a touch of blue), light text, and the theme's light accents for status.
-export const TERMINAL_BG = "bg-[#1b1f3b]";
-const TERMINAL_FG = "text-[#e8eef5]";
-const TERMINAL_MUTED = "text-[#d5e0ecb2]";
-const TERMINAL_NOTE = "text-[#e8eef5d1]";
-const TERMINAL_VALUE = "text-[#d9e3ee]";
-const TERMINAL_ERROR = "text-[#e08a9e]";
-
 /** A status square's colour on the terminal. */
 function dotColor(status: string) {
   switch (status) {
@@ -245,7 +237,7 @@ export function ChatActivityEntries(props: { itemID: string; activity: any }) {
           <View class="flex-1 gap-1">
             <View class="flex-row flex-wrap items-baseline gap-1.5">
               <If when={kindLabel(entry())}>
-                <Text class={`font-mono text-xs uppercase ${TERMINAL_MUTED}`}>{kindLabel(entry())}</Text>
+                <Text class={TERMINAL_LABEL}>{kindLabel(entry())}</Text>
               </If>
               <Text class={`text-sm font-medium ${TERMINAL_FG}`}>
                 {entryTitle(entry())}
@@ -273,7 +265,7 @@ export function ChatActivityEntries(props: { itemID: string; activity: any }) {
             </If>
             <If when={entryNote(entry()) && children(entry()).length === 0}>
               <View selectable>
-                <Text class={`text-xs ${cleanText(entry()?.error) ? TERMINAL_ERROR : TERMINAL_NOTE}`}>{entryNote(entry())}</Text>
+                <Text class={terminalNoteClass(Boolean(cleanText(entry()?.error)))}>{entryNote(entry())}</Text>
               </View>
             </If>
             <If when={children(entry()).length > 0}>
