@@ -1,24 +1,55 @@
 // Whether the composer lays out in one row (add, field, actions) or two (the field above a row of
-// the controls). The answer changes the field's width, and the width changes how many lines the
-// text takes: a line that wraps beside the controls can fit on the wider field above them. Deciding
-// from the measured height alone flips the layout on every layout pass for such a line, rebuilding
-// the controls each time; on a phone that runs until the page runs out of memory. So the switch is
-// one way per edit: text that wraps moves the field up, and it comes back down only once the text
-// fits one line, has no line break, and is shorter than when it moved up (or is empty). Coming
-// back down then always takes an edit, never just a layout.
+// the controls), and how wide its text is. Moving the field above the controls widens it, so a line
+// that wraps beside the controls can fit one line above them. Decided from the field's own height,
+// the answer changed the width it was measured at: the rows flipped on every layout pass, or, held
+// one way per edit, the taller two-row layout showed a single line of text until the line was long
+// enough to wrap the wider field too.
+//
+// So the rows come from the draft's height at both widths, measured by hidden copies of the field
+// whose widths do not depend on the rows (ComposerMeasure.tsx):
+//
+// - one line beside the controls: one row;
+// - more than that, but one line above them: two rows, with the text still as wide as beside the
+//   controls, so it shows on the lines it took there (the two-row layout never holds one line);
+// - more than one line above the controls too (a long line), or a line break: two rows at the full
+//   width, where the text also takes two lines or more.
+//
+// The same draft in the same window always gets the same layout, however it got there: typing,
+// deleting, pasting, clearing, sending or resizing. Nothing holds a layout for an edit to come.
+import { COMPOSER_LINE_HEIGHT } from "./composerField";
 
-export interface ComposerRows {
-  multi: boolean;
-  /** The draft's length when the field moved above the controls. */
-  enteredAt: number;
+/** `one`: one row. `narrow`: two rows, the text as wide as on one row. `wide`: two rows, full width. */
+export type ComposerRows = "one" | "narrow" | "wide";
+
+/** The draft's laid-out height beside the controls (`oneRow`) and above them (`twoRows`). */
+export interface ComposerMeasures {
+  oneRow: number;
+  twoRows: number;
 }
 
-export const SINGLE_ROW: ComposerRows = { multi: false, enteredAt: 0 };
+/** The rows, and the height of the text at the width the field takes in them. */
+export interface ComposerLayout {
+  rows: ComposerRows;
+  height: number;
+}
 
-/** The rows for `text`, given whether its laid-out height is one line at the current width. */
-export function nextComposerRows(rows: ComposerRows, text: string, oneLine: boolean): ComposerRows {
-  if (!rows.multi) return oneLine ? rows : { multi: true, enteredAt: text.length };
-  if (text === "") return SINGLE_ROW;
-  if (oneLine && !text.includes("\n") && text.length < rows.enteredAt) return SINGLE_ROW;
-  return rows;
+export const ONE_ROW: ComposerLayout = { rows: "one", height: COMPOSER_LINE_HEIGHT };
+
+/** Whether a measured height is one line (a platform may measure a line a little taller). */
+export function composerOneLine(height: number): boolean {
+  return !(height > COMPOSER_LINE_HEIGHT * 1.5);
+}
+
+/** The layout for `text`, given its heights at the two widths. An empty draft is one row at once; a
+ *  line break is two lines or more at any width, so it takes the full width at once too. */
+export function composerLayout(text: string, measures: ComposerMeasures): ComposerLayout {
+  if (text === "") return ONE_ROW;
+  const lineBreak = text.includes("\n");
+  if (!lineBreak && composerOneLine(measures.oneRow)) return { rows: "one", height: measures.oneRow };
+  if (!lineBreak && composerOneLine(measures.twoRows)) return { rows: "narrow", height: measures.oneRow };
+  return { rows: "wide", height: lineBreak ? Math.max(measures.twoRows, 2 * COMPOSER_LINE_HEIGHT) : measures.twoRows };
+}
+
+export function sameComposerLayout(a: ComposerLayout, b: ComposerLayout): boolean {
+  return a.rows === b.rows && Math.abs(a.height - b.height) < 0.5;
 }
