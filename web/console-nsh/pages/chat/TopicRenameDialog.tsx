@@ -1,11 +1,14 @@
 // The topic rename dialog: the topic's name in a field to edit, a Regenerate button (its icon alone,
 // as tall as the field) that puts a generated name in the field, and Save, which alone renames the
-// topic (pages/chat/topicRename.ts). Enter in the field saves; Escape, the close button, the scrim
-// and Cancel leave the name as it was. A save under way holds the dialog until it answers. Cancel
-// and Save share the footer's width equally.
+// topic (pages/chat/topicRename.ts). Enter in the field saves, keeping the focus should it fail;
+// Escape, the close button, the scrim and Cancel leave the name as it was. A save under way holds
+// the dialog until it answers. Cancel and Save share the footer's width equally. However it
+// closes, the field lets go of the focus and the software keyboard goes down with it
+// (components/shared/dialogFieldFocus.ts).
 import { Text, View, type Bounds } from "nsh";
 import { Button, Modal, TextField } from "../../components/ui";
 import { InlineNotice } from "../../components/settings/DialogShell";
+import { createDialogFieldFocus } from "../../components/shared/dialogFieldFocus";
 import { t } from "../../components/chat/i18n";
 import { TOPIC_TITLE_MAX_LENGTH, type TopicRename } from "./topicRename";
 
@@ -18,6 +21,7 @@ export function TopicRenameDialog(props: {
   onPartLayout?: (part: TopicRenamePart, bounds: Bounds) => void;
 }) {
   const r = props.rename;
+  const focus = createDialogFieldFocus({ session: () => r.session() });
   const layout = (part: TopicRenamePart) => (event: { bounds: Bounds }) => props.onPartLayout?.(part, event.bounds);
   return (
     <Modal
@@ -59,11 +63,14 @@ export function TopicRenameDialog(props: {
             value={r.draft()}
             onChange={(value) => r.setDraft(value)}
             onSubmit={() => void r.save()}
+            // Enter keeps the focus: a blank or failed save leaves the dialog to type in.
+            submitBehavior="submit"
             placeholder={t("chat_topic_rename_placeholder")}
             accessibilityLabel={t("chat_topic_rename_label")}
             readonly={r.saving()}
             maxLength={TOPIC_TITLE_MAX_LENGTH}
             autoFocus
+            inputRef={(node) => focus.ref(node)}
             testID="chat-topic-rename-input"
           />
         </View>
