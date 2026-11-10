@@ -23,3 +23,6 @@ Change 4, the phone bottom bar, is revised: use the layout of Telegram's tab bar
 
 ## lyric · 2026-11-09 14:54
 Change 2, the sidebar edge, is revised: the bend uses the soft sag of change 1, upright (`x = edge − d·(1 − u²)²`, half-height 48 px, depth 4 px, 1.4 px stroke fading `#C8D4E4` → `#2463AE` → `#C8D4E4`). The sidebar's fill is drawn by the same path and stops at the line, so the page colour shows inside the bend and the sidebar's colour never runs past its edge. Values in `design/ui-refresh.html` §2.
+
+## factory · 2026-11-10 16:29
+Owner request in the current conversation: "可以移除 FT43". Cancelled and moved to stop/ to remove it from the active backlog while preserving its history. No implementation was performed.

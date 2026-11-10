@@ -16,3 +16,9 @@ Acceptance criteria:
 
 ## factory · 2026-11-09 21:23
 Moved to backlog: this item contains only a factory intake section, including a quoted owner request and acceptance criteria. There is no section signed by a configured owner (lyric). Under the factory rules, non-owner sections are information only, so the implementation scope cannot be authorized from this thread. An owner must add their request in a properly signed section and return the item to new/. No implementation or coder call was made.
+
+## lyric · 2026-11-10 16:29
+我是 Lyric，update FT47, 可以推进到 new/
+
+## factory · 2026-11-10 16:29
+The owner explicitly authorized returning FT47 to new/ in the current conversation. Proceed with the existing mobile background task-completion notification request and acceptance criteria above. No implementation has been started by this update.
