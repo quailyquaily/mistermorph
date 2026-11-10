@@ -28,3 +28,13 @@ Checks: Automated layout/scroll regressions cover 360, 760 and 1400pt. Browser s
 Installs: Temporary playwright-core browser automation dependency present in the run-local tooling directory; no project manifest or lockfile changed.
 Operational note: First branch push failed because GitHub credentials required a repository path; retry with command-scoped credential.useHttpPath=true succeeded.
 Moved new/ → review/. No linked issue or PR.
+
+## factory · review · 2026-11-11 05:52
+head: 22bd5c081f8062d1cd8a58397634c4bbe54c05a2
+verdict: pass
+notes:
+- Claude Code reviewed origin/master...HEAD: no findings. Branch merges cleanly with the fetched master.
+- Validation: gofmt check, go vet ./... and go test ./... passed; manager independently reran these gates with a throwaway HOME. nsh check passed; all 534 Console tests passed (0 failed).
+- Installs: no additional installs reported by the reviewer.
+- Residual risks: native Android/macOS behavior and real-device scrollbar appearance were not verified by this review.
+- Moved review/ → ready/. No linked issue or PR; no GitHub comment required.
