@@ -1,0 +1,48 @@
+---
+branch: factory/FT76-cron-toggle-clock-hands-loading
+round: 1
+---
+# Cron toggle loading should animate clock hands instead of using button loading styles
+
+## factory · 2026-11-11 00:34
+
+Recorded from the owner’s explicit request to add this correction to `new/`.
+
+Follow-up to shipped FT61. The owner rejects directly reusing button loading styling for the cron toggle and suggests animating the clock icon’s two hands like someone adjusting the time.
+
+### Acceptance criteria
+
+- Remove generic button-loading styling from the cron toggle pending state. Preserve the toggle’s own dimensions and visual identity.
+- Animate the minute and hour hands within the clock icon while the toggle request is pending; make them move distinctly like a clock being adjusted, rather than spinning the whole icon or using a generic button spinner.
+- End the animation on success or failure and show the correct resulting toggle state. Prevent duplicate pending requests and retain failure feedback/retry behavior.
+- Respect reduced-motion preferences with a clear non-animated pending indication. Verify the appearance directly, including pending, success, and failure states.
+
+Intake only; implementation has not started.
+
+## factory · plan · 2026-11-11 04:12
+
+Behaviour: keep the clock face fixed, animate minute/hour hands independently during activity, and restore the original idle pose on completion. Preserve selection, dimensions, and failure/retry semantics; reduced motion uses a distinct static pose. Empty/first-run states remain idle.
+
+Scope: the TODO-runs ViewToggle clock indicator, its animation component, and regression coverage; no scheduler or unrelated button redesign.
+
+Decisions: FT61's toggle represents running TODO activity and performs local navigation, not a network request. Keep navigation clickable while running; do not invent a pending request or deduplication requirement. Existing cron enable switches edit drafts. Use nsh-native animations and remove the generic BusyBeam only from this toggle.
+
+Checking: idle/running/selected geometry, separate hand angles/speeds, settling/restart/unmount, reduced motion, and navigation. Run repository Go checks, nsh check, and full nsh tests. Check appearance and success/failure transitions in browser where available.
+
+## factory · 2026-11-11 04:12
+
+Built and pushed `7e36ad2f` (with prerequisite `c50b266e`); new/ → review/, round 1.
+
+Added AdjustingClock: stationary alarm face and Canvas hands; minute hand eased over 1.2-second laps, hour hand at 1/12 speed. Idle returns to three o'clock. Reduced motion uses static blue ten-past-ten hands. The toggle retains its 38pt square, selection and navigation behavior. A failed activity poll preserves running indication until activity ends.
+
+A small prerequisite StatusDot ref callback fix prevents the browser topic list from freezing during activity, necessary for live toggle navigation. Other buttons and loading beams are unchanged. No prohibited paths changed.
+
+Tests: manager independently passed `test -z "$(gofmt -l .)" && go vet ./... && go test ./...` with throwaway HOME. Coder passed `nsh check` and full `nsh test --web-host tests/noHost.js`: 529 passed, 0 failed. Tests cover distinct hand motion, layout, selected states, stopping/restarting/remounting, reduced motion, and working presses.
+
+Visual checks reported by coder: Chrome component screenshots and live mock-LLM console at desktop/mobile sizes and reduced motion; running and failed polls, navigation mid-run, successful/failed completion restored idle pixels. Native desktop app and real Android device were not checked.
+
+Installs: none beyond pinned dependencies.
+
+IMPORTANT TEST ISOLATION INCIDENT: coder reported restarting test Console without throwaway HOME, writing test data to the real user state directory despite explicit isolation instructions. Reported effects: `_cron_slow-job` topic with five task records in task/stat projections, a test log, and agent.db/usage.db updates. No cleanup was attempted to avoid further unauthorized data changes. Owner notified; review should retain this warning. Subsequent test launcher reportedly refuses to start without isolated HOME.
+
+Recovery: preserved an older FT46 worktree's untracked scratch directory in a stash; no existing work discarded. Initial branch push failed because credential helper needed repository path; retried successfully with command-local credential.useHttpPath=true.
