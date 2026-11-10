@@ -158,6 +158,7 @@ func runLarkLoop(ctx context.Context, d Dependencies, opts RunOptions) error {
 	maxConcurrency := opts.MaxConcurrency
 	sem := make(chan struct{}, maxConcurrency)
 	workersCtx, stopWorkers := newLarkOwnedContext(ctx)
+	steerReplies := runtimecore.NewGenerationSteerResponder(workersCtx, runtimeGenerations, logger)
 	allowedChats := toAllowlist(opts.AllowedChatIDs)
 
 	serverListen := strings.TrimSpace(opts.ServerListen)
@@ -268,6 +269,8 @@ func runLarkLoop(ctx context.Context, d Dependencies, opts RunOptions) error {
 				TopicID:         job.ChatID,
 				TaskID:          job.TaskID,
 				RunID:           job.TaskID,
+				Task:            job.Text,
+				Conversation:    runtimecore.SteerConversation(h),
 			})
 			if err != nil {
 				if cancelLarkTaskOnWorkerShutdown(workerCtx, logger, daemonStore, job) {
@@ -531,9 +534,15 @@ func runLarkLoop(ctx context.Context, d Dependencies, opts RunOptions) error {
 		}
 		if !contextCompactionOnly && len(inbound.ImageKeys) == 0 && len(inbound.ImageAttachments) == 0 {
 			if result := runControl.Steer("lark", msg.ConversationKey, text); result.Found {
-				correlationID := fmt.Sprintf("lark:steer:%s:%s", inbound.ChatID, inbound.MessageID)
-				_, publishErr := publishLarkBusOutbound(ctx, inprocBus, inbound.ChatID, runtimecontrol.SteerFeedback(result.Found, result.Queued), inbound.MessageID, correlationID)
-				return publishErr
+				chatID, messageID := inbound.ChatID, inbound.MessageID
+				return steerReplies.Respond(result, func(replyCtx context.Context, reply runtimecontrol.SteerReply) error {
+					correlationID := fmt.Sprintf("lark:steer:%s:%s", chatID, messageID)
+					if reply.Followup {
+						correlationID += ":followup"
+					}
+					_, publishErr := publishLarkBusOutbound(replyCtx, inprocBus, chatID, reply.Text, messageID, correlationID)
+					return publishErr
+				})
 			}
 		}
 		if !lightweightDecided && !contextCompactionOnly && strings.TrimSpace(inbound.MessageID) != "" &&

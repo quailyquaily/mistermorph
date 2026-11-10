@@ -75,7 +75,8 @@ func remoteHistory(tasks map[string]taskdomain.TaskInfo) []remoteHistoryRow {
 		rows = append(rows, remoteHistoryRow{id: t.ID + ":" + role, task: t.ID, role: role, text: text, status: status, structured: structured})
 	}
 	// Same projection as Console: each target answer follows its latest loaded
-	// steer user. Missing targets are retained as associations, not invented.
+	// steer user and that steer's reply. Missing targets are retained as
+	// associations, not invented.
 	for _, t := range sorted {
 		if t.SteerTargetTaskID == "" {
 			continue
@@ -94,6 +95,10 @@ func remoteHistory(tasks map[string]taskdomain.TaskInfo) []remoteHistoryRow {
 		rows = append(rows[:idx], rows[idx+1:]...)
 		for i, r := range rows {
 			if r.id == t.ID+":user" {
+				// After the steer's own reply, when it follows.
+				if i+1 < len(rows) && rows[i+1].id == t.ID+":system" {
+					i++
+				}
 				rows = append(rows, remoteHistoryRow{})
 				copy(rows[i+2:], rows[i+1:])
 				rows[i+1] = answer

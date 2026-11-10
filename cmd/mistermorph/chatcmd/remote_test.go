@@ -322,7 +322,7 @@ func TestRemoteHistorySteering(t *testing.T) {
 	}
 	tasks["target"] = taskdomain.TaskInfo{ID: "target", Task: "first", CreatedAt: now, Status: taskdomain.TaskDone, Result: map[string]any{"final": map[string]any{"output": "answer"}}}
 	rows = remoteHistory(tasks)
-	if len(rows) != 4 || rows[1].id != "steer:user" || rows[2].id != "target:assistant" || !strings.Contains(rows[2].text, "answer") {
+	if len(rows) != 4 || rows[1].id != "steer:user" || rows[2].id != "steer:system" || rows[3].id != "target:assistant" || !strings.Contains(rows[3].text, "answer") {
 		t.Fatalf("projection: %+v", rows)
 	}
 }

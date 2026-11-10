@@ -64,6 +64,9 @@ func (p *sharedTopicsProvider) ServeHTTP(w http.ResponseWriter, r *http.Request)
 	if isTask {
 		output = `{"type":"final","output":"acceptance-answer","is_lightweight":false}`
 	}
+	if len(req.Messages) > 0 && strings.Contains(req.Messages[0].Content, "sent the message below while you were working on a task") {
+		output = "acceptance-steer-reply: I will keep the answer shorter."
+	}
 	if isTask && strings.Contains(req.Messages[len(req.Messages)-1].Content, "acceptance-approval") {
 		w.Header().Set("Content-Type", "text/event-stream")
 		fmt.Fprint(w, `data: {"id":"fake","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"approval-call","type":"function","function":{"name":"bash","arguments":"{\"cmd\":\"printf acceptance-approved\"}"}}]},"finish_reason":"tool_calls"}]}`+"\n\ndata: [DONE]\n\n")
@@ -300,13 +303,15 @@ func TestSharedTopicsIntegrationStopIsolationAndSteer(t *testing.T) {
 	}
 	b.wait(active.ID, daemonruntime.TaskRunning)
 	steer := b.submit(active.TopicID, "acceptance-steer-shorter", "")
-	if steer.SteerTargetTaskID != active.ID || steer.Status != daemonruntime.TaskDone {
+	if steer.SteerTargetTaskID != active.ID || steer.Status != daemonruntime.TaskRunning {
 		t.Fatalf("steer response: %+v", steer)
 	}
+	// The steer's reply is written by the model while the target keeps running.
 	stored := a.wait(steer.ID, daemonruntime.TaskDone)
-	if stored.SteerTargetTaskID != active.ID {
-		t.Fatalf("lost steer association: %+v", stored)
+	if stored.SteerTargetTaskID != active.ID || !strings.Contains(fmt.Sprint(stored.Result), "acceptance-steer-reply") {
+		t.Fatalf("steer task: %+v", stored)
 	}
+	b.wait(active.ID, daemonruntime.TaskRunning)
 	b.ok("POST", "/topics/"+active.TopicID+"/stop", nil, &stop)
 	if !stop.Found || stop.TopicID != active.TopicID || stop.Status != "stopping" {
 		t.Fatalf("target stop: %+v", stop)

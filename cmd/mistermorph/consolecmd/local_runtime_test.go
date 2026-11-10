@@ -1363,7 +1363,7 @@ func TestBuildConsoleTopicHistoryPlacesSteersBeforeTargetReply(t *testing.T) {
 			FinishedAt:        &secondSteerFinishedAt,
 			TopicID:           "topic_a",
 			SteerTargetTaskID: "task_target",
-			Result:            map[string]any{"output": runtimecontrol.FeedbackSteerAccepted},
+			Result:            map[string]any{"output": "Got it, I will adjust the story."},
 		},
 		{
 			ID:                "task_steer_1",
@@ -1373,7 +1373,7 @@ func TestBuildConsoleTopicHistoryPlacesSteersBeforeTargetReply(t *testing.T) {
 			FinishedAt:        &firstSteerFinishedAt,
 			TopicID:           "topic_a",
 			SteerTargetTaskID: "task_target",
-			Result:            map[string]any{"output": runtimecontrol.FeedbackSteerAccepted},
+			Result:            map[string]any{"output": "Got it, I will adjust the story."},
 		},
 		{
 			ID:         "task_target",
@@ -2788,77 +2788,6 @@ func TestConsoleLocalRuntimeStopCommandCancelsRunningTask(t *testing.T) {
 	}
 	if strings.TrimSpace(task.Error) != "stopped by user" {
 		t.Fatalf("task.Error = %q, want stopped by user", task.Error)
-	}
-}
-
-func TestConsoleLocalRuntimeSubmitTaskSteersRunningTask(t *testing.T) {
-	store, err := daemonruntime.NewConsoleFileStore(daemonruntime.ConsoleFileStoreOptions{
-		Persist: false,
-	})
-	if err != nil {
-		t.Fatalf("NewConsoleFileStore() error = %v", err)
-	}
-	topic, err := store.CreateTopic("Topic A")
-	if err != nil {
-		t.Fatalf("CreateTopic() error = %v", err)
-	}
-	reader := viper.New()
-	generation := &consoleLocalRuntimeGeneration{reader: reader}
-	control := runtimecontrol.New()
-	queue := runtimecontrol.NewSteerQueue(0)
-	rt := &consoleLocalRuntime{
-		store:                 store,
-		generation:            generation,
-		consoleExecutionState: newConsoleExecutionState(nil, nil),
-	}
-	rt.runControl = control
-	runCtx, cancel := context.WithCancelCause(context.Background())
-	defer cancel(nil)
-	conversationKey := buildConsoleConversationKey(topic.ID)
-	if err := control.Start(runtimecontrol.ActiveRun{
-		Runtime:         "console",
-		ConversationKey: conversationKey,
-		TopicID:         topic.ID,
-		TaskID:          "task_active",
-		RunID:           "task_active",
-		Cancel:          cancel,
-		SteerQueue:      queue,
-	}); err != nil {
-		t.Fatalf("RunControl.Start() error = %v", err)
-	}
-
-	resp, err := rt.submitTask(context.Background(), daemonruntime.SubmitTaskRequest{
-		Task:    "请改成简短回答",
-		TopicID: topic.ID,
-	})
-	if err != nil {
-		t.Fatalf("submitTask(steer) error = %v", err)
-	}
-	if resp.Status != daemonruntime.TaskDone {
-		t.Fatalf("resp.Status = %q, want %q", resp.Status, daemonruntime.TaskDone)
-	}
-	if resp.SteerTargetTaskID != "task_active" {
-		t.Fatalf("resp.SteerTargetTaskID = %q, want task_active", resp.SteerTargetTaskID)
-	}
-	if runCtx.Err() != nil {
-		t.Fatalf("steer canceled active run: %v", runCtx.Err())
-	}
-	items := queue.Drain()
-	if len(items) != 1 || strings.TrimSpace(items[0]) != "请改成简短回答" {
-		t.Fatalf("steer queue = %#v, want one queued input", items)
-	}
-	task, ok := store.Get(resp.ID)
-	if !ok || task == nil {
-		t.Fatalf("store.Get(%q) missing", resp.ID)
-	}
-	if task.SteerTargetTaskID != "task_active" {
-		t.Fatalf("task.SteerTargetTaskID = %q, want task_active", task.SteerTargetTaskID)
-	}
-	result, _ := task.Result.(map[string]any)
-	final, _ := result["final"].(map[string]any)
-	output := strings.TrimSpace(fmt.Sprint(final["output"]))
-	if output != runtimecontrol.FeedbackSteerAccepted {
-		t.Fatalf("final.output = %q, want steer acknowledgement", output)
 	}
 }
 

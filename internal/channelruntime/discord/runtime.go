@@ -189,6 +189,7 @@ func runDiscordLoop(ctx context.Context, d Dependencies, opts RunOptions) error 
 	defer generations.Close()
 	runControl := runtimecontrol.New()
 	workersCtx, stopWorkers := context.WithCancel(context.WithoutCancel(ctx))
+	steerReplies := runtimecore.NewGenerationSteerResponder(workersCtx, generations, logger)
 	sem := make(chan struct{}, opts.MaxConcurrency)
 	taskEnv := discordTaskEnv{api: api, bus: bus, receipts: receipts, logger: logger, botID: botID, botName: botName, fileLimit: discordtools.DefaultFileMaxBytes}
 
@@ -231,6 +232,7 @@ func runDiscordLoop(ctx context.Context, d Dependencies, opts RunOptions) error 
 		}
 		lease, err := runControl.StartLease(workerCtx, opts.TaskTimeout, runtimecontrol.ActiveRun{
 			Runtime: "discord", ConversationKey: conversationKey, TopicID: job.ChannelID, TaskID: job.TaskID, RunID: job.TaskID,
+			Task: job.Text, Conversation: runtimecore.SteerConversation(prior),
 		})
 		if err != nil {
 			markDiscordTaskFailed(logger, daemonStore, job.TaskID, err.Error(), false)
@@ -522,8 +524,24 @@ func runDiscordLoop(ctx context.Context, d Dependencies, opts RunOptions) error 
 			}
 			if !compactOnly {
 				if result := runControl.Steer("discord", conversationKey, text); result.Found {
+					// The reply fills a slash command's placeholder once it is written.
 					answered = true
-					return publishDiscordBusOutbound(handlerCtx, bus, inbound.ChannelID, runtimecontrol.SteerFeedback(result.Found, result.Queued), replyTo, "discord:steer:"+inbound.MessageID)
+					channelID, messageID := inbound.ChannelID, inbound.MessageID
+					return steerReplies.Respond(result, func(replyCtx context.Context, reply runtimecontrol.SteerReply) error {
+						target, correlationID := replyTo, "discord:steer:"+messageID
+						if reply.Followup {
+							// A slash command's placeholder already holds the reply.
+							correlationID += ":followup"
+							if fromInteraction {
+								target = ""
+							}
+						}
+						err := publishDiscordBusOutbound(replyCtx, bus, channelID, reply.Text, target, correlationID)
+						if err != nil && fromInteraction && !reply.Followup {
+							interactions.finish(context.WithoutCancel(replyCtx), messageID)
+						}
+						return err
+					})
 				}
 			}
 		}

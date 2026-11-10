@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/quailyquaily/mistermorph/agent"
@@ -13,11 +14,20 @@ import (
 
 var ErrStoppedByUser = errors.New("stopped by user")
 
+// steerSeq numbers steered inputs in the order they reach their runs, across run controls, so
+// replies keep that order even when a conversation's run moves to another control.
+var steerSeq atomic.Uint64
+
 const (
-	FeedbackNoActiveRun      = "🤔"
-	FeedbackStopped          = "👌"
-	FeedbackSteerUnavailable = "😵‍💫"
-	FeedbackSteerAccepted    = "👌"
+	FeedbackNoActiveRun = "🤔"
+	FeedbackStopped     = "👌"
+)
+
+// Why input steered into an active run was not queued (SteerResult.Reason).
+const (
+	SteerRejectedFinishing = "finishing"
+	SteerRejectedStopping  = "stopping"
+	SteerRejectedFull      = "full"
 )
 
 type ActiveRun struct {
@@ -30,6 +40,10 @@ type ActiveRun struct {
 	Snapshot        func() string
 	SteerQueue      *SteerQueue
 	EventSink       agent.EventSink
+	// Task is the request the run works on; Conversation is the conversation before it. Replies
+	// to steered input are written with both.
+	Task         string
+	Conversation []ConversationLine
 }
 
 type StopResult struct {
@@ -44,6 +58,26 @@ type SteerResult struct {
 	// steering it; Queued is set too.
 	Answered bool   `json:"answered,omitempty"`
 	TaskID   string `json:"task_id,omitempty"`
+	// Reason says why found input was not queued: SteerRejectedFinishing, Stopping or Full.
+	Reason string `json:"reason,omitempty"`
+
+	// What a SteerResponder needs to reply to the input.
+	control  *RunControl
+	entry    *activeRun
+	input    string
+	seq      uint64
+	ticket   *SteerTicket
+	question string
+}
+
+// Input is the steered input, trimmed.
+func (r SteerResult) Input() string {
+	return r.input
+}
+
+// Ticket follows a queued input; it is nil for an answer and for input that was not queued.
+func (r SteerResult) Ticket() *SteerTicket {
+	return r.ticket
 }
 
 type RunControl struct {
@@ -66,6 +100,12 @@ type activeRun struct {
 	Snapshot        func() string
 	SteerQueue      *SteerQueue
 	EventSink       agent.EventSink
+	Task            string
+	Conversation    []ConversationLine
+	startedAt       time.Time
+
+	// steerLog keeps the replies given to inputs steered into the run.
+	steerLog []SteerExchange
 
 	stopRequested bool
 	stopReason    string
@@ -168,6 +208,9 @@ func (c *RunControl) Start(run ActiveRun) error {
 		Snapshot:        run.Snapshot,
 		SteerQueue:      run.SteerQueue,
 		EventSink:       run.EventSink,
+		Task:            strings.TrimSpace(run.Task),
+		Conversation:    append([]ConversationLine(nil), run.Conversation...),
+		startedAt:       time.Now(),
 	}
 	if entry.SteerQueue == nil {
 		entry.SteerQueue = NewSteerQueue(0)
@@ -252,19 +295,39 @@ func (c *RunControl) Steer(runtime string, conversationKey string, input string)
 		c.mu.Unlock()
 		return SteerResult{}
 	}
-	taskID := strings.TrimSpace(entry.TaskID)
+	result := SteerResult{
+		Found:   true,
+		TaskID:  strings.TrimSpace(entry.TaskID),
+		control: c,
+		entry:   entry,
+		input:   input,
+		seq:     steerSeq.Add(1),
+	}
 	if entry.question != nil && !entry.question.choicesOnly && !entry.stopRequested {
+		result.question = entry.question.prompt
 		answerLocked(entry, Answer{Text: input, Option: -1})
 		c.mu.Unlock()
-		return SteerResult{Found: true, Queued: true, Answered: true, TaskID: taskID}
+		result.Queued, result.Answered = true, true
+		return result
 	}
-	if _, pushErr := entry.SteerQueue.Push(input); pushErr != nil {
+	if entry.stopRequested {
 		c.mu.Unlock()
-		return SteerResult{Found: true, TaskID: taskID}
+		result.Reason = SteerRejectedStopping
+		return result
+	}
+	ticket, _, pushErr := entry.SteerQueue.PushTicket(input)
+	if pushErr != nil {
+		c.mu.Unlock()
+		result.Reason = SteerRejectedFinishing
+		if errors.Is(pushErr, ErrSteerQueueFull) {
+			result.Reason = SteerRejectedFull
+		}
+		return result
 	}
 	c.mu.Unlock()
 	emitControlEvent(entry, agent.EventKindSteerQueued, "", input)
-	return SteerResult{Found: true, Queued: true, TaskID: taskID}
+	result.Queued, result.ticket = true, ticket
+	return result
 }
 
 func (c *RunControl) stopByKey(key runKey, reason string, expectedTaskID string) StopResult {
@@ -281,7 +344,7 @@ func (c *RunControl) stopByKey(key runKey, reason string, expectedTaskID string)
 		entry.stopRequested = true
 		entry.stopReason = reason
 		if entry.SteerQueue != nil {
-			entry.SteerQueue.Close()
+			entry.SteerQueue.closeAs(SteerStopped)
 		}
 	}
 	c.mu.Unlock()
@@ -339,14 +402,4 @@ func StopFeedback(found bool) string {
 		return FeedbackNoActiveRun
 	}
 	return FeedbackStopped
-}
-
-func SteerFeedback(found bool, queued bool) string {
-	if !found {
-		return FeedbackNoActiveRun
-	}
-	if !queued {
-		return FeedbackSteerUnavailable
-	}
-	return FeedbackSteerAccepted
 }

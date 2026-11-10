@@ -16,7 +16,6 @@ import (
 	"github.com/quailyquaily/mistermorph/internal/daemonruntime"
 	"github.com/quailyquaily/mistermorph/internal/llmstats"
 	"github.com/quailyquaily/mistermorph/internal/pathutil"
-	"github.com/quailyquaily/mistermorph/internal/runtimecontrol"
 	"github.com/quailyquaily/mistermorph/internal/statepaths"
 	"github.com/quailyquaily/mistermorph/internal/taskdomain"
 	"github.com/quailyquaily/mistermorph/internal/textutil"
@@ -169,28 +168,6 @@ func (s *chatSession) localTopicHistory(current daemonruntime.TaskInfo) ([]llm.M
 		boundaries = append(boundaries, chathistory.BoundaryForItem(item))
 	}
 	return messages, boundaries, chathistory.BoundaryForItem(chathistory.TaskInbound(current)), nil
-}
-
-func (s *chatSession) queueLocalSteer(turn *activeChatTurn, input string) error {
-	var task daemonruntime.TaskInfo
-	if s.sharedTopics != nil && turn.sharedTask != nil {
-		now := time.Now().UTC()
-		task = daemonruntime.TaskInfo{ID: llmstats.NewSyntheticRunID("chat-steer"), TopicID: turn.sharedTask.TopicID, Task: input, Status: daemonruntime.TaskDone, CreatedAt: now, FinishedAt: &now, SteerTargetTaskID: turn.sharedTask.ID, Result: map[string]any{"final": &agent.Final{Output: runtimecontrol.SteerFeedback(true, true)}}}
-		if err := s.sharedTopics.UpsertWithTrigger(task, daemonruntime.TaskTrigger{Source: "chat", Ref: s.chatOwner, Event: "chat_steer"}, ""); err != nil {
-			return err
-		}
-	}
-	_, err := turn.steerQueue.Push(input)
-	if err != nil && task.ID != "" {
-		if saveErr := s.sharedTopics.Update(task.ID, func(info *daemonruntime.TaskInfo) {
-			info.Status = daemonruntime.TaskFailed
-			info.Error = err.Error()
-			info.Result = nil
-		}); saveErr != nil {
-			return fmt.Errorf("%w; save failed instruction: %v", err, saveErr)
-		}
-	}
-	return err
 }
 
 func (s *chatSession) recordLocalResult(result chatTurnResult) error {

@@ -356,6 +356,8 @@ func (s *telegramRuntimeState) runJob(workerCtx context.Context, conversationKey
 		TopicID:         telegramContextTopicID(job),
 		TaskID:          job.TaskID,
 		RunID:           job.TaskID,
+		Task:            job.Text,
+		Conversation:    runtimecore.SteerConversation(history),
 	})
 	if err != nil {
 		if stateErr := runtimecore.MarkTaskFailed(s.taskStore, job.TaskID, strings.TrimSpace(err.Error()), false); stateErr != nil {
@@ -1269,9 +1271,19 @@ func (s *telegramRuntimeState) handleUpdate(update telegramUpdate) {
 	}
 	if !contextCompactionOnly && len(downloaded) == 0 && len(imageAttachments) == 0 {
 		if result := s.runControl.Steer("telegram", conversationKey, text); result.Found {
-			correlationID := fmt.Sprintf("telegram:steer:%d:%d", chatID, message.MessageID)
-			if _, publishErr := publishTelegramBusOutbound(context.Background(), s.inprocBus, chatID, messageThreadID, runtimecontrol.SteerFeedback(result.Found, result.Queued), "", correlationID); publishErr != nil {
-				s.logger.Warn("telegram_bus_publish_error", "channel", busruntime.ChannelTelegram, "chat_id", chatID, "message_id", message.MessageID, "bus_error_code", string(busruntime.ErrorCodeOf(publishErr)), "error", publishErr.Error())
+			messageID := message.MessageID
+			if respondErr := s.steerReplies.Respond(result, func(replyCtx context.Context, reply runtimecontrol.SteerReply) error {
+				correlationID := fmt.Sprintf("telegram:steer:%d:%d", chatID, messageID)
+				if reply.Followup {
+					correlationID += ":followup"
+				}
+				_, publishErr := publishTelegramBusOutbound(replyCtx, s.inprocBus, chatID, messageThreadID, reply.Text, "", correlationID)
+				if publishErr != nil {
+					s.logger.Warn("telegram_bus_publish_error", "channel", busruntime.ChannelTelegram, "chat_id", chatID, "message_id", messageID, "bus_error_code", string(busruntime.ErrorCodeOf(publishErr)), "error", publishErr.Error())
+				}
+				return publishErr
+			}); respondErr != nil {
+				s.logger.Warn("telegram_steer_reply_error", "chat_id", chatID, "message_id", messageID, "error", respondErr.Error())
 			}
 			return
 		}

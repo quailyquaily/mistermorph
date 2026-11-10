@@ -135,6 +135,8 @@ type consoleLocalRuntime struct {
 	bus                         *busruntime.Inproc
 	beforeConsoleInboundPublish func()
 	*consoleExecutionState
+	steerRepliesOnce        sync.Once
+	steerReplies            *runtimecontrol.SteerResponder
 	lifecycleMu             sync.Mutex
 	closed                  bool
 	generationMu            sync.RWMutex
@@ -1583,16 +1585,10 @@ func (r *consoleLocalRuntime) submitTaskWithGeneration(ctx context.Context, gene
 	}
 	if !contextCompactionOnly && command != "/reset" && command != "/init" && command != "/update" && len(req.FileReferences) == 0 {
 		if result := r.trySteerConsoleRun(task, strings.TrimSpace(req.TopicID)); result.Found {
-			output := runtimecontrol.SteerFeedback(result.Found, result.Queued)
-			steerTargetTaskID := ""
-			if result.Queued {
-				steerTargetTaskID = strings.TrimSpace(result.TaskID)
-			}
-			resp, err := r.submitSyntheticTask(
+			resp, err := r.submitSteerTask(
 				generation,
+				result,
 				task,
-				output,
-				steerTargetTaskID,
 				timeout,
 				strings.TrimSpace(req.TopicID),
 				strings.TrimSpace(req.TopicTitle),
@@ -2449,6 +2445,8 @@ func (r *consoleLocalRuntime) handleTaskJob(workerCtx context.Context, conversat
 			RunID:           job.TaskID,
 			Snapshot:        snapshot,
 			EventSink:       eventSink,
+			Task:            job.Task,
+			Conversation:    r.steerConsoleConversation(job),
 		})
 		if err != nil {
 			previewSink.Close()

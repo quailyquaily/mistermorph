@@ -90,7 +90,7 @@ func LeaseUserQuestions(lease *runtimecontrol.RunLease, logger *slog.Logger, sho
 			labels = append(labels, option.Label)
 		}
 		// Open before showing, so an answer that comes at once is not lost.
-		open, err := lease.OpenQuestion(q.ID, labels, q.ChoicesOnly)
+		open, err := lease.OpenQuestionText(q.ID, q.Text, labels, q.ChoicesOnly)
 		if err != nil {
 			return runtimecontrol.Answer{}, err
 		}

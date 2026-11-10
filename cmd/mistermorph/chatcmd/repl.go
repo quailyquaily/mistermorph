@@ -79,6 +79,7 @@ type activeChatTurn struct {
 	cancel                context.CancelCauseFunc
 	timeoutCancel         context.CancelFunc
 	steerQueue            *runtimecontrol.SteerQueue
+	steering              *chatTurnSteering
 	prepared              *taskruntime.PreparedEngine
 	stopAcknowledged      bool
 	runInput              string
@@ -114,6 +115,10 @@ func (t *activeChatTurn) requestStop() {
 		return
 	}
 	t.stopAcknowledged = true
+	if t.steering != nil {
+		// Messages still waiting are dropped as stopped, which the stop reply tells.
+		t.steering.control.Stop(chatSteerRuntime, t.steering.key, "/stop")
+	}
 	if t.steerQueue != nil {
 		t.steerQueue.Close()
 	}
@@ -554,6 +559,9 @@ func runREPL(sess *chatSession, model *chatModel, options ...tea.ProgramOption) 
 					currentTurn.timeoutCancel = timeoutCancel
 					currentTurn.steerQueue = steerQueue
 					currentTurn.stopAcknowledged = false
+					if currentTurn.prepared != nil {
+						sess.attachTurnSteering(ctx, currentTurn, steerQueue, stopCancel, nil, currentTurn.prepared.Route, currentTurn.prepared.Model)
+					}
 					active = currentTurn
 					safeSend(p, approvalClearedMsg{})
 					safeSend(p, thinkingMsg{on: true})
@@ -584,15 +592,11 @@ func runREPL(sess *chatSession, model *chatModel, options ...tea.ProgramOption) 
 						safeSend(p, agentResultMsg{output: "Wait for the current turn to finish before running /ctx compact.", keepThinking: true})
 						continue
 					}
-					if active.stopAcknowledged || active.steerQueue == nil {
-						safeSend(p, agentResultMsg{output: runtimecontrol.SteerFeedback(true, false), keepThinking: true})
-						continue
-					}
-					if err := sess.queueLocalSteer(active, input); err != nil {
+					if err := sess.steerActiveTurn(active, input, func(text string) {
+						safeSend(p, agentResultMsg{output: text, keepThinking: true})
+					}); err != nil {
 						safeSend(p, agentResultMsg{err: err, keepThinking: true})
-						continue
 					}
-					safeSend(p, agentResultMsg{output: runtimecontrol.SteerFeedback(true, true), keepThinking: true})
 					continue
 				}
 
@@ -696,6 +700,7 @@ func runREPL(sess *chatSession, model *chatModel, options ...tea.ProgramOption) 
 				steerQueue := runtimecontrol.NewSteerQueue(0)
 				currentTurn.cancel, currentTurn.timeoutCancel = stopCancel, timeoutCancel
 				currentTurn.steerQueue, currentTurn.prepared = steerQueue, prepared
+				sess.attachTurnSteering(ctx, currentTurn, steerQueue, stopCancel, history, prepared.Route, prepared.Model)
 				currentTurn.checkpointStore, currentTurn.userBoundary = checkpointStore, userBoundary
 				active = currentTurn
 				historySnapshot := append([]llm.Message(nil), history...)
