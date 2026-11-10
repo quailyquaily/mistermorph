@@ -43,3 +43,13 @@ Tests: manager independently passed configured gofmt check, go vet ./..., go tes
 Installs: none; no manifest or lockfile changes.
 UI checks: coder exercised headless Chrome desktop and touch-phone layouts with mock streaming, reading-anchor preservation, bottom following and topic switches. Not checked: native desktop app, Android device/emulator, Safari, Firefox, headed browser, real-model streaming. Manager independently ran automated suites, not interactive browser checks.
 Verification: one item-focused commit from start c89e4e14; no forbidden paths changed; clean worktree; feature branch pushed. Round 1; moved new/ → review/.
+
+## factory · review · 2026-11-10 14:36
+head: 04b36fee3d03163c1409689df9fc90853cead571
+verdict: pass
+notes:
+- [P2] web/console-nsh/components/chat/ChatHistoryList.tsx:137: chronological top pagination loses the visible reading anchor as prepended rows acquire measured heights. In a real-component headless phone-model probe, clicking Load earlier messages moved a-u1 from y=142pt to 326pt (184pt); base retained 142pt. Desktop second-page loading moved 70pt. Preserve the visible message ID and viewport offset across pagination and measurement; cover top-button loading and final-page button removal. Supplementary differential probes: HEAD 2 passed/4 failed; base 6 passed.
+- Factory pass means no P0/P1 findings; the confirmed P2 pagination regression remains for owner consideration before shipping.
+- Codex reviewed all seven changed files against origin/master c89e4e1430a6c50049aebb34cb8feb17ea22217c. Configured gofmt check, go vet ./..., go test ./..., nsh check, and nsh test --web-host tests/noHost.js passed; frontend suite 417 passed, 0 failed. Tests used absolute throwaway HOME. No installs. Source worktree remains clean and head unchanged.
+- Streaming, status/completion, following/resuming, topic switching, measured upstream height growth, short-history growth and empty-history send checks passed. Additional Chrome checks failed during page initialization on both HEAD and base, so this review obtained no valid browser result. Native desktop, Android device/emulator, Safari, Firefox, headed browser and real-model streaming were not checked.
+- No linked GitHub issue or PR. Moved review/ → ready/ under the factory P0/P1 threshold; no code changed or shipped.
