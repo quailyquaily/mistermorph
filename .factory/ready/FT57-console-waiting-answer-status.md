@@ -26,3 +26,13 @@ Tests: configured gofmt check, go vet ./..., and go test ./... passed; manager i
 Browser: coder checked the real Console with a fake model server: waiting marks, reload restoration, answer-to-running transition and terminal mark clearing. Fake model final response was malformed, so the run ended failed; successful completion was not manually verified in this browser scenario.
 Not checked: native phone/desktop builds on devices and live Telegram/Slack runs (unit coverage only). Older Console builds do not recognize waiting topic activity; backend and Console should ship together.
 Move: new/ → review/. Ready for independent review; not merged to master.
+
+## factory · review · 2026-11-10 10:48
+head: eef8815a8644d9b65631dfa0f9fdfb4bf7152ccc
+verdict: pass
+notes:
+- [P2] web/console-nsh/lib/core/chat-task-history.js:487: Cached questions unconditionally override newer polling state. After an open question is streamed, disconnecting the WebSocket and answering or expiring the question leaves the running task without result.questions; polling clears awaiting_answer but retains the cached open question, so chat/progress stay waiting while topic/Audit show running. Conversely, cached answered questions hide a subsequent open question. Reconcile stream and polling freshness/connection state and cover running responses without result.questions. Codex reproduced both mismatches with actual functions: server false/chat true after answer, server true/chat false for a later question.
+Validation: Codex reviewed all 22 changed files in origin/master...HEAD. Configured gofmt check, go vet ./..., and go test ./... passed; nsh check passed; nsh tests 408/408 and core Node tests 250/250 passed. Scripted tests used an absolute throwaway HOME. Working tree remained clean.
+Installs: none.
+Not checked: real-browser disconnection, native devices, live Slack/Telegram. Finding reproduced through code paths and scripts.
+Move: review/ → ready/ under the no-P0/P1 review gate. P2 remains for owner consideration; not merged.
