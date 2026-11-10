@@ -34,3 +34,16 @@ Installs: none. Manager verification with throwaway HOME: configured gofmt/vet/g
 Not checked: Android rendering on a device/emulator; no APK built. Browser comparison is not Android visual verification. Owner should inspect long Chinese and Latin titles on selected and unselected Android rows.
 
 Branch pushed. Initial credential-helper push failed due to missing repository path; retry with command-local credential.useHttpPath=true succeeded. Moved new/ → review/.
+
+## factory · review · 2026-11-10 16:04
+head: fd1cc140e79da7602f5c4481ab757ed2b7ed7eec
+verdict: pass
+notes:
+- [P3] web/console-nsh/components/motion/FadeText.tsx:89: colour-only class changes invalidate glyph measurements and briefly remove the Android fade. Verified example: a 220pt overflowing Latin label changing text-subtle to text-foreground emits plan/null/plan. Keep the prior plan during remeasurement or separate colour from metric keys. The topic title's fixed class is unaffected.
+- [P3] web/console-nsh/components/motion/FadeText.tsx:151-163: splitting joined/RTL text into independent Text nodes loses cross-node shaping and bidi continuity. Verified structural example: an Arabic title at 220pt produces head "مراجعة خارطة الطريق الف" followed by separate ص, ل, ي, ة nodes in the row. Preserve whole shaped runs or disable the glyph fallback for these scripts. Native visual effect was not checked.
+
+Review by Claude Code covered all six changed files against origin/master c89e4e14. No P0/P1 findings; branch merges cleanly with base. Required gofmt/vet/go test gate passed (162 packages); nsh check passed; nsh test --web-host tests/noHost.js passed (412/412). Tests used a throwaway HOME. Installs: none. Worktree and head unchanged.
+
+Residual risks: no Android device/emulator visual verification or APK build. Headless glyph metrics do not verify real kerning, CJK fallback, fade smoothness or system font-scale changes. Owner should inspect long Chinese/Latin titles on selected/unselected Android rows, both themes, including running status indicators. Initial layout briefly clips before measurements complete. No linked GitHub issue or PR.
+
+Moved review/ → ready/; not merged or shipped.
