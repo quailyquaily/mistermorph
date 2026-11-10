@@ -52,7 +52,10 @@ already, instead of building `web/console-nsh` (CI caching, or a tree that does 
 Tests: `cargo test` (pure parts: config, saved values, window state, port reservation, backend
 lookup, update check, uploads against a local server, image re-encoding). With a built backend,
 `HOME=$(mktemp -d) MORPH_TEST_BACKEND=bin/desktop-nsh/morph cargo test -- --ignored` also starts,
-stops and restarts a real one.
+stops and restarts a real one. `MORPH_NOTIFY_EXPECT=granted|unsupported cargo test -- --ignored
+notify::tests::live` checks the session bus's notification service against what it should answer
+(with `granted`, press the notification within a minute); run it under `dbus-run-session` for a
+private bus.
 
 ## Run
 
@@ -95,8 +98,8 @@ folders, `~/.config` and `~/.cache` on Linux):
 | `morph.title` | The window title |
 | `morph.language` | Nothing (a window has no page language) |
 | `morph.visibility` (event) | On window activation and visibility changes: `{ visible, focused }` |
-| `morph.notify.state` / `request` | `"granted"`: desktop notification services ask apps no permission |
-| `morph.notify.show`, `morph.notify.press` (event) | notify-rust; on Linux pressing the notification brings the window forward and sends `morph.notify.press` |
+| `morph.notify.state` / `request` | No desktop notification service asks an app permission, so both answer whether one is there. Linux: `"granted"` when a freedesktop notification service answers `GetServerInformation` on the session bus, `"unsupported"` when none does (the console then shows nothing and says so in Settings; the log notes the change once). macOS and Windows: `"granted"` (they tell an app nothing it could read: notifications the user turned off for the app are not seen) |
+| `morph.notify.show`, `morph.notify.press` (event) | notify-rust, once per call (a failure rejects; nothing tries again). Pressing the notification (Linux: its default action, shown as "Open"; Windows: the toast's body) brings the window forward and sends `morph.notify.press`, which opens a task's topic. macOS reports no press |
 | `morph.file.pick` / `release` | GPUI's open dialog (the desktop portal on Linux); `accept` filters the chosen files afterwards, since the dialog has no type filter. Images (up to 16 MB) get a `data:` preview of the picked bytes: nsh refuses `file://` images under `capabilities.network`, so only the chosen file is shown |
 | `morph.file.upload` | Multipart (`field`, `fields`) or the raw file, chunked, with `morph.file.progress` events. With `image`, the picture is cropped, scaled (Lanczos3) and re-encoded first: **WebP is lossless** (the `image` crate has no lossy WebP encoder; `quality` applies to JPEG only) |
 | `morph.file.save` | Fetches (`url` + `headers`) or decodes (`text`, `base64`) first, then GPUI's save dialog in the Downloads folder |
@@ -172,8 +175,11 @@ executable in release) but was built and run only on Linux; the macOS and Window
 (`.github/workflows/build_app.yaml`). Not verified there:
 
 - that it compiles and the window opens (Metal on macOS, DirectX on Windows);
-- notifications: notify-rust shows them, but pressing one does not send `morph.notify.press`
-  (only Linux reports the press);
+- notifications: notify-rust shows them; Windows sends `morph.notify.press` for a press on the
+  toast's body (`wait_for_response`, written from notify-rust's source but never run: toasts go
+  out under PowerShell's app ID, and whether the press still arrives once the toast has gone to
+  the Action Center is unknown); macOS sends none (waiting for it would send the notification
+  twice on NSUserNotificationCenter), and "granted" is assumed on both;
 - macOS: that the signed and notarized bundle from `packaging/package-darwin.sh` launches and
   shows notifications;
 - Windows: a backend left running if the app is killed (no job object yet; Linux uses

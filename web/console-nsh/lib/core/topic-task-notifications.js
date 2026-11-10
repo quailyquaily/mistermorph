@@ -51,11 +51,24 @@ async function topicNotificationTitle(topicID, topicTitle, translate) {
   return String(title || "").trim() || translate("chat_topic_untitled");
 }
 
+// What the notifications go through: the host's (lib/platform.ts), the same in the browser and the
+// desktop app; tests pass their own.
+export const topicNotificationHost = {
+  storage: localStore,
+  isForeground,
+  permission: notificationPermission,
+  show: showNotification,
+  onPress: onNotificationPress,
+};
+
 const pressTargets = new Map();
-let pressListening = false;
+const pressListeners = new Set();
 
 // topicTitle(topicID) reads the topic's current name; it may be async, and may fail.
-export async function handleTopicTaskNotification(raw, { scope, translate, navigate, topicTitle, isCurrent = () => true }) {
+export async function handleTopicTaskNotification(
+  raw,
+  { scope, translate, navigate, topicTitle, isCurrent = () => true, host = topicNotificationHost },
+) {
   if (
     raw?.type !== "topic_task_completed" ||
     typeof raw.id !== "string" ||
@@ -70,33 +83,35 @@ export async function handleTopicTaskNotification(raw, { scope, translate, navig
   ) {
     return false;
   }
-  const foregroundAtArrival = isForeground();
+  const foregroundAtArrival = host.isForeground();
   const prefix = `${PREFIX}${scope}:`;
+  const id = `${prefix}${raw.id}`;
   try {
     if (!isCurrent()) return false;
-    // Keep consumed IDs across reloads, including events suppressed in the foreground.
+    // Keep consumed IDs across reloads, including events suppressed in the foreground and ones the
+    // host failed to show: each task completion gets one try.
     const key = `${prefix}task:${raw.id}`;
-    if (localStore.getItem(key) !== null) return false;
-    localStore.setItem(key, "1");
-    if (foregroundAtArrival || isForeground() || (await notificationPermission()) !== "granted") return false;
+    if (host.storage.getItem(key) !== null) return false;
+    host.storage.setItem(key, "1");
+    if (foregroundAtArrival || host.isForeground() || (await host.permission()) !== "granted") return false;
     const topicID = raw.topic_id.trim();
     // Read the name first: the person may come back while it loads, and then nothing is shown.
     const title = await topicNotificationTitle(topicID, topicTitle, translate);
-    if (!isCurrent() || isForeground()) return false;
-    const id = `${prefix}${raw.id}`;
+    if (!isCurrent() || host.isForeground()) return false;
     pressTargets.set(id, () => navigate(endpointRoutePath(CONSOLE_LOCAL_ENDPOINT_REF, `/chat/${encodeURIComponent(topicID)}`)));
-    if (!pressListening) {
-      pressListening = true;
-      onNotificationPress((pressed) => {
+    if (!pressListeners.has(host.onPress)) {
+      pressListeners.add(host.onPress);
+      host.onPress((pressed) => {
         const go = pressTargets.get(pressed);
         pressTargets.delete(pressed);
         go?.();
       });
     }
-    await showNotification({ id, title, body: translate(`topic_notification_${raw.status}`), tag: id });
+    await host.show({ id, title, body: translate(`topic_notification_${raw.status}`), tag: id });
     return true;
   } catch {
     // Blocked storage or a refused notification must be a no-op.
+    pressTargets.delete(id);
     return false;
   }
 }

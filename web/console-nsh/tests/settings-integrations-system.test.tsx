@@ -201,3 +201,14 @@ test("Notifications: blocked and unavailable states keep the button off", async 
   const unsupported = await openFixture({ view: "notifications", host: { "morph.notify.state": "unsupported" } });
   await unsupported.app.waitFor("Background notifications are unavailable in this browser context.");
 });
+
+test("Notifications on the desktop: the system's service answers, or its absence is said so", async () => {
+  // The desktop app asks for no permission: a notification service that answers is "granted".
+  const granted = await openFixture({ view: "notifications", runtime: "desktop", features: ["notifications"], host: { "morph.notify.state": "granted" } });
+  await granted.app.waitFor("Notifications are enabled.");
+  expect(granted.app.enabled("Enable notifications")).toBe(false);
+  const missing = await openFixture({ view: "notifications", runtime: "desktop", features: ["notifications"], host: { "morph.notify.state": "unsupported" } });
+  await missing.app.waitFor("Notifications are unavailable: the system's notification service did not answer.");
+  expect(missing.app.enabled("Enable notifications")).toBe(false);
+  expect(missing.app.texts()).not.toContain("Background notifications are unavailable in this browser context.");
+});
