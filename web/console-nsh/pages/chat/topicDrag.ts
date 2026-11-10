@@ -77,6 +77,8 @@ interface Drag {
 export function createTopicDrag(options: {
   /** The list's rows, as rendered. */
   rows: () => TopicRow[];
+  /** The rows' top inset within the scroll content (a search can precede them). */
+  contentInset?: () => number;
   /** Topics can be dragged now (the tag view). */
   enabled: () => boolean;
   /** The topic can be dropped on the group (it would gain a tag). */
@@ -100,7 +102,7 @@ export function createTopicDrag(options: {
     const d = drag();
     if (!d || !d.origin) return null;
     const point = { x: d.page.x - d.origin.x, y: d.page.y - d.origin.y + (scrollY() - d.originScroll) };
-    const inView = point.y - scrollY();
+    const inView = point.y - scrollY() + (options.contentInset?.() ?? 0);
     return inView >= 0 && inView <= viewportHeight() ? point : null;
   });
   const zones = computed(() => {

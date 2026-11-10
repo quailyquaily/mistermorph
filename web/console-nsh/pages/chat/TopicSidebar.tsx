@@ -153,8 +153,10 @@ export function TopicSidebar(props: {
     return active ? active.key : null;
   };
   const selection = createSlidingSelection(activeKey);
+  const rowsInset = signal(0);
   const drag = createTopicDrag({
     rows: () => c.topicRows(),
+    contentInset: rowsInset,
     enabled: () => view() === "tags",
     canDrop: (topic, group) => c.topicCanDrop(topic, group),
     drop: (topic, group) => void c.dropTopicOnGroup(topic, group),
@@ -200,8 +202,9 @@ export function TopicSidebar(props: {
     const { origin, size } = event.bounds;
     reportPart("head-action", headRow, { x: origin.x, y: origin.y, w: size.width, h: size.height });
   };
-  // On a touch phone the search hides until the list is pulled down from its top, and then sits
-  // at the top of the list, scrolling with it; the desktop's stays under the head.
+  // The search is the list's first view, scrolling with it, never the head's (the head keeps the
+  // title and its buttons). On a touch phone it hides until the list is pulled down from its top;
+  // on a desktop (and a desktop's window narrowed to the phone layout) it always shows.
   const pull = createPullSearch({
     query: () => c.topicSearch(),
     revealed: c.topicSearchRevealed,
@@ -362,9 +365,9 @@ export function TopicSidebar(props: {
   return (
     <View class={`bg-sidebar ${props.class ?? ""}`} testID="chat-topic-sidebar" {...probe(() => "sidebar")}>
       {/* The head: the title on the left, the view toggles and New at the right, the last button
-          ending at the right inset over the rows' status marks, and on a desktop the search under
-          them (on a phone it is the list's). The hairline under the head shows once topics have
-          scrolled beneath, and sags softly under the view toggle that is on
+          ending at the right inset over the rows' status marks. The search is the list's, on a
+          phone and a desktop alike. The hairline under the head shows once topics have scrolled
+          beneath, and sags softly under the view toggle that is on
           (design/ui-refresh.html §1). */}
       <View class="relative z-10">
         <View
@@ -423,7 +426,6 @@ export function TopicSidebar(props: {
             </TipButton>
           </If>
         </View>
-        <If when={!c.mobileMode()}>{search()}</If>
         <SagRule
           center={sagCenter}
           half={sagHalf(38)}
@@ -431,9 +433,6 @@ export function TopicSidebar(props: {
           class="absolute -bottom-[6px] left-0 right-0 h-[7px]"
         />
       </View>
-      <If when={c.topicsLoading() && c.topicRows().length === 0}>
-        <Spinner class="items-center py-3" />
-      </If>
       <Scroll
         class={`flex-1 ${c.topicsLoading() ? "opacity-70" : ""}`}
         testID="chat-topic-list"
@@ -456,51 +455,59 @@ export function TopicSidebar(props: {
         accessibilityActions={pull.actions()}
         onAccessibilityAction={pull.onAction}
       >
-        {/* The list's gutter (16pt; none on a phone, where rows run edge to edge as Contacts' do) as
-            views inside the content rather than its padding: the content is at least the viewport's
-            height, and padding on top of that made a list that fits scroll by its padding. Phones
-            keep room under the floating New button. */}
-        <View class={`grow ${c.mobileMode() ? "" : "px-4"}`} onLayout={edges.onContentLayout} ref={drag.contentRef}>
-          {/* On a phone the search, once pulled down: the list's first view, scrolling with it, at
-              the head's foot as on a desktop while the list is at its top. */}
-          <If when={c.mobileMode() && pull.shown()}>{search()}</If>
-          {/* 8pt before the first row, as under Contacts' search. */}
-          <View class="h-2" />
-          <selection.Highlight class="rounded-(--radius) bg-selection" testID="chat-topic-selection" />
-          <Each of={c.topicRows()} key={(row) => row.key}>
-            {(row) => (
-              <If
-                when={row().kind === "topic"}
-                else={
-                  <If
-                    when={row().kind === "group"}
-                    else={
-                      <View class="px-3.5 pb-2.5 pt-1.5">
-                        <Text class="text-xs leading-[18px] text-muted-foreground">{(row() as Extract<TopicRow, { kind: "note" }>).text}</Text>
-                      </View>
-                    }
-                  >
-                    {groupRow(row as () => Extract<TopicRow, { kind: "group" }>)}
-                  </If>
-                }
-              >
-                {topicRow(row as () => Extract<TopicRow, { kind: "topic" }>)}
-              </If>
-            )}
-          </Each>
-          <If when={c.topicsNextCursor()}>
-            <View class="items-center py-2">
-              <Button
-                variant="plain"
-                size="sm"
-                label={t("chat_topics_load_older")}
-                loading={c.topicsLoadingOlder()}
-                onPress={() => void c.loadOlderTopics()}
-                testID="chat-topics-load-older"
-              />
+        <View class="grow" onLayout={edges.onContentLayout}>
+          {/* The search (on a touch phone once pulled down): the list's first view, scrolling with
+              it, at the head's foot while the list is at its top. It has its own gutter, so it sits
+              outside the rows' one below. It stays while the topics load, fail or are none. */}
+          <If when={pull.shown()}>{search()}</If>
+          <If when={c.topicsLoading() && c.topicRows().length === 0}>
+            <View testID="chat-topics-loading">
+              <Spinner class="items-center py-3" />
             </View>
           </If>
-          <View class={c.mobileTopicSplitEnabled() ? "h-21" : "h-4"} />
+          {/* The list's gutter (16pt; none on a phone, where rows run edge to edge as Contacts' do) as
+              views inside the content rather than its padding: the content is at least the viewport's
+              height, and padding on top of that made a list that fits scroll by its padding. Phones
+              keep room under the floating New button. */}
+          <View class={`grow ${c.mobileMode() ? "" : "px-4"}`} ref={drag.contentRef} onLayout={(event) => rowsInset.set(event.bounds.origin.y)}>
+            {/* 8pt before the first row, as under Contacts' search. */}
+            <View class="h-2" />
+            <selection.Highlight class="rounded-(--radius) bg-selection" testID="chat-topic-selection" />
+            <Each of={c.topicRows()} key={(row) => row.key}>
+              {(row) => (
+                <If
+                  when={row().kind === "topic"}
+                  else={
+                    <If
+                      when={row().kind === "group"}
+                      else={
+                        <View class="px-3.5 pb-2.5 pt-1.5">
+                          <Text class="text-xs leading-[18px] text-muted-foreground">{(row() as Extract<TopicRow, { kind: "note" }>).text}</Text>
+                        </View>
+                      }
+                    >
+                      {groupRow(row as () => Extract<TopicRow, { kind: "group" }>)}
+                    </If>
+                  }
+                >
+                  {topicRow(row as () => Extract<TopicRow, { kind: "topic" }>)}
+                </If>
+              )}
+            </Each>
+            <If when={c.topicsNextCursor()}>
+              <View class="items-center py-2">
+                <Button
+                  variant="plain"
+                  size="sm"
+                  label={t("chat_topics_load_older")}
+                  loading={c.topicsLoadingOlder()}
+                  onPress={() => void c.loadOlderTopics()}
+                  testID="chat-topics-load-older"
+                />
+              </View>
+            </If>
+            <View class={c.mobileTopicSplitEnabled() ? "h-21" : "h-4"} />
+          </View>
         </View>
         <MobileBarSpacer />
       </Scroll>

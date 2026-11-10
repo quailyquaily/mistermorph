@@ -121,10 +121,11 @@ export function indexSearchMetrics(mobile: boolean) {
 }
 
 /**
- * The search under the head of the Topics and Contacts indexes, one field for both: a 14pt text
- * field with the magnifier and a clear button, 38pt tall on a desktop and 44pt (a touch target) on
- * a phone, as wide as the column less its gutters. Escape empties it while it has the focus and
- * holds text. It owns its spacing: put it in `IndexColumn`'s `search`, not its `top`.
+ * The search at the top of the Topics and Contacts lists, one field for both: a 14pt text field
+ * with the magnifier and a clear button, 38pt tall on a desktop and 44pt (a touch target) on a
+ * phone, as wide as the column less its gutters. Escape empties it while it has the focus and holds
+ * text. It owns its spacing and gutters: make it the list's first view (outside any gutter of the
+ * rows), on a phone and a desktop alike, never part of the head; or `IndexColumn`'s `search`.
  */
 export function IndexSearch(props: {
   value: string;
