@@ -35,3 +35,12 @@ Installs: none; no manifest changes.
 Visual checks: coder compared isolated before/after fixture screenshots at desktop and phone widths; field moved down 4pt, mobile first row stayed fixed. Desktop fixture did not render rows in either version. Actual Topics/Contacts pages were not visually inspected; fixture fonts were not loaded. No real Android/emulator pull-down gesture was checked.
 
 Moved new/ → review/. Owner should check the spacing on the actual Topics and Contacts pages.
+
+## factory · review · 2026-11-10 12:22
+head: 712282f22cf157c3711926a00f1c18338806147b
+verdict: pass
+notes:
+- Codex reviewed origin/master...HEAD (base c89e4e14); no findings. Shared search padding changes from 0/8 to 4/4 without changing total spacing or pull-down behavior.
+- Configured gofmt, go vet and go test gate passed. Console nsh check passed; nsh tests passed 403/403. Tests used an absolute throwaway HOME.
+- Installs: only restored pinned dependencies; no non-pinned installs. Tracked files remained unchanged.
+- Actual pages were not visually inspected; real Android pull-down gestures were not checked. Owner should inspect actual Topics and Contacts spacing.
