@@ -24,3 +24,13 @@ Tests: nsh check passed; full nsh test --web-host tests/noHost.js passed (408 te
 Installs: none.
 Visual check: coder inspected fixture screenshots in headless Chrome for desktop and phone layouts. Real running Console, desktop app and Android device were not inspected.
 Moved new/ → review/; ready for review, not merged.
+
+## factory · review · 2026-11-10 11:00
+head: fb3ab9cd22b489e98d09aa74c32477807045c505
+verdict: pass
+notes:
+- Codex reviewed all three changed files against origin/master...HEAD; no confirmed introduced defects. The branch merges cleanly with current base.
+- Validation: configured gofmt/go vet/go test suite passed; nsh 0.4.0 check passed; nsh test --web-host tests/noHost.js passed (408 tests, zero failures, including five alignment tests). Scripted tests used a throwaway HOME.
+- Browser validation could not run because the nsh web runtime was unavailable. Real Console, desktop client and Android visual behaviour remain unverified; owner should check the desktop action inset described in the build report.
+- Installs: none. Review left branch files and commits unchanged.
+- Moved review/ → ready/; awaiting owner approval, not merged.
