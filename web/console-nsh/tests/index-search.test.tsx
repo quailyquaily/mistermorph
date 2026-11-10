@@ -55,19 +55,21 @@ for (const viewport of VIEWPORTS) {
     });
   }
 
-  test(`on a ${viewport.name} the search box sits right under the 57pt head, as wide as the column, its field ${viewport.field}pt tall`, async () => {
+  test(`on a ${viewport.name} the search box sits under the 57pt head, as wide as the column, its field ${viewport.field}pt tall`, async () => {
     const app = await open("./fixtures/index-search-app.tsx", { width: viewport.width, height: viewport.height, platform: "linux", locale: "en-US" });
     const readout = () => JSON.parse(app.texts().find((text) => text.startsWith("{")) ?? "{}") as Readout;
     await app.waitUntil(() => Boolean(readout().frames?.search && readout().frames?.column));
     const { frames, metrics } = readout();
-    expect(metrics).toEqual({ gutter: viewport.gutter, top: 0, bottom: 8, size: viewport.size });
+    expect(metrics).toEqual({ gutter: viewport.gutter, top: 4, bottom: 4, size: viewport.size });
+    // 4pt moved from below the field to above it: the same 8pt of room in all.
+    expect(metrics.top + metrics.bottom).toBe(8);
     // Directly under the head, with no box of IndexColumn's `top` around it.
     expect(frames.search.x).toBe(0);
     expect(frames.search.y).toBe(57);
     expect(frames.search.w).toBe(frames.column.w);
     expect(frames.column.w).toBe(viewport.name === "phone" ? viewport.width : 310);
-    // The field, then 8pt below it.
-    expect(Math.abs(frames.search.h - (viewport.field + metrics.top + metrics.bottom))).toBeLessThan(0.5);
+    // 4pt, the field, then 4pt below it.
+    expect(Math.abs(frames.search.h - (viewport.field + 8))).toBeLessThan(0.5);
   });
 }
 
