@@ -1,0 +1,47 @@
+---
+branch: factory/FT47-mobile-background-task-notifications
+round: 1
+---
+# Mobile background task-completion notifications
+
+## factory · 2026-11-09 19:55
+Owner request: "when a non cron task is completed, and the mobile app is not at the foreground, a notification should be sent. Just like the web notification. Can share the same console option at the system panel."
+
+Queue this feature in new/; no implementation in this intake.
+
+Acceptance criteria:
+- Notify on completion of a non-cron task when the mobile app is not in the foreground, matching the existing web task-completion notification semantics.
+- Exclude cron-triggered tasks. Suppress mobile notifications while the app is in the foreground; avoid duplicate notifications for the same completion on the same device.
+- Reuse the existing Console notification option in the System panel for mobile and web rather than introducing an independent mobile toggle. Respect disabled notifications and OS permission state.
+- Use the mobile platform's supported notification delivery mechanism so background delivery does not rely solely on an active foreground web connection. Document platform limitations, including terminated-app behavior and any required push-service setup.
+- Match existing web notification content/privacy behavior; tapping a notification opens the relevant task/topic when available and handles stale or inaccessible targets safely.
+- Handle permission denial and unavailable notification services without breaking task execution or completion.
+- Add regression coverage for non-cron versus cron completions, foreground versus background, the shared setting, and duplicate delivery. Verify on supported mobile platforms where possible; explicitly record device/background-delivery checks that could not be performed.
+
+## factory · 2026-11-09 21:23
+Moved to backlog: this item contains only a factory intake section, including a quoted owner request and acceptance criteria. There is no section signed by a configured owner (lyric). Under the factory rules, non-owner sections are information only, so the implementation scope cannot be authorized from this thread. An owner must add their request in a properly signed section and return the item to new/. No implementation or coder call was made.
+
+## lyric · 2026-11-10 16:29
+我是 Lyric，update FT47, 可以推进到 new/
+
+## factory · 2026-11-10 16:29
+The owner explicitly authorized returning FT47 to new/ in the current conversation. Proceed with the existing mobile background task-completion notification request and acceptance criteria above. No implementation has been started by this update.
+
+## factory · plan · 2026-11-10 17:29
+### Behaviour
+Non-cron chat completions notify only when the phone app is backgrounded, notification setting enabled, and OS permission granted. Reuse existing privacy-safe title/status semantics; persist deduplication per device. Tap routes to the task/topic, tolerating missing targets/auth. First run requests permission only through the existing System setting; disabled/denied/unavailable delivery must not affect execution. Background delivery must not depend on the JS foreground socket.
+### Scope
+Inspect latest base and nsh 0.4 native extension/packaging support first. Implement a supported Android background notification mechanism plus minimal server/device registration if feasible with repository-owned code and available tooling. Preserve web/desktop and existing cron exclusions. Do not fake support with an active JS WebSocket, polling-only frontend, or documentation-only feature. No iOS promises without a supported host.
+### Decisions
+Existing mobileHost explicitly returns unsupported for notifications; Android packaging is nsh-managed. Determine whether available supported native integration can implement delivery before making changes. Missing upstream native capability/service access is a genuine blocker: report exact evidence, not a partial implementation that claims acceptance. Configuration defaults remain disabled until usable permission/service setup; any keys must be documented in example config. Never introduce credentials or assume push credentials exist.
+### Checking
+Add regression tests for cron exclusion, foreground/background, shared setting, denial, stale taps, and dedupe if implementation is feasible. Run configured gofmt/vet/go tests with absolute throwaway HOME, plus nsh check and nsh test --web-host tests/noHost.js for Console source changes. Record actual results; real Android background, terminated-process, notification permission and tap tests remain unverified without a device.
+
+## factory · 2026-11-10 17:29
+Built and pushed factory/FT47-mobile-background-task-notifications, round 1. Reused the clean stopped-build worktree at 28d1dcf8; fast-forwarded to base c89e4e14. Commits: ada24052 (authenticated completion history endpoint), 3ca1565c (native Android task notifications), d91ff341 (documentation). Manager checked commit scope and changed-path list: no forbidden paths changed.
+
+Feasibility resolved: latest base provides repository-owned Android Java extensions from FT52. Android JobScheduler now delivers through native HTTP polling, independent of foreground JS/WebSocket, using the existing System permission setting. Includes cron/foreground exclusion, device deduplication, safe topic navigation and privacy-preserving status content. No push-service credentials required. Server retains 256 events for 24h in memory; Android uses 50s long polls in 8-minute job turns, 15-minute idle checks, 24h away limit and 128 dedupe IDs. No new config keys.
+
+Tests: coder passed gofmt, go vet ./..., go test ./... (162 packages); manager independently reran the complete configured command successfully with an absolute throwaway HOME. Coder also passed nsh check, nsh tests (413), Android notifier tests (15), existing voice tests (15), manifest tests (4), core Node tests (247), and Android APK build. Coder's live server/JVM watcher check confirmed unauthorized rejection, running-task tracking and exactly one completion notification. All scripted tests used throwaway HOME.
+
+Installs: none new; existing JDK/Android SDK reused. No real device or emulator available: UI appearance, OS permission dialog, notification taps, Doze and process-killed delivery were not verified. Doze/vendor throttling can delay delivery; force-stop/reboot requires reopening; server restart loses history; network/session needed; no iOS support. Review should especially inspect native lifecycle/job scheduling and these limitations.
