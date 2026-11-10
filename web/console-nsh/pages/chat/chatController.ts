@@ -46,6 +46,7 @@ import {
   taskActivity,
   taskAgentText,
   taskAwaitingReply,
+  taskWaitingForAnswer,
   taskDurationLabel,
   taskElevations,
   taskInsights,
@@ -72,6 +73,7 @@ import {
   topicActivitySignature,
   TOPIC_ACTIVITY_DONE,
   TOPIC_ACTIVITY_PENDING,
+  TOPIC_ACTIVITY_WAITING,
 } from "../../lib/core/topic-activity.js";
 import { contextMeter } from "../../lib/core/context-meter.js";
 import {
@@ -1936,6 +1938,8 @@ export function createChatController() {
       }
       if (typeof frame.status === "string" && frame.status !== "") patch.status = normalizeTaskStatus(frame.status);
       if (Object.keys(patch).length > 0) patchAgentHistoryItem(key, historyID, patch);
+      // A question opened or closed: the topic list's mark follows now, not at its next poll.
+      if (patch.questions && taskWaitingForAnswer(existingItem) !== taskWaitingForAnswer({ ...existingItem, ...patch })) void refreshTopicActivity();
       if (frame.done) closeTaskStream(key);
     };
     socket.onclose = () => {
@@ -1963,6 +1967,7 @@ export function createChatController() {
   function topicActivityLabel(topic: any) {
     const status = topicActivityState(topic);
     if (status === TOPIC_ACTIVITY_DONE) return t("chat_topic_status_done");
+    if (status === TOPIC_ACTIVITY_WAITING) return t("chat_topic_status_waiting");
     return status === TOPIC_ACTIVITY_PENDING ? t("chat_topic_status_pending") : t("chat_topic_status_running");
   }
 
@@ -2174,6 +2179,8 @@ export function createChatController() {
         text: taskAgentText(detail, t, { agentName: untracked(activeAgentName), pendingSeed, pendingText: preservePendingText ? existing?.text : "" }),
         // Still the polling hint, unless the stream has already shown words.
         awaiting: taskAwaitingReply(detail) && existing?.awaiting !== false,
+        // The run waits on the answer to its question (while the stream's questions are unknown).
+        awaitingAnswer: detail?.awaiting_answer === true,
         timeText: formatChatHistoryTime(detail?.finished_at || detail?.started_at || detail?.created_at, currentLocale()),
         durationText: taskDurationLabel(detail),
         rawJSON: taskRawJSON(detail),

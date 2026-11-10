@@ -14,6 +14,7 @@ import {
   keepLiveTaskState,
   taskAgentText,
   taskListHistoryItems,
+  taskWaitingForAnswer,
   planStepMessages,
   agentLinkMessages,
 } from "./chat-task-history.js";
@@ -419,4 +420,45 @@ test("worker labels omit invalid PIDs", () => {
     id: "worker-1", name: "Milo", processes: [{ pid: 0 }, { pid: -1 }, { pid: "123" }, { pid: 1.5 }],
   } }] });
   assert.equal(activityWorkerLabel(activity.current), "Milo");
+});
+
+test("taskWaitingForAnswer follows the open question of a running task", () => {
+  const open = { id: "q1", text: "Which?", status: "open" };
+  const answered = { ...open, status: "answered", answer: "A" };
+  const expired = { ...open, status: "expired" };
+  // The question opened: waiting, the first one or a later one.
+  assert.equal(taskWaitingForAnswer({ status: "running", questions: [open] }), true);
+  assert.equal(taskWaitingForAnswer({ status: "running", questions: [answered, { ...open, id: "q2" }] }), true);
+  // Answered or expired: running again.
+  assert.equal(taskWaitingForAnswer({ status: "running", questions: [answered] }), false);
+  assert.equal(taskWaitingForAnswer({ status: "running", questions: [expired] }), false);
+  // The questions the chat holds win over the server's flag polled a moment before.
+  assert.equal(taskWaitingForAnswer({ status: "running", questions: [answered], awaitingAnswer: true }), false);
+  // A finished task keeps its own status, whatever its last question says.
+  for (const status of ["done", "failed", "canceled"]) {
+    assert.equal(taskWaitingForAnswer({ status, questions: [open], awaitingAnswer: true }), false, status);
+  }
+  // Queued work, an approval and a task without questions are not waiting for an answer.
+  assert.equal(taskWaitingForAnswer({ status: "queued", awaitingAnswer: true }), false);
+  assert.equal(taskWaitingForAnswer({ status: "pending", questions: [open] }), false);
+  assert.equal(taskWaitingForAnswer({ status: "running", questions: [] }), false);
+  assert.equal(taskWaitingForAnswer({ status: "running" }), false);
+  assert.equal(taskWaitingForAnswer(null), false);
+  // Without questions (a reload before the stream's), the server's view of the run decides.
+  assert.equal(taskWaitingForAnswer({ status: "running", questions: null, awaitingAnswer: true }), true);
+  assert.equal(taskWaitingForAnswer({ status: "running", awaiting_answer: true }), true);
+});
+
+test("taskListHistoryItems carries a running task's awaiting_answer after a reload", () => {
+  const t = (key) => key;
+  const [, agent] = taskListHistoryItems(
+    [{ id: "task_1", task: "go", status: "running", awaiting_answer: true, created_at: "2026-11-10T09:00:00Z" }],
+    t,
+    { agentName: "Morph" },
+  );
+  assert.equal(agent.awaitingAnswer, true);
+  assert.equal(taskWaitingForAnswer(agent), true);
+  const [, plain] = taskListHistoryItems([{ id: "task_2", task: "go", status: "queued", created_at: "2026-11-10T09:00:00Z" }], t, {});
+  assert.equal(plain.awaitingAnswer, false);
+  assert.equal(taskWaitingForAnswer(plain), false);
 });

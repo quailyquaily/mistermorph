@@ -22,6 +22,7 @@ import { activityEntries, ChatActivityEntries, ChatPlanSteps, planProgress, TERM
 import { ChatWorkerOutput, replyWorkers, WorkerAvatar } from "../../components/chat/ChatWorkerRoster";
 import { t } from "../../components/chat/i18n";
 import { PinnedScroll } from "../../components/chat/PinnedScroll";
+import { taskWaitingForAnswer } from "../../lib/core/chat-task-history.js";
 
 function taskStatus(item: HistoryItem | null) {
   const value = String(item?.status || "").trim().toLowerCase();
@@ -99,6 +100,7 @@ export function ActivityDetailPanel(props: {
       const state = String(worker()?.state || "");
       return state === "failed" || state === "canceled" ? "error" : state === "done" ? "on" : "running";
     }
+    if (item() && taskWaitingForAnswer(item())) return "pending";
     return status() === "failed" || status() === "canceled" ? "error" : terminal(status()) ? "on" : "running";
   };
   const has = () => {
@@ -124,7 +126,7 @@ export function ActivityDetailPanel(props: {
         style={props.phone ? { height: CHROME_BAR_HEIGHT } : undefined}
       >
         <If when={item() && has()}>
-          <If when={kind() === "worker" && worker()} else={<StatusMark state={markState()} />}>
+          <If when={kind() === "worker" && worker()} else={<StatusMark state={markState()} testID={`chat-detail-mark-${markState()}`} />}>
             <WorkerAvatar avatarStyle={worker()?.avatarStyle ?? ""} />
           </If>
         </If>

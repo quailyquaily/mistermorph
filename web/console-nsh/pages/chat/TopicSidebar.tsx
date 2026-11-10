@@ -59,7 +59,8 @@ function ViewToggle(props: {
 }
 
 // The topic's status mark (7pt): filled blue once a task finished and until the topic is viewed,
-// filled orange while a task waits for the person, the turning ring while one runs.
+// filled orange while a task waits for the person (an approval, or the answer to its question),
+// the turning ring while one runs.
 function StatusDot(props: { status: string; label: string; class?: string; testID?: string }) {
   return (
     <View
@@ -69,7 +70,10 @@ function StatusDot(props: { status: string; label: string; class?: string; testI
       class={`size-[7px] ${props.class ?? ""}`}
       testID={props.testID ?? `chat-topic-status-${props.status}`}
     >
-      <StatusMark state={props.status === "running" ? "running" : props.status === "pending" ? "pending" : "on"} size={7} />
+      <StatusMark
+        state={props.status === "running" ? "running" : props.status === "pending" || props.status === "waiting" ? "pending" : "on"}
+        size={7}
+      />
     </View>
   );
 }

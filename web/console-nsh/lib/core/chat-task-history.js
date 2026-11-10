@@ -476,6 +476,18 @@ function taskAwaitingReply(task) {
   return !isTerminalStatus(normalizeTaskStatus(task?.status));
 }
 
+// Whether a task waits for the person's answer to a question it asked (ask_user). Only a running
+// task can: a queued one has not started, a pending one waits on an approval, and a finished one
+// keeps its own status. The questions the chat holds (the stream's, the latest) decide when there
+// are any: waiting while one is open. Without them, the task's awaiting_answer (`awaitingAnswer`
+// on a history item), the server's view of the run, decides.
+function taskWaitingForAnswer(item) {
+  if (normalizeTaskStatus(item?.status) !== "running") return false;
+  const questions = Array.isArray(item?.questions) ? item.questions : [];
+  if (questions.length > 0) return questions.some((question) => question?.status === "open");
+  return item?.awaitingAnswer === true || item?.awaiting_answer === true;
+}
+
 function historyPendingSeed(item, fallback = "agent") {
   const candidates = [item?.pendingSeed, item?.taskId, item?.id, fallback];
   for (const candidate of candidates) {
@@ -562,6 +574,7 @@ function taskHistoryItems(task, t, options = {}) {
         pendingSeed: taskID,
       }),
       awaiting: taskAwaitingReply(task),
+      awaitingAnswer: task?.awaiting_answer === true,
       plan: taskPlan(task),
       insights: taskInsights(task),
       questions: taskQuestions(task),
@@ -738,6 +751,7 @@ export {
   buildPollingHint,
   pollingActionWord,
   taskAwaitingReply,
+  taskWaitingForAnswer,
   chatApprovalReasonText,
   historyPendingSeed,
   historyTimeLabel,
