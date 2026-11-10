@@ -27,3 +27,6 @@ Moved to backlog: this item contains only a factory intake section and no sectio
 Owner explicitly confirms desktop reproduction and requests returning FT68 to new/: “FT68 我在桌面版也复现了。加到 new”. This is direct owner authorization in the current conversation to implement the existing FT68 scope; the earlier lack-of-authorization blocker is superseded by this request. Recorded by factory without impersonating an owner signature.
 
 Move backlog/ → new/. Include the desktop host in reproduction and regression verification, alongside the plain Editor versus MarkdownEditor comparison. Desktop reproduction is owner-reported, not independently verified by factory; the exact failing interactions and root causes still require verification. No implementation was performed in this update.
+
+## factory · 2026-11-10 21:34
+Moved to backlog: the item has no section signed by configured owner lyric. Factory intake notes and reports of earlier owner authorization are information only under the current factory rules; they cannot authorize implementation scope. Please add an owner-signed request before returning this item to new/. No code was changed or coder invoked.

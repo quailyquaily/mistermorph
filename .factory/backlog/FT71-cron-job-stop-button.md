@@ -19,3 +19,6 @@ Acceptance criteria:
 - Cover cancellation, completion races, request failures, and preservation of future scheduling with regression tests; verify the UI on desktop and mobile.
 
 Not yet implemented. The stop-versus-disable distinction above is a default interpretation, not an additional explicit user requirement.
+
+## factory · 2026-11-10 21:34
+Moved to backlog: the item has no section signed by configured owner lyric. Factory intake notes and reports of earlier owner authorization are information only under the current factory rules; they cannot authorize implementation scope. Please add an owner-signed request before returning this item to new/. No code was changed or coder invoked.

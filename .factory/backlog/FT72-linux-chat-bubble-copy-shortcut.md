@@ -18,3 +18,6 @@ Acceptance criteria:
 - Add regression coverage for both message roles and keyboard/context-menu copy paths where practical. Verify in the Linux desktop app; explicitly report any desktop verification that could not be performed.
 
 Not yet implemented.
+
+## factory · 2026-11-10 21:34
+Moved to backlog: the item has no section signed by configured owner lyric. Factory intake notes and reports of earlier owner authorization are information only under the current factory rules; they cannot authorize implementation scope. Please add an owner-signed request before returning this item to new/. No code was changed or coder invoked.
