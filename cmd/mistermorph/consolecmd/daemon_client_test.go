@@ -23,6 +23,8 @@ func TestTopicRegenerateProxyUsesLLMTimeoutInsteadOfProxyTimeout(t *testing.T) {
 		{name: "console prefix", basePath: "/console/runtime", method: "POST", path: "/topics/topic_a/regenerate-title"},
 		{name: "query", basePath: "/runtime", method: "POST", path: "/topics/topic_a/regenerate-title?source=console"},
 		{name: "caller deadline", basePath: "/runtime", method: "POST", path: "/topics/topic_a/regenerate-title", callerDeadline: true, wantDeadline: true},
+		{name: "title suggestion", basePath: "/runtime", method: "POST", path: "/topics/topic_a/title-suggestion"},
+		{name: "rename", basePath: "/runtime", method: "PUT", path: "/topics/topic_a/title", wantDeadline: true},
 		{name: "stop", basePath: "/runtime", method: "POST", path: "/topics/topic_a/stop", wantDeadline: true},
 		{name: "get", basePath: "/runtime", method: "GET", path: "/topics/topic_a/regenerate-title", wantDeadline: true},
 	} {

@@ -147,10 +147,19 @@ type TaskTopicRoutes struct {
 	AnswerQuestion AnswerQuestionFunc
 	// AnswerElevation answers an approval card of a running task; nil when the runtime asks no
 	// client to approve.
-	AnswerElevation      AnswerElevationFunc
-	TopicMetadata        TopicMetadataFunc
-	TopicContext         TopicContextFunc
+	AnswerElevation AnswerElevationFunc
+	TopicMetadata   TopicMetadataFunc
+	TopicContext    TopicContextFunc
+	// RegenerateTopicTitle generates a topic's title and icon and saves them (a TODO item's topic
+	// takes the icon alone).
 	RegenerateTopicTitle func(context.Context, string) (TopicInfo, error)
+	// SetTopicTitle saves the title a person typed for one of their topics; nil when the runtime's
+	// topics take no manual titles.
+	SetTopicTitle func(topicID, title string) (TopicInfo, error)
+	// SuggestTopicTitle generates a title for one of a person's topics the way RegenerateTopicTitle
+	// does, but saves nothing: the rename dialog offers it as a draft. Nil when the runtime does not
+	// name topics.
+	SuggestTopicTitle func(context.Context, string) (TopicTitleSuggestion, error)
 	// SetTopicTags replaces a topic's tags; nil when the runtime has no taggable topics.
 	SetTopicTags func(topicID string, tags []string) (TopicInfo, error)
 	// TopicLayout and SetTopicLayout read and replace how the tag view is arranged; nil when the

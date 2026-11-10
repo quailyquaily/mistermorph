@@ -164,6 +164,11 @@ execution resumed. These endpoints require the runtime token.
 In Console, `PUT /topics/{topic_id}/tags` with `{"tags": [...]}` replaces a topic's
 tags; topics carry them in `tags`. The reserved tag `pinned` pins the topic to the
 top of the Console topic list.
+In Console, `PUT /topics/{topic_id}/title` with `{"title": "..."}` renames one of a
+person's topics (trimmed, at most 72 characters; reserved and TODO item topics
+return `400`). A saved title is customized, so automatic naming does not replace
+it. `POST /topics/{topic_id}/title-suggestion` generates a title and icon from
+the topic's history without saving anything, for a client to offer as a draft.
 `GET /topics/layout` and `PUT /topics/layout` read and replace how the topic
 list's tag view is arranged: `tag_order` lists the tag groups in order, and
 `topic_order` lists the topic IDs of a tag group or the pinned group in order.
