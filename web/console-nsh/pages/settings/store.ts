@@ -58,6 +58,7 @@ import {
 } from "../../lib/core/persona-profile.js";
 import { modelPickerItemsFromPayload } from "../../lib/core/setup-picker.js";
 import { reactiveRecord } from "../../lib/stores/reactive-record.js";
+import { DEFAULT_WORKER_NAME_SET, normalizeWorkerNameSet } from "../../lib/core/worker-identity.js";
 import { hasFeature, isDesktop, restartDesktopApp } from "../../lib/platform";
 import { navigate } from "../../lib/router";
 import { createDeviceAuthFlow } from "./device-auth";
@@ -433,6 +434,11 @@ export function createSettingsStore() {
     x: reactiveRecord(EMPTY_CHANNELS.x()) as Record<string, any>,
     guard: reactiveRecord(EMPTY_CHANNELS.guard()) as Record<string, any>,
   };
+  // The Tools page's agent name set (tools.agent_name_set): shared by spawn and coder, saved with
+  // the tool switches. A missing or unknown stored value reads as the default.
+  const agentNameSet = signal(DEFAULT_WORKER_NAME_SET);
+  // False for a runtime too old to report the set: it would ignore one sent to it.
+  const agentNameSetSupported = signal(true);
   type ChannelKind = "telegram" | "slack" | "line" | "lark" | "mixin" | "discord" | "wechat" | "whatsapp" | "bluesky" | "x" | "guard";
   const channelState = (kind: string) => (state as any)[kind] as Record<string, any> | undefined;
 
@@ -675,7 +681,10 @@ export function createSettingsStore() {
   }
 
   function buildToolsSnapshot() {
-    return JSON.stringify({ tools: Object.fromEntries(Object.keys(DEFAULT_TOOLS).map((id) => [id, !!state.tools[id]])) });
+    return JSON.stringify({
+      tools: Object.fromEntries(Object.keys(DEFAULT_TOOLS).map((id) => [id, !!state.tools[id]])),
+      agent_name_set: agentNameSet(),
+    });
   }
 
   function buildMCPSnapshot() {
@@ -1521,6 +1530,8 @@ export function createSettingsStore() {
       state.llm.profiles = [];
       state.llm.fallback_profiles = [];
       Object.assign(state.tools, DEFAULT_TOOLS);
+      agentNameSet.set(DEFAULT_WORKER_NAME_SET);
+      agentNameSetSupported.set(true);
       state.mcp.servers = [];
       llmEnvManaged.set({});
       llmSecretFields.set({});
@@ -1623,6 +1634,8 @@ export function createSettingsStore() {
       });
       state.llm.fallback_profiles = normalizeNamedList(llm.fallback_profiles);
       for (const id of Object.keys(DEFAULT_TOOLS)) state.tools[id] = toolEnabledValue(tools[id]);
+      agentNameSet.set(normalizeWorkerNameSet(tools.agent_name_set));
+      agentNameSetSupported.set(typeof tools.agent_name_set === "string");
       applyMCPPayload(data?.mcp);
       llmEnvManaged.set(obj(envManagedPayload.llm));
       llmSecretFields.set(obj(secretFieldsPayload.llm));
@@ -2047,7 +2060,8 @@ export function createSettingsStore() {
   }
 
   function buildSavePayload(target = "all") {
-    const tools = Object.fromEntries(Object.keys(DEFAULT_TOOLS).map((id) => [id, { enabled: !!state.tools[id] }]));
+    const tools: Record<string, unknown> = Object.fromEntries(Object.keys(DEFAULT_TOOLS).map((id) => [id, { enabled: !!state.tools[id] }]));
+    if (agentNameSetSupported()) tools.agent_name_set = agentNameSet();
     if (target === "llm") return { llm: buildLLMSettingsPayload() };
     if (target === "tools") return { tools };
     const mcp = { servers: state.mcp.servers.map(serializeMCPServer) };
@@ -2398,6 +2412,10 @@ export function createSettingsStore() {
     if (untracked(agentSettingsReadOnly)) return;
     if (!Object.prototype.hasOwnProperty.call(state.tools, id)) return;
     state.tools[id] = !!value;
+  }
+  function setAgentNameSet(value: string) {
+    if (untracked(agentSettingsReadOnly)) return;
+    agentNameSet.set(normalizeWorkerNameSet(value));
   }
 
   /* --- MCP --- */
@@ -3035,12 +3053,14 @@ export function createSettingsStore() {
         untracked(() => {
           const preservedProfiles = state.llm.profiles;
           const preservedTools = { ...state.tools };
+          const preservedNameSet = agentNameSet();
           const previousToolsSnapshot = loadedToolsSnapshot();
           batch(() => {
             applyPayload(payload, { snapshotScope: normalizedTarget === "llm" ? "llm" : "all" });
             state.llm.profiles = preservedProfiles;
             if (normalizedTarget === "llm") {
               Object.assign(state.tools, preservedTools);
+              agentNameSet.set(preservedNameSet);
               loadedToolsSnapshot.set(previousToolsSnapshot);
             }
           });
@@ -3446,6 +3466,9 @@ export function createSettingsStore() {
     previewToolSchema,
     previewChannelToolSchema,
     setToolEnabled,
+    agentNameSet,
+    agentNameSetSupported,
+    setAgentNameSet,
     // console
     consoleLoading,
     consoleSaving,

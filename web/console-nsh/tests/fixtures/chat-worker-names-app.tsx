@@ -1,6 +1,7 @@
 // A test entry for tests/chat-worker-names.test.tsx: a task's worker roster (ChatWorkerRoster) at
 // phone width, as the runtime records its workers: scientists by name index, a nested coder, a
-// repeat once the pool ran out, and a worker from before the scientist pool, with buttons that
+// repeat once the pool ran out, a worker from before the scientist pool, and workers named from
+// the musician and artist sets (one a repeat) beside them in the same roster, with buttons that
 // switch the Console's language. A chip opens its worker in the detail panel (ActivityDetailPanel)
 // beside the roster, as the chat page does.
 import { mount, signal, View } from "nsh";
@@ -13,7 +14,7 @@ import { localeState } from "../../lib/core/context.js";
 import { WORKER_NAME_POOLS } from "../../lib/core/worker-identity.js";
 
 const order = [4, 1, 0, 31, 23, 6, 15, 29, 2, 3, 7, 28];
-const workers = order.map((nameIndex, n) => ({
+const workers: Record<string, unknown>[] = order.map((nameIndex, n) => ({
   id: `worker-${n + 1}`,
   name: WORKER_NAME_POOLS.en[nameIndex],
   name_index: nameIndex,
@@ -24,6 +25,8 @@ const workers = order.map((nameIndex, n) => ({
 workers.push(
   { id: "worker-33", name: "Darwin-2", name_index: 35, avatar_index: 4, kind: "coder", status: "done" },
   { id: "worker-34", name: "Hazel", name_index: 13, avatar_index: 5, kind: "subagent", status: "failed" },
+  { id: "worker-35", name: "Chopin", name_set: "musicians", name_index: 3, avatar_index: 6, kind: "subagent", status: "done" },
+  { id: "worker-36", name: "Van Gogh-2", name_set: "artists", name_index: 37, avatar_index: 0, kind: "coder", status: "done" },
 );
 const activity = normalizeActivity({ workers });
 const selected = signal("");
