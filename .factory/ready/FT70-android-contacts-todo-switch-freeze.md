@@ -39,3 +39,16 @@ Fixed Contacts empty-view ownership to avoid leaked reactive scopes from the nsh
 Checks from the completed build: manager Go gate passed; coder reported nsh check and all 407 nsh tests passed. This retry reused the unchanged commit and did not rerun tests. No new installs. No physical Android device or visual UI verification was performed; actual device/Android/app-version validation remains outstanding.
 
 Moved new → review.
+
+## factory · review · 2026-11-10 22:21
+head: abde50e77399c19a57fded2a7eeedd470af931af
+verdict: pass
+notes:
+- Claude Code reviewed all five changed files against origin/master (c89e4e1430a6c50049aebb34cb8feb17ea22217c); no actionable findings. Branch merges cleanly and worktree stayed clean.
+- Verified nsh 0.4.0 empty-slot lifecycle ownership against its implementation: the element slot removes leaked reactive subscriptions on Contacts unmount. The upstream inert-cell allocation remains; this change does not repair the runtime itself.
+- Required Go gate passed (gofmt, go vet, go test); nsh check passed; nsh test --web-host tests/noHost.js passed, 407 tests, zero failures. Tests used a throwaway HOME. No installs.
+- All three 50-round-trip headless scenarios passed. Replacing ContactsPage with the baseline version in a scratch copy caused the empty-contacts regression test to hang until the external 600-second timeout, corroborating the regression coverage.
+- Physical Android and visual verification remain outstanding: no device, Android version or app build was tested. Owner should verify repeated navigation on the affected Android device before shipping.
+- Residual test limits: the per-test timeout cannot stop this baseline hang, so CI needs an outer timeout; the lifecycle fixture intentionally asserts the current nsh bug and will need updating after an upstream fix.
+
+Moved review → ready.
