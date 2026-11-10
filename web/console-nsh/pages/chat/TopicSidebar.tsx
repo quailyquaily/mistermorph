@@ -3,9 +3,9 @@
 // topics' titles, foldable groups, each topic with its icon, title and activity mark, and older
 // topics on demand. Metrics from the Vue
 // console's ChatView.css / common.css (`.chat-topic-*`, `.workspace-sidebar-*`): a 57pt head, rows
-// 40pt tall 2pt apart (44 on phones) with a 20pt icon and a 14pt title that fades where it is cut,
-// group labels in mono caps with a hairline running out to the right, one selection highlight that
-// glides between rows, and calm hover fills.
+// 40pt tall 2pt apart (44 on phones) with a 20pt icon and a 14pt title (15 on mobile) that fades
+// where it is cut, group labels in mono caps with a hairline running out to the right, one
+// selection highlight that glides between rows, and calm hover fills.
 //
 // The rows are an `Each` in a scroll view rather than a virtualized List: a sidebar holds dozens of
 // topics (older ones load on demand), and the sliding highlight must share the rows' parent to
@@ -24,6 +24,7 @@ import { t } from "../../components/chat/i18n";
 import { normalizeTopicID } from "../../lib/core/chat-task-history.js";
 import type { ChatController, SidebarView, TopicRow } from "./chatController";
 import { MobileBarSpacer } from "../../components/frame/mobileBar";
+import { listTitleSize } from "../../components/frame/metrics";
 import { createPullSearch } from "../../components/shared/pullSearch";
 import { createTopicDrag } from "./topicDrag";
 
@@ -99,6 +100,11 @@ function StatusDot(props: {
 // list keeps its rhythm). Exported for tests/topic-group-heading.test.tsx.
 export const TOPIC_GROUP_TOGGLE_CLASS =
   "mt-1.5 flex-row items-center gap-2.5 rounded-(--radius) py-[7px] pl-3.5 pr-3.5 transition-colors duration-[180ms] hover:bg-hover-soft";
+
+/** A topic row's title type: 14pt on a 20pt line, 15 on 22 on mobile. Exported for
+ * tests/list-title-size.test.tsx. */
+export const topicTitleClass = (mobile: boolean) =>
+  `${listTitleSize(mobile)} ${mobile ? "leading-[22px]" : "leading-5"} tracking-[-0.025em] text-foreground`;
 
 // The head's last button (New, or the tag toggle where a phone's New floats over the list) and every
 // row's status mark end the same distance in from the sidebar's right edge: the right inset. On a
@@ -266,7 +272,7 @@ export function TopicSidebar(props: {
             />
           </If>
           <View class="flex-1 gap-px" {...probe(() => `title-${normalizeTopicID(row().topic?.id)}`)}>
-            <FadeText text={c.topicTitle(row().topic)} class="text-sm leading-5 tracking-[-0.025em] text-foreground" noTooltip />
+            <FadeText text={c.topicTitle(row().topic)} class={topicTitleClass(c.mobileMode())} noTooltip />
             <If when={c.isCronTopicID(row().topic?.id)}>
               <FadeText text={c.cronTopicModel(row().topic)} class="font-mono text-xs text-muted-foreground" noTooltip />
             </If>

@@ -26,3 +26,10 @@ export const gutterY = computed(() => {
 export const pageGap = computed(() => Math.round(clamp(14, windowSize().width * 0.016, 24) * 10) / 10);
 export const pageTop = computed(() => Math.round(clamp(14, windowSize().width * 0.014, 20) * 10) / 10);
 
+/**
+ * The size of a title in a list row of the second column (Topics, Contacts, Memories, Skills,
+ * TODO): 14pt on a desktop, 15pt below the mobile breakpoint, where the list is a screen of its own
+ * (the 15pt of the phone panels' titles). Each row sets its line height to match; meta lines stay
+ * 12pt.
+ */
+export const listTitleSize = (mobile: boolean) => (mobile ? "text-[15px]" : "text-sm");
