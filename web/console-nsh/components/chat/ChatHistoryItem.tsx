@@ -6,7 +6,7 @@
 //
 // It is a List row: it is made once per cell and shows whatever item the cell holds now, so every
 // value is read from `props.item` in a binding and per-item state lives in ChatRowContext.
-import type { JSX } from "nsh";
+import type { JSX, ViewRef } from "nsh";
 import {
   Canvas,
   cleanup,
@@ -203,7 +203,13 @@ function CopyButton(props: { copied: boolean; copySeq: number; label: string; on
   );
 }
 
-export function ChatHistoryItem(props: { item: HistoryItem; ctx: ChatRowContext; arriving?: (id: string) => boolean }) {
+export function ChatHistoryItem(props: {
+  item: HistoryItem;
+  ctx: ChatRowContext;
+  arriving?: (id: string) => boolean;
+  /** The row's view, once (ChatHistoryList's `onRowRef`). */
+  rowRef?: (ref: ViewRef) => void;
+}) {
   const item = () => props.item;
   const ctx = props.ctx;
   // A message that just joined the thread: a sent one rises from the composer (14pt), a reply
@@ -538,6 +544,7 @@ export function ChatHistoryItem(props: { item: HistoryItem; ctx: ChatRowContext;
       class="group w-full max-w-[832px] gap-[7px] self-center"
       style={{ ...arrival.style, paddingLeft: role() === "user" ? sideRoom() : 0, paddingRight: isAgent() ? sideRoom() : 0 }}
       testID={`chat-item-${role() || "system"}`}
+      ref={(ref: ViewRef) => props.rowRef?.(ref)}
     >
       <If when={retryNotices().length}>
         <View class="gap-1.5" accessibilityLabel="Retry updates">

@@ -86,6 +86,19 @@ Headless tests prove behaviour, not the look.
 - `style={{ display: "flex" }}` turns a View into a row.
 - On an inverted `List`, `scrollToEnd()` goes to the oldest item (nsh 0.4.0): use
   `scrollToIndex({ index: 0 })` to show the newest.
+- `List` tells the items of `each` apart by identity (`===`), not by `keyExtractor`: an item
+  replaced by a new object (`{ ...item, text }`) is one removed and one inserted, its measured
+  height goes back to `estimatedItemSize`, and the place the list keeps on screen goes with it. A
+  list whose items are updated by copy gets their ids and looks each one up in its row
+  (`ChatHistoryList`; docs/console/chat-scroll-anchoring.md).
+- An inverted `List` keeps its distance from the end, and moves nothing for a row across the
+  viewport's bottom edge: a reply growing there pushes what is on screen up. The chat's list is
+  not inverted: `maintainVisibleContentPosition` follows the end, and is off while scrolled up,
+  since nsh 0.4's compares its old end with an offset already moved for rows that changed above
+  the viewport (an older page taller than the way back to the bottom sent the reader there).
+- Headless (`nsh test`), a list's own scroll corrections are not reported back: `measure()` and
+  `onScroll` lag until the next scroll. Scroll by a point and back before reading positions
+  (`tests/chat-scroll-anchor.test.tsx`).
 - `lifecycle()` from `nsh` breaks the whole page on the web runtime (0.4.0).
 - A page loaded in a hidden browser tab gets no frames, so animated values stall part-way until
   the tab is shown; take screenshots from a visible tab.

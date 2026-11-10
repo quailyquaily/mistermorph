@@ -1,9 +1,9 @@
-// The conversation: a virtualized, inverted list (the newest message at the bottom, where it
-// starts and stays while new messages and streamed words arrive; scrolled up, the messages on
-// screen keep their place). While another topic's history loads, a placeholder thread shows
-// instead of the old messages. Ported from web/console/src/components/ChatHistoryList.js.
-import type { ListRef } from "nsh";
-import { createMotion, effect, List, Text, untracked, View, windowSize } from "nsh";
+// The conversation: a virtualized list that opens at the newest message, at the bottom, and stays
+// there while new messages and streamed words arrive; scrolled up, the messages on screen keep their
+// place whatever changes above or below them. While another topic's history loads, a placeholder
+// thread shows instead of the old messages. Ported from web/console/src/components/ChatHistoryList.js.
+import type { ListRef, ViewRef } from "nsh";
+import { computed, createMotion, effect, List, signal, Text, untracked, View, windowSize } from "nsh";
 import { createArrivalTracker } from "../../lib/core/arrivals.js";
 import { SCROLLBAR } from "../motion/ScrollEdges";
 import { Button } from "../ui";
@@ -13,6 +13,9 @@ const ARRIVAL_WINDOW_MS = 700;
 
 /** The room under the newest message, in points. */
 export const HISTORY_END_PADDING = 20;
+
+/** Within this many points of the newest message's end the list follows it as it grows. */
+export const HISTORY_FOLLOW_THRESHOLD = 32;
 
 /** The conversation's side gutter: the Vue console's clamp(12px, 2vw, 20px). */
 export function chatGutter() {
@@ -56,6 +59,14 @@ function Skeleton(props: { label: string }) {
   );
 }
 
+function historyID(item: HistoryItem) {
+  return String(item?.id ?? "");
+}
+
+function sameIDs(a: string[], b: string[]) {
+  return a.length === b.length && a.every((id, i) => id === b[i]);
+}
+
 export function ChatHistoryList(props: {
   items: HistoryItem[];
   loading: boolean;
@@ -71,9 +82,18 @@ export function ChatHistoryList(props: {
   onScrollFromEnd?: (distance: number, viewport: number) => void;
   /** Room above the oldest message, for a control floating over the top corner (default 20). */
   topInset?: number;
+  /** Each row's view as its cell is made, and the id it shows now (cells are recycled). For tests. */
+  onRowRef?: (ref: ViewRef, id: () => string) => void;
 }) {
-  // Newest first: the list is inverted.
-  const rows = () => [...props.items].reverse();
+  // nsh's List (0.4.0) tells its items apart by identity (`===`), not by `keyExtractor`. Every
+  // update gives a message a new object (a streamed word, a status, a finished task's reload gives
+  // them all new ones), and an item the List sees replaced loses its measured height for the
+  // estimate, and with it the place the list keeps on screen: scrolled up, the view jumped. So the
+  // List gets the ids (equal strings while a message only changes) and each row looks its message
+  // up: a message changes in place and its row is measured again. Only new, removed or reordered
+  // messages change the ids.
+  const rows = computed(() => props.items.map(historyID), { equals: sameIDs });
+  const byID = computed(() => new Map(props.items.map((item) => [historyID(item), item])));
   // Messages that just joined the thread animate in; history loads and topic switches do not (the
   // Vue console's arrival tracker). An id stays "arriving" for a moment longer than its motion, so
   // a row bound again by streaming text in that time does not start over.
@@ -91,32 +111,47 @@ export function ChatHistoryList(props: {
     });
   });
   const arriving = (id: string) => (arrivingUntil.get(id) ?? 0) > Date.now();
+  // Whether the reader is at the newest message (within the threshold), as the last scroll report
+  // says. The list follows the end only then: nsh 0.4's `maintainVisibleContentPosition` compares
+  // its old end with an offset already moved for rows that changed above the viewport, so with it
+  // on, a reader scrolled up by less than an older page's height (or a row above that grew) was sent
+  // to the bottom. Off, the list keeps what is on screen in place; turned on again, it starts over.
+  const following = signal(true);
   return (
     <If when={!props.loading} else={<Skeleton label={props.loadingText} />}>
       <List
-        ref={(node: ListRef) => props.onListRef?.(node)}
+        ref={(node: ListRef) => {
+          // Before the first frame: the conversation opens at its newest message, its end shown.
+          node.scrollToEnd({ animated: false });
+          following.set(true);
+          props.onListRef?.(node);
+        }}
         each={rows()}
-        inverted
-        keyExtractor={(item) => item.id}
+        keyExtractor={(id) => id}
+        // Not `inverted`: an inverted list keeps its distance from the bottom, so a reply growing
+        // below the viewport (the running one, read from its start) pushed what was on screen up.
+        // This list follows the end only while it is at it (or within the threshold, where a
+        // return to the newest message resumes following); scrolled further up, what is on screen
+        // stays where it is, whether rows above it, below it or across its bottom edge change.
+        // `following` turns the following off while scrolled up (see above).
+        maintainVisibleContentPosition={following() ? { autoscrollToBottomThreshold: HISTORY_FOLLOW_THRESHOLD } : undefined}
         // Close to a typical turn (a sent message is ~110pt, a reply 150 to 600), so the scroll bar
         // and jumps are right before rows are measured.
         estimatedItemSize={180}
         keyboardDismissMode="on-drag"
         scrollbar={SCROLLBAR}
         scrollEventThrottle={100}
-        onScroll={(event) =>
-          props.onScrollFromEnd?.(Math.max(0, event.contentSize.height - event.offset.y - event.size.height), event.size.height)
-        }
-        // There are no newer pages to load: the listener makes the inverted list keep the messages
-        // on screen in place while scrolled up, and follow the newest one while at the bottom.
-        onLoadMoreAtStart={() => {}}
+        onScroll={(event) => {
+          const distance = Math.max(0, event.contentSize.height - event.offset.y - event.size.height);
+          following.set(distance <= HISTORY_FOLLOW_THRESHOLD);
+          props.onScrollFromEnd?.(distance, event.size.height);
+        }}
         class="flex-1"
-        // The Vue history: 20pt around the conversation and between turns. The list is inverted,
-        // and so is its padding: `paddingTop` is at its start, under the newest message, and
-        // `paddingBottom` above the oldest one (room for the panel toggle there).
-        contentStyle={{ paddingTop: HISTORY_END_PADDING, paddingBottom: props.topInset ?? 20, paddingLeft: chatGutter(), paddingRight: chatGutter(), gap: 20 }}
+        // The Vue history: 20pt around the conversation and between turns; above the oldest
+        // message, room for the panel toggle.
+        contentStyle={{ paddingTop: props.topInset ?? 20, paddingBottom: HISTORY_END_PADDING, paddingLeft: chatGutter(), paddingRight: chatGutter(), gap: 20 }}
         testID="chat-history"
-        footer={() => (
+        header={() => (
           <If when={props.hasOlder}>
             <View class="items-center py-2">
               <Button
@@ -136,7 +171,18 @@ export function ChatHistoryList(props: {
           </View>
         )}
       >
-        {(item) => <ChatHistoryItem item={item()} ctx={props.ctx} arriving={arriving} />}
+        {(id) => {
+          // A cell still bound to a message just removed keeps showing it until it is bound again.
+          const item = computed<HistoryItem | undefined>((previous) => byID().get(id()) ?? previous);
+          return (
+            <ChatHistoryItem
+              item={item() as HistoryItem}
+              ctx={props.ctx}
+              arriving={arriving}
+              rowRef={props.onRowRef ? (ref) => props.onRowRef?.(ref, id) : undefined}
+            />
+          );
+        }}
       </List>
     </If>
   );

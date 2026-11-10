@@ -7,7 +7,6 @@
 // It runs in the ChatPage component's body: its effects, timers and sockets go with the page.
 import { batch, cleanup, computed, effect, LayoutAnimation, signal, untracked } from "nsh";
 import { MOTION_SLOW, motionMs } from "../../components/motion/tokens";
-import { HISTORY_END_PADDING } from "../../components/chat/ChatHistoryList";
 import type { ListRef } from "nsh";
 import { approvalDetailsByID, taskApprovalState } from "../../lib/core/chat-approvals.js";
 import { formatDate, formatNumber } from "../../lib/core/intl-format.js";
@@ -1788,21 +1787,17 @@ export function createChatController() {
 
   /* ---------- history ---------- */
 
-  // The newest message is item 0 of the inverted list. Scroll to that index, not `scrollToEnd()`:
-  // nsh 0.4's core resolves an inverted list's "end" to content offset 0, the top of the content,
-  // which is the OLDEST message (list.rs `end_offset`), so a topic opened at its first message.
-  // Resolved natively, the index scroll also follows the row while it is measured.
-  // An inverted list lays its content padding out mirrored too: the history's 20pt `paddingTop`
-  // is below the newest message, so the scroll goes that much past item 0's own end.
-  const stickToBottom = (animated = false) => historyList?.scrollToIndex({ index: 0, viewPosition: 0, viewOffset: HISTORY_END_PADDING, animated });
+  // The newest message is the last item, at the end of the list's content (its 20pt end padding
+  // under it). Resolved natively, the scroll also follows the end while rows are measured.
+  const stickToBottom = (animated = false) => historyList?.scrollToEnd({ animated });
   // How far the history is scrolled up from the newest message, in points (ChatHistoryList keeps it).
   let historyDistanceFromEnd = 0;
   let historyViewport = 0;
 
   function scrollHistoryToBottom(options: { force?: boolean; smooth?: boolean } = {}) {
-    // The inverted list keeps the newest message in view while it is there; a send or a load moves
-    // back to it. A send glides there when it is near (within 1.5 screens), and jumps from farther,
-    // so the view never trails the conversation (the Vue console's scrollHistoryToBottom).
+    // The list follows the newest message while it is at it (ChatHistoryList); a send or a load
+    // moves back to it. A send glides there when it is near (within 1.5 screens), and jumps from
+    // farther, so the view never trails the conversation (the Vue console's scrollHistoryToBottom).
     if (!options.force && !options.smooth) return;
     const near = historyDistanceFromEnd <= Math.max(1, historyViewport) * 1.5;
     const animated = Boolean(options.smooth) && near;
