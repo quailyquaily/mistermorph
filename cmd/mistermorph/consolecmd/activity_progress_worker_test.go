@@ -110,3 +110,38 @@ func TestActivityWorkerIndicesReachRosterAndSurviveReload(t *testing.T) {
 		}
 	}
 }
+
+// A worker's name set reaches the roster and survives a reload and a replay, beside workers
+// recorded before name sets, which keep having none.
+func TestActivityWorkerNameSetReachesRosterAndSurvivesReload(t *testing.T) {
+	nameIndex, avatarIndex := 3, 2
+	musician := &agent.WorkerMetadata{ID: "worker-1", Name: "Chopin", NameSet: agent.WorkerNameSetMusicians, NameIndex: &nameIndex, AvatarIndex: &avatarIndex}
+	scientist := &agent.WorkerMetadata{ID: "worker-2", Name: "Darwin", NameIndex: &nameIndex, AvatarIndex: &avatarIndex}
+	var progress *consoleActivityProgress
+	for _, event := range []agent.Event{
+		{Kind: agent.EventKindToolStart, ActivityID: "spawn", ToolName: "spawn", Status: "running", Worker: musician},
+		{Kind: agent.EventKindToolStart, ActivityID: "coder", ToolName: "coder", Status: "running", Worker: scientist},
+		{Kind: agent.EventKindToolDone, ActivityID: "spawn", ToolName: "spawn", Status: "done"},
+	} {
+		progress, _ = updateConsoleActivityProgress(progress, event)
+	}
+	raw, err := json.Marshal(progress)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var loaded consoleActivityProgress
+	if err := json.Unmarshal(raw, &loaded); err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded.Workers) != 2 || loaded.Workers[0].NameSet != "musicians" || loaded.Workers[0].Name != "Chopin" || loaded.Workers[1].NameSet != "" {
+		t.Fatalf("workers = %+v (%s)", loaded.Workers, raw)
+	}
+	if entry := loaded.History[0]; entry.Worker == nil || entry.Worker.NameSet != "musicians" {
+		t.Fatalf("history entry lost its name set: %+v", entry)
+	}
+	again := cloneConsoleActivityProgress(&loaded)
+	syncConsoleActivityWorkers(again, nil)
+	if again.Workers[0].NameSet != "musicians" || again.Workers[1].NameSet != "" {
+		t.Fatalf("replay changed the name sets: %+v", again.Workers)
+	}
+}

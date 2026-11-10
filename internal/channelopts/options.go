@@ -46,6 +46,7 @@ func engineToolsConfigFromReader(r ConfigReader) agent.EngineToolsConfig {
 		SpawnEnabled:   r.GetBool("tools.spawn.enabled"),
 		CoderEnabled:   r.GetBool("tools.coder.enabled"),
 		CoderPathExtra: append([]string(nil), r.GetStringSlice("tools.coder.path_extra")...),
+		WorkerNameSet:  agent.NormalizeWorkerNameSet(r.GetString("tools.agent_name_set")),
 	}
 }
 

@@ -281,6 +281,7 @@ func Apply(v *viper.Viper) {
 	v.SetDefault("tools.coder.path_extra", []string{})
 	v.SetDefault("tools.coder.bypass_approvals.codex", false)
 	v.SetDefault("tools.coder.bypass_approvals.claude", false)
+	v.SetDefault("tools.agent_name_set", "scientists")
 
 	// Platform-specific shell tool defaults:
 	// - Windows: PowerShell enabled, Bash disabled

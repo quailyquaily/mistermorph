@@ -1,6 +1,11 @@
 package configsettings
 
-import "testing"
+import (
+	"slices"
+	"testing"
+
+	"github.com/quailyquaily/mistermorph/agent"
+)
 
 func TestPublicFieldSetsHaveUniquePathsAndApplyModes(t *testing.T) {
 	seen := map[string]string{}
@@ -44,4 +49,17 @@ func TestPublicFieldSetsHaveUniquePathsAndApplyModes(t *testing.T) {
 			t.Errorf("public field %q is not registered", path)
 		}
 	}
+}
+
+// The registry's agent name sets are the ones the runtime names workers from.
+func TestAgentNameSetFieldMatchesTheRuntimeSets(t *testing.T) {
+	for _, field := range AgentFields() {
+		if field.Path == "tools.agent_name_set" {
+			if !slices.Equal(field.Enum, agent.WorkerNameSets()) || field.Kind != KindString {
+				t.Fatalf("field = %+v, want the sets %v", field, agent.WorkerNameSets())
+			}
+			return
+		}
+	}
+	t.Fatal("tools.agent_name_set is not registered")
 }

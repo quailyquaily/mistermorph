@@ -510,6 +510,7 @@ func buildChatSession(cmd *cobra.Command, deps Dependencies) (*chatSession, erro
 		CoderEnabled:   viper.GetBool("tools.coder.enabled"),
 		PathRoots:      pathroots.New("", fileCacheDir, fileStateDir),
 		CoderPathExtra: append([]string(nil), viper.GetStringSlice("tools.coder.path_extra")...),
+		WorkerNameSet:  agent.NormalizeWorkerNameSet(viper.GetString("tools.agent_name_set")),
 	}
 	taskRuntime, err := taskruntime.NewRunPreparer(common, taskruntime.BootstrapOptions{
 		AgentConfig: agent.Config{

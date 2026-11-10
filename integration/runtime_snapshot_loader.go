@@ -73,6 +73,7 @@ func loadRuntimeSnapshotFromReader(v *viper.Viper) runtimeSnapshot {
 			ToolsSpawnEnabled:         v.GetBool("tools.spawn.enabled"),
 			ToolsCoderEnabled:         v.GetBool("tools.coder.enabled"),
 			ToolsCoderPathExtra:       append([]string(nil), v.GetStringSlice("tools.coder.path_extra")...),
+			ToolsAgentNameSet:         agent.NormalizeWorkerNameSet(v.GetString("tools.agent_name_set")),
 			ToolsPlanCreateEnabled:    v.GetBool("tools.plan_create.enabled"),
 			ToolsPlanCreateMaxSteps:   v.GetInt("tools.plan_create.max_steps"),
 			ToolsTodoUpdateEnabled:    v.GetBool("tools.todo_update.enabled"),
