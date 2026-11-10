@@ -152,6 +152,9 @@ Settings that only apply after a restart (`process_restart` and `runtime_restart
   - list + detail (read-only)
 - Files:
   - `cron.yaml`, `identity.yaml`, `soul.md` and `HEARTBEAT.md` are rows of `agent.db`; their routes render them in the file shapes and parse a save back (for one release)
+- TODO runs:
+  - while a saved item runs, its editor's head shows Stop (desktop, the calendar's panel and the phone editor alike). It stops that one execution, named by the `run_id` from `/todo/runs`, through `POST /todo/tasks/{id}/stop`; the item, its schedule and its later runs are left alone, and what the run already did is not undone. Idle, waiting and unsaved items and the heartbeat show no Stop
+  - after the press the button reads Stopping… and is busy (a second press sends nothing) until `/todo/runs` (asked every second meanwhile) reports how that run ended: `Stopped "…"` only once it ended stopped, `"…" finished before it could stop` (or `failed`) when it ended on its own first. The last-run line follows (`· Stopped`). A run another client is stopping shows Stopping… too. A failed request says why and leaves Stop to press again; a run the runtime no longer holds says it is no longer running. A later run of the item has a Stop of its own
 - Heartbeat (in TODO):
   - the heartbeat's workflows, one card each: a title, a switch (an off workflow is kept but not run) and Markdown instructions; add, move up or down, delete; Save replaces the list
 - Contacts:

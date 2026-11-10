@@ -309,6 +309,165 @@ test("running and waiting items say so, and a running item cannot be run again",
   await expect(app.press("text:Run manually")).rejects.toMatchObject({ code: "ERR_NSH_TEST_DISABLED" });
 });
 
+/** A runtime whose TODO runs the test changes: `state.runs` and `state.finished` as /todo/runs lists them. */
+function liveRuns(initial: any[]) {
+  const state = { runs: initial, finished: [] as any[] };
+  return {
+    state,
+    api: {
+      "GET /proxy:/todo/tasks": () => ({ body: tasksBody({ runs: state.runs }) }),
+      "GET /proxy:/todo/runs": () => ({ body: { runs: state.runs, finished: state.finished } }),
+    } as Record<string, unknown>,
+  };
+}
+
+const RUN_A = { id: "task-1", run_id: "run_a", state: "running", started_at: "2030-01-01T09:15:00Z" };
+
+test("Stop stops the item's running run once, and says so only when the run has ended", async () => {
+  const live = liveRuns([RUN_A]);
+  const { app, calls } = await openTodo({
+    ...live.api,
+    "POST /proxy:/todo/tasks/task-1/stop": () => ({ status: 202, body: { status: "stopping", id: "task-1", run_id: "run_a" } }),
+  });
+  await app.press("id:todo-item-task-1");
+  await app.waitFor("id:todo-stop");
+  expect(app.texts()).toContain("Stop");
+  await app.press("id:todo-stop");
+  await app.waitFor("text:Stopping…");
+  // Pending: a second press sends nothing.
+  await expect(app.press("id:todo-stop")).rejects.toMatchObject({ code: "ERR_NSH_TEST_DISABLED" });
+  const stops = proxied(calls, "POST", "/todo/tasks/task-1/stop");
+  expect(stops.length).toBe(1);
+  expect(stops[0].json).toEqual({ run_id: "run_a" });
+
+  // Taken but still winding down: no word of success yet.
+  live.state.runs = [{ ...RUN_A, stopping: true }];
+  const polls = () => proxied(calls, "GET", "/todo/runs").length;
+  const before = polls();
+  await app.waitUntil(() => polls() > before, { timeout: 4000 });
+  expect(app.shows("text:/^Stopped/")).toBe(false);
+  expect(app.texts()).toContain("Stopping…");
+
+  live.state.runs = [];
+  live.state.finished = [{ id: "task-1", run_id: "run_a", status: "canceled", stopping: true, finished_at: "2030-01-01T09:16:00Z" }];
+  await app.waitFor('Stopped "Review". What it already did is not undone.', { timeout: 4000 });
+  await app.waitFor("id:todo-stop", { state: "gone" });
+  await app.waitFor("text:/^Last run .+ · Stopped$/");
+  // The item itself was left alone: the stop is all the page sent.
+  expect(agentWrites(calls).map((call) => `${call.method} ${call.uri}`)).toEqual(["POST /todo/tasks/task-1/stop"]);
+});
+
+test("a run that finishes before it stops says so, and the next run has a Stop of its own", async () => {
+  const live = liveRuns([RUN_A]);
+  const { app, calls } = await openTodo({
+    ...live.api,
+    "POST /proxy:/todo/tasks/task-1/stop": (request: ApiRequest) => ({
+      status: 202,
+      body: { status: "stopping", id: "task-1", run_id: request.json?.run_id },
+    }),
+  });
+  await app.press("id:todo-item-task-1");
+  await app.press("id:todo-stop");
+  await app.waitFor("text:Stopping…");
+  // The run completed anyway, and the item's schedule started its next run.
+  live.state.runs = [{ ...RUN_A, run_id: "run_b", started_at: "2030-01-01T09:20:00Z" }];
+  live.state.finished = [{ id: "task-1", run_id: "run_a", status: "done", stopping: true, finished_at: "2030-01-01T09:16:00Z" }];
+  await app.waitFor('"Review" finished before it could stop.', { timeout: 4000 });
+  expect(app.shows("text:/^Stopped/")).toBe(false);
+  await app.waitFor("text:/^Last run .+ · Done$/");
+  // The new run is not being stopped: its Stop is ready, and names it.
+  await app.waitFor("text:Stop");
+  await app.press("id:todo-stop");
+  await app.waitFor("text:Stopping…");
+  expect(proxied(calls, "POST", "/todo/tasks/task-1/stop").map((call) => call.json?.run_id)).toEqual(["run_a", "run_b"]);
+});
+
+test("a stop answered with the run's end needs no wait", async () => {
+  const live = liveRuns([RUN_A]);
+  const { app } = await openTodo({
+    ...live.api,
+    "POST /proxy:/todo/tasks/task-1/stop": () => {
+      live.state.runs = [];
+      return { body: { status: "failed", id: "task-1", run_id: "run_a" } };
+    },
+  });
+  await app.press("id:todo-item-task-1");
+  await app.press("id:todo-stop");
+  await app.waitFor('"Review" failed before it could stop.');
+  await app.waitFor("text:/^Last run .+ · Failed$/");
+  await app.waitFor("id:todo-stop", { state: "gone" });
+});
+
+test("a failed stop says why and can be tried again; a run that is gone says so", async () => {
+  const live = liveRuns([RUN_A]);
+  let answers = 0;
+  const { app, calls } = await openTodo({
+    ...live.api,
+    "POST /proxy:/todo/tasks/task-1/stop": () => {
+      answers += 1;
+      return answers === 1
+        ? { status: 503, body: { error: "runtime busy" } }
+        : { status: 404, body: { error: "this run is not running", status: "not_found" } };
+    },
+  });
+  await app.press("id:todo-item-task-1");
+  await app.press("id:todo-stop");
+  await app.waitFor("Could not stop the run: runtime busy");
+  // Still running: Stop is offered again, not stuck pending.
+  await app.waitFor("text:Stop");
+  expect(app.shows("text:Stopping…")).toBe(false);
+  await app.press("id:todo-stop");
+  await app.waitFor('"Review" is no longer running.');
+  expect(proxied(calls, "POST", "/todo/tasks/task-1/stop").length).toBe(2);
+  expect(app.shows("text:/^Stopped/")).toBe(false);
+});
+
+test("idle and waiting items and Heartbeat offer no Stop", async () => {
+  const { app, calls } = await openTodo(
+    liveRuns([
+      { id: "task-2", run_id: "run_q", state: "queued" },
+      { id: "__heartbeat__", run_id: "run_h", state: "running" },
+    ]).api,
+  );
+  await app.press("id:todo-item-task-1");
+  await app.waitFor("id:todo-task-editor");
+  expect(app.shows("id:todo-stop")).toBe(false);
+  await app.press("id:todo-item-task-2");
+  await app.waitFor("text:Report");
+  expect(app.shows("id:todo-stop")).toBe(false);
+  await app.press("id:todo-heartbeat-item");
+  await app.waitFor("text:Inbox");
+  expect(app.shows("id:todo-stop")).toBe(false);
+  expect(agentWrites(calls).length).toBe(0);
+});
+
+test("a run someone else is stopping shows Stopping… and sends nothing", async () => {
+  const { app, calls } = await openTodo(liveRuns([{ ...RUN_A, stopping: true }]).api);
+  await app.press("id:todo-item-task-1");
+  await app.waitFor("text:Stopping…");
+  await expect(app.press("id:todo-stop")).rejects.toMatchObject({ code: "ERR_NSH_TEST_DISABLED" });
+  expect(agentWrites(calls).length).toBe(0);
+});
+
+test("on a phone the open item's editor offers Stop while it runs", async () => {
+  const live = liveRuns([RUN_A]);
+  const { app, calls } = await openTodo(
+    {
+      ...live.api,
+      "POST /proxy:/todo/tasks/task-1/stop": () => ({ status: 202, body: { status: "stopping", id: "task-1", run_id: "run_a" } }),
+    },
+    { width: 390, height: 844 },
+  );
+  await app.press("id:todo-item-task-1");
+  await app.waitFor("id:todo-task-editor");
+  await app.press("id:todo-stop");
+  await app.waitFor("text:Stopping…");
+  live.state.runs = [];
+  live.state.finished = [{ id: "task-1", run_id: "run_a", status: "canceled", stopping: true, finished_at: "2030-01-01T09:16:00Z" }];
+  await app.waitFor('Stopped "Review". What it already did is not undone.', { timeout: 4000 });
+  expect(proxied(calls, "POST", "/todo/tasks/task-1/stop").length).toBe(1);
+});
+
 test("the repeat tabs, weekdays and custom cron rewrite the schedule and its preview", async () => {
   const { app, calls } = await openTodo();
   await app.press("id:todo-item-task-1");
