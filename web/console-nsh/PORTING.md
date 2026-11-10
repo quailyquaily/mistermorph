@@ -110,6 +110,10 @@ Headless tests prove behaviour, not the look.
   patched copy (`desktop/nsh/patches/nsh-gpui-masks.patch`) fades text glyphs under a linear mask
   (not fills or images). For a cut-out of anything but text, draw on a `Canvas`
   (`components/shared/CutoutAvatar.tsx`).
+- Android draws no masks at all: its prebuilt runtime parses `maskImage` but never passes it to the
+  Java views that draw, and no blend mode erases. `FadeText` fades there by drawing the letters
+  under the fade as texts of their own at the mask's alpha (`components/motion/glyphFade.ts`); a
+  new masked fade on Android needs the same, or nothing fades.
 - Repeating gradients work, though the docs don't say so: `backgroundImage:
   "repeating-linear-gradient(135deg, <c> 0 2px, transparent 2px 5px)"` (hatching, the paper grid in
   `Shell`). Put them in `style` (Tailwind arbitrary values can't hold the spaces).
