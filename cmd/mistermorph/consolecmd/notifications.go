@@ -23,10 +23,16 @@ type consoleNotification struct {
 type consoleNotificationHub struct {
 	mu   sync.RWMutex
 	subs map[chan consoleNotification]struct{}
+	// The recent topic task completions, for clients that are not connected when a task ends (the
+	// Android app's background watcher, see notification_events.go).
+	completions *taskCompletionLog
 }
 
 func newConsoleNotificationHub() *consoleNotificationHub {
-	return &consoleNotificationHub{subs: map[chan consoleNotification]struct{}{}}
+	return &consoleNotificationHub{
+		subs:        map[chan consoleNotification]struct{}{},
+		completions: newTaskCompletionLog(time.Now),
+	}
 }
 
 func (h *consoleNotificationHub) Subscribe() (<-chan consoleNotification, func()) {
@@ -61,17 +67,11 @@ func (h *consoleNotificationHub) Publish(notification awarenessloop.CronNotifica
 // PublishTaskCompletion tells of a task in a topic that finished; trigger is the one the task was
 // recorded with.
 func (h *consoleNotificationHub) PublishTaskCompletion(previous, next daemonruntime.TaskInfo, trigger daemonruntime.TaskTrigger) {
-	if previous.ID == "" || next.ID == "" || strings.TrimSpace(next.TopicID) == "" || next.SteerTargetTaskID != "" {
+	if h == nil || next.ID == "" || !notifiesTopicTask(next, trigger) {
 		return
 	}
-	// A TODO item's run, told apart by its own trigger rather than by its topic, notifies through
-	// the item's opt-in notification alone (see Publish), which a scheduled run never raises.
-	if daemonruntime.IsCronRunTrigger(trigger) {
-		return
-	}
-	// Only the person's own chats notify. A heartbeat run in Awareness, or a task another agent
-	// started over Agent Link, is not something the person is waiting for.
-	if strings.TrimSpace(next.TopicID) == daemonruntime.ConsoleAwarenessTopicID || daemonruntime.IsAgentLinkTopicID(next.TopicID) {
+	h.completions.track(next)
+	if previous.ID == "" {
 		return
 	}
 	switch previous.Status {
@@ -82,12 +82,32 @@ func (h *consoleNotificationHub) PublishTaskCompletion(previous, next daemonrunt
 	if next.Status != daemonruntime.TaskDone && next.Status != daemonruntime.TaskFailed {
 		return
 	}
-	h.publish(consoleNotification{
+	notification := consoleNotification{
 		ID:      "topic-task:" + next.ID,
 		Type:    "topic_task_completed",
 		TopicID: next.TopicID,
 		Status:  string(next.Status),
-	})
+	}
+	h.completions.add(notification)
+	h.publish(notification)
+}
+
+// notifiesTopicTask reports whether a task's completion is one the person is told of.
+func notifiesTopicTask(task daemonruntime.TaskInfo, trigger daemonruntime.TaskTrigger) bool {
+	if strings.TrimSpace(task.TopicID) == "" || task.SteerTargetTaskID != "" {
+		return false
+	}
+	// A TODO item's run, told apart by its own trigger rather than by its topic, notifies through
+	// the item's opt-in notification alone (see Publish), which a scheduled run never raises.
+	if daemonruntime.IsCronRunTrigger(trigger) {
+		return false
+	}
+	// Only the person's own chats notify. A heartbeat run in Awareness, or a task another agent
+	// started over Agent Link, is not something the person is waiting for.
+	if strings.TrimSpace(task.TopicID) == daemonruntime.ConsoleAwarenessTopicID || daemonruntime.IsAgentLinkTopicID(task.TopicID) {
+		return false
+	}
+	return true
 }
 
 func (h *consoleNotificationHub) publish(notification consoleNotification) {

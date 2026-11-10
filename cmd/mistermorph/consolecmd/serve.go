@@ -616,6 +616,7 @@ func (s *server) handler() http.Handler {
 	mux.HandleFunc(apiPrefix+"/stream/ticket", s.withAuth(s.handleStreamTicket))
 	mux.HandleFunc(apiPrefix+"/stream/ws", s.handleStreamWebSocket)
 	mux.HandleFunc(apiPrefix+"/notifications/ws", s.handleNotificationWebSocket)
+	mux.HandleFunc(apiPrefix+"/notifications/events", s.withAuth(s.handleNotificationEvents))
 	mux.HandleFunc(apiPrefix+"/pwa/manifest.webmanifest", s.handlePWAManifest)
 	mux.HandleFunc(apiPrefix+"/pwa/icon", s.handlePWAIcon)
 
