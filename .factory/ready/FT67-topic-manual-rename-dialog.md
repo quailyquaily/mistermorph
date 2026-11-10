@@ -36,3 +36,13 @@ Verification: manager independently passed gofmt check, go vet ./..., go test ./
 Coder browser checks: real Console with mock LLM in Chrome; preview does not persist, rename survives subsequent messages/restart, concurrent old regeneration returns 409; desktop focus, keyboard opening, Enter save, Escape discard and mobile touch-width sheet flow passed. A phone-width Chrome page closed once; rerun passed.
 Not checked: real Android device/emulator and software keyboard, native desktop window, screen readers and iOS. Existing dialog focus limitation remains: Tab can leave the dialog after Save. Regenerate on phone-width view moves focus off input, which may hide the real phone keyboard. Review should examine these accessibility/platform limitations.
 Push initially lacked repository-path credential context; retry using command-local credential.useHttpPath=true succeeded. No base branch or tag was pushed.
+
+## factory · review · 2026-11-10 17:02
+head: 704534a867ea9c3813b204139fbab4bf5a637982
+verdict: pass
+notes:
+- [P3] internal/daemonruntime/console_store.go:691: RenameTopic rejects titles above 72 runes, but existing first-message seed titles can contain 75 runes (72 plus "...") and chat-created titles up to 80. Opening such a topic and saving its unchanged title returns HTTP 400. Confirmed with a Go overlay test: seed runes=75, rename unchanged seed err=topic title is longer than 72 characters. Accommodate existing title lengths or explicitly normalize and explain the draft length before saving.
+
+Claude Code reviewed all 23 changed files in origin/master...HEAD; no P0/P1/P2 findings. Required gofmt check, go vet ./... and go test ./... passed (162 packages). nsh check passed; nsh test --web-host tests/noHost.js passed all 420 tests in 6m38s. Tests used a throwaway HOME. Test wrapper summary command failed after nsh succeeded; this was not a test failure. Installs: none. Review worktree remains clean and HEAD unchanged.
+Authorization, persistence, manual-title/automatic-generation races, cancel/error handling and stale responses were checked. Shared dialog Tab escape is pre-existing, not introduced here. Not verified in this review: live browser focus/Tab order, native desktop window, real Android/emulator/software keyboard, iOS, screen readers, and browser maxlength behavior for existing overlong titles.
+Moved review/ → ready/; the P3 length mismatch remains for owner attention. No linked GitHub issues or PRs.
