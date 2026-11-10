@@ -51,3 +51,15 @@ Installs: none. Manager independently passed gofmt clean check, go vet ./..., go
 Not checked: native Android and desktop apps, actual keyboard/screen-reader behavior, and other channel runtimes live. Browser mobile emulation is not native-device verification. Owner/reviewer should inspect one-time cancellation behavior and native UI.
 
 Initial code push lacked credential repository-path context; retry with command-local credential.useHttpPath=true succeeded. No protected paths changed.
+
+## factory · review · 2026-11-11 00:02
+head: 52cab0adb06b3dfa868a5e6cd066c38b8ed3cf36
+verdict: pass
+notes:
+- [P3] docs/runtime-api.full.openapi.yaml:1796: the newly added POST /todo/tasks/{id}/stop endpoint is absent from the Full OpenAPI specification and runtime-api.md despite their maintenance requirement. Add its run_id request body and 200/202/400/404 responses; generated clients currently lack this operation. Related changed implementation: internal/daemonruntime/server.go:1655-1693.
+
+Reviewed by Claude Code against origin/master...HEAD (merge base c89e4e14; current master 2b4c2ee1). All 20 changed files reviewed. No P0/P1 findings. Manager verified a clean merge with current master and an unchanged review worktree/head. review/ → ready/.
+
+Validation reported by reviewer: gofmt clean, go vet ./... and go test ./... passed (162 packages); targeted stop/run race tests passed three times; nsh check passed; nsh test --web-host tests/noHost.js passed 410/410. Scripted tests used a throwaway HOME. Unpinned installs: none.
+
+Residual risks: native apps, real keyboard/screen-reader use and live channel runtimes were not verified in this review. Owner should inspect the documented one-time behavior: manual completion of a previously stopped overdue one-time job can allow its scheduled execution on the next tick. Queued API cancellation waits for a worker slot before terminal confirmation. Reviewer noted an unconfirmed failure-versus-stop classification race; no deterministic reproduction. The separate generic task-stop endpoint was not validated for cron execution cancellation. No linked issue or PR to comment on.
