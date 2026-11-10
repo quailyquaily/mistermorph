@@ -2205,6 +2205,16 @@ pub(crate) fn key(surface: &Rc<Surface>, event: &KeyEvent) -> bool {
             }
             false
         }
+        // Copying with nothing selected in the field copies the text
+        // selected on the page (a selectable text or area), which a press
+        // there leaves the field focused for.
+        _ if is_command(m)
+            && (vk == 0x43 || (vk == VK_INSERT && !m.shift))
+            && !input.model.borrow().has_selection()
+            && page_selected(surface) =>
+        {
+            false
+        }
         _ if is_command(m) => match vk {
             0x41 => moved(&|model| model.select_all()),
             0x43 => {
@@ -2249,6 +2259,35 @@ pub(crate) fn key(surface: &Rc<Surface>, event: &KeyEvent) -> bool {
         }
         _ => false,
     }
+}
+
+/// True when text outside the fields of `surface` is selected: a selectable
+/// text's ([`crate::text`]) or a selectable view's ([`crate::selectable_view`]).
+fn page_selected(surface: &Surface) -> bool {
+    crate::text::has_selection(surface.key())
+        || crate::selectable_view::has_selection(surface.key())
+}
+
+/// A mouse press starts selecting text outside the focused field, which
+/// keeps the keyboard: the field's selection collapses to its caret, so one
+/// selection shows at a time and the copy keys copy the new one.
+pub(crate) fn page_pressed(surface: &Surface) {
+    let Some(view) = focused(surface) else {
+        return;
+    };
+    let Some(input) = input_of(&view) else {
+        return;
+    };
+    {
+        let mut model = input.model.borrow_mut();
+        if !model.has_selection() {
+            return;
+        }
+        let caret = model.caret();
+        model.move_to(caret, false);
+    }
+    report_selection(surface, &view, &input);
+    view.changed();
 }
 
 /// Copies the selection (never a password's).

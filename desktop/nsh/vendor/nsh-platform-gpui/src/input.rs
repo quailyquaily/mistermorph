@@ -1375,6 +1375,7 @@ fn down(
     {
         // Mouse drags in a selectable view select across its texts; its
         // texts never select alone.
+        crate::text_input::page_pressed(surface);
         crate::selectable_view::down(surface, &area, &hit.view, (x, y), clicks, modifiers.shift);
         item = Some(Item::Area(area));
     }
@@ -1384,6 +1385,7 @@ fn down(
         } else if !touch && crate::text::selectable(&hit.view.state()) {
             // Mouse drags over selectable text select it rather than
             // pan.
+            crate::text_input::page_pressed(surface);
             Some(Item::Text(hit.view.clone()))
         } else {
             None
