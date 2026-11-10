@@ -7,8 +7,6 @@ import {
   isDesktop,
   pickDirectory,
   reportFrontendReady,
-  requestNotificationPermission,
-  showNotification,
 } from "../platform";
 
 export function isDesktopRuntime() {
@@ -21,10 +19,6 @@ export function canPostDesktopRawMessage() {
 
 export function canCheckDesktopUpdate() {
   return isDesktop() && hasFeature("checkUpdate");
-}
-
-export function canUseDesktopNotifications() {
-  return isDesktop() && hasFeature("notifications");
 }
 
 export function desktopRuntimeVersion() {
@@ -53,18 +47,6 @@ export function canPickDesktopDirectory() {
 // Shows the native folder picker. Resolves to the chosen folder, or "" when the user cancels.
 export async function pickDesktopDirectory({ title = "", current = "" } = {}) {
   return await pickDirectory({ title: String(title || "").trim(), current: String(current || "").trim() });
-}
-
-export async function requestDesktopNotificationPermission() {
-  return (await requestNotificationPermission()) === "granted";
-}
-
-export async function showDesktopNotification(options = {}) {
-  return await showNotification({
-    id: String(options.id || "").trim(),
-    title: String(options.title || "").trim(),
-    body: String(options.body || "").trim(),
-  });
 }
 
 export function logDesktopRuntimeEvent() {

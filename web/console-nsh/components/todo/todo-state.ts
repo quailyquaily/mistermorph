@@ -28,7 +28,7 @@ import {
   TODO_TOPIC_UNAVAILABLE,
 } from "../../lib/core/todo-topic.js";
 import { modelVendorMeta } from "../../lib/core/model-vendor.js";
-import { isVisible } from "../../lib/platform";
+import { isDesktop, isVisible } from "../../lib/platform";
 import { currentRoute, locationOf, navigate } from "../../lib/router";
 import { isMobile } from "../../lib/shell";
 import * as model from "./todo-model.js";
@@ -804,7 +804,9 @@ export function createTodoState() {
             permission === "denied"
               ? "todo_chat_notification_denied"
               : permission === "unsupported"
-                ? "todo_chat_notification_unsupported"
+                ? isDesktop()
+                  ? "todo_chat_notification_unsupported_desktop"
+                  : "todo_chat_notification_unsupported"
                 : "todo_chat_notification_required";
           notice.error(t(key));
           return;

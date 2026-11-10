@@ -659,3 +659,46 @@ test("notifying the console user asks for notification permission first", async 
   await app.waitFor("Saved");
   expect(proxied(calls, "PUT", "/todo/tasks")[0].json.tasks[0].chat_id).toBe("console:user");
 });
+
+test("on the desktop, notifying the console user needs the system's notification service, asked once", async () => {
+  let requests = 0;
+  let answer: () => string = () => {
+    throw new Error("timed out");
+  };
+  const { app, calls } = await openTodo(
+    {
+      "GET /proxy:/todo/tasks": {
+        body: tasksBody({ chat_options: [{ chat_id: "console:user", name: "Console", platform: "console" }] }),
+      },
+    },
+    {
+      runtime: "desktop",
+      features: ["notifications"],
+      host: {
+        "morph.notify.request": () => {
+          requests += 1;
+          return answer();
+        },
+      },
+    },
+  );
+  await app.press("id:todo-item-task-1");
+  await app.press("label:Notify Chat");
+  await app.press("text:Console User");
+  await app.waitFor("System notifications are unavailable: the system's notification service did not answer.");
+  expect(requests).toBe(1);
+  expect(app.enabled("id:todo-save")).toBe(false);
+  answer = () => "unsupported";
+  await app.press("label:Notify Chat");
+  await app.press("text:Console User");
+  await app.waitUntil(() => requests === 2);
+  expect(app.enabled("id:todo-save")).toBe(false);
+  answer = () => "granted";
+  await app.press("label:Notify Chat");
+  await app.press("text:Console User");
+  await app.waitUntil(() => app.enabled("id:todo-save"));
+  expect(requests).toBe(3);
+  await app.press("id:todo-save");
+  await app.waitFor("Saved");
+  expect(proxied(calls, "PUT", "/todo/tasks")[0].json.tasks[0].chat_id).toBe("console:user");
+});

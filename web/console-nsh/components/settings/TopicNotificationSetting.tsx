@@ -1,11 +1,16 @@
 // The notifications row of Settings' System section (the Vue console's TopicNotificationSetting):
 // the permission's state and the button that asks for it. The host answers both (lib/platform.ts).
 import { cleanup, effect, signal, Text, untracked, View } from "nsh";
-import { onVisibilityChange, requestNotificationPermission, type NotificationPermission } from "../../lib/platform";
+import { isDesktop, onVisibilityChange, requestNotificationPermission, type NotificationPermission } from "../../lib/platform";
 import { topicNotificationPermission } from "../../lib/core/topic-task-notifications.js";
 import { isMobile } from "../../lib/shell";
 import { Button } from "../ui";
 import { t } from "./DialogShell";
+
+// The desktop app's "unsupported" is a missing system notification service, not a browser context.
+function stateKey(permission: NotificationPermission) {
+  return permission === "unsupported" && isDesktop() ? "topic_notifications_unsupported_desktop" : `topic_notifications_${permission}`;
+}
 
 export function TopicNotificationSetting() {
   const permission = signal<NotificationPermission>("default");
@@ -51,7 +56,7 @@ export function TopicNotificationSetting() {
         <Text class="text-sm font-medium leading-[18.9px] text-foreground">{t("topic_notifications_title")}</Text>
         <Text class="text-xs leading-[20.3px] text-muted-foreground">{t("topic_notifications_hint")}</Text>
         <Text class="text-xs leading-[20.3px] text-muted-foreground" testID="topic-notifications-state">
-          {t(`topic_notifications_${permission()}`)}
+          {t(stateKey(permission()))}
         </Text>
       </View>
       <Button
