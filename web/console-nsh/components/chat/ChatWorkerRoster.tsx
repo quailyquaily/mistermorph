@@ -10,6 +10,7 @@ import { localeState } from "../../lib/core/context.js";
 import { rosterWorkers, workerProcessLabel } from "../../lib/core/chat-workers.js";
 import { workerAvatarURL } from "../../lib/core/worker-avatars.js";
 import { t } from "./i18n";
+import { OverflowLine } from "./OverflowLine";
 
 function stateTone(state: string) {
   switch (state) {
@@ -111,7 +112,11 @@ export function ChatWorkerOutput(props: { worker: any }) {
           of={Array.isArray(worker().processes) ? worker().processes : []}
           key={(process: any) => `${process.pid}:${process.program}:${process.activityId}`}
         >
-          {(process) => <Text class="font-mono text-xs text-muted-foreground">{workerProcessLabel(process())}</Text>}
+          {(process) => (
+            <OverflowLine testID="chat-worker-process">
+              <Text class="font-mono text-xs text-muted-foreground">{workerProcessLabel(process())}</Text>
+            </OverflowLine>
+          )}
         </Each>
       </View>
       <If when={worker().sections.length > 0} else={<Text class="text-xs text-muted-foreground">{t("chat_worker_no_output")}</Text>}>

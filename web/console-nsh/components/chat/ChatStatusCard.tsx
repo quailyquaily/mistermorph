@@ -10,6 +10,7 @@ import { Button as BaseButton } from "nsh/base";
 import { Icon, StatusMark } from "../ui";
 import { localeState } from "../../lib/core/context.js";
 import { t } from "./i18n";
+import { OverflowLine } from "./OverflowLine";
 import { activityWorkerLabel } from "../../lib/core/chat-task-history.js";
 
 export const PANEL_PLAN = "plan";
@@ -247,10 +248,12 @@ export function ChatActivityEntries(props: { itemID: string; activity: any }) {
               <If when={kindLabel(entry())}>
                 <Text class={`font-mono text-xs uppercase ${TERMINAL_MUTED}`}>{kindLabel(entry())}</Text>
               </If>
-              <Text class={`text-sm font-medium ${TERMINAL_FG}`}>
-                {entryTitle(entry())}
-                {activityWorkerLabel(entry(), localeState.lang) ? ` · ${activityWorkerLabel(entry(), localeState.lang)}` : ""}
-              </Text>
+              <OverflowLine testID="chat-activity-title">
+                <Text class={`text-sm font-medium ${TERMINAL_FG}`}>
+                  {entryTitle(entry())}
+                  {activityWorkerLabel(entry(), localeState.lang) ? ` · ${activityWorkerLabel(entry(), localeState.lang)}` : ""}
+                </Text>
+              </OverflowLine>
               <If when={childCount(entry()) > 0}>
                 <Text class={`text-xs ${TERMINAL_MUTED}`}>{t("chat_activity_calls", { count: childCount(entry()) })}</Text>
               </If>
@@ -263,10 +266,10 @@ export function ChatActivityEntries(props: { itemID: string; activity: any }) {
               <View class="flex-row flex-wrap gap-1.5">
                 <Each of={activityParams(entry())} key={(param) => param.key}>
                   {(param) => (
-                    <View class="flex-row gap-1">
+                    <OverflowLine contentClass="flex-row gap-1" testID="chat-activity-param">
                       <Text class={`font-mono text-xs ${TERMINAL_MUTED}`}>{param().key}</Text>
                       <Text class={`font-mono text-xs ${TERMINAL_VALUE} line-clamp-2`}>{param().value}</Text>
-                    </View>
+                    </OverflowLine>
                   )}
                 </Each>
               </View>
@@ -284,15 +287,17 @@ export function ChatActivityEntries(props: { itemID: string; activity: any }) {
                 <Each of={children(entry())} key={(child, index) => `${props.itemID}:activity:child:${entryKey(child, index)}`}>
                   {(child) => (
                     <View class="gap-0.5">
-                      <View class="flex-row items-center gap-1.5">
-                        <View class={`size-1.5 border ${dotClass(normalizeTaskStatus(child()?.status))}`} />
-                        <Text class={`text-xs ${TERMINAL_FG}`}>
-                          {entryTitle(child())}
-                          {activityWorkerLabel(child(), localeState.lang) ? ` · ${activityWorkerLabel(child(), localeState.lang)}` : ""}
-                        </Text>
-                        <If when={activityParams(child())[0]?.value}>
-                          <Text class={`flex-1 font-mono text-xs ${TERMINAL_MUTED} line-clamp-1`}>{activityParams(child())[0]?.value}</Text>
-                        </If>
+                      <View class="flex-row items-start gap-1.5">
+                        <View class={`mt-[5px] size-1.5 border ${dotClass(normalizeTaskStatus(child()?.status))}`} />
+                        <OverflowLine contentClass="flex-row items-center gap-1.5" testID="chat-activity-call">
+                          <Text class={`text-xs ${TERMINAL_FG}`}>
+                            {entryTitle(child())}
+                            {activityWorkerLabel(child(), localeState.lang) ? ` · ${activityWorkerLabel(child(), localeState.lang)}` : ""}
+                          </Text>
+                          <If when={activityParams(child())[0]?.value}>
+                            <Text class={`font-mono text-xs ${TERMINAL_MUTED} line-clamp-1`}>{activityParams(child())[0]?.value}</Text>
+                          </If>
+                        </OverflowLine>
                       </View>
                       <If when={child()?.error}>
                         <Text class={`text-xs ${TERMINAL_ERROR}`}>{String(child()?.error ?? "")}</Text>
