@@ -11,6 +11,7 @@ import { rosterWorkers, workerProcessLabel } from "../../lib/core/chat-workers.j
 import { workerAvatarURL } from "../../lib/core/worker-avatars.js";
 import { t } from "./i18n";
 import { TERMINAL_LABEL, TERMINAL_MUTED, TERMINAL_VALUE, terminalNoteClass } from "./ChatTerminal";
+import { OverflowLine } from "./OverflowLine";
 
 function stateTone(state: string) {
   switch (state) {
@@ -113,7 +114,11 @@ export function ChatWorkerOutput(props: { worker: any }) {
           of={Array.isArray(worker().processes) ? worker().processes : []}
           key={(process: any) => `${process.pid}:${process.program}:${process.activityId}`}
         >
-          {(process) => <Text class={`font-mono text-xs ${TERMINAL_MUTED}`}>{workerProcessLabel(process())}</Text>}
+          {(process) => (
+            <OverflowLine testID="chat-worker-process">
+              <Text class={`font-mono text-xs ${TERMINAL_MUTED}`}>{workerProcessLabel(process())}</Text>
+            </OverflowLine>
+          )}
         </Each>
       </View>
       <If when={worker().sections.length > 0} else={<Text class={`text-xs ${TERMINAL_MUTED}`}>{t("chat_worker_no_output")}</Text>}>
