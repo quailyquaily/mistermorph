@@ -39,3 +39,15 @@ UI: Coder checked real Chrome at desktop 1280 and phone 390 widths, including ty
 Installs: none. Existing browser and tooling reused. Initial branch push lacked credential repository-path context; retry with command-local credential.useHttpPath succeeded. No changes to machine git settings.
 
 Moved new/ → review/ for independent review.
+
+## factory · review · 2026-11-11 02:43
+head: f14b796f3eb828564aef81a7b2171ea7adaa6bf8
+verdict: pass
+notes:
+- [P2] web/console-nsh/components/chat/composerRows.ts:91: The unchanged-layout early return leaves shownFor on the previous draft. Example: in multiline mode, type a character without changing either measured height, wait for the draft-tagged measurement, then resize so the height changes. The resize incorrectly calls LayoutAnimation.configureNext because draft differs from shownFor, easing widths instead of snapping. A scratch regression probe reproduced one animation call where zero was expected. Update shownFor in the early-return path only when measured.text equals draft, and add the type-then-resize regression. The proposed correction passed the probe and 23/23 composer tests in a scratch copy; the reviewed branch was not modified.
+
+Validation: Claude Code reviewed all seven changed files against origin/master...HEAD and the request/plan. No P0/P1 findings. Mandatory gofmt check, go vet ./..., go test ./..., nsh check and nsh test --web-host tests/noHost.js passed; nsh 527/527. Review artifacts were inspected and the P2 reproduction independently rerun by a second Claude Code call after the first call returned an incomplete report. Branch worktree remains clean. Installs: none.
+
+Residual risks: No independent real-browser animation or native GPUI, Android or Mobile Safari validation in this review. Headless geometry cannot verify actual wrapping/animation timing; native delayed measurement behavior remains unverified. Build-stage Chrome checks are recorded above, not claimed as independent review checks.
+
+Moved review/ → ready/ under the factory rule allowing P2 notes; owner should inspect the resize animation finding before shipping. No linked GitHub issue or PR.
