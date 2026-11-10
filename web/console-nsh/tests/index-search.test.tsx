@@ -60,15 +60,16 @@ for (const viewport of VIEWPORTS) {
     const readout = () => JSON.parse(app.texts().find((text) => text.startsWith("{")) ?? "{}") as Readout;
     await app.waitUntil(() => Boolean(readout().frames?.search && readout().frames?.column));
     const { frames, metrics } = readout();
-    expect(metrics).toEqual({ gutter: viewport.gutter, top: 4, bottom: 4, size: viewport.size });
-    // 4pt moved from below the field to above it: the same 8pt of room in all.
+    expect(metrics).toEqual({ gutter: viewport.gutter, top: 6, bottom: 2, size: viewport.size });
+    // More room above the field than below it (6pt, 2pt): the same 8pt in all.
+    expect(metrics.top).toBeGreaterThan(metrics.bottom);
     expect(metrics.top + metrics.bottom).toBe(8);
     // Directly under the head, with no box of IndexColumn's `top` around it.
     expect(frames.search.x).toBe(0);
     expect(frames.search.y).toBe(57);
     expect(frames.search.w).toBe(frames.column.w);
     expect(frames.column.w).toBe(viewport.name === "phone" ? viewport.width : 310);
-    // 4pt, the field, then 4pt below it.
+    // 6pt, the field, then 2pt below it: the box keeps its height.
     expect(Math.abs(frames.search.h - (viewport.field + 8))).toBeLessThan(0.5);
   });
 }
