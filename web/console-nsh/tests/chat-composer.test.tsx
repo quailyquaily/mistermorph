@@ -4,7 +4,8 @@
 // back arrow, whose first tap with the keyboard up only lowers it.
 import type { App } from "nsh/test";
 import { expect, test } from "nsh/test";
-import { nextComposerRows, SINGLE_ROW } from "../components/chat/composerRows";
+import { COMPOSER_LINE_HEIGHT } from "../components/chat/composerField";
+import { composerLayout, ONE_ROW } from "../components/chat/composerRows";
 import { PROFILE_SHEET_MAX_HEIGHT, PROFILE_SHEET_PADDING } from "../components/chat/composerSheets";
 import { softKeyboardUp } from "../lib/softKeyboard";
 import { bottomSheetInsets } from "../lib/systemInsets";
@@ -166,30 +167,42 @@ test("the arrow keys move through the suggestions and Escape closes them", async
 
 // A line that wraps beside the controls but fits the wider field above them used to flip the
 // layout on every layout pass (the field's height decided the rows, the rows its width), until a
-// phone's page ran out of memory.
-test("the field moves above the controls when its text wraps, and stays there while the line fits the wider field", () => {
-  const line = "a line that wraps beside the buttons";
-  const up = nextComposerRows(SINGLE_ROW, line, false);
-  expect(up.multi).toBe(true);
-  // Laid out again at the full width it is one line: no edit, so no move back.
-  let rows = up;
-  for (let pass = 0; pass < 10; pass += 1) rows = nextComposerRows(rows, line, true);
-  expect(rows).toBe(up);
-  // Typing on keeps it up.
-  expect(nextComposerRows(up, `${line} and more`, true).multi).toBe(true);
+// phone's page ran out of memory; held one way per edit, the two-row layout then showed that line
+// as one line. The rows now come from the draft's height at both widths, which the rows do not
+// change (composerRows.ts).
+const LINE = COMPOSER_LINE_HEIGHT;
+
+test("one line beside the controls is one row, whatever the wider field would hold", () => {
+  expect(composerLayout("hello", { oneRow: LINE, twoRows: LINE })).toEqual({ rows: "one", height: LINE });
+  // A line measured a little taller is still one line.
+  expect(composerLayout("hello", { oneRow: LINE + 3, twoRows: LINE + 3 }).rows).toBe("one");
 });
 
-test("the field comes back down once the text is shorter than when it moved up, or empty", () => {
-  const up = nextComposerRows(SINGLE_ROW, "a line that wraps beside the buttons", false);
-  expect(nextComposerRows(up, "a line that wraps", true)).toEqual(SINGLE_ROW);
-  expect(nextComposerRows(up, "", true)).toEqual(SINGLE_ROW);
-  // Shorter but still more than one line at the full width, or holding a line break: it stays up.
-  expect(nextComposerRows(up, "a line that wraps", false).multi).toBe(true);
-  expect(nextComposerRows(up, "one\ntwo", true).multi).toBe(true);
-  // A line break moves it up from one row too.
-  const broken = nextComposerRows(SINGLE_ROW, "one\n", false);
-  expect(broken.multi).toBe(true);
-  expect(nextComposerRows(broken, "one", true)).toEqual(SINGLE_ROW);
+test("a line that wraps beside the controls but fits above them goes above them at the one-row width, on its two lines", () => {
+  const narrow = composerLayout("a line that wraps beside the buttons", { oneRow: 2 * LINE, twoRows: LINE });
+  expect(narrow).toEqual({ rows: "narrow", height: 2 * LINE });
+  // Laid out again (the field above the controls now), the measures are the same: so is the layout.
+  for (let pass = 0; pass < 10; pass += 1) expect(composerLayout("a line that wraps beside the buttons", { oneRow: 2 * LINE, twoRows: LINE })).toEqual(narrow);
+});
+
+test("more than a line at the full width too, or a line break, takes the full width at that height", () => {
+  expect(composerLayout("a long draft", { oneRow: 3 * LINE, twoRows: 2 * LINE })).toEqual({ rows: "wide", height: 2 * LINE });
+  expect(composerLayout("one\ntwo", { oneRow: 2 * LINE, twoRows: 2 * LINE })).toEqual({ rows: "wide", height: 2 * LINE });
+  // A line break is two lines at once, before the copies have measured it.
+  expect(composerLayout("hi\n", { oneRow: LINE, twoRows: LINE })).toEqual({ rows: "wide", height: 2 * LINE });
+  expect(composerLayout("one\ntwo\nthree", { oneRow: 3 * LINE, twoRows: 3 * LINE })).toEqual({ rows: "wide", height: 3 * LINE });
+});
+
+test("the way back is the way there: the same draft and widths give the same layout, and empty is one row", () => {
+  for (const measures of [
+    { oneRow: LINE, twoRows: LINE },
+    { oneRow: 2 * LINE, twoRows: LINE },
+    { oneRow: 3 * LINE, twoRows: 2 * LINE },
+  ]) {
+    expect(composerLayout("draft", measures)).toEqual(composerLayout("draft", { ...measures }));
+  }
+  // Cleared or sent: one row at once, before the copies have measured the empty field.
+  expect(composerLayout("", { oneRow: 5 * LINE, twoRows: 4 * LINE })).toEqual(ONE_ROW);
 });
 
 // On phones the add menu and the model picker are sheets at the bottom of the screen, under the

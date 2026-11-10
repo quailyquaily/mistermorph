@@ -11,6 +11,8 @@
 export const COMPOSER_LINE_HEIGHT = 22.12;
 /** The add button and Send: 38pt squares (`size-[38px]` in ChatComposer). */
 export const COMPOSER_CONTROL_SIZE = 38;
+/** The field's text: its font and size (also the hidden copies' in ComposerMeasure.tsx). */
+export const COMPOSER_FIELD_TEXT = "font-mono text-sm";
 const DEFAULT_MAX_ROWS = 24;
 
 /** One row: add, the field, actions. Two rows: the field above a row of the controls. */

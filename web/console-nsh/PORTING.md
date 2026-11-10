@@ -137,6 +137,14 @@ Headless tests prove behaviour, not the look.
   for a 22.12pt line). A field that must centre one line beside other controls gets a fixed box
   with the line placed from `lineHeight`, not padding around the measured height
   (`components/chat/composerField.ts`).
+- A layout decided from an `Input`'s measured height must not change the width it was measured at,
+  or it feeds back on itself. Measure at the widths the layout can take with hidden copies of the
+  input instead (`components/chat/ComposerMeasure.tsx`). Hide them with `invisible`: on the web,
+  `focusable={false}`, `readonly` and `disabled` leave the `textarea` in the browser's Tab order
+  (Shift+Tab reached them), while `visibility: hidden` keeps the layout and drops the focus. Two
+  inputs laid out together report `onContentSizeChange` one after the other (a microtask between
+  them does not merge them), before the next frame is drawn. Headless runs measure a line break
+  as no break.
 - A pull down from a list's top is the scroll view's own pull-to-refresh (`onRefresh` with
   `refreshIndicator={{ height }}`: no spinner, the platform decides the gesture, short and empty
   lists included). Touch handlers on the list would not do: the scroll view takes the touches over
