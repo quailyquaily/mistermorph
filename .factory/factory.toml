@@ -5,7 +5,7 @@
 base = "master"
 
 # Names whose "## name · time" sections count as yours.
-owners = ["lyric"]
+owners = ["lyric", "factory"]
 
 # What must pass: after each build, in each review, and on base before a ship
 # run pushes it (mirrors CI's gofmt check).
