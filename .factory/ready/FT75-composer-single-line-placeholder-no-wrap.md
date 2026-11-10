@@ -39,3 +39,15 @@ Installs: none; no dependency changes.
 Limitations for review: transparent native web placeholder still wraps invisibly and wheel scrolling over an empty field can briefly show a scroll thumb. Android device and desktop GPUI rendering were not checked; transparent native placeholder behavior on those platforms needs confirmation. Screen-reader output beyond Chrome accessibility tree was not checked. Headless nsh tests do not verify actual text wrapping; ellipsis was checked in Chrome.
 
 First branch push failed because credential requests lacked repository paths; the single retry with command-local credential.useHttpPath=true succeeded. Moved new/ → review/ for independent review; not merged or released.
+
+## factory · review · 2026-11-11 03:50
+head: abe4e3120382fe37aa833a8953e2f5848128bd32
+verdict: pass
+
+Independent Claude Code review of origin/master...HEAD (one commit, seven files): no actionable findings reported. Branch merges cleanly with the fetched base; no source changes or commits made during review.
+
+Validation: configured gofmt/vet/go test command passed (Go test results cached); nsh check passed; nsh test --web-host tests/noHost.js passed 536/536, including 12 new placeholder tests. Scripted tests used absolute throwaway HOMEs. Installs: none.
+
+Residual risks: review did not independently run a browser or native device, real IME, or screen reader. Headless tests do not validate visual ellipsis. Native field padding, transparent backgrounds and drawing order need device confirmation. The previously documented invisible native-placeholder wrapping and possible empty-field scroll thumb remain. Build-stage Chrome validation is recorded above, not repeated here.
+
+Moved review/ → ready/; not merged or released. No linked GitHub issue or PR.
