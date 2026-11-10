@@ -156,8 +156,8 @@ test("on a phone the composer's frame is the design's line, a light border the f
 test("the composer's frame differs between a phone and a desktop only in its border's colour", () => {
   const phone = composerFrameClass(true);
   const desktop = composerFrameClass(false);
-  // The desktop's frame is the one it had.
-  expect(desktop).toBe("relative rounded-(--radius) border border-input bg-field transition duration-[260ms] focus-within:border-blue/45 focus-within:shadow-md");
+  // The desktop's frame: its resting `input` border in every state, the shadow for focus.
+  expect(desktop).toBe("relative rounded-(--radius) border border-input bg-field transition-shadow duration-[260ms] focus-within:shadow-md");
   expect(phone.replace("border-line", "border-input")).toBe(desktop);
   for (const frame of [phone, desktop]) {
     const classes = frame.split(" ");
@@ -165,8 +165,24 @@ test("the composer's frame differs between a phone and a desktop only in its bor
     expect(classes).toContain("border");
     expect(classes.filter((name) => /^border-\d/.test(name))).toEqual([]);
     expect(classes).toContain("rounded-(--radius)");
-    expect(classes).toContain("focus-within:border-blue/45");
     expect(classes).toContain("focus-within:shadow-md");
     expect(classes).toContain("bg-field");
+  }
+});
+
+// The light border stays while the field has the focus, while typing, sending and running, and after
+// a send (the keyboard lowered or not): the frame's class depends on the window's width alone, and
+// none of its parts changes the border in a state or eases its colour. Focus was
+// `focus-within:border-blue/45`, which took the light border away until the field lost the focus.
+test("the composer's frame keeps its light border in every state; focus shows as the shadow alone", () => {
+  for (const mobile of [true, false]) {
+    const classes = composerFrameClass(mobile).split(" ");
+    const border = composerFrameBorder(mobile);
+    expect(classes.filter((name) => name.startsWith("border-"))).toEqual([border]);
+    // No state variant (focus-within, focus, hover, pressed, disabled...) touches the border.
+    expect(classes.filter((name) => name.includes(":") && /:border(-|$)/.test(name))).toEqual([]);
+    expect(classes.filter((name) => name.includes(":"))).toEqual(["focus-within:shadow-md"]);
+    // Only the shadow eases: a colour transition would animate the border (and the fill).
+    expect(classes.filter((name) => name === "transition" || name.startsWith("transition-"))).toEqual(["transition-shadow"]);
   }
 });
