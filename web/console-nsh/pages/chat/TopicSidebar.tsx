@@ -10,7 +10,7 @@
 // The rows are an `Each` in a scroll view rather than a virtualized List: a sidebar holds dozens of
 // topics (older ones load on demand), and the sliding highlight must share the rows' parent to
 // measure them and move with them.
-import { Image, Scroll, signal, Text, token, View } from "nsh";
+import { Image, Scroll, signal, Text, token, View, type ViewRef } from "nsh";
 import { Button as BaseButton } from "nsh/base";
 import { Button, Icon, Spinner, StatusMark, Tip, TipButton } from "../../components/ui";
 import { ContactAvatar } from "../../components/shared/ContactAvatar";
@@ -37,12 +37,17 @@ function ViewToggle(props: {
   testID: string;
   /** Its centre along the head, for the head's sag. */
   onCenter?: (x: number) => void;
+  /** Its frame in the head (the sidebar's `onPartLayout`). */
+  onFrame?: (event: { bounds: { origin: { x: number; y: number }; size: { width: number; height: number } } }) => void;
 }) {
   return (
     <TipButton
       selected={props.active}
       onPress={props.onPress}
-      onLayout={({ bounds }) => props.onCenter?.(bounds.origin.x + bounds.size.width / 2)}
+      onLayout={(event) => {
+        props.onCenter?.(event.bounds.origin.x + event.bounds.size.width / 2);
+        props.onFrame?.(event);
+      }}
       accessibilityLabel={props.label}
       testID={props.testID}
       tooltip={<Tip text={props.title} />}
@@ -60,9 +65,18 @@ function ViewToggle(props: {
 
 // The topic's status mark (7pt): filled blue once a task finished and until the topic is viewed,
 // filled orange while a task waits for the person, the turning ring while one runs.
-function StatusDot(props: { status: string; label: string; class?: string; testID?: string }) {
+function StatusDot(props: {
+  status: string;
+  label: string;
+  class?: string;
+  testID?: string;
+  ref?: (node: ViewRef) => void;
+  onLayout?: () => void;
+}) {
   return (
     <View
+      ref={props.ref}
+      onLayout={props.onLayout}
       role="image"
       accessibilityLabel={props.label}
       tooltip={<Tip text={props.label} />}
@@ -80,7 +94,36 @@ function StatusDot(props: { status: string; label: string; class?: string; testI
 export const TOPIC_GROUP_TOGGLE_CLASS =
   "mt-1.5 flex-row items-center gap-2.5 rounded-(--radius) py-[7px] pl-3.5 pr-3.5 transition-colors duration-[180ms] hover:bg-hover-soft";
 
-export function TopicSidebar(props: { c: ChatController; class?: string }) {
+// The head's last button (New, or the tag toggle where a phone's New floats over the list) and every
+// row's status mark end the same distance in from the sidebar's right edge: the right inset. On a
+// phone it is the pages' phone gutter (`gutterX`), the head's own padding; the rows run edge to
+// edge, so their right padding is the inset less their 1pt border. On a desktop it is the list's
+// 16pt gutter, the border and the row's 13pt padding (30pt), which the head takes as its right
+// padding. The edges are the buttons' outer edges (their hover fill), not their icons.
+export const TOPIC_ROW_BORDER = 1;
+export const TOPIC_LIST_GUTTER = 16;
+const DESKTOP_ROW_PADDING_RIGHT = 13;
+
+/** How far the head's last button and the rows' status marks end in from the sidebar's right edge. */
+export function topicRightInset(mobile: boolean): number {
+  return mobile ? gutterX() : TOPIC_LIST_GUTTER + TOPIC_ROW_BORDER + DESKTOP_ROW_PADDING_RIGHT;
+}
+
+/** A topic row's right padding, so its status mark ends at `topicRightInset`. */
+export function topicRowPaddingRight(mobile: boolean): number {
+  return topicRightInset(mobile) - (mobile ? 0 : TOPIC_LIST_GUTTER) - TOPIC_ROW_BORDER;
+}
+
+/** A part's frame on the page, for `onPartLayout`. */
+export type TopicPartFrame = { x: number; y: number; w: number; h: number };
+
+export function TopicSidebar(props: {
+  c: ChatController;
+  class?: string;
+  /** Hears where parts lie on the page (tests): `sidebar`, `head-action` (the head's last button),
+   * `status-<topic id>` and `title-<topic id>`. */
+  onPartLayout?: (name: string, frame: TopicPartFrame) => void;
+}) {
   const c = props.c;
   const view = () => c.topicSidebarView();
   const toggle = (next: SidebarView) => c.setTopicSidebarView(view() === next ? "date" : next);
@@ -100,8 +143,43 @@ export function TopicSidebar(props: { c: ChatController; class?: string }) {
   const rowHeight = () => (c.mobileMode() ? "min-h-11" : "min-h-10");
   // On a phone the topics are a page of their own and take the pages' phone gutter (Contacts, TODO):
   // the title at the page's 12pt, rows edge to edge with their content 12pt in, group labels at 14.
-  // The desktop sidebar keeps its 16pt list gutter and 25.6pt title.
-  const rowPadding = () => (c.mobileMode() ? "px-3" : "pl-3.5 pr-[13px]");
+  // The desktop sidebar keeps its 16pt list gutter and 25.6pt title. The rows' right padding comes
+  // from the shared right inset (above), so their status marks end under the head's last button.
+  const rowPadding = () => (c.mobileMode() ? "pl-3" : "pl-3.5");
+  const rightInset = () => topicRightInset(c.mobileMode());
+  // The probe for `onPartLayout`: a view's frame on the page as it lays out. The head's buttons
+  // take no ref: their frames in the head row are placed from the row's.
+  let headRow: ViewRef | undefined;
+  const reportPart = (name: string, node: ViewRef | undefined, inner?: TopicPartFrame) => {
+    if (!props.onPartLayout || !node) return;
+    node
+      .measure()
+      .then((m) => {
+        if (!m) return;
+        const at = { x: m.pagePosition.x, y: m.pagePosition.y };
+        props.onPartLayout?.(
+          name,
+          inner ? { x: at.x + inner.x, y: at.y + inner.y, w: inner.w, h: inner.h } : { ...at, w: m.bounds.size.width, h: m.bounds.size.height },
+        );
+      })
+      .catch((error) => console.warn("topic sidebar: measure failed", error));
+  };
+  const probe = (name: () => string) => {
+    if (!props.onPartLayout) return {};
+    let node: ViewRef | undefined;
+    return {
+      ref: (value: ViewRef) => {
+        node = value;
+      },
+      onLayout: () => reportPart(name(), node),
+    };
+  };
+  type LayoutBounds = { bounds: { origin: { x: number; y: number }; size: { width: number; height: number } } };
+  const headButtonLayout = (last: () => boolean) => (event: LayoutBounds) => {
+    if (!last()) return;
+    const { origin, size } = event.bounds;
+    reportPart("head-action", headRow, { x: origin.x, y: origin.y, w: size.width, h: size.height });
+  };
   // On a touch phone the search hides until the list is pulled down from its top, and then sits
   // at the top of the list, scrolling with it; the desktop's stays under the head.
   const pull = createPullSearch({
@@ -132,6 +210,7 @@ export function TopicSidebar(props: { c: ChatController; class?: string }) {
       testID={`chat-topic-${normalizeTopicID(row().topic?.id)}`}
       tooltip={c.topicTimeLabel(row().topic) ? <Tip text={c.topicTimeLabel(row().topic)} /> : undefined}
       class={`mt-0.5 ${rowHeight()} flex-row items-center gap-2.5 rounded-(--radius) border border-transparent py-2 ${rowPadding()} transition-colors duration-[180ms] hover:bg-hover-soft`}
+      style={{ paddingRight: topicRowPaddingRight(c.mobileMode()) }}
     >
       <If
         when={view() === "agents"}
@@ -158,14 +237,18 @@ export function TopicSidebar(props: { c: ChatController; class?: string }) {
           class="size-6"
         />
       </If>
-      <View class="flex-1 gap-px">
+      <View class="flex-1 gap-px" {...probe(() => `title-${normalizeTopicID(row().topic?.id)}`)}>
         <FadeText text={c.topicTitle(row().topic)} class="text-sm leading-5 tracking-[-0.025em] text-foreground" noTooltip />
         <If when={c.isCronTopicID(row().topic?.id)}>
           <FadeText text={c.cronTopicModel(row().topic)} class="font-mono text-xs text-muted-foreground" noTooltip />
         </If>
       </View>
       <If when={c.topicActivityState(row().topic)}>
-        <StatusDot status={c.topicActivityState(row().topic)} label={c.topicActivityLabel(row().topic)} />
+        <StatusDot
+          status={c.topicActivityState(row().topic)}
+          label={c.topicActivityLabel(row().topic)}
+          {...probe(() => `status-${normalizeTopicID(row().topic?.id)}`)}
+        />
       </If>
     </TipButton>
   );
@@ -213,15 +296,19 @@ export function TopicSidebar(props: { c: ChatController; class?: string }) {
   );
 
   return (
-    <View class={`bg-sidebar ${props.class ?? ""}`} testID="chat-topic-sidebar">
-      {/* The head: the title on the left, the view toggles and New flush at the right, and on a
-          desktop the search under them (on a phone it is the list's). The hairline under the head
-          shows once topics have scrolled beneath, and sags softly under the view toggle that is on
+    <View class={`bg-sidebar ${props.class ?? ""}`} testID="chat-topic-sidebar" {...probe(() => "sidebar")}>
+      {/* The head: the title on the left, the view toggles and New at the right, the last button
+          ending at the right inset over the rows' status marks, and on a desktop the search under
+          them (on a phone it is the list's). The hairline under the head shows once topics have
+          scrolled beneath, and sags softly under the view toggle that is on
           (design/ui-refresh.html §1). */}
       <View class="relative z-10">
         <View
+          ref={(node: ViewRef) => {
+            headRow = node;
+          }}
           class={`h-[57px] flex-row items-center ${c.mobileMode() ? "" : "pl-[25.6px]"}`}
-          style={c.mobileMode() ? { paddingLeft: gutterX(), paddingRight: gutterX() } : undefined}
+          style={c.mobileMode() ? { paddingLeft: gutterX(), paddingRight: rightInset() } : { paddingRight: rightInset() }}
         >
           <View class="mr-3 flex-1" onPress={() => c.clickTopicSidebarTitle()} testID="chat-topics-title">
             <Text class="text-xl leading-6 tracking-[-0.03em] text-foreground" role="header">
@@ -257,6 +344,7 @@ export function TopicSidebar(props: { c: ChatController; class?: string }) {
             onPress={() => toggle("tags")}
             testID="chat-topics-view-tags"
             onCenter={placeToggle("tags")}
+            onFrame={headButtonLayout(() => c.mobileTopicSplitEnabled())}
           />
           <If when={!c.mobileTopicSplitEnabled()}>
             <TipButton
@@ -264,6 +352,7 @@ export function TopicSidebar(props: { c: ChatController; class?: string }) {
               accessibilityLabel={t("chat_topic_new")}
               tooltip={<Tip text={t("chat_topic_new")} />}
               testID="chat-topic-new"
+              onLayout={headButtonLayout(() => true)}
               class="size-[38px] items-center justify-center rounded-(--radius) transition-colors duration-[180ms] hover:bg-hover-soft"
             >
               <Icon name="PhPlus" size={14} color="subtle" />
