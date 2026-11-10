@@ -462,3 +462,36 @@ test("taskListHistoryItems carries a running task's awaiting_answer after a relo
   assert.equal(plain.awaitingAnswer, false);
   assert.equal(taskWaitingForAnswer(plain), false);
 });
+
+test("taskListHistoryItems shows a steered message's reply before the steered task's answer", () => {
+  const t = (key) => key;
+  const items = taskListHistoryItems(
+    [
+      { id: "target", task: "write a story", status: "running", created_at: "2026-11-11T09:00:00Z" },
+      {
+        id: "legacy",
+        task: "older steer",
+        status: "done",
+        steer_target_task_id: "target",
+        created_at: "2026-11-11T09:00:30Z",
+        result: { final: { output: "👌" } },
+      },
+      {
+        id: "steer",
+        task: "make it shorter",
+        status: "done",
+        steer_target_task_id: "target",
+        created_at: "2026-11-11T09:01:00Z",
+        result: { final: { output: "Understood, I'll keep it short." }, steer_reply_status: "replied" },
+      },
+      { id: "pending", task: "and funnier", status: "running", steer_target_task_id: "target", created_at: "2026-11-11T09:02:00Z" },
+    ],
+    t,
+    { agentName: "Morph" },
+  );
+  assert.deepEqual(
+    items.map((item) => item.id),
+    ["target:user", "legacy:user", "steer:user", "steer:agent", "pending:user", "pending:agent", "target:agent"],
+  );
+  assert.equal(items.find((item) => item.id === "steer:agent").text, "Understood, I'll keep it short.");
+});
