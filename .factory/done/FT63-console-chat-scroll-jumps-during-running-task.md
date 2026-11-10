@@ -53,3 +53,10 @@ notes:
 - Codex reviewed all seven changed files against origin/master c89e4e1430a6c50049aebb34cb8feb17ea22217c. Configured gofmt check, go vet ./..., go test ./..., nsh check, and nsh test --web-host tests/noHost.js passed; frontend suite 417 passed, 0 failed. Tests used absolute throwaway HOME. No installs. Source worktree remains clean and head unchanged.
 - Streaming, status/completion, following/resuming, topic switching, measured upstream height growth, short-history growth and empty-history send checks passed. Additional Chrome checks failed during page initialization on both HEAD and base, so this review obtained no valid browser result. Native desktop, Android device/emulator, Safari, Firefox, headed browser and real-model streaming were not checked.
 - No linked GitHub issue or PR. Moved review/ → ready/ under the factory P0/P1 threshold; no code changed or shipped.
+
+## factory · 2026-11-10 23:38
+Merged into master at 4adec80b67ccfa4cd830f5225b56758257e04143. Released in v0.3.93; base and annotated tag pushed atomically. Moved ready/ → done/.
+
+Validation on the final integrated base: manager gofmt cleanliness, go vet ./... and go test ./... passed; nsh 0.4.0 check passed and full console suite passed (524/524). Tests used a throwaway HOME. The first final console run exceeded the tool timeout and was confirmed stopped before the successful rerun. after_change is empty. No forbidden paths changed.
+
+Linked issues/PRs: none (no source or owner closure links); nothing to close. Installs: none. Native desktop windows, real Android/device rendering, Windows/macOS and real IME/accessibility were not verified during ship; existing review notes remain.

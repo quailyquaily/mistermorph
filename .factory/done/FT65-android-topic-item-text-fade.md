@@ -47,3 +47,11 @@ Review by Claude Code covered all six changed files against origin/master c89e4e
 Residual risks: no Android device/emulator visual verification or APK build. Headless glyph metrics do not verify real kerning, CJK fallback, fade smoothness or system font-scale changes. Owner should inspect long Chinese/Latin titles on selected/unselected Android rows, both themes, including running status indicators. Initial layout briefly clips before measurements complete. No linked GitHub issue or PR.
 
 Moved review/ → ready/; not merged or shipped.
+
+## factory · 2026-11-10 23:38
+Merged into master at 6b82819fbe5c66ae52da437e003ea86370dc6d3d. Released in v0.3.93; base and annotated tag pushed atomically. Moved ready/ → done/.
+
+Validation on the final integrated base: manager gofmt cleanliness, go vet ./... and go test ./... passed; nsh 0.4.0 check passed and full console suite passed (524/524). Tests used a throwaway HOME. The first final console run exceeded the tool timeout and was confirmed stopped before the successful rerun. after_change is empty. No forbidden paths changed.
+
+Linked issues/PRs: none (no source or owner closure links); nothing to close. Installs: none. Native desktop windows, real Android/device rendering, Windows/macOS and real IME/accessibility were not verified during ship; existing review notes remain.
+Integration test fix b96a0c667b5df64fe06a5045f4cae6ae96c41b10 normalizes rendered no-break spaces before title-prefix comparison; no product-code change.

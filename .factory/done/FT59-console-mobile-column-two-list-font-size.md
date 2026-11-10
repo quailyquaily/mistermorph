@@ -32,3 +32,10 @@ Codex reviewed all six changed files in origin/master...HEAD; no qualifying find
 Validation: configured gofmt/vet/go test gate passed (162 tested packages); nsh check passed; nsh tests passed (414 passed, 0 failed). Tests used a throwaway HOME. No installs or tracked-file changes.
 Residual risks: actual browser rendering, Android devices and native desktop windows were not inspected in this review. Owner should check mobile list readability and truncation on real screens.
 Moved review/ → ready/; not merged.
+
+## factory · 2026-11-10 23:38
+Merged into master at 916b4cf6da04376c613bd9865ed75528ded76ceb. Released in v0.3.93; base and annotated tag pushed atomically. Moved ready/ → done/.
+
+Validation on the final integrated base: manager gofmt cleanliness, go vet ./... and go test ./... passed; nsh 0.4.0 check passed and full console suite passed (524/524). Tests used a throwaway HOME. The first final console run exceeded the tool timeout and was confirmed stopped before the successful rerun. after_change is empty. No forbidden paths changed.
+
+Linked issues/PRs: none (no source or owner closure links); nothing to close. Installs: none. Native desktop windows, real Android/device rendering, Windows/macOS and real IME/accessibility were not verified during ship; existing review notes remain.

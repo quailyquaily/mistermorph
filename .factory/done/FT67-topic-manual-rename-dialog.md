@@ -46,3 +46,11 @@ notes:
 Claude Code reviewed all 23 changed files in origin/master...HEAD; no P0/P1/P2 findings. Required gofmt check, go vet ./... and go test ./... passed (162 packages). nsh check passed; nsh test --web-host tests/noHost.js passed all 420 tests in 6m38s. Tests used a throwaway HOME. Test wrapper summary command failed after nsh succeeded; this was not a test failure. Installs: none. Review worktree remains clean and HEAD unchanged.
 Authorization, persistence, manual-title/automatic-generation races, cancel/error handling and stale responses were checked. Shared dialog Tab escape is pre-existing, not introduced here. Not verified in this review: live browser focus/Tab order, native desktop window, real Android/emulator/software keyboard, iOS, screen readers, and browser maxlength behavior for existing overlong titles.
 Moved review/ → ready/; the P3 length mismatch remains for owner attention. No linked GitHub issues or PRs.
+
+## factory · 2026-11-10 23:38
+Merged into master at 95053464a28dfe58bb1ca2882ba173bd71a09602. Released in v0.3.93; base and annotated tag pushed atomically. Moved ready/ → done/.
+
+Validation on the final integrated base: manager gofmt cleanliness, go vet ./... and go test ./... passed; nsh 0.4.0 check passed and full console suite passed (524/524). Tests used a throwaway HOME. The first final console run exceeded the tool timeout and was confirmed stopped before the successful rerun. after_change is empty. No forbidden paths changed.
+
+Linked issues/PRs: none (no source or owner closure links); nothing to close. Installs: none. Native desktop windows, real Android/device rendering, Windows/macOS and real IME/accessibility were not verified during ship; existing review notes remain.
+Merge conflicts resolved/verified by Claude Code, preserving both reviewed intents.

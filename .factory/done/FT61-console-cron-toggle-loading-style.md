@@ -45,3 +45,10 @@ Reviewed all four changed files in origin/master...HEAD with Codex. No qualifyin
 Validation: required gofmt, go vet and go test command passed; nsh check passed; nsh test --web-host tests/noHost.js passed 409/409. Tests used a throwaway HOME. No installs; review worktree unchanged.
 
 Residual risks: reviewer did not independently perform browser visual, dark-theme or physical-device checks. Reduced-motion coverage verifies indicator presence, not animation cessation. No linked GitHub issues or PRs.
+
+## factory · 2026-11-10 23:38
+Merged into master at 871989b65e1e2af1740cdcb367402fbb1858abde. Released in v0.3.93; base and annotated tag pushed atomically. Moved ready/ → done/.
+
+Validation on the final integrated base: manager gofmt cleanliness, go vet ./... and go test ./... passed; nsh 0.4.0 check passed and full console suite passed (524/524). Tests used a throwaway HOME. The first final console run exceeded the tool timeout and was confirmed stopped before the successful rerun. after_change is empty. No forbidden paths changed.
+
+Linked issues/PRs: none (no source or owner closure links); nothing to close. Installs: none. Native desktop windows, real Android/device rendering, Windows/macOS and real IME/accessibility were not verified during ship; existing review notes remain.

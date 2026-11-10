@@ -81,3 +81,10 @@ Previous P1 fixed: ACCESS_NETWORK_STATE is declared and confirmed in the built A
 Validation: Claude Code reviewed origin/master...HEAD and passed the configured gofmt/vet/go tests, nsh check, nsh tests 413/413, manifest tests 6/6, native VoiceController and TaskNotifier tests 15/15 each, and Android APK build/assertions. Scripted tests used an absolute throwaway HOME. Manager verified clean tracked worktree and unchanged head. No installs; existing JDK/SDK reused. No linked issues or PRs. Initial auth check outside clone failed installation discovery; rerun inside clone succeeded.
 
 Residual risks: no device/emulator checks for Android 14/15 scheduling, Doze/standby/vendor limits, process-killed delivery, permission dialogs, notification appearance/privacy or cold/background/foreground tap routing. Documented force-stop/reboot, in-memory history and iOS limitations remain. Owner should inspect the P2 tap-routing issue before shipping.
+
+## factory · 2026-11-10 23:38
+Merged into master at 71ee42696e2d9151474cabac07cdab7075337352. Released in v0.3.93; base and annotated tag pushed atomically. Moved ready/ → done/.
+
+Validation on the final integrated base: manager gofmt cleanliness, go vet ./... and go test ./... passed; nsh 0.4.0 check passed and full console suite passed (524/524). Tests used a throwaway HOME. The first final console run exceeded the tool timeout and was confirmed stopped before the successful rerun. after_change is empty. No forbidden paths changed.
+
+Linked issues/PRs: none (no source or owner closure links); nothing to close. Installs: none. Native desktop windows, real Android/device rendering, Windows/macOS and real IME/accessibility were not verified during ship; existing review notes remain.

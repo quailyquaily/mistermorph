@@ -36,3 +36,10 @@ notes:
 - [P2] web/console-nsh/pages/chat/topicDrag.ts:196: The lifted row does not compensate for list scrolling during a drag. With the pointer fixed at y=420, scrolling down 120 points leaves translateY at 20 and moves the row to y=300, while the drop target still follows the pointer. Record initial scroll offset and add its delta to the lifted row translation. Codex verified the source function with gesture/reactivity stubs; not reproduced in a real window.
 
 Reviewed all five changed files in origin/master...HEAD with Codex. No P0/P1 findings; branch merges cleanly with master. Required gofmt/vet/Go tests passed; nsh check passed; nsh tests: 410 passed, 0 failed, including seven added regressions. Scripted tests used throwaway HOME directories. Installs: none. No code changes or commits by reviewer. Real browser, GPUI and touch hardware behavior was not verified in this review. Moved review/ → ready/; owner should inspect drag feedback while scrolling before shipping.
+
+## factory · 2026-11-10 23:38
+Merged into master at 4b41b79109ab3f7d68a0db1994f35d7735c480e7. Released in v0.3.93; base and annotated tag pushed atomically. Moved ready/ → done/.
+
+Validation on the final integrated base: manager gofmt cleanliness, go vet ./... and go test ./... passed; nsh 0.4.0 check passed and full console suite passed (524/524). Tests used a throwaway HOME. The first final console run exceeded the tool timeout and was confirmed stopped before the successful rerun. after_change is empty. No forbidden paths changed.
+
+Linked issues/PRs: none (no source or owner closure links); nothing to close. Installs: none. Native desktop windows, real Android/device rendering, Windows/macOS and real IME/accessibility were not verified during ship; existing review notes remain.

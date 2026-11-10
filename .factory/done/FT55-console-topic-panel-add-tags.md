@@ -37,3 +37,10 @@ notes:
 - Chrome mouse and emulated tablet/phone touch checks passed for picker opening, assignment, save request, list refresh, tag/pin preservation, duplicates, failure rollback/error display and keyboard selection/deletion. API responses were mocked.
 - Limitations: browser checks also opened the picker on the old editor, so the original focus failure was not independently reproduced. Physical devices, iOS software keyboard and native clients remain unverified.
 - Installs: none. No tracked code changes. Moved review/ → ready/; awaiting owner approval before shipping.
+
+## factory · 2026-11-10 23:38
+Merged into master at 75541ce7e6fc21d47b71aab00b90e1da27b693b4. Released in v0.3.93; base and annotated tag pushed atomically. Moved ready/ → done/.
+
+Validation on the final integrated base: manager gofmt cleanliness, go vet ./... and go test ./... passed; nsh 0.4.0 check passed and full console suite passed (524/524). Tests used a throwaway HOME. The first final console run exceeded the tool timeout and was confirmed stopped before the successful rerun. after_change is empty. No forbidden paths changed.
+
+Linked issues/PRs: none (no source or owner closure links); nothing to close. Installs: none. Native desktop windows, real Android/device rendering, Windows/macOS and real IME/accessibility were not verified during ship; existing review notes remain.

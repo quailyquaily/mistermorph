@@ -49,3 +49,12 @@ Claude Code reviewed all 12 changed files against origin/master...HEAD. No confi
 Validation: gofmt cleanliness, go vet ./... and go test ./... passed (162 packages); nsh check passed; nsh tests 416 passed, 0 failed; cargo test --offline 66 passed, 0 failed, 4 ignored. Private Linux session-bus tests passed for absent service and fake-service notification delivery/default-action navigation. Scripted tests used a throwaway HOME. No installs. Native builds used existing runtime libraries and the fontconfig dlopen option. Worktree remained clean; no code commits made.
 
 Residual risks: no real desktop popup/UI verification; Windows and macOS were not compiled or run. Windows body/Action Center activation remains unverified; macOS topic routing is unavailable as documented. Windows/macOS OS-level notification disabling is not detectable by this bridge. Hung or slow Linux notification service timeout behavior was not reproduced. Rust fmt/clippy for the pinned toolchain were unavailable and not run. Owner should check native notification delivery and activation on target desktop platforms before release.
+
+## factory · 2026-11-10 23:38
+Merged into master at 815450f506f978d64cfdc4ec57527aa3a3e1f400. Released in v0.3.93; base and annotated tag pushed atomically. Moved ready/ → done/.
+
+Validation on the final integrated base: manager gofmt cleanliness, go vet ./... and go test ./... passed; nsh 0.4.0 check passed and full console suite passed (524/524). Tests used a throwaway HOME. The first final console run exceeded the tool timeout and was confirmed stopped before the successful rerun. after_change is empty. No forbidden paths changed.
+
+Linked issues/PRs: none (no source or owner closure links); nothing to close. Installs: none. Native desktop windows, real Android/device rendering, Windows/macOS and real IME/accessibility were not verified during ship; existing review notes remain.
+Native Linux Rust tests: 66 passed, 4 ignored; private-bus unsupported-service checks passed. Local linker symlinks reused installed runtime libraries; no installs.
+Merge conflicts resolved/verified by Claude Code, preserving both reviewed intents.

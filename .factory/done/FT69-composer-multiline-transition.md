@@ -48,3 +48,10 @@ notes:
 - Owner should check the narrow two-row transition on mobile with the model picker (builder measured 161px versus 336px) and the line-break shift when the text column widens. This is a product choice, not a verified defect.
 - Native hidden-field measurement, extremely narrow viewports and fixture-versus-production coverage remain residual risks, not confirmed findings.
 - Installs: none. No source edits or code commits during review. No linked GitHub issues or PRs.
+
+## factory · 2026-11-10 23:38
+Merged into master at 2b4c2ee14c502f9d4894a2b373e813af4906a141. Released in v0.3.93; base and annotated tag pushed atomically. Moved ready/ → done/.
+
+Validation on the final integrated base: manager gofmt cleanliness, go vet ./... and go test ./... passed; nsh 0.4.0 check passed and full console suite passed (524/524). Tests used a throwaway HOME. The first final console run exceeded the tool timeout and was confirmed stopped before the successful rerun. after_change is empty. No forbidden paths changed.
+
+Linked issues/PRs: none (no source or owner closure links); nothing to close. Installs: none. Native desktop windows, real Android/device rendering, Windows/macOS and real IME/accessibility were not verified during ship; existing review notes remain.

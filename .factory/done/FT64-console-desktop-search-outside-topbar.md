@@ -42,3 +42,11 @@ notes:
 - Installs: none.
 - Residual risks: this review did not independently render UI or validate native desktop/Android. Contacts desktop loading lacks automated coverage; desktop-width browser pull-to-reveal was not exercised. Earlier build reports visual checks, not independently repeated here.
 - Move: review/ → ready/.
+
+## factory · 2026-11-10 23:38
+Merged into master at 22728551eeb616b427e041d39d000ddfba2a2a55. Released in v0.3.93; base and annotated tag pushed atomically. Moved ready/ → done/.
+
+Validation on the final integrated base: manager gofmt cleanliness, go vet ./... and go test ./... passed; nsh 0.4.0 check passed and full console suite passed (524/524). Tests used a throwaway HOME. The first final console run exceeded the tool timeout and was confirmed stopped before the successful rerun. after_change is empty. No forbidden paths changed.
+
+Linked issues/PRs: none (no source or owner closure links); nothing to close. Installs: none. Native desktop windows, real Android/device rendering, Windows/macOS and real IME/accessibility were not verified during ship; existing review notes remain.
+Merge conflicts resolved/verified by Claude Code, preserving both reviewed intents.

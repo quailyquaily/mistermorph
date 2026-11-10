@@ -36,3 +36,10 @@ Validation: Codex reviewed all 22 changed files in origin/master...HEAD. Configu
 Installs: none.
 Not checked: real-browser disconnection, native devices, live Slack/Telegram. Finding reproduced through code paths and scripts.
 Move: review/ → ready/ under the no-P0/P1 review gate. P2 remains for owner consideration; not merged.
+
+## factory · 2026-11-10 23:38
+Merged into master at cbc9e6859ead016bafa78a5cb56bf92eb09d3867. Released in v0.3.93; base and annotated tag pushed atomically. Moved ready/ → done/.
+
+Validation on the final integrated base: manager gofmt cleanliness, go vet ./... and go test ./... passed; nsh 0.4.0 check passed and full console suite passed (524/524). Tests used a throwaway HOME. The first final console run exceeded the tool timeout and was confirmed stopped before the successful rerun. after_change is empty. No forbidden paths changed.
+
+Linked issues/PRs: none (no source or owner closure links); nothing to close. Installs: none. Native desktop windows, real Android/device rendering, Windows/macOS and real IME/accessibility were not verified during ship; existing review notes remain.

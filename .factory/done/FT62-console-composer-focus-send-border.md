@@ -53,3 +53,10 @@ notes:
 - Codex browser checks covered two widths and eight states per width: the light 1px border remained stable, including retained draft on send failure; baseline focus changed the border to blue.
 - Real mobile keyboards, native desktop and dark mode remain unverified. Owner should check the originally reported persistent post-send rendering on a real device.
 - review/ → ready/. No linked GitHub issue or PR.
+
+## factory · 2026-11-10 23:38
+Merged into master at 8d80f0ff3b836ecf5e19097a6064e473e1754f9a. Released in v0.3.93; base and annotated tag pushed atomically. Moved ready/ → done/.
+
+Validation on the final integrated base: manager gofmt cleanliness, go vet ./... and go test ./... passed; nsh 0.4.0 check passed and full console suite passed (524/524). Tests used a throwaway HOME. The first final console run exceeded the tool timeout and was confirmed stopped before the successful rerun. after_change is empty. No forbidden paths changed.
+
+Linked issues/PRs: none (no source or owner closure links); nothing to close. Installs: none. Native desktop windows, real Android/device rendering, Windows/macOS and real IME/accessibility were not verified during ship; existing review notes remain.
