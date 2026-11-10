@@ -23,3 +23,12 @@ Tests: Manager independently passed the configured gofmt/vet/go test gate. Claud
 Visual checking: Claude Code inspected temporary real-row fixture screenshots at 320px, 390px and desktop width, with no overlap. The real console with live data, Android device/emulator and native desktop window were not checked.
 Installs: none.
 Moved new/ → review/; ready for independent review, not merged.
+
+## factory · review · 2026-11-10 11:48
+head: 75cb5c0265e04d03723d9ca4ff73116ad4e22ccc
+verdict: pass
+
+Codex reviewed all six changed files in origin/master...HEAD; no qualifying findings. Branch merges cleanly with origin/master.
+Validation: configured gofmt/vet/go test gate passed (162 tested packages); nsh check passed; nsh tests passed (414 passed, 0 failed). Tests used a throwaway HOME. No installs or tracked-file changes.
+Residual risks: actual browser rendering, Android devices and native desktop windows were not inspected in this review. Owner should check mobile list readability and truncation on real screens.
+Moved review/ → ready/; not merged.
